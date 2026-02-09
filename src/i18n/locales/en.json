@@ -1,0 +1,159 @@
+{
+  "app": {
+    "name": "Animetor Eval",
+    "description": "Anime Industry Professional Evaluation System"
+  },
+  "cli": {
+    "stats": {
+      "title": "Database Statistics",
+      "total_persons": "Total Persons",
+      "total_anime": "Total Anime",
+      "total_credits": "Total Credits",
+      "unique_roles": "Unique Roles",
+      "date_range": "Date Range"
+    },
+    "ranking": {
+      "title": "Score Rankings",
+      "composite": "Composite Score",
+      "authority": "Authority",
+      "trust": "Trust",
+      "skill": "Skill"
+    },
+    "profile": {
+      "title": "Person Profile",
+      "not_found": "Person not found",
+      "basic_info": "Basic Information",
+      "scores": "Scores",
+      "career": "Career Statistics",
+      "collaborators": "Top Collaborators"
+    },
+    "export": {
+      "success": "Successfully exported {count} records to {path}",
+      "error": "Export failed: {error}"
+    },
+    "validate": {
+      "title": "Data Validation Report",
+      "passed": "Validation Passed",
+      "failed": "Validation Failed",
+      "errors": "Errors",
+      "warnings": "Warnings"
+    }
+  },
+  "api": {
+    "health": {
+      "status": "healthy",
+      "version": "1.0.0"
+    },
+    "pipeline": {
+      "started": "Pipeline execution started",
+      "completed": "Pipeline execution completed",
+      "error": "Pipeline execution failed"
+    },
+    "errors": {
+      "not_found": "Resource not found",
+      "invalid_parameter": "Invalid parameter: {param}",
+      "internal_error": "Internal server error"
+    }
+  },
+  "pipeline": {
+    "phases": {
+      "data_loading": "Data Loading",
+      "validation": "Validation",
+      "entity_resolution": "Entity Resolution",
+      "graph_construction": "Graph Construction",
+      "core_scoring": "Core Scoring",
+      "supplementary_metrics": "Supplementary Metrics",
+      "result_assembly": "Result Assembly",
+      "post_processing": "Post-Processing",
+      "analysis_modules": "Analysis Modules",
+      "export_and_viz": "Export & Visualization"
+    },
+    "status": {
+      "waiting": "Waiting",
+      "running": "Running",
+      "completed": "Completed",
+      "error": "Error"
+    },
+    "messages": {
+      "start": "Pipeline started ({total_phases} phases)",
+      "complete": "Pipeline completed! ({total_persons} persons, {duration}s)",
+      "phase_complete": "Phase {phase}: {phase_name} completed ({duration}ms)",
+      "phase_error": "Phase {phase}: {phase_name} error - {error}"
+    }
+  },
+  "frontend": {
+    "monitor": {
+      "title": "Animetor Eval - Pipeline Monitor",
+      "subtitle": "Real-time Pipeline Progress Monitor",
+      "connection": {
+        "connected": "Connected",
+        "disconnected": "Disconnected",
+        "connecting": "Connecting..."
+      },
+      "buttons": {
+        "run_pipeline": "Run Pipeline",
+        "clear_logs": "Clear Logs",
+        "reconnect": "Reconnect"
+      },
+      "progress": {
+        "title": "Progress",
+        "stats": {
+          "total_persons": "Total Persons",
+          "duration": "Duration (s)",
+          "current_phase": "Current Phase"
+        }
+      },
+      "logs": {
+        "title": "Logs",
+        "waiting": "Waiting for connection...",
+        "connecting": "Connecting to WebSocket...",
+        "connected": "WebSocket connection successful",
+        "disconnected": "WebSocket connection closed",
+        "error": "WebSocket error: {error}",
+        "cleared": "Logs cleared"
+      }
+    }
+  },
+  "reports": {
+    "disclaimer": {
+      "title": "DISCLAIMER",
+      "content": "This evaluation is based solely on publicly available credit data from released anime works. Scores represent network position, collaboration density, and career trajectory — NOT subjective ability judgments. Low scores indicate limited data or network visibility, not lack of talent. This service is intended for production optimization and research purposes."
+    },
+    "summary": {
+      "total_persons": "Total Persons Evaluated",
+      "total_anime": "Total Anime Analyzed",
+      "total_credits": "Total Credits Processed",
+      "date_range": "Date Range"
+    }
+  },
+  "validation": {
+    "checks": {
+      "referential_integrity": "Referential Integrity",
+      "data_completeness": "Data Completeness",
+      "credit_distribution": "Credit Distribution",
+      "duplicate_detection": "Duplicate Detection"
+    },
+    "messages": {
+      "orphaned_credits": "Found {count} orphaned credits",
+      "missing_anime_info": "Found {count} anime with missing information",
+      "duplicate_credits": "Found {count} duplicate credits",
+      "all_clear": "All validation checks passed"
+    }
+  },
+  "errors": {
+    "database": {
+      "connection_failed": "Database connection failed",
+      "query_failed": "Database query failed: {error}",
+      "migration_failed": "Database migration failed: {error}"
+    },
+    "file": {
+      "not_found": "File not found: {path}",
+      "read_error": "Failed to read file: {path}",
+      "write_error": "Failed to write file: {path}"
+    },
+    "network": {
+      "connection_timeout": "Network connection timeout",
+      "request_failed": "Network request failed: {error}"
+    }
+  }
+}

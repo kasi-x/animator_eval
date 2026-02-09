@@ -1,0 +1,159 @@
+{
+  "app": {
+    "name": "アニメーター評価",
+    "description": "アニメ業界プロフェッショナル評価システム"
+  },
+  "cli": {
+    "stats": {
+      "title": "データベース統計",
+      "total_persons": "総人数",
+      "total_anime": "総アニメ数",
+      "total_credits": "総クレジット数",
+      "unique_roles": "役職種類",
+      "date_range": "期間"
+    },
+    "ranking": {
+      "title": "スコアランキング",
+      "composite": "総合スコア",
+      "authority": "権威性",
+      "trust": "信頼性",
+      "skill": "技術力"
+    },
+    "profile": {
+      "title": "人物プロフィール",
+      "not_found": "人物が見つかりません",
+      "basic_info": "基本情報",
+      "scores": "スコア",
+      "career": "キャリア統計",
+      "collaborators": "主要コラボレーター"
+    },
+    "export": {
+      "success": "{count}件のレコードを{path}に出力しました",
+      "error": "出力エラー: {error}"
+    },
+    "validate": {
+      "title": "データ検証レポート",
+      "passed": "検証成功",
+      "failed": "検証失敗",
+      "errors": "エラー",
+      "warnings": "警告"
+    }
+  },
+  "api": {
+    "health": {
+      "status": "正常",
+      "version": "1.0.0"
+    },
+    "pipeline": {
+      "started": "パイプライン実行を開始しました",
+      "completed": "パイプライン実行が完了しました",
+      "error": "パイプライン実行に失敗しました"
+    },
+    "errors": {
+      "not_found": "リソースが見つかりません",
+      "invalid_parameter": "無効なパラメータ: {param}",
+      "internal_error": "内部サーバーエラー"
+    }
+  },
+  "pipeline": {
+    "phases": {
+      "data_loading": "データ読み込み",
+      "validation": "検証",
+      "entity_resolution": "名寄せ",
+      "graph_construction": "グラフ構築",
+      "core_scoring": "コアスコアリング",
+      "supplementary_metrics": "補助メトリクス",
+      "result_assembly": "結果組み立て",
+      "post_processing": "後処理",
+      "analysis_modules": "分析モジュール",
+      "export_and_viz": "出力・可視化"
+    },
+    "status": {
+      "waiting": "待機中",
+      "running": "実行中...",
+      "completed": "完了",
+      "error": "エラー"
+    },
+    "messages": {
+      "start": "パイプライン開始 ({total_phases} phases)",
+      "complete": "🎉 パイプライン完了! ({total_persons} persons, {duration}s)",
+      "phase_complete": "✓ Phase {phase}: {phase_name} 完了 ({duration}ms)",
+      "phase_error": "✗ Phase {phase}: {phase_name} エラー - {error}"
+    }
+  },
+  "frontend": {
+    "monitor": {
+      "title": "🎨 Animetor Eval - Pipeline Monitor",
+      "subtitle": "リアルタイムパイプライン進捗モニター",
+      "connection": {
+        "connected": "✓ 接続中",
+        "disconnected": "✗ 切断",
+        "connecting": "⟳ 接続中..."
+      },
+      "buttons": {
+        "run_pipeline": "パイプライン実行",
+        "clear_logs": "ログクリア",
+        "reconnect": "再接続"
+      },
+      "progress": {
+        "title": "📊 進捗状況",
+        "stats": {
+          "total_persons": "Total Persons",
+          "duration": "Duration (s)",
+          "current_phase": "Current Phase"
+        }
+      },
+      "logs": {
+        "title": "📝 ログ",
+        "waiting": "Waiting for connection...",
+        "connecting": "WebSocketに接続中...",
+        "connected": "WebSocket接続成功",
+        "disconnected": "WebSocket接続が閉じられました",
+        "error": "WebSocketエラー: {error}",
+        "cleared": "ログをクリアしました"
+      }
+    }
+  },
+  "reports": {
+    "disclaimer": {
+      "title": "免責事項",
+      "content": "本評価は公開されたアニメ作品のクレジットデータのみに基づきます。スコアはネットワーク上の位置、コラボレーション密度、キャリア軌跡を表し、主観的な能力判断ではありません。低スコアはデータ不足やネットワーク可視性の限定を示すものであり、才能の欠如を意味しません。本サービスは制作最適化および研究目的を想定しています。"
+    },
+    "summary": {
+      "total_persons": "評価対象人数",
+      "total_anime": "分析アニメ数",
+      "total_credits": "処理クレジット数",
+      "date_range": "期間"
+    }
+  },
+  "validation": {
+    "checks": {
+      "referential_integrity": "参照整合性",
+      "data_completeness": "データ完全性",
+      "credit_distribution": "クレジット分布",
+      "duplicate_detection": "重複検出"
+    },
+    "messages": {
+      "orphaned_credits": "{count}件の孤立クレジットが見つかりました",
+      "missing_anime_info": "{count}件のアニメに情報不足があります",
+      "duplicate_credits": "{count}件の重複クレジットが見つかりました",
+      "all_clear": "すべての検証チェックに合格しました"
+    }
+  },
+  "errors": {
+    "database": {
+      "connection_failed": "データベース接続に失敗しました",
+      "query_failed": "データベースクエリエラー: {error}",
+      "migration_failed": "データベースマイグレーションエラー: {error}"
+    },
+    "file": {
+      "not_found": "ファイルが見つかりません: {path}",
+      "read_error": "ファイル読み込みエラー: {path}",
+      "write_error": "ファイル書き込みエラー: {path}"
+    },
+    "network": {
+      "connection_timeout": "ネットワーク接続タイムアウト",
+      "request_failed": "ネットワークリクエストエラー: {error}"
+    }
+  }
+}

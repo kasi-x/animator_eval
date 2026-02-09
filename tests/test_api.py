@@ -847,3 +847,36 @@ class TestProductivityApi:
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/productivity")
         assert resp.status_code == 404
+
+
+class TestI18nApi:
+    """i18n (internationalization) endpoint tests."""
+
+    def test_get_translations_english(self, client):
+        """Get English translations."""
+        resp = client.get("/api/v1/i18n/en")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["language"] == "en"
+        assert "translations" in data
+        assert "app" in data["translations"]
+        assert "cli" in data["translations"]
+        assert "pipeline" in data["translations"]
+        assert data["translations"]["app"]["name"] == "Animetor Eval"
+
+    def test_get_translations_japanese(self, client):
+        """Get Japanese translations."""
+        resp = client.get("/api/v1/i18n/ja")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["language"] == "ja"
+        assert "translations" in data
+        assert "app" in data["translations"]
+        assert data["translations"]["app"]["name"] == "アニメーター評価"
+
+    def test_unsupported_language(self, client):
+        """Unsupported language returns 400."""
+        resp = client.get("/api/v1/i18n/fr")
+        assert resp.status_code == 400
+        data = resp.json()
+        assert "Unsupported language" in data["detail"]
