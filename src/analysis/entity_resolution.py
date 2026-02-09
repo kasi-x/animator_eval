@@ -67,28 +67,77 @@ def exact_match_cluster(persons: list[Person]) -> dict[str, str]:
     """完全一致による名寄せ（最も保守的）.
 
     正規化後の名前が完全一致する場合のみ統合する。
+    日本語名を優先し、英語名のみでのマッチは日本語名がない場合のみ許容する。
+    これにより、異なる漢字で同じローマ字表記のケース（例: 岡遼子 vs 岡亮子）での
+    false positive を防ぐ。
+
     Returns: {person_id: canonical_id}
     """
-    name_groups: dict[str, list[str]] = defaultdict(list)
+    # 日本語名でのグループ化
+    ja_name_groups: dict[str, list[str]] = defaultdict(list)
+    # 英語名でのグループ化（日本語名を持たない人物のみ）
+    en_name_groups: dict[str, list[str]] = defaultdict(list)
+    # エイリアスでのグループ化
+    alias_groups: dict[str, list[str]] = defaultdict(list)
+
+    persons_by_id = {p.id: p for p in persons}
 
     for p in persons:
-        for name in [p.name_ja, p.name_en] + p.aliases:
-            normalized = normalize_name(name)
-            if normalized:
-                name_groups[normalized].append(p.id)
+        # 日本語名がある場合は優先的に使用
+        if p.name_ja:
+            normalized_ja = normalize_name(p.name_ja)
+            if normalized_ja:
+                ja_name_groups[normalized_ja].append(p.id)
+        # 日本語名がない場合のみ英語名でグループ化
+        elif p.name_en:
+            normalized_en = normalize_name(p.name_en)
+            if normalized_en:
+                en_name_groups[normalized_en].append(p.id)
 
-    # 同一名のグループを統合
+        # エイリアスは補助的に使用
+        for alias in p.aliases:
+            normalized_alias = normalize_name(alias)
+            if normalized_alias:
+                alias_groups[normalized_alias].append(p.id)
+
     canonical_map: dict[str, str] = {}
 
-    for _name, ids in name_groups.items():
+    # 日本語名での統合（最優先）
+    for name_ja, ids in ja_name_groups.items():
         if len(ids) < 2:
             continue
         unique_ids = list(dict.fromkeys(ids))
-        canonical = unique_ids[0]  # 最初に見つかったIDを正規とする
+        canonical = unique_ids[0]
         for pid in unique_ids[1:]:
             if pid not in canonical_map:
                 canonical_map[pid] = canonical
-                logger.info("entity_merged", source=pid, canonical=canonical, strategy="exact_match")
+                logger.info("entity_merged", source=pid, canonical=canonical, strategy="exact_match", name=name_ja)
+
+    # 英語名での統合（日本語名を持たない人物のみ）
+    for name_en, ids in en_name_groups.items():
+        if len(ids) < 2:
+            continue
+        unique_ids = list(dict.fromkeys(ids))
+        canonical = unique_ids[0]
+        for pid in unique_ids[1:]:
+            if pid not in canonical_map:
+                canonical_map[pid] = canonical
+                logger.info("entity_merged", source=pid, canonical=canonical, strategy="exact_match", name=name_en)
+
+    # エイリアスでの統合（補助的、既にマッチしていない場合のみ）
+    for alias, ids in alias_groups.items():
+        if len(ids) < 2:
+            continue
+        unique_ids = list(dict.fromkeys(ids))
+        # エイリアスマッチは両方が日本語名を持たない場合のみ許可
+        valid_ids = [pid for pid in unique_ids if not persons_by_id[pid].name_ja]
+        if len(valid_ids) < 2:
+            continue
+        canonical = valid_ids[0]
+        for pid in valid_ids[1:]:
+            if pid not in canonical_map:
+                canonical_map[pid] = canonical
+                logger.info("entity_merged", source=pid, canonical=canonical, strategy="exact_match", name=alias)
 
     return canonical_map
 

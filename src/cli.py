@@ -1622,12 +1622,14 @@ def entity_resolution_check(
         console.print("[yellow]No persons in database[/yellow]")
         return
 
+    import json
+
     persons = [
         Person(
             id=row["id"],
             name_ja=row["name_ja"],
             name_en=row["name_en"],
-            aliases=row["aliases"].split(",") if row["aliases"] else [],
+            aliases=json.loads(row["aliases"]) if row["aliases"] and row["aliases"] != "[]" else [],
         )
         for row in person_rows
     ]

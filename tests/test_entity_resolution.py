@@ -53,6 +53,30 @@ class TestExactMatchCluster:
         assert "anilist:p1" in result
         assert result["anilist:p1"] == "mal:p1"
 
+    def test_different_kanji_same_romaji_no_match(self):
+        """異なる漢字で同じローマ字表記の場合はマッチしない（false positive 防止）.
+
+        例: 岡遼子 vs 岡亮子 はどちらも "Ryouko Oka" だが別人である可能性が高い。
+        日本語名がある場合、日本語名が一致しない限りマッチさせない。
+        """
+        persons = [
+            Person(id="anilist:p1", name_ja="岡遼子", name_en="Ryouko Oka"),
+            Person(id="anilist:p2", name_ja="岡亮子", name_en="Ryouko Oka"),
+        ]
+        result = exact_match_cluster(persons)
+        # 日本語名が異なるため、英語名が同じでもマッチしない
+        assert result == {}
+
+    def test_english_name_match_without_japanese(self):
+        """日本語名がない場合は英語名でマッチング可能."""
+        persons = [
+            Person(id="mal:p1", name_en="John Smith"),
+            Person(id="anilist:p1", name_en="John Smith"),
+        ]
+        result = exact_match_cluster(persons)
+        assert len(result) == 1
+        assert result["anilist:p1"] == "mal:p1"
+
 
 class TestCrossSourceMatch:
     def test_match_by_name(self):
