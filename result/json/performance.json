@@ -212,18 +212,18 @@
     },
     "cross_validation": {
       "count": 1,
-      "total": 0.005,
-      "avg": 0.005,
-      "min": 0.005,
-      "max": 0.005
+      "total": 0.004,
+      "avg": 0.004,
+      "min": 0.004,
+      "max": 0.004
     }
   },
   "memory_snapshots": {
-    "pipeline_start": 273.7,
-    "after_data_load": 273.8,
-    "after_graph_build": 273.8,
-    "after_scoring": 273.8,
-    "after_centrality": 273.8
+    "pipeline_start": 295.9,
+    "after_data_load": 295.9,
+    "after_graph_build": 295.9,
+    "after_scoring": 295.9,
+    "after_centrality": 295.9
   },
   "counters": {
     "persons_loaded": 4,

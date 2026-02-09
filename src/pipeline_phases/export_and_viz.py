@@ -1,283 +1,128 @@
-"""Phase 10: Export and Visualization — save results to JSON and generate visualizations."""
-from dataclasses import asdict
+"""Phase 10: Export and Visualization — declarative registry-based exports.
+
+This module implements a declarative export system using ExportSpec objects.
+All 26 JSON exports are defined in a single registry for easy maintenance.
+"""
+
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any, Callable
 
 import structlog
 
 from src.pipeline_phases.context import PipelineContext
-from src.utils.json_io import save_pipeline_json_if_data_present
+from src.utils.json_io import save_json_to_file
 
 logger = structlog.get_logger()
 
 
-def export_and_visualize_phase(context: PipelineContext, elapsed: float = 0.0) -> None:
-    """Export all results to JSON files and generate visualizations.
+@dataclass
+class ExportSpec:
+    """Declarative export configuration for a single JSON file.
 
-    This phase:
-    1. Exports scores.json (main results)
-    2. Exports circles.json (director circles with names)
-    3. Exports all analysis results from context.analysis_results
-    4. Generates visualizations if context.visualize is True
-
-    Args:
-        context: Pipeline context
-        elapsed: Pipeline elapsed time in seconds
+    Each spec defines:
+    - filename: Output filename (e.g., "scores.json")
+    - data_getter: Function that extracts data from PipelineContext
+    - transformer: Optional function to transform data before export
+    - condition: Optional function to determine if export should happen
+    - log_message: Message to log when export succeeds
+    - log_metrics: Optional dict of metrics to include in log
     """
-    logger.info("step_start", step="json_export")
-    context.monitor.record_memory("before_export")
 
-    with context.monitor.measure("json_export"):
-        # Export main scores
-        save_pipeline_json_if_data_present(
-            "scores.json",
-            context.results,
-            log_message="scores_saved",
-            persons=len(context.results),
-        )
-
-        # Export director circles (with name lookups)
-        if context.circles:
-            pid_to_name = {r["person_id"]: r["name"] or r["person_id"] for r in context.results}
-            circles_output = {}
-            for dir_id, circle in context.circles.items():
-                circle_dict = asdict(circle)
-                circles_output[dir_id] = {
-                    "director_name": pid_to_name.get(dir_id, dir_id),
-                    **circle_dict,
-                    "members": [
-                        {**member, "name": pid_to_name.get(member["person_id"], member["person_id"])}
-                        for member in circle_dict["members"]
-                    ],
-                }
-            save_pipeline_json_if_data_present(
-                "circles.json",
-                circles_output,
-                log_message="circles_saved",
-                directors=len(circles_output),
-            )
-
-        # Export all analysis results
-        _export_analysis_results(context, elapsed)
-
-    # Generate visualizations if requested
-    if context.visualize:
-        logger.info("step_start", step="visualization")
-        _generate_visualizations(context)
+    filename: str
+    data_getter: Callable[[PipelineContext], Any]
+    transformer: Callable[[Any, PipelineContext], dict | list] | None = None
+    condition: Callable[[Any], bool] | None = None
+    log_message: str = "export_saved"
+    log_metrics: Callable[[Any], dict[str, Any]] | None = None
 
 
-def _export_analysis_results(context: PipelineContext, elapsed: float) -> None:
-    """Export all analysis module results to JSON files.
+def _transform_circles(data: dict, context: PipelineContext) -> dict:
+    """Transform circles data with name lookups."""
+    if not data:
+        return {}
 
-    Args:
-        context: Pipeline context with analysis_results populated
-        elapsed: Pipeline elapsed time in seconds
-    """
-    # Export anime_stats
-    save_pipeline_json_if_data_present(
-        "anime_stats.json",
-        context.analysis_results.get("anime_stats"),
-        log_message="anime_stats_saved",
-        anime=len(context.analysis_results.get("anime_stats", {})),
-    )
-
-    # Export studios
-    save_pipeline_json_if_data_present(
-        "studios.json",
-        context.analysis_results.get("studios"),
-        log_message="studios_saved",
-        studios=len(context.analysis_results.get("studios", {})),
-    )
-
-    # Export seasonal trends
-    seasonal_data = context.analysis_results.get("seasonal")
-    save_pipeline_json_if_data_present(
-        "seasonal.json",
-        seasonal_data,
-        condition=seasonal_data.get("by_season") if seasonal_data else False,
-        log_message="seasonal_saved",
-    )
-
-    # Export collaborations
-    save_pipeline_json_if_data_present(
-        "collaborations.json",
-        context.analysis_results.get("collaborations"),
-        log_message="collaborations_saved",
-        pairs=len(context.analysis_results.get("collaborations", [])),
-    )
-
-    # Export outliers
-    save_pipeline_json_if_data_present(
-        "outliers.json",
-        context.analysis_results.get("outliers"),
-        log_message="outliers_saved",
-    )
-
-    # Export team patterns
-    save_pipeline_json_if_data_present(
-        "teams.json",
-        context.analysis_results.get("teams"),
-        log_message="teams_saved",
-        patterns=len(context.analysis_results.get("teams", [])),
-    )
-
-    # Export time series
-    save_pipeline_json_if_data_present(
-        "time_series.json",
-        context.analysis_results.get("time_series"),
-        log_message="time_series_saved",
-    )
-
-    # Export decades
-    save_pipeline_json_if_data_present(
-        "decades.json",
-        context.analysis_results.get("decades"),
-        log_message="decades_saved",
-    )
-
-    # Export growth trends (with trend summary)
-    if context.growth_data:
-        # Summarize trend counts (access dataclass fields as attributes)
-        trend_counts: dict[str, int] = {}
-        for gd in context.growth_data.values():
-            trend_counts[gd.trend] = trend_counts.get(gd.trend, 0) + 1
-        # Convert dataclass instances to dicts for JSON serialization
-        growth_output = {
-            "trend_summary": trend_counts,
-            "total_persons": len(context.growth_data),
-            "persons": {
-                pid: asdict(data)
-                for pid, data in sorted(
-                    context.growth_data.items(),
-                    key=lambda x: x[1].activity_ratio,
-                    reverse=True,
-                )[:200]
-            },
+    pid_to_name = {r["person_id"]: r["name"] or r["person_id"] for r in context.results}
+    circles_output = {}
+    for dir_id, circle in data.items():
+        circle_dict = asdict(circle)
+        circles_output[dir_id] = {
+            "director_name": pid_to_name.get(dir_id, dir_id),
+            **circle_dict,
+            "members": [
+                {**member, "name": pid_to_name.get(member["person_id"], member["person_id"])}
+                for member in circle_dict["members"]
+            ],
         }
-        save_pipeline_json_if_data_present(
-            "growth.json",
-            growth_output,
-            log_message="growth_saved",
-            persons=len(context.growth_data),
-        )
+    return circles_output
 
-    # Export person tags (with tag summary)
-    person_tags = context.analysis_results.get("tags", {})
-    if person_tags:
-        # Build tag summary (count of each tag)
-        tag_summary: dict[str, int] = {}
-        for tags_list in person_tags.values():
-            for tag in tags_list:
-                tag_summary[tag] = tag_summary.get(tag, 0) + 1
-        tags_data = {
-            "tag_summary": dict(sorted(tag_summary.items(), key=lambda x: -x[1])),
-            "person_tags": person_tags,
-        }
-        save_pipeline_json_if_data_present(
-            "tags.json",
-            tags_data,
-            log_message="tags_saved",
-            unique_tags=len(tag_summary),
-        )
 
-    # Export role transitions
-    save_pipeline_json_if_data_present(
-        "transitions.json",
-        context.analysis_results.get("transitions"),
-        log_message="transitions_saved",
-    )
+def _transform_growth(data: dict, context: PipelineContext) -> dict:
+    """Transform growth data with trend summary."""
+    if not data:
+        return {}
 
-    # Export role flow
-    save_pipeline_json_if_data_present(
-        "role_flow.json",
-        context.analysis_results.get("role_flow"),
-        log_message="role_flow_saved",
-    )
+    # Summarize trend counts
+    trend_counts: dict[str, int] = {}
+    for gd in data.values():
+        trend_counts[gd.trend] = trend_counts.get(gd.trend, 0) + 1
 
-    # Export bridges
-    save_pipeline_json_if_data_present(
-        "bridges.json",
-        context.analysis_results.get("bridges"),
-        log_message="bridges_saved",
-        bridges=len(context.analysis_results.get("bridges", [])),
-    )
+    # Convert top 200 by activity_ratio to dicts
+    return {
+        "trend_summary": trend_counts,
+        "total_persons": len(data),
+        "persons": {
+            pid: asdict(metrics)
+            for pid, metrics in sorted(
+                data.items(),
+                key=lambda x: x[1].activity_ratio,
+                reverse=True,
+            )[:200]
+        },
+    }
 
-    # Export mentorships
-    save_pipeline_json_if_data_present(
-        "mentorships.json",
-        context.analysis_results.get("mentorships"),
-        log_message="mentorships_saved",
-        pairs=len(context.analysis_results.get("mentorships", [])),
-    )
 
-    # Export mentorship tree
-    save_pipeline_json_if_data_present(
-        "mentorship_tree.json",
-        context.analysis_results.get("mentorship_tree"),
-        log_message="mentorship_tree_saved",
-    )
+def _transform_tags(data: dict, context: PipelineContext) -> dict:
+    """Transform person tags with tag summary."""
+    if not data:
+        return {}
 
-    # Export milestones
-    save_pipeline_json_if_data_present(
-        "milestones.json",
-        context.analysis_results.get("milestones"),
-        log_message="milestones_saved",
-        records=len(context.analysis_results.get("milestones", [])),
-    )
+    # Build tag summary
+    tag_summary: dict[str, int] = {}
+    for tags_list in data.values():
+        for tag in tags_list:
+            tag_summary[tag] = tag_summary.get(tag, 0) + 1
 
-    # Export network evolution
-    save_pipeline_json_if_data_present(
-        "network_evolution.json",
-        context.analysis_results.get("network_evolution"),
-        log_message="network_evolution_saved",
-    )
+    return {
+        "tag_summary": dict(sorted(tag_summary.items(), key=lambda x: -x[1])),
+        "person_tags": data,
+    }
 
-    # Export genre affinity
-    save_pipeline_json_if_data_present(
-        "genre_affinity.json",
-        context.analysis_results.get("genre_affinity"),
-        log_message="genre_affinity_saved",
-        persons=len(context.analysis_results.get("genre_affinity", [])),
-    )
 
-    # Export productivity (convert dataclass instances to dicts)
-    productivity_data = context.analysis_results.get("productivity", {})
-    if productivity_data:
-        productivity_output = {pid: asdict(metrics) for pid, metrics in productivity_data.items()}
-    else:
-        productivity_output = {}
-    save_pipeline_json_if_data_present(
-        "productivity.json",
-        productivity_output,
-        log_message="productivity_saved",
-        persons=len(productivity_output),
-    )
+def _transform_productivity(data: dict, context: PipelineContext) -> dict:
+    """Transform productivity dataclass instances to dicts."""
+    if not data:
+        return {}
+    return {pid: asdict(metrics) for pid, metrics in data.items()}
 
-    # Export influence tree
-    save_pipeline_json_if_data_present(
-        "influence.json",
-        context.analysis_results.get("influence"),
-        log_message="influence_saved",
-    )
 
-    # Export cross-validation (conditional)
-    save_pipeline_json_if_data_present(
-        "crossval.json",
-        context.analysis_results.get("crossval"),
-        log_message="crossval_saved",
-    )
+def _transform_transitions(data: dict, context: PipelineContext) -> dict:
+    """Transform role transitions with dataclass to dict conversion."""
+    if not data:
+        return {}
 
-    # Export performance monitoring summary
-    save_pipeline_json_if_data_present(
-        "performance.json",
-        context.analysis_results.get("performance"),
-        log_message="performance_saved",
-    )
+    # Transitions data is already in dict format from analysis_modules.py
+    # It was already converted using asdict() there, so just return as-is
+    return data
 
-    # Export pipeline summary (with elapsed time)
-    # Note: elapsed is passed via a closure or we compute it here
-    # For now, we'll add a placeholder and update in pipeline.py
+
+def _transform_summary(data: None, context: PipelineContext) -> dict:
+    """Build pipeline summary from context and elapsed time."""
     from datetime import datetime
-
     from src.analysis.graph import compute_graph_summary
+
+    # Get elapsed time from context or compute it
+    elapsed = getattr(context, "_elapsed", 0.0)
 
     # Compute graph summary if collaboration graph available
     graph_summary = {}
@@ -293,7 +138,7 @@ def _export_analysis_results(context: PipelineContext, elapsed: float) -> None:
             "avg_top10_overlap": crossval_data.get("avg_top10_overlap", 0),
         }
 
-    summary = {
+    return {
         "generated_at": datetime.now().isoformat(),
         "elapsed_seconds": round(elapsed, 2),
         "mode": "full",
@@ -312,11 +157,295 @@ def _export_analysis_results(context: PipelineContext, elapsed: float) -> None:
         "graph": graph_summary,
         "crossval": crossval_summary,
     }
-    save_pipeline_json_if_data_present(
-        "summary.json",
-        summary,
+
+
+# Registry of all 26 pipeline exports
+EXPORT_REGISTRY: list[ExportSpec] = [
+    # Main results
+    ExportSpec(
+        filename="scores.json",
+        data_getter=lambda ctx: ctx.results,
+        log_message="scores_saved",
+        log_metrics=lambda data: {"persons": len(data)} if data else {},
+    ),
+
+    # Director circles (with name lookups)
+    ExportSpec(
+        filename="circles.json",
+        data_getter=lambda ctx: ctx.circles,
+        transformer=_transform_circles,
+        log_message="circles_saved",
+        log_metrics=lambda data: {"directors": len(data)} if data else {},
+    ),
+
+    # Anime statistics
+    ExportSpec(
+        filename="anime_stats.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("anime_stats"),
+        log_message="anime_stats_saved",
+        log_metrics=lambda data: {"anime": len(data)} if data else {},
+    ),
+
+    # Studios
+    ExportSpec(
+        filename="studios.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("studios"),
+        log_message="studios_saved",
+        log_metrics=lambda data: {"studios": len(data)} if data else {},
+    ),
+
+    # Seasonal trends (conditional on by_season data)
+    ExportSpec(
+        filename="seasonal.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("seasonal"),
+        condition=lambda data: data.get("by_season") if data else False,
+        log_message="seasonal_saved",
+    ),
+
+    # Collaborations
+    ExportSpec(
+        filename="collaborations.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("collaborations"),
+        log_message="collaborations_saved",
+        log_metrics=lambda data: {"pairs": len(data)} if data else {},
+    ),
+
+    # Outliers
+    ExportSpec(
+        filename="outliers.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("outliers"),
+        log_message="outliers_saved",
+    ),
+
+    # Team patterns
+    ExportSpec(
+        filename="teams.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("teams"),
+        log_message="teams_saved",
+        log_metrics=lambda data: {"patterns": len(data)} if data else {},
+    ),
+
+    # Time series
+    ExportSpec(
+        filename="time_series.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("time_series"),
+        log_message="time_series_saved",
+    ),
+
+    # Decades
+    ExportSpec(
+        filename="decades.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("decades"),
+        log_message="decades_saved",
+    ),
+
+    # Growth trends (with trend summary)
+    ExportSpec(
+        filename="growth.json",
+        data_getter=lambda ctx: ctx.growth_data,
+        transformer=_transform_growth,
+        log_message="growth_saved",
+        log_metrics=lambda data: {"persons": data.get("total_persons", 0)} if data else {},
+    ),
+
+    # Person tags (with tag summary)
+    ExportSpec(
+        filename="tags.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("tags"),
+        transformer=_transform_tags,
+        log_message="tags_saved",
+        log_metrics=lambda data: {"unique_tags": len(data.get("tag_summary", {}))} if data else {},
+    ),
+
+    # Role transitions
+    ExportSpec(
+        filename="transitions.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("transitions"),
+        transformer=_transform_transitions,
+        log_message="transitions_saved",
+    ),
+
+    # Role flow
+    ExportSpec(
+        filename="role_flow.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("role_flow"),
+        log_message="role_flow_saved",
+    ),
+
+    # Bridges
+    ExportSpec(
+        filename="bridges.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("bridges"),
+        log_message="bridges_saved",
+        log_metrics=lambda data: {"bridges": len(data)} if isinstance(data, list) else {},
+    ),
+
+    # Mentorships
+    ExportSpec(
+        filename="mentorships.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("mentorships"),
+        log_message="mentorships_saved",
+        log_metrics=lambda data: {"pairs": len(data)} if data else {},
+    ),
+
+    # Mentorship tree
+    ExportSpec(
+        filename="mentorship_tree.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("mentorship_tree"),
+        log_message="mentorship_tree_saved",
+    ),
+
+    # Milestones
+    ExportSpec(
+        filename="milestones.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("milestones"),
+        log_message="milestones_saved",
+        log_metrics=lambda data: {"records": len(data)} if data else {},
+    ),
+
+    # Network evolution
+    ExportSpec(
+        filename="network_evolution.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("network_evolution"),
+        log_message="network_evolution_saved",
+    ),
+
+    # Genre affinity
+    ExportSpec(
+        filename="genre_affinity.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("genre_affinity"),
+        log_message="genre_affinity_saved",
+        log_metrics=lambda data: {"persons": len(data)} if data else {},
+    ),
+
+    # Productivity (convert dataclass to dict)
+    ExportSpec(
+        filename="productivity.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("productivity"),
+        transformer=_transform_productivity,
+        log_message="productivity_saved",
+        log_metrics=lambda data: {"persons": len(data)} if data else {},
+    ),
+
+    # Influence tree
+    ExportSpec(
+        filename="influence.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("influence"),
+        log_message="influence_saved",
+    ),
+
+    # Cross-validation (conditional)
+    ExportSpec(
+        filename="crossval.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("crossval"),
+        log_message="crossval_saved",
+    ),
+
+    # Performance monitoring
+    ExportSpec(
+        filename="performance.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("performance"),
+        log_message="performance_saved",
+    ),
+
+    # Pipeline summary (special case - uses elapsed time)
+    ExportSpec(
+        filename="summary.json",
+        data_getter=lambda ctx: None,  # Summary is built by transformer
+        transformer=_transform_summary,
         log_message="summary_saved",
-    )
+    ),
+]
+
+
+def export_single_result_file(
+    spec: ExportSpec,
+    context: PipelineContext,
+    json_dir: Path,
+) -> bool:
+    """Export a single result file using its ExportSpec.
+
+    Args:
+        spec: Export specification
+        context: Pipeline context
+        json_dir: Directory to write JSON files
+
+    Returns:
+        True if exported, False if skipped
+    """
+    # Get data from context
+    data = spec.data_getter(context)
+
+    # Check condition (if specified)
+    if spec.condition and not spec.condition(data):
+        logger.debug("export_skipped_condition", filename=spec.filename)
+        return False
+
+    # Skip if empty (unless transformer will create data)
+    if not data and not spec.transformer:
+        logger.debug("export_skipped_empty", filename=spec.filename)
+        return False
+
+    # Transform if needed
+    if spec.transformer:
+        data = spec.transformer(data, context)
+
+    # Skip if still empty after transformation
+    if not data:
+        logger.debug("export_skipped_empty_after_transform", filename=spec.filename)
+        return False
+
+    # Save to file
+    file_path = json_dir / spec.filename
+    save_json_to_file(data, file_path)
+
+    # Log with optional metrics
+    log_context = {"path": str(file_path)}
+    if spec.log_metrics:
+        metrics = spec.log_metrics(data)
+        log_context.update(metrics)
+
+    logger.info(spec.log_message, **log_context)
+    return True
+
+
+def export_and_visualize_phase(context: PipelineContext, elapsed: float = 0.0) -> None:
+    """Export all results to JSON and generate visualizations.
+
+    Uses declarative registry to export all 26 JSON files.
+
+    Args:
+        context: Pipeline context
+        elapsed: Pipeline elapsed time in seconds
+    """
+    from src.utils.config import JSON_DIR
+
+    logger.info("step_start", step="json_export")
+    context.monitor.record_memory("before_export")
+
+    # Store elapsed time in context for summary export
+    context._elapsed = elapsed
+
+    with context.monitor.measure("json_export"):
+        # Ensure JSON directory exists
+        JSON_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Export all registered files
+        exported_count = 0
+        for spec in EXPORT_REGISTRY:
+            if export_single_result_file(spec, context, JSON_DIR):
+                exported_count += 1
+
+        logger.info(
+            "exports_complete",
+            files_exported=exported_count,
+            total_specs=len(EXPORT_REGISTRY),
+        )
+
+    # Generate visualizations if requested
+    if context.visualize:
+        logger.info("step_start", step="visualization")
+        _generate_visualizations(context)
 
 
 def _generate_visualizations(context: PipelineContext) -> None:
