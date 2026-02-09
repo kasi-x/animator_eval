@@ -10,7 +10,7 @@
     ],
     "top_role_pairs": [
       {
-        "pair": "director+key_animator",
+        "pair": "key_animator+director",
         "count": 3
       }
     ],
@@ -19,26 +19,6 @@
     "longevity": 3,
     "strength_score": 79.0,
     "combined_score": 55.02
-  },
-  {
-    "person_a": "p1",
-    "person_b": "p3",
-    "shared_works": 2,
-    "shared_anime": [
-      "a1",
-      "a2"
-    ],
-    "top_role_pairs": [
-      {
-        "pair": "director+animation_director",
-        "count": 2
-      }
-    ],
-    "first_year": 2022,
-    "latest_year": 2023,
-    "longevity": 2,
-    "strength_score": 59.3,
-    "combined_score": 44.63
   },
   {
     "person_a": "p2",
@@ -59,5 +39,25 @@
     "longevity": 2,
     "strength_score": 59.3,
     "combined_score": 59.64
+  },
+  {
+    "person_a": "p1",
+    "person_b": "p3",
+    "shared_works": 2,
+    "shared_anime": [
+      "a1",
+      "a2"
+    ],
+    "top_role_pairs": [
+      {
+        "pair": "animation_director+director",
+        "count": 2
+      }
+    ],
+    "first_year": 2022,
+    "latest_year": 2023,
+    "longevity": 2,
+    "strength_score": 59.3,
+    "combined_score": 44.63
   }
 ]
