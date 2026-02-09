@@ -59,3 +59,11 @@ COMPOSITE_WEIGHTS = {
 
 # 正規化方式: "minmax" | "percentile" | "zscore"
 NORMALIZATION_METHOD = "minmax"
+
+# AI-assisted entity resolution
+# vLLM または OpenAI 互換エンドポイント
+LLM_BASE_URL = "http://localhost:8000/v1"  # vLLM default
+LLM_MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"  # or other model
+LLM_TEMPERATURE = 0.1  # 低温度で決定論的な出力
+LLM_MAX_TOKENS = 50  # "SAME" or "DIFFERENT" の短い応答
+LLM_TIMEOUT = 10.0  # seconds

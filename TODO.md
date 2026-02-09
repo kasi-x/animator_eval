@@ -85,7 +85,7 @@
 
 ### Phase 9: さらなる洗練
 - [ ] エッジ減衰の時間パラメータ最適化（実データでの検証）
-- [ ] より高精度な名寄せ (AI-assisted)
+- [x] より高精度な名寄せ (AI-assisted) — ✅ 完了 (vLLM + Qwen, few-shot prompting, 保守的マッチング)
 - [ ] Neo4j 直接接続（大規模運用向け）
 - [x] Plotly インタラクティブ可視化 — ✅ 完了 (score distribution, radar, scatter, timeline, network)
 - [ ] 外部 ID 連携 (AniDB, ANN)
