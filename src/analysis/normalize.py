@@ -5,17 +5,32 @@ min-max / percentile / z-score 正規化で 0-100 に揃える。
 """
 
 import math
+from enum import Enum
 
 import structlog
 
 logger = structlog.get_logger()
 
 
+class NormalizationMethod(str, Enum):
+    """スコア正規化の戦略を定義する列挙型.
+
+    Defines the strategy for normalizing scores to a common scale.
+    """
+
+    MIN_MAX = "minmax"  # Min-max normalization (linear scaling)
+    PERCENTILE = "percentile"  # Percentile rank normalization
+    Z_SCORE = "zscore"  # Z-score normalization (mean=50, ±2σ = 0 or 100)
+
+
 def normalize_minmax(
     scores: dict[str, float],
-    scale: float = 100.0,
+    target_maximum_value: float = 100.0,
 ) -> dict[str, float]:
-    """min-max 正規化: [0, scale]."""
+    """min-max 正規化: [0, target_maximum_value].
+
+    Rescales scores linearly to range from 0 to target_maximum_value.
+    """
     if not scores:
         return {}
 
@@ -25,41 +40,45 @@ def normalize_minmax(
     spread = max_val - min_val
 
     if spread == 0:
-        return {pid: scale / 2 for pid in scores}
+        return {pid: target_maximum_value / 2 for pid in scores}
 
     return {
-        pid: round((val - min_val) / spread * scale, 2)
+        pid: round((val - min_val) / spread * target_maximum_value, 2)
         for pid, val in scores.items()
     }
 
 
 def normalize_percentile(
     scores: dict[str, float],
-    scale: float = 100.0,
+    target_maximum_value: float = 100.0,
 ) -> dict[str, float]:
-    """パーセンタイル正規化: 順位ベースで [0, scale]."""
+    """パーセンタイル正規化: 順位ベースで [0, target_maximum_value].
+
+    Assigns scores based on percentile rank.
+    """
     if not scores:
         return {}
 
     n = len(scores)
     if n == 1:
-        return {pid: scale / 2 for pid in scores}
+        return {pid: target_maximum_value / 2 for pid in scores}
 
     sorted_pids = sorted(scores.keys(), key=lambda pid: scores[pid])
     return {
-        pid: round(rank / (n - 1) * scale, 2)
+        pid: round(rank / (n - 1) * target_maximum_value, 2)
         for rank, pid in enumerate(sorted_pids)
     }
 
 
 def normalize_zscore(
     scores: dict[str, float],
-    scale: float = 100.0,
+    target_maximum_value: float = 100.0,
 ) -> dict[str, float]:
     """z-score 正規化: 平均50, 標準偏差に基づきスケール.
 
-    z-score を [0, scale] にクリップする。
-    mean → scale/2, ±2σ → 0 or scale.
+    Normalizes using z-scores: mean maps to target_maximum_value/2, ±2σ map to 0 or target_maximum_value.
+    z-score を [0, target_maximum_value] にクリップする。
+    mean → target_maximum_value/2, ±2σ → 0 or target_maximum_value.
     """
     if not scores:
         return {}
@@ -67,29 +86,33 @@ def normalize_zscore(
     values = list(scores.values())
     n = len(values)
     if n <= 1:
-        return {pid: scale / 2 for pid in scores}
+        return {pid: target_maximum_value / 2 for pid in scores}
 
     mean = sum(values) / n
     variance = sum((v - mean) ** 2 for v in values) / n
     std = math.sqrt(variance) if variance > 0 else 1.0
 
     return {
-        pid: round(max(0, min(scale, (((val - mean) / std) + 2) / 4 * scale)), 2)
+        pid: round(
+            max(0, min(target_maximum_value, (((val - mean) / std) + 2) / 4 * target_maximum_value)), 2
+        )
         for pid, val in scores.items()
     }
 
 
 def normalize_scores(
     scores: dict[str, float],
-    scale: float = 100.0,
-    method: str | None = None,
+    target_maximum_value: float = 100.0,
+    method: str | NormalizationMethod | None = None,
 ) -> dict[str, float]:
     """スコア辞書を正規化する.
 
+    Normalizes a dictionary of scores using the specified method.
+
     Args:
         scores: {person_id: raw_score}
-        scale: 最大値（デフォルト100）
-        method: "minmax" | "percentile" | "zscore" (None = config設定に従う)
+        target_maximum_value: 最大値（デフォルト100） / Maximum value for normalized scores
+        method: Normalization strategy - "minmax" | "percentile" | "zscore" (None = use config default)
 
     Returns:
         {person_id: normalized_score}
@@ -98,12 +121,18 @@ def normalize_scores(
         from src.utils.config import NORMALIZATION_METHOD
         method = NORMALIZATION_METHOD
 
-    if method == "percentile":
-        return normalize_percentile(scores, scale)
-    elif method == "zscore":
-        return normalize_zscore(scores, scale)
+    # Convert string to enum if needed
+    if isinstance(method, str):
+        method_str = method
     else:
-        return normalize_minmax(scores, scale)
+        method_str = method.value if isinstance(method, NormalizationMethod) else method
+
+    if method_str == NormalizationMethod.PERCENTILE or method_str == "percentile":
+        return normalize_percentile(scores, target_maximum_value)
+    elif method_str == NormalizationMethod.Z_SCORE or method_str == "zscore":
+        return normalize_zscore(scores, target_maximum_value)
+    else:
+        return normalize_minmax(scores, target_maximum_value)
 
 
 def normalize_all_axes(

@@ -31,7 +31,7 @@ class TestNormalizeScores:
         assert result["p3"] == 100.0
 
     def test_custom_scale(self):
-        result = normalize_scores({"p1": 0.0, "p2": 10.0}, scale=50.0)
+        result = normalize_scores({"p1": 0.0, "p2": 10.0}, target_maximum_value=50.0)
         assert result["p1"] == 0.0
         assert result["p2"] == 50.0
 
