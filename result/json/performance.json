@@ -219,11 +219,11 @@
     }
   },
   "memory_snapshots": {
-    "pipeline_start": 287.3,
-    "after_data_load": 287.4,
-    "after_graph_build": 287.4,
-    "after_scoring": 287.4,
-    "after_centrality": 287.4
+    "pipeline_start": 273.7,
+    "after_data_load": 273.8,
+    "after_graph_build": 273.8,
+    "after_scoring": 273.8,
+    "after_centrality": 273.8
   },
   "counters": {
     "persons_loaded": 4,

@@ -390,10 +390,11 @@ def _generate_visualizations(context: PipelineContext) -> None:
         if time_series.get("years"):
             plot_time_series(time_series)
 
-        # Productivity
+        # Productivity (convert dataclass instances to dicts for visualization)
         productivity = context.analysis_results.get("productivity", {})
         if productivity:
-            plot_productivity_distribution(productivity)
+            productivity_dicts = {pid: asdict(metrics) for pid, metrics in productivity.items()}
+            plot_productivity_distribution(productivity_dicts)
 
         # Influence tree
         influence = context.analysis_results.get("influence", {})
