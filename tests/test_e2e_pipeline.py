@@ -16,6 +16,7 @@ def synthetic_pipeline(monkeypatch, tmp_path):
     """合成データでパイプラインを実行するフィクスチャ."""
     import src.database
     import src.pipeline
+    import src.utils.json_io
 
     # DB と JSON 出力先を一時ディレクトリに差し替え
     db_path = tmp_path / "test_e2e.db"
@@ -24,6 +25,7 @@ def synthetic_pipeline(monkeypatch, tmp_path):
 
     monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
     monkeypatch.setattr(src.pipeline, "JSON_DIR", json_dir)
+    monkeypatch.setattr(src.utils.json_io, "JSON_DIR", json_dir)
 
     # 合成データを生成してDBに投入
     from src.database import get_connection, init_db, insert_credit, upsert_anime, upsert_person

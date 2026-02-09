@@ -1,0 +1,85 @@
+{
+  "high_score_teams": [
+    {
+      "anime_id": "a1",
+      "title": "すごいアニメ",
+      "year": 2022,
+      "anime_score": 8.5,
+      "team_size": 3,
+      "core_roles": 3,
+      "roles": {
+        "director": [
+          "p1"
+        ],
+        "key_animator": [
+          "p2"
+        ],
+        "animation_director": [
+          "p3"
+        ]
+      },
+      "avg_person_score": 53.1
+    },
+    {
+      "anime_id": "a2",
+      "title": "いいアニメ",
+      "year": 2023,
+      "anime_score": 7.5,
+      "team_size": 3,
+      "core_roles": 3,
+      "roles": {
+        "director": [
+          "p1"
+        ],
+        "key_animator": [
+          "p2"
+        ],
+        "animation_director": [
+          "p3"
+        ]
+      },
+      "avg_person_score": 53.1
+    }
+  ],
+  "total_high_score": 2,
+  "role_combinations": [
+    {
+      "roles": "animation_director+director",
+      "count": 2
+    },
+    {
+      "roles": "animation_director+key_animator",
+      "count": 2
+    },
+    {
+      "roles": "director+key_animator",
+      "count": 2
+    }
+  ],
+  "recommended_pairs": [
+    {
+      "person_a": "p1",
+      "person_b": "p2",
+      "shared_high_score_works": 2,
+      "combined_score": 55.02
+    },
+    {
+      "person_a": "p1",
+      "person_b": "p3",
+      "shared_high_score_works": 2,
+      "combined_score": 44.62
+    },
+    {
+      "person_a": "p2",
+      "person_b": "p3",
+      "shared_high_score_works": 2,
+      "combined_score": 59.65
+    }
+  ],
+  "team_size_stats": {
+    "min": 3,
+    "max": 3,
+    "avg": 3.0,
+    "high_score_avg": 3.0
+  }
+}

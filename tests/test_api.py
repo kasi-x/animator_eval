@@ -17,8 +17,14 @@ def client():
 def scores_data(tmp_path, monkeypatch):
     """テスト用スコアデータをJSON_DIRに配置."""
     import src.api
+    import src.utils.json_io
 
+    # Monkeypatch JSON_DIR in both api and json_io modules
     monkeypatch.setattr(src.api, "JSON_DIR", tmp_path)
+    monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path)
+
+    # Clear cache to force reload with new paths
+    src.utils.json_io.clear_json_cache()
 
     scores = [
         {
@@ -263,6 +269,9 @@ class TestSummary:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/summary")
         assert resp.status_code == 404
 
@@ -377,6 +386,9 @@ class TestStudios:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/studios")
         assert resp.status_code == 404
 
@@ -392,6 +404,9 @@ class TestSeasonal:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/seasonal")
         assert resp.status_code == 404
 
@@ -408,6 +423,9 @@ class TestCrossval:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/crossval")
         assert resp.status_code == 404
 
@@ -429,6 +447,9 @@ class TestCollaborations:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/collaborations")
         assert resp.status_code == 404
 
@@ -444,6 +465,9 @@ class TestOutliers:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/outliers")
         assert resp.status_code == 404
 
@@ -459,6 +483,9 @@ class TestTeams:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/teams")
         assert resp.status_code == 404
 
@@ -479,6 +506,9 @@ class TestGrowth:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/growth")
         assert resp.status_code == 404
 
@@ -494,6 +524,9 @@ class TestTimeSeries:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/time-series")
         assert resp.status_code == 404
 
@@ -509,6 +542,9 @@ class TestDecades:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/decades")
         assert resp.status_code == 404
 
@@ -530,6 +566,9 @@ class TestTags:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/tags")
         assert resp.status_code == 404
 
@@ -545,6 +584,9 @@ class TestRoleFlow:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/role-flow")
         assert resp.status_code == 404
 
@@ -692,6 +734,9 @@ class TestBridgesApi:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/bridges")
         assert resp.status_code == 404
 
@@ -708,6 +753,9 @@ class TestMentorshipsApi:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/mentorships")
         assert resp.status_code == 404
 
@@ -728,6 +776,9 @@ class TestMilestonesApi:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/persons/p1/milestones")
         assert resp.status_code == 404
 
@@ -743,6 +794,9 @@ class TestNetworkEvolutionApi:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/network-evolution")
         assert resp.status_code == 404
 
@@ -769,6 +823,9 @@ class TestGenreAffinityApi:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/genre-affinity")
         assert resp.status_code == 404
 
@@ -785,5 +842,8 @@ class TestProductivityApi:
         import src.api
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        import src.utils.json_io
+        monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
+        src.utils.json_io.clear_json_cache()
         resp = client.get("/api/v1/productivity")
         assert resp.status_code == 404

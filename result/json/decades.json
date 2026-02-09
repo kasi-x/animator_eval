@@ -1,0 +1,53 @@
+{
+  "decades": {
+    "2020s": {
+      "credit_count": 9,
+      "unique_persons": 4,
+      "unique_anime": 3,
+      "avg_anime_score": 7.33,
+      "role_distribution": {
+        "key_animator": 4,
+        "director": 3,
+        "animation_director": 2
+      },
+      "top_persons": [
+        {
+          "person_id": "p1",
+          "credits": 3
+        },
+        {
+          "person_id": "p2",
+          "credits": 3
+        },
+        {
+          "person_id": "p3",
+          "credits": 2
+        },
+        {
+          "person_id": "p4",
+          "credits": 1
+        }
+      ]
+    }
+  },
+  "year_by_year": {
+    "2022": {
+      "credits": 3,
+      "persons": 3,
+      "anime": 1,
+      "avg_score": 8.5
+    },
+    "2023": {
+      "credits": 3,
+      "persons": 3,
+      "anime": 1,
+      "avg_score": 7.5
+    },
+    "2024": {
+      "credits": 3,
+      "persons": 3,
+      "anime": 1,
+      "avg_score": 6.0
+    }
+  }
+}

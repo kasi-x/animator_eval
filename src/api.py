@@ -12,8 +12,6 @@
   GET /api/v1/health           — ヘルスチェック
 """
 
-import json
-
 import structlog
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query
@@ -22,6 +20,30 @@ from pydantic import BaseModel
 from src.analysis.similarity import find_similar_persons
 from src.database import get_connection, get_data_sources, get_db_stats, get_score_history, search_persons
 from src.utils.config import JSON_DIR
+from src.utils.json_io import (
+    load_anime_statistics_from_json,
+    load_bridge_analysis_from_json,
+    load_career_milestones_from_json,
+    load_collaboration_pairs_from_json,
+    load_cross_validation_results_from_json,
+    load_decade_analysis_from_json,
+    load_genre_affinity_from_json,
+    load_growth_trends_from_json,
+    load_influence_tree_from_json,
+    load_mentorship_relationships_from_json,
+    load_network_evolution_from_json,
+    load_outlier_analysis_from_json,
+    load_person_scores_from_json,
+    load_person_tags_from_json,
+    load_pipeline_summary_from_json,
+    load_productivity_metrics_from_json,
+    load_role_flow_from_json,
+    load_role_transitions_from_json,
+    load_seasonal_trends_from_json,
+    load_studio_analysis_from_json,
+    load_team_patterns_from_json,
+    load_time_series_from_json,
+)
 
 logger = structlog.get_logger()
 
@@ -49,207 +71,6 @@ class PaginatedResponse(BaseModel):
     pages: int
 
 
-# --- Data Loading ---
-
-
-def _load_scores() -> list[dict]:
-    """scores.json を読み込む."""
-    path = JSON_DIR / "scores.json"
-    if not path.exists():
-        return []
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_anime_stats() -> dict:
-    """anime_stats.json を読み込む."""
-    path = JSON_DIR / "anime_stats.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_summary() -> dict:
-    """summary.json を読み込む."""
-    path = JSON_DIR / "summary.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_transitions() -> dict:
-    """transitions.json を読み込む."""
-    path = JSON_DIR / "transitions.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_crossval() -> dict:
-    """crossval.json を読み込む."""
-    path = JSON_DIR / "crossval.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_influence() -> dict:
-    """influence.json を読み込む."""
-    path = JSON_DIR / "influence.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_studios() -> dict:
-    """studios.json を読み込む."""
-    path = JSON_DIR / "studios.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_seasonal() -> dict:
-    """seasonal.json を読み込む."""
-    path = JSON_DIR / "seasonal.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_collaborations() -> list:
-    """collaborations.json を読み込む."""
-    path = JSON_DIR / "collaborations.json"
-    if not path.exists():
-        return []
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_outliers() -> dict:
-    """outliers.json を読み込む."""
-    path = JSON_DIR / "outliers.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_teams() -> dict:
-    """teams.json を読み込む."""
-    path = JSON_DIR / "teams.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_growth() -> dict:
-    """growth.json を読み込む."""
-    path = JSON_DIR / "growth.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_time_series() -> dict:
-    """time_series.json を読み込む."""
-    path = JSON_DIR / "time_series.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_decades() -> dict:
-    """decades.json を読み込む."""
-    path = JSON_DIR / "decades.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_tags() -> dict:
-    """tags.json を読み込む."""
-    path = JSON_DIR / "tags.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_role_flow() -> dict:
-    """role_flow.json を読み込む."""
-    path = JSON_DIR / "role_flow.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_bridges() -> dict:
-    """bridges.json を読み込む."""
-    path = JSON_DIR / "bridges.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_mentorships() -> dict:
-    """mentorships.json を読み込む."""
-    path = JSON_DIR / "mentorships.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_milestones() -> dict:
-    """milestones.json を読み込む."""
-    path = JSON_DIR / "milestones.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_network_evolution() -> dict:
-    """network_evolution.json を読み込む."""
-    path = JSON_DIR / "network_evolution.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_genre_affinity() -> dict:
-    """genre_affinity.json を読み込む."""
-    path = JSON_DIR / "genre_affinity.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
-def _load_productivity() -> dict:
-    """productivity.json を読み込む."""
-    path = JSON_DIR / "productivity.json"
-    if not path.exists():
-        return {}
-    with open(path) as f:
-        return json.load(f)
-
-
 # --- Endpoints ---
 
 
@@ -270,7 +91,7 @@ def health():
 @app.get("/api/v1/summary")
 def summary():
     """パイプラインサマリー."""
-    data = _load_summary()
+    data = load_pipeline_summary_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Summary not found. Run pipeline first.")
     return data
@@ -283,7 +104,7 @@ def list_persons(
     sort: str = Query("composite", description="ソート軸 (composite, authority, trust, skill)"),
 ):
     """全人物スコア一覧（ページネーション対応）."""
-    scores = _load_scores()
+    scores = load_person_scores_from_json()
     if not scores:
         return PaginatedResponse(items=[], total=0, page=page, per_page=per_page, pages=0)
 
@@ -317,7 +138,7 @@ def search(
 @app.get("/api/v1/persons/{person_id}")
 def get_person(person_id: str):
     """人物プロフィール（スコア + ブレークダウン）."""
-    scores = _load_scores()
+    scores = load_person_scores_from_json()
     for entry in scores:
         if entry["person_id"] == person_id:
             return entry
@@ -330,7 +151,7 @@ def get_similar(
     top_n: int = Query(10, ge=1, le=50, description="類似人物の数"),
 ):
     """類似人物検索（コサイン類似度）."""
-    scores = _load_scores()
+    scores = load_person_scores_from_json()
     if not scores:
         raise HTTPException(status_code=404, detail="No scores available")
 
@@ -366,7 +187,7 @@ def ranking(
     limit: int = Query(50, ge=1, le=500, description="件数"),
 ):
     """ランキング（フィルタ対応）."""
-    scores = _load_scores()
+    scores = load_person_scores_from_json()
     if not scores:
         return {"items": [], "total": 0}
 
@@ -404,7 +225,7 @@ def list_anime(
     sort: str = Query("credit_count", description="ソート (credit_count, avg_person_score, year)"),
 ):
     """アニメ統計一覧."""
-    stats = _load_anime_stats()
+    stats = load_anime_statistics_from_json()
     if not stats:
         return PaginatedResponse(items=[], total=0, page=page, per_page=per_page, pages=0)
 
@@ -434,7 +255,7 @@ def list_anime(
 @app.get("/api/v1/anime/{anime_id}")
 def get_anime(anime_id: str):
     """アニメ詳細統計."""
-    stats = _load_anime_stats()
+    stats = load_anime_statistics_from_json()
     if anime_id not in stats:
         raise HTTPException(status_code=404, detail=f"Anime {anime_id} not found")
     return {"anime_id": anime_id, **stats[anime_id]}
@@ -443,7 +264,7 @@ def get_anime(anime_id: str):
 @app.get("/api/v1/transitions")
 def transitions():
     """役職遷移分析."""
-    data = _load_transitions()
+    data = load_role_transitions_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Transitions not found. Run pipeline first.")
     return data
@@ -452,7 +273,7 @@ def transitions():
 @app.get("/api/v1/crossval")
 def crossval():
     """スコアクロスバリデーション結果."""
-    data = _load_crossval()
+    data = load_cross_validation_results_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Cross-validation not found. Run pipeline first.")
     return data
@@ -461,7 +282,7 @@ def crossval():
 @app.get("/api/v1/influence")
 def influence():
     """影響ツリー（メンター・メンティー関係）."""
-    data = _load_influence()
+    data = load_influence_tree_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Influence data not found. Run pipeline first.")
     return data
@@ -470,7 +291,7 @@ def influence():
 @app.get("/api/v1/studios")
 def studios():
     """スタジオ分析."""
-    data = _load_studios()
+    data = load_studio_analysis_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Studio data not found. Run pipeline first.")
     return data
@@ -479,7 +300,7 @@ def studios():
 @app.get("/api/v1/seasonal")
 def seasonal():
     """シーズントレンド."""
-    data = _load_seasonal()
+    data = load_seasonal_trends_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Seasonal data not found. Run pipeline first.")
     return data
@@ -491,7 +312,7 @@ def collaborations(
     person_id: str | None = Query(None, description="人物IDでフィルタ"),
 ):
     """コラボレーション強度ペア."""
-    data = _load_collaborations()
+    data = load_collaboration_pairs_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Collaboration data not found. Run pipeline first.")
     if person_id:
@@ -502,7 +323,7 @@ def collaborations(
 @app.get("/api/v1/outliers")
 def outliers():
     """スコア外れ値検出結果."""
-    data = _load_outliers()
+    data = load_outlier_analysis_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Outlier data not found. Run pipeline first.")
     return data
@@ -511,7 +332,7 @@ def outliers():
 @app.get("/api/v1/teams")
 def teams():
     """チーム構成分析."""
-    data = _load_teams()
+    data = load_team_patterns_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Team data not found. Run pipeline first.")
     return data
@@ -523,7 +344,7 @@ def growth(
     limit: int = Query(50, ge=1, le=500),
 ):
     """成長トレンド."""
-    data = _load_growth()
+    data = load_growth_trends_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Growth data not found. Run pipeline first.")
     persons = data.get("persons", {})
@@ -540,7 +361,7 @@ def growth(
 @app.get("/api/v1/time-series")
 def time_series():
     """年次時系列データ."""
-    data = _load_time_series()
+    data = load_time_series_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Time series data not found. Run pipeline first.")
     return data
@@ -549,7 +370,7 @@ def time_series():
 @app.get("/api/v1/decades")
 def decades():
     """年代別分析."""
-    data = _load_decades()
+    data = load_decade_analysis_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Decade data not found. Run pipeline first.")
     return data
@@ -560,7 +381,7 @@ def tags(
     tag: str | None = Query(None, description="タグでフィルタ"),
 ):
     """人物タグ."""
-    data = _load_tags()
+    data = load_person_tags_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Tag data not found. Run pipeline first.")
 
@@ -581,7 +402,7 @@ def tags(
 @app.get("/api/v1/role-flow")
 def role_flow():
     """役職遷移フロー（Sankey diagram data）."""
-    data = _load_role_flow()
+    data = load_role_flow_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Role flow data not found. Run pipeline first.")
     return data
@@ -598,7 +419,7 @@ def compare_persons(
     if len(person_ids) < 2:
         raise HTTPException(status_code=400, detail="At least 2 person IDs required")
 
-    scores = _load_scores()
+    scores = load_person_scores_from_json()
     if not scores:
         raise HTTPException(status_code=404, detail="No scores available")
 
@@ -679,7 +500,7 @@ def get_person_network(
         conn.close()
 
     anime_map = {a.id: a for a in anime_list}
-    scores = _load_scores()
+    scores = load_person_scores_from_json()
     person_scores = {r["person_id"]: r["composite"] for r in scores} if scores else None
 
     result = extract_ego_graph(person_id, credits, anime_map, hops=hops, person_scores=person_scores)
@@ -701,7 +522,7 @@ def recommend(
     if not team_ids:
         raise HTTPException(status_code=400, detail="At least 1 team member required")
 
-    scores = _load_scores()
+    scores = load_person_scores_from_json()
     if not scores:
         raise HTTPException(status_code=404, detail="No scores available")
 
@@ -735,7 +556,7 @@ def predict(
         conn.close()
 
     anime_map = {a.id: a for a in anime_list}
-    scores = _load_scores()
+    scores = load_person_scores_from_json()
     person_scores = {r["person_id"]: r["composite"] for r in scores} if scores else None
 
     result = predict_anime_score(team_ids, credits, anime_map, person_scores=person_scores)
@@ -745,7 +566,7 @@ def predict(
 @app.get("/api/v1/bridges")
 def bridges():
     """コミュニティ間ブリッジ人物."""
-    data = _load_bridges()
+    data = load_bridge_analysis_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Bridge data not found. Run pipeline first.")
     return data
@@ -754,7 +575,7 @@ def bridges():
 @app.get("/api/v1/mentorships")
 def mentorships():
     """推定メンターシップ関係."""
-    data = _load_mentorships()
+    data = load_mentorship_relationships_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Mentorship data not found. Run pipeline first.")
     return data
@@ -763,7 +584,7 @@ def mentorships():
 @app.get("/api/v1/persons/{person_id}/milestones")
 def get_person_milestones(person_id: str):
     """人物のキャリアマイルストーン."""
-    data = _load_milestones()
+    data = load_career_milestones_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Milestone data not found. Run pipeline first.")
     if person_id not in data:
@@ -774,7 +595,7 @@ def get_person_milestones(person_id: str):
 @app.get("/api/v1/network-evolution")
 def network_evolution():
     """ネットワーク進化の時系列データ."""
-    data = _load_network_evolution()
+    data = load_network_evolution_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Network evolution data not found. Run pipeline first.")
     return data
@@ -785,7 +606,7 @@ def genre_affinity(
     person_id: str | None = Query(None, description="人物IDでフィルタ"),
 ):
     """ジャンル親和性データ."""
-    data = _load_genre_affinity()
+    data = load_genre_affinity_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Genre affinity data not found. Run pipeline first.")
     if person_id:
@@ -800,7 +621,7 @@ def productivity(
     limit: int = Query(50, ge=1, le=500),
 ):
     """生産性指標."""
-    data = _load_productivity()
+    data = load_productivity_metrics_from_json()
     if not data:
         raise HTTPException(status_code=404, detail="Productivity data not found. Run pipeline first.")
     items = [{"person_id": pid, **d} for pid, d in list(data.items())[:limit]]

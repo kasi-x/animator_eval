@@ -1,0 +1,25 @@
+{
+  "transitions": [],
+  "career_paths": [],
+  "avg_time_to_stage": {
+    "3": {
+      "label": "Key Animator",
+      "avg_years": 1.5,
+      "median_years": 2,
+      "sample_size": 2
+    },
+    "4": {
+      "label": "Anim. Director",
+      "avg_years": 1.0,
+      "median_years": 1,
+      "sample_size": 1
+    },
+    "6": {
+      "label": "Director",
+      "avg_years": 1.5,
+      "median_years": 2,
+      "sample_size": 2
+    }
+  },
+  "total_persons_analyzed": 3
+}

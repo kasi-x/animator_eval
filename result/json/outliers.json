@@ -1,0 +1,101 @@
+{
+  "axis_outliers": {
+    "authority": {
+      "high": [
+        {
+          "person_id": "syn:a3",
+          "name": "アニメーター003",
+          "value": 100.0,
+          "zscore": 2.99,
+          "iqr_outlier": true,
+          "zscore_outlier": true
+        },
+        {
+          "person_id": "syn:a0",
+          "name": "アニメーター000",
+          "value": 81.33,
+          "zscore": 2.11,
+          "iqr_outlier": true,
+          "zscore_outlier": false
+        }
+      ],
+      "low": [],
+      "bounds": {
+        "iqr_lower": -8.67,
+        "iqr_upper": 80.09,
+        "mean": 36.47,
+        "std": 21.24
+      }
+    },
+    "trust": {
+      "high": [
+        {
+          "person_id": "syn:a9",
+          "name": "アニメーター009",
+          "value": 100.0,
+          "zscore": 2.54,
+          "iqr_outlier": true,
+          "zscore_outlier": true
+        },
+        {
+          "person_id": "syn:a6",
+          "name": "アニメーター006",
+          "value": 96.59,
+          "zscore": 2.42,
+          "iqr_outlier": true,
+          "zscore_outlier": false
+        },
+        {
+          "person_id": "syn:a0",
+          "name": "アニメーター000",
+          "value": 82.71,
+          "zscore": 1.91,
+          "iqr_outlier": true,
+          "zscore_outlier": false
+        },
+        {
+          "person_id": "syn:a3",
+          "name": "アニメーター003",
+          "value": 80.55,
+          "zscore": 1.83,
+          "iqr_outlier": true,
+          "zscore_outlier": false
+        }
+      ],
+      "low": [],
+      "bounds": {
+        "iqr_lower": -27.59,
+        "iqr_upper": 76.33,
+        "mean": 30.24,
+        "std": 27.44
+      }
+    },
+    "skill": {
+      "high": [],
+      "low": [],
+      "bounds": {
+        "iqr_lower": -53.29,
+        "iqr_upper": 151.75,
+        "mean": 42.84,
+        "std": 30.89
+      }
+    },
+    "composite": {
+      "high": [],
+      "low": [],
+      "bounds": {
+        "iqr_lower": -13.91,
+        "iqr_upper": 83.18,
+        "mean": 35.88,
+        "std": 19.91
+      }
+    }
+  },
+  "total_outliers": 4,
+  "outlier_person_ids": [
+    "syn:a0",
+    "syn:a3",
+    "syn:a6",
+    "syn:a9"
+  ]
+}

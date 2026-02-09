@@ -1,0 +1,12 @@
+Source ID,Canonical ID,Strategy,Confidence,Source Name JA,Source Name EN,Canonical Name JA,Canonical Name EN,Reason,Correct? (Y/N)
+anilist:p132741,anilist:p267442,exact,0.95,中村真由美,Mayumi Nakamura,中村真由美,Mayumi Nakamura,Exact name match: 中村真由美,
+anilist:p300047,anilist:p371742,exact,0.95,鈴木裕介,Yuusuke Suzuki,鈴木裕介,Yuusuke Suzuki,Exact name match: 鈴木裕介,
+anilist:p121275,anilist:p172956,exact,0.95,伊藤秀樹,Hideki Itou,伊藤秀樹,Hideki Itou,Exact name match: 伊藤秀樹,
+anilist:p182523,anilist:p116611,exact,0.95,木村誠,Makoto Kimura,木村誠,Makoto Kimura,Exact name match: 木村誠,
+anilist:p112847,anilist:p219343,exact,0.95,奥田誠治,Seiji Okuda,奥田誠治,Seiji Okuda,Exact name match: 奥田誠治,
+anilist:p206626,anilist:p118575,similarity,0.85,押田裕一,Yuuichi Oshida,吉田雄一,Yuuichi Yoshida,High similarity: 吉田雄一 ≈ 押田裕一,
+anilist:p211100,anilist:p172939,similarity,0.85,,Khoa Nguyen,,Hoa Nguyen,High similarity: Hoa Nguyen ≈ Khoa Nguyen,
+anilist:p184870,anilist:p184057,similarity,0.85,島亜里沙,Risa Shima,島亜里紗,Arisa Shima,High similarity: 島亜里紗 ≈ 島亜里沙,
+anilist:p136055,anilist:p183389,similarity,0.85,小林由美,Yumi Kobayashi,小林あゆみ,Ayumi Kobayashi,High similarity: 小林あゆみ ≈ 小林由美,
+anilist:p133260,anilist:p152177,similarity,0.85,阿部晃瑳詩,Asashi Abe,阿部雅司,Masashi Abe,High similarity: 阿部雅司 ≈ 阿部晃瑳詩,
+anilist:p150550,anilist:p170275,similarity,0.85,藤田麻貴,Maki Fujita,藤田舞,Mai Fujita,High similarity: 藤田舞 ≈ 藤田麻貴,

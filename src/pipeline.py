@@ -62,6 +62,7 @@ from src.database import (
 )
 from src.models import Anime, Credit, ScoreResult
 from src.utils.config import JSON_DIR
+from src.utils.json_io import save_pipeline_json_if_data_present
 from src.utils.performance import get_monitor, reset_monitor
 
 logger = structlog.get_logger()
@@ -412,27 +413,30 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
     # Anime statistics 出力
     composite_scores = {r["person_id"]: r["composite"] for r in results}
     anime_quality_statistics = compute_anime_stats(credits, anime_map, composite_scores)
-    if anime_quality_statistics:
-        anime_stats_output_path = JSON_DIR / "anime_stats.json"
-        with open(anime_stats_output_path, "w") as f:
-            json.dump(anime_quality_statistics, f, indent=2, ensure_ascii=False)
-        logger.info("anime_stats_saved", path=str(anime_stats_output_path), anime=len(anime_quality_statistics))
+    save_pipeline_json_if_data_present(
+        "anime_stats.json",
+        anime_quality_statistics,
+        log_message="anime_stats_saved",
+        anime=len(anime_quality_statistics) if anime_quality_statistics else 0,
+    )
 
     # Studio analysis 出力
     studio_performance_analysis = compute_studio_analysis(credits, anime_map, composite_scores)
-    if studio_performance_analysis:
-        studio_output_path = JSON_DIR / "studios.json"
-        with open(studio_output_path, "w") as f:
-            json.dump(studio_performance_analysis, f, indent=2, ensure_ascii=False)
-        logger.info("studios_saved", path=str(studio_output_path), studios=len(studio_performance_analysis))
+    save_pipeline_json_if_data_present(
+        "studios.json",
+        studio_performance_analysis,
+        log_message="studios_saved",
+        studios=len(studio_performance_analysis) if studio_performance_analysis else 0,
+    )
 
     # Seasonal trends 出力
     seasonal_activity_patterns = compute_seasonal_trends(credits, anime_map, composite_scores)
-    if seasonal_activity_patterns.get("by_season"):
-        seasonal_output_path = JSON_DIR / "seasonal.json"
-        with open(seasonal_output_path, "w") as f:
-            json.dump(seasonal_activity_patterns, f, indent=2, ensure_ascii=False)
-        logger.info("seasonal_saved", path=str(seasonal_output_path))
+    save_pipeline_json_if_data_present(
+        "seasonal.json",
+        seasonal_activity_patterns,
+        condition=seasonal_activity_patterns.get("by_season") if seasonal_activity_patterns else False,
+        log_message="seasonal_saved",
+    )
 
     # Collaboration strength 出力
     logger.info("step_start", step="collaboration_strength")
@@ -440,33 +444,37 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
         strongest_collaboration_pairs = compute_collaboration_strength(
             credits, anime_map, min_shared=2, person_scores=composite_scores,
         )
-    if strongest_collaboration_pairs:
-        collaborations_output_path = JSON_DIR / "collaborations.json"
-        with open(collaborations_output_path, "w") as f:
-            json.dump(strongest_collaboration_pairs[:500], f, indent=2, ensure_ascii=False)
-        logger.info("collaborations_saved", path=str(collaborations_output_path), pairs=len(strongest_collaboration_pairs))
+    save_pipeline_json_if_data_present(
+        "collaborations.json",
+        strongest_collaboration_pairs[:500] if strongest_collaboration_pairs else [],
+        log_message="collaborations_saved",
+        pairs=len(strongest_collaboration_pairs) if strongest_collaboration_pairs else 0,
+    )
 
     # Outlier detection
     logger.info("step_start", step="outlier_detection")
     outlier_data = detect_outliers(results)
-    if outlier_data["total_outliers"] > 0:
-        outlier_path = JSON_DIR / "outliers.json"
-        with open(outlier_path, "w") as f:
-            json.dump(outlier_data, f, indent=2, ensure_ascii=False)
-        logger.info("outliers_saved", path=str(outlier_path), total=outlier_data["total_outliers"])
+    save_pipeline_json_if_data_present(
+        "outliers.json",
+        outlier_data,
+        condition=outlier_data.get("total_outliers", 0) > 0,
+        log_message="outliers_saved",
+        total=outlier_data.get("total_outliers", 0),
+    )
 
     # Team composition analysis
     logger.info("step_start", step="team_composition")
     team_data = analyze_team_patterns(credits, anime_map, person_scores=composite_scores)
-    if team_data["total_high_score"] > 0:
-        team_path = JSON_DIR / "teams.json"
-        with open(team_path, "w") as f:
-            json.dump(team_data, f, indent=2, ensure_ascii=False)
-        logger.info("teams_saved", path=str(team_path), high_score=team_data["total_high_score"])
+    save_pipeline_json_if_data_present(
+        "teams.json",
+        team_data,
+        condition=team_data.get("total_high_score", 0) > 0,
+        log_message="teams_saved",
+        high_score=team_data.get("total_high_score", 0),
+    )
 
     # Growth trends (output to JSON — data already computed above)
     if growth_data:
-        growth_path = JSON_DIR / "growth.json"
         # Summarize trend counts for the JSON
         trend_counts: dict[str, int] = {}
         for gd in growth_data.values():
@@ -482,9 +490,12 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
                 )[:200]
             },
         }
-        with open(growth_path, "w") as f:
-            json.dump(growth_output, f, indent=2, ensure_ascii=False)
-        logger.info("growth_saved", path=str(growth_path), persons=len(growth_data))
+        save_pipeline_json_if_data_present(
+            "growth.json",
+            growth_output,
+            log_message="growth_saved",
+            persons=len(growth_data),
+        )
 
     # GraphML export
     logger.info("step_start", step="graphml_export")
@@ -503,20 +514,24 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
     # Time series
     logger.info("step_start", step="time_series")
     credit_timeline_by_year = compute_time_series(credits, anime_map)
-    if credit_timeline_by_year["years"]:
-        time_series_output_path = JSON_DIR / "time_series.json"
-        with open(time_series_output_path, "w") as f:
-            json.dump(credit_timeline_by_year, f, indent=2, ensure_ascii=False)
-        logger.info("time_series_saved", path=str(time_series_output_path), years=len(credit_timeline_by_year["years"]))
+    save_pipeline_json_if_data_present(
+        "time_series.json",
+        credit_timeline_by_year,
+        condition=credit_timeline_by_year.get("years") if credit_timeline_by_year else False,
+        log_message="time_series_saved",
+        years=len(credit_timeline_by_year.get("years", [])),
+    )
 
     # Decade analysis
     logger.info("step_start", step="decade_analysis")
     decade_data = compute_decade_analysis(credits, anime_map, person_scores=composite_scores)
-    if decade_data["decades"]:
-        decade_path = JSON_DIR / "decades.json"
-        with open(decade_path, "w") as f:
-            json.dump(decade_data, f, indent=2, ensure_ascii=False)
-        logger.info("decades_saved", path=str(decade_path), decades=len(decade_data["decades"]))
+    save_pipeline_json_if_data_present(
+        "decades.json",
+        decade_data,
+        condition=decade_data.get("decades") if decade_data else False,
+        log_message="decades_saved",
+        decades=len(decade_data.get("decades", [])),
+    )
 
     # Person tags (auto-labeling)
     logger.info("step_start", step="person_tags")
@@ -529,18 +544,20 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
                 r["tags"] = person_tags[pid]
 
         # Also save standalone tags file
-        tags_path = JSON_DIR / "tags.json"
-        with open(tags_path, "w") as f:
-            # Summary: count per tag
-            tag_summary: dict[str, int] = {}
-            for t_list in person_tags.values():
-                for t in t_list:
-                    tag_summary[t] = tag_summary.get(t, 0) + 1
-            json.dump(
-                {"tag_summary": dict(sorted(tag_summary.items(), key=lambda x: -x[1])), "person_tags": person_tags},
-                f, indent=2, ensure_ascii=False,
-            )
-        logger.info("tags_saved", path=str(tags_path), unique_tags=len(tag_summary))
+        tag_summary: dict[str, int] = {}
+        for t_list in person_tags.values():
+            for t in t_list:
+                tag_summary[t] = tag_summary.get(t, 0) + 1
+        tags_data = {
+            "tag_summary": dict(sorted(tag_summary.items(), key=lambda x: -x[1])),
+            "person_tags": person_tags,
+        }
+        save_pipeline_json_if_data_present(
+            "tags.json",
+            tags_data,
+            log_message="tags_saved",
+            unique_tags=len(tag_summary),
+        )
 
     # Re-save scores.json with tags added
     with open(output_path, "w") as f:
@@ -549,21 +566,25 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
     # Role flow (Sankey data)
     logger.info("step_start", step="role_flow")
     role_flow = compute_role_flow(credits, anime_map)
-    if role_flow["total_transitions"] > 0:
-        flow_path = JSON_DIR / "role_flow.json"
-        with open(flow_path, "w") as f:
-            json.dump(role_flow, f, indent=2, ensure_ascii=False)
-        logger.info("role_flow_saved", path=str(flow_path), transitions=role_flow["total_transitions"])
+    save_pipeline_json_if_data_present(
+        "role_flow.json",
+        role_flow,
+        condition=role_flow.get("total_transitions", 0) > 0,
+        log_message="role_flow_saved",
+        transitions=role_flow.get("total_transitions", 0),
+    )
 
     # Bridge detection
     logger.info("step_start", step="bridge_detection")
     # Use clusters if available, otherwise let detect_bridges compute its own
     bridge_data = detect_bridges(credits)
-    if bridge_data["bridge_persons"]:
-        bridge_path = JSON_DIR / "bridges.json"
-        with open(bridge_path, "w") as f:
-            json.dump(bridge_data, f, indent=2, ensure_ascii=False)
-        logger.info("bridges_saved", path=str(bridge_path), bridges=len(bridge_data["bridge_persons"]))
+    save_pipeline_json_if_data_present(
+        "bridges.json",
+        bridge_data,
+        condition=bridge_data.get("bridge_persons") if bridge_data else False,
+        log_message="bridges_saved",
+        bridges=len(bridge_data.get("bridge_persons", [])),
+    )
 
     # Mentorship inference
     logger.info("step_start", step="mentorship_inference")
@@ -575,53 +596,62 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
             "tree": mentorship_tree,
             "total": len(mentorship_data),
         }
-        mentorship_path = JSON_DIR / "mentorships.json"
-        with open(mentorship_path, "w") as f:
-            json.dump(mentorship_output, f, indent=2, ensure_ascii=False)
-        logger.info("mentorships_saved", path=str(mentorship_path), total=len(mentorship_data))
+        save_pipeline_json_if_data_present(
+            "mentorships.json",
+            mentorship_output,
+            log_message="mentorships_saved",
+            total=len(mentorship_data),
+        )
 
     # Career milestones
     logger.info("step_start", step="milestones")
     milestones_data = compute_milestones(credits, anime_map)
-    if milestones_data:
-        milestones_path = JSON_DIR / "milestones.json"
-        with open(milestones_path, "w") as f:
-            json.dump(milestones_data, f, indent=2, ensure_ascii=False)
-        logger.info("milestones_saved", path=str(milestones_path), persons=len(milestones_data))
+    save_pipeline_json_if_data_present(
+        "milestones.json",
+        milestones_data,
+        log_message="milestones_saved",
+        persons=len(milestones_data) if milestones_data else 0,
+    )
 
     # Network evolution
     logger.info("step_start", step="network_evolution")
     network_growth_over_decades = compute_network_evolution(credits, anime_map)
-    if network_growth_over_decades["years"]:
-        network_evolution_output_path = JSON_DIR / "network_evolution.json"
-        with open(network_evolution_output_path, "w") as f:
-            json.dump(network_growth_over_decades, f, indent=2, ensure_ascii=False)
-        logger.info("network_evolution_saved", path=str(network_evolution_output_path), years=len(network_growth_over_decades["years"]))
+    save_pipeline_json_if_data_present(
+        "network_evolution.json",
+        network_growth_over_decades,
+        condition=network_growth_over_decades.get("years") if network_growth_over_decades else False,
+        log_message="network_evolution_saved",
+        years=len(network_growth_over_decades.get("years", [])),
+    )
 
     # Genre affinity
     logger.info("step_start", step="genre_affinity")
     person_genre_specialization = compute_genre_affinity(credits, anime_map)
     if person_genre_specialization:
-        genre_affinity_output_path = JSON_DIR / "genre_affinity.json"
         # Save top 200 by total_credits
         top_genre_specialists = dict(
             sorted(person_genre_specialization.items(), key=lambda x: x[1]["total_credits"], reverse=True)[:200]
         )
-        with open(genre_affinity_output_path, "w") as f:
-            json.dump(top_genre_specialists, f, indent=2, ensure_ascii=False)
-        logger.info("genre_affinity_saved", path=str(genre_affinity_output_path), persons=len(person_genre_specialization))
+        save_pipeline_json_if_data_present(
+            "genre_affinity.json",
+            top_genre_specialists,
+            log_message="genre_affinity_saved",
+            persons=len(person_genre_specialization),
+        )
 
     # Productivity
     logger.info("step_start", step="productivity")
     person_productivity_metrics = compute_productivity(credits, anime_map)
     if person_productivity_metrics:
-        productivity_output_path = JSON_DIR / "productivity.json"
         most_productive_persons = dict(
             sorted(person_productivity_metrics.items(), key=lambda x: x[1]["credits_per_year"], reverse=True)[:200]
         )
-        with open(productivity_output_path, "w") as f:
-            json.dump(most_productive_persons, f, indent=2, ensure_ascii=False)
-        logger.info("productivity_saved", path=str(productivity_output_path), persons=len(person_productivity_metrics))
+        save_pipeline_json_if_data_present(
+            "productivity.json",
+            most_productive_persons,
+            log_message="productivity_saved",
+            persons=len(person_productivity_metrics),
+        )
 
     # Role transitions 出力
     from dataclasses import asdict
@@ -637,25 +667,25 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
         "total_persons_analyzed": transitions["total_persons_analyzed"],
     }
 
-    if transitions["total_persons_analyzed"] > 0:
-        trans_path = JSON_DIR / "transitions.json"
-        with open(trans_path, "w") as f:
-            json.dump(transitions_serializable, f, indent=2, ensure_ascii=False)
-        logger.info("transitions_saved", path=str(trans_path), persons=transitions["total_persons_analyzed"])
+    save_pipeline_json_if_data_present(
+        "transitions.json",
+        transitions_serializable,
+        condition=transitions.get("total_persons_analyzed", 0) > 0,
+        log_message="transitions_saved",
+        persons=transitions.get("total_persons_analyzed", 0),
+    )
 
     # Influence tree (mentor-mentee relationships)
     logger.info("step_start", step="influence_tree")
     influence = compute_influence_tree(credits, anime_map, person_scores=composite_scores)
-    if influence["total_mentors"] > 0:
-        influence_path = JSON_DIR / "influence.json"
-        with open(influence_path, "w") as f:
-            json.dump(influence, f, indent=2, ensure_ascii=False)
-        logger.info(
-            "influence_saved",
-            path=str(influence_path),
-            mentors=influence["total_mentors"],
-            mentees=influence["total_mentees"],
-        )
+    save_pipeline_json_if_data_present(
+        "influence.json",
+        influence,
+        condition=influence.get("total_mentors", 0) > 0,
+        log_message="influence_saved",
+        mentors=influence.get("total_mentors", 0),
+        mentees=influence.get("total_mentees", 0),
+    )
 
     # Cross-validation (score stability measurement) — skip for very small datasets
     if len(credits) >= 20:
@@ -665,14 +695,12 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
             crossval_result = cross_validate_scores(
             persons, anime_list, credits, n_folds=cv_folds, holdout_ratio=0.2,
         )
-        crossval_path = JSON_DIR / "crossval.json"
-        with open(crossval_path, "w") as f:
-            json.dump(crossval_result, f, indent=2, ensure_ascii=False)
-        logger.info(
-            "crossval_saved",
-            path=str(crossval_path),
-            avg_correlation=crossval_result["avg_rank_correlation"],
-            avg_top10=crossval_result["avg_top10_overlap"],
+        save_pipeline_json_if_data_present(
+            "crossval.json",
+            crossval_result,
+            log_message="crossval_saved",
+            avg_correlation=crossval_result.get("avg_rank_correlation", 0),
+            avg_top10=crossval_result.get("avg_top10_overlap", 0),
         )
     else:
         crossval_result = {"avg_rank_correlation": 0, "avg_top10_overlap": 0}

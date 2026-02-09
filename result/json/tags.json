@@ -1,0 +1,31 @@
+{
+  "tag_summary": {
+    "newcomer": 4,
+    "specialist": 4,
+    "hub": 2,
+    "senior_staff": 1,
+    "director_class": 1
+  },
+  "person_tags": {
+    "p2": [
+      "newcomer",
+      "hub",
+      "specialist"
+    ],
+    "p3": [
+      "newcomer",
+      "specialist",
+      "senior_staff"
+    ],
+    "p1": [
+      "newcomer",
+      "hub",
+      "specialist",
+      "director_class"
+    ],
+    "p4": [
+      "newcomer",
+      "specialist"
+    ]
+  }
+}

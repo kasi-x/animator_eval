@@ -1,0 +1,55 @@
+{
+  "p1": {
+    "score_tiers": {
+      "high_rated": 33.3,
+      "mid_rated": 33.3,
+      "low_rated": 33.3
+    },
+    "eras": {
+      "modern": 100.0
+    },
+    "primary_tier": "high_rated",
+    "primary_era": "modern",
+    "avg_anime_score": 7.33,
+    "total_credits": 3
+  },
+  "p2": {
+    "score_tiers": {
+      "high_rated": 33.3,
+      "mid_rated": 33.3,
+      "low_rated": 33.3
+    },
+    "eras": {
+      "modern": 100.0
+    },
+    "primary_tier": "high_rated",
+    "primary_era": "modern",
+    "avg_anime_score": 7.33,
+    "total_credits": 3
+  },
+  "p3": {
+    "score_tiers": {
+      "high_rated": 50.0,
+      "mid_rated": 50.0
+    },
+    "eras": {
+      "modern": 100.0
+    },
+    "primary_tier": "high_rated",
+    "primary_era": "modern",
+    "avg_anime_score": 8.0,
+    "total_credits": 2
+  },
+  "p4": {
+    "score_tiers": {
+      "low_rated": 100.0
+    },
+    "eras": {
+      "modern": 100.0
+    },
+    "primary_tier": "low_rated",
+    "primary_era": "modern",
+    "avg_anime_score": 6.0,
+    "total_credits": 1
+  }
+}
