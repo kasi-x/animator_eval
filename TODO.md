@@ -87,7 +87,7 @@
 - [ ] エッジ減衰の時間パラメータ最適化（実データでの検証）
 - [ ] より高精度な名寄せ (AI-assisted)
 - [ ] Neo4j 直接接続（大規模運用向け）
-- [ ] Plotly インタラクティブ可視化
+- [x] Plotly インタラクティブ可視化 — ✅ 完了 (score distribution, radar, scatter, timeline, network)
 - [ ] 外部 ID 連携 (AniDB, ANN)
 - [ ] WebSocket リアルタイム更新
 - [ ] 国際化 (i18n)

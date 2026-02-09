@@ -22,6 +22,7 @@ pipeline = "python -m src.pipeline"
 pipeline-viz = "python -m src.pipeline --visualize"
 pipeline-check = "python -m src.pipeline --dry-run"
 report = "python -m src.report"
+viz-interactive = "python -m src.analysis.visualize_interactive"
 
 # CLI
 stats = "python -c 'from src.cli import app; app()' stats"
@@ -58,6 +59,7 @@ pydantic = ">=2.0"
 rich = "*"
 structlog = "*"
 typer = "*"
+plotly = ">=6.5.2,<7"
 
 [pypi-dependencies]
 sparqlwrapper = "*"
