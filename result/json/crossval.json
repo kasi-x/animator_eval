@@ -1,40 +1,28 @@
 {
-  "n_folds": 5,
+  "n_folds": 3,
   "holdout_ratio": 0.2,
-  "total_credits": 529,
-  "avg_rank_correlation": 0.9351,
-  "min_rank_correlation": 0.912,
-  "avg_top10_overlap": 0.9,
+  "total_credits": 9,
+  "avg_rank_correlation": 0.8667,
+  "min_rank_correlation": 0.8,
+  "avg_top10_overlap": 1.0,
   "fold_results": [
     {
       "fold": 1,
-      "credits_used": 424,
-      "correlation": 0.912,
-      "top10_overlap": 0.9
-    },
-    {
-      "fold": 2,
-      "credits_used": 424,
-      "correlation": 0.9485,
-      "top10_overlap": 0.9
-    },
-    {
-      "fold": 3,
-      "credits_used": 424,
-      "correlation": 0.9291,
-      "top10_overlap": 0.9
-    },
-    {
-      "fold": 4,
-      "credits_used": 424,
-      "correlation": 0.9543,
+      "credits_used": 8,
+      "correlation": 0.8,
       "top10_overlap": 1.0
     },
     {
-      "fold": 5,
-      "credits_used": 424,
-      "correlation": 0.9317,
-      "top10_overlap": 0.8
+      "fold": 2,
+      "credits_used": 8,
+      "correlation": 0.8,
+      "top10_overlap": 1.0
+    },
+    {
+      "fold": 3,
+      "credits_used": 8,
+      "correlation": 1.0,
+      "top10_overlap": 1.0
     }
   ]
 }

@@ -95,31 +95,31 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
                     "peak_credits": career_snapshot.peak_credits,
                 }
 
-        # Add network density
+        # Add network density (dataclass instance -> dict fields)
         if pid in context.network_density:
             nd = context.network_density[pid]
             result_entry["network"] = {
-                "collaborators": nd["collaborator_count"],
-                "unique_anime": nd["unique_anime"],
-                "hub_score": nd["hub_score"],
+                "collaborators": nd.collaborator_count,
+                "unique_anime": nd.unique_anime,
+                "hub_score": nd.hub_score,
             }
 
-        # Add growth trend
+        # Add growth trend (dataclass instance -> dict fields)
         if context.growth_data and pid in context.growth_data:
             gd = context.growth_data[pid]
             result_entry["growth"] = {
-                "trend": gd["trend"],
-                "activity_ratio": gd["activity_ratio"],
-                "recent_credits": gd["recent_credits"],
+                "trend": gd.trend,
+                "activity_ratio": gd.activity_ratio,
+                "recent_credits": gd.recent_credits,
             }
 
-        # Add versatility
+        # Add versatility (dataclass instance -> dict fields)
         if pid in context.versatility:
             v = context.versatility[pid]
             result_entry["versatility"] = {
-                "score": v["versatility_score"],
-                "categories": v["category_count"],
-                "roles": v["role_count"],
+                "score": v.versatility_score,
+                "categories": v.category_count,
+                "roles": v.role_count,
             }
 
         # Add score breakdown (top contributing factors)

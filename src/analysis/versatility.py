@@ -8,6 +8,7 @@ from collections import defaultdict
 
 import structlog
 
+from src.analysis.protocols import VersatilityMetrics
 from src.models import Credit, Role
 from src.utils.role_groups import ROLE_CATEGORY
 
@@ -17,7 +18,7 @@ logger = structlog.get_logger()
 def compute_versatility(
     credits: list[Credit],
     person_ids: set[str] | None = None,
-) -> dict[str, dict]:
+) -> dict[str, VersatilityMetrics]:
     """人物ごとの役職多様性を計算する.
 
     Args:
@@ -25,14 +26,13 @@ def compute_versatility(
         person_ids: 対象人物ID (None = 全員)
 
     Returns:
-        {person_id: {
-            "categories": [str],
-            "category_count": int,
-            "roles": [str],
-            "role_count": int,
-            "versatility_score": float,  # 0-100
-            "category_credits": {category: count},
-        }}
+        Dict mapping person_id to VersatilityMetrics dataclass with:
+        - categories: List of role categories worked in
+        - category_count: Number of distinct categories
+        - roles: List of specific roles worked
+        - role_count: Number of distinct roles
+        - versatility_score: 0-100 score (4+ categories = 100)
+        - category_credits: Dict mapping category to credit count
     """
     person_roles: dict[str, set[Role]] = defaultdict(set)
     person_categories: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
@@ -55,14 +55,14 @@ def compute_versatility(
         n_cats = len(categories)
         versatility = min(n_cats / 4.0, 1.0) * 100
 
-        results[pid] = {
-            "categories": sorted(categories),
-            "category_count": n_cats,
-            "roles": sorted(r.value for r in roles),
-            "role_count": len(roles),
-            "versatility_score": round(versatility, 1),
-            "category_credits": cat_credits,
-        }
+        results[pid] = VersatilityMetrics(
+            categories=sorted(categories),
+            category_count=n_cats,
+            roles=sorted(r.value for r in roles),
+            role_count=len(roles),
+            versatility_score=round(versatility, 1),
+            category_credits=cat_credits,
+        )
 
     logger.info("versatility_computed", persons=len(results))
     return results

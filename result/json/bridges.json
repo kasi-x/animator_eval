@@ -1,0 +1,11 @@
+{
+  "bridge_persons": [],
+  "cross_community_edges": [],
+  "community_connectivity": {},
+  "stats": {
+    "total_persons": 4,
+    "total_communities": 1,
+    "total_cross_edges": 0,
+    "bridge_person_count": 0
+  }
+}

@@ -41,40 +41,40 @@ class TestComputeGrowthTrends:
     def test_rising_trend(self):
         credits, anime_map = _make_data()
         result = compute_growth_trends(credits, anime_map, window=3)
-        assert result["p1"]["trend"] == "rising"
+        assert result["p1"].trend == "rising"
 
     def test_inactive_trend(self):
         credits, anime_map = _make_data()
         result = compute_growth_trends(credits, anime_map, window=3)
-        assert result["p2"]["trend"] == "inactive"
+        assert result["p2"].trend == "inactive"
 
     def test_yearly_credits(self):
         credits, anime_map = _make_data()
         result = compute_growth_trends(credits, anime_map)
-        assert result["p1"]["yearly_credits"][2024] == 2  # a4 + a5
+        assert result["p1"].yearly_credits[2024] == 2  # a4 + a5
 
     def test_total_credits(self):
         credits, anime_map = _make_data()
         result = compute_growth_trends(credits, anime_map)
-        assert result["p1"]["total_credits"] == 4
+        assert result["p1"].total_credits == 4
 
     def test_activity_ratio(self):
         credits, anime_map = _make_data()
         result = compute_growth_trends(credits, anime_map, window=3)
         # p1 has 3 recent, 1 early → ratio = 0.75
-        assert result["p1"]["activity_ratio"] == 0.75
+        assert result["p1"].activity_ratio == 0.75
 
     def test_with_person_scores(self):
         credits, anime_map = _make_data()
         scores = {"p1": 70.0, "p2": 50.0}
         result = compute_growth_trends(credits, anime_map, person_scores=scores)
-        assert result["p1"]["current_score"] == 70.0
+        assert result["p1"].current_score == 70.0
 
     def test_recent_avg_anime_score(self):
         credits, anime_map = _make_data()
         result = compute_growth_trends(credits, anime_map, window=3)
         # p1 recent: a3 (8.0), a4 (8.5), a5 (7.5)
-        assert result["p1"]["recent_avg_anime_score"] == 8.0
+        assert result["p1"].recent_avg_anime_score == 8.0
 
     def test_empty(self):
         result = compute_growth_trends([], {})
@@ -84,4 +84,4 @@ class TestComputeGrowthTrends:
         credits, anime_map = _make_data()
         result = compute_growth_trends(credits, anime_map)
         # p1: 2015 to 2024 = 10
-        assert result["p1"]["career_span"] == 10
+        assert result["p1"].career_span == 10

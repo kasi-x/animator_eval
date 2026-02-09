@@ -6,6 +6,7 @@
 
 import structlog
 
+from src.analysis.protocols import GrowthMetrics
 from src.models import Anime, Credit
 
 logger = structlog.get_logger()
@@ -16,7 +17,7 @@ def compute_growth_trends(
     anime_map: dict[str, Anime],
     person_scores: dict[str, float] | None = None,
     window: int = 3,
-) -> dict[str, dict]:
+) -> dict[str, GrowthMetrics]:
     """人物ごとの成長トレンドを算出する.
 
     Args:
@@ -26,14 +27,7 @@ def compute_growth_trends(
         window: 直近何年分を「最近」とみなすか
 
     Returns:
-        {person_id: {
-            "yearly_credits": {year: count},
-            "trend": "rising" | "stable" | "declining" | "inactive",
-            "recent_avg_score": float | None,
-            "career_avg_score": float | None,
-            "activity_ratio": float,  # 最近/全体のクレジット比率
-            "total_years": int,
-        }}
+        Dict mapping person_id to GrowthMetrics dataclass with trend analysis
     """
     from collections import defaultdict
 
@@ -107,33 +101,31 @@ def compute_growth_trends(
                     if y in recent_years:
                         recent_scores.append(e["score"])
 
-        entry: dict = {
-            "yearly_credits": dict(sorted(yearly_counts.items())),
-            "trend": trend,
-            "total_credits": total_credits,
-            "recent_credits": recent_credits,
-            "total_years": total_years,
-            "career_span": career_span,
-            "activity_ratio": round(recent_credits / max(total_credits, 1), 3),
-        }
-
-        if recent_scores:
-            entry["recent_avg_anime_score"] = round(
-                sum(recent_scores) / len(recent_scores), 2
-            )
-        if career_scores:
-            entry["career_avg_anime_score"] = round(
-                sum(career_scores) / len(career_scores), 2
-            )
-        if person_scores and pid in person_scores:
-            entry["current_score"] = person_scores[pid]
-
-        results[pid] = entry
+        results[pid] = GrowthMetrics(
+            yearly_credits=dict(sorted(yearly_counts.items())),
+            trend=trend,
+            total_credits=total_credits,
+            recent_credits=recent_credits,
+            total_years=total_years,
+            career_span=career_span,
+            activity_ratio=round(recent_credits / max(total_credits, 1), 3),
+            recent_avg_anime_score=(
+                round(sum(recent_scores) / len(recent_scores), 2)
+                if recent_scores
+                else None
+            ),
+            career_avg_anime_score=(
+                round(sum(career_scores) / len(career_scores), 2)
+                if career_scores
+                else None
+            ),
+            current_score=person_scores.get(pid) if person_scores else None,
+        )
 
     # Compute summary stats
     trend_counts = defaultdict(int)
     for r in results.values():
-        trend_counts[r["trend"]] += 1
+        trend_counts[r.trend] += 1
 
     logger.info(
         "growth_trends_computed",

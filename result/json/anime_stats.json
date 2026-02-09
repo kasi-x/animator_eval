@@ -14,11 +14,11 @@
     "top_persons": [
       {
         "person_id": "p2",
-        "composite": 70.04
+        "composite": 70.036
       },
       {
         "person_id": "p3",
-        "composite": 49.25
+        "composite": 49.251
       },
       {
         "person_id": "p1",
@@ -41,11 +41,11 @@
     "top_persons": [
       {
         "person_id": "p2",
-        "composite": 70.04
+        "composite": 70.036
       },
       {
         "person_id": "p3",
-        "composite": 49.25
+        "composite": 49.251
       },
       {
         "person_id": "p1",
@@ -67,7 +67,7 @@
     "top_persons": [
       {
         "person_id": "p2",
-        "composite": 70.04
+        "composite": 70.036
       },
       {
         "person_id": "p1",
@@ -75,7 +75,7 @@
       },
       {
         "person_id": "p4",
-        "composite": 20.55
+        "composite": 20.5535
       }
     ]
   }

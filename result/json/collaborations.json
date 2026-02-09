@@ -30,7 +30,7 @@
     ],
     "top_role_pairs": [
       {
-        "pair": "animation_director+key_animator",
+        "pair": "key_animator+animation_director",
         "count": 2
       }
     ],
@@ -38,7 +38,7 @@
     "latest_year": 2023,
     "longevity": 2,
     "strength_score": 59.3,
-    "combined_score": 59.65
+    "combined_score": 59.64
   },
   {
     "person_a": "p1",
@@ -50,7 +50,7 @@
     ],
     "top_role_pairs": [
       {
-        "pair": "animation_director+director",
+        "pair": "director+animation_director",
         "count": 2
       }
     ],
@@ -58,6 +58,6 @@
     "latest_year": 2023,
     "longevity": 2,
     "strength_score": 59.3,
-    "combined_score": 44.62
+    "combined_score": 44.63
   }
 ]

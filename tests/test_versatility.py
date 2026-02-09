@@ -1,7 +1,8 @@
 """versatility モジュールのテスト."""
 
-from src.analysis.versatility import ROLE_CATEGORY, compute_versatility
+from src.analysis.versatility import compute_versatility
 from src.models import Credit, Role
+from src.utils.role_groups import ROLE_CATEGORY
 
 
 def _make_credits():
@@ -31,25 +32,25 @@ class TestComputeVersatility:
     def test_category_count(self):
         credits = _make_credits()
         result = compute_versatility(credits)
-        assert result["p1"]["category_count"] == 3  # direction, animation, writing
-        assert result["p2"]["category_count"] == 1  # animation only
+        assert result["p1"].category_count == 3  # direction, animation, writing
+        assert result["p2"].category_count == 1  # animation only
 
     def test_versatility_score_single_category(self):
         credits = _make_credits()
         result = compute_versatility(credits)
-        assert result["p2"]["versatility_score"] == 25.0  # 1/4 * 100
+        assert result["p2"].versatility_score == 25.0  # 1/4 * 100
 
     def test_versatility_score_multi_category(self):
         credits = _make_credits()
         result = compute_versatility(credits)
         # p3 has 5 categories: direction, design, animation, technical, writing
-        assert result["p3"]["versatility_score"] == 100.0  # capped at 100
+        assert result["p3"].versatility_score == 100.0  # capped at 100
 
     def test_roles_list(self):
         credits = _make_credits()
         result = compute_versatility(credits)
-        assert "director" in result["p1"]["roles"]
-        assert "key_animator" in result["p1"]["roles"]
+        assert "director" in result["p1"].roles
+        assert "key_animator" in result["p1"].roles
 
     def test_filter_person_ids(self):
         credits = _make_credits()
@@ -64,7 +65,7 @@ class TestComputeVersatility:
         credits = _make_credits()
         result = compute_versatility(credits)
         # p2 has 2 key_animator credits → animation: 2
-        assert result["p2"]["category_credits"]["animation"] == 2
+        assert result["p2"].category_credits["animation"] == 2
 
     def test_role_category_mapping(self):
         assert ROLE_CATEGORY[Role.DIRECTOR] == "direction"

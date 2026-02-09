@@ -11,6 +11,7 @@ from collections import defaultdict
 
 import structlog
 
+from src.analysis.protocols import NetworkDensityMetrics
 from src.models import Credit
 
 logger = structlog.get_logger()
@@ -19,7 +20,7 @@ logger = structlog.get_logger()
 def compute_network_density(
     credits: list[Credit],
     person_scores: dict[str, float] | None = None,
-) -> dict[str, dict]:
+) -> dict[str, NetworkDensityMetrics]:
     """人物ごとのネットワーク密度を計算する.
 
     Args:
@@ -27,12 +28,7 @@ def compute_network_density(
         person_scores: {person_id: composite_score}
 
     Returns:
-        {person_id: {
-            "collaborator_count": int,
-            "avg_collaborator_score": float | None,
-            "unique_anime": int,
-            "hub_score": float,
-        }}
+        Dict mapping person_id to NetworkDensityMetrics dataclass
     """
     # Build anime → persons mapping
     anime_persons: dict[str, set[str]] = defaultdict(set)
@@ -58,22 +54,19 @@ def compute_network_density(
         collabs = person_collaborators[pid]
         unique_anime = len(person_anime[pid])
 
-        entry: dict = {
-            "collaborator_count": len(collabs),
-            "unique_anime": unique_anime,
-            "hub_score": round(len(collabs) / max_collabs * 100, 1) if max_collabs > 0 else 0,
-        }
-
+        # Calculate average collaborator score
+        avg_collab_score = None
         if person_scores:
-            collab_scores = [
-                person_scores[c] for c in collabs if c in person_scores
-            ]
+            collab_scores = [person_scores[c] for c in collabs if c in person_scores]
             if collab_scores:
-                entry["avg_collaborator_score"] = round(
-                    sum(collab_scores) / len(collab_scores), 2
-                )
+                avg_collab_score = round(sum(collab_scores) / len(collab_scores), 2)
 
-        results[pid] = entry
+        results[pid] = NetworkDensityMetrics(
+            collaborator_count=len(collabs),
+            unique_anime=unique_anime,
+            hub_score=round(len(collabs) / max_collabs * 100, 1) if max_collabs > 0 else 0,
+            avg_collaborator_score=avg_collab_score,
+        )
 
     logger.info("network_density_computed", persons=len(results))
     return results

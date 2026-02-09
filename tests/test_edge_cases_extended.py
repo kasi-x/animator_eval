@@ -27,8 +27,8 @@ class TestSinglePersonDataset:
     def test_network_density_single(self):
         credits, _ = self._make_single()
         result = compute_network_density(credits)
-        assert result["p1"]["collaborator_count"] == 0
-        assert result["p1"]["hub_score"] == 0
+        assert result["p1"].collaborator_count == 0
+        assert result["p1"].hub_score == 0
 
     def test_collaboration_strength_single(self):
         credits, anime_map = self._make_single()
@@ -38,7 +38,7 @@ class TestSinglePersonDataset:
     def test_growth_single(self):
         credits, anime_map = self._make_single()
         result = compute_growth_trends(credits, anime_map)
-        assert result["p1"]["total_credits"] == 1
+        assert result["p1"].total_credits == 1
 
     def test_time_series_single(self):
         credits, anime_map = self._make_single()
@@ -63,7 +63,7 @@ class TestSinglePersonDataset:
     def test_versatility_single(self):
         credits, _ = self._make_single()
         result = compute_versatility(credits)
-        assert result["p1"]["role_count"] == 1
+        assert result["p1"].role_count == 1
 
 
 class TestAllSameScores:
@@ -156,7 +156,7 @@ class TestLargeTeam:
         result = compute_network_density(credits)
         # Everyone has 9 collaborators
         for pid in result:
-            assert result[pid]["collaborator_count"] == 9
+            assert result[pid].collaborator_count == 9
 
 
 class TestRecommendationEdgeCases:

@@ -135,18 +135,19 @@ def _export_analysis_results(context: PipelineContext, elapsed: float) -> None:
 
     # Export growth trends (with trend summary)
     if context.growth_data:
-        # Summarize trend counts
+        # Summarize trend counts (access dataclass fields as attributes)
         trend_counts: dict[str, int] = {}
         for gd in context.growth_data.values():
-            trend_counts[gd["trend"]] = trend_counts.get(gd["trend"], 0) + 1
+            trend_counts[gd.trend] = trend_counts.get(gd.trend, 0) + 1
+        # Convert dataclass instances to dicts for JSON serialization
         growth_output = {
             "trend_summary": trend_counts,
             "total_persons": len(context.growth_data),
             "persons": {
-                pid: data
+                pid: asdict(data)
                 for pid, data in sorted(
                     context.growth_data.items(),
-                    key=lambda x: x[1].get("activity_ratio", 0),
+                    key=lambda x: x[1].activity_ratio,
                     reverse=True,
                 )[:200]
             },
@@ -237,12 +238,17 @@ def _export_analysis_results(context: PipelineContext, elapsed: float) -> None:
         persons=len(context.analysis_results.get("genre_affinity", [])),
     )
 
-    # Export productivity
+    # Export productivity (convert dataclass instances to dicts)
+    productivity_data = context.analysis_results.get("productivity", {})
+    if productivity_data:
+        productivity_output = {pid: asdict(metrics) for pid, metrics in productivity_data.items()}
+    else:
+        productivity_output = {}
     save_pipeline_json_if_data_present(
         "productivity.json",
-        context.analysis_results.get("productivity"),
+        productivity_output,
         log_message="productivity_saved",
-        persons=len(context.analysis_results.get("productivity", {})),
+        persons=len(productivity_output),
     )
 
     # Export influence tree
@@ -361,7 +367,7 @@ def _generate_visualizations(context: PipelineContext) -> None:
         if context.growth_data:
             trend_counts: dict[str, int] = {}
             for gd in context.growth_data.values():
-                trend_counts[gd["trend"]] = trend_counts.get(gd["trend"], 0) + 1
+                trend_counts[gd.trend] = trend_counts.get(gd.trend, 0) + 1
             plot_growth_trends({"trend_summary": trend_counts})
 
         # Network evolution

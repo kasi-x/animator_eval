@@ -1,0 +1,28 @@
+{
+  "generated_at": "2026-02-10T00:24:21.224866",
+  "elapsed_seconds": 0.01,
+  "mode": "full",
+  "data": {
+    "persons": 4,
+    "anime": 3,
+    "credits": 9,
+    "scored_persons": 4
+  },
+  "scores": {
+    "top_composite": 70.04,
+    "median_composite": 40.0
+  },
+  "graph": {
+    "nodes": 4,
+    "edges": 5,
+    "density": 0.833333,
+    "avg_degree": 2.5,
+    "components": 1,
+    "largest_component_size": 4,
+    "avg_clustering": 0.5029
+  },
+  "crossval": {
+    "avg_rank_correlation": 0.8667,
+    "avg_top10_overlap": 1.0
+  }
+}

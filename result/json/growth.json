@@ -18,7 +18,8 @@
       "career_span": 3,
       "activity_ratio": 1.0,
       "recent_avg_anime_score": 7.33,
-      "career_avg_anime_score": 7.33
+      "career_avg_anime_score": 7.33,
+      "current_score": null
     },
     "p2": {
       "yearly_credits": {
@@ -33,7 +34,8 @@
       "career_span": 3,
       "activity_ratio": 1.0,
       "recent_avg_anime_score": 7.33,
-      "career_avg_anime_score": 7.33
+      "career_avg_anime_score": 7.33,
+      "current_score": null
     },
     "p3": {
       "yearly_credits": {
@@ -47,7 +49,8 @@
       "career_span": 2,
       "activity_ratio": 1.0,
       "recent_avg_anime_score": 8.0,
-      "career_avg_anime_score": 8.0
+      "career_avg_anime_score": 8.0,
+      "current_score": null
     },
     "p4": {
       "yearly_credits": {
@@ -60,7 +63,8 @@
       "career_span": 1,
       "activity_ratio": 1.0,
       "recent_avg_anime_score": 6.0,
-      "career_avg_anime_score": 6.0
+      "career_avg_anime_score": 6.0,
+      "current_score": null
     }
   }
 }
