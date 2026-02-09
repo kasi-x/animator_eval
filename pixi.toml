@@ -69,4 +69,3 @@ pytest = ">=7.0"
 fastapi = ">=0.100"
 uvicorn = {version = ">=0.20", extras = ["standard"]}
 rapidfuzz = ">=3.0"
-openai = ">=1.0"

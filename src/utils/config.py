@@ -61,9 +61,9 @@ COMPOSITE_WEIGHTS = {
 NORMALIZATION_METHOD = "minmax"
 
 # AI-assisted entity resolution
-# vLLM または OpenAI 互換エンドポイント
-LLM_BASE_URL = "http://localhost:8000/v1"  # vLLM default
-LLM_MODEL_NAME = "Qwen/Qwen2.5-7B-Instruct"  # or other model
+# Ollama (OpenAI-compatible API)
+LLM_BASE_URL = "http://localhost:11434/v1"  # Ollama default
+LLM_MODEL_NAME = "qwen3:8b"  # or qwen3:32b for better accuracy
 LLM_TEMPERATURE = 0.1  # 低温度で決定論的な出力
-LLM_MAX_TOKENS = 50  # "SAME" or "DIFFERENT" の短い応答
-LLM_TIMEOUT = 10.0  # seconds
+LLM_MAX_TOKENS = 200  # Qwen3 needs more tokens for reasoning mode
+LLM_TIMEOUT = 15.0  # seconds

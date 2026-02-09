@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from src.analysis.ai_entity_resolution import (
+    LLMError,
     NameMatchDecision,
     ai_assisted_cluster,
     ask_llm_if_same_person,
@@ -14,36 +15,35 @@ from src.models import Person
 
 
 class TestCheckLLMAvailable:
-    @patch("src.analysis.ai_entity_resolution.OpenAI")
-    def test_llm_available(self, mock_openai):
-        """LLM が利用可能な場合 True を返す."""
-        mock_client = MagicMock()
-        mock_openai.return_value = mock_client
-        mock_client.models.list.return_value = []
+    @patch("src.analysis.ai_entity_resolution.httpx.get")
+    def test_llm_available(self, mock_get):
+        """Ollama が利用可能な場合 True を返す."""
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_get.return_value = mock_response
 
         result = check_llm_available()
         assert result is True
 
-    @patch("src.analysis.ai_entity_resolution.OpenAI")
-    def test_llm_unavailable(self, mock_openai):
-        """LLM が利用不可の場合 False を返す."""
-        mock_openai.side_effect = Exception("Connection refused")
+    @patch("src.analysis.ai_entity_resolution.httpx.get")
+    def test_llm_unavailable(self, mock_get):
+        """Ollama が利用不可の場合 False を返す."""
+        mock_get.side_effect = Exception("Connection refused")
 
         result = check_llm_available()
         assert result is False
 
 
 class TestAskLLMIfSamePerson:
-    @patch("src.analysis.ai_entity_resolution.OpenAI")
-    def test_same_response(self, mock_openai):
-        """LLM が SAME と回答した場合."""
-        mock_client = MagicMock()
-        mock_openai.return_value = mock_client
-
+    @patch("src.analysis.ai_entity_resolution.httpx.post")
+    def test_same_response(self, mock_post):
+        """Ollama が SAME と回答した場合."""
         mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "SAME\nReason: Variant kanji forms"
-        mock_client.chat.completions.create.return_value = mock_response
+        mock_response.json.return_value = {
+            "thinking": "The names are identical. So the answer should be SAME.",
+            "response": "",
+        }
+        mock_post.return_value = mock_response
 
         p1 = Person(id="mal:1", name_ja="渡辺信一郎")
         p2 = Person(id="mal:2", name_ja="渡邊信一郎")
@@ -52,18 +52,16 @@ class TestAskLLMIfSamePerson:
 
         assert decision.is_match is True
         assert decision.confidence == 0.85
-        assert "Variant kanji" in decision.reasoning
 
-    @patch("src.analysis.ai_entity_resolution.OpenAI")
-    def test_different_response(self, mock_openai):
-        """LLM が DIFFERENT と回答した場合."""
-        mock_client = MagicMock()
-        mock_openai.return_value = mock_client
-
+    @patch("src.analysis.ai_entity_resolution.httpx.post")
+    def test_different_response(self, mock_post):
+        """Ollama が DIFFERENT と回答した場合."""
         mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "DIFFERENT\nReason: Different names"
-        mock_client.chat.completions.create.return_value = mock_response
+        mock_response.json.return_value = {
+            "thinking": "These are clearly different people. Therefore DIFFERENT.",
+            "response": "",
+        }
+        mock_post.return_value = mock_response
 
         p1 = Person(id="mal:1", name_ja="宮崎駿")
         p2 = Person(id="mal:2", name_ja="高畑勲")
@@ -73,16 +71,15 @@ class TestAskLLMIfSamePerson:
         assert decision.is_match is False
         assert decision.confidence == 0.9
 
-    @patch("src.analysis.ai_entity_resolution.OpenAI")
-    def test_uncertain_response(self, mock_openai):
-        """LLM が UNCERTAIN と回答した場合."""
-        mock_client = MagicMock()
-        mock_openai.return_value = mock_client
-
+    @patch("src.analysis.ai_entity_resolution.httpx.post")
+    def test_uncertain_response(self, mock_post):
+        """Ollama が UNCERTAIN と回答した場合."""
         mock_response = MagicMock()
-        mock_response.choices = [MagicMock()]
-        mock_response.choices[0].message.content = "UNCERTAIN\nReason: Not enough info"
-        mock_client.chat.completions.create.return_value = mock_response
+        mock_response.json.return_value = {
+            "thinking": "Not enough information. The answer is UNCERTAIN.",
+            "response": "",
+        }
+        mock_post.return_value = mock_response
 
         p1 = Person(id="mal:1", name_ja="田中宏")
         p2 = Person(id="mal:2", name_ja="田中博")
@@ -92,19 +89,17 @@ class TestAskLLMIfSamePerson:
         assert decision.is_match is False
         assert decision.confidence == 0.5
 
-    @patch("src.analysis.ai_entity_resolution.OpenAI")
-    def test_api_error(self, mock_openai):
+    @patch("src.analysis.ai_entity_resolution.httpx.post")
+    def test_api_error(self, mock_post):
         """API エラーが発生した場合."""
-        from openai import OpenAIError
+        import httpx
 
-        mock_client = MagicMock()
-        mock_openai.return_value = mock_client
-        mock_client.chat.completions.create.side_effect = OpenAIError("API error")
+        mock_post.side_effect = httpx.HTTPError("Connection failed")
 
         p1 = Person(id="mal:1", name_ja="山田太郎")
         p2 = Person(id="mal:2", name_ja="山田次郎")
 
-        with pytest.raises(OpenAIError):
+        with pytest.raises(LLMError):
             ask_llm_if_same_person(p1, p2)
 
 
@@ -221,13 +216,11 @@ class TestAIAssistedCluster:
     @patch("src.analysis.ai_entity_resolution.ask_llm_if_same_person")
     def test_api_error_continues(self, mock_ask, mock_check):
         """API エラーが発生しても処理を続行."""
-        from openai import OpenAIError
-
         mock_check.return_value = True
 
         # 最初のペアでエラー、2番目のペアは成功
         mock_ask.side_effect = [
-            OpenAIError("API error"),
+            LLMError("API error"),
             NameMatchDecision(is_match=True, confidence=0.9, reasoning="Same"),
         ]
 

@@ -1,4 +1,4 @@
-"""AI-assisted entity resolution using local LLM (vLLM + Qwen).
+"""AI-assisted entity resolution using local LLM (Ollama + Qwen3).
 
 LLMを使用して、ルールベースでは判定困難な名寄せケースを処理する。
 - 漢字の読み違い
@@ -8,12 +8,10 @@ LLMを使用して、ルールベースでは判定困難な名寄せケース�
 法的要件: false positive を避けるため、LLM の回答も保守的に解釈する。
 """
 
-import os
 from dataclasses import dataclass
 
+import httpx
 import structlog
-from openai import OpenAI
-from openai import OpenAIError
 
 from src.models import Person
 from src.utils.config import (
@@ -25,6 +23,12 @@ from src.utils.config import (
 )
 
 logger = structlog.get_logger()
+
+
+class LLMError(Exception):
+    """LLM API error."""
+
+    pass
 
 
 @dataclass
@@ -71,41 +75,43 @@ def _build_prompt(person1: Person, person2: Person) -> str:
     p2_names = f"{person2.name_ja or ''} ({person2.name_en or ''})".strip()
 
     if person1.aliases:
-        p1_names += f" [aliases: {', '.join(person1.aliases)}]"
+        p1_names += f" [also: {', '.join(person1.aliases)}]"
     if person2.aliases:
-        p2_names += f" [aliases: {', '.join(person2.aliases)}]"
+        p2_names += f" [also: {', '.join(person2.aliases)}]"
 
-    return f"""{FEW_SHOT_EXAMPLES}
-
-# Now judge this pair:
-
-Person A: {p1_names}
+    # Simplified prompt for better Qwen3 response
+    return f"""Person A: {p1_names}
 Person B: {p2_names}
-Decision: """
+
+Are these the same person? Answer SAME, DIFFERENT, or UNCERTAIN first, then explain.
+
+Consider:
+- Kanji variants (e.g., 渡辺/渡邊, 國/国)
+- Name order (e.g., "Yamada Taro" vs "Taro Yamada")
+- Different readings of same kanji = DIFFERENT people
+- If unsure, answer UNCERTAIN.
+
+Answer:"""
 
 
 def check_llm_available() -> bool:
-    """Check if LLM endpoint is available.
+    """Check if Ollama endpoint is available.
 
     Returns:
-        True if LLM is accessible, False otherwise
+        True if Ollama is accessible, False otherwise
     """
     try:
-        client = OpenAI(
-            base_url=LLM_BASE_URL,
-            api_key=os.getenv("OPENAI_API_KEY", "dummy-key"),  # vLLM doesn't require real key
-            timeout=LLM_TIMEOUT,
-        )
-        # Try a minimal request
-        client.models.list()
-        return True
+        # Use Ollama's native API for health check
+        ollama_base = LLM_BASE_URL.replace("/v1", "")
+        response = httpx.get(f"{ollama_base}/api/tags", timeout=LLM_TIMEOUT)
+        return response.status_code == 200
     except Exception as e:
         logger.info("llm_not_available", error=str(e))
         return False
 
 
 def ask_llm_if_same_person(person1: Person, person2: Person) -> NameMatchDecision:
-    """Ask LLM if two persons are the same.
+    """Ask Ollama LLM if two persons are the same.
 
     Args:
         person1: First person
@@ -115,53 +121,91 @@ def ask_llm_if_same_person(person1: Person, person2: Person) -> NameMatchDecisio
         NameMatchDecision with is_match, confidence, and reasoning
 
     Raises:
-        OpenAIError: If LLM API call fails
+        LLMError: If Ollama API call fails
     """
-    client = OpenAI(
-        base_url=LLM_BASE_URL,
-        api_key=os.getenv("OPENAI_API_KEY", "dummy-key"),
-        timeout=LLM_TIMEOUT,
-    )
-
     prompt = _build_prompt(person1, person2)
 
     try:
-        response = client.chat.completions.create(
-            model=LLM_MODEL_NAME,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You are an expert at Japanese names and anime industry credits. "
-                    "Judge if two person records refer to the same individual. "
-                    "Answer SAME, DIFFERENT, or UNCERTAIN followed by your reasoning. "
-                    "Be conservative - if unsure, answer UNCERTAIN.",
+        # Use Ollama's native API
+        ollama_base = LLM_BASE_URL.replace("/v1", "")
+
+        response = httpx.post(
+            f"{ollama_base}/api/generate",
+            json={
+                "model": LLM_MODEL_NAME,
+                "prompt": prompt,
+                "stream": False,
+                "options": {
+                    "temperature": LLM_TEMPERATURE,
+                    "num_predict": LLM_MAX_TOKENS,
                 },
-                {"role": "user", "content": prompt},
-            ],
-            temperature=LLM_TEMPERATURE,
-            max_tokens=LLM_MAX_TOKENS,
+            },
+            timeout=LLM_TIMEOUT,
         )
+        response.raise_for_status()
+        result = response.json()
 
-        answer = response.choices[0].message.content.strip()
-        logger.debug("llm_response", person1=person1.id, person2=person2.id, answer=answer)
+        # Qwen3 uses "thinking" field for all output (reasoning + answer)
+        # "response" field is typically empty in thinking mode
+        answer = result.get("response", "").strip()
+        if not answer:
+            answer = result.get("thinking", "").strip()
 
-        # Parse response
+        logger.debug("llm_response", person1=person1.id, person2=person2.id, answer=answer[:200] + "...")
+
+        # Parse response - Qwen3 typically concludes with "the answer should be X" or "the answer is X"
         answer_upper = answer.upper()
-        if answer_upper.startswith("SAME"):
+        answer_lower = answer.lower()
+
+        # Look for conclusive statements (usually at the end)
+        # Patterns: "answer should be SAME", "answer is SAME", "therefore SAME", etc.
+        conclusive_patterns = [
+            "answer should be ",
+            "answer is ",
+            "therefore ",
+            "so ",
+            "conclusion:",
+        ]
+
+        decision_text = ""
+        for pattern in conclusive_patterns:
+            pos = answer_lower.rfind(pattern)  # Find last occurrence
+            if pos >= 0:
+                # Extract text after the pattern
+                decision_text = answer_upper[pos + len(pattern) : pos + len(pattern) + 100]
+                break
+
+        # Check for decision keywords
+        if "SAME" in decision_text[:50]:
             is_match = True
-            confidence = 0.85  # High but not perfect (LLM can be wrong)
-        elif answer_upper.startswith("DIFFERENT"):
+            confidence = 0.85
+        elif "DIFFERENT" in decision_text[:50]:
             is_match = False
             confidence = 0.9
-        else:  # UNCERTAIN or unparseable
+        elif "UNCERTAIN" in decision_text[:50]:
             is_match = False
             confidence = 0.5
+        else:
+            # Fallback: check entire response
+            if "DIFFERENT" in answer_upper and "SAME" not in answer_upper[-200:]:
+                is_match = False
+                confidence = 0.7
+            elif "UNCERTAIN" in answer_upper:
+                is_match = False
+                confidence = 0.5
+            else:
+                # No clear decision
+                is_match = False
+                confidence = 0.3
+                logger.warning(
+                    "unclear_llm_decision", person1=person1.id, person2=person2.id, answer_snippet=answer[:300]
+                )
 
         return NameMatchDecision(is_match=is_match, confidence=confidence, reasoning=answer)
 
-    except OpenAIError as e:
+    except (httpx.HTTPError, httpx.TimeoutException) as e:
         logger.error("llm_api_error", error=str(e), person1=person1.id, person2=person2.id)
-        raise
+        raise LLMError(f"Ollama API error: {e}") from e
 
 
 def ai_assisted_cluster(
@@ -238,7 +282,7 @@ def ai_assisted_cluster(
                             confidence=f"{decision.confidence:.2f}",
                             reasoning=decision.reasoning[:100],
                         )
-                except OpenAIError as e:
+                except LLMError as e:
                     logger.error("ai_match_failed", person1=p1.id, person2=p2.id, error=str(e))
                     continue
 
