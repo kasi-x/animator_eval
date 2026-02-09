@@ -624,11 +624,23 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
         logger.info("productivity_saved", path=str(productivity_output_path), persons=len(person_productivity_metrics))
 
     # Role transitions 出力
+    from dataclasses import asdict
+
     transitions = compute_role_transitions(credits, anime_map)
+    # Convert dataclass objects to dicts for JSON serialization
+    transitions_serializable = {
+        "transitions": [asdict(t) for t in transitions["transitions"]],
+        "career_paths": [asdict(p) for p in transitions["career_paths"]],
+        "avg_time_to_stage": {
+            stage: asdict(stats) for stage, stats in transitions["avg_time_to_stage"].items()
+        },
+        "total_persons_analyzed": transitions["total_persons_analyzed"],
+    }
+
     if transitions["total_persons_analyzed"] > 0:
         trans_path = JSON_DIR / "transitions.json"
         with open(trans_path, "w") as f:
-            json.dump(transitions, f, indent=2, ensure_ascii=False)
+            json.dump(transitions_serializable, f, indent=2, ensure_ascii=False)
         logger.info("transitions_saved", path=str(trans_path), persons=transitions["total_persons_analyzed"])
 
     # Influence tree (mentor-mentee relationships)
@@ -781,8 +793,8 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
                     plot_outlier_summary(outlier_data)
 
                 # Transition heatmap
-                if transitions.get("transitions"):
-                    plot_transition_heatmap(transitions)
+                if transitions_serializable.get("transitions"):
+                    plot_transition_heatmap(transitions_serializable)
 
                 # Anime stats chart
                 if anime_quality_statistics:

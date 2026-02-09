@@ -42,9 +42,9 @@ class TestComputeRoleTransitions:
         transitions = result["transitions"]
 
         # Find in-between → key_animator transition
-        ib_to_ka = [t for t in transitions if t["from_stage"] == 1 and t["to_stage"] == 3]
+        ib_to_ka = [t for t in transitions if t.from_stage == 1 and t.to_stage == 3]
         assert len(ib_to_ka) == 1
-        assert ib_to_ka[0]["count"] == 2  # p1 and p2 both do this
+        assert ib_to_ka[0].count == 2  # p1 and p2 both do this
 
     def test_avg_years(self):
         credits, anime_map = _make_credits_and_anime()
@@ -52,8 +52,8 @@ class TestComputeRoleTransitions:
         transitions = result["transitions"]
 
         # in-between(2018) → key_animator: p1 takes 2 years (2018→2020), p2 takes 4 years (2018→2022)
-        ib_to_ka = [t for t in transitions if t["from_stage"] == 1 and t["to_stage"] == 3]
-        assert ib_to_ka[0]["avg_years"] == 3.0  # (2 + 4) / 2
+        ib_to_ka = [t for t in transitions if t.from_stage == 1 and t.to_stage == 3]
+        assert ib_to_ka[0].avg_years == 3.0  # (2 + 4) / 2
 
     def test_career_paths(self):
         credits, anime_map = _make_credits_and_anime()
@@ -61,8 +61,8 @@ class TestComputeRoleTransitions:
         paths = result["career_paths"]
         assert len(paths) > 0
         # All paths should have at least 2 stages
-        for p in paths:
-            assert len(p["path"]) >= 2
+        for path_record in paths:
+            assert len(path_record.path) >= 2
 
     def test_time_to_stage(self):
         credits, anime_map = _make_credits_and_anime()
@@ -70,7 +70,7 @@ class TestComputeRoleTransitions:
         avg_time = result["avg_time_to_stage"]
         # Stage 3 (key animator) should be reachable
         assert 3 in avg_time
-        assert avg_time[3]["sample_size"] > 0
+        assert avg_time[3].sample_size > 0
 
     def test_empty_data(self):
         result = compute_role_transitions([], {})

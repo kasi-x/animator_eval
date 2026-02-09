@@ -7,6 +7,8 @@
 """
 
 from collections import defaultdict
+from dataclasses import dataclass
+from typing import NamedTuple
 
 import structlog
 
@@ -16,7 +18,7 @@ from src.models import Anime, Credit
 logger = structlog.get_logger()
 
 # Stage → readable label
-STAGE_LABEL = {
+STAGE_LABELS = {
     1: "In-Between",
     2: "2nd Key/Layout",
     3: "Key Animator",
@@ -24,6 +26,56 @@ STAGE_LABEL = {
     5: "Chief AD/Ep.Dir",
     6: "Director",
 }
+
+
+class YearlyStageRecord(NamedTuple):
+    """年ごとの役職ステージ記録.
+
+    Records the career stage for a given year.
+    """
+
+    year: int
+    stage: int
+
+
+@dataclass(frozen=True)
+class TransitionStatistics:
+    """役職遷移の統計情報.
+
+    Statistics about role transitions between career stages.
+    """
+
+    from_stage: int
+    from_label: str
+    to_stage: int
+    to_label: str
+    count: int
+    avg_years: float
+
+
+@dataclass(frozen=True)
+class CareerPathRecord:
+    """キャリアパスの記録.
+
+    Records a specific career progression path and its frequency.
+    """
+
+    path: list[int]
+    path_labels: list[str]
+    count: int
+
+
+@dataclass(frozen=True)
+class TimeToStageStatistics:
+    """ステージ到達時間の統計.
+
+    Statistics about time taken to reach a career stage.
+    """
+
+    label: str
+    avg_years: float
+    median_years: float
+    sample_size: int
 
 
 def compute_role_transitions(
@@ -41,99 +93,109 @@ def compute_role_transitions(
         }
     """
     # Group credits by person, sorted by year
-    person_credits: dict[str, list[tuple[int, int]]] = defaultdict(list)
-    for c in credits:
-        anime = anime_map.get(c.anime_id)
+    annual_role_records_by_person: dict[str, list[YearlyStageRecord]] = defaultdict(list)
+    for credit in credits:
+        anime = anime_map.get(credit.anime_id)
         if not anime or not anime.year:
             continue
-        stage = CAREER_STAGE.get(c.role, 0)
+        stage = CAREER_STAGE.get(credit.role, 0)
         if stage > 0:
-            person_credits[c.person_id].append((anime.year, stage))
+            record = YearlyStageRecord(year=anime.year, stage=stage)
+            annual_role_records_by_person[credit.person_id].append(record)
 
     # Compute per-person stage progression (max stage per year)
-    transition_counts: dict[tuple[int, int], list[int]] = defaultdict(list)  # (from, to) -> [years_gap]
-    career_paths: dict[tuple[int, ...], int] = defaultdict(int)
-    time_to_stage: dict[int, list[int]] = defaultdict(list)
+    transition_gap_years: dict[tuple[int, int], list[int]] = defaultdict(list)  # (from, to) -> [years_gap]
+    career_path_frequencies: dict[tuple[int, ...], int] = defaultdict(int)
+    years_to_reach_each_stage: dict[int, list[int]] = defaultdict(list)
 
-    analyzed = 0
-    for pid, year_stages in person_credits.items():
-        if len(year_stages) < 2:
+    analyzed_person_count = 0
+    for person_id, annual_records in annual_role_records_by_person.items():
+        if len(annual_records) < 2:
             continue
 
         # Get max stage per year
-        yearly_max: dict[int, int] = {}
-        for year, stage in year_stages:
-            yearly_max[year] = max(yearly_max.get(year, 0), stage)
+        max_stage_per_year: dict[int, int] = {}
+        for record in annual_records:
+            max_stage_per_year[record.year] = max(
+                max_stage_per_year.get(record.year, 0), record.stage
+            )
 
-        years_sorted = sorted(yearly_max.keys())
+        years_sorted = sorted(max_stage_per_year.keys())
         if len(years_sorted) < 2:
             continue
 
-        analyzed += 1
-        first_year = years_sorted[0]
+        analyzed_person_count += 1
+        career_start_year = years_sorted[0]
 
         # Track progression (only upward transitions)
-        path = []
-        prev_stage = yearly_max[years_sorted[0]]
-        prev_year = years_sorted[0]
-        path.append(prev_stage)
+        career_progression_path = []
+        previous_stage = max_stage_per_year[years_sorted[0]]
+        previous_transition_year = years_sorted[0]
+        career_progression_path.append(previous_stage)
 
         for year in years_sorted[1:]:
-            cur_stage = yearly_max[year]
-            if cur_stage > prev_stage:
-                transition_counts[(prev_stage, cur_stage)].append(year - prev_year)
-                prev_stage = cur_stage
-                prev_year = year
-                path.append(cur_stage)
+            current_stage = max_stage_per_year[year]
+            if current_stage > previous_stage:
+                years_elapsed = year - previous_transition_year
+                transition_gap_years[(previous_stage, current_stage)].append(years_elapsed)
+                previous_stage = current_stage
+                previous_transition_year = year
+                career_progression_path.append(current_stage)
             # Track time to reach each stage from career start
-            time_to_stage[cur_stage].append(year - first_year)
+            years_since_start = year - career_start_year
+            years_to_reach_each_stage[current_stage].append(years_since_start)
 
-        if len(path) >= 2:
-            career_paths[tuple(path)] += 1
+        if len(career_progression_path) >= 2:
+            career_path_frequencies[tuple(career_progression_path)] += 1
 
     # Build transition results
-    transitions = []
-    for (from_s, to_s), years_list in sorted(transition_counts.items()):
-        avg_years = sum(years_list) / len(years_list) if years_list else 0
-        transitions.append({
-            "from_stage": from_s,
-            "from_label": STAGE_LABEL.get(from_s, "?"),
-            "to_stage": to_s,
-            "to_label": STAGE_LABEL.get(to_s, "?"),
-            "count": len(years_list),
-            "avg_years": round(avg_years, 1),
-        })
+    transition_statistics = []
+    for (from_stage, to_stage), gap_years_list in sorted(transition_gap_years.items()):
+        avg_gap = sum(gap_years_list) / len(gap_years_list) if gap_years_list else 0
+        stat = TransitionStatistics(
+            from_stage=from_stage,
+            from_label=STAGE_LABELS.get(from_stage, "?"),
+            to_stage=to_stage,
+            to_label=STAGE_LABELS.get(to_stage, "?"),
+            count=len(gap_years_list),
+            avg_years=round(avg_gap, 1),
+        )
+        transition_statistics.append(stat)
 
     # Top career paths
-    top_paths = sorted(career_paths.items(), key=lambda x: -x[1])[:20]
-    paths_result = []
-    for path, count in top_paths:
-        paths_result.append({
-            "path": list(path),
-            "path_labels": [STAGE_LABEL.get(s, "?") for s in path],
-            "count": count,
-        })
+    most_common_paths = sorted(
+        career_path_frequencies.items(), key=lambda item: -item[1]
+    )[:20]
+    career_path_records = []
+    for path_tuple, frequency in most_common_paths:
+        record = CareerPathRecord(
+            path=list(path_tuple),
+            path_labels=[STAGE_LABELS.get(stage, "?") for stage in path_tuple],
+            count=frequency,
+        )
+        career_path_records.append(record)
 
     # Average time to reach each stage
-    avg_time = {}
-    for stage in sorted(time_to_stage.keys()):
-        vals = time_to_stage[stage]
-        avg_time[stage] = {
-            "label": STAGE_LABEL.get(stage, "?"),
-            "avg_years": round(sum(vals) / len(vals), 1),
-            "median_years": round(sorted(vals)[len(vals) // 2], 1),
-            "sample_size": len(vals),
-        }
+    time_to_stage_stats = {}
+    for stage in sorted(years_to_reach_each_stage.keys()):
+        years_samples = years_to_reach_each_stage[stage]
+        stats = TimeToStageStatistics(
+            label=STAGE_LABELS.get(stage, "?"),
+            avg_years=round(sum(years_samples) / len(years_samples), 1),
+            median_years=round(sorted(years_samples)[len(years_samples) // 2], 1),
+            sample_size=len(years_samples),
+        )
+        time_to_stage_stats[stage] = stats
 
     logger.info(
         "transition_analysis_complete",
-        persons=analyzed,
-        unique_transitions=len(transitions),
+        persons=analyzed_person_count,
+        unique_transitions=len(transition_statistics),
     )
 
     return {
-        "transitions": transitions,
-        "career_paths": paths_result,
-        "avg_time_to_stage": avg_time,
-        "total_persons_analyzed": analyzed,
+        "transitions": transition_statistics,
+        "career_paths": career_path_records,
+        "avg_time_to_stage": time_to_stage_stats,
+        "total_persons_analyzed": analyzed_person_count,
     }
