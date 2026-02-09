@@ -389,17 +389,20 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
 
     # Director circles 出力
     if circles:
+        from dataclasses import asdict
+
         circles_path = JSON_DIR / "circles.json"
         # person_id → name のルックアップを構築
         pid_to_name = {r["person_id"]: r["name"] or r["person_id"] for r in results}
         circles_output = {}
         for dir_id, circle in circles.items():
+            circle_dict = asdict(circle)
             circles_output[dir_id] = {
                 "director_name": pid_to_name.get(dir_id, dir_id),
-                **circle,
+                **circle_dict,
                 "members": [
-                    {**m, "name": pid_to_name.get(m["person_id"], m["person_id"])}
-                    for m in circle["members"]
+                    {**member, "name": pid_to_name.get(member["person_id"], member["person_id"])}
+                    for member in circle_dict["members"]
                 ],
             }
         with open(circles_path, "w") as f:

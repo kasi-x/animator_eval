@@ -46,33 +46,33 @@ class TestFindDirectorCircles:
     def test_dir1_has_anim1(self):
         credits, anime_map = _make_test_data()
         circles = find_director_circles(credits, anime_map, min_shared_works=2, min_director_works=3)
-        member_ids = [m["person_id"] for m in circles["dir1"]["members"]]
+        member_ids = [m.person_id for m in circles["dir1"].members]
         assert "anim1" in member_ids
 
     def test_anim3_not_in_circle(self):
         """1回しか共演していないアニメーターはサークルに含まれない."""
         credits, anime_map = _make_test_data()
         circles = find_director_circles(credits, anime_map, min_shared_works=2, min_director_works=3)
-        member_ids = [m["person_id"] for m in circles["dir1"]["members"]]
+        member_ids = [m.person_id for m in circles["dir1"].members]
         assert "anim3" not in member_ids
 
     def test_hit_rate_calculation(self):
         credits, anime_map = _make_test_data()
         circles = find_director_circles(credits, anime_map, min_shared_works=2, min_director_works=3)
-        anim1_entry = next(m for m in circles["dir1"]["members"] if m["person_id"] == "anim1")
+        anim1_entry = next(m for m in circles["dir1"].members if m.person_id == "anim1")
         # anim1: 3 shared works / 4 total dir1 works = 0.75
-        assert anim1_entry["hit_rate"] == 0.75
+        assert anim1_entry.hit_rate == 0.75
 
     def test_total_works(self):
         credits, anime_map = _make_test_data()
         circles = find_director_circles(credits, anime_map, min_shared_works=2, min_director_works=3)
-        assert circles["dir1"]["total_works"] == 4
-        assert circles["dir2"]["total_works"] == 3
+        assert circles["dir1"].total_works == 4
+        assert circles["dir2"].total_works == 3
 
     def test_members_sorted_by_shared_works(self):
         credits, anime_map = _make_test_data()
         circles = find_director_circles(credits, anime_map, min_shared_works=2, min_director_works=3)
-        works = [m["shared_works"] for m in circles["dir1"]["members"]]
+        works = [m.shared_works for m in circles["dir1"].members]
         assert works == sorted(works, reverse=True)
 
     def test_empty_credits(self):
@@ -91,7 +91,7 @@ class TestGetPersonCircles:
         credits, anime_map = _make_test_data()
         circles = find_director_circles(credits, anime_map, min_shared_works=2, min_director_works=3)
         person_circles = get_person_circles("anim2", circles)
-        director_ids = {c["director_id"] for c in person_circles}
+        director_ids = {c.director_id for c in person_circles}
         assert "dir1" in director_ids
         assert "dir2" in director_ids
 
@@ -105,5 +105,5 @@ class TestGetPersonCircles:
         credits, anime_map = _make_test_data()
         circles = find_director_circles(credits, anime_map, min_shared_works=2, min_director_works=3)
         person_circles = get_person_circles("anim2", circles)
-        works = [c["shared_works"] for c in person_circles]
+        works = [c.shared_works for c in person_circles]
         assert works == sorted(works, reverse=True)

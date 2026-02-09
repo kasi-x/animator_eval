@@ -66,7 +66,11 @@ class TestCirclesEdgeCases:
         anime_map = {"a1": Anime(id="a1", year=2024, score=8.0)}
         credits = [Credit(person_id="dir1", anime_id="a1", role=Role.DIRECTOR)]
         circles = find_director_circles(credits, anime_map, min_shared_works=1, min_director_works=1)
-        assert circles.get("dir1", {}).get("members", []) == []
+        # Should either not have dir1 or have empty members list
+        if "dir1" in circles:
+            assert circles["dir1"].members == []
+        else:
+            assert True  # Also acceptable to exclude directors with no circle members
 
     def test_one_work_director(self):
         """1作品しかない監督は min_director_works=2 で除外される."""

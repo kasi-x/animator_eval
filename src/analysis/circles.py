@@ -6,12 +6,54 @@
 """
 
 from collections import defaultdict
+from dataclasses import dataclass, field
 
 import structlog
 
 from src.models import Anime, Credit, Role
 
 logger = structlog.get_logger()
+
+
+@dataclass
+class AnimatorInDirectorsCircle:
+    """監督サークルに属するアニメーターのメンバー情報.
+
+    Represents an animator who frequently collaborates with a specific director.
+    """
+
+    person_id: str
+    shared_works: int
+    hit_rate: float  # 共演率 (shared / director's total)
+    roles: list[str]
+    latest_year: int | None
+
+
+@dataclass
+class DirectorCircle:
+    """監督とその常連メンバー集団.
+
+    Represents a director and their circle of frequent collaborators.
+    """
+
+    total_works: int
+    members: list[AnimatorInDirectorsCircle] = field(default_factory=list)
+
+
+@dataclass
+class PersonCircleMembership:
+    """特定人物が属する監督サークルの情報.
+
+    Represents a person's membership in a director's circle.
+    """
+
+    director_id: str
+    director_total_works: int
+    person_id: str
+    shared_works: int
+    hit_rate: float
+    roles: list[str]
+    latest_year: int | None
 
 DIRECTOR_ROLES = {
     Role.DIRECTOR,
@@ -36,111 +78,115 @@ def find_director_circles(
     anime_map: dict[str, Anime],
     min_shared_works: int = 2,
     min_director_works: int = 3,
-) -> dict[str, dict]:
+) -> dict[str, DirectorCircle]:
     """監督サークルを特定する.
 
+    Identifies circles of animators who frequently collaborate with specific directors.
+
     Args:
-        credits: クレジットデータ
+        credits: クレジットデータ / Credit records
         anime_map: anime_id → Anime
-        min_shared_works: サークルメンバー認定に必要な最低共演作品数
-        min_director_works: 分析対象となる監督の最低作品数
+        min_shared_works: サークルメンバー認定に必要な最低共演作品数 / Min shared works for membership
+        min_director_works: 分析対象となる監督の最低作品数 / Min director works for analysis
 
     Returns:
-        {director_id: {
-            "director_name": str,
-            "total_works": int,
-            "members": [{
-                "person_id": str,
-                "shared_works": int,
-                "hit_rate": float,  # 共演率 (shared / director's total)
-                "roles": [str],
-                "latest_year": int | None,
-            }]
-        }}
+        {director_id: DirectorCircle}
     """
     # 監督ごとの作品を特定
-    director_works: dict[str, set[str]] = defaultdict(set)
+    works_by_each_director: dict[str, set[str]] = defaultdict(set)
     for c in credits:
         if c.role in DIRECTOR_ROLES:
-            director_works[c.person_id].add(c.anime_id)
+            works_by_each_director[c.person_id].add(c.anime_id)
 
     # 作品ごとのスタッフ
-    anime_staff: dict[str, list[tuple[str, Role]]] = defaultdict(list)
+    staff_per_anime: dict[str, list[tuple[str, Role]]] = defaultdict(list)
     for c in credits:
         if c.role in ANIMATOR_ROLES:
-            anime_staff[c.anime_id].append((c.person_id, c.role))
+            staff_per_anime[c.anime_id].append((c.person_id, c.role))
 
-    circles: dict[str, dict] = {}
+    circles_by_director_id: dict[str, DirectorCircle] = {}
 
-    for dir_id, dir_anime_ids in director_works.items():
-        if len(dir_anime_ids) < min_director_works:
+    for director_id, anime_ids_directed in works_by_each_director.items():
+        if len(anime_ids_directed) < min_director_works:
             continue
 
         # この監督の各作品に参加したアニメーター
-        member_stats: dict[str, dict] = defaultdict(
+        collaborator_statistics: dict[str, dict] = defaultdict(
             lambda: {"shared_works": 0, "roles": set(), "latest_year": None}
         )
 
-        for anime_id in dir_anime_ids:
+        for anime_id in anime_ids_directed:
             anime = anime_map.get(anime_id)
             year = anime.year if anime else None
 
-            for person_id, role in anime_staff.get(anime_id, []):
-                if person_id == dir_id:
+            for person_id, role in staff_per_anime.get(anime_id, []):
+                if person_id == director_id:
                     continue
-                stats = member_stats[person_id]
+                stats = collaborator_statistics[person_id]
                 stats["shared_works"] += 1
                 stats["roles"].add(role.value)
                 if year and (stats["latest_year"] is None or year > stats["latest_year"]):
                     stats["latest_year"] = year
 
         # min_shared_works 以上の共演者をサークルメンバーとする
-        members = []
-        total = len(dir_anime_ids)
-        for pid, stats in member_stats.items():
+        circle_members = []
+        total_director_works = len(anime_ids_directed)
+        for person_id, stats in collaborator_statistics.items():
             if stats["shared_works"] >= min_shared_works:
-                members.append({
-                    "person_id": pid,
-                    "shared_works": stats["shared_works"],
-                    "hit_rate": round(stats["shared_works"] / total, 3),
-                    "roles": sorted(stats["roles"]),
-                    "latest_year": stats["latest_year"],
-                })
+                member = AnimatorInDirectorsCircle(
+                    person_id=person_id,
+                    shared_works=stats["shared_works"],
+                    hit_rate=round(stats["shared_works"] / total_director_works, 3),
+                    roles=sorted(stats["roles"]),
+                    latest_year=stats["latest_year"],
+                )
+                circle_members.append(member)
 
-        if members:
-            members.sort(key=lambda m: m["shared_works"], reverse=True)
-            circles[dir_id] = {
-                "total_works": total,
-                "members": members,
-            }
+        if circle_members:
+            circle_members.sort(key=lambda m: m.shared_works, reverse=True)
+            circles_by_director_id[director_id] = DirectorCircle(
+                total_works=total_director_works,
+                members=circle_members,
+            )
 
     logger.info(
         "director_circles_found",
-        directors=len(circles),
-        total_members=sum(len(c["members"]) for c in circles.values()),
+        directors=len(circles_by_director_id),
+        total_members=sum(len(circle.members) for circle in circles_by_director_id.values()),
     )
-    return circles
+    return circles_by_director_id
 
 
 def get_person_circles(
     person_id: str,
-    circles: dict[str, dict],
-) -> list[dict]:
+    circles: dict[str, DirectorCircle],
+) -> list[PersonCircleMembership]:
     """特定人物が属する監督サークルを返す.
 
+    Returns the list of director circles a person belongs to.
+
+    Args:
+        person_id: 人物ID / Person ID to look up
+        circles: 監督サークル辞書 / Director circles dictionary
+
     Returns:
-        [{"director_id": str, "shared_works": int, "hit_rate": float, ...}]
+        List of PersonCircleMembership, sorted by shared_works descending
     """
-    result = []
-    for dir_id, circle in circles.items():
-        for member in circle["members"]:
-            if member["person_id"] == person_id:
-                result.append({
-                    "director_id": dir_id,
-                    "director_total_works": circle["total_works"],
-                    **member,
-                })
+    memberships = []
+    for director_id, circle in circles.items():
+        for member in circle.members:
+            if member.person_id == person_id:
+                membership = PersonCircleMembership(
+                    director_id=director_id,
+                    director_total_works=circle.total_works,
+                    person_id=member.person_id,
+                    shared_works=member.shared_works,
+                    hit_rate=member.hit_rate,
+                    roles=member.roles,
+                    latest_year=member.latest_year,
+                )
+                memberships.append(membership)
                 break
 
-    result.sort(key=lambda x: x["shared_works"], reverse=True)
-    return result
+    memberships.sort(key=lambda x: x.shared_works, reverse=True)
+    return memberships
