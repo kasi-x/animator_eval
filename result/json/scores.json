@@ -1,0 +1,562 @@
+[
+  {
+    "person_id": "syn:a9",
+    "name": "アニメーター009",
+    "name_ja": "アニメーター009",
+    "name_en": "Animator 009",
+    "authority": 64.0,
+    "trust": 100.0,
+    "skill": 74.7,
+    "composite": 79.27,
+    "centrality": {
+      "degree": 0.9706,
+      "betweenness": 0.0,
+      "closeness": 0.097,
+      "eigenvector": 0.2511
+    }
+  },
+  {
+    "person_id": "syn:a3",
+    "name": "アニメーター003",
+    "name_ja": "アニメーター003",
+    "name_en": "Animator 003",
+    "authority": 100.0,
+    "trust": 80.55,
+    "skill": 25.82,
+    "composite": 74.65,
+    "centrality": {
+      "degree": 0.9706,
+      "betweenness": 0.0,
+      "closeness": 0.0889,
+      "eigenvector": 0.3446
+    }
+  },
+  {
+    "person_id": "syn:a0",
+    "name": "アニメーター000",
+    "name_ja": "アニメーター000",
+    "name_en": "Animator 000",
+    "authority": 81.33,
+    "trust": 82.71,
+    "skill": 26.01,
+    "composite": 67.98,
+    "centrality": {
+      "degree": 0.9412,
+      "betweenness": 0.0,
+      "closeness": 0.1,
+      "eigenvector": 0.2993
+    }
+  },
+  {
+    "person_id": "syn:a7",
+    "name": "アニメーター007",
+    "name_ja": "アニメーター007",
+    "name_en": "Animator 007",
+    "authority": 64.49,
+    "trust": 63.97,
+    "skill": 54.43,
+    "composite": 61.79,
+    "centrality": {
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 0.0858,
+      "eigenvector": 0.234
+    }
+  },
+  {
+    "person_id": "syn:a15",
+    "name": "アニメーター015",
+    "name_ja": "アニメーター015",
+    "name_en": "Animator 015",
+    "authority": 56.54,
+    "trust": 51.99,
+    "skill": 77.98,
+    "composite": 60.3,
+    "centrality": {
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 0.1353,
+      "eigenvector": 0.2334
+    }
+  },
+  {
+    "person_id": "syn:a12",
+    "name": "アニメーター012",
+    "name_ja": "アニメーター012",
+    "name_en": "Animator 012",
+    "authority": 62.06,
+    "trust": 75.31,
+    "skill": 24.66,
+    "composite": 57.35,
+    "centrality": {
+      "degree": 0.9706,
+      "betweenness": 0.0241,
+      "closeness": 0.139,
+      "eigenvector": 0.2427
+    }
+  },
+  {
+    "person_id": "syn:a23",
+    "name": "アニメーター023",
+    "name_ja": "アニメーター023",
+    "name_en": "Animator 023",
+    "authority": 46.81,
+    "trust": 37.36,
+    "skill": 100.0,
+    "composite": 56.8,
+    "centrality": {
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 0.1303,
+      "eigenvector": 0.1781
+    }
+  },
+  {
+    "person_id": "syn:a6",
+    "name": "アニメーター006",
+    "name_ja": "アニメーター006",
+    "name_en": "Animator 006",
+    "authority": 54.96,
+    "trust": 96.59,
+    "skill": 1.43,
+    "composite": 56.15,
+    "centrality": {
+      "degree": 0.9706,
+      "betweenness": 0.0,
+      "closeness": 0.1329,
+      "eigenvector": 0.2376
+    }
+  },
+  {
+    "person_id": "syn:a10",
+    "name": "アニメーター010",
+    "name_ja": "アニメーター010",
+    "name_en": "Animator 010",
+    "authority": 52.31,
+    "trust": 36.31,
+    "skill": 52.55,
+    "composite": 46.77,
+    "centrality": {
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 0.1321,
+      "eigenvector": 0.2087
+    }
+  },
+  {
+    "person_id": "syn:a24",
+    "name": "アニメーター024",
+    "name_ja": "アニメーター024",
+    "name_en": "Animator 024",
+    "authority": 43.39,
+    "trust": 25.76,
+    "skill": 77.27,
+    "composite": 45.69,
+    "centrality": {
+      "degree": 0.9706,
+      "betweenness": 0.0,
+      "closeness": 0.1115,
+      "eigenvector": 0.1898
+    }
+  },
+  {
+    "person_id": "syn:a14",
+    "name": "アニメーター014",
+    "name_ja": "アニメーター014",
+    "name_en": "Animator 014",
+    "authority": 36.83,
+    "trust": 30.82,
+    "skill": 75.02,
+    "composite": 44.27,
+    "centrality": {
+      "degree": 0.9706,
+      "betweenness": 0.0217,
+      "closeness": 0.1485,
+      "eigenvector": 0.1603
+    }
+  },
+  {
+    "person_id": "syn:a29",
+    "name": "アニメーター029",
+    "name_ja": "アニメーター029",
+    "name_en": "Animator 029",
+    "authority": 24.85,
+    "trust": 32.48,
+    "skill": 77.69,
+    "composite": 40.73,
+    "centrality": {
+      "degree": 0.9706,
+      "betweenness": 0.0392,
+      "closeness": 0.1627,
+      "eigenvector": 0.1301
+    }
+  },
+  {
+    "person_id": "syn:a11",
+    "name": "アニメーター011",
+    "name_ja": "アニメーター011",
+    "name_en": "Animator 011",
+    "authority": 24.62,
+    "trust": 30.01,
+    "skill": 76.97,
+    "composite": 39.59,
+    "centrality": {
+      "degree": 0.9706,
+      "betweenness": 0.0241,
+      "closeness": 0.1508,
+      "eigenvector": 0.1219
+    }
+  },
+  {
+    "person_id": "syn:a5",
+    "name": "アニメーター005",
+    "name_ja": "アニメーター005",
+    "name_en": "Animator 005",
+    "authority": 22.8,
+    "trust": 15.39,
+    "skill": 98.92,
+    "composite": 39.23,
+    "centrality": {
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 0.1536,
+      "eigenvector": 0.1044
+    }
+  },
+  {
+    "person_id": "syn:a16",
+    "name": "アニメーター016",
+    "name_ja": "アニメーター016",
+    "name_en": "Animator 016",
+    "authority": 28.64,
+    "trust": 19.66,
+    "skill": 74.86,
+    "composite": 37.05,
+    "centrality": {
+      "degree": 0.9706,
+      "betweenness": 0.0,
+      "closeness": 0.1262,
+      "eigenvector": 0.1277
+    }
+  },
+  {
+    "person_id": "syn:a17",
+    "name": "アニメーター017",
+    "name_ja": "アニメーター017",
+    "name_en": "Animator 017",
+    "authority": 40.55,
+    "trust": 19.03,
+    "skill": 55.33,
+    "composite": 36.72,
+    "centrality": {
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 0.1031,
+      "eigenvector": 0.1683
+    }
+  },
+  {
+    "person_id": "syn:a20",
+    "name": "アニメーター020",
+    "name_ja": "アニメーター020",
+    "name_en": "Animator 020",
+    "authority": 31.57,
+    "trust": 31.14,
+    "skill": 51.12,
+    "composite": 36.31,
+    "centrality": {
+      "degree": 1.0,
+      "betweenness": 0.0743,
+      "closeness": 0.1715,
+      "eigenvector": 0.1379
+    }
+  },
+  {
+    "person_id": "syn:a13",
+    "name": "アニメーター013",
+    "name_ja": "アニメーター013",
+    "name_en": "Animator 013",
+    "authority": 40.41,
+    "trust": 37.71,
+    "skill": 23.6,
+    "composite": 35.26,
+    "centrality": {
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 0.1577,
+      "eigenvector": 0.1702
+    }
+  },
+  {
+    "person_id": "syn:a28",
+    "name": "アニメーター028",
+    "name_ja": "アニメーター028",
+    "name_en": "Animator 028",
+    "authority": 32.7,
+    "trust": 23.47,
+    "skill": 54.25,
+    "composite": 34.86,
+    "centrality": {
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 0.1196,
+      "eigenvector": 0.1468
+    }
+  },
+  {
+    "person_id": "syn:a18",
+    "name": "アニメーター018",
+    "name_ja": "アニメーター018",
+    "name_en": "Animator 018",
+    "authority": 25.6,
+    "trust": 5.32,
+    "skill": 78.7,
+    "composite": 31.78,
+    "centrality": {
+      "degree": 0.9706,
+      "betweenness": 0.0,
+      "closeness": 0.1157,
+      "eigenvector": 0.1141
+    }
+  },
+  {
+    "person_id": "syn:a26",
+    "name": "アニメーター026",
+    "name_ja": "アニメーター026",
+    "name_en": "Animator 026",
+    "authority": 36.11,
+    "trust": 31.22,
+    "skill": 25.13,
+    "composite": 31.65,
+    "centrality": {
+      "degree": 0.9706,
+      "betweenness": 0.0,
+      "closeness": 0.0959,
+      "eigenvector": 0.156
+    }
+  },
+  {
+    "person_id": "syn:a21",
+    "name": "アニメーター021",
+    "name_ja": "アニメーター021",
+    "name_en": "Animator 021",
+    "authority": 35.74,
+    "trust": 11.38,
+    "skill": 51.3,
+    "composite": 31.1,
+    "centrality": {
+      "degree": 0.9706,
+      "betweenness": 0.0,
+      "closeness": 0.1196,
+      "eigenvector": 0.1663
+    }
+  },
+  {
+    "person_id": "syn:a19",
+    "name": "アニメーター019",
+    "name_ja": "アニメーター019",
+    "name_en": "Animator 019",
+    "authority": 26.58,
+    "trust": 19.31,
+    "skill": 53.68,
+    "composite": 30.81,
+    "centrality": {
+      "degree": 0.9412,
+      "betweenness": 0.0,
+      "closeness": 0.096,
+      "eigenvector": 0.1173
+    }
+  },
+  {
+    "person_id": "syn:a1",
+    "name": "アニメーター001",
+    "name_ja": "アニメーター001",
+    "name_en": "Animator 001",
+    "authority": 37.21,
+    "trust": 19.57,
+    "skill": 27.39,
+    "composite": 28.58,
+    "centrality": {
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 0.1222,
+      "eigenvector": 0.144
+    }
+  },
+  {
+    "person_id": "syn:a2",
+    "name": "アニメーター002",
+    "name_ja": "アニメーター002",
+    "name_en": "Animator 002",
+    "authority": 37.9,
+    "trust": 17.1,
+    "skill": 29.04,
+    "composite": 28.4,
+    "centrality": {
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 0.1132,
+      "eigenvector": 0.158
+    }
+  },
+  {
+    "person_id": "syn:a4",
+    "name": "アニメーター004",
+    "name_ja": "アニメーター004",
+    "name_en": "Animator 004",
+    "authority": 19.32,
+    "trust": 7.3,
+    "skill": 55.79,
+    "composite": 24.23,
+    "centrality": {
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 0.1433,
+      "eigenvector": 0.0929
+    }
+  },
+  {
+    "person_id": "syn:a8",
+    "name": "アニメーター008",
+    "name_ja": "アニメーター008",
+    "name_en": "Animator 008",
+    "authority": 27.28,
+    "trust": 15.81,
+    "skill": 24.23,
+    "composite": 22.5,
+    "centrality": {
+      "degree": 0.9706,
+      "betweenness": 0.0,
+      "closeness": 0.1046,
+      "eigenvector": 0.1235
+    }
+  },
+  {
+    "person_id": "syn:a27",
+    "name": "アニメーター027",
+    "name_ja": "アニメーター027",
+    "name_en": "Animator 027",
+    "authority": 43.59,
+    "trust": 11.51,
+    "skill": 1.28,
+    "composite": 21.78,
+    "centrality": {
+      "degree": 0.9706,
+      "betweenness": 0.0,
+      "closeness": 0.1461,
+      "eigenvector": 0.1753
+    }
+  },
+  {
+    "person_id": "syn:a22",
+    "name": "アニメーター022",
+    "name_ja": "アニメーター022",
+    "name_en": "Animator 022",
+    "authority": 7.05,
+    "trust": 1.72,
+    "skill": 50.37,
+    "composite": 16.01,
+    "centrality": {
+      "degree": 0.9412,
+      "betweenness": 0.0793,
+      "closeness": 0.1569,
+      "eigenvector": 0.0428
+    }
+  },
+  {
+    "person_id": "syn:d0",
+    "name": "監督000",
+    "name_ja": "監督000",
+    "name_en": "Director 000",
+    "authority": 29.52,
+    "trust": 9.09,
+    "skill": 0.0,
+    "composite": 14.99,
+    "centrality": {
+      "degree": 0.9412,
+      "betweenness": 0.0036,
+      "closeness": 0.1388,
+      "eigenvector": 0.1147
+    }
+  },
+  {
+    "person_id": "syn:a25",
+    "name": "アニメーター025",
+    "name_ja": "アニメーター025",
+    "name_en": "Animator 025",
+    "authority": 20.83,
+    "trust": 18.05,
+    "skill": 0.0,
+    "composite": 14.65,
+    "centrality": {
+      "degree": 1.0,
+      "betweenness": 0.0,
+      "closeness": 0.1635,
+      "eigenvector": 0.1068
+    }
+  },
+  {
+    "person_id": "syn:d3",
+    "name": "監督003",
+    "name_ja": "監督003",
+    "name_en": "Director 003",
+    "authority": 12.54,
+    "trust": 0.04,
+    "skill": 0.0,
+    "composite": 5.03,
+    "centrality": {
+      "degree": 0.8529,
+      "betweenness": 0.1221,
+      "closeness": 0.1486,
+      "eigenvector": 0.056
+    }
+  },
+  {
+    "person_id": "syn:d2",
+    "name": "監督002",
+    "name_ja": "監督002",
+    "name_en": "Director 002",
+    "authority": 4.12,
+    "trust": 0.58,
+    "skill": 0.0,
+    "composite": 1.85,
+    "centrality": {
+      "degree": 0.7941,
+      "betweenness": 0.2834,
+      "closeness": 0.1777,
+      "eigenvector": 0.0265
+    }
+  },
+  {
+    "person_id": "syn:d1",
+    "name": "監督001",
+    "name_ja": "監督001",
+    "name_en": "Director 001",
+    "authority": 4.25,
+    "trust": 0.26,
+    "skill": 0.0,
+    "composite": 1.79,
+    "centrality": {
+      "degree": 0.7941,
+      "betweenness": 0.1988,
+      "closeness": 0.169,
+      "eigenvector": 0.027
+    }
+  },
+  {
+    "person_id": "syn:d4",
+    "name": "監督004",
+    "name_ja": "監督004",
+    "name_en": "Director 004",
+    "authority": 0.0,
+    "trust": 0.0,
+    "skill": 0.0,
+    "composite": 0.0,
+    "centrality": {
+      "degree": 0.5588,
+      "betweenness": 0.3063,
+      "closeness": 0.1803,
+      "eigenvector": 0.012
+    }
+  }
+]

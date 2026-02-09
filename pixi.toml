@@ -1,0 +1,68 @@
+[workspace]
+authors = ["kashi-x <kashimiya.exe@gmail.com>"]
+channels = ["conda-forge"]
+name = "animetor_eval"
+platforms = ["linux-64"]
+version = "0.1.0"
+
+[tasks]
+# データ収集
+scrape-mal = "python -m src.scrapers.mal_scraper"
+scrape-anilist = "python -m src.scrapers.anilist_scraper"
+scrape-mediaarts = "python -m src.scrapers.mediaarts_scraper"
+scrape-jvmg = "python -m src.scrapers.jvmg_fetcher"
+
+# 合成データ
+synthetic = "python -m src.synthetic"
+
+# 分析
+build-graph = "python -m src.analysis.graph"
+calc-scores = "python -m src.analysis.pagerank"
+pipeline = "python -m src.pipeline"
+pipeline-viz = "python -m src.pipeline --visualize"
+pipeline-check = "python -m src.pipeline --dry-run"
+report = "python -m src.report"
+
+# CLI
+stats = "python -c 'from src.cli import app; app()' stats"
+ranking = "python -c 'from src.cli import app; app()' ranking"
+export = "python -c 'from src.cli import app; app()' export"
+export-all = "python -c 'from src.cli import app; app()' export --format all"
+validate = "python -c 'from src.cli import app; app()' validate"
+search = "python -c 'from src.cli import app; app()' search"
+compare = "python -c 'from src.cli import app; app()' compare"
+similar = "python -c 'from src.cli import app; app()' similar"
+
+# API サーバー
+serve = "python -m src.api"
+
+# ノートブック
+lab = "jupyter lab --notebook-dir=result/notebooks"
+
+# 品質
+test = "pytest tests/ -v"
+lint = "ruff check src/ tests/"
+format = "ruff format src/ tests/"
+
+[dependencies]
+python = "3.12.*"
+networkx = "*"
+pandas = "*"
+numpy = "*"
+httpx = "*"
+beautifulsoup4 = "*"
+lxml = "*"
+jupyterlab = "*"
+matplotlib = "*"
+pydantic = ">=2.0"
+rich = "*"
+structlog = "*"
+typer = "*"
+
+[pypi-dependencies]
+sparqlwrapper = "*"
+openskill = "*"
+ruff = ">=0.1"
+pytest = ">=7.0"
+fastapi = ">=0.100"
+uvicorn = {version = ">=0.20", extras = ["standard"]}

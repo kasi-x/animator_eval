@@ -1,0 +1,32 @@
+# pixi
+.pixi/
+pixi.lock
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Data (large files — keep .gitkeep only)
+data/raw/*
+data/interim/*
+data/processed/*
+!data/**/.gitkeep
+
+# Result DB
+result/db/*
+!result/db/.gitkeep
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

@@ -1,0 +1,159 @@
+"""チーム構成分析 — アニメ作品のスタッフ構成パターンを分析する.
+
+成功作品のチーム構成パターンを特定し、
+最適なキャスティング候補を推薦する。
+"""
+
+from collections import defaultdict
+
+import structlog
+
+from src.models import Anime, Credit, Role
+
+logger = structlog.get_logger()
+
+# High-value roles for team composition
+CORE_ROLES = {
+    Role.DIRECTOR,
+    Role.CHIEF_ANIMATION_DIRECTOR,
+    Role.ANIMATION_DIRECTOR,
+    Role.CHARACTER_DESIGNER,
+    Role.KEY_ANIMATOR,
+    Role.STORYBOARD,
+    Role.EPISODE_DIRECTOR,
+}
+
+
+def analyze_team_patterns(
+    credits: list[Credit],
+    anime_map: dict[str, Anime],
+    person_scores: dict[str, float] | None = None,
+    min_score: float = 7.0,
+) -> dict:
+    """成功作品のチーム構成パターンを分析する.
+
+    Args:
+        credits: 全クレジット
+        anime_map: anime_id → Anime
+        person_scores: {person_id: composite_score}
+        min_score: 「成功」判定の最低作品スコア
+
+    Returns:
+        {
+            "high_score_teams": [...],  # 高評価作品のチーム構成
+            "role_combinations": {...},  # 成功パターンの役職組み合わせ
+            "recommended_pairs": [...],  # 推薦ペア
+            "team_size_stats": {...},    # チームサイズの統計
+        }
+    """
+    # Group credits by anime
+    anime_credits: dict[str, list[Credit]] = defaultdict(list)
+    for c in credits:
+        anime_credits[c.anime_id].append(c)
+
+    # Classify anime by score
+    high_score_teams = []
+    all_teams = []
+
+    for anime_id, team_credits in anime_credits.items():
+        anime = anime_map.get(anime_id)
+        if not anime:
+            continue
+
+        # Team composition
+        roles: dict[str, list[str]] = defaultdict(list)
+        for c in team_credits:
+            roles[c.role.value].append(c.person_id)
+
+        team_size = len({c.person_id for c in team_credits})
+        core_count = len({c.person_id for c in team_credits if c.role in CORE_ROLES})
+
+        team_entry = {
+            "anime_id": anime_id,
+            "title": anime.display_title,
+            "year": anime.year,
+            "anime_score": anime.score,
+            "team_size": team_size,
+            "core_roles": core_count,
+            "roles": {r: sorted(set(pids)) for r, pids in roles.items()},
+        }
+
+        if person_scores:
+            team_scores = [
+                person_scores[c.person_id]
+                for c in team_credits
+                if c.person_id in person_scores
+            ]
+            if team_scores:
+                team_entry["avg_person_score"] = round(
+                    sum(team_scores) / len(team_scores), 2
+                )
+
+        all_teams.append(team_entry)
+
+        if anime.score and anime.score >= min_score:
+            high_score_teams.append(team_entry)
+
+    # Sort by anime score
+    high_score_teams.sort(
+        key=lambda x: x.get("anime_score") or 0, reverse=True
+    )
+
+    # Team size statistics
+    sizes = [t["team_size"] for t in all_teams]
+    team_size_stats = {}
+    if sizes:
+        team_size_stats = {
+            "min": min(sizes),
+            "max": max(sizes),
+            "avg": round(sum(sizes) / len(sizes), 1),
+            "high_score_avg": round(
+                sum(t["team_size"] for t in high_score_teams) / max(len(high_score_teams), 1), 1
+            ),
+        }
+
+    # Find frequent role co-occurrences in high-score works
+    role_pair_freq: dict[str, int] = defaultdict(int)
+    for team in high_score_teams:
+        role_keys = sorted(team["roles"].keys())
+        for i, r1 in enumerate(role_keys):
+            for r2 in role_keys[i + 1:]:
+                role_pair_freq[f"{r1}+{r2}"] += 1
+
+    top_combos = sorted(role_pair_freq.items(), key=lambda x: -x[1])[:20]
+
+    # Find recommended pairs (persons who frequently appear together in high-score works)
+    pair_count: dict[tuple[str, str], int] = defaultdict(int)
+    for team in high_score_teams:
+        all_pids = sorted({c.person_id for c in anime_credits.get(team["anime_id"], [])})
+        for i, a in enumerate(all_pids):
+            for b in all_pids[i + 1:]:
+                pair_count[(a, b)] += 1
+
+    recommended_pairs = []
+    for (a, b), count in sorted(pair_count.items(), key=lambda x: -x[1])[:30]:
+        if count >= 2:
+            entry: dict = {"person_a": a, "person_b": b, "shared_high_score_works": count}
+            if person_scores:
+                sa = person_scores.get(a)
+                sb = person_scores.get(b)
+                if sa is not None and sb is not None:
+                    entry["combined_score"] = round((sa + sb) / 2, 2)
+            recommended_pairs.append(entry)
+
+    result = {
+        "high_score_teams": high_score_teams[:50],
+        "total_high_score": len(high_score_teams),
+        "role_combinations": [
+            {"roles": combo, "count": cnt} for combo, cnt in top_combos
+        ],
+        "recommended_pairs": recommended_pairs,
+        "team_size_stats": team_size_stats,
+    }
+
+    logger.info(
+        "team_patterns_analyzed",
+        total_teams=len(all_teams),
+        high_score_teams=len(high_score_teams),
+    )
+    return result

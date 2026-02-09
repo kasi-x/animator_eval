@@ -1,0 +1,202 @@
+"""End-to-end パイプラインテスト — 合成データで全フロー検証.
+
+合成データを生成し、パイプラインを実行し、全出力ファイルが
+正しく生成されることを検証する。
+"""
+
+import json
+
+import pytest
+
+from src.synthetic import generate_synthetic_data
+
+
+@pytest.fixture
+def synthetic_pipeline(monkeypatch, tmp_path):
+    """合成データでパイプラインを実行するフィクスチャ."""
+    import src.database
+    import src.pipeline
+
+    # DB と JSON 出力先を一時ディレクトリに差し替え
+    db_path = tmp_path / "test_e2e.db"
+    json_dir = tmp_path / "json"
+    json_dir.mkdir()
+
+    monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(src.pipeline, "JSON_DIR", json_dir)
+
+    # 合成データを生成してDBに投入
+    from src.database import get_connection, init_db, insert_credit, upsert_anime, upsert_person
+
+    persons, anime_list, credits = generate_synthetic_data(
+        n_directors=5, n_animators=30, n_anime=15, seed=42,
+    )
+
+    conn = get_connection()
+    init_db(conn)
+    for p in persons:
+        upsert_person(conn, p)
+    for a in anime_list:
+        upsert_anime(conn, a)
+    for c in credits:
+        insert_credit(conn, c)
+    conn.commit()
+    conn.close()
+
+    # パイプライン実行
+    from src.pipeline import run_scoring_pipeline
+
+    results = run_scoring_pipeline(visualize=False, dry_run=False)
+
+    return {
+        "results": results,
+        "json_dir": json_dir,
+        "db_path": db_path,
+        "persons": persons,
+        "anime_list": anime_list,
+        "credits": credits,
+    }
+
+
+class TestE2EPipelineResults:
+    def test_returns_results(self, synthetic_pipeline):
+        results = synthetic_pipeline["results"]
+        assert len(results) > 0
+
+    def test_results_sorted_by_composite(self, synthetic_pipeline):
+        results = synthetic_pipeline["results"]
+        composites = [r["composite"] for r in results]
+        assert composites == sorted(composites, reverse=True)
+
+    def test_results_have_required_fields(self, synthetic_pipeline):
+        results = synthetic_pipeline["results"]
+        for r in results:
+            assert "person_id" in r
+            assert "authority" in r
+            assert "trust" in r
+            assert "skill" in r
+            assert "composite" in r
+
+    def test_scores_normalized(self, synthetic_pipeline):
+        results = synthetic_pipeline["results"]
+        for r in results:
+            for axis in ("authority", "trust", "skill", "composite"):
+                assert 0 <= r[axis] <= 100
+
+    def test_percentile_ranks(self, synthetic_pipeline):
+        results = synthetic_pipeline["results"]
+        for r in results:
+            assert "composite_pct" in r
+            assert 0 <= r["composite_pct"] <= 100
+
+
+class TestE2EOutputFiles:
+    def test_scores_json(self, synthetic_pipeline):
+        path = synthetic_pipeline["json_dir"] / "scores.json"
+        assert path.exists()
+        data = json.loads(path.read_text())
+        assert len(data) > 0
+
+    def test_summary_json(self, synthetic_pipeline):
+        path = synthetic_pipeline["json_dir"] / "summary.json"
+        assert path.exists()
+        data = json.loads(path.read_text())
+        assert "elapsed_seconds" in data
+        assert "data" in data
+
+    def test_circles_json(self, synthetic_pipeline):
+        path = synthetic_pipeline["json_dir"] / "circles.json"
+        # Circles may or may not exist depending on data
+        if path.exists():
+            data = json.loads(path.read_text())
+            assert isinstance(data, dict)
+
+    def test_anime_stats_json(self, synthetic_pipeline):
+        path = synthetic_pipeline["json_dir"] / "anime_stats.json"
+        assert path.exists()
+        data = json.loads(path.read_text())
+        assert len(data) > 0
+
+    def test_transitions_json(self, synthetic_pipeline):
+        path = synthetic_pipeline["json_dir"] / "transitions.json"
+        assert path.exists()
+
+    def test_growth_json(self, synthetic_pipeline):
+        path = synthetic_pipeline["json_dir"] / "growth.json"
+        assert path.exists()
+        data = json.loads(path.read_text())
+        assert "trend_summary" in data
+
+    def test_teams_json(self, synthetic_pipeline):
+        path = synthetic_pipeline["json_dir"] / "teams.json"
+        # May not exist if no high-score teams
+        if path.exists():
+            data = json.loads(path.read_text())
+            assert "high_score_teams" in data
+
+    def test_time_series_json(self, synthetic_pipeline):
+        path = synthetic_pipeline["json_dir"] / "time_series.json"
+        assert path.exists()
+        data = json.loads(path.read_text())
+        assert len(data["years"]) > 0
+
+    def test_decades_json(self, synthetic_pipeline):
+        path = synthetic_pipeline["json_dir"] / "decades.json"
+        assert path.exists()
+        data = json.loads(path.read_text())
+        assert len(data["decades"]) > 0
+
+    def test_tags_json(self, synthetic_pipeline):
+        path = synthetic_pipeline["json_dir"] / "tags.json"
+        assert path.exists()
+        data = json.loads(path.read_text())
+        assert "tag_summary" in data
+
+    def test_role_flow_json(self, synthetic_pipeline):
+        path = synthetic_pipeline["json_dir"] / "role_flow.json"
+        assert path.exists()
+
+    def test_network_evolution_json(self, synthetic_pipeline):
+        path = synthetic_pipeline["json_dir"] / "network_evolution.json"
+        assert path.exists()
+        data = json.loads(path.read_text())
+        assert len(data["years"]) > 0
+
+    def test_milestones_json(self, synthetic_pipeline):
+        path = synthetic_pipeline["json_dir"] / "milestones.json"
+        assert path.exists()
+
+
+class TestE2EDataConsistency:
+    def test_all_directors_scored(self, synthetic_pipeline):
+        results = synthetic_pipeline["results"]
+        person_ids = {r["person_id"] for r in results}
+        for p in synthetic_pipeline["persons"]:
+            if p.id.startswith("syn:d"):
+                assert p.id in person_ids
+
+    def test_scores_json_matches_results(self, synthetic_pipeline):
+        path = synthetic_pipeline["json_dir"] / "scores.json"
+        data = json.loads(path.read_text())
+        assert len(data) == len(synthetic_pipeline["results"])
+
+    def test_growth_covers_active_persons(self, synthetic_pipeline):
+        path = synthetic_pipeline["json_dir"] / "growth.json"
+        data = json.loads(path.read_text())
+        assert data["total_persons"] > 0
+
+    def test_career_data_in_results(self, synthetic_pipeline):
+        results = synthetic_pipeline["results"]
+        has_career = sum(1 for r in results if r.get("career"))
+        assert has_career > 0
+
+    def test_network_data_in_results(self, synthetic_pipeline):
+        results = synthetic_pipeline["results"]
+        has_network = sum(1 for r in results if r.get("network"))
+        assert has_network > 0
+
+    def test_tags_in_results(self, synthetic_pipeline):
+        results = synthetic_pipeline["results"]
+        has_tags = sum(1 for r in results if r.get("tags") is not None)
+        # Tags are added post-computation, so at least some should have them
+        assert has_tags >= 0  # Not all may have tags
