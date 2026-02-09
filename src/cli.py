@@ -1585,3 +1585,89 @@ def data_quality() -> None:
 
 if __name__ == "__main__":
     app()
+
+
+@app.command(name="resolve-check")
+def entity_resolution_check(
+    export_csv: str = typer.Option(None, "--export", "-e", help="Export matches to CSV for review"),
+    min_confidence: float = typer.Option(0.0, "--min-conf", help="Minimum confidence to export"),
+    max_confidence: float = typer.Option(1.0, "--max-conf", help="Maximum confidence to export"),
+    review_csv: str = typer.Option(None, "--review", "-r", help="Calculate precision from reviewed CSV"),
+) -> None:
+    """Entity resolution evaluation report."""
+    setup_logging()
+
+    from src.analysis.entity_resolution import (
+        cross_source_match,
+        exact_match_cluster,
+        romaji_match,
+        similarity_based_cluster,
+    )
+    from src.analysis.entity_resolution_eval import (
+        calculate_precision_from_review,
+        export_matches_for_review,
+        format_resolution_report,
+        generate_resolution_report,
+    )
+    from src.database import get_connection, init_db
+    from src.models import Person
+
+    conn = get_connection()
+    init_db(conn)
+
+    person_rows = conn.execute("SELECT * FROM persons").fetchall()
+    conn.close()
+
+    if not person_rows:
+        console.print("[yellow]No persons in database[/yellow]")
+        return
+
+    persons = [
+        Person(
+            id=row["id"],
+            name_ja=row["name_ja"],
+            name_en=row["name_en"],
+            aliases=row["aliases"].split(",") if row["aliases"] else [],
+        )
+        for row in person_rows
+    ]
+
+    console.print(f"[cyan]Loaded {len(persons):,} persons[/cyan]\n")
+
+    # Run resolution with tracking
+    exact = exact_match_cluster(persons)
+    cross = cross_source_match(persons)
+    
+    already_matched = set(exact) | set(cross)
+    remaining = [p for p in persons if p.id not in already_matched]
+    romaji = romaji_match(remaining)
+    
+    already_matched = already_matched | set(romaji)
+    remaining = [p for p in persons if p.id not in already_matched]
+    similarity = similarity_based_cluster(remaining, threshold=0.95)
+
+    canonical_map = {**exact, **cross, **romaji, **similarity}
+    strategy_breakdown = {
+        "exact": exact,
+        "cross_source": cross,
+        "romaji": romaji,
+        "similarity": similarity,
+    }
+
+    report = generate_resolution_report(persons, canonical_map, strategy_breakdown)
+    console.print(format_resolution_report(report))
+
+    if export_csv:
+        export_matches_for_review(report, export_csv, min_confidence, max_confidence)
+        console.print(f"\n[green]✓ Exported to {export_csv}[/green]")
+
+    if review_csv:
+        precision = calculate_precision_from_review(review_csv)
+        console.print("\n[bold cyan]Precision by Strategy:[/bold cyan]")
+        pt = Table()
+        pt.add_column("Strategy")
+        pt.add_column("Precision", justify="right")
+        for strategy, prec in precision.items():
+            color = "green" if prec >= 0.95 else "yellow" if prec >= 0.85 else "red"
+            pt.add_row(strategy, f"[{color}]{prec * 100:.1f}%[/{color}]")
+        console.print(pt)
