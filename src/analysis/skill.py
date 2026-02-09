@@ -7,6 +7,8 @@
 直近の作品ほど重視される（OpenSkill の自然な性質）。
 """
 
+from typing import NamedTuple
+
 import numpy as np
 import structlog
 from openskill.models import PlackettLuce
@@ -14,6 +16,17 @@ from openskill.models import PlackettLuce
 from src.models import Anime, Credit, Role
 
 logger = structlog.get_logger()
+
+
+class ScoredAnimeRecord(NamedTuple):
+    """評点付き作品の記録.
+
+    Records an anime with its score and year for skill rating calculation.
+    """
+
+    anime_id: str
+    score: float
+    year: int
 
 # スキル評価対象の役職（制作スタッフ全般）
 SKILL_ROLES = {
@@ -40,90 +53,91 @@ def compute_skill_scores(
     同じ作品に参加したスタッフはチームとして扱う。
     """
     # 作品をスコア順にソート（年代も考慮）
-    scored_anime: list[tuple[str, float, int]] = []
+    anime_by_year_and_score: list[ScoredAnimeRecord] = []
     for anime_id, anime in anime_map.items():
         if anime.score and anime.score > 0:
             year = anime.year or 2000
-            scored_anime.append((anime_id, anime.score, year))
+            record = ScoredAnimeRecord(anime_id=anime_id, score=anime.score, year=year)
+            anime_by_year_and_score.append(record)
 
-    scored_anime.sort(key=lambda x: (x[2], x[1]))  # 年代順→スコア順
+    anime_by_year_and_score.sort(key=lambda record: (record.year, record.score))  # 年代順→スコア順
 
-    if not scored_anime:
+    if not anime_by_year_and_score:
         logger.warning("No scored anime found")
         return {}
 
     # anime_id → [person_id] (対象役職のみ)
-    anime_staff: dict[str, list[str]] = {}
-    for c in credits:
-        if c.role in SKILL_ROLES:
-            anime_staff.setdefault(c.anime_id, [])
-            if c.person_id not in anime_staff[c.anime_id]:
-                anime_staff[c.anime_id].append(c.person_id)
+    staff_by_anime: dict[str, list[str]] = {}
+    for credit in credits:
+        if credit.role in SKILL_ROLES:
+            staff_by_anime.setdefault(credit.anime_id, [])
+            if credit.person_id not in staff_by_anime[credit.anime_id]:
+                staff_by_anime[credit.anime_id].append(credit.person_id)
 
     # OpenSkill モデル初期化
     model = PlackettLuce()
 
     # 全参加者のレーティング
-    all_person_ids: set[str] = set()
-    for staff in anime_staff.values():
-        all_person_ids.update(staff)
+    all_staff_member_ids: set[str] = set()
+    for staff_list in staff_by_anime.values():
+        all_staff_member_ids.update(staff_list)
 
-    ratings: dict[str, object] = {
-        pid: model.rating() for pid in all_person_ids
+    person_ratings: dict[str, object] = {
+        person_id: model.rating() for person_id in all_staff_member_ids
     }
 
     # 年代ごとにバッチ処理（同年の作品をスコア順にランク）
-    yearly: dict[int, list[tuple[str, float]]] = {}
-    for anime_id, score, year in scored_anime:
-        yearly.setdefault(year, []).append((anime_id, score))
+    anime_records_by_year: dict[int, list[ScoredAnimeRecord]] = {}
+    for anime_record in anime_by_year_and_score:
+        anime_records_by_year.setdefault(anime_record.year, []).append(anime_record)
 
-    for year in sorted(yearly.keys()):
-        anime_in_year = yearly[year]
+    for year in sorted(anime_records_by_year.keys()):
+        yearly_anime_records = anime_records_by_year[year]
         # スコア降順でランク
-        anime_in_year.sort(key=lambda x: x[1], reverse=True)
+        yearly_anime_records.sort(key=lambda record: record.score, reverse=True)
 
         # 各作品のスタッフをチームとして構成
-        teams = []
-        team_keys: list[list[str]] = []
+        team_rating_objects = []
+        team_member_ids: list[list[str]] = []
 
-        for anime_id, _score in anime_in_year:
-            staff = anime_staff.get(anime_id, [])
-            if not staff:
+        for anime_record in yearly_anime_records:
+            staff_members = staff_by_anime.get(anime_record.anime_id, [])
+            if not staff_members:
                 continue
-            team_ratings = [ratings[pid] for pid in staff]
-            teams.append(team_ratings)
-            team_keys.append(staff)
+            team_ratings = [person_ratings[person_id] for person_id in staff_members]
+            team_rating_objects.append(team_ratings)
+            team_member_ids.append(staff_members)
 
-        if len(teams) < 2:
+        if len(team_rating_objects) < 2:
             continue
 
         # ランクは 1-indexed（1位 = 最高スコアの作品チーム）
-        ranks = list(range(1, len(teams) + 1))
+        competition_ranks = list(range(1, len(team_rating_objects) + 1))
 
         try:
-            new_ratings = model.rate(teams, ranks=ranks)
-            for team_pids, team_new in zip(team_keys, new_ratings):
-                for pid, new_r in zip(team_pids, team_new):
-                    ratings[pid] = new_r
+            updated_team_ratings = model.rate(team_rating_objects, ranks=competition_ranks)
+            for team_person_ids, updated_ratings in zip(team_member_ids, updated_team_ratings):
+                for person_id, updated_rating in zip(team_person_ids, updated_ratings):
+                    person_ratings[person_id] = updated_rating
         except Exception:
             logger.debug("skipping_year_rating_update", year=year)
 
     # mu を抽出して正規化
     skill_scores: dict[str, float] = {}
-    for pid, r in ratings.items():
-        skill_scores[pid] = r.mu  # type: ignore[union-attr]
+    for person_id, rating_object in person_ratings.items():
+        skill_scores[person_id] = rating_object.mu  # type: ignore[union-attr]
 
     if skill_scores:
-        values = np.array(list(skill_scores.values()))
-        min_val = values.min()
-        max_val = values.max()
-        if max_val > min_val:
+        score_values = np.array(list(skill_scores.values()))
+        minimum_score = score_values.min()
+        maximum_score = score_values.max()
+        if maximum_score > minimum_score:
             skill_scores = {
-                k: float((v - min_val) / (max_val - min_val) * 100.0)
-                for k, v in skill_scores.items()
+                person_id: float((score - minimum_score) / (maximum_score - minimum_score) * 100.0)
+                for person_id, score in skill_scores.items()
             }
         else:
-            skill_scores = {k: 50.0 for k in skill_scores}
+            skill_scores = {person_id: 50.0 for person_id in skill_scores}
 
     logger.info("skill_scores_computed", persons=len(skill_scores))
     return skill_scores
