@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Animetor Eval - Pipeline Monitor</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        .header h1 { color: #667eea; margin-bottom: 10px; font-size: 32px; }
+        .header p { color: #666; font-size: 16px; }
+        .connection-status {
+            display: inline-block;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            margin-top: 15px;
+        }
+        .connection-status.connected { background: #10b981; color: white; }
+        .connection-status.disconnected { background: #ef4444; color: white; }
+        .connection-status.connecting { background: #f59e0b; color: white; }
+        .pipeline-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+        .pipeline-card h2 { color: #333; margin-bottom: 20px; font-size: 24px; }
+        .progress-bar-container {
+            background: #f3f4f6;
+            border-radius: 10px;
+            height: 30px;
+            overflow: hidden;
+            margin-bottom: 15px;
+        }
+        .progress-bar {
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            height: 100%;
+            transition: width 0.3s ease;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .phase-list { display: grid; gap: 10px; }
+        .phase-item {
+            display: flex;
+            align-items: center;
+            padding: 15px;
+            background: #f9fafb;
+            border-radius: 8px;
+            border-left: 4px solid #d1d5db;
+            transition: all 0.3s ease;
+        }
+        .phase-item.running { border-left-color: #f59e0b; background: #fef3c7; }
+        .phase-item.complete { border-left-color: #10b981; background: #d1fae5; }
+        .phase-item.error { border-left-color: #ef4444; background: #fee2e2; }
+        .phase-number {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: #667eea;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            margin-right: 15px;
+        }
+        .phase-info { flex-grow: 1; }
+        .phase-name { font-weight: 600; color: #333; margin-bottom: 5px; }
+        .phase-status { font-size: 14px; color: #666; }
+        .phase-duration {
+            font-size: 12px;
+            color: #999;
+            margin-left: auto;
+            padding-left: 10px;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+        .stat-card {
+            background: #f9fafb;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+        .stat-label { font-size: 14px; color: #666; }
+        .log-container {
+            background: #1f2937;
+            border-radius: 8px;
+            padding: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        .log-entry { color: #d1d5db; margin-bottom: 8px; }
+        .log-entry .timestamp { color: #9ca3af; }
+        .log-entry .type { color: #60a5fa; font-weight: 600; }
+        .log-entry.error { color: #fca5a5; }
+        .log-entry.complete { color: #86efac; }
+        .controls { display: flex; gap: 10px; margin-bottom: 20px; }
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-size: 14px;
+        }
+        .btn-primary { background: #667eea; color: white; }
+        .btn-primary:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        .btn-secondary { background: #f3f4f6; color: #333; }
+        .btn-secondary:hover { background: #e5e7eb; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎨 Animetor Eval - Pipeline Monitor</h1>
+            <p>リアルタイムパイプライン進捗モニター</p>
+            <div class="connection-status" id="connectionStatus">接続中...</div>
+        </div>
+
+        <div class="controls">
+            <button class="btn-primary" id="runPipelineBtn">パイプライン実行</button>
+            <button class="btn-secondary" id="clearLogsBtn">ログクリア</button>
+            <button class="btn-secondary" id="reconnectBtn">再接続</button>
+        </div>
+
+        <div class="pipeline-card">
+            <h2>📊 進捗状況</h2>
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progressBar">0%</div>
+            </div>
+            <div class="phase-list" id="phaseList"></div>
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="stat-value" id="totalPersons">-</div>
+                    <div class="stat-label">Total Persons</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="duration">-</div>
+                    <div class="stat-label">Duration (s)</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="currentPhase">-</div>
+                    <div class="stat-label">Current Phase</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="pipeline-card">
+            <h2>📝 ログ</h2>
+            <div class="log-container" id="logContainer">
+                <div class="log-entry">Waiting for connection...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="pipeline_monitor.js"></script>
+</body>
+</html>

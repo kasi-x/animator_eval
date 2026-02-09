@@ -14,8 +14,10 @@
 
 import structlog
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from pathlib import Path
 
 from src.analysis.similarity import find_similar_persons
 from src.database import get_connection, get_data_sources, get_db_stats, get_score_history, search_persons
@@ -52,6 +54,11 @@ app = FastAPI(
     description="アニメ業界人物評価 API — ネットワーク密度・位置指標に基づくスコアリング",
     version="0.1.0",
 )
+
+# Mount static files for WebSocket demo
+STATIC_DIR = Path(__file__).parent.parent / "static"
+if STATIC_DIR.exists():
+    app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 # --- Response Models ---
@@ -638,6 +645,108 @@ def db_stats():
     finally:
         conn.close()
     return {"stats": stats, "data_sources": sources}
+
+
+@app.websocket("/ws/pipeline")
+async def websocket_pipeline_progress(websocket: WebSocket):
+    """WebSocket endpoint for real-time pipeline progress updates.
+
+    Connect to this endpoint to receive live updates during pipeline execution:
+    - Pipeline start/complete events
+    - Phase progress updates
+    - Error notifications
+
+    Example JavaScript client:
+        const ws = new WebSocket('ws://localhost:8000/ws/pipeline');
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            console.log('Pipeline update:', data);
+        };
+    """
+    from src.websocket_manager import get_websocket_manager
+
+    manager = get_websocket_manager()
+    await manager.connect(websocket)
+
+    try:
+        # Send initial connection confirmation
+        await manager.send_personal_message(
+            {
+                "type": "connection_established",
+                "message": "Connected to pipeline progress stream",
+                "timestamp": __import__("datetime").datetime.now().isoformat(),
+            },
+            websocket,
+        )
+
+        # Keep connection alive and listen for client messages
+        while True:
+            # Wait for any client messages (ping/pong, etc.)
+            data = await websocket.receive_text()
+
+            # Echo back (simple ping/pong)
+            if data == "ping":
+                await manager.send_personal_message({"type": "pong"}, websocket)
+
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+        logger.info("websocket_client_disconnected")
+    except Exception as e:
+        logger.exception("websocket_error", error=str(e))
+        manager.disconnect(websocket)
+
+
+@app.post("/api/v1/pipeline/run")
+async def run_pipeline_async(
+    visualize: bool = Query(False, description="Generate visualizations"),
+    dry_run: bool = Query(False, description="Dry run (validation only)"),
+):
+    """Run scoring pipeline asynchronously with WebSocket progress updates.
+
+    This endpoint triggers the pipeline in a background task and returns immediately.
+    Connect to /ws/pipeline WebSocket to receive real-time progress updates.
+
+    Args:
+        visualize: Generate matplotlib visualizations
+        dry_run: Run validation only, don't compute scores
+
+    Returns:
+        Job started confirmation with job ID
+    """
+    import asyncio
+    from datetime import datetime
+
+    job_id = f"pipeline_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+
+    # Run pipeline in background task
+    async def run_pipeline_task():
+        """Background task to run pipeline with WebSocket updates."""
+        from src.pipeline import run_scoring_pipeline
+
+        try:
+            logger.info("pipeline_task_started", job_id=job_id)
+            # Note: run_scoring_pipeline is sync, so run in thread pool
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                run_scoring_pipeline,
+                visualize,
+                dry_run,
+            )
+            logger.info("pipeline_task_complete", job_id=job_id)
+
+        except Exception as e:
+            logger.exception("pipeline_task_failed", job_id=job_id, error=str(e))
+
+    # Create background task
+    asyncio.create_task(run_pipeline_task())
+
+    return {
+        "status": "started",
+        "job_id": job_id,
+        "message": "Pipeline started in background. Connect to /ws/pipeline for progress updates.",
+        "websocket_url": "ws://localhost:8000/ws/pipeline",
+    }
 
 
 def main() -> None:
