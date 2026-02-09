@@ -1,0 +1,44 @@
+# Coverage configuration for pytest-cov
+
+[run]
+source = src
+omit =
+    # Scrapers depend on external APIs - mock testing not practical
+    src/scrapers/*
+    # Old pipeline (deprecated, kept for reference)
+    src/pipeline_old.py
+    # Generated files
+    .pixi/*
+    */site-packages/*
+
+[report]
+# Minimum coverage percentage (fail if below)
+# Current: 81% overall, 89% excluding scrapers
+fail_under = 85
+
+# Exclude lines from coverage
+exclude_lines =
+    # Standard exclusions
+    pragma: no cover
+    def __repr__
+    raise AssertionError
+    raise NotImplementedError
+    if __name__ == .__main__.:
+    if TYPE_CHECKING:
+    @abstractmethod
+
+    # Defensive programming (hard to test)
+    except Exception:
+    except BaseException:
+
+    # Debug/development code
+    if settings.DEBUG
+    if logger.isEnabledFor
+
+precision = 2
+show_missing = True
+skip_covered = False
+
+[html]
+directory = htmlcov
+title = Animetor Eval Coverage Report

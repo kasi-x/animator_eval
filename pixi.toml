@@ -42,6 +42,8 @@ lab = "jupyter lab --notebook-dir=result/notebooks"
 
 # 品質
 test = "pytest tests/ -v"
+test-cov = "pytest tests/ -v --cov=src --cov-report=term-missing --cov-report=html"
+test-cov-report = "pytest tests/ -v --cov=src --cov-report=html && python -m webbrowser htmlcov/index.html"
 lint = "ruff check src/ tests/"
 format = "ruff format src/ tests/"
 
@@ -66,6 +68,7 @@ sparqlwrapper = "*"
 openskill = "*"
 ruff = ">=0.1"
 pytest = ">=7.0"
+pytest-cov = ">=4.0"
 fastapi = ">=0.100"
 uvicorn = {version = ">=0.20", extras = ["standard"]}
 rapidfuzz = ">=3.0"

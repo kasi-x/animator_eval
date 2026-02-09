@@ -30,10 +30,10 @@
     },
     "authority_pagerank": {
       "count": 1,
-      "total": 0.001,
-      "avg": 0.001,
-      "min": 0.001,
-      "max": 0.001
+      "total": 0.002,
+      "avg": 0.002,
+      "min": 0.002,
+      "max": 0.002
     },
     "trust_scores": {
       "count": 1,
@@ -93,10 +93,10 @@
     },
     "centrality_metrics": {
       "count": 1,
-      "total": 0.0,
-      "avg": 0.0,
-      "min": 0.0,
-      "max": 0.0
+      "total": 0.001,
+      "avg": 0.001,
+      "min": 0.001,
+      "max": 0.001
     },
     "network_density": {
       "count": 1,
@@ -119,6 +119,13 @@
       "min": 0.0,
       "max": 0.0
     },
+    "collaboration_strength": {
+      "count": 1,
+      "total": 0.0,
+      "avg": 0.0,
+      "min": 0.0,
+      "max": 0.0
+    },
     "outlier_detection": {
       "count": 1,
       "total": 0.0,
@@ -126,19 +133,12 @@
       "min": 0.0,
       "max": 0.0
     },
-    "collaboration_strength": {
-      "count": 1,
-      "total": 0.001,
-      "avg": 0.001,
-      "min": 0.001,
-      "max": 0.001
-    },
     "team_composition": {
       "count": 1,
-      "total": 0.001,
-      "avg": 0.001,
-      "min": 0.001,
-      "max": 0.001
+      "total": 0.0,
+      "avg": 0.0,
+      "min": 0.0,
+      "max": 0.0
     },
     "time_series": {
       "count": 1,
@@ -168,13 +168,6 @@
       "min": 0.001,
       "max": 0.001
     },
-    "graphml_export": {
-      "count": 1,
-      "total": 0.002,
-      "avg": 0.002,
-      "min": 0.002,
-      "max": 0.002
-    },
     "bridge_detection": {
       "count": 1,
       "total": 0.001,
@@ -188,6 +181,13 @@
       "avg": 0.001,
       "min": 0.001,
       "max": 0.001
+    },
+    "graphml_export": {
+      "count": 1,
+      "total": 0.003,
+      "avg": 0.003,
+      "min": 0.003,
+      "max": 0.003
     },
     "milestones": {
       "count": 1,
@@ -219,25 +219,25 @@
     },
     "influence_tree": {
       "count": 1,
-      "total": 0.001,
-      "avg": 0.001,
-      "min": 0.001,
-      "max": 0.001
+      "total": 0.0,
+      "avg": 0.0,
+      "min": 0.0,
+      "max": 0.0
     },
     "cross_validation": {
       "count": 1,
-      "total": 0.005,
-      "avg": 0.005,
-      "min": 0.005,
-      "max": 0.005
+      "total": 0.009,
+      "avg": 0.009,
+      "min": 0.009,
+      "max": 0.009
     }
   },
   "memory_snapshots": {
-    "pipeline_start": 254.4,
-    "after_data_load": 254.4,
-    "after_graph_build": 254.4,
-    "after_scoring": 254.4,
-    "after_centrality": 254.4
+    "pipeline_start": 258.5,
+    "after_data_load": 258.6,
+    "after_graph_build": 258.6,
+    "after_scoring": 258.6,
+    "after_centrality": 258.6
   },
   "counters": {
     "persons_loaded": 4,
