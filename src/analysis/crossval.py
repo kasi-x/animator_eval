@@ -10,7 +10,7 @@ import random
 
 import structlog
 
-from src.analysis.graph import build_bipartite_graph
+from src.analysis.graph import create_person_anime_network
 from src.analysis.pagerank import compute_authority_scores
 from src.analysis.skill import compute_skill_scores
 from src.analysis.trust import compute_trust_scores
@@ -77,7 +77,7 @@ def cross_validate_scores(
     anime_map = {a.id: a for a in anime_list}
 
     # Full scores as baseline
-    full_graph = build_bipartite_graph(persons, anime_list, credits)
+    full_graph = create_person_anime_network(persons, anime_list, credits)
     full_authority = compute_authority_scores(full_graph)
     full_trust = compute_trust_scores(credits, anime_map)
     full_skill = compute_skill_scores(credits, anime_map)
@@ -108,7 +108,7 @@ def cross_validate_scores(
             continue
 
         # Recompute scores
-        fold_graph = build_bipartite_graph(persons, anime_list, fold_credits)
+        fold_graph = create_person_anime_network(persons, anime_list, fold_credits)
         fold_authority = compute_authority_scores(fold_graph)
         fold_trust = compute_trust_scores(fold_credits, anime_map)
         fold_skill = compute_skill_scores(fold_credits, anime_map)

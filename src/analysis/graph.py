@@ -25,12 +25,15 @@ def _role_weight(role: Role) -> float:
     return ROLE_WEIGHTS.get(role.value, 1.0)
 
 
-def build_bipartite_graph(
+def create_person_anime_network(
     persons: list[Person],
     anime_list: list[Anime],
     credits: list[Credit],
 ) -> nx.DiGraph:
-    """二部グラフ (person ↔ anime) を構築する."""
+    """二部グラフ (person ↔ anime) を構築する.
+
+    Creates a bipartite network connecting people to the anime works they contributed to.
+    """
     g = nx.DiGraph()
 
     # ノード追加
@@ -64,12 +67,13 @@ def build_bipartite_graph(
     return g
 
 
-def build_collaboration_graph(
+def create_person_collaboration_network(
     persons: list[Person],
     credits: list[Credit],
 ) -> nx.Graph:
     """人物間コラボレーション無向グラフを構築する.
 
+    Creates a network of people who worked together on the same anime.
     同じ作品に参加した人物同士にエッジを張る。
     エッジ重み = Σ(role_weight_a × role_weight_b) / max_weight で正規化。
     """
@@ -110,11 +114,12 @@ def build_collaboration_graph(
     return g
 
 
-def build_director_animator_graph(
+def create_director_animator_network(
     credits: list[Credit],
 ) -> nx.DiGraph:
     """監督→アニメーター の有向グラフを構築する.
 
+    Creates a directed network showing which directors worked with which animators.
     同一作品で監督/演出とアニメーターが共演した場合にエッジを張る。
     Trust スコアの算出に使用。
     """
@@ -170,11 +175,12 @@ def build_director_animator_graph(
     return g
 
 
-def classify_person_roles(
+def determine_primary_role_for_each_person(
     credits: list[Credit],
 ) -> dict[str, dict[str, int | str]]:
     """各人物の役職分布と主要カテゴリを算出する.
 
+    Determines each person's primary role category based on their credit distribution.
     Returns:
         {person_id: {"primary_category": "animator"|"director"|...,
                       "role_counts": {role: count}, "total_credits": int}}
@@ -239,12 +245,13 @@ def classify_person_roles(
 LARGE_GRAPH_THRESHOLD = 500  # nodes
 
 
-def compute_centrality_metrics(
+def calculate_network_centrality_scores(
     graph: nx.Graph,
     person_ids: set[str] | None = None,
 ) -> dict[str, dict[str, float]]:
     """各種中心性指標を算出する.
 
+    Calculates how central each person is to the collaboration network.
     大規模グラフ (>500ノード) の場合は近似アルゴリズムを使用する。
 
     Args:
@@ -391,13 +398,13 @@ def main() -> None:
         return
 
     # 二部グラフ
-    bp_graph = build_bipartite_graph(persons, anime_list, credits)
+    bp_graph = create_person_anime_network(persons, anime_list, credits)
 
     # コラボレーショングラフ
-    collab_graph = build_collaboration_graph(persons, credits)
+    collab_graph = create_person_collaboration_network(persons, credits)
 
     # 監督→アニメーターグラフ
-    da_graph = build_director_animator_graph(credits)
+    da_graph = create_director_animator_network(credits)
 
     # 統計出力
     stats = {

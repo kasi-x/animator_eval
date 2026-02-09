@@ -41,10 +41,10 @@ from src.analysis.stability import compare_scores
 from src.validation import validate_all
 from src.analysis.circles import find_director_circles
 from src.analysis.graph import (
-    build_bipartite_graph,
-    build_collaboration_graph,
-    classify_person_roles,
-    compute_centrality_metrics,
+    create_person_anime_network,
+    create_person_collaboration_network,
+    determine_primary_role_for_each_person,
+    calculate_network_centrality_scores,
     compute_graph_summary,
 )
 from src.analysis.pagerank import compute_authority_scores
@@ -158,7 +158,7 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
     # Step 2: グラフ構築
     logger.info("step_start", step="graph_construction")
     with monitor.measure("graph_construction"):
-        graph = build_bipartite_graph(persons, anime_list, credits)
+        graph = create_person_anime_network(persons, anime_list, credits)
     monitor.record_memory("after_graph_build")
 
     # Step 3: Authority (PageRank)
@@ -208,7 +208,7 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
     # Step 5.6: Role Classification
     logger.info("step_start", step="role_classification")
     with monitor.measure("role_classification"):
-        role_profiles = classify_person_roles(credits)
+        role_profiles = determine_primary_role_for_each_person(credits)
 
     # Step 5.7: Career Analysis
     logger.info("step_start", step="career_analysis")
@@ -229,9 +229,9 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
     # Step 5.9: Centrality Metrics (supplementary)
     logger.info("step_start", step="centrality_metrics")
     with monitor.measure("centrality_metrics"):
-        collab_graph = build_collaboration_graph(persons, credits)
+        collab_graph = create_person_collaboration_network(persons, credits)
         person_ids = {p.id for p in persons}
-        centrality = compute_centrality_metrics(collab_graph, person_ids)
+        centrality = calculate_network_centrality_scores(collab_graph, person_ids)
     monitor.record_memory("after_centrality")
 
     # Step 5.95: Network density

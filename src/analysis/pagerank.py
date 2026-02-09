@@ -108,7 +108,7 @@ def main() -> None:
     """エントリーポイント: グラフを構築し Authority スコアを算出."""
     import json
 
-    from src.analysis.graph import build_bipartite_graph
+    from src.analysis.graph import create_person_anime_network
     from src.database import (
         get_connection,
         init_db,
@@ -135,7 +135,7 @@ def main() -> None:
         conn.close()
         return
 
-    graph = build_bipartite_graph(persons, anime_list, credits)
+    graph = create_person_anime_network(persons, anime_list, credits)
     authority = compute_authority_scores(graph)
 
     # DB に保存
