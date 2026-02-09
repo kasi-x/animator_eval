@@ -14,6 +14,7 @@ import numpy as np
 import structlog
 
 from src.models import Anime, Credit, Role
+from src.utils.role_groups import DIRECTOR_ROLES
 
 logger = structlog.get_logger()
 
@@ -27,12 +28,6 @@ class DirectorEngagementRecord(NamedTuple):
 # 減衰パラメータ
 DECAY_HALF_LIFE_YEARS = 3.0  # 3年で半減
 DECAY_LAMBDA = math.log(2) / DECAY_HALF_LIFE_YEARS
-
-DIRECTOR_ROLES = {
-    Role.DIRECTOR,
-    Role.EPISODE_DIRECTOR,
-    Role.CHIEF_ANIMATION_DIRECTOR,
-}
 
 # Role importance map (hoisted to module level - not recreated per credit)
 ROLE_IMPORTANCE_MAP: dict[Role, float] = {

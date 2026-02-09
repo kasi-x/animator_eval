@@ -9,35 +9,9 @@ from collections import defaultdict
 import structlog
 
 from src.models import Credit, Role
+from src.utils.role_groups import ROLE_CATEGORY
 
 logger = structlog.get_logger()
-
-# 役職カテゴリマッピング
-ROLE_CATEGORY: dict[Role, str] = {
-    Role.DIRECTOR: "direction",
-    Role.EPISODE_DIRECTOR: "direction",
-    Role.STORYBOARD: "direction",
-    Role.CHIEF_ANIMATION_DIRECTOR: "animation_supervision",
-    Role.ANIMATION_DIRECTOR: "animation_supervision",
-    Role.CHARACTER_DESIGNER: "design",
-    Role.MECHANICAL_DESIGNER: "design",
-    Role.ART_DIRECTOR: "design",
-    Role.COLOR_DESIGNER: "design",
-    Role.KEY_ANIMATOR: "animation",
-    Role.SECOND_KEY_ANIMATOR: "animation",
-    Role.IN_BETWEEN: "animation",
-    Role.LAYOUT: "animation",
-    Role.EFFECTS: "technical",
-    Role.CGI_DIRECTOR: "technical",
-    Role.PHOTOGRAPHY_DIRECTOR: "technical",
-    Role.BACKGROUND_ART: "art",
-    Role.SOUND_DIRECTOR: "sound",
-    Role.MUSIC: "sound",
-    Role.SERIES_COMPOSITION: "writing",
-    Role.SCREENPLAY: "writing",
-    Role.ORIGINAL_CREATOR: "writing",
-    Role.PRODUCER: "production",
-}
 
 
 def compute_versatility(

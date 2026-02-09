@@ -8,20 +8,10 @@ from collections import defaultdict
 
 import structlog
 
-from src.models import Anime, Credit, Role
+from src.models import Anime, Credit
+from src.utils.role_groups import CORE_TEAM_ROLES as CORE_ROLES
 
 logger = structlog.get_logger()
-
-# High-value roles for team composition
-CORE_ROLES = {
-    Role.DIRECTOR,
-    Role.CHIEF_ANIMATION_DIRECTOR,
-    Role.ANIMATION_DIRECTOR,
-    Role.CHARACTER_DESIGNER,
-    Role.KEY_ANIMATOR,
-    Role.STORYBOARD,
-    Role.EPISODE_DIRECTOR,
-}
 
 
 def analyze_team_patterns(

@@ -7,11 +7,10 @@ from collections import defaultdict
 
 import structlog
 
-from src.models import Anime, Credit, Role
+from src.models import Anime, Credit
+from src.utils.role_groups import DIRECTOR_ROLES
 
 logger = structlog.get_logger()
-
-DIRECTOR_ROLES = {Role.DIRECTOR, Role.CHIEF_ANIMATION_DIRECTOR, Role.EPISODE_DIRECTOR}
 
 
 def explain_authority(

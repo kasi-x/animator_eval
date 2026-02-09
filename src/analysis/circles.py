@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 import structlog
 
 from src.models import Anime, Credit, Role
+from src.utils.role_groups import DIRECTOR_ROLES, ANIMATOR_ROLES
 
 logger = structlog.get_logger()
 
@@ -54,23 +55,6 @@ class PersonCircleMembership:
     hit_rate: float
     roles: list[str]
     latest_year: int | None
-
-DIRECTOR_ROLES = {
-    Role.DIRECTOR,
-    Role.EPISODE_DIRECTOR,
-    Role.CHIEF_ANIMATION_DIRECTOR,
-}
-
-ANIMATOR_ROLES = {
-    Role.ANIMATION_DIRECTOR,
-    Role.KEY_ANIMATOR,
-    Role.SECOND_KEY_ANIMATOR,
-    Role.IN_BETWEEN,
-    Role.CHARACTER_DESIGNER,
-    Role.STORYBOARD,
-    Role.LAYOUT,
-    Role.EFFECTS,
-}
 
 
 def find_director_circles(

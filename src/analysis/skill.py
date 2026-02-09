@@ -13,7 +13,8 @@ import numpy as np
 import structlog
 from openskill.models import PlackettLuce
 
-from src.models import Anime, Credit, Role
+from src.models import Anime, Credit
+from src.utils.role_groups import SKILL_EVALUATED_ROLES as SKILL_ROLES
 
 logger = structlog.get_logger()
 
@@ -27,20 +28,6 @@ class ScoredAnimeRecord(NamedTuple):
     anime_id: str
     score: float
     year: int
-
-# スキル評価対象の役職（制作スタッフ全般）
-SKILL_ROLES = {
-    Role.CHIEF_ANIMATION_DIRECTOR,
-    Role.ANIMATION_DIRECTOR,
-    Role.KEY_ANIMATOR,
-    Role.SECOND_KEY_ANIMATOR,
-    Role.CHARACTER_DESIGNER,
-    Role.STORYBOARD,
-    Role.EPISODE_DIRECTOR,
-    Role.ART_DIRECTOR,
-    Role.EFFECTS,
-    Role.LAYOUT,
-}
 
 
 def compute_skill_scores(

@@ -14,18 +14,10 @@ from collections import defaultdict
 import structlog
 
 from src.analysis.career import CAREER_STAGE
-from src.models import Anime, Credit, Role
+from src.models import Anime, Credit
+from src.utils.role_groups import DIRECTOR_ROLES as _DIRECTOR_ROLES, MENTEE_ROLES as _MENTEE_ROLES
 
 logger = structlog.get_logger()
-
-# ディレクターレベルの役職
-_DIRECTOR_ROLES = {Role.DIRECTOR, Role.EPISODE_DIRECTOR, Role.CHIEF_ANIMATION_DIRECTOR}
-
-# メンティーとなりうる役職（キーアニメーター以下）
-_MENTEE_ROLES = {
-    Role.IN_BETWEEN, Role.SECOND_KEY_ANIMATOR, Role.KEY_ANIMATOR,
-    Role.LAYOUT, Role.EFFECTS,
-}
 
 
 def _find_mentor_mentee_pairs(

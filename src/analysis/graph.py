@@ -16,6 +16,7 @@ import structlog
 
 from src.models import Anime, Credit, Person, Role
 from src.utils.config import ROLE_WEIGHTS
+from src.utils.role_groups import DIRECTOR_ROLES, ANIMATOR_ROLES
 
 logger = structlog.get_logger()
 
@@ -129,27 +130,15 @@ def create_director_animator_network(
     """
     g = nx.DiGraph()
 
-    director_roles = {
-        Role.DIRECTOR,
-        Role.EPISODE_DIRECTOR,
-        Role.CHIEF_ANIMATION_DIRECTOR,
-    }
-    animator_roles = {
-        Role.ANIMATION_DIRECTOR,
-        Role.KEY_ANIMATOR,
-        Role.SECOND_KEY_ANIMATOR,
-        Role.IN_BETWEEN,
-    }
-
     # anime_id → directors/animators
     anime_directors: dict[str, list[tuple[str, float]]] = defaultdict(list)
     anime_animators: dict[str, list[tuple[str, float]]] = defaultdict(list)
 
     for c in credits:
         w = _role_weight(c.role)
-        if c.role in director_roles:
+        if c.role in DIRECTOR_ROLES:
             anime_directors[c.anime_id].append((c.person_id, w))
-        if c.role in animator_roles:
+        if c.role in ANIMATOR_ROLES:
             anime_animators[c.anime_id].append((c.person_id, w))
 
     for anime_id in anime_directors:
