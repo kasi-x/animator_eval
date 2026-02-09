@@ -62,6 +62,7 @@ from src.database import (
 )
 from src.models import Anime, Credit, ScoreResult
 from src.utils.config import JSON_DIR
+from src.utils.performance import get_monitor, reset_monitor
 
 logger = structlog.get_logger()
 
@@ -75,13 +76,24 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
         visualize: 可視化を生成するか
         dry_run: True の場合、データ検証のみ行いスコア計算は行わない
     """
+    # Initialize performance monitoring
+    reset_monitor()
+    monitor = get_monitor()
+    monitor.record_memory("pipeline_start")
+
     t_start = time.monotonic()
     conn = get_connection()
     init_db(conn)
 
-    persons = load_all_persons(conn)
-    anime_list = load_all_anime(conn)
-    credits = load_all_credits(conn)
+    with monitor.measure("data_loading"):
+        persons = load_all_persons(conn)
+        anime_list = load_all_anime(conn)
+        credits = load_all_credits(conn)
+
+    monitor.increment_counter("persons_loaded", len(persons))
+    monitor.increment_counter("anime_loaded", len(anime_list))
+    monitor.increment_counter("credits_loaded", len(credits))
+    monitor.record_memory("after_data_load")
 
     if not credits:
         logger.warning("No credits in DB. Run scrapers first.")
@@ -97,7 +109,8 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
 
     # Step 0: データバリデーション
     logger.info("step_start", step="validation")
-    validation = validate_all(conn)
+    with monitor.measure("validation"):
+        validation = validate_all(conn)
     if not validation.passed:
         for err in validation.errors:
             logger.error("validation_error", message=err)
@@ -121,93 +134,115 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
 
     # Step 1: 名寄せ
     logger.info("step_start", step="entity_resolution")
-    canonical_map = resolve_all(persons)
+    with monitor.measure("entity_resolution"):
+        canonical_map = resolve_all(persons)
 
-    # クレジットの person_id を正規IDに置換
-    if canonical_map:
-        resolved_credits = []
-        for c in credits:
-            new_pid = canonical_map.get(c.person_id, c.person_id)
-            resolved_credits.append(
-                Credit(
-                    person_id=new_pid,
-                    anime_id=c.anime_id,
-                    role=c.role,
-                    episode=c.episode,
-                    source=c.source,
+        # クレジットの person_id を正規IDに置換
+        if canonical_map:
+            resolved_credits = []
+            for c in credits:
+                new_pid = canonical_map.get(c.person_id, c.person_id)
+                resolved_credits.append(
+                    Credit(
+                        person_id=new_pid,
+                        anime_id=c.anime_id,
+                        role=c.role,
+                        episode=c.episode,
+                        source=c.source,
+                    )
                 )
-            )
-        credits = resolved_credits
-        logger.info("person_ids_resolved", count=len(canonical_map))
+            credits = resolved_credits
+            logger.info("person_ids_resolved", count=len(canonical_map))
+            monitor.increment_counter("persons_resolved", len(canonical_map))
 
     # Step 2: グラフ構築
     logger.info("step_start", step="graph_construction")
-    graph = build_bipartite_graph(persons, anime_list, credits)
+    with monitor.measure("graph_construction"):
+        graph = build_bipartite_graph(persons, anime_list, credits)
+    monitor.record_memory("after_graph_build")
 
     # Step 3: Authority (PageRank)
     logger.info("step_start", step="authority_pagerank")
-    authority_scores = compute_authority_scores(graph)
+    with monitor.measure("authority_pagerank"):
+        authority_scores = compute_authority_scores(graph)
+    monitor.increment_counter("persons_with_authority", len(authority_scores))
 
     # Step 4: Trust (継続起用)
     logger.info("step_start", step="trust_repeat_engagement")
     anime_map: dict[str, Anime] = {a.id: a for a in anime_list}
-    trust_scores = compute_trust_scores(credits, anime_map)
+    with monitor.measure("trust_scores"):
+        trust_scores = compute_trust_scores(credits, anime_map)
+    monitor.increment_counter("persons_with_trust", len(trust_scores))
 
     # Step 5: Skill (OpenSkill)
     logger.info("step_start", step="skill_openskill")
-    skill_scores = compute_skill_scores(credits, anime_map)
+    with monitor.measure("skill_scores"):
+        skill_scores = compute_skill_scores(credits, anime_map)
+    monitor.increment_counter("persons_with_skill", len(skill_scores))
 
     # Step 5.1: Score Normalization (0-100)
     logger.info("step_start", step="score_normalization")
-    authority_scores, trust_scores, skill_scores = normalize_all_axes(
-        authority_scores, trust_scores, skill_scores,
-    )
+    with monitor.measure("score_normalization"):
+        authority_scores, trust_scores, skill_scores = normalize_all_axes(
+            authority_scores, trust_scores, skill_scores,
+        )
+    monitor.record_memory("after_scoring")
 
     # Step 5.5: Engagement Decay Detection
     logger.info("step_start", step="engagement_decay")
-    director_ids = {
-        c.person_id for c in credits if c.role in DIRECTOR_ROLES
-    }
-    decay_results: dict[str, list[dict]] = {}
-    for pid in set(trust_scores) - director_ids:
-        person_decays = []
-        for dir_id in director_ids:
-            decay = detect_engagement_decay(pid, dir_id, credits, anime_map)
-            if decay.get("status") == "decayed":
-                person_decays.append({"director_id": dir_id, **decay})
-        if person_decays:
-            decay_results[pid] = person_decays
-    logger.info("engagement_decay_detected", persons_with_decay=len(decay_results))
+    with monitor.measure("engagement_decay"):
+        director_ids = {
+            c.person_id for c in credits if c.role in DIRECTOR_ROLES
+        }
+        decay_results: dict[str, list[dict]] = {}
+        for pid in set(trust_scores) - director_ids:
+            person_decays = []
+            for dir_id in director_ids:
+                decay = detect_engagement_decay(pid, dir_id, credits, anime_map)
+                if decay.get("status") == "decayed":
+                    person_decays.append({"director_id": dir_id, **decay})
+            if person_decays:
+                decay_results[pid] = person_decays
+        logger.info("engagement_decay_detected", persons_with_decay=len(decay_results))
 
     # Step 5.6: Role Classification
     logger.info("step_start", step="role_classification")
-    role_profiles = classify_person_roles(credits)
+    with monitor.measure("role_classification"):
+        role_profiles = classify_person_roles(credits)
 
     # Step 5.7: Career Analysis
     logger.info("step_start", step="career_analysis")
-    career_data = batch_career_analysis(credits, anime_map)
+    with monitor.measure("career_analysis"):
+        career_data = batch_career_analysis(credits, anime_map)
 
     # Step 5.8: Director Circles
     logger.info("step_start", step="director_circles")
-    circles = find_director_circles(credits, anime_map)
+    with monitor.measure("director_circles"):
+        circles = find_director_circles(credits, anime_map)
+    monitor.increment_counter("circles_found", len(circles))
 
     # Step 5.95: Versatility
     logger.info("step_start", step="versatility")
-    versatility = compute_versatility(credits)
+    with monitor.measure("versatility"):
+        versatility = compute_versatility(credits)
 
     # Step 5.9: Centrality Metrics (supplementary)
     logger.info("step_start", step="centrality_metrics")
-    collab_graph = build_collaboration_graph(persons, credits)
-    person_ids = {p.id for p in persons}
-    centrality = compute_centrality_metrics(collab_graph, person_ids)
+    with monitor.measure("centrality_metrics"):
+        collab_graph = build_collaboration_graph(persons, credits)
+        person_ids = {p.id for p in persons}
+        centrality = compute_centrality_metrics(collab_graph, person_ids)
+    monitor.record_memory("after_centrality")
 
     # Step 5.95: Network density
     logger.info("step_start", step="network_density")
-    network_density = compute_network_density(credits)
+    with monitor.measure("network_density"):
+        network_density = compute_network_density(credits)
 
     # Step 5.96: Growth trends (pre-compute for result entries)
     logger.info("step_start", step="growth_trends_precompute")
-    growth_data = compute_growth_trends(credits, anime_map)
+    with monitor.measure("growth_trends"):
+        growth_data = compute_growth_trends(credits, anime_map)
 
     # Step 6: 統合スコアの算出と保存
     logger.info("step_start", step="composite_scores")
@@ -320,18 +355,20 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
 
     # Score confidence intervals
     logger.info("step_start", step="confidence")
-    _sources_per_person: dict[str, set] = {}
-    for c in credits:
-        if c.person_id not in _sources_per_person:
-            _sources_per_person[c.person_id] = set()
-        _sources_per_person[c.person_id].add(c.source)
-    source_counts = {pid: len(srcs) for pid, srcs in _sources_per_person.items()}
-    batch_compute_confidence(results, sources_per_person=source_counts)
+    with monitor.measure("confidence_intervals"):
+        _sources_per_person: dict[str, set] = {}
+        for c in credits:
+            if c.person_id not in _sources_per_person:
+                _sources_per_person[c.person_id] = set()
+            _sources_per_person[c.person_id].add(c.source)
+        source_counts = {pid: len(srcs) for pid, srcs in _sources_per_person.items()}
+        batch_compute_confidence(results, sources_per_person=source_counts)
 
     # Score stability check (compare with previous run)
     JSON_DIR.mkdir(parents=True, exist_ok=True)
     output_path = JSON_DIR / "scores.json"
-    stability = compare_scores(results, output_path)
+    with monitor.measure("stability_check"):
+        stability = compare_scores(results, output_path)
     if stability["significant_changes"]:
         for sc in stability["significant_changes"][:5]:
             logger.warning(
@@ -343,8 +380,11 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
             )
 
     # JSON 出力
-    with open(output_path, "w") as f:
-        json.dump(results, f, indent=2, ensure_ascii=False)
+    logger.info("step_start", step="json_export")
+    monitor.record_memory("before_export")
+    with monitor.measure("json_export"):
+        with open(output_path, "w") as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
     logger.info("scores_saved", path=str(output_path), persons=len(results))
 
     # Director circles 出力
@@ -368,39 +408,40 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
 
     # Anime statistics 出力
     composite_scores = {r["person_id"]: r["composite"] for r in results}
-    astats = compute_anime_stats(credits, anime_map, composite_scores)
-    if astats:
-        astats_path = JSON_DIR / "anime_stats.json"
-        with open(astats_path, "w") as f:
-            json.dump(astats, f, indent=2, ensure_ascii=False)
-        logger.info("anime_stats_saved", path=str(astats_path), anime=len(astats))
+    anime_quality_statistics = compute_anime_stats(credits, anime_map, composite_scores)
+    if anime_quality_statistics:
+        anime_stats_output_path = JSON_DIR / "anime_stats.json"
+        with open(anime_stats_output_path, "w") as f:
+            json.dump(anime_quality_statistics, f, indent=2, ensure_ascii=False)
+        logger.info("anime_stats_saved", path=str(anime_stats_output_path), anime=len(anime_quality_statistics))
 
     # Studio analysis 出力
-    studio_data = compute_studio_analysis(credits, anime_map, composite_scores)
-    if studio_data:
-        studio_path = JSON_DIR / "studios.json"
-        with open(studio_path, "w") as f:
-            json.dump(studio_data, f, indent=2, ensure_ascii=False)
-        logger.info("studios_saved", path=str(studio_path), studios=len(studio_data))
+    studio_performance_analysis = compute_studio_analysis(credits, anime_map, composite_scores)
+    if studio_performance_analysis:
+        studio_output_path = JSON_DIR / "studios.json"
+        with open(studio_output_path, "w") as f:
+            json.dump(studio_performance_analysis, f, indent=2, ensure_ascii=False)
+        logger.info("studios_saved", path=str(studio_output_path), studios=len(studio_performance_analysis))
 
     # Seasonal trends 出力
-    seasonal_data = compute_seasonal_trends(credits, anime_map, composite_scores)
-    if seasonal_data.get("by_season"):
-        seasonal_path = JSON_DIR / "seasonal.json"
-        with open(seasonal_path, "w") as f:
-            json.dump(seasonal_data, f, indent=2, ensure_ascii=False)
-        logger.info("seasonal_saved", path=str(seasonal_path))
+    seasonal_activity_patterns = compute_seasonal_trends(credits, anime_map, composite_scores)
+    if seasonal_activity_patterns.get("by_season"):
+        seasonal_output_path = JSON_DIR / "seasonal.json"
+        with open(seasonal_output_path, "w") as f:
+            json.dump(seasonal_activity_patterns, f, indent=2, ensure_ascii=False)
+        logger.info("seasonal_saved", path=str(seasonal_output_path))
 
     # Collaboration strength 出力
     logger.info("step_start", step="collaboration_strength")
-    collab_pairs = compute_collaboration_strength(
-        credits, anime_map, min_shared=2, person_scores=composite_scores,
-    )
-    if collab_pairs:
-        collab_path = JSON_DIR / "collaborations.json"
-        with open(collab_path, "w") as f:
-            json.dump(collab_pairs[:500], f, indent=2, ensure_ascii=False)
-        logger.info("collaborations_saved", path=str(collab_path), pairs=len(collab_pairs))
+    with monitor.measure("collaboration_strength"):
+        strongest_collaboration_pairs = compute_collaboration_strength(
+            credits, anime_map, min_shared=2, person_scores=composite_scores,
+        )
+    if strongest_collaboration_pairs:
+        collaborations_output_path = JSON_DIR / "collaborations.json"
+        with open(collaborations_output_path, "w") as f:
+            json.dump(strongest_collaboration_pairs[:500], f, indent=2, ensure_ascii=False)
+        logger.info("collaborations_saved", path=str(collaborations_output_path), pairs=len(strongest_collaboration_pairs))
 
     # Outlier detection
     logger.info("step_start", step="outlier_detection")
@@ -458,12 +499,12 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
 
     # Time series
     logger.info("step_start", step="time_series")
-    ts_data = compute_time_series(credits, anime_map)
-    if ts_data["years"]:
-        ts_path = JSON_DIR / "time_series.json"
-        with open(ts_path, "w") as f:
-            json.dump(ts_data, f, indent=2, ensure_ascii=False)
-        logger.info("time_series_saved", path=str(ts_path), years=len(ts_data["years"]))
+    credit_timeline_by_year = compute_time_series(credits, anime_map)
+    if credit_timeline_by_year["years"]:
+        time_series_output_path = JSON_DIR / "time_series.json"
+        with open(time_series_output_path, "w") as f:
+            json.dump(credit_timeline_by_year, f, indent=2, ensure_ascii=False)
+        logger.info("time_series_saved", path=str(time_series_output_path), years=len(credit_timeline_by_year["years"]))
 
     # Decade analysis
     logger.info("step_start", step="decade_analysis")
@@ -547,37 +588,37 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
 
     # Network evolution
     logger.info("step_start", step="network_evolution")
-    net_evo = compute_network_evolution(credits, anime_map)
-    if net_evo["years"]:
-        net_evo_path = JSON_DIR / "network_evolution.json"
-        with open(net_evo_path, "w") as f:
-            json.dump(net_evo, f, indent=2, ensure_ascii=False)
-        logger.info("network_evolution_saved", path=str(net_evo_path), years=len(net_evo["years"]))
+    network_growth_over_decades = compute_network_evolution(credits, anime_map)
+    if network_growth_over_decades["years"]:
+        network_evolution_output_path = JSON_DIR / "network_evolution.json"
+        with open(network_evolution_output_path, "w") as f:
+            json.dump(network_growth_over_decades, f, indent=2, ensure_ascii=False)
+        logger.info("network_evolution_saved", path=str(network_evolution_output_path), years=len(network_growth_over_decades["years"]))
 
     # Genre affinity
     logger.info("step_start", step="genre_affinity")
-    genre_data = compute_genre_affinity(credits, anime_map)
-    if genre_data:
-        genre_path = JSON_DIR / "genre_affinity.json"
+    person_genre_specialization = compute_genre_affinity(credits, anime_map)
+    if person_genre_specialization:
+        genre_affinity_output_path = JSON_DIR / "genre_affinity.json"
         # Save top 200 by total_credits
-        top_genres = dict(
-            sorted(genre_data.items(), key=lambda x: x[1]["total_credits"], reverse=True)[:200]
+        top_genre_specialists = dict(
+            sorted(person_genre_specialization.items(), key=lambda x: x[1]["total_credits"], reverse=True)[:200]
         )
-        with open(genre_path, "w") as f:
-            json.dump(top_genres, f, indent=2, ensure_ascii=False)
-        logger.info("genre_affinity_saved", path=str(genre_path), persons=len(genre_data))
+        with open(genre_affinity_output_path, "w") as f:
+            json.dump(top_genre_specialists, f, indent=2, ensure_ascii=False)
+        logger.info("genre_affinity_saved", path=str(genre_affinity_output_path), persons=len(person_genre_specialization))
 
     # Productivity
     logger.info("step_start", step="productivity")
-    prod_data = compute_productivity(credits, anime_map)
-    if prod_data:
-        prod_path = JSON_DIR / "productivity.json"
-        top_prod = dict(
-            sorted(prod_data.items(), key=lambda x: x[1]["credits_per_year"], reverse=True)[:200]
+    person_productivity_metrics = compute_productivity(credits, anime_map)
+    if person_productivity_metrics:
+        productivity_output_path = JSON_DIR / "productivity.json"
+        most_productive_persons = dict(
+            sorted(person_productivity_metrics.items(), key=lambda x: x[1]["credits_per_year"], reverse=True)[:200]
         )
-        with open(prod_path, "w") as f:
-            json.dump(top_prod, f, indent=2, ensure_ascii=False)
-        logger.info("productivity_saved", path=str(prod_path), persons=len(prod_data))
+        with open(productivity_output_path, "w") as f:
+            json.dump(most_productive_persons, f, indent=2, ensure_ascii=False)
+        logger.info("productivity_saved", path=str(productivity_output_path), persons=len(person_productivity_metrics))
 
     # Role transitions 出力
     transitions = compute_role_transitions(credits, anime_map)
@@ -604,8 +645,9 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
     # Cross-validation (score stability measurement) — skip for very small datasets
     if len(credits) >= 20:
         logger.info("step_start", step="cross_validation")
-        cv_folds = 3 if len(credits) < 100 else 5
-        crossval_result = cross_validate_scores(
+        with monitor.measure("cross_validation"):
+            cv_folds = 3 if len(credits) < 100 else 5
+            crossval_result = cross_validate_scores(
             persons, anime_list, credits, n_folds=cv_folds, holdout_ratio=0.2,
         )
         crossval_path = JSON_DIR / "crossval.json"
@@ -636,130 +678,136 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
     # Step 7: 可視化（オプション）
     if visualize and results:
         logger.info("step_start", step="visualization")
-        try:
-            from src.analysis.visualize import (
-                plot_anime_stats,
-                plot_bridge_analysis,
-                plot_collaboration_network,
-                plot_collaboration_strength,
-                plot_crossval_stability,
-                plot_decade_comparison,
-                plot_genre_affinity,
-                plot_growth_trends,
-                plot_influence_tree,
-                plot_milestone_summary,
-                plot_network_evolution,
-                plot_outlier_summary,
-                plot_productivity_distribution,
-                plot_role_flow_sankey,
-                plot_score_distribution,
-                plot_seasonal_trends,
-                plot_studio_comparison,
-                plot_tag_summary,
-                plot_time_series,
-                plot_top_persons_radar,
-                plot_transition_heatmap,
-            )
+        with monitor.measure("visualization"):
+            try:
+                from src.analysis.visualize import (
+                    plot_anime_stats,
+                    plot_bridge_analysis,
+                    plot_collaboration_network,
+                    plot_collaboration_strength,
+                    plot_crossval_stability,
+                    plot_decade_comparison,
+                    plot_genre_affinity,
+                    plot_growth_trends,
+                    plot_influence_tree,
+                    plot_milestone_summary,
+                    plot_network_evolution,
+                    plot_outlier_summary,
+                    plot_performance_metrics,
+                    plot_productivity_distribution,
+                    plot_role_flow_sankey,
+                    plot_score_distribution,
+                    plot_seasonal_trends,
+                    plot_studio_comparison,
+                    plot_tag_summary,
+                    plot_time_series,
+                    plot_top_persons_radar,
+                    plot_transition_heatmap,
+                )
 
-            scores_dict = {r["person_id"]: r for r in results}
-            plot_score_distribution(scores_dict)
-            plot_top_persons_radar(results, top_n=min(10, len(results)))
+                scores_dict = {r["person_id"]: r for r in results}
+                plot_score_distribution(scores_dict)
+                plot_top_persons_radar(results, top_n=min(10, len(results)))
 
-            composite_scores = {r["person_id"]: r["composite"] for r in results}
-            plot_collaboration_network(
-                collab_graph, composite_scores, top_n=min(50, len(results))
-            )
+                composite_scores = {r["person_id"]: r["composite"] for r in results}
+                plot_collaboration_network(
+                    collab_graph, composite_scores, top_n=min(50, len(results))
+                )
 
-            # Growth trend chart
-            if growth_data:
-                trend_counts: dict[str, int] = {}
-                for gd in growth_data.values():
-                    trend_counts[gd["trend"]] = trend_counts.get(gd["trend"], 0) + 1
-                plot_growth_trends({"trend_summary": trend_counts})
+                # Growth trend chart
+                if growth_data:
+                    trend_counts: dict[str, int] = {}
+                    for gd in growth_data.values():
+                        trend_counts[gd["trend"]] = trend_counts.get(gd["trend"], 0) + 1
+                    plot_growth_trends({"trend_summary": trend_counts})
 
-            # Network evolution chart
-            if net_evo.get("years"):
-                plot_network_evolution(net_evo)
+                # Network evolution chart
+                if network_growth_over_decades.get("years"):
+                    plot_network_evolution(network_growth_over_decades)
 
-            # Decade comparison chart
-            if decade_data.get("decades"):
-                plot_decade_comparison(decade_data)
+                # Decade comparison chart
+                if decade_data.get("decades"):
+                    plot_decade_comparison(decade_data)
 
-            # Role flow chart
-            if role_flow.get("links"):
-                plot_role_flow_sankey(role_flow)
+                # Role flow chart
+                if role_flow.get("links"):
+                    plot_role_flow_sankey(role_flow)
 
-            # Time series chart
-            if ts_data.get("years"):
-                plot_time_series(ts_data)
+                # Time series chart
+                if credit_timeline_by_year.get("years"):
+                    plot_time_series(credit_timeline_by_year)
 
-            # Productivity chart
-            if prod_data:
-                plot_productivity_distribution(prod_data)
+                # Productivity chart
+                if person_productivity_metrics:
+                    plot_productivity_distribution(person_productivity_metrics)
 
-            # Influence tree chart
-            if influence.get("total_mentors", 0) > 0:
-                plot_influence_tree(influence)
+                # Influence tree chart
+                if influence.get("total_mentors", 0) > 0:
+                    plot_influence_tree(influence)
 
-            # Milestone summary chart
-            if milestones_data:
-                plot_milestone_summary(milestones_data)
+                # Milestone summary chart
+                if milestones_data:
+                    plot_milestone_summary(milestones_data)
 
-            # Seasonal trends chart
-            if seasonal_data.get("by_season"):
-                plot_seasonal_trends(seasonal_data)
+                # Seasonal trends chart
+                if seasonal_activity_patterns.get("by_season"):
+                    plot_seasonal_trends(seasonal_activity_patterns)
 
-            # Bridge analysis chart
-            if bridge_data.get("bridge_persons"):
-                plot_bridge_analysis(bridge_data)
+                # Bridge analysis chart
+                if bridge_data.get("bridge_persons"):
+                    plot_bridge_analysis(bridge_data)
 
-            # Collaboration strength chart
-            if collab_pairs:
-                plot_collaboration_strength(collab_pairs)
+                # Collaboration strength chart
+                if strongest_collaboration_pairs:
+                    plot_collaboration_strength(strongest_collaboration_pairs)
 
-            # Tag summary chart
-            if person_tags:
-                tag_summary_data: dict[str, int] = {}
-                for t_list in person_tags.values():
-                    for t in t_list:
-                        tag_summary_data[t] = tag_summary_data.get(t, 0) + 1
-                plot_tag_summary({"tag_summary": tag_summary_data})
+                # Tag summary chart
+                if person_tags:
+                    tag_summary_data: dict[str, int] = {}
+                    for t_list in person_tags.values():
+                        for t in t_list:
+                            tag_summary_data[t] = tag_summary_data.get(t, 0) + 1
+                    plot_tag_summary({"tag_summary": tag_summary_data})
 
-            # Studio comparison chart
-            if studio_data:
-                plot_studio_comparison(studio_data)
+                # Studio comparison chart
+                if studio_performance_analysis:
+                    plot_studio_comparison(studio_performance_analysis)
 
-            # Outlier chart
-            if outlier_data.get("total_outliers", 0) > 0:
-                plot_outlier_summary(outlier_data)
+                # Outlier chart
+                if outlier_data.get("total_outliers", 0) > 0:
+                    plot_outlier_summary(outlier_data)
 
-            # Transition heatmap
-            if transitions.get("transitions"):
-                plot_transition_heatmap(transitions)
+                # Transition heatmap
+                if transitions.get("transitions"):
+                    plot_transition_heatmap(transitions)
 
-            # Anime stats chart
-            if astats:
-                plot_anime_stats(astats)
+                # Anime stats chart
+                if anime_quality_statistics:
+                    plot_anime_stats(anime_quality_statistics)
 
-            # Genre affinity chart
-            if genre_data:
-                plot_genre_affinity(genre_data)
+                # Genre affinity chart
+                if person_genre_specialization:
+                    plot_genre_affinity(person_genre_specialization)
 
-            # Cross-validation stability chart
-            if crossval_result.get("fold_results"):
-                plot_crossval_stability(crossval_result)
+                # Cross-validation stability chart
+                if crossval_result.get("fold_results"):
+                    plot_crossval_stability(crossval_result)
 
-            # Generate visual dashboard (HTML with embedded charts)
-            from src.report import generate_visual_dashboard
+                # Performance metrics chart (generated last so it captures all timing data)
+                perf_summary = monitor.get_summary()
+                plot_performance_metrics(perf_summary)
 
-            generate_visual_dashboard(
-                results,
-                png_dir=JSON_DIR.parent,
-                output_path=JSON_DIR.parent / "dashboard.html",
-            )
+                # Generate visual dashboard (HTML with embedded charts)
+                from src.report import generate_visual_dashboard
 
-        except Exception:
-            logger.exception("Visualization failed (non-critical)")
+                generate_visual_dashboard(
+                    results,
+                    png_dir=JSON_DIR.parent,
+                    output_path=JSON_DIR.parent / "dashboard.html",
+                )
+
+            except Exception:
+                logger.exception("Visualization failed (non-critical)")
 
     # Pipeline summary
     elapsed = time.monotonic() - t_start
@@ -797,6 +845,18 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
     summary_path = JSON_DIR / "summary.json"
     with open(summary_path, "w") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
+
+    # Performance metrics summary
+    monitor.record_memory("pipeline_end")
+    perf_summary = monitor.get_summary()
+    monitor.log_summary()
+
+    # Save performance metrics to JSON
+    perf_path = JSON_DIR / "performance.json"
+    with open(perf_path, "w") as f:
+        json.dump(perf_summary, f, indent=2, ensure_ascii=False)
+    logger.info("performance_saved", path=str(perf_path))
+
     logger.info("pipeline_complete", elapsed=round(elapsed, 2), persons=len(results))
 
     return results

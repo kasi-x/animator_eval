@@ -363,6 +363,7 @@ def generate_visual_dashboard(
         ("studios.png", "Studio Comparison"),
         ("outliers.png", "Outliers"),
         ("crossval.png", "Cross-Validation Stability"),
+        ("performance.png", "Pipeline Performance Metrics"),
     ]
 
     for filename, title in chart_order:

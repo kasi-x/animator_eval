@@ -18,6 +18,121 @@ matplotlib.rcParams["font.family"] = ["Noto Serif CJK JP", "Noto Sans CJK JP", "
 logger = structlog.get_logger()
 
 
+def plot_performance_metrics(
+    perf_data: dict,
+    output_path: Path | None = None,
+) -> None:
+    """パフォーマンスメトリクスの可視化.
+
+    Args:
+        perf_data: performance.json のデータ
+        output_path: 出力先パス (デフォルト: JSON_DIR.parent / "performance.png")
+    """
+    timings = perf_data.get("timings", {})
+    memory = perf_data.get("memory_snapshots", {})
+    cache = perf_data.get("cache", {})
+
+    if not timings and not memory:
+        return
+
+    # Create subplots based on available data
+    n_plots = sum([bool(timings), bool(memory), cache.get("hits", 0) + cache.get("misses", 0) > 0])
+    if n_plots == 0:
+        return
+
+    fig, axes = plt.subplots(n_plots, 1, figsize=(14, 4 * n_plots))
+    if n_plots == 1:
+        axes = [axes]
+
+    plot_idx = 0
+
+    # Timing breakdown (horizontal bar chart)
+    if timings:
+        ax = axes[plot_idx]
+        plot_idx += 1
+
+        operations = list(timings.keys())
+        totals = [timings[op]["total"] for op in operations]
+
+        # Sort by total time
+        sorted_pairs = sorted(zip(operations, totals), key=lambda x: x[1], reverse=True)
+        operations, totals = zip(*sorted_pairs) if sorted_pairs else ([], [])
+
+        # Limit to top 15 for readability
+        if len(operations) > 15:
+            operations = operations[:15]
+            totals = totals[:15]
+
+        y_pos = range(len(operations))
+        colors = plt.cm.viridis(np.linspace(0.3, 0.9, len(operations)))
+
+        ax.barh(y_pos, totals, color=colors)
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(operations, fontsize=9)
+        ax.set_xlabel("Total Time (seconds)", fontsize=11)
+        ax.set_title("Pipeline Stage Execution Time", fontsize=13, fontweight="bold")
+        ax.grid(axis="x", alpha=0.3)
+
+        # Add value labels
+        for i, v in enumerate(totals):
+            ax.text(v, i, f" {v:.2f}s", va="center", fontsize=8)
+
+    # Memory usage progression
+    if memory:
+        ax = axes[plot_idx]
+        plot_idx += 1
+
+        checkpoints = list(memory.keys())
+        mem_values = [memory[cp] for cp in checkpoints]
+
+        x_pos = range(len(checkpoints))
+        ax.plot(x_pos, mem_values, marker="o", linewidth=2, markersize=8, color="#2E86AB")
+        ax.fill_between(x_pos, mem_values, alpha=0.3, color="#2E86AB")
+        ax.set_xticks(x_pos)
+        ax.set_xticklabels(checkpoints, rotation=45, ha="right", fontsize=9)
+        ax.set_ylabel("Memory (MB)", fontsize=11)
+        ax.set_title("Memory Usage Progression", fontsize=13, fontweight="bold")
+        ax.grid(axis="y", alpha=0.3)
+
+        # Add value labels
+        for i, v in enumerate(mem_values):
+            ax.text(i, v, f"{v:.1f}", ha="center", va="bottom", fontsize=8)
+
+    # Cache hit rate (pie chart)
+    if cache.get("hits", 0) + cache.get("misses", 0) > 0:
+        ax = axes[plot_idx]
+
+        hits = cache.get("hits", 0)
+        misses = cache.get("misses", 0)
+        hit_rate = cache.get("hit_rate", 0) * 100
+
+        colors_pie = ["#06D6A0", "#EF476F"]
+        explode = (0.05, 0)
+
+        ax.pie(
+            [hits, misses],
+            labels=[f"Hits ({hits})", f"Misses ({misses})"],
+            colors=colors_pie,
+            autopct="%1.1f%%",
+            startangle=90,
+            explode=explode,
+        )
+        ax.set_title(
+            f"Cache Performance (Hit Rate: {hit_rate:.1f}%)",
+            fontsize=13,
+            fontweight="bold",
+        )
+
+    plt.tight_layout()
+
+    if output_path is None:
+        output_path = JSON_DIR.parent / "performance.png"
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    logger.info("performance_chart_saved", path=str(output_path))
+
+
 def plot_score_distribution(
     scores: dict[str, dict],
     output_path: Path | None = None,

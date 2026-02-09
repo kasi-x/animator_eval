@@ -16,6 +16,7 @@ from src.analysis.visualize import (
     plot_milestone_summary,
     plot_network_evolution,
     plot_outlier_summary,
+    plot_performance_metrics,
     plot_person_timeline,
     plot_productivity_distribution,
     plot_role_flow_sankey,
@@ -480,3 +481,81 @@ class TestPlotCrossvalStability:
         out = tmp_path / "cv.png"
         plot_crossval_stability({"fold_results": []}, output_path=out)
         assert not out.exists()
+
+
+class TestPerformanceMetrics:
+    def test_creates_file(self, tmp_path):
+        data = {
+            "timings": {
+                "data_loading": {"count": 1, "total": 0.123, "avg": 0.123, "min": 0.123, "max": 0.123},
+                "authority_pagerank": {"count": 1, "total": 1.456, "avg": 1.456, "min": 1.456, "max": 1.456},
+                "trust_scores": {"count": 1, "total": 0.789, "avg": 0.789, "min": 0.789, "max": 0.789},
+            },
+            "memory_snapshots": {
+                "pipeline_start": 100.5,
+                "after_data_load": 150.2,
+                "after_scoring": 200.8,
+                "pipeline_end": 180.3,
+            },
+            "cache": {
+                "hits": 45,
+                "misses": 5,
+                "hit_rate": 0.9,
+            },
+            "counters": {
+                "persons_loaded": 100,
+                "anime_loaded": 50,
+            },
+        }
+        out = tmp_path / "perf.png"
+        plot_performance_metrics(data, output_path=out)
+        assert out.exists()
+        assert out.stat().st_size > 0
+
+    def test_timing_only(self, tmp_path):
+        data = {
+            "timings": {
+                "validation": {"count": 1, "total": 0.05, "avg": 0.05, "min": 0.05, "max": 0.05},
+                "graph_construction": {"count": 1, "total": 0.5, "avg": 0.5, "min": 0.5, "max": 0.5},
+            },
+            "memory_snapshots": {},
+            "cache": {"hits": 0, "misses": 0, "hit_rate": 0},
+        }
+        out = tmp_path / "perf.png"
+        plot_performance_metrics(data, output_path=out)
+        assert out.exists()
+
+    def test_memory_only(self, tmp_path):
+        data = {
+            "timings": {},
+            "memory_snapshots": {
+                "start": 50.0,
+                "middle": 75.5,
+                "end": 60.2,
+            },
+            "cache": {"hits": 0, "misses": 0, "hit_rate": 0},
+        }
+        out = tmp_path / "perf.png"
+        plot_performance_metrics(data, output_path=out)
+        assert out.exists()
+
+    def test_empty_data(self, tmp_path):
+        out = tmp_path / "perf.png"
+        plot_performance_metrics({}, output_path=out)
+        assert not out.exists()
+
+    def test_many_operations(self, tmp_path):
+        """Test with many operations to trigger top-15 limit."""
+        timings = {
+            f"operation_{i}": {"count": 1, "total": i * 0.1, "avg": i * 0.1, "min": i * 0.1, "max": i * 0.1}
+            for i in range(20)
+        }
+        data = {
+            "timings": timings,
+            "memory_snapshots": {"start": 100.0},
+            "cache": {"hits": 10, "misses": 2, "hit_rate": 0.833},
+        }
+        out = tmp_path / "perf.png"
+        plot_performance_metrics(data, output_path=out)
+        assert out.exists()
+        assert out.stat().st_size > 0

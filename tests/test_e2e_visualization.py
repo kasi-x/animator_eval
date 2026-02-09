@@ -180,6 +180,13 @@ class TestVisualizationOutputs:
         assert png.exists()
         assert png.stat().st_size > 0
 
+    def test_performance_png(self, viz_pipeline):
+        json_dir = viz_pipeline["json_dir"]
+        parent = json_dir.parent
+        png = parent / "performance.png"
+        assert png.exists()
+        assert png.stat().st_size > 0
+
     def test_dashboard_html(self, viz_pipeline):
         json_dir = viz_pipeline["json_dir"]
         parent = json_dir.parent
