@@ -1673,3 +1673,164 @@ def entity_resolution_check(
             color = "green" if prec >= 0.95 else "yellow" if prec >= 0.85 else "red"
             pt.add_row(strategy, f"[{color}]{prec * 100:.1f}%[/{color}]")
         console.print(pt)
+
+
+@app.command()
+def neo4j_export(
+    uri: str = typer.Option("bolt://localhost:7687", help="Neo4j URI"),
+    user: str = typer.Option("neo4j", help="Neo4j username"),
+    password: str = typer.Option(None, help="Neo4j password (or set NEO4J_PASSWORD env var)"),
+    clear: bool = typer.Option(False, "--clear", help="Clear database before export"),
+) -> None:
+    """Export data to Neo4j database (direct connection).
+
+    Requires Neo4j 5.0+ running and neo4j Python driver installed.
+
+    Example:
+        pixi run python -c 'from src.cli import app; app()' neo4j-export --password mypass
+    """
+    setup_logging()
+
+    from src.database import get_connection, init_db, get_all_anime, get_all_credits, get_all_persons, get_all_scores
+
+    console.print("\n[bold blue]Neo4j Direct Export[/bold blue]\n")
+
+    # Load data from SQLite
+    console.print("[cyan]Loading data from SQLite...[/cyan]")
+    conn = get_connection()
+    init_db(conn)
+
+    persons = get_all_persons(conn)
+    anime_list = get_all_anime(conn)
+    credits = get_all_credits(conn)
+    scores = get_all_scores(conn)
+    conn.close()
+
+    console.print(f"[green]✓ Loaded {len(persons):,} persons, {len(anime_list):,} anime, {len(credits):,} credits[/green]\n")
+
+    # Connect to Neo4j
+    try:
+        from src.analysis.neo4j_direct import Neo4jWriter
+
+        console.print(f"[cyan]Connecting to Neo4j at {uri}...[/cyan]")
+
+        with Neo4jWriter(uri=uri, user=user, password=password) as writer:
+            console.print("[green]✓ Connected to Neo4j[/green]\n")
+
+            if clear:
+                console.print("[yellow]Clearing Neo4j database...[/yellow]")
+                writer.clear_database(confirm=True)
+                console.print("[green]✓ Database cleared[/green]\n")
+
+            # Write all data
+            console.print("[cyan]Writing data to Neo4j...[/cyan]")
+            writer.write_all(persons, anime_list, credits, scores, clear=False)
+
+            # Get stats
+            stats = writer.get_stats()
+            console.print("\n[bold green]✓ Export complete![/bold green]\n")
+
+            # Display stats
+            stats_table = Table(title="Neo4j Database Stats")
+            stats_table.add_column("Entity", style="cyan")
+            stats_table.add_column("Count", justify="right", style="green")
+            stats_table.add_row("Persons", f"{stats['persons']:,}")
+            stats_table.add_row("Anime", f"{stats['anime']:,}")
+            stats_table.add_row("Credits", f"{stats['credits']:,}")
+            stats_table.add_row("Collaborations", f"{stats['collaborations']:,}")
+            console.print(stats_table)
+
+            console.print("\n[dim]You can now query the graph with Cypher in Neo4j Browser[/dim]")
+
+    except ImportError:
+        console.print("[red]✗ neo4j driver not installed. Run: pixi install[/red]")
+    except ValueError as e:
+        console.print(f"[red]✗ {e}[/red]")
+    except Exception as e:
+        console.print(f"[red]✗ Neo4j export failed: {e}[/red]")
+        raise
+
+
+@app.command()
+def neo4j_query(
+    cypher: str = typer.Argument(..., help="Cypher query to execute"),
+    uri: str = typer.Option("bolt://localhost:7687", help="Neo4j URI"),
+    user: str = typer.Option("neo4j", help="Neo4j username"),
+    password: str = typer.Option(None, help="Neo4j password (or set NEO4J_PASSWORD env var)"),
+) -> None:
+    """Execute Cypher query against Neo4j database.
+
+    Example:
+        pixi run python -c 'from src.cli import app; app()' neo4j-query "MATCH (p:Person) RETURN p.name_en LIMIT 5"
+    """
+    setup_logging()
+
+    try:
+        from src.analysis.neo4j_direct import Neo4jWriter
+
+        with Neo4jWriter(uri=uri, user=user, password=password) as writer:
+            results = writer.run_cypher(cypher)
+
+            if not results:
+                console.print("[yellow]No results[/yellow]")
+                return
+
+            # Display results as table
+            if results:
+                table = Table(title="Query Results")
+
+                # Add columns from first result
+                for key in results[0].keys():
+                    table.add_column(key, style="cyan")
+
+                # Add rows
+                for record in results[:100]:  # Limit to 100 rows
+                    table.add_row(*[str(v) for v in record.values()])
+
+                console.print(table)
+
+                if len(results) > 100:
+                    console.print(f"\n[dim]Showing 100 of {len(results)} results[/dim]")
+
+    except ImportError:
+        console.print("[red]✗ neo4j driver not installed. Run: pixi install[/red]")
+    except Exception as e:
+        console.print(f"[red]✗ Query failed: {e}[/red]")
+        raise
+
+
+@app.command()
+def neo4j_stats(
+    uri: str = typer.Option("bolt://localhost:7687", help="Neo4j URI"),
+    user: str = typer.Option("neo4j", help="Neo4j username"),
+    password: str = typer.Option(None, help="Neo4j password (or set NEO4J_PASSWORD env var)"),
+) -> None:
+    """Show Neo4j database statistics.
+
+    Example:
+        pixi run python -c 'from src.cli import app; app()' neo4j-stats --password mypass
+    """
+    setup_logging()
+
+    try:
+        from src.analysis.neo4j_direct import Neo4jWriter
+
+        with Neo4jWriter(uri=uri, user=user, password=password) as writer:
+            stats = writer.get_stats()
+
+            console.print("\n[bold blue]Neo4j Database Statistics[/bold blue]\n")
+
+            stats_table = Table()
+            stats_table.add_column("Entity", style="cyan")
+            stats_table.add_column("Count", justify="right", style="green")
+            stats_table.add_row("Persons", f"{stats['persons']:,}")
+            stats_table.add_row("Anime", f"{stats['anime']:,}")
+            stats_table.add_row("Credits", f"{stats['credits']:,}")
+            stats_table.add_row("Collaborations", f"{stats['collaborations']:,}")
+            console.print(stats_table)
+
+    except ImportError:
+        console.print("[red]✗ neo4j driver not installed. Run: pixi install[/red]")
+    except Exception as e:
+        console.print(f"[red]✗ Failed to get stats: {e}[/red]")
+        raise

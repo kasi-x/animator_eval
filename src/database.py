@@ -523,3 +523,77 @@ def get_score_history(
         (person_id, limit),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+def get_all_persons(conn: sqlite3.Connection) -> list[Person]:
+    """全人物データを取得する."""
+    import json
+    rows = conn.execute("SELECT * FROM persons").fetchall()
+    return [
+        Person(
+            id=row["id"],
+            name_ja=row["name_japanese"],
+            name_en=row["name_english"],
+            source=row["source"],
+            mal_id=row["mal_id"],
+            anilist_id=row["anilist_id"],
+            aliases=json.loads(row["aliases"]) if row["aliases"] else [],
+        )
+        for row in rows
+    ]
+
+
+def get_all_anime(conn: sqlite3.Connection) -> list[Anime]:
+    """全アニメデータを取得する."""
+    rows = conn.execute("SELECT * FROM anime").fetchall()
+    return [
+        Anime(
+            id=row["id"],
+            title_ja=row["title_japanese"],
+            title_en=row["title_english"],
+            year=row["year"],
+            season=row["season"],
+            episodes=row["episodes"],
+            format=row["format"],
+            source=row["source"],
+            score=row["score"],
+            mal_id=row["mal_id"],
+            anilist_id=row["anilist_id"],
+        )
+        for row in rows
+    ]
+
+
+def get_all_credits(conn: sqlite3.Connection) -> list[Credit]:
+    """全クレジットデータを取得する."""
+    from src.models import Role
+    rows = conn.execute("SELECT * FROM credits").fetchall()
+    return [
+        Credit(
+            person_id=row["person_id"],
+            anime_id=row["anime_id"],
+            role=Role(row["role"]),
+            episode=row["episode"],
+            source=row["source"],
+        )
+        for row in rows
+    ]
+
+
+def get_all_scores(conn: sqlite3.Connection) -> list[ScoreResult]:
+    """全スコアデータを取得する."""
+    rows = conn.execute("SELECT * FROM scores").fetchall()
+    return [
+        ScoreResult(
+            person_id=row["person_id"],
+            authority=row["authority"],
+            trust=row["trust"],
+            skill=row["skill"],
+            composite=row["composite"],
+            authority_pct=row["authority_pct"],
+            trust_pct=row["trust_pct"],
+            skill_pct=row["skill_pct"],
+            composite_pct=row["composite_pct"],
+        )
+        for row in rows
+    ]

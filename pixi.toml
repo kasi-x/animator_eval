@@ -34,6 +34,11 @@ search = "python -c 'from src.cli import app; app()' search"
 compare = "python -c 'from src.cli import app; app()' compare"
 similar = "python -c 'from src.cli import app; app()' similar"
 
+# Neo4j (requires Neo4j 5.0+ running)
+neo4j-export = "python -c 'from src.cli import app; app()' neo4j-export"
+neo4j-query = "python -c 'from src.cli import app; app()' neo4j-query"
+neo4j-stats = "python -c 'from src.cli import app; app()' neo4j-stats"
+
 # API サーバー
 serve = "python -m src.api"
 
@@ -72,3 +77,4 @@ pytest-cov = ">=4.0"
 fastapi = ">=0.100"
 uvicorn = {version = ">=0.20", extras = ["standard"]}
 rapidfuzz = ">=3.0"
+neo4j = ">=5.0"
