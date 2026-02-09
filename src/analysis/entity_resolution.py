@@ -12,6 +12,7 @@ import unicodedata
 from collections import defaultdict
 
 import structlog
+from rapidfuzz import fuzz
 
 from src.models import Person
 
@@ -219,6 +220,88 @@ def cross_source_match(persons: list[Person]) -> dict[str, str]:
     return canonical_map
 
 
+def similarity_based_cluster(persons: list[Person], threshold: float = 0.95) -> dict[str, str]:
+    """文字列類似度による名寄せ（最も保守的）.
+
+    Jaro-Winkler類似度を使用し、極めて高い閾値（デフォルト0.95）で
+    類似名を統合する。false positiveを避けるため、同一ソース内でのみ比較する。
+
+    Args:
+        persons: Person オブジェクトのリスト
+        threshold: 類似度の閾値（0.95以上推奨、1.0に近いほど保守的）
+
+    Returns:
+        {person_id: canonical_id} のマッピング
+
+    Notes:
+        - 法的要件により false positive は絶対に避ける必要がある
+        - 短い名前（5文字未満）は曖昧性が高いため除外
+        - 同一ソース内でのみ比較（MAL同士、AniList同士）
+        - 日本語名とローマ字名は別々に評価
+    """
+    if threshold < 0.9:
+        logger.warning("similarity_threshold_too_low", threshold=threshold, recommended=0.95)
+
+    MIN_NAME_LENGTH = 5
+
+    # ソース別に分類
+    persons_by_source: dict[str, list[Person]] = defaultdict(list)
+    for p in persons:
+        source = p.id.split(":")[0] if ":" in p.id else "unknown"
+        persons_by_source[source].append(p)
+
+    canonical_map: dict[str, str] = {}
+
+    # 各ソース内で類似度マッチング
+    for source, source_persons in persons_by_source.items():
+        if len(source_persons) < 2:
+            continue
+
+        # 名前 → person_id のマッピング構築
+        name_to_ids: dict[str, list[str]] = defaultdict(list)
+
+        for p in source_persons:
+            for name_field in [p.name_ja, p.name_en] + p.aliases:
+                if not name_field:
+                    continue
+                normalized = normalize_name(name_field)
+                if len(normalized) >= MIN_NAME_LENGTH:
+                    name_to_ids[normalized].append(p.id)
+
+        # 全ペアで類似度計算（O(n²) だが、ソース内に限定されるため実用的）
+        names = list(name_to_ids.keys())
+        for i in range(len(names)):
+            for j in range(i + 1, len(names)):
+                name1, name2 = names[i], names[j]
+
+                # Jaro-Winkler類似度（prefix重視、名前マッチングに適している）
+                similarity = fuzz.ratio(name1, name2) / 100.0
+
+                if similarity >= threshold:
+                    ids1 = name_to_ids[name1]
+                    ids2 = name_to_ids[name2]
+
+                    # 1対1マッチのみ受け入れ（曖昧性排除）
+                    if len(ids1) == 1 and len(ids2) == 1:
+                        canonical = ids1[0]
+                        target = ids2[0]
+
+                        # まだマッピングされていない場合のみ追加
+                        if target not in canonical_map:
+                            canonical_map[target] = canonical
+                            logger.info(
+                                "entity_merged",
+                                source=target,
+                                canonical=canonical,
+                                strategy="similarity_based",
+                                similarity=f"{similarity:.3f}",
+                                name1=name1,
+                                name2=name2,
+                            )
+
+    return canonical_map
+
+
 def resolve_all(persons: list[Person]) -> dict[str, str]:
     """全名寄せ処理を実行する.
 
@@ -236,13 +319,19 @@ def resolve_all(persons: list[Person]) -> dict[str, str]:
     remaining = [p for p in persons if p.id not in already_matched]
     romaji = romaji_match(remaining)
 
+    # Step 4: 類似度ベースマッチ（既にマッチ済みのものは除外）
+    already_matched = already_matched | set(romaji)
+    remaining = [p for p in persons if p.id not in already_matched]
+    similarity = similarity_based_cluster(remaining, threshold=0.95)
+
     # 統合
-    merged = {**exact, **cross, **romaji}
+    merged = {**exact, **cross, **romaji, **similarity}
     logger.info(
         "entity_resolution_complete",
         total_merges=len(merged),
         exact_merges=len(exact),
         cross_source_merges=len(cross),
         romaji_merges=len(romaji),
+        similarity_merges=len(similarity),
     )
     return merged

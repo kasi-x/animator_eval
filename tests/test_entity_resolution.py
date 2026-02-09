@@ -7,6 +7,7 @@ from src.analysis.entity_resolution import (
     normalize_name,
     resolve_all,
     romaji_match,
+    similarity_based_cluster,
 )
 from src.models import Person
 
@@ -135,6 +136,106 @@ class TestRomajiMatch:
         assert result == {}
 
 
+class TestSimilarityBasedCluster:
+    def test_high_similarity_match(self):
+        """非常に似た名前（タイポ）をマッチングする."""
+        persons = [
+            Person(id="mal:p1", name_en="Hayao Miyazaki"),
+            Person(id="mal:p2", name_en="Hayao Miyazakii"),  # 1文字余分
+        ]
+        result = similarity_based_cluster(persons, threshold=0.95)
+        # 97%以上の類似度でマッチするはず
+        assert "mal:p2" in result
+        assert result["mal:p2"] == "mal:p1"
+
+    def test_low_similarity_no_match(self):
+        """類似度が低い名前はマッチしない."""
+        persons = [
+            Person(id="mal:p1", name_en="Hayao Miyazaki"),
+            Person(id="mal:p2", name_en="Satoshi Kon"),
+        ]
+        result = similarity_based_cluster(persons, threshold=0.95)
+        assert result == {}
+
+    def test_short_names_excluded(self):
+        """5文字未満の短い名前は除外される."""
+        persons = [
+            Person(id="mal:p1", name_en="Ai Li"),
+            Person(id="mal:p2", name_en="Ai Lee"),
+        ]
+        result = similarity_based_cluster(persons, threshold=0.90)
+        # 短すぎるので除外
+        assert result == {}
+
+    def test_same_source_only(self):
+        """同一ソース内でのみマッチングする（クロスソースは避ける）."""
+        persons = [
+            Person(id="mal:p1", name_en="Hayao Miyazaki"),
+            Person(id="anilist:p2", name_en="Hayao Miyazakii"),
+        ]
+        result = similarity_based_cluster(persons, threshold=0.95)
+        # 異なるソースなのでマッチしない
+        assert result == {}
+
+    def test_multiple_candidates_skipped(self):
+        """複数候補がある場合は曖昧性を避けてスキップ."""
+        persons = [
+            Person(id="mal:p1", name_en="Takashi Yamada"),
+            Person(id="mal:p1b", name_en="Takashi Yamada"),  # 完全一致
+            Person(id="mal:p2", name_en="Takashi Yamadaa"),
+        ]
+        # p1とp1bが同じ名前 → p2とのマッチが曖昧 → スキップ
+        result = similarity_based_cluster(persons, threshold=0.95)
+        # 1対1マッチでないためスキップされる
+        assert "mal:p2" not in result
+
+    def test_threshold_sensitivity(self):
+        """閾値による動作の違い."""
+        persons = [
+            Person(id="mal:p1", name_en="Miyazaki Hayao"),
+            Person(id="mal:p2", name_en="Miyazaki Haya"),  # 1文字削除
+        ]
+        # 高い閾値ではマッチしない
+        result_high = similarity_based_cluster(persons, threshold=0.98)
+        assert result_high == {}
+
+        # 低い閾値ではマッチする
+        result_low = similarity_based_cluster(persons, threshold=0.90)
+        assert "mal:p2" in result_low
+
+    def test_japanese_names(self):
+        """日本語名の類似度マッチング."""
+        persons = [
+            Person(id="mal:p1", name_ja="渡辺信一郎太郎"),  # より長い名前
+            Person(id="mal:p2", name_ja="渡辺信一郎太朗"),  # 最後の文字が異なる
+        ]
+        # 類似度は高い（1文字違い／8文字）
+        result = similarity_based_cluster(persons, threshold=0.85)
+        # 85%閾値なら十分マッチする
+        assert "mal:p2" in result
+
+    def test_empty_list(self):
+        """空のリストでエラーが起きない."""
+        result = similarity_based_cluster([], threshold=0.95)
+        assert result == {}
+
+    def test_single_person(self):
+        """1人だけの場合はマッチングなし."""
+        persons = [Person(id="mal:p1", name_en="Hayao Miyazaki")]
+        result = similarity_based_cluster(persons, threshold=0.95)
+        assert result == {}
+
+    def test_typo_variations(self):
+        """よくあるタイポパターン."""
+        persons = [
+            Person(id="mal:p1", name_en="Shinichiro Watanabe"),
+            Person(id="mal:p2", name_en="Shinichiro Watanabee"),  # 末尾に1文字余分
+        ]
+        # 高い類似度でマッチ
+        result = similarity_based_cluster(persons, threshold=0.95)
+        assert "mal:p2" in result
+
+
 class TestResolveAll:
     def test_combines_exact_and_cross(self):
         persons = [
@@ -143,3 +244,15 @@ class TestResolveAll:
         ]
         result = resolve_all(persons)
         assert "anilist:p1" in result
+
+    def test_includes_similarity_matches(self):
+        """類似度ベースマッチングが統合結果に含まれる."""
+        persons = [
+            Person(id="mal:p1", name_en="Hayao Miyazaki"),
+            Person(id="mal:p2", name_en="Hayao Miyazakii"),  # タイポ
+            Person(id="anilist:p1", name_en="Satoshi Kon"),
+        ]
+        result = resolve_all(persons)
+        # mal:p2 は mal:p1 にマッチするはず
+        assert "mal:p2" in result
+        assert result["mal:p2"] == "mal:p1"

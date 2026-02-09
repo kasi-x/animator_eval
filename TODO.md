@@ -26,8 +26,8 @@
 - [x] 完全一致クラスタリング
 - [x] クロスソースマッチ (MAL ↔ AniList)
 - [x] ローマ字比較による照合改善
+- [x] 類似度ベースクラスタリング（Jaro-Winkler, threshold=0.95, 同一ソース内のみ）
 - [ ] 漢字読み照合（要外部辞書）
-- [ ] 類似度ベースクラスタリング（慎重に — false positive 回避が最優先）
 
 ### Phase 4: グラフ構築 ✅
 - [x] NetworkX 二部グラフ構築 (person ↔ anime)

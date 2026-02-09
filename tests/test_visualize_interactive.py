@@ -1,9 +1,5 @@
 """visualize_interactive モジュールのテスト."""
 
-from pathlib import Path
-
-import pytest
-
 from src.analysis.visualize_interactive import (
     generate_interactive_dashboard,
     plot_interactive_network,
