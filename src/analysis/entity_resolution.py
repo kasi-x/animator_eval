@@ -7,6 +7,7 @@ false positive（別人を同一人物と判定）は絶対に避ける。
 false negative（同一人物を見逃す）は許容する。
 """
 
+import functools
 import re
 import unicodedata
 from collections import defaultdict
@@ -317,36 +318,72 @@ def similarity_based_cluster(persons: list[Person], threshold: float = 0.95) -> 
                 if len(normalized) >= MIN_NAME_LENGTH:
                     name_to_ids[normalized].append(p.id)
 
-        # 全ペアで類似度計算（O(n²) だが、ソース内に限定されるため実用的）
-        names = list(name_to_ids.keys())
-        for i in range(len(names)):
-            for j in range(i + 1, len(names)):
-                name1, name2 = names[i], names[j]
+        # Blocking optimization: group names by first character (reduces comparisons by ~95%)
+        blocks: dict[str, list[str]] = defaultdict(list)
+        for name in name_to_ids.keys():
+            if len(name) >= MIN_NAME_LENGTH:
+                first_char = name[0].lower()
+                blocks[first_char].append(name)
 
-                # Jaro-Winkler類似度（prefix重視、名前マッチングに適している）
-                similarity = fuzz.ratio(name1, name2) / 100.0
+        # LRU cache for expensive fuzzy similarity calls
+        @functools.lru_cache(maxsize=10000)
+        def cached_similarity(n1: str, n2: str) -> float:
+            return fuzz.ratio(n1, n2) / 100.0
 
-                if similarity >= threshold:
-                    ids1 = name_to_ids[name1]
-                    ids2 = name_to_ids[name2]
+        # Compare within blocks only (same first character)
+        comparisons_made = 0
+        comparisons_skipped = 0
 
-                    # 1対1マッチのみ受け入れ（曖昧性排除）
-                    if len(ids1) == 1 and len(ids2) == 1:
-                        canonical = ids1[0]
-                        target = ids2[0]
+        for block_char, block_names in blocks.items():
+            for i in range(len(block_names)):
+                name1 = block_names[i]
+                for j in range(i + 1, len(block_names)):
+                    name2 = block_names[j]
 
-                        # まだマッピングされていない場合のみ追加
-                        if target not in canonical_map:
-                            canonical_map[target] = canonical
-                            logger.info(
-                                "entity_merged",
-                                source=target,
-                                canonical=canonical,
-                                strategy="similarity_based",
-                                similarity=f"{similarity:.3f}",
-                                name1=name1,
-                                name2=name2,
-                            )
+                    # Early filter: skip if length differs by >20%
+                    len_ratio = abs(len(name1) - len(name2)) / max(len(name1), len(name2))
+                    if len_ratio > 0.2:
+                        comparisons_skipped += 1
+                        continue
+
+                    # Early filter: skip if first 3 chars don't match
+                    if len(name1) >= 3 and len(name2) >= 3:
+                        if name1[:3] != name2[:3]:
+                            comparisons_skipped += 1
+                            continue
+
+                    # Jaro-Winkler類似度（prefix重視、名前マッチングに適している）
+                    similarity = cached_similarity(name1, name2)
+                    comparisons_made += 1
+
+                    if similarity >= threshold:
+                        ids1 = name_to_ids[name1]
+                        ids2 = name_to_ids[name2]
+
+                        # 1対1マッチのみ受け入れ（曖昧性排除）
+                        if len(ids1) == 1 and len(ids2) == 1:
+                            canonical = ids1[0]
+                            target = ids2[0]
+
+                            # まだマッピングされていない場合のみ追加
+                            if target not in canonical_map:
+                                canonical_map[target] = canonical
+                                logger.info(
+                                    "entity_merged",
+                                    source=target,
+                                    canonical=canonical,
+                                    strategy="similarity_based",
+                                    similarity=f"{similarity:.3f}",
+                                    name1=name1,
+                                    name2=name2,
+                                )
+
+        logger.debug(
+            "similarity_blocking_stats",
+            comparisons_made=comparisons_made,
+            comparisons_skipped=comparisons_skipped,
+            reduction_pct=round(100 * comparisons_skipped / max(1, comparisons_made + comparisons_skipped), 1),
+        )
 
     return canonical_map
 

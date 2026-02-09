@@ -88,23 +88,27 @@ def create_person_collaboration_network(
         w = _role_weight(c.role)
         anime_credits[c.anime_id].append((c.person_id, c.role, w))
 
-    # 同一作品の全ペアにエッジを追加
+    # Pre-aggregate edges in memory (eliminates ~1M has_edge() calls)
+    edge_data: dict[tuple[str, str], dict[str, float]] = defaultdict(
+        lambda: {"weight": 0.0, "shared_works": 0}
+    )
+
+    # 同一作品の全ペアのエッジデータを集計
     for anime_id, staff in anime_credits.items():
         for i, (pid_a, role_a, w_a) in enumerate(staff):
             for pid_b, role_b, w_b in staff[i + 1 :]:
                 if pid_a == pid_b:
                     continue
+                # Canonical edge key (smaller ID first for consistency)
+                edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
                 edge_weight = (w_a + w_b) / 2.0
-                if g.has_edge(pid_a, pid_b):
-                    g[pid_a][pid_b]["weight"] += edge_weight
-                    g[pid_a][pid_b]["shared_works"] += 1
-                else:
-                    g.add_edge(
-                        pid_a,
-                        pid_b,
-                        weight=edge_weight,
-                        shared_works=1,
-                    )
+                edge_data[edge_key]["weight"] += edge_weight
+                edge_data[edge_key]["shared_works"] += 1
+
+    # Batch add all edges to graph (single pass, no has_edge() calls)
+    g.add_edges_from(
+        (pid_a, pid_b, attrs) for (pid_a, pid_b), attrs in edge_data.items()
+    )
 
     logger.info(
         "collaboration_graph_built",
