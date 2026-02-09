@@ -30,54 +30,54 @@ class TestAnalyzeCareer:
     def test_year_range(self):
         credits, anime_map = _make_career_data()
         result = analyze_career("p1", credits, anime_map)
-        assert result["first_year"] == 2018
-        assert result["latest_year"] == 2024
+        assert result.first_year == 2018
+        assert result.latest_year == 2024
 
     def test_active_years(self):
         credits, anime_map = _make_career_data()
         result = analyze_career("p1", credits, anime_map)
-        assert result["active_years"] == 4  # 2018, 2020, 2022, 2024
+        assert result.active_years == 4  # 2018, 2020, 2022, 2024
 
     def test_total_credits(self):
         credits, anime_map = _make_career_data()
         result = analyze_career("p1", credits, anime_map)
-        assert result["total_credits"] == 5
+        assert result.total_credits == 5
 
     def test_yearly_activity(self):
         credits, anime_map = _make_career_data()
         result = analyze_career("p1", credits, anime_map)
-        assert result["yearly_activity"][2018] == 1
-        assert result["yearly_activity"][2022] == 2  # 2 credits in same year
+        assert result.yearly_activity[2018] == 1
+        assert result.yearly_activity[2022] == 2  # 2 credits in same year
 
     def test_role_progression(self):
         credits, anime_map = _make_career_data()
         result = analyze_career("p1", credits, anime_map)
-        stages = [rp["stage"] for rp in result["role_progression"]]
+        stages = [record.stage for record in result.role_progression]
         # Should show career growth: in_between(1) → key(3) → anim_dir(4) → anim_dir(4)
         assert stages[0] < stages[-1]
 
     def test_highest_stage(self):
         credits, anime_map = _make_career_data()
         result = analyze_career("p1", credits, anime_map)
-        assert result["highest_stage"] == 4  # animation_director
-        assert "animation_director" in result["highest_roles"]
+        assert result.highest_stage == 4  # animation_director
+        assert "animation_director" in result.highest_roles
 
     def test_peak_year(self):
         credits, anime_map = _make_career_data()
         result = analyze_career("p1", credits, anime_map)
         # 2022 has 2 credits (key_animator + animation_director), others have 1
-        assert result["peak_year"] == 2022
-        assert result["peak_credits"] == 2
+        assert result.peak_year == 2022
+        assert result.peak_credits == 2
 
     def test_nonexistent_person(self):
         credits, anime_map = _make_career_data()
         result = analyze_career("nobody", credits, anime_map)
-        assert result["total_credits"] == 0
-        assert result["first_year"] is None
+        assert result.total_credits == 0
+        assert result.first_year is None
 
     def test_empty_credits(self):
         result = analyze_career("p1", [], {})
-        assert result["total_credits"] == 0
+        assert result.total_credits == 0
 
 
 class TestBatchCareerAnalysis:

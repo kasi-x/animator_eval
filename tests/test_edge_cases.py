@@ -33,18 +33,18 @@ class TestCareerEdgeCases:
         anime_map = {"a1": Anime(id="a1", title_en="X", year=2024, score=8.0)}
         credits = [Credit(person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR)]
         result = analyze_career("p1", credits, anime_map)
-        assert result["total_credits"] == 1
-        assert result["first_year"] == 2024
-        assert result["latest_year"] == 2024
-        assert result["active_years"] == 1
+        assert result.total_credits == 1
+        assert result.first_year == 2024
+        assert result.latest_year == 2024
+        assert result.active_years == 1
 
     def test_no_year_info(self):
         anime_map = {"a1": Anime(id="a1", title_en="X")}
         credits = [Credit(person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR)]
         result = analyze_career("p1", credits, anime_map)
-        assert result["total_credits"] == 1
-        assert result["first_year"] is None
-        assert result["active_years"] == 0
+        assert result.total_credits == 1
+        assert result.first_year is None
+        assert result.active_years == 0
 
     def test_same_year_many_credits(self):
         anime_map = {
@@ -56,8 +56,8 @@ class TestCareerEdgeCases:
             for i in range(20)
         ]
         result = analyze_career("p1", credits, anime_map)
-        assert result["active_years"] == 1
-        assert result["yearly_activity"][2024] == 20
+        assert result.active_years == 1
+        assert result.yearly_activity[2024] == 20
 
 
 class TestCirclesEdgeCases:

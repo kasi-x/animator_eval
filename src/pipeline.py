@@ -284,16 +284,16 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
             result_entry["total_credits"] = role_profiles[pid]["total_credits"]
         # Career data
         if pid in career_data:
-            cd = career_data[pid]
-            if cd["total_credits"] > 0:
+            career_snapshot = career_data[pid]
+            if career_snapshot.total_credits > 0:
                 result_entry["career"] = {
-                    "first_year": cd["first_year"],
-                    "latest_year": cd["latest_year"],
-                    "active_years": cd["active_years"],
-                    "highest_stage": cd["highest_stage"],
-                    "highest_roles": cd["highest_roles"],
-                    "peak_year": cd.get("peak_year"),
-                    "peak_credits": cd.get("peak_credits", 0),
+                    "first_year": career_snapshot.first_year,
+                    "latest_year": career_snapshot.latest_year,
+                    "active_years": career_snapshot.active_years,
+                    "highest_stage": career_snapshot.highest_stage,
+                    "highest_roles": career_snapshot.highest_roles,
+                    "peak_year": career_snapshot.peak_year,
+                    "peak_credits": career_snapshot.peak_credits,
                 }
         # Network density
         if pid in network_density:
