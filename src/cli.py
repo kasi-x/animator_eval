@@ -1853,3 +1853,156 @@ def neo4j_stats(
     except Exception as e:
         console.print(f"[red]✗ Failed to get stats: {e}[/red]")
         raise
+
+
+@app.command()
+def performance(
+    latest: bool = typer.Option(True, "--latest", help="Show latest performance report"),
+    all_reports: bool = typer.Option(False, "--all", help="List all performance reports"),
+    report_file: str = typer.Option(None, "--file", "-f", help="Specific report file to display"),
+    percentiles: bool = typer.Option(True, "--percentiles/--no-percentiles", help="Show percentile metrics"),
+    lang: str = lang_option,
+) -> None:
+    """Display performance reports from pipeline runs.
+
+    Shows detailed timing, memory, and cache statistics from previous pipeline executions.
+
+    Examples:
+        animetor-eval performance                # Show latest report
+        animetor-eval performance --all          # List all reports
+        animetor-eval performance --file perf.json  # Show specific report
+        animetor-eval performance --no-percentiles  # Hide percentile columns
+    """
+    setup_logging()
+
+    from pathlib import Path
+    from src.utils.config import JSON_DIR
+    from src.utils.performance import PerformanceReport
+
+    perf_files = sorted(JSON_DIR.glob("performance_*.json"), reverse=True)
+
+    if not perf_files:
+        console.print("[yellow]No performance reports found. Run the pipeline to generate reports.[/yellow]")
+        return
+
+    if all_reports:
+        # List all available reports
+        console.print("\n[bold blue]Available Performance Reports[/bold blue]\n")
+        reports_table = Table()
+        reports_table.add_column("File", style="cyan")
+        reports_table.add_column("Timestamp", style="dim")
+        reports_table.add_column("Duration", justify="right", style="green")
+        reports_table.add_column("Peak Memory", justify="right", style="yellow")
+
+        for pf in perf_files[:20]:  # Show last 20
+            try:
+                with open(pf) as f:
+                    data = json.load(f)
+                    reports_table.add_row(
+                        pf.name,
+                        data.get("timestamp", "N/A"),
+                        f"{data.get('total_duration', 0):.2f}s",
+                        f"{data.get('peak_memory_mb', 0):.1f} MB",
+                    )
+            except Exception:
+                pass
+
+        console.print(reports_table)
+        console.print(f"\n[dim]Showing {min(len(perf_files), 20)} of {len(perf_files)} reports[/dim]")
+        return
+
+    # Load specific report
+    if report_file:
+        target_file = JSON_DIR / report_file
+        if not target_file.exists():
+            console.print(f"[red]✗ Report file not found: {report_file}[/red]")
+            return
+    else:
+        target_file = perf_files[0]  # Latest
+
+    try:
+        with open(target_file) as f:
+            data = json.load(f)
+
+        console.print(f"\n[bold blue]Performance Report: {target_file.name}[/bold blue]\n")
+
+        # Summary table
+        summary = Table(title="Summary")
+        summary.add_column("Metric", style="cyan")
+        summary.add_column("Value", style="green")
+        summary.add_row("Timestamp", data.get("timestamp", "N/A"))
+        summary.add_row("Total Duration", f"{data.get('total_duration', 0):.2f}s")
+        summary.add_row("Peak Memory", f"{data.get('peak_memory_mb', 0):.1f} MB")
+        summary.add_row("Memory Delta", f"{data.get('total_memory_delta_mb', 0):+.1f} MB")
+
+        cache_stats = data.get("cache_stats", {})
+        summary.add_row("Cache Hit Rate", f"{cache_stats.get('hit_rate', 0):.1%}")
+        summary.add_row("Cache Hits/Misses", f"{cache_stats.get('hits', 0)}/{cache_stats.get('misses', 0)}")
+        console.print(summary)
+
+        # Timing table
+        timings = data.get("timings", [])
+        if timings:
+            timing_table = Table(title="Operation Timings")
+            timing_table.add_column("Operation", style="cyan")
+            timing_table.add_column("Count", justify="right")
+            timing_table.add_column("Total", justify="right", style="yellow")
+            timing_table.add_column("Avg", justify="right", style="green")
+            if percentiles:
+                timing_table.add_column("P50", justify="right", style="dim")
+                timing_table.add_column("P95", justify="right", style="dim")
+                timing_table.add_column("P99", justify="right", style="dim")
+            timing_table.add_column("Min", justify="right", style="dim")
+            timing_table.add_column("Max", justify="right", style="red")
+
+            for stats in sorted(timings, key=lambda x: x.get("total", 0), reverse=True)[:20]:
+                row = [
+                    stats.get("operation", "N/A"),
+                    str(stats.get("count", 0)),
+                    f"{stats.get('total', 0):.3f}s",
+                    f"{stats.get('avg', 0):.3f}s",
+                ]
+                if percentiles:
+                    row.extend([
+                        f"{stats.get('median', 0):.3f}s",
+                        f"{stats.get('p95', 0):.3f}s",
+                        f"{stats.get('p99', 0):.3f}s",
+                    ])
+                row.extend([
+                    f"{stats.get('min', 0):.3f}s",
+                    f"{stats.get('max', 0):.3f}s",
+                ])
+                timing_table.add_row(*row)
+
+            console.print(timing_table)
+            if len(timings) > 20:
+                console.print(f"\n[dim]Showing top 20 of {len(timings)} operations[/dim]")
+
+        # Memory snapshots table
+        memory_snapshots = data.get("memory_snapshots", [])
+        if memory_snapshots:
+            mem_table = Table(title="Memory Snapshots")
+            mem_table.add_column("Checkpoint", style="cyan")
+            mem_table.add_column("Time", justify="right", style="dim")
+            mem_table.add_column("RSS (MB)", justify="right", style="green")
+            mem_table.add_column("Delta", justify="right", style="yellow")
+            mem_table.add_column("% Used", justify="right", style="magenta")
+
+            for snapshot in memory_snapshots[:30]:  # Show first 30
+                delta_mb = snapshot.get("delta_mb")
+                delta_str = f"{delta_mb:+.1f}" if delta_mb is not None else "-"
+                mem_table.add_row(
+                    snapshot.get("checkpoint", "N/A"),
+                    f"{snapshot.get('timestamp', 0):.2f}s",
+                    f"{snapshot.get('rss_mb', 0):.1f}",
+                    delta_str,
+                    f"{snapshot.get('percent', 0):.1f}%",
+                )
+
+            console.print(mem_table)
+            if len(memory_snapshots) > 30:
+                console.print(f"\n[dim]Showing first 30 of {len(memory_snapshots)} snapshots[/dim]")
+
+    except Exception as e:
+        console.print(f"[red]✗ Failed to load report: {e}[/red]")
+        raise
