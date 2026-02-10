@@ -1356,7 +1356,7 @@ def main(
                         characters = media.get("characters", {})
                         char_edges = characters.get("edges", [])
                         for char_edge in char_edges:
-                            voice_actors = char_edge.get("voiceActors", [])
+                            voice_actors = char_edge.get("voiceActors") or []  # Handle None case
                             for va in voice_actors:
                                 va_id = va.get("id")
                                 if va_id:
