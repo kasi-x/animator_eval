@@ -48,10 +48,32 @@ class MediaArtsClient:
     """メディア芸術DB SPARQL 非同期クライアント."""
 
     def __init__(self) -> None:
-        # SSL証明書の期限切れ対策: verify=False, follow_redirects=True
-        self._client = httpx.AsyncClient(timeout=60.0, verify=False, follow_redirects=True)
+        """Initialize with system CA first, fall back to insecure if needed.
+
+        SSL verification strategy:
+        1. Try system CA bundle (verify=True)
+        2. If cert validation fails, log warning and fall back to verify=False
+        """
+        # Start with system CA verification enabled
+        self._verify = True
+        self._client = httpx.AsyncClient(timeout=60.0, verify=True, follow_redirects=True)
         self._last_request_time = 0.0
-        log.info("mediaarts_client_init", ssl_verify=False, follow_redirects=True)
+        log.info("mediaarts_client_init", ssl_verify=True, follow_redirects=True)
+
+    async def _fallback_to_insecure(self) -> None:
+        """Fall back to insecure SSL verification with warning.
+
+        Called when system CA verification fails. Creates new client with verify=False.
+        """
+        if self._verify:
+            self._verify = False
+            await self._client.aclose()
+            self._client = httpx.AsyncClient(timeout=60.0, verify=False, follow_redirects=True)
+            log.warning(
+                "ssl_verification_failed_falling_back",
+                source="mediaarts",
+                message="System SSL verification failed, falling back to insecure (verify=False)",
+            )
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -63,24 +85,54 @@ class MediaArtsClient:
         self._last_request_time = time.monotonic()
 
     async def query(self, sparql: str) -> list[dict]:
-        """SPARQL クエリを実行."""
+        """SPARQL クエリを実行.
+
+        SSL verification strategy:
+        1. Try with system CA first
+        2. On SSL cert error, fall back to insecure and retry
+        3. Give up after 3 total attempts
+        """
         await self._rate_limit()
         params = {"query": sparql, "format": "json"}
+        ssl_fallback_tried = False
+
         for attempt in range(3):
             try:
-                resp = await self._client.get(
-                    SPARQL_ENDPOINT, params=params
-                )
+                resp = await self._client.get(SPARQL_ENDPOINT, params=params)
                 resp.raise_for_status()
                 data = resp.json()
                 return data.get("results", {}).get("bindings", [])
-            except httpx.HTTPError as e:
-                log.warning("sparql_query_failed", attempt=attempt + 1, error=str(e))
+            except httpx.SSLError as e:
+                # SSL verification failed - try fallback once
+                if not ssl_fallback_tried and self._verify:
+                    ssl_fallback_tried = True
+                    await self._fallback_to_insecure()
+                    log.info("ssl_fallback_retry", attempt=attempt + 1)
+                    await asyncio.sleep(1)
+                    continue
+                log.warning(
+                    "sparql_query_failed",
+                    source="mediaarts",
+                    error_type=type(e).__name__,
+                    error_message=str(e),
+                    attempt=attempt + 1,
+                )
                 if attempt < 2:
                     await asyncio.sleep(2 ** (attempt + 1))
+            except httpx.HTTPError as e:
+                log.warning(
+                    "sparql_query_failed",
+                    source="mediaarts",
+                    error_type=type(e).__name__,
+                    error_message=str(e),
+                    attempt=attempt + 1,
+                )
+                if attempt < 2:
+                    await asyncio.sleep(2 ** (attempt + 1))
+
         from src.scrapers.exceptions import EndpointUnreachableError
 
-        log.error("sparql_endpoint_unreachable")
+        log.error("sparql_endpoint_unreachable", source="mediaarts", url=SPARQL_ENDPOINT)
         raise EndpointUnreachableError(
             "MediaArts SPARQL endpoint unreachable after 3 attempts",
             source="mediaarts",
