@@ -384,21 +384,23 @@ def find_bottleneck_nodes(
 
 def main():
     """スタンドアロン実行用エントリーポイント."""
-    from src.analysis.graph import build_collaboration_graph
-    from src.database import get_all_credits, get_all_persons, get_connection, init_db
+    from src.analysis.graph import create_person_collaboration_network
+    from src.database import get_all_anime, get_all_credits, get_all_persons, get_connection, init_db
 
     conn = get_connection()
     init_db(conn)
 
     persons = get_all_persons(conn)
+    anime_list = get_all_anime(conn)
     credits = get_all_credits(conn)
 
-    # 名前マップ作成
+    # マップ作成
+    anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
 
     # コラボレーショングラフ構築
     logger.info("building_collaboration_graph")
-    collab_graph = build_collaboration_graph(credits)
+    collab_graph = create_person_collaboration_network(credits, anime_map)
 
     # 統計計算
     stats = compute_separation_statistics(collab_graph)
