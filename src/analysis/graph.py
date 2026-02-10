@@ -350,10 +350,19 @@ def compute_graph_summary(graph: nx.Graph) -> dict:
         "largest_component_size": largest,
     }
 
-    # Clustering coefficient (skip for very large graphs)
-    if n_nodes <= 5000:
+    # Clustering coefficient (skip for very large/dense graphs)
+    # Weighted clustering is O(n * d^2) where d = avg_degree
+    # Skip if: nodes > 5000 OR edges > 100K OR avg_degree > 100
+    if n_nodes <= 5000 and n_edges <= 100_000 and avg_degree <= 100:
         try:
             avg_clustering = nx.average_clustering(graph, weight="weight")
+            summary["avg_clustering"] = round(avg_clustering, 4)
+        except Exception:
+            pass
+    elif n_nodes <= 10_000 and n_edges <= 500_000:
+        # For moderately large graphs, use unweighted clustering (much faster)
+        try:
+            avg_clustering = nx.average_clustering(graph)
             summary["avg_clustering"] = round(avg_clustering, 4)
         except Exception:
             pass
