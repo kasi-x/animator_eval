@@ -10,7 +10,7 @@ from src.analysis.graph import (
 )
 from src.analysis.growth import compute_growth_trends
 from src.analysis.network_density import compute_network_density
-from src.analysis.trust import detect_engagement_decay
+from src.analysis.trust import batch_detect_engagement_decay
 from src.analysis.versatility import compute_versatility
 # Advanced metrics
 from src.analysis.studio_bias_correction import (
@@ -58,20 +58,12 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
         - growth_data: Dict[person_id, growth_metrics]
         - collaboration_graph: NetworkX graph (side effect)
     """
-    # Engagement Decay Detection
+    # Engagement Decay Detection (optimized: batch processing)
     logger.info("step_start", step="engagement_decay")
     with context.monitor.measure("engagement_decay"):
-        director_ids = {c.person_id for c in context.credits if c.role in DIRECTOR_ROLES}
-        context.decay_results = {}
-        for pid in set(context.trust_scores) - director_ids:
-            person_decays = []
-            for dir_id in director_ids:
-                decay = detect_engagement_decay(pid, dir_id, context.credits, context.anime_map)
-                if decay.get("status") == "decayed":
-                    person_decays.append({"director_id": dir_id, **decay})
-            if person_decays:
-                context.decay_results[pid] = person_decays
-        logger.info("engagement_decay_detected", persons_with_decay=len(context.decay_results))
+        context.decay_results = batch_detect_engagement_decay(
+            context.credits, context.anime_map
+        )
 
     # Role Classification
     logger.info("step_start", step="role_classification")
@@ -104,6 +96,12 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
         context.centrality = calculate_network_centrality_scores(
             context.collaboration_graph, person_ids
         )
+    # Extract betweenness cache for reuse (avoids duplicate computation in potential_value)
+    context.betweenness_cache = {
+        pid: metrics["betweenness"]
+        for pid, metrics in context.centrality.items()
+        if "betweenness" in metrics
+    }
     context.monitor.record_memory("after_centrality")
 
     # Network Density
@@ -217,6 +215,7 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
             growth_dict,
             adjusted_skills,
             context.collaboration_graph,
+            betweenness_cache=context.betweenness_cache,
         )
         # Convert to dict and handle Enum serialization
         context.potential_value_scores = {

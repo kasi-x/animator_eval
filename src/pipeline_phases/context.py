@@ -66,6 +66,8 @@ class PipelineContext:
     network_density: dict[str, dict] = field(default_factory=dict)
     growth_data: dict[str, dict] = field(default_factory=dict)
     versatility: dict[str, dict] = field(default_factory=dict)
+    # Cached centrality sub-results (avoid recomputation)
+    betweenness_cache: dict[str, float] = field(default_factory=dict)
     # Advanced metrics (Phase 6 extensions)
     studio_bias_metrics: dict[str, Any] = field(default_factory=dict)
     growth_acceleration_data: dict[str, Any] = field(default_factory=dict)

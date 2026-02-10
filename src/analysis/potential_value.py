@@ -78,6 +78,7 @@ class PotentialValueScore:
 def compute_structural_advantage(
     collaboration_graph: nx.Graph,
     person_id: str,
+    betweenness_cache: dict[str, float] | None = None,
 ) -> float:
     """構造的優位性スコアを計算.
 
@@ -86,6 +87,7 @@ def compute_structural_advantage(
     Args:
         collaboration_graph: コラボレーショングラフ
         person_id: 対象のperson_id
+        betweenness_cache: 事前計算されたbetweenness centrality辞書
 
     Returns:
         構造的優位性スコア（0-1）
@@ -93,12 +95,8 @@ def compute_structural_advantage(
     if person_id not in collaboration_graph:
         return 0.0
 
-    # Betweenness centrality
-    try:
-        betweenness = nx.betweenness_centrality(collaboration_graph, weight="weight")
-        betweenness_score = betweenness.get(person_id, 0)
-    except Exception:
-        betweenness_score = 0
+    # Use pre-computed betweenness if available
+    betweenness_score = betweenness_cache.get(person_id, 0) if betweenness_cache else 0
 
     # Degree diversity (connections to different groups)
     neighbors = list(collaboration_graph.neighbors(person_id))
@@ -120,6 +118,7 @@ def compute_potential_value_scores(
     growth_metrics: dict[str, dict],
     adjusted_skills: dict[str, float],
     collaboration_graph: nx.Graph,
+    betweenness_cache: dict[str, float] | None = None,
 ) -> dict[str, PotentialValueScore]:
     """潜在価値スコアを計算.
 
@@ -129,11 +128,35 @@ def compute_potential_value_scores(
         growth_metrics: 成長指標
         adjusted_skills: 成長率考慮Skill
         collaboration_graph: コラボレーショングラフ
+        betweenness_cache: 事前計算されたbetweenness centrality辞書
+            (Noneの場合はここで計算)
 
     Returns:
         person_id → PotentialValueScore
     """
     potential_scores: dict[str, PotentialValueScore] = {}
+
+    # Use pre-computed betweenness if available, otherwise compute here
+    if betweenness_cache is None:
+        betweenness_cache = {}
+        n_nodes = collaboration_graph.number_of_nodes()
+        n_edges = collaboration_graph.number_of_edges()
+        if n_nodes > 0:
+            try:
+                if n_nodes > 500 or n_edges > 100_000:
+                    k = min(100, n_nodes)
+                    betweenness_cache = nx.betweenness_centrality(
+                        collaboration_graph, k=k, weight="weight"
+                    )
+                    logger.info("betweenness_approximate", k=k, nodes=n_nodes, edges=n_edges)
+                else:
+                    betweenness_cache = nx.betweenness_centrality(
+                        collaboration_graph, weight="weight"
+                    )
+            except Exception:
+                logger.warning("betweenness_failed", nodes=n_nodes, edges=n_edges)
+    else:
+        logger.info("betweenness_using_cache", cached_nodes=len(betweenness_cache))
 
     for person_id, scores in person_scores.items():
         # Original scores
@@ -150,7 +173,9 @@ def compute_potential_value_scores(
         adjusted_skill = adjusted_skills.get(person_id, skill)
 
         # Structural advantage
-        structural_advantage = compute_structural_advantage(collaboration_graph, person_id)
+        structural_advantage = compute_structural_advantage(
+            collaboration_graph, person_id, betweenness_cache
+        )
 
         # Growth metrics
         growth = growth_metrics.get(person_id, {})
