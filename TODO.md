@@ -214,21 +214,19 @@ reduces install size, avoids dependency conflicts, and allows faster CI for targ
 
 ### P1-10: Lint Cleanup + Python 3.12 Deprecation Fix
 
-69 lint errors (56 auto-fixable) + Python 3.12 deprecation warnings。
-一括で `ruff check --fix` で大半解消。残りは手動。
+**Status**: ✅ **Complete!** All 69 lint errors resolved.
 
-**Subtasks**:
+**Completed Subtasks**:
 
-1. **P1-10a**: `ruff check --fix src/ tests/` — 56 unused imports (F401) + empty f-strings (F541)
-2. **P1-10b**: Bare `except:` → 具体的な例外型に修正
+1. **P1-10a**: ✅ `ruff check --fix src/ tests/` — 56 unused imports (F401) + empty f-strings (F541) (Commit: 027498d)
+2. **P1-10b**: ✅ Bare `except:` → 具体的な例外型に修正 (already fixed)
    - `src/analysis/causal_studio_identification.py:282` → `except (ValueError, ZeroDivisionError):`
-3. **P1-10c**: Dead code (F841 unused variables) 削除
-   - `src/analysis/community_detection.py:192, 502, 662`
-4. **P1-10d**: Python 3.12 deprecation `asyncio.get_event_loop()` → `asyncio.to_thread()`
-   - `src/api.py:786` — pipeline executor
-   - `src/websocket_manager.py:87` — broadcast_sync
+3. **P1-10c**: ✅ Dead code (F841 unused variables) 削除 (Commit: 0203502)
+   - 4 variables removed: event_study_viz, structural_estimation_html, temporal_influence (2x)
+4. **P1-10d**: ✅ Python 3.12 deprecation fixed (already addressed)
+   - No asyncio.get_event_loop() calls remaining in codebase
 
-- **Acceptance**: `pixi run lint` がエラー0
+- **Acceptance**: ✅ `pixi run lint` — 0 errors!
 - **Complexity**: Low（ほぼ自動修正、手動修正4箇所）
 
 ### P1-11: AniList Scraper main() 分割 (514行 → 5関数)
@@ -278,8 +276,10 @@ reduces install size, avoids dependency conflicts, and allows faster CI for targ
 
 ## P1-PERF — Pipeline Performance Optimization (残ボトルネック)
 
-現在のパイプライン実行時間: **182.6s** (12,164 persons, 2.68M edges)
-以下の5ボトルネックを解消すれば **60-80s** まで短縮可能。
+**Status**: ✅ **All PERF optimizations complete!**
+
+元のパイプライン実行時間: **182.6s** (12,164 persons, 2.68M edges)
+最適化後の予測: **40-60s** (3-4.5x speedup)
 
 **注意事項**:
 
@@ -292,6 +292,8 @@ reduces install size, avoids dependency conflicts, and allows faster CI for targ
   44ms で完了しており、Python でも十分速い)
 
 ### PERF-1: GraphML Export 高速化 (78.8s → 1-3s)
+
+**Status**: ✅ Done (Commit: 3753f17)
 
 **効果: ★★★ (25-50x)** | **複雑度: Low** | **実装時間: 30分**
 
@@ -337,6 +339,8 @@ graphml_file = export_graphml(
 ---
 
 ### PERF-2: Influence Tree 高速化 (60s → 1-2s)
+
+**Status**: ✅ Done (Commit: 3753f17)
 
 **効果: ★★★ (40-60x)** | **複雑度: Low** | **実装時間: 30分**
 
@@ -392,6 +396,8 @@ for c in credits:
 ---
 
 ### PERF-3: Structural Estimation 高速化 (59.7s → 3-6s)
+
+**Status**: ✅ Done (Commit: fdc24c9)
 
 **効果: ★★☆ (10-20x)** | **複雑度: Medium** | **実装時間: 1-2時間**
 
@@ -460,6 +466,8 @@ all_person_years = [
 ---
 
 ### PERF-4: Contribution Attribution 高速化 (39.8s → 3-5s)
+
+**Status**: ✅ Done (Commit: ba26c69)
 
 **効果: ★★☆ (8-15x)** | **複雑度: Medium** | **実装時間: 1-2時間**
 
@@ -536,6 +544,8 @@ anime_credits = anime_credits_index.get(anime_id, [])
 ---
 
 ### PERF-5: Bridge Detection 高速化 (16.5s → 3-6s)
+
+**Status**: ✅ Done (Commit: ba26c69)
 
 **効果: ★☆☆ (3-5x)** | **複雑度: Low** | **実装時間: 30分**
 
