@@ -722,6 +722,7 @@ def main(
     log_level: str = typer.Option("error", "--log-level", help="ログレベル (debug/info/warning/error)"),
     skip_existing_persons: bool = typer.Option(True, "--skip-existing-persons/--update-all-persons", help="既存人物をスキップ（高速化）"),
     update: bool = typer.Option(False, "--update", "-u", help="アニメリストを更新取得（キャッシュを使わない、放映中/新規のみ更新）"),
+    reverse: bool = typer.Option(False, "--reverse", "-r", help="古い順で取得（デフォルト: 新しい順）"),
 ) -> None:
     """AniList からクレジットデータを収集する (チェックポイント機能付き)."""
     import json
@@ -1056,9 +1057,12 @@ def main(
                     anime_id = item["anime"]["id"]
                     prev_anime_status[anime_id] = item.get("status")
 
-            # Always sort by popularity (newest/most relevant first)
-            # This shows progress faster and prioritizes current/active anime
-            sort_order = ["POPULARITY_DESC"]
+            # Sort order: by default newest/most relevant first
+            # Can be reversed with --reverse flag
+            if reverse:
+                sort_order = ["START_DATE_ASC"]  # Old first
+            else:
+                sort_order = ["POPULARITY_DESC"]  # New/popular first
 
             with Progress(
                 SpinnerColumn(style="cyan"),
@@ -1349,11 +1353,11 @@ def main(
                     total_persons_all = total_persons_fetched + total_persons_skipped
                     skip_pct = (total_persons_skipped / total_persons_all * 100) if total_persons_all > 0 else 0
 
-                    # Update person task with detailed info
+                    # Update person task with detailed info (formatted in columns)
                     person_desc = (
-                        f"[bold cyan]👥 新規スタッフ: {total_persons_fetched:,}[/bold cyan] | "
-                        f"[bright_blue]🎤 声優（新規）: {batch_va_count:,}[/bright_blue] | "
-                        f"[dim]💾 既存（スキップ）: {total_persons_skipped:,} ({skip_pct:.1f}%)[/dim]"
+                        f"[bold cyan]👥 新規: {total_persons_fetched:,}[/bold cyan] | "
+                        f"[bright_blue]🎤 声優: {batch_va_count:,}[/bright_blue] | "
+                        f"[dim]💾 既存: {total_persons_skipped:,}({skip_pct:.0f}%)[/dim]"
                         f"{trend_str}"
                     )
                     progress.update(person_task, description=person_desc)

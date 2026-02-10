@@ -1,19 +1,19 @@
 {
-  "p3": {
-    "person_id": "p3",
-    "authority": 39.43,
-    "trust": 59.94,
+  "p4": {
+    "person_id": "p4",
+    "authority": 0.0,
+    "trust": 23.01,
     "skill": 50.0,
-    "composite": 48.754,
-    "debiased_authority": 27.601,
-    "adjusted_skill": 55.0,
-    "structural_advantage": 0.4,
-    "potential_value": 1453.91,
-    "category": "elite",
-    "elite_score": 4769.7,
-    "growth_score": 50.0,
+    "composite": 21.903,
+    "debiased_authority": 0.0,
+    "adjusted_skill": 65.0,
+    "structural_advantage": 0.6,
+    "potential_value": 549.09,
+    "category": "steady_performer",
+    "elite_score": 1690.3,
+    "growth_score": 100,
     "hidden_score": 0,
-    "structural_score": 40.0
+    "structural_score": 60.0
   },
   "p1": {
     "person_id": "p1",
@@ -31,21 +31,21 @@
     "hidden_score": 0,
     "structural_score": 40.0
   },
-  "p4": {
-    "person_id": "p4",
-    "authority": 0.0,
-    "trust": 23.01,
+  "p3": {
+    "person_id": "p3",
+    "authority": 39.43,
+    "trust": 59.94,
     "skill": 50.0,
-    "composite": 21.903,
-    "debiased_authority": 0.0,
-    "adjusted_skill": 65.0,
-    "structural_advantage": 0.6,
-    "potential_value": 549.09,
-    "category": "steady_performer",
-    "elite_score": 1690.3,
-    "growth_score": 100,
+    "composite": 48.754,
+    "debiased_authority": 27.601,
+    "adjusted_skill": 55.0,
+    "structural_advantage": 0.4,
+    "potential_value": 1453.91,
+    "category": "elite",
+    "elite_score": 4769.7,
+    "growth_score": 50.0,
     "hidden_score": 0,
-    "structural_score": 60.0
+    "structural_score": 40.0
   },
   "p2": {
     "person_id": "p2",
