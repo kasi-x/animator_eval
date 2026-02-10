@@ -385,6 +385,26 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="performance_saved",
     ),
 
+    # Bias detection report
+    ExportSpec(
+        filename="bias_report.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("bias_report"),
+        log_message="bias_report_saved",
+        log_metrics=lambda data: {
+            "total_biases": data.get("summary", {}).get("total_biases_detected", 0)
+        }
+        if data
+        else {},
+    ),
+
+    # Fair compensation analysis
+    ExportSpec(
+        filename="fair_compensation.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("fair_compensation"),
+        log_message="fair_compensation_saved",
+        log_metrics=lambda data: {"anime": data.get("total_anime", 0)} if data else {},
+    ),
+
     # Pipeline summary (special case - uses elapsed time)
     ExportSpec(
         filename="summary.json",

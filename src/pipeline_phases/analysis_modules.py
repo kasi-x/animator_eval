@@ -12,8 +12,10 @@ from typing import Any, Callable
 import structlog
 
 from src.analysis.anime_stats import compute_anime_stats
+from src.analysis.bias_detector import detect_systematic_biases, generate_bias_report
 from src.analysis.bridges import detect_bridges
 from src.analysis.collaboration_strength import compute_collaboration_strength
+from src.analysis.compensation_analyzer import batch_analyze_compensation, export_compensation_report
 from src.analysis.crossval import cross_validate_scores
 from src.analysis.decade_analysis import compute_decade_analysis
 from src.analysis.genre_affinity import compute_genre_affinity
@@ -245,6 +247,54 @@ def _run_crossval(context: PipelineContext) -> Any:
     )
 
 
+def _run_bias_detector(context: PipelineContext) -> Any:
+    """Systematic bias detection across roles, studios, career stages."""
+    # Build person_scores dict
+    person_scores = {r["person_id"]: r for r in context.results}
+
+    # Detect biases
+    bias_results = detect_systematic_biases(
+        contributions=context.contribution_data,
+        person_scores=person_scores,
+        studio_bias_metrics=context.studio_bias_metrics,
+        growth_acceleration_data=context.growth_acceleration_data,
+        potential_value_scores=context.potential_value_scores,
+        role_profiles=context.role_profiles,
+    )
+
+    # Generate report
+    return generate_bias_report(bias_results)
+
+
+def _run_compensation_analyzer(context: PipelineContext) -> Any:
+    """Fair compensation analysis with anime type adjustments."""
+    # Build person_names dict
+    person_names = {
+        p.id: p.name_ja or p.name_en or p.id for p in context.persons
+    }
+
+    # Run batch analysis (top 100 anime by composite value)
+    if not context.contribution_data:
+        return {}
+
+    # Get anime with contributions
+    anime_with_contribs = [
+        anime
+        for anime in context.anime_list
+        if anime.id in context.contribution_data
+    ]
+
+    # Analyze compensation
+    analyses = batch_analyze_compensation(
+        anime_list=anime_with_contribs,
+        all_contributions=context.contribution_data,
+        total_budget_per_anime=100.0,  # Normalized budget
+    )
+
+    # Export report
+    return export_compensation_report(analyses, person_names)
+
+
 # Registry of all analysis tasks (order-independent for parallel execution)
 ANALYSIS_TASKS: list[AnalysisTask] = [
     AnalysisTask("anime_stats", _run_anime_stats),
@@ -267,6 +317,8 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
     AnalysisTask("productivity", _run_productivity, monitor_step="productivity"),
     AnalysisTask("influence", _run_influence, monitor_step="influence_tree"),
     AnalysisTask("crossval", _run_crossval, monitor_step="cross_validation"),
+    AnalysisTask("bias_report", _run_bias_detector, monitor_step="bias_detection"),
+    AnalysisTask("fair_compensation", _run_compensation_analyzer, monitor_step="compensation_analysis"),
 ]
 
 
