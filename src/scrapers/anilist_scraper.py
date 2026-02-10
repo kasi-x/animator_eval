@@ -866,7 +866,7 @@ async def fetch_top_anime_credits(
 def main(
     count: int = typer.Option(50, "--count", "-n", help="取得するアニメ数"),
     checkpoint_interval: int = typer.Option(3, "--checkpoint", help="チェックポイント間隔 (デフォルト: 3件)"),
-    resume: bool = typer.Option(False, "--resume", help="前回から再開"),
+    force_restart: bool = typer.Option(False, "--force-restart", help="チェックポイントを無視して最初から始める"),
     log_level: str = typer.Option("error", "--log-level", help="ログレベル (debug/info/warning/error)"),
     skip_existing_persons: bool = typer.Option(True, "--skip-existing-persons/--update-all-persons", help="既存人物をスキップ（高速化）"),
     update: bool = typer.Option(False, "--update", "-u", help="アニメリストを更新取得（キャッシュを使わない、放映中/新規のみ更新）"),
@@ -929,10 +929,19 @@ def main(
     from src.utils.download_queue import DownloadQueue
     download_queue = DownloadQueue()
 
-    # Load checkpoint if resuming
+    # Import Rich components for checkpoint display
+    from rich.rule import Rule
+    from rich.panel import Panel
+    from rich.table import Table
+
+    # Load checkpoint - auto-resume if exists (unless --force-restart is specified)
     start_index = 0
     fetched_ids = set()
-    if resume and checkpoint_file.exists():
+    checkpoint_exists = checkpoint_file.exists()
+
+    # デフォルト: チェックポイント存在時は自動で続きから始める
+    # --force-restart フラグで最初から始められる
+    if checkpoint_exists and not force_restart:
         with open(checkpoint_file) as f:
             checkpoint = json.load(f)
             start_index = checkpoint.get("last_index", 0)
