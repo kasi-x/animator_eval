@@ -1006,19 +1006,30 @@ def main(
                 try:
                     with open(anime_list_cache_file) as f:
                         cached_data = json.load(f)
-                        anime_ids = []
+                        anime_items = []
                         for item in cached_data.get("anime_list", []):
                             anime_dict = item["anime"]
                             anilist_id = anime_dict["anilist_id"]
                             anime_id = anime_dict["id"]
                             # Reconstruct Anime object
                             anime = Anime(**anime_dict)
-                            if anime_id not in fetched_ids:
-                                anime_ids.append((anime, anilist_id, anime_id))
+                            anime_items.append((anime, anilist_id, anime_id))
+
+                        # Apply reverse sorting if needed
+                        if reverse:
+                            # Sort by start date (oldest first)
+                            anime_items.sort(key=lambda x: x[0].year or 9999)
+                        else:
+                            # Sort by year descending (newest first)
+                            anime_items.sort(key=lambda x: x[0].year or 0, reverse=True)
+
+                        # Filter by fetched_ids
+                        anime_ids = [item for item in anime_items if item[2] not in fetched_ids]
 
                         if len(anime_ids) > 0:
                             console.print()
-                            console.print(Rule("[bold cyan]フェーズ1: アニメリスト（キャッシュ使用）[/bold cyan]", style="cyan"))
+                            sort_info = " (古い順)" if reverse else ""
+                            console.print(Rule(f"[bold cyan]フェーズ1: アニメリスト（キャッシュ使用{sort_info}）[/bold cyan]", style="cyan"))
                             cache_info = Table(show_header=False, box=None, padding=(0, 2))
                             cache_info.add_row("[cyan]キャッシュから読込[/cyan]", f"[bold green]{len(anime_ids)}件[/bold green]")
                             console.print(Panel(cache_info, border_style="cyan", padding=(1, 2)))

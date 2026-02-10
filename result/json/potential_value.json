@@ -15,22 +15,6 @@
     "hidden_score": 0,
     "structural_score": 40.0
   },
-  "p2": {
-    "person_id": "p2",
-    "authority": 56.34,
-    "trust": 100.0,
-    "skill": 50.0,
-    "composite": 67.536,
-    "debiased_authority": 39.438,
-    "adjusted_skill": 55.0,
-    "structural_advantage": 0.6,
-    "potential_value": 2072.1,
-    "category": "elite",
-    "elite_score": 6817.0,
-    "growth_score": 50.0,
-    "hidden_score": 0,
-    "structural_score": 60.0
-  },
   "p3": {
     "person_id": "p3",
     "authority": 39.43,
@@ -60,6 +44,22 @@
     "category": "steady_performer",
     "elite_score": 1690.3,
     "growth_score": 100,
+    "hidden_score": 0,
+    "structural_score": 60.0
+  },
+  "p2": {
+    "person_id": "p2",
+    "authority": 56.34,
+    "trust": 100.0,
+    "skill": 50.0,
+    "composite": 67.536,
+    "debiased_authority": 39.438,
+    "adjusted_skill": 55.0,
+    "structural_advantage": 0.6,
+    "potential_value": 2072.1,
+    "category": "elite",
+    "elite_score": 6817.0,
+    "growth_score": 50.0,
     "hidden_score": 0,
     "structural_score": 60.0
   }

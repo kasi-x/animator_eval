@@ -1,0 +1,21 @@
+{
+  "count": 2,
+  "items": [
+    {
+      "item_id": "anilist:16498",
+      "item_type": "anime",
+      "url_large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx16498-buvcRTBx4NSm.jpg",
+      "url_medium": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx16498-buvcRTBx4NSm.jpg",
+      "url_banner": "https://s4.anilist.co/file/anilistcdn/media/anime/banner/16498-8jpFCOcDmneX.jpg",
+      "added_at": 1770744360.0641816
+    },
+    {
+      "item_id": "anilist:101922",
+      "item_type": "anime",
+      "url_large": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/large/bx101922-WBsBl0ClmgYL.jpg",
+      "url_medium": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx101922-WBsBl0ClmgYL.jpg",
+      "url_banner": "https://s4.anilist.co/file/anilistcdn/media/anime/banner/101922-33MtJGsUSxga.jpg",
+      "added_at": 1770744379.6884484
+    }
+  ]
+}
