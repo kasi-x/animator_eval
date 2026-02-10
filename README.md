@@ -2,7 +2,7 @@
 
 > アニメ業界人物評価システム — ネットワーク密度・位置指標に基づく客観的スコアリング
 
-[![Tests](https://img.shields.io/badge/tests-955%20passing-success)](https://github.com/kasi-x/animetor_eval)
+[![Tests](https://img.shields.io/badge/tests-974%20passing-success)](https://github.com/kasi-x/animetor_eval)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -31,8 +31,11 @@
 - 🕸️ **ネットワーク分析**: コラボレーション強度、監督サークル、ブリッジ検出
 - 🎨 **可視化**: 23種のmatplotlib静的チャート + 6種のPlotlyインタラクティブ可視化
 - 🚀 **並列実行**: ThreadPoolExecutorによる20モジュール同時実行（4-6倍高速化）
-- 🔌 **REST API**: 35エンドポイント（FastAPI）
-- 💻 **CLI**: 16コマンド（typer + Rich）
+- 📡 **WebSocket監視**: リアルタイムパイプライン進捗配信（10フェーズ追跡）
+- 🌐 **国際化 (i18n)**: 英語・日本語完全対応（CLI・API・フロントエンド）
+- 📊 **パフォーマンス監視**: 詳細メトリクス（パーセンタイル、メモリデルタ、キャッシュ統計）
+- 🔌 **REST API**: 38エンドポイント（FastAPI + WebSocket）
+- 💻 **CLI**: 21コマンド（typer + Rich）
 
 ## クイックスタート
 
@@ -101,6 +104,75 @@ pixi run api
 # ブラウザで http://localhost:8000/docs にアクセス
 # OpenAPI (Swagger) ドキュメントが表示されます
 ```
+
+## 新機能
+
+### 📡 WebSocketリアルタイム監視
+
+パイプライン実行中の進捗をリアルタイムで表示：
+
+```bash
+# APIサーバー起動後
+# http://localhost:8000/static/pipeline_monitor_i18n.html にアクセス
+```
+
+**機能**:
+- 10フェーズの進捗追跡（データ読み込み → 出力・可視化）
+- 各フェーズの実行時間（ミリ秒）
+- リアルタイムログ表示
+- 美しいグラデーションUI
+- 言語切り替え（EN/JA）
+
+**WebSocket エンドポイント**: `ws://localhost:8000/ws/pipeline`
+
+### 🌐 国際化 (i18n)
+
+完全な多言語対応（英語・日本語）：
+
+**CLI**:
+```bash
+# 英語で表示
+animetor-eval stats --lang en
+
+# 日本語で表示
+animetor-eval stats --lang ja
+
+# 環境変数から自動検出
+export ANIMETOR_LANG=ja
+animetor-eval stats
+```
+
+**API**:
+```bash
+# 翻訳辞書を取得
+curl http://localhost:8000/api/v1/i18n/en
+curl http://localhost:8000/api/v1/i18n/ja
+```
+
+**フロントエンド**: 言語切り替えボタンでリアルタイム切り替え
+
+### 📊 パフォーマンス監視
+
+詳細なパフォーマンスメトリクス：
+
+```bash
+# 最新のパフォーマンスレポート表示
+animetor-eval performance
+
+# 全レポート一覧
+animetor-eval performance --all
+
+# 特定レポート表示
+animetor-eval performance --file performance_20260210_123456.json
+```
+
+**追跡メトリクス**:
+- **タイミング**: 中央値、P95、P99、標準偏差
+- **メモリ**: RSS、VMS、使用率、デルタ
+- **キャッシュ**: ヒット率、ヒット/ミス数
+- **カウンタ**: カスタムメトリクス
+
+**自動エクスポート**: パイプライン実行後に `result/json/performance_TIMESTAMP.json` に保存
 
 ## アーキテクチャ
 
@@ -190,7 +262,7 @@ result/json/
 ### テスト実行
 
 ```bash
-pixi run test              # 全テスト（955件）
+pixi run test              # 全テスト（974件: 16 i18n + 3 i18n API + 955 既存）
 pixi run lint              # ruff lint
 pixi run format            # ruff format
 ```
@@ -219,7 +291,13 @@ pixi run lab
 
 ## API エンドポイント
 
-35エンドポイントを提供（詳細は http://localhost:8000/docs 参照）：
+38エンドポイント + WebSocketを提供（詳細は http://localhost:8000/docs 参照）：
+
+### 新機能 ✨
+- `GET /api/v1/i18n/{language}` - 翻訳辞書取得（en/ja）
+- `POST /api/v1/pipeline/run` - パイプライン非同期実行
+- `WS /ws/pipeline` - リアルタイム進捗配信
+- `GET /static/pipeline_monitor_i18n.html` - 監視UI
 
 ### 人物関連
 - `GET /api/v1/persons` - 全人物スコア一覧（ページネーション）
@@ -268,26 +346,39 @@ pixi run lab
 
 ## CLI コマンド
 
-16コマンドを提供：
+21コマンドを提供（全て `--lang en/ja` オプション対応）：
 
-- `stats` - データベース統計
+### 基本コマンド
+- `stats` - データベース統計（i18n対応 ✨）
 - `ranking` - スコアランキング
 - `profile` - 人物プロフィール
 - `search` - 人物検索
 - `compare` - スコア比較
 - `similar` - 類似人物検索
+
+### キャリア分析
 - `timeline` - キャリアタイムライン
 - `history` - スコア履歴
-- `crossval` - クロスバリデーション
-- `influence` - 影響力ツリー
-- `export` - エクスポート
-- `validate` - データ検証
+- `milestones` - マイルストーン
+- `productivity` - 生産性分析
+
+### ネットワーク分析
 - `bridges` - ブリッジ検出
 - `mentorships` - メンター関係
-- `milestones` - マイルストーン
 - `net-evolution` - ネットワーク進化
 - `genre-affinity` - ジャンル親和性
-- `productivity` - 生産性分析
+
+### 検証・分析
+- `crossval` - クロスバリデーション
+- `influence` - 影響力ツリー
+- `validate` - データ検証
+
+### ユーティリティ
+- `export` - エクスポート
+- `performance` - パフォーマンスレポート表示 ✨
+- `neo4j-export` - Neo4jエクスポート
+- `neo4j-query` - Neo4jクエリ実行
+- `neo4j-stats` - Neo4j統計表示
 
 ## 技術スタック
 
@@ -298,11 +389,14 @@ pixi run lab
 - **データモデル**: Pydantic v2
 - **HTTP**: httpx (async)
 - **ログ**: structlog
-- **CLI**: typer + Rich
-- **API**: FastAPI + uvicorn
+- **CLI**: typer + Rich（i18n対応）
+- **API**: FastAPI + uvicorn + WebSocket
 - **可視化**: matplotlib + Plotly
+- **国際化**: JSON-based i18n (EN/JA)
+- **リアルタイム通信**: WebSocket（進捗配信）
+- **パフォーマンス**: 詳細メトリクス追跡（percentile, memory delta）
 - **DB**: SQLite (WAL mode)
-- **テスト**: pytest (955 tests)
+- **テスト**: pytest (974 tests)
 - **Lint/Format**: ruff
 
 ## ディレクトリ構成
@@ -314,16 +408,21 @@ animetor_eval/
 │   ├── analysis/            # 37+ 分析モジュール
 │   ├── scrapers/            # データ収集（4ソース）
 │   ├── utils/               # ユーティリティ
+│   ├── i18n/                # 国際化（EN/JA翻訳） ✨
 │   ├── models.py            # Pydantic データモデル
 │   ├── database.py          # SQLite DAO
 │   ├── pipeline.py          # オーケストレーター
-│   ├── api.py               # FastAPI サーバー
-│   ├── cli.py               # CLI エントリーポイント
+│   ├── api.py               # FastAPI サーバー + WebSocket ✨
+│   ├── cli.py               # CLI エントリーポイント（i18n対応） ✨
+│   ├── websocket_manager.py # WebSocket管理 ✨
 │   └── ...
-├── tests/                   # 955 テスト
+├── static/                  # フロントエンド（HTML/JS） ✨
+│   ├── pipeline_monitor.html       # パイプライン監視UI（JA）
+│   └── pipeline_monitor_i18n.html  # 多言語対応UI（EN/JA切替）
+├── tests/                   # 974 テスト（+19 i18n）
 ├── result/
 │   ├── db/                  # SQLite DB
-│   ├── json/                # 26 JSON出力
+│   ├── json/                # 26 JSON出力 + パフォーマンスレポート ✨
 │   ├── visualizations/      # 可視化ファイル
 │   └── notebooks/           # Jupyter ノートブック
 ├── docs/                    # ドキュメント
