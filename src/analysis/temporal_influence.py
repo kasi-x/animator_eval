@@ -389,7 +389,7 @@ def main():
         "stable": trends.count("stable"),
         "declining": trends.count("declining"),
     }
-    print(f"\n全体トレンド分布:")
+    print("\n全体トレンド分布:")
     print(f"  Rising: {trend_counts['rising']} ({100*trend_counts['rising']/len(trends):.1f}%)")
     print(f"  Stable: {trend_counts['stable']} ({100*trend_counts['stable']/len(trends):.1f}%)")
     print(f"  Declining: {trend_counts['declining']} ({100*trend_counts['declining']/len(trends):.1f}%)")

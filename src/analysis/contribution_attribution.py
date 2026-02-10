@@ -10,9 +10,7 @@
 """
 
 from collections import defaultdict
-from dataclasses import dataclass, field
-import itertools
-import math
+from dataclasses import dataclass
 
 import structlog
 

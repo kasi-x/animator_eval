@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 import networkx as nx
 import structlog
 
-from src.models import Credit
 
 logger = structlog.get_logger()
 

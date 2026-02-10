@@ -217,7 +217,6 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False, enable_
     context.monitor.log_summary()
 
     # Export performance report to JSON
-    from src.utils.config import JSON_DIR
     perf_report_path = JSON_DIR / f"performance_{time.strftime('%Y%m%d_%H%M%S')}.json"
     context.monitor.export_report(perf_report_path)
     logger.info("performance_report_saved", path=str(perf_report_path))

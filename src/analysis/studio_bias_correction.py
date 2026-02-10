@@ -11,7 +11,7 @@ PageRankは「有名スタジオの人」に偏りやすい問題を解決。
 """
 
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 import math
 
 import structlog

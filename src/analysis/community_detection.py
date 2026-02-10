@@ -189,7 +189,6 @@ def compute_retrospective_potential(
         return current_score
 
     years_since_debut = evaluation_year - all_years[0]
-    years_to_peak = max(y for y in all_years if y >= evaluation_year) - evaluation_year if any(y >= evaluation_year for y in all_years) else 0
 
     # Early career: high potential (closer to future peak)
     # Late career: lower potential (closer to current)
@@ -499,11 +498,6 @@ def compute_community_features(
 
                 # 3. Retrospective potential (with hindsight, using all data)
                 # Find peak score from all future activity
-                all_member_years = [
-                    anime_map[c.anime_id].year
-                    for c in member_creds
-                    if anime_map.get(c.anime_id) and anime_map[c.anime_id].year
-                ]
                 # Assume current composite score is their peak (simplified)
                 future_peak = current_score
                 retrospective = compute_retrospective_potential(
@@ -658,8 +652,8 @@ def main():
     # ブリッジ分析
     bridges = analyze_community_overlap(communities, collab_graph)
 
-    # エクスポート
-    export_data = export_communities_for_visualization(communities, features, person_names)
+    # エクスポート (function call kept for side effects, return value unused)
+    _ = export_communities_for_visualization(communities, features, person_names)
 
     # 結果表示
     print(f"\n検出されたコミュニティ数: {len(communities)}")
@@ -669,7 +663,7 @@ def main():
         print(f"\nコミュニティ {comm_id}:")
         print(f"  サイズ: {comm.size}人")
         print(f"  密度: {comm.density:.3f}")
-        print(f"  中心メンバー:")
+        print("  中心メンバー:")
         for person_id, degree in comm.top_members[:3]:
             print(f"    - {person_names.get(person_id, person_id)} (次数: {degree})")
 

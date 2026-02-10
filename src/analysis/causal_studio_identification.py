@@ -279,7 +279,7 @@ def compute_collaboration_synergy(
         # Convert correlation (-1 to 1) to 0-100 scale
         synergy_score = (corr + 1) * 50
         return max(0.0, min(100.0, synergy_score))
-    except:
+    except (ValueError, ZeroDivisionError):
         return 50.0  # Neutral if calculation fails
 
 
@@ -857,11 +857,11 @@ def identify_studio_effects(
     # Step 7: Generate summary
     summary_parts = [
         f"分析対象: {len(trajectories)}人のキャリア軌跡、{len(transitions)}件のスタジオ移籍",
-        f"",
+        "",
         f"【選択効果】{selection_effect.interpretation}",
         f"【処置効果】{treatment_effect.interpretation}",
         f"【ブランド効果】{brand_effect.interpretation}",
-        f"",
+        "",
         f"結論: {dominant_effect.value.upper()}が支配的（信頼度: {confidence_level}）",
     ]
 

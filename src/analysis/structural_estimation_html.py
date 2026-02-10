@@ -454,7 +454,7 @@ def _build_event_study_section(result: Any) -> str:
         period_type = "処置前" if k < 0 else "入所年" if k == 0 else "処置後"
         row_class = "coefficient-row-pre" if k < 0 else "coefficient-row-treatment" if k == 0 else "coefficient-row-post"
 
-        sig_badge = f'<span class="badge badge-significant">有意</span>' if coef.p_value < 0.05 else f'<span class="badge badge-not-significant">非有意</span>'
+        sig_badge = '<span class="badge badge-significant">有意</span>' if coef.p_value < 0.05 else '<span class="badge badge-not-significant">非有意</span>'
 
         table_rows.append(f"""
             <tr class="{row_class}">

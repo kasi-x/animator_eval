@@ -26,7 +26,6 @@ from src.analysis.anime_value import compute_anime_values
 from src.analysis.contribution_attribution import compute_contribution_attribution
 from src.analysis.potential_value import compute_potential_value_scores
 from src.pipeline_phases.context import PipelineContext
-from src.utils.role_groups import DIRECTOR_ROLES
 
 logger = structlog.get_logger()
 

@@ -405,7 +405,7 @@ def main():
         high_spec = len([s for s in specializations if s > 70])
         low_spec = len([s for s in specializations if s < 30])
 
-        print(f"\n特化度分布:")
+        print("\n特化度分布:")
         print(f"  平均: {avg_spec:.1f}")
         print(f"  高特化 (>70): {high_spec} ({100*high_spec/len(specializations):.1f}%)")
         print(f"  低特化 (<30): {low_spec} ({100*low_spec/len(specializations):.1f}%)")

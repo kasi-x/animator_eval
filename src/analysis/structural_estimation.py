@@ -61,7 +61,6 @@ from typing import Any
 import numpy as np
 import structlog
 from scipy import stats
-from scipy.optimize import minimize
 
 from src.models import Anime, Credit
 
@@ -1029,22 +1028,22 @@ def estimate_structural_model(
 
     # Step 5: Generate summary
     summary_parts = [
-        f"構造推定結果 (Structural Estimation Results)",
-        f"",
-        f"【固定効果推定 (Fixed Effects)】",
+        "構造推定結果 (Structural Estimation Results)",
+        "",
+        "【固定効果推定 (Fixed Effects)】",
         f"  効果: {fe_result.beta:.3f} (SE={fe_result.se:.3f}, p={fe_result.p_value:.4f})",
         f"  サンプル: N={fe_result.n_obs}, 人数={fe_result.n_persons}",
         f"  R²={fe_result.r_squared:.3f}",
-        f"",
-        f"【差分の差分法 (Difference-in-Differences)】",
+        "",
+        "【差分の差分法 (Difference-in-Differences)】",
         f"  効果: {did_result.beta:.3f} (SE={did_result.se:.3f}, p={did_result.p_value:.4f})",
         f"  95% CI: [{did_result.ci_lower:.3f}, {did_result.ci_upper:.3f}]",
-        f"",
+        "",
     ]
 
     # Add event study summary if available
     if event_study_results:
-        summary_parts.append(f"【イベントスタディ (Event Study)】")
+        summary_parts.append("【イベントスタディ (Event Study)】")
         summary_parts.append(f"  推定期間数: {len(event_study_results)}")
 
         # Pre-treatment summary
@@ -1071,7 +1070,7 @@ def estimate_structural_model(
 
         summary_parts.append("")
 
-    summary_parts.append(f"【頑健性チェック (Robustness Checks)】")
+    summary_parts.append("【頑健性チェック (Robustness Checks)】")
 
     for check in robustness_checks:
         summary_parts.append(
@@ -1080,8 +1079,8 @@ def estimate_structural_model(
 
     summary_parts.extend(
         [
-            f"",
-            f"【推奨推定値 (Preferred Estimate)】",
+            "",
+            "【推奨推定値 (Preferred Estimate)】",
             f"  Method: {preferred.method.value}",
             f"  Effect: {preferred.beta:.3f} (p={preferred.p_value:.4f})",
             f"  Interpretation: {preferred.interpretation}",

@@ -10,12 +10,9 @@ Shapley値に基づいた理論的に公正な報酬配分を提案。
 - 最低保証額と報酬比制約の適用
 """
 
-import math
 import statistics
-from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any
 
 import structlog
 

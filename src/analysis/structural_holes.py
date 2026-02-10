@@ -10,13 +10,12 @@ References:
 """
 
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 
 import networkx as nx
 import structlog
 
-from src.models import Credit
 
 logger = structlog.get_logger()
 

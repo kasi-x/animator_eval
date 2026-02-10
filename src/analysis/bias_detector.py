@@ -16,7 +16,6 @@ from typing import Any
 
 import structlog
 
-from src.models import Anime, Role
 
 logger = structlog.get_logger()
 

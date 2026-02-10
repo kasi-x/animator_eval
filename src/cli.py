@@ -1853,9 +1853,7 @@ def performance(
     """
     setup_logging()
 
-    from pathlib import Path
     from src.utils.config import JSON_DIR
-    from src.utils.performance import PerformanceReport
 
     perf_files = sorted(JSON_DIR.glob("performance_*.json"), reverse=True)
 

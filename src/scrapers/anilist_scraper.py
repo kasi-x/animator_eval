@@ -457,9 +457,7 @@ async def fetch_top_anime_credits(
     """Fetch anime credits with optional rich progress visualization."""
     from rich.console import Console
     from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn, TimeElapsedColumn
-    from rich.live import Live
     from rich.table import Table
-    from rich.panel import Panel
     import time as time_module
 
     client = AniListClient()
@@ -486,7 +484,7 @@ async def fetch_top_anime_credits(
                 console=console
             ) as progress:
                 list_task = progress.add_task(
-                    f"[cyan]アニメリスト取得中...", total=pages_needed
+                    "[cyan]アニメリスト取得中...", total=pages_needed
                 )
 
                 for page in range(1, pages_needed + 1):
@@ -694,7 +692,7 @@ def main(
     """AniList からクレジットデータを収集する (チェックポイント機能付き)."""
     import json
     from pathlib import Path
-    from src.database import get_connection, init_db, insert_credit, update_data_source, upsert_anime, upsert_person, get_all_person_ids
+    from src.database import get_connection, init_db, update_data_source, upsert_anime, upsert_person, get_all_person_ids
     from src.log import setup_logging
     from rich.console import Console
 
@@ -757,11 +755,8 @@ def main(
     async def fetch_with_checkpoints():
         """Execute scraping with checkpoint-based incremental saving."""
         from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn, TimeElapsedColumn
-        from rich.layout import Layout
         from rich.panel import Panel
         from rich.table import Table
-        from rich.live import Live
-        from rich.text import Text
         import time as time_module
         from src.scrapers.image_downloader import download_person_images, download_anime_images
 
@@ -1028,7 +1023,7 @@ def main(
 
         async def download_images_for_batches(batch_persons, batch_anime, conn):
             """Download images for persons and anime, update database."""
-            console.print(f"  🖼️  [cyan]画像ダウンロード中...[/cyan]")
+            console.print("  🖼️  [cyan]画像ダウンロード中...[/cyan]")
 
             total_images = 0
 

@@ -11,7 +11,7 @@ PageRankと各種補正分析から実務的なインプリケーションを抽
 
 import statistics
 from collections import defaultdict
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from typing import Any
 
 import structlog

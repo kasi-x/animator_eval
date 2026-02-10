@@ -1,6 +1,5 @@
 """Tests for causal studio identification module."""
 
-import pytest
 
 from src.analysis.causal_studio_identification import (
     CausalEstimate,
@@ -15,9 +14,8 @@ from src.analysis.causal_studio_identification import (
     estimate_causal_effects,
     export_identification_report,
     identify_major_studios,
-    identify_studio_effects,
 )
-from src.models import Anime, Credit, Person, Role
+from src.models import Anime, Credit, Role
 
 
 class TestIdentifyMajorStudios:

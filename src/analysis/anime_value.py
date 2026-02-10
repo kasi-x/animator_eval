@@ -12,7 +12,6 @@
 
 from collections import defaultdict
 from dataclasses import dataclass, field
-import math
 
 import structlog
 

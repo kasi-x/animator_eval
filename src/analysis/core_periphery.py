@@ -14,7 +14,6 @@ from enum import Enum
 import networkx as nx
 import structlog
 
-from src.models import Credit
 
 logger = structlog.get_logger()
 

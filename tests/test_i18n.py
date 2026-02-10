@@ -1,11 +1,8 @@
 """Tests for i18n (internationalization) module."""
 
-import os
-from pathlib import Path
 
-import pytest
 
-from src.i18n import I18n, get_i18n, get_language, i18n, set_language, t
+from src.i18n import I18n, get_i18n, get_language, set_language, t
 
 
 def test_i18n_initialization():
