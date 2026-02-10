@@ -710,6 +710,7 @@ def main(
     resume: bool = typer.Option(False, "--resume", help="前回から再開"),
     log_level: str = typer.Option("error", "--log-level", help="ログレベル (debug/info/warning/error)"),
     skip_existing_persons: bool = typer.Option(True, "--skip-existing-persons/--update-all-persons", help="既存人物をスキップ（高速化）"),
+    update: bool = typer.Option(False, "--update", "-u", help="アニメリストを更新取得（キャッシュを使わない、放映中/新規のみ更新）"),
 ) -> None:
     """AniList からクレジットデータを収集する (チェックポイント機能付き)."""
     import json
@@ -758,9 +759,11 @@ def main(
     from src.utils.config import load_dotenv_if_exists
     load_dotenv_if_exists()
 
-    # Checkpoint file
+    # Cache files
     checkpoint_file = Path(__file__).parent.parent.parent / "data" / "anilist_checkpoint.json"
+    anime_list_cache_file = Path(__file__).parent.parent.parent / "data" / "anilist_anime_list_cache.json"
     checkpoint_file.parent.mkdir(parents=True, exist_ok=True)
+    anime_list_cache_file.parent.mkdir(parents=True, exist_ok=True)
 
     # Load checkpoint if resuming
     start_index = 0
@@ -980,14 +983,43 @@ def main(
             ))
             console.print()
 
-        async def fetch_anime_list_from_api(client, count, fetched_ids):
-            """Fetch anime list from API with progress display."""
+        async def fetch_anime_list_from_api(client, count, fetched_ids, use_cache=True, anime_list_cache_file=None):
+            """Fetch anime list from API with optional caching."""
+            # Try to load from cache if not updating
+            if use_cache and not update and anime_list_cache_file and anime_list_cache_file.exists():
+                try:
+                    with open(anime_list_cache_file) as f:
+                        cached_data = json.load(f)
+                        anime_ids = []
+                        for item in cached_data.get("anime_list", []):
+                            anime_dict = item["anime"]
+                            anilist_id = anime_dict["anilist_id"]
+                            anime_id = anime_dict["id"]
+                            # Reconstruct Anime object
+                            anime = Anime(**anime_dict)
+                            if anime_id not in fetched_ids:
+                                anime_ids.append((anime, anilist_id, anime_id))
+
+                        if len(anime_ids) > 0:
+                            console.print()
+                            console.print(Rule("[bold cyan]フェーズ1: アニメリスト（キャッシュ使用）[/bold cyan]", style="cyan"))
+                            cache_info = Table(show_header=False, box=None, padding=(0, 2))
+                            cache_info.add_row("[cyan]キャッシュから読込[/cyan]", f"[bold green]{len(anime_ids)}件[/bold green]")
+                            console.print(Panel(cache_info, border_style="cyan", padding=(1, 2)))
+                            console.print()
+                            return anime_ids
+                except Exception as e:
+                    log.warning("cache_load_failed", error=str(e))
+                    # Fall through to API fetch
+
+            # Fetch from API
             console.print()
             console.print(Rule("[bold cyan]フェーズ1: アニメリスト取得[/bold cyan]", style="cyan"))
             console.print()
 
             pages_needed = (count + 49) // 50
             anime_ids = []
+            all_anime_for_cache = []
 
             with Progress(
                 SpinnerColumn(style="cyan"),
@@ -1007,10 +1039,30 @@ def main(
                         if len(anime_ids) >= count:
                             break
                         anime = parse_anilist_anime(raw)
+                        # Store for caching
+                        all_anime_for_cache.append({
+                            "anime": anime.model_dump(),
+                            "status": raw.get("status"),  # FINISHED, CURRENTLY_AIRING, NOT_YET_AIRED
+                            "fetched_at": time_module.time()
+                        })
                         if anime.id not in fetched_ids:
                             anime_ids.append((anime, anime.anilist_id, anime.id))
 
                     progress.update(list_task, advance=1)
+
+            # Save to cache
+            if anime_list_cache_file:
+                try:
+                    cache_data = {
+                        "count": len(anime_ids),
+                        "fetched_at": time_module.time(),
+                        "anime_list": all_anime_for_cache
+                    }
+                    with open(anime_list_cache_file, "w") as f:
+                        json.dump(cache_data, f, indent=2, default=str)
+                    log.info("anime_list_cached", count=len(anime_ids), file=str(anime_list_cache_file))
+                except Exception as e:
+                    log.warning("cache_save_failed", error=str(e))
 
             return anime_ids
 
@@ -1144,7 +1196,11 @@ def main(
 
         try:
             # ===== PHASE 1: Fetch Anime List =====
-            anime_ids = await fetch_anime_list_from_api(client, count, fetched_ids)
+            anime_ids = await fetch_anime_list_from_api(
+                client, count, fetched_ids,
+                use_cache=True,
+                anime_list_cache_file=anime_list_cache_file
+            )
 
             # Display Phase 1 summary
             summary_table = create_phase1_summary_table(len(anime_ids), len(fetched_ids))
