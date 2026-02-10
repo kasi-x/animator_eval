@@ -822,104 +822,6 @@ def main(
                 console.print()
             return existing_ids
 
-        def create_stats_display_table(elapsed, completed, total, persons, credits, images, vas, errors, skipped=0):
-            """Create formatted statistics table for display."""
-            from rich.box import ROUNDED
-
-            table = Table(
-                show_header=True,
-                header_style="bold white on blue",
-                border_style="blue",
-                box=ROUNDED,
-                padding=(0, 1)
-            )
-            table.add_column("📊 項目", style="cyan", width=18)
-            table.add_column("📈 件数", justify="right", style="bold green", width=16)
-            table.add_column("⚡ 速度", justify="right", style="bold yellow", width=18)
-
-            rate = completed / elapsed if elapsed > 0 else 0
-            eta_seconds = (total - completed) / rate if rate > 0 else 0
-
-            # Progress percentage
-            progress_pct = (completed / total * 100) if total > 0 else 0
-
-            # Main progress row with progress bar
-            progress_bar = "█" * int(progress_pct / 5) + "░" * (20 - int(progress_pct / 5))
-            table.add_row(
-                "[bold cyan]アニメ処理済み[/bold cyan]",
-                f"[bold green]{completed:,} / {total:,}[/bold green]",
-                f"[bold yellow]{rate:.2f}[/bold yellow] 件/秒"
-            )
-            table.add_row(
-                f"[dim]{progress_bar}[/dim]",
-                f"[bold]{progress_pct:.1f}%[/bold]",
-                ""
-            )
-
-            table.add_row("", "", "")  # Separator
-
-            # Persons section
-            table.add_row(
-                "[bold magenta]👥 人物（新規）[/bold magenta]",
-                f"[bold green]{persons:,}[/bold green]",
-                ""
-            )
-            table.add_row(
-                "[dim]  └ 声優[/dim]",
-                f"[bright_blue]{vas:,}[/bright_blue]",
-                ""
-            )
-
-            if skipped > 0:
-                table.add_row(
-                    "[dim]  └ スキップ[/dim]",
-                    f"[dim]{skipped:,}[/dim]",
-                    ""
-                )
-
-            table.add_row("", "", "")  # Separator
-
-            # Credits and images
-            table.add_row(
-                "[bold yellow]📝 クレジット[/bold yellow]",
-                f"[bold green]{credits:,}[/bold green]",
-                ""
-            )
-            table.add_row(
-                "[bold cyan]🖼️  画像ダウンロード[/bold cyan]",
-                f"[bold green]{images:,}[/bold green]",
-                ""
-            )
-
-            # Errors
-            if errors > 0:
-                table.add_row(
-                    "[bold red]❌ エラー[/bold red]",
-                    f"[bold red]{errors}[/bold red]",
-                    ""
-                )
-
-            table.add_row("", "", "")  # Separator
-
-            # Time info
-            table.add_row(
-                "[bold bright_blue]⏱️  経過時間[/bold bright_blue]",
-                f"[bold cyan]{int(elapsed//60)}分{int(elapsed%60)}秒[/bold cyan]",
-                ""
-            )
-
-            eta_display = (
-                f"[bold yellow]{int(eta_seconds//60)}分{int(eta_seconds%60)}秒[/bold yellow]"
-                if eta_seconds > 0 else "[dim]計算中...[/dim]"
-            )
-            table.add_row(
-                "[bold bright_magenta]⏳ 残り時間（推定）[/bold bright_magenta]",
-                eta_display,
-                ""
-            )
-
-            return table
-
         def should_skip_person(person_id, existing_ids, seen_ids):
             """Determine if person should be skipped."""
             if person_id in seen_ids:
@@ -928,14 +830,6 @@ def main(
 
         # --- More Helper Functions ---
 
-        def calculate_processing_rate(completed, elapsed):
-            """Calculate processing rate (items per second)."""
-            return completed / elapsed if elapsed > 0 else 0
-
-        def calculate_eta_seconds(total, completed, rate):
-            """Calculate estimated time remaining in seconds."""
-            return (total - completed) / rate if rate > 0 else 0
-
         def format_elapsed_time(seconds):
             """Format elapsed time as hours/minutes/seconds string."""
             hours = int(seconds // 3600)
@@ -943,14 +837,6 @@ def main(
             secs = int(seconds % 60)
             if hours > 0:
                 return f"{hours}時間{minutes}分{secs}秒"
-            return f"{minutes}分{secs}秒"
-
-        def format_eta_time(seconds):
-            """Format ETA time string."""
-            if seconds <= 0:
-                return "計算中..."
-            minutes = int(seconds // 60)
-            secs = int(seconds % 60)
             return f"{minutes}分{secs}秒"
 
         def create_phase1_summary_table(anime_count, skipped_count):
@@ -1342,13 +1228,17 @@ def main(
                     if skip_ratio_history:
                         trend_values = [f"[{'green' if pct < 30 else 'yellow' if pct < 60 else 'red'}]{pct:.0f}%[/]"
                                        for _, pct in skip_ratio_history]
-                        trend_str = f" | 📊 直近3: [{', '.join(trend_values)}]"
+                        trend_str = f" | 📊 直近3既存率: [{', '.join(trend_values)}]"
+
+                    # Calculate percentages
+                    total_persons_all = total_persons_fetched + total_persons_skipped
+                    skip_pct = (total_persons_skipped / total_persons_all * 100) if total_persons_all > 0 else 0
 
                     # Update person task with detailed info
                     person_desc = (
-                        f"[blue]👥 スタッフ: {total_persons_fetched:,} | "
-                        f"⏭️  スキップ: {total_persons_skipped:,} ({total_persons_skipped/(total_persons_fetched+total_persons_skipped)*100 if (total_persons_fetched+total_persons_skipped) > 0 else 0:.1f}%) | "
-                        f"📝 クレジット: {total_credits_fetched:,}"
+                        f"[bold cyan]👥 新規スタッフ: {total_persons_fetched:,}[/bold cyan] | "
+                        f"[bright_blue]🎤 声優（新規）: {batch_va_count:,}[/bright_blue] | "
+                        f"[dim]💾 既存（スキップ）: {total_persons_skipped:,} ({skip_pct:.1f}%)[/dim]"
                         f"{trend_str}"
                     )
                     progress.update(person_task, description=person_desc)
@@ -1372,21 +1262,11 @@ def main(
                         totals["voice_actors"] += batch_va_count
                         totals["images"] += images_downloaded
 
-                        # Save checkpoint file
+                        # Save checkpoint file (silent save - progress bar shows live stats)
                         checkpoint_data = create_checkpoint_data(
                             i + 1, fetched_ids, totals, time_module.time()
                         )
                         save_checkpoint(checkpoint_file, checkpoint_data)
-
-                        # Display checkpoint summary
-                        elapsed = time_module.time() - start_time
-                        stats_table = create_stats_display_table(
-                            elapsed, i + 1, len(anime_ids),
-                            totals["persons"], totals["credits"], totals["images"],
-                            totals["voice_actors"], totals["errors"], totals["skipped"]
-                        )
-                        checkpoint_num = ((i + 1) + checkpoint_interval - 1) // checkpoint_interval
-                        display_checkpoint_panel(checkpoint_num, stats_table)
 
                         # Clear batches for next iteration
                         batch_anime.clear()

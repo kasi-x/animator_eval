@@ -175,20 +175,6 @@
       "min": 0.0,
       "max": 0.0
     },
-    "time_series": {
-      "count": 1,
-      "total": 0.0,
-      "avg": 0.0,
-      "min": 0.0,
-      "max": 0.0
-    },
-    "decade_analysis": {
-      "count": 1,
-      "total": 0.0,
-      "avg": 0.0,
-      "min": 0.0,
-      "max": 0.0
-    },
     "person_tags": {
       "count": 1,
       "total": 0.001,
@@ -196,12 +182,19 @@
       "min": 0.001,
       "max": 0.001
     },
-    "graphml_export": {
+    "decade_analysis": {
       "count": 1,
-      "total": 0.003,
-      "avg": 0.003,
-      "min": 0.003,
-      "max": 0.003
+      "total": 0.001,
+      "avg": 0.001,
+      "min": 0.001,
+      "max": 0.001
+    },
+    "time_series": {
+      "count": 1,
+      "total": 0.001,
+      "avg": 0.001,
+      "min": 0.001,
+      "max": 0.001
     },
     "role_flow": {
       "count": 1,
@@ -230,6 +223,13 @@
       "avg": 0.001,
       "min": 0.001,
       "max": 0.001
+    },
+    "graphml_export": {
+      "count": 1,
+      "total": 0.003,
+      "avg": 0.003,
+      "min": 0.003,
+      "max": 0.003
     },
     "network_evolution": {
       "count": 1,
@@ -268,17 +268,17 @@
     },
     "causal_identification": {
       "count": 1,
+      "total": 0.002,
+      "avg": 0.002,
+      "min": 0.002,
+      "max": 0.002
+    },
+    "bias_detection": {
+      "count": 1,
       "total": 0.003,
       "avg": 0.003,
       "min": 0.003,
       "max": 0.003
-    },
-    "bias_detection": {
-      "count": 1,
-      "total": 0.004,
-      "avg": 0.004,
-      "min": 0.004,
-      "max": 0.004
     },
     "insights_generation": {
       "count": 1,
@@ -289,25 +289,25 @@
     },
     "structural_estimation": {
       "count": 1,
-      "total": 0.005,
-      "avg": 0.005,
-      "min": 0.005,
-      "max": 0.005
+      "total": 0.004,
+      "avg": 0.004,
+      "min": 0.004,
+      "max": 0.004
     },
     "cross_validation": {
       "count": 1,
-      "total": 0.008,
-      "avg": 0.008,
-      "min": 0.008,
-      "max": 0.008
+      "total": 0.007,
+      "avg": 0.007,
+      "min": 0.007,
+      "max": 0.007
     }
   },
   "memory_snapshots": {
-    "pipeline_start": 373.0,
-    "after_data_load": 373.0,
-    "after_graph_build": 373.0,
-    "after_scoring": 373.0,
-    "after_centrality": 373.0
+    "pipeline_start": 282.7,
+    "after_data_load": 282.7,
+    "after_graph_build": 282.7,
+    "after_scoring": 282.7,
+    "after_centrality": 282.7
   },
   "counters": {
     "persons_loaded": 4,
