@@ -1041,7 +1041,7 @@ def main(
                     log.warning("prev_cache_load_failed", error=str(e))
                     console.print(Rule("[bold cyan]フェーズ1: アニメリスト取得[/bold cyan]", style="cyan"))
             else:
-                console.print(Rule("[bold cyan]フェーズ1: アニメリスト取得（古い順）[/bold cyan]", style="cyan"))
+                console.print(Rule("[bold cyan]フェーズ1: アニメリスト取得[/bold cyan]", style="cyan"))
 
             console.print()
 
@@ -1056,8 +1056,9 @@ def main(
                     anime_id = item["anime"]["id"]
                     prev_anime_status[anime_id] = item.get("status")
 
-            # Determine sort order: old first for initial collection, popular for updates
-            sort_order = ["START_DATE_ASC"] if not update else ["POPULARITY_DESC"]
+            # Always sort by popularity (newest/most relevant first)
+            # This shows progress faster and prioritizes current/active anime
+            sort_order = ["POPULARITY_DESC"]
 
             with Progress(
                 SpinnerColumn(style="cyan"),
@@ -1357,36 +1358,28 @@ def main(
                     )
                     progress.update(person_task, description=person_desc)
 
-                    # Checkpoint save every N anime
+                    # Save current anime to database immediately (per-anime saving)
+                    save_anime_batch_to_database(conn, [anime])
+                    save_persons_batch_to_database(conn, persons)
+                    save_credits_batch_to_database(conn, credits)
+                    conn.commit()
+
+                    # Queue images for async download (non-blocking)
+                    images_queued = await download_images_for_batches(persons, [anime], conn, download_queue)
+
+                    # Update totals
+                    totals["anime"] += 1
+                    totals["persons"] += len(persons)
+                    totals["credits"] += len(credits)
+                    totals["voice_actors"] += va_count
+                    totals["images"] += images_queued
+
+                    # Save checkpoint file every N anime (for crash recovery)
                     if (i + 1) % checkpoint_interval == 0 or (i + 1) == len(anime_ids):
-                        # Save batch to database
-                        save_anime_batch_to_database(conn, batch_anime)
-                        save_persons_batch_to_database(conn, batch_persons)
-                        save_credits_batch_to_database(conn, batch_credits)
-                        conn.commit()
-
-                        # Queue images for async download (non-blocking)
-                        images_queued = await download_images_for_batches(batch_persons, batch_anime, conn, download_queue)
-                        conn.commit()
-
-                        # Update totals
-                        totals["anime"] += len(batch_anime)
-                        totals["persons"] += len(batch_persons)
-                        totals["credits"] += len(batch_credits)
-                        totals["voice_actors"] += batch_va_count
-                        totals["images"] += images_queued
-
-                        # Save checkpoint file (silent save - progress bar shows live stats)
                         checkpoint_data = create_checkpoint_data(
                             i + 1, fetched_ids, totals, time_module.time()
                         )
                         save_checkpoint(checkpoint_file, checkpoint_data)
-
-                        # Clear batches for next iteration
-                        batch_anime.clear()
-                        batch_persons.clear()
-                        batch_credits.clear()
-                        batch_va_count = 0
 
             # Finalize database
             update_data_source(conn, "anilist", totals["credits"])

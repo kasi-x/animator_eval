@@ -93,10 +93,10 @@
     },
     "centrality_metrics": {
       "count": 1,
-      "total": 0.0,
-      "avg": 0.0,
-      "min": 0.0,
-      "max": 0.0
+      "total": 0.001,
+      "avg": 0.001,
+      "min": 0.001,
+      "max": 0.001
     },
     "network_density": {
       "count": 1,
@@ -196,19 +196,19 @@
       "min": 0.001,
       "max": 0.001
     },
+    "graphml_export": {
+      "count": 1,
+      "total": 0.002,
+      "avg": 0.002,
+      "min": 0.002,
+      "max": 0.002
+    },
     "role_flow": {
       "count": 1,
       "total": 0.001,
       "avg": 0.001,
       "min": 0.001,
       "max": 0.001
-    },
-    "graphml_export": {
-      "count": 1,
-      "total": 0.003,
-      "avg": 0.003,
-      "min": 0.003,
-      "max": 0.003
     },
     "bridge_detection": {
       "count": 1,
@@ -296,18 +296,18 @@
     },
     "cross_validation": {
       "count": 1,
-      "total": 0.008,
-      "avg": 0.008,
-      "min": 0.008,
-      "max": 0.008
+      "total": 0.007,
+      "avg": 0.007,
+      "min": 0.007,
+      "max": 0.007
     }
   },
   "memory_snapshots": {
-    "pipeline_start": 303.6,
-    "after_data_load": 303.6,
-    "after_graph_build": 303.6,
-    "after_scoring": 303.6,
-    "after_centrality": 303.6
+    "pipeline_start": 293.3,
+    "after_data_load": 293.3,
+    "after_graph_build": 293.3,
+    "after_scoring": 293.3,
+    "after_centrality": 293.3
   },
   "counters": {
     "persons_loaded": 4,
