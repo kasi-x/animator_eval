@@ -1382,27 +1382,26 @@ def main(
 
             all_person_ids_to_fetch = set()
 
-            with Progress(
+            from rich.live import Live
+            from rich.console import Group
+            from rich.text import Text
+
+            bar2a = Progress(
                 SpinnerColumn(style="cyan"),
-                TextColumn("[bold cyan]{task.description}"),
                 BarColumn(bar_width=50, complete_style="bright_cyan", finished_style="bold bright_cyan"),
                 MofNCompleteColumn(),
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                 TimeElapsedColumn(),
                 TimeRemainingColumn(),
-                console=console,
-                expand=False,
-            ) as progress:
-                phase2a_task = progress.add_task(
-                    "[cyan]📋 スタッフリスト収集中...", total=len(anime_ids)
-                )
+            )
+            task2a = bar2a.add_task("", total=len(anime_ids))
+            title_line = Text("📋 ...", style="bold cyan")
 
+            with Live(Group(title_line, bar2a), console=console, refresh_per_second=4) as live:
                 for loop_idx, (anime, anilist_id, anime_id) in enumerate(anime_ids):
                     title = anime.title_ja or anime.title_en or anime_id
-                    progress.update(
-                        phase2a_task,
-                        description=f"[cyan]{title[:40]}",
-                    )
+                    title_line = Text(f"📋 {title}", style="bold cyan")
+                    live.update(Group(title_line, bar2a))
 
                     credits, person_ids, va_count, had_error = await fetch_staff_ids_for_anime(
                         client, anilist_id, anime_id
@@ -1412,12 +1411,10 @@ def main(
                     if had_error:
                         totals["errors"] += 1
 
-                    # アニメ情報は Phase 1 で取得済みなので credits だけ保存
                     save_anime_batch_to_database(conn, [anime])
                     save_credits_batch_to_database(conn, credits)
                     conn.commit()
 
-                    # Queue anime images
                     if anime.cover_large or anime.cover_extra_large or anime.banner:
                         download_queue.add_anime(
                             anime.id, anime.cover_large, anime.cover_extra_large, anime.banner
@@ -1428,15 +1425,13 @@ def main(
                     totals["anime"] += 1
                     totals["credits"] += len(credits)
                     totals["voice_actors"] += va_count
-                    progress.update(phase2a_task, advance=1)
+                    bar2a.update(task2a, advance=1)
 
-                    # チェックポイント: loop_idx ベースで正しい間隔
                     if (loop_idx + 1) % checkpoint_interval == 0:
                         save_checkpoint(checkpoint_file, create_checkpoint_data(
                             loop_idx + 1, fetched_ids, totals, time_module.time()
                         ))
 
-                # 最終チェックポイント
                 save_checkpoint(checkpoint_file, create_checkpoint_data(
                     len(anime_ids), fetched_ids, totals, time_module.time()
                 ))
@@ -1465,38 +1460,40 @@ def main(
                 console.print(Rule("[bold magenta]フェーズ2B: 個人情報詳細取得[/bold magenta]", style="magenta"))
                 console.print()
 
-                person_batch = []  # バッチで保存するための蓄積
+                person_batch = []
 
-                with Progress(
+                bar2b = Progress(
                     SpinnerColumn(style="magenta"),
-                    TextColumn("[bold magenta]{task.description}"),
                     BarColumn(bar_width=50, complete_style="bright_magenta", finished_style="bold bright_magenta"),
                     MofNCompleteColumn(),
                     TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                     TimeElapsedColumn(),
                     TimeRemainingColumn(),
-                    console=console,
-                    expand=False,
-                ) as progress:
-                    phase2b_task = progress.add_task(
-                        "[magenta]👤 個人情報取得中...", total=len(ids_to_fetch)
-                    )
-                    api_wait_task = progress.add_task("", visible=False)
+                )
+                task2b = bar2b.add_task("", total=len(ids_to_fetch))
+                status_line = Text(f"👤 個人情報取得中 (0/{len(ids_to_fetch):,})", style="bold magenta")
+                wait_line = Text("")  # 待ち中は空
 
+                def _make_2b_group():
+                    parts = [status_line, bar2b]
+                    if str(wait_line):
+                        parts.append(wait_line)
+                    return Group(*parts)
+
+                with Live(_make_2b_group(), console=console, refresh_per_second=4) as live:
                     for idx, person_id in enumerate(ids_to_fetch, 1):
-                        # Rate limit countdown 表示
+                        # Rate limit countdown — wait_line をリアルタイム更新
                         if (client.requests_remaining is not None
                                 and client.requests_remaining <= 0
                                 and client.rate_limit_reset_at is not None):
                             reset_at = client.rate_limit_reset_at
                             while reset_at > time_module.time():
                                 secs = int(reset_at - time_module.time())
-                                progress.update(
-                                    api_wait_task, visible=True,
-                                    description=f"[bold red]⏳ 待ち中(あと{secs}秒)[/bold red]",
-                                )
+                                wait_line = Text(f"⏳ 待ち中(あと{secs}秒)", style="bold red")
+                                live.update(_make_2b_group())
                                 await asyncio.sleep(0.5)
-                            progress.update(api_wait_task, visible=False)
+                            wait_line = Text("")
+                            live.update(_make_2b_group())
 
                         try:
                             resp = await client.get_person_details(person_id)
@@ -1515,19 +1512,18 @@ def main(
                         except Exception as e:
                             log.warning("person_fetch_failed", person_id=person_id, error=str(e))
 
-                        # 3件ごとにバッチ保存
                         if len(person_batch) >= 3:
                             save_persons_batch_to_database(conn, person_batch)
                             conn.commit()
                             person_batch.clear()
 
-                        progress.update(
-                            phase2b_task,
-                            description=f"[magenta]👤 個人情報取得中 ({idx}/{len(ids_to_fetch)})",
-                            advance=1,
+                        bar2b.update(task2b, advance=1)
+                        status_line = Text(
+                            f"👤 個人情報取得中 ({idx:,}/{len(ids_to_fetch):,})",
+                            style="bold magenta",
                         )
+                        live.update(_make_2b_group())
 
-                    # 残りを保存
                     if person_batch:
                         save_persons_batch_to_database(conn, person_batch)
                         conn.commit()
