@@ -41,19 +41,19 @@
     "unknown": 60.87555555555556
   },
   "debiased_scores": {
-    "p4": {
-      "person_id": "p4",
-      "original_authority": 0.0,
-      "studio_bias": 0.3,
-      "debiased_authority": 0.0,
-      "cross_studio_bonus": 0.0,
-      "diversity_factor": 1.0
-    },
     "p1": {
       "person_id": "p1",
       "original_authority": 100.0,
       "studio_bias": 0.3,
       "debiased_authority": 70.0,
+      "cross_studio_bonus": 0.0,
+      "diversity_factor": 1.0
+    },
+    "p2": {
+      "person_id": "p2",
+      "original_authority": 56.34,
+      "studio_bias": 0.3,
+      "debiased_authority": 39.438,
       "cross_studio_bonus": 0.0,
       "diversity_factor": 1.0
     },
@@ -65,11 +65,11 @@
       "cross_studio_bonus": 0.0,
       "diversity_factor": 1.0
     },
-    "p2": {
-      "person_id": "p2",
-      "original_authority": 56.34,
+    "p4": {
+      "person_id": "p4",
+      "original_authority": 0.0,
       "studio_bias": 0.3,
-      "debiased_authority": 39.438,
+      "debiased_authority": 0.0,
       "cross_studio_bonus": 0.0,
       "diversity_factor": 1.0
     }

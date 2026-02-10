@@ -1,0 +1,144 @@
+version: '3'
+
+tasks:
+  default:
+    cmds:
+      - task --list
+
+  # Data collection
+  scrape:
+    desc: Scrape AniList (default 50 anime)
+    cmds:
+      - pixi run python -m src.scrapers.anilist_scraper --count {{.COUNT | default "50"}}
+
+  scrape-old:
+    desc: Scrape AniList in old-first order
+    cmds:
+      - pixi run python -m src.scrapers.anilist_scraper --count {{.COUNT | default "50"}} --reverse
+
+  scrape-update:
+    desc: Update AniList cache (airing/new only)
+    cmds:
+      - pixi run python -m src.scrapers.anilist_scraper --update
+
+  scrape-update-old:
+    desc: Update AniList cache in old-first order
+    cmds:
+      - pixi run python -m src.scrapers.anilist_scraper --update --reverse
+
+  scrape-resume:
+    desc: Resume previous scrape (with checkpoint)
+    cmds:
+      - pixi run python -m src.scrapers.anilist_scraper --count {{.COUNT | default "20400"}} --resume
+
+  download-images:
+    desc: Process pending image download queue
+    cmds:
+      - pixi run python -m src.scrapers.anilist_scraper process-downloads
+
+  # MAL scraping
+  scrape-mal:
+    desc: Scrape MAL
+    cmds:
+      - pixi run python -m src.scrapers.mal_scraper --count {{.COUNT | default "50"}}
+
+  # Media Arts scraping
+  scrape-mediaarts:
+    desc: Scrape Media Arts DB
+    cmds:
+      - pixi run python -m src.scrapers.mediaarts_scraper --max-records {{.RECORDS | default "1000"}}
+
+  scrape-jvmg:
+    desc: Fetch JVMG data
+    cmds:
+      - pixi run python -m src.scrapers.jvmg_fetcher
+
+  # Pipeline
+  pipeline:
+    desc: Run full pipeline
+    cmds:
+      - pixi run pipeline
+
+  pipeline-viz:
+    desc: Run pipeline with visualizations
+    cmds:
+      - pixi run pipeline-viz
+
+  pipeline-debug:
+    desc: Dry-run pipeline (no changes)
+    cmds:
+      - pixi run python -m src.pipeline --dry-run
+
+  pipeline-profile:
+    desc: Run pipeline with performance profiling
+    cmds:
+      - pixi run python -m src.pipeline --profile
+
+  # Testing
+  test:
+    desc: Run all tests
+    cmds:
+      - pixi run test
+
+  test-fast:
+    desc: Run tests with fast fail (first failure stops)
+    cmds:
+      - pixi run pytest tests/ -x --tb=short
+
+  test-cov:
+    desc: Run tests with coverage report
+    cmds:
+      - pixi run pytest tests/ -v --cov=src --cov-report=term-missing
+
+  # Code quality
+  lint:
+    desc: Lint code
+    cmds:
+      - pixi run lint
+
+  format:
+    desc: Format code
+    cmds:
+      - pixi run format
+
+  lint-fix:
+    desc: Lint and auto-fix issues
+    cmds:
+      - pixi run ruff check --fix src/ tests/
+
+  # CLI shortcuts
+  stats:
+    desc: Show stats
+    cmds:
+      - pixi run python -c 'from src.cli import app; app()' stats --lang {{.LANG | default "en"}}
+
+  ranking:
+    desc: Show ranking
+    cmds:
+      - pixi run python -c 'from src.cli import app; app()' ranking --limit {{.LIMIT | default "50"}}
+
+  export:
+    desc: Export data
+    cmds:
+      - pixi run python -c 'from src.cli import app; app()' export --format {{.FORMAT | default "json"}}
+
+  # Utilities
+  serve:
+    desc: Start API server
+    cmds:
+      - pixi run serve
+
+  lab:
+    desc: Start Jupyter Lab
+    cmds:
+      - pixi run lab
+
+  synthetic:
+    desc: Generate synthetic test data
+    cmds:
+      - pixi run synthetic
+
+  build-rust:
+    desc: Build Rust extensions
+    cmds:
+      - pixi run build-rust

@@ -6,70 +6,20 @@ platforms = ["linux-64"]
 version = "0.1.0"
 
 [tasks]
-# データ収集（少量テスト用）
-scrape-mal = "python -m src.scrapers.mal_scraper --count 3"
-scrape-anilist = "python -m src.scrapers.anilist_scraper --count 3"
-scrape-mediaarts = "python -m src.scrapers.mediaarts_scraper --max-records 1000"
-scrape-jvmg = "python -m src.scrapers.jvmg_fetcher"
-
-# データ収集（段階的取得）
-scrape-anilist-medium = "python -m src.scrapers.anilist_scraper --count 5000"
-scrape-anilist-large = "python -m src.scrapers.anilist_scraper --count 10000"
-scrape-mal-full = "python -m src.scrapers.mal_scraper --count 1000"
-scrape-mediaarts-full = "python -m src.scrapers.mediaarts_scraper --max-records 5000"
-
-# 完全取得（チェックポイント機能付き、認証必須）
-scrape-anilist-complete = "python -m src.scrapers.anilist_scraper --count 20400 --checkpoint 10"
-scrape-mal-complete = "python -m src.scrapers.mal_scraper --count 5000"
-
-# 再開機能（途中で停止した場合）
-scrape-anilist-resume = "python -m src.scrapers.anilist_scraper --count 20400 --checkpoint 100 --resume"
-
-# 全データ収集（約9.7時間、チェックポイント付き）
-scrape-all-complete = { depends-on = ["scrape-anilist-complete", "scrape-mal-complete", "scrape-mediaarts-full"] }
-
-# 合成データ
-synthetic = "python -m src.synthetic"
-
-# 分析
-build-graph = "python -m src.analysis.graph"
-calc-scores = "python -m src.analysis.pagerank"
+# Core pipeline
 pipeline = "python -m src.pipeline"
 pipeline-viz = "python -m src.pipeline --visualize"
-pipeline-check = "python -m src.pipeline --dry-run"
-report = "python -m src.report"
-viz-interactive = "python -m src.analysis.visualize_interactive"
 
-# Rust extension (graph algorithm acceleration)
-build-rust = "maturin develop --release --manifest-path rust_ext/Cargo.toml --uv"
-
-# CLI
-stats = "python -c 'from src.cli import app; app()' stats"
-ranking = "python -c 'from src.cli import app; app()' ranking"
-export = "python -c 'from src.cli import app; app()' export"
-export-all = "python -c 'from src.cli import app; app()' export --format all"
-validate = "python -c 'from src.cli import app; app()' validate"
-search = "python -c 'from src.cli import app; app()' search"
-compare = "python -c 'from src.cli import app; app()' compare"
-similar = "python -c 'from src.cli import app; app()' similar"
-
-# Neo4j (requires Neo4j 5.0+ running)
-neo4j-export = "python -c 'from src.cli import app; app()' neo4j-export"
-neo4j-query = "python -c 'from src.cli import app; app()' neo4j-query"
-neo4j-stats = "python -c 'from src.cli import app; app()' neo4j-stats"
-
-# API サーバー
-serve = "python -m src.api"
-
-# ノートブック
-lab = "jupyter lab --notebook-dir=result/notebooks"
-
-# 品質
+# Development tools
 test = "pytest tests/ -v"
-test-cov = "pytest tests/ -v --cov=src --cov-report=term-missing --cov-report=html"
-test-cov-report = "pytest tests/ -v --cov=src --cov-report=html && python -m webbrowser htmlcov/index.html"
 lint = "ruff check src/ tests/"
 format = "ruff format src/ tests/"
+
+# Utilities
+synthetic = "python -m src.synthetic"
+build-rust = "maturin develop --release --manifest-path rust_ext/Cargo.toml --uv"
+serve = "python -m src.api"
+lab = "jupyter lab --notebook-dir=result/notebooks"
 
 [dependencies]
 python = "3.12.*"
