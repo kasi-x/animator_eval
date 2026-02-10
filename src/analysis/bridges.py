@@ -34,15 +34,16 @@ def detect_bridges(
     for c in credits:
         anime_persons[c.anime_id].add(c.person_id)
 
-    # Build person-person edges with anime_ids
+    # Build person-person edges with anime_ids (PERF-5 optimization)
+    import itertools
     edges: dict[tuple[str, str], list[str]] = defaultdict(list)
     all_persons: set[str] = set()
     for anime_id, persons in anime_persons.items():
         plist = sorted(persons)
-        for i, p1 in enumerate(plist):
-            all_persons.add(p1)
-            for p2 in plist[i + 1 :]:
-                edges[(p1, p2)].append(anime_id)
+        all_persons.update(plist)
+        # Use itertools.combinations (C-level) instead of nested loop with slicing
+        for p1, p2 in itertools.combinations(plist, 2):
+            edges[(p1, p2)].append(anime_id)
 
     if not all_persons:
         return {"bridge_persons": [], "cross_community_edges": [], "stats": {}}
