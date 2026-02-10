@@ -1195,5 +1195,27 @@ def main(
     asyncio.run(fetch_with_checkpoints())
 
 
+# Batch save helper functions (referenced in batch_fetch_staff_credits)
+def save_anime_batch_to_database(conn, anime_batch):
+    """Save a batch of anime to database."""
+    from src.database import upsert_anime
+    for anime in anime_batch:
+        upsert_anime(conn, anime)
+
+
+def save_persons_batch_to_database(conn, persons_batch):
+    """Save a batch of persons to database."""
+    from src.database import upsert_person
+    for person in persons_batch:
+        upsert_person(conn, person)
+
+
+def save_credits_batch_to_database(conn, credits_batch):
+    """Save a batch of credits to database."""
+    from src.database import insert_credit
+    for credit in credits_batch:
+        insert_credit(conn, credit)
+
+
 if __name__ == "__main__":
     app()

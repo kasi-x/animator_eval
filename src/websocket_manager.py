@@ -83,16 +83,17 @@ class WebSocketManager:
         """
         # Queue message for async processing
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                # If event loop is running, create task
-                asyncio.create_task(self.broadcast(message))
-            else:
-                # If no loop, run in new event loop
-                asyncio.run(self.broadcast(message))
+            # Use get_running_loop() instead of deprecated get_event_loop()
+            asyncio.get_running_loop()
+            # If we get here, there's a running loop - create task
+            asyncio.create_task(self.broadcast(message))
         except RuntimeError:
-            # No event loop available, skip broadcast
-            logger.debug("websocket_broadcast_skipped_no_loop", message_type=message.get("type"))
+            # No running event loop, run in new event loop
+            try:
+                asyncio.run(self.broadcast(message))
+            except RuntimeError:
+                # Can't create new loop, skip broadcast
+                logger.debug("websocket_broadcast_skipped_no_loop", message_type=message.get("type"))
 
 
 # Global WebSocket manager instance

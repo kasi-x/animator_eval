@@ -783,9 +783,7 @@ async def run_pipeline_async(
         try:
             logger.info("pipeline_task_started", job_id=job_id)
             # Note: run_scoring_pipeline is sync, so run in thread pool
-            loop = asyncio.get_event_loop()
-            await loop.run_in_executor(
-                None,
+            await asyncio.to_thread(
                 run_scoring_pipeline,
                 visualize,
                 dry_run,
