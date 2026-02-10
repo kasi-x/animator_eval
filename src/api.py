@@ -27,6 +27,7 @@ from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
 
 from src.analysis.similarity import find_similar_persons
+from src.api_validators import AnimeId, PersonId, validate_query_string
 from src.database import db_connection, get_data_sources, get_db_stats, get_score_history, search_persons
 from src.utils.config import JSON_DIR
 from src.utils.json_io import (
@@ -206,17 +207,19 @@ def list_persons(
 
 @app.get("/api/v1/persons/search")
 def search(
-    q: str = Query(..., min_length=1, description="検索クエリ"),
+    q: str = Query(..., min_length=1, max_length=500, description="検索クエリ"),
     limit: int = Query(20, ge=1, le=100, description="最大件数"),
 ):
     """人物検索（名前・IDの部分一致）."""
+    # Validate query string for SQL injection patterns
+    q = validate_query_string(q)
     with db_connection() as conn:
         results = search_persons(conn, q, limit=limit)
     return {"query": q, "count": len(results), "results": results}
 
 
 @app.get("/api/v1/persons/{person_id}")
-def get_person(person_id: str):
+def get_person(person_id: PersonId):
     """人物プロフィール（スコア + ブレークダウン）."""
     scores = load_person_scores_from_json()
     for entry in scores:
@@ -227,7 +230,7 @@ def get_person(person_id: str):
 
 @app.get("/api/v1/persons/{person_id}/similar")
 def get_similar(
-    person_id: str,
+    person_id: PersonId,
     top_n: int = Query(10, ge=1, le=50, description="類似人物の数"),
 ):
     """類似人物検索（コサイン類似度）."""
@@ -244,7 +247,7 @@ def get_similar(
 
 @app.get("/api/v1/persons/{person_id}/history")
 def get_person_history(
-    person_id: str,
+    person_id: PersonId,
     limit: int = Query(50, ge=1, le=200, description="履歴件数"),
 ):
     """人物のスコア履歴."""
@@ -330,7 +333,7 @@ def list_anime(
 
 
 @app.get("/api/v1/anime/{anime_id}")
-def get_anime(anime_id: str):
+def get_anime(anime_id: AnimeId):
     """アニメ詳細統計."""
     stats = load_anime_statistics_from_json()
     if anime_id not in stats:
@@ -559,7 +562,7 @@ def data_quality():
 
 @app.get("/api/v1/persons/{person_id}/network")
 def get_person_network(
-    person_id: str,
+    person_id: PersonId,
     hops: int = Query(1, ge=1, le=3, description="ネットワーク深度"),
 ):
     """人物のエゴグラフ（ローカルネットワーク）."""
@@ -647,7 +650,7 @@ def mentorships():
 
 
 @app.get("/api/v1/persons/{person_id}/milestones")
-def get_person_milestones(person_id: str):
+def get_person_milestones(person_id: PersonId):
     """人物のキャリアマイルストーン."""
     data = load_career_milestones_from_json()
     if not data:
