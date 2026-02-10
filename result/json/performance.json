@@ -154,19 +154,19 @@
       "min": 0.0,
       "max": 0.0
     },
-    "outlier_detection": {
+    "collaboration_strength": {
       "count": 1,
       "total": 0.0,
       "avg": 0.0,
       "min": 0.0,
       "max": 0.0
     },
-    "collaboration_strength": {
+    "outlier_detection": {
       "count": 1,
-      "total": 0.001,
-      "avg": 0.001,
-      "min": 0.001,
-      "max": 0.001
+      "total": 0.0,
+      "avg": 0.0,
+      "min": 0.0,
+      "max": 0.0
     },
     "team_composition": {
       "count": 1,
@@ -217,19 +217,19 @@
       "min": 0.001,
       "max": 0.001
     },
-    "milestones": {
-      "count": 1,
-      "total": 0.001,
-      "avg": 0.001,
-      "min": 0.001,
-      "max": 0.001
-    },
     "graphml_export": {
       "count": 1,
       "total": 0.003,
       "avg": 0.003,
       "min": 0.003,
       "max": 0.003
+    },
+    "milestones": {
+      "count": 1,
+      "total": 0.001,
+      "avg": 0.001,
+      "min": 0.001,
+      "max": 0.001
     },
     "network_evolution": {
       "count": 1,
@@ -259,13 +259,6 @@
       "min": 0.001,
       "max": 0.001
     },
-    "structural_estimation": {
-      "count": 1,
-      "total": 0.003,
-      "avg": 0.003,
-      "min": 0.003,
-      "max": 0.003
-    },
     "compensation_analysis": {
       "count": 1,
       "total": 0.003,
@@ -280,12 +273,19 @@
       "min": 0.003,
       "max": 0.003
     },
-    "bias_detection": {
+    "structural_estimation": {
       "count": 1,
       "total": 0.003,
       "avg": 0.003,
       "min": 0.003,
       "max": 0.003
+    },
+    "bias_detection": {
+      "count": 1,
+      "total": 0.004,
+      "avg": 0.004,
+      "min": 0.004,
+      "max": 0.004
     },
     "insights_generation": {
       "count": 1,
@@ -303,11 +303,11 @@
     }
   },
   "memory_snapshots": {
-    "pipeline_start": 306.5,
-    "after_data_load": 306.6,
-    "after_graph_build": 306.6,
-    "after_scoring": 306.6,
-    "after_centrality": 306.6
+    "pipeline_start": 220.2,
+    "after_data_load": 220.3,
+    "after_graph_build": 220.3,
+    "after_scoring": 220.3,
+    "after_centrality": 220.3
   },
   "counters": {
     "persons_loaded": 4,

@@ -586,6 +586,293 @@ def estimate_difference_in_differences(
     )
 
 
+def estimate_event_study(
+    panel_data: list[PanelObservation],
+    pre_periods: int = 3,
+    post_periods: int = 3,
+) -> dict[int, RegressionResult]:
+    """Estimate event study with dynamic treatment effects.
+
+    This function estimates treatment effects for each relative time period
+    around the treatment event (joining major studio). It provides visual
+    evidence for the parallel trends assumption and reveals dynamic effects.
+
+    Model:
+        Y_it = α_i + Σ_k β_k·1{t - t_entry = k} + γ·X_it + δ_t + ε_it
+
+    where k ∈ [-pre_periods, ..., -1, 0, +1, ..., +post_periods]
+
+    Args:
+        panel_data: Panel observations
+        pre_periods: Number of periods before treatment to include
+        post_periods: Number of periods after treatment to include
+
+    Returns:
+        Dict mapping relative time k to RegressionResult with β_k estimate
+
+    Interpretation:
+        - k < 0: Pre-treatment periods (should be ≈ 0 if parallel trends hold)
+        - k = 0: Treatment year (immediate effect)
+        - k > 0: Post-treatment periods (cumulative/dynamic effects)
+    """
+    # Step 1: Identify treatment events (first major studio entry)
+    person_first_major: dict[str, int] = {}
+    person_groups: dict[str, list[PanelObservation]] = defaultdict(list)
+
+    for obs in panel_data:
+        person_groups[obs.person_id].append(obs)
+        if obs.major_studio and obs.person_id not in person_first_major:
+            person_first_major[obs.person_id] = obs.year
+
+    # Only keep treated persons with sufficient pre/post data
+    valid_persons = set()
+    for person_id, entry_year in person_first_major.items():
+        person_obs = person_groups[person_id]
+        years = [obs.year for obs in person_obs]
+        min_year = min(years)
+        max_year = max(years)
+
+        # Need at least pre_periods before and post_periods after
+        if (entry_year - min_year >= pre_periods and
+            max_year - entry_year >= post_periods):
+            valid_persons.add(person_id)
+
+    if len(valid_persons) < 5:
+        # Insufficient data
+        logger.warning(
+            "event_study_insufficient_data",
+            valid_persons=len(valid_persons),
+            required_min=5,
+        )
+        return {}
+
+    logger.info(
+        "event_study_sample",
+        n_persons=len(valid_persons),
+        avg_entry_year=int(np.mean(list(person_first_major.values()))),
+    )
+
+    # Step 2: Build dataset with relative time indicators
+    observations_with_reltime: list[tuple[PanelObservation, int]] = []
+
+    for person_id in valid_persons:
+        entry_year = person_first_major[person_id]
+        for obs in person_groups[person_id]:
+            relative_time = obs.year - entry_year
+            if -pre_periods <= relative_time <= post_periods:
+                observations_with_reltime.append((obs, relative_time))
+
+    # Step 3: Within-transformation (remove person fixed effects)
+    # Group by person and compute person means
+    person_means: dict[str, dict] = {}
+    for person_id in valid_persons:
+        person_obs = [
+            obs for obs, _ in observations_with_reltime if obs.person_id == person_id
+        ]
+        if person_obs:
+            person_means[person_id] = {
+                "skill": sum(o.skill_score for o in person_obs) / len(person_obs),
+                "experience": sum(o.experience_years for o in person_obs) / len(person_obs),
+                "potential": sum(o.potential_score for o in person_obs) / len(person_obs),
+            }
+
+    # Step 4: Estimate coefficient for each relative time k
+    results = {}
+
+    for k in range(-pre_periods, post_periods + 1):
+        # Build demeaned data for this specification
+        y_demeaned = []
+        x_demeaned = []  # [time_k_dummy, experience, potential]
+
+        for obs, rel_t in observations_with_reltime:
+            person_mean = person_means[obs.person_id]
+
+            # Demean outcome
+            y_demeaned.append(obs.skill_score - person_mean["skill"])
+
+            # Demean covariates
+            time_k_dummy = 1 if rel_t == k else 0
+            mean_time_k = sum(
+                1 for o, r in observations_with_reltime
+                if o.person_id == obs.person_id and r == k
+            ) / len([o for o, _ in observations_with_reltime if o.person_id == obs.person_id])
+
+            x_demeaned.append([
+                time_k_dummy - mean_time_k,
+                obs.experience_years - person_mean["experience"],
+                obs.potential_score - person_mean["potential"],
+            ])
+
+        y = np.array(y_demeaned)
+        X = np.array(x_demeaned)
+
+        # OLS estimation
+        try:
+            beta_hat = np.linalg.solve(X.T @ X, X.T @ y)
+        except np.linalg.LinAlgError:
+            # Singular matrix, skip this k
+            continue
+
+        # Residuals and inference
+        residuals = y - X @ beta_hat
+        n = len(y)
+        k_params = X.shape[1]
+        sigma_sq = np.sum(residuals**2) / (n - k_params) if n > k_params else 0
+        var_covar = sigma_sq * np.linalg.inv(X.T @ X)
+        se = np.sqrt(np.diag(var_covar))
+
+        beta_k = beta_hat[0]  # Coefficient on time k dummy
+        se_k = se[0]
+        t_stat = beta_k / se_k if se_k > 0 else 0.0
+        p_value = 2 * (1 - stats.t.cdf(abs(t_stat), n - k_params)) if n > k_params else 1.0
+        ci_lower, ci_upper = stats.t.interval(
+            0.95, n - k_params, loc=beta_k, scale=se_k
+        ) if n > k_params else (beta_k, beta_k)
+
+        # Interpretation
+        if k < 0:
+            if abs(beta_k) < 3 and p_value > 0.10:
+                interp = f"Pre-treatment period (k={k}): No significant effect (β={beta_k:.2f}, p={p_value:.3f}). Parallel trends supported."
+            else:
+                interp = f"Pre-treatment period (k={k}): Significant pre-trend (β={beta_k:.2f}, p={p_value:.3f}). Parallel trends violated!"
+        elif k == 0:
+            if p_value < 0.05:
+                interp = f"Treatment year (k=0): Immediate effect of {beta_k:.2f} points (p={p_value:.3f})."
+            else:
+                interp = f"Treatment year (k=0): No immediate effect (β={beta_k:.2f}, p={p_value:.3f})."
+        else:  # k > 0
+            if p_value < 0.05:
+                interp = f"Post-treatment period (k={k}): Cumulative effect of {beta_k:.2f} points (p={p_value:.3f})."
+            else:
+                interp = f"Post-treatment period (k={k}): No significant effect (β={beta_k:.2f}, p={p_value:.3f})."
+
+        results[k] = RegressionResult(
+            method=EstimationMethod.EVENT_STUDY,
+            beta=beta_k,
+            se=se_k,
+            t_stat=t_stat,
+            p_value=p_value,
+            ci_lower=ci_lower,
+            ci_upper=ci_upper,
+            n_obs=n,
+            n_persons=len(valid_persons),
+            r_squared=0.0,  # Not meaningful for individual time dummies
+            adj_r_squared=0.0,
+            covariates={
+                "experience": beta_hat[1] if len(beta_hat) > 1 else 0,
+                "potential": beta_hat[2] if len(beta_hat) > 2 else 0,
+            },
+            diagnostics={
+                "relative_time": k,
+                "is_pre_treatment": k < 0,
+                "is_treatment_year": k == 0,
+                "is_post_treatment": k > 0,
+            },
+            interpretation=interp,
+        )
+
+    logger.info(
+        "event_study_complete",
+        n_periods=len(results),
+        pre_periods_estimated=sum(1 for k in results if k < 0),
+        post_periods_estimated=sum(1 for k in results if k > 0),
+    )
+
+    return results
+
+
+def test_parallel_trends(
+    event_study_results: dict[int, RegressionResult],
+) -> RobustnessCheck:
+    """Test parallel trends assumption using pre-treatment coefficients.
+
+    The parallel trends assumption is satisfied if all pre-treatment
+    coefficients are statistically indistinguishable from zero.
+
+    Args:
+        event_study_results: Event study results from estimate_event_study()
+
+    Returns:
+        RobustnessCheck indicating whether parallel trends hold
+    """
+    # Extract pre-treatment coefficients
+    pre_treatment_betas = [
+        result.beta for k, result in event_study_results.items() if k < 0
+    ]
+    pre_treatment_pvals = [
+        result.p_value for k, result in event_study_results.items() if k < 0
+    ]
+
+    if not pre_treatment_betas:
+        return RobustnessCheck(
+            check_name="parallel_trends_test",
+            description="Test whether pre-treatment trends are zero (parallel trends assumption)",
+            result="inconclusive",
+            detail="No pre-treatment periods available",
+            evidence={},
+        )
+
+    # Test 1: Are all individual coefficients insignificant?
+    all_insignificant = all(p > 0.10 for p in pre_treatment_pvals)
+
+    # Test 2: Joint F-test (are all pre-treatment βs = 0?)
+    # Simplified: test if average |β| is small
+    avg_abs_beta = np.mean([abs(b) for b in pre_treatment_betas])
+    max_abs_beta = max([abs(b) for b in pre_treatment_betas])
+
+    # Test 3: Visual test - trend in pre-treatment coefficients
+    if len(pre_treatment_betas) >= 2:
+        # Linear trend in pre-treatment period
+        x = list(range(len(pre_treatment_betas)))
+        y = pre_treatment_betas
+        if len(x) > 1:
+            slope, _, _, p_trend, _ = stats.linregress(x, y)
+            has_trend = abs(slope) > 1.0 and p_trend < 0.10
+        else:
+            has_trend = False
+    else:
+        has_trend = False
+
+    # Overall assessment
+    if all_insignificant and avg_abs_beta < 3.0 and not has_trend:
+        result = "passed"
+        detail = (
+            f"Parallel trends assumption appears satisfied. "
+            f"Pre-treatment coefficients: avg |β|={avg_abs_beta:.2f}, "
+            f"max |β|={max_abs_beta:.2f}. All p-values > 0.10."
+        )
+    elif has_trend:
+        result = "failed"
+        detail = (
+            f"Parallel trends assumption violated: significant pre-trend detected. "
+            f"Pre-treatment slope={slope:.2f} (p={p_trend:.3f}). "
+            f"Treatment and control groups had different trends before treatment."
+        )
+    else:
+        result = "warning"
+        detail = (
+            f"Parallel trends assumption questionable. "
+            f"Some pre-treatment effects detected: avg |β|={avg_abs_beta:.2f}, "
+            f"max |β|={max_abs_beta:.2f}. "
+            f"Results should be interpreted with caution."
+        )
+
+    return RobustnessCheck(
+        check_name="parallel_trends_test",
+        description="Test whether pre-treatment trends are zero (parallel trends assumption)",
+        result=result,
+        detail=detail,
+        evidence={
+            "pre_treatment_betas": [float(b) for b in pre_treatment_betas],
+            "pre_treatment_pvals": [float(p) for p in pre_treatment_pvals],
+            "avg_abs_beta": float(avg_abs_beta),
+            "max_abs_beta": float(max_abs_beta),
+            "has_trend": has_trend,
+            "n_pre_periods": len(pre_treatment_betas),
+        },
+    )
+
+
 def run_placebo_test(
     panel_data: list[PanelObservation],
 ) -> RobustnessCheck:
@@ -713,8 +1000,16 @@ def estimate_structural_model(
     fe_result = estimate_fixed_effects(panel_data)
     did_result = estimate_difference_in_differences(panel_data)
 
+    # Step 2b: Event study (dynamic treatment effects)
+    event_study_results = estimate_event_study(panel_data, pre_periods=3, post_periods=3)
+
     # Step 3: Robustness checks
     robustness_checks = [run_placebo_test(panel_data)]
+
+    # Add parallel trends test if event study available
+    if event_study_results:
+        parallel_trends_check = test_parallel_trends(event_study_results)
+        robustness_checks.append(parallel_trends_check)
 
     # Step 4: Preferred estimate (use FE if significant, otherwise DID)
     if fe_result.p_value < 0.05:
@@ -738,8 +1033,38 @@ def estimate_structural_model(
         f"  効果: {did_result.beta:.3f} (SE={did_result.se:.3f}, p={did_result.p_value:.4f})",
         f"  95% CI: [{did_result.ci_lower:.3f}, {did_result.ci_upper:.3f}]",
         f"",
-        f"【頑健性チェック (Robustness Checks)】",
     ]
+
+    # Add event study summary if available
+    if event_study_results:
+        summary_parts.append(f"【イベントスタディ (Event Study)】")
+        summary_parts.append(f"  推定期間数: {len(event_study_results)}")
+
+        # Pre-treatment summary
+        pre_results = {k: v for k, v in event_study_results.items() if k < 0}
+        if pre_results:
+            avg_pre_beta = np.mean([r.beta for r in pre_results.values()])
+            summary_parts.append(f"  処置前平均効果: {avg_pre_beta:.2f} (並行トレンド検証)")
+
+        # Treatment year
+        if 0 in event_study_results:
+            t0_result = event_study_results[0]
+            summary_parts.append(
+                f"  入所年効果: {t0_result.beta:.2f} (p={t0_result.p_value:.3f})"
+            )
+
+        # Post-treatment summary
+        post_results = {k: v for k, v in event_study_results.items() if k > 0}
+        if post_results:
+            max_k = max(post_results.keys())
+            max_result = post_results[max_k]
+            summary_parts.append(
+                f"  {max_k}年後効果: {max_result.beta:.2f} (累積効果)"
+            )
+
+        summary_parts.append("")
+
+    summary_parts.append(f"【頑健性チェック (Robustness Checks)】")
 
     for check in robustness_checks:
         summary_parts.append(
@@ -758,15 +1083,26 @@ def estimate_structural_model(
 
     summary = "\n".join(summary_parts)
 
+    # Extract parallel trends test result if available
+    parallel_trends_dict = {}
+    for check in robustness_checks:
+        if check.check_name == "parallel_trends_test":
+            parallel_trends_dict = {
+                "result": check.result,
+                "detail": check.detail,
+                "evidence": check.evidence,
+            }
+            break
+
     result = StructuralEstimationResult(
         fixed_effects=fe_result,
         did_estimate=did_result,
         matching_estimate=None,  # Not implemented yet
-        event_study=None,  # Not implemented yet
+        event_study=event_study_results if event_study_results else None,
         robustness_checks=robustness_checks,
         hausman_test={},  # Would need random effects to compute
         f_test_fixed_effects={},  # Would need pooled OLS to compare
-        parallel_trends_test={},  # Would need pre-treatment trends
+        parallel_trends_test=parallel_trends_dict,
         preferred_estimate=preferred,
         summary=summary,
     )
@@ -777,6 +1113,8 @@ def estimate_structural_model(
         fe_pval=fe_result.p_value,
         did_beta=did_result.beta,
         did_pval=did_result.p_value,
+        event_study_periods=len(event_study_results) if event_study_results else 0,
+        parallel_trends=parallel_trends_dict.get("result", "not_tested"),
     )
 
     return result
@@ -817,6 +1155,25 @@ def export_structural_estimation(result: StructuralEstimationResult) -> dict[str
             "covariates": result.did_estimate.covariates,
             "interpretation": result.did_estimate.interpretation,
         },
+        "event_study": {
+            "available": result.event_study is not None,
+            "n_periods": len(result.event_study) if result.event_study else 0,
+            "coefficients": {
+                str(k): {
+                    "beta": v.beta,
+                    "se": v.se,
+                    "t_stat": v.t_stat,
+                    "p_value": v.p_value,
+                    "ci": [v.ci_lower, v.ci_upper],
+                    "is_pre_treatment": k < 0,
+                    "is_treatment_year": k == 0,
+                    "is_post_treatment": k > 0,
+                    "interpretation": v.interpretation,
+                }
+                for k, v in (result.event_study or {}).items()
+            },
+        } if result.event_study else None,
+        "parallel_trends_test": result.parallel_trends_test,
         "robustness_checks": [
             {
                 "name": check.check_name,

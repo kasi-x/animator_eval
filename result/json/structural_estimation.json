@@ -32,6 +32,8 @@
     "covariates": {},
     "interpretation": "No major studio affiliation observed in data"
   },
+  "event_study": null,
+  "parallel_trends_test": {},
   "robustness_checks": [
     {
       "name": "placebo_test",
