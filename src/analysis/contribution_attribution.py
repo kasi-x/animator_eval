@@ -145,6 +145,15 @@ def compute_shapley_value_approximate(
     if len(all_staff) <= 10:
         sample_size = 2 ** len(all_staff)
 
+    # Pre-compute marginal contributions for all staff (PERF-4 optimization)
+    # Eliminates redundant computation across sampling iterations
+    marginal_cache: dict[str, float] = {
+        pid: estimate_marginal_contribution(
+            pid, r, anime_value, person_scores, staff_quality_avg
+        )
+        for pid, r in all_staff
+    }
+
     marginal_contributions = []
 
     for _ in range(min(sample_size, 1000)):  # Cap at 1000 samples
@@ -161,18 +170,9 @@ def compute_shapley_value_approximate(
         # Staff before this person (coalition)
         coalition = staff_copy[:position]
 
-        # Value with coalition
-        value_with_coalition = sum(
-            estimate_marginal_contribution(
-                pid, r, anime_value, person_scores, staff_quality_avg
-            )
-            for pid, r in coalition
-        )
-
-        # Value with coalition + this person
-        value_with_person = value_with_coalition + estimate_marginal_contribution(
-            person_id, role, anime_value, person_scores, staff_quality_avg
-        )
+        # O(1) lookup instead of redundant computation (PERF-4 optimization)
+        value_with_coalition = sum(marginal_cache[pid] for pid, _ in coalition)
+        value_with_person = value_with_coalition + marginal_cache[person_id]
 
         # Marginal contribution in this permutation
         marginal = value_with_person - value_with_coalition

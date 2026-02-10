@@ -176,9 +176,16 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
             reverse=True,
         )[:100]
 
+        # Pre-index credits by anime for O(1) lookup (PERF-4 optimization)
+        from collections import defaultdict
+        anime_credits_index: dict[str, list] = defaultdict(list)
+        for c in context.credits:
+            anime_credits_index[c.anime_id].append(c)
+
         all_contributions = {}
         for anime_id, anime_value_metrics in top_anime:
-            anime_credits = [c for c in context.credits if c.anime_id == anime_id]
+            # O(1) lookup instead of O(n) scan (PERF-4 optimization)
+            anime_credits = anime_credits_index.get(anime_id, [])
             if anime_credits:
                 contributions = compute_contribution_attribution(
                     anime_id, anime_value_metrics.composite_value, anime_credits, person_scores
