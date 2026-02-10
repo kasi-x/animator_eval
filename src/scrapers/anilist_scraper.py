@@ -155,6 +155,10 @@ class AniListClient:
         # Create client without default headers (auth added per-request in query())
         self._client = httpx.AsyncClient(timeout=60.0)
 
+        # Rate limit tracking
+        self.requests_remaining = None
+        self.rate_limit_reset_at = None
+
     async def close(self) -> None:
         await self._client.aclose()
 
@@ -182,9 +186,14 @@ class AniListClient:
                     headers=headers,
                 )
 
+                # Extract rate limit info from response headers
+                if "X-RateLimit-Remaining" in resp.headers:
+                    self.requests_remaining = int(resp.headers.get("X-RateLimit-Remaining", -1))
+                    self.rate_limit_reset_at = int(resp.headers.get("X-RateLimit-Reset", 0))
+
                 if resp.status_code == 429:
                     retry_after = int(resp.headers.get("Retry-After", 60))
-                    log.warning("rate_limited", retry_after=retry_after)
+                    log.warning("rate_limited", retry_after=retry_after, requests_remaining=self.requests_remaining)
                     await asyncio.sleep(retry_after)
                     continue
 
@@ -1094,7 +1103,15 @@ def main(
                             if anime.id not in fetched_ids:
                                 anime_ids.append((anime, anime.anilist_id, anime.id))
 
-                    progress.update(list_task, advance=1)
+                    # Update progress with rate limit info
+                    rate_info = ""
+                    if client.requests_remaining is not None:
+                        rate_info = f" [dim]| API: {client.requests_remaining}件残[/dim]"
+                    progress.update(
+                        list_task,
+                        description=f"📋 アニメリスト取得中 ({page}/{pages_needed}){rate_info}",
+                        advance=1
+                    )
 
             # Display update mode info
             if update and prev_cache and len(all_anime_for_cache) > 0:
