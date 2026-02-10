@@ -167,7 +167,6 @@ def plot_event_study_with_annotation(
 
     # Annotate parallel trends test result
     if parallel_trends_test:
-        test_detail = parallel_trends_test.get("detail", "No test performed")
         evidence = parallel_trends_test.get("evidence", {})
 
         annotation_text = "Parallel Trends Test:\n"

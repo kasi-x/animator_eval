@@ -386,7 +386,6 @@ def _build_executive_summary(result: Any) -> str:
     did_sig = "有意" if did.p_value < 0.05 else "非有意"
 
     # Event study status
-    event_study_available = result.event_study is not None
     parallel_trends_result = result.parallel_trends_test.get("result", "not_tested") if result.parallel_trends_test else "not_tested"
 
     html = f"""

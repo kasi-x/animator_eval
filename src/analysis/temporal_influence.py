@@ -334,19 +334,17 @@ def detect_industry_trends(
 
 def main():
     """スタンドアロン実行用エントリーポイント."""
-    from src.database import get_all_anime, get_all_credits, get_all_persons, get_all_scores, get_connection, init_db
+    from src.database import get_all_anime, get_all_credits, get_all_scores, get_connection, init_db
 
     conn = get_connection()
     init_db(conn)
 
-    persons = get_all_persons(conn)
     anime_list = get_all_anime(conn)
     credits = get_all_credits(conn)
     scores_list = get_all_scores(conn)
 
     # マップ作成
     anime_map = {a.id: a for a in anime_list}
-    person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
     scores_map = {
         s.person_id: {
             "authority": s.authority,
