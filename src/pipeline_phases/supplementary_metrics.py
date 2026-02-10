@@ -12,6 +12,19 @@ from src.analysis.growth import compute_growth_trends
 from src.analysis.network_density import compute_network_density
 from src.analysis.trust import detect_engagement_decay
 from src.analysis.versatility import compute_versatility
+# Advanced metrics
+from src.analysis.studio_bias_correction import (
+    compute_studio_bias_metrics,
+    compute_studio_prestige,
+    debias_authority_scores,
+)
+from src.analysis.growth_acceleration import (
+    compute_growth_metrics,
+    compute_adjusted_skill_with_growth,
+)
+from src.analysis.anime_value import compute_anime_values
+from src.analysis.contribution_attribution import compute_contribution_attribution
+from src.analysis.potential_value import compute_potential_value_scores
 from src.pipeline_phases.context import PipelineContext
 from src.utils.role_groups import DIRECTOR_ROLES
 
@@ -102,3 +115,112 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
     logger.info("step_start", step="growth_trends_precompute")
     with context.monitor.measure("growth_trends"):
         context.growth_data = compute_growth_trends(context.credits, context.anime_map)
+
+    # ========== Advanced Metrics (New) ==========
+
+    # Build person_scores dict for advanced metrics
+    person_scores = {
+        pid: {
+            "authority": context.authority_scores.get(pid, 0),
+            "trust": context.trust_scores.get(pid, 0),
+            "skill": context.skill_scores.get(pid, 0),
+            "composite": (
+                context.authority_scores.get(pid, 0) * 0.4
+                + context.trust_scores.get(pid, 0) * 0.3
+                + context.skill_scores.get(pid, 0) * 0.3
+            ),
+        }
+        for pid in set(context.authority_scores) | set(context.trust_scores) | set(context.skill_scores)
+    }
+
+    # Studio Bias Correction
+    logger.info("step_start", step="studio_bias_correction")
+    with context.monitor.measure("studio_bias_correction"):
+        bias_metrics = compute_studio_bias_metrics(context.credits, context.anime_map)
+        studio_prestige = compute_studio_prestige(context.credits, context.anime_map, person_scores)
+        debiased_scores = debias_authority_scores(
+            person_scores, bias_metrics, studio_prestige, debias_strength=0.3
+        )
+        context.studio_bias_metrics = {
+            "bias_metrics": {pid: vars(m) for pid, m in bias_metrics.items()},
+            "studio_prestige": studio_prestige,
+            "debiased_scores": {pid: vars(d) for pid, d in debiased_scores.items()},
+        }
+        logger.info("studio_bias_computed", persons=len(bias_metrics), studios=len(studio_prestige))
+
+    # Growth Acceleration
+    logger.info("step_start", step="growth_acceleration")
+    with context.monitor.measure("growth_acceleration"):
+        growth_metrics = compute_growth_metrics(context.credits, context.anime_map)
+        adjusted_skills = compute_adjusted_skill_with_growth(
+            person_scores, growth_metrics, growth_weight=0.3
+        )
+        context.growth_acceleration_data = {
+            "growth_metrics": {pid: vars(m) for pid, m in growth_metrics.items()},
+            "adjusted_skills": adjusted_skills,
+        }
+        logger.info("growth_acceleration_computed", persons=len(growth_metrics))
+
+    # Anime Value Assessment
+    logger.info("step_start", step="anime_value_assessment")
+    with context.monitor.measure("anime_value_assessment"):
+        anime_values = compute_anime_values(context.anime_list, context.credits, person_scores)
+        context.anime_values = {aid: vars(v) for aid, v in anime_values.items()}
+        logger.info("anime_values_computed", anime=len(anime_values))
+
+    # Contribution Attribution (sample top 100 anime by value for performance)
+    logger.info("step_start", step="contribution_attribution")
+    with context.monitor.measure("contribution_attribution"):
+        # Sort anime by composite value
+        top_anime = sorted(
+            anime_values.items(),
+            key=lambda x: x[1].composite_value,
+            reverse=True,
+        )[:100]
+
+        all_contributions = {}
+        for anime_id, anime_value_metrics in top_anime:
+            anime_credits = [c for c in context.credits if c.anime_id == anime_id]
+            if anime_credits:
+                contributions = compute_contribution_attribution(
+                    anime_id, anime_value_metrics.composite_value, anime_credits, person_scores
+                )
+                # Convert to dict and handle Enum serialization
+                all_contributions[anime_id] = {
+                    pid: {**vars(contrib), "role": contrib.role.value}
+                    for pid, contrib in contributions.items()
+                }
+
+        context.contribution_data = all_contributions
+        logger.info("contribution_attribution_computed", anime=len(all_contributions))
+
+    # Potential Value Score (integrates all adjusted scores)
+    logger.info("step_start", step="potential_value_scoring")
+    with context.monitor.measure("potential_value_scoring"):
+        # Prepare inputs
+        debiased_dict = {
+            pid: {"debiased_authority": d.debiased_authority}
+            for pid, d in debiased_scores.items()
+        }
+        growth_dict = {
+            pid: {
+                "growth_velocity": m.growth_velocity,
+                "momentum_score": m.momentum_score,
+                "career_years": m.career_years,
+            }
+            for pid, m in growth_metrics.items()
+        }
+
+        potential_scores = compute_potential_value_scores(
+            person_scores,
+            debiased_dict,
+            growth_dict,
+            adjusted_skills,
+            context.collaboration_graph,
+        )
+        # Convert to dict and handle Enum serialization
+        context.potential_value_scores = {
+            pid: {**vars(p), "category": p.category.value}
+            for pid, p in potential_scores.items()
+        }
+        logger.info("potential_value_computed", persons=len(potential_scores))

@@ -332,7 +332,7 @@ def compute_anime_values(
 
         values[anime.id] = AnimeValueMetrics(
             anime_id=anime.id,
-            title=anime.title,
+            title=anime.title_ja or anime.title_en or anime.id,
             year=anime.year,
             commercial_value=commercial,
             critical_value=critical,

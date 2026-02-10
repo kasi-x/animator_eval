@@ -1,0 +1,98 @@
+{
+  "a1": {
+    "p1": {
+      "person_id": "p1",
+      "anime_id": "a1",
+      "role": "director",
+      "shapley_value": 192.873,
+      "marginal_contribution": 192.873,
+      "role_importance": 0.2,
+      "irreplaceability": 0,
+      "value_share": 47.28
+    },
+    "p2": {
+      "person_id": "p2",
+      "anime_id": "a1",
+      "role": "key_animator",
+      "shapley_value": 97.595,
+      "marginal_contribution": 97.595,
+      "role_importance": 0.06,
+      "irreplaceability": 15.439,
+      "value_share": 23.92
+    },
+    "p3": {
+      "person_id": "p3",
+      "anime_id": "a1",
+      "role": "animation_director",
+      "shapley_value": 117.489,
+      "marginal_contribution": 117.489,
+      "role_importance": 0.1,
+      "irreplaceability": 0,
+      "value_share": 28.8
+    }
+  },
+  "a2": {
+    "p1": {
+      "person_id": "p1",
+      "anime_id": "a2",
+      "role": "director",
+      "shapley_value": 192.835,
+      "marginal_contribution": 192.835,
+      "role_importance": 0.2,
+      "irreplaceability": 0,
+      "value_share": 47.28
+    },
+    "p2": {
+      "person_id": "p2",
+      "anime_id": "a2",
+      "role": "key_animator",
+      "shapley_value": 97.575,
+      "marginal_contribution": 97.575,
+      "role_importance": 0.06,
+      "irreplaceability": 15.439,
+      "value_share": 23.92
+    },
+    "p3": {
+      "person_id": "p3",
+      "anime_id": "a2",
+      "role": "animation_director",
+      "shapley_value": 117.466,
+      "marginal_contribution": 117.466,
+      "role_importance": 0.1,
+      "irreplaceability": 0,
+      "value_share": 28.8
+    }
+  },
+  "a3": {
+    "p1": {
+      "person_id": "p1",
+      "anime_id": "a3",
+      "role": "director",
+      "shapley_value": 197.795,
+      "marginal_contribution": 197.795,
+      "role_importance": 0.2,
+      "irreplaceability": 0,
+      "value_share": 59.86
+    },
+    "p2": {
+      "person_id": "p2",
+      "anime_id": "a3",
+      "role": "key_animator",
+      "shapley_value": 100.085,
+      "marginal_contribution": 100.085,
+      "role_importance": 0.06,
+      "irreplaceability": 24.39,
+      "value_share": 30.29
+    },
+    "p4": {
+      "person_id": "p4",
+      "anime_id": "a3",
+      "role": "key_animator",
+      "shapley_value": 32.559,
+      "marginal_contribution": 32.559,
+      "role_importance": 0.06,
+      "irreplaceability": 0,
+      "value_share": 9.85
+    }
+  }
+}

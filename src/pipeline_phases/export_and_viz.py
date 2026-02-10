@@ -341,6 +341,43 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="crossval_saved",
     ),
 
+    # ========== Advanced Metrics (New) ==========
+
+    # Studio bias correction
+    ExportSpec(
+        filename="studio_bias.json",
+        data_getter=lambda ctx: ctx.studio_bias_metrics,
+        log_message="studio_bias_saved",
+        log_metrics=lambda data: {
+            "persons": len(data.get("bias_metrics", {})) if data else 0,
+            "studios": len(data.get("studio_prestige", {})) if data else 0,
+        },
+    ),
+
+    # Anime value assessment
+    ExportSpec(
+        filename="anime_values.json",
+        data_getter=lambda ctx: ctx.anime_values,
+        log_message="anime_values_saved",
+        log_metrics=lambda data: {"anime": len(data)} if data else {},
+    ),
+
+    # Contribution attribution
+    ExportSpec(
+        filename="contributions.json",
+        data_getter=lambda ctx: ctx.contribution_data,
+        log_message="contributions_saved",
+        log_metrics=lambda data: {"anime": len(data)} if data else {},
+    ),
+
+    # Potential value scores
+    ExportSpec(
+        filename="potential_value.json",
+        data_getter=lambda ctx: ctx.potential_value_scores,
+        log_message="potential_value_saved",
+        log_metrics=lambda data: {"persons": len(data)} if data else {},
+    ),
+
     # Performance monitoring
     ExportSpec(
         filename="performance.json",
