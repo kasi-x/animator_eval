@@ -126,6 +126,7 @@ def _run_graphml(context: PipelineContext) -> Any:
     graphml_file = export_graphml(
         context.persons, context.credits, person_scores=scores_for_graphml,
         collaboration_graph=context.collaboration_graph,
+        prettyprint=False, round_decimals=2,
     )
     logger.info("graphml_exported", path=str(graphml_file))
     return {"path": str(graphml_file)}

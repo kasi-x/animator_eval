@@ -35,6 +35,11 @@ def _find_mentor_mentee_pairs(
     Returns:
         {mentor_id: {mentee_id: {shared_works: [...], first_year, last_year}}}
     """
+    # Pre-compute anime years for O(1) lookup (PERF-2 optimization)
+    anime_years: dict[str, int] = {
+        aid: a.year for aid, a in anime_map.items() if a.year
+    }
+
     # Build per-anime role assignments
     anime_directors: dict[str, set[str]] = defaultdict(set)
     anime_staff: dict[str, set[str]] = defaultdict(set)
@@ -61,11 +66,8 @@ def _find_mentor_mentee_pairs(
         for mentee_id, shared_anime_ids in mentees.items():
             if len(shared_anime_ids) < min_shared_works:
                 continue
-            years = []
-            for aid in shared_anime_ids:
-                anime = anime_map.get(aid)
-                if anime and anime.year:
-                    years.append(anime.year)
+            # O(1) lookup per anime instead of O(n) scan (PERF-2 optimization)
+            years = [anime_years[aid] for aid in shared_anime_ids if aid in anime_years]
             mentor_mentees[mentee_id] = {
                 "shared_works": shared_anime_ids,
                 "shared_count": len(shared_anime_ids),
@@ -120,6 +122,14 @@ def compute_influence_tree(
             "avg_nurture_rate": float,
         }
     """
+    # Pre-compute highest career stage for each person (PERF-2 optimization)
+    # This eliminates O(mentees × all_credits) complexity
+    person_highest_stage: dict[str, int] = {}
+    for c in credits:
+        stage = CAREER_STAGE.get(c.role, 0)
+        if stage > person_highest_stage.get(c.person_id, 0):
+            person_highest_stage[c.person_id] = stage
+
     mentor_pairs = _find_mentor_mentee_pairs(credits, anime_map, min_shared_works)
 
     if not mentor_pairs:
@@ -141,7 +151,8 @@ def compute_influence_tree(
 
         for mentee_id, info in mentees.items():
             all_mentees.add(mentee_id)
-            highest = _get_highest_stage(mentee_id, credits)
+            # O(1) lookup instead of O(n) scan (PERF-2 optimization)
+            highest = person_highest_stage.get(mentee_id, 0)
             reached_director = highest >= 5  # chief AD or above
             if reached_director:
                 director_count += 1

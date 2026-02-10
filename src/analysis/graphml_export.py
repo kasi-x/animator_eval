@@ -20,6 +20,8 @@ def export_graphml(
     person_scores: dict[str, dict] | None = None,
     output_path: Path | None = None,
     collaboration_graph: nx.Graph | None = None,
+    prettyprint: bool = True,
+    round_decimals: int = 2,
 ) -> Path:
     """コラボレーショングラフをGraphML形式でエクスポートする.
 
@@ -29,6 +31,8 @@ def export_graphml(
         person_scores: {person_id: {authority, trust, skill, composite, ...}}
         output_path: 出力パス (None の場合はデフォルト)
         collaboration_graph: 既存のコラボレーショングラフ (再利用で高速化)
+        prettyprint: XMLを整形するか (False で高速化、デフォルト True)
+        round_decimals: float属性の丸め桁数 (デフォルト 2)
 
     Returns:
         出力ファイルパス
@@ -54,7 +58,7 @@ def export_graphml(
             ps = person_scores[p.id]
             for key in ("authority", "trust", "skill", "composite"):
                 if key in ps:
-                    attrs[key] = float(ps[key])
+                    attrs[key] = round(float(ps[key]), round_decimals)
             if "primary_role" in ps:
                 attrs["category"] = str(ps["primary_role"])
         g.add_node(p.id, **attrs)
@@ -85,7 +89,7 @@ def export_graphml(
             for (a, b), cnt in edge_counts.items()
         )
 
-    nx.write_graphml(g, str(output_path))
+    nx.write_graphml_lxml(g, str(output_path), prettyprint=prettyprint)
 
     logger.info(
         "graphml_exported",
