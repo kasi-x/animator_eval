@@ -49,11 +49,11 @@ async def retry_async(
             last_error = e
             wait = e.retry_after
             log.warning(
-                "rate_limited_retry",
+                "rate_limited",
                 source=source,
                 attempt=attempt,
                 max_attempts=max_attempts,
-                retry_after=wait,
+                retry_after_seconds=wait,
             )
             await asyncio.sleep(wait)
         except ScraperError as e:
@@ -62,13 +62,13 @@ async def retry_async(
                 break
             wait = base_delay * (2 ** (attempt - 1))
             log.warning(
-                "scraper_retry",
+                "retry_attempt",
                 source=source,
                 attempt=attempt,
                 max_attempts=max_attempts,
-                wait=wait,
+                wait_seconds=wait,
                 error_type=type(e).__name__,
-                error=str(e),
+                error_message=str(e),
             )
             await asyncio.sleep(wait)
 
