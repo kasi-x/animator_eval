@@ -18,13 +18,14 @@ logger = structlog.get_logger()
 DISCLAIMER = (
     "本スコアはクレジットデータに基づくネットワーク位置・密度の定量指標であり、"
     "個人の能力や技量を評価するものではありません。"
-    "制作スタジオのキャスティング最適化を目的として算出されています。"
+    "個人の貢献を可視化し、適正な報酬と業界の健全化に資することを目的としています。"
 )
 
 DISCLAIMER_EN = (
     "These scores are quantitative indicators of network position and density "
     "based on credit data. They do NOT evaluate individual ability or skill. "
-    "Computed for the purpose of casting optimization for production studios."
+    "They aim to make individual contributions visible, supporting fair "
+    "compensation and a healthier anime industry."
 )
 
 

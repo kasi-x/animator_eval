@@ -1107,7 +1107,7 @@ def main(
                 SpinnerColumn(style="cyan"),
                 TextColumn("[bold cyan]{task.description}"),
                 BarColumn(bar_width=40),
-                MofNCompleteColumn(style="bright_blue"),
+                MofNCompleteColumn(),
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                 console=console
             ) as progress:
@@ -1278,19 +1278,22 @@ def main(
             batch_persons = []
             batch_credits = []
             batch_va_count = 0
+            total_persons_fetched = 0
+            total_credits_fetched = 0
 
             with Progress(
                 SpinnerColumn(style="green"),
                 TextColumn("[bold green]{task.description}"),
                 BarColumn(bar_width=50, complete_style="bright_green", finished_style="bold bright_green"),
-                MofNCompleteColumn(style="bright_blue"),
+                MofNCompleteColumn(),
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                 TimeElapsedColumn(),
                 TimeRemainingColumn(),
                 console=console,
                 expand=False
             ) as progress:
-                staff_task = progress.add_task("[green]📥 スタッフ情報取得中...", total=len(anime_ids))
+                staff_task = progress.add_task("[green]📥 アニメ処理中...", total=len(anime_ids))
+                person_task = progress.add_task("[blue]👥 スタッフ取得中...", total=None)  # Indeterminate for people count
 
                 for i, (anime, anilist_id, anime_id) in enumerate(anime_ids, start=start_index):
                     # Update progress with current anime title
@@ -1310,11 +1313,23 @@ def main(
                     batch_va_count += va_count
                     totals["skipped"] += skipped
 
+                    # Update person tracking
+                    total_persons_fetched += len(persons)
+                    total_credits_fetched += len(credits)
+
                     if had_error:
                         totals["errors"] += 1
 
                     fetched_ids.add(anime_id)
                     progress.update(staff_task, advance=1)
+
+                    # Update person task with detailed info
+                    person_desc = (
+                        f"[blue]👥 スタッフ: {total_persons_fetched:,} | "
+                        f"🎤 声優: {batch_va_count:,} | "
+                        f"📝 クレジット: {total_credits_fetched:,}"
+                    )
+                    progress.update(person_task, description=person_desc)
 
                     # Checkpoint save every N anime
                     if (i + 1) % checkpoint_interval == 0 or (i + 1) == len(anime_ids):

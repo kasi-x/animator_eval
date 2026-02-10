@@ -7,8 +7,8 @@ version = "0.1.0"
 
 [tasks]
 # データ収集（少量テスト用）
-scrape-mal = "python -m src.scrapers.mal_scraper --count 50"
-scrape-anilist = "python -m src.scrapers.anilist_scraper --count 50"
+scrape-mal = "python -m src.scrapers.mal_scraper --count 3"
+scrape-anilist = "python -m src.scrapers.anilist_scraper --count 3"
 scrape-mediaarts = "python -m src.scrapers.mediaarts_scraper --max-records 1000"
 scrape-jvmg = "python -m src.scrapers.jvmg_fetcher"
 

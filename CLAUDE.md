@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Animetor Eval** is a service that evaluates anime industry professionals (animators, directors, etc.) by analyzing credit data from publicly released works. It models the industry as a trust network and produces quantitative scores based on collaboration patterns, not subjective opinion.
 
-The core principle: credit data is the objective source of truth. Scores reflect network position and collaboration density, never subjective "ability" judgments.
+The goal: make individual contributions visible so that studios pay fair compensation, contributing to a healthier anime industry. Scores reflect network position and collaboration density, never subjective "ability" judgments.
 
 ## Architecture
 
@@ -107,7 +107,7 @@ animetor_eval/
 These are hard requirements, not suggestions:
 
 - **Never frame low scores as "lack of ability"** — scores represent network density and position only
-- **Public benefit framing**: The service's stated purpose is "casting optimization for production studios" (公益目的)
+- **Public benefit framing**: The service aims to make individual contributions visible, supporting fair compensation and industry health (公益目的)
 - **Data source restriction**: Only publicly available credit data from released works
 - **Entity resolution accuracy**: Name matching errors can constitute defamation (信用毀損) under Japanese law — treat this as a blocking quality gate
 - **Disclaimers**: All reports include JA + EN disclaimers

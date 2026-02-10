@@ -59,7 +59,7 @@ logger = structlog.get_logger()
 
 app = FastAPI(
     title="Animetor Eval API",
-    description="アニメ業界人物評価 API — ネットワーク密度・位置指標に基づくスコアリング",
+    description="アニメ業界人物評価 API — 個人の貢献を可視化し、適正な報酬と業界の健全化を支援する",
     version="0.1.0",
 )
 
