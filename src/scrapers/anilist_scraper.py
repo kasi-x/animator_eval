@@ -87,10 +87,10 @@ query ($id: Int, $staffPage: Int, $staffPerPage: Int, $charPage: Int, $charPerPa
 """
 
 TOP_ANIME_QUERY = """
-query ($page: Int, $perPage: Int) {
+query ($page: Int, $perPage: Int, $sort: [MediaSort]) {
   Page(page: $page, perPage: $perPage) {
     pageInfo { hasNextPage total }
-    media(type: ANIME, sort: POPULARITY_DESC) {
+    media(type: ANIME, sort: $sort) {
       id
       title { romaji english native }
       seasonYear
@@ -224,8 +224,10 @@ class AniListClient:
             url=ANILIST_URL,
         )
 
-    async def get_top_anime(self, page: int = 1, per_page: int = 50) -> dict:
-        return await self.query(TOP_ANIME_QUERY, {"page": page, "perPage": per_page})
+    async def get_top_anime(self, page: int = 1, per_page: int = 50, sort: list = None) -> dict:
+        if sort is None:
+            sort = ["POPULARITY_DESC"]  # Default: popular first
+        return await self.query(TOP_ANIME_QUERY, {"page": page, "perPage": per_page, "sort": sort})
 
     async def get_anime_staff(
         self, anilist_id: int, staff_page: int = 1, staff_per_page: int = 25,
@@ -1026,7 +1028,7 @@ def main(
                     log.warning("prev_cache_load_failed", error=str(e))
                     console.print(Rule("[bold cyan]フェーズ1: アニメリスト取得[/bold cyan]", style="cyan"))
             else:
-                console.print(Rule("[bold cyan]フェーズ1: アニメリスト取得[/bold cyan]", style="cyan"))
+                console.print(Rule("[bold cyan]フェーズ1: アニメリスト取得（古い順）[/bold cyan]", style="cyan"))
 
             console.print()
 
@@ -1041,6 +1043,9 @@ def main(
                     anime_id = item["anime"]["id"]
                     prev_anime_status[anime_id] = item.get("status")
 
+            # Determine sort order: old first for initial collection, popular for updates
+            sort_order = ["START_DATE_ASC"] if not update else ["POPULARITY_DESC"]
+
             with Progress(
                 SpinnerColumn(style="cyan"),
                 TextColumn("[bold cyan]{task.description}"),
@@ -1052,7 +1057,7 @@ def main(
                 list_task = progress.add_task("📋 アニメリスト取得中...", total=pages_needed)
 
                 for page in range(1, pages_needed + 1):
-                    resp = await client.get_top_anime(page=page, per_page=50)
+                    resp = await client.get_top_anime(page=page, per_page=50, sort=sort_order)
                     page_data = resp.get("Page", {})
 
                     for raw in page_data.get("media", []):
