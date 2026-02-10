@@ -1532,6 +1532,7 @@ def main(
                 expand=False
             ) as progress:
                 phase2b_task = progress.add_task("[magenta]👤 個人情報詳細取得中...", total=len(all_person_ids_to_fetch))
+                api_wait_task = progress.add_task("[red]⏳ API待機中...", visible=False)
 
                 for idx, person_id in enumerate(all_person_ids_to_fetch, 1):
                     # Skip if already in DB
@@ -1539,6 +1540,20 @@ def main(
                         totals["skipped"] += 1
                         progress.update(phase2b_task, advance=1)
                         continue
+
+                    # Show rate limit waiting state if applicable
+                    import time as time_mod
+                    if client.requests_remaining is not None and client.requests_remaining <= 0:
+                        if client.rate_limit_reset_at is not None:
+                            now = time_mod.time()
+                            reset_at = client.rate_limit_reset_at
+                            if reset_at > now:
+                                # Show waiting display with countdown
+                                while reset_at > time_mod.time():
+                                    remaining_secs = int(reset_at - time_mod.time())
+                                    progress.update(api_wait_task, visible=True, description=f"[bold red]⏳ 待ち中(あと{remaining_secs}秒)[/bold red]")
+                                    await asyncio.sleep(0.5)  # Update display every 0.5s
+                                progress.update(api_wait_task, visible=False)
 
                     try:
                         resp = await client.get_person_details(person_id)
@@ -1557,6 +1572,8 @@ def main(
                     except Exception as e:
                         log.warning("person_details_fetch_failed", person_id=person_id, error=str(e))
 
+                    # Hide wait task and show progress
+                    progress.update(api_wait_task, visible=False)
                     progress.update(phase2b_task, description=f"[magenta]👤 {idx}/{len(all_person_ids_to_fetch)}")
                     progress.update(phase2b_task, advance=1)
 
