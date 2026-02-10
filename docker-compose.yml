@@ -1,0 +1,66 @@
+# Docker Compose configuration for Animetor Eval services
+# Usage: docker-compose up -d
+
+version: '3.8'
+
+services:
+  # Neo4j Graph Database
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: animetor_neo4j
+    ports:
+      - "7474:7474"  # HTTP (Browser UI)
+      - "7687:7687"  # Bolt (Python driver)
+    environment:
+      # Authentication (change password in production!)
+      NEO4J_AUTH: neo4j/animetor_dev
+
+      # Plugins (optional but recommended)
+      NEO4J_PLUGINS: '["apoc", "graph-data-science"]'
+
+      # Memory configuration (adjust based on your system)
+      NEO4J_dbms_memory_pagecache_size: 2G
+      NEO4J_dbms_memory_heap_max__size: 2G
+      NEO4J_dbms_memory_heap_initial__size: 512M
+
+      # Performance tuning
+      NEO4J_dbms_default__database: neo4j
+      NEO4J_dbms_directories_import: /var/lib/neo4j/import
+
+      # Accept license (for GDS plugin)
+      NEO4J_ACCEPT_LICENSE_AGREEMENT: "yes"
+    volumes:
+      # Persistent data storage
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+
+      # CSV import directory (for bulk imports)
+      - ./result/neo4j:/var/lib/neo4j/import
+
+    # Health check
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p animetor_dev 'RETURN 1'"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    # Restart policy
+    restart: unless-stopped
+
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+        reservations:
+          memory: 2G
+
+volumes:
+  neo4j_data:
+    driver: local
+  neo4j_logs:
+    driver: local
+
+networks:
+  default:
+    name: animetor_network
