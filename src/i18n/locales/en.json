@@ -6,11 +6,24 @@
   "cli": {
     "stats": {
       "title": "Database Statistics",
-      "total_persons": "Total Persons",
-      "total_anime": "Total Anime",
-      "total_credits": "Total Credits",
+      "entity": "Entity",
+      "count": "Count",
+      "total_persons": "Persons",
+      "total_anime": "Anime",
+      "total_credits": "Credits",
+      "scores": "Scores",
       "unique_roles": "Unique Roles",
-      "date_range": "Date Range"
+      "date_range": "Date Range",
+      "credits_by_role": "Credits by Role",
+      "credits_by_source": "Credits by Source",
+      "anime_by_year": "Anime by Year (Top 10)",
+      "data_sources": "Data Sources",
+      "role": "Role",
+      "source": "Source",
+      "year": "Year",
+      "last_scraped": "Last Scraped",
+      "items": "Items",
+      "status": "Status"
     },
     "ranking": {
       "title": "Score Rankings",

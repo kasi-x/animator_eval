@@ -108,14 +108,32 @@ class TestStatsCommand:
     def test_stats_displays_tables(self, populated_db):
         result = runner.invoke(app, ["stats"])
         assert result.exit_code == 0
-        assert "Persons" in result.output
-        assert "Anime" in result.output
-        assert "Credits" in result.output
+        assert "Persons" in result.output or "人物" in result.output
+        assert "Anime" in result.output or "アニメ" in result.output
+        assert "Credits" in result.output or "クレジット" in result.output
 
     def test_stats_shows_counts(self, populated_db):
         result = runner.invoke(app, ["stats"])
         assert "3" in result.output  # 3 persons
         assert "2" in result.output  # 2 anime
+
+    def test_stats_lang_english(self, populated_db):
+        """Stats command with --lang en shows English text."""
+        result = runner.invoke(app, ["stats", "--lang", "en"])
+        assert result.exit_code == 0
+        assert "Database Statistics" in result.output
+        assert "Persons" in result.output
+        assert "Anime" in result.output
+        assert "Credits" in result.output
+
+    def test_stats_lang_japanese(self, populated_db):
+        """Stats command with --lang ja shows Japanese text."""
+        result = runner.invoke(app, ["stats", "--lang", "ja"])
+        assert result.exit_code == 0
+        assert "データベース統計" in result.output
+        assert "人物" in result.output
+        assert "アニメ" in result.output
+        assert "クレジット" in result.output
 
 
 class TestRankingCommand:

@@ -5,14 +5,32 @@ from rich.console import Console
 from rich.table import Table
 
 from src.log import setup_logging
+from src.i18n import set_language, t
 
 app = typer.Typer(name="animetor-eval", help="アニメ業界人材ネットワーク評価ツール")
 console = Console()
 
 
+def lang_callback(value: str) -> str:
+    """Set language for CLI output."""
+    if value:
+        set_language(value)
+    return value
+
+
+# Global language option (used before each command)
+lang_option = typer.Option(
+    None,
+    "--lang",
+    "-l",
+    help="Language for output (en/ja)",
+    callback=lang_callback,
+)
+
+
 @app.command()
-def stats() -> None:
-    """DB の統計情報を表示する."""
+def stats(lang: str = lang_option) -> None:
+    """DB の統計情報を表示する / Display database statistics."""
     setup_logging()
 
     from src.database import get_connection, get_data_sources, init_db
@@ -43,47 +61,48 @@ def stats() -> None:
     data_sources = get_data_sources(conn)
     conn.close()
 
-    console.print("\n[bold blue]Animetor Eval — DB Statistics[/bold blue]\n")
+    # Use i18n for output
+    console.print(f"\n[bold blue]{t('cli.stats.title')}[/bold blue]\n")
 
-    summary = Table(title="Summary")
-    summary.add_column("Entity", style="cyan")
-    summary.add_column("Count", justify="right", style="green")
-    summary.add_row("Persons", f"{n_persons:,}")
-    summary.add_row("Anime", f"{n_anime:,}")
-    summary.add_row("Credits", f"{n_credits:,}")
-    summary.add_row("Scores", f"{n_scores:,}")
+    summary = Table(title=t('cli.stats.title'))
+    summary.add_column(t('cli.stats.entity'), style="cyan")
+    summary.add_column(t('cli.stats.count'), justify="right", style="green")
+    summary.add_row(t('cli.stats.total_persons'), f"{n_persons:,}")
+    summary.add_row(t('cli.stats.total_anime'), f"{n_anime:,}")
+    summary.add_row(t('cli.stats.total_credits'), f"{n_credits:,}")
+    summary.add_row(t('cli.stats.scores'), f"{n_scores:,}")
     console.print(summary)
 
     if role_dist:
-        roles_table = Table(title="Credits by Role")
-        roles_table.add_column("Role", style="cyan")
-        roles_table.add_column("Count", justify="right", style="green")
+        roles_table = Table(title=t('cli.stats.credits_by_role'))
+        roles_table.add_column(t('cli.stats.role'), style="cyan")
+        roles_table.add_column(t('cli.stats.count'), justify="right", style="green")
         for row in role_dist:
             roles_table.add_row(row["role"], f"{row['cnt']:,}")
         console.print(roles_table)
 
     if source_dist:
-        src_table = Table(title="Credits by Source")
-        src_table.add_column("Source", style="cyan")
-        src_table.add_column("Count", justify="right", style="green")
+        src_table = Table(title=t('cli.stats.credits_by_source'))
+        src_table.add_column(t('cli.stats.source'), style="cyan")
+        src_table.add_column(t('cli.stats.count'), justify="right", style="green")
         for row in source_dist:
             src_table.add_row(row["source"] or "(empty)", f"{row['cnt']:,}")
         console.print(src_table)
 
     if year_dist:
-        year_table = Table(title="Anime by Year (Top 10)")
-        year_table.add_column("Year", style="cyan")
-        year_table.add_column("Count", justify="right", style="green")
+        year_table = Table(title=t('cli.stats.anime_by_year'))
+        year_table.add_column(t('cli.stats.year'), style="cyan")
+        year_table.add_column(t('cli.stats.count'), justify="right", style="green")
         for row in year_dist:
             year_table.add_row(str(row["year"]), f"{row['cnt']:,}")
         console.print(year_table)
 
     if data_sources:
-        ds_table = Table(title="Data Sources")
-        ds_table.add_column("Source", style="cyan")
-        ds_table.add_column("Last Scraped", style="dim")
-        ds_table.add_column("Items", justify="right", style="green")
-        ds_table.add_column("Status", style="yellow")
+        ds_table = Table(title=t('cli.stats.data_sources'))
+        ds_table.add_column(t('cli.stats.source'), style="cyan")
+        ds_table.add_column(t('cli.stats.last_scraped'), style="dim")
+        ds_table.add_column(t('cli.stats.items'), justify="right", style="green")
+        ds_table.add_column(t('cli.stats.status'), style="yellow")
         for ds in data_sources:
             ds_table.add_row(
                 ds["source"],

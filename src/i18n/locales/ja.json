@@ -6,11 +6,24 @@
   "cli": {
     "stats": {
       "title": "データベース統計",
-      "total_persons": "総人数",
-      "total_anime": "総アニメ数",
-      "total_credits": "総クレジット数",
+      "entity": "項目",
+      "count": "件数",
+      "total_persons": "人物",
+      "total_anime": "アニメ",
+      "total_credits": "クレジット",
+      "scores": "スコア",
       "unique_roles": "役職種類",
-      "date_range": "期間"
+      "date_range": "期間",
+      "credits_by_role": "役職別クレジット",
+      "credits_by_source": "ソース別クレジット",
+      "anime_by_year": "年度別アニメ（上位10件）",
+      "data_sources": "データソース",
+      "role": "役職",
+      "source": "ソース",
+      "year": "年",
+      "last_scraped": "最終取得",
+      "items": "件数",
+      "status": "ステータス"
     },
     "ranking": {
       "title": "スコアランキング",
