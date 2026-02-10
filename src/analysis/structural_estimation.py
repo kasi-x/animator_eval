@@ -191,6 +191,11 @@ def build_panel_data(
 
         person_year_data[(credit.person_id, anime.year)].append(credit)
 
+    # Pre-compute person → years index for O(1) lookup (PERF-3 optimization)
+    person_years_index: dict[str, list[int]] = defaultdict(list)
+    for person_id, year in person_year_data.keys():
+        person_years_index[person_id].append(year)
+
     # Build panel observations
     panel_obs = []
 
@@ -219,12 +224,8 @@ def build_panel_data(
                 studio_counts[s] += 1
             studio_id = max(studio_counts.items(), key=lambda x: x[1])[0]
 
-        # Experience years (approximate from data)
-        all_person_years = [
-            yr
-            for (pid, yr), _ in person_year_data.items()
-            if pid == person_id
-        ]
+        # Experience years - O(1) lookup instead of O(n) scan (PERF-3 optimization)
+        all_person_years = person_years_index.get(person_id, [year])
         debut_year = min(all_person_years) if all_person_years else year
         experience_years = year - debut_year
 
@@ -676,6 +677,13 @@ def estimate_event_study(
                 "potential": sum(o.potential_score for o in person_obs) / len(person_obs),
             }
 
+    # Pre-compute person observation counts for O(1) lookup (PERF-3 optimization)
+    from collections import Counter
+    person_obs_count = Counter(obs.person_id for obs, _ in observations_with_reltime)
+    person_k_count = Counter(
+        (obs.person_id, rel_t) for obs, rel_t in observations_with_reltime
+    )
+
     # Step 4: Estimate coefficient for each relative time k
     results = {}
 
@@ -690,12 +698,11 @@ def estimate_event_study(
             # Demean outcome
             y_demeaned.append(obs.skill_score - person_mean["skill"])
 
-            # Demean covariates
+            # Demean covariates - O(1) lookup instead of O(n²) scan (PERF-3 optimization)
             time_k_dummy = 1 if rel_t == k else 0
-            mean_time_k = sum(
-                1 for o, r in observations_with_reltime
-                if o.person_id == obs.person_id and r == k
-            ) / len([o for o, _ in observations_with_reltime if o.person_id == obs.person_id])
+            mean_time_k = person_k_count.get((obs.person_id, k), 0) / max(
+                person_obs_count.get(obs.person_id, 1), 1
+            )
 
             x_demeaned.append([
                 time_k_dummy - mean_time_k,
