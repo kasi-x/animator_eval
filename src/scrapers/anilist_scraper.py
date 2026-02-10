@@ -984,7 +984,7 @@ def main(
             console.print()
 
         async def fetch_anime_list_from_api(client, count, fetched_ids, use_cache=True, anime_list_cache_file=None):
-            """Fetch anime list from API with optional caching."""
+            """Fetch anime list from API with optional caching and smart updates."""
             # Try to load from cache if not updating
             if use_cache and not update and anime_list_cache_file and anime_list_cache_file.exists():
                 try:
@@ -1014,12 +1014,32 @@ def main(
 
             # Fetch from API
             console.print()
-            console.print(Rule("[bold cyan]フェーズ1: アニメリスト取得[/bold cyan]", style="cyan"))
+
+            # Load previous cache if updating (for smart filtering)
+            prev_cache = {}
+            if update and anime_list_cache_file and anime_list_cache_file.exists():
+                try:
+                    with open(anime_list_cache_file) as f:
+                        prev_cache = json.load(f)
+                    console.print(Rule("[bold cyan]フェーズ1: アニメリスト更新（放映中・新規のみ）[/bold cyan]", style="cyan"))
+                except Exception as e:
+                    log.warning("prev_cache_load_failed", error=str(e))
+                    console.print(Rule("[bold cyan]フェーズ1: アニメリスト取得[/bold cyan]", style="cyan"))
+            else:
+                console.print(Rule("[bold cyan]フェーズ1: アニメリスト取得[/bold cyan]", style="cyan"))
+
             console.print()
 
             pages_needed = (count + 49) // 50
             anime_ids = []
             all_anime_for_cache = []
+
+            # Build lookup for previous anime status
+            prev_anime_status = {}
+            if prev_cache:
+                for item in prev_cache.get("anime_list", []):
+                    anime_id = item["anime"]["id"]
+                    prev_anime_status[anime_id] = item.get("status")
 
             with Progress(
                 SpinnerColumn(style="cyan"),
@@ -1036,31 +1056,58 @@ def main(
                     page_data = resp.get("Page", {})
 
                     for raw in page_data.get("media", []):
-                        if len(anime_ids) >= count:
+                        if len(all_anime_for_cache) >= count:
                             break
                         anime = parse_anilist_anime(raw)
-                        # Store for caching
+                        current_status = raw.get("status")
+
+                        # Store for caching (all anime)
                         all_anime_for_cache.append({
                             "anime": anime.model_dump(),
-                            "status": raw.get("status"),  # FINISHED, CURRENTLY_AIRING, NOT_YET_AIRED
+                            "status": current_status,
                             "fetched_at": time_module.time()
                         })
-                        if anime.id not in fetched_ids:
-                            anime_ids.append((anime, anime.anilist_id, anime.id))
+
+                        # Smart filtering for --update mode
+                        if update and prev_cache:
+                            prev_status = prev_anime_status.get(anime.id)
+
+                            # Include if: new anime OR (was/is airing)
+                            is_new = anime.id not in prev_anime_status
+                            was_airing = prev_status in ("CURRENTLY_AIRING", None)
+                            is_airing = current_status == "CURRENTLY_AIRING"
+
+                            if is_new or was_airing or is_airing:
+                                if anime.id not in fetched_ids:
+                                    anime_ids.append((anime, anime.anilist_id, anime.id))
+                        else:
+                            # Normal mode: include all
+                            if anime.id not in fetched_ids:
+                                anime_ids.append((anime, anime.anilist_id, anime.id))
 
                     progress.update(list_task, advance=1)
+
+            # Display update mode info
+            if update and prev_cache and len(all_anime_for_cache) > 0:
+                total_checked = len(all_anime_for_cache)
+                console.print()
+                update_info = Table(show_header=False, box=None, padding=(0, 2))
+                update_info.add_row("[cyan]チェック対象[/cyan]", f"[dim]{total_checked}件[/dim]")
+                update_info.add_row("[cyan]処理対象（放映中・新規）[/cyan]", f"[bold yellow]{len(anime_ids)}件[/bold yellow]")
+                console.print(Panel(update_info, border_style="cyan", padding=(1, 2)))
+                console.print()
 
             # Save to cache
             if anime_list_cache_file:
                 try:
                     cache_data = {
-                        "count": len(anime_ids),
+                        "count": len(all_anime_for_cache),
                         "fetched_at": time_module.time(),
                         "anime_list": all_anime_for_cache
                     }
                     with open(anime_list_cache_file, "w") as f:
                         json.dump(cache_data, f, indent=2, default=str)
-                    log.info("anime_list_cached", count=len(anime_ids), file=str(anime_list_cache_file))
+                    log.info("anime_list_cached", count=len(all_anime_for_cache), file=str(anime_list_cache_file))
                 except Exception as e:
                     log.warning("cache_save_failed", error=str(e))
 

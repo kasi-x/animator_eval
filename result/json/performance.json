@@ -154,19 +154,19 @@
       "min": 0.0,
       "max": 0.0
     },
-    "outlier_detection": {
+    "collaboration_strength": {
       "count": 1,
       "total": 0.0,
       "avg": 0.0,
       "min": 0.0,
       "max": 0.0
     },
-    "collaboration_strength": {
+    "outlier_detection": {
       "count": 1,
-      "total": 0.001,
-      "avg": 0.001,
-      "min": 0.001,
-      "max": 0.001
+      "total": 0.0,
+      "avg": 0.0,
+      "min": 0.0,
+      "max": 0.0
     },
     "team_composition": {
       "count": 1,
@@ -217,6 +217,13 @@
       "min": 0.001,
       "max": 0.001
     },
+    "graphml_export": {
+      "count": 1,
+      "total": 0.003,
+      "avg": 0.003,
+      "min": 0.003,
+      "max": 0.003
+    },
     "milestones": {
       "count": 1,
       "total": 0.001,
@@ -230,13 +237,6 @@
       "avg": 0.001,
       "min": 0.001,
       "max": 0.001
-    },
-    "graphml_export": {
-      "count": 1,
-      "total": 0.003,
-      "avg": 0.003,
-      "min": 0.003,
-      "max": 0.003
     },
     "genre_affinity": {
       "count": 1,
@@ -261,53 +261,53 @@
     },
     "compensation_analysis": {
       "count": 1,
-      "total": 0.003,
-      "avg": 0.003,
-      "min": 0.003,
-      "max": 0.003
+      "total": 0.004,
+      "avg": 0.004,
+      "min": 0.004,
+      "max": 0.004
     },
     "causal_identification": {
       "count": 1,
-      "total": 0.003,
-      "avg": 0.003,
-      "min": 0.003,
-      "max": 0.003
+      "total": 0.004,
+      "avg": 0.004,
+      "min": 0.004,
+      "max": 0.004
     },
     "bias_detection": {
       "count": 1,
-      "total": 0.003,
-      "avg": 0.003,
-      "min": 0.003,
-      "max": 0.003
+      "total": 0.004,
+      "avg": 0.004,
+      "min": 0.004,
+      "max": 0.004
     },
     "insights_generation": {
       "count": 1,
-      "total": 0.003,
-      "avg": 0.003,
-      "min": 0.003,
-      "max": 0.003
+      "total": 0.004,
+      "avg": 0.004,
+      "min": 0.004,
+      "max": 0.004
     },
     "structural_estimation": {
       "count": 1,
-      "total": 0.003,
-      "avg": 0.003,
-      "min": 0.003,
-      "max": 0.003
+      "total": 0.004,
+      "avg": 0.004,
+      "min": 0.004,
+      "max": 0.004
     },
     "cross_validation": {
       "count": 1,
-      "total": 0.008,
-      "avg": 0.008,
-      "min": 0.008,
-      "max": 0.008
+      "total": 0.009,
+      "avg": 0.009,
+      "min": 0.009,
+      "max": 0.009
     }
   },
   "memory_snapshots": {
-    "pipeline_start": 320.4,
-    "after_data_load": 320.5,
-    "after_graph_build": 320.5,
-    "after_scoring": 320.5,
-    "after_centrality": 320.5
+    "pipeline_start": 314.4,
+    "after_data_load": 314.5,
+    "after_graph_build": 314.5,
+    "after_scoring": 314.5,
+    "after_centrality": 314.5
   },
   "counters": {
     "persons_loaded": 4,
