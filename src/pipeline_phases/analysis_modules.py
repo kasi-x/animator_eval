@@ -16,6 +16,7 @@ from src.analysis.bias_detector import detect_systematic_biases, generate_bias_r
 from src.analysis.bridges import detect_bridges
 from src.analysis.causal_studio_identification import identify_studio_effects, export_identification_report
 from src.analysis.structural_estimation import estimate_structural_model, export_structural_estimation
+from src.analysis.structural_estimation_html import generate_html_report
 from src.analysis.collaboration_strength import compute_collaboration_strength
 from src.analysis.compensation_analyzer import batch_analyze_compensation, export_compensation_report
 from src.analysis.insights_report import generate_comprehensive_insights, export_insights_report
@@ -366,7 +367,14 @@ def _run_structural_estimation(context: PipelineContext) -> Any:
         potential_value_scores=context.potential_value_scores,
     )
 
-    # Export report
+    # Generate HTML report
+    from src.utils.config import HTML_DIR
+    HTML_DIR.mkdir(parents=True, exist_ok=True)
+    html_path = HTML_DIR / "structural_estimation_report.html"
+    generate_html_report(result, html_path)
+    logger.info("structural_estimation_html_generated", path=str(html_path))
+
+    # Export JSON report
     return export_structural_estimation(result)
 
 

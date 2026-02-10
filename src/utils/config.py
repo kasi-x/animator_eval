@@ -15,6 +15,7 @@ PROCESSED_DIR = DATA_DIR / "processed"
 RESULT_DIR = ROOT_DIR / "result"
 DB_DIR = RESULT_DIR / "db"
 JSON_DIR = RESULT_DIR / "json"
+HTML_DIR = RESULT_DIR / "html"
 NOTEBOOKS_DIR = RESULT_DIR / "notebooks"
 
 # PageRank パラメータ
