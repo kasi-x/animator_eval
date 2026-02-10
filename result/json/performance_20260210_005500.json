@@ -30,10 +30,10 @@
     },
     "authority_pagerank": {
       "count": 1,
-      "total": 0.001,
-      "avg": 0.001,
-      "min": 0.001,
-      "max": 0.001
+      "total": 0.002,
+      "avg": 0.002,
+      "min": 0.002,
+      "max": 0.002
     },
     "trust_scores": {
       "count": 1,
@@ -93,10 +93,10 @@
     },
     "centrality_metrics": {
       "count": 1,
-      "total": 0.0,
-      "avg": 0.0,
-      "min": 0.0,
-      "max": 0.0
+      "total": 0.001,
+      "avg": 0.001,
+      "min": 0.001,
+      "max": 0.001
     },
     "network_density": {
       "count": 1,
@@ -106,41 +106,6 @@
       "max": 0.0
     },
     "growth_trends": {
-      "count": 1,
-      "total": 0.0,
-      "avg": 0.0,
-      "min": 0.0,
-      "max": 0.0
-    },
-    "studio_bias_correction": {
-      "count": 1,
-      "total": 0.0,
-      "avg": 0.0,
-      "min": 0.0,
-      "max": 0.0
-    },
-    "growth_acceleration": {
-      "count": 1,
-      "total": 0.0,
-      "avg": 0.0,
-      "min": 0.0,
-      "max": 0.0
-    },
-    "anime_value_assessment": {
-      "count": 1,
-      "total": 0.0,
-      "avg": 0.0,
-      "min": 0.0,
-      "max": 0.0
-    },
-    "contribution_attribution": {
-      "count": 1,
-      "total": 0.0,
-      "avg": 0.0,
-      "min": 0.0,
-      "max": 0.0
-    },
-    "potential_value_scoring": {
       "count": 1,
       "total": 0.0,
       "avg": 0.0,
@@ -177,10 +142,10 @@
     },
     "time_series": {
       "count": 1,
-      "total": 0.0,
-      "avg": 0.0,
-      "min": 0.0,
-      "max": 0.0
+      "total": 0.001,
+      "avg": 0.001,
+      "min": 0.001,
+      "max": 0.001
     },
     "decade_analysis": {
       "count": 1,
@@ -195,13 +160,6 @@
       "avg": 0.001,
       "min": 0.001,
       "max": 0.001
-    },
-    "graphml_export": {
-      "count": 1,
-      "total": 0.002,
-      "avg": 0.002,
-      "min": 0.002,
-      "max": 0.002
     },
     "role_flow": {
       "count": 1,
@@ -223,6 +181,13 @@
       "avg": 0.001,
       "min": 0.001,
       "max": 0.001
+    },
+    "graphml_export": {
+      "count": 1,
+      "total": 0.003,
+      "avg": 0.003,
+      "min": 0.003,
+      "max": 0.003
     },
     "milestones": {
       "count": 1,
@@ -254,53 +219,25 @@
     },
     "influence_tree": {
       "count": 1,
-      "total": 0.001,
-      "avg": 0.001,
-      "min": 0.001,
-      "max": 0.001
-    },
-    "compensation_analysis": {
-      "count": 1,
-      "total": 0.003,
-      "avg": 0.003,
-      "min": 0.003,
-      "max": 0.003
-    },
-    "causal_identification": {
-      "count": 1,
-      "total": 0.003,
-      "avg": 0.003,
-      "min": 0.003,
-      "max": 0.003
-    },
-    "bias_detection": {
-      "count": 1,
-      "total": 0.003,
-      "avg": 0.003,
-      "min": 0.003,
-      "max": 0.003
-    },
-    "insights_generation": {
-      "count": 1,
-      "total": 0.003,
-      "avg": 0.003,
-      "min": 0.003,
-      "max": 0.003
+      "total": 0.0,
+      "avg": 0.0,
+      "min": 0.0,
+      "max": 0.0
     },
     "cross_validation": {
       "count": 1,
-      "total": 0.007,
-      "avg": 0.007,
-      "min": 0.007,
-      "max": 0.007
+      "total": 0.009,
+      "avg": 0.009,
+      "min": 0.009,
+      "max": 0.009
     }
   },
   "memory_snapshots": {
-    "pipeline_start": 277.6,
-    "after_data_load": 277.6,
-    "after_graph_build": 277.6,
-    "after_scoring": 277.6,
-    "after_centrality": 277.6
+    "pipeline_start": 258.5,
+    "after_data_load": 258.6,
+    "after_graph_build": 258.6,
+    "after_scoring": 258.6,
+    "after_centrality": 258.6
   },
   "counters": {
     "persons_loaded": 4,

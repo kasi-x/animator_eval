@@ -1,7 +1,7 @@
 """Phase 10: Export and Visualization — declarative registry-based exports.
 
 This module implements a declarative export system using ExportSpec objects.
-All 26 JSON exports are defined in a single registry for easy maintenance.
+All 27 JSON exports are defined in a single registry for easy maintenance.
 """
 
 from dataclasses import asdict, dataclass
@@ -413,6 +413,20 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_metrics=lambda data: {
             "recommendations": len(data.get("recommendations", [])),
             "findings": len(data.get("key_findings", [])),
+        }
+        if data
+        else {},
+    ),
+
+    # Causal studio identification (selection vs treatment vs brand)
+    ExportSpec(
+        filename="causal_identification.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("causal_identification"),
+        log_message="causal_identification_saved",
+        log_metrics=lambda data: {
+            "trajectories": data.get("sample_statistics", {}).get("total_trajectories", 0),
+            "transitions": data.get("sample_statistics", {}).get("total_transitions", 0),
+            "dominant_effect": data.get("conclusion", {}).get("dominant_effect", "unknown"),
         }
         if data
         else {},

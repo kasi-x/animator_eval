@@ -1,0 +1,59 @@
+{
+  "major_studios": {
+    "studio_ids": [],
+    "studio_names": {},
+    "count": 0
+  },
+  "sample_statistics": {
+    "total_trajectories": 0,
+    "total_transitions": 0,
+    "major_to_minor_transitions": 0,
+    "minor_to_major_transitions": 0
+  },
+  "causal_estimates": {
+    "selection_effect": {
+      "estimate": 0,
+      "std_error": 0,
+      "confidence_interval": [
+        0,
+        0
+      ],
+      "p_value": 1.0,
+      "sample_size": 0,
+      "interpretation": "Pre-major studio trend: 0.00 points/period. Not significant evidence of positive selection."
+    },
+    "treatment_effect": {
+      "estimate": 0,
+      "std_error": 0,
+      "confidence_interval": [
+        0,
+        0
+      ],
+      "p_value": 1.0,
+      "sample_size": 0,
+      "interpretation": "Treatment effect: 0.00 points (trend-adjusted). Not significant evidence of training effect."
+    },
+    "brand_effect": {
+      "estimate": 0,
+      "std_error": 0,
+      "confidence_interval": [
+        0,
+        0
+      ],
+      "p_value": 1.0,
+      "sample_size": 0,
+      "interpretation": "Brand effect: 0.00 authority points lost when leaving major studio. Not significant evidence of network effect."
+    }
+  },
+  "aggregate_metrics": {
+    "avg_pre_to_major_skill_change": 0,
+    "avg_major_to_post_skill_change": 0
+  },
+  "conclusion": {
+    "dominant_effect": "inconclusive",
+    "confidence_level": "low",
+    "summary": "分析対象: 0人のキャリア軌跡、0件のスタジオ移籍\n\n【選択効果】Pre-major studio trend: 0.00 points/period. Not significant evidence of positive selection.\n【処置効果】Treatment effect: 0.00 points (trend-adjusted). Not significant evidence of training effect.\n【ブランド効果】Brand effect: 0.00 authority points lost when leaving major studio. Not significant evidence of network effect.\n\n結論: INCONCLUSIVEが支配的（信頼度: low）"
+  },
+  "top_trajectories": [],
+  "top_transitions": []
+}

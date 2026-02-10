@@ -30,7 +30,7 @@
     ],
     "top_role_pairs": [
       {
-        "pair": "director+animation_director",
+        "pair": "animation_director+director",
         "count": 2
       }
     ],

@@ -1,0 +1,132 @@
+{
+  "total_anime": 3,
+  "summary": {
+    "avg_gini_coefficient": -0.295,
+    "avg_shapley_correlation": 0.995
+  },
+  "anime_type_distribution": {
+    "movie": 3
+  },
+  "analyses": [
+    {
+      "anime_id": "a1",
+      "anime_title": "すごいアニメ",
+      "anime_type": "movie",
+      "total_budget": 100.0,
+      "staff_count": 3,
+      "fairness": {
+        "gini_coefficient": -0.241,
+        "shapley_correlation": 0.998,
+        "min_compensation": 19.51,
+        "max_compensation": 55.7,
+        "compensation_ratio": 2.85
+      },
+      "allocations": [
+        {
+          "person_id": "p1",
+          "name": "監督A",
+          "role": "director",
+          "allocation": 55.69597562068657,
+          "shapley_value": 192.873,
+          "value_share": 47.28
+        },
+        {
+          "person_id": "p3",
+          "name": "アニメーターC",
+          "role": "animation_director",
+          "allocation": 24.793043392499015,
+          "shapley_value": 117.489,
+          "value_share": 28.8
+        },
+        {
+          "person_id": "p2",
+          "name": "アニメーターB",
+          "role": "key_animator",
+          "allocation": 19.51098098681442,
+          "shapley_value": 97.595,
+          "value_share": 23.92
+        }
+      ]
+    },
+    {
+      "anime_id": "a2",
+      "anime_title": "いいアニメ",
+      "anime_type": "movie",
+      "total_budget": 100.0,
+      "staff_count": 3,
+      "fairness": {
+        "gini_coefficient": -0.241,
+        "shapley_correlation": 0.998,
+        "min_compensation": 19.51,
+        "max_compensation": 55.7,
+        "compensation_ratio": 2.85
+      },
+      "allocations": [
+        {
+          "person_id": "p1",
+          "name": "監督A",
+          "role": "director",
+          "allocation": 55.69604419682304,
+          "shapley_value": 192.835,
+          "value_share": 47.28
+        },
+        {
+          "person_id": "p3",
+          "name": "アニメーターC",
+          "role": "animation_director",
+          "allocation": 24.793105110757555,
+          "shapley_value": 117.466,
+          "value_share": 28.8
+        },
+        {
+          "person_id": "p2",
+          "name": "アニメーターB",
+          "role": "key_animator",
+          "allocation": 19.510850692419414,
+          "shapley_value": 97.575,
+          "value_share": 23.92
+        }
+      ]
+    },
+    {
+      "anime_id": "a3",
+      "anime_title": "普通のアニメ",
+      "anime_type": "movie",
+      "total_budget": 100.0,
+      "staff_count": 3,
+      "fairness": {
+        "gini_coefficient": -0.403,
+        "shapley_correlation": 0.988,
+        "min_compensation": 7.78,
+        "max_compensation": 68.29,
+        "compensation_ratio": 8.77
+      },
+      "allocations": [
+        {
+          "person_id": "p1",
+          "name": "監督A",
+          "role": "director",
+          "allocation": 68.2933741216441,
+          "shapley_value": 197.795,
+          "value_share": 59.86
+        },
+        {
+          "person_id": "p2",
+          "name": "アニメーターB",
+          "role": "key_animator",
+          "allocation": 23.923868784379614,
+          "shapley_value": 100.085,
+          "value_share": 30.29
+        },
+        {
+          "person_id": "p4",
+          "name": "原画D",
+          "role": "key_animator",
+          "allocation": 7.782757093976279,
+          "shapley_value": 32.559,
+          "value_share": 9.85
+        }
+      ]
+    }
+  ]
+}

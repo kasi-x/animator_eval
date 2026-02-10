@@ -1,6 +1,6 @@
 """Phase 9: Analysis Modules — parallel execution for 4-6x speedup.
 
-This phase runs 18+ independent analysis modules in parallel using ThreadPoolExecutor.
+This phase runs 24 independent analysis modules in parallel using ThreadPoolExecutor.
 Each analysis reads from context and writes to context.analysis_results with thread-safe locking.
 """
 
@@ -14,6 +14,7 @@ import structlog
 from src.analysis.anime_stats import compute_anime_stats
 from src.analysis.bias_detector import detect_systematic_biases, generate_bias_report
 from src.analysis.bridges import detect_bridges
+from src.analysis.causal_studio_identification import identify_studio_effects, export_identification_report
 from src.analysis.collaboration_strength import compute_collaboration_strength
 from src.analysis.compensation_analyzer import batch_analyze_compensation, export_compensation_report
 from src.analysis.insights_report import generate_comprehensive_insights, export_insights_report
@@ -323,6 +324,22 @@ def _run_insights_report(context: PipelineContext) -> Any:
     return export_insights_report(insights)
 
 
+def _run_causal_identification(context: PipelineContext) -> Any:
+    """Causal identification of major studio effects (selection vs treatment vs brand)."""
+    # Build person_scores dict with all necessary fields
+    person_scores = {r["person_id"]: r for r in context.results}
+
+    # Run causal identification
+    result = identify_studio_effects(
+        credits=context.credits,
+        anime_map=context.anime_map,
+        person_scores=person_scores,
+    )
+
+    # Export report
+    return export_identification_report(result)
+
+
 # Registry of all analysis tasks (order-independent for parallel execution)
 ANALYSIS_TASKS: list[AnalysisTask] = [
     AnalysisTask("anime_stats", _run_anime_stats),
@@ -348,6 +365,7 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
     AnalysisTask("bias_report", _run_bias_detector, monitor_step="bias_detection"),
     AnalysisTask("fair_compensation", _run_compensation_analyzer, monitor_step="compensation_analysis"),
     AnalysisTask("insights_report", _run_insights_report, monitor_step="insights_generation"),
+    AnalysisTask("causal_identification", _run_causal_identification, monitor_step="causal_identification"),
 ]
 
 

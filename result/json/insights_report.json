@@ -1,0 +1,170 @@
+{
+  "pagerank_analysis": {
+    "top_percentile_share": 51.08,
+    "concentration_ratio": 0.384,
+    "avg_score": 48.94,
+    "median_score": 47.89,
+    "top_characteristics": {
+      "role_distribution": {
+        "unknown": 4
+      },
+      "avg_betweenness": 0.1667,
+      "score_range": {
+        "highest": 100.0,
+        "10th": 0
+      }
+    },
+    "network_structure": {
+      "avg_betweenness": 0.1667,
+      "max_betweenness": 0.3333
+    }
+  },
+  "bias_correction_analysis": {
+    "total_persons_affected": 4,
+    "avg_correction": -14.68,
+    "top_gainers": [
+      {
+        "person_id": "p4",
+        "name": "原画D",
+        "original": 0.0,
+        "debiased": 0.0,
+        "correction": 0.0
+      },
+      {
+        "person_id": "p3",
+        "name": "アニメーターC",
+        "original": 39.43,
+        "debiased": 27.6,
+        "correction": -11.83
+      },
+      {
+        "person_id": "p2",
+        "name": "アニメーターB",
+        "original": 56.34,
+        "debiased": 39.44,
+        "correction": -16.9
+      },
+      {
+        "person_id": "p1",
+        "name": "監督A",
+        "original": 100.0,
+        "debiased": 70.0,
+        "correction": -30.0
+      }
+    ],
+    "top_losers": [
+      {
+        "person_id": "p1",
+        "name": "監督A",
+        "original": 100.0,
+        "debiased": 70.0,
+        "correction": -30.0
+      },
+      {
+        "person_id": "p2",
+        "name": "アニメーターB",
+        "original": 56.34,
+        "debiased": 39.44,
+        "correction": -16.9
+      },
+      {
+        "person_id": "p3",
+        "name": "アニメーターC",
+        "original": 39.43,
+        "debiased": 27.6,
+        "correction": -11.83
+      },
+      {
+        "person_id": "p4",
+        "name": "原画D",
+        "original": 0.0,
+        "debiased": 0.0,
+        "correction": 0.0
+      }
+    ],
+    "studio_effects": {
+      "unknown": {
+        "persons": 4,
+        "avg_correction": -14.68,
+        "direction": "overvalued"
+      }
+    },
+    "cross_studio_value": 0
+  },
+  "growth_analysis": {
+    "rising_stars_count": 0,
+    "stagnant_count": 0,
+    "avg_velocity": 0.0,
+    "top_risers": [
+      {
+        "person_id": "p1",
+        "name": "監督A",
+        "velocity": 0.0,
+        "momentum": 0.0,
+        "career_years": 3
+      },
+      {
+        "person_id": "p2",
+        "name": "アニメーターB",
+        "velocity": 0.0,
+        "momentum": 0.0,
+        "career_years": 3
+      },
+      {
+        "person_id": "p3",
+        "name": "アニメーターC",
+        "velocity": 0.0,
+        "momentum": 0.0,
+        "career_years": 2
+      },
+      {
+        "person_id": "p4",
+        "name": "原画D",
+        "velocity": 0,
+        "momentum": 0.0,
+        "career_years": 1
+      }
+    ],
+    "early_career_impact": 0.15
+  },
+  "potential_value_analysis": {
+    "category_distribution": {
+      "elite": 2,
+      "steady_performer": 2
+    },
+    "hidden_gems_count": 0,
+    "undervalued_talent": [],
+    "structural_advantage_impact": 50.0,
+    "elite_vs_hidden": {
+      "elite": {
+        "count": 2,
+        "avg_authority": 47.89,
+        "avg_trust": 79.97
+      },
+      "hidden_gem": {
+        "count": 0,
+        "avg_authority": 0,
+        "avg_debiased_authority": 0
+      }
+    }
+  },
+  "bridge_analysis": {
+    "bridge_persons_count": 0,
+    "avg_betweenness": 0.0,
+    "top_bridges": [],
+    "circle_connections": 0,
+    "information_brokerage": 0.0
+  },
+  "recommendations": [
+    "スコア分布が集中している（Herfindahl=0.384）。上位10%が全体の51.1%を占める。多様な人材評価の仕組みが必要。",
+    "スタジオバイアス補正で平均14.7点の変動。大手スタジオ出身者が過大評価されている。",
+    "早期キャリアボーナスの効果は+15.0%。新人の潜在能力評価を強化すべき。",
+    "構造的優位性（ネットワーク位置）の効果は50.0点。ブリッジ人材の戦略的配置が重要。"
+  ],
+  "key_findings": [
+    "上位者の共通点: unknownが多数、平均媒介中心性0.1667",
+    "最大の補正: 原画Dが+0.0点上昇（スタジオバイアス補正）",
+    "最高成長: 監督Aがモメンタム0.0（キャリア3年）",
+    "潜在価値分布: エリートが最多（2名）"
+  ]
+}
