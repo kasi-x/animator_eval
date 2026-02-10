@@ -170,24 +170,24 @@
     },
     "team_composition": {
       "count": 1,
-      "total": 0.001,
-      "avg": 0.001,
-      "min": 0.001,
-      "max": 0.001
+      "total": 0.0,
+      "avg": 0.0,
+      "min": 0.0,
+      "max": 0.0
     },
     "time_series": {
       "count": 1,
-      "total": 0.001,
-      "avg": 0.001,
-      "min": 0.001,
-      "max": 0.001
+      "total": 0.0,
+      "avg": 0.0,
+      "min": 0.0,
+      "max": 0.0
     },
     "decade_analysis": {
       "count": 1,
-      "total": 0.001,
-      "avg": 0.001,
-      "min": 0.001,
-      "max": 0.001
+      "total": 0.0,
+      "avg": 0.0,
+      "min": 0.0,
+      "max": 0.0
     },
     "person_tags": {
       "count": 1,
@@ -195,6 +195,13 @@
       "avg": 0.001,
       "min": 0.001,
       "max": 0.001
+    },
+    "graphml_export": {
+      "count": 1,
+      "total": 0.003,
+      "avg": 0.003,
+      "min": 0.003,
+      "max": 0.003
     },
     "role_flow": {
       "count": 1,
@@ -209,13 +216,6 @@
       "avg": 0.001,
       "min": 0.001,
       "max": 0.001
-    },
-    "graphml_export": {
-      "count": 1,
-      "total": 0.003,
-      "avg": 0.003,
-      "min": 0.003,
-      "max": 0.003
     },
     "mentorship_inference": {
       "count": 1,
@@ -261,10 +261,10 @@
     },
     "compensation_analysis": {
       "count": 1,
-      "total": 0.004,
-      "avg": 0.004,
-      "min": 0.004,
-      "max": 0.004
+      "total": 0.003,
+      "avg": 0.003,
+      "min": 0.003,
+      "max": 0.003
     },
     "causal_identification": {
       "count": 1,
@@ -289,10 +289,10 @@
     },
     "structural_estimation": {
       "count": 1,
-      "total": 0.004,
-      "avg": 0.004,
-      "min": 0.004,
-      "max": 0.004
+      "total": 0.005,
+      "avg": 0.005,
+      "min": 0.005,
+      "max": 0.005
     },
     "cross_validation": {
       "count": 1,
@@ -303,11 +303,11 @@
     }
   },
   "memory_snapshots": {
-    "pipeline_start": 304.7,
-    "after_data_load": 304.7,
-    "after_graph_build": 304.7,
-    "after_scoring": 304.7,
-    "after_centrality": 304.7
+    "pipeline_start": 373.0,
+    "after_data_load": 373.0,
+    "after_graph_build": 373.0,
+    "after_scoring": 373.0,
+    "after_centrality": 373.0
   },
   "counters": {
     "persons_loaded": 4,

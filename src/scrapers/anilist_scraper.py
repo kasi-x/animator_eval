@@ -1280,6 +1280,10 @@ def main(
             batch_va_count = 0
             total_persons_fetched = 0
             total_credits_fetched = 0
+            total_persons_skipped = 0
+
+            # Track last 3 anime skip percentages for trend analysis
+            skip_ratio_history = []  # Will store tuples of (anime_title, skip_pct)
 
             with Progress(
                 SpinnerColumn(style="green"),
@@ -1312,10 +1316,20 @@ def main(
                     batch_credits.extend(credits)
                     batch_va_count += va_count
                     totals["skipped"] += skipped
+                    total_persons_skipped += skipped
 
                     # Update person tracking
                     total_persons_fetched += len(persons)
                     total_credits_fetched += len(credits)
+
+                    # Calculate skip percentage for this anime
+                    total_staff_in_anime = len(persons) + skipped
+                    skip_pct = (skipped / total_staff_in_anime * 100) if total_staff_in_anime > 0 else 0
+
+                    # Keep only last 3 entries
+                    skip_ratio_history.append((title, skip_pct))
+                    if len(skip_ratio_history) > 3:
+                        skip_ratio_history.pop(0)
 
                     if had_error:
                         totals["errors"] += 1
@@ -1323,11 +1337,19 @@ def main(
                     fetched_ids.add(anime_id)
                     progress.update(staff_task, advance=1)
 
+                    # Build trend string for last 3 anime
+                    trend_str = ""
+                    if skip_ratio_history:
+                        trend_values = [f"[{'green' if pct < 30 else 'yellow' if pct < 60 else 'red'}]{pct:.0f}%[/]"
+                                       for _, pct in skip_ratio_history]
+                        trend_str = f" | 📊 直近3: [{', '.join(trend_values)}]"
+
                     # Update person task with detailed info
                     person_desc = (
                         f"[blue]👥 スタッフ: {total_persons_fetched:,} | "
-                        f"🎤 声優: {batch_va_count:,} | "
+                        f"⏭️  スキップ: {total_persons_skipped:,} ({total_persons_skipped/(total_persons_fetched+total_persons_skipped)*100 if (total_persons_fetched+total_persons_skipped) > 0 else 0:.1f}%) | "
                         f"📝 クレジット: {total_credits_fetched:,}"
+                        f"{trend_str}"
                     )
                     progress.update(person_task, description=person_desc)
 
