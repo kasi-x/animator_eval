@@ -16,6 +16,7 @@ from src.analysis.bias_detector import detect_systematic_biases, generate_bias_r
 from src.analysis.bridges import detect_bridges
 from src.analysis.collaboration_strength import compute_collaboration_strength
 from src.analysis.compensation_analyzer import batch_analyze_compensation, export_compensation_report
+from src.analysis.insights_report import generate_comprehensive_insights, export_insights_report
 from src.analysis.crossval import cross_validate_scores
 from src.analysis.decade_analysis import compute_decade_analysis
 from src.analysis.genre_affinity import compute_genre_affinity
@@ -295,6 +296,33 @@ def _run_compensation_analyzer(context: PipelineContext) -> Any:
     return export_compensation_report(analyses, person_names)
 
 
+def _run_insights_report(context: PipelineContext) -> Any:
+    """Generate comprehensive insights report from all analyses."""
+    # Build person_scores and person_names dicts
+    person_scores = {r["person_id"]: r for r in context.results}
+    person_names = {
+        p.id: p.name_ja or p.name_en or p.id for p in context.persons
+    }
+
+    # Get bridges data (or empty dict if not available)
+    bridges_data = context.analysis_results.get("bridges", {})
+
+    # Generate comprehensive insights
+    insights = generate_comprehensive_insights(
+        person_scores=person_scores,
+        studio_bias_metrics=context.studio_bias_metrics,
+        growth_acceleration_data=context.growth_acceleration_data,
+        potential_value_scores=context.potential_value_scores,
+        centrality=context.centrality,
+        role_profiles=context.role_profiles,
+        bridges_data=bridges_data,
+        person_names=person_names,
+    )
+
+    # Export report
+    return export_insights_report(insights)
+
+
 # Registry of all analysis tasks (order-independent for parallel execution)
 ANALYSIS_TASKS: list[AnalysisTask] = [
     AnalysisTask("anime_stats", _run_anime_stats),
@@ -319,6 +347,7 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
     AnalysisTask("crossval", _run_crossval, monitor_step="cross_validation"),
     AnalysisTask("bias_report", _run_bias_detector, monitor_step="bias_detection"),
     AnalysisTask("fair_compensation", _run_compensation_analyzer, monitor_step="compensation_analysis"),
+    AnalysisTask("insights_report", _run_insights_report, monitor_step="insights_generation"),
 ]
 
 

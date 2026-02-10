@@ -405,6 +405,19 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_metrics=lambda data: {"anime": data.get("total_anime", 0)} if data else {},
     ),
 
+    # Comprehensive insights report
+    ExportSpec(
+        filename="insights_report.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("insights_report"),
+        log_message="insights_report_saved",
+        log_metrics=lambda data: {
+            "recommendations": len(data.get("recommendations", [])),
+            "findings": len(data.get("key_findings", [])),
+        }
+        if data
+        else {},
+    ),
+
     # Pipeline summary (special case - uses elapsed time)
     ExportSpec(
         filename="summary.json",
