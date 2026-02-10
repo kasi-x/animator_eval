@@ -49,13 +49,13 @@
   <data key="d6">20.55</data>
   <data key="d7">animator</data>
 </node>
-<edge source="p1" target="p3">
-  <data key="d8">2</data>
-  <data key="d9">2</data>
-</edge>
 <edge source="p1" target="p2">
   <data key="d8">3</data>
   <data key="d9">3</data>
+</edge>
+<edge source="p1" target="p3">
+  <data key="d8">2</data>
+  <data key="d9">2</data>
 </edge>
 <edge source="p1" target="p4">
   <data key="d8">1</data>

@@ -1,0 +1,58 @@
+{
+  "fixed_effects": {
+    "beta": 0.0,
+    "se": Infinity,
+    "t_stat": 0.0,
+    "p_value": 1.0,
+    "ci": [
+      0.0,
+      0.0
+    ],
+    "n_obs": 9,
+    "n_persons": 3,
+    "r_squared": 0.0,
+    "covariates": {},
+    "diagnostics": {
+      "error": "insufficient_within_variation"
+    },
+    "interpretation": "Insufficient within-person variation for FE estimation"
+  },
+  "difference_in_differences": {
+    "beta": 0.0,
+    "se": Infinity,
+    "t_stat": 0.0,
+    "p_value": 1.0,
+    "ci": [
+      0.0,
+      0.0
+    ],
+    "n_obs": 9,
+    "n_treated": 0,
+    "n_control": 0,
+    "covariates": {},
+    "interpretation": "No major studio affiliation observed in data"
+  },
+  "robustness_checks": [
+    {
+      "name": "placebo_test",
+      "result": "inconclusive",
+      "description": "Test for spurious effects in pre-treatment period",
+      "detail": "Insufficient pre-treatment observations",
+      "evidence": {
+        "n_obs": 0
+      }
+    }
+  ],
+  "preferred_estimate": {
+    "method": "fixed_effects",
+    "beta": 0.0,
+    "se": Infinity,
+    "p_value": 1.0,
+    "ci": [
+      0.0,
+      0.0
+    ],
+    "interpretation": "Insufficient within-person variation for FE estimation"
+  },
+  "summary": "構造推定結果 (Structural Estimation Results)\n\n【固定効果推定 (Fixed Effects)】\n  効果: 0.000 (SE=inf, p=1.0000)\n  サンプル: N=9, 人数=3\n  R²=0.000\n\n【差分の差分法 (Difference-in-Differences)】\n  効果: 0.000 (SE=inf, p=1.0000)\n  95% CI: [0.000, 0.000]\n\n【頑健性チェック (Robustness Checks)】\n  placebo_test: inconclusive - Insufficient pre-treatment observations\n\n【推奨推定値 (Preferred Estimate)】\n  Method: fixed_effects\n  Effect: 0.000 (p=1.0000)\n  Interpretation: Insufficient within-person variation for FE estimation"
+}

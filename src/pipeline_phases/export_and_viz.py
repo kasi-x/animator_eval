@@ -1,7 +1,7 @@
 """Phase 10: Export and Visualization — declarative registry-based exports.
 
 This module implements a declarative export system using ExportSpec objects.
-All 27 JSON exports are defined in a single registry for easy maintenance.
+All 28 JSON exports are defined in a single registry for easy maintenance.
 """
 
 from dataclasses import asdict, dataclass
@@ -427,6 +427,22 @@ EXPORT_REGISTRY: list[ExportSpec] = [
             "trajectories": data.get("sample_statistics", {}).get("total_trajectories", 0),
             "transitions": data.get("sample_statistics", {}).get("total_transitions", 0),
             "dominant_effect": data.get("conclusion", {}).get("dominant_effect", "unknown"),
+        }
+        if data
+        else {},
+    ),
+
+    # Structural estimation (fixed effects + DID)
+    ExportSpec(
+        filename="structural_estimation.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("structural_estimation"),
+        log_message="structural_estimation_saved",
+        log_metrics=lambda data: {
+            "fe_beta": data.get("fixed_effects", {}).get("beta", 0),
+            "fe_pvalue": data.get("fixed_effects", {}).get("p_value", 1),
+            "did_beta": data.get("difference_in_differences", {}).get("beta", 0),
+            "did_pvalue": data.get("difference_in_differences", {}).get("p_value", 1),
+            "preferred_method": data.get("preferred_estimate", {}).get("method", "unknown"),
         }
         if data
         else {},

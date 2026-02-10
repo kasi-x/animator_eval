@@ -1,6 +1,6 @@
 """Phase 9: Analysis Modules — parallel execution for 4-6x speedup.
 
-This phase runs 24 independent analysis modules in parallel using ThreadPoolExecutor.
+This phase runs 25 independent analysis modules in parallel using ThreadPoolExecutor.
 Each analysis reads from context and writes to context.analysis_results with thread-safe locking.
 """
 
@@ -15,6 +15,7 @@ from src.analysis.anime_stats import compute_anime_stats
 from src.analysis.bias_detector import detect_systematic_biases, generate_bias_report
 from src.analysis.bridges import detect_bridges
 from src.analysis.causal_studio_identification import identify_studio_effects, export_identification_report
+from src.analysis.structural_estimation import estimate_structural_model, export_structural_estimation
 from src.analysis.collaboration_strength import compute_collaboration_strength
 from src.analysis.compensation_analyzer import batch_analyze_compensation, export_compensation_report
 from src.analysis.insights_report import generate_comprehensive_insights, export_insights_report
@@ -334,10 +335,39 @@ def _run_causal_identification(context: PipelineContext) -> Any:
         credits=context.credits,
         anime_map=context.anime_map,
         person_scores=person_scores,
+        potential_value_scores=context.potential_value_scores,
+        growth_acceleration_data=context.growth_acceleration_data,
     )
 
     # Export report
     return export_identification_report(result)
+
+
+def _run_structural_estimation(context: PipelineContext) -> Any:
+    """Structural estimation with fixed effects and DID (研究レベルの構造推定)."""
+    # Build person_scores dict
+    person_scores = {r["person_id"]: r for r in context.results}
+
+    # Identify major studios
+    from src.analysis.causal_studio_identification import identify_major_studios
+
+    major_studios, _ = identify_major_studios(
+        credits=context.credits,
+        anime_map=context.anime_map,
+        person_scores=person_scores,
+    )
+
+    # Run structural estimation
+    result = estimate_structural_model(
+        credits=context.credits,
+        anime_map=context.anime_map,
+        person_scores=person_scores,
+        major_studios=set(major_studios),
+        potential_value_scores=context.potential_value_scores,
+    )
+
+    # Export report
+    return export_structural_estimation(result)
 
 
 # Registry of all analysis tasks (order-independent for parallel execution)
@@ -366,6 +396,7 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
     AnalysisTask("fair_compensation", _run_compensation_analyzer, monitor_step="compensation_analysis"),
     AnalysisTask("insights_report", _run_insights_report, monitor_step="insights_generation"),
     AnalysisTask("causal_identification", _run_causal_identification, monitor_step="causal_identification"),
+    AnalysisTask("structural_estimation", _run_structural_estimation, monitor_step="structural_estimation"),
 ]
 
 
