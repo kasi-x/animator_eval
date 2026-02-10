@@ -1364,12 +1364,26 @@ def main(
                     total_persons_all = total_persons_fetched + total_persons_skipped
                     skip_pct = (total_persons_skipped / total_persons_all * 100) if total_persons_all > 0 else 0
 
-                    # Update person task with detailed info (formatted in columns)
+                    # Build rate limit info
+                    rate_limit_info = ""
+                    if client.requests_remaining is not None and client.rate_limit_reset_at is not None:
+                        import time as time_mod
+                        now = time_mod.time()
+                        reset_at = client.rate_limit_reset_at
+                        if reset_at > now:
+                            remaining_secs = int(reset_at - now)
+                            if client.requests_remaining < 10:
+                                rate_limit_info = f" | [bold red]⏳ rate limit 残り{remaining_secs}秒[/bold red]"
+                            else:
+                                rate_limit_info = f" | [dim]API: {client.requests_remaining}件[/dim]"
+
+                    # Update person task with detailed info (comprehensive format)
+                    total_staff_collected = total_persons_fetched + total_persons_skipped
                     person_desc = (
-                        f"[bold cyan]👥 新規: {total_persons_fetched:,}[/bold cyan] | "
-                        f"[bright_blue]🎤 声優: {batch_va_count:,}[/bright_blue] | "
-                        f"[dim]💾 既存: {total_persons_skipped:,}({skip_pct:.0f}%)[/dim]"
+                        f"[bold cyan]👥 スタッフ個人の情報収集中({total_persons_fetched:,}/{total_staff_collected:,}, "
+                        f"{total_persons_skipped:,}は取得済み)[/bold cyan]"
                         f"{trend_str}"
+                        f"{rate_limit_info}"
                     )
                     progress.update(person_task, description=person_desc)
 
