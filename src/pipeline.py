@@ -10,7 +10,7 @@ import time
 
 import structlog
 
-from src.database import get_connection, init_db, record_pipeline_run
+from src.database import db_connection, get_connection, init_db, record_pipeline_run
 from src.utils.config import JSON_DIR  # noqa: F401 - Imported for test monkeypatch compatibility
 from src.pipeline_phases import (
     PipelineContext,
@@ -204,14 +204,13 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False, enable_
         ws_broadcaster.complete_phase(10, "Export & Visualization", (time.monotonic() - phase_start) * 1000)
 
     # Record pipeline completion
-    conn = get_connection()
-    record_pipeline_run(
-        conn,
-        credit_count=len(context.credits),
-        person_count=len(context.results),
-        elapsed=elapsed,
-    )
-    conn.close()
+    with db_connection() as conn:
+        record_pipeline_run(
+            conn,
+            credit_count=len(context.credits),
+            person_count=len(context.results),
+            elapsed=elapsed,
+        )
 
     # Log performance summary and export report
     context.monitor.record_memory("pipeline_end")

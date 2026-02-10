@@ -12,15 +12,22 @@
   GET /api/v1/health           — ヘルスチェック
 """
 
+import os
+
 import structlog
 import uvicorn
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from pathlib import Path
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+from starlette.responses import JSONResponse
 
 from src.analysis.similarity import find_similar_persons
-from src.database import get_connection, get_data_sources, get_db_stats, get_score_history, search_persons
+from src.database import db_connection, get_data_sources, get_db_stats, get_score_history, search_persons
 from src.utils.config import JSON_DIR
 from src.utils.json_io import (
     load_anime_statistics_from_json,
@@ -54,6 +61,48 @@ app = FastAPI(
     description="アニメ業界人物評価 API — ネットワーク密度・位置指標に基づくスコアリング",
     version="0.1.0",
 )
+
+# --- CORS ---
+_cors_env = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://localhost:8000")
+CORS_ORIGINS = [origin.strip() for origin in _cors_env.split(",") if origin.strip()]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=CORS_ORIGINS,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# --- Rate Limiting (slowapi) ---
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit exceeded. Try again later."},
+    )
+
+
+# --- API Key Auth (for write endpoints) ---
+
+
+def verify_api_key(request: Request) -> None:
+    """Verify API key for protected endpoints.
+
+    If API_SECRET_KEY is not configured, allow all requests (dev mode).
+    """
+    secret = os.environ.get("API_SECRET_KEY")
+    if not secret:
+        # Dev mode — no key required
+        return
+    provided = request.headers.get("X-API-Key", "")
+    if provided != secret:
+        raise HTTPException(status_code=403, detail="Invalid or missing API key")
+
 
 # Mount static files for WebSocket demo
 STATIC_DIR = Path(__file__).parent.parent / "static"
@@ -161,11 +210,8 @@ def search(
     limit: int = Query(20, ge=1, le=100, description="最大件数"),
 ):
     """人物検索（名前・IDの部分一致）."""
-    conn = get_connection()
-    try:
+    with db_connection() as conn:
         results = search_persons(conn, q, limit=limit)
-    finally:
-        conn.close()
     return {"query": q, "count": len(results), "results": results}
 
 
@@ -202,11 +248,8 @@ def get_person_history(
     limit: int = Query(50, ge=1, le=200, description="履歴件数"),
 ):
     """人物のスコア履歴."""
-    conn = get_connection()
-    try:
+    with db_connection() as conn:
         history = get_score_history(conn, person_id, limit=limit)
-    finally:
-        conn.close()
     if not history:
         raise HTTPException(status_code=404, detail=f"No history for {person_id}")
     return {"person_id": person_id, "history": history}
@@ -469,8 +512,7 @@ def data_quality():
     """データ品質スコア."""
     from src.analysis.data_quality import compute_data_quality_score
 
-    conn = get_connection()
-    try:
+    with db_connection() as conn:
         stats = get_db_stats(conn)
 
         total_credits = stats.get("credits", 0)
@@ -501,8 +543,6 @@ def data_quality():
             "SELECT MAX(year) FROM anime WHERE year IS NOT NULL"
         ).fetchone()
         latest_year = latest_year_row[0] if latest_year_row else None
-    finally:
-        conn.close()
 
     return compute_data_quality_score(
         stats={"latest_year": latest_year},
@@ -526,12 +566,9 @@ def get_person_network(
     from src.analysis.ego_graph import extract_ego_graph
     from src.database import load_all_anime, load_all_credits
 
-    conn = get_connection()
-    try:
+    with db_connection() as conn:
         credits = load_all_credits(conn)
         anime_list = load_all_anime(conn)
-    finally:
-        conn.close()
 
     anime_map = {a.id: a for a in anime_list}
     scores = load_person_scores_from_json()
@@ -560,11 +597,8 @@ def recommend(
     if not scores:
         raise HTTPException(status_code=404, detail="No scores available")
 
-    conn = get_connection()
-    try:
+    with db_connection() as conn:
         credits = load_all_credits(conn)
-    finally:
-        conn.close()
 
     recs = recommend_for_team(team_ids, scores, credits, top_n=top_n)
     return {"team": team_ids, "recommendations": recs}
@@ -582,12 +616,9 @@ def predict(
     if not team_ids:
         raise HTTPException(status_code=400, detail="At least 1 team member required")
 
-    conn = get_connection()
-    try:
+    with db_connection() as conn:
         credits = load_all_credits(conn)
         anime_list = load_all_anime(conn)
-    finally:
-        conn.close()
 
     anime_map = {a.id: a for a in anime_list}
     scores = load_person_scores_from_json()
@@ -665,12 +696,9 @@ def productivity(
 @app.get("/api/v1/stats")
 def db_stats():
     """DB統計情報."""
-    conn = get_connection()
-    try:
+    with db_connection() as conn:
         stats = get_db_stats(conn)
         sources = get_data_sources(conn)
-    finally:
-        conn.close()
     return {"stats": stats, "data_sources": sources}
 
 
@@ -723,8 +751,10 @@ async def websocket_pipeline_progress(websocket: WebSocket):
         manager.disconnect(websocket)
 
 
-@app.post("/api/v1/pipeline/run")
+@app.post("/api/v1/pipeline/run", dependencies=[Depends(verify_api_key)])
+@limiter.limit("2/minute")
 async def run_pipeline_async(
+    request: Request,
     visualize: bool = Query(False, description="Generate visualizations"),
     dry_run: bool = Query(False, description="Dry run (validation only)"),
 ):

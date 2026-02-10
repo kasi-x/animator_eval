@@ -17,7 +17,7 @@ from src.models import Anime, Credit, Person, parse_role
 
 log = structlog.get_logger()
 
-SPARQL_ENDPOINT = "https://mediaarts-db.bunka.go.jp/sparql"
+SPARQL_ENDPOINT = "https://mediaarts-db.artmuseums.go.jp/sparql"
 REQUEST_INTERVAL = 1.0  # 秒
 
 # アニメ作品とスタッフのクエリ
@@ -48,8 +48,10 @@ class MediaArtsClient:
     """メディア芸術DB SPARQL 非同期クライアント."""
 
     def __init__(self) -> None:
-        self._client = httpx.AsyncClient(timeout=60.0)
+        # SSL証明書の期限切れ対策: verify=False, follow_redirects=True
+        self._client = httpx.AsyncClient(timeout=60.0, verify=False, follow_redirects=True)
         self._last_request_time = 0.0
+        log.info("mediaarts_client_init", ssl_verify=False, follow_redirects=True)
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -76,8 +78,14 @@ class MediaArtsClient:
                 log.warning("sparql_query_failed", attempt=attempt + 1, error=str(e))
                 if attempt < 2:
                     await asyncio.sleep(2 ** (attempt + 1))
+        from src.scrapers.exceptions import EndpointUnreachableError
+
         log.error("sparql_endpoint_unreachable")
-        return []
+        raise EndpointUnreachableError(
+            "MediaArts SPARQL endpoint unreachable after 3 attempts",
+            source="mediaarts",
+            url=SPARQL_ENDPOINT,
+        )
 
     async def fetch_anime_staff(
         self, limit: int = 1000, offset: int = 0
@@ -187,7 +195,7 @@ def main(
     max_records: int = typer.Option(5000, "--max-records", "-n", help="最大レコード数"),
 ) -> None:
     """メディア芸術DB からクレジットデータを収集する."""
-    from src.database import get_connection, init_db, insert_credit, update_data_source, upsert_anime, upsert_person
+    from src.database import db_connection, init_db, insert_credit, update_data_source, upsert_anime, upsert_person
     from src.log import setup_logging
 
     setup_logging()
@@ -196,17 +204,15 @@ def main(
         fetch_all_anime_staff(max_records=max_records)
     )
 
-    conn = get_connection()
-    init_db(conn)
-    for anime in anime_list:
-        upsert_anime(conn, anime)
-    for person in persons:
-        upsert_person(conn, person)
-    for credit in credits:
-        insert_credit(conn, credit)
-    update_data_source(conn, "mediaarts", len(credits))
-    conn.commit()
-    conn.close()
+    with db_connection() as conn:
+        init_db(conn)
+        for anime in anime_list:
+            upsert_anime(conn, anime)
+        for person in persons:
+            upsert_person(conn, person)
+        for credit in credits:
+            insert_credit(conn, credit)
+        update_data_source(conn, "mediaarts", len(credits))
 
     log.info("saved_to_db", anime=len(anime_list), persons=len(persons), credits=len(credits))
 

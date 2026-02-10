@@ -3,6 +3,7 @@
 import json
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from src.api import app
@@ -880,3 +881,83 @@ class TestI18nApi:
         assert resp.status_code == 400
         data = resp.json()
         assert "Unsupported language" in data["detail"]
+
+
+class TestCorsHeaders:
+    """CORS middleware tests."""
+
+    def test_cors_headers_present(self, client):
+        """CORS headers are included in responses."""
+        resp = client.options(
+            "/api/v1/health",
+            headers={
+                "Origin": "http://localhost:3000",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+        assert resp.headers.get("access-control-allow-origin") == "http://localhost:3000"
+
+    def test_cors_disallowed_origin(self, client):
+        """Disallowed origin gets no CORS header."""
+        resp = client.options(
+            "/api/v1/health",
+            headers={
+                "Origin": "http://evil.example.com",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+        assert resp.headers.get("access-control-allow-origin") != "http://evil.example.com"
+
+
+class TestApiKeyAuth:
+    """API key authentication tests."""
+
+    def test_pipeline_run_rejected_without_key(self, client, monkeypatch):
+        """With API_SECRET_KEY set, requests without key get 403."""
+        monkeypatch.setenv("API_SECRET_KEY", "test-secret-key-123")
+        resp = client.post("/api/v1/pipeline/run")
+        assert resp.status_code == 403
+        assert "API key" in resp.json()["detail"]
+
+    def test_pipeline_run_rejected_with_wrong_key(self, client, monkeypatch):
+        """Wrong API key returns 403."""
+        monkeypatch.setenv("API_SECRET_KEY", "test-secret-key-123")
+        resp = client.post(
+            "/api/v1/pipeline/run",
+            headers={"X-API-Key": "wrong-key"},
+        )
+        assert resp.status_code == 403
+
+    def test_verify_api_key_allows_dev_mode(self):
+        """verify_api_key allows requests when API_SECRET_KEY is not set."""
+        from unittest.mock import MagicMock
+        from src.api import verify_api_key
+
+        request = MagicMock()
+        request.headers = {}
+        # No API_SECRET_KEY set — should not raise
+        import os
+        os.environ.pop("API_SECRET_KEY", None)
+        verify_api_key(request)  # Should not raise
+
+    def test_verify_api_key_rejects_bad_key(self, monkeypatch):
+        """verify_api_key raises HTTPException for wrong key."""
+        from unittest.mock import MagicMock
+        from src.api import verify_api_key
+
+        monkeypatch.setenv("API_SECRET_KEY", "correct-key")
+        request = MagicMock()
+        request.headers = {"X-API-Key": "wrong-key"}
+        with pytest.raises(HTTPException) as exc_info:
+            verify_api_key(request)
+        assert exc_info.value.status_code == 403
+
+
+class TestRateLimiting:
+    """Rate limiting tests."""
+
+    def test_rate_limit_handler_registered(self, client):
+        """Rate limit exception handler is registered on the app."""
+        from src.api import app
+        # Verify that app has the limiter configured
+        assert hasattr(app.state, "limiter")

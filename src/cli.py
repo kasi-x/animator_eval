@@ -33,33 +33,32 @@ def stats(lang: str = lang_option) -> None:
     """DB の統計情報を表示する / Display database statistics."""
     setup_logging()
 
-    from src.database import get_connection, get_data_sources, init_db
+    from src.database import db_connection, get_data_sources, init_db
 
-    conn = get_connection()
-    init_db(conn)
+    with db_connection() as conn:
+        init_db(conn)
 
-    n_persons = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
-    n_anime = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]
-    n_credits = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
-    n_scores = conn.execute("SELECT COUNT(*) FROM scores").fetchone()[0]
+        n_persons = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
+        n_anime = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]
+        n_credits = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
+        n_scores = conn.execute("SELECT COUNT(*) FROM scores").fetchone()[0]
 
-    # 役職分布
-    role_dist = conn.execute(
-        "SELECT role, COUNT(*) as cnt FROM credits GROUP BY role ORDER BY cnt DESC"
-    ).fetchall()
+        # 役職分布
+        role_dist = conn.execute(
+            "SELECT role, COUNT(*) as cnt FROM credits GROUP BY role ORDER BY cnt DESC"
+        ).fetchall()
 
-    # ソース分布
-    source_dist = conn.execute(
-        "SELECT source, COUNT(*) as cnt FROM credits GROUP BY source ORDER BY cnt DESC"
-    ).fetchall()
+        # ソース分布
+        source_dist = conn.execute(
+            "SELECT source, COUNT(*) as cnt FROM credits GROUP BY source ORDER BY cnt DESC"
+        ).fetchall()
 
-    # 年代分布
-    year_dist = conn.execute(
-        "SELECT year, COUNT(*) as cnt FROM anime WHERE year IS NOT NULL GROUP BY year ORDER BY year DESC LIMIT 10"
-    ).fetchall()
+        # 年代分布
+        year_dist = conn.execute(
+            "SELECT year, COUNT(*) as cnt FROM anime WHERE year IS NOT NULL GROUP BY year ORDER BY year DESC LIMIT 10"
+        ).fetchall()
 
-    data_sources = get_data_sources(conn)
-    conn.close()
+        data_sources = get_data_sources(conn)
 
     # Use i18n for output
     console.print(f"\n[bold blue]{t('cli.stats.title')}[/bold blue]\n")
@@ -124,15 +123,11 @@ def ranking(
     """スコアランキングを表示する."""
     setup_logging()
 
-    from src.database import get_connection, init_db
-
-    conn = get_connection()
-    init_db(conn)
+    from src.database import db_connection, init_db
 
     valid_sort = {"composite", "authority", "trust", "skill"}
     if sort_by not in valid_sort:
         console.print(f"[red]Invalid sort axis: {sort_by}. Use: {', '.join(valid_sort)}[/red]")
-        conn.close()
         raise typer.Exit(1)
 
     if role or year_from or year_to:
@@ -144,7 +139,6 @@ def ranking(
         scores_path = JSON_DIR / "scores.json"
         if not scores_path.exists():
             console.print("[yellow]No scores.json found. Run 'pixi run pipeline' first.[/yellow]")
-            conn.close()
             raise typer.Exit()
 
         all_data = json_mod.loads(scores_path.read_text())
@@ -163,7 +157,6 @@ def ranking(
             ]
         filtered.sort(key=lambda x: x.get(sort_by, 0), reverse=True)
         rows = filtered[:top_n]
-        conn.close()
 
         if not rows:
             msg = "No persons found"
@@ -174,18 +167,19 @@ def ranking(
             console.print(f"[yellow]{msg}[/yellow]")
             raise typer.Exit()
     else:
-        order_col = f"s.{sort_by}"
-        rows = conn.execute(
-            f"""SELECT s.person_id, p.name_ja, p.name_en,
-                      s.authority, s.trust, s.skill, s.composite
-               FROM scores s
-               JOIN persons p ON s.person_id = p.id
-               ORDER BY {order_col} DESC
-               LIMIT ?""",  # noqa: S608
-            (top_n,),
-        ).fetchall()
-        conn.close()
-        rows = [dict(r) for r in rows]
+        with db_connection() as conn:
+            init_db(conn)
+            order_col = f"s.{sort_by}"
+            rows = conn.execute(
+                f"""SELECT s.person_id, p.name_ja, p.name_en,
+                          s.authority, s.trust, s.skill, s.composite
+                   FROM scores s
+                   JOIN persons p ON s.person_id = p.id
+                   ORDER BY {order_col} DESC
+                   LIMIT ?""",  # noqa: S608
+                (top_n,),
+            ).fetchall()
+            rows = [dict(r) for r in rows]
 
     if not rows:
         console.print("[yellow]No scores found. Run 'pixi run pipeline' first.[/yellow]")
@@ -228,33 +222,30 @@ def profile(person_id: str = typer.Argument(help="人物ID (例: anilist:p100)")
     """特定人物のプロフィールを表示する."""
     setup_logging()
 
-    from src.database import get_connection, init_db
+    from src.database import db_connection, init_db
 
-    conn = get_connection()
-    init_db(conn)
+    with db_connection() as conn:
+        init_db(conn)
 
-    person = conn.execute(
-        "SELECT * FROM persons WHERE id = ?", (person_id,)
-    ).fetchone()
-    if not person:
-        console.print(f"[red]Person not found: {person_id}[/red]")
-        conn.close()
-        raise typer.Exit(1)
+        person = conn.execute(
+            "SELECT * FROM persons WHERE id = ?", (person_id,)
+        ).fetchone()
+        if not person:
+            console.print(f"[red]Person not found: {person_id}[/red]")
+            raise typer.Exit(1)
 
-    score = conn.execute(
-        "SELECT * FROM scores WHERE person_id = ?", (person_id,)
-    ).fetchone()
+        score = conn.execute(
+            "SELECT * FROM scores WHERE person_id = ?", (person_id,)
+        ).fetchone()
 
-    credits = conn.execute(
-        """SELECT c.role, c.source, a.title_ja, a.title_en, a.year, a.score
-           FROM credits c
-           JOIN anime a ON c.anime_id = a.id
-           WHERE c.person_id = ?
-           ORDER BY a.year DESC""",
-        (person_id,),
-    ).fetchall()
-
-    conn.close()
+        credits = conn.execute(
+            """SELECT c.role, c.source, a.title_ja, a.title_en, a.year, a.score
+               FROM credits c
+               JOIN anime a ON c.anime_id = a.id
+               WHERE c.person_id = ?
+               ORDER BY a.year DESC""",
+            (person_id,),
+        ).fetchall()
 
     name = person["name_ja"] or person["name_en"] or person_id
     console.print(f"\n[bold blue]Profile: {name}[/bold blue]")
@@ -342,12 +333,11 @@ def search(
     """人物を名前で検索する."""
     setup_logging()
 
-    from src.database import get_connection, init_db, search_persons
+    from src.database import db_connection, init_db, search_persons
 
-    conn = get_connection()
-    init_db(conn)
-    rows = search_persons(conn, query, limit)
-    conn.close()
+    with db_connection() as conn:
+        init_db(conn)
+        rows = search_persons(conn, query, limit)
 
     if not rows:
         console.print(f"[yellow]No results for: {query}[/yellow]")
@@ -383,39 +373,38 @@ def compare(
     """2人の人物を比較する."""
     setup_logging()
 
-    from src.database import get_connection, init_db
+    from src.database import db_connection, init_db
 
-    conn = get_connection()
-    init_db(conn)
+    with db_connection() as conn:
+        init_db(conn)
 
-    def _load_person_data(pid: str) -> dict | None:
-        person = conn.execute("SELECT * FROM persons WHERE id = ?", (pid,)).fetchone()
-        if not person:
-            return None
-        score = conn.execute("SELECT * FROM scores WHERE person_id = ?", (pid,)).fetchone()
-        credit_count = conn.execute(
-            "SELECT COUNT(*) FROM credits WHERE person_id = ?", (pid,)
-        ).fetchone()[0]
-        roles = conn.execute(
-            """SELECT role, COUNT(*) as cnt FROM credits
-               WHERE person_id = ? GROUP BY role ORDER BY cnt DESC""",
-            (pid,),
-        ).fetchall()
-        return {
-            "id": pid,
-            "name_ja": person["name_ja"],
-            "name_en": person["name_en"],
-            "authority": score["authority"] if score else 0.0,
-            "trust": score["trust"] if score else 0.0,
-            "skill": score["skill"] if score else 0.0,
-            "composite": score["composite"] if score else 0.0,
-            "credit_count": credit_count,
-            "roles": [(r["role"], r["cnt"]) for r in roles],
-        }
+        def _load_person_data(pid: str) -> dict | None:
+            person = conn.execute("SELECT * FROM persons WHERE id = ?", (pid,)).fetchone()
+            if not person:
+                return None
+            score = conn.execute("SELECT * FROM scores WHERE person_id = ?", (pid,)).fetchone()
+            credit_count = conn.execute(
+                "SELECT COUNT(*) FROM credits WHERE person_id = ?", (pid,)
+            ).fetchone()[0]
+            roles = conn.execute(
+                """SELECT role, COUNT(*) as cnt FROM credits
+                   WHERE person_id = ? GROUP BY role ORDER BY cnt DESC""",
+                (pid,),
+            ).fetchall()
+            return {
+                "id": pid,
+                "name_ja": person["name_ja"],
+                "name_en": person["name_en"],
+                "authority": score["authority"] if score else 0.0,
+                "trust": score["trust"] if score else 0.0,
+                "skill": score["skill"] if score else 0.0,
+                "composite": score["composite"] if score else 0.0,
+                "credit_count": credit_count,
+                "roles": [(r["role"], r["cnt"]) for r in roles],
+            }
 
-    data_a = _load_person_data(person_a)
-    data_b = _load_person_data(person_b)
-    conn.close()
+        data_a = _load_person_data(person_a)
+        data_b = _load_person_data(person_b)
 
     if not data_a:
         console.print(f"[red]Person not found: {person_a}[/red]")
@@ -528,21 +517,20 @@ def export(
     setup_logging()
     from pathlib import Path
 
-    from src.database import get_connection, init_db
+    from src.database import db_connection, init_db
     from src.report import generate_csv_report, generate_html_report, generate_json_report, generate_text_report
 
-    conn = get_connection()
-    init_db(conn)
+    with db_connection() as conn:
+        init_db(conn)
 
-    # scores + persons を結合して results 形式に変換
-    rows = conn.execute(
-        """SELECT s.person_id, p.name_ja, p.name_en,
-                  s.authority, s.trust, s.skill, s.composite
-           FROM scores s
-           JOIN persons p ON s.person_id = p.id
-           ORDER BY s.composite DESC""",
-    ).fetchall()
-    conn.close()
+        # scores + persons を結合して results 形式に変換
+        rows = conn.execute(
+            """SELECT s.person_id, p.name_ja, p.name_en,
+                      s.authority, s.trust, s.skill, s.composite
+               FROM scores s
+               JOIN persons p ON s.person_id = p.id
+               ORDER BY s.composite DESC""",
+        ).fetchall()
 
     if not rows:
         console.print("[yellow]No scores found. Run 'pixi run pipeline' first.[/yellow]")
@@ -602,26 +590,24 @@ def timeline(
 
     from src.analysis.career import CAREER_STAGE
     from src.analysis.visualize import plot_person_timeline
-    from src.database import get_connection, init_db
+    from src.database import db_connection, init_db
     from src.models import Role
 
-    conn = get_connection()
-    init_db(conn)
+    with db_connection() as conn:
+        init_db(conn)
 
-    person = conn.execute("SELECT * FROM persons WHERE id = ?", (person_id,)).fetchone()
-    if not person:
-        console.print(f"[red]Person not found: {person_id}[/red]")
-        conn.close()
-        raise typer.Exit(1)
+        person = conn.execute("SELECT * FROM persons WHERE id = ?", (person_id,)).fetchone()
+        if not person:
+            console.print(f"[red]Person not found: {person_id}[/red]")
+            raise typer.Exit(1)
 
-    credits = conn.execute(
-        """SELECT c.role, a.title_ja, a.title_en, a.year, a.score
-           FROM credits c JOIN anime a ON c.anime_id = a.id
-           WHERE c.person_id = ? AND a.year IS NOT NULL
-           ORDER BY a.year""",
-        (person_id,),
-    ).fetchall()
-    conn.close()
+        credits = conn.execute(
+            """SELECT c.role, a.title_ja, a.title_en, a.year, a.score
+               FROM credits c JOIN anime a ON c.anime_id = a.id
+               WHERE c.person_id = ? AND a.year IS NOT NULL
+               ORDER BY a.year""",
+            (person_id,),
+        ).fetchall()
 
     if not credits:
         console.print(f"[yellow]No credits with year data for {person_id}[/yellow]")
@@ -668,19 +654,17 @@ def history(
     """人物のスコア履歴を表示する."""
     setup_logging()
 
-    from src.database import get_connection, get_score_history, init_db
+    from src.database import db_connection, get_score_history, init_db
 
-    conn = get_connection()
-    init_db(conn)
+    with db_connection() as conn:
+        init_db(conn)
 
-    person = conn.execute("SELECT * FROM persons WHERE id = ?", (person_id,)).fetchone()
-    if not person:
-        console.print(f"[red]Person not found: {person_id}[/red]")
-        conn.close()
-        raise typer.Exit(1)
+        person = conn.execute("SELECT * FROM persons WHERE id = ?", (person_id,)).fetchone()
+        if not person:
+            console.print(f"[red]Person not found: {person_id}[/red]")
+            raise typer.Exit(1)
 
-    hist = get_score_history(conn, person_id, limit=limit)
-    conn.close()
+        hist = get_score_history(conn, person_id, limit=limit)
 
     if not hist:
         console.print(f"[yellow]No score history for {person_id}[/yellow]")
@@ -841,13 +825,12 @@ def validate() -> None:
     """DBデータの品質チェックを実行する."""
     setup_logging()
 
-    from src.database import get_connection, init_db
+    from src.database import db_connection, init_db
     from src.validation import validate_all
 
-    conn = get_connection()
-    init_db(conn)
-    result = validate_all(conn)
-    conn.close()
+    with db_connection() as conn:
+        init_db(conn)
+        result = validate_all(conn)
 
     if result.passed:
         console.print("[bold green]Validation PASSED[/bold green]")
@@ -1528,42 +1511,40 @@ def data_quality() -> None:
     setup_logging()
 
     from src.analysis.data_quality import compute_data_quality_score
-    from src.database import get_connection, get_db_stats, init_db
+    from src.database import db_connection, get_db_stats, init_db
 
-    conn = get_connection()
-    init_db(conn)
+    with db_connection() as conn:
+        init_db(conn)
 
-    stats = get_db_stats(conn)
-    total_credits = stats.get("credits", 0)
-    total_persons = stats.get("persons", 0)
-    total_anime = stats.get("anime", 0)
+        stats = get_db_stats(conn)
+        total_credits = stats.get("credits", 0)
+        total_persons = stats.get("persons", 0)
+        total_anime = stats.get("anime", 0)
 
-    credits_with_source = conn.execute(
-        "SELECT COUNT(*) FROM credits WHERE source != ''"
-    ).fetchone()[0] if total_credits else 0
+        credits_with_source = conn.execute(
+            "SELECT COUNT(*) FROM credits WHERE source != ''"
+        ).fetchone()[0] if total_credits else 0
 
-    persons_with_score = conn.execute(
-        "SELECT COUNT(*) FROM scores"
-    ).fetchone()[0] if total_persons else 0
+        persons_with_score = conn.execute(
+            "SELECT COUNT(*) FROM scores"
+        ).fetchone()[0] if total_persons else 0
 
-    anime_with_year = conn.execute(
-        "SELECT COUNT(*) FROM anime WHERE year IS NOT NULL"
-    ).fetchone()[0] if total_anime else 0
+        anime_with_year = conn.execute(
+            "SELECT COUNT(*) FROM anime WHERE year IS NOT NULL"
+        ).fetchone()[0] if total_anime else 0
 
-    anime_with_score = conn.execute(
-        "SELECT COUNT(*) FROM anime WHERE score IS NOT NULL"
-    ).fetchone()[0] if total_anime else 0
+        anime_with_score = conn.execute(
+            "SELECT COUNT(*) FROM anime WHERE score IS NOT NULL"
+        ).fetchone()[0] if total_anime else 0
 
-    source_count = conn.execute(
-        "SELECT COUNT(DISTINCT source) FROM credits WHERE source != ''"
-    ).fetchone()[0]
+        source_count = conn.execute(
+            "SELECT COUNT(DISTINCT source) FROM credits WHERE source != ''"
+        ).fetchone()[0]
 
-    latest_year_row = conn.execute(
-        "SELECT MAX(year) FROM anime WHERE year IS NOT NULL"
-    ).fetchone()
-    latest_year = latest_year_row[0] if latest_year_row else None
-
-    conn.close()
+        latest_year_row = conn.execute(
+            "SELECT MAX(year) FROM anime WHERE year IS NOT NULL"
+        ).fetchone()
+        latest_year = latest_year_row[0] if latest_year_row else None
 
     result = compute_data_quality_score(
         stats={"latest_year": latest_year},
@@ -1628,14 +1609,12 @@ def entity_resolution_check(
         format_resolution_report,
         generate_resolution_report,
     )
-    from src.database import get_connection, init_db
+    from src.database import db_connection, init_db
     from src.models import Person
 
-    conn = get_connection()
-    init_db(conn)
-
-    person_rows = conn.execute("SELECT * FROM persons").fetchall()
-    conn.close()
+    with db_connection() as conn:
+        init_db(conn)
+        person_rows = conn.execute("SELECT * FROM persons").fetchall()
 
     if not person_rows:
         console.print("[yellow]No persons in database[/yellow]")
@@ -1710,20 +1689,19 @@ def neo4j_export(
     """
     setup_logging()
 
-    from src.database import get_connection, init_db, get_all_anime, get_all_credits, get_all_persons, get_all_scores
+    from src.database import db_connection, init_db, get_all_anime, get_all_credits, get_all_persons, get_all_scores
 
     console.print("\n[bold blue]Neo4j Direct Export[/bold blue]\n")
 
     # Load data from SQLite
     console.print("[cyan]Loading data from SQLite...[/cyan]")
-    conn = get_connection()
-    init_db(conn)
+    with db_connection() as conn:
+        init_db(conn)
 
-    persons = get_all_persons(conn)
-    anime_list = get_all_anime(conn)
-    credits = get_all_credits(conn)
-    scores = get_all_scores(conn)
-    conn.close()
+        persons = get_all_persons(conn)
+        anime_list = get_all_anime(conn)
+        credits = get_all_credits(conn)
+        scores = get_all_scores(conn)
 
     console.print(f"[green]✓ Loaded {len(persons):,} persons, {len(anime_list):,} anime, {len(credits):,} credits[/green]\n")
 

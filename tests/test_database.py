@@ -4,6 +4,7 @@
 import pytest
 
 from src.database import (
+    db_connection,
     get_connection,
     init_db,
     insert_credit,
@@ -130,3 +131,48 @@ class TestScoreCrud:
         scores = load_all_scores(db_conn)
         assert len(scores) == 1
         assert scores[0].authority == 80.0
+
+
+class TestDbConnection:
+    """db_connection() コンテキストマネージャのテスト."""
+
+    def test_auto_commit_on_success(self, tmp_path):
+        db_path = tmp_path / "ctx_test.db"
+        with db_connection(db_path) as conn:
+            init_db(conn)
+            upsert_person(conn, Person(id="mal:p1", name_ja="テスト"))
+
+        # Verify data persisted by opening a new connection
+        conn2 = get_connection(db_path)
+        row = conn2.execute("SELECT name_ja FROM persons WHERE id = 'mal:p1'").fetchone()
+        conn2.close()
+        assert row is not None
+        assert row["name_ja"] == "テスト"
+
+    def test_rollback_on_exception(self, tmp_path):
+        db_path = tmp_path / "ctx_test.db"
+
+        # First: create table
+        with db_connection(db_path) as conn:
+            init_db(conn)
+
+        # Then: insert that fails mid-way
+        with pytest.raises(ValueError, match="intentional"):
+            with db_connection(db_path) as conn:
+                upsert_person(conn, Person(id="mal:p2", name_ja="ロールバック"))
+                raise ValueError("intentional")
+
+        # Verify data was rolled back
+        conn2 = get_connection(db_path)
+        row = conn2.execute("SELECT * FROM persons WHERE id = 'mal:p2'").fetchone()
+        conn2.close()
+        assert row is None
+
+    def test_connection_closed_after_context(self, tmp_path):
+        db_path = tmp_path / "ctx_test.db"
+        with db_connection(db_path) as conn:
+            init_db(conn)
+
+        # Connection should be closed — executing should raise
+        with pytest.raises(Exception):
+            conn.execute("SELECT 1")

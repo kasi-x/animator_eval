@@ -91,8 +91,14 @@ class WikidataClient:
                 log.warning("wikidata_query_failed", attempt=attempt + 1, error=str(e))
                 if attempt < 2:
                     await asyncio.sleep(2 ** (attempt + 1))
+        from src.scrapers.exceptions import EndpointUnreachableError
+
         log.error("wikidata_sparql_unreachable")
-        return []
+        raise EndpointUnreachableError(
+            "Wikidata SPARQL endpoint unreachable after 3 attempts",
+            source="wikidata",
+            url=WIKIDATA_SPARQL,
+        )
 
 
 def parse_wikidata_results(
@@ -198,7 +204,7 @@ def main(
     max_records: int = typer.Option(5000, "--max-records", "-n", help="最大レコード数"),
 ) -> None:
     """Wikidata からアニメスタッフデータを収集する."""
-    from src.database import get_connection, init_db, insert_credit, update_data_source, upsert_anime, upsert_person
+    from src.database import db_connection, init_db, insert_credit, update_data_source, upsert_anime, upsert_person
     from src.log import setup_logging
 
     setup_logging()
@@ -207,17 +213,15 @@ def main(
         fetch_anime_staff(max_records=max_records)
     )
 
-    conn = get_connection()
-    init_db(conn)
-    for anime in anime_list:
-        upsert_anime(conn, anime)
-    for person in persons:
-        upsert_person(conn, person)
-    for credit in credits:
-        insert_credit(conn, credit)
-    update_data_source(conn, "jvmg", len(credits))
-    conn.commit()
-    conn.close()
+    with db_connection() as conn:
+        init_db(conn)
+        for anime in anime_list:
+            upsert_anime(conn, anime)
+        for person in persons:
+            upsert_person(conn, person)
+        for credit in credits:
+            insert_credit(conn, credit)
+        update_data_source(conn, "jvmg", len(credits))
 
     log.info("saved_to_db", anime=len(anime_list), persons=len(persons), credits=len(credits))
 

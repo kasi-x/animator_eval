@@ -57,7 +57,13 @@ class JikanClient:
                 log.warning("request_failed", attempt=attempt + 1, error=str(e))
                 if attempt < 4:
                     await asyncio.sleep(2 ** (attempt + 1))
-        raise RuntimeError(f"Failed to fetch {url} after 5 attempts")
+        from src.scrapers.exceptions import EndpointUnreachableError
+
+        raise EndpointUnreachableError(
+            f"Failed to fetch {url} after 5 attempts",
+            source="mal",
+            url=url,
+        )
 
     async def get_anime_staff(self, mal_id: int) -> list[dict]:
         data = await self.get(f"/anime/{mal_id}/staff")

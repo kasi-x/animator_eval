@@ -1,6 +1,12 @@
 """プロジェクト共通のパス定義・定数."""
 
+import os
 from pathlib import Path
+
+import structlog
+from dotenv import load_dotenv
+
+log = structlog.get_logger()
 
 # プロジェクトルート
 ROOT_DIR = Path(__file__).resolve().parent.parent.parent
@@ -68,3 +74,42 @@ LLM_MODEL_NAME = "qwen3:8b"  # or qwen3:32b for better accuracy
 LLM_TEMPERATURE = 0.1  # 低温度で決定論的な出力
 LLM_MAX_TOKENS = 200  # Qwen3 needs more tokens for reasoning mode
 LLM_TIMEOUT = 15.0  # seconds
+
+
+def load_dotenv_if_exists(env_path: Path | None = None) -> bool:
+    """Load .env file into os.environ via python-dotenv.
+
+    Does NOT override existing environment variables.
+    Returns True if a .env file was found and loaded.
+    """
+    if env_path is None:
+        env_path = ROOT_DIR / ".env"
+    if not env_path.exists():
+        return False
+
+    loaded = load_dotenv(env_path, override=False)
+    log.debug("dotenv_loaded", path=str(env_path), loaded=loaded)
+    return loaded
+
+
+def validate_environment() -> list[str]:
+    """Check for recommended environment variables and return warnings.
+
+    Returns a list of warning messages for missing optional vars.
+    """
+    warnings: list[str] = []
+
+    if not os.environ.get("API_SECRET_KEY"):
+        warnings.append(
+            "API_SECRET_KEY not set — write endpoints are unprotected (dev mode)"
+        )
+
+    if not os.environ.get("ANILIST_ACCESS_TOKEN"):
+        warnings.append(
+            "ANILIST_ACCESS_TOKEN not set — anonymous rate limits apply (90 req/min)"
+        )
+
+    for w in warnings:
+        log.warning("env_warning", message=w)
+
+    return warnings

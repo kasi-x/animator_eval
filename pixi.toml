@@ -6,11 +6,27 @@ platforms = ["linux-64"]
 version = "0.1.0"
 
 [tasks]
-# データ収集
-scrape-mal = "python -m src.scrapers.mal_scraper"
-scrape-anilist = "python -m src.scrapers.anilist_scraper"
-scrape-mediaarts = "python -m src.scrapers.mediaarts_scraper"
+# データ収集（少量テスト用）
+scrape-mal = "python -m src.scrapers.mal_scraper --count 50"
+scrape-anilist = "python -m src.scrapers.anilist_scraper --count 50"
+scrape-mediaarts = "python -m src.scrapers.mediaarts_scraper --max-records 1000"
 scrape-jvmg = "python -m src.scrapers.jvmg_fetcher"
+
+# データ収集（段階的取得）
+scrape-anilist-medium = "python -m src.scrapers.anilist_scraper --count 5000"
+scrape-anilist-large = "python -m src.scrapers.anilist_scraper --count 10000"
+scrape-mal-full = "python -m src.scrapers.mal_scraper --count 1000"
+scrape-mediaarts-full = "python -m src.scrapers.mediaarts_scraper --max-records 5000"
+
+# 完全取得（チェックポイント機能付き、認証必須）
+scrape-anilist-complete = "python -m src.scrapers.anilist_scraper --count 20400 --checkpoint 100"
+scrape-mal-complete = "python -m src.scrapers.mal_scraper --count 5000"
+
+# 再開機能（途中で停止した場合）
+scrape-anilist-resume = "python -m src.scrapers.anilist_scraper --count 20400 --checkpoint 100 --resume"
+
+# 全データ収集（約9.7時間、チェックポイント付き）
+scrape-all-complete = { depends-on = ["scrape-anilist-complete", "scrape-mal-complete", "scrape-mediaarts-full"] }
 
 # 合成データ
 synthetic = "python -m src.synthetic"
@@ -23,6 +39,9 @@ pipeline-viz = "python -m src.pipeline --visualize"
 pipeline-check = "python -m src.pipeline --dry-run"
 report = "python -m src.report"
 viz-interactive = "python -m src.analysis.visualize_interactive"
+
+# Rust extension (graph algorithm acceleration)
+build-rust = "maturin develop --release --manifest-path rust_ext/Cargo.toml --uv"
 
 # CLI
 stats = "python -c 'from src.cli import app; app()' stats"
@@ -67,6 +86,8 @@ rich = "*"
 structlog = "*"
 typer = "*"
 plotly = ">=6.5.2,<7"
+rust = ">=1.75"
+maturin = ">=1.11.5,<2"
 
 [pypi-dependencies]
 sparqlwrapper = "*"
@@ -78,3 +99,5 @@ fastapi = ">=0.100"
 uvicorn = {version = ">=0.20", extras = ["standard"]}
 rapidfuzz = ">=3.0"
 neo4j = ">=5.0"
+python-dotenv = ">=1.0"
+slowapi = ">=0.1.9"
