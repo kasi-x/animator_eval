@@ -19,7 +19,7 @@ scrape-mal-full = "python -m src.scrapers.mal_scraper --count 1000"
 scrape-mediaarts-full = "python -m src.scrapers.mediaarts_scraper --max-records 5000"
 
 # 完全取得（チェックポイント機能付き、認証必須）
-scrape-anilist-complete = "python -m src.scrapers.anilist_scraper --count 20400 --checkpoint 100"
+scrape-anilist-complete = "python -m src.scrapers.anilist_scraper --count 20400 --checkpoint 10"
 scrape-mal-complete = "python -m src.scrapers.mal_scraper --count 5000"
 
 # 再開機能（途中で停止した場合）

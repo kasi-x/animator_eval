@@ -129,8 +129,8 @@
   },
   "potential_value_analysis": {
     "category_distribution": {
-      "steady_performer": 2,
-      "elite": 2
+      "elite": 2,
+      "steady_performer": 2
     },
     "hidden_gems_count": 0,
     "undervalued_talent": [],
@@ -165,6 +165,6 @@
     "上位者の共通点: unknownが多数、平均媒介中心性0.1667",
     "最大の補正: 原画Dが+0.0点上昇（スタジオバイアス補正）",
     "最高成長: 監督Aがモメンタム0.0（キャリア3年）",
-    "潜在価値分布: 安定型が最多（2名）"
+    "潜在価値分布: エリートが最多（2名）"
   ]
 }

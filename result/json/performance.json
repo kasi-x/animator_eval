@@ -154,13 +154,6 @@
       "min": 0.0,
       "max": 0.0
     },
-    "collaboration_strength": {
-      "count": 1,
-      "total": 0.0,
-      "avg": 0.0,
-      "min": 0.0,
-      "max": 0.0
-    },
     "outlier_detection": {
       "count": 1,
       "total": 0.0,
@@ -168,12 +161,19 @@
       "min": 0.0,
       "max": 0.0
     },
-    "team_composition": {
+    "collaboration_strength": {
       "count": 1,
       "total": 0.001,
       "avg": 0.001,
       "min": 0.001,
       "max": 0.001
+    },
+    "team_composition": {
+      "count": 1,
+      "total": 0.0,
+      "avg": 0.0,
+      "min": 0.0,
+      "max": 0.0
     },
     "time_series": {
       "count": 1,
@@ -217,19 +217,19 @@
       "min": 0.001,
       "max": 0.001
     },
-    "milestones": {
-      "count": 1,
-      "total": 0.001,
-      "avg": 0.001,
-      "min": 0.001,
-      "max": 0.001
-    },
     "graphml_export": {
       "count": 1,
       "total": 0.003,
       "avg": 0.003,
       "min": 0.003,
       "max": 0.003
+    },
+    "milestones": {
+      "count": 1,
+      "total": 0.001,
+      "avg": 0.001,
+      "min": 0.001,
+      "max": 0.001
     },
     "network_evolution": {
       "count": 1,
@@ -303,11 +303,11 @@
     }
   },
   "memory_snapshots": {
-    "pipeline_start": 3710.4,
-    "after_data_load": 3710.4,
-    "after_graph_build": 3710.4,
-    "after_scoring": 3710.4,
-    "after_centrality": 3710.4
+    "pipeline_start": 360.6,
+    "after_data_load": 360.6,
+    "after_graph_build": 360.6,
+    "after_scoring": 360.6,
+    "after_centrality": 360.6
   },
   "counters": {
     "persons_loaded": 4,

@@ -119,6 +119,28 @@ query ($page: Int, $perPage: Int) {
 app = typer.Typer()
 
 
+# Batch save helper functions (must be defined before main())
+def save_anime_batch_to_database(conn, anime_batch):
+    """Save a batch of anime to database."""
+    from src.database import upsert_anime
+    for anime in anime_batch:
+        upsert_anime(conn, anime)
+
+
+def save_persons_batch_to_database(conn, persons_batch):
+    """Save a batch of persons to database."""
+    from src.database import upsert_person
+    for person in persons_batch:
+        upsert_person(conn, person)
+
+
+def save_credits_batch_to_database(conn, credits_batch):
+    """Save a batch of credits to database."""
+    from src.database import insert_credit
+    for credit in credits_batch:
+        insert_credit(conn, credit)
+
+
 class AniListClient:
     """AniList GraphQL 非同期クライアント (認証サポート)."""
 
@@ -748,15 +770,37 @@ def main(
             checkpoint = json.load(f)
             start_index = checkpoint.get("last_index", 0)
             fetched_ids = set(checkpoint.get("fetched_ids", []))
-            console.print(f"[yellow]📂 チェックポイントから再開: {start_index}件目から[/yellow]\n")
+
+            # Display checkpoint recovery message
+            console.print()
+            console.print(Rule("[bold bright_yellow]チェックポイント復旧[/bold bright_yellow]", style="bright_yellow"))
+            checkpoint_table = Table(show_header=False, box=None, padding=(0, 2))
+            checkpoint_table.add_row(
+                "[bright_yellow]前回の進捗[/bright_yellow]",
+                f"[bold bright_green]{start_index:,}[/bold bright_green]件処理済み"
+            )
+            checkpoint_table.add_row(
+                "[bright_yellow]今回の開始位置[/bright_yellow]",
+                f"[bold bright_cyan]{start_index + 1:,}[/bold bright_cyan]件目から"
+            )
+            checkpoint_table.add_row(
+                "[bright_yellow]タイムスタンプ[/bright_yellow]",
+                f"[dim]{checkpoint.get('timestamp', 'N/A')}[/dim]"
+            )
+            console.print(Panel(checkpoint_table, border_style="bright_yellow", padding=(1, 2)))
+            console.print()
+
             log.info("checkpoint_loaded", start_index=start_index, fetched_count=len(fetched_ids))
 
     # Fetch with incremental saving
     async def fetch_with_checkpoints():
         """Execute scraping with checkpoint-based incremental saving."""
-        from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn, TimeElapsedColumn
+        from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn, TimeElapsedColumn, MofNCompleteColumn
         from rich.panel import Panel
         from rich.table import Table
+        from rich.rule import Rule
+        from rich.align import Align
+        from rich.syntax import Syntax
         import time as time_module
         from src.scrapers.image_downloader import download_person_images, download_anime_images
 
@@ -769,34 +813,111 @@ def main(
 
             existing_ids = get_all_person_ids(conn)
             if existing_ids:
-                console.print(f"[dim]💾 既存人物: {len(existing_ids):,}件（スキップします）[/dim]\n")
+                console.print()
+                console.print(Panel(
+                    f"[bold bright_blue]💾 既存データベースから {len(existing_ids):,}件の人物を読み込みました[/bold bright_blue]\n[dim]重複を避けるためスキップします[/dim]",
+                    border_style="bright_blue",
+                    padding=(1, 2)
+                ))
+                console.print()
             return existing_ids
 
         def create_stats_display_table(elapsed, completed, total, persons, credits, images, vas, errors, skipped=0):
             """Create formatted statistics table for display."""
-            table = Table(show_header=True, header_style="bold magenta", box=None)
-            table.add_column("項目", style="cyan", width=20)
-            table.add_column("件数", justify="right", style="green", width=15)
-            table.add_column("速度", justify="right", style="yellow", width=20)
+            from rich.box import ROUNDED
+
+            table = Table(
+                show_header=True,
+                header_style="bold white on blue",
+                border_style="blue",
+                box=ROUNDED,
+                padding=(0, 1)
+            )
+            table.add_column("📊 項目", style="cyan", width=18)
+            table.add_column("📈 件数", justify="right", style="bold green", width=16)
+            table.add_column("⚡ 速度", justify="right", style="bold yellow", width=18)
 
             rate = completed / elapsed if elapsed > 0 else 0
             eta_seconds = (total - completed) / rate if rate > 0 else 0
 
-            table.add_row("アニメ処理済み", f"{completed:,} / {total:,}", f"{rate:.2f} 件/秒")
-            table.add_row("人物（新規）", f"{persons:,}", "")
-            table.add_row("└ 声優", f"{vas:,}", "")
-            if skipped > 0:
-                table.add_row("人物（スキップ）", f"[dim]{skipped:,}[/dim]", "")
-            table.add_row("クレジット", f"{credits:,}", "")
-            table.add_row("画像ダウンロード", f"{images:,}", "")
-            table.add_row("エラー", f"[red]{errors}[/red]" if errors > 0 else "0", "")
-            table.add_row("", "", "")
-            table.add_row("経過時間", f"{int(elapsed//60)}分{int(elapsed%60)}秒", "")
+            # Progress percentage
+            progress_pct = (completed / total * 100) if total > 0 else 0
+
+            # Main progress row with progress bar
+            progress_bar = "█" * int(progress_pct / 5) + "░" * (20 - int(progress_pct / 5))
             table.add_row(
-                "残り時間（推定）",
-                f"{int(eta_seconds//60)}分{int(eta_seconds%60)}秒" if eta_seconds > 0 else "計算中...",
+                "[bold cyan]アニメ処理済み[/bold cyan]",
+                f"[bold green]{completed:,} / {total:,}[/bold green]",
+                f"[bold yellow]{rate:.2f}[/bold yellow] 件/秒"
+            )
+            table.add_row(
+                f"[dim]{progress_bar}[/dim]",
+                f"[bold]{progress_pct:.1f}%[/bold]",
                 ""
             )
+
+            table.add_row("", "", "")  # Separator
+
+            # Persons section
+            table.add_row(
+                "[bold magenta]👥 人物（新規）[/bold magenta]",
+                f"[bold green]{persons:,}[/bold green]",
+                ""
+            )
+            table.add_row(
+                "[dim]  └ 声優[/dim]",
+                f"[bright_blue]{vas:,}[/bright_blue]",
+                ""
+            )
+
+            if skipped > 0:
+                table.add_row(
+                    "[dim]  └ スキップ[/dim]",
+                    f"[dim]{skipped:,}[/dim]",
+                    ""
+                )
+
+            table.add_row("", "", "")  # Separator
+
+            # Credits and images
+            table.add_row(
+                "[bold yellow]📝 クレジット[/bold yellow]",
+                f"[bold green]{credits:,}[/bold green]",
+                ""
+            )
+            table.add_row(
+                "[bold cyan]🖼️  画像ダウンロード[/bold cyan]",
+                f"[bold green]{images:,}[/bold green]",
+                ""
+            )
+
+            # Errors
+            if errors > 0:
+                table.add_row(
+                    "[bold red]❌ エラー[/bold red]",
+                    f"[bold red]{errors}[/bold red]",
+                    ""
+                )
+
+            table.add_row("", "", "")  # Separator
+
+            # Time info
+            table.add_row(
+                "[bold bright_blue]⏱️  経過時間[/bold bright_blue]",
+                f"[bold cyan]{int(elapsed//60)}分{int(elapsed%60)}秒[/bold cyan]",
+                ""
+            )
+
+            eta_display = (
+                f"[bold yellow]{int(eta_seconds//60)}分{int(eta_seconds%60)}秒[/bold yellow]"
+                if eta_seconds > 0 else "[dim]計算中...[/dim]"
+            )
+            table.add_row(
+                "[bold bright_magenta]⏳ 残り時間（推定）[/bold bright_magenta]",
+                eta_display,
+                ""
+            )
+
             return table
 
         def should_skip_person(person_id, existing_ids, seen_ids):
@@ -834,54 +955,105 @@ def main(
 
         def create_phase1_summary_table(anime_count, skipped_count):
             """Create Phase 1 completion summary table."""
-            summary_table = Table(show_header=False, box=None, padding=(0, 2))
-            summary_table.add_row("[cyan]取得完了", f"[bold green]{anime_count}件[/bold green]")
-            summary_table.add_row("[cyan]スキップ", f"[yellow]{skipped_count}件[/yellow]")
-            summary_table.add_row("[cyan]次フェーズ", f"[bold]{anime_count}件処理予定[/bold]")
+            from rich.box import ROUNDED
+            summary_table = Table(
+                show_header=False,
+                box=ROUNDED,
+                padding=(0, 2),
+                border_style="cyan"
+            )
+            summary_table.add_row(
+                "[bold cyan]📋 アニメリスト取得完了[/bold cyan]",
+                f"[bold bright_green]{anime_count}件[/bold bright_green]"
+            )
+            if skipped_count > 0:
+                summary_table.add_row(
+                    "[dim]  └ スキップ済み[/dim]",
+                    f"[dim]{skipped_count}件[/dim]"
+                )
+            summary_table.add_row(
+                "[bold cyan]📥 フェーズ2で処理[/bold cyan]",
+                f"[bold bright_yellow]{anime_count}件[/bold bright_yellow]"
+            )
             return summary_table
 
         def display_phase1_summary(summary_table):
             """Display Phase 1 completion panel."""
+            console.print()
+            console.print(Rule("[bold cyan]フェーズ1: アニメリスト取得[/bold cyan]", style="cyan"))
             console.print(Panel(
                 summary_table,
-                title="[bold cyan]✅ フェーズ1完了[/bold cyan]",
-                border_style="cyan"
+                title="[bold bright_green]✅ 完了[/bold bright_green]",
+                border_style="bright_green",
+                padding=(1, 2)
             ))
             console.print()
 
         def create_final_summary_table(totals, elapsed):
             """Create final completion summary table."""
-            final_table = Table(show_header=True, header_style="bold cyan", box=None, padding=(0, 2))
-            final_table.add_column("項目", style="cyan", width=25)
-            final_table.add_column("件数", justify="right", style="bold green", width=20)
+            from rich.box import ROUNDED
 
-            final_table.add_row("アニメ作品", f"{totals['anime']:,}")
-            final_table.add_row("人物（新規）", f"{totals['persons']:,}")
-            final_table.add_row("└ 声優", f"{totals['voice_actors']:,}")
+            final_table = Table(
+                show_header=True,
+                header_style="bold white on green",
+                box=ROUNDED,
+                border_style="green",
+                padding=(0, 1)
+            )
+            final_table.add_column("🎯 項目", style="cyan", width=25)
+            final_table.add_column("📊 件数", justify="right", style="bold green", width=20)
+
+            # Main data
+            final_table.add_row("🎬 アニメ作品", f"[bold bright_green]{totals['anime']:,}[/bold bright_green]")
+            final_table.add_row("👥 人物（新規）", f"[bold bright_green]{totals['persons']:,}[/bold bright_green]")
+            final_table.add_row("  └ 🎤 声優", f"[bright_blue]{totals['voice_actors']:,}[/bright_blue]")
+
             if totals.get("skipped", 0) > 0:
-                final_table.add_row("人物（スキップ）", f"[dim]{totals['skipped']:,}[/dim]")
-            final_table.add_row("クレジット", f"{totals['credits']:,}")
-            final_table.add_row("画像ファイル", f"{totals['images']:,}")
-            if totals.get("errors", 0) > 0:
-                final_table.add_row("エラー", f"[red]{totals['errors']}[/red]")
-            final_table.add_row("", "")
+                final_table.add_row(
+                    "  └ ⏭️  スキップ",
+                    f"[dim]{totals['skipped']:,}[/dim]"
+                )
 
+            final_table.add_row("", "")  # Separator
+
+            final_table.add_row("📝 クレジット", f"[bold bright_green]{totals['credits']:,}[/bold bright_green]")
+            final_table.add_row("🖼️  画像ファイル", f"[bold bright_green]{totals['images']:,}[/bold bright_green]")
+
+            if totals.get("errors", 0) > 0:
+                final_table.add_row(
+                    "❌ エラー",
+                    f"[bold red]{totals['errors']}[/bold red]"
+                )
+
+            final_table.add_row("", "")  # Separator
+
+            # Performance metrics
             rate = totals['anime'] / elapsed if elapsed > 0 else 0
-            final_table.add_row("所要時間", format_elapsed_time(elapsed))
-            final_table.add_row("平均速度", f"{rate:.2f} 作品/秒")
+            final_table.add_row(
+                "⏱️  所要時間",
+                f"[bold bright_blue]{format_elapsed_time(elapsed)}[/bold bright_blue]"
+            )
+            final_table.add_row(
+                "⚡ 平均速度",
+                f"[bold bright_yellow]{rate:.2f} 作品/秒[/bold bright_yellow]"
+            )
 
             return final_table
 
         def display_final_summary(final_table):
             """Display final completion panel."""
             console.print("\n")
+            console.print(Rule("[bold bright_green]データ収集完了[/bold bright_green]", style="bright_green"))
+            console.print()
             console.print(Panel(
                 final_table,
-                title="[bold green]🎉 データ収集完了！[/bold green]",
-                border_style="green",
+                title="[bold bright_green]🎉 大成功！[/bold bright_green]",
+                border_style="bright_green",
                 padding=(1, 2)
             ))
-            console.print("\n[dim]✅ チェックポイントファイル削除完了[/dim]\n")
+            console.print()
+            console.print(Align.center("[bold cyan]✨ チェックポイントファイル削除完了[/bold cyan]"))
+            console.print()
 
         def create_checkpoint_data(index, fetched_ids, totals, timestamp):
             """Create checkpoint data dictionary."""
@@ -910,29 +1082,36 @@ def main(
         def display_checkpoint_panel(checkpoint_num, stats_table):
             """Display checkpoint save panel."""
             console.print("\n")
+            console.print(Rule(
+                f"[bold bright_yellow]💾 チェックポイント #{checkpoint_num}[/bold bright_yellow]",
+                style="bright_yellow"
+            ))
             console.print(Panel(
                 stats_table,
-                title=f"[bold yellow]💾 チェックポイント #{checkpoint_num} 保存完了[/bold yellow]",
-                border_style="yellow",
+                title=f"[bold bright_yellow]✅ 保存完了[/bold bright_yellow]",
+                border_style="bright_yellow",
                 padding=(1, 2)
             ))
-            console.print("\n")
+            console.print()
 
         async def fetch_anime_list_from_api(client, count, fetched_ids):
             """Fetch anime list from API with progress display."""
-            console.print("[cyan]📋 フェーズ1: アニメリスト取得中...[/cyan]")
+            console.print()
+            console.print(Rule("[bold cyan]フェーズ1: アニメリスト取得[/bold cyan]", style="cyan"))
+            console.print()
 
             pages_needed = (count + 49) // 50
             anime_ids = []
 
             with Progress(
-                SpinnerColumn(),
-                TextColumn("[bold blue]{task.description}"),
-                BarColumn(),
+                SpinnerColumn(style="cyan"),
+                TextColumn("[bold cyan]{task.description}"),
+                BarColumn(bar_width=40),
+                MofNCompleteColumn(style="bright_blue"),
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                 console=console
             ) as progress:
-                list_task = progress.add_task("取得中...", total=pages_needed)
+                list_task = progress.add_task("📋 アニメリスト取得中...", total=pages_needed)
 
                 for page in range(1, pages_needed + 1):
                     resp = await client.get_top_anime(page=page, per_page=50)
@@ -1090,7 +1269,9 @@ def main(
             init_db(conn)
             existing_person_ids = load_existing_person_ids_from_database(conn)
 
-            console.print("[bold green]📥 フェーズ2: スタッフ情報取得 & 保存[/bold green]\n")
+            console.print()
+            console.print(Rule("[bold green]フェーズ2: スタッフ情報取得 & データベース保存[/bold green]", style="green"))
+            console.print()
 
             # Initialize batches for checkpoint saving
             batch_anime = []
@@ -1099,17 +1280,17 @@ def main(
             batch_va_count = 0
 
             with Progress(
-                SpinnerColumn(),
+                SpinnerColumn(style="green"),
                 TextColumn("[bold green]{task.description}"),
-                BarColumn(bar_width=50),
+                BarColumn(bar_width=50, complete_style="bright_green", finished_style="bold bright_green"),
+                MofNCompleteColumn(style="bright_blue"),
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                TextColumn("({task.completed}/{task.total})"),
                 TimeElapsedColumn(),
                 TimeRemainingColumn(),
                 console=console,
                 expand=False
             ) as progress:
-                staff_task = progress.add_task("[green]処理中...", total=len(anime_ids))
+                staff_task = progress.add_task("[green]📥 スタッフ情報取得中...", total=len(anime_ids))
 
                 for i, (anime, anilist_id, anime_id) in enumerate(anime_ids, start=start_index):
                     # Update progress with current anime title
@@ -1193,28 +1374,6 @@ def main(
             await client.close()
 
     asyncio.run(fetch_with_checkpoints())
-
-
-# Batch save helper functions (referenced in batch_fetch_staff_credits)
-def save_anime_batch_to_database(conn, anime_batch):
-    """Save a batch of anime to database."""
-    from src.database import upsert_anime
-    for anime in anime_batch:
-        upsert_anime(conn, anime)
-
-
-def save_persons_batch_to_database(conn, persons_batch):
-    """Save a batch of persons to database."""
-    from src.database import upsert_person
-    for person in persons_batch:
-        upsert_person(conn, person)
-
-
-def save_credits_batch_to_database(conn, credits_batch):
-    """Save a batch of credits to database."""
-    from src.database import insert_credit
-    for credit in credits_batch:
-        insert_credit(conn, credit)
 
 
 if __name__ == "__main__":

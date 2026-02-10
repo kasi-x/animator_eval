@@ -1,7 +1,63 @@
 # TODO — Animetor Eval
 
-Priority-based roadmap organized by urgency. Each item includes affected files,
-acceptance criteria, and complexity estimate.
+## プロジェクトの目的
+
+**個人の貢献を可視化・定量化** → スタジオが適正な報酬を支払う根拠を提供 → アニメ業界の健全化
+
+スコアは「能力」ではなく「ネットワーク上の位置と密度」を表す。
+個人にフォーカスが当たり、正当な評価と報酬につながることが最終ゴール。
+
+---
+
+## P0-EVAL — 最重要（個人評価の信頼性）
+
+### P0-EVAL-1: anime_value.py プレースホルダー解消
+
+`anime_value.py` の5次元のうち4つが `0.5` 固定のプレースホルダー。
+potential_value の根幹であり、報酬根拠として使えない状態。
+
+- **現状のプレースホルダー**:
+  - `commercial_success` → 0.5 固定
+  - `cultural_impact` → 0.5 固定
+  - `critical_reception` → 0.5 固定
+  - `industry_influence` → 0.5 固定
+  - `technical_quality` のみ実装済み
+- **Files**: `src/analysis/anime_value.py`, `src/analysis/potential_value.py`
+- **Acceptance**:
+  - 各次元が実データに基づく値を返す（AniList score, MAL score, 受賞歴, 続編数 etc.）
+  - 実データが取得できない場合のフォールバック戦略が明示されている
+  - 既存テスト + 新規テスト通過
+- **Complexity**: High（データソースの調査・統合が必要）
+
+### P0-EVAL-2: 全スコアへの信頼区間付与
+
+点推定だけでは報酬交渉に使えない。各スコアに信頼区間を付ける。
+
+- **対象スコア**: authority, trust, skill, potential_value, composite
+- **手法候補**:
+  - Bootstrap resampling（クレジットデータをリサンプリング）
+  - Bayesian credible interval（事前分布 + 観測データ）
+  - Cross-validation variance（既存の `crossval.py` を拡張）
+- **Files**: `src/analysis/confidence.py`, `src/pipeline_phases/core_scoring.py`,
+  `src/models.py` (ScoreSet に interval フィールド追加)
+- **Acceptance**:
+  - 各スコアに `(lower, upper, confidence_level)` が付与される
+  - クレジット数が少ない人ほど区間が広くなる（正しい不確実性表現）
+  - JSON出力に interval が含まれる
+- **Complexity**: High
+
+### P0-EVAL-3: structural_estimation 実データ検証
+
+構造推定（DID, 操作変数法, Event Study）が実データで妥当な結果を出すか検証。
+報酬根拠として使うなら、因果推定の信頼性が命。
+
+- **Files**: `src/analysis/structural_estimation.py`, `src/analysis/causal_studio_identification.py`
+- **Acceptance**:
+  - 実データ（production DB）での推定結果が経済学的に妥当
+  - 推定のロバストネスチェック（異なる仕様で結果が安定）
+  - プレースホルダー的な推定（サンプルサイズ不足等）に警告表示
+  - 推定不可能なケースでエラーではなく明示的な "insufficient data" を返す
+- **Complexity**: High
 
 ---
 
@@ -18,83 +74,77 @@ Shared async retry utility with exponential backoff and `Retry-After` support.
   `src/scrapers/anilist_scraper.py`, `src/scrapers/mal_scraper.py`,
   `src/scrapers/mediaarts_scraper.py`, `src/scrapers/jvmg_fetcher.py`
 - **Tests**: `tests/test_scraper_exceptions.py`
-- **Acceptance**:
-  - `ScraperError` base with `source`, `url`, `metadata` attributes
-  - `RateLimitError` with `retry_after`, `AuthenticationError`, `DataParseError`,
-    `EndpointUnreachableError`, `ContentValidationError`
-  - `retry_async()` respects `Retry-After` header, exponential backoff
-  - All scrapers raise typed exceptions instead of `RuntimeError`
-- **Complexity**: Medium (4-5 files, straightforward)
 
 ### P0-2: Image Downloader Retry + Content Validation
 
 **Status**: ✅ Done
 
-Add retry with exponential backoff and content validation to image downloads.
-
-- **Files**: `src/scrapers/image_downloader.py`
-- **Acceptance**:
-  - 3 retries with exponential backoff on failure
-  - `Retry-After` header respected on 429
-  - `Content-Type` must start with `image/`
-  - Files <1KB rejected as corrupt
-- **Complexity**: Low
-
 ### P0-3: Database Context Manager
 
 **Status**: ✅ Done
-
-`db_connection()` context manager to replace manual `conn.close()` patterns.
-Auto-commit on success, rollback on exception, always close.
-
-- **Files**: `src/database.py`, `src/api.py`, `src/cli.py`, `src/pipeline.py`,
-  `src/scrapers/mediaarts_scraper.py`, `src/scrapers/jvmg_fetcher.py`
-- **Tests**: `tests/test_database.py`
-- **Acceptance**:
-  - `with db_connection() as conn:` works for all callers
-  - Auto-commit on clean exit, rollback on exception
-  - All `try/finally: conn.close()` patterns migrated
-  - All bare `conn.close()` patterns migrated
-  - No leaked connections on exception paths
-- **Complexity**: Medium-High (many call sites across 6+ files)
 
 ### P0-4: API Security (CORS, Rate Limiting, API Key)
 
 **Status**: ✅ Done
 
-Production-ready API security: CORS middleware, rate limiting, API key auth
-for write endpoints.
-
-- **Files**: `src/api.py`, `pixi.toml`
-- **Tests**: `tests/test_api.py`
-- **Dependencies**: `slowapi>=0.1.9`
-- **Acceptance**:
-  - CORS: configurable `CORS_ORIGINS` from env, defaults to `["http://localhost:*"]`
-  - Rate limiting: 60/min GET, 2/min `/api/v1/pipeline/run`
-  - API key: `verify_api_key()` dependency on `/api/v1/pipeline/run`
-  - Dev mode: no API key configured → allow with log warning
-  - Production: `API_SECRET_KEY` env var required for write endpoints
-- **Complexity**: Medium (1 main file + dependency)
-
 ### P0-5: Secrets Management
 
 **Status**: ✅ Done
 
-Centralized .env loading, startup validation, and example file.
+---
 
-- **Files**: `.env.example` (new), `src/utils/config.py`,
-  `src/scrapers/anilist_scraper.py`
+## P1-EVAL — 個人評価の強化
+
+### P1-EVAL-1: explain.py 強化（個人向けレポート）
+
+「あなたの評価はこうで、根拠はこれ」を個人が理解できる形で見せる。
+現在の explain.py はスコア分解のみ。キャリアストーリーと根拠を加える。
+
+- **Files**: `src/analysis/explain.py`, `src/report.py`
 - **Acceptance**:
-  - `.env.example` with all env vars documented (placeholder values)
-  - `load_dotenv_if_exists()` — uses `python-dotenv`, no manual parsing
-  - `validate_environment()` — warns about missing optional vars
-  - AniList scraper's manual .env loading replaced with centralized utility
-- **Dependencies**: `python-dotenv>=1.0`
-- **Complexity**: Low-Medium (3 files)
+  - 個人プロファイルに「スコアの根拠」セクション追加
+  - 上位貢献作品、主要コラボレーター、キャリア転機を含む
+  - 日本語・英語の自然言語テキスト生成
+  - 信頼区間（P0-EVAL-2）の平易な説明
+- **Complexity**: Medium-High
+
+### P1-EVAL-2: studio_bias の拡充（待遇差分析）
+
+スタジオ間の待遇差を統計的に示す。業界健全化の直接ツール。
+
+- **Files**: `src/analysis/studio_bias_correction.py`, `src/analysis/bias_detector.py`
+- **Acceptance**:
+  - 同等スコアの人材がスタジオ間でどう評価されるかの比較
+  - バイアス検出結果の統計的有意性検定
+  - レポート出力（匿名化オプション付き）
+- **Complexity**: Medium
+
+### P1-EVAL-3: 重複モジュール統合
+
+- `growth.py` vs `growth_acceleration.py` → 統合
+- `circles.py` vs `community_detection.py` → circles を community_detection に吸収
+- **Files**: `src/analysis/growth.py`, `src/analysis/growth_acceleration.py`,
+  `src/analysis/circles.py`, `src/analysis/community_detection.py`
+- **Acceptance**:
+  - 重複機能が1箇所に統合
+  - 既存のJSON出力フォーマットは維持（後方互換）
+  - パイプライン呼び出し元を更新
+- **Complexity**: Medium
+
+### P1-EVAL-4: 作品軸モジュールの個人軸への再構成
+
+`anime_stats`, `seasonal`, `decades` 等の作品軸統計を個人視点に変換。
+例: 「この人はどの季節に最も活発か」「この人のキャリアは年代ごとにどう変化したか」
+
+- **Files**: `src/analysis/anime_stats.py`, `src/analysis/seasonal.py`
+- **Acceptance**:
+  - 個人IDを軸とした集計オプション追加
+  - 既存の作品軸出力は維持
+- **Complexity**: Medium
 
 ---
 
-## P1 — Important (For Other Agents)
+## P1 — Important (Infrastructure)
 
 ### P1-1: MediaArts SSL Verification Fix
 
@@ -162,16 +212,6 @@ only reprocesses changed/new data would greatly improve iteration speed.
 
 **Status**: ✅ Done
 
-Multi-stage Docker build with Rust extension compilation and Python app.
-
-- **Files**: `Dockerfile`, `docker-compose.yml`, `.dockerignore`
-- **Acceptance**:
-  - Multi-stage build (Rust extension + Python app)
-  - `docker compose up` starts API + optional Neo4j
-  - Environment variables for all configuration
-  - Health check endpoint used for container health
-- **Complexity**: Medium
-
 ### P1-7: API Input Validation Hardening
 
 Some endpoints accept raw string inputs that could be tightened with Pydantic
@@ -214,20 +254,7 @@ reduces install size, avoids dependency conflicts, and allows faster CI for targ
 
 ### P1-10: Lint Cleanup + Python 3.12 Deprecation Fix
 
-**Status**: ✅ **Complete!** All 69 lint errors resolved.
-
-**Completed Subtasks**:
-
-1. **P1-10a**: ✅ `ruff check --fix src/ tests/` — 56 unused imports (F401) + empty f-strings (F541) (Commit: 027498d)
-2. **P1-10b**: ✅ Bare `except:` → 具体的な例外型に修正 (already fixed)
-   - `src/analysis/causal_studio_identification.py:282` → `except (ValueError, ZeroDivisionError):`
-3. **P1-10c**: ✅ Dead code (F841 unused variables) 削除 (Commit: 0203502)
-   - 4 variables removed: event_study_viz, structural_estimation_html, temporal_influence (2x)
-4. **P1-10d**: ✅ Python 3.12 deprecation fixed (already addressed)
-   - No asyncio.get_event_loop() calls remaining in codebase
-
-- **Acceptance**: ✅ `pixi run lint` — 0 errors!
-- **Complexity**: Low（ほぼ自動修正、手動修正4箇所）
+**Status**: ✅ Done
 
 ### P1-11: AniList Scraper main() 分割 (514行 → 5関数)
 
@@ -251,14 +278,14 @@ reduces install size, avoids dependency conflicts, and allows faster CI for targ
 
 20の分析モジュール（計~4000行）にテストがない。
 
-**Tier 1 (Critical — 複雑アルゴリズム)**:
-- `causal_studio_identification.py` (1017行) — 因果推論
-- `structural_estimation.py` (~700行) — Event Study
-- `community_detection.py` (695行) — コミュニティ検出 + 師弟関係
-
-**Tier 2 (Important — JSON export対象)**:
-- `contribution_attribution.py` (~250行) — Shapley値
+**Tier 1 (Critical — 報酬根拠に直結)**:
+- `structural_estimation.py` (~700行) — 因果推定（DID, Event Study）
+- `causal_studio_identification.py` (1017行) — スタジオ因果効果
 - `potential_value.py` (~180行) — ポテンシャル推定
+- `contribution_attribution.py` (~250行) — Shapley値
+
+**Tier 2 (Important — 個人評価の補助)**:
+- `community_detection.py` (695行) — コミュニティ検出 + 師弟関係
 - `bias_detector.py` (~150行) — バイアス検出
 
 **Tier 3 (低優先)**:
@@ -270,7 +297,7 @@ reduces install size, avoids dependency conflicts, and allows faster CI for targ
 
 - **Files**: `tests/` (new test files)
 - **Acceptance**: Tier 1 modules at 70%+ coverage
-- **Complexity**: High（Tier 1 だけで ~2400行のテスト対象）
+- **Complexity**: High（Tier 1 だけで ~2150行のテスト対象）
 
 ---
 
@@ -281,333 +308,39 @@ reduces install size, avoids dependency conflicts, and allows faster CI for targ
 元のパイプライン実行時間: **182.6s** (12,164 persons, 2.68M edges)
 最適化後の予測: **40-60s** (3-4.5x speedup)
 
-**注意事項**:
+<details>
+<summary>完了済み PERF 詳細（クリックで展開）</summary>
 
-- 長期放送作品（ポケモン等）や劇場アニメはスタッフが多くて当然。
-  スタッフ数によるフィルタリングは行わないこと。
-- **Rust化は不要**。これらのボトルネックは「同じ計算を何万回も繰り返す」
-  純Pythonコードの問題であり、dict事前構築やキャッシュで計算量自体を
-  O(n²) → O(n) に削減できる。Rustで O(n²) を速く回しても O(n²) のまま。
-  (参考: PageRank は NetworkX 内部で scipy 疎行列演算 (C実装) を使うため
-  44ms で完了しており、Python でも十分速い)
+### PERF-1: GraphML Export 高速化 (78.8s → 1-3s) ✅
 
-### PERF-1: GraphML Export 高速化 (78.8s → 1-3s)
+Commit: 3753f17 — `nx.write_graphml_lxml()` + `prettyprint=False` + `round(2)`
 
-**Status**: ✅ Done (Commit: 3753f17)
+### PERF-2: Influence Tree 高速化 (60s → 1-2s) ✅
 
-**効果: ★★★ (25-50x)** | **複雑度: Low** | **実装時間: 30分**
+Commit: 3753f17 — person_highest_stage dict 事前構築で O(1) ルックアップ
 
-**問題箇所**: `src/analysis/graphml_export.py`
+### PERF-3: Structural Estimation 高速化 (59.7s → 3-6s) ✅
 
-`nx.write_graphml()` (line 88) が 12,164ノード + 2.68Mエッジを
-prettyprint付きXMLにシリアライズしている。float属性がフル精度で出力
-されるため、生成ファイルが約246MBになり、I/Oバウンドで遅い。
+Commit: fdc24c9 — Counter 事前集計 + defaultdict person-year index
 
-**原因コード**:
+### PERF-4: Contribution Attribution 高速化 (39.8s → 3-5s) ✅
 
-```python
-# line 57: float全精度で出力
-attrs[key] = float(ps[key])  # e.g. 75.12345678901234
+Commit: ba26c69 — marginal_cache + anime_credits_index
 
-# line 88: prettyprint=Trueがデフォルト
-nx.write_graphml(g, str(output_path))
-```
+### PERF-5: Bridge Detection 高速化 (16.5s → 3-6s) ✅
 
-**修正**:
+Commit: ba26c69 — itertools.combinations (C実装) に置換
 
-1. **line 17** — 関数シグネチャに `prettyprint` と `round_decimals` パラメータ追加
-2. **line 57** — float属性を `round(float(ps[key]), round_decimals)` に変更
-3. **line 88** — `nx.write_graphml_lxml(g, str(output_path), prettyprint=False)` に変更
+| # | ボトルネック | 現在 | 目標 | 効果 |
+|---|---|---|---|---|
+| PERF-1 | GraphML Export | 78.8s | 1-3s | ★★★ |
+| PERF-2 | Influence Tree | 60.0s | 1-2s | ★★★ |
+| PERF-3 | Structural Estimation | 59.7s | 3-6s | ★★☆ |
+| PERF-4 | Contribution Attribution | 39.8s | 3-5s | ★★☆ |
+| PERF-5 | Bridge Detection | 16.5s | 3-6s | ★☆☆ |
+| | **合計** | **254.8s** | **11-22s** | |
 
-**呼び出し側**: `src/pipeline_phases/analysis_modules.py` line 126-128
-
-```python
-graphml_file = export_graphml(
-    context.persons, context.credits, person_scores=scores_for_graphml,
-    collaboration_graph=context.collaboration_graph,
-    prettyprint=False, round_decimals=2,  # ← 追加
-)
-```
-
-**受入条件**:
-- 出力GraphMLが `nx.read_graphml()` で読み込み可能
-- Gephiインポート可能（prettyprint=Falseでもフォーマットは同じ）
-- スコアの精度低下は0.01以内（実用上影響なし）
-- `pixi run test` 全通過
-- 78.8s → 1-3s
-
----
-
-### PERF-2: Influence Tree 高速化 (60s → 1-2s)
-
-**Status**: ✅ Done (Commit: 3753f17)
-
-**効果: ★★★ (40-60x)** | **複雑度: Low** | **実装時間: 30分**
-
-**問題箇所**: `src/analysis/influence.py`
-
-`_get_highest_stage()` (lines 81-88) が全クレジットリストを線形スキャン
-して1人分のキャリアステージを取得。これがmenteeループ内 (line 144) で
-毎回呼ばれるため、O(mentee数 × 全クレジット数) = O(60K × 34K) の計算量。
-
-**原因コード**:
-
-```python
-# lines 81-88: 全クレジットを毎回スキャンする関数
-def _get_highest_stage(person_id: str, credits: list[Credit]) -> int:
-    stages = [
-        CAREER_STAGE.get(c.role, 0)
-        for c in credits              # ← 34,637件を毎回全走査
-        if c.person_id == person_id
-    ]
-    return max(stages) if stages else 0
-
-# line 144: mentee毎に呼び出し (数万回)
-highest = _get_highest_stage(mentee_id, credits)
-```
-
-**修正**:
-
-1. `compute_influence_tree()` の冒頭（line 91付近）で person_id → 最高ステージ
-   の辞書を1パスで構築する
-
-```python
-person_highest_stage: dict[str, int] = {}
-for c in credits:
-    stage = CAREER_STAGE.get(c.role, 0)
-    if stage > person_highest_stage.get(c.person_id, 0):
-        person_highest_stage[c.person_id] = stage
-```
-
-2. line 144 の呼び出しを `person_highest_stage.get(mentee_id, 0)` に置換
-3. `_get_highest_stage()` 関数は削除可能（他で使われていなければ）
-
-**追加修正（任意）**: `_find_mentor_mentee_pairs()` 内の年情報取得
-(lines 64-73) でも `anime_map.get(aid)` を毎回呼んでいる。
-`anime_years = {aid: a.year for aid, a in anime_map.items() if a.year}` を
-事前構築すると追加で2-3x高速化。
-
-**受入条件**:
-- O(1) ルックアップで全クレジットの線形スキャンが消滅
-- 出力（influence tree JSON）が修正前と同一
-- `pixi run test` 全通過
-- 60s → 1-2s
-
----
-
-### PERF-3: Structural Estimation 高速化 (59.7s → 3-6s)
-
-**Status**: ✅ Done (Commit: fdc24c9)
-
-**効果: ★★☆ (10-20x)** | **複雑度: Medium** | **実装時間: 1-2時間**
-
-**問題箇所**: `src/analysis/structural_estimation.py`
-
-Event Study 推定関数 `estimate_event_study()` 内の demeaning ループ
-(lines 682-704) で、各観測値に対して `mean_time_k` を計算するために
-全観測リストを2回スキャンしている。これが 7期間 × 全観測 × 全観測 で
-**O(k × n²)** になっている。
-
-**原因コード**:
-
-```python
-# lines 695-698: 三重ネストの内側（各観測で全リスト2回走査）
-mean_time_k = sum(
-    1 for o, r in observations_with_reltime      # ← 全リスト走査1回目
-    if o.person_id == obs.person_id and r == k
-) / len([o for o, _ in observations_with_reltime  # ← 全リスト走査2回目
-        if o.person_id == obs.person_id])
-```
-
-この `mean_time_k` は (person_id, k) のペアで一意に決まる値。
-同じ person_id と k の組み合わせに対して何千回も再計算している。
-
-**修正**:
-
-1. ループ前に `Counter` で事前集計
-
-```python
-from collections import Counter
-
-person_obs_count = Counter(
-    obs.person_id for obs, _ in observations_with_reltime
-)
-person_k_count = Counter(
-    (obs.person_id, rel_t) for obs, rel_t in observations_with_reltime
-)
-```
-
-2. lines 695-698 を O(1) ルックアップに置換
-
-```python
-mean_time_k = person_k_count.get((obs.person_id, k), 0) / \
-              max(person_obs_count.get(obs.person_id, 1), 1)
-```
-
-**追加問題箇所**: `estimate_fixed_effects()` 内 (lines 223-227付近)
-
-```python
-# person_year_data の全キーをスキャンして1人分を取得
-all_person_years = [
-    yr for (pid, yr), _ in person_year_data.items()
-    if pid == person_id  # ← 全エントリスキャン
-]
-```
-
-**修正**: ループ前に `defaultdict(list)` で person_id → years を構築し、
-`person_years_index.get(person_id, [])` に置換。
-
-**受入条件**:
-- Event Study の demeaning が O(n) に削減
-- Fixed Effects の person-year ルックアップが O(1)
-- `pixi run test` 全通過、推定結果が修正前と同一
-- 59.7s → 3-6s
-
----
-
-### PERF-4: Contribution Attribution 高速化 (39.8s → 3-5s)
-
-**Status**: ✅ Done (Commit: ba26c69)
-
-**効果: ★★☆ (8-15x)** | **複雑度: Medium** | **実装時間: 1-2時間**
-
-**問題箇所1**: `src/analysis/contribution_attribution.py`
-
-`compute_shapley_value_approximate()` (lines 150-179) で、各サンプリング
-反復ごとに coalition 内の全スタッフの `estimate_marginal_contribution()` を
-再計算している。同じ (person_id, role) に対する限界貢献値は定数なのに
-毎回呼んでいる。
-
-**原因コード**:
-
-```python
-# lines 150-179: sample_size (50-1000) 回のループ
-for _ in range(min(sample_size, 1000)):
-    staff_copy = list(all_staff)          # line 152: O(staff) リストコピー
-    random.shuffle(staff_copy)            # line 153: O(staff) シャッフル
-    position = next(i for i, (pid, _)     # line 157: O(staff) 線形探索
-                    in enumerate(staff_copy) if pid == person_id)
-    coalition = staff_copy[:position]     # line 162
-    value_with_coalition = sum(
-        estimate_marginal_contribution(   # lines 165-169: 毎回再計算
-            pid, r, anime_value, person_scores, staff_quality_avg
-        )
-        for pid, r in coalition
-    )
-```
-
-**修正**:
-
-ループ前に限界貢献を全スタッフ分キャッシュ:
-
-```python
-marginal_cache = {
-    pid: estimate_marginal_contribution(pid, r, anime_value, person_scores, avg)
-    for pid, r in all_staff
-}
-
-for _ in range(sample_size):
-    # ... shuffle, position ...
-    value_with_coalition = sum(marginal_cache[pid] for pid, _ in coalition)
-    value_with_person = value_with_coalition + marginal_cache[person_id]
-```
-
-**問題箇所2**: `src/pipeline_phases/supplementary_metrics.py` line 181
-
-100アニメ分のループで毎回全クレジットを線形フィルタリング:
-
-```python
-# line 181: 全クレジットを100回スキャン
-anime_credits = [c for c in context.credits if c.anime_id == anime_id]
-```
-
-**修正**: ループ前に `anime_credits_index: dict[str, list[Credit]]` を構築
-
-```python
-anime_credits_index = defaultdict(list)
-for c in context.credits:
-    anime_credits_index[c.anime_id].append(c)
-
-# ループ内: O(1)
-anime_credits = anime_credits_index.get(anime_id, [])
-```
-
-**追加修正（任意）**: 100アニメの処理は互いに独立なので
-`ThreadPoolExecutor(max_workers=8)` で並列化可能。
-
-**受入条件**:
-- 限界貢献のキャッシュで冗長計算を排除
-- クレジットの事前インデックスで O(1) ルックアップ
-- `pixi run test` 全通過
-- 39.8s → 3-5s
-
----
-
-### PERF-5: Bridge Detection 高速化 (16.5s → 3-6s)
-
-**Status**: ✅ Done (Commit: ba26c69)
-
-**効果: ★☆☆ (3-5x)** | **複雑度: Low** | **実装時間: 30分**
-
-**問題箇所**: `src/analysis/bridges.py` lines 40-45
-
-Python の二重ネストループでペアを生成。内側のスライス `plist[i + 1:]` が
-毎回新しいリストを作成する。
-
-**原因コード**:
-
-```python
-# lines 40-45
-for anime_id, persons in anime_persons.items():
-    plist = sorted(persons)
-    for i, p1 in enumerate(plist):
-        all_persons.add(p1)
-        for p2 in plist[i + 1 :]:     # ← スライスで毎回リスト生成
-            edges[(p1, p2)].append(anime_id)
-```
-
-**修正**:
-
-`itertools.combinations` (C実装) に置換:
-
-```python
-import itertools
-
-for anime_id, persons in anime_persons.items():
-    plist = sorted(persons)
-    all_persons.update(plist)
-    for p1, p2 in itertools.combinations(plist, 2):
-        edges[(p1, p2)].append(anime_id)
-```
-
-`plist` は既にソート済みなので `p1 < p2` が保証される（canonical order不要）。
-
-**受入条件**:
-- `itertools.combinations` 使用
-- `pixi run test` 全通過、出力同一
-- 16.5s → 3-6s
-
----
-
-### PERF 合計インパクト見積
-
-| # | ボトルネック | 現在 | 目標 | 効果 | 実装時間 |
-|---|---|---|---|---|---|
-| PERF-1 | GraphML Export | 78.8s | 1-3s | ★★★ | 30分 |
-| PERF-2 | Influence Tree | 60.0s | 1-2s | ★★★ | 30分 |
-| PERF-3 | Structural Estimation | 59.7s | 3-6s | ★★☆ | 1-2時間 |
-| PERF-4 | Contribution Attribution | 39.8s | 3-5s | ★★☆ | 1-2時間 |
-| PERF-5 | Bridge Detection | 16.5s | 3-6s | ★☆☆ | 30分 |
-| | **合計** | **254.8s** | **11-22s** | | **3-6時間** |
-
-**パイプライン全体**: 182.6s → **60-80s** (他の処理を含む見積)
-
-**実装順序**: PERF-1 → PERF-2 (各30分で計140s削減) → PERF-3 → PERF-4 → PERF-5
-
-**共通の受入条件**:
-- `pixi run test` が全通過（現在1030 passed, 5 pre-existing failures in retry tests）
-- `pixi run lint` がクリーン
-- パイプライン出力JSONが修正前と実質同一（float丸め以外）
+</details>
 
 ---
 
@@ -621,12 +354,17 @@ in-memory or Redis cache with TTL would reduce latency.
 - **Files**: `src/api.py`, `src/utils/json_io.py`
 - **Complexity**: Medium
 
-### P2-2: Frontend SPA
+### P2-2: Frontend SPA（個人ポートフォリオ）
 
-Replace static HTML files with a proper single-page application (React/Vue/Svelte)
-for score browsing, search, and visualization.
+個人が自分のスコア・キャリア・根拠を閲覧できるWebアプリ。
+スタジオ向けダッシュボードではなく、**個人向けポートフォリオ**がメイン。
 
 - **Files**: `frontend/` (new directory)
+- **機能**:
+  - 個人プロファイルページ（スコア + 信頼区間 + 根拠）
+  - キャリアタイムライン（インタラクティブ）
+  - 同等ポジションの人材との比較（匿名化）
+  - 多言語対応（既存i18nシステム活用）
 - **Complexity**: High
 
 ### P2-3: Performance Benchmarks (CI)
@@ -663,38 +401,48 @@ instead of starting over.
 
 ## Completed (Reference)
 
+<details>
+<summary>完了済みタスク一覧（クリックで展開）</summary>
+
+### P0-1 ~ P0-5: Robustness & Security ✅
+
+- Scraper exceptions + retry, image downloader, db_connection, API security, secrets management
+
 ### Rust Extension (Phase 10) ✅
 
 Pipeline acceleration from ~9min to ~1-2min via PyO3/maturin Rust extension.
 Brandes' betweenness (rayon parallel), collaboration edge aggregation,
 betweenness cache deduplication.
 
-- Measured: betweenness 547x speedup, eigenvector 4.9x
-- Files: `rust_ext/`, `src/analysis/graph_rust.py`, `tests/test_graph_rust.py`
-
 ### Pipeline Bottleneck Optimization ✅
 
-Optimized two major bottlenecks discovered after Rust acceleration:
-
-- `collaboration_strength.py`: Two-pass optimization (count first, detail later) — **101.8s → 29.9s (3.4x)**
-- `graphml_export.py`: Accept pre-built collaboration_graph to avoid O(n²) recomputation — **112.7s → 78.8s (1.4x)**
-- Total pipeline: **225s → 182.6s** (12,164 persons, 2.68M edges)
+- `collaboration_strength.py`: 101.8s → 29.9s (3.4x)
+- `graphml_export.py`: 112.7s → 78.8s (1.4x)
 
 ### Docker Deployment ✅
 
 Multi-stage Dockerfile (Rust build + Python app), docker-compose with app + Neo4j.
 
-- Files: `Dockerfile`, `docker-compose.yml`, `.dockerignore`
+### P1-10: Lint Cleanup ✅
+
+All 69 lint errors resolved. `pixi run lint` clean.
+
+### PERF-1 ~ PERF-5: Performance Optimization ✅
+
+Total: 254.8s → 11-22s across 5 bottlenecks.
+
+</details>
 
 ---
 
 ## Legal Compliance (Ongoing)
 
-These are hard constraints, not backlog items:
+これらはバックログではなく、常に遵守すべきハード制約:
 
-- [ ] Never frame scores as "ability" — only "network position and density"
-- [ ] Entity resolution false positives = potential defamation (信用毀損)
-- [ ] Only use publicly available credit data from released works
-- [ ] All reports include JA + EN disclaimers
-- [ ] AniList rate limit: 90 req/min — exponential backoff implemented
-- [ ] MAL (Jikan) rate limit: 3 req/s, 60 req/min — implemented
+- [ ] スコアを「能力」と表現しない — 「ネットワーク上の位置と密度」のみ
+- [ ] エンティティ解決の偽陽性 = 潜在的名誉毀損（信用毀損）
+- [ ] 公開されたクレジットデータのみ使用
+- [ ] 全レポートに JA + EN の免責事項を含む
+- [ ] AniList rate limit: 90 req/min — exponential backoff 実装済み
+- [ ] MAL (Jikan) rate limit: 3 req/s, 60 req/min — 実装済み
+- [ ] **報酬根拠として提示する場合、信頼区間の表示を必須とする**（P0-EVAL-2）
