@@ -35,38 +35,49 @@ def compute_collaboration_strength(
         list of {person_a, person_b, shared_works, shared_anime, role_pairs,
                  first_year, latest_year, longevity, strength_score}
     """
-    # Build anime → [(person_id, role)] mapping
-    anime_staff: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    # Build anime → {person_id: set(roles)} mapping (pre-compute for O(1) lookup)
+    anime_person_roles: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
     for c in credits:
-        anime_staff[c.anime_id].append((c.person_id, c.role.value))
+        anime_person_roles[c.anime_id][c.person_id].add(c.role.value)
 
-    # Count shared works per pair
-    pair_data: dict[tuple[str, str], dict] = {}
+    # Pass 1: Count shared works per pair (lightweight — no role data yet)
+    pair_shared_anime: dict[tuple[str, str], list[str]] = defaultdict(list)
+    pair_years: dict[tuple[str, str], list[int]] = defaultdict(list)
 
-    for anime_id, staff in anime_staff.items():
+    for anime_id, person_roles in anime_person_roles.items():
         anime = anime_map.get(anime_id)
         year = anime.year if anime else None
+        persons = list(person_roles.keys())
 
-        persons = list({pid for pid, _ in staff})
-        for i, pid_a in enumerate(persons):
-            for pid_b in persons[i + 1:]:
-                key = (min(pid_a, pid_b), max(pid_a, pid_b))
-                if key not in pair_data:
-                    pair_data[key] = {
-                        "anime_ids": set(),
-                        "years": [],
-                        "role_pairs": [],
-                    }
-                pair_data[key]["anime_ids"].add(anime_id)
+        for i in range(len(persons)):
+            pid_a = persons[i]
+            for j in range(i + 1, len(persons)):
+                pid_b = persons[j]
+                key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
+                pair_shared_anime[key].append(anime_id)
                 if year:
-                    pair_data[key]["years"].append(year)
+                    pair_years[key].append(year)
 
-                # Record role combinations for this anime
-                roles_a = {r for p, r in staff if p == pid_a}
-                roles_b = {r for p, r in staff if p == pid_b}
-                for ra in roles_a:
-                    for rb in roles_b:
-                        pair_data[key]["role_pairs"].append(f"{ra}+{rb}")
+    # Pass 2: Collect role pairs only for qualifying pairs (min_shared filter)
+    pair_data: dict[tuple[str, str], dict] = {}
+    for key, anime_ids in pair_shared_anime.items():
+        if len(anime_ids) < min_shared:
+            continue
+        pid_a, pid_b = key
+        # Collect role pairs from all shared anime
+        role_pairs: list[str] = []
+        for anime_id in anime_ids:
+            roles_a = anime_person_roles[anime_id].get(pid_a, set())
+            roles_b = anime_person_roles[anime_id].get(pid_b, set())
+            for ra in roles_a:
+                for rb in roles_b:
+                    role_pairs.append(f"{ra}+{rb}")
+
+        pair_data[key] = {
+            "anime_ids": set(anime_ids),
+            "years": pair_years.get(key, []),
+            "role_pairs": role_pairs,
+        }
 
     # Filter by min_shared and compute metrics
     results = []

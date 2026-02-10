@@ -19,6 +19,7 @@ def export_graphml(
     credits: list[Credit],
     person_scores: dict[str, dict] | None = None,
     output_path: Path | None = None,
+    collaboration_graph: nx.Graph | None = None,
 ) -> Path:
     """コラボレーショングラフをGraphML形式でエクスポートする.
 
@@ -27,6 +28,7 @@ def export_graphml(
         credits: クレジットリスト
         person_scores: {person_id: {authority, trust, skill, composite, ...}}
         output_path: 出力パス (None の場合はデフォルト)
+        collaboration_graph: 既存のコラボレーショングラフ (再利用で高速化)
 
     Returns:
         出力ファイルパス
@@ -57,20 +59,31 @@ def export_graphml(
                 attrs["category"] = str(ps["primary_role"])
         g.add_node(p.id, **attrs)
 
-    # Build edges from shared credits
-    anime_persons: dict[str, list[str]] = defaultdict(list)
-    for c in credits:
-        anime_persons[c.anime_id].append(c.person_id)
+    if collaboration_graph is not None:
+        # Reuse existing collaboration graph edges (avoids O(n²) recomputation)
+        for u, v, data in collaboration_graph.edges(data=True):
+            if g.has_node(u) and g.has_node(v):
+                shared = int(data.get("shared_works", 1))
+                g.add_edge(u, v, weight=shared, shared_works=shared)
+    else:
+        # Fallback: build edges from credits (slow path)
+        anime_persons: dict[str, list[str]] = defaultdict(list)
+        for c in credits:
+            anime_persons[c.anime_id].append(c.person_id)
 
-    for anime_id, pids in anime_persons.items():
-        unique_pids = list(set(pids))
-        for i, a in enumerate(unique_pids):
-            for b in unique_pids[i + 1:]:
-                if g.has_edge(a, b):
-                    g[a][b]["weight"] += 1
-                    g[a][b]["shared_works"] += 1
-                else:
-                    g.add_edge(a, b, weight=1, shared_works=1)
+        # Pre-aggregate edges in memory (same pattern as graph.py optimization)
+        edge_counts: dict[tuple[str, str], int] = defaultdict(int)
+        for anime_id, pids in anime_persons.items():
+            unique_pids = list(set(pids))
+            for i in range(len(unique_pids)):
+                for j in range(i + 1, len(unique_pids)):
+                    a, b = unique_pids[i], unique_pids[j]
+                    key = (a, b) if a < b else (b, a)
+                    edge_counts[key] += 1
+        g.add_edges_from(
+            (a, b, {"weight": cnt, "shared_works": cnt})
+            for (a, b), cnt in edge_counts.items()
+        )
 
     nx.write_graphml(g, str(output_path))
 

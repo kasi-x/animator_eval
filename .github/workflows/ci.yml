@@ -17,6 +17,9 @@ jobs:
           pixi-version: v0.41.4
           cache: true
 
+      - name: Build Rust extension
+        run: pixi run build-rust
+
       - name: Lint
         run: pixi run lint
 

@@ -203,3 +203,91 @@ def detect_engagement_decay(
         "total_appearances": total_appearances,
         "recent_appearances": recent_appearances,
     }
+
+
+def batch_detect_engagement_decay(
+    credits: list[Credit],
+    anime_map: dict[str, Anime],
+    window_size: int = 5,
+) -> dict[str, list[dict]]:
+    """全アニメーター×監督ペアの起用減衰をバッチ検出する.
+
+    最適化版: credits を1回スキャンして事前集計し、
+    共演のあるペアのみを検査する。
+
+    Returns:
+        {person_id: [{"director_id": ..., "status": "decayed", ...}, ...]}
+    """
+    # Step 1: 事前集計（credits を1回だけスキャン）
+    director_works: dict[str, list[tuple[int, str]]] = defaultdict(list)
+    person_anime: dict[str, set[str]] = defaultdict(set)
+    director_ids: set[str] = set()
+
+    for c in credits:
+        person_anime[c.person_id].add(c.anime_id)
+        if c.role in DIRECTOR_ROLES:
+            director_ids.add(c.person_id)
+            anime = anime_map.get(c.anime_id)
+            if anime and anime.year:
+                director_works[c.person_id].append((anime.year, c.anime_id))
+
+    # Sort director works by year
+    for dir_id in director_works:
+        director_works[dir_id].sort()
+
+    # Step 2: 監督ごとにコラボレーターを特定（共演のあるペアのみ）
+    director_anime_sets: dict[str, set[str]] = {
+        dir_id: {aid for _, aid in works}
+        for dir_id, works in director_works.items()
+    }
+
+    # Step 3: 共演ペアのみ検査
+    decay_results: dict[str, list[dict]] = {}
+    pairs_checked = 0
+
+    for dir_id, works in director_works.items():
+        if len(works) < window_size:
+            continue
+
+        dir_anime = director_anime_sets[dir_id]
+        recent_works = works[-window_size:]
+
+        for pid, p_anime in person_anime.items():
+            if pid in director_ids:
+                continue
+
+            # 共演がなければスキップ
+            shared = p_anime & dir_anime
+            if not shared:
+                continue
+
+            pairs_checked += 1
+
+            # 全体の起用率
+            total_appearances = len(shared)
+            expected_rate = total_appearances / len(works)
+
+            # 直近 window の起用率
+            recent_appearances = sum(
+                1 for _, aid in recent_works if aid in p_anime
+            )
+            recent_rate = recent_appearances / window_size
+
+            if recent_rate < expected_rate * 0.5:
+                decay_results.setdefault(pid, []).append({
+                    "director_id": dir_id,
+                    "status": "decayed",
+                    "expected_rate": round(expected_rate, 3),
+                    "recent_rate": round(recent_rate, 3),
+                    "total_works": len(works),
+                    "total_appearances": total_appearances,
+                    "recent_appearances": recent_appearances,
+                })
+
+    logger.info(
+        "engagement_decay_batch_complete",
+        directors=len(director_works),
+        pairs_checked=pairs_checked,
+        persons_with_decay=len(decay_results),
+    )
+    return decay_results

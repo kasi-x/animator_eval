@@ -1,7 +1,9 @@
 """SQLite データベース管理."""
 
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Generator
 
 import structlog
 
@@ -12,7 +14,7 @@ logger = structlog.get_logger()
 
 DEFAULT_DB_PATH = DB_DIR / "animetor_eval.db"
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 6
 
 
 def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
@@ -25,6 +27,29 @@ def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
+
+
+@contextmanager
+def db_connection(db_path: Path | None = None) -> Generator[sqlite3.Connection, None, None]:
+    """SQLite 接続のコンテキストマネージャ.
+
+    正常終了時は自動コミット、例外時はロールバック、常にクローズする。
+
+    Usage::
+
+        with db_connection() as conn:
+            conn.execute("INSERT ...")
+            # auto-commit on success, rollback on exception
+    """
+    conn = get_connection(db_path)
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def init_db(conn: sqlite3.Connection) -> None:
@@ -128,6 +153,8 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         2: _migrate_v2_add_score_history_index,
         3: _migrate_v3_add_pipeline_meta,
         4: _migrate_v4_add_studio_column,
+        5: _migrate_v5_add_person_metadata,
+        6: _migrate_v6_add_anime_metadata,
     }
 
     for version in range(current + 1, SCHEMA_VERSION + 1):
@@ -186,19 +213,90 @@ def _migrate_v4_add_studio_column(conn: sqlite3.Connection) -> None:
         pass  # Column already exists
 
 
+def _migrate_v5_add_person_metadata(conn: sqlite3.Connection) -> None:
+    """v5: persons テーブルにメタデータカラムを追加."""
+    new_columns = [
+        "image_large TEXT",
+        "image_medium TEXT",
+        "image_large_path TEXT",
+        "image_medium_path TEXT",
+        "date_of_birth TEXT",
+        "age INTEGER",
+        "gender TEXT",
+        "years_active TEXT DEFAULT '[]'",
+        "hometown TEXT",
+        "blood_type TEXT",
+        "description TEXT",
+        "favourites INTEGER",
+        "site_url TEXT",
+    ]
+    for column in new_columns:
+        try:
+            conn.execute(f"ALTER TABLE persons ADD COLUMN {column}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
+
+def _migrate_v6_add_anime_metadata(conn: sqlite3.Connection) -> None:
+    """v6: anime テーブルにメタデータカラムを追加."""
+    new_columns = [
+        "cover_large TEXT",
+        "cover_extra_large TEXT",
+        "cover_medium TEXT",
+        "banner TEXT",
+        "cover_large_path TEXT",
+        "banner_path TEXT",
+        "description TEXT",
+        "format TEXT",
+        "status TEXT",
+        "start_date TEXT",
+        "end_date TEXT",
+        "duration INTEGER",
+        "source TEXT",
+        "genres TEXT DEFAULT '[]'",
+        "tags TEXT DEFAULT '[]'",
+        "popularity_rank INTEGER",
+        "favourites INTEGER",
+        "studios TEXT DEFAULT '[]'",
+    ]
+    for column in new_columns:
+        try:
+            conn.execute(f"ALTER TABLE anime ADD COLUMN {column}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
+
 def upsert_person(conn: sqlite3.Connection, person: Person) -> None:
-    """人物を挿入または更新する."""
+    """人物を挿入または更新する（包括的データ対応）."""
     import json
 
     conn.execute(
-        """INSERT INTO persons (id, name_ja, name_en, aliases, mal_id, anilist_id)
-           VALUES (?, ?, ?, ?, ?, ?)
+        """INSERT INTO persons (
+               id, name_ja, name_en, aliases, mal_id, anilist_id,
+               image_large, image_medium, image_large_path, image_medium_path,
+               date_of_birth, age, gender, years_active, hometown, blood_type,
+               description, favourites, site_url
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
                name_ja = COALESCE(NULLIF(excluded.name_ja, ''), persons.name_ja),
                name_en = COALESCE(NULLIF(excluded.name_en, ''), persons.name_en),
                aliases = excluded.aliases,
                mal_id = COALESCE(excluded.mal_id, persons.mal_id),
-               anilist_id = COALESCE(excluded.anilist_id, persons.anilist_id)
+               anilist_id = COALESCE(excluded.anilist_id, persons.anilist_id),
+               image_large = COALESCE(excluded.image_large, persons.image_large),
+               image_medium = COALESCE(excluded.image_medium, persons.image_medium),
+               image_large_path = COALESCE(excluded.image_large_path, persons.image_large_path),
+               image_medium_path = COALESCE(excluded.image_medium_path, persons.image_medium_path),
+               date_of_birth = COALESCE(excluded.date_of_birth, persons.date_of_birth),
+               age = COALESCE(excluded.age, persons.age),
+               gender = COALESCE(excluded.gender, persons.gender),
+               years_active = COALESCE(excluded.years_active, persons.years_active),
+               hometown = COALESCE(excluded.hometown, persons.hometown),
+               blood_type = COALESCE(excluded.blood_type, persons.blood_type),
+               description = COALESCE(excluded.description, persons.description),
+               favourites = COALESCE(excluded.favourites, persons.favourites),
+               site_url = COALESCE(excluded.site_url, persons.site_url)
         """,
         (
             person.id,
@@ -207,15 +305,35 @@ def upsert_person(conn: sqlite3.Connection, person: Person) -> None:
             json.dumps(person.aliases, ensure_ascii=False),
             person.mal_id,
             person.anilist_id,
+            person.image_large,
+            person.image_medium,
+            person.image_large_path,
+            person.image_medium_path,
+            person.date_of_birth,
+            person.age,
+            person.gender,
+            json.dumps(person.years_active, ensure_ascii=False),
+            person.hometown,
+            person.blood_type,
+            person.description,
+            person.favourites,
+            person.site_url,
         ),
     )
 
 
 def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
-    """アニメを挿入または更新する."""
+    """アニメを挿入または更新する（包括的データ対応）."""
+    import json
+
     conn.execute(
-        """INSERT INTO anime (id, title_ja, title_en, year, season, episodes, mal_id, anilist_id, score, studio)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """INSERT INTO anime (
+               id, title_ja, title_en, year, season, episodes, mal_id, anilist_id, score, studio,
+               cover_large, cover_extra_large, cover_medium, banner, cover_large_path, banner_path,
+               description, format, status, start_date, end_date, duration, source,
+               genres, tags, popularity_rank, favourites, studios
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
                title_ja = COALESCE(NULLIF(excluded.title_ja, ''), anime.title_ja),
                title_en = COALESCE(NULLIF(excluded.title_en, ''), anime.title_en),
@@ -225,7 +343,25 @@ def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
                mal_id = COALESCE(excluded.mal_id, anime.mal_id),
                anilist_id = COALESCE(excluded.anilist_id, anime.anilist_id),
                score = COALESCE(excluded.score, anime.score),
-               studio = COALESCE(NULLIF(excluded.studio, ''), anime.studio)
+               studio = COALESCE(NULLIF(excluded.studio, ''), anime.studio),
+               cover_large = COALESCE(excluded.cover_large, anime.cover_large),
+               cover_extra_large = COALESCE(excluded.cover_extra_large, anime.cover_extra_large),
+               cover_medium = COALESCE(excluded.cover_medium, anime.cover_medium),
+               banner = COALESCE(excluded.banner, anime.banner),
+               cover_large_path = COALESCE(excluded.cover_large_path, anime.cover_large_path),
+               banner_path = COALESCE(excluded.banner_path, anime.banner_path),
+               description = COALESCE(excluded.description, anime.description),
+               format = COALESCE(excluded.format, anime.format),
+               status = COALESCE(excluded.status, anime.status),
+               start_date = COALESCE(excluded.start_date, anime.start_date),
+               end_date = COALESCE(excluded.end_date, anime.end_date),
+               duration = COALESCE(excluded.duration, anime.duration),
+               source = COALESCE(excluded.source, anime.source),
+               genres = COALESCE(excluded.genres, anime.genres),
+               tags = COALESCE(excluded.tags, anime.tags),
+               popularity_rank = COALESCE(excluded.popularity_rank, anime.popularity_rank),
+               favourites = COALESCE(excluded.favourites, anime.favourites),
+               studios = COALESCE(excluded.studios, anime.studios)
         """,
         (
             anime.id,
@@ -238,6 +374,24 @@ def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
             anime.anilist_id,
             anime.score,
             anime.studio or "",
+            anime.cover_large,
+            anime.cover_extra_large,
+            anime.cover_medium,
+            anime.banner,
+            anime.cover_large_path,
+            anime.banner_path,
+            anime.description,
+            anime.format,
+            anime.status,
+            anime.start_date,
+            anime.end_date,
+            anime.duration,
+            anime.source,
+            json.dumps(anime.genres, ensure_ascii=False),
+            json.dumps(anime.tags, ensure_ascii=False),
+            anime.popularity_rank,
+            anime.favourites,
+            json.dumps(anime.studios, ensure_ascii=False),
         ),
     )
 
@@ -541,6 +695,12 @@ def get_all_persons(conn: sqlite3.Connection) -> list[Person]:
         )
         for row in rows
     ]
+
+
+def get_all_person_ids(conn: sqlite3.Connection) -> set[str]:
+    """既存の全人物IDを高速取得する（スキップ判定用）."""
+    rows = conn.execute("SELECT id FROM persons").fetchall()
+    return {row["id"] for row in rows}
 
 
 def get_all_anime(conn: sqlite3.Connection) -> list[Anime]:

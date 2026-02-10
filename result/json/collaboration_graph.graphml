@@ -61,12 +61,12 @@
   <data key="d8">1</data>
   <data key="d9">1</data>
 </edge>
-<edge source="p2" target="p3">
-  <data key="d8">2</data>
-  <data key="d9">2</data>
-</edge>
 <edge source="p2" target="p4">
   <data key="d8">1</data>
   <data key="d9">1</data>
+</edge>
+<edge source="p2" target="p3">
+  <data key="d8">2</data>
+  <data key="d9">2</data>
 </edge>
 </graph></graphml>

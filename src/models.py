@@ -124,6 +124,27 @@ class Person(BaseModel):
     mal_id: int | None = None
     anilist_id: int | None = None
 
+    # 画像（AniList）
+    image_large: str | None = None
+    image_medium: str | None = None
+    image_large_path: str | None = None  # ローカル保存パス
+    image_medium_path: str | None = None
+
+    # プロフィール情報
+    date_of_birth: str | None = None  # YYYY-MM-DD形式
+    age: int | None = None
+    gender: str | None = None
+    years_active: list[int] = Field(default_factory=list)
+    hometown: str | None = None
+    blood_type: str | None = None
+    description: str | None = None  # 経歴・説明
+
+    # 人気度指標
+    favourites: int | None = None  # お気に入り数
+
+    # 外部リンク
+    site_url: str | None = None
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def display_name(self) -> str:
@@ -143,6 +164,34 @@ class Anime(BaseModel):
     anilist_id: int | None = None
     score: float | None = None
     studio: str | None = None
+
+    # 画像（AniList）
+    cover_large: str | None = None
+    cover_extra_large: str | None = None
+    cover_medium: str | None = None
+    banner: str | None = None
+    cover_large_path: str | None = None  # ローカル保存パス
+    banner_path: str | None = None
+
+    # 詳細情報
+    description: str | None = None  # あらすじ
+    format: str | None = None  # TV, MOVIE, OVA, ONA, SPECIAL, MUSIC
+    status: str | None = None  # FINISHED, RELEASING, NOT_YET_RELEASED, CANCELLED
+    start_date: str | None = None  # YYYY-MM-DD
+    end_date: str | None = None
+    duration: int | None = None  # 分/話
+    source: str | None = None  # ORIGINAL, MANGA, LIGHT_NOVEL, etc.
+
+    # 分類・タグ
+    genres: list[str] = Field(default_factory=list)
+    tags: list[dict] = Field(default_factory=list)  # [{"name": str, "rank": int}]
+
+    # 人気度指標
+    popularity_rank: int | None = None
+    favourites: int | None = None
+
+    # 制作情報
+    studios: list[str] = Field(default_factory=list)
 
     @computed_field  # type: ignore[prop-decorator]
     @property

@@ -1,0 +1,48 @@
+# Version control
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+*.egg
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+
+# Pixi (use pip in Docker instead)
+.pixi/
+pixi.lock
+
+# Rust build artifacts (rebuilt in Docker)
+rust_ext/target/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets
+.env
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Large data files (mount as volumes instead)
+data/raw/*
+data/interim/*
+data/processed/*
+
+# Documentation (not needed in container)
+docs/
+*.md
+!src/**/*.md
+
+# Tests (not needed in production container)
+tests/

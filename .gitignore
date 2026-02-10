@@ -20,6 +20,10 @@ data/processed/*
 result/db/*
 !result/db/.gitkeep
 
+# Result artifacts (timestamped performance reports, HTML exports)
+result/json/performance_*.json
+result/html/
+
 # Jupyter
 .ipynb_checkpoints/
 
@@ -27,6 +31,10 @@ result/db/*
 .vscode/
 .idea/
 
+# Rust extension build artifacts
+rust_ext/target/
+
 # OS
 .DS_Store
 Thumbs.db
+.env
