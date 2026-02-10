@@ -41,6 +41,14 @@
     "unknown": 60.87555555555556
   },
   "debiased_scores": {
+    "p4": {
+      "person_id": "p4",
+      "original_authority": 0.0,
+      "studio_bias": 0.3,
+      "debiased_authority": 0.0,
+      "cross_studio_bonus": 0.0,
+      "diversity_factor": 1.0
+    },
     "p3": {
       "person_id": "p3",
       "original_authority": 39.43,
@@ -54,14 +62,6 @@
       "original_authority": 56.34,
       "studio_bias": 0.3,
       "debiased_authority": 39.438,
-      "cross_studio_bonus": 0.0,
-      "diversity_factor": 1.0
-    },
-    "p4": {
-      "person_id": "p4",
-      "original_authority": 0.0,
-      "studio_bias": 0.3,
-      "debiased_authority": 0.0,
       "cross_studio_bonus": 0.0,
       "diversity_factor": 1.0
     },

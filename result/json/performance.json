@@ -170,10 +170,10 @@
     },
     "team_composition": {
       "count": 1,
-      "total": 0.0,
-      "avg": 0.0,
-      "min": 0.0,
-      "max": 0.0
+      "total": 0.001,
+      "avg": 0.001,
+      "min": 0.001,
+      "max": 0.001
     },
     "time_series": {
       "count": 1,
@@ -203,6 +203,13 @@
       "min": 0.001,
       "max": 0.001
     },
+    "graphml_export": {
+      "count": 1,
+      "total": 0.003,
+      "avg": 0.003,
+      "min": 0.003,
+      "max": 0.003
+    },
     "bridge_detection": {
       "count": 1,
       "total": 0.001,
@@ -216,13 +223,6 @@
       "avg": 0.001,
       "min": 0.001,
       "max": 0.001
-    },
-    "graphml_export": {
-      "count": 1,
-      "total": 0.002,
-      "avg": 0.002,
-      "min": 0.002,
-      "max": 0.002
     },
     "milestones": {
       "count": 1,
@@ -303,11 +303,11 @@
     }
   },
   "memory_snapshots": {
-    "pipeline_start": 347.8,
-    "after_data_load": 347.9,
-    "after_graph_build": 347.9,
-    "after_scoring": 347.9,
-    "after_centrality": 347.9
+    "pipeline_start": 303.6,
+    "after_data_load": 303.6,
+    "after_graph_build": 303.6,
+    "after_scoring": 303.6,
+    "after_centrality": 303.6
   },
   "counters": {
     "persons_loaded": 4,

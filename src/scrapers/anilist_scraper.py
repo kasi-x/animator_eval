@@ -1523,4 +1523,9 @@ def process_downloads(
 
 
 if __name__ == "__main__":
+    # When called directly without a command, default to 'main'
+    import sys
+    if len(sys.argv) == 1 or (len(sys.argv) > 1 and sys.argv[1].startswith("--")):
+        # No command specified, or starts with --option, so prepend 'main'
+        sys.argv.insert(1, "main")
     app()
