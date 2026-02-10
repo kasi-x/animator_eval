@@ -27,19 +27,19 @@ tasks:
       - pixi run python -m src.scrapers.anilist_scraper --update --reverse
 
   scrape-all:
-    desc: Scrape all AniList anime (20400+, with checkpoints)
+    desc: Scrape all AniList anime (20400+, auto-resumes from checkpoint)
     cmds:
-      - pixi run python -m src.scrapers.anilist_scraper --count 20400 --checkpoint 100
+      - pixi run python -m src.scrapers.anilist_scraper --count 20400
 
   scrape-all-old:
-    desc: Scrape all AniList anime in old-first order
+    desc: Scrape all AniList anime in old-first order (auto-resumes)
     cmds:
-      - pixi run python -m src.scrapers.anilist_scraper --count 20400 --checkpoint 100 --reverse
+      - pixi run python -m src.scrapers.anilist_scraper --count 20400 --reverse
 
-  scrape-resume:
-    desc: Resume previous scrape (with checkpoint)
+  scrape-restart:
+    desc: Restart scrape from beginning (ignore checkpoint)
     cmds:
-      - pixi run python -m src.scrapers.anilist_scraper --count {{.COUNT | default "20400"}} --resume
+      - pixi run python -m src.scrapers.anilist_scraper --count {{.COUNT | default "20400"}} --force-restart
 
   download-images:
     desc: Process pending image download queue

@@ -90,43 +90,18 @@ ANIME_STAFF_MINIMAL_QUERY = """
 query ($id: Int, $staffPage: Int, $staffPerPage: Int, $charPage: Int, $charPerPage: Int) {
   Media(id: $id, type: ANIME) {
     id
-    title { romaji english native }
-    seasonYear
-    season
-    episodes
-    averageScore
-    coverImage { large extraLarge medium }
-    bannerImage
-    description
-    format
-    status
-    startDate { year month day }
-    endDate { year month day }
-    duration
-    source
-    genres
-    tags { name rank }
-    popularity
-    favourites
-    studios { nodes { name } }
     staff(page: $staffPage, perPage: $staffPerPage) {
       pageInfo { hasNextPage }
       edges {
         role
-        node {
-          id
-          name { full native alternative }
-        }
+        node { id }
       }
     }
     characters(page: $charPage, perPage: $charPerPage) {
       pageInfo { hasNextPage }
       edges {
         role
-        voiceActors(language: JAPANESE) {
-          id
-          name { full native alternative }
-        }
+        voiceActors(language: JAPANESE) { id }
       }
     }
   }
@@ -875,7 +850,7 @@ def main(
     """AniList からクレジットデータを収集する (チェックポイント機能付き)."""
     import json
     from pathlib import Path
-    from src.database import get_connection, init_db, update_data_source, upsert_anime, upsert_person, get_all_person_ids
+    from src.database import get_connection, init_db, update_data_source, get_all_person_ids
     from src.log import setup_logging
     from rich.console import Console
 
@@ -976,9 +951,7 @@ def main(
         from rich.table import Table
         from rich.rule import Rule
         from rich.align import Align
-        from rich.syntax import Syntax
         import time as time_module
-        from src.scrapers.image_downloader import download_person_images, download_anime_images
 
         # === Helper Functions (Nested for Clarity) ===
 
@@ -1150,7 +1123,7 @@ def main(
             ))
             console.print(Panel(
                 stats_table,
-                title=f"[bold bright_yellow]✅ 保存完了[/bold bright_yellow]",
+                title="[bold bright_yellow]✅ 保存完了[/bold bright_yellow]",
                 border_style="bright_yellow",
                 padding=(1, 2)
             ))
@@ -1312,15 +1285,13 @@ def main(
 
             return anime_ids
 
-        async def fetch_anime_staff_list_minimal(
-            client, anime, anilist_id, anime_id
-        ):
-            """Phase 2A: Fetch minimal staff list (IDs and roles only).
+        async def fetch_staff_ids_for_anime(client, anilist_id, anime_id):
+            """Phase 2A: アニメ1件のスタッフID・ロール一覧を取得（最小クエリ）.
 
-            Returns: (anime_obj, credits, person_ids_to_fetch, va_count, had_error)
+            Returns: (credits, person_ids, va_count, had_error)
             """
-            batch_credits = []
-            person_ids_to_fetch = set()
+            credits = []
+            person_ids = set()
             va_count = 0
 
             try:
@@ -1339,107 +1310,54 @@ def main(
                     )
                     media = resp.get("Media", {})
 
-                    # Process staff - just collect IDs and roles
                     if has_more_staff:
                         staff = media.get("staff", {})
-                        edges = staff.get("edges", [])
-                        for edge in edges:
-                            node = edge.get("node", {})
-                            staff_id = node.get("id")
+                        for edge in staff.get("edges", []):
+                            staff_id = edge.get("node", {}).get("id")
                             role = edge.get("role")
                             if staff_id and role:
-                                person_ids_to_fetch.add(staff_id)
-                                batch_credits.append(Credit(
+                                person_ids.add(staff_id)
+                                credits.append(Credit(
                                     person_id=f"anilist:p{staff_id}",
                                     anime_id=anime_id,
                                     role=parse_role(role),
-                                    source="anilist"
+                                    source="anilist",
                                 ))
-
                         has_more_staff = staff.get("pageInfo", {}).get("hasNextPage", False)
                         if has_more_staff:
                             staff_page += 1
 
-                    # Process characters - collect voice actor IDs
                     if has_more_chars:
                         characters = media.get("characters", {})
-                        char_edges = characters.get("edges", [])
-                        for char_edge in char_edges:
-                            voice_actors = char_edge.get("voiceActors") or []  # Handle None case
-                            for va in voice_actors:
+                        for char_edge in characters.get("edges", []):
+                            for va in char_edge.get("voiceActors") or []:
                                 va_id = va.get("id")
                                 if va_id:
-                                    person_ids_to_fetch.add(va_id)
+                                    person_ids.add(va_id)
                                     va_count += 1
-                                    batch_credits.append(Credit(
+                                    credits.append(Credit(
                                         person_id=f"anilist:p{va_id}",
                                         anime_id=anime_id,
                                         role=parse_role("Voice Actor"),
-                                        source="anilist"
+                                        source="anilist",
                                     ))
-
                         has_more_chars = characters.get("pageInfo", {}).get("hasNextPage", False)
                         if has_more_chars:
                             char_page += 1
 
             except Exception as e:
                 log.error("staff_list_fetch_failed", anime_id=anime_id, error=str(e))
-                return anime, batch_credits, person_ids_to_fetch, va_count, True
+                return credits, person_ids, va_count, True
 
-            return anime, batch_credits, person_ids_to_fetch, va_count, False
-
-        async def fetch_person_details_and_save(
-            client, person_ids, existing_person_ids, conn, download_queue
-        ):
-            """Phase 2B: Fetch full person details for all collected person IDs.
-
-            Returns: (new_persons_count, images_queued)
-            """
-            new_persons = []
-            images_queued = 0
-
-            for person_id in person_ids:
-                # Skip if already in DB
-                if f"anilist:p{person_id}" in existing_person_ids:
-                    continue
-
-                try:
-                    resp = await client.get_person_details(person_id)
-                    staff = resp.get("Staff")
-                    if staff:
-                        person = parse_anilist_person(staff)
-                        new_persons.append(person)
-
-                        # Queue image for async download
-                        if person.image_large or person.image_medium:
-                            download_queue.add_person(person.id, person.image_large, person.image_medium)
-                            images_queued += 1
-
-                except Exception as e:
-                    log.warning("person_details_fetch_failed", person_id=person_id, error=str(e))
-                    continue
-
-            # Save all new persons to DB
-            if new_persons:
-                save_persons_batch_to_database(conn, new_persons)
-                conn.commit()
-
-            return len(new_persons), images_queued
+            return credits, person_ids, va_count, False
 
         # === Main Execution ===
 
-        # Initialize state
         client = AniListClient()
         totals = {
-            "anime": 0,
-            "persons": 0,
-            "credits": 0,
-            "images": 0,
-            "voice_actors": 0,
-            "errors": 0,
-            "skipped": 0,
+            "anime": 0, "persons": 0, "credits": 0,
+            "images": 0, "voice_actors": 0, "errors": 0, "skipped": 0,
         }
-        seen_person_ids = set()
         start_time = time_module.time()
 
         try:
@@ -1450,23 +1368,19 @@ def main(
                 anime_list_cache_file=anime_list_cache_file
             )
 
-            # Display Phase 1 summary
             summary_table = create_phase1_summary_table(len(anime_ids), len(fetched_ids))
             display_phase1_summary(summary_table)
 
-            # ===== PHASE 2: Two-Phase Staff & Character Fetching =====
+            # ===== PHASE 2A: スタッフリスト収集 (クレジットとID) =====
             conn = get_connection()
             init_db(conn)
             existing_person_ids = load_existing_person_ids_from_database(conn)
 
             console.print()
-            console.print(Rule("[bold cyan]フェーズ2A: アニメ スタッフリスト収集[/bold cyan]", style="cyan"))
+            console.print(Rule("[bold cyan]フェーズ2A: スタッフリスト収集[/bold cyan]", style="cyan"))
             console.print()
 
-            # Phase 2A: Collect anime staff lists and IDs
             all_person_ids_to_fetch = set()
-            total_credits_from_anime = 0
-            total_voice_actors = 0
 
             with Progress(
                 SpinnerColumn(style="cyan"),
@@ -1477,35 +1391,37 @@ def main(
                 TimeElapsedColumn(),
                 TimeRemainingColumn(),
                 console=console,
-                expand=False
+                expand=False,
             ) as progress:
-                phase2a_task = progress.add_task("[cyan]📋 アニメスタッフリスト収集中...", total=len(anime_ids))
+                phase2a_task = progress.add_task(
+                    "[cyan]📋 スタッフリスト収集中...", total=len(anime_ids)
+                )
 
-                for i, (anime, anilist_id, anime_id) in enumerate(anime_ids, start=start_index):
-                    # Update progress with current anime title
+                for loop_idx, (anime, anilist_id, anime_id) in enumerate(anime_ids):
                     title = anime.title_ja or anime.title_en or anime_id
-                    progress.update(phase2a_task, description=f"[cyan]{title[:35]}... ({i-start_index+1}/{len(anime_ids)})")
+                    progress.update(
+                        phase2a_task,
+                        description=f"[cyan]{title[:40]}",
+                    )
 
-                    # Phase 2A: Fetch minimal staff list (just IDs and roles)
-                    anime_obj, credits, person_ids, va_count, had_error = await fetch_anime_staff_list_minimal(
-                        client, anime, anilist_id, anime_id
+                    credits, person_ids, va_count, had_error = await fetch_staff_ids_for_anime(
+                        client, anilist_id, anime_id
                     )
 
                     all_person_ids_to_fetch.update(person_ids)
-                    total_credits_from_anime += len(credits)
-                    total_voice_actors += va_count
-
                     if had_error:
                         totals["errors"] += 1
 
-                    # Save anime and credits immediately
-                    save_anime_batch_to_database(conn, [anime_obj])
+                    # アニメ情報は Phase 1 で取得済みなので credits だけ保存
+                    save_anime_batch_to_database(conn, [anime])
                     save_credits_batch_to_database(conn, credits)
                     conn.commit()
 
-                    # Queue anime images for download
-                    if anime_obj.cover_large or anime_obj.cover_extra_large or anime_obj.banner:
-                        download_queue.add_anime(anime_obj.id, anime_obj.cover_large, anime_obj.cover_extra_large, anime_obj.banner)
+                    # Queue anime images
+                    if anime.cover_large or anime.cover_extra_large or anime.banner:
+                        download_queue.add_anime(
+                            anime.id, anime.cover_large, anime.cover_extra_large, anime.banner
+                        )
                         totals["images"] += 1
 
                     fetched_ids.add(anime_id)
@@ -1514,77 +1430,109 @@ def main(
                     totals["voice_actors"] += va_count
                     progress.update(phase2a_task, advance=1)
 
-                    # Save checkpoint every N anime
-                    if (i + 1) % checkpoint_interval == 0 or (i + 1) == len(anime_ids):
-                        checkpoint_data = create_checkpoint_data(
-                            i + 1, fetched_ids, totals, time_module.time()
-                        )
-                        save_checkpoint(checkpoint_file, checkpoint_data)
+                    # チェックポイント: loop_idx ベースで正しい間隔
+                    if (loop_idx + 1) % checkpoint_interval == 0:
+                        save_checkpoint(checkpoint_file, create_checkpoint_data(
+                            loop_idx + 1, fetched_ids, totals, time_module.time()
+                        ))
 
-            # Phase 2A Summary
+                # 最終チェックポイント
+                save_checkpoint(checkpoint_file, create_checkpoint_data(
+                    len(anime_ids), fetched_ids, totals, time_module.time()
+                ))
+
+            # Phase 2A サマリ
+            # DB にある person を除外して、本当に取得が必要な ID だけにする
+            ids_to_fetch = sorted(all_person_ids_to_fetch - {
+                int(pid.removeprefix("anilist:p"))
+                for pid in existing_person_ids
+                if pid.startswith("anilist:p")
+            })
+            total_unique = len(all_person_ids_to_fetch)
+            skipped_existing = total_unique - len(ids_to_fetch)
+
             console.print()
-            console.print(f"[cyan]✅ フェーズ2A完了: {len(anime_ids)}件のアニメから{total_credits_from_anime:,}件のクレジット、{len(all_person_ids_to_fetch)}件のユニークな個人IDを収集[/cyan]")
-            console.print()
-            console.print(Rule("[bold magenta]フェーズ2B: 個人情報詳細取得[/bold magenta]", style="magenta"))
-            console.print()
+            console.print(
+                f"[cyan]✅ フェーズ2A完了: {totals['anime']}件のアニメ → "
+                f"{totals['credits']:,}クレジット, "
+                f"{total_unique:,}人 (うち{skipped_existing:,}人は取得済み → "
+                f"[bold]{len(ids_to_fetch):,}人を取得[/bold])[/cyan]"
+            )
 
-            # Phase 2B: Fetch full person details for all collected IDs
-            with Progress(
-                SpinnerColumn(style="magenta"),
-                TextColumn("[bold magenta]{task.description}"),
-                BarColumn(bar_width=50, complete_style="bright_magenta", finished_style="bold bright_magenta"),
-                MofNCompleteColumn(),
-                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                TimeElapsedColumn(),
-                TimeRemainingColumn(),
-                console=console,
-                expand=False
-            ) as progress:
-                phase2b_task = progress.add_task("[magenta]👤 個人情報詳細取得中...", total=len(all_person_ids_to_fetch))
-                api_wait_task = progress.add_task("[red]⏳ API待機中...", visible=False)
+            # ===== PHASE 2B: 個人情報詳細取得 =====
+            if ids_to_fetch:
+                console.print()
+                console.print(Rule("[bold magenta]フェーズ2B: 個人情報詳細取得[/bold magenta]", style="magenta"))
+                console.print()
 
-                for idx, person_id in enumerate(all_person_ids_to_fetch, 1):
-                    # Skip if already in DB
-                    if f"anilist:p{person_id}" in existing_person_ids:
-                        totals["skipped"] += 1
-                        progress.update(phase2b_task, advance=1)
-                        continue
+                person_batch = []  # バッチで保存するための蓄積
 
-                    # Show rate limit waiting state if applicable
-                    import time as time_mod
-                    if client.requests_remaining is not None and client.requests_remaining <= 0:
-                        if client.rate_limit_reset_at is not None:
-                            now = time_mod.time()
+                with Progress(
+                    SpinnerColumn(style="magenta"),
+                    TextColumn("[bold magenta]{task.description}"),
+                    BarColumn(bar_width=50, complete_style="bright_magenta", finished_style="bold bright_magenta"),
+                    MofNCompleteColumn(),
+                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                    TimeElapsedColumn(),
+                    TimeRemainingColumn(),
+                    console=console,
+                    expand=False,
+                ) as progress:
+                    phase2b_task = progress.add_task(
+                        "[magenta]👤 個人情報取得中...", total=len(ids_to_fetch)
+                    )
+                    api_wait_task = progress.add_task("", visible=False)
+
+                    for idx, person_id in enumerate(ids_to_fetch, 1):
+                        # Rate limit countdown 表示
+                        if (client.requests_remaining is not None
+                                and client.requests_remaining <= 0
+                                and client.rate_limit_reset_at is not None):
                             reset_at = client.rate_limit_reset_at
-                            if reset_at > now:
-                                # Show waiting display with countdown
-                                while reset_at > time_mod.time():
-                                    remaining_secs = int(reset_at - time_mod.time())
-                                    progress.update(api_wait_task, visible=True, description=f"[bold red]⏳ 待ち中(あと{remaining_secs}秒)[/bold red]")
-                                    await asyncio.sleep(0.5)  # Update display every 0.5s
-                                progress.update(api_wait_task, visible=False)
+                            while reset_at > time_module.time():
+                                secs = int(reset_at - time_module.time())
+                                progress.update(
+                                    api_wait_task, visible=True,
+                                    description=f"[bold red]⏳ 待ち中(あと{secs}秒)[/bold red]",
+                                )
+                                await asyncio.sleep(0.5)
+                            progress.update(api_wait_task, visible=False)
 
-                    try:
-                        resp = await client.get_person_details(person_id)
-                        staff = resp.get("Staff")
-                        if staff:
-                            person = parse_anilist_person(staff)
-                            save_persons_batch_to_database(conn, [person])
+                        try:
+                            resp = await client.get_person_details(person_id)
+                            staff = resp.get("Staff")
+                            if staff:
+                                person = parse_anilist_person(staff)
+                                person_batch.append(person)
+                                totals["persons"] += 1
+
+                                if person.image_large or person.image_medium:
+                                    download_queue.add_person(
+                                        person.id, person.image_large, person.image_medium
+                                    )
+                                    totals["images"] += 1
+
+                        except Exception as e:
+                            log.warning("person_fetch_failed", person_id=person_id, error=str(e))
+
+                        # 3件ごとにバッチ保存
+                        if len(person_batch) >= 3:
+                            save_persons_batch_to_database(conn, person_batch)
                             conn.commit()
-                            totals["persons"] += 1
+                            person_batch.clear()
 
-                            # Queue image for async download
-                            if person.image_large or person.image_medium:
-                                download_queue.add_person(person.id, person.image_large, person.image_medium)
-                                totals["images"] += 1
+                        progress.update(
+                            phase2b_task,
+                            description=f"[magenta]👤 個人情報取得中 ({idx}/{len(ids_to_fetch)})",
+                            advance=1,
+                        )
 
-                    except Exception as e:
-                        log.warning("person_details_fetch_failed", person_id=person_id, error=str(e))
+                    # 残りを保存
+                    if person_batch:
+                        save_persons_batch_to_database(conn, person_batch)
+                        conn.commit()
 
-                    # Hide wait task and show progress
-                    progress.update(api_wait_task, visible=False)
-                    progress.update(phase2b_task, description=f"[magenta]👤 {idx}/{len(all_person_ids_to_fetch)}")
-                    progress.update(phase2b_task, advance=1)
+            totals["skipped"] = skipped_existing
 
             # Finalize database
             update_data_source(conn, "anilist", totals["credits"])
@@ -1630,7 +1578,7 @@ def process_downloads(
     import asyncio
     from src.log import setup_logging
     from src.utils.download_queue import DownloadQueue
-    from src.database import get_connection, upsert_person, upsert_anime
+    from src.database import get_connection
     from src.scrapers.image_downloader import download_person_images, download_anime_images
     from rich.console import Console
     from rich.table import Table
@@ -1682,7 +1630,6 @@ def process_downloads(
                     person_paths = await download_person_images(person_data, show_progress=False)
                     # Update database
                     for person_id, paths in person_paths.items():
-                        from src.models import Person
                         # Fetch person from DB and update paths
                         # This is simplified - in reality you'd query the DB
                         queue.remove_item(person_id)
