@@ -26,6 +26,16 @@ tasks:
     cmds:
       - pixi run python -m src.scrapers.anilist_scraper --update --reverse
 
+  scrape-all:
+    desc: Scrape all AniList anime (20400+, with checkpoints)
+    cmds:
+      - pixi run python -m src.scrapers.anilist_scraper --count 20400 --checkpoint 100
+
+  scrape-all-old:
+    desc: Scrape all AniList anime in old-first order
+    cmds:
+      - pixi run python -m src.scrapers.anilist_scraper --count 20400 --checkpoint 100 --reverse
+
   scrape-resume:
     desc: Resume previous scrape (with checkpoint)
     cmds:
