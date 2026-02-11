@@ -5,7 +5,10 @@ SPARQL エンドポイント: https://query.wikidata.org/sparql
 """
 
 import asyncio
+import json
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 import structlog
@@ -47,6 +50,29 @@ WIKIDATA_ROLE_MAP = {
 
 app = typer.Typer()
 
+CHECKPOINT_FILE = Path(__file__).parent.parent.parent / "data" / "jvmg_checkpoint.json"
+
+
+def _load_checkpoint(path: Path) -> dict | None:
+    """チェックポイントファイルを読み込む."""
+    if path.exists():
+        with open(path) as f:
+            return json.load(f)
+    return None
+
+
+def _save_checkpoint(path: Path, data: dict) -> None:
+    """チェックポイントファイルを保存する."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def _delete_checkpoint(path: Path) -> None:
+    """チェックポイントファイルを削除する."""
+    if path.exists():
+        path.unlink()
+
 
 class WikidataClient:
     """Wikidata SPARQL 非同期クライアント."""
@@ -81,19 +107,19 @@ class WikidataClient:
                 )
                 if resp.status_code == 429:
                     wait = int(resp.headers.get("Retry-After", 30))
-                    log.warning("wikidata_rate_limited", retry_after=wait)
+                    log.warning("wikidata_rate_limited", source="wikidata", retry_after_seconds=wait)
                     await asyncio.sleep(wait)
                     continue
                 resp.raise_for_status()
                 data = resp.json()
                 return data.get("results", {}).get("bindings", [])
             except httpx.HTTPError as e:
-                log.warning("wikidata_query_failed", attempt=attempt + 1, error=str(e))
+                log.warning("wikidata_query_failed", source="wikidata", attempt=attempt + 1, error_type=type(e).__name__, error_message=str(e))
                 if attempt < 2:
                     await asyncio.sleep(2 ** (attempt + 1))
         from src.scrapers.exceptions import EndpointUnreachableError
 
-        log.error("wikidata_sparql_unreachable")
+        log.error("wikidata_sparql_unreachable", source="wikidata", url=WIKIDATA_SPARQL)
         raise EndpointUnreachableError(
             "Wikidata SPARQL endpoint unreachable after 3 attempts",
             source="wikidata",
@@ -173,7 +199,7 @@ async def fetch_anime_staff(
 
     try:
         while offset < max_records:
-            log.info("fetching_wikidata", offset=offset)
+            log.info("fetching_wikidata", source="wikidata", offset=offset)
             query = ANIME_STAFF_QUERY.format(limit=page_size, offset=offset)
             bindings = await client.query(query)
             if not bindings:
@@ -192,6 +218,8 @@ async def fetch_anime_staff(
 
     log.info(
         "wikidata_fetch_complete",
+        source="wikidata",
+        item_count=len(all_credits),
         anime=len(all_anime),
         persons=len(all_persons),
         credits=len(all_credits),
@@ -202,6 +230,8 @@ async def fetch_anime_staff(
 @app.command()
 def main(
     max_records: int = typer.Option(5000, "--max-records", "-n", help="最大レコード数"),
+    resume: bool = typer.Option(True, "--resume/--no-resume", help="チェックポイントから再開する"),
+    checkpoint_interval: int = typer.Option(2, "--checkpoint-interval", help="チェックポイント保存間隔 (ページ数)"),
 ) -> None:
     """Wikidata からアニメスタッフデータを収集する."""
     from src.database import db_connection, init_db, insert_credit, update_data_source, upsert_anime, upsert_person
@@ -209,21 +239,89 @@ def main(
 
     setup_logging()
 
-    anime_list, persons, credits = asyncio.run(
-        fetch_anime_staff(max_records=max_records)
-    )
+    # Load checkpoint if resuming
+    start_offset = 0
+    if resume:
+        checkpoint = _load_checkpoint(CHECKPOINT_FILE)
+        if checkpoint:
+            start_offset = checkpoint.get("last_offset", 0)
+            log.info(
+                "checkpoint_loaded",
+                last_offset=start_offset,
+                total_anime=checkpoint.get("total_anime", 0),
+                total_persons=checkpoint.get("total_persons", 0),
+                total_credits=checkpoint.get("total_credits", 0),
+                timestamp=checkpoint.get("timestamp"),
+            )
 
-    with db_connection() as conn:
-        init_db(conn)
-        for anime in anime_list:
-            upsert_anime(conn, anime)
-        for person in persons:
-            upsert_person(conn, person)
-        for credit in credits:
-            insert_credit(conn, credit)
-        update_data_source(conn, "jvmg", len(credits))
+    async def _fetch_and_save() -> None:
+        """Fetch Wikidata records incrementally with checkpoint support."""
+        client = WikidataClient()
+        total_anime = 0
+        total_persons = 0
+        total_credits = 0
 
-    log.info("saved_to_db", anime=len(anime_list), persons=len(persons), credits=len(credits))
+        page_size = 500
+        offset = start_offset
+        pages_since_checkpoint = 0
+
+        try:
+            with db_connection() as conn:
+                init_db(conn)
+
+                while offset < max_records:
+                    log.info("fetching_wikidata", source="wikidata", offset=offset)
+                    query = ANIME_STAFF_QUERY.format(limit=page_size, offset=offset)
+                    bindings = await client.query(query)
+                    if not bindings:
+                        break
+
+                    anime_list, persons, credits = parse_wikidata_results(bindings)
+                    for anime in anime_list:
+                        upsert_anime(conn, anime)
+                        total_anime += 1
+                    for person in persons:
+                        upsert_person(conn, person)
+                        total_persons += 1
+                    for credit in credits:
+                        insert_credit(conn, credit)
+                        total_credits += 1
+
+                    pages_since_checkpoint += 1
+                    offset += page_size
+
+                    # Save checkpoint every N pages
+                    if pages_since_checkpoint >= checkpoint_interval:
+                        conn.commit()
+                        _save_checkpoint(CHECKPOINT_FILE, {
+                            "last_offset": offset,
+                            "total_anime": total_anime,
+                            "total_persons": total_persons,
+                            "total_credits": total_credits,
+                            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+                        })
+                        log.info("checkpoint_saved", last_offset=offset)
+                        pages_since_checkpoint = 0
+
+                    if len(bindings) < page_size:
+                        break
+
+                update_data_source(conn, "jvmg", total_credits)
+
+        finally:
+            await client.close()
+
+        # Delete checkpoint on successful completion
+        _delete_checkpoint(CHECKPOINT_FILE)
+        log.info(
+            "saved_to_db",
+            source="wikidata",
+            anime=total_anime,
+            persons=total_persons,
+            credits=total_credits,
+        )
+
+    asyncio.run(_fetch_and_save())
 
 
 if __name__ == "__main__":

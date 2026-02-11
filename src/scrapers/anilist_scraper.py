@@ -5,19 +5,21 @@ httpx (async) + structlog + typer で構成。
 """
 
 import asyncio
-import os
 import time
 
 import httpx
 import structlog
 import typer
+from dotenv import find_dotenv, dotenv_values
 
 from src.models import Anime, Credit, Person, parse_role
+
+_env = dotenv_values(find_dotenv())
 
 log = structlog.get_logger()
 
 ANILIST_URL = "https://graphql.anilist.co"
-REQUEST_INTERVAL = 0.7
+REQUEST_INTERVAL = 0.1  # 最小間隔（マッハ方式: 429が来たらRetry-Afterだけ待つ）
 
 ANIME_STAFF_QUERY = """
 query ($id: Int, $staffPage: Int, $staffPerPage: Int, $charPage: Int, $charPerPage: Int) {
@@ -187,8 +189,8 @@ class AniListClient:
 
     def __init__(self) -> None:
         self._last_request_time = 0.0
-        # Load authentication token from environment
-        self._access_token = os.getenv("ANILIST_ACCESS_TOKEN")
+        # Load authentication token from .env
+        self._access_token = _env.get("ANILIST_ACCESS_TOKEN")
         if self._access_token:
             log.info("anilist_token_loaded", will_attempt_auth=True)
         else:
@@ -199,6 +201,11 @@ class AniListClient:
         # Rate limit tracking
         self.requests_remaining = None
         self.rate_limit_reset_at = None
+        self.rate_limit_max = None  # X-RateLimit-Limit (90=認証済み, 30=未認証)
+        self._auth_reported = False
+        # Callback: called with remaining seconds during rate limit wait
+        # signature: on_rate_limit(remaining_secs: int | None)  None=wait ended
+        self.on_rate_limit: callable | None = None
 
     async def close(self) -> None:
         await self._client.aclose()
@@ -227,18 +234,30 @@ class AniListClient:
                     headers=headers,
                 )
 
-                # Extract rate limit info from response headers
+                if resp.status_code == 429:
+                    # 429時はX-RateLimit-*ヘッダーが来ないことがある
+                    retry_after = int(resp.headers.get("Retry-After", 10))
+                    log.warning("rate_limited", source="anilist", retry_after_seconds=retry_after)
+                    self.requests_remaining = 0
+                    self.rate_limit_reset_at = time.time() + retry_after
+                    # 0.5秒刻みでコールバックを呼びながら待機
+                    remaining = retry_after
+                    while remaining > 0:
+                        if self.on_rate_limit:
+                            self.on_rate_limit(int(remaining))
+                        await asyncio.sleep(0.5)
+                        remaining -= 0.5
+                    if self.on_rate_limit:
+                        self.on_rate_limit(None)  # 待機終了
+                    continue
+
+                # 正常レスポンスからrate limit情報を取得
                 if "X-RateLimit-Remaining" in resp.headers:
                     self.requests_remaining = int(resp.headers.get("X-RateLimit-Remaining", -1))
                     self.rate_limit_reset_at = int(resp.headers.get("X-RateLimit-Reset", 0))
-
-                if resp.status_code == 429:
-                    retry_after = int(resp.headers.get("Retry-After", 60))
-                    log.warning("rate_limited", retry_after=retry_after, requests_remaining=self.requests_remaining)
-                    # Store rate limit info for progress display
-                    self.rate_limit_reset_at = time.monotonic() + retry_after
-                    await asyncio.sleep(retry_after)
-                    continue
+                    limit_val = resp.headers.get("X-RateLimit-Limit")
+                    if limit_val and self.rate_limit_max is None:
+                        self.rate_limit_max = int(limit_val)
 
                 # Handle invalid token: fall back to unauthenticated
                 if resp.status_code in (400, 401) and self._access_token:
@@ -247,25 +266,26 @@ class AniListClient:
                         errors = data.get("errors", [])
                         # Log detailed error info
                         log.warning("auth_error_response",
+                                  source="anilist",
                                   status=resp.status_code,
                                   errors=errors,
                                   token_format="JWT" if "." in self._access_token else "non-JWT")
                         # Check if error is token-related
                         error_str = str(errors).lower()
                         if "token" in error_str or "auth" in error_str or "invalid" in error_str:
-                            log.warning("invalid_token_disabling", errors=errors, fallback="unauthenticated")
+                            log.warning("invalid_token_disabling", source="anilist", errors=errors, fallback="unauthenticated")
                             self._access_token = None  # Disable token for future requests
                             continue  # Retry without token
                     except Exception as parse_error:
-                        log.warning("failed_to_parse_error_response", error=str(parse_error))
+                        log.warning("failed_to_parse_error_response", source="anilist", error_type=type(parse_error).__name__, error_message=str(parse_error))
 
                 resp.raise_for_status()
                 data = resp.json()
                 if "errors" in data:
-                    log.warning("graphql_errors", errors=data["errors"])
+                    log.warning("graphql_errors", source="anilist", errors=data["errors"])
                 return data.get("data", {})
             except httpx.HTTPError as e:
-                log.warning("request_failed", attempt=attempt + 1, error=str(e))
+                log.warning("request_failed", source="anilist", attempt=attempt + 1, error_type=type(e).__name__, error_message=str(e))
                 if attempt < 4:
                     await asyncio.sleep(2 ** (attempt + 1))
         from src.scrapers.exceptions import EndpointUnreachableError
@@ -726,7 +746,7 @@ async def fetch_top_anime_credits(
                                     char_page += 1
 
                     except Exception as e:
-                        log.error("staff_fetch_failed", anime_id=anime_id, error=str(e))
+                        log.error("staff_fetch_failed", source="anilist", anime_id=anime_id, error_type=type(e).__name__, error_message=str(e))
 
                     progress.update(staff_task, advance=1)
 
@@ -803,7 +823,7 @@ async def fetch_top_anime_credits(
                                 char_page += 1
 
                 except Exception as e:
-                    log.error("staff_fetch_failed", anime_id=anime_id, error=str(e))
+                    log.error("staff_fetch_failed", source="anilist", anime_id=anime_id, error_type=type(e).__name__, error_message=str(e))
 
     finally:
         await client.close()
@@ -835,6 +855,240 @@ async def fetch_top_anime_credits(
         elapsed_seconds=int(elapsed_total),
     )
     return all_anime, all_persons, all_credits
+
+
+async def _load_anime_ids(
+    client, count, fetched_ids, console,
+    update, reverse, anime_list_cache_file,
+    fetch_anime_list_from_api, create_phase1_summary_table,
+    display_phase1_summary,
+):
+    """Phase 1: Fetch anime list and return anime IDs.
+
+    Fetches the anime list (from cache or API), displays the Phase 1 summary,
+    and shows the authentication status.
+
+    Returns:
+        list of (Anime, anilist_id, anime_id) tuples.
+    """
+    anime_ids = await fetch_anime_list_from_api(
+        client, count, fetched_ids,
+        use_cache=True,
+        anime_list_cache_file=anime_list_cache_file
+    )
+
+    summary_table = create_phase1_summary_table(len(anime_ids), len(fetched_ids))
+    display_phase1_summary(summary_table)
+
+    # 認証状況を表示
+    if client.rate_limit_max is not None:
+        if client.rate_limit_max >= 90:
+            console.print(f"[green]🔑 認証済み (rate limit: {client.rate_limit_max} req/min)[/green]")
+        else:
+            console.print(f"[yellow]⚠️ 未認証 (rate limit: {client.rate_limit_max} req/min)[/yellow]")
+    elif client._access_token:
+        console.print("[green]🔑 トークン設定済み（認証確認はAPI初回リクエスト後）[/green]")
+    else:
+        console.print("[yellow]⚠️ トークン未設定（未認証モード: 30 req/min）[/yellow]")
+
+    return anime_ids
+
+
+async def _fetch_staff_phase(
+    client, conn, anime_ids, totals, fetched_ids,
+    console, download_queue, checkpoint_interval,
+    checkpoint_file, fetch_staff_ids_for_anime,
+    create_checkpoint_data, save_checkpoint,
+    Progress, SpinnerColumn, BarColumn,
+    MofNCompleteColumn, TextColumn,
+    TimeElapsedColumn, TimeRemainingColumn,
+    time_module,
+):
+    """Phase 2A: Fetch staff lists (credits and person IDs) for each anime.
+
+    Iterates over all anime, fetches minimal staff data, saves anime/credits
+    to the database, and handles checkpointing.
+
+    Returns:
+        set of all person IDs that need to be fetched in Phase 2B.
+    """
+    from rich.rule import Rule
+    from rich.live import Live
+    from rich.console import Group
+    from rich.text import Text
+
+    console.print()
+    console.print(Rule("[bold cyan]フェーズ2A: スタッフリスト収集[/bold cyan]", style="cyan"))
+    console.print()
+
+    all_person_ids_to_fetch = set()
+
+    bar2a = Progress(
+        SpinnerColumn(style="cyan"),
+        BarColumn(bar_width=50, complete_style="bright_cyan", finished_style="bold bright_cyan"),
+        MofNCompleteColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+    )
+    task2a = bar2a.add_task("", total=len(anime_ids))
+    title_line = Text("📋 ...", style="bold cyan")
+    wait_line_2a = Text("")
+
+    def _make_2a_group():
+        parts = [title_line, bar2a]
+        if str(wait_line_2a):
+            parts.append(wait_line_2a)
+        return Group(*parts)
+
+    live_2a = None  # Live への参照（コールバックから更新用）
+
+    def _on_rate_limit_2a(secs):
+        nonlocal wait_line_2a
+        if secs is None:
+            wait_line_2a = Text("")
+        else:
+            wait_line_2a = Text(f"⏳ 現在、待機中（あと{secs}秒）", style="bold red")
+        if live_2a:
+            live_2a.update(_make_2a_group())
+
+    client.on_rate_limit = _on_rate_limit_2a
+
+    with Live(_make_2a_group(), console=console, refresh_per_second=4) as live:
+        live_2a = live
+        for loop_idx, (anime, anilist_id, anime_id) in enumerate(anime_ids):
+            title = anime.title_ja or anime.title_en or anime_id
+            title_line = Text(f"📋 {title}", style="bold cyan")
+            live.update(_make_2a_group())
+
+            credits, person_ids, va_count, had_error = await fetch_staff_ids_for_anime(
+                client, anilist_id, anime_id
+            )
+
+            all_person_ids_to_fetch.update(person_ids)
+            if had_error:
+                totals["errors"] += 1
+
+            save_anime_batch_to_database(conn, [anime])
+            save_credits_batch_to_database(conn, credits)
+            conn.commit()
+
+            if anime.cover_large or anime.cover_extra_large or anime.banner:
+                download_queue.add_anime(
+                    anime.id, anime.cover_large, anime.cover_extra_large, anime.banner
+                )
+                totals["images"] += 1
+
+            fetched_ids.add(anime_id)
+            totals["anime"] += 1
+            totals["credits"] += len(credits)
+            totals["voice_actors"] += va_count
+            bar2a.update(task2a, advance=1)
+
+            if (loop_idx + 1) % checkpoint_interval == 0:
+                save_checkpoint(checkpoint_file, create_checkpoint_data(
+                    loop_idx + 1, fetched_ids, totals, time_module.time()
+                ))
+
+        save_checkpoint(checkpoint_file, create_checkpoint_data(
+            len(anime_ids), fetched_ids, totals, time_module.time()
+        ))
+
+    return all_person_ids_to_fetch
+
+
+async def _fetch_person_details_phase(
+    client, conn, ids_to_fetch, totals,
+    console, download_queue,
+    Progress, SpinnerColumn, BarColumn,
+    MofNCompleteColumn, TextColumn,
+    TimeElapsedColumn, TimeRemainingColumn,
+):
+    """Phase 2B: Fetch detailed person information for each person ID.
+
+    Iterates over person IDs, fetches full details from the API,
+    saves to the database in batches, and queues image downloads.
+    """
+    if not ids_to_fetch:
+        return
+
+    from rich.rule import Rule
+    from rich.live import Live
+    from rich.console import Group
+    from rich.text import Text
+
+    console.print()
+    console.print(Rule("[bold magenta]フェーズ2B: 個人情報詳細取得[/bold magenta]", style="magenta"))
+    console.print()
+
+    person_batch = []
+
+    bar2b = Progress(
+        SpinnerColumn(style="magenta"),
+        BarColumn(bar_width=50, complete_style="bright_magenta", finished_style="bold bright_magenta"),
+        MofNCompleteColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TimeElapsedColumn(),
+        TimeRemainingColumn(),
+    )
+    task2b = bar2b.add_task("", total=len(ids_to_fetch))
+    status_line = Text(f"👤 個人情報取得中 (0/{len(ids_to_fetch):,})", style="bold magenta")
+    wait_line_2b = Text("")
+
+    def _make_2b_group():
+        parts = [status_line, bar2b]
+        if str(wait_line_2b):
+            parts.append(wait_line_2b)
+        return Group(*parts)
+
+    live_2b = None
+
+    def _on_rate_limit_2b(secs):
+        nonlocal wait_line_2b
+        if secs is None:
+            wait_line_2b = Text("")
+        else:
+            wait_line_2b = Text(f"⏳ 現在、待機中（あと{secs}秒）", style="bold red")
+        if live_2b:
+            live_2b.update(_make_2b_group())
+
+    client.on_rate_limit = _on_rate_limit_2b
+
+    with Live(_make_2b_group(), console=console, refresh_per_second=4) as live:
+        live_2b = live
+        for idx, person_id in enumerate(ids_to_fetch, 1):
+            try:
+                resp = await client.get_person_details(person_id)
+                staff = resp.get("Staff")
+                if staff:
+                    person = parse_anilist_person(staff)
+                    person_batch.append(person)
+                    totals["persons"] += 1
+
+                    if person.image_large or person.image_medium:
+                        download_queue.add_person(
+                            person.id, person.image_large, person.image_medium
+                        )
+                        totals["images"] += 1
+
+            except Exception as e:
+                log.warning("person_fetch_failed", source="anilist", person_id=person_id, error_type=type(e).__name__, error_message=str(e))
+
+            if len(person_batch) >= 3:
+                save_persons_batch_to_database(conn, person_batch)
+                conn.commit()
+                person_batch.clear()
+
+            bar2b.update(task2b, advance=1)
+            status_line = Text(
+                f"👤 個人情報取得中 ({idx:,}/{len(ids_to_fetch):,})",
+                style="bold magenta",
+            )
+            live.update(_make_2b_group())
+
+        if person_batch:
+            save_persons_batch_to_database(conn, person_batch)
+            conn.commit()
 
 
 @app.command()
@@ -890,10 +1144,6 @@ def main(
     )
     console = Console()
 
-    # Load .env file (centralized)
-    from src.utils.config import load_dotenv_if_exists
-    load_dotenv_if_exists()
-
     # Cache files
     checkpoint_file = Path(__file__).parent.parent.parent / "data" / "anilist_checkpoint.json"
     anime_list_cache_file = Path(__file__).parent.parent.parent / "data" / "anilist_anime_list_cache.json"
@@ -909,9 +1159,23 @@ def main(
     from rich.panel import Panel
     from rich.table import Table
 
+    # DB に既存のアニメIDを取得（中断後の再開でも重複スキップ）
+    fetched_ids = set()
+    if not force_restart:
+        try:
+            from src.database import get_connection as _gc, init_db as _idb
+            _conn = _gc()
+            _idb(_conn)
+            rows = _conn.execute("SELECT id FROM anime").fetchall()
+            fetched_ids = {row["id"] for row in rows}
+            _conn.close()
+            if fetched_ids:
+                console.print(f"[dim]💾 DB内の既存アニメ: {len(fetched_ids):,}件（スキップ対象）[/dim]")
+        except Exception:
+            pass
+
     # Load checkpoint - auto-resume if exists (unless --force-restart is specified)
     start_index = 0
-    fetched_ids = set()
     checkpoint_exists = checkpoint_file.exists()
 
     # デフォルト: チェックポイント存在時は自動で続きから始める
@@ -920,7 +1184,7 @@ def main(
         with open(checkpoint_file) as f:
             checkpoint = json.load(f)
             start_index = checkpoint.get("last_index", 0)
-            fetched_ids = set(checkpoint.get("fetched_ids", []))
+            fetched_ids.update(checkpoint.get("fetched_ids", []))
 
             # Display checkpoint recovery message
             console.print()
@@ -1166,7 +1430,7 @@ def main(
                             console.print()
                             return anime_ids
                 except Exception as e:
-                    log.warning("cache_load_failed", error=str(e))
+                    log.warning("cache_load_failed", source="anilist", error_type=type(e).__name__, error_message=str(e))
                     # Fall through to API fetch
 
             # Fetch from API
@@ -1180,7 +1444,7 @@ def main(
                         prev_cache = json.load(f)
                     console.print(Rule("[bold cyan]フェーズ1: アニメリスト更新（放映中・新規のみ）[/bold cyan]", style="cyan"))
                 except Exception as e:
-                    log.warning("prev_cache_load_failed", error=str(e))
+                    log.warning("prev_cache_load_failed", source="anilist", error_type=type(e).__name__, error_message=str(e))
                     console.print(Rule("[bold cyan]フェーズ1: アニメリスト取得[/bold cyan]", style="cyan"))
             else:
                 console.print(Rule("[bold cyan]フェーズ1: アニメリスト取得[/bold cyan]", style="cyan"))
@@ -1281,7 +1545,7 @@ def main(
                         json.dump(cache_data, f, indent=2, default=str)
                     log.info("anime_list_cached", count=len(all_anime_for_cache), file=str(anime_list_cache_file))
                 except Exception as e:
-                    log.warning("cache_save_failed", error=str(e))
+                    log.warning("cache_save_failed", source="anilist", error_type=type(e).__name__, error_message=str(e))
 
             return anime_ids
 
@@ -1346,7 +1610,7 @@ def main(
                             char_page += 1
 
             except Exception as e:
-                log.error("staff_list_fetch_failed", anime_id=anime_id, error=str(e))
+                log.error("staff_list_fetch_failed", source="anilist", anime_id=anime_id, error_type=type(e).__name__, error_message=str(e))
                 return credits, person_ids, va_count, True
 
             return credits, person_ids, va_count, False
@@ -1362,79 +1626,28 @@ def main(
 
         try:
             # ===== PHASE 1: Fetch Anime List =====
-            anime_ids = await fetch_anime_list_from_api(
-                client, count, fetched_ids,
-                use_cache=True,
-                anime_list_cache_file=anime_list_cache_file
+            anime_ids = await _load_anime_ids(
+                client, count, fetched_ids, console,
+                update, reverse, anime_list_cache_file,
+                fetch_anime_list_from_api, create_phase1_summary_table,
+                display_phase1_summary,
             )
-
-            summary_table = create_phase1_summary_table(len(anime_ids), len(fetched_ids))
-            display_phase1_summary(summary_table)
 
             # ===== PHASE 2A: スタッフリスト収集 (クレジットとID) =====
             conn = get_connection()
             init_db(conn)
             existing_person_ids = load_existing_person_ids_from_database(conn)
 
-            console.print()
-            console.print(Rule("[bold cyan]フェーズ2A: スタッフリスト収集[/bold cyan]", style="cyan"))
-            console.print()
-
-            all_person_ids_to_fetch = set()
-
-            from rich.live import Live
-            from rich.console import Group
-            from rich.text import Text
-
-            bar2a = Progress(
-                SpinnerColumn(style="cyan"),
-                BarColumn(bar_width=50, complete_style="bright_cyan", finished_style="bold bright_cyan"),
-                MofNCompleteColumn(),
-                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                TimeElapsedColumn(),
-                TimeRemainingColumn(),
+            all_person_ids_to_fetch = await _fetch_staff_phase(
+                client, conn, anime_ids, totals, fetched_ids,
+                console, download_queue, checkpoint_interval,
+                checkpoint_file, fetch_staff_ids_for_anime,
+                create_checkpoint_data, save_checkpoint,
+                Progress, SpinnerColumn, BarColumn,
+                MofNCompleteColumn, TextColumn,
+                TimeElapsedColumn, TimeRemainingColumn,
+                time_module,
             )
-            task2a = bar2a.add_task("", total=len(anime_ids))
-            title_line = Text("📋 ...", style="bold cyan")
-
-            with Live(Group(title_line, bar2a), console=console, refresh_per_second=4) as live:
-                for loop_idx, (anime, anilist_id, anime_id) in enumerate(anime_ids):
-                    title = anime.title_ja or anime.title_en or anime_id
-                    title_line = Text(f"📋 {title}", style="bold cyan")
-                    live.update(Group(title_line, bar2a))
-
-                    credits, person_ids, va_count, had_error = await fetch_staff_ids_for_anime(
-                        client, anilist_id, anime_id
-                    )
-
-                    all_person_ids_to_fetch.update(person_ids)
-                    if had_error:
-                        totals["errors"] += 1
-
-                    save_anime_batch_to_database(conn, [anime])
-                    save_credits_batch_to_database(conn, credits)
-                    conn.commit()
-
-                    if anime.cover_large or anime.cover_extra_large or anime.banner:
-                        download_queue.add_anime(
-                            anime.id, anime.cover_large, anime.cover_extra_large, anime.banner
-                        )
-                        totals["images"] += 1
-
-                    fetched_ids.add(anime_id)
-                    totals["anime"] += 1
-                    totals["credits"] += len(credits)
-                    totals["voice_actors"] += va_count
-                    bar2a.update(task2a, advance=1)
-
-                    if (loop_idx + 1) % checkpoint_interval == 0:
-                        save_checkpoint(checkpoint_file, create_checkpoint_data(
-                            loop_idx + 1, fetched_ids, totals, time_module.time()
-                        ))
-
-                save_checkpoint(checkpoint_file, create_checkpoint_data(
-                    len(anime_ids), fetched_ids, totals, time_module.time()
-                ))
 
             # Phase 2A サマリ
             # DB にある person を除外して、本当に取得が必要な ID だけにする
@@ -1455,78 +1668,13 @@ def main(
             )
 
             # ===== PHASE 2B: 個人情報詳細取得 =====
-            if ids_to_fetch:
-                console.print()
-                console.print(Rule("[bold magenta]フェーズ2B: 個人情報詳細取得[/bold magenta]", style="magenta"))
-                console.print()
-
-                person_batch = []
-
-                bar2b = Progress(
-                    SpinnerColumn(style="magenta"),
-                    BarColumn(bar_width=50, complete_style="bright_magenta", finished_style="bold bright_magenta"),
-                    MofNCompleteColumn(),
-                    TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                    TimeElapsedColumn(),
-                    TimeRemainingColumn(),
-                )
-                task2b = bar2b.add_task("", total=len(ids_to_fetch))
-                status_line = Text(f"👤 個人情報取得中 (0/{len(ids_to_fetch):,})", style="bold magenta")
-                wait_line = Text("")  # 待ち中は空
-
-                def _make_2b_group():
-                    parts = [status_line, bar2b]
-                    if str(wait_line):
-                        parts.append(wait_line)
-                    return Group(*parts)
-
-                with Live(_make_2b_group(), console=console, refresh_per_second=4) as live:
-                    for idx, person_id in enumerate(ids_to_fetch, 1):
-                        # Rate limit countdown — wait_line をリアルタイム更新
-                        if (client.requests_remaining is not None
-                                and client.requests_remaining <= 0
-                                and client.rate_limit_reset_at is not None):
-                            reset_at = client.rate_limit_reset_at
-                            while reset_at > time_module.time():
-                                secs = int(reset_at - time_module.time())
-                                wait_line = Text(f"⏳ 待ち中(あと{secs}秒)", style="bold red")
-                                live.update(_make_2b_group())
-                                await asyncio.sleep(0.5)
-                            wait_line = Text("")
-                            live.update(_make_2b_group())
-
-                        try:
-                            resp = await client.get_person_details(person_id)
-                            staff = resp.get("Staff")
-                            if staff:
-                                person = parse_anilist_person(staff)
-                                person_batch.append(person)
-                                totals["persons"] += 1
-
-                                if person.image_large or person.image_medium:
-                                    download_queue.add_person(
-                                        person.id, person.image_large, person.image_medium
-                                    )
-                                    totals["images"] += 1
-
-                        except Exception as e:
-                            log.warning("person_fetch_failed", person_id=person_id, error=str(e))
-
-                        if len(person_batch) >= 3:
-                            save_persons_batch_to_database(conn, person_batch)
-                            conn.commit()
-                            person_batch.clear()
-
-                        bar2b.update(task2b, advance=1)
-                        status_line = Text(
-                            f"👤 個人情報取得中 ({idx:,}/{len(ids_to_fetch):,})",
-                            style="bold magenta",
-                        )
-                        live.update(_make_2b_group())
-
-                    if person_batch:
-                        save_persons_batch_to_database(conn, person_batch)
-                        conn.commit()
+            await _fetch_person_details_phase(
+                client, conn, ids_to_fetch, totals,
+                console, download_queue,
+                Progress, SpinnerColumn, BarColumn,
+                MofNCompleteColumn, TextColumn,
+                TimeElapsedColumn, TimeRemainingColumn,
+            )
 
             totals["skipped"] = skipped_existing
 
@@ -1564,6 +1712,155 @@ def main(
             await client.close()
 
     asyncio.run(fetch_with_checkpoints())
+
+
+@app.command("fetch-persons")
+def fetch_persons(
+    log_level: str = typer.Option("error", "--log-level", help="ログレベル (debug/info/warning/error)"),
+) -> None:
+    """DBのクレジットに含まれる未取得の個人情報を取得する."""
+    import asyncio
+    import time as time_module
+    from src.database import get_connection, init_db, get_all_person_ids
+    from src.log import setup_logging
+    setup_logging(log_level)
+
+    async def _run():
+        from rich.console import Console
+        from rich.rule import Rule
+        from rich.live import Live
+        from rich.console import Group
+        from rich.text import Text
+        from rich.progress import (
+            Progress, SpinnerColumn, BarColumn, MofNCompleteColumn,
+            TextColumn, TimeElapsedColumn, TimeRemainingColumn,
+        )
+
+        console = Console()
+        conn = get_connection()
+        init_db(conn)
+
+        # credits テーブルから全 person_id を取得
+        rows = conn.execute("SELECT DISTINCT person_id FROM credits").fetchall()
+        all_credit_person_ids = {row["person_id"] for row in rows}
+
+        # 既に persons テーブルに存在する ID
+        existing_ids = get_all_person_ids(conn)
+
+        # 未取得の AniList person ID を抽出
+        missing_ids = set()
+        for pid in all_credit_person_ids:
+            if pid not in existing_ids and pid.startswith("anilist:p"):
+                try:
+                    missing_ids.add(int(pid.removeprefix("anilist:p")))
+                except ValueError:
+                    pass
+
+        ids_to_fetch = sorted(missing_ids)
+
+        console.print()
+        console.print(Rule("[bold magenta]個人情報取得 (DBのクレジットから)[/bold magenta]", style="magenta"))
+        console.print(f"  クレジット内の人物: [bold]{len(all_credit_person_ids):,}[/bold]人")
+        console.print(f"  取得済み:           [dim]{len(existing_ids):,}[/dim]人")
+        console.print(f"  未取得:             [bold yellow]{len(ids_to_fetch):,}[/bold yellow]人")
+        console.print()
+
+        if not ids_to_fetch:
+            console.print("[green]全員取得済みです。[/green]")
+            conn.close()
+            return
+
+        console.print(f"[dim]🔑 トークン: {'あり' if _env.get('ANILIST_ACCESS_TOKEN') else 'なし'}[/dim]")
+
+        from src.utils.download_queue import DownloadQueue
+
+        client = AniListClient()
+        download_queue = DownloadQueue()
+        person_batch = []
+        fetched = 0
+        errors = 0
+        start_time = time_module.time()
+
+        try:
+            bar = Progress(
+                SpinnerColumn(style="magenta"),
+                BarColumn(bar_width=50, complete_style="bright_magenta", finished_style="bold bright_magenta"),
+                MofNCompleteColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeElapsedColumn(),
+                TimeRemainingColumn(),
+            )
+            task = bar.add_task("", total=len(ids_to_fetch))
+            status_line = Text(f"👤 個人情報取得中 (0/{len(ids_to_fetch):,})", style="bold magenta")
+            wait_line = Text("")
+
+            def _make_group():
+                parts = [status_line, bar]
+                if str(wait_line):
+                    parts.append(wait_line)
+                return Group(*parts)
+
+            live_ref = None
+
+            def _on_rate_limit(secs):
+                nonlocal wait_line
+                if secs is None:
+                    wait_line = Text("")
+                else:
+                    wait_line = Text(f"⏳ 現在、待機中（あと{secs}秒）", style="bold red")
+                if live_ref:
+                    live_ref.update(_make_group())
+
+            client.on_rate_limit = _on_rate_limit
+
+            with Live(_make_group(), console=console, refresh_per_second=4) as live:
+                live_ref = live
+                for idx, person_id in enumerate(ids_to_fetch, 1):
+                    try:
+                        resp = await client.get_person_details(person_id)
+                        staff = resp.get("Staff")
+                        if staff:
+                            person = parse_anilist_person(staff)
+                            person_batch.append(person)
+                            fetched += 1
+
+                            if person.image_large or person.image_medium:
+                                download_queue.add_person(
+                                    person.id, person.image_large, person.image_medium
+                                )
+                    except Exception as e:
+                        log.warning("person_fetch_failed", source="anilist", person_id=person_id, error_type=type(e).__name__, error_message=str(e))
+                        errors += 1
+
+                    if len(person_batch) >= 3:
+                        save_persons_batch_to_database(conn, person_batch)
+                        conn.commit()
+                        person_batch.clear()
+
+                    bar.update(task, advance=1)
+                    status_line = Text(
+                        f"👤 個人情報取得中 ({idx:,}/{len(ids_to_fetch):,})",
+                        style="bold magenta",
+                    )
+                    live.update(_make_group())
+
+                if person_batch:
+                    save_persons_batch_to_database(conn, person_batch)
+                    conn.commit()
+
+        finally:
+            await client.close()
+            conn.close()
+
+        elapsed = time_module.time() - start_time
+        console.print()
+        console.print(f"[green]✅ 完了: {fetched:,}人取得, {errors}件エラー ({elapsed:.1f}秒)[/green]")
+
+        queue_size = download_queue.count()
+        if queue_size > 0:
+            console.print(f"[dim]📥 画像キュー: {queue_size}件 → task download-images で取得[/dim]")
+
+    asyncio.run(_run())
 
 
 @app.command()
@@ -1632,7 +1929,7 @@ def process_downloads(
                         processed += 1
                         progress.update(task, advance=1)
                 except Exception as e:
-                    log.error("person_download_failed", error=str(e))
+                    log.error("person_download_failed", source="anilist", error_type=type(e).__name__, error_message=str(e))
 
             # Download anime images
             if anime:
@@ -1648,7 +1945,7 @@ def process_downloads(
                         processed += 1
                         progress.update(task, advance=1)
                 except Exception as e:
-                    log.error("anime_download_failed", error=str(e))
+                    log.error("anime_download_failed", source="anilist", error_type=type(e).__name__, error_message=str(e))
 
         # Display summary
         console.print()

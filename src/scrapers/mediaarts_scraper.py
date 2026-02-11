@@ -58,7 +58,7 @@ class MediaArtsClient:
         self._verify = True
         self._client = httpx.AsyncClient(timeout=60.0, verify=True, follow_redirects=True)
         self._last_request_time = 0.0
-        log.info("mediaarts_client_init", ssl_verify=True, follow_redirects=True)
+        log.info("mediaarts_client_init", source="mediaarts", ssl_verify=True, follow_redirects=True)
 
     async def _fallback_to_insecure(self) -> None:
         """Fall back to insecure SSL verification with warning.
@@ -107,7 +107,7 @@ class MediaArtsClient:
                 if not ssl_fallback_tried and self._verify:
                     ssl_fallback_tried = True
                     await self._fallback_to_insecure()
-                    log.info("ssl_fallback_retry", attempt=attempt + 1)
+                    log.info("ssl_fallback_retry", source="mediaarts", attempt=attempt + 1)
                     await asyncio.sleep(1)
                     continue
                 log.warning(
@@ -217,7 +217,7 @@ async def fetch_all_anime_staff(
 
     try:
         while offset < max_records:
-            log.info("fetching_madb", offset=offset)
+            log.info("fetching_madb", source="mediaarts", offset=offset)
             bindings = await client.fetch_anime_staff(limit=page_size, offset=offset)
             if not bindings:
                 break
@@ -235,6 +235,8 @@ async def fetch_all_anime_staff(
 
     log.info(
         "madb_fetch_complete",
+        source="mediaarts",
+        item_count=len(all_credits),
         anime=len(all_anime),
         persons=len(all_persons),
         credits=len(all_credits),
@@ -266,7 +268,7 @@ def main(
             insert_credit(conn, credit)
         update_data_source(conn, "mediaarts", len(credits))
 
-    log.info("saved_to_db", anime=len(anime_list), persons=len(persons), credits=len(credits))
+    log.info("saved_to_db", source="mediaarts", item_count=len(credits), anime=len(anime_list), persons=len(persons), credits=len(credits))
 
 
 if __name__ == "__main__":

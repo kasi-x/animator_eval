@@ -5,7 +5,10 @@ httpx + structlog + typer で構成。
 """
 
 import asyncio
+import json
 import time
+from datetime import datetime, timezone
+from pathlib import Path
 
 import httpx
 import structlog
@@ -19,6 +22,29 @@ BASE_URL = "https://api.jikan.moe/v4"
 REQUEST_INTERVAL = 0.4
 
 app = typer.Typer()
+
+CHECKPOINT_FILE = Path(__file__).parent.parent.parent / "data" / "mal_checkpoint.json"
+
+
+def _load_checkpoint(path: Path) -> dict | None:
+    """チェックポイントファイルを読み込む."""
+    if path.exists():
+        with open(path) as f:
+            return json.load(f)
+    return None
+
+
+def _save_checkpoint(path: Path, data: dict) -> None:
+    """チェックポイントファイルを保存する."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
+
+
+def _delete_checkpoint(path: Path) -> None:
+    """チェックポイントファイルを削除する."""
+    if path.exists():
+        path.unlink()
 
 
 class JikanClient:
@@ -48,13 +74,13 @@ class JikanClient:
                 resp = await self._client.get(url, params=params)
                 if resp.status_code == 429:
                     retry_after = int(resp.headers.get("Retry-After", 3))
-                    log.warning("rate_limited", retry_after=retry_after, url=url)
+                    log.warning("rate_limited", source="mal", retry_after_seconds=retry_after, url=url)
                     await asyncio.sleep(retry_after)
                     continue
                 resp.raise_for_status()
                 return resp.json()
             except httpx.HTTPError as e:
-                log.warning("request_failed", attempt=attempt + 1, error=str(e))
+                log.warning("request_failed", source="mal", attempt=attempt + 1, error_type=type(e).__name__, error_message=str(e))
                 if attempt < 4:
                     await asyncio.sleep(2 ** (attempt + 1))
         from src.scrapers.exceptions import EndpointUnreachableError
@@ -139,7 +165,7 @@ async def fetch_top_anime_credits(
         for page in range(1, pages_needed + 1):
             if fetched >= n_anime:
                 break
-            log.info("fetching_top_anime", page=page)
+            log.info("fetching_top_anime", source="mal", page=page)
             resp = await client.get_top_anime(page=page, limit=25, type_filter=type_filter)
             for raw_anime in resp.get("data", []):
                 if fetched >= n_anime:
@@ -147,7 +173,7 @@ async def fetch_top_anime_credits(
                 anime = parse_anime_data(raw_anime)
                 all_anime.append(anime)
                 fetched += 1
-                log.info("fetching_staff", progress=f"{fetched}/{n_anime}", title=anime.display_title)
+                log.info("fetching_staff", source="mal", progress=f"{fetched}/{n_anime}", title=anime.display_title)
                 try:
                     staff = await client.get_anime_staff(anime.mal_id)
                     persons, credits = parse_staff_data(staff, anime.id)
@@ -156,13 +182,13 @@ async def fetch_top_anime_credits(
                             all_persons.append(p)
                             seen.add(p.id)
                     all_credits.extend(credits)
-                    log.info("staff_fetched", staff=len(persons), credits=len(credits))
+                    log.info("staff_fetched", source="mal", item_count=len(credits), staff=len(persons), credits=len(credits))
                 except Exception as e:
-                    log.error("staff_fetch_failed", anime_id=anime.id, error=str(e))
+                    log.error("staff_fetch_failed", source="mal", anime_id=anime.id, error_type=type(e).__name__, error_message=str(e))
     finally:
         await client.close()
 
-    log.info("fetch_complete", anime=len(all_anime), persons=len(all_persons), credits=len(all_credits))
+    log.info("fetch_complete", source="mal", item_count=len(all_credits), anime=len(all_anime), persons=len(all_persons), credits=len(all_credits))
     return all_anime, all_persons, all_credits
 
 
@@ -170,28 +196,129 @@ async def fetch_top_anime_credits(
 def main(
     count: int = typer.Option(50, "--count", "-n", help="取得するアニメ数"),
     type_filter: str = typer.Option("tv", "--type", help="アニメタイプ"),
+    resume: bool = typer.Option(True, "--resume/--no-resume", help="チェックポイントから再開する"),
+    checkpoint_interval: int = typer.Option(10, "--checkpoint-interval", help="チェックポイント保存間隔 (アニメ数)"),
 ) -> None:
     """MAL (Jikan API) からクレジットデータを収集する."""
-    from src.database import get_connection, init_db, insert_credit, update_data_source, upsert_anime, upsert_person
+    from src.database import db_connection, init_db, insert_credit, update_data_source, upsert_anime, upsert_person
     from src.log import setup_logging
 
     setup_logging()
-    anime_list, persons, credits = asyncio.run(
-        fetch_top_anime_credits(n_anime=count, type_filter=type_filter)
-    )
 
-    conn = get_connection()
-    init_db(conn)
-    for a in anime_list:
-        upsert_anime(conn, a)
-    for p in persons:
-        upsert_person(conn, p)
-    for c in credits:
-        insert_credit(conn, c)
-    update_data_source(conn, "mal", len(credits))
-    conn.commit()
-    conn.close()
-    log.info("saved_to_db", anime=len(anime_list), persons=len(persons), credits=len(credits))
+    # Load checkpoint if resuming
+    start_index = 0
+    if resume:
+        checkpoint = _load_checkpoint(CHECKPOINT_FILE)
+        if checkpoint:
+            start_index = checkpoint.get("last_fetched_index", 0)
+            log.info(
+                "checkpoint_loaded",
+                last_fetched_index=start_index,
+                total_anime=checkpoint.get("total_anime", 0),
+                total_persons=checkpoint.get("total_persons", 0),
+                total_credits=checkpoint.get("total_credits", 0),
+                timestamp=checkpoint.get("timestamp"),
+            )
+
+    async def _fetch_and_save() -> None:
+        """Fetch anime credits incrementally with checkpoint support."""
+        client = JikanClient()
+        seen: set[str] = set()
+        total_anime = 0
+        total_persons = 0
+        total_credits = 0
+        fetched = 0
+
+        try:
+            with db_connection() as conn:
+                init_db(conn)
+
+                pages_needed = (count + 24) // 25
+                for page in range(1, pages_needed + 1):
+                    if fetched >= count:
+                        break
+                    log.info("fetching_top_anime", source="mal", page=page)
+                    resp = await client.get_top_anime(
+                        page=page, limit=25, type_filter=type_filter,
+                    )
+                    for raw_anime in resp.get("data", []):
+                        if fetched >= count:
+                            break
+                        anime = parse_anime_data(raw_anime)
+                        fetched += 1
+
+                        # Skip already-processed anime on resume
+                        if fetched <= start_index:
+                            log.info(
+                                "skipping_anime",
+                                source="mal",
+                                progress=f"{fetched}/{count}",
+                                title=anime.display_title,
+                            )
+                            continue
+
+                        log.info(
+                            "fetching_staff",
+                            source="mal",
+                            progress=f"{fetched}/{count}",
+                            title=anime.display_title,
+                        )
+                        upsert_anime(conn, anime)
+                        total_anime += 1
+
+                        try:
+                            staff = await client.get_anime_staff(anime.mal_id)
+                            persons, credits = parse_staff_data(staff, anime.id)
+                            for p in persons:
+                                if p.id not in seen:
+                                    upsert_person(conn, p)
+                                    seen.add(p.id)
+                                    total_persons += 1
+                            for c in credits:
+                                insert_credit(conn, c)
+                                total_credits += 1
+                            log.info(
+                                "staff_fetched",
+                                source="mal",
+                                staff=len(persons),
+                                credits=len(credits),
+                            )
+                        except Exception as e:
+                            log.error(
+                                "staff_fetch_failed",
+                                source="mal",
+                                anime_id=anime.id,
+                                error=str(e),
+                            )
+
+                        # Save checkpoint every N anime
+                        if fetched % checkpoint_interval == 0:
+                            conn.commit()
+                            _save_checkpoint(CHECKPOINT_FILE, {
+                                "last_fetched_index": fetched,
+                                "total_anime": total_anime,
+                                "total_persons": total_persons,
+                                "total_credits": total_credits,
+                                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+                            })
+                            log.info("checkpoint_saved", last_fetched_index=fetched)
+
+                update_data_source(conn, "mal", total_credits)
+
+        finally:
+            await client.close()
+
+        # Delete checkpoint on successful completion
+        _delete_checkpoint(CHECKPOINT_FILE)
+        log.info(
+            "saved_to_db",
+            source="mal",
+            anime=total_anime,
+            persons=total_persons,
+            credits=total_credits,
+        )
+
+    asyncio.run(_fetch_and_save())
 
 
 if __name__ == "__main__":
