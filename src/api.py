@@ -1,16 +1,16 @@
 """FastAPI サーバー — スコア照会 API.
 
 エンドポイント:
-  GET /api/v1/persons          — 全人物スコア一覧 (ページネーション対応)
-  GET /api/v1/persons/search   — 人物検索
-  GET /api/v1/persons/{id}     — 人物プロフィール
-  GET /api/v1/persons/{id}/profile — 個人貢献プロファイル（二層モデル）
-  GET /api/v1/persons/{id}/similar — 類似人物
-  GET /api/v1/ranking          — ランキング (フィルタ対応)
-  GET /api/v1/anime            — アニメ統計一覧
-  GET /api/v1/anime/{id}       — アニメ詳細
-  GET /api/v1/summary          — パイプラインサマリー
-  GET /api/v1/health           — ヘルスチェック
+  GET /api/persons          — 全人物スコア一覧 (ページネーション対応)
+  GET /api/persons/search   — 人物検索
+  GET /api/persons/{id}     — 人物プロフィール
+  GET /api/persons/{id}/profile — 個人貢献プロファイル（二層モデル）
+  GET /api/persons/{id}/similar — 類似人物
+  GET /api/ranking          — ランキング (フィルタ対応)
+  GET /api/anime            — アニメ統計一覧
+  GET /api/anime/{id}       — アニメ詳細
+  GET /api/summary          — パイプラインサマリー
+  GET /api/health           — ヘルスチェック
 """
 
 import os
@@ -152,7 +152,7 @@ class PaginatedResponse(BaseModel):
 # --- Endpoints ---
 
 
-@app.get("/api/v1/health", response_model=HealthResponse)
+@app.get("/api/health", response_model=HealthResponse)
 def health():
     """ヘルスチェック."""
     from src.utils.config import DB_DIR
@@ -166,7 +166,7 @@ def health():
     )
 
 
-@app.get("/api/v1/i18n/{language}")
+@app.get("/api/i18n/{language}")
 def get_translations(language: str):
     """Get translations for specified language.
 
@@ -193,7 +193,7 @@ def get_translations(language: str):
     }
 
 
-@app.get("/api/v1/summary")
+@app.get("/api/summary")
 def summary():
     """パイプラインサマリー."""
     data = load_pipeline_summary_from_json()
@@ -202,7 +202,7 @@ def summary():
     return data
 
 
-@app.get("/api/v1/persons")
+@app.get("/api/persons")
 def list_persons(
     page: int = Query(1, ge=1, description="ページ番号"),
     per_page: int = Query(50, ge=1, le=200, description="1ページあたりの件数"),
@@ -226,7 +226,7 @@ def list_persons(
     return PaginatedResponse(items=items, total=total, page=page, per_page=per_page, pages=pages)
 
 
-@app.get("/api/v1/persons/search")
+@app.get("/api/persons/search")
 def search(
     q: str = Query(..., min_length=1, max_length=500, description="検索クエリ"),
     limit: int = Query(20, ge=1, le=100, description="最大件数"),
@@ -239,7 +239,7 @@ def search(
     return {"query": q, "count": len(results), "results": results}
 
 
-@app.get("/api/v1/persons/{person_id}")
+@app.get("/api/persons/{person_id}")
 def get_person(person_id: PersonId):
     """人物プロフィール（スコア + ブレークダウン）."""
     scores = load_person_scores_from_json()
@@ -249,7 +249,7 @@ def get_person(person_id: PersonId):
     raise HTTPException(status_code=404, detail=f"Person {person_id} not found")
 
 
-@app.get("/api/v1/persons/{person_id}/similar")
+@app.get("/api/persons/{person_id}/similar")
 def get_similar(
     person_id: PersonId,
     top_n: int = Query(10, ge=1, le=50, description="類似人物の数"),
@@ -266,7 +266,7 @@ def get_similar(
     return {"person_id": person_id, "similar": similar}
 
 
-@app.get("/api/v1/persons/{person_id}/history")
+@app.get("/api/persons/{person_id}/history")
 def get_person_history(
     person_id: PersonId,
     limit: int = Query(50, ge=1, le=200, description="履歴件数"),
@@ -279,7 +279,7 @@ def get_person_history(
     return {"person_id": person_id, "history": history}
 
 
-@app.get("/api/v1/ranking")
+@app.get("/api/ranking")
 def ranking(
     role: str | None = Query(None, description="役職フィルタ (director, animator, etc.)"),
     year_from: int | None = Query(None, description="開始年"),
@@ -319,7 +319,7 @@ def ranking(
     return {"items": filtered[:limit], "total": len(filtered), "sort": sort, "filters": {"role": role, "year_from": year_from, "year_to": year_to}}
 
 
-@app.get("/api/v1/anime")
+@app.get("/api/anime")
 def list_anime(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
@@ -353,7 +353,7 @@ def list_anime(
     )
 
 
-@app.get("/api/v1/anime/{anime_id}")
+@app.get("/api/anime/{anime_id}")
 def get_anime(anime_id: AnimeId):
     """アニメ詳細統計."""
     stats = load_anime_statistics_from_json()
@@ -362,7 +362,7 @@ def get_anime(anime_id: AnimeId):
     return {"anime_id": anime_id, **stats[anime_id]}
 
 
-@app.get("/api/v1/transitions")
+@app.get("/api/transitions")
 def transitions():
     """役職遷移分析."""
     data = load_role_transitions_from_json()
@@ -371,7 +371,7 @@ def transitions():
     return data
 
 
-@app.get("/api/v1/crossval")
+@app.get("/api/crossval")
 def crossval():
     """スコアクロスバリデーション結果."""
     data = load_cross_validation_results_from_json()
@@ -380,7 +380,7 @@ def crossval():
     return data
 
 
-@app.get("/api/v1/influence")
+@app.get("/api/influence")
 def influence():
     """影響ツリー（メンター・メンティー関係）."""
     data = load_influence_tree_from_json()
@@ -389,7 +389,7 @@ def influence():
     return data
 
 
-@app.get("/api/v1/studios")
+@app.get("/api/studios")
 def studios():
     """スタジオ分析."""
     data = load_studio_analysis_from_json()
@@ -398,7 +398,7 @@ def studios():
     return data
 
 
-@app.get("/api/v1/seasonal")
+@app.get("/api/seasonal")
 def seasonal():
     """シーズントレンド."""
     data = load_seasonal_trends_from_json()
@@ -407,7 +407,7 @@ def seasonal():
     return data
 
 
-@app.get("/api/v1/collaborations")
+@app.get("/api/collaborations")
 def collaborations(
     limit: int = Query(50, ge=1, le=500, description="件数"),
     person_id: str | None = Query(None, description="人物IDでフィルタ"),
@@ -421,7 +421,7 @@ def collaborations(
     return {"items": data[:limit], "total": len(data)}
 
 
-@app.get("/api/v1/outliers")
+@app.get("/api/outliers")
 def outliers():
     """スコア外れ値検出結果."""
     data = load_outlier_analysis_from_json()
@@ -430,7 +430,7 @@ def outliers():
     return data
 
 
-@app.get("/api/v1/teams")
+@app.get("/api/teams")
 def teams():
     """チーム構成分析."""
     data = load_team_patterns_from_json()
@@ -439,7 +439,7 @@ def teams():
     return data
 
 
-@app.get("/api/v1/growth")
+@app.get("/api/growth")
 def growth(
     trend: str | None = Query(None, description="トレンドフィルタ (rising/stable/declining/inactive)"),
     limit: int = Query(50, ge=1, le=500),
@@ -459,7 +459,7 @@ def growth(
     }
 
 
-@app.get("/api/v1/time-series")
+@app.get("/api/time-series")
 def time_series():
     """年次時系列データ."""
     data = load_time_series_from_json()
@@ -468,7 +468,7 @@ def time_series():
     return data
 
 
-@app.get("/api/v1/decades")
+@app.get("/api/decades")
 def decades():
     """年代別分析."""
     data = load_decade_analysis_from_json()
@@ -477,7 +477,7 @@ def decades():
     return data
 
 
-@app.get("/api/v1/tags")
+@app.get("/api/tags")
 def tags(
     tag: str | None = Query(None, description="タグでフィルタ"),
 ):
@@ -500,7 +500,7 @@ def tags(
     return data
 
 
-@app.get("/api/v1/role-flow")
+@app.get("/api/role-flow")
 def role_flow():
     """役職遷移フロー（Sankey diagram data）."""
     data = load_role_flow_from_json()
@@ -509,7 +509,7 @@ def role_flow():
     return data
 
 
-@app.get("/api/v1/compare")
+@app.get("/api/compare")
 def compare_persons(
     ids: str = Query(..., description="比較対象の人物ID (カンマ区切り)"),
 ):
@@ -531,7 +531,7 @@ def compare_persons(
     return result
 
 
-@app.get("/api/v1/data-quality")
+@app.get("/api/data-quality")
 def data_quality():
     """データ品質スコア."""
     from src.analysis.data_quality import compute_data_quality_score
@@ -581,7 +581,7 @@ def data_quality():
     )
 
 
-@app.get("/api/v1/persons/{person_id}/network")
+@app.get("/api/persons/{person_id}/network")
 def get_person_network(
     person_id: PersonId,
     hops: int = Query(1, ge=1, le=3, description="ネットワーク深度"),
@@ -604,7 +604,7 @@ def get_person_network(
     return result
 
 
-@app.get("/api/v1/recommend")
+@app.get("/api/recommend")
 def recommend(
     team: str = Query(..., description="既存チームの人物ID (カンマ区切り)"),
     top_n: int = Query(10, ge=1, le=50),
@@ -628,7 +628,7 @@ def recommend(
     return {"team": team_ids, "recommendations": recs}
 
 
-@app.get("/api/v1/predict")
+@app.get("/api/predict")
 def predict(
     team: str = Query(..., description="チームの人物ID (カンマ区切り)"),
 ):
@@ -652,7 +652,7 @@ def predict(
     return {"team": team_ids, **result}
 
 
-@app.get("/api/v1/bridges")
+@app.get("/api/bridges")
 def bridges():
     """コミュニティ間ブリッジ人物."""
     data = load_bridge_analysis_from_json()
@@ -661,7 +661,7 @@ def bridges():
     return data
 
 
-@app.get("/api/v1/mentorships")
+@app.get("/api/mentorships")
 def mentorships():
     """推定メンターシップ関係."""
     data = load_mentorship_relationships_from_json()
@@ -670,7 +670,7 @@ def mentorships():
     return data
 
 
-@app.get("/api/v1/persons/{person_id}/milestones")
+@app.get("/api/persons/{person_id}/milestones")
 def get_person_milestones(person_id: PersonId):
     """人物のキャリアマイルストーン."""
     data = load_career_milestones_from_json()
@@ -681,7 +681,7 @@ def get_person_milestones(person_id: PersonId):
     return {"person_id": person_id, "milestones": data[person_id]}
 
 
-@app.get("/api/v1/persons/{person_id}/profile")
+@app.get("/api/persons/{person_id}/profile")
 def get_person_profile(person_id: PersonId):
     """個人貢献プロファイル（二層モデル: ネットワーク + 個人貢献）."""
     # Layer 1: Network Profile (scores.json)
@@ -718,7 +718,7 @@ def get_person_profile(person_id: PersonId):
     }
 
 
-@app.get("/api/v1/studio-disparity")
+@app.get("/api/studio-disparity")
 def studio_disparity():
     """スタジオ間待遇差分析 — 同Skill帯のスコア差を比較."""
     data = load_studio_bias_from_json()
@@ -733,7 +733,7 @@ def studio_disparity():
     }
 
 
-@app.get("/api/v1/network-evolution")
+@app.get("/api/network-evolution")
 def network_evolution():
     """ネットワーク進化の時系列データ."""
     data = load_network_evolution_from_json()
@@ -742,7 +742,7 @@ def network_evolution():
     return data
 
 
-@app.get("/api/v1/genre-affinity")
+@app.get("/api/genre-affinity")
 def genre_affinity(
     person_id: str | None = Query(None, description="人物IDでフィルタ"),
 ):
@@ -757,7 +757,7 @@ def genre_affinity(
     return data
 
 
-@app.get("/api/v1/productivity")
+@app.get("/api/productivity")
 def productivity(
     limit: int = Query(50, ge=1, le=500),
 ):
@@ -769,7 +769,7 @@ def productivity(
     return {"total": len(data), "items": items}
 
 
-@app.get("/api/v1/stats")
+@app.get("/api/stats")
 def db_stats():
     """DB統計情報."""
     with db_connection() as conn:
@@ -778,7 +778,7 @@ def db_stats():
     return {"stats": stats, "data_sources": sources}
 
 
-@app.get("/api/v1/freshness")
+@app.get("/api/freshness")
 def freshness():
     """Data source freshness check."""
     from src.monitoring import get_freshness_summary
@@ -823,7 +823,7 @@ def _get_neo4j_reader():
         )
 
 
-@app.get("/api/v1/neo4j/path")
+@app.get("/api/neo4j/path")
 def neo4j_shortest_path(
     from_id: str = Query(..., alias="from", description="Source person ID"),
     to_id: str = Query(..., alias="to", description="Target person ID"),
@@ -845,7 +845,7 @@ def neo4j_shortest_path(
         reader.close()
 
 
-@app.get("/api/v1/neo4j/common")
+@app.get("/api/neo4j/common")
 def neo4j_common_collaborators(
     person_a: str = Query(..., description="First person ID"),
     person_b: str = Query(..., description="Second person ID"),
@@ -870,7 +870,7 @@ def neo4j_common_collaborators(
         reader.close()
 
 
-@app.get("/api/v1/neo4j/neighborhood")
+@app.get("/api/neo4j/neighborhood")
 def neo4j_neighborhood(
     person_id: str = Query(..., description="Center person ID"),
     depth: int = Query(2, ge=1, le=5, description="Traversal depth"),
@@ -890,7 +890,7 @@ def neo4j_neighborhood(
         reader.close()
 
 
-@app.get("/api/v1/neo4j/stats")
+@app.get("/api/neo4j/stats")
 def neo4j_stats():
     """Get high-level collaboration graph statistics from Neo4j."""
     reader = _get_neo4j_reader()
@@ -955,7 +955,7 @@ async def websocket_pipeline_progress(websocket: WebSocket):
         manager.disconnect(websocket)
 
 
-@app.post("/api/v1/pipeline/run", dependencies=[Depends(verify_api_key)])
+@app.post("/api/pipeline/run", dependencies=[Depends(verify_api_key)])
 @limiter.limit("2/minute")
 async def run_pipeline_async(
     request: Request,

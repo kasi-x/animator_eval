@@ -587,7 +587,7 @@ message = t("cli.stats.title")  # "データベース統計"
 **Frontend**:
 ```javascript
 // Fetch translations
-const response = await fetch('/api/v1/i18n/ja');
+const response = await fetch('/api/i18n/ja');
 const data = await response.json();
 translations = data.translations;
 
@@ -610,7 +610,7 @@ const title = translations.cli.stats.title;
 ### Endpoint Patterns
 
 ```python
-@app.get("/api/v1/persons")
+@app.get("/api/persons")
 def list_persons(
     page: int = Query(1, ge=1),
     per_page: int = Query(100, ge=1, le=1000),
@@ -618,11 +618,11 @@ def list_persons(
 ) -> PaginatedResponse:
     """List all persons with pagination and sorting."""
 
-@app.get("/api/v1/persons/{person_id}")
+@app.get("/api/persons/{person_id}")
 def get_person(person_id: str) -> dict:
     """Get person profile by ID."""
 
-@app.get("/api/v1/persons/{person_id}/similar")
+@app.get("/api/persons/{person_id}/similar")
 def get_similar_persons(person_id: str, top_n: int = 10) -> list[dict]:
     """Find similar persons using cosine similarity."""
 ```

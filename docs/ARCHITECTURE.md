@@ -632,45 +632,45 @@ Architecture:
 
 Endpoints:
 ├── Health & Stats
-│   ├── GET /api/v1/health
-│   ├── GET /api/v1/stats
-│   └── GET /api/v1/summary
+│   ├── GET /api/health
+│   ├── GET /api/stats
+│   └── GET /api/summary
 ├── Persons
-│   ├── GET /api/v1/persons (paginated)
-│   ├── GET /api/v1/persons/search
-│   ├── GET /api/v1/persons/{id}
-│   ├── GET /api/v1/persons/{id}/similar
-│   ├── GET /api/v1/persons/{id}/history
-│   ├── GET /api/v1/persons/{id}/network
-│   └── GET /api/v1/persons/{id}/milestones
+│   ├── GET /api/persons (paginated)
+│   ├── GET /api/persons/search
+│   ├── GET /api/persons/{id}
+│   ├── GET /api/persons/{id}/similar
+│   ├── GET /api/persons/{id}/history
+│   ├── GET /api/persons/{id}/network
+│   └── GET /api/persons/{id}/milestones
 ├── Rankings & Analysis
-│   ├── GET /api/v1/ranking
-│   ├── GET /api/v1/compare
-│   ├── GET /api/v1/recommend
-│   └── GET /api/v1/predict
+│   ├── GET /api/ranking
+│   ├── GET /api/compare
+│   ├── GET /api/recommend
+│   └── GET /api/predict
 ├── Anime
-│   ├── GET /api/v1/anime
-│   └── GET /api/v1/anime/{id}
+│   ├── GET /api/anime
+│   └── GET /api/anime/{id}
 ├── Advanced Analysis (20 endpoints)
-│   ├── GET /api/v1/transitions
-│   ├── GET /api/v1/crossval
-│   ├── GET /api/v1/influence
-│   ├── GET /api/v1/studios
-│   ├── GET /api/v1/seasonal
-│   ├── GET /api/v1/collaborations
-│   ├── GET /api/v1/outliers
-│   ├── GET /api/v1/teams
-│   ├── GET /api/v1/growth
-│   ├── GET /api/v1/time-series
-│   ├── GET /api/v1/decades
-│   ├── GET /api/v1/tags
-│   ├── GET /api/v1/role-flow
-│   ├── GET /api/v1/bridges
-│   ├── GET /api/v1/mentorships
-│   ├── GET /api/v1/network-evolution
-│   ├── GET /api/v1/genre-affinity
-│   ├── GET /api/v1/productivity
-│   └── GET /api/v1/data-quality
+│   ├── GET /api/transitions
+│   ├── GET /api/crossval
+│   ├── GET /api/influence
+│   ├── GET /api/studios
+│   ├── GET /api/seasonal
+│   ├── GET /api/collaborations
+│   ├── GET /api/outliers
+│   ├── GET /api/teams
+│   ├── GET /api/growth
+│   ├── GET /api/time-series
+│   ├── GET /api/decades
+│   ├── GET /api/tags
+│   ├── GET /api/role-flow
+│   ├── GET /api/bridges
+│   ├── GET /api/mentorships
+│   ├── GET /api/network-evolution
+│   ├── GET /api/genre-affinity
+│   ├── GET /api/productivity
+│   └── GET /api/data-quality
 ```
 
 ### CLI (Typer + Rich)

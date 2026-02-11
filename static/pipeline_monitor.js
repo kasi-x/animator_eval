@@ -177,7 +177,7 @@ function updateProgress(progress) {
 async function runPipeline() {
     try {
         addLog('パイプライン実行APIを呼び出し中...');
-        const response = await fetch('http://localhost:8000/api/v1/pipeline/run', {
+        const response = await fetch('http://localhost:8000/api/pipeline/run', {
             method: 'POST'
         });
         const data = await response.json();

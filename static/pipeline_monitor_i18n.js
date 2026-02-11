@@ -23,7 +23,7 @@ async function loadTranslations(lang) {
     overlay.classList.add('active');
 
     try {
-        const response = await fetch(`http://localhost:8000/api/v1/i18n/${lang}`);
+        const response = await fetch(`http://localhost:8000/api/i18n/${lang}`);
         if (!response.ok) {
             throw new Error(`Failed to load translations: ${response.statusText}`);
         }
@@ -310,7 +310,7 @@ function updateProgress(progress) {
 async function runPipeline() {
     try {
         addLog(t('frontend.monitor.logs.connecting'));
-        const response = await fetch('http://localhost:8000/api/v1/pipeline/run', {
+        const response = await fetch('http://localhost:8000/api/pipeline/run', {
             method: 'POST'
         });
         const data = await response.json();

@@ -250,7 +250,7 @@ def scores_data(tmp_path, monkeypatch):
 
 class TestHealth:
     def test_health_endpoint(self, client):
-        resp = client.get("/api/v1/health")
+        resp = client.get("/api/health")
         assert resp.status_code == 200
         data = resp.json()
         assert data["status"] == "ok"
@@ -260,7 +260,7 @@ class TestHealth:
 
 class TestSummary:
     def test_summary_exists(self, client, scores_data):
-        resp = client.get("/api/v1/summary")
+        resp = client.get("/api/summary")
         assert resp.status_code == 200
         data = resp.json()
         assert "generated_at" in data
@@ -273,42 +273,42 @@ class TestSummary:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/summary")
+        resp = client.get("/api/summary")
         assert resp.status_code == 404
 
 
 class TestListPersons:
     def test_list_all(self, client, scores_data):
-        resp = client.get("/api/v1/persons")
+        resp = client.get("/api/persons")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] == 3
         assert len(data["items"]) == 3
 
     def test_pagination(self, client, scores_data):
-        resp = client.get("/api/v1/persons?page=1&per_page=2")
+        resp = client.get("/api/persons?page=1&per_page=2")
         data = resp.json()
         assert len(data["items"]) == 2
         assert data["pages"] == 2
 
-        resp2 = client.get("/api/v1/persons?page=2&per_page=2")
+        resp2 = client.get("/api/persons?page=2&per_page=2")
         data2 = resp2.json()
         assert len(data2["items"]) == 1
 
     def test_sort_by_authority(self, client, scores_data):
-        resp = client.get("/api/v1/persons?sort=authority")
+        resp = client.get("/api/persons?sort=authority")
         data = resp.json()
         values = [item["authority"] for item in data["items"]]
         assert values == sorted(values, reverse=True)
 
     def test_invalid_sort(self, client, scores_data):
-        resp = client.get("/api/v1/persons?sort=invalid")
+        resp = client.get("/api/persons?sort=invalid")
         assert resp.status_code == 400
 
 
 class TestGetPerson:
     def test_found(self, client, scores_data):
-        resp = client.get("/api/v1/persons/p1")
+        resp = client.get("/api/persons/p1")
         assert resp.status_code == 200
         data = resp.json()
         assert data["person_id"] == "p1"
@@ -316,38 +316,38 @@ class TestGetPerson:
         assert "breakdown" in data
 
     def test_not_found(self, client, scores_data):
-        resp = client.get("/api/v1/persons/nonexistent")
+        resp = client.get("/api/persons/nonexistent")
         assert resp.status_code == 404
 
 
 class TestSimilar:
     def test_similar_persons(self, client, scores_data):
-        resp = client.get("/api/v1/persons/p1/similar?top_n=2")
+        resp = client.get("/api/persons/p1/similar?top_n=2")
         assert resp.status_code == 200
         data = resp.json()
         assert data["person_id"] == "p1"
         assert len(data["similar"]) <= 2
 
     def test_similar_not_found(self, client, scores_data):
-        resp = client.get("/api/v1/persons/nonexistent/similar")
+        resp = client.get("/api/persons/nonexistent/similar")
         assert resp.status_code == 404
 
 
 class TestRanking:
     def test_ranking_default(self, client, scores_data):
-        resp = client.get("/api/v1/ranking")
+        resp = client.get("/api/ranking")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] == 3
 
     def test_ranking_role_filter(self, client, scores_data):
-        resp = client.get("/api/v1/ranking?role=director")
+        resp = client.get("/api/ranking?role=director")
         data = resp.json()
         assert data["total"] == 1
         assert data["items"][0]["person_id"] == "p1"
 
     def test_ranking_sort(self, client, scores_data):
-        resp = client.get("/api/v1/ranking?sort=trust")
+        resp = client.get("/api/ranking?sort=trust")
         data = resp.json()
         values = [item["trust"] for item in data["items"]]
         assert values == sorted(values, reverse=True)
@@ -355,30 +355,30 @@ class TestRanking:
 
 class TestAnime:
     def test_list_anime(self, client, scores_data):
-        resp = client.get("/api/v1/anime")
+        resp = client.get("/api/anime")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] == 2
 
     def test_get_anime(self, client, scores_data):
-        resp = client.get("/api/v1/anime/a1")
+        resp = client.get("/api/anime/a1")
         assert resp.status_code == 200
         data = resp.json()
         assert data["title"] == "Anime 1"
 
     def test_anime_not_found(self, client, scores_data):
-        resp = client.get("/api/v1/anime/nonexistent")
+        resp = client.get("/api/anime/nonexistent")
         assert resp.status_code == 404
 
     def test_anime_sort_by_year(self, client, scores_data):
-        resp = client.get("/api/v1/anime?sort=year")
+        resp = client.get("/api/anime?sort=year")
         data = resp.json()
         assert data["items"][0]["year"] >= data["items"][1]["year"]
 
 
 class TestStudios:
     def test_studios_exists(self, client, scores_data):
-        resp = client.get("/api/v1/studios")
+        resp = client.get("/api/studios")
         assert resp.status_code == 200
         data = resp.json()
         assert "MAPPA" in data
@@ -390,13 +390,13 @@ class TestStudios:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/studios")
+        resp = client.get("/api/studios")
         assert resp.status_code == 404
 
 
 class TestSeasonal:
     def test_seasonal_exists(self, client, scores_data):
-        resp = client.get("/api/v1/seasonal")
+        resp = client.get("/api/seasonal")
         assert resp.status_code == 200
         data = resp.json()
         assert "by_season" in data
@@ -408,13 +408,13 @@ class TestSeasonal:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/seasonal")
+        resp = client.get("/api/seasonal")
         assert resp.status_code == 404
 
 
 class TestCrossval:
     def test_crossval_exists(self, client, scores_data):
-        resp = client.get("/api/v1/crossval")
+        resp = client.get("/api/crossval")
         assert resp.status_code == 200
         data = resp.json()
         assert data["avg_rank_correlation"] == 0.95
@@ -427,20 +427,20 @@ class TestCrossval:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/crossval")
+        resp = client.get("/api/crossval")
         assert resp.status_code == 404
 
 
 class TestCollaborations:
     def test_collaborations_exists(self, client, scores_data):
-        resp = client.get("/api/v1/collaborations")
+        resp = client.get("/api/collaborations")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] >= 1
         assert data["items"][0]["person_a"] == "p1"
 
     def test_collaborations_filter_by_person(self, client, scores_data):
-        resp = client.get("/api/v1/collaborations?person_id=p1")
+        resp = client.get("/api/collaborations?person_id=p1")
         data = resp.json()
         assert data["total"] >= 1
 
@@ -451,13 +451,13 @@ class TestCollaborations:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/collaborations")
+        resp = client.get("/api/collaborations")
         assert resp.status_code == 404
 
 
 class TestOutliers:
     def test_outliers_exists(self, client, scores_data):
-        resp = client.get("/api/v1/outliers")
+        resp = client.get("/api/outliers")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_outliers"] == 1
@@ -469,13 +469,13 @@ class TestOutliers:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/outliers")
+        resp = client.get("/api/outliers")
         assert resp.status_code == 404
 
 
 class TestTeams:
     def test_teams_exists(self, client, scores_data):
-        resp = client.get("/api/v1/teams")
+        resp = client.get("/api/teams")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_high_score"] == 1
@@ -487,19 +487,19 @@ class TestTeams:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/teams")
+        resp = client.get("/api/teams")
         assert resp.status_code == 404
 
 
 class TestGrowth:
     def test_growth_exists(self, client, scores_data):
-        resp = client.get("/api/v1/growth")
+        resp = client.get("/api/growth")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] == 2
 
     def test_growth_filter_by_trend(self, client, scores_data):
-        resp = client.get("/api/v1/growth?trend=rising")
+        resp = client.get("/api/growth?trend=rising")
         data = resp.json()
         assert data["total"] == 1
 
@@ -510,13 +510,13 @@ class TestGrowth:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/growth")
+        resp = client.get("/api/growth")
         assert resp.status_code == 404
 
 
 class TestTimeSeries:
     def test_time_series_exists(self, client, scores_data):
-        resp = client.get("/api/v1/time-series")
+        resp = client.get("/api/time-series")
         assert resp.status_code == 200
         data = resp.json()
         assert data["years"] == [2020, 2021, 2022]
@@ -528,13 +528,13 @@ class TestTimeSeries:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/time-series")
+        resp = client.get("/api/time-series")
         assert resp.status_code == 404
 
 
 class TestDecades:
     def test_decades_exists(self, client, scores_data):
-        resp = client.get("/api/v1/decades")
+        resp = client.get("/api/decades")
         assert resp.status_code == 200
         data = resp.json()
         assert "2020s" in data["decades"]
@@ -546,19 +546,19 @@ class TestDecades:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/decades")
+        resp = client.get("/api/decades")
         assert resp.status_code == 404
 
 
 class TestTags:
     def test_tags_exists(self, client, scores_data):
-        resp = client.get("/api/v1/tags")
+        resp = client.get("/api/tags")
         assert resp.status_code == 200
         data = resp.json()
         assert "tag_summary" in data
 
     def test_tags_filter(self, client, scores_data):
-        resp = client.get("/api/v1/tags?tag=veteran")
+        resp = client.get("/api/tags?tag=veteran")
         data = resp.json()
         assert data["count"] == 1
         assert "p1" in data["persons"]
@@ -570,13 +570,13 @@ class TestTags:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/tags")
+        resp = client.get("/api/tags")
         assert resp.status_code == 404
 
 
 class TestRoleFlow:
     def test_role_flow_exists(self, client, scores_data):
-        resp = client.get("/api/v1/role-flow")
+        resp = client.get("/api/role-flow")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total_transitions"] == 5
@@ -588,19 +588,19 @@ class TestRoleFlow:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/role-flow")
+        resp = client.get("/api/role-flow")
         assert resp.status_code == 404
 
 
 class TestCompare:
     def test_compare_two(self, client, scores_data):
-        resp = client.get("/api/v1/compare?ids=p1,p2")
+        resp = client.get("/api/compare?ids=p1,p2")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["persons"]) == 2
 
     def test_compare_invalid(self, client, scores_data):
-        resp = client.get("/api/v1/compare?ids=p1")
+        resp = client.get("/api/compare?ids=p1")
         assert resp.status_code == 400
 
 
@@ -621,7 +621,7 @@ class TestDataQuality:
         conn.commit()
         conn.close()
 
-        resp = client.get("/api/v1/data-quality")
+        resp = client.get("/api/data-quality")
         assert resp.status_code == 200
         data = resp.json()
         assert "overall_score" in data
@@ -647,7 +647,7 @@ class TestPersonNetwork:
         conn.commit()
         conn.close()
 
-        resp = client.get("/api/v1/persons/p1/network")
+        resp = client.get("/api/persons/p1/network")
         assert resp.status_code == 200
         data = resp.json()
         assert data["center"] == "p1"
@@ -673,7 +673,7 @@ class TestRecommend:
         conn.commit()
         conn.close()
 
-        resp = client.get("/api/v1/recommend?team=p1")
+        resp = client.get("/api/recommend?team=p1")
         assert resp.status_code == 200
         data = resp.json()
         assert "recommendations" in data
@@ -696,7 +696,7 @@ class TestPredict:
         conn.commit()
         conn.close()
 
-        resp = client.get("/api/v1/predict?team=p1")
+        resp = client.get("/api/predict?team=p1")
         assert resp.status_code == 200
         data = resp.json()
         assert "predicted_score" in data
@@ -716,7 +716,7 @@ class TestDbStats:
         init_db(conn)
         conn.close()
 
-        resp = client.get("/api/v1/stats")
+        resp = client.get("/api/stats")
         assert resp.status_code == 200
         data = resp.json()
         assert "stats" in data
@@ -725,7 +725,7 @@ class TestDbStats:
 
 class TestBridgesApi:
     def test_bridges_exists(self, client, scores_data):
-        resp = client.get("/api/v1/bridges")
+        resp = client.get("/api/bridges")
         assert resp.status_code == 200
         data = resp.json()
         assert len(data["bridge_persons"]) == 1
@@ -738,13 +738,13 @@ class TestBridgesApi:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/bridges")
+        resp = client.get("/api/bridges")
         assert resp.status_code == 404
 
 
 class TestMentorshipsApi:
     def test_mentorships_exists(self, client, scores_data):
-        resp = client.get("/api/v1/mentorships")
+        resp = client.get("/api/mentorships")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] == 1
@@ -757,20 +757,20 @@ class TestMentorshipsApi:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/mentorships")
+        resp = client.get("/api/mentorships")
         assert resp.status_code == 404
 
 
 class TestMilestonesApi:
     def test_milestones_exists(self, client, scores_data):
-        resp = client.get("/api/v1/persons/p1/milestones")
+        resp = client.get("/api/persons/p1/milestones")
         assert resp.status_code == 200
         data = resp.json()
         assert data["person_id"] == "p1"
         assert len(data["milestones"]) == 2
 
     def test_milestones_not_found(self, client, scores_data):
-        resp = client.get("/api/v1/persons/nonexistent/milestones")
+        resp = client.get("/api/persons/nonexistent/milestones")
         assert resp.status_code == 404
 
     def test_milestones_missing(self, client, tmp_path, monkeypatch):
@@ -780,13 +780,13 @@ class TestMilestonesApi:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/persons/p1/milestones")
+        resp = client.get("/api/persons/p1/milestones")
         assert resp.status_code == 404
 
 
 class TestNetworkEvolutionApi:
     def test_net_evo_exists(self, client, scores_data):
-        resp = client.get("/api/v1/network-evolution")
+        resp = client.get("/api/network-evolution")
         assert resp.status_code == 200
         data = resp.json()
         assert data["years"] == [2018, 2019, 2020]
@@ -798,26 +798,26 @@ class TestNetworkEvolutionApi:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/network-evolution")
+        resp = client.get("/api/network-evolution")
         assert resp.status_code == 404
 
 
 class TestGenreAffinityApi:
     def test_genre_exists(self, client, scores_data):
-        resp = client.get("/api/v1/genre-affinity")
+        resp = client.get("/api/genre-affinity")
         assert resp.status_code == 200
         data = resp.json()
         assert "p1" in data
 
     def test_genre_by_person(self, client, scores_data):
-        resp = client.get("/api/v1/genre-affinity?person_id=p1")
+        resp = client.get("/api/genre-affinity?person_id=p1")
         assert resp.status_code == 200
         data = resp.json()
         assert data["person_id"] == "p1"
         assert data["primary_tier"] == "high_rated"
 
     def test_genre_person_not_found(self, client, scores_data):
-        resp = client.get("/api/v1/genre-affinity?person_id=nonexistent")
+        resp = client.get("/api/genre-affinity?person_id=nonexistent")
         assert resp.status_code == 404
 
     def test_genre_missing(self, client, tmp_path, monkeypatch):
@@ -827,13 +827,13 @@ class TestGenreAffinityApi:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/genre-affinity")
+        resp = client.get("/api/genre-affinity")
         assert resp.status_code == 404
 
 
 class TestProductivityApi:
     def test_prod_exists(self, client, scores_data):
-        resp = client.get("/api/v1/productivity")
+        resp = client.get("/api/productivity")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] == 1
@@ -846,7 +846,7 @@ class TestProductivityApi:
         import src.utils.json_io
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
-        resp = client.get("/api/v1/productivity")
+        resp = client.get("/api/productivity")
         assert resp.status_code == 404
 
 
@@ -855,7 +855,7 @@ class TestI18nApi:
 
     def test_get_translations_english(self, client):
         """Get English translations."""
-        resp = client.get("/api/v1/i18n/en")
+        resp = client.get("/api/i18n/en")
         assert resp.status_code == 200
         data = resp.json()
         assert data["language"] == "en"
@@ -867,7 +867,7 @@ class TestI18nApi:
 
     def test_get_translations_japanese(self, client):
         """Get Japanese translations."""
-        resp = client.get("/api/v1/i18n/ja")
+        resp = client.get("/api/i18n/ja")
         assert resp.status_code == 200
         data = resp.json()
         assert data["language"] == "ja"
@@ -877,7 +877,7 @@ class TestI18nApi:
 
     def test_unsupported_language(self, client):
         """Unsupported language returns 400."""
-        resp = client.get("/api/v1/i18n/fr")
+        resp = client.get("/api/i18n/fr")
         assert resp.status_code == 400
         data = resp.json()
         assert "Unsupported language" in data["detail"]
@@ -889,7 +889,7 @@ class TestCorsHeaders:
     def test_cors_headers_present(self, client):
         """CORS headers are included in responses."""
         resp = client.options(
-            "/api/v1/health",
+            "/api/health",
             headers={
                 "Origin": "http://localhost:3000",
                 "Access-Control-Request-Method": "GET",
@@ -900,7 +900,7 @@ class TestCorsHeaders:
     def test_cors_disallowed_origin(self, client):
         """Disallowed origin gets no CORS header."""
         resp = client.options(
-            "/api/v1/health",
+            "/api/health",
             headers={
                 "Origin": "http://evil.example.com",
                 "Access-Control-Request-Method": "GET",
@@ -915,7 +915,7 @@ class TestApiKeyAuth:
     def test_pipeline_run_rejected_without_key(self, client, monkeypatch):
         """With API_SECRET_KEY set, requests without key get 403."""
         monkeypatch.setenv("API_SECRET_KEY", "test-secret-key-123")
-        resp = client.post("/api/v1/pipeline/run")
+        resp = client.post("/api/pipeline/run")
         assert resp.status_code == 403
         assert "API key" in resp.json()["detail"]
 
@@ -923,7 +923,7 @@ class TestApiKeyAuth:
         """Wrong API key returns 403."""
         monkeypatch.setenv("API_SECRET_KEY", "test-secret-key-123")
         resp = client.post(
-            "/api/v1/pipeline/run",
+            "/api/pipeline/run",
             headers={"X-API-Key": "wrong-key"},
         )
         assert resp.status_code == 403

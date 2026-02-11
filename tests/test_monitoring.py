@@ -370,7 +370,7 @@ class TestFreshnessCliCommand:
 
 class TestFreshnessApiEndpoint:
     def test_freshness_endpoint(self, monkeypatch, tmp_path):
-        """GET /api/v1/freshness returns freshness summary."""
+        """GET /api/freshness returns freshness summary."""
         from fastapi.testclient import TestClient
 
         from src.api import app as fastapi_app
@@ -403,7 +403,7 @@ class TestFreshnessApiEndpoint:
         monkeypatch.setattr("src.database.get_connection", patched_get)
 
         client = TestClient(fastapi_app)
-        response = client.get("/api/v1/freshness")
+        response = client.get("/api/freshness")
         assert response.status_code == 200
 
         data = response.json()
@@ -416,7 +416,7 @@ class TestFreshnessApiEndpoint:
         assert data["fresh_sources"] == 1
 
     def test_freshness_endpoint_empty(self, monkeypatch, tmp_path):
-        """GET /api/v1/freshness with no sources returns warning status."""
+        """GET /api/freshness with no sources returns warning status."""
         from fastapi.testclient import TestClient
 
         from src.api import app as fastapi_app
@@ -443,7 +443,7 @@ class TestFreshnessApiEndpoint:
         monkeypatch.setattr("src.database.get_connection", patched_get)
 
         client = TestClient(fastapi_app)
-        response = client.get("/api/v1/freshness")
+        response = client.get("/api/freshness")
         assert response.status_code == 200
 
         data = response.json()

@@ -154,8 +154,8 @@ animetor-eval stats
 **API**:
 ```bash
 # 翻訳辞書を取得
-curl http://localhost:8000/api/v1/i18n/en
-curl http://localhost:8000/api/v1/i18n/ja
+curl http://localhost:8000/api/i18n/en
+curl http://localhost:8000/api/i18n/ja
 ```
 
 **フロントエンド**: 言語切り替えボタンでリアルタイム切り替え
@@ -304,67 +304,67 @@ pixi run lab
 42+エンドポイント + WebSocketを提供（詳細は http://localhost:8000/docs 参照）：
 
 ### 新機能 ✨
-- `GET /api/v1/i18n/{language}` - 翻訳辞書取得（en/ja）
-- `POST /api/v1/pipeline/run` - パイプライン非同期実行
+- `GET /api/i18n/{language}` - 翻訳辞書取得（en/ja）
+- `POST /api/pipeline/run` - パイプライン非同期実行
 - `WS /ws/pipeline` - リアルタイム進捗配信
 - `GET /static/pipeline_monitor_i18n.html` - 監視UI
 - `GET /static/portfolio.html` - ポートフォリオSPA
 
 ### 人物関連
-- `GET /api/v1/persons` - 全人物スコア一覧（ページネーション）
-- `GET /api/v1/persons/search` - 人物検索
-- `GET /api/v1/persons/{id}` - プロフィール詳細
-- `GET /api/v1/persons/{id}/profile` - 個人貢献プロファイル（二層モデル）
-- `GET /api/v1/persons/{id}/similar` - 類似人物
-- `GET /api/v1/persons/{id}/history` - スコア履歴
-- `GET /api/v1/persons/{id}/network` - ネットワーク分析
-- `GET /api/v1/persons/{id}/milestones` - キャリアマイルストーン
+- `GET /api/persons` - 全人物スコア一覧（ページネーション）
+- `GET /api/persons/search` - 人物検索
+- `GET /api/persons/{id}` - プロフィール詳細
+- `GET /api/persons/{id}/profile` - 個人貢献プロファイル（二層モデル）
+- `GET /api/persons/{id}/similar` - 類似人物
+- `GET /api/persons/{id}/history` - スコア履歴
+- `GET /api/persons/{id}/network` - ネットワーク分析
+- `GET /api/persons/{id}/milestones` - キャリアマイルストーン
 
 ### ランキング・統計
-- `GET /api/v1/ranking` - ランキング（フィルタ対応）
-- `GET /api/v1/stats` - DB統計
-- `GET /api/v1/summary` - パイプラインサマリー
-- `GET /api/v1/data-quality` - データ品質レポート
+- `GET /api/ranking` - ランキング（フィルタ対応）
+- `GET /api/stats` - DB統計
+- `GET /api/summary` - パイプラインサマリー
+- `GET /api/data-quality` - データ品質レポート
 
 ### アニメ関連
-- `GET /api/v1/anime` - アニメ統計一覧
-- `GET /api/v1/anime/{id}` - アニメ詳細
+- `GET /api/anime` - アニメ統計一覧
+- `GET /api/anime/{id}` - アニメ詳細
 
 ### 分析
-- `GET /api/v1/transitions` - 役職遷移
-- `GET /api/v1/crossval` - クロスバリデーション
-- `GET /api/v1/influence` - 影響力ツリー
-- `GET /api/v1/studios` - スタジオ分析
-- `GET /api/v1/seasonal` - 季節トレンド
-- `GET /api/v1/collaborations` - 協業ペア
-- `GET /api/v1/outliers` - 外れ値検出
-- `GET /api/v1/teams` - チーム分析
-- `GET /api/v1/growth` - 成長トレンド
-- `GET /api/v1/time-series` - 時系列
-- `GET /api/v1/decades` - 年代別
-- `GET /api/v1/tags` - 人物タグ
-- `GET /api/v1/role-flow` - 役職フロー
-- `GET /api/v1/bridges` - ブリッジ検出
-- `GET /api/v1/mentorships` - メンター関係
-- `GET /api/v1/network-evolution` - ネットワーク進化
-- `GET /api/v1/genre-affinity` - ジャンル親和性
-- `GET /api/v1/productivity` - 生産性
+- `GET /api/transitions` - 役職遷移
+- `GET /api/crossval` - クロスバリデーション
+- `GET /api/influence` - 影響力ツリー
+- `GET /api/studios` - スタジオ分析
+- `GET /api/seasonal` - 季節トレンド
+- `GET /api/collaborations` - 協業ペア
+- `GET /api/outliers` - 外れ値検出
+- `GET /api/teams` - チーム分析
+- `GET /api/growth` - 成長トレンド
+- `GET /api/time-series` - 時系列
+- `GET /api/decades` - 年代別
+- `GET /api/tags` - 人物タグ
+- `GET /api/role-flow` - 役職フロー
+- `GET /api/bridges` - ブリッジ検出
+- `GET /api/mentorships` - メンター関係
+- `GET /api/network-evolution` - ネットワーク進化
+- `GET /api/genre-affinity` - ジャンル親和性
+- `GET /api/productivity` - 生産性
 
 ### データ品質・監視
-- `GET /api/v1/freshness` - データソース鮮度
-- `GET /api/v1/studio-disparity` - スタジオ間待遇差分析
+- `GET /api/freshness` - データソース鮮度
+- `GET /api/studio-disparity` - スタジオ間待遇差分析
 
 ### Neo4j
-- `GET /api/v1/neo4j/path` - 最短パス検索
-- `GET /api/v1/neo4j/common` - 共通コラボレーター
-- `GET /api/v1/neo4j/neighborhood` - 近傍探索
-- `GET /api/v1/neo4j/stats` - グラフ統計
+- `GET /api/neo4j/path` - 最短パス検索
+- `GET /api/neo4j/common` - 共通コラボレーター
+- `GET /api/neo4j/neighborhood` - 近傍探索
+- `GET /api/neo4j/stats` - グラフ統計
 
 ### ユーティリティ
-- `GET /api/v1/compare` - 2人のスコア比較
-- `GET /api/v1/recommend` - 推薦
-- `GET /api/v1/predict` - 予測
-- `GET /api/v1/health` - ヘルスチェック
+- `GET /api/compare` - 2人のスコア比較
+- `GET /api/recommend` - 推薦
+- `GET /api/predict` - 予測
+- `GET /api/health` - ヘルスチェック
 
 ## CLI コマンド
 

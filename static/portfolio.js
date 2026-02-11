@@ -129,7 +129,7 @@ window.addEventListener("hashchange", handleRoute);
 // ========================================================================
 // API
 // ========================================================================
-var API_BASE = "/api/v1";
+var API_BASE = "/api";
 
 function api(path) {
     return fetch(API_BASE + path).then(function (resp) {
