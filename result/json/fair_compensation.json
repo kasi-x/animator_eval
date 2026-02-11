@@ -26,24 +26,24 @@
           "person_id": "p1",
           "name": "監督A",
           "role": "director",
-          "allocation": 55.69597562068657,
-          "shapley_value": 192.873,
+          "allocation": 55.69611672488249,
+          "shapley_value": 191.503,
           "value_share": 47.28
         },
         {
           "person_id": "p3",
           "name": "アニメーターC",
           "role": "animation_director",
-          "allocation": 24.793043392499015,
-          "shapley_value": 117.489,
+          "allocation": 24.7930081047263,
+          "shapley_value": 116.654,
           "value_share": 28.8
         },
         {
           "person_id": "p2",
           "name": "アニメーターB",
           "role": "key_animator",
-          "allocation": 19.51098098681442,
-          "shapley_value": 97.595,
+          "allocation": 19.510875170391202,
+          "shapley_value": 96.901,
           "value_share": 23.92
         }
       ]
@@ -66,24 +66,24 @@
           "person_id": "p1",
           "name": "監督A",
           "role": "director",
-          "allocation": 55.69604419682304,
-          "shapley_value": 192.835,
+          "allocation": 55.69608496339564,
+          "shapley_value": 191.431,
           "value_share": 47.28
         },
         {
           "person_id": "p3",
           "name": "アニメーターC",
           "role": "animation_director",
-          "allocation": 24.793105110757555,
-          "shapley_value": 117.466,
+          "allocation": 24.79296394082337,
+          "shapley_value": 116.61,
           "value_share": 28.8
         },
         {
           "person_id": "p2",
           "name": "アニメーターB",
           "role": "key_animator",
-          "allocation": 19.510850692419414,
-          "shapley_value": 97.575,
+          "allocation": 19.51095109578099,
+          "shapley_value": 96.865,
           "value_share": 23.92
         }
       ]
@@ -106,24 +106,24 @@
           "person_id": "p1",
           "name": "監督A",
           "role": "director",
-          "allocation": 68.2933741216441,
-          "shapley_value": 197.795,
+          "allocation": 68.29338619184756,
+          "shapley_value": 196.04,
           "value_share": 59.86
         },
         {
           "person_id": "p2",
           "name": "アニメーターB",
           "role": "key_animator",
-          "allocation": 23.923868784379614,
-          "shapley_value": 100.085,
+          "allocation": 23.923881810091476,
+          "shapley_value": 99.197,
           "value_share": 30.29
         },
         {
           "person_id": "p4",
           "name": "原画D",
           "role": "key_animator",
-          "allocation": 7.782757093976279,
-          "shapley_value": 32.559,
+          "allocation": 7.7827319980609495,
+          "shapley_value": 32.27,
           "value_share": 9.85
         }
       ]

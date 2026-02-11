@@ -3,12 +3,12 @@
     "anime_id": "a1",
     "title": "すごいアニメ",
     "year": 2022,
-    "commercial_value": 0.298,
-    "critical_value": 0.42,
+    "commercial_value": 0.0905,
+    "critical_value": 0.171,
     "creative_value": 14.15,
     "cultural_value": 0.3,
     "technical_value": 40.7015,
-    "composite_value": 1255.28,
+    "composite_value": 1246.36,
     "staff_quality": 52.097,
     "staff_count": 3,
     "key_contributors": [
@@ -25,18 +25,18 @@
         40.0
       ]
     ],
-    "value_per_staff": 418.43
+    "value_per_staff": 415.45
   },
   "a2": {
     "anime_id": "a2",
     "title": "いいアニメ",
     "year": 2023,
-    "commercial_value": 0.298,
-    "critical_value": 0.42,
+    "commercial_value": 0.0855,
+    "critical_value": 0.165,
     "creative_value": 14.15,
     "cultural_value": 0.275,
     "technical_value": 40.7015,
-    "composite_value": 1255.03,
+    "composite_value": 1245.89,
     "staff_quality": 52.097,
     "staff_count": 3,
     "key_contributors": [
@@ -53,18 +53,18 @@
         40.0
       ]
     ],
-    "value_per_staff": 418.34
+    "value_per_staff": 415.3
   },
   "a3": {
     "anime_id": "a3",
     "title": "普通のアニメ",
     "year": 2024,
-    "commercial_value": 0.288,
-    "critical_value": 0.42,
+    "commercial_value": 0.068,
+    "critical_value": 0.156,
     "creative_value": 14.15,
     "cultural_value": 0.25,
     "technical_value": 31.3036,
-    "composite_value": 1066.57,
+    "composite_value": 1057.11,
     "staff_quality": 43.146,
     "staff_count": 3,
     "key_contributors": [
@@ -81,6 +81,6 @@
         21.903
       ]
     ],
-    "value_per_staff": 355.52
+    "value_per_staff": 352.37
   }
 }
