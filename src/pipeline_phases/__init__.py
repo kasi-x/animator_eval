@@ -18,7 +18,7 @@ Each phase is <200 lines, testable in isolation, and has explicit
 inputs/outputs via the PipelineContext dataclass.
 """
 from src.pipeline_phases.analysis_modules import run_analysis_modules_phase
-from src.pipeline_phases.context import PipelineContext
+from src.pipeline_phases.context import PipelineCheckpoint, PipelineContext
 from src.pipeline_phases.core_scoring import compute_core_scores_phase
 from src.pipeline_phases.data_loading import load_pipeline_data
 from src.pipeline_phases.entity_resolution import run_entity_resolution
@@ -30,6 +30,7 @@ from src.pipeline_phases.supplementary_metrics import compute_supplementary_metr
 from src.pipeline_phases.validation import run_validation_phase
 
 __all__ = [
+    "PipelineCheckpoint",
     "PipelineContext",
     "load_pipeline_data",
     "run_validation_phase",

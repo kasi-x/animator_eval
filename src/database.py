@@ -14,7 +14,7 @@ logger = structlog.get_logger()
 
 DEFAULT_DB_PATH = DB_DIR / "animetor_eval.db"
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 
 def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
@@ -84,8 +84,8 @@ def init_db(conn: sqlite3.Connection) -> None:
 
         CREATE TABLE IF NOT EXISTS credits (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            person_id TEXT NOT NULL REFERENCES persons(id),
-            anime_id TEXT NOT NULL REFERENCES anime(id),
+            person_id TEXT NOT NULL,
+            anime_id TEXT NOT NULL,
             role TEXT NOT NULL,
             episode INTEGER DEFAULT -1,
             source TEXT NOT NULL DEFAULT '',
@@ -93,7 +93,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         );
 
         CREATE TABLE IF NOT EXISTS scores (
-            person_id TEXT PRIMARY KEY REFERENCES persons(id),
+            person_id TEXT PRIMARY KEY,
             authority REAL NOT NULL DEFAULT 0.0,
             trust REAL NOT NULL DEFAULT 0.0,
             skill REAL NOT NULL DEFAULT 0.0,
@@ -155,6 +155,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         4: _migrate_v4_add_studio_column,
         5: _migrate_v5_add_person_metadata,
         6: _migrate_v6_add_anime_metadata,
+        7: _migrate_v7_drop_credits_fk,
     }
 
     for version in range(current + 1, SCHEMA_VERSION + 1):
@@ -264,6 +265,30 @@ def _migrate_v6_add_anime_metadata(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE anime ADD COLUMN {column}")
         except sqlite3.OperationalError:
             pass  # Column already exists
+
+
+def _migrate_v7_drop_credits_fk(conn: sqlite3.Connection) -> None:
+    """v7: credits テーブルの外部キー制約を削除.
+
+    二段階パイプラインでは credits が persons より先に保存されるため、
+    FK 制約があると IntegrityError になる。
+    SQLite は ALTER TABLE で FK を削除できないため、テーブル再作成が必要。
+    """
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS credits_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            person_id TEXT NOT NULL,
+            anime_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            episode INTEGER DEFAULT -1,
+            source TEXT NOT NULL DEFAULT '',
+            UNIQUE(person_id, anime_id, role, episode)
+        );
+        INSERT OR IGNORE INTO credits_new
+            SELECT id, person_id, anime_id, role, episode, source FROM credits;
+        DROP TABLE credits;
+        ALTER TABLE credits_new RENAME TO credits;
+    """)
 
 
 def upsert_person(conn: sqlite3.Connection, person: Person) -> None:
@@ -620,6 +645,35 @@ def get_last_pipeline_run(conn: sqlite3.Connection) -> dict | None:
         "SELECT * FROM pipeline_runs ORDER BY id DESC LIMIT 1"
     ).fetchone()
     return dict(row) if row else None
+
+
+def has_credits_changed_since_last_run(conn: sqlite3.Connection) -> bool:
+    """最後のパイプライン実行以降にクレジットデータが変化したか判定する.
+
+    credit_count と person_count を比較して変化を検出する。
+    前回のパイプライン実行が存在しない場合は True を返す。
+
+    Returns:
+        True: クレジットまたは人物数が変化した、またはパイプライン未実行
+        False: データに変化なし
+    """
+    last_run = get_last_pipeline_run(conn)
+    if last_run is None:
+        return True
+
+    current_credit_count = conn.execute(
+        "SELECT COUNT(*) FROM credits"
+    ).fetchone()[0]
+    if current_credit_count != last_run["credit_count"]:
+        return True
+
+    current_person_count = conn.execute(
+        "SELECT COUNT(DISTINCT person_id) FROM credits"
+    ).fetchone()[0]
+    if current_person_count != last_run.get("person_count", -1):
+        return True
+
+    return False
 
 
 def get_persons_with_new_credits(

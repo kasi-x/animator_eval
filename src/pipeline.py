@@ -10,9 +10,10 @@ import time
 
 import structlog
 
-from src.database import db_connection, get_connection, init_db, record_pipeline_run
+from src.database import db_connection, get_connection, has_credits_changed_since_last_run, init_db, record_pipeline_run
 from src.utils.config import JSON_DIR  # noqa: F401 - Imported for test monkeypatch compatibility
 from src.pipeline_phases import (
+    PipelineCheckpoint,
     PipelineContext,
     assemble_result_entries,
     build_graphs_phase,
@@ -30,7 +31,13 @@ from src.utils.performance import reset_monitor
 logger = structlog.get_logger()
 
 
-def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False, enable_websocket: bool = True) -> list[dict]:
+def run_scoring_pipeline(
+    visualize: bool = False,
+    dry_run: bool = False,
+    enable_websocket: bool = True,
+    incremental: bool = False,
+    resume: bool = False,
+) -> list[dict]:
     """スコアリングパイプラインを実行する.
 
     前提: DBにクレジットデータが既に存在すること。
@@ -39,6 +46,8 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False, enable_
         visualize: 可視化を生成するか
         dry_run: True の場合、データ検証のみ行いスコア計算は行わない
         enable_websocket: WebSocket進捗配信を有効にするか (default: True)
+        incremental: True の場合、前回実行からデータ変化がなければキャッシュ結果を返す
+        resume: True の場合、前回クラッシュした地点から再開する
 
     Returns:
         list[dict]: スコア計算結果 (person_id, composite, authority, trust, skill, etc.)
@@ -68,9 +77,32 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False, enable_
         ws_broadcaster = PipelineProgressBroadcaster()
         ws_broadcaster.start_pipeline(total_phases=10)
 
+    # Checkpoint manager for crash resume
+    checkpoint_mgr = PipelineCheckpoint(JSON_DIR)
+    resume_from_phase = 0  # 0 = start from beginning
+
     # Database connection
     conn = get_connection()
     init_db(conn)
+
+    # Incremental mode: skip pipeline if data hasn't changed
+    if incremental and not dry_run:
+        if not has_credits_changed_since_last_run(conn):
+            conn.close()
+            logger.info("incremental_skip", reason="no_credit_changes")
+            # Load cached results from last export
+            from src.utils.json_io import load_person_scores_from_json
+            cached = load_person_scores_from_json()
+            if cached:
+                logger.info("incremental_cached", persons=len(cached))
+                if ws_broadcaster:
+                    ws_broadcaster.complete_pipeline(len(cached), 0.0)
+                return cached
+            # Cached results missing — fall through to full pipeline
+            logger.info("incremental_fallback", reason="no_cached_results")
+            conn = get_connection()
+        else:
+            logger.info("incremental_detected_changes", mode="full_recompute")
 
     # Phase 1: Data Loading
     logger.info("step_start", step="data_loading")
@@ -140,57 +172,79 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False, enable_
     if ws_broadcaster:
         ws_broadcaster.complete_phase(4, "Graph Construction", (time.monotonic() - phase_start) * 1000)
 
+    # Resume check: after phases 1-4 (data loaded), try to restore checkpoint
+    if resume and not dry_run:
+        saved = checkpoint_mgr.load()
+        if saved and checkpoint_mgr.is_compatible(saved, context):
+            resume_from_phase = checkpoint_mgr.restore_to_context(saved, context)
+            logger.info("pipeline_resuming", from_phase=resume_from_phase + 1)
+        elif saved:
+            logger.info("checkpoint_incompatible", reason="data_changed")
+
     # Phase 5: Core Scoring (Authority, Trust, Skill + Normalize)
-    if ws_broadcaster:
-        ws_broadcaster.update_phase(5, "Core Scoring", "running")
+    if resume_from_phase < 5:
+        if ws_broadcaster:
+            ws_broadcaster.update_phase(5, "Core Scoring", "running")
 
-    phase_start = time.monotonic()
-    compute_core_scores_phase(context)
+        phase_start = time.monotonic()
+        compute_core_scores_phase(context)
 
-    if ws_broadcaster:
-        ws_broadcaster.complete_phase(5, "Core Scoring", (time.monotonic() - phase_start) * 1000)
+        if ws_broadcaster:
+            ws_broadcaster.complete_phase(5, "Core Scoring", (time.monotonic() - phase_start) * 1000)
+
+        checkpoint_mgr.save(5, context)
 
     # Phase 6: Supplementary Metrics
-    if ws_broadcaster:
-        ws_broadcaster.update_phase(6, "Supplementary Metrics", "running")
+    if resume_from_phase < 6:
+        if ws_broadcaster:
+            ws_broadcaster.update_phase(6, "Supplementary Metrics", "running")
 
-    phase_start = time.monotonic()
-    compute_supplementary_metrics_phase(context)
+        phase_start = time.monotonic()
+        compute_supplementary_metrics_phase(context)
 
-    if ws_broadcaster:
-        ws_broadcaster.complete_phase(6, "Supplementary Metrics", (time.monotonic() - phase_start) * 1000)
+        if ws_broadcaster:
+            ws_broadcaster.complete_phase(6, "Supplementary Metrics", (time.monotonic() - phase_start) * 1000)
 
     # Phase 7: Result Assembly (build comprehensive result dicts)
-    if ws_broadcaster:
-        ws_broadcaster.update_phase(7, "Result Assembly", "running")
+    if resume_from_phase < 7:
+        if ws_broadcaster:
+            ws_broadcaster.update_phase(7, "Result Assembly", "running")
 
-    phase_start = time.monotonic()
-    assemble_result_entries(context, conn)
-    conn.commit()
-    conn.close()
+        phase_start = time.monotonic()
+        assemble_result_entries(context, conn)
+        conn.commit()
+        conn.close()
 
-    if ws_broadcaster:
-        ws_broadcaster.complete_phase(7, "Result Assembly", (time.monotonic() - phase_start) * 1000)
+        if ws_broadcaster:
+            ws_broadcaster.complete_phase(7, "Result Assembly", (time.monotonic() - phase_start) * 1000)
+
+        checkpoint_mgr.save(7, context)
+    else:
+        conn.close()
 
     # Phase 8: Post-Processing (percentiles, confidence, stability)
-    if ws_broadcaster:
-        ws_broadcaster.update_phase(8, "Post-Processing", "running")
+    if resume_from_phase < 8:
+        if ws_broadcaster:
+            ws_broadcaster.update_phase(8, "Post-Processing", "running")
 
-    phase_start = time.monotonic()
-    post_process_results(context)
+        phase_start = time.monotonic()
+        post_process_results(context)
 
-    if ws_broadcaster:
-        ws_broadcaster.complete_phase(8, "Post-Processing", (time.monotonic() - phase_start) * 1000)
+        if ws_broadcaster:
+            ws_broadcaster.complete_phase(8, "Post-Processing", (time.monotonic() - phase_start) * 1000)
 
     # Phase 9: Analysis Modules (18+ independent analyses - PARALLELIZABLE)
-    if ws_broadcaster:
-        ws_broadcaster.update_phase(9, "Analysis Modules", "running")
+    if resume_from_phase < 9:
+        if ws_broadcaster:
+            ws_broadcaster.update_phase(9, "Analysis Modules", "running")
 
-    phase_start = time.monotonic()
-    run_analysis_modules_phase(context)
+        phase_start = time.monotonic()
+        run_analysis_modules_phase(context)
 
-    if ws_broadcaster:
-        ws_broadcaster.complete_phase(9, "Analysis Modules", (time.monotonic() - phase_start) * 1000)
+        if ws_broadcaster:
+            ws_broadcaster.complete_phase(9, "Analysis Modules", (time.monotonic() - phase_start) * 1000)
+
+        checkpoint_mgr.save(9, context)
 
     # Phase 10: Export & Visualization
     if ws_broadcaster:
@@ -203,13 +257,15 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False, enable_
     if ws_broadcaster:
         ws_broadcaster.complete_phase(10, "Export & Visualization", (time.monotonic() - phase_start) * 1000)
 
-    # Record pipeline completion
+    # Record pipeline completion and clean up checkpoint
+    checkpoint_mgr.delete()
     with db_connection() as conn:
         record_pipeline_run(
             conn,
             credit_count=len(context.credits),
             person_count=len(context.results),
             elapsed=elapsed,
+            mode="resume" if resume else ("incremental" if incremental else "full"),
         )
 
     # Log performance summary and export report
@@ -241,9 +297,22 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Animetor Eval パイプライン")
     parser.add_argument("--visualize", action="store_true", help="可視化を生成")
     parser.add_argument("--dry-run", action="store_true", help="データ検証のみ（スコア計算なし）")
+    parser.add_argument(
+        "--incremental", action="store_true",
+        help="増分モード: データ変化がなければキャッシュ結果を返す",
+    )
+    parser.add_argument(
+        "--resume", action="store_true",
+        help="クラッシュ再開: 前回中断した地点から再開する",
+    )
     args = parser.parse_args()
 
-    run_scoring_pipeline(visualize=args.visualize, dry_run=args.dry_run)
+    run_scoring_pipeline(
+        visualize=args.visualize,
+        dry_run=args.dry_run,
+        incremental=args.incremental,
+        resume=args.resume,
+    )
 
 
 if __name__ == "__main__":

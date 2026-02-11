@@ -5,8 +5,10 @@ import pytest
 
 from src.database import (
     get_connection,
+    has_credits_changed_since_last_run,
     init_db,
     insert_credit,
+    record_pipeline_run,
     upsert_anime,
     upsert_person,
 )
@@ -88,3 +90,89 @@ class TestScoringPipeline:
         scores_by_id = {r["person_id"]: r for r in results}
         if "p2" in scores_by_id and "p4" in scores_by_id:
             assert scores_by_id["p2"]["trust"] >= scores_by_id["p4"]["trust"]
+
+
+class TestIncrementalPipeline:
+    """incremental モードのテスト."""
+
+    def test_incremental_first_run_executes_full(self, populated_db):
+        """初回実行時はフルパイプラインが走る."""
+        results = run_scoring_pipeline(incremental=True)
+        assert len(results) > 0
+
+    def test_incremental_skip_when_no_changes(self, populated_db):
+        """データ変化なしなら2回目はキャッシュを返す."""
+        # First run: full pipeline
+        results1 = run_scoring_pipeline(incremental=True)
+        assert len(results1) > 0
+
+        # Second run: should skip and return cached
+        results2 = run_scoring_pipeline(incremental=True)
+        assert len(results2) > 0
+        # Same number of results
+        assert len(results2) == len(results1)
+
+    def test_incremental_runs_after_new_credits(self, populated_db):
+        """新クレジット追加後はフルパイプラインが走る."""
+        run_scoring_pipeline(incremental=True)
+
+        # Add a new credit
+        conn = get_connection()
+        insert_credit(
+            conn,
+            Credit(person_id="p4", anime_id="a1", role=Role.IN_BETWEEN, source="test"),
+        )
+        conn.commit()
+        conn.close()
+
+        results2 = run_scoring_pipeline(incremental=True)
+        assert len(results2) > 0
+
+    def test_non_incremental_always_runs(self, populated_db):
+        """incremental=False なら常にフルパイプラインが走る."""
+        results1 = run_scoring_pipeline(incremental=False)
+        results2 = run_scoring_pipeline(incremental=False)
+        assert len(results1) > 0
+        assert len(results2) > 0
+
+
+class TestHasCreditsChanged:
+    """has_credits_changed_since_last_run のユニットテスト."""
+
+    def test_no_previous_run_returns_true(self, populated_db):
+        conn = get_connection()
+        assert has_credits_changed_since_last_run(conn) is True
+        conn.close()
+
+    def test_same_counts_returns_false(self, populated_db):
+        conn = get_connection()
+        # Record a run matching current state
+        credit_count = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
+        person_count = conn.execute(
+            "SELECT COUNT(DISTINCT person_id) FROM credits"
+        ).fetchone()[0]
+        record_pipeline_run(conn, credit_count, person_count, 1.0)
+        conn.commit()
+
+        assert has_credits_changed_since_last_run(conn) is False
+        conn.close()
+
+    def test_new_credit_returns_true(self, populated_db):
+        conn = get_connection()
+        # Record current state
+        credit_count = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
+        person_count = conn.execute(
+            "SELECT COUNT(DISTINCT person_id) FROM credits"
+        ).fetchone()[0]
+        record_pipeline_run(conn, credit_count, person_count, 1.0)
+        conn.commit()
+
+        # Add new credit
+        insert_credit(
+            conn,
+            Credit(person_id="p4", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
+        )
+        conn.commit()
+
+        assert has_credits_changed_since_last_run(conn) is True
+        conn.close()
