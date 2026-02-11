@@ -77,16 +77,18 @@ def generate_text_report(
         "",
         f"評価対象: {len(results)} 名",
         "",
-        "-" * 80,
-        f"{'Rank':<6}{'Name':<30}{'Auth':>8}{'Trust':>8}{'Skill':>8}{'Total':>8}",
-        "-" * 80,
+        "-" * 88,
+        f"{'Rank':<6}{'Name':<30}{'Auth':>8}{'Trust':>8}{'Skill':>8}{'Total':>8}{'Conf':>8}",
+        "-" * 88,
     ]
 
     for i, r in enumerate(results[:top_n], 1):
         name = r.get("name", r.get("person_id", ""))[:28]
+        conf = r.get("confidence", 0)
+        conf_str = f"{conf:.0%}" if conf else "-"
         lines.append(
             f"{i:<6}{name:<30}{r['authority']:>8.1f}{r['trust']:>8.1f}"
-            f"{r['skill']:>8.1f}{r['composite']:>8.1f}"
+            f"{r['skill']:>8.1f}{r['composite']:>8.1f}{conf_str:>8}"
         )
 
     lines.extend([
@@ -200,14 +202,25 @@ def generate_html_report(
     generated_at = datetime.now().strftime("%Y-%m-%d %H:%M")
 
     # Build ranking table rows
+    has_confidence = any(r.get("confidence") for r in top)
     table_rows = []
     for i, r in enumerate(top, 1):
         name = _html_escape(r.get("name", r.get("person_id", "")))
         role = r.get("primary_role", "")
+        conf_cell = ""
+        if has_confidence:
+            conf = r.get("confidence", 0)
+            if conf >= 0.8:
+                conf_cell = f'<td><span style="color:#2e7d32">{conf:.0%}</span></td>'
+            elif conf >= 0.5:
+                conf_cell = f'<td><span style="color:#f57f17">{conf:.0%}</span></td>'
+            else:
+                conf_cell = f'<td><span style="color:#c62828">{conf:.0%}</span></td>'
         table_rows.append(
             f"<tr><td>{i}</td><td>{name}</td><td>{role}</td>"
             f"<td>{r['authority']:.1f}</td><td>{r['trust']:.1f}</td>"
-            f"<td>{r['skill']:.1f}</td><td><strong>{r['composite']:.1f}</strong></td></tr>"
+            f"<td>{r['skill']:.1f}</td><td><strong>{r['composite']:.1f}</strong></td>"
+            f"{conf_cell}</tr>"
         )
 
     # Build SVG bar chart for score distribution
@@ -282,7 +295,7 @@ def generate_html_report(
 <h2>Top {top_n} Ranking</h2>
 <table>
 <thead>
-<tr><th>#</th><th>Name</th><th>Role</th><th>Authority</th><th>Trust</th><th>Skill</th><th>Composite</th></tr>
+<tr><th>#</th><th>Name</th><th>Role</th><th>Authority</th><th>Trust</th><th>Skill</th><th>Composite</th>{"<th>Conf.</th>" if has_confidence else ""}</tr>
 </thead>
 <tbody>
 {"".join(table_rows)}
@@ -381,16 +394,26 @@ def generate_visual_dashboard(
 
     # Top ranking table
     top = results[:30]
+    dash_has_conf = any(r.get("confidence") for r in top)
     table_rows = []
     for i, r in enumerate(top, 1):
         name = _html_escape(r.get("name", r.get("person_id", "")))
         role = r.get("primary_role", "")
         tags = ", ".join(r.get("tags", [])[:3])
+        conf_cell = ""
+        if dash_has_conf:
+            conf = r.get("confidence", 0)
+            if conf >= 0.8:
+                conf_cell = f'<td><span style="color:#2e7d32">{conf:.0%}</span></td>'
+            elif conf >= 0.5:
+                conf_cell = f'<td><span style="color:#f57f17">{conf:.0%}</span></td>'
+            else:
+                conf_cell = f'<td><span style="color:#c62828">{conf:.0%}</span></td>'
         table_rows.append(
             f"<tr><td>{i}</td><td>{name}</td><td>{role}</td>"
             f"<td>{r['authority']:.1f}</td><td>{r['trust']:.1f}</td>"
             f"<td>{r['skill']:.1f}</td><td><strong>{r['composite']:.1f}</strong></td>"
-            f"<td>{tags}</td></tr>"
+            f"<td>{tags}</td>{conf_cell}</tr>"
         )
 
     html = f"""<!DOCTYPE html>
@@ -449,7 +472,7 @@ def generate_visual_dashboard(
 <h2>Top 30 Ranking</h2>
 <table>
 <thead>
-<tr><th>#</th><th>Name</th><th>Role</th><th>Auth</th><th>Trust</th><th>Skill</th><th>Composite</th><th>Tags</th></tr>
+<tr><th>#</th><th>Name</th><th>Role</th><th>Auth</th><th>Trust</th><th>Skill</th><th>Composite</th><th>Tags</th>{"<th>Conf.</th>" if dash_has_conf else ""}</tr>
 </thead>
 <tbody>
 {"".join(table_rows)}

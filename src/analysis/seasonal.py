@@ -130,3 +130,60 @@ def compute_seasonal_trends(
 
     logger.info("seasonal_trends_complete", seasons=len(by_season))
     return result
+
+
+def compute_person_seasonal_activity(
+    credits: list[Credit],
+    anime_map: dict[str, Anime],
+) -> dict[str, dict]:
+    """人物ごとの季節活動パターンを算出する.
+
+    Args:
+        credits: クレジットリスト
+        anime_map: {anime_id: Anime}
+
+    Returns:
+        {person_id: {
+            primary_season: str | None,  # most active season
+            season_distribution: {season: credit_count},
+            works_per_season: {season: int},  # unique anime per season
+            active_seasons: int,  # how many seasons they're active in
+        }}
+    """
+    if not credits:
+        return {}
+
+    # 人物ごとにシーズン別クレジットを集計
+    person_season_credits: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    person_season_anime: dict[str, dict[str, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
+
+    for c in credits:
+        anime = anime_map.get(c.anime_id)
+        if not anime:
+            continue
+        season = _infer_season(anime)
+        if not season:
+            continue
+        person_season_credits[c.person_id][season] += 1
+        person_season_anime[c.person_id][season].add(c.anime_id)
+
+    results: dict[str, dict] = {}
+    for person_id, season_dist in person_season_credits.items():
+        # 最も活発なシーズン
+        primary_season = max(season_dist, key=season_dist.get) if season_dist else None  # type: ignore[arg-type]
+
+        works_per_season = {
+            s: len(aids) for s, aids in person_season_anime[person_id].items()
+        }
+
+        results[person_id] = {
+            "primary_season": primary_season,
+            "season_distribution": dict(season_dist),
+            "works_per_season": works_per_season,
+            "active_seasons": len(season_dist),
+        }
+
+    logger.info("person_seasonal_activity_computed", person_count=len(results))
+    return results

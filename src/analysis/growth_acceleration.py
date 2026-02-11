@@ -22,7 +22,7 @@ logger = structlog.get_logger()
 
 
 @dataclass
-class GrowthMetrics:
+class AccelerationMetrics:
     """成長指標.
 
     Attributes:
@@ -56,7 +56,7 @@ def compute_growth_metrics(
     credits: list[Credit],
     anime_map: dict[str, Anime],
     current_year: int = 2026,
-) -> dict[str, GrowthMetrics]:
+) -> dict[str, AccelerationMetrics]:
     """成長指標を計算.
 
     Args:
@@ -65,7 +65,7 @@ def compute_growth_metrics(
         current_year: 現在年
 
     Returns:
-        person_id → GrowthMetrics
+        person_id → AccelerationMetrics
     """
     # person_id → year → count
     person_year_credits: dict[str, dict[int, int]] = defaultdict(lambda: defaultdict(int))
@@ -75,7 +75,7 @@ def compute_growth_metrics(
         if anime and anime.year:
             person_year_credits[credit.person_id][anime.year] += 1
 
-    metrics: dict[str, GrowthMetrics] = {}
+    metrics: dict[str, AccelerationMetrics] = {}
 
     for person_id, year_credits in person_year_credits.items():
         if not year_credits:
@@ -185,7 +185,7 @@ def compute_growth_metrics(
         else:
             consistency = 0
 
-        metrics[person_id] = GrowthMetrics(
+        metrics[person_id] = AccelerationMetrics(
             person_id=person_id,
             career_years=career_years,
             total_credits=total_credits,
@@ -209,7 +209,7 @@ def compute_growth_metrics(
 
 
 def find_fast_risers(
-    growth_metrics: dict[str, GrowthMetrics],
+    growth_metrics: dict[str, AccelerationMetrics],
     min_velocity: float = 2.0,
     top_n: int = 20,
 ) -> list[tuple[str, float, float]]:
@@ -241,7 +241,7 @@ def find_fast_risers(
 
 
 def find_early_potential(
-    growth_metrics: dict[str, GrowthMetrics],
+    growth_metrics: dict[str, AccelerationMetrics],
     max_career_years: int = 5,
     min_momentum: float = 1.0,
     top_n: int = 20,
@@ -274,7 +274,7 @@ def find_early_potential(
 
 def compute_adjusted_skill_with_growth(
     person_scores: dict[str, dict],
-    growth_metrics: dict[str, GrowthMetrics],
+    growth_metrics: dict[str, AccelerationMetrics],
     growth_weight: float = 0.3,
 ) -> dict[str, float]:
     """成長率を考慮したSkillスコアを計算.

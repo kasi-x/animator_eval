@@ -1,12 +1,12 @@
-"""Insights Report Generator — 実践的洞察レポートの生成.
+"""Insights Report Generator — 個人評価に基づく洞察レポートの生成.
 
-PageRankと各種補正分析から実務的なインプリケーションを抽出:
+個人の貢献を可視化し、適正な報酬と業界の健全化に資する洞察を抽出:
 - PageRank分析: 上位者の特徴、ネットワーク構造
-- スタジオバイアス補正: 順位変動、クロススタジオ活動の価値
-- 成長率分析: Rising Stars、停滞者の発見
+- スタジオバイアス補正: 過小評価されている個人の発見
+- 成長率分析: Rising Stars、成長中の人材
 - 潜在価値分析: 過小評価人材、構造的優位性
 - ブリッジ分析: ネットワークの橋渡し役
-- 提言: 評価システム改善、人材発掘戦略
+- 提言: 個人の適正評価、過小評価の是正
 """
 
 import statistics
@@ -119,6 +119,29 @@ class BridgeInsights:
 
 
 @dataclass
+class UndervaluationAlert:
+    """個人の過小評価アラート.
+
+    Attributes:
+        person_id: 対象者ID
+        name: 名前
+        current_composite: 現在の総合スコア
+        debiased_authority: バイアス補正後Authority
+        authority_gap: 補正前後の差分
+        category: 潜在価値カテゴリ
+        reason: 過小評価の推定原因
+    """
+
+    person_id: str
+    name: str
+    current_composite: float
+    debiased_authority: float
+    authority_gap: float
+    category: str
+    reason: str
+
+
+@dataclass
 class ComprehensiveInsights:
     """包括的洞察レポート.
 
@@ -128,8 +151,9 @@ class ComprehensiveInsights:
         growth: 成長率分析
         potential: 潜在価値分析
         bridges: ブリッジ分析
-        recommendations: 実務的提言
+        recommendations: 個人の適正評価に向けた提言
         key_findings: 主要な発見
+        undervaluation_alerts: 過小評価アラート（個人レベル）
     """
 
     pagerank: PageRankInsights
@@ -139,6 +163,7 @@ class ComprehensiveInsights:
     bridges: BridgeInsights
     recommendations: list[str]
     key_findings: list[str]
+    undervaluation_alerts: list[UndervaluationAlert] | None = None
 
 
 def analyze_pagerank_distribution(
@@ -597,7 +622,7 @@ def generate_recommendations(
     potential: PotentialValueInsights,
     bridges: BridgeInsights,
 ) -> list[str]:
-    """実務的提言を生成.
+    """個人の適正評価に向けた提言を生成.
 
     Args:
         pagerank: PageRank分析
@@ -611,61 +636,65 @@ def generate_recommendations(
     """
     recommendations = []
 
-    # PageRank集中度に基づく提言
+    # スコア集中 → 評価が少数に偏っている
     if pagerank.concentration_ratio > 0.1:
         recommendations.append(
-            f"スコア分布が集中している（Herfindahl={pagerank.concentration_ratio:.3f}）。"
-            "上位10%が全体の{:.1f}%を占める。多様な人材評価の仕組みが必要。".format(
-                pagerank.top_percentile_share
-            )
+            f"評価が上位に集中している（上位10%が全体の{pagerank.top_percentile_share:.1f}%を占有）。"
+            "中堅〜若手の貢献が可視化されていない可能性がある。"
         )
 
-    # スタジオバイアスに基づく提言
+    # スタジオバイアス → 過小評価されている個人がいる
     if abs(bias.avg_correction) > 1.0:
-        recommendations.append(
-            f"スタジオバイアス補正で平均{abs(bias.avg_correction):.1f}点の変動。"
-            f"{'大手スタジオ出身者が過大評価されている' if bias.avg_correction < 0 else '中小スタジオ人材が過小評価されている'}。"
-        )
+        if bias.avg_correction > 0:
+            recommendations.append(
+                f"スタジオバイアス補正で平均+{bias.avg_correction:.1f}点の上方修正。"
+                "中小スタジオ所属の個人が過小評価されている。適正な報酬のため補正後スコアを参照すべき。"
+            )
+        else:
+            recommendations.append(
+                f"スタジオバイアス補正で平均{bias.avg_correction:.1f}点の修正。"
+                "大手スタジオのブランド効果が個人スコアに影響している。"
+            )
 
     if bias.cross_studio_value > 0:
         recommendations.append(
-            f"クロススタジオ活動者は平均+{bias.cross_studio_value:.1f}点の価値。"
-            "複数スタジオでの経験を評価に反映すべき。"
+            f"複数スタジオで活動する個人は平均+{bias.cross_studio_value:.1f}点高い。"
+            "スタジオ横断的な経験は個人の市場価値を高める。"
         )
 
-    # 成長率に基づく提言
+    # 成長中の個人 → 報酬が追いついていない可能性
     if growth.rising_stars_count > 0:
         recommendations.append(
-            f"{growth.rising_stars_count}名の急成長人材を発見。"
-            f"平均成長速度{growth.avg_velocity:.1f}クレジット/年。"
-            "早期発掘と育成支援が重要。"
+            f"{growth.rising_stars_count}名が急成長中（平均成長速度{growth.avg_velocity:.1f}/年）。"
+            "成長中の個人は現在の報酬が実力に追いついていない可能性がある。"
         )
 
     if growth.early_career_impact > 0.1:
         recommendations.append(
-            f"早期キャリアボーナスの効果は+{growth.early_career_impact:.1%}。"
-            "新人の潜在能力評価を強化すべき。"
+            "キャリア初期の人材は過小評価されやすい。"
+            "クレジット数が少ないだけで貢献度が低いわけではない点に留意。"
         )
 
-    # 潜在価値に基づく提言
+    # Hidden Gems → 最も過小評価されている個人
     if potential.hidden_gems_count > 0:
         recommendations.append(
-            f"{potential.hidden_gems_count}名のHidden Gem（過小評価人材）を発見。"
-            "スタジオバイアス補正により真の実力が明らかに。"
+            f"⚠️ {potential.hidden_gems_count}名が過小評価（Hidden Gem）と判定。"
+            "スタジオバイアス補正後のスコアが大幅に上昇する個人は、"
+            "現在の評価・報酬が不当に低い可能性がある。"
         )
 
     if potential.structural_advantage_impact > 10:
         recommendations.append(
-            f"構造的優位性（ネットワーク位置）の効果は{potential.structural_advantage_impact:.1f}点。"
-            "ブリッジ人材の戦略的配置が重要。"
+            f"ネットワーク上の構造的貢献（ブリッジ役）は{potential.structural_advantage_impact:.1f}点相当の価値。"
+            "この貢献は従来のスコアでは見えにくく、報酬に反映されにくい。"
         )
 
-    # ブリッジに基づく提言
+    # ブリッジ人材 → 業界に不可欠だが評価されにくい
     if bridges.bridge_persons_count > 0:
         recommendations.append(
-            f"{bridges.bridge_persons_count}名のブリッジ人材が{bridges.circle_connections}のサークル間接続を担う。"
-            f"平均媒介中心性{bridges.avg_betweenness:.4f}。"
-            "情報仲介者の育成・保持が業界全体の効率化につながる。"
+            f"{bridges.bridge_persons_count}名がスタジオ間の橋渡し役を担い、"
+            f"{bridges.circle_connections}のサークル間接続に貢献。"
+            "ブリッジ人材は業界の協業効率に不可欠だが、個人としての評価・報酬に反映されにくい。"
         )
 
     return recommendations
@@ -742,6 +771,72 @@ def generate_key_findings(
     return findings
 
 
+def identify_undervaluation_alerts(
+    studio_bias_metrics: dict[str, Any],
+    potential_value_scores: dict[str, dict],
+    person_names: dict[str, str],
+    top_n: int = 20,
+) -> list[UndervaluationAlert]:
+    """過小評価されている個人を特定する.
+
+    スタジオバイアス補正と潜在価値分析を組み合わせて、
+    現在の評価が不当に低い可能性のある個人を抽出する。
+
+    Args:
+        studio_bias_metrics: スタジオバイアスメトリクス
+        potential_value_scores: 潜在価値スコア
+        person_names: person_id → 名前
+        top_n: 最大アラート件数
+
+    Returns:
+        過小評価アラートのリスト（gap の大きい順）
+    """
+    debiased_scores = studio_bias_metrics.get("debiased_scores", {})
+    bias_metrics = studio_bias_metrics.get("bias_metrics", {})
+    alerts = []
+
+    for pid, debiased_dict in debiased_scores.items():
+        original = debiased_dict.get("original_authority", 0)
+        debiased = debiased_dict.get("debiased_authority", 0)
+        gap = debiased - original
+
+        if gap <= 0.03:
+            continue
+
+        # 潜在価値カテゴリ
+        pv = potential_value_scores.get(pid, {})
+        category = pv.get("category", "unknown")
+
+        # 過小評価の推定原因
+        bias_info = bias_metrics.get(pid, {})
+        primary_studio = bias_info.get("primary_studio", "")
+        cross_studio_works = bias_info.get("cross_studio_works", 0)
+
+        if cross_studio_works == 0 and primary_studio:
+            reason = f"単一スタジオ（{primary_studio}）所属による可視性の限定"
+        elif gap > 0.1:
+            reason = "スタジオ規模バイアスによる大幅な過小評価"
+        else:
+            reason = "スタジオバイアスによる軽度の過小評価"
+
+        composite = pv.get("composite", 0)
+
+        alerts.append(UndervaluationAlert(
+            person_id=pid,
+            name=person_names.get(pid, pid),
+            current_composite=round(composite, 2),
+            debiased_authority=round(debiased, 4),
+            authority_gap=round(gap, 4),
+            category=category if isinstance(category, str) else category.value if hasattr(category, "value") else str(category),
+            reason=reason,
+        ))
+
+    alerts.sort(key=lambda a: a.authority_gap, reverse=True)
+
+    logger.info("undervaluation_alerts_generated", alerts=len(alerts[:top_n]))
+    return alerts[:top_n]
+
+
 def generate_comprehensive_insights(
     person_scores: dict[str, dict],
     studio_bias_metrics: dict[str, Any],
@@ -780,10 +875,16 @@ def generate_comprehensive_insights(
     recommendations = generate_recommendations(pagerank, bias, growth, potential, bridges)
     key_findings = generate_key_findings(pagerank, bias, growth, potential, bridges)
 
+    # 過小評価アラート
+    undervaluation_alerts = identify_undervaluation_alerts(
+        studio_bias_metrics, potential_value_scores, person_names
+    )
+
     logger.info(
         "comprehensive_insights_generated",
         recommendations=len(recommendations),
         findings=len(key_findings),
+        undervaluation_alerts=len(undervaluation_alerts),
     )
 
     return ComprehensiveInsights(
@@ -794,6 +895,7 @@ def generate_comprehensive_insights(
         bridges=bridges,
         recommendations=recommendations,
         key_findings=key_findings,
+        undervaluation_alerts=undervaluation_alerts,
     )
 
 
@@ -808,7 +910,7 @@ def export_insights_report(
     Returns:
         JSON出力用辞書
     """
-    return {
+    result = {
         "pagerank_analysis": asdict(insights.pagerank),
         "bias_correction_analysis": asdict(insights.bias),
         "growth_analysis": asdict(insights.growth),
@@ -817,6 +919,11 @@ def export_insights_report(
         "recommendations": insights.recommendations,
         "key_findings": insights.key_findings,
     }
+    if insights.undervaluation_alerts:
+        result["undervaluation_alerts"] = [
+            asdict(a) for a in insights.undervaluation_alerts
+        ]
+    return result
 
 
 def main():

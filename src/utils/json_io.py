@@ -10,8 +10,9 @@ All functions use structlog for consistent logging.
 """
 
 import json
-from functools import lru_cache
+import time
 from pathlib import Path
+from threading import Lock
 from typing import Any, TypeVar
 
 import structlog
@@ -23,6 +24,11 @@ logger = structlog.get_logger()
 # Type variables for generic returns
 T = TypeVar("T")
 ListOrDict = list | dict
+
+# TTL cache configuration
+_TTL_SECONDS: int = 300  # 5 minutes default
+_ttl_cache: dict[tuple, tuple[float, ListOrDict]] = {}
+_ttl_cache_lock = Lock()
 
 
 # ============================================================================
@@ -89,26 +95,40 @@ def load_json_file_by_name_or_return_default(
 # ============================================================================
 
 
-@lru_cache(maxsize=32)
 def load_json_file_with_caching(file_path_str: str, default_type: str) -> ListOrDict:
-    """Load JSON with caching for API endpoints (LRU cache, thread-safe).
+    """Load JSON with TTL caching for API endpoints (thread-safe).
+
+    Entries expire after _TTL_SECONDS (default: 300s / 5 minutes).
+    Call clear_json_cache() to invalidate all entries immediately.
 
     Args:
-        file_path_str: String path to JSON file (must be str for LRU cache hashing)
+        file_path_str: String path to JSON file (must be str for cache key hashing)
         default_type: Type of default to return ("list" or "dict")
 
     Returns:
         Parsed JSON data (list or dict) or default
 
-    Note:
-        This function is cached with maxsize=32. Call clear_json_cache() to invalidate.
-
     Example:
         >>> data = load_json_file_with_caching("/path/to/scores.json", "list")
     """
+    key = (file_path_str, default_type)
+    now = time.monotonic()
+
+    with _ttl_cache_lock:
+        if key in _ttl_cache:
+            timestamp, value = _ttl_cache[key]
+            if now - timestamp < _TTL_SECONDS:
+                return value
+
+    # Cache miss or expired — load from disk
     default: ListOrDict = [] if default_type == "list" else {}
     file_path = Path(file_path_str)
-    return load_json_file_or_return_default(file_path, default)
+    value = load_json_file_or_return_default(file_path, default)
+
+    with _ttl_cache_lock:
+        _ttl_cache[key] = (now, value)
+
+    return value
 
 
 def load_pipeline_json_with_caching(filename: str, default: ListOrDict) -> ListOrDict:
@@ -130,15 +150,29 @@ def load_pipeline_json_with_caching(filename: str, default: ListOrDict) -> ListO
 
 
 def clear_json_cache() -> None:
-    """Clear the LRU cache for JSON file loading.
+    """Clear the TTL cache for JSON file loading.
 
     Call this after pipeline runs to force API endpoints to reload fresh data.
 
     Example:
         >>> clear_json_cache()  # Force API to reload after pipeline
     """
-    load_json_file_with_caching.cache_clear()
+    with _ttl_cache_lock:
+        _ttl_cache.clear()
     logger.debug("json_cache_cleared")
+
+
+def set_json_cache_ttl(seconds: int) -> None:
+    """Set the TTL for JSON file caching.
+
+    Args:
+        seconds: Cache TTL in seconds (0 to disable caching)
+
+    Example:
+        >>> set_json_cache_ttl(600)  # 10 minutes
+    """
+    global _TTL_SECONDS
+    _TTL_SECONDS = seconds
 
 
 # ============================================================================
@@ -412,6 +446,28 @@ def load_productivity_metrics_from_json() -> dict:
         >>> productivity = load_productivity_metrics_from_json()
     """
     return load_pipeline_json_with_caching("productivity.json", {})
+
+
+def load_individual_profiles_from_json() -> dict:
+    """Load individual contribution profiles from individual_profiles.json.
+
+    Returns:
+        Dict with profiles (person_id → IndividualProfile), model_r_squared, etc.
+
+    Example:
+        >>> profiles = load_individual_profiles_from_json()
+        >>> profiles["profiles"]["anilist:p123"]["peer_percentile"]
+    """
+    return load_pipeline_json_with_caching("individual_profiles.json", {})
+
+
+def load_studio_bias_from_json() -> dict:
+    """Load studio bias data from studio_bias.json.
+
+    Returns:
+        Dict with bias_metrics, studio_prestige, debiased_scores, studio_disparity.
+    """
+    return load_pipeline_json_with_caching("studio_bias.json", {})
 
 
 # ============================================================================

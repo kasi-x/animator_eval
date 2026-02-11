@@ -21,6 +21,7 @@ from src.analysis.collaboration_strength import compute_collaboration_strength
 from src.analysis.compensation_analyzer import batch_analyze_compensation, export_compensation_report
 from src.analysis.insights_report import generate_comprehensive_insights, export_insights_report
 from src.analysis.crossval import cross_validate_scores
+from src.analysis.individual_contribution import compute_individual_profiles
 from src.analysis.decade_analysis import compute_decade_analysis
 from src.analysis.genre_affinity import compute_genre_affinity
 from src.analysis.graphml_export import export_graphml
@@ -380,6 +381,18 @@ def _run_structural_estimation(context: PipelineContext) -> Any:
     return export_structural_estimation(result)
 
 
+def _run_individual_contribution(context: PipelineContext) -> Any:
+    """Compute individual contribution profiles (Layer 2 metrics)."""
+    return asdict(compute_individual_profiles(
+        results=context.results,
+        credits=context.credits,
+        anime_map=context.anime_map,
+        role_profiles=context.role_profiles,
+        career_data=context.career_data,
+        collaboration_graph=context.collaboration_graph,
+    ))
+
+
 # Registry of all analysis tasks (order-independent for parallel execution)
 ANALYSIS_TASKS: list[AnalysisTask] = [
     AnalysisTask("anime_stats", _run_anime_stats),
@@ -407,6 +420,7 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
     AnalysisTask("insights_report", _run_insights_report, monitor_step="insights_generation"),
     AnalysisTask("causal_identification", _run_causal_identification, monitor_step="causal_identification"),
     AnalysisTask("structural_estimation", _run_structural_estimation, monitor_step="structural_estimation"),
+    AnalysisTask("individual_profiles", _run_individual_contribution, monitor_step="individual_contribution"),
 ]
 
 

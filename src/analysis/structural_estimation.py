@@ -1,5 +1,11 @@
 """Structural estimation of major studio effects (構造推定).
 
+⚠️ 参考分析（Reference Analysis）
+本モジュールの結果は研究参考情報として提供されます。
+因果推定の前提条件（strict exogeneity, parallel trends 等）の検証が困難なため、
+報酬根拠としての直接利用は推奨しません。
+報酬根拠には Individual Contribution Profile (individual_contribution.py) を使用してください。
+
 This module implements research-grade econometric analysis of studio effects
 with rigorous identification strategies, robustness checks, and statistical inference.
 

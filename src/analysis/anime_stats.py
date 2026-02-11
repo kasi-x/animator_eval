@@ -80,3 +80,108 @@ def compute_anime_stats(
 
     logger.info("anime_stats_computed", anime_count=len(results))
     return results
+
+
+def compute_person_anime_stats(
+    credits: list[Credit],
+    anime_map: dict[str, Anime],
+) -> dict[str, dict]:
+    """人物ごとのアニメ参加統計を算出する.
+
+    Args:
+        credits: 全クレジット
+        anime_map: anime_id → Anime
+
+    Returns:
+        {person_id: {
+            total_works: int,
+            total_credits: int,
+            role_distribution: {role: count},
+            avg_anime_score: float | None,
+            year_range: [first_year, latest_year],
+            studios: list[str],  # unique studios
+            top_works: list[{title, year, score, role}],  # top 5 by anime score
+        }}
+    """
+    if not credits:
+        return {}
+
+    # クレジットを人物IDでグループ化
+    person_credits: dict[str, list[Credit]] = defaultdict(list)
+    for c in credits:
+        person_credits[c.person_id].append(c)
+
+    results: dict[str, dict] = {}
+    for person_id, pcredits in person_credits.items():
+        anime_ids = {c.anime_id for c in pcredits}
+
+        # 役職分布
+        role_dist: dict[str, int] = defaultdict(int)
+        for c in pcredits:
+            role_dist[c.role.value] += 1
+
+        # アニメスコアの平均
+        scores = [
+            anime_map[aid].score
+            for aid in anime_ids
+            if aid in anime_map and anime_map[aid].score is not None
+        ]
+        avg_score = round(sum(scores) / len(scores), 2) if scores else None
+
+        # 年範囲
+        years = [
+            anime_map[aid].year
+            for aid in anime_ids
+            if aid in anime_map and anime_map[aid].year is not None
+        ]
+        year_range = [min(years), max(years)] if years else []
+
+        # ユニークスタジオ
+        studios = sorted(
+            {
+                anime_map[aid].studio
+                for aid in anime_ids
+                if aid in anime_map and anime_map[aid].studio
+            }
+        )
+
+        # Top 5 works by anime score
+        work_entries = []
+        for c in pcredits:
+            anime = anime_map.get(c.anime_id)
+            if anime:
+                work_entries.append(
+                    {
+                        "title": anime.title_ja or anime.title_en or c.anime_id,
+                        "year": anime.year,
+                        "score": anime.score,
+                        "role": c.role.value,
+                    }
+                )
+        # 重複排除（同一作品で複数役職の場合は最初のものを採用）
+        seen_anime: set[str] = set()
+        unique_works = []
+        for w in work_entries:
+            if w["title"] not in seen_anime:
+                seen_anime.add(w["title"])
+                unique_works.append(w)
+        top_works = sorted(
+            unique_works,
+            key=lambda w: w["score"] if w["score"] is not None else -1,
+            reverse=True,
+        )[:5]
+
+        results[person_id] = {
+            "total_works": len(anime_ids),
+            "total_credits": len(pcredits),
+            "role_distribution": dict(
+                sorted(role_dist.items(), key=lambda x: x[1], reverse=True)
+            ),
+            "avg_anime_score": avg_score,
+            "year_range": year_range,
+            "studios": studios,
+            "top_works": top_works,
+        }
+
+    logger.info("person_anime_stats_computed", person_count=len(results))
+    return results

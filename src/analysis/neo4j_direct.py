@@ -1,6 +1,6 @@
-"""Neo4j 直接接続 — Python driver経由でグラフデータベースに直接書き込み.
+"""Neo4j 直接接続 — Python driver経由でグラフデータベースの読み書き.
 
-大規模運用向けの機能。CSV exportと違い、リアルタイムでNeo4jに書き込む。
+大規模運用向けの機能。CSV exportと違い、リアルタイムでNeo4jに読み書きする。
 
 Requirements:
     - Neo4j 5.0+ running (docker or local)
@@ -11,11 +11,17 @@ Requirements:
         NEO4J_PASSWORD (required)
 
 Usage:
-    from src.analysis.neo4j_direct import Neo4jWriter
+    from src.analysis.neo4j_direct import Neo4jWriter, Neo4jReader
 
+    # Write data
     writer = Neo4jWriter()
     writer.write_all(persons, anime_list, credits, scores)
     writer.close()
+
+    # Query data
+    with Neo4jReader() as reader:
+        path = reader.find_shortest_path("p1", "p2")
+        stats = reader.get_collaboration_stats()
 """
 
 import os
@@ -385,3 +391,419 @@ class Neo4jWriter:
                 "credits": credit_count,
                 "collaborations": collab_count // 2,  # Undirected, so divide by 2
             }
+
+
+class Neo4jReader:
+    """Read-only Neo4j graph queries for richer analysis.
+
+    Provides graph-native queries that exploit Neo4j's traversal engine:
+    shortest paths, neighborhood exploration, common collaborators, etc.
+
+    Attributes:
+        driver: Neo4j driver instance
+        uri: Neo4j connection URI
+        user: Neo4j username
+    """
+
+    def __init__(
+        self,
+        uri: str | None = None,
+        user: str | None = None,
+        password: str | None = None,
+    ):
+        """Initialize Neo4j read-only connection.
+
+        Args:
+            uri: Neo4j URI (default: bolt://localhost:7687)
+            user: Neo4j username (default: neo4j)
+            password: Neo4j password (required, or from NEO4J_PASSWORD env)
+
+        Raises:
+            ImportError: If neo4j driver not installed
+            ValueError: If password not provided
+        """
+        try:
+            from neo4j import GraphDatabase
+        except ImportError as e:
+            raise ImportError(
+                "neo4j driver not installed. Run: pixi install"
+            ) from e
+
+        self.uri = uri or os.getenv("NEO4J_URI", "bolt://localhost:7687")
+        self.user = user or os.getenv("NEO4J_USER", "neo4j")
+        self.password = password or os.getenv("NEO4J_PASSWORD")
+
+        if not self.password:
+            raise ValueError(
+                "NEO4J_PASSWORD required (env var or constructor arg)"
+            )
+
+        logger.info("neo4j_reader_connecting", uri=self.uri, user=self.user)
+        self.driver = GraphDatabase.driver(
+            self.uri, auth=(self.user, self.password)
+        )
+
+        self.driver.verify_connectivity()
+        logger.info("neo4j_reader_connected", uri=self.uri)
+
+    def close(self):
+        """Close Neo4j driver connection."""
+        if self.driver:
+            self.driver.close()
+            logger.info("neo4j_reader_disconnected")
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        self.close()
+
+    def find_shortest_path(
+        self, person_id_a: str, person_id_b: str
+    ) -> dict[str, Any]:
+        """Find shortest collaboration path between two persons.
+
+        Uses Neo4j's shortestPath algorithm on COLLABORATED_WITH edges.
+
+        Args:
+            person_id_a: Source person ID
+            person_id_b: Target person ID
+
+        Returns:
+            Dict with path, length, and connection details.
+            Empty path if no connection exists.
+        """
+        cypher = """
+        MATCH (a:Person {id: $id_a}), (b:Person {id: $id_b})
+        MATCH path = shortestPath((a)-[:COLLABORATED_WITH*]-(b))
+        WITH path, nodes(path) AS ns, relationships(path) AS rels
+        RETURN
+            [n IN ns | n.id] AS node_ids,
+            [n IN ns | coalesce(n.name_en, n.name_ja, n.id)] AS node_names,
+            [r IN rels | r.shared_works] AS shared_works,
+            length(path) AS path_length
+        """
+        with self.driver.session() as session:
+            result = session.run(
+                cypher, id_a=person_id_a, id_b=person_id_b
+            )
+            record = result.single()
+
+        if record is None:
+            logger.info(
+                "neo4j_no_path_found",
+                from_id=person_id_a,
+                to_id=person_id_b,
+            )
+            return {"path": [], "length": 0, "connections": []}
+
+        node_ids = list(record["node_ids"])
+        node_names = list(record["node_names"])
+        shared_works_list = list(record["shared_works"])
+
+        connections = []
+        for i in range(len(node_ids) - 1):
+            connections.append(
+                {
+                    "from": node_ids[i],
+                    "from_name": node_names[i],
+                    "to": node_ids[i + 1],
+                    "to_name": node_names[i + 1],
+                    "shared_works": shared_works_list[i],
+                }
+            )
+
+        return {
+            "path": node_ids,
+            "length": record["path_length"],
+            "connections": connections,
+        }
+
+    def find_common_collaborators(
+        self, person_id_a: str, person_id_b: str
+    ) -> list[dict[str, Any]]:
+        """Find persons who collaborated with both A and B.
+
+        Args:
+            person_id_a: First person ID
+            person_id_b: Second person ID
+
+        Returns:
+            List of common collaborators with shared work counts.
+        """
+        cypher = """
+        MATCH (a:Person {id: $id_a})-[r1:COLLABORATED_WITH]-(common:Person)
+              -[r2:COLLABORATED_WITH]-(b:Person {id: $id_b})
+        WHERE common <> a AND common <> b
+        RETURN common.id AS person_id,
+               coalesce(common.name_en, common.name_ja, common.id) AS name,
+               r1.shared_works AS shared_with_a,
+               r2.shared_works AS shared_with_b
+        ORDER BY (r1.shared_works + r2.shared_works) DESC
+        """
+        with self.driver.session() as session:
+            result = session.run(
+                cypher, id_a=person_id_a, id_b=person_id_b
+            )
+            records = [record.data() for record in result]
+
+        logger.info(
+            "neo4j_common_collaborators",
+            person_a=person_id_a,
+            person_b=person_id_b,
+            count=len(records),
+        )
+        return records
+
+    def get_neighborhood(
+        self,
+        person_id: str,
+        depth: int = 2,
+        limit: int = 50,
+    ) -> dict[str, Any]:
+        """Get the collaboration neighborhood around a person.
+
+        Traverses COLLABORATED_WITH edges up to ``depth`` hops and returns
+        the induced subgraph (nodes + edges).
+
+        Args:
+            person_id: Center person ID
+            depth: Maximum traversal depth (default: 2)
+            limit: Maximum number of neighbor nodes returned (default: 50)
+
+        Returns:
+            Dict with center, nodes, edges, and depth.
+        """
+        cypher = """
+        MATCH (center:Person {id: $pid})
+        CALL {
+            WITH center
+            MATCH path = (center)-[:COLLABORATED_WITH*1..$depth]-(neighbor:Person)
+            WITH DISTINCT neighbor
+            RETURN neighbor
+            ORDER BY neighbor.composite DESC
+            LIMIT $limit
+        }
+        WITH center, collect(neighbor) AS neighbors
+        WITH center, neighbors, [center] + neighbors AS all_nodes
+        UNWIND all_nodes AS n1
+        UNWIND all_nodes AS n2
+        WITH center, neighbors, all_nodes, n1, n2
+        WHERE id(n1) < id(n2)
+        OPTIONAL MATCH (n1)-[r:COLLABORATED_WITH]-(n2)
+        WHERE r IS NOT NULL
+        RETURN
+            center.id AS center_id,
+            [n IN neighbors | {
+                id: n.id,
+                name: coalesce(n.name_en, n.name_ja, n.id),
+                composite: n.composite
+            }] AS neighbor_nodes,
+            collect(CASE WHEN r IS NOT NULL THEN {
+                source: n1.id,
+                target: n2.id,
+                shared_works: r.shared_works
+            } END) AS edges
+        """
+        with self.driver.session() as session:
+            result = session.run(
+                cypher,
+                pid=person_id,
+                depth=depth,
+                limit=limit,
+            )
+            record = result.single()
+
+        if record is None:
+            logger.info("neo4j_person_not_found", person_id=person_id)
+            return {
+                "center": person_id,
+                "nodes": [],
+                "edges": [],
+                "depth": depth,
+            }
+
+        neighbor_nodes = list(record["neighbor_nodes"])
+        edges = [e for e in record["edges"] if e is not None]
+
+        logger.info(
+            "neo4j_neighborhood",
+            person_id=person_id,
+            depth=depth,
+            nodes=len(neighbor_nodes),
+            edges=len(edges),
+        )
+        return {
+            "center": record["center_id"],
+            "nodes": neighbor_nodes,
+            "edges": edges,
+            "depth": depth,
+        }
+
+    def find_influential_paths(
+        self,
+        person_id: str,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        """Find paths to the most influential persons (highest composite score).
+
+        Discovers shortest paths from the given person to the top-scored
+        persons in the graph.
+
+        Args:
+            person_id: Source person ID
+            limit: Maximum number of influential targets (default: 10)
+
+        Returns:
+            List of dicts with target info, composite score, path length, and path.
+        """
+        cypher = """
+        MATCH (source:Person {id: $pid})
+        MATCH (target:Person)
+        WHERE target <> source
+          AND target.composite IS NOT NULL
+        WITH source, target
+        ORDER BY target.composite DESC
+        LIMIT $limit
+        MATCH path = shortestPath((source)-[:COLLABORATED_WITH*]-(target))
+        RETURN
+            target.id AS target_id,
+            coalesce(target.name_en, target.name_ja, target.id) AS target_name,
+            target.composite AS composite,
+            length(path) AS path_length,
+            [n IN nodes(path) | n.id] AS path
+        ORDER BY target.composite DESC
+        """
+        with self.driver.session() as session:
+            result = session.run(cypher, pid=person_id, limit=limit)
+            records = []
+            for record in result:
+                records.append(
+                    {
+                        "target": record["target_id"],
+                        "target_name": record["target_name"],
+                        "composite": record["composite"],
+                        "path_length": record["path_length"],
+                        "path": list(record["path"]),
+                    }
+                )
+
+        logger.info(
+            "neo4j_influential_paths",
+            person_id=person_id,
+            paths_found=len(records),
+        )
+        return records
+
+    def get_community_subgraph(
+        self,
+        person_ids: list[str],
+    ) -> dict[str, Any]:
+        """Extract subgraph for a set of persons (e.g., a community).
+
+        Returns nodes and edges within the given set, plus density metric.
+
+        Args:
+            person_ids: List of person IDs defining the subgraph
+
+        Returns:
+            Dict with nodes, edges, and density.
+        """
+        cypher = """
+        UNWIND $pids AS pid
+        MATCH (p:Person {id: pid})
+        WITH collect(p) AS persons
+        UNWIND persons AS p1
+        UNWIND persons AS p2
+        WITH persons, p1, p2
+        WHERE id(p1) < id(p2)
+        OPTIONAL MATCH (p1)-[r:COLLABORATED_WITH]-(p2)
+        WITH persons,
+             collect(CASE WHEN r IS NOT NULL THEN {
+                 source: p1.id,
+                 target: p2.id,
+                 shared_works: r.shared_works
+             } END) AS raw_edges
+        WITH persons,
+             [e IN raw_edges WHERE e IS NOT NULL] AS edges
+        RETURN
+            [p IN persons | {
+                id: p.id,
+                name: coalesce(p.name_en, p.name_ja, p.id),
+                composite: p.composite
+            }] AS nodes,
+            edges,
+            size(persons) AS node_count,
+            size(edges) AS edge_count
+        """
+        with self.driver.session() as session:
+            result = session.run(cypher, pids=person_ids)
+            record = result.single()
+
+        if record is None:
+            return {"nodes": [], "edges": [], "density": 0.0}
+
+        nodes = list(record["nodes"])
+        edges = list(record["edges"])
+        node_count = record["node_count"]
+        edge_count = record["edge_count"]
+
+        # Density = 2 * |E| / (|V| * (|V| - 1)) for undirected graph
+        density = 0.0
+        if node_count >= 2:
+            density = round(
+                2.0 * edge_count / (node_count * (node_count - 1)), 4
+            )
+
+        logger.info(
+            "neo4j_community_subgraph",
+            person_count=node_count,
+            edge_count=edge_count,
+            density=density,
+        )
+        return {"nodes": nodes, "edges": edges, "density": density}
+
+    def get_collaboration_stats(self) -> dict[str, Any]:
+        """Get high-level collaboration graph statistics from Neo4j.
+
+        Returns:
+            Dict with total_persons, total_anime, total_credits,
+            and avg_collaborators.
+        """
+        cypher = """
+        MATCH (p:Person) WITH count(p) AS persons
+        MATCH (a:Anime) WITH persons, count(a) AS anime
+        MATCH ()-[r:CREDITED_IN]->() WITH persons, anime, count(r) AS credits
+        OPTIONAL MATCH (p2:Person)-[c:COLLABORATED_WITH]-()
+        WITH persons, anime, credits, count(c) AS collab_edges, count(DISTINCT p2) AS persons_with_collabs
+        RETURN persons AS total_persons,
+               anime AS total_anime,
+               credits AS total_credits,
+               CASE WHEN persons_with_collabs > 0
+                    THEN toFloat(collab_edges) / persons_with_collabs
+                    ELSE 0.0
+               END AS avg_collaborators
+        """
+        with self.driver.session() as session:
+            result = session.run(cypher)
+            record = result.single()
+
+        if record is None:
+            return {
+                "total_persons": 0,
+                "total_anime": 0,
+                "total_credits": 0,
+                "avg_collaborators": 0.0,
+            }
+
+        stats = {
+            "total_persons": record["total_persons"],
+            "total_anime": record["total_anime"],
+            "total_credits": record["total_credits"],
+            "avg_collaborators": round(record["avg_collaborators"], 2),
+        }
+
+        logger.info("neo4j_collaboration_stats", **stats)
+        return stats

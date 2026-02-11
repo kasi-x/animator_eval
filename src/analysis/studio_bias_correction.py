@@ -74,18 +74,31 @@ def extract_studio_from_anime(anime: Anime) -> str | None:
     Returns:
         スタジオ名（不明の場合None）
     """
-    # アニメのメタデータからスタジオを取得
-    # 実装は実際のデータ構造に依存
-    if hasattr(anime, "studio") and anime.studio:
+    # Use studios list (primary source from AniList)
+    if anime.studios:
+        return anime.studios[0]
+
+    # Fallback to singular studio field
+    if anime.studio:
         return anime.studio
 
-    # タグからスタジオを推定（例: "Studio Ghibli"）
-    if hasattr(anime, "tags") and anime.tags:
-        for tag in anime.tags:
-            if "studio" in tag.lower() or "スタジオ" in tag:
-                return tag
-
     return "unknown"
+
+
+def extract_all_studios(anime: Anime) -> list[str]:
+    """アニメの全スタジオを抽出.
+
+    Args:
+        anime: Animeオブジェクト
+
+    Returns:
+        スタジオ名リスト
+    """
+    if anime.studios:
+        return anime.studios
+    if anime.studio:
+        return [anime.studio]
+    return []
 
 
 def compute_studio_bias_metrics(
@@ -163,7 +176,7 @@ def compute_studio_bias_metrics(
         persons=len(metrics),
         avg_diversity=round(
             sum(m.studio_diversity for m in metrics.values()) / len(metrics), 3
-        ),
+        ) if metrics else 0.0,
     )
 
     return metrics
@@ -363,6 +376,119 @@ def find_overvalued_by_studio(
     logger.info("overvalued_talents_found", count=len(result))
 
     return result
+
+
+@dataclass
+class StudioDisparityResult:
+    """スタジオ間待遇差分析結果.
+
+    Attributes:
+        studio: スタジオ名
+        person_count: 所属人数
+        mean_composite: 平均compositeスコア
+        mean_authority: 平均Authorityスコア
+        mean_trust: 平均Trustスコア
+        mean_skill: 平均Skillスコア
+        score_std: compositeの標準偏差
+    """
+
+    studio: str
+    person_count: int = 0
+    mean_composite: float = 0.0
+    mean_authority: float = 0.0
+    mean_trust: float = 0.0
+    mean_skill: float = 0.0
+    score_std: float = 0.0
+
+
+def compute_studio_disparity(
+    credits: list[Credit],
+    anime_map: dict[str, Anime],
+    person_scores: dict[str, dict],
+    min_persons: int = 5,
+) -> dict[str, StudioDisparityResult]:
+    """スタジオ間の待遇差（スコア分布）を分析.
+
+    同程度のSkillを持つ人材がスタジオによって
+    異なるAuthority/Trust評価を受けているかを検出。
+
+    Args:
+        credits: 全クレジット
+        anime_map: anime_id → Anime
+        person_scores: person_id → {"authority", "trust", "skill", "composite"}
+        min_persons: 最低所属人数（統計的信頼性のため）
+
+    Returns:
+        studio → StudioDisparityResult
+    """
+    # Map person → primary studio (most credits)
+    person_studio_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for credit in credits:
+        anime = anime_map.get(credit.anime_id)
+        if not anime:
+            continue
+        studios = extract_all_studios(anime)
+        for studio in studios:
+            person_studio_counts[credit.person_id][studio] += 1
+
+    person_primary_studio: dict[str, str] = {}
+    for person_id, studio_counts in person_studio_counts.items():
+        if studio_counts:
+            person_primary_studio[person_id] = max(
+                studio_counts.items(), key=lambda x: x[1]
+            )[0]
+
+    # Group scores by studio
+    studio_person_scores: dict[str, list[dict]] = defaultdict(list)
+    for person_id, scores in person_scores.items():
+        studio = person_primary_studio.get(person_id)
+        if studio and studio != "unknown":
+            studio_person_scores[studio].append(scores)
+
+    # Compute per-studio statistics
+    results: dict[str, StudioDisparityResult] = {}
+    for studio, scores_list in studio_person_scores.items():
+        if len(scores_list) < min_persons:
+            continue
+
+        composites = [s.get("composite", 0) for s in scores_list]
+        authorities = [s.get("authority", 0) for s in scores_list]
+        trusts = [s.get("trust", 0) for s in scores_list]
+        skills = [s.get("skill", 0) for s in scores_list]
+
+        n = len(composites)
+        mean_comp = sum(composites) / n
+        mean_auth = sum(authorities) / n
+        mean_trust = sum(trusts) / n
+        mean_skill = sum(skills) / n
+
+        # Standard deviation
+        variance = sum((x - mean_comp) ** 2 for x in composites) / n
+        std_dev = math.sqrt(variance)
+
+        results[studio] = StudioDisparityResult(
+            studio=studio,
+            person_count=n,
+            mean_composite=round(mean_comp, 4),
+            mean_authority=round(mean_auth, 4),
+            mean_trust=round(mean_trust, 4),
+            mean_skill=round(mean_skill, 4),
+            score_std=round(std_dev, 4),
+        )
+
+    logger.info(
+        "studio_disparity_computed",
+        studios=len(results),
+        max_gap=round(
+            max(r.mean_composite for r in results.values())
+            - min(r.mean_composite for r in results.values()),
+            4,
+        )
+        if len(results) >= 2
+        else 0,
+    )
+
+    return results
 
 
 def main():

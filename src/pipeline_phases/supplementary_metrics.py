@@ -15,6 +15,7 @@ from src.analysis.versatility import compute_versatility
 # Advanced metrics
 from src.analysis.studio_bias_correction import (
     compute_studio_bias_metrics,
+    compute_studio_disparity,
     compute_studio_prestige,
     debias_authority_scores,
 )
@@ -138,12 +139,21 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
         debiased_scores = debias_authority_scores(
             person_scores, bias_metrics, studio_prestige, debias_strength=0.3
         )
+        disparity = compute_studio_disparity(
+            context.credits, context.anime_map, person_scores
+        )
         context.studio_bias_metrics = {
             "bias_metrics": {pid: vars(m) for pid, m in bias_metrics.items()},
             "studio_prestige": studio_prestige,
             "debiased_scores": {pid: vars(d) for pid, d in debiased_scores.items()},
+            "studio_disparity": {s: vars(d) for s, d in disparity.items()},
         }
-        logger.info("studio_bias_computed", persons=len(bias_metrics), studios=len(studio_prestige))
+        logger.info(
+            "studio_bias_computed",
+            persons=len(bias_metrics),
+            studios=len(studio_prestige),
+            disparity_studios=len(disparity),
+        )
 
     # Growth Acceleration
     logger.info("step_start", step="growth_acceleration")

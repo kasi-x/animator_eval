@@ -448,6 +448,19 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         else {},
     ),
 
+    # Individual contribution profiles (Layer 2)
+    ExportSpec(
+        filename="individual_profiles.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("individual_profiles"),
+        log_message="individual_profiles_saved",
+        log_metrics=lambda data: {
+            "persons": data.get("total_persons", 0),
+            "r_squared": data.get("model_r_squared"),
+        }
+        if data
+        else {},
+    ),
+
     # Pipeline summary (special case - uses elapsed time)
     ExportSpec(
         filename="summary.json",

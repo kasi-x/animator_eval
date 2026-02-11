@@ -87,9 +87,11 @@ def compute_commercial_value(
     unique_roles = len(set(c.role for c in credits))
     diversity_score = min(1.0, unique_roles / 20)  # Normalize to 20 roles
 
-    # Placeholder for external data (ratings, sales)
-    # In real implementation, integrate with MAL ratings, etc.
-    external_score = 0.5  # Default
+    # Use anime.score from AniList/MAL ratings (0-100 scale → 0-1)
+    if anime.score and anime.score > 0:
+        external_score = min(1.0, anime.score / 100)
+    else:
+        external_score = 0.5  # Default when no rating available
 
     commercial = (staff_score * 0.3 + diversity_score * 0.2 + external_score * 0.5)
 
@@ -119,10 +121,13 @@ def compute_critical_value(
     else:
         tag_score = 0.3  # Default
 
-    # Placeholder for awards, critic scores
-    awards_score = 0.5  # Default
+    # Use anime.score as proxy for critical reception (0-100 → 0-1)
+    if anime.score and anime.score > 0:
+        critic_score = min(1.0, anime.score / 100)
+    else:
+        critic_score = 0.5  # Default when no score available
 
-    critical = (tag_score * 0.4 + awards_score * 0.6)
+    critical = (tag_score * 0.4 + critic_score * 0.6)
 
     return round(critical, 4)
 
@@ -169,8 +174,13 @@ def compute_creative_value(
 
     skill_score = (avg_director_skill * 0.6 + avg_animator_skill * 0.4)
 
-    # Genre/tag novelty (placeholder)
-    novelty_score = 0.5
+    # Genre/tag novelty: unique tag combinations indicate creative risk-taking
+    if hasattr(anime, "tags") and anime.tags:
+        # More tags = broader creative scope
+        tag_variety = min(1.0, len(anime.tags) / 15)
+        novelty_score = tag_variety
+    else:
+        novelty_score = 0.5  # Default when no tags available
 
     creative = (skill_score * 0.7 + novelty_score * 0.3)
 
