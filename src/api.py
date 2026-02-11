@@ -4,6 +4,7 @@
   GET /api/v1/persons          — 全人物スコア一覧 (ページネーション対応)
   GET /api/v1/persons/search   — 人物検索
   GET /api/v1/persons/{id}     — 人物プロフィール
+  GET /api/v1/persons/{id}/profile — 個人貢献プロファイル（二層モデル）
   GET /api/v1/persons/{id}/similar — 類似人物
   GET /api/v1/ranking          — ランキング (フィルタ対応)
   GET /api/v1/anime            — アニメ統計一覧
@@ -26,6 +27,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
 
+from src.analysis.explain import explain_individual_profile
 from src.analysis.similarity import find_similar_persons
 from src.api_validators import AnimeId, PersonId, validate_query_string
 from src.database import db_connection, get_data_sources, get_db_stats, get_score_history, search_persons
@@ -39,6 +41,7 @@ from src.utils.json_io import (
     load_decade_analysis_from_json,
     load_genre_affinity_from_json,
     load_growth_trends_from_json,
+    load_individual_profiles_from_json,
     load_influence_tree_from_json,
     load_mentorship_relationships_from_json,
     load_network_evolution_from_json,
@@ -51,6 +54,7 @@ from src.utils.json_io import (
     load_role_transitions_from_json,
     load_seasonal_trends_from_json,
     load_studio_analysis_from_json,
+    load_studio_bias_from_json,
     load_team_patterns_from_json,
     load_time_series_from_json,
 )
@@ -74,6 +78,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# --- Cache-Control Headers ---
+_CACHE_MAX_AGE = int(os.environ.get("API_CACHE_MAX_AGE", "300"))  # 5 minutes default
+
+
+@app.middleware("http")
+async def add_cache_control_headers(request: Request, call_next):
+    """Add Cache-Control headers to GET API responses."""
+    response = await call_next(request)
+    if (
+        request.method == "GET"
+        and request.url.path.startswith("/api/")
+        and response.status_code == 200
+    ):
+        response.headers["Cache-Control"] = f"public, max-age={_CACHE_MAX_AGE}"
+    return response
+
 
 # --- Rate Limiting (slowapi) ---
 limiter = Limiter(key_func=get_remote_address)
@@ -660,6 +681,58 @@ def get_person_milestones(person_id: PersonId):
     return {"person_id": person_id, "milestones": data[person_id]}
 
 
+@app.get("/api/v1/persons/{person_id}/profile")
+def get_person_profile(person_id: PersonId):
+    """個人貢献プロファイル（二層モデル: ネットワーク + 個人貢献）."""
+    # Layer 1: Network Profile (scores.json)
+    scores = load_person_scores_from_json()
+    network_profile = None
+    for entry in scores:
+        if entry["person_id"] == person_id:
+            network_profile = {
+                "authority": entry.get("authority"),
+                "trust": entry.get("trust"),
+                "skill": entry.get("skill"),
+                "composite": entry.get("composite"),
+            }
+            break
+    if network_profile is None:
+        raise HTTPException(status_code=404, detail=f"Person {person_id} not found")
+
+    # Layer 2: Individual Contribution Profile (individual_profiles.json)
+    individual_data = load_individual_profiles_from_json()
+    profiles = individual_data.get("profiles", {})
+    individual_profile = profiles.get(person_id)
+
+    # Interpret individual profile metrics
+    interpretation = None
+    if individual_profile:
+        interpretation = explain_individual_profile(individual_profile)
+
+    return {
+        "person_id": person_id,
+        "network_profile": network_profile,
+        "individual_profile": individual_profile,
+        "interpretation": interpretation,
+        "model_r_squared": individual_data.get("model_r_squared"),
+    }
+
+
+@app.get("/api/v1/studio-disparity")
+def studio_disparity():
+    """スタジオ間待遇差分析 — 同Skill帯のスコア差を比較."""
+    data = load_studio_bias_from_json()
+    if not data:
+        raise HTTPException(status_code=404, detail="Studio bias data not found. Run pipeline first.")
+    disparity = data.get("studio_disparity", {})
+    prestige = data.get("studio_prestige", {})
+    return {
+        "studio_disparity": disparity,
+        "studio_prestige": prestige,
+        "studios_analyzed": len(disparity),
+    }
+
+
 @app.get("/api/v1/network-evolution")
 def network_evolution():
     """ネットワーク進化の時系列データ."""
@@ -703,6 +776,134 @@ def db_stats():
         stats = get_db_stats(conn)
         sources = get_data_sources(conn)
     return {"stats": stats, "data_sources": sources}
+
+
+@app.get("/api/v1/freshness")
+def freshness():
+    """Data source freshness check."""
+    from src.monitoring import get_freshness_summary
+
+    with db_connection() as conn:
+        return get_freshness_summary(conn)
+
+
+# --- Neo4j Query Endpoints ---
+# These endpoints require a running Neo4j instance. If Neo4j is unavailable,
+# they return 503 with a descriptive error message.
+
+
+def _get_neo4j_reader():
+    """Create a Neo4jReader instance, raising 503 if unavailable.
+
+    Returns:
+        Neo4jReader instance
+
+    Raises:
+        HTTPException: 503 if Neo4j is not available
+    """
+    try:
+        from src.analysis.neo4j_direct import Neo4jReader
+
+        return Neo4jReader()
+    except ImportError:
+        raise HTTPException(
+            status_code=503,
+            detail="Neo4j driver not installed. Install with: pixi install",
+        )
+    except ValueError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Neo4j configuration error: {e}",
+        )
+    except Exception as e:
+        logger.warning("neo4j_unavailable", error=str(e))
+        raise HTTPException(
+            status_code=503,
+            detail="Neo4j not available",
+        )
+
+
+@app.get("/api/v1/neo4j/path")
+def neo4j_shortest_path(
+    from_id: str = Query(..., alias="from", description="Source person ID"),
+    to_id: str = Query(..., alias="to", description="Target person ID"),
+):
+    """Find shortest collaboration path between two persons via Neo4j.
+
+    Returns the shortest path through COLLABORATED_WITH relationships.
+    """
+    reader = _get_neo4j_reader()
+    try:
+        return reader.find_shortest_path(from_id, to_id)
+    except Exception as e:
+        logger.warning("neo4j_path_query_failed", error=str(e))
+        raise HTTPException(
+            status_code=503,
+            detail="Neo4j not available",
+        )
+    finally:
+        reader.close()
+
+
+@app.get("/api/v1/neo4j/common")
+def neo4j_common_collaborators(
+    person_a: str = Query(..., description="First person ID"),
+    person_b: str = Query(..., description="Second person ID"),
+):
+    """Find persons who collaborated with both person A and person B."""
+    reader = _get_neo4j_reader()
+    try:
+        collaborators = reader.find_common_collaborators(person_a, person_b)
+        return {
+            "person_a": person_a,
+            "person_b": person_b,
+            "count": len(collaborators),
+            "collaborators": collaborators,
+        }
+    except Exception as e:
+        logger.warning("neo4j_common_query_failed", error=str(e))
+        raise HTTPException(
+            status_code=503,
+            detail="Neo4j not available",
+        )
+    finally:
+        reader.close()
+
+
+@app.get("/api/v1/neo4j/neighborhood")
+def neo4j_neighborhood(
+    person_id: str = Query(..., description="Center person ID"),
+    depth: int = Query(2, ge=1, le=5, description="Traversal depth"),
+    limit: int = Query(50, ge=1, le=200, description="Max neighbor nodes"),
+):
+    """Get the collaboration neighborhood around a person."""
+    reader = _get_neo4j_reader()
+    try:
+        return reader.get_neighborhood(person_id, depth=depth, limit=limit)
+    except Exception as e:
+        logger.warning("neo4j_neighborhood_query_failed", error=str(e))
+        raise HTTPException(
+            status_code=503,
+            detail="Neo4j not available",
+        )
+    finally:
+        reader.close()
+
+
+@app.get("/api/v1/neo4j/stats")
+def neo4j_stats():
+    """Get high-level collaboration graph statistics from Neo4j."""
+    reader = _get_neo4j_reader()
+    try:
+        return reader.get_collaboration_stats()
+    except Exception as e:
+        logger.warning("neo4j_stats_query_failed", error=str(e))
+        raise HTTPException(
+            status_code=503,
+            detail="Neo4j not available",
+        )
+    finally:
+        reader.close()
 
 
 @app.websocket("/ws/pipeline")
@@ -760,6 +961,7 @@ async def run_pipeline_async(
     request: Request,
     visualize: bool = Query(False, description="Generate visualizations"),
     dry_run: bool = Query(False, description="Dry run (validation only)"),
+    incremental: bool = Query(False, description="Skip if no data changes since last run"),
 ):
     """Run scoring pipeline asynchronously with WebSocket progress updates.
 
@@ -769,6 +971,7 @@ async def run_pipeline_async(
     Args:
         visualize: Generate matplotlib visualizations
         dry_run: Run validation only, don't compute scores
+        incremental: Skip pipeline if no credit changes since last run
 
     Returns:
         Job started confirmation with job ID
@@ -790,6 +993,7 @@ async def run_pipeline_async(
                 run_scoring_pipeline,
                 visualize,
                 dry_run,
+                incremental=incremental,
             )
             logger.info("pipeline_task_complete", job_id=job_id)
 

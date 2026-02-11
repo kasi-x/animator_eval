@@ -3,8 +3,8 @@
 import re
 from typing import Annotated
 
-from fastapi import HTTPException, Path, Query
-from pydantic import AfterValidator, ValidationError
+from fastapi import HTTPException, Path
+from pydantic import AfterValidator
 
 
 def validate_person_id(value: str) -> str:

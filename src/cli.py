@@ -1585,6 +1585,63 @@ def data_quality() -> None:
             console.print(f"  [yellow]- {rec}[/yellow]")
 
 
+@app.command()
+def freshness(lang: str = lang_option) -> None:
+    """Display data source freshness status."""
+    setup_logging()
+
+    from src.database import db_connection, init_db
+    from src.monitoring import check_data_freshness
+
+    with db_connection() as conn:
+        init_db(conn)
+        reports = check_data_freshness(conn)
+
+    if not reports:
+        console.print("[yellow]No data sources registered.[/yellow]")
+        raise typer.Exit()
+
+    console.print("\n[bold blue]Data Source Freshness[/bold blue]\n")
+
+    table = Table()
+    table.add_column("Source", style="cyan")
+    table.add_column("Last Scraped", style="dim")
+    table.add_column("Age (hours)", justify="right")
+    table.add_column("Items", justify="right", style="green")
+    table.add_column("Threshold (h)", justify="right", style="dim")
+    table.add_column("Status")
+
+    for r in reports:
+        if r.hours_since_scrape is None:
+            age_str = "-"
+            status_str = "[red]Never scraped[/red]"
+        elif r.is_stale:
+            age_str = f"{r.hours_since_scrape:.1f}"
+            status_str = "[yellow]Stale[/yellow]"
+        else:
+            age_str = f"{r.hours_since_scrape:.1f}"
+            status_str = "[green]Fresh[/green]"
+
+        table.add_row(
+            r.source,
+            r.last_scraped_at or "-",
+            age_str,
+            str(r.item_count),
+            str(r.threshold_hours),
+            status_str,
+        )
+
+    console.print(table)
+
+    stale_count = sum(1 for r in reports if r.is_stale)
+    if stale_count == 0:
+        console.print("\n[bold green]All sources are fresh.[/bold green]")
+    elif stale_count == len(reports):
+        console.print(f"\n[bold red]All {stale_count} sources are stale or never scraped.[/bold red]")
+    else:
+        console.print(f"\n[bold yellow]{stale_count} of {len(reports)} sources need attention.[/bold yellow]")
+
+
 if __name__ == "__main__":
     app()
 
