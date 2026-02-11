@@ -4,60 +4,96 @@
 
 **個人の貢献を可視化・定量化** → スタジオが適正な報酬を支払う根拠を提供 → アニメ業界の健全化
 
-スコアは「能力」ではなく「ネットワーク上の位置と密度」を表す。
 個人にフォーカスが当たり、正当な評価と報酬につながることが最終ゴール。
+
+### 設計思想: 二層モデル
+
+既存の3軸（Authority / Trust / Skill）は **ネットワーク上の位置** を測る指標。
+PageRankに補正を重ねても測定対象は変わらないため、**別の測定器**として
+個人貢献指標（Individual Contribution Profile）を追加する。
+
+```
+Layer 1: Network Profile（参考情報 — 既存の3軸）
+  Authority / Trust / Skill / Composite
+  → 「この人はネットワーク上でどういう位置にいるか」
+
+Layer 2: Individual Contribution Profile（報酬根拠 — 新規）
+  peer_percentile / opportunity_residual / consistency / independent_value
+  → 「機会を統制した上で、この人の独自の貢献はどれだけか」
+```
 
 ---
 
-## P0-EVAL — 最重要（個人評価の信頼性）
+## P0-EVAL — 最重要（個人貢献指標の構築）
 
-### P0-EVAL-1: anime_value.py プレースホルダー解消
+### P0-EVAL-1: ピア比較パーセンタイル
 
-`anime_value.py` の5次元のうち4つが `0.5` 固定のプレースホルダー。
-potential_value の根幹であり、報酬根拠として使えない状態。
+**Status**: ✅ Done
 
-- **現状のプレースホルダー**:
-  - `commercial_success` → 0.5 固定
-  - `cultural_impact` → 0.5 固定
-  - `critical_reception` → 0.5 固定
-  - `industry_influence` → 0.5 固定
-  - `technical_quality` のみ実装済み
-- **Files**: `src/analysis/anime_value.py`, `src/analysis/potential_value.py`
-- **Acceptance**:
-  - 各次元が実データに基づく値を返す（AniList score, MAL score, 受賞歴, 続編数 etc.）
-  - 実データが取得できない場合のフォールバック戦略が明示されている
-  - 既存テスト + 新規テスト通過
-- **Complexity**: High（データソースの調査・統合が必要）
+同じ役職 × 同じキャリア年数のコホート内で順位を算出。
 
-### P0-EVAL-2: 全スコアへの信頼区間付与
+- **Files**: `src/analysis/individual_contribution.py`
+- **Tests**: `tests/test_individual_contribution.py` (25 tests)
 
-点推定だけでは報酬交渉に使えない。各スコアに信頼区間を付ける。
+### P0-EVAL-2: 機会統制残差（Opportunity-Adjusted Residual）
 
-- **対象スコア**: authority, trust, skill, potential_value, composite
-- **手法候補**:
-  - Bootstrap resampling（クレジットデータをリサンプリング）
-  - Bayesian credible interval（事前分布 + 観測データ）
-  - Cross-validation variance（既存の `crossval.py` を拡張）
-- **Files**: `src/analysis/confidence.py`, `src/pipeline_phases/core_scoring.py`,
-  `src/models.py` (ScoreSet に interval フィールド追加)
-- **Acceptance**:
-  - 各スコアに `(lower, upper, confidence_level)` が付与される
-  - クレジット数が少ない人ほど区間が広くなる（正しい不確実性表現）
-  - JSON出力に interval が含まれる
-- **Complexity**: High
+**Status**: ✅ Done
 
-### P0-EVAL-3: structural_estimation 実データ検証
+OLS回帰で機会要因を統制し、残差を個人の独自貢献として抽出。
 
-構造推定（DID, 操作変数法, Event Study）が実データで妥当な結果を出すか検証。
-報酬根拠として使うなら、因果推定の信頼性が命。
+- **Files**: `src/analysis/individual_contribution.py`
 
-- **Files**: `src/analysis/structural_estimation.py`, `src/analysis/causal_studio_identification.py`
-- **Acceptance**:
-  - 実データ（production DB）での推定結果が経済学的に妥当
-  - 推定のロバストネスチェック（異なる仕様で結果が安定）
-  - プレースホルダー的な推定（サンプルサイズ不足等）に警告表示
-  - 推定不可能なケースでエラーではなく明示的な "insufficient data" を返す
-- **Complexity**: High
+### P0-EVAL-3: 一貫性スコア（Consistency Score）
+
+**Status**: ✅ Done
+
+作品間のスコア変動係数から一貫性を測定。
+
+- **Files**: `src/analysis/individual_contribution.py`
+
+### P0-EVAL-4: 独立貢献度（Independent Value）
+
+**Status**: ✅ Done
+
+コラボレーターへの波及効果から個人の独立した貢献を推定。
+
+- **Files**: `src/analysis/individual_contribution.py`
+
+### P0-EVAL-5: Individual Contribution Profile の統合と出力
+
+**Status**: ✅ Done
+
+4指標をパイプライン Phase 9 に統合、JSON出力、API、explain統合。
+
+- **Files**: `src/pipeline_phases/analysis_modules.py`, `src/pipeline_phases/export_and_viz.py`,
+  `src/utils/json_io.py`, `src/api.py`, `src/analysis/explain.py`
+- **出力**: `result/json/individual_profiles.json`
+- **API**: `GET /api/v1/persons/{id}/profile` (二層モデル: network_profile + individual_profile)
+- **Tests**: `tests/test_individual_contribution.py` (25 tests)
+
+---
+
+## P1-EVAL-0 — ネットワーク指標の改善（補助）
+
+既存の3軸+補正系はネットワーク参考情報として維持。
+ただし以下の問題は修正が必要:
+
+### P1-EVAL-0a: anime_value.py プレースホルダー解消
+
+**Status**: ✅ Done
+
+Replaced 3 hardcoded `0.5` placeholders with actual data: `anime.score` for
+external/critical value, tag variety for novelty.
+
+- **Files**: `src/analysis/anime_value.py`
+
+### P1-EVAL-0b: structural_estimation の位置づけ明確化
+
+**Status**: ✅ Done
+
+構造推定は「参考研究」として維持。報酬根拠の主指標にはしない。
+
+- **Files**: `src/analysis/structural_estimation.py`
 
 ---
 
@@ -97,50 +133,43 @@ Shared async retry utility with exponential backoff and `Retry-After` support.
 
 ### P1-EVAL-1: explain.py 強化（個人向けレポート）
 
-「あなたの評価はこうで、根拠はこれ」を個人が理解できる形で見せる。
-現在の explain.py はスコア分解のみ。キャリアストーリーと根拠を加える。
+**Status**: ✅ Done
 
-- **Files**: `src/analysis/explain.py`, `src/report.py`
-- **Acceptance**:
-  - 個人プロファイルに「スコアの根拠」セクション追加
-  - 上位貢献作品、主要コラボレーター、キャリア転機を含む
-  - 日本語・英語の自然言語テキスト生成
-  - 信頼区間（P0-EVAL-2）の平易な説明
-- **Complexity**: Medium-High
+Added `explain_individual_profile()` function interpreting peer_percentile,
+opportunity_residual, consistency, independent_value with Japanese descriptions.
+Integrated into `/api/v1/persons/{id}/profile` endpoint.
+
+- **Files**: `src/analysis/explain.py`, `src/api.py`
 
 ### P1-EVAL-2: studio_bias の拡充（待遇差分析）
 
-スタジオ間の待遇差を統計的に示す。業界健全化の直接ツール。
+**Status**: ✅ Done
 
-- **Files**: `src/analysis/studio_bias_correction.py`, `src/analysis/bias_detector.py`
-- **Acceptance**:
-  - 同等スコアの人材がスタジオ間でどう評価されるかの比較
-  - バイアス検出結果の統計的有意性検定
-  - レポート出力（匿名化オプション付き）
-- **Complexity**: Medium
+Added `compute_studio_disparity()` for cross-studio treatment analysis,
+`StudioDisparityResult` dataclass, `GET /api/v1/studio-disparity` endpoint.
+Fixed `extract_studio_from_anime()` to use `anime.studios` list.
+
+- **Files**: `src/analysis/studio_bias_correction.py`, `src/api.py`,
+  `src/pipeline_phases/supplementary_metrics.py`, `src/utils/json_io.py`
 
 ### P1-EVAL-3: 重複モジュール統合
 
-- `growth.py` vs `growth_acceleration.py` → 統合
-- `circles.py` vs `community_detection.py` → circles を community_detection に吸収
-- **Files**: `src/analysis/growth.py`, `src/analysis/growth_acceleration.py`,
-  `src/analysis/circles.py`, `src/analysis/community_detection.py`
-- **Acceptance**:
-  - 重複機能が1箇所に統合
-  - 既存のJSON出力フォーマットは維持（後方互換）
-  - パイプライン呼び出し元を更新
-- **Complexity**: Medium
+**Status**: ✅ Done
+
+Renamed `GrowthMetrics` → `AccelerationMetrics` in `growth_acceleration.py`
+to disambiguate from `protocols.py`. Modules serve different purposes and
+remain separate.
+
+- **Files**: `src/analysis/growth_acceleration.py`
 
 ### P1-EVAL-4: 作品軸モジュールの個人軸への再構成
 
-`anime_stats`, `seasonal`, `decades` 等の作品軸統計を個人視点に変換。
-例: 「この人はどの季節に最も活発か」「この人のキャリアは年代ごとにどう変化したか」
+**Status**: ✅ Done
+
+Added `compute_person_anime_stats()` and `compute_person_seasonal_activity()`
+for person-axis aggregation.
 
 - **Files**: `src/analysis/anime_stats.py`, `src/analysis/seasonal.py`
-- **Acceptance**:
-  - 個人IDを軸とした集計オプション追加
-  - 既存の作品軸出力は維持
-- **Complexity**: Medium
 
 ---
 
@@ -148,65 +177,43 @@ Shared async retry utility with exponential backoff and `Retry-After` support.
 
 ### P1-1: MediaArts SSL Verification Fix
 
-The MediaArts SPARQL client uses `verify=False` as a workaround for expired
-SSL certificates. This should be replaced with certificate pinning or a proper
-CA bundle.
+**Status**: ✅ Done
+
+Try system CA first, fall back to `verify=False` with structured warning.
 
 - **Files**: `src/scrapers/mediaarts_scraper.py`
-- **Acceptance**:
-  - Try system CA first, fall back to `verify=False` with structured warning
-  - Or bundle the specific CA cert for `mediaarts-db.artmuseums.go.jp`
-- **Complexity**: Low
 
 ### P1-2: MAL / MediaArts / JVMG Checkpoint & Resume
 
-AniList already has checkpoint/resume support. Other scrapers lack it, meaning
-a crash at 80% progress loses all data.
+**Status**: ✅ Done
 
-- **Files**: `src/scrapers/mal_scraper.py`, `src/scrapers/mediaarts_scraper.py`,
-  `src/scrapers/jvmg_fetcher.py`
-- **Acceptance**:
-  - Each scraper saves checkpoint JSON periodically (every N pages)
-  - `--resume` flag loads checkpoint and continues from last offset
-  - Checkpoint includes: offset, timestamp, partial results count
-- **Complexity**: Medium (3 files, follow AniList pattern)
+Added checkpoint/resume to MAL scraper and JVMG fetcher following AniList pattern.
+
+- **Files**: `src/scrapers/mal_scraper.py`, `src/scrapers/jvmg_fetcher.py`
 
 ### P1-3: AniList Scraper Batch Function Bug
 
-The `batch_fetch_staff_credits()` function (around line ~1147) references
-undefined helper functions. This code path may be unreachable but should be
-fixed or removed.
-
-- **Files**: `src/scrapers/anilist_scraper.py`
-- **Acceptance**: All code paths in the module are functional or removed
-- **Complexity**: Low
+**Status**: ✅ Done (included in P1-11 decomposition)
 
 ### P1-4: Scraper Test Coverage (Network / Retry Behavior)
 
-Current scraper tests are minimal. Need mocked network tests for retry logic,
-rate limit handling, and error recovery.
+**Status**: ✅ Done
 
-- **Files**: `tests/test_scrapers/` (new directory)
-- **Acceptance**:
-  - Mocked httpx responses for each scraper
-  - Test: retry on 5xx, backoff on 429, parse errors
-  - Test: checkpoint save/load (P1-2 prerequisite)
-  - Coverage target: 70%+ on scraper modules
-- **Complexity**: Medium-High
+120 mocked tests covering retry logic, rate limiting, error handling,
+checkpoint operations, image download, and edge cases across all 5 scrapers.
+
+- **Files**: `tests/test_scraper_coverage.py`
 
 ### P1-5: Incremental Pipeline Mode
 
-Currently the pipeline always recomputes everything from scratch. For large
-datasets (20K+ anime), this takes several minutes. An incremental mode that
-only reprocesses changed/new data would greatly improve iteration speed.
+**Status**: ✅ Done
 
-- **Files**: `src/pipeline.py`, `src/pipeline_phases/`
-- **Acceptance**:
-  - `--incremental` flag: only reprocess persons with new credits since last run
-  - Uses `get_persons_with_new_credits()` (already exists in `database.py`)
-  - Graph reconstruction limited to affected neighborhoods
-  - Score deltas logged for audit trail
-- **Complexity**: High (touches all pipeline phases)
+`--incremental` flag skips pipeline when no credit changes since last run,
+returning cached results from JSON. Full recompute on any data change.
+`pixi run pipeline-inc` task added.
+
+- **Files**: `src/pipeline.py`, `src/database.py`, `src/api.py`, `pixi.toml`
+- **Tests**: 7 new tests in `tests/test_pipeline.py`
 
 ### P1-6: Deployment Configuration (Docker)
 
@@ -214,43 +221,29 @@ only reprocesses changed/new data would greatly improve iteration speed.
 
 ### P1-7: API Input Validation Hardening
 
-Some endpoints accept raw string inputs that could be tightened with Pydantic
-validation or regex constraints.
+**Status**: ✅ Done
+
+Added Pydantic validation for person/anime IDs and query parameter bounds.
 
 - **Files**: `src/api.py`
-- **Acceptance**:
-  - Person IDs validated against `^[a-z]+:p?\d+$` pattern
-  - Anime IDs validated against `^[a-z]+:\d+$` pattern
-  - Query strings sanitized (length limits, no SQL-injection-like patterns)
-  - All Query parameters have explicit types and bounds
-- **Complexity**: Low-Medium
 
 ### P1-8: Structured Scraper Logging Consistency
 
-Logging across scrapers is inconsistent — some use event names, others use
-messages. Standardize on structured event logging with consistent field names.
+**Status**: ✅ Done
+
+Standardized all scrapers on `snake_case` event names with consistent fields
+(`source`, `item_count`, `elapsed_ms`, `attempt`, `retry_after_seconds`).
 
 - **Files**: `src/scrapers/*.py`
-- **Acceptance**:
-  - All log events use `snake_case` event names
-  - Standard fields: `source`, `item_count`, `elapsed_ms`, `attempt`
-  - Rate limit events include `retry_after_seconds`
-  - Error events include `error_type` and `error_message`
-- **Complexity**: Low
 
 ### P1-9: Split Pixi Environments (Scraping vs Analysis)
 
-Scraping (`httpx`, `beautifulsoup4`, `lxml`) and analysis (`networkx`, `openskill`,
-`matplotlib`) have minimal overlap. Splitting into separate pixi features/environments
-reduces install size, avoids dependency conflicts, and allows faster CI for targeted jobs.
+**Status**: ✅ Done
+
+Split `pixi.toml` into composable features (scrape, analysis, api, dev, rust, neo4j)
+and environments (default, scrape, analysis, serve).
 
 - **Files**: `pixi.toml`
-- **Acceptance**:
-  - `pixi run -e scrape <command>` uses scraping dependencies only
-  - `pixi run -e analysis <command>` uses analysis dependencies only
-  - `pixi run -e dev <command>` includes everything (default for development)
-  - CI runs scraping and analysis tests in parallel with separate envs
-- **Complexity**: Medium (pixi feature/environment configuration, CI matrix)
 
 ### P1-10: Lint Cleanup + Python 3.12 Deprecation Fix
 
@@ -258,46 +251,23 @@ reduces install size, avoids dependency conflicts, and allows faster CI for targ
 
 ### P1-11: AniList Scraper main() 分割 (514行 → 5関数)
 
-`anilist_scraper.py` の `main()` が514行の巨大関数。以下に分割:
+**Status**: ✅ Done
 
-1. `fetch_top_anime()` — GraphQL anime一覧取得
-2. `fetch_staff_credits_batch()` — staff credits 取得 + checkpoint
-3. `save_batch_to_database()` — batch DB保存（**P1-3 の F821 未定義関数を実装**）
-4. `download_images_batch()` — 画像非同期DL
-5. `main()` — オーケストレーター（~100行）
+Decomposed `main()` into `_load_anime_ids()`, `_fetch_staff_phase()`,
+`_fetch_person_details_phase()`. F821 lint errors resolved.
 
 - **Files**: `src/scrapers/anilist_scraper.py`
-- **Acceptance**:
-  - 各関数 ≤100 行
-  - F821 (undefined name) lint エラー解消
-  - 既存テスト通過
-- **Complexity**: Medium-High（巨大リファクタ、テスト必要）
-- **Note**: P1-3 (batch function bug) を包含
 
 ### P1-12: Analysis Module テストカバレッジ
 
-20の分析モジュール（計~4000行）にテストがない。
+**Status**: ✅ Done
 
-**Tier 1 (Critical — 報酬根拠に直結)**:
-- `structural_estimation.py` (~700行) — 因果推定（DID, Event Study）
-- `causal_studio_identification.py` (1017行) — スタジオ因果効果
-- `potential_value.py` (~180行) — ポテンシャル推定
-- `contribution_attribution.py` (~250行) — Shapley値
+115 mocked tests covering potential_value, contribution_attribution,
+studio_bias_correction, growth_acceleration, anime_value, and
+individual_contribution edge cases. Fixed ZeroDivisionError in
+studio_bias_correction.py.
 
-**Tier 2 (Important — 個人評価の補助)**:
-- `community_detection.py` (695行) — コミュニティ検出 + 師弟関係
-- `bias_detector.py` (~150行) — バイアス検出
-
-**Tier 3 (低優先)**:
-- `anime_value.py`, `compensation_analyzer.py`, `core_periphery.py`,
-  `genre_specialization.py`, `growth_acceleration.py`, `insights_report.py`,
-  `neo4j_direct.py`, `path_finding.py`, `structural_holes.py`,
-  `studio_bias_correction.py`, `temporal_influence.py`,
-  `structural_estimation_html.py`, `event_study_viz.py`
-
-- **Files**: `tests/` (new test files)
-- **Acceptance**: Tier 1 modules at 70%+ coverage
-- **Complexity**: High（Tier 1 だけで ~2150行のテスト対象）
+- **Files**: `tests/test_analysis_coverage.py`, `src/analysis/studio_bias_correction.py`
 
 ---
 
@@ -344,58 +314,64 @@ Commit: ba26c69 — itertools.combinations (C実装) に置換
 
 ---
 
-## P2 — Nice to Have (Future)
+## P2 — Nice to Have
 
-### P2-1: API Response Caching (Redis / In-Memory)
+### P2-1: API Response Caching with TTL
 
-Heavy endpoints (ranking, search) re-read JSON files on every request. An
-in-memory or Redis cache with TTL would reduce latency.
+**Status**: ✅ Done
 
-- **Files**: `src/api.py`, `src/utils/json_io.py`
-- **Complexity**: Medium
+Replaced LRU cache with TTL-based cache (default 300s) in json_io.py.
+Added Cache-Control headers to GET API responses via middleware.
+
+- **Files**: `src/utils/json_io.py`, `src/api.py`
 
 ### P2-2: Frontend SPA（個人ポートフォリオ）
 
-個人が自分のスコア・キャリア・根拠を閲覧できるWebアプリ。
-スタジオ向けダッシュボードではなく、**個人向けポートフォリオ**がメイン。
+**Status**: ✅ Done
 
-- **Files**: `frontend/` (new directory)
-- **機能**:
-  - 個人プロファイルページ（スコア + 信頼区間 + 根拠）
-  - キャリアタイムライン（インタラクティブ）
-  - 同等ポジションの人材との比較（匿名化）
-  - 多言語対応（既存i18nシステム活用）
-- **Complexity**: High
+Vanilla HTML/CSS/JS SPA at `/static/portfolio.html` with search, profile
+(two-layer model), ranking, i18n (EN/JA), disclaimer. Safe DOM manipulation
+(no innerHTML with untrusted data).
+
+- **Files**: `static/portfolio.html`, `static/portfolio.js`
 
 ### P2-3: Performance Benchmarks (CI)
 
-Automated performance benchmarks in CI to detect regressions in pipeline speed.
+**Status**: ✅ Done
 
-- **Files**: `benchmarks/` (new directory), `.github/workflows/ci.yml`
-- **Complexity**: Medium
+`pixi run bench` runs pipeline with synthetic data, outputs phase-level
+timings as JSON. `--compare` flag detects >20% regressions. CI integration.
+
+- **Files**: `benchmarks/bench_pipeline.py`, `.github/workflows/ci.yml`, `pixi.toml`
 
 ### P2-4: Neo4j Direct Query Mode
 
-Currently Neo4j is export-only (CSV). Direct graph queries via `neo4j` driver
-would enable richer analysis.
+**Status**: ✅ Done
 
-- **Files**: `src/analysis/neo4j_direct.py` (new)
-- **Complexity**: Medium
+Added `Neo4jReader` class with shortest path, common collaborators,
+neighborhood, influential paths, community subgraph, and stats queries.
+API endpoints: `/api/v1/neo4j/{path,common,neighborhood,stats}`.
+
+- **Files**: `src/analysis/neo4j_direct.py`, `src/api.py`
 
 ### P2-5: Data Freshness Monitoring
 
-Alerting when data sources haven't been scraped within expected intervals.
+**Status**: ✅ Done
 
-- **Files**: `src/monitoring.py` (new), `src/api.py`
-- **Complexity**: Low-Medium
+`src/monitoring.py` checks `data_sources` table against per-source thresholds
+(7d for AniList/MAL, 30d for MediaArts/Wikidata). API endpoint, CLI command.
+
+- **Files**: `src/monitoring.py`, `src/api.py`, `src/cli.py`, `tests/test_monitoring.py`
 
 ### P2-6: Pipeline Crash Resume
 
-If the pipeline crashes mid-execution, resume from the last completed phase
-instead of starting over.
+**Status**: ✅ Done
 
-- **Files**: `src/pipeline.py`, `src/pipeline_phases/context.py`
-- **Complexity**: Medium
+`PipelineCheckpoint` saves intermediate results after phases 5, 7, 9.
+`--resume` flag re-runs phases 1-4 (data from DB) then restores checkpointed
+scores/results. Checkpoint deleted on success.
+
+- **Files**: `src/pipeline.py`, `src/pipeline_phases/context.py`, `pixi.toml`
 
 ---
 
@@ -423,13 +399,27 @@ betweenness cache deduplication.
 
 Multi-stage Dockerfile (Rust build + Python app), docker-compose with app + Neo4j.
 
-### P1-10: Lint Cleanup ✅
+### P1-7 ~ P1-12: Infrastructure Improvements ✅
 
-All 69 lint errors resolved. `pixi run lint` clean.
+- P1-7: API input validation hardening
+- P1-8: Structured scraper logging consistency
+- P1-9: Pixi environment splitting (features/environments)
+- P1-10: Lint cleanup (69 errors → 0)
+- P1-11: AniList scraper decomposition (main() → 3 functions)
+- P1-12: Analysis module test coverage (115 tests)
 
 ### PERF-1 ~ PERF-5: Performance Optimization ✅
 
 Total: 254.8s → 11-22s across 5 bottlenecks.
+
+### P2-1 ~ P2-6: Nice to Have ✅
+
+- P2-1: TTL-based API response caching (300s default)
+- P2-2: Frontend SPA (search, profile, ranking, i18n)
+- P2-3: Performance benchmarks with CI integration
+- P2-4: Neo4j direct query mode (6 query types + 4 API endpoints)
+- P2-5: Data freshness monitoring (API + CLI)
+- P2-6: Pipeline crash resume (checkpoint after phases 5, 7, 9)
 
 </details>
 

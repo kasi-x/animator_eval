@@ -5,15 +5,23 @@ name = "animetor_eval"
 platforms = ["linux-64"]
 version = "0.1.0"
 
+# ============================================================================
+# Tasks (run in default environment unless -e specified)
+# ============================================================================
 [tasks]
 # Core pipeline
 pipeline = "python -m src.pipeline"
 pipeline-viz = "python -m src.pipeline --visualize"
+pipeline-inc = "python -m src.pipeline --incremental"
+pipeline-resume = "python -m src.pipeline --resume"
 
 # Development tools
 test = "pytest tests/ -v"
 lint = "ruff check src/ tests/"
 format = "ruff format src/ tests/"
+
+# Benchmarks
+bench = "python benchmarks/bench_pipeline.py"
 
 # Utilities
 synthetic = "python -m src.synthetic"
@@ -21,33 +29,83 @@ build-rust = "maturin develop --release --manifest-path rust_ext/Cargo.toml --uv
 serve = "python -m src.api"
 lab = "jupyter lab --notebook-dir=result/notebooks"
 
+# ============================================================================
+# Shared Dependencies (included in ALL environments)
+# ============================================================================
 [dependencies]
 python = "3.12.*"
+pydantic = ">=2.0"
+structlog = "*"
+rich = "*"
+typer = "*"
+httpx = "*"
+
+# ============================================================================
+# Feature: scrape — web scraping and data collection
+# ============================================================================
+[feature.scrape.dependencies]
+beautifulsoup4 = "*"
+lxml = "*"
+
+[feature.scrape.pypi-dependencies]
+sparqlwrapper = "*"
+python-dotenv = ">=1.0"
+
+# ============================================================================
+# Feature: analysis — graph analysis, scoring, visualization
+# ============================================================================
+[feature.analysis.dependencies]
 networkx = "*"
 pandas = "*"
 numpy = "*"
-httpx = "*"
-beautifulsoup4 = "*"
-lxml = "*"
-jupyterlab = "*"
 matplotlib = "*"
-pydantic = ">=2.0"
-rich = "*"
-structlog = "*"
-typer = "*"
 plotly = ">=6.5.2,<7"
-rust = ">=1.75"
-maturin = ">=1.11.5,<2"
 
-[pypi-dependencies]
-sparqlwrapper = "*"
+[feature.analysis.pypi-dependencies]
 openskill = "*"
+rapidfuzz = ">=3.0"
+
+# ============================================================================
+# Feature: api — FastAPI web server
+# ============================================================================
+[feature.api.pypi-dependencies]
+fastapi = ">=0.100"
+uvicorn = {version = ">=0.20", extras = ["standard"]}
+slowapi = ">=0.1.9"
+
+# ============================================================================
+# Feature: dev — testing, linting, notebooks
+# ============================================================================
+[feature.dev.dependencies]
+jupyterlab = "*"
+
+[feature.dev.pypi-dependencies]
 ruff = ">=0.1"
 pytest = ">=7.0"
 pytest-cov = ">=4.0"
-fastapi = ">=0.100"
-uvicorn = {version = ">=0.20", extras = ["standard"]}
-rapidfuzz = ">=3.0"
+
+# ============================================================================
+# Feature: rust — Rust extension (PyO3/maturin)
+# ============================================================================
+[feature.rust.dependencies]
+rust = ">=1.75"
+maturin = ">=1.11.5,<2"
+
+# ============================================================================
+# Feature: neo4j — Neo4j graph database export (optional)
+# ============================================================================
+[feature.neo4j.pypi-dependencies]
 neo4j = ">=5.0"
-python-dotenv = ">=1.0"
-slowapi = ">=0.1.9"
+
+# ============================================================================
+# Environments
+# ============================================================================
+[environments]
+# default: everything (development, testing, CI)
+default = ["scrape", "analysis", "api", "dev", "rust", "neo4j"]
+# scrape: minimal env for running scrapers only
+scrape = ["scrape"]
+# analysis: pipeline + scoring (no scrapers, no API server)
+analysis = ["analysis"]
+# serve: API server with analysis backend
+serve = ["analysis", "api"]

@@ -1,0 +1,24 @@
+{
+  "total_seconds": 4.3472,
+  "phases": {
+    "data_loading": 0.0043,
+    "validation": 0.0034,
+    "entity_resolution": 0.0078,
+    "graph_construction": 0.0819,
+    "core_scoring": 0.0101,
+    "supplementary_metrics": 0.8072,
+    "result_assembly": 0.0217,
+    "post_processing": 0.0015,
+    "analysis_modules": 3.6736,
+    "export_and_viz": 0.3201
+  },
+  "result_count": 110,
+  "credit_count": 1853,
+  "synthetic_params": {
+    "n_directors": 10,
+    "n_animators": 100,
+    "n_anime": 50,
+    "seed": 42
+  },
+  "timestamp": "2026-02-10T20:35:38.074312+00:00"
+}

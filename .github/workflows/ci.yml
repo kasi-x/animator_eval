@@ -25,3 +25,6 @@ jobs:
 
       - name: Test
         run: pixi run test
+
+      - name: Run benchmarks
+        run: pixi run bench

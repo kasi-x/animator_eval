@@ -41,6 +41,11 @@ tasks:
     cmds:
       - pixi run python -m src.scrapers.anilist_scraper --count {{.COUNT | default "20400"}} --force-restart
 
+  fetch-persons:
+    desc: Fetch missing person details from DB credits
+    cmds:
+      - pixi run python -m src.scrapers.anilist_scraper fetch-persons
+
   download-images:
     desc: Process pending image download queue
     cmds:
