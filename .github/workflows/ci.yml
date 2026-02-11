@@ -28,3 +28,11 @@ jobs:
 
       - name: Run benchmarks
         run: pixi run bench
+
+      - name: Upload benchmark results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmarks/results/latest.json
+          retention-days: 90

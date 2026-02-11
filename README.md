@@ -2,7 +2,7 @@
 
 > アニメ業界人物評価システム — 個人の貢献を可視化し、適正な報酬と業界の健全化を支援する
 
-[![Tests](https://img.shields.io/badge/tests-974%20passing-success)](https://github.com/kasi-x/animetor_eval)
+[![Tests](https://img.shields.io/badge/tests-1319%20passing-success)](https://github.com/kasi-x/animetor_eval)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -25,17 +25,20 @@
 
 ## 主な機能
 
-- 📊 **3軸スコアリング**: Authority × Trust × Skill の統合評価
+- 📊 **二層評価モデル**: Layer 1 (Authority × Trust × Skill) + Layer 2 (個人貢献指標)
+- 🎯 **個人貢献指標**: ピア比較パーセンタイル、機会統制残差、一貫性、独立貢献度
 - 🔍 **エンティティ解決**: 5段階の名寄せ（完全一致 → クロスソース → ローマ字 → 類似度 → AI支援）
 - 📈 **キャリア分析**: 役職遷移、成長トレンド、マイルストーン検出
 - 🕸️ **ネットワーク分析**: コラボレーション強度、監督サークル、ブリッジ検出
 - 🎨 **可視化**: 23種のmatplotlib静的チャート + 6種のPlotlyインタラクティブ可視化
 - 🚀 **並列実行**: ThreadPoolExecutorによる20モジュール同時実行（4-6倍高速化）
+- 🦀 **Rust拡張**: PyO3/maturinによるグラフアルゴリズム高速化（50-100倍）
 - 📡 **WebSocket監視**: リアルタイムパイプライン進捗配信（10フェーズ追跡）
 - 🌐 **国際化 (i18n)**: 英語・日本語完全対応（CLI・API・フロントエンド）
 - 📊 **パフォーマンス監視**: 詳細メトリクス（パーセンタイル、メモリデルタ、キャッシュ統計）
-- 🔌 **REST API**: 38エンドポイント（FastAPI + WebSocket）
-- 💻 **CLI**: 21コマンド（typer + Rich）
+- 🔌 **REST API**: 42+エンドポイント（FastAPI + WebSocket）
+- 💻 **CLI**: 22コマンド（typer + Rich）
+- 🖥️ **フロントエンド**: ポートフォリオSPA（検索・プロフィール・ランキング）
 
 ## クイックスタート
 
@@ -54,7 +57,7 @@ cd animetor_eval
 # 依存パッケージをインストール
 pixi install
 
-# テスト実行（955件、約60秒）
+# テスト実行（1319件、約270秒）
 pixi run test
 ```
 
@@ -66,6 +69,12 @@ pixi run pipeline
 
 # 可視化付き実行
 pixi run pipeline-viz
+
+# インクリメンタルモード（データ変更なしならスキップ）
+pixi run pipeline-inc
+
+# クラッシュ再開モード
+pixi run pipeline-resume
 
 # データ検証のみ（--dry-run）
 pixi run validate
@@ -215,7 +224,8 @@ src/pipeline_phases/
 | **名寄せ** | 先頭文字ブロッキング + LRUキャッシュ | 10-100倍高速化 |
 | **Trust計算** | 定数の巻き上げ + 事前計算 | 40-50%高速化 |
 | **分析フェーズ** | ThreadPoolExecutor（20並列） | 4-6倍高速化 |
-| **API応答** | JSON読み込みLRUキャッシュ | 30-50%高速化 |
+| **API応答** | TTLキャッシュ（300秒） | 30-50%高速化 |
+| **Rust拡張** | PyO3/maturin + rayon並列 | 50-100倍高速化 |
 
 ## 出力ファイル
 
@@ -262,7 +272,7 @@ result/json/
 ### テスト実行
 
 ```bash
-pixi run test              # 全テスト（974件: 16 i18n + 3 i18n API + 955 既存）
+pixi run test              # 全テスト（1319件）
 pixi run lint              # ruff lint
 pixi run format            # ruff format
 ```
@@ -291,18 +301,20 @@ pixi run lab
 
 ## API エンドポイント
 
-38エンドポイント + WebSocketを提供（詳細は http://localhost:8000/docs 参照）：
+42+エンドポイント + WebSocketを提供（詳細は http://localhost:8000/docs 参照）：
 
 ### 新機能 ✨
 - `GET /api/v1/i18n/{language}` - 翻訳辞書取得（en/ja）
 - `POST /api/v1/pipeline/run` - パイプライン非同期実行
 - `WS /ws/pipeline` - リアルタイム進捗配信
 - `GET /static/pipeline_monitor_i18n.html` - 監視UI
+- `GET /static/portfolio.html` - ポートフォリオSPA
 
 ### 人物関連
 - `GET /api/v1/persons` - 全人物スコア一覧（ページネーション）
 - `GET /api/v1/persons/search` - 人物検索
 - `GET /api/v1/persons/{id}` - プロフィール詳細
+- `GET /api/v1/persons/{id}/profile` - 個人貢献プロファイル（二層モデル）
 - `GET /api/v1/persons/{id}/similar` - 類似人物
 - `GET /api/v1/persons/{id}/history` - スコア履歴
 - `GET /api/v1/persons/{id}/network` - ネットワーク分析
@@ -338,6 +350,16 @@ pixi run lab
 - `GET /api/v1/genre-affinity` - ジャンル親和性
 - `GET /api/v1/productivity` - 生産性
 
+### データ品質・監視
+- `GET /api/v1/freshness` - データソース鮮度
+- `GET /api/v1/studio-disparity` - スタジオ間待遇差分析
+
+### Neo4j
+- `GET /api/v1/neo4j/path` - 最短パス検索
+- `GET /api/v1/neo4j/common` - 共通コラボレーター
+- `GET /api/v1/neo4j/neighborhood` - 近傍探索
+- `GET /api/v1/neo4j/stats` - グラフ統計
+
 ### ユーティリティ
 - `GET /api/v1/compare` - 2人のスコア比較
 - `GET /api/v1/recommend` - 推薦
@@ -346,7 +368,7 @@ pixi run lab
 
 ## CLI コマンド
 
-21コマンドを提供（全て `--lang en/ja` オプション対応）：
+22コマンドを提供（全て `--lang en/ja` オプション対応）：
 
 ### 基本コマンド
 - `stats` - データベース統計（i18n対応 ✨）
@@ -376,6 +398,7 @@ pixi run lab
 ### ユーティリティ
 - `export` - エクスポート
 - `performance` - パフォーマンスレポート表示 ✨
+- `freshness` - データソース鮮度チェック ✨
 - `neo4j-export` - Neo4jエクスポート
 - `neo4j-query` - Neo4jクエリ実行
 - `neo4j-stats` - Neo4j統計表示
@@ -396,7 +419,8 @@ pixi run lab
 - **リアルタイム通信**: WebSocket（進捗配信）
 - **パフォーマンス**: 詳細メトリクス追跡（percentile, memory delta）
 - **DB**: SQLite (WAL mode)
-- **テスト**: pytest (974 tests)
+- **高速化**: Rust拡張 (PyO3/maturin, rayon並列)
+- **テスト**: pytest (1319 tests)
 - **Lint/Format**: ruff
 
 ## ディレクトリ構成
@@ -405,7 +429,7 @@ pixi run lab
 animetor_eval/
 ├── src/
 │   ├── pipeline_phases/     # 10フェーズモジュール
-│   ├── analysis/            # 37+ 分析モジュール
+│   ├── analysis/            # 41+ 分析モジュール
 │   ├── scrapers/            # データ収集（4ソース）
 │   ├── utils/               # ユーティリティ
 │   ├── i18n/                # 国際化（EN/JA翻訳） ✨
@@ -418,8 +442,12 @@ animetor_eval/
 │   └── ...
 ├── static/                  # フロントエンド（HTML/JS） ✨
 │   ├── pipeline_monitor.html       # パイプライン監視UI（JA）
-│   └── pipeline_monitor_i18n.html  # 多言語対応UI（EN/JA切替）
-├── tests/                   # 974 テスト（+19 i18n）
+│   ├── pipeline_monitor_i18n.html  # 多言語対応UI（EN/JA切替）
+│   ├── portfolio.html              # ポートフォリオSPA ✨
+│   └── portfolio.js                # ポートフォリオJS ✨
+├── rust_ext/                # Rust拡張 (PyO3/maturin) ✨
+├── benchmarks/              # パフォーマンスベンチマーク ✨
+├── tests/                   # 1319 テスト
 ├── result/
 │   ├── db/                  # SQLite DB
 │   ├── json/                # 26 JSON出力 + パフォーマンスレポート ✨
