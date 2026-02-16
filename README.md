@@ -1,286 +1,286 @@
 # Animetor Eval
 
-> アニメ業界人物評価システム — 個人の貢献を可視化し、適正な報酬と業界の健全化を支援する
+> Anime industry professional evaluation system — Making individual contributions visible to support fair compensation and a healthier industry
 
 [![Tests](https://img.shields.io/badge/tests-1319%20passing-success)](https://github.com/kasi-x/animetor_eval)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-## 概要
+## Overview
 
-**Animetor Eval** は、アニメ業界の制作者（アニメーター、監督など）の貢献を**クレジットデータ**に基づいて可視化・定量化するシステムです。個人にフォーカスを当て、スタジオが適正な報酬を支払う根拠を提供し、業界の健全化に貢献します。業界を信頼ネットワークとしてモデル化し、以下の3軸でスコアリングします：
+**Animetor Eval** is a system that visualizes and quantifies the contributions of anime industry professionals (animators, directors, etc.) based on **credit data**. It focuses on individuals, providing studios with evidence for fair compensation and contributing to a healthier industry. The industry is modeled as a trust network and scored across three axes:
 
-| 軸 | アルゴリズム | 測定対象 |
+| Axis | Algorithm | What It Measures |
 |---|---|---|
-| **Authority（権威）** | Weighted PageRank | 著名な監督・作品との協業距離 |
-| **Trust（信頼）** | Repeat Engagement | 同じ監督からの継続起用回数 |
-| **Skill（技量）** | OpenSkill (PlackettLuce) | 近年のプロジェクト貢献・成長軌道 |
+| **Authority** | Weighted PageRank | Proximity to prominent directors and works in the collaboration graph |
+| **Trust** | Repeat Engagement | Number of repeat engagements by the same directors |
+| **Skill** | OpenSkill (PlackettLuce) | Recent project contributions and growth trajectory |
 
-### 重要な原則
+### Core Principles
 
-- ⚖️ **客観性**: 公開されたクレジットデータのみを使用
-- 🔢 **ネットワーク指標**: スコアは「能力」ではなく「ネットワーク上の位置・密度」を表す
-- 🎯 **用途**: 個人の貢献を可視化し、適正な報酬と業界の健全化に資する（公益目的）
-- ⚠️ **法的配慮**: 名寄せの精度は信用毀損リスクに直結するため保守的に実装
+- **Objectivity**: Uses only publicly available credit data
+- **Network metrics**: Scores represent network position and density, not "ability"
+- **Purpose**: Visualize individual contributions to support fair compensation and industry health (public benefit)
+- **Legal considerations**: Entity resolution accuracy is implemented conservatively due to defamation risk
 
-## 主な機能
+## Key Features
 
-- 📊 **二層評価モデル**: Layer 1 (Authority × Trust × Skill) + Layer 2 (個人貢献指標)
-- 🎯 **個人貢献指標**: ピア比較パーセンタイル、機会統制残差、一貫性、独立貢献度
-- 🔍 **エンティティ解決**: 5段階の名寄せ（完全一致 → クロスソース → ローマ字 → 類似度 → AI支援）
-- 📈 **キャリア分析**: 役職遷移、成長トレンド、マイルストーン検出
-- 🕸️ **ネットワーク分析**: コラボレーション強度、監督サークル、ブリッジ検出
-- 🎨 **可視化**: 23種のmatplotlib静的チャート + 6種のPlotlyインタラクティブ可視化
-- 🚀 **並列実行**: ThreadPoolExecutorによる20モジュール同時実行（4-6倍高速化）
-- 🦀 **Rust拡張**: PyO3/maturinによるグラフアルゴリズム高速化（50-100倍）
-- 📡 **WebSocket監視**: リアルタイムパイプライン進捗配信（10フェーズ追跡）
-- 🌐 **国際化 (i18n)**: 英語・日本語完全対応（CLI・API・フロントエンド）
-- 📊 **パフォーマンス監視**: 詳細メトリクス（パーセンタイル、メモリデルタ、キャッシュ統計）
-- 🔌 **REST API**: 42+エンドポイント（FastAPI + WebSocket）
-- 💻 **CLI**: 22コマンド（typer + Rich）
-- 🖥️ **フロントエンド**: ポートフォリオSPA（検索・プロフィール・ランキング）
+- **Two-layer evaluation model**: Layer 1 (Authority x Trust x Skill) + Layer 2 (Individual contribution metrics)
+- **Individual contribution metrics**: Peer comparison percentile, opportunity-controlled residual, consistency, independent contribution
+- **Entity resolution**: 5-step name matching (exact match -> cross-source -> romaji -> similarity -> AI-assisted)
+- **Career analysis**: Role transitions, growth trends, milestone detection
+- **Network analysis**: Collaboration intensity, director circles, bridge detection
+- **Visualization**: 23 matplotlib static charts + 6 Plotly interactive visualizations
+- **Parallel execution**: 20 modules running concurrently via ThreadPoolExecutor (4-6x speedup)
+- **Rust extension**: Graph algorithm acceleration via PyO3/maturin (50-100x speedup)
+- **WebSocket monitoring**: Real-time pipeline progress broadcasting (10-phase tracking)
+- **Internationalization (i18n)**: Full English/Japanese support (CLI, API, frontend)
+- **Performance monitoring**: Detailed metrics (percentiles, memory delta, cache statistics)
+- **REST API**: 42+ endpoints (FastAPI + WebSocket)
+- **CLI**: 22 commands (typer + Rich)
+- **Frontend**: Portfolio SPA (search, profile, ranking)
 
-## クイックスタート
+## Quick Start
 
-### 必要環境
+### Requirements
 
 - Python 3.12+
-- [pixi](https://pixi.sh/) パッケージマネージャー
+- [pixi](https://pixi.sh/) package manager
 
-### インストール
+### Installation
 
 ```bash
-# リポジトリをクローン
+# Clone the repository
 git clone https://github.com/kasi-x/animetor_eval.git
 cd animetor_eval
 
-# 依存パッケージをインストール
+# Install dependencies
 pixi install
 
-# テスト実行（1319件、約270秒）
+# Run tests (1319 tests, ~270 seconds)
 pixi run test
 ```
 
-### パイプライン実行
+### Running the Pipeline
 
 ```bash
-# 全パイプライン実行（スコア計算 + JSON出力）
+# Run full pipeline (score calculation + JSON output)
 pixi run pipeline
 
-# 可視化付き実行
+# Run with visualizations
 pixi run pipeline-viz
 
-# インクリメンタルモード（データ変更なしならスキップ）
+# Incremental mode (skip if no data changes)
 pixi run pipeline-inc
 
-# クラッシュ再開モード
+# Resume from crash checkpoint
 pixi run pipeline-resume
 
-# データ検証のみ（--dry-run）
+# Data validation only (--dry-run)
 pixi run validate
 ```
 
-### CLI 使用例
+### CLI Usage Examples
 
 ```bash
-# ランキング表示（トップ20）
+# Show ranking (top 20)
 pixi run ranking
 
-# 特定人物のプロフィール
+# Person profile
 pixi run profile "宮崎駿"
 
-# 人物検索
+# Search for a person
 pixi run search "田中"
 
-# 類似人物検索
+# Find similar persons
 pixi run similar "person_id_123"
 
-# スコア比較（2人）
+# Compare scores (2 persons)
 pixi run compare "person_1" "person_2"
 
-# キャリアタイムライン
+# Career timeline
 pixi run timeline "person_id_123"
 
-# データベース統計
+# Database statistics
 pixi run stats
 ```
 
-### API サーバー起動
+### Starting the API Server
 
 ```bash
 pixi run api
 
-# ブラウザで http://localhost:8000/docs にアクセス
-# OpenAPI (Swagger) ドキュメントが表示されます
+# Open http://localhost:8000/docs in your browser
+# OpenAPI (Swagger) documentation will be displayed
 ```
 
-## 新機能
+## Highlights
 
-### 📡 WebSocketリアルタイム監視
+### WebSocket Real-Time Monitoring
 
-パイプライン実行中の進捗をリアルタイムで表示：
+View pipeline progress in real time during execution:
 
 ```bash
-# APIサーバー起動後
-# http://localhost:8000/static/pipeline_monitor_i18n.html にアクセス
+# After starting the API server
+# Visit http://localhost:8000/static/pipeline_monitor_i18n.html
 ```
 
-**機能**:
-- 10フェーズの進捗追跡（データ読み込み → 出力・可視化）
-- 各フェーズの実行時間（ミリ秒）
-- リアルタイムログ表示
-- 美しいグラデーションUI
-- 言語切り替え（EN/JA）
+**Features**:
+- 10-phase progress tracking (data loading -> export/visualization)
+- Execution time per phase (milliseconds)
+- Real-time log display
+- Gradient UI
+- Language switcher (EN/JA)
 
-**WebSocket エンドポイント**: `ws://localhost:8000/ws/pipeline`
+**WebSocket endpoint**: `ws://localhost:8000/ws/pipeline`
 
-### 🌐 国際化 (i18n)
+### Internationalization (i18n)
 
-完全な多言語対応（英語・日本語）：
+Full multilingual support (English and Japanese):
 
 **CLI**:
 ```bash
-# 英語で表示
+# Display in English
 animetor-eval stats --lang en
 
-# 日本語で表示
+# Display in Japanese
 animetor-eval stats --lang ja
 
-# 環境変数から自動検出
+# Auto-detect from environment variable
 export ANIMETOR_LANG=ja
 animetor-eval stats
 ```
 
 **API**:
 ```bash
-# 翻訳辞書を取得
+# Get translation dictionary
 curl http://localhost:8000/api/i18n/en
 curl http://localhost:8000/api/i18n/ja
 ```
 
-**フロントエンド**: 言語切り替えボタンでリアルタイム切り替え
+**Frontend**: Real-time language switching via toggle button
 
-### 📊 パフォーマンス監視
+### Performance Monitoring
 
-詳細なパフォーマンスメトリクス：
+Detailed performance metrics:
 
 ```bash
-# 最新のパフォーマンスレポート表示
+# Show latest performance report
 animetor-eval performance
 
-# 全レポート一覧
+# List all reports
 animetor-eval performance --all
 
-# 特定レポート表示
+# Show specific report
 animetor-eval performance --file performance_20260210_123456.json
 ```
 
-**追跡メトリクス**:
-- **タイミング**: 中央値、P95、P99、標準偏差
-- **メモリ**: RSS、VMS、使用率、デルタ
-- **キャッシュ**: ヒット率、ヒット/ミス数
-- **カウンタ**: カスタムメトリクス
+**Tracked metrics**:
+- **Timing**: Median, P95, P99, standard deviation
+- **Memory**: RSS, VMS, usage, delta
+- **Cache**: Hit rate, hits/misses
+- **Counters**: Custom metrics
 
-**自動エクスポート**: パイプライン実行後に `result/json/performance_TIMESTAMP.json` に保存
+**Auto-export**: Saved to `result/json/performance_TIMESTAMP.json` after pipeline execution
 
-## アーキテクチャ
+## Architecture
 
-### パイプライン構成（10フェーズ）
+### Pipeline (10 Phases)
 
 ```
 src/pipeline_phases/
-├── data_loading.py          # Phase 1: DBからデータロード
-├── validation.py            # Phase 2: データ品質チェック
-├── entity_resolution.py     # Phase 3: 名寄せ（5段階）
-├── graph_construction.py    # Phase 4: NetworkXグラフ構築
-├── core_scoring.py          # Phase 5: Authority/Trust/Skill計算
-├── supplementary_metrics.py # Phase 6: 8種の補助メトリクス
-├── result_assembly.py       # Phase 7: 結果データ組み立て
-├── post_processing.py       # Phase 8: パーセンタイル、信頼区間
-├── analysis_modules.py      # Phase 9: 20分析モジュール（並列実行）
-└── export_and_viz.py        # Phase 10: JSON出力 + 可視化
+├── data_loading.py          # Phase 1: Load data from DB
+├── validation.py            # Phase 2: Data quality checks
+├── entity_resolution.py     # Phase 3: Name deduplication (5-step)
+├── graph_construction.py    # Phase 4: NetworkX graph construction
+├── core_scoring.py          # Phase 5: Authority/Trust/Skill calculation
+├── supplementary_metrics.py # Phase 6: 8 supplementary metrics
+├── result_assembly.py       # Phase 7: Result data assembly
+├── post_processing.py       # Phase 8: Percentiles, confidence intervals
+├── analysis_modules.py      # Phase 9: 20 analysis modules (parallel)
+└── export_and_viz.py        # Phase 10: JSON export + visualization
 ```
 
-### グラフモデル
+### Graph Model
 
-- **ノード**: アニメーター、監督、作品（アニメタイトル）
-- **エッジ**: 作品参加関係、役職（24種類）、協業関係
-- **エッジ重み**: 監督著名度ボーナス、継続協業ボーナス、役職ベース重み付け
+- **Nodes**: Animators, directors, works (anime titles)
+- **Edges**: Work participation, roles (24 types), collaboration relationships
+- **Edge weights**: Director prominence bonus, repeat collaboration bonus, role-based weighting
 
-### データソース
+### Data Sources
 
 - [AniList](https://anilist.co/) GraphQL API
-- [Jikan](https://jikan.moe/) (MAL非公式REST API)
-- [メディア芸術データベース](https://mediaarts-db.bunka.go.jp/) SPARQL
+- [Jikan](https://jikan.moe/) (unofficial MAL REST API)
+- [Media Arts Database](https://mediaarts-db.bunka.go.jp/) JSON-LD dump
 - [Wikidata](https://www.wikidata.org/) SPARQL (JVMG)
 
-## パフォーマンス最適化
+## Performance Optimizations
 
-プロジェクトは包括的なリファクタリング（Phase 1-4 + 並列化）を完了し、以下の最適化を実現：
+The project has undergone comprehensive refactoring (Phases 1-4 + parallelization) achieving the following optimizations:
 
-| 最適化 | 手法 | 効果 |
+| Optimization | Method | Impact |
 |---|---|---|
-| **グラフ構築** | エッジの事前集約 | 3-5倍高速化 |
-| **名寄せ** | 先頭文字ブロッキング + LRUキャッシュ | 10-100倍高速化 |
-| **Trust計算** | 定数の巻き上げ + 事前計算 | 40-50%高速化 |
-| **分析フェーズ** | ThreadPoolExecutor（20並列） | 4-6倍高速化 |
-| **API応答** | TTLキャッシュ（300秒） | 30-50%高速化 |
-| **Rust拡張** | PyO3/maturin + rayon並列 | 50-100倍高速化 |
+| **Graph construction** | Pre-aggregate edges | 3-5x speedup |
+| **Entity resolution** | First-character blocking + LRU cache | 10-100x speedup |
+| **Trust calculation** | Constant hoisting + precomputation | 40-50% speedup |
+| **Analysis phase** | ThreadPoolExecutor (20 parallel) | 4-6x speedup |
+| **API responses** | TTL cache (300s) | 30-50% speedup |
+| **Rust extension** | PyO3/maturin + rayon parallel | 50-100x speedup |
 
-## 出力ファイル
+## Output Files
 
-### JSON (26ファイル)
+### JSON (26 files)
 
 ```
 result/json/
-├── scores.json              # 全人物スコア（composite降順）
-├── circles.json             # 監督サークル
-├── anime_stats.json         # アニメ品質統計
-├── summary.json             # パイプライン実行サマリー
-├── transitions.json         # 役職遷移分析
-├── influence.json           # 影響力ツリー
-├── crossval.json            # クロスバリデーション結果
-├── studios.json             # スタジオ分析
-├── seasonal.json            # 季節トレンド
-├── collaborations.json      # 協業ペア（トップ500）
-├── outliers.json            # 統計的外れ値
-├── teams.json               # チーム構成パターン
-├── growth.json              # 成長トレンド
-├── time_series.json         # 時系列分析
-├── decades.json             # 年代別分析
-├── tags.json                # 人物タグ（自動ラベリング）
-├── role_flow.json           # 役職フロー分析
-├── bridges.json             # ブリッジノード検出
-├── mentorships.json         # メンター関係推論
-├── milestones.json          # キャリアマイルストーン
-├── network_evolution.json   # ネットワーク進化
-├── genre_affinity.json      # ジャンル親和性
-├── productivity.json        # 生産性メトリクス
-├── performance.json         # パフォーマンスモニタリング
-├── graphml/                 # GraphMLエクスポート（Neo4j互換）
+├── scores.json              # All person scores (sorted by composite)
+├── circles.json             # Director circles
+├── anime_stats.json         # Anime quality statistics
+├── summary.json             # Pipeline execution summary
+├── transitions.json         # Role transition analysis
+├── influence.json           # Influence tree
+├── crossval.json            # Cross-validation results
+├── studios.json             # Studio analysis
+├── seasonal.json            # Seasonal trends
+├── collaborations.json      # Collaboration pairs (top 500)
+├── outliers.json            # Statistical outliers
+├── teams.json               # Team composition patterns
+├── growth.json              # Growth trends
+├── time_series.json         # Time series analysis
+├── decades.json             # Decade-by-decade analysis
+├── tags.json                # Person tags (auto-labeling)
+├── role_flow.json           # Role flow analysis
+├── bridges.json             # Bridge node detection
+├── mentorships.json         # Mentor relationship inference
+├── milestones.json          # Career milestones
+├── network_evolution.json   # Network evolution
+├── genre_affinity.json      # Genre affinity
+├── productivity.json        # Productivity metrics
+├── performance.json         # Performance monitoring
+├── graphml/                 # GraphML export (Neo4j compatible)
 └── ...
 ```
 
-### その他
+### Other Outputs
 
-- **CSV**: `scores.csv` (UTF-8 BOM、パーセンタイル付き)
-- **SQLite**: `result/db/animetor_eval.db` (スコア履歴、実行履歴)
-- **Visualization**: `result/visualizations/*.png` (23種 + 6種HTML)
+- **CSV**: `scores.csv` (UTF-8 BOM, with percentiles)
+- **SQLite**: `result/db/animetor_eval.db` (score history, execution history)
+- **Visualization**: `result/visualizations/*.png` (23 static + 6 interactive HTML)
 
-## 開発
+## Development
 
-### テスト実行
+### Running Tests
 
 ```bash
-pixi run test              # 全テスト（1319件）
+pixi run test              # All tests (1319)
 pixi run lint              # ruff lint
 pixi run format            # ruff format
 ```
 
-### 合成データ生成
+### Generating Synthetic Data
 
 ```bash
-# テスト・デモ用の合成データ生成
+# Generate synthetic data for testing/demo
 pixi run python -c "
 from src.synthetic import generate_synthetic_data
 persons, anime, credits = generate_synthetic_data(
@@ -296,206 +296,206 @@ print(f'Generated {len(persons)} persons, {len(anime)} anime, {len(credits)} cre
 
 ```bash
 pixi run lab
-# 分析ノートブックは result/notebooks/ に保存
+# Analysis notebooks are saved in result/notebooks/
 ```
 
-## API エンドポイント
+## API Endpoints
 
-42+エンドポイント + WebSocketを提供（詳細は http://localhost:8000/docs 参照）：
+42+ endpoints + WebSocket (see http://localhost:8000/docs for details):
 
-### 新機能 ✨
-- `GET /api/i18n/{language}` - 翻訳辞書取得（en/ja）
-- `POST /api/pipeline/run` - パイプライン非同期実行
-- `WS /ws/pipeline` - リアルタイム進捗配信
-- `GET /static/pipeline_monitor_i18n.html` - 監視UI
-- `GET /static/portfolio.html` - ポートフォリオSPA
+### New
+- `GET /api/i18n/{language}` - Get translation dictionary (en/ja)
+- `POST /api/pipeline/run` - Async pipeline execution
+- `WS /ws/pipeline` - Real-time progress broadcasting
+- `GET /static/pipeline_monitor_i18n.html` - Monitoring UI
+- `GET /static/portfolio.html` - Portfolio SPA
 
-### 人物関連
-- `GET /api/persons` - 全人物スコア一覧（ページネーション）
-- `GET /api/persons/search` - 人物検索
-- `GET /api/persons/{id}` - プロフィール詳細
-- `GET /api/persons/{id}/profile` - 個人貢献プロファイル（二層モデル）
-- `GET /api/persons/{id}/similar` - 類似人物
-- `GET /api/persons/{id}/history` - スコア履歴
-- `GET /api/persons/{id}/network` - ネットワーク分析
-- `GET /api/persons/{id}/milestones` - キャリアマイルストーン
+### Persons
+- `GET /api/persons` - All person scores (paginated)
+- `GET /api/persons/search` - Person search
+- `GET /api/persons/{id}` - Profile details
+- `GET /api/persons/{id}/profile` - Individual contribution profile (two-layer model)
+- `GET /api/persons/{id}/similar` - Similar persons
+- `GET /api/persons/{id}/history` - Score history
+- `GET /api/persons/{id}/network` - Network analysis
+- `GET /api/persons/{id}/milestones` - Career milestones
 
-### ランキング・統計
-- `GET /api/ranking` - ランキング（フィルタ対応）
-- `GET /api/stats` - DB統計
-- `GET /api/summary` - パイプラインサマリー
-- `GET /api/data-quality` - データ品質レポート
+### Ranking & Statistics
+- `GET /api/ranking` - Ranking (with filters)
+- `GET /api/stats` - DB statistics
+- `GET /api/summary` - Pipeline summary
+- `GET /api/data-quality` - Data quality report
 
-### アニメ関連
-- `GET /api/anime` - アニメ統計一覧
-- `GET /api/anime/{id}` - アニメ詳細
+### Anime
+- `GET /api/anime` - Anime statistics list
+- `GET /api/anime/{id}` - Anime details
 
-### 分析
-- `GET /api/transitions` - 役職遷移
-- `GET /api/crossval` - クロスバリデーション
-- `GET /api/influence` - 影響力ツリー
-- `GET /api/studios` - スタジオ分析
-- `GET /api/seasonal` - 季節トレンド
-- `GET /api/collaborations` - 協業ペア
-- `GET /api/outliers` - 外れ値検出
-- `GET /api/teams` - チーム分析
-- `GET /api/growth` - 成長トレンド
-- `GET /api/time-series` - 時系列
-- `GET /api/decades` - 年代別
-- `GET /api/tags` - 人物タグ
-- `GET /api/role-flow` - 役職フロー
-- `GET /api/bridges` - ブリッジ検出
-- `GET /api/mentorships` - メンター関係
-- `GET /api/network-evolution` - ネットワーク進化
-- `GET /api/genre-affinity` - ジャンル親和性
-- `GET /api/productivity` - 生産性
+### Analysis
+- `GET /api/transitions` - Role transitions
+- `GET /api/crossval` - Cross-validation
+- `GET /api/influence` - Influence tree
+- `GET /api/studios` - Studio analysis
+- `GET /api/seasonal` - Seasonal trends
+- `GET /api/collaborations` - Collaboration pairs
+- `GET /api/outliers` - Outlier detection
+- `GET /api/teams` - Team analysis
+- `GET /api/growth` - Growth trends
+- `GET /api/time-series` - Time series
+- `GET /api/decades` - Decade-by-decade
+- `GET /api/tags` - Person tags
+- `GET /api/role-flow` - Role flow
+- `GET /api/bridges` - Bridge detection
+- `GET /api/mentorships` - Mentor relationships
+- `GET /api/network-evolution` - Network evolution
+- `GET /api/genre-affinity` - Genre affinity
+- `GET /api/productivity` - Productivity
 
-### データ品質・監視
-- `GET /api/freshness` - データソース鮮度
-- `GET /api/studio-disparity` - スタジオ間待遇差分析
+### Data Quality & Monitoring
+- `GET /api/freshness` - Data source freshness
+- `GET /api/studio-disparity` - Inter-studio compensation disparity analysis
 
 ### Neo4j
-- `GET /api/neo4j/path` - 最短パス検索
-- `GET /api/neo4j/common` - 共通コラボレーター
-- `GET /api/neo4j/neighborhood` - 近傍探索
-- `GET /api/neo4j/stats` - グラフ統計
+- `GET /api/neo4j/path` - Shortest path search
+- `GET /api/neo4j/common` - Common collaborators
+- `GET /api/neo4j/neighborhood` - Neighborhood exploration
+- `GET /api/neo4j/stats` - Graph statistics
 
-### ユーティリティ
-- `GET /api/compare` - 2人のスコア比較
-- `GET /api/recommend` - 推薦
-- `GET /api/predict` - 予測
-- `GET /api/health` - ヘルスチェック
+### Utilities
+- `GET /api/compare` - Compare scores of 2 persons
+- `GET /api/recommend` - Recommendations
+- `GET /api/predict` - Predictions
+- `GET /api/health` - Health check
 
-## CLI コマンド
+## CLI Commands
 
-22コマンドを提供（全て `--lang en/ja` オプション対応）：
+22 commands available (all support `--lang en/ja` option):
 
-### 基本コマンド
-- `stats` - データベース統計（i18n対応 ✨）
-- `ranking` - スコアランキング
-- `profile` - 人物プロフィール
-- `search` - 人物検索
-- `compare` - スコア比較
-- `similar` - 類似人物検索
+### Basic
+- `stats` - Database statistics (i18n supported)
+- `ranking` - Score ranking
+- `profile` - Person profile
+- `search` - Person search
+- `compare` - Score comparison
+- `similar` - Similar person search
 
-### キャリア分析
-- `timeline` - キャリアタイムライン
-- `history` - スコア履歴
-- `milestones` - マイルストーン
-- `productivity` - 生産性分析
+### Career Analysis
+- `timeline` - Career timeline
+- `history` - Score history
+- `milestones` - Milestones
+- `productivity` - Productivity analysis
 
-### ネットワーク分析
-- `bridges` - ブリッジ検出
-- `mentorships` - メンター関係
-- `net-evolution` - ネットワーク進化
-- `genre-affinity` - ジャンル親和性
+### Network Analysis
+- `bridges` - Bridge detection
+- `mentorships` - Mentor relationships
+- `net-evolution` - Network evolution
+- `genre-affinity` - Genre affinity
 
-### 検証・分析
-- `crossval` - クロスバリデーション
-- `influence` - 影響力ツリー
-- `validate` - データ検証
+### Validation & Analysis
+- `crossval` - Cross-validation
+- `influence` - Influence tree
+- `validate` - Data validation
 
-### ユーティリティ
-- `export` - エクスポート
-- `performance` - パフォーマンスレポート表示 ✨
-- `freshness` - データソース鮮度チェック ✨
-- `neo4j-export` - Neo4jエクスポート
-- `neo4j-query` - Neo4jクエリ実行
-- `neo4j-stats` - Neo4j統計表示
+### Utilities
+- `export` - Export
+- `performance` - Performance report
+- `freshness` - Data source freshness check
+- `neo4j-export` - Neo4j export
+- `neo4j-query` - Neo4j query execution
+- `neo4j-stats` - Neo4j statistics
 
-## 技術スタック
+## Tech Stack
 
-- **言語**: Python 3.12
-- **パッケージ管理**: pixi (conda-forge + pypi)
-- **グラフ**: NetworkX
-- **スコアリング**: OpenSkill (PlackettLuce)
-- **データモデル**: Pydantic v2
+- **Language**: Python 3.12
+- **Package management**: pixi (conda-forge + pypi)
+- **Graph**: NetworkX
+- **Scoring**: OpenSkill (PlackettLuce)
+- **Data models**: Pydantic v2
 - **HTTP**: httpx (async)
-- **ログ**: structlog
-- **CLI**: typer + Rich（i18n対応）
+- **Logging**: structlog
+- **CLI**: typer + Rich (i18n supported)
 - **API**: FastAPI + uvicorn + WebSocket
-- **可視化**: matplotlib + Plotly
-- **国際化**: JSON-based i18n (EN/JA)
-- **リアルタイム通信**: WebSocket（進捗配信）
-- **パフォーマンス**: 詳細メトリクス追跡（percentile, memory delta）
+- **Visualization**: matplotlib + Plotly
+- **Internationalization**: JSON-based i18n (EN/JA)
+- **Real-time communication**: WebSocket (progress broadcasting)
+- **Performance**: Detailed metrics tracking (percentile, memory delta)
 - **DB**: SQLite (WAL mode)
-- **高速化**: Rust拡張 (PyO3/maturin, rayon並列)
-- **テスト**: pytest (1319 tests)
+- **Acceleration**: Rust extension (PyO3/maturin, rayon parallel)
+- **Testing**: pytest (1319 tests)
 - **Lint/Format**: ruff
 
-## ディレクトリ構成
+## Directory Structure
 
 ```
 animetor_eval/
 ├── src/
-│   ├── pipeline_phases/     # 10フェーズモジュール
-│   ├── analysis/            # 41+ 分析モジュール
-│   ├── scrapers/            # データ収集（4ソース）
-│   ├── utils/               # ユーティリティ
-│   ├── i18n/                # 国際化（EN/JA翻訳） ✨
-│   ├── models.py            # Pydantic データモデル
+│   ├── pipeline_phases/     # 10-phase modules
+│   ├── analysis/            # 41+ analysis modules
+│   ├── scrapers/            # Data collection (4 sources)
+│   ├── utils/               # Utilities
+│   ├── i18n/                # Internationalization (EN/JA)
+│   ├── models.py            # Pydantic data models
 │   ├── database.py          # SQLite DAO
-│   ├── pipeline.py          # オーケストレーター
-│   ├── api.py               # FastAPI サーバー + WebSocket ✨
-│   ├── cli.py               # CLI エントリーポイント（i18n対応） ✨
-│   ├── websocket_manager.py # WebSocket管理 ✨
+│   ├── pipeline.py          # Orchestrator
+│   ├── api.py               # FastAPI server + WebSocket
+│   ├── cli.py               # CLI entry point (i18n supported)
+│   ├── websocket_manager.py # WebSocket manager
 │   └── ...
-├── static/                  # フロントエンド（HTML/JS） ✨
-│   ├── pipeline_monitor.html       # パイプライン監視UI（JA）
-│   ├── pipeline_monitor_i18n.html  # 多言語対応UI（EN/JA切替）
-│   ├── portfolio.html              # ポートフォリオSPA ✨
-│   └── portfolio.js                # ポートフォリオJS ✨
-├── rust_ext/                # Rust拡張 (PyO3/maturin) ✨
-├── benchmarks/              # パフォーマンスベンチマーク ✨
-├── tests/                   # 1319 テスト
+├── static/                  # Frontend (HTML/JS)
+│   ├── pipeline_monitor.html       # Pipeline monitoring UI (JA)
+│   ├── pipeline_monitor_i18n.html  # Multilingual UI (EN/JA switcher)
+│   ├── portfolio.html              # Portfolio SPA
+│   └── portfolio.js                # Portfolio JS
+├── rust_ext/                # Rust extension (PyO3/maturin)
+├── benchmarks/              # Performance benchmarks
+├── tests/                   # 1319 tests
 ├── result/
 │   ├── db/                  # SQLite DB
-│   ├── json/                # 26 JSON出力 + パフォーマンスレポート ✨
-│   ├── visualizations/      # 可視化ファイル
-│   └── notebooks/           # Jupyter ノートブック
-├── docs/                    # ドキュメント
-├── CLAUDE.md                # Claude Code 向け指示
-├── TODO.md                  # タスク管理
-└── pixi.toml                # 依存関係定義
+│   ├── json/                # 26 JSON outputs + performance reports
+│   ├── visualizations/      # Visualization files
+│   └── notebooks/           # Jupyter notebooks
+├── docs/                    # Documentation
+├── CLAUDE.md                # Claude Code instructions
+├── TODO.md                  # Task management
+└── pixi.toml                # Dependency definitions
 ```
 
-## 法的留意事項
+## Legal Considerations
 
-### データソース
-- 公開されたクレジットデータのみを使用
-- スクレイピングはレート制限を厳守（AniList: 90req/min, Jikan: 3req/s）
+### Data Sources
+- Uses only publicly available credit data
+- Scraping strictly adheres to rate limits (AniList: 90 req/min, Jikan: 3 req/s)
 
-### スコアの解釈
-- スコアは**ネットワーク上の位置・密度指標**であり、「能力」や「才能」を測定するものではありません
-- 出力には必ず以下の免責事項を含めます：
+### Score Interpretation
+- Scores are **network position and density metrics**, not measurements of "ability" or "talent"
+- All outputs include the following disclaimer:
 
-> **免責事項**: 本スコアはクレジットデータに基づくネットワーク密度・位置指標であり、個人の能力や才能を評価するものではありません。個人の貢献を可視化し、適正な報酬と業界の健全化に資することを目的としています。
+> **Disclaimer**: These scores are network density and position metrics based on credit data. They do not evaluate individual ability or talent. The purpose is to visualize individual contributions to support fair compensation and a healthier industry.
 
-### 名寄せの精度
-- 誤った名寄せ（false positive）は信用毀損リスクに直結
-- 5段階の保守的な名寄せプロセスを実装
-- AI支援は最小信頼度0.8、同一ソース内のみで適用
+### Entity Resolution Accuracy
+- False positive matches directly create defamation risk
+- 5-step conservative name matching process implemented
+- AI assistance applied only with minimum confidence 0.8, within same source
 
-## ライセンス
+## License
 
 MIT License
 
-## 貢献
+## Contributing
 
-Issue・Pull Requestを歓迎します。
+Issues and Pull Requests are welcome.
 
-## 参考文献
+## References
 
 - Page, L., Brin, S., et al. (1999). "The PageRank Citation Ranking"
 - Weng, R.C., Lin, C.J. (2011). "A Bayesian Approximation Method for Online Ranking"
 - Newman, M.E.J. (2010). "Networks: An Introduction"
 
-## リンク
+## Links
 
-- [ドキュメント](docs/)
-- [API仕様](http://localhost:8000/docs) (サーバー起動後)
+- [Documentation](docs/)
+- [API Specification](http://localhost:8000/docs) (after starting the server)
 - [Issues](https://github.com/kasi-x/animetor_eval/issues)
 
 ---
 
-**Animetor Eval** - アニメ業界のネットワーク分析による客観的評価システム
+**Animetor Eval** - Objective evaluation system for the anime industry through network analysis

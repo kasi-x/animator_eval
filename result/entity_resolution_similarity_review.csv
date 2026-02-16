@@ -1,7 +1,0 @@
-Source ID,Canonical ID,Strategy,Confidence,Source Name JA,Source Name EN,Canonical Name JA,Canonical Name EN,Reason,Correct? (Y/N)
-anilist:p206626,anilist:p118575,similarity,0.85,押田裕一,Yuuichi Oshida,吉田雄一,Yuuichi Yoshida,High similarity: 吉田雄一 ≈ 押田裕一,
-anilist:p211100,anilist:p172939,similarity,0.85,,Khoa Nguyen,,Hoa Nguyen,High similarity: Hoa Nguyen ≈ Khoa Nguyen,
-anilist:p184870,anilist:p184057,similarity,0.85,島亜里沙,Risa Shima,島亜里紗,Arisa Shima,High similarity: 島亜里紗 ≈ 島亜里沙,
-anilist:p136055,anilist:p183389,similarity,0.85,小林由美,Yumi Kobayashi,小林あゆみ,Ayumi Kobayashi,High similarity: 小林あゆみ ≈ 小林由美,
-anilist:p133260,anilist:p152177,similarity,0.85,阿部晃瑳詩,Asashi Abe,阿部雅司,Masashi Abe,High similarity: 阿部雅司 ≈ 阿部晃瑳詩,
-anilist:p150550,anilist:p170275,similarity,0.85,藤田麻貴,Maki Fujita,藤田舞,Mai Fujita,High similarity: 藤田舞 ≈ 藤田麻貴,
