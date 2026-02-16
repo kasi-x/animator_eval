@@ -3,12 +3,17 @@
 メディア芸術データベース LOD: https://mediaarts-db.bunka.go.jp/
 SPARQL エンドポイント: https://mediaarts-db.bunka.go.jp/sparql
 
-注意: エンドポイントの安定性が不明のため、フォールバック処理を含む。
+MADBのcontributorデータはプレーンテキスト（例: "[脚本]仲倉重郎 / [演出]須永 司"）
+であり、構造化された人物URIがないため、テキストパーサーとdeterministic ID生成を使用する。
 """
 
-import asyncio
-import time
+from __future__ import annotations
 
+import asyncio
+import hashlib
+import re
+import time
+import unicodedata
 import httpx
 import structlog
 import typer
@@ -17,54 +22,191 @@ from src.models import Anime, Credit, Person, parse_role
 
 log = structlog.get_logger()
 
-SPARQL_ENDPOINT = "https://mediaarts-db.artmuseums.go.jp/sparql"
-REQUEST_INTERVAL = 1.0  # 秒
+SPARQL_ENDPOINT = "https://mediaarts-db.bunka.go.jp/sparql"
+REQUEST_INTERVAL = 1.0  # 秒（保守的なレート制限）
 
-# アニメ作品とスタッフのクエリ
-ANIME_STAFF_QUERY = """
+# 対象アニメタイプ（正しいオントロジークラス）
+ANIME_TYPES = [
+    "AnimationTVRegularSeries",
+    "AnimationMovie",
+    "AnimationMovieSeries",
+    "AnimationTVSpecialSeries",
+    "AnimationVideoPackageSeries",
+]
+
+# アニメ一覧クエリ（軽量 — タイトル・年・外部IDのみ）
+ANIME_LIST_QUERY = """
 PREFIX schema: <http://schema.org/>
-PREFIX ma: <https://mediaarts-db.bunka.go.jp/data/property/>
-PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+PREFIX madb: <https://mediaarts-db.bunka.go.jp/data/property/>
+PREFIX rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#>
 
-SELECT ?anime ?title ?year ?person ?personName ?role
+SELECT ?anime ?title ?year ?identifier
 WHERE {{
-  ?anime a schema:TVSeries ;
-         schema:genre "アニメーション" ;
+  ?anime rdf:type <https://mediaarts-db.bunka.go.jp/data/class/{anime_type}> ;
          schema:name ?title .
   OPTIONAL {{ ?anime schema:datePublished ?year . }}
-  ?anime schema:contributor ?contribution .
-  ?contribution schema:agent ?person ;
-                schema:roleName ?role .
-  ?person schema:name ?personName .
+  OPTIONAL {{ ?anime madb:externalIdentifier ?identifier . }}
 }}
 LIMIT {limit}
 OFFSET {offset}
 """
 
+# 個別アニメの contributor 取得クエリ
+ANIME_CONTRIBUTOR_QUERY = """
+PREFIX schema: <http://schema.org/>
+PREFIX madb: <https://mediaarts-db.bunka.go.jp/data/property/>
+
+SELECT ?contributor
+WHERE {{
+  <{anime_uri}> schema:contributor ?contributor .
+}}
+"""
+
 app = typer.Typer()
+
+
+def parse_contributor_text(text: str) -> list[tuple[str, str]]:
+    """MADBのcontributorテキストを (role_ja, name_ja) ペアに分解.
+
+    Input:  "[脚本]仲倉重郎 / [演出]須永 司 / [作画監督]数井浩子"
+    Output: [("脚本", "仲倉重郎"), ("演出", "須永 司"), ("作画監督", "数井浩子")]
+
+    各種バリエーションに対応:
+    - 全角ブラケット: ［脚本］→ [脚本]
+    - ブラケットなし: "仲倉重郎" → ("other", "仲倉重郎")
+    - 複数ロール: "[脚本・演出]名前" → [("脚本", "名前"), ("演出", "名前")]
+    """
+    if not text or not text.strip():
+        return []
+
+    # NFKC正規化（全角ブラケット → 半角 etc.）
+    text = unicodedata.normalize("NFKC", text)
+
+    results: list[tuple[str, str]] = []
+
+    # " / " で分割（前後に空白があるスラッシュのみ）
+    # ブラケット内のスラッシュ（[脚本/演出]）は分割しない
+    segments = re.split(r"\s+/\s+", text)
+
+    for segment in segments:
+        segment = segment.strip()
+        if not segment:
+            continue
+
+        # [role]name パターン
+        match = re.match(r"\[([^\]]+)\]\s*(.+)", segment)
+        if match:
+            role_text = match.group(1).strip()
+            name = match.group(2).strip()
+            if not name:
+                continue
+            # 複数ロール対応: "脚本・演出" → ["脚本", "演出"]
+            roles = re.split(r"[・/]", role_text)
+            for role in roles:
+                role = role.strip()
+                if role:
+                    results.append((role, name))
+        else:
+            # ブラケットなし → role="other"
+            name = segment.strip()
+            if name:
+                results.append(("other", name))
+
+    return results
+
+
+def make_madb_person_id(name_ja: str) -> str:
+    """正規化した名前のSHA256ハッシュからdeterministic IDを生成.
+
+    Format: "madb:p_{hash12}"
+    同じ名前 → 常に同じID（冪等）
+    """
+    # NFKC正規化 + 空白統一
+    normalized = unicodedata.normalize("NFKC", name_ja)
+    normalized = re.sub(r"\s+", "", normalized)  # 空白完全除去
+    hash_hex = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
+    return f"madb:p_{hash_hex}"
+
+
+def normalize_title(title: str) -> str:
+    """タイトルを正規化して比較可能にする."""
+    if not title:
+        return ""
+    title = unicodedata.normalize("NFKC", title)
+    # 空白統一・除去
+    title = re.sub(r"\s+", " ", title).strip()
+    return title
+
+
+def match_anime_to_anilist(
+    madb_title: str,
+    madb_year: int | None,
+    madb_identifiers: list[str],
+    anilist_anime: list[Anime],
+) -> str | None:
+    """MADBアニメをAniListアニメにマッチングする.
+
+    3段階マッチング:
+    1. 外部ID: madb:externalIdentifier にAniList/MAL URLが含まれていれば直接紐づけ
+    2. タイトル+年: 正規化title_ja + 年（±1年許容）で照合。1:1マッチのみ
+    3. マッチなし → None
+
+    Returns:
+        AniListアニメのid（例: "anilist:12345"）またはNone
+    """
+    # Step 1: 外部ID照合
+    for identifier in madb_identifiers:
+        # AniList URL: https://anilist.co/anime/12345
+        al_match = re.search(r"anilist\.co/anime/(\d+)", identifier)
+        if al_match:
+            anilist_id = int(al_match.group(1))
+            for a in anilist_anime:
+                if a.anilist_id == anilist_id:
+                    return a.id
+
+        # MAL URL: https://myanimelist.net/anime/12345
+        mal_match = re.search(r"myanimelist\.net/anime/(\d+)", identifier)
+        if mal_match:
+            mal_id = int(mal_match.group(1))
+            for a in anilist_anime:
+                if a.mal_id == mal_id:
+                    return a.id
+
+    # Step 2: タイトル+年
+    if not madb_title:
+        return None
+
+    norm_title = normalize_title(madb_title)
+    if not norm_title:
+        return None
+
+    # AniListのタイトルインデックス（正規化→Anime）
+    candidates: list[Anime] = []
+    for a in anilist_anime:
+        a_norm = normalize_title(a.title_ja)
+        if a_norm and a_norm == norm_title:
+            # 年チェック（±1年許容 or 年なし）
+            if madb_year is None or a.year is None or abs(madb_year - a.year) <= 1:
+                candidates.append(a)
+
+    # 1:1マッチのみ採用
+    if len(candidates) == 1:
+        return candidates[0].id
+
+    return None
 
 
 class MediaArtsClient:
     """メディア芸術DB SPARQL 非同期クライアント."""
 
     def __init__(self) -> None:
-        """Initialize with system CA first, fall back to insecure if needed.
-
-        SSL verification strategy:
-        1. Try system CA bundle (verify=True)
-        2. If cert validation fails, log warning and fall back to verify=False
-        """
-        # Start with system CA verification enabled
         self._verify = True
         self._client = httpx.AsyncClient(timeout=60.0, verify=True, follow_redirects=True)
         self._last_request_time = 0.0
-        log.info("mediaarts_client_init", source="mediaarts", ssl_verify=True, follow_redirects=True)
+        log.info("mediaarts_client_init", source="mediaarts", ssl_verify=True)
 
     async def _fallback_to_insecure(self) -> None:
-        """Fall back to insecure SSL verification with warning.
-
-        Called when system CA verification fails. Creates new client with verify=False.
-        """
+        """SSL検証失敗時のフォールバック."""
         if self._verify:
             self._verify = False
             await self._client.aclose()
@@ -72,7 +214,7 @@ class MediaArtsClient:
             log.warning(
                 "ssl_verification_failed_falling_back",
                 source="mediaarts",
-                message="System SSL verification failed, falling back to insecure (verify=False)",
+                message="Falling back to verify=False",
             )
 
     async def close(self) -> None:
@@ -85,13 +227,7 @@ class MediaArtsClient:
         self._last_request_time = time.monotonic()
 
     async def query(self, sparql: str) -> list[dict]:
-        """SPARQL クエリを実行.
-
-        SSL verification strategy:
-        1. Try with system CA first
-        2. On SSL cert error, fall back to insecure and retry
-        3. Give up after 3 total attempts
-        """
+        """SPARQL クエリを実行（リトライ + SSL フォールバック）."""
         await self._rate_limit()
         params = {"query": sparql, "format": "json"}
         ssl_fallback_tried = False
@@ -103,30 +239,17 @@ class MediaArtsClient:
                 data = resp.json()
                 return data.get("results", {}).get("bindings", [])
             except httpx.SSLError as e:
-                # SSL verification failed - try fallback once
                 if not ssl_fallback_tried and self._verify:
                     ssl_fallback_tried = True
                     await self._fallback_to_insecure()
                     log.info("ssl_fallback_retry", source="mediaarts", attempt=attempt + 1)
                     await asyncio.sleep(1)
                     continue
-                log.warning(
-                    "sparql_query_failed",
-                    source="mediaarts",
-                    error_type=type(e).__name__,
-                    error_message=str(e),
-                    attempt=attempt + 1,
-                )
+                log.warning("sparql_query_failed", source="mediaarts", error=str(e), attempt=attempt + 1)
                 if attempt < 2:
                     await asyncio.sleep(2 ** (attempt + 1))
             except httpx.HTTPError as e:
-                log.warning(
-                    "sparql_query_failed",
-                    source="mediaarts",
-                    error_type=type(e).__name__,
-                    error_message=str(e),
-                    attempt=attempt + 1,
-                )
+                log.warning("sparql_query_failed", source="mediaarts", error=str(e), attempt=attempt + 1)
                 if attempt < 2:
                     await asyncio.sleep(2 ** (attempt + 1))
 
@@ -139,136 +262,266 @@ class MediaArtsClient:
             url=SPARQL_ENDPOINT,
         )
 
-    async def fetch_anime_staff(
-        self, limit: int = 1000, offset: int = 0
+    async def fetch_anime_list(
+        self,
+        anime_type: str,
+        limit: int = 1000,
+        offset: int = 0,
     ) -> list[dict]:
-        """アニメスタッフデータを取得."""
-        query = ANIME_STAFF_QUERY.format(limit=limit, offset=offset)
-        return await self.query(query)
+        """指定タイプのアニメ一覧を取得."""
+        sparql = ANIME_LIST_QUERY.format(anime_type=anime_type, limit=limit, offset=offset)
+        return await self.query(sparql)
+
+    async def fetch_contributor(self, anime_uri: str) -> list[dict]:
+        """特定アニメのcontributorを取得."""
+        sparql = ANIME_CONTRIBUTOR_QUERY.format(anime_uri=anime_uri)
+        return await self.query(sparql)
 
 
-def parse_sparql_results(
-    bindings: list[dict],
-) -> tuple[list[Anime], list[Person], list[Credit]]:
-    """SPARQL 結果をパースする."""
-    anime_map: dict[str, Anime] = {}
-    person_map: dict[str, Person] = {}
-    credits: list[Credit] = []
+def parse_anime_list_results(bindings: list[dict]) -> list[dict]:
+    """アニメ一覧のSPARQL結果をパースする.
 
+    Returns: [{uri, title, year, identifiers}]
+    """
+    # 同一URIの結果を統合（identifier が複数行になる場合がある）
+    anime_map: dict[str, dict] = {}
     for row in bindings:
-        anime_uri = row.get("anime", {}).get("value", "")
-        title = row.get("title", {}).get("value", "")
-        year_str = row.get("year", {}).get("value", "")
-        person_uri = row.get("person", {}).get("value", "")
-        person_name = row.get("personName", {}).get("value", "")
-        role_str = row.get("role", {}).get("value", "")
-
-        if not anime_uri or not person_uri:
+        uri = row.get("anime", {}).get("value", "")
+        if not uri:
             continue
 
-        # Anime
-        anime_id = f"madb:{anime_uri.split('/')[-1]}"
-        if anime_id not in anime_map:
+        if uri not in anime_map:
+            title = row.get("title", {}).get("value", "")
+            year_str = row.get("year", {}).get("value", "")
             year = None
             if year_str:
                 try:
                     year = int(year_str[:4])
-                except ValueError:
+                except (ValueError, IndexError):
                     pass
-            anime_map[anime_id] = Anime(
-                id=anime_id,
-                title_ja=title,
-                year=year,
-            )
+            anime_map[uri] = {
+                "uri": uri,
+                "title": title,
+                "year": year,
+                "identifiers": [],
+            }
 
-        # Person
-        person_id = f"madb:p{person_uri.split('/')[-1]}"
-        if person_id not in person_map:
-            person_map[person_id] = Person(
-                id=person_id,
-                name_ja=person_name,
-            )
+        identifier = row.get("identifier", {}).get("value", "")
+        if identifier and identifier not in anime_map[uri]["identifiers"]:
+            anime_map[uri]["identifiers"].append(identifier)
 
-        # Credit
-        role = parse_role(role_str)
-        credits.append(
-            Credit(
-                person_id=person_id,
-                anime_id=anime_id,
-                role=role,
-                source="mediaarts",
-            )
-        )
-
-    return list(anime_map.values()), list(person_map.values()), credits
+    return list(anime_map.values())
 
 
-async def fetch_all_anime_staff(
-    max_records: int = 5000,
-) -> tuple[list[Anime], list[Person], list[Credit]]:
-    """全アニメスタッフデータをページング取得."""
+async def scrape_madb(
+    conn,
+    anime_types: list[str] | None = None,
+    max_anime: int = 10000,
+    checkpoint_interval: int = 50,
+    anilist_anime: list[Anime] | None = None,
+) -> dict:
+    """MADBからクレジットデータを収集する.
+
+    Phase A: アニメ一覧取得（軽量SPARQL）
+    Phase B: 各アニメのcontributor取得 → テキストパース → DB保存
+
+    Args:
+        conn: SQLite接続
+        anime_types: 対象タイプ（デフォルト: 全タイプ）
+        max_anime: 最大アニメ数
+        checkpoint_interval: DB保存間隔
+        anilist_anime: AniListアニメリスト（マッチング用）
+
+    Returns:
+        統計情報dict
+    """
+    from src.database import insert_credit, update_data_source, upsert_anime, upsert_person
+
+    if anime_types is None:
+        anime_types = ANIME_TYPES
+    if anilist_anime is None:
+        anilist_anime = []
+
     client = MediaArtsClient()
-    all_anime: list[Anime] = []
-    all_persons: list[Person] = []
-    all_credits: list[Credit] = []
-
-    page_size = 1000
-    offset = 0
+    stats = {
+        "anime_fetched": 0,
+        "anime_with_contributors": 0,
+        "credits_created": 0,
+        "persons_created": 0,
+        "anime_matched": 0,
+        "anime_new": 0,
+        "parse_failures": 0,
+    }
+    person_cache: dict[str, Person] = {}  # name → Person（重複防止）
 
     try:
-        while offset < max_records:
-            log.info("fetching_madb", source="mediaarts", offset=offset)
-            bindings = await client.fetch_anime_staff(limit=page_size, offset=offset)
-            if not bindings:
+        # Phase A: アニメ一覧取得
+        all_anime_records: list[dict] = []
+        for anime_type in anime_types:
+            offset = 0
+            page_size = 1000
+            while len(all_anime_records) < max_anime:
+                log.info(
+                    "fetching_madb_anime_list",
+                    type=anime_type,
+                    offset=offset,
+                    total_so_far=len(all_anime_records),
+                )
+                bindings = await client.fetch_anime_list(anime_type, limit=page_size, offset=offset)
+                if not bindings:
+                    break
+
+                records = parse_anime_list_results(bindings)
+                all_anime_records.extend(records)
+
+                if len(bindings) < page_size:
+                    break
+                offset += page_size
+
+            if len(all_anime_records) >= max_anime:
+                all_anime_records = all_anime_records[:max_anime]
                 break
 
-            anime, persons, credits = parse_sparql_results(bindings)
-            all_anime.extend(anime)
-            all_persons.extend(persons)
-            all_credits.extend(credits)
+        stats["anime_fetched"] = len(all_anime_records)
+        log.info("madb_anime_list_complete", total=len(all_anime_records))
 
-            if len(bindings) < page_size:
-                break
-            offset += page_size
+        # Phase B: 各アニメのcontributor取得
+        for i, anime_record in enumerate(all_anime_records):
+            uri = anime_record["uri"]
+            title = anime_record["title"]
+            year = anime_record["year"]
+            identifiers = anime_record["identifiers"]
+
+            # contributor取得
+            contributor_bindings = await client.fetch_contributor(uri)
+            if not contributor_bindings:
+                continue
+
+            # contributorテキストをパース
+            all_credits_for_anime: list[tuple[str, str]] = []
+            for binding in contributor_bindings:
+                contrib_text = binding.get("contributor", {}).get("value", "")
+                if not contrib_text:
+                    continue
+
+                parsed = parse_contributor_text(contrib_text)
+                if parsed:
+                    all_credits_for_anime.extend(parsed)
+                elif contrib_text.strip():
+                    stats["parse_failures"] += 1
+                    log.debug("contributor_parse_empty", anime=title, text=contrib_text[:100])
+
+            if not all_credits_for_anime:
+                continue
+
+            stats["anime_with_contributors"] += 1
+
+            # AniListマッチング
+            madb_id = uri.split("/")[-1] if "/" in uri else uri
+            matched_anilist_id = match_anime_to_anilist(title, year, identifiers, anilist_anime)
+
+            if matched_anilist_id:
+                anime_id = matched_anilist_id
+                stats["anime_matched"] += 1
+                # 既存アニメの madb_id を更新
+                conn.execute(
+                    "UPDATE anime SET madb_id = ? WHERE id = ? AND madb_id IS NULL",
+                    (madb_id, anime_id),
+                )
+            else:
+                anime_id = f"madb:{madb_id}"
+                stats["anime_new"] += 1
+                # 新規アニメ作成
+                anime = Anime(
+                    id=anime_id,
+                    title_ja=title,
+                    year=year,
+                    madb_id=madb_id,
+                )
+                upsert_anime(conn, anime)
+
+            # クレジット登録
+            for role_ja, name_ja in all_credits_for_anime:
+                # 名前が短すぎる場合はスキップ（法的リスク）
+                if len(name_ja) < 2:
+                    continue
+
+                # Person取得 or 作成
+                if name_ja not in person_cache:
+                    person_id = make_madb_person_id(name_ja)
+                    person = Person(
+                        id=person_id,
+                        name_ja=name_ja,
+                        madb_id=person_id,
+                    )
+                    upsert_person(conn, person)
+                    person_cache[name_ja] = person
+                    stats["persons_created"] += 1
+                else:
+                    person = person_cache[name_ja]
+
+                role = parse_role(role_ja)
+                credit = Credit(
+                    person_id=person.id,
+                    anime_id=anime_id,
+                    role=role,
+                    raw_role=role_ja,
+                    source="mediaarts",
+                )
+                insert_credit(conn, credit)
+                stats["credits_created"] += 1
+
+            # チェックポイント
+            if (i + 1) % checkpoint_interval == 0:
+                conn.commit()
+                log.info(
+                    "madb_checkpoint",
+                    progress=f"{i + 1}/{len(all_anime_records)}",
+                    credits=stats["credits_created"],
+                    persons=stats["persons_created"],
+                )
+
+        # 最終コミット
+        conn.commit()
+        update_data_source(conn, "mediaarts", stats["credits_created"])
+        conn.commit()
+
     finally:
         await client.close()
 
     log.info(
-        "madb_fetch_complete",
+        "madb_scrape_complete",
         source="mediaarts",
-        item_count=len(all_credits),
-        anime=len(all_anime),
-        persons=len(all_persons),
-        credits=len(all_credits),
+        **stats,
     )
-    return all_anime, all_persons, all_credits
+    return stats
 
 
 @app.command()
 def main(
-    max_records: int = typer.Option(5000, "--max-records", "-n", help="最大レコード数"),
+    max_records: int = typer.Option(10000, "--max-records", "-n", help="最大アニメ数"),
+    checkpoint: int = typer.Option(50, "--checkpoint", "-c", help="チェックポイント間隔"),
 ) -> None:
     """メディア芸術DB からクレジットデータを収集する."""
-    from src.database import db_connection, init_db, insert_credit, update_data_source, upsert_anime, upsert_person
+    from src.database import db_connection, init_db, load_all_anime
     from src.log import setup_logging
 
     setup_logging()
 
-    anime_list, persons, credits = asyncio.run(
-        fetch_all_anime_staff(max_records=max_records)
-    )
-
     with db_connection() as conn:
         init_db(conn)
-        for anime in anime_list:
-            upsert_anime(conn, anime)
-        for person in persons:
-            upsert_person(conn, person)
-        for credit in credits:
-            insert_credit(conn, credit)
-        update_data_source(conn, "mediaarts", len(credits))
+        # AniListアニメをマッチング用にロード
+        anilist_anime = load_all_anime(conn)
+        stats = asyncio.run(
+            scrape_madb(
+                conn,
+                max_anime=max_records,
+                checkpoint_interval=checkpoint,
+                anilist_anime=anilist_anime,
+            )
+        )
 
-    log.info("saved_to_db", source="mediaarts", item_count=len(credits), anime=len(anime_list), persons=len(persons), credits=len(credits))
+    log.info("madb_scrape_saved", **stats)
 
 
 if __name__ == "__main__":

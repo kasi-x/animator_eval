@@ -699,7 +699,7 @@ class TestAniListParsers:
         assert len(persons) == 1
         assert persons[0].name_ja == "梶裕貴"
         assert persons[0].date_of_birth == "1985-09-03"
-        assert credits[0].role == Role.OTHER  # voice actor maps to OTHER
+        assert credits[0].role == Role.VOICE_ACTOR
 
     def test_parse_anilist_voice_actors_skips_missing_id(self):
         from src.scrapers.anilist_scraper import parse_anilist_voice_actors
@@ -1066,122 +1066,114 @@ class TestMediaArtsClient:
                 _run(run())
         _run(client.close())
 
-    def test_fetch_anime_staff(self):
+    def test_fetch_anime_list(self):
         from src.scrapers.mediaarts_scraper import MediaArtsClient
 
         client = MediaArtsClient()
         client.query = AsyncMock(return_value=[{"anime": {"value": "http://x"}}])
 
-        result = _run(client.fetch_anime_staff(limit=100, offset=50))
+        result = _run(client.fetch_anime_list(anime_type="AnimationTVRegularSeries", limit=100, offset=50))
         assert len(result) == 1
         # Verify SPARQL query was formatted correctly
         call_args = client.query.call_args[0][0]
         assert "LIMIT 100" in call_args
         assert "OFFSET 50" in call_args
+        assert "AnimationTVRegularSeries" in call_args
         _run(client.close())
 
 
 class TestMediaArtsParsers:
-    def test_parse_sparql_results(self):
-        from src.scrapers.mediaarts_scraper import parse_sparql_results
+    def test_parse_anime_list_results(self):
+        from src.scrapers.mediaarts_scraper import parse_anime_list_results
 
         bindings = [
             {
                 "anime": {"value": "http://madb/anime/12345"},
                 "title": {"value": "テスト作品"},
                 "year": {"value": "2020"},
-                "person": {"value": "http://madb/person/67890"},
-                "personName": {"value": "山田太郎"},
-                "role": {"value": "監督"},
             }
         ]
-        anime_list, persons, credits = parse_sparql_results(bindings)
-        assert len(anime_list) == 1
-        assert anime_list[0].id == "madb:12345"
-        assert anime_list[0].title_ja == "テスト作品"
-        assert anime_list[0].year == 2020
-        assert len(persons) == 1
-        assert persons[0].name_ja == "山田太郎"
-        assert len(credits) == 1
-        assert credits[0].role == Role.DIRECTOR
+        result = parse_anime_list_results(bindings)
+        assert len(result) == 1
+        assert result[0]["uri"] == "http://madb/anime/12345"
+        assert result[0]["title"] == "テスト作品"
+        assert result[0]["year"] == 2020
 
-    def test_parse_sparql_results_missing_uri_skipped(self):
-        from src.scrapers.mediaarts_scraper import parse_sparql_results
+    def test_parse_anime_list_missing_uri_skipped(self):
+        from src.scrapers.mediaarts_scraper import parse_anime_list_results
 
         bindings = [
-            {"anime": {"value": ""}, "person": {"value": "http://x"}},
-            {"anime": {"value": "http://x"}, "person": {"value": ""}},
+            {"anime": {"value": ""}, "title": {"value": "Test"}},
         ]
-        anime_list, persons, credits = parse_sparql_results(bindings)
-        assert len(anime_list) == 0
-        assert len(persons) == 0
-        assert len(credits) == 0
+        result = parse_anime_list_results(bindings)
+        assert len(result) == 0
 
-    def test_parse_sparql_results_invalid_year(self):
-        from src.scrapers.mediaarts_scraper import parse_sparql_results
+    def test_parse_anime_list_invalid_year(self):
+        from src.scrapers.mediaarts_scraper import parse_anime_list_results
 
         bindings = [
             {
                 "anime": {"value": "http://madb/anime/1"},
                 "title": {"value": "Test"},
                 "year": {"value": "not-a-year"},
-                "person": {"value": "http://madb/person/1"},
-                "personName": {"value": "Person"},
-                "role": {"value": "other"},
             }
         ]
-        anime_list, persons, credits = parse_sparql_results(bindings)
-        assert anime_list[0].year is None
+        result = parse_anime_list_results(bindings)
+        assert result[0]["year"] is None
 
-    def test_parse_sparql_results_deduplication(self):
-        from src.scrapers.mediaarts_scraper import parse_sparql_results
+    def test_parse_anime_list_deduplication(self):
+        from src.scrapers.mediaarts_scraper import parse_anime_list_results
 
         bindings = [
             {
                 "anime": {"value": "http://madb/anime/1"},
                 "title": {"value": "Test"},
                 "year": {"value": "2020"},
-                "person": {"value": "http://madb/person/1"},
-                "personName": {"value": "Person"},
-                "role": {"value": "監督"},
+                "identifier": {"value": "https://anilist.co/anime/100"},
             },
             {
                 "anime": {"value": "http://madb/anime/1"},
                 "title": {"value": "Test"},
                 "year": {"value": "2020"},
-                "person": {"value": "http://madb/person/1"},
-                "personName": {"value": "Person"},
-                "role": {"value": "作画監督"},
+                "identifier": {"value": "https://myanimelist.net/anime/200"},
             },
         ]
-        anime_list, persons, credits = parse_sparql_results(bindings)
-        assert len(anime_list) == 1  # Deduped
-        assert len(persons) == 1  # Deduped
-        assert len(credits) == 2  # Both credits kept
+        result = parse_anime_list_results(bindings)
+        assert len(result) == 1  # Deduped
+        assert len(result[0]["identifiers"]) == 2
 
-    def test_parse_sparql_results_empty_bindings(self):
-        from src.scrapers.mediaarts_scraper import parse_sparql_results
+    def test_parse_anime_list_empty_bindings(self):
+        from src.scrapers.mediaarts_scraper import parse_anime_list_results
 
-        anime_list, persons, credits = parse_sparql_results([])
-        assert anime_list == []
-        assert persons == []
-        assert credits == []
+        result = parse_anime_list_results([])
+        assert result == []
 
-    def test_parse_sparql_results_empty_year(self):
-        from src.scrapers.mediaarts_scraper import parse_sparql_results
+    def test_parse_anime_list_empty_year(self):
+        from src.scrapers.mediaarts_scraper import parse_anime_list_results
 
         bindings = [
             {
                 "anime": {"value": "http://madb/anime/1"},
                 "title": {"value": "Test"},
                 "year": {"value": ""},
-                "person": {"value": "http://madb/person/1"},
-                "personName": {"value": "Person"},
-                "role": {"value": "other"},
             }
         ]
-        anime_list, _, _ = parse_sparql_results(bindings)
-        assert anime_list[0].year is None
+        result = parse_anime_list_results(bindings)
+        assert result[0]["year"] is None
+
+    def test_parse_contributor_text(self):
+        from src.scrapers.mediaarts_scraper import parse_contributor_text
+
+        result = parse_contributor_text("[監督]山田太郎 / [脚本]鈴木次郎")
+        assert len(result) == 2
+        assert result[0] == ("監督", "山田太郎")
+        assert result[1] == ("脚本", "鈴木次郎")
+
+    def test_parse_contributor_text_empty(self):
+        from src.scrapers.mediaarts_scraper import parse_contributor_text
+
+        assert parse_contributor_text("") == []
+        assert parse_contributor_text(None) == []
 
 
 # ---------------------------------------------------------------------------
@@ -1747,17 +1739,14 @@ class TestDownloadAnimeImages:
 
 
 class TestMediaArtsFetchAll:
-    def test_fetch_all_anime_staff_pagination(self):
-        from src.scrapers.mediaarts_scraper import fetch_all_anime_staff
+    def test_fetch_anime_list_pagination(self):
+        from src.scrapers.mediaarts_scraper import MediaArtsClient
 
         page1 = [
             {
                 "anime": {"value": f"http://madb/anime/{i}"},
                 "title": {"value": f"Anime {i}"},
                 "year": {"value": "2020"},
-                "person": {"value": f"http://madb/person/{i}"},
-                "personName": {"value": f"Person {i}"},
-                "role": {"value": "監督"},
             }
             for i in range(1000)
         ]
@@ -1766,34 +1755,31 @@ class TestMediaArtsFetchAll:
                 "anime": {"value": "http://madb/anime/2000"},
                 "title": {"value": "Anime 2000"},
                 "year": {"value": "2021"},
-                "person": {"value": "http://madb/person/2000"},
-                "personName": {"value": "Person 2000"},
-                "role": {"value": "原画"},
             }
         ]
 
-        with patch("src.scrapers.mediaarts_scraper.MediaArtsClient") as MockClient:
-            instance = MockClient.return_value
-            instance.fetch_anime_staff = AsyncMock(side_effect=[page1, page2])
-            instance.close = AsyncMock()
+        client = MediaArtsClient()
+        client.query = AsyncMock(side_effect=[page1, page2])
 
-            anime, persons, credits = _run(fetch_all_anime_staff(max_records=2000))
+        # First page: 1000 results → continues
+        result1 = _run(client.fetch_anime_list("AnimationTVRegularSeries", limit=1000, offset=0))
+        assert len(result1) == 1000
 
-        assert len(credits) == 1001
+        # Second page: 1 result < 1000 → signals end
+        result2 = _run(client.fetch_anime_list("AnimationTVRegularSeries", limit=1000, offset=1000))
+        assert len(result2) == 1
 
-    def test_fetch_all_anime_staff_empty_response(self):
-        from src.scrapers.mediaarts_scraper import fetch_all_anime_staff
+        _run(client.close())
 
-        with patch("src.scrapers.mediaarts_scraper.MediaArtsClient") as MockClient:
-            instance = MockClient.return_value
-            instance.fetch_anime_staff = AsyncMock(return_value=[])
-            instance.close = AsyncMock()
+    def test_fetch_anime_list_empty_response(self):
+        from src.scrapers.mediaarts_scraper import MediaArtsClient
 
-            anime, persons, credits = _run(fetch_all_anime_staff(max_records=1000))
+        client = MediaArtsClient()
+        client.query = AsyncMock(return_value=[])
 
-        assert len(anime) == 0
-        assert len(persons) == 0
-        assert len(credits) == 0
+        result = _run(client.fetch_anime_list("AnimationTVRegularSeries", limit=1000, offset=0))
+        assert len(result) == 0
+        _run(client.close())
 
 
 class TestJVMGFetchAnimeStaff:

@@ -7,14 +7,14 @@ from typing import Generator
 
 import structlog
 
-from src.models import Anime, Credit, Person, Role, ScoreResult
+from src.models import Anime, AnimeRelation, AnimeStudio, Character, CharacterVoiceActor, Credit, Person, Role, ScoreResult, Studio
 from src.utils.config import DB_DIR
 
 logger = structlog.get_logger()
 
 DEFAULT_DB_PATH = DB_DIR / "animetor_eval.db"
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 11
 
 
 def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
@@ -63,6 +63,7 @@ def init_db(conn: sqlite3.Connection) -> None:
             mal_id INTEGER,
             anilist_id INTEGER,
             canonical_id TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(mal_id),
             UNIQUE(anilist_id)
         );
@@ -77,7 +78,7 @@ def init_db(conn: sqlite3.Connection) -> None:
             mal_id INTEGER,
             anilist_id INTEGER,
             score REAL,
-            studio TEXT DEFAULT '',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(mal_id),
             UNIQUE(anilist_id)
         );
@@ -87,8 +88,10 @@ def init_db(conn: sqlite3.Connection) -> None:
             person_id TEXT NOT NULL,
             anime_id TEXT NOT NULL,
             role TEXT NOT NULL,
+            raw_role TEXT,
             episode INTEGER DEFAULT -1,
             source TEXT NOT NULL DEFAULT '',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(person_id, anime_id, role, episode)
         );
 
@@ -108,10 +111,77 @@ def init_db(conn: sqlite3.Connection) -> None:
             status TEXT DEFAULT 'ok'
         );
 
+        CREATE TABLE IF NOT EXISTS characters (
+            id TEXT PRIMARY KEY,
+            name_ja TEXT NOT NULL DEFAULT '',
+            name_en TEXT NOT NULL DEFAULT '',
+            aliases TEXT NOT NULL DEFAULT '[]',
+            anilist_id INTEGER,
+            image_large TEXT,
+            image_medium TEXT,
+            description TEXT,
+            gender TEXT,
+            date_of_birth TEXT,
+            age TEXT,
+            blood_type TEXT,
+            favourites INTEGER,
+            site_url TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(anilist_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS character_voice_actors (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            character_id TEXT NOT NULL,
+            person_id TEXT NOT NULL,
+            anime_id TEXT NOT NULL,
+            character_role TEXT NOT NULL DEFAULT '',
+            source TEXT NOT NULL DEFAULT '',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(character_id, person_id, anime_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS studios (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL DEFAULT '',
+            anilist_id INTEGER,
+            is_animation_studio INTEGER,
+            favourites INTEGER,
+            site_url TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(anilist_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS anime_studios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            anime_id TEXT NOT NULL,
+            studio_id TEXT NOT NULL,
+            is_main INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(anime_id, studio_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS anime_relations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            anime_id TEXT NOT NULL,
+            related_anime_id TEXT NOT NULL,
+            relation_type TEXT NOT NULL DEFAULT '',
+            related_title TEXT NOT NULL DEFAULT '',
+            related_format TEXT,
+            UNIQUE(anime_id, related_anime_id, relation_type)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_credits_person ON credits(person_id);
         CREATE INDEX IF NOT EXISTS idx_credits_anime ON credits(anime_id);
         CREATE INDEX IF NOT EXISTS idx_credits_role ON credits(role);
         CREATE INDEX IF NOT EXISTS idx_anime_year ON anime(year);
+        CREATE INDEX IF NOT EXISTS idx_persons_canonical ON persons(canonical_id);
+        CREATE INDEX IF NOT EXISTS idx_cva_character ON character_voice_actors(character_id);
+        CREATE INDEX IF NOT EXISTS idx_cva_person ON character_voice_actors(person_id);
+        CREATE INDEX IF NOT EXISTS idx_cva_anime ON character_voice_actors(anime_id);
+        CREATE INDEX IF NOT EXISTS idx_anime_studios_anime ON anime_studios(anime_id);
+        CREATE INDEX IF NOT EXISTS idx_anime_studios_studio ON anime_studios(studio_id);
+        CREATE INDEX IF NOT EXISTS idx_anime_relations_anime ON anime_relations(anime_id);
+        CREATE INDEX IF NOT EXISTS idx_anime_relations_related ON anime_relations(related_anime_id);
 
         CREATE TABLE IF NOT EXISTS schema_meta (
             key TEXT PRIMARY KEY,
@@ -156,6 +226,10 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         5: _migrate_v5_add_person_metadata,
         6: _migrate_v6_add_anime_metadata,
         7: _migrate_v7_drop_credits_fk,
+        8: _migrate_v8_raw_role_unique_and_anime_extra,
+        9: _migrate_v9_add_studios_tables,
+        10: _migrate_v10_schema_cleanup,
+        11: _migrate_v11_add_madb_ids,
     }
 
     for version in range(current + 1, SCHEMA_VERSION + 1):
@@ -280,15 +354,167 @@ def _migrate_v7_drop_credits_fk(conn: sqlite3.Connection) -> None:
             person_id TEXT NOT NULL,
             anime_id TEXT NOT NULL,
             role TEXT NOT NULL,
+            raw_role TEXT,
             episode INTEGER DEFAULT -1,
             source TEXT NOT NULL DEFAULT '',
             UNIQUE(person_id, anime_id, role, episode)
         );
         INSERT OR IGNORE INTO credits_new
-            SELECT id, person_id, anime_id, role, episode, source FROM credits;
+            SELECT id, person_id, anime_id, role, NULL as raw_role, episode, source FROM credits;
         DROP TABLE credits;
         ALTER TABLE credits_new RENAME TO credits;
     """)
+
+
+def _migrate_v8_raw_role_unique_and_anime_extra(conn: sqlite3.Connection) -> None:
+    """v8: credits の UNIQUE を raw_role ベースに変更 + anime に追加カラム.
+
+    - UNIQUE(person_id, anime_id, role, episode) → UNIQUE(person_id, anime_id, raw_role, episode)
+    - raw_role を NOT NULL DEFAULT '' に変更
+    - anime テーブルに追加メタデータカラム
+    """
+    # 1. credits テーブル再作成（raw_role ベース UNIQUE）
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS credits_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            person_id TEXT NOT NULL,
+            anime_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            raw_role TEXT NOT NULL DEFAULT '',
+            episode INTEGER DEFAULT -1,
+            source TEXT NOT NULL DEFAULT '',
+            UNIQUE(person_id, anime_id, raw_role, episode)
+        );
+        INSERT OR IGNORE INTO credits_new (person_id, anime_id, role, raw_role, episode, source)
+            SELECT person_id, anime_id, role, COALESCE(raw_role, ''), episode, source FROM credits;
+        DROP TABLE credits;
+        ALTER TABLE credits_new RENAME TO credits;
+        CREATE INDEX IF NOT EXISTS idx_credits_person ON credits(person_id);
+        CREATE INDEX IF NOT EXISTS idx_credits_anime ON credits(anime_id);
+        CREATE INDEX IF NOT EXISTS idx_credits_role ON credits(role);
+    """)
+
+    # 2. anime テーブルに追加カラム
+    new_columns = [
+        "synonyms TEXT DEFAULT '[]'",
+        "mean_score INTEGER",
+        "country_of_origin TEXT",
+        "is_licensed INTEGER",
+        "is_adult INTEGER",
+        "hashtag TEXT",
+        "site_url TEXT",
+        "trailer_url TEXT",
+        "trailer_site TEXT",
+        "relations_json TEXT",
+        "external_links_json TEXT",
+        "rankings_json TEXT",
+    ]
+    for column in new_columns:
+        try:
+            conn.execute(f"ALTER TABLE anime ADD COLUMN {column}")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+
+
+def _migrate_v9_add_studios_tables(conn: sqlite3.Connection) -> None:
+    """v9: studios + anime_studios テーブルを追加."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS studios (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL DEFAULT '',
+            anilist_id INTEGER,
+            is_animation_studio INTEGER,
+            favourites INTEGER,
+            site_url TEXT,
+            UNIQUE(anilist_id)
+        );
+
+        CREATE TABLE IF NOT EXISTS anime_studios (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            anime_id TEXT NOT NULL,
+            studio_id TEXT NOT NULL,
+            is_main INTEGER NOT NULL DEFAULT 0,
+            UNIQUE(anime_id, studio_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_anime_studios_anime ON anime_studios(anime_id);
+        CREATE INDEX IF NOT EXISTS idx_anime_studios_studio ON anime_studios(studio_id);
+    """)
+
+
+def _migrate_v10_schema_cleanup(conn: sqlite3.Connection) -> None:
+    """v10: スキーマ整理.
+
+    - anime.studio (単数) カラム削除
+    - credits.episode デフォルト -1 → NULL
+    - updated_at カラム追加 (persons, anime, credits, characters, character_voice_actors, studios)
+    - persons.canonical_id インデックス追加
+    - anime_relations テーブル追加
+    """
+    # 1. credits テーブル再作成 (updated_at 追加)
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS credits_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            person_id TEXT NOT NULL,
+            anime_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            raw_role TEXT NOT NULL DEFAULT '',
+            episode INTEGER DEFAULT -1,
+            source TEXT NOT NULL DEFAULT '',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(person_id, anime_id, raw_role, episode)
+        );
+        INSERT OR IGNORE INTO credits_new (person_id, anime_id, role, raw_role, episode, source)
+            SELECT person_id, anime_id, role, COALESCE(raw_role, ''),
+                   episode, source FROM credits;
+        DROP TABLE credits;
+        ALTER TABLE credits_new RENAME TO credits;
+        CREATE INDEX IF NOT EXISTS idx_credits_person ON credits(person_id);
+        CREATE INDEX IF NOT EXISTS idx_credits_anime ON credits(anime_id);
+        CREATE INDEX IF NOT EXISTS idx_credits_role ON credits(role);
+    """)
+
+    # 2. anime.studio (単数) カラム削除
+    try:
+        conn.execute("ALTER TABLE anime DROP COLUMN studio")
+    except sqlite3.OperationalError:
+        pass  # Column doesn't exist or SQLite too old
+
+    # 3. updated_at カラム追加
+    for table in ["persons", "anime", "characters", "character_voice_actors", "studios"]:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        except sqlite3.OperationalError:
+            pass
+
+    # 4. persons.canonical_id インデックス
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_persons_canonical ON persons(canonical_id)")
+
+    # 5. anime_relations テーブル
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS anime_relations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            anime_id TEXT NOT NULL,
+            related_anime_id TEXT NOT NULL,
+            relation_type TEXT NOT NULL DEFAULT '',
+            related_title TEXT NOT NULL DEFAULT '',
+            related_format TEXT,
+            UNIQUE(anime_id, related_anime_id, relation_type)
+        );
+        CREATE INDEX IF NOT EXISTS idx_anime_relations_anime ON anime_relations(anime_id);
+        CREATE INDEX IF NOT EXISTS idx_anime_relations_related ON anime_relations(related_anime_id);
+    """)
+
+
+def _migrate_v11_add_madb_ids(conn: sqlite3.Connection) -> None:
+    """v11: anime/persons テーブルに madb_id カラムを追加."""
+    for table in ["anime", "persons"]:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN madb_id TEXT")
+        except sqlite3.OperationalError:
+            pass  # Column already exists
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_anime_madb_id ON anime(madb_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_persons_madb_id ON persons(madb_id)")
 
 
 def upsert_person(conn: sqlite3.Connection, person: Person) -> None:
@@ -297,18 +523,19 @@ def upsert_person(conn: sqlite3.Connection, person: Person) -> None:
 
     conn.execute(
         """INSERT INTO persons (
-               id, name_ja, name_en, aliases, mal_id, anilist_id,
+               id, name_ja, name_en, aliases, mal_id, anilist_id, madb_id,
                image_large, image_medium, image_large_path, image_medium_path,
                date_of_birth, age, gender, years_active, hometown, blood_type,
                description, favourites, site_url
            )
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
                name_ja = COALESCE(NULLIF(excluded.name_ja, ''), persons.name_ja),
                name_en = COALESCE(NULLIF(excluded.name_en, ''), persons.name_en),
                aliases = excluded.aliases,
                mal_id = COALESCE(excluded.mal_id, persons.mal_id),
                anilist_id = COALESCE(excluded.anilist_id, persons.anilist_id),
+               madb_id = COALESCE(excluded.madb_id, persons.madb_id),
                image_large = COALESCE(excluded.image_large, persons.image_large),
                image_medium = COALESCE(excluded.image_medium, persons.image_medium),
                image_large_path = COALESCE(excluded.image_large_path, persons.image_large_path),
@@ -330,6 +557,7 @@ def upsert_person(conn: sqlite3.Connection, person: Person) -> None:
             json.dumps(person.aliases, ensure_ascii=False),
             person.mal_id,
             person.anilist_id,
+            person.madb_id,
             person.image_large,
             person.image_medium,
             person.image_large_path,
@@ -353,12 +581,21 @@ def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
 
     conn.execute(
         """INSERT INTO anime (
-               id, title_ja, title_en, year, season, episodes, mal_id, anilist_id, score, studio,
+               id, title_ja, title_en, year, season, episodes, mal_id, anilist_id, madb_id, score,
                cover_large, cover_extra_large, cover_medium, banner, cover_large_path, banner_path,
                description, format, status, start_date, end_date, duration, source,
-               genres, tags, popularity_rank, favourites, studios
+               genres, tags, popularity_rank, favourites, studios,
+               synonyms, mean_score, country_of_origin, is_licensed, is_adult,
+               hashtag, site_url, trailer_url, trailer_site,
+               relations_json, external_links_json, rankings_json
            )
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?,
+                   ?, ?, ?, ?, ?,
+                   ?, ?, ?, ?,
+                   ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
                title_ja = COALESCE(NULLIF(excluded.title_ja, ''), anime.title_ja),
                title_en = COALESCE(NULLIF(excluded.title_en, ''), anime.title_en),
@@ -367,8 +604,8 @@ def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
                episodes = COALESCE(excluded.episodes, anime.episodes),
                mal_id = COALESCE(excluded.mal_id, anime.mal_id),
                anilist_id = COALESCE(excluded.anilist_id, anime.anilist_id),
+               madb_id = COALESCE(excluded.madb_id, anime.madb_id),
                score = COALESCE(excluded.score, anime.score),
-               studio = COALESCE(NULLIF(excluded.studio, ''), anime.studio),
                cover_large = COALESCE(excluded.cover_large, anime.cover_large),
                cover_extra_large = COALESCE(excluded.cover_extra_large, anime.cover_extra_large),
                cover_medium = COALESCE(excluded.cover_medium, anime.cover_medium),
@@ -386,7 +623,20 @@ def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
                tags = COALESCE(excluded.tags, anime.tags),
                popularity_rank = COALESCE(excluded.popularity_rank, anime.popularity_rank),
                favourites = COALESCE(excluded.favourites, anime.favourites),
-               studios = COALESCE(excluded.studios, anime.studios)
+               studios = COALESCE(excluded.studios, anime.studios),
+               synonyms = COALESCE(excluded.synonyms, anime.synonyms),
+               mean_score = COALESCE(excluded.mean_score, anime.mean_score),
+               country_of_origin = COALESCE(excluded.country_of_origin, anime.country_of_origin),
+               is_licensed = COALESCE(excluded.is_licensed, anime.is_licensed),
+               is_adult = COALESCE(excluded.is_adult, anime.is_adult),
+               hashtag = COALESCE(excluded.hashtag, anime.hashtag),
+               site_url = COALESCE(excluded.site_url, anime.site_url),
+               trailer_url = COALESCE(excluded.trailer_url, anime.trailer_url),
+               trailer_site = COALESCE(excluded.trailer_site, anime.trailer_site),
+               relations_json = COALESCE(excluded.relations_json, anime.relations_json),
+               external_links_json = COALESCE(excluded.external_links_json, anime.external_links_json),
+               rankings_json = COALESCE(excluded.rankings_json, anime.rankings_json),
+               updated_at = CURRENT_TIMESTAMP
         """,
         (
             anime.id,
@@ -397,8 +647,8 @@ def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
             anime.episodes,
             anime.mal_id,
             anime.anilist_id,
+            anime.madb_id,
             anime.score,
-            anime.studio or "",
             anime.cover_large,
             anime.cover_extra_large,
             anime.cover_medium,
@@ -417,6 +667,18 @@ def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
             anime.popularity_rank,
             anime.favourites,
             json.dumps(anime.studios, ensure_ascii=False),
+            json.dumps(anime.synonyms, ensure_ascii=False),
+            anime.mean_score,
+            anime.country_of_origin,
+            1 if anime.is_licensed else (0 if anime.is_licensed is not None else None),
+            1 if anime.is_adult else (0 if anime.is_adult is not None else None),
+            anime.hashtag,
+            anime.site_url,
+            anime.trailer_url,
+            anime.trailer_site,
+            anime.relations_json,
+            anime.external_links_json,
+            anime.rankings_json,
         ),
     )
 
@@ -424,14 +686,118 @@ def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
 def insert_credit(conn: sqlite3.Connection, credit: Credit) -> None:
     """クレジットを挿入する（重複は無視）."""
     conn.execute(
-        """INSERT OR IGNORE INTO credits (person_id, anime_id, role, episode, source)
-           VALUES (?, ?, ?, ?, ?)""",
+        """INSERT OR IGNORE INTO credits (person_id, anime_id, role, raw_role, episode, source)
+           VALUES (?, ?, ?, ?, ?, ?)""",
         (
             credit.person_id,
             credit.anime_id,
             credit.role.value,
+            credit.raw_role or "",  # 元のロール文字列を保存（NOT NULL）
             credit.episode if credit.episode is not None else -1,
             credit.source,
+        ),
+    )
+
+
+def upsert_character(conn: sqlite3.Connection, character: Character) -> None:
+    """キャラクターを挿入または更新する."""
+    import json
+
+    conn.execute(
+        """INSERT INTO characters (
+               id, name_ja, name_en, aliases, anilist_id,
+               image_large, image_medium, description, gender,
+               date_of_birth, age, blood_type, favourites, site_url
+           )
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+               name_ja = COALESCE(NULLIF(excluded.name_ja, ''), characters.name_ja),
+               name_en = COALESCE(NULLIF(excluded.name_en, ''), characters.name_en),
+               aliases = excluded.aliases,
+               anilist_id = COALESCE(excluded.anilist_id, characters.anilist_id),
+               image_large = COALESCE(excluded.image_large, characters.image_large),
+               image_medium = COALESCE(excluded.image_medium, characters.image_medium),
+               description = COALESCE(excluded.description, characters.description),
+               gender = COALESCE(excluded.gender, characters.gender),
+               date_of_birth = COALESCE(excluded.date_of_birth, characters.date_of_birth),
+               age = COALESCE(excluded.age, characters.age),
+               blood_type = COALESCE(excluded.blood_type, characters.blood_type),
+               favourites = COALESCE(excluded.favourites, characters.favourites),
+               site_url = COALESCE(excluded.site_url, characters.site_url)
+        """,
+        (
+            character.id,
+            character.name_ja,
+            character.name_en,
+            json.dumps(character.aliases, ensure_ascii=False),
+            character.anilist_id,
+            character.image_large,
+            character.image_medium,
+            character.description,
+            character.gender,
+            character.date_of_birth,
+            character.age,
+            character.blood_type,
+            character.favourites,
+            character.site_url,
+        ),
+    )
+
+
+def insert_character_voice_actor(conn: sqlite3.Connection, cva: CharacterVoiceActor) -> None:
+    """キャラクター×声優×作品の関係を挿入する（重複は無視）."""
+    conn.execute(
+        """INSERT OR IGNORE INTO character_voice_actors
+           (character_id, person_id, anime_id, character_role, source)
+           VALUES (?, ?, ?, ?, ?)""",
+        (cva.character_id, cva.person_id, cva.anime_id, cva.character_role, cva.source),
+    )
+
+
+def upsert_studio(conn: sqlite3.Connection, studio: Studio) -> None:
+    """スタジオを挿入または更新する."""
+    conn.execute(
+        """INSERT INTO studios (id, name, anilist_id, is_animation_studio, favourites, site_url)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+               name = COALESCE(NULLIF(excluded.name, ''), studios.name),
+               anilist_id = COALESCE(excluded.anilist_id, studios.anilist_id),
+               is_animation_studio = COALESCE(excluded.is_animation_studio, studios.is_animation_studio),
+               favourites = COALESCE(excluded.favourites, studios.favourites),
+               site_url = COALESCE(excluded.site_url, studios.site_url)
+        """,
+        (
+            studio.id,
+            studio.name,
+            studio.anilist_id,
+            1 if studio.is_animation_studio else (0 if studio.is_animation_studio is not None else None),
+            studio.favourites,
+            studio.site_url,
+        ),
+    )
+
+
+def insert_anime_studio(conn: sqlite3.Connection, anime_studio: AnimeStudio) -> None:
+    """アニメ×スタジオの関係を挿入する（重複は無視）."""
+    conn.execute(
+        """INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main)
+           VALUES (?, ?, ?)""",
+        (anime_studio.anime_id, anime_studio.studio_id, 1 if anime_studio.is_main else 0),
+    )
+
+
+def insert_anime_relation(conn: sqlite3.Connection, relation: AnimeRelation) -> None:
+    """アニメ間の関連を挿入する（重複は無視）."""
+    conn.execute(
+        """INSERT OR IGNORE INTO anime_relations
+           (anime_id, related_anime_id, relation_type, related_title, related_format)
+           VALUES (?, ?, ?, ?, ?)""",
+        (
+            relation.anime_id,
+            relation.related_anime_id,
+            relation.relation_type,
+            relation.related_title,
+            relation.related_format,
         ),
     )
 
@@ -463,36 +829,78 @@ def load_all_persons(conn: sqlite3.Connection) -> list[Person]:
     import json
 
     rows = conn.execute("SELECT * FROM persons").fetchall()
-    return [
-        Person(
-            id=row["id"],
-            name_ja=row["name_ja"],
-            name_en=row["name_en"],
-            aliases=json.loads(row["aliases"]),
-            mal_id=row["mal_id"],
-            anilist_id=row["anilist_id"],
-        )
-        for row in rows
-    ]
+    columns = set(rows[0].keys()) if rows else set()
+    result = []
+    for row in rows:
+        kwargs: dict = {
+            "id": row["id"],
+            "name_ja": row["name_ja"],
+            "name_en": row["name_en"],
+            "aliases": json.loads(row["aliases"]),
+            "mal_id": row["mal_id"],
+            "anilist_id": row["anilist_id"],
+        }
+        if "madb_id" in columns:
+            kwargs["madb_id"] = row["madb_id"]
+        result.append(Person(**kwargs))
+    return result
 
 
 def load_all_anime(conn: sqlite3.Connection) -> list[Anime]:
     """全アニメを読み込む."""
+    import json as _json
+
     rows = conn.execute("SELECT * FROM anime").fetchall()
-    return [
-        Anime(
-            id=row["id"],
-            title_ja=row["title_ja"],
-            title_en=row["title_en"],
-            year=row["year"],
-            season=row["season"],
-            episodes=row["episodes"],
-            mal_id=row["mal_id"],
-            anilist_id=row["anilist_id"],
-            score=row["score"],
-        )
-        for row in rows
-    ]
+    columns = set(rows[0].keys()) if rows else set()
+    result = []
+    for row in rows:
+        kwargs: dict = {
+            "id": row["id"],
+            "title_ja": row["title_ja"],
+            "title_en": row["title_en"],
+            "year": row["year"],
+            "season": row["season"],
+            "episodes": row["episodes"],
+            "mal_id": row["mal_id"],
+            "anilist_id": row["anilist_id"],
+            "score": row["score"],
+        }
+        # v6+ カラム
+        if "studios" in columns:
+            try:
+                kwargs["studios"] = _json.loads(row["studios"] or "[]")
+            except (ValueError, TypeError):
+                kwargs["studios"] = []
+        if "genres" in columns:
+            try:
+                kwargs["genres"] = _json.loads(row["genres"] or "[]")
+            except (ValueError, TypeError):
+                kwargs["genres"] = []
+        if "tags" in columns:
+            try:
+                kwargs["tags"] = _json.loads(row["tags"] or "[]")
+            except (ValueError, TypeError):
+                kwargs["tags"] = []
+        # スカラーカラム（存在すれば読む）
+        for col in [
+            "format", "status", "source", "description",
+            "start_date", "end_date", "duration",
+            "cover_large", "cover_extra_large", "cover_medium", "banner",
+            "popularity_rank", "favourites", "mean_score",
+            "country_of_origin", "is_licensed", "is_adult",
+            "hashtag", "site_url", "trailer_url", "trailer_site",
+            "relations_json", "external_links_json", "rankings_json",
+            "madb_id",
+        ]:
+            if col in columns:
+                kwargs[col] = row[col]
+        if "synonyms" in columns:
+            try:
+                kwargs["synonyms"] = _json.loads(row["synonyms"] or "[]")
+            except (ValueError, TypeError):
+                kwargs["synonyms"] = []
+        result.append(Anime(**kwargs))
+    return result
 
 
 def load_all_credits(conn: sqlite3.Connection) -> list[Credit]:
@@ -787,7 +1195,7 @@ def get_all_credits(conn: sqlite3.Connection) -> list[Credit]:
             person_id=row["person_id"],
             anime_id=row["anime_id"],
             role=Role(row["role"]),
-            episode=row["episode"],
+            episode=row["episode"] if row["episode"] != -1 else None,
             source=row["source"],
         )
         for row in rows

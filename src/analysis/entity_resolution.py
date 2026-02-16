@@ -221,19 +221,31 @@ def romaji_match(persons: list[Person]) -> dict[str, str]:
 def cross_source_match(persons: list[Person]) -> dict[str, str]:
     """異なるデータソース間の名寄せ.
 
-    MAL と AniList の人物を名前の完全一致で統合する。
+    MAL/MADB の人物を AniList に対して名前の完全一致で統合する。
+    MADB人物は name_ja の正規化一致のみ使用（法的リスク回避）。
     """
     # ソース別に分類
     mal_persons: dict[str, Person] = {}
     anilist_persons: dict[str, Person] = {}
+    madb_persons: dict[str, Person] = {}
 
     for p in persons:
         if p.id.startswith("mal:"):
             mal_persons[p.id] = p
         elif p.id.startswith("anilist:"):
             anilist_persons[p.id] = p
+        elif p.id.startswith("madb:"):
+            madb_persons[p.id] = p
 
-    # 正規化名 → person_id のインデックス
+    # AniList の正規化日本語名インデックス（MADB マッチング用）
+    anilist_ja_index: dict[str, list[str]] = defaultdict(list)
+    for pid, p in anilist_persons.items():
+        if p.name_ja:
+            n = normalize_name(p.name_ja)
+            if n and len(n) >= 3:  # 短い名前はスキップ（法的リスク）
+                anilist_ja_index[n].append(pid)
+
+    # MAL の正規化名インデックス
     mal_name_index: dict[str, list[str]] = defaultdict(list)
     for pid, p in mal_persons.items():
         for name in [p.name_ja, p.name_en] + p.aliases:
@@ -243,13 +255,13 @@ def cross_source_match(persons: list[Person]) -> dict[str, str]:
 
     canonical_map: dict[str, str] = {}
 
+    # MAL → AniList マッチング（既存ロジック）
     for anilist_pid, p in anilist_persons.items():
         for name in [p.name_ja, p.name_en] + p.aliases:
             n = normalize_name(name)
             if n and n in mal_name_index:
                 mal_ids = mal_name_index[n]
                 if len(mal_ids) == 1:
-                    # 一意にマッチ
                     canonical_map[anilist_pid] = mal_ids[0]
                     logger.info(
                         "entity_merged",
@@ -260,12 +272,37 @@ def cross_source_match(persons: list[Person]) -> dict[str, str]:
                     )
                     break
                 else:
-                    # 曖昧 — 安全のためスキップ
                     logger.debug(
                         "ambiguous_cross_source_match",
                         name=n,
                         candidates=mal_ids,
                     )
+
+    # MADB → AniList マッチング（name_ja のみ、高精度）
+    for madb_pid, p in madb_persons.items():
+        if not p.name_ja:
+            continue
+        n = normalize_name(p.name_ja)
+        if not n or len(n) < 3:
+            continue
+        if n in anilist_ja_index:
+            anilist_ids = anilist_ja_index[n]
+            if len(anilist_ids) == 1:
+                canonical_map[madb_pid] = anilist_ids[0]
+                logger.info(
+                    "entity_merged",
+                    source=madb_pid,
+                    canonical=anilist_ids[0],
+                    strategy="cross_source_madb",
+                    name=n,
+                )
+            else:
+                logger.debug(
+                    "ambiguous_cross_source_match",
+                    name=n,
+                    candidates=anilist_ids,
+                    source="madb",
+                )
 
     return canonical_map
 

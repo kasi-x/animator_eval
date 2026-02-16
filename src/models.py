@@ -33,6 +33,10 @@ class Role(str, Enum):
     BACKGROUND_ART = "background_art"
     CGI_DIRECTOR = "cgi_director"
     LAYOUT = "layout"
+    # 分析対象外だが明示的に区別するロール
+    VOICE_ACTOR = "voice_actor"
+    THEME_SONG = "theme_song"  # 主題歌・挿入歌
+    ADR = "adr"  # 吹き替え関連（ADR Director, ADR Script等）
     OTHER = "other"
 
 
@@ -105,12 +109,59 @@ ROLE_MAP: dict[str, Role] = {
     "CGI監督": Role.CGI_DIRECTOR,
     "レイアウト": Role.LAYOUT,
     "副監督": Role.EPISODE_DIRECTOR,
+    # MADB固有ロール (日本語)
+    "作画": Role.KEY_ANIMATOR,  # MADB固有（AniListは「原画」）
+    "文芸": Role.SCREENPLAY,  # 文芸部 → 脚本
+    "総監督": Role.DIRECTOR,
+    "撮影": Role.PHOTOGRAPHY_DIRECTOR,
+    "制作進行": Role.PRODUCER,
+    "動画チェック": Role.IN_BETWEEN,
+    "原案": Role.ORIGINAL_CREATOR,
+    "音楽監督": Role.SOUND_DIRECTOR,
+    "メカニックデザイン": Role.MECHANICAL_DESIGNER,
+    "メカニカルデザイン": Role.MECHANICAL_DESIGNER,
+    "美術": Role.BACKGROUND_ART,
+    "色彩設定": Role.COLOR_DESIGNER,
+    "色指定": Role.COLOR_DESIGNER,
+    "特殊効果": Role.EFFECTS,
+    "エフェクト": Role.EFFECTS,
+    "3dcg": Role.CGI_DIRECTOR,
+    "cg": Role.CGI_DIRECTOR,
+    "構成": Role.SERIES_COMPOSITION,
+    # 声優・音楽関連（分析対象外だが明示的に区別）
+    "voice actor": Role.VOICE_ACTOR,
+    "voice acting": Role.VOICE_ACTOR,
+    "theme song performance": Role.THEME_SONG,
+    "theme song arrangement": Role.THEME_SONG,
+    "theme song composition": Role.THEME_SONG,
+    "theme song lyrics": Role.THEME_SONG,
+    "insert song performance": Role.THEME_SONG,
+    "insert song lyrics": Role.THEME_SONG,
+    "ending theme": Role.THEME_SONG,
+    "opening theme": Role.THEME_SONG,
+    # 吹き替え関連
+    "adr director": Role.ADR,
+    "adr script": Role.ADR,
+    "adr director assistant": Role.ADR,
 }
 
 
 def parse_role(raw: str) -> Role:
-    """役職文字列を Role enum にマッピングする."""
-    normalized = raw.strip().lower()
+    """役職文字列を Role enum にマッピングする.
+
+    エピソード特定の役職（括弧付き）を正しく処理：
+    - "Animation Director (ep 10)" → "animation director" → Role.ANIMATION_DIRECTOR
+    - "Key Animation (eps 21, 25)" → "key animation" → Role.KEY_ANIMATOR
+    """
+    import re
+
+    # 括弧とその中身を除去（エピソード番号など）
+    # 例: "Animation Director (ep 10)" → "Animation Director"
+    cleaned = re.sub(r'\s*\([^)]*\)', '', raw)
+
+    # 正規化: 小文字化、前後の空白削除
+    normalized = cleaned.strip().lower()
+
     return ROLE_MAP.get(normalized, Role.OTHER)
 
 
@@ -123,6 +174,7 @@ class Person(BaseModel):
     aliases: list[str] = Field(default_factory=list)
     mal_id: int | None = None
     anilist_id: int | None = None
+    madb_id: str | None = None  # メディア芸術DB URI
 
     # 画像（AniList）
     image_large: str | None = None
@@ -162,8 +214,8 @@ class Anime(BaseModel):
     episodes: int | None = None
     mal_id: int | None = None
     anilist_id: int | None = None
+    madb_id: str | None = None  # メディア芸術DB URI
     score: float | None = None
-    studio: str | None = None
 
     # 画像（AniList）
     cover_large: str | None = None
@@ -189,14 +241,103 @@ class Anime(BaseModel):
     # 人気度指標
     popularity_rank: int | None = None
     favourites: int | None = None
+    mean_score: int | None = None  # 単純平均スコア（averageScoreとは別算出）
 
     # 制作情報
     studios: list[str] = Field(default_factory=list)
+
+    # 追加メタデータ（AniList拡張）
+    synonyms: list[str] = Field(default_factory=list)  # 別名・別タイトル
+    country_of_origin: str | None = None  # ISO 3166-1 alpha-2 (JP, CN, KR, etc.)
+    is_licensed: bool | None = None
+    is_adult: bool | None = None  # R18フラグ
+    hashtag: str | None = None  # 公式Twitterハッシュタグ
+    site_url: str | None = None  # AniList URL
+    trailer_url: str | None = None  # トレーラーURL
+    trailer_site: str | None = None  # トレーラーサイト名 (youtube, dailymotion)
+
+    # 複合データ（JSON文字列でDB保存）
+    relations_json: str | None = None  # 関連作品（続編/前日譚等）
+    external_links_json: str | None = None  # 外部リンク（配信サイト等）
+    rankings_json: str | None = None  # ランキング情報
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def studio(self) -> str | None:
+        """主制作スタジオ（studiosリストの先頭、後方互換用）."""
+        return self.studios[0] if self.studios else None
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def display_title(self) -> str:
         return self.title_ja or self.title_en or self.id
+
+
+class AnimeRelation(BaseModel):
+    """アニメ間の関連（続編・前日譚等）."""
+
+    anime_id: str
+    related_anime_id: str  # "anilist:{id}"
+    relation_type: str = ""  # SEQUEL, PREQUEL, SIDE_STORY, PARENT, etc.
+    related_title: str = ""
+    related_format: str | None = None  # TV, MOVIE, OVA, etc.
+
+
+class Character(BaseModel):
+    """アニメキャラクター."""
+
+    id: str  # "anilist:c{anilist_id}"
+    name_ja: str = ""
+    name_en: str = ""
+    aliases: list[str] = Field(default_factory=list)
+    anilist_id: int | None = None
+
+    # 画像
+    image_large: str | None = None
+    image_medium: str | None = None
+
+    # プロフィール
+    description: str | None = None
+    gender: str | None = None
+    date_of_birth: str | None = None  # YYYY-MM-DD
+    age: str | None = None  # 文字列 (AniList APIが文字列で返す)
+    blood_type: str | None = None
+    favourites: int | None = None
+    site_url: str | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def display_name(self) -> str:
+        return self.name_ja or self.name_en or self.id
+
+
+class Studio(BaseModel):
+    """アニメ制作スタジオ."""
+
+    id: str  # "anilist:s{anilist_id}"
+    name: str = ""
+    anilist_id: int | None = None
+    is_animation_studio: bool | None = None
+    favourites: int | None = None
+    site_url: str | None = None
+
+
+class AnimeStudio(BaseModel):
+    """アニメ×スタジオの関係."""
+
+    anime_id: str
+    studio_id: str
+    is_main: bool = False
+
+
+class CharacterVoiceActor(BaseModel):
+    """キャラクター×声優×作品の関係."""
+
+    character_id: str
+    person_id: str
+    anime_id: str
+    character_role: str = ""  # MAIN, SUPPORTING, BACKGROUND
+    source: str = ""
 
 
 class Credit(BaseModel):
@@ -205,6 +346,7 @@ class Credit(BaseModel):
     person_id: str
     anime_id: str
     role: Role
+    raw_role: str | None = None  # 元のロール文字列（API由来）を保存
     episode: int | None = None
     source: str = ""
 
