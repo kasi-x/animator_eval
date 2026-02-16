@@ -1,13 +1,13 @@
-"""メディア芸術データベース (MADB) からのデータ収集.
+"""Media Arts Database (MADB) data collection.
 
-GitHub Releases で公開される JSON-LD ダンプを使用する。
+Uses JSON-LD dumps published via GitHub Releases.
 https://github.com/mediaarts-db/dataset
 
-MADBのcontributorデータはプレーンテキスト（例: "[脚本]仲倉重郎 ／ [演出]須永 司"）
-であり、構造化された人物URIがないため、テキストパーサーとdeterministic ID生成を使用する。
+MADB contributor data is plain text (e.g. "[脚本]仲倉重郎 ／ [演出]須永 司"),
+with no structured person URIs, so we use a text parser and deterministic ID generation.
 
-スクレイパーはデータ取得+保存のみ行い、AniListとのマッチングは
-パイプラインの Entity Resolution フェーズで別途実施する。
+This scraper only fetches and stores data. Matching with AniList is handled
+separately in the pipeline's Entity Resolution phase.
 """
 
 from __future__ import annotations
@@ -32,7 +32,7 @@ log = structlog.get_logger()
 DATASET_REPO = "mediaarts-db/dataset"
 GITHUB_API_BASE = "https://api.github.com"
 
-# アニメ関連のコレクション（シリーズ単位 — 主要スタッフ含む）
+# Anime collection files (series-level — contains key staff credits)
 ANIME_COLLECTION_FILES: dict[str, str] = {
     "metadata207_json.zip": "AnimationTVRegularSeries",
     "metadata208_json.zip": "AnimationTVSpecialSeries",
@@ -46,27 +46,27 @@ app = typer.Typer()
 
 
 def parse_contributor_text(text: str) -> list[tuple[str, str]]:
-    """MADBのcontributorテキストを (role_ja, name_ja) ペアに分解.
+    """Parse MADB contributor text into (role_ja, name_ja) pairs.
 
     Input:  "[脚本]仲倉重郎 ／ [演出]須永 司 ／ [作画監督]数井浩子"
     Output: [("脚本", "仲倉重郎"), ("演出", "須永 司"), ("作画監督", "数井浩子")]
 
-    各種バリエーションに対応:
-    - 全角ブラケット: ［脚本］→ [脚本]
-    - ブラケットなし: "仲倉重郎" → ("other", "仲倉重郎")
-    - 複数ロール: "[脚本・演出]名前" → [("脚本", "名前"), ("演出", "名前")]
-    - 全角スラッシュ: ／ （JSON-LDダンプ形式）
+    Handles variations:
+    - Fullwidth brackets: ［脚本］ -> [脚本]
+    - No brackets: "仲倉重郎" -> ("other", "仲倉重郎")
+    - Multiple roles: "[脚本・演出]名前" -> [("脚本", "名前"), ("演出", "名前")]
+    - Fullwidth slash: ／ (JSON-LD dump format)
     """
     if not text or not text.strip():
         return []
 
-    # NFKC正規化（全角ブラケット → 半角 etc.）
+    # NFKC normalization (fullwidth brackets -> halfwidth, etc.)
     text = unicodedata.normalize("NFKC", text)
 
     results: list[tuple[str, str]] = []
 
-    # " / " or " ／ " で分割（前後に空白があるスラッシュのみ）
-    # ブラケット内のスラッシュ（[脚本/演出]）は分割しない
+    # Split on " / " or " ／ " (slash with surrounding whitespace only)
+    # Slashes inside brackets (e.g. [脚本/演出]) are not split
     segments = re.split(r"\s+[/／]\s+", text)
 
     for segment in segments:
@@ -74,21 +74,21 @@ def parse_contributor_text(text: str) -> list[tuple[str, str]]:
         if not segment:
             continue
 
-        # [role]name パターン
+        # [role]name pattern
         match = re.match(r"\[([^\]]+)\]\s*(.+)", segment)
         if match:
             role_text = match.group(1).strip()
             name = match.group(2).strip()
             if not name:
                 continue
-            # 複数ロール対応: "脚本・演出" → ["脚本", "演出"]
+            # Multiple roles: "脚本・演出" -> ["脚本", "演出"]
             roles = re.split(r"[・/]", role_text)
             for role in roles:
                 role = role.strip()
                 if role:
                     results.append((role, name))
         else:
-            # ブラケットなし → role="other"
+            # No brackets -> role="other"
             name = segment.strip()
             if name:
                 results.append(("other", name))
@@ -97,35 +97,35 @@ def parse_contributor_text(text: str) -> list[tuple[str, str]]:
 
 
 def make_madb_person_id(name_ja: str) -> str:
-    """正規化した名前のSHA256ハッシュからdeterministic IDを生成.
+    """Generate a deterministic ID from the SHA256 hash of a normalized name.
 
     Format: "madb:p_{hash12}"
-    同じ名前 → 常に同じID（冪等）
+    Same name -> always same ID (idempotent).
     """
-    # NFKC正規化 + 空白統一
+    # NFKC normalization + whitespace removal
     normalized = unicodedata.normalize("NFKC", name_ja)
-    normalized = re.sub(r"\s+", "", normalized)  # 空白完全除去
+    normalized = re.sub(r"\s+", "", normalized)  # Remove all whitespace
     hash_hex = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
     return f"madb:p_{hash_hex}"
 
 
 def normalize_title(title: str) -> str:
-    """タイトルを正規化して比較可能にする."""
+    """Normalize a title for comparison."""
     if not title:
         return ""
     title = unicodedata.normalize("NFKC", title)
-    # 空白統一・除去
+    # Normalize whitespace
     title = re.sub(r"\s+", " ", title).strip()
     return title
 
 
 def _extract_name_from_schema(name_field: str | list | dict) -> str:
-    """schema:name フィールドからタイトル文字列を抽出.
+    """Extract a title string from the schema:name field.
 
-    JSON-LDでは以下の形式がありうる:
-    - 文字列: "タイトル"
-    - リスト: ["タイトル", {"@value": "カタカナ", "@language": "ja-hrkt"}]
-    - dict: {"@value": "タイトル", "@language": "ja"}
+    JSON-LD may contain:
+    - String: "タイトル"
+    - List: ["タイトル", {"@value": "カタカナ", "@language": "ja-hrkt"}]
+    - Dict: {"@value": "タイトル", "@language": "ja"}
     """
     if isinstance(name_field, str):
         return name_field
@@ -135,9 +135,9 @@ def _extract_name_from_schema(name_field: str | list | dict) -> str:
                 return item
             if isinstance(item, dict) and "@value" in item:
                 lang = item.get("@language", "")
-                if lang not in ("ja-hrkt",):  # カタカナ読みは除外
+                if lang not in ("ja-hrkt",):  # Exclude katakana readings
                     return item["@value"]
-        # カタカナ読みしかない場合はそれを使う
+        # Fall back to katakana reading if nothing else available
         for item in name_field:
             if isinstance(item, str):
                 return item
@@ -150,7 +150,7 @@ def _extract_name_from_schema(name_field: str | list | dict) -> str:
 
 
 def _extract_year(item: dict) -> int | None:
-    """datePublished or startDate から年を抽出."""
+    """Extract year from datePublished or startDate."""
     for field in ("schema:datePublished", "schema:startDate"):
         val = item.get(field, "")
         if val:
@@ -165,7 +165,7 @@ def _extract_year(item: dict) -> int | None:
 
 
 def _extract_studios(item: dict) -> list[str]:
-    """schema:productionCompany からスタジオ名を抽出."""
+    """Extract studio names from schema:productionCompany."""
     raw = item.get("schema:productionCompany", "")
     if not raw:
         return []
@@ -176,11 +176,11 @@ def _extract_studios(item: dict) -> list[str]:
 
     studios = []
     text = unicodedata.normalize("NFKC", raw)
-    # "[アニメーション制作]マッドハウス ／ [制作]東映" のような形式
+    # Format: "[アニメーション制作]マッドハウス ／ [制作]東映"
     segments = re.split(r"\s+[/／]\s+", text)
     for seg in segments:
         seg = seg.strip()
-        # [role]name パターン → name を抽出
+        # [role]name pattern -> extract name
         match = re.match(r"\[([^\]]*)\]\s*(.+)", seg)
         if match:
             name = match.group(2).strip()
@@ -192,7 +192,7 @@ def _extract_studios(item: dict) -> list[str]:
 
 
 def parse_jsonld_dump(json_path: Path) -> list[dict]:
-    """JSON-LDファイルをパースしてアニメ情報を抽出.
+    """Parse a JSON-LD file and extract anime information.
 
     Returns: [{
         "id": "C10001",
@@ -213,16 +213,16 @@ def parse_jsonld_dump(json_path: Path) -> list[dict]:
         if not identifier:
             continue
 
-        # タイトル
+        # Title
         name_field = item.get("schema:name", "")
         title = _extract_name_from_schema(name_field)
         if not title:
             continue
 
-        # 年
+        # Year
         year = _extract_year(item)
 
-        # contributor + creator + originalWorkCreator を統合
+        # Merge contributor + creator + originalWorkCreator
         contributors: list[tuple[str, str]] = []
         for field in ("schema:contributor", "schema:creator", "ma:originalWorkCreator"):
             raw = item.get(field, "")
@@ -234,7 +234,7 @@ def parse_jsonld_dump(json_path: Path) -> list[dict]:
                 parsed = parse_contributor_text(raw)
                 contributors.extend(parsed)
 
-        # スタジオ
+        # Studios
         studios = _extract_studios(item)
 
         results.append({
@@ -252,14 +252,14 @@ async def download_madb_dataset(
     data_dir: Path,
     version: str = "latest",
 ) -> dict[str, Path]:
-    """GitHub Releases から MADB データセットをダウンロード.
+    """Download MADB dataset from GitHub Releases.
 
     Returns: {anime_type: extracted_json_path}
     """
     data_dir.mkdir(parents=True, exist_ok=True)
     version_file = data_dir / ".version"
 
-    # バージョン情報取得
+    # Fetch release info
     async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
         if version == "latest":
             url = f"{GITHUB_API_BASE}/repos/{DATASET_REPO}/releases/latest"
@@ -271,7 +271,7 @@ async def download_madb_dataset(
         release = resp.json()
         tag = release["tag_name"]
 
-        # キャッシュチェック — 同バージョンなら全ファイル揃っていればスキップ
+        # Cache check — skip if same version and all files present
         if version_file.exists() and version_file.read_text().strip() == tag:
             cached = {}
             all_cached = True
@@ -287,7 +287,7 @@ async def download_madb_dataset(
                 log.info("madb_dataset_cached", version=tag, files=len(cached))
                 return cached
 
-        # アセットURLマップ作成
+        # Build asset URL map
         assets = {a["name"]: a["browser_download_url"] for a in release.get("assets", [])}
 
         downloaded: dict[str, Path] = {}
@@ -301,14 +301,14 @@ async def download_madb_dataset(
             resp = await client.get(download_url)
             resp.raise_for_status()
 
-            # ZIP展開
+            # Extract ZIP
             with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
                 json_files = [n for n in zf.namelist() if n.endswith(".json")]
                 if not json_files:
                     log.warning("madb_zip_empty", zip_name=zip_name)
                     continue
 
-                # 最初のJSONファイルを展開
+                # Extract the first JSON file
                 json_name = zip_name.replace("_json.zip", ".json")
                 json_path = data_dir / json_name
                 with open(json_path, "wb") as out:
@@ -317,7 +317,7 @@ async def download_madb_dataset(
                 downloaded[anime_type] = json_path
                 log.info("madb_extracted", file=json_name, size=json_path.stat().st_size)
 
-        # バージョン記録
+        # Record version
         version_file.write_text(tag)
         log.info("madb_download_complete", version=tag, files=len(downloaded))
         return downloaded
@@ -330,21 +330,21 @@ async def scrape_madb(
     max_anime: int = 10000,
     checkpoint_interval: int = 50,
 ) -> dict:
-    """MADBダンプからクレジットデータを取得.
+    """Fetch credit data from MADB dump.
 
-    1. GitHub Releases からダンプをダウンロード（キャッシュあり）
-    2. JSON-LDをパース
-    3. DBに保存（既存と同じ upsert_anime/upsert_person/insert_credit）
+    1. Download dump from GitHub Releases (with caching)
+    2. Parse JSON-LD
+    3. Save to DB (using existing upsert_anime/upsert_person/insert_credit)
 
     Args:
-        conn: SQLite接続
-        data_dir: ダウンロード先ディレクトリ
-        version: データセットバージョン（"latest" or タグ名）
-        max_anime: 最大アニメ数
-        checkpoint_interval: DB保存間隔
+        conn: SQLite connection
+        data_dir: Download destination directory
+        version: Dataset version ("latest" or tag name)
+        max_anime: Maximum number of anime to process
+        checkpoint_interval: DB commit interval
 
     Returns:
-        統計情報dict
+        Statistics dict
     """
     from src.database import insert_credit, update_data_source, upsert_anime, upsert_person
 
@@ -358,15 +358,15 @@ async def scrape_madb(
         "persons_created": 0,
         "parse_failures": 0,
     }
-    person_cache: dict[str, Person] = {}  # name → Person（重複防止）
+    person_cache: dict[str, Person] = {}  # name -> Person (dedup)
 
-    # Phase A: ダンプダウンロード
+    # Phase A: Download dump
     dataset_files = await download_madb_dataset(data_dir, version=version)
     if not dataset_files:
         log.warning("madb_no_files_downloaded")
         return stats
 
-    # Phase B: JSON-LDパース + DB保存
+    # Phase B: Parse JSON-LD + save to DB
     all_records: list[dict] = []
     for anime_type, json_path in dataset_files.items():
         log.info("madb_parsing", file=json_path.name, type=anime_type)
@@ -380,7 +380,7 @@ async def scrape_madb(
     stats["anime_fetched"] = len(all_records)
     log.info("madb_total_records", total=len(all_records))
 
-    # Phase C: DB保存
+    # Phase C: Save to DB
     for i, record in enumerate(all_records):
         madb_id = record["id"]
         title = record["title"]
@@ -404,13 +404,13 @@ async def scrape_madb(
         )
         upsert_anime(conn, anime)
 
-        # クレジット登録
+        # Register credits
         for role_ja, name_ja in contributors:
-            # 名前が短すぎる場合はスキップ（法的リスク）
+            # Skip names that are too short (legal risk)
             if len(name_ja) < 2:
                 continue
 
-            # Person取得 or 作成
+            # Get or create Person
             if name_ja not in person_cache:
                 person_id = make_madb_person_id(name_ja)
                 person = Person(
@@ -435,7 +435,7 @@ async def scrape_madb(
             insert_credit(conn, credit)
             stats["credits_created"] += 1
 
-        # チェックポイント
+        # Checkpoint
         if (i + 1) % checkpoint_interval == 0:
             conn.commit()
             log.info(
@@ -445,7 +445,7 @@ async def scrape_madb(
                 persons=stats["persons_created"],
             )
 
-    # 最終コミット
+    # Final commit
     conn.commit()
     update_data_source(conn, "mediaarts", stats["credits_created"])
     conn.commit()
@@ -460,12 +460,12 @@ async def scrape_madb(
 
 @app.command()
 def main(
-    max_records: int = typer.Option(10000, "--max-records", "-n", help="最大アニメ数"),
-    checkpoint: int = typer.Option(50, "--checkpoint", "-c", help="チェックポイント間隔"),
-    version: str = typer.Option("latest", "--version", "-v", help="データセットバージョン"),
-    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, "--data-dir", "-d", help="ダウンロード先"),
+    max_records: int = typer.Option(10000, "--max-records", "-n", help="Maximum number of anime"),
+    checkpoint: int = typer.Option(50, "--checkpoint", "-c", help="Checkpoint interval"),
+    version: str = typer.Option("latest", "--version", "-v", help="Dataset version"),
+    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, "--data-dir", "-d", help="Download directory"),
 ) -> None:
-    """メディア芸術DB のダンプデータからクレジットを取得する."""
+    """Fetch credit data from Media Arts DB dump."""
     from src.database import db_connection, init_db
     from src.log import setup_logging
 

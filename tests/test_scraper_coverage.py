@@ -1653,10 +1653,10 @@ class TestDownloadAnimeImages:
 
 class TestMediaArtsDownload:
     def test_download_cached(self, tmp_path):
-        """キャッシュ済みの場合はダウンロードをスキップ."""
+        """Cached version skips download."""
         from src.scrapers.mediaarts_scraper import ANIME_COLLECTION_FILES, download_madb_dataset
 
-        # バージョンファイルとJSONファイルを事前作成
+        # Pre-create version file and JSON files
         (tmp_path / ".version").write_text("v1.2.12")
         for zip_name in ANIME_COLLECTION_FILES:
             json_name = zip_name.replace("_json.zip", ".json")

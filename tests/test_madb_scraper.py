@@ -1,4 +1,4 @@
-"""メディア芸術データベース (MADB) スクレイパーのテスト."""
+"""Tests for the Media Arts Database (MADB) scraper."""
 
 from __future__ import annotations
 
@@ -25,15 +25,15 @@ from src.scrapers.mediaarts_scraper import (
 
 
 # ============================================================
-# TestParseContributorText — テキストパーサーの単体テスト
+# TestParseContributorText — Text parser unit tests
 # ============================================================
 
 
 class TestParseContributorText:
-    """contributorテキストパーサーのテスト."""
+    """Tests for the contributor text parser."""
 
     def test_standard_format(self):
-        """標準的な [role]name / [role]name 形式."""
+        """Standard [role]name / [role]name format."""
         text = "[脚本]仲倉重郎 / [演出]須永 司 / [作画監督]数井浩子"
         result = parse_contributor_text(text)
         assert result == [
@@ -43,7 +43,7 @@ class TestParseContributorText:
         ]
 
     def test_fullwidth_slash_separator(self):
-        """全角スラッシュ ／ での区切り（JSON-LDダンプ形式）."""
+        """Fullwidth slash ／ separator (JSON-LD dump format)."""
         text = "[脚本]仲倉重郎 ／ [演出]須永 司 ／ [作画監督]数井浩子"
         result = parse_contributor_text(text)
         assert result == [
@@ -53,40 +53,40 @@ class TestParseContributorText:
         ]
 
     def test_single_entry(self):
-        """単一エントリ."""
+        """Single entry."""
         text = "[監督]宮崎駿"
         result = parse_contributor_text(text)
         assert result == [("監督", "宮崎駿")]
 
     def test_fullwidth_brackets(self):
-        """全角ブラケット ［ ］ の対応."""
+        """Fullwidth brackets ［ ］ support."""
         text = "［脚本］山田太郎"
         result = parse_contributor_text(text)
         assert result == [("脚本", "山田太郎")]
 
     def test_no_brackets(self):
-        """ブラケットなし → role="other"."""
+        """No brackets -> role="other"."""
         text = "山田太郎"
         result = parse_contributor_text(text)
         assert result == [("other", "山田太郎")]
 
     def test_multiple_roles_dot_separator(self):
-        """複数ロール（中点区切り）."""
+        """Multiple roles (interpunct separator)."""
         text = "[脚本・演出]山田太郎"
         result = parse_contributor_text(text)
         assert result == [("脚本", "山田太郎"), ("演出", "山田太郎")]
 
     def test_empty_string(self):
-        """空文字列."""
+        """Empty string."""
         assert parse_contributor_text("") == []
         assert parse_contributor_text("   ") == []
 
     def test_none_input(self):
-        """None入力."""
+        """None input."""
         assert parse_contributor_text(None) == []
 
     def test_mixed_format(self):
-        """ブラケット有り/無し混在."""
+        """Mixed bracketed/unbracketed entries."""
         text = "[監督]田中一 / 鈴木二郎 / [脚本]佐藤三"
         result = parse_contributor_text(text)
         assert result == [
@@ -96,7 +96,7 @@ class TestParseContributorText:
         ]
 
     def test_whitespace_handling(self):
-        """余分な空白の処理."""
+        """Extra whitespace handling."""
         text = "  [監督]  田中 太郎  /  [脚本]  鈴木 次郎  "
         result = parse_contributor_text(text)
         assert result == [
@@ -105,13 +105,13 @@ class TestParseContributorText:
         ]
 
     def test_slash_in_role(self):
-        """ロール内のスラッシュ（脚本/演出）."""
+        """Slash inside role brackets (脚本/演出)."""
         text = "[脚本/演出]山田太郎"
         result = parse_contributor_text(text)
         assert result == [("脚本", "山田太郎"), ("演出", "山田太郎")]
 
     def test_mixed_slash_types(self):
-        """半角と全角スラッシュの混在."""
+        """Mixed halfwidth and fullwidth slashes."""
         text = "[監督]A太郎 / [脚本]B花子 ／ [演出]C次郎"
         result = parse_contributor_text(text)
         assert len(result) == 3
@@ -121,54 +121,54 @@ class TestParseContributorText:
 
 
 # ============================================================
-# TestMakeMADBPersonId — ID生成テスト
+# TestMakeMADBPersonId — ID generation tests
 # ============================================================
 
 
 class TestMakeMADBPersonId:
-    """MADB人物ID生成のテスト."""
+    """Tests for MADB person ID generation."""
 
     def test_deterministic(self):
-        """同じ名前 → 常に同じID."""
+        """Same name -> always same ID."""
         id1 = make_madb_person_id("宮崎駿")
         id2 = make_madb_person_id("宮崎駿")
         assert id1 == id2
 
     def test_format(self):
-        """ID形式: madb:p_{hash12}."""
+        """ID format: madb:p_{hash12}."""
         pid = make_madb_person_id("宮崎駿")
         assert pid.startswith("madb:p_")
         assert len(pid) == len("madb:p_") + 12
 
     def test_different_names_different_ids(self):
-        """異なる名前 → 異なるID."""
+        """Different names -> different IDs."""
         id1 = make_madb_person_id("宮崎駿")
         id2 = make_madb_person_id("高畑勲")
         assert id1 != id2
 
     def test_whitespace_normalization(self):
-        """空白の有無でIDが変わらない."""
+        """Whitespace presence does not change ID."""
         id1 = make_madb_person_id("須永 司")
         id2 = make_madb_person_id("須永司")
         assert id1 == id2
 
     def test_nfkc_normalization(self):
-        """全角/半角の違いでIDが変わらない."""
+        """Fullwidth/halfwidth differences do not change ID."""
         id1 = make_madb_person_id("ＡＢＣ")
         id2 = make_madb_person_id("ABC")
         assert id1 == id2
 
 
 # ============================================================
-# TestMADBRoleMapping — ロールマッピングテスト
+# TestMADBRoleMapping — Role mapping tests
 # ============================================================
 
 
 class TestMADBRoleMapping:
-    """MADB固有ロールのマッピングテスト."""
+    """Tests for MADB-specific role mapping."""
 
     def test_madb_specific_roles(self):
-        """MADB固有ロール → 正しいRole enum."""
+        """MADB-specific roles -> correct Role enum."""
         assert parse_role("作画") == Role.KEY_ANIMATOR
         assert parse_role("文芸") == Role.SCREENPLAY
         assert parse_role("総監督") == Role.DIRECTOR
@@ -178,7 +178,7 @@ class TestMADBRoleMapping:
         assert parse_role("原案") == Role.ORIGINAL_CREATOR
 
     def test_shared_roles_still_work(self):
-        """既存の共通ロールも引き続き動作."""
+        """Existing common roles still work."""
         assert parse_role("監督") == Role.DIRECTOR
         assert parse_role("脚本") == Role.SCREENPLAY
         assert parse_role("原画") == Role.KEY_ANIMATOR
@@ -186,11 +186,11 @@ class TestMADBRoleMapping:
         assert parse_role("作画監督") == Role.ANIMATION_DIRECTOR
 
     def test_unknown_role(self):
-        """不明ロール → Role.OTHER."""
+        """Unknown role -> Role.OTHER."""
         assert parse_role("ナレーション") == Role.OTHER
 
     def test_new_madb_roles(self):
-        """追加されたMADB固有ロール."""
+        """Additional MADB-specific roles."""
         assert parse_role("音楽監督") == Role.SOUND_DIRECTOR
         assert parse_role("メカニックデザイン") == Role.MECHANICAL_DESIGNER
         assert parse_role("美術") == Role.BACKGROUND_ART
@@ -204,12 +204,12 @@ class TestMADBRoleMapping:
 
 
 # ============================================================
-# TestNormalizeTitle — タイトル正規化テスト
+# TestNormalizeTitle — Title normalization tests
 # ============================================================
 
 
 class TestNormalizeTitle:
-    """タイトル正規化のテスト."""
+    """Tests for title normalization."""
 
     def test_basic(self):
         assert normalize_title("機動戦士ガンダム") == "機動戦士ガンダム"
@@ -218,7 +218,7 @@ class TestNormalizeTitle:
         assert normalize_title("  機動戦士  ガンダム  ") == "機動戦士 ガンダム"
 
     def test_nfkc(self):
-        """全角英数字の正規化."""
+        """Fullwidth alphanumeric normalization."""
         assert normalize_title("ＧＵＮＤＡＭ") == "GUNDAM"
 
     def test_empty(self):
@@ -227,12 +227,12 @@ class TestNormalizeTitle:
 
 
 # ============================================================
-# TestExtractNameFromSchema — JSON-LDの名前フィールド抽出
+# TestExtractNameFromSchema — JSON-LD name field extraction
 # ============================================================
 
 
 class TestExtractNameFromSchema:
-    """schema:name フィールドの各形式テスト."""
+    """Tests for schema:name field format variants."""
 
     def test_string(self):
         assert _extract_name_from_schema("タイトル") == "タイトル"
@@ -242,7 +242,7 @@ class TestExtractNameFromSchema:
         assert result == "タイトル"
 
     def test_list_kana_only(self):
-        """カタカナ読みしかない場合はそれを使う."""
+        """Falls back to katakana reading if nothing else available."""
         result = _extract_name_from_schema([{"@value": "タイトル", "@language": "ja-hrkt"}])
         assert result == "タイトル"
 
@@ -258,12 +258,12 @@ class TestExtractNameFromSchema:
 
 
 # ============================================================
-# TestExtractYear — 年抽出テスト
+# TestExtractYear — Year extraction tests
 # ============================================================
 
 
 class TestExtractYear:
-    """datePublished/startDate からの年抽出テスト."""
+    """Tests for year extraction from datePublished/startDate."""
 
     def test_date_published(self):
         assert _extract_year({"schema:datePublished": "2020-04-01"}) == 2020
@@ -283,12 +283,12 @@ class TestExtractYear:
 
 
 # ============================================================
-# TestExtractStudios — スタジオ抽出テスト
+# TestExtractStudios — Studio extraction tests
 # ============================================================
 
 
 class TestExtractStudios:
-    """productionCompany からのスタジオ名抽出テスト."""
+    """Tests for studio name extraction from productionCompany."""
 
     def test_single_studio(self):
         item = {"schema:productionCompany": "[アニメーション制作]マッドハウス"}
@@ -309,12 +309,12 @@ class TestExtractStudios:
 
 
 # ============================================================
-# TestParseJsonLdDump — JSON-LDパーステスト
+# TestParseJsonLdDump — JSON-LD parsing tests
 # ============================================================
 
 
 class TestParseJsonLdDump:
-    """JSON-LDダンプのパーステスト."""
+    """Tests for JSON-LD dump parsing."""
 
     def _make_json(self, tmp_path: Path, graph: list[dict]) -> Path:
         json_path = tmp_path / "test.json"
@@ -340,7 +340,7 @@ class TestParseJsonLdDump:
         assert result[0]["studios"] == ["マッドハウス"]
 
     def test_creator_and_contributor_merged(self, tmp_path):
-        """schema:creator + schema:contributor + ma:originalWorkCreator が統合される."""
+        """schema:creator + schema:contributor + ma:originalWorkCreator are merged."""
         graph = [
             {
                 "schema:identifier": "C20001",
@@ -358,7 +358,7 @@ class TestParseJsonLdDump:
         assert "原作" in roles
 
     def test_no_contributor_empty_list(self, tmp_path):
-        """contributorが空の場合."""
+        """Empty contributors when no contributor fields."""
         graph = [
             {
                 "schema:identifier": "C30001",
@@ -371,13 +371,13 @@ class TestParseJsonLdDump:
         assert result[0]["contributors"] == []
 
     def test_no_identifier_skipped(self, tmp_path):
-        """identifierがない場合はスキップ."""
+        """Items without identifier are skipped."""
         graph = [{"schema:name": "NoID"}]
         result = parse_jsonld_dump(self._make_json(tmp_path, graph))
         assert len(result) == 0
 
     def test_no_title_skipped(self, tmp_path):
-        """タイトルがない場合はスキップ."""
+        """Items without title are skipped."""
         graph = [{"schema:identifier": "C40001"}]
         result = parse_jsonld_dump(self._make_json(tmp_path, graph))
         assert len(result) == 0
@@ -387,7 +387,7 @@ class TestParseJsonLdDump:
         assert result == []
 
     def test_name_as_list(self, tmp_path):
-        """schema:name がリスト形式."""
+        """schema:name in list format."""
         graph = [
             {
                 "schema:identifier": "C50001",
@@ -401,20 +401,20 @@ class TestParseJsonLdDump:
 
 
 # ============================================================
-# TestDownloadMADBDataset — ダウンロード機能テスト
+# TestDownloadMADBDataset — Download tests
 # ============================================================
 
 
 class TestDownloadMADBDataset:
-    """GitHub Releasesからのダウンロードテスト."""
+    """Tests for downloading from GitHub Releases."""
 
     def test_cache_hit(self, tmp_path):
-        """キャッシュ済みの場合はダウンロードをスキップ."""
+        """Cached version skips download."""
         import asyncio
 
         from src.scrapers.mediaarts_scraper import ANIME_COLLECTION_FILES, download_madb_dataset
 
-        # バージョンファイルとJSONファイルを事前作成
+        # Pre-create version file and JSON files
         (tmp_path / ".version").write_text("v1.2.12")
         for zip_name in ANIME_COLLECTION_FILES:
             json_name = zip_name.replace("_json.zip", ".json")
@@ -440,12 +440,12 @@ class TestDownloadMADBDataset:
         assert len(result) == len(ANIME_COLLECTION_FILES)
 
     def test_download_and_extract(self, tmp_path):
-        """ZIPダウンロード+展開のテスト."""
+        """ZIP download and extraction."""
         import asyncio
 
         from src.scrapers.mediaarts_scraper import download_madb_dataset
 
-        # テスト用ZIPデータ作成
+        # Create test ZIP data
         zip_buf = io.BytesIO()
         with zipfile.ZipFile(zip_buf, "w") as zf:
             zf.writestr("metadata207.json", json.dumps({"@graph": []}))
@@ -487,16 +487,16 @@ class TestDownloadMADBDataset:
 
 
 # ============================================================
-# TestMADBIntegration — JSON-LDダンプでのE2Eテスト
+# TestMADBIntegration — E2E tests with JSON-LD dump
 # ============================================================
 
 
 class TestMADBIntegration:
-    """MADB統合のE2Eテスト（モックJSON-LDファイル）."""
+    """MADB integration E2E tests (mock JSON-LD files)."""
 
     @pytest.fixture
     def db_conn(self, tmp_path):
-        """テスト用DB接続."""
+        """Test DB connection."""
         from src.database import init_db
 
         db_path = tmp_path / "test.db"
@@ -506,12 +506,12 @@ class TestMADBIntegration:
         return conn
 
     def test_scrape_with_mock_dump(self, db_conn, tmp_path):
-        """モックJSON-LDファイルからの基本的なスクレイプフロー."""
+        """Basic scrape flow from mock JSON-LD file."""
         import asyncio
 
         from src.scrapers.mediaarts_scraper import scrape_madb
 
-        # テスト用JSON-LDファイル作成
+        # Create test JSON-LD file
         data_dir = tmp_path / "madb"
         data_dir.mkdir()
         json_data = {
@@ -528,7 +528,7 @@ class TestMADBIntegration:
         json_path = data_dir / "metadata207.json"
         json_path.write_text(json.dumps(json_data, ensure_ascii=False), encoding="utf-8")
 
-        # download_madb_dataset をモックしてローカルファイルを返す
+        # Mock download_madb_dataset to return local file
         async def mock_download(data_dir, version="latest"):
             return {"AnimationTVRegularSeries": json_path}
 
@@ -547,7 +547,7 @@ class TestMADBIntegration:
         assert stats["credits_created"] == 2
         assert stats["persons_created"] == 2
 
-        # 全てmadb:IDで保存される
+        # All saved with madb: IDs
         credits = db_conn.execute("SELECT * FROM credits WHERE source='mediaarts'").fetchall()
         assert len(credits) == 2
 
@@ -559,7 +559,7 @@ class TestMADBIntegration:
         assert anime[0]["madb_id"] == "A001"
 
     def test_scrape_multiple_contributor_fields(self, db_conn, tmp_path):
-        """creator + contributor + originalWorkCreator が統合される."""
+        """creator + contributor + originalWorkCreator are merged."""
         import asyncio
 
         from src.scrapers.mediaarts_scraper import scrape_madb
@@ -593,15 +593,15 @@ class TestMADBIntegration:
         assert stats["persons_created"] == 3
 
     def test_short_name_skipped(self):
-        """2文字未満の名前はスキップ."""
+        """Names shorter than 2 chars are skipped."""
         text = "[監督]A"
         result = parse_contributor_text(text)
-        # パーサー自体は返す（フィルタはscrape_madb内）
+        # Parser returns it (filtering is in scrape_madb)
         assert len(result) == 1
         assert result[0] == ("監督", "A")
 
     def test_no_files_returns_empty_stats(self, db_conn, tmp_path):
-        """ダウンロードファイルなしの場合."""
+        """No downloaded files returns empty stats."""
         import asyncio
 
         from src.scrapers.mediaarts_scraper import scrape_madb
@@ -619,15 +619,15 @@ class TestMADBIntegration:
 
 
 # ============================================================
-# TestEntityResolutionMADB — MADB名寄せテスト
+# TestEntityResolutionMADB — MADB entity resolution tests
 # ============================================================
 
 
 class TestEntityResolutionMADB:
-    """MADB人物の名寄せテスト."""
+    """Tests for MADB person entity resolution."""
 
     def test_madb_to_anilist_match(self):
-        """MADB人物がAniList人物にマッチする."""
+        """MADB person matches AniList person."""
         from src.analysis.entity_resolution import cross_source_match
         from src.models import Person
 
@@ -639,7 +639,7 @@ class TestEntityResolutionMADB:
         assert result.get("madb:p_abc123def456") == "anilist:1"
 
     def test_madb_short_name_skipped(self):
-        """短い名前(< 3文字)のMADB人物はスキップ."""
+        """Short names (< 3 chars) are skipped."""
         from src.analysis.entity_resolution import cross_source_match
         from src.models import Person
 
@@ -648,11 +648,11 @@ class TestEntityResolutionMADB:
             Person(id="madb:p_abc123def456", name_ja="太郎"),
         ]
         result = cross_source_match(persons)
-        # 2文字 < 3 → スキップ
+        # 2 chars < 3 -> skipped
         assert "madb:p_abc123def456" not in result
 
     def test_madb_ambiguous_skipped(self):
-        """曖昧マッチ（同名が複数）はスキップ."""
+        """Ambiguous matches (multiple same names) are skipped."""
         from src.analysis.entity_resolution import cross_source_match
         from src.models import Person
 
@@ -665,7 +665,7 @@ class TestEntityResolutionMADB:
         assert "madb:p_abc123def456" not in result
 
     def test_madb_no_match(self):
-        """マッチなし."""
+        """No match."""
         from src.analysis.entity_resolution import cross_source_match
         from src.models import Person
 
