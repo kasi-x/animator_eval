@@ -7,10 +7,9 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from src.models import Anime, Role, parse_role
+from src.models import Role, parse_role
 from src.scrapers.mediaarts_scraper import (
     make_madb_person_id,
-    match_anime_to_anilist,
     normalize_title,
     parse_anime_list_results,
     parse_contributor_text,
@@ -201,92 +200,6 @@ class TestNormalizeTitle:
 
 
 # ============================================================
-# TestAnimeMatching — アニメマッチングテスト
-# ============================================================
-
-
-class TestAnimeMatching:
-    """MADB ↔ AniList アニメマッチングのテスト."""
-
-    @pytest.fixture
-    def anilist_anime(self):
-        return [
-            Anime(id="anilist:1", title_ja="新世紀エヴァンゲリオン", year=1995, anilist_id=1, mal_id=30),
-            Anime(id="anilist:2", title_ja="攻殻機動隊", year=1995, anilist_id=2, mal_id=43),
-            Anime(id="anilist:3", title_ja="カウボーイビバップ", year=1998, anilist_id=3),
-        ]
-
-    def test_match_by_anilist_url(self, anilist_anime):
-        """AniList外部IDによるマッチング."""
-        result = match_anime_to_anilist(
-            "新世紀エヴァンゲリオン",
-            1995,
-            ["https://anilist.co/anime/1"],
-            anilist_anime,
-        )
-        assert result == "anilist:1"
-
-    def test_match_by_mal_url(self, anilist_anime):
-        """MAL外部IDによるマッチング."""
-        result = match_anime_to_anilist(
-            "攻殻機動隊",
-            1995,
-            ["https://myanimelist.net/anime/43"],
-            anilist_anime,
-        )
-        assert result == "anilist:2"
-
-    def test_match_by_title_and_year(self, anilist_anime):
-        """タイトル+年マッチング."""
-        result = match_anime_to_anilist(
-            "カウボーイビバップ",
-            1998,
-            [],
-            anilist_anime,
-        )
-        assert result == "anilist:3"
-
-    def test_match_year_tolerance(self, anilist_anime):
-        """年±1許容."""
-        result = match_anime_to_anilist(
-            "カウボーイビバップ",
-            1999,  # ±1年以内
-            [],
-            anilist_anime,
-        )
-        assert result == "anilist:3"
-
-    def test_no_match(self, anilist_anime):
-        """マッチなし."""
-        result = match_anime_to_anilist(
-            "存在しないアニメ",
-            2020,
-            [],
-            anilist_anime,
-        )
-        assert result is None
-
-    def test_ambiguous_match_skipped(self):
-        """同名・同年が2つ以上 → マッチしない."""
-        anime_list = [
-            Anime(id="anilist:1", title_ja="テスト", year=2020, anilist_id=1),
-            Anime(id="anilist:2", title_ja="テスト", year=2020, anilist_id=2),
-        ]
-        result = match_anime_to_anilist("テスト", 2020, [], anime_list)
-        assert result is None
-
-    def test_match_no_year(self, anilist_anime):
-        """年なしでのタイトルマッチング（一意なら成功）."""
-        result = match_anime_to_anilist(
-            "カウボーイビバップ",
-            None,
-            [],
-            anilist_anime,
-        )
-        assert result == "anilist:3"
-
-
-# ============================================================
 # TestParseAnimeListResults — SPARQL結果パーステスト
 # ============================================================
 
@@ -354,6 +267,7 @@ class TestMADBIntegration:
     def db_conn(self, tmp_path):
         """テスト用DB接続."""
         from src.database import init_db
+
         db_path = tmp_path / "test.db"
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
@@ -361,12 +275,11 @@ class TestMADBIntegration:
         return conn
 
     def test_scrape_with_mock(self, db_conn):
-        """モックSPARQLでの基本的なスクレイプフロー."""
+        """モックSPARQLでの基本的なスクレイプフロー（マッチングなし）."""
         import asyncio
 
         from src.scrapers.mediaarts_scraper import scrape_madb
 
-        # モックレスポンス
         anime_list_response = [
             {
                 "anime": {"value": "https://mediaarts-db.bunka.go.jp/data/anime/A001"},
@@ -382,7 +295,7 @@ class TestMADBIntegration:
 
         mock_client = AsyncMock()
         mock_client.fetch_anime_list = AsyncMock(
-            side_effect=[anime_list_response, []]  # first page + empty second page
+            side_effect=[anime_list_response, []]
         )
         mock_client.fetch_contributor = AsyncMock(return_value=contributor_response)
         mock_client.close = AsyncMock()
@@ -404,9 +317,8 @@ class TestMADBIntegration:
         assert stats["anime_with_contributors"] == 1
         assert stats["credits_created"] == 2
         assert stats["persons_created"] == 2
-        assert stats["anime_new"] == 1
 
-        # DB確認
+        # 全てmadb:IDで保存される
         credits = db_conn.execute("SELECT * FROM credits WHERE source='mediaarts'").fetchall()
         assert len(credits) == 2
 
@@ -415,33 +327,25 @@ class TestMADBIntegration:
 
         anime = db_conn.execute("SELECT * FROM anime WHERE id LIKE 'madb:%'").fetchall()
         assert len(anime) == 1
+        assert anime[0]["madb_id"] == "A001"
 
-    def test_scrape_with_anilist_match(self, db_conn):
-        """AniListマッチングが動作するE2Eテスト."""
+    def test_scrape_saves_external_ids(self, db_conn):
+        """外部IDがexternal_links_jsonに保存される."""
         import asyncio
+        import json
 
-        from src.database import upsert_anime
         from src.scrapers.mediaarts_scraper import scrape_madb
-
-        # 既存AniListアニメを作成
-        anilist_anime = Anime(
-            id="anilist:999",
-            title_ja="テストアニメ",
-            year=2000,
-            anilist_id=999,
-        )
-        upsert_anime(db_conn, anilist_anime)
-        db_conn.commit()
 
         anime_list_response = [
             {
-                "anime": {"value": "https://mediaarts-db.bunka.go.jp/data/anime/A001"},
-                "title": {"value": "テストアニメ"},
-                "year": {"value": "2000"},
+                "anime": {"value": "https://mediaarts-db.bunka.go.jp/data/anime/B002"},
+                "title": {"value": "テスト作品"},
+                "year": {"value": "2005"},
+                "identifier": {"value": "https://anilist.co/anime/999"},
             }
         ]
         contributor_response = [
-            {"contributor": {"value": "[監督]テスト太郎"}},
+            {"contributor": {"value": "[監督]山田太郎"}},
         ]
 
         mock_client = AsyncMock()
@@ -455,23 +359,18 @@ class TestMADBIntegration:
             "src.scrapers.mediaarts_scraper.MediaArtsClient",
             return_value=mock_client,
         ):
-            stats = asyncio.run(
+            asyncio.run(
                 scrape_madb(
                     db_conn,
                     anime_types=["AnimationTVRegularSeries"],
                     max_anime=10,
-                    anilist_anime=[anilist_anime],
                 )
             )
 
-        assert stats["anime_matched"] == 1
-        assert stats["anime_new"] == 0
-
-        # クレジットは既存anilistアニメに紐づくべき
-        credits = db_conn.execute(
-            "SELECT * FROM credits WHERE anime_id = 'anilist:999'"
-        ).fetchall()
-        assert len(credits) == 1
+        anime = db_conn.execute("SELECT * FROM anime WHERE id = 'madb:B002'").fetchone()
+        assert anime is not None
+        ext_links = json.loads(anime["external_links_json"])
+        assert "https://anilist.co/anime/999" in ext_links
 
     def test_short_name_skipped(self):
         """2文字未満の名前はスキップ."""

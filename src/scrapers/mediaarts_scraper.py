@@ -5,6 +5,9 @@ SPARQL エンドポイント: https://mediaarts-db.bunka.go.jp/sparql
 
 MADBのcontributorデータはプレーンテキスト（例: "[脚本]仲倉重郎 / [演出]須永 司"）
 であり、構造化された人物URIがないため、テキストパーサーとdeterministic ID生成を使用する。
+
+スクレイパーはデータ取得+保存のみ行い、AniListとのマッチングは
+パイプラインの Entity Resolution フェーズで別途実施する。
 """
 
 from __future__ import annotations
@@ -14,6 +17,7 @@ import hashlib
 import re
 import time
 import unicodedata
+
 import httpx
 import structlog
 import typer
@@ -138,64 +142,6 @@ def normalize_title(title: str) -> str:
     return title
 
 
-def match_anime_to_anilist(
-    madb_title: str,
-    madb_year: int | None,
-    madb_identifiers: list[str],
-    anilist_anime: list[Anime],
-) -> str | None:
-    """MADBアニメをAniListアニメにマッチングする.
-
-    3段階マッチング:
-    1. 外部ID: madb:externalIdentifier にAniList/MAL URLが含まれていれば直接紐づけ
-    2. タイトル+年: 正規化title_ja + 年（±1年許容）で照合。1:1マッチのみ
-    3. マッチなし → None
-
-    Returns:
-        AniListアニメのid（例: "anilist:12345"）またはNone
-    """
-    # Step 1: 外部ID照合
-    for identifier in madb_identifiers:
-        # AniList URL: https://anilist.co/anime/12345
-        al_match = re.search(r"anilist\.co/anime/(\d+)", identifier)
-        if al_match:
-            anilist_id = int(al_match.group(1))
-            for a in anilist_anime:
-                if a.anilist_id == anilist_id:
-                    return a.id
-
-        # MAL URL: https://myanimelist.net/anime/12345
-        mal_match = re.search(r"myanimelist\.net/anime/(\d+)", identifier)
-        if mal_match:
-            mal_id = int(mal_match.group(1))
-            for a in anilist_anime:
-                if a.mal_id == mal_id:
-                    return a.id
-
-    # Step 2: タイトル+年
-    if not madb_title:
-        return None
-
-    norm_title = normalize_title(madb_title)
-    if not norm_title:
-        return None
-
-    # AniListのタイトルインデックス（正規化→Anime）
-    candidates: list[Anime] = []
-    for a in anilist_anime:
-        a_norm = normalize_title(a.title_ja)
-        if a_norm and a_norm == norm_title:
-            # 年チェック（±1年許容 or 年なし）
-            if madb_year is None or a.year is None or abs(madb_year - a.year) <= 1:
-                candidates.append(a)
-
-    # 1:1マッチのみ採用
-    if len(candidates) == 1:
-        return candidates[0].id
-
-    return None
-
-
 class MediaArtsClient:
     """メディア芸術DB SPARQL 非同期クライアント."""
 
@@ -313,14 +259,21 @@ def parse_anime_list_results(bindings: list[dict]) -> list[dict]:
     return list(anime_map.values())
 
 
+def _extract_madb_id(uri: str) -> str:
+    """SPARQL URIからMADB IDを抽出する."""
+    return uri.split("/")[-1] if "/" in uri else uri
+
+
 async def scrape_madb(
     conn,
     anime_types: list[str] | None = None,
     max_anime: int = 10000,
     checkpoint_interval: int = 50,
-    anilist_anime: list[Anime] | None = None,
 ) -> dict:
     """MADBからクレジットデータを収集する.
+
+    全データを madb: プレフィックス付きIDでDB保存する。
+    AniListとのマッチングはパイプラインの Entity Resolution で別途実施。
 
     Phase A: アニメ一覧取得（軽量SPARQL）
     Phase B: 各アニメのcontributor取得 → テキストパース → DB保存
@@ -330,7 +283,6 @@ async def scrape_madb(
         anime_types: 対象タイプ（デフォルト: 全タイプ）
         max_anime: 最大アニメ数
         checkpoint_interval: DB保存間隔
-        anilist_anime: AniListアニメリスト（マッチング用）
 
     Returns:
         統計情報dict
@@ -339,8 +291,6 @@ async def scrape_madb(
 
     if anime_types is None:
         anime_types = ANIME_TYPES
-    if anilist_anime is None:
-        anilist_anime = []
 
     client = MediaArtsClient()
     stats = {
@@ -348,8 +298,6 @@ async def scrape_madb(
         "anime_with_contributors": 0,
         "credits_created": 0,
         "persons_created": 0,
-        "anime_matched": 0,
-        "anime_new": 0,
         "parse_failures": 0,
     }
     person_cache: dict[str, Person] = {}  # name → Person（重複防止）
@@ -416,29 +364,23 @@ async def scrape_madb(
 
             stats["anime_with_contributors"] += 1
 
-            # AniListマッチング
-            madb_id = uri.split("/")[-1] if "/" in uri else uri
-            matched_anilist_id = match_anime_to_anilist(title, year, identifiers, anilist_anime)
+            # 全て madb: IDで保存（マッチングはパイプラインで後から実施）
+            madb_id = _extract_madb_id(uri)
+            anime_id = f"madb:{madb_id}"
 
-            if matched_anilist_id:
-                anime_id = matched_anilist_id
-                stats["anime_matched"] += 1
-                # 既存アニメの madb_id を更新
-                conn.execute(
-                    "UPDATE anime SET madb_id = ? WHERE id = ? AND madb_id IS NULL",
-                    (madb_id, anime_id),
-                )
-            else:
-                anime_id = f"madb:{madb_id}"
-                stats["anime_new"] += 1
-                # 新規アニメ作成
-                anime = Anime(
-                    id=anime_id,
-                    title_ja=title,
-                    year=year,
-                    madb_id=madb_id,
-                )
-                upsert_anime(conn, anime)
+            # 外部IDをJSON文字列として保存（後のマッチングで利用可能）
+            import json
+
+            ext_ids_json = json.dumps(identifiers, ensure_ascii=False) if identifiers else None
+
+            anime = Anime(
+                id=anime_id,
+                title_ja=title,
+                year=year,
+                madb_id=madb_id,
+                external_links_json=ext_ids_json,
+            )
+            upsert_anime(conn, anime)
 
             # クレジット登録
             for role_ja, name_ja in all_credits_for_anime:
@@ -503,21 +445,18 @@ def main(
     checkpoint: int = typer.Option(50, "--checkpoint", "-c", help="チェックポイント間隔"),
 ) -> None:
     """メディア芸術DB からクレジットデータを収集する."""
-    from src.database import db_connection, init_db, load_all_anime
+    from src.database import db_connection, init_db
     from src.log import setup_logging
 
     setup_logging()
 
     with db_connection() as conn:
         init_db(conn)
-        # AniListアニメをマッチング用にロード
-        anilist_anime = load_all_anime(conn)
         stats = asyncio.run(
             scrape_madb(
                 conn,
                 max_anime=max_records,
                 checkpoint_interval=checkpoint,
-                anilist_anime=anilist_anime,
             )
         )
 
