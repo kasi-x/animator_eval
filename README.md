@@ -2,7 +2,7 @@
 
 > Anime industry professional evaluation system — Making individual contributions visible to support fair compensation and a healthier industry
 
-[![Tests](https://img.shields.io/badge/tests-1319%20passing-success)](https://github.com/kasi-x/animetor_eval)
+[![Tests](https://img.shields.io/badge/tests-1319%20passing-success)](https://github.com/kasi-x/animator_eval)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
 [![License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -51,8 +51,8 @@
 
 ```bash
 # Clone the repository
-git clone https://github.com/kasi-x/animetor_eval.git
-cd animetor_eval
+git clone https://github.com/kasi-x/animator_eval.git
+cd animator_eval
 
 # Install dependencies
 pixi install
@@ -87,10 +87,10 @@ pixi run validate
 pixi run ranking
 
 # Person profile
-pixi run profile "宮崎駿"
+pixi run profile "Hayao Miyazaki"
 
 # Search for a person
-pixi run search "田中"
+pixi run search "Tanaka"
 
 # Find similar persons
 pixi run similar "person_id_123"
@@ -426,7 +426,7 @@ pixi run lab
 ## Directory Structure
 
 ```
-animetor_eval/
+animator_eval/
 ├── src/
 │   ├── pipeline_phases/     # 10-phase modules
 │   ├── analysis/            # 41+ analysis modules
@@ -494,7 +494,7 @@ Issues and Pull Requests are welcome.
 
 - [Documentation](docs/)
 - [API Specification](http://localhost:8000/docs) (after starting the server)
-- [Issues](https://github.com/kasi-x/animetor_eval/issues)
+- [Issues](https://github.com/kasi-x/animator_eval/issues)
 
 ---
 
