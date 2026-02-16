@@ -3,7 +3,7 @@
 Targets 70%+ coverage across:
 - anilist_scraper.py (AniListClient, parsers, edge cases)
 - mal_scraper.py (JikanClient, parsers, checkpoint)
-- mediaarts_scraper.py (MediaArtsClient, SPARQL, SSL fallback)
+- mediaarts_scraper.py (JSON-LD dump parser, GitHub download)
 - jvmg_fetcher.py (WikidataClient, parsers, checkpoint)
 - image_downloader.py (download_image, content validation, retry)
 - retry.py (retry_async utility)
@@ -214,9 +214,16 @@ class TestAniListClient:
             request=httpx.Request("POST", "https://graphql.anilist.co"),
         )
 
+        # probe response after 429 wait
+        probe_response = httpx.Response(
+            200,
+            json={"data": {}},
+            request=httpx.Request("POST", "https://graphql.anilist.co"),
+        )
+
         client = AniListClient()
         client._client = AsyncMock()
-        client._client.post = AsyncMock(side_effect=[rate_limit_response, success_response])
+        client._client.post = AsyncMock(side_effect=[rate_limit_response, probe_response, success_response])
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
@@ -224,7 +231,7 @@ class TestAniListClient:
 
         result = _run(run())
         assert result == {"result": "ok"}
-        assert client._client.post.call_count == 2
+        assert client._client.post.call_count == 3  # 429 + probe + success
         _run(client.close())
 
     def test_query_429_with_callback(self):
@@ -242,11 +249,17 @@ class TestAniListClient:
             request=httpx.Request("POST", "https://graphql.anilist.co"),
         )
 
+        probe_response = httpx.Response(
+            200,
+            json={"data": {}},
+            request=httpx.Request("POST", "https://graphql.anilist.co"),
+        )
+
         callback_calls = []
 
         client = AniListClient()
         client._client = AsyncMock()
-        client._client.post = AsyncMock(side_effect=[rate_limit_response, success_response])
+        client._client.post = AsyncMock(side_effect=[rate_limit_response, probe_response, success_response])
         client.on_rate_limit = lambda secs: callback_calls.append(secs)
 
         async def run():
@@ -961,210 +974,110 @@ class TestMALCheckpoint:
 # ---------------------------------------------------------------------------
 
 
-class TestMediaArtsClient:
-    def test_query_success(self):
-        from src.scrapers.mediaarts_scraper import MediaArtsClient
+class TestMediaArtsJsonLdParser:
+    def test_parse_jsonld_dump_basic(self, tmp_path):
+        from src.scrapers.mediaarts_scraper import parse_jsonld_dump
 
-        mock_response = httpx.Response(
-            200,
-            json={"results": {"bindings": [{"anime": {"value": "http://example/1"}}]}},
-            request=httpx.Request("GET", "https://mediaarts-db.artmuseums.go.jp/sparql"),
-        )
+        data = {
+            "@graph": [
+                {
+                    "schema:identifier": "C10001",
+                    "schema:name": "テスト作品",
+                    "schema:datePublished": "2020-04-01",
+                    "schema:contributor": "[監督]山田太郎 ／ [脚本]鈴木次郎",
+                    "schema:productionCompany": "[アニメーション制作]マッドハウス",
+                }
+            ]
+        }
+        json_path = tmp_path / "test.json"
+        json_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
-        client = MediaArtsClient()
-        client._client = AsyncMock()
-        client._client.get = AsyncMock(return_value=mock_response)
-
-        result = _run(client.query("SELECT ?anime WHERE {}"))
+        result = parse_jsonld_dump(json_path)
         assert len(result) == 1
-        _run(client.close())
+        assert result[0]["id"] == "C10001"
+        assert result[0]["title"] == "テスト作品"
+        assert result[0]["year"] == 2020
+        assert ("監督", "山田太郎") in result[0]["contributors"]
+        assert ("脚本", "鈴木次郎") in result[0]["contributors"]
+        assert "マッドハウス" in result[0]["studios"]
 
-    def test_query_ssl_fallback(self):
-        """Test SSL fallback behavior.
+    def test_parse_jsonld_name_list(self, tmp_path):
+        from src.scrapers.mediaarts_scraper import parse_jsonld_dump
 
-        Note: The installed httpx version does not have httpx.SSLError.
-        The mediaarts_scraper.py code has an 'except httpx.SSLError' clause,
-        but since that class doesn't exist, Python raises AttributeError when
-        evaluating the except clause. This test verifies the actual behavior.
+        data = {
+            "@graph": [
+                {
+                    "schema:identifier": "C10002",
+                    "schema:name": ["タイトル", {"@value": "タイトル", "@language": "ja-hrkt"}],
+                    "schema:datePublished": "2021",
+                    "schema:contributor": "[監督]テスト太郎",
+                }
+            ]
+        }
+        json_path = tmp_path / "test.json"
+        json_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
-        If httpx.SSLError is available, test the real SSL fallback path.
-        """
-        from src.scrapers.mediaarts_scraper import MediaArtsClient
+        result = parse_jsonld_dump(json_path)
+        assert result[0]["title"] == "タイトル"
 
-        has_ssl_error = hasattr(httpx, "SSLError")
+    def test_parse_jsonld_creator_and_contributor(self, tmp_path):
+        from src.scrapers.mediaarts_scraper import parse_jsonld_dump
 
-        if has_ssl_error:
-            # If httpx.SSLError exists, test the real fallback path
-            success_response = httpx.Response(
-                200,
-                json={"results": {"bindings": []}},
-                request=httpx.Request("GET", "https://mediaarts-db.artmuseums.go.jp/sparql"),
-            )
+        data = {
+            "@graph": [
+                {
+                    "schema:identifier": "C10003",
+                    "schema:name": "テスト",
+                    "schema:datePublished": "2022",
+                    "schema:creator": "[総監督]湯山邦彦",
+                    "schema:contributor": "[脚本]井上敏樹",
+                    "ma:originalWorkCreator": "[原作]村上真紀",
+                }
+            ]
+        }
+        json_path = tmp_path / "test.json"
+        json_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
-            client = MediaArtsClient()
-            mock_client_secure = AsyncMock()
-            mock_client_secure.get = AsyncMock(side_effect=httpx.SSLError("cert verify failed"))
-            mock_client_secure.aclose = AsyncMock()
+        result = parse_jsonld_dump(json_path)
+        roles = [r for r, _n in result[0]["contributors"]]
+        assert "総監督" in roles
+        assert "脚本" in roles
+        assert "原作" in roles
 
-            mock_client_insecure = AsyncMock()
-            mock_client_insecure.get = AsyncMock(return_value=success_response)
+    def test_parse_jsonld_no_identifier_skipped(self, tmp_path):
+        from src.scrapers.mediaarts_scraper import parse_jsonld_dump
 
-            client._client = mock_client_secure
+        data = {"@graph": [{"schema:name": "NoID"}]}
+        json_path = tmp_path / "test.json"
+        json_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
-            async def run():
-                with patch("httpx.AsyncClient", return_value=mock_client_insecure):
-                    with patch("asyncio.sleep", new_callable=AsyncMock):
-                        return await client.query("SELECT ?x WHERE {}")
+        result = parse_jsonld_dump(json_path)
+        assert len(result) == 0
 
-            result = _run(run())
-            assert result == []
-            assert client._verify is False
-            _run(client.close())
-        else:
-            # httpx.SSLError doesn't exist in this version.
-            # The 'except httpx.SSLError' in the source code will trigger
-            # AttributeError when any exception is raised during query.
-            client = MediaArtsClient()
-            client._client = AsyncMock()
-            client._client.get = AsyncMock(side_effect=httpx.ConnectError("ssl error"))
+    def test_parse_jsonld_empty_graph(self, tmp_path):
+        from src.scrapers.mediaarts_scraper import parse_jsonld_dump
 
-            async def run():
-                with patch("asyncio.sleep", new_callable=AsyncMock):
-                    return await client.query("SELECT ?x WHERE {}")
+        data = {"@graph": []}
+        json_path = tmp_path / "test.json"
+        json_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
 
-            with pytest.raises(AttributeError, match="SSLError"):
-                _run(run())
-            _run(client.close())
-
-    def test_query_all_attempts_fail(self):
-        """Test that repeated failures eventually raise an error.
-
-        Note: The installed httpx version lacks httpx.SSLError. Since the source
-        code has 'except httpx.SSLError' before 'except httpx.HTTPError', Python
-        raises AttributeError when evaluating the except clause on any HTTPError.
-        If httpx.SSLError exists, expects EndpointUnreachableError after retries.
-        """
-        from src.scrapers.mediaarts_scraper import MediaArtsClient
-
-        has_ssl_error = hasattr(httpx, "SSLError")
-
-        client = MediaArtsClient()
-        client._client = AsyncMock()
-        client._client.get = AsyncMock(side_effect=httpx.ConnectError("down"))
-
-        async def run():
-            with patch("asyncio.sleep", new_callable=AsyncMock):
-                return await client.query("SELECT ?x WHERE {}")
-
-        if has_ssl_error:
-            with pytest.raises(EndpointUnreachableError):
-                _run(run())
-        else:
-            # httpx.SSLError doesn't exist, so 'except httpx.SSLError' raises
-            # AttributeError when evaluating the exception class
-            with pytest.raises(AttributeError, match="SSLError"):
-                _run(run())
-        _run(client.close())
-
-    def test_fetch_anime_list(self):
-        from src.scrapers.mediaarts_scraper import MediaArtsClient
-
-        client = MediaArtsClient()
-        client.query = AsyncMock(return_value=[{"anime": {"value": "http://x"}}])
-
-        result = _run(client.fetch_anime_list(anime_type="AnimationTVRegularSeries", limit=100, offset=50))
-        assert len(result) == 1
-        # Verify SPARQL query was formatted correctly
-        call_args = client.query.call_args[0][0]
-        assert "LIMIT 100" in call_args
-        assert "OFFSET 50" in call_args
-        assert "AnimationTVRegularSeries" in call_args
-        _run(client.close())
+        result = parse_jsonld_dump(json_path)
+        assert result == []
 
 
 class TestMediaArtsParsers:
-    def test_parse_anime_list_results(self):
-        from src.scrapers.mediaarts_scraper import parse_anime_list_results
-
-        bindings = [
-            {
-                "anime": {"value": "http://madb/anime/12345"},
-                "title": {"value": "テスト作品"},
-                "year": {"value": "2020"},
-            }
-        ]
-        result = parse_anime_list_results(bindings)
-        assert len(result) == 1
-        assert result[0]["uri"] == "http://madb/anime/12345"
-        assert result[0]["title"] == "テスト作品"
-        assert result[0]["year"] == 2020
-
-    def test_parse_anime_list_missing_uri_skipped(self):
-        from src.scrapers.mediaarts_scraper import parse_anime_list_results
-
-        bindings = [
-            {"anime": {"value": ""}, "title": {"value": "Test"}},
-        ]
-        result = parse_anime_list_results(bindings)
-        assert len(result) == 0
-
-    def test_parse_anime_list_invalid_year(self):
-        from src.scrapers.mediaarts_scraper import parse_anime_list_results
-
-        bindings = [
-            {
-                "anime": {"value": "http://madb/anime/1"},
-                "title": {"value": "Test"},
-                "year": {"value": "not-a-year"},
-            }
-        ]
-        result = parse_anime_list_results(bindings)
-        assert result[0]["year"] is None
-
-    def test_parse_anime_list_deduplication(self):
-        from src.scrapers.mediaarts_scraper import parse_anime_list_results
-
-        bindings = [
-            {
-                "anime": {"value": "http://madb/anime/1"},
-                "title": {"value": "Test"},
-                "year": {"value": "2020"},
-                "identifier": {"value": "https://anilist.co/anime/100"},
-            },
-            {
-                "anime": {"value": "http://madb/anime/1"},
-                "title": {"value": "Test"},
-                "year": {"value": "2020"},
-                "identifier": {"value": "https://myanimelist.net/anime/200"},
-            },
-        ]
-        result = parse_anime_list_results(bindings)
-        assert len(result) == 1  # Deduped
-        assert len(result[0]["identifiers"]) == 2
-
-    def test_parse_anime_list_empty_bindings(self):
-        from src.scrapers.mediaarts_scraper import parse_anime_list_results
-
-        result = parse_anime_list_results([])
-        assert result == []
-
-    def test_parse_anime_list_empty_year(self):
-        from src.scrapers.mediaarts_scraper import parse_anime_list_results
-
-        bindings = [
-            {
-                "anime": {"value": "http://madb/anime/1"},
-                "title": {"value": "Test"},
-                "year": {"value": ""},
-            }
-        ]
-        result = parse_anime_list_results(bindings)
-        assert result[0]["year"] is None
-
     def test_parse_contributor_text(self):
         from src.scrapers.mediaarts_scraper import parse_contributor_text
 
         result = parse_contributor_text("[監督]山田太郎 / [脚本]鈴木次郎")
+        assert len(result) == 2
+        assert result[0] == ("監督", "山田太郎")
+        assert result[1] == ("脚本", "鈴木次郎")
+
+    def test_parse_contributor_text_fullwidth_slash(self):
+        from src.scrapers.mediaarts_scraper import parse_contributor_text
+
+        result = parse_contributor_text("[監督]山田太郎 ／ [脚本]鈴木次郎")
         assert len(result) == 2
         assert result[0] == ("監督", "山田太郎")
         assert result[1] == ("脚本", "鈴木次郎")
@@ -1738,48 +1651,31 @@ class TestDownloadAnimeImages:
 # ---------------------------------------------------------------------------
 
 
-class TestMediaArtsFetchAll:
-    def test_fetch_anime_list_pagination(self):
-        from src.scrapers.mediaarts_scraper import MediaArtsClient
+class TestMediaArtsDownload:
+    def test_download_cached(self, tmp_path):
+        """キャッシュ済みの場合はダウンロードをスキップ."""
+        from src.scrapers.mediaarts_scraper import ANIME_COLLECTION_FILES, download_madb_dataset
 
-        page1 = [
-            {
-                "anime": {"value": f"http://madb/anime/{i}"},
-                "title": {"value": f"Anime {i}"},
-                "year": {"value": "2020"},
-            }
-            for i in range(1000)
-        ]
-        page2 = [
-            {
-                "anime": {"value": "http://madb/anime/2000"},
-                "title": {"value": "Anime 2000"},
-                "year": {"value": "2021"},
-            }
-        ]
+        # バージョンファイルとJSONファイルを事前作成
+        (tmp_path / ".version").write_text("v1.2.12")
+        for zip_name in ANIME_COLLECTION_FILES:
+            json_name = zip_name.replace("_json.zip", ".json")
+            (tmp_path / json_name).write_text("{}")
 
-        client = MediaArtsClient()
-        client.query = AsyncMock(side_effect=[page1, page2])
+        mock_release = {"tag_name": "v1.2.12", "assets": []}
+        mock_resp = httpx.Response(200, json=mock_release, request=httpx.Request("GET", "https://api.github.com/repos/x/releases/latest"))
 
-        # First page: 1000 results → continues
-        result1 = _run(client.fetch_anime_list("AnimationTVRegularSeries", limit=1000, offset=0))
-        assert len(result1) == 1000
+        async def run():
+            with patch("httpx.AsyncClient") as mock_cls:
+                mock_client = AsyncMock()
+                mock_client.get = AsyncMock(return_value=mock_resp)
+                mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+                mock_client.__aexit__ = AsyncMock(return_value=False)
+                mock_cls.return_value = mock_client
+                return await download_madb_dataset(tmp_path, version="latest")
 
-        # Second page: 1 result < 1000 → signals end
-        result2 = _run(client.fetch_anime_list("AnimationTVRegularSeries", limit=1000, offset=1000))
-        assert len(result2) == 1
-
-        _run(client.close())
-
-    def test_fetch_anime_list_empty_response(self):
-        from src.scrapers.mediaarts_scraper import MediaArtsClient
-
-        client = MediaArtsClient()
-        client.query = AsyncMock(return_value=[])
-
-        result = _run(client.fetch_anime_list("AnimationTVRegularSeries", limit=1000, offset=0))
-        assert len(result) == 0
-        _run(client.close())
+        result = _run(run())
+        assert len(result) == len(ANIME_COLLECTION_FILES)
 
 
 class TestJVMGFetchAnimeStaff:

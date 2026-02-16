@@ -2,17 +2,25 @@
 
 from __future__ import annotations
 
+import io
+import json
 import sqlite3
+import zipfile
+from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
+import httpx
 import pytest
 
 from src.models import Role, parse_role
 from src.scrapers.mediaarts_scraper import (
+    _extract_name_from_schema,
+    _extract_studios,
+    _extract_year,
     make_madb_person_id,
     normalize_title,
-    parse_anime_list_results,
     parse_contributor_text,
+    parse_jsonld_dump,
 )
 
 
@@ -27,6 +35,16 @@ class TestParseContributorText:
     def test_standard_format(self):
         """標準的な [role]name / [role]name 形式."""
         text = "[脚本]仲倉重郎 / [演出]須永 司 / [作画監督]数井浩子"
+        result = parse_contributor_text(text)
+        assert result == [
+            ("脚本", "仲倉重郎"),
+            ("演出", "須永 司"),
+            ("作画監督", "数井浩子"),
+        ]
+
+    def test_fullwidth_slash_separator(self):
+        """全角スラッシュ ／ での区切り（JSON-LDダンプ形式）."""
+        text = "[脚本]仲倉重郎 ／ [演出]須永 司 ／ [作画監督]数井浩子"
         result = parse_contributor_text(text)
         assert result == [
             ("脚本", "仲倉重郎"),
@@ -91,6 +109,15 @@ class TestParseContributorText:
         text = "[脚本/演出]山田太郎"
         result = parse_contributor_text(text)
         assert result == [("脚本", "山田太郎"), ("演出", "山田太郎")]
+
+    def test_mixed_slash_types(self):
+        """半角と全角スラッシュの混在."""
+        text = "[監督]A太郎 / [脚本]B花子 ／ [演出]C次郎"
+        result = parse_contributor_text(text)
+        assert len(result) == 3
+        assert result[0] == ("監督", "A太郎")
+        assert result[1] == ("脚本", "B花子")
+        assert result[2] == ("演出", "C次郎")
 
 
 # ============================================================
@@ -200,68 +227,272 @@ class TestNormalizeTitle:
 
 
 # ============================================================
-# TestParseAnimeListResults — SPARQL結果パーステスト
+# TestExtractNameFromSchema — JSON-LDの名前フィールド抽出
 # ============================================================
 
 
-class TestParseAnimeListResults:
-    """アニメ一覧のSPARQL結果パースのテスト."""
+class TestExtractNameFromSchema:
+    """schema:name フィールドの各形式テスト."""
 
-    def test_basic_parse(self):
-        bindings = [
-            {
-                "anime": {"value": "https://mediaarts-db.bunka.go.jp/data/anime/123"},
-                "title": {"value": "テストアニメ"},
-                "year": {"value": "1990-04-01"},
-            }
-        ]
-        result = parse_anime_list_results(bindings)
-        assert len(result) == 1
-        assert result[0]["uri"] == "https://mediaarts-db.bunka.go.jp/data/anime/123"
-        assert result[0]["title"] == "テストアニメ"
-        assert result[0]["year"] == 1990
-        assert result[0]["identifiers"] == []
+    def test_string(self):
+        assert _extract_name_from_schema("タイトル") == "タイトル"
 
-    def test_multiple_identifiers_merged(self):
-        """同一URIの identifier が複数行 → 統合."""
-        bindings = [
-            {
-                "anime": {"value": "https://example.com/anime/1"},
-                "title": {"value": "テスト"},
-                "identifier": {"value": "https://anilist.co/anime/100"},
-            },
-            {
-                "anime": {"value": "https://example.com/anime/1"},
-                "title": {"value": "テスト"},
-                "identifier": {"value": "https://myanimelist.net/anime/200"},
-            },
-        ]
-        result = parse_anime_list_results(bindings)
-        assert len(result) == 1
-        assert len(result[0]["identifiers"]) == 2
+    def test_list_with_string_first(self):
+        result = _extract_name_from_schema(["タイトル", {"@value": "タイトル", "@language": "ja-hrkt"}])
+        assert result == "タイトル"
 
-    def test_no_year(self):
-        """年なし."""
-        bindings = [
-            {
-                "anime": {"value": "https://example.com/anime/1"},
-                "title": {"value": "テスト"},
-            }
-        ]
-        result = parse_anime_list_results(bindings)
-        assert result[0]["year"] is None
+    def test_list_kana_only(self):
+        """カタカナ読みしかない場合はそれを使う."""
+        result = _extract_name_from_schema([{"@value": "タイトル", "@language": "ja-hrkt"}])
+        assert result == "タイトル"
 
-    def test_empty_bindings(self):
-        assert parse_anime_list_results([]) == []
+    def test_dict(self):
+        result = _extract_name_from_schema({"@value": "タイトル", "@language": "ja"})
+        assert result == "タイトル"
+
+    def test_empty_list(self):
+        assert _extract_name_from_schema([]) == ""
+
+    def test_none(self):
+        assert _extract_name_from_schema("") == ""
 
 
 # ============================================================
-# TestMADBIntegration — モックSPARQLでのE2Eテスト
+# TestExtractYear — 年抽出テスト
+# ============================================================
+
+
+class TestExtractYear:
+    """datePublished/startDate からの年抽出テスト."""
+
+    def test_date_published(self):
+        assert _extract_year({"schema:datePublished": "2020-04-01"}) == 2020
+
+    def test_start_date_fallback(self):
+        assert _extract_year({"schema:startDate": "2021-10"}) == 2021
+
+    def test_date_published_priority(self):
+        item = {"schema:datePublished": "2020", "schema:startDate": "2021"}
+        assert _extract_year(item) == 2020
+
+    def test_no_date(self):
+        assert _extract_year({}) is None
+
+    def test_dict_value(self):
+        assert _extract_year({"schema:datePublished": {"@value": "2019-01-01"}}) == 2019
+
+
+# ============================================================
+# TestExtractStudios — スタジオ抽出テスト
+# ============================================================
+
+
+class TestExtractStudios:
+    """productionCompany からのスタジオ名抽出テスト."""
+
+    def test_single_studio(self):
+        item = {"schema:productionCompany": "[アニメーション制作]マッドハウス"}
+        assert _extract_studios(item) == ["マッドハウス"]
+
+    def test_multiple_studios(self):
+        item = {"schema:productionCompany": "[アニメーション制作]マッドハウス ／ [制作]東映アニメーション"}
+        result = _extract_studios(item)
+        assert "マッドハウス" in result
+        assert "東映アニメーション" in result
+
+    def test_no_brackets(self):
+        item = {"schema:productionCompany": "サンライズ"}
+        assert _extract_studios(item) == ["サンライズ"]
+
+    def test_empty(self):
+        assert _extract_studios({}) == []
+
+
+# ============================================================
+# TestParseJsonLdDump — JSON-LDパーステスト
+# ============================================================
+
+
+class TestParseJsonLdDump:
+    """JSON-LDダンプのパーステスト."""
+
+    def _make_json(self, tmp_path: Path, graph: list[dict]) -> Path:
+        json_path = tmp_path / "test.json"
+        json_path.write_text(json.dumps({"@graph": graph}, ensure_ascii=False), encoding="utf-8")
+        return json_path
+
+    def test_basic(self, tmp_path):
+        graph = [
+            {
+                "schema:identifier": "C10001",
+                "schema:name": "ギャラクシー エンジェル",
+                "schema:datePublished": "2001-04-08",
+                "schema:contributor": "[シリーズ構成]井上敏樹 ／ [監督]浅香守生",
+                "schema:productionCompany": "[アニメーション制作]マッドハウス",
+            }
+        ]
+        result = parse_jsonld_dump(self._make_json(tmp_path, graph))
+        assert len(result) == 1
+        assert result[0]["id"] == "C10001"
+        assert result[0]["title"] == "ギャラクシー エンジェル"
+        assert result[0]["year"] == 2001
+        assert len(result[0]["contributors"]) == 2
+        assert result[0]["studios"] == ["マッドハウス"]
+
+    def test_creator_and_contributor_merged(self, tmp_path):
+        """schema:creator + schema:contributor + ma:originalWorkCreator が統合される."""
+        graph = [
+            {
+                "schema:identifier": "C20001",
+                "schema:name": "テスト作品",
+                "schema:datePublished": "2022",
+                "schema:creator": "[総監督]湯山邦彦",
+                "schema:contributor": "[脚本]井上敏樹",
+                "ma:originalWorkCreator": "[原作]村上真紀",
+            }
+        ]
+        result = parse_jsonld_dump(self._make_json(tmp_path, graph))
+        roles = [r for r, _n in result[0]["contributors"]]
+        assert "総監督" in roles
+        assert "脚本" in roles
+        assert "原作" in roles
+
+    def test_no_contributor_empty_list(self, tmp_path):
+        """contributorが空の場合."""
+        graph = [
+            {
+                "schema:identifier": "C30001",
+                "schema:name": "テスト",
+                "schema:datePublished": "2023",
+            }
+        ]
+        result = parse_jsonld_dump(self._make_json(tmp_path, graph))
+        assert len(result) == 1
+        assert result[0]["contributors"] == []
+
+    def test_no_identifier_skipped(self, tmp_path):
+        """identifierがない場合はスキップ."""
+        graph = [{"schema:name": "NoID"}]
+        result = parse_jsonld_dump(self._make_json(tmp_path, graph))
+        assert len(result) == 0
+
+    def test_no_title_skipped(self, tmp_path):
+        """タイトルがない場合はスキップ."""
+        graph = [{"schema:identifier": "C40001"}]
+        result = parse_jsonld_dump(self._make_json(tmp_path, graph))
+        assert len(result) == 0
+
+    def test_empty_graph(self, tmp_path):
+        result = parse_jsonld_dump(self._make_json(tmp_path, []))
+        assert result == []
+
+    def test_name_as_list(self, tmp_path):
+        """schema:name がリスト形式."""
+        graph = [
+            {
+                "schema:identifier": "C50001",
+                "schema:name": ["タイトル名", {"@value": "タイトルメイ", "@language": "ja-hrkt"}],
+                "schema:datePublished": "2020",
+                "schema:contributor": "[監督]テスト太郎",
+            }
+        ]
+        result = parse_jsonld_dump(self._make_json(tmp_path, graph))
+        assert result[0]["title"] == "タイトル名"
+
+
+# ============================================================
+# TestDownloadMADBDataset — ダウンロード機能テスト
+# ============================================================
+
+
+class TestDownloadMADBDataset:
+    """GitHub Releasesからのダウンロードテスト."""
+
+    def test_cache_hit(self, tmp_path):
+        """キャッシュ済みの場合はダウンロードをスキップ."""
+        import asyncio
+
+        from src.scrapers.mediaarts_scraper import ANIME_COLLECTION_FILES, download_madb_dataset
+
+        # バージョンファイルとJSONファイルを事前作成
+        (tmp_path / ".version").write_text("v1.2.12")
+        for zip_name in ANIME_COLLECTION_FILES:
+            json_name = zip_name.replace("_json.zip", ".json")
+            (tmp_path / json_name).write_text("{}")
+
+        mock_release = {"tag_name": "v1.2.12", "assets": []}
+        mock_resp = httpx.Response(
+            200,
+            json=mock_release,
+            request=httpx.Request("GET", "https://api.github.com/repos/x/releases/latest"),
+        )
+
+        async def run():
+            with patch("httpx.AsyncClient") as mock_cls:
+                mock_client = AsyncMock()
+                mock_client.get = AsyncMock(return_value=mock_resp)
+                mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+                mock_client.__aexit__ = AsyncMock(return_value=False)
+                mock_cls.return_value = mock_client
+                return await download_madb_dataset(tmp_path, version="latest")
+
+        result = asyncio.run(run())
+        assert len(result) == len(ANIME_COLLECTION_FILES)
+
+    def test_download_and_extract(self, tmp_path):
+        """ZIPダウンロード+展開のテスト."""
+        import asyncio
+
+        from src.scrapers.mediaarts_scraper import download_madb_dataset
+
+        # テスト用ZIPデータ作成
+        zip_buf = io.BytesIO()
+        with zipfile.ZipFile(zip_buf, "w") as zf:
+            zf.writestr("metadata207.json", json.dumps({"@graph": []}))
+        zip_bytes = zip_buf.getvalue()
+
+        mock_release = {
+            "tag_name": "v1.2.13",
+            "assets": [
+                {
+                    "name": "metadata207_json.zip",
+                    "browser_download_url": "https://github.com/x/releases/download/v1.2.13/metadata207_json.zip",
+                },
+            ],
+        }
+
+        call_count = 0
+
+        async def mock_get(url, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if "api.github.com" in url:
+                return httpx.Response(200, json=mock_release, request=httpx.Request("GET", url))
+            else:
+                return httpx.Response(200, content=zip_bytes, request=httpx.Request("GET", url))
+
+        async def run():
+            with patch("httpx.AsyncClient") as mock_cls:
+                mock_client = AsyncMock()
+                mock_client.get = AsyncMock(side_effect=mock_get)
+                mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+                mock_client.__aexit__ = AsyncMock(return_value=False)
+                mock_cls.return_value = mock_client
+                return await download_madb_dataset(tmp_path, version="latest")
+
+        result = asyncio.run(run())
+        assert "AnimationTVRegularSeries" in result
+        assert (tmp_path / "metadata207.json").exists()
+        assert (tmp_path / ".version").read_text() == "v1.2.13"
+
+
+# ============================================================
+# TestMADBIntegration — JSON-LDダンプでのE2Eテスト
 # ============================================================
 
 
 class TestMADBIntegration:
-    """MADB統合のE2Eテスト（モックSPARQL）."""
+    """MADB統合のE2Eテスト（モックJSON-LDファイル）."""
 
     @pytest.fixture
     def db_conn(self, tmp_path):
@@ -274,40 +505,38 @@ class TestMADBIntegration:
         init_db(conn)
         return conn
 
-    def test_scrape_with_mock(self, db_conn):
-        """モックSPARQLでの基本的なスクレイプフロー（マッチングなし）."""
+    def test_scrape_with_mock_dump(self, db_conn, tmp_path):
+        """モックJSON-LDファイルからの基本的なスクレイプフロー."""
         import asyncio
 
         from src.scrapers.mediaarts_scraper import scrape_madb
 
-        anime_list_response = [
-            {
-                "anime": {"value": "https://mediaarts-db.bunka.go.jp/data/anime/A001"},
-                "title": {"value": "テストアニメ"},
-                "year": {"value": "2000"},
-            }
-        ]
-        contributor_response = [
-            {
-                "contributor": {"value": "[監督]テスト太郎 / [脚本]テスト花子"},
-            }
-        ]
+        # テスト用JSON-LDファイル作成
+        data_dir = tmp_path / "madb"
+        data_dir.mkdir()
+        json_data = {
+            "@graph": [
+                {
+                    "schema:identifier": "A001",
+                    "schema:name": "テストアニメ",
+                    "schema:datePublished": "2000-01-01",
+                    "schema:contributor": "[監督]テスト太郎 ／ [脚本]テスト花子",
+                    "schema:productionCompany": "[アニメーション制作]テストスタジオ",
+                }
+            ]
+        }
+        json_path = data_dir / "metadata207.json"
+        json_path.write_text(json.dumps(json_data, ensure_ascii=False), encoding="utf-8")
 
-        mock_client = AsyncMock()
-        mock_client.fetch_anime_list = AsyncMock(
-            side_effect=[anime_list_response, []]
-        )
-        mock_client.fetch_contributor = AsyncMock(return_value=contributor_response)
-        mock_client.close = AsyncMock()
+        # download_madb_dataset をモックしてローカルファイルを返す
+        async def mock_download(data_dir, version="latest"):
+            return {"AnimationTVRegularSeries": json_path}
 
-        with patch(
-            "src.scrapers.mediaarts_scraper.MediaArtsClient",
-            return_value=mock_client,
-        ):
+        with patch("src.scrapers.mediaarts_scraper.download_madb_dataset", side_effect=mock_download):
             stats = asyncio.run(
                 scrape_madb(
                     db_conn,
-                    anime_types=["AnimationTVRegularSeries"],
+                    data_dir=data_dir,
                     max_anime=10,
                     checkpoint_interval=5,
                 )
@@ -329,48 +558,39 @@ class TestMADBIntegration:
         assert len(anime) == 1
         assert anime[0]["madb_id"] == "A001"
 
-    def test_scrape_saves_external_ids(self, db_conn):
-        """外部IDがexternal_links_jsonに保存される."""
+    def test_scrape_multiple_contributor_fields(self, db_conn, tmp_path):
+        """creator + contributor + originalWorkCreator が統合される."""
         import asyncio
-        import json
 
         from src.scrapers.mediaarts_scraper import scrape_madb
 
-        anime_list_response = [
-            {
-                "anime": {"value": "https://mediaarts-db.bunka.go.jp/data/anime/B002"},
-                "title": {"value": "テスト作品"},
-                "year": {"value": "2005"},
-                "identifier": {"value": "https://anilist.co/anime/999"},
-            }
-        ]
-        contributor_response = [
-            {"contributor": {"value": "[監督]山田太郎"}},
-        ]
+        data_dir = tmp_path / "madb"
+        data_dir.mkdir()
+        json_data = {
+            "@graph": [
+                {
+                    "schema:identifier": "B001",
+                    "schema:name": "テスト作品2",
+                    "schema:datePublished": "2010",
+                    "schema:creator": "[総監督]クリエイター太郎",
+                    "schema:contributor": "[脚本]脚本家花子",
+                    "ma:originalWorkCreator": "[原作]原作者次郎",
+                }
+            ]
+        }
+        json_path = data_dir / "metadata207.json"
+        json_path.write_text(json.dumps(json_data, ensure_ascii=False), encoding="utf-8")
 
-        mock_client = AsyncMock()
-        mock_client.fetch_anime_list = AsyncMock(
-            side_effect=[anime_list_response, []]
-        )
-        mock_client.fetch_contributor = AsyncMock(return_value=contributor_response)
-        mock_client.close = AsyncMock()
+        async def mock_download(data_dir, version="latest"):
+            return {"AnimationTVRegularSeries": json_path}
 
-        with patch(
-            "src.scrapers.mediaarts_scraper.MediaArtsClient",
-            return_value=mock_client,
-        ):
-            asyncio.run(
-                scrape_madb(
-                    db_conn,
-                    anime_types=["AnimationTVRegularSeries"],
-                    max_anime=10,
-                )
+        with patch("src.scrapers.mediaarts_scraper.download_madb_dataset", side_effect=mock_download):
+            stats = asyncio.run(
+                scrape_madb(db_conn, data_dir=data_dir, max_anime=10)
             )
 
-        anime = db_conn.execute("SELECT * FROM anime WHERE id = 'madb:B002'").fetchone()
-        assert anime is not None
-        ext_links = json.loads(anime["external_links_json"])
-        assert "https://anilist.co/anime/999" in ext_links
+        assert stats["credits_created"] == 3
+        assert stats["persons_created"] == 3
 
     def test_short_name_skipped(self):
         """2文字未満の名前はスキップ."""
@@ -379,6 +599,23 @@ class TestMADBIntegration:
         # パーサー自体は返す（フィルタはscrape_madb内）
         assert len(result) == 1
         assert result[0] == ("監督", "A")
+
+    def test_no_files_returns_empty_stats(self, db_conn, tmp_path):
+        """ダウンロードファイルなしの場合."""
+        import asyncio
+
+        from src.scrapers.mediaarts_scraper import scrape_madb
+
+        async def mock_download(data_dir, version="latest"):
+            return {}
+
+        with patch("src.scrapers.mediaarts_scraper.download_madb_dataset", side_effect=mock_download):
+            stats = asyncio.run(
+                scrape_madb(db_conn, data_dir=tmp_path, max_anime=10)
+            )
+
+        assert stats["anime_fetched"] == 0
+        assert stats["credits_created"] == 0
 
 
 # ============================================================
