@@ -22,9 +22,30 @@ class TestCosineSimilarity:
 class TestFindSimilarPersons:
     def test_basic_similarity(self):
         results = [
-            {"person_id": "p1", "name": "A", "authority": 80, "trust": 60, "skill": 70, "composite": 70},
-            {"person_id": "p2", "name": "B", "authority": 78, "trust": 62, "skill": 68, "composite": 69},
-            {"person_id": "p3", "name": "C", "authority": 10, "trust": 90, "skill": 20, "composite": 40},
+            {
+                "person_id": "p1",
+                "name": "A",
+                "authority": 80,
+                "trust": 60,
+                "skill": 70,
+                "composite": 70,
+            },
+            {
+                "person_id": "p2",
+                "name": "B",
+                "authority": 78,
+                "trust": 62,
+                "skill": 68,
+                "composite": 69,
+            },
+            {
+                "person_id": "p3",
+                "name": "C",
+                "authority": 10,
+                "trust": 90,
+                "skill": 20,
+                "composite": 40,
+            },
         ]
         similar = find_similar_persons("p1", results, top_n=2)
         assert len(similar) == 2
@@ -34,21 +55,42 @@ class TestFindSimilarPersons:
 
     def test_nonexistent_target(self):
         results = [
-            {"person_id": "p1", "name": "A", "authority": 80, "trust": 60, "skill": 70, "composite": 70},
+            {
+                "person_id": "p1",
+                "name": "A",
+                "authority": 80,
+                "trust": 60,
+                "skill": 70,
+                "composite": 70,
+            },
         ]
         similar = find_similar_persons("nobody", results)
         assert similar == []
 
     def test_single_person(self):
         results = [
-            {"person_id": "p1", "name": "A", "authority": 80, "trust": 60, "skill": 70, "composite": 70},
+            {
+                "person_id": "p1",
+                "name": "A",
+                "authority": 80,
+                "trust": 60,
+                "skill": 70,
+                "composite": 70,
+            },
         ]
         similar = find_similar_persons("p1", results)
         assert similar == []
 
     def test_top_n_limit(self):
         results = [
-            {"person_id": f"p{i}", "name": f"P{i}", "authority": i * 10, "trust": i * 5, "skill": i * 8, "composite": i * 7}
+            {
+                "person_id": f"p{i}",
+                "name": f"P{i}",
+                "authority": i * 10,
+                "trust": i * 5,
+                "skill": i * 8,
+                "composite": i * 7,
+            }
             for i in range(10)
         ]
         similar = find_similar_persons("p5", results, top_n=3)
@@ -56,9 +98,30 @@ class TestFindSimilarPersons:
 
     def test_similarity_sorted_desc(self):
         results = [
-            {"person_id": "p1", "name": "A", "authority": 50, "trust": 50, "skill": 50, "composite": 50},
-            {"person_id": "p2", "name": "B", "authority": 49, "trust": 51, "skill": 50, "composite": 50},
-            {"person_id": "p3", "name": "C", "authority": 10, "trust": 90, "skill": 10, "composite": 40},
+            {
+                "person_id": "p1",
+                "name": "A",
+                "authority": 50,
+                "trust": 50,
+                "skill": 50,
+                "composite": 50,
+            },
+            {
+                "person_id": "p2",
+                "name": "B",
+                "authority": 49,
+                "trust": 51,
+                "skill": 50,
+                "composite": 50,
+            },
+            {
+                "person_id": "p3",
+                "name": "C",
+                "authority": 10,
+                "trust": 90,
+                "skill": 10,
+                "composite": 40,
+            },
         ]
         similar = find_similar_persons("p1", results)
         sims = [s["similarity"] for s in similar]

@@ -74,16 +74,18 @@ def compute_work_impact(
 
             impact_score = round(score_factor + role_factor + team_factor + recency, 1)
 
-            impacts.append({
-                "anime_id": c.anime_id,
-                "title": anime.title_en or anime.title_ja or c.anime_id,
-                "year": anime.year,
-                "anime_score": anime.score,
-                "role": c.role.value,
-                "stage": stage,
-                "team_size": team_size,
-                "impact_score": impact_score,
-            })
+            impacts.append(
+                {
+                    "anime_id": c.anime_id,
+                    "title": anime.title_en or anime.title_ja or c.anime_id,
+                    "year": anime.year,
+                    "anime_score": anime.score,
+                    "role": c.role.value,
+                    "stage": stage,
+                    "team_size": team_size,
+                    "impact_score": impact_score,
+                }
+            )
 
         # Sort by impact score
         impacts.sort(key=lambda x: -x["impact_score"])

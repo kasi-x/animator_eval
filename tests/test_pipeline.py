@@ -1,6 +1,5 @@
 """pipeline モジュールの統合テスト."""
 
-
 import pytest
 
 from src.database import (
@@ -33,9 +32,23 @@ def populated_db(tmp_path, monkeypatch):
         Person(id="p4", name_en="Key Animator Delta", name_ja="原画D"),
     ]
     anime_list = [
-        Anime(id="a1", title_en="Great Anime", title_ja="すごいアニメ", year=2022, score=8.5),
-        Anime(id="a2", title_en="Good Anime", title_ja="いいアニメ", year=2023, score=7.5),
-        Anime(id="a3", title_en="Average Anime", title_ja="普通のアニメ", year=2024, score=6.0),
+        Anime(
+            id="a1",
+            title_en="Great Anime",
+            title_ja="すごいアニメ",
+            year=2022,
+            score=8.5,
+        ),
+        Anime(
+            id="a2", title_en="Good Anime", title_ja="いいアニメ", year=2023, score=7.5
+        ),
+        Anime(
+            id="a3",
+            title_en="Average Anime",
+            title_ja="普通のアニメ",
+            year=2024,
+            score=6.0,
+        ),
     ]
     credits_data = [
         Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="test"),
@@ -44,8 +57,12 @@ def populated_db(tmp_path, monkeypatch):
         Credit(person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"),
         Credit(person_id="p2", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
         Credit(person_id="p2", anime_id="a3", role=Role.KEY_ANIMATOR, source="test"),
-        Credit(person_id="p3", anime_id="a1", role=Role.ANIMATION_DIRECTOR, source="test"),
-        Credit(person_id="p3", anime_id="a2", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p3", anime_id="a1", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
+        Credit(
+            person_id="p3", anime_id="a2", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
         Credit(person_id="p4", anime_id="a3", role=Role.KEY_ANIMATOR, source="test"),
     ]
 
@@ -170,7 +187,9 @@ class TestHasCreditsChanged:
         # Add new credit
         insert_credit(
             conn,
-            Credit(person_id="p4", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
+            Credit(
+                person_id="p4", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"
+            ),
         )
         conn.commit()
 

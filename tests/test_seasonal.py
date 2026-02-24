@@ -6,9 +6,15 @@ from src.models import Anime, Credit, Role
 
 def _make_test_data():
     anime_map = {
-        "a1": Anime(id="a1", title_en="Winter 2020", year=2020, season="winter", score=8.0),
-        "a2": Anime(id="a2", title_en="Spring 2020", year=2020, season="spring", score=7.0),
-        "a3": Anime(id="a3", title_en="Summer 2021", year=2021, season="summer", score=9.0),
+        "a1": Anime(
+            id="a1", title_en="Winter 2020", year=2020, season="winter", score=8.0
+        ),
+        "a2": Anime(
+            id="a2", title_en="Spring 2020", year=2020, season="spring", score=7.0
+        ),
+        "a3": Anime(
+            id="a3", title_en="Summer 2021", year=2021, season="summer", score=9.0
+        ),
         "a4": Anime(id="a4", title_en="Fall 2021", year=2021, season="fall", score=7.5),
         "a5": Anime(id="a5", title_en="No Season", year=2022),
     }
@@ -18,7 +24,9 @@ def _make_test_data():
         Credit(person_id="p1", anime_id="a2", role=Role.DIRECTOR, source="test"),
         Credit(person_id="p3", anime_id="a3", role=Role.DIRECTOR, source="test"),
         Credit(person_id="p4", anime_id="a3", role=Role.KEY_ANIMATOR, source="test"),
-        Credit(person_id="p4", anime_id="a4", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p4", anime_id="a4", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
         Credit(person_id="p5", anime_id="a5", role=Role.DIRECTOR, source="test"),
     ]
     return credits, anime_map

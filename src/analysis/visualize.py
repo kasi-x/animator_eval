@@ -13,7 +13,11 @@ from src.utils.config import JSON_DIR
 matplotlib.use("Agg")
 
 # 日本語フォント設定
-matplotlib.rcParams["font.family"] = ["Noto Serif CJK JP", "Noto Sans CJK JP", "DejaVu Sans"]
+matplotlib.rcParams["font.family"] = [
+    "Noto Serif CJK JP",
+    "Noto Sans CJK JP",
+    "DejaVu Sans",
+]
 
 logger = structlog.get_logger()
 
@@ -36,7 +40,9 @@ def plot_performance_metrics(
         return
 
     # Create subplots based on available data
-    n_plots = sum([bool(timings), bool(memory), cache.get("hits", 0) + cache.get("misses", 0) > 0])
+    n_plots = sum(
+        [bool(timings), bool(memory), cache.get("hits", 0) + cache.get("misses", 0) > 0]
+    )
     if n_plots == 0:
         return
 
@@ -86,7 +92,9 @@ def plot_performance_metrics(
         mem_values = [memory[cp] for cp in checkpoints]
 
         x_pos = range(len(checkpoints))
-        ax.plot(x_pos, mem_values, marker="o", linewidth=2, markersize=8, color="#2E86AB")
+        ax.plot(
+            x_pos, mem_values, marker="o", linewidth=2, markersize=8, color="#2E86AB"
+        )
         ax.fill_between(x_pos, mem_values, alpha=0.3, color="#2E86AB")
         ax.set_xticks(x_pos)
         ax.set_xticklabels(checkpoints, rotation=45, ha="right", fontsize=9)
@@ -158,7 +166,13 @@ def plot_score_distribution(
             ax.set_title(label, fontsize=12)
             ax.set_xlabel("Score")
             ax.set_ylabel("Count")
-            ax.axvline(np.mean(values), color="red", linestyle="--", alpha=0.5, label=f"Mean: {np.mean(values):.1f}")
+            ax.axvline(
+                np.mean(values),
+                color="red",
+                linestyle="--",
+                alpha=0.5,
+                label=f"Mean: {np.mean(values):.1f}",
+            )
             ax.legend()
 
     plt.tight_layout()
@@ -254,9 +268,7 @@ def plot_collaboration_network(
         subgraph, pos, ax=ax, node_size=node_sizes, node_color="#2196F3", alpha=0.7
     )
 
-    labels = {
-        n: subgraph.nodes[n].get("name", n)[:15] for n in subgraph.nodes()
-    }
+    labels = {n: subgraph.nodes[n].get("name", n)[:15] for n in subgraph.nodes()}
     nx.draw_networkx_labels(subgraph, pos, labels, ax=ax, font_size=7)
 
     ax.set_title(f"Collaboration Network (Top {top_n})", fontsize=14)
@@ -301,16 +313,38 @@ def plot_person_timeline(
         return
 
     years = sorted(credits_by_year.keys())
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 8), gridspec_kw={"height_ratios": [2, 1]})
+    fig, (ax1, ax2) = plt.subplots(
+        2, 1, figsize=(14, 8), gridspec_kw={"height_ratios": [2, 1]}
+    )
 
     # Panel 1: Works per year (stacked by role type)
     role_groups = {
-        "Director": {"director", "chief_animation_director", "episode_director", "storyboard"},
-        "Animation": {"animation_director", "key_animator", "second_key_animator", "in_between"},
-        "Design": {"character_designer", "mechanical_designer", "art_director", "color_designer"},
+        "Director": {
+            "director",
+            "chief_animation_director",
+            "episode_director",
+            "storyboard",
+        },
+        "Animation": {
+            "animation_director",
+            "key_animator",
+            "second_key_animator",
+            "in_between",
+        },
+        "Design": {
+            "character_designer",
+            "mechanical_designer",
+            "art_director",
+            "color_designer",
+        },
         "Other": set(),
     }
-    group_colors = {"Director": "#E91E63", "Animation": "#2196F3", "Design": "#4CAF50", "Other": "#9E9E9E"}
+    group_colors = {
+        "Director": "#E91E63",
+        "Animation": "#2196F3",
+        "Design": "#4CAF50",
+        "Other": "#9E9E9E",
+    }
 
     yearly_counts: dict[str, list[int]] = {g: [] for g in role_groups}
     for y in years:
@@ -331,7 +365,14 @@ def plot_person_timeline(
     bottom = np.zeros(len(years))
     for group_name in ["Other", "Design", "Animation", "Director"]:
         vals = np.array(yearly_counts[group_name])
-        ax1.bar(years, vals, bottom=bottom, label=group_name, color=group_colors[group_name], alpha=0.8)
+        ax1.bar(
+            years,
+            vals,
+            bottom=bottom,
+            label=group_name,
+            color=group_colors[group_name],
+            alpha=0.8,
+        )
         bottom += vals
 
     ax1.set_ylabel("Credits")
@@ -343,12 +384,16 @@ def plot_person_timeline(
         stage_years = sorted(career_stages.keys())
         stage_vals = [career_stages[y] for y in stage_years]
         ax2.step(stage_years, stage_vals, where="post", color="#FF9800", linewidth=2)
-        ax2.fill_between(stage_years, stage_vals, step="post", alpha=0.2, color="#FF9800")
+        ax2.fill_between(
+            stage_years, stage_vals, step="post", alpha=0.2, color="#FF9800"
+        )
         ax2.set_yticks(list(_STAGE_LABELS.keys()))
         ax2.set_yticklabels(list(_STAGE_LABELS.values()), fontsize=8)
         ax2.set_ylim(0.5, 6.5)
     else:
-        ax2.text(0.5, 0.5, "No stage data", ha="center", va="center", transform=ax2.transAxes)
+        ax2.text(
+            0.5, 0.5, "No stage data", ha="center", va="center", transform=ax2.transAxes
+        )
 
     ax2.set_xlabel("Year")
     ax2.set_ylabel("Career Stage")
@@ -391,14 +436,19 @@ def plot_growth_trends(
     }
     bar_colors = [colors.get(label, "#757575") for label in labels]
 
-    bars = ax.bar(labels, values, color=bar_colors, alpha=0.85, edgecolor="white", linewidth=1.5)
+    bars = ax.bar(
+        labels, values, color=bar_colors, alpha=0.85, edgecolor="white", linewidth=1.5
+    )
 
     for bar, val in zip(bars, values):
         ax.text(
             bar.get_x() + bar.get_width() / 2,
             bar.get_height() + 0.5,
             str(val),
-            ha="center", va="bottom", fontsize=12, fontweight="bold",
+            ha="center",
+            va="bottom",
+            fontsize=12,
+            fontweight="bold",
         )
 
     ax.set_title("Career Growth Trend Distribution", fontsize=14)
@@ -432,20 +482,41 @@ def plot_network_evolution(
     if not years:
         return
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(14, 8), gridspec_kw={"height_ratios": [1, 1]})
+    fig, (ax1, ax2) = plt.subplots(
+        2, 1, figsize=(14, 8), gridspec_kw={"height_ratios": [1, 1]}
+    )
 
-    cum_persons = [snapshots.get(str(y), snapshots.get(y, {})).get("cumulative_persons", 0) for y in years]
-    cum_edges = [snapshots.get(str(y), snapshots.get(y, {})).get("cumulative_edges", 0) for y in years]
-    new_persons = [snapshots.get(str(y), snapshots.get(y, {})).get("new_persons", 0) for y in years]
-    density = [snapshots.get(str(y), snapshots.get(y, {})).get("density", 0) for y in years]
+    cum_persons = [
+        snapshots.get(str(y), snapshots.get(y, {})).get("cumulative_persons", 0)
+        for y in years
+    ]
+    cum_edges = [
+        snapshots.get(str(y), snapshots.get(y, {})).get("cumulative_edges", 0)
+        for y in years
+    ]
+    new_persons = [
+        snapshots.get(str(y), snapshots.get(y, {})).get("new_persons", 0) for y in years
+    ]
+    density = [
+        snapshots.get(str(y), snapshots.get(y, {})).get("density", 0) for y in years
+    ]
 
     # Top: Cumulative persons & edges
-    ax1.plot(years, cum_persons, "o-", color="#2196F3", linewidth=2, label="Cumulative Persons")
+    ax1.plot(
+        years,
+        cum_persons,
+        "o-",
+        color="#2196F3",
+        linewidth=2,
+        label="Cumulative Persons",
+    )
     ax1.set_ylabel("Persons", color="#2196F3")
     ax1.tick_params(axis="y", labelcolor="#2196F3")
 
     ax1b = ax1.twinx()
-    ax1b.plot(years, cum_edges, "s-", color="#FF9800", linewidth=2, label="Cumulative Edges")
+    ax1b.plot(
+        years, cum_edges, "s-", color="#FF9800", linewidth=2, label="Cumulative Edges"
+    )
     ax1b.set_ylabel("Edges", color="#FF9800")
     ax1b.tick_params(axis="y", labelcolor="#FF9800")
 
@@ -521,8 +592,12 @@ def plot_decade_comparison(
     for bar, val in zip(bars, avg_scores):
         if val > 0:
             ax2.text(
-                bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.1,
-                f"{val:.1f}", ha="center", va="bottom", fontsize=10,
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 0.1,
+                f"{val:.1f}",
+                ha="center",
+                va="bottom",
+                fontsize=10,
             )
     ax2.spines["top"].set_visible(False)
     ax2.spines["right"].set_visible(False)
@@ -573,10 +648,15 @@ def plot_role_flow_sankey(
         lw = max(1, val / max_val * 10)
 
         ax.annotate(
-            "", xy=(1, tgt_y), xytext=(0, src_y),
+            "",
+            xy=(1, tgt_y),
+            xytext=(0, src_y),
             arrowprops=dict(
-                arrowstyle="->", color="#2196F3", alpha=alpha,
-                lw=lw, connectionstyle="arc3,rad=0.2",
+                arrowstyle="->",
+                color="#2196F3",
+                alpha=alpha,
+                lw=lw,
+                connectionstyle="arc3,rad=0.2",
             ),
         )
         # Label the flow
@@ -672,8 +752,12 @@ def plot_productivity_distribution(
     if not prod_data:
         return
 
-    cpy_values = [v["credits_per_year"] for v in prod_data.values() if "credits_per_year" in v]
-    consistency_values = [v["consistency_score"] for v in prod_data.values() if "consistency_score" in v]
+    cpy_values = [
+        v["credits_per_year"] for v in prod_data.values() if "credits_per_year" in v
+    ]
+    consistency_values = [
+        v["consistency_score"] for v in prod_data.values() if "consistency_score" in v
+    ]
 
     if not cpy_values:
         return
@@ -682,7 +766,12 @@ def plot_productivity_distribution(
 
     # Left: credits per year histogram
     ax1.hist(cpy_values, bins=25, color="#2196F3", alpha=0.7, edgecolor="white")
-    ax1.axvline(np.mean(cpy_values), color="red", linestyle="--", label=f"Mean: {np.mean(cpy_values):.1f}")
+    ax1.axvline(
+        np.mean(cpy_values),
+        color="red",
+        linestyle="--",
+        label=f"Mean: {np.mean(cpy_values):.1f}",
+    )
     ax1.set_title("Credits per Year Distribution", fontsize=12)
     ax1.set_xlabel("Credits / Year")
     ax1.set_ylabel("Count")
@@ -692,8 +781,15 @@ def plot_productivity_distribution(
 
     # Right: consistency score histogram
     if consistency_values:
-        ax2.hist(consistency_values, bins=20, color="#4CAF50", alpha=0.7, edgecolor="white")
-        ax2.axvline(np.mean(consistency_values), color="red", linestyle="--", label=f"Mean: {np.mean(consistency_values):.2f}")
+        ax2.hist(
+            consistency_values, bins=20, color="#4CAF50", alpha=0.7, edgecolor="white"
+        )
+        ax2.axvline(
+            np.mean(consistency_values),
+            color="red",
+            linestyle="--",
+            label=f"Mean: {np.mean(consistency_values):.2f}",
+        )
         ax2.set_title("Consistency Score Distribution", fontsize=12)
         ax2.set_xlabel("Consistency (active years / career span)")
         ax2.set_ylabel("Count")
@@ -732,7 +828,9 @@ def plot_influence_tree(
     mentee_counts = [len(m.get("mentees", [])) for m in mentors.values()]
     if mentee_counts:
         bins = range(0, max(mentee_counts) + 2)
-        ax1.hist(mentee_counts, bins=bins, color="#E91E63", alpha=0.7, edgecolor="white")
+        ax1.hist(
+            mentee_counts, bins=bins, color="#E91E63", alpha=0.7, edgecolor="white"
+        )
         ax1.set_title("Mentees per Mentor", fontsize=12)
         ax1.set_xlabel("Number of Mentees")
         ax1.set_ylabel("Number of Mentors")
@@ -740,7 +838,9 @@ def plot_influence_tree(
         ax1.spines["right"].set_visible(False)
 
     # Right: Top mentors bar chart
-    sorted_mentors = sorted(mentors.items(), key=lambda x: len(x[1].get("mentees", [])), reverse=True)[:15]
+    sorted_mentors = sorted(
+        mentors.items(), key=lambda x: len(x[1].get("mentees", [])), reverse=True
+    )[:15]
     if sorted_mentors:
         names = [m[1].get("name", m[0])[:20] for m in sorted_mentors]
         counts = [len(m[1].get("mentees", [])) for m in sorted_mentors]
@@ -806,8 +906,13 @@ def plot_milestone_summary(
     bar_colors = [colors.get(k, "#757575") for k in labels]
     bars = ax1.barh(labels, vals, color=bar_colors, alpha=0.85)
     for bar, val in zip(bars, vals):
-        ax1.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height() / 2,
-                 str(val), va="center", fontsize=10)
+        ax1.text(
+            bar.get_width() + 0.5,
+            bar.get_y() + bar.get_height() / 2,
+            str(val),
+            va="center",
+            fontsize=10,
+        )
     ax1.set_title("Milestone Types", fontsize=12)
     ax1.set_xlabel("Count")
     ax1.invert_yaxis()
@@ -869,10 +974,22 @@ def plot_seasonal_trends(
     credit_vals = [by_season[s].get("credit_count", 0) for s in seasons]
     person_vals = [by_season[s].get("person_count", 0) for s in seasons]
 
-    ax1.bar(x - width / 2, credit_vals, width, label="Credits",
-            color=[season_colors.get(s, "#757575") for s in seasons], alpha=0.8)
-    ax1.bar(x + width / 2, person_vals, width, label="Persons",
-            color=[season_colors.get(s, "#757575") for s in seasons], alpha=0.5)
+    ax1.bar(
+        x - width / 2,
+        credit_vals,
+        width,
+        label="Credits",
+        color=[season_colors.get(s, "#757575") for s in seasons],
+        alpha=0.8,
+    )
+    ax1.bar(
+        x + width / 2,
+        person_vals,
+        width,
+        label="Persons",
+        color=[season_colors.get(s, "#757575") for s in seasons],
+        alpha=0.5,
+    )
     ax1.set_xticks(x)
     ax1.set_xticklabels([s.capitalize() for s in seasons])
     ax1.set_title("Activity by Season", fontsize=12)
@@ -882,14 +999,24 @@ def plot_seasonal_trends(
 
     # Right: avg anime score per season
     avg_scores = [by_season[s].get("avg_anime_score", 0) for s in seasons]
-    bars = ax2.bar([s.capitalize() for s in seasons], avg_scores,
-                   color=[season_colors.get(s, "#757575") for s in seasons], alpha=0.8)
+    bars = ax2.bar(
+        [s.capitalize() for s in seasons],
+        avg_scores,
+        color=[season_colors.get(s, "#757575") for s in seasons],
+        alpha=0.8,
+    )
     ax2.set_title("Average Anime Score by Season", fontsize=12)
     ax2.set_ylim(0, 10)
     for bar, val in zip(bars, avg_scores):
         if val > 0:
-            ax2.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.1,
-                     f"{val:.1f}", ha="center", va="bottom", fontsize=10)
+            ax2.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 0.1,
+                f"{val:.1f}",
+                ha="center",
+                va="bottom",
+                fontsize=10,
+            )
     ax2.spines["top"].set_visible(False)
     ax2.spines["right"].set_visible(False)
 
@@ -922,7 +1049,12 @@ def plot_bridge_analysis(
     # Left: bridge score distribution
     scores = [bp["bridge_score"] for bp in bridge_persons]
     ax1.hist(scores, bins=20, color="#E91E63", alpha=0.7, edgecolor="white")
-    ax1.axvline(np.mean(scores), color="red", linestyle="--", label=f"Mean: {np.mean(scores):.1f}")
+    ax1.axvline(
+        np.mean(scores),
+        color="red",
+        linestyle="--",
+        label=f"Mean: {np.mean(scores):.1f}",
+    )
     ax1.set_title("Bridge Score Distribution", fontsize=12)
     ax1.set_xlabel("Bridge Score")
     ax1.set_ylabel("Count")
@@ -977,8 +1109,12 @@ def plot_collaboration_strength(
     # Left: strength score distribution
     strength_scores = [p.get("strength_score", 0) for p in collab_pairs]
     ax1.hist(strength_scores, bins=25, color="#2196F3", alpha=0.7, edgecolor="white")
-    ax1.axvline(np.mean(strength_scores), color="red", linestyle="--",
-                label=f"Mean: {np.mean(strength_scores):.1f}")
+    ax1.axvline(
+        np.mean(strength_scores),
+        color="red",
+        linestyle="--",
+        label=f"Mean: {np.mean(strength_scores):.1f}",
+    )
     ax1.set_title("Collaboration Strength Distribution", fontsize=12)
     ax1.set_xlabel("Strength Score")
     ax1.set_ylabel("Pairs")
@@ -1032,8 +1168,13 @@ def plot_tag_summary(
     bars = ax.barh(y_pos, counts, color=colors, alpha=0.85)
 
     for bar, val in zip(bars, counts):
-        ax.text(bar.get_width() + 0.5, bar.get_y() + bar.get_height() / 2,
-                str(val), va="center", fontsize=9)
+        ax.text(
+            bar.get_width() + 0.5,
+            bar.get_y() + bar.get_height() / 2,
+            str(val),
+            va="center",
+            fontsize=9,
+        )
 
     ax.set_yticks(y_pos)
     ax.set_yticklabels(labels, fontsize=9)
@@ -1069,7 +1210,9 @@ def plot_studio_comparison(
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 7))
 
     # Sort studios by person count
-    sorted_studios = sorted(studio_data.items(), key=lambda x: -x[1].get("person_count", 0))[:15]
+    sorted_studios = sorted(
+        studio_data.items(), key=lambda x: -x[1].get("person_count", 0)
+    )[:15]
     if not sorted_studios:
         plt.close(fig)
         return
@@ -1134,8 +1277,22 @@ def plot_outlier_summary(
     high_counts = [len(axis_outliers[a].get("high", [])) for a in axes]
     low_counts = [len(axis_outliers[a].get("low", [])) for a in axes]
 
-    ax.bar(x - width / 2, high_counts, width, label="High Outliers", color="#E91E63", alpha=0.8)
-    ax.bar(x + width / 2, low_counts, width, label="Low Outliers", color="#2196F3", alpha=0.8)
+    ax.bar(
+        x - width / 2,
+        high_counts,
+        width,
+        label="High Outliers",
+        color="#E91E63",
+        alpha=0.8,
+    )
+    ax.bar(
+        x + width / 2,
+        low_counts,
+        width,
+        label="Low Outliers",
+        color="#2196F3",
+        alpha=0.8,
+    )
     ax.set_xticks(x)
     ax.set_xticklabels([a.capitalize() for a in axes])
     ax.set_title("Outliers by Score Axis", fontsize=14)
@@ -1215,8 +1372,15 @@ def plot_transition_heatmap(
         for j in range(n):
             val = int(matrix[i][j])
             if val > 0:
-                ax.text(j, i, str(val), ha="center", va="center",
-                        color="white" if val > matrix.max() / 2 else "black", fontsize=10)
+                ax.text(
+                    j,
+                    i,
+                    str(val),
+                    ha="center",
+                    va="center",
+                    color="white" if val > matrix.max() / 2 else "black",
+                    fontsize=10,
+                )
 
     fig.colorbar(im, ax=ax, label="Transition Count")
     plt.tight_layout()
@@ -1253,8 +1417,16 @@ def plot_anime_stats(
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
 
     # Left: unique persons vs anime score
-    sc = ax1.scatter(persons, scores, c=avg_person_scores, cmap="viridis",
-                     alpha=0.6, s=40, edgecolors="white", linewidth=0.5)
+    sc = ax1.scatter(
+        persons,
+        scores,
+        c=avg_person_scores,
+        cmap="viridis",
+        alpha=0.6,
+        s=40,
+        edgecolors="white",
+        linewidth=0.5,
+    )
     ax1.set_title("Staff Count vs Anime Score", fontsize=12)
     ax1.set_xlabel("Unique Persons")
     ax1.set_ylabel("Anime Score")
@@ -1266,8 +1438,12 @@ def plot_anime_stats(
     valid_scores = [s for s in scores if s > 0]
     if valid_scores:
         ax2.hist(valid_scores, bins=20, color="#9C27B0", alpha=0.7, edgecolor="white")
-        ax2.axvline(np.mean(valid_scores), color="red", linestyle="--",
-                    label=f"Mean: {np.mean(valid_scores):.1f}")
+        ax2.axvline(
+            np.mean(valid_scores),
+            color="red",
+            linestyle="--",
+            label=f"Mean: {np.mean(valid_scores):.1f}",
+        )
         ax2.set_title("Anime Score Distribution", fontsize=12)
         ax2.set_xlabel("Score")
         ax2.set_ylabel("Count")
@@ -1313,7 +1489,12 @@ def plot_genre_affinity(
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
 
     # Left: score tier distribution (pie chart)
-    tier_colors = {"high": "#4CAF50", "mid": "#FF9800", "low": "#F44336", "unknown": "#9E9E9E"}
+    tier_colors = {
+        "high": "#4CAF50",
+        "mid": "#FF9800",
+        "low": "#F44336",
+        "unknown": "#9E9E9E",
+    }
     if tier_counts:
         labels = sorted(tier_counts.keys())
         values = [tier_counts[k] for k in labels]
@@ -1323,7 +1504,13 @@ def plot_genre_affinity(
 
     # Right: era distribution
     era_order = ["classic", "2000s", "2010s", "modern", "unknown"]
-    era_colors_map = {"classic": "#9C27B0", "2000s": "#2196F3", "2010s": "#4CAF50", "modern": "#FF9800", "unknown": "#9E9E9E"}
+    era_colors_map = {
+        "classic": "#9C27B0",
+        "2000s": "#2196F3",
+        "2010s": "#4CAF50",
+        "modern": "#FF9800",
+        "unknown": "#9E9E9E",
+    }
     if era_counts:
         eras = [e for e in era_order if e in era_counts]
         if not eras:
@@ -1332,8 +1519,14 @@ def plot_genre_affinity(
         colors = [era_colors_map.get(e, "#757575") for e in eras]
         bars = ax2.bar(eras, vals, color=colors, alpha=0.85)
         for bar, val in zip(bars, vals):
-            ax2.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.5,
-                     str(val), ha="center", va="bottom", fontsize=10)
+            ax2.text(
+                bar.get_x() + bar.get_width() / 2,
+                bar.get_height() + 0.5,
+                str(val),
+                ha="center",
+                va="bottom",
+                fontsize=10,
+            )
         ax2.set_title("Era Distribution", fontsize=12)
         ax2.set_xlabel("Era")
         ax2.set_ylabel("Persons")
@@ -1385,7 +1578,9 @@ def plot_crossval_stability(
     # Right: top-10 overlap per fold
     ax2.bar(fold_ids, overlaps, color="#4CAF50", alpha=0.8)
     avg_overlap = crossval_data.get("avg_top10_overlap", 0)
-    ax2.axhline(avg_overlap, color="red", linestyle="--", label=f"Avg: {avg_overlap:.1f}%")
+    ax2.axhline(
+        avg_overlap, color="red", linestyle="--", label=f"Avg: {avg_overlap:.1f}%"
+    )
     ax2.set_title("Top-10 Overlap by Fold", fontsize=12)
     ax2.set_xlabel("Fold")
     ax2.set_ylabel("Overlap (%)")

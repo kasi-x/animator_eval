@@ -1,5 +1,7 @@
 """Phase 7: Result Assembly — build comprehensive result dictionaries."""
+
 import sqlite3
+from collections import defaultdict
 
 import structlog
 
@@ -7,6 +9,7 @@ from src.analysis.explain import explain_authority, explain_skill, explain_trust
 from src.database import save_score_history, upsert_score
 from src.models import ScoreResult
 from src.pipeline_phases.context import PipelineContext
+from src.utils.role_groups import DIRECTOR_ROLES
 
 logger = structlog.get_logger()
 
@@ -31,11 +34,24 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
     logger.info("step_start", step="composite_scores")
 
     all_person_ids = (
-        set(context.authority_scores) | set(context.trust_scores) | set(context.skill_scores)
+        set(context.authority_scores)
+        | set(context.trust_scores)
+        | set(context.skill_scores)
     )
 
     context.results = []
     context.composite_scores = {}
+
+    # Pre-group credits by person_id: O(m) instead of O(n*m) per explain call
+    credits_by_person: dict[str, list] = defaultdict(list)
+    for credit in context.credits:
+        credits_by_person[credit.person_id].append(credit)
+
+    # Pre-build anime_directors index for explain_trust
+    anime_directors: dict[str, set[str]] = defaultdict(set)
+    for credit in context.credits:
+        if credit.role in DIRECTOR_ROLES:
+            anime_directors[credit.anime_id].add(credit.person_id)
 
     for pid in all_person_ids:
         # Create score object
@@ -78,7 +94,9 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
 
         # Add role profile
         if pid in context.role_profiles:
-            result_entry["primary_role"] = context.role_profiles[pid]["primary_category"]
+            result_entry["primary_role"] = context.role_profiles[pid][
+                "primary_category"
+            ]
             result_entry["total_credits"] = context.role_profiles[pid]["total_credits"]
 
         # Add career data
@@ -123,9 +141,20 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
             }
 
         # Add score breakdown (top contributing factors)
-        auth_factors = explain_authority(pid, context.credits, context.anime_map)
-        trust_factors = explain_trust(pid, context.credits, context.anime_map)
-        skill_factors = explain_skill(pid, context.credits, context.anime_map)
+        person_credits = credits_by_person.get(pid, [])
+        auth_factors = explain_authority(
+            pid, context.credits, context.anime_map, _person_credits=person_credits
+        )
+        trust_factors = explain_trust(
+            pid,
+            context.credits,
+            context.anime_map,
+            _person_credits=person_credits,
+            _anime_directors=anime_directors,
+        )
+        skill_factors = explain_skill(
+            pid, context.credits, context.anime_map, _person_credits=person_credits
+        )
         if auth_factors or trust_factors or skill_factors:
             result_entry["breakdown"] = {}
             if auth_factors:

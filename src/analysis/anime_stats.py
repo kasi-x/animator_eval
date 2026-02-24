@@ -61,7 +61,9 @@ def compute_anime_stats(
             "score": anime.score,
             "credit_count": len(acredits),
             "unique_persons": len(person_ids),
-            "role_distribution": dict(sorted(role_dist.items(), key=lambda x: x[1], reverse=True)),
+            "role_distribution": dict(
+                sorted(role_dist.items(), key=lambda x: x[1], reverse=True)
+            ),
         }
 
         if person_scores:
@@ -70,11 +72,17 @@ def compute_anime_stats(
                 entry["avg_person_score"] = round(sum(scored) / len(scored), 2)
                 # Top 5 contributors by composite score
                 top = sorted(
-                    [(pid, person_scores[pid]) for pid in person_ids if pid in person_scores],
+                    [
+                        (pid, person_scores[pid])
+                        for pid in person_ids
+                        if pid in person_scores
+                    ],
                     key=lambda x: x[1],
                     reverse=True,
                 )[:5]
-                entry["top_persons"] = [{"person_id": pid, "composite": s} for pid, s in top]
+                entry["top_persons"] = [
+                    {"person_id": pid, "composite": s} for pid, s in top
+                ]
 
         results[anime_id] = entry
 

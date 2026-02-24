@@ -32,7 +32,9 @@ class WebSocketManager:
         """
         await websocket.accept()
         self.active_connections.append(websocket)
-        logger.info("websocket_connected", total_connections=len(self.active_connections))
+        logger.info(
+            "websocket_connected", total_connections=len(self.active_connections)
+        )
 
     def disconnect(self, websocket: WebSocket):
         """Remove WebSocket connection.
@@ -42,7 +44,9 @@ class WebSocketManager:
         """
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-            logger.info("websocket_disconnected", total_connections=len(self.active_connections))
+            logger.info(
+                "websocket_disconnected", total_connections=len(self.active_connections)
+            )
 
     async def send_personal_message(self, message: dict, websocket: WebSocket):
         """Send message to specific WebSocket client.
@@ -93,7 +97,10 @@ class WebSocketManager:
                 asyncio.run(self.broadcast(message))
             except RuntimeError:
                 # Can't create new loop, skip broadcast
-                logger.debug("websocket_broadcast_skipped_no_loop", message_type=message.get("type"))
+                logger.debug(
+                    "websocket_broadcast_skipped_no_loop",
+                    message_type=message.get("type"),
+                )
 
 
 # Global WebSocket manager instance
@@ -134,11 +141,13 @@ class PipelineProgressBroadcaster:
         self.total_phases = total_phases
         self.current_phase = 0
 
-        self.manager.broadcast_sync({
-            "type": "pipeline_start",
-            "total_phases": total_phases,
-            "timestamp": self._get_timestamp(),
-        })
+        self.manager.broadcast_sync(
+            {
+                "type": "pipeline_start",
+                "total_phases": total_phases,
+                "timestamp": self._get_timestamp(),
+            }
+        )
 
     def update_phase(self, phase: int, phase_name: str, status: str = "running"):
         """フェーズ進捗を更新.
@@ -150,16 +159,20 @@ class PipelineProgressBroadcaster:
         """
         self.current_phase = phase
 
-        self.manager.broadcast_sync({
-            "type": "phase_update",
-            "phase": phase,
-            "phase_name": phase_name,
-            "status": status,
-            "progress": round(phase / self.total_phases * 100, 1),
-            "timestamp": self._get_timestamp(),
-        })
+        self.manager.broadcast_sync(
+            {
+                "type": "phase_update",
+                "phase": phase,
+                "phase_name": phase_name,
+                "status": status,
+                "progress": round(phase / self.total_phases * 100, 1),
+                "timestamp": self._get_timestamp(),
+            }
+        )
 
-    def complete_phase(self, phase: int, phase_name: str, duration_ms: float | None = None):
+    def complete_phase(
+        self, phase: int, phase_name: str, duration_ms: float | None = None
+    ):
         """フェーズ完了を通知.
 
         Args:
@@ -188,13 +201,15 @@ class PipelineProgressBroadcaster:
             phase_name: Phase name
             error: Error message
         """
-        self.manager.broadcast_sync({
-            "type": "phase_error",
-            "phase": phase,
-            "phase_name": phase_name,
-            "error": error,
-            "timestamp": self._get_timestamp(),
-        })
+        self.manager.broadcast_sync(
+            {
+                "type": "phase_error",
+                "phase": phase,
+                "phase_name": phase_name,
+                "error": error,
+                "timestamp": self._get_timestamp(),
+            }
+        )
 
     def complete_pipeline(self, total_persons: int, duration_seconds: float):
         """Pipeline完了を通知.
@@ -203,12 +218,14 @@ class PipelineProgressBroadcaster:
             total_persons: Total persons scored
             duration_seconds: Total pipeline duration
         """
-        self.manager.broadcast_sync({
-            "type": "pipeline_complete",
-            "total_persons": total_persons,
-            "duration_seconds": round(duration_seconds, 2),
-            "timestamp": self._get_timestamp(),
-        })
+        self.manager.broadcast_sync(
+            {
+                "type": "pipeline_complete",
+                "total_persons": total_persons,
+                "duration_seconds": round(duration_seconds, 2),
+                "timestamp": self._get_timestamp(),
+            }
+        )
 
     def send_custom_message(self, message_type: str, data: dict[str, Any]):
         """カスタムメッセージを配信.
@@ -232,4 +249,5 @@ class PipelineProgressBroadcaster:
             ISO 8601 timestamp string
         """
         from datetime import datetime
+
         return datetime.now().isoformat()

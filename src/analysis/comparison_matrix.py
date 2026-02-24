@@ -33,11 +33,13 @@ def build_comparison_matrix(
     for pid in person_ids:
         if pid in scores_map:
             r = scores_map[pid]
-            persons.append({
-                "person_id": pid,
-                "name": r.get("name", "") or r.get("name_ja", "") or pid,
-                **{axis: r.get(axis, 0) for axis in axes},
-            })
+            persons.append(
+                {
+                    "person_id": pid,
+                    "name": r.get("name", "") or r.get("name_ja", "") or pid,
+                    **{axis: r.get(axis, 0) for axis in axes},
+                }
+            )
 
     if not persons:
         return {"persons": [], "axis_rankings": {}, "pairwise_dominance": {}}

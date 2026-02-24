@@ -17,6 +17,7 @@ This package decomposes the monolithic run_scoring_pipeline() function into
 Each phase is <200 lines, testable in isolation, and has explicit
 inputs/outputs via the PipelineContext dataclass.
 """
+
 from src.pipeline_phases.analysis_modules import run_analysis_modules_phase
 from src.pipeline_phases.context import PipelineCheckpoint, PipelineContext
 from src.pipeline_phases.core_scoring import compute_core_scores_phase
@@ -26,7 +27,9 @@ from src.pipeline_phases.export_and_viz import export_and_visualize_phase
 from src.pipeline_phases.graph_construction import build_graphs_phase
 from src.pipeline_phases.post_processing import post_process_results
 from src.pipeline_phases.result_assembly import assemble_result_entries
-from src.pipeline_phases.supplementary_metrics import compute_supplementary_metrics_phase
+from src.pipeline_phases.supplementary_metrics import (
+    compute_supplementary_metrics_phase,
+)
 from src.pipeline_phases.validation import run_validation_phase
 
 __all__ = [

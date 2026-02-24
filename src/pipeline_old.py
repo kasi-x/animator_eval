@@ -186,16 +186,16 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
     logger.info("step_start", step="score_normalization")
     with monitor.measure("score_normalization"):
         authority_scores, trust_scores, skill_scores = normalize_all_axes(
-            authority_scores, trust_scores, skill_scores,
+            authority_scores,
+            trust_scores,
+            skill_scores,
         )
     monitor.record_memory("after_scoring")
 
     # Step 5.5: Engagement Decay Detection
     logger.info("step_start", step="engagement_decay")
     with monitor.measure("engagement_decay"):
-        director_ids = {
-            c.person_id for c in credits if c.role in DIRECTOR_ROLES
-        }
+        director_ids = {c.person_id for c in credits if c.role in DIRECTOR_ROLES}
         decay_results: dict[str, list[dict]] = {}
         for pid in set(trust_scores) - director_ids:
             person_decays = []
@@ -403,13 +403,20 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
                 "director_name": pid_to_name.get(dir_id, dir_id),
                 **circle_dict,
                 "members": [
-                    {**member, "name": pid_to_name.get(member["person_id"], member["person_id"])}
+                    {
+                        **member,
+                        "name": pid_to_name.get(
+                            member["person_id"], member["person_id"]
+                        ),
+                    }
                     for member in circle_dict["members"]
                 ],
             }
         with open(circles_path, "w") as f:
             json.dump(circles_output, f, indent=2, ensure_ascii=False)
-        logger.info("circles_saved", path=str(circles_path), directors=len(circles_output))
+        logger.info(
+            "circles_saved", path=str(circles_path), directors=len(circles_output)
+        )
 
     # Anime statistics 出力
     composite_scores = {r["person_id"]: r["composite"] for r in results}
@@ -422,7 +429,9 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
     )
 
     # Studio analysis 出力
-    studio_performance_analysis = compute_studio_analysis(credits, anime_map, composite_scores)
+    studio_performance_analysis = compute_studio_analysis(
+        credits, anime_map, composite_scores
+    )
     save_pipeline_json_if_data_present(
         "studios.json",
         studio_performance_analysis,
@@ -431,11 +440,15 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
     )
 
     # Seasonal trends 出力
-    seasonal_activity_patterns = compute_seasonal_trends(credits, anime_map, composite_scores)
+    seasonal_activity_patterns = compute_seasonal_trends(
+        credits, anime_map, composite_scores
+    )
     save_pipeline_json_if_data_present(
         "seasonal.json",
         seasonal_activity_patterns,
-        condition=seasonal_activity_patterns.get("by_season") if seasonal_activity_patterns else False,
+        condition=seasonal_activity_patterns.get("by_season")
+        if seasonal_activity_patterns
+        else False,
         log_message="seasonal_saved",
     )
 
@@ -443,13 +456,18 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
     logger.info("step_start", step="collaboration_strength")
     with monitor.measure("collaboration_strength"):
         strongest_collaboration_pairs = compute_collaboration_strength(
-            credits, anime_map, min_shared=2, person_scores=composite_scores,
+            credits,
+            anime_map,
+            min_shared=2,
+            person_scores=composite_scores,
         )
     save_pipeline_json_if_data_present(
         "collaborations.json",
         strongest_collaboration_pairs[:500] if strongest_collaboration_pairs else [],
         log_message="collaborations_saved",
-        pairs=len(strongest_collaboration_pairs) if strongest_collaboration_pairs else 0,
+        pairs=len(strongest_collaboration_pairs)
+        if strongest_collaboration_pairs
+        else 0,
     )
 
     # Outlier detection
@@ -465,7 +483,9 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
 
     # Team composition analysis
     logger.info("step_start", step="team_composition")
-    team_data = analyze_team_patterns(credits, anime_map, person_scores=composite_scores)
+    team_data = analyze_team_patterns(
+        credits, anime_map, person_scores=composite_scores
+    )
     save_pipeline_json_if_data_present(
         "teams.json",
         team_data,
@@ -484,7 +504,8 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
             "trend_summary": trend_counts,
             "total_persons": len(growth_data),
             "persons": {
-                pid: data for pid, data in sorted(
+                pid: data
+                for pid, data in sorted(
                     growth_data.items(),
                     key=lambda x: x[1].get("activity_ratio", 0),
                     reverse=True,
@@ -518,14 +539,18 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
     save_pipeline_json_if_data_present(
         "time_series.json",
         credit_timeline_by_year,
-        condition=credit_timeline_by_year.get("years") if credit_timeline_by_year else False,
+        condition=credit_timeline_by_year.get("years")
+        if credit_timeline_by_year
+        else False,
         log_message="time_series_saved",
         years=len(credit_timeline_by_year.get("years", [])),
     )
 
     # Decade analysis
     logger.info("step_start", step="decade_analysis")
-    decade_data = compute_decade_analysis(credits, anime_map, person_scores=composite_scores)
+    decade_data = compute_decade_analysis(
+        credits, anime_map, person_scores=composite_scores
+    )
     save_pipeline_json_if_data_present(
         "decades.json",
         decade_data,
@@ -620,7 +645,9 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
     save_pipeline_json_if_data_present(
         "network_evolution.json",
         network_growth_over_decades,
-        condition=network_growth_over_decades.get("years") if network_growth_over_decades else False,
+        condition=network_growth_over_decades.get("years")
+        if network_growth_over_decades
+        else False,
         log_message="network_evolution_saved",
         years=len(network_growth_over_decades.get("years", [])),
     )
@@ -631,7 +658,11 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
     if person_genre_specialization:
         # Save top 200 by total_credits
         top_genre_specialists = dict(
-            sorted(person_genre_specialization.items(), key=lambda x: x[1]["total_credits"], reverse=True)[:200]
+            sorted(
+                person_genre_specialization.items(),
+                key=lambda x: x[1]["total_credits"],
+                reverse=True,
+            )[:200]
         )
         save_pipeline_json_if_data_present(
             "genre_affinity.json",
@@ -645,7 +676,11 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
     person_productivity_metrics = compute_productivity(credits, anime_map)
     if person_productivity_metrics:
         most_productive_persons = dict(
-            sorted(person_productivity_metrics.items(), key=lambda x: x[1]["credits_per_year"], reverse=True)[:200]
+            sorted(
+                person_productivity_metrics.items(),
+                key=lambda x: x[1]["credits_per_year"],
+                reverse=True,
+            )[:200]
         )
         save_pipeline_json_if_data_present(
             "productivity.json",
@@ -663,7 +698,8 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
         "transitions": [asdict(t) for t in transitions["transitions"]],
         "career_paths": [asdict(p) for p in transitions["career_paths"]],
         "avg_time_to_stage": {
-            stage: asdict(stats) for stage, stats in transitions["avg_time_to_stage"].items()
+            stage: asdict(stats)
+            for stage, stats in transitions["avg_time_to_stage"].items()
         },
         "total_persons_analyzed": transitions["total_persons_analyzed"],
     }
@@ -678,7 +714,9 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
 
     # Influence tree (mentor-mentee relationships)
     logger.info("step_start", step="influence_tree")
-    influence = compute_influence_tree(credits, anime_map, person_scores=composite_scores)
+    influence = compute_influence_tree(
+        credits, anime_map, person_scores=composite_scores
+    )
     save_pipeline_json_if_data_present(
         "influence.json",
         influence,
@@ -694,8 +732,12 @@ def run_scoring_pipeline(visualize: bool = False, dry_run: bool = False) -> list
         with monitor.measure("cross_validation"):
             cv_folds = 3 if len(credits) < 100 else 5
             crossval_result = cross_validate_scores(
-            persons, anime_list, credits, n_folds=cv_folds, holdout_ratio=0.2,
-        )
+                persons,
+                anime_list,
+                credits,
+                n_folds=cv_folds,
+                holdout_ratio=0.2,
+            )
         save_pipeline_json_if_data_present(
             "crossval.json",
             crossval_result,
@@ -915,9 +957,7 @@ def main() -> None:
     setup_logging()
 
     parser = argparse.ArgumentParser(description="Animetor Eval パイプライン")
-    parser.add_argument(
-        "--visualize", action="store_true", help="可視化を生成"
-    )
+    parser.add_argument("--visualize", action="store_true", help="可視化を生成")
     parser.add_argument(
         "--dry-run", action="store_true", help="データ検証のみ（スコア計算なし）"
     )

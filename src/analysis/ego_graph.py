@@ -74,7 +74,7 @@ def extract_ego_graph(
     for aid, persons in anime_persons.items():
         local_persons = [p for p in persons if p in visited]
         for i, a in enumerate(local_persons):
-            for b in local_persons[i + 1:]:
+            for b in local_persons[i + 1 :]:
                 key = (min(a, b), max(a, b))
                 if key not in edges:
                     edges[key] = set()
@@ -86,7 +86,9 @@ def extract_ego_graph(
         node: dict = {
             "id": pid,
             "distance": distance,
-            "shared_works": len(person_anime.get(pid, set()) & person_anime.get(person_id, set())),
+            "shared_works": len(
+                person_anime.get(pid, set()) & person_anime.get(person_id, set())
+            ),
         }
         if person_scores and pid in person_scores:
             node["score"] = person_scores[pid]

@@ -258,7 +258,13 @@ class TestHistoryCommand:
         db_path = tmp_path / "history.db"
         monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
 
-        from src.database import get_connection, init_db, save_score_history, upsert_person, upsert_score
+        from src.database import (
+            get_connection,
+            init_db,
+            save_score_history,
+            upsert_person,
+            upsert_score,
+        )
         from src.models import Person, ScoreResult
 
         conn = get_connection()
@@ -319,7 +325,12 @@ class TestCrossvalCommand:
             "min_rank_correlation": 0.88,
             "avg_top10_overlap": 0.9,
             "fold_results": [
-                {"fold": 1, "credits_used": 80, "correlation": 0.95, "top10_overlap": 0.9},
+                {
+                    "fold": 1,
+                    "credits_used": 80,
+                    "correlation": 0.95,
+                    "top10_overlap": 0.9,
+                },
             ],
         }
         (tmp_path / "crossval.json").write_text(json.dumps(data))
@@ -372,7 +383,11 @@ class TestStudiosCommand:
         monkeypatch.setattr("src.utils.config.JSON_DIR", tmp_path)
         data = {
             "MAPPA": {"anime_count": 5, "person_count": 50, "avg_person_score": 65.0},
-            "ufotable": {"anime_count": 3, "person_count": 30, "avg_person_score": 72.0},
+            "ufotable": {
+                "anime_count": 3,
+                "person_count": 30,
+                "avg_person_score": 72.0,
+            },
         }
         (tmp_path / "studios.json").write_text(json.dumps(data))
         result = runner.invoke(app, ["studios"])
@@ -393,7 +408,9 @@ class TestVersatilityCommand:
         monkeypatch.setattr("src.utils.config.JSON_DIR", tmp_path)
         data = [
             {
-                "person_id": "p1", "name": "Person 1", "composite": 70.0,
+                "person_id": "p1",
+                "name": "Person 1",
+                "composite": 70.0,
                 "versatility": {"score": 75.0, "categories": 3, "roles": 5},
             },
         ]
@@ -416,7 +433,9 @@ class TestDensityCommand:
         monkeypatch.setattr("src.utils.config.JSON_DIR", tmp_path)
         data = [
             {
-                "person_id": "p1", "name": "Person 1", "composite": 70.0,
+                "person_id": "p1",
+                "name": "Person 1",
+                "composite": 70.0,
                 "network": {"hub_score": 85.0, "collaborators": 20, "unique_anime": 10},
             },
         ]
@@ -438,10 +457,24 @@ class TestOutliersCommand:
 
         monkeypatch.setattr("src.utils.config.JSON_DIR", tmp_path)
         data = [
-            {"person_id": f"p{i}", "name": f"Normal {i}", "authority": 50.0, "trust": 50.0, "skill": 50.0, "composite": 50.0}
+            {
+                "person_id": f"p{i}",
+                "name": f"Normal {i}",
+                "authority": 50.0,
+                "trust": 50.0,
+                "skill": 50.0,
+                "composite": 50.0,
+            }
             for i in range(20)
         ] + [
-            {"person_id": "p_high", "name": "Outlier", "authority": 99.0, "trust": 99.0, "skill": 99.0, "composite": 99.0},
+            {
+                "person_id": "p_high",
+                "name": "Outlier",
+                "authority": 99.0,
+                "trust": 99.0,
+                "skill": 99.0,
+                "composite": 99.0,
+            },
         ]
         (tmp_path / "scores.json").write_text(json.dumps(data))
         result = runner.invoke(app, ["outliers"])
@@ -463,7 +496,13 @@ class TestGrowthCommand:
             "trend_summary": {"rising": 2, "stable": 1},
             "total_persons": 3,
             "persons": {
-                "p1": {"trend": "rising", "total_credits": 10, "recent_credits": 7, "activity_ratio": 0.7, "career_span": 5},
+                "p1": {
+                    "trend": "rising",
+                    "total_credits": 10,
+                    "recent_credits": 7,
+                    "activity_ratio": 0.7,
+                    "career_span": 5,
+                },
             },
         }
         (tmp_path / "growth.json").write_text(json.dumps(data))
@@ -484,7 +523,9 @@ class TestTeamsCommand:
 
         monkeypatch.setattr("src.utils.config.JSON_DIR", tmp_path)
         data = {
-            "high_score_teams": [{"title": "Hit Show", "year": 2023, "anime_score": 8.5, "team_size": 5}],
+            "high_score_teams": [
+                {"title": "Hit Show", "year": 2023, "anime_score": 8.5, "team_size": 5}
+            ],
             "total_high_score": 1,
             "role_combinations": [],
             "recommended_pairs": [],
@@ -508,7 +549,14 @@ class TestDecadesCommand:
 
         monkeypatch.setattr("src.utils.config.JSON_DIR", tmp_path)
         data = {
-            "decades": {"2020s": {"credit_count": 100, "unique_persons": 50, "unique_anime": 20, "avg_anime_score": 7.5}},
+            "decades": {
+                "2020s": {
+                    "credit_count": 100,
+                    "unique_persons": 50,
+                    "unique_anime": 20,
+                    "avg_anime_score": 7.5,
+                }
+            },
             "year_by_year": {},
         }
         (tmp_path / "decades.json").write_text(json.dumps(data))
@@ -568,9 +616,13 @@ class TestDataQualityCommand:
 
         conn = get_connection()
         init_db(conn)
-        conn.execute("INSERT INTO anime (id, title_en, year, score) VALUES ('a1', 'Test', 2024, 8.0)")
+        conn.execute(
+            "INSERT INTO anime (id, title_en, year, score) VALUES ('a1', 'Test', 2024, 8.0)"
+        )
         conn.execute("INSERT INTO persons (id, name_en) VALUES ('p1', 'Person')")
-        conn.execute("INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p1', 'a1', 'director', 'test')")
+        conn.execute(
+            "INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p1', 'a1', 'director', 'test')"
+        )
         conn.commit()
         conn.close()
 
@@ -587,9 +639,19 @@ class TestBridgesCommand:
         monkeypatch.setattr("src.utils.config.JSON_DIR", tmp_path)
         data = {
             "bridge_persons": [
-                {"person_id": "p2", "cross_community_edges": 3, "communities_connected": 2, "bridge_score": 60}
+                {
+                    "person_id": "p2",
+                    "cross_community_edges": 3,
+                    "communities_connected": 2,
+                    "bridge_score": 60,
+                }
             ],
-            "stats": {"total_persons": 6, "total_communities": 2, "total_cross_edges": 3, "bridge_person_count": 1},
+            "stats": {
+                "total_persons": 6,
+                "total_communities": 2,
+                "total_cross_edges": 3,
+                "bridge_person_count": 1,
+            },
         }
         (tmp_path / "bridges.json").write_text(json.dumps(data))
         result = runner.invoke(app, ["bridges"])
@@ -610,8 +672,14 @@ class TestMentorshipsCommand:
         monkeypatch.setattr("src.utils.config.JSON_DIR", tmp_path)
         data = {
             "mentorships": [
-                {"mentor_id": "p1", "mentee_id": "p2", "shared_works": 5, "stage_gap": 3, "confidence": 80,
-                 "year_span": [2018, 2022]}
+                {
+                    "mentor_id": "p1",
+                    "mentee_id": "p2",
+                    "shared_works": 5,
+                    "stage_gap": 3,
+                    "confidence": 80,
+                    "year_span": [2018, 2022],
+                }
             ],
             "tree": {"tree": {"p1": ["p2"]}, "roots": ["p1"]},
             "total": 1,
@@ -635,7 +703,11 @@ class TestMilestonesCommand:
         monkeypatch.setattr("src.utils.config.JSON_DIR", tmp_path)
         data = {
             "p1": [
-                {"type": "career_start", "year": 2010, "description": "初クレジット: First Show"},
+                {
+                    "type": "career_start",
+                    "year": 2010,
+                    "description": "初クレジット: First Show",
+                },
             ],
         }
         (tmp_path / "milestones.json").write_text(json.dumps(data))
@@ -666,10 +738,26 @@ class TestNetEvolutionCommand:
         data = {
             "years": [2020, 2021],
             "snapshots": {
-                "2020": {"active_persons": 5, "cumulative_persons": 5, "new_persons": 5, "new_edges": 3, "density": 0.3},
-                "2021": {"active_persons": 8, "cumulative_persons": 10, "new_persons": 5, "new_edges": 7, "density": 0.25},
+                "2020": {
+                    "active_persons": 5,
+                    "cumulative_persons": 5,
+                    "new_persons": 5,
+                    "new_edges": 3,
+                    "density": 0.3,
+                },
+                "2021": {
+                    "active_persons": 8,
+                    "cumulative_persons": 10,
+                    "new_persons": 5,
+                    "new_edges": 7,
+                    "density": 0.25,
+                },
             },
-            "trends": {"person_growth": 5, "edge_growth": 10, "avg_new_persons_per_year": 5.0},
+            "trends": {
+                "person_growth": 5,
+                "edge_growth": 10,
+                "avg_new_persons_per_year": 5.0,
+            },
         }
         (tmp_path / "network_evolution.json").write_text(json.dumps(data))
         result = runner.invoke(app, ["net-evolution"])
@@ -724,7 +812,12 @@ class TestProductivityCommand:
 
         monkeypatch.setattr("src.utils.config.JSON_DIR", tmp_path)
         data = {
-            "p1": {"credits_per_year": 3.5, "total_credits": 14, "active_years": 4, "consistency_score": 0.8},
+            "p1": {
+                "credits_per_year": 3.5,
+                "total_credits": 14,
+                "active_years": 4,
+                "consistency_score": 0.8,
+            },
         }
         (tmp_path / "productivity.json").write_text(json.dumps(data))
         result = runner.invoke(app, ["productivity"])

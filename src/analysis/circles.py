@@ -109,7 +109,9 @@ def find_director_circles(
                 stats = collaborator_statistics[person_id]
                 stats["shared_works"] += 1
                 stats["roles"].add(role.value)
-                if year and (stats["latest_year"] is None or year > stats["latest_year"]):
+                if year and (
+                    stats["latest_year"] is None or year > stats["latest_year"]
+                ):
                     stats["latest_year"] = year
 
         # min_shared_works 以上の共演者をサークルメンバーとする
@@ -136,7 +138,9 @@ def find_director_circles(
     logger.info(
         "director_circles_found",
         directors=len(circles_by_director_id),
-        total_members=sum(len(circle.members) for circle in circles_by_director_id.values()),
+        total_members=sum(
+            len(circle.members) for circle in circles_by_director_id.values()
+        ),
     )
     return circles_by_director_id
 

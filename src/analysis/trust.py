@@ -23,8 +23,11 @@ logger = structlog.get_logger()
 class DirectorEngagementRecord(NamedTuple):
     """監督との共演記録 — 役職の重要度と時間経過を表す."""
 
-    role_importance_weight: float  # 役職の重み (animation_director=2.5, key_animator=1.0, etc.)
+    role_importance_weight: (
+        float  # 役職の重み (animation_director=2.5, key_animator=1.0, etc.)
+    )
     years_since_collaboration: float  # 共演からの経過年数
+
 
 # 減衰パラメータ
 DECAY_HALF_LIFE_YEARS = 3.0  # 3年で半減
@@ -80,23 +83,25 @@ def compute_trust_scores(
     # 各人物の Trust スコアを算出
     # Pre-compute anime years and director work counts (avoid repeated lookups)
     anime_years: dict[str, int] = {
-        aid: a.year if a.year else current_year - 5
-        for aid, a in anime_map.items()
+        aid: a.year if a.year else current_year - 5 for aid, a in anime_map.items()
     }
 
     director_work_counts: dict[str, int] = {
-        dir_id: len(anime_ids)
-        for dir_id, anime_ids in director_credits.items()
+        dir_id: len(anime_ids) for dir_id, anime_ids in director_credits.items()
     }
 
     trust_scores: dict[str, float] = {}
 
     for person_id, person_credits in animator_credits.items():
         # 監督との共演を集計
-        collaborations_with_each_director: dict[str, list[DirectorEngagementRecord]] = defaultdict(list)
+        collaborations_with_each_director: dict[str, list[DirectorEngagementRecord]] = (
+            defaultdict(list)
+        )
 
         for c in person_credits:
-            years_since_this_work = current_year - anime_years.get(c.anime_id, current_year - 5)
+            years_since_this_work = current_year - anime_years.get(
+                c.anime_id, current_year - 5
+            )
 
             # この作品の監督を特定
             for dir_id in anime_directors.get(c.anime_id, set()):
@@ -114,21 +119,29 @@ def compute_trust_scores(
 
         # Trust = Σ_directors [ repeat_bonus × Σ_works(role_weight × time_decay) ]
         total_trust_score = 0.0
-        for dir_id, all_collaborations_with_this_director in collaborations_with_each_director.items():
+        for (
+            dir_id,
+            all_collaborations_with_this_director,
+        ) in collaborations_with_each_director.items():
             how_many_times_worked_together = len(all_collaborations_with_this_director)
             # 繰り返し起用ボーナス: log(1 + n) で飽和
             repeat_engagement_boost = math.log1p(how_many_times_worked_together)
 
             weighted_collaboration_sum = sum(
-                collab.role_importance_weight * _compute_time_weight(collab.years_since_collaboration)
+                collab.role_importance_weight
+                * _compute_time_weight(collab.years_since_collaboration)
                 for collab in all_collaborations_with_this_director
             )
             total_trust_score += repeat_engagement_boost * weighted_collaboration_sum
 
             # 監督自身の著名度ボーナス（監督クレジット数に基づく、pre-computed）
             how_many_works_director_has_directed = director_work_counts.get(dir_id, 0)
-            director_prominence_multiplier = math.log1p(how_many_works_director_has_directed) / math.log(10)
-            total_trust_score += weighted_collaboration_sum * director_prominence_multiplier * 0.3
+            director_prominence_multiplier = math.log1p(
+                how_many_works_director_has_directed
+            ) / math.log(10)
+            total_trust_score += (
+                weighted_collaboration_sum * director_prominence_multiplier * 0.3
+            )
 
         trust_scores[person_id] = total_trust_score
 
@@ -174,19 +187,13 @@ def detect_engagement_decay(
         return {"status": "insufficient_data", "works": len(director_works)}
 
     # 全体の起用率
-    animator_anime_ids = {
-        c.anime_id for c in credits if c.person_id == person_id
-    }
-    total_appearances = sum(
-        1 for _, aid in director_works if aid in animator_anime_ids
-    )
+    animator_anime_ids = {c.anime_id for c in credits if c.person_id == person_id}
+    total_appearances = sum(1 for _, aid in director_works if aid in animator_anime_ids)
     expected_rate = total_appearances / len(director_works) if director_works else 0
 
     # 直近 window の起用率
     recent_works = director_works[-window_size:]
-    recent_appearances = sum(
-        1 for _, aid in recent_works if aid in animator_anime_ids
-    )
+    recent_appearances = sum(1 for _, aid in recent_works if aid in animator_anime_ids)
     recent_rate = recent_appearances / window_size
 
     return {
@@ -231,8 +238,7 @@ def batch_detect_engagement_decay(
 
     # Step 2: 監督ごとにコラボレーターを特定（共演のあるペアのみ）
     director_anime_sets: dict[str, set[str]] = {
-        dir_id: {aid for _, aid in works}
-        for dir_id, works in director_works.items()
+        dir_id: {aid for _, aid in works} for dir_id, works in director_works.items()
     }
 
     # Step 3: 共演ペアのみ検査
@@ -262,21 +268,21 @@ def batch_detect_engagement_decay(
             expected_rate = total_appearances / len(works)
 
             # 直近 window の起用率
-            recent_appearances = sum(
-                1 for _, aid in recent_works if aid in p_anime
-            )
+            recent_appearances = sum(1 for _, aid in recent_works if aid in p_anime)
             recent_rate = recent_appearances / window_size
 
             if recent_rate < expected_rate * 0.5:
-                decay_results.setdefault(pid, []).append({
-                    "director_id": dir_id,
-                    "status": "decayed",
-                    "expected_rate": round(expected_rate, 3),
-                    "recent_rate": round(recent_rate, 3),
-                    "total_works": len(works),
-                    "total_appearances": total_appearances,
-                    "recent_appearances": recent_appearances,
-                })
+                decay_results.setdefault(pid, []).append(
+                    {
+                        "director_id": dir_id,
+                        "status": "decayed",
+                        "expected_rate": round(expected_rate, 3),
+                        "recent_rate": round(recent_rate, 3),
+                        "total_works": len(works),
+                        "total_appearances": total_appearances,
+                        "recent_appearances": recent_appearances,
+                    }
+                )
 
     logger.info(
         "engagement_decay_batch_complete",

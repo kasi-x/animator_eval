@@ -107,7 +107,5 @@ class TestBatchComputeConfidence:
                 "total_credits": 0,
             },
         ]
-        updated = batch_compute_confidence(
-            results, credits_per_person={"p1": 30}
-        )
+        updated = batch_compute_confidence(results, credits_per_person={"p1": 30})
         assert updated[0]["confidence"] > 0.5

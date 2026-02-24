@@ -81,7 +81,9 @@ def check_data_freshness(
 
         # Parse the timestamp -- SQLite CURRENT_TIMESTAMP produces "YYYY-MM-DD HH:MM:SS"
         try:
-            scraped_dt = datetime.fromisoformat(last_scraped).replace(tzinfo=timezone.utc)
+            scraped_dt = datetime.fromisoformat(last_scraped).replace(
+                tzinfo=timezone.utc
+            )
         except (ValueError, TypeError):
             # Fallback: treat as never scraped
             reports.append(

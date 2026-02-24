@@ -106,10 +106,14 @@ class TestNormalizeRomaji:
         assert _normalize_romaji("Miyazaki Hayao") == "hayao miyazaki"
 
     def test_name_order_invariant(self):
-        assert _normalize_romaji("Hayao Miyazaki") == _normalize_romaji("Miyazaki Hayao")
+        assert _normalize_romaji("Hayao Miyazaki") == _normalize_romaji(
+            "Miyazaki Hayao"
+        )
 
     def test_macron_removal(self):
-        assert _normalize_romaji("Ōtomo Katsuhirō") == _normalize_romaji("Otomo Katsuhiro")
+        assert _normalize_romaji("Ōtomo Katsuhirō") == _normalize_romaji(
+            "Otomo Katsuhiro"
+        )
 
     def test_hyphen_removal(self):
         assert _normalize_romaji("Shin-ichirō") == _normalize_romaji("Shinichiro")

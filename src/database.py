@@ -7,14 +7,25 @@ from typing import Generator
 
 import structlog
 
-from src.models import Anime, AnimeRelation, AnimeStudio, Character, CharacterVoiceActor, Credit, Person, Role, ScoreResult, Studio
+from src.models import (
+    Anime,
+    AnimeRelation,
+    AnimeStudio,
+    Character,
+    CharacterVoiceActor,
+    Credit,
+    Person,
+    Role,
+    ScoreResult,
+    Studio,
+)
 from src.utils.config import DB_DIR
 
 logger = structlog.get_logger()
 
 DEFAULT_DB_PATH = DB_DIR / "animetor_eval.db"
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 
 def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
@@ -30,7 +41,9 @@ def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
 
 
 @contextmanager
-def db_connection(db_path: Path | None = None) -> Generator[sqlite3.Connection, None, None]:
+def db_connection(
+    db_path: Path | None = None,
+) -> Generator[sqlite3.Connection, None, None]:
     """SQLite 接続のコンテキストマネージャ.
 
     正常終了時は自動コミット、例外時はロールバック、常にクローズする。
@@ -230,6 +243,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         9: _migrate_v9_add_studios_tables,
         10: _migrate_v10_schema_cleanup,
         11: _migrate_v11_add_madb_ids,
+        12: _migrate_v12_add_person_fetch_status,
     }
 
     for version in range(current + 1, SCHEMA_VERSION + 1):
@@ -481,14 +495,24 @@ def _migrate_v10_schema_cleanup(conn: sqlite3.Connection) -> None:
         pass  # Column doesn't exist or SQLite too old
 
     # 3. updated_at カラム追加
-    for table in ["persons", "anime", "characters", "character_voice_actors", "studios"]:
+    for table in [
+        "persons",
+        "anime",
+        "characters",
+        "character_voice_actors",
+        "studios",
+    ]:
         try:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+            conn.execute(
+                f"ALTER TABLE {table} ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP"
+            )
         except sqlite3.OperationalError:
             pass
 
     # 4. persons.canonical_id インデックス
-    conn.execute("CREATE INDEX IF NOT EXISTS idx_persons_canonical ON persons(canonical_id)")
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_persons_canonical ON persons(canonical_id)"
+    )
 
     # 5. anime_relations テーブル
     conn.executescript("""
@@ -515,6 +539,46 @@ def _migrate_v11_add_madb_ids(conn: sqlite3.Connection) -> None:
             pass  # Column already exists
     conn.execute("CREATE INDEX IF NOT EXISTS idx_anime_madb_id ON anime(madb_id)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_persons_madb_id ON persons(madb_id)")
+
+
+def _migrate_v12_add_person_fetch_status(conn: sqlite3.Connection) -> None:
+    """v12: API取得失敗（404等）を記録するテーブルを追加."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS person_fetch_status (
+            anilist_id INTEGER PRIMARY KEY,
+            status TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT 'anilist',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+
+def mark_person_unfetchable(
+    conn: sqlite3.Connection,
+    anilist_id: int,
+    status: str = "not_found",
+    source: str = "anilist",
+) -> None:
+    """APIで取得不可だった人物IDを記録する."""
+    conn.execute(
+        """INSERT INTO person_fetch_status (anilist_id, status, source, updated_at)
+           VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+           ON CONFLICT(anilist_id) DO UPDATE SET
+               status = excluded.status,
+               updated_at = CURRENT_TIMESTAMP""",
+        (anilist_id, status, source),
+    )
+
+
+def get_unfetchable_person_ids(
+    conn: sqlite3.Connection, source: str = "anilist"
+) -> set[int]:
+    """取得不可と記録された人物のanilist_idセットを返す."""
+    rows = conn.execute(
+        "SELECT anilist_id FROM person_fetch_status WHERE source = ?",
+        (source,),
+    ).fetchall()
+    return {row[0] for row in rows}
 
 
 def upsert_person(conn: sqlite3.Connection, person: Person) -> None:
@@ -744,7 +808,9 @@ def upsert_character(conn: sqlite3.Connection, character: Character) -> None:
     )
 
 
-def insert_character_voice_actor(conn: sqlite3.Connection, cva: CharacterVoiceActor) -> None:
+def insert_character_voice_actor(
+    conn: sqlite3.Connection, cva: CharacterVoiceActor
+) -> None:
     """キャラクター×声優×作品の関係を挿入する（重複は無視）."""
     conn.execute(
         """INSERT OR IGNORE INTO character_voice_actors
@@ -770,7 +836,9 @@ def upsert_studio(conn: sqlite3.Connection, studio: Studio) -> None:
             studio.id,
             studio.name,
             studio.anilist_id,
-            1 if studio.is_animation_studio else (0 if studio.is_animation_studio is not None else None),
+            1
+            if studio.is_animation_studio
+            else (0 if studio.is_animation_studio is not None else None),
             studio.favourites,
             studio.site_url,
         ),
@@ -782,7 +850,11 @@ def insert_anime_studio(conn: sqlite3.Connection, anime_studio: AnimeStudio) -> 
     conn.execute(
         """INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main)
            VALUES (?, ?, ?)""",
-        (anime_studio.anime_id, anime_studio.studio_id, 1 if anime_studio.is_main else 0),
+        (
+            anime_studio.anime_id,
+            anime_studio.studio_id,
+            1 if anime_studio.is_main else 0,
+        ),
     )
 
 
@@ -883,13 +955,30 @@ def load_all_anime(conn: sqlite3.Connection) -> list[Anime]:
                 kwargs["tags"] = []
         # スカラーカラム（存在すれば読む）
         for col in [
-            "format", "status", "source", "description",
-            "start_date", "end_date", "duration",
-            "cover_large", "cover_extra_large", "cover_medium", "banner",
-            "popularity_rank", "favourites", "mean_score",
-            "country_of_origin", "is_licensed", "is_adult",
-            "hashtag", "site_url", "trailer_url", "trailer_site",
-            "relations_json", "external_links_json", "rankings_json",
+            "format",
+            "status",
+            "source",
+            "description",
+            "start_date",
+            "end_date",
+            "duration",
+            "cover_large",
+            "cover_extra_large",
+            "cover_medium",
+            "banner",
+            "popularity_rank",
+            "favourites",
+            "mean_score",
+            "country_of_origin",
+            "is_licensed",
+            "is_adult",
+            "hashtag",
+            "site_url",
+            "trailer_url",
+            "trailer_site",
+            "relations_json",
+            "external_links_json",
+            "rankings_json",
             "madb_id",
         ]:
             if col in columns:
@@ -911,6 +1000,7 @@ def load_all_credits(conn: sqlite3.Connection) -> list[Credit]:
             person_id=row["person_id"],
             anime_id=row["anime_id"],
             role=Role(row["role"]),
+            raw_role=row["raw_role"] or None,
             episode=row["episode"] if row["episode"] != -1 else None,
             source=row["source"],
         )
@@ -923,7 +1013,9 @@ def get_db_stats(conn: sqlite3.Connection) -> dict[str, int | float]:
     stats: dict[str, int | float] = {}
 
     for table in ("persons", "anime", "credits", "scores"):
-        stats[f"{table}_count"] = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]  # noqa: S608
+        stats[f"{table}_count"] = conn.execute(
+            f"SELECT COUNT(*) FROM {table}"
+        ).fetchone()[0]  # noqa: S608
 
     # 役職分布
     role_counts = conn.execute("""
@@ -1069,9 +1161,7 @@ def has_credits_changed_since_last_run(conn: sqlite3.Connection) -> bool:
     if last_run is None:
         return True
 
-    current_credit_count = conn.execute(
-        "SELECT COUNT(*) FROM credits"
-    ).fetchone()[0]
+    current_credit_count = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
     if current_credit_count != last_run["credit_count"]:
         return True
 
@@ -1144,6 +1234,7 @@ def get_score_history(
 def get_all_persons(conn: sqlite3.Connection) -> list[Person]:
     """全人物データを取得する."""
     import json
+
     rows = conn.execute("SELECT * FROM persons").fetchall()
     return [
         Person(
@@ -1189,6 +1280,7 @@ def get_all_anime(conn: sqlite3.Connection) -> list[Anime]:
 def get_all_credits(conn: sqlite3.Connection) -> list[Credit]:
     """全クレジットデータを取得する."""
     from src.models import Role
+
     rows = conn.execute("SELECT * FROM credits").fetchall()
     return [
         Credit(

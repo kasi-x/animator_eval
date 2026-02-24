@@ -100,7 +100,9 @@ def compute_genre_profiles(
         person_id → GenreProfile
     """
     # person_id → genre → [credits] のマッピング
-    person_genre_credits: dict[str, dict[str, list[Credit]]] = defaultdict(lambda: defaultdict(list))
+    person_genre_credits: dict[str, dict[str, list[Credit]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
 
     # ジャンル別作品数（業界全体）
     global_genre_counts: dict[str, int] = defaultdict(int)
@@ -164,7 +166,9 @@ def compute_genre_profiles(
                 entropy -= p * math.log2(p)
 
         # 最大エントロピー（均等分布）
-        max_entropy = math.log2(len(genre_distribution)) if len(genre_distribution) > 1 else 1
+        max_entropy = (
+            math.log2(len(genre_distribution)) if len(genre_distribution) > 1 else 1
+        )
 
         # 正規化された多様性（0-1）
         genre_diversity = entropy / max_entropy if max_entropy > 0 else 0
@@ -224,7 +228,9 @@ def find_genre_specialists(
     for person_id, profile in profiles.items():
         works_in_genre = profile.genre_distribution.get(genre, 0)
         if works_in_genre >= min_works and profile.primary_genre == genre:
-            specialists.append((person_id, works_in_genre, profile.specialization_score))
+            specialists.append(
+                (person_id, works_in_genre, profile.specialization_score)
+            )
 
     # 作品数 × 特化度 でソート
     specialists.sort(key=lambda x: x[1] * x[2], reverse=True)
@@ -250,12 +256,14 @@ def analyze_genre_trends(
     Returns:
         genre → 統計情報
     """
-    genre_stats: dict[str, dict] = defaultdict(lambda: {
-        "total_creators": 0,
-        "specialists": 0,  # specialization_score > 70
-        "avg_specialization": 0.0,
-        "total_works": 0,
-    })
+    genre_stats: dict[str, dict] = defaultdict(
+        lambda: {
+            "total_creators": 0,
+            "specialists": 0,  # specialization_score > 70
+            "avg_specialization": 0.0,
+            "total_works": 0,
+        }
+    )
 
     for profile in profiles.values():
         for genre, count in profile.genre_distribution.items():
@@ -268,9 +276,7 @@ def analyze_genre_trends(
 
     # 平均特化度計算
     for genre, stats in genre_stats.items():
-        genre_profiles = [
-            p for p in profiles.values() if genre in p.genre_distribution
-        ]
+        genre_profiles = [p for p in profiles.values() if genre in p.genre_distribution]
         if genre_profiles:
             avg_spec = sum(
                 p.specialization_score
@@ -298,7 +304,9 @@ def compute_genre_similarity(
         類似度（0-1、1に近いほど似ている）
     """
     # 全ジャンルのユニオン
-    all_genres = set(profile1.genre_distribution.keys()) | set(profile2.genre_distribution.keys())
+    all_genres = set(profile1.genre_distribution.keys()) | set(
+        profile2.genre_distribution.keys()
+    )
 
     if not all_genres:
         return 0.0
@@ -364,7 +372,14 @@ def find_similar_creators_by_genre(
 
 def main():
     """スタンドアロン実行用エントリーポイント."""
-    from src.database import get_all_anime, get_all_credits, get_all_persons, get_all_scores, get_connection, init_db
+    from src.database import (
+        get_all_anime,
+        get_all_credits,
+        get_all_persons,
+        get_all_scores,
+        get_connection,
+        init_db,
+    )
 
     conn = get_connection()
     init_db(conn)
@@ -377,10 +392,7 @@ def main():
     # マップ作成
     anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
-    scores_map = {
-        s.person_id: {"composite": s.composite}
-        for s in scores_list
-    }
+    scores_map = {s.person_id: {"composite": s.composite} for s in scores_list}
 
     # ジャンルプロファイル計算
     profiles = compute_genre_profiles(credits, anime_map, scores_map)
@@ -407,8 +419,12 @@ def main():
 
         print("\n特化度分布:")
         print(f"  平均: {avg_spec:.1f}")
-        print(f"  高特化 (>70): {high_spec} ({100*high_spec/len(specializations):.1f}%)")
-        print(f"  低特化 (<30): {low_spec} ({100*low_spec/len(specializations):.1f}%)")
+        print(
+            f"  高特化 (>70): {high_spec} ({100 * high_spec / len(specializations):.1f}%)"
+        )
+        print(
+            f"  低特化 (<30): {low_spec} ({100 * low_spec / len(specializations):.1f}%)"
+        )
 
     # ジャンルスペシャリスト例
     if genre_trends:

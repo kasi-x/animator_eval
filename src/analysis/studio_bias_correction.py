@@ -74,14 +74,8 @@ def extract_studio_from_anime(anime: Anime) -> str | None:
     Returns:
         スタジオ名（不明の場合None）
     """
-    # Use studios list (primary source from AniList)
     if anime.studios:
         return anime.studios[0]
-
-    # Fallback to singular studio field
-    if anime.studio:
-        return anime.studio
-
     return "unknown"
 
 
@@ -96,8 +90,6 @@ def extract_all_studios(anime: Anime) -> list[str]:
     """
     if anime.studios:
         return anime.studios
-    if anime.studio:
-        return [anime.studio]
     return []
 
 
@@ -115,7 +107,9 @@ def compute_studio_bias_metrics(
         person_id → StudioBiasMetrics
     """
     # person_id → studio → count
-    person_studio_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    person_studio_counts: dict[str, dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
 
     for credit in credits:
         anime = anime_map.get(credit.anime_id)
@@ -138,7 +132,9 @@ def compute_studio_bias_metrics(
         primary_count = studio_counts[primary_studio]
 
         # Studio concentration (Herfindahl index)
-        concentration = sum((count / total_works) ** 2 for count in studio_counts.values())
+        concentration = sum(
+            (count / total_works) ** 2 for count in studio_counts.values()
+        )
 
         # Studio diversity (Shannon entropy)
         diversity = 0.0
@@ -176,7 +172,9 @@ def compute_studio_bias_metrics(
         persons=len(metrics),
         avg_diversity=round(
             sum(m.studio_diversity for m in metrics.values()) / len(metrics), 3
-        ) if metrics else 0.0,
+        )
+        if metrics
+        else 0.0,
     )
 
     return metrics
@@ -271,7 +269,9 @@ def debias_authority_scores(
         # Studio bias penalty
         # High prestige studio + high concentration = high bias
         studio_prestige_value = normalized_prestige.get(metrics.primary_studio, 0)
-        studio_bias = studio_prestige_value * metrics.studio_concentration * debias_strength
+        studio_bias = (
+            studio_prestige_value * metrics.studio_concentration * debias_strength
+        )
 
         # Diversity bonus
         # High diversity = less bias, get bonus
@@ -282,9 +282,9 @@ def debias_authority_scores(
         cross_studio_bonus = min(0.1, metrics.cross_studio_works * 0.02)  # Up to +10%
 
         # Debiased authority
-        debiased_authority = original_authority * (1 - studio_bias) * diversity_factor + (
-            original_authority * cross_studio_bonus
-        )
+        debiased_authority = original_authority * (
+            1 - studio_bias
+        ) * diversity_factor + (original_authority * cross_studio_bonus)
 
         debiased[person_id] = DebiasedScore(
             person_id=person_id,
@@ -335,7 +335,9 @@ def find_undervalued_by_studio(
     # Sort by improvement (descending)
     improvements.sort(key=lambda x: x[3], reverse=True)
 
-    result = [(pid, original, debiased) for pid, original, debiased, _ in improvements[:top_n]]
+    result = [
+        (pid, original, debiased) for pid, original, debiased, _ in improvements[:top_n]
+    ]
 
     logger.info("undervalued_talents_found", count=len(result))
 
@@ -371,7 +373,9 @@ def find_overvalued_by_studio(
     # Sort by decline (descending)
     declines.sort(key=lambda x: x[3], reverse=True)
 
-    result = [(pid, original, debiased) for pid, original, debiased, _ in declines[:top_n]]
+    result = [
+        (pid, original, debiased) for pid, original, debiased, _ in declines[:top_n]
+    ]
 
     logger.info("overvalued_talents_found", count=len(result))
 
@@ -422,7 +426,9 @@ def compute_studio_disparity(
         studio → StudioDisparityResult
     """
     # Map person → primary studio (most credits)
-    person_studio_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    person_studio_counts: dict[str, dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
     for credit in credits:
         anime = anime_map.get(credit.anime_id)
         if not anime:
@@ -534,7 +540,9 @@ def main():
 
     # 結果表示
     print("\n=== スタジオ威信ランキング（トップ10）===\n")
-    sorted_studios = sorted(studio_prestige.items(), key=lambda x: x[1], reverse=True)[:10]
+    sorted_studios = sorted(studio_prestige.items(), key=lambda x: x[1], reverse=True)[
+        :10
+    ]
     for studio, prestige in sorted_studios:
         print(f"{studio}: {prestige:.3f}")
 

@@ -7,23 +7,40 @@ def _make_results():
     return [
         {
             "person_id": "p1",
-            "authority": 90, "trust": 85, "skill": 80, "composite": 86,
-            "career": {"active_years": 20, "highest_stage": 6, "highest_roles": ["director"]},
+            "authority": 90,
+            "trust": 85,
+            "skill": 80,
+            "composite": 86,
+            "career": {
+                "active_years": 20,
+                "highest_stage": 6,
+                "highest_roles": ["director"],
+            },
             "growth": {"trend": "stable"},
             "network": {"hub_score": 90},
             "versatility": {"score": 80, "categories": 5},
         },
         {
             "person_id": "p2",
-            "authority": 60, "trust": 50, "skill": 40, "composite": 52,
-            "career": {"active_years": 2, "highest_stage": 3, "highest_roles": ["key_animator"]},
+            "authority": 60,
+            "trust": 50,
+            "skill": 40,
+            "composite": 52,
+            "career": {
+                "active_years": 2,
+                "highest_stage": 3,
+                "highest_roles": ["key_animator"],
+            },
             "growth": {"trend": "rising"},
             "network": {"hub_score": 30},
             "versatility": {"score": 20, "categories": 1},
         },
         {
             "person_id": "p3",
-            "authority": 40, "trust": 30, "skill": 20, "composite": 32,
+            "authority": 40,
+            "trust": 30,
+            "skill": 20,
+            "composite": 32,
             "career": {"active_years": 8, "highest_stage": 4},
             "growth": {"trend": "inactive"},
             "network": {"hub_score": 10},
@@ -33,7 +50,10 @@ def _make_results():
         *[
             {
                 "person_id": f"px{i}",
-                "authority": 30 + i, "trust": 30 + i, "skill": 30 + i, "composite": 30 + i,
+                "authority": 30 + i,
+                "trust": 30 + i,
+                "skill": 30 + i,
+                "composite": 30 + i,
                 "career": {"active_years": 5, "highest_stage": 3},
             }
             for i in range(7)

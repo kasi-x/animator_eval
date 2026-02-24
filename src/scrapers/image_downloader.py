@@ -7,7 +7,14 @@ from typing import Optional
 
 import httpx
 import structlog
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, DownloadColumn, TransferSpeedColumn
+from rich.progress import (
+    Progress,
+    SpinnerColumn,
+    TextColumn,
+    BarColumn,
+    DownloadColumn,
+    TransferSpeedColumn,
+)
 
 log = structlog.get_logger()
 
@@ -65,8 +72,14 @@ async def download_image(
                 resp = await client.get(url, timeout=30.0, follow_redirects=True)
             except httpx.HTTPError as e:
                 if attempt < MAX_RETRIES:
-                    wait = DOWNLOAD_DELAY * (2 ** attempt)
-                    log.warning("image_download_retry", url=url, attempt=attempt, wait=wait, error=str(e))
+                    wait = DOWNLOAD_DELAY * (2**attempt)
+                    log.warning(
+                        "image_download_retry",
+                        url=url,
+                        attempt=attempt,
+                        wait=wait,
+                        error=str(e),
+                    )
                     await asyncio.sleep(wait)
                     continue
                 log.warning("image_download_error", url=url, error=str(e))
@@ -82,8 +95,13 @@ async def download_image(
 
             if resp.status_code != 200:
                 if attempt < MAX_RETRIES:
-                    wait = DOWNLOAD_DELAY * (2 ** attempt)
-                    log.warning("image_download_retry", url=url, attempt=attempt, status=resp.status_code)
+                    wait = DOWNLOAD_DELAY * (2**attempt)
+                    log.warning(
+                        "image_download_retry",
+                        url=url,
+                        attempt=attempt,
+                        status=resp.status_code,
+                    )
                     await asyncio.sleep(wait)
                     continue
                 log.warning("image_download_failed", url=url, status=resp.status_code)
@@ -92,11 +110,18 @@ async def download_image(
             # Content validation
             content_type = resp.headers.get("content-type", "")
             if not content_type.startswith("image/"):
-                log.warning("image_invalid_content_type", url=url, content_type=content_type)
+                log.warning(
+                    "image_invalid_content_type", url=url, content_type=content_type
+                )
                 return None
 
             if len(resp.content) < MIN_IMAGE_SIZE:
-                log.warning("image_too_small", url=url, size=len(resp.content), min_size=MIN_IMAGE_SIZE)
+                log.warning(
+                    "image_too_small",
+                    url=url,
+                    size=len(resp.content),
+                    min_size=MIN_IMAGE_SIZE,
+                )
                 return None
 
             save_path.write_bytes(resp.content)
@@ -127,6 +152,7 @@ async def download_person_images(
     async with httpx.AsyncClient(timeout=60.0) as client:
         if show_progress:
             from rich.console import Console
+
             console = Console()
 
             with Progress(
@@ -136,11 +162,10 @@ async def download_person_images(
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                 DownloadColumn(),
                 TransferSpeedColumn(),
-                console=console
+                console=console,
             ) as progress:
                 task = progress.add_task(
-                    "[cyan]人物画像ダウンロード中...",
-                    total=len(persons)
+                    "[cyan]人物画像ダウンロード中...", total=len(persons)
                 )
 
                 for person_id, img_large, img_medium in persons:
@@ -193,7 +218,9 @@ async def download_person_images(
 
 
 async def download_anime_images(
-    anime_list: list[tuple[str, str, str, str]],  # [(anime_id, cover_large, cover_extra_large, banner)]
+    anime_list: list[
+        tuple[str, str, str, str]
+    ],  # [(anime_id, cover_large, cover_extra_large, banner)]
     show_progress: bool = True,
 ) -> dict[str, dict[str, Optional[str]]]:
     """アニメ作品の画像を一括ダウンロード.
@@ -210,6 +237,7 @@ async def download_anime_images(
     async with httpx.AsyncClient(timeout=60.0) as client:
         if show_progress:
             from rich.console import Console
+
             console = Console()
 
             with Progress(
@@ -219,11 +247,10 @@ async def download_anime_images(
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                 DownloadColumn(),
                 TransferSpeedColumn(),
-                console=console
+                console=console,
             ) as progress:
                 task = progress.add_task(
-                    "[green]作品画像ダウンロード中...",
-                    total=len(anime_list)
+                    "[green]作品画像ダウンロード中...", total=len(anime_list)
                 )
 
                 for anime_id, cover_large, cover_xl, banner in anime_list:

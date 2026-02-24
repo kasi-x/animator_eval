@@ -134,10 +134,16 @@ class TestCreditQuality:
         from src.validation import validate_credit_quality
 
         # Add 5 different roles for same person-anime pair
-        for role in ["director", "storyboard", "screenplay", "key_animator", "animation_director"]:
+        for role in [
+            "director",
+            "storyboard",
+            "screenplay",
+            "key_animator",
+            "animation_director",
+        ]:
             populated_conn.execute(
-                "INSERT OR IGNORE INTO credits (person_id, anime_id, role, source) VALUES ('p1', 'a1', ?, 'test')",
-                (role,),
+                "INSERT OR IGNORE INTO credits (person_id, anime_id, role, raw_role, source) VALUES ('p1', 'a1', ?, ?, 'test')",
+                (role, role),
             )
         populated_conn.commit()
         result = validate_credit_quality(populated_conn)
@@ -153,7 +159,12 @@ class TestDataFreshness:
 
     def test_stale_data_detected(self, test_conn):
         upsert_anime(test_conn, Anime(id="old1", title_en="Old Show", year=2010))
-        insert_credit(test_conn, Credit(person_id="p1", anime_id="old1", role=Role.DIRECTOR, source="old_src"))
+        insert_credit(
+            test_conn,
+            Credit(
+                person_id="p1", anime_id="old1", role=Role.DIRECTOR, source="old_src"
+            ),
+        )
         upsert_person(test_conn, Person(id="p1", name_en="Old Director"))
         test_conn.commit()
         result = validate_data_freshness(test_conn, stale_years=5)

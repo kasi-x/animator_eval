@@ -6,11 +6,18 @@ This refactored version decomposes the monolithic pipeline into 10 modular
 phases in src/pipeline_phases/, reducing this file from 930→150 lines while
 maintaining identical functionality.
 """
+
 import time
 
 import structlog
 
-from src.database import db_connection, get_connection, has_credits_changed_since_last_run, init_db, record_pipeline_run
+from src.database import (
+    db_connection,
+    get_connection,
+    has_credits_changed_since_last_run,
+    init_db,
+    record_pipeline_run,
+)
 from src.utils.config import JSON_DIR  # noqa: F401 - Imported for test monkeypatch compatibility
 from src.pipeline_phases import (
     PipelineCheckpoint,
@@ -74,6 +81,7 @@ def run_scoring_pipeline(
     ws_broadcaster = None
     if enable_websocket:
         from src.websocket_manager import PipelineProgressBroadcaster
+
         ws_broadcaster = PipelineProgressBroadcaster()
         ws_broadcaster.start_pipeline(total_phases=10)
 
@@ -92,6 +100,7 @@ def run_scoring_pipeline(
             logger.info("incremental_skip", reason="no_credit_changes")
             # Load cached results from last export
             from src.utils.json_io import load_person_scores_from_json
+
             cached = load_person_scores_from_json()
             if cached:
                 logger.info("incremental_cached", persons=len(cached))
@@ -113,7 +122,9 @@ def run_scoring_pipeline(
     load_pipeline_data(context, conn)
 
     if ws_broadcaster:
-        ws_broadcaster.complete_phase(1, "Data Loading", (time.monotonic() - phase_start) * 1000)
+        ws_broadcaster.complete_phase(
+            1, "Data Loading", (time.monotonic() - phase_start) * 1000
+        )
 
     if not context.credits:
         logger.warning("No credits in DB. Run scrapers first.")
@@ -131,7 +142,9 @@ def run_scoring_pipeline(
     validation = run_validation_phase(context, conn)
 
     if ws_broadcaster:
-        ws_broadcaster.complete_phase(2, "Validation", (time.monotonic() - phase_start) * 1000)
+        ws_broadcaster.complete_phase(
+            2, "Validation", (time.monotonic() - phase_start) * 1000
+        )
 
     if dry_run:
         conn.close()
@@ -159,7 +172,9 @@ def run_scoring_pipeline(
     run_entity_resolution(context)
 
     if ws_broadcaster:
-        ws_broadcaster.complete_phase(3, "Entity Resolution", (time.monotonic() - phase_start) * 1000)
+        ws_broadcaster.complete_phase(
+            3, "Entity Resolution", (time.monotonic() - phase_start) * 1000
+        )
 
     # Phase 4: Graph Construction
     logger.info("step_start", step="graph_construction")
@@ -170,7 +185,9 @@ def run_scoring_pipeline(
     build_graphs_phase(context)
 
     if ws_broadcaster:
-        ws_broadcaster.complete_phase(4, "Graph Construction", (time.monotonic() - phase_start) * 1000)
+        ws_broadcaster.complete_phase(
+            4, "Graph Construction", (time.monotonic() - phase_start) * 1000
+        )
 
     # Resume check: after phases 1-4 (data loaded), try to restore checkpoint
     if resume and not dry_run:
@@ -190,7 +207,9 @@ def run_scoring_pipeline(
         compute_core_scores_phase(context)
 
         if ws_broadcaster:
-            ws_broadcaster.complete_phase(5, "Core Scoring", (time.monotonic() - phase_start) * 1000)
+            ws_broadcaster.complete_phase(
+                5, "Core Scoring", (time.monotonic() - phase_start) * 1000
+            )
 
         checkpoint_mgr.save(5, context)
 
@@ -203,7 +222,9 @@ def run_scoring_pipeline(
         compute_supplementary_metrics_phase(context)
 
         if ws_broadcaster:
-            ws_broadcaster.complete_phase(6, "Supplementary Metrics", (time.monotonic() - phase_start) * 1000)
+            ws_broadcaster.complete_phase(
+                6, "Supplementary Metrics", (time.monotonic() - phase_start) * 1000
+            )
 
     # Phase 7: Result Assembly (build comprehensive result dicts)
     if resume_from_phase < 7:
@@ -216,7 +237,9 @@ def run_scoring_pipeline(
         conn.close()
 
         if ws_broadcaster:
-            ws_broadcaster.complete_phase(7, "Result Assembly", (time.monotonic() - phase_start) * 1000)
+            ws_broadcaster.complete_phase(
+                7, "Result Assembly", (time.monotonic() - phase_start) * 1000
+            )
 
         checkpoint_mgr.save(7, context)
     else:
@@ -231,7 +254,9 @@ def run_scoring_pipeline(
         post_process_results(context)
 
         if ws_broadcaster:
-            ws_broadcaster.complete_phase(8, "Post-Processing", (time.monotonic() - phase_start) * 1000)
+            ws_broadcaster.complete_phase(
+                8, "Post-Processing", (time.monotonic() - phase_start) * 1000
+            )
 
     # Phase 9: Analysis Modules (18+ independent analyses - PARALLELIZABLE)
     if resume_from_phase < 9:
@@ -242,7 +267,9 @@ def run_scoring_pipeline(
         run_analysis_modules_phase(context)
 
         if ws_broadcaster:
-            ws_broadcaster.complete_phase(9, "Analysis Modules", (time.monotonic() - phase_start) * 1000)
+            ws_broadcaster.complete_phase(
+                9, "Analysis Modules", (time.monotonic() - phase_start) * 1000
+            )
 
         checkpoint_mgr.save(9, context)
 
@@ -255,7 +282,9 @@ def run_scoring_pipeline(
     export_and_visualize_phase(context, elapsed)
 
     if ws_broadcaster:
-        ws_broadcaster.complete_phase(10, "Export & Visualization", (time.monotonic() - phase_start) * 1000)
+        ws_broadcaster.complete_phase(
+            10, "Export & Visualization", (time.monotonic() - phase_start) * 1000
+        )
 
     # Record pipeline completion and clean up checkpoint
     checkpoint_mgr.delete()
@@ -277,7 +306,9 @@ def run_scoring_pipeline(
     context.monitor.export_report(perf_report_path)
     logger.info("performance_report_saved", path=str(perf_report_path))
 
-    logger.info("pipeline_complete", elapsed=round(elapsed, 2), persons=len(context.results))
+    logger.info(
+        "pipeline_complete", elapsed=round(elapsed, 2), persons=len(context.results)
+    )
 
     # Broadcast pipeline completion
     if ws_broadcaster:
@@ -296,13 +327,17 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Animetor Eval パイプライン")
     parser.add_argument("--visualize", action="store_true", help="可視化を生成")
-    parser.add_argument("--dry-run", action="store_true", help="データ検証のみ（スコア計算なし）")
     parser.add_argument(
-        "--incremental", action="store_true",
+        "--dry-run", action="store_true", help="データ検証のみ（スコア計算なし）"
+    )
+    parser.add_argument(
+        "--incremental",
+        action="store_true",
         help="増分モード: データ変化がなければキャッシュ結果を返す",
     )
     parser.add_argument(
-        "--resume", action="store_true",
+        "--resume",
+        action="store_true",
         help="クラッシュ再開: 前回中断した地点から再開する",
     )
     args = parser.parse_args()

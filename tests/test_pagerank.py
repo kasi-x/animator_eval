@@ -2,7 +2,11 @@
 
 import networkx as nx
 
-from src.analysis.pagerank import compute_authority_scores, normalize_scores, weighted_pagerank
+from src.analysis.pagerank import (
+    compute_authority_scores,
+    normalize_scores,
+    weighted_pagerank,
+)
 
 
 class TestWeightedPagerank:

@@ -203,7 +203,9 @@ class TestExportMatchesForReview:
 
         output_file = tmp_path / "uncertain_only.csv"
         # Only export matches with confidence 0.8-0.9
-        export_matches_for_review(report, str(output_file), min_confidence=0.8, max_confidence=0.9)
+        export_matches_for_review(
+            report, str(output_file), min_confidence=0.8, max_confidence=0.9
+        )
 
         content = output_file.read_text(encoding="utf-8")
         # Should include the similarity match (0.85) but not exact (1.0)

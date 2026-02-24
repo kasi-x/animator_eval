@@ -53,8 +53,24 @@ class TestCompareGroups:
         assert result["summary"]["overall_winner"] == "tie"
 
     def test_equal_groups(self):
-        a = [{"person_id": "p1", "authority": 50, "trust": 50, "skill": 50, "composite": 50}]
-        b = [{"person_id": "p2", "authority": 50, "trust": 50, "skill": 50, "composite": 50}]
+        a = [
+            {
+                "person_id": "p1",
+                "authority": 50,
+                "trust": 50,
+                "skill": 50,
+                "composite": 50,
+            }
+        ]
+        b = [
+            {
+                "person_id": "p2",
+                "authority": 50,
+                "trust": 50,
+                "skill": 50,
+                "composite": 50,
+            }
+        ]
         result = compare_groups(a, b)
         assert result["summary"]["overall_winner"] == "tie"
         assert result["summary"]["ties"] == 4
@@ -66,8 +82,24 @@ class TestCompareGroups:
         assert "composite" in result["comparison_by_axis"]
 
     def test_mixed_winner(self):
-        a = [{"person_id": "p1", "authority": 90, "trust": 20, "skill": 50, "composite": 50}]
-        b = [{"person_id": "p2", "authority": 20, "trust": 90, "skill": 50, "composite": 50}]
+        a = [
+            {
+                "person_id": "p1",
+                "authority": 90,
+                "trust": 20,
+                "skill": 50,
+                "composite": 50,
+            }
+        ]
+        b = [
+            {
+                "person_id": "p2",
+                "authority": 20,
+                "trust": 90,
+                "skill": 50,
+                "composite": 50,
+            }
+        ]
         result = compare_groups(a, b, "A", "B")
         assert result["summary"]["a_wins"] == 1
         assert result["summary"]["b_wins"] == 1

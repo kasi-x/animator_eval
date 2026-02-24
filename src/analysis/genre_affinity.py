@@ -84,7 +84,9 @@ def compute_genre_affinity(
         era_pct = {k: round(v / total * 100, 1) for k, v in era_counts.items()}
 
         # Primary affinity
-        primary_tier = max(tier_counts, key=tier_counts.get) if tier_counts else "unknown"
+        primary_tier = (
+            max(tier_counts, key=tier_counts.get) if tier_counts else "unknown"
+        )
         primary_era = max(era_counts, key=era_counts.get) if era_counts else "unknown"
 
         result[pid] = {

@@ -94,7 +94,14 @@ def normalize_zscore(
 
     return {
         pid: round(
-            max(0, min(target_maximum_value, (((val - mean) / std) + 2) / 4 * target_maximum_value)), 2
+            max(
+                0,
+                min(
+                    target_maximum_value,
+                    (((val - mean) / std) + 2) / 4 * target_maximum_value,
+                ),
+            ),
+            2,
         )
         for pid, val in scores.items()
     }
@@ -119,6 +126,7 @@ def normalize_scores(
     """
     if method is None:
         from src.utils.config import NORMALIZATION_METHOD
+
         method = NORMALIZATION_METHOD
 
     # Convert string to enum if needed

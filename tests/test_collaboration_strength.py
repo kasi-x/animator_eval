@@ -18,7 +18,9 @@ def _make_data():
         Credit(person_id="p1", anime_id="a2", role=Role.DIRECTOR, source="test"),
         Credit(person_id="p2", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
         Credit(person_id="p1", anime_id="a3", role=Role.DIRECTOR, source="test"),
-        Credit(person_id="p2", anime_id="a3", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p2", anime_id="a3", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
         # p1 and p3 work together on a1 only (weak pair)
         Credit(person_id="p3", anime_id="a1", role=Role.IN_BETWEEN, source="test"),
         # p2 and p4 work together on a4 only
@@ -68,7 +70,10 @@ class TestComputeCollaborationStrength:
         credits, anime_map = _make_data()
         scores = {"p1": 80.0, "p2": 60.0}
         result = compute_collaboration_strength(
-            credits, anime_map, min_shared=2, person_scores=scores,
+            credits,
+            anime_map,
+            min_shared=2,
+            person_scores=scores,
         )
         pair = result[0]
         assert pair["combined_score"] == 70.0  # (80+60)/2

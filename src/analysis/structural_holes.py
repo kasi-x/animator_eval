@@ -116,7 +116,9 @@ def compute_network_constraint(
         indirect = 0.0
         for q in neighbors:
             if q != j and graph.has_edge(j, q):
-                indirect += (1.0 / len(neighbors)) * (1.0 / len(list(graph.neighbors(q))))
+                indirect += (1.0 / len(neighbors)) * (
+                    1.0 / len(list(graph.neighbors(q)))
+                )
 
         constraint += (direct + indirect) ** 2
 
@@ -211,7 +213,9 @@ def compute_structural_hole_metrics(
         constraint = compute_network_constraint(collaboration_graph, person_id)
 
         # Effective size
-        effective_size, efficiency = compute_effective_size(collaboration_graph, person_id)
+        effective_size, efficiency = compute_effective_size(
+            collaboration_graph, person_id
+        )
 
         # Bridges
         bridge_count = sum(1 for u, v in all_bridges if person_id in (u, v))
@@ -238,7 +242,9 @@ def compute_structural_hole_metrics(
     logger.info(
         "structural_hole_metrics_computed",
         persons=len(metrics),
-        avg_constraint=round(sum(m.constraint for m in metrics.values()) / len(metrics), 3),
+        avg_constraint=round(
+            sum(m.constraint for m in metrics.values()) / len(metrics), 3
+        ),
     )
 
     return metrics
@@ -325,7 +331,9 @@ def compute_brokerage_metrics(
 
     for person_id, role_counts in brokerage_counts.items():
         total = sum(role_counts.values())
-        dominant_role = max(role_counts.items(), key=lambda x: x[1])[0] if role_counts else None
+        dominant_role = (
+            max(role_counts.items(), key=lambda x: x[1])[0] if role_counts else None
+        )
 
         metrics[person_id] = BrokerageMetrics(
             person_id=person_id,
@@ -341,7 +349,9 @@ def compute_brokerage_metrics(
     logger.info(
         "brokerage_metrics_computed",
         persons=len(metrics),
-        avg_brokerage=round(sum(m.total_brokerage for m in metrics.values()) / len(metrics), 1),
+        avg_brokerage=round(
+            sum(m.total_brokerage for m in metrics.values()) / len(metrics), 1
+        ),
     )
 
     return metrics
@@ -376,7 +386,10 @@ def find_structural_hole_spanners(
     # Sort by score (descending)
     scored.sort(key=lambda x: x[3], reverse=True)
 
-    result = [(pid, constraint, efficiency) for pid, constraint, efficiency, _ in scored[:top_n]]
+    result = [
+        (pid, constraint, efficiency)
+        for pid, constraint, efficiency, _ in scored[:top_n]
+    ]
 
     logger.info("structural_hole_spanners_found", count=len(result))
     return result
@@ -417,14 +430,22 @@ def find_key_brokers(
 
     result = scored[:top_n]
 
-    logger.info("key_brokers_found", count=len(result), role=role.value if role else "all")
+    logger.info(
+        "key_brokers_found", count=len(result), role=role.value if role else "all"
+    )
     return result
 
 
 def main():
     """スタンドアロン実行用エントリーポイント."""
     from src.analysis.graph import create_person_collaboration_network
-    from src.database import get_all_anime, get_all_credits, get_all_persons, get_connection, init_db
+    from src.database import (
+        get_all_anime,
+        get_all_credits,
+        get_all_persons,
+        get_connection,
+        init_db,
+    )
 
     conn = get_connection()
     init_db(conn)

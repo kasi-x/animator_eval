@@ -91,38 +91,46 @@ def generate_text_report(
             f"{r['skill']:>8.1f}{r['composite']:>8.1f}{conf_str:>8}"
         )
 
-    lines.extend([
-        "-" * 80,
-        "",
-    ])
+    lines.extend(
+        [
+            "-" * 80,
+            "",
+        ]
+    )
 
     # Career summary for top persons
     career_persons = [r for r in results[:top_n] if r.get("career")]
     if career_persons:
-        lines.extend([
-            "キャリアサマリー (上位):",
-            "-" * 80,
-            f"{'Name':<30}{'Years':>10}{'Stage':>8}{'Top Roles':<30}",
-            "-" * 80,
-        ])
+        lines.extend(
+            [
+                "キャリアサマリー (上位):",
+                "-" * 80,
+                f"{'Name':<30}{'Years':>10}{'Stage':>8}{'Top Roles':<30}",
+                "-" * 80,
+            ]
+        )
         for r in career_persons[:20]:
             name = r.get("name", "")[:28]
             career = r["career"]
-            year_range = f"{career.get('first_year', '?')}-{career.get('latest_year', '?')}"
+            year_range = (
+                f"{career.get('first_year', '?')}-{career.get('latest_year', '?')}"
+            )
             stage = str(career.get("highest_stage", "?"))
             top_roles = ", ".join(career.get("highest_roles", []))[:28]
             lines.append(f"{name:<30}{year_range:>10}{stage:>8}  {top_roles:<28}")
         lines.extend(["-" * 80, ""])
 
-    lines.extend([
-        "スコア凡例:",
-        "  Authority : PageRank（高影響力の監督/作品との関係が多いほど高い）",
-        "  Trust     : 継続起用度（同じ監督から繰り返し起用されるほど高い）",
-        "  Skill     : OpenSkillレーティング（高評価作品への参加が多いほど高い）",
-        "  Total     : 統合スコア (Auth×0.4 + Trust×0.35 + Skill×0.25)",
-        "",
-        "=" * 80,
-    ])
+    lines.extend(
+        [
+            "スコア凡例:",
+            "  Authority : PageRank（高影響力の監督/作品との関係が多いほど高い）",
+            "  Trust     : 継続起用度（同じ監督から繰り返し起用されるほど高い）",
+            "  Skill     : OpenSkillレーティング（高評価作品への参加が多いほど高い）",
+            "  Total     : 統合スコア (Auth×0.4 + Trust×0.35 + Skill×0.25)",
+            "",
+            "=" * 80,
+        ]
+    )
 
     text = "\n".join(lines)
 
@@ -146,40 +154,58 @@ def generate_csv_report(
         output_path = JSON_DIR.parent / "scores.csv"
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    fieldnames = ["rank", "person_id", "name", "name_ja", "name_en",
-                  "authority", "trust", "skill", "composite",
-                  "authority_pct", "trust_pct", "skill_pct", "composite_pct",
-                  "primary_role", "total_credits",
-                  "first_year", "latest_year", "active_years",
-                  "highest_stage", "highest_roles"]
+    fieldnames = [
+        "rank",
+        "person_id",
+        "name",
+        "name_ja",
+        "name_en",
+        "authority",
+        "trust",
+        "skill",
+        "composite",
+        "authority_pct",
+        "trust_pct",
+        "skill_pct",
+        "composite_pct",
+        "primary_role",
+        "total_credits",
+        "first_year",
+        "latest_year",
+        "active_years",
+        "highest_stage",
+        "highest_roles",
+    ]
 
     with open(output_path, "w", newline="", encoding="utf-8-sig") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         for i, r in enumerate(results, 1):
             career = r.get("career", {})
-            writer.writerow({
-                "rank": i,
-                "person_id": r.get("person_id", ""),
-                "name": r.get("name", ""),
-                "name_ja": r.get("name_ja", ""),
-                "name_en": r.get("name_en", ""),
-                "authority": r.get("authority", 0),
-                "trust": r.get("trust", 0),
-                "skill": r.get("skill", 0),
-                "composite": r.get("composite", 0),
-                "authority_pct": r.get("authority_pct", ""),
-                "trust_pct": r.get("trust_pct", ""),
-                "skill_pct": r.get("skill_pct", ""),
-                "composite_pct": r.get("composite_pct", ""),
-                "primary_role": r.get("primary_role", ""),
-                "total_credits": r.get("total_credits", ""),
-                "first_year": career.get("first_year", ""),
-                "latest_year": career.get("latest_year", ""),
-                "active_years": career.get("active_years", ""),
-                "highest_stage": career.get("highest_stage", ""),
-                "highest_roles": "|".join(career.get("highest_roles", [])),
-            })
+            writer.writerow(
+                {
+                    "rank": i,
+                    "person_id": r.get("person_id", ""),
+                    "name": r.get("name", ""),
+                    "name_ja": r.get("name_ja", ""),
+                    "name_en": r.get("name_en", ""),
+                    "authority": r.get("authority", 0),
+                    "trust": r.get("trust", 0),
+                    "skill": r.get("skill", 0),
+                    "composite": r.get("composite", 0),
+                    "authority_pct": r.get("authority_pct", ""),
+                    "trust_pct": r.get("trust_pct", ""),
+                    "skill_pct": r.get("skill_pct", ""),
+                    "composite_pct": r.get("composite_pct", ""),
+                    "primary_role": r.get("primary_role", ""),
+                    "total_credits": r.get("total_credits", ""),
+                    "first_year": career.get("first_year", ""),
+                    "latest_year": career.get("latest_year", ""),
+                    "active_years": career.get("active_years", ""),
+                    "highest_stage": career.get("highest_stage", ""),
+                    "highest_roles": "|".join(career.get("highest_roles", [])),
+                }
+            )
 
     logger.info("csv_report_generated", path=str(output_path), persons=len(results))
     return output_path
@@ -387,9 +413,9 @@ def generate_visual_dashboard(
                 b64 = base64.b64encode(f.read()).decode("ascii")
             chart_sections.append(
                 f'<div class="chart-card">'
-                f'<h3>{_html_escape(title)}</h3>'
+                f"<h3>{_html_escape(title)}</h3>"
                 f'<img src="data:image/png;base64,{b64}" alt="{_html_escape(title)}" />'
-                f'</div>'
+                f"</div>"
             )
 
     # Top ranking table
@@ -464,8 +490,8 @@ def generate_visual_dashboard(
 
 <div class="stats-row">
   <div class="stat-card"><div class="value">{len(results)}</div><div class="label">Persons</div></div>
-  <div class="stat-card"><div class="value">{results[0]['composite']:.1f}</div><div class="label">Top Score</div></div>
-  <div class="stat-card"><div class="value">{results[len(results)//2]['composite']:.1f}</div><div class="label">Median Score</div></div>
+  <div class="stat-card"><div class="value">{results[0]["composite"]:.1f}</div><div class="label">Top Score</div></div>
+  <div class="stat-card"><div class="value">{results[len(results) // 2]["composite"]:.1f}</div><div class="label">Median Score</div></div>
   <div class="stat-card"><div class="value">{len(chart_sections)}</div><div class="label">Charts</div></div>
 </div>
 
@@ -491,13 +517,20 @@ Animetor Eval — Scores represent network position and density, not individual 
     with open(output_path, "w", encoding="utf-8") as f:
         f.write(html)
 
-    logger.info("visual_dashboard_generated", path=str(output_path), charts=len(chart_sections))
+    logger.info(
+        "visual_dashboard_generated", path=str(output_path), charts=len(chart_sections)
+    )
     return output_path
 
 
 def _html_escape(text: str) -> str:
     """Basic HTML escaping."""
-    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+    return (
+        text.replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
 
 
 def main() -> None:

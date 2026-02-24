@@ -16,7 +16,12 @@ import structlog
 
 from src.models import Anime, Credit, Person, Role
 from src.utils.config import ROLE_WEIGHTS
-from src.utils.role_groups import DIRECTOR_ROLES, ANIMATOR_ROLES, THROUGH_ROLES, EPISODIC_ROLES
+from src.utils.role_groups import (
+    DIRECTOR_ROLES,
+    ANIMATOR_ROLES,
+    THROUGH_ROLES,
+    EPISODIC_ROLES,
+)
 
 logger = structlog.get_logger()
 
@@ -39,7 +44,12 @@ def create_person_anime_network(
 
     # ノード追加
     for p in persons:
-        g.add_node(p.id, type="person", name=p.display_name, **{"name_ja": p.name_ja, "name_en": p.name_en})
+        g.add_node(
+            p.id,
+            type="person",
+            name=p.display_name,
+            **{"name_ja": p.name_ja, "name_en": p.name_en},
+        )
     for a in anime_list:
         g.add_node(a.id, type="anime", name=a.display_title, year=a.year, score=a.score)
 
@@ -51,9 +61,7 @@ def create_person_anime_network(
             g[c.person_id][c.anime_id]["weight"] += weight
             g[c.person_id][c.anime_id]["roles"].append(c.role.value)
         else:
-            g.add_edge(
-                c.person_id, c.anime_id, weight=weight, roles=[c.role.value]
-            )
+            g.add_edge(c.person_id, c.anime_id, weight=weight, roles=[c.role.value])
         # anime → person (逆方向、PageRank 伝播用)
         if g.has_edge(c.anime_id, c.person_id):
             g[c.anime_id][c.person_id]["weight"] += weight
@@ -198,7 +206,9 @@ def _episode_weight_for_pair(
             unknown_frac = min(26.0 / total_episodes, 1.0)
             # Estimated overlap = known_frac × unknown_frac × total_episodes
             # Normalized by union ≈ (known_frac + unknown_frac) × total_episodes
-            return (known_frac * unknown_frac) / max(known_frac + unknown_frac - known_frac * unknown_frac, 0.001)
+            return (known_frac * unknown_frac) / max(
+                known_frac + unknown_frac - known_frac * unknown_frac, 0.001
+            )
 
         # No total_episodes info → default
         return 1.0
@@ -250,7 +260,10 @@ def _apply_episode_adjustments(
     # Build per-edge, per-anime contribution breakdown
     # We need to recompute weights from scratch using episode info
     # First, figure out which anime each edge pair shares
-    anime_pair_info: dict[tuple[str, str], list[tuple[float, float, set[int], set[int], Role, Role, int | None, str]]] = defaultdict(list)
+    anime_pair_info: dict[
+        tuple[str, str],
+        list[tuple[float, float, set[int], set[int], Role, Role, int | None, str]],
+    ] = defaultdict(list)
 
     for anime_id, person_info in anime_person_info.items():
         total_episodes = None
@@ -261,13 +274,22 @@ def _apply_episode_adjustments(
 
         persons_list = list(person_info.items())
         for i, (pid_a, (eps_a, role_a, w_a)) in enumerate(persons_list):
-            for pid_b, (eps_b, role_b, w_b) in persons_list[i + 1:]:
+            for pid_b, (eps_b, role_b, w_b) in persons_list[i + 1 :]:
                 if pid_a == pid_b:
                     continue
                 edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
                 if edge_key in edge_data:
                     anime_pair_info[edge_key].append(
-                        (w_a, w_b, eps_a, eps_b, role_a, role_b, total_episodes, anime_id)
+                        (
+                            w_a,
+                            w_b,
+                            eps_a,
+                            eps_b,
+                            role_a,
+                            role_b,
+                            total_episodes,
+                            anime_id,
+                        )
                     )
 
     # Recompute weights with episode adjustments
@@ -275,7 +297,16 @@ def _apply_episode_adjustments(
     for edge_key, anime_entries in anime_pair_info.items():
         new_weight = 0.0
         new_shared = 0
-        for w_a, w_b, eps_a, eps_b, role_a, role_b, total_eps, anime_id in anime_entries:
+        for (
+            w_a,
+            w_b,
+            eps_a,
+            eps_b,
+            role_a,
+            role_b,
+            total_eps,
+            anime_id,
+        ) in anime_entries:
             ep_w = _episode_weight_for_pair(eps_a, eps_b, role_a, role_b, total_eps)
             if ep_w < 0.001:
                 continue
@@ -329,7 +360,7 @@ def _build_edges_python(
             person_info = anime_person_info.get(anime_id, {})
             persons_list = list(person_info.items())
             for i, (pid_a, (eps_a, role_a, w_a)) in enumerate(persons_list):
-                for pid_b, (eps_b, role_b, w_b) in persons_list[i + 1:]:
+                for pid_b, (eps_b, role_b, w_b) in persons_list[i + 1 :]:
                     if pid_a == pid_b:
                         continue
                     ep_w = _episode_weight_for_pair(
@@ -351,7 +382,7 @@ def _build_edges_python(
                     seen_persons[pid] = (role, w)
             persons_dedup = list(seen_persons.items())
             for i, (pid_a, (role_a, w_a)) in enumerate(persons_dedup):
-                for pid_b, (role_b, w_b) in persons_dedup[i + 1:]:
+                for pid_b, (role_b, w_b) in persons_dedup[i + 1 :]:
                     if pid_a == pid_b:
                         continue
                     edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
@@ -391,7 +422,7 @@ def _apply_commitment_adjustments(
 
         pid_list = sorted(person_ids)
         for i, pid_a in enumerate(pid_list):
-            for pid_b in pid_list[i + 1:]:
+            for pid_b in pid_list[i + 1 :]:
                 edge_key = (pid_a, pid_b)
                 if edge_key not in edge_data:
                     continue
@@ -598,7 +629,11 @@ def determine_primary_role_for_each_person(
                 cat = "other"
             category_counts[cat] += count
 
-        primary = max(category_counts, key=category_counts.get) if category_counts else "other"
+        primary = (
+            max(category_counts, key=category_counts.get)
+            if category_counts
+            else "other"
+        )
 
         result[pid] = {
             "primary_category": primary,
@@ -706,8 +741,12 @@ def compute_graph_summary(graph: nx.Graph) -> dict:
 
     if n_nodes == 0:
         return {
-            "nodes": 0, "edges": 0, "density": 0.0,
-            "avg_degree": 0.0, "components": 0, "largest_component_size": 0,
+            "nodes": 0,
+            "edges": 0,
+            "density": 0.0,
+            "avg_degree": 0.0,
+            "components": 0,
+            "largest_component_size": 0,
         }
 
     density = nx.density(graph)
@@ -779,7 +818,9 @@ def main() -> None:
 
     # コラボレーショングラフ
     anime_map = {a.id: a for a in anime_list}
-    collab_graph = create_person_collaboration_network(persons, credits, anime_map=anime_map)
+    collab_graph = create_person_collaboration_network(
+        persons, credits, anime_map=anime_map
+    )
 
     # 監督→アニメーターグラフ
     da_graph = create_director_animator_network(credits, anime_map=anime_map)

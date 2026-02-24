@@ -84,7 +84,9 @@ def compute_temporal_profiles(
         person_id → TemporalProfile
     """
     # person_id → year → credits のマッピング
-    person_year_credits: dict[str, dict[int, list[Credit]]] = defaultdict(lambda: defaultdict(list))
+    person_year_credits: dict[str, dict[int, list[Credit]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
 
     for credit in credits:
         anime = anime_map.get(credit.anime_id)
@@ -112,7 +114,9 @@ def compute_temporal_profiles(
             role_counts = defaultdict(int)
             for cred in year_creds:
                 role_counts[cred.role.value] += 1
-            primary_role = max(role_counts.items(), key=lambda x: x[1])[0] if role_counts else None
+            primary_role = (
+                max(role_counts.items(), key=lambda x: x[1])[0] if role_counts else None
+            )
 
             # スコアは現在の値を使用（時点ごとの再計算は重い）
             # 実際の実装では、その時点までのクレジットで再計算が望ましい
@@ -145,7 +149,8 @@ def compute_temporal_profiles(
                 years_diff = career_end - career_start
                 if years_diff > 0:
                     growth_rate = (
-                        (snapshots[-1].composite - snapshots[0].composite) / snapshots[0].composite
+                        (snapshots[-1].composite - snapshots[0].composite)
+                        / snapshots[0].composite
                     ) / years_diff
                 else:
                     growth_rate = 0.0
@@ -222,8 +227,12 @@ def analyze_cohort_trends(
     cohort_stats = {}
 
     for cohort_key, cohort_profiles in cohorts.items():
-        avg_peak_score = sum(p.peak_score for p in cohort_profiles) / len(cohort_profiles)
-        avg_growth_rate = sum(p.growth_rate for p in cohort_profiles) / len(cohort_profiles)
+        avg_peak_score = sum(p.peak_score for p in cohort_profiles) / len(
+            cohort_profiles
+        )
+        avg_growth_rate = sum(p.growth_rate for p in cohort_profiles) / len(
+            cohort_profiles
+        )
 
         trend_counts = defaultdict(int)
         for p in cohort_profiles:
@@ -236,8 +245,12 @@ def analyze_cohort_trends(
             "trend_distribution": dict(trend_counts),
             "median_career_length": round(
                 sorted(
-                    [(p.career_end - p.career_start) if p.career_start and p.career_end else 0
-                     for p in cohort_profiles]
+                    [
+                        (p.career_end - p.career_start)
+                        if p.career_start and p.career_end
+                        else 0
+                        for p in cohort_profiles
+                    ]
                 )[len(cohort_profiles) // 2],
                 1,
             ),
@@ -265,13 +278,15 @@ def detect_industry_trends(
         year → 統計情報
     """
     # 年ごとの集計
-    year_stats: dict[int, dict] = defaultdict(lambda: {
-        "new_entrants": 0,
-        "active_persons": 0,
-        "total_credits": 0,
-        "avg_composite": 0.0,
-        "role_distribution": defaultdict(int),
-    })
+    year_stats: dict[int, dict] = defaultdict(
+        lambda: {
+            "new_entrants": 0,
+            "active_persons": 0,
+            "total_credits": 0,
+            "avg_composite": 0.0,
+            "role_distribution": defaultdict(int),
+        }
+    )
 
     # 年範囲の決定
     all_years = set()
@@ -314,7 +329,9 @@ def detect_industry_trends(
                 if snapshot.year == year
             ]
             if year_composites:
-                stats["avg_composite"] = round(sum(year_composites) / len(year_composites), 2)
+                stats["avg_composite"] = round(
+                    sum(year_composites) / len(year_composites), 2
+                )
 
     # defaultdictを通常のdictに変換
     result = {}
@@ -328,13 +345,24 @@ def detect_industry_trends(
             "role_distribution": dict(stats["role_distribution"]),
         }
 
-    logger.info("industry_trends_detected", years=len(result), min_year=min_year, max_year=max_year)
+    logger.info(
+        "industry_trends_detected",
+        years=len(result),
+        min_year=min_year,
+        max_year=max_year,
+    )
     return result
 
 
 def main():
     """スタンドアロン実行用エントリーポイント."""
-    from src.database import get_all_anime, get_all_credits, get_all_scores, get_connection, init_db
+    from src.database import (
+        get_all_anime,
+        get_all_credits,
+        get_all_scores,
+        get_connection,
+        init_db,
+    )
 
     conn = get_connection()
     init_db(conn)
@@ -388,9 +416,15 @@ def main():
         "declining": trends.count("declining"),
     }
     print("\n全体トレンド分布:")
-    print(f"  Rising: {trend_counts['rising']} ({100*trend_counts['rising']/len(trends):.1f}%)")
-    print(f"  Stable: {trend_counts['stable']} ({100*trend_counts['stable']/len(trends):.1f}%)")
-    print(f"  Declining: {trend_counts['declining']} ({100*trend_counts['declining']/len(trends):.1f}%)")
+    print(
+        f"  Rising: {trend_counts['rising']} ({100 * trend_counts['rising'] / len(trends):.1f}%)"
+    )
+    print(
+        f"  Stable: {trend_counts['stable']} ({100 * trend_counts['stable'] / len(trends):.1f}%)"
+    )
+    print(
+        f"  Declining: {trend_counts['declining']} ({100 * trend_counts['declining'] / len(trends):.1f}%)"
+    )
 
     conn.close()
 

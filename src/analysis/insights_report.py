@@ -323,10 +323,9 @@ def analyze_bias_correction_impact(
     for pid, bias_info in bias_metrics.items():
         studio = bias_info.get("primary_studio", "unknown")
         if pid in debiased_scores:
-            correction = (
-                debiased_scores[pid].get("debiased_authority", 0)
-                - debiased_scores[pid].get("original_authority", 0)
-            )
+            correction = debiased_scores[pid].get(
+                "debiased_authority", 0
+            ) - debiased_scores[pid].get("original_authority", 0)
             studio_corrections[studio].append(correction)
 
     for studio, corrs in studio_corrections.items():
@@ -334,7 +333,9 @@ def analyze_bias_correction_impact(
             studio_effects[studio] = {
                 "persons": len(corrs),
                 "avg_correction": round(statistics.mean(corrs), 2),
-                "direction": "overvalued" if statistics.mean(corrs) < 0 else "undervalued",
+                "direction": "overvalued"
+                if statistics.mean(corrs) < 0
+                else "undervalued",
             }
 
     # クロススタジオ活動の価値
@@ -342,10 +343,9 @@ def analyze_bias_correction_impact(
     for pid, bias_info in bias_metrics.items():
         cross_studio_works = bias_info.get("cross_studio_works", 0)
         if cross_studio_works > 0 and pid in debiased_scores:
-            correction = (
-                debiased_scores[pid].get("debiased_authority", 0)
-                - debiased_scores[pid].get("original_authority", 0)
-            )
+            correction = debiased_scores[pid].get(
+                "debiased_authority", 0
+            ) - debiased_scores[pid].get("original_authority", 0)
             cross_studio_values.append(correction)
 
     cross_studio_avg = (
@@ -480,7 +480,9 @@ def analyze_potential_value_categories(
         for pid, p in potential_value_scores.items()
         if p.get("category") == "hidden_gem"
     ]
-    undervalued = sorted(hidden_gems, key=lambda x: x["hidden_score"], reverse=True)[:10]
+    undervalued = sorted(hidden_gems, key=lambda x: x["hidden_score"], reverse=True)[
+        :10
+    ]
 
     # 構造的優位性の効果
     structural_scores = [
@@ -518,7 +520,8 @@ def analyze_potential_value_categories(
             if hidden_group
             else 0,
             "avg_debiased_authority": round(
-                statistics.mean([p.get("debiased_authority", 0) for p in hidden_group]), 2
+                statistics.mean([p.get("debiased_authority", 0) for p in hidden_group]),
+                2,
             )
             if hidden_group
             else 0,
@@ -585,9 +588,9 @@ def analyze_bridge_importance(
         }
         for pid in bridge_persons
     ]
-    top_bridges = sorted(
-        bridge_rankings, key=lambda x: x["betweenness"], reverse=True
-    )[:10]
+    top_bridges = sorted(bridge_rankings, key=lambda x: x["betweenness"], reverse=True)[
+        :10
+    ]
 
     # サークル間接続数（エッジ数の近似）
     circle_connections = bridges_data.get("total_bridge_edges", 0)
@@ -755,7 +758,9 @@ def generate_key_findings(
         "newcomer": "新人",
     }
     top_category = max(
-        potential.category_distribution.items(), key=lambda x: x[1], default=("unknown", 0)
+        potential.category_distribution.items(),
+        key=lambda x: x[1],
+        default=("unknown", 0),
     )
     findings.append(
         f"潜在価値分布: {category_names.get(top_category[0], top_category[0])}が最多（{top_category[1]}名）"
@@ -821,15 +826,21 @@ def identify_undervaluation_alerts(
 
         composite = pv.get("composite", 0)
 
-        alerts.append(UndervaluationAlert(
-            person_id=pid,
-            name=person_names.get(pid, pid),
-            current_composite=round(composite, 2),
-            debiased_authority=round(debiased, 4),
-            authority_gap=round(gap, 4),
-            category=category if isinstance(category, str) else category.value if hasattr(category, "value") else str(category),
-            reason=reason,
-        ))
+        alerts.append(
+            UndervaluationAlert(
+                person_id=pid,
+                name=person_names.get(pid, pid),
+                current_composite=round(composite, 2),
+                debiased_authority=round(debiased, 4),
+                authority_gap=round(gap, 4),
+                category=category
+                if isinstance(category, str)
+                else category.value
+                if hasattr(category, "value")
+                else str(category),
+                reason=reason,
+            )
+        )
 
     alerts.sort(key=lambda a: a.authority_gap, reverse=True)
 
@@ -872,7 +883,9 @@ def generate_comprehensive_insights(
     bridges = analyze_bridge_importance(bridges_data, person_names, centrality)
 
     # 提言と発見を生成
-    recommendations = generate_recommendations(pagerank, bias, growth, potential, bridges)
+    recommendations = generate_recommendations(
+        pagerank, bias, growth, potential, bridges
+    )
     key_findings = generate_key_findings(pagerank, bias, growth, potential, bridges)
 
     # 過小評価アラート

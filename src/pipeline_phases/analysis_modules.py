@@ -14,12 +14,26 @@ import structlog
 from src.analysis.anime_stats import compute_anime_stats
 from src.analysis.bias_detector import detect_systematic_biases, generate_bias_report
 from src.analysis.bridges import detect_bridges
-from src.analysis.causal_studio_identification import identify_studio_effects, export_identification_report
-from src.analysis.structural_estimation import estimate_structural_model, export_structural_estimation
+from src.analysis.causal_studio_identification import (
+    identify_studio_effects,
+    export_identification_report,
+)
+from src.analysis.credit_stats import compute_credit_statistics
+from src.analysis.credit_stats_html import generate_credit_stats_html
+from src.analysis.structural_estimation import (
+    estimate_structural_model,
+    export_structural_estimation,
+)
 from src.analysis.structural_estimation_html import generate_html_report
 from src.analysis.collaboration_strength import compute_collaboration_strength
-from src.analysis.compensation_analyzer import batch_analyze_compensation, export_compensation_report
-from src.analysis.insights_report import generate_comprehensive_insights, export_insights_report
+from src.analysis.compensation_analyzer import (
+    batch_analyze_compensation,
+    export_compensation_report,
+)
+from src.analysis.insights_report import (
+    generate_comprehensive_insights,
+    export_insights_report,
+)
 from src.analysis.crossval import cross_validate_scores
 from src.analysis.individual_contribution import compute_individual_profiles
 from src.analysis.decade_analysis import compute_decade_analysis
@@ -88,6 +102,7 @@ def _run_collaborations(context: PipelineContext) -> Any:
         context.anime_map,
         min_shared=2,
         person_scores=context.composite_scores,
+        collaboration_graph=context.collaboration_graph,
     )
     return pairs[:500] if pairs else []
 
@@ -125,9 +140,12 @@ def _run_graphml(context: PipelineContext) -> Any:
         for r in context.results
     }
     graphml_file = export_graphml(
-        context.persons, context.credits, person_scores=scores_for_graphml,
+        context.persons,
+        context.credits,
+        person_scores=scores_for_graphml,
         collaboration_graph=context.collaboration_graph,
-        prettyprint=False, round_decimals=2,
+        prettyprint=False,
+        round_decimals=2,
     )
     logger.info("graphml_exported", path=str(graphml_file))
     return {"path": str(graphml_file)}
@@ -179,7 +197,10 @@ def _run_role_flow(context: PipelineContext) -> Any:
 
 def _run_bridges(context: PipelineContext) -> Any:
     """Detect bridge nodes in network."""
-    return detect_bridges(context.credits)
+    return detect_bridges(
+        context.credits,
+        collaboration_graph=context.collaboration_graph,
+    )
 
 
 def _run_mentorships(context: PipelineContext) -> Any:
@@ -201,7 +222,11 @@ def _run_milestones(context: PipelineContext) -> Any:
 
 def _run_network_evolution(context: PipelineContext) -> Any:
     """Compute network evolution over time."""
-    return compute_network_evolution(context.credits, context.anime_map)
+    return compute_network_evolution(
+        context.credits,
+        context.anime_map,
+        collaboration_graph=context.collaboration_graph,
+    )
 
 
 def _run_genre_affinity(context: PipelineContext) -> Any:
@@ -276,9 +301,7 @@ def _run_bias_detector(context: PipelineContext) -> Any:
 def _run_compensation_analyzer(context: PipelineContext) -> Any:
     """Fair compensation analysis with anime type adjustments."""
     # Build person_names dict
-    person_names = {
-        p.id: p.name_ja or p.name_en or p.id for p in context.persons
-    }
+    person_names = {p.id: p.name_ja or p.name_en or p.id for p in context.persons}
 
     # Run batch analysis (top 100 anime by composite value)
     if not context.contribution_data:
@@ -286,9 +309,7 @@ def _run_compensation_analyzer(context: PipelineContext) -> Any:
 
     # Get anime with contributions
     anime_with_contribs = [
-        anime
-        for anime in context.anime_list
-        if anime.id in context.contribution_data
+        anime for anime in context.anime_list if anime.id in context.contribution_data
     ]
 
     # Analyze compensation
@@ -306,9 +327,7 @@ def _run_insights_report(context: PipelineContext) -> Any:
     """Generate comprehensive insights report from all analyses."""
     # Build person_scores and person_names dicts
     person_scores = {r["person_id"]: r for r in context.results}
-    person_names = {
-        p.id: p.name_ja or p.name_en or p.id for p in context.persons
-    }
+    person_names = {p.id: p.name_ja or p.name_en or p.id for p in context.persons}
 
     # Get bridges data (or empty dict if not available)
     bridges_data = context.analysis_results.get("bridges", {})
@@ -372,6 +391,7 @@ def _run_structural_estimation(context: PipelineContext) -> Any:
 
     # Generate HTML report
     from src.utils.config import HTML_DIR
+
     HTML_DIR.mkdir(parents=True, exist_ok=True)
     html_path = HTML_DIR / "structural_estimation_report.html"
     generate_html_report(result, html_path)
@@ -383,14 +403,32 @@ def _run_structural_estimation(context: PipelineContext) -> Any:
 
 def _run_individual_contribution(context: PipelineContext) -> Any:
     """Compute individual contribution profiles (Layer 2 metrics)."""
-    return asdict(compute_individual_profiles(
-        results=context.results,
-        credits=context.credits,
-        anime_map=context.anime_map,
-        role_profiles=context.role_profiles,
-        career_data=context.career_data,
-        collaboration_graph=context.collaboration_graph,
-    ))
+    return asdict(
+        compute_individual_profiles(
+            results=context.results,
+            credits=context.credits,
+            anime_map=context.anime_map,
+            role_profiles=context.role_profiles,
+            career_data=context.career_data,
+            collaboration_graph=context.collaboration_graph,
+        )
+    )
+
+
+def _run_credit_stats(context: PipelineContext) -> Any:
+    """Compute comprehensive credit statistics (person_id level)."""
+    stats = compute_credit_statistics(context.credits, context.anime_map)
+
+    # Generate HTML report
+    if stats:
+        from src.utils.config import HTML_DIR
+
+        HTML_DIR.mkdir(parents=True, exist_ok=True)
+        html_path = HTML_DIR / "credit_stats_report.html"
+        generate_credit_stats_html(stats, html_path)
+        logger.info("credit_stats_html_generated", path=str(html_path))
+
+    return stats
 
 
 # Registry of all analysis tasks (order-independent for parallel execution)
@@ -398,7 +436,9 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
     AnalysisTask("anime_stats", _run_anime_stats),
     AnalysisTask("studios", _run_studios),
     AnalysisTask("seasonal", _run_seasonal),
-    AnalysisTask("collaborations", _run_collaborations, monitor_step="collaboration_strength"),
+    AnalysisTask(
+        "collaborations", _run_collaborations, monitor_step="collaboration_strength"
+    ),
     AnalysisTask("outliers", _run_outliers, monitor_step="outlier_detection"),
     AnalysisTask("teams", _run_teams, monitor_step="team_composition"),
     AnalysisTask("graphml", _run_graphml, monitor_step="graphml_export"),
@@ -410,17 +450,38 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
     AnalysisTask("bridges", _run_bridges, monitor_step="bridge_detection"),
     AnalysisTask("mentorships", _run_mentorships, monitor_step="mentorship_inference"),
     AnalysisTask("milestones", _run_milestones, monitor_step="milestones"),
-    AnalysisTask("network_evolution", _run_network_evolution, monitor_step="network_evolution"),
+    AnalysisTask(
+        "network_evolution", _run_network_evolution, monitor_step="network_evolution"
+    ),
     AnalysisTask("genre_affinity", _run_genre_affinity, monitor_step="genre_affinity"),
     AnalysisTask("productivity", _run_productivity, monitor_step="productivity"),
     AnalysisTask("influence", _run_influence, monitor_step="influence_tree"),
     AnalysisTask("crossval", _run_crossval, monitor_step="cross_validation"),
     AnalysisTask("bias_report", _run_bias_detector, monitor_step="bias_detection"),
-    AnalysisTask("fair_compensation", _run_compensation_analyzer, monitor_step="compensation_analysis"),
-    AnalysisTask("insights_report", _run_insights_report, monitor_step="insights_generation"),
-    AnalysisTask("causal_identification", _run_causal_identification, monitor_step="causal_identification"),
-    AnalysisTask("structural_estimation", _run_structural_estimation, monitor_step="structural_estimation"),
-    AnalysisTask("individual_profiles", _run_individual_contribution, monitor_step="individual_contribution"),
+    AnalysisTask(
+        "fair_compensation",
+        _run_compensation_analyzer,
+        monitor_step="compensation_analysis",
+    ),
+    AnalysisTask(
+        "insights_report", _run_insights_report, monitor_step="insights_generation"
+    ),
+    AnalysisTask(
+        "causal_identification",
+        _run_causal_identification,
+        monitor_step="causal_identification",
+    ),
+    AnalysisTask(
+        "structural_estimation",
+        _run_structural_estimation,
+        monitor_step="structural_estimation",
+    ),
+    AnalysisTask(
+        "individual_profiles",
+        _run_individual_contribution,
+        monitor_step="individual_contribution",
+    ),
+    AnalysisTask("credit_stats", _run_credit_stats, monitor_step="credit_statistics"),
 ]
 
 

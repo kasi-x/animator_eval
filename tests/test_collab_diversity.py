@@ -71,7 +71,9 @@ class TestCollabDiversity:
             aid = f"a{i}"
             anime_map[aid] = Anime(id=aid, title_en=f"Show {i}", year=2020)
             credits.append(Credit(person_id="p1", anime_id=aid, role=Role.DIRECTOR))
-            credits.append(Credit(person_id=f"p{i+10}", anime_id=aid, role=Role.KEY_ANIMATOR))
+            credits.append(
+                Credit(person_id=f"p{i + 10}", anime_id=aid, role=Role.KEY_ANIMATOR)
+            )
 
         result = compute_collab_diversity(credits, anime_map)
         assert result["p1"]["unique_collaborators"] == 10

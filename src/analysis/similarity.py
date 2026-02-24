@@ -61,15 +61,17 @@ def find_similar_persons(
             r.get("skill", 0),
         )
         sim = _cosine_similarity(target_vec, vec)
-        similarities.append({
-            "person_id": r["person_id"],
-            "name": r.get("name", r["person_id"]),
-            "similarity": round(sim, 4),
-            "authority": r.get("authority", 0),
-            "trust": r.get("trust", 0),
-            "skill": r.get("skill", 0),
-            "composite": r.get("composite", 0),
-        })
+        similarities.append(
+            {
+                "person_id": r["person_id"],
+                "name": r.get("name", r["person_id"]),
+                "similarity": round(sim, 4),
+                "authority": r.get("authority", 0),
+                "trust": r.get("trust", 0),
+                "skill": r.get("skill", 0),
+                "composite": r.get("composite", 0),
+            }
+        )
 
     similarities.sort(key=lambda x: x["similarity"], reverse=True)
     return similarities[:top_n]

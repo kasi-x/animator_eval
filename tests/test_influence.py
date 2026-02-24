@@ -132,10 +132,7 @@ class TestComputeInfluenceTree:
         chains = result["generation_chains"]
         assert len(chains) >= 1
         # At least one chain should contain p1 → p2
-        has_p1_p2_chain = any(
-            "p1" in chain and "p2" in chain
-            for chain in chains
-        )
+        has_p1_p2_chain = any("p1" in chain and "p2" in chain for chain in chains)
         assert has_p1_p2_chain
 
     def test_empty_credits(self):
@@ -149,7 +146,9 @@ class TestComputeInfluenceTree:
         anime_map = {"a1": Anime(id="a1", title_en="Show", year=2020)}
         credits = [
             Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="test"),
-            Credit(person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"),
+            Credit(
+                person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"
+            ),
         ]
         result = compute_influence_tree(credits, anime_map, min_shared_works=2)
         assert result["total_mentors"] == 0

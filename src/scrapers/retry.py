@@ -6,7 +6,11 @@ from typing import TypeVar
 
 import structlog
 
-from src.scrapers.exceptions import EndpointUnreachableError, RateLimitError, ScraperError
+from src.scrapers.exceptions import (
+    EndpointUnreachableError,
+    RateLimitError,
+    ScraperError,
+)
 
 log = structlog.get_logger()
 

@@ -1,6 +1,5 @@
 """database モジュールのテスト."""
 
-
 import pytest
 
 from src.database import (
@@ -71,9 +70,7 @@ class TestPersonCrud:
 
 class TestAnimeCrud:
     def test_upsert_and_load(self, db_conn):
-        anime = Anime(
-            id="mal:1", title_ja="千と千尋の神隠し", year=2001, mal_id=199
-        )
+        anime = Anime(id="mal:1", title_ja="千と千尋の神隠し", year=2001, mal_id=199)
         upsert_anime(db_conn, anime)
         db_conn.commit()
 
@@ -144,7 +141,9 @@ class TestDbConnection:
 
         # Verify data persisted by opening a new connection
         conn2 = get_connection(db_path)
-        row = conn2.execute("SELECT name_ja FROM persons WHERE id = 'mal:p1'").fetchone()
+        row = conn2.execute(
+            "SELECT name_ja FROM persons WHERE id = 'mal:p1'"
+        ).fetchone()
         conn2.close()
         assert row is not None
         assert row["name_ja"] == "テスト"

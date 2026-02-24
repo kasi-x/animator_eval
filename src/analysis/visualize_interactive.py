@@ -36,7 +36,12 @@ def plot_interactive_score_distribution(
     fig = make_subplots(
         rows=2,
         cols=2,
-        subplot_titles=("Authority Score", "Trust Score", "Skill Score", "Composite Score"),
+        subplot_titles=(
+            "Authority Score",
+            "Trust Score",
+            "Skill Score",
+            "Composite Score",
+        ),
     )
 
     # Authority
@@ -190,7 +195,12 @@ def plot_interactive_scatter(
         y=y_axis,
         color="composite",
         size="composite",
-        hover_data={"name_display": True, x_axis: ":.1f", y_axis: ":.1f", "composite": ":.1f"},
+        hover_data={
+            "name_display": True,
+            x_axis: ":.1f",
+            y_axis: ":.1f",
+            "composite": ":.1f",
+        },
         labels={
             "authority": "Authority Score",
             "trust": "Trust Score",
@@ -208,7 +218,9 @@ def plot_interactive_scatter(
 
     if output_path:
         fig.write_html(str(output_path))
-        logger.info("interactive_scatter_saved", path=str(output_path), x=x_axis, y=y_axis)
+        logger.info(
+            "interactive_scatter_saved", path=str(output_path), x=x_axis, y=y_axis
+        )
     else:
         fig.show()
 
@@ -339,7 +351,9 @@ def plot_interactive_network(
             showscale=True,
             colorscale="YlGnBu",
             size=10,
-            colorbar=dict(thickness=15, title=dict(text="Node Connections"), xanchor="left"),
+            colorbar=dict(
+                thickness=15, title=dict(text="Node Connections"), xanchor="left"
+            ),
             line_width=2,
         ),
     )
@@ -354,7 +368,10 @@ def plot_interactive_network(
     fig = go.Figure(
         data=[edge_trace, node_trace],
         layout=go.Layout(
-            title=dict(text=f"Collaboration Network (Top {top_n} pairs - Interactive)", font=dict(size=16)),
+            title=dict(
+                text=f"Collaboration Network (Top {top_n} pairs - Interactive)",
+                font=dict(size=16),
+            ),
             showlegend=False,
             hovermode="closest",
             margin=dict(b=20, l=5, r=5, t=40),
@@ -393,32 +410,47 @@ def generate_interactive_dashboard(
     # Score distribution
     if scores_data:
         plot_interactive_score_distribution(
-            scores_data, output_path=output_dir / "interactive_scores.html" if output_dir else None
+            scores_data,
+            output_path=output_dir / "interactive_scores.html" if output_dir else None,
         )
 
     # Radar chart (top 10)
     if scores_data:
         plot_interactive_radar(
-            scores_data, top_n=10, output_path=output_dir / "interactive_radar.html" if output_dir else None
+            scores_data,
+            top_n=10,
+            output_path=output_dir / "interactive_radar.html" if output_dir else None,
         )
 
     # Scatter plots (multiple combinations)
     if scores_data:
-        for x_axis, y_axis in [("authority", "trust"), ("authority", "skill"), ("trust", "skill")]:
+        for x_axis, y_axis in [
+            ("authority", "trust"),
+            ("authority", "skill"),
+            ("trust", "skill"),
+        ]:
             plot_interactive_scatter(
                 scores_data,
                 x_axis=x_axis,
                 y_axis=y_axis,
-                output_path=output_dir / f"interactive_scatter_{x_axis}_{y_axis}.html" if output_dir else None,
+                output_path=output_dir / f"interactive_scatter_{x_axis}_{y_axis}.html"
+                if output_dir
+                else None,
             )
 
     # Timeline
     if timeline_data:
         plot_interactive_timeline(
-            timeline_data, output_path=output_dir / "interactive_timeline.html" if output_dir else None
+            timeline_data,
+            output_path=output_dir / "interactive_timeline.html"
+            if output_dir
+            else None,
         )
 
-    logger.info("interactive_dashboard_generated", output_dir=str(output_dir) if output_dir else "display")
+    logger.info(
+        "interactive_dashboard_generated",
+        output_dir=str(output_dir) if output_dir else "display",
+    )
 
 
 def main() -> None:
@@ -448,7 +480,9 @@ def main() -> None:
 
     # Generate all interactive visualizations
     interactive_dir = JSON_DIR.parent / "interactive"
-    generate_interactive_dashboard(scores_data, timeline_data, output_dir=interactive_dir)
+    generate_interactive_dashboard(
+        scores_data, timeline_data, output_dir=interactive_dir
+    )
 
     logger.info("interactive_visualizations_complete", directory=str(interactive_dir))
 

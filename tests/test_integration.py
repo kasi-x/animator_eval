@@ -56,8 +56,7 @@ class TestFullPipeline:
 
         results = run_scoring_pipeline()
         has_all_three = any(
-            r["authority"] > 0 and r["trust"] > 0 and r["skill"] > 0
-            for r in results
+            r["authority"] > 0 and r["trust"] > 0 and r["skill"] > 0 for r in results
         )
         assert has_all_three
 
@@ -83,7 +82,11 @@ class TestFullPipeline:
     def test_report_generation(self, synthetic_db, tmp_path):
         """レポート生成が正常に完了する."""
         from src.pipeline import run_scoring_pipeline
-        from src.report import generate_csv_report, generate_json_report, generate_text_report
+        from src.report import (
+            generate_csv_report,
+            generate_json_report,
+            generate_text_report,
+        )
 
         results = run_scoring_pipeline()
 
@@ -121,7 +124,15 @@ class TestFullPipeline:
         assert has_role
         for r in results:
             if "primary_role" in r:
-                assert r["primary_role"] in ("director", "animator", "designer", "technical", "production", "writing", "other")
+                assert r["primary_role"] in (
+                    "director",
+                    "animator",
+                    "designer",
+                    "technical",
+                    "production",
+                    "writing",
+                    "other",
+                )
 
     def test_dry_run_returns_empty(self, synthetic_db):
         """dry-run モードではスコア計算を行わず空リストを返す."""

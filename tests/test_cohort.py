@@ -17,7 +17,9 @@ def _make_multi_generation_data():
         # 2000s cohort: p1 (debut 2005)
         Credit(person_id="p1", anime_id="a1", role=Role.IN_BETWEEN, source="test"),
         Credit(person_id="p1", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
-        Credit(person_id="p1", anime_id="a3", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p1", anime_id="a3", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
         Credit(person_id="p1", anime_id="a4", role=Role.DIRECTOR, source="test"),
         # 2000s cohort: p2 (debut 2008)
         Credit(person_id="p2", anime_id="a2", role=Role.IN_BETWEEN, source="test"),
@@ -25,7 +27,9 @@ def _make_multi_generation_data():
         # 2010s cohort: p3 (debut 2012)
         Credit(person_id="p3", anime_id="a3", role=Role.IN_BETWEEN, source="test"),
         Credit(person_id="p3", anime_id="a4", role=Role.KEY_ANIMATOR, source="test"),
-        Credit(person_id="p3", anime_id="a5", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p3", anime_id="a5", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
         # 2020s cohort: p4 (debut 2021)
         Credit(person_id="p4", anime_id="a5", role=Role.IN_BETWEEN, source="test"),
     ]

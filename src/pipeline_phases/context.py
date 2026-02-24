@@ -6,6 +6,7 @@ variables and making dependencies explicit.
 
 Also provides PipelineCheckpoint for crash resume support.
 """
+
 import json
 import time
 from dataclasses import dataclass, field
@@ -200,10 +201,9 @@ class PipelineCheckpoint:
 
     def is_compatible(self, checkpoint: dict, context: PipelineContext) -> bool:
         """Check if checkpoint is compatible with current data."""
-        return (
-            checkpoint.get("credit_count") == len(context.credits)
-            and checkpoint.get("person_count") == len(context.persons)
-        )
+        return checkpoint.get("credit_count") == len(
+            context.credits
+        ) and checkpoint.get("person_count") == len(context.persons)
 
     def delete(self) -> None:
         """Delete checkpoint on successful pipeline completion."""

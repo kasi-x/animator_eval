@@ -64,7 +64,9 @@ def compute_network_density(
         results[pid] = NetworkDensityMetrics(
             collaborator_count=len(collabs),
             unique_anime=unique_anime,
-            hub_score=round(len(collabs) / max_collabs * 100, 1) if max_collabs > 0 else 0,
+            hub_score=round(len(collabs) / max_collabs * 100, 1)
+            if max_collabs > 0
+            else 0,
             avg_collaborator_score=avg_collab_score,
         )
 

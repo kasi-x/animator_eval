@@ -12,6 +12,7 @@ log = structlog.get_logger()
 @dataclass
 class DownloadItem:
     """Single download queue item."""
+
     item_id: str  # person_id or anime_id
     item_type: str  # "person" or "anime"
     url_large: str = None  # large image URL
@@ -30,7 +31,9 @@ class DownloadQueue:
             queue_file: Path to queue JSON file. If None, uses default location.
         """
         if queue_file is None:
-            queue_file = Path(__file__).parent.parent.parent / "data" / "download_queue.json"
+            queue_file = (
+                Path(__file__).parent.parent.parent / "data" / "download_queue.json"
+            )
 
         self.queue_file = queue_file
         self.queue_file.parent.mkdir(parents=True, exist_ok=True)
@@ -47,9 +50,7 @@ class DownloadQueue:
         try:
             with open(self.queue_file) as f:
                 data = json.load(f)
-                self.items = [
-                    DownloadItem(**item) for item in data.get("items", [])
-                ]
+                self.items = [DownloadItem(**item) for item in data.get("items", [])]
             log.info("download_queue_loaded", count=len(self.items))
         except Exception as e:
             log.warning("download_queue_load_failed", error=str(e))
@@ -60,14 +61,16 @@ class DownloadQueue:
         try:
             data = {
                 "count": len(self.items),
-                "items": [asdict(item) for item in self.items]
+                "items": [asdict(item) for item in self.items],
             }
             with open(self.queue_file, "w") as f:
                 json.dump(data, f, indent=2, default=str)
         except Exception as e:
             log.warning("download_queue_save_failed", error=str(e))
 
-    def add_person(self, person_id: str, url_large: str = None, url_medium: str = None) -> None:
+    def add_person(
+        self, person_id: str, url_large: str = None, url_medium: str = None
+    ) -> None:
         """Add person image to download queue.
 
         Args:
@@ -76,13 +79,14 @@ class DownloadQueue:
             url_medium: Medium image URL
         """
         import time
+
         if url_large or url_medium:
             item = DownloadItem(
                 item_id=person_id,
                 item_type="person",
                 url_large=url_large,
                 url_medium=url_medium,
-                added_at=time.time()
+                added_at=time.time(),
             )
             self.items.append(item)
             self._save_to_file()
@@ -92,7 +96,7 @@ class DownloadQueue:
         anime_id: str,
         url_large: str = None,
         url_extra_large: str = None,
-        url_banner: str = None
+        url_banner: str = None,
     ) -> None:
         """Add anime image to download queue.
 
@@ -103,6 +107,7 @@ class DownloadQueue:
             url_banner: Banner image URL
         """
         import time
+
         if url_large or url_extra_large or url_banner:
             item = DownloadItem(
                 item_id=anime_id,
@@ -110,7 +115,7 @@ class DownloadQueue:
                 url_large=url_extra_large or url_large,  # Use extra_large if available
                 url_medium=url_large,  # Store large as medium
                 url_banner=url_banner,
-                added_at=time.time()
+                added_at=time.time(),
             )
             self.items.append(item)
             self._save_to_file()

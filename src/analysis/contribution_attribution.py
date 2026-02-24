@@ -98,7 +98,9 @@ def estimate_marginal_contribution(
         限界貢献度
     """
     # Person's quality
-    person_quality = person_scores.get(person_id, {}).get("composite", staff_quality_avg)
+    person_quality = person_scores.get(person_id, {}).get(
+        "composite", staff_quality_avg
+    )
 
     # Role importance
     role_weight = compute_role_importance(role)
@@ -161,7 +163,9 @@ def compute_shapley_value_approximate(
 
         # Find position of target person
         try:
-            position = next(i for i, (pid, _) in enumerate(staff_copy) if pid == person_id)
+            position = next(
+                i for i, (pid, _) in enumerate(staff_copy) if pid == person_id
+            )
         except StopIteration:
             continue
 
@@ -177,7 +181,11 @@ def compute_shapley_value_approximate(
         marginal_contributions.append(marginal)
 
     # Shapley value = average marginal contribution
-    shapley = sum(marginal_contributions) / len(marginal_contributions) if marginal_contributions else 0
+    shapley = (
+        sum(marginal_contributions) / len(marginal_contributions)
+        if marginal_contributions
+        else 0
+    )
 
     return round(shapley, 3)
 
@@ -206,7 +214,9 @@ def compute_contribution_attribution(
     staff_composites = [
         person_scores.get(c.person_id, {}).get("composite", 0.5) for c in credits
     ]
-    staff_quality_avg = sum(staff_composites) / len(staff_composites) if staff_composites else 0.5
+    staff_quality_avg = (
+        sum(staff_composites) / len(staff_composites) if staff_composites else 0.5
+    )
 
     # All staff
     all_staff = [(c.person_id, c.role) for c in credits]
@@ -246,7 +256,9 @@ def compute_contribution_attribution(
         )
 
         # Irreplaceability: how much better is this person than average
-        person_quality = person_scores.get(person_id, {}).get("composite", staff_quality_avg)
+        person_quality = person_scores.get(person_id, {}).get(
+            "composite", staff_quality_avg
+        )
         irreplaceability = max(0, person_quality - staff_quality_avg)
 
         contributions[person_id] = ContributionMetrics(
@@ -264,7 +276,9 @@ def compute_contribution_attribution(
     total_shapley = sum(c.shapley_value for c in contributions.values())
     if total_shapley > 0:
         for contrib in contributions.values():
-            contrib.value_share = round((contrib.shapley_value / total_shapley) * 100, 2)
+            contrib.value_share = round(
+                (contrib.shapley_value / total_shapley) * 100, 2
+            )
 
     logger.info(
         "contribution_attributed",
@@ -469,7 +483,9 @@ def main():
 
     # Undervalued contributors
     print("\n=== 過小評価されている貢献者 ===\n")
-    undervalued = find_undervalued_contributors(person_aggregates, person_scores, top_n=10)
+    undervalued = find_undervalued_contributors(
+        person_aggregates, person_scores, top_n=10
+    )
 
     for person_id, contribution, current_score in undervalued:
         name = person_names.get(person_id, person_id)
@@ -482,7 +498,12 @@ def main():
 
     # Role MVPs
     print("\n=== 役職別MVP ===\n")
-    for role in ["director", "chief_animation_director", "animation_director", "key_animator"]:
+    for role in [
+        "director",
+        "chief_animation_director",
+        "animation_director",
+        "key_animator",
+    ]:
         mvps = find_mvp_by_role(person_aggregates, role, top_n=3)
         if mvps:
             print(f"{role.upper()}:")

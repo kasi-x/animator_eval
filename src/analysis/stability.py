@@ -68,25 +68,29 @@ def compare_scores(
         deltas.append(abs(delta))
 
         if abs(delta) >= threshold:
-            significant_changes.append({
-                "person_id": pid,
-                "name": curr_map[pid].get("name", pid),
-                "old_composite": round(old_c, 2),
-                "new_composite": round(new_c, 2),
-                "delta": round(delta, 2),
-            })
+            significant_changes.append(
+                {
+                    "person_id": pid,
+                    "name": curr_map[pid].get("name", pid),
+                    "old_composite": round(old_c, 2),
+                    "new_composite": round(new_c, 2),
+                    "delta": round(delta, 2),
+                }
+            )
 
         old_rank = prev_ranked.get(pid, 0)
         new_rank = curr_ranked.get(pid, 0)
         rank_delta = old_rank - new_rank  # positive = moved up
         if abs(rank_delta) >= 5:
-            rank_changes.append({
-                "person_id": pid,
-                "name": curr_map[pid].get("name", pid),
-                "old_rank": old_rank,
-                "new_rank": new_rank,
-                "delta": rank_delta,
-            })
+            rank_changes.append(
+                {
+                    "person_id": pid,
+                    "name": curr_map[pid].get("name", pid),
+                    "old_rank": old_rank,
+                    "new_rank": new_rank,
+                    "delta": rank_delta,
+                }
+            )
 
     significant_changes.sort(key=lambda x: abs(x["delta"]), reverse=True)
     rank_changes.sort(key=lambda x: abs(x["delta"]), reverse=True)

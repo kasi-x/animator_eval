@@ -71,7 +71,13 @@ class TestAllSameScores:
 
     def test_outliers_all_same(self):
         results = [
-            {"person_id": f"p{i}", "authority": 50, "trust": 50, "skill": 50, "composite": 50}
+            {
+                "person_id": f"p{i}",
+                "authority": 50,
+                "trust": 50,
+                "skill": 50,
+                "composite": 50,
+            }
             for i in range(20)
         ]
         out = detect_outliers(results)
@@ -81,7 +87,14 @@ class TestAllSameScores:
 
     def test_comparison_all_same(self):
         results = [
-            {"person_id": f"p{i}", "name": f"P{i}", "authority": 50, "trust": 50, "skill": 50, "composite": 50}
+            {
+                "person_id": f"p{i}",
+                "name": f"P{i}",
+                "authority": 50,
+                "trust": 50,
+                "skill": 50,
+                "composite": 50,
+            }
             for i in range(3)
         ]
         cm = build_comparison_matrix(["p0", "p1"], results)
@@ -92,7 +105,10 @@ class TestAllSameScores:
         results = [
             {
                 "person_id": f"p{i}",
-                "authority": 50, "trust": 50, "skill": 50, "composite": 50,
+                "authority": 50,
+                "trust": 50,
+                "skill": 50,
+                "composite": 50,
                 "career": {"active_years": 5, "highest_stage": 3},
             }
             for i in range(10)
@@ -163,8 +179,20 @@ class TestRecommendationEdgeCases:
     def test_recommend_all_team_members(self):
         """When all persons are in the team, no recommendations."""
         results = [
-            {"person_id": "p1", "authority": 50, "trust": 50, "skill": 50, "composite": 50},
-            {"person_id": "p2", "authority": 50, "trust": 50, "skill": 50, "composite": 50},
+            {
+                "person_id": "p1",
+                "authority": 50,
+                "trust": 50,
+                "skill": 50,
+                "composite": 50,
+            },
+            {
+                "person_id": "p2",
+                "authority": 50,
+                "trust": 50,
+                "skill": 50,
+                "composite": 50,
+            },
         ]
         credits = [
             Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR),
@@ -174,6 +202,14 @@ class TestRecommendationEdgeCases:
         assert recs == []
 
     def test_recommend_nonexistent_team(self):
-        results = [{"person_id": "p1", "authority": 50, "trust": 50, "skill": 50, "composite": 50}]
+        results = [
+            {
+                "person_id": "p1",
+                "authority": 50,
+                "trust": 50,
+                "skill": 50,
+                "composite": 50,
+            }
+        ]
         recs = recommend_for_team(["nonexistent"], results, [])
         assert recs == []

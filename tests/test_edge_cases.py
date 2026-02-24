@@ -65,7 +65,9 @@ class TestCirclesEdgeCases:
         """監督だけでアニメーターがいない場合."""
         anime_map = {"a1": Anime(id="a1", year=2024, score=8.0)}
         credits = [Credit(person_id="dir1", anime_id="a1", role=Role.DIRECTOR)]
-        circles = find_director_circles(credits, anime_map, min_shared_works=1, min_director_works=1)
+        circles = find_director_circles(
+            credits, anime_map, min_shared_works=1, min_director_works=1
+        )
         # Should either not have dir1 or have empty members list
         if "dir1" in circles:
             assert circles["dir1"].members == []
@@ -79,7 +81,9 @@ class TestCirclesEdgeCases:
             Credit(person_id="dir1", anime_id="a1", role=Role.DIRECTOR),
             Credit(person_id="anim1", anime_id="a1", role=Role.KEY_ANIMATOR),
         ]
-        circles = find_director_circles(credits, anime_map, min_shared_works=1, min_director_works=2)
+        circles = find_director_circles(
+            credits, anime_map, min_shared_works=1, min_director_works=2
+        )
         assert "dir1" not in circles
 
 

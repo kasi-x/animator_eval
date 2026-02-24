@@ -230,7 +230,9 @@ def detect_studio_bias(
                 )
             )
 
-    logger.info("studio_bias_detected", biases=len(results), total_studios=len(studio_data))
+    logger.info(
+        "studio_bias_detected", biases=len(results), total_studios=len(studio_data)
+    )
     return results
 
 
@@ -311,7 +313,9 @@ def detect_career_stage_bias(
                 )
             )
 
-    logger.info("career_stage_bias_detected", biases=len(results), stages=len(stage_groups))
+    logger.info(
+        "career_stage_bias_detected", biases=len(results), stages=len(stage_groups)
+    )
     return results
 
 

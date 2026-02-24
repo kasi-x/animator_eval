@@ -91,17 +91,15 @@ def compute_decade_analysis(
     # Format decades
     formatted_decades = {}
     for decade, dd in sorted(decades.items()):
-        top_persons = sorted(
-            dd["person_credits"].items(), key=lambda x: -x[1]
-        )[:10]
+        top_persons = sorted(dd["person_credits"].items(), key=lambda x: -x[1])[:10]
 
         formatted_decades[decade] = {
             "credit_count": dd["credit_count"],
             "unique_persons": len(dd["persons"]),
             "unique_anime": len(dd["anime"]),
-            "avg_anime_score": round(
-                sum(dd["scores"]) / len(dd["scores"]), 2
-            ) if dd["scores"] else None,
+            "avg_anime_score": round(sum(dd["scores"]) / len(dd["scores"]), 2)
+            if dd["scores"]
+            else None,
             "role_distribution": dict(
                 sorted(dd["role_distribution"].items(), key=lambda x: -x[1])
             ),
@@ -117,9 +115,9 @@ def compute_decade_analysis(
             "credits": yd["credits"],
             "persons": len(yd["persons"]),
             "anime": len(yd["anime"]),
-            "avg_score": round(
-                sum(yd["scores"]) / len(yd["scores"]), 2
-            ) if yd["scores"] else None,
+            "avg_score": round(sum(yd["scores"]) / len(yd["scores"]), 2)
+            if yd["scores"]
+            else None,
         }
 
     logger.info("decade_analysis_computed", decades=len(formatted_decades))

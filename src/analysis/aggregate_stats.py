@@ -37,7 +37,7 @@ def compute_aggregate_stats(results: list[dict]) -> dict:
             continue
         mean = sum(vals) / len(vals)
         variance = sum((v - mean) ** 2 for v in vals) / len(vals)
-        std = variance ** 0.5
+        std = variance**0.5
 
         score_dist[axis] = {
             "min": round(vals[0], 2),
@@ -68,35 +68,45 @@ def compute_aggregate_stats(results: list[dict]) -> dict:
     # Career stats
     career_active = [
         r["career"]["active_years"]
-        for r in results if r.get("career", {}).get("active_years")
+        for r in results
+        if r.get("career", {}).get("active_years")
     ]
     career_stages = [
         r["career"]["highest_stage"]
-        for r in results if r.get("career", {}).get("highest_stage")
+        for r in results
+        if r.get("career", {}).get("highest_stage")
     ]
 
     career_stats = {}
     if career_active:
-        career_stats["avg_active_years"] = round(sum(career_active) / len(career_active), 1)
+        career_stats["avg_active_years"] = round(
+            sum(career_active) / len(career_active), 1
+        )
         career_stats["max_active_years"] = max(career_active)
     if career_stages:
-        career_stats["avg_highest_stage"] = round(sum(career_stages) / len(career_stages), 1)
+        career_stats["avg_highest_stage"] = round(
+            sum(career_stages) / len(career_stages), 1
+        )
 
     # Network stats
     hub_scores = [
         r["network"]["hub_score"]
-        for r in results if r.get("network", {}).get("hub_score") is not None
+        for r in results
+        if r.get("network", {}).get("hub_score") is not None
     ]
     collaborators = [
         r["network"]["collaborators"]
-        for r in results if r.get("network", {}).get("collaborators") is not None
+        for r in results
+        if r.get("network", {}).get("collaborators") is not None
     ]
 
     network_stats = {}
     if hub_scores:
         network_stats["avg_hub_score"] = round(sum(hub_scores) / len(hub_scores), 1)
     if collaborators:
-        network_stats["avg_collaborators"] = round(sum(collaborators) / len(collaborators), 1)
+        network_stats["avg_collaborators"] = round(
+            sum(collaborators) / len(collaborators), 1
+        )
         network_stats["max_collaborators"] = max(collaborators)
 
     result = {

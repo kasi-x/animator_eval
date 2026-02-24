@@ -62,7 +62,9 @@ class TestPredictAnimeScore:
     def test_with_person_scores(self):
         credits, anime_map = _make_data()
         scores = {"p1": 80.0, "p2": 60.0}
-        result = predict_anime_score(["p1", "p2"], credits, anime_map, person_scores=scores)
+        result = predict_anime_score(
+            ["p1", "p2"], credits, anime_map, person_scores=scores
+        )
         assert result["team_avg_score"] == 70.0
 
     def test_empty_team(self):

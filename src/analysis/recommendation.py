@@ -85,16 +85,22 @@ def recommend_for_team(
         if r.get("growth", {}).get("trend") == "rising":
             reasons.append("Rising trend")
 
-        candidates.append({
-            "person_id": pid,
-            "name": r.get("name", "") or r.get("name_ja", "") or pid,
-            "composite": r.get("composite", 0),
-            "compatibility_score": compatibility,
-            "shared_projects": shared,
-            "reasons": reasons,
-        })
+        candidates.append(
+            {
+                "person_id": pid,
+                "name": r.get("name", "") or r.get("name_ja", "") or pid,
+                "composite": r.get("composite", 0),
+                "compatibility_score": compatibility,
+                "shared_projects": shared,
+                "reasons": reasons,
+            }
+        )
 
     candidates.sort(key=lambda x: x["compatibility_score"], reverse=True)
 
-    logger.info("recommendations_computed", team_size=len(team_person_ids), candidates=len(candidates[:top_n]))
+    logger.info(
+        "recommendations_computed",
+        team_size=len(team_person_ids),
+        candidates=len(candidates[:top_n]),
+    )
     return candidates[:top_n]

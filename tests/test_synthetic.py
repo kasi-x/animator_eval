@@ -17,7 +17,11 @@ class TestGenerateSyntheticData:
             n_directors=3, n_animators=10, n_anime=5
         )
         director_ids = {p.id for p in persons if p.id.startswith("syn:d")}
-        director_credits = [c for c in credits if c.person_id in director_ids and c.role.value == "director"]
+        director_credits = [
+            c
+            for c in credits
+            if c.person_id in director_ids and c.role.value == "director"
+        ]
         assert len(director_credits) >= 5  # at least one director per anime
 
     def test_deterministic_with_seed(self):

@@ -18,7 +18,9 @@ from src.models import Anime, Credit, Role
 # --- Fixtures ---
 
 
-def _make_anime(aid: str, score: float, year: int = 2020, studios: list[str] | None = None) -> Anime:
+def _make_anime(
+    aid: str, score: float, year: int = 2020, studios: list[str] | None = None
+) -> Anime:
     return Anime(
         id=aid,
         title_ja=f"Anime {aid}",
@@ -30,7 +32,9 @@ def _make_anime(aid: str, score: float, year: int = 2020, studios: list[str] | N
     )
 
 
-def _make_credit(person_id: str, anime_id: str, role: Role = Role.KEY_ANIMATOR) -> Credit:
+def _make_credit(
+    person_id: str, anime_id: str, role: Role = Role.KEY_ANIMATOR
+) -> Credit:
     return Credit(person_id=person_id, anime_id=anime_id, role=role, source="test")
 
 
@@ -71,23 +75,27 @@ def results_list():
     """Simulated pipeline results for all 15 persons."""
     results = []
     for d in range(5):
-        results.append({
-            "person_id": f"dir{d}",
-            "name": f"Director {d}",
-            "authority": 70 + d * 5,
-            "trust": 60 + d * 3,
-            "skill": 65 + d * 4,
-            "composite": 65 + d * 4,
-        })
+        results.append(
+            {
+                "person_id": f"dir{d}",
+                "name": f"Director {d}",
+                "authority": 70 + d * 5,
+                "trust": 60 + d * 3,
+                "skill": 65 + d * 4,
+                "composite": 65 + d * 4,
+            }
+        )
     for ka in range(10):
-        results.append({
-            "person_id": f"ka{ka}",
-            "name": f"Animator {ka}",
-            "authority": 40 + ka * 3,
-            "trust": 35 + ka * 2,
-            "skill": 50 + ka * 3,
-            "composite": 42 + ka * 3,
-        })
+        results.append(
+            {
+                "person_id": f"ka{ka}",
+                "name": f"Animator {ka}",
+                "authority": 40 + ka * 3,
+                "trust": 35 + ka * 2,
+                "skill": 50 + ka * 3,
+                "composite": 42 + ka * 3,
+            }
+        )
     return results
 
 
@@ -134,7 +142,9 @@ class TestGetCareerBand:
 
 
 class TestBuildPersonFeatures:
-    def test_basic_features(self, results_list, credits_list, anime_map, role_profiles, career_data):
+    def test_basic_features(
+        self, results_list, credits_list, anime_map, role_profiles, career_data
+    ):
         features = _build_person_features(
             results_list, credits_list, anime_map, role_profiles, career_data
         )
@@ -144,14 +154,18 @@ class TestBuildPersonFeatures:
         assert "career_band" in features["ka0"]
         assert features["ka0"]["primary_role"] == "key_animator"
 
-    def test_career_years_from_career_data(self, results_list, credits_list, anime_map, role_profiles, career_data):
+    def test_career_years_from_career_data(
+        self, results_list, credits_list, anime_map, role_profiles, career_data
+    ):
         features = _build_person_features(
             results_list, credits_list, anime_map, role_profiles, career_data
         )
         # dir0 has active_years=10
         assert features["dir0"]["career_years"] == 10
 
-    def test_career_years_fallback_to_credits(self, results_list, credits_list, anime_map, role_profiles):
+    def test_career_years_fallback_to_credits(
+        self, results_list, credits_list, anime_map, role_profiles
+    ):
         """When career_data has 0 active_years, fall back to credit date range."""
         empty_career = {pid: {"active_years": 0} for pid in role_profiles}
         features = _build_person_features(
@@ -160,7 +174,9 @@ class TestBuildPersonFeatures:
         # ka9 works on all 10 anime (years 2015-2024), so span = 10
         assert features["ka9"]["career_years"] == 10
 
-    def test_avg_anime_score(self, results_list, credits_list, anime_map, role_profiles, career_data):
+    def test_avg_anime_score(
+        self, results_list, credits_list, anime_map, role_profiles, career_data
+    ):
         features = _build_person_features(
             results_list, credits_list, anime_map, role_profiles, career_data
         )
@@ -169,7 +185,9 @@ class TestBuildPersonFeatures:
 
 
 class TestPeerPercentile:
-    def test_basic_percentile(self, results_list, credits_list, anime_map, role_profiles, career_data):
+    def test_basic_percentile(
+        self, results_list, credits_list, anime_map, role_profiles, career_data
+    ):
         features = _build_person_features(
             results_list, credits_list, anime_map, role_profiles, career_data
         )
@@ -179,7 +197,9 @@ class TestPeerPercentile:
         for pid in features:
             assert pid in result
 
-    def test_highest_in_cohort_gets_high_percentile(self, results_list, credits_list, anime_map, role_profiles, career_data):
+    def test_highest_in_cohort_gets_high_percentile(
+        self, results_list, credits_list, anime_map, role_profiles, career_data
+    ):
         features = _build_person_features(
             results_list, credits_list, anime_map, role_profiles, career_data
         )
@@ -222,7 +242,9 @@ class TestPeerPercentile:
 
 
 class TestOpportunityResidual:
-    def test_basic_regression(self, results_list, credits_list, anime_map, role_profiles, career_data):
+    def test_basic_regression(
+        self, results_list, credits_list, anime_map, role_profiles, career_data
+    ):
         features = _build_person_features(
             results_list, credits_list, anime_map, role_profiles, career_data
         )
@@ -231,7 +253,9 @@ class TestOpportunityResidual:
         assert r_squared is not None
         assert 0 <= r_squared <= 1.0
 
-    def test_residuals_are_z_scores(self, results_list, credits_list, anime_map, role_profiles, career_data):
+    def test_residuals_are_z_scores(
+        self, results_list, credits_list, anime_map, role_profiles, career_data
+    ):
         """Standardized residuals should have mean ~0 and std ~1."""
         import numpy as np
 
@@ -331,7 +355,9 @@ class TestIndependentValue:
 
 
 class TestComputeIndividualProfiles:
-    def test_full_integration(self, results_list, credits_list, anime_map, role_profiles, career_data):
+    def test_full_integration(
+        self, results_list, credits_list, anime_map, role_profiles, career_data
+    ):
         result = compute_individual_profiles(
             results=results_list,
             credits=credits_list,
@@ -344,7 +370,9 @@ class TestComputeIndividualProfiles:
         assert result.cohort_count > 0
         assert len(result.profiles) == 15
 
-    def test_profiles_have_all_fields(self, results_list, credits_list, anime_map, role_profiles, career_data):
+    def test_profiles_have_all_fields(
+        self, results_list, credits_list, anime_map, role_profiles, career_data
+    ):
         result = compute_individual_profiles(
             results=results_list,
             credits=credits_list,
@@ -359,7 +387,9 @@ class TestComputeIndividualProfiles:
             assert "consistency" in profile
             assert "independent_value" in profile
 
-    def test_r_squared_reasonable(self, results_list, credits_list, anime_map, role_profiles, career_data):
+    def test_r_squared_reasonable(
+        self, results_list, credits_list, anime_map, role_profiles, career_data
+    ):
         result = compute_individual_profiles(
             results=results_list,
             credits=credits_list,
@@ -370,7 +400,9 @@ class TestComputeIndividualProfiles:
         if result.model_r_squared is not None:
             assert 0 <= result.model_r_squared <= 1.0
 
-    def test_serializable(self, results_list, credits_list, anime_map, role_profiles, career_data):
+    def test_serializable(
+        self, results_list, credits_list, anime_map, role_profiles, career_data
+    ):
         """Result should be JSON-serializable via asdict."""
         from dataclasses import asdict
         import json

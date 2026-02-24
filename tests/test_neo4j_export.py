@@ -20,7 +20,9 @@ def _sample_data():
         Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="test"),
         Credit(person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"),
         Credit(person_id="p1", anime_id="a2", role=Role.DIRECTOR, source="test"),
-        Credit(person_id="p2", anime_id="a2", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p2", anime_id="a2", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
         Credit(person_id="p3", anime_id="a2", role=Role.IN_BETWEEN, source="test"),
     ]
     scores = [

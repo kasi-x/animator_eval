@@ -8,32 +8,38 @@ def _make_results():
     results = []
     # Normal cluster: scores around 50
     for i in range(20):
-        results.append({
-            "person_id": f"p{i}",
-            "name": f"Person {i}",
-            "authority": 45 + i * 0.5,
-            "trust": 40 + i * 0.5,
-            "skill": 50 + i * 0.3,
-            "composite": 45 + i * 0.4,
-        })
+        results.append(
+            {
+                "person_id": f"p{i}",
+                "name": f"Person {i}",
+                "authority": 45 + i * 0.5,
+                "trust": 40 + i * 0.5,
+                "skill": 50 + i * 0.3,
+                "composite": 45 + i * 0.4,
+            }
+        )
     # High outlier
-    results.append({
-        "person_id": "p_high",
-        "name": "High Outlier",
-        "authority": 99.0,
-        "trust": 95.0,
-        "skill": 98.0,
-        "composite": 97.0,
-    })
+    results.append(
+        {
+            "person_id": "p_high",
+            "name": "High Outlier",
+            "authority": 99.0,
+            "trust": 95.0,
+            "skill": 98.0,
+            "composite": 97.0,
+        }
+    )
     # Low outlier
-    results.append({
-        "person_id": "p_low",
-        "name": "Low Outlier",
-        "authority": 1.0,
-        "trust": 2.0,
-        "skill": 1.0,
-        "composite": 1.5,
-    })
+    results.append(
+        {
+            "person_id": "p_low",
+            "name": "Low Outlier",
+            "authority": 1.0,
+            "trust": 2.0,
+            "skill": 1.0,
+            "composite": 1.5,
+        }
+    )
     return results
 
 

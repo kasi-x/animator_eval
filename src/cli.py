@@ -65,45 +65,45 @@ def stats(lang: str = lang_option) -> None:
     # Use i18n for output
     console.print(f"\n[bold blue]{t('cli.stats.title')}[/bold blue]\n")
 
-    summary = Table(title=t('cli.stats.title'))
-    summary.add_column(t('cli.stats.entity'), style="cyan")
-    summary.add_column(t('cli.stats.count'), justify="right", style="green")
-    summary.add_row(t('cli.stats.total_persons'), f"{n_persons:,}")
-    summary.add_row(t('cli.stats.total_anime'), f"{n_anime:,}")
-    summary.add_row(t('cli.stats.total_credits'), f"{n_credits:,}")
-    summary.add_row(t('cli.stats.scores'), f"{n_scores:,}")
+    summary = Table(title=t("cli.stats.title"))
+    summary.add_column(t("cli.stats.entity"), style="cyan")
+    summary.add_column(t("cli.stats.count"), justify="right", style="green")
+    summary.add_row(t("cli.stats.total_persons"), f"{n_persons:,}")
+    summary.add_row(t("cli.stats.total_anime"), f"{n_anime:,}")
+    summary.add_row(t("cli.stats.total_credits"), f"{n_credits:,}")
+    summary.add_row(t("cli.stats.scores"), f"{n_scores:,}")
     console.print(summary)
 
     if role_dist:
-        roles_table = Table(title=t('cli.stats.credits_by_role'))
-        roles_table.add_column(t('cli.stats.role'), style="cyan")
-        roles_table.add_column(t('cli.stats.count'), justify="right", style="green")
+        roles_table = Table(title=t("cli.stats.credits_by_role"))
+        roles_table.add_column(t("cli.stats.role"), style="cyan")
+        roles_table.add_column(t("cli.stats.count"), justify="right", style="green")
         for row in role_dist:
             roles_table.add_row(row["role"], f"{row['cnt']:,}")
         console.print(roles_table)
 
     if source_dist:
-        src_table = Table(title=t('cli.stats.credits_by_source'))
-        src_table.add_column(t('cli.stats.source'), style="cyan")
-        src_table.add_column(t('cli.stats.count'), justify="right", style="green")
+        src_table = Table(title=t("cli.stats.credits_by_source"))
+        src_table.add_column(t("cli.stats.source"), style="cyan")
+        src_table.add_column(t("cli.stats.count"), justify="right", style="green")
         for row in source_dist:
             src_table.add_row(row["source"] or "(empty)", f"{row['cnt']:,}")
         console.print(src_table)
 
     if year_dist:
-        year_table = Table(title=t('cli.stats.anime_by_year'))
-        year_table.add_column(t('cli.stats.year'), style="cyan")
-        year_table.add_column(t('cli.stats.count'), justify="right", style="green")
+        year_table = Table(title=t("cli.stats.anime_by_year"))
+        year_table.add_column(t("cli.stats.year"), style="cyan")
+        year_table.add_column(t("cli.stats.count"), justify="right", style="green")
         for row in year_dist:
             year_table.add_row(str(row["year"]), f"{row['cnt']:,}")
         console.print(year_table)
 
     if data_sources:
-        ds_table = Table(title=t('cli.stats.data_sources'))
-        ds_table.add_column(t('cli.stats.source'), style="cyan")
-        ds_table.add_column(t('cli.stats.last_scraped'), style="dim")
-        ds_table.add_column(t('cli.stats.items'), justify="right", style="green")
-        ds_table.add_column(t('cli.stats.status'), style="yellow")
+        ds_table = Table(title=t("cli.stats.data_sources"))
+        ds_table.add_column(t("cli.stats.source"), style="cyan")
+        ds_table.add_column(t("cli.stats.last_scraped"), style="dim")
+        ds_table.add_column(t("cli.stats.items"), justify="right", style="green")
+        ds_table.add_column(t("cli.stats.status"), style="yellow")
         for ds in data_sources:
             ds_table.add_row(
                 ds["source"],
@@ -117,8 +117,15 @@ def stats(lang: str = lang_option) -> None:
 @app.command()
 def ranking(
     top_n: int = typer.Option(30, "--top", "-n", help="表示件数"),
-    role: str = typer.Option(None, "--role", "-r", help="役職カテゴリでフィルタ (director/animator/designer/technical)"),
-    sort_by: str = typer.Option("composite", "--sort", "-s", help="ソート軸 (composite/authority/trust/skill)"),
+    role: str = typer.Option(
+        None,
+        "--role",
+        "-r",
+        help="役職カテゴリでフィルタ (director/animator/designer/technical)",
+    ),
+    sort_by: str = typer.Option(
+        "composite", "--sort", "-s", help="ソート軸 (composite/authority/trust/skill)"
+    ),
     year_from: int = typer.Option(None, "--year-from", help="キャリア開始年の下限"),
     year_to: int = typer.Option(None, "--year-to", help="最新活動年の上限"),
 ) -> None:
@@ -129,7 +136,9 @@ def ranking(
 
     valid_sort = {"composite", "authority", "trust", "skill"}
     if sort_by not in valid_sort:
-        console.print(f"[red]Invalid sort axis: {sort_by}. Use: {', '.join(valid_sort)}[/red]")
+        console.print(
+            f"[red]Invalid sort axis: {sort_by}. Use: {', '.join(valid_sort)}[/red]"
+        )
         raise typer.Exit(1)
 
     if role or year_from or year_to:
@@ -140,7 +149,9 @@ def ranking(
 
         scores_path = JSON_DIR / "scores.json"
         if not scores_path.exists():
-            console.print("[yellow]No scores.json found. Run 'pixi run pipeline' first.[/yellow]")
+            console.print(
+                "[yellow]No scores.json found. Run 'pixi run pipeline' first.[/yellow]"
+            )
             raise typer.Exit()
 
         all_data = json_mod.loads(scores_path.read_text())
@@ -149,13 +160,17 @@ def ranking(
             filtered = [r for r in filtered if r.get("primary_role") == role]
         if year_from:
             filtered = [
-                r for r in filtered
-                if r.get("career", {}).get("first_year") and r["career"]["first_year"] >= year_from
+                r
+                for r in filtered
+                if r.get("career", {}).get("first_year")
+                and r["career"]["first_year"] >= year_from
             ]
         if year_to:
             filtered = [
-                r for r in filtered
-                if r.get("career", {}).get("latest_year") and r["career"]["latest_year"] <= year_to
+                r
+                for r in filtered
+                if r.get("career", {}).get("latest_year")
+                and r["career"]["latest_year"] <= year_to
             ]
         filtered.sort(key=lambda x: x.get(sort_by, 0), reverse=True)
         rows = filtered[:top_n]
@@ -184,7 +199,9 @@ def ranking(
             rows = [dict(r) for r in rows]
 
     if not rows:
-        console.print("[yellow]No scores found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No scores found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     title = "Animetor Eval — ネットワーク評価ランキング"
@@ -206,7 +223,12 @@ def ranking(
     table.add_column("Composite", justify="right", style="bold magenta")
 
     for i, row in enumerate(rows, 1):
-        name = row.get("name_ja") or row.get("name_en") or row.get("name") or row.get("person_id", "?")
+        name = (
+            row.get("name_ja")
+            or row.get("name_en")
+            or row.get("name")
+            or row.get("person_id", "?")
+        )
         table.add_row(
             str(i),
             name,
@@ -294,11 +316,13 @@ def profile(person_id: str = typer.Argument(help="人物ID (例: anilist:p100)")
         for dir_id, circle in circles_data.items():
             for member in circle.get("members", []):
                 if member["person_id"] == person_id:
-                    memberships.append({
-                        "director": circle.get("director_name", dir_id),
-                        "shared_works": member["shared_works"],
-                        "hit_rate": member["hit_rate"],
-                    })
+                    memberships.append(
+                        {
+                            "director": circle.get("director_name", dir_id),
+                            "shared_works": member["shared_works"],
+                            "hit_rate": member["hit_rate"],
+                        }
+                    )
 
         if memberships:
             console.print("\n[bold]Director Circles:[/bold]")
@@ -307,7 +331,9 @@ def profile(person_id: str = typer.Argument(help="人物ID (例: anilist:p100)")
             ct.add_column("Shared Works", justify="right")
             ct.add_column("Hit Rate", justify="right")
             for m in sorted(memberships, key=lambda x: x["shared_works"], reverse=True):
-                ct.add_row(m["director"], str(m["shared_works"]), f"{m['hit_rate']:.0%}")
+                ct.add_row(
+                    m["director"], str(m["shared_works"]), f"{m['hit_rate']:.0%}"
+                )
             console.print(ct)
 
     # Score explanation
@@ -316,11 +342,15 @@ def profile(person_id: str = typer.Argument(help="人物ID (例: anilist:p100)")
         import json as json_mod
 
         scores_data = json_mod.loads(scores_path.read_text())
-        person_data = next((r for r in scores_data if r["person_id"] == person_id), None)
+        person_data = next(
+            (r for r in scores_data if r["person_id"] == person_id), None
+        )
         if person_data and person_data.get("career"):
             career = person_data["career"]
             console.print("\n[bold]Career:[/bold]")
-            console.print(f"  Active: {career.get('first_year', '?')} - {career.get('latest_year', '?')}")
+            console.print(
+                f"  Active: {career.get('first_year', '?')} - {career.get('latest_year', '?')}"
+            )
             console.print(f"  Active years: {career.get('active_years', '?')}")
             console.print(f"  Highest stage: {career.get('highest_stage', '?')}")
             if career.get("highest_roles"):
@@ -345,7 +375,9 @@ def search(
         console.print(f"[yellow]No results for: {query}[/yellow]")
         raise typer.Exit()
 
-    console.print(f"\n[bold blue]Search results for '{query}' ({len(rows)} found):[/bold blue]\n")
+    console.print(
+        f"\n[bold blue]Search results for '{query}' ({len(rows)} found):[/bold blue]\n"
+    )
 
     table = Table()
     table.add_column("ID", style="dim")
@@ -381,10 +413,14 @@ def compare(
         init_db(conn)
 
         def _load_person_data(pid: str) -> dict | None:
-            person = conn.execute("SELECT * FROM persons WHERE id = ?", (pid,)).fetchone()
+            person = conn.execute(
+                "SELECT * FROM persons WHERE id = ?", (pid,)
+            ).fetchone()
             if not person:
                 return None
-            score = conn.execute("SELECT * FROM scores WHERE person_id = ?", (pid,)).fetchone()
+            score = conn.execute(
+                "SELECT * FROM scores WHERE person_id = ?", (pid,)
+            ).fetchone()
             credit_count = conn.execute(
                 "SELECT COUNT(*) FROM credits WHERE person_id = ?", (pid,)
             ).fetchone()[0]
@@ -435,7 +471,9 @@ def compare(
         diff_str = f"{diff:+.1f}"
         table.add_row(axis.capitalize(), f"{va:.1f}", f"{vb:.1f}", diff_str)
 
-    table.add_row("Credits", str(data_a["credit_count"]), str(data_b["credit_count"]), "")
+    table.add_row(
+        "Credits", str(data_a["credit_count"]), str(data_b["credit_count"]), ""
+    )
     console.print(table)
 
     # 役職比較
@@ -468,14 +506,18 @@ def similar(
 
     scores_path = JSON_DIR / "scores.json"
     if not scores_path.exists():
-        console.print("[yellow]No scores.json found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No scores.json found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     results = json_mod.loads(scores_path.read_text())
     similar_list = find_similar_persons(person_id, results, top_n)
 
     if not similar_list:
-        console.print(f"[yellow]Person not found or no similar persons: {person_id}[/yellow]")
+        console.print(
+            f"[yellow]Person not found or no similar persons: {person_id}[/yellow]"
+        )
         raise typer.Exit()
 
     # Get target name
@@ -483,9 +525,7 @@ def similar(
     target_name = target.get("name") or person_id
 
     console.print(f"\n[bold blue]Similar to: {target_name}[/bold blue]")
-    console.print(
-        "[dim]※ コサイン類似度によるスコアプロファイル比較[/dim]\n"
-    )
+    console.print("[dim]※ コサイン類似度によるスコアプロファイル比較[/dim]\n")
 
     table = Table()
     table.add_column("#", justify="right", style="dim")
@@ -512,7 +552,9 @@ def similar(
 
 @app.command()
 def export(
-    fmt: str = typer.Option("json", "--format", "-f", help="出力形式 (json/text/csv/all)"),
+    fmt: str = typer.Option(
+        "json", "--format", "-f", help="出力形式 (json/text/csv/all)"
+    ),
     output_dir: str = typer.Option(None, "--output", "-o", help="出力ディレクトリ"),
 ) -> None:
     """スコアデータをファイルにエクスポートする."""
@@ -520,7 +562,12 @@ def export(
     from pathlib import Path
 
     from src.database import db_connection, init_db
-    from src.report import generate_csv_report, generate_html_report, generate_json_report, generate_text_report
+    from src.report import (
+        generate_csv_report,
+        generate_html_report,
+        generate_json_report,
+        generate_text_report,
+    )
 
     with db_connection() as conn:
         init_db(conn)
@@ -535,7 +582,9 @@ def export(
         ).fetchall()
 
     if not rows:
-        console.print("[yellow]No scores found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No scores found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     results = [
@@ -598,7 +647,9 @@ def timeline(
     with db_connection() as conn:
         init_db(conn)
 
-        person = conn.execute("SELECT * FROM persons WHERE id = ?", (person_id,)).fetchone()
+        person = conn.execute(
+            "SELECT * FROM persons WHERE id = ?", (person_id,)
+        ).fetchone()
         if not person:
             console.print(f"[red]Person not found: {person_id}[/red]")
             raise typer.Exit(1)
@@ -621,11 +672,13 @@ def timeline(
 
     for c in credits:
         year = c["year"]
-        credits_by_year[year].append({
-            "anime_title": c["title_ja"] or c["title_en"] or "",
-            "role": c["role"],
-            "score": c["score"],
-        })
+        credits_by_year[year].append(
+            {
+                "anime_title": c["title_ja"] or c["title_en"] or "",
+                "role": c["role"],
+                "score": c["score"],
+            }
+        )
         try:
             role_enum = Role(c["role"])
         except ValueError:
@@ -661,7 +714,9 @@ def history(
     with db_connection() as conn:
         init_db(conn)
 
-        person = conn.execute("SELECT * FROM persons WHERE id = ?", (person_id,)).fetchone()
+        person = conn.execute(
+            "SELECT * FROM persons WHERE id = ?", (person_id,)
+        ).fetchone()
         if not person:
             console.print(f"[red]Person not found: {person_id}[/red]")
             raise typer.Exit(1)
@@ -714,7 +769,9 @@ def crossval() -> None:
 
     path = JSON_DIR / "crossval.json"
     if not path.exists():
-        console.print("[yellow]No crossval.json found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No crossval.json found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     data = json_mod.loads(path.read_text())
@@ -730,8 +787,12 @@ def crossval() -> None:
     summary.add_row("Folds", str(data.get("n_folds", "?")))
     summary.add_row("Holdout Ratio", f"{data.get('holdout_ratio', 0):.0%}")
     summary.add_row("Total Credits", f"{data.get('total_credits', 0):,}")
-    summary.add_row("Avg Rank Correlation", f"{data.get('avg_rank_correlation', 0):.4f}")
-    summary.add_row("Min Rank Correlation", f"{data.get('min_rank_correlation', 0):.4f}")
+    summary.add_row(
+        "Avg Rank Correlation", f"{data.get('avg_rank_correlation', 0):.4f}"
+    )
+    summary.add_row(
+        "Min Rank Correlation", f"{data.get('min_rank_correlation', 0):.4f}"
+    )
     summary.add_row("Avg Top-10 Overlap", f"{data.get('avg_top10_overlap', 0):.0%}")
     console.print(summary)
 
@@ -760,7 +821,9 @@ def crossval() -> None:
     elif avg_corr >= 0.70:
         console.print("\n[bold yellow]Score stability: Moderate (>0.70)[/bold yellow]")
     else:
-        console.print("\n[bold red]Score stability: Low (<0.70) — scores may be unreliable[/bold red]")
+        console.print(
+            "\n[bold red]Score stability: Low (<0.70) — scores may be unreliable[/bold red]"
+        )
 
 
 @app.command()
@@ -772,15 +835,17 @@ def influence() -> None:
 
     path = JSON_DIR / "influence.json"
     if not path.exists():
-        console.print("[yellow]No influence.json found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No influence.json found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     data = json_mod.loads(path.read_text())
 
-    console.print("\n[bold blue]Influence Tree — Mentor-Mentee Relationships[/bold blue]")
     console.print(
-        "[dim]ディレクターの門下から成長した人材の追跡[/dim]\n"
+        "\n[bold blue]Influence Tree — Mentor-Mentee Relationships[/bold blue]"
     )
+    console.print("[dim]ディレクターの門下から成長した人材の追跡[/dim]\n")
 
     summary = Table(title="Summary")
     summary.add_column("Metric", style="cyan")
@@ -867,7 +932,9 @@ def studios() -> None:
 
     path = JSON_DIR / "studios.json"
     if not path.exists():
-        console.print("[yellow]No studios.json found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No studios.json found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     data = json_mod.loads(path.read_text())
@@ -910,7 +977,9 @@ def versatility(
 
     scores_path = JSON_DIR / "scores.json"
     if not scores_path.exists():
-        console.print("[yellow]No scores.json found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No scores.json found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     results = json_mod.loads(scores_path.read_text())
@@ -960,7 +1029,9 @@ def density(
 
     scores_path = JSON_DIR / "scores.json"
     if not scores_path.exists():
-        console.print("[yellow]No scores.json found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No scores.json found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     results = json_mod.loads(scores_path.read_text())
@@ -1008,7 +1079,9 @@ def outliers() -> None:
 
     scores_path = JSON_DIR / "scores.json"
     if not scores_path.exists():
-        console.print("[yellow]No scores.json found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No scores.json found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     results = json_mod.loads(scores_path.read_text())
@@ -1019,7 +1092,9 @@ def outliers() -> None:
 
     for axis, data in out.get("axis_outliers", {}).items():
         if data["high"] or data["low"]:
-            console.print(f"\n[bold]{axis.capitalize()}[/bold] (bounds: {data['bounds']['iqr_lower']:.1f} - {data['bounds']['iqr_upper']:.1f})")
+            console.print(
+                f"\n[bold]{axis.capitalize()}[/bold] (bounds: {data['bounds']['iqr_lower']:.1f} - {data['bounds']['iqr_upper']:.1f})"
+            )
 
             if data["high"]:
                 ht = Table(title=f"{axis} — High Outliers")
@@ -1027,7 +1102,9 @@ def outliers() -> None:
                 ht.add_column("Value", justify="right", style="red")
                 ht.add_column("Z-score", justify="right")
                 for entry in data["high"][:10]:
-                    ht.add_row(entry["name"], f"{entry['value']:.1f}", f"{entry['zscore']:.2f}")
+                    ht.add_row(
+                        entry["name"], f"{entry['value']:.1f}", f"{entry['zscore']:.2f}"
+                    )
                 console.print(ht)
 
             if data["low"]:
@@ -1036,13 +1113,20 @@ def outliers() -> None:
                 lt.add_column("Value", justify="right", style="blue")
                 lt.add_column("Z-score", justify="right")
                 for entry in data["low"][:10]:
-                    lt.add_row(entry["name"], f"{entry['value']:.1f}", f"{entry['zscore']:.2f}")
+                    lt.add_row(
+                        entry["name"], f"{entry['value']:.1f}", f"{entry['zscore']:.2f}"
+                    )
                 console.print(lt)
 
 
 @app.command()
 def growth(
-    trend_filter: str = typer.Option(None, "--trend", "-t", help="トレンドフィルタ (rising/stable/declining/inactive)"),
+    trend_filter: str = typer.Option(
+        None,
+        "--trend",
+        "-t",
+        help="トレンドフィルタ (rising/stable/declining/inactive)",
+    ),
     top_n: int = typer.Option(30, "--top", "-n", help="表示件数"),
 ) -> None:
     """成長トレンドを表示する."""
@@ -1052,7 +1136,9 @@ def growth(
 
     path = JSON_DIR / "growth.json"
     if not path.exists():
-        console.print("[yellow]No growth.json found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No growth.json found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     data = json_mod.loads(path.read_text())
@@ -1073,9 +1159,13 @@ def growth(
     # Person details
     persons = data.get("persons", {})
     if trend_filter:
-        persons = {pid: d for pid, d in persons.items() if d.get("trend") == trend_filter}
+        persons = {
+            pid: d for pid, d in persons.items() if d.get("trend") == trend_filter
+        }
 
-    items = sorted(persons.items(), key=lambda x: x[1].get("activity_ratio", 0), reverse=True)[:top_n]
+    items = sorted(
+        persons.items(), key=lambda x: x[1].get("activity_ratio", 0), reverse=True
+    )[:top_n]
 
     if items:
         table = Table(title="Person Growth Details")
@@ -1116,7 +1206,9 @@ def teams(
 
     path = JSON_DIR / "teams.json"
     if not path.exists():
-        console.print("[yellow]No teams.json found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No teams.json found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     data = json_mod.loads(path.read_text())
@@ -1150,7 +1242,9 @@ def teams(
                 str(t.get("year", "?")),
                 f"{t.get('anime_score', 0):.1f}",
                 str(t["team_size"]),
-                f"{t.get('avg_person_score', 0):.1f}" if t.get("avg_person_score") else "-",
+                f"{t.get('avg_person_score', 0):.1f}"
+                if t.get("avg_person_score")
+                else "-",
             )
         console.print(table)
 
@@ -1175,7 +1269,9 @@ def decades() -> None:
 
     path = JSON_DIR / "decades.json"
     if not path.exists():
-        console.print("[yellow]No decades.json found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No decades.json found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     data = json_mod.loads(path.read_text())
@@ -1196,7 +1292,9 @@ def decades() -> None:
             f"{info['credit_count']:,}",
             str(info["unique_persons"]),
             str(info["unique_anime"]),
-            f"{info.get('avg_anime_score', 0):.1f}" if info.get("avg_anime_score") else "-",
+            f"{info.get('avg_anime_score', 0):.1f}"
+            if info.get("avg_anime_score")
+            else "-",
         )
 
     console.print(table)
@@ -1214,7 +1312,9 @@ def tags(
 
     path = JSON_DIR / "tags.json"
     if not path.exists():
-        console.print("[yellow]No tags.json found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No tags.json found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     data = json_mod.loads(path.read_text())
@@ -1235,8 +1335,12 @@ def tags(
     # Filtered persons
     person_tags = data.get("person_tags", {})
     if tag_filter:
-        filtered = {pid: tags for pid, tags in person_tags.items() if tag_filter in tags}
-        console.print(f"\n[bold]Persons with tag '{tag_filter}': {len(filtered)}[/bold]")
+        filtered = {
+            pid: tags for pid, tags in person_tags.items() if tag_filter in tags
+        }
+        console.print(
+            f"\n[bold]Persons with tag '{tag_filter}': {len(filtered)}[/bold]"
+        )
         for pid in list(filtered)[:top_n]:
             console.print(f"  {pid}: {', '.join(filtered[pid])}")
 
@@ -1252,13 +1356,17 @@ def bridges(
 
     path = JSON_DIR / "bridges.json"
     if not path.exists():
-        console.print("[yellow]No bridges.json found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No bridges.json found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     data = json_mod.loads(path.read_text())
 
     console.print("\n[bold blue]Community Bridge Persons[/bold blue]")
-    console.print("[dim]異なるコラボレーション・コミュニティをつなぐキーパーソン[/dim]\n")
+    console.print(
+        "[dim]異なるコラボレーション・コミュニティをつなぐキーパーソン[/dim]\n"
+    )
 
     stats = data.get("stats", {})
     if stats:
@@ -1302,7 +1410,9 @@ def mentorships(
 
     path = JSON_DIR / "mentorships.json"
     if not path.exists():
-        console.print("[yellow]No mentorships.json found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No mentorships.json found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     data = json_mod.loads(path.read_text())
@@ -1350,7 +1460,9 @@ def milestones(
 
     path = JSON_DIR / "milestones.json"
     if not path.exists():
-        console.print("[yellow]No milestones.json found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No milestones.json found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     data = json_mod.loads(path.read_text())
@@ -1383,7 +1495,9 @@ def net_evolution() -> None:
 
     path = JSON_DIR / "network_evolution.json"
     if not path.exists():
-        console.print("[yellow]No network_evolution.json found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No network_evolution.json found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     data = json_mod.loads(path.read_text())
@@ -1417,7 +1531,9 @@ def net_evolution() -> None:
         console.print("\n[bold]Trends:[/bold]")
         console.print(f"  Person growth: +{trends.get('person_growth', 0)}")
         console.print(f"  Edge growth: +{trends.get('edge_growth', 0)}")
-        console.print(f"  Avg new persons/year: {trends.get('avg_new_persons_per_year', 0)}")
+        console.print(
+            f"  Avg new persons/year: {trends.get('avg_new_persons_per_year', 0)}"
+        )
 
 
 @app.command(name="genre-affinity")
@@ -1431,7 +1547,9 @@ def genre_affinity_cmd(
 
     path = JSON_DIR / "genre_affinity.json"
     if not path.exists():
-        console.print("[yellow]No genre_affinity.json found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No genre_affinity.json found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     data = json_mod.loads(path.read_text())
@@ -1476,7 +1594,9 @@ def productivity(
 
     path = JSON_DIR / "productivity.json"
     if not path.exists():
-        console.print("[yellow]No productivity.json found. Run 'pixi run pipeline' first.[/yellow]")
+        console.print(
+            "[yellow]No productivity.json found. Run 'pixi run pipeline' first.[/yellow]"
+        )
         raise typer.Exit()
 
     data = json_mod.loads(path.read_text())
@@ -1484,7 +1604,9 @@ def productivity(
     console.print("\n[bold blue]Productivity Ranking[/bold blue]")
     console.print("[dim]クレジット密度による生産性指標[/dim]\n")
 
-    items = sorted(data.items(), key=lambda x: x[1]["credits_per_year"], reverse=True)[:top_n]
+    items = sorted(data.items(), key=lambda x: x[1]["credits_per_year"], reverse=True)[
+        :top_n
+    ]
 
     table = Table()
     table.add_column("#", justify="right", style="dim")
@@ -1523,21 +1645,35 @@ def data_quality() -> None:
         total_persons = stats.get("persons", 0)
         total_anime = stats.get("anime", 0)
 
-        credits_with_source = conn.execute(
-            "SELECT COUNT(*) FROM credits WHERE source != ''"
-        ).fetchone()[0] if total_credits else 0
+        credits_with_source = (
+            conn.execute("SELECT COUNT(*) FROM credits WHERE source != ''").fetchone()[
+                0
+            ]
+            if total_credits
+            else 0
+        )
 
-        persons_with_score = conn.execute(
-            "SELECT COUNT(*) FROM scores"
-        ).fetchone()[0] if total_persons else 0
+        persons_with_score = (
+            conn.execute("SELECT COUNT(*) FROM scores").fetchone()[0]
+            if total_persons
+            else 0
+        )
 
-        anime_with_year = conn.execute(
-            "SELECT COUNT(*) FROM anime WHERE year IS NOT NULL"
-        ).fetchone()[0] if total_anime else 0
+        anime_with_year = (
+            conn.execute(
+                "SELECT COUNT(*) FROM anime WHERE year IS NOT NULL"
+            ).fetchone()[0]
+            if total_anime
+            else 0
+        )
 
-        anime_with_score = conn.execute(
-            "SELECT COUNT(*) FROM anime WHERE score IS NOT NULL"
-        ).fetchone()[0] if total_anime else 0
+        anime_with_score = (
+            conn.execute(
+                "SELECT COUNT(*) FROM anime WHERE score IS NOT NULL"
+            ).fetchone()[0]
+            if total_anime
+            else 0
+        )
 
         source_count = conn.execute(
             "SELECT COUNT(DISTINCT source) FROM credits WHERE source != ''"
@@ -1637,9 +1773,13 @@ def freshness(lang: str = lang_option) -> None:
     if stale_count == 0:
         console.print("\n[bold green]All sources are fresh.[/bold green]")
     elif stale_count == len(reports):
-        console.print(f"\n[bold red]All {stale_count} sources are stale or never scraped.[/bold red]")
+        console.print(
+            f"\n[bold red]All {stale_count} sources are stale or never scraped.[/bold red]"
+        )
     else:
-        console.print(f"\n[bold yellow]{stale_count} of {len(reports)} sources need attention.[/bold yellow]")
+        console.print(
+            f"\n[bold yellow]{stale_count} of {len(reports)} sources need attention.[/bold yellow]"
+        )
 
 
 if __name__ == "__main__":
@@ -1648,10 +1788,18 @@ if __name__ == "__main__":
 
 @app.command(name="resolve-check")
 def entity_resolution_check(
-    export_csv: str = typer.Option(None, "--export", "-e", help="Export matches to CSV for review"),
-    min_confidence: float = typer.Option(0.0, "--min-conf", help="Minimum confidence to export"),
-    max_confidence: float = typer.Option(1.0, "--max-conf", help="Maximum confidence to export"),
-    review_csv: str = typer.Option(None, "--review", "-r", help="Calculate precision from reviewed CSV"),
+    export_csv: str = typer.Option(
+        None, "--export", "-e", help="Export matches to CSV for review"
+    ),
+    min_confidence: float = typer.Option(
+        0.0, "--min-conf", help="Minimum confidence to export"
+    ),
+    max_confidence: float = typer.Option(
+        1.0, "--max-conf", help="Maximum confidence to export"
+    ),
+    review_csv: str = typer.Option(
+        None, "--review", "-r", help="Calculate precision from reviewed CSV"
+    ),
 ) -> None:
     """Entity resolution evaluation report."""
     setup_logging()
@@ -1686,7 +1834,9 @@ def entity_resolution_check(
             id=row["id"],
             name_ja=row["name_ja"],
             name_en=row["name_en"],
-            aliases=json.loads(row["aliases"]) if row["aliases"] and row["aliases"] != "[]" else [],
+            aliases=json.loads(row["aliases"])
+            if row["aliases"] and row["aliases"] != "[]"
+            else [],
         )
         for row in person_rows
     ]
@@ -1696,11 +1846,11 @@ def entity_resolution_check(
     # Run resolution with tracking
     exact = exact_match_cluster(persons)
     cross = cross_source_match(persons)
-    
+
     already_matched = set(exact) | set(cross)
     remaining = [p for p in persons if p.id not in already_matched]
     romaji = romaji_match(remaining)
-    
+
     already_matched = already_matched | set(romaji)
     remaining = [p for p in persons if p.id not in already_matched]
     similarity = similarity_based_cluster(remaining, threshold=0.95)
@@ -1736,7 +1886,9 @@ def entity_resolution_check(
 def neo4j_export(
     uri: str = typer.Option("bolt://localhost:7687", help="Neo4j URI"),
     user: str = typer.Option("neo4j", help="Neo4j username"),
-    password: str = typer.Option(None, help="Neo4j password (or set NEO4J_PASSWORD env var)"),
+    password: str = typer.Option(
+        None, help="Neo4j password (or set NEO4J_PASSWORD env var)"
+    ),
     clear: bool = typer.Option(False, "--clear", help="Clear database before export"),
 ) -> None:
     """Export data to Neo4j database (direct connection).
@@ -1748,7 +1900,14 @@ def neo4j_export(
     """
     setup_logging()
 
-    from src.database import db_connection, init_db, get_all_anime, get_all_credits, get_all_persons, get_all_scores
+    from src.database import (
+        db_connection,
+        init_db,
+        get_all_anime,
+        get_all_credits,
+        get_all_persons,
+        get_all_scores,
+    )
 
     console.print("\n[bold blue]Neo4j Direct Export[/bold blue]\n")
 
@@ -1762,7 +1921,9 @@ def neo4j_export(
         credits = get_all_credits(conn)
         scores = get_all_scores(conn)
 
-    console.print(f"[green]✓ Loaded {len(persons):,} persons, {len(anime_list):,} anime, {len(credits):,} credits[/green]\n")
+    console.print(
+        f"[green]✓ Loaded {len(persons):,} persons, {len(anime_list):,} anime, {len(credits):,} credits[/green]\n"
+    )
 
     # Connect to Neo4j
     try:
@@ -1796,7 +1957,9 @@ def neo4j_export(
             stats_table.add_row("Collaborations", f"{stats['collaborations']:,}")
             console.print(stats_table)
 
-            console.print("\n[dim]You can now query the graph with Cypher in Neo4j Browser[/dim]")
+            console.print(
+                "\n[dim]You can now query the graph with Cypher in Neo4j Browser[/dim]"
+            )
 
     except ImportError:
         console.print("[red]✗ neo4j driver not installed. Run: pixi install[/red]")
@@ -1812,7 +1975,9 @@ def neo4j_query(
     cypher: str = typer.Argument(..., help="Cypher query to execute"),
     uri: str = typer.Option("bolt://localhost:7687", help="Neo4j URI"),
     user: str = typer.Option("neo4j", help="Neo4j username"),
-    password: str = typer.Option(None, help="Neo4j password (or set NEO4J_PASSWORD env var)"),
+    password: str = typer.Option(
+        None, help="Neo4j password (or set NEO4J_PASSWORD env var)"
+    ),
 ) -> None:
     """Execute Cypher query against Neo4j database.
 
@@ -1859,7 +2024,9 @@ def neo4j_query(
 def neo4j_stats(
     uri: str = typer.Option("bolt://localhost:7687", help="Neo4j URI"),
     user: str = typer.Option("neo4j", help="Neo4j username"),
-    password: str = typer.Option(None, help="Neo4j password (or set NEO4J_PASSWORD env var)"),
+    password: str = typer.Option(
+        None, help="Neo4j password (or set NEO4J_PASSWORD env var)"
+    ),
 ) -> None:
     """Show Neo4j database statistics.
 
@@ -1894,10 +2061,18 @@ def neo4j_stats(
 
 @app.command()
 def performance(
-    latest: bool = typer.Option(True, "--latest", help="Show latest performance report"),
-    all_reports: bool = typer.Option(False, "--all", help="List all performance reports"),
-    report_file: str = typer.Option(None, "--file", "-f", help="Specific report file to display"),
-    percentiles: bool = typer.Option(True, "--percentiles/--no-percentiles", help="Show percentile metrics"),
+    latest: bool = typer.Option(
+        True, "--latest", help="Show latest performance report"
+    ),
+    all_reports: bool = typer.Option(
+        False, "--all", help="List all performance reports"
+    ),
+    report_file: str = typer.Option(
+        None, "--file", "-f", help="Specific report file to display"
+    ),
+    percentiles: bool = typer.Option(
+        True, "--percentiles/--no-percentiles", help="Show percentile metrics"
+    ),
     lang: str = lang_option,
 ) -> None:
     """Display performance reports from pipeline runs.
@@ -1917,7 +2092,9 @@ def performance(
     perf_files = sorted(JSON_DIR.glob("performance_*.json"), reverse=True)
 
     if not perf_files:
-        console.print("[yellow]No performance reports found. Run the pipeline to generate reports.[/yellow]")
+        console.print(
+            "[yellow]No performance reports found. Run the pipeline to generate reports.[/yellow]"
+        )
         return
 
     if all_reports:
@@ -1943,7 +2120,9 @@ def performance(
                 pass
 
         console.print(reports_table)
-        console.print(f"\n[dim]Showing {min(len(perf_files), 20)} of {len(perf_files)} reports[/dim]")
+        console.print(
+            f"\n[dim]Showing {min(len(perf_files), 20)} of {len(perf_files)} reports[/dim]"
+        )
         return
 
     # Load specific report
@@ -1959,7 +2138,9 @@ def performance(
         with open(target_file) as f:
             data = json.load(f)
 
-        console.print(f"\n[bold blue]Performance Report: {target_file.name}[/bold blue]\n")
+        console.print(
+            f"\n[bold blue]Performance Report: {target_file.name}[/bold blue]\n"
+        )
 
         # Summary table
         summary = Table(title="Summary")
@@ -1968,11 +2149,16 @@ def performance(
         summary.add_row("Timestamp", data.get("timestamp", "N/A"))
         summary.add_row("Total Duration", f"{data.get('total_duration', 0):.2f}s")
         summary.add_row("Peak Memory", f"{data.get('peak_memory_mb', 0):.1f} MB")
-        summary.add_row("Memory Delta", f"{data.get('total_memory_delta_mb', 0):+.1f} MB")
+        summary.add_row(
+            "Memory Delta", f"{data.get('total_memory_delta_mb', 0):+.1f} MB"
+        )
 
         cache_stats = data.get("cache_stats", {})
         summary.add_row("Cache Hit Rate", f"{cache_stats.get('hit_rate', 0):.1%}")
-        summary.add_row("Cache Hits/Misses", f"{cache_stats.get('hits', 0)}/{cache_stats.get('misses', 0)}")
+        summary.add_row(
+            "Cache Hits/Misses",
+            f"{cache_stats.get('hits', 0)}/{cache_stats.get('misses', 0)}",
+        )
         console.print(summary)
 
         # Timing table
@@ -1990,7 +2176,9 @@ def performance(
             timing_table.add_column("Min", justify="right", style="dim")
             timing_table.add_column("Max", justify="right", style="red")
 
-            for stats in sorted(timings, key=lambda x: x.get("total", 0), reverse=True)[:20]:
+            for stats in sorted(timings, key=lambda x: x.get("total", 0), reverse=True)[
+                :20
+            ]:
                 row = [
                     stats.get("operation", "N/A"),
                     str(stats.get("count", 0)),
@@ -1998,20 +2186,26 @@ def performance(
                     f"{stats.get('avg', 0):.3f}s",
                 ]
                 if percentiles:
-                    row.extend([
-                        f"{stats.get('median', 0):.3f}s",
-                        f"{stats.get('p95', 0):.3f}s",
-                        f"{stats.get('p99', 0):.3f}s",
-                    ])
-                row.extend([
-                    f"{stats.get('min', 0):.3f}s",
-                    f"{stats.get('max', 0):.3f}s",
-                ])
+                    row.extend(
+                        [
+                            f"{stats.get('median', 0):.3f}s",
+                            f"{stats.get('p95', 0):.3f}s",
+                            f"{stats.get('p99', 0):.3f}s",
+                        ]
+                    )
+                row.extend(
+                    [
+                        f"{stats.get('min', 0):.3f}s",
+                        f"{stats.get('max', 0):.3f}s",
+                    ]
+                )
                 timing_table.add_row(*row)
 
             console.print(timing_table)
             if len(timings) > 20:
-                console.print(f"\n[dim]Showing top 20 of {len(timings)} operations[/dim]")
+                console.print(
+                    f"\n[dim]Showing top 20 of {len(timings)} operations[/dim]"
+                )
 
         # Memory snapshots table
         memory_snapshots = data.get("memory_snapshots", [])
@@ -2036,7 +2230,9 @@ def performance(
 
             console.print(mem_table)
             if len(memory_snapshots) > 30:
-                console.print(f"\n[dim]Showing first 30 of {len(memory_snapshots)} snapshots[/dim]")
+                console.print(
+                    f"\n[dim]Showing first 30 of {len(memory_snapshots)} snapshots[/dim]"
+                )
 
     except Exception as e:
         console.print(f"[red]✗ Failed to load report: {e}[/red]")

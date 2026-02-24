@@ -229,7 +229,11 @@ def compute_fairness_metrics(
                 for s, a in zip(shapley_values, alloc_values)
             ) / len(shapley_values)
 
-            shapley_corr = covariance / (std_shapley * std_alloc) if std_shapley * std_alloc > 0 else 0
+            shapley_corr = (
+                covariance / (std_shapley * std_alloc)
+                if std_shapley * std_alloc > 0
+                else 0
+            )
     else:
         shapley_corr = 1.0
 
@@ -321,13 +325,17 @@ def analyze_fair_compensation(
             role = Role.OTHER
 
         min_comp = request.min_compensation.get(role, 0)
-        adjusted_allocations[person_id] = max(base_allocations.get(person_id, 0), min_comp)
+        adjusted_allocations[person_id] = max(
+            base_allocations.get(person_id, 0), min_comp
+        )
         total_guaranteed += adjusted_allocations[person_id]
 
     # 予算超過の場合、比例配分で調整
     if total_guaranteed > request.total_budget:
         scale = request.total_budget / total_guaranteed
-        adjusted_allocations = {pid: comp * scale for pid, comp in adjusted_allocations.items()}
+        adjusted_allocations = {
+            pid: comp * scale for pid, comp in adjusted_allocations.items()
+        }
 
     # 最高/最低比制約を適用
     if len(adjusted_allocations) > 1:
@@ -483,8 +491,12 @@ def export_compensation_report(
     report = {
         "total_anime": len(analyses),
         "summary": {
-            "avg_gini_coefficient": round(statistics.mean(all_gini), 3) if all_gini else 0,
-            "avg_shapley_correlation": round(statistics.mean(all_corr), 3) if all_corr else 0,
+            "avg_gini_coefficient": round(statistics.mean(all_gini), 3)
+            if all_gini
+            else 0,
+            "avg_shapley_correlation": round(statistics.mean(all_corr), 3)
+            if all_corr
+            else 0,
         },
         "anime_type_distribution": {
             atype: sum(1 for a in analyses.values() if a.anime_type == atype)

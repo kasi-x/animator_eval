@@ -9,7 +9,11 @@ class TestAniListParser:
     def test_parse_anime(self):
         raw = {
             "id": 16498,
-            "title": {"romaji": "Shingeki no Kyojin", "english": "Attack on Titan", "native": "進撃の巨人"},
+            "title": {
+                "romaji": "Shingeki no Kyojin",
+                "english": "Attack on Titan",
+                "native": "進撃の巨人",
+            },
             "seasonYear": 2013,
             "season": "SPRING",
             "episodes": 25,
@@ -38,7 +42,10 @@ class TestAniListParser:
         edges = [
             {
                 "role": "Director",
-                "node": {"id": 100, "name": {"full": "Tetsuro Araki", "native": "荒木哲郎"}},
+                "node": {
+                    "id": 100,
+                    "name": {"full": "Tetsuro Araki", "native": "荒木哲郎"},
+                },
             },
             {
                 "role": "Key Animation",

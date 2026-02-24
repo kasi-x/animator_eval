@@ -109,14 +109,10 @@ def compute_cohort_analysis(
 
         if scores:
             cohort_data["avg_score"] = round(sum(scores) / len(scores), 1)
-            cohort_data["median_score"] = round(
-                sorted(scores)[len(scores) // 2], 1
-            )
+            cohort_data["median_score"] = round(sorted(scores)[len(scores) // 2], 1)
 
         if max_stages:
-            cohort_data["avg_max_stage"] = round(
-                sum(max_stages) / len(max_stages), 1
-            )
+            cohort_data["avg_max_stage"] = round(sum(max_stages) / len(max_stages), 1)
             # Percentage who reached director level (stage 6)
             director_count = sum(1 for s in max_stages if s >= 6)
             cohort_data["director_rate"] = round(

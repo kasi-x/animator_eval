@@ -222,7 +222,10 @@ class TestGenerateHtmlReport:
             {
                 "person_id": "p1",
                 "name": '<script>alert("xss")</script>',
-                "authority": 50.0, "trust": 50.0, "skill": 50.0, "composite": 50.0,
+                "authority": 50.0,
+                "trust": 50.0,
+                "skill": 50.0,
+                "composite": 50.0,
             },
         ]
         out = tmp_path / "report.html"
@@ -243,7 +246,9 @@ class TestGenerateVisualDashboard:
 
         out = tmp_path / "dashboard.html"
         result = generate_visual_dashboard(
-            sample_results, png_dir=png_dir, output_path=out,
+            sample_results,
+            png_dir=png_dir,
+            output_path=out,
         )
         assert result == out
         assert out.exists()
@@ -256,7 +261,9 @@ class TestGenerateVisualDashboard:
         """ダッシュボードにランキングテーブルが含まれる."""
         png_dir = tmp_path / "charts"
         png_dir.mkdir()
-        (png_dir / "score_distribution.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 50)
+        (png_dir / "score_distribution.png").write_bytes(
+            b"\x89PNG\r\n\x1a\n" + b"\x00" * 50
+        )
 
         out = tmp_path / "dashboard.html"
         generate_visual_dashboard(sample_results, png_dir=png_dir, output_path=out)
@@ -289,12 +296,17 @@ class TestGenerateVisualDashboard:
             {
                 "person_id": "p1",
                 "name": '<script>alert("xss")</script>',
-                "authority": 50.0, "trust": 50.0, "skill": 50.0, "composite": 50.0,
+                "authority": 50.0,
+                "trust": 50.0,
+                "skill": 50.0,
+                "composite": 50.0,
             },
         ]
         png_dir = tmp_path / "charts"
         png_dir.mkdir()
-        (png_dir / "score_distribution.png").write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 50)
+        (png_dir / "score_distribution.png").write_bytes(
+            b"\x89PNG\r\n\x1a\n" + b"\x00" * 50
+        )
 
         out = tmp_path / "dashboard.html"
         generate_visual_dashboard(results, png_dir=png_dir, output_path=out)
@@ -306,7 +318,11 @@ class TestGenerateVisualDashboard:
         """複数のチャートタイプが正しく埋め込まれる."""
         png_dir = tmp_path / "charts"
         png_dir.mkdir()
-        for name in ["score_distribution.png", "top_radar.png", "collaboration_network.png"]:
+        for name in [
+            "score_distribution.png",
+            "top_radar.png",
+            "collaboration_network.png",
+        ]:
             (png_dir / name).write_bytes(b"\x89PNG\r\n\x1a\n" + b"\x00" * 50)
 
         out = tmp_path / "dashboard.html"

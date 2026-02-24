@@ -104,9 +104,7 @@ def compute_studio_analysis(
                 sum(anime_scores) / len(anime_scores), 2
             )
         if p_scores:
-            studio_data["avg_person_score"] = round(
-                sum(p_scores) / len(p_scores), 2
-            )
+            studio_data["avg_person_score"] = round(sum(p_scores) / len(p_scores), 2)
         if years:
             studio_data["year_range"] = [min(years), max(years)]
 

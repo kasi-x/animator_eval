@@ -99,7 +99,9 @@ def _generate_match_reason(p1: Person, p2: Person, strategy: MatchStrategy) -> s
     elif strategy == "romaji":
         return f"Romaji normalization: {p1.name_en} ≈ {p2.name_en}"
     elif strategy == "similarity":
-        return f"High similarity: {p1.name_ja or p1.name_en} ≈ {p2.name_ja or p2.name_en}"
+        return (
+            f"High similarity: {p1.name_ja or p1.name_en} ≈ {p2.name_ja or p2.name_en}"
+        )
     elif strategy == "ai_assisted":
         return f"AI decision: {p1.name_ja or p1.name_en} ≈ {p2.name_ja or p2.name_en}"
     return "Unknown strategy"
@@ -173,7 +175,9 @@ def format_resolution_report(report: ResolutionReport) -> str:
     lines.append(f"Total persons: {report.total_persons}")
     lines.append(f"Total matches: {report.total_matches}")
     lines.append(f"Match rate: {report.match_rate * 100:.1f}%")
-    lines.append(f"Unique persons after resolution: {report.total_persons - report.total_matches}")
+    lines.append(
+        f"Unique persons after resolution: {report.total_persons - report.total_matches}"
+    )
     lines.append("")
 
     # Breakdown by strategy
@@ -187,8 +191,12 @@ def format_resolution_report(report: ResolutionReport) -> str:
     lines.append("Sample match decisions (first 20):")
     lines.append("-" * 80)
     for i, decision in enumerate(report.decisions[:20], 1):
-        lines.append(f"{i}. [{decision.strategy}] {decision.source_id} → {decision.canonical_id}")
-        lines.append(f"   Source:    {decision.source_person.name_ja or ''} ({decision.source_person.name_en or ''})")
+        lines.append(
+            f"{i}. [{decision.strategy}] {decision.source_id} → {decision.canonical_id}"
+        )
+        lines.append(
+            f"   Source:    {decision.source_person.name_ja or ''} ({decision.source_person.name_en or ''})"
+        )
         lines.append(
             f"   Canonical: {decision.canonical_person.name_ja or ''} ({decision.canonical_person.name_en or ''})"
         )
@@ -295,6 +303,8 @@ def calculate_precision_from_review(review_csv: str) -> dict[str, float]:
     precision = {}
     for strategy in total_by_strategy:
         if total_by_strategy[strategy] > 0:
-            precision[strategy] = correct_by_strategy[strategy] / total_by_strategy[strategy]
+            precision[strategy] = (
+                correct_by_strategy[strategy] / total_by_strategy[strategy]
+            )
 
     return precision

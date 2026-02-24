@@ -38,16 +38,16 @@ CONVERGENCE_THRESHOLD = 1e-6
 # Example: direction=3.0 means a director-class role carries 3x base commitment.
 # Adjust these to change how much each department contributes to edge weights.
 COMMITMENT_MULTIPLIERS: dict[str, float] = {
-    "direction": 3.0,           # 監督・演出系 — 作品全体の責任
+    "direction": 3.0,  # 監督・演出系 — 作品全体の責任
     "animation_supervision": 2.8,  # 作画監督系 — 作画品質の責任
-    "animation": 2.0,           # アニメーター系 — 作画実務
-    "design": 2.3,              # デザイン系 — ビジュアル設計
-    "technical": 2.0,           # 技術系 — 撮影・CG・エフェクト
-    "art": 1.3,                 # 美術系 — 背景美術
-    "sound": 1.8,               # 音響系 — 音響・音楽
-    "writing": 1.8,             # 脚本系 — 脚本・原作
-    "production": 1.5,          # 制作系 — プロデューサー
-    "other": 1.0,               # その他
+    "animation": 2.0,  # アニメーター系 — 作画実務
+    "design": 2.3,  # デザイン系 — ビジュアル設計
+    "technical": 2.0,  # 技術系 — 撮影・CG・エフェクト
+    "art": 1.3,  # 美術系 — 背景美術
+    "sound": 1.8,  # 音響系 — 音響・音楽
+    "writing": 1.8,  # 脚本系 — 脚本・原作
+    "production": 1.5,  # 制作系 — プロデューサー
+    "other": 1.0,  # その他
 }
 
 # =============================================================================
@@ -93,7 +93,9 @@ ROLE_RANK: dict[str, float] = {
 }
 
 # Role → category mapping — derived from role_groups.ROLE_CATEGORY (single source of truth)
-_ROLE_TO_CATEGORY: dict[str, str] = {role.value: cat for role, cat in ROLE_CATEGORY.items()}
+_ROLE_TO_CATEGORY: dict[str, str] = {
+    role.value: cat for role, cat in ROLE_CATEGORY.items()
+}
 
 
 def _compute_role_weights() -> dict[str, float]:

@@ -185,7 +185,9 @@ class TestAIAssistedCluster:
             Person(id="anilist:1", name_ja="宮崎駿"),
         ]
 
-        result = ai_assisted_cluster(persons, same_source_only=False, min_confidence=0.8)
+        result = ai_assisted_cluster(
+            persons, same_source_only=False, min_confidence=0.8
+        )
         assert "anilist:1" in result
         assert result["anilist:1"] == "mal:1"
 

@@ -105,12 +105,18 @@ class CareerTrajectory:
     trend_before_major: float = 0.0  # Pre-existing trend (selection indicator)
 
     # Enhanced controls for confounders
-    career_stage_at_entry: CareerStage = CareerStage.NEWCOMER  # Career stage when joining major studio
+    career_stage_at_entry: CareerStage = (
+        CareerStage.NEWCOMER
+    )  # Career stage when joining major studio
     years_of_experience_at_entry: int = 0  # Years since debut when joining major
-    potential_score_at_entry: float = 0.0  # Potential value score at entry (if available)
+    potential_score_at_entry: float = (
+        0.0  # Potential value score at entry (if available)
+    )
     growth_acceleration_pre_entry: float = 0.0  # Growth acceleration before entry
     environmental_adaptation_score: float = 0.0  # Stability across transitions (0-100)
-    collaboration_synergy_score: float = 0.0  # Performance boost in collaborative settings
+    collaboration_synergy_score: float = (
+        0.0  # Performance boost in collaborative settings
+    )
 
 
 @dataclass
@@ -258,9 +264,9 @@ def compute_collaboration_synergy(
     for credit in person_credits:
         anime = anime_map.get(credit.anime_id)
         if anime:
-            anime_team_sizes[credit.anime_id] = anime_team_sizes.get(
-                credit.anime_id, 0
-            ) + 1
+            anime_team_sizes[credit.anime_id] = (
+                anime_team_sizes.get(credit.anime_id, 0) + 1
+            )
 
     # Compute correlation between team size and performance
     team_sizes = []
@@ -331,9 +337,7 @@ def identify_major_studios(
     }
 
     # Select top N
-    sorted_studios = sorted(
-        studio_avg_scores.items(), key=lambda x: x[1], reverse=True
-    )
+    sorted_studios = sorted(studio_avg_scores.items(), key=lambda x: x[1], reverse=True)
     major_studios = [studio_id for studio_id, _ in sorted_studios[:top_n]]
 
     logger.info(
@@ -493,7 +497,9 @@ def analyze_career_trajectories(
         # Post-major data
         if post_affiliations:
             trajectory.post_years = [a.start_year for a in post_affiliations]
-            trajectory.post_skill_scores = [a.avg_skill_score for a in post_affiliations]
+            trajectory.post_skill_scores = [
+                a.avg_skill_score for a in post_affiliations
+            ]
             trajectory.post_avg_skill = (
                 sum(trajectory.post_skill_scores) / len(trajectory.post_skill_scores)
                 if trajectory.post_skill_scores
@@ -672,13 +678,17 @@ def estimate_causal_effects(
     """
     # 1. Selection effect: Pre-existing trend before major studio
     selection_trends = [t.trend_before_major for t in trajectories]
-    selection_estimate = sum(selection_trends) / len(selection_trends) if selection_trends else 0
-    selection_std = (
-        stats.sem(selection_trends) if len(selection_trends) > 1 else 0
+    selection_estimate = (
+        sum(selection_trends) / len(selection_trends) if selection_trends else 0
     )
-    selection_ci = stats.t.interval(
-        0.95, len(selection_trends) - 1, loc=selection_estimate, scale=selection_std
-    ) if len(selection_trends) > 1 else (0, 0)
+    selection_std = stats.sem(selection_trends) if len(selection_trends) > 1 else 0
+    selection_ci = (
+        stats.t.interval(
+            0.95, len(selection_trends) - 1, loc=selection_estimate, scale=selection_std
+        )
+        if len(selection_trends) > 1
+        else (0, 0)
+    )
     selection_pval = (
         stats.ttest_1samp(selection_trends, 0).pvalue
         if len(selection_trends) > 1
@@ -703,13 +713,20 @@ def estimate_causal_effects(
         t.pre_to_major_change - t.trend_before_major * len(t.pre_skill_scores)
         for t in trajectories
     ]
-    treatment_estimate = sum(treatment_changes) / len(treatment_changes) if treatment_changes else 0
-    treatment_std = (
-        stats.sem(treatment_changes) if len(treatment_changes) > 1 else 0
+    treatment_estimate = (
+        sum(treatment_changes) / len(treatment_changes) if treatment_changes else 0
     )
-    treatment_ci = stats.t.interval(
-        0.95, len(treatment_changes) - 1, loc=treatment_estimate, scale=treatment_std
-    ) if len(treatment_changes) > 1 else (0, 0)
+    treatment_std = stats.sem(treatment_changes) if len(treatment_changes) > 1 else 0
+    treatment_ci = (
+        stats.t.interval(
+            0.95,
+            len(treatment_changes) - 1,
+            loc=treatment_estimate,
+            scale=treatment_std,
+        )
+        if len(treatment_changes) > 1
+        else (0, 0)
+    )
     treatment_pval = (
         stats.ttest_1samp(treatment_changes, 0).pvalue
         if len(treatment_changes) > 1
@@ -734,9 +751,13 @@ def estimate_causal_effects(
     brand_changes = [t.authority_change for t in major_to_minor]
     brand_estimate = sum(brand_changes) / len(brand_changes) if brand_changes else 0
     brand_std = stats.sem(brand_changes) if len(brand_changes) > 1 else 0
-    brand_ci = stats.t.interval(
-        0.95, len(brand_changes) - 1, loc=brand_estimate, scale=brand_std
-    ) if len(brand_changes) > 1 else (0, 0)
+    brand_ci = (
+        stats.t.interval(
+            0.95, len(brand_changes) - 1, loc=brand_estimate, scale=brand_std
+        )
+        if len(brand_changes) > 1
+        else (0, 0)
+    )
     brand_pval = (
         stats.ttest_1samp(brand_changes, 0).pvalue if len(brand_changes) > 1 else 1.0
     )
@@ -824,7 +845,9 @@ def identify_studio_effects(
     )
 
     # Step 2: Build studio affiliations
-    skill_scores = {pid: scores.get("skill", 0) for pid, scores in person_scores.items()}
+    skill_scores = {
+        pid: scores.get("skill", 0) for pid, scores in person_scores.items()
+    }
     authority_scores = {
         pid: scores.get("authority", 0) for pid, scores in person_scores.items()
     }
@@ -833,7 +856,9 @@ def identify_studio_effects(
     )
 
     # Step 3: Analyze trajectories (with enhanced controls)
-    person_names = {pid: scores.get("name", pid) for pid, scores in person_scores.items()}
+    person_names = {
+        pid: scores.get("name", pid) for pid, scores in person_scores.items()
+    }
     trajectories = analyze_career_trajectories(
         affiliations,
         person_names,
@@ -866,21 +891,15 @@ def identify_studio_effects(
     ]
 
     if dominant_effect == EffectType.SELECTION:
-        summary_parts.append(
-            "→ 大手スタジオは既に優秀な人材を採用している（逆選択）"
-        )
+        summary_parts.append("→ 大手スタジオは既に優秀な人材を採用している（逆選択）")
     elif dominant_effect == EffectType.TREATMENT:
-        summary_parts.append(
-            "→ 大手スタジオの教育・環境が実力向上に貢献している"
-        )
+        summary_parts.append("→ 大手スタジオの教育・環境が実力向上に貢献している")
     elif dominant_effect == EffectType.BRAND:
         summary_parts.append(
             "→ スタジオのネームバリューがPageRankスコアを押し上げている"
         )
     elif dominant_effect == EffectType.MIXED:
-        summary_parts.append(
-            "→ 選択効果と処置効果の両方が存在する"
-        )
+        summary_parts.append("→ 選択効果と処置効果の両方が存在する")
 
     summary = "\n".join(summary_parts)
 
@@ -891,9 +910,7 @@ def identify_studio_effects(
     result = IdentificationResult(
         major_studios=major_studios,
         major_studio_names=studio_names,
-        minor_studios=[
-            sid for sid in studio_names if sid not in major_studios
-        ],
+        minor_studios=[sid for sid in studio_names if sid not in major_studios],
         trajectories=trajectories,
         avg_pre_to_major_change=(
             sum(t.pre_to_major_change for t in trajectories) / len(trajectories)

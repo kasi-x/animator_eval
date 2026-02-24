@@ -74,7 +74,9 @@ def find_shortest_path(
         if weight:
             # 重み付き最短経路（Dijkstra）
             path = nx.dijkstra_path(collaboration_graph, source, target, weight=weight)
-            path_weight = nx.dijkstra_path_length(collaboration_graph, source, target, weight=weight)
+            path_weight = nx.dijkstra_path_length(
+                collaboration_graph, source, target, weight=weight
+            )
         else:
             # 重みなし最短経路（BFS）
             path = nx.shortest_path(collaboration_graph, source, target)
@@ -84,12 +86,14 @@ def find_shortest_path(
         shared_works_info = []
         for i in range(len(path) - 1):
             edge_data = collaboration_graph.get_edge_data(path[i], path[i + 1])
-            shared_works_info.append({
-                "from": path[i],
-                "to": path[i + 1],
-                "weight": edge_data.get("weight", 0),
-                "shared_works": edge_data.get("shared_works", 0),
-            })
+            shared_works_info.append(
+                {
+                    "from": path[i],
+                    "to": path[i + 1],
+                    "weight": edge_data.get("weight", 0),
+                    "shared_works": edge_data.get("shared_works", 0),
+                }
+            )
 
         result = CollaborationPath(
             source=source,
@@ -141,7 +145,9 @@ def find_all_shortest_paths(
         return []
 
     if source == target:
-        return [CollaborationPath(source=source, target=target, path=[source], length=0)]
+        return [
+            CollaborationPath(source=source, target=target, path=[source], length=0)
+        ]
 
     try:
         all_paths = nx.all_shortest_paths(collaboration_graph, source, target)
@@ -159,12 +165,14 @@ def find_all_shortest_paths(
                 edge_data = collaboration_graph.get_edge_data(path[i], path[i + 1])
                 weight = edge_data.get("weight", 0)
                 total_weight += weight
-                shared_works_info.append({
-                    "from": path[i],
-                    "to": path[i + 1],
-                    "weight": weight,
-                    "shared_works": edge_data.get("shared_works", 0),
-                })
+                shared_works_info.append(
+                    {
+                        "from": path[i],
+                        "to": path[i + 1],
+                        "weight": weight,
+                        "shared_works": edge_data.get("shared_works", 0),
+                    }
+                )
 
             results.append(
                 CollaborationPath(
@@ -191,7 +199,9 @@ def find_all_shortest_paths(
         logger.warning("path_finding_no_paths", source=source, target=target)
         return []
     except Exception as e:
-        logger.error("path_finding_error_all", source=source, target=target, error=str(e))
+        logger.error(
+            "path_finding_error_all", source=source, target=target, error=str(e)
+        )
         return []
 
 
@@ -218,10 +228,14 @@ def find_all_simple_paths(
         return []
 
     if source == target:
-        return [CollaborationPath(source=source, target=target, path=[source], length=0)]
+        return [
+            CollaborationPath(source=source, target=target, path=[source], length=0)
+        ]
 
     try:
-        all_paths = nx.all_simple_paths(collaboration_graph, source, target, cutoff=cutoff)
+        all_paths = nx.all_simple_paths(
+            collaboration_graph, source, target, cutoff=cutoff
+        )
 
         results = []
         for path in all_paths:
@@ -232,12 +246,14 @@ def find_all_simple_paths(
                 edge_data = collaboration_graph.get_edge_data(path[i], path[i + 1])
                 weight = edge_data.get("weight", 0)
                 total_weight += weight
-                shared_works_info.append({
-                    "from": path[i],
-                    "to": path[i + 1],
-                    "weight": weight,
-                    "shared_works": edge_data.get("shared_works", 0),
-                })
+                shared_works_info.append(
+                    {
+                        "from": path[i],
+                        "to": path[i + 1],
+                        "weight": weight,
+                        "shared_works": edge_data.get("shared_works", 0),
+                    }
+                )
 
             results.append(
                 CollaborationPath(
@@ -264,7 +280,9 @@ def find_all_simple_paths(
         return results
 
     except Exception as e:
-        logger.error("path_finding_error_simple", source=source, target=target, error=str(e))
+        logger.error(
+            "path_finding_error_simple", source=source, target=target, error=str(e)
+        )
         return []
 
 
@@ -325,19 +343,23 @@ def compute_separation_statistics(
                 except nx.NetworkXNoPath:
                     pass
 
-        avg_path_length = sum(sampled_lengths) / len(sampled_lengths) if sampled_lengths else 0
+        avg_path_length = (
+            sum(sampled_lengths) / len(sampled_lengths) if sampled_lengths else 0
+        )
         diameter = max(sampled_lengths) if sampled_lengths else 0
 
     stats = {
         "n_components": n_components,
         "largest_component_size": largest_cc.number_of_nodes(),
         "largest_component_pct": round(
-            100 * largest_cc.number_of_nodes() / collaboration_graph.number_of_nodes(), 1
+            100 * largest_cc.number_of_nodes() / collaboration_graph.number_of_nodes(),
+            1,
         ),
         "avg_path_length": round(avg_path_length, 2),
         "diameter": diameter,
         "avg_degree": round(
-            sum(dict(collaboration_graph.degree()).values()) / collaboration_graph.number_of_nodes(),
+            sum(dict(collaboration_graph.degree()).values())
+            / collaboration_graph.number_of_nodes(),
             1,
         ),
     }
@@ -375,7 +397,9 @@ def find_bottleneck_nodes(
         betweenness = nx.betweenness_centrality(collaboration_graph, weight="weight")
 
     # 上位N件を抽出
-    top_bottlenecks = sorted(betweenness.items(), key=lambda x: x[1], reverse=True)[:top_n]
+    top_bottlenecks = sorted(betweenness.items(), key=lambda x: x[1], reverse=True)[
+        :top_n
+    ]
 
     logger.info("bottleneck_nodes_found", count=len(top_bottlenecks))
     return [(node, round(score, 4)) for node, score in top_bottlenecks]
@@ -384,7 +408,13 @@ def find_bottleneck_nodes(
 def main():
     """スタンドアロン実行用エントリーポイント."""
     from src.analysis.graph import create_person_collaboration_network
-    from src.database import get_all_anime, get_all_credits, get_all_persons, get_connection, init_db
+    from src.database import (
+        get_all_anime,
+        get_all_credits,
+        get_all_persons,
+        get_connection,
+        init_db,
+    )
 
     conn = get_connection()
     init_db(conn)
@@ -405,7 +435,9 @@ def main():
     stats = compute_separation_statistics(collab_graph)
     print("\nネットワーク統計:")
     print(f"  連結成分数: {stats.get('n_components', 'N/A')}")
-    print(f"  最大成分サイズ: {stats.get('largest_component_size', 'N/A')} ({stats.get('largest_component_pct', 'N/A')}%)")
+    print(
+        f"  最大成分サイズ: {stats.get('largest_component_size', 'N/A')} ({stats.get('largest_component_pct', 'N/A')}%)"
+    )
     print(f"  平均経路長: {stats.get('avg_path_length', 'N/A')}")
     print(f"  Diameter: {stats.get('diameter', 'N/A')}")
 
@@ -425,7 +457,9 @@ def main():
         shortest = find_shortest_path(collab_graph, source_id, target_id)
         if shortest:
             print(f"  最短経路長: {shortest.length} ホップ")
-            print(f"  経路: {' → '.join(person_names.get(p, p) for p in shortest.path)}")
+            print(
+                f"  経路: {' → '.join(person_names.get(p, p) for p in shortest.path)}"
+            )
 
     conn.close()
 

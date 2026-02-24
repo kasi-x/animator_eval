@@ -56,7 +56,7 @@ def detect_outliers(
 
         mean = sum(values) / n
         variance = sum((v - mean) ** 2 for v in values) / n
-        std = variance ** 0.5 if variance > 0 else 0.0
+        std = variance**0.5 if variance > 0 else 0.0
 
         high_outliers = []
         low_outliers = []

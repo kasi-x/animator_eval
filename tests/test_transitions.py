@@ -16,13 +16,17 @@ def _make_credits_and_anime():
         # Person 1: in-between → key_animator → animation_director
         Credit(person_id="p1", anime_id="a1", role=Role.IN_BETWEEN, source="test"),
         Credit(person_id="p1", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
-        Credit(person_id="p1", anime_id="a3", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p1", anime_id="a3", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
         # Person 2: in-between → key_animator
         Credit(person_id="p2", anime_id="a1", role=Role.IN_BETWEEN, source="test"),
         Credit(person_id="p2", anime_id="a3", role=Role.KEY_ANIMATOR, source="test"),
         # Person 3: key_animator → animation_director → director
         Credit(person_id="p3", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"),
-        Credit(person_id="p3", anime_id="a2", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p3", anime_id="a2", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
         Credit(person_id="p3", anime_id="a4", role=Role.DIRECTOR, source="test"),
         # Person 4: only one credit (should be skipped)
         Credit(person_id="p4", anime_id="a1", role=Role.IN_BETWEEN, source="test"),

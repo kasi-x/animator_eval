@@ -15,7 +15,10 @@ import structlog
 
 from src.analysis.career import CAREER_STAGE
 from src.models import Anime, Credit
-from src.utils.role_groups import DIRECTOR_ROLES as _DIRECTOR_ROLES, MENTEE_ROLES as _MENTEE_ROLES
+from src.utils.role_groups import (
+    DIRECTOR_ROLES as _DIRECTOR_ROLES,
+    MENTEE_ROLES as _MENTEE_ROLES,
+)
 
 logger = structlog.get_logger()
 
@@ -82,11 +85,7 @@ def _find_mentor_mentee_pairs(
 
 def _get_highest_stage(person_id: str, credits: list[Credit]) -> int:
     """人物の最高キャリアステージを返す."""
-    stages = [
-        CAREER_STAGE.get(c.role, 0)
-        for c in credits
-        if c.person_id == person_id
-    ]
+    stages = [CAREER_STAGE.get(c.role, 0) for c in credits if c.person_id == person_id]
     return max(stages) if stages else 0
 
 
@@ -174,9 +173,7 @@ def compute_influence_tree(
         nurture_rate = director_count / len(mentees) * 100 if mentees else 0.0
         influence = 0.0
         if person_scores:
-            influence = sum(
-                person_scores.get(m["mentee_id"], 0) for m in mentee_list
-            )
+            influence = sum(person_scores.get(m["mentee_id"], 0) for m in mentee_list)
 
         mentors_data[mentor_id] = {
             "mentee_count": len(mentees),

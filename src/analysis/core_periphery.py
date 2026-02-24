@@ -167,7 +167,9 @@ def identify_core_periphery(
         )
 
     # Classify nodes
-    core_members = [pid for pid, score in coreness_scores.items() if score >= core_threshold]
+    core_members = [
+        pid for pid, score in coreness_scores.items() if score >= core_threshold
+    ]
     semi_members = [
         pid
         for pid, score in coreness_scores.items()
@@ -271,7 +273,9 @@ def compute_coreness_metrics(
                     for core in core_structure.core_members
                     if nx.has_path(graph, person_id, core)
                 ]
-                avg_distance = sum(distances) / len(distances) if distances else float("inf")
+                avg_distance = (
+                    sum(distances) / len(distances) if distances else float("inf")
+                )
             except Exception:
                 avg_distance = float("inf")
         else:
@@ -285,7 +289,9 @@ def compute_coreness_metrics(
             core_degree=core_degree,
             periphery_degree=periphery_degree,
             core_ratio=round(core_ratio, 3),
-            closeness_to_core=round(avg_distance, 2) if avg_distance != float("inf") else float("inf"),
+            closeness_to_core=round(avg_distance, 2)
+            if avg_distance != float("inf")
+            else float("inf"),
         )
 
     logger.info("coreness_metrics_computed", persons=len(metrics))
@@ -354,7 +360,11 @@ def analyze_core_accessibility(
     ]
 
     avg_semi_distance = (
-        sum(m.closeness_to_core for m in semi_members if m.closeness_to_core != float("inf"))
+        sum(
+            m.closeness_to_core
+            for m in semi_members
+            if m.closeness_to_core != float("inf")
+        )
         / len([m for m in semi_members if m.closeness_to_core != float("inf")])
         if semi_members
         else 0
@@ -388,7 +398,10 @@ def analyze_core_accessibility(
             semi_with_core_links / len(semi_members) if semi_members else 0, 3
         ),
         "periphery_core_link_rate": round(
-            periphery_with_core_links / len(periphery_members) if periphery_members else 0, 3
+            periphery_with_core_links / len(periphery_members)
+            if periphery_members
+            else 0,
+            3,
         ),
     }
 
@@ -400,7 +413,13 @@ def analyze_core_accessibility(
 def main():
     """スタンドアロン実行用エントリーポイント."""
     from src.analysis.graph import create_person_collaboration_network
-    from src.database import get_all_anime, get_all_credits, get_all_persons, get_connection, init_db
+    from src.database import (
+        get_all_anime,
+        get_all_credits,
+        get_all_persons,
+        get_connection,
+        init_db,
+    )
 
     conn = get_connection()
     init_db(conn)
@@ -419,7 +438,9 @@ def main():
 
     # コア-ペリフェリー分析
     logger.info("identifying_core_periphery")
-    structure = identify_core_periphery(collab_graph, core_threshold=0.7, semi_threshold=0.4)
+    structure = identify_core_periphery(
+        collab_graph, core_threshold=0.7, semi_threshold=0.4
+    )
 
     # コア性指標計算
     logger.info("computing_coreness_metrics")
@@ -458,12 +479,18 @@ def main():
     print("\n=== コアへのアクセシビリティ ===\n")
     accessibility = analyze_core_accessibility(structure, metrics)
 
-    print(f"セミペリフェリー → コア平均距離: {accessibility['avg_semi_distance_to_core']:.2f}")
+    print(
+        f"セミペリフェリー → コア平均距離: {accessibility['avg_semi_distance_to_core']:.2f}"
+    )
     print(
         f"ペリフェリー → コア平均距離: {accessibility['avg_periphery_distance_to_core']:.2f}"
     )
-    print(f"セミペリフェリーのコア直接接続率: {accessibility['semi_core_link_rate']:.1%}")
-    print(f"ペリフェリーのコア直接接続率: {accessibility['periphery_core_link_rate']:.1%}")
+    print(
+        f"セミペリフェリーのコア直接接続率: {accessibility['semi_core_link_rate']:.1%}"
+    )
+    print(
+        f"ペリフェリーのコア直接接続率: {accessibility['periphery_core_link_rate']:.1%}"
+    )
 
     conn.close()
 

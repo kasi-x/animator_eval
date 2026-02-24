@@ -18,17 +18,25 @@ def _make_test_data():
         # Cluster 1
         Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="test"),
         Credit(person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"),
-        Credit(person_id="p3", anime_id="a1", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p3", anime_id="a1", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
         Credit(person_id="p1", anime_id="a2", role=Role.DIRECTOR, source="test"),
         Credit(person_id="p2", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
-        Credit(person_id="p3", anime_id="a2", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p3", anime_id="a2", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
         # Cluster 2
         Credit(person_id="p4", anime_id="a3", role=Role.DIRECTOR, source="test"),
         Credit(person_id="p5", anime_id="a3", role=Role.KEY_ANIMATOR, source="test"),
-        Credit(person_id="p6", anime_id="a3", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p6", anime_id="a3", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
         Credit(person_id="p4", anime_id="a4", role=Role.DIRECTOR, source="test"),
         Credit(person_id="p5", anime_id="a4", role=Role.KEY_ANIMATOR, source="test"),
-        Credit(person_id="p6", anime_id="a4", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p6", anime_id="a4", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
     ]
     return credits, anime_map
 

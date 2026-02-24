@@ -81,14 +81,14 @@ def _anime(
     tags: list[dict] | None = None,
     genres: list[str] | None = None,
 ) -> Anime:
+    resolved_studios = studios or ([studio] if studio else [])
     return Anime(
         id=aid,
         title_ja=f"Anime_{aid}",
         title_en=f"Anime_{aid}",
         year=year,
         score=score,
-        studio=studio,
-        studios=studios or [],
+        studios=resolved_studios,
         tags=tags or [],
         genres=genres or [],
     )
@@ -241,7 +241,9 @@ class TestComputePotentialValueScores:
     def test_betweenness_cache_used(self, basic_setup):
         ps, db, gr, adj, G = basic_setup
         cache = {"p1": 0.9, "p2": 0.1, "p3": 0.05}
-        result = compute_potential_value_scores(ps, db, gr, adj, G, betweenness_cache=cache)
+        result = compute_potential_value_scores(
+            ps, db, gr, adj, G, betweenness_cache=cache
+        )
         # p1 should have higher structural advantage with cache
         assert result["p1"].structural_advantage > 0
 
@@ -249,16 +251,24 @@ class TestComputePotentialValueScores:
         """Person with authority_improvement > 0.1 and skill > 0.6 => HIDDEN_GEM."""
         ps = {"p1": {"authority": 0.3, "trust": 0.3, "skill": 0.7, "composite": 0.4}}
         debiased = {"p1": {"debiased_authority": 0.5}}  # improvement = 0.2 > 0.1
-        growth = {"p1": {"growth_velocity": 0.0, "momentum_score": 0.0, "career_years": 10}}
-        result = compute_potential_value_scores(ps, debiased, growth, {"p1": 0.7}, nx.Graph())
+        growth = {
+            "p1": {"growth_velocity": 0.0, "momentum_score": 0.0, "career_years": 10}
+        }
+        result = compute_potential_value_scores(
+            ps, debiased, growth, {"p1": 0.7}, nx.Graph()
+        )
         assert result["p1"].category == ValueCategory.HIDDEN_GEM
 
     def test_rising_star_category(self):
         """Person with velocity > 2.0 and authority > 0.5 => RISING_STAR."""
         ps = {"p1": {"authority": 0.6, "trust": 0.5, "skill": 0.6, "composite": 0.57}}
         debiased = {"p1": {"debiased_authority": 0.6}}
-        growth = {"p1": {"growth_velocity": 3.0, "momentum_score": 0.5, "career_years": 8}}
-        result = compute_potential_value_scores(ps, debiased, growth, {"p1": 0.6}, nx.Graph())
+        growth = {
+            "p1": {"growth_velocity": 3.0, "momentum_score": 0.5, "career_years": 8}
+        }
+        result = compute_potential_value_scores(
+            ps, debiased, growth, {"p1": 0.6}, nx.Graph()
+        )
         assert result["p1"].category == ValueCategory.RISING_STAR
 
 
@@ -541,11 +551,11 @@ class TestFindUndervaluedContributors:
     def test_finds_undervalued(self):
         aggregates = {
             "p1": {"total_shapley": 20.0, "work_count": 2},  # per_work=10
-            "p2": {"total_shapley": 2.0, "work_count": 2},   # per_work=1
+            "p2": {"total_shapley": 2.0, "work_count": 2},  # per_work=1
         }
         scores = {
-            "p1": {"composite": 3.0},   # 10 > 3*1.5=4.5 => undervalued
-            "p2": {"composite": 5.0},   # 1 < 5*1.5=7.5 => not undervalued
+            "p1": {"composite": 3.0},  # 10 > 3*1.5=4.5 => undervalued
+            "p2": {"composite": 5.0},  # 1 < 5*1.5=7.5 => not undervalued
         }
         result = find_undervalued_contributors(aggregates, scores)
         assert len(result) == 1
@@ -560,7 +570,11 @@ class TestFindMvpByRole:
         aggregates = {
             "p1": {"total_shapley": 30.0, "work_count": 5, "primary_role": "director"},
             "p2": {"total_shapley": 20.0, "work_count": 3, "primary_role": "director"},
-            "p3": {"total_shapley": 50.0, "work_count": 8, "primary_role": "key_animator"},
+            "p3": {
+                "total_shapley": 50.0,
+                "work_count": 8,
+                "primary_role": "key_animator",
+            },
         }
         result = find_mvp_by_role(aggregates, "director", top_n=5)
         assert len(result) == 2
@@ -754,15 +768,15 @@ class TestStudioDisparityResult:
 
 class TestComputeStudioDisparity:
     def test_basic_disparity(self):
-        anime_map = {
-            f"a{i}": _anime(f"a{i}", studios=["StudioA"]) for i in range(6)
-        }
+        anime_map = {f"a{i}": _anime(f"a{i}", studios=["StudioA"]) for i in range(6)}
         credits = [_credit(f"p{i}", f"a{i}") for i in range(6)]
         person_scores = {
             f"p{i}": {"authority": 0.5, "trust": 0.4, "skill": 0.6, "composite": 0.5}
             for i in range(6)
         }
-        result = compute_studio_disparity(credits, anime_map, person_scores, min_persons=5)
+        result = compute_studio_disparity(
+            credits, anime_map, person_scores, min_persons=5
+        )
         assert "StudioA" in result
         assert result["StudioA"].person_count == 6
 
@@ -770,7 +784,9 @@ class TestComputeStudioDisparity:
         anime_map = {"a1": _anime("a1", studios=["TinyStudio"])}
         credits = [_credit("p1", "a1")]
         person_scores = {"p1": {"composite": 0.5}}
-        result = compute_studio_disparity(credits, anime_map, person_scores, min_persons=5)
+        result = compute_studio_disparity(
+            credits, anime_map, person_scores, min_persons=5
+        )
         assert "TinyStudio" not in result
 
 
@@ -1011,7 +1027,9 @@ class TestComputeCommercialValue:
 
 class TestComputeCriticalValue:
     def test_with_tags_and_score(self):
-        anime = _anime("a1", score=90.0, tags=[{"name": f"tag{i}", "rank": i} for i in range(10)])
+        anime = _anime(
+            "a1", score=90.0, tags=[{"name": f"tag{i}", "rank": i} for i in range(10)]
+        )
         credits = [_credit("p1", "a1")]
         result = compute_critical_value(anime, credits)
         assert 0 < result <= 1.0
@@ -1085,8 +1103,13 @@ class TestComputeAnimeValues:
     @pytest.fixture()
     def anime_data(self):
         anime_list = [
-            _anime("a1", year=2020, score=85.0, studios=["StudioA"],
-                   tags=[{"name": "action"}]),
+            _anime(
+                "a1",
+                year=2020,
+                score=85.0,
+                studios=["StudioA"],
+                tags=[{"name": "action"}],
+            ),
             _anime("a2", year=2005, score=70.0, studios=["StudioB"]),
         ]
         credits = [
@@ -1143,23 +1166,36 @@ class TestComputeAnimeValues:
         anime_low = [_anime("a_low", score=30.0)]
         credits_high = [_credit("p1", "a_high")]
         credits_low = [_credit("p1", "a_low")]
-        scores = {"p1": {"authority": 0.5, "trust": 0.5, "skill": 0.5, "composite": 0.5}}
+        scores = {
+            "p1": {"authority": 0.5, "trust": 0.5, "skill": 0.5, "composite": 0.5}
+        }
         result_high = compute_anime_values(anime_high, credits_high, scores)
         result_low = compute_anime_values(anime_low, credits_low, scores)
-        assert result_high["a_high"].commercial_value > result_low["a_low"].commercial_value
+        assert (
+            result_high["a_high"].commercial_value
+            > result_low["a_low"].commercial_value
+        )
 
 
 class TestRankAnimeByValue:
     def test_ranking_order(self):
         values = {
             "a1": AnimeValueMetrics(
-                anime_id="a1", title="Show A", composite_value=90.0,
-                commercial_value=0.8, creative_value=0.7, technical_value=0.6,
+                anime_id="a1",
+                title="Show A",
+                composite_value=90.0,
+                commercial_value=0.8,
+                creative_value=0.7,
+                technical_value=0.6,
                 cultural_value=0.5,
             ),
             "a2": AnimeValueMetrics(
-                anime_id="a2", title="Show B", composite_value=50.0,
-                commercial_value=0.4, creative_value=0.3, technical_value=0.2,
+                anime_id="a2",
+                title="Show B",
+                composite_value=50.0,
+                commercial_value=0.4,
+                creative_value=0.3,
+                technical_value=0.2,
                 cultural_value=0.1,
             ),
         }
@@ -1170,11 +1206,15 @@ class TestRankAnimeByValue:
     def test_ranking_by_dimension(self):
         values = {
             "a1": AnimeValueMetrics(
-                anime_id="a1", title="Show A", composite_value=50.0,
+                anime_id="a1",
+                title="Show A",
+                composite_value=50.0,
                 commercial_value=0.9,
             ),
             "a2": AnimeValueMetrics(
-                anime_id="a2", title="Show B", composite_value=80.0,
+                anime_id="a2",
+                title="Show B",
+                composite_value=80.0,
                 commercial_value=0.2,
             ),
         }
@@ -1256,8 +1296,7 @@ class TestIndividualContributionEdgeCases:
 
         features = {"p1": {"composite": 50}}
         anime_map = {
-            f"a{i}": Anime(id=f"a{i}", title_ja=f"a{i}", score=0.0)
-            for i in range(6)
+            f"a{i}": Anime(id=f"a{i}", title_ja=f"a{i}", score=0.0) for i in range(6)
         }
         credits = [_credit("p1", f"a{i}") for i in range(6)]
         result = compute_consistency(features, credits, anime_map)
@@ -1288,7 +1327,9 @@ class TestIndividualContributionEdgeCases:
         G = nx.Graph()
         G.add_edges_from([("p0", "p1"), ("p0", "p2"), ("p0", "p3")])
 
-        result = compute_independent_value(features, credits, anime_map, collaboration_graph=G)
+        result = compute_independent_value(
+            features, credits, anime_map, collaboration_graph=G
+        )
         # p0 should have a positive value (collaborators do better when with p0)
         if result["p0"] is not None:
             assert result["p0"] > 0

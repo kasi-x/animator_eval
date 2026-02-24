@@ -1,4 +1,5 @@
 """Phase 4: Graph Construction — build person-anime and collaboration networks."""
+
 import structlog
 
 from src.analysis.graph import create_person_anime_network

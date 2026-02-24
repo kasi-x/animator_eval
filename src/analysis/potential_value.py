@@ -147,7 +147,9 @@ def compute_potential_value_scores(
                     betweenness_cache = nx.betweenness_centrality(
                         collaboration_graph, k=k, weight="weight"
                     )
-                    logger.info("betweenness_approximate", k=k, nodes=n_nodes, edges=n_edges)
+                    logger.info(
+                        "betweenness_approximate", k=k, nodes=n_nodes, edges=n_edges
+                    )
                 else:
                     betweenness_cache = nx.betweenness_centrality(
                         collaboration_graph, weight="weight"
@@ -474,8 +476,10 @@ def main():
         # Get detailed breakdown
         person_id = entry["person_id"]
         details = potential_scores[person_id]
-        print(f"   内訳: Elite={details.elite_score:.1f}, Growth={details.growth_score:.1f}, "
-              f"Hidden={details.hidden_score:.1f}, Structural={details.structural_score:.1f}")
+        print(
+            f"   内訳: Elite={details.elite_score:.1f}, Growth={details.growth_score:.1f}, "
+            f"Hidden={details.hidden_score:.1f}, Structural={details.structural_score:.1f}"
+        )
         print()
 
     # カテゴリ別分布

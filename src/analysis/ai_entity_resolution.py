@@ -151,7 +151,12 @@ def ask_llm_if_same_person(person1: Person, person2: Person) -> NameMatchDecisio
         if not answer:
             answer = result.get("thinking", "").strip()
 
-        logger.debug("llm_response", person1=person1.id, person2=person2.id, answer=answer[:200] + "...")
+        logger.debug(
+            "llm_response",
+            person1=person1.id,
+            person2=person2.id,
+            answer=answer[:200] + "...",
+        )
 
         # Parse response - Qwen3 typically concludes with "the answer should be X" or "the answer is X"
         answer_upper = answer.upper()
@@ -172,7 +177,9 @@ def ask_llm_if_same_person(person1: Person, person2: Person) -> NameMatchDecisio
             pos = answer_lower.rfind(pattern)  # Find last occurrence
             if pos >= 0:
                 # Extract text after the pattern
-                decision_text = answer_upper[pos + len(pattern) : pos + len(pattern) + 100]
+                decision_text = answer_upper[
+                    pos + len(pattern) : pos + len(pattern) + 100
+                ]
                 break
 
         # Check for decision keywords
@@ -198,13 +205,20 @@ def ask_llm_if_same_person(person1: Person, person2: Person) -> NameMatchDecisio
                 is_match = False
                 confidence = 0.3
                 logger.warning(
-                    "unclear_llm_decision", person1=person1.id, person2=person2.id, answer_snippet=answer[:300]
+                    "unclear_llm_decision",
+                    person1=person1.id,
+                    person2=person2.id,
+                    answer_snippet=answer[:300],
                 )
 
-        return NameMatchDecision(is_match=is_match, confidence=confidence, reasoning=answer)
+        return NameMatchDecision(
+            is_match=is_match, confidence=confidence, reasoning=answer
+        )
 
     except (httpx.HTTPError, httpx.TimeoutException) as e:
-        logger.error("llm_api_error", error=str(e), person1=person1.id, person2=person2.id)
+        logger.error(
+            "llm_api_error", error=str(e), person1=person1.id, person2=person2.id
+        )
         raise LLMError(f"Ollama API error: {e}") from e
 
 
@@ -283,7 +297,9 @@ def ai_assisted_cluster(
                             reasoning=decision.reasoning[:100],
                         )
                 except LLMError as e:
-                    logger.error("ai_match_failed", person1=p1.id, person2=p2.id, error=str(e))
+                    logger.error(
+                        "ai_match_failed", person1=p1.id, person2=p2.id, error=str(e)
+                    )
                     continue
 
     return canonical_map

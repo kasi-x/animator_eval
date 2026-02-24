@@ -55,7 +55,10 @@ class TestNetworkEvolution:
         # 2019: p1-p3 (1 new)
         # 2020: p1-p2, p1-p3, p1-p4, p2-p3, p2-p4, p3-p4 (3 new)
         assert result["snapshots"][2018]["cumulative_edges"] == 1
-        assert result["snapshots"][2020]["cumulative_edges"] > result["snapshots"][2018]["cumulative_edges"]
+        assert (
+            result["snapshots"][2020]["cumulative_edges"]
+            > result["snapshots"][2018]["cumulative_edges"]
+        )
 
     def test_density_computed(self):
         credits, anime_map = _make_data()

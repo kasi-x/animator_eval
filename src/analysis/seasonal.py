@@ -74,8 +74,12 @@ def compute_seasonal_trends(
         season = _infer_season(anime)
         if season:
             year_season[anime.year][season]["anime_count"] = len(
-                {cr.anime_id for cr in season_credits[season]
-                 if anime_map.get(cr.anime_id) and anime_map[cr.anime_id].year == anime.year}
+                {
+                    cr.anime_id
+                    for cr in season_credits[season]
+                    if anime_map.get(cr.anime_id)
+                    and anime_map[cr.anime_id].year == anime.year
+                }
             )
 
     if not season_anime:
@@ -93,7 +97,8 @@ def compute_seasonal_trends(
         persons = {c.person_id for c in creds}
 
         anime_scores = [
-            anime_map[aid].score for aid in anime_ids
+            anime_map[aid].score
+            for aid in anime_ids
             if anime_map[aid].score is not None
         ]
         p_scores = []
@@ -115,9 +120,7 @@ def compute_seasonal_trends(
     # Year-season matrix
     by_year_season = {}
     for year in sorted(year_season.keys()):
-        by_year_season[year] = {
-            s: dict(v) for s, v in year_season[year].items()
-        }
+        by_year_season[year] = {s: dict(v) for s, v in year_season[year].items()}
 
     total_with_season = sum(len(v) for v in season_credits.values())
 
@@ -154,7 +157,9 @@ def compute_person_seasonal_activity(
         return {}
 
     # 人物ごとにシーズン別クレジットを集計
-    person_season_credits: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    person_season_credits: dict[str, dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
     person_season_anime: dict[str, dict[str, set[str]]] = defaultdict(
         lambda: defaultdict(set)
     )

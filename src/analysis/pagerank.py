@@ -68,8 +68,7 @@ def normalize_scores(scores: dict[str, float]) -> dict[str, float]:
         return {k: 50.0 for k in scores}
 
     return {
-        k: float((v - min_val) / (max_val - min_val) * 100.0)
-        for k, v in scores.items()
+        k: float((v - min_val) / (max_val - min_val) * 100.0) for k, v in scores.items()
     }
 
 
@@ -148,13 +147,15 @@ def main() -> None:
     results = []
     for person_id, score in sorted(authority.items(), key=lambda x: x[1], reverse=True):
         node_data = graph.nodes[person_id]
-        results.append({
-            "person_id": person_id,
-            "name": node_data.get("name", ""),
-            "name_ja": node_data.get("name_ja", ""),
-            "name_en": node_data.get("name_en", ""),
-            "authority_score": round(score, 4),
-        })
+        results.append(
+            {
+                "person_id": person_id,
+                "name": node_data.get("name", ""),
+                "name_ja": node_data.get("name_ja", ""),
+                "name_en": node_data.get("name_en", ""),
+                "authority_score": round(score, 4),
+            }
+        )
 
     output_path = JSON_DIR / "authority_scores.json"
     with open(output_path, "w") as f:

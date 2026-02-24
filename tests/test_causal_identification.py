@@ -1,6 +1,5 @@
 """Tests for causal studio identification module."""
 
-
 from src.analysis.causal_studio_identification import (
     CausalEstimate,
     CareerTrajectory,
@@ -37,9 +36,9 @@ class TestIdentifyMajorStudios:
         ]
 
         anime_map = {
-            "a1": Anime(id="a1", title_ja="アニメ1", studio="Studio A", year=2020),
-            "a2": Anime(id="a2", title_ja="アニメ2", studio="Studio B", year=2020),
-            "a3": Anime(id="a3", title_ja="アニメ3", studio="Studio C", year=2020),
+            "a1": Anime(id="a1", title_ja="アニメ1", studios=["Studio A"], year=2020),
+            "a2": Anime(id="a2", title_ja="アニメ2", studios=["Studio B"], year=2020),
+            "a3": Anime(id="a3", title_ja="アニメ3", studios=["Studio C"], year=2020),
         }
 
         person_scores = {
@@ -71,7 +70,9 @@ class TestIdentifyMajorStudios:
             for i in range(5)
         ]
 
-        anime_map = {"a1": Anime(id="a1", title_ja="Test", studio="Small Studio", year=2020)}
+        anime_map = {
+            "a1": Anime(id="a1", title_ja="Test", studios=["Small Studio"], year=2020)
+        }
 
         person_scores = {f"p{i}": {"composite": 100.0} for i in range(5)}
 
@@ -85,7 +86,7 @@ class TestIdentifyMajorStudios:
         """Anime without studios are skipped."""
         credits = [Credit(person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR)]
 
-        anime_map = {"a1": Anime(id="a1", title_ja="Test", studio=None, year=2020)}
+        anime_map = {"a1": Anime(id="a1", title_ja="Test", year=2020)}
 
         person_scores = {"p1": {"composite": 100.0}}
 
@@ -106,9 +107,9 @@ class TestBuildStudioAffiliations:
         ]
 
         anime_map = {
-            "a1": Anime(id="a1", title_ja="Test1", studio="Studio A", year=2018),
-            "a2": Anime(id="a2", title_ja="Test2", studio="Studio A", year=2019),
-            "a3": Anime(id="a3", title_ja="Test3", studio="Studio B", year=2020),
+            "a1": Anime(id="a1", title_ja="Test1", studios=["Studio A"], year=2018),
+            "a2": Anime(id="a2", title_ja="Test2", studios=["Studio A"], year=2019),
+            "a3": Anime(id="a3", title_ja="Test3", studios=["Studio B"], year=2020),
         }
 
         major_studios = {"Studio A"}

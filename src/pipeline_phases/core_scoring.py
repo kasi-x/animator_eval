@@ -1,4 +1,5 @@
 """Phase 5: Core Scoring — Authority, Trust, Skill + Normalization."""
+
 import structlog
 
 from src.analysis.normalize import normalize_all_axes
@@ -25,7 +26,9 @@ def compute_core_scores_phase(context: PipelineContext) -> None:
     logger.info("step_start", step="authority_pagerank")
     with context.monitor.measure("authority_pagerank"):
         context.authority_scores = compute_authority_scores(context.person_anime_graph)
-    context.monitor.increment_counter("persons_with_authority", len(context.authority_scores))
+    context.monitor.increment_counter(
+        "persons_with_authority", len(context.authority_scores)
+    )
 
     # Trust (repeat engagement)
     logger.info("step_start", step="trust_repeat_engagement")
@@ -42,10 +45,12 @@ def compute_core_scores_phase(context: PipelineContext) -> None:
     # Normalization (0-100)
     logger.info("step_start", step="score_normalization")
     with context.monitor.measure("score_normalization"):
-        context.authority_scores, context.trust_scores, context.skill_scores = normalize_all_axes(
-            context.authority_scores,
-            context.trust_scores,
-            context.skill_scores,
+        context.authority_scores, context.trust_scores, context.skill_scores = (
+            normalize_all_axes(
+                context.authority_scores,
+                context.trust_scores,
+                context.skill_scores,
+            )
         )
 
     context.monitor.record_memory("after_scoring")

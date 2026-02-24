@@ -77,7 +77,8 @@ def compute_time_series(
     credit_count = {y: year_credits[y] for y in years}
     avg_anime_score = {
         y: round(sum(year_scores[y]) / len(year_scores[y]), 2)
-        for y in years if year_scores[y]
+        for y in years
+        if year_scores[y]
     }
     unique_anime = {y: len(year_anime[y]) for y in years}
 

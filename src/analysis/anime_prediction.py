@@ -66,14 +66,16 @@ def predict_anime_score(
         if not anime or not anime.score:
             continue
 
-        anime_overlap.append({
-            "anime_id": anime_id,
-            "title": anime.display_title,
-            "year": anime.year,
-            "score": anime.score,
-            "overlap_count": len(overlap),
-            "overlap_ratio": len(overlap) / len(team_set),
-        })
+        anime_overlap.append(
+            {
+                "anime_id": anime_id,
+                "title": anime.display_title,
+                "year": anime.year,
+                "score": anime.score,
+                "overlap_count": len(overlap),
+                "overlap_ratio": len(overlap) / len(team_set),
+            }
+        )
 
     if not anime_overlap:
         return {
@@ -95,7 +97,9 @@ def predict_anime_score(
     predicted = round(weighted_sum / total_weight, 2) if total_weight > 0 else None
 
     # Confidence level
-    if len(anime_overlap) >= 10 and any(ao["overlap_ratio"] > 0.5 for ao in anime_overlap):
+    if len(anime_overlap) >= 10 and any(
+        ao["overlap_ratio"] > 0.5 for ao in anime_overlap
+    ):
         confidence = "high"
     elif len(anime_overlap) >= 5:
         confidence = "medium"
@@ -105,7 +109,9 @@ def predict_anime_score(
     # Team average composite score
     team_avg = None
     if person_scores:
-        team_composite = [person_scores[pid] for pid in team_person_ids if pid in person_scores]
+        team_composite = [
+            person_scores[pid] for pid in team_person_ids if pid in person_scores
+        ]
         if team_composite:
             team_avg = round(sum(team_composite) / len(team_composite), 2)
 
@@ -117,7 +123,9 @@ def predict_anime_score(
     }
 
     # Top similar teams (highest overlap)
-    similar_teams = sorted(anime_overlap, key=lambda x: (-x["overlap_count"], -(x["score"] or 0)))[:10]
+    similar_teams = sorted(
+        anime_overlap, key=lambda x: (-x["overlap_count"], -(x["score"] or 0))
+    )[:10]
 
     return {
         "predicted_score": predicted,

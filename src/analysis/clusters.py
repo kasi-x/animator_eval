@@ -60,7 +60,9 @@ def detect_collaboration_clusters(
         return {"clusters": [], "person_to_cluster": {}, "total_clusters": 0}
 
     # Louvain community detection
-    communities = nx.community.louvain_communities(G, weight="weight", resolution=resolution, seed=42)
+    communities = nx.community.louvain_communities(
+        G, weight="weight", resolution=resolution, seed=42
+    )
 
     clusters = []
     person_to_cluster: dict[str, int] = {}
@@ -79,13 +81,15 @@ def detect_collaboration_clusters(
         avg_shared = sum(internal_edges) / len(internal_edges) if internal_edges else 0
 
         cluster_id = idx
-        clusters.append({
-            "id": cluster_id,
-            "members": members,
-            "size": len(members),
-            "avg_shared_works": round(avg_shared, 1),
-            "internal_edges": len(internal_edges),
-        })
+        clusters.append(
+            {
+                "id": cluster_id,
+                "members": members,
+                "size": len(members),
+                "avg_shared_works": round(avg_shared, 1),
+                "internal_edges": len(internal_edges),
+            }
+        )
         for pid in members:
             person_to_cluster[pid] = cluster_id
 
@@ -131,9 +135,7 @@ def compute_cluster_stats(
         }
         if person_scores:
             member_scores = [
-                person_scores[pid]
-                for pid in cluster["members"]
-                if pid in person_scores
+                person_scores[pid] for pid in cluster["members"] if pid in person_scores
             ]
             if member_scores:
                 stats["avg_score"] = round(sum(member_scores) / len(member_scores), 1)

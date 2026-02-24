@@ -68,7 +68,9 @@ class TestExtractEgoGraph:
     def test_with_scores(self):
         credits, anime_map = _make_data()
         scores = {"p1": 80.0, "p2": 60.0}
-        result = extract_ego_graph("p1", credits, anime_map, hops=1, person_scores=scores)
+        result = extract_ego_graph(
+            "p1", credits, anime_map, hops=1, person_scores=scores
+        )
         p2 = next(n for n in result["nodes"] if n["id"] == "p2")
         assert p2["score"] == 60.0
 

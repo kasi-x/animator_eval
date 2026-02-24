@@ -172,10 +172,18 @@ def compute_peer_percentile(
                     result[pid] = {"peer_percentile": None, "peer_cohort": None}
                 continue
             cohort_members = merged
-            cohort_label = {"role": role, "career_band": "all", "cohort_size": len(merged)}
+            cohort_label = {
+                "role": role,
+                "career_band": "all",
+                "cohort_size": len(merged),
+            }
         else:
             cohort_members = members
-            cohort_label = {"role": role, "career_band": band, "cohort_size": len(members)}
+            cohort_label = {
+                "role": role,
+                "career_band": band,
+                "cohort_size": len(members),
+            }
 
         # パーセンタイル算出
         scores = sorted([s for _, s in cohort_members])
@@ -320,7 +328,9 @@ def compute_consistency(
         result[pid] = round(consistency, 3)
 
     computed = sum(1 for v in result.values() if v is not None)
-    logger.info("consistency_computed", persons=computed, skipped=len(result) - computed)
+    logger.info(
+        "consistency_computed", persons=computed, skipped=len(result) - computed
+    )
     return result
 
 
@@ -403,7 +413,9 @@ def compute_independent_value(
         result[pid] = round(float(np.mean(diffs)), 2)
 
     computed = sum(1 for v in result.values() if v is not None)
-    logger.info("independent_value_computed", persons=computed, skipped=len(result) - computed)
+    logger.info(
+        "independent_value_computed", persons=computed, skipped=len(result) - computed
+    )
     return result
 
 
@@ -466,10 +478,18 @@ def compute_individual_profiles(
     logger.info(
         "individual_profiles_computed",
         total=len(profiles),
-        with_percentile=sum(1 for p in profiles.values() if p["peer_percentile"] is not None),
-        with_residual=sum(1 for p in profiles.values() if p["opportunity_residual"] is not None),
-        with_consistency=sum(1 for p in profiles.values() if p["consistency"] is not None),
-        with_independent=sum(1 for p in profiles.values() if p["independent_value"] is not None),
+        with_percentile=sum(
+            1 for p in profiles.values() if p["peer_percentile"] is not None
+        ),
+        with_residual=sum(
+            1 for p in profiles.values() if p["opportunity_residual"] is not None
+        ),
+        with_consistency=sum(
+            1 for p in profiles.values() if p["consistency"] is not None
+        ),
+        with_independent=sum(
+            1 for p in profiles.values() if p["independent_value"] is not None
+        ),
         r_squared=r_squared,
     )
 
@@ -477,8 +497,7 @@ def compute_individual_profiles(
         profiles=profiles,
         model_r_squared=r_squared,
         total_persons=len(profiles),
-        cohort_count=len({
-            (f["primary_role"], f["career_band"])
-            for f in features.values()
-        }),
+        cohort_count=len(
+            {(f["primary_role"], f["career_band"]) for f in features.values()}
+        ),
     )

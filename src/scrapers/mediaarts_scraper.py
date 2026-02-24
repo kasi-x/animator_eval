@@ -237,13 +237,15 @@ def parse_jsonld_dump(json_path: Path) -> list[dict]:
         # Studios
         studios = _extract_studios(item)
 
-        results.append({
-            "id": identifier,
-            "title": title,
-            "year": year,
-            "contributors": contributors,
-            "studios": studios,
-        })
+        results.append(
+            {
+                "id": identifier,
+                "title": title,
+                "year": year,
+                "contributors": contributors,
+                "studios": studios,
+            }
+        )
 
     return results
 
@@ -288,7 +290,9 @@ async def download_madb_dataset(
                 return cached
 
         # Build asset URL map
-        assets = {a["name"]: a["browser_download_url"] for a in release.get("assets", [])}
+        assets = {
+            a["name"]: a["browser_download_url"] for a in release.get("assets", [])
+        }
 
         downloaded: dict[str, Path] = {}
         for zip_name, anime_type in ANIME_COLLECTION_FILES.items():
@@ -315,7 +319,9 @@ async def download_madb_dataset(
                     out.write(zf.read(json_files[0]))
 
                 downloaded[anime_type] = json_path
-                log.info("madb_extracted", file=json_name, size=json_path.stat().st_size)
+                log.info(
+                    "madb_extracted", file=json_name, size=json_path.stat().st_size
+                )
 
         # Record version
         version_file.write_text(tag)
@@ -346,7 +352,12 @@ async def scrape_madb(
     Returns:
         Statistics dict
     """
-    from src.database import insert_credit, update_data_source, upsert_anime, upsert_person
+    from src.database import (
+        insert_credit,
+        update_data_source,
+        upsert_anime,
+        upsert_person,
+    )
 
     if data_dir is None:
         data_dir = DEFAULT_DATA_DIR
@@ -460,10 +471,16 @@ async def scrape_madb(
 
 @app.command()
 def main(
-    max_records: int = typer.Option(10000, "--max-records", "-n", help="Maximum number of anime"),
-    checkpoint: int = typer.Option(50, "--checkpoint", "-c", help="Checkpoint interval"),
+    max_records: int = typer.Option(
+        10000, "--max-records", "-n", help="Maximum number of anime"
+    ),
+    checkpoint: int = typer.Option(
+        50, "--checkpoint", "-c", help="Checkpoint interval"
+    ),
     version: str = typer.Option("latest", "--version", "-v", help="Dataset version"),
-    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, "--data-dir", "-d", help="Download directory"),
+    data_dir: Path = typer.Option(
+        DEFAULT_DATA_DIR, "--data-dir", "-d", help="Download directory"
+    ),
 ) -> None:
     """Fetch credit data from Media Arts DB dump."""
     from src.database import db_connection, init_db

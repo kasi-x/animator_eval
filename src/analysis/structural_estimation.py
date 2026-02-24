@@ -305,9 +305,7 @@ def estimate_fixed_effects(
 
     # Only keep persons with multiple observations (need within variation)
     valid_persons = {
-        pid: obs_list
-        for pid, obs_list in person_groups.items()
-        if len(obs_list) >= 2
+        pid: obs_list for pid, obs_list in person_groups.items() if len(obs_list) >= 2
     }
 
     if len(valid_persons) < 10:
@@ -401,9 +399,7 @@ def estimate_fixed_effects(
     se_major = se[0]
     t_stat = beta_major / se_major if se_major > 0 else 0.0
     p_value = 2 * (1 - stats.t.cdf(abs(t_stat), n - k))
-    ci_lower, ci_upper = stats.t.interval(
-        0.95, n - k, loc=beta_major, scale=se_major
-    )
+    ci_lower, ci_upper = stats.t.interval(0.95, n - k, loc=beta_major, scale=se_major)
 
     # Interpretation
     if p_value < 0.05:
@@ -411,10 +407,16 @@ def estimate_fixed_effects(
         if beta_major > 0:
             interp += "This suggests a positive treatment effect (大手スタジオの教育効果が確認された)."
         else:
-            interp += "This suggests a negative effect, possibly due to misspecification."
+            interp += (
+                "This suggests a negative effect, possibly due to misspecification."
+            )
     else:
-        interp = f"No significant effect of major studio affiliation (p={p_value:.4f}). "
-        interp += "Effect may be small or selection/brand effects may dominate treatment."
+        interp = (
+            f"No significant effect of major studio affiliation (p={p_value:.4f}). "
+        )
+        interp += (
+            "Effect may be small or selection/brand effects may dominate treatment."
+        )
 
     return RegressionResult(
         method=EstimationMethod.FIXED_EFFECTS,
@@ -639,8 +641,10 @@ def estimate_event_study(
         max_year = max(years)
 
         # Need at least pre_periods before and post_periods after
-        if (entry_year - min_year >= pre_periods and
-            max_year - entry_year >= post_periods):
+        if (
+            entry_year - min_year >= pre_periods
+            and max_year - entry_year >= post_periods
+        ):
             valid_persons.add(person_id)
 
     if len(valid_persons) < 5:
@@ -678,12 +682,15 @@ def estimate_event_study(
         if person_obs:
             person_means[person_id] = {
                 "skill": sum(o.skill_score for o in person_obs) / len(person_obs),
-                "experience": sum(o.experience_years for o in person_obs) / len(person_obs),
-                "potential": sum(o.potential_score for o in person_obs) / len(person_obs),
+                "experience": sum(o.experience_years for o in person_obs)
+                / len(person_obs),
+                "potential": sum(o.potential_score for o in person_obs)
+                / len(person_obs),
             }
 
     # Pre-compute person observation counts for O(1) lookup (PERF-3 optimization)
     from collections import Counter
+
     person_obs_count = Counter(obs.person_id for obs, _ in observations_with_reltime)
     person_k_count = Counter(
         (obs.person_id, rel_t) for obs, rel_t in observations_with_reltime
@@ -709,11 +716,13 @@ def estimate_event_study(
                 person_obs_count.get(obs.person_id, 1), 1
             )
 
-            x_demeaned.append([
-                time_k_dummy - mean_time_k,
-                obs.experience_years - person_mean["experience"],
-                obs.potential_score - person_mean["potential"],
-            ])
+            x_demeaned.append(
+                [
+                    time_k_dummy - mean_time_k,
+                    obs.experience_years - person_mean["experience"],
+                    obs.potential_score - person_mean["potential"],
+                ]
+            )
 
         y = np.array(y_demeaned)
         X = np.array(x_demeaned)
@@ -736,10 +745,14 @@ def estimate_event_study(
         beta_k = beta_hat[0]  # Coefficient on time k dummy
         se_k = se[0]
         t_stat = beta_k / se_k if se_k > 0 else 0.0
-        p_value = 2 * (1 - stats.t.cdf(abs(t_stat), n - k_params)) if n > k_params else 1.0
-        ci_lower, ci_upper = stats.t.interval(
-            0.95, n - k_params, loc=beta_k, scale=se_k
-        ) if n > k_params else (beta_k, beta_k)
+        p_value = (
+            2 * (1 - stats.t.cdf(abs(t_stat), n - k_params)) if n > k_params else 1.0
+        )
+        ci_lower, ci_upper = (
+            stats.t.interval(0.95, n - k_params, loc=beta_k, scale=se_k)
+            if n > k_params
+            else (beta_k, beta_k)
+        )
 
         # Interpretation
         if k < 0:
@@ -929,9 +942,7 @@ def run_placebo_test(
     # Run regression on pre-treatment data with fake treatment
     # Fake treatment: assign "treated" randomly
     np.random.seed(42)
-    fake_treatment = np.random.choice(
-        [0, 1], size=len(pre_treatment_obs), p=[0.5, 0.5]
-    )
+    fake_treatment = np.random.choice([0, 1], size=len(pre_treatment_obs), p=[0.5, 0.5])
 
     y = np.array([obs.skill_score for obs in pre_treatment_obs])
     X = np.column_stack([fake_treatment, np.ones(len(fake_treatment))])  # Add constant
@@ -1013,7 +1024,9 @@ def estimate_structural_model(
     did_result = estimate_difference_in_differences(panel_data)
 
     # Step 2b: Event study (dynamic treatment effects)
-    event_study_results = estimate_event_study(panel_data, pre_periods=3, post_periods=3)
+    event_study_results = estimate_event_study(
+        panel_data, pre_periods=3, post_periods=3
+    )
 
     # Step 3: Robustness checks
     robustness_checks = [run_placebo_test(panel_data)]
@@ -1056,7 +1069,9 @@ def estimate_structural_model(
         pre_results = {k: v for k, v in event_study_results.items() if k < 0}
         if pre_results:
             avg_pre_beta = np.mean([r.beta for r in pre_results.values()])
-            summary_parts.append(f"  処置前平均効果: {avg_pre_beta:.2f} (並行トレンド検証)")
+            summary_parts.append(
+                f"  処置前平均効果: {avg_pre_beta:.2f} (並行トレンド検証)"
+            )
 
         # Treatment year
         if 0 in event_study_results:
@@ -1070,18 +1085,14 @@ def estimate_structural_model(
         if post_results:
             max_k = max(post_results.keys())
             max_result = post_results[max_k]
-            summary_parts.append(
-                f"  {max_k}年後効果: {max_result.beta:.2f} (累積効果)"
-            )
+            summary_parts.append(f"  {max_k}年後効果: {max_result.beta:.2f} (累積効果)")
 
         summary_parts.append("")
 
     summary_parts.append("【頑健性チェック (Robustness Checks)】")
 
     for check in robustness_checks:
-        summary_parts.append(
-            f"  {check.check_name}: {check.result} - {check.detail}"
-        )
+        summary_parts.append(f"  {check.check_name}: {check.result} - {check.detail}")
 
     summary_parts.extend(
         [
@@ -1184,7 +1195,9 @@ def export_structural_estimation(result: StructuralEstimationResult) -> dict[str
                 }
                 for k, v in (result.event_study or {}).items()
             },
-        } if result.event_study else None,
+        }
+        if result.event_study
+        else None,
         "parallel_trends_test": result.parallel_trends_test,
         "robustness_checks": [
             {

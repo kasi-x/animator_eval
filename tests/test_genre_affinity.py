@@ -78,7 +78,12 @@ class TestGenreAffinity:
     def test_primary_tier(self):
         credits, anime_map = _make_data()
         result = compute_genre_affinity(credits, anime_map)
-        assert result["p1"]["primary_tier"] in ("high_rated", "mid_rated", "low_rated", "unknown")
+        assert result["p1"]["primary_tier"] in (
+            "high_rated",
+            "mid_rated",
+            "low_rated",
+            "unknown",
+        )
 
     def test_avg_anime_score(self):
         credits, anime_map = _make_data()

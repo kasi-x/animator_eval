@@ -24,13 +24,13 @@ def scraper_timer(source: str, operation: str):
     try:
         yield metrics
         elapsed_ms = int((time.time() - start) * 1000)
-        metrics['elapsed_ms'] = elapsed_ms
-        metrics['source'] = source
+        metrics["elapsed_ms"] = elapsed_ms
+        metrics["source"] = source
     finally:
-        if 'elapsed_ms' not in metrics:
-            metrics['elapsed_ms'] = int((time.time() - start) * 1000)
-        if 'source' not in metrics:
-            metrics['source'] = source
+        if "elapsed_ms" not in metrics:
+            metrics["elapsed_ms"] = int((time.time() - start) * 1000)
+        if "source" not in metrics:
+            metrics["source"] = source
 
 
 def log_scraper_start(source: str, operation: str, **kwargs):
@@ -45,7 +45,9 @@ def log_scraper_start(source: str, operation: str, **kwargs):
     logger.info(event, source=source, **kwargs)
 
 
-def log_scraper_complete(source: str, operation: str, item_count: int, elapsed_ms: int, **kwargs):
+def log_scraper_complete(
+    source: str, operation: str, item_count: int, elapsed_ms: int, **kwargs
+):
     """Log scraper operation completion.
 
     Args:
@@ -56,7 +58,9 @@ def log_scraper_complete(source: str, operation: str, item_count: int, elapsed_m
         **kwargs: Additional fields
     """
     event = f"{source}_{operation}_complete"
-    logger.info(event, source=source, item_count=item_count, elapsed_ms=elapsed_ms, **kwargs)
+    logger.info(
+        event, source=source, item_count=item_count, elapsed_ms=elapsed_ms, **kwargs
+    )
 
 
 def log_rate_limit(source: str, retry_after_seconds: int, attempt: int = 1, **kwargs):
@@ -77,7 +81,9 @@ def log_rate_limit(source: str, retry_after_seconds: int, attempt: int = 1, **kw
     )
 
 
-def log_error(source: str, operation: str, error: Exception, attempt: int = 1, **kwargs):
+def log_error(
+    source: str, operation: str, error: Exception, attempt: int = 1, **kwargs
+):
     """Log error event with structured fields.
 
     Args:

@@ -90,9 +90,7 @@ def cross_validate_scores(
             sorted(full_composite.items(), key=lambda x: -x[1]), 1
         )
     }
-    full_top10 = set(
-        sorted(full_composite, key=full_composite.get, reverse=True)[:10]
-    )
+    full_top10 = set(sorted(full_composite, key=full_composite.get, reverse=True)[:10])
 
     fold_results = []
     n_holdout = max(1, int(len(credits) * holdout_ratio))
@@ -129,12 +127,14 @@ def cross_validate_scores(
         correlation = _rank_correlation(full_ranking, fold_ranking)
         top10_overlap = len(full_top10 & fold_top10) / max(len(full_top10), 1)
 
-        fold_results.append({
-            "fold": fold + 1,
-            "credits_used": len(fold_credits),
-            "correlation": round(correlation, 4),
-            "top10_overlap": round(top10_overlap, 2),
-        })
+        fold_results.append(
+            {
+                "fold": fold + 1,
+                "credits_used": len(fold_credits),
+                "correlation": round(correlation, 4),
+                "top10_overlap": round(top10_overlap, 2),
+            }
+        )
 
     correlations = [f["correlation"] for f in fold_results]
     overlaps = [f["top10_overlap"] for f in fold_results]
@@ -143,7 +143,9 @@ def cross_validate_scores(
         "n_folds": n_folds,
         "holdout_ratio": holdout_ratio,
         "total_credits": len(credits),
-        "avg_rank_correlation": round(sum(correlations) / len(correlations), 4) if correlations else 0,
+        "avg_rank_correlation": round(sum(correlations) / len(correlations), 4)
+        if correlations
+        else 0,
         "min_rank_correlation": round(min(correlations), 4) if correlations else 0,
         "avg_top10_overlap": round(sum(overlaps) / len(overlaps), 2) if overlaps else 0,
         "fold_results": fold_results,

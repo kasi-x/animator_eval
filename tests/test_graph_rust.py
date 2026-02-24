@@ -75,7 +75,9 @@ def sample_credits():
     return [
         Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="test"),
         Credit(person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"),
-        Credit(person_id="p3", anime_id="a1", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p3", anime_id="a1", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
         Credit(person_id="p1", anime_id="a2", role=Role.DIRECTOR, source="test"),
         Credit(person_id="p2", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
     ]
@@ -219,13 +221,13 @@ class TestBuildCollaborationEdges:
     def test_canonical_ordering(self, sample_persons, sample_credits):
         """Edge keys should have person_a < person_b."""
         edge_data = build_collaboration_edges(sample_persons, sample_credits)
-        for (a, b) in edge_data.keys():
+        for a, b in edge_data.keys():
             assert a < b, f"Edge ({a}, {b}) not canonically ordered"
 
     def test_no_self_edges(self, sample_persons, sample_credits):
         """Should not have self-edges (same person)."""
         edge_data = build_collaboration_edges(sample_persons, sample_credits)
-        for (a, b) in edge_data.keys():
+        for a, b in edge_data.keys():
             assert a != b
 
     def test_empty_credits(self, sample_persons):
@@ -259,8 +261,12 @@ class TestRustPythonEquivalence:
 
             # Same values within tolerance
             for key in rust_edges:
-                assert abs(rust_edges[key]["weight"] - python_edges[key]["weight"]) < 1e-6
-                assert rust_edges[key]["shared_works"] == python_edges[key]["shared_works"]
+                assert (
+                    abs(rust_edges[key]["weight"] - python_edges[key]["weight"]) < 1e-6
+                )
+                assert (
+                    rust_edges[key]["shared_works"] == python_edges[key]["shared_works"]
+                )
         finally:
             gr.RUST_AVAILABLE = orig_available
 
@@ -279,8 +285,13 @@ class TestBetweennessCache:
             "A": {"authority": 0.8, "trust": 0.7, "skill": 0.6, "composite": 0.7},
             "B": {"authority": 0.5, "trust": 0.4, "skill": 0.3, "composite": 0.4},
         }
-        debiased = {"A": {"debiased_authority": 0.85}, "B": {"debiased_authority": 0.55}}
-        growth = {"A": {"growth_velocity": 1.0, "momentum_score": 0.5, "career_years": 10}}
+        debiased = {
+            "A": {"debiased_authority": 0.85},
+            "B": {"debiased_authority": 0.55},
+        }
+        growth = {
+            "A": {"growth_velocity": 1.0, "momentum_score": 0.5, "career_years": 10}
+        }
         adjusted = {"A": 0.65, "B": 0.35}
 
         # Pre-compute cache
@@ -288,8 +299,12 @@ class TestBetweennessCache:
 
         # Should not raise and should use cache (no extra betweenness computation)
         result = compute_potential_value_scores(
-            person_scores, debiased, growth, adjusted,
-            weighted_graph, betweenness_cache=betweenness_cache,
+            person_scores,
+            debiased,
+            growth,
+            adjusted,
+            weighted_graph,
+            betweenness_cache=betweenness_cache,
         )
         assert "A" in result
         assert "B" in result

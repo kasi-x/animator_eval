@@ -68,7 +68,9 @@ def compute_growth_metrics(
         person_id → AccelerationMetrics
     """
     # person_id → year → count
-    person_year_credits: dict[str, dict[int, int]] = defaultdict(lambda: defaultdict(int))
+    person_year_credits: dict[str, dict[int, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
 
     for credit in credits:
         anime = anime_map.get(credit.anime_id)

@@ -93,7 +93,7 @@ def compute_commercial_value(
     else:
         external_score = 0.5  # Default when no rating available
 
-    commercial = (staff_score * 0.3 + diversity_score * 0.2 + external_score * 0.5)
+    commercial = staff_score * 0.3 + diversity_score * 0.2 + external_score * 0.5
 
     return round(commercial, 4)
 
@@ -127,7 +127,7 @@ def compute_critical_value(
     else:
         critic_score = 0.5  # Default when no score available
 
-    critical = (tag_score * 0.4 + critic_score * 0.6)
+    critical = tag_score * 0.4 + critic_score * 0.6
 
     return round(critical, 4)
 
@@ -167,12 +167,14 @@ def compute_creative_value(
         if is_animator_role(c.role) and c.person_id in person_scores
     ]
 
-    avg_director_skill = sum(director_skills) / len(director_skills) if director_skills else 0.5
+    avg_director_skill = (
+        sum(director_skills) / len(director_skills) if director_skills else 0.5
+    )
     avg_animator_skill = (
         sum(animator_skills) / len(animator_skills) if animator_skills else 0.5
     )
 
-    skill_score = (avg_director_skill * 0.6 + avg_animator_skill * 0.4)
+    skill_score = avg_director_skill * 0.6 + avg_animator_skill * 0.4
 
     # Genre/tag novelty: unique tag combinations indicate creative risk-taking
     if hasattr(anime, "tags") and anime.tags:
@@ -182,7 +184,7 @@ def compute_creative_value(
     else:
         novelty_score = 0.5  # Default when no tags available
 
-    creative = (skill_score * 0.7 + novelty_score * 0.3)
+    creative = skill_score * 0.7 + novelty_score * 0.3
 
     return round(creative, 4)
 
@@ -221,7 +223,7 @@ def compute_cultural_value(
     else:
         longevity_score = 0.4
 
-    cultural = (age_score * 0.5 + longevity_score * 0.5)
+    cultural = age_score * 0.5 + longevity_score * 0.5
 
     return round(cultural, 4)
 
@@ -256,17 +258,22 @@ def compute_technical_value(
     ]
 
     avg_animator_quality = (
-        sum(animator_composites) / len(animator_composites) if animator_composites else 0.5
+        sum(animator_composites) / len(animator_composites)
+        if animator_composites
+        else 0.5
     )
 
     # Technical staff count (art, photography, effects)
-    technical_roles = ["art_director", "photography_director", "effects", "cgi_director"]
-    technical_count = sum(
-        1 for c in credits if c.role.value.lower() in technical_roles
-    )
+    technical_roles = [
+        "art_director",
+        "photography_director",
+        "effects",
+        "cgi_director",
+    ]
+    technical_count = sum(1 for c in credits if c.role.value.lower() in technical_roles)
     technical_score = min(1.0, technical_count / 5)
 
-    technical = (avg_animator_quality * 0.7 + technical_score * 0.3)
+    technical = avg_animator_quality * 0.7 + technical_score * 0.3
 
     return round(technical, 4)
 
@@ -358,7 +365,9 @@ def compute_anime_values(
     logger.info(
         "anime_values_computed",
         anime=len(values),
-        avg_value=round(sum(v.composite_value for v in values.values()) / len(values), 2),
+        avg_value=round(
+            sum(v.composite_value for v in values.values()) / len(values), 2
+        ),
     )
 
     return values
@@ -382,7 +391,8 @@ def rank_anime_by_value(
     # Get value by dimension
     if dimension == "composite":
         ranked = [
-            (anime_id, v.title, v.composite_value) for anime_id, v in anime_values.items()
+            (anime_id, v.title, v.composite_value)
+            for anime_id, v in anime_values.items()
         ]
     elif dimension == "commercial":
         ranked = [
@@ -391,7 +401,8 @@ def rank_anime_by_value(
         ]
     elif dimension == "creative":
         ranked = [
-            (anime_id, v.title, v.creative_value * 100) for anime_id, v in anime_values.items()
+            (anime_id, v.title, v.creative_value * 100)
+            for anime_id, v in anime_values.items()
         ]
     elif dimension == "technical":
         ranked = [
@@ -400,15 +411,18 @@ def rank_anime_by_value(
         ]
     elif dimension == "cultural":
         ranked = [
-            (anime_id, v.title, v.cultural_value * 100) for anime_id, v in anime_values.items()
+            (anime_id, v.title, v.cultural_value * 100)
+            for anime_id, v in anime_values.items()
         ]
     elif dimension == "value_per_staff":
         ranked = [
-            (anime_id, v.title, v.value_per_staff) for anime_id, v in anime_values.items()
+            (anime_id, v.title, v.value_per_staff)
+            for anime_id, v in anime_values.items()
         ]
     else:
         ranked = [
-            (anime_id, v.title, v.composite_value) for anime_id, v in anime_values.items()
+            (anime_id, v.title, v.composite_value)
+            for anime_id, v in anime_values.items()
         ]
 
     # Sort descending
@@ -524,9 +538,11 @@ def main():
         metrics = anime_values[anime_id]
         print(f"{rank}. {title} ({metrics.year})")
         print(f"   総合価値: {value:.1f}")
-        print(f"   内訳: 商業={metrics.commercial_value:.2f}, "
-              f"創造={metrics.creative_value:.2f}, "
-              f"技術={metrics.technical_value:.2f}")
+        print(
+            f"   内訳: 商業={metrics.commercial_value:.2f}, "
+            f"創造={metrics.creative_value:.2f}, "
+            f"技術={metrics.technical_value:.2f}"
+        )
         print(f"   スタッフ品質: {metrics.staff_quality:.2f} ({metrics.staff_count}人)")
         print()
 

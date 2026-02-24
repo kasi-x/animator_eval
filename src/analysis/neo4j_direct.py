@@ -63,23 +63,17 @@ class Neo4jWriter:
         try:
             from neo4j import GraphDatabase
         except ImportError as e:
-            raise ImportError(
-                "neo4j driver not installed. Run: pixi install"
-            ) from e
+            raise ImportError("neo4j driver not installed. Run: pixi install") from e
 
         self.uri = uri or os.getenv("NEO4J_URI", "bolt://localhost:7687")
         self.user = user or os.getenv("NEO4J_USER", "neo4j")
         self.password = password or os.getenv("NEO4J_PASSWORD")
 
         if not self.password:
-            raise ValueError(
-                "NEO4J_PASSWORD required (env var or constructor arg)"
-            )
+            raise ValueError("NEO4J_PASSWORD required (env var or constructor arg)")
 
         logger.info("neo4j_connecting", uri=self.uri, user=self.user)
-        self.driver = GraphDatabase.driver(
-            self.uri, auth=(self.user, self.password)
-        )
+        self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
 
         # Verify connection
         self.driver.verify_connectivity()
@@ -139,9 +133,13 @@ class Neo4jWriter:
                 try:
                     session.run(cypher)
                 except Exception as e:
-                    logger.warning("constraint_or_index_failed", cypher=cypher, error=str(e))
+                    logger.warning(
+                        "constraint_or_index_failed", cypher=cypher, error=str(e)
+                    )
 
-            logger.info("neo4j_constraints_created", count=len(constraints) + len(indexes))
+            logger.info(
+                "neo4j_constraints_created", count=len(constraints) + len(indexes)
+            )
 
     def write_persons(
         self,
@@ -183,10 +181,18 @@ class Neo4jWriter:
                         "name_en": p.name_en,
                         "mal_id": p.mal_id,
                         "anilist_id": p.anilist_id,
-                        "authority": round(score_map[p.id].authority, 2) if p.id in score_map else None,
-                        "trust": round(score_map[p.id].trust, 2) if p.id in score_map else None,
-                        "skill": round(score_map[p.id].skill, 2) if p.id in score_map else None,
-                        "composite": round(score_map[p.id].composite, 2) if p.id in score_map else None,
+                        "authority": round(score_map[p.id].authority, 2)
+                        if p.id in score_map
+                        else None,
+                        "trust": round(score_map[p.id].trust, 2)
+                        if p.id in score_map
+                        else None,
+                        "skill": round(score_map[p.id].skill, 2)
+                        if p.id in score_map
+                        else None,
+                        "composite": round(score_map[p.id].composite, 2)
+                        if p.id in score_map
+                        else None,
                     }
                     for p in batch
                 ]
@@ -293,7 +299,9 @@ class Neo4jWriter:
         for anime_id, pids in anime_persons.items():
             pids_list = sorted(pids)
             for i in range(len(pids_list)):
-                for j in range(i + 1, min(i + 100, len(pids_list))):  # Cap to avoid O(n²)
+                for j in range(
+                    i + 1, min(i + 100, len(pids_list))
+                ):  # Cap to avoid O(n²)
                     pair = (pids_list[i], pids_list[j])
                     collab_counts[pair] += 1
 
@@ -359,7 +367,9 @@ class Neo4jWriter:
 
         logger.info("neo4j_write_all_complete")
 
-    def run_cypher(self, cypher: str, parameters: dict[str, Any] | None = None) -> list[dict]:
+    def run_cypher(
+        self, cypher: str, parameters: dict[str, Any] | None = None
+    ) -> list[dict]:
         """Execute arbitrary Cypher query.
 
         Args:
@@ -380,10 +390,18 @@ class Neo4jWriter:
             Dict with node counts, relationship counts, etc.
         """
         with self.driver.session() as session:
-            person_count = session.run("MATCH (p:Person) RETURN count(p) AS count").single()["count"]
-            anime_count = session.run("MATCH (a:Anime) RETURN count(a) AS count").single()["count"]
-            credit_count = session.run("MATCH ()-[r:CREDITED_IN]->() RETURN count(r) AS count").single()["count"]
-            collab_count = session.run("MATCH ()-[r:COLLABORATED_WITH]-() RETURN count(r) AS count").single()["count"]
+            person_count = session.run(
+                "MATCH (p:Person) RETURN count(p) AS count"
+            ).single()["count"]
+            anime_count = session.run(
+                "MATCH (a:Anime) RETURN count(a) AS count"
+            ).single()["count"]
+            credit_count = session.run(
+                "MATCH ()-[r:CREDITED_IN]->() RETURN count(r) AS count"
+            ).single()["count"]
+            collab_count = session.run(
+                "MATCH ()-[r:COLLABORATED_WITH]-() RETURN count(r) AS count"
+            ).single()["count"]
 
             return {
                 "persons": person_count,
@@ -425,23 +443,17 @@ class Neo4jReader:
         try:
             from neo4j import GraphDatabase
         except ImportError as e:
-            raise ImportError(
-                "neo4j driver not installed. Run: pixi install"
-            ) from e
+            raise ImportError("neo4j driver not installed. Run: pixi install") from e
 
         self.uri = uri or os.getenv("NEO4J_URI", "bolt://localhost:7687")
         self.user = user or os.getenv("NEO4J_USER", "neo4j")
         self.password = password or os.getenv("NEO4J_PASSWORD")
 
         if not self.password:
-            raise ValueError(
-                "NEO4J_PASSWORD required (env var or constructor arg)"
-            )
+            raise ValueError("NEO4J_PASSWORD required (env var or constructor arg)")
 
         logger.info("neo4j_reader_connecting", uri=self.uri, user=self.user)
-        self.driver = GraphDatabase.driver(
-            self.uri, auth=(self.user, self.password)
-        )
+        self.driver = GraphDatabase.driver(self.uri, auth=(self.user, self.password))
 
         self.driver.verify_connectivity()
         logger.info("neo4j_reader_connected", uri=self.uri)
@@ -460,9 +472,7 @@ class Neo4jReader:
         """Context manager exit."""
         self.close()
 
-    def find_shortest_path(
-        self, person_id_a: str, person_id_b: str
-    ) -> dict[str, Any]:
+    def find_shortest_path(self, person_id_a: str, person_id_b: str) -> dict[str, Any]:
         """Find shortest collaboration path between two persons.
 
         Uses Neo4j's shortestPath algorithm on COLLABORATED_WITH edges.
@@ -486,9 +496,7 @@ class Neo4jReader:
             length(path) AS path_length
         """
         with self.driver.session() as session:
-            result = session.run(
-                cypher, id_a=person_id_a, id_b=person_id_b
-            )
+            result = session.run(cypher, id_a=person_id_a, id_b=person_id_b)
             record = result.single()
 
         if record is None:
@@ -544,9 +552,7 @@ class Neo4jReader:
         ORDER BY (r1.shared_works + r2.shared_works) DESC
         """
         with self.driver.session() as session:
-            result = session.run(
-                cypher, id_a=person_id_a, id_b=person_id_b
-            )
+            result = session.run(cypher, id_a=person_id_a, id_b=person_id_b)
             records = [record.data() for record in result]
 
         logger.info(
@@ -753,9 +759,7 @@ class Neo4jReader:
         # Density = 2 * |E| / (|V| * (|V| - 1)) for undirected graph
         density = 0.0
         if node_count >= 2:
-            density = round(
-                2.0 * edge_count / (node_count * (node_count - 1)), 4
-            )
+            density = round(2.0 * edge_count / (node_count * (node_count - 1)), 4)
 
         logger.info(
             "neo4j_community_subgraph",

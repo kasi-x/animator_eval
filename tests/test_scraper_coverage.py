@@ -43,7 +43,9 @@ def _run(coro):
 
 class TestExceptions:
     def test_scraper_error_attributes(self):
-        err = ScraperError("boom", source="anilist", url="http://x", metadata={"k": "v"})
+        err = ScraperError(
+            "boom", source="anilist", url="http://x", metadata={"k": "v"}
+        )
         assert str(err) == "boom"
         assert err.source == "anilist"
         assert err.url == "http://x"
@@ -111,7 +113,9 @@ class TestRetryAsync:
                 raise ScraperError("transient", source="test")
             return "ok"
 
-        result = _run(retry_async(flaky, max_attempts=5, base_delay=0.01, source="test"))
+        result = _run(
+            retry_async(flaky, max_attempts=5, base_delay=0.01, source="test")
+        )
         assert result == "ok"
         assert call_count == 3
 
@@ -122,7 +126,9 @@ class TestRetryAsync:
             raise ScraperError("permanent", source="test")
 
         with pytest.raises(EndpointUnreachableError) as exc_info:
-            _run(retry_async(always_fail, max_attempts=2, base_delay=0.01, source="test"))
+            _run(
+                retry_async(always_fail, max_attempts=2, base_delay=0.01, source="test")
+            )
         assert "Failed after 2 attempts" in str(exc_info.value)
 
     def test_rate_limit_error_respects_retry_after(self):
@@ -137,7 +143,11 @@ class TestRetryAsync:
                 raise RateLimitError(source="test", retry_after=0.01)
             return "success"
 
-        result = _run(retry_async(rate_limited_then_ok, max_attempts=3, base_delay=0.01, source="test"))
+        result = _run(
+            retry_async(
+                rate_limited_then_ok, max_attempts=3, base_delay=0.01, source="test"
+            )
+        )
         assert result == "success"
         assert call_count == 2
 
@@ -167,7 +177,9 @@ class TestAniListClient:
             _run(client.close())
 
     def test_init_with_token(self):
-        with patch("src.scrapers.anilist_scraper._env", {"ANILIST_ACCESS_TOKEN": "test-token"}):
+        with patch(
+            "src.scrapers.anilist_scraper._env", {"ANILIST_ACCESS_TOKEN": "test-token"}
+        ):
             from src.scrapers.anilist_scraper import AniListClient
 
             client = AniListClient()
@@ -223,7 +235,9 @@ class TestAniListClient:
 
         client = AniListClient()
         client._client = AsyncMock()
-        client._client.post = AsyncMock(side_effect=[rate_limit_response, probe_response, success_response])
+        client._client.post = AsyncMock(
+            side_effect=[rate_limit_response, probe_response, success_response]
+        )
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
@@ -259,7 +273,9 @@ class TestAniListClient:
 
         client = AniListClient()
         client._client = AsyncMock()
-        client._client.post = AsyncMock(side_effect=[rate_limit_response, probe_response, success_response])
+        client._client.post = AsyncMock(
+            side_effect=[rate_limit_response, probe_response, success_response]
+        )
         client.on_rate_limit = lambda secs: callback_calls.append(secs)
 
         async def run():
@@ -289,7 +305,9 @@ class TestAniListClient:
         client = AniListClient()
         client._access_token = "bad-token"
         client._client = AsyncMock()
-        client._client.post = AsyncMock(side_effect=[auth_error_response, success_response])
+        client._client.post = AsyncMock(
+            side_effect=[auth_error_response, success_response]
+        )
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
@@ -306,7 +324,10 @@ class TestAniListClient:
 
         response = httpx.Response(
             200,
-            json={"data": {"partial": True}, "errors": [{"message": "field not found"}]},
+            json={
+                "data": {"partial": True},
+                "errors": [{"message": "field not found"}],
+            },
             request=httpx.Request("POST", "https://graphql.anilist.co"),
         )
 
@@ -324,7 +345,9 @@ class TestAniListClient:
 
         client = AniListClient()
         client._client = AsyncMock()
-        client._client.post = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
+        client._client.post = AsyncMock(
+            side_effect=httpx.ConnectError("connection refused")
+        )
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
@@ -448,7 +471,11 @@ class TestAniListParsers:
 
         staff = {
             "id": 100,
-            "name": {"full": "Tetsuro Araki", "native": "荒木哲郎", "alternative": ["Araki T.", None, ""]},
+            "name": {
+                "full": "Tetsuro Araki",
+                "native": "荒木哲郎",
+                "alternative": ["Araki T.", None, ""],
+            },
             "image": {"large": "http://img/large.jpg", "medium": "http://img/med.jpg"},
             "dateOfBirth": {"year": 1976, "month": 11, "day": 21},
             "age": 47,
@@ -530,12 +557,20 @@ class TestAniListParsers:
 
         raw = {
             "id": 16498,
-            "title": {"romaji": "Shingeki no Kyojin", "english": "Attack on Titan", "native": "進撃の巨人"},
+            "title": {
+                "romaji": "Shingeki no Kyojin",
+                "english": "Attack on Titan",
+                "native": "進撃の巨人",
+            },
             "seasonYear": 2013,
             "season": "SPRING",
             "episodes": 25,
             "averageScore": 84,
-            "coverImage": {"large": "http://cover/l.jpg", "extraLarge": "http://cover/xl.jpg", "medium": "http://cover/m.jpg"},
+            "coverImage": {
+                "large": "http://cover/l.jpg",
+                "extraLarge": "http://cover/xl.jpg",
+                "medium": "http://cover/m.jpg",
+            },
             "bannerImage": "http://banner.jpg",
             "description": "Giants attack humanity",
             "format": "TV",
@@ -575,7 +610,10 @@ class TestAniListParsers:
     def test_parse_anilist_anime_no_english_falls_back_to_romaji(self):
         from src.scrapers.anilist_scraper import parse_anilist_anime
 
-        raw = {"id": 1, "title": {"romaji": "Test Romaji", "english": None, "native": None}}
+        raw = {
+            "id": 1,
+            "title": {"romaji": "Test Romaji", "english": None, "native": None},
+        }
         anime = parse_anilist_anime(raw)
         assert anime.title_en == "Test Romaji"
 
@@ -643,7 +681,11 @@ class TestAniListParsers:
                 "role": "Key Animation",
                 "node": {
                     "id": 42,
-                    "name": {"full": "Test Person", "native": "テスト", "alternative": ["Alias1", "Alias2"]},
+                    "name": {
+                        "full": "Test Person",
+                        "native": "テスト",
+                        "alternative": ["Alias1", "Alias2"],
+                    },
                 },
             }
         ]
@@ -670,8 +712,16 @@ class TestAniListParsers:
         from src.scrapers.anilist_scraper import parse_anilist_voice_actors
 
         edges = [
-            {"voiceActors": [{"id": 1, "name": {"full": "VA One", "native": "声優一"}}]},
-            {"voiceActors": [{"id": 1, "name": {"full": "VA One", "native": "声優一"}}]},  # duplicate
+            {
+                "voiceActors": [
+                    {"id": 1, "name": {"full": "VA One", "native": "声優一"}}
+                ]
+            },
+            {
+                "voiceActors": [
+                    {"id": 1, "name": {"full": "VA One", "native": "声優一"}}
+                ]
+            },  # duplicate
             {"voiceActors": [{"id": 2, "name": {"full": "VA Two"}}]},
         ]
         persons, credits = parse_anilist_voice_actors(edges, "anilist:1")
@@ -693,8 +743,15 @@ class TestAniListParsers:
                 "voiceActors": [
                     {
                         "id": 10,
-                        "name": {"full": "Yuki Kaji", "native": "梶裕貴", "alternative": ["Kaji"]},
-                        "image": {"large": "http://img/l.jpg", "medium": "http://img/m.jpg"},
+                        "name": {
+                            "full": "Yuki Kaji",
+                            "native": "梶裕貴",
+                            "alternative": ["Kaji"],
+                        },
+                        "image": {
+                            "large": "http://img/l.jpg",
+                            "medium": "http://img/m.jpg",
+                        },
                         "dateOfBirth": {"year": 1985, "month": 9, "day": 3},
                         "age": 38,
                         "gender": "Male",
@@ -830,7 +887,9 @@ class TestJikanClient:
 
         result = _run(client.get_top_anime(page=2, limit=10, type_filter="movie"))
         assert result == {"data": [], "pagination": {}}
-        client.get.assert_called_once_with("/top/anime", params={"page": 2, "limit": 10, "type": "movie"})
+        client.get.assert_called_once_with(
+            "/top/anime", params={"page": 2, "limit": 10, "type": "movie"}
+        )
         _run(client.close())
 
     def test_get_top_anime_no_type_filter(self):
@@ -902,7 +961,10 @@ class TestMALParsers:
         from src.scrapers.mal_scraper import parse_staff_data
 
         staff_list = [
-            {"person": {"mal_id": 10, "name": "CLAMP"}, "positions": ["Original Creator"]}
+            {
+                "person": {"mal_id": 10, "name": "CLAMP"},
+                "positions": ["Original Creator"],
+            }
         ]
         persons, credits = parse_staff_data(staff_list, "mal:1")
         assert persons[0].name_en == "CLAMP"
@@ -923,9 +985,7 @@ class TestMALParsers:
     def test_parse_staff_data_empty_positions(self):
         from src.scrapers.mal_scraper import parse_staff_data
 
-        staff_list = [
-            {"person": {"mal_id": 1, "name": "Doe, John"}, "positions": []}
-        ]
+        staff_list = [{"person": {"mal_id": 1, "name": "Doe, John"}, "positions": []}]
         persons, credits = parse_staff_data(staff_list, "mal:1")
         assert len(persons) == 1
         assert len(credits) == 0
@@ -1008,7 +1068,10 @@ class TestMediaArtsJsonLdParser:
             "@graph": [
                 {
                     "schema:identifier": "C10002",
-                    "schema:name": ["タイトル", {"@value": "タイトル", "@language": "ja-hrkt"}],
+                    "schema:name": [
+                        "タイトル",
+                        {"@value": "タイトル", "@language": "ja-hrkt"},
+                    ],
                     "schema:datePublished": "2021",
                     "schema:contributor": "[監督]テスト太郎",
                 }
@@ -1331,7 +1394,9 @@ class TestImageDownloader:
 
         async def run():
             with patch("src.scrapers.image_downloader.IMAGES_DIR", images_dir):
-                return await download_image(client, "http://example.com/img.jpg", save_dir, "test.jpg")
+                return await download_image(
+                    client, "http://example.com/img.jpg", save_dir, "test.jpg"
+                )
 
         result = _run(run())
         assert result is not None
@@ -1356,7 +1421,9 @@ class TestImageDownloader:
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
                 with patch("src.scrapers.image_downloader.IMAGES_DIR", tmp_path):
-                    return await download_image(client, "http://example.com/img.jpg", save_dir, "test.jpg")
+                    return await download_image(
+                        client, "http://example.com/img.jpg", save_dir, "test.jpg"
+                    )
 
         result = _run(run())
         assert result is not None
@@ -1377,7 +1444,9 @@ class TestImageDownloader:
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                return await download_image(client, "http://example.com/img.jpg", save_dir, "test.jpg")
+                return await download_image(
+                    client, "http://example.com/img.jpg", save_dir, "test.jpg"
+                )
 
         result = _run(run())
         assert result is None
@@ -1397,7 +1466,9 @@ class TestImageDownloader:
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                return await download_image(client, "http://example.com/img.jpg", save_dir, "test.jpg")
+                return await download_image(
+                    client, "http://example.com/img.jpg", save_dir, "test.jpg"
+                )
 
         result = _run(run())
         assert result is None
@@ -1423,7 +1494,9 @@ class TestImageDownloader:
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
                 with patch("src.scrapers.image_downloader.IMAGES_DIR", tmp_path):
-                    return await download_image(client, "http://example.com/img.jpg", save_dir, "test.jpg")
+                    return await download_image(
+                        client, "http://example.com/img.jpg", save_dir, "test.jpg"
+                    )
 
         result = _run(run())
         assert result is not None
@@ -1438,7 +1511,9 @@ class TestImageDownloader:
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                return await download_image(client, "http://example.com/img.jpg", save_dir, "test.jpg")
+                return await download_image(
+                    client, "http://example.com/img.jpg", save_dir, "test.jpg"
+                )
 
         result = _run(run())
         assert result is None
@@ -1465,7 +1540,9 @@ class TestImageDownloader:
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
                 with patch("src.scrapers.image_downloader.IMAGES_DIR", tmp_path):
-                    return await download_image(client, "http://example.com/img.jpg", save_dir, "test.jpg")
+                    return await download_image(
+                        client, "http://example.com/img.jpg", save_dir, "test.jpg"
+                    )
 
         result = _run(run())
         assert result is not None
@@ -1484,7 +1561,9 @@ class TestImageDownloader:
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                return await download_image(client, "http://example.com/img.jpg", save_dir, "test.jpg")
+                return await download_image(
+                    client, "http://example.com/img.jpg", save_dir, "test.jpg"
+                )
 
         result = _run(run())
         assert result is None
@@ -1503,7 +1582,9 @@ class TestImageDownloader:
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                return await download_image(client, "http://example.com/img.jpg", save_dir, "test.jpg")
+                return await download_image(
+                    client, "http://example.com/img.jpg", save_dir, "test.jpg"
+                )
 
         result = _run(run())
         assert result is None
@@ -1518,7 +1599,9 @@ class TestImageDownloader:
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                return await download_image(client, "http://example.com/img.jpg", save_dir, "test.jpg")
+                return await download_image(
+                    client, "http://example.com/img.jpg", save_dir, "test.jpg"
+                )
 
         result = _run(run())
         assert result is None
@@ -1542,7 +1625,9 @@ class TestImageDownloader:
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
                 with patch("src.scrapers.image_downloader.IMAGES_DIR", tmp_path):
-                    return await download_image(client, "http://example.com/photo.png", save_dir)
+                    return await download_image(
+                        client, "http://example.com/photo.png", save_dir
+                    )
 
         result = _run(run())
         assert result is not None
@@ -1559,7 +1644,9 @@ class TestDownloadPersonImages:
         persons = [("person:1", "http://img/large.jpg", "http://img/med.jpg")]
 
         async def run():
-            with patch("src.scrapers.image_downloader.download_image", new_callable=AsyncMock) as mock_dl:
+            with patch(
+                "src.scrapers.image_downloader.download_image", new_callable=AsyncMock
+            ) as mock_dl:
                 mock_dl.return_value = "images/persons/person_1/large.png"
                 return await download_person_images(persons, show_progress=False)
 
@@ -1573,7 +1660,9 @@ class TestDownloadPersonImages:
         persons = [("person:1", None, None)]
 
         async def run():
-            with patch("src.scrapers.image_downloader.download_image", new_callable=AsyncMock) as mock_dl:
+            with patch(
+                "src.scrapers.image_downloader.download_image", new_callable=AsyncMock
+            ) as mock_dl:
                 result = await download_person_images(persons, show_progress=False)
                 return result, mock_dl
 
@@ -1587,10 +1676,19 @@ class TestDownloadAnimeImages:
     def test_download_anime_images_no_progress(self):
         from src.scrapers.image_downloader import download_anime_images
 
-        anime = [("anime:1", "http://cover/l.jpg", "http://cover/xl.jpg", "http://banner.jpg")]
+        anime = [
+            (
+                "anime:1",
+                "http://cover/l.jpg",
+                "http://cover/xl.jpg",
+                "http://banner.jpg",
+            )
+        ]
 
         async def run():
-            with patch("src.scrapers.image_downloader.download_image", new_callable=AsyncMock) as mock_dl:
+            with patch(
+                "src.scrapers.image_downloader.download_image", new_callable=AsyncMock
+            ) as mock_dl:
                 mock_dl.return_value = "images/anime/anime_1/cover.jpg"
                 return await download_anime_images(anime, show_progress=False)
 
@@ -1604,7 +1702,9 @@ class TestDownloadAnimeImages:
         anime = [("anime:1", "http://cover/l.jpg", "http://cover/xl.jpg", None)]
 
         async def run():
-            with patch("src.scrapers.image_downloader.download_image", new_callable=AsyncMock) as mock_dl:
+            with patch(
+                "src.scrapers.image_downloader.download_image", new_callable=AsyncMock
+            ) as mock_dl:
                 mock_dl.return_value = "images/anime/anime_1/cover.jpg"
                 await download_anime_images(anime, show_progress=False)
                 return mock_dl
@@ -1621,7 +1721,9 @@ class TestDownloadAnimeImages:
         anime = [("anime:1", "http://cover/l.jpg", None, None)]
 
         async def run():
-            with patch("src.scrapers.image_downloader.download_image", new_callable=AsyncMock) as mock_dl:
+            with patch(
+                "src.scrapers.image_downloader.download_image", new_callable=AsyncMock
+            ) as mock_dl:
                 mock_dl.return_value = "images/anime/anime_1/cover.jpg"
                 await download_anime_images(anime, show_progress=False)
                 return mock_dl
@@ -1636,7 +1738,9 @@ class TestDownloadAnimeImages:
         anime = [("anime:1", None, None, None)]
 
         async def run():
-            with patch("src.scrapers.image_downloader.download_image", new_callable=AsyncMock) as mock_dl:
+            with patch(
+                "src.scrapers.image_downloader.download_image", new_callable=AsyncMock
+            ) as mock_dl:
                 result = await download_anime_images(anime, show_progress=False)
                 return result, mock_dl
 
@@ -1654,7 +1758,10 @@ class TestDownloadAnimeImages:
 class TestMediaArtsDownload:
     def test_download_cached(self, tmp_path):
         """Cached version skips download."""
-        from src.scrapers.mediaarts_scraper import ANIME_COLLECTION_FILES, download_madb_dataset
+        from src.scrapers.mediaarts_scraper import (
+            ANIME_COLLECTION_FILES,
+            download_madb_dataset,
+        )
 
         # Pre-create version file and JSON files
         (tmp_path / ".version").write_text("v1.2.12")
@@ -1663,7 +1770,13 @@ class TestMediaArtsDownload:
             (tmp_path / json_name).write_text("{}")
 
         mock_release = {"tag_name": "v1.2.12", "assets": []}
-        mock_resp = httpx.Response(200, json=mock_release, request=httpx.Request("GET", "https://api.github.com/repos/x/releases/latest"))
+        mock_resp = httpx.Response(
+            200,
+            json=mock_release,
+            request=httpx.Request(
+                "GET", "https://api.github.com/repos/x/releases/latest"
+            ),
+        )
 
         async def run():
             with patch("httpx.AsyncClient") as mock_cls:

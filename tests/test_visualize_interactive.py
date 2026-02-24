@@ -42,7 +42,10 @@ def _sample_scores():
 
 def _sample_timeline():
     """テスト用タイムラインデータ."""
-    return {"years": [2018, 2019, 2020, 2021, 2022], "credit_counts": [10, 15, 20, 18, 25]}
+    return {
+        "years": [2018, 2019, 2020, 2021, 2022],
+        "credit_counts": [10, 15, 20, 18, 25],
+    }
 
 
 def _sample_collaboration():
@@ -121,7 +124,9 @@ class TestInteractiveScatter:
     def test_creates_html_file(self, tmp_path):
         scores = _sample_scores()
         output = tmp_path / "scatter.html"
-        plot_interactive_scatter(scores, x_axis="authority", y_axis="trust", output_path=output)
+        plot_interactive_scatter(
+            scores, x_axis="authority", y_axis="trust", output_path=output
+        )
         assert output.exists()
         assert output.stat().st_size > 0
 
@@ -133,7 +138,9 @@ class TestInteractiveScatter:
     def test_different_axes(self, tmp_path):
         scores = _sample_scores()
         output = tmp_path / "scatter.html"
-        plot_interactive_scatter(scores, x_axis="skill", y_axis="trust", output_path=output)
+        plot_interactive_scatter(
+            scores, x_axis="skill", y_axis="trust", output_path=output
+        )
         content = output.read_text()
         assert "Skill Score" in content or "skill" in content.lower()
         assert "Trust Score" in content or "trust" in content.lower()

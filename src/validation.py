@@ -41,7 +41,9 @@ def validate_referential_integrity(conn: sqlite3.Connection) -> ValidationResult
     """).fetchone()[0]
 
     if orphan_person > 0:
-        result.add_error(f"orphan_credits_person: {orphan_person} credits reference non-existent persons")
+        result.add_error(
+            f"orphan_credits_person: {orphan_person} credits reference non-existent persons"
+        )
 
     # 存在しない anime_id を参照するクレジット
     orphan_anime = conn.execute("""
@@ -51,7 +53,9 @@ def validate_referential_integrity(conn: sqlite3.Connection) -> ValidationResult
     """).fetchone()[0]
 
     if orphan_anime > 0:
-        result.add_error(f"orphan_credits_anime: {orphan_anime} credits reference non-existent anime")
+        result.add_error(
+            f"orphan_credits_anime: {orphan_anime} credits reference non-existent anime"
+        )
 
     result.stats["orphan_person_credits"] = orphan_person
     result.stats["orphan_anime_credits"] = orphan_anime
@@ -70,7 +74,9 @@ def validate_data_completeness(conn: sqlite3.Connection) -> ValidationResult:
     """).fetchone()[0]
 
     if nameless > 0:
-        result.add_warning(f"nameless_persons: {nameless} persons have no name (ja or en)")
+        result.add_warning(
+            f"nameless_persons: {nameless} persons have no name (ja or en)"
+        )
 
     # タイトルが両方空のアニメ
     titleless = conn.execute("""
@@ -98,15 +104,17 @@ def validate_data_completeness(conn: sqlite3.Connection) -> ValidationResult:
     if total_anime > 0 and no_score / total_anime > 0.5:
         result.add_warning(
             f"low_score_coverage: {no_score}/{total_anime} anime have no score "
-            f"({no_score/total_anime:.0%})"
+            f"({no_score / total_anime:.0%})"
         )
 
-    result.stats.update({
-        "nameless_persons": nameless,
-        "titleless_anime": titleless,
-        "no_year_anime": no_year,
-        "no_score_anime": no_score,
-    })
+    result.stats.update(
+        {
+            "nameless_persons": nameless,
+            "titleless_anime": titleless,
+            "no_year_anime": no_year,
+            "no_score_anime": no_score,
+        }
+    )
 
     return result
 
@@ -123,7 +131,9 @@ def validate_credit_distribution(conn: sqlite3.Connection) -> ValidationResult:
     """).fetchone()[0]
 
     if no_credits > 0:
-        result.add_warning(f"persons_without_credits: {no_credits} persons have no credits")
+        result.add_warning(
+            f"persons_without_credits: {no_credits} persons have no credits"
+        )
 
     # クレジットなしのアニメ
     no_anime_credits = conn.execute("""
@@ -133,7 +143,9 @@ def validate_credit_distribution(conn: sqlite3.Connection) -> ValidationResult:
     """).fetchone()[0]
 
     if no_anime_credits > 0:
-        result.add_warning(f"anime_without_credits: {no_anime_credits} anime have no credits")
+        result.add_warning(
+            f"anime_without_credits: {no_anime_credits} anime have no credits"
+        )
 
     # 極端にクレジットが多い人物（上位1%が異常値でないか）
     top_credits = conn.execute("""
@@ -152,13 +164,15 @@ def validate_credit_distribution(conn: sqlite3.Connection) -> ValidationResult:
         if avg_credits and max_credits > avg_credits * 50:
             result.add_warning(
                 f"credit_outlier: top person has {max_credits} credits "
-                f"(avg={avg_credits:.1f}, ratio={max_credits/avg_credits:.0f}x)"
+                f"(avg={avg_credits:.1f}, ratio={max_credits / avg_credits:.0f}x)"
             )
 
-    result.stats.update({
-        "persons_without_credits": no_credits,
-        "anime_without_credits": no_anime_credits,
-    })
+    result.stats.update(
+        {
+            "persons_without_credits": no_credits,
+            "anime_without_credits": no_anime_credits,
+        }
+    )
 
     return result
 
@@ -218,7 +232,9 @@ def validate_data_freshness(
     cutoff_year = current_year - stale_years
 
     # 最新のアニメ年
-    latest = conn.execute("SELECT MAX(year) FROM anime WHERE year IS NOT NULL").fetchone()[0]
+    latest = conn.execute(
+        "SELECT MAX(year) FROM anime WHERE year IS NOT NULL"
+    ).fetchone()[0]
     if latest and latest < cutoff_year:
         result.add_warning(
             f"stale_data: newest anime is from {latest}, "
@@ -245,13 +261,16 @@ def validate_data_freshness(
         )
 
     # 直近でクレジットのない人物の割合（活動停止検出）
-    inactive = conn.execute("""
+    inactive = conn.execute(
+        """
         SELECT COUNT(DISTINCT c.person_id) FROM credits c
         JOIN anime a ON c.anime_id = a.id
         WHERE a.year IS NOT NULL
         GROUP BY c.person_id
         HAVING MAX(a.year) < ?
-    """, (cutoff_year,)).fetchall()
+    """,
+        (cutoff_year,),
+    ).fetchall()
 
     total_persons = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
     inactive_count = len(inactive)
@@ -259,7 +278,7 @@ def validate_data_freshness(
     if total_persons > 0 and inactive_count / total_persons > 0.5:
         result.add_warning(
             f"high_inactivity: {inactive_count}/{total_persons} persons "
-            f"({inactive_count/total_persons:.0%}) have no credits since {cutoff_year}"
+            f"({inactive_count / total_persons:.0%}) have no credits since {cutoff_year}"
         )
 
     # 単一ソースのみのクレジット割合
@@ -279,15 +298,17 @@ def validate_data_freshness(
     if credited_persons > 10 and single_source / credited_persons > 0.8:
         result.add_warning(
             f"low_source_diversity: {single_source}/{credited_persons} persons "
-            f"({single_source/credited_persons:.0%}) have credits from only one source"
+            f"({single_source / credited_persons:.0%}) have credits from only one source"
         )
 
-    result.stats.update({
-        "latest_anime_year": latest or 0,
-        "stale_sources": len(stale_sources),
-        "inactive_persons": inactive_count,
-        "single_source_persons": single_source,
-    })
+    result.stats.update(
+        {
+            "latest_anime_year": latest or 0,
+            "stale_sources": len(stale_sources),
+            "inactive_persons": inactive_count,
+            "single_source_persons": single_source,
+        }
+    )
 
     return result
 

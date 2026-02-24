@@ -55,37 +55,65 @@ def plot_event_study(
     fig, ax = plt.subplots(figsize=figsize)
 
     # Plot coefficients with confidence intervals
-    ax.plot(relative_times, betas, 'o-', color='#2E86AB', linewidth=2,
-            markersize=8, label='Estimated Effect', zorder=3)
+    ax.plot(
+        relative_times,
+        betas,
+        "o-",
+        color="#2E86AB",
+        linewidth=2,
+        markersize=8,
+        label="Estimated Effect",
+        zorder=3,
+    )
 
     # Shade confidence interval
-    ax.fill_between(relative_times, ci_lowers, ci_uppers,
-                     alpha=0.3, color='#2E86AB', label='95% CI')
+    ax.fill_between(
+        relative_times, ci_lowers, ci_uppers, alpha=0.3, color="#2E86AB", label="95% CI"
+    )
 
     # Zero reference line
-    ax.axhline(y=0, color='black', linestyle='--', linewidth=1,
-               alpha=0.5, label='No Effect', zorder=1)
+    ax.axhline(
+        y=0,
+        color="black",
+        linestyle="--",
+        linewidth=1,
+        alpha=0.5,
+        label="No Effect",
+        zorder=1,
+    )
 
     # Vertical line at treatment year (k=0)
-    ax.axvline(x=0, color='red', linestyle=':', linewidth=2,
-               alpha=0.7, label='Treatment Year', zorder=2)
+    ax.axvline(
+        x=0,
+        color="red",
+        linestyle=":",
+        linewidth=2,
+        alpha=0.7,
+        label="Treatment Year",
+        zorder=2,
+    )
 
     # Shade pre-treatment region
     pre_treatment_times = [k for k in relative_times if k < 0]
     if pre_treatment_times:
-        ax.axvspan(min(pre_treatment_times) - 0.5, -0.5,
-                   alpha=0.1, color='gray', label='Pre-Treatment')
+        ax.axvspan(
+            min(pre_treatment_times) - 0.5,
+            -0.5,
+            alpha=0.1,
+            color="gray",
+            label="Pre-Treatment",
+        )
 
     # Labels and title
-    ax.set_xlabel('Relative Time (Years from Major Studio Entry)', fontsize=12)
+    ax.set_xlabel("Relative Time (Years from Major Studio Entry)", fontsize=12)
     ax.set_ylabel(ylabel, fontsize=12)
-    ax.set_title(title, fontsize=14, fontweight='bold')
+    ax.set_title(title, fontsize=14, fontweight="bold")
 
     # Grid
-    ax.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
+    ax.grid(True, alpha=0.3, linestyle="-", linewidth=0.5)
 
     # Legend
-    ax.legend(loc='best', framealpha=0.95, fontsize=10)
+    ax.legend(loc="best", framealpha=0.95, fontsize=10)
 
     # Tighten layout
     plt.tight_layout()
@@ -93,7 +121,7 @@ def plot_event_study(
     # Save
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=150, bbox_inches='tight')
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
     logger.info("event_study_plot_saved", path=str(output_path))
@@ -132,20 +160,32 @@ def plot_event_study_with_annotation(
     fig, ax = plt.subplots(figsize=(12, 7))
 
     # Plot coefficients
-    ax.plot(relative_times, betas, 'o-', color='#2E86AB', linewidth=2.5,
-            markersize=9, label='Estimated Effect', zorder=3)
+    ax.plot(
+        relative_times,
+        betas,
+        "o-",
+        color="#2E86AB",
+        linewidth=2.5,
+        markersize=9,
+        label="Estimated Effect",
+        zorder=3,
+    )
 
     # Confidence interval
-    ax.fill_between(relative_times, ci_lowers, ci_uppers,
-                     alpha=0.25, color='#2E86AB', label='95% CI')
+    ax.fill_between(
+        relative_times,
+        ci_lowers,
+        ci_uppers,
+        alpha=0.25,
+        color="#2E86AB",
+        label="95% CI",
+    )
 
     # Zero line
-    ax.axhline(y=0, color='black', linestyle='--', linewidth=1.5,
-               alpha=0.6, zorder=1)
+    ax.axhline(y=0, color="black", linestyle="--", linewidth=1.5, alpha=0.6, zorder=1)
 
     # Treatment year line
-    ax.axvline(x=0, color='red', linestyle=':', linewidth=2.5,
-               alpha=0.8, zorder=2)
+    ax.axvline(x=0, color="red", linestyle=":", linewidth=2.5, alpha=0.8, zorder=2)
 
     # Pre-treatment shading (color-coded by test result)
     pre_treatment_times = [k for k in relative_times if k < 0]
@@ -153,24 +193,31 @@ def plot_event_study_with_annotation(
         test_result = parallel_trends_test.get("result", "inconclusive")
 
         if test_result == "passed":
-            shade_color = '#06D6A0'  # Green
-            shade_label = 'Pre-Treatment (✓ Parallel Trends)'
+            shade_color = "#06D6A0"  # Green
+            shade_label = "Pre-Treatment (✓ Parallel Trends)"
         elif test_result == "failed":
-            shade_color = '#EF476F'  # Red
-            shade_label = 'Pre-Treatment (✗ Trends Violated)'
+            shade_color = "#EF476F"  # Red
+            shade_label = "Pre-Treatment (✗ Trends Violated)"
         else:
-            shade_color = '#FFD166'  # Yellow
-            shade_label = 'Pre-Treatment (? Questionable)'
+            shade_color = "#FFD166"  # Yellow
+            shade_label = "Pre-Treatment (? Questionable)"
 
-        ax.axvspan(min(pre_treatment_times) - 0.5, -0.5,
-                   alpha=0.15, color=shade_color, label=shade_label)
+        ax.axvspan(
+            min(pre_treatment_times) - 0.5,
+            -0.5,
+            alpha=0.15,
+            color=shade_color,
+            label=shade_label,
+        )
 
     # Annotate parallel trends test result
     if parallel_trends_test:
         evidence = parallel_trends_test.get("evidence", {})
 
         annotation_text = "Parallel Trends Test:\n"
-        annotation_text += f"Result: {parallel_trends_test.get('result', 'N/A').upper()}\n"
+        annotation_text += (
+            f"Result: {parallel_trends_test.get('result', 'N/A').upper()}\n"
+        )
 
         if evidence:
             avg_beta = evidence.get("avg_abs_beta", 0)
@@ -179,23 +226,29 @@ def plot_event_study_with_annotation(
             annotation_text += f"Max |β_pre|: {max_beta:.2f}"
 
         # Place annotation in upper right
-        ax.text(0.98, 0.98, annotation_text,
-                transform=ax.transAxes,
-                fontsize=10,
-                verticalalignment='top',
-                horizontalalignment='right',
-                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+        ax.text(
+            0.98,
+            0.98,
+            annotation_text,
+            transform=ax.transAxes,
+            fontsize=10,
+            verticalalignment="top",
+            horizontalalignment="right",
+            bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+        )
 
     # Labels
-    ax.set_xlabel('Relative Time (Years from Major Studio Entry)', fontsize=12, fontweight='bold')
-    ax.set_ylabel('Effect on Skill Score (β_k)', fontsize=12, fontweight='bold')
-    ax.set_title(title, fontsize=14, fontweight='bold', pad=15)
+    ax.set_xlabel(
+        "Relative Time (Years from Major Studio Entry)", fontsize=12, fontweight="bold"
+    )
+    ax.set_ylabel("Effect on Skill Score (β_k)", fontsize=12, fontweight="bold")
+    ax.set_title(title, fontsize=14, fontweight="bold", pad=15)
 
     # Grid
-    ax.grid(True, alpha=0.3, linestyle='-', linewidth=0.5)
+    ax.grid(True, alpha=0.3, linestyle="-", linewidth=0.5)
 
     # Legend
-    ax.legend(loc='upper left', framealpha=0.95, fontsize=10)
+    ax.legend(loc="upper left", framealpha=0.95, fontsize=10)
 
     # Tighten layout
     plt.tight_layout()
@@ -203,7 +256,7 @@ def plot_event_study_with_annotation(
     # Save
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=150, bbox_inches='tight')
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
     logger.info("event_study_annotated_plot_saved", path=str(output_path))
@@ -244,12 +297,16 @@ def plot_event_study_decomposition(
         cis_lower = [pre_results[k].ci_lower for k in times]
         cis_upper = [pre_results[k].ci_upper for k in times]
 
-        ax.plot(times, betas, 'o-', color='#06D6A0', linewidth=2, markersize=8)
-        ax.fill_between(times, cis_lower, cis_upper, alpha=0.3, color='#06D6A0')
-        ax.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
-        ax.set_title('Pre-Treatment Period\n(Parallel Trends Check)', fontsize=11, fontweight='bold')
-        ax.set_xlabel('Years Before Entry', fontsize=10)
-        ax.set_ylabel('Effect (β_k)', fontsize=10)
+        ax.plot(times, betas, "o-", color="#06D6A0", linewidth=2, markersize=8)
+        ax.fill_between(times, cis_lower, cis_upper, alpha=0.3, color="#06D6A0")
+        ax.axhline(y=0, color="black", linestyle="--", linewidth=1, alpha=0.5)
+        ax.set_title(
+            "Pre-Treatment Period\n(Parallel Trends Check)",
+            fontsize=11,
+            fontweight="bold",
+        )
+        ax.set_xlabel("Years Before Entry", fontsize=10)
+        ax.set_ylabel("Effect (β_k)", fontsize=10)
         ax.grid(True, alpha=0.3)
 
     # Panel 2: Treatment year
@@ -259,16 +316,25 @@ def plot_event_study_decomposition(
         ci_lower = treatment_result.ci_lower
         ci_upper = treatment_result.ci_upper
 
-        ax.bar([0], [beta], color='#EF476F', alpha=0.7, label='Immediate Effect')
-        ax.errorbar([0], [beta], yerr=[[beta - ci_lower], [ci_upper - beta]],
-                    fmt='none', ecolor='black', capsize=10, capthick=2)
-        ax.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
-        ax.set_title('Treatment Year\n(Immediate Impact)', fontsize=11, fontweight='bold')
-        ax.set_xlabel('Entry Year', fontsize=10)
-        ax.set_ylabel('Effect (β_0)', fontsize=10)
+        ax.bar([0], [beta], color="#EF476F", alpha=0.7, label="Immediate Effect")
+        ax.errorbar(
+            [0],
+            [beta],
+            yerr=[[beta - ci_lower], [ci_upper - beta]],
+            fmt="none",
+            ecolor="black",
+            capsize=10,
+            capthick=2,
+        )
+        ax.axhline(y=0, color="black", linestyle="--", linewidth=1, alpha=0.5)
+        ax.set_title(
+            "Treatment Year\n(Immediate Impact)", fontsize=11, fontweight="bold"
+        )
+        ax.set_xlabel("Entry Year", fontsize=10)
+        ax.set_ylabel("Effect (β_0)", fontsize=10)
         ax.set_xticks([0])
-        ax.set_xticklabels(['k=0'])
-        ax.grid(True, alpha=0.3, axis='y')
+        ax.set_xticklabels(["k=0"])
+        ax.grid(True, alpha=0.3, axis="y")
 
     # Panel 3: Post-treatment
     if post_results:
@@ -278,17 +344,25 @@ def plot_event_study_decomposition(
         cis_lower = [post_results[k].ci_lower for k in times]
         cis_upper = [post_results[k].ci_upper for k in times]
 
-        ax.plot(times, betas, 'o-', color='#2E86AB', linewidth=2, markersize=8)
-        ax.fill_between(times, cis_lower, cis_upper, alpha=0.3, color='#2E86AB')
-        ax.axhline(y=0, color='black', linestyle='--', linewidth=1, alpha=0.5)
-        ax.set_title('Post-Treatment Period\n(Cumulative Effects)', fontsize=11, fontweight='bold')
-        ax.set_xlabel('Years After Entry', fontsize=10)
-        ax.set_ylabel('Effect (β_k)', fontsize=10)
+        ax.plot(times, betas, "o-", color="#2E86AB", linewidth=2, markersize=8)
+        ax.fill_between(times, cis_lower, cis_upper, alpha=0.3, color="#2E86AB")
+        ax.axhline(y=0, color="black", linestyle="--", linewidth=1, alpha=0.5)
+        ax.set_title(
+            "Post-Treatment Period\n(Cumulative Effects)",
+            fontsize=11,
+            fontweight="bold",
+        )
+        ax.set_xlabel("Years After Entry", fontsize=10)
+        ax.set_ylabel("Effect (β_k)", fontsize=10)
         ax.grid(True, alpha=0.3)
 
     # Overall title
-    fig.suptitle('Event Study Decomposition: Pre/During/Post Treatment',
-                 fontsize=14, fontweight='bold', y=1.02)
+    fig.suptitle(
+        "Event Study Decomposition: Pre/During/Post Treatment",
+        fontsize=14,
+        fontweight="bold",
+        y=1.02,
+    )
 
     # Tighten layout
     plt.tight_layout()
@@ -296,7 +370,7 @@ def plot_event_study_decomposition(
     # Save
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=150, bbox_inches='tight')
+    fig.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close(fig)
 
     logger.info("event_study_decomposition_saved", path=str(output_path))

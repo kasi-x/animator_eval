@@ -64,8 +64,10 @@ def compare_groups(
         }
 
     overall_winner = (
-        group_a_label if a_wins > b_wins
-        else group_b_label if b_wins > a_wins
+        group_a_label
+        if a_wins > b_wins
+        else group_b_label
+        if b_wins > a_wins
         else "tie"
     )
 

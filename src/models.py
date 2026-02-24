@@ -157,7 +157,7 @@ def parse_role(raw: str) -> Role:
 
     # 括弧とその中身を除去（エピソード番号など）
     # 例: "Animation Director (ep 10)" → "Animation Director"
-    cleaned = re.sub(r'\s*\([^)]*\)', '', raw)
+    cleaned = re.sub(r"\s*\([^)]*\)", "", raw)
 
     # 正規化: 小文字化、前後の空白削除
     normalized = cleaned.strip().lower()

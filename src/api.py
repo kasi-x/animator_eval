@@ -17,7 +17,15 @@ import os
 
 import structlog
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -30,7 +38,13 @@ from starlette.responses import JSONResponse
 from src.analysis.explain import explain_individual_profile
 from src.analysis.similarity import find_similar_persons
 from src.api_validators import AnimeId, PersonId, validate_query_string
-from src.database import db_connection, get_data_sources, get_db_stats, get_score_history, search_persons
+from src.database import (
+    db_connection,
+    get_data_sources,
+    get_db_stats,
+    get_score_history,
+    search_persons,
+)
 from src.utils.config import JSON_DIR
 from src.utils.json_io import (
     load_anime_statistics_from_json,
@@ -68,7 +82,9 @@ app = FastAPI(
 )
 
 # --- CORS ---
-_cors_env = os.environ.get("CORS_ORIGINS", "http://localhost:3000,http://localhost:8000")
+_cors_env = os.environ.get(
+    "CORS_ORIGINS", "http://localhost:3000,http://localhost:8000"
+)
 CORS_ORIGINS = [origin.strip() for origin in _cors_env.split(",") if origin.strip()]
 
 app.add_middleware(
@@ -198,7 +214,9 @@ def summary():
     """パイプラインサマリー."""
     data = load_pipeline_summary_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Summary not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Summary not found. Run pipeline first."
+        )
     return data
 
 
@@ -206,16 +224,22 @@ def summary():
 def list_persons(
     page: int = Query(1, ge=1, description="ページ番号"),
     per_page: int = Query(50, ge=1, le=200, description="1ページあたりの件数"),
-    sort: str = Query("composite", description="ソート軸 (composite, authority, trust, skill)"),
+    sort: str = Query(
+        "composite", description="ソート軸 (composite, authority, trust, skill)"
+    ),
 ):
     """全人物スコア一覧（ページネーション対応）."""
     scores = load_person_scores_from_json()
     if not scores:
-        return PaginatedResponse(items=[], total=0, page=page, per_page=per_page, pages=0)
+        return PaginatedResponse(
+            items=[], total=0, page=page, per_page=per_page, pages=0
+        )
 
     valid_sorts = {"composite", "authority", "trust", "skill"}
     if sort not in valid_sorts:
-        raise HTTPException(status_code=400, detail=f"Invalid sort: {sort}. Use: {valid_sorts}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid sort: {sort}. Use: {valid_sorts}"
+        )
 
     scores.sort(key=lambda x: x.get(sort, 0), reverse=True)
     total = len(scores)
@@ -223,7 +247,9 @@ def list_persons(
     start = (page - 1) * per_page
     items = scores[start : start + per_page]
 
-    return PaginatedResponse(items=items, total=total, page=page, per_page=per_page, pages=pages)
+    return PaginatedResponse(
+        items=items, total=total, page=page, per_page=per_page, pages=pages
+    )
 
 
 @app.get("/api/persons/search")
@@ -281,7 +307,9 @@ def get_person_history(
 
 @app.get("/api/ranking")
 def ranking(
-    role: str | None = Query(None, description="役職フィルタ (director, animator, etc.)"),
+    role: str | None = Query(
+        None, description="役職フィルタ (director, animator, etc.)"
+    ),
     year_from: int | None = Query(None, description="開始年"),
     year_to: int | None = Query(None, description="終了年"),
     sort: str = Query("composite", description="ソート軸"),
@@ -299,15 +327,20 @@ def ranking(
 
     if year_from:
         filtered = [
-            s for s in filtered
-            if s.get("career", {}).get("first_year") and s["career"]["first_year"] >= year_from
-            or s.get("career", {}).get("latest_year") and s["career"]["latest_year"] >= year_from
+            s
+            for s in filtered
+            if s.get("career", {}).get("first_year")
+            and s["career"]["first_year"] >= year_from
+            or s.get("career", {}).get("latest_year")
+            and s["career"]["latest_year"] >= year_from
         ]
 
     if year_to:
         filtered = [
-            s for s in filtered
-            if s.get("career", {}).get("first_year") and s["career"]["first_year"] <= year_to
+            s
+            for s in filtered
+            if s.get("career", {}).get("first_year")
+            and s["career"]["first_year"] <= year_to
         ]
 
     valid_sorts = {"composite", "authority", "trust", "skill"}
@@ -316,19 +349,28 @@ def ranking(
 
     filtered.sort(key=lambda x: x.get(sort, 0), reverse=True)
 
-    return {"items": filtered[:limit], "total": len(filtered), "sort": sort, "filters": {"role": role, "year_from": year_from, "year_to": year_to}}
+    return {
+        "items": filtered[:limit],
+        "total": len(filtered),
+        "sort": sort,
+        "filters": {"role": role, "year_from": year_from, "year_to": year_to},
+    }
 
 
 @app.get("/api/anime")
 def list_anime(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
-    sort: str = Query("credit_count", description="ソート (credit_count, avg_person_score, year)"),
+    sort: str = Query(
+        "credit_count", description="ソート (credit_count, avg_person_score, year)"
+    ),
 ):
     """アニメ統計一覧."""
     stats = load_anime_statistics_from_json()
     if not stats:
-        return PaginatedResponse(items=[], total=0, page=page, per_page=per_page, pages=0)
+        return PaginatedResponse(
+            items=[], total=0, page=page, per_page=per_page, pages=0
+        )
 
     items = [{"anime_id": k, **v} for k, v in stats.items()]
 
@@ -367,7 +409,9 @@ def transitions():
     """役職遷移分析."""
     data = load_role_transitions_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Transitions not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Transitions not found. Run pipeline first."
+        )
     return data
 
 
@@ -376,7 +420,9 @@ def crossval():
     """スコアクロスバリデーション結果."""
     data = load_cross_validation_results_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Cross-validation not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Cross-validation not found. Run pipeline first."
+        )
     return data
 
 
@@ -385,7 +431,9 @@ def influence():
     """影響ツリー（メンター・メンティー関係）."""
     data = load_influence_tree_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Influence data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Influence data not found. Run pipeline first."
+        )
     return data
 
 
@@ -394,7 +442,9 @@ def studios():
     """スタジオ分析."""
     data = load_studio_analysis_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Studio data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Studio data not found. Run pipeline first."
+        )
     return data
 
 
@@ -403,7 +453,9 @@ def seasonal():
     """シーズントレンド."""
     data = load_seasonal_trends_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Seasonal data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Seasonal data not found. Run pipeline first."
+        )
     return data
 
 
@@ -415,9 +467,15 @@ def collaborations(
     """コラボレーション強度ペア."""
     data = load_collaboration_pairs_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Collaboration data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Collaboration data not found. Run pipeline first."
+        )
     if person_id:
-        data = [d for d in data if d.get("person_a") == person_id or d.get("person_b") == person_id]
+        data = [
+            d
+            for d in data
+            if d.get("person_a") == person_id or d.get("person_b") == person_id
+        ]
     return {"items": data[:limit], "total": len(data)}
 
 
@@ -426,7 +484,9 @@ def outliers():
     """スコア外れ値検出結果."""
     data = load_outlier_analysis_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Outlier data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Outlier data not found. Run pipeline first."
+        )
     return data
 
 
@@ -435,19 +495,25 @@ def teams():
     """チーム構成分析."""
     data = load_team_patterns_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Team data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Team data not found. Run pipeline first."
+        )
     return data
 
 
 @app.get("/api/growth")
 def growth(
-    trend: str | None = Query(None, description="トレンドフィルタ (rising/stable/declining/inactive)"),
+    trend: str | None = Query(
+        None, description="トレンドフィルタ (rising/stable/declining/inactive)"
+    ),
     limit: int = Query(50, ge=1, le=500),
 ):
     """成長トレンド."""
     data = load_growth_trends_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Growth data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Growth data not found. Run pipeline first."
+        )
     persons = data.get("persons", {})
     if trend:
         persons = {pid: d for pid, d in persons.items() if d.get("trend") == trend}
@@ -464,7 +530,9 @@ def time_series():
     """年次時系列データ."""
     data = load_time_series_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Time series data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Time series data not found. Run pipeline first."
+        )
     return data
 
 
@@ -473,7 +541,9 @@ def decades():
     """年代別分析."""
     data = load_decade_analysis_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Decade data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Decade data not found. Run pipeline first."
+        )
     return data
 
 
@@ -484,11 +554,14 @@ def tags(
     """人物タグ."""
     data = load_person_tags_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Tag data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Tag data not found. Run pipeline first."
+        )
 
     if tag:
         filtered = {
-            pid: t_list for pid, t_list in data.get("person_tags", {}).items()
+            pid: t_list
+            for pid, t_list in data.get("person_tags", {}).items()
             if tag in t_list
         }
         return {
@@ -505,7 +578,9 @@ def role_flow():
     """役職遷移フロー（Sankey diagram data）."""
     data = load_role_flow_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Role flow data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Role flow data not found. Run pipeline first."
+        )
     return data
 
 
@@ -526,7 +601,9 @@ def compare_persons(
 
     result = build_comparison_matrix(person_ids, scores)
     if not result["persons"]:
-        raise HTTPException(status_code=404, detail="None of the specified persons found")
+        raise HTTPException(
+            status_code=404, detail="None of the specified persons found"
+        )
 
     return result
 
@@ -543,21 +620,35 @@ def data_quality():
         total_persons = stats.get("persons", 0)
         total_anime = stats.get("anime", 0)
 
-        credits_with_source = conn.execute(
-            "SELECT COUNT(*) FROM credits WHERE source != ''"
-        ).fetchone()[0] if total_credits else 0
+        credits_with_source = (
+            conn.execute("SELECT COUNT(*) FROM credits WHERE source != ''").fetchone()[
+                0
+            ]
+            if total_credits
+            else 0
+        )
 
-        persons_with_score = conn.execute(
-            "SELECT COUNT(*) FROM scores"
-        ).fetchone()[0] if total_persons else 0
+        persons_with_score = (
+            conn.execute("SELECT COUNT(*) FROM scores").fetchone()[0]
+            if total_persons
+            else 0
+        )
 
-        anime_with_year = conn.execute(
-            "SELECT COUNT(*) FROM anime WHERE year IS NOT NULL"
-        ).fetchone()[0] if total_anime else 0
+        anime_with_year = (
+            conn.execute(
+                "SELECT COUNT(*) FROM anime WHERE year IS NOT NULL"
+            ).fetchone()[0]
+            if total_anime
+            else 0
+        )
 
-        anime_with_score = conn.execute(
-            "SELECT COUNT(*) FROM anime WHERE score IS NOT NULL"
-        ).fetchone()[0] if total_anime else 0
+        anime_with_score = (
+            conn.execute(
+                "SELECT COUNT(*) FROM anime WHERE score IS NOT NULL"
+            ).fetchone()[0]
+            if total_anime
+            else 0
+        )
 
         source_count = conn.execute(
             "SELECT COUNT(DISTINCT source) FROM credits WHERE source != ''"
@@ -598,9 +689,13 @@ def get_person_network(
     scores = load_person_scores_from_json()
     person_scores = {r["person_id"]: r["composite"] for r in scores} if scores else None
 
-    result = extract_ego_graph(person_id, credits, anime_map, hops=hops, person_scores=person_scores)
+    result = extract_ego_graph(
+        person_id, credits, anime_map, hops=hops, person_scores=person_scores
+    )
     if result["total_nodes"] == 0:
-        raise HTTPException(status_code=404, detail=f"Person {person_id} not found in credits")
+        raise HTTPException(
+            status_code=404, detail=f"Person {person_id} not found in credits"
+        )
     return result
 
 
@@ -648,7 +743,9 @@ def predict(
     scores = load_person_scores_from_json()
     person_scores = {r["person_id"]: r["composite"] for r in scores} if scores else None
 
-    result = predict_anime_score(team_ids, credits, anime_map, person_scores=person_scores)
+    result = predict_anime_score(
+        team_ids, credits, anime_map, person_scores=person_scores
+    )
     return {"team": team_ids, **result}
 
 
@@ -657,7 +754,9 @@ def bridges():
     """コミュニティ間ブリッジ人物."""
     data = load_bridge_analysis_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Bridge data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Bridge data not found. Run pipeline first."
+        )
     return data
 
 
@@ -666,7 +765,9 @@ def mentorships():
     """推定メンターシップ関係."""
     data = load_mentorship_relationships_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Mentorship data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Mentorship data not found. Run pipeline first."
+        )
     return data
 
 
@@ -675,7 +776,9 @@ def get_person_milestones(person_id: PersonId):
     """人物のキャリアマイルストーン."""
     data = load_career_milestones_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Milestone data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Milestone data not found. Run pipeline first."
+        )
     if person_id not in data:
         raise HTTPException(status_code=404, detail=f"No milestones for {person_id}")
     return {"person_id": person_id, "milestones": data[person_id]}
@@ -723,7 +826,9 @@ def studio_disparity():
     """スタジオ間待遇差分析 — 同Skill帯のスコア差を比較."""
     data = load_studio_bias_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Studio bias data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Studio bias data not found. Run pipeline first."
+        )
     disparity = data.get("studio_disparity", {})
     prestige = data.get("studio_prestige", {})
     return {
@@ -738,7 +843,10 @@ def network_evolution():
     """ネットワーク進化の時系列データ."""
     data = load_network_evolution_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Network evolution data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404,
+            detail="Network evolution data not found. Run pipeline first.",
+        )
     return data
 
 
@@ -749,10 +857,14 @@ def genre_affinity(
     """ジャンル親和性データ."""
     data = load_genre_affinity_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Genre affinity data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Genre affinity data not found. Run pipeline first."
+        )
     if person_id:
         if person_id not in data:
-            raise HTTPException(status_code=404, detail=f"No genre data for {person_id}")
+            raise HTTPException(
+                status_code=404, detail=f"No genre data for {person_id}"
+            )
         return {"person_id": person_id, **data[person_id]}
     return data
 
@@ -764,7 +876,9 @@ def productivity(
     """生産性指標."""
     data = load_productivity_metrics_from_json()
     if not data:
-        raise HTTPException(status_code=404, detail="Productivity data not found. Run pipeline first.")
+        raise HTTPException(
+            status_code=404, detail="Productivity data not found. Run pipeline first."
+        )
     items = [{"person_id": pid, **d} for pid, d in list(data.items())[:limit]]
     return {"total": len(data), "items": items}
 
@@ -961,7 +1075,9 @@ async def run_pipeline_async(
     request: Request,
     visualize: bool = Query(False, description="Generate visualizations"),
     dry_run: bool = Query(False, description="Dry run (validation only)"),
-    incremental: bool = Query(False, description="Skip if no data changes since last run"),
+    incremental: bool = Query(
+        False, description="Skip if no data changes since last run"
+    ),
 ):
     """Run scoring pipeline asynchronously with WebSocket progress updates.
 

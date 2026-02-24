@@ -23,11 +23,29 @@ from src.models import Anime, Credit, Role
 # ---------------------------------------------------------------------------
 
 
-def _make_anime(anime_id: str, *, year: int = 2020, genres: list[str] | None = None, episodes: int | None = 12, season: str | None = None, studio: str | None = None) -> Anime:
-    return Anime(id=anime_id, title_ja=f"Anime {anime_id}", year=year, genres=genres or [], episodes=episodes, season=season, studio=studio)
+def _make_anime(
+    anime_id: str,
+    *,
+    year: int = 2020,
+    genres: list[str] | None = None,
+    episodes: int | None = 12,
+    season: str | None = None,
+    studio: str | None = None,
+) -> Anime:
+    return Anime(
+        id=anime_id,
+        title_ja=f"Anime {anime_id}",
+        year=year,
+        genres=genres or [],
+        episodes=episodes,
+        season=season,
+        studios=[studio] if studio else [],
+    )
 
 
-def _make_credit(person_id: str, anime_id: str, role: Role = Role.KEY_ANIMATOR) -> Credit:
+def _make_credit(
+    person_id: str, anime_id: str, role: Role = Role.KEY_ANIMATOR
+) -> Credit:
     return Credit(person_id=person_id, anime_id=anime_id, role=role)
 
 
@@ -171,7 +189,9 @@ class TestCommunityDetection:
             _make_credit("P1", "a1"),
             _make_credit("P1", "a2"),
         ]
-        result = compute_retrospective_potential("P1", credits, anime_map, 2018, 30.0, 80.0)
+        result = compute_retrospective_potential(
+            "P1", credits, anime_map, 2018, 30.0, 80.0
+        )
         # current(30) + gap(50) * factor => between 30 and 80
         assert 30.0 < result <= 80.0
 
@@ -184,7 +204,12 @@ class TestCommunityDetection:
 class TestInsightsReport:
     def _build_person_scores(self, n: int = 20) -> dict[str, dict]:
         return {
-            f"p{i}": {"authority": float(i * 3), "trust": float(i * 2), "skill": float(i), "composite": float(i * 2.5)}
+            f"p{i}": {
+                "authority": float(i * 3),
+                "trust": float(i * 2),
+                "skill": float(i),
+                "composite": float(i * 2.5),
+            }
             for i in range(1, n + 1)
         }
 
@@ -199,7 +224,9 @@ class TestInsightsReport:
         from src.analysis.insights_report import analyze_pagerank_distribution
 
         scores = self._build_person_scores()
-        centrality = {f"p{i}": {"betweenness": 0.1 * i, "degree": i} for i in range(1, 21)}
+        centrality = {
+            f"p{i}": {"betweenness": 0.1 * i, "degree": i} for i in range(1, 21)
+        }
         roles = {f"p{i}": {"primary_role": "animator"} for i in range(1, 21)}
         result = analyze_pagerank_distribution(scores, centrality, roles)
         assert result.avg_score > 0
@@ -243,7 +270,9 @@ class TestInsightsReport:
         from src.analysis.insights_report import generate_comprehensive_insights
 
         scores = self._build_person_scores(5)
-        centrality = {f"p{i}": {"betweenness": 0.01 * i, "degree": i} for i in range(1, 6)}
+        centrality = {
+            f"p{i}": {"betweenness": 0.01 * i, "degree": i} for i in range(1, 6)
+        }
         roles = {f"p{i}": {"primary_role": "animator"} for i in range(1, 6)}
         names = {f"p{i}": f"Person {i}" for i in range(1, 6)}
 
@@ -274,7 +303,10 @@ class TestInsightsReport:
                 "p2": {"primary_studio": "StudioB", "cross_studio_works": 2},
             },
         }
-        potential = {"p1": {"category": "hidden_gem", "composite": 30}, "p2": {"category": "elite", "composite": 60}}
+        potential = {
+            "p1": {"category": "hidden_gem", "composite": 30},
+            "p2": {"category": "elite", "composite": 60},
+        }
         names = {"p1": "Person 1", "p2": "Person 2"}
         alerts = identify_undervaluation_alerts(studio_bias, potential, names)
         assert len(alerts) >= 1
@@ -379,10 +411,7 @@ class TestPathFinding:
 
 class TestTemporalInfluence:
     def _build_temporal_data(self):
-        anime_map = {
-            f"a{i}": _make_anime(f"a{i}", year=2015 + i)
-            for i in range(1, 8)
-        }
+        anime_map = {f"a{i}": _make_anime(f"a{i}", year=2015 + i) for i in range(1, 8)}
         credits = []
         # Person P1 active 2016-2022
         for i in range(1, 8):
@@ -697,7 +726,11 @@ class TestCorePeriphery:
 
         g = _build_collaboration_graph_for_communities()
         structure = identify_core_periphery(g)
-        total = len(structure.core_members) + len(structure.semi_periphery_members) + len(structure.periphery_members)
+        total = (
+            len(structure.core_members)
+            + len(structure.semi_periphery_members)
+            + len(structure.periphery_members)
+        )
         assert total == g.number_of_nodes()
 
     def test_compute_k_core_numbers(self):
@@ -931,7 +964,9 @@ class TestCompensationAnalyzer:
                 "p3": {"shapley_value": 15.0, "role": "animation_director"},
             },
         }
-        results = batch_analyze_compensation(anime_list, all_contributions, total_budget_per_anime=50.0)
+        results = batch_analyze_compensation(
+            anime_list, all_contributions, total_budget_per_anime=50.0
+        )
         assert "a1" in results
         assert "a2" in results
         assert results["a1"].anime_type == "tv_1cour"

@@ -238,12 +238,16 @@ class TestExtractNameFromSchema:
         assert _extract_name_from_schema("タイトル") == "タイトル"
 
     def test_list_with_string_first(self):
-        result = _extract_name_from_schema(["タイトル", {"@value": "タイトル", "@language": "ja-hrkt"}])
+        result = _extract_name_from_schema(
+            ["タイトル", {"@value": "タイトル", "@language": "ja-hrkt"}]
+        )
         assert result == "タイトル"
 
     def test_list_kana_only(self):
         """Falls back to katakana reading if nothing else available."""
-        result = _extract_name_from_schema([{"@value": "タイトル", "@language": "ja-hrkt"}])
+        result = _extract_name_from_schema(
+            [{"@value": "タイトル", "@language": "ja-hrkt"}]
+        )
         assert result == "タイトル"
 
     def test_dict(self):
@@ -295,7 +299,9 @@ class TestExtractStudios:
         assert _extract_studios(item) == ["マッドハウス"]
 
     def test_multiple_studios(self):
-        item = {"schema:productionCompany": "[アニメーション制作]マッドハウス ／ [制作]東映アニメーション"}
+        item = {
+            "schema:productionCompany": "[アニメーション制作]マッドハウス ／ [制作]東映アニメーション"
+        }
         result = _extract_studios(item)
         assert "マッドハウス" in result
         assert "東映アニメーション" in result
@@ -318,7 +324,9 @@ class TestParseJsonLdDump:
 
     def _make_json(self, tmp_path: Path, graph: list[dict]) -> Path:
         json_path = tmp_path / "test.json"
-        json_path.write_text(json.dumps({"@graph": graph}, ensure_ascii=False), encoding="utf-8")
+        json_path.write_text(
+            json.dumps({"@graph": graph}, ensure_ascii=False), encoding="utf-8"
+        )
         return json_path
 
     def test_basic(self, tmp_path):
@@ -391,7 +399,10 @@ class TestParseJsonLdDump:
         graph = [
             {
                 "schema:identifier": "C50001",
-                "schema:name": ["タイトル名", {"@value": "タイトルメイ", "@language": "ja-hrkt"}],
+                "schema:name": [
+                    "タイトル名",
+                    {"@value": "タイトルメイ", "@language": "ja-hrkt"},
+                ],
                 "schema:datePublished": "2020",
                 "schema:contributor": "[監督]テスト太郎",
             }
@@ -412,7 +423,10 @@ class TestDownloadMADBDataset:
         """Cached version skips download."""
         import asyncio
 
-        from src.scrapers.mediaarts_scraper import ANIME_COLLECTION_FILES, download_madb_dataset
+        from src.scrapers.mediaarts_scraper import (
+            ANIME_COLLECTION_FILES,
+            download_madb_dataset,
+        )
 
         # Pre-create version file and JSON files
         (tmp_path / ".version").write_text("v1.2.12")
@@ -424,7 +438,9 @@ class TestDownloadMADBDataset:
         mock_resp = httpx.Response(
             200,
             json=mock_release,
-            request=httpx.Request("GET", "https://api.github.com/repos/x/releases/latest"),
+            request=httpx.Request(
+                "GET", "https://api.github.com/repos/x/releases/latest"
+            ),
         )
 
         async def run():
@@ -467,9 +483,13 @@ class TestDownloadMADBDataset:
             nonlocal call_count
             call_count += 1
             if "api.github.com" in url:
-                return httpx.Response(200, json=mock_release, request=httpx.Request("GET", url))
+                return httpx.Response(
+                    200, json=mock_release, request=httpx.Request("GET", url)
+                )
             else:
-                return httpx.Response(200, content=zip_bytes, request=httpx.Request("GET", url))
+                return httpx.Response(
+                    200, content=zip_bytes, request=httpx.Request("GET", url)
+                )
 
         async def run():
             with patch("httpx.AsyncClient") as mock_cls:
@@ -526,13 +546,18 @@ class TestMADBIntegration:
             ]
         }
         json_path = data_dir / "metadata207.json"
-        json_path.write_text(json.dumps(json_data, ensure_ascii=False), encoding="utf-8")
+        json_path.write_text(
+            json.dumps(json_data, ensure_ascii=False), encoding="utf-8"
+        )
 
         # Mock download_madb_dataset to return local file
         async def mock_download(data_dir, version="latest"):
             return {"AnimationTVRegularSeries": json_path}
 
-        with patch("src.scrapers.mediaarts_scraper.download_madb_dataset", side_effect=mock_download):
+        with patch(
+            "src.scrapers.mediaarts_scraper.download_madb_dataset",
+            side_effect=mock_download,
+        ):
             stats = asyncio.run(
                 scrape_madb(
                     db_conn,
@@ -548,10 +573,14 @@ class TestMADBIntegration:
         assert stats["persons_created"] == 2
 
         # All saved with madb: IDs
-        credits = db_conn.execute("SELECT * FROM credits WHERE source='mediaarts'").fetchall()
+        credits = db_conn.execute(
+            "SELECT * FROM credits WHERE source='mediaarts'"
+        ).fetchall()
         assert len(credits) == 2
 
-        persons = db_conn.execute("SELECT * FROM persons WHERE id LIKE 'madb:%'").fetchall()
+        persons = db_conn.execute(
+            "SELECT * FROM persons WHERE id LIKE 'madb:%'"
+        ).fetchall()
         assert len(persons) == 2
 
         anime = db_conn.execute("SELECT * FROM anime WHERE id LIKE 'madb:%'").fetchall()
@@ -579,15 +608,18 @@ class TestMADBIntegration:
             ]
         }
         json_path = data_dir / "metadata207.json"
-        json_path.write_text(json.dumps(json_data, ensure_ascii=False), encoding="utf-8")
+        json_path.write_text(
+            json.dumps(json_data, ensure_ascii=False), encoding="utf-8"
+        )
 
         async def mock_download(data_dir, version="latest"):
             return {"AnimationTVRegularSeries": json_path}
 
-        with patch("src.scrapers.mediaarts_scraper.download_madb_dataset", side_effect=mock_download):
-            stats = asyncio.run(
-                scrape_madb(db_conn, data_dir=data_dir, max_anime=10)
-            )
+        with patch(
+            "src.scrapers.mediaarts_scraper.download_madb_dataset",
+            side_effect=mock_download,
+        ):
+            stats = asyncio.run(scrape_madb(db_conn, data_dir=data_dir, max_anime=10))
 
         assert stats["credits_created"] == 3
         assert stats["persons_created"] == 3
@@ -609,10 +641,11 @@ class TestMADBIntegration:
         async def mock_download(data_dir, version="latest"):
             return {}
 
-        with patch("src.scrapers.mediaarts_scraper.download_madb_dataset", side_effect=mock_download):
-            stats = asyncio.run(
-                scrape_madb(db_conn, data_dir=tmp_path, max_anime=10)
-            )
+        with patch(
+            "src.scrapers.mediaarts_scraper.download_madb_dataset",
+            side_effect=mock_download,
+        ):
+            stats = asyncio.run(scrape_madb(db_conn, data_dir=tmp_path, max_anime=10))
 
         assert stats["anime_fetched"] == 0
         assert stats["credits_created"] == 0

@@ -1,6 +1,5 @@
 """trust モジュールのテスト."""
 
-
 from src.analysis.trust import (
     _compute_time_weight,
     compute_trust_scores,
@@ -82,9 +81,7 @@ class TestDetectEngagementDecay:
             Credit(person_id="anim1", anime_id=f"a{i}", role=Role.KEY_ANIMATOR)
             for i in range(1, 7)
         ]
-        anime_map = {
-            f"a{i}": Anime(id=f"a{i}", year=2020 + i) for i in range(1, 7)
-        }
+        anime_map = {f"a{i}": Anime(id=f"a{i}", year=2020 + i) for i in range(1, 7)}
         result = detect_engagement_decay("anim1", "dir1", credits, anime_map)
         assert result["status"] == "active"
         assert result["recent_rate"] == 1.0
@@ -98,9 +95,7 @@ class TestDetectEngagementDecay:
             Credit(person_id="anim1", anime_id=f"a{i}", role=Role.KEY_ANIMATOR)
             for i in range(1, 6)  # 前半5作品のみ
         ]
-        anime_map = {
-            f"a{i}": Anime(id=f"a{i}", year=2015 + i) for i in range(1, 11)
-        }
+        anime_map = {f"a{i}": Anime(id=f"a{i}", year=2015 + i) for i in range(1, 11)}
         result = detect_engagement_decay("anim1", "dir1", credits, anime_map)
         assert result["status"] == "decayed"
         assert result["recent_rate"] == 0.0
@@ -114,9 +109,7 @@ class TestDetectEngagementDecay:
             Credit(person_id="anim1", anime_id=f"a{i}", role=Role.KEY_ANIMATOR)
             for i in range(1, 6)
         ]
-        anime_map = {
-            f"a{i}": Anime(id=f"a{i}", year=2015 + i) for i in range(1, 11)
-        }
+        anime_map = {f"a{i}": Anime(id=f"a{i}", year=2015 + i) for i in range(1, 11)}
         result = detect_engagement_decay("anim1", "dir1", credits, anime_map)
         assert result["expected_rate"] == 0.5  # 10作品中5参加
         assert result["total_works"] == 10

@@ -6,11 +6,46 @@ from src.models import Credit, Role
 
 def _make_data():
     results = [
-        {"person_id": "p1", "name": "Director", "authority": 80, "trust": 70, "skill": 60, "composite": 71},
-        {"person_id": "p2", "name": "Animator A", "authority": 50, "trust": 90, "skill": 40, "composite": 58},
-        {"person_id": "p3", "name": "Animator B", "authority": 30, "trust": 40, "skill": 80, "composite": 47},
-        {"person_id": "p4", "name": "Designer", "authority": 60, "trust": 60, "skill": 70, "composite": 63},
-        {"person_id": "p5", "name": "Newcomer", "authority": 10, "trust": 10, "skill": 20, "composite": 13},
+        {
+            "person_id": "p1",
+            "name": "Director",
+            "authority": 80,
+            "trust": 70,
+            "skill": 60,
+            "composite": 71,
+        },
+        {
+            "person_id": "p2",
+            "name": "Animator A",
+            "authority": 50,
+            "trust": 90,
+            "skill": 40,
+            "composite": 58,
+        },
+        {
+            "person_id": "p3",
+            "name": "Animator B",
+            "authority": 30,
+            "trust": 40,
+            "skill": 80,
+            "composite": 47,
+        },
+        {
+            "person_id": "p4",
+            "name": "Designer",
+            "authority": 60,
+            "trust": 60,
+            "skill": 70,
+            "composite": 63,
+        },
+        {
+            "person_id": "p5",
+            "name": "Newcomer",
+            "authority": 10,
+            "trust": 10,
+            "skill": 20,
+            "composite": 13,
+        },
     ]
     credits = [
         Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR),

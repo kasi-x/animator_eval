@@ -99,7 +99,11 @@ class I18n:
         try:
             with open(locale_file, encoding="utf-8") as f:
                 self._translations[language] = json.load(f)
-            logger.debug("locale_loaded", language=language, keys=len(self._translations[language]))
+            logger.debug(
+                "locale_loaded",
+                language=language,
+                keys=len(self._translations[language]),
+            )
         except json.JSONDecodeError as e:
             logger.error("locale_parse_error", language=language, error=str(e))
             self._translations[language] = {}
@@ -114,7 +118,11 @@ class I18n:
             language: Language code ("en" or "ja")
         """
         if language not in self.supported_languages:
-            logger.warning("unsupported_language", language=language, supported=self.supported_languages)
+            logger.warning(
+                "unsupported_language",
+                language=language,
+                supported=self.supported_languages,
+            )
             return
 
         self._current_language = language

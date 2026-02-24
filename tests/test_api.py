@@ -39,10 +39,30 @@ def scores_data(tmp_path, monkeypatch):
             "composite": 71.0,
             "primary_role": "director",
             "total_credits": 10,
-            "career": {"first_year": 2010, "latest_year": 2023, "active_years": 14, "highest_stage": 6, "highest_roles": ["director"]},
+            "career": {
+                "first_year": 2010,
+                "latest_year": 2023,
+                "active_years": 14,
+                "highest_stage": 6,
+                "highest_roles": ["director"],
+            },
             "breakdown": {
-                "authority": [{"anime_id": "a1", "title": "Anime 1", "year": 2023, "score": 8.5, "role": "director"}],
-                "trust": [{"director_id": "p2", "shared_works": 3, "works": ["W1", "W2", "W3"]}],
+                "authority": [
+                    {
+                        "anime_id": "a1",
+                        "title": "Anime 1",
+                        "year": 2023,
+                        "score": 8.5,
+                        "role": "director",
+                    }
+                ],
+                "trust": [
+                    {
+                        "director_id": "p2",
+                        "shared_works": 3,
+                        "works": ["W1", "W2", "W3"],
+                    }
+                ],
             },
         },
         {
@@ -56,7 +76,13 @@ def scores_data(tmp_path, monkeypatch):
             "composite": 47.75,
             "primary_role": "animator",
             "total_credits": 5,
-            "career": {"first_year": 2015, "latest_year": 2024, "active_years": 10, "highest_stage": 3, "highest_roles": ["key_animator"]},
+            "career": {
+                "first_year": 2015,
+                "latest_year": 2024,
+                "active_years": 10,
+                "highest_stage": 3,
+                "highest_roles": ["key_animator"],
+            },
         },
         {
             "person_id": "p3",
@@ -91,7 +117,9 @@ def scores_data(tmp_path, monkeypatch):
             "avg_person_score": 40.0,
         },
     }
-    (tmp_path / "anime_stats.json").write_text(json.dumps(anime_stats), encoding="utf-8")
+    (tmp_path / "anime_stats.json").write_text(
+        json.dumps(anime_stats), encoding="utf-8"
+    )
 
     summary = {
         "generated_at": "2024-01-01T00:00:00",
@@ -128,18 +156,35 @@ def scores_data(tmp_path, monkeypatch):
 
     collaborations = [
         {
-            "person_a": "p1", "person_b": "p2", "shared_works": 3,
-            "shared_anime": ["a1", "a2", "a3"], "strength_score": 75.0,
+            "person_a": "p1",
+            "person_b": "p2",
+            "shared_works": 3,
+            "shared_anime": ["a1", "a2", "a3"],
+            "strength_score": 75.0,
         },
     ]
-    (tmp_path / "collaborations.json").write_text(json.dumps(collaborations), encoding="utf-8")
+    (tmp_path / "collaborations.json").write_text(
+        json.dumps(collaborations), encoding="utf-8"
+    )
 
     outliers_data = {
         "axis_outliers": {
             "composite": {
-                "high": [{"person_id": "p1", "name": "Director A", "value": 71.0, "zscore": 2.8}],
+                "high": [
+                    {
+                        "person_id": "p1",
+                        "name": "Director A",
+                        "value": 71.0,
+                        "zscore": 2.8,
+                    }
+                ],
                 "low": [],
-                "bounds": {"iqr_lower": 5.0, "iqr_upper": 80.0, "mean": 43.0, "std": 30.0},
+                "bounds": {
+                    "iqr_lower": 5.0,
+                    "iqr_upper": 80.0,
+                    "mean": 43.0,
+                    "std": 30.0,
+                },
             }
         },
         "total_outliers": 1,
@@ -148,7 +193,15 @@ def scores_data(tmp_path, monkeypatch):
     (tmp_path / "outliers.json").write_text(json.dumps(outliers_data), encoding="utf-8")
 
     teams_data = {
-        "high_score_teams": [{"anime_id": "a1", "title": "Hit", "year": 2023, "team_size": 5, "anime_score": 8.5}],
+        "high_score_teams": [
+            {
+                "anime_id": "a1",
+                "title": "Hit",
+                "year": 2023,
+                "team_size": 5,
+                "anime_score": 8.5,
+            }
+        ],
         "total_high_score": 1,
         "role_combinations": [],
         "recommended_pairs": [],
@@ -160,21 +213,40 @@ def scores_data(tmp_path, monkeypatch):
         "trend_summary": {"rising": 1, "stable": 1},
         "total_persons": 2,
         "persons": {
-            "p1": {"trend": "rising", "total_credits": 10, "recent_credits": 7, "activity_ratio": 0.7, "career_span": 5},
-            "p2": {"trend": "stable", "total_credits": 5, "recent_credits": 3, "activity_ratio": 0.6, "career_span": 8},
+            "p1": {
+                "trend": "rising",
+                "total_credits": 10,
+                "recent_credits": 7,
+                "activity_ratio": 0.7,
+                "career_span": 5,
+            },
+            "p2": {
+                "trend": "stable",
+                "total_credits": 5,
+                "recent_credits": 3,
+                "activity_ratio": 0.6,
+                "career_span": 8,
+            },
         },
     }
     (tmp_path / "growth.json").write_text(json.dumps(growth_json), encoding="utf-8")
 
     role_flow_data = {
-        "nodes": [{"id": "Stage 1", "label": "Stage 1"}, {"id": "Stage 3", "label": "Stage 3"}],
+        "nodes": [
+            {"id": "Stage 1", "label": "Stage 1"},
+            {"id": "Stage 3", "label": "Stage 3"},
+        ],
         "links": [{"source": "Stage 1", "target": "Stage 3", "value": 5}],
         "total_transitions": 5,
     }
-    (tmp_path / "role_flow.json").write_text(json.dumps(role_flow_data), encoding="utf-8")
+    (tmp_path / "role_flow.json").write_text(
+        json.dumps(role_flow_data), encoding="utf-8"
+    )
 
     decades_data = {
-        "decades": {"2020s": {"credit_count": 50, "unique_persons": 20, "avg_anime_score": 7.5}},
+        "decades": {
+            "2020s": {"credit_count": 50, "unique_persons": 20, "avg_anime_score": 7.5}
+        },
         "year_by_year": {2022: {"credits": 20, "persons": 10}},
     }
     (tmp_path / "decades.json").write_text(json.dumps(decades_data), encoding="utf-8")
@@ -193,36 +265,68 @@ def scores_data(tmp_path, monkeypatch):
         },
         "summary": {"peak_year": 2022, "peak_credits": 90},
     }
-    (tmp_path / "time_series.json").write_text(json.dumps(time_series_data), encoding="utf-8")
+    (tmp_path / "time_series.json").write_text(
+        json.dumps(time_series_data), encoding="utf-8"
+    )
 
     bridges_data = {
         "bridge_persons": [
-            {"person_id": "p2", "cross_community_edges": 3, "communities_connected": 2, "bridge_score": 60}
+            {
+                "person_id": "p2",
+                "cross_community_edges": 3,
+                "communities_connected": 2,
+                "bridge_score": 60,
+            }
         ],
         "cross_community_edges": [
-            {"person_a": "p2", "person_b": "p4", "community_a": 0, "community_b": 1, "shared_works": 2}
+            {
+                "person_a": "p2",
+                "person_b": "p4",
+                "community_a": 0,
+                "community_b": 1,
+                "shared_works": 2,
+            }
         ],
         "community_connectivity": {"0-1": 3},
-        "stats": {"total_persons": 6, "total_communities": 2, "total_cross_edges": 3, "bridge_person_count": 1},
+        "stats": {
+            "total_persons": 6,
+            "total_communities": 2,
+            "total_cross_edges": 3,
+            "bridge_person_count": 1,
+        },
     }
     (tmp_path / "bridges.json").write_text(json.dumps(bridges_data), encoding="utf-8")
 
     mentorship_data = {
         "mentorships": [
-            {"mentor_id": "p1", "mentee_id": "p2", "shared_works": 5, "stage_gap": 3, "confidence": 80}
+            {
+                "mentor_id": "p1",
+                "mentee_id": "p2",
+                "shared_works": 5,
+                "stage_gap": 3,
+                "confidence": 80,
+            }
         ],
         "tree": {"tree": {"p1": ["p2"]}, "roots": ["p1"]},
         "total": 1,
     }
-    (tmp_path / "mentorships.json").write_text(json.dumps(mentorship_data), encoding="utf-8")
+    (tmp_path / "mentorships.json").write_text(
+        json.dumps(mentorship_data), encoding="utf-8"
+    )
 
     milestones_data = {
         "p1": [
-            {"type": "career_start", "year": 2010, "description": "初クレジット: First Show"},
+            {
+                "type": "career_start",
+                "year": 2010,
+                "description": "初クレジット: First Show",
+            },
             {"type": "first_director", "year": 2015, "description": "初監督: Big Show"},
         ],
     }
-    (tmp_path / "milestones.json").write_text(json.dumps(milestones_data), encoding="utf-8")
+    (tmp_path / "milestones.json").write_text(
+        json.dumps(milestones_data), encoding="utf-8"
+    )
 
     net_evo_data = {
         "years": [2018, 2019, 2020],
@@ -233,15 +337,34 @@ def scores_data(tmp_path, monkeypatch):
         },
         "trends": {"person_growth": 2, "edge_growth": 5},
     }
-    (tmp_path / "network_evolution.json").write_text(json.dumps(net_evo_data), encoding="utf-8")
+    (tmp_path / "network_evolution.json").write_text(
+        json.dumps(net_evo_data), encoding="utf-8"
+    )
 
     genre_data = {
-        "p1": {"score_tiers": {"high_rated": 66.7}, "eras": {"modern": 50.0}, "primary_tier": "high_rated", "primary_era": "modern", "avg_anime_score": 8.0, "total_credits": 3},
+        "p1": {
+            "score_tiers": {"high_rated": 66.7},
+            "eras": {"modern": 50.0},
+            "primary_tier": "high_rated",
+            "primary_era": "modern",
+            "avg_anime_score": 8.0,
+            "total_credits": 3,
+        },
     }
-    (tmp_path / "genre_affinity.json").write_text(json.dumps(genre_data), encoding="utf-8")
+    (tmp_path / "genre_affinity.json").write_text(
+        json.dumps(genre_data), encoding="utf-8"
+    )
 
     prod_data = {
-        "p1": {"total_credits": 10, "unique_anime": 8, "active_years": 5, "credits_per_year": 2.0, "peak_year": 2022, "peak_credits": 4, "consistency_score": 1.0},
+        "p1": {
+            "total_credits": 10,
+            "unique_anime": 8,
+            "active_years": 5,
+            "credits_per_year": 2.0,
+            "peak_year": 2022,
+            "peak_credits": 4,
+            "consistency_score": 1.0,
+        },
     }
     (tmp_path / "productivity.json").write_text(json.dumps(prod_data), encoding="utf-8")
 
@@ -271,6 +394,7 @@ class TestSummary:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/summary")
@@ -388,6 +512,7 @@ class TestStudios:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/studios")
@@ -406,6 +531,7 @@ class TestSeasonal:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/seasonal")
@@ -425,6 +551,7 @@ class TestCrossval:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/crossval")
@@ -449,6 +576,7 @@ class TestCollaborations:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/collaborations")
@@ -467,6 +595,7 @@ class TestOutliers:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/outliers")
@@ -485,6 +614,7 @@ class TestTeams:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/teams")
@@ -508,6 +638,7 @@ class TestGrowth:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/growth")
@@ -526,6 +657,7 @@ class TestTimeSeries:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/time-series")
@@ -544,6 +676,7 @@ class TestDecades:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/decades")
@@ -568,6 +701,7 @@ class TestTags:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/tags")
@@ -586,6 +720,7 @@ class TestRoleFlow:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/role-flow")
@@ -615,9 +750,13 @@ class TestDataQuality:
 
         conn = get_connection()
         init_db(conn)
-        conn.execute("INSERT INTO anime (id, title_en, year, score) VALUES ('a1', 'Test', 2024, 8.0)")
+        conn.execute(
+            "INSERT INTO anime (id, title_en, year, score) VALUES ('a1', 'Test', 2024, 8.0)"
+        )
         conn.execute("INSERT INTO persons (id, name_en) VALUES ('p1', 'Person')")
-        conn.execute("INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p1', 'a1', 'director', 'test')")
+        conn.execute(
+            "INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p1', 'a1', 'director', 'test')"
+        )
         conn.commit()
         conn.close()
 
@@ -642,8 +781,12 @@ class TestPersonNetwork:
         conn.execute("INSERT INTO persons (id, name_en) VALUES ('p1', 'Director')")
         conn.execute("INSERT INTO persons (id, name_en) VALUES ('p2', 'Animator')")
         conn.execute("INSERT INTO anime (id, title_en) VALUES ('a1', 'Test')")
-        conn.execute("INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p1', 'a1', 'director', 'test')")
-        conn.execute("INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p2', 'a1', 'key_animator', 'test')")
+        conn.execute(
+            "INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p1', 'a1', 'director', 'test')"
+        )
+        conn.execute(
+            "INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p2', 'a1', 'key_animator', 'test')"
+        )
         conn.commit()
         conn.close()
 
@@ -668,8 +811,12 @@ class TestRecommend:
         conn.execute("INSERT INTO persons (id, name_en) VALUES ('p1', 'Director A')")
         conn.execute("INSERT INTO persons (id, name_en) VALUES ('p2', 'Animator B')")
         conn.execute("INSERT INTO anime (id, title_en) VALUES ('a1', 'Test')")
-        conn.execute("INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p1', 'a1', 'director', 'test')")
-        conn.execute("INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p2', 'a1', 'key_animator', 'test')")
+        conn.execute(
+            "INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p1', 'a1', 'director', 'test')"
+        )
+        conn.execute(
+            "INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p2', 'a1', 'key_animator', 'test')"
+        )
         conn.commit()
         conn.close()
 
@@ -691,8 +838,12 @@ class TestPredict:
         conn = get_connection()
         init_db(conn)
         conn.execute("INSERT INTO persons (id, name_en) VALUES ('p1', 'Director')")
-        conn.execute("INSERT INTO anime (id, title_en, score) VALUES ('a1', 'Test', 8.0)")
-        conn.execute("INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p1', 'a1', 'director', 'test')")
+        conn.execute(
+            "INSERT INTO anime (id, title_en, score) VALUES ('a1', 'Test', 8.0)"
+        )
+        conn.execute(
+            "INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p1', 'a1', 'director', 'test')"
+        )
         conn.commit()
         conn.close()
 
@@ -736,6 +887,7 @@ class TestBridgesApi:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/bridges")
@@ -755,6 +907,7 @@ class TestMentorshipsApi:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/mentorships")
@@ -778,6 +931,7 @@ class TestMilestonesApi:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/persons/p1/milestones")
@@ -796,6 +950,7 @@ class TestNetworkEvolutionApi:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/network-evolution")
@@ -825,6 +980,7 @@ class TestGenreAffinityApi:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/genre-affinity")
@@ -844,6 +1000,7 @@ class TestProductivityApi:
 
         monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
+
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
         src.utils.json_io.clear_json_cache()
         resp = client.get("/api/productivity")
@@ -895,7 +1052,9 @@ class TestCorsHeaders:
                 "Access-Control-Request-Method": "GET",
             },
         )
-        assert resp.headers.get("access-control-allow-origin") == "http://localhost:3000"
+        assert (
+            resp.headers.get("access-control-allow-origin") == "http://localhost:3000"
+        )
 
     def test_cors_disallowed_origin(self, client):
         """Disallowed origin gets no CORS header."""
@@ -906,7 +1065,9 @@ class TestCorsHeaders:
                 "Access-Control-Request-Method": "GET",
             },
         )
-        assert resp.headers.get("access-control-allow-origin") != "http://evil.example.com"
+        assert (
+            resp.headers.get("access-control-allow-origin") != "http://evil.example.com"
+        )
 
 
 class TestApiKeyAuth:
@@ -937,6 +1098,7 @@ class TestApiKeyAuth:
         request.headers = {}
         # No API_SECRET_KEY set — should not raise
         import os
+
         os.environ.pop("API_SECRET_KEY", None)
         verify_api_key(request)  # Should not raise
 
@@ -959,5 +1121,6 @@ class TestRateLimiting:
     def test_rate_limit_handler_registered(self, client):
         """Rate limit exception handler is registered on the app."""
         from src.api import app
+
         # Verify that app has the limiter configured
         assert hasattr(app.state, "limiter")

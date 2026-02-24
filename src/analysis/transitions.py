@@ -93,7 +93,9 @@ def compute_role_transitions(
         }
     """
     # Group credits by person, sorted by year
-    annual_role_records_by_person: dict[str, list[YearlyStageRecord]] = defaultdict(list)
+    annual_role_records_by_person: dict[str, list[YearlyStageRecord]] = defaultdict(
+        list
+    )
     for credit in credits:
         anime = anime_map.get(credit.anime_id)
         if not anime or not anime.year:
@@ -104,7 +106,9 @@ def compute_role_transitions(
             annual_role_records_by_person[credit.person_id].append(record)
 
     # Compute per-person stage progression (max stage per year)
-    transition_gap_years: dict[tuple[int, int], list[int]] = defaultdict(list)  # (from, to) -> [years_gap]
+    transition_gap_years: dict[tuple[int, int], list[int]] = defaultdict(
+        list
+    )  # (from, to) -> [years_gap]
     career_path_frequencies: dict[tuple[int, ...], int] = defaultdict(int)
     years_to_reach_each_stage: dict[int, list[int]] = defaultdict(list)
 
@@ -137,7 +141,9 @@ def compute_role_transitions(
             current_stage = max_stage_per_year[year]
             if current_stage > previous_stage:
                 years_elapsed = year - previous_transition_year
-                transition_gap_years[(previous_stage, current_stage)].append(years_elapsed)
+                transition_gap_years[(previous_stage, current_stage)].append(
+                    years_elapsed
+                )
                 previous_stage = current_stage
                 previous_transition_year = year
                 career_progression_path.append(current_stage)

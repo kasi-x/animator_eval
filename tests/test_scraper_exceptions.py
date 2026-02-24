@@ -53,7 +53,9 @@ class TestScraperErrorAttributes:
     """例外属性テスト."""
 
     def test_base_error_attributes(self):
-        err = ScraperError("msg", source="anilist", url="https://example.com", metadata={"key": "val"})
+        err = ScraperError(
+            "msg", source="anilist", url="https://example.com", metadata={"key": "val"}
+        )
         assert str(err) == "msg"
         assert err.source == "anilist"
         assert err.url == "https://example.com"
@@ -103,7 +105,9 @@ class TestRetryAsync:
             return "ok"
 
         result = asyncio.run(
-            retry_async(fail_then_succeed, max_attempts=5, base_delay=0.01, source="test")
+            retry_async(
+                fail_then_succeed, max_attempts=5, base_delay=0.01, source="test"
+            )
         )
         assert result == "ok"
         assert call_count == 3
@@ -128,7 +132,9 @@ class TestRetryAsync:
             return "ok"
 
         result = asyncio.run(
-            retry_async(rate_limited_then_ok, max_attempts=3, base_delay=0.01, source="test")
+            retry_async(
+                rate_limited_then_ok, max_attempts=3, base_delay=0.01, source="test"
+            )
         )
         assert result == "ok"
         assert call_count == 2

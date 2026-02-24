@@ -107,14 +107,24 @@ class WikidataClient:
                 )
                 if resp.status_code == 429:
                     wait = int(resp.headers.get("Retry-After", 30))
-                    log.warning("wikidata_rate_limited", source="wikidata", retry_after_seconds=wait)
+                    log.warning(
+                        "wikidata_rate_limited",
+                        source="wikidata",
+                        retry_after_seconds=wait,
+                    )
                     await asyncio.sleep(wait)
                     continue
                 resp.raise_for_status()
                 data = resp.json()
                 return data.get("results", {}).get("bindings", [])
             except httpx.HTTPError as e:
-                log.warning("wikidata_query_failed", source="wikidata", attempt=attempt + 1, error_type=type(e).__name__, error_message=str(e))
+                log.warning(
+                    "wikidata_query_failed",
+                    source="wikidata",
+                    attempt=attempt + 1,
+                    error_type=type(e).__name__,
+                    error_message=str(e),
+                )
                 if attempt < 2:
                     await asyncio.sleep(2 ** (attempt + 1))
         from src.scrapers.exceptions import EndpointUnreachableError
@@ -230,11 +240,22 @@ async def fetch_anime_staff(
 @app.command()
 def main(
     max_records: int = typer.Option(5000, "--max-records", "-n", help="最大レコード数"),
-    resume: bool = typer.Option(True, "--resume/--no-resume", help="チェックポイントから再開する"),
-    checkpoint_interval: int = typer.Option(2, "--checkpoint-interval", help="チェックポイント保存間隔 (ページ数)"),
+    resume: bool = typer.Option(
+        True, "--resume/--no-resume", help="チェックポイントから再開する"
+    ),
+    checkpoint_interval: int = typer.Option(
+        2, "--checkpoint-interval", help="チェックポイント保存間隔 (ページ数)"
+    ),
 ) -> None:
     """Wikidata からアニメスタッフデータを収集する."""
-    from src.database import db_connection, init_db, insert_credit, update_data_source, upsert_anime, upsert_person
+    from src.database import (
+        db_connection,
+        init_db,
+        insert_credit,
+        update_data_source,
+        upsert_anime,
+        upsert_person,
+    )
     from src.log import setup_logging
 
     setup_logging()
@@ -293,13 +314,16 @@ def main(
                     # Save checkpoint every N pages
                     if pages_since_checkpoint >= checkpoint_interval:
                         conn.commit()
-                        _save_checkpoint(CHECKPOINT_FILE, {
-                            "last_offset": offset,
-                            "total_anime": total_anime,
-                            "total_persons": total_persons,
-                            "total_credits": total_credits,
-                            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-                        })
+                        _save_checkpoint(
+                            CHECKPOINT_FILE,
+                            {
+                                "last_offset": offset,
+                                "total_anime": total_anime,
+                                "total_persons": total_persons,
+                                "total_credits": total_credits,
+                                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+                            },
+                        )
                         log.info("checkpoint_saved", last_offset=offset)
                         pages_since_checkpoint = 0
 

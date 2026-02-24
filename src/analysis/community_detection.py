@@ -126,15 +126,37 @@ def compute_prospective_potential(
         return current_score
 
     # Calculate growth indicators
-    years = sorted({anime_map[c.anime_id].year for c in past_credits if anime_map.get(c.anime_id) and anime_map[c.anime_id].year})
+    years = sorted(
+        {
+            anime_map[c.anime_id].year
+            for c in past_credits
+            if anime_map.get(c.anime_id) and anime_map[c.anime_id].year
+        }
+    )
     if len(years) < 2:
         # Not enough history, use current score as baseline
         return current_score
 
     # Compute credits per year (acceleration indicator)
     career_span = years[-1] - years[0] + 1
-    early_credits = len([c for c in past_credits if anime_map.get(c.anime_id) and anime_map[c.anime_id].year and anime_map[c.anime_id].year <= years[0] + career_span // 3])
-    recent_credits = len([c for c in past_credits if anime_map.get(c.anime_id) and anime_map[c.anime_id].year and anime_map[c.anime_id].year >= years[-1] - career_span // 3])
+    early_credits = len(
+        [
+            c
+            for c in past_credits
+            if anime_map.get(c.anime_id)
+            and anime_map[c.anime_id].year
+            and anime_map[c.anime_id].year <= years[0] + career_span // 3
+        ]
+    )
+    recent_credits = len(
+        [
+            c
+            for c in past_credits
+            if anime_map.get(c.anime_id)
+            and anime_map[c.anime_id].year
+            and anime_map[c.anime_id].year >= years[-1] - career_span // 3
+        ]
+    )
 
     # Growth rate (positive = ascending career)
     growth_rate = (recent_credits - early_credits) / max(early_credits, 1)
@@ -184,7 +206,13 @@ def compute_retrospective_potential(
 
     # Otherwise, retrospective potential is somewhere between current and peak
     # Use a factor based on career stage at evaluation time
-    all_years = sorted({anime_map[c.anime_id].year for c in credits if anime_map.get(c.anime_id) and anime_map[c.anime_id].year})
+    all_years = sorted(
+        {
+            anime_map[c.anime_id].year
+            for c in credits
+            if anime_map.get(c.anime_id) and anime_map[c.anime_id].year
+        }
+    )
     if not all_years:
         return current_score
 
@@ -355,7 +383,9 @@ def detect_communities(
             "community_detection_complete",
             communities=len(communities),
             total_modularity=round(total_modularity, 4),
-            avg_size=round(sum(c.size for c in communities.values()) / len(communities), 1),
+            avg_size=round(
+                sum(c.size for c in communities.values()) / len(communities), 1
+            ),
         )
     else:
         logger.warning("community_detection_no_communities_found")
@@ -378,7 +408,9 @@ def analyze_community_overlap(
     Returns:
         person_id → [(community_id, connections_count)] のマッピング
     """
-    person_connections: dict[str, dict[int, int]] = defaultdict(lambda: defaultdict(int))
+    person_connections: dict[str, dict[int, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
 
     # 各人物がどのコミュニティと何回繋がっているかカウント
     for person_id in collaboration_graph.nodes():
@@ -469,7 +501,9 @@ def compute_community_features(
         comm.mentorship_pairs = mentorship_pairs
 
         # Compute ability metrics at formation time
-        formation_period = get_community_formation_period(comm.members, credits, anime_map)
+        formation_period = get_community_formation_period(
+            comm.members, credits, anime_map
+        )
         if formation_period and person_scores:
             formation_year = (formation_period[0] + formation_period[1]) // 2
 
@@ -532,13 +566,16 @@ def compute_community_features(
             "size": comm.size,
             "density": comm.density,
             "total_credits": total_credits,
-            "credits_per_person": round(total_credits / comm.size, 1) if comm.size > 0 else 0,
+            "credits_per_person": round(total_credits / comm.size, 1)
+            if comm.size > 0
+            else 0,
             "active_period": active_period,
             "active_years": active_years,
             "top_roles": [(role, count) for role, count in top_roles],
             "mentorship_count": len(mentorship_pairs),
             "mentorship_pairs": [
-                {"mentor": m, "mentee": t, "confidence": c} for m, t, c in mentorship_pairs
+                {"mentor": m, "mentee": t, "confidence": c}
+                for m, t, c in mentorship_pairs
             ],
             "avg_ability_at_formation": comm.avg_ability_at_formation,
             "avg_prospective_potential": comm.avg_prospective_potential,
@@ -571,7 +608,9 @@ def export_communities_for_visualization(
         "communities": [],
     }
 
-    for comm_id, comm in sorted(communities.items(), key=lambda x: x[1].size, reverse=True):
+    for comm_id, comm in sorted(
+        communities.items(), key=lambda x: x[1].size, reverse=True
+    ):
         comm_features = features.get(comm_id, {})
 
         # メンバー名の取得
@@ -586,37 +625,49 @@ def export_communities_for_visualization(
         # Format mentorship pairs with names
         mentorship_list = []
         for mentor_id, mentee_id, confidence in comm.mentorship_pairs:
-            mentorship_list.append({
-                "mentor_id": mentor_id,
-                "mentor_name": person_names.get(mentor_id, mentor_id) if person_names else mentor_id,
-                "mentee_id": mentee_id,
-                "mentee_name": person_names.get(mentee_id, mentee_id) if person_names else mentee_id,
-                "confidence": round(confidence, 1),
-            })
+            mentorship_list.append(
+                {
+                    "mentor_id": mentor_id,
+                    "mentor_name": person_names.get(mentor_id, mentor_id)
+                    if person_names
+                    else mentor_id,
+                    "mentee_id": mentee_id,
+                    "mentee_name": person_names.get(mentee_id, mentee_id)
+                    if person_names
+                    else mentee_id,
+                    "confidence": round(confidence, 1),
+                }
+            )
 
-        export_data["communities"].append({
-            "community_id": comm_id,
-            "size": comm.size,
-            "density": comm.density,
-            "members": members_with_names,
-            "top_members": [
-                {"person_id": m, "name": person_names.get(m, m) if person_names else m, "degree": d}
-                for m, d in comm.top_members
-            ],
-            "internal_edges": comm.internal_edges,
-            "external_edges": comm.external_edges,
-            "mentorships": mentorship_list,
-            "ability_metrics": {
-                "avg_ability_at_formation": comm.avg_ability_at_formation,
-                "avg_prospective_potential": comm.avg_prospective_potential,
-                "avg_retrospective_potential": comm.avg_retrospective_potential,
-                "ability_range": {
-                    "min": comm.ability_range[0],
-                    "max": comm.ability_range[1],
+        export_data["communities"].append(
+            {
+                "community_id": comm_id,
+                "size": comm.size,
+                "density": comm.density,
+                "members": members_with_names,
+                "top_members": [
+                    {
+                        "person_id": m,
+                        "name": person_names.get(m, m) if person_names else m,
+                        "degree": d,
+                    }
+                    for m, d in comm.top_members
+                ],
+                "internal_edges": comm.internal_edges,
+                "external_edges": comm.external_edges,
+                "mentorships": mentorship_list,
+                "ability_metrics": {
+                    "avg_ability_at_formation": comm.avg_ability_at_formation,
+                    "avg_prospective_potential": comm.avg_prospective_potential,
+                    "avg_retrospective_potential": comm.avg_retrospective_potential,
+                    "ability_range": {
+                        "min": comm.ability_range[0],
+                        "max": comm.ability_range[1],
+                    },
                 },
-            },
-            **comm_features,
-        })
+                **comm_features,
+            }
+        )
 
     return export_data
 
@@ -624,7 +675,14 @@ def export_communities_for_visualization(
 def main():
     """スタンドアロン実行用エントリーポイント."""
     from src.analysis.graph import create_person_collaboration_network
-    from src.database import get_all_anime, get_all_credits, get_all_persons, get_all_scores, get_connection, init_db
+    from src.database import (
+        get_all_anime,
+        get_all_credits,
+        get_all_persons,
+        get_all_scores,
+        get_connection,
+        init_db,
+    )
 
     conn = get_connection()
     init_db(conn)
@@ -647,7 +705,9 @@ def main():
     communities = detect_communities(collab_graph, min_community_size=5)
 
     # 特徴量計算
-    features = compute_community_features(communities, credits, anime_map, person_scores)
+    features = compute_community_features(
+        communities, credits, anime_map, person_scores
+    )
 
     # ブリッジ分析
     bridges = analyze_community_overlap(communities, collab_graph)
@@ -659,7 +719,9 @@ def main():
     print(f"\n検出されたコミュニティ数: {len(communities)}")
     print(f"ブリッジ人物数: {len(bridges)}")
 
-    for comm_id, comm in sorted(communities.items(), key=lambda x: x[1].size, reverse=True)[:5]:
+    for comm_id, comm in sorted(
+        communities.items(), key=lambda x: x[1].size, reverse=True
+    )[:5]:
         print(f"\nコミュニティ {comm_id}:")
         print(f"  サイズ: {comm.size}人")
         print(f"  密度: {comm.density:.3f}")
@@ -680,7 +742,9 @@ def main():
             print(f"  形成期の平均能力: {comm.avg_ability_at_formation:.1f}")
             print(f"  当時推定の潜在能力: {comm.avg_prospective_potential:.1f}")
             print(f"  事後推定の潜在能力: {comm.avg_retrospective_potential:.1f}")
-            print(f"  能力範囲: {comm.ability_range[0]:.1f} - {comm.ability_range[1]:.1f}")
+            print(
+                f"  能力範囲: {comm.ability_range[0]:.1f} - {comm.ability_range[1]:.1f}"
+            )
 
     conn.close()
 

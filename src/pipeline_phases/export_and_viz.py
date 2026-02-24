@@ -50,7 +50,10 @@ def _transform_circles(data: dict, context: PipelineContext) -> dict:
             "director_name": pid_to_name.get(dir_id, dir_id),
             **circle_dict,
             "members": [
-                {**member, "name": pid_to_name.get(member["person_id"], member["person_id"])}
+                {
+                    **member,
+                    "name": pid_to_name.get(member["person_id"], member["person_id"]),
+                }
                 for member in circle_dict["members"]
             ],
         }
@@ -151,7 +154,9 @@ def _transform_summary(data: None, context: PipelineContext) -> dict:
         "scores": {
             "top_composite": context.results[0]["composite"] if context.results else 0,
             "median_composite": (
-                context.results[len(context.results) // 2]["composite"] if context.results else 0
+                context.results[len(context.results) // 2]["composite"]
+                if context.results
+                else 0
             ),
         },
         "graph": graph_summary,
@@ -168,7 +173,6 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="scores_saved",
         log_metrics=lambda data: {"persons": len(data)} if data else {},
     ),
-
     # Director circles (with name lookups)
     ExportSpec(
         filename="circles.json",
@@ -177,7 +181,6 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="circles_saved",
         log_metrics=lambda data: {"directors": len(data)} if data else {},
     ),
-
     # Anime statistics
     ExportSpec(
         filename="anime_stats.json",
@@ -185,7 +188,6 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="anime_stats_saved",
         log_metrics=lambda data: {"anime": len(data)} if data else {},
     ),
-
     # Studios
     ExportSpec(
         filename="studios.json",
@@ -193,7 +195,6 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="studios_saved",
         log_metrics=lambda data: {"studios": len(data)} if data else {},
     ),
-
     # Seasonal trends (conditional on by_season data)
     ExportSpec(
         filename="seasonal.json",
@@ -201,7 +202,6 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         condition=lambda data: data.get("by_season") if data else False,
         log_message="seasonal_saved",
     ),
-
     # Collaborations
     ExportSpec(
         filename="collaborations.json",
@@ -209,14 +209,12 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="collaborations_saved",
         log_metrics=lambda data: {"pairs": len(data)} if data else {},
     ),
-
     # Outliers
     ExportSpec(
         filename="outliers.json",
         data_getter=lambda ctx: ctx.analysis_results.get("outliers"),
         log_message="outliers_saved",
     ),
-
     # Team patterns
     ExportSpec(
         filename="teams.json",
@@ -224,39 +222,38 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="teams_saved",
         log_metrics=lambda data: {"patterns": len(data)} if data else {},
     ),
-
     # Time series
     ExportSpec(
         filename="time_series.json",
         data_getter=lambda ctx: ctx.analysis_results.get("time_series"),
         log_message="time_series_saved",
     ),
-
     # Decades
     ExportSpec(
         filename="decades.json",
         data_getter=lambda ctx: ctx.analysis_results.get("decades"),
         log_message="decades_saved",
     ),
-
     # Growth trends (with trend summary)
     ExportSpec(
         filename="growth.json",
         data_getter=lambda ctx: ctx.growth_data,
         transformer=_transform_growth,
         log_message="growth_saved",
-        log_metrics=lambda data: {"persons": data.get("total_persons", 0)} if data else {},
+        log_metrics=lambda data: (
+            {"persons": data.get("total_persons", 0)} if data else {}
+        ),
     ),
-
     # Person tags (with tag summary)
     ExportSpec(
         filename="tags.json",
         data_getter=lambda ctx: ctx.analysis_results.get("tags"),
         transformer=_transform_tags,
         log_message="tags_saved",
-        log_metrics=lambda data: {"unique_tags": len(data.get("tag_summary", {}))} if data else {},
+        log_metrics=lambda data: (
+            {"unique_tags": len(data.get("tag_summary", {}))} if data else {}
+        ),
     ),
-
     # Role transitions
     ExportSpec(
         filename="transitions.json",
@@ -264,22 +261,21 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         transformer=_transform_transitions,
         log_message="transitions_saved",
     ),
-
     # Role flow
     ExportSpec(
         filename="role_flow.json",
         data_getter=lambda ctx: ctx.analysis_results.get("role_flow"),
         log_message="role_flow_saved",
     ),
-
     # Bridges
     ExportSpec(
         filename="bridges.json",
         data_getter=lambda ctx: ctx.analysis_results.get("bridges"),
         log_message="bridges_saved",
-        log_metrics=lambda data: {"bridges": len(data)} if isinstance(data, list) else {},
+        log_metrics=lambda data: (
+            {"bridges": len(data)} if isinstance(data, list) else {}
+        ),
     ),
-
     # Mentorships
     ExportSpec(
         filename="mentorships.json",
@@ -287,14 +283,12 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="mentorships_saved",
         log_metrics=lambda data: {"pairs": len(data)} if data else {},
     ),
-
     # Mentorship tree
     ExportSpec(
         filename="mentorship_tree.json",
         data_getter=lambda ctx: ctx.analysis_results.get("mentorship_tree"),
         log_message="mentorship_tree_saved",
     ),
-
     # Milestones
     ExportSpec(
         filename="milestones.json",
@@ -302,14 +296,12 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="milestones_saved",
         log_metrics=lambda data: {"records": len(data)} if data else {},
     ),
-
     # Network evolution
     ExportSpec(
         filename="network_evolution.json",
         data_getter=lambda ctx: ctx.analysis_results.get("network_evolution"),
         log_message="network_evolution_saved",
     ),
-
     # Genre affinity
     ExportSpec(
         filename="genre_affinity.json",
@@ -317,7 +309,6 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="genre_affinity_saved",
         log_metrics=lambda data: {"persons": len(data)} if data else {},
     ),
-
     # Productivity (convert dataclass to dict)
     ExportSpec(
         filename="productivity.json",
@@ -326,23 +317,19 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="productivity_saved",
         log_metrics=lambda data: {"persons": len(data)} if data else {},
     ),
-
     # Influence tree
     ExportSpec(
         filename="influence.json",
         data_getter=lambda ctx: ctx.analysis_results.get("influence"),
         log_message="influence_saved",
     ),
-
     # Cross-validation (conditional)
     ExportSpec(
         filename="crossval.json",
         data_getter=lambda ctx: ctx.analysis_results.get("crossval"),
         log_message="crossval_saved",
     ),
-
     # ========== Advanced Metrics (New) ==========
-
     # Studio bias correction
     ExportSpec(
         filename="studio_bias.json",
@@ -353,7 +340,6 @@ EXPORT_REGISTRY: list[ExportSpec] = [
             "studios": len(data.get("studio_prestige", {})) if data else 0,
         },
     ),
-
     # Anime value assessment
     ExportSpec(
         filename="anime_values.json",
@@ -361,7 +347,6 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="anime_values_saved",
         log_metrics=lambda data: {"anime": len(data)} if data else {},
     ),
-
     # Contribution attribution
     ExportSpec(
         filename="contributions.json",
@@ -369,7 +354,6 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="contributions_saved",
         log_metrics=lambda data: {"anime": len(data)} if data else {},
     ),
-
     # Potential value scores
     ExportSpec(
         filename="potential_value.json",
@@ -377,26 +361,23 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="potential_value_saved",
         log_metrics=lambda data: {"persons": len(data)} if data else {},
     ),
-
     # Performance monitoring
     ExportSpec(
         filename="performance.json",
         data_getter=lambda ctx: ctx.analysis_results.get("performance"),
         log_message="performance_saved",
     ),
-
     # Bias detection report
     ExportSpec(
         filename="bias_report.json",
         data_getter=lambda ctx: ctx.analysis_results.get("bias_report"),
         log_message="bias_report_saved",
-        log_metrics=lambda data: {
-            "total_biases": data.get("summary", {}).get("total_biases_detected", 0)
-        }
-        if data
-        else {},
+        log_metrics=lambda data: (
+            {"total_biases": data.get("summary", {}).get("total_biases_detected", 0)}
+            if data
+            else {}
+        ),
     ),
-
     # Fair compensation analysis
     ExportSpec(
         filename="fair_compensation.json",
@@ -404,63 +385,93 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="fair_compensation_saved",
         log_metrics=lambda data: {"anime": data.get("total_anime", 0)} if data else {},
     ),
-
     # Comprehensive insights report
     ExportSpec(
         filename="insights_report.json",
         data_getter=lambda ctx: ctx.analysis_results.get("insights_report"),
         log_message="insights_report_saved",
-        log_metrics=lambda data: {
-            "recommendations": len(data.get("recommendations", [])),
-            "findings": len(data.get("key_findings", [])),
-        }
-        if data
-        else {},
+        log_metrics=lambda data: (
+            {
+                "recommendations": len(data.get("recommendations", [])),
+                "findings": len(data.get("key_findings", [])),
+            }
+            if data
+            else {}
+        ),
     ),
-
     # Causal studio identification (selection vs treatment vs brand)
     ExportSpec(
         filename="causal_identification.json",
         data_getter=lambda ctx: ctx.analysis_results.get("causal_identification"),
         log_message="causal_identification_saved",
-        log_metrics=lambda data: {
-            "trajectories": data.get("sample_statistics", {}).get("total_trajectories", 0),
-            "transitions": data.get("sample_statistics", {}).get("total_transitions", 0),
-            "dominant_effect": data.get("conclusion", {}).get("dominant_effect", "unknown"),
-        }
-        if data
-        else {},
+        log_metrics=lambda data: (
+            {
+                "trajectories": data.get("sample_statistics", {}).get(
+                    "total_trajectories", 0
+                ),
+                "transitions": data.get("sample_statistics", {}).get(
+                    "total_transitions", 0
+                ),
+                "dominant_effect": data.get("conclusion", {}).get(
+                    "dominant_effect", "unknown"
+                ),
+            }
+            if data
+            else {}
+        ),
     ),
-
     # Structural estimation (fixed effects + DID)
     ExportSpec(
         filename="structural_estimation.json",
         data_getter=lambda ctx: ctx.analysis_results.get("structural_estimation"),
         log_message="structural_estimation_saved",
-        log_metrics=lambda data: {
-            "fe_beta": data.get("fixed_effects", {}).get("beta", 0),
-            "fe_pvalue": data.get("fixed_effects", {}).get("p_value", 1),
-            "did_beta": data.get("difference_in_differences", {}).get("beta", 0),
-            "did_pvalue": data.get("difference_in_differences", {}).get("p_value", 1),
-            "preferred_method": data.get("preferred_estimate", {}).get("method", "unknown"),
-        }
-        if data
-        else {},
+        log_metrics=lambda data: (
+            {
+                "fe_beta": data.get("fixed_effects", {}).get("beta", 0),
+                "fe_pvalue": data.get("fixed_effects", {}).get("p_value", 1),
+                "did_beta": data.get("difference_in_differences", {}).get("beta", 0),
+                "did_pvalue": data.get("difference_in_differences", {}).get(
+                    "p_value", 1
+                ),
+                "preferred_method": data.get("preferred_estimate", {}).get(
+                    "method", "unknown"
+                ),
+            }
+            if data
+            else {}
+        ),
     ),
-
     # Individual contribution profiles (Layer 2)
     ExportSpec(
         filename="individual_profiles.json",
         data_getter=lambda ctx: ctx.analysis_results.get("individual_profiles"),
         log_message="individual_profiles_saved",
-        log_metrics=lambda data: {
-            "persons": data.get("total_persons", 0),
-            "r_squared": data.get("model_r_squared"),
-        }
-        if data
-        else {},
+        log_metrics=lambda data: (
+            {
+                "persons": data.get("total_persons", 0),
+                "r_squared": data.get("model_r_squared"),
+            }
+            if data
+            else {}
+        ),
     ),
-
+    # Credit statistics (person_id level analysis)
+    ExportSpec(
+        filename="credit_stats.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("credit_stats"),
+        log_message="credit_stats_saved",
+        log_metrics=lambda data: (
+            {
+                "total_credits": data.get("summary", {}).get("total_credits", 0),
+                "unique_persons": data.get("summary", {}).get("unique_persons", 0),
+                "collaboration_pairs": data.get("collaboration_stats", {}).get(
+                    "total_pairs", 0
+                ),
+            }
+            if data
+            else {}
+        ),
+    ),
     # Pipeline summary (special case - uses elapsed time)
     ExportSpec(
         filename="summary.json",
@@ -602,7 +613,9 @@ def _generate_visualizations(context: PipelineContext) -> None:
         if context.collaboration_graph:
             composite_scores = {r["person_id"]: r["composite"] for r in context.results}
             plot_collaboration_network(
-                context.collaboration_graph, composite_scores, top_n=min(50, len(context.results))
+                context.collaboration_graph,
+                composite_scores,
+                top_n=min(50, len(context.results)),
             )
 
         # Growth trends
@@ -635,7 +648,9 @@ def _generate_visualizations(context: PipelineContext) -> None:
         # Productivity (convert dataclass instances to dicts for visualization)
         productivity = context.analysis_results.get("productivity", {})
         if productivity:
-            productivity_dicts = {pid: asdict(metrics) for pid, metrics in productivity.items()}
+            productivity_dicts = {
+                pid: asdict(metrics) for pid, metrics in productivity.items()
+            }
             plot_productivity_distribution(productivity_dicts)
 
         # Influence tree

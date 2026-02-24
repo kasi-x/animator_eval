@@ -42,8 +42,7 @@ def sample_scores():
 @pytest.fixture
 def sample_results(sample_scores):
     return [
-        {"person_id": k, "name": f"Person {k}", **v}
-        for k, v in sample_scores.items()
+        {"person_id": k, "name": f"Person {k}", **v} for k, v in sample_scores.items()
     ]
 
 
@@ -129,7 +128,9 @@ class TestPlotPersonTimeline:
 
 class TestPlotGrowthTrends:
     def test_creates_file(self, tmp_path):
-        data = {"trend_summary": {"rising": 10, "stable": 20, "declining": 5, "inactive": 3}}
+        data = {
+            "trend_summary": {"rising": 10, "stable": 20, "declining": 5, "inactive": 3}
+        }
         out = tmp_path / "growth.png"
         plot_growth_trends(data, output_path=out)
         assert out.exists()
@@ -146,9 +147,24 @@ class TestPlotNetworkEvolution:
         data = {
             "years": [2018, 2019, 2020],
             "snapshots": {
-                "2018": {"cumulative_persons": 10, "cumulative_edges": 5, "new_persons": 10, "density": 0.1},
-                "2019": {"cumulative_persons": 20, "cumulative_edges": 15, "new_persons": 10, "density": 0.08},
-                "2020": {"cumulative_persons": 30, "cumulative_edges": 30, "new_persons": 10, "density": 0.07},
+                "2018": {
+                    "cumulative_persons": 10,
+                    "cumulative_edges": 5,
+                    "new_persons": 10,
+                    "density": 0.1,
+                },
+                "2019": {
+                    "cumulative_persons": 20,
+                    "cumulative_edges": 15,
+                    "new_persons": 10,
+                    "density": 0.08,
+                },
+                "2020": {
+                    "cumulative_persons": 30,
+                    "cumulative_edges": 30,
+                    "new_persons": 10,
+                    "density": 0.07,
+                },
             },
         }
         out = tmp_path / "net_evo.png"
@@ -166,9 +182,24 @@ class TestPlotDecadeComparison:
     def test_creates_file(self, tmp_path):
         data = {
             "decades": {
-                "2000s": {"credit_count": 100, "unique_persons": 30, "unique_anime": 20, "avg_anime_score": 7.2},
-                "2010s": {"credit_count": 300, "unique_persons": 80, "unique_anime": 50, "avg_anime_score": 7.5},
-                "2020s": {"credit_count": 200, "unique_persons": 60, "unique_anime": 40, "avg_anime_score": 7.8},
+                "2000s": {
+                    "credit_count": 100,
+                    "unique_persons": 30,
+                    "unique_anime": 20,
+                    "avg_anime_score": 7.2,
+                },
+                "2010s": {
+                    "credit_count": 300,
+                    "unique_persons": 80,
+                    "unique_anime": 50,
+                    "avg_anime_score": 7.5,
+                },
+                "2020s": {
+                    "credit_count": 200,
+                    "unique_persons": 60,
+                    "unique_anime": 40,
+                    "avg_anime_score": 7.8,
+                },
             },
         }
         out = tmp_path / "decades.png"
@@ -289,10 +320,26 @@ class TestPlotSeasonalTrends:
     def test_creates_file(self, tmp_path):
         data = {
             "by_season": {
-                "winter": {"credit_count": 100, "person_count": 30, "avg_anime_score": 7.2},
-                "spring": {"credit_count": 150, "person_count": 45, "avg_anime_score": 7.5},
-                "summer": {"credit_count": 80, "person_count": 20, "avg_anime_score": 7.0},
-                "fall": {"credit_count": 120, "person_count": 35, "avg_anime_score": 7.8},
+                "winter": {
+                    "credit_count": 100,
+                    "person_count": 30,
+                    "avg_anime_score": 7.2,
+                },
+                "spring": {
+                    "credit_count": 150,
+                    "person_count": 45,
+                    "avg_anime_score": 7.5,
+                },
+                "summer": {
+                    "credit_count": 80,
+                    "person_count": 20,
+                    "avg_anime_score": 7.0,
+                },
+                "fall": {
+                    "credit_count": 120,
+                    "person_count": 35,
+                    "avg_anime_score": 7.8,
+                },
             },
         }
         out = tmp_path / "seasonal.png"
@@ -310,9 +357,24 @@ class TestPlotBridgeAnalysis:
     def test_creates_file(self, tmp_path):
         data = {
             "bridge_persons": [
-                {"person_id": "p1", "bridge_score": 80, "communities_connected": 3, "cross_community_edges": 5},
-                {"person_id": "p2", "bridge_score": 45, "communities_connected": 2, "cross_community_edges": 3},
-                {"person_id": "p3", "bridge_score": 25, "communities_connected": 2, "cross_community_edges": 1},
+                {
+                    "person_id": "p1",
+                    "bridge_score": 80,
+                    "communities_connected": 3,
+                    "cross_community_edges": 5,
+                },
+                {
+                    "person_id": "p2",
+                    "bridge_score": 45,
+                    "communities_connected": 2,
+                    "cross_community_edges": 3,
+                },
+                {
+                    "person_id": "p3",
+                    "bridge_score": 25,
+                    "communities_connected": 2,
+                    "cross_community_edges": 1,
+                },
             ],
         }
         out = tmp_path / "bridges.png"
@@ -329,9 +391,27 @@ class TestPlotBridgeAnalysis:
 class TestPlotCollaborationStrength:
     def test_creates_file(self, tmp_path):
         data = [
-            {"person_a": "p1", "person_b": "p2", "strength_score": 85, "shared_works": 5, "longevity": 4},
-            {"person_a": "p1", "person_b": "p3", "strength_score": 40, "shared_works": 2, "longevity": 1},
-            {"person_a": "p2", "person_b": "p3", "strength_score": 60, "shared_works": 3, "longevity": 2},
+            {
+                "person_a": "p1",
+                "person_b": "p2",
+                "strength_score": 85,
+                "shared_works": 5,
+                "longevity": 4,
+            },
+            {
+                "person_a": "p1",
+                "person_b": "p3",
+                "strength_score": 40,
+                "shared_works": 2,
+                "longevity": 1,
+            },
+            {
+                "person_a": "p2",
+                "person_b": "p3",
+                "strength_score": 60,
+                "shared_works": 3,
+                "longevity": 2,
+            },
         ]
         out = tmp_path / "collab.png"
         plot_collaboration_strength(data, output_path=out)
@@ -389,7 +469,10 @@ class TestPlotOutlierSummary:
             "axis_outliers": {
                 "authority": {"high": [{"person_id": "p1"}], "low": []},
                 "trust": {"high": [], "low": [{"person_id": "p2"}]},
-                "composite": {"high": [{"person_id": "p1"}], "low": [{"person_id": "p3"}]},
+                "composite": {
+                    "high": [{"person_id": "p1"}],
+                    "low": [{"person_id": "p3"}],
+                },
             },
             "total_outliers": 3,
         }
@@ -428,9 +511,24 @@ class TestPlotTransitionHeatmap:
 class TestPlotAnimeStats:
     def test_creates_file(self, tmp_path):
         data = {
-            "a1": {"title": "Show A", "score": 8.0, "unique_persons": 20, "avg_person_score": 65.0},
-            "a2": {"title": "Show B", "score": 7.5, "unique_persons": 15, "avg_person_score": 55.0},
-            "a3": {"title": "Show C", "score": 6.0, "unique_persons": 10, "avg_person_score": 45.0},
+            "a1": {
+                "title": "Show A",
+                "score": 8.0,
+                "unique_persons": 20,
+                "avg_person_score": 65.0,
+            },
+            "a2": {
+                "title": "Show B",
+                "score": 7.5,
+                "unique_persons": 15,
+                "avg_person_score": 55.0,
+            },
+            "a3": {
+                "title": "Show C",
+                "score": 6.0,
+                "unique_persons": 10,
+                "avg_person_score": 45.0,
+            },
         }
         out = tmp_path / "anime.png"
         plot_anime_stats(data, output_path=out)
@@ -446,7 +544,11 @@ class TestPlotAnimeStats:
 class TestPlotGenreAffinity:
     def test_creates_file(self, tmp_path):
         data = {
-            "p1": {"primary_tier": "high", "primary_era": "modern", "total_credits": 10},
+            "p1": {
+                "primary_tier": "high",
+                "primary_era": "modern",
+                "total_credits": 10,
+            },
             "p2": {"primary_tier": "mid", "primary_era": "2010s", "total_credits": 8},
             "p3": {"primary_tier": "low", "primary_era": "2000s", "total_credits": 5},
         }
@@ -487,9 +589,27 @@ class TestPerformanceMetrics:
     def test_creates_file(self, tmp_path):
         data = {
             "timings": {
-                "data_loading": {"count": 1, "total": 0.123, "avg": 0.123, "min": 0.123, "max": 0.123},
-                "authority_pagerank": {"count": 1, "total": 1.456, "avg": 1.456, "min": 1.456, "max": 1.456},
-                "trust_scores": {"count": 1, "total": 0.789, "avg": 0.789, "min": 0.789, "max": 0.789},
+                "data_loading": {
+                    "count": 1,
+                    "total": 0.123,
+                    "avg": 0.123,
+                    "min": 0.123,
+                    "max": 0.123,
+                },
+                "authority_pagerank": {
+                    "count": 1,
+                    "total": 1.456,
+                    "avg": 1.456,
+                    "min": 1.456,
+                    "max": 1.456,
+                },
+                "trust_scores": {
+                    "count": 1,
+                    "total": 0.789,
+                    "avg": 0.789,
+                    "min": 0.789,
+                    "max": 0.789,
+                },
             },
             "memory_snapshots": {
                 "pipeline_start": 100.5,
@@ -515,8 +635,20 @@ class TestPerformanceMetrics:
     def test_timing_only(self, tmp_path):
         data = {
             "timings": {
-                "validation": {"count": 1, "total": 0.05, "avg": 0.05, "min": 0.05, "max": 0.05},
-                "graph_construction": {"count": 1, "total": 0.5, "avg": 0.5, "min": 0.5, "max": 0.5},
+                "validation": {
+                    "count": 1,
+                    "total": 0.05,
+                    "avg": 0.05,
+                    "min": 0.05,
+                    "max": 0.05,
+                },
+                "graph_construction": {
+                    "count": 1,
+                    "total": 0.5,
+                    "avg": 0.5,
+                    "min": 0.5,
+                    "max": 0.5,
+                },
             },
             "memory_snapshots": {},
             "cache": {"hits": 0, "misses": 0, "hit_rate": 0},
@@ -547,7 +679,13 @@ class TestPerformanceMetrics:
     def test_many_operations(self, tmp_path):
         """Test with many operations to trigger top-15 limit."""
         timings = {
-            f"operation_{i}": {"count": 1, "total": i * 0.1, "avg": i * 0.1, "min": i * 0.1, "max": i * 0.1}
+            f"operation_{i}": {
+                "count": 1,
+                "total": i * 0.1,
+                "avg": i * 0.1,
+                "min": i * 0.1,
+                "max": i * 0.1,
+            }
             for i in range(20)
         }
         data = {

@@ -1,4 +1,5 @@
 """Phase 6: Supplementary Metrics — additional scoring dimensions."""
+
 import structlog
 
 from src.analysis.career import batch_career_analysis
@@ -12,6 +13,7 @@ from src.analysis.growth import compute_growth_trends
 from src.analysis.network_density import compute_network_density
 from src.analysis.trust import batch_detect_engagement_decay
 from src.analysis.versatility import compute_versatility
+
 # Advanced metrics
 from src.analysis.studio_bias_correction import (
     compute_studio_bias_metrics,
@@ -90,7 +92,7 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
     logger.info("step_start", step="centrality_metrics")
     with context.monitor.measure("centrality_metrics"):
         context.collaboration_graph = create_person_collaboration_network(
-            context.persons, context.credits
+            context.persons, context.credits, anime_map=context.anime_map
         )
         person_ids = {p.id for p in context.persons}
         context.centrality = calculate_network_centrality_scores(
@@ -128,14 +130,18 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
                 + context.skill_scores.get(pid, 0) * 0.3
             ),
         }
-        for pid in set(context.authority_scores) | set(context.trust_scores) | set(context.skill_scores)
+        for pid in set(context.authority_scores)
+        | set(context.trust_scores)
+        | set(context.skill_scores)
     }
 
     # Studio Bias Correction
     logger.info("step_start", step="studio_bias_correction")
     with context.monitor.measure("studio_bias_correction"):
         bias_metrics = compute_studio_bias_metrics(context.credits, context.anime_map)
-        studio_prestige = compute_studio_prestige(context.credits, context.anime_map, person_scores)
+        studio_prestige = compute_studio_prestige(
+            context.credits, context.anime_map, person_scores
+        )
         debiased_scores = debias_authority_scores(
             person_scores, bias_metrics, studio_prestige, debias_strength=0.3
         )
@@ -171,7 +177,9 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
     # Anime Value Assessment
     logger.info("step_start", step="anime_value_assessment")
     with context.monitor.measure("anime_value_assessment"):
-        anime_values = compute_anime_values(context.anime_list, context.credits, person_scores)
+        anime_values = compute_anime_values(
+            context.anime_list, context.credits, person_scores
+        )
         context.anime_values = {aid: vars(v) for aid, v in anime_values.items()}
         logger.info("anime_values_computed", anime=len(anime_values))
 
@@ -187,6 +195,7 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
 
         # Pre-index credits by anime for O(1) lookup (PERF-4 optimization)
         from collections import defaultdict
+
         anime_credits_index: dict[str, list] = defaultdict(list)
         for c in context.credits:
             anime_credits_index[c.anime_id].append(c)
@@ -197,7 +206,10 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
             anime_credits = anime_credits_index.get(anime_id, [])
             if anime_credits:
                 contributions = compute_contribution_attribution(
-                    anime_id, anime_value_metrics.composite_value, anime_credits, person_scores
+                    anime_id,
+                    anime_value_metrics.composite_value,
+                    anime_credits,
+                    person_scores,
                 )
                 # Convert to dict and handle Enum serialization
                 all_contributions[anime_id] = {

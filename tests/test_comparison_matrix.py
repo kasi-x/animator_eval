@@ -5,9 +5,30 @@ from src.analysis.comparison_matrix import build_comparison_matrix
 
 def _make_results():
     return [
-        {"person_id": "p1", "name": "Alice", "authority": 80, "trust": 70, "skill": 60, "composite": 71},
-        {"person_id": "p2", "name": "Bob", "authority": 50, "trust": 90, "skill": 40, "composite": 58},
-        {"person_id": "p3", "name": "Carol", "authority": 60, "trust": 60, "skill": 80, "composite": 65},
+        {
+            "person_id": "p1",
+            "name": "Alice",
+            "authority": 80,
+            "trust": 70,
+            "skill": 60,
+            "composite": 71,
+        },
+        {
+            "person_id": "p2",
+            "name": "Bob",
+            "authority": 50,
+            "trust": 90,
+            "skill": 40,
+            "composite": 58,
+        },
+        {
+            "person_id": "p3",
+            "name": "Carol",
+            "authority": 60,
+            "trust": 60,
+            "skill": 80,
+            "composite": 65,
+        },
     ]
 
 
@@ -44,7 +65,9 @@ class TestBuildComparisonMatrix:
 
     def test_custom_axes(self):
         result = build_comparison_matrix(
-            ["p1", "p2"], _make_results(), axes=("authority", "trust"),
+            ["p1", "p2"],
+            _make_results(),
+            axes=("authority", "trust"),
         )
         assert "authority" in result["axis_rankings"]
         assert "skill" not in result["axis_rankings"]

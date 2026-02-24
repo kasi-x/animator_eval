@@ -86,7 +86,9 @@ class PerformanceMonitor:
     def record_timing(self, operation: str, duration: float) -> None:
         """実行時間を記録."""
         self.timings[operation].append(duration)
-        logger.debug("timing_recorded", operation=operation, duration=round(duration, 3))
+        logger.debug(
+            "timing_recorded", operation=operation, duration=round(duration, 3)
+        )
 
     def record_memory(self, checkpoint: str) -> None:
         """メモリ使用量を記録（RSS, VMS, percent）."""
@@ -152,8 +154,12 @@ class PerformanceMonitor:
             min=round(min(durations), 3),
             max=round(max(durations), 3),
             median=round(statistics.median(durations), 3),
-            p95=round(sorted_durations[int(n * 0.95)] if n > 1 else sorted_durations[0], 3),
-            p99=round(sorted_durations[int(n * 0.99)] if n > 1 else sorted_durations[0], 3),
+            p95=round(
+                sorted_durations[int(n * 0.95)] if n > 1 else sorted_durations[0], 3
+            ),
+            p99=round(
+                sorted_durations[int(n * 0.99)] if n > 1 else sorted_durations[0], 3
+            ),
             stddev=round(statistics.stdev(durations) if n > 1 else 0.0, 3),
         )
 
@@ -214,7 +220,10 @@ class PerformanceMonitor:
         peak_memory = max((s.rss_mb for s in self.memory_snapshots_list), default=0.0)
         total_delta = 0.0
         if len(self.memory_snapshots_list) >= 2:
-            total_delta = self.memory_snapshots_list[-1].rss_mb - self.memory_snapshots_list[0].rss_mb
+            total_delta = (
+                self.memory_snapshots_list[-1].rss_mb
+                - self.memory_snapshots_list[0].rss_mb
+            )
 
         # Cache stats
         cache_total = self.cache_hits + self.cache_misses
@@ -301,15 +310,19 @@ class PerformanceMonitor:
                     f"{stats.avg:.3f}s",
                 ]
                 if show_percentiles:
-                    row.extend([
-                        f"{stats.median:.3f}s",
-                        f"{stats.p95:.3f}s",
-                        f"{stats.p99:.3f}s",
-                    ])
-                row.extend([
-                    f"{stats.min:.3f}s",
-                    f"{stats.max:.3f}s",
-                ])
+                    row.extend(
+                        [
+                            f"{stats.median:.3f}s",
+                            f"{stats.p95:.3f}s",
+                            f"{stats.p99:.3f}s",
+                        ]
+                    )
+                row.extend(
+                    [
+                        f"{stats.min:.3f}s",
+                        f"{stats.max:.3f}s",
+                    ]
+                )
                 timing_table.add_row(*row)
 
             console.print(timing_table)
@@ -324,7 +337,11 @@ class PerformanceMonitor:
             mem_table.add_column("% Used", justify="right", style="magenta")
 
             for snapshot in report.memory_snapshots:
-                delta_str = f"{snapshot.delta_mb:+.1f}" if snapshot.delta_mb is not None else "-"
+                delta_str = (
+                    f"{snapshot.delta_mb:+.1f}"
+                    if snapshot.delta_mb is not None
+                    else "-"
+                )
                 mem_table.add_row(
                     snapshot.checkpoint,
                     f"{snapshot.timestamp:.2f}s",

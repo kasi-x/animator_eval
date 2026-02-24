@@ -136,7 +136,9 @@ def test_load_json_file_with_caching_dict_default(tmp_path: Path) -> None:
     assert result == {}
 
 
-def test_load_pipeline_json_with_caching(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_load_pipeline_json_with_caching(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """Test loading pipeline JSON with caching."""
     # Monkeypatch JSON_DIR
     monkeypatch.setattr(json_io, "JSON_DIR", tmp_path)

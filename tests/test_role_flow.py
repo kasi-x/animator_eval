@@ -71,7 +71,8 @@ class TestComputeRoleFlow:
         result = compute_role_flow(credits, anime_map)
         # Stage 1 → Stage 3 should appear (p1 and p3 both do this)
         s1_to_s3 = [
-            link for link in result["links"]
+            link
+            for link in result["links"]
             if "Stage 1" in link["source"] and "Stage 3" in link["target"]
         ]
         assert len(s1_to_s3) == 1

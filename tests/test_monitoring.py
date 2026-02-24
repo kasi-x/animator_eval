@@ -255,8 +255,13 @@ class TestGetFreshnessSummary:
         """All sources fresh -> healthy."""
         now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc)
         fresh = (now - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
-        db_conn.execute("INSERT INTO data_sources VALUES (?, ?, ?, ?)", ("anilist", fresh, 1000, "ok"))
-        db_conn.execute("INSERT INTO data_sources VALUES (?, ?, ?, ?)", ("mal", fresh, 800, "ok"))
+        db_conn.execute(
+            "INSERT INTO data_sources VALUES (?, ?, ?, ?)",
+            ("anilist", fresh, 1000, "ok"),
+        )
+        db_conn.execute(
+            "INSERT INTO data_sources VALUES (?, ?, ?, ?)", ("mal", fresh, 800, "ok")
+        )
         db_conn.commit()
 
         summary = get_freshness_summary(db_conn, now=now)
@@ -270,8 +275,13 @@ class TestGetFreshnessSummary:
         """All sources stale -> critical."""
         now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc)
         stale = (now - timedelta(hours=500)).strftime("%Y-%m-%d %H:%M:%S")
-        db_conn.execute("INSERT INTO data_sources VALUES (?, ?, ?, ?)", ("anilist", stale, 100, "ok"))
-        db_conn.execute("INSERT INTO data_sources VALUES (?, ?, ?, ?)", ("mal", None, 0, "ok"))
+        db_conn.execute(
+            "INSERT INTO data_sources VALUES (?, ?, ?, ?)",
+            ("anilist", stale, 100, "ok"),
+        )
+        db_conn.execute(
+            "INSERT INTO data_sources VALUES (?, ?, ?, ?)", ("mal", None, 0, "ok")
+        )
         db_conn.commit()
 
         summary = get_freshness_summary(db_conn, now=now)
@@ -285,8 +295,13 @@ class TestGetFreshnessSummary:
         fresh = (now - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
         stale = (now - timedelta(hours=500)).strftime("%Y-%m-%d %H:%M:%S")
 
-        db_conn.execute("INSERT INTO data_sources VALUES (?, ?, ?, ?)", ("anilist", fresh, 1000, "ok"))
-        db_conn.execute("INSERT INTO data_sources VALUES (?, ?, ?, ?)", ("mal", stale, 500, "ok"))
+        db_conn.execute(
+            "INSERT INTO data_sources VALUES (?, ?, ?, ?)",
+            ("anilist", fresh, 1000, "ok"),
+        )
+        db_conn.execute(
+            "INSERT INTO data_sources VALUES (?, ?, ?, ?)", ("mal", stale, 500, "ok")
+        )
         db_conn.commit()
 
         summary = get_freshness_summary(db_conn, now=now)
@@ -305,7 +320,10 @@ class TestGetFreshnessSummary:
         """Verify summary sources contain expected keys."""
         now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc)
         fresh = (now - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
-        db_conn.execute("INSERT INTO data_sources VALUES (?, ?, ?, ?)", ("anilist", fresh, 1000, "ok"))
+        db_conn.execute(
+            "INSERT INTO data_sources VALUES (?, ?, ?, ?)",
+            ("anilist", fresh, 1000, "ok"),
+        )
         db_conn.commit()
 
         summary = get_freshness_summary(db_conn, now=now)

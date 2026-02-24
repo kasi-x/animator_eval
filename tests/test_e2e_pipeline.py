@@ -30,10 +30,19 @@ def synthetic_pipeline(monkeypatch, tmp_path):
     monkeypatch.setattr(src.utils.config, "JSON_DIR", json_dir)
 
     # 合成データを生成してDBに投入
-    from src.database import get_connection, init_db, insert_credit, upsert_anime, upsert_person
+    from src.database import (
+        get_connection,
+        init_db,
+        insert_credit,
+        upsert_anime,
+        upsert_person,
+    )
 
     persons, anime_list, credits = generate_synthetic_data(
-        n_directors=5, n_animators=30, n_anime=15, seed=42,
+        n_directors=5,
+        n_animators=30,
+        n_anime=15,
+        seed=42,
     )
 
     conn = get_connection()

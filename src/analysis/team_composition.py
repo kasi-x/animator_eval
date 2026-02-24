@@ -85,9 +85,7 @@ def analyze_team_patterns(
             high_score_teams.append(team_entry)
 
     # Sort by anime score
-    high_score_teams.sort(
-        key=lambda x: x.get("anime_score") or 0, reverse=True
-    )
+    high_score_teams.sort(key=lambda x: x.get("anime_score") or 0, reverse=True)
 
     # Team size statistics
     sizes = [t["team_size"] for t in all_teams]
@@ -98,7 +96,9 @@ def analyze_team_patterns(
             "max": max(sizes),
             "avg": round(sum(sizes) / len(sizes), 1),
             "high_score_avg": round(
-                sum(t["team_size"] for t in high_score_teams) / max(len(high_score_teams), 1), 1
+                sum(t["team_size"] for t in high_score_teams)
+                / max(len(high_score_teams), 1),
+                1,
             ),
         }
 
@@ -107,7 +107,7 @@ def analyze_team_patterns(
     for team in high_score_teams:
         role_keys = sorted(team["roles"].keys())
         for i, r1 in enumerate(role_keys):
-            for r2 in role_keys[i + 1:]:
+            for r2 in role_keys[i + 1 :]:
                 role_pair_freq[f"{r1}+{r2}"] += 1
 
     top_combos = sorted(role_pair_freq.items(), key=lambda x: -x[1])[:20]
@@ -115,15 +115,21 @@ def analyze_team_patterns(
     # Find recommended pairs (persons who frequently appear together in high-score works)
     pair_count: dict[tuple[str, str], int] = defaultdict(int)
     for team in high_score_teams:
-        all_pids = sorted({c.person_id for c in anime_credits.get(team["anime_id"], [])})
+        all_pids = sorted(
+            {c.person_id for c in anime_credits.get(team["anime_id"], [])}
+        )
         for i, a in enumerate(all_pids):
-            for b in all_pids[i + 1:]:
+            for b in all_pids[i + 1 :]:
                 pair_count[(a, b)] += 1
 
     recommended_pairs = []
     for (a, b), count in sorted(pair_count.items(), key=lambda x: -x[1])[:30]:
         if count >= 2:
-            entry: dict = {"person_a": a, "person_b": b, "shared_high_score_works": count}
+            entry: dict = {
+                "person_a": a,
+                "person_b": b,
+                "shared_high_score_works": count,
+            }
             if person_scores:
                 sa = person_scores.get(a)
                 sb = person_scores.get(b)

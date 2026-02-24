@@ -70,79 +70,89 @@ def compute_milestones(
 
             # First credit ever
             if len(milestones) == 0 and not seen_roles:
-                milestones.append({
-                    "type": "career_start",
-                    "year": year,
-                    "anime_id": credit.anime_id,
-                    "anime_title": anime_title,
-                    "description": f"初クレジット: {anime_title}",
-                })
+                milestones.append(
+                    {
+                        "type": "career_start",
+                        "year": year,
+                        "anime_id": credit.anime_id,
+                        "anime_title": anime_title,
+                        "description": f"初クレジット: {anime_title}",
+                    }
+                )
 
             # New role
             if credit.role not in seen_roles:
                 seen_roles.add(credit.role)
                 if len(seen_roles) > 1:  # Skip the very first role
-                    milestones.append({
-                        "type": "new_role",
-                        "year": year,
-                        "role": credit.role.value,
-                        "anime_id": credit.anime_id,
-                        "anime_title": anime_title,
-                        "description": f"新役職 {credit.role.value}: {anime_title}",
-                    })
+                    milestones.append(
+                        {
+                            "type": "new_role",
+                            "year": year,
+                            "role": credit.role.value,
+                            "anime_id": credit.anime_id,
+                            "anime_title": anime_title,
+                            "description": f"新役職 {credit.role.value}: {anime_title}",
+                        }
+                    )
 
             # Stage promotion
             stage = CAREER_STAGE.get(credit.role, 0)
             if stage > highest_stage:
                 if highest_stage > 0:  # Skip the first stage
-                    milestones.append({
-                        "type": "promotion",
-                        "year": year,
-                        "from_stage": highest_stage,
-                        "to_stage": stage,
-                        "role": credit.role.value,
-                        "anime_id": credit.anime_id,
-                        "anime_title": anime_title,
-                        "description": f"昇進 Stage {highest_stage}→{stage}: {credit.role.value}",
-                    })
+                    milestones.append(
+                        {
+                            "type": "promotion",
+                            "year": year,
+                            "from_stage": highest_stage,
+                            "to_stage": stage,
+                            "role": credit.role.value,
+                            "anime_id": credit.anime_id,
+                            "anime_title": anime_title,
+                            "description": f"昇進 Stage {highest_stage}→{stage}: {credit.role.value}",
+                        }
+                    )
                 highest_stage = stage
                 seen_stages.add(stage)
 
             # Participation in highest-scored anime
             if credit.anime_id == best_anime_id and best_anime_id is not None:
-                milestones.append({
-                    "type": "top_anime",
-                    "year": year,
-                    "anime_id": credit.anime_id,
-                    "anime_title": anime_title,
-                    "score": best_score,
-                    "description": f"最高評価作品参加: {anime_title} (score: {best_score})",
-                })
+                milestones.append(
+                    {
+                        "type": "top_anime",
+                        "year": year,
+                        "anime_id": credit.anime_id,
+                        "anime_title": anime_title,
+                        "score": best_score,
+                        "description": f"最高評価作品参加: {anime_title} (score: {best_score})",
+                    }
+                )
 
             # First director credit
             if credit.role == Role.DIRECTOR and "first_director" not in {
                 m["type"] for m in milestones
             }:
-                milestones.append({
-                    "type": "first_director",
-                    "year": year,
-                    "anime_id": credit.anime_id,
-                    "anime_title": anime_title,
-                    "description": f"初監督: {anime_title}",
-                })
+                milestones.append(
+                    {
+                        "type": "first_director",
+                        "year": year,
+                        "anime_id": credit.anime_id,
+                        "anime_title": anime_title,
+                        "description": f"初監督: {anime_title}",
+                    }
+                )
 
         # Prolific milestone: 10+ credits
         credit_count = len(year_credits)
         if credit_count >= 10:
-            milestones.append({
-                "type": "prolific",
-                "total_credits": credit_count,
-                "description": f"多数参加: {credit_count}作品",
-            })
+            milestones.append(
+                {
+                    "type": "prolific",
+                    "total_credits": credit_count,
+                    "description": f"多数参加: {credit_count}作品",
+                }
+            )
 
-        all_milestones[pid] = sorted(
-            milestones, key=lambda m: m.get("year", 9999)
-        )
+        all_milestones[pid] = sorted(milestones, key=lambda m: m.get("year", 9999))
 
     logger.info("milestones_computed", persons=len(all_milestones))
     return all_milestones

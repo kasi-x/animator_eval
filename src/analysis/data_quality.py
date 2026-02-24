@@ -81,7 +81,9 @@ def compute_data_quality_score(
         scored_ratio = persons_with_score / total_persons
         coverage = scored_ratio * 100
         if scored_ratio < 0.8:
-            recommendations.append(f"スコア未算出の人物が多い ({(1-scored_ratio):.0%})")
+            recommendations.append(
+                f"スコア未算出の人物が多い ({(1 - scored_ratio):.0%})"
+            )
     else:
         coverage = 0
 
@@ -149,10 +151,7 @@ def compute_data_quality_score(
         "volume": 0.15,
         "freshness": 0.10,
     }
-    overall = sum(
-        dimensions[dim]["score"] * weight
-        for dim, weight in weights.items()
-    )
+    overall = sum(dimensions[dim]["score"] * weight for dim, weight in weights.items())
 
     result = {
         "overall_score": round(overall, 1),

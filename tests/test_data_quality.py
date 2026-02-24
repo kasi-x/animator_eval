@@ -57,7 +57,9 @@ class TestComputeDataQualityScore:
             source_count=1,
         )
         # Should recommend more sources
-        assert any("ソース" in r or "source" in r.lower() for r in result["recommendations"])
+        assert any(
+            "ソース" in r or "source" in r.lower() for r in result["recommendations"]
+        )
 
     def test_stale_data(self):
         result = compute_data_quality_score(

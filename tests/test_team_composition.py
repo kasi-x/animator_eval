@@ -85,4 +85,6 @@ class TestAnalyzeTeamPatterns:
         result = analyze_team_patterns(credits, anime_map, min_score=7.0)
         teams = result["high_score_teams"]
         for i in range(len(teams) - 1):
-            assert (teams[i].get("anime_score") or 0) >= (teams[i + 1].get("anime_score") or 0)
+            assert (teams[i].get("anime_score") or 0) >= (
+                teams[i + 1].get("anime_score") or 0
+            )

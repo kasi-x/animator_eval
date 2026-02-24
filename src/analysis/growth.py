@@ -37,11 +37,13 @@ def compute_growth_trends(
     for c in credits:
         anime = anime_map.get(c.anime_id)
         if anime and anime.year:
-            person_years[c.person_id][anime.year].append({
-                "anime_id": c.anime_id,
-                "score": anime.score,
-                "role": c.role.value,
-            })
+            person_years[c.person_id][anime.year].append(
+                {
+                    "anime_id": c.anime_id,
+                    "score": anime.score,
+                    "role": c.role.value,
+                }
+            )
 
     if not person_years:
         return {}
@@ -82,7 +84,11 @@ def compute_growth_trends(
             trend = "inactive"
         else:
             recent_avg = recent_credits / min(window, career_span)
-            early_avg = early_credits / max(career_span - window, 1) if career_span > window else recent_avg
+            early_avg = (
+                early_credits / max(career_span - window, 1)
+                if career_span > window
+                else recent_avg
+            )
 
             if recent_avg > early_avg * 1.3:
                 trend = "rising"

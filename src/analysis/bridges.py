@@ -6,6 +6,7 @@
 
 from collections import defaultdict
 
+import networkx as nx
 import structlog
 
 from src.models import Credit
@@ -16,12 +17,14 @@ logger = structlog.get_logger()
 def detect_bridges(
     credits: list[Credit],
     communities: dict[str, int] | None = None,
+    collaboration_graph: "nx.Graph | None" = None,
 ) -> dict:
     """コミュニティ間ブリッジを検出する.
 
     Args:
         credits: クレジットリスト
         communities: {person_id: community_id} マッピング (None の場合は内部で計算)
+        collaboration_graph: 既存のコラボグラフ (再利用で高速化)
 
     Returns:
         bridge_persons, cross_community_edges, community_connectivity
@@ -29,21 +32,29 @@ def detect_bridges(
     if not credits:
         return {"bridge_persons": [], "cross_community_edges": [], "stats": {}}
 
-    # Build collaboration adjacency
-    anime_persons: dict[str, set[str]] = defaultdict(set)
-    for c in credits:
-        anime_persons[c.anime_id].add(c.person_id)
+    if collaboration_graph is not None:
+        # Fast path: use existing graph edges
+        all_persons = set(collaboration_graph.nodes())
+        edges: dict[tuple[str, str], int] = {}
+        for u, v, data in collaboration_graph.edges(data=True):
+            key = (u, v) if u < v else (v, u)
+            edges[key] = int(data.get("shared_works", 1))
+    else:
+        # Slow path: build edges from credits
+        anime_persons: dict[str, set[str]] = defaultdict(set)
+        for c in credits:
+            anime_persons[c.anime_id].add(c.person_id)
 
-    # Build person-person edges with anime_ids (PERF-5 optimization)
-    import itertools
-    edges: dict[tuple[str, str], list[str]] = defaultdict(list)
-    all_persons: set[str] = set()
-    for anime_id, persons in anime_persons.items():
-        plist = sorted(persons)
-        all_persons.update(plist)
-        # Use itertools.combinations (C-level) instead of nested loop with slicing
-        for p1, p2 in itertools.combinations(plist, 2):
-            edges[(p1, p2)].append(anime_id)
+        import itertools
+
+        edge_anime: dict[tuple[str, str], list[str]] = defaultdict(list)
+        all_persons = set()
+        for anime_id, persons in anime_persons.items():
+            plist = sorted(persons)
+            all_persons.update(plist)
+            for p1, p2 in itertools.combinations(plist, 2):
+                edge_anime[(p1, p2)].append(anime_id)
+        edges = {k: len(v) for k, v in edge_anime.items()}
 
     if not all_persons:
         return {"bridge_persons": [], "cross_community_edges": [], "stats": {}}
@@ -57,17 +68,21 @@ def detect_bridges(
     person_cross_count: dict[str, int] = defaultdict(int)
     person_communities_touched: dict[str, set[int]] = defaultdict(set)
 
-    for (p1, p2), anime_ids in edges.items():
+    for (p1, p2), shared_count in edges.items():
         c1 = communities.get(p1, -1)
         c2 = communities.get(p2, -1)
         if c1 != c2 and c1 >= 0 and c2 >= 0:
-            cross_edges.append({
-                "person_a": p1,
-                "person_b": p2,
-                "community_a": c1,
-                "community_b": c2,
-                "shared_works": len(anime_ids),
-            })
+            cross_edges.append(
+                {
+                    "person_a": p1,
+                    "person_b": p2,
+                    "community_a": c1,
+                    "community_b": c2,
+                    "shared_works": shared_count
+                    if isinstance(shared_count, int)
+                    else len(shared_count),
+                }
+            )
             person_cross_count[p1] += 1
             person_cross_count[p2] += 1
             person_communities_touched[p1].add(c1)
@@ -78,12 +93,16 @@ def detect_bridges(
     # Rank bridge persons by number of cross-community connections
     bridge_persons = []
     for pid, count in sorted(person_cross_count.items(), key=lambda x: -x[1]):
-        bridge_persons.append({
-            "person_id": pid,
-            "cross_community_edges": count,
-            "communities_connected": len(person_communities_touched[pid]),
-            "bridge_score": min(100, count * 10 + len(person_communities_touched[pid]) * 15),
-        })
+        bridge_persons.append(
+            {
+                "person_id": pid,
+                "cross_community_edges": count,
+                "communities_connected": len(person_communities_touched[pid]),
+                "bridge_score": min(
+                    100, count * 10 + len(person_communities_touched[pid]) * 15
+                ),
+            }
+        )
 
     # Community connectivity matrix
     num_communities = max(communities.values(), default=-1) + 1

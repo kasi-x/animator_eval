@@ -85,19 +85,21 @@ def infer_mentorships(
         mentor_stage = person_modal_stage.get(mentor_id, 0)
         mentee_stage = person_modal_stage.get(mentee_id, 0)
 
-        mentorships.append({
-            "mentor_id": mentor_id,
-            "mentee_id": mentee_id,
-            "shared_works": len(anime_ids),
-            "shared_anime_ids": sorted(set(anime_ids)),
-            "mentor_stage": mentor_stage,
-            "mentee_stage": mentee_stage,
-            "stage_gap": mentor_stage - mentee_stage,
-            "year_span": (min(years), max(years)) if years else None,
-            "confidence": _compute_confidence(
-                len(anime_ids), mentor_stage - mentee_stage, len(years)
-            ),
-        })
+        mentorships.append(
+            {
+                "mentor_id": mentor_id,
+                "mentee_id": mentee_id,
+                "shared_works": len(anime_ids),
+                "shared_anime_ids": sorted(set(anime_ids)),
+                "mentor_stage": mentor_stage,
+                "mentee_stage": mentee_stage,
+                "stage_gap": mentor_stage - mentee_stage,
+                "year_span": (min(years), max(years)) if years else None,
+                "confidence": _compute_confidence(
+                    len(anime_ids), mentor_stage - mentee_stage, len(years)
+                ),
+            }
+        )
 
     # Sort by confidence
     mentorships.sort(key=lambda m: -m["confidence"])

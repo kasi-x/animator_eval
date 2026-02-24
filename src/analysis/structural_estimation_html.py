@@ -44,7 +44,7 @@ def generate_html_report(
     # Write to file
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(html_content, encoding='utf-8')
+    output_path.write_text(html_content, encoding="utf-8")
 
     logger.info("structural_estimation_html_saved", path=str(output_path))
 
@@ -372,6 +372,7 @@ def _get_css_styles() -> str:
 def _get_timestamp() -> str:
     """Get current timestamp in Japanese format."""
     from datetime import datetime
+
     return datetime.now().strftime("%Y年%m月%d日 %H:%M:%S")
 
 
@@ -386,7 +387,11 @@ def _build_executive_summary(result: Any) -> str:
     did_sig = "有意" if did.p_value < 0.05 else "非有意"
 
     # Event study status
-    parallel_trends_result = result.parallel_trends_test.get("result", "not_tested") if result.parallel_trends_test else "not_tested"
+    parallel_trends_result = (
+        result.parallel_trends_test.get("result", "not_tested")
+        if result.parallel_trends_test
+        else "not_tested"
+    )
 
     html = f"""
     <section class="section">
@@ -397,14 +402,14 @@ def _build_executive_summary(result: Any) -> str:
                 <h4>固定効果推定 (FE)</h4>
                 <div class="value">{fe.beta:.2f}</div>
                 <div class="label">点推定値 (p={fe.p_value:.3f})</div>
-                <span class="badge badge-{'significant' if fe.p_value < 0.05 else 'not-significant'}">{fe_sig}</span>
+                <span class="badge badge-{"significant" if fe.p_value < 0.05 else "not-significant"}">{fe_sig}</span>
             </div>
 
             <div class="summary-card">
                 <h4>差分の差分法 (DID)</h4>
                 <div class="value">{did.beta:.2f}</div>
                 <div class="label">点推定値 (p={did.p_value:.3f})</div>
-                <span class="badge badge-{'significant' if did.p_value < 0.05 else 'not-significant'}">{did_sig}</span>
+                <span class="badge badge-{"significant" if did.p_value < 0.05 else "not-significant"}">{did_sig}</span>
             </div>
 
             <div class="summary-card">
@@ -416,8 +421,8 @@ def _build_executive_summary(result: Any) -> str:
 
             <div class="summary-card">
                 <h4>並行トレンド検定</h4>
-                <div class="value">{'✓' if parallel_trends_result == 'passed' else '✗' if parallel_trends_result == 'failed' else '?'}</div>
-                <div class="label">{'成立' if parallel_trends_result == 'passed' else '不成立' if parallel_trends_result == 'failed' else '未実施' if parallel_trends_result == 'not_tested' else '警告'}</div>
+                <div class="value">{"✓" if parallel_trends_result == "passed" else "✗" if parallel_trends_result == "failed" else "?"}</div>
+                <div class="label">{"成立" if parallel_trends_result == "passed" else "不成立" if parallel_trends_result == "failed" else "未実施" if parallel_trends_result == "not_tested" else "警告"}</div>
                 <span class="badge badge-{parallel_trends_result}">{parallel_trends_result.upper()}</span>
             </div>
         </div>
@@ -451,9 +456,19 @@ def _build_event_study_section(result: Any) -> str:
     for k in sorted(event_study.keys()):
         coef = event_study[k]
         period_type = "処置前" if k < 0 else "入所年" if k == 0 else "処置後"
-        row_class = "coefficient-row-pre" if k < 0 else "coefficient-row-treatment" if k == 0 else "coefficient-row-post"
+        row_class = (
+            "coefficient-row-pre"
+            if k < 0
+            else "coefficient-row-treatment"
+            if k == 0
+            else "coefficient-row-post"
+        )
 
-        sig_badge = '<span class="badge badge-significant">有意</span>' if coef.p_value < 0.05 else '<span class="badge badge-not-significant">非有意</span>'
+        sig_badge = (
+            '<span class="badge badge-significant">有意</span>'
+            if coef.p_value < 0.05
+            else '<span class="badge badge-not-significant">非有意</span>'
+        )
 
         table_rows.append(f"""
             <tr class="{row_class}">
@@ -481,7 +496,7 @@ def _build_event_study_section(result: Any) -> str:
                 </tr>
             </thead>
             <tbody>
-                {''.join(table_rows)}
+                {"".join(table_rows)}
             </tbody>
         </table>
     """
@@ -493,13 +508,19 @@ def _build_event_study_section(result: Any) -> str:
         pt_evidence = parallel_trends.get("evidence", {})
 
         pt_badge_class = f"badge-{pt_result}"
-        pt_alert_class = "alert-success" if pt_result == "passed" else "alert-danger" if pt_result == "failed" else "alert-warning"
+        pt_alert_class = (
+            "alert-success"
+            if pt_result == "passed"
+            else "alert-danger"
+            if pt_result == "failed"
+            else "alert-warning"
+        )
 
         parallel_trends_html = f"""
             <div class="alert {pt_alert_class}">
                 <strong>並行トレンド検定:</strong> <span class="badge {pt_badge_class}">{pt_result.upper()}</span>
                 <p style="margin-top: 0.5rem;">{pt_detail}</p>
-                {f'<p style="margin-top: 0.3rem;">平均 |β_pre| = {pt_evidence.get("avg_abs_beta", 0):.2f}, 最大 |β_pre| = {pt_evidence.get("max_abs_beta", 0):.2f}</p>' if pt_evidence else ''}
+                {f'<p style="margin-top: 0.3rem;">平均 |β_pre| = {pt_evidence.get("avg_abs_beta", 0):.2f}, 最大 |β_pre| = {pt_evidence.get("max_abs_beta", 0):.2f}</p>' if pt_evidence else ""}
             </div>
         """
     else:
@@ -561,7 +582,7 @@ def _build_main_estimates_section(result: Any) -> str:
                 </tr>
                 <tr>
                     <td>p値</td>
-                    <td>{fe.p_value:.4f} <span class="badge badge-{'significant' if fe.p_value < 0.05 else 'not-significant'}">{'有意' if fe.p_value < 0.05 else '非有意'}</span></td>
+                    <td>{fe.p_value:.4f} <span class="badge badge-{"significant" if fe.p_value < 0.05 else "not-significant"}">{"有意" if fe.p_value < 0.05 else "非有意"}</span></td>
                 </tr>
                 <tr>
                     <td>95% 信頼区間</td>
@@ -609,7 +630,7 @@ def _build_main_estimates_section(result: Any) -> str:
                 </tr>
                 <tr>
                     <td>p値</td>
-                    <td>{did.p_value:.4f} <span class="badge badge-{'significant' if did.p_value < 0.05 else 'not-significant'}">{'有意' if did.p_value < 0.05 else '非有意'}</span></td>
+                    <td>{did.p_value:.4f} <span class="badge badge-{"significant" if did.p_value < 0.05 else "not-significant"}">{"有意" if did.p_value < 0.05 else "非有意"}</span></td>
                 </tr>
                 <tr>
                     <td>95% 信頼区間</td>
@@ -617,11 +638,11 @@ def _build_main_estimates_section(result: Any) -> str:
                 </tr>
                 <tr>
                     <td>処理群人数</td>
-                    <td>{did.diagnostics.get('n_treated', 0):,}</td>
+                    <td>{did.diagnostics.get("n_treated", 0):,}</td>
                 </tr>
                 <tr>
                     <td>対照群人数</td>
-                    <td>{did.diagnostics.get('n_control', 0):,}</td>
+                    <td>{did.diagnostics.get("n_control", 0):,}</td>
                 </tr>
             </tbody>
         </table>
@@ -640,11 +661,17 @@ def _build_robustness_section(result: Any) -> str:
 
     for check in result.robustness_checks:
         badge_class = f"badge-{check.result}"
-        alert_class = "alert-success" if check.result == "passed" else "alert-danger" if check.result == "failed" else "alert-warning"
+        alert_class = (
+            "alert-success"
+            if check.result == "passed"
+            else "alert-danger"
+            if check.result == "failed"
+            else "alert-warning"
+        )
 
         checks_html.append(f"""
             <div class="alert {alert_class}">
-                <strong>{check.check_name.replace('_', ' ').title()}:</strong> <span class="badge {badge_class}">{check.result.upper()}</span>
+                <strong>{check.check_name.replace("_", " ").title()}:</strong> <span class="badge {badge_class}">{check.result.upper()}</span>
                 <p style="margin-top: 0.5rem;"><em>{check.description}</em></p>
                 <p>{check.detail}</p>
             </div>
@@ -656,7 +683,7 @@ def _build_robustness_section(result: Any) -> str:
 
         <p>推定結果の頑健性を検証するため、複数のチェックを実施しました。</p>
 
-        {''.join(checks_html)}
+        {"".join(checks_html)}
     </section>
     """
     return html

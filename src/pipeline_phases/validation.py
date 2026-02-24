@@ -1,4 +1,5 @@
 """Phase 2: Validation — data quality checks."""
+
 import sqlite3
 
 import structlog
@@ -9,7 +10,9 @@ from src.validation import ValidationResult, validate_all
 logger = structlog.get_logger()
 
 
-def run_validation_phase(context: PipelineContext, conn: sqlite3.Connection) -> ValidationResult:
+def run_validation_phase(
+    context: PipelineContext, conn: sqlite3.Connection
+) -> ValidationResult:
     """Run data validation checks.
 
     Args:

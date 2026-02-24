@@ -12,9 +12,7 @@ from src.models import Anime, Credit, Person, Role
 
 def _make_test_data():
     """テスト用の人物・アニメ・クレジットデータ."""
-    persons = [
-        Person(id=f"p{i}", name_en=f"Person {i}") for i in range(1, 11)
-    ]
+    persons = [Person(id=f"p{i}", name_en=f"Person {i}") for i in range(1, 11)]
     anime_list = [
         Anime(id="a1", title_en="Show A", year=2015, score=8.0),
         Anime(id="a2", title_en="Show B", year=2016, score=7.5),
@@ -25,14 +23,22 @@ def _make_test_data():
     credits = []
     # p1 is a prolific director
     for a in anime_list:
-        credits.append(Credit(person_id="p1", anime_id=a.id, role=Role.DIRECTOR, source="test"))
+        credits.append(
+            Credit(person_id="p1", anime_id=a.id, role=Role.DIRECTOR, source="test")
+        )
     # p2-p5 are key animators across multiple shows
     for pid in ["p2", "p3", "p4", "p5"]:
         for aid in ["a1", "a2", "a3"]:
-            credits.append(Credit(person_id=pid, anime_id=aid, role=Role.KEY_ANIMATOR, source="test"))
+            credits.append(
+                Credit(
+                    person_id=pid, anime_id=aid, role=Role.KEY_ANIMATOR, source="test"
+                )
+            )
     # p6-p10 are in-betweeners with fewer credits
     for pid in ["p6", "p7", "p8", "p9", "p10"]:
-        credits.append(Credit(person_id=pid, anime_id="a1", role=Role.IN_BETWEEN, source="test"))
+        credits.append(
+            Credit(person_id=pid, anime_id="a1", role=Role.IN_BETWEEN, source="test")
+        )
     return persons, anime_list, credits
 
 

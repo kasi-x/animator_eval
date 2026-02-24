@@ -57,6 +57,7 @@ class CareerSnapshot:
             return self.latest_year - self.first_year + 1
         return None
 
+
 # 役職のキャリアステージ順序（低→高）
 CAREER_STAGE = {
     Role.IN_BETWEEN: 1,
@@ -77,6 +78,8 @@ def analyze_career(
     person_id: str,
     credits: list[Credit],
     anime_map: dict[str, Anime],
+    *,
+    _person_credits: list[Credit] | None = None,
 ) -> CareerSnapshot:
     """特定人物のキャリアタイムラインを分析する.
 
@@ -86,11 +89,16 @@ def analyze_career(
         person_id: 人物ID / Person ID to analyze
         credits: 全クレジット / All credit records
         anime_map: anime_id → Anime
+        _person_credits: Pre-filtered credits for this person (batch optimization)
 
     Returns:
         CareerSnapshot with complete career analysis
     """
-    person_credit_records = [credit for credit in credits if credit.person_id == person_id]
+    person_credit_records = (
+        _person_credits
+        if _person_credits is not None
+        else [credit for credit in credits if credit.person_id == person_id]
+    )
     if not person_credit_records:
         return CareerSnapshot(
             first_year=None,
@@ -125,7 +133,9 @@ def analyze_career(
     role_progression_records = []
     for year in sorted(roles_by_year):
         roles_in_year = roles_by_year[year]
-        highest_ranking_role = max(roles_in_year, key=lambda role: CAREER_STAGE.get(role, 0))
+        highest_ranking_role = max(
+            roles_in_year, key=lambda role: CAREER_STAGE.get(role, 0)
+        )
         record = RoleProgressionRecord(
             year=year,
             role=highest_ranking_role.value,
@@ -134,12 +144,17 @@ def analyze_career(
         role_progression_records.append(record)
 
     # 最高到達ステージ
-    all_career_stages = [CAREER_STAGE.get(credit.role, 0) for credit in person_credit_records]
+    all_career_stages = [
+        CAREER_STAGE.get(credit.role, 0) for credit in person_credit_records
+    ]
     highest_stage = max(all_career_stages) if all_career_stages else 0
-    highest_roles = sorted({
-        credit.role.value for credit in person_credit_records
-        if CAREER_STAGE.get(credit.role, 0) == highest_stage
-    })
+    highest_roles = sorted(
+        {
+            credit.role.value
+            for credit in person_credit_records
+            if CAREER_STAGE.get(credit.role, 0) == highest_stage
+        }
+    )
 
     # Peak year (most credits)
     peak_year = None
@@ -180,12 +195,22 @@ def batch_career_analysis(
     Returns:
         {person_id: CareerSnapshot}
     """
+    # Pre-group credits by person_id: O(m) instead of O(n*m)
+    credits_by_person: dict[str, list[Credit]] = defaultdict(list)
+    for credit in credits:
+        credits_by_person[credit.person_id].append(credit)
+
     if person_ids is None:
-        person_ids = {credit.person_id for credit in credits}
+        person_ids = set(credits_by_person.keys())
 
     career_snapshots = {}
     for person_id in person_ids:
-        career_snapshots[person_id] = analyze_career(person_id, credits, anime_map)
+        career_snapshots[person_id] = analyze_career(
+            person_id,
+            credits,
+            anime_map,
+            _person_credits=credits_by_person.get(person_id, []),
+        )
 
     logger.info("career_analysis_complete", persons=len(career_snapshots))
     return career_snapshots

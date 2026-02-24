@@ -47,7 +47,9 @@ def compute_skill_scores(
             record = ScoredAnimeRecord(anime_id=anime_id, score=anime.score, year=year)
             anime_by_year_and_score.append(record)
 
-    anime_by_year_and_score.sort(key=lambda record: (record.year, record.score))  # 年代順→スコア順
+    anime_by_year_and_score.sort(
+        key=lambda record: (record.year, record.score)
+    )  # 年代順→スコア順
 
     if not anime_by_year_and_score:
         logger.warning("No scored anime found")
@@ -102,8 +104,12 @@ def compute_skill_scores(
         competition_ranks = list(range(1, len(team_rating_objects) + 1))
 
         try:
-            updated_team_ratings = model.rate(team_rating_objects, ranks=competition_ranks)
-            for team_person_ids, updated_ratings in zip(team_member_ids, updated_team_ratings):
+            updated_team_ratings = model.rate(
+                team_rating_objects, ranks=competition_ranks
+            )
+            for team_person_ids, updated_ratings in zip(
+                team_member_ids, updated_team_ratings
+            ):
                 for person_id, updated_rating in zip(team_person_ids, updated_ratings):
                     person_ratings[person_id] = updated_rating
         except Exception:
@@ -120,7 +126,9 @@ def compute_skill_scores(
         maximum_score = score_values.max()
         if maximum_score > minimum_score:
             skill_scores = {
-                person_id: float((score - minimum_score) / (maximum_score - minimum_score) * 100.0)
+                person_id: float(
+                    (score - minimum_score) / (maximum_score - minimum_score) * 100.0
+                )
                 for person_id, score in skill_scores.items()
             }
         else:

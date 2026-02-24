@@ -1,7 +1,5 @@
 """Tests for i18n (internationalization) module."""
 
-
-
 from src.i18n import I18n, get_i18n, get_language, set_language, t
 
 
@@ -171,7 +169,9 @@ def test_i18n_error_messages():
 
     # English
     instance.set_language("en")
-    assert "connection failed" in instance.t("errors.database.connection_failed").lower()
+    assert (
+        "connection failed" in instance.t("errors.database.connection_failed").lower()
+    )
 
     # Japanese
     instance.set_language("ja")

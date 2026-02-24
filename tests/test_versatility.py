@@ -16,7 +16,9 @@ def _make_credits():
         Credit(person_id="p2", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
         # p3: many categories
         Credit(person_id="p3", anime_id="a1", role=Role.DIRECTOR, source="test"),
-        Credit(person_id="p3", anime_id="a1", role=Role.CHARACTER_DESIGNER, source="test"),
+        Credit(
+            person_id="p3", anime_id="a1", role=Role.CHARACTER_DESIGNER, source="test"
+        ),
         Credit(person_id="p3", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"),
         Credit(person_id="p3", anime_id="a1", role=Role.EFFECTS, source="test"),
         Credit(person_id="p3", anime_id="a1", role=Role.SCREENPLAY, source="test"),

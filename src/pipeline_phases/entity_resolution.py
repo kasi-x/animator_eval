@@ -1,4 +1,5 @@
 """Phase 3: Entity Resolution — deduplicate person identities."""
+
 import structlog
 
 from src.analysis.entity_resolution import resolve_all
@@ -37,4 +38,6 @@ def run_entity_resolution(context: PipelineContext) -> None:
                 )
             context.credits = resolved_credits
             logger.info("person_ids_resolved", count=len(context.canonical_map))
-            context.monitor.increment_counter("persons_resolved", len(context.canonical_map))
+            context.monitor.increment_counter(
+                "persons_resolved", len(context.canonical_map)
+            )

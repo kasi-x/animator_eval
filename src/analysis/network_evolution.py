@@ -2,26 +2,57 @@
 
 年ごとにコラボレーションネットワークがどう変化したかを追跡する。
 新規コラボの増加率、ネットワーク密度推移、コア人材の安定性などを計測。
+
+Uses the pre-built collaboration graph (episode-aware) when available,
+falling back to credit-based pair enumeration for backward compatibility.
 """
 
 from collections import defaultdict
 
+import networkx as nx
 import structlog
 
 from src.models import Anime, Credit
 
 logger = structlog.get_logger()
 
+# Threshold for switching from O(n²) pair enumeration to graph-based lookup
+_LARGE_CAST_THRESHOLD = 100
+
+
+def _edges_from_graph_for_cast(
+    collab_graph: nx.Graph,
+    persons_in_anime: set[str],
+) -> set[tuple[str, str]]:
+    """Efficiently find collaboration edges among a set of persons using the graph.
+
+    For each person, iterate their graph neighbors and check if the neighbor
+    is also in the cast. This is O(Σ degree(p)) instead of O(n²).
+    """
+    edges: set[tuple[str, str]] = set()
+    for p in persons_in_anime:
+        if p not in collab_graph:
+            continue
+        for neighbor in collab_graph.neighbors(p):
+            if neighbor in persons_in_anime:
+                edge = (p, neighbor) if p < neighbor else (neighbor, p)
+                edges.add(edge)
+    return edges
+
 
 def compute_network_evolution(
     credits: list[Credit],
     anime_map: dict[str, Anime],
+    collaboration_graph: nx.Graph | None = None,
 ) -> dict:
     """年ごとのネットワーク進化を計算する.
 
     Args:
         credits: クレジットリスト
         anime_map: {anime_id: Anime} マッピング
+        collaboration_graph: Pre-built episode-aware collaboration graph.
+            When provided, edges are derived from the graph instead of
+            enumerating all O(n²) pairs per anime — faster and more accurate.
 
     Returns:
         {years: [...], snapshots: {year: {metrics}}, trends: {...}}
@@ -50,21 +81,38 @@ def compute_network_evolution(
         # Persons active this year
         year_persons = {c.person_id for c in year_credits}
 
-        # New collaborations this year
+        # Group by anime
         anime_persons: dict[str, set[str]] = defaultdict(set)
         for c in year_credits:
             anime_persons[c.anime_id].add(c.person_id)
 
         new_edges_this_year = 0
         year_edges: set[tuple[str, str]] = set()
-        for persons in anime_persons.values():
-            plist = sorted(persons)
-            for i, p1 in enumerate(plist):
-                for p2 in plist[i + 1 :]:
-                    edge = (p1, p2)
+
+        for persons_in_anime in anime_persons.values():
+            if len(persons_in_anime) < 2:
+                continue
+
+            if collaboration_graph is not None:
+                # Graph-based: use neighbor lookup — O(Σ degree) per anime
+                anime_edges = _edges_from_graph_for_cast(
+                    collaboration_graph, persons_in_anime
+                )
+                for edge in anime_edges:
                     year_edges.add(edge)
                     if edge not in cumulative_edges:
                         new_edges_this_year += 1
+            else:
+                # No graph: enumerate pairs (skip very large casts)
+                plist = sorted(persons_in_anime)
+                if len(plist) > _LARGE_CAST_THRESHOLD:
+                    continue
+                for i, p1 in enumerate(plist):
+                    for p2 in plist[i + 1 :]:
+                        edge = (p1, p2)
+                        year_edges.add(edge)
+                        if edge not in cumulative_edges:
+                            new_edges_this_year += 1
 
         # New persons this year
         new_persons = year_persons - cumulative_persons
@@ -93,8 +141,10 @@ def compute_network_evolution(
         first_snap = snapshots[years[0]]
         last_snap = snapshots[years[-1]]
         trends = {
-            "person_growth": last_snap["cumulative_persons"] - first_snap["cumulative_persons"],
-            "edge_growth": last_snap["cumulative_edges"] - first_snap["cumulative_edges"],
+            "person_growth": last_snap["cumulative_persons"]
+            - first_snap["cumulative_persons"],
+            "edge_growth": last_snap["cumulative_edges"]
+            - first_snap["cumulative_edges"],
             "density_change": round(last_snap["density"] - first_snap["density"], 6),
             "avg_new_persons_per_year": round(
                 sum(s["new_persons"] for s in snapshots.values()) / len(years), 1
@@ -106,5 +156,9 @@ def compute_network_evolution(
     else:
         trends = {}
 
-    logger.info("network_evolution_computed", years=len(years))
+    logger.info(
+        "network_evolution_computed",
+        years=len(years),
+        graph_based=collaboration_graph is not None,
+    )
     return {"years": years, "snapshots": snapshots, "trends": trends}

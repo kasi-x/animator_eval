@@ -36,7 +36,9 @@ def compute_collab_diversity(
         anime_persons[c.anime_id].add(c.person_id)
 
     # Count collaborator frequency per person
-    person_collab_freq: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    person_collab_freq: dict[str, dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
     for persons in anime_persons.values():
         plist = list(persons)
         for i, p1 in enumerate(plist):
@@ -66,7 +68,9 @@ def compute_collab_diversity(
 
         # Repeat rate: % of collaborators worked with 2+ times
         repeat_collabs = sum(1 for c in collab_counts.values() if c >= 2)
-        repeat_rate = round(repeat_collabs / unique_collabs * 100, 1) if unique_collabs > 0 else 0
+        repeat_rate = (
+            round(repeat_collabs / unique_collabs * 100, 1) if unique_collabs > 0 else 0
+        )
 
         # Top collaborator concentration
         top_count = max(collab_counts.values())

@@ -15,7 +15,9 @@ def _make_data():
         Credit(person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"),
         Credit(person_id="p3", anime_id="a1", role=Role.IN_BETWEEN, source="test"),
         Credit(person_id="p1", anime_id="a2", role=Role.DIRECTOR, source="test"),
-        Credit(person_id="p2", anime_id="a2", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p2", anime_id="a2", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
     ]
     return persons, credits
 
@@ -48,8 +50,20 @@ class TestExportGraphml:
     def test_with_scores(self, tmp_path):
         persons, credits = _make_data()
         scores = {
-            "p1": {"authority": 80.0, "trust": 70.0, "skill": 60.0, "composite": 72.0, "primary_role": "director"},
-            "p2": {"authority": 60.0, "trust": 50.0, "skill": 40.0, "composite": 52.0, "primary_role": "animator"},
+            "p1": {
+                "authority": 80.0,
+                "trust": 70.0,
+                "skill": 60.0,
+                "composite": 72.0,
+                "primary_role": "director",
+            },
+            "p2": {
+                "authority": 60.0,
+                "trust": 50.0,
+                "skill": 40.0,
+                "composite": 52.0,
+                "primary_role": "animator",
+            },
         }
         out = tmp_path / "test.graphml"
         export_graphml(persons, credits, person_scores=scores, output_path=out)

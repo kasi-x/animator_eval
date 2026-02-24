@@ -1,4 +1,5 @@
 """Phase 1: Data Loading — load persons, anime, and credits from database."""
+
 import sqlite3
 
 import structlog
@@ -25,7 +26,14 @@ def load_pipeline_data(context: PipelineContext, conn: sqlite3.Connection) -> No
     with context.monitor.measure("data_loading"):
         context.persons = load_all_persons(conn)
         context.anime_list = load_all_anime(conn)
-        context.credits = load_all_credits(conn)
+        all_credits = load_all_credits(conn)
+
+    # Filter out placeholder N/A credits (no real person data)
+    person_ids = {p.id for p in context.persons}
+    context.credits = [c for c in all_credits if c.person_id in person_ids]
+    na_count = len(all_credits) - len(context.credits)
+    if na_count > 0:
+        logger.info("filtered_orphan_credits", count=na_count)
 
     # Build anime_map for quick lookups
     context.anime_map = {a.id: a for a in context.anime_list}

@@ -61,7 +61,10 @@ def _is_kanji(char: str) -> bool:
 
 def _is_japanese_name(name: str) -> bool:
     """日本語の名前かどうかを判定."""
-    return any(_is_kanji(c) or ("\u3040" <= c <= "\u309F") or ("\u30A0" <= c <= "\u30FF") for c in name)
+    return any(
+        _is_kanji(c) or ("\u3040" <= c <= "\u309f") or ("\u30a0" <= c <= "\u30ff")
+        for c in name
+    )
 
 
 def exact_match_cluster(persons: list[Person]) -> dict[str, str]:
@@ -112,7 +115,13 @@ def exact_match_cluster(persons: list[Person]) -> dict[str, str]:
         for pid in unique_ids[1:]:
             if pid not in canonical_map:
                 canonical_map[pid] = canonical
-                logger.info("entity_merged", source=pid, canonical=canonical, strategy="exact_match", name=name_ja)
+                logger.info(
+                    "entity_merged",
+                    source=pid,
+                    canonical=canonical,
+                    strategy="exact_match",
+                    name=name_ja,
+                )
 
     # 英語名での統合（日本語名を持たない人物のみ）
     for name_en, ids in en_name_groups.items():
@@ -123,7 +132,13 @@ def exact_match_cluster(persons: list[Person]) -> dict[str, str]:
         for pid in unique_ids[1:]:
             if pid not in canonical_map:
                 canonical_map[pid] = canonical
-                logger.info("entity_merged", source=pid, canonical=canonical, strategy="exact_match", name=name_en)
+                logger.info(
+                    "entity_merged",
+                    source=pid,
+                    canonical=canonical,
+                    strategy="exact_match",
+                    name=name_en,
+                )
 
     # エイリアスでの統合（補助的、既にマッチしていない場合のみ）
     for alias, ids in alias_groups.items():
@@ -138,7 +153,13 @@ def exact_match_cluster(persons: list[Person]) -> dict[str, str]:
         for pid in valid_ids[1:]:
             if pid not in canonical_map:
                 canonical_map[pid] = canonical
-                logger.info("entity_merged", source=pid, canonical=canonical, strategy="exact_match", name=alias)
+                logger.info(
+                    "entity_merged",
+                    source=pid,
+                    canonical=canonical,
+                    strategy="exact_match",
+                    name=alias,
+                )
 
     return canonical_map
 
@@ -307,7 +328,9 @@ def cross_source_match(persons: list[Person]) -> dict[str, str]:
     return canonical_map
 
 
-def similarity_based_cluster(persons: list[Person], threshold: float = 0.95) -> dict[str, str]:
+def similarity_based_cluster(
+    persons: list[Person], threshold: float = 0.95
+) -> dict[str, str]:
     """文字列類似度による名寄せ（最も保守的）.
 
     Jaro-Winkler類似度を使用し、極めて高い閾値（デフォルト0.95）で
@@ -327,7 +350,9 @@ def similarity_based_cluster(persons: list[Person], threshold: float = 0.95) -> 
         - 日本語名とローマ字名は別々に評価
     """
     if threshold < 0.9:
-        logger.warning("similarity_threshold_too_low", threshold=threshold, recommended=0.95)
+        logger.warning(
+            "similarity_threshold_too_low", threshold=threshold, recommended=0.95
+        )
 
     MIN_NAME_LENGTH = 5
 
@@ -378,7 +403,9 @@ def similarity_based_cluster(persons: list[Person], threshold: float = 0.95) -> 
                     name2 = block_names[j]
 
                     # Early filter: skip if length differs by >20%
-                    len_ratio = abs(len(name1) - len(name2)) / max(len(name1), len(name2))
+                    len_ratio = abs(len(name1) - len(name2)) / max(
+                        len(name1), len(name2)
+                    )
                     if len_ratio > 0.2:
                         comparisons_skipped += 1
                         continue
@@ -419,7 +446,12 @@ def similarity_based_cluster(persons: list[Person], threshold: float = 0.95) -> 
             "similarity_blocking_stats",
             comparisons_made=comparisons_made,
             comparisons_skipped=comparisons_skipped,
-            reduction_pct=round(100 * comparisons_skipped / max(1, comparisons_made + comparisons_skipped), 1),
+            reduction_pct=round(
+                100
+                * comparisons_skipped
+                / max(1, comparisons_made + comparisons_skipped),
+                1,
+            ),
         )
 
     return canonical_map
