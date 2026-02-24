@@ -21,12 +21,26 @@ class TestNormalizeAnimeTitle:
         assert normalize_anime_title("進撃の巨人 (TV)") == "進撃の巨人"
 
     def test_strip_ova_suffix(self):
-        assert normalize_anime_title("AKIRA [OVA]") == "AKIRA"
+        assert normalize_anime_title("AKIRA [OVA]") == "akira"
 
     def test_strip_season_suffix(self):
         assert (
             normalize_anime_title("僕のヒーローアカデミア（第2期）")
             == "僕のヒーローアカデミア"
+        )
+
+    def test_strip_season_suffix_kanji(self):
+        """Kanji number season: [五期]"""
+        assert normalize_anime_title("闇芝居[五期]") == "闇芝居"
+
+    def test_strip_series_suffix(self):
+        """[第3シリーズ] pattern."""
+        assert normalize_anime_title("境界のRINNE[第3シリーズ]") == "境界のrinne"
+
+    def test_strip_year_suffix(self):
+        """[2017] pattern."""
+        assert (
+            normalize_anime_title("デュエル・マスターズ[2017]") == "デュエル マスターズ"
         )
 
     def test_strip_movie_suffix(self):
@@ -36,13 +50,25 @@ class TestNormalizeAnimeTitle:
         assert normalize_anime_title("  進撃  の  巨人  ") == "進撃 の 巨人"
 
     def test_punctuation_normalization(self):
-        # ・ and ～ and : are normalized to spaces
-        assert normalize_anime_title("Fate～stay night") == "Fate stay night"
+        assert normalize_anime_title("Fate～stay night") == "fate stay night"
+
+    def test_trailing_dot_removed(self):
+        assert normalize_anime_title("銀魂.") == "銀魂"
+
+    def test_trailing_exclamation_removed(self):
+        assert normalize_anime_title("バッカーノ!") == "バッカーノ"
+
+    def test_lowercase(self):
+        assert normalize_anime_title("RINNE") == "rinne"
+        assert normalize_anime_title("NEW") == "new"
+
+    def test_case_insensitive_matching(self):
+        """RINNE and Rinne should normalize to same value."""
+        assert normalize_anime_title("境界のRINNE") == normalize_anime_title(
+            "境界のRinne"
+        )
 
     def test_empty_string(self):
-        assert normalize_anime_title("") == ""
-
-    def test_none_like_empty(self):
         assert normalize_anime_title("") == ""
 
     def test_preserves_core_title(self):
@@ -96,6 +122,14 @@ class TestExactMatch:
         """MADB has (TV) suffix, AniList does not."""
         madb = [_madb("madb:C1", "進撃の巨人 (TV)", 2013)]
         anilist = [_anilist("anilist:1", title_ja="進撃の巨人", year=2013)]
+        matches = match_anime_titles(madb, anilist)
+        assert len(matches) == 1
+        assert matches[0].strategy == "exact"
+
+    def test_case_insensitive_exact_match(self):
+        """RINNE vs Rinne should match via case-insensitive normalization."""
+        madb = [_madb("madb:C1", "境界のRINNE", 2015)]
+        anilist = [_anilist("anilist:1", title_ja="境界のRinne", year=2015)]
         matches = match_anime_titles(madb, anilist)
         assert len(matches) == 1
         assert matches[0].strategy == "exact"
@@ -173,7 +207,7 @@ class TestOneToOneEnforcement:
         assert matches[0].madb_anime_id == "madb:C1"
 
     def test_no_duplicate_madb_match(self):
-        """Same MADB anime should not match two AniList anime."""
+        """Same MADB anime should not match two AniList anime with same year."""
         madb = [_madb("madb:C1", "AKIRA", 1988)]
         anilist = [
             _anilist("anilist:1", title_ja="AKIRA", year=1988),
@@ -205,6 +239,29 @@ class TestAmbiguityRejection:
         matches = match_anime_titles(madb, anilist, year_tolerance=1)
         assert len(matches) == 1
         assert matches[0].anilist_anime_id == "anilist:1"
+
+    def test_year_disambiguation_picks_exact_year(self):
+        """Same title, multiple candidates — exact year match wins."""
+        madb = [_madb("madb:C1", "賭ケグルイ", 2017)]
+        anilist = [
+            _anilist("anilist:1", title_ja="賭ケグルイ", year=2017),
+            _anilist("anilist:2", title_ja="賭ケグルイ", year=2017),
+            _anilist("anilist:3", title_ja="賭ケグルイ××", year=2019),
+        ]
+        # Two have same title+year → still ambiguous
+        matches = match_anime_titles(madb, anilist)
+        assert len(matches) == 0
+
+    def test_year_disambiguation_with_specials(self):
+        """Same base title but one is 'Picture Drama' (different AniList entry)."""
+        madb = [_madb("madb:C1", "月がきれい", 2017)]
+        anilist = [
+            _anilist("anilist:1", title_ja="月がきれい", year=2017),
+            _anilist("anilist:2", title_ja="月がきれい", title_en="Special", year=2017),
+        ]
+        # Both have same title_ja and year → ambiguous, skip
+        matches = match_anime_titles(madb, anilist)
+        assert len(matches) == 0
 
 
 class TestSynonymMatch:

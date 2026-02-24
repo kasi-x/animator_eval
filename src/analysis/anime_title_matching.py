@@ -39,15 +39,24 @@ class AnimeMatch:
 
 # Patterns to strip from titles before comparison
 _STRIP_PATTERNS = re.compile(
-    r"\s*[\(\[（【]"
-    r"(?:TV|OVA|OAD|ONA|劇場版|映画|第?\d+期|第?\d+シーズン|Season\s*\d+|\d+st|\d+nd|\d+rd|\d+th)"
-    r"[\)\]）】]\s*",
+    r"\s*[\(\[（【［]"
+    r"(?:"
+    r"TV|OVA|OAD|ONA|劇場版|映画"
+    r"|第?\d+期|第?\d+シーズン|第?\d+シリーズ"
+    r"|[一二三四五六七八九十]+期|[一二三四五六七八九十]+シーズン"
+    r"|Season\s*\d+"
+    r"|\d+st|\d+nd|\d+rd|\d+th"
+    r"|\d{4}"  # bare year like [2017]
+    r")"
+    r"[\)\]）】］]\s*",
     re.IGNORECASE,
 )
 
 # Whitespace / punctuation normalization
 _WHITESPACE = re.compile(r"\s+")
 _PUNCTUATION = re.compile(r"[～〜~・:：\-−–—]+")
+# Trailing punctuation (e.g. 銀魂.)
+_TRAILING_PUNCT = re.compile(r"[.。!！?？]+$")
 
 
 def normalize_anime_title(title: str) -> str:
@@ -64,7 +73,10 @@ def normalize_anime_title(title: str) -> str:
     title = unicodedata.normalize("NFKC", title)
     title = _STRIP_PATTERNS.sub("", title)
     title = _PUNCTUATION.sub(" ", title)
+    title = _TRAILING_PUNCT.sub("", title)
     title = _WHITESPACE.sub(" ", title).strip()
+    # Case-insensitive comparison (RINNE vs Rinne, NEW vs New)
+    title = title.lower()
 
     return title
 
@@ -169,6 +181,14 @@ def match_anime_titles(
 
         # Deduplicate (same anime_id can appear multiple times via different titles)
         valid = list(dict.fromkeys(valid))
+
+        # If multiple candidates, try to disambiguate by exact year match
+        if len(valid) > 1 and madb.get("year") is not None:
+            exact_year = [
+                aid for aid in valid if anime_by_id[aid].get("year") == madb["year"]
+            ]
+            if len(exact_year) == 1:
+                valid = exact_year
 
         if len(valid) == 1:
             aid = valid[0]
