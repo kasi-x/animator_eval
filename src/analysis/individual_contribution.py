@@ -89,9 +89,14 @@ def _build_person_features(
         rp = role_profiles.get(pid, {})
         primary_role = rp.get("primary_role", "unknown")
 
-        # キャリア年数
-        cd = career_data.get(pid, {})
-        career_years = cd.get("active_years", 0)
+        # キャリア年数 (career_data values may be CareerSnapshot or dict)
+        cd = career_data.get(pid)
+        if cd is None:
+            career_years = 0
+        elif isinstance(cd, dict):
+            career_years = cd.get("active_years", 0)
+        else:
+            career_years = getattr(cd, "active_years", 0)
         if career_years == 0:
             # credits から計算
             pc = person_credits.get(pid, [])

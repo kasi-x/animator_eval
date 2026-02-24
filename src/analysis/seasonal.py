@@ -66,21 +66,21 @@ def compute_seasonal_trends(
             ys["credit_count"] += 1
             # anime_count updated separately below
 
-    # Count anime per year-season
+    # Count anime per year-season (pre-aggregate to avoid O(n²))
+    year_season_anime: dict[int, dict[str, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
     for c in credits:
         anime = anime_map.get(c.anime_id)
         if not anime or not anime.year:
             continue
         season = _infer_season(anime)
         if season:
-            year_season[anime.year][season]["anime_count"] = len(
-                {
-                    cr.anime_id
-                    for cr in season_credits[season]
-                    if anime_map.get(cr.anime_id)
-                    and anime_map[cr.anime_id].year == anime.year
-                }
-            )
+            year_season_anime[anime.year][season].add(c.anime_id)
+
+    for year, seasons in year_season_anime.items():
+        for season, anime_ids in seasons.items():
+            year_season[year][season]["anime_count"] = len(anime_ids)
 
     if not season_anime:
         return {
