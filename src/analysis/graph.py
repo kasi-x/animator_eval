@@ -16,7 +16,7 @@ import structlog
 
 from src.models import Anime, Credit, Person, Role
 from src.utils.config import ROLE_WEIGHTS
-from src.utils.role_groups import DIRECTOR_ROLES, ANIMATOR_ROLES
+from src.utils.role_groups import DIRECTOR_ROLES, ANIMATOR_ROLES, THROUGH_ROLES, EPISODIC_ROLES
 
 logger = structlog.get_logger()
 
@@ -68,17 +68,370 @@ def create_person_anime_network(
     return g
 
 
+def _episode_coverage(
+    role: Role,
+    episodes: set[int],
+    total_episodes: int | None,
+) -> float:
+    """Compute episode coverage fraction for a person-role on an anime.
+
+    - Episode data available: len(episodes) / total_episodes
+    - No episode data + through-role: 1.0
+    - No episode data + episodic-role + large anime (>26 ep): min(26 / total_episodes, 1.0)
+    - No episode data + small anime (≤26 ep): 1.0
+    - No total_episodes info: 1.0
+    """
+    if episodes:
+        if total_episodes and total_episodes > 0:
+            return len(episodes) / total_episodes
+        return 1.0
+
+    # No episode data
+    if role in THROUGH_ROLES:
+        return 1.0
+    if total_episodes is not None and total_episodes > 26:
+        if role in EPISODIC_ROLES:
+            return min(26.0 / total_episodes, 1.0)
+    return 1.0
+
+
+def _compute_anime_commitments(
+    credits: list[Credit],
+    anime_map: dict[str, Anime] | None,
+) -> dict[str, dict[str, float]]:
+    """Compute per-person raw commitment for each anime.
+
+    Returns: {anime_id: {person_id: raw_commitment}}
+
+    raw_commitment = Σ(role_weight × episode_coverage_fraction) across all roles.
+    """
+    # Track episodes per person-anime-role
+    role_episodes: dict[tuple[str, str, str], set[int]] = defaultdict(set)
+
+    for c in credits:
+        key = (c.anime_id, c.person_id, c.role.value)
+        if c.episode is not None:
+            role_episodes[key].add(c.episode)
+
+    # Group credits by anime+person, dedup roles
+    anime_person_role_set: dict[str, dict[str, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
+    for c in credits:
+        anime_person_role_set[c.anime_id][c.person_id].add(c.role.value)
+
+    commitments: dict[str, dict[str, float]] = {}
+
+    for anime_id, person_roles in anime_person_role_set.items():
+        total_episodes = None
+        if anime_map:
+            anime = anime_map.get(anime_id)
+            if anime:
+                total_episodes = anime.episodes
+
+        person_commitments: dict[str, float] = {}
+        for person_id, roles in person_roles.items():
+            raw = 0.0
+            for role_val in roles:
+                try:
+                    role = Role(role_val)
+                except ValueError:
+                    continue
+                w = ROLE_WEIGHTS.get(role_val, 1.0)
+                eps = role_episodes.get((anime_id, person_id, role_val), set())
+                coverage = _episode_coverage(role, eps, total_episodes)
+                raw += w * coverage
+            person_commitments[person_id] = raw
+
+        commitments[anime_id] = person_commitments
+
+    return commitments
+
+
+def _work_importance(anime: Anime | None) -> float:
+    """Compute work importance multiplier from anime score. Range: 0.1-1.0."""
+    if anime is None or anime.score is None:
+        return 0.5
+    return max(anime.score / 10.0, 0.1)
+
+
+def _episode_weight_for_pair(
+    episodes_a: set[int],
+    episodes_b: set[int],
+    role_a: Role,
+    role_b: Role,
+    total_episodes: int | None,
+) -> float:
+    """Compute episode-aware weight multiplier for a collaboration pair.
+
+    When both persons have episode data, weight by overlap fraction.
+    When only one has data, estimate the other's coverage from role type.
+    When neither has data, use role-based heuristics for large anime.
+    """
+    both_have = bool(episodes_a) and bool(episodes_b)
+    either_has = bool(episodes_a) or bool(episodes_b)
+
+    # Both have episode data → weight by overlap
+    if both_have:
+        overlap = len(episodes_a & episodes_b)
+        union = len(episodes_a | episodes_b)
+        return overlap / max(union, 1)
+
+    # One has episode data, the other doesn't
+    if either_has:
+        known = episodes_a if episodes_a else episodes_b
+        unknown_role = role_b if episodes_a else role_a
+
+        # Through-roles span the full series → overlap with all known episodes
+        if unknown_role in THROUGH_ROLES:
+            return 1.0
+
+        # Small anime → assume full overlap
+        if total_episodes is not None and total_episodes <= 26:
+            return 1.0
+
+        # Large anime, episodic role without episode data → estimate coverage
+        if total_episodes is not None and total_episodes > 26:
+            # Known side: fraction of episodes they cover
+            known_frac = len(known) / total_episodes
+            # Unknown episodic side: assume typical 1-2 cour coverage
+            unknown_frac = min(26.0 / total_episodes, 1.0)
+            # Estimated overlap = known_frac × unknown_frac × total_episodes
+            # Normalized by union ≈ (known_frac + unknown_frac) × total_episodes
+            return (known_frac * unknown_frac) / max(known_frac + unknown_frac - known_frac * unknown_frac, 0.001)
+
+        # No total_episodes info → default
+        return 1.0
+
+    # Neither has episode data
+    # Small anime (≤26 episodes, typical 1-2 cour) → assume full overlap
+    if total_episodes is not None and total_episodes <= 26:
+        return 1.0
+
+    # Large anime without episode data → role-based heuristic
+    if total_episodes is not None and total_episodes > 26:
+        a_through = role_a in THROUGH_ROLES
+        b_through = role_b in THROUGH_ROLES
+        a_episodic = role_a in EPISODIC_ROLES
+        b_episodic = role_b in EPISODIC_ROLES
+
+        # Both through roles → full overlap
+        if a_through and b_through:
+            return 1.0
+
+        # Both episodic → dilute by assumed coverage
+        if a_episodic and b_episodic:
+            dilution = min(26.0 / total_episodes, 1.0)
+            return dilution * dilution  # both diluted
+
+        # One through, one episodic → dilute the episodic side
+        if (a_through and b_episodic) or (b_through and a_episodic):
+            return min(26.0 / total_episodes, 1.0)
+
+        # Fallback for unclassified roles
+        return min(26.0 / total_episodes, 1.0)
+
+    # No episode count info at all → default full weight
+    return 1.0
+
+
+def _apply_episode_adjustments(
+    edge_data: dict[tuple[str, str], dict[str, float]],
+    anime_person_info: dict[str, dict[str, tuple[set[int], Role, float]]],
+    anime_map: dict[str, Anime] | None,
+    commitments: dict[str, dict[str, float]] | None = None,
+) -> None:
+    """Apply episode-aware weight adjustments to pre-built edge data.
+
+    Recomputes edge weights by summing episode-adjusted per-anime contributions.
+    Used when Rust builds base edges but episode data needs to be factored in.
+    Modifies edge_data in place.
+    """
+    # Build per-edge, per-anime contribution breakdown
+    # We need to recompute weights from scratch using episode info
+    # First, figure out which anime each edge pair shares
+    anime_pair_info: dict[tuple[str, str], list[tuple[float, float, set[int], set[int], Role, Role, int | None, str]]] = defaultdict(list)
+
+    for anime_id, person_info in anime_person_info.items():
+        total_episodes = None
+        if anime_map:
+            anime = anime_map.get(anime_id)
+            if anime:
+                total_episodes = anime.episodes
+
+        persons_list = list(person_info.items())
+        for i, (pid_a, (eps_a, role_a, w_a)) in enumerate(persons_list):
+            for pid_b, (eps_b, role_b, w_b) in persons_list[i + 1:]:
+                if pid_a == pid_b:
+                    continue
+                edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
+                if edge_key in edge_data:
+                    anime_pair_info[edge_key].append(
+                        (w_a, w_b, eps_a, eps_b, role_a, role_b, total_episodes, anime_id)
+                    )
+
+    # Recompute weights with episode adjustments
+    edges_to_remove = []
+    for edge_key, anime_entries in anime_pair_info.items():
+        new_weight = 0.0
+        new_shared = 0
+        for w_a, w_b, eps_a, eps_b, role_a, role_b, total_eps, anime_id in anime_entries:
+            ep_w = _episode_weight_for_pair(eps_a, eps_b, role_a, role_b, total_eps)
+            if ep_w < 0.001:
+                continue
+            anime_obj = anime_map.get(anime_id) if anime_map else None
+            importance = _work_importance(anime_obj)
+            anime_commits = commitments.get(anime_id, {}) if commitments else {}
+            commit_a = anime_commits.get(edge_key[0], w_a)
+            commit_b = anime_commits.get(edge_key[1], w_b)
+            new_weight += commit_a * commit_b * ep_w * importance
+            new_shared += 1
+
+        if new_weight < 0.001:
+            edges_to_remove.append(edge_key)
+        else:
+            edge_data[edge_key]["weight"] = new_weight
+            edge_data[edge_key]["shared_works"] = new_shared
+
+    for key in edges_to_remove:
+        del edge_data[key]
+
+
+def _build_edges_python(
+    credits: list[Credit],
+    anime_person_info: dict[str, dict[str, tuple[set[int], Role, float]]] | None,
+    anime_map: dict[str, Anime] | None,
+    has_episode_data: bool,
+    commitments: dict[str, dict[str, float]] | None = None,
+) -> dict[tuple[str, str], dict[str, float]]:
+    """Build collaboration edges in pure Python with optional episode awareness."""
+    anime_credits: dict[str, list[tuple[str, Role, float]]] = defaultdict(list)
+    for c in credits:
+        w = _role_weight(c.role)
+        anime_credits[c.anime_id].append((c.person_id, c.role, w))
+
+    edge_data: dict[tuple[str, str], dict[str, float]] = defaultdict(
+        lambda: {"weight": 0.0, "shared_works": 0}
+    )
+
+    for anime_id, staff_list in anime_credits.items():
+        total_episodes = None
+        anime_obj = None
+        if anime_map:
+            anime_obj = anime_map.get(anime_id)
+            if anime_obj:
+                total_episodes = anime_obj.episodes
+
+        importance = _work_importance(anime_obj)
+        anime_commits = commitments.get(anime_id, {}) if commitments else {}
+
+        if has_episode_data and anime_person_info:
+            person_info = anime_person_info.get(anime_id, {})
+            persons_list = list(person_info.items())
+            for i, (pid_a, (eps_a, role_a, w_a)) in enumerate(persons_list):
+                for pid_b, (eps_b, role_b, w_b) in persons_list[i + 1:]:
+                    if pid_a == pid_b:
+                        continue
+                    ep_w = _episode_weight_for_pair(
+                        eps_a, eps_b, role_a, role_b, total_episodes
+                    )
+                    if ep_w < 0.001:
+                        continue
+                    edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
+                    commit_a = anime_commits.get(pid_a, w_a)
+                    commit_b = anime_commits.get(pid_b, w_b)
+                    edge_weight = commit_a * commit_b * ep_w * importance
+                    edge_data[edge_key]["weight"] += edge_weight
+                    edge_data[edge_key]["shared_works"] += 1
+        else:
+            # Deduplicate: aggregate per person to avoid overcounting shared_works
+            seen_persons: dict[str, tuple[Role, float]] = {}
+            for pid, role, w in staff_list:
+                if pid not in seen_persons or w > seen_persons[pid][1]:
+                    seen_persons[pid] = (role, w)
+            persons_dedup = list(seen_persons.items())
+            for i, (pid_a, (role_a, w_a)) in enumerate(persons_dedup):
+                for pid_b, (role_b, w_b) in persons_dedup[i + 1:]:
+                    if pid_a == pid_b:
+                        continue
+                    edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
+                    commit_a = anime_commits.get(pid_a, w_a)
+                    commit_b = anime_commits.get(pid_b, w_b)
+                    edge_weight = commit_a * commit_b * importance
+                    edge_data[edge_key]["weight"] += edge_weight
+                    edge_data[edge_key]["shared_works"] += 1
+
+    return edge_data
+
+
+def _apply_commitment_adjustments(
+    edge_data: dict[tuple[str, str], dict[str, float]],
+    credits: list[Credit],
+    anime_map: dict[str, Anime] | None,
+    commitments: dict[str, dict[str, float]],
+) -> None:
+    """Recompute Rust-built edge weights with commitment and work_importance.
+
+    Used when Rust finds edge topology but we need commitment-based weights.
+    Modifies edge_data in place.
+    """
+    # Build per-anime person sets for pair lookup
+    anime_persons: dict[str, set[str]] = defaultdict(set)
+    for c in credits:
+        anime_persons[c.anime_id].add(c.person_id)
+
+    # Rebuild edge weights from scratch
+    new_weights: dict[tuple[str, str], float] = defaultdict(float)
+    new_shared: dict[tuple[str, str], int] = defaultdict(int)
+
+    for anime_id, person_ids in anime_persons.items():
+        anime_obj = anime_map.get(anime_id) if anime_map else None
+        importance = _work_importance(anime_obj)
+        anime_commits = commitments.get(anime_id, {})
+
+        pid_list = sorted(person_ids)
+        for i, pid_a in enumerate(pid_list):
+            for pid_b in pid_list[i + 1:]:
+                edge_key = (pid_a, pid_b)
+                if edge_key not in edge_data:
+                    continue
+                commit_a = anime_commits.get(pid_a, 1.0)
+                commit_b = anime_commits.get(pid_b, 1.0)
+                new_weights[edge_key] += commit_a * commit_b * importance
+                new_shared[edge_key] += 1
+
+    edges_to_remove = []
+    for edge_key in edge_data:
+        if edge_key in new_weights and new_weights[edge_key] >= 0.001:
+            edge_data[edge_key]["weight"] = new_weights[edge_key]
+            edge_data[edge_key]["shared_works"] = new_shared[edge_key]
+        elif edge_key in new_weights:
+            edges_to_remove.append(edge_key)
+
+    for key in edges_to_remove:
+        del edge_data[key]
+
+
 def create_person_collaboration_network(
     persons: list[Person],
     credits: list[Credit],
+    anime_map: dict[str, Anime] | None = None,
 ) -> nx.Graph:
     """人物間コラボレーション無向グラフを構築する.
 
     Creates a network of people who worked together on the same anime.
     同じ作品に参加した人物同士にエッジを張る。
-    エッジ重み = Σ(role_weight_a × role_weight_b) / max_weight で正規化。
+    エッジ重み = Σ(commitment_a × commitment_b × episode_overlap × work_importance)
 
-    Uses Rust extension for edge aggregation when available (10-30x speedup).
+    Commitment = sum of role_weight × episode_coverage for each role a person holds.
+    Work importance = anime score / 10.0 (0.1-1.0, default 0.5).
+
+    Episode-aware weighting reduces spurious edges on long-running anime by
+    considering actual episode overlap when available, and applying role-based
+    heuristics when episode data is missing.
+
+    Uses Rust extension for edge aggregation when available (10-30x speedup),
+    falling back to Python with episode-aware weighting.
     """
     from src.analysis.graph_rust import RUST_AVAILABLE, build_collaboration_edges
 
@@ -87,28 +440,41 @@ def create_person_collaboration_network(
     for p in persons:
         g.add_node(p.id, name=p.display_name, name_ja=p.name_ja, name_en=p.name_en)
 
-    if RUST_AVAILABLE:
-        # Rust-accelerated edge aggregation
-        edge_data = build_collaboration_edges(persons, credits)
-    else:
-        # Python fallback: pre-aggregate edges in memory
-        anime_credits: dict[str, list[tuple[str, Role, float]]] = defaultdict(list)
-        for c in credits:
-            w = _role_weight(c.role)
-            anime_credits[c.anime_id].append((c.person_id, c.role, w))
+    # Compute commitment data for all anime
+    commitments = _compute_anime_commitments(credits, anime_map)
 
-        edge_data: dict[tuple[str, str], dict[str, float]] = defaultdict(
-            lambda: {"weight": 0.0, "shared_works": 0}
+    # Check if any credits have episode data (enables episode-aware path)
+    has_episode_data = any(c.episode is not None for c in credits)
+
+    # Build per-anime, per-person episode/role info (needed for episode-aware weighting)
+    # Structure: {anime_id: {person_id: (episodes, primary_role, max_weight)}}
+    anime_person_info: dict[str, dict[str, tuple[set[int], Role, float]]] | None = None
+    if has_episode_data:
+        anime_person_info = {}
+        for c in credits:
+            by_person = anime_person_info.setdefault(c.anime_id, {})
+            w = _role_weight(c.role)
+            if c.person_id not in by_person:
+                by_person[c.person_id] = (set(), c.role, w)
+            eps, _, prev_w = by_person[c.person_id]
+            if c.episode is not None:
+                eps.add(c.episode)
+            if w > prev_w:
+                by_person[c.person_id] = (eps, c.role, w)
+
+    if RUST_AVAILABLE and not has_episode_data:
+        # Rust-accelerated edge aggregation, then recompute with commitments
+        edge_data = build_collaboration_edges(persons, credits)
+        _apply_commitment_adjustments(edge_data, credits, anime_map, commitments)
+    elif RUST_AVAILABLE and has_episode_data:
+        # Rust builds base edges, then apply episode + commitment weight adjustments
+        edge_data = build_collaboration_edges(persons, credits)
+        _apply_episode_adjustments(edge_data, anime_person_info, anime_map, commitments)
+    else:
+        # Pure Python path with episode-aware edge aggregation
+        edge_data = _build_edges_python(
+            credits, anime_person_info, anime_map, has_episode_data, commitments
         )
-        for anime_id, staff in anime_credits.items():
-            for i, (pid_a, role_a, w_a) in enumerate(staff):
-                for pid_b, role_b, w_b in staff[i + 1 :]:
-                    if pid_a == pid_b:
-                        continue
-                    edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
-                    edge_weight = (w_a + w_b) / 2.0
-                    edge_data[edge_key]["weight"] += edge_weight
-                    edge_data[edge_key]["shared_works"] += 1
 
     # Batch add all edges to graph (single pass, no has_edge() calls)
     g.add_edges_from(
@@ -119,18 +485,22 @@ def create_person_collaboration_network(
         "collaboration_graph_built",
         nodes=g.number_of_nodes(),
         edges=g.number_of_edges(),
+        episode_aware=has_episode_data,
     )
     return g
 
 
 def create_director_animator_network(
     credits: list[Credit],
+    anime_map: dict[str, Anime] | None = None,
 ) -> nx.DiGraph:
     """監督→アニメーター の有向グラフを構築する.
 
     Creates a directed network showing which directors worked with which animators.
     同一作品で監督/演出とアニメーターが共演した場合にエッジを張る。
     Trust スコアの算出に使用。
+
+    Edge weight = (dir_w + anim_w) / 2.0 × work_importance.
     """
     g = nx.DiGraph()
 
@@ -148,11 +518,12 @@ def create_director_animator_network(
     for anime_id in anime_directors:
         if anime_id not in anime_animators:
             continue
+        importance = _work_importance(anime_map.get(anime_id) if anime_map else None)
         for dir_id, dir_w in anime_directors[anime_id]:
             for anim_id, anim_w in anime_animators[anime_id]:
                 if dir_id == anim_id:
                     continue
-                edge_w = (dir_w + anim_w) / 2.0
+                edge_w = (dir_w + anim_w) / 2.0 * importance
                 if g.has_edge(dir_id, anim_id):
                     g[dir_id][anim_id]["weight"] += edge_w
                     g[dir_id][anim_id]["works"].append(anime_id)
@@ -407,10 +778,11 @@ def main() -> None:
     bp_graph = create_person_anime_network(persons, anime_list, credits)
 
     # コラボレーショングラフ
-    collab_graph = create_person_collaboration_network(persons, credits)
+    anime_map = {a.id: a for a in anime_list}
+    collab_graph = create_person_collaboration_network(persons, credits, anime_map=anime_map)
 
     # 監督→アニメーターグラフ
-    da_graph = create_director_animator_network(credits)
+    da_graph = create_director_animator_network(credits, anime_map=anime_map)
 
     # 統計出力
     stats = {

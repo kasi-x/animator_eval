@@ -14,6 +14,7 @@ import numpy as np
 import structlog
 
 from src.models import Anime, Credit, Role
+from src.utils.config import ROLE_WEIGHTS
 from src.utils.role_groups import DIRECTOR_ROLES
 
 logger = structlog.get_logger()
@@ -29,16 +30,10 @@ class DirectorEngagementRecord(NamedTuple):
 DECAY_HALF_LIFE_YEARS = 3.0  # 3年で半減
 DECAY_LAMBDA = math.log(2) / DECAY_HALF_LIFE_YEARS
 
-# Role importance map (hoisted to module level - not recreated per credit)
-ROLE_IMPORTANCE_MAP: dict[Role, float] = {
-    Role.ANIMATION_DIRECTOR: 2.5,
-    Role.CHIEF_ANIMATION_DIRECTOR: 2.8,
-    Role.KEY_ANIMATOR: 2.0,
-    Role.SECOND_KEY_ANIMATOR: 1.5,
-    Role.IN_BETWEEN: 1.0,
-    Role.CHARACTER_DESIGNER: 2.3,
-    Role.STORYBOARD: 2.0,
-}
+
+def _role_importance(role: Role) -> float:
+    """Dynamic role importance from ROLE_WEIGHTS (single source of truth)."""
+    return ROLE_WEIGHTS.get(role.value, 1.0)
 
 
 @functools.lru_cache(maxsize=100)
@@ -108,8 +103,7 @@ def compute_trust_scores(
                 if dir_id == person_id:
                     continue  # 自分自身は除外
 
-                # Use pre-computed role importance map (not recreated per credit)
-                role_importance = ROLE_IMPORTANCE_MAP.get(c.role, 1.0)
+                role_importance = _role_importance(c.role)
 
                 collaborations_with_each_director[dir_id].append(
                     DirectorEngagementRecord(

@@ -135,7 +135,10 @@ def build_collaboration_edges(
             }
         return edge_data
 
-    # Python fallback: same logic as original graph.py
+    # Python fallback: provides edge topology only.
+    # Weights computed here are placeholder averages — graph.py's
+    # _apply_commitment_adjustments() or _apply_episode_adjustments()
+    # will overwrite them with commitment-based values.
     edge_data = defaultdict(lambda: {"weight": 0.0, "shared_works": 0})
     for _anime_id, staff in anime_credits.items():
         for i, (pid_a, w_a) in enumerate(staff):
