@@ -124,7 +124,7 @@ def load_madb_anime(conn) -> list[dict]:
 def load_anilist_anime(conn) -> list[dict]:
     """DB から AniList anime をロードする."""
     rows = conn.execute(
-        "SELECT id, title_ja, title_en, year, synonyms FROM anime WHERE id LIKE 'anilist:%'"
+        "SELECT id, title_ja, title_en, year, synonyms, format FROM anime WHERE id LIKE 'anilist:%'"
     ).fetchall()
     import json
 
@@ -141,6 +141,7 @@ def load_anilist_anime(conn) -> list[dict]:
                 "title_ja": r["title_ja"] or "",
                 "title_en": r["title_en"] or "",
                 "year": r["year"],
+                "format": r["format"],
                 "synonyms": synonyms if isinstance(synonyms, list) else [],
             }
         )
@@ -264,6 +265,7 @@ def print_report(
     # --- Title Matching ---
     exact = sum(1 for m in matches if m.strategy == "exact")
     fuzzy = sum(1 for m in matches if m.strategy == "fuzzy")
+    contains = sum(1 for m in matches if m.strategy == "contains")
     madb_total = scrape_stats.get("anime_with_contributors", 0)
     unmatched = madb_total - len(matches)
 
@@ -272,6 +274,7 @@ def print_report(
     t.add_column("Value", justify="right", style="green")
     t.add_row("Exact matches", f"{exact:,}")
     t.add_row("Fuzzy matches", f"{fuzzy:,}")
+    t.add_row("Contains matches", f"{contains:,}")
     t.add_row("Unmatched", f"{unmatched:,}")
     t.add_row(
         "Match rate",

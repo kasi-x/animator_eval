@@ -9,7 +9,7 @@ anime matching は別の関心事（タイトル fuzzy matching + 年検証）�
 設計方針:
 - false positive（別作品を同一と判定）を避ける保守的マッチング
 - 1:1 マッピング強制（多対一を防止）
-- 曖昧なケース（同一年で複数候補）は安全側にスキップ
+- 曖昧なケース（同一年で複数候補）は format 優先度で解決
 """
 
 from __future__ import annotations
@@ -34,8 +34,21 @@ class AnimeMatch:
     madb_title: str
     anilist_title: str
     score: float
-    strategy: str  # "exact" or "fuzzy"
+    strategy: str  # "exact", "fuzzy", or "contains"
 
+
+# Format priority: prefer main content over specials/shorts
+# Lower number = higher priority
+_FORMAT_PRIORITY: dict[str | None, int] = {
+    "TV": 0,
+    "MOVIE": 1,
+    "OVA": 2,
+    "ONA": 3,
+    "TV_SHORT": 4,
+    "SPECIAL": 5,
+    "MUSIC": 6,
+}
+_DEFAULT_FORMAT_PRIORITY = 99
 
 # Patterns to strip from titles before comparison
 _STRIP_PATTERNS = re.compile(
@@ -66,6 +79,7 @@ def normalize_anime_title(title: str) -> str:
     - (TV)/(OVA) 等のサフィックス除去
     - 句読点・記号の統一
     - 空白正規化
+    - 小文字化
     """
     if not title:
         return ""
@@ -75,10 +89,58 @@ def normalize_anime_title(title: str) -> str:
     title = _PUNCTUATION.sub(" ", title)
     title = _TRAILING_PUNCT.sub("", title)
     title = _WHITESPACE.sub(" ", title).strip()
-    # Case-insensitive comparison (RINNE vs Rinne, NEW vs New)
     title = title.lower()
 
     return title
+
+
+def _format_priority(anime: dict) -> int:
+    """Anime の format 優先度を返す (低い = 優先)."""
+    return _FORMAT_PRIORITY.get(anime.get("format"), _DEFAULT_FORMAT_PRIORITY)
+
+
+def _pick_best_by_format(candidates: list[str], anime_by_id: dict[str, dict]) -> str:
+    """複数候補から format 優先度が最も高い1件を返す."""
+    return min(candidates, key=lambda aid: _format_priority(anime_by_id[aid]))
+
+
+def _disambiguate(
+    valid: list[str],
+    madb_year: int | None,
+    anime_by_id: dict[str, dict],
+) -> list[str]:
+    """複数候補を year + format で絞り込む.
+
+    1. 年の完全一致で絞る
+    2. まだ複数なら format 優先度で1件に絞る
+    """
+    if len(valid) <= 1:
+        return valid
+
+    # Step 1: exact year
+    if madb_year is not None:
+        exact_year = [
+            aid for aid in valid if anime_by_id[aid].get("year") == madb_year
+        ]
+        if len(exact_year) == 1:
+            return exact_year
+        if exact_year:
+            valid = exact_year
+
+    # Step 2: format priority
+    if len(valid) > 1:
+        best = _pick_best_by_format(valid, anime_by_id)
+        best_prio = _format_priority(anime_by_id[best])
+        # Only disambiguate if the best is strictly better than the rest
+        same_prio = [
+            aid
+            for aid in valid
+            if _format_priority(anime_by_id[aid]) == best_prio
+        ]
+        if len(same_prio) == 1:
+            return [best]
+
+    return valid
 
 
 def _build_anilist_index(
@@ -96,7 +158,6 @@ def _build_anilist_index(
         aid = anime["id"]
         anime_by_id[aid] = anime
 
-        # Index all title variants
         titles: list[str] = []
         if anime.get("title_ja"):
             titles.append(anime["title_ja"])
@@ -119,13 +180,14 @@ def _year_compatible(
     anilist_year: int | None,
     tolerance: int,
 ) -> bool:
-    """年が互換性があるか確認する.
-
-    両方に year がある場合のみ検証。片方が欠損なら通す。
-    """
+    """年が互換性があるか確認する."""
     if madb_year is None or anilist_year is None:
         return True
     return abs(madb_year - anilist_year) <= tolerance
+
+
+def _get_display_title(anime: dict) -> str:
+    return anime.get("title_ja") or anime.get("title_en") or ""
 
 
 def match_anime_titles(
@@ -136,26 +198,55 @@ def match_anime_titles(
 ) -> list[AnimeMatch]:
     """MADB anime と AniList anime をタイトルマッチングする.
 
-    Args:
-        madb_anime: MADB anime dicts (id, title, year, ...)
-        anilist_anime: AniList anime dicts (id, title_ja, title_en, year, synonyms, ...)
-        threshold: fuzzy match の最低スコア (0-100)
-        year_tolerance: 年の許容誤差
-
-    Returns:
-        マッチ結果のリスト
-
-    マッチング戦略:
+    マッチング戦略 (4 パス):
         1. 正規化タイトルの完全一致（高速パス）
-        2. rapidfuzz.fuzz.token_sort_ratio で fuzzy match
-        3. 年の検証: 両方に year がある場合 ±tolerance 年以内
-        4. 1:1 マッピング強制（多対一を防止）
+        2. fuzzy match (fuzz.ratio >= threshold)
+        3. 部分文字列マッチ（MADB タイトルが AniList に含まれる場合）
+        - 各パスで年検証 + format 優先度による曖昧性解消
+        - 1:1 マッピング強制
     """
     title_index, anime_by_id = _build_anilist_index(anilist_anime)
 
     matches: list[AnimeMatch] = []
     used_anilist_ids: set[str] = set()
     used_madb_ids: set[str] = set()
+
+    def _try_match(
+        madb_id: str,
+        madb_title: str,
+        madb_year: int | None,
+        valid: list[str],
+        score: float,
+        strategy: str,
+    ) -> bool:
+        """候補リストからマッチを試みる. 成功したら True."""
+        valid = [aid for aid in valid if aid not in used_anilist_ids]
+        valid = list(dict.fromkeys(valid))  # dedup
+        valid = _disambiguate(valid, madb_year, anime_by_id)
+
+        if len(valid) == 1:
+            aid = valid[0]
+            matches.append(
+                AnimeMatch(
+                    madb_anime_id=madb_id,
+                    anilist_anime_id=aid,
+                    madb_title=madb_title,
+                    anilist_title=_get_display_title(anime_by_id[aid]),
+                    score=score,
+                    strategy=strategy,
+                )
+            )
+            used_anilist_ids.add(aid)
+            used_madb_ids.add(madb_id)
+            return True
+        if len(valid) > 1:
+            log.debug(
+                f"anime_match_ambiguous_{strategy}",
+                madb_id=madb_id,
+                title=madb_title,
+                candidates=len(valid),
+            )
+        return False
 
     # --- Pass 1: Exact match (fast path) ---
     for madb in madb_anime:
@@ -169,60 +260,20 @@ def match_anime_titles(
             continue
 
         candidates = title_index.get(normalized, [])
-        # Filter by year and already-used
         valid = [
             aid
             for aid in candidates
-            if aid not in used_anilist_ids
-            and _year_compatible(
+            if _year_compatible(
                 madb.get("year"), anime_by_id[aid].get("year"), year_tolerance
             )
         ]
-
-        # Deduplicate (same anime_id can appear multiple times via different titles)
-        valid = list(dict.fromkeys(valid))
-
-        # If multiple candidates, try to disambiguate by exact year match
-        if len(valid) > 1 and madb.get("year") is not None:
-            exact_year = [
-                aid for aid in valid if anime_by_id[aid].get("year") == madb["year"]
-            ]
-            if len(exact_year) == 1:
-                valid = exact_year
-
-        if len(valid) == 1:
-            aid = valid[0]
-            anilist_title = (
-                anime_by_id[aid].get("title_ja")
-                or anime_by_id[aid].get("title_en")
-                or ""
-            )
-            matches.append(
-                AnimeMatch(
-                    madb_anime_id=madb_id,
-                    anilist_anime_id=aid,
-                    madb_title=madb_title,
-                    anilist_title=anilist_title,
-                    score=100.0,
-                    strategy="exact",
-                )
-            )
-            used_anilist_ids.add(aid)
-            used_madb_ids.add(madb_id)
-        elif len(valid) > 1:
-            log.debug(
-                "anime_match_ambiguous_exact",
-                madb_id=madb_id,
-                title=madb_title,
-                candidates=len(valid),
-            )
+        _try_match(madb_id, madb_title, madb.get("year"), valid, 100.0, "exact")
 
     # --- Pass 2: Fuzzy match (remaining) ---
-    # Build first-character blocking index for performance
     char_blocks: dict[str, list[tuple[str, str]]] = defaultdict(list)
     for norm_title, aids in title_index.items():
         if norm_title:
-            first = norm_title[0].lower()
+            first = norm_title[0]
             for aid in aids:
                 if aid not in used_anilist_ids:
                     char_blocks[first].append((norm_title, aid))
@@ -237,25 +288,19 @@ def match_anime_titles(
         if not normalized or len(normalized) < 3:
             continue
 
-        first_char = normalized[0].lower()
+        first_char = normalized[0]
         block = char_blocks.get(first_char, [])
 
-        best_score = 0.0
-        best_aid: str | None = None
-        best_anilist_title = ""
-        ambiguous = False
-
+        # Collect all candidates above threshold
+        scored: list[tuple[float, str]] = []
         for anilist_norm, aid in block:
             if aid in used_anilist_ids:
                 continue
-
-            # Year filter (cheap, applied before expensive fuzzy)
             if not _year_compatible(
                 madb.get("year"), anime_by_id[aid].get("year"), year_tolerance
             ):
                 continue
-
-            # Length filter: skip if lengths differ too much (>50%)
+            # Length filter
             len_ratio = abs(len(normalized) - len(anilist_norm)) / max(
                 len(normalized), len(anilist_norm)
             )
@@ -264,46 +309,68 @@ def match_anime_titles(
 
             score = fuzz.ratio(normalized, anilist_norm)
             if score >= threshold:
-                if score > best_score:
-                    best_score = score
-                    best_aid = aid
-                    best_anilist_title = (
-                        anime_by_id[aid].get("title_ja")
-                        or anime_by_id[aid].get("title_en")
-                        or ""
-                    )
-                    ambiguous = False
-                elif score == best_score and aid != best_aid:
-                    ambiguous = True
+                scored.append((score, aid))
 
-        if best_aid and not ambiguous:
-            matches.append(
-                AnimeMatch(
-                    madb_anime_id=madb_id,
-                    anilist_anime_id=best_aid,
-                    madb_title=madb_title,
-                    anilist_title=best_anilist_title,
-                    score=best_score,
-                    strategy="fuzzy",
-                )
+        if scored:
+            best_score = max(s for s, _ in scored)
+            best_aids = [aid for s, aid in scored if s == best_score]
+            # Deduplicate
+            best_aids = list(dict.fromkeys(best_aids))
+            _try_match(
+                madb_id, madb_title, madb.get("year"), best_aids, best_score, "fuzzy"
             )
-            used_anilist_ids.add(best_aid)
-            used_madb_ids.add(madb_id)
-        elif ambiguous:
-            log.debug(
-                "anime_match_ambiguous_fuzzy",
-                madb_id=madb_id,
-                title=madb_title,
-                score=best_score,
+
+    # --- Pass 3: Contains match (MADB title is substring of AniList title) ---
+    # For cases like "ソード・オラトリア" → "ダンジョンに出会いを...ソード・オラトリア"
+    # Build a flat list of (normalized_anilist_title, aid) for substring search
+    anilist_flat: list[tuple[str, str]] = []
+    for norm_title, aids in title_index.items():
+        for aid in aids:
+            if aid not in used_anilist_ids:
+                anilist_flat.append((norm_title, aid))
+
+    for madb in madb_anime:
+        madb_id = madb["id"]
+        if madb_id in used_madb_ids:
+            continue
+
+        madb_title = madb.get("title", "")
+        normalized = normalize_anime_title(madb_title)
+        # Require meaningful length to avoid false positives on short titles
+        if not normalized or len(normalized) < 4:
+            continue
+
+        contain_hits: list[str] = []
+        for anilist_norm, aid in anilist_flat:
+            if aid in used_anilist_ids:
+                continue
+            if not _year_compatible(
+                madb.get("year"), anime_by_id[aid].get("year"), year_tolerance
+            ):
+                continue
+            # MADB title must be a substantial portion of AniList title
+            if normalized in anilist_norm and len(normalized) >= len(anilist_norm) * 0.4:
+                contain_hits.append(aid)
+
+        if contain_hits:
+            _try_match(
+                madb_id,
+                madb_title,
+                madb.get("year"),
+                contain_hits,
+                80.0,
+                "contains",
             )
 
     exact_count = sum(1 for m in matches if m.strategy == "exact")
     fuzzy_count = sum(1 for m in matches if m.strategy == "fuzzy")
+    contains_count = sum(1 for m in matches if m.strategy == "contains")
     log.info(
         "anime_title_matching_complete",
         total_matches=len(matches),
         exact=exact_count,
         fuzzy=fuzzy_count,
+        contains=contains_count,
         madb_total=len(madb_anime),
         anilist_total=len(anilist_anime),
         match_rate=round(100 * len(matches) / max(1, len(madb_anime)), 1),

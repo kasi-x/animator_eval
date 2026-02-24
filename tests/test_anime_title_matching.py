@@ -90,12 +90,14 @@ def _anilist(
     title_en: str = "",
     year: int | None = None,
     synonyms: list[str] | None = None,
+    format: str | None = None,
 ) -> dict:
     return {
         "id": id,
         "title_ja": title_ja,
         "title_en": title_en,
         "year": year,
+        "format": format,
         "synonyms": synonyms or [],
     }
 
@@ -327,6 +329,104 @@ class TestAnimeMatchDataclass:
         assert m.anilist_anime_id == "anilist:1"
         assert m.score == 95.0
         assert m.strategy == "fuzzy"
+
+
+class TestFormatDisambiguation:
+    def test_tv_vs_special_resolves(self):
+        """Same title+year but different formats: TV wins over SPECIAL."""
+        madb = [_madb("madb:C1", "月がきれい", 2017)]
+        anilist = [
+            _anilist("anilist:1", title_ja="月がきれい", year=2017, format="TV"),
+            _anilist("anilist:2", title_ja="月がきれい", year=2017, format="SPECIAL"),
+        ]
+        matches = match_anime_titles(madb, anilist)
+        assert len(matches) == 1
+        assert matches[0].anilist_anime_id == "anilist:1"
+
+    def test_tv_vs_movie_resolves(self):
+        """TV has higher priority than MOVIE."""
+        madb = [_madb("madb:C1", "ルパン三世", 2015)]
+        anilist = [
+            _anilist("anilist:1", title_ja="ルパン三世", year=2015, format="MOVIE"),
+            _anilist("anilist:2", title_ja="ルパン三世", year=2015, format="TV"),
+        ]
+        matches = match_anime_titles(madb, anilist)
+        assert len(matches) == 1
+        assert matches[0].anilist_anime_id == "anilist:2"
+
+    def test_same_format_still_ambiguous(self):
+        """Same title+year+format: cannot disambiguate."""
+        madb = [_madb("madb:C1", "ルパン三世", 2015)]
+        anilist = [
+            _anilist("anilist:1", title_ja="ルパン三世", year=2015, format="TV"),
+            _anilist("anilist:2", title_ja="ルパン三世", year=2015, format="TV"),
+        ]
+        matches = match_anime_titles(madb, anilist)
+        assert len(matches) == 0
+
+    def test_no_format_info_still_ambiguous(self):
+        """Without format info, same title+year is ambiguous."""
+        madb = [_madb("madb:C1", "賭ケグルイ", 2017)]
+        anilist = [
+            _anilist("anilist:1", title_ja="賭ケグルイ", year=2017),
+            _anilist("anilist:2", title_ja="賭ケグルイ", year=2017),
+        ]
+        matches = match_anime_titles(madb, anilist)
+        assert len(matches) == 0
+
+
+class TestContainsMatch:
+    def test_substring_match(self):
+        """MADB title is a substantial substring of AniList title (>= 40%)."""
+        # 灼眼のシャナII (8 chars) is 53% of 灼眼のシャナII Second (15 chars)
+        # fuzz.ratio = 69.6, below threshold, so only pass 3 catches it
+        madb = [_madb("madb:C1", "灼眼のシャナII", 2007)]
+        anilist = [
+            _anilist(
+                "anilist:1",
+                title_ja="灼眼のシャナII Second",
+                year=2007,
+            )
+        ]
+        matches = match_anime_titles(madb, anilist)
+        assert len(matches) == 1
+        assert matches[0].strategy == "contains"
+        assert matches[0].score == 80.0
+
+    def test_short_title_no_false_positive(self):
+        """Very short titles should NOT trigger substring match."""
+        madb = [_madb("madb:C1", "AB", 2010)]
+        anilist = [_anilist("anilist:1", title_ja="ABCDEF", year=2010)]
+        matches = match_anime_titles(madb, anilist)
+        # "ab" is only 2 chars, below the 4-char minimum
+        assert len(matches) == 0
+
+    def test_contains_with_year_validation(self):
+        """Contains match still requires year compatibility."""
+        madb = [_madb("madb:C1", "ソード・オラトリア", 2010)]
+        anilist = [
+            _anilist(
+                "anilist:1",
+                title_ja="ダンジョンに出会いを求めるのは間違っているだろうか外伝 ソード オラトリア",
+                year=2017,
+            )
+        ]
+        matches = match_anime_titles(madb, anilist, year_tolerance=1)
+        assert len(matches) == 0
+
+    def test_contains_requires_substantial_portion(self):
+        """Substring must be >= 40% of the full title length."""
+        madb = [_madb("madb:C1", "テスト", 2020)]
+        anilist = [
+            _anilist(
+                "anilist:1",
+                title_ja="非常に長いタイトルのアニメでテストという文字が含まれている",
+                year=2020,
+            )
+        ]
+        matches = match_anime_titles(madb, anilist)
+        # "テスト" (3 chars after normalize) is too small a portion
+        assert len(matches) == 0
 
 
 class TestMultipleMatches:
