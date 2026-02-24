@@ -10,6 +10,7 @@
 4. independent_value: コラボレーターへの波及効果
 """
 
+import bisect
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 
@@ -29,6 +30,8 @@ MIN_COHORT_SIZE = 5
 MIN_WORKS_FOR_CONSISTENCY = 5
 # 独立貢献度算出に必要な最小コラボレーター数
 MIN_COLLABORATORS = 3
+# 独立貢献度算出時のコラボレーター上限（高次数ノードの計算量抑制）
+_MAX_COLLABORATORS_SAMPLE = 50
 
 
 @dataclass
@@ -190,12 +193,13 @@ def compute_peer_percentile(
                 "cohort_size": len(members),
             }
 
-        # パーセンタイル算出
+        # パーセンタイル算出 (bisect for O(n log n) instead of O(n²))
         scores = sorted([s for _, s in cohort_members])
+        n_members = len(scores)
         for pid, score in cohort_members:
             # パーセンタイル: この人より低い人の割合
-            rank = sum(1 for s in scores if s < score)
-            percentile = round(rank / len(scores) * 100, 1)
+            rank = bisect.bisect_left(scores, score)
+            percentile = round(rank / n_members * 100, 1)
             result[pid] = {
                 "peer_percentile": percentile,
                 "peer_cohort": cohort_label,
@@ -377,6 +381,7 @@ def compute_independent_value(
 
     result = {}
     target_pids = list(features.keys())
+    features_keys = set(features.keys())
 
     for pid in target_pids:
         # コラボレーターを特定
@@ -389,11 +394,28 @@ def compute_independent_value(
                 collaborators.update(anime_persons.get(aid, set()))
             collaborators.discard(pid)
 
-        collaborators = collaborators & set(features.keys())
+        collaborators = collaborators & features_keys
 
         if len(collaborators) < MIN_COLLABORATORS:
             result[pid] = None
             continue
+
+        # Cap collaborators to limit computation on high-degree nodes
+        if len(collaborators) > _MAX_COLLABORATORS_SAMPLE:
+            # Prefer collaborators with more shared works (higher edge weight)
+            if collaboration_graph and pid in collaboration_graph:
+                scored = [
+                    (c, collaboration_graph[pid][c].get("shared_works", 1))
+                    for c in collaborators
+                    if c in collaboration_graph[pid]
+                ]
+                scored.sort(key=lambda x: x[1], reverse=True)
+                collaborators = {c for c, _ in scored[:_MAX_COLLABORATORS_SAMPLE]}
+            else:
+                # Random sample fallback
+                import random
+
+                collaborators = set(random.sample(list(collaborators), _MAX_COLLABORATORS_SAMPLE))
 
         # 各コラボレーターについて: Xと共演時のスコア vs 非共演時のスコア
         diffs = []

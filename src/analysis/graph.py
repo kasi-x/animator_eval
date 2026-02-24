@@ -272,6 +272,16 @@ def _apply_episode_adjustments(
             if anime:
                 total_episodes = anime.episodes
 
+        # Cap staff per anime to prevent O(N²) explosion
+        if len(person_info) > _MAX_STAFF_PER_ANIME:
+            anime_commits = commitments.get(anime_id, {}) if commitments else {}
+            sorted_staff = sorted(
+                person_info.items(),
+                key=lambda x: anime_commits.get(x[0], x[1][2]),
+                reverse=True,
+            )
+            person_info = dict(sorted_staff[:_MAX_STAFF_PER_ANIME])
+
         persons_list = list(person_info.items())
         for i, (pid_a, (eps_a, role_a, w_a)) in enumerate(persons_list):
             for pid_b, (eps_b, role_b, w_b) in persons_list[i + 1 :]:
@@ -328,6 +338,12 @@ def _apply_episode_adjustments(
         del edge_data[key]
 
 
+# Per-anime staff cap: prevent O(N²) edge explosion on large-cast anime.
+# Keeps top-K by commitment weight — low-commitment staff (e.g., single inbetween
+# on one episode) don't form meaningful collaboration edges.
+_MAX_STAFF_PER_ANIME = 100
+
+
 def _build_edges_python(
     credits: list[Credit],
     anime_person_info: dict[str, dict[str, tuple[set[int], Role, float]]] | None,
@@ -358,6 +374,14 @@ def _build_edges_python(
 
         if has_episode_data and anime_person_info:
             person_info = anime_person_info.get(anime_id, {})
+            # Cap staff per anime: keep top-K by commitment weight
+            if len(person_info) > _MAX_STAFF_PER_ANIME:
+                sorted_staff = sorted(
+                    person_info.items(),
+                    key=lambda x: anime_commits.get(x[0], x[1][2]),
+                    reverse=True,
+                )
+                person_info = dict(sorted_staff[:_MAX_STAFF_PER_ANIME])
             persons_list = list(person_info.items())
             for i, (pid_a, (eps_a, role_a, w_a)) in enumerate(persons_list):
                 for pid_b, (eps_b, role_b, w_b) in persons_list[i + 1 :]:
@@ -380,6 +404,14 @@ def _build_edges_python(
             for pid, role, w in staff_list:
                 if pid not in seen_persons or w > seen_persons[pid][1]:
                     seen_persons[pid] = (role, w)
+            # Cap staff per anime: keep top-K by commitment weight
+            if len(seen_persons) > _MAX_STAFF_PER_ANIME:
+                sorted_staff = sorted(
+                    seen_persons.items(),
+                    key=lambda x: anime_commits.get(x[0], x[1][1]),
+                    reverse=True,
+                )
+                seen_persons = dict(sorted_staff[:_MAX_STAFF_PER_ANIME])
             persons_dedup = list(seen_persons.items())
             for i, (pid_a, (role_a, w_a)) in enumerate(persons_dedup):
                 for pid_b, (role_b, w_b) in persons_dedup[i + 1 :]:
@@ -419,6 +451,16 @@ def _apply_commitment_adjustments(
         anime_obj = anime_map.get(anime_id) if anime_map else None
         importance = _work_importance(anime_obj)
         anime_commits = commitments.get(anime_id, {})
+
+        # Cap staff per anime to prevent O(N²) explosion
+        if len(person_ids) > _MAX_STAFF_PER_ANIME:
+            person_ids = set(
+                sorted(
+                    person_ids,
+                    key=lambda pid: anime_commits.get(pid, 1.0),
+                    reverse=True,
+                )[:_MAX_STAFF_PER_ANIME]
+            )
 
         pid_list = sorted(person_ids)
         for i, pid_a in enumerate(pid_list):
@@ -709,11 +751,22 @@ def calculate_network_centrality_scores(
                     closeness[n] = 0.0
 
     # 固有ベクトル中心性（最大連結成分のみ）
+    # Skip on very large components — eigenvector iteration is O(V*E) per iteration
     eigenvector: dict = {}
     if n_nodes > 1:
         largest_cc = max(nx.connected_components(graph), key=len)
         subg = graph.subgraph(largest_cc)
-        eigenvector = graph_rust.eigenvector_centrality(subg, max_iter=1000)
+        cc_nodes = subg.number_of_nodes()
+        cc_edges = subg.number_of_edges()
+        if cc_nodes > 50_000 or cc_edges > 10_000_000:
+            logger.info(
+                "eigenvector_centrality_skipped",
+                nodes=cc_nodes,
+                edges=cc_edges,
+                reason="graph too large for eigenvector iteration",
+            )
+        else:
+            eigenvector = graph_rust.eigenvector_centrality(subg, max_iter=1000)
 
     target_nodes = person_ids if person_ids else set(graph.nodes())
     for node in target_nodes:

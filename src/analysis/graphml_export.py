@@ -101,10 +101,14 @@ def export_graphml(
 
     if collaboration_graph is not None:
         # Reuse existing collaboration graph edges (avoids O(n²) recomputation)
-        for u, v, data in collaboration_graph.edges(data=True):
-            if g.has_node(u) and g.has_node(v):
-                shared = int(data.get("shared_works", 1))
-                g.add_edge(u, v, weight=shared, shared_works=shared)
+        # Only iterate edges of nodes in our subgraph, not all 11M+ edges
+        for pid in node_ids:
+            if pid not in collaboration_graph:
+                continue
+            for v, data in collaboration_graph[pid].items():
+                if pid < v and g.has_node(v):
+                    shared = int(data.get("shared_works", 1))
+                    g.add_edge(pid, v, weight=shared, shared_works=shared)
     else:
         # Fallback: build edges from credits (slow path)
         anime_persons: dict[str, list[str]] = defaultdict(list)

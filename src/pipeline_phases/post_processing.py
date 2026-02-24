@@ -1,5 +1,7 @@
 """Phase 8: Post-Processing — percentiles, confidence, stability."""
 
+import bisect
+
 import structlog
 
 from src.analysis.confidence import batch_compute_confidence
@@ -24,14 +26,13 @@ def post_process_results(context: PipelineContext) -> None:
         - Adds confidence field (interval width based on source diversity)
         - Adds stability field (comparison with previous run)
     """
-    # Calculate percentile ranks
+    # Calculate percentile ranks using bisect (O(n log n) instead of O(n²))
     n = len(context.results)
     if n > 1:
         for axis in ("authority", "trust", "skill", "composite"):
             sorted_vals = sorted(r[axis] for r in context.results)
             for r in context.results:
-                val = r[axis]
-                rank = sum(1 for v in sorted_vals if v <= val)
+                rank = bisect.bisect_right(sorted_vals, r[axis])
                 r[f"{axis}_pct"] = round(rank / n * 100, 1)
     elif n == 1:
         for r in context.results:

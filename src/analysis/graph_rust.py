@@ -100,6 +100,9 @@ def eigenvector_centrality(
         return {}
 
 
+_MAX_STAFF_PER_ANIME = 100
+
+
 def build_collaboration_edges(
     persons: list[Person],
     credits: list[Credit],
@@ -115,6 +118,22 @@ def build_collaboration_edges(
     for c in credits:
         w = ROLE_WEIGHTS.get(c.role.value, 1.0)
         anime_credits[c.anime_id].append((c.person_id, w))
+
+    # Cap staff per anime: keep top-K by weight to prevent O(N²) edge explosion
+    for anime_id, staff in anime_credits.items():
+        if len(staff) > _MAX_STAFF_PER_ANIME:
+            # Deduplicate by person_id (keep highest weight)
+            best: dict[str, float] = {}
+            for pid, w in staff:
+                if pid not in best or w > best[pid]:
+                    best[pid] = w
+            if len(best) > _MAX_STAFF_PER_ANIME:
+                top = sorted(best.items(), key=lambda x: x[1], reverse=True)[
+                    :_MAX_STAFF_PER_ANIME
+                ]
+                anime_credits[anime_id] = top
+            else:
+                anime_credits[anime_id] = list(best.items())
 
     if RUST_AVAILABLE:
         anime_staff_list = list(anime_credits.items())

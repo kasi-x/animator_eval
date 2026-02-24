@@ -146,6 +146,7 @@ def _run_graphml(context: PipelineContext) -> Any:
         collaboration_graph=context.collaboration_graph,
         prettyprint=False,
         round_decimals=2,
+        top_n_persons=1000,
     )
     logger.info("graphml_exported", path=str(graphml_file))
     return {"path": str(graphml_file)}
@@ -441,7 +442,15 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
     ),
     AnalysisTask("outliers", _run_outliers, monitor_step="outlier_detection"),
     AnalysisTask("teams", _run_teams, monitor_step="team_composition"),
-    AnalysisTask("graphml", _run_graphml, monitor_step="graphml_export"),
+    AnalysisTask(
+        "graphml",
+        _run_graphml,
+        monitor_step="graphml_export",
+        condition=lambda ctx: (
+            ctx.collaboration_graph is not None
+            and ctx.collaboration_graph.number_of_edges() <= 1_000_000
+        ),
+    ),
     AnalysisTask("time_series", _run_time_series, monitor_step="time_series"),
     AnalysisTask("decades", _run_decades, monitor_step="decade_analysis"),
     AnalysisTask("tags", _run_tags, monitor_step="person_tags"),

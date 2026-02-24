@@ -6,7 +6,6 @@ from collections import defaultdict
 import structlog
 
 from src.analysis.explain import explain_authority, explain_skill, explain_trust
-from src.database import save_score_history, upsert_score
 from src.models import ScoreResult
 from src.pipeline_phases.context import PipelineContext
 from src.utils.role_groups import DIRECTOR_ROLES
@@ -53,21 +52,44 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
         if credit.role in DIRECTOR_ROLES:
             anime_directors[credit.anime_id].add(credit.person_id)
 
+    # Pre-compute all scores and batch DB writes
+    scores_by_pid: dict[str, ScoreResult] = {}
+    score_rows = []
     for pid in all_person_ids:
-        # Create score object
         score = ScoreResult(
             person_id=pid,
             authority=context.authority_scores.get(pid, 0.0),
             trust=context.trust_scores.get(pid, 0.0),
             skill=context.skill_scores.get(pid, 0.0),
         )
-
-        # Save to database
-        upsert_score(conn, score)
-        save_score_history(conn, score)
-
-        # Track composite score
+        scores_by_pid[pid] = score
         context.composite_scores[pid] = score.composite
+        score_rows.append(
+            (pid, score.authority, score.trust, score.skill, score.composite)
+        )
+
+    # Batch upsert scores (single transaction instead of 125K individual INSERTs)
+    conn.executemany(
+        """INSERT INTO scores (person_id, authority, trust, skill, composite)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(person_id) DO UPDATE SET
+               authority = excluded.authority,
+               trust = excluded.trust,
+               skill = excluded.skill,
+               composite = excluded.composite,
+               updated_at = CURRENT_TIMESTAMP
+        """,
+        score_rows,
+    )
+    conn.executemany(
+        """INSERT INTO score_history (person_id, authority, trust, skill, composite)
+           VALUES (?, ?, ?, ?, ?)""",
+        score_rows,
+    )
+    logger.info("scores_batch_saved", count=len(score_rows))
+
+    for pid in all_person_ids:
+        score = scores_by_pid[pid]
 
         # Build result entry
         node_data = context.person_anime_graph.nodes.get(pid, {})
