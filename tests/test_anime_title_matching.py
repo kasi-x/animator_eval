@@ -68,6 +68,36 @@ class TestNormalizeAnimeTitle:
             "境界のRinne"
         )
 
+    def test_strip_shin_suffix(self):
+        """(新) pattern — e.g. ゲゲゲの鬼太郎（新）"""
+        assert normalize_anime_title("ゲゲゲの鬼太郎（新）") == "ゲゲゲの鬼太郎"
+
+    def test_strip_sakuhin_suffix(self):
+        """(第2作) pattern."""
+        assert normalize_anime_title("ゲゲゲの鬼太郎（第2作）") == "ゲゲゲの鬼太郎"
+
+    def test_strip_series_bare(self):
+        """(シリーズ) without number."""
+        assert normalize_anime_title("キャプテン（シリーズ）") == "キャプテン"
+
+    def test_strip_special_suffix(self):
+        """(スペシャル) pattern."""
+        assert normalize_anime_title("ドラえもん（スペシャル）") == "ドラえもん"
+
+    def test_strip_soushuuhen(self):
+        """(総集編) pattern."""
+        assert normalize_anime_title("進撃の巨人（総集編）") == "進撃の巨人"
+
+    def test_strip_zokuhen(self):
+        """(続章) / (前編) / (後編) patterns."""
+        assert normalize_anime_title("鬼滅の刃（続章）") == "鬼滅の刃"
+        assert normalize_anime_title("コードギアス（前編）") == "コードギアス"
+        assert normalize_anime_title("コードギアス（後編）") == "コードギアス"
+
+    def test_strip_tokubetsuhen(self):
+        """(特別編) pattern."""
+        assert normalize_anime_title("銀魂（特別編）") == "銀魂"
+
     def test_empty_string(self):
         assert normalize_anime_title("") == ""
 
