@@ -5,7 +5,14 @@ This module eliminates duplication of role definitions in circles.py, trust.py,
 influence.py, explain.py, graph.py, versatility.py, skill.py, and team_composition.py.
 """
 
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from src.models import Role
+
+if TYPE_CHECKING:
+    from src.models import Credit
 
 # =============================================================================
 # Role Groups (frozensets for immutability and set operations)
@@ -107,6 +114,30 @@ EPISODIC_ROLES: frozenset[Role] = frozenset(
 # =============================================================================
 # Role Categorization (unified mapping across all modules)
 # =============================================================================
+
+NON_PRODUCTION_ROLES: frozenset[Role] = frozenset(
+    {
+        Role.VOICE_ACTOR,
+        Role.THEME_SONG,
+        Role.ADR,
+        Role.ORIGINAL_CREATOR,  # 原作者 — 制作スタッフではない
+        Role.MUSIC,  # 作曲家 — アニメーション制作スタッフではない
+        Role.OTHER,  # 役職不明 — 放送局・スタジオ等の組織エントリが大半
+    }
+)
+
+
+def is_production_credit(credit: Credit) -> bool:
+    """Check if a credit is for production work (not voice acting, theme songs, etc.).
+
+    Args:
+        credit: The credit to check
+
+    Returns:
+        True if the credit's role is a production role
+    """
+    return credit.role not in NON_PRODUCTION_ROLES
+
 
 ROLE_CATEGORY: dict[Role, str] = {
     # Direction (5 roles)
