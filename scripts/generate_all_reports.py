@@ -140,14 +140,176 @@ footer {
 
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
 @media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+.report-intro {
+    background: linear-gradient(135deg, rgba(240,147,251,0.08), rgba(160,210,219,0.08));
+    border: 1px solid rgba(240,147,251,0.15);
+    border-radius: 16px; padding: 2rem;
+    margin-bottom: 1.5rem; color: #c0c0d0;
+}
+.report-intro h2 { color: #f093fb; font-size: 1.4rem; margin-bottom: 0.8rem; }
+.report-intro p { margin-bottom: 0.6rem; line-height: 1.7; }
+.report-intro .audience { font-size: 0.85rem; color: #a0a0c0; font-style: italic; margin-top: 0.5rem; }
+
+.chart-guide {
+    border-left: 3px solid #667eea;
+    background: rgba(102,126,234,0.06);
+    border-radius: 0 8px 8px 0;
+    padding: 0.8rem 1.2rem; margin: 0.8rem 0;
+    font-size: 0.88rem; color: #b0b0c0;
+}
+.chart-guide strong { color: #667eea; }
+
+.section-desc {
+    color: #a0a0c0; font-size: 0.9rem;
+    margin: 0.5rem 0 1rem; line-height: 1.6;
+}
+
+.disclaimer-block {
+    border: 1px solid rgba(255,209,102,0.3);
+    background: rgba(255,209,102,0.05);
+    border-radius: 12px; padding: 1.5rem;
+    margin: 2rem 0; color: #c0c0d0;
+}
+.disclaimer-block h3 { color: #FFD166; font-size: 1.1rem; margin-bottom: 0.8rem; }
+.disclaimer-block p { font-size: 0.88rem; line-height: 1.7; margin-bottom: 0.5rem; }
+
+details.glossary-toggle {
+    background: rgba(255,255,255,0.03);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 1.2rem;
+    margin: 1.5rem 0; color: #c0c0d0;
+}
+details.glossary-toggle summary {
+    cursor: pointer; font-weight: 600; color: #a0d2db;
+    font-size: 1.1rem; padding: 0.3rem 0;
+}
+details.glossary-toggle dl { margin-top: 1rem; }
+details.glossary-toggle dt {
+    font-weight: 600; color: #f093fb;
+    margin-top: 0.8rem; font-size: 0.95rem;
+}
+details.glossary-toggle dd {
+    margin-left: 1.2rem; color: #b0b0c0;
+    font-size: 0.88rem; line-height: 1.6;
+}
+
+.methodology {
+    font-size: 0.82rem; color: rgba(255,255,255,0.4);
+    max-width: 800px; margin: 0 auto;
+    line-height: 1.6; text-align: left;
+}
+
+.toc { margin: 1rem 0 1.5rem; }
+.toc a {
+    color: #a0d2db; text-decoration: none;
+    font-size: 0.9rem; display: inline-block;
+    margin-right: 1.5rem; margin-bottom: 0.4rem;
+}
+.toc a:hover { text-decoration: underline; }
 """
 
 
-def wrap_html(title: str, subtitle: str, body: str) -> str:
+# ============================================================
+# Shared text constants (English only)
+# ============================================================
+
+DISCLAIMER = (
+    "These scores are quantitative indicators of network position and collaboration "
+    "density derived from publicly available credit data. They do not represent, "
+    "measure, or imply individual ability, talent, or artistic skill. Low scores "
+    "reflect limited network visibility in the dataset, not a lack of competence. "
+    "This data should not be used as the sole basis for employment, compensation, "
+    "or professional evaluation decisions."
+)
+
+METHODOLOGY_SUMMARY = (
+    "Evaluation uses three axes: (1) Authority — Weighted PageRank measuring "
+    "proximity to high-profile directors/works in the collaboration graph; "
+    "(2) Trust — cumulative edge weight from repeat engagements by the same "
+    "supervisors; (3) Skill — OpenSkill (Plackett-Luce) rating based on recent "
+    "project contributions. The composite score is a weighted combination of "
+    "these three axes, normalized to a 0-100 scale."
+)
+
+COMMON_GLOSSARY_TERMS: dict[str, str] = {
+    "Authority Score": (
+        "A PageRank-based centrality measure. Higher values indicate stronger "
+        "connections to influential directors and high-profile works in the "
+        "collaboration network."
+    ),
+    "Trust Score": (
+        "Cumulative weight from repeat collaborations. A high trust score means "
+        "the person is repeatedly called back by the same supervisors — a signal "
+        "of professional reliability."
+    ),
+    "Skill Score": (
+        "An OpenSkill (Plackett-Luce model) rating reflecting recent project "
+        "contributions and growth trajectory. Unlike Authority, this metric "
+        "emphasizes recency."
+    ),
+    "Composite Score": (
+        "A weighted combination of Authority, Trust, and Skill, normalized to "
+        "0-100. This is the primary ranking metric."
+    ),
+    "PageRank": (
+        "A graph centrality algorithm originally developed for web search. In "
+        "this context, it measures how central a person is in the anime "
+        "collaboration network."
+    ),
+}
+
+
+def report_intro(title: str, description: str, audience: str) -> str:
+    """Build an intro block for the top of a report."""
+    return (
+        f'<div class="report-intro">'
+        f"<h2>{title}</h2>"
+        f"<p>{description}</p>"
+        f'<p class="audience">Intended audience: {audience}</p>'
+        f"</div>"
+    )
+
+
+def chart_guide(text: str) -> str:
+    """Build a chart reading guide block."""
+    return f'<div class="chart-guide"><strong>How to read this chart:</strong> {text}</div>'
+
+
+def section_desc(text: str) -> str:
+    """Build a section description paragraph."""
+    return f'<p class="section-desc">{text}</p>'
+
+
+def build_glossary(terms: dict[str, str]) -> str:
+    """Build a collapsible glossary from a dict of term -> definition."""
+    if not terms:
+        return ""
+    dl = ""
+    for term, defn in terms.items():
+        dl += f"<dt>{term}</dt><dd>{defn}</dd>"
+    return (
+        '<details class="glossary-toggle">'
+        "<summary>Glossary of Terms</summary>"
+        f"<dl>{dl}</dl>"
+        "</details>"
+    )
+
+
+def wrap_html(title: str, subtitle: str, body: str, *, intro_html: str = "",
+              glossary_terms: dict[str, str] | None = None) -> str:
     """共通HTMLテンプレート."""
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    glossary_html = build_glossary(glossary_terms) if glossary_terms else ""
+    disclaimer_html = (
+        '<div class="disclaimer-block">'
+        "<h3>Disclaimer</h3>"
+        f"<p>{DISCLAIMER}</p>"
+        "</div>"
+    )
+    methodology_html = f'<div class="methodology"><p><strong>Methodology:</strong> {METHODOLOGY_SUMMARY}</p></div>'
     return f"""<!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -163,10 +325,14 @@ def wrap_html(title: str, subtitle: str, body: str) -> str:
     <p class="subtitle">{subtitle}</p>
     <p class="timestamp">Generated: {ts}</p>
 </header>
+{intro_html}
 {body}
+{glossary_html}
+{disclaimer_html}
 <footer>
     <p>Generated by Animetor Eval Pipeline Analysis</p>
     <p>Data: 125,419 persons / 60,091 anime / 994,854 credits</p>
+    {methodology_html}
 </footer>
 </div>
 </div>
@@ -255,6 +421,10 @@ def generate_industry_overview():
     # Summary stats
     body += '<div class="card">'
     body += "<h2>Pipeline Summary</h2>"
+    body += section_desc(
+        "Key metrics from the evaluation pipeline run. Graph nodes include both "
+        "persons and anime titles; edges represent co-credit relationships."
+    )
     body += '<div class="stats-grid">'
     for label, val in [
         ("Total Persons", fmt_num(d.get("persons", 0))),
@@ -309,6 +479,11 @@ def generate_industry_overview():
         fig.update_layout(title="Industry Time Series (1917-2027)", showlegend=False)
         body += '<div class="card">'
         body += "<h2>Time Series</h2>"
+        body += chart_guide(
+            "Each subplot tracks a different metric over the full history of anime production. "
+            "Hover over any point to see exact values. Upward trends indicate industry growth; "
+            "plateaus or dips may reflect data coverage gaps in earlier decades."
+        )
         body += plotly_div_safe(fig, "timeseries", 600)
         body += "</div>"
 
@@ -327,6 +502,10 @@ def generate_industry_overview():
         fig.update_layout(barmode="group", title="Decade Comparison")
         body += '<div class="card">'
         body += "<h2>Decade Comparison</h2>"
+        body += chart_guide(
+            "Grouped bars compare credits, persons, and anime titles across decades. "
+            "Use this to identify which decades saw the most production activity."
+        )
         body += plotly_div_safe(fig, "decades", 450)
         body += "</div>"
 
@@ -347,6 +526,11 @@ def generate_industry_overview():
 
         body += '<div class="card">'
         body += "<h2>Seasonal Patterns</h2>"
+        body += chart_guide(
+            "Anime production follows a seasonal broadcast cycle. Winter (Jan-Mar), "
+            "Spring (Apr-Jun), Summer (Jul-Sep), and Fall (Oct-Dec) each have "
+            "different production volumes and average quality scores."
+        )
         body += plotly_div_safe(fig, "seasonal", 400)
 
         body += '<div class="stats-grid">'
@@ -392,8 +576,16 @@ def generate_industry_overview():
 
     html = wrap_html(
         "Industry Overview Dashboard",
-        "アニメ業界の包括的分析レポート — 125,419人 / 60,091作品 / 994,854クレジット",
+        "Comprehensive anime industry analysis — 125,419 persons / 60,091 anime / 994,854 credits",
         body,
+        intro_html=report_intro(
+            "Industry Overview",
+            "A macro-level view of the anime industry's collaboration network. This "
+            "report covers production volume trends across 100+ years, seasonal broadcast "
+            "patterns, decade comparisons, and workforce growth trajectories.",
+            "Studio executives, industry researchers, and policymakers",
+        ),
+        glossary_terms=COMMON_GLOSSARY_TERMS,
     )
     out = REPORTS_DIR / "industry_overview.html"
     out.write_text(html, encoding="utf-8")
@@ -454,6 +646,11 @@ def generate_bridge_report():
 
     body += '<div class="card">'
     body += "<h2>Bridge Score Distribution</h2>"
+    body += chart_guide(
+        "Bridge scores range from 0 to 100. Higher scores indicate persons who connect "
+        "more communities with stronger cross-community ties. The bar color intensity "
+        "reflects the score value."
+    )
     body += plotly_div_safe(fig, "bridge_scores", 400)
     body += "</div>"
 
@@ -502,6 +699,10 @@ def generate_bridge_report():
     # Top bridge persons table
     body += '<div class="card">'
     body += "<h2>Top 50 Bridge Persons</h2>"
+    body += section_desc(
+        "Ranked by bridge score. Persons connecting more communities with more "
+        "cross-community edges receive higher scores."
+    )
     body += "<table><thead><tr>"
     body += "<th>#</th><th>Person</th><th>Bridge Score</th><th>Communities</th><th>Cross Edges</th>"
     body += "</tr></thead><tbody>"
@@ -530,13 +731,42 @@ def generate_bridge_report():
 
     body += '<div class="card">'
     body += "<h2>Score vs Connectivity</h2>"
+    body += chart_guide(
+        "Each dot represents a bridge person. X-axis shows the number of cross-community "
+        "edges; Y-axis shows their bridge score. Color indicates how many distinct "
+        "communities they connect. Outliers in the upper-right are the most impactful bridges."
+    )
     body += plotly_div_safe(fig, "bridge_scatter", 500)
     body += "</div>"
 
     html = wrap_html(
         "Network Bridge Analysis",
-        f"コミュニティ間ブリッジ分析 — {fmt_num(stats.get('bridge_person_count', 0))} bridge persons / {fmt_num(stats.get('total_communities', 0))} communities",
+        f"Cross-community bridge analysis — {fmt_num(stats.get('bridge_person_count', 0))} bridge persons / {fmt_num(stats.get('total_communities', 0))} communities",
         body,
+        intro_html=report_intro(
+            "Bridge Analysis",
+            "Bridge persons are individuals who connect otherwise separate communities "
+            "in the collaboration network. They facilitate knowledge transfer, style "
+            "diffusion, and talent discovery across studio and genre boundaries. "
+            "This report identifies the most impactful bridges and maps cross-community "
+            "connectivity patterns.",
+            "Studio HR, talent scouts, and network researchers",
+        ),
+        glossary_terms={
+            **COMMON_GLOSSARY_TERMS,
+            "Bridge Person": (
+                "An individual who belongs to or connects two or more distinct "
+                "communities in the collaboration graph."
+            ),
+            "Bridge Score": (
+                "A 0-100 composite metric reflecting how many communities a person "
+                "connects and the strength of those cross-community ties."
+            ),
+            "Community": (
+                "A densely connected cluster of persons in the collaboration network, "
+                "detected via graph partitioning algorithms."
+            ),
+        },
     )
     out = REPORTS_DIR / "bridge_analysis.html"
     out.write_text(html, encoding="utf-8")
@@ -611,6 +841,11 @@ def generate_team_report():
 
         body += '<div class="card">'
         body += "<h2>Team Size vs Quality</h2>"
+        body += chart_guide(
+            "Each dot is an anime title. X-axis = team size (number of credited staff), "
+            "Y-axis = anime score. Color indicates release year. Look for whether larger "
+            "teams correlate with higher scores."
+        )
         body += plotly_div_safe(fig, "team_scatter", 500)
         body += "</div>"
 
@@ -626,6 +861,10 @@ def generate_team_report():
 
         body += '<div class="card">'
         body += "<h2>Role Combinations</h2>"
+        body += chart_guide(
+            "Bars show the most frequent role combinations found in high-scoring works. "
+            "These patterns reveal which staff configurations tend to produce top-tier anime."
+        )
         body += plotly_div_safe(fig, "role_combos", 450)
         body += "</div>"
 
@@ -633,11 +872,17 @@ def generate_team_report():
     if rec_pairs:
         body += '<div class="card">'
         body += "<h2>Top 30 Recommended Collaboration Pairs</h2>"
+        body += section_desc(
+            "Pairs of professionals who have repeatedly co-credited on high-scoring "
+            "works. A high shared count suggests strong creative synergy."
+        )
         body += "<table><thead><tr>"
         body += "<th>#</th><th>Person A</th><th>Person B</th><th>Shared High-Score Works</th>"
         body += "</tr></thead><tbody>"
         for i, pair in enumerate(rec_pairs[:30], 1):
-            body += f"<tr><td>{i}</td><td>{pair['person_a']}</td><td>{pair['person_b']}</td>"
+            name_a = pair.get("name_a") or pair["person_a"]
+            name_b = pair.get("name_b") or pair["person_b"]
+            body += f"<tr><td>{i}</td><td>{name_a}</td><td>{name_b}</td>"
             body += f'<td><span class="badge badge-high">{pair["shared_high_score_works"]}</span></td></tr>'
         body += "</tbody></table></div>"
 
@@ -658,8 +903,23 @@ def generate_team_report():
 
     html = wrap_html(
         "Team Composition Analysis",
-        f"チーム構成パターン分析 — {fmt_num(teams.get('total_high_score', 0))} high-score works analyzed",
+        f"Team composition patterns — {fmt_num(teams.get('total_high_score', 0))} high-score works analyzed",
         body,
+        intro_html=report_intro(
+            "Team Composition",
+            "What team structures produce the best anime? This report analyzes staff "
+            "compositions of high-scoring works to reveal optimal team sizes, frequently "
+            "successful role combinations, and proven collaboration pairs.",
+            "Producers, line producers, and production managers",
+        ),
+        glossary_terms={
+            **COMMON_GLOSSARY_TERMS,
+            "High-Score Work": "An anime title with an above-average audience/critic score.",
+            "Core Roles": (
+                "The number of distinct key production roles (e.g., director, animation "
+                "director, character designer) filled on a given title."
+            ),
+        },
     )
     out = REPORTS_DIR / "team_analysis.html"
     out.write_text(html, encoding="utf-8")
@@ -720,6 +980,11 @@ def generate_career_report():
 
             body += '<div class="card">'
             body += "<h2>Transition Matrix</h2>"
+            body += chart_guide(
+                "Rows = origin stage, columns = destination stage. Brighter cells indicate "
+                "more frequent transitions. Read across a row to see where people in that "
+                "stage typically move next."
+            )
             body += plotly_div_safe(fig, "transition_matrix", 500)
             body += "</div>"
 
@@ -752,6 +1017,11 @@ def generate_career_report():
 
             body += '<div class="card">'
             body += "<h2>Time to Stage</h2>"
+            body += chart_guide(
+                "Grouped bars show average and median years to reach each career stage. "
+                "A large gap between average and median suggests a skewed distribution "
+                "with some outlier late-bloomers."
+            )
             body += plotly_div_safe(fig, "time_to_stage", 400)
 
             # Table
@@ -817,13 +1087,40 @@ def generate_career_report():
 
             body += '<div class="card">'
             body += "<h2>Role Flow (Sankey Diagram)</h2>"
+            body += chart_guide(
+                "The Sankey diagram shows flows between roles. Thicker bands = more people "
+                "making that transition. Follow a band from left to right to trace a "
+                "career progression path."
+            )
             body += plotly_div_safe(fig, "sankey", 600)
             body += "</div>"
 
     html = wrap_html(
         "Career Transitions Analysis",
-        f"キャリアステージ遷移分析 — {fmt_num(transitions.get('total_persons_analyzed', 0) if transitions else 0)} persons analyzed",
+        f"Career stage transition analysis — {fmt_num(transitions.get('total_persons_analyzed', 0) if transitions else 0)} persons analyzed",
         body,
+        intro_html=report_intro(
+            "Career Transitions",
+            "How do anime professionals progress through career stages? This report "
+            "maps transition patterns between roles, shows average time to reach each "
+            "career stage, and visualizes the most common career paths as Sankey flows.",
+            "Career counselors, aspiring animators, and HR departments",
+        ),
+        glossary_terms={
+            **COMMON_GLOSSARY_TERMS,
+            "Career Stage": (
+                "A classification of a professional's position (e.g., newcomer, "
+                "mid-career, veteran, master) based on credit history duration and role progression."
+            ),
+            "Transition Matrix": (
+                "A grid showing the frequency of transitions between career stages. "
+                "Each cell (row, column) = count of persons who moved from row stage to column stage."
+            ),
+            "Sankey Diagram": (
+                "A flow visualization where band width represents the volume of transitions "
+                "between roles. Useful for seeing dominant career pathways at a glance."
+            ),
+        },
     )
     out = REPORTS_DIR / "career_transitions.html"
     out.write_text(html, encoding="utf-8")
@@ -888,6 +1185,11 @@ def generate_temporal_report():
 
         body += '<div class="card">'
         body += "<h2>Authority Evolution (Top 10)</h2>"
+        body += chart_guide(
+            "Each line tracks one person's authority (PageRank) over time. Rising lines "
+            "indicate growing network influence; peaks followed by decline suggest "
+            "career phase transitions. Hover for exact yearly values."
+        )
         body += plotly_div_safe(fig, "authority_timeline", 550)
         body += "</div>"
 
@@ -922,6 +1224,11 @@ def generate_temporal_report():
             hovertemplate="Score: %{x:.1f}<br>Count: %{y}<extra></extra>",
         ))
         fig.update_layout(title="Foresight Score Distribution", xaxis_title="Foresight (Normalized)", yaxis_title="Count")
+        body += chart_guide(
+            "Higher foresight scores indicate persons who collaborated with future stars "
+            "before they became prominent. The distribution is right-skewed — most "
+            "people have low foresight, and a few are exceptional talent scouts."
+        )
         body += plotly_div_safe(fig, "foresight_dist", 400)
 
         # Top foresight table
@@ -975,8 +1282,31 @@ def generate_temporal_report():
 
     html = wrap_html(
         "Temporal Authority & Foresight",
-        f"時系列権威推定・先見スコア分析 — {fmt_num(tp.get('total_persons', 0))} persons / {len(years_computed)} years",
+        f"Temporal authority estimation and foresight analysis — {fmt_num(tp.get('total_persons', 0))} persons / {len(years_computed)} years",
         body,
+        intro_html=report_intro(
+            "Temporal Authority & Foresight",
+            "Authority isn't static — it evolves as careers progress. This report tracks "
+            "how each person's network centrality (PageRank) changes over time, identifies "
+            "individuals with exceptional foresight in discovering future talent, and "
+            "measures promotion effectiveness.",
+            "Talent scouts, studio management, and career researchers",
+        ),
+        glossary_terms={
+            **COMMON_GLOSSARY_TERMS,
+            "Temporal PageRank": (
+                "PageRank computed on year-specific snapshots of the collaboration graph. "
+                "Shows how a person's network centrality evolved over their career."
+            ),
+            "Foresight Score": (
+                "Measures how often a person collaborated with individuals who later "
+                "became highly ranked — i.e., the ability to identify talent before it's recognized."
+            ),
+            "Promotion Credit": (
+                "Tracks how effectively a person nurtures talent that later achieves "
+                "prominence. High promotion credit = strong mentorship track record."
+            ),
+        },
     )
     out = REPORTS_DIR / "temporal_foresight.html"
     out.write_text(html, encoding="utf-8")
@@ -1038,13 +1368,40 @@ def generate_network_evolution_report():
                     name=key.replace("_", " ").title(),
                 ), row=row, col=col)
             fig.update_layout(title="Network Metrics Over Time", showlegend=False)
+            body += chart_guide(
+                "Each subplot tracks a different network topology metric over time. Rising "
+                "node/edge counts indicate industry growth; changes in density or clustering "
+                "reveal shifts in collaboration patterns."
+            )
             body += plotly_div_safe(fig, "net_evolution", 200 + 250 * rows)
         body += "</div>"
 
     html = wrap_html(
         "Network Evolution",
-        "ネットワーク構造の時系列変化",
+        "Collaboration network topology changes over time",
         body,
+        intro_html=report_intro(
+            "Network Evolution",
+            "How has the anime collaboration network changed structurally over time? "
+            "This report tracks key graph metrics — node counts, edge counts, density, "
+            "clustering coefficients, and connected components — across decades of production.",
+            "Network researchers and industry analysts",
+        ),
+        glossary_terms={
+            **COMMON_GLOSSARY_TERMS,
+            "Density": (
+                "The ratio of actual edges to possible edges in the graph. Higher density "
+                "means more collaboration connections relative to the network size."
+            ),
+            "Clustering Coefficient": (
+                "Measures how much nodes tend to cluster together. High clustering "
+                "indicates tightly-knit collaboration groups."
+            ),
+            "Connected Component": (
+                "A group of nodes where every node can reach every other node via some "
+                "path. Multiple components mean isolated sub-networks."
+            ),
+        },
     )
     out = REPORTS_DIR / "network_evolution.html"
     out.write_text(html, encoding="utf-8")
@@ -1087,6 +1444,12 @@ def generate_growth_score_report():
         fig.update_layout(title=f"Growth Trend Distribution ({fmt_num(total)} persons)")
         body += '<div class="card">'
         body += "<h2>Trend Distribution</h2>"
+        body += chart_guide(
+            "The donut chart shows what fraction of all professionals fall into each "
+            "growth category. 'Rising' = increasing credit activity; 'Declining' = "
+            "decreasing; 'Stable' = consistent; 'New' = recently entered; 'Inactive' = "
+            "no recent credits."
+        )
         body += plotly_div_safe(fig, "trend_pie", 450)
         body += "</div>"
 
@@ -1098,6 +1461,10 @@ def generate_growth_score_report():
         if rising:
             body += '<div class="card">'
             body += f"<h2>Rising Stars ({len(rising)} persons)</h2>"
+            body += section_desc(
+                "Professionals classified as 'rising' — their credit count and activity "
+                "are increasing. Sorted by total credits to highlight the most prolific."
+            )
             body += "<table><thead><tr>"
             body += "<th>#</th><th>Person</th><th>Total Credits</th><th>Career Span</th><th>Activity Ratio</th><th>Recent Avg Score</th>"
             body += "</tr></thead><tbody>"
@@ -1153,8 +1520,27 @@ def generate_growth_score_report():
 
     html = wrap_html(
         "Growth & Score Analysis",
-        "成長トレンドとスコア分析",
+        "Growth trends and score analysis",
         body,
+        intro_html=report_intro(
+            "Growth & Score Analysis",
+            "Who is rising, who is declining, and who is being undervalued? This report "
+            "classifies all professionals by growth trajectory, highlights rising stars "
+            "with accelerating careers, and flags potential undervaluation based on "
+            "bias-corrected PageRank analysis.",
+            "Talent scouts, industry analysts, and studio HR",
+        ),
+        glossary_terms={
+            **COMMON_GLOSSARY_TERMS,
+            "Rising": "A growth trend indicating increasing credit activity over recent years.",
+            "Declining": "A growth trend indicating decreasing credit activity.",
+            "Stable": "Consistent activity level across recent years.",
+            "Inactive": "No credits recorded in the most recent analysis period.",
+            "Concentration Ratio": (
+                "Measures how much of total authority is held by the top percentile. "
+                "High concentration is typical of scale-free networks."
+            ),
+        },
     )
     out = REPORTS_DIR / "growth_scores.html"
     out.write_text(html, encoding="utf-8")
@@ -1220,6 +1606,11 @@ def generate_person_ranking_report():
     fig.update_layout(title="Score Distributions", showlegend=False)
     body += '<div class="card">'
     body += "<h2>Score Distributions</h2>"
+    body += chart_guide(
+        "Four histograms showing the distribution of each scoring axis. Most persons "
+        "cluster at low scores with a long right tail — typical of power-law "
+        "distributions in collaboration networks."
+    )
     body += plotly_div_safe(fig, "score_dist", 600)
     body += "</div>"
 
@@ -1240,6 +1631,11 @@ def generate_person_ranking_report():
     )
     body += '<div class="card">'
     body += "<h2>Top 10 Radar</h2>"
+    body += chart_guide(
+        "Each polygon represents one person's score profile across three axes. A "
+        "balanced triangle means equal strength in all areas; elongated shapes "
+        "indicate specialization in one axis."
+    )
     body += plotly_div_safe(fig, "radar_top10", 550)
     body += "</div>"
 
@@ -1254,6 +1650,11 @@ def generate_person_ranking_report():
     fig.update_layout(title="Authority vs Trust", xaxis_title="Authority", yaxis_title="Trust")
     body += '<div class="card">'
     body += "<h2>Authority vs Trust</h2>"
+    body += chart_guide(
+        "Each dot is one person. X = Authority, Y = Trust, color = Composite. Persons "
+        "in the upper-right quadrant have both high network centrality and strong "
+        "repeat-collaboration signals. Hover to see names."
+    )
     body += plotly_div_safe(fig, "auth_trust_scatter", 500)
     body += "</div>"
 
@@ -1273,6 +1674,10 @@ def generate_person_ranking_report():
     # Top 50 table
     body += '<div class="card">'
     body += "<h2>Top 50 Persons by Composite Score</h2>"
+    body += section_desc(
+        "Ranked by composite score (weighted combination of Authority, Trust, and Skill). "
+        "Badge colors: green = top tier (70+), yellow = mid tier (40-69), red = lower tier."
+    )
     body += "<table><thead><tr>"
     body += "<th>#</th><th>Name</th><th>Role</th><th>Composite</th>"
     body += "<th>Authority</th><th>Trust</th><th>Skill</th><th>Credits</th>"
@@ -1289,8 +1694,24 @@ def generate_person_ranking_report():
 
     html = wrap_html(
         "Person Ranking & Score Analysis",
-        f"人物ランキング・スコア分析 — {fmt_num(len(persons))} persons evaluated",
+        f"Person ranking and score analysis — {fmt_num(len(persons))} persons evaluated",
         body,
+        intro_html=report_intro(
+            "Person Ranking & Score Analysis",
+            "The definitive ranking of anime professionals by composite score. This "
+            "report breaks down score distributions across all three evaluation axes "
+            "(Authority, Trust, Skill), provides radar profile comparisons for the "
+            "top 10, and shows how Authority and Trust correlate across the full population.",
+            "Studio executives, producers, and industry researchers",
+        ),
+        glossary_terms={
+            **COMMON_GLOSSARY_TERMS,
+            "Composite Calculation": (
+                "Composite = weighted sum of Authority, Trust, and Skill scores, "
+                "each normalized to 0-100. The default weights emphasize Authority "
+                "and Trust over Skill."
+            ),
+        },
     )
     out = REPORTS_DIR / "person_ranking.html"
     out.write_text(html, encoding="utf-8")
@@ -1342,6 +1763,11 @@ def generate_compensation_report():
         fig.update_layout(title="Gini Coefficient Distribution", xaxis_title="Gini Coefficient", yaxis_title="Anime Count")
         body += '<div class="card">'
         body += "<h2>Gini Coefficient Distribution</h2>"
+        body += chart_guide(
+            "Distribution of Gini coefficients across all analyzed anime. Values near 0 "
+            "indicate equal credit distribution among staff; values near 1 indicate one "
+            "or few persons dominating the credit allocation."
+        )
         body += plotly_div_safe(fig, "gini_dist", 400)
         body += "</div>"
 
@@ -1415,8 +1841,28 @@ def generate_compensation_report():
 
     html = wrap_html(
         "Compensation Fairness Analysis",
-        f"公正報酬・貢献分析 — {fmt_num(fair.get('total_anime', 0))} anime analyzed",
+        f"Fair compensation and contribution analysis — {fmt_num(fair.get('total_anime', 0))} anime analyzed",
         body,
+        intro_html=report_intro(
+            "Compensation Fairness",
+            "Is credit distributed fairly among anime staff? This report uses Shapley "
+            "value allocation to estimate each person's marginal contribution and Gini "
+            "coefficients to measure inequality. It also profiles anime across five "
+            "value dimensions (commercial, critical, creative, cultural, technical).",
+            "Producers, union representatives, and compensation analysts",
+        ),
+        glossary_terms={
+            **COMMON_GLOSSARY_TERMS,
+            "Gini Coefficient": (
+                "A measure of inequality from 0 (perfect equality) to 1 (maximum "
+                "inequality). Applied here to credit allocation among staff on each anime."
+            ),
+            "Shapley Value": (
+                "A game theory concept that allocates total value fairly based on each "
+                "participant's marginal contribution. Used here to estimate each staff "
+                "member's share of an anime's success."
+            ),
+        },
     )
     out = REPORTS_DIR / "compensation_fairness.html"
     out.write_text(html, encoding="utf-8")
@@ -1475,6 +1921,11 @@ def generate_bias_report():
             fig.update_layout(title="Bias Severity Distribution")
             body += '<div class="card">'
             body += "<h2>Severity Distribution</h2>"
+            body += chart_guide(
+                "Breakdown of detected biases by severity level. Severe biases "
+                "indicate large systematic distortions that should be corrected; "
+                "mild biases may be within acceptable tolerance."
+            )
             body += plotly_div_safe(fig, "bias_severity", 400)
             body += "</div>"
 
@@ -1526,6 +1977,11 @@ def generate_bias_report():
         if bca:
             body += '<div class="card">'
             body += "<h2>Bias Correction Analysis</h2>"
+            body += section_desc(
+                "After identifying biases, scores are adjusted. 'Gainers' are persons whose "
+                "scores increase after correction (previously undervalued). 'Losers' decrease "
+                "(previously overvalued due to studio or role advantages)."
+            )
             body += '<div class="stats-grid">'
             for label, val in [
                 ("Persons Affected", fmt_num(bca.get("total_persons_affected", 0))),
@@ -1584,8 +2040,31 @@ def generate_bias_report():
 
     html = wrap_html(
         "Bias Detection Report",
-        "バイアス検出・是正分析レポート",
+        "Bias detection and correction analysis",
         body,
+        intro_html=report_intro(
+            "Bias Detection",
+            "Are scores systematically skewed by studio affiliation, role type, or career "
+            "stage? This report tests for biases, quantifies their severity, and shows "
+            "how bias-corrected scores differ from raw scores — identifying who is "
+            "undervalued and overvalued.",
+            "Auditors, fairness researchers, and HR policy makers",
+        ),
+        glossary_terms={
+            **COMMON_GLOSSARY_TERMS,
+            "Studio Bias": (
+                "Systematic score inflation or deflation caused by studio affiliation "
+                "rather than individual merit."
+            ),
+            "Career Stage Bias": (
+                "Systematic advantage or disadvantage in scores based on career stage "
+                "(e.g., newcomers penalized, veterans favored)."
+            ),
+            "Effect Size": (
+                "The magnitude of a detected bias. Larger effect sizes indicate more "
+                "significant systematic distortions."
+            ),
+        },
     )
     out = REPORTS_DIR / "bias_detection.html"
     out.write_text(html, encoding="utf-8")
@@ -1648,6 +2127,10 @@ def generate_genre_report():
     fig.update_layout(title="Primary Score Tier Distribution")
     body += '<div class="card">'
     body += "<h2>Score Tier Distribution</h2>"
+    body += chart_guide(
+        "Shows the primary score tier for each person — the quality tier where they have "
+        "the most credits. Persons working mostly on high-rated anime cluster in higher tiers."
+    )
     body += plotly_div_safe(fig, "tier_pie", 450)
     body += "</div>"
 
@@ -1709,8 +2192,30 @@ def generate_genre_report():
 
     html = wrap_html(
         "Genre & Score Affinity Analysis",
-        f"ジャンル・スコア親和性分析 — {fmt_num(total_persons)} persons",
+        f"Genre and score affinity analysis — {fmt_num(total_persons)} persons",
         body,
+        intro_html=report_intro(
+            "Genre & Score Affinity",
+            "Do professionals specialize in high-quality or lower-tier productions? This "
+            "report analyzes score tier affinity, era distribution, and the "
+            "specialist-vs-generalist spectrum across all professionals.",
+            "Career advisors, studio planners, and genre researchers",
+        ),
+        glossary_terms={
+            **COMMON_GLOSSARY_TERMS,
+            "Specialist": (
+                "A person whose credits are concentrated in a single score tier or era. "
+                "High tier concentration (e.g., 90%+ in one tier)."
+            ),
+            "Generalist": (
+                "A person with credits spread across multiple score tiers and eras. "
+                "Low tier concentration."
+            ),
+            "Score Tier": (
+                "A quality bracket based on anime audience/critic scores (e.g., "
+                "top-tier, mid-tier, low-tier)."
+            ),
+        },
     )
     out = REPORTS_DIR / "genre_analysis.html"
     out.write_text(html, encoding="utf-8")
@@ -1773,6 +2278,12 @@ def generate_studio_impact_report():
             hovertemplate="%{x}: %{y:.3f}<extra></extra>",
         ))
         fig.update_layout(title="Causal Effect Estimates (with 95% CI)", yaxis_title="Effect Size")
+        body += chart_guide(
+            "Each bar shows the estimated causal effect with 95% confidence interval "
+            "(error bars). Positive values mean the effect increases scores; negative "
+            "means it decreases them. If the CI crosses zero, the effect is not "
+            "statistically significant."
+        )
         body += plotly_div_safe(fig, "causal_effects", 400)
 
         # Interpretations
@@ -1867,8 +2378,31 @@ def generate_studio_impact_report():
 
     html = wrap_html(
         "Studio Impact Analysis",
-        "スタジオ影響・因果効果分析",
+        "Studio impact and causal effect analysis",
         body,
+        intro_html=report_intro(
+            "Studio Impact Analysis",
+            "Does working at a prestigious studio actually improve a professional's scores, "
+            "or do top studios simply attract top talent? This report disentangles three "
+            "causal mechanisms — selection effect (who gets hired), treatment effect (how "
+            "the studio develops talent), and brand effect (reputation halo).",
+            "Studio executives, economists, and industry researchers",
+        ),
+        glossary_terms={
+            **COMMON_GLOSSARY_TERMS,
+            "Selection Effect": (
+                "Score differences explained by studios hiring already-talented people, "
+                "rather than developing them."
+            ),
+            "Treatment Effect": (
+                "The genuine causal impact of working at a studio on a person's "
+                "score — the studio's contribution to professional development."
+            ),
+            "Brand Effect": (
+                "Score inflation from association with a prestigious studio name, "
+                "independent of actual skill development."
+            ),
+        },
     )
     out = REPORTS_DIR / "studio_impact.html"
     out.write_text(html, encoding="utf-8")
@@ -1940,6 +2474,11 @@ def generate_credit_statistics_report():
         fig.update_layout(title=f"Credits Timeline ({timeline.get('year_range', '')})", showlegend=False)
         body += '<div class="card">'
         body += "<h2>Credits Timeline</h2>"
+        body += chart_guide(
+            "Three side-by-side timelines showing annual credit counts, active persons, "
+            "and anime titles. Year-over-year trends reveal industry expansion and "
+            "contraction periods."
+        )
         body += plotly_div_safe(fig, "credit_timeline", 400)
         body += "</div>"
 
@@ -2021,14 +2560,36 @@ def generate_credit_statistics_report():
         fig.update_layout(title="Productivity vs Consistency", xaxis_title="Credits per Year", yaxis_title="Consistency Score")
         body += '<div class="card">'
         body += "<h2>Productivity vs Consistency</h2>"
+        body += chart_guide(
+            "Each dot is one person. X = credits per active year, Y = consistency "
+            "score (how steady their output is). High-right = prolific and consistent. "
+            "High-left = consistent but selective."
+        )
         body += plotly_div_safe(fig, "productivity_scatter", 450)
         body += "</div>"
 
     html = wrap_html(
         "Credit Statistics Report",
-        f"クレジット統計 — {fmt_num(summary.get('total_credits', 0))} credits / "
+        f"Credit statistics — {fmt_num(summary.get('total_credits', 0))} credits / "
         f"{fmt_num(summary.get('unique_persons', 0))} persons / {fmt_num(summary.get('unique_anime', 0))} anime",
         body,
+        intro_html=report_intro(
+            "Credit Statistics",
+            "The raw data foundation: total credits, role distributions, year-by-year "
+            "timelines, collaboration pair counts, and productivity metrics. This report "
+            "provides the statistical baseline that all other analyses build upon.",
+            "Data analysts, pipeline engineers, and QA reviewers",
+        ),
+        glossary_terms={
+            **COMMON_GLOSSARY_TERMS,
+            "Credit": (
+                "A single person-role-anime record. One person credited for multiple "
+                "roles on one anime generates multiple credits."
+            ),
+            "Collaboration Pair": (
+                "Two persons who share at least one credit on the same anime title."
+            ),
+        },
     )
     out = REPORTS_DIR / "credit_statistics.html"
     out.write_text(html, encoding="utf-8")
@@ -2043,91 +2604,91 @@ REPORT_CATALOG = [
     {
         "file": "industry_overview.html",
         "title": "Industry Overview Dashboard",
-        "subtitle": "業界概観ダッシュボード",
-        "desc": "Macro-level trends across 100+ years of anime production. Time series, seasonal patterns, decade comparisons, and growth analysis.",
+        "subtitle": "Macro trends across 100+ years of anime production",
+        "desc": "Time series, seasonal patterns, decade comparisons, and growth analysis.",
         "sources": "summary, time_series, decades, seasonal, growth",
     },
     {
         "file": "bridge_analysis.html",
         "title": "Network Bridge Analysis",
-        "subtitle": "ネットワーク橋渡し分析",
+        "subtitle": "Cross-community bridge persons and connectivity",
         "desc": "Individuals who connect otherwise separate communities. Bridge scores, cross-community edges, and connectivity patterns.",
         "sources": "bridges",
     },
     {
         "file": "team_analysis.html",
         "title": "Team Composition Analysis",
-        "subtitle": "チーム構成パターン分析",
-        "desc": "Team structures behind high-scoring anime. Role combinations, recommended collaboration pairs, and team size vs quality.",
+        "subtitle": "Staff structures behind high-scoring anime",
+        "desc": "Team structures, role combinations, recommended collaboration pairs, and team size vs quality.",
         "sources": "teams",
     },
     {
         "file": "career_transitions.html",
         "title": "Career Transitions Analysis",
-        "subtitle": "キャリアステージ遷移分析",
+        "subtitle": "Career stage progression and role flow",
         "desc": "How professionals move through career stages. Transition matrices, Sankey diagrams, and common career paths.",
         "sources": "transitions, role_flow",
     },
     {
         "file": "temporal_foresight.html",
         "title": "Temporal Authority & Foresight",
-        "subtitle": "時系列権威・先見スコア分析",
+        "subtitle": "Authority evolution and early talent detection",
         "desc": "Authority evolution over time, foresight scores for early talent detection, and promotion credit analysis.",
         "sources": "temporal_pagerank",
     },
     {
         "file": "network_evolution.html",
         "title": "Network Evolution",
-        "subtitle": "ネットワーク構造の時系列変化",
+        "subtitle": "Collaboration network topology over time",
         "desc": "How the collaboration network topology has changed over time. Node/edge counts, density, and clustering trends.",
         "sources": "network_evolution",
     },
     {
         "file": "growth_scores.html",
         "title": "Growth & Score Analysis",
-        "subtitle": "成長トレンドとスコア分析",
+        "subtitle": "Growth trends, rising stars, and undervaluation",
         "desc": "Growth trend distribution, rising stars, undervaluation alerts, and PageRank concentration analysis.",
         "sources": "growth, insights_report",
     },
     {
         "file": "person_ranking.html",
         "title": "Person Ranking & Scores",
-        "subtitle": "人物ランキング・スコア分析",
+        "subtitle": "Top professionals by composite score",
         "desc": "Top-ranked professionals by composite score. Score distributions, radar charts, and Authority/Trust/Skill scatter plots.",
         "sources": "scores, individual_profiles",
     },
     {
         "file": "compensation_fairness.html",
         "title": "Compensation Fairness",
-        "subtitle": "公正報酬・貢献分析",
+        "subtitle": "Shapley allocation and Gini analysis",
         "desc": "Shapley-based fair allocation, Gini coefficients per anime, and multi-axis anime value profiles (commercial/critical/creative).",
         "sources": "fair_compensation, anime_values",
     },
     {
         "file": "bias_detection.html",
         "title": "Bias Detection Report",
-        "subtitle": "バイアス検出・是正分析",
+        "subtitle": "Systematic bias detection and correction",
         "desc": "Systematic biases by role, studio, and career stage. Undervaluation alerts and correction recommendations.",
         "sources": "bias_report, credit_stats, insights_report",
     },
     {
         "file": "genre_analysis.html",
         "title": "Genre & Score Affinity",
-        "subtitle": "ジャンル・スコア親和性分析",
+        "subtitle": "Quality tier and era affinity analysis",
         "desc": "How professionals cluster by anime quality tier and era. Specialist vs generalist concentration analysis.",
         "sources": "genre_affinity, anime_stats",
     },
     {
         "file": "studio_impact.html",
         "title": "Studio Impact Analysis",
-        "subtitle": "スタジオ影響・因果効果分析",
+        "subtitle": "Causal effects of studio affiliation",
         "desc": "Causal effects of studio affiliation (selection/treatment/brand), structural estimation, and studio comparisons.",
         "sources": "causal_identification, structural_estimation, studios",
     },
     {
         "file": "credit_statistics.html",
         "title": "Credit Statistics",
-        "subtitle": "クレジット統計レポート",
+        "subtitle": "Raw credit counts, role distribution, and productivity",
         "desc": "Credit counts, role distribution, year-by-year timelines, role flow (Sankey), and productivity metrics.",
         "sources": "credit_stats, role_flow, productivity",
     },
@@ -2226,7 +2787,7 @@ def generate_index_page():
     """
 
     html = f"""<!DOCTYPE html>
-<html lang="ja">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -2240,7 +2801,7 @@ def generate_index_page():
 <div class="container">
 <header>
     <h1>Animetor Eval Reports</h1>
-    <p class="subtitle">アニメ業界評価パイプライン — 全分析レポートインデックス</p>
+    <p class="subtitle">Anime Industry Evaluation Pipeline — All Analysis Reports</p>
     <p class="timestamp">Generated: {ts}</p>
 </header>
 
