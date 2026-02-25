@@ -50,6 +50,7 @@ from src.analysis.role_flow import compute_role_flow
 from src.analysis.seasonal import compute_seasonal_trends
 from src.analysis.studio import compute_studio_analysis
 from src.analysis.team_composition import analyze_team_patterns
+from src.analysis.temporal_pagerank import compute_temporal_pagerank
 from src.analysis.time_series import compute_time_series
 from src.analysis.transitions import compute_role_transitions
 from src.pipeline_phases.context import PipelineContext
@@ -416,6 +417,17 @@ def _run_individual_contribution(context: PipelineContext) -> Any:
     )
 
 
+def _run_temporal_pagerank(context: PipelineContext) -> Any:
+    """Compute temporal PageRank (yearly authority, foresight, promotions)."""
+    return asdict(
+        compute_temporal_pagerank(
+            credits=context.credits,
+            anime_map=context.anime_map,
+            persons=context.persons,
+        )
+    )
+
+
 def _run_credit_stats(context: PipelineContext) -> Any:
     """Compute comprehensive credit statistics (person_id level)."""
     stats = compute_credit_statistics(context.credits, context.anime_map)
@@ -491,6 +503,12 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
         monitor_step="individual_contribution",
     ),
     AnalysisTask("credit_stats", _run_credit_stats, monitor_step="credit_statistics"),
+    AnalysisTask(
+        "temporal_pagerank",
+        _run_temporal_pagerank,
+        monitor_step="temporal_pagerank",
+        condition=lambda ctx: len(ctx.credits) >= 50,
+    ),
 ]
 
 

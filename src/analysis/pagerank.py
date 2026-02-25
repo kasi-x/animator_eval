@@ -22,11 +22,19 @@ def weighted_pagerank(
     damping: float = DAMPING_FACTOR,
     max_iter: int = MAX_ITERATIONS,
     tol: float = CONVERGENCE_THRESHOLD,
+    nstart: dict[str, float] | None = None,
 ) -> dict[str, float]:
     """重み付き PageRank を計算する.
 
     NetworkX の pagerank に weight パラメータを渡すことで
     重み付きバージョンを使用する。
+
+    Args:
+        graph: 有向グラフ
+        damping: ダンピングファクタ (default: 0.85)
+        max_iter: 最大反復回数
+        tol: 収束閾値
+        nstart: 初期スコア分布 (warm start用、Noneなら均一分布)
     """
     if graph.number_of_nodes() == 0:
         return {}
@@ -38,6 +46,7 @@ def weighted_pagerank(
             max_iter=max_iter,
             tol=tol,
             weight="weight",
+            nstart=nstart,
         )
     except nx.PowerIterationFailedConvergence:
         logger.warning(
@@ -50,6 +59,7 @@ def weighted_pagerank(
             max_iter=max_iter * 2,
             tol=tol * 10,
             weight="weight",
+            nstart=nstart,
         )
 
     return scores

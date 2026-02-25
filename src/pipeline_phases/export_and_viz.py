@@ -472,6 +472,22 @@ EXPORT_REGISTRY: list[ExportSpec] = [
             else {}
         ),
     ),
+    # Temporal PageRank (yearly authority timelines, foresight, promotions)
+    ExportSpec(
+        filename="temporal_pagerank.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("temporal_pagerank"),
+        log_message="temporal_pagerank_saved",
+        log_metrics=lambda data: (
+            {
+                "years": len(data.get("years_computed", [])),
+                "persons": data.get("total_persons", 0),
+                "foresight": len(data.get("foresight_scores", {})),
+                "promotions": len(data.get("promotion_credits", {})),
+            }
+            if data
+            else {}
+        ),
+    ),
     # Pipeline summary (special case - uses elapsed time)
     ExportSpec(
         filename="summary.json",
