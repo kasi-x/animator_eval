@@ -204,22 +204,27 @@ def _run_role_flow(context: PipelineContext) -> Any:
 
 
 def _run_bridges(context: PipelineContext) -> Any:
-    """Detect bridge nodes in network using Louvain communities."""
+    """Detect bridge nodes in network using community detection."""
     communities_map = None
     if context.collaboration_graph is not None:
         n_edges = context.collaboration_graph.number_of_edges()
-        # Guard: skip Louvain on very large graphs (>1M edges)
-        if n_edges <= 1_000_000:
-            try:
+        try:
+            if n_edges <= 1_000_000:
+                # Louvain for moderate graphs
                 comms = nx.community.louvain_communities(
                     context.collaboration_graph, weight="weight", seed=42
                 )
-                communities_map = {}
-                for comm_id, members in enumerate(comms):
-                    for member in members:
-                        communities_map[member] = comm_id
-            except Exception:
-                logger.warning("louvain_communities_failed_for_bridges")
+            else:
+                # Label propagation for large graphs — O(E), much faster
+                comms = nx.community.label_propagation_communities(
+                    context.collaboration_graph
+                )
+            communities_map = {}
+            for comm_id, members in enumerate(comms):
+                for member in members:
+                    communities_map[member] = comm_id
+        except Exception:
+            logger.warning("community_detection_failed_for_bridges")
     return detect_bridges(
         context.credits,
         communities=communities_map,
