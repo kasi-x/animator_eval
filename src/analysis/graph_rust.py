@@ -10,8 +10,9 @@ from collections import defaultdict
 import networkx as nx
 import structlog
 
-from src.models import Credit, Person
+from src.models import Credit, Person, Role
 from src.utils.config import ROLE_WEIGHTS
+from src.utils.role_groups import generate_core_team_pairs
 
 logger = structlog.get_logger()
 
@@ -100,43 +101,45 @@ def eigenvector_centrality(
         return {}
 
 
-_MAX_STAFF_PER_ANIME = 100
-
-
 def build_collaboration_edges(
     persons: list[Person],
     credits: list[Credit],
 ) -> dict[tuple[str, str], dict[str, float]]:
     """Build collaboration edge data, using Rust when available.
 
+    Uses CORE_TEAM star topology: core↔core all-pairs + core↔non-core star.
+    No non-core↔non-core edges. All staff remain as nodes (nobody is dropped).
+
     Returns:
         Dict mapping (person_a, person_b) to {"weight": float, "shared_works": int}
         with canonical ordering (person_a < person_b).
     """
-    # Build anime_id → [(person_id, role, weight)] mapping
-    anime_credits: dict[str, list[tuple[str, float]]] = defaultdict(list)
+    # Build anime_id → {person_id: (role, weight)} mapping (deduplicated)
+    anime_staff: dict[str, dict[str, tuple[Role, float]]] = defaultdict(dict)
     for c in credits:
         w = ROLE_WEIGHTS.get(c.role.value, 1.0)
-        anime_credits[c.anime_id].append((c.person_id, w))
-
-    # Cap staff per anime: keep top-K by weight to prevent O(N²) edge explosion
-    for anime_id, staff in anime_credits.items():
-        if len(staff) > _MAX_STAFF_PER_ANIME:
-            # Deduplicate by person_id (keep highest weight)
-            best: dict[str, float] = {}
-            for pid, w in staff:
-                if pid not in best or w > best[pid]:
-                    best[pid] = w
-            if len(best) > _MAX_STAFF_PER_ANIME:
-                top = sorted(best.items(), key=lambda x: x[1], reverse=True)[
-                    :_MAX_STAFF_PER_ANIME
-                ]
-                anime_credits[anime_id] = top
-            else:
-                anime_credits[anime_id] = list(best.items())
+        aid = c.anime_id
+        pid = c.person_id
+        if pid not in anime_staff[aid] or w > anime_staff[aid][pid][1]:
+            anime_staff[aid][pid] = (c.role, w)
 
     if RUST_AVAILABLE:
-        anime_staff_list = list(anime_credits.items())
+        # Build CORE_TEAM-filtered staff lists for Rust
+        # Only pass pairs that should have edges, as flat staff lists
+        anime_staff_list: list[tuple[str, list[tuple[str, float]]]] = []
+        for anime_id, staff in anime_staff.items():
+            staff_roles = {pid: role for pid, (role, _w) in staff.items()}
+            valid_pairs = generate_core_team_pairs(staff_roles)
+            # Collect unique persons that appear in valid pairs
+            pair_persons: set[str] = set()
+            for a, b in valid_pairs:
+                pair_persons.add(a)
+                pair_persons.add(b)
+            # Build staff list for Rust (only persons with edges)
+            staff_for_rust = [(pid, staff[pid][1]) for pid in pair_persons if pid in staff]
+            if staff_for_rust:
+                anime_staff_list.append((anime_id, staff_for_rust))
+
         n_anime = len(anime_staff_list)
         total_staff = sum(len(s) for _, s in anime_staff_list)
         logger.info(
@@ -152,20 +155,39 @@ def build_collaboration_edges(
                 "weight": weight,
                 "shared_works": shared_works,
             }
-        return edge_data
+
+        # Filter: Rust produces all-pairs within each anime's staff list,
+        # but we only want CORE_TEAM topology edges.
+        # Re-check each edge against the valid pairs.
+        filtered_edge_data: dict[tuple[str, str], dict[str, float]] = {}
+        valid_pair_set: set[tuple[str, str]] = set()
+        for anime_id, staff_info in anime_staff.items():
+            staff_roles = {pid: role for pid, (role, _w) in staff_info.items()}
+            for pair in generate_core_team_pairs(staff_roles):
+                canonical = (pair[0], pair[1]) if pair[0] < pair[1] else (pair[1], pair[0])
+                valid_pair_set.add(canonical)
+
+        for edge_key, attrs in edge_data.items():
+            if edge_key in valid_pair_set:
+                filtered_edge_data[edge_key] = attrs
+
+        return filtered_edge_data
 
     # Python fallback: provides edge topology only.
     # Weights computed here are placeholder averages — graph.py's
     # _apply_commitment_adjustments() or _apply_episode_adjustments()
     # will overwrite them with commitment-based values.
-    edge_data = defaultdict(lambda: {"weight": 0.0, "shared_works": 0})
-    for _anime_id, staff in anime_credits.items():
-        for i, (pid_a, w_a) in enumerate(staff):
-            for pid_b, w_b in staff[i + 1 :]:
-                if pid_a == pid_b:
-                    continue
-                edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
-                edge_weight = (w_a + w_b) / 2.0
-                edge_data[edge_key]["weight"] += edge_weight
-                edge_data[edge_key]["shared_works"] += 1
-    return dict(edge_data)
+    edge_data_default = defaultdict(lambda: {"weight": 0.0, "shared_works": 0})
+    for anime_id, staff in anime_staff.items():
+        staff_roles = {pid: role for pid, (role, _w) in staff.items()}
+        valid_pairs = generate_core_team_pairs(staff_roles)
+        for pid_a, pid_b in valid_pairs:
+            if pid_a not in staff or pid_b not in staff:
+                continue
+            edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
+            w_a = staff[pid_a][1]
+            w_b = staff[pid_b][1]
+            edge_weight = (w_a + w_b) / 2.0
+            edge_data_default[edge_key]["weight"] += edge_weight
+            edge_data_default[edge_key]["shared_works"] += 1
+    return dict(edge_data_default)

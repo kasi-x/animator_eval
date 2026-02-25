@@ -21,6 +21,7 @@ from src.utils.role_groups import (
     ANIMATOR_ROLES,
     THROUGH_ROLES,
     EPISODIC_ROLES,
+    generate_core_team_pairs,
 )
 
 logger = structlog.get_logger()
@@ -272,35 +273,29 @@ def _apply_episode_adjustments(
             if anime:
                 total_episodes = anime.episodes
 
-        # Cap staff per anime to prevent O(N²) explosion
-        if len(person_info) > _MAX_STAFF_PER_ANIME:
-            anime_commits = commitments.get(anime_id, {}) if commitments else {}
-            sorted_staff = sorted(
-                person_info.items(),
-                key=lambda x: anime_commits.get(x[0], x[1][2]),
-                reverse=True,
-            )
-            person_info = dict(sorted_staff[:_MAX_STAFF_PER_ANIME])
+        # CORE_TEAM star topology: O(n×k) instead of O(n²)
+        staff_roles = {pid: info[1] for pid, info in person_info.items()}
+        valid_pairs = generate_core_team_pairs(staff_roles)
 
-        persons_list = list(person_info.items())
-        for i, (pid_a, (eps_a, role_a, w_a)) in enumerate(persons_list):
-            for pid_b, (eps_b, role_b, w_b) in persons_list[i + 1 :]:
-                if pid_a == pid_b:
-                    continue
-                edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
-                if edge_key in edge_data:
-                    anime_pair_info[edge_key].append(
-                        (
-                            w_a,
-                            w_b,
-                            eps_a,
-                            eps_b,
-                            role_a,
-                            role_b,
-                            total_episodes,
-                            anime_id,
-                        )
+        for pid_a, pid_b in valid_pairs:
+            if pid_a not in person_info or pid_b not in person_info:
+                continue
+            edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
+            if edge_key in edge_data:
+                eps_a, role_a, w_a = person_info[pid_a]
+                eps_b, role_b, w_b = person_info[pid_b]
+                anime_pair_info[edge_key].append(
+                    (
+                        w_a,
+                        w_b,
+                        eps_a,
+                        eps_b,
+                        role_a,
+                        role_b,
+                        total_episodes,
+                        anime_id,
                     )
+                )
 
     # Recompute weights with episode adjustments
     edges_to_remove = []
@@ -338,12 +333,6 @@ def _apply_episode_adjustments(
         del edge_data[key]
 
 
-# Per-anime staff cap: prevent O(N²) edge explosion on large-cast anime.
-# Keeps top-K by commitment weight — low-commitment staff (e.g., single inbetween
-# on one episode) don't form meaningful collaboration edges.
-_MAX_STAFF_PER_ANIME = 100
-
-
 def _build_edges_python(
     credits: list[Credit],
     anime_person_info: dict[str, dict[str, tuple[set[int], Role, float]]] | None,
@@ -374,55 +363,45 @@ def _build_edges_python(
 
         if has_episode_data and anime_person_info:
             person_info = anime_person_info.get(anime_id, {})
-            # Cap staff per anime: keep top-K by commitment weight
-            if len(person_info) > _MAX_STAFF_PER_ANIME:
-                sorted_staff = sorted(
-                    person_info.items(),
-                    key=lambda x: anime_commits.get(x[0], x[1][2]),
-                    reverse=True,
+            # CORE_TEAM star topology: O(n×k) instead of O(n²)
+            staff_roles = {pid: info[1] for pid, info in person_info.items()}
+            valid_pairs = generate_core_team_pairs(staff_roles)
+            for pid_a, pid_b in valid_pairs:
+                if pid_a not in person_info or pid_b not in person_info:
+                    continue
+                eps_a, role_a, w_a = person_info[pid_a]
+                eps_b, role_b, w_b = person_info[pid_b]
+                ep_w = _episode_weight_for_pair(
+                    eps_a, eps_b, role_a, role_b, total_episodes
                 )
-                person_info = dict(sorted_staff[:_MAX_STAFF_PER_ANIME])
-            persons_list = list(person_info.items())
-            for i, (pid_a, (eps_a, role_a, w_a)) in enumerate(persons_list):
-                for pid_b, (eps_b, role_b, w_b) in persons_list[i + 1 :]:
-                    if pid_a == pid_b:
-                        continue
-                    ep_w = _episode_weight_for_pair(
-                        eps_a, eps_b, role_a, role_b, total_episodes
-                    )
-                    if ep_w < 0.001:
-                        continue
-                    edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
-                    commit_a = anime_commits.get(pid_a, w_a)
-                    commit_b = anime_commits.get(pid_b, w_b)
-                    edge_weight = commit_a * commit_b * ep_w * importance
-                    edge_data[edge_key]["weight"] += edge_weight
-                    edge_data[edge_key]["shared_works"] += 1
+                if ep_w < 0.001:
+                    continue
+                edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
+                commit_a = anime_commits.get(pid_a, w_a)
+                commit_b = anime_commits.get(pid_b, w_b)
+                edge_weight = commit_a * commit_b * ep_w * importance
+                edge_data[edge_key]["weight"] += edge_weight
+                edge_data[edge_key]["shared_works"] += 1
         else:
             # Deduplicate: aggregate per person to avoid overcounting shared_works
             seen_persons: dict[str, tuple[Role, float]] = {}
             for pid, role, w in staff_list:
                 if pid not in seen_persons or w > seen_persons[pid][1]:
                     seen_persons[pid] = (role, w)
-            # Cap staff per anime: keep top-K by commitment weight
-            if len(seen_persons) > _MAX_STAFF_PER_ANIME:
-                sorted_staff = sorted(
-                    seen_persons.items(),
-                    key=lambda x: anime_commits.get(x[0], x[1][1]),
-                    reverse=True,
-                )
-                seen_persons = dict(sorted_staff[:_MAX_STAFF_PER_ANIME])
-            persons_dedup = list(seen_persons.items())
-            for i, (pid_a, (role_a, w_a)) in enumerate(persons_dedup):
-                for pid_b, (role_b, w_b) in persons_dedup[i + 1 :]:
-                    if pid_a == pid_b:
-                        continue
-                    edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
-                    commit_a = anime_commits.get(pid_a, w_a)
-                    commit_b = anime_commits.get(pid_b, w_b)
-                    edge_weight = commit_a * commit_b * importance
-                    edge_data[edge_key]["weight"] += edge_weight
-                    edge_data[edge_key]["shared_works"] += 1
+            # CORE_TEAM star topology: O(n×k) instead of O(n²)
+            staff_roles = {pid: role for pid, (role, _w) in seen_persons.items()}
+            valid_pairs = generate_core_team_pairs(staff_roles)
+            for pid_a, pid_b in valid_pairs:
+                if pid_a not in seen_persons or pid_b not in seen_persons:
+                    continue
+                role_a, w_a = seen_persons[pid_a]
+                role_b, w_b = seen_persons[pid_b]
+                edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
+                commit_a = anime_commits.get(pid_a, w_a)
+                commit_b = anime_commits.get(pid_b, w_b)
+                edge_weight = commit_a * commit_b * importance
+                edge_data[edge_key]["weight"] += edge_weight
+                edge_data[edge_key]["shared_works"] += 1
 
     return edge_data
 
@@ -438,40 +417,39 @@ def _apply_commitment_adjustments(
     Used when Rust finds edge topology but we need commitment-based weights.
     Modifies edge_data in place.
     """
-    # Build per-anime person sets for pair lookup
-    anime_persons: dict[str, set[str]] = defaultdict(set)
+    # Build per-anime person role mapping for CORE_TEAM pair generation
+    anime_person_roles: dict[str, dict[str, Role]] = defaultdict(dict)
     for c in credits:
-        anime_persons[c.anime_id].add(c.person_id)
+        pid = c.person_id
+        aid = c.anime_id
+        # Keep highest-weight role per person per anime
+        if pid not in anime_person_roles[aid]:
+            anime_person_roles[aid][pid] = c.role
+        else:
+            existing_w = ROLE_WEIGHTS.get(anime_person_roles[aid][pid].value, 1.0)
+            new_w = ROLE_WEIGHTS.get(c.role.value, 1.0)
+            if new_w > existing_w:
+                anime_person_roles[aid][pid] = c.role
 
     # Rebuild edge weights from scratch
     new_weights: dict[tuple[str, str], float] = defaultdict(float)
     new_shared: dict[tuple[str, str], int] = defaultdict(int)
 
-    for anime_id, person_ids in anime_persons.items():
+    for anime_id, staff_roles in anime_person_roles.items():
         anime_obj = anime_map.get(anime_id) if anime_map else None
         importance = _work_importance(anime_obj)
         anime_commits = commitments.get(anime_id, {})
 
-        # Cap staff per anime to prevent O(N²) explosion
-        if len(person_ids) > _MAX_STAFF_PER_ANIME:
-            person_ids = set(
-                sorted(
-                    person_ids,
-                    key=lambda pid: anime_commits.get(pid, 1.0),
-                    reverse=True,
-                )[:_MAX_STAFF_PER_ANIME]
-            )
-
-        pid_list = sorted(person_ids)
-        for i, pid_a in enumerate(pid_list):
-            for pid_b in pid_list[i + 1 :]:
-                edge_key = (pid_a, pid_b)
-                if edge_key not in edge_data:
-                    continue
-                commit_a = anime_commits.get(pid_a, 1.0)
-                commit_b = anime_commits.get(pid_b, 1.0)
-                new_weights[edge_key] += commit_a * commit_b * importance
-                new_shared[edge_key] += 1
+        # CORE_TEAM star topology: O(n×k) instead of O(n²)
+        valid_pairs = generate_core_team_pairs(staff_roles)
+        for pid_a, pid_b in valid_pairs:
+            edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
+            if edge_key not in edge_data:
+                continue
+            commit_a = anime_commits.get(pid_a, 1.0)
+            commit_b = anime_commits.get(pid_b, 1.0)
+            new_weights[edge_key] += commit_a * commit_b * importance
+            new_shared[edge_key] += 1
 
     edges_to_remove = []
     for edge_key in edge_data:

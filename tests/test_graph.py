@@ -13,6 +13,7 @@ from src.analysis.graph import (
     _episode_coverage,
 )
 from src.models import Anime, Credit, Person, Role
+from src.utils.role_groups import generate_core_team_pairs
 
 
 def _sample_data():
@@ -483,3 +484,107 @@ class TestCommitmentWeighting:
         g = create_person_collaboration_network(persons, credits, anime_map=anime_map)
         # p1 and p2 share a1 and a2
         assert g["p1"]["p2"]["shared_works"] == 2
+
+
+class TestCoreTeamPairs:
+    def test_core_team_pairs_basic(self):
+        """CORE_TEAM members should all be connected to each other."""
+        staff = {
+            "p1": Role.DIRECTOR,
+            "p2": Role.ANIMATION_DIRECTOR,
+            "p3": Role.KEY_ANIMATOR,
+        }
+        pairs = generate_core_team_pairs(staff)
+        pair_set = {tuple(sorted(p)) for p in pairs}
+        # All three are CORE_TEAM → 3 pairs
+        assert ("p1", "p2") in pair_set
+        assert ("p1", "p3") in pair_set
+        assert ("p2", "p3") in pair_set
+
+    def test_non_core_connects_to_core(self):
+        """Non-core staff should connect to all core members."""
+        staff = {
+            "p1": Role.DIRECTOR,           # core
+            "p2": Role.KEY_ANIMATOR,        # core
+            "p3": Role.IN_BETWEEN,          # non-core
+        }
+        pairs = generate_core_team_pairs(staff)
+        pair_set = {tuple(sorted(p)) for p in pairs}
+        # p3 (non-core) connects to p1 and p2 (core)
+        assert ("p1", "p3") in pair_set
+        assert ("p2", "p3") in pair_set
+        # Core pair also exists
+        assert ("p1", "p2") in pair_set
+
+    def test_non_core_not_connected_to_each_other(self):
+        """Non-core staff (e.g. two in-betweeners) should not connect."""
+        staff = {
+            "p1": Role.DIRECTOR,           # core
+            "p2": Role.IN_BETWEEN,          # non-core
+            "p3": Role.IN_BETWEEN,          # non-core
+        }
+        pairs = generate_core_team_pairs(staff)
+        pair_set = {tuple(sorted(p)) for p in pairs}
+        # p2 ↔ p3 should NOT exist
+        assert ("p2", "p3") not in pair_set
+        # But both connect to core
+        assert ("p1", "p2") in pair_set
+        assert ("p1", "p3") in pair_set
+
+    def test_no_core_team_fallback(self):
+        """When no CORE_TEAM members exist, all pairs are generated."""
+        staff = {
+            "p1": Role.IN_BETWEEN,
+            "p2": Role.IN_BETWEEN,
+            "p3": Role.PRODUCER,
+        }
+        pairs = generate_core_team_pairs(staff)
+        pair_set = {tuple(sorted(p)) for p in pairs}
+        # Fallback: all 3 pairs
+        assert len(pair_set) == 3
+        assert ("p1", "p2") in pair_set
+        assert ("p1", "p3") in pair_set
+        assert ("p2", "p3") in pair_set
+
+    def test_large_anime_no_staff_dropped(self):
+        """300-person anime: all staff should exist as nodes in graph."""
+        # 20 core + 280 non-core
+        persons = []
+        credits = []
+        for i in range(20):
+            pid = f"core_{i}"
+            persons.append(Person(id=pid, name_en=f"Core {i}"))
+            credits.append(Credit(person_id=pid, anime_id="a1", role=Role.KEY_ANIMATOR))
+        for i in range(280):
+            pid = f"noncore_{i}"
+            persons.append(Person(id=pid, name_en=f"NonCore {i}"))
+            credits.append(Credit(person_id=pid, anime_id="a1", role=Role.IN_BETWEEN))
+
+        g = create_person_collaboration_network(persons, credits)
+        # ALL 300 staff should be nodes
+        assert g.number_of_nodes() == 300
+        # Verify some non-core are connected to core (not dropped)
+        assert g.has_edge("noncore_0", "core_0")
+
+    def test_edge_count_is_linear(self):
+        """Edge count should be O(n×k), not O(n²)."""
+        persons = []
+        credits = []
+        n_core = 10
+        n_non_core = 200
+        for i in range(n_core):
+            pid = f"core_{i}"
+            persons.append(Person(id=pid, name_en=f"Core {i}"))
+            credits.append(Credit(person_id=pid, anime_id="a1", role=Role.DIRECTOR))
+        for i in range(n_non_core):
+            pid = f"noncore_{i}"
+            persons.append(Person(id=pid, name_en=f"NonCore {i}"))
+            credits.append(Credit(person_id=pid, anime_id="a1", role=Role.IN_BETWEEN))
+
+        g = create_person_collaboration_network(persons, credits)
+        # Expected: core pairs + star edges = k*(k-1)/2 + n_non_core*k
+        expected = n_core * (n_core - 1) // 2 + n_non_core * n_core
+        assert g.number_of_edges() == expected
+        # Should be much less than all-pairs
+        all_pairs = (n_core + n_non_core) * (n_core + n_non_core - 1) // 2
+        assert g.number_of_edges() < all_pairs * 0.2  # <20% of all-pairs

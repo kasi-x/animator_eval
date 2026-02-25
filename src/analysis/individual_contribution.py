@@ -30,8 +30,6 @@ MIN_COHORT_SIZE = 5
 MIN_WORKS_FOR_CONSISTENCY = 5
 # 独立貢献度算出に必要な最小コラボレーター数
 MIN_COLLABORATORS = 3
-# 独立貢献度算出時のコラボレーター上限（高次数ノードの計算量抑制）
-_MAX_COLLABORATORS_SAMPLE = 50
 
 
 @dataclass
@@ -399,23 +397,6 @@ def compute_independent_value(
         if len(collaborators) < MIN_COLLABORATORS:
             result[pid] = None
             continue
-
-        # Cap collaborators to limit computation on high-degree nodes
-        if len(collaborators) > _MAX_COLLABORATORS_SAMPLE:
-            # Prefer collaborators with more shared works (higher edge weight)
-            if collaboration_graph and pid in collaboration_graph:
-                scored = [
-                    (c, collaboration_graph[pid][c].get("shared_works", 1))
-                    for c in collaborators
-                    if c in collaboration_graph[pid]
-                ]
-                scored.sort(key=lambda x: x[1], reverse=True)
-                collaborators = {c for c, _ in scored[:_MAX_COLLABORATORS_SAMPLE]}
-            else:
-                # Random sample fallback
-                import random
-
-                collaborators = set(random.sample(list(collaborators), _MAX_COLLABORATORS_SAMPLE))
 
         # 各コラボレーターについて: Xと共演時のスコア vs 非共演時のスコア
         diffs = []

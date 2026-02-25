@@ -232,3 +232,49 @@ def is_core_team_role(role: Role) -> bool:
         True if role is a core team position
     """
     return role in CORE_TEAM_ROLES
+
+
+def generate_core_team_pairs(
+    staff: dict[str, Role],
+) -> list[tuple[str, str]]:
+    """Generate collaboration pairs using CORE_TEAM star topology.
+
+    Instead of all-pairs O(n²), generates:
+    - CORE_TEAM ↔ CORE_TEAM: all pairs (k*(k-1)/2)
+    - CORE_TEAM ↔ non-CORE_TEAM: star edges (n_non_core × k)
+    - non-CORE_TEAM ↔ non-CORE_TEAM: no edges
+
+    Fallback: if no CORE_TEAM members exist, generates all pairs.
+
+    Args:
+        staff: {person_id: primary_role} mapping for one anime
+
+    Returns:
+        List of (person_a, person_b) pairs with canonical ordering (a < b)
+    """
+    core = [pid for pid, role in staff.items() if role in CORE_TEAM_ROLES]
+    non_core = [pid for pid, role in staff.items() if role not in CORE_TEAM_ROLES]
+
+    # Fallback: no core team → all pairs (small anime, O(n²) is fine)
+    if not core:
+        all_pids = sorted(staff.keys())
+        pairs = []
+        for i, a in enumerate(all_pids):
+            for b in all_pids[i + 1 :]:
+                pairs.append((a, b) if a < b else (b, a))
+        return pairs
+
+    pairs: list[tuple[str, str]] = []
+
+    # Core ↔ Core: all pairs
+    core_sorted = sorted(core)
+    for i, a in enumerate(core_sorted):
+        for b in core_sorted[i + 1 :]:
+            pairs.append((a, b))
+
+    # Core ↔ Non-core: star edges
+    for nc in non_core:
+        for c in core_sorted:
+            pairs.append((c, nc) if c < nc else (nc, c))
+
+    return pairs
