@@ -76,6 +76,38 @@ class TestDetectBridges:
         # → no bridges because everyone is in same community
         assert result["stats"]["total_persons"] == 6
 
+    def test_with_louvain_communities(self):
+        """Louvain communities should detect cross-community bridges."""
+        import networkx as nx
+
+        # Build a graph with two dense clusters connected by a weak bridge
+        G = nx.Graph()
+        G.add_edges_from(
+            [("p1", "p2"), ("p1", "p3"), ("p2", "p3")],
+            weight=5, shared_works=3,
+        )
+        G.add_edges_from(
+            [("p4", "p5"), ("p4", "p6"), ("p5", "p6")],
+            weight=5, shared_works=3,
+        )
+        # Weak bridge between clusters
+        G.add_edge("p2", "p4", weight=1, shared_works=1)
+
+        comms = nx.community.louvain_communities(G, weight="weight", seed=42)
+        communities_map = {}
+        for comm_id, members in enumerate(comms):
+            for member in members:
+                communities_map[member] = comm_id
+
+        credits = _make_two_clusters()
+        result = detect_bridges(
+            credits,
+            communities=communities_map,
+            collaboration_graph=G,
+        )
+        assert len(result["bridge_persons"]) > 0
+        assert result["stats"]["total_cross_edges"] > 0
+
 
 class TestSimpleCommunities:
     def test_single_component(self):

@@ -9,6 +9,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from typing import Any, Callable
 
+import networkx as nx
+import numpy as np
 import structlog
 
 from src.analysis.anime_stats import compute_anime_stats
@@ -115,16 +117,20 @@ def _run_outliers(context: PipelineContext) -> Any:
 
 def _run_teams(context: PipelineContext) -> Any:
     """Analyze team composition patterns."""
+    # composite は 0-100 スケール → 95パーセンタイルで動的閾値
+    composites = [r["composite"] for r in context.results if r["composite"] > 0]
+    person_threshold = float(np.percentile(composites, 95)) if composites else 30.0
     top_persons = {
         r["person_id"]: r["composite"]
         for r in context.results
-        if r["composite"] >= 70.0
+        if r["composite"] >= person_threshold
     }
+    # anime.score は 1-10 スケール → 8.0 が「高評価」に適切
     return analyze_team_patterns(
         context.credits,
         context.anime_map,
         person_scores=top_persons,
-        min_score=70.0,
+        min_score=8.0,
     )
 
 
@@ -198,9 +204,25 @@ def _run_role_flow(context: PipelineContext) -> Any:
 
 
 def _run_bridges(context: PipelineContext) -> Any:
-    """Detect bridge nodes in network."""
+    """Detect bridge nodes in network using Louvain communities."""
+    communities_map = None
+    if context.collaboration_graph is not None:
+        n_edges = context.collaboration_graph.number_of_edges()
+        # Guard: skip Louvain on very large graphs (>1M edges)
+        if n_edges <= 1_000_000:
+            try:
+                comms = nx.community.louvain_communities(
+                    context.collaboration_graph, weight="weight", seed=42
+                )
+                communities_map = {}
+                for comm_id, members in enumerate(comms):
+                    for member in members:
+                        communities_map[member] = comm_id
+            except Exception:
+                logger.warning("louvain_communities_failed_for_bridges")
     return detect_bridges(
         context.credits,
+        communities=communities_map,
         collaboration_graph=context.collaboration_graph,
     )
 

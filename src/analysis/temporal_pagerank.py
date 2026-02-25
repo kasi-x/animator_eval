@@ -450,7 +450,7 @@ def _compute_foresight_scores(
     credits: list[Credit],
     anime_map: dict[str, Anime],
     yearly_normalized: dict[int, dict[str, float]],
-    foresight_horizon_years: int = 5,
+    foresight_horizon_years: int = 10,
     unknown_threshold_percentile: float = 25.0,
 ) -> dict[str, ForesightScore]:
     """先見スコアを計算する.
@@ -519,7 +519,7 @@ def _compute_foresight_scores(
                         future_authority = max(future_authority, fa)
 
                 growth = future_authority - y_authority_t
-                if growth < 10.0:
+                if growth < 5.0:
                     continue
 
                 # Credit all established co-workers
@@ -837,7 +837,7 @@ def compute_temporal_pagerank(
     anime_map: dict[str, Anime],
     persons: list,
     peer_edge_weight: float = 0.3,
-    foresight_horizon_years: int = 5,
+    foresight_horizon_years: int = 10,
     unknown_threshold_percentile: float = 25.0,
     min_promotions_for_credit: int = 2,
 ) -> TemporalPageRankResult:
