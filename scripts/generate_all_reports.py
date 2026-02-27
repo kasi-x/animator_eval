@@ -9494,6 +9494,455 @@ def generate_longitudinal_analysis_report():  # noqa: C901
     body += "</div>"
 
     # ─────────────────────────────────────────────────────────
+    # Section 6: 需要ギャップ & 生産性 & 人材動態
+    # ─────────────────────────────────────────────────────────
+    body += '<div class="card" id="sec-demand">'
+    body += "<h2>Section 6: 需要ギャップ・生産性向上・人材動態</h2>"
+    body += section_desc(
+        "配信時代の到来により「想定されていた需要」と「実際の需要」の間には構造的なギャップが生じています。"
+        "また、デジタル制作ツールの普及による生産性向上は「同じ人数でより多くの作品を担える」効果をもたらし、"
+        "単純な人材不足の議論を複雑にします。さらに、業界への新規参入・現役維持・離脱のフローを"
+        "時系列で把握することで、人材パイプラインの持続可能性が見えてきます。"
+    )
+
+    # ─── 必要データ共通準備 ──────────────────────────────────
+    ts_series_d6 = time_series_data.get("series", {})
+    ts_years_all = time_series_data.get("years", [])
+    DEMAND_YEARS = [y for y in ts_years_all if 1990 <= y <= 2025]
+
+    active_d = ts_series_d6.get("active_persons", {})
+    credits_d = ts_series_d6.get("credit_count", {})
+    anime_d = ts_series_d6.get("unique_anime", {})
+    new_ent_d = ts_series_d6.get("new_entrants", {})
+
+    def _ts_val(d: dict, yr: int) -> float:
+        return float(d.get(str(yr), 0) or 0)
+
+    # ── Chart 12: 想定需要 vs 実際需要のギャップ ──────────────
+    body += "<h3>Chart 12: 想定需要 vs 実際需要のギャップ — 生産性調整済みスタッフ需要</h3>"
+    body += chart_guide(
+        "上段: 実際クレジット数（実線）と「過去トレンド外挿による想定クレジット需要」（破線）の乖離（塗り潰し＝ギャップ）。"
+        "下段: 実際スタッフ数（実線）と「現在のクレジット量をベースライン生産性でこなすために必要なスタッフ数」（破線）の比較。"
+        "下段の破線が実線を上回る＝生産性向上のおかげで現実より少ない人数で需要を処理できている。"
+        "下段の実線が破線を上回る＝人材が想定より多く供給されている（需要以上の人材流入）。"
+    )
+
+    try:
+        # Fit linear trend on 1990-2010 credit_count → project 2011-2025
+        base_yrs = [y for y in DEMAND_YEARS if y <= 2010]
+        proj_yrs = [y for y in DEMAND_YEARS if y > 2010]
+
+        base_credits = [_ts_val(credits_d, y) for y in base_yrs]
+        base_active = [_ts_val(active_d, y) for y in base_yrs]
+
+        # Simple OLS (avoid numpy dependency — use statistics)
+        def _ols_predict(xs: list[int], ys: list[float], x_new: list[int]) -> list[float]:
+            n = len(xs)
+            if n < 2:
+                return [ys[-1]] * len(x_new)
+            mx = sum(xs) / n
+            my = sum(ys) / n
+            denom = sum((x - mx) ** 2 for x in xs)
+            if denom == 0:
+                return [my] * len(x_new)
+            slope = sum((xs[i] - mx) * (ys[i] - my) for i in range(n)) / denom
+            intercept = my - slope * mx
+            return [max(0.0, intercept + slope * x) for x in x_new]
+
+        # Project credits and active_persons from 1990-2010 trend
+        expected_credits_proj = _ols_predict(base_yrs, base_credits, proj_yrs)
+        expected_credits_all = base_credits + expected_credits_proj
+
+        expected_active_proj = _ols_predict(base_yrs, base_active, proj_yrs)
+        expected_active_all = base_active + expected_active_proj
+
+        actual_credits_all = [_ts_val(credits_d, y) for y in DEMAND_YEARS]
+        actual_active_all = [_ts_val(active_d, y) for y in DEMAND_YEARS]
+
+        # Baseline productivity = avg credits/person in 1990-2005
+        base_prod_yrs = [y for y in base_yrs if y <= 2005]
+        base_prod_vals = [
+            _ts_val(credits_d, y) / _ts_val(active_d, y)
+            for y in base_prod_yrs
+            if _ts_val(active_d, y) > 0
+        ]
+        baseline_productivity = sum(base_prod_vals) / len(base_prod_vals) if base_prod_vals else 2.1
+
+        # "Required staff at baseline productivity" to handle actual credits
+        required_staff = [
+            _ts_val(credits_d, y) / baseline_productivity
+            for y in DEMAND_YEARS
+        ]
+
+        fig12 = make_subplots(
+            rows=2, cols=1,
+            subplot_titles=[
+                "クレジット需要: 実際 vs 想定（1990〜2010年トレンド外挿）",
+                "スタッフ需要: 実際 vs ベースライン生産性ベース必要数",
+            ],
+            vertical_spacing=0.14,
+        )
+
+        # Upper: credit gap
+        # Shaded gap area (actual - expected; positive = excess demand)
+        gap_upper = [a - e for a, e in zip(actual_credits_all, expected_credits_all)]
+        gap_pos = [max(0, g) for g in gap_upper]
+        gap_neg = [min(0, g) for g in gap_upper]
+
+        fig12.add_trace(go.Scatter(
+            x=DEMAND_YEARS, y=expected_credits_all,
+            name="想定クレジット需要（外挿）", mode="lines",
+            line=dict(color="#FFD166", width=2, dash="dash"),
+            hovertemplate="%{x}年 想定: %{y:,.0f}件<extra></extra>",
+        ), row=1, col=1)
+        fig12.add_trace(go.Scatter(
+            x=DEMAND_YEARS, y=actual_credits_all,
+            name="実際クレジット数", mode="lines",
+            line=dict(color="#4CC9F0", width=2.5),
+            hovertemplate="%{x}年 実際: %{y:,.0f}件<extra></extra>",
+        ), row=1, col=1)
+        # Gap fill (excess demand = actual > expected)
+        fig12.add_trace(go.Scatter(
+            x=DEMAND_YEARS + DEMAND_YEARS[::-1],
+            y=[a if a >= e else e for a, e in zip(actual_credits_all, expected_credits_all)] +
+              expected_credits_all[::-1],
+            fill="toself", fillcolor="rgba(76,201,240,0.15)",
+            line=dict(color="rgba(0,0,0,0)"),
+            name="需要超過域", showlegend=True, hoverinfo="skip",
+        ), row=1, col=1)
+        fig12.add_trace(go.Scatter(
+            x=DEMAND_YEARS + DEMAND_YEARS[::-1],
+            y=[e if a >= e else a for a, e in zip(actual_credits_all, expected_credits_all)] +
+              expected_credits_all[::-1],
+            fill="toself", fillcolor="rgba(255,107,53,0.15)",
+            line=dict(color="rgba(0,0,0,0)"),
+            name="想定割れ域", showlegend=True, hoverinfo="skip",
+        ), row=1, col=1)
+
+        # Lower: staff gap
+        fig12.add_trace(go.Scatter(
+            x=DEMAND_YEARS, y=required_staff,
+            name=f"必要スタッフ数（生産性{baseline_productivity:.2f}基準）",
+            mode="lines",
+            line=dict(color="#FF6B35", width=2, dash="dash"),
+            hovertemplate="%{x}年 必要数: %{y:,.0f}人<extra></extra>",
+        ), row=2, col=1)
+        fig12.add_trace(go.Scatter(
+            x=DEMAND_YEARS, y=actual_active_all,
+            name="実際アクティブスタッフ数",
+            mode="lines",
+            line=dict(color="#06D6A0", width=2.5),
+            hovertemplate="%{x}年 実際: %{y:,.0f}人<extra></extra>",
+        ), row=2, col=1)
+
+        # Demand shift markers
+        for marker_yr, label in [(2000, "デジタル化"), (2015, "配信台頭"), (2020, "COVID")]:
+            for row_n in [1, 2]:
+                fig12.add_vline(
+                    x=marker_yr, line_dash="dot",
+                    line_color="rgba(255,255,255,0.3)",
+                    row=row_n, col=1,
+                )
+            fig12.add_annotation(
+                x=marker_yr, y=1, yref="paper",
+                text=label, showarrow=False,
+                font=dict(size=9, color="rgba(255,255,255,0.5)"),
+                xanchor="left",
+            )
+
+        fig12.update_layout(
+            title_text="想定需要 vs 実際需要のギャップ",
+            legend=dict(orientation="h", y=-0.08),
+        )
+        fig12.update_yaxes(title_text="クレジット数", row=1, col=1)
+        fig12.update_yaxes(title_text="スタッフ数（人）", row=2, col=1)
+        body += plotly_div_safe(fig12, "demand-gap-chart", height=680)
+
+        # Key findings
+        gap_2023 = _ts_val(credits_d, 2023) - _ols_predict(base_yrs, base_credits, [2023])[0]
+        required_2023 = _ts_val(credits_d, 2023) / baseline_productivity
+        actual_2023 = _ts_val(active_d, 2023)
+        staff_surplus = actual_2023 - required_2023
+        body += key_findings([
+            f"1990〜2010年トレンド外挿との乖離（2023年）: 実際 "
+            f"{_ts_val(credits_d,2023):,.0f}件 vs 想定 "
+            f"{_ols_predict(base_yrs, base_credits, [2023])[0]:,.0f}件 "
+            f"(+{gap_2023:,.0f}件超過)",
+            f"ベースライン生産性（{baseline_productivity:.2f}件/人）基準の必要スタッフ数 vs 実際: "
+            f"必要 {required_2023:,.0f}人 vs 実際 {actual_2023:,.0f}人 "
+            f"({'余剰' if staff_surplus > 0 else '不足'} {abs(staff_surplus):,.0f}人)",
+            "実際スタッフ数が必要数を上回る場合、生産性向上が実現しており"
+            "「少ない人数で同じ量を捌ける」効率化が起きていることを示す",
+            "実際スタッフ数が必要数を下回る場合、1人当たりの負荷が"
+            "ベースライン期より増大しており過重労働リスクの指標となる",
+        ])
+    except Exception as e:
+        body += f'<div class="insight-box">Chart 12 生成スキップ: {e}</div>'
+
+    # ── Chart 13: 生産性指数の推移 ─────────────────────────────
+    body += "<h3>Chart 13: 生産性指数の推移 — credits/person の時系列変化</h3>"
+    body += chart_guide(
+        "青実線（左軸）＝1人あたり年間クレジット数（credits/active_person）。"
+        "オレンジ実線（左軸）＝生産性指数（1990年=100に正規化）。"
+        "灰色棒（右軸）＝アクティブスタッフ数。"
+        "生産性指数が上昇するほど、同じ人数で多くの作品を担えることを意味する。"
+        "デジタル化・配信台頭のタイミングと生産性の変化を照らし合わせてください。"
+    )
+
+    try:
+        prod_per_person = []
+        prod_index = []
+        base_prod_1990 = None
+
+        for yr in DEMAND_YEARS:
+            c_yr = _ts_val(credits_d, yr)
+            a_yr = _ts_val(active_d, yr)
+            cpp = c_yr / a_yr if a_yr > 0 else 0
+            prod_per_person.append(cpp)
+            if yr == DEMAND_YEARS[0]:
+                base_prod_1990 = cpp
+            prod_index.append((cpp / base_prod_1990 * 100) if base_prod_1990 else 100)
+
+        # Trend line (5-year rolling average)
+        prod_trend = []
+        window = 5
+        for i in range(len(DEMAND_YEARS)):
+            lo = max(0, i - window // 2)
+            hi = min(len(DEMAND_YEARS), i + window // 2 + 1)
+            prod_trend.append(sum(prod_per_person[lo:hi]) / (hi - lo))
+
+        # "Counterfactual staff needed" if productivity stayed at 1990 baseline
+        counterfactual_staff = [
+            _ts_val(credits_d, yr) / prod_per_person[0]  # 1990 productivity
+            for yr in DEMAND_YEARS
+        ]
+        actual_active_list = [_ts_val(active_d, yr) for yr in DEMAND_YEARS]
+        productivity_savings = [
+            max(0, cf - ac) for cf, ac in zip(counterfactual_staff, actual_active_list)
+        ]
+
+        fig13 = make_subplots(
+            rows=2, cols=1,
+            subplot_titles=[
+                "生産性指数（1990=100）と1人当たりクレジット数",
+                "生産性向上による「浮いたスタッフ工数」（もし1990年生産性のままなら必要だった追加人数）",
+            ],
+            vertical_spacing=0.14,
+        )
+
+        # Upper: productivity
+        fig13.add_trace(go.Bar(
+            x=DEMAND_YEARS, y=[_ts_val(active_d, yr) for yr in DEMAND_YEARS],
+            name="アクティブスタッフ数", marker_color="rgba(160,160,200,0.25)",
+            yaxis="y2", showlegend=True,
+            hovertemplate="%{x}年: %{y:,}人<extra>アクティブスタッフ</extra>",
+        ), row=1, col=1)
+        fig13.add_trace(go.Scatter(
+            x=DEMAND_YEARS, y=prod_per_person,
+            name="1人当たりクレジット数", mode="lines+markers",
+            line=dict(color="#4CC9F0", width=2),
+            marker=dict(size=4),
+            hovertemplate="%{x}年: %{y:.2f}件/人<extra></extra>",
+        ), row=1, col=1)
+        fig13.add_trace(go.Scatter(
+            x=DEMAND_YEARS, y=prod_trend,
+            name="5年移動平均", mode="lines",
+            line=dict(color="#FFD166", width=2.5, dash="dash"),
+            hovertemplate="%{x}年 移動平均: %{y:.2f}件/人<extra></extra>",
+        ), row=1, col=1)
+
+        # Lower: productivity savings
+        fig13.add_trace(go.Bar(
+            x=DEMAND_YEARS, y=productivity_savings,
+            name="生産性向上による節減人数",
+            marker_color="#06D6A0",
+            opacity=0.75,
+            hovertemplate=(
+                "%{x}年: 1990年生産性のままなら +%{y:,.0f}人 必要だった<extra></extra>"
+            ),
+        ), row=2, col=1)
+        fig13.add_trace(go.Scatter(
+            x=DEMAND_YEARS, y=actual_active_list,
+            name="実際スタッフ数（参考）", mode="lines",
+            line=dict(color="#a0a0c0", width=1.5, dash="dot"),
+            opacity=0.5,
+            hovertemplate="%{x}年 実際: %{y:,}人<extra></extra>",
+        ), row=2, col=1)
+
+        # Markers
+        for marker_yr, label in [
+            (2000, "デジタル彩色\n普及"), (2008, "デジタル撮影\n主流化"), (2015, "配信台頭"),
+        ]:
+            for rn in [1, 2]:
+                fig13.add_vline(
+                    x=marker_yr, line_dash="dot",
+                    line_color="rgba(255,209,102,0.4)", row=rn, col=1,
+                )
+
+        fig13.update_layout(
+            title_text="生産性指数の推移と需要へのインパクト",
+            legend=dict(orientation="h", y=-0.08),
+        )
+        fig13.update_yaxes(title_text="credits/person", row=1, col=1)
+        fig13.update_yaxes(title_text="節減スタッフ数（人）", row=2, col=1)
+        body += plotly_div_safe(fig13, "productivity-chart", height=660)
+
+        # Key findings
+        prod_2023_idx = prod_index[-2] if len(prod_index) >= 2 else prod_index[-1]
+        savings_2023 = productivity_savings[-2] if len(productivity_savings) >= 2 else 0
+        body += key_findings([
+            f"生産性指数（1990=100）の2023年値: {prod_2023_idx:.1f} "
+            f"— 1990年比で {prod_2023_idx-100:+.1f}% の生産性変化",
+            f"2023年時点で「1990年生産性のままだったら」: "
+            f"さらに約 {savings_2023:,.0f}人 のスタッフが必要だった（生産性向上の節減効果）",
+            "デジタル化（2000年前後）と配信需要急増（2015年〜）のどちらが"
+            "生産性指数に強い影響を与えたかに注目すると、効率化vs労働集約化の分岐点が見える",
+            "生産性向上が止まり実スタッフ数増加が加速する年代は、"
+            "技術的効率化の限界または需要超過によるブルウィップ効果の可能性がある",
+        ])
+    except Exception as e:
+        body += f'<div class="insight-box">Chart 13 生成スキップ: {e}</div>'
+
+    # ── Chart 14: 現役・引退・新規の時系列 ────────────────────
+    body += "<h3>Chart 14: 現役・引退・新規の時系列 — 人材パイプラインの動態</h3>"
+    body += chart_guide(
+        "上段: 現役（active、青）・新規参入（green）・引退/離脱（orange）の人数推移。"
+        "引退＝その年が最後のクレジットになった人物数（scores.jsonのlatest_yearから集計）。"
+        "中段: 純増数（新規−引退）。プラス＝業界人口が増加、マイナス＝減少。"
+        "下段: 現役に対する新規・引退の比率（入れ替わり率）。"
+        "比率が高い年は業界の「新陳代謝」が活発で、世代交代が急速に進んでいる。"
+    )
+
+    try:
+        # Compute retired per year from scores.json
+        retired_by_yr: dict[int, int] = {}
+        first_yr_counts: dict[int, int] = {}
+        for p in scores_data:
+            fy = p.get("career", {}).get("first_year")
+            ly = p.get("career", {}).get("latest_year")
+            if fy and 1990 <= fy <= 2025:
+                first_yr_counts[fy] = first_yr_counts.get(fy, 0) + 1
+            # "retired" = latest_year is at least 2 years ago (avoid penalizing recent data gaps)
+            if ly and 1990 <= ly <= 2023:
+                retired_by_yr[ly] = retired_by_yr.get(ly, 0) + 1
+
+        # Also can use new_entrants from time_series (more complete)
+        new_ent_vals = [_ts_val(new_ent_d, yr) for yr in DEMAND_YEARS]
+        active_vals = [_ts_val(active_d, yr) for yr in DEMAND_YEARS]
+        retired_vals = [float(retired_by_yr.get(yr, 0)) for yr in DEMAND_YEARS]
+
+        # Net change = new - retired
+        net_change = [n - r for n, r in zip(new_ent_vals, retired_vals)]
+        # Turnover rate = (new + retired) / active
+        turnover_rate = [
+            (n + r) / a * 100 if a > 0 else 0
+            for n, r, a in zip(new_ent_vals, retired_vals, active_vals)
+        ]
+
+        fig14 = make_subplots(
+            rows=3, cols=1,
+            subplot_titles=[
+                "現役・新規・引退の絶対数",
+                "純増数（新規 − 引退）",
+                "入れ替わり率 = (新規+引退) / 現役 [%]",
+            ],
+            vertical_spacing=0.1,
+            row_heights=[0.5, 0.25, 0.25],
+        )
+
+        # Upper: absolute counts
+        fig14.add_trace(go.Scatter(
+            x=DEMAND_YEARS, y=active_vals,
+            name="現役スタッフ数", mode="lines",
+            line=dict(color="#4CC9F0", width=2.5),
+            fill="tozeroy", fillcolor="rgba(76,201,240,0.08)",
+            hovertemplate="%{x}年 現役: %{y:,.0f}人<extra></extra>",
+        ), row=1, col=1)
+        fig14.add_trace(go.Bar(
+            x=DEMAND_YEARS, y=new_ent_vals,
+            name="新規参入", marker_color="#06D6A0", opacity=0.8,
+            hovertemplate="%{x}年 新規: %{y:,.0f}人<extra></extra>",
+        ), row=1, col=1)
+        fig14.add_trace(go.Bar(
+            x=DEMAND_YEARS, y=[-v for v in retired_vals],
+            name="引退/離脱", marker_color="#FF6B35", opacity=0.8,
+            hovertemplate="%{x}年 引退: %{y:,.0f}人<extra></extra>",
+        ), row=1, col=1)
+
+        # Middle: net change
+        net_colors = ["#06D6A0" if v >= 0 else "#FF6B35" for v in net_change]
+        fig14.add_trace(go.Bar(
+            x=DEMAND_YEARS, y=net_change,
+            name="純増数",
+            marker_color=net_colors,
+            hovertemplate="%{x}年 純増: %{y:+,.0f}人<extra></extra>",
+        ), row=2, col=1)
+        fig14.add_hline(y=0, line_dash="dot", line_color="rgba(255,255,255,0.3)", row=2, col=1)
+
+        # Lower: turnover rate
+        fig14.add_trace(go.Scatter(
+            x=DEMAND_YEARS, y=turnover_rate,
+            name="入れ替わり率", mode="lines+markers",
+            line=dict(color="#f093fb", width=2),
+            marker=dict(size=4),
+            hovertemplate="%{x}年 入替率: %{y:.1f}%<extra></extra>",
+        ), row=3, col=1)
+
+        # Demand shift milestones
+        for marker_yr, label in [(2000, "デジタル化"), (2015, "配信台頭"), (2020, "COVID")]:
+            for rn in [1, 2, 3]:
+                fig14.add_vline(
+                    x=marker_yr, line_dash="dot",
+                    line_color="rgba(255,255,255,0.25)", row=rn, col=1,
+                )
+
+        fig14.update_layout(
+            title_text="現役・引退・新規の時系列 — 人材パイプライン動態",
+            barmode="overlay",
+            legend=dict(orientation="h", y=-0.06),
+        )
+        fig14.update_yaxes(title_text="人数", row=1, col=1)
+        fig14.update_yaxes(title_text="純増（人）", row=2, col=1)
+        fig14.update_yaxes(title_text="率（%）", row=3, col=1)
+        body += plotly_div_safe(fig14, "turnover-chart", height=740)
+
+        # Key findings
+        # Find year of max new entrants and max retirements
+        max_new_yr = DEMAND_YEARS[new_ent_vals.index(max(new_ent_vals))]
+        max_new_v = max(new_ent_vals)
+        max_ret_yr = DEMAND_YEARS[retired_vals.index(max(retired_vals))]
+        max_ret_v = max(retired_vals)
+        max_turn_yr = DEMAND_YEARS[turnover_rate.index(max(turnover_rate))]
+        max_turn_v = max(turnover_rate)
+
+        # Net change in post-streaming era
+        streaming_net = sum(net_change[i] for i, yr in enumerate(DEMAND_YEARS) if 2015 <= yr <= 2023)
+
+        body += key_findings([
+            f"新規参入ピーク: {max_new_yr}年 ({max_new_v:,.0f}人) — "
+            "配信台頭期の需要急増が新規流入を押し上げた可能性が高い",
+            f"引退/離脱ピーク: {max_ret_yr}年 ({max_ret_v:,.0f}人) — "
+            "この年に長期活動者の大量リタイアまたは業界縮小が起きた可能性",
+            f"最高入れ替わり率: {max_turn_yr}年 ({max_turn_v:.1f}%) — "
+            "業界の新陳代謝が最も活発だった年",
+            f"配信台頭後（2015〜2023年）の累積純増: {streaming_net:+,.0f}人 — "
+            "この期間の人材蓄積が現在の業界規模の基盤を形成している",
+            "純増がマイナスになる年（引退＞新規）は高齢化・業界縮小の警戒シグナル。"
+            "現在のトレンドが継続した場合、将来の純増推移も推定できる",
+        ])
+    except Exception as e:
+        body += f'<div class="insight-box">Chart 14 生成スキップ: {e}</div>'
+
+    # TOC更新アンカー追加のため再インサート
+    body = body.replace(
+        '<a href="#sec-stream">5. ストック&amp;フロー</a>\n</div>\n</div>',
+        '<a href="#sec-stream">5. ストック&amp;フロー</a>\n'
+        '<a href="#sec-demand">6. 需要ギャップ&amp;人材動態</a>\n</div>\n</div>',
+    )
+
+    body += "</div>"
+
+    # ─────────────────────────────────────────────────────────
     # Glossary terms for this report
     # ─────────────────────────────────────────────────────────
     longitudinal_glossary = dict(COMMON_GLOSSARY_TERMS)
@@ -9527,19 +9976,31 @@ def generate_longitudinal_analysis_report():  # noqa: C901
             "急増した。この需要シフトはcareer_ageベースの分析においても観測可能で、"
             "特定コホートのCompositeスコアや稼働密度に影響を与えている。"
         ),
+        "想定需要ギャップ": (
+            "過去トレンド（1990〜2010年）を線形外挿した「想定クレジット需要」と"
+            "実際のクレジット数の差。ギャップが正＝想定を超える実需があった（配信台頭期に顕著）。"
+        ),
+        "生産性向上節減効果": (
+            "「1990年の生産性（credits/person）のままだった場合に必要だった追加スタッフ数」。"
+            "デジタルツール・制作パイプラインの効率化により実現した工数削減量の推計値。"
+        ),
+        "入れ替わり率": (
+            "（新規参入数 + 引退/離脱数）÷ 現役スタッフ数 × 100。"
+            "高い値は業界の新陳代謝が活発であることを示すが、"
+            "スキルの蓄積・継承リスクを内包する場合もある。"
+        ),
     })
 
     html = wrap_html(
         "縦断的キャリア分析",
-        "相対時間インデックス・OMAクラスタ・レキシス図・MDS・ストック&フローの11チャート",
+        "相対時間・OMAクラスタ・需要ギャップ・生産性・人材動態の14チャート",
         body,
         intro_html=report_intro(
             "縦断的キャリア分析レポート",
-            "デビュー年を0として揃えたcareer_age軸でキャリア軌跡を比較します。"
-            "OMAクラスタリングにより代表的なキャリアパス類型を5種に分類し、"
-            "アリュビアル図・CFD・MDSで遷移構造を多角的に解析。"
-            "ストリームグラフ・ホライズンチャートで需要シフト（配信台頭）が"
-            "役職別クレジット需要と個人稼働密度に与えた影響を可視化します。",
+            "career_age軸でのスパゲッティプロット・レキシス図・OMAクラスタ・アリュビアル図・CFD・"
+            "MDS・ストリームグラフ・ホライズンチャート・ストック&フロー（Section 1〜5）に加え、"
+            "Section 6では「想定需要 vs 実際需要のギャップ」「生産性向上による節減効果」"
+            "「現役・引退・新規の時系列」を分析し、配信台頭が業界構造に与えた影響を定量化します。",
             "スタジオ人事・エージェント・業界研究者・キャリア設計中のスタッフ",
         ),
         glossary_terms=longitudinal_glossary,
