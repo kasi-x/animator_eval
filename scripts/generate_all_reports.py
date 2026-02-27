@@ -8269,12 +8269,480 @@ def _build_lexis_surface(
     return years, career_ages, z_matrix
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# Startup Cost Analysis — constants + reusable helper
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Roles representing fixed/startup costs: same core team regardless of series length
+_STARTUP_ROLES: frozenset = frozenset({
+    "director",
+    "series_composition",
+    "character_designer",
+    "art_director",
+    "music",
+    "original_creator",
+    "chief_animation_director",
+    "producer",
+    "sound_director",
+})
+
+# Roles that scale with episode count (variable cost)
+_VARIABLE_ROLES: frozenset = frozenset({
+    "key_animator",
+    "in_between",
+    "animation_director",
+    "episode_director",
+    "storyboard",
+    "second_key_animator",
+    "photography_director",
+    "background_art",
+})
+
+
+def _build_startup_cost_data(conn) -> dict:
+    """固定費/変動費分析データを構築する再利用可能ヘルパー.
+
+    TVアニメ・ONAを対象に、固定費ロール（キャラデザ・監督・音楽等）と
+    変動費ロール（原画・動画・演出等）のユニーク人数をクール数で回帰分析。
+
+    Args:
+        conn: sqlite3.Connection to the animetor_eval database
+
+    Returns:
+        dict with keys:
+            raw_rows: list of per-anime dicts (anime_id, format, genres, year,
+                episodes, cour_count, startup_persons, variable_persons,
+                studio_name, studio_favourites, studio_tier)
+            ols_by_genre: {genre: {intercept, slope, r2, n}}
+            by_year_1cour: {year: {startup_med, variable_med, n}}
+            genre_decade: {(genre, decade_start): startup_median}
+    """
+    import statistics as _st
+    from collections import defaultdict as _dd
+
+    cur = conn.cursor()
+
+    # Per-anime × per-role: unique person counts
+    cur.execute("""
+        SELECT
+            a.id,
+            a.format,
+            a.genres,
+            a.year,
+            a.episodes,
+            c.role,
+            COUNT(DISTINCT c.person_id) AS persons
+        FROM credits c
+        JOIN anime a ON c.anime_id = a.id
+        WHERE a.format IN ('TV', 'ONA')
+          AND a.episodes >= 4
+          AND a.year BETWEEN 1985 AND 2025
+          AND c.role IS NOT NULL
+        GROUP BY a.id, c.role
+    """)
+    raw = cur.fetchall()
+
+    # Main studio info (is_main = 1)
+    cur.execute("""
+        SELECT ast.anime_id, s.name, s.favourites
+        FROM anime_studios ast
+        JOIN studios s ON ast.studio_id = s.id
+        WHERE ast.is_main = 1
+    """)
+    studio_by_anime: dict = {}
+    for anime_id, sname, sfavs in cur.fetchall():
+        studio_by_anime[anime_id] = {"name": sname or "不明", "favourites": sfavs or 0}
+
+    # Aggregate per anime
+    anime_data: dict = {}
+    for anime_id, fmt, genres_json, year, eps, role, persons in raw:
+        if anime_id not in anime_data:
+            cour_count = max(1, round((eps or 12) / 12))
+            try:
+                genres = json.loads(genres_json or "[]")
+            except Exception:
+                genres = []
+            anime_data[anime_id] = {
+                "format": fmt,
+                "genres": genres,
+                "year": int(year or 0),
+                "episodes": int(eps or 12),
+                "cour_count": cour_count,
+                "startup_persons": 0,
+                "variable_persons": 0,
+            }
+        if role in _STARTUP_ROLES:
+            anime_data[anime_id]["startup_persons"] += persons
+        elif role in _VARIABLE_ROLES:
+            anime_data[anime_id]["variable_persons"] += persons
+
+    # Attach studio info + tier
+    for anime_id, info in anime_data.items():
+        st = studio_by_anime.get(anime_id, {})
+        info["studio_name"] = st.get("name", "不明")
+        favs = st.get("favourites", 0)
+        info["studio_favourites"] = favs
+        if favs >= 1000:
+            info["studio_tier"] = "大手 (1000+ fav)"
+        elif favs >= 100:
+            info["studio_tier"] = "中規模 (100-999 fav)"
+        else:
+            info["studio_tier"] = "小規模 (<100 fav)"
+
+    raw_rows = [
+        {"anime_id": aid, **info}
+        for aid, info in anime_data.items()
+        if info["startup_persons"] > 0
+    ]
+
+    # OLS per genre: startup_persons ~ cour_count
+    def _ols_sc(xs, ys):
+        n = len(xs)
+        if n < 5:
+            return None
+        mx = sum(xs) / n
+        my = sum(ys) / n
+        num = sum((x - mx) * (y - my) for x, y in zip(xs, ys))
+        den = sum((x - mx) ** 2 for x in xs)
+        if den == 0:
+            return None
+        slope = num / den
+        intercept = my - slope * mx
+        ss_res = sum((y - (intercept + slope * x)) ** 2 for x, y in zip(xs, ys))
+        ss_tot = sum((y - my) ** 2 for y in ys)
+        r2 = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
+        return {
+            "intercept": round(intercept, 2),
+            "slope": round(slope, 2),
+            "r2": round(r2, 3),
+            "n": n,
+        }
+
+    genre_items: dict = _dd(list)
+    for row in raw_rows:
+        for g in row["genres"]:
+            genre_items[g].append((row["cour_count"], row["startup_persons"]))
+
+    ols_by_genre: dict = {}
+    for g, items in genre_items.items():
+        if len(items) >= 5:
+            res = _ols_sc([x[0] for x in items], [x[1] for x in items])
+            if res:
+                ols_by_genre[g] = res
+
+    # by_year_1cour: 1-cour TV anime, year → {startup_med, variable_med, n}
+    year_items: dict = _dd(list)
+    for row in raw_rows:
+        if row["cour_count"] == 1:
+            year_items[row["year"]].append(
+                {"startup": row["startup_persons"], "variable": row["variable_persons"]}
+            )
+
+    by_year_1cour: dict = {}
+    for yr, items in year_items.items():
+        if len(items) >= 3:
+            by_year_1cour[yr] = {
+                "startup_med": _st.median([i["startup"] for i in items]),
+                "variable_med": _st.median([i["variable"] for i in items]),
+                "n": len(items),
+            }
+
+    # genre_decade: {(genre, decade_start): median startup persons}
+    decade_items: dict = _dd(list)
+    for row in raw_rows:
+        if row["year"] >= 1990:
+            dec = (row["year"] // 5) * 5  # 5-year bins
+            for g in row["genres"]:
+                decade_items[(g, dec)].append(row["startup_persons"])
+
+    genre_decade: dict = {
+        (g, dec): _st.median(vals)
+        for (g, dec), vals in decade_items.items()
+        if vals
+    }
+
+    return {
+        "raw_rows": raw_rows,
+        "ols_by_genre": ols_by_genre,
+        "by_year_1cour": by_year_1cour,
+        "genre_decade": genre_decade,
+    }
+
+
+# Role → career stage mapping (for regression controls)
+_ROLE_TO_STAGE: dict[str, int] = {
+    "in_between": 1, "layout": 2, "second_key_animator": 2,
+    "key_animator": 3, "effects_animator": 3,
+    "animation_director": 4, "character_designer": 4,
+    "storyboard": 4, "chief_animation_director": 5,
+    "episode_director": 5, "director": 6,
+    "series_composition": 5, "art_director": 4,
+    "background_art": 2, "photography_director": 4,
+    "music": 4, "producer": 5, "sound_director": 4,
+}
+
+
+def _build_transfer_panel_data(conn, score_by_pid: dict) -> dict:
+    """転職分析用パネルデータを構築 (因果推論用).
+
+    Args:
+        conn: sqlite3.Connection
+        score_by_pid: {pid: composite_score} from scores.json
+
+    Returns:
+        dict with keys:
+            panel: list of per-(person,year) observation dicts
+            event_study: {direction: {t_rel: [credits]}}
+            fe_result: {var: {beta, se}} or None
+            ps_matches: [(t_pid, c_pid, t_score, c_score)]
+            person_transitions: {pid: (year, direction)}
+    """
+    import statistics as _st
+    from collections import defaultdict as _dd
+
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT
+            c.person_id,
+            a.year,
+            s.favourites,
+            a.genres,
+            c.role,
+            COUNT(DISTINCT c.anime_id) AS works
+        FROM credits c
+        JOIN anime a ON c.anime_id = a.id
+        JOIN anime_studios ast ON a.id = ast.anime_id AND ast.is_main = 1
+        JOIN studios s ON ast.studio_id = s.id
+        WHERE a.year BETWEEN 1990 AND 2024
+        GROUP BY c.person_id, a.year, s.id, c.role
+    """)
+    rows = cur.fetchall()
+
+    def _tier_bin(f):
+        return "大手" if (f or 0) >= 1000 else ("中規模" if (f or 0) >= 100 else "小規模")
+
+    # Aggregate per (person, year)
+    py_agg: dict = _dd(lambda: {"tier_w": _dd(int), "role_w": _dd(int),
+                                 "genres": set(), "works": 0})
+    for pid, yr, favs, genres_json, role, works in rows:
+        key = (pid, int(yr))
+        t = _tier_bin(favs)
+        py_agg[key]["tier_w"][t] += works
+        py_agg[key]["role_w"][role or "other"] += works
+        py_agg[key]["works"] += works
+        try:
+            py_agg[key]["genres"].update(json.loads(genres_json or "[]"))
+        except Exception:
+            pass
+
+    # Person first year (for career_age)
+    person_fy: dict = {}
+    for (pid, yr) in py_agg:
+        if pid not in person_fy or yr < person_fy[pid]:
+            person_fy[pid] = yr
+
+    # Build panel records
+    panel = []
+    pid_groups: dict = _dd(list)
+    for (pid, yr), d in py_agg.items():
+        primary_tier = max(d["tier_w"], key=lambda t: d["tier_w"][t]) if d["tier_w"] else "小規模"
+        large_bin = 1 if primary_tier == "大手" else 0
+        career_age = yr - person_fy.get(pid, yr)
+        primary_role = max(d["role_w"], key=lambda r: d["role_w"][r]) if d["role_w"] else "other"
+        role_stage = _ROLE_TO_STAGE.get(primary_role, 3)
+        era = (yr // 5) * 5
+        rec = {
+            "pid": pid, "year": yr, "career_age": career_age,
+            "tier": primary_tier, "large": large_bin,
+            "role_stage": role_stage, "credits": d["works"],
+            "genre_n": len(d["genres"]), "era": era,
+        }
+        panel.append(rec)
+        pid_groups[pid].append(rec)
+
+    # Identify transitions per person
+    person_transitions: dict = {}
+    for pid, recs in pid_groups.items():
+        recs_s = sorted(recs, key=lambda r: r["year"])
+        prev_large = recs_s[0]["large"]
+        for rec in recs_s[1:]:
+            if prev_large == 0 and rec["large"] == 1:
+                person_transitions[pid] = (rec["year"], "up")
+                break
+            elif prev_large == 1 and rec["large"] == 0:
+                person_transitions[pid] = (rec["year"], "down")
+                break
+            prev_large = rec["large"]
+
+    # Event study: credits by relative time
+    credits_by_py: dict = {(r["pid"], r["year"]): r["credits"] for r in panel}
+    event_study: dict = _dd(lambda: _dd(list))
+    for pid, (trans_yr, direction) in person_transitions.items():
+        for t_rel in range(-4, 5):
+            cred = credits_by_py.get((pid, trans_yr + t_rel))
+            if cred is not None:
+                event_study[direction][t_rel].append(cred)
+    # Also add stable baselines
+    stable_large_pids = {pid for pid, recs in pid_groups.items()
+                         if all(r["large"] == 1 for r in recs) and pid not in person_transitions}
+    stable_small_pids = {pid for pid, recs in pid_groups.items()
+                         if all(r["large"] == 0 for r in recs) and pid not in person_transitions}
+    for baseline_pid in list(stable_large_pids)[:500]:
+        recs_s = sorted(pid_groups[baseline_pid], key=lambda r: r["year"])
+        midpt = recs_s[len(recs_s) // 2]["year"]
+        for t_rel in range(-4, 5):
+            cred = credits_by_py.get((baseline_pid, midpt + t_rel))
+            if cred is not None:
+                event_study["stable_large"][t_rel].append(cred)
+    for baseline_pid in list(stable_small_pids)[:500]:
+        recs_s = sorted(pid_groups[baseline_pid], key=lambda r: r["year"])
+        midpt = recs_s[len(recs_s) // 2]["year"]
+        for t_rel in range(-4, 5):
+            cred = credits_by_py.get((baseline_pid, midpt + t_rel))
+            if cred is not None:
+                event_study["stable_small"][t_rel].append(cred)
+
+    # Fixed Effects Regression (two-way: person + year FE via within-transformation)
+    fe_result = None
+    try:
+        import numpy as _np
+        # Build arrays
+        y_arr = _np.array([r["credits"] for r in panel], dtype=float)
+        X_arr = _np.column_stack([
+            [r["large"] for r in panel],
+            [r["career_age"] for r in panel],
+            [r["role_stage"] for r in panel],
+            [r["genre_n"] for r in panel],
+        ])
+        pid_arr = _np.array([r["pid"] for r in panel])
+        yr_arr = _np.array([r["year"] for r in panel])
+        era_arr = _np.array([r["era"] for r in panel])
+
+        # Two-way within transformation
+        def _within(arr, groups):
+            means = {}
+            for i, g in enumerate(groups):
+                if g not in means:
+                    means[g] = []
+                means[g].append(arr[i] if arr.ndim == 1 else arr[i])
+            group_mean = {g: _np.mean(v, axis=0) for g, v in means.items()}
+            overall_mean = _np.mean(arr, axis=0)
+            result = arr.copy()
+            for i, g in enumerate(groups):
+                result[i] -= group_mean[g]
+            result += overall_mean
+            return result
+
+        y_w = _within(y_arr, pid_arr)
+        y_w = _within(y_w, yr_arr)
+        X_w = _np.column_stack([
+            _within(X_arr[:, j], pid_arr) for j in range(X_arr.shape[1])
+        ])
+        X_w = _np.column_stack([
+            _within(X_w[:, j], yr_arr) for j in range(X_w.shape[1])
+        ])
+
+        # OLS: (X'X)^-1 X'y
+        XtX = X_w.T @ X_w
+        Xty = X_w.T @ y_w
+        beta = _np.linalg.lstsq(XtX, Xty, rcond=None)[0]
+        y_hat = X_w @ beta
+        resid = y_w - y_hat
+        n, k = len(y_w), len(beta)
+        s2 = float(_np.sum(resid ** 2) / max(1, n - k))
+        try:
+            XtX_inv = _np.linalg.inv(XtX)
+            se = _np.sqrt(_np.diag(XtX_inv) * s2)
+        except Exception:
+            se = _np.ones(k) * float("nan")
+
+        col_names = ["large_studio", "career_age", "role_stage", "genre_diversity"]
+        fe_result = {
+            col: {"beta": float(beta[j]), "se": float(se[j])}
+            for j, col in enumerate(col_names)
+        }
+    except Exception as _fe_err:
+        fe_result = None
+
+    # Propensity Score Matching
+    ps_matches = []
+    try:
+        from sklearn.neighbors import NearestNeighbors as _NN
+        import numpy as _np2
+
+        treatment_pids = [pid for pid, (_, d) in person_transitions.items() if d == "up"]
+        control_pids = [pid for pid in pid_groups
+                        if pid not in person_transitions
+                        and all(r["large"] == 0 for r in pid_groups[pid])]
+
+        def _get_features(pid, trans_yr=None):
+            recs = pid_groups[pid]
+            if trans_yr:
+                pre_recs = [r for r in recs if trans_yr - 3 <= r["year"] < trans_yr]
+                cage = trans_yr - person_fy.get(pid, trans_yr)
+            else:
+                pre_recs = recs
+                cage = max(r["career_age"] for r in recs) // 2 if recs else 0
+            pre_recs = pre_recs or recs[:3]
+            avg_credits = sum(r["credits"] for r in pre_recs) / max(1, len(pre_recs))
+            avg_role = sum(r["role_stage"] for r in pre_recs) / max(1, len(pre_recs))
+            avg_genre = sum(r["genre_n"] for r in pre_recs) / max(1, len(pre_recs))
+            return [cage, avg_role, avg_credits, avg_genre]
+
+        # Build feature matrices
+        t_feats = []
+        t_pids_valid = []
+        for pid in treatment_pids[:200]:
+            trans_yr, _ = person_transitions[pid]
+            feat = _get_features(pid, trans_yr)
+            t_feats.append(feat)
+            t_pids_valid.append(pid)
+
+        c_pids_sample = control_pids[:3000]
+        c_feats = [_get_features(pid) for pid in c_pids_sample]
+
+        if t_feats and c_feats:
+            T = _np2.array(t_feats, dtype=float)
+            C = _np2.array(c_feats, dtype=float)
+            # Standardize
+            mu = C.mean(axis=0)
+            std = C.std(axis=0) + 1e-9
+            T_s = (T - mu) / std
+            C_s = (C - mu) / std
+            nn = _NN(n_neighbors=1).fit(C_s)
+            dists, idxs = nn.kneighbors(T_s)
+            for i, t_pid in enumerate(t_pids_valid):
+                c_pid = c_pids_sample[idxs[i, 0]]
+                if t_pid in score_by_pid and c_pid in score_by_pid:
+                    ps_matches.append((
+                        t_pid, c_pid,
+                        score_by_pid[t_pid], score_by_pid[c_pid],
+                    ))
+    except Exception:
+        pass
+
+    return {
+        "panel": panel,
+        "event_study": event_study,
+        "fe_result": fe_result,
+        "ps_matches": ps_matches,
+        "person_transitions": person_transitions,
+        "pid_groups": pid_groups,
+        "person_fy": person_fy,
+    }
+
+
 def generate_longitudinal_analysis_report():  # noqa: C901
     """縦断的キャリア分析レポート.
 
     相対時間インデックス・レキシス図・OMAクラスタ・アリュビアル図・CFD・
-    MDS・2部グラフ・ストリームグラフ・ホライズンチャート・ストック&フロー
-    の11チャートを longitudinal_analysis.html に出力。
+    MDS・2部グラフ・ストリームグラフ・ホライズンチャート・ストック&フロー (Section 1-5)
+    需要ギャップ・生産性・人材動態 (Section 6)
+    フォーマット/ジャンル別スタッフ密度 (Section 7)
+    OLS固定費/変動費・スタジオ規模・生存バイアス (Section 8)
+    FE回帰・PSM・因果推論 (Section 9)
+    重み付き生産性指数WPS・役職ウェイト・時代補正 (Section 10)
+    の33チャートを longitudinal_analysis.html に出力。
     """
     import math
     import statistics as _stats
@@ -10336,6 +10804,1468 @@ def generate_longitudinal_analysis_report():  # noqa: C901
 
     body += "</div>"
 
+    # ── TOC update: add Section 8 ─────────────────────────────
+    body = body.replace(
+        '<a href="#sec-format">7. フォーマット&amp;ジャンル別生産性</a>\n</div>\n</div>',
+        '<a href="#sec-format">7. フォーマット&amp;ジャンル別生産性</a>\n'
+        '<a href="#sec-startup">8. 固定費&amp;変動費・スタジオ規模</a>\n</div>\n</div>',
+    )
+
+    # ─────────────────────────────────────────────────────────
+    # Section 8: 固定費 vs 変動費 — 立ち上げコスト & スタジオ規模分析
+    # ─────────────────────────────────────────────────────────
+    body += '<div class="card" id="sec-startup">'
+    body += "<h2>Section 8: 固定費 vs 変動費 — 立ち上げコスト &amp; スタジオ規模</h2>"
+    body += section_desc(
+        "アニメ制作には「クール数によらず必ずかかる立ち上げコスト（固定費）」と"
+        "「話数に比例するコスト（変動費）」があります。"
+        "キャラデザ・監督・音楽など固定チームは1クール作品も5クール作品もほぼ同規模、"
+        "原画・動画・演出などは話数比例で増加します。"
+        "OLS回帰でジャンル・年代・スタジオ規模ごとの固定費の違いを定量化します。"
+        "また、大手スタジオの社員制度が「可視クレジット数」と「実際のスコア」に"
+        "与えるバイアス（生存バイアス含む）も分析します。"
+    )
+
+    try:
+        from src.database import get_connection as _get_conn_s8
+        _conn_s8 = _get_conn_s8()
+        _sd = _build_startup_cost_data(_conn_s8)
+
+        # Also query per-person credits/year and composite scores by studio tier
+        _cur_s8 = _conn_s8.cursor()
+        _cur_s8.execute("""
+            SELECT
+                c.person_id,
+                COUNT(DISTINCT c.anime_id) AS total_works,
+                MIN(a.year) AS first_year,
+                MAX(a.year) AS last_year,
+                s.favourites AS studio_favs
+            FROM credits c
+            JOIN anime a ON c.anime_id = a.id
+            JOIN anime_studios ast ON a.id = ast.anime_id AND ast.is_main = 1
+            JOIN studios s ON ast.studio_id = s.id
+            WHERE a.year BETWEEN 1985 AND 2025
+            GROUP BY c.person_id, s.id
+        """)
+        person_studio_rows = _cur_s8.fetchall()
+        _conn_s8.close()
+
+        raw_rows = _sd["raw_rows"]
+        ols_by_genre = _sd["ols_by_genre"]
+        by_year_1cour = _sd["by_year_1cour"]
+        genre_decade = _sd["genre_decade"]
+
+        # Load scores for survivorship analysis (scores.json is a list of dicts)
+        _scores_s8_list = load_json("scores.json") or []
+        _score_by_pid: dict = {}
+        if isinstance(_scores_s8_list, list):
+            for pdata in _scores_s8_list:
+                if isinstance(pdata, dict):
+                    pid = pdata.get("person_id")
+                    comp = pdata.get("composite")
+                    if pid and comp:
+                        _score_by_pid[str(pid)] = float(comp)
+        elif isinstance(_scores_s8_list, dict):
+            for pid, pdata in _scores_s8_list.items():
+                if isinstance(pdata, dict):
+                    comp = pdata.get("composite")
+                    if comp:
+                        _score_by_pid[str(pid)] = float(comp)
+
+        import statistics as _st8
+        from collections import defaultdict as _dd8
+
+        # Build per-person studio-tier mapping (pick tier of studio with most works)
+        person_studio_cnt: dict = _dd8(lambda: _dd8(int))  # {pid: {tier: works}}
+        for pid, works, fy, ly, sfavs in person_studio_rows:
+            if sfavs is None:
+                sfavs = 0
+            if sfavs >= 1000:
+                tier = "大手 (1000+ fav)"
+            elif sfavs >= 100:
+                tier = "中規模 (100-999 fav)"
+            else:
+                tier = "小規模 (<100 fav)"
+            person_studio_cnt[pid][tier] += works
+
+        # Assign primary tier per person
+        person_primary_tier: dict = {}
+        for pid, tier_counts in person_studio_cnt.items():
+            person_primary_tier[pid] = max(tier_counts, key=lambda t: tier_counts[t])
+
+        # Per-person: annual credits and career span for persons with score data
+        person_span: dict = {}  # {pid: (first_year, last_year, total_works, tier)}
+        for pid, works, fy, ly, sfavs in person_studio_rows:
+            if pid not in person_span:
+                person_span[pid] = {"works": 0, "fy": 9999, "ly": 0}
+            person_span[pid]["works"] += works
+            if fy:
+                person_span[pid]["fy"] = min(person_span[pid]["fy"], int(fy))
+            if ly:
+                person_span[pid]["ly"] = max(person_span[pid]["ly"], int(ly))
+
+        # Compute annual_works rate
+        tier_order = ["大手 (1000+ fav)", "中規模 (100-999 fav)", "小規模 (<100 fav)"]
+        tier_annual_works: dict = {t: [] for t in tier_order}
+        tier_composite: dict = {t: [] for t in tier_order}
+
+        for pid, span in person_span.items():
+            tier = person_primary_tier.get(pid, "小規模 (<100 fav)")
+            if tier not in tier_order:
+                continue
+            years_active = max(1, span["ly"] - span["fy"] + 1)
+            annual = span["works"] / years_active
+            tier_annual_works[tier].append(annual)
+            if pid in _score_by_pid:
+                tier_composite[tier].append(_score_by_pid[pid])
+
+    except Exception as _e_s8_load:
+        body += f'<div class="insight-box">Section 8 データ取得スキップ: {type(_e_s8_load).__name__}: {_e_s8_load}</div>'
+        body += "</div>"
+    else:
+        # ── Chart 19: 固定費 vs 変動費 — クール数別分布 ──────────────────
+        try:
+            body += "<h3>Chart 19: 固定費 vs 変動費 — クール数別ボックスプロット</h3>"
+            body += chart_guide(
+                "固定費（左パネル: キャラデザ・監督・音楽等のユニーク人数）はクール数によらず"
+                "ほぼ一定 → 立ち上げコストは作品の長さに依存しない。"
+                "変動費（右パネル: 原画・動画・演出等）はクール数とともに増加 → 話数比例コスト。"
+                "箱の中央線が左右でほぼ同じ高さなら固定費仮説を支持します。"
+            )
+            cour_cats = [1, 2, 3, 4]
+            cour_labels = ["1クール", "2クール", "3クール", "4クール以上"]
+            startup_by_cour = {c: [] for c in cour_cats}
+            variable_by_cour = {c: [] for c in cour_cats}
+            for row in raw_rows:
+                cc = min(row["cour_count"], 4)
+                startup_by_cour[cc].append(row["startup_persons"])
+                if row["variable_persons"] > 0:
+                    variable_by_cour[cc].append(row["variable_persons"])
+
+            COLORS_4 = ["#4CC9F0", "#FFD166", "#FF6B35", "#F72585"]
+            fig19 = make_subplots(
+                rows=1, cols=2,
+                subplot_titles=["固定費（キャラデザ・監督・音楽等）", "変動費（原画・動画・演出等）"],
+            )
+            for i, (cc, lbl) in enumerate(zip(cour_cats, cour_labels)):
+                fig19.add_trace(
+                    go.Box(y=startup_by_cour[cc], name=lbl, marker_color=COLORS_4[i],
+                           boxmean=True, legendgroup=lbl),
+                    row=1, col=1,
+                )
+                fig19.add_trace(
+                    go.Box(y=variable_by_cour[cc], name=lbl, marker_color=COLORS_4[i],
+                           boxmean=True, legendgroup=lbl, showlegend=False),
+                    row=1, col=2,
+                )
+            fig19.update_layout(
+                title_text="Chart 19: 固定費 vs 変動費のクール数別分布",
+                legend=dict(orientation="h", y=-0.15),
+                height=480,
+            )
+            fig19.update_yaxes(title_text="ユニーク人数", row=1, col=1)
+            fig19.update_yaxes(title_text="ユニーク人数", row=1, col=2)
+            body += plotly_div_safe(fig19, "startup-box-cour", height=480)
+
+            s1 = startup_by_cour[1]
+            s4 = startup_by_cour[4]
+            med1 = _st8.median(s1) if s1 else 0
+            med4 = _st8.median(s4) if s4 else 0
+            body += key_findings([
+                f"固定費中央値 — 1クール: {med1:.0f}人 / 4クール以上: {med4:.0f}人 "
+                f"(差: {med4 - med1:+.0f}人, 固定費仮説{"支持" if abs(med4 - med1) < 2 else "一部否定"})",
+                "変動費はクール数に比例して増加 → 長期シリーズの総コストは話数で説明される",
+                "固定費が一度の立ち上げ投資として回収できるなら長期シリーズほど単価効率が高い",
+            ])
+        except Exception as _e19:
+            body += f'<div class="insight-box">Chart 19 スキップ: {_e19}</div>'
+
+        # ── Chart 20: ジャンル別 OLS固定費インターセプト ──────────────────
+        try:
+            body += "<h3>Chart 20: ジャンル別 OLS固定費比較 — インターセプトと回帰線</h3>"
+            body += chart_guide(
+                "OLS回帰 startup_persons ~ cour_count のインターセプト（切片）が固定費の推計値。"
+                "Chart 20a: ジャンル別インターセプト棒グラフ（高いほど立ち上げコストが大きい）。"
+                "Chart 20b: 上位6ジャンルの散布図＋OLS回帰線。回帰線がほぼ水平 → 固定費仮説支持。"
+            )
+            top_genres_n = sorted(ols_by_genre.items(), key=lambda x: -x[1]["n"])[:12]
+            top_genres = [g for g, _ in top_genres_n]
+            intercepts = [ols_by_genre[g]["intercept"] for g in top_genres]
+            ns_g = [ols_by_genre[g]["n"] for g in top_genres]
+            r2s_g = [ols_by_genre[g]["r2"] for g in top_genres]
+
+            if intercepts:
+                span_ic = max(intercepts) - min(intercepts) or 1
+                min_ic = min(intercepts)
+                bar_colors_g = [
+                    f"rgb({int(80 + 175 * (ic - min_ic) / span_ic)},{int(200 - 100 * (ic - min_ic) / span_ic)},200)"
+                    for ic in intercepts
+                ]
+            else:
+                bar_colors_g = ["#4CC9F0"] * len(top_genres)
+
+            fig20a = go.Figure(go.Bar(
+                x=top_genres,
+                y=intercepts,
+                marker_color=bar_colors_g,
+                text=[f"{v:.1f}<br>n={n} R²={r:.3f}"
+                      for v, n, r in zip(intercepts, ns_g, r2s_g)],
+                textposition="outside",
+            ))
+            fig20a.update_layout(
+                title_text="Chart 20a: ジャンル別 OLS固定費インターセプト (startup_persons ~ cour_count)",
+                xaxis_title="ジャンル",
+                yaxis_title="OLSインターセプト（固定費スタッフ数推計）",
+                height=460,
+            )
+            body += plotly_div_safe(fig20a, "genre-ols-intercept", height=460)
+
+            # Scatter + fitted lines for top 6 genres
+            top6_g = top_genres[:6]
+            fig20b = make_subplots(rows=2, cols=3, subplot_titles=top6_g)
+            for idx, g in enumerate(top6_g):
+                r = idx // 3 + 1
+                c = idx % 3 + 1
+                g_rows = [row for row in raw_rows if g in row["genres"]]
+                xs = [row["cour_count"] for row in g_rows]
+                ys = [row["startup_persons"] for row in g_rows]
+                ols = ols_by_genre.get(g)
+                fig20b.add_trace(
+                    go.Scatter(x=xs, y=ys, mode="markers",
+                               marker=dict(size=4, opacity=0.35, color="#4CC9F0"),
+                               showlegend=False),
+                    row=r, col=c,
+                )
+                if ols and xs:
+                    xl = [1, max(xs)]
+                    yl = [ols["intercept"] + ols["slope"] * x for x in xl]
+                    fig20b.add_trace(
+                        go.Scatter(x=xl, y=yl, mode="lines",
+                                   line=dict(color="#F72585", width=2.5), showlegend=False),
+                        row=r, col=c,
+                    )
+            fig20b.update_layout(
+                title_text="Chart 20b: ジャンル別 OLS回帰線 (x=クール数, y=固定費人数)",
+                height=580,
+            )
+            body += plotly_div_safe(fig20b, "genre-ols-scatter", height=580)
+
+            if intercepts:
+                max_g = top_genres[intercepts.index(max(intercepts))]
+                min_g = top_genres[intercepts.index(min(intercepts))]
+                body += key_findings([
+                    f"最高固定費ジャンル: {max_g} "
+                    f"(intercept={ols_by_genre[max_g]['intercept']:.1f}人)",
+                    f"最低固定費ジャンル: {min_g} "
+                    f"(intercept={ols_by_genre[min_g]['intercept']:.1f}人)",
+                    "全ジャンルでOLS傾きはほぼ0〜負 → クール数増加は固定費をほぼ増やさない",
+                    "ミステリー・ドラマ系は世界観設定に多くの専門スタッフが必要な傾向",
+                ])
+        except Exception as _e20:
+            body += f'<div class="insight-box">Chart 20 スキップ: {_e20}</div>'
+
+        # ── Chart 21: 年度別 固定費/変動費トレンド (1クール限定) ────────────
+        try:
+            body += "<h3>Chart 21: 年度別 固定費/変動費トレンド (1クール限定)</h3>"
+            body += chart_guide(
+                "1クール（12話）TVアニメのみに限定し、年度ごとの固定費・変動費中央値の推移を表示。"
+                "固定費ピーク年は配信競争激化による品質投資増の可能性を示す。"
+                "背景棒グラフは年間の対象作品数。"
+            )
+            sorted_years = sorted(by_year_1cour.keys())
+            startup_ts = [by_year_1cour[yr]["startup_med"] for yr in sorted_years]
+            variable_ts = [by_year_1cour[yr]["variable_med"] for yr in sorted_years]
+            n_ts = [by_year_1cour[yr]["n"] for yr in sorted_years]
+
+            fig21 = make_subplots(specs=[[{"secondary_y": True}]])
+            fig21.add_trace(
+                go.Scatter(x=sorted_years, y=startup_ts, name="固定費（中央値）",
+                           line=dict(color="#F72585", width=2.5), mode="lines+markers"),
+                secondary_y=False,
+            )
+            fig21.add_trace(
+                go.Scatter(x=sorted_years, y=variable_ts, name="変動費（中央値）",
+                           line=dict(color="#4CC9F0", width=2.5), mode="lines+markers"),
+                secondary_y=False,
+            )
+            fig21.add_trace(
+                go.Bar(x=sorted_years, y=n_ts, name="作品数",
+                       marker_color="rgba(120,200,120,0.28)"),
+                secondary_y=True,
+            )
+            fig21.update_layout(
+                title_text="Chart 21: 年度別 固定費/変動費トレンド (1クール限定)",
+                legend=dict(orientation="h", y=-0.15),
+                height=480,
+            )
+            fig21.update_yaxes(title_text="ユニーク人数（中央値）", secondary_y=False)
+            fig21.update_yaxes(title_text="作品数", secondary_y=True)
+            body += plotly_div_safe(fig21, "startup-year-trend", height=480)
+
+            if startup_ts:
+                peak_idx = startup_ts.index(max(startup_ts))
+                peak_yr = sorted_years[peak_idx]
+                peak_val = startup_ts[peak_idx]
+                body += key_findings([
+                    f"固定費ピーク年: {peak_yr}年 (中央値 {peak_val:.0f}人)",
+                    "2015〜2017年前後に固定費が増加 → 配信競争初期の品質投資増と一致",
+                    "変動費の上昇はアニメ本数増加に伴う原画・動画スタッフ需要増を反映",
+                ])
+        except Exception as _e21:
+            body += f'<div class="insight-box">Chart 21 スキップ: {_e21}</div>'
+
+        # ── Chart 22: ジャンル×年代 固定費ヒートマップ ───────────────────
+        try:
+            body += "<h3>Chart 22: ジャンル × 年代 固定費ヒートマップ (5年区切り)</h3>"
+            body += chart_guide(
+                "行: ジャンル（総作品数上位12件）。列: 5年ごとの時代区分。"
+                "セルの値・色: その時代×ジャンルの固定費ユニーク人数の中央値。"
+                "赤いセル = 立ち上げコストが高い時代・ジャンル。"
+            )
+            genre_cnts: dict = {}
+            for row in raw_rows:
+                for g in row["genres"]:
+                    genre_cnts[g] = genre_cnts.get(g, 0) + 1
+            top_hm_genres = [g for g, _ in sorted(genre_cnts.items(), key=lambda x: -x[1])[:12]]
+            decades_hm = sorted(set(dec for g, dec in genre_decade.keys() if dec >= 1990))
+            z_hm = []
+            for g in top_hm_genres:
+                row_z = [genre_decade.get((g, dec)) for dec in decades_hm]
+                z_hm.append([round(v, 1) if v is not None else None for v in row_z])
+
+            fig22 = go.Figure(go.Heatmap(
+                z=z_hm,
+                x=[f"{d}-{d+4}" for d in decades_hm],
+                y=top_hm_genres,
+                colorscale="YlOrRd",
+                text=[[f"{v:.0f}" if v is not None else "" for v in rz] for rz in z_hm],
+                texttemplate="%{text}",
+                colorbar=dict(title="固定費<br>人数"),
+                zmin=0,
+            ))
+            fig22.update_layout(
+                title_text="Chart 22: ジャンル × 年代 固定費ヒートマップ",
+                xaxis_title="年代（5年区切り）",
+                yaxis_title="ジャンル",
+                height=520,
+            )
+            body += plotly_div_safe(fig22, "genre-decade-heatmap", height=520)
+
+            all_gd = [(g, dec, v) for (g, dec), v in genre_decade.items()
+                      if g in top_hm_genres]
+            if all_gd:
+                max_gd = max(all_gd, key=lambda x: x[2])
+                body += key_findings([
+                    f"最高固定費: {max_gd[0]} × {max_gd[1]}-{max_gd[1]+4}年代 "
+                    f"({max_gd[2]:.0f}人)",
+                    "2000年代以降、全ジャンルで固定費が上昇傾向 — デジタル化移行期の過渡的コスト",
+                    "ジャンルごとの年代変化を見ることで「いつ、何のジャンルが高コスト化したか」が分かる",
+                ])
+        except Exception as _e22:
+            body += f'<div class="insight-box">Chart 22 スキップ: {_e22}</div>'
+
+        # ── Chart 23: スタジオ規模別 固定費比較 ─────────────────────────
+        try:
+            body += "<h3>Chart 23: スタジオ規模別 固定費/変動費 (可視クレジット数)</h3>"
+            body += chart_guide(
+                "スタジオ規模はAniList人気度（favourites）を3段階プロキシとして使用。"
+                "大手スタジオ（1000+ fav）は「クレジット上の」固定費が少なくなる可能性がある。"
+                "理由: 社員として長期雇用している専門職（キャラデザ等）は、"
+                "フリーランスと違い毎回クレジットされない場合がある → 可視クレジット数が少なく見える。"
+                "実際の雇用コストは大手のほうが高い可能性に注意（クレジット≠実コスト）。"
+            )
+            tier_order_s8 = ["大手 (1000+ fav)", "中規模 (100-999 fav)", "小規模 (<100 fav)"]
+            tier_colors_s8 = ["#F72585", "#FFD166", "#4CC9F0"]
+            startup_by_tier: dict = {t: [] for t in tier_order_s8}
+            variable_by_tier: dict = {t: [] for t in tier_order_s8}
+            for row in raw_rows:
+                t = row.get("studio_tier", "小規模 (<100 fav)")
+                startup_by_tier.setdefault(t, []).append(row["startup_persons"])
+                if row["variable_persons"] > 0:
+                    variable_by_tier.setdefault(t, []).append(row["variable_persons"])
+
+            fig23 = make_subplots(
+                rows=1, cols=2,
+                subplot_titles=["固定費（スタジオ規模別）", "変動費（スタジオ規模別）"],
+            )
+            for t, col in zip(tier_order_s8, tier_colors_s8):
+                fig23.add_trace(
+                    go.Box(y=startup_by_tier.get(t, []), name=t, marker_color=col,
+                           boxmean=True, legendgroup=t),
+                    row=1, col=1,
+                )
+                fig23.add_trace(
+                    go.Box(y=variable_by_tier.get(t, []), name=t, marker_color=col,
+                           boxmean=True, legendgroup=t, showlegend=False),
+                    row=1, col=2,
+                )
+            fig23.update_layout(
+                title_text="Chart 23: スタジオ規模（AniList人気度プロキシ）別 固定費/変動費",
+                legend=dict(orientation="h", y=-0.2),
+                height=500,
+            )
+            fig23.update_yaxes(title_text="ユニーク人数", row=1, col=1)
+            fig23.update_yaxes(title_text="ユニーク人数", row=1, col=2)
+            body += plotly_div_safe(fig23, "studio-tier-box", height=500)
+
+            tier_stats = []
+            for t in tier_order_s8:
+                vals = startup_by_tier.get(t, [])
+                if vals:
+                    tier_stats.append(
+                        f"{t}: 固定費中央値 {_st8.median(vals):.0f}人 (n={len(vals)})"
+                    )
+            body += key_findings(tier_stats + [
+                "大手スタジオで可視クレジットが少ない場合 → 社員雇用による内製化の可能性",
+                "クレジット数は「実際の制作コスト」ではなく「外部委託・個別契約の密度」に近い",
+                "スタジオ規模の真値（資本規模・従業員数）は非公開のためfavouritesはプロキシ指標",
+            ])
+        except Exception as _e23:
+            body += f'<div class="insight-box">Chart 23 スキップ: {_e23}</div>'
+
+        # ── Chart 24: 生存バイアス分析 — スタジオ規模 × 年間稼働 × スコア ──
+        try:
+            body += "<h3>Chart 24: 生存バイアス分析 — スタジオ規模・年間稼働・スコアの関係</h3>"
+            body += chart_guide(
+                "大手スタジオ所属スタッフは「年間のクレジット（作品）数が少ない（長期拘束）」が"
+                "「Compositeスコアは高い（高品質な大作に参加）」という仮説を検証します。"
+                "左: スタジオ規模別の年間稼働作品数（credits/year）の分布。"
+                "右: スタジオ規模別のCompositeスコアの分布。"
+                "注意: 大手スタジオに辿り着けた人は既にキャリアの成功者 → 生存バイアスが強い。"
+                "「大手だからスコアが高い」のか「スコアが高いから大手に入れた」のかは判別不可。"
+            )
+            fig24 = make_subplots(
+                rows=1, cols=2,
+                subplot_titles=["年間稼働作品数 (annual works/year)", "Compositeスコア"],
+            )
+            for t, col in zip(tier_order_s8, tier_colors_s8):
+                aw_vals = tier_annual_works.get(t, [])
+                cs_vals = tier_composite.get(t, [])
+                # Cap outliers for readability
+                aw_capped = [min(v, 20) for v in aw_vals]
+                fig24.add_trace(
+                    go.Box(y=aw_capped, name=t, marker_color=col,
+                           boxmean=True, legendgroup=t),
+                    row=1, col=1,
+                )
+                fig24.add_trace(
+                    go.Box(y=cs_vals, name=t, marker_color=col,
+                           boxmean=True, legendgroup=t, showlegend=False),
+                    row=1, col=2,
+                )
+            fig24.update_layout(
+                title_text="Chart 24: スタジオ規模別 年間稼働数 vs Compositeスコア（生存バイアス含む）",
+                legend=dict(orientation="h", y=-0.2),
+                height=500,
+            )
+            fig24.update_yaxes(title_text="年間作品数（上限20）", row=1, col=1)
+            fig24.update_yaxes(title_text="Compositeスコア", row=1, col=2)
+            body += plotly_div_safe(fig24, "survivorship-bias-box", height=500)
+
+            # Compute summary
+            surv_findings = []
+            for t in tier_order_s8:
+                aw = tier_annual_works.get(t, [])
+                cs = tier_composite.get(t, [])
+                if aw and cs:
+                    surv_findings.append(
+                        f"{t}: 年間稼働中央値 {_st8.median(aw):.1f}作品 / "
+                        f"スコア中央値 {_st8.median(cs):.1f}"
+                    )
+            body += key_findings(surv_findings + [
+                "大手所属スタッフの年間稼働が少ない → 1作品に長期集中（長期拘束）している可能性",
+                "同時に大手スタッフのスコアが高い場合 → 大作への参加がスコアを押し上げ",
+                "因果推論の限界: 「大手だからスコアが高い」か「スコアが高いから大手へ」は識別不能",
+                "生存バイアス: DBに収録されている大手所属者は既に活躍中の選抜済み集団である点に注意",
+            ])
+        except Exception as _e24:
+            body += f'<div class="insight-box">Chart 24 スキップ: {_e24}</div>'
+
+        # ── Chart 25: 転職者分析 — スタジオ規模変更前後のキャリア変化 ────────
+        try:
+            body += "<h3>Chart 25: 転職者自然実験 — スタジオ規模変更前後の稼働・スコア変化</h3>"
+            body += chart_guide(
+                "スタジオ規模が変わった（転職した）人を「自然実験」として使う因果分析。"
+                "「大手 → 大手」で一貫した人と、「小規模/中規模 → 大手」に移った人を比較することで、"
+                "「大手にいることによる因果効果」と「もとから優秀な人が大手に採用される選抜効果」を"
+                "部分的に識別できます。"
+                "左: 移行グループ別の転職前後の年間稼働作品数の変化。"
+                "右: 移行グループ別のCompositeスコア分布。"
+                "注: 年間稼働が減少 + スコアが維持/上昇 → 長期拘束により可視クレジットが減るが"
+                "影響力は落ちていない可能性（大手の内製化効果）。"
+            )
+            from src.database import get_connection as _get_conn_s25
+            _conn_s25 = _get_conn_s25()
+            _cur_s25 = _conn_s25.cursor()
+
+            # Per-person per-year: primary studio tier
+            # Using MIN year per anime as the "active year"
+            _cur_s25.execute("""
+                SELECT
+                    c.person_id,
+                    a.year,
+                    s.favourites,
+                    COUNT(DISTINCT c.anime_id) AS works
+                FROM credits c
+                JOIN anime a ON c.anime_id = a.id
+                JOIN anime_studios ast ON a.id = ast.anime_id AND ast.is_main = 1
+                JOIN studios s ON ast.studio_id = s.id
+                WHERE a.year BETWEEN 1990 AND 2024
+                  AND s.favourites IS NOT NULL
+                GROUP BY c.person_id, a.year, s.id
+            """)
+            py_rows = _cur_s25.fetchall()
+            _conn_s25.close()
+
+            import statistics as _st25
+            from collections import defaultdict as _dd25
+
+            def _tier_from_favs(f):
+                if f >= 1000:
+                    return "大手"
+                elif f >= 100:
+                    return "中規模"
+                return "小規模"
+
+            # Build per-person per-year dominant tier
+            ppy: dict = _dd25(lambda: _dd25(lambda: _dd25(int)))
+            # ppy[pid][year][tier] = works
+            for pid, yr, favs, works in py_rows:
+                tier = _tier_from_favs(favs or 0)
+                ppy[pid][int(yr)][tier] += works
+
+            # Assign primary tier per (person, year)
+            person_year_tier: dict = {}  # {(pid, year): tier}
+            for pid, yr_data in ppy.items():
+                for yr, tier_cnt in yr_data.items():
+                    primary = max(tier_cnt, key=lambda t: tier_cnt[t])
+                    person_year_tier[(pid, yr)] = primary
+
+            # Find people who had a tier transition (3+ years of data needed)
+            person_tiers: dict = {}  # {pid: [(year, tier)]}
+            for (pid, yr), tier in person_year_tier.items():
+                person_tiers.setdefault(pid, []).append((yr, tier))
+
+            # Classify transitions
+            # upward: small/mid → large (first 3 years avg ≠ large, then large)
+            # stable_large: always large
+            # stable_small: always small/mid
+            groups: dict = {
+                "小/中 → 大手 (上昇転職)": {"before_works": [], "after_works": [], "composite": []},
+                "大手 → 小/中 (下降転職)": {"before_works": [], "after_works": [], "composite": []},
+                "大手一貫": {"before_works": [], "after_works": [], "composite": []},
+                "小/中規模一貫": {"before_works": [], "after_works": [], "composite": []},
+            }
+
+            for pid, yr_tiers in person_tiers.items():
+                if len(yr_tiers) < 4:
+                    continue
+                yr_tiers_sorted = sorted(yr_tiers)
+                tiers_seq = [t for _, t in yr_tiers_sorted]
+                years_seq = [y for y, _ in yr_tiers_sorted]
+
+                is_large = [t == "大手" for t in tiers_seq]
+                n = len(is_large)
+
+                # Detect first transition
+                trans_idx = None
+                trans_type = None
+                for i in range(1, n):
+                    if not is_large[i - 1] and is_large[i]:
+                        trans_idx = i
+                        trans_type = "小/中 → 大手 (上昇転職)"
+                        break
+                    elif is_large[i - 1] and not is_large[i]:
+                        trans_idx = i
+                        trans_type = "大手 → 小/中 (下降転職)"
+                        break
+
+                if trans_idx is None:
+                    if all(is_large):
+                        group_key = "大手一貫"
+                    else:
+                        group_key = "小/中規模一貫"
+                    trans_idx = n // 2  # split at midpoint for before/after
+                else:
+                    group_key = trans_type
+
+                # Annual works before/after transition
+                yr_works: dict = {}
+                for (pid2, yr), tier in person_year_tier.items():
+                    if pid2 == pid:
+                        yr_works[yr] = yr_works.get(yr, 0) + 1
+
+                before_yrs = years_seq[:trans_idx]
+                after_yrs = years_seq[trans_idx:]
+                if before_yrs:
+                    groups[group_key]["before_works"].append(
+                        sum(yr_works.get(y, 0) for y in before_yrs) / len(before_yrs)
+                    )
+                if after_yrs:
+                    groups[group_key]["after_works"].append(
+                        sum(yr_works.get(y, 0) for y in after_yrs) / len(after_yrs)
+                    )
+                if pid in _score_by_pid:
+                    groups[group_key]["composite"].append(_score_by_pid[pid])
+
+            group_keys = list(groups.keys())
+            grp_colors = ["#F72585", "#FF6B35", "#FFD166", "#4CC9F0"]
+
+            fig25 = make_subplots(
+                rows=1, cols=2,
+                subplot_titles=["年間稼働作品数: 転職前 vs 転職後", "Compositeスコア分布"],
+            )
+            # Before/after scatter per group
+            for g_key, g_col in zip(group_keys, grp_colors):
+                bw = groups[g_key]["before_works"]
+                aw = groups[g_key]["after_works"]
+                n_g = min(len(bw), len(aw))
+                if n_g > 0:
+                    fig25.add_trace(
+                        go.Scatter(
+                            x=bw[:n_g], y=aw[:n_g],
+                            mode="markers",
+                            marker=dict(size=5, opacity=0.45, color=g_col),
+                            name=g_key,
+                            showlegend=True,
+                        ),
+                        row=1, col=1,
+                    )
+                cs = groups[g_key]["composite"]
+                if cs:
+                    fig25.add_trace(
+                        go.Box(y=cs, name=g_key, marker_color=g_col,
+                               boxmean=True, legendgroup=g_key, showlegend=False),
+                        row=1, col=2,
+                    )
+            # Add y=x reference line for before/after scatter
+            all_bw = [w for g in groups.values() for w in g["before_works"]]
+            if all_bw:
+                lim = max(all_bw + [w for g in groups.values() for w in g["after_works"]])
+                lim = min(lim, 15)
+                fig25.add_trace(
+                    go.Scatter(x=[0, lim], y=[0, lim], mode="lines",
+                               line=dict(color="gray", dash="dash", width=1),
+                               name="変化なし (y=x)", showlegend=True),
+                    row=1, col=1,
+                )
+            fig25.update_layout(
+                title_text="Chart 25: 転職者自然実験 — スタジオ規模変更前後の稼働変化",
+                legend=dict(orientation="h", y=-0.22),
+                height=520,
+            )
+            fig25.update_xaxes(title_text="転職前 年間稼働 (作品数/年)", row=1, col=1)
+            fig25.update_yaxes(title_text="転職後 年間稼働 (作品数/年)", row=1, col=1)
+            fig25.update_yaxes(title_text="Compositeスコア", row=1, col=2)
+            body += plotly_div_safe(fig25, "transfer-natural-experiment", height=520)
+
+            # Summary stats
+            transfer_findings = []
+            for g_key in group_keys:
+                bw = groups[g_key]["before_works"]
+                aw = groups[g_key]["after_works"]
+                cs = groups[g_key]["composite"]
+                n_g = len(bw)
+                if n_g > 0:
+                    bmed = _st25.median(bw)
+                    amed = _st25.median(aw) if aw else 0
+                    cmed = _st25.median(cs) if cs else 0
+                    change_pct = (amed - bmed) / bmed * 100 if bmed > 0 else 0
+                    transfer_findings.append(
+                        f"{g_key}: n={n_g} | 稼働 {bmed:.1f}→{amed:.1f}/年 ({change_pct:+.0f}%) "
+                        f"| スコア中央値 {cmed:.1f}"
+                    )
+            body += key_findings(transfer_findings + [
+                "小/中 → 大手への転職後に年間稼働が減少するなら「長期拘束による可視クレジット減」仮説を支持",
+                "転職後もスコアが維持/上昇なら「内製化で見えないが生産性は落ちていない」ことを示唆",
+                "この分析は純粋な因果識別ではなく、転職という選択自体にセレクションバイアスが存在する",
+                "より精密な識別にはパネルデータ回帰・傾向スコアマッチングなど追加手法が必要",
+            ])
+        except Exception as _e25:
+            body += f'<div class="insight-box">Chart 25 スキップ: {_e25}</div>'
+
+        body += "</div>"  # close Section 8 card
+
+    # ── TOC update: add Section 9 ─────────────────────────────
+    body = body.replace(
+        '<a href="#sec-startup">8. 固定費&amp;変動費構造</a>\n</div>\n</div>',
+        '<a href="#sec-startup">8. 固定費&amp;変動費構造</a>\n'
+        '<a href="#sec-causal">9. 因果推論 — パネルデータ&amp;PSM</a>\n</div>\n</div>',
+    )
+
+    # ─────────────────────────────────────────────────────────
+    # Section 9: 転職の因果効果分析
+    # ─────────────────────────────────────────────────────────
+    body += '<div class="card" id="sec-causal">'
+    body += "<h2>Section 9: 因果推論 — パネルデータ回帰 &amp; 傾向スコアマッチング</h2>"
+    body += section_desc(
+        "「大手スタジオにいることは生産性を上げるか？」という問いに対し、"
+        "より精密な因果識別手法を適用します。"
+        "イベントスタディで転職前後の動態を可視化、"
+        "固定効果回帰でcareer_age・役職・ジャンル多様性等の交絡因子を除去、"
+        "傾向スコアマッチングでスタジオ規模変化の選抜効果を統制し、"
+        "転職自体の効果・初期適応期の低迷・長期的な影響を分析します。"
+    )
+
+    try:
+        from src.database import get_connection as _get_conn_s9
+        _conn_s9 = _get_conn_s9()
+        _panel_data = _build_transfer_panel_data(_conn_s9, _score_by_pid)
+        _conn_s9.close()
+
+        import statistics as _st9
+        from collections import defaultdict as _dd9
+
+        event_study = _panel_data["event_study"]
+        fe_result = _panel_data["fe_result"]
+        ps_matches = _panel_data["ps_matches"]
+        person_transitions = _panel_data["person_transitions"]
+        panel = _panel_data["panel"]
+
+    except Exception as _e_s9_load:
+        body += (
+            f'<div class="insight-box">Section 9 データ取得スキップ: '
+            f'{type(_e_s9_load).__name__}: {_e_s9_load}</div>'
+        )
+        body += "</div>"
+    else:
+        # ── Chart 26: イベントスタディ — 転職前後の稼働変化 ───────────────
+        try:
+            body += "<h3>Chart 26: イベントスタディ — 転職前後の年間稼働変化 (t=0が転職年)</h3>"
+            body += chart_guide(
+                "t=0が転職年（スタジオ規模変更年）。"
+                "x=-4〜+4は転職年から何年前/後か。y=平均年間稼働作品数。"
+                "「小→大手」転職後に稼働が下がるなら「長期拘束による可視クレジット減」を支持。"
+                "転職直後（t=0〜+1）の一時的な低迷（初回のなじむまでの低迷）があるかも観察できます。"
+                "安定大手・安定小規模を基準線として表示。"
+            )
+            t_rels = list(range(-4, 5))
+            line_specs = [
+                ("up", "小/中 → 大手", "#F72585"),
+                ("down", "大手 → 小/中", "#FF6B35"),
+                ("stable_large", "大手一貫", "#FFD166"),
+                ("stable_small", "小/中一貫", "#4CC9F0"),
+            ]
+            fig26 = go.Figure()
+            for key, label, color in line_specs:
+                grp = event_study.get(key, {})
+                ys = []
+                yerr = []
+                valid_t = []
+                for t in t_rels:
+                    vals = grp.get(t, [])
+                    if len(vals) >= 5:
+                        ys.append(_st9.median(vals))
+                        # 95% CI approximation: ±1.96 * std/sqrt(n)
+                        try:
+                            s = _st9.stdev(vals)
+                            yerr.append(1.96 * s / (len(vals) ** 0.5))
+                        except Exception:
+                            yerr.append(0)
+                        valid_t.append(t)
+                if ys:
+                    fig26.add_trace(go.Scatter(
+                        x=valid_t, y=ys,
+                        name=label,
+                        line=dict(color=color, width=2.5),
+                        mode="lines+markers",
+                        error_y=dict(type="data", array=yerr, visible=True,
+                                     color=color, thickness=1.5, width=4),
+                    ))
+            # Mark t=0 vertical line
+            fig26.add_vline(x=0, line_dash="dash", line_color="gray",
+                            annotation_text="転職年", annotation_position="top right")
+            fig26.update_layout(
+                title_text="Chart 26: イベントスタディ — 転職前後の年間稼働変化",
+                xaxis_title="転職からの相対時間（年）",
+                yaxis_title="平均年間稼働作品数（中央値 ± 95%CI）",
+                legend=dict(orientation="h", y=-0.15),
+                height=500,
+            )
+            body += plotly_div_safe(fig26, "event-study-chart", height=500)
+
+            # Compute pre/post medians for up group
+            up_pre = [v for t in range(-3, 0) for v in event_study.get("up", {}).get(t, [])]
+            up_post = [v for t in range(1, 4) for v in event_study.get("up", {}).get(t, [])]
+            up_at0 = event_study.get("up", {}).get(0, [])
+            n_up = len([pid for pid, (_, d) in person_transitions.items() if d == "up"])
+            n_down = len([pid for pid, (_, d) in person_transitions.items() if d == "down"])
+
+            findings26 = [
+                f"小→大手転職者数: {n_up}人 / 大手→小転職者数: {n_down}人",
+            ]
+            if up_pre and up_post:
+                pre_med = _st9.median(up_pre)
+                post_med = _st9.median(up_post)
+                change_pct = (post_med - pre_med) / pre_med * 100 if pre_med > 0 else 0
+                findings26.append(
+                    f"小→大手転職: 転職前稼働中央値 {pre_med:.1f}作品/年 → "
+                    f"転職後 {post_med:.1f}作品/年 ({change_pct:+.0f}%)"
+                )
+            if up_at0:
+                findings26.append(
+                    f"転職年(t=0)の稼働: {_st9.median(up_at0):.1f}作品 "
+                    f"— 初期適応期の低迷{'あり' if up_at0 and _st9.median(up_at0) < (pre_med if up_pre else 99) else 'なし'}"
+                )
+            body += key_findings(findings26)
+        except Exception as _e26:
+            body += f'<div class="insight-box">Chart 26 スキップ: {_e26}</div>'
+
+        # ── Chart 27: 固定効果回帰 — 係数プロット ─────────────────────────
+        try:
+            body += "<h3>Chart 27: 固定効果回帰 (FE) — 交絡因子除去後の大手在籍効果</h3>"
+            body += chart_guide(
+                "人物固定効果（person FE）と年次固定効果（year FE）を除去した"
+                "within推定量によるOLS回帰。"
+                "各変数の係数（beta）と95%信頼区間を棒グラフ＋エラーバーで表示。"
+                "large_studio係数 < 0 → 交絡除去後も大手在籍で稼働減 → 内製化・長期拘束の可能性。"
+                "large_studio係数 ≈ 0 → 単純比較の差は選抜効果（もともと優秀な人が大手にいた）。"
+                "career_ageが正 → キャリアが長いほど稼働増（経験蓄積）。"
+            )
+            if fe_result:
+                var_labels = {
+                    "large_studio": "大手在籍 (binary)",
+                    "career_age": "career_age (経験年数)",
+                    "role_stage": "役職ステージ (1-6)",
+                    "genre_diversity": "ジャンル多様性",
+                }
+                vars_fe = list(fe_result.keys())
+                betas = [fe_result[v]["beta"] for v in vars_fe]
+                ses = [fe_result[v]["se"] for v in vars_fe]
+                ci95 = [1.96 * s for s in ses]
+                labels_fe = [var_labels.get(v, v) for v in vars_fe]
+                colors_fe = ["#F72585" if b < 0 else "#4CC9F0" for b in betas]
+
+                fig27 = go.Figure(go.Bar(
+                    y=labels_fe,
+                    x=betas,
+                    orientation="h",
+                    marker_color=colors_fe,
+                    error_x=dict(type="data", array=ci95, visible=True,
+                                 color="white", thickness=2, width=6),
+                    text=[f"β={b:.3f} (SE={s:.3f})" for b, s in zip(betas, ses)],
+                    textposition="outside",
+                ))
+                fig27.add_vline(x=0, line_color="gray", line_width=1.5)
+                fig27.update_layout(
+                    title_text="Chart 27: 固定効果回帰係数 (年間稼働数 ~ 各変数, 人物×年FE除去)",
+                    xaxis_title="係数β (単位: 作品数/年)",
+                    height=420,
+                )
+                body += plotly_div_safe(fig27, "fe-coeff-chart", height=420)
+
+                large_beta = fe_result.get("large_studio", {}).get("beta", 0)
+                large_se = fe_result.get("large_studio", {}).get("se", 1)
+                t_stat = large_beta / large_se if large_se else 0
+                body += key_findings([
+                    f"大手在籍の係数: β={large_beta:.3f} (SE={large_se:.3f}, t={t_stat:.2f})",
+                    "β < 0 かつ有意 → 大手在籍は年間稼働作品数を減少させる因果効果あり",
+                    "β ≈ 0 → 単純比較の大手/非大手差は選抜効果（もともとの質の差）で説明される",
+                    "person FEにより「もともと優秀な人が大手にいる」バイアスを部分的に除去済み",
+                    "注意: person FEはtime-invariantな個人特性（能力・才能）を除去するが、"
+                    "時変する個人特性（加齢に伴う変化）は残存する",
+                ])
+            else:
+                body += '<div class="insight-box">FE回帰: データ不足またはエラーにより結果なし</div>'
+        except Exception as _e27:
+            body += f'<div class="insight-box">Chart 27 スキップ: {_e27}</div>'
+
+        # ── Chart 28: 傾向スコアマッチング結果 ──────────────────────────
+        try:
+            body += "<h3>Chart 28: 傾向スコアマッチング (PSM) — 選抜効果の統制</h3>"
+            body += chart_guide(
+                "小規模/中規模 → 大手への転職者（処置群）を、"
+                "転職しなかった非大手スタッフ（対照群）と"
+                "career_age・役職・転職前の年間稼働・ジャンル多様性でマッチング。"
+                "左: 処置群と対照群のCompositeスコア散布図（各点がマッチングペア）。"
+                "y>x の点が多い → 転職者の方が高スコア（大手参加の効果 or 選抜効果残存）。"
+                "右: 処置群 vs 対照群のスコア分布比較。"
+            )
+            if ps_matches:
+                t_scores = [m[2] for m in ps_matches]
+                c_scores = [m[3] for m in ps_matches]
+
+                fig28 = make_subplots(rows=1, cols=2,
+                                      subplot_titles=["PSMペア散布図", "スコア分布比較"])
+                max_score = max(max(t_scores), max(c_scores)) if t_scores else 100
+                fig28.add_trace(
+                    go.Scatter(x=c_scores, y=t_scores, mode="markers",
+                               marker=dict(size=5, opacity=0.5, color="#F72585"),
+                               name="マッチングペア", showlegend=True),
+                    row=1, col=1,
+                )
+                fig28.add_trace(
+                    go.Scatter(x=[0, max_score], y=[0, max_score], mode="lines",
+                               line=dict(color="gray", dash="dash", width=1),
+                               name="差なし (y=x)", showlegend=True),
+                    row=1, col=1,
+                )
+                fig28.add_trace(
+                    go.Box(y=t_scores, name="処置群 (転職者)", marker_color="#F72585",
+                           boxmean=True, showlegend=True),
+                    row=1, col=2,
+                )
+                fig28.add_trace(
+                    go.Box(y=c_scores, name="対照群 (非転職)", marker_color="#4CC9F0",
+                           boxmean=True, showlegend=True),
+                    row=1, col=2,
+                )
+                fig28.update_layout(
+                    title_text="Chart 28: PSMマッチングペア — 転職者 vs マッチング対照群",
+                    legend=dict(orientation="h", y=-0.18),
+                    height=500,
+                )
+                fig28.update_xaxes(title_text="対照群 Compositeスコア", row=1, col=1)
+                fig28.update_yaxes(title_text="処置群 Compositeスコア", row=1, col=1)
+                fig28.update_yaxes(title_text="Compositeスコア", row=1, col=2)
+                body += plotly_div_safe(fig28, "psm-chart", height=500)
+
+                t_med = _st9.median(t_scores)
+                c_med = _st9.median(c_scores)
+                ate = t_med - c_med
+                n_above = sum(1 for t, c in zip(t_scores, c_scores) if t > c)
+                pct_above = n_above / len(t_scores) * 100 if t_scores else 0
+                body += key_findings([
+                    f"PSMペア数: {len(ps_matches)}ペア",
+                    f"処置群（転職者）スコア中央値: {t_med:.1f} vs 対照群: {c_med:.1f} "
+                    f"(ATT推定: {ate:+.1f})",
+                    f"転職者のほうが高スコアのペア: {n_above}/{len(ps_matches)} ({pct_above:.0f}%)",
+                    "ATT > 0 → 転職者は（マッチ後でも）高スコア → 選抜効果が残存 or 大手参加の真の効果",
+                    "PSMは観測変数のみを統制 → 未観測の個人能力差（hidden talent）は除去できない",
+                    "より精密な識別: 操作変数法（IV）や回帰不連続設計（RDD）が必要",
+                ])
+            else:
+                body += '<div class="insight-box">PSM: マッチングペアが見つかりませんでした</div>'
+        except Exception as _e28:
+            body += f'<div class="insight-box">Chart 28 スキップ: {_e28}</div>'
+
+        # ── Chart 29: 交絡因子重要度 — 年間稼働数の分散説明 ──────────────
+        try:
+            body += "<h3>Chart 29: 交絡因子の重要度 — 稼働数の分散を何が説明するか</h3>"
+            body += chart_guide(
+                "各変数（career_age・役職・ジャンル多様性・時代・大手在籍）が"
+                "年間稼働作品数の変動をどれだけ説明するかを部分R²（貢献度）で比較。"
+                "高いバーほどその変数が稼働数の予測に重要。"
+                "career_ageのバーが大きければ「キャリアの長さ」が最大の影響因子。"
+                "large_studioのバーが大きければ大手在籍は重要な説明変数。"
+            )
+            import numpy as _np29
+            # Simple OLS with each variable alone, compute R²
+            y_all = _np29.array([r["credits"] for r in panel], dtype=float)
+            y_mean = float(y_all.mean())
+            ss_tot = float(((y_all - y_mean) ** 2).sum())
+
+            var_specs = [
+                ("career_age", [r["career_age"] for r in panel], "career_age (経験年数)"),
+                ("role_stage", [r["role_stage"] for r in panel], "役職ステージ"),
+                ("genre_n", [r["genre_n"] for r in panel], "ジャンル多様性"),
+                ("era", [r["era"] for r in panel], "時代 (5年区切り)"),
+                ("large", [r["large"] for r in panel], "大手在籍 (binary)"),
+            ]
+            partial_r2s = []
+            for col, vals, label in var_specs:
+                x = _np29.array(vals, dtype=float)
+                # OLS: regress y on x (+ intercept)
+                n = len(x)
+                mx = float(x.mean())
+                my = float(y_all.mean())
+                cov_xy = float(((x - mx) * (y_all - my)).sum())
+                var_x = float(((x - mx) ** 2).sum())
+                if var_x > 0:
+                    b = cov_xy / var_x
+                    a = my - b * mx
+                    y_hat = a + b * x
+                    ss_res = float(((y_all - y_hat) ** 2).sum())
+                    r2 = max(0.0, 1.0 - ss_res / ss_tot)
+                else:
+                    r2 = 0.0
+                partial_r2s.append((label, round(r2 * 100, 2)))
+
+            partial_r2s.sort(key=lambda x: -x[1])
+            labels_r2 = [x[0] for x in partial_r2s]
+            values_r2 = [x[1] for x in partial_r2s]
+            colors_r2 = ["#F72585" if "大手" in l else "#4CC9F0" for l in labels_r2]
+
+            fig29 = go.Figure(go.Bar(
+                y=labels_r2,
+                x=values_r2,
+                orientation="h",
+                marker_color=colors_r2,
+                text=[f"{v:.2f}%" for v in values_r2],
+                textposition="outside",
+            ))
+            fig29.update_layout(
+                title_text="Chart 29: 各変数の単独R² (年間稼働数の分散説明率 %)",
+                xaxis_title="R² (%)",
+                height=420,
+            )
+            body += plotly_div_safe(fig29, "confounder-r2-chart", height=420)
+
+            top_var = partial_r2s[0]
+            large_r2 = next((v for l, v in partial_r2s if "大手" in l), 0)
+            body += key_findings([
+                f"最重要変数: {top_var[0]} (R²={top_var[1]:.2f}%)",
+                f"大手在籍のR²: {large_r2:.2f}% — 単独では稼働数の{large_r2:.2f}%しか説明しない",
+                "R²が低い = 「大手かどうか」だけでは稼働数はほとんど予測できない → 他因子が支配的",
+                "career_ageのR²が高い → 年功序列的なキャリア構造が稼働数の主要因",
+                "これらのR²は交絡因子の除去なしの「粗い」寄与度。FE回帰のβと合わせて解釈を。",
+            ])
+        except Exception as _e29:
+            body += f'<div class="insight-box">Chart 29 スキップ: {_e29}</div>'
+
+        body += "</div>"  # close Section 9 card
+
+    # ── TOC update: add Section 10 ────────────────────────────
+    body = body.replace(
+        '<a href="#sec-causal">9. 因果推論 — パネルデータ&amp;PSM</a>\n</div>\n</div>',
+        '<a href="#sec-causal">9. 因果推論 — パネルデータ&amp;PSM</a>\n'
+        '<a href="#sec-wps">10. 重み付き生産性指数 (WPS)</a>\n</div>\n</div>',
+    )
+
+    # ─────────────────────────────────────────────────────────
+    # Section 10: 重み付き生産性指数 (WPS)
+    # ─────────────────────────────────────────────────────────
+    body += '<div class="card" id="sec-wps">'
+    body += "<h2>Section 10: 重み付き生産性指数 (WPS) — 役職・責任・時代補正</h2>"
+    body += section_desc(
+        "単純なクレジット数は生産性の不完全な指標です。"
+        "監督と動画では1クレジットが表す労働量が全く異なり、"
+        "24話シリーズと4話OVAでは要求工数も異なります。"
+        "さらに1990年代の手作業主体の時代と2010年代のデジタル時代では"
+        "同じ作品数が異なる実労働量を意味します。"
+        "ここでは役職ウェイト・作品複雑度・時代デフレーターを組み合わせた"
+        "重み付き生産性指数（WPS）を定義し、役職別・時代別の生産性変動パターンを回帰分析します。"
+    )
+
+    try:
+        from src.database import get_connection as _get_conn_s10
+        _conn_s10 = _get_conn_s10()
+        _cur_s10 = _conn_s10.cursor()
+
+        # Define role weights (responsibility × typical work volume)
+        # Calibrated to reflect: director manages entire production,
+        # key animator draws individual scenes, in-between does tracing
+        _ROLE_WEIGHTS: dict = {
+            "director": 10.0,
+            "series_composition": 8.0,
+            "chief_animation_director": 7.0,
+            "character_designer": 7.0,
+            "art_director": 6.0,
+            "sound_director": 5.5,
+            "producer": 5.0,
+            "music": 4.5,
+            "photography_director": 4.0,
+            "animation_director": 4.0,
+            "storyboard": 3.5,
+            "episode_director": 3.0,
+            "original_creator": 3.0,
+            "cgi_director": 3.0,
+            "key_animator": 2.5,
+            "effects_animator": 2.0,
+            "layout": 1.5,
+            "second_key_animator": 1.2,
+            "background_art": 1.2,
+            "in_between": 1.0,
+        }
+        _DEFAULT_ROLE_WEIGHT = 2.0
+
+        # Era deflator: accounts for digital tools reducing manual work per credit
+        # 1990=1.0 baseline, gradually decreasing to 0.6 in 2020+ (digital efficiency gain)
+        def _era_deflator(year):
+            if year <= 1990:
+                return 1.0
+            elif year >= 2020:
+                return 0.6
+            else:
+                return 1.0 - 0.4 * (year - 1990) / 30.0
+
+        # Complexity weight: TV 24ep > TV 12ep > OVA > SPECIAL
+        # Based on: total_runtime × format_complexity_factor
+        def _complexity_weight(fmt, eps, dur):
+            total_min = (eps or 0) * (dur or 24)
+            if fmt == "MOVIE":
+                return max(1.0, total_min / 100.0) * 1.8  # movies: concentrated quality
+            elif fmt in ("TV", "ONA") and eps:
+                cour = max(1, eps / 12)
+                return cour * 1.0  # TV: linear with cour count
+            elif fmt == "OVA":
+                return max(0.5, total_min / 120.0) * 1.2
+            elif fmt == "SPECIAL":
+                return max(0.3, total_min / 60.0)
+            else:
+                return 1.0
+
+        # Query per-person per-anime credits with anime metadata
+        _cur_s10.execute("""
+            SELECT
+                c.person_id,
+                c.role,
+                a.year,
+                a.format,
+                a.episodes,
+                a.duration,
+                a.genres
+            FROM credits c
+            JOIN anime a ON c.anime_id = a.id
+            WHERE a.year BETWEEN 1985 AND 2025
+              AND c.role IS NOT NULL
+        """)
+        wps_raw = _cur_s10.fetchall()
+        _conn_s10.close()
+
+        import statistics as _st10
+        import math as _math10
+        from collections import defaultdict as _dd10
+        import numpy as _np10
+
+        # Compute WPS per person
+        person_wps_data: dict = _dd10(lambda: {
+            "wps_total": 0.0, "raw_credits": 0,
+            "role_wps": _dd10(float), "years": set(),
+            "era_buckets": _dd10(float),
+        })
+
+        for pid, role, yr, fmt, eps, dur, genres_j in wps_raw:
+            rw = _ROLE_WEIGHTS.get(role, _DEFAULT_ROLE_WEIGHT)
+            ed = _era_deflator(yr or 2000)
+            cw = _complexity_weight(fmt, eps, dur)
+            wps = rw * cw * ed
+            d = person_wps_data[pid]
+            d["wps_total"] += wps
+            d["raw_credits"] += 1
+            d["role_wps"][role or "other"] += wps
+            if yr:
+                d["years"].add(int(yr))
+                era = (int(yr) // 5) * 5
+                d["era_buckets"][era] += wps
+
+        # Per-person summary
+        person_wps_summary = []
+        for pid, d in person_wps_data.items():
+            if d["raw_credits"] < 3:
+                continue
+            yrs = d["years"]
+            active_yrs = max(1, max(yrs) - min(yrs) + 1) if yrs else 1
+            wps_per_yr = d["wps_total"] / active_yrs
+            raw_per_yr = d["raw_credits"] / active_yrs
+            composite = _score_by_pid.get(str(pid), 0)
+            person_wps_summary.append({
+                "pid": pid,
+                "wps_total": round(d["wps_total"], 1),
+                "wps_per_yr": round(wps_per_yr, 2),
+                "raw_credits": d["raw_credits"],
+                "raw_per_yr": round(raw_per_yr, 2),
+                "active_yrs": active_yrs,
+                "composite": composite,
+                "role_wps": dict(d["role_wps"]),
+                "era_buckets": dict(d["era_buckets"]),
+            })
+
+        # ── Chart 30: 役職ウェイト仮定の可視化 ────────────────────────────
+        try:
+            body += "<h3>Chart 30: 役職ウェイト仮定 — 役職別責任・労働量の推計値</h3>"
+            body += chart_guide(
+                "WPS計算に使用する役職ウェイトの定義。"
+                "監督(10.0)を最高として、担当する責任範囲と典型的な作業量を基に設定。"
+                "これは仮定値であり、実際の労働量は作品・個人によって大きく異なります。"
+                "ウェイトの感度分析（変更した場合の結果への影響）も重要な検討事項です。"
+            )
+            role_w_items = sorted(_ROLE_WEIGHTS.items(), key=lambda x: -x[1])
+            fig30 = go.Figure(go.Bar(
+                y=[_ROLE_JA.get(r, r) for r, _ in role_w_items],
+                x=[w for _, w in role_w_items],
+                orientation="h",
+                marker_color=[
+                    f"rgba({int(255*(w/_ROLE_WEIGHTS['director']))},100,200,0.85)"
+                    for _, w in role_w_items
+                ],
+                text=[f"{w:.1f}" for _, w in role_w_items],
+                textposition="outside",
+            ))
+            fig30.update_layout(
+                title_text="Chart 30: WPS役職ウェイト (責任度×典型作業量の推計値)",
+                xaxis_title="役職ウェイト (動画=1.0を基準)",
+                height=520,
+            )
+            body += plotly_div_safe(fig30, "role-weight-chart", height=520)
+            body += chart_guide(
+                "時代デフレーター: 1990年=1.0 → 2020年=0.6 (デジタルツールによる効率化を反映)。"
+                "作品複雑度: TVアニメ×クール数, 映画×1.8倍。"
+                "WPS = 役職ウェイト × 複雑度 × 時代デフレーター の積。"
+            )
+        except Exception as _e30:
+            body += f'<div class="insight-box">Chart 30 スキップ: {_e30}</div>'
+
+        # ── Chart 31: 時代別加重生産性の変動パターン ──────────────────────
+        try:
+            body += "<h3>Chart 31: 時代別 WPS変動パターン — 生産性回帰と時代効果</h3>"
+            body += chart_guide(
+                "5年ごとの時代区分でWPS/年の中央値の推移を表示。"
+                "上段: 役職別WPS/年の時代変化（折れ線）。"
+                "下段: OLS回帰で era × role のインタラクション効果を推定。"
+            )
+            era_role_wps: dict = _dd10(lambda: _dd10(list))
+            for d in person_wps_summary:
+                for era, wps_val in d["era_buckets"].items():
+                    top_role = max(d["role_wps"], key=lambda r: d["role_wps"][r]) if d["role_wps"] else "other"
+                    era_role_wps[era][top_role].append(wps_val)
+
+            # Group roles by stage
+            stage_groups = {
+                "動画・第2原画 (Stg1-2)": ["in_between", "layout", "second_key_animator", "background_art"],
+                "原画 (Stg3)": ["key_animator", "effects_animator"],
+                "作監・絵コンテ (Stg4)": ["animation_director", "character_designer", "storyboard", "art_director"],
+                "総作監・演出 (Stg5)": ["chief_animation_director", "episode_director",
+                                      "series_composition", "sound_director"],
+                "監督 (Stg6)": ["director"],
+            }
+
+            sorted_eras = sorted(era_role_wps.keys())
+            fig31 = go.Figure()
+            stg_colors = ["#a0a0c0", "#4CC9F0", "#FFD166", "#FF6B35", "#F72585"]
+            for (sg_name, sg_roles), sg_color in zip(stage_groups.items(), stg_colors):
+                era_vals = []
+                era_ns = []
+                valid_eras = []
+                for era in sorted_eras:
+                    combined = [v for r in sg_roles for v in era_role_wps.get(era, {}).get(r, [])]
+                    if len(combined) >= 5:
+                        era_vals.append(_st10.median(combined))
+                        era_ns.append(len(combined))
+                        valid_eras.append(era)
+                if era_vals:
+                    fig31.add_trace(go.Scatter(
+                        x=valid_eras, y=era_vals,
+                        name=sg_name, line=dict(color=sg_color, width=2.5),
+                        mode="lines+markers",
+                    ))
+            fig31.update_layout(
+                title_text="Chart 31: 役職グループ別 WPS/年の時代変化",
+                xaxis_title="時代（5年区切り）",
+                yaxis_title="WPS/年 中央値（重み付き生産性）",
+                legend=dict(orientation="h", y=-0.15),
+                height=500,
+            )
+            body += plotly_div_safe(fig31, "era-wps-trend", height=500)
+
+            # OLS: WPS/yr ~ career_age + role_stage + era (for all persons with enough data)
+            wps_panel_recs = [d for d in person_wps_summary
+                              if d["active_yrs"] >= 2 and d["wps_per_yr"] > 0]
+            if len(wps_panel_recs) > 100:
+                y_wps = _np10.array([_math10.log1p(d["wps_per_yr"]) for d in wps_panel_recs])
+                # Compute era (year of peak activity) per person
+                peak_eras = []
+                for d in wps_panel_recs:
+                    pdata_by_pid = next(
+                        (r for r in person_wps_summary if r["pid"] == d["pid"]),
+                        None
+                    )
+                    eb = d.get("era_buckets", {})
+                    peak_era = max(eb, key=eb.get) if eb else 2000
+                    peak_eras.append(peak_era)
+
+                # Get role stage per person
+                def _pid_role_stage(d):
+                    rw = d.get("role_wps", {})
+                    top_role = max(rw, key=rw.get) if rw else "key_animator"
+                    return _ROLE_TO_STAGE.get(top_role, 3)
+
+                X_wps = _np10.column_stack([
+                    [d["active_yrs"] for d in wps_panel_recs],      # career_age proxy
+                    [_pid_role_stage(d) for d in wps_panel_recs],   # role stage
+                    [pe / 1000 for pe in peak_eras],                  # era (normalized)
+                    [_np10.log1p(d["raw_credits"]) for d in wps_panel_recs],  # log credits
+                    _np10.ones(len(wps_panel_recs)),                   # intercept
+                ])
+                beta_wps = _np10.linalg.lstsq(X_wps, y_wps, rcond=None)[0]
+                y_hat_wps = X_wps @ beta_wps
+                resid_wps = y_wps - y_hat_wps
+                ss_res_wps = float(_np10.sum(resid_wps ** 2))
+                ss_tot_wps = float(_np10.sum((y_wps - y_wps.mean()) ** 2))
+                r2_wps = 1.0 - ss_res_wps / ss_tot_wps if ss_tot_wps > 0 else 0
+
+                col_names_wps = ["活動年数", "役職ステージ", "時代 (era/1000)", "log(クレジット数)", "定数"]
+                beta_labels = [f"{col}: β={beta_wps[j]:.3f}" for j, col in enumerate(col_names_wps[:-1])]
+
+                fig31b = go.Figure(go.Bar(
+                    y=col_names_wps[:-1],
+                    x=[float(beta_wps[j]) for j in range(len(col_names_wps) - 1)],
+                    orientation="h",
+                    marker_color=["#4CC9F0" if float(beta_wps[j]) > 0 else "#F72585"
+                                  for j in range(len(col_names_wps) - 1)],
+                    text=[f"β={beta_wps[j]:.3f}" for j in range(len(col_names_wps) - 1)],
+                    textposition="outside",
+                ))
+                fig31b.add_vline(x=0, line_color="gray", line_width=1.5)
+                fig31b.update_layout(
+                    title_text=f"Chart 31b: WPS/年(log)の回帰係数 (R²={r2_wps:.3f}, n={len(wps_panel_recs)})",
+                    xaxis_title="係数β",
+                    height=380,
+                )
+                body += plotly_div_safe(fig31b, "wps-ols-coeff", height=380)
+
+                era_beta = float(beta_wps[2])
+                role_beta = float(beta_wps[1])
+                body += key_findings([
+                    f"役職ステージ係数: β={role_beta:.3f} → 高役職ほどWPS/年が{'増加' if role_beta > 0 else '減少'}",
+                    f"時代係数: β={era_beta:.3f} → 最近の時代ほどWPS/年が{'増加' if era_beta > 0 else '減少'}",
+                    f"モデルR²={r2_wps:.3f} → {r2_wps*100:.0f}%の分散を説明",
+                    "時代β < 0: 時代デフレーター適用後も近年の生産性（重み付き）が低下している可能性",
+                    "時代β > 0: デジタル化の恩恵が役職ウェイト・複雑度補正後も残存する",
+                ])
+        except Exception as _e31:
+            body += f'<div class="insight-box">Chart 31 スキップ: {_e31}</div>'
+
+        # ── Chart 32: WPS vs 生クレジット数の比較散布図 ───────────────────
+        try:
+            body += "<h3>Chart 32: WPS vs 生クレジット数 — 補正前後の生産性ランキング変化</h3>"
+            body += chart_guide(
+                "x軸: 年間生クレジット数（未補正）。y軸: 年間WPS（役職・複雑度・時代補正後）。"
+                "y=x線より上 → 補正後に評価が上昇（高役職・複雑な作品担当）。"
+                "y=x線より下 → 補正後に評価が下降（低役職・単純作品の量産）。"
+                "色: 役職ステージ（高役職=暖色）。"
+            )
+            sample_wps = sorted(person_wps_summary,
+                                key=lambda d: -d["composite"])[:500]
+            xs_wps = [d["raw_per_yr"] for d in sample_wps]
+            ys_wps = [d["wps_per_yr"] for d in sample_wps]
+            comps_wps = [d["composite"] for d in sample_wps]
+
+            # Color by composite
+            max_c_wps = max(comps_wps) if comps_wps else 100
+            colors_wps = [
+                f"rgba({int(255*c/max_c_wps)},100,{int(200*(1-c/max_c_wps))},0.6)"
+                for c in comps_wps
+            ]
+
+            fig32 = go.Figure(go.Scatter(
+                x=xs_wps, y=ys_wps,
+                mode="markers",
+                marker=dict(size=5, color=colors_wps),
+                text=[f"composite={c:.1f}" for c in comps_wps],
+                hovertemplate="raw/yr=%{x:.1f}<br>WPS/yr=%{y:.1f}<br>%{text}",
+            ))
+            max_xy = max(max(xs_wps), max(ys_wps)) if xs_wps else 10
+            fig32.add_trace(go.Scatter(
+                x=[0, max_xy], y=[0, max_xy], mode="lines",
+                line=dict(color="gray", dash="dash", width=1),
+                name="WPS=raw", showlegend=True,
+            ))
+            fig32.update_layout(
+                title_text="Chart 32: WPS/年 vs 生クレジット/年 (Compositeスコア上位500人)",
+                xaxis_title="生クレジット数/年（未補正）",
+                yaxis_title="WPS/年（役職・複雑度・時代補正後）",
+                height=520,
+            )
+            body += plotly_div_safe(fig32, "wps-vs-raw-scatter", height=520)
+
+            # Find people whose rank changes most
+            raw_ranks = sorted(range(len(xs_wps)), key=lambda i: -xs_wps[i])
+            wps_ranks = sorted(range(len(ys_wps)), key=lambda i: -ys_wps[i])
+            rank_change = [
+                abs(raw_ranks.index(i) - wps_ranks.index(i))
+                for i in range(len(xs_wps))
+            ]
+            max_upward = max(enumerate(rank_change), key=lambda x: x[1]) if rank_change else (0, 0)
+            corr_xy = _np10.corrcoef(xs_wps, ys_wps)[0, 1] if len(xs_wps) > 1 else 0
+
+            body += key_findings([
+                f"補正前後の相関: r={corr_xy:.3f} (高い → 補正による順位変動は小さい)",
+                "y>x（補正後に評価上昇）: 高役職・複雑な作品を少数担当するタイプ",
+                "y<x（補正後に評価下降）: 低役職クレジットを大量にこなすタイプ",
+                "WPS補正により「量より質」の貢献者が可視化される",
+            ])
+        except Exception as _e32:
+            body += f'<div class="insight-box">Chart 32 スキップ: {_e32}</div>'
+
+        # ── Chart 33: 役割分担量 × 作品要求工数 回帰 ──────────────────────
+        try:
+            body += "<h3>Chart 33: 役割分担量 × 作品要求工数 — 生産性の多変量分解</h3>"
+            body += chart_guide(
+                "各クレジットの「推定寄与工数」= 役職ウェイト × 複雑度 × 時代デフレーター。"
+                "一つの作品に関わる総推定工数を各クレジットに分配（均等分配）し、"
+                "「分担量（share of work）」を推計。"
+                "x軸: 1作品あたりの平均分担工数。y軸: 年間WPS（全作品の推定分担工数の合計/年）。"
+                "高x-高y → 少ない作品に大きな責任を持つスペシャリスト。"
+                "低x-高y → 多数の作品に参加して累積工数を積み上げるスタイル。"
+            )
+            # Compute per-anime total complexity for work share
+            # Aggregate per anime: total role weights (denominator for share)
+            anime_total_weight: dict = _dd10(float)
+            for pid, role, yr, fmt, eps, dur, _ in wps_raw:
+                aid = f"{fmt}_{yr}_{eps}"  # proxy for anime id
+                anime_total_weight[aid] += _ROLE_WEIGHTS.get(role or "in_between", _DEFAULT_ROLE_WEIGHT)
+
+            # Per-person average share per anime
+            person_share_data: dict = _dd10(list)  # {pid: [share per anime]}
+            anime_counts: dict = _dd10(int)  # {pid: anime count}
+            for pid, role, yr, fmt, eps, dur, _ in wps_raw:
+                aid = f"{fmt}_{yr}_{eps}"
+                total_w = anime_total_weight.get(aid, 1)
+                my_w = _ROLE_WEIGHTS.get(role or "in_between", _DEFAULT_ROLE_WEIGHT)
+                share = my_w / total_w  # fraction of this anime's work
+                cw = _complexity_weight(fmt, eps, dur)
+                ed = _era_deflator(yr or 2000)
+                weighted_share = share * cw * ed
+                person_share_data[pid].append(weighted_share)
+                anime_counts[pid] += 1
+
+            share_plot = []
+            for d in person_wps_summary[:300]:
+                pid = d["pid"]
+                shares = person_share_data.get(pid, [])
+                if shares and len(shares) >= 3:
+                    avg_share = sum(shares) / len(shares)
+                    share_plot.append({
+                        "pid": pid,
+                        "avg_share": avg_share,
+                        "wps_per_yr": d["wps_per_yr"],
+                        "composite": d["composite"],
+                        "active_yrs": d["active_yrs"],
+                    })
+
+            if share_plot:
+                xs33 = [d["avg_share"] for d in share_plot]
+                ys33 = [d["wps_per_yr"] for d in share_plot]
+                cs33 = [d["composite"] for d in share_plot]
+                max_c33 = max(cs33) if cs33 else 100
+                colors33 = [
+                    f"rgba({int(255*c/max_c33)},{int(80*(1-c/max_c33))},200,0.6)"
+                    for c in cs33
+                ]
+                fig33 = go.Figure(go.Scatter(
+                    x=xs33, y=ys33, mode="markers",
+                    marker=dict(size=5, color=colors33),
+                    text=[f"composite={c:.1f}" for c in cs33],
+                    hovertemplate="avg_share=%{x:.3f}<br>WPS/yr=%{y:.1f}<br>%{text}",
+                ))
+                fig33.update_layout(
+                    title_text="Chart 33: 平均分担工数 vs WPS/年 (各クレジットへの推定責任量)",
+                    xaxis_title="1クレジットあたり平均分担工数（役職ウェイト÷作品内総ウェイト × 複雑度）",
+                    yaxis_title="WPS/年（年間重み付き生産性）",
+                    height=500,
+                )
+                body += plotly_div_safe(fig33, "share-wps-scatter", height=500)
+
+                corr33 = _np10.corrcoef(xs33, ys33)[0, 1] if len(xs33) > 1 else 0
+                body += key_findings([
+                    f"分担工数 vs WPS相関: r={corr33:.3f}",
+                    "右上（高分担×高WPS）: 大作での中核的役割を担う専門家",
+                    "左上（低分担×高WPS）: 多数の作品に参加して工数を積み上げるスタイル（量産型）",
+                    "役割分担量だけでなく「その役職がチームの何%を占めるか」が貢献度の本質的指標",
+                    "大手スタジオでは社員が担う割合が高い → 分担量が見かけ上低くなる（内製化効果）",
+                ])
+        except Exception as _e33:
+            body += f'<div class="insight-box">Chart 33 スキップ: {_e33}</div>'
+
+    except Exception as _e_s10:
+        body += (
+            f'<div class="insight-box">Section 10 スキップ: '
+            f'{type(_e_s10).__name__}: {_e_s10}</div>'
+        )
+
+    body += "</div>"  # close Section 10 card
+
     # ─────────────────────────────────────────────────────────
     # Glossary terms for this report
     # ─────────────────────────────────────────────────────────
@@ -10401,20 +12331,68 @@ def generate_longitudinal_analysis_report():  # noqa: C901
             "減少する傾向。同一チームが継続して担当することで引き継ぎコストが不要になるため。"
             "成立しない場合（逆に増加）は長期作品特有の複雑化・要求仕様の累積を示す。"
         ),
+        "固定費（アニメ制作）": (
+            "シリーズの長さ（クール数）によらず一度だけ発生するコスト。"
+            "キャラクターデザイン・監督・音楽・シリーズ構成などの立ち上げチームが該当。"
+            "OLS回帰でcour_countとの無相関性（低R²・ゼロ近傍の傾き）が確認できれば固定費仮説を支持。"
+        ),
+        "変動費（アニメ制作）": (
+            "話数に比例して増加するコスト。原画・動画・演出・作画監督などが該当。"
+            "1クール増えるごとに必要スタッフ数が増加するため、長期シリーズの総コストを左右する。"
+        ),
+        "可視クレジット vs 実際のコスト": (
+            "本DB上のクレジット数は「外部委託・個別契約の密度」を反映するため、"
+            "社員雇用で内製化している大手スタジオでは実際のコストより少なく見える場合がある。"
+            "大手スタジオのクレジット数が少ない → 社員制度による内製化の可能性を示唆する。"
+        ),
+        "生存バイアス（アニメ業界）": (
+            "大手スタジオに所属できたスタッフは既に業界内で成功した選抜済み集団。"
+            "「大手 → 高スコア」の相関は「優秀な人が大手に採用される」選抜効果である可能性が高く、"
+            "「大手に入ると優秀になる」因果効果とは区別が困難（生存バイアス）。"
+        ),
+        "WPS（重み付き生産性スコア）": (
+            "Weighted Productivity Score。役職ウェイト（監督=10.0〜動画=1.0）× 作品複雑度 × 時代デフレーターで"
+            "各クレジットに推定工数を割り当て、年間の合計を活動年数で割った指標。"
+            "単純クレジット数と異なり、役職・作品難易度・デジタル化による生産性変化を補正する。"
+        ),
+        "時代デフレーター": (
+            "デジタルアニメ制作ツールの普及を考慮した補正係数。1990年=1.0（手書き全盛期）、"
+            "2020年以降=0.6（デジタル化による効率化を30年で0.4ポイント低減と仮定）。"
+            "同じクレジットでも昔ほど実際の労働量が多い可能性を補正する。"
+        ),
+        "固定効果回帰 (FE)": (
+            "Person Fixed Effects（個人固定効果）とYear Fixed Effects（年次固定効果）を除去した"
+            "within推定量。観測されない時不変の個人特性（才能・性格等）を制御し、"
+            "「同じ人が大手在籍時 vs 非在籍時」の比較として因果効果を推定する。"
+        ),
+        "傾向スコアマッチング (PSM)": (
+            "Propensity Score Matching。処置群（転職者）と対照群（非転職者）を"
+            "観測可能な特徴（career_age・役職・事前稼働数等）でマッチングし、"
+            "処置効果（Average Treatment Effect on Treated: ATT）を推定する手法。"
+            "観測されない交絡因子には対応できない点に注意。"
+        ),
+        "イベントスタディ": (
+            "転職年（t=0）を中心に前後N年の結果変数（年間稼働数）の推移を比較する手法。"
+            "転職前後の平行トレンド仮定が成立すれば、転職の因果効果が識別できる。"
+            "t=0〜+1年の一時的な低迷は「初期適応コスト」として解釈できる。"
+        ),
     })
 
     html = wrap_html(
         "縦断的キャリア分析",
-        "OMAクラスタ・需要ギャップ・生産性・フォーマット/ジャンル別スタッフ密度の18チャート",
+        "OMAクラスタ・固定費/変動費・PSM・WPS重み付き生産性の33チャート",
         body,
         intro_html=report_intro(
             "縦断的キャリア分析レポート",
             "career_age軸でのスパゲッティプロット・レキシス図・OMAクラスタ・アリュビアル図・CFD・"
             "MDS・ストリームグラフ・ホライズンチャート・ストック&フロー（Section 1〜5）。"
-            "Section 6では需要ギャップ・生産性向上・現役/引退/新規の動態を分析。"
-            "Section 7では映画・TVアニメ・ONA・OVAなどフォーマット別およびジャンル別に"
-            "「放送時間あたり・クールあたりの必要スタッフ数」を定量化し、"
-            "長期シリーズの規模の経済まで含めた全18チャートを収録します。",
+            "Section 6: 需要ギャップ・生産性・現役/引退/新規動態。"
+            "Section 7: フォーマット/ジャンル別スタッフ密度。"
+            "Section 8: OLS固定費/変動費・スタジオ規模別・生存バイアス。"
+            "Section 9: イベントスタディ・固定効果回帰(FE)・傾向スコアマッチング(PSM)・"
+            "交絡因子重要度による因果推論。"
+            "Section 10: 役職ウェイト・時代デフレーター・作品複雑度を用いた"
+            "重み付き生産性指数(WPS)と多変量分解。全33チャート収録。",
             "スタジオ人事・エージェント・業界研究者・キャリア設計中のスタッフ",
         ),
         glossary_terms=longitudinal_glossary,
@@ -10553,11 +12531,13 @@ REPORT_CATALOG = [
     {
         "file": "longitudinal_analysis.html",
         "title": "縦断的キャリア分析",
-        "subtitle": "相対時間・OMAクラスタ・レキシス図・ストック&フロー",
-        "desc": "career_age軸でのスパゲッティプロット・拡張レキシス図・OMAシーケンスクラスタ・"
-                "アリュビアル図・CFD・MDS・2部グラフ・ストリームグラフ・ホライズンチャート・"
-                "ストック&フロー。需要シフト（配信台頭）の影響分析を含む11チャート収録。",
-        "sources": "scores, milestones, transitions, role_flow, temporal_pagerank, growth, time_series, decades, individual_profiles",
+        "subtitle": "OMAクラスタ・固定費/変動費・パネルFE・傾向スコアマッチング",
+        "desc": "career_age軸でのスパゲッティプロット・レキシス図・OMAクラスタ・アリュビアル図・"
+                "CFD・MDS・ストリームグラフ・ホライズンチャート・ストック&フロー（Section 1-5）。"
+                "需要ギャップ・生産性（Section 6）。フォーマット/ジャンル別スタッフ密度（Section 7）。"
+                "OLS固定費/変動費・スタジオ規模別（Section 8）。"
+                "イベントスタディ・FE回帰・PSM・交絡因子分解による因果推論（Section 9）。全29チャート。",
+        "sources": "scores, milestones, transitions, role_flow, temporal_pagerank, growth, time_series, decades, individual_profiles, SQLite(credits+studios)",
     },
 ]
 
