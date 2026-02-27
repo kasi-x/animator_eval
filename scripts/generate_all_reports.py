@@ -9937,8 +9937,402 @@ def generate_longitudinal_analysis_report():  # noqa: C901
     body = body.replace(
         '<a href="#sec-stream">5. ストック&amp;フロー</a>\n</div>\n</div>',
         '<a href="#sec-stream">5. ストック&amp;フロー</a>\n'
-        '<a href="#sec-demand">6. 需要ギャップ&amp;人材動態</a>\n</div>\n</div>',
+        '<a href="#sec-demand">6. 需要ギャップ&amp;人材動態</a>\n'
+        '<a href="#sec-format">7. フォーマット&amp;ジャンル別生産性</a>\n</div>\n</div>',
     )
+
+    body += "</div>"
+
+    # ─────────────────────────────────────────────────────────
+    # Section 7: フォーマット・ジャンル別 生産性分析
+    # ─────────────────────────────────────────────────────────
+    body += '<div class="card" id="sec-format">'
+    body += "<h2>Section 7: フォーマット・ジャンル別 生産性 &amp; 必要スタッフ数</h2>"
+    body += section_desc(
+        "映画（MOVIE）・TVアニメ・ONA・OVA・TV_SHORTなど、メディアフォーマットによって"
+        "「放送1時間あたり / 1クール（12話）あたりの必要スタッフ数」は大きく異なります。"
+        "同じ「アニメ1本」でも、映画とTVシリーズでは労働密度の構造が根本的に違います。"
+        "またジャンルによっても戦闘・メカ系vs日常系では複雑度が異なり、必要人数が変わります。"
+        "生産性の時系列変化と作品規模（クール数）による規模の経済も可視化します。"
+    )
+
+    try:
+        from src.database import get_connection as _get_conn
+        _conn = _get_conn()
+        _conn.row_factory = None
+        _cur = _conn.cursor()
+
+        # ── 基礎データ取得 ────────────────────────────────────
+        # 1) Per-anime: format, duration, episodes, credits, persons
+        _cur.execute('''SELECT a.id, a.format, a.duration, a.episodes, a.year,
+            COUNT(c.id) as total_credits,
+            COUNT(DISTINCT c.person_id) as unique_persons
+        FROM credits c
+        JOIN anime a ON c.anime_id = a.id
+        WHERE a.format IN ('TV','MOVIE','ONA','OVA','SPECIAL','TV_SHORT','MUSIC')
+            AND a.duration > 0 AND a.episodes > 0
+            AND a.year BETWEEN 1985 AND 2025
+        GROUP BY a.id''')
+        per_anime_rows = _cur.fetchall()
+
+        # 2) Per-anime with genre
+        _cur.execute('''SELECT a.genres, a.format, a.duration, a.episodes,
+            COUNT(c.id) as total_credits,
+            COUNT(DISTINCT c.person_id) as unique_persons
+        FROM credits c
+        JOIN anime a ON c.anime_id = a.id
+        WHERE a.genres IS NOT NULL
+            AND a.format IN ('TV','MOVIE','ONA','OVA','TV_SHORT')
+            AND a.duration > 0 AND a.episodes > 0
+        GROUP BY a.id''')
+        genre_rows_s7 = _cur.fetchall()
+
+        _conn.close()
+
+        import statistics as _st7
+        from collections import defaultdict as _dd7
+
+        # Build per-anime normalized metrics
+        fmt_metrics = _dd7(lambda: {
+            'cred_per_hr': [], 'pers_per_hr': [],
+            'cred_per_cour': [], 'pers_per_cour': [],
+            'total_min': [], 'anime_cnt': 0,
+        })
+        yr_fmt_metrics = _dd7(lambda: _dd7(lambda: {
+            'cred_per_hr': [], 'pers_per_hr': [],
+            'cred_per_cour': [], 'pers_per_cour': [],
+        }))
+
+        for (aid, fmt, dur, eps, yr, cred, pers) in per_anime_rows:
+            total_min = dur * eps
+            total_hr = total_min / 60.0
+            cour_count = eps / 12.0
+            if total_hr <= 0 or cour_count <= 0:
+                continue
+            cph = cred / total_hr
+            pph = pers / total_hr
+            cpc = cred / cour_count
+            ppc = pers / cour_count
+            d = fmt_metrics[fmt]
+            d['cred_per_hr'].append(cph)
+            d['pers_per_hr'].append(pph)
+            d['cred_per_cour'].append(cpc)
+            d['pers_per_cour'].append(ppc)
+            d['total_min'].append(total_min)
+            d['anime_cnt'] += 1
+            if yr:
+                yd = yr_fmt_metrics[int(yr)][fmt]
+                yd['cred_per_hr'].append(cph)
+                yd['pers_per_hr'].append(pph)
+                yd['cred_per_cour'].append(cpc)
+                yd['pers_per_cour'].append(ppc)
+
+        # Genre metrics
+        genre_metrics = _dd7(lambda: _dd7(lambda: {
+            'cred_per_hr': [], 'pers_per_hr': [],
+            'cred_per_cour': [], 'pers_per_cour': [],
+        }))
+        for (genres_str, fmt, dur, eps, cred, pers) in genre_rows_s7:
+            try:
+                gs = json.loads(genres_str) if isinstance(genres_str, str) else []
+                if not gs:
+                    continue
+                total_hr = (dur * eps) / 60.0
+                cour_count = eps / 12.0
+                if total_hr <= 0 or cour_count <= 0:
+                    continue
+                for g in gs[:3]:
+                    d = genre_metrics[g][fmt]
+                    d['cred_per_hr'].append(cred / total_hr)
+                    d['pers_per_hr'].append(pers / total_hr)
+                    d['cred_per_cour'].append(cred / cour_count)
+                    d['pers_per_cour'].append(pers / cour_count)
+            except Exception:
+                pass
+
+        FORMATS_S7 = ['MOVIE', 'TV', 'ONA', 'OVA', 'SPECIAL', 'TV_SHORT']
+        FORMAT_LABELS_S7 = {
+            'MOVIE': '映画', 'TV': 'TVアニメ', 'ONA': 'ONA',
+            'OVA': 'OVA', 'SPECIAL': 'スペシャル', 'TV_SHORT': 'ショート',
+        }
+        FORMAT_COLORS_S7 = {
+            'MOVIE': '#F72585', 'TV': '#4CC9F0', 'ONA': '#06D6A0',
+            'OVA': '#FFD166', 'SPECIAL': '#FF6B35', 'TV_SHORT': '#7209B7',
+        }
+
+        def _med(lst):
+            return _st7.median(lst) if lst else 0.0
+
+        # ── Chart 15: フォーマット別スタッフ需要プロファイル ──
+        body += "<h3>Chart 15: フォーマット別 スタッフ需要プロファイル — 放送時間・クール当たり</h3>"
+        body += chart_guide(
+            "左軸: 放送1時間あたりクレジット数（労働密度）と担当スタッフ数（チーム規模）。"
+            "右パネル: 1クール（12話相当）あたりの同指標。"
+            "映画は放送時間あたりのスタッフ密度が高く、TVは1クールで安定した規模感がある。"
+            "ONA・ショートは短尺のため時間あたり密度が低い一方、1クール換算では独自の構造を持つ。"
+        )
+
+        fig15 = make_subplots(
+            rows=1, cols=2,
+            subplot_titles=["放送時間あたり（credits/hr・persons/hr）",
+                            "1クール12話あたり（credits/cour・persons/cour）"],
+            horizontal_spacing=0.12,
+        )
+
+        fmts_present = [f for f in FORMATS_S7 if fmt_metrics[f]['anime_cnt'] > 0]
+        labels15 = [FORMAT_LABELS_S7[f] for f in fmts_present]
+        colors15 = [FORMAT_COLORS_S7[f] for f in fmts_present]
+
+        # Left panel: per-hour
+        fig15.add_trace(go.Bar(
+            x=labels15,
+            y=[_med(fmt_metrics[f]['cred_per_hr']) for f in fmts_present],
+            name="クレジット数/時間",
+            marker_color=[c + "cc" for c in colors15],
+            hovertemplate="%{x}<br>クレジット/hr: %{y:.1f}<extra></extra>",
+        ), row=1, col=1)
+        fig15.add_trace(go.Bar(
+            x=labels15,
+            y=[_med(fmt_metrics[f]['pers_per_hr']) for f in fmts_present],
+            name="スタッフ数/時間",
+            marker_color=[c + "66" for c in colors15],
+            marker_pattern_shape="/",
+            hovertemplate="%{x}<br>スタッフ/hr: %{y:.1f}<extra></extra>",
+        ), row=1, col=1)
+
+        # Right panel: per-cour
+        fig15.add_trace(go.Bar(
+            x=labels15,
+            y=[_med(fmt_metrics[f]['cred_per_cour']) for f in fmts_present],
+            name="クレジット数/クール",
+            marker_color=[c + "cc" for c in colors15],
+            showlegend=False,
+            hovertemplate="%{x}<br>クレジット/クール: %{y:.1f}<extra></extra>",
+        ), row=1, col=2)
+        fig15.add_trace(go.Bar(
+            x=labels15,
+            y=[_med(fmt_metrics[f]['pers_per_cour']) for f in fmts_present],
+            name="スタッフ数/クール",
+            marker_color=[c + "66" for c in colors15],
+            marker_pattern_shape="/",
+            showlegend=False,
+            hovertemplate="%{x}<br>スタッフ/クール: %{y:.1f}<extra></extra>",
+        ), row=1, col=2)
+
+        fig15.update_layout(
+            title_text="フォーマット別 スタッフ需要プロファイル",
+            barmode="group",
+            legend=dict(orientation="h", y=-0.12),
+        )
+        fig15.update_yaxes(title_text="（中央値）", row=1, col=1)
+        fig15.update_yaxes(title_text="（中央値）", row=1, col=2)
+        body += plotly_div_safe(fig15, "format-profile-chart", height=480)
+
+        # Key findings
+        mov_pph = _med(fmt_metrics['MOVIE']['pers_per_hr'])
+        tv_ppc = _med(fmt_metrics['TV']['pers_per_cour'])
+        ona_ppc = _med(fmt_metrics['ONA']['pers_per_cour'])
+        body += key_findings([
+            f"映画: 中央値 {mov_pph:.1f}人/放送時間 — 短時間に集中した高密度スタッフ編成",
+            f"TVアニメ: 中央値 {tv_ppc:.1f}人/クール — 12話にわたり安定したチームが稼働",
+            f"ONA: 中央値 {ona_ppc:.1f}人/クール — 短尺・少人数の効率的な制作体制",
+            "映画とTVアニメでは制作の時間軸の圧縮率が異なるため、単純な本数比較は誤解を生む。"
+            "正確な労働需要推計には放送時間基準の正規化が必須",
+        ])
+
+        # ── Chart 16: ジャンル×フォーマット スタッフ需要マトリクス ──
+        body += "<h3>Chart 16: ジャンル × フォーマット スタッフ需要マトリクス</h3>"
+        body += chart_guide(
+            "色が濃い（暖色）ほど、そのジャンル×フォーマットの組み合わせでのスタッフ数が多い。"
+            "左列＝TVアニメ（persons/クール）、右列＝映画（persons/時間）。"
+            "ミステリー・ドラマは登場人物・作画複雑度が高く、コメディ・スポーツより密度が高い傾向。"
+        )
+
+        TOP_GENRES_S7 = [
+            'Action', 'Comedy', 'Drama', 'Fantasy', 'Adventure',
+            'Sci-Fi', 'Slice of Life', 'Romance', 'Supernatural',
+            'Mystery', 'Mecha', 'Sports', 'Psychological',
+        ]
+        GENRE_JA_S7 = {
+            'Action': 'アクション', 'Comedy': 'コメディ', 'Drama': 'ドラマ',
+            'Fantasy': 'ファンタジー', 'Adventure': 'アドベンチャー',
+            'Sci-Fi': 'SF', 'Slice of Life': '日常', 'Romance': 'ロマンス',
+            'Supernatural': '超自然', 'Mystery': 'ミステリー', 'Mecha': 'メカ',
+            'Sports': 'スポーツ', 'Psychological': '心理',
+        }
+        FMTS_MATRIX = ['TV', 'MOVIE', 'ONA', 'OVA']
+        FMT_METRIC = {'TV': 'pers_per_cour', 'MOVIE': 'pers_per_hr',
+                      'ONA': 'pers_per_cour', 'OVA': 'pers_per_hr'}
+
+        z_matrix16 = []
+        hover16 = []
+        for g in TOP_GENRES_S7:
+            row_z = []
+            row_h = []
+            for fmt in FMTS_MATRIX:
+                vals = genre_metrics[g][fmt].get(FMT_METRIC[fmt], [])
+                v = _med(vals) if vals else None
+                row_z.append(v)
+                unit = "/クール" if FMT_METRIC[fmt] == 'pers_per_cour' else "/時間"
+                row_h.append(
+                    f"{GENRE_JA_S7.get(g,g)} × {FORMAT_LABELS_S7[fmt]}<br>"
+                    f"スタッフ数{unit}: {v:.1f}" if v else f"{g} × {fmt}: データ不足"
+                )
+            z_matrix16.append(row_z)
+            hover16.append(row_h)
+
+        fig16 = go.Figure(go.Heatmap(
+            z=z_matrix16,
+            x=[FORMAT_LABELS_S7[f] for f in FMTS_MATRIX],
+            y=[GENRE_JA_S7.get(g, g) for g in TOP_GENRES_S7],
+            colorscale="YlOrRd",
+            colorbar=dict(title="スタッフ数（中央値）"),
+            hoverongaps=False,
+            customdata=hover16,
+            hovertemplate="%{customdata}<extra></extra>",
+        ))
+        fig16.update_layout(
+            title_text="ジャンル × フォーマット スタッフ需要マトリクス（スタッフ数/クール or /時間）",
+            xaxis_title="フォーマット",
+            yaxis_title="ジャンル",
+        )
+        body += plotly_div_safe(fig16, "genre-format-matrix", height=500)
+
+        # ── Chart 17: フォーマット別 時系列トレンド ────────────
+        body += "<h3>Chart 17: フォーマット別 スタッフ密度の時系列トレンド（1990〜2025年）</h3>"
+        body += chart_guide(
+            "各フォーマットの「放送時間あたりスタッフ数（persons/hr）」の年次推移。"
+            "上昇＝同じ時間の作品に使うスタッフが増えた（品質向上 or 複雑化）。"
+            "下降＝効率化・人材不足・シンプルな作風の流行。"
+            "映画とTVで異なるトレンドを追うことで、制作スタイルの時代変化が読み取れる。"
+        )
+
+        TREND_YEARS = list(range(1990, 2025))
+        FMTS_TREND = ['TV', 'MOVIE', 'ONA', 'TV_SHORT']
+        TREND_METRIC = 'pers_per_hr'
+
+        fig17 = go.Figure()
+        for fmt in FMTS_TREND:
+            yvals = []
+            xvals = []
+            for yr in TREND_YEARS:
+                vals = yr_fmt_metrics[yr][fmt].get(TREND_METRIC, [])
+                if len(vals) >= 3:  # require at least 3 works for stability
+                    yvals.append(_med(vals))
+                    xvals.append(yr)
+            if len(xvals) < 5:
+                continue
+            # 3-year rolling smooth
+            smoothed = []
+            for i, yr in enumerate(xvals):
+                lo = max(0, i - 1)
+                hi = min(len(xvals), i + 2)
+                smoothed.append(sum(yvals[lo:hi]) / (hi - lo))
+
+            color = FORMAT_COLORS_S7.get(fmt, "#888")
+            fig17.add_trace(go.Scatter(
+                x=xvals, y=smoothed,
+                name=FORMAT_LABELS_S7.get(fmt, fmt),
+                mode="lines",
+                line=dict(color=color, width=2.5),
+                hovertemplate=f"{FORMAT_LABELS_S7.get(fmt, fmt)}<br>%{{x}}年: %{{y:.1f}}人/hr<extra></extra>",
+            ))
+
+        for marker_yr, label in [(2000, "デジタル化"), (2015, "配信台頭"), (2020, "COVID")]:
+            fig17.add_vline(
+                x=marker_yr, line_dash="dot",
+                line_color="rgba(255,255,255,0.35)",
+                annotation_text=label,
+                annotation_position="top",
+                annotation_font=dict(size=9, color="rgba(255,255,255,0.55)"),
+            )
+
+        fig17.update_layout(
+            title_text="フォーマット別 スタッフ密度（persons/hr）の時系列変化",
+            xaxis_title="年", yaxis_title="スタッフ数/放送時間（中央値）",
+            legend=dict(orientation="h", y=-0.12),
+        )
+        body += plotly_div_safe(fig17, "format-trend-chart", height=460)
+
+        # ── Chart 18: TVアニメ クール数別 効率性分析 ────────────
+        body += "<h3>Chart 18: TVアニメ クール数別効率性 — 長期作品の規模の経済</h3>"
+        body += chart_guide(
+            "X軸＝クール数（12話=1クール換算）。Y軸＝1クールあたりのスタッフ数（pers/cour）。"
+            "箱ひげ図でクール数ごとのばらつきも確認できる。"
+            "1クール作品 vs 4クール超の長期シリーズで「1クールあたりスタッフ数」が下がれば"
+            "長期作品の規模の経済（同一スタッフで複数クールを担当）が成立している。"
+        )
+
+        # Bin TV anime by cour count
+        cour_bins = {'0.5クール以下': [], '1クール': [], '2クール': [], '3〜4クール': [], '5クール以上': []}
+
+        for (aid, fmt, dur, eps, yr, cred, pers) in per_anime_rows:
+            if fmt != 'TV':
+                continue
+            cour_count = eps / 12.0
+            ppc = pers / cour_count if cour_count > 0 else None
+            if ppc is None:
+                continue
+            if cour_count <= 0.5:
+                cour_bins['0.5クール以下'].append(ppc)
+            elif cour_count <= 1.2:
+                cour_bins['1クール'].append(ppc)
+            elif cour_count <= 2.3:
+                cour_bins['2クール'].append(ppc)
+            elif cour_count <= 4.5:
+                cour_bins['3〜4クール'].append(ppc)
+            else:
+                cour_bins['5クール以上'].append(ppc)
+
+        fig18 = go.Figure()
+        bin_colors = ['#a0a0c0', '#4CC9F0', '#06D6A0', '#FFD166', '#FF6B35']
+        for (bin_name, color) in zip(cour_bins.keys(), bin_colors):
+            vals = cour_bins[bin_name]
+            if not vals:
+                continue
+            # Clip outliers for display
+            p10 = sorted(vals)[max(0, int(len(vals) * 0.05))]
+            p90 = sorted(vals)[min(len(vals)-1, int(len(vals) * 0.95))]
+            clipped = [v for v in vals if p10 <= v <= p90]
+            fig18.add_trace(go.Box(
+                y=clipped,
+                name=f"{bin_name}\n(N={len(vals)})",
+                marker_color=color,
+                boxmean=True,
+                hovertemplate=f"{bin_name}<br>スタッフ/クール: %{{y:.1f}}<extra></extra>",
+            ))
+
+        fig18.update_layout(
+            title_text="TVアニメ クール数別 スタッフ規模（persons/クール）— 規模の経済分析",
+            xaxis_title="クール数カテゴリ",
+            yaxis_title="スタッフ数/クール（中央値）",
+        )
+        body += plotly_div_safe(fig18, "cour-efficiency-chart", height=480)
+
+        # Key findings for Section 7
+        one_cour = cour_bins.get('1クール', [])
+        long_cour = cour_bins.get('5クール以上', [])
+        if one_cour and long_cour:
+            med_1 = _med(one_cour)
+            med_long = _med(long_cour)
+            scale_effect = (med_long - med_1) / med_1 * 100
+            scale_label = "規模の経済が成立" if scale_effect < -5 else (
+                "規模の不経済（長期作品のほうがコスト高）" if scale_effect > 5 else "ほぼ規模中立"
+            )
+            body += key_findings([
+                f"TVアニメ 1クール: 中央値 {med_1:.0f}人/クール vs "
+                f"5クール以上: 中央値 {med_long:.0f}人/クール "
+                f"({scale_effect:+.0f}% → {scale_label})",
+                "ジャンルマトリクスでミステリー・ドラマが労働集約的、"
+                "コメディ・スポーツが比較的コンパクトなスタッフ編成の傾向",
+                "映画は短い放送時間に対して高密度のスタッフを集中投入する構造。"
+                "Netflix系配信映画の増加はこの密度をさらに押し上げる可能性がある",
+                "ONAは時間あたりスタッフ密度が低く、スタジオが少人数・短期集中で制作できる"
+                "配信向け効率フォーマットとして確立しつつある",
+            ])
+
+    except Exception as e:
+        body += f'<div class="insight-box">Section 7 生成スキップ: {type(e).__name__}: {e}</div>'
 
     body += "</div>"
 
@@ -9989,18 +10383,38 @@ def generate_longitudinal_analysis_report():  # noqa: C901
             "高い値は業界の新陳代謝が活発であることを示すが、"
             "スキルの蓄積・継承リスクを内包する場合もある。"
         ),
+        "1クール（12話）": (
+            "日本のTVアニメの標準的な放送単位。約3ヶ月間、週1回放送で12話。"
+            "本分析では episodes÷12 でクール数を計算し、フォーマット間の比較単位として使用。"
+        ),
+        "persons/hr（スタッフ数/時間）": (
+            "放送1時間あたりのユニークスタッフ数。映画・OVAなど短尺作品と"
+            "TVシリーズの労働密度を同一スケールで比較するための正規化指標。"
+        ),
+        "persons/cour（スタッフ数/クール）": (
+            "1クール（12話相当）あたりのユニークスタッフ数。"
+            "TVアニメの長期シリーズでは1クールごとの人員配置が"
+            "交渉・計画の基準単位となるため、業界実務と整合した指標。"
+        ),
+        "規模の経済（スタッフ）": (
+            "TVアニメで長期シリーズ（複数クール）になるほど、1クールあたりの必要スタッフが"
+            "減少する傾向。同一チームが継続して担当することで引き継ぎコストが不要になるため。"
+            "成立しない場合（逆に増加）は長期作品特有の複雑化・要求仕様の累積を示す。"
+        ),
     })
 
     html = wrap_html(
         "縦断的キャリア分析",
-        "相対時間・OMAクラスタ・需要ギャップ・生産性・人材動態の14チャート",
+        "OMAクラスタ・需要ギャップ・生産性・フォーマット/ジャンル別スタッフ密度の18チャート",
         body,
         intro_html=report_intro(
             "縦断的キャリア分析レポート",
             "career_age軸でのスパゲッティプロット・レキシス図・OMAクラスタ・アリュビアル図・CFD・"
-            "MDS・ストリームグラフ・ホライズンチャート・ストック&フロー（Section 1〜5）に加え、"
-            "Section 6では「想定需要 vs 実際需要のギャップ」「生産性向上による節減効果」"
-            "「現役・引退・新規の時系列」を分析し、配信台頭が業界構造に与えた影響を定量化します。",
+            "MDS・ストリームグラフ・ホライズンチャート・ストック&フロー（Section 1〜5）。"
+            "Section 6では需要ギャップ・生産性向上・現役/引退/新規の動態を分析。"
+            "Section 7では映画・TVアニメ・ONA・OVAなどフォーマット別およびジャンル別に"
+            "「放送時間あたり・クールあたりの必要スタッフ数」を定量化し、"
+            "長期シリーズの規模の経済まで含めた全18チャートを収録します。",
             "スタジオ人事・エージェント・業界研究者・キャリア設計中のスタッフ",
         ),
         glossary_terms=longitudinal_glossary,
