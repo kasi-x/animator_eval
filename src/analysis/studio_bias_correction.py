@@ -50,17 +50,17 @@ class DebiasedScore:
 
     Attributes:
         person_id: person_id
-        original_authority: 元のAuthority（PageRank）
+        original_birank: 元のBiRank
         studio_bias: 検出されたスタジオバイアス
-        debiased_authority: 補正後Authority
+        debiased_birank: 補正後BiRank
         cross_studio_bonus: クロススタジオボーナス
         diversity_factor: 多様性係数
     """
 
     person_id: str
-    original_authority: float = 0.0
+    original_birank: float = 0.0
     studio_bias: float = 0.0
-    debiased_authority: float = 0.0
+    debiased_birank: float = 0.0
     cross_studio_bonus: float = 0.0
     diversity_factor: float = 1.0
 
@@ -206,7 +206,7 @@ def compute_studio_prestige(
 
         studio = extract_studio_from_anime(anime)
         if studio and credit.person_id in person_scores:
-            score = person_scores[credit.person_id].get("authority", 0)
+            score = person_scores[credit.person_id].get("birank", 0)
             studio_scores[studio].append(score)
 
     # Average score per studio
@@ -226,16 +226,16 @@ def compute_studio_prestige(
     return studio_prestige
 
 
-def debias_authority_scores(
+def debias_birank_scores(
     person_scores: dict[str, dict],
     bias_metrics: dict[str, StudioBiasMetrics],
     studio_prestige: dict[str, float],
     debias_strength: float = 0.3,
 ) -> dict[str, DebiasedScore]:
-    """Authorityスコアからスタジオバイアスを除去.
+    """BiRankスコアからスタジオバイアスを除去.
 
     Args:
-        person_scores: person_id → scores dict（authorityを含む）
+        person_scores: person_id → scores dict（birankを含む）
         bias_metrics: スタジオバイアス指標
         studio_prestige: スタジオの威信スコア
         debias_strength: 補正の強さ（0-1）
@@ -253,14 +253,14 @@ def debias_authority_scores(
     debiased: dict[str, DebiasedScore] = {}
 
     for person_id, scores in person_scores.items():
-        original_authority = scores.get("authority", 0)
+        original_birank = scores.get("birank", 0)
 
         if person_id not in bias_metrics:
             # No bias data, keep original
             debiased[person_id] = DebiasedScore(
                 person_id=person_id,
-                original_authority=original_authority,
-                debiased_authority=original_authority,
+                original_birank=original_birank,
+                debiased_birank=original_birank,
             )
             continue
 
@@ -281,22 +281,22 @@ def debias_authority_scores(
         # More studios = more validation
         cross_studio_bonus = min(0.1, metrics.cross_studio_works * 0.02)  # Up to +10%
 
-        # Debiased authority
-        debiased_authority = original_authority * (
+        # Debiased birank
+        debiased_birank = original_birank * (
             1 - studio_bias
-        ) * diversity_factor + (original_authority * cross_studio_bonus)
+        ) * diversity_factor + (original_birank * cross_studio_bonus)
 
         debiased[person_id] = DebiasedScore(
             person_id=person_id,
-            original_authority=round(original_authority, 4),
+            original_birank=round(original_birank, 4),
             studio_bias=round(studio_bias, 4),
-            debiased_authority=round(debiased_authority, 4),
+            debiased_birank=round(debiased_birank, 4),
             cross_studio_bonus=round(cross_studio_bonus, 4),
             diversity_factor=round(diversity_factor, 3),
         )
 
     logger.info(
-        "authority_debiased",
+        "birank_debiased",
         persons=len(debiased),
         avg_bias=round(
             sum(d.studio_bias for d in debiased.values()) / len(debiased), 4
@@ -325,9 +325,9 @@ def find_undervalued_by_studio(
     improvements = [
         (
             person_id,
-            d.original_authority,
-            d.debiased_authority,
-            d.debiased_authority - d.original_authority,
+            d.original_birank,
+            d.debiased_birank,
+            d.debiased_birank - d.original_birank,
         )
         for person_id, d in debiased.items()
     ]
@@ -363,9 +363,9 @@ def find_overvalued_by_studio(
     declines = [
         (
             person_id,
-            d.original_authority,
-            d.debiased_authority,
-            d.original_authority - d.debiased_authority,
+            d.original_birank,
+            d.debiased_birank,
+            d.original_birank - d.debiased_birank,
         )
         for person_id, d in debiased.items()
     ]
@@ -389,19 +389,19 @@ class StudioDisparityResult:
     Attributes:
         studio: スタジオ名
         person_count: 所属人数
-        mean_composite: 平均compositeスコア
-        mean_authority: 平均Authorityスコア
-        mean_trust: 平均Trustスコア
-        mean_skill: 平均Skillスコア
-        score_std: compositeの標準偏差
+        mean_iv_score: 平均IV Scoreスコア
+        mean_birank: 平均BiRankスコア
+        mean_patronage: 平均Patronageスコア
+        mean_person_fe: 平均Person FEスコア
+        score_std: iv_scoreの標準偏差
     """
 
     studio: str
     person_count: int = 0
-    mean_composite: float = 0.0
-    mean_authority: float = 0.0
-    mean_trust: float = 0.0
-    mean_skill: float = 0.0
+    mean_iv_score: float = 0.0
+    mean_birank: float = 0.0
+    mean_patronage: float = 0.0
+    mean_person_fe: float = 0.0
     score_std: float = 0.0
 
 
@@ -413,13 +413,13 @@ def compute_studio_disparity(
 ) -> dict[str, StudioDisparityResult]:
     """スタジオ間の待遇差（スコア分布）を分析.
 
-    同程度のSkillを持つ人材がスタジオによって
-    異なるAuthority/Trust評価を受けているかを検出。
+    同程度のPerson FEを持つ人材がスタジオによって
+    異なるBiRank/Patronage評価を受けているかを検出。
 
     Args:
         credits: 全クレジット
         anime_map: anime_id → Anime
-        person_scores: person_id → {"authority", "trust", "skill", "composite"}
+        person_scores: person_id → {"birank", "patronage", "person_fe", "iv_score"}
         min_persons: 最低所属人数（統計的信頼性のため）
 
     Returns:
@@ -457,28 +457,28 @@ def compute_studio_disparity(
         if len(scores_list) < min_persons:
             continue
 
-        composites = [s.get("composite", 0) for s in scores_list]
-        authorities = [s.get("authority", 0) for s in scores_list]
-        trusts = [s.get("trust", 0) for s in scores_list]
-        skills = [s.get("skill", 0) for s in scores_list]
+        iv_scores = [s.get("iv_score", 0) for s in scores_list]
+        biranks = [s.get("birank", 0) for s in scores_list]
+        patronages = [s.get("patronage", 0) for s in scores_list]
+        person_fes = [s.get("person_fe", 0) for s in scores_list]
 
-        n = len(composites)
-        mean_comp = sum(composites) / n
-        mean_auth = sum(authorities) / n
-        mean_trust = sum(trusts) / n
-        mean_skill = sum(skills) / n
+        n = len(iv_scores)
+        mean_iv = sum(iv_scores) / n
+        mean_birank = sum(biranks) / n
+        mean_patronage = sum(patronages) / n
+        mean_person_fe = sum(person_fes) / n
 
         # Standard deviation
-        variance = sum((x - mean_comp) ** 2 for x in composites) / n
+        variance = sum((x - mean_iv) ** 2 for x in iv_scores) / n
         std_dev = math.sqrt(variance)
 
         results[studio] = StudioDisparityResult(
             studio=studio,
             person_count=n,
-            mean_composite=round(mean_comp, 4),
-            mean_authority=round(mean_auth, 4),
-            mean_trust=round(mean_trust, 4),
-            mean_skill=round(mean_skill, 4),
+            mean_iv_score=round(mean_iv, 4),
+            mean_birank=round(mean_birank, 4),
+            mean_patronage=round(mean_patronage, 4),
+            mean_person_fe=round(mean_person_fe, 4),
             score_std=round(std_dev, 4),
         )
 
@@ -486,8 +486,8 @@ def compute_studio_disparity(
         "studio_disparity_computed",
         studios=len(results),
         max_gap=round(
-            max(r.mean_composite for r in results.values())
-            - min(r.mean_composite for r in results.values()),
+            max(r.mean_iv_score for r in results.values())
+            - min(r.mean_iv_score for r in results.values()),
             4,
         )
         if len(results) >= 2
@@ -520,7 +520,7 @@ def main():
     anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
     person_scores = {
-        s.person_id: {"authority": s.authority, "composite": s.composite}
+        s.person_id: {"birank": s.birank, "iv_score": s.iv_score}
         for s in scores_list
     }
 
@@ -533,8 +533,8 @@ def main():
     studio_prestige = compute_studio_prestige(credits, anime_map, person_scores)
 
     # バイアス補正
-    logger.info("debiasing_authority_scores")
-    debiased = debias_authority_scores(
+    logger.info("debiasing_birank_scores")
+    debiased = debias_birank_scores(
         person_scores, bias_metrics, studio_prestige, debias_strength=0.3
     )
 
@@ -556,7 +556,7 @@ def main():
         studio_name = primary.primary_studio if primary else "unknown"
 
         print(f"{name} ({studio_name}):")
-        print(f"  元Authority: {original:.3f}")
+        print(f"  元BiRank: {original:.3f}")
         print(f"  補正後: {debiased_score:.3f} (+{improvement:.3f})")
         if primary:
             print(f"  スタジオ多様性: {primary.studio_diversity:.2f}")
@@ -572,7 +572,7 @@ def main():
         studio_name = primary.primary_studio if primary else "unknown"
 
         print(f"{name} ({studio_name}):")
-        print(f"  元Authority: {original:.3f}")
+        print(f"  元BiRank: {original:.3f}")
         print(f"  補正後: {debiased_score:.3f} (-{decline:.3f})")
         if primary:
             print(f"  スタジオ集中度: {primary.studio_concentration:.2f}")

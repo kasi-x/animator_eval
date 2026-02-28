@@ -23,6 +23,11 @@ format = "ruff format src/ tests/"
 # Benchmarks
 bench = "python benchmarks/bench_pipeline.py"
 
+# Reports & Explorer
+reports = "python scripts/generate_all_reports.py"
+build-explorer = "cd cmd/explorer && go build -o ../../bin/explorer ."
+explorer = "bin/explorer -data ./result/json -static ./static/explorer -port 3000"
+
 # Utilities
 synthetic = "python -m src.synthetic"
 build-rust = "maturin develop --release --manifest-path rust_ext/Cargo.toml --uv"
@@ -60,6 +65,8 @@ pandas = "*"
 numpy = "*"
 matplotlib = "*"
 plotly = ">=6.5.2,<7"
+scipy = "*"
+scikit-learn = "*"
 
 [feature.analysis.pypi-dependencies]
 openskill = "*"

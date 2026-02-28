@@ -41,7 +41,7 @@ def recommend_for_team(
     if not team_scores:
         return []
 
-    axes = ("authority", "trust", "skill")
+    axes = ("person_fe", "birank", "patronage")
     team_avg = {
         axis: sum(r.get(axis, 0) for r in team_scores) / len(team_scores)
         for axis in axes
@@ -73,7 +73,7 @@ def recommend_for_team(
         collab_bonus = min(shared * 5, 30)
 
         # Base quality
-        quality = r.get("composite", 0) / 100 * 40
+        quality = r.get("iv_score", 0) / 100 * 40
 
         compatibility = round(quality + complement_bonus + collab_bonus, 2)
 
@@ -89,7 +89,7 @@ def recommend_for_team(
             {
                 "person_id": pid,
                 "name": r.get("name", "") or r.get("name_ja", "") or pid,
-                "composite": r.get("composite", 0),
+                "iv_score": r.get("iv_score", 0),
                 "compatibility_score": compatibility,
                 "shared_projects": shared,
                 "reasons": reasons,

@@ -40,11 +40,13 @@ def generate_json_report(
             "disclaimer_ja": DISCLAIMER,
             "disclaimer_en": DISCLAIMER_EN,
             "total_persons": len(results),
-            "scoring_axes": {
-                "authority": "Weighted PageRank — コラボレーショングラフ上のネットワーク中心性",
-                "trust": "Cumulative edge weight — 監督/演出からの継続起用度",
-                "skill": "OpenSkill rating — 高評価作品への参加に基づくレーティング",
-                "composite": "3軸の重み付き統合 (A:0.4, T:0.35, S:0.25)",
+            "scoring_components": {
+                "person_fe": "AKM固定効果推定 — 個人の固有寄与（スタジオ効果を除去）",
+                "birank": "BiRank — 二部グラフPageRankによるネットワーク中心性",
+                "patronage": "Patronage Premium — 監督からの継続的バックアップ価値",
+                "iv_score": "Integrated Value — CV最適化による8コンポーネント統合スコア",
+                "dormancy": "Dormancy Penalty — 活動継続性の減衰係数",
+                "awcc": "AWCC — コミュニティ横断的な知識橋渡し指標",
             },
         },
         "rankings": results,
@@ -68,18 +70,18 @@ def generate_text_report(
 ) -> Path:
     """テキスト形式のレポートを出力する."""
     lines = [
-        "=" * 80,
-        "Animetor Eval — ネットワーク評価レポート",
+        "=" * 88,
+        "Animetor Eval — 構造推定ネットワーク評価レポート",
         f"生成日時: {datetime.now().strftime('%Y-%m-%d %H:%M')}",
-        "=" * 80,
+        "=" * 88,
         "",
         "【注意】" + DISCLAIMER,
         "",
         f"評価対象: {len(results)} 名",
         "",
-        "-" * 88,
-        f"{'Rank':<6}{'Name':<30}{'Auth':>8}{'Trust':>8}{'Skill':>8}{'Total':>8}{'Conf':>8}",
-        "-" * 88,
+        "-" * 96,
+        f"{'Rank':<6}{'Name':<30}{'IV Score':>10}{'PersonFE':>10}{'BiRank':>10}{'Patron':>10}{'Conf':>8}",
+        "-" * 96,
     ]
 
     for i, r in enumerate(results[:top_n], 1):
@@ -87,13 +89,13 @@ def generate_text_report(
         conf = r.get("confidence", 0)
         conf_str = f"{conf:.0%}" if conf else "-"
         lines.append(
-            f"{i:<6}{name:<30}{r['authority']:>8.1f}{r['trust']:>8.1f}"
-            f"{r['skill']:>8.1f}{r['composite']:>8.1f}{conf_str:>8}"
+            f"{i:<6}{name:<30}{r.get('iv_score', 0):>10.2f}{r.get('person_fe', 0):>10.4f}"
+            f"{r.get('birank', 0):>10.4f}{r.get('patronage', 0):>10.4f}{conf_str:>8}"
         )
 
     lines.extend(
         [
-            "-" * 80,
+            "-" * 96,
             "",
         ]
     )
@@ -123,12 +125,12 @@ def generate_text_report(
     lines.extend(
         [
             "スコア凡例:",
-            "  Authority : PageRank（高影響力の監督/作品との関係が多いほど高い）",
-            "  Trust     : 継続起用度（同じ監督から繰り返し起用されるほど高い）",
-            "  Skill     : OpenSkillレーティング（高評価作品への参加が多いほど高い）",
-            "  Total     : 統合スコア (Auth×0.4 + Trust×0.35 + Skill×0.25)",
+            "  IV Score  : Integrated Value（8コンポーネント統合スコア）",
+            "  PersonFE  : AKM個人固定効果（スタジオ効果除去後の個人寄与）",
+            "  BiRank    : BiRank（二部グラフネットワーク中心性）",
+            "  Patron    : Patronage Premium（監督バックアップ価値）",
             "",
-            "=" * 80,
+            "=" * 88,
         ]
     )
 
@@ -160,14 +162,18 @@ def generate_csv_report(
         "name",
         "name_ja",
         "name_en",
-        "authority",
-        "trust",
-        "skill",
-        "composite",
-        "authority_pct",
-        "trust_pct",
-        "skill_pct",
-        "composite_pct",
+        "iv_score",
+        "person_fe",
+        "studio_fe_exposure",
+        "birank",
+        "patronage",
+        "dormancy",
+        "awcc",
+        "ndi",
+        "iv_score_pct",
+        "person_fe_pct",
+        "birank_pct",
+        "patronage_pct",
         "primary_role",
         "total_credits",
         "first_year",
@@ -189,14 +195,18 @@ def generate_csv_report(
                     "name": r.get("name", ""),
                     "name_ja": r.get("name_ja", ""),
                     "name_en": r.get("name_en", ""),
-                    "authority": r.get("authority", 0),
-                    "trust": r.get("trust", 0),
-                    "skill": r.get("skill", 0),
-                    "composite": r.get("composite", 0),
-                    "authority_pct": r.get("authority_pct", ""),
-                    "trust_pct": r.get("trust_pct", ""),
-                    "skill_pct": r.get("skill_pct", ""),
-                    "composite_pct": r.get("composite_pct", ""),
+                    "iv_score": r.get("iv_score", 0),
+                    "person_fe": r.get("person_fe", 0),
+                    "studio_fe_exposure": r.get("studio_fe_exposure", 0),
+                    "birank": r.get("birank", 0),
+                    "patronage": r.get("patronage", 0),
+                    "dormancy": r.get("dormancy", 0),
+                    "awcc": r.get("awcc", 0),
+                    "ndi": r.get("ndi", 0),
+                    "iv_score_pct": r.get("iv_score_pct", ""),
+                    "person_fe_pct": r.get("person_fe_pct", ""),
+                    "birank_pct": r.get("birank_pct", ""),
+                    "patronage_pct": r.get("patronage_pct", ""),
                     "primary_role": r.get("primary_role", ""),
                     "total_credits": r.get("total_credits", ""),
                     "first_year": career.get("first_year", ""),
@@ -244,25 +254,26 @@ def generate_html_report(
                 conf_cell = f'<td><span style="color:#c62828">{conf:.0%}</span></td>'
         table_rows.append(
             f"<tr><td>{i}</td><td>{name}</td><td>{role}</td>"
-            f"<td>{r['authority']:.1f}</td><td>{r['trust']:.1f}</td>"
-            f"<td>{r['skill']:.1f}</td><td><strong>{r['composite']:.1f}</strong></td>"
+            f"<td>{r.get('iv_score', 0):.2f}</td><td>{r.get('person_fe', 0):.4f}</td>"
+            f"<td>{r.get('birank', 0):.4f}</td><td>{r.get('patronage', 0):.4f}</td>"
+            f"<td>{r.get('dormancy', 1):.2f}</td>"
             f"{conf_cell}</tr>"
         )
 
     # Build SVG bar chart for score distribution
-    max_composite = max((r["composite"] for r in top), default=1) or 1
+    max_iv = max((r.get("iv_score", 0) for r in top), default=1) or 1
     bars = []
     for i, r in enumerate(top[:20]):
         y = i * 28
-        w_auth = r["authority"] / max_composite * 300
-        w_trust = r["trust"] / max_composite * 300
-        w_skill = r["skill"] / max_composite * 300
+        w_fe = abs(r.get("person_fe", 0)) / (max_iv or 1) * 300
+        w_br = r.get("birank", 0) / (max_iv or 1) * 300
+        w_pt = r.get("patronage", 0) / (max_iv or 1) * 300
         name = _html_escape(r.get("name", "")[:20])
         bars.append(
             f'<text x="0" y="{y + 18}" font-size="11" fill="#333">{name}</text>'
-            f'<rect x="160" y="{y + 4}" width="{w_auth:.0f}" height="7" fill="#2196F3" opacity="0.8"/>'
-            f'<rect x="160" y="{y + 12}" width="{w_trust:.0f}" height="7" fill="#4CAF50" opacity="0.8"/>'
-            f'<rect x="160" y="{y + 20}" width="{w_skill:.0f}" height="7" fill="#FF9800" opacity="0.8"/>'
+            f'<rect x="160" y="{y + 4}" width="{w_fe:.0f}" height="7" fill="#2196F3" opacity="0.8"/>'
+            f'<rect x="160" y="{y + 12}" width="{w_br:.0f}" height="7" fill="#4CAF50" opacity="0.8"/>'
+            f'<rect x="160" y="{y + 20}" width="{w_pt:.0f}" height="7" fill="#FF9800" opacity="0.8"/>'
         )
     chart_height = min(len(top), 20) * 28 + 10
     svg_chart = (
@@ -321,7 +332,7 @@ def generate_html_report(
 <h2>Top {top_n} Ranking</h2>
 <table>
 <thead>
-<tr><th>#</th><th>Name</th><th>Role</th><th>Authority</th><th>Trust</th><th>Skill</th><th>Composite</th>{"<th>Conf.</th>" if has_confidence else ""}</tr>
+<tr><th>#</th><th>Name</th><th>Role</th><th>IV Score</th><th>Person FE</th><th>BiRank</th><th>Patronage</th><th>Dormancy</th>{"<th>Conf.</th>" if has_confidence else ""}</tr>
 </thead>
 <tbody>
 {"".join(table_rows)}
@@ -331,9 +342,9 @@ def generate_html_report(
 <h2>Score Distribution (Top 20)</h2>
 <div class="chart-box">
 <div class="legend">
-  <span><span class="dot" style="background:#2196F3"></span> Authority</span>
-  <span><span class="dot" style="background:#4CAF50"></span> Trust</span>
-  <span><span class="dot" style="background:#FF9800"></span> Skill</span>
+  <span><span class="dot" style="background:#2196F3"></span> Person FE</span>
+  <span><span class="dot" style="background:#4CAF50"></span> BiRank</span>
+  <span><span class="dot" style="background:#FF9800"></span> Patronage</span>
 </div>
 {svg_chart}
 </div>
@@ -342,7 +353,7 @@ def generate_html_report(
 <ul>{role_items}</ul>
 
 <footer>
-Animetor Eval v0.1 — Scores represent network position and density, not individual ability.
+Animetor Eval v0.2 — Scores represent network position and structural estimation, not individual ability.
 </footer>
 </body>
 </html>"""
@@ -437,10 +448,13 @@ def generate_visual_dashboard(
                 conf_cell = f'<td><span style="color:#c62828">{conf:.0%}</span></td>'
         table_rows.append(
             f"<tr><td>{i}</td><td>{name}</td><td>{role}</td>"
-            f"<td>{r['authority']:.1f}</td><td>{r['trust']:.1f}</td>"
-            f"<td>{r['skill']:.1f}</td><td><strong>{r['composite']:.1f}</strong></td>"
+            f"<td>{r.get('iv_score', 0):.2f}</td><td>{r.get('person_fe', 0):.4f}</td>"
+            f"<td>{r.get('birank', 0):.4f}</td><td>{r.get('patronage', 0):.4f}</td>"
             f"<td>{tags}</td>{conf_cell}</tr>"
         )
+
+    top_iv = results[0].get("iv_score", 0) if results else 0
+    median_iv = results[len(results) // 2].get("iv_score", 0) if results else 0
 
     html = f"""<!DOCTYPE html>
 <html lang="ja">
@@ -490,15 +504,15 @@ def generate_visual_dashboard(
 
 <div class="stats-row">
   <div class="stat-card"><div class="value">{len(results)}</div><div class="label">Persons</div></div>
-  <div class="stat-card"><div class="value">{results[0]["composite"]:.1f}</div><div class="label">Top Score</div></div>
-  <div class="stat-card"><div class="value">{results[len(results) // 2]["composite"]:.1f}</div><div class="label">Median Score</div></div>
+  <div class="stat-card"><div class="value">{top_iv:.2f}</div><div class="label">Top IV Score</div></div>
+  <div class="stat-card"><div class="value">{median_iv:.2f}</div><div class="label">Median IV Score</div></div>
   <div class="stat-card"><div class="value">{len(chart_sections)}</div><div class="label">Charts</div></div>
 </div>
 
 <h2>Top 30 Ranking</h2>
 <table>
 <thead>
-<tr><th>#</th><th>Name</th><th>Role</th><th>Auth</th><th>Trust</th><th>Skill</th><th>Composite</th><th>Tags</th>{"<th>Conf.</th>" if dash_has_conf else ""}</tr>
+<tr><th>#</th><th>Name</th><th>Role</th><th>IV Score</th><th>Person FE</th><th>BiRank</th><th>Patronage</th><th>Tags</th>{"<th>Conf.</th>" if dash_has_conf else ""}</tr>
 </thead>
 <tbody>
 {"".join(table_rows)}
@@ -509,7 +523,7 @@ def generate_visual_dashboard(
 {"<div class='chart-grid'>" + "".join(chart_sections) + "</div>" if chart_sections else "<p>No visualization charts available. Run pipeline with <code>visualize=True</code> to generate charts.</p>"}
 
 <footer>
-Animetor Eval — Scores represent network position and density, not individual ability.
+Animetor Eval — Scores represent network position and structural estimation, not individual ability.
 </footer>
 </body>
 </html>"""

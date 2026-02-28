@@ -124,7 +124,7 @@ class Neo4jWriter:
 
             # Additional indexes for common queries
             indexes = [
-                "CREATE INDEX person_composite IF NOT EXISTS FOR (p:Person) ON (p.composite)",
+                "CREATE INDEX person_iv_score IF NOT EXISTS FOR (p:Person) ON (p.iv_score)",
                 "CREATE INDEX anime_year IF NOT EXISTS FOR (a:Anime) ON (a.year)",
                 "CREATE INDEX credit_role IF NOT EXISTS FOR ()-[r:CREDITED_IN]-() ON (r.role)",
             ]
@@ -165,10 +165,10 @@ class Neo4jWriter:
             p.name_en = person.name_en,
             p.mal_id = person.mal_id,
             p.anilist_id = person.anilist_id,
-            p.authority = person.authority,
-            p.trust = person.trust,
-            p.skill = person.skill,
-            p.composite = person.composite
+            p.birank = person.birank,
+            p.patronage = person.patronage,
+            p.person_fe = person.person_fe,
+            p.iv_score = person.iv_score
         """
 
         with self.driver.session() as session:
@@ -181,16 +181,16 @@ class Neo4jWriter:
                         "name_en": p.name_en,
                         "mal_id": p.mal_id,
                         "anilist_id": p.anilist_id,
-                        "authority": round(score_map[p.id].authority, 2)
+                        "birank": round(score_map[p.id].birank, 2)
                         if p.id in score_map
                         else None,
-                        "trust": round(score_map[p.id].trust, 2)
+                        "patronage": round(score_map[p.id].patronage, 2)
                         if p.id in score_map
                         else None,
-                        "skill": round(score_map[p.id].skill, 2)
+                        "person_fe": round(score_map[p.id].person_fe, 2)
                         if p.id in score_map
                         else None,
-                        "composite": round(score_map[p.id].composite, 2)
+                        "iv_score": round(score_map[p.id].iv_score, 2)
                         if p.id in score_map
                         else None,
                     }
@@ -589,7 +589,7 @@ class Neo4jReader:
             MATCH path = (center)-[:COLLABORATED_WITH*1..$depth]-(neighbor:Person)
             WITH DISTINCT neighbor
             RETURN neighbor
-            ORDER BY neighbor.composite DESC
+            ORDER BY neighbor.iv_score DESC
             LIMIT $limit
         }
         WITH center, collect(neighbor) AS neighbors
@@ -605,7 +605,7 @@ class Neo4jReader:
             [n IN neighbors | {
                 id: n.id,
                 name: coalesce(n.name_en, n.name_ja, n.id),
-                composite: n.composite
+                iv_score: n.iv_score
             }] AS neighbor_nodes,
             collect(CASE WHEN r IS NOT NULL THEN {
                 source: n1.id,
@@ -653,7 +653,7 @@ class Neo4jReader:
         person_id: str,
         limit: int = 10,
     ) -> list[dict[str, Any]]:
-        """Find paths to the most influential persons (highest composite score).
+        """Find paths to the most influential persons (highest iv_score).
 
         Discovers shortest paths from the given person to the top-scored
         persons in the graph.
@@ -663,24 +663,24 @@ class Neo4jReader:
             limit: Maximum number of influential targets (default: 10)
 
         Returns:
-            List of dicts with target info, composite score, path length, and path.
+            List of dicts with target info, iv_score, path length, and path.
         """
         cypher = """
         MATCH (source:Person {id: $pid})
         MATCH (target:Person)
         WHERE target <> source
-          AND target.composite IS NOT NULL
+          AND target.iv_score IS NOT NULL
         WITH source, target
-        ORDER BY target.composite DESC
+        ORDER BY target.iv_score DESC
         LIMIT $limit
         MATCH path = shortestPath((source)-[:COLLABORATED_WITH*]-(target))
         RETURN
             target.id AS target_id,
             coalesce(target.name_en, target.name_ja, target.id) AS target_name,
-            target.composite AS composite,
+            target.iv_score AS iv_score,
             length(path) AS path_length,
             [n IN nodes(path) | n.id] AS path
-        ORDER BY target.composite DESC
+        ORDER BY target.iv_score DESC
         """
         with self.driver.session() as session:
             result = session.run(cypher, pid=person_id, limit=limit)
@@ -690,7 +690,7 @@ class Neo4jReader:
                     {
                         "target": record["target_id"],
                         "target_name": record["target_name"],
-                        "composite": record["composite"],
+                        "iv_score": record["iv_score"],
                         "path_length": record["path_length"],
                         "path": list(record["path"]),
                     }
@@ -738,7 +738,7 @@ class Neo4jReader:
             [p IN persons | {
                 id: p.id,
                 name: coalesce(p.name_en, p.name_ja, p.id),
-                composite: p.composite
+                iv_score: p.iv_score
             }] AS nodes,
             edges,
             size(persons) AS node_count,

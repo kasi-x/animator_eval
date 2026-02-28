@@ -77,10 +77,10 @@ def populated_freshness_db(monkeypatch, tmp_path):
         );
         CREATE TABLE IF NOT EXISTS scores (
             person_id TEXT PRIMARY KEY,
-            authority REAL DEFAULT 0.0,
-            trust REAL DEFAULT 0.0,
-            skill REAL DEFAULT 0.0,
-            composite REAL DEFAULT 0.0,
+            iv_score REAL DEFAULT 0.0,
+            person_fe REAL DEFAULT 0.0,
+            birank REAL DEFAULT 0.0,
+            patronage REAL DEFAULT 0.0,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         CREATE TABLE IF NOT EXISTS data_sources (
@@ -364,7 +364,7 @@ class TestFreshnessCliCommand:
             CREATE TABLE persons (id TEXT PRIMARY KEY, name_ja TEXT DEFAULT '', name_en TEXT DEFAULT '', aliases TEXT DEFAULT '[]', mal_id INTEGER, anilist_id INTEGER, canonical_id TEXT, UNIQUE(mal_id), UNIQUE(anilist_id));
             CREATE TABLE anime (id TEXT PRIMARY KEY, title_ja TEXT DEFAULT '', title_en TEXT DEFAULT '', year INTEGER, season TEXT, episodes INTEGER, mal_id INTEGER, anilist_id INTEGER, score REAL, UNIQUE(mal_id), UNIQUE(anilist_id));
             CREATE TABLE credits (id INTEGER PRIMARY KEY AUTOINCREMENT, person_id TEXT NOT NULL, anime_id TEXT NOT NULL, role TEXT NOT NULL, episode INTEGER DEFAULT -1, source TEXT DEFAULT '', UNIQUE(person_id, anime_id, role, episode));
-            CREATE TABLE scores (person_id TEXT PRIMARY KEY, authority REAL DEFAULT 0.0, trust REAL DEFAULT 0.0, skill REAL DEFAULT 0.0, composite REAL DEFAULT 0.0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE scores (person_id TEXT PRIMARY KEY, iv_score REAL DEFAULT 0.0, person_fe REAL DEFAULT 0.0, birank REAL DEFAULT 0.0, patronage REAL DEFAULT 0.0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
             CREATE TABLE data_sources (source TEXT PRIMARY KEY, last_scraped_at TIMESTAMP, item_count INTEGER DEFAULT 0, status TEXT DEFAULT 'ok');
             CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         """)

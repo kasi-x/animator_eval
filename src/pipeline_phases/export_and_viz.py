@@ -37,12 +37,164 @@ class ExportSpec:
     log_metrics: Callable[[Any], dict[str, Any]] | None = None
 
 
+def _build_pid_to_name(context: PipelineContext) -> dict[str, str]:
+    """Build person_id → display name mapping from context results."""
+    return {r["person_id"]: r["name"] or r["person_id"] for r in context.results}
+
+
+def _transform_collaborations(data: list, context: PipelineContext) -> list:
+    """Add person names to collaboration pairs."""
+    if not data:
+        return []
+    pid_to_name = _build_pid_to_name(context)
+    for item in data:
+        if "person_a" in item:
+            item["name_a"] = pid_to_name.get(item["person_a"], item["person_a"])
+        if "person_b" in item:
+            item["name_b"] = pid_to_name.get(item["person_b"], item["person_b"])
+    return data
+
+
+def _transform_mentorships(data: list, context: PipelineContext) -> list:
+    """Add person names to mentorship pairs."""
+    if not data:
+        return []
+    pid_to_name = _build_pid_to_name(context)
+    for item in data:
+        if "mentor_id" in item:
+            item["mentor_name"] = pid_to_name.get(item["mentor_id"], item["mentor_id"])
+        if "mentee_id" in item:
+            item["mentee_name"] = pid_to_name.get(item["mentee_id"], item["mentee_id"])
+    return data
+
+
+def _transform_bridges(data: dict, context: PipelineContext) -> dict:
+    """Add person names to bridge analysis results."""
+    if not data:
+        return {}
+    pid_to_name = _build_pid_to_name(context)
+    if "bridge_persons" in data:
+        for bp in data["bridge_persons"]:
+            if "person_id" in bp:
+                bp["name"] = pid_to_name.get(bp["person_id"], bp["person_id"])
+    if "cross_community_edges" in data:
+        for edge in data["cross_community_edges"]:
+            if "person_a" in edge:
+                edge["name_a"] = pid_to_name.get(edge["person_a"], edge["person_a"])
+            if "person_b" in edge:
+                edge["name_b"] = pid_to_name.get(edge["person_b"], edge["person_b"])
+    return data
+
+
+def _transform_influence(data: dict, context: PipelineContext) -> dict:
+    """Add person names to influence tree."""
+    if not data:
+        return {}
+    pid_to_name = _build_pid_to_name(context)
+    if "mentors" in data:
+        for mid, mentor_data in data["mentors"].items():
+            mentor_data["name"] = pid_to_name.get(mid, mid)
+            for mentee in mentor_data.get("mentees", []):
+                if "mentee_id" in mentee:
+                    mentee["name"] = pid_to_name.get(
+                        mentee["mentee_id"], mentee["mentee_id"]
+                    )
+    return data
+
+
+def _transform_teams(data: dict, context: PipelineContext) -> dict:
+    """Add person names to team analysis results."""
+    if not data:
+        return {}
+    pid_to_name = _build_pid_to_name(context)
+    for team in data.get("high_score_teams", []):
+        if "roles" in team:
+            named_roles = {}
+            for role_name, pids in team["roles"].items():
+                named_roles[role_name] = [
+                    {"person_id": pid, "name": pid_to_name.get(pid, pid)}
+                    for pid in pids
+                ]
+            team["roles"] = named_roles
+    for pair in data.get("recommended_pairs", []):
+        if "person_a" in pair:
+            pair["name_a"] = pid_to_name.get(pair["person_a"], pair["person_a"])
+        if "person_b" in pair:
+            pair["name_b"] = pid_to_name.get(pair["person_b"], pair["person_b"])
+    return data
+
+
+def _transform_mentorship_tree(data: dict, context: PipelineContext) -> dict:
+    """Add person names to mentorship tree."""
+    if not data:
+        return {}
+    pid_to_name = _build_pid_to_name(context)
+    if "tree" in data:
+        named_tree = {}
+        for mentor_id, mentee_ids in data["tree"].items():
+            named_tree[mentor_id] = {
+                "mentor_name": pid_to_name.get(mentor_id, mentor_id),
+                "mentees": [
+                    {"mentee_id": mid, "name": pid_to_name.get(mid, mid)}
+                    for mid in mentee_ids
+                ],
+            }
+        data["tree"] = named_tree
+    if "roots" in data:
+        data["roots"] = [
+            {"person_id": pid, "name": pid_to_name.get(pid, pid)}
+            for pid in data["roots"]
+        ]
+    return data
+
+
+def _transform_cooccurrence_groups(data: dict, context: PipelineContext) -> dict:
+    """Add member names and anime titles to cooccurrence groups."""
+    if not data:
+        return {}
+    pid_to_name = _build_pid_to_name(context)
+    aid_to_title = {
+        anime.id: anime.display_title for anime in context.anime_list
+    }
+    for group in data.get("groups", []):
+        group["member_names"] = [
+            pid_to_name.get(pid, pid) for pid in group.get("members", [])
+        ]
+        group["shared_anime_titles"] = [
+            aid_to_title.get(aid, aid) for aid in group.get("shared_anime", [])
+        ]
+    # Also update top_groups in temporal_slices
+    for ts in data.get("temporal_slices", []):
+        for tg in ts.get("top_groups", []):
+            tg["member_names"] = [
+                pid_to_name.get(pid, pid) for pid in tg.get("members", [])
+            ]
+    return data
+
+
+def _transform_temporal_pagerank(data: dict, context: PipelineContext) -> dict:
+    """Add person names to temporal pagerank timeline, foresight and promotion data."""
+    if not data:
+        return {}
+    pid_to_name = _build_pid_to_name(context)
+    if "authority_timelines" in data:
+        for pid, tdata in data["authority_timelines"].items():
+            tdata["name"] = pid_to_name.get(pid, pid)
+    if "foresight_scores" in data:
+        for pid, fdata in data["foresight_scores"].items():
+            fdata["name"] = pid_to_name.get(pid, pid)
+    if "promotion_credits" in data:
+        for pid, pdata in data["promotion_credits"].items():
+            pdata["name"] = pid_to_name.get(pid, pid)
+    return data
+
+
 def _transform_circles(data: dict, context: PipelineContext) -> dict:
     """Transform circles data with name lookups."""
     if not data:
         return {}
 
-    pid_to_name = {r["person_id"]: r["name"] or r["person_id"] for r in context.results}
+    pid_to_name = _build_pid_to_name(context)
     circles_output = {}
     for dir_id, circle in data.items():
         circle_dict = asdict(circle)
@@ -61,21 +213,23 @@ def _transform_circles(data: dict, context: PipelineContext) -> dict:
 
 
 def _transform_growth(data: dict, context: PipelineContext) -> dict:
-    """Transform growth data with trend summary."""
+    """Transform growth data with trend summary and names."""
     if not data:
         return {}
+
+    pid_to_name = _build_pid_to_name(context)
 
     # Summarize trend counts
     trend_counts: dict[str, int] = {}
     for gd in data.values():
         trend_counts[gd.trend] = trend_counts.get(gd.trend, 0) + 1
 
-    # Convert top 200 by activity_ratio to dicts
+    # Convert top 200 by activity_ratio to dicts with names
     return {
         "trend_summary": trend_counts,
         "total_persons": len(data),
         "persons": {
-            pid: asdict(metrics)
+            pid: {**asdict(metrics), "name": pid_to_name.get(pid, pid)}
             for pid, metrics in sorted(
                 data.items(),
                 key=lambda x: x[1].activity_ratio,
@@ -152,9 +306,9 @@ def _transform_summary(data: None, context: PipelineContext) -> dict:
             "scored_persons": len(context.results),
         },
         "scores": {
-            "top_composite": context.results[0]["composite"] if context.results else 0,
-            "median_composite": (
-                context.results[len(context.results) // 2]["composite"]
+            "top_iv_score": context.results[0]["iv_score"] if context.results else 0,
+            "median_iv_score": (
+                context.results[len(context.results) // 2]["iv_score"]
                 if context.results
                 else 0
             ),
@@ -202,10 +356,11 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         condition=lambda data: data.get("by_season") if data else False,
         log_message="seasonal_saved",
     ),
-    # Collaborations
+    # Collaborations (with names)
     ExportSpec(
         filename="collaborations.json",
         data_getter=lambda ctx: ctx.analysis_results.get("collaborations"),
+        transformer=_transform_collaborations,
         log_message="collaborations_saved",
         log_metrics=lambda data: {"pairs": len(data)} if data else {},
     ),
@@ -215,10 +370,11 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         data_getter=lambda ctx: ctx.analysis_results.get("outliers"),
         log_message="outliers_saved",
     ),
-    # Team patterns
+    # Team patterns (with names)
     ExportSpec(
         filename="teams.json",
         data_getter=lambda ctx: ctx.analysis_results.get("teams"),
+        transformer=_transform_teams,
         log_message="teams_saved",
         log_metrics=lambda data: {"patterns": len(data)} if data else {},
     ),
@@ -267,26 +423,29 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         data_getter=lambda ctx: ctx.analysis_results.get("role_flow"),
         log_message="role_flow_saved",
     ),
-    # Bridges
+    # Bridges (with names)
     ExportSpec(
         filename="bridges.json",
         data_getter=lambda ctx: ctx.analysis_results.get("bridges"),
+        transformer=_transform_bridges,
         log_message="bridges_saved",
         log_metrics=lambda data: (
             {"bridges": len(data)} if isinstance(data, list) else {}
         ),
     ),
-    # Mentorships
+    # Mentorships (with names)
     ExportSpec(
         filename="mentorships.json",
         data_getter=lambda ctx: ctx.analysis_results.get("mentorships"),
+        transformer=_transform_mentorships,
         log_message="mentorships_saved",
         log_metrics=lambda data: {"pairs": len(data)} if data else {},
     ),
-    # Mentorship tree
+    # Mentorship tree (with names)
     ExportSpec(
         filename="mentorship_tree.json",
         data_getter=lambda ctx: ctx.analysis_results.get("mentorship_tree"),
+        transformer=_transform_mentorship_tree,
         log_message="mentorship_tree_saved",
     ),
     # Milestones
@@ -317,10 +476,11 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="productivity_saved",
         log_metrics=lambda data: {"persons": len(data)} if data else {},
     ),
-    # Influence tree
+    # Influence tree (with names)
     ExportSpec(
         filename="influence.json",
         data_getter=lambda ctx: ctx.analysis_results.get("influence"),
+        transformer=_transform_influence,
         log_message="influence_saved",
     ),
     # Cross-validation (conditional)
@@ -472,10 +632,26 @@ EXPORT_REGISTRY: list[ExportSpec] = [
             else {}
         ),
     ),
-    # Temporal PageRank (yearly authority timelines, foresight, promotions)
+    # Co-occurrence groups (recurring core staff teams, with names)
+    ExportSpec(
+        filename="cooccurrence_groups.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("cooccurrence_groups"),
+        transformer=_transform_cooccurrence_groups,
+        log_message="cooccurrence_groups_saved",
+        log_metrics=lambda data: (
+            {
+                "groups": data.get("summary", {}).get("total_groups", 0),
+                "active": data.get("summary", {}).get("active_groups", 0),
+            }
+            if data
+            else {}
+        ),
+    ),
+    # Temporal PageRank (yearly authority timelines, foresight, promotions, with names)
     ExportSpec(
         filename="temporal_pagerank.json",
         data_getter=lambda ctx: ctx.analysis_results.get("temporal_pagerank"),
+        transformer=_transform_temporal_pagerank,
         log_message="temporal_pagerank_saved",
         log_metrics=lambda data: (
             {
@@ -486,6 +662,49 @@ EXPORT_REGISTRY: list[ExportSpec] = [
             }
             if data
             else {}
+        ),
+    ),
+    # ========== 8-Component Structural Estimation ==========
+    # AKM diagnostics
+    ExportSpec(
+        filename="akm_diagnostics.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("akm_diagnostics"),
+        log_message="akm_diagnostics_saved",
+        log_metrics=lambda data: (
+            {"r_squared": data.get("r_squared", 0), "movers": data.get("n_movers", 0)}
+            if data
+            else {}
+        ),
+    ),
+    # IV weights
+    ExportSpec(
+        filename="iv_weights.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("iv_weights"),
+        log_message="iv_weights_saved",
+    ),
+    # Knowledge spanners
+    ExportSpec(
+        filename="knowledge_spanners.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("knowledge_spanners"),
+        log_message="knowledge_spanners_saved",
+        log_metrics=lambda data: {"persons": len(data)} if data else {},
+    ),
+    # Career friction
+    ExportSpec(
+        filename="career_friction.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("career_friction_report"),
+        log_message="career_friction_saved",
+        log_metrics=lambda data: (
+            {"persons": data.get("total_persons", 0)} if data else {}
+        ),
+    ),
+    # Era effects
+    ExportSpec(
+        filename="era_effects.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("era_effects"),
+        log_message="era_effects_saved",
+        log_metrics=lambda data: (
+            {"years": len(data.get("era_fe", {}))} if data else {}
         ),
     ),
     # Pipeline summary (special case - uses elapsed time)
@@ -627,10 +846,10 @@ def _generate_visualizations(context: PipelineContext) -> None:
 
         # Collaboration network
         if context.collaboration_graph:
-            composite_scores = {r["person_id"]: r["composite"] for r in context.results}
+            iv_scores_for_plot = {r["person_id"]: r["iv_score"] for r in context.results}
             plot_collaboration_network(
                 context.collaboration_graph,
-                composite_scores,
+                iv_scores_for_plot,
                 top_n=min(50, len(context.results)),
             )
 

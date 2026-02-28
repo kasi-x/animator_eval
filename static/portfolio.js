@@ -18,14 +18,14 @@ const TRANSLATIONS = {
         search_button: "Search", search_no_results: "No results found",
         ranking_title: "Ranking", ranking_all_roles: "All Roles",
         rank_col: "#", name_col: "Name", role_col: "Role",
-        composite_col: "Composite", authority_col: "Authority",
-        trust_col: "Trust", skill_col: "Skill",
+        iv_score_col: "IV Score", birank_col: "BiRank",
+        patronage_col: "Patronage", person_fe_col: "Person FE",
         profile_network: "Network Profile",
         profile_contribution: "Individual Contribution",
         profile_similar: "Similar Persons",
         profile_explanation: "Score Explanation",
-        score_composite: "Composite", score_authority: "Authority",
-        score_trust: "Trust", score_skill: "Skill",
+        score_iv_score: "IV Score", score_birank: "BiRank",
+        score_patronage: "Patronage", score_person_fe: "Person FE",
         metric_percentile: "Peer Percentile",
         metric_residual: "Opportunity Residual",
         metric_consistency: "Consistency",
@@ -49,14 +49,14 @@ const TRANSLATIONS = {
         ranking_title: "\u30E9\u30F3\u30AD\u30F3\u30B0",
         ranking_all_roles: "\u5168\u5F79\u8077",
         rank_col: "#", name_col: "\u6C0F\u540D", role_col: "\u5F79\u8077",
-        composite_col: "\u7DCF\u5408", authority_col: "\u6A29\u5A01\u6027",
-        trust_col: "\u4FE1\u983C\u6027", skill_col: "\u6280\u8853\u529B",
+        iv_score_col: "IV\u30B9\u30B3\u30A2", birank_col: "BiRank",
+        patronage_col: "Patronage", person_fe_col: "\u500B\u4EBAFE",
         profile_network: "\u30CD\u30C3\u30C8\u30EF\u30FC\u30AF\u30D7\u30ED\u30D5\u30A1\u30A4\u30EB",
         profile_contribution: "\u500B\u4EBA\u8CA2\u732E\u30D7\u30ED\u30D5\u30A1\u30A4\u30EB",
         profile_similar: "\u985E\u4F3C\u4EBA\u7269",
         profile_explanation: "\u30B9\u30B3\u30A2\u89E3\u8AAC",
-        score_composite: "\u7DCF\u5408", score_authority: "\u6A29\u5A01\u6027",
-        score_trust: "\u4FE1\u983C\u6027", score_skill: "\u6280\u8853\u529B",
+        score_iv_score: "IV\u30B9\u30B3\u30A2", score_birank: "BiRank",
+        score_patronage: "Patronage", score_person_fe: "\u500B\u4EBAFE",
         metric_percentile: "\u30D4\u30A2\u30D1\u30FC\u30BB\u30F3\u30BF\u30A4\u30EB",
         metric_residual: "\u6A5F\u4F1A\u7D71\u5236\u6B8B\u5DEE",
         metric_consistency: "\u4E00\u8CAB\u6027",
@@ -195,10 +195,10 @@ function doSearch() {
                 nameDiv.appendChild(small);
             }
             item.appendChild(nameDiv);
-            if (r.composite != null) {
+            if (r.iv_score != null) {
                 var sc = document.createElement("div");
                 sc.className = "score";
-                sc.textContent = fmtScore(r.composite);
+                sc.textContent = fmtScore(r.iv_score);
                 item.appendChild(sc);
             }
             item.addEventListener("click", function () { navigate("#profile/" + encodeURIComponent(r.id)); });
@@ -277,10 +277,10 @@ function loadProfile(personId) {
         scoreGrid.className = "score-grid";
 
         [
-            { key: "composite", label: t("score_composite"), cls: "composite" },
-            { key: "authority", label: t("score_authority"), cls: "" },
-            { key: "trust", label: t("score_trust"), cls: "" },
-            { key: "skill", label: t("score_skill"), cls: "" },
+            { key: "iv_score", label: t("score_iv_score"), cls: "iv-score" },
+            { key: "person_fe", label: t("score_person_fe"), cls: "" },
+            { key: "birank", label: t("score_birank"), cls: "" },
+            { key: "patronage", label: t("score_patronage"), cls: "" },
         ].forEach(function (ax) {
             var cell = document.createElement("div");
             cell.className = "score-cell" + (ax.cls ? " " + ax.cls : "");
@@ -304,10 +304,10 @@ function loadProfile(personId) {
         barChart.className = "bar-chart";
 
         [
-            { key: "authority", label: t("score_authority"), cls: "authority" },
-            { key: "trust", label: t("score_trust"), cls: "trust" },
-            { key: "skill", label: t("score_skill"), cls: "skill" },
-            { key: "composite", label: t("score_composite"), cls: "composite" },
+            { key: "birank", label: t("score_birank"), cls: "birank" },
+            { key: "patronage", label: t("score_patronage"), cls: "patronage" },
+            { key: "person_fe", label: t("score_person_fe"), cls: "person-fe" },
+            { key: "iv_score", label: t("score_iv_score"), cls: "iv-score" },
         ].forEach(function (ax) {
             var row = document.createElement("div");
             row.className = "bar-row";
@@ -472,7 +472,7 @@ function loadRanking() {
         var table = document.createElement("table");
         var thead = document.createElement("thead");
         var headerRow = document.createElement("tr");
-        [t("rank_col"), t("name_col"), t("role_col"), t("composite_col"), t("authority_col"), t("trust_col"), t("skill_col")].forEach(function (col) {
+        [t("rank_col"), t("name_col"), t("role_col"), t("iv_score_col"), t("birank_col"), t("patronage_col"), t("person_fe_col")].forEach(function (col) {
             var th = document.createElement("th");
             th.textContent = col;
             headerRow.appendChild(th);
@@ -499,7 +499,7 @@ function loadRanking() {
             td3.textContent = entry.primary_role || "\u2014";
             tr.appendChild(td3);
 
-            [entry.composite, entry.authority, entry.trust, entry.skill].forEach(function (v) {
+            [entry.iv_score, entry.birank, entry.patronage, entry.person_fe].forEach(function (v) {
                 var td = document.createElement("td");
                 td.textContent = fmtScore(v);
                 tr.appendChild(td);

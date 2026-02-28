@@ -37,7 +37,7 @@ from src.analysis.contribution_attribution import (
 )
 from src.analysis.growth_acceleration import (
     AccelerationMetrics,
-    compute_adjusted_skill_with_growth,
+    compute_adjusted_person_fe_with_growth,
     compute_growth_metrics,
     find_early_potential,
     find_fast_risers,
@@ -57,7 +57,7 @@ from src.analysis.studio_bias_correction import (
     compute_studio_bias_metrics,
     compute_studio_disparity,
     compute_studio_prestige,
-    debias_authority_scores,
+    debias_birank_scores,
     extract_all_studios,
     extract_studio_from_anime,
     find_overvalued_by_studio,
@@ -119,21 +119,21 @@ class TestValueCategory:
 class TestPotentialValueScore:
     def test_defaults(self):
         pv = PotentialValueScore(person_id="p1")
-        assert pv.authority == 0.0
-        assert pv.trust == 0.0
-        assert pv.skill == 0.0
+        assert pv.birank == 0.0
+        assert pv.patronage == 0.0
+        assert pv.person_fe == 0.0
         assert pv.potential_value == 0.0
         assert pv.category == ValueCategory.STEADY_PERFORMER
 
     def test_custom_values(self):
         pv = PotentialValueScore(
             person_id="p1",
-            authority=0.8,
-            trust=0.7,
+            birank=0.8,
+            patronage=0.7,
             potential_value=85.0,
             category=ValueCategory.ELITE,
         )
-        assert pv.authority == 0.8
+        assert pv.birank == 0.8
         assert pv.category == ValueCategory.ELITE
 
 
@@ -173,14 +173,14 @@ class TestComputePotentialValueScores:
     @pytest.fixture()
     def basic_setup(self):
         person_scores = {
-            "p1": {"authority": 0.9, "trust": 0.9, "skill": 0.8, "composite": 0.87},
-            "p2": {"authority": 0.3, "trust": 0.2, "skill": 0.7, "composite": 0.35},
-            "p3": {"authority": 0.5, "trust": 0.4, "skill": 0.5, "composite": 0.47},
+            "p1": {"birank": 0.9, "patronage": 0.9, "person_fe": 0.8, "iv_score": 0.87},
+            "p2": {"birank": 0.3, "patronage": 0.2, "person_fe": 0.7, "iv_score": 0.35},
+            "p3": {"birank": 0.5, "patronage": 0.4, "person_fe": 0.5, "iv_score": 0.47},
         }
         debiased = {
-            "p1": {"debiased_authority": 0.85},
-            "p2": {"debiased_authority": 0.5},  # big improvement
-            "p3": {"debiased_authority": 0.5},
+            "p1": {"debiased_birank": 0.85},
+            "p2": {"debiased_birank": 0.5},  # big improvement
+            "p3": {"debiased_birank": 0.5},
         }
         growth = {
             "p1": {"growth_velocity": 0.5, "momentum_score": 0.3, "career_years": 15},
@@ -234,9 +234,9 @@ class TestComputePotentialValueScores:
         assert result == {}
 
     def test_missing_debiased_defaults_to_original(self):
-        ps = {"p1": {"authority": 0.5, "trust": 0.3, "skill": 0.4, "composite": 0.4}}
+        ps = {"p1": {"birank": 0.5, "patronage": 0.3, "person_fe": 0.4, "iv_score": 0.4}}
         result = compute_potential_value_scores(ps, {}, {}, {}, nx.Graph())
-        assert result["p1"].debiased_authority == 0.5
+        assert result["p1"].debiased_birank == 0.5
 
     def test_betweenness_cache_used(self, basic_setup):
         ps, db, gr, adj, G = basic_setup
@@ -249,8 +249,8 @@ class TestComputePotentialValueScores:
 
     def test_hidden_gem_category(self):
         """Person with authority_improvement > 0.1 and skill > 0.6 => HIDDEN_GEM."""
-        ps = {"p1": {"authority": 0.3, "trust": 0.3, "skill": 0.7, "composite": 0.4}}
-        debiased = {"p1": {"debiased_authority": 0.5}}  # improvement = 0.2 > 0.1
+        ps = {"p1": {"birank": 0.3, "patronage": 0.3, "person_fe": 0.7, "iv_score": 0.4}}
+        debiased = {"p1": {"debiased_birank": 0.5}}  # improvement = 0.2 > 0.1
         growth = {
             "p1": {"growth_velocity": 0.0, "momentum_score": 0.0, "career_years": 10}
         }
@@ -261,8 +261,8 @@ class TestComputePotentialValueScores:
 
     def test_rising_star_category(self):
         """Person with velocity > 2.0 and authority > 0.5 => RISING_STAR."""
-        ps = {"p1": {"authority": 0.6, "trust": 0.5, "skill": 0.6, "composite": 0.57}}
-        debiased = {"p1": {"debiased_authority": 0.6}}
+        ps = {"p1": {"birank": 0.6, "patronage": 0.5, "person_fe": 0.6, "iv_score": 0.57}}
+        debiased = {"p1": {"debiased_birank": 0.6}}
         growth = {
             "p1": {"growth_velocity": 3.0, "momentum_score": 0.5, "career_years": 8}
         }
@@ -316,9 +316,9 @@ class TestExportPotentialValueReport:
                 person_id="p1",
                 potential_value=80,
                 category=ValueCategory.ELITE,
-                authority=0.9,
-                trust=0.8,
-                skill=0.7,
+                birank=0.9,
+                patronage=0.8,
+                person_fe=0.7,
             ),
         }
         names = {"p1": "Alice"}
@@ -381,7 +381,7 @@ class TestEstimateMarginalContribution:
             person_id="p1",
             role=Role.DIRECTOR,
             anime_value=100.0,
-            person_scores={"p1": {"composite": 0.8}},
+            person_scores={"p1": {"iv_score": 0.8}},
             staff_quality_avg=0.5,
         )
         # role_weight=0.20, quality_premium=(0.8-0.5)/(0.5+0.1)=0.5
@@ -393,7 +393,7 @@ class TestEstimateMarginalContribution:
             person_id="p1",
             role=Role.DIRECTOR,
             anime_value=100.0,
-            person_scores={"p1": {"composite": 0.2}},
+            person_scores={"p1": {"iv_score": 0.2}},
             staff_quality_avg=0.5,
         )
         # quality_premium=(0.2-0.5)/(0.5+0.1)=-0.5
@@ -418,7 +418,7 @@ class TestEstimateMarginalContribution:
             person_id="p1",
             role=Role.DIRECTOR,
             anime_value=0.0,
-            person_scores={"p1": {"composite": 0.8}},
+            person_scores={"p1": {"iv_score": 0.8}},
             staff_quality_avg=0.5,
         )
         assert result == 0.0
@@ -432,13 +432,13 @@ class TestComputeShapleyValueApproximate:
             role=Role.DIRECTOR,
             all_staff=[("p1", Role.DIRECTOR)],
             anime_value=100.0,
-            person_scores={"p1": {"composite": 0.5}},
+            person_scores={"p1": {"iv_score": 0.5}},
             staff_quality_avg=0.5,
         )
         # Only person: position is always 0 => coalition is empty
         # marginal = own marginal_contribution
         expected = estimate_marginal_contribution(
-            "p1", Role.DIRECTOR, 100.0, {"p1": {"composite": 0.5}}, 0.5
+            "p1", Role.DIRECTOR, 100.0, {"p1": {"iv_score": 0.5}}, 0.5
         )
         assert result == expected
 
@@ -448,7 +448,7 @@ class TestComputeShapleyValueApproximate:
             role=Role.DIRECTOR,
             all_staff=[("p1", Role.DIRECTOR), ("p2", Role.KEY_ANIMATOR)],
             anime_value=100.0,
-            person_scores={"p1": {"composite": 0.6}, "p2": {"composite": 0.4}},
+            person_scores={"p1": {"iv_score": 0.6}, "p2": {"iv_score": 0.4}},
             staff_quality_avg=0.5,
         )
         assert isinstance(result, float)
@@ -473,7 +473,7 @@ class TestComputeContributionAttribution:
 
     def test_single_contributor(self):
         credits = [_credit("p1", "a1", Role.DIRECTOR)]
-        scores = {"p1": {"composite": 0.8}}
+        scores = {"p1": {"iv_score": 0.8}}
         result = compute_contribution_attribution("a1", 100.0, credits, scores)
         assert "p1" in result
         assert isinstance(result["p1"], ContributionMetrics)
@@ -486,9 +486,9 @@ class TestComputeContributionAttribution:
             _credit("p3", "a1", Role.ANIMATION_DIRECTOR),
         ]
         scores = {
-            "p1": {"composite": 0.8},
-            "p2": {"composite": 0.5},
-            "p3": {"composite": 0.6},
+            "p1": {"iv_score": 0.8},
+            "p2": {"iv_score": 0.5},
+            "p3": {"iv_score": 0.6},
         }
         result = compute_contribution_attribution("a1", 100.0, credits, scores)
         total_share = sum(c.value_share for c in result.values())
@@ -504,7 +504,7 @@ class TestComputeContributionAttribution:
             _credit("p1", "a1", Role.DIRECTOR),
             _credit("p1", "a1", Role.STORYBOARD),
         ]
-        scores = {"p1": {"composite": 0.7}}
+        scores = {"p1": {"iv_score": 0.7}}
         result = compute_contribution_attribution("a1", 100.0, credits, scores)
         # Should only be one entry for p1, with accumulated marginal
         assert len(result) == 1
@@ -554,8 +554,8 @@ class TestFindUndervaluedContributors:
             "p2": {"total_shapley": 2.0, "work_count": 2},  # per_work=1
         }
         scores = {
-            "p1": {"composite": 3.0},  # 10 > 3*1.5=4.5 => undervalued
-            "p2": {"composite": 5.0},  # 1 < 5*1.5=7.5 => not undervalued
+            "p1": {"iv_score": 3.0},  # 10 > 3*1.5=4.5 => undervalued
+            "p2": {"iv_score": 5.0},  # 1 < 5*1.5=7.5 => not undervalued
         }
         result = find_undervalued_contributors(aggregates, scores)
         assert len(result) == 1
@@ -685,8 +685,8 @@ class TestComputeStudioPrestige:
             _credit("p2", "a2"),
         ]
         scores = {
-            "p1": {"authority": 0.9},
-            "p2": {"authority": 0.3},
+            "p1": {"birank": 0.9},
+            "p2": {"birank": 0.3},
         }
         result = compute_studio_prestige(credits, anime_map, scores)
         assert result["StudioA"] > result["StudioB"]
@@ -698,14 +698,14 @@ class TestComputeStudioPrestige:
         assert result.get("StudioA") is None or result["StudioA"] == 0
 
 
-class TestDebiasAuthorityScores:
+class TestDebiasBirankScores:
     def test_no_bias_data_preserves_original(self):
-        ps = {"p1": {"authority": 0.7}}
-        result = debias_authority_scores(ps, {}, {})
-        assert result["p1"].debiased_authority == 0.7
+        ps = {"p1": {"birank": 0.7}}
+        result = debias_birank_scores(ps, {}, {})
+        assert result["p1"].debiased_birank == 0.7
 
     def test_high_concentration_reduces_score(self):
-        ps = {"p1": {"authority": 0.8}}
+        ps = {"p1": {"birank": 0.8}}
         bias = {
             "p1": StudioBiasMetrics(
                 person_id="p1",
@@ -715,11 +715,11 @@ class TestDebiasAuthorityScores:
             ),
         }
         prestige = {"BigStudio": 0.9}
-        result = debias_authority_scores(ps, bias, prestige, debias_strength=0.5)
-        assert result["p1"].debiased_authority < 0.8
+        result = debias_birank_scores(ps, bias, prestige, debias_strength=0.5)
+        assert result["p1"].debiased_birank < 0.8
 
     def test_diverse_person_gets_bonus(self):
-        ps = {"p1": {"authority": 0.5}}
+        ps = {"p1": {"birank": 0.5}}
         bias = {
             "p1": StudioBiasMetrics(
                 person_id="p1",
@@ -730,12 +730,12 @@ class TestDebiasAuthorityScores:
             ),
         }
         prestige = {"SmallStudio": 0.2}
-        result = debias_authority_scores(ps, bias, prestige, debias_strength=0.3)
+        result = debias_birank_scores(ps, bias, prestige, debias_strength=0.3)
         # Diversity bonus + cross-studio bonus should increase score
-        assert result["p1"].debiased_authority > 0.5
+        assert result["p1"].debiased_birank > 0.5
 
     def test_debiased_score_fields(self):
-        ps = {"p1": {"authority": 0.6}}
+        ps = {"p1": {"birank": 0.6}}
         bias = {
             "p1": StudioBiasMetrics(
                 person_id="p1",
@@ -746,11 +746,11 @@ class TestDebiasAuthorityScores:
             ),
         }
         prestige = {"Studio": 0.5}
-        result = debias_authority_scores(ps, bias, prestige)
+        result = debias_birank_scores(ps, bias, prestige)
         d = result["p1"]
         assert isinstance(d, DebiasedScore)
         assert d.person_id == "p1"
-        assert d.original_authority == 0.6
+        assert d.original_birank == 0.6
         assert d.studio_bias >= 0
         assert d.diversity_factor >= 1.0
 
@@ -760,7 +760,7 @@ class TestStudioDisparityResult:
         r = StudioDisparityResult(
             studio="MAPPA",
             person_count=10,
-            mean_composite=0.6,
+            mean_iv_score=0.6,
         )
         assert r.studio == "MAPPA"
         assert r.person_count == 10
@@ -771,7 +771,7 @@ class TestComputeStudioDisparity:
         anime_map = {f"a{i}": _anime(f"a{i}", studios=["StudioA"]) for i in range(6)}
         credits = [_credit(f"p{i}", f"a{i}") for i in range(6)]
         person_scores = {
-            f"p{i}": {"authority": 0.5, "trust": 0.4, "skill": 0.6, "composite": 0.5}
+            f"p{i}": {"birank": 0.5, "patronage": 0.4, "person_fe": 0.6, "iv_score": 0.5}
             for i in range(6)
         }
         result = compute_studio_disparity(
@@ -783,7 +783,7 @@ class TestComputeStudioDisparity:
     def test_too_few_persons_filtered(self):
         anime_map = {"a1": _anime("a1", studios=["TinyStudio"])}
         credits = [_credit("p1", "a1")]
-        person_scores = {"p1": {"composite": 0.5}}
+        person_scores = {"p1": {"iv_score": 0.5}}
         result = compute_studio_disparity(
             credits, anime_map, person_scores, min_persons=5
         )
@@ -794,10 +794,10 @@ class TestFindUnderOvervalued:
     def test_find_undervalued(self):
         debiased = {
             "p1": DebiasedScore(
-                person_id="p1", original_authority=0.3, debiased_authority=0.7
+                person_id="p1", original_birank=0.3, debiased_birank=0.7
             ),
             "p2": DebiasedScore(
-                person_id="p2", original_authority=0.6, debiased_authority=0.5
+                person_id="p2", original_birank=0.6, debiased_birank=0.5
             ),
         }
         result = find_undervalued_by_studio(debiased)
@@ -806,10 +806,10 @@ class TestFindUnderOvervalued:
     def test_find_overvalued(self):
         debiased = {
             "p1": DebiasedScore(
-                person_id="p1", original_authority=0.8, debiased_authority=0.3
+                person_id="p1", original_birank=0.8, debiased_birank=0.3
             ),
             "p2": DebiasedScore(
-                person_id="p2", original_authority=0.3, debiased_authority=0.5
+                person_id="p2", original_birank=0.3, debiased_birank=0.5
             ),
         }
         result = find_overvalued_by_studio(debiased)
@@ -951,8 +951,8 @@ class TestFindEarlyPotential:
 class TestComputeAdjustedSkillWithGrowth:
     def test_basic_adjustment(self):
         person_scores = {
-            "p1": {"skill": 0.5},
-            "p2": {"skill": 0.6},
+            "p1": {"person_fe": 0.5},
+            "p2": {"person_fe": 0.6},
         }
         growth_metrics = {
             "p1": AccelerationMetrics(
@@ -962,7 +962,7 @@ class TestComputeAdjustedSkillWithGrowth:
                 early_career_bonus=0.2,
             ),
         }
-        result = compute_adjusted_skill_with_growth(
+        result = compute_adjusted_person_fe_with_growth(
             person_scores, growth_metrics, growth_weight=0.3
         )
         assert "p1" in result
@@ -970,12 +970,12 @@ class TestComputeAdjustedSkillWithGrowth:
         assert result["p2"] == 0.6  # No growth data => original skill
 
     def test_no_growth_metrics(self):
-        person_scores = {"p1": {"skill": 0.7}}
-        result = compute_adjusted_skill_with_growth(person_scores, {})
+        person_scores = {"p1": {"person_fe": 0.7}}
+        result = compute_adjusted_person_fe_with_growth(person_scores, {})
         assert result["p1"] == 0.7
 
     def test_negative_growth_reduces_skill(self):
-        person_scores = {"p1": {"skill": 0.6}}
+        person_scores = {"p1": {"person_fe": 0.6}}
         growth_metrics = {
             "p1": AccelerationMetrics(
                 person_id="p1",
@@ -984,7 +984,7 @@ class TestComputeAdjustedSkillWithGrowth:
                 early_career_bonus=0.0,
             ),
         }
-        result = compute_adjusted_skill_with_growth(
+        result = compute_adjusted_person_fe_with_growth(
             person_scores, growth_metrics, growth_weight=0.3
         )
         assert result["p1"] < 0.6
@@ -1048,7 +1048,7 @@ class TestComputeCreativeValue:
             _credit("p1", "a1", Role.DIRECTOR),
             _credit("p2", "a1", Role.KEY_ANIMATOR),
         ]
-        scores = {"p1": {"skill": 0.8}, "p2": {"skill": 0.6}}
+        scores = {"p1": {"person_fe": 0.8}, "p2": {"person_fe": 0.6}}
         result = compute_creative_value(anime, credits, scores)
         assert 0 < result <= 1.0
 
@@ -1088,7 +1088,7 @@ class TestComputeTechnicalValue:
             _credit("p1", "a1", Role.KEY_ANIMATOR),
             _credit("p2", "a1", Role.ART_DIRECTOR),
         ]
-        scores = {"p1": {"composite": 0.8}, "p2": {"composite": 0.7}}
+        scores = {"p1": {"iv_score": 0.8}, "p2": {"iv_score": 0.7}}
         result = compute_technical_value(anime, credits, scores)
         assert 0 < result <= 1.0
 
@@ -1118,9 +1118,9 @@ class TestComputeAnimeValues:
             _credit("p3", "a2", Role.DIRECTOR),
         ]
         person_scores = {
-            "p1": {"authority": 0.8, "trust": 0.7, "skill": 0.9, "composite": 0.8},
-            "p2": {"authority": 0.5, "trust": 0.4, "skill": 0.6, "composite": 0.5},
-            "p3": {"authority": 0.3, "trust": 0.3, "skill": 0.4, "composite": 0.33},
+            "p1": {"birank": 0.8, "patronage": 0.7, "person_fe": 0.9, "iv_score": 0.8},
+            "p2": {"birank": 0.5, "patronage": 0.4, "person_fe": 0.6, "iv_score": 0.5},
+            "p3": {"birank": 0.3, "patronage": 0.3, "person_fe": 0.4, "iv_score": 0.33},
         }
         return anime_list, credits, person_scores
 
@@ -1167,7 +1167,7 @@ class TestComputeAnimeValues:
         credits_high = [_credit("p1", "a_high")]
         credits_low = [_credit("p1", "a_low")]
         scores = {
-            "p1": {"authority": 0.5, "trust": 0.5, "skill": 0.5, "composite": 0.5}
+            "p1": {"birank": 0.5, "patronage": 0.5, "person_fe": 0.5, "iv_score": 0.5}
         }
         result_high = compute_anime_values(anime_high, credits_high, scores)
         result_low = compute_anime_values(anime_low, credits_low, scores)
@@ -1294,7 +1294,7 @@ class TestIndividualContributionEdgeCases:
         """anime.score=0 should result in None consistency."""
         from src.analysis.individual_contribution import compute_consistency
 
-        features = {"p1": {"composite": 50}}
+        features = {"p1": {"iv_score": 50}}
         anime_map = {
             f"a{i}": Anime(id=f"a{i}", title_ja=f"a{i}", score=0.0) for i in range(6)
         }
@@ -1306,7 +1306,7 @@ class TestIndividualContributionEdgeCases:
         """Test independent_value uses collaboration_graph when provided."""
         from src.analysis.individual_contribution import compute_independent_value
 
-        features = {f"p{i}": {"composite": 50 + i * 5} for i in range(6)}
+        features = {f"p{i}": {"iv_score": 50 + i * 5} for i in range(6)}
         anime_map = {
             "shared": _anime("shared", score=90),
             "solo1": _anime("solo1", score=50),

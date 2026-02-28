@@ -35,7 +35,7 @@ def explain_person_summary(
         person_id: 対象者ID
         credits: 全クレジットリスト
         anime_map: anime_id → Anime
-        scores: {"authority": float, "trust": float, "skill": float, "composite": float}
+        scores: {"birank": float, "patronage": float, "person_fe": float, "iv_score": float}
         confidence: 信頼度 (0-1)
         score_range: 各軸の信頼区間
         potential_category: ValueCategory の文字列 ("hidden_gem", "rising_star" 等)
@@ -106,7 +106,7 @@ def explain_person_summary(
     # --- 過小評価の判定 ---
     undervaluation_gap = None
     if scores and debiased_authority is not None:
-        gap = debiased_authority - scores.get("authority", 0)
+        gap = debiased_authority - scores.get("birank", 0)
         if gap > 0.05:
             undervaluation_gap = round(gap * 100, 1)
 
@@ -320,9 +320,9 @@ def explain_authority(
     *,
     _person_credits: list[Credit] | None = None,
 ) -> list[dict]:
-    """Authority スコアの主要寄与要因を返す.
+    """BiRank スコアの主要寄与要因を返す.
 
-    高評価/高プロフィール作品への参加が Authority に寄与する。
+    高評価/高プロフィール作品への参加が BiRank に寄与する。
     """
     person_credits = (
         _person_credits
@@ -359,9 +359,9 @@ def explain_trust(
     _person_credits: list[Credit] | None = None,
     _anime_directors: dict[str, set[str]] | None = None,
 ) -> list[dict]:
-    """Trust スコアの主要寄与要因を返す.
+    """Patronage スコアの主要寄与要因を返す.
 
-    同じ監督との繰り返し共演が Trust に寄与する。
+    同じ監督との繰り返し共演が Patronage に寄与する。
     """
     person_credits = (
         _person_credits
@@ -416,9 +416,9 @@ def explain_skill(
     *,
     _person_credits: list[Credit] | None = None,
 ) -> list[dict]:
-    """Skill スコアの主要寄与要因を返す.
+    """Person FE スコアの主要寄与要因を返す.
 
-    高評価作品への参加が Skill レーティングに影響する。
+    高評価作品への参加が Person FE レーティングに影響する。
     年代順にソートして、最近の実績を強調する。
     """
     person_credits = (

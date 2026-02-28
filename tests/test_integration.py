@@ -21,9 +21,15 @@ def synthetic_db(monkeypatch, tmp_path):
     # DEFAULT_DB_PATH をパッチして get_connection() がテストDBを使うようにする
     import src.database
     import src.pipeline
+    import src.utils.config
+    import src.utils.json_io
 
     monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
     monkeypatch.setattr(src.pipeline, "JSON_DIR", json_dir)
+    # export_and_viz.py が実行時に src.utils.config.JSON_DIR を import するため
+    # 本番ディレクトリへの書き込みを防ぐために必須
+    monkeypatch.setattr(src.utils.config, "JSON_DIR", json_dir)
+    monkeypatch.setattr(src.utils.json_io, "JSON_DIR", json_dir)
 
     persons, anime_list, credits = generate_synthetic_data(
         n_directors=5, n_animators=30, n_anime=15, seed=42
@@ -50,23 +56,23 @@ class TestFullPipeline:
         results = run_scoring_pipeline()
         assert len(results) > 0
 
-    def test_all_three_axes_nonzero(self, synthetic_db):
-        """少なくとも一部の人物が全3軸で非ゼロスコアを持つ."""
+    def test_multiple_components_nonzero(self, synthetic_db):
+        """少なくとも一部の人物が複数コンポーネントで非ゼロスコアを持つ."""
         from src.pipeline import run_scoring_pipeline
 
         results = run_scoring_pipeline()
-        has_all_three = any(
-            r["authority"] > 0 and r["trust"] > 0 and r["skill"] > 0 for r in results
+        has_multiple = any(
+            r["birank"] > 0 and r["person_fe"] != 0 for r in results
         )
-        assert has_all_three
+        assert has_multiple
 
-    def test_composite_ordering(self, synthetic_db):
-        """composite スコアが降順にソートされている."""
+    def test_iv_score_ordering(self, synthetic_db):
+        """iv_score が降順にソートされている."""
         from src.pipeline import run_scoring_pipeline
 
         results = run_scoring_pipeline()
-        composites = [r["composite"] for r in results]
-        assert composites == sorted(composites, reverse=True)
+        iv_scores = [r["iv_score"] for r in results]
+        assert iv_scores == sorted(iv_scores, reverse=True)
 
     def test_scores_in_db(self, synthetic_db):
         """スコアがDBに保存される."""
@@ -112,8 +118,8 @@ class TestFullPipeline:
 
         results = run_scoring_pipeline()
         for r in results:
-            assert "composite_pct" in r
-            assert 0 <= r["composite_pct"] <= 100
+            assert "iv_score_pct" in r
+            assert 0 <= r["iv_score_pct"] <= 100
 
     def test_role_classification_included(self, synthetic_db):
         """役職分類が結果に含まれる."""
@@ -175,15 +181,39 @@ class TestFullPipeline:
         for r in results:
             if "breakdown" in r:
                 bd = r["breakdown"]
-                # At least one axis should have factors
-                assert any(k in bd for k in ("authority", "trust", "skill"))
-                # Authority factors should have title and role
-                if "authority" in bd:
-                    for factor in bd["authority"]:
+                # At least one component should have factors
+                assert any(k in bd for k in ("birank", "patronage", "person_fe"))
+                # birank factors should have title and role
+                if "birank" in bd:
+                    for factor in bd["birank"]:
                         assert "title" in factor
                         assert "role" in factor
-                # Trust factors should have director_id and shared_works
-                if "trust" in bd:
-                    for factor in bd["trust"]:
+                # patronage factors should have director_id and shared_works
+                if "patronage" in bd:
+                    for factor in bd["patronage"]:
                         assert "director_id" in factor
                         assert "shared_works" in factor
+
+    def test_structural_components_included(self, synthetic_db):
+        """新しい構造推定コンポーネントが結果に含まれる."""
+        from src.pipeline import run_scoring_pipeline
+
+        results = run_scoring_pipeline()
+        # Check new fields exist
+        for r in results:
+            assert "iv_score" in r
+            assert "birank" in r
+            assert "person_fe" in r
+            assert "dormancy" in r
+            assert "awcc" in r
+            # Dormancy should be between 0 and 1
+            assert 0 <= r["dormancy"] <= 1.0
+
+    def test_iv_score_percentiles_included(self, synthetic_db):
+        """IVスコアのパーセンタイルが結果に含まれる."""
+        from src.pipeline import run_scoring_pipeline
+
+        results = run_scoring_pipeline()
+        for r in results:
+            assert "iv_score_pct" in r
+            assert 0 <= r["iv_score_pct"] <= 100

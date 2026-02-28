@@ -111,12 +111,37 @@ def _compute_role_weights() -> dict[str, float]:
 # 役職の重み（エッジ重み係数） — COMMITMENT_MULTIPLIERS × ROLE_RANK から動的に計算
 ROLE_WEIGHTS: dict[str, float] = _compute_role_weights()
 
-# 統合スコアの重み
-COMPOSITE_WEIGHTS = {
-    "authority": 0.4,
-    "trust": 0.35,
-    "skill": 0.25,
-}
+# =============================================================================
+# BiRank parameters
+# =============================================================================
+BIRANK_ALPHA = 0.85
+BIRANK_BETA = 0.85
+BIRANK_MAX_ITER = 100
+BIRANK_TOL = 1e-6
+
+# =============================================================================
+# AKM parameters
+# =============================================================================
+AKM_MAX_ITER = 50  # iterative demeaning convergence
+AKM_TOL = 1e-8
+AKM_MIN_MOVER_FRACTION = 0.10  # warn if fewer movers
+
+# =============================================================================
+# Dormancy parameters
+# =============================================================================
+DORMANCY_DECAY_RATE = 0.5
+DORMANCY_GRACE_PERIOD = 2.0  # years
+
+# =============================================================================
+# IV weight optimization
+# =============================================================================
+IV_CV_FOLDS = 5
+IV_CV_SEED = 42
+
+# Duration-based work importance weighting
+# 30分アニメを基準 (1.0x), ミニアニメは減衰, 映画は増幅
+DURATION_BASELINE_MINUTES = 30  # 30分 = 1.0x multiplier
+DURATION_MAX_MULTIPLIER = 2.0  # 映画等の上限キャップ
 
 # 正規化方式: "minmax" | "percentile" | "zscore"
 NORMALIZATION_METHOD = "minmax"

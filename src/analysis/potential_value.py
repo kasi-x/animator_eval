@@ -36,13 +36,13 @@ class PotentialValueScore:
     Attributes:
         person_id: person_id
         # 既存スコア
-        authority: 元のAuthority（PageRank）
-        trust: Trust
-        skill: Skill
-        composite: 元のComposite
+        person_fe: Person Fixed Effect
+        birank: BiRank
+        patronage: Patronage
+        iv_score: IV Score (primary ranking metric)
         # 補正・拡張スコア
-        debiased_authority: スタジオバイアス補正Authority
-        adjusted_skill: 成長率考慮Skill
+        debiased_birank: スタジオバイアス補正Authority
+        adjusted_person_fe: 成長率考慮Skill
         structural_advantage: 構造的優位性スコア
         # 統合スコア
         potential_value: 総合潜在価値スコア（0-100）
@@ -56,13 +56,13 @@ class PotentialValueScore:
 
     person_id: str
     # Original scores
-    authority: float = 0.0
-    trust: float = 0.0
-    skill: float = 0.0
-    composite: float = 0.0
+    person_fe: float = 0.0
+    birank: float = 0.0
+    patronage: float = 0.0
+    iv_score: float = 0.0
     # Adjusted scores
-    debiased_authority: float = 0.0
-    adjusted_skill: float = 0.0
+    debiased_birank: float = 0.0
+    adjusted_person_fe: float = 0.0
     structural_advantage: float = 0.0
     # Integrated score
     potential_value: float = 0.0
@@ -115,7 +115,7 @@ def compute_potential_value_scores(
     person_scores: dict[str, dict],
     debiased_scores: dict[str, dict],
     growth_metrics: dict[str, dict],
-    adjusted_skills: dict[str, float],
+    adjusted_person_fes: dict[str, float],
     collaboration_graph: nx.Graph,
     betweenness_cache: dict[str, float] | None = None,
 ) -> dict[str, PotentialValueScore]:
@@ -125,7 +125,7 @@ def compute_potential_value_scores(
         person_scores: 元のスコア辞書
         debiased_scores: スタジオバイアス補正後のスコア
         growth_metrics: 成長指標
-        adjusted_skills: 成長率考慮Skill
+        adjusted_person_fes: 成長率考慮Skill
         collaboration_graph: コラボレーショングラフ
         betweenness_cache: 事前計算されたbetweenness centrality辞書
             (Noneの場合はここで計算)
@@ -161,17 +161,17 @@ def compute_potential_value_scores(
 
     for person_id, scores in person_scores.items():
         # Original scores
-        authority = scores.get("authority", 0)
-        trust = scores.get("trust", 0)
-        skill = scores.get("skill", 0)
-        composite = scores.get("composite", 0)
+        person_fe = scores.get("person_fe", 0)
+        birank = scores.get("birank", 0)
+        patronage = scores.get("patronage", 0)
+        iv_score = scores.get("iv_score", 0)
 
         # Debiased authority
         debiased = debiased_scores.get(person_id, {})
-        debiased_authority = debiased.get("debiased_authority", authority)
+        debiased_birank = debiased.get("debiased_birank", birank)
 
         # Adjusted skill
-        adjusted_skill = adjusted_skills.get(person_id, skill)
+        adjusted_person_fe = adjusted_person_fes.get(person_id, person_fe)
 
         # Structural advantage
         structural_advantage = compute_structural_advantage(
@@ -186,13 +186,13 @@ def compute_potential_value_scores(
 
         # Component scores (0-100)
         # 1. Elite score: established reputation
-        elite_score = (authority * 0.5 + trust * 0.3 + skill * 0.2) * 100
+        elite_score = (birank * 0.5 + patronage * 0.3 + person_fe * 0.2) * 100
 
         # 2. Growth score: rising potential
-        growth_score = min(100, momentum * 20 + (adjusted_skill - skill) * 10)
+        growth_score = min(100, momentum * 20 + (adjusted_person_fe - person_fe) * 10)
 
         # 3. Hidden score: undervalued talent
-        authority_improvement = debiased_authority - authority
+        authority_improvement = debiased_birank - birank
         hidden_score = max(0, authority_improvement * 100)
 
         # 4. Structural score: network position
@@ -201,13 +201,13 @@ def compute_potential_value_scores(
         # Determine category
         if career_years <= 3 and momentum > 1.0:
             category = ValueCategory.NEWCOMER
-        elif velocity > 2.0 and authority > 0.5:
+        elif velocity > 2.0 and birank > 0.5:
             category = ValueCategory.RISING_STAR
-        elif authority_improvement > 0.1 and skill > 0.6:
+        elif authority_improvement > 0.1 and person_fe > 0.6:
             category = ValueCategory.HIDDEN_GEM
         elif structural_advantage > 0.7:
             category = ValueCategory.STRUCTURAL_PLAYER
-        elif authority > 0.8 and trust > 0.8:
+        elif birank > 0.8 and patronage > 0.8:
             category = ValueCategory.ELITE
         else:
             category = ValueCategory.STEADY_PERFORMER
@@ -223,12 +223,12 @@ def compute_potential_value_scores(
 
         potential_scores[person_id] = PotentialValueScore(
             person_id=person_id,
-            authority=round(authority, 4),
-            trust=round(trust, 4),
-            skill=round(skill, 4),
-            composite=round(composite, 4),
-            debiased_authority=round(debiased_authority, 4),
-            adjusted_skill=round(adjusted_skill, 4),
+            person_fe=round(person_fe, 4),
+            birank=round(birank, 4),
+            patronage=round(patronage, 4),
+            iv_score=round(iv_score, 4),
+            debiased_birank=round(debiased_birank, 4),
+            adjusted_person_fe=round(adjusted_person_fe, 4),
             structural_advantage=round(structural_advantage, 4),
             potential_value=round(potential_value, 2),
             category=category,
@@ -335,14 +335,14 @@ def export_potential_value_report(
                 "potential_value": score.potential_value,
                 "category": score.category.value,
                 "original_scores": {
-                    "authority": score.authority,
-                    "trust": score.trust,
-                    "skill": score.skill,
-                    "composite": score.composite,
+                    "person_fe": score.person_fe,
+                    "birank": score.birank,
+                    "patronage": score.patronage,
+                    "iv_score": score.iv_score,
                 },
                 "adjusted_scores": {
-                    "debiased_authority": score.debiased_authority,
-                    "adjusted_skill": score.adjusted_skill,
+                    "debiased_birank": score.debiased_birank,
+                    "adjusted_person_fe": score.adjusted_person_fe,
                     "structural_advantage": score.structural_advantage,
                 },
                 "breakdown": {
@@ -388,7 +388,7 @@ def main():
     )
     from src.analysis.growth_acceleration import (
         compute_growth_metrics,
-        compute_adjusted_skill_with_growth,
+        compute_adjusted_person_fe_with_growth,
     )
     from src.database import (
         get_all_anime,
@@ -412,10 +412,10 @@ def main():
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
     person_scores = {
         s.person_id: {
-            "authority": s.authority,
-            "trust": s.trust,
-            "skill": s.skill,
-            "composite": s.composite,
+            "person_fe": s.person_fe,
+            "birank": s.birank,
+            "patronage": s.patronage,
+            "iv_score": s.iv_score,
         }
         for s in scores_list
     }
@@ -433,13 +433,13 @@ def main():
     )
 
     debiased_dict = {
-        pid: {"debiased_authority": d.debiased_authority} for pid, d in debiased.items()
+        pid: {"debiased_birank": d.debiased_birank} for pid, d in debiased.items()
     }
 
     # 成長率分析
     logger.info("computing_growth_metrics")
     growth_metrics = compute_growth_metrics(credits, anime_map)
-    adjusted_skills = compute_adjusted_skill_with_growth(
+    adjusted_person_fes = compute_adjusted_person_fe_with_growth(
         person_scores, growth_metrics, growth_weight=0.3
     )
 
@@ -455,7 +455,7 @@ def main():
     # 潜在価値スコア計算
     logger.info("computing_potential_value_scores")
     potential_scores = compute_potential_value_scores(
-        person_scores, debiased_dict, growth_dict, adjusted_skills, collab_graph
+        person_scores, debiased_dict, growth_dict, adjusted_person_fes, collab_graph
     )
 
     # レポート生成

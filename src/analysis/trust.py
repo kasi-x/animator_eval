@@ -15,7 +15,7 @@ import structlog
 
 from src.models import Anime, Credit, Role
 from src.utils.config import ROLE_WEIGHTS
-from src.utils.role_groups import DIRECTOR_ROLES
+from src.utils.role_groups import DIRECTOR_ROLES, NON_PRODUCTION_ROLES
 
 logger = structlog.get_logger()
 
@@ -70,6 +70,8 @@ def compute_trust_scores(
     animator_credits: dict[str, list[Credit]] = defaultdict(list)
 
     for c in credits:
+        if c.role in NON_PRODUCTION_ROLES:
+            continue
         if c.role in DIRECTOR_ROLES:
             director_credits[c.person_id].add(c.anime_id)
         animator_credits[c.person_id].append(c)

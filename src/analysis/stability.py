@@ -22,13 +22,13 @@ def compare_scores(
     Args:
         current: 今回のパイプライン結果
         previous_path: 前回の scores.json パス
-        threshold: 変動アラート閾値（composite の絶対差）
+        threshold: 変動アラート閾値（iv_score の絶対差）
 
     Returns:
         {
             "new_persons": [person_id, ...],
             "removed_persons": [person_id, ...],
-            "significant_changes": [{person_id, old_composite, new_composite, delta}, ...],
+            "significant_changes": [{person_id, old_iv_score, new_iv_score, delta}, ...],
             "rank_changes": [{person_id, old_rank, new_rank, delta}, ...],
             "summary": {total_compared, avg_delta, max_delta},
         }
@@ -62,8 +62,8 @@ def compare_scores(
 
     common_ids = prev_ids & curr_ids
     for pid in common_ids:
-        old_c = prev_map[pid].get("composite", 0)
-        new_c = curr_map[pid].get("composite", 0)
+        old_c = prev_map[pid].get("iv_score", 0)
+        new_c = curr_map[pid].get("iv_score", 0)
         delta = new_c - old_c
         deltas.append(abs(delta))
 
@@ -72,8 +72,8 @@ def compare_scores(
                 {
                     "person_id": pid,
                     "name": curr_map[pid].get("name", pid),
-                    "old_composite": round(old_c, 2),
-                    "new_composite": round(new_c, 2),
+                    "old_iv_score": round(old_c, 2),
+                    "new_iv_score": round(new_c, 2),
                     "delta": round(delta, 2),
                 }
             )

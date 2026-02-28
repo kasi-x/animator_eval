@@ -26,8 +26,8 @@ def _sample_data():
         Credit(person_id="p3", anime_id="a2", role=Role.IN_BETWEEN, source="test"),
     ]
     scores = [
-        ScoreResult(person_id="p1", authority=80.0, trust=70.0, skill=60.0),
-        ScoreResult(person_id="p2", authority=50.0, trust=40.0, skill=55.0),
+        ScoreResult(person_id="p1", birank=80.0, patronage=70.0, person_fe=60.0),
+        ScoreResult(person_id="p2", birank=50.0, patronage=40.0, person_fe=55.0),
     ]
     return persons, anime, credits, scores
 
@@ -53,7 +53,7 @@ class TestExportNeo4jCsv:
         assert len(rows) == 4  # header + 3 persons
         # Check scores are included for p1
         p1_row = [r for r in rows[1:] if r[0] == "p1"][0]
-        assert p1_row[5] == "80.0"  # authority
+        assert p1_row[6] == "80.0"  # birank
 
     def test_anime_csv_content(self, tmp_path):
         persons, anime, credits, scores = _sample_data()

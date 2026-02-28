@@ -52,10 +52,12 @@ def populated_db(monkeypatch, tmp_path):
         );
         CREATE TABLE scores (
             person_id TEXT PRIMARY KEY,
-            authority REAL DEFAULT 0.0,
-            trust REAL DEFAULT 0.0,
-            skill REAL DEFAULT 0.0,
-            composite REAL DEFAULT 0.0,
+            iv_score REAL DEFAULT 0.0,
+            person_fe REAL DEFAULT 0.0,
+            birank REAL DEFAULT 0.0,
+            patronage REAL DEFAULT 0.0,
+            dormancy REAL DEFAULT 1.0,
+            awcc REAL DEFAULT 0.0,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
@@ -85,7 +87,7 @@ def populated_db(monkeypatch, tmp_path):
         ],
     )
     conn.executemany(
-        "INSERT INTO scores (person_id, authority, trust, skill, composite) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO scores (person_id, birank, patronage, person_fe, iv_score) VALUES (?, ?, ?, ?, ?)",
         [
             ("p1", 85.0, 70.0, 60.0, 73.0),
             ("p2", 60.0, 80.0, 90.0, 74.5),
@@ -140,18 +142,18 @@ class TestRankingCommand:
     def test_ranking_shows_scores(self, populated_db):
         result = runner.invoke(app, ["ranking"])
         assert result.exit_code == 0
-        assert "Authority" in result.output
-        assert "Trust" in result.output
-        assert "Composite" in result.output
+        assert "BiRank" in result.output
+        assert "Patronage" in result.output
+        assert "IV Score" in result.output
 
     def test_ranking_top_option(self, populated_db):
         result = runner.invoke(app, ["ranking", "--top", "2"])
         assert result.exit_code == 0
 
-    def test_ranking_sort_by_authority(self, populated_db):
-        result = runner.invoke(app, ["ranking", "--sort", "authority"])
+    def test_ranking_sort_by_birank(self, populated_db):
+        result = runner.invoke(app, ["ranking", "--sort", "birank"])
         assert result.exit_code == 0
-        assert "Authority" in result.output
+        assert "BiRank" in result.output
 
     def test_ranking_invalid_sort(self, populated_db):
         result = runner.invoke(app, ["ranking", "--sort", "invalid"])
@@ -166,7 +168,7 @@ class TestRankingCommand:
             CREATE TABLE persons (id TEXT PRIMARY KEY, name_ja TEXT DEFAULT '', name_en TEXT DEFAULT '', aliases TEXT DEFAULT '[]', mal_id INTEGER, anilist_id INTEGER, canonical_id TEXT);
             CREATE TABLE anime (id TEXT PRIMARY KEY, title_ja TEXT DEFAULT '', title_en TEXT DEFAULT '', year INTEGER, season TEXT, episodes INTEGER, mal_id INTEGER, anilist_id INTEGER, score REAL);
             CREATE TABLE credits (id INTEGER PRIMARY KEY AUTOINCREMENT, person_id TEXT, anime_id TEXT, role TEXT, episode INTEGER DEFAULT -1, source TEXT DEFAULT '');
-            CREATE TABLE scores (person_id TEXT PRIMARY KEY, authority REAL DEFAULT 0.0, trust REAL DEFAULT 0.0, skill REAL DEFAULT 0.0, composite REAL DEFAULT 0.0, updated_at TIMESTAMP);
+            CREATE TABLE scores (person_id TEXT PRIMARY KEY, iv_score REAL DEFAULT 0.0, person_fe REAL DEFAULT 0.0, birank REAL DEFAULT 0.0, patronage REAL DEFAULT 0.0, dormancy REAL DEFAULT 1.0, awcc REAL DEFAULT 0.0, updated_at TIMESTAMP);
         """)
         conn.commit()
         conn.close()
@@ -186,7 +188,7 @@ class TestProfileCommand:
         result = runner.invoke(app, ["profile", "p1"])
         assert result.exit_code == 0
         assert "荒木哲郎" in result.output
-        assert "Authority" in result.output
+        assert "BiRank" in result.output
 
     def test_profile_not_found(self, populated_db):
         result = runner.invoke(app, ["profile", "nonexistent"])
@@ -219,7 +221,7 @@ class TestSearchCommand:
         result = runner.invoke(app, ["search", "xyz_nobody"])
         assert "No results" in result.output
 
-    def test_search_shows_composite_score(self, populated_db):
+    def test_search_shows_iv_score(self, populated_db):
         result = runner.invoke(app, ["search", "荒木"])
         assert "73.0" in result.output
 
@@ -228,7 +230,7 @@ class TestCompareCommand:
     def test_compare_two_persons(self, populated_db):
         result = runner.invoke(app, ["compare", "p1", "p2"])
         assert result.exit_code == 0
-        assert "Authority" in result.output or "authority" in result.output.lower()
+        assert "BiRank" in result.output or "birank" in result.output.lower()
         assert "荒木哲郎" in result.output
         assert "今井有文" in result.output
 
@@ -270,12 +272,12 @@ class TestHistoryCommand:
         conn = get_connection()
         init_db(conn)
         upsert_person(conn, Person(id="p1", name_en="Test Person", name_ja="テスト"))
-        score = ScoreResult(person_id="p1", authority=80.0, trust=70.0, skill=60.0)
+        score = ScoreResult(person_id="p1", birank=80.0, patronage=70.0, person_fe=60.0)
         upsert_score(conn, score)
         save_score_history(conn, score)
         save_score_history(
             conn,
-            ScoreResult(person_id="p1", authority=85.0, trust=72.0, skill=62.0),
+            ScoreResult(person_id="p1", birank=85.0, patronage=72.0, person_fe=62.0),
         )
         conn.commit()
         conn.close()
@@ -410,7 +412,7 @@ class TestVersatilityCommand:
             {
                 "person_id": "p1",
                 "name": "Person 1",
-                "composite": 70.0,
+                "iv_score": 70.0,
                 "versatility": {"score": 75.0, "categories": 3, "roles": 5},
             },
         ]
@@ -435,7 +437,7 @@ class TestDensityCommand:
             {
                 "person_id": "p1",
                 "name": "Person 1",
-                "composite": 70.0,
+                "iv_score": 70.0,
                 "network": {"hub_score": 85.0, "collaborators": 20, "unique_anime": 10},
             },
         ]
@@ -460,20 +462,20 @@ class TestOutliersCommand:
             {
                 "person_id": f"p{i}",
                 "name": f"Normal {i}",
-                "authority": 50.0,
-                "trust": 50.0,
-                "skill": 50.0,
-                "composite": 50.0,
+                "birank": 50.0,
+                "patronage": 50.0,
+                "person_fe": 50.0,
+                "iv_score": 50.0,
             }
             for i in range(20)
         ] + [
             {
                 "person_id": "p_high",
                 "name": "Outlier",
-                "authority": 99.0,
-                "trust": 99.0,
-                "skill": 99.0,
-                "composite": 99.0,
+                "birank": 99.0,
+                "patronage": 99.0,
+                "person_fe": 99.0,
+                "iv_score": 99.0,
             },
         ]
         (tmp_path / "scores.json").write_text(json.dumps(data))

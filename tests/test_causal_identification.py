@@ -42,16 +42,16 @@ class TestIdentifyMajorStudios:
         }
 
         person_scores = {
-            "p1": {"composite": 90.0},
-            "p2": {"composite": 85.0},  # Studio A avg: 87.5
-            "p3": {"composite": 70.0},
-            "p4": {"composite": 65.0},  # Studio B avg: 67.5
-            "p5": {"composite": 50.0},
-            "p6": {"composite": 55.0},
-            "p7": {"composite": 52.0},
-            "p8": {"composite": 48.0},
-            "p9": {"composite": 53.0},
-            "p10": {"composite": 52.0},  # Studio C avg: 51.67
+            "p1": {"iv_score": 90.0},
+            "p2": {"iv_score": 85.0},  # Studio A avg: 87.5
+            "p3": {"iv_score": 70.0},
+            "p4": {"iv_score": 65.0},  # Studio B avg: 67.5
+            "p5": {"iv_score": 50.0},
+            "p6": {"iv_score": 55.0},
+            "p7": {"iv_score": 52.0},
+            "p8": {"iv_score": 48.0},
+            "p9": {"iv_score": 53.0},
+            "p10": {"iv_score": 52.0},  # Studio C avg: 51.67
         }
 
         major_studios, studio_names = identify_major_studios(
@@ -74,7 +74,7 @@ class TestIdentifyMajorStudios:
             "a1": Anime(id="a1", title_ja="Test", studios=["Small Studio"], year=2020)
         }
 
-        person_scores = {f"p{i}": {"composite": 100.0} for i in range(5)}
+        person_scores = {f"p{i}": {"iv_score": 100.0} for i in range(5)}
 
         major_studios, _ = identify_major_studios(
             credits, anime_map, person_scores, top_n=1
@@ -88,7 +88,7 @@ class TestIdentifyMajorStudios:
 
         anime_map = {"a1": Anime(id="a1", title_ja="Test", year=2020)}
 
-        person_scores = {"p1": {"composite": 100.0}}
+        person_scores = {"p1": {"iv_score": 100.0}}
 
         major_studios, _ = identify_major_studios(credits, anime_map, person_scores)
 
@@ -113,11 +113,11 @@ class TestBuildStudioAffiliations:
         }
 
         major_studios = {"Studio A"}
-        skill_scores = {"p1": 80.0}
-        authority_scores = {"p1": 75.0}
+        person_fe_scores = {"p1": 80.0}
+        birank_scores = {"p1": 75.0}
 
         affiliations = build_studio_affiliations(
-            credits, anime_map, major_studios, skill_scores, authority_scores
+            credits, anime_map, major_studios, person_fe_scores, birank_scores
         )
 
         assert "p1" in affiliations
@@ -154,8 +154,8 @@ class TestAnalyzeCareerTrajectories:
                     start_year=2020,
                     end_year=2021,
                     credits_count=10,
-                    avg_skill_score=80.0,
-                    avg_authority_score=75.0,
+                    avg_person_fe_score=80.0,
+                    avg_birank_score=75.0,
                 )
             ],
             "p2": [
@@ -166,8 +166,8 @@ class TestAnalyzeCareerTrajectories:
                     start_year=2018,
                     end_year=2019,
                     credits_count=5,
-                    avg_skill_score=60.0,
-                    avg_authority_score=50.0,
+                    avg_person_fe_score=60.0,
+                    avg_birank_score=50.0,
                 ),
                 StudioAffiliation(
                     person_id="p2",
@@ -176,8 +176,8 @@ class TestAnalyzeCareerTrajectories:
                     start_year=2020,
                     end_year=2021,
                     credits_count=10,
-                    avg_skill_score=80.0,
-                    avg_authority_score=75.0,
+                    avg_person_fe_score=80.0,
+                    avg_birank_score=75.0,
                 ),
             ],
         }
@@ -190,7 +190,7 @@ class TestAnalyzeCareerTrajectories:
         assert len(trajectories) == 1
         assert trajectories[0].person_id == "p2"
 
-    def test_computes_skill_changes(self):
+    def test_computes_person_fe_changes(self):
         """Computes pre-to-major and major-to-post skill changes."""
         affiliations = {
             "p1": [
@@ -201,8 +201,8 @@ class TestAnalyzeCareerTrajectories:
                     start_year=2018,
                     end_year=2019,
                     credits_count=5,
-                    avg_skill_score=60.0,
-                    avg_authority_score=50.0,
+                    avg_person_fe_score=60.0,
+                    avg_birank_score=50.0,
                 ),
                 StudioAffiliation(
                     person_id="p1",
@@ -211,8 +211,8 @@ class TestAnalyzeCareerTrajectories:
                     start_year=2020,
                     end_year=2021,
                     credits_count=10,
-                    avg_skill_score=80.0,
-                    avg_authority_score=75.0,
+                    avg_person_fe_score=80.0,
+                    avg_birank_score=75.0,
                 ),
                 StudioAffiliation(
                     person_id="p1",
@@ -221,8 +221,8 @@ class TestAnalyzeCareerTrajectories:
                     start_year=2022,
                     end_year=2023,
                     credits_count=5,
-                    avg_skill_score=75.0,
-                    avg_authority_score=70.0,
+                    avg_person_fe_score=75.0,
+                    avg_birank_score=70.0,
                 ),
             ]
         }
@@ -234,9 +234,9 @@ class TestAnalyzeCareerTrajectories:
         assert len(trajectories) == 1
         traj = trajectories[0]
 
-        assert traj.pre_avg_skill == 60.0
-        assert traj.major_avg_skill == 80.0
-        assert traj.post_avg_skill == 75.0
+        assert traj.pre_avg_person_fe == 60.0
+        assert traj.major_avg_person_fe == 80.0
+        assert traj.post_avg_person_fe == 75.0
         assert traj.pre_to_major_change == 20.0  # 80 - 60
         assert traj.major_to_post_change == -5.0  # 75 - 80
 
@@ -255,8 +255,8 @@ class TestAnalyzeStudioTransitions:
                     start_year=2018,
                     end_year=2019,
                     credits_count=5,
-                    avg_skill_score=80.0,
-                    avg_authority_score=75.0,
+                    avg_person_fe_score=80.0,
+                    avg_birank_score=75.0,
                 ),
                 StudioAffiliation(
                     person_id="p1",
@@ -265,8 +265,8 @@ class TestAnalyzeStudioTransitions:
                     start_year=2020,
                     end_year=2021,
                     credits_count=5,
-                    avg_skill_score=70.0,
-                    avg_authority_score=60.0,
+                    avg_person_fe_score=70.0,
+                    avg_birank_score=60.0,
                 ),
             ]
         }
@@ -282,8 +282,8 @@ class TestAnalyzeStudioTransitions:
         assert trans.to_studio == "Studio B"
         assert trans.from_is_major is True
         assert trans.to_is_major is False
-        assert trans.skill_change == -10.0  # 70 - 80
-        assert trans.authority_change == -15.0  # 60 - 75
+        assert trans.person_fe_change == -10.0  # 70 - 80
+        assert trans.birank_change == -15.0  # 60 - 75
 
     def test_skips_large_gaps(self):
         """Skips transitions with >5 year gaps."""
@@ -296,8 +296,8 @@ class TestAnalyzeStudioTransitions:
                     start_year=2010,
                     end_year=2011,
                     credits_count=5,
-                    avg_skill_score=80.0,
-                    avg_authority_score=75.0,
+                    avg_person_fe_score=80.0,
+                    avg_birank_score=75.0,
                 ),
                 StudioAffiliation(
                     person_id="p1",
@@ -306,8 +306,8 @@ class TestAnalyzeStudioTransitions:
                     start_year=2020,
                     end_year=2021,
                     credits_count=5,
-                    avg_skill_score=70.0,
-                    avg_authority_score=60.0,
+                    avg_person_fe_score=70.0,
+                    avg_birank_score=60.0,
                 ),
             ]
         }
@@ -328,18 +328,18 @@ class TestEstimateCausalEffects:
             CareerTrajectory(
                 person_id="p1",
                 person_name="Person 1",
-                pre_skill_scores=[60.0, 62.0],
-                major_avg_skill=80.0,
-                post_avg_skill=75.0,
+                pre_person_fe_scores=[60.0, 62.0],
+                major_avg_person_fe=80.0,
+                post_avg_person_fe=75.0,
                 pre_to_major_change=20.0,
                 trend_before_major=1.0,  # Positive trend (selection indicator)
             ),
             CareerTrajectory(
                 person_id="p2",
                 person_name="Person 2",
-                pre_skill_scores=[55.0, 56.0],
-                major_avg_skill=75.0,
-                post_avg_skill=70.0,
+                pre_person_fe_scores=[55.0, 56.0],
+                major_avg_person_fe=75.0,
+                post_avg_person_fe=70.0,
                 pre_to_major_change=20.0,
                 trend_before_major=0.5,
             ),
@@ -354,12 +354,12 @@ class TestEstimateCausalEffects:
                 from_is_major=True,
                 to_is_major=False,
                 transition_year=2022,
-                before_skill=80.0,
-                after_skill=75.0,
-                skill_change=-5.0,
-                before_authority=75.0,
-                after_authority=60.0,
-                authority_change=-15.0,  # Brand effect indicator
+                before_person_fe=80.0,
+                after_person_fe=75.0,
+                person_fe_change=-5.0,
+                before_birank=75.0,
+                after_birank=60.0,
+                birank_change=-15.0,  # Brand effect indicator
             )
         ]
 

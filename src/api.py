@@ -225,7 +225,7 @@ def list_persons(
     page: int = Query(1, ge=1, description="ページ番号"),
     per_page: int = Query(50, ge=1, le=200, description="1ページあたりの件数"),
     sort: str = Query(
-        "composite", description="ソート軸 (composite, authority, trust, skill)"
+        "iv_score", description="ソート軸 (iv_score, person_fe, birank, patronage)"
     ),
 ):
     """全人物スコア一覧（ページネーション対応）."""
@@ -235,7 +235,7 @@ def list_persons(
             items=[], total=0, page=page, per_page=per_page, pages=0
         )
 
-    valid_sorts = {"composite", "authority", "trust", "skill"}
+    valid_sorts = {"iv_score", "person_fe", "birank", "patronage", "dormancy", "awcc"}
     if sort not in valid_sorts:
         raise HTTPException(
             status_code=400, detail=f"Invalid sort: {sort}. Use: {valid_sorts}"
@@ -312,7 +312,7 @@ def ranking(
     ),
     year_from: int | None = Query(None, description="開始年"),
     year_to: int | None = Query(None, description="終了年"),
-    sort: str = Query("composite", description="ソート軸"),
+    sort: str = Query("iv_score", description="ソート軸"),
     limit: int = Query(50, ge=1, le=500, description="件数"),
 ):
     """ランキング（フィルタ対応）."""
@@ -343,7 +343,7 @@ def ranking(
             and s["career"]["first_year"] <= year_to
         ]
 
-    valid_sorts = {"composite", "authority", "trust", "skill"}
+    valid_sorts = {"iv_score", "person_fe", "birank", "patronage", "dormancy", "awcc"}
     if sort not in valid_sorts:
         raise HTTPException(status_code=400, detail=f"Invalid sort: {sort}")
 
@@ -687,7 +687,7 @@ def get_person_network(
 
     anime_map = {a.id: a for a in anime_list}
     scores = load_person_scores_from_json()
-    person_scores = {r["person_id"]: r["composite"] for r in scores} if scores else None
+    person_scores = {r["person_id"]: r.get("iv_score", 0) for r in scores} if scores else None
 
     result = extract_ego_graph(
         person_id, credits, anime_map, hops=hops, person_scores=person_scores
@@ -741,7 +741,7 @@ def predict(
 
     anime_map = {a.id: a for a in anime_list}
     scores = load_person_scores_from_json()
-    person_scores = {r["person_id"]: r["composite"] for r in scores} if scores else None
+    person_scores = {r["person_id"]: r.get("iv_score", 0) for r in scores} if scores else None
 
     result = predict_anime_score(
         team_ids, credits, anime_map, person_scores=person_scores
@@ -793,10 +793,12 @@ def get_person_profile(person_id: PersonId):
     for entry in scores:
         if entry["person_id"] == person_id:
             network_profile = {
-                "authority": entry.get("authority"),
-                "trust": entry.get("trust"),
-                "skill": entry.get("skill"),
-                "composite": entry.get("composite"),
+                "iv_score": entry.get("iv_score"),
+                "person_fe": entry.get("person_fe"),
+                "birank": entry.get("birank"),
+                "patronage": entry.get("patronage"),
+                "dormancy": entry.get("dormancy"),
+                "awcc": entry.get("awcc"),
             }
             break
     if network_profile is None:

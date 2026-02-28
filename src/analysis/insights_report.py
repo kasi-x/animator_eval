@@ -125,18 +125,18 @@ class UndervaluationAlert:
     Attributes:
         person_id: 対象者ID
         name: 名前
-        current_composite: 現在の総合スコア
-        debiased_authority: バイアス補正後Authority
-        authority_gap: 補正前後の差分
+        current_iv_score: 現在のIV Score
+        debiased_birank: バイアス補正後BiRank
+        birank_gap: 補正前後の差分
         category: 潜在価値カテゴリ
         reason: 過小評価の推定原因
     """
 
     person_id: str
     name: str
-    current_composite: float
-    debiased_authority: float
-    authority_gap: float
+    current_iv_score: float
+    debiased_birank: float
+    birank_gap: float
     category: str
     reason: str
 
@@ -192,7 +192,7 @@ def analyze_pagerank_distribution(
         )
 
     # スコアリストを取得
-    scores = [s.get("authority", 0) for s in person_scores.values()]
+    scores = [s.get("birank", 0) for s in person_scores.values()]
     sorted_scores = sorted(scores, reverse=True)
 
     # 上位10%のシェア
@@ -214,7 +214,7 @@ def analyze_pagerank_distribution(
 
     # 上位者の特徴分析
     top_10_persons = sorted(
-        person_scores.items(), key=lambda x: x[1].get("authority", 0), reverse=True
+        person_scores.items(), key=lambda x: x[1].get("birank", 0), reverse=True
     )[:10]
 
     # 役職分布
@@ -296,8 +296,8 @@ def analyze_bias_correction_impact(
     # 補正値を計算
     corrections = []
     for pid, debiased_dict in debiased_scores.items():
-        original = debiased_dict.get("original_authority", 0)
-        debiased = debiased_dict.get("debiased_authority", 0)
+        original = debiased_dict.get("original_birank", 0)
+        debiased = debiased_dict.get("debiased_birank", 0)
         correction = debiased - original
         corrections.append(
             {
@@ -324,8 +324,8 @@ def analyze_bias_correction_impact(
         studio = bias_info.get("primary_studio", "unknown")
         if pid in debiased_scores:
             correction = debiased_scores[pid].get(
-                "debiased_authority", 0
-            ) - debiased_scores[pid].get("original_authority", 0)
+                "debiased_birank", 0
+            ) - debiased_scores[pid].get("original_birank", 0)
             studio_corrections[studio].append(correction)
 
     for studio, corrs in studio_corrections.items():
@@ -344,8 +344,8 @@ def analyze_bias_correction_impact(
         cross_studio_works = bias_info.get("cross_studio_works", 0)
         if cross_studio_works > 0 and pid in debiased_scores:
             correction = debiased_scores[pid].get(
-                "debiased_authority", 0
-            ) - debiased_scores[pid].get("original_authority", 0)
+                "debiased_birank", 0
+            ) - debiased_scores[pid].get("original_birank", 0)
             cross_studio_values.append(correction)
 
     cross_studio_avg = (
@@ -475,7 +475,7 @@ def analyze_potential_value_categories(
             "name": person_names.get(pid, pid),
             "potential_value": round(p.get("potential_value", 0), 2),
             "hidden_score": round(p.get("hidden_score", 0), 2),
-            "current_composite": round(p.get("composite", 0), 2),
+            "current_iv_score": round(p.get("iv_score", 0), 2),
         }
         for pid, p in potential_value_scores.items()
         if p.get("category") == "hidden_gem"
@@ -501,26 +501,26 @@ def analyze_potential_value_categories(
     elite_vs_hidden = {
         "elite": {
             "count": len(elite_group),
-            "avg_authority": round(
-                statistics.mean([p.get("authority", 0) for p in elite_group]), 2
+            "avg_birank": round(
+                statistics.mean([p.get("birank", 0) for p in elite_group]), 2
             )
             if elite_group
             else 0,
-            "avg_trust": round(
-                statistics.mean([p.get("trust", 0) for p in elite_group]), 2
+            "avg_patronage": round(
+                statistics.mean([p.get("patronage", 0) for p in elite_group]), 2
             )
             if elite_group
             else 0,
         },
         "hidden_gem": {
             "count": len(hidden_group),
-            "avg_authority": round(
-                statistics.mean([p.get("authority", 0) for p in hidden_group]), 2
+            "avg_birank": round(
+                statistics.mean([p.get("birank", 0) for p in hidden_group]), 2
             )
             if hidden_group
             else 0,
-            "avg_debiased_authority": round(
-                statistics.mean([p.get("debiased_authority", 0) for p in hidden_group]),
+            "avg_debiased_birank": round(
+                statistics.mean([p.get("debiased_birank", 0) for p in hidden_group]),
                 2,
             )
             if hidden_group
@@ -801,8 +801,8 @@ def identify_undervaluation_alerts(
     alerts = []
 
     for pid, debiased_dict in debiased_scores.items():
-        original = debiased_dict.get("original_authority", 0)
-        debiased = debiased_dict.get("debiased_authority", 0)
+        original = debiased_dict.get("original_birank", 0)
+        debiased = debiased_dict.get("debiased_birank", 0)
         gap = debiased - original
 
         if gap <= 0.03:
@@ -824,15 +824,15 @@ def identify_undervaluation_alerts(
         else:
             reason = "スタジオバイアスによる軽度の過小評価"
 
-        composite = pv.get("composite", 0)
+        iv_score = pv.get("iv_score", 0)
 
         alerts.append(
             UndervaluationAlert(
                 person_id=pid,
                 name=person_names.get(pid, pid),
-                current_composite=round(composite, 2),
-                debiased_authority=round(debiased, 4),
-                authority_gap=round(gap, 4),
+                current_iv_score=round(iv_score, 2),
+                debiased_birank=round(debiased, 4),
+                birank_gap=round(gap, 4),
                 category=category
                 if isinstance(category, str)
                 else category.value
@@ -842,7 +842,7 @@ def identify_undervaluation_alerts(
             )
         )
 
-    alerts.sort(key=lambda a: a.authority_gap, reverse=True)
+    alerts.sort(key=lambda a: a.birank_gap, reverse=True)
 
     logger.info("undervaluation_alerts_generated", alerts=len(alerts[:top_n]))
     return alerts[:top_n]

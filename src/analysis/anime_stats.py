@@ -27,7 +27,7 @@ def compute_anime_stats(
     Args:
         credits: 全クレジット
         anime_map: anime_id → Anime
-        person_scores: {person_id: composite_score} (optional)
+        person_scores: {person_id: iv_score} (optional)
 
     Returns:
         {anime_id: {
@@ -70,7 +70,7 @@ def compute_anime_stats(
             scored = [person_scores[pid] for pid in person_ids if pid in person_scores]
             if scored:
                 entry["avg_person_score"] = round(sum(scored) / len(scored), 2)
-                # Top 5 contributors by composite score
+                # Top 5 contributors by iv_score
                 top = sorted(
                     [
                         (pid, person_scores[pid])
@@ -81,7 +81,7 @@ def compute_anime_stats(
                     reverse=True,
                 )[:5]
                 entry["top_persons"] = [
-                    {"person_id": pid, "composite": s} for pid, s in top
+                    {"person_id": pid, "iv_score": s} for pid, s in top
                 ]
 
         results[anime_id] = entry

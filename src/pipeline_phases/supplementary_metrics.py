@@ -3,27 +3,23 @@
 import structlog
 
 from src.analysis.career import batch_career_analysis
+from src.analysis.career_friction import estimate_career_friction
 from src.analysis.circles import find_director_circles
+from src.analysis.era_effects import compute_era_and_difficulty
 from src.analysis.graph import (
     calculate_network_centrality_scores,
-    create_person_collaboration_network,
     determine_primary_role_for_each_person,
 )
 from src.analysis.growth import compute_growth_trends
 from src.analysis.network_density import compute_network_density
+from src.analysis.peer_effects import estimate_peer_effects_2sls
 from src.analysis.trust import batch_detect_engagement_decay
 from src.analysis.versatility import compute_versatility
 
 # Advanced metrics
-from src.analysis.studio_bias_correction import (
-    compute_studio_bias_metrics,
-    compute_studio_disparity,
-    compute_studio_prestige,
-    debias_authority_scores,
-)
 from src.analysis.growth_acceleration import (
     compute_growth_metrics,
-    compute_adjusted_skill_with_growth,
+    compute_adjusted_person_fe_with_growth,
 )
 from src.analysis.anime_value import compute_anime_values
 from src.analysis.contribution_attribution import compute_contribution_attribution
@@ -34,7 +30,7 @@ logger = structlog.get_logger()
 
 
 def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
-    """Compute supplementary metrics beyond the three core scores.
+    """Compute supplementary metrics beyond the core scores.
 
     Metrics computed:
     - Engagement decay (directors whose engagement with an animator has declined)
@@ -45,20 +41,19 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
     - Centrality (betweenness, closeness, degree in collaboration network)
     - Network density (collaborator count, hub score)
     - Growth trends (career trajectory: rising, stable, declining)
+    - Peer effects (2SLS estimation)
+    - Career friction (observed vs expected transitions)
+    - Era effects (year fixed effects, difficulty proxy)
 
     Args:
         context: Pipeline context
 
     Updates context fields:
-        - decay_results: Dict[person_id, List[decay_event]]
-        - role_profiles: Dict[person_id, role_info]
-        - career_data: Dict[person_id, CareerSnapshot]
-        - circles: Dict[director_id, DirectorCircle]
-        - versatility: Dict[person_id, versatility_metrics]
-        - centrality: Dict[person_id, centrality_metrics]
-        - network_density: Dict[person_id, density_metrics]
-        - growth_data: Dict[person_id, growth_metrics]
-        - collaboration_graph: NetworkX graph (side effect)
+        - decay_results, role_profiles, career_data, circles, versatility
+        - centrality, network_density, growth_data
+        - peer_effect_result, career_friction, era_effects
+        - studio_bias_metrics, growth_acceleration_data, anime_values
+        - contribution_data, potential_value_scores
     """
     # Engagement Decay Detection (optimized: batch processing)
     logger.info("step_start", step="engagement_decay")
@@ -88,12 +83,9 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
     with context.monitor.measure("versatility"):
         context.versatility = compute_versatility(context.credits)
 
-    # Centrality Metrics (requires collaboration graph)
+    # Centrality Metrics (collaboration graph already built in Phase 4)
     logger.info("step_start", step="centrality_metrics")
     with context.monitor.measure("centrality_metrics"):
-        context.collaboration_graph = create_person_collaboration_network(
-            context.persons, context.credits, anime_map=context.anime_map
-        )
         person_ids = {p.id for p in context.persons}
         context.centrality = calculate_network_centrality_scores(
             context.collaboration_graph, person_ids
@@ -116,56 +108,62 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
     with context.monitor.measure("growth_trends"):
         context.growth_data = compute_growth_trends(context.credits, context.anime_map)
 
-    # ========== Advanced Metrics (New) ==========
+    # ========== New 8-Component Supplementary Metrics ==========
+
+    # Peer Effects Estimation (2SLS)
+    logger.info("step_start", step="peer_effects")
+    with context.monitor.measure("peer_effects"):
+        context.peer_effect_result = estimate_peer_effects_2sls(
+            context.credits,
+            context.anime_map,
+            context.iv_scores,
+            context.collaboration_graph,
+        )
+    logger.info(
+        "peer_effects_complete",
+        identified=context.peer_effect_result.identified
+        if context.peer_effect_result
+        else False,
+    )
+
+    # Career Friction
+    logger.info("step_start", step="career_friction")
+    with context.monitor.measure("career_friction"):
+        friction_result = estimate_career_friction(
+            context.credits,
+            context.anime_map,
+            person_scores=context.iv_scores,
+            studio_fe=context.studio_fe,
+        )
+        context.career_friction = friction_result.friction_index
+
+    # Era Effects
+    logger.info("step_start", step="era_effects")
+    with context.monitor.measure("era_effects"):
+        context.era_effects = compute_era_and_difficulty(
+            context.credits, context.anime_map, context.iv_scores
+        )
+
+    # ========== Advanced Metrics (Existing) ==========
 
     # Build person_scores dict for advanced metrics
     person_scores = {
         pid: {
-            "authority": context.authority_scores.get(pid, 0),
-            "trust": context.trust_scores.get(pid, 0),
-            "skill": context.skill_scores.get(pid, 0),
-            "composite": (
-                context.authority_scores.get(pid, 0) * 0.4
-                + context.trust_scores.get(pid, 0) * 0.3
-                + context.skill_scores.get(pid, 0) * 0.3
-            ),
+            "person_fe": context.person_fe.get(pid, 0),
+            "birank": context.birank_person_scores.get(pid, 0),
+            "patronage": context.patronage_scores.get(pid, 0),
+            "iv_score": context.iv_scores.get(pid, 0),
         }
-        for pid in set(context.authority_scores)
-        | set(context.trust_scores)
-        | set(context.skill_scores)
+        for pid in set(context.person_fe)
+        | set(context.birank_person_scores)
+        | set(context.iv_scores)
     }
-
-    # Studio Bias Correction
-    logger.info("step_start", step="studio_bias_correction")
-    with context.monitor.measure("studio_bias_correction"):
-        bias_metrics = compute_studio_bias_metrics(context.credits, context.anime_map)
-        studio_prestige = compute_studio_prestige(
-            context.credits, context.anime_map, person_scores
-        )
-        debiased_scores = debias_authority_scores(
-            person_scores, bias_metrics, studio_prestige, debias_strength=0.3
-        )
-        disparity = compute_studio_disparity(
-            context.credits, context.anime_map, person_scores
-        )
-        context.studio_bias_metrics = {
-            "bias_metrics": {pid: vars(m) for pid, m in bias_metrics.items()},
-            "studio_prestige": studio_prestige,
-            "debiased_scores": {pid: vars(d) for pid, d in debiased_scores.items()},
-            "studio_disparity": {s: vars(d) for s, d in disparity.items()},
-        }
-        logger.info(
-            "studio_bias_computed",
-            persons=len(bias_metrics),
-            studios=len(studio_prestige),
-            disparity_studios=len(disparity),
-        )
 
     # Growth Acceleration
     logger.info("step_start", step="growth_acceleration")
     with context.monitor.measure("growth_acceleration"):
         growth_metrics = compute_growth_metrics(context.credits, context.anime_map)
-        adjusted_skills = compute_adjusted_skill_with_growth(
+        adjusted_skills = compute_adjusted_person_fe_with_growth(
             person_scores, growth_metrics, growth_weight=0.3
         )
         context.growth_acceleration_data = {
@@ -223,11 +221,8 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
     # Potential Value Score (integrates all adjusted scores)
     logger.info("step_start", step="potential_value_scoring")
     with context.monitor.measure("potential_value_scoring"):
-        # Prepare inputs
-        debiased_dict = {
-            pid: {"debiased_authority": d.debiased_authority}
-            for pid, d in debiased_scores.items()
-        }
+        # Prepare inputs — handle case where studio_bias_correction is not run
+        debiased_dict = {}
         growth_dict = {
             pid: {
                 "growth_velocity": m.growth_velocity,

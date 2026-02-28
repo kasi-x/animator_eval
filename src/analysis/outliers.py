@@ -11,7 +11,7 @@ logger = structlog.get_logger()
 
 def detect_outliers(
     results: list[dict],
-    axes: tuple[str, ...] = ("authority", "trust", "skill", "composite"),
+    axes: tuple[str, ...] = ("iv_score", "person_fe", "birank", "patronage"),
     iqr_multiplier: float = 1.5,
     zscore_threshold: float = 2.5,
 ) -> dict:

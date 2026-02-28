@@ -274,7 +274,7 @@ def find_early_potential(
     return early_talents[:top_n]
 
 
-def compute_adjusted_skill_with_growth(
+def compute_adjusted_person_fe_with_growth(
     person_scores: dict[str, dict],
     growth_metrics: dict[str, AccelerationMetrics],
     growth_weight: float = 0.3,
@@ -295,7 +295,7 @@ def compute_adjusted_skill_with_growth(
     adjusted_skills: dict[str, float] = {}
 
     for person_id, scores in person_scores.items():
-        original_skill = scores.get("skill", 0)
+        original_skill = scores.get("person_fe", 0)
 
         if person_id not in growth_metrics:
             adjusted_skills[person_id] = original_skill
@@ -321,10 +321,10 @@ def compute_adjusted_skill_with_growth(
         persons=len(adjusted_skills),
         avg_adjustment=round(
             sum(
-                (adjusted_skills[pid] - person_scores[pid].get("skill", 0))
-                / person_scores[pid].get("skill", 1)
+                (adjusted_skills[pid] - person_scores[pid].get("person_fe", 0))
+                / person_scores[pid].get("person_fe", 1)
                 for pid in adjusted_skills
-                if person_scores[pid].get("skill", 0) > 0
+                if person_scores[pid].get("person_fe", 0) > 0
             )
             / len(adjusted_skills),
             3,
@@ -357,7 +357,7 @@ def main():
     anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
     person_scores = {
-        s.person_id: {"skill": s.skill, "composite": s.composite} for s in scores_list
+        s.person_id: {"person_fe": s.person_fe, "iv_score": s.iv_score} for s in scores_list
     }
 
     # 成長指標計算
@@ -397,7 +397,7 @@ def main():
 
     # 成長率調整Skill
     logger.info("computing_adjusted_skills")
-    adjusted_skills = compute_adjusted_skill_with_growth(
+    adjusted_skills = compute_adjusted_person_fe_with_growth(
         person_scores, growth_metrics, growth_weight=0.3
     )
 
@@ -406,12 +406,12 @@ def main():
     improvements = [
         (
             person_id,
-            person_scores[person_id].get("skill", 0),
+            person_scores[person_id].get("person_fe", 0),
             adjusted_skills[person_id],
-            adjusted_skills[person_id] - person_scores[person_id].get("skill", 0),
+            adjusted_skills[person_id] - person_scores[person_id].get("person_fe", 0),
         )
         for person_id in adjusted_skills
-        if person_scores[person_id].get("skill", 0) > 0
+        if person_scores[person_id].get("person_fe", 0) > 0
     ]
 
     improvements.sort(key=lambda x: x[3], reverse=True)

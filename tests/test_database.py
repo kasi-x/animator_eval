@@ -121,13 +121,13 @@ class TestScoreCrud:
         upsert_person(db_conn, Person(id="mal:p1"))
         upsert_score(
             db_conn,
-            ScoreResult(person_id="mal:p1", authority=80.0, trust=60.0, skill=70.0),
+            ScoreResult(person_id="mal:p1", birank=80.0, patronage=60.0, person_fe=70.0),
         )
         db_conn.commit()
 
         scores = load_all_scores(db_conn)
         assert len(scores) == 1
-        assert scores[0].authority == 80.0
+        assert scores[0].birank == 80.0
 
 
 class TestDbConnection:

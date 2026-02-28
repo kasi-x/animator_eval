@@ -79,11 +79,23 @@ def generate_synthetic_data(
 
     persons = directors + animators
 
+    # スタジオを生成（5スタジオ）
+    studio_names = [
+        "Studio Alpha",
+        "Studio Beta",
+        "Studio Gamma",
+        "Studio Delta",
+        "Studio Epsilon",
+    ]
+
     # アニメ作品を生成
     anime_list = []
     for i in range(n_anime):
         year = rng.randint(2000, 2025)
         score = round(rng.uniform(5.0, 9.5), 1)
+        # Assign 1-2 studios per anime
+        n_studios = rng.choices([1, 2], weights=[0.7, 0.3])[0]
+        anime_studios = rng.sample(studio_names, min(n_studios, len(studio_names)))
         anime_list.append(
             Anime(
                 id=f"syn:anime{i}",
@@ -93,6 +105,7 @@ def generate_synthetic_data(
                 season=rng.choice(["winter", "spring", "summer", "fall"]),
                 episodes=rng.choice([12, 13, 24, 25, 26]),
                 score=score,
+                studios=anime_studios,
             )
         )
 

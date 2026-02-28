@@ -84,7 +84,7 @@ def _build_person_features(
     features = {}
     for r in persons_with_scores:
         pid = r["person_id"]
-        composite = r.get("composite", 0)
+        iv_score = r.get("iv_score", 0)
 
         # 役職
         rp = role_profiles.get(pid, {})
@@ -129,7 +129,7 @@ def _build_person_features(
         unique_studios = len(set(studios))
 
         features[pid] = {
-            "composite": composite,
+            "iv_score": iv_score,
             "primary_role": primary_role,
             "career_years": career_years,
             "career_band": _get_career_band(career_years),
@@ -157,7 +157,7 @@ def compute_peer_percentile(
     cohorts: dict[tuple[str, str], list[tuple[str, float]]] = defaultdict(list)
     for pid, f in features.items():
         key = (f["primary_role"], f["career_band"])
-        cohorts[key].append((pid, f["composite"]))
+        cohorts[key].append((pid, f["iv_score"]))
 
     # 小さいコホートをマージ（同じ役職の隣接バンド）
     role_bands: dict[str, list[str]] = defaultdict(list)
@@ -229,7 +229,7 @@ def compute_opportunity_residual(
     roles = sorted({f["primary_role"] for f in features.values()})
     role_to_idx = {r: i for i, r in enumerate(roles)}
 
-    y = np.array([features[pid]["composite"] for pid in pids])
+    y = np.array([features[pid]["iv_score"] for pid in pids])
 
     # 特徴量行列: [career_years, avg_anime_score, unique_studios, role_dummies...]
     n = len(pids)

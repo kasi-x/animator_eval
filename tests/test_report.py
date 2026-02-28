@@ -21,20 +21,20 @@ def sample_results():
             "name": "Director Alpha",
             "name_ja": "監督A",
             "name_en": "Director Alpha",
-            "authority": 85.0,
-            "trust": 70.0,
-            "skill": 60.0,
-            "composite": 73.5,
+            "birank": 85.0,
+            "patronage": 70.0,
+            "person_fe": 60.0,
+            "iv_score": 73.5,
         },
         {
             "person_id": "p2",
             "name": "Animator Beta",
             "name_ja": "アニメーターB",
             "name_en": "Animator Beta",
-            "authority": 50.0,
-            "trust": 90.0,
-            "skill": 40.0,
-            "composite": 61.5,
+            "birank": 50.0,
+            "patronage": 90.0,
+            "person_fe": 40.0,
+            "iv_score": 61.5,
         },
     ]
 
@@ -101,9 +101,9 @@ class TestGenerateCsvReport:
         lines = out.read_text().strip().split("\n")
         assert len(lines) == 3  # header + 2 rows
         assert "rank" in lines[0]
-        assert "composite" in lines[0]
+        assert "iv_score" in lines[0]
         assert "primary_role" in lines[0]
-        assert "composite_pct" in lines[0]
+        assert "iv_score_pct" in lines[0]
 
     def test_utf8_bom(self, tmp_path, sample_results):
         """Excel 互換のための UTF-8 BOM が付いていることを確認."""
@@ -120,10 +120,10 @@ class TestGenerateCsvReport:
                 "name": "Test Person",
                 "name_ja": "テスト",
                 "name_en": "Test",
-                "authority": 50.0,
-                "trust": 50.0,
-                "skill": 50.0,
-                "composite": 50.0,
+                "birank": 50.0,
+                "patronage": 50.0,
+                "person_fe": 50.0,
+                "iv_score": 50.0,
                 "career": {
                     "first_year": 2018,
                     "latest_year": 2024,
@@ -154,10 +154,10 @@ class TestTextReportCareer:
                 "name": "Test Person",
                 "name_ja": "テスト",
                 "name_en": "Test",
-                "authority": 50.0,
-                "trust": 50.0,
-                "skill": 50.0,
-                "composite": 50.0,
+                "birank": 50.0,
+                "patronage": 50.0,
+                "person_fe": 50.0,
+                "iv_score": 50.0,
                 "career": {
                     "first_year": 2018,
                     "latest_year": 2024,
@@ -222,10 +222,10 @@ class TestGenerateHtmlReport:
             {
                 "person_id": "p1",
                 "name": '<script>alert("xss")</script>',
-                "authority": 50.0,
-                "trust": 50.0,
-                "skill": 50.0,
-                "composite": 50.0,
+                "birank": 50.0,
+                "patronage": 50.0,
+                "person_fe": 50.0,
+                "iv_score": 50.0,
             },
         ]
         out = tmp_path / "report.html"
@@ -296,10 +296,10 @@ class TestGenerateVisualDashboard:
             {
                 "person_id": "p1",
                 "name": '<script>alert("xss")</script>',
-                "authority": 50.0,
-                "trust": 50.0,
-                "skill": 50.0,
-                "composite": 50.0,
+                "birank": 50.0,
+                "patronage": 50.0,
+                "person_fe": 50.0,
+                "iv_score": 50.0,
             },
         ]
         png_dir = tmp_path / "charts"

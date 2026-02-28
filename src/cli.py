@@ -124,7 +124,7 @@ def ranking(
         help="役職カテゴリでフィルタ (director/animator/designer/technical)",
     ),
     sort_by: str = typer.Option(
-        "composite", "--sort", "-s", help="ソート軸 (composite/authority/trust/skill)"
+        "iv_score", "--sort", "-s", help="ソート軸 (iv_score/person_fe/birank/patronage)"
     ),
     year_from: int = typer.Option(None, "--year-from", help="キャリア開始年の下限"),
     year_to: int = typer.Option(None, "--year-to", help="最新活動年の上限"),
@@ -134,7 +134,7 @@ def ranking(
 
     from src.database import db_connection, init_db
 
-    valid_sort = {"composite", "authority", "trust", "skill"}
+    valid_sort = {"iv_score", "person_fe", "birank", "patronage", "dormancy", "awcc"}
     if sort_by not in valid_sort:
         console.print(
             f"[red]Invalid sort axis: {sort_by}. Use: {', '.join(valid_sort)}[/red]"
@@ -189,7 +189,8 @@ def ranking(
             order_col = f"s.{sort_by}"
             rows = conn.execute(
                 f"""SELECT s.person_id, p.name_ja, p.name_en,
-                          s.authority, s.trust, s.skill, s.composite
+                          s.iv_score, s.person_fe, s.birank, s.patronage,
+                          s.dormancy, s.awcc
                    FROM scores s
                    JOIN persons p ON s.person_id = p.id
                    ORDER BY {order_col} DESC
@@ -217,10 +218,10 @@ def ranking(
     table = Table()
     table.add_column("#", justify="right", style="dim")
     table.add_column("Name", style="cyan", min_width=25)
-    table.add_column("Authority", justify="right", style="blue")
-    table.add_column("Trust", justify="right", style="green")
-    table.add_column("Skill", justify="right", style="yellow")
-    table.add_column("Composite", justify="right", style="bold magenta")
+    table.add_column("IV Score", justify="right", style="bold magenta")
+    table.add_column("Person FE", justify="right", style="blue")
+    table.add_column("BiRank", justify="right", style="green")
+    table.add_column("Patronage", justify="right", style="yellow")
 
     for i, row in enumerate(rows, 1):
         name = (
@@ -232,10 +233,10 @@ def ranking(
         table.add_row(
             str(i),
             name,
-            f"{row['authority']:.1f}",
-            f"{row['trust']:.1f}",
-            f"{row['skill']:.1f}",
-            f"{row['composite']:.1f}",
+            f"{row.get('iv_score', 0):.2f}",
+            f"{row.get('person_fe', 0):.4f}",
+            f"{row.get('birank', 0):.4f}",
+            f"{row.get('patronage', 0):.4f}",
         )
 
     console.print(table)
@@ -281,10 +282,12 @@ def profile(person_id: str = typer.Argument(help="人物ID (例: anilist:p100)")
 
     if score:
         console.print("\n[bold]Scores:[/bold]")
-        console.print(f"  Authority: [blue]{score['authority']:.1f}[/blue]")
-        console.print(f"  Trust:     [green]{score['trust']:.1f}[/green]")
-        console.print(f"  Skill:     [yellow]{score['skill']:.1f}[/yellow]")
-        console.print(f"  Composite: [magenta]{score['composite']:.1f}[/magenta]")
+        console.print(f"  IV Score:    [magenta]{score['iv_score']:.2f}[/magenta]")
+        console.print(f"  Person FE:   [blue]{score['person_fe']:.4f}[/blue]")
+        console.print(f"  BiRank:      [green]{score['birank']:.4f}[/green]")
+        console.print(f"  Patronage:   [yellow]{score['patronage']:.4f}[/yellow]")
+        console.print(f"  Dormancy:    {score['dormancy']:.2f}")
+        console.print(f"  AWCC:        {score['awcc']:.4f}")
 
     if credits:
         console.print(f"\n[bold]Credits ({len(credits)} total):[/bold]")
@@ -384,16 +387,16 @@ def search(
     table.add_column("Name (JA)", style="cyan")
     table.add_column("Name (EN)", style="cyan")
     table.add_column("Credits", justify="right")
-    table.add_column("Composite", justify="right", style="bold magenta")
+    table.add_column("IV Score", justify="right", style="bold magenta")
 
     for row in rows:
-        composite = f"{row['composite']:.1f}" if row["composite"] is not None else "-"
+        iv = f"{row['iv_score']:.2f}" if row.get("iv_score") is not None else "-"
         table.add_row(
             row["id"],
             row["name_ja"] or "",
             row["name_en"] or "",
             str(row["credit_count"]),
-            composite,
+            iv,
         )
 
     console.print(table)
@@ -433,10 +436,11 @@ def compare(
                 "id": pid,
                 "name_ja": person["name_ja"],
                 "name_en": person["name_en"],
-                "authority": score["authority"] if score else 0.0,
-                "trust": score["trust"] if score else 0.0,
-                "skill": score["skill"] if score else 0.0,
-                "composite": score["composite"] if score else 0.0,
+                "iv_score": score["iv_score"] if score else 0.0,
+                "person_fe": score["person_fe"] if score else 0.0,
+                "birank": score["birank"] if score else 0.0,
+                "patronage": score["patronage"] if score else 0.0,
+                "dormancy": score["dormancy"] if score else 1.0,
                 "credit_count": credit_count,
                 "roles": [(r["role"], r["cnt"]) for r in roles],
             }
@@ -465,11 +469,11 @@ def compare(
     table.add_column(name_b[:25], justify="right", style="yellow")
     table.add_column("Diff", justify="right", style="dim")
 
-    for axis in ("authority", "trust", "skill", "composite"):
+    for axis, label in (("iv_score", "IV Score"), ("person_fe", "Person FE"), ("birank", "BiRank"), ("patronage", "Patronage"), ("dormancy", "Dormancy")):
         va, vb = data_a[axis], data_b[axis]
         diff = va - vb
-        diff_str = f"{diff:+.1f}"
-        table.add_row(axis.capitalize(), f"{va:.1f}", f"{vb:.1f}", diff_str)
+        diff_str = f"{diff:+.4f}"
+        table.add_row(label, f"{va:.4f}", f"{vb:.4f}", diff_str)
 
     table.add_row(
         "Credits", str(data_a["credit_count"]), str(data_b["credit_count"]), ""
@@ -531,20 +535,20 @@ def similar(
     table.add_column("#", justify="right", style="dim")
     table.add_column("Name", style="cyan", min_width=25)
     table.add_column("Similarity", justify="right", style="bold green")
-    table.add_column("Authority", justify="right", style="blue")
-    table.add_column("Trust", justify="right", style="green")
-    table.add_column("Skill", justify="right", style="yellow")
-    table.add_column("Composite", justify="right", style="magenta")
+    table.add_column("IV Score", justify="right", style="magenta")
+    table.add_column("Person FE", justify="right", style="blue")
+    table.add_column("BiRank", justify="right", style="green")
+    table.add_column("Patronage", justify="right", style="yellow")
 
     for i, s in enumerate(similar_list, 1):
         table.add_row(
             str(i),
             s["name"],
             f"{s['similarity']:.3f}",
-            f"{s['authority']:.1f}",
-            f"{s['trust']:.1f}",
-            f"{s['skill']:.1f}",
-            f"{s['composite']:.1f}",
+            f"{s.get('iv_score', 0):.2f}",
+            f"{s.get('person_fe', 0):.4f}",
+            f"{s.get('birank', 0):.4f}",
+            f"{s.get('patronage', 0):.4f}",
         )
 
     console.print(table)
@@ -575,10 +579,11 @@ def export(
         # scores + persons を結合して results 形式に変換
         rows = conn.execute(
             """SELECT s.person_id, p.name_ja, p.name_en,
-                      s.authority, s.trust, s.skill, s.composite
+                      s.iv_score, s.person_fe, s.studio_fe_exposure,
+                      s.birank, s.patronage, s.dormancy, s.awcc
                FROM scores s
                JOIN persons p ON s.person_id = p.id
-               ORDER BY s.composite DESC""",
+               ORDER BY s.iv_score DESC""",
         ).fetchall()
 
     if not rows:
@@ -593,10 +598,13 @@ def export(
             "name": r["name_ja"] or r["name_en"] or r["person_id"],
             "name_ja": r["name_ja"],
             "name_en": r["name_en"],
-            "authority": r["authority"],
-            "trust": r["trust"],
-            "skill": r["skill"],
-            "composite": r["composite"],
+            "iv_score": r["iv_score"],
+            "person_fe": r["person_fe"],
+            "studio_fe_exposure": r["studio_fe_exposure"],
+            "birank": r["birank"],
+            "patronage": r["patronage"],
+            "dormancy": r["dormancy"],
+            "awcc": r["awcc"],
         }
         for r in rows
     ]
@@ -732,18 +740,18 @@ def history(
 
     table = Table()
     table.add_column("Run Date", style="dim")
-    table.add_column("Authority", justify="right", style="blue")
-    table.add_column("Trust", justify="right", style="green")
-    table.add_column("Skill", justify="right", style="yellow")
-    table.add_column("Composite", justify="right", style="bold magenta")
+    table.add_column("BiRank", justify="right", style="blue")
+    table.add_column("Patronage", justify="right", style="green")
+    table.add_column("Person FE", justify="right", style="yellow")
+    table.add_column("IV Score", justify="right", style="bold magenta")
 
-    prev_composite = None
+    prev_iv = None
     for h in hist:
         delta = ""
-        if prev_composite is not None:
-            diff = h["composite"] - prev_composite
+        if prev_iv is not None:
+            diff = h["iv_score"] - prev_iv
             delta = f" ({diff:+.1f})" if abs(diff) > 0.01 else ""
-        prev_composite = h["composite"]
+        prev_iv = h["iv_score"]
 
         run_at = h["run_at"] or ""
         if len(run_at) > 19:
@@ -751,10 +759,10 @@ def history(
 
         table.add_row(
             run_at,
-            f"{h['authority']:.1f}",
-            f"{h['trust']:.1f}",
-            f"{h['skill']:.1f}",
-            f"{h['composite']:.1f}{delta}",
+            f"{h['birank']:.1f}",
+            f"{h['patronage']:.1f}",
+            f"{h['person_fe']:.1f}",
+            f"{h['iv_score']:.1f}{delta}",
         )
 
     console.print(table)
@@ -1012,7 +1020,7 @@ def versatility(
             f"{v['score']:.0f}",
             str(v["categories"]),
             str(v["roles"]),
-            f"{r['composite']:.1f}",
+            f"{r['iv_score']:.1f}",
         )
 
     console.print(table)
@@ -1063,7 +1071,7 @@ def density(
             f"{n['hub_score']:.1f}",
             str(n["collaborators"]),
             str(n["unique_anime"]),
-            f"{r['composite']:.1f}",
+            f"{r['iv_score']:.1f}",
         )
 
     console.print(table)

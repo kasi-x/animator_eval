@@ -1,6 +1,6 @@
-"""時系列PageRank — 年次スナップショットによる動的Authority評価.
+"""時系列PageRank — 年次スナップショットによる動的BiRank評価.
 
-年ごとの累積グラフでPageRankを実行し、Authority推移・先見スコア・抜擢検出を算出する。
+年ごとの累積グラフでPageRankを実行し、BiRank推移・先見スコア・抜擢検出を算出する。
 Phase 9 分析モジュールとして動作（コアスコアリングには影響しない独立した補足分析）。
 
 Components:
@@ -34,24 +34,24 @@ PEER_EDGE_CAP = 15  # Max persons per category per anime for peer edges
 
 
 @dataclass(frozen=True)
-class YearlyAuthoritySnapshot:
-    """1年分のAuthority評価."""
+class YearlyBirankSnapshot:
+    """1年分のBiRank評価."""
 
     year: int
-    authority: float  # 0-100 normalized within year
+    birank: float  # 0-100 normalized within year
     raw_pagerank: float
     graph_size: int  # person nodes count
     n_credits_cumulative: int
 
 
 @dataclass
-class AuthorityTimeline:
-    """人物の年次Authority推移."""
+class BirankTimeline:
+    """人物の年次BiRank推移."""
 
     person_id: str
-    snapshots: list[YearlyAuthoritySnapshot] = field(default_factory=list)
+    snapshots: list[YearlyBirankSnapshot] = field(default_factory=list)
     peak_year: int | None = None
-    peak_authority: float = 0.0
+    peak_birank: float = 0.0
     career_start_year: int | None = None
     latest_year: int | None = None
     trajectory: str = "stable"  # "rising" | "stable" | "declining" | "peaked"
@@ -103,7 +103,7 @@ class PromotionCredit:
 class TemporalPageRankResult:
     """時系列PageRankの全結果."""
 
-    authority_timelines: dict = field(default_factory=dict)  # person_id -> dict
+    birank_timelines: dict = field(default_factory=dict)  # person_id -> dict
     foresight_scores: dict = field(default_factory=dict)  # person_id -> dict
     promotion_credits: dict = field(default_factory=dict)  # person_id -> dict
     years_computed: list[int] = field(default_factory=list)
@@ -313,18 +313,18 @@ def _run_yearly_pagerank_with_warm_start(
 
 
 # =============================================================================
-# Step 3: Authority Timeline Construction
+# Step 3: BiRank Timeline Construction
 # =============================================================================
 
 
-def _build_authority_timelines(
+def _build_birank_timelines(
     yearly_scores: dict[int, dict[str, float]],
     yearly_graphs: dict[int, nx.DiGraph],
     yearly_normalized: dict[int, dict[str, float]],
     credits: list[Credit],
     anime_map: dict[str, Anime],
-) -> dict[str, AuthorityTimeline]:
-    """年次PageRankスコアからAuthorityタイムラインを構築する.
+) -> dict[str, BirankTimeline]:
+    """年次PageRankスコアからBiRankタイムラインを構築する.
 
     Args:
         yearly_scores: {year: {node_id: raw_pagerank}}
@@ -334,7 +334,7 @@ def _build_authority_timelines(
         anime_map: anime_id -> Anime
 
     Returns:
-        {person_id: AuthorityTimeline}
+        {person_id: BirankTimeline}
     """
     # Count cumulative credits per year
     credits_by_year: dict[int, int] = defaultdict(int)
@@ -358,7 +358,7 @@ def _build_authority_timelines(
         )
 
     # Build timelines
-    timelines: dict[str, AuthorityTimeline] = {}
+    timelines: dict[str, BirankTimeline] = {}
     years = sorted(yearly_scores.keys())
 
     # Collect all person IDs
@@ -374,9 +374,9 @@ def _build_authority_timelines(
             if person_id not in normalized:
                 continue
             snapshots.append(
-                YearlyAuthoritySnapshot(
+                YearlyBirankSnapshot(
                     year=year,
-                    authority=normalized[person_id],
+                    birank=normalized[person_id],
                     raw_pagerank=raw.get(person_id, 0.0),
                     graph_size=yearly_person_count.get(year, 0),
                     n_credits_cumulative=cumulative_by_year.get(year, 0),
@@ -387,15 +387,15 @@ def _build_authority_timelines(
             continue
 
         # Find peak
-        peak_snap = max(snapshots, key=lambda s: s.authority)
+        peak_snap = max(snapshots, key=lambda s: s.birank)
         # Determine trajectory
         trajectory = _classify_trajectory(snapshots)
 
-        timelines[person_id] = AuthorityTimeline(
+        timelines[person_id] = BirankTimeline(
             person_id=person_id,
             snapshots=snapshots,
             peak_year=peak_snap.year,
-            peak_authority=peak_snap.authority,
+            peak_birank=peak_snap.birank,
             career_start_year=snapshots[0].year,
             latest_year=snapshots[-1].year,
             trajectory=trajectory,
@@ -404,7 +404,7 @@ def _build_authority_timelines(
     return timelines
 
 
-def _classify_trajectory(snapshots: list[YearlyAuthoritySnapshot]) -> str:
+def _classify_trajectory(snapshots: list[YearlyBirankSnapshot]) -> str:
     """スナップショット列からキャリア軌道を分類する.
 
     Returns: "rising" | "stable" | "declining" | "peaked"
@@ -412,15 +412,15 @@ def _classify_trajectory(snapshots: list[YearlyAuthoritySnapshot]) -> str:
     if len(snapshots) < 2:
         return "stable"
 
-    authorities = [s.authority for s in snapshots]
-    n = len(authorities)
+    biranks = [s.birank for s in snapshots]
+    n = len(biranks)
 
     # Use last third vs first third comparison
     third = max(n // 3, 1)
-    early_avg = sum(authorities[:third]) / third
-    late_avg = sum(authorities[-third:]) / third
-    peak = max(authorities)
-    peak_idx = authorities.index(peak)
+    early_avg = sum(biranks[:third]) / third
+    late_avg = sum(biranks[-third:]) / third
+    peak = max(biranks)
+    peak_idx = biranks.index(peak)
 
     # Threshold for "significant" change
     threshold = 10.0
@@ -446,7 +446,7 @@ def _classify_trajectory(snapshots: list[YearlyAuthoritySnapshot]) -> str:
 
 
 def _compute_foresight_scores(
-    authority_timelines: dict[str, AuthorityTimeline],
+    birank_timelines: dict[str, BirankTimeline],
     credits: list[Credit],
     anime_map: dict[str, Anime],
     yearly_normalized: dict[int, dict[str, float]],
@@ -456,10 +456,10 @@ def _compute_foresight_scores(
     """先見スコアを計算する.
 
     Algorithm:
-    1. Year T: find "unknown" Y (authority < 25th percentile) and "established" X (> 25th)
+    1. Year T: find "unknown" Y (birank < 25th percentile) and "established" X (> 25th)
        who co-appear in the same anime
-    2. If Y's authority grows by 10+ points within T+5 years -> X gets foresight credit
-    3. foresight(X) = sum(growth(Y) * 1/(authority_T(Y) + epsilon))
+    2. If Y's birank grows by 10+ points within T+5 years -> X gets foresight credit
+    3. foresight(X) = sum(growth(Y) * 1/(birank_T(Y) + epsilon))
     4. Bootstrap CI (200 iterations)
 
     Returns:
@@ -480,15 +480,15 @@ def _compute_foresight_scores(
             vals = list(scores.values())
             year_thresholds[year] = float(np.percentile(vals, unknown_threshold_percentile))
 
-    # Build per-person authority by year lookup
-    person_year_authority: dict[str, dict[int, float]] = defaultdict(dict)
-    for pid, timeline in authority_timelines.items():
+    # Build per-person birank by year lookup
+    person_year_birank: dict[str, dict[int, float]] = defaultdict(dict)
+    for pid, timeline in birank_timelines.items():
         for snap in timeline.snapshots:
-            person_year_authority[pid][snap.year] = snap.authority
+            person_year_birank[pid][snap.year] = snap.birank
 
     years = sorted(yearly_normalized.keys())
 
-    # Collect discovery events: {established_person: [(growth, unknown_authority, year, unknown_id)]}
+    # Collect discovery events: {established_person: [(growth, unknown_birank, year, unknown_id)]}
     discoveries_raw: dict[str, list[tuple[float, float, int, str]]] = defaultdict(list)
 
     for year in years:
@@ -510,21 +510,21 @@ def _compute_foresight_scores(
                 continue
 
             for y_id in unknown:
-                y_authority_t = year_scores.get(y_id, 0.0)
+                y_birank_t = year_scores.get(y_id, 0.0)
                 # Check future growth within horizon
-                future_authority = 0.0
+                future_birank = 0.0
                 for future_year in range(year + 1, year + foresight_horizon_years + 1):
-                    fa = person_year_authority.get(y_id, {}).get(future_year)
+                    fa = person_year_birank.get(y_id, {}).get(future_year)
                     if fa is not None:
-                        future_authority = max(future_authority, fa)
+                        future_birank = max(future_birank, fa)
 
-                growth = future_authority - y_authority_t
+                growth = future_birank - y_birank_t
                 if growth < 5.0:
                     continue
 
                 # Credit all established co-workers
                 for x_id in established:
-                    discoveries_raw[x_id].append((growth, y_authority_t, year, y_id))
+                    discoveries_raw[x_id].append((growth, y_birank_t, year, y_id))
 
     # Compute raw foresight scores
     epsilon = 1.0
@@ -581,7 +581,7 @@ def _compute_foresight_scores(
             {
                 "person_id": y_id,
                 "growth": round(growth, 2),
-                "authority_at_discovery": round(y_auth, 2),
+                "birank_at_discovery": round(y_auth, 2),
                 "year": year,
             }
             for growth, y_auth, year, y_id in top_discoveries
@@ -608,7 +608,7 @@ def _compute_foresight_scores(
 def _detect_promotions(
     credits: list[Credit],
     anime_map: dict[str, Anime],
-    authority_timelines: dict[str, AuthorityTimeline],
+    birank_timelines: dict[str, BirankTimeline],
     min_promotions: int = 2,
 ) -> dict[str, PromotionCredit]:
     """抜擢イベントを検出し、上位者に帰属する.
@@ -879,14 +879,14 @@ def compute_temporal_pagerank(
         }
         yearly_normalized[year] = normalize_scores(person_scores)
 
-    # Step 3: Build authority timelines (reuses yearly_normalized — no recomputation)
-    authority_timelines = _build_authority_timelines(
+    # Step 3: Build birank timelines (reuses yearly_normalized — no recomputation)
+    birank_timelines = _build_birank_timelines(
         yearly_scores, yearly_graphs, yearly_normalized, credits, anime_map
     )
 
     # Step 4: Compute foresight scores
     foresight_scores = _compute_foresight_scores(
-        authority_timelines,
+        birank_timelines,
         credits,
         anime_map,
         yearly_normalized,
@@ -898,7 +898,7 @@ def compute_temporal_pagerank(
     promotion_credits = _detect_promotions(
         credits,
         anime_map,
-        authority_timelines,
+        birank_timelines,
         min_promotions=min_promotions_for_credit,
     )
 
@@ -908,21 +908,21 @@ def compute_temporal_pagerank(
     logger.info(
         "temporal_pagerank_computed",
         years=len(years_computed),
-        timelines=len(authority_timelines),
+        timelines=len(birank_timelines),
         foresight_persons=len(foresight_scores),
         promotions=sum(pc.promotion_count for pc in promotion_credits.values()),
         elapsed_seconds=round(elapsed, 2),
     )
 
     return TemporalPageRankResult(
-        authority_timelines={
-            pid: asdict(tl) for pid, tl in authority_timelines.items()
+        birank_timelines={
+            pid: asdict(tl) for pid, tl in birank_timelines.items()
         },
         foresight_scores={pid: asdict(fs) for pid, fs in foresight_scores.items()},
         promotion_credits={
             pid: asdict(pc) for pid, pc in promotion_credits.items()
         },
         years_computed=years_computed,
-        total_persons=len(authority_timelines),
+        total_persons=len(birank_timelines),
         computation_time_seconds=round(elapsed, 2),
     )

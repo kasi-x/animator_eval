@@ -282,12 +282,12 @@ class TestBetweennessCache:
         from src.analysis.potential_value import compute_potential_value_scores
 
         person_scores = {
-            "A": {"authority": 0.8, "trust": 0.7, "skill": 0.6, "composite": 0.7},
-            "B": {"authority": 0.5, "trust": 0.4, "skill": 0.3, "composite": 0.4},
+            "A": {"birank": 0.8, "patronage": 0.7, "person_fe": 0.6, "iv_score": 0.7},
+            "B": {"birank": 0.5, "patronage": 0.4, "person_fe": 0.3, "iv_score": 0.4},
         }
         debiased = {
-            "A": {"debiased_authority": 0.85},
-            "B": {"debiased_authority": 0.55},
+            "A": {"debiased_birank": 0.85},
+            "B": {"debiased_birank": 0.55},
         }
         growth = {
             "A": {"growth_velocity": 1.0, "momentum_score": 0.5, "career_years": 10}

@@ -51,17 +51,17 @@ class TestExportGraphml:
         persons, credits = _make_data()
         scores = {
             "p1": {
-                "authority": 80.0,
-                "trust": 70.0,
-                "skill": 60.0,
-                "composite": 72.0,
+                "birank": 80.0,
+                "patronage": 70.0,
+                "person_fe": 60.0,
+                "iv_score": 72.0,
                 "primary_role": "director",
             },
             "p2": {
-                "authority": 60.0,
-                "trust": 50.0,
-                "skill": 40.0,
-                "composite": 52.0,
+                "birank": 60.0,
+                "patronage": 50.0,
+                "person_fe": 40.0,
+                "iv_score": 52.0,
                 "primary_role": "animator",
             },
         }
@@ -70,7 +70,7 @@ class TestExportGraphml:
         content = out.read_text()
         assert out.exists()
         # Should contain score attributes
-        assert "authority" in content
+        assert "birank" in content
 
     def test_empty_credits(self, tmp_path):
         persons, _ = _make_data()

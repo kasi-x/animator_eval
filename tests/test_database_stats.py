@@ -159,27 +159,27 @@ class TestSchemaMigration:
 
 class TestScoreHistory:
     def test_save_and_retrieve(self, stats_conn):
-        score = ScoreResult(person_id="p1", authority=80.0, trust=70.0, skill=60.0)
+        score = ScoreResult(person_id="p1", birank=80.0, patronage=70.0, person_fe=60.0)
         save_score_history(stats_conn, score)
         stats_conn.commit()
 
         history = get_score_history(stats_conn, "p1")
         assert len(history) == 1
-        assert history[0]["authority"] == 80.0
-        assert history[0]["composite"] == score.composite
+        assert history[0]["birank"] == 80.0
+        assert history[0]["iv_score"] == score.iv_score
 
     def test_multiple_runs(self, stats_conn):
         for auth in [50.0, 60.0, 70.0]:
             save_score_history(
                 stats_conn,
-                ScoreResult(person_id="p1", authority=auth, trust=40.0, skill=30.0),
+                ScoreResult(person_id="p1", birank=auth, patronage=40.0, person_fe=30.0),
             )
         stats_conn.commit()
 
         history = get_score_history(stats_conn, "p1")
         assert len(history) == 3
         # All three values present
-        values = {h["authority"] for h in history}
+        values = {h["birank"] for h in history}
         assert values == {50.0, 60.0, 70.0}
 
     def test_empty_history(self, stats_conn):
@@ -190,7 +190,7 @@ class TestScoreHistory:
         for i in range(10):
             save_score_history(
                 stats_conn,
-                ScoreResult(person_id="p2", authority=float(i), trust=0, skill=0),
+                ScoreResult(person_id="p2", birank=float(i), patronage=0, person_fe=0),
             )
         stats_conn.commit()
 

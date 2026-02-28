@@ -5,7 +5,7 @@
 - "rising_star" — 成長トレンド
 - "hub" — コラボ数上位
 - "specialist" / "generalist" — 役職多様性
-- "high_authority" / "high_trust" / "high_skill" — 各軸上位
+- "high_birank" / "high_patronage" / "high_person_fe" — 各軸上位
 """
 
 import structlog
@@ -35,10 +35,10 @@ def compute_person_tags(results: list[dict]) -> dict[str, list[str]]:
         idx = min(int(len(vals) * pct), len(vals) - 1)
         return vals[idx]
 
-    high_auth = percentile_threshold("authority", 0.85)
-    high_trust = percentile_threshold("trust", 0.85)
-    high_skill = percentile_threshold("skill", 0.85)
-    high_composite = percentile_threshold("composite", 0.90)
+    high_birank = percentile_threshold("birank", 0.85)
+    high_patronage = percentile_threshold("patronage", 0.85)
+    high_person_fe = percentile_threshold("person_fe", 0.85)
+    high_iv_score = percentile_threshold("iv_score", 0.90)
 
     tags: dict[str, list[str]] = {}
     for r in results:
@@ -46,13 +46,13 @@ def compute_person_tags(results: list[dict]) -> dict[str, list[str]]:
         person_tags = []
 
         # Score-based tags (strict > so equal scores don't all qualify)
-        if r.get("authority", 0) > high_auth:
-            person_tags.append("high_authority")
-        if r.get("trust", 0) > high_trust:
-            person_tags.append("high_trust")
-        if r.get("skill", 0) > high_skill:
-            person_tags.append("high_skill")
-        if r.get("composite", 0) > high_composite:
+        if r.get("birank", 0) > high_birank:
+            person_tags.append("high_birank")
+        if r.get("patronage", 0) > high_patronage:
+            person_tags.append("high_patronage")
+        if r.get("person_fe", 0) > high_person_fe:
+            person_tags.append("high_person_fe")
+        if r.get("iv_score", 0) > high_iv_score:
             person_tags.append("top_talent")
 
         # Career-based tags

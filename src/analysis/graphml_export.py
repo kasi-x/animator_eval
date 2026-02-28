@@ -27,13 +27,13 @@ def export_graphml(
 ) -> Path:
     """コラボレーショングラフをGraphML形式でエクスポートする.
 
-    大規模グラフ (>max_edges) の場合はcompositeスコア上位top_n_personsの
+    大規模グラフ (>max_edges) の場合はiv_scoreスコア上位top_n_personsの
     サブグラフのみエクスポートする（Gephi等でも62M辺は扱えないため）。
 
     Args:
         persons: 人物リスト
         credits: クレジットリスト
-        person_scores: {person_id: {authority, trust, skill, composite, ...}}
+        person_scores: {person_id: {iv_score, person_fe, birank, patronage, ...}}
         output_path: 出力パス (None の場合はデフォルト)
         collaboration_graph: 既存のコラボレーショングラフ (再利用で高速化)
         prettyprint: XMLを整形するか (False で高速化、デフォルト True)
@@ -58,11 +58,11 @@ def export_graphml(
 
     # Determine which person IDs to include
     if use_subgraph and person_scores:
-        # Select top N persons by composite score
+        # Select top N persons by iv_score
         top_pids = {
             pid
             for pid, _ in sorted(
-                ((pid, ps.get("composite", 0)) for pid, ps in person_scores.items()),
+                ((pid, ps.get("iv_score", 0)) for pid, ps in person_scores.items()),
                 key=lambda x: x[1],
                 reverse=True,
             )[:top_n_persons]
@@ -92,7 +92,7 @@ def export_graphml(
         }
         if person_scores and p.id in person_scores:
             ps = person_scores[p.id]
-            for key in ("authority", "trust", "skill", "composite"):
+            for key in ("iv_score", "person_fe", "birank", "patronage"):
                 if key in ps:
                     attrs[key] = round(float(ps[key]), round_decimals)
             if "primary_role" in ps:

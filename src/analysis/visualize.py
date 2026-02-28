@@ -153,14 +153,15 @@ def plot_score_distribution(
     fig, axes = plt.subplots(1, 4, figsize=(20, 5))
 
     score_types = [
-        ("authority", "Authority (PageRank)", "#2196F3"),
-        ("trust", "Trust (継続起用)", "#4CAF50"),
-        ("skill", "Skill (OpenSkill)", "#FF9800"),
-        ("composite", "Composite (総合)", "#9C27B0"),
+        ("birank", "BiRank", "#2196F3"),
+        ("patronage", "Patronage (継続起用)", "#4CAF50"),
+        ("person_fe", "Person FE", "#FF9800"),
+        ("iv_score", "IV Score (総合)", "#9C27B0"),
     ]
 
     for ax, (key, label, color) in zip(axes, score_types):
-        values = [s[key] for s in scores.values() if key in s]
+        score_items = scores.values() if isinstance(scores, dict) else scores
+        values = [s[key] for s in score_items if key in s]
         if values:
             ax.hist(values, bins=30, color=color, alpha=0.7, edgecolor="white")
             ax.set_title(label, fontsize=12)
@@ -195,7 +196,7 @@ def plot_top_persons_radar(
         return
 
     top = results[:top_n]
-    categories = ["Authority", "Trust", "Skill"]
+    categories = ["BiRank", "Patronage", "Person FE"]
     n_cats = len(categories)
     angles = np.linspace(0, 2 * np.pi, n_cats, endpoint=False).tolist()
     angles += angles[:1]
@@ -205,7 +206,7 @@ def plot_top_persons_radar(
     colors = plt.cm.tab10(np.linspace(0, 1, top_n))
 
     for i, r in enumerate(top):
-        values = [r.get("authority", 0), r.get("trust", 0), r.get("skill", 0)]
+        values = [r.get("birank", 0), r.get("patronage", 0), r.get("person_fe", 0)]
         values += values[:1]
         name = r.get("name", r.get("person_id", ""))
         ax.plot(angles, values, "o-", color=colors[i], label=name, linewidth=2)
@@ -213,7 +214,7 @@ def plot_top_persons_radar(
 
     ax.set_thetagrids([a * 180 / np.pi for a in angles[:-1]], categories)
     ax.set_ylim(0, 100)
-    ax.set_title(f"Top {top_n} — 3軸評価レーダー", fontsize=14, pad=20)
+    ax.set_title(f"Top {top_n} — 3軸スコアレーダー", fontsize=14, pad=20)
     ax.legend(loc="upper right", bbox_to_anchor=(1.3, 1.0), fontsize=8)
 
     plt.tight_layout()
@@ -585,7 +586,7 @@ def plot_decade_comparison(
     ax1.spines["right"].set_visible(False)
 
     # Avg anime score by decade
-    avg_scores = [decades[d].get("avg_anime_score", 0) for d in labels]
+    avg_scores = [decades[d].get("avg_anime_score") or 0 for d in labels]
     bars = ax2.bar(labels, avg_scores, color="#9C27B0", alpha=0.8)
     ax2.set_title("Average Anime Score by Decade", fontsize=12)
     ax2.set_ylim(0, 10)

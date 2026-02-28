@@ -73,10 +73,10 @@ class TestAllSameScores:
         results = [
             {
                 "person_id": f"p{i}",
-                "authority": 50,
-                "trust": 50,
-                "skill": 50,
-                "composite": 50,
+                "birank": 50,
+                "patronage": 50,
+                "person_fe": 50,
+                "iv_score": 50,
             }
             for i in range(20)
         ]
@@ -90,10 +90,10 @@ class TestAllSameScores:
             {
                 "person_id": f"p{i}",
                 "name": f"P{i}",
-                "authority": 50,
-                "trust": 50,
-                "skill": 50,
-                "composite": 50,
+                "birank": 50,
+                "patronage": 50,
+                "person_fe": 50,
+                "iv_score": 50,
             }
             for i in range(3)
         ]
@@ -105,10 +105,10 @@ class TestAllSameScores:
         results = [
             {
                 "person_id": f"p{i}",
-                "authority": 50,
-                "trust": 50,
-                "skill": 50,
-                "composite": 50,
+                "birank": 50,
+                "patronage": 50,
+                "person_fe": 50,
+                "iv_score": 50,
                 "career": {"active_years": 5, "highest_stage": 3},
             }
             for i in range(10)
@@ -181,17 +181,17 @@ class TestRecommendationEdgeCases:
         results = [
             {
                 "person_id": "p1",
-                "authority": 50,
-                "trust": 50,
-                "skill": 50,
-                "composite": 50,
+                "birank": 50,
+                "patronage": 50,
+                "person_fe": 50,
+                "iv_score": 50,
             },
             {
                 "person_id": "p2",
-                "authority": 50,
-                "trust": 50,
-                "skill": 50,
-                "composite": 50,
+                "birank": 50,
+                "patronage": 50,
+                "person_fe": 50,
+                "iv_score": 50,
             },
         ]
         credits = [
@@ -205,10 +205,10 @@ class TestRecommendationEdgeCases:
         results = [
             {
                 "person_id": "p1",
-                "authority": 50,
-                "trust": 50,
-                "skill": 50,
-                "composite": 50,
+                "birank": 50,
+                "patronage": 50,
+                "person_fe": 50,
+                "iv_score": 50,
             }
         ]
         recs = recommend_for_team(["nonexistent"], results, [])

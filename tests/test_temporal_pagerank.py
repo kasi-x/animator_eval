@@ -6,9 +6,9 @@ from dataclasses import asdict
 import pytest
 
 from src.analysis.temporal_pagerank import (
-    YearlyAuthoritySnapshot,
+    YearlyBirankSnapshot,
     _add_peer_edges,
-    _build_authority_timelines,
+    _build_birank_timelines,
     _build_yearly_cumulative_graphs,
     _classify_trajectory,
     _compute_foresight_scores,
@@ -231,7 +231,7 @@ class TestWarmStartPageRank:
 # =============================================================================
 
 
-class TestAuthorityTimeline:
+class TestBirankTimeline:
     def test_timeline_peak_detection(self, basic_data):
         """Peak year should be correctly detected."""
         persons, anime_list, anime_map, credits = basic_data
@@ -239,7 +239,7 @@ class TestAuthorityTimeline:
         scores = _run_yearly_pagerank_with_warm_start(graphs)
 
         yearly_norm = _build_yearly_normalized(scores, graphs)
-        timelines = _build_authority_timelines(scores, graphs, yearly_norm, credits, anime_map)
+        timelines = _build_birank_timelines(scores, graphs, yearly_norm, credits, anime_map)
 
         # All persons should have timelines
         assert "d1" in timelines
@@ -248,45 +248,45 @@ class TestAuthorityTimeline:
         # Peak should be in the valid year range
         for pid, tl in timelines.items():
             assert tl.peak_year in [2020, 2021, 2022]
-            assert tl.peak_authority >= 0
+            assert tl.peak_birank >= 0
 
     def test_trajectory_rising(self):
         """Rising trajectory: scores increase over time."""
         snapshots = [
-            YearlyAuthoritySnapshot(2018, 10.0, 0.01, 100, 500),
-            YearlyAuthoritySnapshot(2019, 20.0, 0.02, 150, 700),
-            YearlyAuthoritySnapshot(2020, 30.0, 0.03, 200, 900),
-            YearlyAuthoritySnapshot(2021, 50.0, 0.05, 250, 1100),
-            YearlyAuthoritySnapshot(2022, 70.0, 0.07, 300, 1300),
-            YearlyAuthoritySnapshot(2023, 85.0, 0.08, 350, 1500),
+            YearlyBirankSnapshot(2018, 10.0, 0.01, 100, 500),
+            YearlyBirankSnapshot(2019, 20.0, 0.02, 150, 700),
+            YearlyBirankSnapshot(2020, 30.0, 0.03, 200, 900),
+            YearlyBirankSnapshot(2021, 50.0, 0.05, 250, 1100),
+            YearlyBirankSnapshot(2022, 70.0, 0.07, 300, 1300),
+            YearlyBirankSnapshot(2023, 85.0, 0.08, 350, 1500),
         ]
         assert _classify_trajectory(snapshots) == "rising"
 
     def test_trajectory_declining(self):
         """Declining trajectory: scores decrease over time."""
         snapshots = [
-            YearlyAuthoritySnapshot(2018, 80.0, 0.08, 100, 500),
-            YearlyAuthoritySnapshot(2019, 70.0, 0.07, 150, 700),
-            YearlyAuthoritySnapshot(2020, 55.0, 0.05, 200, 900),
-            YearlyAuthoritySnapshot(2021, 40.0, 0.04, 250, 1100),
-            YearlyAuthoritySnapshot(2022, 25.0, 0.02, 300, 1300),
-            YearlyAuthoritySnapshot(2023, 15.0, 0.01, 350, 1500),
+            YearlyBirankSnapshot(2018, 80.0, 0.08, 100, 500),
+            YearlyBirankSnapshot(2019, 70.0, 0.07, 150, 700),
+            YearlyBirankSnapshot(2020, 55.0, 0.05, 200, 900),
+            YearlyBirankSnapshot(2021, 40.0, 0.04, 250, 1100),
+            YearlyBirankSnapshot(2022, 25.0, 0.02, 300, 1300),
+            YearlyBirankSnapshot(2023, 15.0, 0.01, 350, 1500),
         ]
         assert _classify_trajectory(snapshots) == "declining"
 
     def test_trajectory_stable(self):
         """Stable trajectory: scores fluctuate within threshold."""
         snapshots = [
-            YearlyAuthoritySnapshot(2018, 50.0, 0.05, 100, 500),
-            YearlyAuthoritySnapshot(2019, 52.0, 0.05, 150, 700),
-            YearlyAuthoritySnapshot(2020, 48.0, 0.05, 200, 900),
-            YearlyAuthoritySnapshot(2021, 51.0, 0.05, 250, 1100),
+            YearlyBirankSnapshot(2018, 50.0, 0.05, 100, 500),
+            YearlyBirankSnapshot(2019, 52.0, 0.05, 150, 700),
+            YearlyBirankSnapshot(2020, 48.0, 0.05, 200, 900),
+            YearlyBirankSnapshot(2021, 51.0, 0.05, 250, 1100),
         ]
         assert _classify_trajectory(snapshots) == "stable"
 
     def test_trajectory_single_snapshot(self):
         """Single snapshot should classify as stable."""
-        snapshots = [YearlyAuthoritySnapshot(2020, 50.0, 0.05, 100, 500)]
+        snapshots = [YearlyBirankSnapshot(2020, 50.0, 0.05, 100, 500)]
         assert _classify_trajectory(snapshots) == "stable"
 
 
@@ -315,7 +315,7 @@ class TestForesightScores:
         scores = _run_yearly_pagerank_with_warm_start(graphs)
         yearly_norm = _build_yearly_normalized(scores, graphs)
 
-        timelines = _build_authority_timelines(scores, graphs, yearly_norm, credits, anime_map)
+        timelines = _build_birank_timelines(scores, graphs, yearly_norm, credits, anime_map)
         foresight = _compute_foresight_scores(
             timelines, credits, anime_map, yearly_norm,
             foresight_horizon_years=5,
@@ -340,7 +340,7 @@ class TestForesightScores:
         scores = _run_yearly_pagerank_with_warm_start(graphs)
         yearly_norm = _build_yearly_normalized(scores, graphs)
 
-        timelines = _build_authority_timelines(scores, graphs, yearly_norm, credits, anime_map)
+        timelines = _build_birank_timelines(scores, graphs, yearly_norm, credits, anime_map)
         foresight = _compute_foresight_scores(
             timelines, credits, anime_map, yearly_norm,
         )
@@ -397,7 +397,7 @@ class TestPromotionDetection:
         graphs = _build_yearly_cumulative_graphs(credits, anime_map, persons, 0.3)
         scores = _run_yearly_pagerank_with_warm_start(graphs)
         yearly_norm = _build_yearly_normalized(scores, graphs)
-        timelines = _build_authority_timelines(scores, graphs, yearly_norm, credits, anime_map)
+        timelines = _build_birank_timelines(scores, graphs, yearly_norm, credits, anime_map)
 
         # Use min_promotions=1 to detect all events (including single promotions)
         promotions = _detect_promotions(credits, anime_map, timelines, min_promotions=1)
@@ -417,7 +417,7 @@ class TestPromotionDetection:
         graphs = _build_yearly_cumulative_graphs(credits, anime_map, persons, 0.3)
         scores = _run_yearly_pagerank_with_warm_start(graphs)
         yearly_norm = _build_yearly_normalized(scores, graphs)
-        timelines = _build_authority_timelines(scores, graphs, yearly_norm, credits, anime_map)
+        timelines = _build_birank_timelines(scores, graphs, yearly_norm, credits, anime_map)
 
         promotions = _detect_promotions(credits, anime_map, timelines, min_promotions=1)
 
@@ -433,7 +433,7 @@ class TestPromotionDetection:
         graphs = _build_yearly_cumulative_graphs(credits, anime_map, persons, 0.3)
         scores = _run_yearly_pagerank_with_warm_start(graphs)
         yearly_norm = _build_yearly_normalized(scores, graphs)
-        timelines = _build_authority_timelines(scores, graphs, yearly_norm, credits, anime_map)
+        timelines = _build_birank_timelines(scores, graphs, yearly_norm, credits, anime_map)
 
         # With min_promotions=5, nothing should pass in this small dataset
         promotions = _detect_promotions(credits, anime_map, timelines, min_promotions=5)
@@ -459,7 +459,7 @@ class TestPromotionDetection:
         graphs = _build_yearly_cumulative_graphs(credits, anime_map, persons, 0.3)
         scores = _run_yearly_pagerank_with_warm_start(graphs)
         yearly_norm = _build_yearly_normalized(scores, graphs)
-        timelines = _build_authority_timelines(scores, graphs, yearly_norm, credits, anime_map)
+        timelines = _build_birank_timelines(scores, graphs, yearly_norm, credits, anime_map)
 
         promotions = _detect_promotions(credits, anime_map, timelines, min_promotions=2)
 
@@ -499,7 +499,7 @@ class TestPromotionDetection:
         graphs = _build_yearly_cumulative_graphs(credits, anime_map, persons, 0.3)
         scores = _run_yearly_pagerank_with_warm_start(graphs)
         yearly_norm = _build_yearly_normalized(scores, graphs)
-        timelines = _build_authority_timelines(scores, graphs, yearly_norm, credits, anime_map)
+        timelines = _build_birank_timelines(scores, graphs, yearly_norm, credits, anime_map)
 
         promotions = _detect_promotions(credits, anime_map, timelines, min_promotions=1)
 
@@ -520,7 +520,7 @@ class TestIntegration:
         result = compute_temporal_pagerank([], {}, [])
         assert result.years_computed == []
         assert result.total_persons == 0
-        assert result.authority_timelines == {}
+        assert result.birank_timelines == {}
         assert result.foresight_scores == {}
         assert result.promotion_credits == {}
 
@@ -536,7 +536,7 @@ class TestIntegration:
 
         # Should round-trip
         parsed = json.loads(json_str)
-        assert "authority_timelines" in parsed
+        assert "birank_timelines" in parsed
         assert "foresight_scores" in parsed
         assert "promotion_credits" in parsed
         assert "years_computed" in parsed
@@ -551,7 +551,7 @@ class TestIntegration:
         assert result.computation_time_seconds >= 0
 
         # Authority timelines
-        for pid, tl_dict in result.authority_timelines.items():
+        for pid, tl_dict in result.birank_timelines.items():
             assert "snapshots" in tl_dict
             assert "peak_year" in tl_dict
             assert "trajectory" in tl_dict

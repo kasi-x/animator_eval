@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Animetor Eval Explorer</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans CJK JP', sans-serif;
+    line-height: 1.6; color: #e0e0e0;
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    min-height: 100vh;
+}
+a { color: #a0d2db; text-decoration: none; cursor: pointer; }
+a:hover { text-decoration: underline; }
+
+/* Layout */
+.app { max-width: 1400px; margin: 0 auto; padding: 1rem; }
+nav {
+    display: flex; align-items: center; gap: 1.5rem;
+    padding: 1rem 0; border-bottom: 1px solid rgba(255,255,255,0.1);
+    margin-bottom: 1.5rem; flex-wrap: wrap;
+}
+nav .logo {
+    font-size: 1.4rem; font-weight: 800;
+    background: linear-gradient(135deg, #f093fb, #f5576c);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+nav a { color: #a0a0c0; font-size: 0.9rem; padding: 0.3rem 0.8rem; border-radius: 8px; transition: all 0.2s; }
+nav a:hover, nav a.active { background: rgba(240,147,251,0.15); color: #f093fb; text-decoration: none; }
+nav .spacer { flex: 1; }
+nav .lang-btn {
+    font-size: 0.8rem; padding: 0.2rem 0.6rem;
+    border: 1px solid rgba(255,255,255,0.2); border-radius: 6px;
+    cursor: pointer; color: #a0a0c0; background: transparent;
+}
+nav .lang-btn:hover { border-color: #f093fb; color: #f093fb; }
+
+/* Cards */
+.card {
+    background: rgba(255,255,255,0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 16px; padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+.card h2 { font-size: 1.4rem; color: #f093fb; margin-bottom: 1rem; font-weight: 700; }
+.card h3 { font-size: 1.1rem; color: #a0d2db; margin: 1rem 0 0.6rem; }
+
+/* Stats */
+.stats-grid {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.8rem; margin: 1rem 0;
+}
+.stat-card {
+    background: linear-gradient(135deg, rgba(240,147,251,0.12), rgba(245,87,108,0.08));
+    border: 1px solid rgba(240,147,251,0.15);
+    border-radius: 12px; padding: 1rem; text-align: center;
+}
+.stat-card .value {
+    font-size: 1.8rem; font-weight: 800;
+    background: linear-gradient(135deg, #f093fb, #f5576c);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.stat-card .label { font-size: 0.8rem; color: #a0a0c0; margin-top: 0.2rem; }
+
+/* Search */
+.search-box {
+    display: flex; gap: 0.8rem; margin-bottom: 1rem; flex-wrap: wrap;
+}
+.search-box input {
+    flex: 1; min-width: 200px; padding: 0.7rem 1rem;
+    background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 10px; color: #e0e0e0; font-size: 1rem;
+    outline: none; transition: border 0.2s;
+}
+.search-box input:focus { border-color: #f093fb; }
+.search-box select {
+    padding: 0.7rem 1rem; background: rgba(255,255,255,0.08);
+    border: 1px solid rgba(255,255,255,0.15); border-radius: 10px;
+    color: #e0e0e0; font-size: 0.9rem; outline: none;
+}
+
+/* Result cards */
+.person-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1rem; }
+.person-card {
+    background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 12px; padding: 1.2rem; cursor: pointer; transition: all 0.2s;
+}
+.person-card:hover { border-color: rgba(240,147,251,0.3); background: rgba(255,255,255,0.07); }
+.person-card .name { font-size: 1.1rem; font-weight: 700; color: #f093fb; margin-bottom: 0.3rem; }
+.person-card .role { font-size: 0.8rem; color: #a0a0c0; }
+.person-card .scores {
+    display: flex; gap: 0.5rem; margin-top: 0.6rem; flex-wrap: wrap;
+}
+.person-card .score-badge {
+    padding: 0.15rem 0.5rem; border-radius: 8px;
+    font-size: 0.75rem; font-weight: 600;
+}
+.badge-birank { background: rgba(240,147,251,0.2); color: #f093fb; }
+.badge-patronage { background: rgba(6,214,160,0.2); color: #06D6A0; }
+.badge-person-fe { background: rgba(102,126,234,0.2); color: #667eea; }
+.badge-iv { background: rgba(253,160,133,0.2); color: #fda085; }
+.cluster-badge {
+    display: inline-block; padding: 0.15rem 0.5rem;
+    background: rgba(160,210,219,0.15); color: #a0d2db;
+    border-radius: 8px; font-size: 0.7rem; margin-top: 0.4rem;
+}
+
+/* Person detail */
+.detail-header {
+    display: flex; align-items: flex-start; gap: 2rem; flex-wrap: wrap;
+}
+.detail-header .info { flex: 1; min-width: 250px; }
+.detail-header .info h1 {
+    font-size: 2rem; font-weight: 800;
+    background: linear-gradient(135deg, #f093fb, #f5576c, #fda085);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+.detail-header .info .sub { color: #a0a0c0; font-size: 0.9rem; margin-top: 0.3rem; }
+.tag-list { display: flex; gap: 0.4rem; margin-top: 0.6rem; flex-wrap: wrap; }
+.tag {
+    padding: 0.15rem 0.5rem; border-radius: 8px;
+    font-size: 0.7rem; font-weight: 600;
+    background: rgba(255,255,255,0.08); color: #c0c0d0;
+}
+
+/* Tables */
+table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 0.8rem 0; }
+thead { background: rgba(240,147,251,0.1); }
+thead th { padding: 0.6rem 0.8rem; text-align: left; color: #f093fb; font-weight: 600; border-bottom: 2px solid rgba(240,147,251,0.2); }
+tbody tr { border-bottom: 1px solid rgba(255,255,255,0.04); }
+tbody tr:hover { background: rgba(255,255,255,0.04); }
+tbody td { padding: 0.5rem 0.8rem; color: #c0c0d0; }
+
+/* Chart */
+.chart-box { background: rgba(0,0,0,0.2); border-radius: 12px; padding: 0.8rem; margin: 0.8rem 0; }
+
+/* Disclaimer */
+.disclaimer {
+    margin-top: 2rem; padding: 1.2rem; border: 1px solid rgba(255,209,102,0.3);
+    background: rgba(255,209,102,0.04); border-radius: 12px;
+    font-size: 0.82rem; color: #a0a0a0; line-height: 1.7;
+}
+.disclaimer strong { color: #FFD166; }
+
+/* Loading */
+.loading { text-align: center; padding: 3rem; color: #a0a0c0; }
+.loading::after { content: ''; display: inline-block; width: 20px; height: 20px; border: 2px solid #f093fb; border-top-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-left: 0.5rem; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Two col */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+@media (max-width: 900px) { .two-col { grid-template-columns: 1fr; } }
+
+/* Back btn */
+.back-btn { display: inline-block; margin-bottom: 1rem; color: #a0d2db; font-size: 0.9rem; cursor: pointer; }
+.back-btn:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="app">
+<nav>
+    <span class="logo">Animetor Explorer</span>
+    <a href="#search" data-nav="search">検索</a>
+    <a href="#clusters" data-nav="clusters">クラスタ</a>
+    <span class="spacer"></span>
+    <button class="lang-btn" id="langToggle">EN/JA</button>
+</nav>
+<div id="app"></div>
+<div class="disclaimer" id="disclaimerBlock"></div>
+</div>
+
+<script>
+// ============================================================
+// i18n
+// ============================================================
+const I18N = {
+    ja: {
+        search: '検索', clusters: 'クラスタ', person: '人物詳細',
+        searchPlaceholder: '名前で検索...', role: 'ロール', allRoles: '全ロール',
+        allClusters: '全クラスタ', iv_score: 'IVスコア', birank: 'BiRank',
+        patronage: 'Patronage', person_fe: '個人FE', credits: 'クレジット',
+        activeYears: '活動年数', collaborators: '協業者数', confidence: '確信度',
+        similar: '類似人物', recommendations: '同世代レコメンド',
+        egoGraph: 'エゴグラフ', clusterProfile: 'クラスタプロファイル',
+        members: 'メンバー', back: '\u2190 戻る', loading: '読み込み中...',
+        noResults: '該当なし', radarChart: 'レーダーチャート',
+        hubScore: 'ハブ', versatility: '多様性',
+        yearRange: '活動期間', peakYear: 'ピーク年',
+        careerStage: 'キャリアステージ', trend: 'トレンド',
+        size: '人数', silhouette: 'シルエット',
+        disclaimer: '免責事項 (Disclaimer): 本スコアは公開クレジットデータに基づくネットワーク上の位置・協業密度の定量指標であり、個人の能力・技量・芸術性を評価・測定・示唆するものではありません。低スコアはデータセット上のネットワーク可視性が限定的であることを意味し、実力の不足を意味するものではありません。',
+    },
+    en: {
+        search: 'Search', clusters: 'Clusters', person: 'Person Detail',
+        searchPlaceholder: 'Search by name...', role: 'Role', allRoles: 'All Roles',
+        allClusters: 'All Clusters', iv_score: 'IV Score', birank: 'BiRank',
+        patronage: 'Patronage', person_fe: 'Person FE', credits: 'Credits',
+        activeYears: 'Active Years', collaborators: 'Collaborators', confidence: 'Confidence',
+        similar: 'Similar Persons', recommendations: 'Cohort Recommendations',
+        egoGraph: 'Ego Graph', clusterProfile: 'Cluster Profile',
+        members: 'Members', back: '\u2190 Back', loading: 'Loading...',
+        noResults: 'No results', radarChart: 'Radar Chart',
+        hubScore: 'Hub', versatility: 'Versatility',
+        yearRange: 'Active Period', peakYear: 'Peak Year',
+        careerStage: 'Career Stage', trend: 'Trend',
+        size: 'Size', silhouette: 'Silhouette',
+        disclaimer: 'Disclaimer: These scores are quantitative metrics of network position and collaboration density based on publicly available credit data. They do not evaluate, measure, or imply individual ability, skill, or artistry. A low score means limited network visibility in the dataset, not a lack of talent.',
+    }
+};
+let lang = localStorage.getItem('explorer_lang') || 'ja';
+function t(key) { return (I18N[lang] || I18N.ja)[key] || key; }
+
+function updateDisclaimer() {
+    var block = document.getElementById('disclaimerBlock');
+    block.textContent = '';
+    var strong = document.createElement('strong');
+    strong.textContent = lang === 'ja' ? '免責事項:' : 'Disclaimer:';
+    block.appendChild(strong);
+    block.appendChild(document.createTextNode(' ' + t('disclaimer')));
+}
+updateDisclaimer();
+
+document.getElementById('langToggle').addEventListener('click', function() {
+    lang = lang === 'ja' ? 'en' : 'ja';
+    localStorage.setItem('explorer_lang', lang);
+    updateDisclaimer();
+    route();
+});
+
+// ============================================================
+// API
+// ============================================================
+async function api(path) {
+    var res = await fetch(path);
+    if (!res.ok) throw new Error('API error: ' + res.status);
+    return res.json();
+}
+
+// ============================================================
+// DOM Helpers (safe - no innerHTML)
+// ============================================================
+function el(tag, attrs) {
+    var e = document.createElement(tag);
+    if (attrs) {
+        Object.keys(attrs).forEach(function(k) {
+            var v = attrs[k];
+            if (k === 'className') e.className = v;
+            else if (k === 'onclick') e.addEventListener('click', v);
+            else e.setAttribute(k, v);
+        });
+    }
+    for (var i = 2; i < arguments.length; i++) {
+        var c = arguments[i];
+        if (typeof c === 'string') e.appendChild(document.createTextNode(c));
+        else if (c) e.appendChild(c);
+    }
+    return e;
+}
+
+function personCard(p) {
+    var card = el('div', {className: 'person-card', onclick: function() { navigate('person/' + p.person_id); }});
+    card.appendChild(el('div', {className: 'name'}, p.name || p.name_ja || p.person_id));
+    card.appendChild(el('div', {className: 'role'}, (p.primary_role || '?') + ' | ' + t('credits') + ': ' + (p.total_credits || 0)));
+    var scores = el('div', {className: 'scores'});
+    scores.appendChild(el('span', {className: 'score-badge badge-iv'}, t('iv_score') + ': ' + (p.iv_score||0).toFixed(2)));
+    if (p.birank !== undefined) scores.appendChild(el('span', {className: 'score-badge badge-birank'}, 'BR: ' + (p.birank||0).toFixed(4)));
+    if (p.patronage !== undefined) scores.appendChild(el('span', {className: 'score-badge badge-patronage'}, 'PT: ' + (p.patronage||0).toFixed(4)));
+    if (p.person_fe !== undefined) scores.appendChild(el('span', {className: 'score-badge badge-person-fe'}, 'FE: ' + (p.person_fe||0).toFixed(4)));
+    card.appendChild(scores);
+    if (p.cluster_name) card.appendChild(el('div', {className: 'cluster-badge'}, p.cluster_name));
+    return card;
+}
+
+function navigate(hash) { location.hash = hash; }
+
+// ============================================================
+// Pages
+// ============================================================
+
+async function renderSearch() {
+    var app = document.getElementById('app');
+    app.textContent = '';
+
+    var card = el('div', {className: 'card'});
+    card.appendChild(el('h2', null, t('search')));
+
+    var box = el('div', {className: 'search-box'});
+    var input = el('input', {type: 'text', placeholder: t('searchPlaceholder'), id: 'searchInput'});
+    var roleSelect = el('select', {id: 'roleFilter'});
+    roleSelect.appendChild(el('option', {value: ''}, t('allRoles')));
+    // Populate roles from API
+    api('/api/roles').then(function(rdata) {
+        (rdata.roles||[]).forEach(function(r) {
+            var opt = el('option', {value: r.role}, r.role + ' (' + r.count + ')');
+            roleSelect.appendChild(opt);
+        });
+    }).catch(function() {});
+    var clusterSelect = el('select', {id: 'clusterFilter'});
+    clusterSelect.appendChild(el('option', {value: ''}, t('allClusters')));
+    // Populate clusters from API
+    api('/api/clusters').then(function(cdata) {
+        (cdata.clusters||[]).forEach(function(c) {
+            var opt = el('option', {value: String(c.cluster_id)}, (c.name||'C'+c.cluster_id) + ' (' + c.size + ')');
+            clusterSelect.appendChild(opt);
+        });
+    }).catch(function() {});
+
+
+    box.appendChild(input);
+    box.appendChild(roleSelect);
+    box.appendChild(clusterSelect);
+    card.appendChild(box);
+
+    var resultDiv = el('div', {id: 'searchResults', className: 'person-list'});
+    card.appendChild(resultDiv);
+    app.appendChild(card);
+
+    var debounceTimer;
+    async function doSearch() {
+        var q = input.value.trim();
+        var role = roleSelect.value;
+        var cluster = clusterSelect.value;
+        var params = new URLSearchParams();
+        if (q) params.set('q', q);
+        if (role) params.set('role', role);
+        if (cluster) params.set('cluster', cluster);
+        params.set('limit', '40');
+
+        resultDiv.textContent = '';
+        resultDiv.appendChild(el('div', {className: 'loading'}, t('loading')));
+
+        try {
+            var data = await api('/api/search?' + params);
+            resultDiv.textContent = '';
+            var items = data.results || data.persons || [];
+            if (items.length === 0) {
+                resultDiv.appendChild(el('div', {className: 'loading'}, t('noResults')));
+                return;
+            }
+            items.forEach(function(p) { resultDiv.appendChild(personCard(p)); });
+        } catch (e) {
+            resultDiv.textContent = '';
+            resultDiv.appendChild(el('div', {className: 'loading'}, 'Error: ' + e.message));
+        }
+    }
+
+    function debouncedSearch() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(doSearch, 300);
+    }
+
+    input.addEventListener('input', debouncedSearch);
+    roleSelect.addEventListener('change', doSearch);
+    clusterSelect.addEventListener('change', doSearch);
+
+    doSearch();
+}
+
+async function renderPerson(id) {
+    var app = document.getElementById('app');
+    app.textContent = '';
+    app.appendChild(el('div', {className: 'loading'}, t('loading')));
+
+    try {
+        var results = await Promise.all([
+            api('/api/persons/' + id),
+            api('/api/persons/' + id + '/graph').catch(function() { return {nodes:[], edges:[]}; }),
+            api('/api/persons/' + id + '/similar?n=8').catch(function() { return {similar:[]}; }),
+            api('/api/persons/' + id + '/recommendations').catch(function() { return {recommendations:[]}; }),
+        ]);
+        var person = results[0];
+        var graphData = results[1];
+        var similarData = results[2];
+        var recsData = results[3];
+
+        app.textContent = '';
+
+        // Back button
+        app.appendChild(el('a', {className: 'back-btn', onclick: function() { history.back(); }}, t('back')));
+
+        // Header card
+        var header = el('div', {className: 'card'});
+        var dh = el('div', {className: 'detail-header'});
+        var info = el('div', {className: 'info'});
+        info.appendChild(el('h1', null, person.name || person.name_ja || id));
+        var subParts = [];
+        if (person.name_en) subParts.push(person.name_en);
+        subParts.push(person.primary_role || '?');
+        subParts.push(t('credits') + ': ' + (person.total_credits||0));
+        info.appendChild(el('div', {className: 'sub'}, subParts.join(' | ')));
+        if (person.cluster_name) info.appendChild(el('div', {className: 'cluster-badge'}, person.cluster_name));
+        if (person.tags && person.tags.length) {
+            var tags = el('div', {className: 'tag-list'});
+            person.tags.forEach(function(tg) { tags.appendChild(el('span', {className: 'tag'}, tg)); });
+            info.appendChild(tags);
+        }
+        dh.appendChild(info);
+        header.appendChild(dh);
+
+        // Stats
+        var sg = el('div', {className: 'stats-grid'});
+        var statItems = [
+            [t('iv_score'), (person.iv_score||0).toFixed(2)],
+            [t('birank'), (person.birank||0).toFixed(4)],
+            [t('patronage'), (person.patronage||0).toFixed(4)],
+            [t('person_fe'), (person.person_fe||0).toFixed(4)],
+            [t('confidence'), (person.confidence||0).toFixed(3)],
+            [t('credits'), String(person.total_credits||0)],
+            [t('activeYears'), String((person.career||{}).active_years||0)],
+            [t('collaborators'), String((person.network||{}).collaborators||0)],
+        ];
+        statItems.forEach(function(item) {
+            var sc = el('div', {className: 'stat-card'});
+            sc.appendChild(el('div', {className: 'value'}, item[1]));
+            sc.appendChild(el('div', {className: 'label'}, item[0]));
+            sg.appendChild(sc);
+        });
+        header.appendChild(sg);
+        app.appendChild(header);
+
+        // Two-column layout
+        var twocol = el('div', {className: 'two-col'});
+
+        // Radar chart
+        var radarCard = el('div', {className: 'card'});
+        radarCard.appendChild(el('h2', null, t('radarChart')));
+        var radarDiv = el('div', {className: 'chart-box', id: 'radarChart'});
+        radarCard.appendChild(radarDiv);
+        twocol.appendChild(radarCard);
+
+        // Career info
+        var careerCard = el('div', {className: 'card'});
+        careerCard.appendChild(el('h2', null, 'Career'));
+        var career = person.career || {};
+        var growth = person.growth || {};
+        var versatility = person.versatility || {};
+        var tbl = el('table');
+        var tbody = el('tbody');
+        var careerItems = [
+            [t('yearRange'), (career.first_year||'?') + ' - ' + (career.latest_year||'?')],
+            [t('peakYear'), (career.peak_year||'?') + ' (' + (career.peak_credits||0) + ' credits)'],
+            [t('careerStage'), String(career.highest_stage||'?')],
+            [t('trend'), growth.trend||'?'],
+            [t('versatility'), (versatility.score||0).toFixed(1) + ' (' + (versatility.categories||0) + ' cat, ' + (versatility.roles||0) + ' roles)'],
+            [t('hubScore'), ((person.network||{}).hub_score||0).toFixed(1)],
+        ];
+        careerItems.forEach(function(item) {
+            var row = el('tr');
+            row.appendChild(el('td', {style: 'color:#a0d2db;font-weight:600'}, item[0]));
+            row.appendChild(el('td', null, item[1]));
+            tbody.appendChild(row);
+        });
+        tbl.appendChild(tbody);
+        careerCard.appendChild(tbl);
+        twocol.appendChild(careerCard);
+        app.appendChild(twocol);
+
+        // Render radar
+        var radarCategories = [t('birank'), t('patronage'), t('person_fe'), t('hubScore'), t('versatility'), t('confidence')];
+        var radarValues = [
+            person.birank||0, person.patronage||0, person.person_fe||0,
+            (person.network||{}).hub_score||0, (person.versatility||{}).score||0,
+            (person.confidence||0)*100
+        ];
+        Plotly.newPlot('radarChart', [{
+            type: 'scatterpolar', r: radarValues.concat([radarValues[0]]),
+            theta: radarCategories.concat([radarCategories[0]]),
+            fill: 'toself', fillcolor: 'rgba(240,147,251,0.15)',
+            line: {color: '#f093fb', width: 2},
+            marker: {size: 6, color: '#f093fb'},
+        }], {
+            polar: {
+                radialaxis: {visible: true, range: [0, 100], color: '#666', gridcolor: 'rgba(255,255,255,0.1)'},
+                angularaxis: {color: '#a0a0c0'},
+                bgcolor: 'rgba(0,0,0,0)',
+            },
+            paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+            font: {color: '#c0c0d0'}, margin: {l: 60, r: 60, t: 30, b: 30},
+            showlegend: false, height: 300,
+        }, {responsive: true, displayModeBar: false});
+
+        // Ego Graph
+        if (graphData.nodes && graphData.nodes.length > 1) {
+            var graphCard = el('div', {className: 'card'});
+            graphCard.appendChild(el('h2', null, t('egoGraph')));
+            var graphDiv = el('div', {className: 'chart-box', id: 'egoGraph'});
+            graphCard.appendChild(graphDiv);
+            app.appendChild(graphCard);
+
+            var nodes = graphData.nodes || [];
+            var edges = graphData.edges || [];
+            var others = nodes.filter(function(n) { return n.person_id !== id; });
+            var positions = {};
+            positions[id] = [0, 0];
+            others.forEach(function(n, i) {
+                var angle = (2 * Math.PI * i) / others.length;
+                positions[n.person_id] = [Math.cos(angle), Math.sin(angle)];
+            });
+
+            var edgeX = [], edgeY = [];
+            edges.forEach(function(e) {
+                var s = positions[e.source] || [0,0];
+                var tgt = positions[e.target] || [0,0];
+                edgeX.push(s[0], tgt[0], null);
+                edgeY.push(s[1], tgt[1], null);
+            });
+
+            var centerNode = nodes.find(function(n) { return n.person_id === id; }) || nodes[0];
+            var clusterColors = ['#f093fb','#06D6A0','#667eea','#fda085','#FFD166','#a0d2db','#EF476F','#96E6A1','#DDA0DD','#87CEEB'];
+
+            var traces = [];
+            traces.push({
+                x: edgeX, y: edgeY, mode: 'lines',
+                line: {width: 1, color: 'rgba(150,150,200,0.4)'}, hoverinfo: 'none',
+                showlegend: false,
+            });
+            traces.push({
+                x: [0], y: [0], mode: 'markers+text',
+                marker: {size: 20, color: '#f093fb', line: {width: 2, color: 'white'}},
+                text: [centerNode.name], textposition: 'top center',
+                textfont: {color: '#f093fb', size: 11},
+                hovertemplate: centerNode.name + '<br>IV Score: ' + (centerNode.iv_score||0).toFixed(2) + '<extra></extra>',
+                showlegend: false,
+            });
+            traces.push({
+                x: others.map(function(n) { return positions[n.person_id][0]; }),
+                y: others.map(function(n) { return positions[n.person_id][1]; }),
+                mode: 'markers+text', marker: {
+                    size: others.map(function(n) { return Math.max(8, Math.min(18, (n.iv_score||10)/5)); }),
+                    color: others.map(function(n) { return clusterColors[(n.cluster||0) % clusterColors.length]; }),
+                    line: {width: 1, color: 'rgba(255,255,255,0.5)'},
+                },
+                text: others.map(function(n) { return n.name; }),
+                textposition: 'top center', textfont: {color: '#c0c0d0', size: 9},
+                customdata: others.map(function(n) { return n.person_id; }),
+                hovertemplate: '%{text}<extra></extra>',
+                showlegend: false,
+            });
+
+            Plotly.newPlot('egoGraph', traces, {
+                xaxis: {showgrid: false, zeroline: false, showticklabels: false},
+                yaxis: {showgrid: false, zeroline: false, showticklabels: false, scaleanchor: 'x'},
+                paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                font: {color: '#c0c0d0'}, margin: {l: 20, r: 20, t: 20, b: 20},
+                height: 450, showlegend: false,
+            }, {responsive: true, displayModeBar: false});
+
+            document.getElementById('egoGraph').on('plotly_click', function(data) {
+                if (data.points[0].customdata) navigate('person/' + data.points[0].customdata);
+            });
+        }
+
+        // Similar persons
+        if (similarData.similar && similarData.similar.length > 0) {
+            var simCard = el('div', {className: 'card'});
+            simCard.appendChild(el('h2', null, t('similar')));
+            var simList = el('div', {className: 'person-list'});
+            similarData.similar.forEach(function(s) {
+                // s may be {person: {...}, similarity} or flat {person_id, name, ..., similarity}
+                var pdata = s.person || s;
+                var c = personCard(pdata);
+                var simBadge = el('div', {style: 'font-size:0.75rem;color:#06D6A0;margin-top:0.3rem'}, 'similarity: ' + (s.similarity||0).toFixed(4));
+                c.appendChild(simBadge);
+                simList.appendChild(c);
+            });
+            simCard.appendChild(simList);
+            app.appendChild(simCard);
+        }
+
+        // Recommendations
+        if (recsData.recommendations && recsData.recommendations.length > 0) {
+            var recCard = el('div', {className: 'card'});
+            recCard.appendChild(el('h2', null, t('recommendations') + ' (' + (recsData.target_role||'') + ', ' + (recsData.target_year||'') + '\u00b15\u5e74)'));
+            var recList = el('div', {className: 'person-list'});
+            recsData.recommendations.forEach(function(p) { recList.appendChild(personCard(p)); });
+            recCard.appendChild(recList);
+            app.appendChild(recCard);
+        }
+
+    } catch (e) {
+        app.textContent = '';
+        app.appendChild(el('div', {className: 'card'}, el('h2', null, 'Error: ' + e.message)));
+    }
+}
+
+async function renderClusters() {
+    var app = document.getElementById('app');
+    app.textContent = '';
+    app.appendChild(el('div', {className: 'loading'}, t('loading')));
+
+    try {
+        var data = await api('/api/clusters');
+        app.textContent = '';
+
+        var card = el('div', {className: 'card'});
+        card.appendChild(el('h2', null, t('clusters')));
+
+        if (data.silhouette_score) {
+            var statGrid = el('div', {className: 'stats-grid'});
+            var s1 = el('div', {className: 'stat-card'});
+            s1.appendChild(el('div', {className: 'value'}, String(data.n_clusters||0)));
+            s1.appendChild(el('div', {className: 'label'}, t('clusters')));
+            statGrid.appendChild(s1);
+            var s2 = el('div', {className: 'stat-card'});
+            s2.appendChild(el('div', {className: 'value'}, (data.silhouette_score||0).toFixed(3)));
+            s2.appendChild(el('div', {className: 'label'}, t('silhouette')));
+            statGrid.appendChild(s2);
+            card.appendChild(statGrid);
+        }
+
+        var tbl = el('table');
+        var thead = el('thead');
+        var hrow = el('tr');
+        ['#', 'Name', t('size'), '平均IV Score', '最大IV Score'].forEach(function(h) {
+            hrow.appendChild(el('th', null, h));
+        });
+        thead.appendChild(hrow);
+        tbl.appendChild(thead);
+        var tbody = el('tbody');
+        (data.clusters || []).forEach(function(c) {
+            var cid = c.cluster_id !== undefined ? c.cluster_id : (c.cluster || 0);
+            var row = el('tr', {style: 'cursor:pointer', onclick: function() { navigate('cluster/' + cid); }});
+            row.appendChild(el('td', null, String(cid)));
+            row.appendChild(el('td', {style: 'color:#f093fb'}, c.name || 'C'+cid));
+            row.appendChild(el('td', null, String(c.size || 0)));
+            row.appendChild(el('td', null, (c.avg_iv_score||0).toFixed(2)));
+            row.appendChild(el('td', null, (c.max_iv_score||0).toFixed(1)));
+            tbody.appendChild(row);
+        });
+        tbl.appendChild(tbody);
+        card.appendChild(tbl);
+        app.appendChild(card);
+    } catch (e) {
+        app.textContent = '';
+        app.appendChild(el('div', {className: 'card'}, el('h2', null, 'Error: ' + e.message)));
+    }
+}
+
+async function renderClusterDetail(cid) {
+    var app = document.getElementById('app');
+    app.textContent = '';
+    app.appendChild(el('div', {className: 'loading'}, t('loading')));
+
+    try {
+        var data = await api('/api/clusters/' + cid);
+        app.textContent = '';
+
+        app.appendChild(el('a', {className: 'back-btn', onclick: function() { navigate('clusters'); }}, t('back')));
+
+        var card = el('div', {className: 'card'});
+        var profile = data.profile || {};
+        card.appendChild(el('h2', null, t('clusterProfile') + ': ' + (profile.name || 'Cluster ' + cid)));
+        card.appendChild(el('div', {style: 'color:#a0a0c0;margin-bottom:1rem'}, t('size') + ': ' + (profile.size || 0)));
+
+        if (profile.profile) {
+            var tbl = el('table');
+            var tbody = el('tbody');
+            Object.keys(profile.profile).forEach(function(k) {
+                var v = profile.profile[k];
+                var row = el('tr');
+                row.appendChild(el('td', {style: 'color:#a0d2db;font-weight:600'}, k));
+                row.appendChild(el('td', null, typeof v === 'number' ? v.toFixed(2) : String(v)));
+                tbody.appendChild(row);
+            });
+            tbl.appendChild(tbody);
+            card.appendChild(tbl);
+        }
+        app.appendChild(card);
+
+        if (data.members && data.members.length > 0) {
+            var memCard = el('div', {className: 'card'});
+            memCard.appendChild(el('h2', null, t('members') + ' (' + data.members.length + ')'));
+            var memList = el('div', {className: 'person-list'});
+            data.members.slice(0, 50).forEach(function(p) { memList.appendChild(personCard(p)); });
+            memCard.appendChild(memList);
+            app.appendChild(memCard);
+        }
+    } catch (e) {
+        app.textContent = '';
+        app.appendChild(el('div', {className: 'card'}, el('h2', null, 'Error: ' + e.message)));
+    }
+}
+
+// ============================================================
+// Router
+// ============================================================
+function route() {
+    var hash = location.hash.slice(1) || 'search';
+
+    document.querySelectorAll('nav a[data-nav]').forEach(function(a) {
+        a.classList.toggle('active', hash.startsWith(a.dataset.nav));
+    });
+
+    if (hash === 'search') return renderSearch();
+    if (hash.startsWith('person/')) return renderPerson(hash.slice(7));
+    if (hash === 'clusters') return renderClusters();
+    if (hash.startsWith('cluster/')) return renderClusterDetail(hash.slice(8));
+    return renderSearch();
+}
+
+window.addEventListener('hashchange', route);
+route();
+</script>
+</body>
+</html>

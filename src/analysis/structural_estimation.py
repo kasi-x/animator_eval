@@ -95,7 +95,7 @@ class PanelObservation:
 
     person_id: str
     year: int
-    skill_score: float  # Outcome variable
+    outcome_score: float  # Outcome variable
     major_studio: bool  # Treatment indicator
     experience_years: int  # Years since debut
     potential_score: float  # Potential value
@@ -210,7 +210,7 @@ def build_panel_data(
             continue
 
         scores = person_scores[person_id]
-        skill_score = scores.get("skill", 0)
+        outcome_score = scores.get("person_fe", 0)
 
         # Determine major studio affiliation (majority of credits in this year)
         studios_this_year = [
@@ -258,7 +258,7 @@ def build_panel_data(
         obs = PanelObservation(
             person_id=person_id,
             year=year,
-            skill_score=skill_score,
+            outcome_score=outcome_score,
             major_studio=is_major,
             experience_years=experience_years,
             potential_score=potential_score,
@@ -333,7 +333,7 @@ def estimate_fixed_effects(
 
     for pid, obs_list in valid_persons.items():
         # Compute person means
-        mean_y = sum(obs.skill_score for obs in obs_list) / len(obs_list)
+        mean_y = sum(obs.outcome_score for obs in obs_list) / len(obs_list)
         mean_major = sum(1 if obs.major_studio else 0 for obs in obs_list) / len(
             obs_list
         )
@@ -342,7 +342,7 @@ def estimate_fixed_effects(
 
         # Demean
         for obs in obs_list:
-            y_demeaned.append(obs.skill_score - mean_y)
+            y_demeaned.append(obs.outcome_score - mean_y)
             x_demeaned.append(
                 [
                     (1 if obs.major_studio else 0) - mean_major,
@@ -508,7 +508,7 @@ def estimate_difference_in_differences(
     X = []  # [treated, post, treated×post]
 
     for obs in panel_data:
-        y.append(obs.skill_score)
+        y.append(obs.outcome_score)
         treated = 1 if obs.person_id in treated_persons else 0
         post = 1 if obs.year >= treatment_year else 0
         X.append([treated, post, treated * post])
@@ -681,7 +681,7 @@ def estimate_event_study(
         ]
         if person_obs:
             person_means[person_id] = {
-                "skill": sum(o.skill_score for o in person_obs) / len(person_obs),
+                "outcome": sum(o.outcome_score for o in person_obs) / len(person_obs),
                 "experience": sum(o.experience_years for o in person_obs)
                 / len(person_obs),
                 "potential": sum(o.potential_score for o in person_obs)
@@ -708,7 +708,7 @@ def estimate_event_study(
             person_mean = person_means[obs.person_id]
 
             # Demean outcome
-            y_demeaned.append(obs.skill_score - person_mean["skill"])
+            y_demeaned.append(obs.outcome_score - person_mean["outcome"])
 
             # Demean covariates - O(1) lookup instead of O(n²) scan (PERF-3 optimization)
             time_k_dummy = 1 if rel_t == k else 0
@@ -944,7 +944,7 @@ def run_placebo_test(
     np.random.seed(42)
     fake_treatment = np.random.choice([0, 1], size=len(pre_treatment_obs), p=[0.5, 0.5])
 
-    y = np.array([obs.skill_score for obs in pre_treatment_obs])
+    y = np.array([obs.outcome_score for obs in pre_treatment_obs])
     X = np.column_stack([fake_treatment, np.ones(len(fake_treatment))])  # Add constant
 
     try:

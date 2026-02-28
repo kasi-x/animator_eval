@@ -69,26 +69,26 @@ class TestBatchComputeConfidence:
         results = [
             {
                 "person_id": "p1",
-                "authority": 80.0,
-                "trust": 70.0,
-                "skill": 60.0,
-                "composite": 71.0,
+                "birank": 80.0,
+                "patronage": 70.0,
+                "person_fe": 60.0,
+                "iv_score": 71.0,
                 "total_credits": 15,
             },
         ]
         updated = batch_compute_confidence(results)
         assert "confidence" in updated[0]
         assert "score_range" in updated[0]
-        assert "authority" in updated[0]["score_range"]
+        assert "birank" in updated[0]["score_range"]
 
     def test_uses_career_data(self):
         results = [
             {
                 "person_id": "p1",
-                "authority": 50.0,
-                "trust": 50.0,
-                "skill": 50.0,
-                "composite": 50.0,
+                "birank": 50.0,
+                "patronage": 50.0,
+                "person_fe": 50.0,
+                "iv_score": 50.0,
                 "total_credits": 10,
                 "career": {"active_years": 15, "first_year": 2010, "latest_year": 2025},
             },
@@ -100,10 +100,10 @@ class TestBatchComputeConfidence:
         results = [
             {
                 "person_id": "p1",
-                "authority": 50.0,
-                "trust": 50.0,
-                "skill": 50.0,
-                "composite": 50.0,
+                "birank": 50.0,
+                "patronage": 50.0,
+                "person_fe": 50.0,
+                "iv_score": 50.0,
                 "total_credits": 0,
             },
         ]

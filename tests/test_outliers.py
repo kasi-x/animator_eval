@@ -12,10 +12,10 @@ def _make_results():
             {
                 "person_id": f"p{i}",
                 "name": f"Person {i}",
-                "authority": 45 + i * 0.5,
-                "trust": 40 + i * 0.5,
-                "skill": 50 + i * 0.3,
-                "composite": 45 + i * 0.4,
+                "birank": 45 + i * 0.5,
+                "patronage": 40 + i * 0.5,
+                "person_fe": 50 + i * 0.3,
+                "iv_score": 45 + i * 0.4,
             }
         )
     # High outlier
@@ -23,10 +23,10 @@ def _make_results():
         {
             "person_id": "p_high",
             "name": "High Outlier",
-            "authority": 99.0,
-            "trust": 95.0,
-            "skill": 98.0,
-            "composite": 97.0,
+            "birank": 99.0,
+            "patronage": 95.0,
+            "person_fe": 98.0,
+            "iv_score": 97.0,
         }
     )
     # Low outlier
@@ -34,10 +34,10 @@ def _make_results():
         {
             "person_id": "p_low",
             "name": "Low Outlier",
-            "authority": 1.0,
-            "trust": 2.0,
-            "skill": 1.0,
-            "composite": 1.5,
+            "birank": 1.0,
+            "patronage": 2.0,
+            "person_fe": 1.0,
+            "iv_score": 1.5,
         }
     )
     return results
@@ -68,7 +68,7 @@ class TestDetectOutliers:
     def test_all_axes_checked(self):
         results = _make_results()
         out = detect_outliers(results)
-        for axis in ("authority", "trust", "skill", "composite"):
+        for axis in ("birank", "patronage", "person_fe", "iv_score"):
             assert axis in out["axis_outliers"]
 
     def test_bounds_present(self):
@@ -88,7 +88,7 @@ class TestDetectOutliers:
         assert out["total_outliers"] == len(out["outlier_person_ids"])
 
     def test_too_few_results(self):
-        results = [{"person_id": "p1", "authority": 50, "composite": 50}]
+        results = [{"person_id": "p1", "birank": 50, "iv_score": 50}]
         out = detect_outliers(results)
         assert out["total_outliers"] == 0
 
@@ -98,9 +98,9 @@ class TestDetectOutliers:
 
     def test_custom_axes(self):
         results = _make_results()
-        out = detect_outliers(results, axes=("composite",))
-        assert "composite" in out["axis_outliers"]
-        assert "authority" not in out["axis_outliers"]
+        out = detect_outliers(results, axes=("iv_score",))
+        assert "iv_score" in out["axis_outliers"]
+        assert "birank" not in out["axis_outliers"]
 
     def test_zscore_in_entry(self):
         results = _make_results()

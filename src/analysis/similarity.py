@@ -1,6 +1,6 @@
 """類似人物検索 — スコアプロファイルの類似度を算出する.
 
-3軸スコアベクトル [authority, trust, skill] のコサイン類似度で
+3軸スコアベクトル [person_fe, birank, patronage] のコサイン類似度で
 類似プロファイルの人物を検索する。
 """
 
@@ -34,7 +34,7 @@ def find_similar_persons(
         top_n: 返す件数
 
     Returns:
-        [{person_id, name, similarity, authority, trust, skill, composite}]
+        [{person_id, name, similarity, person_fe, birank, patronage, iv_score}]
     """
     target = None
     for r in results:
@@ -46,9 +46,9 @@ def find_similar_persons(
         return []
 
     target_vec = (
-        target.get("authority", 0),
-        target.get("trust", 0),
-        target.get("skill", 0),
+        target.get("person_fe", 0),
+        target.get("birank", 0),
+        target.get("patronage", 0),
     )
 
     similarities = []
@@ -56,9 +56,9 @@ def find_similar_persons(
         if r["person_id"] == target_id:
             continue
         vec = (
-            r.get("authority", 0),
-            r.get("trust", 0),
-            r.get("skill", 0),
+            r.get("person_fe", 0),
+            r.get("birank", 0),
+            r.get("patronage", 0),
         )
         sim = _cosine_similarity(target_vec, vec)
         similarities.append(
@@ -66,10 +66,10 @@ def find_similar_persons(
                 "person_id": r["person_id"],
                 "name": r.get("name", r["person_id"]),
                 "similarity": round(sim, 4),
-                "authority": r.get("authority", 0),
-                "trust": r.get("trust", 0),
-                "skill": r.get("skill", 0),
-                "composite": r.get("composite", 0),
+                "person_fe": r.get("person_fe", 0),
+                "birank": r.get("birank", 0),
+                "patronage": r.get("patronage", 0),
+                "iv_score": r.get("iv_score", 0),
             }
         )
 

@@ -55,10 +55,10 @@ def export_neo4j_csv(
                 "name_en",
                 "mal_id:int",
                 "anilist_id:int",
-                "authority:float",
-                "trust:float",
-                "skill:float",
-                "composite:float",
+                "person_fe:float",
+                "birank:float",
+                "patronage:float",
+                "iv_score:float",
                 ":LABEL",
             ]
         )
@@ -71,10 +71,10 @@ def export_neo4j_csv(
                     p.name_en,
                     p.mal_id or "",
                     p.anilist_id or "",
-                    round(s.authority, 2) if s else "",
-                    round(s.trust, 2) if s else "",
-                    round(s.skill, 2) if s else "",
-                    round(s.composite, 2) if s else "",
+                    round(s.person_fe, 2) if s else "",
+                    round(s.birank, 2) if s else "",
+                    round(s.patronage, 2) if s else "",
+                    round(s.iv_score, 2) if s else "",
                     "Person",
                 ]
             )

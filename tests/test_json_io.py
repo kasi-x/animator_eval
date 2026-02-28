@@ -304,7 +304,7 @@ def test_named_loaders_return_data_when_present(
     json_io.clear_json_cache()
 
     # Create test files
-    scores_data = [{"person_id": "p1", "composite": 85.5}]
+    scores_data = [{"person_id": "p1", "iv_score": 85.5}]
     (tmp_path / "scores.json").write_text(json.dumps(scores_data))
 
     anime_data = {"anime_1": {"credit_count": 50}}

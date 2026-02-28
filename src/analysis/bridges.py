@@ -2,9 +2,18 @@
 
 グラフ理論のブリッジ概念を応用し、異なるコラボレーション
 クラスター間を橋渡しする人物を検出する。
+
+スコア設計の方針:
+- コミュニティサイズを考慮: 小さなコミュニティ同士のブリッジは低スコア
+- edge_value = sqrt(min(size_a, size_b)) × log1p(shared_works)
+  → 「より小さい側のコミュニティサイズ」で価値を決める
+  → 5人コミュニティ ↔ 5000人コミュニティ: sqrt(5) ≈ 2.2
+  → 500人コミュニティ ↔ 500人コミュニティ: sqrt(500) ≈ 22.4
+- 最終スコアは log スケールで 0-99 に正規化 (カンストなし)
 """
 
-from collections import defaultdict
+import math
+from collections import Counter, defaultdict
 
 import networkx as nx
 import structlog
@@ -63,44 +72,80 @@ def detect_bridges(
     if communities is None:
         communities = _compute_simple_communities(all_persons, edges)
 
-    # Find cross-community edges
+    # Community sizes — number of members per community ID
+    community_sizes: dict[int, int] = Counter(communities.values())
+
+    # Find cross-community edges + compute per-person weighted scores
     cross_edges = []
     person_cross_count: dict[str, int] = defaultdict(int)
     person_communities_touched: dict[str, set[int]] = defaultdict(set)
+    # Weighted score: size-aware bridge value accumulator
+    person_weighted_score: dict[str, float] = defaultdict(float)
 
     for (p1, p2), shared_count in edges.items():
         c1 = communities.get(p1, -1)
         c2 = communities.get(p2, -1)
         if c1 != c2 and c1 >= 0 and c2 >= 0:
+            sw = shared_count if isinstance(shared_count, int) else len(shared_count)
             cross_edges.append(
                 {
                     "person_a": p1,
                     "person_b": p2,
                     "community_a": c1,
                     "community_b": c2,
-                    "shared_works": shared_count
-                    if isinstance(shared_count, int)
-                    else len(shared_count),
+                    "shared_works": sw,
                 }
             )
             person_cross_count[p1] += 1
             person_cross_count[p2] += 1
-            person_communities_touched[p1].add(c1)
-            person_communities_touched[p1].add(c2)
-            person_communities_touched[p2].add(c1)
-            person_communities_touched[p2].add(c2)
+            person_communities_touched[p1].update({c1, c2})
+            person_communities_touched[p2].update({c1, c2})
 
-    # Rank bridge persons by number of cross-community connections
+            # Community-size-weighted edge value:
+            # Use the SMALLER of the two community sizes as the bottleneck.
+            # A tiny community ↔ large community bridge is low value.
+            # sqrt() dampens so 500-person community isn't 100x more than 5-person.
+            size1 = community_sizes.get(c1, 1)
+            size2 = community_sizes.get(c2, 1)
+            size_weight = math.sqrt(min(size1, size2))
+            # Stronger connections (more shared works) = higher value
+            works_weight = math.log1p(sw)
+            edge_value = size_weight * works_weight
+
+            person_weighted_score[p1] += edge_value
+            person_weighted_score[p2] += edge_value
+
+    # Compute raw bridge score per person:
+    # weighted cross edges + community diversity bonus
+    raw_scores: dict[str, float] = {}
+    for pid in person_cross_count:
+        # Diversity bonus: reward touching many LARGE communities
+        diversity = sum(
+            math.log1p(community_sizes.get(c, 1))
+            for c in person_communities_touched[pid]
+        )
+        raw_scores[pid] = person_weighted_score[pid] + diversity
+
+    # Normalize to 0-99 using log scale.
+    # log normalization gives natural spread without saturation:
+    #   score = log1p(raw) / log1p(max_raw) * 99
+    # The top person gets 99, and scores spread logarithmically below.
+    max_raw = max(raw_scores.values(), default=1.0)
+    log_max = math.log1p(max_raw)
+
+    # Sort by raw score (community-size-aware) for ranking
     bridge_persons = []
-    for pid, count in sorted(person_cross_count.items(), key=lambda x: -x[1]):
+    for pid in sorted(raw_scores, key=lambda p: -raw_scores[p]):
+        raw = raw_scores[pid]
+        bridge_score = round(math.log1p(raw) / log_max * 99) if log_max > 0 else 0
         bridge_persons.append(
             {
                 "person_id": pid,
-                "cross_community_edges": count,
+                "cross_community_edges": person_cross_count[pid],
                 "communities_connected": len(person_communities_touched[pid]),
-                "bridge_score": min(
-                    100, count * 10 + len(person_communities_touched[pid]) * 15
-                ),
+                "bridge_score": bridge_score,
+                # Expose raw score for debugging / alternative sorting
+                "raw_bridge_score": round(raw, 2),
             }
         )
 

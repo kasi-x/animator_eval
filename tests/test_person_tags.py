@@ -7,10 +7,10 @@ def _make_results():
     return [
         {
             "person_id": "p1",
-            "authority": 90,
-            "trust": 85,
-            "skill": 80,
-            "composite": 86,
+            "birank": 90,
+            "patronage": 85,
+            "person_fe": 80,
+            "iv_score": 86,
             "career": {
                 "active_years": 20,
                 "highest_stage": 6,
@@ -22,10 +22,10 @@ def _make_results():
         },
         {
             "person_id": "p2",
-            "authority": 60,
-            "trust": 50,
-            "skill": 40,
-            "composite": 52,
+            "birank": 60,
+            "patronage": 50,
+            "person_fe": 40,
+            "iv_score": 52,
             "career": {
                 "active_years": 2,
                 "highest_stage": 3,
@@ -37,10 +37,10 @@ def _make_results():
         },
         {
             "person_id": "p3",
-            "authority": 40,
-            "trust": 30,
-            "skill": 20,
-            "composite": 32,
+            "birank": 40,
+            "patronage": 30,
+            "person_fe": 20,
+            "iv_score": 32,
             "career": {"active_years": 8, "highest_stage": 4},
             "growth": {"trend": "inactive"},
             "network": {"hub_score": 10},
@@ -50,10 +50,10 @@ def _make_results():
         *[
             {
                 "person_id": f"px{i}",
-                "authority": 30 + i,
-                "trust": 30 + i,
-                "skill": 30 + i,
-                "composite": 30 + i,
+                "birank": 30 + i,
+                "patronage": 30 + i,
+                "person_fe": 30 + i,
+                "iv_score": 30 + i,
                 "career": {"active_years": 5, "highest_stage": 3},
             }
             for i in range(7)
@@ -105,9 +105,9 @@ class TestComputePersonTags:
     def test_high_score_tags(self):
         results = _make_results()
         tags = compute_person_tags(results)
-        # p1 should have high_authority, high_trust, high_skill
-        assert "high_authority" in tags["p1"]
-        assert "high_trust" in tags["p1"]
+        # p1 should have high_birank, high_patronage, high_person_fe
+        assert "high_birank" in tags["p1"]
+        assert "high_patronage" in tags["p1"]
 
     def test_empty(self):
         tags = compute_person_tags([])

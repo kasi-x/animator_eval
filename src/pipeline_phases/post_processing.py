@@ -28,15 +28,16 @@ def post_process_results(context: PipelineContext) -> None:
     """
     # Calculate percentile ranks using bisect (O(n log n) instead of O(n²))
     n = len(context.results)
+    axes = ("iv_score", "person_fe", "birank", "patronage", "awcc", "dormancy")
     if n > 1:
-        for axis in ("authority", "trust", "skill", "composite"):
-            sorted_vals = sorted(r[axis] for r in context.results)
+        for axis in axes:
+            sorted_vals = sorted(r.get(axis, 0) for r in context.results)
             for r in context.results:
-                rank = bisect.bisect_right(sorted_vals, r[axis])
+                rank = bisect.bisect_right(sorted_vals, r.get(axis, 0))
                 r[f"{axis}_pct"] = round(rank / n * 100, 1)
     elif n == 1:
         for r in context.results:
-            for axis in ("authority", "trust", "skill", "composite"):
+            for axis in axes:
                 r[f"{axis}_pct"] = 100.0
 
     # Compute confidence intervals

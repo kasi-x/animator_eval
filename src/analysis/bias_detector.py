@@ -112,7 +112,7 @@ def detect_role_bias(
             role_str = contrib_dict.get("role", "other")
 
             # 現在スコアを取得
-            score = person_scores.get(person_id, {}).get("composite", 0)
+            score = person_scores.get(person_id, {}).get("iv_score", 0)
 
             role_data[role_str].append((shapley, score, person_id))
 
@@ -188,8 +188,8 @@ def detect_studio_bias(
         primary_studio = bias_info.get("primary_studio", "unknown")
 
         # 補正前と補正後のAuthority
-        original = debiased_dict.get("original_authority", 0)
-        debiased = debiased_dict.get("debiased_authority", 0)
+        original = debiased_dict.get("original_birank", 0)
+        debiased = debiased_dict.get("debiased_birank", 0)
 
         studio_data[primary_studio].append((debiased, original, person_id))
 
@@ -267,7 +267,7 @@ def detect_career_stage_bias(
         potential = potential_value_scores.get(person_id, {}).get("potential_value", 0)
 
         # 現在スコアを取得
-        current = person_scores.get(person_id, {}).get("composite", 0)
+        current = person_scores.get(person_id, {}).get("iv_score", 0)
 
         # キャリアステージ分類
         if years <= 3:

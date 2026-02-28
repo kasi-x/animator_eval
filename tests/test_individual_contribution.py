@@ -79,10 +79,10 @@ def results_list():
             {
                 "person_id": f"dir{d}",
                 "name": f"Director {d}",
-                "authority": 70 + d * 5,
-                "trust": 60 + d * 3,
-                "skill": 65 + d * 4,
-                "composite": 65 + d * 4,
+                "birank": 70 + d * 5,
+                "patronage": 60 + d * 3,
+                "person_fe": 65 + d * 4,
+                "iv_score": 65 + d * 4,
             }
         )
     for ka in range(10):
@@ -90,10 +90,10 @@ def results_list():
             {
                 "person_id": f"ka{ka}",
                 "name": f"Animator {ka}",
-                "authority": 40 + ka * 3,
-                "trust": 35 + ka * 2,
-                "skill": 50 + ka * 3,
-                "composite": 42 + ka * 3,
+                "birank": 40 + ka * 3,
+                "patronage": 35 + ka * 2,
+                "person_fe": 50 + ka * 3,
+                "iv_score": 42 + ka * 3,
             }
         )
     return results
@@ -149,7 +149,7 @@ class TestBuildPersonFeatures:
             results_list, credits_list, anime_map, role_profiles, career_data
         )
         assert len(features) == 15
-        assert "composite" in features["ka0"]
+        assert "iv_score" in features["ka0"]
         assert "primary_role" in features["ka0"]
         assert "career_band" in features["ka0"]
         assert features["ka0"]["primary_role"] == "key_animator"
@@ -215,7 +215,7 @@ class TestPeerPercentile:
         """Cohorts smaller than MIN_COHORT_SIZE should merge across bands."""
         features = {
             f"p{i}": {
-                "composite": 50 + i,
+                "iv_score": 50 + i,
                 "primary_role": "key_animator",
                 "career_band": "0-4y" if i < 3 else "5-9y",
             }
@@ -230,7 +230,7 @@ class TestPeerPercentile:
         """If role has too few persons even after merge, return None."""
         features = {
             f"p{i}": {
-                "composite": 50 + i,
+                "iv_score": 50 + i,
                 "primary_role": f"unique_role_{i}",
                 "career_band": "0-4y",
             }
@@ -271,7 +271,7 @@ class TestOpportunityResidual:
         """With <10 persons, should return None values."""
         features = {
             f"p{i}": {
-                "composite": 50,
+                "iv_score": 50,
                 "primary_role": "ka",
                 "career_years": 5,
                 "avg_anime_score": 70,
@@ -287,7 +287,7 @@ class TestOpportunityResidual:
 class TestConsistency:
     def test_consistent_person(self):
         """Person who only works on similarly-scored anime should be consistent."""
-        features = {"p1": {"composite": 60}}
+        features = {"p1": {"iv_score": 60}}
         anime_map = {f"a{i}": _make_anime(f"a{i}", score=75) for i in range(6)}
         credits = [_make_credit("p1", f"a{i}") for i in range(6)]
 
@@ -297,7 +297,7 @@ class TestConsistency:
 
     def test_inconsistent_person(self):
         """Person who works on wildly varied anime should have lower consistency."""
-        features = {"p1": {"composite": 60}}
+        features = {"p1": {"iv_score": 60}}
         anime_map = {}
         credits = []
         for i in range(6):
@@ -311,7 +311,7 @@ class TestConsistency:
 
     def test_insufficient_works(self):
         """Person with fewer than MIN_WORKS_FOR_CONSISTENCY anime should get None."""
-        features = {"p1": {"composite": 60}}
+        features = {"p1": {"iv_score": 60}}
         anime_map = {f"a{i}": _make_anime(f"a{i}", score=75) for i in range(3)}
         credits = [_make_credit("p1", f"a{i}") for i in range(3)]
 
@@ -322,7 +322,7 @@ class TestConsistency:
 class TestIndependentValue:
     def test_basic_computation(self):
         """Person X works on high-score anime; collaborators also on lower anime without X."""
-        features = {f"p{i}": {"composite": 50 + i * 5} for i in range(6)}
+        features = {f"p{i}": {"iv_score": 50 + i * 5} for i in range(6)}
         anime_map = {
             "good": _make_anime("good", score=90),
             "ok1": _make_anime("ok1", score=60),
@@ -346,7 +346,7 @@ class TestIndependentValue:
 
     def test_too_few_collaborators(self):
         """Should return None if < MIN_COLLABORATORS."""
-        features = {"p0": {"composite": 50}, "p1": {"composite": 40}}
+        features = {"p0": {"iv_score": 50}, "p1": {"iv_score": 40}}
         anime_map = {"a1": _make_anime("a1", score=70)}
         credits = [_make_credit("p0", "a1"), _make_credit("p1", "a1")]
 

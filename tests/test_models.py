@@ -47,15 +47,27 @@ class TestAnime:
 
 
 class TestScoreResult:
-    def test_composite_calculation(self):
-        s = ScoreResult(person_id="test:1", authority=100.0, trust=100.0, skill=100.0)
-        # 0.4 * 100 + 0.35 * 100 + 0.25 * 100 = 100.0
-        assert s.composite == 100.0
-
-    def test_composite_weighted(self):
-        s = ScoreResult(person_id="test:1", authority=50.0, trust=0.0, skill=0.0)
-        assert s.composite == 50.0 * 0.4
-
-    def test_composite_zero(self):
+    def test_iv_score_default(self):
         s = ScoreResult(person_id="test:1")
-        assert s.composite == 0.0
+        assert s.iv_score == 0.0
+
+    def test_iv_score_set(self):
+        s = ScoreResult(person_id="test:1", iv_score=75.0)
+        assert s.iv_score == 75.0
+
+    def test_all_structural_fields(self):
+        s = ScoreResult(
+            person_id="test:1",
+            person_fe=0.5,
+            studio_fe_exposure=0.3,
+            birank=0.7,
+            patronage=0.4,
+            dormancy=0.95,
+            awcc=0.6,
+            ndi=0.2,
+            iv_score=85.0,
+        )
+        assert s.iv_score == 85.0
+        assert s.person_fe == 0.5
+        assert s.dormancy == 0.95
+        assert s.ndi == 0.2

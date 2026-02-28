@@ -374,11 +374,12 @@ class TestComputeAnimeCommitments:
 
 
 class TestWorkImportance:
-    def test_high_score(self):
+    def test_high_score_no_duration(self):
+        """Score-only (no duration) → score / 10.0."""
         anime = Anime(id="a1", title_en="Great Anime", score=9.0)
         assert abs(_work_importance(anime) - 0.9) < 0.001
 
-    def test_low_score(self):
+    def test_low_score_no_duration(self):
         anime = Anime(id="a1", title_en="Low Anime", score=3.0)
         assert abs(_work_importance(anime) - 0.3) < 0.001
 
@@ -392,6 +393,31 @@ class TestWorkImportance:
 
     def test_none_anime(self):
         assert _work_importance(None) == 0.5
+
+    def test_standard_tv_duration(self):
+        """30分 standard TV → duration factor = 24/30 = 0.8."""
+        anime = Anime(id="a1", score=10.0, duration=24)
+        # score=1.0 × duration=24/30=0.8 → 0.8
+        assert abs(_work_importance(anime) - 0.8) < 0.001
+
+    def test_mini_anime_reduced(self):
+        """5分ミニアニメ → greatly reduced importance."""
+        anime = Anime(id="a1", score=8.0, duration=5)
+        # score=0.8 × duration=5/30=0.167 → 0.133
+        result = _work_importance(anime)
+        assert result < 0.2
+
+    def test_movie_capped(self):
+        """120分映画 → duration factor capped at 2.0."""
+        anime = Anime(id="a1", score=8.0, duration=120)
+        # score=0.8 × duration=min(120/30, 2.0)=2.0 → 1.6
+        assert abs(_work_importance(anime) - 1.6) < 0.001
+
+    def test_30min_baseline(self):
+        """30分 = baseline → factor = 1.0."""
+        anime = Anime(id="a1", score=8.0, duration=30)
+        # score=0.8 × duration=30/30=1.0 → 0.8
+        assert abs(_work_importance(anime) - 0.8) < 0.001
 
 
 class TestCommitmentWeighting:

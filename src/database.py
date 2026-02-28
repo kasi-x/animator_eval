@@ -25,7 +25,7 @@ logger = structlog.get_logger()
 
 DEFAULT_DB_PATH = DB_DIR / "animetor_eval.db"
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 14
 
 
 def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
@@ -110,10 +110,13 @@ def init_db(conn: sqlite3.Connection) -> None:
 
         CREATE TABLE IF NOT EXISTS scores (
             person_id TEXT PRIMARY KEY,
-            authority REAL NOT NULL DEFAULT 0.0,
-            trust REAL NOT NULL DEFAULT 0.0,
-            skill REAL NOT NULL DEFAULT 0.0,
-            composite REAL NOT NULL DEFAULT 0.0,
+            person_fe REAL NOT NULL DEFAULT 0.0,
+            studio_fe_exposure REAL NOT NULL DEFAULT 0.0,
+            birank REAL NOT NULL DEFAULT 0.0,
+            patronage REAL NOT NULL DEFAULT 0.0,
+            dormancy REAL NOT NULL DEFAULT 1.0,
+            awcc REAL NOT NULL DEFAULT 0.0,
+            iv_score REAL NOT NULL DEFAULT 0.0,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -244,6 +247,8 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         10: _migrate_v10_schema_cleanup,
         11: _migrate_v11_add_madb_ids,
         12: _migrate_v12_add_person_fetch_status,
+        13: _migrate_v13_add_structural_score_columns,
+        14: _migrate_v14_drop_legacy_score_columns,
     }
 
     for version in range(current + 1, SCHEMA_VERSION + 1):
@@ -551,6 +556,59 @@ def _migrate_v12_add_person_fetch_status(conn: sqlite3.Connection) -> None:
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
+
+
+def _migrate_v13_add_structural_score_columns(conn: sqlite3.Connection) -> None:
+    """v13: 8-component structural estimation columns to scores and score_history."""
+    # Add new columns to scores table
+    for col in [
+        "person_fe REAL DEFAULT 0.0",
+        "studio_fe_exposure REAL DEFAULT 0.0",
+        "birank REAL DEFAULT 0.0",
+        "patronage REAL DEFAULT 0.0",
+        "dormancy REAL DEFAULT 1.0",
+        "awcc REAL DEFAULT 0.0",
+        "iv_score REAL DEFAULT 0.0",
+    ]:
+        col_name = col.split()[0]
+        try:
+            conn.execute(f"ALTER TABLE scores ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            # Column already exists
+            logger.debug("column_already_exists", table="scores", column=col_name)
+
+    # Add new columns to score_history table
+    for col in [
+        "person_fe REAL DEFAULT 0.0",
+        "studio_fe_exposure REAL DEFAULT 0.0",
+        "birank REAL DEFAULT 0.0",
+        "patronage REAL DEFAULT 0.0",
+        "dormancy REAL DEFAULT 1.0",
+        "awcc REAL DEFAULT 0.0",
+        "iv_score REAL DEFAULT 0.0",
+    ]:
+        col_name = col.split()[0]
+        try:
+            conn.execute(f"ALTER TABLE score_history ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            logger.debug(
+                "column_already_exists", table="score_history", column=col_name
+            )
+
+
+def _migrate_v14_drop_legacy_score_columns(conn: sqlite3.Connection) -> None:
+    """v14: Drop legacy authority/trust/skill/composite columns from scores/score_history.
+
+    These are replaced by the 8-component structural fields (person_fe, birank, etc.).
+    Uses ALTER TABLE DROP COLUMN (SQLite 3.35.0+, 2021-03-12).
+    """
+    for table in ["scores", "score_history"]:
+        for col in ["authority", "trust", "skill", "composite"]:
+            try:
+                conn.execute(f"ALTER TABLE {table} DROP COLUMN {col}")
+            except sqlite3.OperationalError:
+                # Column doesn't exist (fresh DB) or SQLite too old
+                logger.debug("drop_column_skipped", table=table, column=col)
 
 
 def mark_person_unfetchable(
@@ -877,21 +935,29 @@ def insert_anime_relation(conn: sqlite3.Connection, relation: AnimeRelation) -> 
 def upsert_score(conn: sqlite3.Connection, score: ScoreResult) -> None:
     """スコアを挿入または更新する."""
     conn.execute(
-        """INSERT INTO scores (person_id, authority, trust, skill, composite)
-           VALUES (?, ?, ?, ?, ?)
+        """INSERT INTO scores
+               (person_id, person_fe, studio_fe_exposure, birank,
+                patronage, dormancy, awcc, iv_score)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(person_id) DO UPDATE SET
-               authority = excluded.authority,
-               trust = excluded.trust,
-               skill = excluded.skill,
-               composite = excluded.composite,
+               person_fe = excluded.person_fe,
+               studio_fe_exposure = excluded.studio_fe_exposure,
+               birank = excluded.birank,
+               patronage = excluded.patronage,
+               dormancy = excluded.dormancy,
+               awcc = excluded.awcc,
+               iv_score = excluded.iv_score,
                updated_at = CURRENT_TIMESTAMP
         """,
         (
             score.person_id,
-            score.authority,
-            score.trust,
-            score.skill,
-            score.composite,
+            score.person_fe,
+            score.studio_fe_exposure,
+            score.birank,
+            score.patronage,
+            score.dormancy,
+            score.awcc,
+            score.iv_score,
         ),
     )
 
@@ -1065,17 +1131,17 @@ def search_persons(
         limit: 最大件数
 
     Returns:
-        [{id, name_ja, name_en, composite, credit_count}]
+        [{id, name_ja, name_en, iv_score, credit_count}]
     """
     pattern = f"%{query}%"
     rows = conn.execute(
         """SELECT p.id, p.name_ja, p.name_en,
-                  s.composite, s.authority, s.trust, s.skill,
+                  s.iv_score, s.person_fe, s.birank, s.patronage,
                   (SELECT COUNT(*) FROM credits c WHERE c.person_id = p.id) as credit_count
            FROM persons p
            LEFT JOIN scores s ON p.id = s.person_id
            WHERE p.name_ja LIKE ? OR p.name_en LIKE ? COLLATE NOCASE OR p.id LIKE ?
-           ORDER BY s.composite DESC NULLS LAST
+           ORDER BY s.iv_score DESC NULLS LAST
            LIMIT ?""",
         (pattern, pattern, pattern, limit),
     ).fetchall()
@@ -1112,15 +1178,16 @@ def get_data_sources(conn: sqlite3.Connection) -> list[dict]:
 def load_all_scores(conn: sqlite3.Connection) -> list[ScoreResult]:
     """全スコアを読み込む."""
     rows = conn.execute("SELECT * FROM scores").fetchall()
-    return [
-        ScoreResult(
-            person_id=row["person_id"],
-            authority=row["authority"],
-            trust=row["trust"],
-            skill=row["skill"],
-        )
-        for row in rows
-    ]
+    cols = set(rows[0].keys()) if rows else set()
+    result = []
+    for row in rows:
+        kwargs: dict = {"person_id": row["person_id"]}
+        for field in ("person_fe", "studio_fe_exposure", "birank", "patronage",
+                       "dormancy", "awcc", "iv_score"):
+            if field in cols:
+                kwargs[field] = row[field]
+        result.append(ScoreResult(**kwargs))
+    return result
 
 
 def record_pipeline_run(
@@ -1208,9 +1275,20 @@ def get_persons_with_new_credits(
 def save_score_history(conn: sqlite3.Connection, score: ScoreResult) -> None:
     """スコア履歴を保存する."""
     conn.execute(
-        """INSERT INTO score_history (person_id, authority, trust, skill, composite)
-           VALUES (?, ?, ?, ?, ?)""",
-        (score.person_id, score.authority, score.trust, score.skill, score.composite),
+        """INSERT INTO score_history
+               (person_id, person_fe, studio_fe_exposure, birank,
+                patronage, dormancy, awcc, iv_score)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            score.person_id,
+            score.person_fe,
+            score.studio_fe_exposure,
+            score.birank,
+            score.patronage,
+            score.dormancy,
+            score.awcc,
+            score.iv_score,
+        ),
     )
 
 
@@ -1221,7 +1299,8 @@ def get_score_history(
 ) -> list[dict]:
     """人物のスコア履歴を取得する（新しい順）."""
     rows = conn.execute(
-        """SELECT authority, trust, skill, composite, run_at
+        """SELECT person_fe, studio_fe_exposure, birank,
+                  patronage, dormancy, awcc, iv_score, run_at
            FROM score_history
            WHERE person_id = ?
            ORDER BY id DESC
@@ -1297,17 +1376,13 @@ def get_all_credits(conn: sqlite3.Connection) -> list[Credit]:
 def get_all_scores(conn: sqlite3.Connection) -> list[ScoreResult]:
     """全スコアデータを取得する."""
     rows = conn.execute("SELECT * FROM scores").fetchall()
-    return [
-        ScoreResult(
-            person_id=row["person_id"],
-            authority=row["authority"],
-            trust=row["trust"],
-            skill=row["skill"],
-            composite=row["composite"],
-            authority_pct=row["authority_pct"],
-            trust_pct=row["trust_pct"],
-            skill_pct=row["skill_pct"],
-            composite_pct=row["composite_pct"],
-        )
-        for row in rows
-    ]
+    cols = set(rows[0].keys()) if rows else set()
+    result = []
+    for row in rows:
+        kwargs: dict = {"person_id": row["person_id"]}
+        for field in ("person_fe", "studio_fe_exposure", "birank", "patronage",
+                       "dormancy", "awcc", "iv_score"):
+            if field in cols:
+                kwargs[field] = row[field]
+        result.append(ScoreResult(**kwargs))
+    return result

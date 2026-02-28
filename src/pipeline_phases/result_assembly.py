@@ -20,7 +20,7 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
     1. Creates ScoreResult objects and saves to database
     2. Builds rich result dictionaries with all computed metrics
     3. Adds score breakdowns (top contributing factors)
-    4. Sorts results by composite score descending
+    4. Sorts results by iv_score descending
 
     Args:
         context: Pipeline context
@@ -28,18 +28,17 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
 
     Updates context fields:
         - results: List[dict] with all person results
-        - composite_scores: Dict[person_id, composite_score]
     """
-    logger.info("step_start", step="composite_scores")
+    logger.info("step_start", step="result_assembly")
 
+    # Collect all person IDs from any scoring component
     all_person_ids = (
-        set(context.authority_scores)
-        | set(context.trust_scores)
-        | set(context.skill_scores)
+        set(context.person_fe)
+        | set(context.birank_person_scores)
+        | set(context.iv_scores)
     )
 
     context.results = []
-    context.composite_scores = {}
 
     # Pre-group credits by person_id: O(m) instead of O(n*m) per explain call
     credits_by_person: dict[str, list] = defaultdict(list)
@@ -56,34 +55,58 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
     scores_by_pid: dict[str, ScoreResult] = {}
     score_rows = []
     for pid in all_person_ids:
+        # Knowledge spanner metrics
+        ks = context.knowledge_spanner_scores.get(pid)
+
         score = ScoreResult(
             person_id=pid,
-            authority=context.authority_scores.get(pid, 0.0),
-            trust=context.trust_scores.get(pid, 0.0),
-            skill=context.skill_scores.get(pid, 0.0),
+            person_fe=context.person_fe.get(pid, 0.0),
+            studio_fe_exposure=sum(
+                context.studio_fe.get(s, 0.0)
+                for s in set(context.studio_assignments.get(pid, {}).values())
+            ) if context.studio_assignments else 0.0,
+            birank=context.birank_person_scores.get(pid, 0.0),
+            patronage=context.patronage_scores.get(pid, 0.0),
+            dormancy=context.dormancy_scores.get(pid, 1.0),
+            awcc=ks.awcc if ks else 0.0,
+            ndi=ks.ndi if ks else 0.0,
+            iv_score=context.iv_scores.get(pid, 0.0),
         )
         scores_by_pid[pid] = score
-        context.composite_scores[pid] = score.composite
-        score_rows.append(
-            (pid, score.authority, score.trust, score.skill, score.composite)
-        )
+        score_rows.append((
+            pid,
+            score.person_fe,
+            score.studio_fe_exposure,
+            score.birank,
+            score.patronage,
+            score.dormancy,
+            score.awcc,
+            score.iv_score,
+        ))
 
     # Batch upsert scores (single transaction instead of 125K individual INSERTs)
     conn.executemany(
-        """INSERT INTO scores (person_id, authority, trust, skill, composite)
-           VALUES (?, ?, ?, ?, ?)
+        """INSERT INTO scores
+               (person_id, person_fe, studio_fe_exposure, birank,
+                patronage, dormancy, awcc, iv_score)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(person_id) DO UPDATE SET
-               authority = excluded.authority,
-               trust = excluded.trust,
-               skill = excluded.skill,
-               composite = excluded.composite,
+               person_fe = excluded.person_fe,
+               studio_fe_exposure = excluded.studio_fe_exposure,
+               birank = excluded.birank,
+               patronage = excluded.patronage,
+               dormancy = excluded.dormancy,
+               awcc = excluded.awcc,
+               iv_score = excluded.iv_score,
                updated_at = CURRENT_TIMESTAMP
         """,
         score_rows,
     )
     conn.executemany(
-        """INSERT INTO score_history (person_id, authority, trust, skill, composite)
-           VALUES (?, ?, ?, ?, ?)""",
+        """INSERT INTO score_history
+               (person_id, person_fe, studio_fe_exposure, birank,
+                patronage, dormancy, awcc, iv_score)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
         score_rows,
     )
     logger.info("scores_batch_saved", count=len(score_rows))
@@ -93,15 +116,28 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
 
         # Build result entry
         node_data = context.person_anime_graph.nodes.get(pid, {})
+
+        # Peer boost
+        peer_boost = 0.0
+        if context.peer_effect_result and context.peer_effect_result.person_peer_boost:
+            peer_boost = context.peer_effect_result.person_peer_boost.get(pid, 0.0)
+
         result_entry = {
             "person_id": pid,
             "name": node_data.get("name", ""),
             "name_ja": node_data.get("name_ja", ""),
             "name_en": node_data.get("name_en", ""),
-            "authority": round(score.authority, 2),
-            "trust": round(score.trust, 2),
-            "skill": round(score.skill, 2),
-            "composite": round(score.composite, 2),
+            # 8-component structural scores
+            "iv_score": round(score.iv_score, 4),
+            "person_fe": round(score.person_fe, 4),
+            "studio_fe_exposure": round(score.studio_fe_exposure, 4),
+            "birank": round(score.birank, 4),
+            "patronage": round(score.patronage, 4),
+            "dormancy": round(score.dormancy, 4),
+            "awcc": round(score.awcc, 4),
+            "ndi": round(score.ndi, 4),
+            "career_friction": round(context.career_friction.get(pid, 0), 4),
+            "peer_boost": round(peer_boost, 4),
         }
 
         # Add centrality metrics (if available)
@@ -164,29 +200,32 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
 
         # Add score breakdown (top contributing factors)
         person_credits = credits_by_person.get(pid, [])
-        auth_factors = explain_authority(
+        # birank explanation: top works contributing to network centrality
+        birank_factors = explain_authority(
             pid, context.credits, context.anime_map, _person_credits=person_credits
         )
-        trust_factors = explain_trust(
+        # patronage explanation: director backing relationships
+        patronage_factors = explain_trust(
             pid,
             context.credits,
             context.anime_map,
             _person_credits=person_credits,
             _anime_directors=anime_directors,
         )
-        skill_factors = explain_skill(
+        # person_fe explanation: recent high-quality works
+        person_fe_factors = explain_skill(
             pid, context.credits, context.anime_map, _person_credits=person_credits
         )
-        if auth_factors or trust_factors or skill_factors:
+        if birank_factors or patronage_factors or person_fe_factors:
             result_entry["breakdown"] = {}
-            if auth_factors:
-                result_entry["breakdown"]["authority"] = auth_factors[:5]
-            if trust_factors:
-                result_entry["breakdown"]["trust"] = trust_factors[:5]
-            if skill_factors:
-                result_entry["breakdown"]["skill"] = skill_factors[:5]
+            if birank_factors:
+                result_entry["breakdown"]["birank"] = birank_factors[:5]
+            if patronage_factors:
+                result_entry["breakdown"]["patronage"] = patronage_factors[:5]
+            if person_fe_factors:
+                result_entry["breakdown"]["person_fe"] = person_fe_factors[:5]
 
         context.results.append(result_entry)
 
-    # Sort by composite score descending
-    context.results.sort(key=lambda x: x["composite"], reverse=True)
+    # Sort by iv_score descending
+    context.results.sort(key=lambda x: x["iv_score"], reverse=True)

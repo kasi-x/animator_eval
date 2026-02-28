@@ -186,7 +186,7 @@ def compute_genre_profiles(
         # ジャンルごとの平均スコア（仮定: スコアは一定）
         genre_scores = {}
         if person_scores and person_id in person_scores:
-            base_score = person_scores[person_id].get("composite", 0)
+            base_score = person_scores[person_id].get("iv_score", 0)
             # 実際にはジャンルごとに異なるスコアを計算すべきだが、
             # ここでは簡易的に全ジャンル同じスコアとする
             for genre in genre_distribution:
@@ -392,7 +392,7 @@ def main():
     # マップ作成
     anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
-    scores_map = {s.person_id: {"composite": s.composite} for s in scores_list}
+    scores_map = {s.person_id: {"iv_score": s.iv_score} for s in scores_list}
 
     # ジャンルプロファイル計算
     profiles = compute_genre_profiles(credits, anime_map, scores_map)

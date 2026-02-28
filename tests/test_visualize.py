@@ -33,9 +33,9 @@ from src.analysis.visualize import (
 @pytest.fixture
 def sample_scores():
     return {
-        "p1": {"authority": 80.0, "trust": 60.0, "skill": 70.0, "composite": 71.5},
-        "p2": {"authority": 50.0, "trust": 90.0, "skill": 40.0, "composite": 61.5},
-        "p3": {"authority": 30.0, "trust": 20.0, "skill": 95.0, "composite": 42.75},
+        "p1": {"birank": 80.0, "patronage": 60.0, "person_fe": 70.0, "iv_score": 71.5},
+        "p2": {"birank": 50.0, "patronage": 90.0, "person_fe": 40.0, "iv_score": 61.5},
+        "p3": {"birank": 30.0, "patronage": 20.0, "person_fe": 95.0, "iv_score": 42.75},
     }
 
 
@@ -430,7 +430,7 @@ class TestPlotTagSummary:
             "tag_summary": {
                 "veteran": 15,
                 "rising_star": 10,
-                "high_authority": 8,
+                "high_birank": 8,
                 "top_talent": 5,
             },
         }
@@ -467,9 +467,9 @@ class TestPlotOutlierSummary:
     def test_creates_file(self, tmp_path):
         data = {
             "axis_outliers": {
-                "authority": {"high": [{"person_id": "p1"}], "low": []},
-                "trust": {"high": [], "low": [{"person_id": "p2"}]},
-                "composite": {
+                "birank": {"high": [{"person_id": "p1"}], "low": []},
+                "patronage": {"high": [], "low": [{"person_id": "p2"}]},
+                "iv_score": {
                     "high": [{"person_id": "p1"}],
                     "low": [{"person_id": "p3"}],
                 },

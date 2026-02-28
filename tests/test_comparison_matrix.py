@@ -8,26 +8,26 @@ def _make_results():
         {
             "person_id": "p1",
             "name": "Alice",
-            "authority": 80,
-            "trust": 70,
-            "skill": 60,
-            "composite": 71,
+            "birank": 80,
+            "patronage": 70,
+            "person_fe": 60,
+            "iv_score": 71,
         },
         {
             "person_id": "p2",
             "name": "Bob",
-            "authority": 50,
-            "trust": 90,
-            "skill": 40,
-            "composite": 58,
+            "birank": 50,
+            "patronage": 90,
+            "person_fe": 40,
+            "iv_score": 58,
         },
         {
             "person_id": "p3",
             "name": "Carol",
-            "authority": 60,
-            "trust": 60,
-            "skill": 80,
-            "composite": 65,
+            "birank": 60,
+            "patronage": 60,
+            "person_fe": 80,
+            "iv_score": 65,
         },
     ]
 
@@ -41,12 +41,12 @@ class TestBuildComparisonMatrix:
 
     def test_axis_rankings(self):
         result = build_comparison_matrix(["p1", "p2", "p3"], _make_results())
-        # p1 has highest authority
-        assert result["axis_rankings"]["authority"][0] == "p1"
-        # p2 has highest trust
-        assert result["axis_rankings"]["trust"][0] == "p2"
-        # p3 has highest skill
-        assert result["axis_rankings"]["skill"][0] == "p3"
+        # p1 has highest birank
+        assert result["axis_rankings"]["birank"][0] == "p1"
+        # p2 has highest patronage
+        assert result["axis_rankings"]["patronage"][0] == "p2"
+        # p3 has highest person_fe
+        assert result["axis_rankings"]["person_fe"][0] == "p3"
 
     def test_pairwise_dominance(self):
         result = build_comparison_matrix(["p1", "p2"], _make_results())
@@ -67,10 +67,10 @@ class TestBuildComparisonMatrix:
         result = build_comparison_matrix(
             ["p1", "p2"],
             _make_results(),
-            axes=("authority", "trust"),
+            axes=("birank", "patronage"),
         )
-        assert "authority" in result["axis_rankings"]
-        assert "skill" not in result["axis_rankings"]
+        assert "birank" in result["axis_rankings"]
+        assert "person_fe" not in result["axis_rankings"]
 
     def test_single_person(self):
         result = build_comparison_matrix(["p1"], _make_results())

@@ -23,7 +23,7 @@ def plot_interactive_score_distribution(
     Interactive histogram of score distributions with hover details.
 
     Args:
-        scores_data: List of score dicts with person_id, authority, trust, skill, composite
+        scores_data: List of score dicts with person_id, person_fe, birank, patronage, iv_score
         output_path: Output HTML file path
     """
     if not scores_data:
@@ -37,55 +37,55 @@ def plot_interactive_score_distribution(
         rows=2,
         cols=2,
         subplot_titles=(
-            "Authority Score",
-            "Trust Score",
-            "Skill Score",
-            "Composite Score",
+            "IV Score",
+            "Person FE Score",
+            "BiRank Score",
+            "Patronage Score",
         ),
     )
 
-    # Authority
+    # IV Score
     fig.add_trace(
         go.Histogram(
-            x=df["authority"],
-            name="Authority",
-            marker_color="rgba(99, 110, 250, 0.7)",
+            x=df["iv_score"],
+            name="IV Score",
+            marker_color="rgba(171, 99, 250, 0.7)",
             hovertemplate="Score: %{x:.1f}<br>Count: %{y}<extra></extra>",
         ),
         row=1,
         col=1,
     )
 
-    # Trust
+    # Person FE
     fig.add_trace(
         go.Histogram(
-            x=df["trust"],
-            name="Trust",
-            marker_color="rgba(239, 85, 59, 0.7)",
+            x=df["person_fe"],
+            name="Person FE",
+            marker_color="rgba(0, 204, 150, 0.7)",
             hovertemplate="Score: %{x:.1f}<br>Count: %{y}<extra></extra>",
         ),
         row=1,
         col=2,
     )
 
-    # Skill
+    # BiRank
     fig.add_trace(
         go.Histogram(
-            x=df["skill"],
-            name="Skill",
-            marker_color="rgba(0, 204, 150, 0.7)",
+            x=df["birank"],
+            name="BiRank",
+            marker_color="rgba(99, 110, 250, 0.7)",
             hovertemplate="Score: %{x:.1f}<br>Count: %{y}<extra></extra>",
         ),
         row=2,
         col=1,
     )
 
-    # Composite
+    # Patronage
     fig.add_trace(
         go.Histogram(
-            x=df["composite"],
-            name="Composite",
-            marker_color="rgba(171, 99, 250, 0.7)",
+            x=df["patronage"],
+            name="Patronage",
+            marker_color="rgba(239, 85, 59, 0.7)",
             hovertemplate="Score: %{x:.1f}<br>Count: %{y}<extra></extra>",
         ),
         row=2,
@@ -116,7 +116,7 @@ def plot_interactive_radar(
     Interactive radar chart for top N persons with toggleable traces.
 
     Args:
-        top_persons: List of top person dicts with name, authority, trust, skill
+        top_persons: List of top person dicts with name, person_fe, birank, patronage
         top_n: Number of top persons to display
         output_path: Output HTML file path
     """
@@ -124,16 +124,16 @@ def plot_interactive_radar(
         return
 
     selected = top_persons[:top_n]
-    categories = ["Authority", "Trust", "Skill"]
+    categories = ["Person FE", "BiRank", "Patronage"]
 
     fig = go.Figure()
 
     for person in selected:
         name = person.get("name") or person.get("person_id", "Unknown")
         values = [
-            person.get("authority", 0),
-            person.get("trust", 0),
-            person.get("skill", 0),
+            person.get("person_fe", 0),
+            person.get("birank", 0),
+            person.get("patronage", 0),
         ]
         # Close the radar by appending first value
         values_closed = values + [values[0]]
@@ -165,8 +165,8 @@ def plot_interactive_radar(
 
 def plot_interactive_scatter(
     scores_data: list[dict],
-    x_axis: str = "authority",
-    y_axis: str = "trust",
+    x_axis: str = "birank",
+    y_axis: str = "patronage",
     output_path: Path | None = None,
 ) -> None:
     """2軸スコアの散布図（インタラクティブ）.
@@ -193,19 +193,19 @@ def plot_interactive_scatter(
         df,
         x=x_axis,
         y=y_axis,
-        color="composite",
-        size="composite",
+        color="iv_score",
+        size="iv_score",
         hover_data={
             "name_display": True,
             x_axis: ":.1f",
             y_axis: ":.1f",
-            "composite": ":.1f",
+            "iv_score": ":.1f",
         },
         labels={
-            "authority": "Authority Score",
-            "trust": "Trust Score",
-            "skill": "Skill Score",
-            "composite": "Composite Score",
+            "birank": "BiRank Score",
+            "patronage": "Patronage Score",
+            "person_fe": "Person FE Score",
+            "iv_score": "IV Score",
             "name_display": "Name",
         },
         title=f"{x_axis.capitalize()} vs {y_axis.capitalize()} (Interactive)",
@@ -425,9 +425,9 @@ def generate_interactive_dashboard(
     # Scatter plots (multiple combinations)
     if scores_data:
         for x_axis, y_axis in [
-            ("authority", "trust"),
-            ("authority", "skill"),
-            ("trust", "skill"),
+            ("birank", "patronage"),
+            ("birank", "person_fe"),
+            ("patronage", "person_fe"),
         ]:
             plot_interactive_scatter(
                 scores_data,

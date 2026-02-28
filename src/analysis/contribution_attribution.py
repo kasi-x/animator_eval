@@ -99,7 +99,7 @@ def estimate_marginal_contribution(
     """
     # Person's quality
     person_quality = person_scores.get(person_id, {}).get(
-        "composite", staff_quality_avg
+        "iv_score", staff_quality_avg
     )
 
     # Role importance
@@ -211,11 +211,11 @@ def compute_contribution_attribution(
         return {}
 
     # Staff quality average
-    staff_composites = [
-        person_scores.get(c.person_id, {}).get("composite", 0.5) for c in credits
+    staff_iv_scores = [
+        person_scores.get(c.person_id, {}).get("iv_score", 0.5) for c in credits
     ]
     staff_quality_avg = (
-        sum(staff_composites) / len(staff_composites) if staff_composites else 0.5
+        sum(staff_iv_scores) / len(staff_iv_scores) if staff_iv_scores else 0.5
     )
 
     # All staff
@@ -257,7 +257,7 @@ def compute_contribution_attribution(
 
         # Irreplaceability: how much better is this person than average
         person_quality = person_scores.get(person_id, {}).get(
-            "composite", staff_quality_avg
+            "iv_score", staff_quality_avg
         )
         irreplaceability = max(0, person_quality - staff_quality_avg)
 
@@ -358,7 +358,7 @@ def find_undervalued_contributors(
             continue
 
         total_contribution = agg["total_shapley"]
-        current_score = person_scores[person_id].get("composite", 0)
+        current_score = person_scores[person_id].get("iv_score", 0)
 
         # Contribution per work
         contribution_per_work = total_contribution / agg["work_count"]
@@ -428,10 +428,10 @@ def main():
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
     person_scores = {
         s.person_id: {
-            "authority": s.authority,
-            "trust": s.trust,
-            "skill": s.skill,
-            "composite": s.composite,
+            "person_fe": s.person_fe,
+            "birank": s.birank,
+            "patronage": s.patronage,
+            "iv_score": s.iv_score,
         }
         for s in scores_list
     }

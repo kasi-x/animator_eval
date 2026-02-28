@@ -19,6 +19,7 @@ from src.utils.config import ROLE_WEIGHTS
 from src.utils.role_groups import (
     DIRECTOR_ROLES,
     ANIMATOR_ROLES,
+    NON_PRODUCTION_ROLES,
     THROUGH_ROLES,
     EPISODIC_ROLES,
     generate_core_team_pairs,
@@ -54,8 +55,10 @@ def create_person_anime_network(
     for a in anime_list:
         g.add_node(a.id, type="anime", name=a.display_title, year=a.year, score=a.score)
 
-    # クレジットエッジ
+    # クレジットエッジ（非制作ロールを除外）
     for c in credits:
+        if c.role in NON_PRODUCTION_ROLES:
+            continue
         weight = _role_weight(c.role)
         # person → anime
         if g.has_edge(c.person_id, c.anime_id):
@@ -158,10 +161,31 @@ def _compute_anime_commitments(
 
 
 def _work_importance(anime: Anime | None) -> float:
-    """Compute work importance multiplier from anime score. Range: 0.1-1.0."""
+    """Compute work importance multiplier from score and duration.
+
+    Score component: anime.score / 10.0 (range 0.1-1.0)
+    Duration component: anime.duration / 30 (30分基準, capped at 2.0x)
+
+    Mini-anime (5 min) gets ~0.17x, standard TV (24 min) gets 0.8x,
+    movies (120 min) get 2.0x (capped).
+    """
+    from src.utils.config import DURATION_BASELINE_MINUTES, DURATION_MAX_MULTIPLIER
+
+    # Score-based importance
     if anime is None or anime.score is None:
-        return 0.5
-    return max(anime.score / 10.0, 0.1)
+        score_mult = 0.5
+    else:
+        score_mult = max(anime.score / 10.0, 0.1)
+
+    # Duration-based importance (30分基準)
+    if anime is None or anime.duration is None:
+        return score_mult
+
+    duration_mult = min(
+        anime.duration / DURATION_BASELINE_MINUTES,
+        DURATION_MAX_MULTIPLIER,
+    )
+    return max(score_mult * duration_mult, 0.01)
 
 
 def _episode_weight_for_pair(
@@ -491,6 +515,9 @@ def create_person_collaboration_network(
     for p in persons:
         g.add_node(p.id, name=p.display_name, name_ja=p.name_ja, name_en=p.name_en)
 
+    # 非制作ロール（声優、主題歌等）を除外
+    credits = [c for c in credits if c.role not in NON_PRODUCTION_ROLES]
+
     # Compute commitment data for all anime
     commitments = _compute_anime_commitments(credits, anime_map)
 
@@ -633,6 +660,8 @@ def determine_primary_role_for_each_person(
     person_roles: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
 
     for c in credits:
+        if c.role in NON_PRODUCTION_ROLES:
+            continue
         person_roles[c.person_id][c.role.value] += 1
 
     result: dict[str, dict[str, int | str]] = {}

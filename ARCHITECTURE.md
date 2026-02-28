@@ -199,10 +199,10 @@ rating = Rating(mu=25.0, sigma=8.33)
 result = {
     "person_id": ...,
     "name": ...,
-    "composite": ...,
-    "authority": ...,
-    "trust": ...,
-    "skill": ...,
+    "iv_score": ...,
+    "birank": ...,
+    "patronage": ...,
+    "person_fe": ...,
     "career": {...},
     "breakdown": {...},
     # ... 30+ fields
@@ -330,10 +330,10 @@ CREATE TABLE credits (
 
 CREATE TABLE scores (
     person_id TEXT PRIMARY KEY,
-    composite REAL,
-    authority REAL,
-    trust REAL,
-    skill REAL,
+    iv_score REAL,
+    birank REAL,
+    patronage REAL,
+    person_fe REAL,
     -- ... 20+ columns
 );
 ```
@@ -614,7 +614,7 @@ const title = translations.cli.stats.title;
 def list_persons(
     page: int = Query(1, ge=1),
     per_page: int = Query(100, ge=1, le=1000),
-    sort_by: str = Query("composite"),
+    sort_by: str = Query("iv_score"),
 ) -> PaginatedResponse:
     """List all persons with pagination and sorting."""
 

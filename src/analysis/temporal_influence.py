@@ -1,6 +1,6 @@
 """Temporal Influence Analysis — 時系列での影響力変化追跡.
 
-クリエイターのAuthority/Trust/Skillスコアが時間とともにどう変化するかを分析。
+クリエイターのBiRank/Patronage/Person FEスコアが時間とともにどう変化するかを分析。
 キャリアの転換点、急上昇期、衰退期などを特定し、業界トレンドを可視化。
 """
 
@@ -20,20 +20,20 @@ class TemporalSnapshot:
 
     Attributes:
         year: 年
-        authority: Authority スコア
-        trust: Trust スコア
-        skill: Skill スコア
-        composite: Composite スコア
+        birank: BiRank スコア
+        patronage: Patronage スコア
+        person_fe: Person FE スコア
+        iv_score: IV Score
         n_credits: その年のクレジット数
         n_collaborators: その年のコラボレーター数
         primary_role: その年の主要役職
     """
 
     year: int
-    authority: float = 0.0
-    trust: float = 0.0
-    skill: float = 0.0
-    composite: float = 0.0
+    birank: float = 0.0
+    patronage: float = 0.0
+    person_fe: float = 0.0
+    iv_score: float = 0.0
     n_credits: int = 0
     n_collaborators: int = 0
     primary_role: str | None = None
@@ -49,7 +49,7 @@ class TemporalProfile:
         career_start: キャリア開始年
         career_end: 最新活動年
         peak_year: スコアがピークだった年
-        peak_score: ピーク時のcompositeスコア
+        peak_score: ピーク時のiv_score
         growth_rate: 成長率（年平均）
         trend: トレンド（"rising", "stable", "declining"）
         turning_points: ターニングポイント（大きな変化があった年）
@@ -124,10 +124,10 @@ def compute_temporal_profiles(
 
             snapshot = TemporalSnapshot(
                 year=year,
-                authority=current.get("authority", 0),
-                trust=current.get("trust", 0),
-                skill=current.get("skill", 0),
-                composite=current.get("composite", 0),
+                birank=current.get("birank", 0),
+                patronage=current.get("patronage", 0),
+                person_fe=current.get("person_fe", 0),
+                iv_score=current.get("iv_score", 0),
                 n_credits=len(year_creds),
                 n_collaborators=len(collaborators),
                 primary_role=primary_role,
@@ -140,17 +140,17 @@ def compute_temporal_profiles(
             career_end = snapshots[-1].year
 
             # ピーク検出
-            peak_snapshot = max(snapshots, key=lambda s: s.composite)
+            peak_snapshot = max(snapshots, key=lambda s: s.iv_score)
             peak_year = peak_snapshot.year
-            peak_score = peak_snapshot.composite
+            peak_score = peak_snapshot.iv_score
 
             # 成長率計算（最初と最後のスコア比較）
-            if len(snapshots) > 1 and snapshots[0].composite > 0:
+            if len(snapshots) > 1 and snapshots[0].iv_score > 0:
                 years_diff = career_end - career_start
                 if years_diff > 0:
                     growth_rate = (
-                        (snapshots[-1].composite - snapshots[0].composite)
-                        / snapshots[0].composite
+                        (snapshots[-1].iv_score - snapshots[0].iv_score)
+                        / snapshots[0].iv_score
                     ) / years_diff
                 else:
                     growth_rate = 0.0
@@ -159,8 +159,8 @@ def compute_temporal_profiles(
 
             # トレンド判定
             if len(snapshots) >= 3:
-                recent_avg = sum(s.composite for s in snapshots[-3:]) / 3
-                early_avg = sum(s.composite for s in snapshots[:3]) / 3
+                recent_avg = sum(s.iv_score for s in snapshots[-3:]) / 3
+                early_avg = sum(s.iv_score for s in snapshots[:3]) / 3
                 if recent_avg > early_avg * 1.2:
                     trend = "rising"
                 elif recent_avg < early_avg * 0.8:
@@ -283,7 +283,7 @@ def detect_industry_trends(
             "new_entrants": 0,
             "active_persons": 0,
             "total_credits": 0,
-            "avg_composite": 0.0,
+            "avg_iv_score": 0.0,
             "role_distribution": defaultdict(int),
         }
     )
@@ -323,13 +323,13 @@ def detect_industry_trends(
         if active > 0:
             # その年にアクティブだった人のスコア平均
             year_composites = [
-                snapshot.composite
+                snapshot.iv_score
                 for profile in profiles.values()
                 for snapshot in profile.snapshots
                 if snapshot.year == year
             ]
             if year_composites:
-                stats["avg_composite"] = round(
+                stats["avg_iv_score"] = round(
                     sum(year_composites) / len(year_composites), 2
                 )
 
@@ -341,7 +341,7 @@ def detect_industry_trends(
             "new_entrants": stats["new_entrants"],
             "active_persons": stats["active_persons"],
             "total_credits": stats["total_credits"],
-            "avg_composite": stats["avg_composite"],
+            "avg_iv_score": stats["avg_iv_score"],
             "role_distribution": dict(stats["role_distribution"]),
         }
 
@@ -375,10 +375,10 @@ def main():
     anime_map = {a.id: a for a in anime_list}
     scores_map = {
         s.person_id: {
-            "authority": s.authority,
-            "trust": s.trust,
-            "skill": s.skill,
-            "composite": s.composite,
+            "birank": s.birank,
+            "patronage": s.patronage,
+            "person_fe": s.person_fe,
+            "iv_score": s.iv_score,
         }
         for s in scores_list
     }

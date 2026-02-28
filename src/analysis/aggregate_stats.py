@@ -17,7 +17,7 @@ def compute_aggregate_stats(results: list[dict]) -> dict:
     Returns:
         {
             "score_distribution": {axis: {min, max, mean, median, std, p25, p75}},
-            "role_breakdown": {role: {count, avg_composite}},
+            "role_breakdown": {role: {count, avg_iv_score}},
             "career_stats": {avg_active_years, avg_highest_stage, ...},
             "network_stats": {avg_hub_score, avg_collaborators, ...},
         }
@@ -28,7 +28,7 @@ def compute_aggregate_stats(results: list[dict]) -> dict:
     n = len(results)
 
     # Score distributions
-    axes = ("authority", "trust", "skill", "composite")
+    axes = ("birank", "patronage", "person_fe", "iv_score")
     score_dist: dict[str, dict] = {}
 
     for axis in axes:
@@ -55,14 +55,14 @@ def compute_aggregate_stats(results: list[dict]) -> dict:
         role = r.get("primary_role", "unknown")
         if role not in role_groups:
             role_groups[role] = []
-        role_groups[role].append(r.get("composite", 0))
+        role_groups[role].append(r.get("iv_score", 0))
 
     role_breakdown = {}
-    for role, composites in role_groups.items():
+    for role, iv_scores in role_groups.items():
         role_breakdown[role] = {
-            "count": len(composites),
-            "avg_composite": round(sum(composites) / len(composites), 2),
-            "max_composite": round(max(composites), 2),
+            "count": len(iv_scores),
+            "avg_iv_score": round(sum(iv_scores) / len(iv_scores), 2),
+            "max_iv_score": round(max(iv_scores), 2),
         }
 
     # Career stats

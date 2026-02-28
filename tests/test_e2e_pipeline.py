@@ -76,31 +76,43 @@ class TestE2EPipelineResults:
         results = synthetic_pipeline["results"]
         assert len(results) > 0
 
-    def test_results_sorted_by_composite(self, synthetic_pipeline):
+    def test_results_sorted_by_iv_score(self, synthetic_pipeline):
         results = synthetic_pipeline["results"]
-        composites = [r["composite"] for r in results]
-        assert composites == sorted(composites, reverse=True)
+        iv_scores = [r["iv_score"] for r in results]
+        assert iv_scores == sorted(iv_scores, reverse=True)
 
     def test_results_have_required_fields(self, synthetic_pipeline):
         results = synthetic_pipeline["results"]
         for r in results:
             assert "person_id" in r
-            assert "authority" in r
-            assert "trust" in r
-            assert "skill" in r
-            assert "composite" in r
+            assert "birank" in r
+            assert "patronage" in r
+            assert "person_fe" in r
+            assert "iv_score" in r
 
-    def test_scores_normalized(self, synthetic_pipeline):
+    def test_scores_have_valid_ranges(self, synthetic_pipeline):
+        """Raw structural scores have component-specific valid ranges."""
         results = synthetic_pipeline["results"]
         for r in results:
-            for axis in ("authority", "trust", "skill", "composite"):
-                assert 0 <= r[axis] <= 100
+            # person_fe can be negative (AKM fixed effects relative to reference)
+            assert isinstance(r["person_fe"], (int, float))
+            # birank is non-negative (bipartite PageRank)
+            assert r["birank"] >= 0
+            # patronage is non-negative (director backing premium)
+            assert r["patronage"] >= 0
+            # dormancy is in (0, 1]
+            assert 0 < r["dormancy"] <= 1
+            # iv_score can be any value (weighted combination)
+            assert isinstance(r["iv_score"], (int, float))
+            # percentile fields are normalized to [0, 100]
+            for axis in ("iv_score", "person_fe", "birank", "patronage"):
+                assert 0 <= r[f"{axis}_pct"] <= 100
 
     def test_percentile_ranks(self, synthetic_pipeline):
         results = synthetic_pipeline["results"]
         for r in results:
-            assert "composite_pct" in r
-            assert 0 <= r["composite_pct"] <= 100
+            assert "iv_score_pct" in r
+            assert 0 <= r["iv_score_pct"] <= 100
 
 
 class TestE2EOutputFiles:

@@ -25,26 +25,26 @@ class TestFindSimilarPersons:
             {
                 "person_id": "p1",
                 "name": "A",
-                "authority": 80,
-                "trust": 60,
-                "skill": 70,
-                "composite": 70,
+                "birank": 80,
+                "patronage": 60,
+                "person_fe": 70,
+                "iv_score": 70,
             },
             {
                 "person_id": "p2",
                 "name": "B",
-                "authority": 78,
-                "trust": 62,
-                "skill": 68,
-                "composite": 69,
+                "birank": 78,
+                "patronage": 62,
+                "person_fe": 68,
+                "iv_score": 69,
             },
             {
                 "person_id": "p3",
                 "name": "C",
-                "authority": 10,
-                "trust": 90,
-                "skill": 20,
-                "composite": 40,
+                "birank": 10,
+                "patronage": 90,
+                "person_fe": 20,
+                "iv_score": 40,
             },
         ]
         similar = find_similar_persons("p1", results, top_n=2)
@@ -58,10 +58,10 @@ class TestFindSimilarPersons:
             {
                 "person_id": "p1",
                 "name": "A",
-                "authority": 80,
-                "trust": 60,
-                "skill": 70,
-                "composite": 70,
+                "birank": 80,
+                "patronage": 60,
+                "person_fe": 70,
+                "iv_score": 70,
             },
         ]
         similar = find_similar_persons("nobody", results)
@@ -72,10 +72,10 @@ class TestFindSimilarPersons:
             {
                 "person_id": "p1",
                 "name": "A",
-                "authority": 80,
-                "trust": 60,
-                "skill": 70,
-                "composite": 70,
+                "birank": 80,
+                "patronage": 60,
+                "person_fe": 70,
+                "iv_score": 70,
             },
         ]
         similar = find_similar_persons("p1", results)
@@ -86,10 +86,10 @@ class TestFindSimilarPersons:
             {
                 "person_id": f"p{i}",
                 "name": f"P{i}",
-                "authority": i * 10,
-                "trust": i * 5,
-                "skill": i * 8,
-                "composite": i * 7,
+                "birank": i * 10,
+                "patronage": i * 5,
+                "person_fe": i * 8,
+                "iv_score": i * 7,
             }
             for i in range(10)
         ]
@@ -101,26 +101,26 @@ class TestFindSimilarPersons:
             {
                 "person_id": "p1",
                 "name": "A",
-                "authority": 50,
-                "trust": 50,
-                "skill": 50,
-                "composite": 50,
+                "birank": 50,
+                "patronage": 50,
+                "person_fe": 50,
+                "iv_score": 50,
             },
             {
                 "person_id": "p2",
                 "name": "B",
-                "authority": 49,
-                "trust": 51,
-                "skill": 50,
-                "composite": 50,
+                "birank": 49,
+                "patronage": 51,
+                "person_fe": 50,
+                "iv_score": 50,
             },
             {
                 "person_id": "p3",
                 "name": "C",
-                "authority": 10,
-                "trust": 90,
-                "skill": 10,
-                "composite": 40,
+                "birank": 10,
+                "patronage": 90,
+                "person_fe": 10,
+                "iv_score": 40,
             },
         ]
         similar = find_similar_persons("p1", results)

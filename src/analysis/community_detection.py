@@ -486,7 +486,7 @@ def compute_community_features(
                 person_scores.get(m, {}) for m in comm.members if m in person_scores
             ]
             if scores_in_comm:
-                for key in ["authority", "trust", "skill", "composite"]:
+                for key in ["birank", "patronage", "person_fe", "iv_score"]:
                     values = [s.get(key, 0) for s in scores_in_comm if key in s]
                     if values:
                         avg_scores[f"avg_{key}"] = round(sum(values) / len(values), 2)
@@ -517,7 +517,7 @@ def compute_community_features(
                     continue
 
                 member_creds = person_credits.get(member_id, [])
-                current_score = person_scores[member_id].get("composite", 0)
+                current_score = person_scores[member_id].get("iv_score", 0)
 
                 # 1. Ability at formation time (actual score at that time)
                 # Simplified: use current score (ideally should recompute at formation_year)
@@ -695,7 +695,7 @@ def main():
     # マップ作成
     anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
-    person_scores = {s.person_id: {"composite": s.composite} for s in scores_list}
+    person_scores = {s.person_id: {"iv_score": s.iv_score} for s in scores_list}
 
     # コラボレーショングラフ構築
     logger.info("building_collaboration_graph")

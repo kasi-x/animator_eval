@@ -24,7 +24,7 @@ def populated_db(tmp_path, monkeypatch):
     conn = get_connection(db_path)
     init_db(conn)
 
-    # テストデータ投入
+    # テストデータ投入 (studios added for AKM)
     persons = [
         Person(id="p1", name_en="Director Alpha", name_ja="監督A"),
         Person(id="p2", name_en="Animator Beta", name_ja="アニメーターB"),
@@ -38,9 +38,15 @@ def populated_db(tmp_path, monkeypatch):
             title_ja="すごいアニメ",
             year=2022,
             score=8.5,
+            studios=["Studio A"],
         ),
         Anime(
-            id="a2", title_en="Good Anime", title_ja="いいアニメ", year=2023, score=7.5
+            id="a2",
+            title_en="Good Anime",
+            title_ja="いいアニメ",
+            year=2023,
+            score=7.5,
+            studios=["Studio B"],
         ),
         Anime(
             id="a3",
@@ -48,6 +54,7 @@ def populated_db(tmp_path, monkeypatch):
             title_ja="普通のアニメ",
             year=2024,
             score=6.0,
+            studios=["Studio A"],
         ),
     ]
     credits_data = [
@@ -81,8 +88,14 @@ def populated_db(tmp_path, monkeypatch):
     monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
 
     import src.pipeline
+    import src.utils.config
+    import src.utils.json_io
 
     monkeypatch.setattr(src.pipeline, "JSON_DIR", json_dir)
+    # export_and_viz.py が実行時に src.utils.config.JSON_DIR を import するため
+    # 本番ディレクトリへの書き込みを防ぐために必須
+    monkeypatch.setattr(src.utils.config, "JSON_DIR", json_dir)
+    monkeypatch.setattr(src.utils.json_io, "JSON_DIR", json_dir)
 
     return db_path
 
@@ -92,21 +105,23 @@ class TestScoringPipeline:
         results = run_scoring_pipeline()
         assert len(results) > 0
 
-    def test_composite_scores_ordered(self, populated_db):
+    def test_iv_scores_ordered(self, populated_db):
         results = run_scoring_pipeline()
-        composites = [r["composite"] for r in results]
-        assert composites == sorted(composites, reverse=True)
+        iv_scores = [r["iv_score"] for r in results]
+        assert iv_scores == sorted(iv_scores, reverse=True)
 
     def test_all_persons_scored(self, populated_db):
         results = run_scoring_pipeline()
         person_ids = {r["person_id"] for r in results}
         assert "p2" in person_ids
 
-    def test_repeat_engagement_higher_trust(self, populated_db):
+    def test_structural_fields_present(self, populated_db):
         results = run_scoring_pipeline()
-        scores_by_id = {r["person_id"]: r for r in results}
-        if "p2" in scores_by_id and "p4" in scores_by_id:
-            assert scores_by_id["p2"]["trust"] >= scores_by_id["p4"]["trust"]
+        for r in results:
+            assert "iv_score" in r
+            assert "person_fe" in r
+            assert "birank" in r
+            assert "dormancy" in r
 
 
 class TestIncrementalPipeline:

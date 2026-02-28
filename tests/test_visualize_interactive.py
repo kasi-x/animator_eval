@@ -16,26 +16,26 @@ def _sample_scores():
         {
             "person_id": "p1",
             "name": "Person 1",
-            "authority": 85.5,
-            "trust": 70.2,
-            "skill": 90.1,
-            "composite": 82.0,
+            "birank": 85.5,
+            "patronage": 70.2,
+            "person_fe": 90.1,
+            "iv_score": 82.0,
         },
         {
             "person_id": "p2",
             "name": "Person 2",
-            "authority": 60.3,
-            "trust": 80.5,
-            "skill": 65.0,
-            "composite": 68.5,
+            "birank": 60.3,
+            "patronage": 80.5,
+            "person_fe": 65.0,
+            "iv_score": 68.5,
         },
         {
             "person_id": "p3",
             "name": "Person 3",
-            "authority": 75.0,
-            "trust": 85.0,
-            "skill": 70.0,
-            "composite": 76.7,
+            "birank": 75.0,
+            "patronage": 85.0,
+            "person_fe": 70.0,
+            "iv_score": 76.7,
         },
     ]
 
@@ -94,7 +94,7 @@ class TestInteractiveScoreDistribution:
         plot_interactive_score_distribution(scores, output_path=output)
         content = output.read_text()
         assert "plotly" in content.lower()
-        assert "Authority Score" in content
+        assert "BiRank Score" in content
 
 
 class TestInteractiveRadar:
@@ -125,7 +125,7 @@ class TestInteractiveScatter:
         scores = _sample_scores()
         output = tmp_path / "scatter.html"
         plot_interactive_scatter(
-            scores, x_axis="authority", y_axis="trust", output_path=output
+            scores, x_axis="birank", y_axis="patronage", output_path=output
         )
         assert output.exists()
         assert output.stat().st_size > 0
@@ -139,11 +139,11 @@ class TestInteractiveScatter:
         scores = _sample_scores()
         output = tmp_path / "scatter.html"
         plot_interactive_scatter(
-            scores, x_axis="skill", y_axis="trust", output_path=output
+            scores, x_axis="person_fe", y_axis="patronage", output_path=output
         )
         content = output.read_text()
-        assert "Skill Score" in content or "skill" in content.lower()
-        assert "Trust Score" in content or "trust" in content.lower()
+        assert "Person FE Score" in content or "person_fe" in content.lower()
+        assert "Patronage Score" in content or "patronage" in content.lower()
 
 
 class TestInteractiveTimeline:
@@ -198,9 +198,9 @@ class TestGenerateInteractiveDashboard:
         expected_files = [
             "interactive_scores.html",
             "interactive_radar.html",
-            "interactive_scatter_authority_trust.html",
-            "interactive_scatter_authority_skill.html",
-            "interactive_scatter_trust_skill.html",
+            "interactive_scatter_birank_patronage.html",
+            "interactive_scatter_birank_person_fe.html",
+            "interactive_scatter_patronage_person_fe.html",
             "interactive_timeline.html",
         ]
 

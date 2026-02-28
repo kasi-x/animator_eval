@@ -34,10 +34,10 @@ class PipelineContext:
     1. data_loading: persons, anime_list, credits, anime_map
     2. validation: (no context updates, just checks)
     3. entity_resolution: canonical_map, credits (resolved)
-    4. graph_construction: person_anime_graph, collaboration_graph
-    5. core_scoring: authority_scores, trust_scores, skill_scores
+    4. graph_construction: person_anime_graph, collaboration_graph, community_map
+    5. core_scoring: person_fe, studio_fe, birank, patronage, dormancy, iv_scores
     6. supplementary_metrics: decay_results, role_profiles, career_data, etc.
-    7. result_assembly: results, composite_scores
+    7. result_assembly: results
     8. post_processing: (updates results in-place)
     9. analysis_modules: analysis_results
     10. export_and_viz: (reads from context, writes to files)
@@ -61,10 +61,27 @@ class PipelineContext:
     person_anime_graph: nx.Graph | None = None
     collaboration_graph: nx.Graph | None = None
 
-    # Core scores (Phase 5: core_scoring)
-    authority_scores: dict[str, float] = field(default_factory=dict)
-    trust_scores: dict[str, float] = field(default_factory=dict)
-    skill_scores: dict[str, float] = field(default_factory=dict)
+    # 8-component structural scoring (Phase 5: core_scoring)
+    akm_result: Any = None  # AKMResult dataclass
+    birank_result: Any = None  # BiRankResult dataclass
+    person_fe: dict[str, float] = field(default_factory=dict)  # θ_i
+    studio_fe: dict[str, float] = field(default_factory=dict)  # ψ_j
+    birank_person_scores: dict[str, float] = field(default_factory=dict)
+    birank_anime_scores: dict[str, float] = field(default_factory=dict)
+    community_map: dict[str, int] = field(default_factory=dict)  # person_id → community_id
+    studio_assignments: dict[str, dict] = field(default_factory=dict)  # person_id → {year → studio}
+
+    # Phase 6 new components
+    knowledge_spanner_scores: dict[str, Any] = field(default_factory=dict)
+    peer_effect_result: Any = None
+    career_friction: dict[str, float] = field(default_factory=dict)
+    era_effects: Any = None
+    patronage_scores: dict[str, float] = field(default_factory=dict)
+    dormancy_scores: dict[str, float] = field(default_factory=dict)
+
+    # Integrated Value (replaces composite_scores semantically)
+    iv_scores: dict[str, float] = field(default_factory=dict)
+    iv_lambda_weights: dict[str, float] = field(default_factory=dict)
 
     # Supplementary metrics (Phase 6)
     decay_results: dict[str, list[dict]] = field(default_factory=dict)
@@ -86,7 +103,6 @@ class PipelineContext:
 
     # Results (Phase 7: result_assembly)
     results: list[dict] = field(default_factory=list)
-    composite_scores: dict[str, float] = field(default_factory=dict)
 
     # Analysis outputs (Phase 9: analysis_modules)
     analysis_results: dict[str, Any] = field(default_factory=dict)
@@ -132,14 +148,18 @@ class PipelineCheckpoint:
 
         # Save score data after phase 5 (core scoring)
         if phase >= 5:
-            data["authority_scores"] = context.authority_scores
-            data["trust_scores"] = context.trust_scores
-            data["skill_scores"] = context.skill_scores
+            data["person_fe"] = context.person_fe
+            data["studio_fe"] = context.studio_fe
+            data["birank_person_scores"] = context.birank_person_scores
+            data["birank_anime_scores"] = context.birank_anime_scores
+            data["iv_scores"] = context.iv_scores
+            data["iv_lambda_weights"] = context.iv_lambda_weights
+            data["patronage_scores"] = context.patronage_scores
+            data["dormancy_scores"] = context.dormancy_scores
 
         # Save results after phase 7 (result assembly)
         if phase >= 7:
             data["results"] = context.results
-            data["composite_scores"] = context.composite_scores
 
         # Save analysis after phase 9
         if phase >= 9:
@@ -186,13 +206,17 @@ class PipelineCheckpoint:
         phase = checkpoint["last_completed_phase"]
 
         if phase >= 5:
-            context.authority_scores = checkpoint.get("authority_scores", {})
-            context.trust_scores = checkpoint.get("trust_scores", {})
-            context.skill_scores = checkpoint.get("skill_scores", {})
+            context.person_fe = checkpoint.get("person_fe", {})
+            context.studio_fe = checkpoint.get("studio_fe", {})
+            context.birank_person_scores = checkpoint.get("birank_person_scores", {})
+            context.birank_anime_scores = checkpoint.get("birank_anime_scores", {})
+            context.iv_scores = checkpoint.get("iv_scores", {})
+            context.iv_lambda_weights = checkpoint.get("iv_lambda_weights", {})
+            context.patronage_scores = checkpoint.get("patronage_scores", {})
+            context.dormancy_scores = checkpoint.get("dormancy_scores", {})
 
         if phase >= 7:
             context.results = checkpoint.get("results", [])
-            context.composite_scores = checkpoint.get("composite_scores", {})
 
         if phase >= 9:
             context.analysis_results = checkpoint.get("analysis_results", {})

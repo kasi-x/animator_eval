@@ -173,7 +173,7 @@ def compute_gini_coefficient(values: list[float]) -> float:
     cumsum = 0
 
     for i, val in enumerate(sorted_values):
-        cumsum += (n - i) * val
+        cumsum += (i + 1) * val  # 1-indexed weight: smallest value gets weight 1
 
     total = sum(sorted_values)
     if total == 0:
@@ -337,36 +337,28 @@ def analyze_fair_compensation(
             pid: comp * scale for pid, comp in adjusted_allocations.items()
         }
 
-    # 最高/最低比制約を適用
+    # 最高/最低比制約を適用 (floor = max / max_ratio で下限を設定)
+    # NOTE: cap = min * max_ratio は逆順を引き起こすため不使用。
+    # 代わりに floor = max / max_ratio で最低保証額を設定し、
+    # 予算超過分を Shapley 比率でスケールする。
     if len(adjusted_allocations) > 1:
         min_comp = min(adjusted_allocations.values())
         max_comp = max(adjusted_allocations.values())
 
-        if max_comp / min_comp > request.max_ratio:
-            # 最高額をキャップ
-            cap = min_comp * request.max_ratio
-            excess = sum(max(0, comp - cap) for comp in adjusted_allocations.values())
+        if min_comp > 0 and max_comp / min_comp > request.max_ratio:
+            floor = max_comp / request.max_ratio
 
-            # 超過分を再配分
-            capped_allocations = {}
-            for person_id in adjusted_allocations:
-                if adjusted_allocations[person_id] > cap:
-                    capped_allocations[person_id] = cap
-                else:
-                    capped_allocations[person_id] = adjusted_allocations[person_id]
-
-            # キャップ以下の人に超過分を比例配分
-            below_cap = {
-                pid: comp for pid, comp in capped_allocations.items() if comp < cap
+            # 下限を下回る配分を floor に引き上げる
+            raised_allocations = {
+                pid: max(comp, floor) for pid, comp in adjusted_allocations.items()
             }
-
-            if below_cap:
-                total_below = sum(below_cap.values())
-                for person_id in below_cap:
-                    share = below_cap[person_id] / total_below if total_below > 0 else 0
-                    capped_allocations[person_id] += excess * share
-
-            adjusted_allocations = capped_allocations
+            # 予算合計が変わるのでスケール調整
+            total_raised = sum(raised_allocations.values())
+            if total_raised > 0:
+                scale = request.total_budget / total_raised
+                adjusted_allocations = {
+                    pid: comp * scale for pid, comp in raised_allocations.items()
+                }
 
     # 公正度メトリクスを計算
     fairness = compute_fairness_metrics(adjusted_allocations, contributions)
@@ -438,16 +430,21 @@ def batch_analyze_compensation(
 def export_compensation_report(
     analyses: dict[str, CompensationAnalysis],
     person_names: dict[str, str],
+    anime_scores: dict[str, float] | None = None,
 ) -> dict:
     """報酬分析レポートをエクスポート.
 
     Args:
         analyses: anime_id → CompensationAnalysis
         person_names: person_id → 名前
+        anime_scores: anime_id → score (optional, for scatter chart)
 
     Returns:
         JSONエクスポート可能な辞書
     """
+    if anime_scores is None:
+        anime_scores = {}
+
     anime_reports = []
 
     for anime_id, analysis in analyses.items():
@@ -466,23 +463,25 @@ def export_compensation_report(
             )
         ]
 
-        anime_reports.append(
-            {
-                "anime_id": anime_id,
-                "anime_title": analysis.anime_title,
-                "anime_type": analysis.anime_type,
-                "total_budget": analysis.total_budget,
-                "staff_count": len(analysis.allocations),
-                "fairness": {
-                    "gini_coefficient": analysis.fairness_metrics.gini_coefficient,
-                    "shapley_correlation": analysis.fairness_metrics.shapley_correlation,
-                    "min_compensation": analysis.fairness_metrics.min_compensation,
-                    "max_compensation": analysis.fairness_metrics.max_compensation,
-                    "compensation_ratio": analysis.fairness_metrics.compensation_ratio,
-                },
-                "allocations": allocations_list,
-            }
-        )
+        entry: dict = {
+            "anime_id": anime_id,
+            "anime_title": analysis.anime_title,
+            "anime_type": analysis.anime_type,
+            "total_budget": analysis.total_budget,
+            "staff_count": len(analysis.allocations),
+            "fairness": {
+                "gini_coefficient": analysis.fairness_metrics.gini_coefficient,
+                "shapley_correlation": analysis.fairness_metrics.shapley_correlation,
+                "min_compensation": analysis.fairness_metrics.min_compensation,
+                "max_compensation": analysis.fairness_metrics.max_compensation,
+                "compensation_ratio": analysis.fairness_metrics.compensation_ratio,
+            },
+            "allocations": allocations_list,
+        }
+        score = anime_scores.get(anime_id)
+        if score is not None:
+            entry["anime_score"] = score
+        anime_reports.append(entry)
 
     # サマリー統計
     all_gini = [a.fairness_metrics.gini_coefficient for a in analyses.values()]

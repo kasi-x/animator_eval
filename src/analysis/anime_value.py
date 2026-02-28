@@ -154,24 +154,24 @@ def compute_creative_value(
     """
     from src.utils.role_groups import is_director_role, is_animator_role
 
-    # Key creators' average skill
-    director_skills = [
-        person_scores.get(c.person_id, {}).get("skill", 0)
+    # Key creators' average person_fe
+    director_fes = [
+        person_scores.get(c.person_id, {}).get("person_fe", 0)
         for c in credits
         if is_director_role(c.role) and c.person_id in person_scores
     ]
 
-    animator_skills = [
-        person_scores.get(c.person_id, {}).get("skill", 0)
+    animator_fes = [
+        person_scores.get(c.person_id, {}).get("person_fe", 0)
         for c in credits
         if is_animator_role(c.role) and c.person_id in person_scores
     ]
 
     avg_director_skill = (
-        sum(director_skills) / len(director_skills) if director_skills else 0.5
+        sum(director_fes) / len(director_fes) if director_fes else 0.5
     )
     avg_animator_skill = (
-        sum(animator_skills) / len(animator_skills) if animator_skills else 0.5
+        sum(animator_fes) / len(animator_fes) if animator_fes else 0.5
     )
 
     skill_score = avg_director_skill * 0.6 + avg_animator_skill * 0.4
@@ -252,7 +252,7 @@ def compute_technical_value(
 
     # Animator quality
     animator_composites = [
-        person_scores.get(c.person_id, {}).get("composite", 0)
+        person_scores.get(c.person_id, {}).get("iv_score", 0)
         for c in credits
         if is_animator_role(c.role) and c.person_id in person_scores
     ]
@@ -325,7 +325,7 @@ def compute_anime_values(
 
         # Staff quality
         staff_composites = [
-            person_scores.get(c.person_id, {}).get("composite", 0)
+            person_scores.get(c.person_id, {}).get("iv_score", 0)
             for c in anime_creds
             if c.person_id in person_scores
         ]
@@ -335,7 +335,7 @@ def compute_anime_values(
 
         # Key contributors (top 5 by composite score)
         staff_with_scores = [
-            (c.person_id, person_scores.get(c.person_id, {}).get("composite", 0))
+            (c.person_id, person_scores.get(c.person_id, {}).get("iv_score", 0))
             for c in anime_creds
             if c.person_id in person_scores
         ]
@@ -518,10 +518,10 @@ def main():
 
     person_scores = {
         s.person_id: {
-            "authority": s.authority,
-            "trust": s.trust,
-            "skill": s.skill,
-            "composite": s.composite,
+            "person_fe": s.person_fe,
+            "birank": s.birank,
+            "patronage": s.patronage,
+            "iv_score": s.iv_score,
         }
         for s in scores_list
     }
@@ -532,7 +532,7 @@ def main():
 
     # 総合ランキング
     print("\n=== 作品価値ランキング（トップ20）===\n")
-    top_anime = rank_anime_by_value(anime_values, dimension="composite", top_n=20)
+    top_anime = rank_anime_by_value(anime_values, dimension="iv_score", top_n=20)
 
     for rank, (anime_id, title, value) in enumerate(top_anime, 1):
         metrics = anime_values[anime_id]

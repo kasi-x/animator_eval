@@ -3,7 +3,6 @@
 import pytest
 
 from src.analysis.crossval import (
-    _compute_composite,
     _rank_correlation,
     cross_validate_scores,
 )
@@ -68,31 +67,6 @@ class TestRankCorrelation:
         ranks_b = {"a": 1, "b": 2, "c": 3, "e": 4}
         # Perfect correlation on common keys
         assert _rank_correlation(ranks_a, ranks_b) == 1.0
-
-
-class TestComputeComposite:
-    def test_weighted_combination(self):
-        authority = {"p1": 100.0}
-        trust = {"p1": 100.0}
-        skill = {"p1": 100.0}
-        result = _compute_composite(authority, trust, skill)
-        # 100*0.4 + 100*0.35 + 100*0.25 = 100.0
-        assert result["p1"] == pytest.approx(100.0)
-
-    def test_missing_scores_default_zero(self):
-        authority = {"p1": 80.0}
-        trust = {}
-        skill = {}
-        result = _compute_composite(authority, trust, skill)
-        # 80*0.4 + 0 + 0 = 32.0
-        assert result["p1"] == pytest.approx(32.0)
-
-    def test_union_of_all_ids(self):
-        authority = {"p1": 50.0}
-        trust = {"p2": 50.0}
-        skill = {"p3": 50.0}
-        result = _compute_composite(authority, trust, skill)
-        assert set(result.keys()) == {"p1", "p2", "p3"}
 
 
 class TestCrossValidateScores:

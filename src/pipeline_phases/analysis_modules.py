@@ -13,6 +13,7 @@ import networkx as nx
 import numpy as np
 import structlog
 
+from src.analysis.cooccurrence_groups import compute_cooccurrence_groups
 from src.analysis.anime_stats import compute_anime_stats
 from src.analysis.bias_detector import detect_systematic_biases, generate_bias_report
 from src.analysis.bridges import detect_bridges
@@ -80,21 +81,21 @@ class AnalysisTask:
 def _run_anime_stats(context: PipelineContext) -> Any:
     """Compute anime quality statistics."""
     return compute_anime_stats(
-        context.credits, context.anime_map, context.composite_scores
+        context.credits, context.anime_map, context.iv_scores
     )
 
 
 def _run_studios(context: PipelineContext) -> Any:
     """Compute studio performance analysis."""
     return compute_studio_analysis(
-        context.credits, context.anime_map, context.composite_scores
+        context.credits, context.anime_map, context.iv_scores
     )
 
 
 def _run_seasonal(context: PipelineContext) -> Any:
     """Compute seasonal activity patterns."""
     return compute_seasonal_trends(
-        context.credits, context.anime_map, context.composite_scores
+        context.credits, context.anime_map, context.iv_scores
     )
 
 
@@ -104,7 +105,7 @@ def _run_collaborations(context: PipelineContext) -> Any:
         context.credits,
         context.anime_map,
         min_shared=2,
-        person_scores=context.composite_scores,
+        person_scores=context.iv_scores,
         collaboration_graph=context.collaboration_graph,
     )
     return pairs[:500] if pairs else []
@@ -117,13 +118,13 @@ def _run_outliers(context: PipelineContext) -> Any:
 
 def _run_teams(context: PipelineContext) -> Any:
     """Analyze team composition patterns."""
-    # composite は 0-100 スケール → 95パーセンタイルで動的閾値
-    composites = [r["composite"] for r in context.results if r["composite"] > 0]
-    person_threshold = float(np.percentile(composites, 95)) if composites else 30.0
+    # iv_score で上位5%を閾値にする
+    iv_vals = [r["iv_score"] for r in context.results if r["iv_score"] > 0]
+    person_threshold = float(np.percentile(iv_vals, 95)) if iv_vals else 0.0
     top_persons = {
-        r["person_id"]: r["composite"]
+        r["person_id"]: r["iv_score"]
         for r in context.results
-        if r["composite"] >= person_threshold
+        if r["iv_score"] >= person_threshold
     }
     # anime.score は 1-10 スケール → 8.0 が「高評価」に適切
     return analyze_team_patterns(
@@ -138,10 +139,10 @@ def _run_graphml(context: PipelineContext) -> Any:
     """Export graph to GraphML format."""
     scores_for_graphml = {
         r["person_id"]: {
-            "authority": r["authority"],
-            "trust": r["trust"],
-            "skill": r["skill"],
-            "composite": r["composite"],
+            "iv_score": r["iv_score"],
+            "person_fe": r["person_fe"],
+            "birank": r["birank"],
+            "patronage": r["patronage"],
             "primary_role": r.get("primary_role", ""),
         }
         for r in context.results
@@ -167,7 +168,7 @@ def _run_time_series(context: PipelineContext) -> Any:
 def _run_decades(context: PipelineContext) -> Any:
     """Compute decade analysis."""
     return compute_decade_analysis(
-        context.credits, context.anime_map, context.composite_scores
+        context.credits, context.anime_map, context.iv_scores
     )
 
 
@@ -285,7 +286,7 @@ def _run_influence(context: PipelineContext) -> Any:
     return compute_influence_tree(
         context.credits,
         context.anime_map,
-        context.composite_scores,
+        context.iv_scores,
     )
 
 
@@ -348,8 +349,13 @@ def _run_compensation_analyzer(context: PipelineContext) -> Any:
         total_budget_per_anime=100.0,  # Normalized budget
     )
 
+    # Build anime_scores dict for scatter chart
+    anime_scores = {
+        a.id: a.score for a in anime_with_contribs if a.score is not None
+    }
+
     # Export report
-    return export_compensation_report(analyses, person_names)
+    return export_compensation_report(analyses, person_names, anime_scores=anime_scores)
 
 
 def _run_insights_report(context: PipelineContext) -> Any:
@@ -455,6 +461,88 @@ def _run_temporal_pagerank(context: PipelineContext) -> Any:
     )
 
 
+def _run_akm_diagnostics(context: PipelineContext) -> Any:
+    """Export AKM model diagnostics (connected set, R², mover analysis)."""
+    if context.akm_result is None:
+        return {}
+    return {
+        "connected_set_size": context.akm_result.connected_set_size,
+        "n_movers": context.akm_result.n_movers,
+        "n_observations": context.akm_result.n_observations,
+        "r_squared": context.akm_result.r_squared,
+        "n_person_fe": len(context.akm_result.person_fe),
+        "n_studio_fe": len(context.akm_result.studio_fe),
+        "beta_coefficients": context.akm_result.beta.tolist()
+        if hasattr(context.akm_result.beta, "tolist")
+        else [],
+    }
+
+
+def _run_iv_weights(context: PipelineContext) -> Any:
+    """Export IV weight optimization results."""
+    return {
+        "lambda_weights": context.iv_lambda_weights,
+    }
+
+
+def _run_knowledge_spanners_report(context: PipelineContext) -> Any:
+    """Export knowledge spanner metrics (AWCC/NDI per person)."""
+    if not context.knowledge_spanner_scores:
+        return {}
+    pid_to_name = {r["person_id"]: r["name"] or r["person_id"] for r in context.results}
+    return {
+        pid: {
+            "name": pid_to_name.get(pid, pid),
+            "awcc": round(m.awcc, 4),
+            "ndi": round(m.ndi, 4),
+            "community_reach": m.community_reach,
+            "degree": m.degree,
+        }
+        for pid, m in context.knowledge_spanner_scores.items()
+    }
+
+
+def _run_career_friction_report(context: PipelineContext) -> Any:
+    """Export career friction analysis results."""
+    if not context.career_friction:
+        return {}
+    pid_to_name = {r["person_id"]: r["name"] or r["person_id"] for r in context.results}
+    return {
+        "friction_index": {
+            pid: {"name": pid_to_name.get(pid, pid), "friction": round(f, 4)}
+            for pid, f in context.career_friction.items()
+        },
+        "total_persons": len(context.career_friction),
+        "avg_friction": round(
+            sum(context.career_friction.values()) / len(context.career_friction), 4
+        )
+        if context.career_friction
+        else 0,
+    }
+
+
+def _run_era_effects_report(context: PipelineContext) -> Any:
+    """Export era effects analysis results."""
+    if context.era_effects is None:
+        return {}
+    return {
+        "era_fe": {str(k): round(v, 4) for k, v in context.era_effects.era_fe.items()},
+        "difficulty_beta": round(context.era_effects.difficulty_beta, 6),
+        "n_anime_difficulty": len(context.era_effects.difficulty_scores),
+    }
+
+
+def _run_cooccurrence_groups(context: PipelineContext) -> Any:
+    """Detect recurring co-production groups (3+ core staff across 3+ works)."""
+    return compute_cooccurrence_groups(
+        context.credits,
+        context.anime_map,
+        iv_scores=context.iv_scores,
+        min_shared_works=3,
+        max_group_size=5,
+    )
+
+
 def _run_credit_stats(context: PipelineContext) -> Any:
     """Compute comprehensive credit statistics (person_id level)."""
     stats = compute_credit_statistics(context.credits, context.anime_map)
@@ -531,10 +619,42 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
     ),
     AnalysisTask("credit_stats", _run_credit_stats, monitor_step="credit_statistics"),
     AnalysisTask(
+        "cooccurrence_groups",
+        _run_cooccurrence_groups,
+        monitor_step="cooccurrence_groups",
+    ),
+    AnalysisTask(
         "temporal_pagerank",
         _run_temporal_pagerank,
         monitor_step="temporal_pagerank",
         condition=lambda ctx: len(ctx.credits) >= 50,
+    ),
+    # New 8-component structural estimation reports
+    AnalysisTask(
+        "akm_diagnostics",
+        _run_akm_diagnostics,
+        monitor_step="akm_diagnostics",
+        condition=lambda ctx: ctx.akm_result is not None,
+    ),
+    AnalysisTask(
+        "iv_weights",
+        _run_iv_weights,
+        monitor_step="iv_weights",
+    ),
+    AnalysisTask(
+        "knowledge_spanners",
+        _run_knowledge_spanners_report,
+        monitor_step="knowledge_spanners_report",
+    ),
+    AnalysisTask(
+        "career_friction_report",
+        _run_career_friction_report,
+        monitor_step="career_friction_report",
+    ),
+    AnalysisTask(
+        "era_effects",
+        _run_era_effects_report,
+        monitor_step="era_effects_report",
     ),
 ]
 

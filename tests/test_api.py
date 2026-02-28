@@ -33,10 +33,10 @@ def scores_data(tmp_path, monkeypatch):
             "name": "Director A",
             "name_ja": "監督A",
             "name_en": "Director A",
-            "authority": 80.0,
-            "trust": 70.0,
-            "skill": 60.0,
-            "composite": 71.0,
+            "birank": 80.0,
+            "patronage": 70.0,
+            "person_fe": 60.0,
+            "iv_score": 71.0,
             "primary_role": "director",
             "total_credits": 10,
             "career": {
@@ -47,7 +47,7 @@ def scores_data(tmp_path, monkeypatch):
                 "highest_roles": ["director"],
             },
             "breakdown": {
-                "authority": [
+                "birank": [
                     {
                         "anime_id": "a1",
                         "title": "Anime 1",
@@ -56,7 +56,7 @@ def scores_data(tmp_path, monkeypatch):
                         "role": "director",
                     }
                 ],
-                "trust": [
+                "patronage": [
                     {
                         "director_id": "p2",
                         "shared_works": 3,
@@ -70,10 +70,10 @@ def scores_data(tmp_path, monkeypatch):
             "name": "Animator B",
             "name_ja": "",
             "name_en": "Animator B",
-            "authority": 50.0,
-            "trust": 40.0,
-            "skill": 55.0,
-            "composite": 47.75,
+            "birank": 50.0,
+            "patronage": 40.0,
+            "person_fe": 55.0,
+            "iv_score": 47.75,
             "primary_role": "animator",
             "total_credits": 5,
             "career": {
@@ -89,10 +89,10 @@ def scores_data(tmp_path, monkeypatch):
             "name": "Newbie C",
             "name_ja": "",
             "name_en": "Newbie C",
-            "authority": 10.0,
-            "trust": 5.0,
-            "skill": 20.0,
-            "composite": 10.75,
+            "birank": 10.0,
+            "patronage": 5.0,
+            "person_fe": 20.0,
+            "iv_score": 10.75,
             "primary_role": "animator",
             "total_credits": 2,
         },
@@ -125,7 +125,7 @@ def scores_data(tmp_path, monkeypatch):
         "generated_at": "2024-01-01T00:00:00",
         "elapsed_seconds": 5.0,
         "data": {"persons": 3, "anime": 2, "credits": 17},
-        "scores": {"top_composite": 71.0, "median_composite": 47.75},
+        "scores": {"top_iv_score": 71.0, "median_iv_score": 47.75},
     }
     (tmp_path / "summary.json").write_text(json.dumps(summary), encoding="utf-8")
 
@@ -169,7 +169,7 @@ def scores_data(tmp_path, monkeypatch):
 
     outliers_data = {
         "axis_outliers": {
-            "composite": {
+            "iv_score": {
                 "high": [
                     {
                         "person_id": "p1",
@@ -419,10 +419,10 @@ class TestListPersons:
         data2 = resp2.json()
         assert len(data2["items"]) == 1
 
-    def test_sort_by_authority(self, client, scores_data):
-        resp = client.get("/api/persons?sort=authority")
+    def test_sort_by_birank(self, client, scores_data):
+        resp = client.get("/api/persons?sort=birank")
         data = resp.json()
-        values = [item["authority"] for item in data["items"]]
+        values = [item["birank"] for item in data["items"]]
         assert values == sorted(values, reverse=True)
 
     def test_invalid_sort(self, client, scores_data):
@@ -436,7 +436,7 @@ class TestGetPerson:
         assert resp.status_code == 200
         data = resp.json()
         assert data["person_id"] == "p1"
-        assert data["authority"] == 80.0
+        assert data["birank"] == 80.0
         assert "breakdown" in data
 
     def test_not_found(self, client, scores_data):
@@ -471,9 +471,9 @@ class TestRanking:
         assert data["items"][0]["person_id"] == "p1"
 
     def test_ranking_sort(self, client, scores_data):
-        resp = client.get("/api/ranking?sort=trust")
+        resp = client.get("/api/ranking?sort=patronage")
         data = resp.json()
-        values = [item["trust"] for item in data["items"]]
+        values = [item["patronage"] for item in data["items"]]
         assert values == sorted(values, reverse=True)
 
 

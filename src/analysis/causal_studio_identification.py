@@ -69,8 +69,8 @@ class StudioAffiliation:
     start_year: int
     end_year: int
     credits_count: int
-    avg_skill_score: float  # Average skill during this period
-    avg_authority_score: float
+    avg_person_fe_score: float  # Average person_fe during this period
+    avg_birank_score: float
 
 
 @dataclass
@@ -82,25 +82,25 @@ class CareerTrajectory:
 
     # Pre-major studio period
     pre_years: list[int] = field(default_factory=list)
-    pre_skill_scores: list[float] = field(default_factory=list)
-    pre_avg_skill: float = 0.0
+    pre_person_fe_scores: list[float] = field(default_factory=list)
+    pre_avg_person_fe: float = 0.0
     pre_credits: int = 0
 
     # Major studio period
     major_studio_id: str = ""
     major_years: list[int] = field(default_factory=list)
-    major_skill_scores: list[float] = field(default_factory=list)
-    major_avg_skill: float = 0.0
+    major_person_fe_scores: list[float] = field(default_factory=list)
+    major_avg_person_fe: float = 0.0
     major_credits: int = 0
 
     # Post-major studio period (if left)
     post_years: list[int] = field(default_factory=list)
-    post_skill_scores: list[float] = field(default_factory=list)
-    post_avg_skill: float = 0.0
+    post_person_fe_scores: list[float] = field(default_factory=list)
+    post_avg_person_fe: float = 0.0
     post_credits: int = 0
 
     # Causal estimates
-    pre_to_major_change: float = 0.0  # Treatment effect estimate
+    pre_to_major_change: float = 0.0  # Treatment effect estimate (person_fe change)
     major_to_post_change: float = 0.0  # Brand effect estimate (should drop if brand)
     trend_before_major: float = 0.0  # Pre-existing trend (selection indicator)
 
@@ -132,13 +132,13 @@ class StudioTransition:
     transition_year: int
 
     # Performance metrics
-    before_skill: float  # Avg skill in 2 years before transition
-    after_skill: float  # Avg skill in 2 years after transition
-    skill_change: float  # after - before
+    before_person_fe: float  # Avg person_fe in 2 years before transition
+    after_person_fe: float  # Avg person_fe in 2 years after transition
+    person_fe_change: float  # after - before
 
-    before_authority: float
-    after_authority: float
-    authority_change: float
+    before_birank: float
+    after_birank: float
+    birank_change: float
 
 
 @dataclass
@@ -306,7 +306,7 @@ def identify_major_studios(
     Args:
         credits: All credits
         anime_map: Anime ID to Anime object
-        person_scores: Person ID to score dict (must include 'composite' key)
+        person_scores: Person ID to score dict (must include 'iv_score' key)
         top_n: Number of top studios to classify as major
         min_credits: Minimum credits required for a studio to be considered
 
@@ -326,7 +326,7 @@ def identify_major_studios(
         studio_names[studio_id] = anime.studio  # Store for later
 
         if credit.person_id in person_scores:
-            composite = person_scores[credit.person_id].get("composite", 0)
+            composite = person_scores[credit.person_id].get("iv_score", 0)
             studio_scores[studio_id].append(composite)
 
     # Compute average scores
@@ -353,8 +353,8 @@ def build_studio_affiliations(
     credits: list[Credit],
     anime_map: dict[str, Anime],
     major_studios: set[str],
-    skill_scores: dict[str, float],
-    authority_scores: dict[str, float],
+    person_fe_scores: dict[str, float],
+    birank_scores: dict[str, float],
 ) -> dict[str, list[StudioAffiliation]]:
     """Build studio affiliation history for each person.
 
@@ -362,8 +362,8 @@ def build_studio_affiliations(
         credits: All credits
         anime_map: Anime ID to Anime object
         major_studios: Set of major studio IDs
-        skill_scores: Person ID to skill score
-        authority_scores: Person ID to authority score
+        person_fe_scores: Person ID to person_fe score
+        birank_scores: Person ID to birank score
 
     Returns:
         Dict mapping person_id to list of StudioAffiliation objects
@@ -402,8 +402,8 @@ def build_studio_affiliations(
                 start_year=min(years),
                 end_year=max(years),
                 credits_count=len(studio_creds),
-                avg_skill_score=skill_scores.get(person_id, 0),
-                avg_authority_score=authority_scores.get(person_id, 0),
+                avg_person_fe_score=person_fe_scores.get(person_id, 0),
+                avg_birank_score=birank_scores.get(person_id, 0),
             )
             person_affiliations.append(affiliation)
 
@@ -478,10 +478,10 @@ def analyze_career_trajectories(
 
         # Pre-major data
         trajectory.pre_years = [a.start_year for a in pre_affiliations]
-        trajectory.pre_skill_scores = [a.avg_skill_score for a in pre_affiliations]
-        trajectory.pre_avg_skill = (
-            sum(trajectory.pre_skill_scores) / len(trajectory.pre_skill_scores)
-            if trajectory.pre_skill_scores
+        trajectory.pre_person_fe_scores = [a.avg_person_fe_score for a in pre_affiliations]
+        trajectory.pre_avg_person_fe = (
+            sum(trajectory.pre_person_fe_scores) / len(trajectory.pre_person_fe_scores)
+            if trajectory.pre_person_fe_scores
             else 0
         )
         trajectory.pre_credits = pre_credits
@@ -490,37 +490,37 @@ def analyze_career_trajectories(
         trajectory.major_years = list(
             range(major_aff.start_year, major_aff.end_year + 1)
         )
-        trajectory.major_skill_scores = [major_aff.avg_skill_score]
-        trajectory.major_avg_skill = major_aff.avg_skill_score
+        trajectory.major_person_fe_scores = [major_aff.avg_person_fe_score]
+        trajectory.major_avg_person_fe = major_aff.avg_person_fe_score
         trajectory.major_credits = major_aff.credits_count
 
         # Post-major data
         if post_affiliations:
             trajectory.post_years = [a.start_year for a in post_affiliations]
-            trajectory.post_skill_scores = [
-                a.avg_skill_score for a in post_affiliations
+            trajectory.post_person_fe_scores = [
+                a.avg_person_fe_score for a in post_affiliations
             ]
-            trajectory.post_avg_skill = (
-                sum(trajectory.post_skill_scores) / len(trajectory.post_skill_scores)
-                if trajectory.post_skill_scores
+            trajectory.post_avg_person_fe = (
+                sum(trajectory.post_person_fe_scores) / len(trajectory.post_person_fe_scores)
+                if trajectory.post_person_fe_scores
                 else 0
             )
             trajectory.post_credits = sum(a.credits_count for a in post_affiliations)
 
         # Compute causal estimates
         trajectory.pre_to_major_change = (
-            trajectory.major_avg_skill - trajectory.pre_avg_skill
+            trajectory.major_avg_person_fe - trajectory.pre_avg_person_fe
         )
 
-        if trajectory.post_avg_skill > 0:
+        if trajectory.post_avg_person_fe > 0:
             trajectory.major_to_post_change = (
-                trajectory.post_avg_skill - trajectory.major_avg_skill
+                trajectory.post_avg_person_fe - trajectory.major_avg_person_fe
             )
 
         # Estimate pre-existing trend (linear regression on pre-major scores)
-        if len(trajectory.pre_skill_scores) >= 2:
-            x = list(range(len(trajectory.pre_skill_scores)))
-            y = trajectory.pre_skill_scores
+        if len(trajectory.pre_person_fe_scores) >= 2:
+            x = list(range(len(trajectory.pre_person_fe_scores)))
+            y = trajectory.pre_person_fe_scores
             slope, _, _, _, _ = stats.linregress(x, y)
             trajectory.trend_before_major = slope
         else:
@@ -539,12 +539,12 @@ def analyze_career_trajectories(
             trajectory.years_of_experience_at_entry = 0
             trajectory.career_stage_at_entry = CareerStage.NEWCOMER
 
-        # Growth acceleration before entry (2nd derivative of skill)
-        if len(trajectory.pre_skill_scores) >= 3:
+        # Growth acceleration before entry (2nd derivative of person_fe)
+        if len(trajectory.pre_person_fe_scores) >= 3:
             # Compute first derivatives (velocities)
             velocities = [
-                trajectory.pre_skill_scores[i + 1] - trajectory.pre_skill_scores[i]
-                for i in range(len(trajectory.pre_skill_scores) - 1)
+                trajectory.pre_person_fe_scores[i + 1] - trajectory.pre_person_fe_scores[i]
+                for i in range(len(trajectory.pre_person_fe_scores) - 1)
             ]
             # Compute second derivative (acceleration) - average change in velocity
             if len(velocities) >= 2:
@@ -562,9 +562,9 @@ def analyze_career_trajectories(
 
         # Environmental adaptation score (performance stability across studios)
         all_studio_scores = (
-            trajectory.pre_skill_scores
-            + trajectory.major_skill_scores
-            + trajectory.post_skill_scores
+            trajectory.pre_person_fe_scores
+            + trajectory.major_person_fe_scores
+            + trajectory.post_person_fe_scores
         )
         trajectory.environmental_adaptation_score = compute_environmental_adaptation(
             all_studio_scores
@@ -651,13 +651,13 @@ def analyze_studio_transitions(
                 from_is_major=from_aff.is_major,
                 to_is_major=to_aff.is_major,
                 transition_year=to_aff.start_year,
-                before_skill=from_aff.avg_skill_score,
-                after_skill=to_aff.avg_skill_score,
-                skill_change=to_aff.avg_skill_score - from_aff.avg_skill_score,
-                before_authority=from_aff.avg_authority_score,
-                after_authority=to_aff.avg_authority_score,
-                authority_change=to_aff.avg_authority_score
-                - from_aff.avg_authority_score,
+                before_person_fe=from_aff.avg_person_fe_score,
+                after_person_fe=to_aff.avg_person_fe_score,
+                person_fe_change=to_aff.avg_person_fe_score - from_aff.avg_person_fe_score,
+                before_birank=from_aff.avg_birank_score,
+                after_birank=to_aff.avg_birank_score,
+                birank_change=to_aff.avg_birank_score
+                - from_aff.avg_birank_score,
             )
 
             transitions.append(transition)
@@ -708,9 +708,9 @@ def estimate_causal_effects(
         ),
     )
 
-    # 2. Treatment effect: Skill increase from pre to major (controlling for trend)
+    # 2. Treatment effect: Person FE increase from pre to major (controlling for trend)
     treatment_changes = [
-        t.pre_to_major_change - t.trend_before_major * len(t.pre_skill_scores)
+        t.pre_to_major_change - t.trend_before_major * len(t.pre_person_fe_scores)
         for t in trajectories
     ]
     treatment_estimate = (
@@ -746,9 +746,9 @@ def estimate_causal_effects(
         ),
     )
 
-    # 3. Brand effect: Authority change for major-to-minor transitions
+    # 3. Brand effect: BiRank change for major-to-minor transitions
     major_to_minor = [t for t in transitions if t.from_is_major and not t.to_is_major]
-    brand_changes = [t.authority_change for t in major_to_minor]
+    brand_changes = [t.birank_change for t in major_to_minor]
     brand_estimate = sum(brand_changes) / len(brand_changes) if brand_changes else 0
     brand_std = stats.sem(brand_changes) if len(brand_changes) > 1 else 0
     brand_ci = (
@@ -770,7 +770,7 @@ def estimate_causal_effects(
         p_value=brand_pval,
         sample_size=len(brand_changes),
         interpretation=(
-            f"Brand effect: {brand_estimate:.2f} authority points lost when leaving major studio. "
+            f"Brand effect: {brand_estimate:.2f} birank points lost when leaving major studio. "
             f"{'Significant' if brand_pval < 0.05 else 'Not significant'} evidence of network effect."
         ),
     )
@@ -830,7 +830,7 @@ def identify_studio_effects(
     Args:
         credits: All credits
         anime_map: Anime ID to Anime object
-        person_scores: Person scores dict with 'composite', 'skill', 'authority' keys
+        person_scores: Person scores dict with 'iv_score', 'person_fe', 'birank' keys
         potential_value_scores: Optional potential value scores (ポテンシャル)
         growth_acceleration_data: Optional growth acceleration data (トレンド)
 
@@ -845,14 +845,14 @@ def identify_studio_effects(
     )
 
     # Step 2: Build studio affiliations
-    skill_scores = {
-        pid: scores.get("skill", 0) for pid, scores in person_scores.items()
+    person_fe_scores = {
+        pid: scores.get("person_fe", 0) for pid, scores in person_scores.items()
     }
-    authority_scores = {
-        pid: scores.get("authority", 0) for pid, scores in person_scores.items()
+    birank_scores = {
+        pid: scores.get("birank", 0) for pid, scores in person_scores.items()
     }
     affiliations = build_studio_affiliations(
-        credits, anime_map, set(major_studios), skill_scores, authority_scores
+        credits, anime_map, set(major_studios), person_fe_scores, birank_scores
     )
 
     # Step 3: Analyze trajectories (with enhanced controls)
@@ -991,8 +991,8 @@ def export_identification_report(result: IdentificationResult) -> dict[str, Any]
             },
         },
         "aggregate_metrics": {
-            "avg_pre_to_major_skill_change": result.avg_pre_to_major_change,
-            "avg_major_to_post_skill_change": result.avg_major_to_post_change,
+            "avg_pre_to_major_person_fe_change": result.avg_pre_to_major_change,
+            "avg_major_to_post_person_fe_change": result.avg_major_to_post_change,
         },
         "conclusion": {
             "dominant_effect": result.dominant_effect.value,
@@ -1003,9 +1003,9 @@ def export_identification_report(result: IdentificationResult) -> dict[str, Any]
             {
                 "person_name": t.person_name,
                 "major_studio_id": t.major_studio_id,
-                "pre_avg_skill": t.pre_avg_skill,
-                "major_avg_skill": t.major_avg_skill,
-                "post_avg_skill": t.post_avg_skill,
+                "pre_avg_person_fe": t.pre_avg_person_fe,
+                "major_avg_person_fe": t.major_avg_person_fe,
+                "post_avg_person_fe": t.post_avg_person_fe,
                 "pre_to_major_change": t.pre_to_major_change,
                 "major_to_post_change": t.major_to_post_change,
                 "trend_before_major": t.trend_before_major,
@@ -1024,11 +1024,11 @@ def export_identification_report(result: IdentificationResult) -> dict[str, Any]
                 "from_is_major": t.from_is_major,
                 "to_is_major": t.to_is_major,
                 "transition_year": t.transition_year,
-                "skill_change": t.skill_change,
-                "authority_change": t.authority_change,
+                "person_fe_change": t.person_fe_change,
+                "birank_change": t.birank_change,
             }
             for t in sorted(
-                result.transitions, key=lambda x: abs(x.skill_change), reverse=True
+                result.transitions, key=lambda x: abs(x.person_fe_change), reverse=True
             )[:20]
         ],
     }

@@ -11,7 +11,7 @@ logger = structlog.get_logger()
 def build_comparison_matrix(
     person_ids: list[str],
     results: list[dict],
-    axes: tuple[str, ...] = ("authority", "trust", "skill", "composite"),
+    axes: tuple[str, ...] = ("iv_score", "person_fe", "birank", "patronage"),
 ) -> dict:
     """複数人物の比較マトリクスを構築する.
 

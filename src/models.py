@@ -352,21 +352,25 @@ class Credit(BaseModel):
 
 
 class ScoreResult(BaseModel):
-    """3軸評価結果."""
+    """評価結果 — 8-component structural estimation framework.
+
+    Components:
+        person_fe: AKM person fixed effect (θ_i) — individual talent isolated from studio
+        studio_fe_exposure: Weighted studio FE exposure — studio environment effect
+        birank: BiRank score — bipartite PageRank network centrality
+        patronage: Patronage premium — director backing value
+        dormancy: Dormancy multiplier (0-1) — activity recency penalty
+        awcc: AWCC — community bridging (structural holes)
+        ndi: NDI — network disruption potential
+        iv_score: Integrated Value — CV-optimized weighted combination (primary metric)
+    """
 
     person_id: str
-    authority: float = 0.0
-    trust: float = 0.0
-    skill: float = 0.0
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def composite(self) -> float:
-        """統合スコア（重み付き平均）."""
-        from src.utils.config import COMPOSITE_WEIGHTS
-
-        return (
-            self.authority * COMPOSITE_WEIGHTS["authority"]
-            + self.trust * COMPOSITE_WEIGHTS["trust"]
-            + self.skill * COMPOSITE_WEIGHTS["skill"]
-        )
+    person_fe: float = 0.0
+    studio_fe_exposure: float = 0.0
+    birank: float = 0.0
+    patronage: float = 0.0
+    dormancy: float = 1.0
+    awcc: float = 0.0
+    ndi: float = 0.0
+    iv_score: float = 0.0

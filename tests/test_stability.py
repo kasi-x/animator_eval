@@ -8,8 +8,8 @@ from src.analysis.stability import compare_scores
 class TestCompareScores:
     def test_no_previous(self, tmp_path):
         current = [
-            {"person_id": "p1", "composite": 80.0, "name": "A"},
-            {"person_id": "p2", "composite": 60.0, "name": "B"},
+            {"person_id": "p1", "iv_score": 80.0, "name": "A"},
+            {"person_id": "p2", "iv_score": 60.0, "name": "B"},
         ]
         prev_path = tmp_path / "scores.json"
         result = compare_scores(current, prev_path)
@@ -18,8 +18,8 @@ class TestCompareScores:
 
     def test_no_changes(self, tmp_path):
         data = [
-            {"person_id": "p1", "composite": 80.0, "name": "A"},
-            {"person_id": "p2", "composite": 60.0, "name": "B"},
+            {"person_id": "p1", "iv_score": 80.0, "name": "A"},
+            {"person_id": "p2", "iv_score": 60.0, "name": "B"},
         ]
         prev_path = tmp_path / "scores.json"
         prev_path.write_text(json.dumps(data))
@@ -29,12 +29,12 @@ class TestCompareScores:
 
     def test_detects_significant_change(self, tmp_path):
         previous = [
-            {"person_id": "p1", "composite": 80.0, "name": "A"},
-            {"person_id": "p2", "composite": 60.0, "name": "B"},
+            {"person_id": "p1", "iv_score": 80.0, "name": "A"},
+            {"person_id": "p2", "iv_score": 60.0, "name": "B"},
         ]
         current = [
-            {"person_id": "p1", "composite": 95.0, "name": "A"},
-            {"person_id": "p2", "composite": 60.0, "name": "B"},
+            {"person_id": "p1", "iv_score": 95.0, "name": "A"},
+            {"person_id": "p2", "iv_score": 60.0, "name": "B"},
         ]
         prev_path = tmp_path / "scores.json"
         prev_path.write_text(json.dumps(previous))
@@ -45,12 +45,12 @@ class TestCompareScores:
 
     def test_detects_new_and_removed(self, tmp_path):
         previous = [
-            {"person_id": "p1", "composite": 80.0, "name": "A"},
-            {"person_id": "p2", "composite": 60.0, "name": "B"},
+            {"person_id": "p1", "iv_score": 80.0, "name": "A"},
+            {"person_id": "p2", "iv_score": 60.0, "name": "B"},
         ]
         current = [
-            {"person_id": "p1", "composite": 80.0, "name": "A"},
-            {"person_id": "p3", "composite": 70.0, "name": "C"},
+            {"person_id": "p1", "iv_score": 80.0, "name": "A"},
+            {"person_id": "p3", "iv_score": 70.0, "name": "C"},
         ]
         prev_path = tmp_path / "scores.json"
         prev_path.write_text(json.dumps(previous))
@@ -60,21 +60,21 @@ class TestCompareScores:
 
     def test_rank_changes(self, tmp_path):
         previous = [
-            {"person_id": "p1", "composite": 90.0, "name": "A"},
-            {"person_id": "p2", "composite": 80.0, "name": "B"},
-            {"person_id": "p3", "composite": 70.0, "name": "C"},
-            {"person_id": "p4", "composite": 60.0, "name": "D"},
-            {"person_id": "p5", "composite": 50.0, "name": "E"},
-            {"person_id": "p6", "composite": 40.0, "name": "F"},
+            {"person_id": "p1", "iv_score": 90.0, "name": "A"},
+            {"person_id": "p2", "iv_score": 80.0, "name": "B"},
+            {"person_id": "p3", "iv_score": 70.0, "name": "C"},
+            {"person_id": "p4", "iv_score": 60.0, "name": "D"},
+            {"person_id": "p5", "iv_score": 50.0, "name": "E"},
+            {"person_id": "p6", "iv_score": 40.0, "name": "F"},
         ]
         # p6 jumps to top
         current = [
-            {"person_id": "p6", "composite": 95.0, "name": "F"},
-            {"person_id": "p1", "composite": 90.0, "name": "A"},
-            {"person_id": "p2", "composite": 80.0, "name": "B"},
-            {"person_id": "p3", "composite": 70.0, "name": "C"},
-            {"person_id": "p4", "composite": 60.0, "name": "D"},
-            {"person_id": "p5", "composite": 50.0, "name": "E"},
+            {"person_id": "p6", "iv_score": 95.0, "name": "F"},
+            {"person_id": "p1", "iv_score": 90.0, "name": "A"},
+            {"person_id": "p2", "iv_score": 80.0, "name": "B"},
+            {"person_id": "p3", "iv_score": 70.0, "name": "C"},
+            {"person_id": "p4", "iv_score": 60.0, "name": "D"},
+            {"person_id": "p5", "iv_score": 50.0, "name": "E"},
         ]
         prev_path = tmp_path / "scores.json"
         prev_path.write_text(json.dumps(previous))
@@ -84,8 +84,8 @@ class TestCompareScores:
         assert p6_change["delta"] == 5  # moved up 5 ranks (6→1)
 
     def test_custom_threshold(self, tmp_path):
-        previous = [{"person_id": "p1", "composite": 50.0, "name": "A"}]
-        current = [{"person_id": "p1", "composite": 55.0, "name": "A"}]
+        previous = [{"person_id": "p1", "iv_score": 50.0, "name": "A"}]
+        current = [{"person_id": "p1", "iv_score": 55.0, "name": "A"}]
         prev_path = tmp_path / "scores.json"
         prev_path.write_text(json.dumps(previous))
 

@@ -10,28 +10,11 @@ import random
 
 import structlog
 
+from src.analysis.birank import compute_birank
 from src.analysis.graph import create_person_anime_network
-from src.analysis.pagerank import compute_authority_scores
-from src.analysis.skill import compute_skill_scores
-from src.analysis.trust import compute_trust_scores
 from src.models import Anime, Credit, Person
 
 logger = structlog.get_logger()
-
-
-def _compute_composite(authority: dict, trust: dict, skill: dict) -> dict[str, float]:
-    """3軸から composite を計算する."""
-    from src.utils.config import COMPOSITE_WEIGHTS
-
-    all_ids = set(authority) | set(trust) | set(skill)
-    return {
-        pid: (
-            authority.get(pid, 0) * COMPOSITE_WEIGHTS["authority"]
-            + trust.get(pid, 0) * COMPOSITE_WEIGHTS["trust"]
-            + skill.get(pid, 0) * COMPOSITE_WEIGHTS["skill"]
-        )
-        for pid in all_ids
-    }
 
 
 def _rank_correlation(ranks_a: dict[str, int], ranks_b: dict[str, int]) -> float:
@@ -55,6 +38,8 @@ def cross_validate_scores(
 ) -> dict:
     """クロスバリデーションでスコア安定性を評価する.
 
+    BiRank スコアを使用してランキング安定性を測定する。
+
     Args:
         persons: 人物リスト
         anime_list: アニメリスト
@@ -74,23 +59,19 @@ def cross_validate_scores(
         }
     """
     rng = random.Random(seed)
-    anime_map = {a.id: a for a in anime_list}
 
-    # Full scores as baseline
+    # Full scores as baseline (BiRank person scores)
     full_graph = create_person_anime_network(persons, anime_list, credits)
-    full_authority = compute_authority_scores(full_graph)
-    full_trust = compute_trust_scores(credits, anime_map)
-    full_skill = compute_skill_scores(credits, anime_map)
-    full_composite = _compute_composite(full_authority, full_trust, full_skill)
+    full_birank = compute_birank(full_graph).person_scores
 
     # Rank all persons
     full_ranking = {
         pid: rank
         for rank, (pid, _) in enumerate(
-            sorted(full_composite.items(), key=lambda x: -x[1]), 1
+            sorted(full_birank.items(), key=lambda x: -x[1]), 1
         )
     }
-    full_top10 = set(sorted(full_composite, key=full_composite.get, reverse=True)[:10])
+    full_top10 = set(sorted(full_birank, key=full_birank.get, reverse=True)[:10])
 
     fold_results = []
     n_holdout = max(1, int(len(credits) * holdout_ratio))
@@ -105,22 +86,19 @@ def cross_validate_scores(
         if not fold_credits:
             continue
 
-        # Recompute scores
+        # Recompute scores with held-out data
         fold_graph = create_person_anime_network(persons, anime_list, fold_credits)
-        fold_authority = compute_authority_scores(fold_graph)
-        fold_trust = compute_trust_scores(fold_credits, anime_map)
-        fold_skill = compute_skill_scores(fold_credits, anime_map)
-        fold_composite = _compute_composite(fold_authority, fold_trust, fold_skill)
+        fold_birank = compute_birank(fold_graph).person_scores
 
         # Rank
         fold_ranking = {
             pid: rank
             for rank, (pid, _) in enumerate(
-                sorted(fold_composite.items(), key=lambda x: -x[1]), 1
+                sorted(fold_birank.items(), key=lambda x: -x[1]), 1
             )
         }
         fold_top10 = set(
-            sorted(fold_composite, key=fold_composite.get, reverse=True)[:10]
+            sorted(fold_birank, key=fold_birank.get, reverse=True)[:10]
         )
 
         # Correlation

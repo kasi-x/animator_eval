@@ -29,7 +29,7 @@ def compare_groups(
         {group_a, group_b, comparison_by_axis, summary}
     """
     if axes is None:
-        axes = ["authority", "trust", "skill", "composite"]
+        axes = ["iv_score", "person_fe", "birank", "patronage"]
 
     def _stats(group: list[dict], axis: str) -> dict:
         vals = [r.get(axis, 0) for r in group]

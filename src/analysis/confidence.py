@@ -114,10 +114,10 @@ def batch_compute_confidence(
         conf = compute_confidence(credit_count, source_count, year_span)
         r["confidence"] = conf
         r["score_range"] = {
-            "authority": compute_score_range(r["authority"], conf),
-            "trust": compute_score_range(r["trust"], conf),
-            "skill": compute_score_range(r["skill"], conf),
-            "composite": compute_score_range(r["composite"], conf),
+            "iv_score": compute_score_range(r["iv_score"], conf),
+            "person_fe": compute_score_range(r["person_fe"], conf),
+            "birank": compute_score_range(r["birank"], conf),
+            "patronage": compute_score_range(r["patronage"], conf),
         }
 
     logger.info("confidence_computed", persons=len(results))

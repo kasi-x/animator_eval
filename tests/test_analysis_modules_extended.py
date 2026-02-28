@@ -205,10 +205,10 @@ class TestInsightsReport:
     def _build_person_scores(self, n: int = 20) -> dict[str, dict]:
         return {
             f"p{i}": {
-                "authority": float(i * 3),
-                "trust": float(i * 2),
-                "skill": float(i),
-                "composite": float(i * 2.5),
+                "birank": float(i * 3),
+                "patronage": float(i * 2),
+                "person_fe": float(i),
+                "iv_score": float(i * 2.5),
             }
             for i in range(1, n + 1)
         }
@@ -295,8 +295,8 @@ class TestInsightsReport:
 
         studio_bias = {
             "debiased_scores": {
-                "p1": {"original_authority": 0.1, "debiased_authority": 0.3},
-                "p2": {"original_authority": 0.5, "debiased_authority": 0.5},
+                "p1": {"original_birank": 0.1, "debiased_birank": 0.3},
+                "p2": {"original_birank": 0.5, "debiased_birank": 0.5},
             },
             "bias_metrics": {
                 "p1": {"primary_studio": "StudioA", "cross_studio_works": 0},
@@ -304,14 +304,14 @@ class TestInsightsReport:
             },
         }
         potential = {
-            "p1": {"category": "hidden_gem", "composite": 30},
-            "p2": {"category": "elite", "composite": 60},
+            "p1": {"category": "hidden_gem", "iv_score": 30},
+            "p2": {"category": "elite", "iv_score": 60},
         }
         names = {"p1": "Person 1", "p2": "Person 2"}
         alerts = identify_undervaluation_alerts(studio_bias, potential, names)
         assert len(alerts) >= 1
         assert alerts[0].person_id == "p1"
-        assert alerts[0].authority_gap > 0
+        assert alerts[0].birank_gap > 0
 
 
 # ===========================================================================
@@ -435,7 +435,7 @@ class TestTemporalInfluence:
         from src.analysis.temporal_influence import compute_temporal_profiles
 
         credits, anime_map = self._build_temporal_data()
-        scores = {"P1": {"authority": 10, "trust": 20, "skill": 30, "composite": 50}}
+        scores = {"P1": {"birank": 10, "patronage": 20, "person_fe": 30, "iv_score": 50}}
         profiles = compute_temporal_profiles(credits, anime_map, current_scores=scores)
         # P1 snapshots should reflect the current scores
         assert profiles["P1"].peak_score == 50.0
@@ -790,7 +790,7 @@ class TestBiasDetector:
                 for i in range(1, 5)
             }
         }
-        scores = {f"p{i}": {"composite": float(i * 0.5)} for i in range(1, 5)}
+        scores = {f"p{i}": {"iv_score": float(i * 0.5)} for i in range(1, 5)}
         roles = {f"p{i}": {"primary_role": "animator"} for i in range(1, 5)}
         results = detect_role_bias(contributions, scores, roles)
         assert results == []

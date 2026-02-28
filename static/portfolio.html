@@ -116,17 +116,17 @@
         .score-cell { text-align: center; padding: 16px 8px; border-radius: 10px; background: #f7f8fc; }
         .score-cell .label { font-size: 12px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; }
         .score-cell .value { font-size: 28px; font-weight: 700; color: var(--primary-dark); }
-        .score-cell.composite { background: linear-gradient(135deg, #ebf4ff, #e8e0f7); }
-        .score-cell.composite .value { color: var(--accent); }
+        .score-cell.iv-score { background: linear-gradient(135deg, #ebf4ff, #e8e0f7); }
+        .score-cell.iv-score .value { color: var(--accent); }
         .bar-chart { display: flex; flex-direction: column; gap: 10px; }
         .bar-row { display: flex; align-items: center; gap: 12px; }
         .bar-label { width: 100px; font-size: 13px; font-weight: 500; text-align: right; }
         .bar-track { flex: 1; height: 24px; background: #edf2f7; border-radius: 12px; overflow: hidden; }
         .bar-fill { height: 100%; border-radius: 12px; transition: width 0.6s ease; }
-        .bar-fill.authority { background: linear-gradient(90deg, #667eea, #5a67d8); }
-        .bar-fill.trust { background: linear-gradient(90deg, #48bb78, #38a169); }
-        .bar-fill.skill { background: linear-gradient(90deg, #ed8936, #dd6b20); }
-        .bar-fill.composite { background: linear-gradient(90deg, #764ba2, #667eea); }
+        .bar-fill.birank { background: linear-gradient(90deg, #667eea, #5a67d8); }
+        .bar-fill.patronage { background: linear-gradient(90deg, #48bb78, #38a169); }
+        .bar-fill.person-fe { background: linear-gradient(90deg, #ed8936, #dd6b20); }
+        .bar-fill.iv-score { background: linear-gradient(90deg, #764ba2, #667eea); }
         .bar-value { width: 50px; font-size: 13px; font-weight: 600; }
         .contrib-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; }
         .contrib-card { padding: 16px; border-radius: 10px; border: 1px solid var(--border); }
@@ -204,10 +204,10 @@
                 <h2 data-i18n="ranking_title">Ranking</h2>
                 <div class="rank-controls">
                     <select id="rankSort">
-                        <option value="composite">Composite</option>
-                        <option value="authority">Authority</option>
-                        <option value="trust">Trust</option>
-                        <option value="skill">Skill</option>
+                        <option value="iv_score">IV Score</option>
+                        <option value="birank">BiRank</option>
+                        <option value="patronage">Patronage</option>
+                        <option value="person_fe">Person FE</option>
                     </select>
                     <select id="rankRole">
                         <option value="" data-i18n="ranking_all_roles">All Roles</option>
