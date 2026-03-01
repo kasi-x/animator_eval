@@ -56,6 +56,8 @@ def compute_core_scores_phase(context: PipelineContext) -> None:
     logger.info("step_start", step="birank")
     with context.monitor.measure("birank"):
         context.birank_result = compute_birank(context.person_anime_graph)
+        # Keep probability-space scores for patronage computation (step 4).
+        # Rescaling to expected-count space happens after patronage, before IV.
         context.birank_person_scores = context.birank_result.person_scores
         context.birank_anime_scores = context.birank_result.anime_scores
     context.monitor.increment_counter(
@@ -90,6 +92,32 @@ def compute_core_scores_phase(context: PipelineContext) -> None:
             context.credits, context.anime_map, current_year=context.current_year
         )
     context.monitor.increment_counter("dormancy_persons", len(context.dormancy_scores))
+
+    # 5b. Rescale BiRank from probability space (sum=1) to expected-count space
+    # (mean=1).  Done AFTER patronage (which uses raw probability-space BiRank
+    # as director weights in Π=Σ PR_d·log(1+N)), but BEFORE IV computation.
+    # Raw BiRank ~1/N per person (~1.7e-5 for 58K).  Other IV components live
+    # on [-6, +10] scales.  Without rescaling, BiRank's max normalized value
+    # is ~0.07 vs ~6 for person_fe → 15% lambda weight contributes ~0% of IV
+    # variance.  ×N gives mean=1.0 and std≈2, comparable to other components.
+    n_birank = len(context.birank_person_scores)
+    if n_birank > 0:
+        context.birank_person_scores = {
+            pid: score * n_birank
+            for pid, score in context.birank_person_scores.items()
+        }
+        context.birank_anime_scores = {
+            aid: score * len(context.birank_anime_scores)
+            for aid, score in context.birank_anime_scores.items()
+        }
+        logger.info(
+            "birank_rescaled_to_expected_count",
+            n_persons=n_birank,
+            max_score=round(max(context.birank_person_scores.values()), 4),
+            mean_score=round(
+                sum(context.birank_person_scores.values()) / n_birank, 4
+            ),
+        )
 
     # 6. Integrated Value with CV weight optimization
     # First compute iv_scores_historical (dormancy=1.0 for all)

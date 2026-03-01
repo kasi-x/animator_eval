@@ -494,10 +494,15 @@ def _run_akm_diagnostics(context: PipelineContext) -> Any:
 
 
 def _run_iv_weights(context: PipelineContext) -> Any:
-    """Export IV weight optimization results."""
-    return {
+    """Export IV weight optimization results with normalization diagnostics."""
+    result: dict = {
         "lambda_weights": context.iv_lambda_weights,
     }
+    if context.iv_component_std:
+        result["component_std"] = context.iv_component_std
+    if context.iv_component_mean:
+        result["component_mean"] = context.iv_component_mean
+    return result
 
 
 def _run_knowledge_spanners_report(context: PipelineContext) -> Any:
@@ -683,9 +688,9 @@ def _run_genre_ecosystem(context: PipelineContext) -> Any:
     result = compute_genre_ecosystem(context.credits, context.anime_map)
     return {
         "trends": {g: asdict(t) for g, t in result.trends.items()},
-        "staffing": {g: asdict(s) for g, s in result.staffing_density.items()},
+        "staffing": {g: asdict(s) for g, s in result.staffing.items()},
         "seasonality": {g: asdict(s) for g, s in result.seasonality.items()},
-        "career_profiles": {g: asdict(c) for g, c in result.career_profiles.items()},
+        "careers": {g: asdict(c) for g, c in result.careers.items()},
     }
 
 
