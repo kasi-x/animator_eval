@@ -562,15 +562,20 @@ class TestWeightedObservations:
             f"Weighted R² = {result.r_squared:.4f}, expected [0, 1]"
         )
 
-    def test_shrinkage_uses_effective_counts(self):
-        """High-weight 3-obs person should retain more FE than low-weight 10-obs person."""
+    def test_shrinkage_uses_raw_obs_count(self):
+        """Shrinkage should depend on raw observation count, not on weight values.
+
+        A director with 1 high-weight anime is still 1 data point for
+        estimating person FE. Weights affect the WLS fit but not the
+        number of independent observations available for shrinkage.
+        """
         import structlog
 
         log = structlog.get_logger()
         n_persons = 30
-        # Person 0: 3 observations with high weight (w=5 each → n_eff=15)
-        # Person 1: 10 observations with low weight (w=0.5 each → n_eff=5)
-        # Remaining: 5 obs each with w=1.0
+        # Person 0: 3 observations (low count)
+        # Person 1: 10 observations (high count)
+        # Remaining: 5 obs each
         person_ind_parts = (
             [0] * 3
             + [1] * 10
@@ -579,28 +584,21 @@ class TestWeightedObservations:
         person_ind = np.array(person_ind_parts, dtype=np.int32)
         n_obs = len(person_ind)
 
-        w = np.ones(n_obs, dtype=np.float64)
-        # Person 0: high weight per observation
-        w[:3] = 5.0
-        # Person 1: low weight per observation
-        w[3:13] = 0.5
-
         person_fe = np.zeros(n_persons)
-        person_fe[0] = 2.0  # extreme, high effective weight
-        person_fe[1] = 2.0  # same extreme, low effective weight
+        person_fe[0] = 2.0  # extreme, 3 obs
+        person_fe[1] = 2.0  # same extreme, 10 obs
         for i in range(2, n_persons):
             person_fe[i] = 0.0
 
         residuals = np.random.RandomState(42).randn(n_obs) * 0.5
 
-        shrunk = _shrink_person_fe(person_fe, person_ind, residuals, n_obs, n_persons, log, w=w)
+        shrunk = _shrink_person_fe(person_fe, person_ind, residuals, n_obs, n_persons, log)
 
-        # Person 0 (n_eff=15) should retain more of raw value
-        # Person 1 (n_eff=5) should be shrunk more toward mean
+        # Person 1 (10 obs) should retain more of raw value than Person 0 (3 obs)
         shrink_0 = abs(shrunk[0] - person_fe[0])
         shrink_1 = abs(shrunk[1] - person_fe[1])
-        assert shrink_0 < shrink_1, (
-            f"High-eff-count person shrunk by {shrink_0:.3f}, "
-            f"low-eff-count person shrunk by {shrink_1:.3f}; "
-            "expected less shrinkage for higher effective count"
+        assert shrink_0 > shrink_1, (
+            f"3-obs person shrunk by {shrink_0:.3f}, "
+            f"10-obs person shrunk by {shrink_1:.3f}; "
+            "expected more shrinkage for fewer observations"
         )

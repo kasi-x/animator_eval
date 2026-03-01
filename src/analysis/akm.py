@@ -429,20 +429,22 @@ def _shrink_person_fe(
     n_obs: int,
     n_persons: int,
     log: structlog.stdlib.BoundLogger,
-    w: np.ndarray | None = None,
 ) -> np.ndarray:
     """Apply empirical Bayes shrinkage to person fixed effects.
 
     Shrinks noisy person FE estimates toward the grand mean based on
-    effective observation counts. With n_eff_i for person i:
+    raw observation counts. With n_i observations for person i:
 
-        θ_shrunk[i] = (n_eff_i / (n_eff_i + κ)) · θ_raw[i] + (κ / (n_eff_i + κ)) · μ
+        θ_shrunk[i] = (n_i / (n_i + κ)) · θ_raw[i] + (κ / (n_i + κ)) · μ
 
-    When weights are provided, n_eff_i = sum(w[k] for k where person_ind[k]==i),
-    otherwise n_eff_i = count of observations.
+    Uses raw observation counts (not weighted effective counts) because
+    shrinkage addresses the incidental parameters problem — which depends
+    on the number of independent data points, not observation weights.
+    A director on 1 anime is statistically 1 observation regardless of
+    how much weight it receives in the WLS estimation.
 
     κ is estimated from the data as σ²_residual / σ²_signal, where
-    σ²_signal = σ²_person_fe - σ²_residual/n̄_eff (variance decomposition).
+    σ²_signal = σ²_person_fe - σ²_residual/n̄ (variance decomposition).
 
     Args:
         person_fe_arr: raw person FE estimates (n_persons,)
@@ -451,7 +453,6 @@ def _shrink_person_fe(
         n_obs: total observations
         n_persons: total persons
         log: logger
-        w: observation weights (n_obs,), or None for uniform weights
 
     Returns:
         Shrunk person FE array (same shape).
@@ -459,22 +460,22 @@ def _shrink_person_fe(
     if n_persons == 0 or n_obs == 0:
         return person_fe_arr
 
-    # Compute effective observation counts per person
-    effective_counts = np.zeros(n_persons, dtype=np.float64)
+    # Count raw observations per person (independent data points)
+    obs_counts = np.zeros(n_persons, dtype=np.int64)
     for k in range(n_obs):
-        effective_counts[person_ind[k]] += w[k] if w is not None else 1.0
+        obs_counts[person_ind[k]] += 1
 
     # Estimate κ from data
     sigma2_resid = float(np.mean(residuals ** 2)) if n_obs > 0 else 1.0
 
-    active = effective_counts > 0
+    active = obs_counts > 0
     if not np.any(active):
         return person_fe_arr
 
     sigma2_person_raw = float(np.var(person_fe_arr[active]))
-    n_bar = float(np.mean(effective_counts[active]))
+    n_bar = float(np.mean(obs_counts[active]))
 
-    # σ²_signal = σ²_raw - σ²_noise, where σ²_noise ≈ σ²_resid / n̄_eff
+    # σ²_signal = σ²_raw - σ²_noise, where σ²_noise ≈ σ²_resid / n̄
     sigma2_signal = max(sigma2_person_raw - sigma2_resid / n_bar, sigma2_person_raw * 0.1)
 
     kappa = sigma2_resid / sigma2_signal if sigma2_signal > 0 else 10.0
@@ -485,13 +486,13 @@ def _shrink_person_fe(
     # Grand mean of raw person FE
     mu = float(np.mean(person_fe_arr[active]))
 
-    # Apply shrinkage using effective counts
+    # Apply shrinkage
     shrunk = person_fe_arr.copy()
     for i in range(n_persons):
-        n_eff_i = effective_counts[i]
-        if n_eff_i == 0:
+        n_i = obs_counts[i]
+        if n_i == 0:
             continue
-        reliability = n_eff_i / (n_eff_i + kappa)
+        reliability = n_i / (n_i + kappa)
         shrunk[i] = reliability * person_fe_arr[i] + (1 - reliability) * mu
 
     # Log diagnostics
@@ -505,10 +506,10 @@ def _shrink_person_fe(
         raw_std=round(raw_std, 4),
         shrunk_std=round(shrunk_std, 4),
         grand_mean=round(mu, 4),
-        shrinkage_1eff=round(1 / (1 + kappa), 3),
-        shrinkage_5eff=round(5 / (5 + kappa), 3),
-        shrinkage_20eff=round(20 / (20 + kappa), 3),
-        shrinkage_50eff=round(50 / (50 + kappa), 3),
+        shrinkage_1obs=round(1 / (1 + kappa), 3),
+        shrinkage_5obs=round(5 / (5 + kappa), 3),
+        shrinkage_20obs=round(20 / (20 + kappa), 3),
+        shrinkage_50obs=round(50 / (50 + kappa), 3),
     )
 
     return shrunk
@@ -724,7 +725,7 @@ def estimate_akm(
     # This pulls low-weight/few-obs estimates strongly toward the mean while
     # leaving well-observed persons nearly unchanged.
     person_fe_arr = _shrink_person_fe(
-        person_fe_arr, person_ind, residuals_arr, n_obs, n_persons, logger, w=w
+        person_fe_arr, person_ind, residuals_arr, n_obs, n_persons, logger
     )
 
     # Step 8: Credit-count debiasing
