@@ -17,7 +17,7 @@ from typing import Any
 import networkx as nx
 import structlog
 
-from src.models import Anime, Credit, Person
+from src.models import Anime, Character, CharacterVoiceActor, Credit, Person
 from src.utils.performance import PerformanceMonitor, get_monitor
 
 checkpoint_logger = structlog.get_logger()
@@ -104,6 +104,38 @@ class PipelineContext:
     anime_values: dict[str, Any] = field(default_factory=dict)
     contribution_data: dict[str, Any] = field(default_factory=dict)
     potential_value_scores: dict[str, Any] = field(default_factory=dict)
+
+    # =========================================================================
+    # Voice Actor Pipeline (Phases 4B–7B, parallel with production pipeline)
+    # =========================================================================
+    # VA source data (Phase 1)
+    va_credits: list[CharacterVoiceActor] = field(default_factory=list)
+    characters: list[Character] = field(default_factory=list)
+    character_map: dict[str, Character] = field(default_factory=dict)
+    va_person_ids: set[str] = field(default_factory=set)  # person IDs that are VAs
+
+    # VA graphs (Phase 4B)
+    va_anime_graph: nx.Graph | None = None  # VA ↔ anime bipartite
+    va_collaboration_graph: nx.Graph | None = None  # VA ↔ VA
+    va_sd_graph: nx.Graph | None = None  # VA ↔ sound_director
+
+    # VA core scores (Phase 5B)
+    va_person_fe: dict[str, float] = field(default_factory=dict)
+    va_sd_fe: dict[str, float] = field(default_factory=dict)
+    va_birank_scores: dict[str, float] = field(default_factory=dict)
+    va_trust_scores: dict[str, float] = field(default_factory=dict)
+    va_patronage_scores: dict[str, float] = field(default_factory=dict)
+    va_dormancy_scores: dict[str, float] = field(default_factory=dict)
+    va_awcc_scores: dict[str, float] = field(default_factory=dict)
+    va_iv_scores: dict[str, float] = field(default_factory=dict)
+
+    # VA supplementary metrics (Phase 6B)
+    va_character_diversity: dict[str, Any] = field(default_factory=dict)
+    va_ensemble_synergy: dict[str, Any] = field(default_factory=dict)
+    va_replacement_difficulty: dict[str, float] = field(default_factory=dict)
+
+    # VA results (Phase 7B)
+    va_results: list[dict] = field(default_factory=list)
 
     # Results (Phase 7: result_assembly)
     results: list[dict] = field(default_factory=list)

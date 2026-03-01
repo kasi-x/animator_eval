@@ -592,6 +592,117 @@ def _name_clusters_distinctive(centers_orig, feature_names: list[str]) -> dict[i
 
 
 # ============================================================
+# 共通統計・品質向上ヘルパー関数 (A1-A5)
+# ============================================================
+
+
+def add_distribution_stats(fig: go.Figure, values, axis: str = "x") -> go.Figure:
+    """ヒストグラム/分布チャートに中央値・平均・P90ラインを追加.
+
+    Args:
+        fig: Plotly Figure
+        values: 数値のシーケンス
+        axis: 'x' or 'y' — 統計線を引く軸
+    """
+    import numpy as np
+
+    arr = np.array([v for v in values if v is not None and np.isfinite(v)])
+    if len(arr) == 0:
+        return fig
+    med = float(np.median(arr))
+    avg = float(np.mean(arr))
+    p90 = float(np.percentile(arr, 90))
+
+    line_specs = [
+        (med, "中央値", "#06D6A0", "dash"),
+        (avg, "平均", "#EF476F", "dot"),
+        (p90, "P90", "#9B59B6", "dashdot"),
+    ]
+
+    for val, label, color, dash_style in line_specs:
+        if axis == "x":
+            fig.add_vline(x=val, line_dash=dash_style, line_color=color, line_width=1.5,
+                          annotation_text=f"{label}={val:.2f}", annotation_font_color=color,
+                          annotation_font_size=10)
+        else:
+            fig.add_hline(y=val, line_dash=dash_style, line_color=color, line_width=1.5,
+                          annotation_text=f"{label}={val:.2f}", annotation_font_color=color,
+                          annotation_font_size=10)
+
+    # タイトルに n= を付記
+    current_title = fig.layout.title.text if fig.layout.title and fig.layout.title.text else ""
+    if current_title and "n=" not in current_title:
+        fig.update_layout(title_text=f"{current_title}  (n={len(arr):,})")
+
+    return fig
+
+
+def add_scatter_correlation(fig: go.Figure, x, y) -> go.Figure:
+    """散布図にOLS回帰線＋Pearson r＋p値アノテーション追加."""
+    import numpy as np
+    from scipy import stats as sp_stats
+
+    x_arr = np.array(x, dtype=float)
+    y_arr = np.array(y, dtype=float)
+    mask = np.isfinite(x_arr) & np.isfinite(y_arr)
+    x_clean, y_clean = x_arr[mask], y_arr[mask]
+    if len(x_clean) < 3:
+        return fig
+
+    r, p = sp_stats.pearsonr(x_clean, y_clean)
+    slope, intercept = np.polyfit(x_clean, y_clean, 1)
+
+    x_line = np.linspace(float(x_clean.min()), float(x_clean.max()), 100)
+    y_line = slope * x_line + intercept
+
+    fig.add_trace(go.Scatter(
+        x=x_line.tolist(), y=y_line.tolist(), mode="lines",
+        line=dict(color="#FFD166", dash="dash", width=2),
+        name="OLS回帰線", showlegend=False,
+    ))
+
+    p_text = f"p<0.001" if p < 0.001 else f"p={p:.3f}"
+    fig.add_annotation(
+        x=0.02, y=0.98, xref="paper", yref="paper",
+        text=f"r={r:.3f}, {p_text}, n={len(x_clean):,}",
+        showarrow=False, font=dict(size=12, color="#FFD166"),
+        bgcolor="rgba(0,0,0,0.5)", bordercolor="#FFD166", borderwidth=1,
+        borderpad=4,
+    )
+
+    return fig
+
+
+def add_ci_band(fig: go.Figure, x, y_mean, y_lower, y_upper, color: str = "#667eea") -> go.Figure:
+    """時系列チャートに信頼区間（半透明帯）を追加."""
+    fig.add_trace(go.Scatter(
+        x=list(x), y=list(y_upper), mode="lines",
+        line=dict(width=0), showlegend=False, hoverinfo="skip",
+    ))
+    fig.add_trace(go.Scatter(
+        x=list(x), y=list(y_lower), mode="lines",
+        line=dict(width=0), fill="tonexty",
+        fillcolor=f"rgba({int(color[1:3],16)},{int(color[3:5],16)},{int(color[5:7],16)},0.15)",
+        showlegend=False, hoverinfo="skip",
+    ))
+    return fig
+
+
+def adaptive_height(n_items: int, base: int = 400, per_item: int = 25, max_h: int = 900) -> int:
+    """表示項目数に応じたチャート高さ自動計算."""
+    return min(base + n_items * per_item, max_h)
+
+
+def subsample_for_scatter(data: list[dict], max_n: int = 5000, seed: int = 42) -> list[dict]:
+    """大規模データ用に層化サブサンプリング."""
+    if len(data) <= max_n:
+        return data
+    import random
+    rng = random.Random(seed)
+    return rng.sample(data, max_n)
+
+
+# ============================================================
 # Feature extraction for ML clustering
 # ============================================================
 

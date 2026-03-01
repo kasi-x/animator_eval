@@ -23,9 +23,13 @@ from src.pipeline_phases import (
     PipelineCheckpoint,
     PipelineContext,
     assemble_result_entries,
+    assemble_va_results,
     build_graphs_phase,
+    build_va_graphs_phase,
     compute_core_scores_phase,
     compute_supplementary_metrics_phase,
+    compute_va_core_scores_phase,
+    compute_va_supplementary_metrics_phase,
     export_and_visualize_phase,
     load_pipeline_data,
     post_process_results,
@@ -189,6 +193,10 @@ def run_scoring_pipeline(
             4, "Graph Construction", (time.monotonic() - phase_start) * 1000
         )
 
+    # Phase 4B: VA Graph Construction (parallel-safe, runs after production graphs)
+    if context.va_credits:
+        build_va_graphs_phase(context)
+
     # Resume check: after phases 1-4 (data loaded), try to restore checkpoint
     if resume and not dry_run:
         saved = checkpoint_mgr.load()
@@ -213,6 +221,10 @@ def run_scoring_pipeline(
 
         checkpoint_mgr.save(5, context)
 
+        # Phase 5B: VA Core Scoring (after production scoring provides BiRank for SD)
+        if context.va_credits:
+            compute_va_core_scores_phase(context)
+
     # Phase 6: Supplementary Metrics
     if resume_from_phase < 6:
         if ws_broadcaster:
@@ -226,6 +238,10 @@ def run_scoring_pipeline(
                 6, "Supplementary Metrics", (time.monotonic() - phase_start) * 1000
             )
 
+        # Phase 6B: VA Supplementary Metrics
+        if context.va_credits:
+            compute_va_supplementary_metrics_phase(context)
+
     # Phase 7: Result Assembly (build comprehensive result dicts)
     if resume_from_phase < 7:
         if ws_broadcaster:
@@ -235,6 +251,10 @@ def run_scoring_pipeline(
         assemble_result_entries(context, conn)
         conn.commit()
         conn.close()
+
+        # Phase 7B: VA Result Assembly
+        if context.va_credits:
+            assemble_va_results(context)
 
         if ws_broadcaster:
             ws_broadcaster.complete_phase(

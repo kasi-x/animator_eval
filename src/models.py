@@ -375,3 +375,37 @@ class ScoreResult(BaseModel):
     ndi: float = 0.0
     iv_score: float = 0.0
     iv_score_historical: float = 0.0
+
+
+class VAScoreResult(BaseModel):
+    """声優評価結果 — Voice Actor scoring result.
+
+    Components:
+        person_fe: VA AKM person fixed effect
+        sd_fe_exposure: Sound director FE exposure
+        birank: VA BiRank score
+        patronage: VA patronage premium
+        trust: VA trust score (SD repeat casting)
+        dormancy: Dormancy multiplier (0-1)
+        awcc: Community bridging (placeholder)
+        va_iv_score: VA Integrated Value (primary metric)
+        character_diversity_index: CDI (0-1)
+        casting_tier: lead_specialist / versatile / ensemble / newcomer
+        replacement_difficulty: RDI (0-1)
+    """
+
+    person_id: str
+    person_fe: float = 0.0
+    sd_fe_exposure: float = 0.0
+    birank: float = 0.0
+    patronage: float = 0.0
+    trust: float = 0.0
+    dormancy: float = 1.0
+    awcc: float = 0.0
+    va_iv_score: float = 0.0
+    character_diversity_index: float = 0.0
+    main_role_count: int = 0
+    supporting_role_count: int = 0
+    total_characters: int = 0
+    casting_tier: str = "newcomer"
+    replacement_difficulty: float = 0.0

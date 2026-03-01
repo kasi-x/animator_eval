@@ -6,7 +6,13 @@ from collections import defaultdict
 
 import structlog
 
-from src.database import load_all_anime, load_all_credits, load_all_persons
+from src.database import (
+    load_all_anime,
+    load_all_characters,
+    load_all_credits,
+    load_all_persons,
+    load_all_voice_actor_credits,
+)
 from src.models import Credit, Person
 from src.pipeline_phases.context import PipelineContext
 from src.models import Role
@@ -216,10 +222,14 @@ def load_pipeline_data(context: PipelineContext, conn: sqlite3.Connection) -> No
     # Build anime_map for quick lookups
     context.anime_map = {a.id: a for a in context.anime_list}
 
+    # Load voice actor / character data for VA pipeline
+    _load_va_data(context, conn)
+
     # Update monitoring counters
     context.monitor.increment_counter("persons_loaded", len(context.persons))
     context.monitor.increment_counter("anime_loaded", len(context.anime_list))
     context.monitor.increment_counter("credits_loaded", len(context.credits))
+    context.monitor.increment_counter("va_credits_loaded", len(context.va_credits))
     context.monitor.record_memory("after_data_load")
 
     logger.info(
@@ -227,4 +237,37 @@ def load_pipeline_data(context: PipelineContext, conn: sqlite3.Connection) -> No
         persons=len(context.persons),
         anime=len(context.anime_list),
         credits=len(context.credits),
+        va_credits=len(context.va_credits),
+        characters=len(context.characters),
+        va_persons=len(context.va_person_ids),
+    )
+
+
+def _load_va_data(context: PipelineContext, conn: sqlite3.Connection) -> None:
+    """Load voice actor and character data for the VA pipeline.
+
+    Populates context.va_credits, context.characters, context.character_map,
+    and context.va_person_ids.
+    """
+    try:
+        context.va_credits = load_all_voice_actor_credits(conn)
+        context.characters = load_all_characters(conn)
+    except Exception:
+        logger.debug("va_data_not_available", msg="tables may not exist yet")
+        return
+
+    if not context.va_credits:
+        return
+
+    # Build character lookup
+    context.character_map = {c.id: c for c in context.characters}
+
+    # Identify all person IDs that appear as voice actors
+    context.va_person_ids = {cva.person_id for cva in context.va_credits}
+
+    logger.info(
+        "va_data_loaded",
+        va_credits=len(context.va_credits),
+        characters=len(context.characters),
+        va_persons=len(context.va_person_ids),
     )

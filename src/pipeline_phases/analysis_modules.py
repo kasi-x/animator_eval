@@ -60,6 +60,15 @@ from src.analysis.team_composition import analyze_team_patterns
 from src.analysis.temporal_pagerank import compute_temporal_pagerank
 from src.analysis.time_series import compute_time_series
 from src.analysis.transitions import compute_role_transitions
+
+# Studio & Genre analysis imports
+from src.analysis.genre_ecosystem import compute_genre_ecosystem
+from src.analysis.genre_network import compute_genre_network
+from src.analysis.genre_quality import compute_genre_quality
+from src.analysis.production_analysis import compute_studio_talent_density
+from src.analysis.studio_clustering import compute_studio_clustering
+from src.analysis.studio_network import compute_studio_network
+from src.analysis.talent_pipeline import compute_talent_pipeline
 from src.pipeline_phases.context import PipelineContext
 
 logger = structlog.get_logger()
@@ -594,6 +603,123 @@ def _run_cooccurrence_groups(context: PipelineContext) -> Any:
     )
 
 
+def _run_studio_talent_density(context: PipelineContext) -> Any:
+    """Compute studio talent density metrics (Gini, tiers, FE distribution)."""
+    result = compute_studio_talent_density(
+        context.credits, context.anime_map, context.person_fe
+    )
+    return {sid: asdict(td) for sid, td in result.items()}
+
+
+def _run_studio_network(context: PipelineContext) -> Any:
+    """Compute studio network (talent sharing + co-production)."""
+    result = compute_studio_network(context.credits, context.anime_map)
+    # Convert to serializable format (drop graph objects)
+    return {
+        "centrality": result.centrality,
+        "communities": result.communities,
+        "talent_flow_edges": result.talent_flow_edges,
+        "talent_nodes": result.talent_sharing_graph.number_of_nodes()
+        if result.talent_sharing_graph
+        else 0,
+        "coprod_nodes": result.coproduction_graph.number_of_nodes()
+        if result.coproduction_graph
+        else 0,
+    }
+
+
+def _run_talent_pipeline(context: PipelineContext) -> Any:
+    """Compute talent pipeline (junior dev, flow matrix, brain drain, retention)."""
+    result = compute_talent_pipeline(
+        context.credits, context.anime_map, context.person_fe
+    )
+    return {
+        "junior_dev": {sid: asdict(jd) for sid, jd in result.junior_dev.items()},
+        "flow_matrix": {f"{k[0]}→{k[1]}": v for k, v in result.flow_matrix.items()},
+        "brain_drain_index": result.brain_drain_index,
+        "retention_rates": result.retention_rates,
+    }
+
+
+def _run_studio_clustering(context: PipelineContext) -> Any:
+    """Cluster studios by 12-dimensional feature vector."""
+    # Compute talent density first
+    talent_density = compute_studio_talent_density(
+        context.credits, context.anime_map, context.person_fe
+    )
+
+    # Get studio network data for eigenvector centrality
+    studio_net = context.analysis_results.get("studio_network", {})
+    centrality = studio_net.get("centrality", {})
+    eigenvector = {
+        s: c.get("eigenvector", 0.0) for s, c in centrality.items()
+    }
+
+    # Get talent pipeline data
+    pipeline_data = context.analysis_results.get("talent_pipeline", {})
+    talent_flow = pipeline_data.get("brain_drain_index", {})
+    retention = pipeline_data.get("retention_rates", {})
+
+    result = compute_studio_clustering(
+        context.credits,
+        context.anime_map,
+        talent_density,
+        studio_fe=context.studio_fe,
+        birank_scores=context.birank_person_scores,
+        eigenvector_centrality=eigenvector,
+        talent_flow=talent_flow,
+        retention_rates=retention,
+    )
+    return {
+        "assignments": {s: asdict(sc) for s, sc in result.assignments.items()},
+        "cluster_names": result.cluster_names,
+        "cluster_sizes": result.cluster_sizes,
+        "centroids": result.centroids,
+    }
+
+
+def _run_genre_ecosystem(context: PipelineContext) -> Any:
+    """Compute genre ecosystem (trends, staffing, seasonality, careers)."""
+    result = compute_genre_ecosystem(context.credits, context.anime_map)
+    return {
+        "trends": {g: asdict(t) for g, t in result.trends.items()},
+        "staffing": {g: asdict(s) for g, s in result.staffing_density.items()},
+        "seasonality": {g: asdict(s) for g, s in result.seasonality.items()},
+        "career_profiles": {g: asdict(c) for g, c in result.career_profiles.items()},
+    }
+
+
+def _run_genre_network(context: PipelineContext) -> Any:
+    """Compute genre network (PMI, families, evolution)."""
+    result = compute_genre_network(context.anime_list)
+    return {
+        "genre_families": result.genre_families,
+        "family_names": result.family_names,
+        "pmi_matrix": {
+            f"{k[0]}↔{k[1]}": round(v, 4) for k, v in result.pmi_matrix.items()
+        },
+        "evolution": {
+            str(decade): {f"{k[0]}↔{k[1]}": round(v, 4) for k, v in deltas.items()}
+            for decade, deltas in result.evolution.items()
+        },
+    }
+
+
+def _run_genre_quality(context: PipelineContext) -> Any:
+    """Compute genre quality (prestige, saturation, mobility)."""
+    result = compute_genre_quality(
+        context.credits,
+        context.anime_map,
+        context.person_fe,
+        birank_scores=context.birank_person_scores,
+    )
+    return {
+        "quality": {g: asdict(q) for g, q in result.quality.items()},
+        "saturation": {g: asdict(s) for g, s in result.saturation.items()},
+        "mobility": {g: asdict(m) for g, m in result.mobility.items()},
+    }
+
+
 def _run_credit_stats(context: PipelineContext) -> Any:
     """Compute comprehensive credit statistics (person_id level)."""
     stats = compute_credit_statistics(context.credits, context.anime_map)
@@ -727,6 +853,46 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
         "compatibility_groups_analysis",
         _run_compatibility,
         monitor_step="compatibility_groups_analysis",
+    ),
+    # ========== Studio & Genre Analysis ==========
+    AnalysisTask(
+        "studio_talent_density",
+        _run_studio_talent_density,
+        monitor_step="studio_talent_density",
+        condition=lambda ctx: len(ctx.person_fe) > 0,
+    ),
+    AnalysisTask(
+        "studio_network",
+        _run_studio_network,
+        monitor_step="studio_network",
+    ),
+    AnalysisTask(
+        "talent_pipeline",
+        _run_talent_pipeline,
+        monitor_step="talent_pipeline",
+        condition=lambda ctx: len(ctx.person_fe) > 0,
+    ),
+    AnalysisTask(
+        "studio_clustering",
+        _run_studio_clustering,
+        monitor_step="studio_clustering",
+        condition=lambda ctx: len(ctx.person_fe) > 0,
+    ),
+    AnalysisTask(
+        "genre_ecosystem",
+        _run_genre_ecosystem,
+        monitor_step="genre_ecosystem",
+    ),
+    AnalysisTask(
+        "genre_network",
+        _run_genre_network,
+        monitor_step="genre_network",
+    ),
+    AnalysisTask(
+        "genre_quality",
+        _run_genre_quality,
+        monitor_step="genre_quality",
+        condition=lambda ctx: len(ctx.person_fe) > 0,
     ),
 ]
 

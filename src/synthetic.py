@@ -17,7 +17,7 @@ from src.database import (
     upsert_anime,
     upsert_person,
 )
-from src.models import Anime, Credit, Person, Role
+from src.models import Anime, Character, CharacterVoiceActor, Credit, Person, Role
 
 logger = structlog.get_logger()
 
@@ -180,6 +180,115 @@ def generate_synthetic_data(
         len(credits),
     )
     return persons, anime_list, credits
+
+
+def generate_synthetic_va_data(
+    anime_list: list[Anime],
+    n_voice_actors: int = 30,
+    n_characters: int = 60,
+    n_sound_directors: int = 5,
+    seed: int = 42,
+) -> tuple[list[Person], list[Character], list[CharacterVoiceActor], list[Credit]]:
+    """Generate synthetic voice actor, character, and sound director data.
+
+    Args:
+        anime_list: existing anime list to assign VAs to
+        n_voice_actors: number of VAs to generate
+        n_characters: number of characters to generate
+        n_sound_directors: number of sound directors
+        seed: random seed
+
+    Returns:
+        (va_persons, characters, va_credits, sd_credits)
+    """
+    rng = random.Random(seed + 100)  # Different seed offset from main data
+
+    # Generate voice actors
+    va_persons = []
+    for i in range(n_voice_actors):
+        gender = rng.choice(["Male", "Female"])
+        va_persons.append(
+            Person(
+                id=f"syn:va{i}",
+                name_ja=f"声優{i:03d}",
+                name_en=f"VA {i:03d}",
+                gender=gender,
+            )
+        )
+
+    # Generate characters
+    characters = []
+    for i in range(n_characters):
+        gender = rng.choice(["Male", "Female", None])
+        characters.append(
+            Character(
+                id=f"syn:c{i}",
+                name_ja=f"キャラ{i:03d}",
+                name_en=f"Character {i:03d}",
+                gender=gender,
+            )
+        )
+
+    # Generate sound directors
+    sd_persons = []
+    for i in range(n_sound_directors):
+        sd_persons.append(
+            Person(
+                id=f"syn:sd{i}",
+                name_ja=f"音響監督{i:03d}",
+                name_en=f"Sound Director {i:03d}",
+            )
+        )
+
+    # Assign characters to anime (2-6 characters per anime)
+    va_credits: list[CharacterVoiceActor] = []
+    char_roles = ["MAIN", "SUPPORTING", "BACKGROUND"]
+    char_role_weights = [0.2, 0.4, 0.4]
+
+    for anime in anime_list:
+        n_chars = rng.randint(2, min(6, n_characters))
+        chosen_chars = rng.sample(characters, n_chars)
+
+        for j, char in enumerate(chosen_chars):
+            # First character is more likely MAIN
+            if j == 0:
+                role = rng.choices(char_roles, weights=[0.7, 0.2, 0.1])[0]
+            else:
+                role = rng.choices(char_roles, weights=char_role_weights)[0]
+
+            # Assign VA (some VAs voice multiple characters, some characters recur)
+            va = rng.choice(va_persons)
+            va_credits.append(
+                CharacterVoiceActor(
+                    character_id=char.id,
+                    person_id=va.id,
+                    anime_id=anime.id,
+                    character_role=role,
+                    source="synthetic",
+                )
+            )
+
+    # Generate sound director credits
+    sd_credits: list[Credit] = []
+    for anime in anime_list:
+        sd = rng.choice(sd_persons)
+        sd_credits.append(
+            Credit(
+                person_id=sd.id,
+                anime_id=anime.id,
+                role=Role.SOUND_DIRECTOR,
+                source="synthetic",
+            )
+        )
+
+    logger.info(
+        "Generated synthetic VA data: %d VAs, %d chars, %d va_credits, %d SDs",
+        len(va_persons),
+        len(characters),
+        len(va_credits),
+        len(sd_persons),
+    )
+    return va_persons + sd_persons, characters, va_credits, sd_credits
 
 
 def populate_db_with_synthetic(

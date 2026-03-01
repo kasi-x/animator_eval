@@ -30,6 +30,12 @@ from src.pipeline_phases.result_assembly import assemble_result_entries
 from src.pipeline_phases.supplementary_metrics import (
     compute_supplementary_metrics_phase,
 )
+from src.pipeline_phases.va_core_scoring import compute_va_core_scores_phase
+from src.pipeline_phases.va_graph_construction import build_va_graphs_phase
+from src.pipeline_phases.va_result_assembly import assemble_va_results
+from src.pipeline_phases.va_supplementary_metrics import (
+    compute_va_supplementary_metrics_phase,
+)
 from src.pipeline_phases.validation import run_validation_phase
 
 __all__ = [
@@ -45,4 +51,9 @@ __all__ = [
     "post_process_results",
     "run_analysis_modules_phase",
     "export_and_visualize_phase",
+    # VA pipeline phases
+    "build_va_graphs_phase",
+    "compute_va_core_scores_phase",
+    "compute_va_supplementary_metrics_phase",
+    "assemble_va_results",
 ]

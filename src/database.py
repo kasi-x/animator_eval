@@ -25,7 +25,7 @@ logger = structlog.get_logger()
 
 DEFAULT_DB_PATH = DB_DIR / "animetor_eval.db"
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 
 def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
@@ -249,6 +249,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         12: _migrate_v12_add_person_fetch_status,
         13: _migrate_v13_add_structural_score_columns,
         14: _migrate_v14_drop_legacy_score_columns,
+        15: _migrate_v15_add_va_scores,
     }
 
     for version in range(current + 1, SCHEMA_VERSION + 1):
@@ -609,6 +610,30 @@ def _migrate_v14_drop_legacy_score_columns(conn: sqlite3.Connection) -> None:
             except sqlite3.OperationalError:
                 # Column doesn't exist (fresh DB) or SQLite too old
                 logger.debug("drop_column_skipped", table=table, column=col)
+
+
+def _migrate_v15_add_va_scores(conn: sqlite3.Connection) -> None:
+    """v15: Add va_scores table for voice actor evaluation system."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS va_scores (
+            person_id TEXT PRIMARY KEY,
+            person_fe REAL DEFAULT 0.0,
+            sd_fe_exposure REAL DEFAULT 0.0,
+            birank REAL DEFAULT 0.0,
+            patronage REAL DEFAULT 0.0,
+            trust REAL DEFAULT 0.0,
+            dormancy REAL DEFAULT 1.0,
+            awcc REAL DEFAULT 0.0,
+            va_iv_score REAL DEFAULT 0.0,
+            character_diversity_index REAL DEFAULT 0.0,
+            main_role_count INTEGER DEFAULT 0,
+            supporting_role_count INTEGER DEFAULT 0,
+            total_characters INTEGER DEFAULT 0,
+            casting_tier TEXT DEFAULT 'newcomer',
+            replacement_difficulty REAL DEFAULT 0.0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
 
 
 def mark_person_unfetchable(
@@ -1187,6 +1212,70 @@ def load_all_scores(conn: sqlite3.Connection) -> list[ScoreResult]:
             if field in cols:
                 kwargs[field] = row[field]
         result.append(ScoreResult(**kwargs))
+    return result
+
+
+def load_all_characters(conn: sqlite3.Connection) -> list:
+    """Load all characters from the database.
+
+    Returns:
+        List of Character objects.
+    """
+    from src.models import Character
+
+    try:
+        rows = conn.execute("SELECT * FROM characters").fetchall()
+    except Exception:
+        return []
+    if not rows:
+        return []
+
+    result = []
+    cols = set(rows[0].keys())
+    for row in rows:
+        kwargs: dict = {"id": row["id"]}
+        for field in ("name_ja", "name_en", "anilist_id", "image_large",
+                       "image_medium", "description", "gender",
+                       "date_of_birth", "age", "blood_type",
+                       "favourites", "site_url"):
+            if field in cols and row[field] is not None:
+                kwargs[field] = row[field]
+        if "aliases" in cols and row["aliases"]:
+            import json as _json
+            try:
+                kwargs["aliases"] = _json.loads(row["aliases"])
+            except (ValueError, TypeError):
+                pass
+        result.append(Character(**kwargs))
+    return result
+
+
+def load_all_voice_actor_credits(conn: sqlite3.Connection) -> list:
+    """Load all character_voice_actors records.
+
+    Returns:
+        List of CharacterVoiceActor objects.
+    """
+    from src.models import CharacterVoiceActor
+
+    try:
+        rows = conn.execute("SELECT * FROM character_voice_actors").fetchall()
+    except Exception:
+        return []
+    if not rows:
+        return []
+
+    result = []
+    for row in rows:
+        result.append(
+            CharacterVoiceActor(
+                character_id=row["character_id"],
+                person_id=row["person_id"],
+                anime_id=row["anime_id"],
+                character_role=row["character_role"] or "",
+                source=row.get("source", "") or "",
+            )
+        )
     return result
 
 

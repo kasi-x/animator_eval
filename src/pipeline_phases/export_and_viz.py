@@ -758,6 +758,67 @@ EXPORT_REGISTRY: list[ExportSpec] = [
             else {}
         ),
     ),
+    # ========== Voice Actor Scores ==========
+    ExportSpec(
+        filename="va_scores.json",
+        data_getter=lambda ctx: ctx.va_results,
+        log_message="va_scores_saved",
+        log_metrics=lambda data: {"persons": len(data)} if data else {},
+    ),
+    ExportSpec(
+        filename="va_synergy.json",
+        data_getter=lambda ctx: ctx.va_ensemble_synergy,
+        log_message="va_synergy_saved",
+        log_metrics=lambda data: {"pairs": len(data)} if isinstance(data, list) else {},
+    ),
+    # ========== Studio Analysis ==========
+    ExportSpec(
+        filename="studio_talent_density.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("studio_talent_density"),
+        log_message="studio_talent_density_saved",
+        log_metrics=lambda data: {"studios": len(data)} if data else {},
+    ),
+    ExportSpec(
+        filename="studio_network.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("studio_network"),
+        log_message="studio_network_saved",
+    ),
+    ExportSpec(
+        filename="talent_pipeline.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("talent_pipeline"),
+        log_message="talent_pipeline_saved",
+    ),
+    ExportSpec(
+        filename="studio_clustering.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("studio_clustering"),
+        log_message="studio_clustering_saved",
+        log_metrics=lambda data: (
+            {"clusters": len(data.get("cluster_names", {}))} if data else {}
+        ),
+    ),
+    # ========== Genre Analysis ==========
+    ExportSpec(
+        filename="genre_ecosystem.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("genre_ecosystem"),
+        log_message="genre_ecosystem_saved",
+        log_metrics=lambda data: {"genres": len(data.get("trends", {}))} if data else {},
+    ),
+    ExportSpec(
+        filename="genre_network.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("genre_network"),
+        log_message="genre_network_saved",
+        log_metrics=lambda data: (
+            {"families": len(data.get("family_names", {}))} if data else {}
+        ),
+    ),
+    ExportSpec(
+        filename="genre_quality.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("genre_quality"),
+        log_message="genre_quality_saved",
+        log_metrics=lambda data: (
+            {"genres": len(data.get("quality", {}))} if data else {}
+        ),
+    ),
     # Pipeline summary (special case - uses elapsed time)
     ExportSpec(
         filename="summary.json",
