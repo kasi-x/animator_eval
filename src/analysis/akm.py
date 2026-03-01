@@ -37,7 +37,7 @@ class AKMResult:
     """Result of AKM estimation.
 
     Attributes:
-        person_fe: θ_i — person fixed effects
+        person_fe: θ_i — person fixed effects (after redistribution)
         studio_fe: ψ_j — studio fixed effects
         beta: coefficients on person time-varying controls
         gamma: coefficients on firm time-varying controls
@@ -46,6 +46,7 @@ class AKMResult:
         n_movers: number of persons who worked at 2+ studios
         n_observations: total person-anime observations
         r_squared: model R²
+        redistribution_alpha: mover-calibrated studio FE redistribution fraction
     """
 
     person_fe: dict[str, float]
@@ -57,6 +58,7 @@ class AKMResult:
     n_movers: int
     n_observations: int
     r_squared: float
+    redistribution_alpha: float = 0.0
 
 
 def infer_studio_assignment(
@@ -422,6 +424,187 @@ def _debias_by_obs_count(
     return debiased
 
 
+def _redistribute_studio_fe(
+    person_fe_arr: np.ndarray,
+    studio_fe_arr: np.ndarray,
+    person_ind: np.ndarray,
+    studio_ind: np.ndarray,
+    w: np.ndarray,
+    person_list: list[str],
+    movers: set[str],
+    n_obs: int,
+    n_persons: int,
+    n_studios: int,
+    log: structlog.stdlib.BoundLogger,
+) -> tuple[np.ndarray, float]:
+    """Redistribute portion of studio FE to persons via contribution shares.
+
+    Addresses the identification problem: in the AKM, studio-defining creators'
+    quality is absorbed into studio FE, producing compressed person_fe.
+    The mover-stayer gap grows with studio quality (Corr(gap, sfe) > 0),
+    confirming that absorption is worse at better studios.
+
+    Calibration uses studio_fe directly (not cs × studio_fe) for regression
+    stability, then distributes proportionally to relative contribution share:
+
+        person_fe_adj[i] = person_fe[i] + α · rcs[i] · studio_fe[j]
+
+    where rcs[i] = cs[i] / mean_cs_at_j (relative contribution share,
+    > 1 for key creators, < 1 for junior staff), and
+    α = max(0, slope_mover − slope_stayer) from regressing person_fe
+    on studio_fe for each group.
+
+    Args:
+        person_fe_arr: person FE estimates (n_persons,)
+        studio_fe_arr: studio FE estimates (n_studios,)
+        person_ind: person index per observation
+        studio_ind: studio index per observation
+        w: observation weights
+        person_list: ordered person IDs
+        movers: set of person IDs at 2+ studios
+        n_obs, n_persons, n_studios: counts
+        log: logger
+
+    Returns:
+        (adjusted_person_fe, alpha)
+    """
+    if n_persons < 30 or n_obs < 100:
+        return person_fe_arr, 0.0
+
+    # --- Step 1: Contribution share at primary studio ---
+    person_studio_w: dict[int, dict[int, float]] = defaultdict(lambda: defaultdict(float))
+    for k in range(n_obs):
+        person_studio_w[int(person_ind[k])][int(studio_ind[k])] += float(w[k])
+
+    # Primary studio: studio with most weight for each person
+    primary_studio = np.zeros(n_persons, dtype=np.int32)
+    for i in range(n_persons):
+        sw = person_studio_w.get(i)
+        if sw:
+            primary_studio[i] = max(sw, key=sw.get)
+
+    # Total weight and person count per studio
+    studio_total = np.zeros(n_studios, dtype=np.float64)
+    studio_n_persons = np.zeros(n_studios, dtype=np.int64)
+    for i, sw in person_studio_w.items():
+        j_primary = primary_studio[i]
+        studio_n_persons[j_primary] += 1
+        for j, wt in sw.items():
+            studio_total[j] += wt
+
+    # Contribution share: person's weight at primary studio / studio total
+    cs = np.zeros(n_persons, dtype=np.float64)
+    for i in range(n_persons):
+        j = primary_studio[i]
+        if studio_total[j] > 0 and i in person_studio_w:
+            cs[i] = person_studio_w[i].get(j, 0.0) / studio_total[j]
+
+    # Relative contribution share: cs / mean_cs_at_studio = cs * n_persons_at_studio
+    # This gives rcs > 1 for important people (directors), < 1 for junior staff
+    rcs = np.zeros(n_persons, dtype=np.float64)
+    for i in range(n_persons):
+        j = primary_studio[i]
+        n_at = studio_n_persons[j]
+        if n_at > 0:
+            rcs[i] = cs[i] * n_at  # = (w_i / total_w) * n = w_i / (total_w / n)
+
+    # Studio FE at primary studio
+    sfe = studio_fe_arr[primary_studio]
+
+    # --- Step 2: Mover/stayer masks ---
+    person_to_idx = {pid: idx for idx, pid in enumerate(person_list)}
+    mover_mask = np.zeros(n_persons, dtype=bool)
+    for pid in movers:
+        idx = person_to_idx.get(pid)
+        if idx is not None:
+            mover_mask[idx] = True
+
+    active = cs > 0
+    mover_active = mover_mask & active
+    stayer_active = ~mover_mask & active
+    n_ma = int(np.sum(mover_active))
+    n_sa = int(np.sum(stayer_active))
+
+    if n_ma < 20 or n_sa < 20:
+        log.info(
+            "akm_redistribution_skipped",
+            reason="insufficient_data",
+            n_movers=n_ma,
+            n_stayers=n_sa,
+        )
+        return person_fe_arr, 0.0
+
+    # --- Step 3: Calibrate α via mover/stayer regression on studio_fe ---
+    # Regress person_fe on studio_fe_primary for each group:
+    # - Movers: slope captures true person-studio correlation (selection)
+    # - Stayers: slope captures selection + absorption
+    # - α = excess negative slope for stayers = absorption
+    def _ols_slope(mask: np.ndarray) -> float:
+        """OLS slope of person_fe on studio_fe_primary for persons in mask."""
+        x = sfe[mask]
+        y_r = person_fe_arr[mask]
+        if float(np.std(x)) < 1e-10:
+            return 0.0
+        x_reg = np.column_stack([np.ones(int(np.sum(mask))), x])
+        try:
+            b, _, _, _ = np.linalg.lstsq(x_reg, y_r, rcond=None)
+            return float(b[1])
+        except np.linalg.LinAlgError:
+            return 0.0
+
+    slope_mover = _ols_slope(mover_active)
+    slope_stayer = _ols_slope(stayer_active)
+
+    # α = excess absorption: how much more person_fe drops per unit studio_fe
+    # for stayers compared to movers
+    alpha = max(0.0, slope_mover - slope_stayer)
+
+    if alpha < 0.005:
+        log.info(
+            "akm_redistribution_skipped",
+            reason="no_excess_absorption",
+            slope_mover=round(slope_mover, 4),
+            slope_stayer=round(slope_stayer, 4),
+        )
+        return person_fe_arr, 0.0
+
+    # --- Step 4: Apply redistribution ---
+    # redistribution = α × rcs × studio_fe
+    # rcs > 1 for key creators → they get more than average correction
+    # rcs < 1 for junior staff → they get less
+    redistribution = alpha * rcs * sfe
+
+    # Cap individual redistribution at ±3σ(person_fe)
+    fe_std = float(np.std(person_fe_arr[active]))
+    max_redist = 3.0 * fe_std if fe_std > 0 else 1.0
+    redistribution = np.clip(redistribution, -max_redist, max_redist)
+
+    person_fe_adj = person_fe_arr + redistribution
+
+    # Diagnostics
+    nonzero = redistribution[redistribution != 0]
+    log.info(
+        "akm_studio_fe_redistribution",
+        alpha=round(alpha, 4),
+        slope_mover=round(slope_mover, 4),
+        slope_stayer=round(slope_stayer, 4),
+        n_movers=n_ma,
+        n_stayers=n_sa,
+        mean_rcs=round(float(np.mean(rcs[active])), 4),
+        median_redistribution=round(float(np.median(nonzero)), 4)
+        if len(nonzero) > 0
+        else 0.0,
+        pct95_redistribution=round(
+            float(np.percentile(np.abs(nonzero), 95)), 4
+        )
+        if len(nonzero) > 0
+        else 0.0,
+        max_abs_redistribution=round(float(np.max(np.abs(redistribution))), 4),
+    )
+
+    return person_fe_adj, alpha
+
+
 def _shrink_person_fe(
     person_fe_arr: np.ndarray,
     person_ind: np.ndarray,
@@ -746,6 +929,25 @@ def estimate_akm(
         person_fe_arr, person_credit_counts, n_persons, logger
     )
 
+    # Step 9: Studio FE redistribution (mover-calibrated)
+    # For stayers, person_fe is under-identified — their quality is partially
+    # absorbed into studio_fe. Redistribute a portion of studio_fe back to
+    # persons proportional to their contribution share, with the fraction
+    # calibrated using movers (whose person_fe is well-identified).
+    person_fe_arr, redistribution_alpha = _redistribute_studio_fe(
+        person_fe_arr,
+        studio_fe_arr,
+        person_ind,
+        studio_ind,
+        w,
+        person_list,
+        movers,
+        n_obs,
+        n_persons,
+        n_studios,
+        logger,
+    )
+
     # Build result dicts
     person_fe_dict = {pid: float(person_fe_arr[i]) for i, pid in enumerate(person_list)}
     studio_fe_dict = {sid: float(studio_fe_arr[i]) for i, sid in enumerate(studio_list)}
@@ -760,6 +962,7 @@ def estimate_akm(
         n_studios=n_studios,
         n_movers=n_movers,
         r_squared=round(r_squared, 4),
+        redistribution_alpha=round(redistribution_alpha, 4),
     )
 
     return AKMResult(
@@ -772,4 +975,5 @@ def estimate_akm(
         n_movers=n_movers,
         n_observations=n_obs,
         r_squared=r_squared,
+        redistribution_alpha=redistribution_alpha,
     )

@@ -8,6 +8,7 @@ from src.analysis.akm import (
     _build_panel,
     _compute_credit_weight,
     _debias_by_obs_count,
+    _redistribute_studio_fe,
     _shrink_person_fe,
     estimate_akm,
     find_connected_set,
@@ -602,3 +603,288 @@ class TestWeightedObservations:
             f"10-obs person shrunk by {shrink_1:.3f}; "
             "expected more shrinkage for fewer observations"
         )
+
+
+class TestRedistributeStudioFE:
+    """Tests for mover-calibrated studio FE redistribution."""
+
+    def _build_synthetic_data(self, *, n_movers=30, n_stayers_per_studio=20,
+                               absorption=0.5):
+        """Build synthetic AKM state with controlled absorption.
+
+        Creates 2 studios:
+        - Studio 0: good (studio_fe = +1.5)
+        - Studio 1: bad (studio_fe = -1.5)
+
+        Movers split time between studios. Stayers are at one studio only.
+        For stayers, person_fe is artificially depressed (good studio) or
+        inflated (bad studio) to simulate absorption.
+
+        Args:
+            n_movers: number of movers
+            n_stayers_per_studio: stayers per studio
+            absorption: how much person_fe is shifted by studio quality
+        """
+        import structlog
+
+        n_studios = 2
+        n_stayers = n_stayers_per_studio * n_studios
+        n_persons = n_movers + n_stayers
+
+        studio_fe = np.array([1.5, -1.5])
+
+        person_ind_list = []
+        studio_ind_list = []
+        w_list = []
+
+        # Movers: split between studios (3 obs at studio 0, 2 at studio 1)
+        for p in range(n_movers):
+            for _ in range(3):
+                person_ind_list.append(p)
+                studio_ind_list.append(0)
+                w_list.append(1.0)
+            for _ in range(2):
+                person_ind_list.append(p)
+                studio_ind_list.append(1)
+                w_list.append(1.0)
+
+        # Stayers at studio 0
+        base = n_movers
+        for p in range(n_stayers_per_studio):
+            for _ in range(5):
+                person_ind_list.append(base + p)
+                studio_ind_list.append(0)
+                w_list.append(1.0)
+
+        # Stayers at studio 1
+        base2 = n_movers + n_stayers_per_studio
+        for p in range(n_stayers_per_studio):
+            for _ in range(5):
+                person_ind_list.append(base2 + p)
+                studio_ind_list.append(1)
+                w_list.append(1.0)
+
+        person_ind = np.array(person_ind_list, dtype=np.int32)
+        studio_ind = np.array(studio_ind_list, dtype=np.int32)
+        w = np.array(w_list, dtype=np.float64)
+        n_obs = len(person_ind)
+
+        rng = np.random.RandomState(42)
+        person_fe = rng.randn(n_persons) * 0.3
+
+        # Movers: person_fe is independent of studio (well-identified)
+        # (already random, no correlation)
+
+        # Stayers at good studio: person_fe depressed (absorbed into studio_fe)
+        person_fe[n_movers:n_movers + n_stayers_per_studio] -= absorption
+        # Stayers at bad studio: person_fe inflated (absorbed from studio_fe)
+        person_fe[n_movers + n_stayers_per_studio:] += absorption
+
+        person_list = [f"p{i}" for i in range(n_persons)]
+        movers_set = {f"p{i}" for i in range(n_movers)}
+        log = structlog.get_logger()
+
+        return (person_fe, studio_fe, person_ind, studio_ind, w,
+                person_list, movers_set, n_obs, n_persons, n_studios, log)
+
+    def test_absorption_detected_and_corrected(self):
+        """When stayers show absorption, α > 0 and redistribution is applied."""
+        data = self._build_synthetic_data(absorption=0.5)
+        person_fe = data[0].copy()
+        adj, alpha = _redistribute_studio_fe(*data)
+
+        assert alpha > 0, f"Expected positive α, got {alpha}"
+
+        # Stayers at good studio (indices 30-49) should have higher FE after
+        n_movers = 30
+        n_sps = 20
+        mean_raw_good = float(np.mean(person_fe[n_movers:n_movers + n_sps]))
+        mean_adj_good = float(np.mean(adj[n_movers:n_movers + n_sps]))
+        assert mean_adj_good > mean_raw_good, (
+            f"Stayers at good studio: adj {mean_adj_good:.3f} should be > "
+            f"raw {mean_raw_good:.3f}"
+        )
+
+    def test_no_absorption_much_less_redistribution(self):
+        """Without absorption, redistribution is much smaller than with absorption."""
+        data_with = self._build_synthetic_data(absorption=0.5)
+        pfe_with = data_with[0].copy()
+        adj_with, _ = _redistribute_studio_fe(*data_with)
+
+        data_without = self._build_synthetic_data(absorption=0.0)
+        pfe_without = data_without[0].copy()
+        adj_without, _ = _redistribute_studio_fe(*data_without)
+
+        change_with = float(np.mean(np.abs(adj_with - pfe_with)))
+        change_without = float(np.mean(np.abs(adj_without - pfe_without)))
+
+        assert change_with > change_without * 2, (
+            f"Absorption case change {change_with:.4f} should be >> "
+            f"no-absorption case change {change_without:.4f}"
+        )
+
+    def test_alpha_bounded(self):
+        """α should be non-negative."""
+        data = self._build_synthetic_data(absorption=0.5)
+        _, alpha = _redistribute_studio_fe(*data)
+        assert alpha >= 0.0
+
+    def test_stayers_adjusted_more_than_movers(self):
+        """Stayers get larger adjustment because cs is more concentrated."""
+        data = self._build_synthetic_data(absorption=0.5)
+        person_fe = data[0].copy()
+        adj, alpha = _redistribute_studio_fe(*data)
+
+        if alpha < 0.01:
+            pytest.skip("No redistribution applied")
+
+        n_movers = 30
+        # Mean absolute adjustment for movers vs stayers
+        mover_adj = float(np.mean(np.abs(adj[:n_movers] - person_fe[:n_movers])))
+        stayer_adj = float(np.mean(np.abs(adj[n_movers:] - person_fe[n_movers:])))
+        assert stayer_adj > mover_adj, (
+            f"Stayer adj {stayer_adj:.4f} should be > mover adj {mover_adj:.4f}"
+        )
+
+    def test_high_weight_gets_more_redistribution(self):
+        """Person with higher observation weight gets more redistribution."""
+        import structlog
+        log = structlog.get_logger()
+
+        n_persons = 60
+        n_studios = 2
+        studio_fe = np.array([2.0, -2.0])
+
+        person_ind_list = []
+        studio_ind_list = []
+        w_list = []
+
+        # 20 movers
+        for p in range(20):
+            for _ in range(3):
+                person_ind_list.append(p)
+                studio_ind_list.append(0)
+                w_list.append(1.0)
+            for _ in range(2):
+                person_ind_list.append(p)
+                studio_ind_list.append(1)
+                w_list.append(1.0)
+
+        # Person 20: "director" stayer at studio 0 — high weight (3.0 per obs)
+        for _ in range(5):
+            person_ind_list.append(20)
+            studio_ind_list.append(0)
+            w_list.append(3.0)
+
+        # Person 21: "key animator" stayer at studio 0 — low weight (0.5 per obs)
+        for _ in range(5):
+            person_ind_list.append(21)
+            studio_ind_list.append(0)
+            w_list.append(0.5)
+
+        # Remaining stayers at studio 0 (22-39)
+        for p in range(22, 40):
+            for _ in range(5):
+                person_ind_list.append(p)
+                studio_ind_list.append(0)
+                w_list.append(1.0)
+
+        # Stayers at studio 1 (40-59)
+        for p in range(40, 60):
+            for _ in range(5):
+                person_ind_list.append(p)
+                studio_ind_list.append(1)
+                w_list.append(1.0)
+
+        person_ind = np.array(person_ind_list, dtype=np.int32)
+        studio_ind = np.array(studio_ind_list, dtype=np.int32)
+        w = np.array(w_list, dtype=np.float64)
+        n_obs = len(person_ind)
+
+        rng = np.random.RandomState(42)
+        person_fe = rng.randn(n_persons) * 0.3
+        # Stayers at good studio have depressed person_fe
+        person_fe[20:40] -= 0.5
+        person_fe[40:60] += 0.5
+
+        person_list = [f"p{i}" for i in range(n_persons)]
+        movers_set = {f"p{i}" for i in range(20)}
+
+        adj, alpha = _redistribute_studio_fe(
+            person_fe.copy(), studio_fe, person_ind, studio_ind, w,
+            person_list, movers_set, n_obs, n_persons, n_studios, log,
+        )
+
+        if alpha < 0.01:
+            pytest.skip("No redistribution applied")
+
+        # Director (p20, high weight) should get more redistribution than
+        # key animator (p21, low weight) at same studio
+        redist_director = adj[20] - person_fe[20]
+        redist_ka = adj[21] - person_fe[21]
+        assert redist_director > redist_ka, (
+            f"Director redistribution {redist_director:.4f} should be > "
+            f"key animator {redist_ka:.4f}"
+        )
+
+    def test_insufficient_data_skips(self):
+        """With too few persons, redistribution is skipped."""
+        import structlog
+        log = structlog.get_logger()
+
+        person_fe = np.array([0.5, -0.5])
+        studio_fe = np.array([1.0])
+        person_ind = np.array([0, 1], dtype=np.int32)
+        studio_ind = np.array([0, 0], dtype=np.int32)
+        w = np.array([1.0, 1.0])
+
+        adj, alpha = _redistribute_studio_fe(
+            person_fe, studio_fe, person_ind, studio_ind, w,
+            ["p0", "p1"], {"p0"}, 2, 2, 1, log,
+        )
+        assert alpha == 0.0
+        np.testing.assert_array_equal(adj, person_fe)
+
+    def test_integration_akm_has_redistribution_alpha(self):
+        """estimate_akm result includes redistribution_alpha field."""
+        anime_map = {}
+        credits = []
+        # Build enough data for redistribution to potentially activate
+        for i in range(30):
+            studio = f"Studio{chr(65 + i % 3)}"
+            aid = f"a{i}"
+            score = 5.0 + (i % 3) * 2.0  # A=5-7, B=7-9, C varies
+            anime_map[aid] = Anime(
+                id=aid, title_en=f"A{i}", year=2015 + i // 6,
+                score=score, studios=[studio], episodes=12,
+            )
+
+        # 20 movers across studios
+        for m in range(20):
+            src_idx = m % 3
+            dst_idx = (m + 1) % 3
+            for i in range(src_idx * 10, src_idx * 10 + 5):
+                credits.append(Credit(
+                    person_id=f"mover{m}", anime_id=f"a{i}",
+                    role=Role.KEY_ANIMATOR, source="t",
+                ))
+            for i in range(dst_idx * 10, dst_idx * 10 + 5):
+                credits.append(Credit(
+                    person_id=f"mover{m}", anime_id=f"a{i}",
+                    role=Role.KEY_ANIMATOR, source="t",
+                ))
+
+        # 30 stayers
+        for s in range(30):
+            studio_idx = s % 3
+            for i in range(studio_idx * 10, studio_idx * 10 + 10):
+                credits.append(Credit(
+                    person_id=f"stayer{s}", anime_id=f"a{i}",
+                    role=Role.DIRECTOR if s < 3 else Role.KEY_ANIMATOR,
+                    source="t",
+                ))
+
+        result = estimate_akm(credits, anime_map)
+        assert isinstance(result, AKMResult)
+        assert hasattr(result, "redistribution_alpha")
+        assert result.redistribution_alpha >= 0.0
