@@ -1,8 +1,18 @@
 """Tests for AKM fixed effects decomposition."""
 
+import numpy as np
 import pytest
 
-from src.analysis.akm import AKMResult, estimate_akm, find_connected_set, infer_studio_assignment
+from src.analysis.akm import (
+    AKMResult,
+    _build_panel,
+    _compute_credit_weight,
+    _debias_by_obs_count,
+    _shrink_person_fe,
+    estimate_akm,
+    find_connected_set,
+    infer_studio_assignment,
+)
 from src.models import Anime, Credit, Person, Role
 
 
@@ -137,11 +147,12 @@ class TestEstimateAKM:
         assert len(result.studio_fe) > 0
 
     def test_akm_r_squared_positive(self, studio_data):
-        """Model explains some variance (R^2 > 0)."""
+        """Model explains some variance (R^2 > 0 and ≤ 1.0)."""
         _, anime_map, credits = studio_data
         result = estimate_akm(credits, anime_map)
-        # With real structure, R^2 should be positive
+        # With real structure, R^2 should be non-negative (intercept prevents collapse)
         assert result.r_squared >= 0.0
+        assert result.r_squared <= 1.0
 
     def test_akm_observation_count(self, studio_data):
         """n_observations should be positive."""
@@ -200,3 +211,396 @@ class TestEstimateAKM:
         # With 0 movers, studio FE should still be estimated (person FE only path)
         assert isinstance(result, AKMResult)
         assert result.n_movers == 0
+
+    def test_studio_fe_zero_sum(self, studio_data):
+        """Studio FE should be zero-mean after AKM identification constraint."""
+        _, anime_map, credits = studio_data
+        result = estimate_akm(credits, anime_map)
+        if result.studio_fe:
+            studio_fe_values = list(result.studio_fe.values())
+            mean_fe = np.mean(studio_fe_values)
+            assert abs(mean_fe) < 0.01, f"Studio FE mean = {mean_fe}, expected ~0"
+
+    def test_co_production_studios(self):
+        """Co-production (multiple studios) distributes credit weight equally."""
+        anime_map = {
+            "a1": Anime(
+                id="a1", title_en="CoProduction", year=2020, score=8.0,
+                studios=["StudioA", "StudioB"],
+            ),
+            "a2": Anime(
+                id="a2", title_en="Solo", year=2021, score=7.0,
+                studios=["StudioA"],
+            ),
+        }
+        credits = [
+            Credit(person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"),
+            Credit(person_id="p1", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
+        ]
+        assignments = infer_studio_assignment(credits, anime_map)
+        # p1 in 2020: StudioA and StudioB both get 0.5 weight
+        # p1 in 2021: StudioA gets full weight → StudioA wins
+        assert assignments["p1"][2021] == "StudioA"
+        # For 2020, with equal weight to both studios, either could win
+        assert assignments["p1"][2020] in ("StudioA", "StudioB")
+
+
+class TestShrinkPersonFE:
+    """Test empirical Bayes shrinkage of person FE."""
+
+    def test_shrinkage_reduces_variance(self):
+        """Shrinkage should reduce person FE variance."""
+        import structlog
+
+        log = structlog.get_logger()
+        rng = np.random.RandomState(42)
+        n_persons = 100
+        n_obs = 500
+        person_fe = rng.randn(n_persons) * 2.0
+        person_ind = rng.randint(0, n_persons, size=n_obs).astype(np.int32)
+        residuals = rng.randn(n_obs) * 0.5
+
+        shrunk = _shrink_person_fe(person_fe, person_ind, residuals, n_obs, n_persons, log)
+        assert np.std(shrunk) < np.std(person_fe)
+
+    def test_low_obs_persons_shrunk_more(self):
+        """Persons with 1 observation should be shrunk more than those with many."""
+        import structlog
+
+        log = structlog.get_logger()
+        n_persons = 20
+        # Person 0: 1 observation, Person 1: 50 observations
+        person_ind = np.array([0] + [1] * 50 + list(range(2, n_persons)) * 3, dtype=np.int32)
+        n_obs = len(person_ind)
+        person_fe = np.zeros(n_persons)
+        person_fe[0] = 2.0  # extreme value, 1 obs
+        person_fe[1] = 2.0  # same extreme value, 50 obs
+        for i in range(2, n_persons):
+            person_fe[i] = 0.0
+        residuals = np.random.RandomState(42).randn(n_obs) * 0.5
+
+        shrunk = _shrink_person_fe(person_fe, person_ind, residuals, n_obs, n_persons, log)
+        # Person 0 (1 obs) should be shrunk more toward mean
+        # Person 1 (50 obs) should retain more of their raw value
+        shrink_0 = abs(shrunk[0] - person_fe[0])
+        shrink_1 = abs(shrunk[1] - person_fe[1])
+        assert shrink_0 > shrink_1, (
+            f"1-obs person shrunk by {shrink_0:.3f}, "
+            f"50-obs person shrunk by {shrink_1:.3f}"
+        )
+
+    def test_shrinkage_preserves_ordering(self):
+        """Relative ordering of person FE should be preserved."""
+        import structlog
+
+        log = structlog.get_logger()
+        n_persons = 50
+        n_obs = 500
+        rng = np.random.RandomState(42)
+        person_fe = np.linspace(-1, 1, n_persons)
+        person_ind = rng.randint(0, n_persons, size=n_obs).astype(np.int32)
+        residuals = rng.randn(n_obs) * 0.3
+
+        shrunk = _shrink_person_fe(person_fe, person_ind, residuals, n_obs, n_persons, log)
+        # Ordering should be preserved (higher raw → higher shrunk)
+        active = np.array([np.sum(person_ind == i) > 0 for i in range(n_persons)])
+        raw_order = np.argsort(person_fe[active])
+        shrunk_order = np.argsort(shrunk[active])
+        # Allow minor reorderings for near-identical values
+        rank_corr = np.corrcoef(raw_order, shrunk_order)[0, 1]
+        assert rank_corr > 0.95
+
+    def test_empty_input(self):
+        """Handles empty arrays."""
+        import structlog
+
+        log = structlog.get_logger()
+        result = _shrink_person_fe(np.array([]), np.array([], dtype=np.int32), np.array([]), 0, 0, log)
+        assert len(result) == 0
+
+    def test_akm_integration_shrinkage_applied(self):
+        """AKM estimate_akm applies shrinkage — low-obs extremes are reduced."""
+        # Build data with one 1-obs person on high-score anime and many normal persons
+        anime_map = {}
+        credits = []
+        # 3 studios, 20 anime, movers between studios
+        for i in range(20):
+            studio = f"Studio{chr(65 + i % 3)}"
+            aid = f"a{i}"
+            score = 7.0 + (i % 5) * 0.3
+            anime_map[aid] = Anime(id=aid, title_en=f"A{i}", year=2018 + i // 4, score=score, studios=[studio])
+
+        # 15 regular persons with multiple credits
+        for p in range(15):
+            for a in range(20):
+                if (p + a) % 3 == 0:
+                    credits.append(Credit(person_id=f"p{p}", anime_id=f"a{a}", role=Role.KEY_ANIMATOR, source="t"))
+
+        # 1 person on single high-score anime
+        anime_map["a_special"] = Anime(id="a_special", title_en="Special", year=2022, score=9.5, studios=["StudioA"])
+        credits.append(Credit(person_id="p_rare", anime_id="a_special", role=Role.KEY_ANIMATOR, source="t"))
+        # Also give them a link to make connected
+        credits.append(Credit(person_id="p_rare", anime_id="a0", role=Role.KEY_ANIMATOR, source="t"))
+
+        result = estimate_akm(credits, anime_map)
+
+        if "p_rare" in result.person_fe:
+            rare_fe = result.person_fe["p_rare"]
+            all_fe = list(result.person_fe.values())
+            fe_mean = np.mean(all_fe)
+            # Without shrinkage, p_rare's raw FE would be far from the mean
+            # (anime score 9.5 vs mean ~7.3 → raw FE ~+2.2).
+            # With shrinkage (2 obs → heavily shrunk), it should be
+            # pulled close to the grand mean.
+            distance_from_mean = abs(rare_fe - fe_mean)
+            assert distance_from_mean < 0.5, (
+                f"p_rare FE={rare_fe:.3f} too far from mean={fe_mean:.3f} "
+                f"(distance={distance_from_mean:.3f}, expected < 0.5 with shrinkage)"
+            )
+
+
+class TestDebiasObsCount:
+    def test_removes_negative_correlation(self):
+        """Debiasing should remove correlation between person_fe and log(credit_count)."""
+        import structlog
+
+        log = structlog.get_logger()
+        rng = np.random.RandomState(42)
+        n_persons = 100
+
+        # Create person_fe with negative correlation to credit count
+        credit_counts = rng.randint(1, 200, size=n_persons).astype(np.int64)
+        # Systematic bias: more credits → lower FE
+        person_fe = 0.5 - 0.15 * np.log1p(credit_counts) + rng.normal(0, 0.1, n_persons)
+
+        old_corr = float(np.corrcoef(person_fe, np.log1p(credit_counts))[0, 1])
+        assert old_corr < -0.3, f"Pre-condition: expect negative correlation, got {old_corr}"
+
+        debiased = _debias_by_obs_count(person_fe.copy(), credit_counts, n_persons, log)
+
+        new_corr = float(np.corrcoef(debiased, np.log1p(credit_counts))[0, 1])
+        assert abs(new_corr) < 0.05, f"After debiasing, correlation should be ~0, got {new_corr:.4f}"
+
+    def test_preserves_ordering_within_bracket(self):
+        """Within same credit count, relative ordering should be preserved."""
+        import structlog
+
+        log = structlog.get_logger()
+        n_persons = 60
+        # Three groups: 5, 10, 20 credits (20 persons each)
+        credit_counts = np.array([5] * 20 + [10] * 20 + [20] * 20, dtype=np.int64)
+        # Within each group, person_fe decreases with index
+        person_fe = np.zeros(n_persons)
+        for grp_start in [0, 20, 40]:
+            for i in range(20):
+                person_fe[grp_start + i] = 1.0 - i * 0.05 - grp_start * 0.01
+
+        debiased = _debias_by_obs_count(person_fe.copy(), credit_counts, n_persons, log)
+
+        # Within each bracket, ordering should be preserved
+        for grp_start in [0, 20, 40]:
+            grp_slice = debiased[grp_start : grp_start + 20]
+            for i in range(19):
+                assert grp_slice[i] > grp_slice[i + 1], (
+                    f"Ordering broken at group {grp_start}, idx {i}: "
+                    f"{grp_slice[i]:.4f} <= {grp_slice[i+1]:.4f}"
+                )
+
+    def test_skips_positive_slope(self):
+        """If slope is non-negative, debiasing should be skipped."""
+        import structlog
+
+        log = structlog.get_logger()
+        n_persons = 50
+        credit_counts = np.arange(1, n_persons + 1, dtype=np.int64)
+        # Positive correlation: more credits → higher FE
+        person_fe = 0.1 * np.log1p(credit_counts) + 0.5
+
+        debiased = _debias_by_obs_count(person_fe.copy(), credit_counts, n_persons, log)
+        np.testing.assert_array_equal(debiased, person_fe)
+
+    def test_small_dataset_skipped(self):
+        """Debiasing should be skipped for datasets with fewer than 20 persons."""
+        import structlog
+
+        log = structlog.get_logger()
+        person_fe = np.array([1.0, 0.5, -0.5])
+        credit_counts = np.array([2, 1, 1], dtype=np.int64)
+
+        result = _debias_by_obs_count(person_fe.copy(), credit_counts, 3, log)
+        np.testing.assert_array_equal(result, person_fe)
+
+
+class TestWeightedObservations:
+    """Tests for observation weight computation and weighted estimation."""
+
+    @pytest.fixture
+    def weighted_data(self):
+        """Data with through and episodic roles for weight testing."""
+        anime_map = {
+            "a1": Anime(
+                id="a1", title_en="Alpha", year=2018, score=9.0,
+                studios=["StudioA"], episodes=24,
+            ),
+            "a2": Anime(
+                id="a2", title_en="Beta", year=2020, score=7.0,
+                studios=["StudioB"], episodes=12,
+            ),
+        }
+        return anime_map
+
+    def test_through_role_higher_weight(self, weighted_data):
+        """Director (through role) should have higher w_obs than Key Animator (episodic)."""
+        anime = weighted_data["a1"]
+        w_director = _compute_credit_weight(Role.DIRECTOR, None, anime, 5)
+        w_key_anim = _compute_credit_weight(Role.KEY_ANIMATOR, None, anime, 5)
+        assert w_director > w_key_anim, (
+            f"Director weight {w_director:.4f} should be > Key Animator weight {w_key_anim:.4f}"
+        )
+
+    def test_episode_coverage_scales_weight(self):
+        """Episodic role on 2/24 episodes should weigh less than through role on full series."""
+        anime = Anime(
+            id="a1", title_en="A", year=2020, score=8.0,
+            studios=["StudioA"], episodes=24,
+        )
+        # Key Animator credited on eps 3 and 7
+        w_partial = _compute_credit_weight(
+            Role.KEY_ANIMATOR, "Key Animation (eps 3, 7)", anime, 5,
+        )
+        # Director (through role, full coverage)
+        w_through = _compute_credit_weight(Role.DIRECTOR, None, anime, 5)
+        assert w_through > w_partial, (
+            f"Through role weight {w_through:.4f} should be > "
+            f"partial episodic weight {w_partial:.4f}"
+        )
+
+    def test_experience_increases_weight(self, weighted_data):
+        """10-year veteran should have higher weight than newcomer on same role/anime."""
+        anime = weighted_data["a1"]
+        w_newbie = _compute_credit_weight(Role.KEY_ANIMATOR, None, anime, 0)
+        w_veteran = _compute_credit_weight(Role.KEY_ANIMATOR, None, anime, 10)
+        assert w_veteran > w_newbie, (
+            f"Veteran weight {w_veteran:.4f} should be > newbie weight {w_newbie:.4f}"
+        )
+        # Experience factor at 0 years should be 1.0
+        # w_experience = min(1.0 + 0.3*(1 - exp(0/5)), 1.3) = 1.0
+        # At 10 years: min(1.0 + 0.3*(1 - exp(-2)), 1.3) ≈ 1.26
+        assert w_veteran / w_newbie > 1.1
+
+    def test_multi_role_accumulates(self):
+        """Director+Character Designer should have higher w_obs than Director alone."""
+        anime_map = {
+            "a1": Anime(
+                id="a1", title_en="A", year=2020, score=8.0,
+                studios=["StudioA"], episodes=12,
+            ),
+            "a2": Anime(
+                id="a2", title_en="B", year=2021, score=7.5,
+                studios=["StudioB"], episodes=12,
+            ),
+        }
+        # p1: director + character designer on a1
+        # p2: director only on a1
+        # Both also on a2 (for connected set)
+        credits = [
+            Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="t"),
+            Credit(person_id="p1", anime_id="a1", role=Role.CHARACTER_DESIGNER, source="t"),
+            Credit(person_id="p1", anime_id="a2", role=Role.DIRECTOR, source="t"),
+            Credit(person_id="p2", anime_id="a1", role=Role.DIRECTOR, source="t"),
+            Credit(person_id="p2", anime_id="a2", role=Role.KEY_ANIMATOR, source="t"),
+        ]
+        studio_assignments = infer_studio_assignment(credits, anime_map)
+        connected_persons, connected_studios = find_connected_set(studio_assignments)
+
+        _, obs_keys, _, _, _, _, _, w = _build_panel(
+            credits, anime_map, studio_assignments, connected_persons, connected_studios
+        )
+
+        # Find weights for p1 on a1 vs p2 on a1
+        w_p1_a1 = None
+        w_p2_a1 = None
+        for i, (pid, aid) in enumerate(obs_keys):
+            if pid == "p1" and aid == "a1":
+                w_p1_a1 = float(w[i])
+            if pid == "p2" and aid == "a1":
+                w_p2_a1 = float(w[i])
+
+        assert w_p1_a1 is not None and w_p2_a1 is not None
+        assert w_p1_a1 > w_p2_a1, (
+            f"Multi-role weight {w_p1_a1:.4f} should be > single-role weight {w_p2_a1:.4f}"
+        )
+
+    def test_weights_median_normalized(self, studio_data):
+        """Observation weights should have median approximately 1.0."""
+        _, anime_map, credits = studio_data
+        studio_assignments = infer_studio_assignment(credits, anime_map)
+        connected_persons, connected_studios = find_connected_set(studio_assignments)
+
+        _, obs_keys, _, _, _, _, _, w = _build_panel(
+            credits, anime_map, studio_assignments, connected_persons, connected_studios
+        )
+
+        if len(w) > 0:
+            assert abs(np.median(w) - 1.0) < 0.01, (
+                f"Median weight {np.median(w):.4f} should be ≈ 1.0"
+            )
+
+    def test_weighted_demeaning_convergence(self, studio_data):
+        """Weighted iterative demeaning should converge within max_iter."""
+        _, anime_map, credits = studio_data
+        result = estimate_akm(credits, anime_map, max_iter=100)
+        # If it converged, we should have valid results
+        assert result.n_observations > 0
+        assert len(result.person_fe) > 0
+
+    def test_weighted_r_squared(self, studio_data):
+        """Weighted R² should be in [0, 1] range."""
+        _, anime_map, credits = studio_data
+        result = estimate_akm(credits, anime_map)
+        assert 0.0 <= result.r_squared <= 1.0, (
+            f"Weighted R² = {result.r_squared:.4f}, expected [0, 1]"
+        )
+
+    def test_shrinkage_uses_effective_counts(self):
+        """High-weight 3-obs person should retain more FE than low-weight 10-obs person."""
+        import structlog
+
+        log = structlog.get_logger()
+        n_persons = 30
+        # Person 0: 3 observations with high weight (w=5 each → n_eff=15)
+        # Person 1: 10 observations with low weight (w=0.5 each → n_eff=5)
+        # Remaining: 5 obs each with w=1.0
+        person_ind_parts = (
+            [0] * 3
+            + [1] * 10
+            + [i for i in range(2, n_persons) for _ in range(5)]
+        )
+        person_ind = np.array(person_ind_parts, dtype=np.int32)
+        n_obs = len(person_ind)
+
+        w = np.ones(n_obs, dtype=np.float64)
+        # Person 0: high weight per observation
+        w[:3] = 5.0
+        # Person 1: low weight per observation
+        w[3:13] = 0.5
+
+        person_fe = np.zeros(n_persons)
+        person_fe[0] = 2.0  # extreme, high effective weight
+        person_fe[1] = 2.0  # same extreme, low effective weight
+        for i in range(2, n_persons):
+            person_fe[i] = 0.0
+
+        residuals = np.random.RandomState(42).randn(n_obs) * 0.5
+
+        shrunk = _shrink_person_fe(person_fe, person_ind, residuals, n_obs, n_persons, log, w=w)
+
+        # Person 0 (n_eff=15) should retain more of raw value
+        # Person 1 (n_eff=5) should be shrunk more toward mean
+        shrink_0 = abs(shrunk[0] - person_fe[0])
+        shrink_1 = abs(shrunk[1] - person_fe[1])
+        assert shrink_0 < shrink_1, (
+            f"High-eff-count person shrunk by {shrink_0:.3f}, "
+            f"low-eff-count person shrunk by {shrink_1:.3f}; "
+            "expected less shrinkage for higher effective count"
+        )
