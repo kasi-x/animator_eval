@@ -6,6 +6,7 @@ from collections import defaultdict
 import structlog
 
 from src.analysis.explain import explain_authority, explain_skill, explain_trust
+from src.analysis.integrated_value import compute_studio_exposure
 from src.models import ScoreResult
 from src.pipeline_phases.context import PipelineContext
 from src.utils.role_groups import DIRECTOR_ROLES
@@ -51,6 +52,13 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
         if credit.role in DIRECTOR_ROLES:
             anime_directors[credit.anime_id].add(credit.person_id)
 
+    # Pre-compute studio exposure once (time-weighted average, consistent with IV)
+    studio_exposure = compute_studio_exposure(
+        context.person_fe,
+        context.studio_fe,
+        studio_assignments=context.studio_assignments,
+    )
+
     # Pre-compute all scores and batch DB writes
     scores_by_pid: dict[str, ScoreResult] = {}
     score_rows = []
@@ -61,16 +69,14 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
         score = ScoreResult(
             person_id=pid,
             person_fe=context.person_fe.get(pid, 0.0),
-            studio_fe_exposure=sum(
-                context.studio_fe.get(s, 0.0)
-                for s in set(context.studio_assignments.get(pid, {}).values())
-            ) if context.studio_assignments else 0.0,
+            studio_fe_exposure=studio_exposure.get(pid, 0.0),
             birank=context.birank_person_scores.get(pid, 0.0),
             patronage=context.patronage_scores.get(pid, 0.0),
             dormancy=context.dormancy_scores.get(pid, 1.0),
             awcc=ks.awcc if ks else 0.0,
             ndi=ks.ndi if ks else 0.0,
             iv_score=context.iv_scores.get(pid, 0.0),
+            iv_score_historical=context.iv_scores_historical.get(pid, 0.0),
         )
         scores_by_pid[pid] = score
         score_rows.append((
@@ -138,6 +144,7 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
             "ndi": round(score.ndi, 4),
             "career_friction": round(context.career_friction.get(pid, 0), 4),
             "peer_boost": round(peer_boost, 4),
+            "iv_score_historical": round(score.iv_score_historical, 4),
         }
 
         # Add centrality metrics (if available)

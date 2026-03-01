@@ -57,12 +57,20 @@ class TestComputeMilestones:
         assert director["year"] == 2021
 
     def test_top_anime(self):
+        # top_anime now triggers when staff_cnt >= 50 (large-scale production),
+        # not based on anime.score. Build credits with 50 staff on a3.
         credits, anime_map = _make_career()
+        # Add 49 more staff to a3 so that staff_cnt = 50
+        for i in range(2, 51):
+            credits.append(
+                Credit(person_id=f"extra{i}", anime_id="a3", role=Role.KEY_ANIMATOR)
+            )
         result = compute_milestones(credits, anime_map)
         types = [m["type"] for m in result["p1"]]
         assert "top_anime" in types
         top = next(m for m in result["p1"] if m["type"] == "top_anime")
-        assert top["anime_id"] == "a3"  # score 9.0 is highest
+        assert top["anime_id"] == "a3"
+        assert top["staff_count"] >= 50
 
     def test_specific_person(self):
         credits, anime_map = _make_career()

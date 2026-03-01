@@ -519,9 +519,22 @@ def compute_community_features(
                 member_creds = person_credits.get(member_id, [])
                 current_score = person_scores[member_id].get("iv_score", 0)
 
-                # 1. Ability at formation time (actual score at that time)
-                # Simplified: use current score (ideally should recompute at formation_year)
-                ability_at_time = current_score
+                # 1. Ability at formation time (estimated by career fraction)
+                # Scale current score by career fraction at formation_year (B14 fix)
+                member_years = sorted(
+                    {
+                        anime_map[c.anime_id].year
+                        for c in member_creds
+                        if anime_map.get(c.anime_id) and anime_map[c.anime_id].year
+                    }
+                )
+                if member_years and formation_year >= member_years[0]:
+                    years_at_formation = formation_year - member_years[0] + 1
+                    total_career = max(member_years) - member_years[0] + 1
+                    career_fraction = min(years_at_formation / total_career, 1.0)
+                    ability_at_time = current_score * career_fraction
+                else:
+                    ability_at_time = current_score
                 abilities_at_formation.append(ability_at_time)
 
                 # 2. Prospective potential (estimated at formation time, no future data)
@@ -531,9 +544,19 @@ def compute_community_features(
                 prospective_potentials.append(prospective)
 
                 # 3. Retrospective potential (with hindsight, using all data)
-                # Find peak score from all future activity
-                # Assume current composite score is their peak (simplified)
-                future_peak = current_score
+                # B14 fix: compute future_peak from post-formation credit activity
+                post_credits = sum(
+                    1
+                    for c in member_creds
+                    if anime_map.get(c.anime_id)
+                    and anime_map[c.anime_id].year
+                    and anime_map[c.anime_id].year > formation_year
+                )
+                total_credits = len(member_creds) if member_creds else 1
+                post_ratio = post_credits / total_credits
+                # Boost proportional to how much activity came after formation
+                peak_boost = max(0.0, post_ratio - 0.5) * 2 * current_score
+                future_peak = min(100, current_score + peak_boost)
                 retrospective = compute_retrospective_potential(
                     member_id,
                     member_creds,

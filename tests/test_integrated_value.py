@@ -180,14 +180,20 @@ class TestOptimizeLambdaWeights:
                 comp[pid] = 0.1 + i * 0.05
             components[comp_name] = comp
 
-        weights, cv_mse = optimize_lambda_weights(components, credits, anime_map)
+        weights, cv_mse, comp_std, comp_mean = optimize_lambda_weights(components, credits, anime_map)
         assert len(weights) == len(components)
         total = sum(weights.values())
         assert total == pytest.approx(1.0, abs=0.05)
+        # Component std should be returned
+        assert isinstance(comp_std, dict)
+        assert len(comp_std) == len(components)
+        # Component mean should be returned
+        assert isinstance(comp_mean, dict)
+        assert len(comp_mean) == len(components)
 
     def test_cv_empty_components(self):
         """Empty components returns empty weights."""
-        weights, mse = optimize_lambda_weights({}, [], {})
+        weights, mse, comp_std, comp_mean = optimize_lambda_weights({}, [], {})
         assert weights == {}
         assert mse == 0.0
 
@@ -196,9 +202,28 @@ class TestOptimizeLambdaWeights:
         components = {"a": {"p1": 1.0}, "b": {"p1": 2.0}}
         anime_map = {"a1": Anime(id="a1", title_en="X", year=2020, score=7.0)}
         credits = [Credit(person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR, source="test")]
-        weights, mse = optimize_lambda_weights(components, credits, anime_map)
+        weights, mse, comp_std, comp_mean = optimize_lambda_weights(components, credits, anime_map)
         assert weights["a"] == pytest.approx(0.5)
         assert weights["b"] == pytest.approx(0.5)
+
+    def test_raw_scale_consistency(self, component_scores, cv_data):
+        """Lambda weights should be bounded by min/max constraints."""
+        credits, anime_map = cv_data
+        person_ids = sorted({c.person_id for c in credits})
+        components = {}
+        for comp_name, base_scores in component_scores.items():
+            comp = {}
+            for i, pid in enumerate(person_ids):
+                comp[pid] = 0.1 + i * 0.05
+            components[comp_name] = comp
+
+        weights, _, comp_std, _ = optimize_lambda_weights(components, credits, anime_map)
+        # All weights should be at least 5% (min_weight constraint)
+        for name, w in weights.items():
+            assert w >= 0.04, f"{name} weight {w:.4f} below minimum"
+        # comp_std should have positive values
+        for std in comp_std.values():
+            assert std > 0
 
 
 class TestComputeIntegratedValueFull:
@@ -233,3 +258,35 @@ class TestComputeIntegratedValueFull:
         for pid, breakdown in result.component_breakdown.items():
             assert "person_fe" in breakdown
             assert "dormancy" in breakdown
+
+
+class TestScaleRobustness:
+    """Ensure extreme scale differences don't cause a single component to dominate."""
+
+    def test_extreme_scale_difference_no_single_component_dominance(self):
+        """When one component has tiny std (e.g. 1e-6), it should not get 99%+ weight."""
+        # BiRank-like: very small values with tiny variance
+        # person_fe-like: normal range values
+        components = {
+            "birank": {f"p{i}": 1e-7 * (i + 1) for i in range(20)},
+            "person_fe": {f"p{i}": 0.1 * (i + 1) for i in range(20)},
+            "awcc": {f"p{i}": 0.05 * (i + 1) for i in range(20)},
+        }
+        anime_map = {
+            f"a{i}": Anime(
+                id=f"a{i}", title_en=f"Anime {i}", year=2018 + i, score=6.0 + i * 0.3,
+                studios=["S1"],
+            )
+            for i in range(8)
+        }
+        credits = [
+            Credit(person_id=f"p{i}", anime_id=f"a{j}", role=Role.KEY_ANIMATOR, source="test")
+            for i in range(20) for j in range(8) if (i + j) % 3 == 0
+        ]
+        weights, _, _, _ = optimize_lambda_weights(components, credits, anime_map)
+        # No single component should dominate above 0.60
+        for name, w in weights.items():
+            assert w < 0.60, f"{name} weight = {w:.4f}, expected < 0.60"
+        # All components should have at least 4% weight (min_weight after normalization)
+        for name, w in weights.items():
+            assert w >= 0.04, f"{name} weight = {w:.4f}, expected >= 0.04"

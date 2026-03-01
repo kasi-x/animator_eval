@@ -1160,20 +1160,25 @@ class TestComputeAnimeValues:
             if v.staff_count > 0:
                 assert abs(v.value_per_staff - v.composite_value / v.staff_count) < 0.1
 
-    def test_anime_score_used(self):
-        """Anime score should influence commercial and critical value."""
-        anime_high = [_anime("a_high", score=95.0)]
-        anime_low = [_anime("a_low", score=30.0)]
-        credits_high = [_credit("p1", "a_high")]
-        credits_low = [_credit("p1", "a_low")]
+    def test_more_staff_higher_commercial_value(self):
+        """More staff (larger production) should increase commercial value."""
+        # anime_value no longer uses anime.score for commercial/critical value.
+        # Commercial value is driven by staff count, role diversity, and
+        # production scale (episodes * duration).
+        anime_big = [_anime("a_big")]
+        anime_small = [_anime("a_small")]
+        # 5 staff on a_big vs 1 on a_small
+        credits_big = [_credit(f"p{i}", "a_big") for i in range(5)]
+        credits_small = [_credit("p1", "a_small")]
         scores = {
-            "p1": {"birank": 0.5, "patronage": 0.5, "person_fe": 0.5, "iv_score": 0.5}
+            f"p{i}": {"birank": 0.5, "patronage": 0.5, "person_fe": 0.5, "iv_score": 0.5}
+            for i in range(5)
         }
-        result_high = compute_anime_values(anime_high, credits_high, scores)
-        result_low = compute_anime_values(anime_low, credits_low, scores)
+        result_big = compute_anime_values(anime_big, credits_big, scores)
+        result_small = compute_anime_values(anime_small, credits_small, scores)
         assert (
-            result_high["a_high"].commercial_value
-            > result_low["a_low"].commercial_value
+            result_big["a_big"].commercial_value
+            > result_small["a_small"].commercial_value
         )
 
 
@@ -1306,12 +1311,15 @@ class TestIndividualContributionEdgeCases:
         """Test independent_value uses collaboration_graph when provided."""
         from src.analysis.individual_contribution import compute_independent_value
 
+        # independent_value now compares collaborator IV residuals with/without
+        # the target person, rather than comparing anime.score. Scores on
+        # anime_map are irrelevant; only participant IV scores matter.
         features = {f"p{i}": {"iv_score": 50 + i * 5} for i in range(6)}
         anime_map = {
-            "shared": _anime("shared", score=90),
-            "solo1": _anime("solo1", score=50),
-            "solo2": _anime("solo2", score=55),
-            "solo3": _anime("solo3", score=60),
+            "shared": _anime("shared"),
+            "solo1": _anime("solo1"),
+            "solo2": _anime("solo2"),
+            "solo3": _anime("solo3"),
         }
         credits = [
             _credit("p0", "shared"),
@@ -1330,6 +1338,6 @@ class TestIndividualContributionEdgeCases:
         result = compute_independent_value(
             features, credits, anime_map, collaboration_graph=G
         )
-        # p0 should have a positive value (collaborators do better when with p0)
-        if result["p0"] is not None:
-            assert result["p0"] > 0
+        # p0 has 3 collaborators from graph (p1, p2, p3) — meets MIN_COLLABORATORS
+        # The collaboration_graph restricts neighbors instead of credit co-occurrence
+        assert result["p0"] is not None

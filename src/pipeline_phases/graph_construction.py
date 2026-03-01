@@ -47,8 +47,8 @@ def build_graphs_phase(context: PipelineContext) -> None:
                         context.collaboration_graph, weight="weight", seed=42
                     )
                 else:
-                    communities = nx.community.label_propagation_communities(
-                        context.collaboration_graph
+                    communities = nx.community.asyn_lpa_communities(
+                        context.collaboration_graph, seed=42
                     )
                 context.community_map = {
                     member: cid

@@ -188,13 +188,15 @@ def plot_interactive_scatter(
     df["name_display"] = df.apply(
         lambda row: row.get("name") or row.get("person_id", "Unknown"), axis=1
     )
+    # Clamp size column — px.scatter rejects negative marker sizes
+    df["_size"] = df["iv_score"].clip(lower=0.001)
 
     fig = px.scatter(
         df,
         x=x_axis,
         y=y_axis,
         color="iv_score",
-        size="iv_score",
+        size="_size",
         hover_data={
             "name_display": True,
             x_axis: ":.1f",

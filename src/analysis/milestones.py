@@ -48,13 +48,14 @@ def compute_milestones(
     for pid in person_credits:
         person_credits[pid].sort(key=lambda x: x[0])
 
-    # Find the highest-scored anime
-    best_score = 0.0
-    best_anime_id = None
-    for aid, anime in anime_map.items():
-        if anime.score and anime.score > best_score:
-            best_score = anime.score
-            best_anime_id = aid
+    # Precompute staff count per anime for "largest production" milestone
+    anime_staff_count: dict[str, int] = defaultdict(int)
+    seen_pid_aid: set[tuple[str, str]] = set()
+    for c in target_credits:
+        key = (c.person_id, c.anime_id)
+        if key not in seen_pid_aid:
+            seen_pid_aid.add(key)
+            anime_staff_count[c.anime_id] += 1
 
     all_milestones: dict[str, list[dict]] = {}
 
@@ -114,16 +115,17 @@ def compute_milestones(
                 highest_stage = stage
                 seen_stages.add(stage)
 
-            # Participation in highest-scored anime
-            if credit.anime_id == best_anime_id and best_anime_id is not None:
+            # Participation in large-scale production (per-person best)
+            staff_cnt = anime_staff_count.get(credit.anime_id, 0)
+            if staff_cnt >= 50 and "top_anime" not in {m["type"] for m in milestones}:
                 milestones.append(
                     {
                         "type": "top_anime",
                         "year": year,
                         "anime_id": credit.anime_id,
                         "anime_title": anime_title,
-                        "score": best_score,
-                        "description": f"最高評価作品参加: {anime_title} (score: {best_score})",
+                        "staff_count": staff_cnt,
+                        "description": f"大規模制作参加: {anime_title} ({staff_cnt}人)",
                     }
                 )
 

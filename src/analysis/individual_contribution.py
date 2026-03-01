@@ -74,6 +74,15 @@ def _build_person_features(
     for c in credits:
         person_credits[c.person_id].append(c)
 
+    # anime → staff count (precompute to avoid O(n²))
+    anime_staff_counts: dict[str, int] = defaultdict(int)
+    _seen_pa: set[tuple[str, str]] = set()
+    for c in credits:
+        key = (c.person_id, c.anime_id)
+        if key not in _seen_pa:
+            _seen_pa.add(key)
+            anime_staff_counts[c.anime_id] += 1
+
     # person → スタジオ一覧
     person_studios: dict[str, list[str]] = defaultdict(list)
     for c in credits:
@@ -109,18 +118,16 @@ def _build_person_features(
             if years:
                 career_years = max(years) - min(years) + 1
 
-        # 参加作品の平均スコア（機会の指標）
+        # 参加作品の平均スタッフ数（機会の指標 — anime.score は使わない）
         pc = person_credits.get(pid, [])
-        anime_scores = []
+        staff_counts_list = []
         seen_anime = set()
         for c in pc:
             if c.anime_id in seen_anime:
                 continue
             seen_anime.add(c.anime_id)
-            anime = anime_map.get(c.anime_id)
-            if anime and anime.score:
-                anime_scores.append(anime.score)
-        avg_anime_score = np.mean(anime_scores) if anime_scores else 0
+            staff_counts_list.append(anime_staff_counts.get(c.anime_id, 1))
+        avg_staff_count = np.mean(staff_counts_list) if staff_counts_list else 0
 
         # スタジオ規模（所属スタジオの頻度）
         studios = person_studios.get(pid, [])
@@ -133,7 +140,7 @@ def _build_person_features(
             "primary_role": primary_role,
             "career_years": career_years,
             "career_band": _get_career_band(career_years),
-            "avg_anime_score": avg_anime_score,
+            "avg_staff_count": avg_staff_count,
             "unique_studios": unique_studios,
             "work_count": len(seen_anime),
             "credit_count": len(pc),
@@ -144,14 +151,16 @@ def _build_person_features(
 
 def compute_peer_percentile(
     features: dict[str, dict],
+    community_map: dict[str, int] | None = None,
 ) -> dict[str, dict]:
     """コホート内パーセンタイルを算出.
 
     Args:
         features: person_id → 特徴量辞書
+        community_map: person_id → community_id（クラスタベースのパーセンタイル追加用）
 
     Returns:
-        person_id → {peer_percentile, peer_cohort}
+        person_id → {peer_percentile, peer_cohort, cluster_percentile?, cluster_id?, cluster_size?}
     """
     # コホートを構成: role × career_band
     cohorts: dict[tuple[str, str], list[tuple[str, float]]] = defaultdict(list)
@@ -159,22 +168,34 @@ def compute_peer_percentile(
         key = (f["primary_role"], f["career_band"])
         cohorts[key].append((pid, f["iv_score"]))
 
-    # 小さいコホートをマージ（同じ役職の隣接バンド）
-    role_bands: dict[str, list[str]] = defaultdict(list)
-    for role, band in cohorts:
-        if role not in role_bands or band not in role_bands[role]:
-            role_bands[role].append(band)
-
-    result = {}
+    # Identify roles that need full merge (any band in that role is < MIN_COHORT_SIZE)
+    role_needs_merge: set[str] = set()
     for (role, band), members in cohorts.items():
         if len(members) < MIN_COHORT_SIZE:
-            # 同じ役職の全バンドをマージ
-            merged = []
-            for (r2, b2), m2 in cohorts.items():
-                if r2 == role:
-                    merged.extend(m2)
+            role_needs_merge.add(role)
+
+    # Pre-compute merged cohorts for roles that need it
+    merged_cohorts: dict[str, list[tuple[str, float]]] = {}
+    for role in role_needs_merge:
+        merged = []
+        for (r2, b2), m2 in cohorts.items():
+            if r2 == role:
+                merged.extend(m2)
+        merged_cohorts[role] = merged
+
+    result = {}
+    seen: set[str] = set()  # Prevent duplicate processing
+
+    for (role, band), members in cohorts.items():
+        if role in role_needs_merge:
+            # Skip if we already processed this role's merged cohort
+            if role in seen:
+                continue
+            seen.add(role)
+
+            merged = merged_cohorts[role]
             if len(merged) < MIN_COHORT_SIZE:
-                for pid, _ in members:
+                for pid, _ in merged:
                     result[pid] = {"peer_percentile": None, "peer_cohort": None}
                 continue
             cohort_members = merged
@@ -196,12 +217,32 @@ def compute_peer_percentile(
         n_members = len(scores)
         for pid, score in cohort_members:
             # パーセンタイル: この人より低い人の割合
-            rank = bisect.bisect_left(scores, score)
+            rank = bisect.bisect_right(scores, score)
             percentile = round(rank / n_members * 100, 1)
             result[pid] = {
                 "peer_percentile": percentile,
                 "peer_cohort": cohort_label,
             }
+
+    # Cluster-based percentile (if community_map provided)
+    if community_map:
+        cluster_cohorts: dict[int, list[tuple[str, float]]] = defaultdict(list)
+        for pid, f in features.items():
+            cid = community_map.get(pid)
+            if cid is not None:
+                cluster_cohorts[cid].append((pid, f["iv_score"]))
+
+        for cid, members in cluster_cohorts.items():
+            if len(members) < MIN_COHORT_SIZE:
+                continue
+            scores = sorted([s for _, s in members])
+            n_members = len(scores)
+            for pid, score in members:
+                if pid in result:
+                    rank = bisect.bisect_right(scores, score)
+                    result[pid]["cluster_percentile"] = round(rank / n_members * 100, 1)
+                    result[pid]["cluster_id"] = cid
+                    result[pid]["cluster_size"] = n_members
 
     logger.info("peer_percentile_computed", persons=len(result), cohorts=len(cohorts))
     return result
@@ -212,7 +253,7 @@ def compute_opportunity_residual(
 ) -> tuple[dict[str, float], float]:
     """機会統制残差を算出.
 
-    OLS: composite ~ career_years + avg_anime_score + unique_studios + role_dummies
+    OLS: composite ~ career_years + avg_staff_count + unique_studios + role_dummies
 
     Args:
         features: person_id → 特徴量辞書
@@ -231,15 +272,15 @@ def compute_opportunity_residual(
 
     y = np.array([features[pid]["iv_score"] for pid in pids])
 
-    # 特徴量行列: [career_years, avg_anime_score, unique_studios, role_dummies...]
+    # 特徴量行列: [career_years, avg_staff_count, unique_studios, role_dummies...]
     n = len(pids)
-    n_roles = max(len(roles) - 1, 1)  # ダミー変数（基準役職を除く）
+    n_roles = max(len(roles) - 1, 0)  # Fix B06: 1ロール時は0列（零列を避ける）
     X = np.zeros((n, 3 + n_roles))
 
     for i, pid in enumerate(pids):
         f = features[pid]
         X[i, 0] = f["career_years"]
-        X[i, 1] = f["avg_anime_score"]
+        X[i, 1] = f["avg_staff_count"]
         X[i, 2] = f["unique_studios"]
         ridx = role_to_idx.get(f["primary_role"], 0)
         if ridx > 0 and ridx <= n_roles:
@@ -248,12 +289,13 @@ def compute_opportunity_residual(
     # 切片を追加
     X = np.column_stack([np.ones(n), X])
 
-    # OLS: β = (X'X)^-1 X'y
+    # OLS: β = (X'X)^-1 X'y with leverage correction (studentized residuals)
     try:
         XtX = X.T @ X
         # 正則化（特異行列対策）
         XtX += np.eye(XtX.shape[0]) * 1e-8
-        beta = np.linalg.solve(XtX, X.T @ y)
+        XtX_inv = np.linalg.inv(XtX)
+        beta = XtX_inv @ (X.T @ y)
         y_hat = X @ beta
         residuals = y - y_hat
 
@@ -262,12 +304,14 @@ def compute_opportunity_residual(
         ss_tot = np.sum((y - np.mean(y)) ** 2)
         r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
 
-        # 標準化残差（z-score）
-        std = np.std(residuals)
-        if std > 0:
-            z_residuals = residuals / std
-        else:
-            z_residuals = np.zeros(n)
+        # Studentized residuals with leverage correction
+        p = X.shape[1]  # number of predictors
+        H_diag = np.sum((X @ XtX_inv) * X, axis=1)  # hat matrix diagonal
+        s = np.sqrt(ss_res / max(n - p, 1))
+        z_residuals = np.zeros(n)
+        for i in range(n):
+            denom = s * np.sqrt(max(1.0 - H_diag[i], 1e-10))
+            z_residuals[i] = residuals[i] / denom if denom > 0 else 0.0
 
         result = {pids[i]: round(float(z_residuals[i]), 3) for i in range(n)}
 
@@ -288,22 +332,25 @@ def compute_consistency(
     features: dict[str, dict],
     credits: list[Credit],
     anime_map: dict[str, Anime],
+    akm_residuals: dict[tuple[str, str], float] | None = None,
 ) -> dict[str, float | None]:
     """作品間の一貫性スコアを算出.
 
-    各人が参加した作品のスコアの変動係数（CV）を計算し、
-    CVが低い（安定している）ほど高い一貫性スコアを返す。
+    AKM残差が利用可能な場合はそれを使用し、スタジオや年次効果を除いた
+    個人の純粋な貢献度の安定性を計測する。残差がない場合はフォールバック
+    として作品スコアを使用する。
 
     Args:
         features: person_id → 特徴量辞書
         credits: クレジットリスト
         anime_map: anime_id → Anime
+        akm_residuals: (person_id, anime_id) → AKM残差
 
     Returns:
         person_id → consistency (0-1, 1=完全に安定)
     """
-    # person → 作品スコアリスト
-    person_work_scores: dict[str, list[float]] = defaultdict(list)
+    # person → AKM残差リスト（スタジオ・年次効果を除いた個人の貢献安定性）
+    person_work_values: dict[str, list[float]] = defaultdict(list)
     person_seen_anime: dict[str, set] = defaultdict(set)
 
     for c in credits:
@@ -314,24 +361,33 @@ def compute_consistency(
             continue
         person_seen_anime[pid].add(c.anime_id)
         anime = anime_map.get(c.anime_id)
-        if anime and anime.score:
-            person_work_scores[pid].append(anime.score)
+        if not anime:
+            continue
+
+        # Use AKM residuals only (no anime.score fallback)
+        if akm_residuals:
+            resid = akm_residuals.get((pid, c.anime_id))
+            if resid is not None:
+                person_work_values[pid].append(resid)
+
+    # Compute population reference scale for consistent normalization
+    all_values = [v for vals in person_work_values.values() for v in vals]
+    ref_scale = float(np.std(all_values)) if all_values else 1.0
+    ref_scale = max(ref_scale, 0.01)  # prevent division by zero
 
     result = {}
     for pid in features:
-        scores = person_work_scores.get(pid, [])
-        if len(scores) < MIN_WORKS_FOR_CONSISTENCY:
+        values = person_work_values.get(pid, [])
+        if len(values) < MIN_WORKS_FOR_CONSISTENCY:
             result[pid] = None
             continue
 
-        mean = np.mean(scores)
-        if mean == 0:
-            result[pid] = None
-            continue
+        std = float(np.std(values))
 
-        cv = np.std(scores) / mean
-        # CV を 0-1 の一貫性スコアに変換（CV=0 → 1.0, CV=1 → 0.0）
-        consistency = max(0.0, 1.0 - cv)
+        # Unified formula: consistency = max(0, 1 - std/ref_scale)
+        # This normalizes by population std so the metric is always 0-1
+        consistency = max(0.0, 1.0 - std / ref_scale)
+
         result[pid] = round(consistency, 3)
 
     computed = sum(1 for v in result.values() if v is not None)
@@ -368,27 +424,36 @@ def compute_independent_value(
         if c.person_id in features:
             anime_persons[c.anime_id].add(c.person_id)
 
-    # person → {anime_id: score}
-    person_anime_scores: dict[str, dict[str, float]] = defaultdict(dict)
+    # person → {anime_id} (participation set — no anime.score)
+    person_anime_set: dict[str, set[str]] = defaultdict(set)
     for c in credits:
-        if c.person_id not in features:
-            continue
-        anime = anime_map.get(c.anime_id)
-        if anime and anime.score:
-            person_anime_scores[c.person_id][c.anime_id] = anime.score
+        if c.person_id in features:
+            person_anime_set[c.person_id].add(c.anime_id)
 
     result = {}
     target_pids = list(features.keys())
     features_keys = set(features.keys())
+
+    # Precompute project quality per anime: sum and count of participant IV scores
+    anime_iv_sum: dict[str, float] = {}
+    anime_iv_count: dict[str, int] = {}
+    for aid, persons in anime_persons.items():
+        total = 0.0
+        count = 0
+        for p in persons:
+            if p in features:
+                total += features[p].get("iv_score", 0.0)
+                count += 1
+        anime_iv_sum[aid] = total
+        anime_iv_count[aid] = count
 
     for pid in target_pids:
         # コラボレーターを特定
         if collaboration_graph and pid in collaboration_graph:
             collaborators = set(collaboration_graph.neighbors(pid))
         else:
-            # グラフがなければ共演者から構築
             collaborators = set()
-            for aid in person_anime_scores[pid]:
+            for aid in person_anime_set[pid]:
                 collaborators.update(anime_persons.get(aid, set()))
             collaborators.discard(pid)
 
@@ -398,20 +463,38 @@ def compute_independent_value(
             result[pid] = None
             continue
 
-        # 各コラボレーターについて: Xと共演時のスコア vs 非共演時のスコア
+        # 各コラボレーターについて: IV統制付きの比較
+        # "pid がいるときのコラボレーターのIV残差" vs "いないとき"
         diffs = []
-        pid_anime = set(person_anime_scores[pid].keys())
+        pid_anime = person_anime_set[pid]
+        pid_iv = features[pid].get("iv_score", 0.0)
 
         for collab_id in collaborators:
-            collab_anime = person_anime_scores.get(collab_id, {})
-            if not collab_anime:
+            collab_anime_ids = person_anime_set.get(collab_id, set())
+            if not collab_anime_ids:
                 continue
 
-            with_x = [s for aid, s in collab_anime.items() if aid in pid_anime]
-            without_x = [s for aid, s in collab_anime.items() if aid not in pid_anime]
+            with_x_resids = []
+            without_x_resids = []
+            collab_iv = features[collab_id].get("iv_score", 0.0)
+            for aid in collab_anime_ids:
+                # Fix B07: exclude both collab AND pid from project quality
+                total = anime_iv_sum.get(aid, 0.0) - collab_iv
+                count = anime_iv_count.get(aid, 0) - (1 if collab_id in features else 0)
+                if aid in pid_anime:
+                    total -= pid_iv  # B07 fix: exclude pid too
+                    count -= 1
+                proj_quality = total / count if count > 0 else 0.0
+                # Use collab's IV as "work outcome" instead of anime.score
+                resid = collab_iv - proj_quality
 
-            if with_x and without_x:
-                diff = np.mean(with_x) - np.mean(without_x)
+                if aid in pid_anime:
+                    with_x_resids.append(resid)
+                else:
+                    without_x_resids.append(resid)
+
+            if with_x_resids and without_x_resids:
+                diff = np.mean(with_x_resids) - np.mean(without_x_resids)
                 diffs.append(diff)
 
         if len(diffs) < MIN_COLLABORATORS:
@@ -434,6 +517,8 @@ def compute_individual_profiles(
     role_profiles: dict[str, dict],
     career_data: dict[str, dict],
     collaboration_graph: nx.Graph | None = None,
+    akm_residuals: dict[tuple[str, str], float] | None = None,
+    community_map: dict[str, int] | None = None,
 ) -> IndividualContributionResult:
     """全指標を統合して Individual Contribution Profile を算出.
 
@@ -444,6 +529,8 @@ def compute_individual_profiles(
         role_profiles: person_id → 役職情報
         career_data: person_id → キャリア情報
         collaboration_graph: コラボレーショングラフ
+        akm_residuals: (person_id, anime_id) → AKM残差（consistency改善用）
+        community_map: person_id → community_id（クラスタパーセンタイル用）
 
     Returns:
         IndividualContributionResult
@@ -455,16 +542,18 @@ def compute_individual_profiles(
         results, credits, anime_map, role_profiles, career_data
     )
 
-    # 1. ピア比較パーセンタイル
-    peer_data = compute_peer_percentile(features)
+    # 1. ピア比較パーセンタイル（+ クラスタベース）
+    peer_data = compute_peer_percentile(features, community_map=community_map)
 
     # 2. 機会統制残差
     residuals, r_squared = compute_opportunity_residual(features)
 
-    # 3. 一貫性スコア
-    consistency_scores = compute_consistency(features, credits, anime_map)
+    # 3. 一貫性スコア（AKM残差を使用可能）
+    consistency_scores = compute_consistency(
+        features, credits, anime_map, akm_residuals=akm_residuals
+    )
 
-    # 4. 独立貢献度
+    # 4. 独立貢献度（セレクションバイアス軽減版）
     independent_values = compute_independent_value(
         features, credits, anime_map, collaboration_graph
     )
@@ -481,7 +570,13 @@ def compute_individual_profiles(
             consistency=consistency_scores.get(pid),
             independent_value=independent_values.get(pid),
         )
-        profiles[pid] = asdict(profile)
+        profile_dict = asdict(profile)
+        # Add cluster percentile if available
+        if "cluster_percentile" in peer:
+            profile_dict["cluster_percentile"] = peer["cluster_percentile"]
+            profile_dict["cluster_id"] = peer["cluster_id"]
+            profile_dict["cluster_size"] = peer["cluster_size"]
+        profiles[pid] = profile_dict
 
     logger.info(
         "individual_profiles_computed",

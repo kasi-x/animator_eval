@@ -19,19 +19,21 @@ def analyze_team_patterns(
     anime_map: dict[str, Anime],
     person_scores: dict[str, float] | None = None,
     min_score: float = 7.0,
+    min_staff: int = 15,
 ) -> dict:
-    """成功作品のチーム構成パターンを分析する.
+    """大規模制作のチーム構成パターンを分析する.
 
     Args:
         credits: 全クレジット
         anime_map: anime_id → Anime
         person_scores: {person_id: composite_score}
-        min_score: 「成功」判定の最低作品スコア
+        min_score: 未使用 (後方互換のため残存)
+        min_staff: 「大規模制作」判定の最低スタッフ数
 
     Returns:
         {
-            "high_score_teams": [...],  # 高評価作品のチーム構成
-            "role_combinations": {...},  # 成功パターンの役職組み合わせ
+            "high_score_teams": [...],  # 大規模制作のチーム構成
+            "role_combinations": {...},  # 頻出パターンの役職組み合わせ
             "recommended_pairs": [...],  # 推薦ペア
             "team_size_stats": {...},    # チームサイズの統計
         }
@@ -81,7 +83,7 @@ def analyze_team_patterns(
 
         all_teams.append(team_entry)
 
-        if anime.score and anime.score >= min_score:
+        if team_size >= min_staff:
             high_score_teams.append(team_entry)
 
     # Sort by anime score

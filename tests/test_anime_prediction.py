@@ -33,21 +33,26 @@ class TestPredictAnimeScore:
     def test_higher_overlap_weighted_more(self):
         credits, anime_map = _make_data()
         result = predict_anime_score(["p1", "p2"], credits, anime_map)
-        # p1+p2 worked together on a1 (8.5) and a2 (8.0)
-        # But p1 alone worked on a3 (6.0)
-        # Prediction should be higher due to overlap weighting
-        assert result["predicted_score"] > 7.0
+        # Now predicts staff count (production scale), not anime.score.
+        # p1+p2 worked together on a1 (2 staff) and a2 (2 staff) — full overlap.
+        # p1 alone on a3 (2 staff) and a4 (1 staff) — partial overlap.
+        # Full-overlap anime are weighted more, so prediction should be
+        # pulled toward 2 (the staff count of full-overlap works).
+        assert result["predicted_score"] > 1.5
 
     def test_basis_anime_count(self):
         credits, anime_map = _make_data()
         result = predict_anime_score(["p1"], credits, anime_map)
-        assert result["basis_anime_count"] == 3  # a1, a2, a3 (not a4 - no score)
+        # Now uses staff count (not anime.score), so a4 is included too
+        assert result["basis_anime_count"] == 4  # a1, a2, a3, a4
 
     def test_historical_range(self):
         credits, anime_map = _make_data()
         result = predict_anime_score(["p1"], credits, anime_map)
-        assert result["historical_range"]["min"] == 6.0
-        assert result["historical_range"]["max"] == 8.5
+        # Historical range now uses staff counts, not anime.score.
+        # a1: {p1,p2}=2, a2: {p1,p2}=2, a3: {p1,p3}=2, a4: {p1}=1
+        assert result["historical_range"]["min"] == 1.0
+        assert result["historical_range"]["max"] == 2.0
 
     def test_similar_teams(self):
         credits, anime_map = _make_data()

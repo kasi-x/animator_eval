@@ -55,6 +55,13 @@ def create_person_anime_network(
     for a in anime_list:
         g.add_node(a.id, type="anime", name=a.display_title, year=a.year, score=a.score)
 
+    # Ensure all credited persons have type="person" even if not in persons list
+    # (BiRank filters on type="person", so implicit nodes would be excluded)
+    credit_person_ids = {c.person_id for c in credits if c.role not in NON_PRODUCTION_ROLES}
+    for pid in credit_person_ids:
+        if pid not in g:
+            g.add_node(pid, type="person", name="", name_ja="", name_en="")
+
     # クレジットエッジ（非制作ロールを除外）
     for c in credits:
         if c.role in NON_PRODUCTION_ROLES:
@@ -161,31 +168,26 @@ def _compute_anime_commitments(
 
 
 def _work_importance(anime: Anime | None) -> float:
-    """Compute work importance multiplier from score and duration.
+    """Compute work importance multiplier from duration only.
 
-    Score component: anime.score / 10.0 (range 0.1-1.0)
     Duration component: anime.duration / 30 (30分基準, capped at 2.0x)
 
     Mini-anime (5 min) gets ~0.17x, standard TV (24 min) gets 0.8x,
     movies (120 min) get 2.0x (capped).
+
+    Note: anime.score is intentionally excluded — viewer ratings are
+    independent of staff contribution quality (see todo.md §経路2).
     """
     from src.utils.config import DURATION_BASELINE_MINUTES, DURATION_MAX_MULTIPLIER
 
-    # Score-based importance
-    if anime is None or anime.score is None:
-        score_mult = 0.5
-    else:
-        score_mult = max(anime.score / 10.0, 0.1)
-
-    # Duration-based importance (30分基準)
     if anime is None or anime.duration is None:
-        return score_mult
+        return 1.0
 
     duration_mult = min(
         anime.duration / DURATION_BASELINE_MINUTES,
         DURATION_MAX_MULTIPLIER,
     )
-    return max(score_mult * duration_mult, 0.01)
+    return max(duration_mult, 0.01)
 
 
 def _episode_weight_for_pair(
@@ -229,11 +231,9 @@ def _episode_weight_for_pair(
             known_frac = len(known) / total_episodes
             # Unknown episodic side: assume typical 1-2 cour coverage
             unknown_frac = min(26.0 / total_episodes, 1.0)
-            # Estimated overlap = known_frac × unknown_frac × total_episodes
-            # Normalized by union ≈ (known_frac + unknown_frac) × total_episodes
-            return (known_frac * unknown_frac) / max(
-                known_frac + unknown_frac - known_frac * unknown_frac, 0.001
-            )
+            # Estimated overlap under independence: P(A∩B) = P(A) × P(B)
+            # (B11 fix: Jaccard invalid with estimated continuous fractions)
+            return known_frac * unknown_frac
 
         # No total_episodes info → default
         return 1.0
@@ -751,7 +751,13 @@ def calculate_network_centrality_scores(
         for component in nx.connected_components(graph):
             subg = graph.subgraph(component)
             if subg.number_of_nodes() > 1:
-                c = nx.closeness_centrality(subg, distance="weight")
+                # Fix B05: Edge weights are similarity (higher = closer), but
+                # closeness_centrality(distance=) treats values as distances.
+                # Invert weights so strong connections = short distance.
+                inv_subg = subg.copy()
+                for u_node, v_node, d in inv_subg.edges(data=True):
+                    d["distance"] = 1.0 / max(d.get("weight", 1.0), 0.001)
+                c = nx.closeness_centrality(inv_subg, distance="distance")
                 closeness.update(c)
             else:
                 for n in component:

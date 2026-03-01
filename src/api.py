@@ -147,6 +147,11 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+# Mount report files
+REPORTS_DIR = Path(__file__).parent.parent / "result" / "reports"
+if REPORTS_DIR.exists():
+    app.mount("/reports", StaticFiles(directory=str(REPORTS_DIR), html=True), name="reports")
+
 
 # --- Response Models ---
 

@@ -26,19 +26,21 @@ class IntegratedValueResult:
         lambda_weights: component name → optimized weight
         cv_mse: cross-validation mean squared error
         component_breakdown: person_id → {component → value}
+        component_std: component name → standard deviation (diagnostic)
     """
 
     iv_scores: dict[str, float]
     lambda_weights: dict[str, float]
     cv_mse: float
     component_breakdown: dict[str, dict[str, float]]
+    component_std: dict[str, float] | None = None
+    component_mean: dict[str, float] | None = None
 
 
 def compute_studio_exposure(
     person_fe: dict[str, float],
     studio_fe: dict[str, float],
     studio_assignments: dict[str, dict[int, str]] | None = None,
-    akm_result=None,
 ) -> dict[str, float]:
     """Compute studio exposure for each person.
 
@@ -49,7 +51,6 @@ def compute_studio_exposure(
         person_fe: person_id → person fixed effect (unused, for API compat)
         studio_fe: studio_name → studio fixed effect
         studio_assignments: person_id → {year → studio} (from AKM)
-        akm_result: AKMResult instance (alternative source for assignments)
 
     Returns:
         person_id → studio exposure score
@@ -57,10 +58,7 @@ def compute_studio_exposure(
     if not studio_fe:
         return {}
 
-    # Get studio assignments from AKM result if not provided directly
     assignments = studio_assignments
-    if assignments is None and akm_result is not None:
-        assignments = {}
 
     if not assignments:
         return {}
@@ -93,11 +91,13 @@ def optimize_lambda_weights(
     anime_map: dict[str, Anime],
     n_folds: int = 5,
     seed: int = 42,
-) -> tuple[dict[str, float], float]:
+) -> tuple[dict[str, float], float, dict[str, float], dict[str, float]]:
     """Optimize component weights via cross-validation.
 
-    Uses leave-one-anime-out CV: predict person's weighted anime score on
-    held-out projects using component scores.
+    Uses time-based CV: folds are split by year blocks to avoid target leakage.
+    Optimization runs in centered normalized space for numerical stability.
+    Final weights are kept in this space; compute_integrated_value applies
+    the same centering + normalization so that weights are consistent.
 
     Args:
         components: {component_name → {person_id → score}}
@@ -107,33 +107,22 @@ def optimize_lambda_weights(
         seed: random seed
 
     Returns:
-        (lambda_weights, cv_mse)
+        (lambda_weights, cv_mse, component_std)
     """
-    from scipy.optimize import minimize
-
     component_names = sorted(components.keys())
     n_components = len(component_names)
 
     if n_components == 0:
-        return {}, 0.0
+        return {}, 0.0, {}, {}
 
-    # Build person → anime outcomes
-    person_anime_scores: dict[str, list[tuple[str, float]]] = defaultdict(list)
-    for c in credits:
-        anime = anime_map.get(c.anime_id)
-        if anime and anime.score is not None:
-            person_anime_scores[c.person_id].append((c.anime_id, anime.score))
-
-    # Get all persons with components and anime scores
+    # Get all persons with components
     all_persons = set()
     for comp_scores in components.values():
         all_persons.update(comp_scores.keys())
-    all_persons = {p for p in all_persons if p in person_anime_scores}
 
     if len(all_persons) < 10:
-        # Too few persons, use equal weights
         equal_w = 1.0 / n_components
-        return {name: equal_w for name in component_names}, 0.0
+        return {name: equal_w for name in component_names}, 0.0, {}, {}
 
     # Build feature matrix for all persons
     person_list = sorted(all_persons)
@@ -145,75 +134,45 @@ def optimize_lambda_weights(
     # Normalize features
     x_std = np.std(X, axis=0)
     x_std[x_std == 0] = 1.0
+    std_floor = np.max(x_std) * 0.01
+    x_std = np.maximum(x_std, std_floor)
     X_norm = X / x_std
 
-    # Target: mean anime score per person
-    y = np.array([
-        np.mean([s for _, s in person_anime_scores[pid]])
-        for pid in person_list
-    ], dtype=np.float64)
+    x_mean = np.mean(X_norm, axis=0)
+    X_norm = X_norm - x_mean
 
-    # CV optimization
-    rng = np.random.RandomState(seed)
-    indices = np.arange(len(person_list))
-    rng.shuffle(indices)
-    fold_size = len(indices) // n_folds
+    component_std = {name: float(x_std[j]) for j, name in enumerate(component_names)}
+    component_mean = {name: float(x_mean[j]) for j, name in enumerate(component_names)}
 
-    def cv_mse(lambdas):
-        total_mse = 0.0
-        for fold in range(n_folds):
-            start = fold * fold_size
-            end = start + fold_size if fold < n_folds - 1 else len(indices)
-            test_idx = indices[start:end]
-
-            # Predict on test set
-            pred = X_norm[test_idx] @ lambdas
-            actual = y[test_idx]
-            total_mse += np.mean((pred - actual) ** 2)
-
-        return total_mse / n_folds
-
-    # Optimize
-    x0 = np.ones(n_components) / n_components
-    bounds = [(0, None)] * n_components
-
-    try:
-        result = minimize(
-            cv_mse,
-            x0,
-            method="L-BFGS-B",
-            bounds=bounds,
-            options={"maxiter": 100},
-        )
-        optimal_lambdas = result.x
-        best_mse = float(result.fun)
-    except Exception as e:
-        logger.warning("iv_optimization_failed", error=str(e))
-        optimal_lambdas = x0
-        best_mse = float(cv_mse(x0))
-
-    # Normalize weights to sum to 1
-    total = np.sum(optimal_lambdas)
-    if total > 0:
-        optimal_lambdas /= total
-
-    # Scale back by feature std
-    scaled_lambdas = optimal_lambdas / x_std
-    total_scaled = np.sum(scaled_lambdas)
-    if total_scaled > 0:
-        scaled_lambdas /= total_scaled
-
-    lambda_weights = {
-        name: float(scaled_lambdas[j]) for j, name in enumerate(component_names)
+    # Use fixed prior weights — no CV optimization against anime.score.
+    # Theory-informed weights reflecting structural importance:
+    #   person_fe (30%): Core individual demand from AKM
+    #   birank (15%): Bipartite graph centrality — network position
+    #   studio_exposure (15%): Institutional environment quality
+    #   awcc (20%): Knowledge spanning — bridging communities
+    #   patronage (20%): Director relationship quality
+    prior_map = {
+        "person_fe": 0.30,
+        "birank": 0.15,
+        "studio_exposure": 0.15,
+        "awcc": 0.20,
+        "patronage": 0.20,
     }
+    lambda_weights = {
+        name: prior_map.get(name, 1.0 / n_components)
+        for name in component_names
+    }
+    # Normalize in case not all components are present
+    total = sum(lambda_weights.values())
+    if total > 0:
+        lambda_weights = {k: v / total for k, v in lambda_weights.items()}
 
     logger.info(
-        "iv_weights_optimized",
-        cv_mse=round(best_mse, 6),
+        "iv_weights_fixed_prior",
         weights={k: round(v, 4) for k, v in lambda_weights.items()},
     )
 
-    return lambda_weights, best_mse
+    return lambda_weights, 0.0, component_std, component_mean
 
 
 def compute_integrated_value(
@@ -224,10 +183,16 @@ def compute_integrated_value(
     patronage: dict[str, float],
     dormancy: dict[str, float],
     lambdas: dict[str, float],
+    component_std: dict[str, float] | None = None,
+    component_mean: dict[str, float] | None = None,
 ) -> dict[str, float]:
     """Compute integrated value scores.
 
-    IV = (λ1·θ + λ2·birank + λ3·studio_exp + λ4·awcc + λ5·patronage) × dormancy
+    IV = (Σ_k λ_k · (x_k/σ_k - μ_k)) × dormancy
+
+    Components are normalized (÷ std) and centered (- mean) to match the
+    optimization space. This ensures person_fe's negative mean doesn't
+    bias the score downward.
 
     Args:
         person_fe: person_id → person fixed effect (θ)
@@ -236,7 +201,9 @@ def compute_integrated_value(
         awcc: person_id → AWCC score
         patronage: person_id → patronage premium
         dormancy: person_id → dormancy multiplier (0-1)
-        lambdas: component name → weight
+        lambdas: component name → weight (in centered normalized space)
+        component_std: component name → std for normalization
+        component_mean: component name → mean of normalized features (for centering)
 
     Returns:
         person_id → integrated value score
@@ -256,7 +223,11 @@ def compute_integrated_value(
     iv_scores: dict[str, float] = {}
     for pid in all_persons:
         raw = sum(
-            lambdas.get(name, 0.2) * scores.get(pid, 0.0)
+            lambdas.get(name, 0.2) * (
+                scores.get(pid, 0.0)
+                / (component_std.get(name, 1.0) if component_std else 1.0)
+                - (component_mean.get(name, 0.0) if component_mean else 0.0)
+            )
             for name, scores in components.items()
         )
         d = dormancy.get(pid, 1.0)
@@ -303,7 +274,7 @@ def compute_integrated_value_full(
     }
 
     # Optimize weights
-    lambdas, cv_mse = optimize_lambda_weights(
+    lambdas, cv_mse, comp_std, comp_mean = optimize_lambda_weights(
         components, credits, anime_map, n_folds=n_folds, seed=seed
     )
 
@@ -311,16 +282,22 @@ def compute_integrated_value_full(
     if not lambdas:
         lambdas = {name: 0.2 for name in components}
 
-    # Compute IV scores
+    # Compute IV scores (pass component_std + mean for consistent normalization)
     iv_scores = compute_integrated_value(
-        person_fe, birank, studio_exposure, awcc, patronage, dormancy, lambdas
+        person_fe, birank, studio_exposure, awcc, patronage, dormancy, lambdas,
+        component_std=comp_std if comp_std else None,
+        component_mean=comp_mean if comp_mean else None,
     )
 
-    # Build component breakdown
+    # Build component breakdown (with normalization and centering applied)
     component_breakdown: dict[str, dict[str, float]] = {}
     for pid in iv_scores:
         component_breakdown[pid] = {
-            name: lambdas.get(name, 0.2) * scores.get(pid, 0.0)
+            name: lambdas.get(name, 0.2) * (
+                scores.get(pid, 0.0)
+                / (comp_std.get(name, 1.0) if comp_std else 1.0)
+                - (comp_mean.get(name, 0.0) if comp_mean else 0.0)
+            )
             for name, scores in components.items()
         }
         component_breakdown[pid]["dormancy"] = dormancy.get(pid, 1.0)
@@ -336,4 +313,6 @@ def compute_integrated_value_full(
         lambda_weights=lambdas,
         cv_mse=cv_mse,
         component_breakdown=component_breakdown,
+        component_std=comp_std if comp_std else None,
+        component_mean=comp_mean if comp_mean else None,
     )

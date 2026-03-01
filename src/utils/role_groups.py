@@ -22,7 +22,7 @@ DIRECTOR_ROLES: frozenset[Role] = frozenset(
     {
         Role.DIRECTOR,
         Role.EPISODE_DIRECTOR,
-        Role.CHIEF_ANIMATION_DIRECTOR,
+        Role.CHIEF_ANIMATION_DIRECTOR,  # supervisory role — included for patronage (selects directors for collaboration counting)
     }
 )
 
@@ -33,7 +33,6 @@ ANIMATOR_ROLES: frozenset[Role] = frozenset(
         Role.SECOND_KEY_ANIMATOR,
         Role.IN_BETWEEN,
         Role.CHARACTER_DESIGNER,
-        Role.STORYBOARD,
         Role.LAYOUT,
         Role.EFFECTS,
     }
@@ -172,6 +171,10 @@ ROLE_CATEGORY: dict[Role, str] = {
     Role.ORIGINAL_CREATOR: "writing",
     # Production (1 role)
     Role.PRODUCER: "production",
+    # Non-production (3 roles — not part of anime production staff)
+    Role.VOICE_ACTOR: "non_production",
+    Role.THEME_SONG: "non_production",
+    Role.ADR: "non_production",
     # Other
     Role.OTHER: "other",
 }

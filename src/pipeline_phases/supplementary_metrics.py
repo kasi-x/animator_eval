@@ -72,6 +72,45 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
     with context.monitor.measure("career_analysis"):
         context.career_data = batch_career_analysis(context.credits, context.anime_map)
 
+    # Career-aware dormancy: now that career_data is available, re-compute dormancy
+    # to protect veterans from harsh dormancy penalties
+    logger.info("step_start", step="career_aware_dormancy")
+    with context.monitor.measure("career_aware_dormancy"):
+        from src.analysis.patronage_dormancy import compute_career_aware_dormancy
+        from src.analysis.integrated_value import compute_integrated_value
+
+        career_dormancy = compute_career_aware_dormancy(
+            raw_dormancy=context.dormancy_scores,
+            iv_scores_historical=context.iv_scores_historical,
+            career_data=context.career_data,
+        )
+        context.dormancy_scores = career_dormancy
+
+        # Re-compute current IV with career-aware dormancy
+        # Fix B01: Use compute_studio_exposure() for consistent year-weighted calculation
+        from src.analysis.integrated_value import compute_studio_exposure
+        studio_exposure = compute_studio_exposure(
+            context.person_fe,
+            context.studio_fe,
+            studio_assignments=context.studio_assignments,
+        )
+        awcc_scores = {
+            pid: m.awcc
+            for pid, m in context.knowledge_spanner_scores.items()
+        }
+        # Fix B02: Pass component_std and component_mean for consistent normalization
+        context.iv_scores = compute_integrated_value(
+            context.person_fe,
+            context.birank_person_scores,
+            studio_exposure,
+            awcc_scores,
+            context.patronage_scores,
+            career_dormancy,
+            context.iv_lambda_weights,
+            component_std=context.iv_component_std,
+            component_mean=context.iv_component_mean,
+        )
+
     # Director Circles
     logger.info("step_start", step="director_circles")
     with context.monitor.measure("director_circles"):

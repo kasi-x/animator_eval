@@ -374,3 +374,4 @@ class ScoreResult(BaseModel):
     awcc: float = 0.0
     ndi: float = 0.0
     iv_score: float = 0.0
+    iv_score_historical: float = 0.0

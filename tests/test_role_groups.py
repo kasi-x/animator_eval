@@ -34,10 +34,14 @@ class TestRoleGroups:
         assert Role.SECOND_KEY_ANIMATOR in ANIMATOR_ROLES
         assert Role.IN_BETWEEN in ANIMATOR_ROLES
         assert Role.CHARACTER_DESIGNER in ANIMATOR_ROLES
-        assert Role.STORYBOARD in ANIMATOR_ROLES
         assert Role.LAYOUT in ANIMATOR_ROLES
         assert Role.EFFECTS in ANIMATOR_ROLES
-        assert len(ANIMATOR_ROLES) == 8
+        assert len(ANIMATOR_ROLES) == 7
+
+    def test_storyboard_not_in_animator_roles(self):
+        """Storyboard is classified as direction, not animation."""
+        assert Role.STORYBOARD not in ANIMATOR_ROLES
+        assert ROLE_CATEGORY.get(Role.STORYBOARD) == "direction"
 
     def test_mentee_roles_contains_expected(self):
         """Mentee roles should contain junior/entry-level positions."""
@@ -191,6 +195,21 @@ class TestHelperFunctions:
         assert is_core_team_role(Role.KEY_ANIMATOR)
         assert not is_core_team_role(Role.IN_BETWEEN)
         assert not is_core_team_role(Role.PRODUCER)
+
+
+class TestRoleCategoryCoverage:
+    """Test that every Role enum member has a ROLE_CATEGORY entry."""
+
+    def test_all_roles_have_category(self):
+        """Every Role constant must be mapped in ROLE_CATEGORY."""
+        missing = [r for r in Role if r not in ROLE_CATEGORY]
+        assert missing == [], f"Roles missing from ROLE_CATEGORY: {missing}"
+
+    def test_non_production_roles_categorized(self):
+        """Non-production roles (VOICE_ACTOR, THEME_SONG, ADR) should be categorized."""
+        assert ROLE_CATEGORY[Role.VOICE_ACTOR] == "non_production"
+        assert ROLE_CATEGORY[Role.THEME_SONG] == "non_production"
+        assert ROLE_CATEGORY[Role.ADR] == "non_production"
 
 
 class TestNoOverlap:

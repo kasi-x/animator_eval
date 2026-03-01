@@ -13,7 +13,9 @@ import networkx as nx
 import numpy as np
 import structlog
 
+from src.analysis.compatibility import compute_compatibility_groups
 from src.analysis.cooccurrence_groups import compute_cooccurrence_groups
+from src.analysis.expected_ability import compute_expected_ability
 from src.analysis.anime_stats import compute_anime_stats
 from src.analysis.bias_detector import detect_systematic_biases, generate_bias_report
 from src.analysis.bridges import detect_bridges
@@ -52,6 +54,8 @@ from src.analysis.productivity import compute_productivity
 from src.analysis.role_flow import compute_role_flow
 from src.analysis.seasonal import compute_seasonal_trends
 from src.analysis.studio import compute_studio_analysis
+from src.analysis.studio_timeseries import compute_studio_timeseries
+from src.analysis.synergy_score import compute_synergy_scores
 from src.analysis.team_composition import analyze_team_patterns
 from src.analysis.temporal_pagerank import compute_temporal_pagerank
 from src.analysis.time_series import compute_time_series
@@ -173,15 +177,13 @@ def _run_decades(context: PipelineContext) -> Any:
 
 
 def _run_tags(context: PipelineContext) -> Any:
-    """Compute person tags (auto-labeling)."""
-    person_tag_assignments = compute_person_tags(context.results)
-    # Add tags to result entries (thread-safe since results is read-only here)
-    if person_tag_assignments:
-        for r in context.results:
-            pid = r["person_id"]
-            if pid in person_tag_assignments:
-                r["tags"] = person_tag_assignments[pid]
-    return person_tag_assignments
+    """Compute person tags (auto-labeling).
+
+    Returns tag assignments only — does NOT mutate context.results.
+    Tags are applied to result entries on the main thread after parallel
+    execution completes (see run_analysis_modules_phase).
+    """
+    return compute_person_tags(context.results)
 
 
 def _run_transitions(context: PipelineContext) -> Any:
@@ -216,9 +218,10 @@ def _run_bridges(context: PipelineContext) -> Any:
                     context.collaboration_graph, weight="weight", seed=42
                 )
             else:
-                # Label propagation for large graphs — O(E), much faster
-                comms = nx.community.label_propagation_communities(
-                    context.collaboration_graph
+                # Async label propagation for large graphs — O(E), much faster
+                # Uses seed=42 for deterministic results
+                comms = nx.community.asyn_lpa_communities(
+                    context.collaboration_graph, seed=42
                 )
             communities_map = {}
             for comm_id, members in enumerate(comms):
@@ -438,6 +441,7 @@ def _run_structural_estimation(context: PipelineContext) -> Any:
 
 def _run_individual_contribution(context: PipelineContext) -> Any:
     """Compute individual contribution profiles (Layer 2 metrics)."""
+    akm_residuals = context.akm_result.residuals if context.akm_result else None
     return asdict(
         compute_individual_profiles(
             results=context.results,
@@ -446,6 +450,8 @@ def _run_individual_contribution(context: PipelineContext) -> Any:
             role_profiles=context.role_profiles,
             career_data=context.career_data,
             collaboration_graph=context.collaboration_graph,
+            akm_residuals=akm_residuals,
+            community_map=context.community_map if context.community_map else None,
         )
     )
 
@@ -530,6 +536,51 @@ def _run_era_effects_report(context: PipelineContext) -> Any:
         "difficulty_beta": round(context.era_effects.difficulty_beta, 6),
         "n_anime_difficulty": len(context.era_effects.difficulty_scores),
     }
+
+
+def _run_studio_timeseries(context: PipelineContext) -> Any:
+    """Compute year-by-year studio evaluation metrics."""
+    akm_residuals = context.akm_result.residuals if context.akm_result else None
+    result = compute_studio_timeseries(
+        credits=context.credits,
+        anime_map=context.anime_map,
+        iv_scores=context.iv_scores,
+        studio_assignments=context.studio_assignments,
+        akm_residuals=akm_residuals,
+    )
+    return asdict(result)
+
+
+def _run_expected_ability(context: PipelineContext) -> Any:
+    """Compute expected vs actual ability scores."""
+    result = compute_expected_ability(
+        credits=context.credits,
+        anime_map=context.anime_map,
+        person_fe=context.person_fe,
+        birank=context.birank_person_scores,
+        studio_fe=context.studio_fe,
+        studio_assignments=context.studio_assignments,
+        iv_scores=context.iv_scores,
+    )
+    return asdict(result)
+
+
+def _run_compatibility(context: PipelineContext) -> Any:
+    """Detect compatibility groups from co-occurrence patterns."""
+    result = compute_compatibility_groups(
+        credits=context.credits,
+        anime_map=context.anime_map,
+        iv_scores=context.iv_scores,
+        collaboration_graph=context.collaboration_graph,
+        community_map=context.community_map if context.community_map else None,
+        min_shared_works=3,
+    )
+    return asdict(result)
+
+
+def _run_synergy_scores(context: PipelineContext) -> Any:
+    """Compute synergy scores for repeated senior staff pairings in sequel chains."""
+    return compute_synergy_scores(context.credits, context.anime_map)
 
 
 def _run_cooccurrence_groups(context: PipelineContext) -> Any:
@@ -624,6 +675,11 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
         monitor_step="cooccurrence_groups",
     ),
     AnalysisTask(
+        "synergy_scores",
+        _run_synergy_scores,
+        monitor_step="synergy_scores",
+    ),
+    AnalysisTask(
         "temporal_pagerank",
         _run_temporal_pagerank,
         monitor_step="temporal_pagerank",
@@ -655,6 +711,22 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
         "era_effects",
         _run_era_effects_report,
         monitor_step="era_effects_report",
+    ),
+    # New: Studio timeseries, Expected ability, Compatibility groups
+    AnalysisTask(
+        "studio_timeseries",
+        _run_studio_timeseries,
+        monitor_step="studio_timeseries",
+    ),
+    AnalysisTask(
+        "expected_ability",
+        _run_expected_ability,
+        monitor_step="expected_ability",
+    ),
+    AnalysisTask(
+        "compatibility_groups_analysis",
+        _run_compatibility,
+        monitor_step="compatibility_groups_analysis",
     ),
 ]
 
@@ -778,6 +850,14 @@ def run_analysis_modules_phase(
                     error=str(e),
                 )
                 failed_count += 1
+
+    # Apply tags to result entries on the main thread (D23: thread-safe mutation)
+    person_tag_assignments = context.analysis_results.get("tags")
+    if person_tag_assignments:
+        for r in context.results:
+            pid = r["person_id"]
+            if pid in person_tag_assignments:
+                r["tags"] = person_tag_assignments[pid]
 
     # Add performance monitoring summary (always last)
     context.analysis_results["performance"] = context.monitor.get_summary()

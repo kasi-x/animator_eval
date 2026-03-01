@@ -116,3 +116,16 @@ class TestComputeConfidence:
 
     def test_bounded(self):
         assert _compute_confidence(100, 100, 100) == 100
+
+    def test_confidence_span_vs_count(self):
+        """Same number of years but different spans yield different scores.
+
+        B16: year_span measures max(years)-min(years), not len(years).
+        3 years spanning 2018-2020 (span=3) should score higher than
+        3 years spanning 2020-2020 (span=1) for the time component.
+        """
+        # 3 shared works, stage_gap=2 in both cases
+        # Only difference is year_span
+        score_wide_span = _compute_confidence(shared_works=3, stage_gap=2, year_span=3)
+        score_narrow_span = _compute_confidence(shared_works=3, stage_gap=2, year_span=1)
+        assert score_wide_span > score_narrow_span

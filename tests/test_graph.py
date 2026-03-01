@@ -58,6 +58,44 @@ class TestBipartiteGraph:
         assert g.has_edge("a1", "p1")
 
 
+class TestImplicitPersonNodes:
+    """BiRank requires type='person' on all person nodes, even implicitly created ones."""
+
+    def test_credit_person_not_in_persons_list_gets_type_attribute(self):
+        """Person referenced in credits but not in persons list should still get type='person'."""
+        persons = [Person(id="p1", name_en="Known Person")]
+        anime_list = [Anime(id="a1", title_en="Anime 1", year=2020, score=8.0)]
+        credits = [
+            Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR),
+            Credit(person_id="p_unknown", anime_id="a1", role=Role.KEY_ANIMATOR),
+        ]
+        g = create_person_anime_network(persons, anime_list, credits)
+        # p_unknown should exist and have type="person"
+        assert "p_unknown" in g.nodes
+        assert g.nodes["p_unknown"]["type"] == "person"
+
+    def test_known_person_retains_attributes(self):
+        """Persons in the persons list should keep their original attributes."""
+        persons = [Person(id="p1", name_en="Known Person")]
+        anime_list = [Anime(id="a1", title_en="Anime 1", year=2020, score=8.0)]
+        credits = [
+            Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR),
+        ]
+        g = create_person_anime_network(persons, anime_list, credits)
+        assert g.nodes["p1"]["type"] == "person"
+        assert g.nodes["p1"]["name"] == "Known Person"
+
+    def test_non_production_roles_excluded_from_implicit_nodes(self):
+        """Voice actors and other non-production roles should not create implicit nodes."""
+        persons = []
+        anime_list = [Anime(id="a1", title_en="Anime 1", year=2020)]
+        credits = [
+            Credit(person_id="va1", anime_id="a1", role=Role.VOICE_ACTOR),
+        ]
+        g = create_person_anime_network(persons, anime_list, credits)
+        assert "va1" not in g.nodes
+
+
 class TestCollaborationGraph:
     def test_collaborators_connected(self):
         persons, _, credits = _sample_data()
@@ -374,50 +412,49 @@ class TestComputeAnimeCommitments:
 
 
 class TestWorkImportance:
-    def test_high_score_no_duration(self):
-        """Score-only (no duration) → score / 10.0."""
+    def test_no_duration_returns_default(self):
+        """No duration → default 1.0."""
         anime = Anime(id="a1", title_en="Great Anime", score=9.0)
-        assert abs(_work_importance(anime) - 0.9) < 0.001
+        assert _work_importance(anime) == 1.0
 
-    def test_low_score_no_duration(self):
+    def test_no_duration_low_score(self):
+        """No duration regardless of score → default 1.0."""
         anime = Anime(id="a1", title_en="Low Anime", score=3.0)
-        assert abs(_work_importance(anime) - 0.3) < 0.001
+        assert _work_importance(anime) == 1.0
 
-    def test_very_low_score_clamped(self):
-        anime = Anime(id="a1", title_en="Bad Anime", score=0.5)
-        assert _work_importance(anime) == 0.1
+    def test_very_short_duration_clamped(self):
+        """Very short duration clamped to 0.01 minimum."""
+        anime = Anime(id="a1", title_en="Tiny Anime", duration=0)
+        assert _work_importance(anime) == 0.01
 
-    def test_none_score(self):
+    def test_no_duration_no_score(self):
+        """No duration, no score → default 1.0."""
         anime = Anime(id="a1", title_en="Unknown Anime")
-        assert _work_importance(anime) == 0.5
+        assert _work_importance(anime) == 1.0
 
     def test_none_anime(self):
-        assert _work_importance(None) == 0.5
+        assert _work_importance(None) == 1.0
 
     def test_standard_tv_duration(self):
-        """30分 standard TV → duration factor = 24/30 = 0.8."""
-        anime = Anime(id="a1", score=10.0, duration=24)
-        # score=1.0 × duration=24/30=0.8 → 0.8
+        """24分 standard TV → 24/30 = 0.8."""
+        anime = Anime(id="a1", duration=24)
         assert abs(_work_importance(anime) - 0.8) < 0.001
 
     def test_mini_anime_reduced(self):
-        """5分ミニアニメ → greatly reduced importance."""
-        anime = Anime(id="a1", score=8.0, duration=5)
-        # score=0.8 × duration=5/30=0.167 → 0.133
+        """5分ミニアニメ → 5/30 ≈ 0.167."""
+        anime = Anime(id="a1", duration=5)
         result = _work_importance(anime)
-        assert result < 0.2
+        assert abs(result - 5.0 / 30) < 0.001
 
     def test_movie_capped(self):
-        """120分映画 → duration factor capped at 2.0."""
-        anime = Anime(id="a1", score=8.0, duration=120)
-        # score=0.8 × duration=min(120/30, 2.0)=2.0 → 1.6
-        assert abs(_work_importance(anime) - 1.6) < 0.001
+        """120分映画 → min(120/30, 2.0) = 2.0."""
+        anime = Anime(id="a1", duration=120)
+        assert abs(_work_importance(anime) - 2.0) < 0.001
 
     def test_30min_baseline(self):
-        """30分 = baseline → factor = 1.0."""
-        anime = Anime(id="a1", score=8.0, duration=30)
-        # score=0.8 × duration=30/30=1.0 → 0.8
-        assert abs(_work_importance(anime) - 0.8) < 0.001
+        """30分 = baseline → 30/30 = 1.0."""
+        anime = Anime(id="a1", duration=30)
+        assert abs(_work_importance(anime) - 1.0) < 0.001
 
 
 class TestCommitmentWeighting:
@@ -475,33 +512,33 @@ class TestCommitmentWeighting:
         w_single = g["p2"]["p3"]["weight"]
         assert w_full > w_single * 5  # significantly heavier
 
-    def test_high_score_anime_produces_heavier_edges(self):
-        """Edges from high-score anime should be heavier than from low-score anime."""
+    def test_longer_duration_anime_produces_heavier_edges(self):
+        """Edges from longer-duration anime should be heavier than from shorter-duration anime."""
         persons = [
             Person(id="p1", name_en="Animator A"),
             Person(id="p2", name_en="Animator B"),
         ]
-        # High-score anime
-        anime_map_high = {"a1": Anime(id="a1", title_en="Great", score=9.0)}
+        # Long duration anime (movie: 120 min → capped at 2.0)
+        anime_map_long = {"a1": Anime(id="a1", title_en="Movie", duration=120)}
         credits = [
             Credit(person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR),
             Credit(person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR),
         ]
-        g_high = create_person_collaboration_network(
-            persons, credits, anime_map=anime_map_high
+        g_long = create_person_collaboration_network(
+            persons, credits, anime_map=anime_map_long
         )
-        w_high = g_high["p1"]["p2"]["weight"]
+        w_long = g_long["p1"]["p2"]["weight"]
 
-        # Low-score anime
-        anime_map_low = {"a1": Anime(id="a1", title_en="Bad", score=3.0)}
-        g_low = create_person_collaboration_network(
-            persons, credits, anime_map=anime_map_low
+        # Short duration anime (mini: 5 min → 5/30 ≈ 0.167)
+        anime_map_short = {"a1": Anime(id="a1", title_en="Mini", duration=5)}
+        g_short = create_person_collaboration_network(
+            persons, credits, anime_map=anime_map_short
         )
-        w_low = g_low["p1"]["p2"]["weight"]
+        w_short = g_short["p1"]["p2"]["weight"]
 
-        assert w_high > w_low
-        # 9.0/10 vs 3.0/10 → 3x ratio
-        assert abs(w_high / w_low - 3.0) < 0.01
+        assert w_long > w_short
+        # 2.0 vs 5/30 ≈ 0.167 → ~12x ratio
+        assert abs(w_long / w_short - 2.0 / (5.0 / 30)) < 0.1
 
     def test_shared_works_unchanged(self):
         """shared_works should still count anime, not be affected by commitment."""

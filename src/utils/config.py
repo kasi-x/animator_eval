@@ -129,6 +129,8 @@ AKM_MIN_MOVER_FRACTION = 0.10  # warn if fewer movers
 # =============================================================================
 # Dormancy parameters
 # =============================================================================
+# 0.5 gives 50% weight at 1 year past grace period — a suitable half-life
+# for a seasonal industry where 1-2 year gaps between projects are common.
 DORMANCY_DECAY_RATE = 0.5
 DORMANCY_GRACE_PERIOD = 2.0  # years
 

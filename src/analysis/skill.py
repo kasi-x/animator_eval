@@ -1,12 +1,16 @@
 """OpenSkill ベースの Skill スコア算出.
 
-作品のスコア（MAL/AniList 評点）を「試合結果」と見立て、
+制作規模（スタッフ数）を「試合結果」と見立て、
 各アニメーターのスキルレーティングを算出する。
 
-高評価作品に多く参加しているアニメーターほど高スキルと推定。
+大規模制作に起用される人ほど高スキルと推定。
 直近の作品ほど重視される（OpenSkill の自然な性質）。
+
+Note: anime.score (視聴者評価) は意図的に使用しない。
+制作スタッフの貢献度と無関係な要因に左右されるため。
 """
 
+from collections import defaultdict
 from typing import NamedTuple
 
 import numpy as np
@@ -20,13 +24,13 @@ logger = structlog.get_logger()
 
 
 class ScoredAnimeRecord(NamedTuple):
-    """評点付き作品の記録.
+    """制作規模付き作品の記録.
 
-    Records an anime with its score and year for skill rating calculation.
+    Records an anime with its staff count and year for skill rating calculation.
     """
 
     anime_id: str
-    score: float
+    score: float  # production scale metric (staff count)
     year: int
 
 
@@ -36,23 +40,34 @@ def compute_skill_scores(
 ) -> dict[str, float]:
     """OpenSkill を用いて Skill スコアを算出する.
 
-    各作品を「試合」として扱い、作品の評点で順位付けする。
+    各作品を「試合」として扱い、スタッフ数（制作規模）で順位付けする。
     同じ作品に参加したスタッフはチームとして扱う。
     """
-    # 作品をスコア順にソート（年代も考慮）
-    anime_by_year_and_score: list[ScoredAnimeRecord] = []
+    # Precompute staff count per anime
+    anime_staff_count: dict[str, int] = defaultdict(int)
+    seen_pa: set[tuple[str, str]] = set()
+    for c in credits:
+        key = (c.person_id, c.anime_id)
+        if key not in seen_pa:
+            seen_pa.add(key)
+            anime_staff_count[c.anime_id] += 1
+
+    # Build records: use staff count as the ranking metric
+    anime_by_year_and_scale: list[ScoredAnimeRecord] = []
     for anime_id, anime in anime_map.items():
-        if anime.score and anime.score > 0:
-            year = anime.year or 2000
-            record = ScoredAnimeRecord(anime_id=anime_id, score=anime.score, year=year)
-            anime_by_year_and_score.append(record)
+        staff_cnt = anime_staff_count.get(anime_id, 0)
+        if staff_cnt == 0:
+            continue
+        year = anime.year or 2000
+        record = ScoredAnimeRecord(anime_id=anime_id, score=float(staff_cnt), year=year)
+        anime_by_year_and_scale.append(record)
 
-    anime_by_year_and_score.sort(
+    anime_by_year_and_scale.sort(
         key=lambda record: (record.year, record.score)
-    )  # 年代順→スコア順
+    )  # 年代順→規模順
 
-    if not anime_by_year_and_score:
-        logger.warning("No scored anime found")
+    if not anime_by_year_and_scale:
+        logger.warning("No anime with staff found")
         return {}
 
     # anime_id → [person_id] (対象役職のみ)
@@ -75,14 +90,14 @@ def compute_skill_scores(
         person_id: model.rating() for person_id in all_staff_member_ids
     }
 
-    # 年代ごとにバッチ処理（同年の作品をスコア順にランク）
+    # 年代ごとにバッチ処理（同年の作品をスタッフ数順にランク）
     anime_records_by_year: dict[int, list[ScoredAnimeRecord]] = {}
-    for anime_record in anime_by_year_and_score:
+    for anime_record in anime_by_year_and_scale:
         anime_records_by_year.setdefault(anime_record.year, []).append(anime_record)
 
     for year in sorted(anime_records_by_year.keys()):
         yearly_anime_records = anime_records_by_year[year]
-        # スコア降順でランク
+        # スタッフ数降順でランク（大規模制作 = 上位）
         yearly_anime_records.sort(key=lambda record: record.score, reverse=True)
 
         # 各作品のスタッフをチームとして構成
@@ -100,7 +115,7 @@ def compute_skill_scores(
         if len(team_rating_objects) < 2:
             continue
 
-        # ランクは 1-indexed（1位 = 最高スコアの作品チーム）
+        # ランクは 1-indexed（1位 = 最大規模の作品チーム）
         competition_ranks = list(range(1, len(team_rating_objects) + 1))
 
         try:

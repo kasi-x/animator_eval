@@ -51,7 +51,15 @@ def post_process_results(context: PipelineContext) -> None:
             sources_per_person[c.person_id].add(c.source)
         source_counts = {pid: len(srcs) for pid, srcs in sources_per_person.items()}
 
-        batch_compute_confidence(context.results, sources_per_person=source_counts)
+        # Pass AKM residuals for analytical person_fe CI (B09 fix)
+        akm_residuals = (
+            context.akm_result.residuals if context.akm_result else None
+        )
+        batch_compute_confidence(
+            context.results,
+            sources_per_person=source_counts,
+            akm_residuals=akm_residuals,
+        )
 
     # Score stability check (compare with previous run)
     # Note: This requires database connection, so we'll make it optional

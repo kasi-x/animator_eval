@@ -1,7 +1,10 @@
-"""アニメ予測 — チーム構成からアニメスコアを推定する.
+"""アニメ予測 — チーム構成から制作規模を推定する.
 
 過去の作品データを基に、特定のチーム構成での
-期待される作品スコアを推定する。
+期待される制作規模を推定する。
+
+Note: anime.score (視聴者評価) は意図的に使用しない。
+制作スタッフの貢献度と無関係な要因に左右されるため。
 """
 
 from collections import defaultdict
@@ -19,9 +22,9 @@ def predict_anime_score(
     anime_map: dict[str, Anime],
     person_scores: dict[str, float] | None = None,
 ) -> dict:
-    """チーム構成から期待される作品スコアを推定する.
+    """チーム構成から期待される制作規模を推定する.
 
-    予測手法: チームメンバーの過去作品の加重平均スコア。
+    予測手法: チームメンバーの過去作品の加重平均スタッフ数。
     メンバー全員が参加した作品はボーナス加重。
 
     Args:
@@ -32,12 +35,12 @@ def predict_anime_score(
 
     Returns:
         {
-            "predicted_score": float | None,
+            "predicted_score": float | None,  # 予測スタッフ数
             "confidence": str,
             "basis_anime_count": int,
             "team_avg_score": float | None,
             "historical_range": {min, max, avg},
-            "similar_teams": [{anime_id, title, score, overlap_count}],
+            "similar_teams": [{anime_id, title, staff_count, overlap_count}],
         }
     """
     if not team_person_ids:
@@ -56,22 +59,25 @@ def predict_anime_score(
         person_anime[c.person_id].add(c.anime_id)
         anime_persons[c.anime_id].add(c.person_id)
 
-    # Score each relevant anime by overlap with team
+    # Use staff count as structural metric instead of anime.score
     anime_overlap: list[dict] = []
     for anime_id, participants in anime_persons.items():
         overlap = participants & team_set
         if not overlap:
             continue
         anime = anime_map.get(anime_id)
-        if not anime or not anime.score:
+        if not anime:
             continue
+
+        staff_count = len(participants)
 
         anime_overlap.append(
             {
                 "anime_id": anime_id,
                 "title": anime.display_title,
                 "year": anime.year,
-                "score": anime.score,
+                "score": anime.score,  # kept for display only
+                "staff_count": staff_count,
                 "overlap_count": len(overlap),
                 "overlap_ratio": len(overlap) / len(team_set),
             }
@@ -87,12 +93,12 @@ def predict_anime_score(
     # Weighted average: more overlap = more weight
     total_weight = 0
     weighted_sum = 0
-    scores = []
+    staff_counts = []
     for ao in anime_overlap:
         weight = ao["overlap_ratio"] ** 2  # Square for stronger weighting
-        weighted_sum += ao["score"] * weight
+        weighted_sum += ao["staff_count"] * weight
         total_weight += weight
-        scores.append(ao["score"])
+        staff_counts.append(ao["staff_count"])
 
     predicted = round(weighted_sum / total_weight, 2) if total_weight > 0 else None
 
@@ -117,14 +123,14 @@ def predict_anime_score(
 
     # Historical range
     historical = {
-        "min": round(min(scores), 2),
-        "max": round(max(scores), 2),
-        "avg": round(sum(scores) / len(scores), 2),
+        "min": round(min(staff_counts), 2),
+        "max": round(max(staff_counts), 2),
+        "avg": round(sum(staff_counts) / len(staff_counts), 2),
     }
 
     # Top similar teams (highest overlap)
     similar_teams = sorted(
-        anime_overlap, key=lambda x: (-x["overlap_count"], -(x["score"] or 0))
+        anime_overlap, key=lambda x: (-x["overlap_count"], -x["staff_count"])
     )[:10]
 
     return {

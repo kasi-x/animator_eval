@@ -664,6 +664,20 @@ EXPORT_REGISTRY: list[ExportSpec] = [
             else {}
         ),
     ),
+    # Synergy scores (sequel chain pairings)
+    ExportSpec(
+        filename="synergy_scores.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("synergy_scores"),
+        log_message="synergy_scores_saved",
+        log_metrics=lambda data: (
+            {
+                "active_pairs": data.get("summary", {}).get("synergy_active_pairs", 0),
+                "franchises": data.get("summary", {}).get("franchise_count", 0),
+            }
+            if data
+            else {}
+        ),
+    ),
     # ========== 8-Component Structural Estimation ==========
     # AKM diagnostics
     ExportSpec(
@@ -705,6 +719,43 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         log_message="era_effects_saved",
         log_metrics=lambda data: (
             {"years": len(data.get("era_fe", {}))} if data else {}
+        ),
+    ),
+    # Studio timeseries
+    ExportSpec(
+        filename="studio_timeseries.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("studio_timeseries"),
+        log_message="studio_timeseries_saved",
+        log_metrics=lambda data: (
+            {"studios": data.get("studios_analyzed", 0)} if data else {}
+        ),
+    ),
+    # Expected ability
+    ExportSpec(
+        filename="expected_ability.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("expected_ability"),
+        log_message="expected_ability_saved",
+        log_metrics=lambda data: (
+            {
+                "persons": data.get("total_persons", 0),
+                "r_squared": data.get("model_r_squared"),
+            }
+            if data
+            else {}
+        ),
+    ),
+    # Compatibility groups
+    ExportSpec(
+        filename="compatibility_groups.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("compatibility_groups_analysis"),
+        log_message="compatibility_groups_saved",
+        log_metrics=lambda data: (
+            {
+                "pairs": data.get("total_pairs_analyzed", 0),
+                "groups": len(data.get("compatible_groups", [])),
+            }
+            if data
+            else {}
         ),
     ),
     # Pipeline summary (special case - uses elapsed time)

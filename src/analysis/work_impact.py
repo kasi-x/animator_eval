@@ -52,17 +52,19 @@ def compute_work_impact(
             if not anime:
                 continue
 
-            # Factors for impact
-            # 1. Anime score (0-10 → 0-30 points)
-            score_factor = (anime.score / 10 * 30) if anime.score else 10
-
-            # 2. Role stage (higher = more impact, 0-25 points)
+            # Factors for impact (structural only — no anime.score)
+            # 1. Role stage (higher = more impact, 0-30 points)
             stage = CAREER_STAGE.get(c.role, 0)
-            role_factor = min(25, stage * 5)
+            role_factor = min(30, stage * 6)
 
-            # 3. Team share (smaller team = more individual impact, 0-25 points)
+            # 2. Team share (smaller team = more individual impact, 0-30 points)
             team_size = anime_person_count.get(c.anime_id, 1)
-            team_factor = min(25, 25 / max(1, team_size / 5))
+            team_factor = min(30, 30 / max(1, team_size / 5))
+
+            # 3. Production scale (episodes × duration, 0-20 points)
+            eps = anime.episodes or 1
+            dur = anime.duration or 24
+            scale_factor = min(20, 5 * (eps * dur / 24) ** 0.3)
 
             # 4. Recency bonus (0-20 points)
             if anime.year and anime.year >= 2020:
@@ -72,7 +74,7 @@ def compute_work_impact(
             else:
                 recency = 5
 
-            impact_score = round(score_factor + role_factor + team_factor + recency, 1)
+            impact_score = round(role_factor + team_factor + scale_factor + recency, 1)
 
             impacts.append(
                 {

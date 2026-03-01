@@ -139,7 +139,8 @@ def compute_birank(
         # Update person scores: p = α · T · u + (1-α) · p_0
         p_new = alpha * (T @ u) + (1 - alpha) * p_0
         # Update anime scores: u = β · S^T · p + (1-β) · u_0
-        u_new = beta * (S.T @ p_new) + (1 - beta) * u_0
+        # Fix B04: Use old p (Jacobi-style), not p_new (Gauss-Seidel)
+        u_new = beta * (S.T @ p) + (1 - beta) * u_0
 
         # Normalize
         p_sum = p_new.sum()

@@ -24,7 +24,7 @@ format = "ruff format src/ tests/"
 bench = "python benchmarks/bench_pipeline.py"
 
 # Reports & Explorer
-reports = "python scripts/generate_all_reports.py"
+reports = "PYTHONNOUSERSITE=1 python scripts/generate_all_reports.py"
 build-explorer = "cd cmd/explorer && go build -o ../../bin/explorer ."
 explorer = "bin/explorer -data ./result/json -static ./static/explorer -port 3000"
 
@@ -67,6 +67,7 @@ matplotlib = "*"
 plotly = ">=6.5.2,<7"
 scipy = "*"
 scikit-learn = "*"
+shap = ">=0.44"
 
 [feature.analysis.pypi-dependencies]
 openskill = "*"

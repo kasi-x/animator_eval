@@ -174,14 +174,14 @@ class TestBuildPersonFeatures:
         # ka9 works on all 10 anime (years 2015-2024), so span = 10
         assert features["ka9"]["career_years"] == 10
 
-    def test_avg_anime_score(
+    def test_avg_staff_count(
         self, results_list, credits_list, anime_map, role_profiles, career_data
     ):
         features = _build_person_features(
             results_list, credits_list, anime_map, role_profiles, career_data
         )
-        # ka0 only works on a0 (score=60)
-        assert features["ka0"]["avg_anime_score"] == 60.0
+        # ka0 only works on a0; a0 has dir0 + ka0..ka9 = 11 unique persons
+        assert features["ka0"]["avg_staff_count"] == 11
 
 
 class TestPeerPercentile:
@@ -265,7 +265,7 @@ class TestOpportunityResidual:
         residuals, _ = compute_opportunity_residual(features)
         vals = [v for v in residuals.values() if v is not None]
         assert abs(np.mean(vals)) < 0.1
-        assert abs(np.std(vals) - 1.0) < 0.2
+        assert abs(np.std(vals) - 1.0) < 0.3  # studentized residuals have wider distribution
 
     def test_insufficient_data(self):
         """With <10 persons, should return None values."""
@@ -274,7 +274,7 @@ class TestOpportunityResidual:
                 "iv_score": 50,
                 "primary_role": "ka",
                 "career_years": 5,
-                "avg_anime_score": 70,
+                "avg_staff_count": 10,
                 "unique_studios": 2,
             }
             for i in range(5)
@@ -286,26 +286,31 @@ class TestOpportunityResidual:
 
 class TestConsistency:
     def test_consistent_person(self):
-        """Person who only works on similarly-scored anime should be consistent."""
+        """Person with stable AKM residuals should be consistent."""
         features = {"p1": {"iv_score": 60}}
         anime_map = {f"a{i}": _make_anime(f"a{i}", score=75) for i in range(6)}
         credits = [_make_credit("p1", f"a{i}") for i in range(6)]
+        # All residuals identical → std=0 → consistency=1.0
+        akm_residuals = {("p1", f"a{i}"): 0.5 for i in range(6)}
 
-        result = compute_consistency(features, credits, anime_map)
+        result = compute_consistency(
+            features, credits, anime_map, akm_residuals=akm_residuals
+        )
         assert result["p1"] is not None
         assert result["p1"] > 0.9  # Very consistent
 
     def test_inconsistent_person(self):
-        """Person who works on wildly varied anime should have lower consistency."""
+        """Person with widely varying AKM residuals should have lower consistency."""
         features = {"p1": {"iv_score": 60}}
-        anime_map = {}
-        credits = []
-        for i in range(6):
-            score = 30 + i * 12  # 30, 42, 54, 66, 78, 90
-            anime_map[f"a{i}"] = _make_anime(f"a{i}", score=score)
-            credits.append(_make_credit("p1", f"a{i}"))
+        anime_map = {f"a{i}": _make_anime(f"a{i}", score=70) for i in range(6)}
+        credits = [_make_credit("p1", f"a{i}") for i in range(6)]
+        # Widely varying residuals → high std → low consistency
+        akm_residuals = {("p1", f"a{i}"): -15 + i * 6 for i in range(6)}
+        # Values: -15, -9, -3, 3, 9, 15 → std ≈ 10.0
 
-        result = compute_consistency(features, credits, anime_map)
+        result = compute_consistency(
+            features, credits, anime_map, akm_residuals=akm_residuals
+        )
         assert result["p1"] is not None
         assert result["p1"] < 0.8
 
@@ -318,29 +323,83 @@ class TestConsistency:
         result = compute_consistency(features, credits, anime_map)
         assert result["p1"] is None
 
+    def test_consistency_with_akm_residuals(self):
+        """AKM residuals should improve consistency measurement."""
+        features = {"p1": {"iv_score": 60}, "p2": {"iv_score": 55}}
+        anime_map = {
+            f"a{i}": _make_anime(f"a{i}", score=60 + i * 5, year=2015 + i)
+            for i in range(12)
+        }
+        # p1: small residuals (close to 0 → consistent)
+        credits = [_make_credit("p1", f"a{i}") for i in range(6)]
+        akm_residuals = {("p1", f"a{i}"): 0.1 * (-1) ** i for i in range(6)}
+        # p2: larger residuals (wider variance → raises ref_scale)
+        credits += [_make_credit("p2", f"a{i}") for i in range(6, 12)]
+        akm_residuals.update(
+            {("p2", f"a{i}"): -10 + (i - 6) * 4 for i in range(6, 12)}
+        )
+
+        result = compute_consistency(
+            features, credits, anime_map, akm_residuals=akm_residuals
+        )
+        assert result["p1"] is not None
+        assert result["p1"] > 0.8  # Small residuals → high consistency
+
 
 class TestIndependentValue:
     def test_basic_computation(self):
-        """Person X works on high-score anime; collaborators also on lower anime without X."""
-        features = {f"p{i}": {"iv_score": 50 + i * 5} for i in range(6)}
-        anime_map = {
-            "good": _make_anime("good", score=90),
-            "ok1": _make_anime("ok1", score=60),
-            "ok2": _make_anime("ok2", score=65),
-            "ok3": _make_anime("ok3", score=55),
+        """Person X's spillover via IV-based residuals.
+
+        independent_value for X = mean over collaborators of:
+          (collab_iv - proj_quality_with_x) - (collab_iv - proj_quality_without_x)
+        = mean of (proj_quality_without_x - proj_quality_with_x)
+
+        For positive spillover: projects WITH X need lower remaining-peer IV
+        (after excluding X and collab), projects WITHOUT X need higher peer IV.
+        This means X is "lifting" projects — without X the other people are
+        strong, but with X the other people are weaker (X substitutes for them).
+        """
+        # p0 = target; p1-p3 = collaborators (mid IV ~50)
+        # low1-low3 = low IV on "withx" projects (keeps proj_quality low with X)
+        # high1-high3 = high IV on "nox" projects (keeps proj_quality high without X)
+        features = {
+            "p0": {"iv_score": 80},
+            "p1": {"iv_score": 50},
+            "p2": {"iv_score": 52},
+            "p3": {"iv_score": 48},
+            "low1": {"iv_score": 10},
+            "low2": {"iv_score": 12},
+            "low3": {"iv_score": 8},
+            "high1": {"iv_score": 90},
+            "high2": {"iv_score": 88},
+            "high3": {"iv_score": 92},
         }
-        # p0 works on "good"; p1-p5 work on "good" + their own "ok" anime
-        credits = [_make_credit("p0", "good")]
+        anime_map = {
+            "withx": _make_anime("withx", score=80),
+            "nox1": _make_anime("nox1", score=70),
+            "nox2": _make_anime("nox2", score=70),
+            "nox3": _make_anime("nox3", score=70),
+        }
+        # "withx": p0 + p1,p2,p3 + low1,low2,low3 (low IV peers besides p0)
+        credits = [
+            _make_credit("p0", "withx"),
+            _make_credit("low1", "withx"),
+            _make_credit("low2", "withx"),
+            _make_credit("low3", "withx"),
+        ]
         for i in range(1, 4):
-            credits.append(_make_credit(f"p{i}", "good"))  # With p0
-            credits.append(_make_credit(f"p{i}", f"ok{i}"))  # Without p0
-        # p4, p5 only on separate anime (not enough collaborators for them)
-        credits.append(_make_credit("p4", "ok1"))
-        credits.append(_make_credit("p5", "ok2"))
+            credits.append(_make_credit(f"p{i}", "withx"))  # With p0
+            # "nox{i}": collab + high IV filler (no p0)
+            credits.append(_make_credit(f"p{i}", f"nox{i}"))  # Without p0
+            credits.append(_make_credit(f"high{i}", f"nox{i}"))  # High IV peer
 
         result = compute_independent_value(features, credits, anime_map)
-        # p0 is on "good" (90); collaborators p1-p3 have "good"(90) with p0 vs "ok"(55-65) without p0
-        # So p0's independent_value should be positive (collaborators do better with p0)
+        # For each collab (e.g. p1, IV=50):
+        #   "withx": exclude p1 and p0 → remaining = {p2,p3,low1,low2,low3} → low avg
+        #     resid = 50 - low_avg → positive (high)
+        #   "nox1": exclude p1 → remaining = {high1} → high avg (~90)
+        #     resid = 50 - 90 → negative (low)
+        #   diff = high_resid - low_resid > 0
         assert result["p0"] is not None
         assert result["p0"] > 0
 
@@ -352,6 +411,61 @@ class TestIndependentValue:
 
         result = compute_independent_value(features, credits, anime_map)
         assert result["p0"] is None
+
+
+class TestClusterPercentile:
+    def test_cluster_percentile_added(self):
+        """Community map adds cluster percentile to results."""
+        features = {
+            f"p{i}": {
+                "iv_score": 50 + i * 5,
+                "primary_role": "key_animator",
+                "career_band": "5-9y",
+            }
+            for i in range(10)
+        }
+        # All in same community
+        community_map = {f"p{i}": 0 for i in range(10)}
+        result = compute_peer_percentile(features, community_map=community_map)
+        # Should have cluster_percentile for everyone
+        for pid, data in result.items():
+            if data.get("peer_percentile") is not None:
+                assert "cluster_percentile" in data
+                assert "cluster_id" in data
+                assert data["cluster_id"] == 0
+                assert "cluster_size" in data
+                assert data["cluster_size"] == 10
+
+    def test_no_cluster_without_community_map(self):
+        """Without community_map, no cluster_percentile is added."""
+        features = {
+            f"p{i}": {
+                "iv_score": 50 + i * 5,
+                "primary_role": "key_animator",
+                "career_band": "5-9y",
+            }
+            for i in range(10)
+        }
+        result = compute_peer_percentile(features, community_map=None)
+        for pid, data in result.items():
+            assert "cluster_percentile" not in data
+
+
+class TestLeverageCorrection:
+    def test_leverage_corrected_residuals(
+        self, results_list, credits_list, anime_map, role_profiles, career_data
+    ):
+        """Studentized residuals should handle high-leverage points."""
+        features = _build_person_features(
+            results_list, credits_list, anime_map, role_profiles, career_data
+        )
+        residuals, r_squared = compute_opportunity_residual(features)
+        # Should still produce valid z-scores
+        vals = [v for v in residuals.values() if v is not None]
+        assert len(vals) == 15
+        # z-scores should generally be bounded
+        for v in vals:
+            assert -10 < v < 10
 
 
 class TestComputeIndividualProfiles:

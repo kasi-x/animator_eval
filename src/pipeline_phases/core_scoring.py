@@ -92,6 +92,7 @@ def compute_core_scores_phase(context: PipelineContext) -> None:
     context.monitor.increment_counter("dormancy_persons", len(context.dormancy_scores))
 
     # 6. Integrated Value with CV weight optimization
+    # First compute iv_scores_historical (dormancy=1.0 for all)
     logger.info("step_start", step="integrated_value")
     with context.monitor.measure("integrated_value"):
         studio_exposure = compute_studio_exposure(
@@ -103,18 +104,40 @@ def compute_core_scores_phase(context: PipelineContext) -> None:
             pid: m.awcc
             for pid, m in context.knowledge_spanner_scores.items()
         }
+        # Historical IV: no dormancy applied (dormancy=1.0 for everyone)
+        no_dormancy = {pid: 1.0 for pid in context.dormancy_scores}
         iv_result = compute_integrated_value_full(
             context.person_fe,
             context.birank_person_scores,
             studio_exposure,
             awcc_scores,
             context.patronage_scores,
-            context.dormancy_scores,
+            no_dormancy,
             context.credits,
             context.anime_map,
         )
-        context.iv_scores = iv_result.iv_scores
+        context.iv_scores_historical = iv_result.iv_scores
         context.iv_lambda_weights = iv_result.lambda_weights
+        iv_component_std = iv_result.component_std
+        iv_component_mean = iv_result.component_mean
+        # Store for Phase 6 reuse (fix B02)
+        context.iv_component_std = iv_component_std
+        context.iv_component_mean = iv_component_mean
+
+        # Current IV: apply raw dormancy (career-aware dormancy applied in Phase 6)
+        from src.analysis.integrated_value import compute_integrated_value
+
+        context.iv_scores = compute_integrated_value(
+            context.person_fe,
+            context.birank_person_scores,
+            studio_exposure,
+            awcc_scores,
+            context.patronage_scores,
+            context.dormancy_scores,
+            context.iv_lambda_weights,
+            component_std=iv_component_std,
+            component_mean=iv_component_mean,
+        )
     context.monitor.increment_counter("iv_persons", len(context.iv_scores))
 
     context.monitor.record_memory("after_scoring")

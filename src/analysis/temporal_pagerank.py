@@ -33,6 +33,19 @@ logger = structlog.get_logger()
 PEER_EDGE_CAP = 15  # Max persons per category per anime for peer edges
 
 
+def _work_importance(anime: Anime | None) -> float:
+    """Duration-based work importance (no anime.score)."""
+    from src.utils.config import DURATION_BASELINE_MINUTES, DURATION_MAX_MULTIPLIER
+
+    if anime is None or anime.duration is None:
+        return 1.0
+    duration_mult = min(
+        anime.duration / DURATION_BASELINE_MINUTES,
+        DURATION_MAX_MULTIPLIER,
+    )
+    return max(duration_mult, 0.01)
+
+
 @dataclass(frozen=True)
 class YearlyBirankSnapshot:
     """1年分のBiRank評価."""
@@ -137,7 +150,7 @@ def _add_peer_edges(
 
     for anime_id, staff in anime_credits.items():
         anime = anime_map.get(anime_id)
-        importance = max(anime.score / 10.0, 0.1) if (anime and anime.score) else 0.5
+        importance = _work_importance(anime)
 
         # Group by ROLE_CATEGORY
         category_persons: dict[str, list[str]] = defaultdict(list)

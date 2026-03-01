@@ -9,12 +9,17 @@ class TestComputeSkillScores:
         assert compute_skill_scores([], {}) == {}
 
     def test_no_scored_anime(self):
+        # compute_skill_scores now uses staff count (not anime.score).
+        # A single credit still yields staff_count=1. With only 1 anime
+        # there are not enough teams to rate, but the person gets the
+        # default rating normalized to 50.0.
         credits = [
             Credit(person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR),
         ]
         anime_map = {"a1": Anime(id="a1", year=2020, score=None)}
         result = compute_skill_scores(credits, anime_map)
-        assert result == {}
+        assert "p1" in result
+        assert result["p1"] == 50.0
 
     def test_basic_skill_scores(self):
         credits = [

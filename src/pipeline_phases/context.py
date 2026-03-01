@@ -7,6 +7,7 @@ variables and making dependencies explicit.
 Also provides PipelineCheckpoint for crash resume support.
 """
 
+import datetime
 import json
 import time
 from dataclasses import dataclass, field
@@ -46,7 +47,7 @@ class PipelineContext:
     # Configuration
     visualize: bool
     dry_run: bool
-    current_year: int = 2026
+    current_year: int = field(default_factory=lambda: datetime.datetime.now().year)
 
     # Source data (Phase 1: data_loading)
     persons: list[Person] = field(default_factory=list)
@@ -81,7 +82,10 @@ class PipelineContext:
 
     # Integrated Value (replaces composite_scores semantically)
     iv_scores: dict[str, float] = field(default_factory=dict)
+    iv_scores_historical: dict[str, float] = field(default_factory=dict)  # dormancy-free
     iv_lambda_weights: dict[str, float] = field(default_factory=dict)
+    iv_component_std: dict[str, float] | None = None  # for consistent normalization
+    iv_component_mean: dict[str, float] | None = None
 
     # Supplementary metrics (Phase 6)
     decay_results: dict[str, list[dict]] = field(default_factory=dict)
@@ -153,6 +157,7 @@ class PipelineCheckpoint:
             data["birank_person_scores"] = context.birank_person_scores
             data["birank_anime_scores"] = context.birank_anime_scores
             data["iv_scores"] = context.iv_scores
+            data["iv_scores_historical"] = context.iv_scores_historical
             data["iv_lambda_weights"] = context.iv_lambda_weights
             data["patronage_scores"] = context.patronage_scores
             data["dormancy_scores"] = context.dormancy_scores
@@ -211,6 +216,7 @@ class PipelineCheckpoint:
             context.birank_person_scores = checkpoint.get("birank_person_scores", {})
             context.birank_anime_scores = checkpoint.get("birank_anime_scores", {})
             context.iv_scores = checkpoint.get("iv_scores", {})
+            context.iv_scores_historical = checkpoint.get("iv_scores_historical", {})
             context.iv_lambda_weights = checkpoint.get("iv_lambda_weights", {})
             context.patronage_scores = checkpoint.get("patronage_scores", {})
             context.dormancy_scores = checkpoint.get("dormancy_scores", {})

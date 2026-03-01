@@ -14,7 +14,7 @@ logger = structlog.get_logger()
 
 
 def _score_tier(score: float | None) -> str:
-    """スコアをティアに分類."""
+    """スコアティア — 表示用のみ（スコア計算には使わない）."""
     if score is None:
         return "unknown"
     if score >= 8.0:
@@ -68,12 +68,12 @@ def compute_genre_affinity(
         for c in pcreds:
             anime = anime_map.get(c.anime_id)
             if anime:
-                tier = _score_tier(anime.score)
+                tier = _score_tier(anime.score)  # display-only — not used in scoring
                 era = _era(anime.year)
                 tier_counts[tier] += 1
                 era_counts[era] += 1
                 if anime.score is not None:
-                    scores.append(anime.score)
+                    scores.append(anime.score)  # display-only — informational metadata
 
         total = len(pcreds)
         if total == 0:
@@ -94,7 +94,7 @@ def compute_genre_affinity(
             "eras": dict(era_pct),
             "primary_tier": primary_tier,
             "primary_era": primary_era,
-            "avg_anime_score": round(sum(scores) / len(scores), 2) if scores else None,
+            "avg_anime_score": round(sum(scores) / len(scores), 2) if scores else None,  # display-only
             "total_credits": total,
         }
 

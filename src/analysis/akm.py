@@ -1,9 +1,13 @@
 """AKM Fixed Effects Decomposition — Abowd, Kramarz, Margolis (1999).
 
-Decomposes observed outcomes (anime scores) into:
-- Person fixed effects (θ_i): individual talent/ability
+Decomposes observed outcomes (production scale metric) into:
+- Person fixed effects (θ_i): individual demand/reputation
 - Studio fixed effects (ψ_j): studio resources/environment
-- Time-varying controls: experience, role level, credits per year
+- Time-varying controls: experience, role level
+
+Outcome y = log(staff_count) × log(episodes) × duration_mult — measures
+"being called for large-scale productions." This is a structural signal of
+industry reputation, independent of viewer ratings (anime.score is NOT used).
 
 Uses iterative demeaning (Gaure 2013) to avoid massive dummy matrices.
 Studio is inferred from anime credits when not directly available.
@@ -266,32 +270,54 @@ def _build_panel(
                 person_first_year[c.person_id], year
             )
 
+    # Precompute staff count per anime (production scale proxy)
+    anime_staff_count: dict[str, int] = {}
+    _seen_pa: set[tuple[str, str]] = set()
+    for c in credits:
+        key = (c.person_id, c.anime_id)
+        if key not in _seen_pa:
+            _seen_pa.add(key)
+            anime_staff_count[c.anime_id] = anime_staff_count.get(c.anime_id, 0) + 1
+
     # Aggregate per (person, anime): collapse multiple roles on same anime.
     # role_w: max role weight (for controls); w_obs: sum of credit weights.
     pa_data: dict[tuple[str, str], tuple[float, float, int, str | None, float]] = {}
     for c in credits:
         anime = anime_map.get(c.anime_id)
-        if not anime or not anime.year or anime.score is None:
+        if not anime or not anime.year:
             continue
         if c.person_id not in connected_persons:
             continue
         if not anime.studios:
             continue
 
+        # Production scale outcome: log(staff_count) × log(episodes) × duration_mult
+        # This measures "being called for large-scale productions" — a structural
+        # signal of industry reputation, independent of viewer ratings.
+        staff_cnt = anime_staff_count.get(c.anime_id, 1)
+        eps = anime.episodes or 1
+        dur = anime.duration or 24
+        from src.utils.config import DURATION_BASELINE_MINUTES
+        dur_mult = min(dur / DURATION_BASELINE_MINUTES, 2.0)
+        outcome = math.log1p(staff_cnt) * math.log1p(eps) * dur_mult
+
         key = (c.person_id, c.anime_id)
         w = ROLE_WEIGHTS.get(c.role.value, 1.0)
-        studio = anime.studios[0]
+        # Use studio_assignments for person's studio (fix B03: was anime.studios[0])
+        studio = studio_assignments.get(c.person_id, {}).get(
+            anime.year, anime.studios[0]
+        )
 
         # Compute credit-level observation weight
         years_active = anime.year - person_first_year.get(c.person_id, anime.year)
         cw = _compute_credit_weight(c.role, c.raw_role, anime, years_active)
 
         if key not in pa_data:
-            pa_data[key] = (anime.score, w, anime.year, studio, cw)
+            pa_data[key] = (outcome, w, anime.year, studio, cw)
         else:
             old_score, old_w, old_year, old_studio, old_cw = pa_data[key]
             # Max role weight for controls; accumulate w_obs for multi-role
-            pa_data[key] = (anime.score, max(old_w, w), old_year, old_studio, old_cw + cw)
+            pa_data[key] = (outcome, max(old_w, w), old_year, old_studio, old_cw + cw)
 
     # Cap accumulated w_obs at 95th percentile to limit multi-role outliers
     if pa_data:

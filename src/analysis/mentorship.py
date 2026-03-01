@@ -96,7 +96,9 @@ def infer_mentorships(
                 "stage_gap": mentor_stage - mentee_stage,
                 "year_span": (min(years), max(years)) if years else None,
                 "confidence": _compute_confidence(
-                    len(anime_ids), mentor_stage - mentee_stage, len(years)
+                    len(anime_ids),
+                    mentor_stage - mentee_stage,
+                    max(years) - min(years) + 1 if years else 0,
                 ),
             }
         )
@@ -108,14 +110,14 @@ def infer_mentorships(
     return mentorships
 
 
-def _compute_confidence(shared_works: int, stage_gap: int, year_count: int) -> float:
+def _compute_confidence(shared_works: int, stage_gap: int, year_span: int) -> float:
     """メンターシップの信頼度 (0-100)."""
     # More shared works = higher confidence
     work_score = min(40, shared_works * 8)
     # Larger stage gap = more likely real mentorship
     gap_score = min(30, stage_gap * 10)
-    # Longer time span = more sustained relationship
-    span_score = min(30, year_count * 6)
+    # Longer time span = more sustained relationship (B16 fix: span, not count)
+    span_score = min(30, year_span * 6)
     return min(100, work_score + gap_score + span_score)
 
 

@@ -170,10 +170,39 @@ class TestEstimateAKM:
         assert result.r_squared == 0.0
 
     def test_studio_fe_ordering(self, studio_data):
-        """Better studio (higher avg anime score) has higher studio_fe."""
-        _, anime_map, credits = studio_data
-        result = estimate_akm(credits, anime_map)
-        # StudioA anime avg = 8.75, StudioB avg = 6.75, StudioC avg = 5.0
+        """Studio with larger production scale has higher studio_fe.
+
+        AKM outcome is now log1p(staff_count) * log1p(episodes) * dur_mult,
+        not anime.score.  Build data where StudioA has clearly larger-scale
+        productions than StudioC so the ordering survives shrinkage.
+        """
+        _, _, base_credits = studio_data
+        # Override anime_map: give StudioA many episodes (large scale)
+        # and StudioC few episodes (small scale)
+        anime_map = {
+            "a1": Anime(id="a1", title_en="Alpha", year=2018, score=9.0,
+                        studios=["StudioA"], episodes=24),
+            "a2": Anime(id="a2", title_en="Beta", year=2019, score=8.5,
+                        studios=["StudioA"], episodes=24),
+            "a3": Anime(id="a3", title_en="Gamma", year=2019, score=7.0,
+                        studios=["StudioB"], episodes=12),
+            "a4": Anime(id="a4", title_en="Delta", year=2020, score=6.5,
+                        studios=["StudioB"], episodes=12),
+            "a5": Anime(id="a5", title_en="Epsilon", year=2021, score=5.0,
+                        studios=["StudioC"], episodes=1),
+        }
+        # Add extra staff to StudioA anime for larger staff counts
+        extra_credits = list(base_credits)
+        for i in range(10, 20):
+            extra_credits.append(
+                Credit(person_id=f"extra{i}", anime_id="a1",
+                       role=Role.KEY_ANIMATOR, source="test")
+            )
+            extra_credits.append(
+                Credit(person_id=f"extra{i}", anime_id="a2",
+                       role=Role.KEY_ANIMATOR, source="test")
+            )
+        result = estimate_akm(extra_credits, anime_map)
         if "StudioA" in result.studio_fe and "StudioC" in result.studio_fe:
             assert result.studio_fe["StudioA"] > result.studio_fe["StudioC"]
 

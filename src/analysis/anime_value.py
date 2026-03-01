@@ -87,13 +87,12 @@ def compute_commercial_value(
     unique_roles = len(set(c.role for c in credits))
     diversity_score = min(1.0, unique_roles / 20)  # Normalize to 20 roles
 
-    # Use anime.score from AniList/MAL ratings (0-100 scale → 0-1)
-    if anime.score and anime.score > 0:
-        external_score = min(1.0, anime.score / 100)
-    else:
-        external_score = 0.5  # Default when no rating available
+    # Production scale: episodes × duration as investment proxy
+    eps = anime.episodes or 1
+    dur = anime.duration or 24
+    scale_score = min(1.0, (eps * dur) / (24 * 24))  # Normalize to 2-cour standard
 
-    commercial = staff_score * 0.3 + diversity_score * 0.2 + external_score * 0.5
+    commercial = staff_score * 0.4 + diversity_score * 0.3 + scale_score * 0.3
 
     return round(commercial, 4)
 
@@ -121,13 +120,12 @@ def compute_critical_value(
     else:
         tag_score = 0.3  # Default
 
-    # Use anime.score as proxy for critical reception (0-100 → 0-1)
-    if anime.score and anime.score > 0:
-        critic_score = min(1.0, anime.score / 100)
-    else:
-        critic_score = 0.5  # Default when no score available
+    # Genre diversity as additional critical signal
+    genre_score = 0.3
+    if hasattr(anime, "genres") and anime.genres:
+        genre_score = min(1.0, len(anime.genres) / 5)
 
-    critical = tag_score * 0.4 + critic_score * 0.6
+    critical = tag_score * 0.6 + genre_score * 0.4
 
     return round(critical, 4)
 
