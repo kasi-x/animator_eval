@@ -26,14 +26,16 @@ from src.analysis.anime_value import (
 )
 from src.analysis.contribution_attribution import (
     ContributionMetrics,
-    ROLE_CONTRIBUTION_WEIGHTS,
+    RoleWeightEstimation,
     aggregate_contributions_by_person,
     compute_contribution_attribution,
     compute_role_importance,
     compute_shapley_value_approximate,
     estimate_marginal_contribution,
+    estimate_role_weights,
     find_mvp_by_role,
     find_undervalued_contributors,
+    set_role_weights,
 )
 from src.analysis.growth_acceleration import (
     AccelerationMetrics,
@@ -357,26 +359,92 @@ class TestExportPotentialValueReport:
 # ============================================================
 
 
+class TestRoleWeightEstimation:
+    """OLS-based role weight estimation tests."""
+
+    def _make_credits(self, n_anime=50):
+        """Generate synthetic credits for OLS estimation testing."""
+        import random
+        random.seed(42)
+        credits = []
+        roles = [Role.DIRECTOR, Role.KEY_ANIMATOR, Role.ANIMATION_DIRECTOR,
+                 Role.SCREENPLAY, Role.EPISODE_DIRECTOR]
+        for i in range(n_anime):
+            aid = f"a{i}"
+            # Bigger anime have more directors/animators
+            n_staff = random.randint(5, 100)
+            for j in range(n_staff):
+                role = random.choice(roles)
+                credits.append(_credit(f"p{j}_{i}", aid, role))
+        return credits
+
+    def test_ols_returns_weights(self):
+        credits = self._make_credits(50)
+        result = estimate_role_weights(credits)
+        assert result.method == "ols"
+        assert result.n_anime >= 30
+        assert len(result.weights) > 0
+
+    def test_weights_sum_to_one(self):
+        credits = self._make_credits(50)
+        result = estimate_role_weights(credits)
+        assert abs(sum(result.weights.values()) - 1.0) < 1e-6
+
+    def test_all_weights_positive(self):
+        credits = self._make_credits(50)
+        result = estimate_role_weights(credits)
+        for role, w in result.weights.items():
+            assert w > 0, f"Role {role} has non-positive weight {w}"
+
+    def test_r_squared_reasonable(self):
+        credits = self._make_credits(50)
+        result = estimate_role_weights(credits)
+        assert 0.0 <= result.r_squared <= 1.0
+
+    def test_insufficient_anime_returns_uniform(self):
+        """With <30 anime, should fall back to uniform weights."""
+        credits = [_credit("p1", "a1", Role.DIRECTOR)]
+        result = estimate_role_weights(credits)
+        assert result.method == "uniform"
+
+    def test_empty_credits_returns_uniform(self):
+        result = estimate_role_weights([])
+        assert result.method == "uniform"
+
+    def test_coefficients_stored(self):
+        credits = self._make_credits(50)
+        result = estimate_role_weights(credits)
+        assert len(result.coefficients) == len(result.weights)
+
+
 class TestRoleImportance:
-    def test_director_weight(self):
-        assert compute_role_importance(Role.DIRECTOR) == 0.20
+    def test_with_set_weights(self):
+        """After set_role_weights, compute_role_importance uses those weights."""
+        set_role_weights({"director": 0.30, "key_animator": 0.10})
+        assert compute_role_importance(Role.DIRECTOR) == 0.30
+        assert compute_role_importance(Role.KEY_ANIMATOR) == 0.10
+        # Reset
+        set_role_weights(None)
 
-    def test_key_animator_weight(self):
-        assert compute_role_importance(Role.KEY_ANIMATOR) == 0.06
+    def test_fallback_uniform(self):
+        """Without set weights, all roles get uniform weight."""
+        set_role_weights(None)
+        w = compute_role_importance(Role.DIRECTOR)
+        assert w > 0
+        # Uniform: 1/n_roles
+        assert abs(w - 1.0 / len(Role)) < 1e-6
+        assert w == compute_role_importance(Role.SPECIAL)
 
-    def test_unknown_role(self):
-        """Roles not in the map should return 0.01."""
-        # All roles are in the map, but let's test a role that is explicitly 0.01
-        assert compute_role_importance(Role.OTHER) == 0.01
-
-    def test_all_roles_have_weights(self):
-        """Every role in ROLE_CONTRIBUTION_WEIGHTS should have a positive weight."""
-        for role, weight in ROLE_CONTRIBUTION_WEIGHTS.items():
-            assert weight > 0
+    def test_unknown_role_in_weights(self):
+        """Role not in weight dict should return 0.01."""
+        set_role_weights({"director": 0.50})
+        assert compute_role_importance(Role.KEY_ANIMATOR) == 0.01
+        set_role_weights(None)
 
 
 class TestEstimateMarginalContribution:
     def test_basic_marginal(self):
+        set_role_weights({"director": 0.20})
         result = estimate_marginal_contribution(
             person_id="p1",
             role=Role.DIRECTOR,
@@ -387,8 +455,10 @@ class TestEstimateMarginalContribution:
         # role_weight=0.20, quality_premium=(0.8-0.5)/(0.5+0.1)=0.5
         # marginal = 0.20 * 100 * (1+0.5) = 30.0
         assert result == 30.0
+        set_role_weights(None)
 
     def test_below_average_quality(self):
+        set_role_weights({"director": 0.20})
         result = estimate_marginal_contribution(
             person_id="p1",
             role=Role.DIRECTOR,
@@ -399,9 +469,11 @@ class TestEstimateMarginalContribution:
         # quality_premium=(0.2-0.5)/(0.5+0.1)=-0.5
         # marginal = 0.20 * 100 * (1-0.5) = 10.0
         assert result == 10.0
+        set_role_weights(None)
 
     def test_missing_person_scores(self):
         """Person not in scores should use staff_quality_avg."""
+        set_role_weights({"key_animator": 0.06})
         result = estimate_marginal_contribution(
             person_id="p_unknown",
             role=Role.KEY_ANIMATOR,
@@ -412,6 +484,7 @@ class TestEstimateMarginalContribution:
         # quality_premium = (0.5-0.5)/(0.5+0.1)=0
         # marginal = 0.06 * 100 * 1 = 6.0
         assert result == 6.0
+        set_role_weights(None)
 
     def test_zero_anime_value(self):
         result = estimate_marginal_contribution(
@@ -495,14 +568,16 @@ class TestComputeContributionAttribution:
         assert abs(total_share - 100.0) < 0.1
 
     def test_role_importance_is_set(self):
+        set_role_weights({"director": 0.20})
         credits = [_credit("p1", "a1", Role.DIRECTOR)]
         result = compute_contribution_attribution("a1", 100.0, credits, {})
         assert result["p1"].role_importance == 0.20
+        set_role_weights(None)
 
     def test_same_person_multiple_roles_accumulates(self):
         credits = [
             _credit("p1", "a1", Role.DIRECTOR),
-            _credit("p1", "a1", Role.STORYBOARD),
+            _credit("p1", "a1", Role.EPISODE_DIRECTOR),
         ]
         scores = {"p1": {"iv_score": 0.7}}
         result = compute_contribution_attribution("a1", 100.0, credits, scores)
@@ -1086,7 +1161,7 @@ class TestComputeTechnicalValue:
         anime = _anime("a1")
         credits = [
             _credit("p1", "a1", Role.KEY_ANIMATOR),
-            _credit("p2", "a1", Role.ART_DIRECTOR),
+            _credit("p2", "a1", Role.BACKGROUND_ART),
         ]
         scores = {"p1": {"iv_score": 0.8}, "p2": {"iv_score": 0.7}}
         result = compute_technical_value(anime, credits, scores)

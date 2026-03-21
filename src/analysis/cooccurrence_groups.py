@@ -18,15 +18,14 @@ logger = structlog.get_logger()
 COOCCURRENCE_ROLES: frozenset[Role] = frozenset(
     {
         Role.DIRECTOR,
-        Role.SERIES_COMPOSITION,
+        Role.SCREENPLAY,
         Role.CHARACTER_DESIGNER,
-        Role.CHIEF_ANIMATION_DIRECTOR,
-        Role.ART_DIRECTOR,
-        Role.COLOR_DESIGNER,
+        Role.ANIMATION_DIRECTOR,
+        Role.BACKGROUND_ART,
+        Role.FINISHING,
         Role.SOUND_DIRECTOR,
         Role.PHOTOGRAPHY_DIRECTOR,
         Role.CGI_DIRECTOR,
-        Role.MECHANICAL_DESIGNER,
     }
 )
 

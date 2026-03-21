@@ -16,7 +16,7 @@ class TestParseRole:
         assert parse_role("原画") == Role.KEY_ANIMATOR
 
     def test_unknown_role(self):
-        assert parse_role("unknown_role_xyz") == Role.OTHER
+        assert parse_role("unknown_role_xyz") == Role.SPECIAL
 
     def test_whitespace_handling(self):
         assert parse_role("  director  ") == Role.DIRECTOR

@@ -9,10 +9,13 @@ Components:
 6. Integrated Value (CV-optimized weighted combination)
 """
 
+import math
+
 import structlog
 
 from src.analysis.akm import estimate_akm, infer_studio_assignment
 from src.analysis.birank import compute_birank
+from src.analysis.graph import enhance_bipartite_quality
 from src.analysis.integrated_value import (
     compute_integrated_value_full,
     compute_studio_exposure,
@@ -51,6 +54,21 @@ def compute_core_scores_phase(context: PipelineContext) -> None:
         )
     context.monitor.increment_counter("akm_persons", len(context.person_fe))
     context.monitor.increment_counter("akm_studios", len(context.studio_fe))
+
+    # 1b. Enhance bipartite graph with staff quality signal from AKM
+    # Re-weights edges: role^damping × production_scale × staff_quality_boost
+    # Parameters (role_damping, blend, top_fraction) are calibrated from data.
+    logger.info("step_start", step="bipartite_quality_enhance")
+    with context.monitor.measure("bipartite_quality_enhance"):
+        enhance_bipartite_quality(
+            context.person_anime_graph,
+            context.person_fe,
+            role_damping=None,  # auto-calibrate from data
+        )
+        # Retrieve calibration results stored on graph by enhance_bipartite_quality
+        context.quality_calibration = (
+            context.person_anime_graph.graph.get("_quality_calibration", {})
+        )
 
     # 2. BiRank (bipartite PageRank)
     logger.info("step_start", step="birank")
@@ -93,30 +111,34 @@ def compute_core_scores_phase(context: PipelineContext) -> None:
         )
     context.monitor.increment_counter("dormancy_persons", len(context.dormancy_scores))
 
-    # 5b. Rescale BiRank from probability space (sum=1) to expected-count space
-    # (mean=1).  Done AFTER patronage (which uses raw probability-space BiRank
+    # 5b. Rescale BiRank from probability space (sum=1) to log expected-count
+    # space.  Done AFTER patronage (which uses raw probability-space BiRank
     # as director weights in Π=Σ PR_d·log(1+N)), but BEFORE IV computation.
-    # Raw BiRank ~1/N per person (~1.7e-5 for 58K).  Other IV components live
-    # on [-6, +10] scales.  Without rescaling, BiRank's max normalized value
-    # is ~0.07 vs ~6 for person_fe → 15% lambda weight contributes ~0% of IV
-    # variance.  ×N gives mean=1.0 and std≈2, comparable to other components.
+    #
+    # Step 1: ×N → expected-count space (mean≈1).
+    # Step 2: log(1+x) → compress power-law tail.
+    #
+    # BiRank follows a power law: a few hub nodes get scores 100-200× the mean.
+    # Without log transform, z-score normalization cannot fix this — BiRank's
+    # outlier range (~228) dwarfs person_fe's range (~24), making IV ≈ BiRank.
+    # log(1+x) maps [0, 228] → [0, 5.4], comparable to person_fe's [-13, 10].
     n_birank = len(context.birank_person_scores)
     if n_birank > 0:
         context.birank_person_scores = {
-            pid: score * n_birank
+            pid: math.log1p(score * n_birank)
             for pid, score in context.birank_person_scores.items()
         }
         context.birank_anime_scores = {
-            aid: score * len(context.birank_anime_scores)
+            aid: math.log1p(score * len(context.birank_anime_scores))
             for aid, score in context.birank_anime_scores.items()
         }
+        br_vals = list(context.birank_person_scores.values())
         logger.info(
-            "birank_rescaled_to_expected_count",
+            "birank_rescaled_log_expected_count",
             n_persons=n_birank,
-            max_score=round(max(context.birank_person_scores.values()), 4),
-            mean_score=round(
-                sum(context.birank_person_scores.values()) / n_birank, 4
-            ),
+            max_score=round(max(br_vals), 4),
+            mean_score=round(sum(br_vals) / n_birank, 4),
+            median_score=round(sorted(br_vals)[n_birank // 2], 4),
         )
 
     # 6. Integrated Value with CV weight optimization
@@ -151,6 +173,7 @@ def compute_core_scores_phase(context: PipelineContext) -> None:
         # Store for Phase 6 reuse (fix B02)
         context.iv_component_std = iv_component_std
         context.iv_component_mean = iv_component_mean
+        context.pca_variance_explained = iv_result.pca_variance_explained
 
         # Current IV: apply raw dormancy (career-aware dormancy applied in Phase 6)
         from src.analysis.integrated_value import compute_integrated_value

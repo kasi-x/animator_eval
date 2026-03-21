@@ -696,6 +696,13 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         data_getter=lambda ctx: ctx.analysis_results.get("iv_weights"),
         log_message="iv_weights_saved",
     ),
+    # Derived parameters report
+    ExportSpec(
+        filename="derived_params.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("derived_params"),
+        log_message="derived_params_saved",
+        log_metrics=lambda data: {"sections": len(data.get("sections", {}))} if data else {},
+    ),
     # Knowledge spanners
     ExportSpec(
         filename="knowledge_spanners.json",
@@ -894,6 +901,12 @@ def export_and_visualize_phase(context: PipelineContext, elapsed: float = 0.0) -
     logger.info("step_start", step="json_export")
     context.monitor.record_memory("before_export")
 
+    # Release betweenness cache (can be large, no longer needed)
+    import gc
+
+    context.betweenness_cache = {}
+    gc.collect()
+
     # Store elapsed time in context for summary export
     context._elapsed = elapsed
 
@@ -901,11 +914,16 @@ def export_and_visualize_phase(context: PipelineContext, elapsed: float = 0.0) -
         # Ensure JSON directory exists
         JSON_DIR.mkdir(parents=True, exist_ok=True)
 
-        # Export all registered files
+        # Export all registered files, releasing memory after each write
         exported_count = 0
         for spec in EXPORT_REGISTRY:
             if export_single_result_file(spec, context, JSON_DIR):
                 exported_count += 1
+            # Release analysis_results entry after export to free memory
+            # (analysis_results can hold 500MB+ total)
+            key = spec.filename.replace(".json", "")
+            if key in context.analysis_results:
+                del context.analysis_results[key]
 
         logger.info(
             "exports_complete",

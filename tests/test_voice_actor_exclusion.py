@@ -43,7 +43,7 @@ def _make_credits_with_voice_actors():
         Credit(person_id="dual1", anime_id="a1", role=Role.KEY_ANIMATOR),
         Credit(person_id="dual1", anime_id="a2", role=Role.VOICE_ACTOR),
         # 主題歌
-        Credit(person_id="song1", anime_id="a1", role=Role.THEME_SONG),
+        Credit(person_id="song1", anime_id="a1", role=Role.MUSIC),
     ]
     return persons, anime_list, credits
 
@@ -53,10 +53,10 @@ class TestNonProductionRolesConstant:
         assert Role.VOICE_ACTOR in NON_PRODUCTION_ROLES
 
     def test_contains_theme_song(self):
-        assert Role.THEME_SONG in NON_PRODUCTION_ROLES
+        assert Role.MUSIC in NON_PRODUCTION_ROLES
 
     def test_contains_adr(self):
-        assert Role.ADR in NON_PRODUCTION_ROLES
+        assert Role.VOICE_ACTOR in NON_PRODUCTION_ROLES
 
     def test_contains_original_creator(self):
         assert Role.ORIGINAL_CREATOR in NON_PRODUCTION_ROLES

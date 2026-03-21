@@ -479,8 +479,12 @@ def resolve_all(persons: list[Person]) -> dict[str, str]:
     remaining = [p for p in persons if p.id not in already_matched]
     similarity = similarity_based_cluster(remaining, threshold=0.95)
 
+    # Step 5: AI-assisted matching (LLM) for borderline similarity pairs
+    already_matched = already_matched | set(similarity)
+    ai_merges = _ai_assisted_step(persons, already_matched)
+
     # 統合
-    merged = {**exact, **cross, **romaji, **similarity}
+    merged = {**exact, **cross, **romaji, **similarity, **ai_merges}
     logger.info(
         "entity_resolution_complete",
         total_merges=len(merged),
@@ -488,5 +492,70 @@ def resolve_all(persons: list[Person]) -> dict[str, str]:
         cross_source_merges=len(cross),
         romaji_merges=len(romaji),
         similarity_merges=len(similarity),
+        ai_merges=len(ai_merges),
     )
     return merged
+
+
+def _ai_assisted_step(
+    persons: list[Person], already_matched: set[str]
+) -> dict[str, str]:
+    """Step 5: AI-assisted entity resolution for borderline cases.
+
+    Finds pairs with similarity 0.85-0.95 (too low for auto-match, too high
+    to ignore) and asks the LLM to verify.
+
+    Returns: {person_id: canonical_id}
+    """
+    try:
+        from src.analysis.ai_entity_resolution import (
+            LLMError,
+            ask_llm_if_same_person,
+            check_llm_available,
+        )
+        from src.analysis.llm_pipeline import find_ai_match_candidates, is_llm_enabled
+    except ImportError:
+        return {}
+
+    if not is_llm_enabled():
+        return {}
+
+    if not check_llm_available():
+        logger.info("ai_entity_resolution_skipped", reason="llm_not_available")
+        return {}
+
+    candidates = find_ai_match_candidates(
+        persons, already_matched, max_candidates=500
+    )
+    if not candidates:
+        return {}
+
+    logger.info("ai_entity_resolution_start", candidates=len(candidates))
+
+    ai_map: dict[str, str] = {}
+    merged_ids: set[str] = set()
+
+    for p1, p2, sim in candidates:
+        if p1.id in merged_ids or p2.id in merged_ids:
+            continue
+
+        try:
+            decision = ask_llm_if_same_person(p1, p2)
+            if decision.is_match and decision.confidence >= 0.8:
+                ai_map[p2.id] = p1.id
+                merged_ids.add(p1.id)
+                merged_ids.add(p2.id)
+                logger.info(
+                    "entity_merged",
+                    canonical=p1.id,
+                    source=p2.id,
+                    strategy="ai_assisted",
+                    similarity=f"{sim:.3f}",
+                    confidence=f"{decision.confidence:.2f}",
+                    name1=p1.name_ja,
+                    name2=p2.name_ja,
+                )
+        except LLMError:
+            continue
+
+    return ai_map

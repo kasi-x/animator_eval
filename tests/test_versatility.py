@@ -20,7 +20,7 @@ def _make_credits():
             person_id="p3", anime_id="a1", role=Role.CHARACTER_DESIGNER, source="test"
         ),
         Credit(person_id="p3", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"),
-        Credit(person_id="p3", anime_id="a1", role=Role.EFFECTS, source="test"),
+        Credit(person_id="p3", anime_id="a1", role=Role.PHOTOGRAPHY_DIRECTOR, source="test"),
         Credit(person_id="p3", anime_id="a1", role=Role.SCREENPLAY, source="test"),
     ]
 

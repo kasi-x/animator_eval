@@ -18,7 +18,7 @@ def _make_data():
         Credit(person_id="p1", anime_id="a3", role=Role.ANIMATION_DIRECTOR),
         Credit(person_id="p2", anime_id="a3", role=Role.DIRECTOR),
         Credit(person_id="p3", anime_id="a3", role=Role.KEY_ANIMATOR),
-        Credit(person_id="p1", anime_id="a4", role=Role.CHIEF_ANIMATION_DIRECTOR),
+        Credit(person_id="p1", anime_id="a4", role=Role.ANIMATION_DIRECTOR),
     ]
     return credits, anime_map
 

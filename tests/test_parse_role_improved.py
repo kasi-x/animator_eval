@@ -9,7 +9,7 @@ def test_parse_role_with_episode_numbers():
     assert parse_role("Animation Director (ep 10)") == Role.ANIMATION_DIRECTOR
     assert parse_role("Key Animation (eps 21, 25)") == Role.KEY_ANIMATOR
     assert parse_role("Episode Director (eps 1, 37)") == Role.EPISODE_DIRECTOR
-    assert parse_role("Storyboard (OP1, eps 1, 25)") == Role.STORYBOARD
+    assert parse_role("Storyboard (OP1, eps 1, 25)") == Role.EPISODE_DIRECTOR
     assert parse_role("Director (eps 1-278)") == Role.DIRECTOR
 
 
@@ -29,20 +29,20 @@ def test_parse_role_voice_actor():
 
 def test_parse_role_theme_song():
     """Test that theme song roles are correctly categorized."""
-    assert parse_role("Theme Song Performance") == Role.THEME_SONG
-    assert parse_role("Theme Song Performance (OP1)") == Role.THEME_SONG
-    assert parse_role("Theme Song Performance (English; OP2)") == Role.THEME_SONG
-    assert parse_role("Insert Song Performance") == Role.THEME_SONG
-    assert parse_role("Theme Song Arrangement (OP2, ED2)") == Role.THEME_SONG
+    assert parse_role("Theme Song Performance") == Role.MUSIC
+    assert parse_role("Theme Song Performance (OP1)") == Role.MUSIC
+    assert parse_role("Theme Song Performance (English; OP2)") == Role.MUSIC
+    assert parse_role("Insert Song Performance") == Role.MUSIC
+    assert parse_role("Theme Song Arrangement (OP2, ED2)") == Role.MUSIC
 
 
 def test_parse_role_adr():
     """Test that ADR roles are correctly categorized."""
-    assert parse_role("ADR Director (English)") == Role.ADR
-    assert parse_role("ADR Director (Brazilian Portuguese; 1st dub)") == Role.ADR
-    assert parse_role("ADR Script (English)") == Role.ADR
+    assert parse_role("ADR Director (English)") == Role.VOICE_ACTOR
+    assert parse_role("ADR Director (Brazilian Portuguese; 1st dub)") == Role.VOICE_ACTOR
+    assert parse_role("ADR Script (English)") == Role.VOICE_ACTOR
     assert (
-        parse_role("ADR Director Assistant (Brazilian Portuguese; 2nd dub)") == Role.ADR
+        parse_role("ADR Director Assistant (Brazilian Portuguese; 2nd dub)") == Role.VOICE_ACTOR
     )
 
 
@@ -58,10 +58,10 @@ def test_parse_role_core_staff():
 
 def test_parse_role_other():
     """Test that unmapped roles fall back to OTHER."""
-    assert parse_role("Endcard (ep 1)") == Role.OTHER
-    assert parse_role("Photography (eps 2-6)") == Role.OTHER
-    assert parse_role("Script Assistance (eps 24, 25)") == Role.OTHER
-    assert parse_role("Unknown Role") == Role.OTHER
+    assert parse_role("Endcard (ep 1)") == Role.SPECIAL
+    assert parse_role("Photography (eps 2-6)") == Role.SPECIAL
+    assert parse_role("Script Assistance (eps 24, 25)") == Role.SPECIAL
+    assert parse_role("Unknown Role") == Role.SPECIAL
 
 
 def test_parse_role_case_insensitive():

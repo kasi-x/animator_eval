@@ -63,7 +63,7 @@ ANIME_TYPE_ROLE_ADJUSTMENTS = {
     AnimeType.MOVIE: {
         Role.DIRECTOR: 1.3,  # 監督の重要度 +30%
         Role.CHARACTER_DESIGNER: 1.2,  # キャラデザ +20%
-        Role.ART_DIRECTOR: 1.2,  # 美術監督 +20%
+        Role.BACKGROUND_ART: 1.2,  # 美術監督 +20%
         Role.KEY_ANIMATOR: 0.9,  # 原画 -10%（話数少ない）
         Role.ANIMATION_DIRECTOR: 0.95,
     },
@@ -74,14 +74,14 @@ ANIME_TYPE_ROLE_ADJUSTMENTS = {
     },
     AnimeType.TV_2COUR: {
         Role.DIRECTOR: 0.95,  # 監督 -5%（話数多いので分散）
-        Role.CHIEF_ANIMATION_DIRECTOR: 1.15,  # 総作監 +15%
+        Role.ANIMATION_DIRECTOR: 1.15,  # 総作監 +15%
         Role.ANIMATION_DIRECTOR: 1.1,  # 作監 +10%
         Role.KEY_ANIMATOR: 1.05,  # 原画 +5%
         Role.EPISODE_DIRECTOR: 1.15,  # 演出 +15%
     },
     AnimeType.TV_LONG: {
         Role.DIRECTOR: 0.9,  # 監督 -10%
-        Role.CHIEF_ANIMATION_DIRECTOR: 1.2,  # 総作監 +20%
+        Role.ANIMATION_DIRECTOR: 1.2,  # 総作監 +20%
         Role.ANIMATION_DIRECTOR: 1.15,  # 作監 +15%
         Role.KEY_ANIMATOR: 1.1,  # 原画 +10%
         Role.EPISODE_DIRECTOR: 1.2,  # 演出 +20%
@@ -298,7 +298,7 @@ def analyze_fair_compensation(
             try:
                 role = Role(role_str)
             except ValueError:
-                role = Role.OTHER
+                role = Role.SPECIAL
 
             adjustment = ANIME_TYPE_ROLE_ADJUSTMENTS.get(anime_type, {}).get(role, 1.0)
             adjusted_shapley[person_id] = base_shapley * adjustment
@@ -322,7 +322,7 @@ def analyze_fair_compensation(
         try:
             role = Role(role_str)
         except ValueError:
-            role = Role.OTHER
+            role = Role.SPECIAL
 
         min_comp = request.min_compensation.get(role, 0)
         adjusted_allocations[person_id] = max(

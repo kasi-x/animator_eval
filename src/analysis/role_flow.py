@@ -18,11 +18,9 @@ ROLE_STAGE = {
     Role.SECOND_KEY_ANIMATOR: "Stage 2: 第二原画",
     Role.LAYOUT: "Stage 2: レイアウト",
     Role.KEY_ANIMATOR: "Stage 3: 原画",
-    Role.EFFECTS: "Stage 3: エフェクト",
-    Role.ANIMATION_DIRECTOR: "Stage 4: 作画監督",
+    Role.PHOTOGRAPHY_DIRECTOR: "Stage 3: 撮影",
     Role.CHARACTER_DESIGNER: "Stage 4: キャラデザ",
-    Role.STORYBOARD: "Stage 4: 絵コンテ",
-    Role.CHIEF_ANIMATION_DIRECTOR: "Stage 5: 総作監",
+    Role.ANIMATION_DIRECTOR: "Stage 5: 作画監督",
     Role.EPISODE_DIRECTOR: "Stage 5: 演出",
     Role.DIRECTOR: "Stage 6: 監督",
 }

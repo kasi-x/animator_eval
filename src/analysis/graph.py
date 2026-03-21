@@ -33,6 +33,31 @@ def _role_weight(role: Role) -> float:
     return ROLE_WEIGHTS.get(role.value, 1.0)
 
 
+def _staff_scale(staff_count: int, log_baseline: float | None = None) -> float:
+    """Production scale multiplier based on staff count.
+
+    Uses log1p scaling (consistent with AKM outcome variable) normalized
+    so that the median anime staff count maps to ~1.0.
+
+    Args:
+        staff_count: number of credited staff on this anime
+        log_baseline: log1p(median_staff_count), computed from data.
+                      Falls back to log1p(30) if not provided.
+
+    Examples (with baseline=30):
+        3 staff (self-produced)  → log1p(3)/log1p(30)  ≈ 0.40
+        30 staff (1-cour TV)     → log1p(30)/log1p(30)  = 1.00
+        200 staff (major TV)     → log1p(200)/log1p(30) ≈ 1.55
+    """
+    import math
+
+    if log_baseline is None:
+        log_baseline = math.log1p(30)
+    if log_baseline <= 0:
+        log_baseline = math.log1p(30)
+    return math.log1p(max(staff_count, 1)) / log_baseline
+
+
 def create_person_anime_network(
     persons: list[Person],
     anime_list: list[Anime],
@@ -40,7 +65,11 @@ def create_person_anime_network(
 ) -> nx.DiGraph:
     """二部グラフ (person ↔ anime) を構築する.
 
-    Creates a bipartite network connecting people to the anime works they contributed to.
+    Edge weights combine three factors:
+      weight = role_weight × work_importance(duration) × staff_scale(staff_count)
+
+    Component weights are also stored separately on edges (role_w, prod_scale)
+    to enable post-hoc re-weighting by enhance_bipartite_quality().
     """
     g = nx.DiGraph()
 
@@ -52,11 +81,43 @@ def create_person_anime_network(
             name=p.display_name,
             **{"name_ja": p.name_ja, "name_en": p.name_en},
         )
+    anime_map: dict[str, Anime] = {}
     for a in anime_list:
         g.add_node(a.id, type="anime", name=a.display_title, year=a.year, score=a.score)
+        anime_map[a.id] = a
+
+    # Pre-compute staff count per anime from credits
+    _anime_staff_sets: dict[str, set] = {}
+    for c in credits:
+        if c.role in NON_PRODUCTION_ROLES:
+            continue
+        _anime_staff_sets.setdefault(c.anime_id, set()).add(c.person_id)
+    anime_staff_count: dict[str, int] = {
+        aid: len(pids) for aid, pids in _anime_staff_sets.items()
+    }
+
+    # Data-driven baseline: median staff count across all anime
+    import math
+    import statistics as _stats
+
+    staff_counts = list(anime_staff_count.values())
+    median_staff = _stats.median(staff_counts) if staff_counts else 30
+    log_baseline = math.log1p(max(median_staff, 1))
+    logger.info(
+        "staff_scale_baseline",
+        median_staff=round(median_staff, 1),
+        n_anime=len(staff_counts),
+    )
+
+    # Pre-compute per-anime production scale (duration × staff)
+    anime_prod_scale: dict[str, float] = {}
+    for aid in anime_staff_count:
+        anime_prod_scale[aid] = (
+            _work_importance(anime_map.get(aid))
+            * _staff_scale(anime_staff_count.get(aid, 1), log_baseline)
+        )
 
     # Ensure all credited persons have type="person" even if not in persons list
-    # (BiRank filters on type="person", so implicit nodes would be excluded)
     credit_person_ids = {c.person_id for c in credits if c.role not in NON_PRODUCTION_ROLES}
     for pid in credit_person_ids:
         if pid not in g:
@@ -66,18 +127,28 @@ def create_person_anime_network(
     for c in credits:
         if c.role in NON_PRODUCTION_ROLES:
             continue
-        weight = _role_weight(c.role)
-        # person → anime
+        w_role = _role_weight(c.role)
+        w_prod = anime_prod_scale.get(c.anime_id, 1.0)
+        weight = w_role * w_prod
+        # person → anime (store components for later re-weighting)
         if g.has_edge(c.person_id, c.anime_id):
             g[c.person_id][c.anime_id]["weight"] += weight
+            g[c.person_id][c.anime_id]["role_w"] += w_role
             g[c.person_id][c.anime_id]["roles"].append(c.role.value)
         else:
-            g.add_edge(c.person_id, c.anime_id, weight=weight, roles=[c.role.value])
-        # anime → person (逆方向、PageRank 伝播用)
+            g.add_edge(
+                c.person_id, c.anime_id,
+                weight=weight, role_w=w_role, prod_scale=w_prod,
+                roles=[c.role.value],
+            )
+        # anime → person (逆方向)
         if g.has_edge(c.anime_id, c.person_id):
             g[c.anime_id][c.person_id]["weight"] += weight
         else:
             g.add_edge(c.anime_id, c.person_id, weight=weight)
+
+    # Store anime_staff_sets for quality re-weighting in enhance_bipartite_quality
+    g.graph["_anime_staff_sets"] = _anime_staff_sets
 
     logger.info(
         "bipartite_graph_built",
@@ -85,6 +156,337 @@ def create_person_anime_network(
         edges=g.number_of_edges(),
     )
     return g
+
+
+def _dual_quality(
+    fe_vals: list[float],
+    role_weights: list[float] | None = None,
+    top_fraction: float = 0.25,
+    blend: float = 0.5,
+) -> float:
+    """Compute dual quality: role-weighted mean + top-quartile mean.
+
+    Blends two signals:
+      - Role-weighted mean (基底品質): higher-responsibility staff contribute more
+      - Top-quartile mean (上澄み): captures elite talent presence
+
+    This avoids penalizing teams that mix veterans with newcomers — the
+    top-quartile component preserves the signal from strong staff even
+    when the average is diluted by trainees.
+
+    Args:
+        fe_vals: shifted person_fe values for staff on this anime
+        role_weights: corresponding role weights (same order as fe_vals).
+                      If None, falls back to simple mean.
+        top_fraction: fraction of staff considered "top tier" (default 25%)
+        blend: weight for role-weighted mean vs top-quartile (0=all top, 1=all weighted)
+
+    Returns:
+        Blended quality score (always > 0)
+    """
+    if not fe_vals:
+        return 0.0
+
+    # Role-weighted mean
+    if role_weights and len(role_weights) == len(fe_vals):
+        total_w = sum(role_weights)
+        if total_w > 0:
+            weighted_mean = sum(
+                f * w for f, w in zip(fe_vals, role_weights)
+            ) / total_w
+        else:
+            weighted_mean = sum(fe_vals) / len(fe_vals)
+    else:
+        weighted_mean = sum(fe_vals) / len(fe_vals)
+
+    # Top-quartile mean (at least 1 person)
+    sorted_vals = sorted(fe_vals, reverse=True)
+    top_k = max(1, int(len(sorted_vals) * top_fraction))
+    top_mean = sum(sorted_vals[:top_k]) / top_k
+
+    return blend * weighted_mean + (1.0 - blend) * top_mean
+
+
+def _calibrate_quality_params(
+    shifted_fe: dict[str, float],
+    anime_staff_sets: dict[str, set[str]],
+    person_anime_role_w: dict[tuple[str, str], float],
+    person_fe: dict[str, float],
+) -> tuple[float, float, float]:
+    """Data-driven calibration of quality aggregation parameters.
+
+    Estimates three parameters:
+      - role_damping: how much to compress role hierarchy (from ρ(role_w, person_fe))
+      - blend: role-weighted mean vs top-quartile balance (from team heterogeneity)
+      - top_fraction: elite tier cutoff (from FE distribution skewness)
+
+    Method:
+      1. role_damping = 1 - |Spearman ρ(role_w, person_fe)|
+         If roles predict ability → keep role signal (low damping).
+         If roles don't predict ability → suppress roles (high damping).
+
+      2. blend derived from within-team coefficient of variation (CV).
+         High CV (heterogeneous teams) → lower blend (more top-quartile weight).
+         Low CV (homogeneous teams) → higher blend (weighted mean is fine).
+         blend = 0.5 + 0.3 × (1 - median_cv / (1 + median_cv))
+         Range: ~0.35 (very heterogeneous) to ~0.8 (very homogeneous).
+
+      3. top_fraction from skewness of person_fe distribution.
+         High positive skew (long right tail, few stars) → smaller top fraction.
+         Low skew (symmetric) → larger top fraction.
+         top_fraction = clamp(0.3 - 0.05 × skewness, 0.10, 0.40)
+
+    Args:
+        shifted_fe: person_id → shifted (non-negative) person_fe
+        anime_staff_sets: anime_id → set of person_ids
+        person_anime_role_w: (person_id, anime_id) → aggregated role weight
+        person_fe: person_id → raw person_fe (for correlation)
+
+    Returns:
+        (role_damping, blend, top_fraction)
+    """
+    import numpy as np
+    from scipy import stats as sp_stats
+
+    # --- 1. role_damping from ρ(role_w, person_fe) ---
+    # Collect (role_w, person_fe) pairs across all credits
+    rw_list: list[float] = []
+    fe_list: list[float] = []
+    for (pid, _aid), rw in person_anime_role_w.items():
+        if pid in person_fe:
+            rw_list.append(rw)
+            fe_list.append(person_fe[pid])
+
+    if len(rw_list) >= 30:
+        rho, _ = sp_stats.spearmanr(rw_list, fe_list)
+        role_damping = 1.0 - abs(float(rho))
+    else:
+        role_damping = 0.5  # fallback
+
+    role_damping = max(0.1, min(0.9, role_damping))
+
+    # --- 2. blend from within-team CV of person_fe ---
+    team_cvs: list[float] = []
+    for _aid, pids in anime_staff_sets.items():
+        fe_vals = [shifted_fe[p] for p in pids if p in shifted_fe]
+        if len(fe_vals) >= 3:  # need at least 3 for meaningful CV
+            arr = np.array(fe_vals)
+            mu = arr.mean()
+            if mu > 0:
+                team_cvs.append(float(arr.std() / mu))
+
+    if team_cvs:
+        median_cv = float(np.median(team_cvs))
+        # High CV → heterogeneous → less blend (more top-quartile)
+        # sigmoid-like mapping: blend in [0.35, 0.80]
+        blend = 0.5 + 0.3 * (1.0 - median_cv / (1.0 + median_cv))
+    else:
+        blend = 0.5
+
+    blend = max(0.2, min(0.8, blend))
+
+    # --- 3. top_fraction from skewness of person_fe ---
+    all_fes = list(person_fe.values())
+    if len(all_fes) >= 30:
+        skew = float(sp_stats.skew(all_fes))
+        # High positive skew → few stars → smaller top fraction
+        top_fraction = 0.30 - 0.05 * skew
+    else:
+        top_fraction = 0.25
+
+    top_fraction = max(0.10, min(0.40, top_fraction))
+
+    logger.info(
+        "quality_params_calibrated",
+        role_damping=round(role_damping, 3),
+        blend=round(blend, 3),
+        top_fraction=round(top_fraction, 3),
+        n_credits=len(rw_list),
+        role_ability_rho=round(float(rho), 3) if len(rw_list) >= 30 else None,
+        median_team_cv=round(median_cv, 3) if team_cvs else None,
+        fe_skewness=round(float(skew), 3) if len(all_fes) >= 30 else None,
+    )
+
+    return role_damping, blend, top_fraction
+
+
+def enhance_bipartite_quality(
+    graph: nx.DiGraph,
+    person_fe: dict[str, float],
+    role_damping: float | None = None,
+) -> None:
+    """Re-weight bipartite edges to emphasize content quality over role title.
+
+    Called between AKM and BiRank in the scoring pipeline.  Uses person fixed
+    effects (individual ability estimates from AKM) to compute a per-anime
+    staff quality boost, and compresses the role hierarchy via role_damping.
+
+    New weight formula:
+        weight = role_w^damping × prod_scale × quality_boost(anime, person)
+
+    All parameters (role_damping, blend, top_fraction) are calibrated from
+    data via _calibrate_quality_params() when role_damping is None.  Pass an
+    explicit role_damping value to override calibration (useful for tests).
+
+    Quality is split into two memoized groups per anime:
+      - quality_non_dir: dual quality of non-director staff
+      - quality_dir: dual quality of directors
+
+    Directors receive quality_non_dir as their boost (evaluated by team quality),
+    non-directors receive quality_dir as their boost (evaluated by leadership
+    quality).  This avoids self-referential scoring: a director's own FE doesn't
+    inflate their own quality boost.
+
+    The dual quality measure (role-weighted mean + top-quartile mean) prevents
+    newcomers on strong teams from dragging down the team quality signal.
+
+    Args:
+        graph: Bipartite person-anime graph (modified in place)
+        person_fe: person_id → AKM fixed effect (individual ability estimate)
+        role_damping: exponent for compressing role hierarchy.  None = calibrate
+                      from data.  0=ignore roles, 1=full role weights.
+    """
+    import statistics
+
+    if not person_fe:
+        return
+
+    # Shift person_fe so minimum is 0 (person_fe can be negative)
+    fe_min = min(person_fe.values())
+    shifted_fe = {pid: fe - fe_min + 0.01 for pid, fe in person_fe.items()}
+
+    director_role_vals = frozenset(r.value for r in DIRECTOR_ROLES)
+
+    # Build per-anime director/non-director sets and role weights from edges
+    anime_directors: dict[str, set[str]] = defaultdict(set)
+    person_anime_role_w: dict[tuple[str, str], float] = {}
+
+    for pid in list(graph.nodes):
+        if graph.nodes[pid].get("type") != "person":
+            continue
+        for _, aid, data in graph.out_edges(pid, data=True):
+            if graph.nodes.get(aid, {}).get("type") != "anime":
+                continue
+            roles = data.get("roles", [])
+            if any(r in director_role_vals for r in roles):
+                anime_directors[aid].add(pid)
+            person_anime_role_w[(pid, aid)] = data.get("role_w", 1.0)
+
+    anime_staff_sets = graph.graph.get("_anime_staff_sets", {})
+
+    # Calibrate parameters from data (or use override)
+    if role_damping is None:
+        cal_damping, cal_blend, cal_top_frac = _calibrate_quality_params(
+            shifted_fe, anime_staff_sets, person_anime_role_w, person_fe,
+        )
+    else:
+        cal_damping = role_damping
+        cal_blend = 0.5
+        cal_top_frac = 0.25
+
+    # Compute dual quality per anime, split by director / non-director
+    quality_non_dir: dict[str, float] = {}  # memoized: shared by all directors
+    quality_dir: dict[str, float] = {}
+
+    for aid, pids in anime_staff_sets.items():
+        directors = anime_directors.get(aid, set())
+        non_directors = pids - directors
+
+        # Non-director quality (used as boost for directors)
+        nd_fes = [shifted_fe[p] for p in non_directors if p in shifted_fe]
+        nd_rws = [person_anime_role_w.get((p, aid), 1.0) for p in non_directors if p in shifted_fe]
+        if nd_fes:
+            quality_non_dir[aid] = _dual_quality(nd_fes, nd_rws, cal_top_frac, cal_blend)
+
+        # Director quality (used as boost for non-directors)
+        d_fes = [shifted_fe[p] for p in directors if p in shifted_fe]
+        d_rws = [person_anime_role_w.get((p, aid), 1.0) for p in directors if p in shifted_fe]
+        if d_fes:
+            quality_dir[aid] = _dual_quality(d_fes, d_rws, cal_top_frac, cal_blend)
+
+    # Fallback: if an anime has no non-directors or no directors, use full staff
+    for aid, pids in anime_staff_sets.items():
+        if aid not in quality_non_dir and aid not in quality_dir:
+            all_fes = [shifted_fe[p] for p in pids if p in shifted_fe]
+            all_rws = [person_anime_role_w.get((p, aid), 1.0) for p in pids if p in shifted_fe]
+            if all_fes:
+                q = _dual_quality(all_fes, all_rws, cal_top_frac, cal_blend)
+                quality_non_dir[aid] = q
+                quality_dir[aid] = q
+
+    # Normalize each quality dict so median = 1.0
+    def _normalize_to_median(qdict: dict[str, float]) -> dict[str, float]:
+        if not qdict:
+            return {}
+        med = statistics.median(qdict.values())
+        if med <= 0:
+            med = 1.0
+        return {aid: q / med for aid, q in qdict.items()}
+
+    boost_non_dir = _normalize_to_median(quality_non_dir)
+    boost_dir = _normalize_to_median(quality_dir)
+
+    # Re-weight all person→anime and anime→person edges
+    reweighted = 0
+    for pid in list(graph.nodes):
+        if graph.nodes[pid].get("type") != "person":
+            continue
+        for _, aid, data in list(graph.out_edges(pid, data=True)):
+            if graph.nodes.get(aid, {}).get("type") != "anime":
+                continue
+
+            role_w = data.get("role_w", 1.0)
+            prod_scale = data.get("prod_scale", 1.0)
+            roles = data.get("roles", [])
+
+            # Directors get non-director quality boost (team quality)
+            # Non-directors get director quality boost (leadership quality)
+            is_dir = any(r in director_role_vals for r in roles)
+            if is_dir:
+                q_boost = boost_non_dir.get(aid, 1.0)
+            else:
+                q_boost = boost_dir.get(aid, 1.0)
+
+            new_weight = (role_w ** cal_damping) * prod_scale * q_boost
+
+            data["weight"] = new_weight
+            if graph.has_edge(aid, pid):
+                graph[aid][pid]["weight"] = new_weight
+            reweighted += 1
+
+    # Store calibration results on graph for pipeline export
+    graph.graph["_quality_calibration"] = {
+        "role_damping": round(cal_damping, 4),
+        "blend": round(cal_blend, 4),
+        "top_fraction": round(cal_top_frac, 4),
+        "edges_reweighted": reweighted,
+        "anime_with_directors": len(anime_directors),
+        "anime_with_quality_non_dir": len(quality_non_dir),
+        "anime_with_quality_dir": len(quality_dir),
+        "boost_non_dir_range": (
+            round(min(boost_non_dir.values()), 4),
+            round(max(boost_non_dir.values()), 4),
+        ) if boost_non_dir else (0, 0),
+        "boost_dir_range": (
+            round(min(boost_dir.values()), 4),
+            round(max(boost_dir.values()), 4),
+        ) if boost_dir else (0, 0),
+    }
+
+    logger.info(
+        "bipartite_quality_enhanced",
+        edges_reweighted=reweighted,
+        role_damping=round(cal_damping, 3),
+        blend=round(cal_blend, 3),
+        top_fraction=round(cal_top_frac, 3),
+        median_boost_non_dir=round(
+            statistics.median(boost_non_dir.values()), 4
+        ) if boost_non_dir else 0,
+        median_boost_dir=round(
+            statistics.median(boost_dir.values()), 4
+        ) if boost_dir else 0,
+        anime_with_directors=len(anime_directors),
+    )
 
 
 def _episode_coverage(
@@ -633,26 +1035,20 @@ def determine_primary_role_for_each_person(
     """
     CATEGORY_MAP = {
         Role.DIRECTOR: "director",
-        Role.CHIEF_ANIMATION_DIRECTOR: "director",
         Role.EPISODE_DIRECTOR: "director",
-        Role.STORYBOARD: "director",
         Role.ANIMATION_DIRECTOR: "animator",
         Role.KEY_ANIMATOR: "animator",
-        Role.SECOND_KEY_ANIMATOR: "animator",
         Role.IN_BETWEEN: "animator",
         Role.LAYOUT: "animator",
-        Role.EFFECTS: "animator",
         Role.CHARACTER_DESIGNER: "designer",
-        Role.MECHANICAL_DESIGNER: "designer",
-        Role.ART_DIRECTOR: "designer",
-        Role.COLOR_DESIGNER: "designer",
         Role.BACKGROUND_ART: "designer",
+        Role.FINISHING: "designer",
         Role.CGI_DIRECTOR: "technical",
         Role.PHOTOGRAPHY_DIRECTOR: "technical",
         Role.PRODUCER: "production",
+        Role.PRODUCTION_MANAGER: "production",
         Role.SOUND_DIRECTOR: "production",
         Role.MUSIC: "production",
-        Role.SERIES_COMPOSITION: "writing",
         Role.SCREENPLAY: "writing",
         Role.ORIGINAL_CREATOR: "writing",
     }

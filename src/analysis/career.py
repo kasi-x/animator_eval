@@ -14,6 +14,7 @@ from typing import NamedTuple
 import structlog
 
 from src.models import Anime, Credit, Role
+from src.utils.role_groups import CAREER_STAGE
 
 logger = structlog.get_logger()
 
@@ -56,22 +57,6 @@ class CareerSnapshot:
         if self.first_year and self.latest_year:
             return self.latest_year - self.first_year + 1
         return None
-
-
-# 役職のキャリアステージ順序（低→高）
-CAREER_STAGE = {
-    Role.IN_BETWEEN: 1,
-    Role.SECOND_KEY_ANIMATOR: 2,
-    Role.LAYOUT: 2,
-    Role.KEY_ANIMATOR: 3,
-    Role.EFFECTS: 3,
-    Role.ANIMATION_DIRECTOR: 4,
-    Role.CHARACTER_DESIGNER: 4,
-    Role.STORYBOARD: 4,
-    Role.CHIEF_ANIMATION_DIRECTOR: 5,
-    Role.EPISODE_DIRECTOR: 5,
-    Role.DIRECTOR: 6,
-}
 
 
 def analyze_career(

@@ -25,7 +25,7 @@ logger = structlog.get_logger()
 
 DEFAULT_DB_PATH = DB_DIR / "animetor_eval.db"
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 17
 
 
 def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
@@ -196,8 +196,20 @@ def init_db(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_cva_anime ON character_voice_actors(anime_id);
         CREATE INDEX IF NOT EXISTS idx_anime_studios_anime ON anime_studios(anime_id);
         CREATE INDEX IF NOT EXISTS idx_anime_studios_studio ON anime_studios(studio_id);
+        CREATE TABLE IF NOT EXISTS person_affiliations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            person_id TEXT NOT NULL,
+            anime_id TEXT NOT NULL,
+            studio_name TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT '',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(person_id, anime_id, studio_name)
+        );
+
         CREATE INDEX IF NOT EXISTS idx_anime_relations_anime ON anime_relations(anime_id);
         CREATE INDEX IF NOT EXISTS idx_anime_relations_related ON anime_relations(related_anime_id);
+        CREATE INDEX IF NOT EXISTS idx_person_affiliations_person ON person_affiliations(person_id);
+        CREATE INDEX IF NOT EXISTS idx_person_affiliations_anime ON person_affiliations(anime_id);
 
         CREATE TABLE IF NOT EXISTS schema_meta (
             key TEXT PRIMARY KEY,
@@ -250,6 +262,8 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         13: _migrate_v13_add_structural_score_columns,
         14: _migrate_v14_drop_legacy_score_columns,
         15: _migrate_v15_add_va_scores,
+        16: _migrate_v16_add_person_affiliations,
+        17: _migrate_v17_add_llm_decisions,
     }
 
     for version in range(current + 1, SCHEMA_VERSION + 1):
@@ -634,6 +648,57 @@ def _migrate_v15_add_va_scores(conn: sqlite3.Connection) -> None:
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
     """)
+
+
+def _migrate_v16_add_person_affiliations(conn: sqlite3.Connection) -> None:
+    """v16: person_affiliations テーブルを追加 (人物×作品×所属スタジオ)."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS person_affiliations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            person_id TEXT NOT NULL,
+            anime_id TEXT NOT NULL,
+            studio_name TEXT NOT NULL,
+            source TEXT NOT NULL DEFAULT '',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(person_id, anime_id, studio_name)
+        );
+        CREATE INDEX IF NOT EXISTS idx_person_affiliations_person
+            ON person_affiliations(person_id);
+        CREATE INDEX IF NOT EXISTS idx_person_affiliations_anime
+            ON person_affiliations(anime_id);
+    """)
+
+
+def _migrate_v17_add_llm_decisions(conn: sqlite3.Connection) -> None:
+    """v17: LLM判定結果テーブルを追加 (org分類・名前正規化・同一人物判定)."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS llm_decisions (
+            name TEXT NOT NULL,
+            task TEXT NOT NULL,
+            result_json TEXT NOT NULL,
+            model TEXT NOT NULL DEFAULT '',
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (name, task)
+        );
+        CREATE INDEX IF NOT EXISTS idx_llm_decisions_task
+            ON llm_decisions(task);
+    """)
+
+
+def insert_person_affiliation(
+    conn: sqlite3.Connection,
+    person_id: str,
+    anime_id: str,
+    studio_name: str,
+    source: str = "",
+) -> None:
+    """人物の所属スタジオ情報を記録する（重複は無視）."""
+    conn.execute(
+        """INSERT OR IGNORE INTO person_affiliations
+           (person_id, anime_id, studio_name, source)
+           VALUES (?, ?, ?, ?)""",
+        (person_id, anime_id, studio_name, source),
+    )
 
 
 def mark_person_unfetchable(
@@ -1083,20 +1148,36 @@ def load_all_anime(conn: sqlite3.Connection) -> list[Anime]:
     return result
 
 
+_LEGACY_ROLE_MAP: dict[str, str] = {
+    "chief_animation_director": "animation_director",
+    "storyboard": "episode_director",
+    "mechanical_designer": "character_designer",
+    "art_director": "background_art",
+    "color_designer": "finishing",
+    "effects": "photography_director",
+    "theme_song": "music",
+    "series_composition": "screenplay",
+    "adr": "voice_actor",
+    "other": "special",
+}
+
+
 def load_all_credits(conn: sqlite3.Connection) -> list[Credit]:
     """全クレジットを読み込む."""
     rows = conn.execute("SELECT * FROM credits").fetchall()
-    return [
-        Credit(
+    credits: list[Credit] = []
+    for row in rows:
+        role_str = row["role"]
+        role_str = _LEGACY_ROLE_MAP.get(role_str, role_str)
+        credits.append(Credit(
             person_id=row["person_id"],
             anime_id=row["anime_id"],
-            role=Role(row["role"]),
+            role=Role(role_str),
             raw_role=row["raw_role"] or None,
             episode=row["episode"] if row["episode"] != -1 else None,
             source=row["source"],
-        )
-        for row in rows
-    ]
+        ))
+    return credits
 
 
 def get_db_stats(conn: sqlite3.Connection) -> dict[str, int | float]:
@@ -1474,4 +1555,79 @@ def get_all_scores(conn: sqlite3.Connection) -> list[ScoreResult]:
             if field in cols:
                 kwargs[field] = row[field]
         result.append(ScoreResult(**kwargs))
+    return result
+
+
+# ---------------------------------------------------------------------------
+# LLM decision cache — DB-backed persistence
+# ---------------------------------------------------------------------------
+
+
+def get_llm_decision(
+    conn: sqlite3.Connection, name: str, task: str
+) -> dict | None:
+    """LLM判定キャッシュを取得する.
+
+    Args:
+        name: 対象の名前 (人物名・ペア名)
+        task: タスク種別 ("org_classification" | "name_normalization" | "entity_match")
+
+    Returns:
+        result_json を dict にパースした結果、なければ None
+    """
+    import json
+
+    row = conn.execute(
+        "SELECT result_json FROM llm_decisions WHERE name = ? AND task = ?",
+        (name, task),
+    ).fetchone()
+    if row is None:
+        return None
+    try:
+        return json.loads(row["result_json"])
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+
+def upsert_llm_decision(
+    conn: sqlite3.Connection,
+    name: str,
+    task: str,
+    result: dict,
+    model: str = "",
+) -> None:
+    """LLM判定結果を保存/更新する."""
+    import json
+
+    conn.execute(
+        """INSERT INTO llm_decisions (name, task, result_json, model, updated_at)
+           VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+           ON CONFLICT(name, task) DO UPDATE SET
+               result_json = excluded.result_json,
+               model = excluded.model,
+               updated_at = CURRENT_TIMESTAMP""",
+        (name, task, json.dumps(result, ensure_ascii=False), model),
+    )
+
+
+def get_all_llm_decisions(
+    conn: sqlite3.Connection, task: str
+) -> dict[str, dict]:
+    """指定タスクの全LLM判定キャッシュを一括取得する.
+
+    Returns:
+        {name: result_dict} の辞書
+    """
+    import json
+
+    rows = conn.execute(
+        "SELECT name, result_json FROM llm_decisions WHERE task = ?",
+        (task,),
+    ).fetchall()
+    result: dict[str, dict] = {}
+    for row in rows:
+        try:
+            result[row["name"]] = json.loads(row["result_json"])
+        except (json.JSONDecodeError, TypeError):
+            continue
     return result

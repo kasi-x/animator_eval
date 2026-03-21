@@ -26,9 +26,9 @@ _ANCHOR_PRODUCTION_ROLES: frozenset[Role] = frozenset(
     {
         Role.DIRECTOR,
         Role.EPISODE_DIRECTOR,
-        Role.STORYBOARD,
+        Role.EPISODE_DIRECTOR,
         Role.ANIMATION_DIRECTOR,
-        Role.CHIEF_ANIMATION_DIRECTOR,
+        Role.ANIMATION_DIRECTOR,
     }
 )
 
@@ -53,10 +53,16 @@ _ORG_SUFFIX_RE = re.compile(
     r"(?:"
     r"テレビ$|テレビジョン$|テレビ動画$|テレビ東京$|テレビ朝日$|テレビ大阪$|"
     r"放送$|放送局$|フジテレビ|NHK$|TBS$|日本テレビ$|"
-    r"アニメーション$|スタジオ$|プロダクション$|エンタプライズ$|"
+    r"アニメーション$|スタジオ$|プロダクション$|プロダクツ$|エンタプライズ$|"
     r"エンタープライズ$|エンタテインメント$|エンターテインメント$|"
+    r"エンタテイメント$|"  # contracted spelling (ベガエンタテイメント etc.)
     r"ホールディングス$|コミュニケーションズ$|エージェンシー$|"
-    r"動画$"  # 東映動画, テレビ動画 etc.
+    r"製作委員会$|制作委員会$|実行委員会$|"  # production committees
+    r"現像所$|撮影所$|"  # labs and studios (東京現像所 etc.)
+    r"動画$|"  # 東映動画, テレビ動画 etc.
+    # English company suffixes (case-insensitive)
+    r"Pictures$|Studio$|Studios$|Animation$|Entertainment$|Productions$|"
+    r"Filmworks$|Arts$"
     r")",
     re.IGNORECASE,
 )
@@ -172,6 +178,127 @@ def _filter_non_production_persons(
     return filtered, non_production_ids
 
 
+def _llm_filter_organizations(
+    persons: list[Person], conn: sqlite3.Connection
+) -> set[str]:
+    """Use LLM + studio DB to detect organizations masquerading as persons.
+
+    Returns set of person_ids identified as organizations.
+    """
+    try:
+        from src.analysis.llm_pipeline import classify_person_or_org
+    except ImportError:
+        return set()
+
+    # Collect known studio names from DB
+    try:
+        rows = conn.execute("SELECT name FROM studios WHERE name IS NOT NULL").fetchall()
+        studio_names = {r[0].strip() for r in rows if r[0]}
+    except Exception:
+        studio_names = set()
+
+    result = classify_person_or_org(persons, studio_names=studio_names, conn=conn)
+    return result.org_ids
+
+
+def _llm_normalize_names(
+    persons: list[Person], credits: list[Credit], conn: sqlite3.Connection | None = None
+) -> tuple[list[Person], list[Credit]]:
+    """Use LLM to normalize names with parenthetical annotations.
+
+    When a name like "高畑勲、宮崎駿(7~最終話)" is split into individual names,
+    new Person entries are created and credits are reassigned.
+
+    Returns (updated_persons, extra_credits_for_new_persons).
+    """
+    try:
+        from src.analysis.llm_pipeline import normalize_names
+    except ImportError:
+        return persons, []
+
+    norm_results = normalize_names(persons, conn=conn)
+    if not norm_results:
+        return persons, []
+
+    # Build lookup: original name → normalization result
+    name_to_norm: dict[str, list] = {}
+    org_names: set[str] = set()
+    for nr in norm_results:
+        name_to_norm[nr.original] = nr.names
+        if nr.is_org:
+            org_names.add(nr.original)
+
+    # Process persons
+    updated: list[Person] = []
+    extra_credits: list[Credit] = []
+    credits_by_person: dict[str, list[Credit]] = defaultdict(list)
+    for c in credits:
+        credits_by_person[c.person_id].append(c)
+
+    for p in persons:
+        name = p.name_ja or ""
+        if name in org_names:
+            # LLM identified as organization — skip
+            continue
+        if name not in name_to_norm:
+            updated.append(p)
+            continue
+
+        normalized_names = name_to_norm[name]
+        if len(normalized_names) == 1 and normalized_names[0] == name:
+            # No change needed
+            updated.append(p)
+            continue
+
+        if len(normalized_names) == 1:
+            # Simple rename — update the person's name
+            p.name_ja = normalized_names[0]
+            updated.append(p)
+            logger.debug("name_normalized", old=name, new=normalized_names[0], pid=p.id)
+        else:
+            # Multi-person split — keep first as canonical, create new for rest
+            p.name_ja = normalized_names[0]
+            updated.append(p)
+
+            person_credits = credits_by_person.get(p.id, [])
+            for extra_name in normalized_names[1:]:
+                new_id = f"{p.id}:split:{extra_name}"
+                new_person = Person(
+                    id=new_id,
+                    name_ja=extra_name,
+                    name_en=None,
+                    source=p.source,
+                )
+                updated.append(new_person)
+                # Copy credits to the split person
+                for c in person_credits:
+                    extra_credits.append(
+                        Credit(
+                            person_id=new_id,
+                            anime_id=c.anime_id,
+                            role=c.role,
+                            episode=c.episode,
+                            source=c.source,
+                        )
+                    )
+            logger.debug(
+                "name_split",
+                original=name,
+                names=normalized_names,
+                pid=p.id,
+            )
+
+    if len(persons) != len(updated):
+        logger.info(
+            "llm_name_normalization_applied",
+            persons_before=len(persons),
+            persons_after=len(updated),
+            extra_credits=len(extra_credits),
+        )
+
+    return updated, extra_credits
+
+
 def load_pipeline_data(context: PipelineContext, conn: sqlite3.Connection) -> None:
     """Load all data from database into context.
 
@@ -206,16 +333,30 @@ def load_pipeline_data(context: PipelineContext, conn: sqlite3.Connection) -> No
     filtered_persons, non_production_ids = _filter_non_production_persons(
         valid_persons, all_credits
     )
-    context.persons = filtered_persons
     if non_production_ids:
         logger.info(
             "filtered_non_production_persons", count=len(non_production_ids)
         )
 
+    # LLM-assisted organization detection (studio DB cross-ref + batch LLM)
+    llm_org_ids = _llm_filter_organizations(filtered_persons, conn)
+    if llm_org_ids:
+        filtered_persons = [p for p in filtered_persons if p.id not in llm_org_ids]
+        logger.info("filtered_llm_orgs", count=len(llm_org_ids))
+
+    # LLM-assisted name normalization (parenthetical removal, multi-person split)
+    filtered_persons, extra_credits = _llm_normalize_names(
+        filtered_persons, all_credits, conn=conn
+    )
+
+    context.persons = filtered_persons
+
     # Filter out orphan credits and credits for garbage/non-production persons
     person_ids = {p.id for p in context.persons}
     context.credits = [c for c in all_credits if c.person_id in person_ids]
-    na_count = len(all_credits) - len(context.credits)
+    if extra_credits:
+        context.credits.extend(extra_credits)
+    na_count = len(all_credits) - len(context.credits) + len(extra_credits)
     if na_count > 0:
         logger.info("filtered_orphan_credits", count=na_count)
 

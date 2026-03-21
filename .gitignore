@@ -19,18 +19,12 @@ data/
 !data/.gitkeep
 
 # Result outputs (all regenerable from pipeline)
-result/db/
-result/json/
-result/html/
-result/visualizations/
-result/graphs/
-result/reports/
-result/notebooks/
-result/*.csv
-result/*.png
-result/*.txt
-result/*.html
-result/*.md
+result/
+
+# Database files
+*.db
+*.db-wal
+*.db-shm
 
 # Jupyter
 .ipynb_checkpoints/

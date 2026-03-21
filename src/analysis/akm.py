@@ -24,7 +24,6 @@ from dataclasses import dataclass
 import numpy as np
 import structlog
 
-from src.analysis.contribution_attribution import ROLE_CONTRIBUTION_WEIGHTS
 from src.models import Anime, Credit, Role
 from src.utils.config import ROLE_WEIGHTS
 from src.utils.episode_parser import parse_episodes
@@ -32,8 +31,8 @@ from src.utils.role_groups import EPISODIC_ROLES, THROUGH_ROLES
 
 logger = structlog.get_logger()
 
-# Normalize ROLE_CONTRIBUTION_WEIGHTS to [0, 1] by dividing by max value
-_MAX_CONTRIB_WEIGHT = max(ROLE_CONTRIBUTION_WEIGHTS.values()) if ROLE_CONTRIBUTION_WEIGHTS else 1.0
+# Normalize ROLE_WEIGHTS to [0, 1] by dividing by max value
+_MAX_ROLE_WEIGHT = max(ROLE_WEIGHTS.values()) if ROLE_WEIGHTS else 1.0
 
 
 @dataclass
@@ -199,7 +198,7 @@ def _compute_credit_weight(
         Observation weight (unnormalized).
     """
     # Factor 1: w_role — role importance (normalized to [0, 1])
-    w_role = ROLE_CONTRIBUTION_WEIGHTS.get(role, 0.01) / _MAX_CONTRIB_WEIGHT
+    w_role = ROLE_WEIGHTS.get(role.value, 1.0) / _MAX_ROLE_WEIGHT
 
     # Factor 2: w_involvement — through vs episodic
     if role in THROUGH_ROLES:

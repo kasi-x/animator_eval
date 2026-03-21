@@ -12,36 +12,12 @@ import numpy as np
 import structlog
 
 from src.models import Anime, Credit
+from src.utils.role_groups import CAREER_STAGE_BY_VALUE
 
 logger = structlog.get_logger()
 
-# Career stage hierarchy (higher = more senior)
-CAREER_STAGE: dict[str, int] = {
-    "in_between": 1,
-    "second_key_animator": 2,
-    "key_animator": 3,
-    "layout": 3,
-    "animation_director": 4,
-    "chief_animation_director": 5,
-    "character_designer": 5,
-    "episode_director": 5,
-    "storyboard": 4,
-    "director": 6,
-    "art_director": 4,
-    "color_designer": 3,
-    "photography_director": 4,
-    "effects": 3,
-    "cgi_director": 4,
-    "background_art": 2,
-    "sound_director": 4,
-    "music": 3,
-    "screenplay": 4,
-    "series_composition": 5,
-    "original_creator": 5,
-    "producer": 5,
-    "mechanical_designer": 3,
-    "other": 1,
-}
+# Re-export for backward compatibility
+CAREER_STAGE = CAREER_STAGE_BY_VALUE
 
 
 @dataclass

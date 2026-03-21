@@ -690,7 +690,7 @@ def timeline(
         try:
             role_enum = Role(c["role"])
         except ValueError:
-            role_enum = Role.OTHER
+            role_enum = Role.SPECIAL
         stage = CAREER_STAGE.get(role_enum, 0)
         if stage > max_stage_so_far:
             max_stage_so_far = stage

@@ -263,9 +263,8 @@ def compute_technical_value(
 
     # Technical staff count (art, photography, effects)
     technical_roles = [
-        "art_director",
+        "background_art",
         "photography_director",
-        "effects",
         "cgi_director",
     ]
     technical_count = sum(1 for c in credits if c.role.value.lower() in technical_roles)

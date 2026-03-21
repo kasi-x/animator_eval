@@ -1255,7 +1255,7 @@ class TestWikidataParsers:
             }
         ]
         anime_list, persons, credits = parse_wikidata_results(bindings)
-        assert credits[0].role == Role.OTHER
+        assert credits[0].role == Role.SPECIAL
 
     def test_parse_wikidata_results_missing_uri(self):
         from src.scrapers.jvmg_fetcher import parse_wikidata_results
@@ -1296,7 +1296,7 @@ class TestWikidataParsers:
                 "animeLabel": {"value": "Test"},
                 "person": {"value": "http://wd/Q2"},
                 "personLabel": {"value": "Person"},
-                "roleLabel": {"value": "storyboard"},
+                "roleLabel": {"value": "episode_director"},
             },
         ]
         anime_list, persons, credits = parse_wikidata_results(bindings)

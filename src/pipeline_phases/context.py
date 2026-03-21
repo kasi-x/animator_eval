@@ -86,6 +86,8 @@ class PipelineContext:
     iv_lambda_weights: dict[str, float] = field(default_factory=dict)
     iv_component_std: dict[str, float] | None = None  # for consistent normalization
     iv_component_mean: dict[str, float] | None = None
+    pca_variance_explained: float = 0.0  # IV PCA PC1 variance explained
+    quality_calibration: dict[str, Any] = field(default_factory=dict)  # BiRank quality params
 
     # Supplementary metrics (Phase 6)
     decay_results: dict[str, list[dict]] = field(default_factory=dict)

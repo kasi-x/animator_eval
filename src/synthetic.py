@@ -25,14 +25,14 @@ logger = structlog.get_logger()
 ROLE_DISTRIBUTION = [
     (Role.DIRECTOR, 1),
     (Role.EPISODE_DIRECTOR, 2),
-    (Role.CHIEF_ANIMATION_DIRECTOR, 1),
+    (Role.ANIMATION_DIRECTOR, 1),
     (Role.ANIMATION_DIRECTOR, 3),
     (Role.CHARACTER_DESIGNER, 1),
     (Role.KEY_ANIMATOR, 8),
-    (Role.SECOND_KEY_ANIMATOR, 5),
+    (Role.KEY_ANIMATOR, 5),
     (Role.IN_BETWEEN, 10),
-    (Role.STORYBOARD, 2),
-    (Role.ART_DIRECTOR, 1),
+    (Role.EPISODE_DIRECTOR, 2),
+    (Role.BACKGROUND_ART, 1),
 ]
 
 

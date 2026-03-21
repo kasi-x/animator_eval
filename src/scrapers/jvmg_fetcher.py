@@ -44,7 +44,7 @@ OFFSET {offset}
 WIKIDATA_ROLE_MAP = {
     "P57": "director",
     "P1040": "animation director",
-    "P3174": "storyboard",
+    "P3174": "episode_director",
     "P58": "episode director",
 }
 

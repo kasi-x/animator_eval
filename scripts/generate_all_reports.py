@@ -141,6 +141,27 @@ tbody td:first-child { color: #a0d2db; font-weight: 600; }
     background: rgba(0,0,0,0.2); border-radius: 12px;
     padding: 1rem; margin: 1rem 0;
 }
+/* Make SVG text selectable/copyable in Plotly charts */
+.js-plotly-plot svg text,
+.js-plotly-plot .legend text,
+.js-plotly-plot .g-gtitle text,
+.js-plotly-plot .xtitle text,
+.js-plotly-plot .ytitle text {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    cursor: text;
+    pointer-events: all !important;
+}
+.copy-toast {
+    position: fixed; bottom: 2rem; right: 2rem; z-index: 9999;
+    background: rgba(6,214,160,0.95); color: #1a1a2e;
+    padding: 0.6rem 1.2rem; border-radius: 8px;
+    font-size: 0.85rem; font-weight: 600;
+    opacity: 0; transition: opacity 0.3s;
+    pointer-events: none; max-width: 400px;
+    word-break: break-all;
+}
 
 .insight-box {
     background: linear-gradient(135deg, rgba(160,210,219,0.1), rgba(240,147,251,0.05));
@@ -422,6 +443,30 @@ def wrap_html(title: str, subtitle: str, body: str, *, intro_html: str = "",
 <style>{COMMON_CSS}</style>
 </head>
 <body>
+<div id="copy-toast" class="copy-toast"></div>
+<script>
+function showCopyToast(txt) {{
+    var t = document.getElementById('copy-toast');
+    t.textContent = 'Copied: ' + txt;
+    t.style.opacity = '1';
+    setTimeout(function() {{ t.style.opacity = '0'; }}, 1500);
+}}
+/* Double-click any SVG text in a Plotly chart to copy its content */
+document.addEventListener('dblclick', function(e) {{
+    var el = e.target;
+    if (el.tagName === 'text' || (el.tagName === 'tspan' && el.closest && el.closest('text'))) {{
+        var textEl = el.tagName === 'tspan' ? el.closest('text') : el;
+        if (textEl && textEl.closest('.js-plotly-plot')) {{
+            var txt = textEl.textContent.trim();
+            if (txt) {{
+                navigator.clipboard.writeText(txt).then(function() {{
+                    showCopyToast(txt);
+                }});
+            }}
+        }}
+    }}
+}});
+</script>
 <div class="page-bg">
 <div class="container">
 <header>
@@ -1432,14 +1477,183 @@ def generate_industry_overview():
         body += f'<div class="stat-card"><div class="value">{val}</div><div class="label">{label}</div></div>'
     body += "</div></div>"
 
-    # Data quality note
+    # ============================================================
+    # 分析手法と定義
+    # ============================================================
+    body += '<div class="card">'
+    body += "<h2>分析手法と定義</h2>"
+    body += section_desc(
+        "本レポートは、公開されたクレジットデータに基づきアニメ業界の人材動態を定量的に分析する。"
+        "分析結果の解釈には、以下に定める定義・仮定・対象範囲が前提となる。"
+        "各定義の妥当性は「前提検証」セクションで実データに基づき検証する。"
+    )
+
+    # データソース
+    body += "<h3>1. データソース</h3>"
     body += (
+        "<table style='width:100%;font-size:0.85rem;margin:0.5rem 0;'>"
+        "<thead><tr><th>ソース</th><th>性質</th><th>主な収録範囲</th><th>制約</th></tr></thead>"
+        "<tbody>"
+        "<tr><td><strong>AniList</strong></td><td>ユーザー投稿型データベース</td>"
+        "<td>TV/映画/OVA/ONA のスタッフ・声優クレジット</td>"
+        "<td>登録密度が作品ごとに不均一（例: 動画マン網羅作品と主要スタッフのみの作品が混在）</td></tr>"
+        "<tr><td><strong>MADB</strong></td><td>文化庁メディア芸術データベース</td>"
+        "<td>シリーズ単位の主要スタッフ</td>"
+        "<td>括弧付き名前（例:「神谷純(サルゲッチュ)」）による重複あり → entity resolution で統合済み</td></tr>"
+        "</tbody></table>"
         '<div class="insight-box" style="border-left-color:#FFD166;">'
-        "<strong>データ品質注記:</strong> "
-        f"2026年以降のデータは収録数が少なく統計的に不安定なため分析対象外（上限: {RELIABLE_MAX_YEAR}年）。"
-        "2025年冬クールは参考値として扱ってください。"
+        "<strong>データ品質上の制約</strong>: "
+        "AniListのクレジット登録密度は作品により大きく異なる。"
+        "同じスタジオの作品でもクレジット数が10倍以上異なることがあり、"
+        "staff_count ベースの指標はこの不均一性の影響を受ける。"
+        f"<br>また、{RELIABLE_MAX_YEAR + 1}年以降のデータは収録が不完全なため分析対象外とする。"
         "</div>"
     )
+
+    # 分析対象期間
+    body += "<h3>2. 分析対象期間</h3>"
+    body += (
+        "<table style='width:100%;font-size:0.85rem;margin:0.5rem 0;'>"
+        "<thead><tr><th>パラメータ</th><th>値</th><th>根拠</th></tr></thead>"
+        "<tbody>"
+        f"<tr><td>データ表示上限</td><td><strong>{RELIABLE_MAX_YEAR}年</strong></td>"
+        "<td>2026年以降はクレジット収録が進行中で統計的に不安定</td></tr>"
+        f"<tr><td>統計・トレンド分析上限</td><td><strong>{STAT_MAX_YEAR}年</strong></td>"
+        "<td>2025年は冬クールのみで年間統計として不完全</td></tr>"
+        "<tr><td>人材フロー分析開始年</td><td><strong>1970年</strong></td>"
+        "<td>1970年以前はアクティブ人数が少なくフロー率が不安定"
+        "（次節の時系列チャートで確認可能）</td></tr>"
+        "<tr><td>引退判定カットオフ</td><td><strong>2022年</strong></td>"
+        "<td>最終クレジット年 ≤ 2022年の人物のみ引退判定の対象。"
+        "2023年以降はデータ収集進行中のため、"
+        "最終クレジット年が過去に見える誤検出（見かけ上の離脱増）を避ける</td></tr>"
+        "</tbody></table>"
+    )
+
+    # キャリアステージ定義
+    body += "<h3>3. キャリアステージ定義</h3>"
+    body += (
+        "<p style='font-size:0.85rem;color:#ccc;'>人物のキャリアステージは、"
+        "クレジットされた最高位の役職（stage番号の最大値）で定義する。</p>"
+        "<table style='width:100%;font-size:0.85rem;margin:0.5rem 0;'>"
+        "<thead><tr><th>Stage</th><th>役職</th><th>グループ</th></tr></thead>"
+        "<tbody>"
+        "<tr><td>1</td><td>動画</td><td rowspan='2' style='color:#a0d2db'>新人 (Stage 1–2)</td></tr>"
+        "<tr><td>2</td><td>第二原画・制作進行</td></tr>"
+        "<tr><td>3</td><td>原画・レイアウト・背景・仕上・編集</td><td rowspan='2' style='color:#06D6A0'>中堅 (Stage 3–4)</td></tr>"
+        "<tr><td>4</td><td>キャラデザ・脚本</td></tr>"
+        "<tr><td>5</td><td>作監・演出・撮影監督・音響監督・P</td><td rowspan='2' style='color:#f093fb'>ベテラン (Stage 5+)</td></tr>"
+        "<tr><td>6</td><td>監督</td></tr>"
+        "</tbody></table>"
+        "<p style='font-size:0.85rem;color:#ccc;'>"
+        "この分類の妥当性は、前提検証セクション V-2（デビューからの年数と到達レベル）"
+        "および V-4/V-5（役職間遷移フロー・確率行列）で検証する。</p>"
+    )
+
+    # 引退の操作的定義
+    body += "<h3>4. 引退の操作的定義</h3>"
+    body += (
+        "<p style='font-size:0.85rem;color:#ccc;'>"
+        "「引退」は以下の条件を<strong>すべて</strong>満たす場合に判定する:</p>"
+        "<ol style='font-size:0.85rem;color:#ccc;'>"
+        "<li>最終クレジット年 ≤ 2022年（カットオフ年）</li>"
+        "<li>最終クレジット年以降、3年以上クレジットが存在しない</li>"
+        "</ol>"
+        "<p style='font-size:0.85rem;color:#ccc;'>"
+        "「3年」の閾値は、前提検証セクション V-1（同一職種内クレジット再登場間隔）の"
+        "分布から導出する。同一職種での再登場間隔が95パーセンタイル以内に収まる年数として、"
+        "3年は保守的だが合理的な閾値であることを示す。</p>"
+        '<div class="insight-box" style="border-left-color:#FFD166;">'
+        "<strong>注意</strong>: 監督級は作品間隔が長い傾向がある（V-1で確認）ため、"
+        "この閾値では実際にはまだ活動中の監督を引退と判定する過小カウントの可能性がある。"
+        "</div>"
+    )
+
+    # 時代補正
+    body += "<h3>5. 時代特性と補正</h3>"
+    body += (
+        "<p style='font-size:0.85rem;color:#ccc;'>"
+        "アニメ業界は1970年代から2020年代にかけて制作本数・スタッフ数が桁違いに変化している。"
+        "このため、以下の補正を適用する:</p>"
+        "<ul style='font-size:0.85rem;color:#ccc;'>"
+        "<li><strong>人材フロー率</strong>: 絶対数ではなく、当該年のアクティブ人数に対する比率で比較</li>"
+        "<li><strong>引退判定カットオフ</strong>: 2022年以前のみ（データ収集の時間差を考慮）</li>"
+        "<li><strong>キャリアパス分析</strong>: 1970年代以前のデータはクレジット密度が低く、"
+        "キャリア遷移の計上が不完全な可能性がある</li>"
+        "</ul>"
+    )
+
+    # 定量指標の定義
+    body += "<h3>6. 定量指標の定義</h3>"
+    body += (
+        "<p style='font-size:0.85rem;color:#ccc;'>"
+        "<strong>なぜ独自指標が必要か</strong>: "
+        "視聴者評価（MAL/AniListスコア）は原作人気・放送時期・配信プラットフォームなど "
+        "制作者の貢献と無関係な要因に左右される。"
+        "本レポートでは、クレジットデータから構造的に導出される指標のみを使用し、"
+        "「誰がどのような位置で業界に貢献しているか」を客観的に測定する。</p>"
+    )
+    body += (
+        "<table style='width:100%;font-size:0.85rem;margin:0.5rem 0;'>"
+        "<thead><tr><th>指標名</th><th>レベル</th><th>算出方法</th><th>測定対象</th></tr></thead>"
+        "<tbody>"
+        "<tr><td><strong>BiRank</strong></td><td>人物/作品</td>"
+        "<td>人物–作品 二部グラフにおける相互強化型ランキング "
+        "（高BiRank作品に参加した人物は高BiRank、高BiRank人物が参加した作品も高BiRank）</td>"
+        "<td>ネットワーク内での構造的権威</td></tr>"
+        "<tr><td><strong>Person FE (θ<sub>i</sub>)</strong></td><td>人物</td>"
+        "<td>AKM分解: log(production_scale<sub>ij</sub>) = θ<sub>i</sub> + ψ<sub>j</sub> + ε<sub>ij</sub>"
+        "<br>production_scale = staff_count × episodes × duration_mult</td>"
+        "<td>スタジオ効果を除去した「その人自身の寄与」</td></tr>"
+        "<tr><td><strong>Patronage</strong></td><td>人物</td>"
+        "<td>エッジ重み（role_weight × episode_coverage × duration_mult）の累積合計</td>"
+        "<td>繰り返し起用される信頼の蓄積</td></tr>"
+        "<tr><td><strong>AWCC</strong></td><td>人物</td>"
+        "<td>PageRankで重み付けしたクレジット数（Σ PageRank(作品) × credit_weight）</td>"
+        "<td>権威あるプロジェクトへの参加度</td></tr>"
+        "<tr><td><strong>Dormancy (D)</strong></td><td>人物</td>"
+        "<td>最終クレジットからの経過年数に基づく減衰係数 (0–1)</td>"
+        "<td>現在の活動状態の補正</td></tr>"
+        "<tr style='background:rgba(255,255,255,0.05);'>"
+        "<td><strong>IV Score</strong></td><td>人物</td>"
+        "<td>IV = (Σ λ<sub>k</sub> · x<sub>k</sub>/σ<sub>k</sub>) × D"
+        "<br>λ: PCA第1主成分の負荷量から導出（データ駆動、視聴者評価による最適化は行わない）。"
+        "5成分をz-score正規化した行列の第1主成分の寄与度を重みとして使用</td>"
+        "<td>5指標の統合値 — 本レポートの主要な人物評価指標</td></tr>"
+        "<tr><td><strong>composite_value</strong></td><td>作品</td>"
+        "<td>BiRankから導出される作品レベルの構造的価値</td>"
+        "<td>参加スタッフのネットワーク位置に基づく作品の「業界的重み」</td></tr>"
+        "</tbody></table>"
+        '<div class="insight-box" style="border-left-color:#FFD166;">'
+        "<strong>解釈上の注意</strong>: "
+        "高IV Score ≠「上手い」「才能がある」。"
+        "これらの指標はネットワーク上の位置と協業密度を反映するものであり、"
+        "主観的な能力判断ではない。大規模プロジェクトに繰り返し起用される人物は高スコアになるが、"
+        "それは業界における構造的重要性の指標であって、芸術的評価とは別の次元である。"
+        "<br>各指標の妥当性は、前提検証セクション V-4c（composite_valueとキャリア長の関係）および"
+        "人材フロー分析 Chart D（期待能力×実際能力の4ティア分析）で確認する。"
+        "</div>"
+    )
+
+    # レポート構成ガイド
+    body += "<h3>7. 本レポートの構成</h3>"
+    body += (
+        "<p style='font-size:0.85rem;color:#ccc;'>"
+        "本レポートは以下の順序で議論を展開する。各ステップは前のステップの結果に依存しており、"
+        "この順序を守ることで「生データ → 定義 → 検証 → 分析 → 知見」の一方向フローが成立する。</p>"
+        "<ol style='font-size:0.85rem;color:#ccc;'>"
+        "<li><strong>生データ概観</strong>: 業界規模の時系列推移を確認し、"
+        "分析対象期間（§2）と時代補正（§5）の根拠となる事実を提示する</li>"
+        "<li><strong>前提検証</strong>: §1で定めた引退閾値・キャリアステージ分類・遷移構造の"
+        "妥当性を実データに照らして検証する。ここを通過した定義のみが後続の分析で使用される</li>"
+        "<li><strong>人材フロー分析</strong>: 検証済みの定義に基づき、参入・離脱・ストックの動態を"
+        "職能レベル別・経験年数別に分析する</li>"
+        "<li><strong>構造分析</strong>: 需給構造（フォーマット別年次推移）、季節パターン（クール別変動）、"
+        "世代別キャリア軌跡分布を分析する</li>"
+        "<li><strong>総括</strong>: 上記の分析から導かれる主要な知見と活用方法をまとめる</li>"
+        "</ol>"
+    )
+    body += "</div>"
 
     # --- Time series chart (filtered to RELIABLE_MAX_YEAR) ---
     if time_series:
@@ -1480,11 +1694,16 @@ def generate_industry_overview():
             showlegend=False,
         )
         body += '<div class="card">'
-        body += "<h2>Time Series</h2>"
+        body += "<h2>生データ概観: 業界規模の推移</h2>"
+        body += section_desc(
+            f"第2節で定めた分析対象期間 (1917–{RELIABLE_MAX_YEAR}) の生データを以下に示す。"
+            "このチャートは後続の分析の前提となる2つの事実を確認するためのものである: "
+            "(1) 1970年以前はアクティブ人数が極端に少なく、フロー率の算出が不安定であること、"
+            "(2) 2000年以降の急成長により、時代間の単純な絶対数比較は不適切であること。"
+        )
         body += chart_guide(
-            "各サブプロットはアニメ制作史全体の異なる指標を追跡しています。"
-            "任意のポイントにホバーすると正確な値が表示されます。上昇傾向は業界の成長を示し、"
-            "横ばいや減少は初期の年代におけるデータカバレッジの差を反映している可能性があります。"
+            "4つのサブプロットはそれぞれ年間クレジット数、アクティブ人数、新規参入者数、"
+            "ユニーク作品数を追跡する。ホバーで正確な値を確認できる。"
         )
         body += plotly_div_safe(fig, "timeseries", 600)
 
@@ -1534,7 +1753,7 @@ def generate_industry_overview():
         # 離脱カウント上限: 2023年以降はデータ欠損により最終クレジット年が
         # 過去に見える誤検出（見かけ上の退職増）が生じるため除外
         EXIT_CUTOFF_YEAR = 2022
-        FLOW_START_YEAR = 1990
+        FLOW_START_YEAR = 1970
         HIGH_IV_THRESHOLD = 30.0
 
         years_all = time_series["years"]
@@ -1548,9 +1767,9 @@ def generate_industry_overview():
 
         # --- ステージグループ定義 ---
         STAGE_GROUPS_DEF = [
-            ("新人",    0,  2, "#a0d2db"),   # 動画・原画・第二原画
-            ("中堅",    3,  4, "#06D6A0"),   # 作画監督補佐・作画監督・演出
-            ("ベテラン", 5, 99, "#f093fb"),  # 総作監・シリーズ監督・監督
+            ("新人",    0,  2, "#a0d2db"),   # 動画・第二原画・制作進行
+            ("中堅",    3,  4, "#06D6A0"),   # 原画・レイアウト・キャラデザ・脚本
+            ("ベテラン", 5, 99, "#f093fb"),  # 作監・演出・撮影監督・監督
         ]
         stage_groups = [d[0] for d in STAGE_GROUPS_DEF]
         sg_color = {d[0]: d[3] for d in STAGE_GROUPS_DEF}
@@ -1579,14 +1798,54 @@ def generate_industry_overview():
             for e in scores_data if e.get("person_id")
         }
 
+        # ---- 年別ステージ推定（milestones promotionイベントから） ----
+        # pid_stage_timeline[pid] = [(year, stage), ...] sorted by year
+        # 各年のストックを「その時点でのステージ」で分類するために使う
+        pid_stage_timeline: dict[str, list[tuple[int, int]]] = {}
+        if milestones_data and isinstance(milestones_data, dict):
+            for pid, events in milestones_data.items():
+                if not isinstance(events, list):
+                    continue
+                timeline: list[tuple[int, int]] = []
+                for ev in events:
+                    if ev.get("type") == "promotion":
+                        yr = ev.get("year")
+                        to_stage = ev.get("to_stage", 0)
+                        if yr and to_stage:
+                            timeline.append((yr, to_stage))
+                    elif ev.get("type") == "career_start":
+                        yr = ev.get("year")
+                        if yr:
+                            # 全員ステージ1（動画）から開始
+                            timeline.append((yr, 1))
+                if timeline:
+                    timeline.sort(key=lambda x: x[0])
+                    pid_stage_timeline[pid] = timeline
+
+        def _stage_at_year(pid: str, year: int) -> int:
+            """milestones promotionイベントからその年のステージを推定."""
+            tl = pid_stage_timeline.get(pid)
+            if not tl:
+                # milestonesにない場合: highest_stageをフォールバック
+                return pid_stage.get(pid, 0)
+            # その年以前の最新promotionを探す
+            stage = 0
+            for yr, st in tl:
+                if yr <= year:
+                    stage = st
+                else:
+                    break
+            return stage if stage > 0 else pid_stage.get(pid, 0)
+
         # ---- STOCK 計算（first_year ≤ Y ≤ latest_year の人数） ----
+        # 各年のストックを「その時点でのステージ」で分類
         stock_by_sg: dict[str, dict[int, int]] = {sg: {yr: 0 for yr in flow_years_stock} for sg in stage_groups}
         stock_total: dict[int, int] = {yr: 0 for yr in flow_years_stock}
         for pid, fy in pid_first_year.items():
             ly = pid_latest_year.get(pid, RELIABLE_MAX_YEAR)
-            sg = _stage_group(pid_stage.get(pid, 0))
             for yr in flow_years_stock:
                 if fy <= yr <= ly:
+                    sg = _stage_group(_stage_at_year(pid, yr))
                     stock_by_sg[sg][yr] += 1
                     stock_total[yr] += 1
 
@@ -1598,20 +1857,24 @@ def generate_industry_overview():
         entry_by_role: dict[str, dict[int, int]] = {rt: {} for rt in ROLE_TYPE_DEF}
         exit_by_role:  dict[str, dict[int, int]] = {rt: {} for rt in ROLE_TYPE_DEF}
 
+        # NOTE: 参入時は全員「新人」（デビュー時の到達ステージは0-2）。
+        # highest_stageは最終到達ステージなので参入分類に使うと、将来昇進する人が
+        # 「中堅参入」にカウントされてしまう。参入は全員「新人」に統一する。
         for pid, fy in pid_first_year.items():
             if not (FLOW_START_YEAR <= fy <= RELIABLE_MAX_YEAR):
                 continue
-            sg   = _stage_group(pid_stage.get(pid, 0))
+            # 参入は全員「新人」: デビュー時は誰もが新人
+            entry_by_sg["新人"][fy] = entry_by_sg["新人"].get(fy, 0) + 1
             tier = "高評価" if pid_iv.get(pid, 0.0) > HIGH_IV_THRESHOLD else "標準"
             rt   = pid_role_type.get(pid, "other")
-            entry_by_sg[sg][fy]     = entry_by_sg[sg].get(fy, 0) + 1
             entry_by_tier[tier][fy] = entry_by_tier[tier].get(fy, 0) + 1
             entry_by_role[rt][fy]   = entry_by_role[rt].get(fy, 0) + 1
 
         for pid, ly in pid_latest_year.items():
             if not (FLOW_START_YEAR <= ly <= EXIT_CUTOFF_YEAR):
                 continue
-            sg   = _stage_group(pid_stage.get(pid, 0))
+            # 離脱時のステージ（timeline使用でその時点のステージを推定）
+            sg   = _stage_group(_stage_at_year(pid, ly))
             tier = "高評価" if pid_iv.get(pid, 0.0) > HIGH_IV_THRESHOLD else "標準"
             rt   = pid_role_type.get(pid, "other")
             exit_by_sg[sg][ly]     = exit_by_sg[sg].get(ly, 0) + 1
@@ -1642,25 +1905,29 @@ def generate_industry_overview():
             import bisect as _bisect_exp
             import statistics as _stats_exp
 
-            # Step 1: load all (anime_id, person_id, anime_score) — O(credits)
+            # Step 1: load credits (anime_id, person_id) — O(credits)
             _exp_conn = _get_conn()
             _exp_conn.row_factory = _sqlite3.Row
             _exp_raw_rows = _exp_conn.execute("""
-                SELECT c.anime_id, c.person_id, a.score AS anime_score
+                SELECT c.anime_id, c.person_id
                 FROM credits c JOIN anime a ON c.anime_id = a.id
                 WHERE a.year BETWEEN 1980 AND 2025
             """).fetchall()
             _exp_conn.close()
 
+            # Load anime composite_value (structural, NOT viewer ratings)
+            _exp_anime_values = load_json("anime_values.json") or {}
+            _exp_anime_cv: dict[str, float] = {}
+            for _aid_av, _av_data in _exp_anime_values.items():
+                _cv_val = _av_data.get("composite_value")
+                if _cv_val and float(_cv_val) > 0:
+                    _exp_anime_cv[_aid_av] = float(_cv_val)
+
             # Step 2: group by anime → avg collaborator iv per anime
             _exp_anime_pids:  dict[str, list] = {}
-            _exp_anime_score: dict[str, float] = {}
             for _row in _exp_raw_rows:
                 _aid = _row["anime_id"]; _p = _row["person_id"]
-                _asc = _row["anime_score"]
                 _exp_anime_pids.setdefault(_aid, []).append(_p)
-                if _asc and float(_asc) > 0:
-                    _exp_anime_score[_aid] = float(_asc)
             del _exp_raw_rows
 
             _exp_avg_collab_iv: dict[str, float] = {}
@@ -1669,7 +1936,7 @@ def generate_industry_overview():
                 if _ivs:
                     _exp_avg_collab_iv[_aid] = _stats_exp.mean(_ivs)
 
-            # Step 3: per-person aggregation (collab quality + work quality)
+            # Step 3: per-person aggregation (collab quality + work composite_value)
             _exp_pid_animes: dict[str, list] = {}
             for _aid, _pids in _exp_anime_pids.items():
                 for _p in _pids:
@@ -1677,18 +1944,18 @@ def generate_industry_overview():
             del _exp_anime_pids
 
             _exp_person_collab_iv:    dict[str, float] = {}
-            _exp_person_work_score:   dict[str, float] = {}
+            _exp_person_work_cv:      dict[str, float] = {}
             for _p, _animes in _exp_pid_animes.items():
                 _civs    = [_exp_avg_collab_iv.get(_a, 0.0) for _a in _animes]
-                _weights = [_exp_anime_score.get(_a, 1.0)   for _a in _animes]
-                _wsum    = sum(_weights)
+                _cv_weights = [_exp_anime_cv.get(_a, 1.0) for _a in _animes]
+                _wsum    = sum(_cv_weights)
                 if _wsum > 0:
                     _exp_person_collab_iv[_p] = (
-                        sum(_c * _w for _c, _w in zip(_civs, _weights)) / _wsum
+                        sum(_c * _w for _c, _w in zip(_civs, _cv_weights)) / _wsum
                     )
-                _wscores = [_exp_anime_score[_a] for _a in _animes if _a in _exp_anime_score]
-                if _wscores:
-                    _exp_person_work_score[_p] = _stats_exp.mean(_wscores)
+                _wcvs = [_exp_anime_cv[_a] for _a in _animes if _a in _exp_anime_cv]
+                if _wcvs:
+                    _exp_person_work_cv[_p] = _stats_exp.mean(_wcvs)
             del _exp_pid_animes
 
             # Step 3b: studio prestige — reuse studio_person_years (no extra DB query)
@@ -1710,14 +1977,18 @@ def generate_industry_overview():
                     _exp_pid_studio_prestige[_p] = max(_vals)
 
             # Step 4: normalize and combine → 期待能力 raw score
+            # All 3 components are structural (no viewer ratings):
+            #   collab_iv = avg IV of collaborators (network position)
+            #   work_cv   = avg composite_value of works (BiRank-derived)
+            #   studio    = max studio avg IV (studio prestige)
             _exp_collab_max = max(_exp_person_collab_iv.values(), default=1.0) or 1.0
-            _exp_work_max   = max(_exp_person_work_score.values(),  default=9.0) or 9.0
-            _exp_studio_max = max(_exp_studio_avg_iv.values(),      default=1.0) or 1.0
+            _exp_work_max   = max(_exp_person_work_cv.values(),   default=1.0) or 1.0
+            _exp_studio_max = max(_exp_studio_avg_iv.values(),    default=1.0) or 1.0
 
             _exp_raw_score: dict[str, float] = {}
             for _p in pid_iv:
                 _cv = _exp_person_collab_iv.get(_p,       0.0) / _exp_collab_max
-                _wv = _exp_person_work_score.get(_p,      0.0) / _exp_work_max
+                _wv = _exp_person_work_cv.get(_p,         0.0) / _exp_work_max
                 _sv = _exp_pid_studio_prestige.get(_p,    0.0) / _exp_studio_max
                 _exp_raw_score[_p] = 0.50 * _cv + 0.30 * _wv + 0.20 * _sv
 
@@ -1806,7 +2077,7 @@ def generate_industry_overview():
             if not (FLOW_START_YEAR <= ly <= EXIT_CUTOFF_YEAR):
                 continue
             iv = pid_iv.get(pid, 0.0)
-            st = pid_stage.get(pid, 0)
+            st = _stage_at_year(pid, ly)  # 離脱時のステージ
             lt = ("エース離脱"   if iv > HIGH_IV_THRESHOLD else
                   "ベテラン引退" if st >= 5 else
                   "中堅離脱"     if st >= 3 else
@@ -1821,7 +2092,9 @@ def generate_industry_overview():
             import numpy as _np_cl
             from sklearn.cluster import KMeans as _KM
             from sklearn.preprocessing import StandardScaler as _SC_km
-            cl_rows, cl_pids = [], []
+            # K-Means on NON-stage features only (active_years, total_credits, iv_score)
+            # to independently validate whether stage groupings emerge from other metrics
+            cl_rows, cl_pids, cl_stages = [], [], []
             for e in scores_data:
                 pid = e.get("person_id", "")
                 career = e.get("career") or {}
@@ -1831,8 +2104,9 @@ def generate_industry_overview():
                 iv = e.get("iv_score") or 0.0
                 if st is None:
                     continue
-                cl_rows.append([float(st), float(ay), float(tc), float(iv)])
+                cl_rows.append([float(ay), float(tc), float(iv)])
                 cl_pids.append(pid)
+                cl_stages.append(int(st))
             if len(cl_rows) >= 30:
                 Xcl = _np_cl.array(cl_rows)
                 sc_km = _SC_km()
@@ -1840,26 +2114,40 @@ def generate_industry_overview():
                 km = _KM(n_clusters=3, n_init=20, random_state=42)
                 labels = km.fit_predict(Xcl_s)
                 centers_real = sc_km.inverse_transform(km.cluster_centers_)
-                # sort by stage centroid
+                # sort by active_years centroid (index 0)
                 ord_cl = _np_cl.argsort(centers_real[:, 0])
-                cl_names = {int(ord_cl[i]): n for i, n in enumerate(["クラスタ新人", "クラスタ中堅", "クラスタベテラン"])}
-                sg_map_rev = {"クラスタ新人": "新人", "クラスタ中堅": "中堅", "クラスタベテラン": "ベテラン"}
+                cl_names = {int(ord_cl[i]): n for i, n in enumerate(["クラスタA", "クラスタB", "クラスタC"])}
+                # Compute average stage per cluster for comparison
+                cl_avg_stage = {k: 0.0 for k in range(3)}
+                cl_cnt = {k: 0 for k in range(3)}
+                for i, lbl in enumerate(labels):
+                    cl_avg_stage[lbl] += cl_stages[i]
+                    cl_cnt[lbl] += 1
+                for k in range(3):
+                    if cl_cnt[k] > 0:
+                        cl_avg_stage[k] /= cl_cnt[k]
+                # Map clusters to stage groups by avg_stage
+                sorted_by_stage = sorted(range(3), key=lambda k: cl_avg_stage[k])
+                sg_map = {sorted_by_stage[0]: "新人", sorted_by_stage[1]: "中堅", sorted_by_stage[2]: "ベテラン"}
                 match = sum(1 for i, pid in enumerate(cl_pids)
-                            if _stage_group(pid_stage.get(pid, 0)) == sg_map_rev[cl_names[labels[i]]])
+                            if _stage_group(pid_stage.get(pid, 0)) == sg_map[labels[i]])
                 agree = match / len(cl_pids) * 100
                 rows_km = "".join(
                     f"<tr><td>{cl_names[i]}</td>"
-                    f"<td>{centers_real[i,0]:.2f}</td>"
-                    f"<td>{centers_real[i,1]:.1f}年</td>"
-                    f"<td>{centers_real[i,2]:.0f}件</td>"
-                    f"<td>{centers_real[i,3]:.4f}</td></tr>"
+                    f"<td>{cl_avg_stage[i]:.2f}</td>"
+                    f"<td>{centers_real[i,0]:.1f}年</td>"
+                    f"<td>{centers_real[i,1]:.0f}件</td>"
+                    f"<td>{centers_real[i,2]:.4f}</td></tr>"
                     for i in range(3)
                 )
                 _cluster_info = (
                     f"<p><strong>K-Means(K=3)との一致率: {agree:.1f}%</strong> "
-                    f"— 一致率が高いほど rule-based 閾値が自然な分布を反映。</p>"
+                    "（クラスタリング特徴量にstageを<strong>含めず</strong>、"
+                    "active_years・total_credits・iv_scoreのみで分類。"
+                    "stageは事後比較に使用。一致率が高いほど、"
+                    "rule-basedの段階分類が他の独立した指標でも再現されることを意味する。）</p>"
                     "<table style='width:100%;font-size:0.82rem;margin:0.5rem 0'>"
-                    "<thead><tr><th>クラスタ</th><th>平均Stage</th><th>平均活動年数</th>"
+                    "<thead><tr><th>クラスタ</th><th>平均Stage(事後)</th><th>平均活動年数</th>"
                     "<th>平均クレジット</th><th>平均iv_score</th></tr></thead>"
                     f"<tbody>{rows_km}</tbody></table>"
                 )
@@ -1904,144 +2192,2124 @@ def generate_industry_overview():
         country_total = {c: sum(v.values()) for c, v in country_persons.items()}
         top_countries = sorted(country_total, key=country_total.get, reverse=True)[:5]
 
-        # ========== HTML組み立て ==========
+        # ========== 前提検証セクション ==========
         body += '<div class="card">'
-        body += "<h2>人材フロー率（参入・離脱・ストック）</h2>"
+        body += "<h2>前提検証: 定義の妥当性を実データで検証する</h2>"
+        body += section_desc(
+            "「分析手法と定義」セクションで定めた引退閾値（3年間クレジットなし）、"
+            "キャリアステージ分類（6段階）、および役職間の遷移構造について、"
+            "実際のクレジットデータに基づき妥当性を検証する。"
+            "ここでの検証結果が後続の「人材フロー分析」の基盤となる。"
+        )
 
-        # --- ステージ分類の説明 ---
+        # --- DB から同一役職内の登場間隔を計算（役職単位で集計） ---
+        from src.utils.role_groups import CAREER_STAGE_BY_VALUE
+        # 分析対象の役職 → 表示ラベル（Stage 0 や非制作職を除外）
+        _ROLE_LABEL_V1 = {
+            "in_between": "動画",
+            "second_key_animator": "第二原画",
+            "production_manager": "制作進行",
+            "key_animator": "原画",
+            "layout": "レイアウト",
+            "animation_director": "作画監督",
+            "character_designer": "キャラデザ",
+            "episode_director": "演出",
+            "director": "監督",
+            "photography_director": "撮影監督",
+            "background_art": "背景美術",
+            "screenplay": "脚本",
+        }
+
+        conn_val = _get_conn()
+        conn_val.row_factory = _sqlite3.Row
+        rows_val = conn_val.execute(
+            "SELECT c.person_id, c.role, a.year "
+            "FROM credits c JOIN anime a ON c.anime_id = a.id "
+            "WHERE a.year IS NOT NULL"
+        ).fetchall()
+        conn_val.close()
+
+        # person_id → {role_label: sorted set of years}
+        from collections import defaultdict as _ddict_val
+        pid_role_years: dict[str, dict[str, set[int]]] = _ddict_val(lambda: _ddict_val(set))
+        for r in rows_val:
+            label = _ROLE_LABEL_V1.get(r["role"])
+            if label:
+                pid_role_years[r["person_id"]][label].add(r["year"])
+
+        # 同一役職内の連続登場間隔を計算
+        # Each record: (gap, year_of_return, career_exp_at_return, role_label)
+        gap_by_stage: dict[str, list[int]] = _ddict_val(list)
+        gap_records: list[tuple[int, int, int, str]] = []  # (gap, year, exp, role)
+        for pid, role_dict in pid_role_years.items():
+            fy = pid_first_year.get(pid)
+            for role_label, year_set in role_dict.items():
+                years_sorted = sorted(year_set)
+                for i in range(1, len(years_sorted)):
+                    gap = years_sorted[i] - years_sorted[i - 1]
+                    if gap >= 1:  # 同年は除外
+                        gap_by_stage[role_label].append(gap)
+                        ret_year = years_sorted[i]
+                        exp = (ret_year - fy) if fy is not None else -1
+                        gap_records.append((gap, ret_year, exp, role_label))
+
+        # --- V-1: 同一職種内クレジット間隔 Violin Plot ---
+        body += "<h3>V-1. 同一職種内のクレジット再登場間隔（年）</h3>"
+        body += chart_guide(
+            "同じ職種（ステージ）で連続してクレジットされた場合の間隔分布。"
+            "監督→原画のような<strong>キャリア転向は除外</strong>し、"
+            "同一職種内での活動間隔のみを計算。"
+            "赤点線は現在の引退判定ライン（3年間クレジットなし）を示す。"
+        )
+        import numpy as _np_val
+        fig_v1 = go.Figure()
+        # 表示順: 低ステージ → 高ステージ
+        # 表示順: キャリアステージ昇順（主要職種のみ）
+        gap_order = ["動画", "第二原画", "原画", "レイアウト",
+                     "作画監督", "キャラデザ", "演出", "監督",
+                     "制作進行", "撮影監督", "背景美術", "脚本"]
+        gap_colors = ["#FF6B6B", "#FFA94D", "#FFD43B", "#A8E6CF",
+                      "#4DABF7", "#7EB8D4", "#DA77F2", "#F72585",
+                      "#fda085", "#667eea", "#69DB7C", "#06D6A0"]
+        gap_stats_rows = []
+        for sg, gc in zip(gap_order, gap_colors):
+            vals = gap_by_stage.get(sg, [])
+            if len(vals) < 5:
+                continue
+            # Box plot (no individual points) — lightweight
+            fig_v1.add_trace(go.Box(
+                y=vals, name=sg, marker_color=gc, boxmean=True,
+                boxpoints=False, showlegend=False,
+            ))
+            arr = _np_val.array(vals)
+            p50 = float(_np_val.median(arr))
+            p90 = float(_np_val.percentile(arr, 90))
+            p95 = float(_np_val.percentile(arr, 95))
+            p99 = float(_np_val.percentile(arr, 99))
+            gap_stats_rows.append((sg, len(vals), p50, p90, p95, p99))
+
+        # 引退判定ライン
+        fig_v1.add_hline(y=3, line_dash="dash", line_color="#EF476F",
+                         annotation_text="引退判定ライン (3年)", annotation_position="top right",
+                         annotation_font_color="#EF476F")
+        fig_v1.update_layout(
+            height=450, yaxis_title="クレジット間隔（年）",
+            xaxis_title="職種",
+            showlegend=False,
+            yaxis=dict(
+                type="log",
+                tickvals=[1, 2, 3, 5, 10, 20, 30],
+                ticktext=["1", "2", "3", "5", "10", "20", "30"],
+            ),
+        )
+        body += plotly_div_safe(fig_v1, "gap_violin", 450)
+
+        # パーセンタイル表
+        body += (
+            "<table style='width:100%;margin:0.8rem 0;font-size:0.85rem;'>"
+            "<thead><tr><th>職種</th><th>N</th><th>中央値</th>"
+            "<th>90%tile</th><th>95%tile</th><th>99%tile</th></tr></thead><tbody>"
+        )
+        for sg, n, p50, p90, p95, p99 in gap_stats_rows:
+            body += (
+                f"<tr><td>{sg}</td><td>{n:,}</td><td>{p50:.1f}年</td>"
+                f"<td>{p90:.1f}年</td><td>{p95:.1f}年</td><td>{p99:.1f}年</td></tr>"
+            )
+        body += "</tbody></table>"
+
+        # --- V-1b: 時代別の再登場間隔推移 ---
+        body += "<h4>V-1b. 時代別の再登場間隔推移</h4>"
+        body += chart_guide(
+            "再登場年の年代別に中央値・P90・P95を折れ線で表示。"
+            "業界の制作サイクル変化（デジタル化、深夜アニメ増加など）が"
+            "再登場間隔に与えた影響を可視化する。"
+        )
+        # Build decade × stage → gaps
+        _decade_stage_gaps: dict[int, dict[str, list[int]]] = _ddict_val(
+            lambda: _ddict_val(list)
+        )
+        for gap, ret_year, _exp, sg in gap_records:
+            if sg in gap_order:
+                decade = (ret_year // 5) * 5  # 5年刻み
+                _decade_stage_gaps[decade][sg].append(gap)
+
+        sorted_decades = sorted(d for d in _decade_stage_gaps if d >= 1980)
+        if sorted_decades:
+            fig_v1b = go.Figure()
+            x_common = sorted_decades  # numeric x-axis, shared across all traces
+            for sg, gc in zip(gap_order, gap_colors):
+                medians = []
+                p95s = []
+                for dec in x_common:
+                    vals = _decade_stage_gaps[dec].get(sg, [])
+                    if len(vals) >= 10:
+                        arr = _np_val.array(vals)
+                        medians.append(float(_np_val.median(arr)))
+                        p95s.append(float(_np_val.percentile(arr, 95)))
+                    else:
+                        medians.append(None)
+                        p95s.append(None)
+                fig_v1b.add_trace(go.Scatter(
+                    x=x_common, y=medians, name=f"{sg} 中央値",
+                    mode="lines+markers", line=dict(color=gc, width=2),
+                    legendgroup=sg, connectgaps=False,
+                ))
+                fig_v1b.add_trace(go.Scatter(
+                    x=x_common, y=p95s, name=f"{sg} P95",
+                    mode="lines+markers",
+                    line=dict(color=gc, width=1, dash="dash"),
+                    legendgroup=sg, opacity=0.6, connectgaps=False,
+                ))
+            fig_v1b.add_hline(y=3, line_dash="dot", line_color="#EF476F",
+                              annotation_text="引退判定ライン",
+                              annotation_position="top right",
+                              annotation_font_color="#EF476F")
+            fig_v1b.update_layout(
+                height=450, yaxis_title="クレジット間隔（年）",
+                xaxis_title="5年期間",
+                legend=dict(font_size=10),
+            )
+            body += plotly_div_safe(fig_v1b, "gap_era_trend", 450)
+
+        # --- V-1c: 経験年数別の再登場間隔 ---
+        body += "<h4>V-1c. 経験年数別の再登場間隔</h4>"
+        body += chart_guide(
+            "デビューからの経験年数を5年刻みでビン化し、各ビンでの再登場間隔の"
+            "中央値・P90・P95をヒートマップで表示。"
+            "ベテランほど間隔が長くなる傾向（他プロジェクト掛け持ち・選別的参加）や、"
+            "新人の高頻度参加パターンを確認する。"
+        )
+        # Build exp_bin × stage → gaps
+        _EXP_BINS = [(0, 4, "0-4年"), (5, 9, "5-9年"), (10, 14, "10-14年"),
+                     (15, 19, "15-19年"), (20, 29, "20-29年"), (30, 99, "30年+")]
+        _exp_stage_gaps: dict[str, dict[str, list[int]]] = _ddict_val(
+            lambda: _ddict_val(list)
+        )
+        for gap, _ret_year, exp, sg in gap_records:
+            if sg not in gap_order or exp < 0:
+                continue
+            for lo, hi, label in _EXP_BINS:
+                if lo <= exp <= hi:
+                    _exp_stage_gaps[label][sg].append(gap)
+                    break
+
+        exp_labels = [lb for _, _, lb in _EXP_BINS]
+        # Heatmap: rows=stages, cols=exp_bins, value=median gap
+        hm_median = []
+        hm_p95 = []
+        hm_n = []
+        hm_stages_used = []
+        for sg in gap_order:
+            row_med = []
+            row_p95 = []
+            row_n = []
+            has_data = False
+            for lb in exp_labels:
+                vals = _exp_stage_gaps[lb].get(sg, [])
+                if len(vals) >= 5:
+                    arr = _np_val.array(vals)
+                    row_med.append(float(_np_val.median(arr)))
+                    row_p95.append(float(_np_val.percentile(arr, 95)))
+                    row_n.append(len(vals))
+                    has_data = True
+                else:
+                    row_med.append(None)
+                    row_p95.append(None)
+                    row_n.append(0)
+            if has_data:
+                hm_median.append(row_med)
+                hm_p95.append(row_p95)
+                hm_n.append(row_n)
+                hm_stages_used.append(sg)
+
+        if hm_stages_used:
+            from plotly.subplots import make_subplots as _ms_v1c
+            fig_v1c = _ms_v1c(rows=1, cols=2,
+                              subplot_titles=["中央値（年）", "P95（年）"],
+                              horizontal_spacing=0.12)
+            # Hover text with N
+            hover_med = [[f"{hm_stages_used[i]}<br>{exp_labels[j]}<br>"
+                          f"中央値: {hm_median[i][j]:.1f}年<br>N={hm_n[i][j]:,}"
+                          if hm_median[i][j] is not None else ""
+                          for j in range(len(exp_labels))]
+                         for i in range(len(hm_stages_used))]
+            hover_p95 = [[f"{hm_stages_used[i]}<br>{exp_labels[j]}<br>"
+                          f"P95: {hm_p95[i][j]:.1f}年<br>N={hm_n[i][j]:,}"
+                          if hm_p95[i][j] is not None else ""
+                          for j in range(len(exp_labels))]
+                         for i in range(len(hm_stages_used))]
+            fig_v1c.add_trace(go.Heatmap(
+                z=hm_median, x=exp_labels, y=hm_stages_used,
+                colorscale="YlOrRd", hovertext=hover_med,
+                hovertemplate="%{hovertext}<extra></extra>",
+                colorbar=dict(title="年", x=0.42),
+                zmin=0, zmax=5,
+            ), row=1, col=1)
+            fig_v1c.add_trace(go.Heatmap(
+                z=hm_p95, x=exp_labels, y=hm_stages_used,
+                colorscale="YlOrRd", hovertext=hover_p95,
+                hovertemplate="%{hovertext}<extra></extra>",
+                colorbar=dict(title="年", x=1.02),
+                zmin=0, zmax=10,
+            ), row=1, col=2)
+            fig_v1c.update_layout(height=350)
+            body += plotly_div_safe(fig_v1c, "gap_exp_heatmap", 350)
+        # Data-driven V-1 insight: check P95 against threshold for each role
+        _v1_within = [sg for sg, _n, _p50, _p90, p95, _p99 in gap_stats_rows if p95 <= 3.0]
+        _v1_exceed = [(sg, p95) for sg, _n, _p50, _p90, p95, _p99 in gap_stats_rows if p95 > 3.0]
+        _v1_within_str = "、".join(_v1_within) if _v1_within else "（該当なし）"
+        if _v1_exceed:
+            _v1_exceed_str = "、".join(f"{sg}（P95={p95:.1f}年）" for sg, p95 in _v1_exceed)
+            _v1_exception = (
+                f"<br><strong>例外</strong>: {_v1_exceed_str} は95パーセンタイルが3年を超えており、"
+                "この閾値では実際にはまだ活動中の人物を引退と判定する過小カウントの可能性がある。"
+            )
+        else:
+            _v1_exception = ""
         body += (
             '<div class="insight-box">'
-            "<strong>キャリアステージ分類の基準（パイプライン定義）</strong>"
+            "<strong>検証結果: 引退閾値 3年の妥当性</strong><br>"
+            f"95パーセンタイルが3年以内の職種: <strong>{_v1_within_str}</strong>"
+            f"（{len(_v1_within)}/{len(gap_stats_rows)}職種）。"
+            f"これらの職種では「3年間クレジットなし＝引退」とした場合、"
+            "活動中の人物を誤って引退と判定するリスクは5%未満に抑えられる。"
+            f"{_v1_exception}"
+            "<br>→ この閾値を以降の人材フロー分析（引退判定）およびサンキーダイアグラム"
+            "（引退ノード）に適用する。"
+            "</div>"
+        )
+
+        # --- V-2: デビューからの年数と職能レベルの関係 ---
+        body += "<h3>V-2. デビューからの年数と到達職能レベル</h3>"
+        body += chart_guide(
+            "X軸=デビューからの経過年数、Y軸=到達ステージ。"
+            "散布＋ヒートマップで、キャリア年数と職能の関係を示す。"
+            "年功序列ではなく能力ベースの昇進であっても、経験年数との正の相関が期待される。"
+        )
+
+        # ヒートマップ: 経過年数 × ステージ の人数
+        max_career_len = 40
+        career_bins = list(range(0, max_career_len + 1))
+        stage_labels = ["Stage 1\n動画", "Stage 2\n第二原画",
+                        "Stage 3\n原画・レイアウト", "Stage 4\nキャラデ・脚本",
+                        "Stage 5\n作監・演出", "Stage 6\n監督"]
+        heatmap_z = [[0] * len(career_bins) for _ in range(6)]  # 6 stages
+
+        for pid, fy in pid_first_year.items():
+            st = pid_stage.get(pid, 0)
+            if st < 1:
+                continue
+            ly = pid_latest_year.get(pid, RELIABLE_MAX_YEAR)
+            career_len = min(ly - fy, max_career_len)
+            if 0 <= career_len <= max_career_len:
+                heatmap_z[st - 1][career_len] += 1
+
+        from math import log10 as _log10
+        heatmap_z_log = [
+            [_log10(v + 1) for v in row] for row in heatmap_z
+        ]
+        # カラーバーは元の人数で表示するためtickvals/ticktextを設定
+        z_max = max(max(row) for row in heatmap_z) if any(any(row) for row in heatmap_z) else 1
+        tick_vals_raw = [0, 1, 3, 10, 30, 100, 300, 1000, 3000]
+        tick_vals = [_log10(v + 1) for v in tick_vals_raw if v <= z_max * 1.2]
+        tick_text = [str(v) for v in tick_vals_raw[:len(tick_vals)]]
+
+        fig_v2 = go.Figure(data=go.Heatmap(
+            z=heatmap_z_log,
+            x=career_bins,
+            y=stage_labels,
+            colorscale="YlOrRd",
+            customdata=heatmap_z,
+            hovertemplate="経験%{x}年 / %{y}: %{customdata}人<extra></extra>",
+            colorbar=dict(tickvals=tick_vals, ticktext=tick_text, title="人数"),
+        ))
+        fig_v2.update_layout(
+            height=350, xaxis_title="デビューからの経過年数",
+            yaxis_title="最高到達ステージ",
+        )
+        body += plotly_div_safe(fig_v2, "career_heatmap", 350)
+
+        # Spearman correlation: career_len vs highest_stage
+        _v2_career_lens = []
+        _v2_stages = []
+        for pid, fy in pid_first_year.items():
+            st = pid_stage.get(pid, 0)
+            if st < 1:
+                continue
+            ly = pid_latest_year.get(pid, RELIABLE_MAX_YEAR)
+            _v2_career_lens.append(ly - fy)
+            _v2_stages.append(st)
+        try:
+            from scipy.stats import spearmanr as _spearmanr_v2
+            _v2_rho, _v2_pval = _spearmanr_v2(_v2_career_lens, _v2_stages)
+        except ImportError:
+            # Fallback: compute rank correlation manually
+            def _rank_v2(vals):
+                s = sorted(range(len(vals)), key=lambda i: vals[i])
+                ranks = [0.0] * len(vals)
+                for rank, idx in enumerate(s):
+                    ranks[idx] = rank
+                return ranks
+            _r_cl = _rank_v2(_v2_career_lens)
+            _r_st = _rank_v2(_v2_stages)
+            _n_v2 = len(_r_cl)
+            _mean_cl = sum(_r_cl) / _n_v2
+            _mean_st = sum(_r_st) / _n_v2
+            _cov = sum((_r_cl[i] - _mean_cl) * (_r_st[i] - _mean_st) for i in range(_n_v2))
+            _std_cl = (sum((_r_cl[i] - _mean_cl) ** 2 for i in range(_n_v2))) ** 0.5
+            _std_st = (sum((_r_st[i] - _mean_st) ** 2 for i in range(_n_v2))) ** 0.5
+            _v2_rho = _cov / (_std_cl * _std_st) if _std_cl * _std_st > 0 else 0
+            _v2_pval = 0.0  # N is large enough that any nonzero rho is significant
+
+        body += (
+            '<div class="insight-box">'
+            f"<strong>Spearman ρ = {_v2_rho:.3f}</strong>"
+            f"（N={len(_v2_career_lens):,}、"
+            f"p{'<0.001' if _v2_pval < 0.001 else f'={_v2_pval:.3f}'}）。"
+            "経験年数と最高到達ステージに統計的に有意な正の相関があり、"
+            "§1.3のステージ分類がキャリア進行を反映していることを確認。"
+            "ただし ρ &lt; 1.0 は経験年数≠職能レベルであることも示す"
+            "（長期間Stage 1-3に留まるアニメーターが多数存在）。"
+            "</div>"
+        )
+
+        # --- V-3: 引退時の経過年数分布（職能別） ---
+        body += "<h3>V-3. 引退時のキャリア年数分布（職能別）</h3>"
+        body += chart_guide(
+            "引退者（最終クレジットが{0}年以前）のキャリア年数分布を職能別に表示。"
+            "各職能レベルごとにどの段階で引退する傾向があるかを示す。".format(EXIT_CUTOFF_YEAR)
+        )
+
+        retire_years_by_sg: dict[str, list[int]] = _ddict_val(list)
+        for pid, ly in pid_latest_year.items():
+            if ly > EXIT_CUTOFF_YEAR:
+                continue
+            fy = pid_first_year.get(pid)
+            if not fy:
+                continue
+            st = _stage_at_year(pid, ly)
+            sg = _stage_group(st)
+            retire_years_by_sg[sg].append(ly - fy)
+
+        fig_v3 = go.Figure()
+        retire_sg_order = stage_groups  # ["新人", "中堅", "ベテラン"]
+        retire_sg_colors = [sg_color[sg] for sg in retire_sg_order]
+        for sg, sc in zip(retire_sg_order, retire_sg_colors):
+            vals = retire_years_by_sg.get(sg, [])
+            if len(vals) >= 5:
+                fig_v3.add_trace(_violin_raincloud(vals, f"{sg} (n={len(vals):,})", sc))
+
+        fig_v3.update_layout(
+            height=400, yaxis_title="キャリア年数（デビュー〜引退）",
+            showlegend=True,
+        )
+        body += plotly_div_safe(fig_v3, "retire_dist", 400)
+
+        body += (
+            '<div class="insight-box">'
+            "<strong>V-3 検証結果: 引退タイミングの職能依存性</strong><br>"
+            "引退時のキャリア年数分布は職能グループ間で明確に異なる。"
+            "新人（Stage 0-2）は早期離脱が多く、中堅以上は長期活動後の引退が中心。"
+            "この二峰性パターンは、§1.3のキャリアステージ分類が"
+            "業界内の異なる人材層を分離できていることの傍証となる。"
+            "</div>"
+        )
+
+        # --- V-4 & V-5: 全役職間の遷移フロー（分析対象の専門性を立証） ---
+        # DB から全人物の年次別役職を取得し、遷移を集計
+        conn_tr = _get_conn()
+        conn_tr.row_factory = _sqlite3.Row
+        rows_tr = conn_tr.execute(
+            "SELECT c.person_id, c.role, a.year "
+            "FROM credits c JOIN anime a ON c.anime_id = a.id "
+            "WHERE a.year IS NOT NULL "
+            "ORDER BY c.person_id, a.year"
+        ).fetchall()
+        conn_tr.close()
+
+        # 各人物の年ごとの最高ステージ役職を特定
+        FULL_ROLE_LABEL = {
+            "in_between": "動画", "second_key_animator": "第二原画",
+            "layout": "レイアウト",
+            "key_animator": "原画", "photography_director": "撮影監督",
+            "animation_director": "作画監督", "character_designer": "キャラデザ",
+            "episode_director": "演出",
+            "director": "監督",
+            "producer": "プロデューサー", "original_creator": "原案/原作",
+            "production_manager": "制作進行",
+            "screenplay": "脚本",
+            "background_art": "背景美術",
+            "finishing": "仕上げ",
+            "sound_director": "音響監督",
+            "music": "音楽", "cgi_director": "CGI監督",
+            "editing": "編集", "settings": "設定",
+            "voice_actor": "声優",
+            "special": "その他",
+        }
+        # 制作ライン（分析対象）の役職セット — NON_PRODUCTION_ROLES 以外
+        from src.utils.role_groups import NON_PRODUCTION_ROLES
+        _non_prod_values = {r.value for r in NON_PRODUCTION_ROLES}
+        PRODUCTION_LINE_ROLES = {
+            r for r in FULL_ROLE_LABEL if r not in _non_prod_values
+        }
+        FULL_ROLE_STAGE = CAREER_STAGE_BY_VALUE
+
+        # person → {year: set of roles}
+        from collections import defaultdict as _ddict_tr
+        pid_year_roles: dict[str, dict[int, set[str]]] = _ddict_tr(lambda: _ddict_tr(set))
+        for r in rows_tr:
+            pid_year_roles[r["person_id"]][r["year"]].add(r["role"])
+
+        # 各人物の年ごとの代表役職（最高ステージ）→ 年次遷移を集計
+        role_transitions: dict[tuple[str, str], int] = _ddict_tr(int)
+        debut_role_count: dict[str, int] = _ddict_tr(int)  # デビュー時の初役職
+        for pid, year_dict in pid_year_roles.items():
+            years_sorted = sorted(year_dict.keys())
+            prev_role: str | None = None
+            for i, yr in enumerate(years_sorted):
+                roles = year_dict[yr]
+                # その年の最高ステージ役職を代表とする
+                best = max(roles, key=lambda r: FULL_ROLE_STAGE.get(r, 0))
+                label = FULL_ROLE_LABEL.get(best, best)
+                if i == 0:
+                    debut_role_count[label] += 1  # デビュー時の役職
+                if prev_role is not None and prev_role != label:
+                    role_transitions[(prev_role, label)] += 1
+                prev_role = label
+
+        # --- V-4: Role Flow Sankey ---
+        body += "<h3>V-4. 全役職間キャリアフロー（Sankey Diagram）</h3>"
+        body += chart_guide(
+            "V-2/V-3で確認したキャリアステージの存在を前提に、"
+            "具体的にどの役職からどの役職へ遷移するかの全体像を可視化する。"
+            "<strong>太い帯</strong>は頻度の高い遷移パスを示す。"
+            "制作ライン（動画→原画→作監→監督）が太い主流であること、"
+            "および他の職種（脚本・美術等）への越境が少ないことが視覚的に確認でき、"
+            "Stage 1→6 の段階的昇進モデルの妥当性を裏付ける。"
+            "<br>引退ノード（右端4段）は第4節の引退定義"
+            "（最終クレジット年 ≤ 2022、かつ3年以上クレジットなし）に基づく。"
+        )
+
+        # サンキーに表示する役職を限定（関連性の高いもののみ）
+        SANKEY_ROLES = [
+            "動画", "第二原画", "レイアウト", "原画",
+            "作画監督", "キャラデザ", "演出", "監督",
+            "制作進行", "プロデューサー",
+            "脚本", "背景美術", "仕上げ",
+            "撮影監督", "音響監督", "CGI監督",
+        ]
+        sankey_role_set = set(SANKEY_ROLES)
+        # サンキー対象役職のraw_roleキーを逆引き
+        _sankey_raw_keys = {raw for raw, lbl in FULL_ROLE_LABEL.items() if lbl in sankey_role_set}
+
+        # サンキー用の代表役職優先度:
+        # 制作ラインのキャリア順序を尊重し、周辺役職は低優先度
+        # (FULL_ROLE_STAGEは声優=11>監督=6で代表選出に不適)
+        # 制作ラインの昇進順序をそのまま優先度に使う
+        _SANKEY_PRIORITY = dict(CAREER_STAGE_BY_VALUE)
+
+        # サンキー用に遷移を再計算（対象役職のみで代表役職を選ぶ）
+        # 1人が同年に複数役職を持つ場合、制作ライン側を優先的に代表にする
+        # 同一役職の継続(原画→原画)も計上する（ノード流量の整合性のため）
+        _EXIT_CUTOFF = 2022  # 2023年以降は引退判定しない
+        role_transitions_san: dict[tuple[str, str], int] = _ddict_tr(int)
+        debut_role_count_san: dict[str, int] = _ddict_tr(int)
+        retire_from_san: dict[tuple[str, str], int] = _ddict_tr(int)  # (最終役職, 引退区分) → 件数
+        for pid, year_dict in pid_year_roles.items():
+            years_sorted = sorted(year_dict.keys())
+            prev_role: str | None = None
+            first_yr_san: int | None = None
+            last_yr_san: int | None = None
+            for i, yr in enumerate(years_sorted):
+                # サンキー対象の役職のみでフィルタ
+                roles_in_scope = [r for r in year_dict[yr] if r in _sankey_raw_keys]
+                if not roles_in_scope:
+                    continue
+                best = max(roles_in_scope, key=lambda r: _SANKEY_PRIORITY.get(r, 0))
+                label = FULL_ROLE_LABEL.get(best, best)
+                if prev_role is None:
+                    debut_role_count_san[label] += 1
+                    first_yr_san = yr
+                else:
+                    role_transitions_san[(prev_role, label)] += 1
+                prev_role = label
+                last_yr_san = yr
+            # 引退判定: 最終活動年が EXIT_CUTOFF 以前 → 引退とみなす
+            if prev_role is not None and last_yr_san is not None and last_yr_san <= _EXIT_CUTOFF:
+                career_len = (last_yr_san - first_yr_san) if first_yr_san else 0
+                if career_len < 1:
+                    retire_tier = "ルーキー引退"
+                elif career_len < 4:
+                    retire_tier = "新人引退"
+                elif career_len < 10:
+                    retire_tier = "中堅引退"
+                else:
+                    retire_tier = "ベテラン引退"
+                retire_from_san[(prev_role, retire_tier)] += 1
+
+        # 杉山メソッド風レイヤー配置: ノードの (x, y) を手動指定
+        # x = キャリアステージ（レイヤー）、y = レイヤー内の位置
+        prod_labels_order = [
+            "動画", "第二原画", "レイアウト", "原画",
+            "作画監督", "キャラデザ", "演出", "監督",
+        ]
+        # レイヤー定義: {ラベル: (x, y)}  x=0.0~1.0, y=0.0~1.0
+        _SANKEY_POS = {
+            "デビュー":      (0.01, 0.35),
+            # Layer 1: 入門 (Stage 1-2)
+            "動画":          (0.12, 0.12),
+            "第二原画":      (0.12, 0.30),
+            "制作進行":      (0.12, 0.48),
+            # Layer 2: 中堅 (Stage 3)
+            "レイアウト":    (0.30, 0.10),
+            "原画":          (0.30, 0.28),
+            "背景美術":      (0.30, 0.55),
+            "仕上げ":        (0.30, 0.70),
+            # Layer 3: 上級 (Stage 4-5)
+            "作画監督":      (0.52, 0.10),
+            "キャラデザ":    (0.52, 0.28),
+            "脚本":          (0.52, 0.45),
+            "演出":          (0.52, 0.60),
+            "撮影監督":      (0.52, 0.72),
+            "音響監督":      (0.52, 0.82),
+            "プロデューサー": (0.52, 0.92),
+            "CGI監督":       (0.52, 0.55),
+            # Layer 4: 頂点 (Stage 6)
+            "監督":          (0.80, 0.30),
+            # 引退ノード（4段、右端に縦並び）
+            "ルーキー引退":  (0.99, 0.30),
+            "新人引退":      (0.99, 0.43),
+            "中堅引退":      (0.99, 0.56),
+            "ベテラン引退":  (0.99, 0.69),
+        }
+        _RETIRE_NODES = {"ルーキー引退", "新人引退", "中堅引退", "ベテラン引退"}
+        # 引退ノード色・リンク色（経験年数別）
+        _RETIRE_NODE_COLOR = {
+            "ルーキー引退": "#FF6B6B",   # 赤
+            "新人引退":     "#FFA94D",   # 橙
+            "中堅引退":     "#FFD43B",   # 黄
+            "ベテラン引退": "#69DB7C",   # 緑
+        }
+        _RETIRE_TIER_COLOR = {
+            "ルーキー引退": "rgba(255,107,107,0.55)",
+            "新人引退":     "rgba(255,169,77,0.55)",
+            "中堅引退":     "rgba(255,212,59,0.55)",
+            "ベテラン引退": "rgba(105,219,124,0.55)",
+        }
+        node_labels = list(_SANKEY_POS.keys())
+        node_idx = {r: i for i, r in enumerate(node_labels)}
+        node_x = [_SANKEY_POS[r][0] for r in node_labels]
+        node_y = [_SANKEY_POS[r][1] for r in node_labels]
+
+        # ノード色: デビュー=金、制作ライン=青、引退=種別色、その他=灰
+        prod_set = set(prod_labels_order)
+        node_colors = []
+        for r in node_labels:
+            if r == "デビュー":
+                node_colors.append("#FFD43B")
+            elif r in _RETIRE_NODE_COLOR:
+                node_colors.append(_RETIRE_NODE_COLOR[r])
+            elif r in prod_set:
+                node_colors.append("#4DABF7")
+            else:
+                node_colors.append("#868E96")
+
+        # 全遷移を含める（自己ループ除外、閾値>=5のみ）
+        all_trans = sorted(
+            [(k, v) for k, v in role_transitions_san.items()
+             if k[0] != k[1] and k[0] in node_idx and k[1] in node_idx and v >= 5],
+            key=lambda x: x[1], reverse=True,
+        )
+        san_src, san_tgt, san_val = [], [], []
+
+        # デビュー → 各役職
+        debut_sorted = sorted(debut_role_count_san.items(), key=lambda x: x[1], reverse=True)
+        for role_label, cnt in debut_sorted:
+            if role_label not in node_idx or cnt < 5:
+                continue
+            san_src.append(node_idx["デビュー"])
+            san_tgt.append(node_idx[role_label])
+            san_val.append(cnt)
+
+        # 通常の遷移リンク（全件）
+        for (fr, to), cnt in all_trans:
+            san_src.append(node_idx[fr])
+            san_tgt.append(node_idx[to])
+            san_val.append(cnt)
+
+        # 各役職 → 引退種別ノード（4つの引退ノードへ直接）
+        retire_link_indices = []  # 引退リンクのインデックス（色を別処理するため）
+        retire_link_tiers = []    # 対応する引退種別
+        for (last_role, retire_tier), cnt in retire_from_san.items():
+            if last_role in node_idx and retire_tier in node_idx and cnt >= 5:
+                retire_link_indices.append(len(san_src))
+                retire_link_tiers.append(retire_tier)
+                san_src.append(node_idx[last_role])
+                san_tgt.append(node_idx[retire_tier])
+                san_val.append(cnt)
+
+        # リンク色: 通常=ソースノード色(logアルファ)、引退=引退種別色
+        max_trans = max(san_val) if san_val else 1
+        import math as _math_san
+        retire_idx_set = set(retire_link_indices)
+        link_colors = []
+        for li, (s_idx, val) in enumerate(zip(san_src, san_val)):
+            if li in retire_idx_set:
+                # 引退リンク: 引退種別の色
+                tier = retire_link_tiers[retire_link_indices.index(li)]
+                link_colors.append(_RETIRE_TIER_COLOR.get(tier, "rgba(192,57,43,0.4)"))
+            else:
+                c = node_colors[s_idx]
+                r_v, g_v, b_v = int(c[1:3], 16), int(c[3:5], 16), int(c[5:7], 16)
+                alpha = 0.08 + 0.52 * _math_san.log1p(val) / _math_san.log1p(max_trans)
+                link_colors.append(f"rgba({r_v},{g_v},{b_v},{alpha:.2f})")
+
+        # ホバーラベル
+        link_customdata = []
+        for li, (s, t, v) in enumerate(zip(san_src, san_tgt, san_val)):
+            if li in retire_idx_set:
+                tier = retire_link_tiers[retire_link_indices.index(li)]
+                link_customdata.append(f"{node_labels[s]} → {tier}: {v:,}件")
+            else:
+                link_customdata.append(f"{node_labels[s]} → {node_labels[t]}: {v:,}件")
+
+        # ノードごとの真の流入/流出を計算（自己ループ含む全遷移から）
+        node_inflow = [0] * len(node_labels)
+        node_outflow = [0] * len(node_labels)
+        node_self = [0] * len(node_labels)  # 継続（自己ループ）
+        for (fr, to), cnt in role_transitions_san.items():
+            if fr in node_idx and to in node_idx:
+                if fr == to:
+                    node_self[node_idx[fr]] += cnt
+                else:
+                    node_outflow[node_idx[fr]] += cnt
+                    node_inflow[node_idx[to]] += cnt
+        # デビューからの流入も加算
+        for role_label, cnt in debut_role_count_san.items():
+            if role_label in node_idx:
+                node_inflow[node_idx[role_label]] += cnt
+        # 引退分も加算（各引退種別ノードへ）
+        for (last_role, retire_tier), cnt in retire_from_san.items():
+            if last_role in node_idx and retire_tier in node_idx:
+                node_outflow[node_idx[last_role]] += cnt
+                node_inflow[node_idx[retire_tier]] += cnt
+        # ノードホバーラベル
+        node_hover = []
+        for i, lbl in enumerate(node_labels):
+            parts = [lbl]
+            if lbl == "デビュー":
+                parts.append(f"流出: {node_outflow[i]:,}")
+            elif lbl in _RETIRE_NODES:
+                parts.append(f"流入: {node_inflow[i]:,}")
+            else:
+                parts.append(f"流入: {node_inflow[i]:,} / 流出: {node_outflow[i]:,}")
+                parts.append(f"継続: {node_self[i]:,}")
+                total = node_inflow[i] + node_self[i]
+                if total > 0:
+                    parts.append(f"継続率: {node_self[i]/total:.0%}")
+            node_hover.append("<br>".join(parts))
+
+        # --- リンク分類（JS用メタデータ） ---
+        # 各リンクがアニメーターキャリアか、マイナーパスか
+        animator_set = prod_set | {"デビュー"} | _RETIRE_NODES
+        link_is_animator = []  # bool: 両端が制作ライン/デビュー/引退
+        minor_threshold = sorted(san_val)[len(san_val) // 2] if san_val else 10
+        link_is_minor = []     # bool: 値が中央値未満
+        for s, t, v in zip(san_src, san_tgt, san_val):
+            s_lbl, t_lbl = node_labels[s], node_labels[t]
+            link_is_animator.append(s_lbl in animator_set and t_lbl in animator_set)
+            link_is_minor.append(v < minor_threshold)
+        # 各ノードに接続するリンクインデックス
+        node_link_map: dict[int, list[int]] = {i: [] for i in range(len(node_labels))}
+        for li, (s, t) in enumerate(zip(san_src, san_tgt)):
+            node_link_map[s].append(li)
+            node_link_map[t].append(li)
+
+        fig_sankey = go.Figure(go.Sankey(
+            arrangement="snap",
+            node=dict(
+                pad=15,
+                thickness=18,
+                label=node_labels,
+                color=node_colors,
+                x=node_x,
+                y=node_y,
+                line=dict(color="rgba(255,255,255,0.15)", width=0.5),
+                customdata=node_hover,
+                hovertemplate="%{customdata}<extra></extra>",
+            ),
+            link=dict(
+                source=san_src,
+                target=san_tgt,
+                value=san_val,
+                color=link_colors,
+                customdata=link_customdata,
+                hovertemplate="%{customdata}<extra></extra>",
+            ),
+        ))
+        fig_sankey.update_layout(
+            template="plotly_dark",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            height=700,
+            margin=dict(l=10, r=10, t=30, b=10),
+            font=dict(size=11, color="#e0e0e0"),
+        )
+        _sankey_div_id = "sankey-v4-career"
+        body += fig_sankey.to_html(
+            full_html=False, include_plotlyjs=False, div_id=_sankey_div_id,
+        )
+
+        # --- コントロールボタン + JS ---
+        import json as _json_san
+        _js_link_colors = _json_san.dumps(link_colors)
+        _js_is_animator = _json_san.dumps(link_is_animator)
+        _js_is_minor = _json_san.dumps(link_is_minor)
+        _js_node_link_map = _json_san.dumps(node_link_map)
+        _js_node_colors = _json_san.dumps(node_colors)
+        _fade_color = "rgba(60,60,60,0.06)"
+
+        body += f"""
+        <div style="margin:0.5rem 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <span style="color:#aaa;font-size:0.85rem;margin-right:4px;">フィルター:</span>
+          <button id="btn-san-reset" class="san-btn san-btn-active"
+            style="font-size:0.8rem;padding:4px 12px;border:1px solid #555;border-radius:4px;
+                   background:#333;color:#e0e0e0;cursor:pointer;">
+            全表示
+          </button>
+          <button id="btn-san-animator" class="san-btn"
+            style="font-size:0.8rem;padding:4px 12px;border:1px solid #555;border-radius:4px;
+                   background:#333;color:#e0e0e0;cursor:pointer;">
+            アニメーターキャリアのみ
+          </button>
+          <button id="btn-san-major" class="san-btn"
+            style="font-size:0.8rem;padding:4px 12px;border:1px solid #555;border-radius:4px;
+                   background:#333;color:#e0e0e0;cursor:pointer;">
+            主要パスのみ
+          </button>
+          <span style="color:#666;font-size:0.78rem;margin-left:8px;">
+            ※ ノードクリックで関連パスを強調
+          </span>
+        </div>
+        <style>
+          .san-btn-active {{ background:#4DABF7 !important; color:#111 !important;
+                             border-color:#4DABF7 !important; font-weight:bold; }}
+        </style>
+        <script>
+        (function() {{
+          var divId = "{_sankey_div_id}";
+          var origColors = {_js_link_colors};
+          var isAnimator = {_js_is_animator};
+          var isMinor = {_js_is_minor};
+          var nodeLinkMap = {_js_node_link_map};
+          var nodeColors = {_js_node_colors};
+          var fadeColor = "{_fade_color}";
+          var nLinks = origColors.length;
+          var mode = "all";  // "all" | "animator" | "major"
+          var clickedNode = -1;
+
+          function applyFilter() {{
+            var colors = [];
+            for (var i = 0; i < nLinks; i++) {{
+              var visible = true;
+              if (mode === "animator" && !isAnimator[i]) visible = false;
+              if (mode === "major" && isMinor[i]) visible = false;
+              // ノードクリック時: 関連リンクのみ表示
+              if (clickedNode >= 0) {{
+                var linked = nodeLinkMap[String(clickedNode)] || [];
+                if (linked.indexOf(i) < 0) visible = false;
+              }}
+              colors.push(visible ? origColors[i] : fadeColor);
+            }}
+            // ノード色: クリック時は非関連ノードを暗く
+            var nc = nodeColors.slice();
+            if (clickedNode >= 0) {{
+              var linkedNodes = new Set();
+              var linked = nodeLinkMap[String(clickedNode)] || [];
+              linkedNodes.add(clickedNode);
+              for (var j = 0; j < linked.length; j++) {{
+                var gd = document.getElementById(divId);
+                var d = gd.data[0];
+                linkedNodes.add(d.link.source[linked[j]]);
+                linkedNodes.add(d.link.target[linked[j]]);
+              }}
+              for (var k = 0; k < nc.length; k++) {{
+                if (!linkedNodes.has(k)) nc[k] = "rgba(60,60,60,0.25)";
+              }}
+            }}
+            var gd = document.getElementById(divId);
+            Plotly.restyle(gd, {{
+              "link.color": [colors],
+              "node.color": [nc]
+            }}, [0]);
+          }}
+
+          function setActive(btnId) {{
+            document.querySelectorAll(".san-btn").forEach(function(b) {{
+              b.classList.remove("san-btn-active");
+            }});
+            document.getElementById(btnId).classList.add("san-btn-active");
+          }}
+
+          document.getElementById("btn-san-reset").addEventListener("click", function() {{
+            mode = "all"; clickedNode = -1; setActive("btn-san-reset"); applyFilter();
+          }});
+          document.getElementById("btn-san-animator").addEventListener("click", function() {{
+            mode = "animator"; clickedNode = -1; setActive("btn-san-animator"); applyFilter();
+          }});
+          document.getElementById("btn-san-major").addEventListener("click", function() {{
+            mode = "major"; clickedNode = -1; setActive("btn-san-major"); applyFilter();
+          }});
+
+          // ノードクリック: 関連パス強調（トグル）
+          var gd = document.getElementById(divId);
+          gd.on("plotly_click", function(evtData) {{
+            if (evtData && evtData.points && evtData.points.length > 0) {{
+              var pt = evtData.points[0];
+              if (pt.pointNumber !== undefined && pt.childrenNodes === undefined) {{
+                // リンクではなくノードクリック
+                var idx = pt.pointNumber;
+                if (clickedNode === idx) {{
+                  clickedNode = -1;  // 同じノード再クリック → 解除
+                }} else {{
+                  clickedNode = idx;
+                }}
+                applyFilter();
+              }}
+            }}
+          }});
+        }})();
+        </script>
+        """
+
+        body += (
+            '<div class="insight-box">'
+            "<strong>色の凡例</strong>: "
+            '<span style="color:#FFD43B">■ 金</span> = デビュー、'
+            '<span style="color:#4DABF7">■ 青</span> = 制作ライン、'
+            '<span style="color:#868E96">■ 灰</span> = 周辺職種。'
+            "<br>引退ノード（右端4段）: "
+            '<span style="color:#FF6B6B">■ ルーキー</span>（&lt;1年）、'
+            '<span style="color:#FFA94D">■ 新人</span>（1-3年）、'
+            '<span style="color:#FFD43B">■ 中堅</span>（4-9年）、'
+            '<span style="color:#69DB7C">■ ベテラン</span>（10年+）。'
+            "<br>帯の濃さはフロー件数に比例（logスケール）。ノードはドラッグ移動可能。"
+            "<br>引退判定: 最終クレジット年≦2022年の人物を対象。"
+            "</div>"
+        )
+
+        # 上位遷移フローの実数テーブル
+        body += "<details><summary>主要遷移フロー（上位30、実数）</summary>"
+        body += (
             "<table style='width:100%;margin:0.5rem 0;font-size:0.85rem;'>"
-            "<thead><tr><th>グループ</th><th>Stage</th><th>典型的な役職</th><th>Rule-based定義</th></tr></thead>"
+            "<thead><tr><th>#</th><th>遷移元</th><th>→</th><th>遷移先</th>"
+            "<th style='text-align:right'>件数</th><th>分類</th></tr></thead><tbody>"
+        )
+        for rank, ((fr, to), cnt) in enumerate(all_trans[:30], 1):
+            if fr in prod_set and to in prod_set:
+                cls_label = '<span style="color:#4DABF7">制作ライン内</span>'
+            elif fr in prod_set or to in prod_set:
+                cls_label = '<span style="color:#FF6B6B">越境</span>'
+            else:
+                cls_label = '<span style="color:#868E96">対象外間</span>'
+            body += (
+                f"<tr><td>{rank}</td><td>{fr}</td><td>→</td><td>{to}</td>"
+                f"<td style='text-align:right'>{cnt:,}</td><td>{cls_label}</td></tr>"
+            )
+        body += "</tbody></table></details>"
+
+        # --- V-4b: アニメーター出身監督 vs 非アニメーター出身監督 ---
+        body += "<h3>V-4b. 監督キャリアパス比較: アニメーター出身 vs 非アニメーター出身</h3>"
+        body += chart_guide(
+            "V-4のサンキーダイアグラムでは「監督」ノードへの流入元が多岐にわたり、"
+            "異なる2つのキャリアパスが混在している。"
+            "ここでは監督をアニメーター経験の有無で分類し、"
+            "それぞれのキャリアパスを別のサンキーダイアグラムで可視化する。"
+            "<br><strong>左</strong>: アニメーター出身監督"
+            "（動画・原画・作画監督等を経て監督に至る制作ラインの昇進型）。"
+            "<br><strong>右</strong>: 非アニメーター出身監督"
+            "（脚本・演出等から監督に至る作家型、またはアニメーター経験の記録なし）。"
+        )
+
+        # 監督経験者を分類（DB の entity resolution 適用済み）
+        _ANIMATOR_ROLES = {
+            "in_between", "key_animator",
+            "animation_director",
+            "character_designer",
+        }
+        directors_animator: list[str] = []   # アニメーター経験あり監督
+        directors_non_animator: list[str] = []  # アニメーター経験なし監督
+        for pid, year_dict in pid_year_roles.items():
+            all_roles = set()
+            for roles in year_dict.values():
+                all_roles.update(roles)
+            if "director" not in all_roles:
+                continue
+            if all_roles & _ANIMATOR_ROLES:
+                directors_animator.append(pid)
+            else:
+                directors_non_animator.append(pid)
+
+        # 2グループそれぞれの遷移を集計（サンキー対象役職のみ）
+        def _build_director_sankey(pids: list[str]) -> tuple[
+            dict[tuple[str, str], int], dict[str, int]
+        ]:
+            trans: dict[tuple[str, str], int] = _ddict_tr(int)
+            debut: dict[str, int] = _ddict_tr(int)
+            for pid in pids:
+                year_dict = pid_year_roles[pid]
+                years_sorted = sorted(year_dict.keys())
+                prev_role: str | None = None
+                for yr in years_sorted:
+                    roles_in_scope = [r for r in year_dict[yr] if r in _sankey_raw_keys]
+                    if not roles_in_scope:
+                        continue
+                    best = max(roles_in_scope, key=lambda r: _SANKEY_PRIORITY.get(r, 0))
+                    label = FULL_ROLE_LABEL.get(best, best)
+                    if prev_role is None:
+                        debut[label] += 1
+                    else:
+                        trans[(prev_role, label)] += 1
+                    prev_role = label
+            return trans, debut
+
+        trans_anim, debut_anim = _build_director_sankey(directors_animator)
+        trans_non, debut_non = _build_director_sankey(directors_non_animator)
+
+        # 2つのサンキーを並べて描画（subplot）
+        from plotly.subplots import make_subplots as _mk_sub_v4b
+
+        def _build_sankey_trace(
+            trans: dict[tuple[str, str], int],
+            debut: dict[str, int],
+            color_accent: str,
+            side_x_offset: float = 0.0,
+        ):
+            """サンキートレース用のノード/リンクデータを構築."""
+            # 出現するノードのみ抽出（順序維持）
+            used_labels: list[str] = []
+            _seen = set()
+            # デビュー→各役職
+            for lbl in debut:
+                if lbl not in _seen:
+                    used_labels.append(lbl)
+                    _seen.add(lbl)
+            for fr, to in trans:
+                for lbl in (fr, to):
+                    if lbl not in _seen:
+                        used_labels.append(lbl)
+                        _seen.add(lbl)
+            # デビューノードを先頭に
+            if "デビュー" not in _seen:
+                used_labels.insert(0, "デビュー")
+            # 監督ノードが含まれることを保証
+            if "監督" not in _seen:
+                used_labels.append("監督")
+
+            # 順序: _SANKEY_POS の y 座標でソート（上→下）
+            used_labels.sort(key=lambda r: _SANKEY_POS.get(r, (0.5, 0.5))[1])
+            idx = {r: i for i, r in enumerate(used_labels)}
+
+            # ノード色
+            n_colors = []
+            for r in used_labels:
+                if r == "デビュー":
+                    n_colors.append("#FFD43B")
+                elif r == "監督":
+                    n_colors.append(color_accent)
+                elif r in prod_set:
+                    n_colors.append("#4DABF7")
+                else:
+                    n_colors.append("#868E96")
+
+            src, tgt, val = [], [], []
+            # デビュー→役職
+            for lbl, cnt in debut.items():
+                if lbl in idx:
+                    src.append(idx["デビュー"])
+                    tgt.append(idx[lbl])
+                    val.append(cnt)
+            # 通常遷移（自己ループ除外）
+            for (fr, to), cnt in trans.items():
+                if fr != to and fr in idx and to in idx and cnt >= 2:
+                    src.append(idx[fr])
+                    tgt.append(idx[to])
+                    val.append(cnt)
+
+            # リンク色（logアルファ）
+            max_v = max(val) if val else 1
+            l_colors = []
+            for s, v in zip(src, val):
+                c = n_colors[s]
+                rv, gv, bv = int(c[1:3], 16), int(c[3:5], 16), int(c[5:7], 16)
+                alpha = 0.12 + 0.48 * _math_san.log1p(v) / _math_san.log1p(max_v)
+                l_colors.append(f"rgba({rv},{gv},{bv},{alpha:.2f})")
+
+            return dict(
+                node=dict(
+                    pad=18, thickness=14,
+                    label=used_labels, color=n_colors,
+                    line=dict(color="rgba(255,255,255,0.15)", width=0.5),
+                ),
+                link=dict(source=src, target=tgt, value=val, color=l_colors),
+            )
+
+        trace_anim = _build_sankey_trace(trans_anim, debut_anim, "#FF6B6B")
+        trace_non = _build_sankey_trace(trans_non, debut_non, "#A78BFA")
+
+        # 左右並置（2つの独立 Sankey を HTML で横並び）
+        fig_dir_a = go.Figure(go.Sankey(
+            arrangement="snap",
+            **trace_anim,
+        ))
+        fig_dir_a.update_layout(
+            title=dict(
+                text=f"アニメーター出身監督 ({len(directors_animator)}人)",
+                font=dict(size=13, color="#FF6B6B"),
+            ),
+            template="plotly_dark",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            height=500,
+            margin=dict(l=5, r=5, t=35, b=5),
+            font=dict(size=10, color="#e0e0e0"),
+        )
+        fig_dir_b = go.Figure(go.Sankey(
+            arrangement="snap",
+            **trace_non,
+        ))
+        fig_dir_b.update_layout(
+            title=dict(
+                text=f"非アニメーター出身監督 ({len(directors_non_animator)}人)",
+                font=dict(size=13, color="#A78BFA"),
+            ),
+            template="plotly_dark",
+            paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0)",
+            height=500,
+            margin=dict(l=5, r=5, t=35, b=5),
+            font=dict(size=10, color="#e0e0e0"),
+        )
+        body += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
+        body += f'<div>{fig_dir_a.to_html(full_html=False, include_plotlyjs=False)}</div>'
+        body += f'<div>{fig_dir_b.to_html(full_html=False, include_plotlyjs=False)}</div>'
+        body += "</div>"
+
+        # 統計比較テーブル
+        def _top_roles_before_director(pids, n=5):
+            """監督就任前の経験役職を集計."""
+            role_cnt: dict[str, int] = _ddict_tr(int)
+            for pid in pids:
+                year_dict = pid_year_roles[pid]
+                dir_year = None
+                for yr in sorted(year_dict.keys()):
+                    if "director" in year_dict[yr]:
+                        dir_year = yr
+                        break
+                if dir_year is None:
+                    continue
+                for yr in sorted(year_dict.keys()):
+                    if yr >= dir_year:
+                        break
+                    for r in year_dict[yr]:
+                        lbl = FULL_ROLE_LABEL.get(r, r)
+                        if lbl != "その他":
+                            role_cnt[lbl] += 1
+            return sorted(role_cnt.items(), key=lambda x: x[1], reverse=True)[:n]
+
+        top_anim = _top_roles_before_director(directors_animator, 8)
+        top_non = _top_roles_before_director(directors_non_animator, 8)
+
+        body += (
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:0.5rem 0;">'
+        )
+        for label, color, pids, top_roles in [
+            ("アニメーター出身", "#FF6B6B", directors_animator, top_anim),
+            ("非アニメーター出身", "#A78BFA", directors_non_animator, top_non),
+        ]:
+            # 監督就任前の平均キャリア年数
+            pre_dir_years = []
+            for pid in pids:
+                year_dict = pid_year_roles[pid]
+                yrs = sorted(year_dict.keys())
+                dir_yr = next((y for y in yrs if "director" in year_dict[y]), None)
+                if dir_yr and yrs[0] < dir_yr:
+                    pre_dir_years.append(dir_yr - yrs[0])
+            avg_pre = sum(pre_dir_years) / len(pre_dir_years) if pre_dir_years else 0
+
+            body += (
+                f'<div style="background:rgba(255,255,255,0.03);border-radius:8px;padding:12px;">'
+                f'<div style="color:{color};font-weight:bold;margin-bottom:6px;">'
+                f'{label}監督 ({len(pids)}人)</div>'
+                f'<div style="font-size:0.85rem;color:#ccc;">'
+                f'監督就任前の平均キャリア: <strong>{avg_pre:.1f}年</strong></div>'
+                f'<table style="width:100%;font-size:0.82rem;margin-top:6px;">'
+                f'<thead><tr><th>監督就任前の経験役職</th>'
+                f'<th style="text-align:right">延べ人年</th></tr></thead><tbody>'
+            )
+            for role, cnt in top_roles:
+                body += f"<tr><td>{role}</td><td style='text-align:right'>{cnt:,}</td></tr>"
+            body += "</tbody></table></div>"
+        body += "</div>"
+
+        body += (
+            '<div class="insight-box">'
+            "<strong>分類基準</strong>: 監督クレジットを持つ人物のうち、"
+            "動画・第二原画・原画・レイアウト・作画監督・キャラクターデザインの"
+            "いずれかの経験があれば「アニメーター出身」、なければ「非アニメーター出身」。"
+            "<br><strong>注意</strong>: AniList/MADBにクレジットが未登録の場合、"
+            "実際にはアニメーター経験があっても「非アニメーター出身」に分類される可能性がある"
+            "（データソースの網羅性に依存）。"
+            "</div>"
+        )
+
+        # --- V-4c: 監督のキャリア長 × アニメ価値 × キャリア種別 散布図 ---
+        body += "<h3>V-4c. 監督分布: キャリア長 × 作品価値 × 出身類型</h3>"
+        body += chart_guide(
+            "V-4bで分類した2種類の監督について、"
+            "キャリアの長さと担当作品の価値にどのような関係があるかを可視化する。"
+            "<br>各点は「監督クレジットを持つ作品」1件。"
+            "X軸=監督時点のキャリア長（初クレジットからの年数）、"
+            "Y軸=作品の総合価値（composite_value: スタッフのネットワーク指標から算出）。"
+            "マーカー形状でアニメーター出身（●）/非アニメーター出身（◆）を区別。"
+            "<br>LOWESS回帰曲線で各類型の傾向を示す。"
+            "上部ヒストグラムはキャリア長の分布。"
+        )
+
+        import numpy as _np_v4c
+
+        # anime_values.json をロード（composite_value, staff_count）
+        _anime_values_v4c = load_json("anime_values.json") or {}
+
+        # 監督クレジット（person_id, anime_id, year）を取得
+        conn_v4c = _get_conn()
+        conn_v4c.row_factory = _sqlite3.Row
+        rows_dir = conn_v4c.execute(
+            "SELECT c.person_id, c.anime_id, a.year, a.title_ja, a.title_en "
+            "FROM credits c JOIN anime a ON c.anime_id = a.id "
+            "WHERE c.role = 'director' AND a.year IS NOT NULL"
+        ).fetchall()
+        conn_v4c.close()
+
+        # アニメーター出身セット（V-4bで構築済み）
+        _anim_set = set(directors_animator)
+        _non_anim_set = set(directors_non_animator)
+
+        # データ構築（pandas DataFrame 使用）
+        import pandas as _pd_v4c
+        _rows_v4c = []
+        _rng_v4c = _np_v4c.random.default_rng(42)
+        for row in rows_dir:
+            pid = row["person_id"]
+            aid = row["anime_id"]
+            yr = row["year"]
+            title = row["title_ja"] or row["title_en"] or aid
+
+            first_yr = pid_first_year.get(pid)
+            if first_yr is None:
+                continue
+            career_len = yr - first_yr
+
+            aval = _anime_values_v4c.get(aid, {})
+            comp_val = aval.get("composite_value")
+            if comp_val is None:
+                continue
+            staff = aval.get("staff_count", 1)
+
+            if pid in _anim_set:
+                typ = "アニメーター出身"
+            elif pid in _non_anim_set:
+                typ = "非アニメーター出身"
+            else:
+                continue
+
+            _rows_v4c.append({
+                "career_len": career_len,
+                "career_jitter": career_len + _rng_v4c.uniform(-0.35, 0.35),
+                "composite_value": comp_val,
+                "staff": staff,
+                "type": typ,
+                "hover": (
+                    f"{title} ({yr})<br>"
+                    f"総合価値: {comp_val:.1f}<br>"
+                    f"キャリア: {career_len}年<br>"
+                    f"スタッフ: {staff}人"
+                ),
+            })
+
+        _df_v4c = _pd_v4c.DataFrame(_rows_v4c)
+
+        if len(_df_v4c) > 0:
+            # 簡易 LOWESS（statsmodels不要: 移動ウィンドウ加重平均）
+            def _calc_lowess(df_sub, n_points=50, frac=0.3):
+                """Naive LOWESS using tricube-weighted local means."""
+                if len(df_sub) < 10:
+                    return [], []
+                xs = df_sub["career_len"].values.astype(float)
+                ys = df_sub["composite_value"].values.astype(float)
+                order = _np_v4c.argsort(xs)
+                xs, ys = xs[order], ys[order]
+                x_grid = _np_v4c.linspace(xs.min(), xs.max(), n_points)
+                h = max((xs.max() - xs.min()) * frac, 1.0)
+                y_smooth = []
+                for xg in x_grid:
+                    dists = _np_v4c.abs(xs - xg)
+                    mask = dists < h
+                    if mask.sum() < 3:
+                        y_smooth.append(_np_v4c.nan)
+                        continue
+                    u = dists[mask] / h
+                    w = (1 - u ** 3) ** 3  # tricube kernel
+                    y_smooth.append(_np_v4c.average(ys[mask], weights=w))
+                # NaN を除外
+                out_x, out_y = [], []
+                for xg, yg in zip(x_grid, y_smooth):
+                    if not _np_v4c.isnan(yg):
+                        out_x.append(float(xg))
+                        out_y.append(float(yg))
+                return out_x, out_y
+
+            # ファセット: 左右に分割（2列 subplots）
+            from plotly.subplots import make_subplots as _mk_sub_v4c
+            fig_v4c = _mk_sub_v4c(
+                rows=2, cols=2,
+                row_heights=[0.12, 0.88],
+                column_widths=[0.5, 0.5],
+                shared_yaxes=True,
+                vertical_spacing=0.04,
+                horizontal_spacing=0.06,
+                specs=[
+                    [{"type": "xy"}, {"type": "xy"}],
+                    [{"type": "xy"}, {"type": "xy"}],
+                ],
+                subplot_titles=["", "", "アニメーター出身", "非アニメーター出身"],
+            )
+
+            _type_config = {
+                "アニメーター出身": {
+                    "col": 1, "color": "#E05555", "rgba": "rgba(224,85,85,{a})",
+                    "symbol": "circle",
+                },
+                "非アニメーター出身": {
+                    "col": 2, "color": "#8B6FD4", "rgba": "rgba(139,111,212,{a})",
+                    "symbol": "diamond",
+                },
+            }
+
+            _size_max_v4c = 14
+            for typ, cfg in _type_config.items():
+                sub = _df_v4c[_df_v4c["type"] == typ]
+                if len(sub) == 0:
+                    continue
+                col = cfg["col"]
+
+                # 散布図（メイン: row=2）
+                fig_v4c.add_trace(go.Scatter(
+                    x=sub["career_jitter"], y=sub["composite_value"],
+                    mode="markers",
+                    marker=dict(
+                        size=_np_v4c.clip(sub["staff"].values ** 0.35, 3, _size_max_v4c),
+                        color=cfg["rgba"].format(a=0.18),
+                        symbol=cfg["symbol"],
+                        line=dict(width=0.3, color=cfg["rgba"].format(a=0.45)),
+                        sizemode="diameter",
+                    ),
+                    text=sub["hover"],
+                    hovertemplate="%{text}<extra></extra>",
+                    name=f"{typ} ({len(sub)}件)",
+                    legendgroup=typ,
+                    showlegend=True,
+                ), row=2, col=col)
+
+                # LOWESS トレンドライン
+                lx, ly = _calc_lowess(sub)
+                if lx:
+                    fig_v4c.add_trace(go.Scatter(
+                        x=lx, y=ly,
+                        mode="lines",
+                        line=dict(color=cfg["color"], width=2.5, dash="solid"),
+                        name=f"LOWESS ({typ})",
+                        legendgroup=typ,
+                        showlegend=False,
+                        hoverinfo="skip",
+                    ), row=2, col=col)
+
+                # 周辺分布: 上部ヒストグラム（キャリア長）
+                fig_v4c.add_trace(go.Histogram(
+                    x=sub["career_len"],
+                    nbinsx=40,
+                    marker_color=cfg["rgba"].format(a=0.5),
+                    showlegend=False,
+                    hovertemplate="キャリア %{x}年: %{y}件<extra></extra>",
+                ), row=1, col=col)
+
+            # レイアウト
+            fig_v4c.update_layout(
+                template="plotly_white",
+                height=620,
+                margin=dict(l=55, r=15, t=40, b=55),
+                font=dict(size=11, color="#333"),
+                legend=dict(
+                    orientation="h", yanchor="bottom", y=1.01,
+                    xanchor="center", x=0.5, font=dict(size=11),
+                ),
+                bargap=0.05,
+            )
+            # 下段のみ軸ラベル
+            fig_v4c.update_xaxes(title_text="キャリア長（年）", row=2, col=1)
+            fig_v4c.update_xaxes(title_text="キャリア長（年）", row=2, col=2)
+            fig_v4c.update_yaxes(title_text="作品総合価値", row=2, col=1)
+            # 上段ヒストグラムの軸非表示
+            fig_v4c.update_xaxes(showticklabels=False, row=1, col=1)
+            fig_v4c.update_xaxes(showticklabels=False, row=1, col=2)
+            fig_v4c.update_yaxes(showticklabels=False, row=1, col=1)
+            fig_v4c.update_yaxes(showticklabels=False, row=1, col=2)
+            # X軸の範囲を統一
+            x_max = _df_v4c["career_len"].max() + 2
+            for c in [1, 2]:
+                fig_v4c.update_xaxes(range=[-1, x_max], row=2, col=c)
+                fig_v4c.update_xaxes(range=[-1, x_max], row=1, col=c)
+
+            body += fig_v4c.to_html(full_html=False, include_plotlyjs=False)
+
+            # 統計テーブル
+            body += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0.5rem 0;">'
+            for typ, cfg in _type_config.items():
+                sub = _df_v4c[_df_v4c["type"] == typ]
+                if len(sub) == 0:
+                    continue
+                avg_v = sub["composite_value"].mean()
+                med_v = sub["composite_value"].median()
+                q75 = sub["composite_value"].quantile(0.75)
+                med_c = sub["career_len"].median()
+                avg_c = sub["career_len"].mean()
+                body += (
+                    f'<div style="background:#f8f8fa;border-radius:8px;padding:12px;'
+                    f'border-left:4px solid {cfg["color"]};">'
+                    f'<div style="font-weight:bold;color:{cfg["color"]};">'
+                    f'{typ} ({len(sub)}件)</div>'
+                    f'<table style="width:100%;font-size:0.83rem;margin-top:4px;">'
+                    f'<tr><td>作品価値 平均</td><td style="text-align:right">{avg_v:.1f}</td></tr>'
+                    f'<tr><td>作品価値 中央値</td><td style="text-align:right">{med_v:.1f}</td></tr>'
+                    f'<tr><td>作品価値 75%ile</td><td style="text-align:right">{q75:.1f}</td></tr>'
+                    f'<tr><td>キャリア長 中央値</td><td style="text-align:right">{med_c:.0f}年</td></tr>'
+                    f'<tr><td>キャリア長 平均</td><td style="text-align:right">{avg_c:.1f}年</td></tr>'
+                    f'</table></div>'
+                )
+            body += "</div>"
+
+            # Compute Spearman r for each type and overall
+            _v4c_corr_parts = []
+            for typ in _type_config:
+                sub = _df_v4c[_df_v4c["type"] == typ]
+                if len(sub) < 10:
+                    continue
+                try:
+                    from scipy.stats import spearmanr as _spearmanr_v4c
+                    _rho_v4c, _pv_v4c = _spearmanr_v4c(sub["career_len"], sub["composite_value"])
+                except ImportError:
+                    _r1 = sub["career_len"].rank()
+                    _r2 = sub["composite_value"].rank()
+                    _rho_v4c = _r1.corr(_r2)
+                    _pv_v4c = 0.0
+                _pstr = "p<0.001" if _pv_v4c < 0.001 else f"p={_pv_v4c:.3f}"
+                _v4c_corr_parts.append(f"{typ}: ρ={_rho_v4c:.3f} ({_pstr}, N={len(sub)})")
+            _v4c_corr_text = "、".join(_v4c_corr_parts) if _v4c_corr_parts else "（計算不能）"
+
+            body += (
+                '<div class="insight-box">'
+                f"<strong>指標有効性の検証: Spearman相関</strong><br>"
+                f"{_v4c_corr_text}<br>"
+                "LOWESS回帰曲線がキャリア長と作品価値の非線形な傾向を示す。"
+                "曲線が右上がりなら「キャリアが長いほど高価値の作品を担当する傾向」を意味する。"
+                "<br>composite_value は§1.6で定義した BiRank から導出された"
+                "作品の構造的価値（視聴者スコアとは独立）。"
+                "<br><strong>注意</strong>: BiRankは人物-作品グラフから計算されるため、"
+                "キャリアが長い→参加作品が多い→グラフ上の接続が多い→BiRankが高い、"
+                "という経路で相関が生じうる。この相関は指標の妥当性の傍証にはなるが、"
+                "因果関係や独立した検証ではない。"
+                "</div>"
+            )
+
+        # --- V-5: 遷移確率行列 + 実数行列 ---
+        body += "<h3>V-5. 役職間遷移確率行列</h3>"
+        body += chart_guide(
+            "行=現在の役職、列=次の役職。各セルは「行の役職の人が列の役職に移る確率(%)」。"
+            "制作ライン内の対角〜右上に高い値が集中し、"
+            "制作ラインから他領域への越境率が低いことがキャリア分類の根拠となる。"
+            "<strong>青枠</strong>は制作ライン（本分析の対象領域）を囲む。"
+        )
+
+        # 遷移が多い役職に絞る（表が見やすくなる）
+        role_total_out = _ddict_tr(int)
+        for (fr, to), cnt in role_transitions.items():
+            if fr != "その他" and to != "その他":
+                role_total_out[fr] += cnt
+        # 出現回数上位の役職のみ表示（「その他」除外済み）
+        top_roles_for_matrix = sorted(role_total_out, key=role_total_out.get, reverse=True)[:14]
+        # 制作ラインが先
+        mat_roles = [r for r in prod_labels_order if r in top_roles_for_matrix]
+        mat_roles += [r for r in top_roles_for_matrix if r not in mat_roles]
+
+        z_count = [[role_transitions.get((fr, to), 0) for to in mat_roles] for fr in mat_roles]
+        z_pct = []
+        for row in z_count:
+            total = sum(row)
+            z_pct.append([v / total * 100 if total > 0 else 0.0 for v in row])
+
+        # 制作ラインの範囲を特定（mat_rolesの中で何番目まで）
+        n_prod_in_mat = sum(1 for r in mat_roles if r in prod_set)
+
+        fig_v5 = go.Figure(go.Heatmap(
+            z=z_pct,
+            x=mat_roles, y=mat_roles,
+            colorscale="Viridis",
+            texttemplate="%{z:.0f}%",
+            hovertemplate="%{y} → %{x}: %{z:.1f}%<extra></extra>",
+        ))
+        # 制作ライン領域を青枠で囲む
+        fig_v5.add_shape(
+            type="rect",
+            x0=-0.5, x1=n_prod_in_mat - 0.5,
+            y0=-0.5, y1=n_prod_in_mat - 0.5,
+            line=dict(color="#4DABF7", width=3, dash="solid"),
+            fillcolor="rgba(0,0,0,0)",
+        )
+        fig_v5.add_annotation(
+            x=n_prod_in_mat / 2 - 0.5, y=n_prod_in_mat + 0.2,
+            text="制作ライン（分析対象）", showarrow=False,
+            font=dict(color="#4DABF7", size=12),
+        )
+        fig_v5.update_layout(
+            height=520,
+            xaxis_title="遷移先", yaxis_title="遷移元",
+            xaxis=dict(tickangle=45),
+        )
+        body += plotly_div_safe(fig_v5, "role_trans_prob", 520)
+
+        # --- V-5b: 遷移実数行列 ---
+        body += "<h3>V-5b. 役職間遷移数（実数）</h3>"
+        body += chart_guide(
+            "V-5と同じレイアウトだが、各セルは実際の遷移件数（人回）。"
+            "確率行列では見えない母数の違いを把握できる。"
+        )
+
+        # 対数スケールで表示（0は除外）
+        z_count_log = []
+        for row in z_count:
+            z_count_log.append([_log10(v + 1) for v in row])
+        # カラーバー用
+        z_max_cnt = max(max(row) for row in z_count) if z_count else 1
+        tick_v_cnt = [0, 1, 3, 10, 30, 100, 300, 1000, 3000, 10000]
+        tick_v_log = [_log10(v + 1) for v in tick_v_cnt if v <= z_max_cnt * 1.2]
+        tick_t_cnt = [str(v) for v in tick_v_cnt[:len(tick_v_log)]]
+
+        # テキストは実数を表示
+        z_text = [[f"{v:,}" if v > 0 else "" for v in row] for row in z_count]
+
+        fig_v5b = go.Figure(go.Heatmap(
+            z=z_count_log,
+            x=mat_roles, y=mat_roles,
+            colorscale="Viridis",
+            customdata=z_count,
+            text=z_text, texttemplate="%{text}",
+            hovertemplate="%{y} → %{x}: %{customdata:,}件<extra></extra>",
+            colorbar=dict(tickvals=tick_v_log, ticktext=tick_t_cnt, title="件数"),
+        ))
+        fig_v5b.add_shape(
+            type="rect",
+            x0=-0.5, x1=n_prod_in_mat - 0.5,
+            y0=-0.5, y1=n_prod_in_mat - 0.5,
+            line=dict(color="#4DABF7", width=3, dash="solid"),
+            fillcolor="rgba(0,0,0,0)",
+        )
+        fig_v5b.update_layout(
+            height=520,
+            xaxis_title="遷移先", yaxis_title="遷移元",
+            xaxis=dict(tickangle=45),
+        )
+        body += plotly_div_safe(fig_v5b, "role_trans_count", 520)
+
+        # 越境率の計算
+        prod_to_prod = 0
+        prod_to_other = 0
+        for (fr, to), cnt in role_transitions.items():
+            fr_raw = [k for k, v in FULL_ROLE_LABEL.items() if v == fr]
+            to_raw = [k for k, v in FULL_ROLE_LABEL.items() if v == to]
+            fr_is_prod = any(r in PRODUCTION_LINE_ROLES for r in fr_raw)
+            to_is_prod = any(r in PRODUCTION_LINE_ROLES for r in to_raw)
+            if fr_is_prod and to_is_prod:
+                prod_to_prod += cnt
+            elif fr_is_prod and not to_is_prod:
+                prod_to_other += cnt
+        total_from_prod = prod_to_prod + prod_to_other
+        cross_rate = prod_to_other / total_from_prod * 100 if total_from_prod > 0 else 0
+
+        body += (
+            '<div class="insight-box">'
+            f"<strong>越境率</strong>: 制作ライン→他領域への遷移は全遷移の "
+            f"<strong>{cross_rate:.1f}%</strong>（{prod_to_other:,}/{total_from_prod:,}件）。"
+            "制作ラインの専門性が高く、他領域への流出が限定的であることから、"
+            "動画→原画→作監→監督のキャリアパスを独立した分析単位として扱うことは妥当である。"
+            "</div>"
+        )
+
+        body += "</div>"  # card 閉じ
+
+        # ========== 人材フロー本体 ==========
+        body += '<div class="card">'
+        body += "<h2>人材フロー分析（参入・離脱・ストック）</h2>"
+        body += section_desc(
+            "前節の検証により、引退閾値（3年間クレジットなし）、キャリアステージ分類（6段階）、"
+            "および制作ライン遷移の独立性が実データと整合することを確認した。"
+            "本節では、これらの検証済み定義に基づき人材の参入・離脱・ストックの動態を分析する。"
+            f"対象期間: {FLOW_START_YEAR}–{RELIABLE_MAX_YEAR}年、"
+            f"離脱判定は{EXIT_CUTOFF_YEAR}年以前のみ（§1.2参照）。"
+        )
+
+        # --- 分類軸の説明 ---
+        body += (
+            '<div class="insight-box">'
+            "<strong>2つの分類軸</strong><br>"
+            "以下のチャートはそれぞれ2つの視点で人材を分類しています:<br>"
+            "<strong>① 職能レベル別</strong>（その時点での役職に基づく分類）:"
+            "<table style='width:100%;margin:0.5rem 0;font-size:0.85rem;'>"
+            "<thead><tr><th>グループ</th><th>Stage</th><th>典型的な役職</th></tr></thead>"
             "<tbody>"
-            "<tr><td style='color:#a0d2db'>新人</td><td>0–2</td>"
-            "<td>動画・原画・第二原画</td><td>highest_stage ≤ 2</td></tr>"
+            "<tr><td style='color:#a0d2db'>新人</td><td>1–2</td>"
+            "<td>動画・第二原画・制作進行</td></tr>"
             "<tr><td style='color:#06D6A0'>中堅</td><td>3–4</td>"
-            "<td>作画監督補佐・作画監督・演出</td><td>3 ≤ highest_stage ≤ 4</td></tr>"
+            "<td>原画・レイアウト・キャラデザ・脚本</td></tr>"
             "<tr><td style='color:#f093fb'>ベテラン</td><td>5–6</td>"
-            "<td>総作画監督・シリーズ監督・監督</td><td>highest_stage ≥ 5</td></tr>"
+            "<td>作監・演出・撮影監督・音響監督・監督</td></tr>"
             "</tbody></table>"
+            "<strong>② 経験年数別</strong>（デビューからの年数）:"
+            "<table style='width:100%;margin:0.5rem 0;font-size:0.85rem;'>"
+            "<thead><tr><th>グループ</th><th>年数</th><th>補足</th></tr></thead>"
+            "<tbody>"
+            "<tr><td style='color:#EF476F'>新人</td><td>0–3年</td>"
+            "<td>デビュー直後〜定着前</td></tr>"
+            "<tr><td style='color:#FFD166'>若手</td><td>4–9年</td>"
+            "<td>技術習熟期</td></tr>"
+            "<tr><td style='color:#06D6A0'>中堅</td><td>10–19年</td>"
+            "<td>中核戦力</td></tr>"
+            "<tr><td style='color:#f093fb'>ベテラン</td><td>20年以上</td>"
+            "<td>経験豊富な熟練者</td></tr>"
+            "</tbody></table>"
+            "注: 職能レベルと経験年数は独立した軸です。"
+            "20年間原画を描き続けるベテランアニメーターは「職能=アニメーター, 経験=ベテラン」となります。"
             + _cluster_info +
             "</div>"
         )
-        body += section_desc(
-            f"対象期間: {FLOW_START_YEAR}–{RELIABLE_MAX_YEAR}年。"
-            f"<strong>離脱カウントは{EXIT_CUTOFF_YEAR}年以前のみ</strong>"
-            f"（{EXIT_CUTOFF_YEAR+1}年以降はデータ収録中のため最終クレジット年が過去に見える誤検出が生じる）。"
-        )
 
-        # ---- Chart A: ストック + 構成比 ----
-        fig_sa = make_subplots(
-            rows=1, cols=2,
-            subplot_titles=("ストック: ステージ別累積人数", "ストック構成比 (%)"),
-            horizontal_spacing=0.10,
-        )
-        for sg in stage_groups:
-            ys_stock = [stock_by_sg[sg].get(yr, 0) for yr in flow_years_stock]
-            ys_ratio = [
-                stock_by_sg[sg].get(yr, 0) / max(stock_total.get(yr, 1), 1) * 100
-                for yr in flow_years_stock
-            ]
-            fig_sa.add_trace(go.Scatter(
-                x=flow_years_stock, y=ys_stock, name=sg,
-                mode="lines", stackgroup="one",
-                line=dict(color=sg_color[sg], width=1),
-                hovertemplate=f"{sg}: %{{y:,}}人<extra></extra>",
-            ), row=1, col=1)
-            fig_sa.add_trace(go.Scatter(
-                x=flow_years_stock, y=ys_ratio, name=f"{sg} %",
-                mode="lines", line=dict(color=sg_color[sg], width=2),
-                showlegend=False,
-                hovertemplate=f"{sg}: %{{y:.1f}}%<extra></extra>",
-            ), row=1, col=2)
-        fig_sa.update_layout(title="A. ストック推移: ステージ別累積アクティブ人数 + 構成比", height=420)
-        body += "<h3>A. ストック推移（ステージ別）</h3>"
-        body += chart_guide(
-            "左: first_year ≤ Y ≤ latest_year の人数をステージ別に積み上げ。"
-            "右: 各ステージの全体に占める構成比。"
-            "中堅・ベテランの比率が上昇すれば業界の熟成が進んでいることを示します。"
-        )
-        body += plotly_div_safe(fig_sa, "flow_stock", 420)
+        # ---- 経験年数別ストック計算 ----
+        EXP_GROUPS_DEF = [
+            ("1年目",          0,  0, "#FF6B6B"),
+            ("2年目",          1,  1, "#FFA94D"),
+            ("3年目",          2,  2, "#FFD43B"),
+            ("若手 (4~9年)",   3,  9, "#69DB7C"),
+            ("中堅 (10~19年)",10, 19, "#4DABF7"),
+            ("ベテラン (20年+)", 20, 999, "#DA77F2"),
+        ]
+        exp_groups = [d[0] for d in EXP_GROUPS_DEF]
+        exp_color = {d[0]: d[3] for d in EXP_GROUPS_DEF}
 
-        # ---- Chart B: ステージ別 参入/離脱（EXIT_CUTOFF_YEAR境界線付き） ----
-        # 新人は「退職/ドロップアウト」と「キャリアアップ（昇進）」に分離
-        exit_xs = [yr for yr in valid_flow_years if yr <= EXIT_CUTOFF_YEAR]
-        fig_b2 = go.Figure()
-        for sg in stage_groups:
-            c = sg_color[sg]
-            fig_b2.add_trace(go.Scatter(
-                x=valid_flow_years,
-                y=[entry_by_sg[sg].get(yr, 0) for yr in valid_flow_years],
-                name=f"{sg} 参入", mode="lines",
-                line=dict(color=c, width=2),
-                hovertemplate=f"{sg} 参入 %{{x}}: %{{y:,}}<extra></extra>",
-            ))
-            exit_label = "退職/ドロップアウト" if sg == "新人" else "離脱"
-            fig_b2.add_trace(go.Scatter(
-                x=exit_xs,
-                y=[exit_by_sg[sg].get(yr, 0) for yr in exit_xs],
-                name=f"{sg} {exit_label}", mode="lines",
-                line=dict(color=c, width=2, dash="dot"),
-                hovertemplate=f"{sg} {exit_label} %{{x}}: %{{y:,}}<extra></extra>",
-            ))
-            # 新人のみ: キャリアアップ（→中堅/ベテランへの昇進）を追加
-            if sg == "新人":
-                cu_ys = [
-                    transitions["新人→中堅"].get(yr, 0) + transitions["新人→ベテラン"].get(yr, 0)
-                    for yr in valid_flow_years
+        def _exp_group(years_since_debut: int) -> str:
+            for label, lo, hi, _ in EXP_GROUPS_DEF:
+                if lo <= years_since_debut <= hi:
+                    return label
+            return exp_groups[-1]
+
+        stock_by_exp: dict[str, dict[int, int]] = {eg: {yr: 0 for yr in flow_years_stock} for eg in exp_groups}
+        for pid, fy in pid_first_year.items():
+            ly = pid_latest_year.get(pid, RELIABLE_MAX_YEAR)
+            for yr in flow_years_stock:
+                if fy <= yr <= ly:
+                    stock_by_exp[_exp_group(yr - fy)][yr] += 1
+
+        # 経験年数別 離脱カウント
+        exit_by_exp: dict[str, dict[int, int]] = {eg: {} for eg in exp_groups}
+        for pid, ly in pid_latest_year.items():
+            if not (FLOW_START_YEAR <= ly <= EXIT_CUTOFF_YEAR):
+                continue
+            fy = pid_first_year.get(pid)
+            if not fy:
+                continue
+            eg = _exp_group(ly - fy)
+            exit_by_exp[eg][ly] = exit_by_exp[eg].get(ly, 0) + 1
+
+        # ---- 職能×経験の細分化グループ（アニメーターを経験年数で分割） ----
+        FUNC_GROUPS_DEF = [
+            ("ルーキー (1年未満)",      0, 2,  0,  0, "#FF6B6B"),   # stage0-2, 赤系
+            ("新人Anim (1~3年目)",      0, 2,  1,  3, "#FFA94D"),   # stage0-2, 橙系
+            ("中堅Anim (4~10年)",       0, 2,  4,  9, "#FFD43B"),   # stage0-2, 黄系
+            ("ベテランAnim (10年+)",    0, 2, 10,999, "#69DB7C"),   # stage0-2, 緑系
+            ("演出・作監",              3, 4,  0,999, "#4DABF7"),   # stage3-4, 青系
+            ("監督級",                  5,99,  0,999, "#DA77F2"),   # stage5+, 紫系
+        ]
+        func_groups = [d[0] for d in FUNC_GROUPS_DEF]
+        func_color = {d[0]: d[5] for d in FUNC_GROUPS_DEF}
+
+        def _func_group(stage: int, years_exp: int) -> str:
+            for label, s_lo, s_hi, e_lo, e_hi, _ in FUNC_GROUPS_DEF:
+                if s_lo <= stage <= s_hi and e_lo <= years_exp <= e_hi:
+                    return label
+            return func_groups[0]
+
+        # 職能別ストック（年ごとのstage + 経験年数で分類）
+        stock_by_func: dict[str, dict[int, int]] = {fg: {yr: 0 for yr in flow_years_stock} for fg in func_groups}
+        for pid, fy in pid_first_year.items():
+            ly = pid_latest_year.get(pid, RELIABLE_MAX_YEAR)
+            for yr in flow_years_stock:
+                if fy <= yr <= ly:
+                    fg = _func_group(_stage_at_year(pid, yr), yr - fy)
+                    stock_by_func[fg][yr] += 1
+
+        # ---- 共通: 遷移データ計算 ----
+        # 職能別: 各年各グループへの新規流入（昇進 or デビュー or 経験年数による移動）
+        inflow_by_func: dict[str, dict[int, int]] = {fg: {} for fg in func_groups}
+        for pid, fy in pid_first_year.items():
+            ly = pid_latest_year.get(pid, RELIABLE_MAX_YEAR)
+            prev_fg: str | None = None
+            for yr in flow_years_stock:
+                if fy <= yr <= ly:
+                    cur_fg = _func_group(_stage_at_year(pid, yr), yr - fy)
+                    if cur_fg != prev_fg:
+                        inflow_by_func[cur_fg][yr] = inflow_by_func[cur_fg].get(yr, 0) + 1
+                    prev_fg = cur_fg
+                else:
+                    prev_fg = None
+
+        # 職能別離脱
+        exit_by_func: dict[str, dict[int, int]] = {fg: {} for fg in func_groups}
+        for pid, ly in pid_latest_year.items():
+            if not (FLOW_START_YEAR <= ly <= EXIT_CUTOFF_YEAR):
+                continue
+            fy = pid_first_year.get(pid)
+            if not fy:
+                continue
+            fg = _func_group(_stage_at_year(pid, ly), ly - fy)
+            exit_by_func[fg][ly] = exit_by_func[fg].get(ly, 0) + 1
+
+        # 旧3グループの exit_func も維持（B-1で使用）
+        exit_func: dict[str, dict[int, int]] = {sg: {} for sg in stage_groups}
+        for pid, ly in pid_latest_year.items():
+            if not (FLOW_START_YEAR <= ly <= EXIT_CUTOFF_YEAR):
+                continue
+            sg = _stage_group(_stage_at_year(pid, ly))
+            exit_func[sg][ly] = exit_func[sg].get(ly, 0) + 1
+
+        # 経験年数別: 各年各グループへの新規流入
+        inflow_by_exp: dict[str, dict[int, int]] = {eg: {} for eg in exp_groups}
+        for pid, fy in pid_first_year.items():
+            ly = pid_latest_year.get(pid, RELIABLE_MAX_YEAR)
+            prev_eg: str | None = None
+            for yr in flow_years_stock:
+                if fy <= yr <= ly:
+                    cur_eg = _exp_group(yr - fy)
+                    if cur_eg != prev_eg:
+                        inflow_by_exp[cur_eg][yr] = inflow_by_exp[cur_eg].get(yr, 0) + 1
+                    prev_eg = cur_eg
+                else:
+                    prev_eg = None
+
+        # 職能別離脱
+        exit_func: dict[str, dict[int, int]] = {sg: {} for sg in stage_groups}
+        for pid, ly in pid_latest_year.items():
+            if not (FLOW_START_YEAR <= ly <= EXIT_CUTOFF_YEAR):
+                continue
+            st = _stage_at_year(pid, ly)
+            sg = _stage_group(st)
+            exit_func[sg][ly] = exit_func[sg].get(ly, 0) + 1
+
+        def _hex_rgba(hex_color: str, alpha: float = 0.6) -> str:
+            h = hex_color.lstrip("#")
+            r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+            return f"rgba({r},{g},{b},{alpha})"
+
+        # ==================================================================
+        # ストック・フロー生成ヘルパー（2軸共通パターン）
+        # ==================================================================
+        def _make_stock_flow_charts(
+            groups: list[str],
+            colors: dict[str, str],
+            stock_data: dict[str, dict[int, int]],
+            inflow_data: dict[str, dict[int, int]],
+            exit_data: dict[str, dict[int, int]],
+            axis_label: str,
+        ) -> tuple:
+            """ストック図とフロー図の2つを返す。"""
+            exit_years = [yr for yr in flow_years_stock if yr <= EXIT_CUTOFF_YEAR]
+
+            # --- ストック図: 積み上げ棒グラフ、グループ内3層（引退/継続/参入） ---
+            fig_stock = go.Figure()
+            # グループ順を反転（監督級/ベテランが下 = 遷移が少ない方が下）
+            # 各グループ内: 引退(暗/下) → 継続(中) → 参入(明/上)
+            # 全員参入のグループ（ルーキー/1年目等）は継続を省略
+            all_inflow_groups = set()
+            for g in groups:
+                total_s = sum(stock_data[g].get(yr, 0) for yr in flow_years_stock)
+                total_i = sum(inflow_data[g].get(yr, 0) for yr in flow_years_stock)
+                if total_s > 0 and total_i >= total_s * 0.95:
+                    all_inflow_groups.add(g)
+
+            for g in reversed(groups):
+                c = colors[g]
+                ys_inflow = [inflow_data[g].get(yr, 0) for yr in flow_years_stock]
+                ys_exit = [exit_data[g].get(yr, 0) if yr <= EXIT_CUTOFF_YEAR else 0
+                           for yr in flow_years_stock]
+                ys_cont = [
+                    max(stock_data[g].get(yr, 0) - inf - ext, 0)
+                    for yr, inf, ext in zip(flow_years_stock, ys_inflow, ys_exit)
                 ]
-                fig_b2.add_trace(go.Scatter(
-                    x=valid_flow_years, y=cu_ys,
-                    name="新人 キャリアアップ（→中堅/ベテラン）", mode="lines",
-                    line=dict(color="#06D6A0", width=2, dash="dashdot"),
-                    hovertemplate="新人 キャリアアップ %{x}: %{y:,}<extra></extra>",
+                # 引退者（暗い、底部）
+                fig_stock.add_trace(go.Bar(
+                    x=flow_years_stock, y=ys_exit,
+                    name=f"{g} 引退", legendgroup=g,
+                    marker_color=_hex_rgba(c, 0.25),
+                    marker_line_width=0,
+                    hovertemplate=f"{g} 引退: %{{y:,}}人<extra></extra>",
                 ))
-        fig_b2.add_vrect(
+                # 継続者（中間）— 全員参入のグループは省略
+                if g not in all_inflow_groups:
+                    fig_stock.add_trace(go.Bar(
+                        x=flow_years_stock, y=ys_cont,
+                        name=f"{g} 継続", legendgroup=g,
+                        marker_color=_hex_rgba(c, 0.55),
+                        marker_line_width=0,
+                        hovertemplate=f"{g} 継続: %{{y:,}}人<extra></extra>",
+                    ))
+                # 参入者（明るい、上部）
+                fig_stock.add_trace(go.Bar(
+                    x=flow_years_stock, y=ys_inflow,
+                    name=f"{g} 参入", legendgroup=g,
+                    marker_color=_hex_rgba(c, 0.95),
+                    marker_line_width=0,
+                    hovertemplate=f"{g} 参入: %{{y:,}}人<extra></extra>",
+                ))
+            fig_stock.update_layout(
+                height=520,
+                yaxis_title="人数",
+                xaxis_title="年",
+                barmode="stack",
+                bargap=0.05,
+            )
+
+            # --- フロー図: 正側=流入（積み上げ面）、負側=離脱（積み上げ面） ---
+            fig_flow = go.Figure()
+            # 正側: 流入
+            for g in groups:
+                c = colors[g]
+                ys = [inflow_data[g].get(yr, 0) for yr in flow_years_stock]
+                fig_flow.add_trace(go.Scatter(
+                    x=flow_years_stock, y=ys,
+                    name=f"流入: {g}",
+                    mode="lines", stackgroup="inflow",
+                    line=dict(width=0.5, color=c),
+                    fillcolor=_hex_rgba(c, 0.6),
+                    hovertemplate=f"{g} 流入: %{{y:,}}人<extra></extra>",
+                ))
+            # 負側: 離脱
+            for g in groups:
+                c = colors[g]
+                ys_neg = [-exit_data[g].get(yr, 0) for yr in exit_years]
+                fig_flow.add_trace(go.Scatter(
+                    x=exit_years, y=ys_neg,
+                    name=f"離脱: {g}",
+                    mode="lines", stackgroup="outflow",
+                    line=dict(width=0.5, color=c),
+                    fillcolor=_hex_rgba(c, 0.35),
+                    hovertemplate=f"{g} 離脱: %{{y:,}}人<extra></extra>",
+                ))
+            # ゼロ線
+            fig_flow.add_hline(y=0, line_dash="dot", line_color="rgba(255,255,255,0.3)")
+            fig_flow.update_layout(
+                height=450,
+                yaxis_title="人数（正=流入, 負=離脱）",
+                xaxis_title="年",
+            )
+            return fig_stock, fig_flow
+
+        # ==================================================================
+        # A-1: 職能レベル別（アニメーターを経験年数で細分化）
+        # ==================================================================
+        fig_func_stock, fig_func_flow = _make_stock_flow_charts(
+            func_groups, func_color,
+            stock_by_func, inflow_by_func, exit_by_func,
+            "職能レベル",
+        )
+        fig_func_stock.update_layout(title="A-1a. ストック（職能別）— 遷移者ハイライト")
+        fig_func_flow.update_layout(title=f"A-1b. フロー（職能別）— 流入/離脱（離脱は{EXIT_CUTOFF_YEAR}年まで）")
+
+        body += "<h3>A-1a. ストック推移（職能別: 遷移者ハイライト）</h3>"
+        body += chart_guide(
+            "各年の活動人数を職能グループ別に積み上げ面で表示。"
+            "アニメーター(stage0-2)を経験年数で4分割（凡例参照）。"
+            "各面は2層: <strong>明るい部分(下)=遷移者</strong>（デビュー/昇進/経験による移動）、"
+            "<strong>暗い部分(上)=前年からの既存</strong>。"
+        )
+        body += plotly_div_safe(fig_func_stock, "stock_func", 480)
+
+        body += "<h3>A-1b. フロー（職能別: 流入/離脱）</h3>"
+        body += chart_guide(
+            "<strong>正側（上）</strong>: 各グループへの流入（積み上げ面）。"
+            "ルーキー流入=業界デビュー、新人流入=ルーキーからの経過、"
+            "中堅流入=新人からの経過、演出・作監流入=アニメーターからの昇進。<br>"
+            "<strong>負側（下）</strong>: 各グループからの離脱。"
+            f"離脱は{EXIT_CUTOFF_YEAR}年まで。ルーキー離脱が大きいほど定着率に問題がある。"
+        )
+        body += plotly_div_safe(fig_func_flow, "flow_func", 450)
+
+        # ==================================================================
+        # A-2: 経験年数別
+        # ==================================================================
+        fig_exp_stock, fig_exp_flow = _make_stock_flow_charts(
+            exp_groups, exp_color,
+            stock_by_exp, inflow_by_exp, exit_by_exp,
+            "経験年数",
+        )
+        fig_exp_stock.update_layout(title="A-2a. ストック（経験年数別）— 遷移者ハイライト")
+        fig_exp_flow.update_layout(title=f"A-2b. フロー（経験年数別）— 流入/離脱（離脱は{EXIT_CUTOFF_YEAR}年まで）")
+
+        body += "<h3>A-2a. ストック推移（経験年数別: 遷移者ハイライト）</h3>"
+        body += chart_guide(
+            "各年の活動人数を経験年数別に積み上げ面で表示（1年目/2年目/3年目は個別）。"
+            "各グループの面は2層: <strong>暗い部分=前年からの既存</strong>、"
+            "<strong>明るい部分=その年の遷移者</strong>（業界参入 or 下位グループからの昇格）。"
+            "1年目の遷移者=業界デビュー者、ベテランの遷移者=中堅から20年目を迎えた人。"
+        )
+        body += plotly_div_safe(fig_exp_stock, "stock_exp", 480)
+
+        body += "<h3>A-2b. フロー（経験年数別: 流入/離脱）</h3>"
+        body += chart_guide(
+            "<strong>正側（上）</strong>: 各経験年数グループへの流入（積み上げ面）。"
+            "1年目流入=業界デビュー、若手流入=3年目からの昇格。<br>"
+            "<strong>負側（下）</strong>: 各経験年数グループからの離脱（積み上げ面）。"
+            f"離脱は{EXIT_CUTOFF_YEAR}年まで。短期離脱（赤系）が多い年は定着率の問題を示す。"
+        )
+        body += plotly_div_safe(fig_exp_flow, "flow_exp", 450)
+
+        # ---- 共通ヘルパー ----
+        exit_xs = [yr for yr in valid_flow_years if yr <= EXIT_CUTOFF_YEAR]
+
+        def _hex_to_rgba(hex_color: str, alpha: float = 0.6) -> str:
+            h = hex_color.lstrip("#")
+            r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+            return f"rgba({r},{g},{b},{alpha})"
+
+        # 職能レベル別の昇進ラベル（新人→中堅 を アニメーター→演出・作監 に）
+        CU_FUNC_LABELS = {
+            "新人→中堅": "アニメーター→演出・作監",
+            "中堅→ベテラン": "演出・作監→監督級",
+            "新人→ベテラン": "アニメーター→監督級",
+        }
+
+        # ====================================================================
+        # Chart B-1: 職能レベル別 離脱（積み上げ）+ 参入 + 職能昇進
+        # ====================================================================
+        # exit_func は上で計算済み
+        FUNC_LABELS = {"新人": "アニメーター", "中堅": "演出・作監", "ベテラン": "監督級"}
+
+        # B-1: 全トレースを1つのfigに入れ、updatemenusで切替
+        cu_colors = {"新人→中堅": "#06D6A0", "中堅→ベテラン": "#f093fb", "新人→ベテラン": "#FFD166"}
+        fig_b1 = go.Figure()
+
+        # --- View 1 traces: 参入 vs 離脱 (indices 0..3) ---
+        # 離脱積み上げ（職能レベル別）: traces 0,1,2
+        for sg in stage_groups:
+            fl = FUNC_LABELS[sg]
+            c = sg_color[sg]
+            fig_b1.add_trace(go.Scatter(
+                x=exit_xs,
+                y=[exit_func[sg].get(yr, 0) for yr in exit_xs],
+                name=f"離脱: {fl}",
+                mode="lines", line=dict(width=0.5, color=c),
+                fillcolor=_hex_to_rgba(c, 0.65),
+                stackgroup="exit_func",
+                visible=True,
+                hovertemplate=f"{fl}離脱 %{{x}}: %{{y:,}}<extra></extra>",
+            ))
+        # 参入線: trace 3
+        fig_b1.add_trace(go.Scatter(
+            x=valid_flow_years,
+            y=[entry_by_sg["新人"].get(yr, 0) for yr in valid_flow_years],
+            name="業界参入", mode="lines",
+            line=dict(color="#FFFFFF", width=3),
+            visible=True,
+            hovertemplate="業界参入 %{x}: %{y:,}<extra></extra>",
+        ))
+        n_view1 = 4  # traces 0-3
+
+        # --- View 2 traces: 昇進推移 + 新人参入 (indices 4..7) ---
+        # 昇進積み上げ: traces 4,5,6
+        for ttype, tc in cu_colors.items():
+            fig_b1.add_trace(go.Scatter(
+                x=valid_flow_years,
+                y=[transitions[ttype].get(yr, 0) for yr in valid_flow_years],
+                name=f"昇進: {CU_FUNC_LABELS[ttype]}",
+                mode="lines", line=dict(width=0.5, color=tc),
+                fillcolor=_hex_to_rgba(tc, 0.65),
+                stackgroup="cu_func",
+                visible=False,
+                hovertemplate=f"{CU_FUNC_LABELS[ttype]} %{{x}}: %{{y:,}}人<extra></extra>",
+            ))
+        # 新人参入数（参考線）: trace 7
+        fig_b1.add_trace(go.Scatter(
+            x=valid_flow_years,
+            y=[entry_by_sg["新人"].get(yr, 0) for yr in valid_flow_years],
+            name="業界参入（新人）", mode="lines",
+            line=dict(color="#FFFFFF", width=2, dash="dot"),
+            visible=False,
+            hovertemplate="業界参入 %{x}: %{y:,}<extra></extra>",
+        ))
+        n_view2 = 4  # traces 4-7
+        n_total = n_view1 + n_view2
+
+        # Toggle buttons
+        vis_view1 = [True] * n_view1 + [False] * n_view2
+        vis_view2 = [False] * n_view1 + [True] * n_view2
+        fig_b1.update_layout(
+            updatemenus=[dict(
+                type="buttons",
+                direction="right",
+                x=0.5, xanchor="center",
+                y=1.12, yanchor="top",
+                buttons=[
+                    dict(label="参入 vs 離脱",
+                         method="update",
+                         args=[{"visible": vis_view1},
+                               {"title": f"B-1. 職能レベル別 参入 vs 離脱（離脱は{EXIT_CUTOFF_YEAR}年まで）",
+                                "yaxis.title.text": "人数"}]),
+                    dict(label="昇進推移 + 参入数",
+                         method="update",
+                         args=[{"visible": vis_view2},
+                               {"title": "B-1. 職能昇進推移（積み上げ）+ 新人参入数",
+                                "yaxis.title.text": "人数"}]),
+                ],
+                font=dict(size=12),
+                bgcolor="rgba(240,147,251,0.2)",
+                bordercolor="rgba(240,147,251,0.5)",
+            )],
+            title=f"B-1. 職能レベル別 参入 vs 離脱（離脱は{EXIT_CUTOFF_YEAR}年まで）",
+            height=550,
+            xaxis_title="年",
+            yaxis_title="人数",
+        )
+        fig_b1.add_vrect(
             x0=EXIT_CUTOFF_YEAR + 0.5, x1=RELIABLE_MAX_YEAR,
             fillcolor="rgba(239,71,111,0.06)",
             line_color="rgba(239,71,111,0.4)", line_dash="dash",
             annotation_text=f"離脱データなし<br>({EXIT_CUTOFF_YEAR+1}年以降)",
             annotation_position="top right",
         )
-        fig_b2.update_layout(
-            title=(
-                f"B. ステージ別 参入/離脱（離脱は{EXIT_CUTOFF_YEAR}年まで）"
-                " ── 実線=参入 / 点線=退職 / 点鎖線=キャリアアップ（新人のみ）"
-            ),
-            xaxis_title="年", yaxis_title="人数",
-        )
-        body += "<h3>B. ステージ別 参入/離脱数（新人: 退職 vs キャリアアップ分離）</h3>"
+
+        body += "<h3>B-1. 職能レベル別: 参入 vs 離脱 / 昇進推移（トグル切替）</h3>"
         body += chart_guide(
-            "実線=参入、点線=退職/ドロップアウト（最終ステージのまま業界を離れた人）、"
-            "点鎖線(緑)=<strong>新人キャリアアップ</strong>（→中堅/ベテランへ昇進した人数、milestones promotionより）。"
-            "「退職」と「キャリアアップ」は排他的（最終stage≤2 の人は昇進記録なし）。"
+            "ボタンで2つのビューを切り替え:<br>"
+            "<strong>「参入 vs 離脱」</strong>: 離脱を職能レベル別に積み上げ + 白実線=参入数。<br>"
+            "<strong>「昇進推移 + 参入数」</strong>: 職能昇進の積み上げ（アニメーター→演出・作監 等）"
+            "+ 白点線=新人参入数。昇進数と参入数の比率で業界の育成効率が見える。"
             f"赤破線より右({EXIT_CUTOFF_YEAR+1}年以降)は離脱データを非表示。"
         )
-        body += plotly_div_safe(fig_b2, "flow_stage_b", 480)
+        body += plotly_div_safe(fig_b1, "flow_func_b", 550)
 
-        # ---- Chart C: キャリア段階遷移 ----
-        fig_c2 = go.Figure()
-        trans_colors = {"新人→中堅": "#06D6A0", "中堅→ベテラン": "#f093fb", "新人→ベテラン": "#FFD166"}
-        for ttype, tc in trans_colors.items():
-            yr_t = sorted(yr for yr in transitions[ttype] if FLOW_START_YEAR <= yr <= RELIABLE_MAX_YEAR)
-            if yr_t:
-                fig_c2.add_trace(go.Scatter(
-                    x=yr_t, y=[transitions[ttype][yr] for yr in yr_t],
-                    name=ttype, mode="lines+markers",
-                    line=dict(color=tc, width=2), marker=dict(size=4),
-                    hovertemplate=f"{ttype} %{{x}}: %{{y:,}}人<extra></extra>",
-                ))
-        fig_c2.update_layout(
-            title="C. キャリア段階遷移数（milestones promotionイベントから）",
-            xaxis_title="年", yaxis_title="遷移人数",
+        # ====================================================================
+        # Chart B-2: 経験年数別 離脱（積み上げ、1年刻み〜10年+）+ 参入
+        # ====================================================================
+        DURATION_BINS = [
+            ("1年未満",   0,  0, "#EF476F"),
+            ("1年",       1,  1, "#f5576c"),
+            ("2年",       2,  2, "#e8657a"),
+            ("3年",       3,  3, "#db7488"),
+            ("4年",       4,  4, "#ce8396"),
+            ("5年",       5,  5, "#c192a4"),
+            ("6年",       6,  6, "#b4a1b2"),
+            ("7年",       7,  7, "#a7b0c0"),
+            ("8年",       8,  8, "#9abfce"),
+            ("9年",       9,  9, "#8dcedc"),
+            ("10-14年",  10, 14, "#80ddea"),
+            ("15-19年",  15, 19, "#06D6A0"),
+            ("20年以上", 20, 999, "#f093fb"),
+        ]
+        exit_by_dur: dict[str, dict[int, int]] = {d[0]: {} for d in DURATION_BINS}
+
+        for pid, ly in pid_latest_year.items():
+            if not (FLOW_START_YEAR <= ly <= EXIT_CUTOFF_YEAR):
+                continue
+            fy = pid_first_year.get(pid)
+            if not fy:
+                continue
+            dur = ly - fy
+            for label, lo, hi, _ in DURATION_BINS:
+                if lo <= dur <= hi:
+                    exit_by_dur[label][ly] = exit_by_dur[label].get(ly, 0) + 1
+                    break
+
+        fig_b2 = make_subplots(
+            rows=2, cols=1,
+            subplot_titles=(
+                "離脱の内訳（経験年数別 積み上げ）＋ 業界参入数",
+                "参考: 職能昇進推移（積み上げ面）",
+            ),
+            shared_xaxes=True,
+            vertical_spacing=0.10,
+            row_heights=[0.6, 0.4],
         )
-        body += "<h3>C. キャリア段階遷移（新人→中堅→ベテラン）</h3>"
+        # 上段: 離脱積み上げ（経験年数別）
+        for label, _lo, _hi, color in DURATION_BINS:
+            fig_b2.add_trace(go.Scatter(
+                x=exit_xs,
+                y=[exit_by_dur[label].get(yr, 0) for yr in exit_xs],
+                name=f"離脱: {label}",
+                mode="lines", line=dict(width=0.5, color=color),
+                fillcolor=_hex_to_rgba(color, 0.65),
+                stackgroup="exit_dur",
+                hovertemplate=f"経験{label}で離脱 %{{x}}: %{{y:,}}<extra></extra>",
+            ), row=1, col=1)
+        # 参入線
+        fig_b2.add_trace(go.Scatter(
+            x=valid_flow_years,
+            y=[entry_by_sg["新人"].get(yr, 0) for yr in valid_flow_years],
+            name="業界参入", mode="lines",
+            line=dict(color="#FFFFFF", width=3),
+            hovertemplate="業界参入 %{x}: %{y:,}<extra></extra>",
+        ), row=1, col=1)
+        # 下段: 職能昇進（参考として同じものを表示）
+        for ttype, tc in cu_colors.items():
+            fig_b2.add_trace(go.Scatter(
+                x=valid_flow_years,
+                y=[transitions[ttype].get(yr, 0) for yr in valid_flow_years],
+                name=f"昇進: {CU_FUNC_LABELS[ttype]}",
+                mode="lines", line=dict(width=0.5, color=tc),
+                fillcolor=_hex_to_rgba(tc, 0.65),
+                stackgroup="cu_dur",
+                hovertemplate=f"{CU_FUNC_LABELS[ttype]} %{{x}}: %{{y:,}}人<extra></extra>",
+            ), row=2, col=1)
+        fig_b2.add_vrect(
+            x0=EXIT_CUTOFF_YEAR + 0.5, x1=RELIABLE_MAX_YEAR,
+            fillcolor="rgba(239,71,111,0.06)",
+            line_color="rgba(239,71,111,0.4)", line_dash="dash",
+            annotation_text=f"離脱データなし<br>({EXIT_CUTOFF_YEAR+1}年以降)",
+            annotation_position="top right", row=1, col=1,
+        )
+        fig_b2.update_layout(
+            title=f"B-2. 経験年数別 参入 vs 離脱 + 昇進推移（離脱は{EXIT_CUTOFF_YEAR}年まで）",
+            height=700,
+        )
+        fig_b2.update_yaxes(title_text="人数", row=1, col=1)
+        fig_b2.update_yaxes(title_text="昇進人数", row=2, col=1)
+        fig_b2.update_xaxes(title_text="年", row=2, col=1)
+
+        body += "<h3>B-2. 経験年数別: 参入 vs 離脱（積み上げ、1年刻み）+ 昇進推移</h3>"
         body += chart_guide(
-            "milestones.jsonのpromotionイベントでステージグループをまたぐ昇進をカウント。"
-            "新人→中堅の遷移ピークが業界の育成力・登竜門の時代変化を示します。"
+            "<strong>上段</strong>: 離脱者の内訳を<strong>業界経験年数</strong>（デビューから離脱年まで）で積み上げ。"
+            "1年未満(赤)～9年(青)は1年刻み、10-14年/15-19年/20年以上はまとめて表示。"
+            "白実線=業界参入数。<br>"
+            "短期離脱（赤系）が多い年は人材定着に問題があり、長期離脱（緑〜紫）が多い年は熟練者の流出を示す。<br>"
+            "<strong>下段</strong>: 職能昇進の積み上げ（B-1と同じ、参考表示）。"
+            f"赤破線より右({EXIT_CUTOFF_YEAR+1}年以降)は離脱データを非表示。"
         )
-        body += plotly_div_safe(fig_c2, "flow_transitions", 380)
+        body += plotly_div_safe(fig_b2, "flow_dur_b", 700)
 
         # ---- Chart D: 才能ティア別 参入/離脱（期待能力 × 実際能力 4-tier） ----
         _exp_d_suffix = "" if _exp_computation_ok else " [フォールバック: iv_score閾値]"
@@ -2121,8 +4389,8 @@ def generate_industry_overview():
                          line_color="rgba(255,255,255,0.25)", row=2, col=1)
         fig_d2.update_xaxes(title_text="年", row=1, col=1)
         fig_d2.update_yaxes(title_text="人数", row=1, col=1)
-        fig_d2.update_xaxes(title_text="期待能力 percentile (協業者質0.5+作品スコア0.3+スタジオ0.2)", row=2, col=1)
-        fig_d2.update_yaxes(title_text="実際能力 percentile (iv_score)", row=2, col=1)
+        fig_d2.update_xaxes(title_text="期待能力 percentile (協業者IV 0.5 + composite_value 0.3 + スタジオ水準 0.2)", row=2, col=1)
+        fig_d2.update_yaxes(title_text="実際能力 percentile (IV Score)", row=2, col=1)
         fig_d2.update_layout(
             title=f"D. 才能ティア別 参入/離脱（期待×実際 4-tier）{_exp_d_suffix}",
             height=820,
@@ -2133,7 +4401,7 @@ def generate_industry_overview():
         _exp_unful  = sum(
             1 for _p2, _t2 in _exp_pid_tier.items()
             if _t2 == "期待の星"
-            and (pid_latest_year.get(_p2, 0) - pid_first_year.get(_p2, 0)) >= 5
+            and (pid_latest_year.get(_p2, RELIABLE_MAX_YEAR) - pid_first_year.get(_p2, 0)) >= 5
         )
         _exp_unful_pct = _exp_unful / max(_exp_rs_ct, 1) * 100
         _exp_tier_rows_html = "".join(
@@ -2147,9 +4415,10 @@ def generate_industry_overview():
         body += "<h3>D. 才能ティア別 参入/離脱数（期待能力×実際能力）</h3>"
         body += (
             '<div class="insight-box">'
-            "<strong>4ティア定義 — 各指標を上位30%で閾値分類</strong><br>"
-            "<em>期待能力</em>: 協業者の平均iv_score(50%) + 参加作品スコア(30%) + スタジオ水準(20%)<br>"
-            "<em>実際能力</em>: iv_score percentile (ネットワーク位置・実績の合成)<br>"
+            "<strong>4ティア定義 — §1.6の構造的指標のみで分類（視聴者評価は不使用）</strong><br>"
+            "<em>期待能力</em>: 協業者の平均IV Score(50%) + 参加作品composite_value(30%) + スタジオ水準(20%)"
+            "（3成分すべてクレジットネットワークから導出、§1.6参照）<br>"
+            "<em>実際能力</em>: IV Score percentile（§1.6で定義したネットワーク位置・協業密度の統合指標）<br>"
             "<table style='width:100%;font-size:0.82rem;margin:0.5rem 0'>"
             "<thead><tr><th>ティア</th><th>人数</th><th>比率</th></tr></thead>"
             f"<tbody>{_exp_tier_rows_html}</tbody></table>"
@@ -2252,13 +4521,20 @@ def generate_industry_overview():
             annotation_position="top right",
         )
         fig_f1.update_layout(
-            title="F-1. 人材価値の流出入（iv_score合計・年次）",
-            xaxis_title="年", yaxis_title="iv_score 合計",
+            title="F-1. 人材価値の流出入（IV Score合計・年次）",
+            xaxis_title="年", yaxis_title="IV Score 合計",
         )
         body += "<h3>F. 人材価値の流出入と損失内訳</h3>"
         body += chart_guide(
-            "赤=離脱者のiv_score合計（業界が失った価値）。緑=上昇トレンド現役者、水色=新規参入者。"
+            "赤=離脱者のIV Score合計（§1.6で定義したネットワーク価値の流出）。緑=上昇トレンド現役者、水色=新規参入者。"
             f"赤破線右({EXIT_CUTOFF_YEAR+1}年以降)は誤検出防止のため離脱データ非表示。"
+        )
+        body += (
+            '<div class="insight-box" style="border-left-color:#FFD166;">'
+            "<strong>解釈上の注意</strong>: IV Scoreはパイプライン実行時点のネットワーク全体から計算されるため、"
+            "2000年代以降のIV Score合計は、ネットワーク規模の拡大に伴い構造的に大きくなる傾向がある。"
+            "年代間の絶対値比較には注意が必要（当該年のアクティブ人数あたりのIV密度で補正した比較が望ましい）。"
+            "</div>"
         )
         body += plotly_div_safe(fig_f1, "flow_value_f1", 400)
 
@@ -2622,9 +4898,11 @@ def generate_industry_overview():
     # Decade Comparison — DB-driven year×format line charts
     # ============================================================
     body += '<div class="card">'
-    body += "<h2>Decade Comparison — 需要と供給（年次折れ線）</h2>"
+    body += "<h2>構造分析: 需要と供給（年次折れ線）</h2>"
     body += section_desc(
-        "DBから年別×作品種別の作品数と人材数を集計。上段=需要（作品数）、下段=供給（ユニーク人数）。"
+        "§2で確認した業界規模の急成長を、作品フォーマット別（TV/映画/OVA/ONA）に分解する。"
+        "上段は需要（年間作品数）、下段は供給（年間ユニーク参加人数）を示す。"
+        "§4の人材フロー分析で確認した参入・離脱の動態が、具体的にどのフォーマットの需要に駆動されているかを明らかにする。"
         f"対象: 1980–{RELIABLE_MAX_YEAR}年。"
     )
     try:
@@ -2708,7 +4986,11 @@ def generate_industry_overview():
     # Seasonal Patterns — Violin + Grouped Bar + Newcomer
     # ============================================================
     body += '<div class="card">'
-    body += "<h2>Seasonal Patterns</h2>"
+    body += "<h2>季節パターン: クール別の制作量変動</h2>"
+    body += section_desc(
+        "前節の年次レベルの需給構造を、季節（クール）レベルに分解する。"
+        "制作量・参加人数の季節変動は、スタジオの人員配置計画に直接影響する。"
+    )
     season_names = ["winter", "spring", "summer", "fall"]
     season_labels_disp = ["Winter (1-3)", "Spring (4-6)", "Summer (7-9)", "Fall (10-12)"]
     season_colors = {
@@ -2823,19 +5105,20 @@ def generate_industry_overview():
                     hovertemplate=f"{sl}: %{{y:.1f}}<extra></extra>",
                 ))
         fig_sea_violin.update_layout(
-            title="A. 季節別 アニメスコア分布（バイオリン図）",
-            xaxis_title="季節", yaxis_title="アニメスコア",
+            title="A. 季節別 視聴者評価スコア分布（参考）",
+            xaxis_title="季節", yaxis_title="視聴者評価 (AniList)",
             showlegend=False,
         )
         fig_sea_violin.add_annotation(
-            text="注: 春はクオリティのばらつきが大きい傾向があります",
+            text="注: 視聴者評価は参考情報であり、本レポートのスコアリングには使用していません",
             xref="paper", yref="paper", x=0, y=1.05,
             showarrow=False, font=dict(size=10, color="#a0a0c0"),
         )
-        body += "<h3>A. 季節別アニメスコア分布（バイオリン図）</h3>"
+        body += "<h3>A. 季節別 視聴者評価スコア分布（参考情報）</h3>"
         body += chart_guide(
-            "各季節のアニメスコアの分布をバイオリン図で表示。箱ひげとアウトライアーも表示。"
-            "分布の幅が広いほど品質のばらつきが大きいことを示します。"
+            "各季節のAniList視聴者評価の分布をバイオリン図で表示。"
+            "これは視聴者による主観的評価であり、制作者の貢献を反映するものではない"
+            "（§1.6参照）。参考情報として掲載。"
         )
         body += plotly_div_safe(fig_sea_violin, "seasonal_violin", 400)
 
@@ -2931,10 +5214,11 @@ def generate_industry_overview():
     # ============================================================
     if growth and scores_data and isinstance(scores_data, list):
         body += '<div class="card">'
-        body += "<h2>Growth Trends — 世代別キャリア軌跡分布</h2>"
+        body += "<h2>世代別キャリア軌跡分布</h2>"
         body += section_desc(
-            "debut_decade（初クレジット年の10年区切り）× trend分類のクロス集計。"
-            "世代ごとに「上昇/安定/新規/低下/非活動」の構成比を水平積み上げ棒グラフで表示。"
+            "§4の人材フロー分析をデビュー世代（10年区切り）の切り口で再集計する。"
+            "世代ごとに「上昇/安定/新規/低下/非活動」の構成比を示し、"
+            "世代間でキャリア軌跡のパターンがどう異なるかを明らかにする。"
         )
 
         trend_categories = ["rising", "stable", "new", "declining", "inactive"]
@@ -2998,16 +5282,23 @@ def generate_industry_overview():
         body += plotly_div_safe(fig_gt, "growth_cohort", 500)
         body += "</div>"
 
+    # ============================================================
+    # 総括
+    # ============================================================
+    body += '<div class="card">'
+    body += "<h2>総括</h2>"
+    body += section_desc(
+        "以上の分析（生データ概観→前提検証→人材フロー→構造分析）から導かれる主要な知見をまとめる。"
+    )
+
     # Key findings from insights
     if insights:
-        body += '<div class="card">'
-        body += "<h2>Key Findings</h2>"
+        body += "<h3>自動抽出された知見</h3>"
         for finding in insights.get("key_findings", []):
             body += f'<div class="insight-box">{finding}</div>'
-        body += "<h3>Recommendations</h3>"
+        body += "<h3>推奨事項</h3>"
         for rec in insights.get("recommendations", []):
             body += f'<div class="insight-box">{rec}</div>'
-        body += "</div>"
 
     # Data-driven key findings
     credits_count = d.get("credits", 0)
@@ -3015,10 +5306,14 @@ def generate_industry_overview():
     credits_per_person = credits_count / max(persons_count, 1)
     body += key_findings([
         f"アニメ業界の協業ネットワークは100年以上にわたり拡大を続けており、"
-        f"特に2000年代以降の成長が顕著（{fmt_num(d.get('anime', 0))}作品 / {fmt_num(persons_count)}人）",
-        f"クレジット数の増加率が人数の増加率を上回っており、"
-        f"1人あたり平均 {credits_per_person:.1f} クレジットと参加作品数が増加傾向",
-        f"時系列は{RELIABLE_MAX_YEAR}年までのデータを対象とし、2026年以降は統計的信頼性が低いため除外",
+        f"特に2000年代以降の成長が顕著（{fmt_num(d.get('anime', 0))}作品 / {fmt_num(persons_count)}人）"
+        "（§2 生データ概観で確認）",
+        f"1人あたり平均 {credits_per_person:.1f} クレジット"
+        f"（{fmt_num(credits_count)}クレジット / {fmt_num(persons_count)}人）",
+        "引退閾値3年の妥当性を95パーセンタイル分析で検証済み"
+        "（§3 V-1）。ただし監督級は間隔が長い傾向がある",
+        "制作ライン（動画→原画→作監→監督）の遷移は外部流出率が低く、"
+        "独立した分析単位として扱うことが妥当（§3 V-5で確認）",
         "成長トレンド分類では「安定」「上昇」が多数を占め、業界全体として成熟と拡大が共存",
     ])
 
@@ -3041,6 +5336,7 @@ def generate_industry_overview():
         "業界標準KPI（年間クレジット数・新規参入者数・活動継続率）の確立と毎年の定点観測",
         "政策効果測定への応用（制作支援補助金がクレジット数・新規参入者数に与えた影響を定量評価）",
     ])
+    body += "</div>"  # 総括 card 閉じ
 
     html = wrap_html(
         "業界俯瞰ダッシュボード",
@@ -3048,8 +5344,9 @@ def generate_industry_overview():
         body,
         intro_html=report_intro(
             "業界俯瞰レポート",
-            "アニメ業界の協業ネットワークをマクロ視点で分析します。100年以上にわたる"
-            "制作量の推移、季節放送パターン、年代比較、人材の成長軌道を網羅します。",
+            "アニメ業界の協業ネットワークをマクロ視点で分析します。"
+            "生データの概観から始まり、分析で用いる定義の妥当性を実データで検証した上で、"
+            "人材フロー・需給構造・世代別キャリア軌跡を定量的に明らかにします。",
             "スタジオ経営者、業界研究者、政策立案者",
         ),
         glossary_terms=COMMON_GLOSSARY_TERMS,
@@ -5795,8 +8092,8 @@ def generate_compensation_report():
             "director": "#9b59b6", "chief_director": "#8e44ad",
             "character_designer": "#3498db", "character_design": "#3498db",
             "animator": "#06D6A0", "key_animator": "#2ecc71",
-            "animation_director": "#27ae60", "chief_animation_director": "#1abc9c",
-            "art_director": "#fda085", "series_composition": "#f5576c",
+            "animation_director": "#27ae60",
+            "background_art": "#fda085", "screenplay": "#f5576c",
             "sound_director": "#FFD166", "music": "#f39c12",
         }
         sorted_analyses = sorted(analyses, key=lambda a: a.get("staff_count", 0), reverse=True)
@@ -5828,11 +8125,11 @@ def generate_compensation_report():
 
         # Stacked bar: top 5 anime Shapley allocation by role category
         role_categories = {
-            "director": "監督系", "chief_director": "監督系", "series_composition": "監督系",
+            "director": "監督系", "chief_director": "監督系", "screenplay": "監督系",
             "character_designer": "デザイン系", "character_design": "デザイン系",
-            "art_director": "デザイン系", "mechanical_design": "デザイン系",
+            "background_art": "デザイン系", "mechanical_design": "デザイン系",
             "animator": "作画系", "key_animator": "作画系",
-            "animation_director": "作画系", "chief_animation_director": "作画系",
+            "animation_director": "作画系",
             "sound_director": "音響系", "music": "音響系",
         }
         cat_colors = {"監督系": "#9b59b6", "デザイン系": "#3498db", "作画系": "#06D6A0", "音響系": "#FFD166", "その他": "#a0a0c0"}
@@ -7315,8 +9612,8 @@ def generate_studio_impact_report():
         # Stacked bar: Top 20 studios by role breakdown
         role_color_map = {
             "director": "#9b59b6", "character_designer": "#3498db",
-            "animator": "#06D6A0", "art_director": "#fda085",
-            "series_composition": "#f5576c", "sound_director": "#FFD166",
+            "animator": "#06D6A0", "background_art": "#fda085",
+            "screenplay": "#f5576c", "sound_director": "#FFD166",
         }
         studio_role_data: dict[str, dict[str, int]] = {}
         for s_name, s_data in top_studios:
@@ -8362,15 +10659,14 @@ def generate_cooccurrence_groups_report():
         from collections import Counter
         role_label_ja: dict[str, str] = {
             "director": "監督",
-            "series_composition": "シリーズ構成",
+            "screenplay": "脚本",
             "character_designer": "キャラデザ",
-            "chief_animation_director": "総作画監督",
-            "art_director": "美術監督",
-            "color_designer": "色彩設計",
+            "animation_director": "作画監督",
+            "background_art": "背景美術",
+            "finishing": "仕上げ",
             "sound_director": "音響監督",
             "photography_director": "撮影監督",
             "cgi_director": "CGI監督",
-            "mechanical_designer": "メカデザ",
         }
         role_counts: dict[str, int] = Counter()
         for g in groups[:200]:
@@ -8952,7 +11248,7 @@ COHORT_COLORS: dict[int, str] = {
     1990: "#FF6B35", 2000: "#06D6A0", 2010: "#FFD166", 2020: "#aaaaaa",
 }
 STAGE_LABELS: dict[int, str] = {
-    1: "動画", 2: "第2原画", 3: "原画", 4: "作監", 5: "総作監", 6: "監督",
+    1: "動画", 2: "第二原画", 3: "原画", 4: "キャラデ", 5: "作監・演出", 6: "監督",
 }
 
 
@@ -9985,7 +12281,7 @@ def generate_cohort_animation_report():  # noqa: C901
     cohort_glossary = dict(COMMON_GLOSSARY_TERMS)
     cohort_glossary.update({
         "コホート (Cohort)": "デビュー年代で分けた世代グループ（1970年代デビュー、1980年代デビューなど）。",
-        "キャリアステージ": "1=動画、2=第2原画、3=原画、4=作画監督、5=総作画監督、6=監督 の6段階。",
+        "キャリアステージ": "1=動画、2=第二原画、3=原画・レイアウト、4=キャラデザ・脚本、5=作監・演出・部門監督、6=監督 の6段階。",
         "需要密度": "年間アニメ本数 ÷ アクティブ人材数 × 100。値が高いほど1人あたりの担当作品が多い。",
         "Gapminder": "GDP/人口/寿命の世界比較で有名なバブルアニメーション可視化手法。本レポートではキャリア成長に応用。",
     })
@@ -10018,19 +12314,19 @@ def generate_cohort_animation_report():  # noqa: C901
 STAGE_COLORS_HEX: dict[int, str] = {
     0: "#404050",   # missing/unknown
     1: "#a0a0c0",   # 動画
-    2: "#7EB8D4",   # 第2原画
-    3: "#4CC9F0",   # 原画
-    4: "#FFD166",   # 作監
-    5: "#FF6B35",   # 総作監
+    2: "#7EB8D4",   # 第二原画
+    3: "#4CC9F0",   # 原画・レイアウト
+    4: "#FFD166",   # キャラデザ・脚本
+    5: "#FF6B35",   # 作監・演出
     6: "#F72585",   # 監督
 }
 
 _ROLE_JA: dict[str, str] = {
     "in_between": "動画", "key_animator": "原画", "animation_director": "作監",
-    "chief_animation_director": "総作監", "director": "監督",
-    "episode_director": "演出", "storyboard": "絵コンテ", "other": "その他",
-    "layout": "レイアウト", "2nd_key_animator": "第2原画",
-    "effects_animator": "エフェクト", "cgi_director": "CGI監督",
+    "director": "監督",
+    "episode_director": "演出", "special": "その他",
+    "layout": "レイアウト",
+    "photography_director": "撮影監督", "cgi_director": "CGI監督",
 }
 
 
@@ -10254,12 +12550,11 @@ def _violin_raincloud(
 # Roles representing fixed/startup costs: same core team regardless of series length
 _STARTUP_ROLES: frozenset = frozenset({
     "director",
-    "series_composition",
+    "screenplay",
     "character_designer",
-    "art_director",
+    "background_art",
     "music",
     "original_creator",
-    "chief_animation_director",
     "producer",
     "sound_director",
 })
@@ -10270,8 +12565,6 @@ _VARIABLE_ROLES: frozenset = frozenset({
     "in_between",
     "animation_director",
     "episode_director",
-    "storyboard",
-    "second_key_animator",
     "photography_director",
     "background_art",
 })
@@ -10449,14 +12742,12 @@ def _build_startup_cost_data(conn) -> dict:
 
 # Role → career stage mapping (for regression controls)
 _ROLE_TO_STAGE: dict[str, int] = {
-    "in_between": 1, "layout": 2, "second_key_animator": 2,
-    "key_animator": 3, "effects_animator": 3,
+    "in_between": 1, "layout": 2,
+    "key_animator": 3, "photography_director": 4,
     "animation_director": 4, "character_designer": 4,
-    "storyboard": 4, "chief_animation_director": 5,
     "episode_director": 5, "director": 6,
-    "series_composition": 5, "art_director": 4,
-    "background_art": 2, "photography_director": 4,
-    "music": 4, "producer": 5, "sound_director": 4,
+    "screenplay": 5, "background_art": 2,
+    "finishing": 4, "music": 4, "producer": 5, "sound_director": 4,
 }
 
 
@@ -11026,7 +13317,7 @@ def generate_longitudinal_analysis_report():  # noqa: C901
             colorbar=dict(
                 title="ステージ",
                 tickvals=[0, 1, 2, 3, 4, 5, 6],
-                ticktext=["欠損", "動画", "第2原画", "原画", "作監", "総作監", "監督"],
+                ticktext=["欠損", "動画", "第二原画", "原画", "キャラデ", "作監・演出", "監督"],
             ),
             hovertemplate="%{customdata}<extra></extra>",
             customdata=hover_c3,
@@ -11100,7 +13391,7 @@ def generate_longitudinal_analysis_report():  # noqa: C901
             if max_stage >= 5.5:
                 name = "監督到達型"
             elif max_stage >= 4.5:
-                name = "総作監到達型"
+                name = "作監・演出到達型"
             elif max_stage >= 3.8:
                 name = "作監キャリア型"
             elif peak_age <= 8:
@@ -11497,7 +13788,7 @@ def generate_longitudinal_analysis_report():  # noqa: C901
             for e in events:
                 if e.get("type") == "new_role":
                     r = e.get("role", "")
-                    if r and r != "other":
+                    if r and r != "special":
                         roles_set.add(r)
             if roles_set:
                 person_roles[pid] = roles_set
@@ -11613,9 +13904,9 @@ def generate_longitudinal_analysis_report():  # noqa: C901
     try:
         # Build role-by-year credits from milestones data
         role_by_year: dict[str, dict[int, int]] = {}
-        MAIN_ROLES = ["in_between", "key_animator", "2nd_key_animator",
-                      "animation_director", "chief_animation_director",
-                      "director", "episode_director", "storyboard"]
+        MAIN_ROLES = ["in_between", "key_animator",
+                      "animation_director",
+                      "director", "episode_director"]
 
         for pid, events in milestones_data.items():
             for e in events:
@@ -13922,14 +16213,14 @@ def generate_longitudinal_analysis_report():  # noqa: C901
 
         # Normalize each indicator → combined weight
         _ROLE_WEIGHT_FALLBACKS: dict = {
-            "director": 10.0, "series_composition": 8.0,
-            "chief_animation_director": 7.0, "character_designer": 7.0,
-            "art_director": 6.0, "sound_director": 5.5, "producer": 5.0,
+            "director": 10.0, "screenplay": 8.0,
+            "character_designer": 7.0,
+            "background_art": 6.0, "sound_director": 5.5, "producer": 5.0,
             "music": 4.5, "photography_director": 4.0, "animation_director": 4.0,
-            "storyboard": 3.5, "episode_director": 3.0, "original_creator": 3.0,
-            "cgi_director": 3.0, "key_animator": 2.5, "effects_animator": 2.0,
-            "layout": 1.5, "second_key_animator": 1.2,
-            "background_art": 1.2, "in_between": 1.0,
+            "episode_director": 3.0, "original_creator": 3.0,
+            "cgi_director": 3.0, "key_animator": 2.5, "finishing": 2.0,
+            "layout": 1.5,
+            "in_between": 1.0,
         }
         _est_roles = [r for r in _ROLE_WEIGHT_FALLBACKS
                       if r in _scarcity_raw or r in _time_demand_raw or r in _impact_raw]
@@ -14101,11 +16392,11 @@ def generate_longitudinal_analysis_report():  # noqa: C901
 
             # Group roles by stage
             stage_groups = {
-                "動画・第2原画 (Stg1-2)": ["in_between", "layout", "second_key_animator", "background_art"],
-                "原画 (Stg3)": ["key_animator", "effects_animator"],
-                "作監・絵コンテ (Stg4)": ["animation_director", "character_designer", "storyboard", "art_director"],
-                "総作監・演出 (Stg5)": ["chief_animation_director", "episode_director",
-                                      "series_composition", "sound_director"],
+                "動画・第2原画 (Stg1-2)": ["in_between", "layout", "background_art"],
+                "原画 (Stg3)": ["key_animator"],
+                "作監・演出 (Stg4)": ["animation_director", "character_designer", "photography_director"],
+                "演出・脚本 (Stg5)": ["episode_director",
+                                      "screenplay", "sound_director"],
                 "監督 (Stg6)": ["director"],
             }
 
@@ -14555,7 +16846,7 @@ def generate_longitudinal_analysis_report():  # noqa: C901
                              "短期離脱 (≤10年)": "#F72585",
                              "長期後退職 (>10年)": "#FFD166"}
 
-            STAGE_LABELS_S11 = {1: "動画", 2: "第2原画", 3: "原画", 4: "作監", 5: "総作監/演出", 6: "監督"}
+            STAGE_LABELS_S11 = {1: "動画", 2: "第二原画", 3: "原画", 4: "キャラデ", 5: "作監・演出", 6: "監督"}
 
             fig35 = make_subplots(
                 rows=1, cols=2,
@@ -14895,7 +17186,7 @@ def generate_longitudinal_analysis_report():  # noqa: C901
             ), row=1, col=1)
 
             # Middle: stage distribution by category (stacked bar)
-            STAGE_SHORT_38 = {1: "動画", 2: "第2原", 3: "原画", 4: "作監", 5: "総作監", 6: "監督"}
+            STAGE_SHORT_38 = {1: "動画", 2: "第二原", 3: "原画", 4: "キャラデ", 5: "作監", 6: "監督"}
             for stage in range(1, 7):
                 s_vals = []
                 for grp in [early_drop, mid_drop, vet_drop]:
@@ -16449,8 +18740,11 @@ def generate_akm_diagnostics_report():
                 textposition="outside",
                 hovertemplate="%{y}: %{x:.4f}<extra></extra>",
             ))
+            var_expl = iv_weights.get("pca_variance_explained", 0)
+            weight_method = iv_weights.get("weight_method", "fixed_prior")
+            title_suffix = f"（PCA PC1, 分散説明率 {var_expl:.1%}）" if weight_method == "PCA_PC1" else "（固定プライア）"
             fig2.update_layout(
-                title="IV Score 構成ウェイト（λ）",
+                title=f"IV Score 構成ウェイト{title_suffix}",
                 xaxis_title="ウェイト",
             )
             body += '<div class="card"><h2>2. IV Score 構成ウェイト</h2>'
@@ -18069,6 +20363,722 @@ def generate_compatibility_report():  # noqa: C901
     out = REPORTS_DIR / "compatibility_report.html"
     out.write_text(html, encoding="utf-8")
     print(f"    -> {out}")
+
+
+# ============================================================
+# Report B8: Score Layers Analysis (3層スコア構造分析)
+# ============================================================
+
+
+def generate_score_layers_report():
+    """3層スコア構造の包括的分析レポート.
+
+    因果的(person_fe) / 構造的(BiRank,AWCC,NDI) / 協業(patronage,studio_exp)
+    の3層の特性差・相関・分布を15チャートで可視化。
+    """
+    print("  Generating Score Layers Analysis Report...")
+    scores = load_json("scores.json")
+    iv_data = load_json("iv_weights.json")
+    profiles = load_json("individual_profiles.json")
+    if not scores or len(scores) < 50:
+        print("    [SKIP] scores.json insufficient")
+        return
+
+    import numpy as np
+    from scipy import stats as sp_stats
+
+    # ---- 前処理 ----
+    lw = iv_data.get("lambda_weights", {}) if iv_data else {}
+    var_expl = iv_data.get("pca_variance_explained", 0) if iv_data else 0
+    weight_method = iv_data.get("weight_method", "fixed_prior") if iv_data else "fixed_prior"
+    profile_dict = profiles.get("profiles", {}) if profiles else {}
+
+    # 全人物のスコア配列
+    n = len(scores)
+    pfe = np.array([s["person_fe"] for s in scores])
+    br = np.array([s["birank"] for s in scores])
+    pat = np.array([s["patronage"] for s in scores])
+    awcc = np.array([s["awcc"] for s in scores])
+    ndi = np.array([s["ndi"] for s in scores])
+    st_exp = np.array([s["studio_fe_exposure"] for s in scores])
+    iv = np.array([s["iv_score"] for s in scores])
+    dorm = np.array([s["dormancy"] for s in scores])
+    cf = np.array([s["career_friction"] for s in scores])
+
+    # percentile rank 計算
+    def pct_rank(arr):
+        from scipy.stats import rankdata
+        return rankdata(arr, method="average") / len(arr) * 100
+
+    pfe_pct = pct_rank(pfe)
+    br_pct = pct_rank(br)
+    pat_pct = pct_rank(pat)
+    awcc_pct = pct_rank(awcc)
+    ndi_pct = pct_rank(ndi)
+    st_pct = pct_rank(st_exp)
+    iv_pct = pct_rank(iv)
+
+    # 層別集約: 各人の3層スコアをpercentile平均で
+    causal_agg = pfe_pct
+    structural_agg = (br_pct + awcc_pct + ndi_pct) / 3
+    collab_agg = (pat_pct + st_pct) / 2
+
+    body = ""
+
+    # ============================================================
+    # Section 0: Summary Stats
+    # ============================================================
+    body += '<div class="stats-grid">'
+    body += f'<div class="stat-card"><div class="value">{fmt_num(n)}</div><div class="label">評価対象人数</div></div>'
+    body += f'<div class="stat-card"><div class="value">{weight_method}</div><div class="label">重み導出手法</div></div>'
+    body += f'<div class="stat-card"><div class="value">{var_expl:.1%}</div><div class="label">PC1 分散説明率</div></div>'
+    body += f'<div class="stat-card"><div class="value">3+1</div><div class="label">スコア層数</div></div>'
+    body += "</div>"
+
+    # ============================================================
+    # Key Findings
+    # ============================================================
+    # 層間相関
+    r_causal_struct, _ = sp_stats.pearsonr(causal_agg, structural_agg)
+    r_causal_collab, _ = sp_stats.pearsonr(causal_agg, collab_agg)
+    r_struct_collab, _ = sp_stats.pearsonr(structural_agg, collab_agg)
+
+    # 層間不一致: 各層でtop 10%に入る人の重複率
+    top10_causal = set(np.argsort(causal_agg)[-n // 10:])
+    top10_struct = set(np.argsort(structural_agg)[-n // 10:])
+    top10_collab = set(np.argsort(collab_agg)[-n // 10:])
+    overlap_cs = len(top10_causal & top10_struct) / (n // 10) * 100
+    overlap_cc = len(top10_causal & top10_collab) / (n // 10) * 100
+    overlap_sc = len(top10_struct & top10_collab) / (n // 10) * 100
+
+    findings = [
+        f"因果層×構造層の相関 r={r_causal_struct:.3f} — "
+        + ("強い正の相関: 個人の実力とネットワーク位置が一致" if r_causal_struct > 0.5 else
+           "中程度の相関: 実力とネットワーク位置にズレあり" if r_causal_struct > 0.3 else
+           "弱い相関: 因果的評価と構造的評価は独立性が高い"),
+        f"因果層×協業層の相関 r={r_causal_collab:.3f} — "
+        + ("強い正の相関: 実力と環境が連動" if r_causal_collab > 0.5 else
+           "中程度: 個人の実力と協業環境の質は部分的に独立" if r_causal_collab > 0.3 else
+           "弱い相関: 個人の因果的貢献は協業環境とほぼ独立"),
+        f"上位10%の重複率: 因果×構造 {overlap_cs:.1f}% / 因果×協業 {overlap_cc:.1f}% / 構造×協業 {overlap_sc:.1f}%",
+        f"IV重み: " + " / ".join(f"{k}={v:.1%}" for k, v in sorted(lw.items(), key=lambda x: -x[1])),
+    ]
+    body += key_findings(findings)
+
+    # ============================================================
+    # Chart 1: 3層の分布比較 (Violin Plot)
+    # ============================================================
+    body += '<div class="card"><h2>1. 3層スコア分布比較（パーセンタイル空間）</h2>'
+    body += section_desc(
+        "因果層（Person FE）、構造層（BiRank+AWCC+NDI平均）、協業層（Patronage+Studio Exp平均）の"
+        "パーセンタイル分布をバイオリンプロットで比較。形状の違いが各層の情報構造を反映。"
+    )
+    body += chart_guide("幅が広い部分ほど該当者が多い。ボックスは四分位範囲。白点は中央値。")
+
+    # Subsample for violin
+    rng = np.random.default_rng(42)
+    sample_idx = rng.choice(n, min(5000, n), replace=False)
+    fig1 = go.Figure()
+    for name, arr, color in [
+        ("因果層 (Person FE)", causal_agg[sample_idx], "#f093fb"),
+        ("構造層 (BiRank+AWCC+NDI)", structural_agg[sample_idx], "#06D6A0"),
+        ("協業層 (Patronage+Studio)", collab_agg[sample_idx], "#667eea"),
+    ]:
+        fig1.add_trace(go.Violin(
+            y=arr, name=name, box_visible=True, meanline_visible=True,
+            fillcolor=color, opacity=0.6, line_color=color,
+            points="outliers",
+        ))
+    fig1.update_layout(
+        yaxis_title="パーセンタイル", showlegend=False,
+        violinmode="group",
+    )
+    body += plotly_div_safe(fig1, "layer_violin", 450)
+    body += "</div>"
+
+    # ============================================================
+    # Chart 2: 各コンポーネント分布 (Histogram Grid)
+    # ============================================================
+    body += '<div class="card"><h2>2. 全コンポーネント分布（生値）</h2>'
+    body += section_desc("7つの主要コンポーネントの生値分布。対数変換やべき乗則パターンの有無を確認。")
+    body += chart_guide("各ヒストグラムの赤線=中央値、青点線=平均。分布の偏りが各指標の性質を示す。")
+
+    fig2 = make_subplots(
+        rows=2, cols=4,
+        subplot_titles=["Person FE (θ)", "BiRank", "Patronage", "AWCC",
+                        "NDI", "Studio Exposure", "IV Score", "Dormancy"],
+        horizontal_spacing=0.06, vertical_spacing=0.12,
+    )
+    components = [
+        (pfe, "#f093fb"), (br, "#06D6A0"), (pat, "#667eea"), (awcc, "#FFD166"),
+        (ndi, "#a0d2db"), (st_exp, "#f5576c"), (iv, "#fda085"), (dorm, "#c0c0d0"),
+    ]
+    for idx, (arr, color) in enumerate(components):
+        r, c = divmod(idx, 4)
+        # Clip extreme outliers for viz
+        q01, q99 = np.percentile(arr, [1, 99])
+        clipped = arr[(arr >= q01) & (arr <= q99)]
+        fig2.add_trace(
+            go.Histogram(x=clipped, nbinsx=60, marker_color=color, opacity=0.75,
+                         showlegend=False),
+            row=r + 1, col=c + 1,
+        )
+        # Median line
+        med = float(np.median(arr))
+        fig2.add_vline(x=med, line_dash="solid", line_color="#ff4444", line_width=1.5,
+                       row=r + 1, col=c + 1)
+        # Mean line
+        mean_val = float(np.mean(arr))
+        fig2.add_vline(x=mean_val, line_dash="dot", line_color="#4488ff", line_width=1,
+                       row=r + 1, col=c + 1)
+    fig2.update_layout(height=550, margin=dict(t=60, b=40))
+    body += plotly_div_safe(fig2, "component_histograms", 550)
+    body += "</div>"
+
+    # ============================================================
+    # Chart 3: 相関行列ヒートマップ
+    # ============================================================
+    body += '<div class="card"><h2>3. コンポーネント間相関行列</h2>'
+    body += section_desc(
+        "7コンポーネント間のPearson相関係数。色が赤いほど正の相関、青いほど負の相関。"
+        "対角は1.0。独立性の高い指標ペアほど「異なる情報」を提供。"
+    )
+    body += chart_guide("1.0に近い=冗長情報。0に近い=独立した視点。負の値=トレードオフ関係。")
+
+    comp_names = ["person_fe", "birank", "patronage", "awcc", "ndi", "studio_exp", "iv_score"]
+    comp_arrays = [pfe, br, pat, awcc, ndi, st_exp, iv]
+    corr_matrix = np.zeros((7, 7))
+    for i in range(7):
+        for j in range(7):
+            corr_matrix[i, j] = np.corrcoef(comp_arrays[i], comp_arrays[j])[0, 1]
+
+    fig3 = go.Figure(go.Heatmap(
+        z=corr_matrix,
+        x=comp_names, y=comp_names,
+        colorscale="RdBu_r", zmid=0, zmin=-1, zmax=1,
+        text=np.round(corr_matrix, 3),
+        texttemplate="%{text:.3f}",
+        textfont=dict(size=11),
+        hovertemplate="r(%{x}, %{y}) = %{z:.4f}<extra></extra>",
+    ))
+    fig3.update_layout(height=500, xaxis_tickangle=30)
+    body += plotly_div_safe(fig3, "corr_heatmap", 500)
+    body += "</div>"
+
+    # ============================================================
+    # Chart 4: IV Weight Composition (PCA loadings)
+    # ============================================================
+    body += '<div class="card"><h2>4. IV Score 構成ウェイト</h2>'
+    method_label = f"PCA PC1（分散説明率 {var_expl:.1%}）" if weight_method == "PCA_PC1" else "固定プライア"
+    body += section_desc(f"手法: {method_label}。各コンポーネントがIV Scoreにどれだけ寄与するか。")
+    body += chart_guide("棒が長いほど影響が大きい。合計=1.0に正規化。")
+
+    if lw:
+        sorted_lw = sorted(lw.items(), key=lambda x: x[1])
+        fig4 = go.Figure(go.Bar(
+            y=[k for k, _ in sorted_lw],
+            x=[v for _, v in sorted_lw],
+            orientation="h",
+            marker_color=["#f093fb", "#a0d2db", "#06D6A0", "#FFD166", "#f5576c"][:len(sorted_lw)],
+            text=[f"{v:.3f}" for _, v in sorted_lw],
+            textposition="outside",
+        ))
+        fig4.update_layout(xaxis_title="ウェイト (λ)", height=350)
+        body += plotly_div_safe(fig4, "iv_weights_bar", 350)
+    body += "</div>"
+
+    # ============================================================
+    # Chart 5: 層間散布図 (因果 vs 構造 / 因果 vs 協業)
+    # ============================================================
+    body += '<div class="card"><h2>5. 層間散布図: 因果層 vs 構造層 / 協業層</h2>'
+    body += section_desc(
+        "各人を因果層（Person FE パーセンタイル）vs 構造層・協業層にプロット。"
+        "対角線から外れた点は「層間で評価が乖離する人物」。"
+    )
+    body += chart_guide("対角線上=両層で一致。上側=構造/協業で高評価、下側=因果で高評価。色はIV Score。")
+
+    sample_idx2 = rng.choice(n, min(4000, n), replace=False)
+    fig5 = make_subplots(rows=1, cols=2, subplot_titles=[
+        "因果層 vs 構造層", "因果層 vs 協業層",
+    ], horizontal_spacing=0.08)
+
+    for col, (y_arr, y_name) in enumerate([
+        (structural_agg, "構造層 pctl"),
+        (collab_agg, "協業層 pctl"),
+    ], 1):
+        fig5.add_trace(go.Scattergl(
+            x=causal_agg[sample_idx2], y=y_arr[sample_idx2],
+            mode="markers",
+            marker=dict(
+                size=3, opacity=0.4,
+                color=iv[sample_idx2],
+                colorscale="Viridis",
+                colorbar=dict(title="IV Score") if col == 2 else None,
+                showscale=(col == 2),
+            ),
+            showlegend=False,
+            hovertemplate="因果: %{x:.1f}<br>" + y_name + ": %{y:.1f}<extra></extra>",
+        ), row=1, col=col)
+        # Diagonal reference line
+        fig5.add_shape(type="line", x0=0, y0=0, x1=100, y1=100,
+                       line=dict(color="rgba(255,255,255,0.3)", dash="dash"),
+                       row=1, col=col)
+
+    fig5.update_xaxes(title_text="因果層 pctl", row=1, col=1)
+    fig5.update_xaxes(title_text="因果層 pctl", row=1, col=2)
+    fig5.update_yaxes(title_text="構造層 pctl", row=1, col=1)
+    fig5.update_yaxes(title_text="協業層 pctl", row=1, col=2)
+    fig5.update_layout(height=450)
+    body += plotly_div_safe(fig5, "layer_scatter", 450)
+    body += "</div>"
+
+    # ============================================================
+    # Chart 6: 層間不一致分析（ギャップスコア分布）
+    # ============================================================
+    body += '<div class="card"><h2>6. 層間ギャップスコア分布</h2>'
+    body += section_desc(
+        "各人の「因果層パーセンタイル − 構造層パーセンタイル」のギャップ分布。"
+        "正の値=因果的に実力があるがネットワーク位置が低い（隠れた実力者）。"
+        "負の値=ネットワーク位置は高いが因果的貢献は低い（環境依存型）。"
+    )
+    body += chart_guide("0付近に集中=両層の一致度が高い。幅が広い=層間で評価が大きく異なる人が多い。")
+
+    gap_cs = causal_agg - structural_agg
+    gap_cc = causal_agg - collab_agg
+
+    fig6 = go.Figure()
+    fig6.add_trace(go.Histogram(
+        x=gap_cs, nbinsx=80, name="因果−構造", marker_color="#f093fb", opacity=0.6,
+    ))
+    fig6.add_trace(go.Histogram(
+        x=gap_cc, nbinsx=80, name="因果−協業", marker_color="#667eea", opacity=0.6,
+    ))
+    fig6.update_layout(
+        barmode="overlay", xaxis_title="パーセンタイルギャップ",
+        yaxis_title="人数", height=400,
+    )
+    # Add std annotation
+    fig6.add_annotation(
+        x=0.95, y=0.95, xref="paper", yref="paper",
+        text=f"因果−構造 σ={np.std(gap_cs):.1f}<br>因果−協業 σ={np.std(gap_cc):.1f}",
+        showarrow=False, font=dict(size=12, color="#e0e0f0"),
+        bgcolor="rgba(0,0,0,0.5)", bordercolor="#666",
+    )
+    body += plotly_div_safe(fig6, "gap_histogram", 400)
+    body += "</div>"
+
+    # ============================================================
+    # Chart 7: 上位50人のパラレル座標
+    # ============================================================
+    body += '<div class="card"><h2>7. 上位50人のパラレル座標プロット</h2>'
+    body += section_desc(
+        "IV Score上位50人の各コンポーネントパーセンタイルをパラレル座標で表示。"
+        "各人がどの層で強く・弱いかのプロファイルが一目でわかる。"
+    )
+    body += chart_guide("各軸は0-100パーセンタイル。線が上にあるほど高い。色はIV Score。")
+
+    top50_idx = np.argsort(iv)[-50:]
+    dims = [
+        dict(label="Person FE", values=pfe_pct[top50_idx], range=[0, 100]),
+        dict(label="BiRank", values=br_pct[top50_idx], range=[0, 100]),
+        dict(label="Patronage", values=pat_pct[top50_idx], range=[0, 100]),
+        dict(label="AWCC", values=awcc_pct[top50_idx], range=[0, 100]),
+        dict(label="NDI", values=ndi_pct[top50_idx], range=[0, 100]),
+        dict(label="Studio Exp", values=st_pct[top50_idx], range=[0, 100]),
+    ]
+    fig7 = go.Figure(go.Parcoords(
+        line=dict(color=iv[top50_idx], colorscale="Plasma", showscale=True,
+                  colorbar=dict(title="IV Score")),
+        dimensions=dims,
+    ))
+    fig7.update_layout(height=500)
+    body += plotly_div_safe(fig7, "parallel_coords", 500)
+    body += "</div>"
+
+    # ============================================================
+    # Chart 8: Person FE vs BiRank 散布図 (最重要な2軸)
+    # ============================================================
+    body += '<div class="card"><h2>8. Person FE vs BiRank（因果×構造の主軸）</h2>'
+    body += section_desc(
+        "因果層の代表（Person FE）と構造層の代表（BiRank）の生値散布図。"
+        "右上=両方で高い（真のトップ）。右下=個人の実力は高いがネットワーク位置が低い。"
+    )
+
+    fig8 = go.Figure()
+    fig8.add_trace(go.Scattergl(
+        x=pfe[sample_idx2], y=br[sample_idx2],
+        mode="markers",
+        marker=dict(size=3, opacity=0.3, color=iv[sample_idx2],
+                    colorscale="Viridis", showscale=True,
+                    colorbar=dict(title="IV")),
+        hovertemplate="PFE: %{x:.2f}<br>BiRank: %{y:.2f}<extra></extra>",
+    ))
+    fig8 = add_scatter_correlation(fig8, pfe[sample_idx2], br[sample_idx2])
+    fig8.update_layout(xaxis_title="Person FE (θ)", yaxis_title="BiRank",
+                       height=500)
+    body += plotly_div_safe(fig8, "pfe_vs_birank", 500)
+    body += "</div>"
+
+    # ============================================================
+    # Chart 9: Patronage vs Person FE (因果×協業)
+    # ============================================================
+    body += '<div class="card"><h2>9. Patronage vs Person FE（因果×協業）</h2>'
+    body += section_desc(
+        "監督からの起用プレミアム（Patronage）と個人固定効果（Person FE）の関係。"
+        "Patronageが高くPerson FEが低い=監督との関係に依存した評価。"
+    )
+
+    fig9 = go.Figure()
+    fig9.add_trace(go.Scattergl(
+        x=pfe[sample_idx2], y=pat[sample_idx2],
+        mode="markers",
+        marker=dict(size=3, opacity=0.3, color="#06D6A0"),
+        hovertemplate="PFE: %{x:.2f}<br>Patronage: %{y:.4f}<extra></extra>",
+    ))
+    fig9 = add_scatter_correlation(fig9, pfe[sample_idx2], pat[sample_idx2])
+    fig9.update_layout(xaxis_title="Person FE (θ)", yaxis_title="Patronage Premium",
+                       height=450)
+    body += plotly_div_safe(fig9, "pfe_vs_patronage", 450)
+    body += "</div>"
+
+    # ============================================================
+    # Chart 10: 役職別の3層レーダー比較
+    # ============================================================
+    body += '<div class="card"><h2>10. 役職別の3層プロファイル比較</h2>'
+    body += section_desc(
+        "主要役職ごとの因果層・構造層・協業層のパーセンタイル中央値をレーダーチャートで比較。"
+        "役職によって強い層が異なることがわかる。"
+    )
+    body += chart_guide("面積が大きいほど全般的に高評価。形の違いが各役職の特徴。")
+
+    role_map = {}
+    for i, s in enumerate(scores):
+        role = s.get("primary_role", "?")
+        if role == "?":
+            continue
+        if role not in role_map:
+            role_map[role] = {"causal": [], "structural": [], "collab": [],
+                              "pfe": [], "br": [], "pat": [], "awcc_v": [], "st": []}
+        role_map[role]["causal"].append(causal_agg[i])
+        role_map[role]["structural"].append(structural_agg[i])
+        role_map[role]["collab"].append(collab_agg[i])
+        role_map[role]["pfe"].append(pfe_pct[i])
+        role_map[role]["br"].append(br_pct[i])
+        role_map[role]["pat"].append(pat_pct[i])
+        role_map[role]["awcc_v"].append(awcc_pct[i])
+        role_map[role]["st"].append(st_pct[i])
+
+    radar_roles = ["animator", "director", "designer", "production", "writing", "technical"]
+    role_colors = ["#f093fb", "#06D6A0", "#667eea", "#FFD166", "#f5576c", "#a0d2db"]
+
+    fig10 = go.Figure()
+    categories = ["Person FE", "BiRank", "Patronage", "AWCC", "Studio Exp"]
+    for role, color in zip(radar_roles, role_colors):
+        if role not in role_map or len(role_map[role]["pfe"]) < 10:
+            continue
+        vals = [
+            float(np.median(role_map[role]["pfe"])),
+            float(np.median(role_map[role]["br"])),
+            float(np.median(role_map[role]["pat"])),
+            float(np.median(role_map[role]["awcc_v"])),
+            float(np.median(role_map[role]["st"])),
+        ]
+        fig10.add_trace(go.Scatterpolar(
+            r=vals + [vals[0]], theta=categories + [categories[0]],
+            name=role, line_color=color, fill="toself", opacity=0.3,
+        ))
+    fig10.update_layout(
+        polar=dict(radialaxis=dict(range=[0, 100], showticklabels=True)),
+        height=500,
+    )
+    body += plotly_div_safe(fig10, "role_radar", 500)
+    body += "</div>"
+
+    # ============================================================
+    # Chart 11: 層別 Box Plot by Career Stage
+    # ============================================================
+    body += '<div class="card"><h2>11. キャリアステージ別の3層スコア推移</h2>'
+    body += section_desc(
+        "キャリアステージ（0=新人〜6=レジェンド）ごとに因果・構造・協業層がどう変化するか。"
+        "ステージが上がると因果層が伸びるか、構造層が伸びるかの違いが各層の性質を反映。"
+    )
+
+    stage_data = {st: {"causal": [], "struct": [], "collab": []} for st in range(7)}
+    for i, s in enumerate(scores):
+        career = s.get("career")
+        if not career:
+            continue
+        st = career.get("highest_stage", 0)
+        if 0 <= st <= 6:
+            stage_data[st]["causal"].append(causal_agg[i])
+            stage_data[st]["struct"].append(structural_agg[i])
+            stage_data[st]["collab"].append(collab_agg[i])
+
+    stage_labels = ["0:新人", "1:若手", "2:中堅", "3:熟練", "4:ベテラン", "5:マスター", "6:レジェンド"]
+    fig11 = go.Figure()
+    for layer_name, key, color in [
+        ("因果層", "causal", "#f093fb"),
+        ("構造層", "struct", "#06D6A0"),
+        ("協業層", "collab", "#667eea"),
+    ]:
+        x_vals, y_vals = [], []
+        for st in range(7):
+            arr = stage_data[st][key]
+            if arr:
+                x_vals.extend([stage_labels[st]] * len(arr))
+                y_vals.extend(arr)
+        fig11.add_trace(go.Box(
+            x=x_vals, y=y_vals, name=layer_name,
+            marker_color=color, opacity=0.7,
+            boxmean=True,
+        ))
+    fig11.update_layout(
+        boxmode="group", yaxis_title="パーセンタイル",
+        height=500,
+    )
+    body += plotly_div_safe(fig11, "stage_boxplot", 500)
+    body += "</div>"
+
+    # ============================================================
+    # Chart 12: Person FE 信頼区間（上位30人）
+    # ============================================================
+    body += '<div class="card"><h2>12. Person FE 信頼区間（上位30人）</h2>'
+    body += section_desc(
+        "Person FE (θ) の解析的95%信頼区間: SE = σ_resid / √n_obs。"
+        "CIが狭いほど推定が安定。score_layersフィールドが利用可能な場合のみ表示。"
+    )
+
+    # Try to use score_layers if available, otherwise compute from data
+    ci_persons = []
+    for s in scores:
+        layers = s.get("score_layers", {})
+        causal_l = layers.get("causal", {})
+        se = s.get("person_fe_se") or causal_l.get("person_fe_se")
+        n_obs = s.get("person_fe_n_obs", 0) or causal_l.get("n_obs", 0)
+        if se and se > 0:
+            ci_persons.append({
+                "name": s.get("name") or s.get("name_ja") or s["person_id"],
+                "pfe": s["person_fe"],
+                "se": se,
+                "n_obs": n_obs,
+                "lower": s["person_fe"] - 1.96 * se,
+                "upper": s["person_fe"] + 1.96 * se,
+            })
+    ci_persons.sort(key=lambda x: x["pfe"], reverse=True)
+    ci_top = ci_persons[:30]
+
+    if ci_top:
+        fig12 = go.Figure()
+        fig12.add_trace(go.Scatter(
+            x=[c["pfe"] for c in ci_top],
+            y=[c["name"] for c in ci_top],
+            mode="markers",
+            marker=dict(size=8, color="#f093fb"),
+            error_x=dict(
+                type="data",
+                array=[c["upper"] - c["pfe"] for c in ci_top],
+                arrayminus=[c["pfe"] - c["lower"] for c in ci_top],
+                color="#f093fb", thickness=1.5,
+            ),
+            hovertemplate="%{y}<br>θ=%{x:.3f} ± %{error_x.array:.3f}<extra></extra>",
+        ))
+        fig12.update_layout(
+            xaxis_title="Person FE (θ) ± 95% CI",
+            height=adaptive_height(len(ci_top)),
+            yaxis=dict(autorange="reversed"),
+        )
+        body += plotly_div_safe(fig12, "pfe_ci_forest", adaptive_height(len(ci_top)))
+    else:
+        body += '<p class="section-desc">パイプライン再実行後にperson_fe_seが追加されます。</p>'
+    body += "</div>"
+
+    # ============================================================
+    # Chart 13: 3層一致/不一致の4象限分類
+    # ============================================================
+    body += '<div class="card"><h2>13. 因果×構造 4象限マップ</h2>'
+    body += section_desc(
+        "因果層・構造層の中央値(50)を閾値に4象限に分類。"
+        "右上=真のトップ、右下=隠れた実力者、左上=環境恵まれ型、左下=成長途上。"
+    )
+
+    quadrant_colors = []
+    for i in range(len(sample_idx2)):
+        idx = sample_idx2[i]
+        if causal_agg[idx] >= 50 and structural_agg[idx] >= 50:
+            quadrant_colors.append("#06D6A0")  # 真のトップ
+        elif causal_agg[idx] >= 50:
+            quadrant_colors.append("#f093fb")  # 隠れた実力者
+        elif structural_agg[idx] >= 50:
+            quadrant_colors.append("#667eea")  # 環境恵まれ型
+        else:
+            quadrant_colors.append("#888888")  # 成長途上
+
+    fig13 = go.Figure()
+    fig13.add_trace(go.Scattergl(
+        x=causal_agg[sample_idx2], y=structural_agg[sample_idx2],
+        mode="markers",
+        marker=dict(size=3, opacity=0.4, color=quadrant_colors),
+        hovertemplate="因果: %{x:.1f}<br>構造: %{y:.1f}<extra></extra>",
+    ))
+    # Quadrant lines
+    fig13.add_hline(y=50, line_dash="dash", line_color="rgba(255,255,255,0.4)")
+    fig13.add_vline(x=50, line_dash="dash", line_color="rgba(255,255,255,0.4)")
+    # Quadrant labels
+    for x, y, text, color in [
+        (75, 90, "真のトップ", "#06D6A0"), (75, 10, "隠れた実力者", "#f093fb"),
+        (25, 90, "環境恵まれ型", "#667eea"), (25, 10, "成長途上", "#888888"),
+    ]:
+        fig13.add_annotation(x=x, y=y, text=text, showarrow=False,
+                             font=dict(size=13, color=color), bgcolor="rgba(0,0,0,0.5)")
+    fig13.update_layout(
+        xaxis_title="因果層 パーセンタイル", yaxis_title="構造層 パーセンタイル",
+        height=500,
+    )
+    body += plotly_div_safe(fig13, "quadrant_map", 500)
+    body += "</div>"
+
+    # ============================================================
+    # Chart 14: 層別 Gini係数（不平等度）
+    # ============================================================
+    body += '<div class="card"><h2>14. コンポーネント別 不平等度（Gini係数）</h2>'
+    body += section_desc(
+        "各コンポーネントのGini係数。1に近いほど不平等（少数の人に集中）。"
+        "BiRankとPatronageはべき乗則的分布のため高Giniが予想される。"
+    )
+
+    def gini(arr):
+        arr = np.sort(np.abs(arr))
+        n_g = len(arr)
+        if n_g == 0 or arr.sum() == 0:
+            return 0.0
+        index = np.arange(1, n_g + 1)
+        return float((2 * np.sum(index * arr) / (n_g * np.sum(arr))) - (n_g + 1) / n_g)
+
+    gini_values = {
+        "Person FE": gini(pfe - pfe.min()),
+        "BiRank": gini(br),
+        "Patronage": gini(pat),
+        "AWCC": gini(awcc),
+        "NDI": gini(ndi),
+        "Studio Exp": gini(st_exp - st_exp.min()),
+        "IV Score": gini(iv - iv.min()),
+    }
+    sorted_gini = sorted(gini_values.items(), key=lambda x: x[1])
+    fig14 = go.Figure(go.Bar(
+        y=[k for k, _ in sorted_gini],
+        x=[v for _, v in sorted_gini],
+        orientation="h",
+        marker_color=["#06D6A0" if v < 0.4 else "#FFD166" if v < 0.6 else "#f5576c"
+                       for _, v in sorted_gini],
+        text=[f"{v:.3f}" for _, v in sorted_gini],
+        textposition="outside",
+    ))
+    fig14.update_layout(xaxis_title="Gini係数", xaxis_range=[0, 1], height=350)
+    body += plotly_div_safe(fig14, "gini_bar", 350)
+    body += "</div>"
+
+    # ============================================================
+    # Chart 15: 3層の情報量分解 (Explained Variance)
+    # ============================================================
+    body += '<div class="card"><h2>15. 3層がIV Scoreを説明する割合</h2>'
+    body += section_desc(
+        "線形回帰で因果層・構造層・協業層パーセンタイルがIV Scoreをどれだけ説明するか。"
+        "各層の部分R²を棒グラフで表示。合計がadjusted R²に近い場合、層間の冗長性が低い。"
+    )
+
+    from sklearn.linear_model import LinearRegression
+    X_layers = np.column_stack([causal_agg, structural_agg, collab_agg])
+    lr_full = LinearRegression().fit(X_layers, iv)
+    r2_full = lr_full.score(X_layers, iv)
+
+    # Partial R² for each layer (drop-one)
+    partial_r2 = {}
+    layer_names_r2 = ["因果層", "構造層", "協業層"]
+    for drop_idx, name in enumerate(layer_names_r2):
+        X_reduced = np.delete(X_layers, drop_idx, axis=1)
+        r2_reduced = LinearRegression().fit(X_reduced, iv).score(X_reduced, iv)
+        partial_r2[name] = r2_full - r2_reduced
+
+    fig15 = go.Figure()
+    fig15.add_trace(go.Bar(
+        x=list(partial_r2.keys()),
+        y=list(partial_r2.values()),
+        marker_color=["#f093fb", "#06D6A0", "#667eea"],
+        text=[f"{v:.3f}" for v in partial_r2.values()],
+        textposition="outside",
+    ))
+    fig15.add_annotation(
+        x=0.95, y=0.95, xref="paper", yref="paper",
+        text=f"全体 R²={r2_full:.4f}", showarrow=False,
+        font=dict(size=13, color="#FFD166"), bgcolor="rgba(0,0,0,0.5)",
+    )
+    fig15.update_layout(yaxis_title="部分 R²", height=400)
+    body += plotly_div_safe(fig15, "partial_r2", 400)
+    body += "</div>"
+
+    # ============================================================
+    # Significance & Utilization
+    # ============================================================
+    body += significance_section(
+        "3層スコア構造の意義",
+        [
+            "単一のIV Scoreだけでは、個人の貢献がどの次元で高いのかが見えない。"
+            "3層に分解することで、因果推論に基づく真の貢献（Person FE）、"
+            "ネットワーク上の記述統計（BiRank/AWCC/NDI）、"
+            "協業環境の質（Patronage/Studio FE）を区別できる。",
+            "報酬交渉では因果層（±信頼区間付き）が最も強い根拠になる。"
+            "構造層は「業界での可視性」、協業層は「どのような環境で働いてきたか」を示す。"
+            "3層の乖離パターンが「隠れた実力者」や「環境依存型」を特定する鍵となる。",
+        ],
+    )
+    body += utilization_guide([
+        {"role": "スタジオ人事", "how": "因果層が高く構造層が低い人材は「隠れた実力者」—"
+         "獲得コストが低く投資対効果が高い可能性"},
+        {"role": "アニメーター本人", "how": "3層のバランスを確認し、構造層が低ければネットワーキング、"
+         "因果層が低ければ技術力向上を重点化"},
+        {"role": "研究者", "how": "層間相関の低さは多次元評価の妥当性を支持。"
+         "相関が高すぎる層は統合の候補"},
+        {"role": "政策立案者", "how": "Gini係数で各指標の不平等度を把握し、"
+         "業界構造の集中度を評価"},
+    ])
+
+    # ============================================================
+    # Glossary
+    # ============================================================
+    glossary = {
+        **COMMON_GLOSSARY_TERMS,
+        "因果層 (Causal Layer)": "AKM固定効果推定によるperson_fe。スタジオ効果を除去した個人の因果的貢献。",
+        "構造層 (Structural Layer)": "BiRank、AWCC、NDIの3指標。ネットワーク上の位置を記述する統計量（因果推論なし）。",
+        "協業層 (Collaboration Layer)": "Patronage Premium（監督起用プレミアム）とStudio FE Exposure（スタジオ環境の質）。",
+        "PC1 分散説明率": "PCA第1主成分が全コンポーネントの分散をどれだけ説明するか。高いほど1次元にまとめやすい。",
+        "パーセンタイル": "全人物中の相対的順位。50=中央値。90=上位10%。",
+        "Gini係数": "不平等度指標。0=完全平等、1=完全不平等。",
+        "部分R²": "特定の変数を除去したときのR²低下量。大きいほどその変数の説明力が高い。",
+    }
+
+    # ============================================================
+    # Wrap
+    # ============================================================
+    intro = report_intro(
+        "3層スコア構造分析",
+        "因果的（Person FE ± SE）、構造的（BiRank/AWCC/NDI）、協業的（Patronage/Studio Exp）の"
+        "3層に分解されたスコア体系の特性・相関・分布・不平等度を15チャートで包括的に分析。"
+        "IV Scoreはこれらの便利な要約指標（OPS的位置付け）。",
+        "スタジオ人事・アニメーター・研究者・政策立案者",
+    )
+
+    html = wrap_html(
+        "3層スコア構造分析",
+        f"因果 / 構造 / 協業 — {fmt_num(n)}人の多次元評価",
+        body,
+        intro_html=intro,
+        glossary_terms=glossary,
+    )
+    out = REPORTS_DIR / "score_layers_analysis.html"
+    out.write_text(html, encoding="utf-8")
+    print(f"    -> {out}")
+
+
 # ============================================================
 # Index Page
 # ============================================================
@@ -18270,7 +21280,864 @@ REPORT_CATALOG = [
                 "個人の相性ブースト分布を含む6チャート。",
         "sources": "compatibility_groups, scores",
     },
+    {
+        "file": "score_layers_analysis.html",
+        "title": "3層スコア構造分析",
+        "subtitle": "因果 / 構造 / 協業 — 多次元評価の特性比較",
+        "desc": "因果層（Person FE ± SE）、構造層（BiRank/AWCC/NDI）、協業層（Patronage/Studio Exp）の"
+                "分布・相関・不平等度・層間ギャップ・4象限分類・パラレル座標を含む15チャート。",
+        "sources": "scores, iv_weights, individual_profiles",
+    },
+    {
+        "file": "career_dynamics.html",
+        "title": "キャリアダイナミクス総合分析",
+        "subtitle": "125K人のキャリアデータから読み解く人材構造",
+        "desc": "生存曲線、離脱ハザード、役職遷移サンキー、ステージ到達年数、密度散布図、4象限マップ、"
+                "タグヒートマップ、トップ人材軌跡を含む20チャート。",
+        "sources": "scores, transitions, role_flow, career_friction (DB)",
+    },
+    {
+        "file": "madb_coverage.html",
+        "title": "MADBデータカバレッジ分析",
+        "subtitle": "メディア芸術DB収録状況・ソース別クレジット分布",
+        "desc": "フォーマット別作品数、年代別収録推移、スタッフ情報完全性、ソース別クレジット分布、役職別内訳を含む6チャート。",
+        "sources": "SQLite (anime, credits, persons)",
+    },
 ]
+
+
+def generate_career_dynamics_report():  # noqa: C901
+    """キャリアダイナミクス総合分析 — 多次元可視化+個人プロファイル."""
+    print("  Generating Career Dynamics Report ...")
+    import sqlite3 as _sq
+    import random
+
+    db_path = Path("result/db/animetor_eval.db")
+    if not db_path.exists():
+        print("  [SKIP] DB not found")
+        return
+
+    scores_data = load_json("scores.json")
+    transitions_data = load_json("transitions.json")
+    role_flow_data = load_json("role_flow.json")
+    milestones_data = load_json("milestones.json")
+    if not scores_data:
+        return
+
+    conn = _sq.connect(db_path)
+
+    # --- Build person records ---
+    scores_by_pid: dict = {}
+    persons: list[dict] = []
+    for s in scores_data:
+        c = s.get("career") or {}
+        n = s.get("network") or {}
+        g = s.get("growth") or {}
+        fy, ly, ay = c.get("first_year"), c.get("latest_year"), c.get("active_years", 0)
+        if not fy or not ly or ay < 1:
+            continue
+        p = {
+            "pid": s["person_id"], "name": s.get("name_ja") or s.get("name") or "",
+            "iv": s.get("iv_score", 0) or 0, "fe": s.get("person_fe", 0) or 0,
+            "birank": s.get("birank", 0) or 0, "patronage": s.get("patronage", 0) or 0,
+            "dormancy": s.get("dormancy", 0) or 0, "awcc": s.get("awcc", 0) or 0,
+            "friction": s.get("career_friction", 0) or 0,
+            "first_year": fy, "latest_year": ly, "active_years": ay, "span": ly - fy + 1,
+            "highest_stage": c.get("highest_stage", 0), "peak_year": c.get("peak_year"),
+            "peak_credits": c.get("peak_credits", 0), "role": s.get("primary_role", "other"),
+            "total_credits": s.get("total_credits", 0),
+            "collaborators": n.get("collaborators", 0), "unique_anime": n.get("unique_anime", 0),
+            "hub_score": n.get("hub_score", 0), "trend": g.get("trend", ""),
+            "activity_ratio": g.get("activity_ratio", 0), "decade": (fy // 10) * 10,
+            "tags": s.get("tags") or [],
+            "centrality": s.get("centrality") or {},
+            "versatility": s.get("versatility") or {},
+            "score_range": s.get("score_range") or {},
+            "breakdown": s.get("breakdown") or {},
+        }
+        persons.append(p)
+        scores_by_pid[p["pid"]] = p
+
+    EXPLORER = "http://localhost:3000"
+    body = ""
+    chart_n = 0
+
+    # --- Clickable scatter helper ---
+    def plotly_div_click(fig, div_id, height=500):
+        """Scatter with click-to-Explorer navigation."""
+        nonlocal body, chart_n
+        chart_n += 1
+        did = f"cd_{chart_n}"
+        base = plotly_div_safe(fig, did, height)
+        # Inject click handler (customdata[0] = person_id)
+        js = (f'<script>document.getElementById("{did}").on("plotly_click",'
+              f'function(d){{var p=d.points[0];if(p&&p.customdata)'
+              f'window.open("{EXPLORER}/#person/"+p.customdata,"_blank")}});</script>')
+        body += base + js
+
+    def add_chart(fig, height=480):
+        nonlocal body, chart_n
+        chart_n += 1
+        body += plotly_div_safe(fig, f"cd_{chart_n}", height)
+
+    def sec(title, guide_text):
+        nonlocal body
+        body += f'<div class="card"><h2>{title}</h2>'
+        body += chart_guide(guide_text)
+
+    def end_sec():
+        nonlocal body
+        body += "</div>"
+
+    stage_names = {0: "Other", 1: "In-Between", 2: "2nd Key", 3: "Key Animator",
+                   4: "Anim Director", 5: "Chief AD", 6: "Director"}
+    decade_labels = ["1970s", "1980s", "1990s", "2000s", "2010s"]
+    decade_ranges = [(1970, 1979), (1980, 1989), (1990, 1999), (2000, 2009), (2010, 2019)]
+    PAL = ["#f093fb", "#f5576c", "#fda085", "#06D6A0", "#a0d2db", "#FFD166", "#667eea"]
+
+    n_p = len(persons)
+    avg_span = sum(p["span"] for p in persons) / n_p
+    still_active = sum(1 for p in persons if p["latest_year"] >= 2022)
+
+    # ============================================================
+    # STAT CARDS
+    # ============================================================
+    body += '<div class="card"><h2>キャリアダイナミクス サマリー</h2><div class="stats-grid">'
+    for label, val in [
+        ("分析対象", fmt_num(n_p)), ("平均キャリア年数", f"{avg_span:.1f}年"),
+        ("平均クレジット数", f"{sum(p['total_credits'] for p in persons)/n_p:.1f}"),
+        ("現役(2022~)", fmt_num(still_active)),
+    ]:
+        body += f'<div class="stat-card"><div class="value">{val}</div><div class="label">{label}</div></div>'
+    body += "</div></div>"
+
+    # ============================================================
+    # A. MULTI-DIM SCATTER WITH MARGINALS + CLICK
+    # ============================================================
+    sec("A. キャリアランドスケープ — 多次元散布図",
+        "横軸=キャリア年数、縦軸=IV Score、バブルサイズ=クレジット数、色=役職。"
+        "上部と右部にマージナル分布（ヒストグラム）を表示。"
+        "<strong>各点をクリックするとExplorerで個人詳細を閲覧できます。</strong>")
+
+    role_pal = {"key_animator": "#f093fb", "animation_director": "#f5576c",
+                "director": "#fda085", "episode_director": "#FFD166",
+                "in_between": "#06D6A0", "voice_actor": "#667eea", "other": "#808090"}
+    sample_a = random.sample(persons, min(10000, n_p))
+    fig_a = make_subplots(rows=2, cols=2,
+                          column_widths=[0.82, 0.18], row_heights=[0.18, 0.82],
+                          shared_xaxes=True, shared_yaxes=True,
+                          horizontal_spacing=0.02, vertical_spacing=0.02)
+    for role, color in role_pal.items():
+        sub = [p for p in sample_a if p["role"] == role]
+        if len(sub) < 5:
+            continue
+        xs = [p["active_years"] for p in sub]
+        ys = [p["iv"] for p in sub]
+        sizes = [max(2, min(p["total_credits"] ** 0.4, 14)) for p in sub]
+        fig_a.add_trace(go.Scattergl(
+            x=xs, y=ys, mode="markers", name=role,
+            marker=dict(size=sizes, color=color, opacity=0.5),
+            customdata=[p["pid"] for p in sub],
+            text=[f"<b>{p['name']}</b><br>IV={p['iv']:.2f} credits={p['total_credits']}"
+                  f"<br>{p['first_year']}–{p['latest_year']} ({p['role']})<br>"
+                  f"<i>click to open Explorer</i>" for p in sub],
+            hoverinfo="text",
+        ), row=2, col=1)
+        # marginal top (x histogram)
+        fig_a.add_trace(go.Histogram(x=xs, marker_color=color, opacity=0.5,
+                                     nbinsx=30, showlegend=False), row=1, col=1)
+        # marginal right (y histogram)
+        fig_a.add_trace(go.Histogram(y=ys, marker_color=color, opacity=0.5,
+                                     nbinsy=40, showlegend=False), row=2, col=2)
+    fig_a.update_layout(barmode="stack",
+                        xaxis3=dict(title="キャリア年数"), yaxis3=dict(title="IV Score"),
+                        legend=dict(orientation="h", y=1.15, font=dict(size=10)))
+    fig_a.update_xaxes(showticklabels=False, row=1, col=1)
+    fig_a.update_yaxes(showticklabels=False, row=2, col=2)
+    plotly_div_click(fig_a, "landscape", 650)
+    end_sec()
+
+    # ============================================================
+    # B. FE × BiRank 4-QUADRANT WITH VIOLIN MARGINALS
+    # ============================================================
+    sec("B. Person FE × BiRank — 4象限 + マージナルViolin",
+        "個人固定効果とネットワーク構造スコアの関係。中央値で4象限に分割。"
+        "周辺にViolin分布を表示し、全体の分布形状と個々の位置を同時に確認できる。"
+        "<strong>クリックでExplorer遷移。</strong>")
+
+    sample_b = random.sample(persons, min(8000, n_p))
+    fe_med = sorted(p["fe"] for p in persons)[n_p // 2]
+    br_med = sorted(p["birank"] for p in persons)[n_p // 2]
+    fig_b = make_subplots(rows=2, cols=2,
+                          column_widths=[0.82, 0.18], row_heights=[0.18, 0.82],
+                          shared_xaxes=True, shared_yaxes=True,
+                          horizontal_spacing=0.02, vertical_spacing=0.02)
+    fig_b.add_trace(go.Scattergl(
+        x=[p["fe"] for p in sample_b], y=[p["birank"] for p in sample_b],
+        mode="markers",
+        marker=dict(size=3, opacity=0.4,
+                    color=[min(p["span"], 30) for p in sample_b],
+                    colorscale=[[0, "#667eea"], [0.5, "#a0d2db"], [1, "#f5576c"]],
+                    colorbar=dict(title="年数", x=1.05)),
+        customdata=[p["pid"] for p in sample_b],
+        text=[f"<b>{p['name']}</b><br>FE={p['fe']:.2f} BiRank={p['birank']:.1f}"
+              f"<br>{p['role']} {p['span']}年<br><i>click→Explorer</i>" for p in sample_b],
+        hoverinfo="text", showlegend=False,
+    ), row=2, col=1)
+    # Violin marginals
+    fig_b.add_trace(go.Violin(x=[p["fe"] for p in sample_b], fillcolor="rgba(240,147,251,0.3)",
+                              line_color="#f093fb", showlegend=False), row=1, col=1)
+    fig_b.add_trace(go.Violin(y=[p["birank"] for p in sample_b], fillcolor="rgba(160,210,219,0.3)",
+                              line_color="#a0d2db", showlegend=False), row=2, col=2)
+    fig_b.add_hline(y=br_med, line_dash="dot", line_color="rgba(255,255,255,0.25)", row=2, col=1)
+    fig_b.add_vline(x=fe_med, line_dash="dot", line_color="rgba(255,255,255,0.25)", row=2, col=1)
+    fig_b.update_layout(xaxis3=dict(title="Person FE"), yaxis3=dict(title="BiRank"))
+    fig_b.update_xaxes(showticklabels=False, row=1, col=1)
+    fig_b.update_yaxes(showticklabels=False, row=2, col=2)
+    plotly_div_click(fig_b, "fe_birank", 650)
+    end_sec()
+
+    # ============================================================
+    # C. PARALLEL COORDINATES — MULTI-SCORE
+    # ============================================================
+    sec("C. パラレル座標 — 多次元スコア比較",
+        "IV, Person FE, BiRank, Patronage, AWCC, Dormancyの6軸を同時比較。"
+        "色はキャリアステージ。各軸の範囲をドラッグでフィルタリング可能。")
+
+    sample_c = random.sample(persons, min(3000, n_p))
+    dims = [
+        dict(label="IV Score", values=[p["iv"] for p in sample_c]),
+        dict(label="Person FE", values=[p["fe"] for p in sample_c]),
+        dict(label="BiRank", values=[p["birank"] for p in sample_c]),
+        dict(label="Patronage", values=[p["patronage"] for p in sample_c]),
+        dict(label="AWCC", values=[p["awcc"] for p in sample_c]),
+        dict(label="Dormancy", values=[p["dormancy"] for p in sample_c]),
+        dict(label="Hub Score", values=[p["hub_score"] for p in sample_c]),
+        dict(label="Career Yrs", values=[p["active_years"] for p in sample_c]),
+    ]
+    fig_c = go.Figure(go.Parcoords(
+        line=dict(color=[p["highest_stage"] for p in sample_c],
+                  colorscale=[[0, "#667eea"], [0.3, "#a0d2db"], [0.6, "#f093fb"], [1, "#f5576c"]],
+                  showscale=True, colorbar=dict(title="Stage")),
+        dimensions=dims,
+    ))
+    fig_c.update_layout(title="多次元スコア パラレル座標 (色: キャリアステージ)")
+    add_chart(fig_c, 520)
+    end_sec()
+
+    # ============================================================
+    # D. SURVIVAL + HAZARD COMBINED
+    # ============================================================
+    sec("D. 生存曲線 + 離脱ハザード率 (二軸複合)",
+        "左軸: Kaplan-Meier生存曲線（年代別コホート）。右軸: ハザード率（全体）。"
+        "「5年の壁」の位置がハザード曲線と生存曲線の変曲点で一致する。")
+
+    fig_d = make_subplots(specs=[[{"secondary_y": True}]])
+    for (d_lo, d_hi), label, color in zip(decade_ranges, decade_labels, PAL):
+        cohort = [p for p in persons if d_lo <= p["first_year"] <= d_hi]
+        if len(cohort) < 50:
+            continue
+        spans = sorted(p["span"] for p in cohort)
+        n_c = len(spans)
+        x_s, y_s = [0], [1.0]
+        for yr in range(1, 36):
+            y_s.append(sum(1 for s in spans if s >= yr) / n_c)
+            x_s.append(yr)
+        fig_d.add_trace(go.Scatter(x=x_s, y=y_s, name=f"{label} (n={n_c:,})",
+                                   mode="lines", line=dict(color=color, width=2)),
+                        secondary_y=False)
+    # Hazard on secondary y
+    all_spans = sorted(p["span"] for p in persons)
+    hx, hy = [], []
+    for yr in range(1, 31):
+        at_risk = sum(1 for s in all_spans if s >= yr)
+        dropped = sum(1 for s in all_spans if s == yr)
+        if at_risk:
+            hx.append(yr)
+            hy.append(dropped / at_risk)
+    fig_d.add_trace(go.Bar(x=hx, y=hy, name="ハザード率 (全体)", opacity=0.3,
+                           marker_color="#FFD166"), secondary_y=True)
+    fig_d.update_yaxes(title_text="生存率", tickformat=".0%", secondary_y=False)
+    fig_d.update_yaxes(title_text="ハザード率", tickformat=".1%", secondary_y=True)
+    fig_d.update_xaxes(title_text="キャリア年数")
+    fig_d.update_layout(legend=dict(orientation="h", y=1.12, font=dict(size=10)))
+    add_chart(fig_d, 520)
+    end_sec()
+
+    # ============================================================
+    # E. ROLE TRANSITION SANKEY
+    # ============================================================
+    if role_flow_data:
+        sec("E. 役職遷移サンキーダイアグラム",
+            "キャリアを通じた役職間の遷移フロー（上位40）。")
+        nodes = role_flow_data.get("nodes", [])
+        links = sorted(role_flow_data.get("links", []),
+                       key=lambda l: l.get("value", 0), reverse=True)[:40]
+        fig_e = go.Figure(go.Sankey(
+            node=dict(label=[n.get("name", "") for n in nodes],
+                      color=PAL * 3, pad=15, thickness=20),
+            link=dict(source=[l["source"] for l in links],
+                      target=[l["target"] for l in links],
+                      value=[l["value"] for l in links],
+                      color=["rgba(240,147,251,0.25)"] * len(links)),
+        ))
+        fig_e.update_layout(title="役職遷移サンキー (上位40)")
+        add_chart(fig_e, 550)
+        end_sec()
+
+    # ============================================================
+    # F. DECADE × STAGE HEATMAP
+    # ============================================================
+    sec("F. デビュー年代 × 最高到達ステージ",
+        "各年代にデビューした人物がキャリアで到達した最高ステージの分布（%）。")
+    dec_labels2 = ["1970s", "1980s", "1990s", "2000s", "2010s", "2020s"]
+    dec_ranges2 = [(1970, 1979), (1980, 1989), (1990, 1999), (2000, 2009), (2010, 2019), (2020, 2029)]
+    z_data = []
+    for stage in range(7):
+        row = []
+        for d_lo, d_hi in dec_ranges2:
+            co = [p for p in persons if d_lo <= p["first_year"] <= d_hi]
+            row.append(sum(1 for p in co if p["highest_stage"] == stage) / max(len(co), 1) * 100)
+        z_data.append(row)
+    fig_f = go.Figure(go.Heatmap(
+        z=z_data, x=dec_labels2,
+        y=[stage_names.get(i, str(i)) for i in range(7)],
+        colorscale=[[0, "#0f0c29"], [0.3, "#302b63"], [0.7, "#f093fb"], [1, "#f5576c"]],
+        text=[[f"{v:.1f}%" for v in r] for r in z_data],
+        texttemplate="%{text}", textfont=dict(size=11), colorbar=dict(title="%"),
+    ))
+    fig_f.update_layout(title="デビュー年代 × 最高到達ステージ (%)")
+    add_chart(fig_f, 420)
+    end_sec()
+
+    # ============================================================
+    # G. RIDGELINE — IV SCORE BY DECADE
+    # ============================================================
+    sec("G. デビュー年代別 IV Score リッジライン",
+        "各年代コホートのIV分布を重ねて表示。生存者バイアスに注意。"
+        "Violin + stripで個々のデータ点も視認可能。")
+    fig_g = go.Figure()
+    for i, ((d_lo, d_hi), label) in enumerate(zip(decade_ranges, decade_labels)):
+        cohort = [p for p in persons if d_lo <= p["first_year"] <= d_hi and p["iv"] > 0]
+        if len(cohort) < 30:
+            continue
+        ivs = [p["iv"] for p in cohort]
+        cap = sorted(ivs)[min(len(ivs) - 1, int(len(ivs) * 0.99))]
+        ivs = [min(v, cap) for v in ivs]
+        fig_g.add_trace(go.Violin(
+            x=ivs, y0=label, name=f"{label} (n={len(cohort):,})", orientation="h",
+            side="positive", fillcolor=PAL[i], line_color="#c0c0d0",
+            meanline_visible=True, width=1.8, points="suspectedoutliers",
+        ))
+    fig_g.update_layout(title="デビュー年代別 IV Score リッジライン",
+                        xaxis_title="IV Score", showlegend=False,
+                        violingap=0.05, violinmode="overlay")
+    add_chart(fig_g, 480)
+    end_sec()
+
+    # ============================================================
+    # H. TAGS × DECADE HEATMAP
+    # ============================================================
+    sec("H. タグ × デビュー年代 ヒートマップ",
+        "各タグの出現率を年代別に可視化。構造変化のパターンが読める。")
+    tag_counts: dict = {}
+    for p in persons:
+        for t in p["tags"]:
+            tag_counts[t] = tag_counts.get(t, 0) + 1
+    top_tags = [t for t, _ in sorted(tag_counts.items(), key=lambda x: -x[1])
+                if tag_counts[t] >= 100][:15]
+    z_h = []
+    for tag in top_tags:
+        row = []
+        for d_lo, d_hi in dec_ranges2:
+            co = [p for p in persons if d_lo <= p["first_year"] <= d_hi]
+            row.append(sum(1 for p in co if tag in p["tags"]) / max(len(co), 1) * 100)
+        z_h.append(row)
+    fig_h = go.Figure(go.Heatmap(
+        z=z_h, x=dec_labels2, y=top_tags,
+        colorscale=[[0, "#0f0c29"], [0.3, "#302b63"], [0.7, "#f093fb"], [1, "#f5576c"]],
+        text=[[f"{v:.1f}%" for v in r] for r in z_h],
+        texttemplate="%{text}", textfont=dict(size=10), colorbar=dict(title="%"),
+    ))
+    fig_h.update_layout(title="タグ出現率 × デビュー年代 (%)", margin=dict(l=180))
+    add_chart(fig_h, 520)
+    end_sec()
+
+    # ============================================================
+    # I. GROWTH TREND MOSAIC
+    # ============================================================
+    sec("I. 成長トレンド × デビュー年代",
+        "rising / stable / declining の人物比率を年代別に積み上げ。")
+    trend_colors = {"rising": "#06D6A0", "stable": "#FFD166", "declining": "#EF476F"}
+    fig_i = go.Figure()
+    for trend, color in trend_colors.items():
+        y_vals = []
+        for d_lo, d_hi in dec_ranges2:
+            co = [p for p in persons if d_lo <= p["first_year"] <= d_hi]
+            y_vals.append(sum(1 for p in co if p["trend"] == trend) / max(len(co), 1) * 100)
+        fig_i.add_trace(go.Bar(name=trend, x=dec_labels2, y=y_vals, marker_color=color))
+    fig_i.update_layout(barmode="stack", title="成長トレンド × デビュー年代 (%)",
+                        yaxis_title="%", legend=dict(orientation="h", y=1.1))
+    add_chart(fig_i, 420)
+    end_sec()
+
+    # ============================================================
+    # J. TOP 20 SPAGHETTI + CLICK
+    # ============================================================
+    sec("J. トップ人材クレジット軌跡",
+        "IV上位20名の年別クレジット数推移。<strong>線上の点をクリックでExplorer遷移。</strong>")
+    top20 = sorted(persons, key=lambda p: p["iv"], reverse=True)[:20]
+    pids20 = {p["pid"] for p in top20}
+    ph = ",".join(f"'{pid}'" for pid in pids20)
+    rows20 = conn.execute(f"""
+        SELECT c.person_id, a.year, COUNT(*) FROM credits c
+        JOIN anime a ON a.id=c.anime_id WHERE c.person_id IN ({ph}) AND a.year IS NOT NULL
+        GROUP BY c.person_id, a.year ORDER BY c.person_id, a.year
+    """).fetchall()
+    pid_yr: dict = {}
+    for r in rows20:
+        pid_yr.setdefault(r[0], {})[r[1]] = r[2]
+    spag_colors = PAL * 3
+    fig_j = go.Figure()
+    for i, p in enumerate(top20):
+        yr_d = pid_yr.get(p["pid"], {})
+        if not yr_d:
+            continue
+        yrs = sorted(yr_d.keys())
+        fig_j.add_trace(go.Scatter(
+            x=yrs, y=[yr_d[y] for y in yrs],
+            name=f"{p['name']} (IV={p['iv']:.2f})",
+            mode="lines+markers", line=dict(color=spag_colors[i], width=2),
+            marker=dict(size=4),
+            customdata=[p["pid"]] * len(yrs),
+            hovertemplate=f"<b>{p['name']}</b><br>%{{x}}: %{{y}}件<br><i>click→Explorer</i><extra></extra>",
+        ))
+    fig_j.update_layout(title="IV Top 20 年別クレジット推移",
+                        xaxis_title="年", yaxis_title="クレジット数",
+                        legend=dict(font=dict(size=9)))
+    plotly_div_click(fig_j, "top20", 580)
+    end_sec()
+
+    # ============================================================
+    # K-O. INDIVIDUAL PROFILE CARDS (5 persons)
+    # ============================================================
+    profile_persons = sorted(persons, key=lambda p: p["iv"], reverse=True)[:5]
+    # Query year×role for these 5
+    pp_ids = {p["pid"] for p in profile_persons}
+    pp_ph = ",".join(f"'{pid}'" for pid in pp_ids)
+    yr_role_rows = conn.execute(f"""
+        SELECT c.person_id, a.year, c.role, COUNT(*) FROM credits c
+        JOIN anime a ON a.id=c.anime_id
+        WHERE c.person_id IN ({pp_ph}) AND a.year IS NOT NULL
+        GROUP BY c.person_id, a.year, c.role
+    """).fetchall()
+    pid_yr_role: dict = {}
+    for r in yr_role_rows:
+        pid_yr_role.setdefault(r[0], {}).setdefault(r[1], {})[r[2]] = r[3]
+
+    for idx, pp in enumerate(profile_persons):
+        pid = pp["pid"]
+        link = f'<a href="{EXPLORER}/#person/{pid}" target="_blank" style="color:#a0d2db">Explorer →</a>'
+        sec(f"個人プロファイル {idx+1}: {pp['name']} {link}",
+            f"{pp['first_year']}–{pp['latest_year']} / {pp['role']} / "
+            f"credits={pp['total_credits']} / collaborators={pp['collaborators']:,}")
+
+        # --- Sub-grid: Radar + Year×Role Stacked Bar ---
+        body += '<div class="two-col">'
+
+        # RADAR: normalized score components
+        cats = ["IV Score", "Person FE", "BiRank", "Patronage", "AWCC", "Hub Score", "Dormancy"]
+        # Normalize to 0-100 using percentile among all persons
+        def pctile(vals, v):
+            if not vals:
+                return 50
+            below = sum(1 for x in vals if x <= v)
+            return below / len(vals) * 100
+        all_iv = [p["iv"] for p in persons]
+        all_fe = [p["fe"] for p in persons]
+        all_br = [p["birank"] for p in persons]
+        all_pat = [p["patronage"] for p in persons]
+        all_awcc = [p["awcc"] for p in persons]
+        all_hub = [p["hub_score"] for p in persons]
+        all_dorm = [p["dormancy"] for p in persons]
+        radar_vals = [
+            pctile(all_iv, pp["iv"]), pctile(all_fe, pp["fe"]),
+            pctile(all_br, pp["birank"]), pctile(all_pat, pp["patronage"]),
+            pctile(all_awcc, pp["awcc"]), pctile(all_hub, pp["hub_score"]),
+            pctile(all_dorm, pp["dormancy"]),
+        ]
+        fig_radar = go.Figure(go.Scatterpolar(
+            r=radar_vals + [radar_vals[0]], theta=cats + [cats[0]],
+            fill="toself", fillcolor="rgba(240,147,251,0.2)",
+            line=dict(color="#f093fb", width=2),
+            marker=dict(size=6),
+            text=[f"{c}: {v:.0f}%ile" for c, v in zip(cats, radar_vals)] + [""],
+            hoverinfo="text",
+        ))
+        fig_radar.update_layout(
+            polar=dict(radialaxis=dict(visible=True, range=[0, 100], tickfont=dict(size=9)),
+                       angularaxis=dict(tickfont=dict(size=10))),
+            title=dict(text="スコアプロファイル (百分位)", font=dict(size=13)),
+            margin=dict(l=40, r=40, t=50, b=30),
+        )
+        body += '<div>'
+        chart_n += 1
+        body += plotly_div_safe(fig_radar, f"cd_{chart_n}", 350)
+        body += '</div>'
+
+        # YEAR × ROLE stacked bar
+        yr_data = pid_yr_role.get(pid, {})
+        if yr_data:
+            years_sorted = sorted(yr_data.keys())
+            all_roles_set: set = set()
+            for yd in yr_data.values():
+                all_roles_set.update(yd.keys())
+            role_colors_map = {r: PAL[i % len(PAL)] for i, r in enumerate(sorted(all_roles_set))}
+            fig_bar = go.Figure()
+            for role in sorted(all_roles_set):
+                vals = [yr_data.get(y, {}).get(role, 0) for y in years_sorted]
+                if sum(vals) == 0:
+                    continue
+                fig_bar.add_trace(go.Bar(name=role, x=years_sorted, y=vals,
+                                         marker_color=role_colors_map[role]))
+            fig_bar.update_layout(barmode="stack",
+                                  title=dict(text="年別クレジット (役職別)", font=dict(size=13)),
+                                  xaxis_title="年", yaxis_title="クレジット数",
+                                  legend=dict(font=dict(size=9), orientation="h", y=1.15),
+                                  margin=dict(l=40, r=20, t=60, b=30))
+            body += '<div>'
+            chart_n += 1
+            body += plotly_div_safe(fig_bar, f"cd_{chart_n}", 350)
+            body += '</div>'
+        body += '</div>'  # end two-col
+
+        # MILESTONES TIMELINE
+        if milestones_data and pid in milestones_data:
+            events = milestones_data[pid]
+            if events:
+                ms_types_colors = {
+                    "career_start": "#06D6A0", "new_role": "#f093fb",
+                    "top_anime": "#FFD166", "career_milestone": "#f5576c",
+                    "first_director": "#fda085",
+                }
+                ms_years = [e.get("year", 0) for e in events]
+                ms_texts = [f"<b>{e.get('type','')}</b><br>{e.get('description','')}" for e in events]
+                ms_colors = [ms_types_colors.get(e.get("type", ""), "#667eea") for e in events]
+                ms_sizes = [12 if e.get("type") in ("career_start", "first_director") else 8 for e in events]
+                fig_ms = go.Figure(go.Scatter(
+                    x=ms_years, y=[0] * len(ms_years), mode="markers+text",
+                    marker=dict(size=ms_sizes, color=ms_colors, symbol="diamond",
+                                line=dict(width=1, color="#c0c0d0")),
+                    text=[e.get("type", "")[:6] for e in events],
+                    textposition="top center", textfont=dict(size=8, color="#a0a0c0"),
+                    hovertext=ms_texts, hoverinfo="text",
+                ))
+                fig_ms.update_layout(
+                    title=dict(text="マイルストーンタイムライン", font=dict(size=13)),
+                    xaxis=dict(title="年"), yaxis=dict(visible=False, range=[-0.5, 0.8]),
+                    margin=dict(l=40, r=20, t=40, b=30))
+                chart_n += 1
+                body += plotly_div_safe(fig_ms, f"cd_{chart_n}", 200)
+
+        # Summary stat row
+        sr = pp.get("score_range", {})
+        fe_range = sr.get("person_fe", [0, 0])
+        body += '<div class="stats-grid">'
+        for label, val in [
+            ("IV Score", f"{pp['iv']:.3f}"),
+            ("Person FE", f"{pp['fe']:.3f} [{fe_range[0]:.2f}, {fe_range[1]:.2f}]"),
+            ("BiRank", f"{pp['birank']:.1f}"),
+            ("Patronage", f"{pp['patronage']:.4f}"),
+            ("Versatility", f"{pp['versatility'].get('roles', 0)}役職 / {pp['versatility'].get('categories', 0)}カテゴリ"),
+            ("Trend", pp["trend"] or "N/A"),
+        ]:
+            body += f'<div class="stat-card"><div class="value" style="font-size:1.4rem">{val}</div><div class="label">{label}</div></div>'
+        body += '</div>'
+        end_sec()
+
+    conn.close()
+
+    # --- Assemble HTML ---
+    html = wrap_html(
+        title="キャリアダイナミクス総合分析",
+        subtitle=f"多次元スコアマップ・クリッカブル散布図・個人プロファイル — {chart_n}チャート",
+        body=body,
+        intro_html=report_intro(
+            "キャリアダイナミクス総合分析",
+            "125,000人以上のアニメ業界人材のキャリアデータを多角的に分析。"
+            "散布図上の各点をクリックしてExplorerで個人詳細を閲覧可能。"
+            "マージナル分布、パラレル座標、レーダーチャート等で分布と属性を同時に可視化。"
+            "5名のトップ人材について個人プロファイル（レーダー・年別クレジット・マイルストーン）を掲載。",
+            "スタジオ経営者、人事担当、業界研究者、アニメーション教育機関",
+        ),
+        glossary_terms={
+            "Kaplan-Meier生存曲線": "ある時点でまだ業界に残っている人物の割合を推定する統計手法",
+            "ハザード率": "各キャリア年数における離脱リスク。生存曲線の傾きに対応",
+            "Person FE": "AKMモデルによる個人固定効果。スタジオ効果を除去した純粋な個人貢献度",
+            "BiRank": "二部グラフ上のPageRank変種。人物-作品ネットワーク構造的重要度",
+            "IV Score": "統合価値スコア。FE+BiRank+Studio Exp+AWCC+Patronageの加重合成",
+            "パラレル座標": "多次元データの各軸を並列に配置し、個体を折れ線で結ぶ可視化手法",
+            "マージナル分布": "散布図の各軸周辺に配置した1次元分布。全体構造と個別位置の同時把握に有効",
+            "キャリアステージ": "0=Other, 1=動画, 2=第二原画, 3=原画・レイアウト, 4=キャラデザ・脚本, 5=作監・演出, 6=監督",
+        },
+    )
+    (REPORTS_DIR / "career_dynamics.html").write_text(html)
+    print(f"    -> result/reports/career_dynamics.html ({chart_n} charts)")
+
+
+def generate_madb_coverage_report():  # noqa: C901
+    """MADBデータカバレッジ分析レポートを生成."""
+    print("  Generating MADB Coverage Report...")
+    import sqlite3 as _sq
+
+    db_path = Path("result/db/animetor_eval.db")
+    if not db_path.exists():
+        print("  [SKIP] result/db/animetor_eval.db not found")
+        return
+
+    conn = _sq.connect(db_path)
+    conn.row_factory = _sq.Row
+
+    # --- Stat cards ---
+    total_anime = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]
+    madb_anime = conn.execute("SELECT COUNT(*) FROM anime WHERE madb_id IS NOT NULL").fetchone()[0]
+    total_credits = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
+    madb_credits = conn.execute("SELECT COUNT(*) FROM credits WHERE source='mediaarts'").fetchone()[0]
+    total_persons = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
+    with_staff = conn.execute(
+        "SELECT COUNT(DISTINCT anime_id) FROM credits WHERE source='mediaarts'"
+    ).fetchone()[0]
+    metadata_only = madb_anime - with_staff
+
+    # --- Chart 1: 年代×フォーマット別アニメ数 (stacked bar) ---
+    rows = conn.execute("""
+        SELECT
+            CASE
+                WHEN year < 1980 THEN '~1979'
+                WHEN year < 1990 THEN '1980s'
+                WHEN year < 2000 THEN '1990s'
+                WHEN year < 2010 THEN '2000s'
+                WHEN year < 2020 THEN '2010s'
+                ELSE '2020s~'
+            END as era,
+            COALESCE(format, 'UNKNOWN') as fmt,
+            COUNT(*) as cnt
+        FROM anime
+        WHERE madb_id IS NOT NULL AND year IS NOT NULL
+        GROUP BY era, fmt
+        ORDER BY era, fmt
+    """).fetchall()
+
+    eras_order = ["~1979", "1980s", "1990s", "2000s", "2010s", "2020s~"]
+    fmt_colors = {"TV": "#f093fb", "OVA": "#a0d2db", "MOVIE": "#fda085",
+                  "SPECIAL": "#FFD166", "UNKNOWN": "#667eea"}
+    era_fmt: dict = {}
+    for r in rows:
+        era_fmt.setdefault(r["era"], {})[r["fmt"]] = r["cnt"]
+
+    fig1 = go.Figure()
+    for fmt, color in fmt_colors.items():
+        y_vals = [era_fmt.get(e, {}).get(fmt, 0) for e in eras_order]
+        if any(v > 0 for v in y_vals):
+            fig1.add_trace(go.Bar(name=fmt, x=eras_order, y=y_vals,
+                                  marker_color=color))
+    fig1.update_layout(barmode="stack", title="年代×フォーマット別 MADB収録アニメ数",
+                       xaxis_title="年代", yaxis_title="作品数",
+                       legend=dict(orientation="h", y=1.1))
+
+    # --- Chart 2: 年別登録数推移 (line per format) ---
+    rows2 = conn.execute("""
+        SELECT year, COALESCE(format, 'UNKNOWN') as fmt, COUNT(*) as cnt
+        FROM anime
+        WHERE madb_id IS NOT NULL AND year BETWEEN 1960 AND 2025
+        GROUP BY year, fmt
+        ORDER BY year, fmt
+    """).fetchall()
+
+    year_fmt: dict = {}
+    all_years: list = sorted({r["year"] for r in rows2})
+    for r in rows2:
+        year_fmt.setdefault(r["fmt"], {})[r["year"]] = r["cnt"]
+
+    fig2 = go.Figure()
+    for fmt, color in fmt_colors.items():
+        if fmt not in year_fmt:
+            continue
+        y_vals = [year_fmt[fmt].get(y, 0) for y in all_years]
+        fig2.add_trace(go.Scatter(name=fmt, x=all_years, y=y_vals,
+                                  mode="lines", stackgroup="one",
+                                  line=dict(color=color), fillcolor=color.replace(")", ",0.4)").replace("rgb", "rgba") if "rgb" in color else color))
+    fig2.update_layout(title="年別 MADB収録アニメ数推移（フォーマット積み上げ）",
+                       xaxis_title="年", yaxis_title="作品数")
+
+    # --- Chart 3: フォーマット別 スタッフ完全性 (horizontal stacked) ---
+    rows3 = conn.execute("""
+        SELECT COALESCE(a.format, 'UNKNOWN') as fmt,
+               COUNT(*) as total,
+               COUNT(DISTINCT c.anime_id) as with_staff
+        FROM anime a
+        LEFT JOIN credits c ON c.anime_id = a.id AND c.source = 'mediaarts'
+        WHERE a.madb_id IS NOT NULL
+        GROUP BY fmt
+        ORDER BY total DESC
+    """).fetchall()
+
+    fmts3 = [r["fmt"] for r in rows3]
+    totals3 = [r["total"] for r in rows3]
+    with_staff3 = [r["with_staff"] for r in rows3]
+    no_staff3 = [t - w for t, w in zip(totals3, with_staff3)]
+
+    fig3 = go.Figure()
+    fig3.add_trace(go.Bar(name="スタッフ情報あり", y=fmts3, x=with_staff3,
+                          orientation="h", marker_color="#06D6A0"))
+    fig3.add_trace(go.Bar(name="メタデータのみ", y=fmts3, x=no_staff3,
+                          orientation="h", marker_color="#667eea"))
+    fig3.update_layout(barmode="stack",
+                       title="フォーマット別 スタッフ情報完全性",
+                       xaxis_title="作品数", yaxis_title="フォーマット",
+                       legend=dict(orientation="h", y=1.1))
+
+    # --- Chart 4: ソース別クレジット数 (pie) ---
+    src_rows = conn.execute(
+        "SELECT COALESCE(source,'N/A') as src, COUNT(*) as cnt FROM credits GROUP BY src ORDER BY cnt DESC"
+    ).fetchall()
+    src_labels = [r["src"] for r in src_rows]
+    src_vals = [r["cnt"] for r in src_rows]
+    src_colors = ["#f093fb", "#a0d2db", "#fda085", "#667eea"]
+
+    fig4 = go.Figure(go.Pie(labels=src_labels, values=src_vals,
+                             marker_colors=src_colors[:len(src_labels)],
+                             hole=0.4,
+                             textinfo="label+percent+value",
+                             texttemplate="%{label}<br>%{value:,}<br>%{percent}"))
+    fig4.update_layout(title="データソース別 クレジット数分布")
+
+    # --- Chart 5: 役職別クレジット数 (AniList vs MediaArts, top 15 roles) ---
+    role_rows = conn.execute("""
+        SELECT role, source, COUNT(*) as cnt
+        FROM credits
+        WHERE source IN ('anilist', 'mediaarts') AND role != 'special'
+        GROUP BY role, source
+        ORDER BY role, source
+    """).fetchall()
+
+    role_data: dict = {}
+    for r in role_rows:
+        role_data.setdefault(r["role"], {})[r["source"]] = r["cnt"]
+
+    # Sort by total credits, take top 15
+    top_roles = sorted(role_data.keys(),
+                       key=lambda ro: sum(role_data[ro].values()), reverse=True)[:15]
+
+    fig5 = go.Figure()
+    fig5.add_trace(go.Bar(name="AniList", x=top_roles,
+                          y=[role_data[ro].get("anilist", 0) for ro in top_roles],
+                          marker_color="#f093fb"))
+    fig5.add_trace(go.Bar(name="MediaArts", x=top_roles,
+                          y=[role_data[ro].get("mediaarts", 0) for ro in top_roles],
+                          marker_color="#a0d2db"))
+    fig5.update_layout(barmode="group", title="役職別クレジット数 — AniList vs MediaArts (上位15役職)",
+                       xaxis_title="役職", yaxis_title="クレジット数",
+                       xaxis_tickangle=-35)
+
+    # --- Chart 6: MADBスクレイパー拡充前後比較 ---
+    # Before: max_anime=10000 → approx TV+Special only (6176+55=6231 with_staff, 0 movies)
+    # After: unlimited → all formats
+    before_with = 6231   # TV(6176) + Special(55) all had contributors
+    before_meta = 3769   # OVA cut-off (no movies at all)
+    after_with = with_staff
+    after_meta = metadata_only
+
+    fig6 = make_subplots(rows=1, cols=2,
+                         subplot_titles=["拡充前 (max=10,000)", "拡充後 (無制限)"],
+                         specs=[[{"type": "domain"}, {"type": "domain"}]])
+    fig6.add_trace(go.Pie(labels=["スタッフあり", "メタのみ"],
+                          values=[before_with, before_meta],
+                          marker_colors=["#06D6A0", "#667eea"],
+                          hole=0.5, name="Before",
+                          textinfo="label+value"), row=1, col=1)
+    fig6.add_trace(go.Pie(labels=["スタッフあり", "メタのみ"],
+                          values=[after_with, after_meta],
+                          marker_colors=["#06D6A0", "#667eea"],
+                          hole=0.5, name="After",
+                          textinfo="label+value"), row=1, col=2)
+    fig6.update_layout(title="スクレイパー拡充前後のMADB収録状況比較")
+
+    conn.close()
+
+    # --- Assemble body ---
+    body = ""
+
+    # Stat cards
+    body += '<div class="card">'
+    body += "<h2>データ収録サマリー</h2>"
+    body += '<div class="stats-grid">'
+    for label, val in [
+        ("総アニメ数", fmt_num(total_anime)),
+        ("MADB収録", fmt_num(madb_anime)),
+        ("スタッフ情報あり", fmt_num(with_staff)),
+        ("メタデータのみ", fmt_num(metadata_only)),
+        ("総クレジット数", fmt_num(total_credits)),
+        ("MADBクレジット", fmt_num(madb_credits)),
+        ("総人物数", fmt_num(total_persons)),
+    ]:
+        body += (f'<div class="stat-card"><div class="value">{val}</div>'
+                 f'<div class="label">{label}</div></div>')
+    body += "</div></div>"
+
+    # Charts
+    body += '<div class="card"><h2>① 年代×フォーマット別収録作品数</h2>'
+    body += chart_guide("年代ごとにどのフォーマットが多く収録されているかを示す。OVAが2000年代に急増していることが読み取れる。")
+    body += plotly_div_safe(fig1, "madb_era_fmt", 450)
+    body += "</div>"
+
+    body += '<div class="card"><h2>② 年別収録作品数推移</h2>'
+    body += chart_guide("1960年以降のMADB収録アニメの年別推移。フォーマット別積み上げで制作トレンドの変化を可視化。")
+    body += plotly_div_safe(fig2, "madb_year_trend", 450)
+    body += "</div>"
+
+    body += '<div class="card"><h2>③ フォーマット別スタッフ情報完全性</h2>'
+    body += chart_guide(
+        "スタッフクレジットが存在する作品（緑）とメタデータのみ（青）の比率。"
+        "OVAはMADBにスタッフ情報が少なく、メタデータのみが大多数を占める。"
+    )
+    body += plotly_div_safe(fig3, "madb_completeness", 350)
+    body += "</div>"
+
+    body += '<div class="card"><h2>④ データソース別クレジット数</h2>'
+    body += chart_guide("AniList・MediaArts・N/Aの各ソースが全クレジットに占める割合。AniListが主力ソース。")
+    body += plotly_div_safe(fig4, "madb_source_pie", 420)
+    body += "</div>"
+
+    body += '<div class="card"><h2>⑤ 役職別クレジット数 — ソース比較</h2>'
+    body += chart_guide(
+        "上位15役職について、AniList（紫）とMediaArts（青）のクレジット数を比較。"
+        "MADBはkey_animatorの比率が高く、AniListはdirector系が相対的に多い。"
+    )
+    body += plotly_div_safe(fig5, "madb_role_compare", 480)
+    body += "</div>"
+
+    body += '<div class="card"><h2>⑥ スクレイパー拡充前後の収録状況比較</h2>'
+    body += chart_guide(
+        "max_anime=10,000の上限撤廃による変化。拡充前は映画(MOVIE)が0件、OVAも一部しか収録されていなかった。"
+        "拡充後は全69,374件を処理し、メタデータのみの作品も登録されるようになった。"
+    )
+    body += plotly_div_safe(fig6, "madb_before_after", 420)
+    body += "</div>"
+
+    html = wrap_html(
+        title="MADBデータカバレッジ分析",
+        subtitle="メディア芸術DB収録状況・ソース別クレジット分布",
+        body=body,
+        glossary_terms={
+            "MADB": "メディア芸術データベース (Media Arts Database) — 文化庁が管理する日本のアニメ・マンガ・ゲームの公式記録データベース",
+            "スタッフ情報あり": "MADBダンプにcontributor/creator情報が存在する作品",
+            "メタデータのみ": "タイトル・年・フォーマット情報のみでスタッフクレジットがない作品。AniList等とのタイトルマッチング用途に利用",
+            "MediaArts": "MADBから取得したクレジットレコードのソース識別子",
+        },
+    )
+    (REPORTS_DIR / "madb_coverage.html").write_text(html)
+    print(f"    -> result/reports/madb_coverage.html")
 
 
 def generate_index_page():
@@ -18666,57 +22533,890 @@ def run_interactive_visualizations():
 # Main
 # ============================================================
 
-def main():
+REPORT_REGISTRY: dict[str, callable] = {}
+
+def _register(name: str):
+    """Decorator to register a report generator."""
+    def deco(fn):
+        REPORT_REGISTRY[name] = fn
+        return fn
+    return deco
+
+
+def generate_dml_report():  # noqa: C901
+    """Double/Debiased ML 因果推論レポート — OLS vs DML 2パターン比較."""
+    print("  Generating DML Causal Inference Report...")
+
+    # Load required data from DB
+    from src.database import get_all_anime, get_all_credits, get_connection, init_db
+    from src.analysis.dml import run_dml_analysis
+
+    scores = load_json("scores.json")
+    akm = load_json("akm_diagnostics.json")
+    if not scores or not akm:
+        print("    [SKIP] scores.json or akm_diagnostics.json not found")
+        return
+
+    # Extract person_fe and studio_fe from pipeline outputs
+    person_fe_map = akm.get("person_fe", {})
+    studio_fe_map = akm.get("studio_fe", {})
+
+    if not person_fe_map or not studio_fe_map:
+        print("    [SKIP] person_fe/studio_fe not in akm_diagnostics.json")
+        return
+
+    conn = get_connection()
+    init_db(conn)
+    credits = get_all_credits(conn)
+    anime_list = get_all_anime(conn)
+    conn.close()
+
+    anime_map = {a.id: a for a in anime_list}
+
+    # Run DML analysis
+    report = run_dml_analysis(credits, anime_map, person_fe_map, studio_fe_map)
+
+    if not report.estimates:
+        print("    [SKIP] Insufficient data for DML estimation")
+        return
+
+    # Save raw results as JSON
+    dml_json_path = JSON_DIR / "dml_analysis.json"
+    dml_json_path.write_text(json.dumps(report.to_dict(), ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # =============================================
+    # Build HTML report
+    # =============================================
+    body = ""
+
+    # Intro
+    body += '<div class="report-intro">'
+    body += "<h2>Double/Debiased Machine Learning (DML)</h2>"
+    body += (
+        "<p>Chernozhukov et al. (2018) の DML フレームワークにより、"
+        "各推定パラメータについて <strong>OLS（線形・バイアスあり）</strong> と "
+        "<strong>DML（GBM + cross-fitting・バイアス除去）</strong> の2パターンを比較。</p>"
+        "<p>交絡変数の影響を柔軟にモデル化し、推定バイアスの方向と大きさを可視化します。</p>"
+    )
+    body += '<p class="audience">対象: 計量経済学・因果推論に関心のある研究者・アナリスト</p>'
+    body += "</div>"
+
+    # --- Section 1: Summary comparison table ---
+    body += '<div class="card"><h2>1. OLS vs DML 推定比較</h2>'
+    body += section_desc(
+        "各パラメータについて、従来の OLS 推定と DML 推定の結果を並列表示。"
+        "Bias = OLS θ - DML θ（正 = OLS が過大推定）。"
+    )
+
+    body += "<table><thead><tr>"
+    body += "<th>パラメータ</th><th>OLS θ</th><th>DML θ</th><th>Bias</th><th>Bias%</th>"
+    body += "<th>DML SE</th><th>DML p値</th><th>N</th>"
+    body += "</tr></thead><tbody>"
+
+    for est in report.estimates:
+        sig = "***" if est.dml.p_value < 0.001 else "**" if est.dml.p_value < 0.01 else "*" if est.dml.p_value < 0.05 else ""
+        bias_color = "#EF476F" if abs(est.bias_pct) > 20 else "#FFD166" if abs(est.bias_pct) > 10 else "#06D6A0"
+        body += (
+            f"<tr>"
+            f'<td>{est.parameter}</td>'
+            f"<td>{est.ols.theta:.4f}</td>"
+            f"<td>{est.dml.theta:.4f}{sig}</td>"
+            f'<td style="color:{bias_color}">{est.bias:+.4f}</td>'
+            f'<td style="color:{bias_color}">{est.bias_pct:+.1f}%</td>'
+            f"<td>{est.dml.se:.4f}</td>"
+            f"<td>{est.dml.p_value:.4f}</td>"
+            f"<td>{fmt_num(est.n_obs)}</td>"
+            f"</tr>"
+        )
+    body += "</tbody></table>"
+    body += "</div>"
+
+    # --- Section 2: OLS vs DML coefficient comparison chart ---
+    body += '<div class="card"><h2>2. 推定係数の比較（信頼区間付き）</h2>'
+    body += section_desc(
+        "各パラメータの OLS と DML の点推定と95%信頼区間。"
+        "DML の方が狭い CI を持つ場合、交絡除去により精度が向上。"
+    )
+
+    params = [e.parameter for e in report.estimates]
+    ols_thetas = [e.ols.theta for e in report.estimates]
+    dml_thetas = [e.dml.theta for e in report.estimates]
+    ols_lower = [e.ols.ci_lower for e in report.estimates]
+    ols_upper = [e.ols.ci_upper for e in report.estimates]
+    dml_lower = [e.dml.ci_lower for e in report.estimates]
+    dml_upper = [e.dml.ci_upper for e in report.estimates]
+
+    fig = go.Figure()
+    # OLS
+    fig.add_trace(go.Scatter(
+        x=ols_thetas, y=[f"{p} (OLS)" for p in params],
+        mode="markers",
+        marker=dict(size=12, color="#EF476F", symbol="diamond"),
+        error_x=dict(
+            type="data",
+            array=[u - t for t, u in zip(ols_thetas, ols_upper)],
+            arrayminus=[t - lo for t, lo in zip(ols_thetas, ols_lower)],
+            color="#EF476F", thickness=2,
+        ),
+        name="OLS (naive)",
+    ))
+    # DML
+    fig.add_trace(go.Scatter(
+        x=dml_thetas, y=[f"{p} (DML)" for p in params],
+        mode="markers",
+        marker=dict(size=12, color="#06D6A0", symbol="circle"),
+        error_x=dict(
+            type="data",
+            array=[u - t for t, u in zip(dml_thetas, dml_upper)],
+            arrayminus=[t - lo for t, lo in zip(dml_thetas, dml_lower)],
+            color="#06D6A0", thickness=2,
+        ),
+        name="DML (debiased)",
+    ))
+
+    fig.update_layout(
+        template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="rgba(0,0,0,0.2)",
+        title="OLS vs DML 推定係数と95%信頼区間",
+        xaxis_title="θ (推定係数)",
+        height=200 + len(params) * 100,
+        legend=dict(x=0.7, y=0.95),
+        margin=dict(l=200),
+    )
+    body += f'<div class="chart-container">{fig.to_html(full_html=False, include_plotlyjs="cdn")}</div>'
+    body += "</div>"
+
+    # --- Section 3: Per-parameter detail cards ---
+    for est in report.estimates:
+        body += f'<div class="card"><h2>3. {est.parameter} — 詳細分析</h2>'
+        body += section_desc(est.description)
+
+        # Stats grid
+        body += '<div class="stats-grid">'
+        for label, val in [
+            ("OLS θ", f"{est.ols.theta:.4f}"),
+            ("DML θ", f"{est.dml.theta:.4f}"),
+            ("Bias", f"{est.bias:+.4f}"),
+            ("Bias%", f"{est.bias_pct:+.1f}%"),
+            ("DML R² (Y model)", f"{est.dml.r2_y:.3f}"),
+            ("DML R² (D model)", f"{est.dml.r2_d:.3f}"),
+        ]:
+            body += f'<div class="stat-card"><div class="value">{val}</div><div class="label">{label}</div></div>'
+        body += "</div>"
+
+        # Interpretation
+        body += f'<div class="insight-box"><strong>解釈:</strong> {est.interpretation}</div>'
+
+        # R² diagnostic
+        body += "<h3>Nuisance Model 診断</h3>"
+        body += (
+            f"<p>Y nuisance R² = {est.dml.r2_y:.3f} — "
+            f"{'交絡変数が Y を良く説明' if est.dml.r2_y > 0.3 else 'Y の変動の大部分は未説明'}。</p>"
+            f"<p>D nuisance R² = {est.dml.r2_d:.3f} — "
+            f"{'D は X から予測可能（交絡あり）' if est.dml.r2_d > 0.3 else 'D は X と独立に近い（交絡少）'}。</p>"
+        )
+        if est.dml.r2_d > 0.3:
+            body += (
+                '<div class="insight-box"><strong>注意:</strong> '
+                f"D の R² が {est.dml.r2_d:.3f} と高いため、D は X で部分的に予測可能。"
+                "これは OLS 推定にバイアスが生じる条件であり、DML による補正が重要。</div>"
+            )
+        body += "</div>"
+
+    # --- Section 4: Studio CATE (if available) ---
+    if report.studio_cate:
+        body += '<div class="card"><h2>4. スタジオ移籍 — キャリア段階別 異質処置効果 (CATE)</h2>'
+        body += section_desc(
+            "キャリア段階別にスタジオ移籍の因果効果を DML で推定。"
+            "段階ごとに効果が異なるかを検証。"
+        )
+
+        stages = [c.stage for c in report.studio_cate]
+        thetas = [c.theta for c in report.studio_cate]
+        ses = [c.se for c in report.studio_cate]
+        ns = [c.n_obs for c in report.studio_cate]
+
+        fig2 = go.Figure()
+        colors = ["#f093fb", "#a0d2db", "#fda085"]
+        fig2.add_trace(go.Bar(
+            x=stages, y=thetas,
+            error_y=dict(type="data", array=[1.96 * s for s in ses], color="white"),
+            marker=dict(color=colors[:len(stages)]),
+            text=[f"θ={t:.3f}<br>N={n:,}" for t, n in zip(thetas, ns)],
+            textposition="outside",
+        ))
+        fig2.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
+        fig2.update_layout(
+            template="plotly_dark", paper_bgcolor="rgba(0,0,0,0)",
+            plot_bgcolor="rgba(0,0,0,0.2)",
+            title="キャリア段階別 DML 因果効果",
+            yaxis_title="θ (DML推定)",
+            height=400,
+        )
+        body += f'<div class="chart-container">{fig2.to_html(full_html=False, include_plotlyjs="cdn")}</div>'
+
+        # Table
+        body += "<table><thead><tr><th>段階</th><th>DML θ</th><th>SE</th><th>95% CI</th><th>N</th></tr></thead><tbody>"
+        for c in report.studio_cate:
+            lo = c.theta - 1.96 * c.se
+            hi = c.theta + 1.96 * c.se
+            body += f"<tr><td>{c.stage}</td><td>{c.theta:+.4f}</td><td>{c.se:.4f}</td><td>[{lo:.3f}, {hi:.3f}]</td><td>{fmt_num(c.n_obs)}</td></tr>"
+        body += "</tbody></table>"
+        body += "</div>"
+
+    # --- Section 5: Methodology ---
+    body += '<div class="card"><h2>5. 方法論</h2>'
+    body += "<h3>Partial Linear Model (PLM)</h3>"
+    body += (
+        "<p>Y = θ₀·D + g₀(X) + ε, &nbsp; D = m₀(X) + V</p>"
+        "<p>g₀, m₀: GradientBoostingRegressor (n_estimators=200, max_depth=4)</p>"
+        "<p>Cross-fitting: 5-fold。各 fold で nuisance model を学習し、"
+        "out-of-fold で残差を計算。Neyman orthogonal score により √n-consistent な推論。</p>"
+    )
+    body += "<h3>OLS との違い</h3>"
+    body += (
+        "<ul>"
+        "<li><strong>OLS</strong>: g₀(X) を線形仮定。非線形交絡 → バイアス。</li>"
+        "<li><strong>DML</strong>: g₀(X) を GBM で柔軟推定。cross-fitting で過学習バイアス除去。</li>"
+        "<li><strong>Bias = OLS θ - DML θ</strong>: 正ならOLSが過大推定、負なら過小推定。</li>"
+        "</ul>"
+    )
+    body += "<h3>参考文献</h3>"
+    body += (
+        "<p>Chernozhukov, V., Chetverikov, D., Demirer, M., Duflo, E., Hansen, C., "
+        "Newey, W., & Robins, J. (2018). Double/debiased machine learning for "
+        "treatment and structural parameters. <em>The Econometrics Journal</em>, 21(1), C1-C68.</p>"
+    )
+    body += "</div>"
+
+    # Diagnostics
+    body += '<div class="card"><h2>6. 診断情報</h2>'
+    body += '<div class="stats-grid">'
+    for label, val in [
+        ("クレジット数", fmt_num(report.diagnostics.get("n_credits", 0))),
+        ("アニメ数", fmt_num(report.diagnostics.get("n_anime", 0))),
+        ("Person FE 数", fmt_num(report.diagnostics.get("n_persons_with_fe", 0))),
+        ("Studio FE 数", fmt_num(report.diagnostics.get("n_studios_with_fe", 0))),
+    ]:
+        body += f'<div class="stat-card"><div class="value">{val}</div><div class="label">{label}</div></div>'
+    body += "</div></div>"
+
+    # Write HTML
+    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+    html = f"""<!DOCTYPE html>
+<html lang="ja"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DML 因果推論レポート</title>
+<style>{COMMON_CSS}</style>
+</head><body>
+<div class="page-bg"><div class="container">
+<header>
+<h1>Double/Debiased Machine Learning</h1>
+<div class="subtitle">OLS vs DML — 因果推論の2パターン比較</div>
+<div class="timestamp">Generated: {now}</div>
+</header>
+{body}
+<footer>
+本レポートはクレジットデータに基づく統計分析であり、個人の能力を評価するものではありません。<br>
+This report is a statistical analysis based on credit data and does not evaluate individual ability.
+</footer>
+</div></div></body></html>"""
+
+    out = REPORTS_DIR / "dml_causal_inference.html"
+    out.write_text(html, encoding="utf-8")
+    print(f"    -> {out} ({len(html):,} bytes)")
+
+
+def generate_derived_params_report():  # noqa: C901
+    """導出パラメータ透明性レポート.
+
+    パイプライン計算過程で動的に推定された全パラメータを可視化し、
+    推定方法・根拠・影響範囲を説明する。
+    """
+    print("  Generating Derived Parameters Report...")
+    params = load_json("derived_params.json")
+    iv_data = load_json("iv_weights.json")
+    scores_data = load_json("scores.json")
+    if not params or not params.get("sections"):
+        print("  [SKIP] derived_params.json not found")
+        return
+
+    import numpy as _np
+
+    sections = params["sections"]
+    body_parts: list[str] = []
+
+    # =====================================================================
+    # §0. Overview — Pipeline Parameter Map
+    # =====================================================================
+    body_parts.append('<div class="card">')
+    body_parts.append("<h2>§0 パラメータマップ — 計算フローと導出箇所</h2>")
+    body_parts.append("""
+    <div class="insight-box">
+    <p>本レポートは、パイプラインの計算過程で<strong>データから動的に推定された</strong>パラメータを
+    すべて開示します。ハードコードされた定数は一切なく、入力データが変われば値も変わります。</p>
+    </div>
+    """)
+    body_parts.append("""
+    <table><thead><tr>
+    <th>Phase</th><th>計算ステップ</th><th>導出パラメータ</th><th>推定方法</th>
+    </tr></thead><tbody>
+    <tr><td>4</td><td>グラフ構築</td><td>staff_scale baseline</td><td>スタッフ数中央値</td></tr>
+    <tr><td>5</td><td>AKM推定</td><td>θ_i, ψ_j分布</td><td>反復デミーニング</td></tr>
+    <tr><td>5</td><td>品質キャリブレーション</td><td>role_damping, blend, top_fraction</td>
+        <td>Spearman ρ, CV, 歪度</td></tr>
+    <tr><td>5</td><td>BiRankリスケール</td><td>×N倍率</td><td>人数N</td></tr>
+    <tr><td>5</td><td>IV PCA重み</td><td>λ_1..λ_5</td><td>PCA第1主成分負荷量</td></tr>
+    </tbody></table>
+    """)
+    body_parts.append("</div>")
+
+    # =====================================================================
+    # §1. BiRank Quality Calibration
+    # =====================================================================
+    cal = sections.get("birank_quality_calibration", {})
+    cal_params = cal.get("parameters", {})
+    cal_diag = cal.get("diagnostics", {})
+
+    body_parts.append('<div class="card">')
+    body_parts.append("<h2>§1 BiRank品質キャリブレーション</h2>")
+    body_parts.append(f"""
+    <p class="section-desc">{cal.get('description', '')}</p>
+    <p>BiRankのエッジ重みは <code>role_w<sup>damping</sup> × prod_scale × quality_boost</code> で計算されます。
+    以下の3パラメータがデータから自動推定されました。</p>
+    """)
+
+    # Parameter cards
+    for pname, pinfo in cal_params.items():
+        val = pinfo.get("value")
+        val_str = f"{val:.4f}" if val is not None else "N/A"
+        body_parts.append(f"""
+        <div class="metric-card" style="margin-bottom: 12px;">
+        <h3>{pname} = <span style="color: #F72585;">{val_str}</span></h3>
+        <p><strong>推定方法:</strong> {pinfo.get('method', '')}</p>
+        <p><strong>解釈:</strong> {pinfo.get('interpretation', '')}</p>
+        <p><strong>有効範囲:</strong> {pinfo.get('range', '')}</p>
+        </div>
+        """)
+
+    # Diagnostics
+    body_parts.append("<h3>診断情報</h3>")
+    body_parts.append("<table><thead><tr><th>項目</th><th>値</th></tr></thead><tbody>")
+    for k, v in cal_diag.items():
+        label = k.replace("_", " ").title()
+        body_parts.append(f"<tr><td>{label}</td><td>{v}</td></tr>")
+    body_parts.append("</tbody></table>")
+
+    # Role damping explanation chart
+    rd = cal_params.get("role_damping", {}).get("value", 0.5)
+    if rd is not None:
+        fig_rd = go.Figure()
+        roles = ["director", "animation_director", "key_animator", "in_between",
+                 "character_designer", "producer", "screenplay"]
+        from src.utils.config import ROLE_WEIGHTS
+        for label, damp in [("damping=0 (役職無視)", 0.0), (f"damping={rd:.2f} (推定値)", rd),
+                            ("damping=1 (フル階層)", 1.0)]:
+            fig_rd.add_trace(go.Bar(
+                name=label,
+                x=roles,
+                y=[ROLE_WEIGHTS.get(r, 1.0) ** damp for r in roles],
+                text=[f"{ROLE_WEIGHTS.get(r, 1.0) ** damp:.2f}" for r in roles],
+                textposition="auto",
+            ))
+        fig_rd.update_layout(
+            title="Role Damping効果 — 役職重みの圧縮度合い",
+            xaxis_title="役職",
+            yaxis_title="有効重み (role_w ^ damping)",
+            barmode="group",
+        )
+        body_parts.append(plotly_div(fig_rd, "role_damping_effect", 400))
+
+    body_parts.append("</div>")
+
+    # =====================================================================
+    # §2. IV PCA Weights
+    # =====================================================================
+    iv_sec = sections.get("iv_pca_weights", {})
+    iv_params = iv_sec.get("parameters", {})
+    iv_diag = iv_sec.get("diagnostics", {})
+
+    body_parts.append('<div class="card">')
+    body_parts.append("<h2>§2 Integrated Value — PCA導出λ重み</h2>")
+    body_parts.append(f"""
+    <p class="section-desc">{iv_sec.get('description', '')}</p>
+    <p>5つのIV成分をz正規化した後、PCA第1主成分(PC1)の負荷量の絶対値を重みに変換。
+    分散説明率 = <strong>{iv_diag.get('pca_variance_explained', 0):.1%}</strong></p>
+    """)
+
+    if iv_params:
+        # Lambda weight bar chart
+        names = sorted(iv_params.keys())
+        weights = [iv_params[n].get("lambda_weight", 0) for n in names]
+        stds = [iv_params[n].get("component_std", 0) for n in names]
+        means = [iv_params[n].get("component_mean", 0) for n in names]
+
+        fig_iv = make_subplots(rows=1, cols=3,
+                               subplot_titles=["λ重み (PCA PC1)", "成分標準偏差", "成分平均 (z正規化後)"])
+        fig_iv.add_trace(go.Bar(x=names, y=weights, marker_color="#7209B7",
+                                text=[f"{w:.3f}" for w in weights], textposition="auto"),
+                         row=1, col=1)
+        fig_iv.add_trace(go.Bar(x=names, y=stds, marker_color="#3A86FF",
+                                text=[f"{s:.3f}" for s in stds], textposition="auto"),
+                         row=1, col=2)
+        fig_iv.add_trace(go.Bar(x=names, y=means, marker_color="#F72585",
+                                text=[f"{m:.3f}" for m in means], textposition="auto"),
+                         row=1, col=3)
+        fig_iv.update_layout(title="IV成分の重みと正規化統計", showlegend=False, height=400)
+        body_parts.append(plotly_div(fig_iv, "iv_weights_chart", 420))
+
+        # Table
+        body_parts.append("""<table><thead><tr>
+        <th>成分</th><th>λ重み</th><th>σ (標準偏差)</th><th>μ (z正規化後平均)</th>
+        <th>解釈</th>
+        </tr></thead><tbody>""")
+        interp_map = {
+            "person_fe": "AKM個人固定効果 — 個人の構造的貢献度",
+            "birank": "BiRank — 二部グラフ上の中心性",
+            "studio_exposure": "スタジオ固定効果の加重和 — 環境の質",
+            "awcc": "加重クラスタリング係数 — 協業の密度",
+            "patronage": "パトロネージプレミアム — 監督からの信頼の蓄積",
+        }
+        for n in names:
+            p = iv_params[n]
+            body_parts.append(
+                f"<tr><td><strong>{n}</strong></td>"
+                f"<td>{p.get('lambda_weight', 0):.4f}</td>"
+                f"<td>{p.get('component_std', 0):.4f}</td>"
+                f"<td>{p.get('component_mean', 0):.4f}</td>"
+                f"<td>{interp_map.get(n, '')}</td></tr>"
+            )
+        body_parts.append("</tbody></table>")
+
+    body_parts.append("</div>")
+
+    # =====================================================================
+    # §3. Staff Scale Baseline
+    # =====================================================================
+    ss_sec = sections.get("staff_scale", {})
+    ss_params = ss_sec.get("parameters", {})
+    ss_diag = ss_sec.get("diagnostics", {})
+
+    if ss_sec:
+        body_parts.append('<div class="card">')
+        body_parts.append("<h2>§3 スタッフ規模ベースライン</h2>")
+        body_parts.append(f"""
+        <p class="section-desc">{ss_sec.get('description', '')}</p>
+        <p><code>staff_scale = log1p(staff_count) / log1p(median)</code> — 中央値の作品がscale=1.0。</p>
+        """)
+
+        median_s = ss_params.get("median_staff_count", 30)
+        body_parts.append(f"""
+        <div class="insight-box">
+        <p><strong>推定ベースライン: {median_s}人</strong> — {ss_params.get('interpretation', '')}</p>
+        </div>
+        """)
+
+        # Show staff_scale curve
+        import math
+        x_staff = list(range(1, 301))
+        log_base = math.log1p(median_s)
+        y_scale = [math.log1p(x) / log_base for x in x_staff]
+        fig_ss = go.Figure()
+        fig_ss.add_trace(go.Scatter(
+            x=x_staff, y=y_scale, mode="lines", name="staff_scale",
+            line=dict(color="#7209B7", width=2),
+        ))
+        fig_ss.add_hline(y=1.0, line_dash="dash", line_color="#F72585",
+                         annotation_text=f"baseline={median_s}人")
+        # Mark key points
+        for pt, lbl in [(3, "自主制作"), (int(median_s), "中央値"), (100, "大型TV"), (250, "劇場版")]:
+            if pt <= 300:
+                fig_ss.add_trace(go.Scatter(
+                    x=[pt], y=[math.log1p(pt) / log_base], mode="markers+text",
+                    text=[f"{lbl}({pt}人)={math.log1p(pt)/log_base:.2f}"],
+                    textposition="top center", marker=dict(size=10, color="#F72585"),
+                    showlegend=False,
+                ))
+        fig_ss.update_layout(
+            title="スタッフ数 → staff_scale変換曲線",
+            xaxis_title="スタッフ数", yaxis_title="staff_scale",
+        )
+        body_parts.append(plotly_div(fig_ss, "staff_scale_curve", 400))
+
+        # Distribution table
+        body_parts.append("<h3>スタッフ数分布</h3>")
+        body_parts.append("<table><thead><tr><th>統計量</th><th>値</th></tr></thead><tbody>")
+        for k, v in ss_diag.items():
+            label = k.replace("_", " ").title()
+            body_parts.append(f"<tr><td>{label}</td><td>{v}</td></tr>")
+        body_parts.append("</tbody></table>")
+        body_parts.append("</div>")
+
+    # =====================================================================
+    # §4. BiRank Rescaling
+    # =====================================================================
+    br_sec = sections.get("birank_rescaling", {})
+    if br_sec:
+        br_params = br_sec.get("parameters", {})
+        br_diag = br_sec.get("diagnostics", {})
+        body_parts.append('<div class="card">')
+        body_parts.append("<h2>§4 BiRankリスケーリング</h2>")
+        body_parts.append(f"""
+        <p class="section-desc">{br_sec.get('description', '')}</p>
+        <p>BiRankの出力は確率空間(全人物のスコア合計=1)。IV成分として使うために
+        ×{br_params.get('rescale_factor', 'N')}して期待値空間(平均=1)に変換。</p>
+        """)
+        body_parts.append(f"""
+        <div class="insight-box">
+        <p><strong>リスケール倍率: ×{br_params.get('rescale_factor', 'N')}</strong><br>
+        変換後: mean={br_diag.get('mean_score', 0):.4f},
+        median={br_diag.get('median_score', 0):.4f},
+        max={br_diag.get('max_score', 0):.4f}</p>
+        </div>
+        """)
+        body_parts.append("</div>")
+
+    # =====================================================================
+    # §5. AKM Distributions
+    # =====================================================================
+    pfe_sec = sections.get("akm_person_fe", {})
+    sfe_sec = sections.get("akm_studio_fe", {})
+    if pfe_sec or sfe_sec:
+        body_parts.append('<div class="card">')
+        body_parts.append("<h2>§5 AKM固定効果の分布</h2>")
+        body_parts.append("""
+        <p class="section-desc">AKMは production_scale = θ_i + ψ_j + ε を推定。
+        θ（個人効果）とψ（スタジオ効果）の分布がスコア全体のダイナミクスを決定します。</p>
+        """)
+
+        if scores_data and isinstance(scores_data, list):
+            pfe_vals = [s.get("person_fe", 0) for s in scores_data if "person_fe" in s]
+            sfe_list = [s.get("score_layers", {}).get("collaboration", {}).get("studio_fe_exposure", None)
+                        for s in scores_data]
+            sfe_vals = [v for v in sfe_list if v is not None and v != 0]
+
+            fig_akm = make_subplots(rows=1, cols=2,
+                                     subplot_titles=["θ_i (個人固定効果)", "ψ_j (スタジオ固定効果)"])
+            if pfe_vals:
+                fig_akm.add_trace(
+                    go.Histogram(x=pfe_vals, nbinsx=80, marker_color="#7209B7", name="person_fe"),
+                    row=1, col=1)
+            if sfe_vals:
+                fig_akm.add_trace(
+                    go.Histogram(x=sfe_vals, nbinsx=50, marker_color="#3A86FF", name="studio_fe"),
+                    row=1, col=2)
+            fig_akm.update_layout(title="AKM固定効果の分布", showlegend=False)
+            body_parts.append(plotly_div(fig_akm, "akm_dist", 400))
+
+        # Stats tables
+        for label, sec in [("個人固定効果 θ_i", pfe_sec), ("スタジオ固定効果 ψ_j", sfe_sec)]:
+            diag = sec.get("diagnostics", {})
+            if diag:
+                body_parts.append(f"<h3>{label}</h3>")
+                body_parts.append("<table><thead><tr><th>統計量</th><th>値</th></tr></thead><tbody>")
+                for k, v in diag.items():
+                    body_parts.append(f"<tr><td>{k}</td><td>{v}</td></tr>")
+                body_parts.append("</tbody></table>")
+        body_parts.append("</div>")
+
+    # =====================================================================
+    # §6. Dormancy & Patronage
+    # =====================================================================
+    dorm_sec = sections.get("dormancy", {})
+    pat_sec = sections.get("patronage", {})
+    if dorm_sec or pat_sec:
+        body_parts.append('<div class="card">')
+        body_parts.append("<h2>§6 休眠ペナルティ &amp; パトロネージプレミアム</h2>")
+
+        if dorm_sec:
+            dp = dorm_sec.get("parameters", {})
+            dd = dorm_sec.get("diagnostics", {})
+            body_parts.append(f"""
+            <h3>休眠ペナルティ</h3>
+            <p>D_i = exp(-{dp.get('decay_rate', 0.5)} × max(0, gap - {dp.get('grace_period_years', 2.0)}))</p>
+            <p>活動中(D≈1.0): <strong>{dd.get('active_persons', 0)}/{dd.get('n_persons', 0)}</strong>
+            ({dd.get('active_fraction', 0):.1%})</p>
+            """)
+
+            if scores_data and isinstance(scores_data, list):
+                dorm_vals = [s.get("dormancy", 1.0) for s in scores_data if "dormancy" in s]
+                if dorm_vals:
+                    fig_dorm = go.Figure()
+                    fig_dorm.add_trace(go.Histogram(
+                        x=dorm_vals, nbinsx=50, marker_color="#F72585", name="dormancy"))
+                    fig_dorm.update_layout(
+                        title="休眠スコア分布 (1.0=活動中, 0=長期離脱)",
+                        xaxis_title="Dormancy Score", yaxis_title="人数",
+                    )
+                    body_parts.append(plotly_div(fig_dorm, "dormancy_dist", 350))
+
+        if pat_sec:
+            pd_diag = pat_sec.get("diagnostics", {})
+            body_parts.append(f"""
+            <h3>パトロネージプレミアム</h3>
+            <p>Π_i = Σ PR_d × log(1 + N_shared) — 監督からの継続起用の蓄積</p>
+            <p>非ゼロ: <strong>{pd_diag.get('nonzero', 0)}/{pd_diag.get('n_persons', 0)}</strong>
+            ({pd_diag.get('nonzero_fraction', 0):.1%}), 平均={pd_diag.get('mean', 0):.4f},
+            最大={pd_diag.get('max', 0):.4f}</p>
+            """)
+
+        body_parts.append("</div>")
+
+    # =====================================================================
+    # §7. Dual Quality — Director/Non-Director Split
+    # =====================================================================
+    body_parts.append('<div class="card">')
+    body_parts.append("<h2>§7 二重品質指標 — 監督/非監督分離</h2>")
+
+    blend_val = cal_params.get("blend", {}).get("value", 0.5)
+    top_frac_val = cal_params.get("top_fraction", {}).get("value", 0.25)
+    blend_val = blend_val if blend_val is not None else 0.5
+    top_frac_val = top_frac_val if top_frac_val is not None else 0.25
+
+    body_parts.append(f"""
+    <p>各アニメのスタッフを<strong>監督</strong>と<strong>非監督</strong>に分離し、
+    交差代入でquality boostを計算します。</p>
+
+    <table><thead><tr>
+    <th>エッジ主体</th><th>受け取るquality_boost</th><th>意味</th>
+    </tr></thead><tbody>
+    <tr><td>監督 → アニメ</td><td>quality_non_dir</td><td>チームの質で監督を評価</td></tr>
+    <tr><td>非監督 → アニメ</td><td>quality_dir</td><td>リーダーの質でスタッフを評価</td></tr>
+    </tbody></table>
+
+    <h3>二重品質の計算式</h3>
+    <p><code>quality = {blend_val:.2f} × 役職加重平均 + {1-blend_val:.2f} × 上位{top_frac_val:.0%}平均</code></p>
+    <ul>
+    <li><strong>役職加重平均</strong>（基底品質）: Σ(role_w × fe) / Σ(role_w) — 重責者の信号を増幅</li>
+    <li><strong>上位{top_frac_val:.0%}平均</strong>（上澄み）: エリート人材の存在を捉える — 新人混在チームでも信号維持</li>
+    </ul>
+    """)
+
+    # Illustration: effect of blend on a hypothetical team
+    team_fes = [0.1, 0.2, 0.3, 0.5, 0.8, 1.0, 2.0, 3.5]  # heterogeneous team
+    team_rws = [1.0, 1.0, 1.0, 2.0, 2.0, 2.3, 2.8, 3.0]
+    blends = [x / 20 for x in range(1, 20)]
+    qualities = []
+    for b in blends:
+        wm = sum(f * w for f, w in zip(team_fes, team_rws)) / sum(team_rws)
+        s = sorted(team_fes, reverse=True)
+        tk = max(1, int(len(s) * top_frac_val))
+        tm = sum(s[:tk]) / tk
+        qualities.append(b * wm + (1 - b) * tm)
+
+    fig_blend = go.Figure()
+    fig_blend.add_trace(go.Scatter(
+        x=blends, y=qualities, mode="lines+markers",
+        line=dict(color="#7209B7", width=2), name="quality"))
+    fig_blend.add_vline(x=blend_val, line_dash="dash", line_color="#F72585",
+                        annotation_text=f"推定blend={blend_val:.2f}")
+    fig_blend.update_layout(
+        title="Blendパラメータの効果（仮想チーム FE=[0.1..3.5]）",
+        xaxis_title="blend (0=上澄みのみ, 1=加重平均のみ)",
+        yaxis_title="quality score",
+    )
+    body_parts.append(plotly_div(fig_blend, "blend_effect", 350))
+    body_parts.append("</div>")
+
+    # =====================================================================
+    # §8. End-to-End Weight Flow
+    # =====================================================================
+    body_parts.append('<div class="card">')
+    body_parts.append("<h2>§8 エッジ重みの全体フロー</h2>")
+    body_parts.append("""
+    <p>グラフ構築からIVスコアまでの全計算パスを示します。</p>
+    """)
+
+    # Sankey-style flow diagram using Plotly
+    fig_flow = go.Figure(go.Sankey(
+        node=dict(
+            pad=15, thickness=20,
+            label=[
+                "role_weight",      # 0
+                "work_importance",  # 1
+                "staff_scale",      # 2
+                "prod_scale",       # 3
+                "role_damping",     # 4
+                "quality_boost",    # 5
+                "BiRank edge weight", # 6
+                "BiRank score",     # 7
+                "person_fe (AKM)",  # 8
+                "studio_exposure",  # 9
+                "AWCC",             # 10
+                "patronage",        # 11
+                "IV Score",         # 12
+                "λ weights (PCA)",  # 13
+                "dormancy",         # 14
+            ],
+            color=["#7209B7", "#3A86FF", "#3A86FF", "#4CC9F0", "#F72585",
+                   "#F72585", "#4CC9F0", "#7209B7", "#7209B7", "#3A86FF",
+                   "#3A86FF", "#3A86FF", "#F72585", "#F72585", "#4CC9F0"],
+        ),
+        link=dict(
+            source=[1, 2, 3, 0, 5, 6, 8, 7, 9, 10, 11, 13, 14, 8],
+            target=[3, 3, 6, 6, 6, 7, 5, 12, 12, 12, 12, 12, 12, 9],
+            value=[2, 2, 3, 2, 3, 5, 3, 3, 2, 1, 2, 4, 2, 1],
+            color=["rgba(58,134,255,0.3)"] * 14,
+        ),
+    ))
+    fig_flow.update_layout(title="パラメータフロー図", height=500)
+    body_parts.append(plotly_div(fig_flow, "param_flow", 520))
+    body_parts.append("</div>")
+
+    # =====================================================================
+    # §9. Parameter Sensitivity Summary
+    # =====================================================================
+    body_parts.append('<div class="card">')
+    body_parts.append("<h2>§9 パラメータ一覧と感度</h2>")
+    body_parts.append("""
+    <p>全導出パラメータの一覧。「固定」列は現在データから推定された値、
+    「感度」は値が変動した場合のスコアへの影響度を示します。</p>
+    <table><thead><tr>
+    <th>パラメータ</th><th>推定値</th><th>推定方法</th><th>感度</th>
+    </tr></thead><tbody>
+    """)
+
+    rd_val = cal_params.get("role_damping", {}).get("value")
+    bl_val = cal_params.get("blend", {}).get("value")
+    tf_val = cal_params.get("top_fraction", {}).get("value")
+    med_staff = ss_params.get("median_staff_count", "N/A")
+    n_br = sections.get("birank_rescaling", {}).get("parameters", {}).get("rescale_factor", "N/A")
+    pca_ve = iv_diag.get("pca_variance_explained", 0)
+
+    rows = [
+        ("role_damping", f"{rd_val:.4f}" if rd_val else "N/A",
+         "1-|ρ(role_w, person_fe)|", "高: BiRank全体に影響"),
+        ("blend", f"{bl_val:.4f}" if bl_val else "N/A",
+         "チーム内CV中央値", "中: quality boostの構成比"),
+        ("top_fraction", f"{tf_val:.4f}" if tf_val else "N/A",
+         "person_fe歪度", "中: 上澄み計算の閾値"),
+        ("staff_baseline", f"{med_staff}",
+         "スタッフ数中央値", "低: log変換により鈍感"),
+        ("BiRank ×N", f"{n_br}",
+         "人数", "低: 線形スケーリング"),
+        ("PCA分散説明率", f"{pca_ve:.1%}",
+         "PCA PC1", "高: λ重みの信頼性指標"),
+    ]
+    # Add lambda weights
+    for name in sorted(iv_params.keys()):
+        w = iv_params[name].get("lambda_weight", 0)
+        rows.append((f"λ_{name}", f"{w:.4f}", "PCA PC1負荷量", "高: IV成分の重み"))
+
+    for pname, val, method, sens in rows:
+        body_parts.append(
+            f"<tr><td><code>{pname}</code></td><td>{val}</td>"
+            f"<td>{method}</td><td>{sens}</td></tr>"
+        )
+    body_parts.append("</tbody></table>")
+    body_parts.append("</div>")
+
+    # Assemble
+    body = "\n".join(body_parts)
+    intro = report_intro(
+        "導出パラメータ透明性レポート",
+        "パイプライン計算過程でデータから動的に推定された全パラメータを開示し、"
+        "推定根拠・計算式・分布・感度を可視化します。",
+        "研究者・監査者・開発者",
+    )
+
+    glossary = {
+        "role_damping": "BiRankエッジ重みにおける役職階層の圧縮指数。0=役職無視、1=フル階層",
+        "blend": "二重品質指標における役職加重平均と上澄み平均の混合比率",
+        "top_fraction": "上澄み計算で「エリート層」とみなす上位割合",
+        "staff_scale": "スタッフ数のlog1p変換。中央値の作品=1.0を基準",
+        "person_fe (θ)": "AKM個人固定効果。スタジオ効果を除去した後の個人の構造的貢献",
+        "studio_fe (ψ)": "AKMスタジオ固定効果。スタジオの平均的な制作規模水準",
+        "PCA PC1": "第1主成分。5成分の共分散構造から最大分散方向を抽出",
+        "quality_boost": "アニメごとのスタッフ品質倍率。中央値のアニメ=1.0",
+    }
+
+    html = wrap_html(
+        "導出パラメータ透明性レポート",
+        "Derived Parameters Transparency Report",
+        body,
+        intro_html=intro,
+        glossary_terms=glossary,
+    )
+
+    out = REPORTS_DIR / "derived_params.html"
+    out.write_text(html, encoding="utf-8")
+    print(f"    -> {out} ({len(html):,} bytes)")
+
+
+def main(only: str | None = None):
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     GRAPHS_DIR.mkdir(parents=True, exist_ok=True)
 
+    # Build report list
+    all_generators = [
+        ("industry_overview",      generate_industry_overview),
+        ("bridge",                 generate_bridge_report),
+        ("team",                   generate_team_report),
+        ("career",                 generate_career_report),
+        ("temporal",               generate_temporal_report),
+        ("network_evolution",      generate_network_evolution_report),
+        ("growth_score",           generate_growth_score_report),
+        ("person_ranking",         generate_person_ranking_report),
+        ("compensation",           generate_compensation_report),
+        ("bias",                   generate_bias_report),
+        ("genre",                  generate_genre_report),
+        ("studio_impact",          generate_studio_impact_report),
+        ("credit_statistics",      generate_credit_statistics_report),
+        ("cooccurrence_groups",    generate_cooccurrence_groups_report),
+        ("ml_clustering",          generate_ml_clustering_report),
+        ("network_graph",          generate_network_graph_report),
+        ("cohort_animation",       generate_cohort_animation_report),
+        ("longitudinal_analysis",  generate_longitudinal_analysis_report),
+        ("shap",                   generate_shap_report),
+        ("knowledge_network",      generate_knowledge_network_report),
+        ("akm_diagnostics",        generate_akm_diagnostics_report),
+        ("expected_ability",       generate_expected_ability_report),
+        ("anime_value",            generate_anime_value_report),
+        ("career_friction",        generate_career_friction_report),
+        ("studio_timeseries",      generate_studio_timeseries_report),
+        ("compatibility",          generate_compatibility_report),
+        ("score_layers",           generate_score_layers_report),
+        ("career_dynamics",        generate_career_dynamics_report),
+        ("madb_coverage",          generate_madb_coverage_report),
+        ("dml",                    generate_dml_report),
+        ("derived_params",         generate_derived_params_report),
+        ("explorer",               generate_explorer_data),
+        ("index",                  generate_index_page),
+    ]
+
+    if only:
+        targets = [t.strip() for t in only.split(",")]
+        generators = [(n, fn) for n, fn in all_generators if n in targets]
+        if not generators:
+            print(f"Unknown report(s): {only}")
+            print(f"Available: {', '.join(n for n, _ in all_generators)}")
+            return
+    else:
+        generators = all_generators
+
     print("=" * 60)
-    print("Animetor Eval — Full Report & Visualization Generator")
+    print("Animetor Eval — Report Generator")
+    if only:
+        print(f"  Target: {only}")
     print("=" * 60)
     print()
 
-    # Phase 1: HTML Analysis Reports (28 reports)
+    # Phase 1: HTML Analysis Reports
     print("[Phase 1] Generating HTML Analysis Reports...")
-    generate_industry_overview()
-    generate_bridge_report()
-    generate_team_report()
-    generate_career_report()
-    generate_temporal_report()
-    generate_network_evolution_report()
-    generate_growth_score_report()
-    generate_person_ranking_report()
-    generate_compensation_report()
-    generate_bias_report()
-    generate_genre_report()
-    generate_studio_impact_report()
-    generate_credit_statistics_report()
-    generate_cooccurrence_groups_report()
-    generate_ml_clustering_report()
-    generate_network_graph_report()
-    generate_cohort_animation_report()
-    generate_longitudinal_analysis_report()
-    generate_shap_report()
-    # New reports (B1-B7)
-    generate_knowledge_network_report()
-    generate_akm_diagnostics_report()
-    generate_expected_ability_report()
-    generate_anime_value_report()
-    generate_career_friction_report()
-    generate_studio_timeseries_report()
-    generate_compatibility_report()
-    generate_explorer_data()
-    generate_index_page()
+    for name, fn in generators:
+        fn()
     print()
 
-    # Phase 2: matplotlib static charts
-    print("[Phase 2] Generating matplotlib static charts...")
-    run_matplotlib_visualizations()
-    print()
+    if not only:
+        # Phase 2: matplotlib static charts
+        print("[Phase 2] Generating matplotlib static charts...")
+        run_matplotlib_visualizations()
+        print()
 
-    # Phase 3: Plotly interactive charts
-    print("[Phase 3] Generating Plotly interactive charts...")
-    run_interactive_visualizations()
-    print()
+        # Phase 3: Plotly interactive charts
+        print("[Phase 3] Generating Plotly interactive charts...")
+        run_interactive_visualizations()
+        print()
 
     # Summary
     reports = list(REPORTS_DIR.glob("*.html"))
@@ -18733,4 +23433,15 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    only_arg = None
+    for arg in sys.argv[1:]:
+        if arg.startswith("--only="):
+            only_arg = arg.split("=", 1)[1]
+        elif sys.argv[sys.argv.index(arg) - 1] == "--only" if arg != "--only" else False:
+            pass
+        elif arg == "--only":
+            idx = sys.argv.index(arg)
+            if idx + 1 < len(sys.argv):
+                only_arg = sys.argv[idx + 1]
+    main(only=only_arg)

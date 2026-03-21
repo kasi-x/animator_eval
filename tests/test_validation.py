@@ -136,7 +136,7 @@ class TestCreditQuality:
         # Add 5 different roles for same person-anime pair
         for role in [
             "director",
-            "storyboard",
+            "episode_director",
             "screenplay",
             "key_animator",
             "animation_director",

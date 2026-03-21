@@ -47,49 +47,41 @@ COMMITMENT_MULTIPLIERS: dict[str, float] = {
     "sound": 1.8,  # 音響系 — 音響・音楽
     "writing": 1.8,  # 脚本系 — 脚本・原作
     "production": 1.5,  # 制作系 — プロデューサー
-    "other": 1.0,  # その他
+    "production_management": 1.2,  # 制作進行・デスク系 — 現場管理
+    "finishing": 1.2,  # 仕上げ系 — 仕上・検査
+    "editing": 1.5,  # 編集系 — 編集・ポスプロ
+    "settings": 1.5,  # 設定系 — 設定・プロップ
+    "non_production": 0.5,  # 非制作部門
 }
 
 # =============================================================================
 # Role Rank — カテゴリ内での相対的な重要度 (0.0–1.0)
 # =============================================================================
-# Within each category, how important is this specific role relative to the top role?
 # 1.0 = category lead, lower values = supporting roles within the category.
+# 統合後は1カテゴリ=1ロールが多いため、大半が1.0。
 ROLE_RANK: dict[str, float] = {
-    # Direction
     "director": 1.0,
     "episode_director": 0.83,
-    "storyboard": 0.67,
-    "series_composition": 0.67,
-    # Animation Supervision
-    "chief_animation_director": 1.0,
-    "animation_director": 0.89,
-    # Animation
+    "animation_director": 1.0,
     "key_animator": 1.0,
-    "second_key_animator": 0.75,
+    "second_key_animator": 0.7,
     "in_between": 0.5,
     "layout": 0.75,
-    # Design
     "character_designer": 1.0,
-    "mechanical_designer": 0.78,
-    "art_director": 0.87,
-    "color_designer": 0.65,
-    # Technical
-    "effects": 0.75,
+    "photography_director": 1.0,  # 撮影+エフェクト
     "cgi_director": 1.0,
-    "photography_director": 0.9,
-    # Art
-    "background_art": 1.0,
-    # Sound
+    "background_art": 1.0,  # 美術+背景
     "sound_director": 1.0,
     "music": 0.67,
-    # Writing
-    "screenplay": 1.0,
+    "screenplay": 1.0,  # +シリーズ構成
     "original_creator": 0.56,
-    # Production
     "producer": 1.0,
-    # Other
-    "other": 1.0,
+    "production_manager": 1.0,
+    "finishing": 1.0,  # +色彩設計
+    "editing": 1.0,
+    "settings": 1.0,
+    "voice_actor": 1.0,
+    "special": 1.0,
 }
 
 # Role → category mapping — derived from role_groups.ROLE_CATEGORY (single source of truth)
@@ -145,16 +137,24 @@ IV_CV_SEED = 42
 DURATION_BASELINE_MINUTES = 30  # 30分 = 1.0x multiplier
 DURATION_MAX_MULTIPLIER = 2.0  # 映画等の上限キャップ
 
+# BiRank edge weight: role hierarchy compression
+# Controls how much "being a director" matters vs "what you directed"
+# 0.0 = role title ignored (pure content weight)
+# 0.5 = sqrt compression (director 3.0 → 1.73, animator 1.0 → 1.0)
+# 1.0 = full role hierarchy (original behavior)
+BIRANK_ROLE_DAMPING = 0.5
+
 # 正規化方式: "minmax" | "percentile" | "zscore"
 NORMALIZATION_METHOD = "minmax"
 
 # AI-assisted entity resolution
 # Ollama (OpenAI-compatible API)
 LLM_BASE_URL = "http://localhost:11434/v1"  # Ollama default
-LLM_MODEL_NAME = "qwen3:8b"  # or qwen3:32b for better accuracy
+LLM_MODEL_NAME = "qwen3:32b"  # 32b for higher accuracy on name classification
 LLM_TEMPERATURE = 0.1  # 低温度で決定論的な出力
-LLM_MAX_TOKENS = 200  # Qwen3 needs more tokens for reasoning mode
-LLM_TIMEOUT = 15.0  # seconds
+LLM_MAX_TOKENS = 500  # Batch prompts need more tokens
+LLM_TIMEOUT = 30.0  # seconds (batch prompts take longer)
+LLM_BATCH_SIZE = 30  # items per batch prompt
 
 
 def load_dotenv_if_exists(env_path: Path | None = None) -> bool:

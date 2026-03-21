@@ -7,16 +7,40 @@
 - Shapley Value: ゲーム理論的な公平な価値分配
 - Marginal Contribution: 各人の限界貢献度
 - Counterfactual Analysis: 反事実推論
+
+役職重要度:
+- OLS回帰で推定: log(production_scale) ~ role構成比
+- データ駆動 — 主観的な重みを排除
 """
 
-from collections import defaultdict
-from dataclasses import dataclass
+from collections import Counter, defaultdict
+from dataclasses import dataclass, field
 
+import numpy as np
 import structlog
 
 from src.models import Credit, Role
 
 logger = structlog.get_logger()
+
+
+@dataclass
+class RoleWeightEstimation:
+    """OLS推定による役職重要度の結果.
+
+    Attributes:
+        weights: role.value → normalized weight (sum=1.0)
+        coefficients: role.value → raw OLS coefficient (β_k)
+        r_squared: 回帰のR²
+        n_anime: 推定に使用した作品数
+        method: 推定方法 ("ols" or "uniform")
+    """
+
+    weights: dict[str, float] = field(default_factory=dict)
+    coefficients: dict[str, float] = field(default_factory=dict)
+    r_squared: float = 0.0
+    n_anime: int = 0
+    method: str = "uniform"
 
 
 @dataclass
@@ -44,28 +68,156 @@ class ContributionMetrics:
     value_share: float = 0.0
 
 
-# Role importance weights (配分の基準)
-ROLE_CONTRIBUTION_WEIGHTS = {
-    Role.DIRECTOR: 0.20,  # 監督: 20%
-    Role.EPISODE_DIRECTOR: 0.08,
-    Role.CHIEF_ANIMATION_DIRECTOR: 0.15,  # 総作監: 15%
-    Role.ANIMATION_DIRECTOR: 0.10,
-    Role.CHARACTER_DESIGNER: 0.12,  # キャラデザ: 12%
-    Role.KEY_ANIMATOR: 0.06,
-    Role.STORYBOARD: 0.08,
-    Role.SCREENPLAY: 0.10,
-    Role.SERIES_COMPOSITION: 0.12,
-    Role.ART_DIRECTOR: 0.05,
-    Role.MUSIC: 0.08,
-    Role.SECOND_KEY_ANIMATOR: 0.03,
-    Role.IN_BETWEEN: 0.01,
-    Role.PRODUCER: 0.05,
-    Role.OTHER: 0.01,
-}
+# =============================================================================
+# Data-driven role weight estimation
+# =============================================================================
+
+# Minimum anime count to attempt OLS estimation
+_MIN_ANIME_FOR_OLS = 30
+
+
+def estimate_role_weights(
+    credits: list[Credit],
+    anime_staff_counts: dict[str, int] | None = None,
+) -> RoleWeightEstimation:
+    """OLS回帰でデータ駆動の役職重要度を推定.
+
+    Model: log(staff_count_j) = Σ_k β_k × role_share_jk + ε_j
+
+    各アニメ j の role k 構成比が、production scale (staff_count) をどの程度
+    説明するかを推定。β_k > 0 なら、その役職の比率が高い作品ほど大規模。
+
+    Args:
+        credits: 全クレジットデータ
+        anime_staff_counts: anime_id → staff_count (省略時はcreditsから計算)
+
+    Returns:
+        RoleWeightEstimation with normalized weights
+    """
+    result = RoleWeightEstimation()
+
+    if not credits:
+        return _uniform_weights(result)
+
+    # Group credits by anime
+    anime_credits: dict[str, list[Credit]] = defaultdict(list)
+    for c in credits:
+        anime_credits[c.anime_id].append(c)
+
+    if len(anime_credits) < _MIN_ANIME_FOR_OLS:
+        logger.info(
+            "role_weight_estimation_skipped",
+            reason="insufficient_anime",
+            n_anime=len(anime_credits),
+            min_required=_MIN_ANIME_FOR_OLS,
+        )
+        return _uniform_weights(result)
+
+    # Collect all roles that appear in data
+    all_roles = sorted({c.role.value for c in credits})
+    role_to_idx = {r: i for i, r in enumerate(all_roles)}
+    n_roles = len(all_roles)
+
+    # Build design matrix X (role shares) and target y (log staff_count)
+    anime_ids = sorted(anime_credits.keys())
+    n_anime = len(anime_ids)
+    X = np.zeros((n_anime, n_roles))
+    y = np.zeros(n_anime)
+
+    for i, aid in enumerate(anime_ids):
+        creds = anime_credits[aid]
+        n_staff = anime_staff_counts[aid] if anime_staff_counts and aid in anime_staff_counts else len(creds)
+        if n_staff < 2:
+            continue
+
+        # Role composition: fraction of staff in each role
+        role_counts = Counter(c.role.value for c in creds)
+        total = sum(role_counts.values())
+        for role_val, count in role_counts.items():
+            if role_val in role_to_idx:
+                X[i, role_to_idx[role_val]] = count / total
+
+        y[i] = np.log(n_staff)
+
+    # Remove anime with y=0 (n_staff < 2 cases)
+    mask = y > 0
+    X = X[mask]
+    y = y[mask]
+    n_anime = int(mask.sum())
+
+    if n_anime < _MIN_ANIME_FOR_OLS:
+        return _uniform_weights(result)
+
+    # OLS: β = (X'X)^{-1} X'y
+    # Add small ridge penalty for numerical stability (roles with few observations)
+    ridge = 1e-4 * np.eye(n_roles)
+    try:
+        XtX = X.T @ X + ridge
+        Xty = X.T @ y
+        beta = np.linalg.solve(XtX, Xty)
+    except np.linalg.LinAlgError:
+        logger.warning("role_weight_ols_failed", reason="singular_matrix")
+        return _uniform_weights(result)
+
+    # R²
+    y_pred = X @ beta
+    ss_res = np.sum((y - y_pred) ** 2)
+    ss_tot = np.sum((y - np.mean(y)) ** 2)
+    r_squared = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
+
+    # Convert coefficients to weights:
+    # - Take max(β_k, floor) to ensure all roles have positive weight
+    # - Normalize to sum to 1.0
+    floor = 0.01
+    raw_weights = np.maximum(beta, floor)
+    weight_sum = raw_weights.sum()
+    normalized = raw_weights / weight_sum if weight_sum > 0 else np.ones(n_roles) / n_roles
+
+    result.weights = {all_roles[i]: float(normalized[i]) for i in range(n_roles)}
+    result.coefficients = {all_roles[i]: float(beta[i]) for i in range(n_roles)}
+    result.r_squared = float(r_squared)
+    result.n_anime = n_anime
+    result.method = "ols"
+
+    logger.info(
+        "role_weights_estimated",
+        method="ols",
+        n_anime=n_anime,
+        n_roles=n_roles,
+        r_squared=round(r_squared, 4),
+        top_3=[
+            (r, round(w, 4))
+            for r, w in sorted(result.weights.items(), key=lambda x: -x[1])[:3]
+        ],
+    )
+
+    return result
+
+
+def _uniform_weights(result: RoleWeightEstimation) -> RoleWeightEstimation:
+    """Fallback: uniform weights across all Role enum values."""
+    all_roles = [r.value for r in Role]
+    n = len(all_roles)
+    result.weights = {r: 1.0 / n for r in all_roles}
+    result.method = "uniform"
+    logger.info("role_weights_fallback", method="uniform", n_roles=n)
+    return result
+
+
+# Module-level cache for estimated weights (set by estimate_role_weights or externally)
+_cached_role_weights: dict[str, float] | None = None
+
+
+def set_role_weights(weights: dict[str, float] | None) -> None:
+    """Set the module-level role weights cache (called after OLS estimation)."""
+    global _cached_role_weights  # noqa: PLW0603
+    _cached_role_weights = weights
 
 
 def compute_role_importance(role: Role) -> float:
     """役職の重要度を取得.
+
+    OLS推定済みなら推定値、未推定なら均一重みを返す。
 
     Args:
         role: 役職
@@ -73,7 +225,11 @@ def compute_role_importance(role: Role) -> float:
     Returns:
         重要度（0-1）
     """
-    return ROLE_CONTRIBUTION_WEIGHTS.get(role, 0.01)
+    if _cached_role_weights is not None:
+        return _cached_role_weights.get(role.value, 0.01)
+    # Fallback: uniform
+    n = len(Role)
+    return 1.0 / n
 
 
 def estimate_marginal_contribution(
@@ -436,6 +592,15 @@ def main():
         for s in scores_list
     }
 
+    # Estimate role weights from data
+    estimation = estimate_role_weights(credits)
+    set_role_weights(estimation.weights)
+    logger.info(
+        "role_weights_set",
+        method=estimation.method,
+        r_squared=round(estimation.r_squared, 4),
+    )
+
     # Group credits by anime
     anime_credits: dict[str, list[Credit]] = defaultdict(list)
     for credit in credits:
@@ -500,7 +665,6 @@ def main():
     print("\n=== 役職別MVP ===\n")
     for role in [
         "director",
-        "chief_animation_director",
         "animation_director",
         "key_animator",
     ]:

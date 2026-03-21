@@ -139,11 +139,11 @@ class TestExtractSeniorStaff:
         anime_map = {"a1": Anime(id="a1", title_en="Test", year=2020)}
         credits = [
             _credit("p1", "a1", Role.DIRECTOR),
-            _credit("p1", "a1", Role.SERIES_COMPOSITION),
+            _credit("p1", "a1", Role.SCREENPLAY),
         ]
         staff = _extract_senior_staff(credits, anime_map)
         assert "director" in staff["a1"]["p1"]
-        assert "series_composition" in staff["a1"]["p1"]
+        assert "screenplay" in staff["a1"]["p1"]
 
 
 # ============================================================

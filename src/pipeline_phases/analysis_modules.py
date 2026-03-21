@@ -57,6 +57,7 @@ from src.analysis.studio import compute_studio_analysis
 from src.analysis.studio_timeseries import compute_studio_timeseries
 from src.analysis.synergy_score import compute_synergy_scores
 from src.analysis.team_composition import analyze_team_patterns
+from src.analysis.dml import run_dml_analysis
 from src.analysis.temporal_pagerank import compute_temporal_pagerank
 from src.analysis.time_series import compute_time_series
 from src.analysis.transitions import compute_role_transitions
@@ -497,12 +498,211 @@ def _run_iv_weights(context: PipelineContext) -> Any:
     """Export IV weight optimization results with normalization diagnostics."""
     result: dict = {
         "lambda_weights": context.iv_lambda_weights,
+        "weight_method": "PCA_PC1",
+        "pca_variance_explained": context.pca_variance_explained,
     }
     if context.iv_component_std:
         result["component_std"] = context.iv_component_std
     if context.iv_component_mean:
         result["component_mean"] = context.iv_component_mean
+    if context.quality_calibration:
+        result["quality_calibration"] = context.quality_calibration
     return result
+
+
+def _run_derived_params_report(context: PipelineContext) -> Any:
+    """Build comprehensive report of all data-derived pipeline parameters."""
+    import statistics
+
+    report: dict = {
+        "description": "パイプライン計算過程で動的に導出された全パラメータ",
+        "sections": {},
+    }
+
+    # --- 1. BiRank Quality Calibration ---
+    cal = context.quality_calibration or {}
+    report["sections"]["birank_quality_calibration"] = {
+        "title": "BiRank品質キャリブレーション",
+        "description": "enhance_bipartite_quality()で推定されたパラメータ",
+        "parameters": {
+            "role_damping": {
+                "value": cal.get("role_damping"),
+                "method": "1 - |Spearman ρ(role_weight, person_fe)|",
+                "interpretation": "役職階層の圧縮度。低い=役職を重視、高い=内容を重視",
+                "range": "[0.1, 0.9]",
+            },
+            "blend": {
+                "value": cal.get("blend"),
+                "method": "チーム内person_fe変動係数(CV)中央値から導出",
+                "interpretation": "加重平均vs上澄みのバランス。高い=加重平均重視、低い=上澄み重視",
+                "range": "[0.2, 0.8]",
+            },
+            "top_fraction": {
+                "value": cal.get("top_fraction"),
+                "method": "person_fe分布の歪度(skewness)から導出",
+                "interpretation": "上位何%をエリート層とみなすか",
+                "range": "[0.10, 0.40]",
+            },
+        },
+        "diagnostics": {
+            "edges_reweighted": cal.get("edges_reweighted"),
+            "anime_with_directors": cal.get("anime_with_directors"),
+            "anime_with_quality_non_dir": cal.get("anime_with_quality_non_dir"),
+            "anime_with_quality_dir": cal.get("anime_with_quality_dir"),
+            "boost_non_dir_range": cal.get("boost_non_dir_range"),
+            "boost_dir_range": cal.get("boost_dir_range"),
+        },
+    }
+
+    # --- 2. IV PCA Weights ---
+    report["sections"]["iv_pca_weights"] = {
+        "title": "Integrated Value PCA重み",
+        "description": "PCA第1主成分の負荷量から導出されたλ重み",
+        "parameters": {
+            name: {
+                "lambda_weight": round(w, 4),
+                "component_std": round(
+                    (context.iv_component_std or {}).get(name, 0), 4
+                ),
+                "component_mean": round(
+                    (context.iv_component_mean or {}).get(name, 0), 4
+                ),
+            }
+            for name, w in sorted(context.iv_lambda_weights.items())
+        },
+        "diagnostics": {
+            "pca_variance_explained": round(context.pca_variance_explained, 4),
+            "weight_method": "PCA_PC1",
+            "n_components": len(context.iv_lambda_weights),
+        },
+    }
+
+    # --- 3. Staff Scale Baseline ---
+    staff_sets = (
+        context.person_anime_graph.graph.get("_anime_staff_sets", {})
+        if context.person_anime_graph
+        else {}
+    )
+    staff_counts = [len(pids) for pids in staff_sets.values()] if staff_sets else []
+    if staff_counts:
+        median_staff = statistics.median(staff_counts)
+        report["sections"]["staff_scale"] = {
+            "title": "スタッフ規模ベースライン",
+            "description": "アニメ毎のスタッフ数中央値をベースラインとして使用",
+            "parameters": {
+                "median_staff_count": round(median_staff, 1),
+                "method": "全アニメのスタッフ数中央値",
+                "interpretation": f"スタッフ{round(median_staff)}人の作品がscale=1.0",
+            },
+            "diagnostics": {
+                "n_anime": len(staff_counts),
+                "min_staff": min(staff_counts),
+                "max_staff": max(staff_counts),
+                "mean_staff": round(statistics.mean(staff_counts), 1),
+                "p25_staff": round(sorted(staff_counts)[len(staff_counts) // 4], 1),
+                "p75_staff": round(
+                    sorted(staff_counts)[3 * len(staff_counts) // 4], 1
+                ),
+            },
+        }
+
+    # --- 4. BiRank Rescaling ---
+    n_birank = len(context.birank_person_scores)
+    if n_birank > 0:
+        br_vals = list(context.birank_person_scores.values())
+        report["sections"]["birank_rescaling"] = {
+            "title": "BiRankリスケーリング",
+            "description": "確率空間(sum=1)から期待値空間(mean=1)への変換",
+            "parameters": {
+                "rescale_factor": n_birank,
+                "method": "×N (人数倍)",
+                "interpretation": "他のIV成分と同スケールにするための正規化",
+            },
+            "diagnostics": {
+                "n_persons": n_birank,
+                "min_score": round(min(br_vals), 6),
+                "max_score": round(max(br_vals), 4),
+                "mean_score": round(statistics.mean(br_vals), 4),
+                "median_score": round(statistics.median(br_vals), 4),
+            },
+        }
+
+    # --- 5. AKM Distribution ---
+    if context.person_fe:
+        pfe_vals = list(context.person_fe.values())
+        report["sections"]["akm_person_fe"] = {
+            "title": "AKM個人固定効果の分布",
+            "description": "log(production_scale) = θ_i + ψ_j + ε — θ_iの分布",
+            "diagnostics": {
+                "n_persons": len(pfe_vals),
+                "mean": round(statistics.mean(pfe_vals), 4),
+                "median": round(statistics.median(pfe_vals), 4),
+                "std": round(statistics.stdev(pfe_vals), 4) if len(pfe_vals) > 1 else 0,
+                "min": round(min(pfe_vals), 4),
+                "max": round(max(pfe_vals), 4),
+            },
+        }
+    if context.studio_fe:
+        sfe_vals = list(context.studio_fe.values())
+        report["sections"]["akm_studio_fe"] = {
+            "title": "AKMスタジオ固定効果の分布",
+            "description": "log(production_scale) = θ_i + ψ_j + ε — ψ_jの分布",
+            "diagnostics": {
+                "n_studios": len(sfe_vals),
+                "mean": round(statistics.mean(sfe_vals), 4),
+                "median": round(statistics.median(sfe_vals), 4),
+                "std": round(statistics.stdev(sfe_vals), 4) if len(sfe_vals) > 1 else 0,
+                "min": round(min(sfe_vals), 4),
+                "max": round(max(sfe_vals), 4),
+            },
+        }
+
+    # --- 6. Dormancy ---
+    if context.dormancy_scores:
+        d_vals = list(context.dormancy_scores.values())
+        active = sum(1 for v in d_vals if v >= 0.99)
+        report["sections"]["dormancy"] = {
+            "title": "休眠ペナルティの分布",
+            "description": "D_i = exp(-λ × max(0, gap - grace))",
+            "parameters": {
+                "decay_rate": 0.5,
+                "grace_period_years": 2.0,
+            },
+            "diagnostics": {
+                "n_persons": len(d_vals),
+                "active_persons": active,
+                "active_fraction": round(active / len(d_vals), 4) if d_vals else 0,
+                "mean": round(statistics.mean(d_vals), 4),
+                "median": round(statistics.median(d_vals), 4),
+            },
+        }
+
+    # --- 7. Patronage ---
+    if context.patronage_scores:
+        pat_vals = list(context.patronage_scores.values())
+        nonzero = sum(1 for v in pat_vals if v > 0)
+        report["sections"]["patronage"] = {
+            "title": "パトロネージプレミアムの分布",
+            "description": "Π_i = Σ PR_d × log(1 + N_shared)",
+            "diagnostics": {
+                "n_persons": len(pat_vals),
+                "nonzero": nonzero,
+                "nonzero_fraction": round(nonzero / len(pat_vals), 4) if pat_vals else 0,
+                "mean": round(statistics.mean(pat_vals), 4),
+                "max": round(max(pat_vals), 4),
+            },
+        }
+
+    return report
+
+
+def _run_dml_analysis(context: PipelineContext) -> Any:
+    """Run DML causal inference: OLS vs DML comparison for each parameter."""
+    report = run_dml_analysis(
+        context.credits, context.anime_map,
+        context.person_fe, context.studio_fe,
+    )
+    return report.to_dict()
 
 
 def _run_knowledge_spanners_report(context: PipelineContext) -> Any:
@@ -829,6 +1029,11 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
         monitor_step="iv_weights",
     ),
     AnalysisTask(
+        "derived_params",
+        _run_derived_params_report,
+        monitor_step="derived_params",
+    ),
+    AnalysisTask(
         "knowledge_spanners",
         _run_knowledge_spanners_report,
         monitor_step="knowledge_spanners_report",
@@ -898,6 +1103,13 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
         _run_genre_quality,
         monitor_step="genre_quality",
         condition=lambda ctx: len(ctx.person_fe) > 0,
+    ),
+    # DML causal inference (OLS vs DML comparison)
+    AnalysisTask(
+        "dml_analysis",
+        _run_dml_analysis,
+        monitor_step="dml_analysis",
+        condition=lambda ctx: ctx.akm_result is not None and len(ctx.person_fe) > 50,
     ),
 ]
 

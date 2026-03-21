@@ -14,6 +14,7 @@ pipeline = "python -m src.pipeline"
 pipeline-viz = "python -m src.pipeline --visualize"
 pipeline-inc = "python -m src.pipeline --incremental"
 pipeline-resume = "python -m src.pipeline --resume"
+pipeline-llm = { cmd = "python -m src.pipeline", env = { ANIMETOR_LLM = "1" } }
 
 # Development tools
 test = "pytest tests/ -v"

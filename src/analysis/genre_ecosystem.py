@@ -104,20 +104,8 @@ class GenreEcosystemResult:
     careers: dict[str, GenreCareerProfile] = field(default_factory=dict)
 
 
-# Career stage mapping (same as career.py)
-_STAGE_MAP: dict[str, int] = {
-    "in_between": 1,
-    "second_key_animator": 2,
-    "layout": 2,
-    "key_animator": 3,
-    "effects": 3,
-    "animation_director": 4,
-    "chief_animation_director": 5,
-    "character_designer": 4,
-    "storyboard": 4,
-    "episode_director": 5,
-    "director": 6,
-}
+# Career stage mapping — single source of truth in role_groups.py
+from src.utils.role_groups import CAREER_STAGE_BY_VALUE as _STAGE_MAP
 
 _SEASONS = ["winter", "spring", "summer", "fall"]
 

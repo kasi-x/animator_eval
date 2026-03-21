@@ -33,11 +33,12 @@ DATASET_REPO = "mediaarts-db/dataset"
 GITHUB_API_BASE = "https://api.github.com"
 
 # Anime collection files (series-level — contains key staff credits)
-ANIME_COLLECTION_FILES: dict[str, str] = {
-    "metadata207_json.zip": "AnimationTVRegularSeries",
-    "metadata208_json.zip": "AnimationTVSpecialSeries",
-    "metadata209_json.zip": "AnimationVideoPackageSeries",
-    "metadata210_json.zip": "AnimationMovieSeries",
+# Maps zip filename -> (collection_type_label, format_code)
+ANIME_COLLECTION_FILES: dict[str, tuple[str, str]] = {
+    "metadata207_json.zip": ("AnimationTVRegularSeries", "TV"),
+    "metadata208_json.zip": ("AnimationTVSpecialSeries", "SPECIAL"),
+    "metadata209_json.zip": ("AnimationVideoPackageSeries", "OVA"),
+    "metadata210_json.zip": ("AnimationMovieSeries", "MOVIE"),
 }
 
 DEFAULT_DATA_DIR = Path("data/madb")
@@ -191,13 +192,14 @@ def _extract_studios(item: dict) -> list[str]:
     return studios
 
 
-def parse_jsonld_dump(json_path: Path) -> list[dict]:
+def parse_jsonld_dump(json_path: Path, format_code: str = "") -> list[dict]:
     """Parse a JSON-LD file and extract anime information.
 
     Returns: [{
         "id": "C10001",
         "title": "ギャラクシー エンジェル",
         "year": 2001,
+        "format": "TV",
         "contributors": [(role, name), ...],
         "studios": ["マッドハウス"],
     }]
@@ -242,6 +244,7 @@ def parse_jsonld_dump(json_path: Path) -> list[dict]:
                 "id": identifier,
                 "title": title,
                 "year": year,
+                "format": format_code,
                 "contributors": contributors,
                 "studios": studios,
             }
@@ -277,7 +280,7 @@ async def download_madb_dataset(
         if version_file.exists() and version_file.read_text().strip() == tag:
             cached = {}
             all_cached = True
-            for zip_name, anime_type in ANIME_COLLECTION_FILES.items():
+            for zip_name, (anime_type, _fmt) in ANIME_COLLECTION_FILES.items():
                 json_name = zip_name.replace("_json.zip", ".json")
                 json_path = data_dir / json_name
                 if json_path.exists():
@@ -295,7 +298,7 @@ async def download_madb_dataset(
         }
 
         downloaded: dict[str, Path] = {}
-        for zip_name, anime_type in ANIME_COLLECTION_FILES.items():
+        for zip_name, (anime_type, _fmt) in ANIME_COLLECTION_FILES.items():
             download_url = assets.get(zip_name)
             if not download_url:
                 log.warning("madb_asset_not_found", zip_name=zip_name, version=tag)
@@ -333,7 +336,7 @@ async def scrape_madb(
     conn,
     data_dir: Path | None = None,
     version: str = "latest",
-    max_anime: int = 10000,
+    max_anime: int = 0,
     checkpoint_interval: int = 50,
 ) -> dict:
     """Fetch credit data from MADB dump.
@@ -346,7 +349,7 @@ async def scrape_madb(
         conn: SQLite connection
         data_dir: Download destination directory
         version: Dataset version ("latest" or tag name)
-        max_anime: Maximum number of anime to process
+        max_anime: Maximum number of anime to process per collection (0 = unlimited)
         checkpoint_interval: DB commit interval
 
     Returns:
@@ -365,9 +368,9 @@ async def scrape_madb(
     stats = {
         "anime_fetched": 0,
         "anime_with_contributors": 0,
+        "anime_metadata_only": 0,
         "credits_created": 0,
         "persons_created": 0,
-        "parse_failures": 0,
     }
     person_cache: dict[str, Person] = {}  # name -> Person (dedup)
 
@@ -377,84 +380,87 @@ async def scrape_madb(
         log.warning("madb_no_files_downloaded")
         return stats
 
-    # Phase B: Parse JSON-LD + save to DB
-    all_records: list[dict] = []
+    # Build format lookup: collection_type -> format_code
+    format_by_type = {label: fmt for _zip, (label, fmt) in ANIME_COLLECTION_FILES.items()}
+
+    # Phase B: Parse JSON-LD per collection and save to DB immediately
+    # (avoids loading all 69K records into memory at once)
+    total_processed = 0
     for anime_type, json_path in dataset_files.items():
-        log.info("madb_parsing", file=json_path.name, type=anime_type)
-        records = parse_jsonld_dump(json_path)
-        all_records.extend(records)
+        format_code = format_by_type.get(anime_type, "")
+        log.info("madb_parsing", file=json_path.name, type=anime_type, format=format_code)
+        records = parse_jsonld_dump(json_path, format_code=format_code)
+        if max_anime > 0:
+            records = records[:max_anime]
         log.info("madb_parsed", file=json_path.name, records=len(records))
 
-    if len(all_records) > max_anime:
-        all_records = all_records[:max_anime]
+        # Phase C: Save to DB
+        for i, record in enumerate(records):
+            madb_id = record["id"]
+            title = record["title"]
+            year = record["year"]
+            fmt = record["format"]
+            contributors = record["contributors"]
+            studios = record["studios"]
 
-    stats["anime_fetched"] = len(all_records)
-    log.info("madb_total_records", total=len(all_records))
+            anime_id = f"madb:{madb_id}"
+            anime = Anime(
+                id=anime_id,
+                title_ja=title,
+                year=year,
+                format=fmt or None,
+                madb_id=madb_id,
+                studios=studios,
+            )
+            upsert_anime(conn, anime)
+            stats["anime_fetched"] += 1
 
-    # Phase C: Save to DB
-    for i, record in enumerate(all_records):
-        madb_id = record["id"]
-        title = record["title"]
-        year = record["year"]
-        contributors = record["contributors"]
-        studios = record["studios"]
-
-        if not contributors:
-            stats["parse_failures"] += 1
-            continue
-
-        stats["anime_with_contributors"] += 1
-        anime_id = f"madb:{madb_id}"
-
-        anime = Anime(
-            id=anime_id,
-            title_ja=title,
-            year=year,
-            madb_id=madb_id,
-            studios=studios,
-        )
-        upsert_anime(conn, anime)
-
-        # Register credits
-        for role_ja, name_ja in contributors:
-            # Skip names that are too short (legal risk)
-            if len(name_ja) < 2:
-                continue
-
-            # Get or create Person
-            if name_ja not in person_cache:
-                person_id = make_madb_person_id(name_ja)
-                person = Person(
-                    id=person_id,
-                    name_ja=name_ja,
-                    madb_id=person_id,
-                )
-                upsert_person(conn, person)
-                person_cache[name_ja] = person
-                stats["persons_created"] += 1
+            if not contributors:
+                # Save anime metadata even without staff credits
+                stats["anime_metadata_only"] += 1
             else:
-                person = person_cache[name_ja]
+                stats["anime_with_contributors"] += 1
+                # Register credits
+                for role_ja, name_ja in contributors:
+                    if len(name_ja) < 2:  # Skip too-short names (legal risk)
+                        continue
 
-            role = parse_role(role_ja)
-            credit = Credit(
-                person_id=person.id,
-                anime_id=anime_id,
-                role=role,
-                raw_role=role_ja,
-                source="mediaarts",
-            )
-            insert_credit(conn, credit)
-            stats["credits_created"] += 1
+                    if name_ja not in person_cache:
+                        person_id = make_madb_person_id(name_ja)
+                        person = Person(
+                            id=person_id,
+                            name_ja=name_ja,
+                            madb_id=person_id,
+                        )
+                        upsert_person(conn, person)
+                        person_cache[name_ja] = person
+                        stats["persons_created"] += 1
+                    else:
+                        person = person_cache[name_ja]
 
-        # Checkpoint
-        if (i + 1) % checkpoint_interval == 0:
-            conn.commit()
-            log.info(
-                "madb_checkpoint",
-                progress=f"{i + 1}/{len(all_records)}",
-                credits=stats["credits_created"],
-                persons=stats["persons_created"],
-            )
+                    role = parse_role(role_ja)
+                    credit = Credit(
+                        person_id=person.id,
+                        anime_id=anime_id,
+                        role=role,
+                        raw_role=role_ja,
+                        source="mediaarts",
+                    )
+                    insert_credit(conn, credit)
+                    stats["credits_created"] += 1
+
+            # Checkpoint
+            total_processed += 1
+            if total_processed % checkpoint_interval == 0:
+                conn.commit()
+                log.info(
+                    "madb_checkpoint",
+                    collection=anime_type,
+                    collection_progress=f"{i + 1}/{len(records)}",
+                    total=total_processed,
+                    credits=stats["credits_created"],
+                    persons=stats["persons_created"],
+                )
 
     # Final commit
     conn.commit()
@@ -472,7 +478,7 @@ async def scrape_madb(
 @app.command()
 def main(
     max_records: int = typer.Option(
-        10000, "--max-records", "-n", help="Maximum number of anime"
+        0, "--max-records", "-n", help="Maximum number of anime per collection (0 = unlimited)"
     ),
     checkpoint: int = typer.Option(
         50, "--checkpoint", "-c", help="Checkpoint interval"

@@ -173,7 +173,7 @@ class TestMADBRoleMapping:
         assert parse_role("文芸") == Role.SCREENPLAY
         assert parse_role("総監督") == Role.DIRECTOR
         assert parse_role("撮影") == Role.PHOTOGRAPHY_DIRECTOR
-        assert parse_role("制作進行") == Role.PRODUCER
+        assert parse_role("制作進行") == Role.PRODUCTION_MANAGER
         assert parse_role("動画チェック") == Role.IN_BETWEEN
         assert parse_role("原案") == Role.ORIGINAL_CREATOR
 
@@ -186,21 +186,25 @@ class TestMADBRoleMapping:
         assert parse_role("作画監督") == Role.ANIMATION_DIRECTOR
 
     def test_unknown_role(self):
-        """Unknown role -> Role.OTHER."""
-        assert parse_role("ナレーション") == Role.OTHER
+        """Unknown role -> Role.SPECIAL."""
+        assert parse_role("完全に未知のロール") == Role.SPECIAL
+
+    def test_narration_is_voice_actor(self):
+        """ナレーション -> VOICE_ACTOR."""
+        assert parse_role("ナレーション") == Role.VOICE_ACTOR
 
     def test_new_madb_roles(self):
         """Additional MADB-specific roles."""
         assert parse_role("音楽監督") == Role.SOUND_DIRECTOR
-        assert parse_role("メカニックデザイン") == Role.MECHANICAL_DESIGNER
+        assert parse_role("メカニックデザイン") == Role.CHARACTER_DESIGNER
         assert parse_role("美術") == Role.BACKGROUND_ART
-        assert parse_role("色彩設定") == Role.COLOR_DESIGNER
-        assert parse_role("色指定") == Role.COLOR_DESIGNER
-        assert parse_role("特殊効果") == Role.EFFECTS
-        assert parse_role("エフェクト") == Role.EFFECTS
+        assert parse_role("色彩設定") == Role.FINISHING
+        assert parse_role("色指定") == Role.FINISHING
+        assert parse_role("特殊効果") == Role.PHOTOGRAPHY_DIRECTOR
+        assert parse_role("エフェクト") == Role.PHOTOGRAPHY_DIRECTOR
         assert parse_role("3DCG") == Role.CGI_DIRECTOR  # lowered to 3dcg
         assert parse_role("CG") == Role.CGI_DIRECTOR  # lowered to cg
-        assert parse_role("構成") == Role.SERIES_COMPOSITION
+        assert parse_role("構成") == Role.SCREENPLAY
 
 
 # ============================================================

@@ -389,8 +389,8 @@ class TestComputeAnimeCommitments:
             Credit(person_id="p1", anime_id="a1", role=Role.ANIMATION_DIRECTOR),
         ]
         commits = _compute_anime_commitments(credits, None)
-        # KEY_ANIMATOR=2.0 + ANIMATION_DIRECTOR≈2.49 ≈ 4.49
-        assert abs(commits["a1"]["p1"] - 4.49) < 0.02
+        # KEY_ANIMATOR=2.0 + ANIMATION_DIRECTOR=2.8 = 4.8
+        assert abs(commits["a1"]["p1"] - 4.8) < 0.02
 
     def test_episode_coverage_reduces_commitment(self):
         anime_map = {"a1": Anime(id="a1", title_en="Long Anime", episodes=200)}

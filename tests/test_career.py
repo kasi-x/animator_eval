@@ -53,13 +53,13 @@ class TestAnalyzeCareer:
         credits, anime_map = _make_career_data()
         result = analyze_career("p1", credits, anime_map)
         stages = [record.stage for record in result.role_progression]
-        # Should show career growth: in_between(1) → key(3) → anim_dir(4) → anim_dir(4)
+        # Should show career growth: in_between(1) → key(3) → anim_dir(5) → anim_dir(5)
         assert stages[0] < stages[-1]
 
     def test_highest_stage(self):
         credits, anime_map = _make_career_data()
         result = analyze_career("p1", credits, anime_map)
-        assert result.highest_stage == 4  # animation_director
+        assert result.highest_stage == 5  # animation_director (+chief AD merged)
         assert "animation_director" in result.highest_roles
 
     def test_peak_year(self):

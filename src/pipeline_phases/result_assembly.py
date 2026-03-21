@@ -1,8 +1,10 @@
 """Phase 7: Result Assembly — build comprehensive result dictionaries."""
 
+import math
 import sqlite3
-from collections import defaultdict
+from collections import Counter, defaultdict
 
+import numpy as np
 import structlog
 
 from src.analysis.explain import explain_authority, explain_skill, explain_trust
@@ -58,6 +60,18 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
         context.studio_fe,
         studio_assignments=context.studio_assignments,
     )
+
+    # Pre-compute person_fe SE from AKM residuals: SE_i = sigma_resid / sqrt(n_i)
+    if context.akm_result and context.akm_result.residuals:
+        all_resids = list(context.akm_result.residuals.values())
+        global_sigma = float(np.std(all_resids, ddof=1)) if len(all_resids) >= 2 else 0.0
+        pid_counter: Counter[str] = Counter()
+        for pid_aid in context.akm_result.residuals:
+            pid_counter[pid_aid[0]] += 1
+        person_n_obs: dict[str, int] = dict(pid_counter)
+    else:
+        global_sigma = 0.0
+        person_n_obs: dict[str, int] = {}
 
     # Pre-compute all scores and batch DB writes
     scores_by_pid: dict[str, ScoreResult] = {}
@@ -128,6 +142,10 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
         if context.peer_effect_result and context.peer_effect_result.person_peer_boost:
             peer_boost = context.peer_effect_result.person_peer_boost.get(pid, 0.0)
 
+        # person_fe standard error (analytical CI for compensation basis)
+        n_obs = person_n_obs.get(pid, 0)
+        se = global_sigma / math.sqrt(n_obs) if n_obs >= 2 and global_sigma > 0 else None
+
         result_entry = {
             "person_id": pid,
             "name": node_data.get("name", ""),
@@ -145,6 +163,39 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
             "career_friction": round(context.career_friction.get(pid, 0), 4),
             "peer_boost": round(peer_boost, 4),
             "iv_score_historical": round(score.iv_score_historical, 4),
+            "person_fe_se": round(se, 4) if se is not None else None,
+            "person_fe_n_obs": n_obs,
+        }
+
+        # 3-layer score structure + combined IV
+        result_entry["score_layers"] = {
+            "causal": {
+                "person_fe": round(score.person_fe, 4),
+                "person_fe_se": round(se, 4) if se is not None else None,
+                "person_fe_ci_95": [
+                    round(score.person_fe - 1.96 * se, 4),
+                    round(score.person_fe + 1.96 * se, 4),
+                ] if se is not None else None,
+                "n_obs": n_obs,
+                "interpretation": "AKM固定効果: 因果推論に基づく個人の生産貢献",
+            },
+            "structural": {
+                "birank": round(score.birank, 4),
+                "awcc": round(score.awcc, 4),
+                "ndi": round(score.ndi, 4),
+                "interpretation": "ネットワーク構造指標: 記述統計（因果推論なし）",
+            },
+            "collaboration": {
+                "patronage": round(score.patronage, 4),
+                "studio_fe_exposure": round(score.studio_fe_exposure, 4),
+                "interpretation": "協業環境指標: 協力関係・スタジオ環境の質",
+            },
+            "combined": {
+                "iv_score": round(score.iv_score, 4),
+                "method": "PCA_PC1",
+                "variance_explained": context.pca_variance_explained,
+                "interpretation": "総合便利指標（OPS的）: PCA第1主成分による重み付き合算",
+            },
         }
 
         # Add centrality metrics (if available)

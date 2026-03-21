@@ -322,21 +322,17 @@ def plot_person_timeline(
     role_groups = {
         "Director": {
             "director",
-            "chief_animation_director",
             "episode_director",
-            "storyboard",
         },
         "Animation": {
             "animation_director",
             "key_animator",
-            "second_key_animator",
             "in_between",
         },
         "Design": {
             "character_designer",
-            "mechanical_designer",
-            "art_director",
-            "color_designer",
+            "background_art",
+            "finishing",
         },
         "Other": set(),
     }

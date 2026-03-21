@@ -1,7 +1,7 @@
-"""Integrated Value — CV-optimized weighted combination of 8 components.
+"""Integrated Value — PCA-weighted combination of 5 components.
 
 Combines person FE, BiRank, studio exposure, AWCC, and patronage with
-cross-validation-optimized weights, multiplied by dormancy penalty.
+PCA PC1 loading-derived weights, multiplied by dormancy penalty.
 
 IV = (λ1·θ + λ2·birank + λ3·studio_exp + λ4·awcc + λ5·patronage) × dormancy
 """
@@ -24,9 +24,10 @@ class IntegratedValueResult:
     Attributes:
         iv_scores: person_id → integrated value score
         lambda_weights: component name → optimized weight
-        cv_mse: cross-validation mean squared error
+        cv_mse: cross-validation mean squared error (legacy, always 0.0)
         component_breakdown: person_id → {component → value}
         component_std: component name → standard deviation (diagnostic)
+        pca_variance_explained: PC1 variance explained ratio (0-1)
     """
 
     iv_scores: dict[str, float]
@@ -35,6 +36,7 @@ class IntegratedValueResult:
     component_breakdown: dict[str, dict[str, float]]
     component_std: dict[str, float] | None = None
     component_mean: dict[str, float] | None = None
+    pca_variance_explained: float = 0.0
 
 
 def compute_studio_exposure(
@@ -91,29 +93,33 @@ def optimize_lambda_weights(
     anime_map: dict[str, Anime],
     n_folds: int = 5,
     seed: int = 42,
-) -> tuple[dict[str, float], float, dict[str, float], dict[str, float]]:
-    """Optimize component weights via cross-validation.
+) -> tuple[dict[str, float], float, dict[str, float], dict[str, float], float]:
+    """Derive component weights from PCA PC1 loadings.
 
-    Uses time-based CV: folds are split by year blocks to avoid target leakage.
-    Optimization runs in centered normalized space for numerical stability.
-    Final weights are kept in this space; compute_integrated_value applies
-    the same centering + normalization so that weights are consistent.
+    PCA extracts the first principal component from the z-scored component
+    matrix. The absolute loadings (with a 5% floor per component) are
+    normalized to sum to 1.0 and used as lambda weights.
+
+    Sign convention: PC1 is flipped so that the person_fe loading is positive,
+    ensuring higher person_fe contributes positively to IV.
 
     Args:
         components: {component_name → {person_id → score}}
-        credits: all credits
-        anime_map: anime_id → Anime
-        n_folds: number of CV folds
-        seed: random seed
+        credits: all credits (unused, kept for API compat)
+        anime_map: anime_id → Anime (unused, kept for API compat)
+        n_folds: unused (kept for API compat)
+        seed: unused (kept for API compat)
 
     Returns:
-        (lambda_weights, cv_mse, component_std)
+        (lambda_weights, cv_mse=0.0, component_std, component_mean, variance_explained)
     """
+    from sklearn.decomposition import PCA
+
     component_names = sorted(components.keys())
     n_components = len(component_names)
 
     if n_components == 0:
-        return {}, 0.0, {}, {}
+        return {}, 0.0, {}, {}, 0.0
 
     # Get all persons with components
     all_persons = set()
@@ -122,7 +128,7 @@ def optimize_lambda_weights(
 
     if len(all_persons) < 10:
         equal_w = 1.0 / n_components
-        return {name: equal_w for name in component_names}, 0.0, {}, {}
+        return {name: equal_w for name in component_names}, 0.0, {}, {}, 0.0
 
     # Build feature matrix for all persons
     person_list = sorted(all_persons)
@@ -144,35 +150,31 @@ def optimize_lambda_weights(
     component_std = {name: float(x_std[j]) for j, name in enumerate(component_names)}
     component_mean = {name: float(x_mean[j]) for j, name in enumerate(component_names)}
 
-    # Use fixed prior weights — no CV optimization against anime.score.
-    # Theory-informed weights reflecting structural importance:
-    #   person_fe (30%): Core individual demand from AKM
-    #   birank (15%): Bipartite graph centrality — network position
-    #   studio_exposure (15%): Institutional environment quality
-    #   awcc (20%): Knowledge spanning — bridging communities
-    #   patronage (20%): Director relationship quality
-    prior_map = {
-        "person_fe": 0.30,
-        "birank": 0.15,
-        "studio_exposure": 0.15,
-        "awcc": 0.20,
-        "patronage": 0.20,
-    }
-    lambda_weights = {
-        name: prior_map.get(name, 1.0 / n_components)
-        for name in component_names
-    }
-    # Normalize in case not all components are present
-    total = sum(lambda_weights.values())
-    if total > 0:
-        lambda_weights = {k: v / total for k, v in lambda_weights.items()}
+    # PCA: extract PC1 loadings as data-driven weights
+    pca = PCA(n_components=1)
+    pca.fit(X_norm)
+    loadings = pca.components_[0]  # shape (n_components,)
+    variance_explained = float(pca.explained_variance_ratio_[0])
+
+    # Sign convention: flip so person_fe loading is positive
+    pfe_idx = component_names.index("person_fe") if "person_fe" in component_names else 0
+    if loadings[pfe_idx] < 0:
+        loadings = -loadings
+
+    # Absolute loadings → floor at 5% → normalize to sum=1
+    raw_w = np.abs(loadings)
+    raw_w = np.maximum(raw_w, 0.05)
+    raw_w /= raw_w.sum()
+
+    lambda_weights = {name: float(raw_w[j]) for j, name in enumerate(component_names)}
 
     logger.info(
-        "iv_weights_fixed_prior",
+        "iv_weights_pca_pc1",
         weights={k: round(v, 4) for k, v in lambda_weights.items()},
+        variance_explained=round(variance_explained, 4),
     )
 
-    return lambda_weights, 0.0, component_std, component_mean
+    return lambda_weights, 0.0, component_std, component_mean, variance_explained
 
 
 def compute_integrated_value(
@@ -273,8 +275,8 @@ def compute_integrated_value_full(
         "patronage": patronage,
     }
 
-    # Optimize weights
-    lambdas, cv_mse, comp_std, comp_mean = optimize_lambda_weights(
+    # Derive weights from PCA PC1 loadings
+    lambdas, cv_mse, comp_std, comp_mean, variance_explained = optimize_lambda_weights(
         components, credits, anime_map, n_folds=n_folds, seed=seed
     )
 
@@ -315,4 +317,5 @@ def compute_integrated_value_full(
         component_breakdown=component_breakdown,
         component_std=comp_std if comp_std else None,
         component_mean=comp_mean if comp_mean else None,
+        pca_variance_explained=variance_explained,
     )

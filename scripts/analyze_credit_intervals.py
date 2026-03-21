@@ -35,31 +35,27 @@ REPORTS_DIR = Path("result/reports")
 ROLE_CATEGORY: dict[str, str] = {
     "director": "direction",
     "episode_director": "direction",
-    "storyboard": "direction",
-    "series_composition": "direction",
-    "chief_animation_director": "animation_supervision",
     "animation_director": "animation_supervision",
     "key_animator": "animation",
-    "second_key_animator": "animation",
     "in_between": "animation",
     "layout": "animation",
     "character_designer": "design",
-    "mechanical_designer": "design",
-    "art_director": "design",
-    "color_designer": "design",
-    "effects": "technical",
     "cgi_director": "technical",
     "photography_director": "technical",
     "background_art": "art",
+    "finishing": "art",
     "sound_director": "sound",
     "music": "sound",
     "screenplay": "writing",
     "original_creator": "writing",
     "producer": "production",
+    "production_manager": "production",
+    "editing": "technical",
+    "settings": "design",
 }
 
 # Exclude non-production roles
-NON_PRODUCTION_ROLES = {"voice_actor", "theme_song", "adr", "other"}
+NON_PRODUCTION_ROLES = {"voice_actor", "theme_song", "adr", "special"}
 
 CATEGORY_LABELS: dict[str, tuple[str, str]] = {
     "direction": ("演出・監督", "#f093fb"),
@@ -304,7 +300,7 @@ def load_credit_data(conn: sqlite3.Connection) -> list[dict]:
         FROM credits c
         JOIN anime a ON c.anime_id = a.id
         WHERE a.year IS NOT NULL
-          AND c.role NOT IN ('voice_actor', 'theme_song', 'adr', 'other')
+          AND c.role NOT IN ('voice_actor', 'theme_song', 'adr', 'special')
         ORDER BY c.person_id, a.year
         """
     ).fetchall()
@@ -980,24 +976,23 @@ def generate_report(conn: sqlite3.Connection) -> None:
         "animation_director": "作画監督",
         "in_between": "動画",
         "episode_director": "演出",
-        "storyboard": "絵コンテ",
         "director": "監督",
         "character_designer": "キャラクターデザイン",
-        "second_key_animator": "第二原画",
-        "chief_animation_director": "総作画監督",
-        "art_director": "美術監督",
-        "effects": "エフェクト",
         "layout": "レイアウト",
         "photography_director": "撮影監督",
-        "color_designer": "色彩設計",
         "screenplay": "脚本",
         "sound_director": "音響監督",
         "background_art": "背景美術",
+        "finishing": "仕上げ",
         "cgi_director": "CGI監督",
         "producer": "プロデューサー",
-        "series_composition": "シリーズ構成",
-        "mechanical_designer": "メカデザイン",
+        "production_manager": "制作進行",
         "music": "音楽",
+        "original_creator": "原作",
+        "editing": "編集",
+        "settings": "設定",
+        "special": "特殊",
+        "voice_actor": "声優",
     }
 
     top_roles = sorted(

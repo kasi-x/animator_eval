@@ -22,7 +22,7 @@ DIRECTOR_ROLES: frozenset[Role] = frozenset(
     {
         Role.DIRECTOR,
         Role.EPISODE_DIRECTOR,
-        Role.CHIEF_ANIMATION_DIRECTOR,  # supervisory role — included for patronage (selects directors for collaboration counting)
+        Role.ANIMATION_DIRECTOR,  # supervisory — included for patronage
     }
 )
 
@@ -34,7 +34,7 @@ ANIMATOR_ROLES: frozenset[Role] = frozenset(
         Role.IN_BETWEEN,
         Role.CHARACTER_DESIGNER,
         Role.LAYOUT,
-        Role.EFFECTS,
+        Role.PHOTOGRAPHY_DIRECTOR,  # 撮影+エフェクト統合
     }
 )
 
@@ -44,21 +44,17 @@ MENTEE_ROLES: frozenset[Role] = frozenset(
         Role.SECOND_KEY_ANIMATOR,
         Role.KEY_ANIMATOR,
         Role.LAYOUT,
-        Role.EFFECTS,
     }
 )
 
 SKILL_EVALUATED_ROLES: frozenset[Role] = frozenset(
     {
-        Role.CHIEF_ANIMATION_DIRECTOR,
         Role.ANIMATION_DIRECTOR,
         Role.KEY_ANIMATOR,
-        Role.SECOND_KEY_ANIMATOR,
         Role.CHARACTER_DESIGNER,
-        Role.STORYBOARD,
         Role.EPISODE_DIRECTOR,
-        Role.ART_DIRECTOR,
-        Role.EFFECTS,
+        Role.BACKGROUND_ART,
+        Role.PHOTOGRAPHY_DIRECTOR,
         Role.LAYOUT,
     }
 )
@@ -66,11 +62,9 @@ SKILL_EVALUATED_ROLES: frozenset[Role] = frozenset(
 CORE_TEAM_ROLES: frozenset[Role] = frozenset(
     {
         Role.DIRECTOR,
-        Role.CHIEF_ANIMATION_DIRECTOR,
         Role.ANIMATION_DIRECTOR,
         Role.CHARACTER_DESIGNER,
         Role.KEY_ANIMATOR,
-        Role.STORYBOARD,
         Role.EPISODE_DIRECTOR,
     }
 )
@@ -80,17 +74,16 @@ THROUGH_ROLES: frozenset[Role] = frozenset(
     {
         Role.DIRECTOR,
         Role.CHARACTER_DESIGNER,
-        Role.ART_DIRECTOR,
-        Role.SERIES_COMPOSITION,
+        Role.BACKGROUND_ART,
+        Role.SCREENPLAY,
         Role.SOUND_DIRECTOR,
         Role.MUSIC,
-        Role.COLOR_DESIGNER,
+        Role.FINISHING,
         Role.PHOTOGRAPHY_DIRECTOR,
         Role.CGI_DIRECTOR,
         Role.PRODUCER,
         Role.ORIGINAL_CREATOR,
-        Role.MECHANICAL_DESIGNER,
-        Role.CHIEF_ANIMATION_DIRECTOR,
+        Role.ANIMATION_DIRECTOR,
     }
 )
 
@@ -101,10 +94,9 @@ EPISODIC_ROLES: frozenset[Role] = frozenset(
         Role.SECOND_KEY_ANIMATOR,
         Role.IN_BETWEEN,
         Role.EPISODE_DIRECTOR,
-        Role.STORYBOARD,
         Role.ANIMATION_DIRECTOR,
         Role.LAYOUT,
-        Role.EFFECTS,
+        Role.PHOTOGRAPHY_DIRECTOR,
         Role.BACKGROUND_ART,
         Role.SCREENPLAY,
     }
@@ -117,67 +109,119 @@ EPISODIC_ROLES: frozenset[Role] = frozenset(
 NON_PRODUCTION_ROLES: frozenset[Role] = frozenset(
     {
         Role.VOICE_ACTOR,
-        Role.THEME_SONG,
-        Role.ADR,
         Role.ORIGINAL_CREATOR,  # 原作者 — 制作スタッフではない
-        Role.MUSIC,  # 作曲家 — アニメーション制作スタッフではない
-        Role.OTHER,  # 役職不明 — 放送局・スタジオ等の組織エントリが大半
+        Role.MUSIC,  # 作曲家・演奏者 — アニメーション制作スタッフではない
+        Role.LOCALIZATION,  # 各国語版スタッフ — 日本の制作工程外
+        Role.SPECIAL,  # 制作工程外 + 分類不能
     }
 )
 
 
 def is_production_credit(credit: Credit) -> bool:
-    """Check if a credit is for production work (not voice acting, theme songs, etc.).
-
-    Args:
-        credit: The credit to check
-
-    Returns:
-        True if the credit's role is a production role
-    """
+    """Check if a credit is for production work (not voice acting, theme songs, etc.)."""
     return credit.role not in NON_PRODUCTION_ROLES
 
 
 ROLE_CATEGORY: dict[Role, str] = {
-    # Direction (5 roles)
+    # Direction
     Role.DIRECTOR: "direction",
     Role.EPISODE_DIRECTOR: "direction",
-    Role.STORYBOARD: "direction",
-    Role.SERIES_COMPOSITION: "direction",
-    # Animation Supervision (2 roles)
-    Role.CHIEF_ANIMATION_DIRECTOR: "animation_supervision",
+    # Animation Supervision
     Role.ANIMATION_DIRECTOR: "animation_supervision",
-    # Animation (4 roles)
+    # Animation
     Role.KEY_ANIMATOR: "animation",
     Role.SECOND_KEY_ANIMATOR: "animation",
     Role.IN_BETWEEN: "animation",
     Role.LAYOUT: "animation",
-    # Design (4 roles)
+    # Design
     Role.CHARACTER_DESIGNER: "design",
-    Role.MECHANICAL_DESIGNER: "design",
-    Role.ART_DIRECTOR: "design",
-    Role.COLOR_DESIGNER: "design",
-    # Technical (3 roles)
-    Role.EFFECTS: "technical",
-    Role.CGI_DIRECTOR: "technical",
+    # Technical (撮影+エフェクト+CG)
     Role.PHOTOGRAPHY_DIRECTOR: "technical",
-    # Art (1 role)
+    Role.CGI_DIRECTOR: "technical",
+    # Art (美術+背景)
     Role.BACKGROUND_ART: "art",
-    # Sound (2 roles)
+    # Sound
     Role.SOUND_DIRECTOR: "sound",
     Role.MUSIC: "sound",
-    # Writing (2 roles)
+    # Writing
     Role.SCREENPLAY: "writing",
     Role.ORIGINAL_CREATOR: "writing",
-    # Production (1 role)
+    # Production
     Role.PRODUCER: "production",
-    # Non-production (3 roles — not part of anime production staff)
+    Role.PRODUCTION_MANAGER: "production_management",
+    # Finishing (仕上+色彩+検査)
+    Role.FINISHING: "finishing",
+    # Editing
+    Role.EDITING: "editing",
+    # Settings
+    Role.SETTINGS: "settings",
+    # Non-production
     Role.VOICE_ACTOR: "non_production",
-    Role.THEME_SONG: "non_production",
-    Role.ADR: "non_production",
-    # Other
-    Role.OTHER: "other",
+    Role.LOCALIZATION: "non_production",
+    Role.SPECIAL: "non_production",
 }
+
+# =============================================================================
+# Career Stage Hierarchy (single source of truth)
+# =============================================================================
+# アニメーション制作のキャリアパスを数値化。低→高。
+#
+# アニメーター系: 動画(1) → 第二原画(2) → 原画/レイアウト(3) → キャラデ(4) → 作監(5) → 監督(6)
+# 演出系:        演出(5) → 監督(6)
+# 技術系:        撮影/CG(3) → 撮影監督/CG監督(5=部門監督、作監相当)
+# 制作系:        制作進行(2) → プロデューサー(5)
+#
+# レイアウトは原画工程の一部（レイアウト作業 → 原画清書）であり、
+# 第二原画とは異なるキャリアステップではない。Stage 3 = 原画と同格。
+#
+# 撮影監督・CGI監督・音響監督は部門監督（作画監督と同格 = Stage 5）。
+# 全体統括の監督（Stage 6）とは区別する。
+#
+# 非制作職 (ORIGINAL_CREATOR, MUSIC, VOICE_ACTOR, SPECIAL) は
+# NON_PRODUCTION_ROLES でパイプラインから除外されるため Stage 0。
+
+CAREER_STAGE: dict[Role, int] = {
+    # Animation track
+    Role.IN_BETWEEN: 1,           # 動画
+    Role.SECOND_KEY_ANIMATOR: 2,  # 第二原画
+    Role.KEY_ANIMATOR: 3,         # 原画
+    Role.LAYOUT: 3,               # レイアウト（原画工程の一部）
+    Role.CHARACTER_DESIGNER: 4,   # キャラクターデザイン
+    Role.ANIMATION_DIRECTOR: 5,   # 作画監督・総作画監督（部門監督）
+    Role.EPISODE_DIRECTOR: 5,     # 演出・絵コンテ
+    Role.DIRECTOR: 6,             # 監督（全体統括）
+    # Technical track — 部門監督 = 作画監督相当
+    Role.PHOTOGRAPHY_DIRECTOR: 5, # 撮影監督
+    Role.CGI_DIRECTOR: 5,         # CGI監督
+    # Art / Sound / Writing
+    Role.BACKGROUND_ART: 3,       # 美術・背景
+    Role.SOUND_DIRECTOR: 5,       # 音響監督（部門監督）
+    Role.SCREENPLAY: 4,           # 脚本・シリーズ構成
+    # Production management
+    Role.PRODUCTION_MANAGER: 2,   # 制作進行・制作デスク
+    Role.PRODUCER: 5,             # プロデューサー
+    # Finishing / Editing / Settings
+    Role.FINISHING: 3,            # 仕上げ・色彩設計
+    Role.EDITING: 3,              # 編集
+    Role.SETTINGS: 3,             # 設定
+    # Non-production — パイプラインで除外されるため Stage 0
+    Role.ORIGINAL_CREATOR: 0,     # 原作（非制作）
+    Role.MUSIC: 0,                # 音楽（非制作）
+    Role.VOICE_ACTOR: 0,          # 声優（非制作）
+    Role.LOCALIZATION: 0,         # 各国語版スタッフ（非制作）
+    Role.SPECIAL: 0,              # その他（非制作）
+}
+
+# String-keyed version for modules that work with role.value strings
+CAREER_STAGE_BY_VALUE: dict[str, int] = {
+    role.value: stage for role, stage in CAREER_STAGE.items()
+}
+
+
+def get_career_stage(role: Role) -> int:
+    """Get the career stage number for a role (0 if unknown)."""
+    return CAREER_STAGE.get(role, 0)
+
 
 # =============================================================================
 # Helper Functions (prose-like names for readability)
@@ -185,86 +229,32 @@ ROLE_CATEGORY: dict[Role, str] = {
 
 
 def is_director_role(role: Role) -> bool:
-    """Check if a role is a director-level position.
-
-    Args:
-        role: The role to check
-
-    Returns:
-        True if role is Director, Episode Director, or Chief Animation Director
-    """
+    """Check if a role is a director-level position."""
     return role in DIRECTOR_ROLES
 
 
 def is_animator_role(role: Role) -> bool:
-    """Check if a role is an animator position.
-
-    Args:
-        role: The role to check
-
-    Returns:
-        True if role is in the animator role set
-    """
+    """Check if a role is an animator position."""
     return role in ANIMATOR_ROLES
 
 
 def is_mentee_role(role: Role) -> bool:
-    """Check if a role is a junior/mentee position.
-
-    Junior roles are typically entry-level or mid-level positions where
-    staff learn from more experienced directors and supervisors.
-
-    Args:
-        role: The role to check
-
-    Returns:
-        True if role is a mentee-level position
-    """
+    """Check if a role is a junior/mentee position."""
     return role in MENTEE_ROLES
 
 
 def get_role_category(role: Role) -> str:
-    """Get the category for a role.
-
-    Categories include: direction, animation_supervision, animation, design,
-    technical, art, sound, writing, production, and other.
-
-    Args:
-        role: The role to categorize
-
-    Returns:
-        Category string, or "other" if role is not mapped
-    """
-    return ROLE_CATEGORY.get(role, "other")
+    """Get the category for a role."""
+    return ROLE_CATEGORY.get(role, "non_production")
 
 
 def is_skill_evaluated_role(role: Role) -> bool:
-    """Check if this role is included in skill score calculation.
-
-    Skill-evaluated roles are those where individual contribution can be
-    measured through project participation and collaboration patterns.
-
-    Args:
-        role: The role to check
-
-    Returns:
-        True if role is included in skill scoring
-    """
+    """Check if this role is included in skill score calculation."""
     return role in SKILL_EVALUATED_ROLES
 
 
 def is_core_team_role(role: Role) -> bool:
-    """Check if this role is considered a core team position.
-
-    Core team roles are high-value positions that significantly influence
-    production quality and team dynamics.
-
-    Args:
-        role: The role to check
-
-    Returns:
-        True if role is a core team position
-    """
+    """Check if this role is considered a core team position."""
     return role in CORE_TEAM_ROLES
 
 
@@ -279,12 +269,6 @@ def generate_core_team_pairs(
     - non-CORE_TEAM ↔ non-CORE_TEAM: no edges
 
     Fallback: if no CORE_TEAM members exist, generates all pairs.
-
-    Args:
-        staff: {person_id: primary_role} mapping for one anime
-
-    Returns:
-        List of (person_a, person_b) pairs with canonical ordering (a < b)
     """
     core = [pid for pid, role in staff.items() if role in CORE_TEAM_ROLES]
     non_core = [pid for pid, role in staff.items() if role not in CORE_TEAM_ROLES]

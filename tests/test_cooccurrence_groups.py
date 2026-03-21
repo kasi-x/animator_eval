@@ -32,13 +32,13 @@ def _make_basic_data():
         # p1 = director, p2 = char designer, p3 = art director — 全3作品
         _credit("p1", "a1", Role.DIRECTOR),
         _credit("p2", "a1", Role.CHARACTER_DESIGNER),
-        _credit("p3", "a1", Role.ART_DIRECTOR),
+        _credit("p3", "a1", Role.BACKGROUND_ART),
         _credit("p1", "a2", Role.DIRECTOR),
         _credit("p2", "a2", Role.CHARACTER_DESIGNER),
-        _credit("p3", "a2", Role.ART_DIRECTOR),
+        _credit("p3", "a2", Role.BACKGROUND_ART),
         _credit("p1", "a3", Role.DIRECTOR),
         _credit("p2", "a3", Role.CHARACTER_DESIGNER),
-        _credit("p3", "a3", Role.ART_DIRECTOR),
+        _credit("p3", "a3", Role.BACKGROUND_ART),
     ]
     return anime_map, credits
 
@@ -60,8 +60,8 @@ class TestCooccurrenceRoles:
     def test_in_between_excluded(self):
         assert Role.IN_BETWEEN not in COOCCURRENCE_ROLES
 
-    def test_ten_roles(self):
-        assert len(COOCCURRENCE_ROLES) == 10
+    def test_cooccurrence_roles_count(self):
+        assert len(COOCCURRENCE_ROLES) == 9
 
 
 # ---------------------------------------------------------------------------
@@ -127,10 +127,10 @@ class TestThresholdFilter:
         credits = [
             _credit("p1", "a1", Role.DIRECTOR),
             _credit("p2", "a1", Role.CHARACTER_DESIGNER),
-            _credit("p3", "a1", Role.ART_DIRECTOR),
+            _credit("p3", "a1", Role.BACKGROUND_ART),
             _credit("p1", "a2", Role.DIRECTOR),
             _credit("p2", "a2", Role.CHARACTER_DESIGNER),
-            _credit("p3", "a2", Role.ART_DIRECTOR),
+            _credit("p3", "a2", Role.BACKGROUND_ART),
         ]
         result = compute_cooccurrence_groups(credits, anime_map, min_shared_works=3)
         # 2作品しかないのでグループは検出されない
@@ -145,10 +145,10 @@ class TestThresholdFilter:
         credits = [
             _credit("p1", "a1", Role.DIRECTOR),
             _credit("p2", "a1", Role.CHARACTER_DESIGNER),
-            _credit("p3", "a1", Role.ART_DIRECTOR),
+            _credit("p3", "a1", Role.BACKGROUND_ART),
             _credit("p1", "a2", Role.DIRECTOR),
             _credit("p2", "a2", Role.CHARACTER_DESIGNER),
-            _credit("p3", "a2", Role.ART_DIRECTOR),
+            _credit("p3", "a2", Role.BACKGROUND_ART),
         ]
         result = compute_cooccurrence_groups(credits, anime_map, min_shared_works=2)
         assert len(result["groups"]) >= 1
@@ -186,13 +186,13 @@ class TestIsActiveFlag:
         credits = [
             _credit("p1", "a1", Role.DIRECTOR),
             _credit("p2", "a1", Role.CHARACTER_DESIGNER),
-            _credit("p3", "a1", Role.ART_DIRECTOR),
+            _credit("p3", "a1", Role.BACKGROUND_ART),
             _credit("p1", "a2", Role.DIRECTOR),
             _credit("p2", "a2", Role.CHARACTER_DESIGNER),
-            _credit("p3", "a2", Role.ART_DIRECTOR),
+            _credit("p3", "a2", Role.BACKGROUND_ART),
             _credit("p1", "a3", Role.DIRECTOR),
             _credit("p2", "a3", Role.CHARACTER_DESIGNER),
-            _credit("p3", "a3", Role.ART_DIRECTOR),
+            _credit("p3", "a3", Role.BACKGROUND_ART),
         ]
         result = compute_cooccurrence_groups(credits, anime_map, min_shared_works=3)
         group = next(
@@ -210,13 +210,13 @@ class TestIsActiveFlag:
         credits = [
             _credit("p1", "a1", Role.DIRECTOR),
             _credit("p2", "a1", Role.CHARACTER_DESIGNER),
-            _credit("p3", "a1", Role.ART_DIRECTOR),
+            _credit("p3", "a1", Role.BACKGROUND_ART),
             _credit("p1", "a2", Role.DIRECTOR),
             _credit("p2", "a2", Role.CHARACTER_DESIGNER),
-            _credit("p3", "a2", Role.ART_DIRECTOR),
+            _credit("p3", "a2", Role.BACKGROUND_ART),
             _credit("p1", "a3", Role.DIRECTOR),
             _credit("p2", "a3", Role.CHARACTER_DESIGNER),
-            _credit("p3", "a3", Role.ART_DIRECTOR),
+            _credit("p3", "a3", Role.BACKGROUND_ART),
         ]
         result = compute_cooccurrence_groups(credits, anime_map, min_shared_works=3)
         group = next(
@@ -272,10 +272,10 @@ class TestFourPersonGroup:
             _credit("p2", aid, Role.CHARACTER_DESIGNER)
             for aid in ("a1", "a2", "a3")
         ] + [
-            _credit("p3", aid, Role.ART_DIRECTOR)
+            _credit("p3", aid, Role.BACKGROUND_ART)
             for aid in ("a1", "a2", "a3")
         ] + [
-            _credit("p4", aid, Role.COLOR_DESIGNER)
+            _credit("p4", aid, Role.FINISHING)
             for aid in ("a1", "a2", "a3")
         ]
         result = compute_cooccurrence_groups(
