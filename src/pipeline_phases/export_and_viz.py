@@ -281,9 +281,9 @@ def _transform_summary(data: None, context: PipelineContext) -> dict:
     # Get elapsed time from context or compute it
     elapsed = getattr(context, "_elapsed", 0.0)
 
-    # Compute graph summary if collaboration graph available
-    graph_summary = {}
-    if context.collaboration_graph:
+    # Use cached graph summary if graph was freed, otherwise compute
+    graph_summary = context.analysis_results.get("_graph_summary", {})
+    if not graph_summary and context.collaboration_graph:
         graph_summary = compute_graph_summary(context.collaboration_graph)
 
     # Get crossval results
@@ -853,6 +853,13 @@ def export_single_result_file(
     """
     # Get data from context
     data = spec.data_getter(context)
+
+    # Skip if already flushed to disk by Phase 9 memory optimization
+    flushed = getattr(context, "_flushed_tasks", set())
+    key = spec.filename.replace(".json", "")
+    if not data and key in flushed:
+        logger.debug("export_skipped_already_flushed", filename=spec.filename)
+        return True  # Count as exported (already on disk)
 
     # Check condition (if specified)
     if spec.condition and not spec.condition(data):

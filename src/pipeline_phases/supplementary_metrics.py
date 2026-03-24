@@ -125,10 +125,13 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
     # Centrality Metrics (collaboration graph already built in Phase 4)
     logger.info("step_start", step="centrality_metrics")
     with context.monitor.measure("centrality_metrics"):
-        person_ids = {p.id for p in context.persons}
-        context.centrality = calculate_network_centrality_scores(
-            context.collaboration_graph, person_ids
-        )
+        if context.collaboration_graph is not None:
+            person_ids = {p.id for p in context.persons}
+            context.centrality = calculate_network_centrality_scores(
+                context.collaboration_graph, person_ids
+            )
+        else:
+            logger.info("centrality_skipped", reason="no_graph")
     # Extract betweenness cache for reuse (avoids duplicate computation in potential_value)
     context.betweenness_cache = {
         pid: metrics["betweenness"]
@@ -152,12 +155,15 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
     # Peer Effects Estimation (2SLS)
     logger.info("step_start", step="peer_effects")
     with context.monitor.measure("peer_effects"):
-        context.peer_effect_result = estimate_peer_effects_2sls(
-            context.credits,
-            context.anime_map,
-            context.iv_scores,
-            context.collaboration_graph,
-        )
+        if context.collaboration_graph is not None:
+            context.peer_effect_result = estimate_peer_effects_2sls(
+                context.credits,
+                context.anime_map,
+                context.iv_scores,
+                context.collaboration_graph,
+            )
+        else:
+            logger.info("peer_effects_skipped", reason="no_graph")
     logger.info(
         "peer_effects_complete",
         identified=context.peer_effect_result.identified
@@ -271,14 +277,18 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
             for pid, m in growth_metrics.items()
         }
 
-        potential_scores = compute_potential_value_scores(
-            person_scores,
-            debiased_dict,
-            growth_dict,
-            adjusted_skills,
-            context.collaboration_graph,
-            betweenness_cache=context.betweenness_cache,
-        )
+        if context.collaboration_graph is not None:
+            potential_scores = compute_potential_value_scores(
+                person_scores,
+                debiased_dict,
+                growth_dict,
+                adjusted_skills,
+                context.collaboration_graph,
+                betweenness_cache=context.betweenness_cache,
+            )
+        else:
+            potential_scores = {}
+            logger.info("potential_value_skipped", reason="no_graph")
         # Convert to dict and handle Enum serialization
         context.potential_value_scores = {
             pid: {**vars(p), "category": p.category.value}

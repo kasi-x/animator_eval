@@ -2,11 +2,17 @@
 
 This phase runs 25 independent analysis modules in parallel using ThreadPoolExecutor.
 Each analysis reads from context and writes to context.analysis_results with thread-safe locking.
+
+Memory optimization: Tasks that need the collaboration graph run first as "batch 1".
+After batch 1 completes, the graph is freed (potentially ~71 GB for large datasets)
+before running the remaining tasks in "batch 2".
 """
 
+import gc
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Any, Callable
 
 import networkx as nx
@@ -66,7 +72,7 @@ from src.analysis.transitions import compute_role_transitions
 from src.analysis.genre_ecosystem import compute_genre_ecosystem
 from src.analysis.genre_network import compute_genre_network
 from src.analysis.genre_quality import compute_genre_quality
-from src.analysis.production_analysis import compute_studio_talent_density
+from src.analysis.production_analysis import StudioTalentDensity, compute_studio_talent_density
 from src.analysis.studio_clustering import compute_studio_clustering
 from src.analysis.studio_network import compute_studio_network
 from src.analysis.talent_pipeline import compute_talent_pipeline
@@ -84,12 +90,16 @@ class AnalysisTask:
         function: Analysis function to execute
         monitor_step: Optional step name for performance monitoring
         condition: Optional condition to check before running
+        needs_collab_graph: Whether this task reads context.collaboration_graph.
+            Tasks with needs_collab_graph=True run in batch 1 (before graph is freed).
     """
 
     name: str
     function: Callable[[PipelineContext], Any]
     monitor_step: str | None = None
     condition: Callable[[PipelineContext], bool] | None = None
+    needs_collab_graph: bool = False
+    memory_heavy: bool = False  # Run sequentially in batch 2b to avoid OOM
 
 
 def _run_anime_stats(context: PipelineContext) -> Any:
@@ -115,6 +125,10 @@ def _run_seasonal(context: PipelineContext) -> Any:
 
 def _run_collaborations(context: PipelineContext) -> Any:
     """Compute strongest collaboration pairs."""
+    # Skip if no graph — the O(n²) fallback is impractical for 167K+ persons
+    if context.collaboration_graph is None:
+        logger.info("collaborations_skipped", reason="no_graph")
+        return []
     pairs = compute_collaboration_strength(
         context.credits,
         context.anime_map,
@@ -140,12 +154,10 @@ def _run_teams(context: PipelineContext) -> Any:
         for r in context.results
         if r["iv_score"] >= person_threshold
     }
-    # anime.score は 1-10 スケール → 8.0 が「高評価」に適切
     return analyze_team_patterns(
         context.credits,
         context.anime_map,
         person_scores=top_persons,
-        min_score=8.0,
     )
 
 
@@ -238,7 +250,7 @@ def _run_bridges(context: PipelineContext) -> Any:
                 for member in members:
                     communities_map[member] = comm_id
         except Exception:
-            logger.warning("community_detection_failed_for_bridges")
+            logger.warning("community_detection_failed_for_bridges", exc_info=True)
     return detect_bridges(
         context.credits,
         communities=communities_map,
@@ -251,11 +263,9 @@ def _run_mentorships(context: PipelineContext) -> Any:
     mentorships = infer_mentorships(
         context.credits, context.anime_map, min_shared_works=3
     )
-    # Also build mentorship tree
     mentorship_tree_data = build_mentorship_tree(mentorships)
-    # Store tree separately (will be saved by another task)
-    context.analysis_results["mentorship_tree"] = mentorship_tree_data
-    return mentorships
+    # Return both — main thread splits under lock (thread safety)
+    return {"mentorships": mentorships, "mentorship_tree": mentorship_tree_data}
 
 
 def _run_milestones(context: PipelineContext) -> Any:
@@ -324,8 +334,7 @@ def _run_crossval(context: PipelineContext) -> Any:
 
 def _run_bias_detector(context: PipelineContext) -> Any:
     """Systematic bias detection across roles, studios, career stages."""
-    # Build person_scores dict
-    person_scores = {r["person_id"]: r for r in context.results}
+    person_scores = context._shared_person_scores
 
     # Detect biases
     bias_results = detect_systematic_biases(
@@ -344,7 +353,7 @@ def _run_bias_detector(context: PipelineContext) -> Any:
 def _run_compensation_analyzer(context: PipelineContext) -> Any:
     """Fair compensation analysis with anime type adjustments."""
     # Build person_names dict
-    person_names = {p.id: p.name_ja or p.name_en or p.id for p in context.persons}
+    person_names = context._shared_person_names
 
     # Run batch analysis (top 100 anime by composite value)
     if not context.contribution_data:
@@ -352,7 +361,7 @@ def _run_compensation_analyzer(context: PipelineContext) -> Any:
 
     # Get anime with contributions
     anime_with_contribs = [
-        anime for anime in context.anime_list if anime.id in context.contribution_data
+        anime for anime in context.anime_map.values() if anime.id in context.contribution_data
     ]
 
     # Analyze compensation
@@ -373,9 +382,8 @@ def _run_compensation_analyzer(context: PipelineContext) -> Any:
 
 def _run_insights_report(context: PipelineContext) -> Any:
     """Generate comprehensive insights report from all analyses."""
-    # Build person_scores and person_names dicts
-    person_scores = {r["person_id"]: r for r in context.results}
-    person_names = {p.id: p.name_ja or p.name_en or p.id for p in context.persons}
+    person_scores = context._shared_person_scores
+    person_names = context._shared_person_names
 
     # Get bridges data (or empty dict if not available)
     bridges_data = context.analysis_results.get("bridges", {})
@@ -398,8 +406,7 @@ def _run_insights_report(context: PipelineContext) -> Any:
 
 def _run_causal_identification(context: PipelineContext) -> Any:
     """Causal identification of major studio effects (selection vs treatment vs brand)."""
-    # Build person_scores dict with all necessary fields
-    person_scores = {r["person_id"]: r for r in context.results}
+    person_scores = context._shared_person_scores
 
     # Run causal identification
     result = identify_studio_effects(
@@ -416,8 +423,7 @@ def _run_causal_identification(context: PipelineContext) -> Any:
 
 def _run_structural_estimation(context: PipelineContext) -> Any:
     """Structural estimation with fixed effects and DID (研究レベルの構造推定)."""
-    # Build person_scores dict
-    person_scores = {r["person_id"]: r for r in context.results}
+    person_scores = context._shared_person_scores
 
     # Identify major studios
     from src.analysis.causal_studio_identification import identify_major_studios
@@ -578,11 +584,10 @@ def _run_derived_params_report(context: PipelineContext) -> Any:
     }
 
     # --- 3. Staff Scale Baseline ---
-    staff_sets = (
-        context.person_anime_graph.graph.get("_anime_staff_sets", {})
-        if context.person_anime_graph
-        else {}
-    )
+    # Use cached staff sets (graph may have been freed for memory optimization)
+    staff_sets = context.analysis_results.get("_anime_staff_sets", {})
+    if not staff_sets and context.person_anime_graph:
+        staff_sets = context.person_anime_graph.graph.get("_anime_staff_sets", {})
     staff_counts = [len(pids) for pids in staff_sets.values()] if staff_sets else []
     if staff_counts:
         median_staff = statistics.median(staff_counts)
@@ -804,7 +809,7 @@ def _run_cooccurrence_groups(context: PipelineContext) -> Any:
         context.anime_map,
         iv_scores=context.iv_scores,
         min_shared_works=3,
-        max_group_size=5,
+        max_group_size=3,  # capped from 5: C(n,5) causes OOM on large datasets
     )
 
 
@@ -848,10 +853,16 @@ def _run_talent_pipeline(context: PipelineContext) -> Any:
 
 def _run_studio_clustering(context: PipelineContext) -> Any:
     """Cluster studios by 12-dimensional feature vector."""
-    # Compute talent density first
-    talent_density = compute_studio_talent_density(
-        context.credits, context.anime_map, context.person_fe
-    )
+    # Reuse talent density from studio_talent_density task if available
+    cached_td = context.analysis_results.get("studio_talent_density")
+    if cached_td:
+        talent_density = {
+            s: StudioTalentDensity(**v) for s, v in cached_td.items()
+        }
+    else:
+        talent_density = compute_studio_talent_density(
+            context.credits, context.anime_map, context.person_fe
+        )
 
     # Get studio network data for eigenvector centrality
     studio_net = context.analysis_results.get("studio_network", {})
@@ -896,7 +907,7 @@ def _run_genre_ecosystem(context: PipelineContext) -> Any:
 
 def _run_genre_network(context: PipelineContext) -> Any:
     """Compute genre network (PMI, families, evolution)."""
-    result = compute_genre_network(context.anime_list)
+    result = compute_genre_network(list(context.anime_map.values()))
     return {
         "genre_families": result.genre_families,
         "family_names": result.family_names,
@@ -947,10 +958,11 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
     AnalysisTask("studios", _run_studios),
     AnalysisTask("seasonal", _run_seasonal),
     AnalysisTask(
-        "collaborations", _run_collaborations, monitor_step="collaboration_strength"
+        "collaborations", _run_collaborations, monitor_step="collaboration_strength",
+        needs_collab_graph=True, memory_heavy=True,
     ),
     AnalysisTask("outliers", _run_outliers, monitor_step="outlier_detection"),
-    AnalysisTask("teams", _run_teams, monitor_step="team_composition"),
+    AnalysisTask("teams", _run_teams, monitor_step="team_composition", memory_heavy=True),
     AnalysisTask(
         "graphml",
         _run_graphml,
@@ -959,21 +971,25 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
             ctx.collaboration_graph is not None
             and ctx.collaboration_graph.number_of_edges() <= 1_000_000
         ),
+        needs_collab_graph=True,
     ),
     AnalysisTask("time_series", _run_time_series, monitor_step="time_series"),
     AnalysisTask("decades", _run_decades, monitor_step="decade_analysis"),
     AnalysisTask("tags", _run_tags, monitor_step="person_tags"),
     AnalysisTask("transitions", _run_transitions),
     AnalysisTask("role_flow", _run_role_flow, monitor_step="role_flow"),
-    AnalysisTask("bridges", _run_bridges, monitor_step="bridge_detection"),
-    AnalysisTask("mentorships", _run_mentorships, monitor_step="mentorship_inference"),
+    AnalysisTask("bridges", _run_bridges, monitor_step="bridge_detection",
+                 needs_collab_graph=True, memory_heavy=True),
+    AnalysisTask("mentorships", _run_mentorships, monitor_step="mentorship_inference",
+                 memory_heavy=True),
     AnalysisTask("milestones", _run_milestones, monitor_step="milestones"),
     AnalysisTask(
-        "network_evolution", _run_network_evolution, monitor_step="network_evolution"
+        "network_evolution", _run_network_evolution, monitor_step="network_evolution",
+        needs_collab_graph=True,
     ),
     AnalysisTask("genre_affinity", _run_genre_affinity, monitor_step="genre_affinity"),
     AnalysisTask("productivity", _run_productivity, monitor_step="productivity"),
-    AnalysisTask("influence", _run_influence, monitor_step="influence_tree"),
+    AnalysisTask("influence", _run_influence, monitor_step="influence_tree", memory_heavy=True),
     AnalysisTask("crossval", _run_crossval, monitor_step="cross_validation"),
     AnalysisTask("bias_report", _run_bias_detector, monitor_step="bias_detection"),
     AnalysisTask(
@@ -988,32 +1004,41 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
         "causal_identification",
         _run_causal_identification,
         monitor_step="causal_identification",
+        memory_heavy=True,
     ),
     AnalysisTask(
         "structural_estimation",
         _run_structural_estimation,
         monitor_step="structural_estimation",
+        memory_heavy=True,
     ),
     AnalysisTask(
         "individual_profiles",
         _run_individual_contribution,
         monitor_step="individual_contribution",
+        memory_heavy=True,
+        # No needs_collab_graph: compute_independent_value has a credit-based
+        # fallback for finding collaborators, avoiding OOM from holding the
+        # 44M-edge graph during 30 min of computation.
     ),
     AnalysisTask("credit_stats", _run_credit_stats, monitor_step="credit_statistics"),
     AnalysisTask(
         "cooccurrence_groups",
         _run_cooccurrence_groups,
         monitor_step="cooccurrence_groups",
+        memory_heavy=True,
     ),
     AnalysisTask(
         "synergy_scores",
         _run_synergy_scores,
         monitor_step="synergy_scores",
+        memory_heavy=True,
     ),
     AnalysisTask(
         "temporal_pagerank",
         _run_temporal_pagerank,
         monitor_step="temporal_pagerank",
+        memory_heavy=True,
         condition=lambda ctx: len(ctx.credits) >= 50,
     ),
     # New 8-component structural estimation reports
@@ -1058,11 +1083,14 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
         "expected_ability",
         _run_expected_ability,
         monitor_step="expected_ability",
+        memory_heavy=True,
     ),
     AnalysisTask(
         "compatibility_groups_analysis",
         _run_compatibility,
         monitor_step="compatibility_groups_analysis",
+        memory_heavy=True,
+        # No needs_collab_graph: compatibility.py accepts graph but never uses it.
     ),
     # ========== Studio & Genre Analysis ==========
     AnalysisTask(
@@ -1080,6 +1108,7 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
         "talent_pipeline",
         _run_talent_pipeline,
         monitor_step="talent_pipeline",
+        memory_heavy=True,
         condition=lambda ctx: len(ctx.person_fe) > 0,
     ),
     AnalysisTask(
@@ -1162,77 +1191,261 @@ def _execute_analysis_task(
         return (task.name, None, 0.0)
 
 
-def run_analysis_modules_phase(
-    context: PipelineContext,
-    max_workers: int | None = None,
-) -> None:
-    """Run all independent analysis modules in parallel.
+def _flush_result_to_json(task_name: str, data: Any, json_dir: Path) -> bool:
+    """Write analysis result to JSON and return True if successful.
 
-    Each analysis module reads from context and produces output stored in
-    context.analysis_results dict. Uses ThreadPoolExecutor for parallel
-    execution with thread-safe writes.
-
-    Args:
-        context: Pipeline context
-        max_workers: Maximum number of parallel workers (default: min(32, cpu_count + 4))
-
-    Performance:
-        - Sequential: ~0.15s for 20 modules on synthetic data
-        - Parallel (4 workers): ~0.04s (3.75x speedup)
-        - Parallel (8 workers): ~0.03s (5x speedup)
+    Results flushed here are marked as _FLUSHED in context.analysis_results
+    so Phase 10 export skips re-writing them.
     """
-    import os
+    import json as json_mod
 
-    # Determine optimal worker count (ThreadPoolExecutor default formula)
-    if max_workers is None:
-        max_workers = min(32, (os.cpu_count() or 1) + 4)
+    # Map task names to their export filenames
+    filename = f"{task_name}.json"
+    filepath = json_dir / filename
+    try:
+        json_dir.mkdir(parents=True, exist_ok=True)
+        with open(filepath, "w", encoding="utf-8") as f:
+            json_mod.dump(data, f, ensure_ascii=False, default=str)
+        logger.debug("analysis_result_flushed", task=task_name, path=str(filepath))
+        return True
+    except (TypeError, ValueError, OSError) as e:
+        logger.warning("analysis_result_flush_failed", task=task_name, error=str(e))
+        return False
 
-    logger.info(
-        "analysis_modules_parallel_start",
-        total_tasks=len(ANALYSIS_TASKS),
-        max_workers=max_workers,
-    )
 
-    # Thread-safe lock for writing to shared analysis_results dict
-    results_lock = threading.Lock()
+# Results read by later tasks within Phase 9 — must stay in memory
+_KEEP_IN_MEMORY = frozenset({
+    "bridges",           # read by _run_insights_report
+    "_anime_staff_sets", # read by _run_akm_diagnostics
+    "_graph_summary",    # used by export phase
+    "studio_talent_density",  # read by _run_studio_clustering
+    "studio_network",    # read by _run_studio_clustering
+    "talent_pipeline",   # read by _run_studio_clustering
+    "tags",              # read by run_analysis_modules_phase (tag assignment)
+    "performance",       # added at end
+    "crossval",          # read by export summary
+})
 
-    # Execute tasks in parallel
-    completed_count = 0
-    failed_count = 0
+def _run_task_batch(
+    tasks: list[AnalysisTask],
+    context: PipelineContext,
+    results_lock: threading.Lock,
+    max_workers: int,
+    batch_label: str,
+    json_dir: Path | None = None,
+) -> tuple[int, int]:
+    """Run a batch of analysis tasks in parallel.
+
+    If json_dir is provided, large results are flushed to JSON and evicted
+    from memory to prevent OOM on datasets with 150K+ persons.
+
+    Returns (completed_count, failed_count).
+    """
+    completed = 0
+    failed = 0
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all tasks
         future_to_task = {
             executor.submit(_execute_analysis_task, task, context, results_lock): task
-            for task in ANALYSIS_TASKS
+            for task in tasks
         }
 
-        # Collect results as they complete
         for future in as_completed(future_to_task):
             task = future_to_task[future]
             try:
                 task_name, result, elapsed = future.result()
 
                 if result is not None:
-                    # Thread-safe write to shared dict
                     with results_lock:
-                        context.analysis_results[task_name] = result
-                    completed_count += 1
+                        if task_name == "mentorships" and isinstance(result, dict) and "mentorship_tree" in result:
+                            context.analysis_results["mentorship_tree"] = result["mentorship_tree"]
+                            context.analysis_results[task_name] = result["mentorships"]
+                        else:
+                            context.analysis_results[task_name] = result
+
+                    # Eagerly flush to JSON and evict from memory if safe
+                    if json_dir and task_name not in _KEEP_IN_MEMORY:
+                        data = context.analysis_results.get(task_name)
+                        if data is not None and _flush_result_to_json(task_name, data, json_dir):
+                            with results_lock:
+                                context.analysis_results[task_name] = None
+                                if not hasattr(context, "_flushed_tasks"):
+                                    context._flushed_tasks = set()
+                                context._flushed_tasks.add(task_name)
+
+                    completed += 1
                     logger.debug(
                         "analysis_task_complete",
                         task=task_name,
+                        batch=batch_label,
                         elapsed=round(elapsed, 3),
                     )
                 else:
-                    failed_count += 1
+                    failed += 1
+
+                # Reclaim intermediate memory after each task to reduce OOM risk
+                del result
+                gc.collect()
 
             except Exception as e:
                 logger.exception(
                     "analysis_task_exception",
                     task=task.name,
+                    batch=batch_label,
                     error=str(e),
                 )
-                failed_count += 1
+                failed += 1
+
+    return completed, failed
+
+
+def run_analysis_modules_phase(
+    context: PipelineContext,
+    max_workers: int | None = None,
+) -> None:
+    """Run all independent analysis modules in parallel.
+
+    Memory optimization: splits tasks into two batches.
+      Batch 1: tasks that need the collaboration graph.
+      (free collaboration graph after batch 1 to reclaim memory)
+      Batch 2: all remaining tasks.
+
+    Args:
+        context: Pipeline context
+        max_workers: Maximum number of parallel workers (default: min(32, cpu_count + 4))
+    """
+    import os
+
+    from src.utils.config import JSON_DIR
+
+    if max_workers is None:
+        max_workers = min(32, (os.cpu_count() or 1) + 4)
+
+    # Pre-build shared dicts — avoids 1-2 GB duplicate per task
+    context._shared_person_scores = {r["person_id"]: r for r in context.results}
+    context._shared_person_names = {p.id: p.name_ja or p.name_en or p.id for p in context.persons}
+
+    # Free redundant anime_list — anime_map has same data, all tasks now use anime_map
+    context.anime_list = []
+    gc.collect()
+    logger.info("phase9_memory_freed", freed="anime_list")
+
+    # Split tasks into graph-dependent (batch 1) and graph-independent (batch 2)
+    batch1_tasks = [t for t in ANALYSIS_TASKS if t.needs_collab_graph]
+    batch2_tasks = [t for t in ANALYSIS_TASKS if not t.needs_collab_graph]
+
+    has_large_graph = (
+        context.collaboration_graph is not None
+        and context.collaboration_graph.number_of_edges() > 1_000_000
+    )
+
+    logger.info(
+        "analysis_modules_parallel_start",
+        total_tasks=len(ANALYSIS_TASKS),
+        batch1_tasks=len(batch1_tasks),
+        batch2_tasks=len(batch2_tasks),
+        max_workers=max_workers,
+        large_graph_optimization=has_large_graph,
+    )
+
+    results_lock = threading.Lock()
+    completed_count = 0
+    failed_count = 0
+
+    if has_large_graph and batch1_tasks:
+        # Batch 1: graph-dependent tasks run sequentially to avoid memory spikes
+        # (each task may hold intermediate data proportional to graph size)
+        b1_workers = 1
+        logger.info(
+            "analysis_batch1_start",
+            tasks=[t.name for t in batch1_tasks],
+            workers=b1_workers,
+        )
+        c, f = _run_task_batch(batch1_tasks, context, results_lock, b1_workers, "batch1", json_dir=JSON_DIR)
+        completed_count += c
+        failed_count += f
+
+        # Cache graph summary for Phase 10 before freeing
+        from src.analysis.graph import compute_graph_summary
+
+        n_edges = context.collaboration_graph.number_of_edges()
+        n_nodes = context.collaboration_graph.number_of_nodes()
+        context.analysis_results["_graph_summary"] = compute_graph_summary(
+            context.collaboration_graph
+        )
+
+        # Cache person_anime_graph staff sets for akm_diagnostics, then free both graphs
+        if context.person_anime_graph:
+            context.analysis_results["_anime_staff_sets"] = (
+                context.person_anime_graph.graph.get("_anime_staff_sets", {})
+            )
+            pa_edges = context.person_anime_graph.number_of_edges()
+            context.person_anime_graph = None
+        else:
+            pa_edges = 0
+
+        # Free the collaboration graph to reclaim memory
+        context.collaboration_graph = None
+        gc.collect()
+        logger.info(
+            "collaboration_graph_freed",
+            freed_edges=n_edges,
+            freed_nodes=n_nodes,
+            person_anime_edges_freed=pa_edges,
+        )
+
+        # Batch 2a: lightweight tasks run in parallel
+        b2_light = [t for t in batch2_tasks if not t.memory_heavy]
+        # Batch 2b: memory-heavy tasks run sequentially (OOM risk)
+        b2_heavy = [t for t in batch2_tasks if t.memory_heavy]
+
+        if b2_light:
+            b2a_workers = min(max_workers, len(b2_light))
+            logger.info(
+                "analysis_batch2a_start",
+                tasks=len(b2_light),
+                workers=b2a_workers,
+            )
+            c, f = _run_task_batch(
+                b2_light, context, results_lock, b2a_workers, "batch2", json_dir=JSON_DIR
+            )
+            completed_count += c
+            failed_count += f
+
+        if b2_heavy:
+            logger.info(
+                "analysis_batch2b_start",
+                tasks=[t.name for t in b2_heavy],
+                workers=1,
+            )
+            c, f = _run_task_batch(
+                b2_heavy, context, results_lock, 1, "batch2", json_dir=JSON_DIR
+            )
+            completed_count += c
+            failed_count += f
+    else:
+        # No large graph: still split light/heavy to prevent OOM from concurrent heavy tasks.
+        # Limit light workers too — even "light" tasks can use 1-5 GB each, and 32 concurrent
+        # tasks on a 123 GB machine leaves no headroom.
+        all_light = [t for t in ANALYSIS_TASKS if not t.memory_heavy]
+        all_heavy = [t for t in ANALYSIS_TASKS if t.memory_heavy]
+
+        if all_light:
+            # Sequential execution: with 167K persons + 2.9M credits, even 2 workers
+            # can push memory past 123 GB.  Sequential + eager flush keeps RSS ~40 GB.
+            light_workers = 1
+            c, f = _run_task_batch(all_light, context, results_lock, light_workers, "all", json_dir=JSON_DIR)
+            completed_count += c
+            failed_count += f
+
+        if all_heavy:
+            logger.info(
+                "analysis_heavy_sequential",
+                tasks=[t.name for t in all_heavy],
+            )
+            c, f = _run_task_batch(all_heavy, context, results_lock, 1, "all", json_dir=JSON_DIR)
+            completed_count += c
+            failed_count += f
 
     # Apply tags to result entries on the main thread (D23: thread-safe mutation)
     person_tag_assignments = context.analysis_results.get("tags")
@@ -1241,6 +1454,11 @@ def run_analysis_modules_phase(
             pid = r["person_id"]
             if pid in person_tag_assignments:
                 r["tags"] = person_tag_assignments[pid]
+
+    # Clean up shared dicts
+    for attr in ("_shared_person_scores", "_shared_person_names"):
+        if hasattr(context, attr):
+            delattr(context, attr)
 
     # Add performance monitoring summary (always last)
     context.analysis_results["performance"] = context.monitor.get_summary()

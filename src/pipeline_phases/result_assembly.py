@@ -1,8 +1,9 @@
 """Phase 7: Result Assembly — build comprehensive result dictionaries."""
 
+import datetime
 import math
 import sqlite3
-from collections import Counter, defaultdict
+from collections import defaultdict
 
 import numpy as np
 import structlog
@@ -61,17 +62,23 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
         studio_assignments=context.studio_assignments,
     )
 
-    # Pre-compute person_fe SE from AKM residuals: SE_i = sigma_resid / sqrt(n_i)
+    # Pre-compute person_fe SE from AKM residuals (per-person clustered SE)
+    # Uses per-person residual std instead of global sigma to handle
+    # heteroscedasticity (episode-level vs through-role credits have
+    # different residual variance).
+    person_fe_se: dict[str, float] = {}
+    person_n_obs: dict[str, int] = {}
     if context.akm_result and context.akm_result.residuals:
-        all_resids = list(context.akm_result.residuals.values())
-        global_sigma = float(np.std(all_resids, ddof=1)) if len(all_resids) >= 2 else 0.0
-        pid_counter: Counter[str] = Counter()
-        for pid_aid in context.akm_result.residuals:
-            pid_counter[pid_aid[0]] += 1
-        person_n_obs: dict[str, int] = dict(pid_counter)
-    else:
-        global_sigma = 0.0
-        person_n_obs: dict[str, int] = {}
+        person_resids: dict[str, list[float]] = defaultdict(list)
+        for (pid, _aid), resid in context.akm_result.residuals.items():
+            person_resids[pid].append(resid)
+        for pid, resids in person_resids.items():
+            n = len(resids)
+            person_n_obs[pid] = n
+            if n >= 2:
+                sigma_i = float(np.std(resids, ddof=1))
+                person_fe_se[pid] = sigma_i / math.sqrt(n)
+            # n=1: no SE estimable
 
     # Pre-compute all scores and batch DB writes
     scores_by_pid: dict[str, ScoreResult] = {}
@@ -122,20 +129,32 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
         """,
         score_rows,
     )
+    # Score history with year+quarter stamp
+    now = datetime.datetime.now()
+    run_year = now.year
+    run_quarter = (now.month - 1) // 3 + 1
+    history_rows = [
+        (*row, run_year, run_quarter) for row in score_rows
+    ]
     conn.executemany(
         """INSERT INTO score_history
                (person_id, person_fe, studio_fe_exposure, birank,
-                patronage, dormancy, awcc, iv_score)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        score_rows,
+                patronage, dormancy, awcc, iv_score, year, quarter)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        history_rows,
     )
-    logger.info("scores_batch_saved", count=len(score_rows))
+    logger.info(
+        "scores_batch_saved",
+        count=len(score_rows),
+        year=run_year,
+        quarter=run_quarter,
+    )
 
     for pid in all_person_ids:
         score = scores_by_pid[pid]
 
         # Build result entry
-        node_data = context.person_anime_graph.nodes.get(pid, {})
+        node_data = context.person_anime_graph.nodes.get(pid, {}) if context.person_anime_graph else {}
 
         # Peer boost
         peer_boost = 0.0
@@ -144,7 +163,7 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
 
         # person_fe standard error (analytical CI for compensation basis)
         n_obs = person_n_obs.get(pid, 0)
-        se = global_sigma / math.sqrt(n_obs) if n_obs >= 2 and global_sigma > 0 else None
+        se = person_fe_se.get(pid)
 
         result_entry = {
             "person_id": pid,
