@@ -2,9 +2,14 @@
 
 from __future__ import annotations
 
+import json
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from pydantic import BaseModel, Field, computed_field
+
+if TYPE_CHECKING:
+    from src.db_rows import AnimeRow, CreditRow, PersonRow, ScoreRow, VARow
 
 
 class Role(str, Enum):
@@ -1236,6 +1241,31 @@ class Person(BaseModel):
     def display_name(self) -> str:
         return self.name_ja or self.name_en or self.id
 
+    @classmethod
+    def from_db_row(cls, row: "PersonRow") -> "Person":
+        return cls(
+            id=row.id,
+            name_ja=row.name_ja,
+            name_en=row.name_en,
+            aliases=json.loads(row.aliases),
+            mal_id=row.mal_id,
+            anilist_id=row.anilist_id,
+            madb_id=row.madb_id,
+            image_large=row.image_large,
+            image_medium=row.image_medium,
+            image_large_path=row.image_large_path,
+            image_medium_path=row.image_medium_path,
+            date_of_birth=row.date_of_birth,
+            age=row.age,
+            gender=row.gender,
+            years_active=json.loads(row.years_active),
+            hometown=row.hometown,
+            blood_type=row.blood_type,
+            description=row.description,
+            favourites=row.favourites,
+            site_url=row.site_url,
+        )
+
 
 class Anime(BaseModel):
     """アニメ作品."""
@@ -1310,6 +1340,54 @@ class Anime(BaseModel):
     @property
     def display_title(self) -> str:
         return self.title_ja or self.title_en or self.id
+
+    @classmethod
+    def from_db_row(cls, row: "AnimeRow") -> "Anime":
+        return cls(
+            id=row.id,
+            title_ja=row.title_ja,
+            title_en=row.title_en,
+            year=row.year,
+            season=row.season,
+            quarter=row.quarter,
+            episodes=row.episodes,
+            mal_id=row.mal_id,
+            anilist_id=row.anilist_id,
+            madb_id=row.madb_id,
+            score=row.score,
+            cover_large=row.cover_large,
+            cover_extra_large=row.cover_extra_large,
+            cover_medium=row.cover_medium,
+            banner=row.banner,
+            cover_large_path=row.cover_large_path,
+            banner_path=row.banner_path,
+            description=row.description,
+            format=row.format,
+            status=row.status,
+            start_date=row.start_date,
+            end_date=row.end_date,
+            duration=row.duration,
+            source=row.source,
+            genres=json.loads(row.genres),
+            tags=json.loads(row.tags),
+            popularity_rank=row.popularity_rank,
+            favourites=row.favourites,
+            studios=json.loads(row.studios),
+            synonyms=json.loads(row.synonyms),
+            mean_score=row.mean_score,
+            country_of_origin=row.country_of_origin,
+            is_licensed=bool(row.is_licensed) if row.is_licensed is not None else None,
+            is_adult=bool(row.is_adult) if row.is_adult is not None else None,
+            hashtag=row.hashtag,
+            site_url=row.site_url,
+            trailer_url=row.trailer_url,
+            trailer_site=row.trailer_site,
+            relations_json=row.relations_json,
+            external_links_json=row.external_links_json,
+            rankings_json=row.rankings_json,
+            work_type=row.work_type,
+            scale_class=row.scale_class,
+        )
 
 
 class AnimeRelation(BaseModel):
@@ -1391,6 +1469,19 @@ class Credit(BaseModel):
     credit_year: int | None = None  # 帰属年（長期作品は話数ごとに異なる）
     credit_quarter: int | None = None  # 帰属四半期 (1-4)
 
+    @classmethod
+    def from_db_row(cls, row: "CreditRow") -> "Credit":
+        return cls(
+            person_id=row.person_id,
+            anime_id=row.anime_id,
+            role=Role(row.role),
+            raw_role=row.raw_role or None,
+            episode=row.episode if row.episode != -1 else None,
+            source=row.source,
+            credit_year=row.credit_year,
+            credit_quarter=row.credit_quarter,
+        )
+
 
 class ScoreResult(BaseModel):
     """評価結果 — 8-component structural estimation framework.
@@ -1416,6 +1507,19 @@ class ScoreResult(BaseModel):
     ndi: float = 0.0
     iv_score: float = 0.0
     iv_score_historical: float = 0.0
+
+    @classmethod
+    def from_db_row(cls, row: "ScoreRow") -> "ScoreResult":
+        return cls(
+            person_id=row.person_id,
+            person_fe=row.person_fe,
+            studio_fe_exposure=row.studio_fe_exposure,
+            birank=row.birank,
+            patronage=row.patronage,
+            dormancy=row.dormancy,
+            awcc=row.awcc,
+            iv_score=row.iv_score,
+        )
 
 
 class VAScoreResult(BaseModel):

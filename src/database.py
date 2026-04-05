@@ -2228,100 +2228,18 @@ def upsert_score(conn: sqlite3.Connection, score: ScoreResult) -> None:
 
 def load_all_persons(conn: sqlite3.Connection) -> list[Person]:
     """全人物を読み込む."""
-    import json
+    from src.db_rows import PersonRow
 
     rows = conn.execute("SELECT * FROM persons").fetchall()
-    columns = set(rows[0].keys()) if rows else set()
-    result = []
-    for row in rows:
-        kwargs: dict = {
-            "id": row["id"],
-            "name_ja": row["name_ja"],
-            "name_en": row["name_en"],
-            "aliases": json.loads(row["aliases"]),
-            "mal_id": row["mal_id"],
-            "anilist_id": row["anilist_id"],
-        }
-        if "madb_id" in columns:
-            kwargs["madb_id"] = row["madb_id"]
-        result.append(Person(**kwargs))
-    return result
+    return [Person.from_db_row(PersonRow.from_row(row)) for row in rows]
 
 
 def load_all_anime(conn: sqlite3.Connection) -> list[Anime]:
     """全アニメを読み込む."""
-    import json as _json
+    from src.db_rows import AnimeRow
 
     rows = conn.execute("SELECT * FROM anime").fetchall()
-    columns = set(rows[0].keys()) if rows else set()
-    result = []
-    for row in rows:
-        kwargs: dict = {
-            "id": row["id"],
-            "title_ja": row["title_ja"],
-            "title_en": row["title_en"],
-            "year": row["year"],
-            "season": row["season"],
-            "episodes": row["episodes"],
-            "mal_id": row["mal_id"],
-            "anilist_id": row["anilist_id"],
-            "score": row["score"],
-        }
-        # v6+ カラム
-        if "studios" in columns:
-            try:
-                kwargs["studios"] = _json.loads(row["studios"] or "[]")
-            except (ValueError, TypeError):
-                kwargs["studios"] = []
-        if "genres" in columns:
-            try:
-                kwargs["genres"] = _json.loads(row["genres"] or "[]")
-            except (ValueError, TypeError):
-                kwargs["genres"] = []
-        if "tags" in columns:
-            try:
-                kwargs["tags"] = _json.loads(row["tags"] or "[]")
-            except (ValueError, TypeError):
-                kwargs["tags"] = []
-        # スカラーカラム（存在すれば読む）
-        for col in [
-            "format",
-            "status",
-            "source",
-            "description",
-            "start_date",
-            "end_date",
-            "duration",
-            "cover_large",
-            "cover_extra_large",
-            "cover_medium",
-            "banner",
-            "popularity_rank",
-            "favourites",
-            "mean_score",
-            "country_of_origin",
-            "is_licensed",
-            "is_adult",
-            "hashtag",
-            "site_url",
-            "trailer_url",
-            "trailer_site",
-            "relations_json",
-            "external_links_json",
-            "rankings_json",
-            "madb_id",
-            "work_type",
-            "scale_class",
-        ]:
-            if col in columns:
-                kwargs[col] = row[col]
-        if "synonyms" in columns:
-            try:
-                kwargs["synonyms"] = _json.loads(row["synonyms"] or "[]")
-            except (ValueError, TypeError):
-                kwargs["synonyms"] = []
-        result.append(Anime(**kwargs))
-    return result
+    return [Anime.from_db_row(AnimeRow.from_row(row)) for row in rows]
 
 
 _LEGACY_ROLE_MAP: dict[str, str] = {
@@ -2340,25 +2258,29 @@ _LEGACY_ROLE_MAP: dict[str, str] = {
 
 def load_all_credits(conn: sqlite3.Connection) -> list[Credit]:
     """全クレジットを読み込む."""
+    from src.db_rows import CreditRow
+
     rows = conn.execute("SELECT * FROM credits").fetchall()
     credits: list[Credit] = []
     skipped = 0
     for row in rows:
-        role_str = row["role"]
-        role_str = _LEGACY_ROLE_MAP.get(role_str, role_str)
+        cr = CreditRow.from_row(row)
+        role_str = _LEGACY_ROLE_MAP.get(cr.role, cr.role)
         try:
-            role = Role(role_str)
+            credits.append(Credit.from_db_row(CreditRow(
+                id=cr.id,
+                person_id=cr.person_id,
+                anime_id=cr.anime_id,
+                role=role_str,
+                raw_role=cr.raw_role,
+                episode=cr.episode,
+                source=cr.source,
+                updated_at=cr.updated_at,
+                credit_year=cr.credit_year,
+                credit_quarter=cr.credit_quarter,
+            )))
         except ValueError:
             skipped += 1
-            continue
-        credits.append(Credit(
-            person_id=row["person_id"],
-            anime_id=row["anime_id"],
-            role=role,
-            raw_role=row["raw_role"] or None,
-            episode=row["episode"] if row["episode"] != -1 else None,
-            source=row["source"],
-        ))
     if skipped:
         logger.warning("credits_skipped_unknown_role", count=skipped)
     return credits
