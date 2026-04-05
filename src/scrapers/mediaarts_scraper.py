@@ -26,6 +26,7 @@ import structlog
 import typer
 
 from src.models import Anime, Credit, Person, parse_role
+from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL
 
 log = structlog.get_logger()
 
@@ -384,7 +385,7 @@ async def scrape_madb(
     data_dir: Path | None = None,
     version: str = "latest",
     max_anime: int = 0,
-    checkpoint_interval: int = 50,
+    checkpoint_interval: int = SCRAPE_CHECKPOINT_INTERVAL,
     extended: bool = False,
 ) -> dict:
     """Fetch credit data from MADB dump.

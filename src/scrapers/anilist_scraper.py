@@ -24,6 +24,7 @@ from src.models import (
     parse_role,
 )
 from src.utils.episode_parser import parse_episodes
+from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL
 
 _env = dotenv_values(find_dotenv())
 
@@ -1871,7 +1872,7 @@ async def _fetch_person_details_phase(
 def main(
     count: int = typer.Option(50, "--count", "-n", help="取得するアニメ数"),
     checkpoint_interval: int = typer.Option(
-        3, "--checkpoint", help="チェックポイント間隔 (デフォルト: 3件)"
+        SCRAPE_CHECKPOINT_INTERVAL, "--checkpoint", help="チェックポイント間隔"
     ),
     force_restart: bool = typer.Option(
         False, "--force-restart", help="チェックポイントを無視して最初から始める"

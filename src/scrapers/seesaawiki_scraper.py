@@ -31,6 +31,7 @@ import typer
 from bs4 import BeautifulSoup
 
 from src.models import Anime, Credit, Person, parse_role
+from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL, SCRAPE_DELAY_SECONDS
 
 log = structlog.get_logger()
 
@@ -50,7 +51,7 @@ HEADERS = {
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
 }
 
-DEFAULT_DELAY = 2.0  # seconds between requests
+DEFAULT_DELAY = SCRAPE_DELAY_SECONDS  # overridable via ANIMETOR_SCRAPE_DELAY
 DEFAULT_DATA_DIR = Path("data/seesaawiki")
 
 # Known Japanese role names — used for is_known_role flag, NOT for parse filtering.
@@ -2013,7 +2014,7 @@ async def scrape_seesaawiki(
     conn,
     data_dir: Path | None = None,
     max_pages: int = 0,
-    checkpoint_interval: int = 10,
+    checkpoint_interval: int = SCRAPE_CHECKPOINT_INTERVAL,
     delay: float = DEFAULT_DELAY,
     use_llm: bool = True,
     fresh: bool = False,
@@ -2428,7 +2429,7 @@ def reparse_from_raw(
     conn,
     data_dir: Path | None = None,
     use_llm: bool = False,
-    checkpoint_interval: int = 50,
+    checkpoint_interval: int = SCRAPE_CHECKPOINT_INTERVAL,
 ) -> dict:
     """Re-parse all saved raw HTML files and update DB.
 

@@ -45,7 +45,7 @@ from src.database import (
     get_score_history,
     search_persons,
 )
-from src.utils.config import JSON_DIR
+from src.utils.config import JSON_DIR, REPORTS_DIR
 from src.utils.json_io import (
     load_anime_statistics_from_json,
     load_bridge_analysis_from_json,
@@ -96,7 +96,7 @@ app.add_middleware(
 )
 
 # --- Cache-Control Headers ---
-_CACHE_MAX_AGE = int(os.environ.get("API_CACHE_MAX_AGE", "300"))  # 5 minutes default
+_CACHE_MAX_AGE = int(os.environ.get("API_CACHE_MAX_AGE", "300"))
 
 
 @app.middleware("http")
@@ -147,8 +147,7 @@ STATIC_DIR = Path(__file__).parent.parent / "static"
 if STATIC_DIR.exists():
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-# Mount report files
-REPORTS_DIR = Path(__file__).parent.parent / "result" / "reports"
+# Mount report files (path from config, overridable via ANIMETOR_REPORTS_DIR)
 if REPORTS_DIR.exists():
     app.mount("/reports", StaticFiles(directory=str(REPORTS_DIR), html=True), name="reports")
 
@@ -176,13 +175,12 @@ class PaginatedResponse(BaseModel):
 @app.get("/api/health", response_model=HealthResponse)
 def health():
     """ヘルスチェック."""
-    from src.utils.config import DB_DIR
+    from src.utils.config import DB_PATH
 
-    db_path = DB_DIR / "animetor_eval.db"
     scores_path = JSON_DIR / "scores.json"
     return HealthResponse(
         status="ok",
-        db_exists=db_path.exists(),
+        db_exists=DB_PATH.exists(),
         scores_exist=scores_path.exists(),
     )
 

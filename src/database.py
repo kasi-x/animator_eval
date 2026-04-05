@@ -19,11 +19,11 @@ from src.models import (
     ScoreResult,
     Studio,
 )
-from src.utils.config import DB_DIR
+from src.utils.config import DB_PATH
 
 logger = structlog.get_logger()
 
-DEFAULT_DB_PATH = DB_DIR / "animetor_eval.db"
+DEFAULT_DB_PATH = DB_PATH
 
 SCHEMA_VERSION = 26
 
