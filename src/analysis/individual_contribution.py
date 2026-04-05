@@ -719,6 +719,46 @@ def compute_independent_value(
     return result
 
 
+def _assemble_individual_profiles(
+    features: dict,
+    peer_data: dict,
+    residuals: dict,
+    consistency_scores: dict,
+    independent_values: dict,
+) -> dict:
+    """統合ステップ：4つの指標を1人のプロファイルに集約.
+
+    Args:
+        features: person_id → 特徴量辞書
+        peer_data: person_id → {peer_percentile, peer_cohort, ...}
+        residuals: person_id → opportunity_residual
+        consistency_scores: person_id → consistency
+        independent_values: person_id → independent_value
+
+    Returns:
+        person_id → {peer_percentile, opportunity_residual, consistency, independent_value, ...}
+    """
+    profiles = {}
+    for pid in features:
+        peer = peer_data.get(pid, {})
+        profile = IndividualProfile(
+            person_id=pid,
+            peer_percentile=peer.get("peer_percentile"),
+            peer_cohort=peer.get("peer_cohort"),
+            opportunity_residual=residuals.get(pid),
+            consistency=consistency_scores.get(pid),
+            independent_value=independent_values.get(pid),
+        )
+        profile_dict = asdict(profile)
+        # Add cluster metrics if available
+        if "cluster_percentile" in peer:
+            profile_dict["cluster_percentile"] = peer["cluster_percentile"]
+            profile_dict["cluster_id"] = peer["cluster_id"]
+            profile_dict["cluster_size"] = peer["cluster_size"]
+        profiles[pid] = profile_dict
+    return profiles
+
+
 def compute_individual_profiles(
     results: list[dict],
     credits: list[Credit],
@@ -767,25 +807,10 @@ def compute_individual_profiles(
         features, credits, anime_map, collaboration_graph
     )
 
-    # 統合
-    profiles = {}
-    for pid in features:
-        peer = peer_data.get(pid, {})
-        profile = IndividualProfile(
-            person_id=pid,
-            peer_percentile=peer.get("peer_percentile"),
-            peer_cohort=peer.get("peer_cohort"),
-            opportunity_residual=residuals.get(pid),
-            consistency=consistency_scores.get(pid),
-            independent_value=independent_values.get(pid),
-        )
-        profile_dict = asdict(profile)
-        # Add cluster percentile if available
-        if "cluster_percentile" in peer:
-            profile_dict["cluster_percentile"] = peer["cluster_percentile"]
-            profile_dict["cluster_id"] = peer["cluster_id"]
-            profile_dict["cluster_size"] = peer["cluster_size"]
-        profiles[pid] = profile_dict
+    # 統合：4つの指標を1つのプロファイルに
+    profiles = _assemble_individual_profiles(
+        features, peer_data, residuals, consistency_scores, independent_values
+    )
 
     logger.info(
         "individual_profiles_computed",
