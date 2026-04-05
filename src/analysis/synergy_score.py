@@ -190,31 +190,28 @@ def _compute_quality_factor(
     anime_ids: list[str],
     anime_map: dict[str, Anime],
 ) -> float:
-    """Compute quality factor from anime score trajectory within a chain.
+    """Production scale trajectory factor for a collaboration chain.
 
-    quality_factor = 1.0 + (latest_score - first_score) / max(first_score, 1.0)
-    Clamped to [0.0, 2.0].
-
-    Args:
-        anime_ids: ordered anime IDs in the chain
-        anime_map: anime_id → Anime
+    Uses episode count as a structural proxy for production scale.
+    Measures whether later collaborations are on larger-scale productions.
+    anime.score is intentionally excluded (viewer ratings are not used).
 
     Returns:
-        Quality factor (0.0 to 2.0)
+        Quality factor (0.5 to 1.5), default 1.0
     """
-    scores = []
+    scales = []
     for aid in anime_ids:
         anime = anime_map.get(aid)
-        if anime and anime.score is not None:
-            scores.append(anime.score)
+        if anime and anime.episodes is not None and anime.episodes > 0:
+            scales.append(float(anime.episodes))
 
-    if len(scores) < 2:
+    if len(scales) < 2:
         return 1.0
 
-    first = scores[0]
-    latest = scores[-1]
-    raw = 1.0 + (latest - first) / max(first, 1.0)
-    return max(0.0, min(2.0, raw))
+    first = scales[0]
+    latest = scales[-1]
+    raw = 1.0 + (latest - first) / max(first, 1.0) * 0.5
+    return max(0.5, min(1.5, raw))
 
 
 def _compute_pair_synergy(
@@ -253,6 +250,11 @@ def _compute_group_synergy(
 
     Trio (3 members): 1.1× multiplier on sum of constituent pair synergies
     Quartet+ (4+ members): 1.2× multiplier
+
+    D11 note: A trio's synergy is ~3.3× a pair's (C(3,2)=3 pairs × 1.1).
+    This is intentional — a trio that all know each other IS substantially
+    more synergistic than a single pair. The 1.1×/1.2× multipliers are modest
+    additional bonuses on top of the natural combinatorial scaling.
 
     Args:
         members: set of person IDs in the group

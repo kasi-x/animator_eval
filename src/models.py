@@ -247,7 +247,6 @@ ROLE_MAP: dict[str, Role] = {
     "助監督": Role.DIRECTOR,
     "選曲": Role.MUSIC,
     "プロデュース": Role.PRODUCER,
-    "タイミング": Role.SPECIAL,
     "美術補佐": Role.BACKGROUND_ART,
     "美術ボード": Role.BACKGROUND_ART,
     "メカデザイン協力": Role.CHARACTER_DESIGNER,
@@ -289,7 +288,6 @@ ROLE_MAP: dict[str, Role] = {
     "デジタル合成": Role.PHOTOGRAPHY_DIRECTOR,
     "cgi": Role.CGI_DIRECTOR,
     "仕上チェック": Role.FINISHING,
-    "文芸": Role.SCREENPLAY,
     "広報": Role.SPECIAL,
     "スペシャルサンクス": Role.SPECIAL,
     "スタジオコーディネート": Role.PRODUCER,
@@ -536,7 +534,6 @@ ROLE_MAP: dict[str, Role] = {
     "挿入歌": Role.MUSIC,
     "ボーカル": Role.MUSIC,
     "lyrics": Role.MUSIC,
-    "music": Role.MUSIC,
     "artist": Role.MUSIC,
     "エンドカードイラスト": Role.SPECIAL,
     "エンドカード": Role.SPECIAL,
@@ -1078,7 +1075,6 @@ ROLE_MAP: dict[str, Role] = {
     "データ放送": Role.SPECIAL,
     "放送": Role.SPECIAL,
     "次回予告": Role.SPECIAL,
-    "記録": Role.SPECIAL,
     "op/edアニメーション": Role.SPECIAL,
     "オープニングアニメーション": Role.SPECIAL,
     "キャスティング": Role.SPECIAL,
@@ -1177,6 +1173,7 @@ def parse_role(raw: str) -> Role:
         r"|Polish|Czech|Dutch|Swedish|Norwegian|Danish|Finnish"
         r"|Russian|Turkish|Arabic|Hebrew|Hindi|Indonesian"
         r"|Malay|Vietnamese|Filipino|Romanian|Greek|Catalan)"
+        r"(?:\s*[;,][^)]*)?"  # optional "; 1st dub", "; eps 314-400" etc.
         r"\)",
         re.IGNORECASE,
     )
@@ -1248,6 +1245,7 @@ class Anime(BaseModel):
     title_en: str = ""
     year: int | None = None
     season: str | None = None
+    quarter: int | None = None  # 1-4, derived from season or start_date month
     episodes: int | None = None
     mal_id: int | None = None
     anilist_id: int | None = None
@@ -1297,6 +1295,10 @@ class Anime(BaseModel):
     relations_json: str | None = None  # 関連作品（続編/前日譚等）
     external_links_json: str | None = None  # 外部リンク（配信サイト等）
     rankings_json: str | None = None  # ランキング情報
+
+    # v26: K-means 規模分類
+    work_type: str | None = None   # 'tv' | 'tanpatsu'
+    scale_class: str | None = None  # 'large' | 'medium' | 'small'
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -1386,6 +1388,8 @@ class Credit(BaseModel):
     raw_role: str | None = None  # 元のロール文字列（API由来）を保存
     episode: int | None = None
     source: str = ""
+    credit_year: int | None = None  # 帰属年（長期作品は話数ごとに異なる）
+    credit_quarter: int | None = None  # 帰属四半期 (1-4)
 
 
 class ScoreResult(BaseModel):

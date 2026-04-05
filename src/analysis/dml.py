@@ -191,7 +191,6 @@ def _fit_dml(
 
 def _fit_ols(Y: np.ndarray, D: np.ndarray, X: np.ndarray) -> EstimationResult:
     """Naive OLS: Y = θ·D + X·β + ε (線形、cross-fittingなし)."""
-    n = X.shape[1]
     Z = np.column_stack([D.reshape(-1, 1), X])
     try:
         beta = np.linalg.lstsq(Z, Y, rcond=None)[0]

@@ -89,10 +89,19 @@ def compute_cooccurrence_groups(
     # group_counts: frozenset[person_id] → list[anime_id]
     group_counts: dict[frozenset, list[str]] = defaultdict(list)
 
+    # Cap staff per anime to avoid combinatorial explosion:
+    # C(n,5) grows as O(n^5), so n=30 → 142K combos, n=60 → 5.5M.
+    # Keep top-scored staff when exceeding the cap.
+    _MAX_STAFF_PER_ANIME = 20
+
     for anime_id, staff_roles in anime_to_staff.items():
         persons = list(staff_roles.keys())
         if len(persons) < 3:
             continue
+        if len(persons) > _MAX_STAFF_PER_ANIME:
+            # Keep top staff by IV score (or arbitrary if no scores)
+            persons.sort(key=lambda p: iv_scores.get(p, 0.0), reverse=True)
+            persons = persons[:_MAX_STAFF_PER_ANIME]
         for k in range(3, min(max_group_size, len(persons)) + 1):
             for combo in combinations(persons, k):
                 group_counts[frozenset(combo)].append(anime_id)

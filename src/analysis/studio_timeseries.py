@@ -10,6 +10,7 @@ from dataclasses import asdict, dataclass
 import structlog
 
 from src.models import Anime, Credit
+from src.utils.time_utils import get_year_quarter, yq_label
 
 logger = structlog.get_logger()
 
@@ -32,6 +33,7 @@ class StudioTimeSeriesResult:
     """Result of studio time series computation."""
 
     studio_metrics: dict[str, list[dict]]  # studio → [StudioYearMetrics as dict]
+    quarterly_summary: dict[str, dict[str, int]]  # studio → {"2020-Q1": credit_count}
     studios_analyzed: int
     total_studio_years: int
 
@@ -92,7 +94,8 @@ def compute_studio_timeseries(
 
     if not all_studios or not all_years:
         return StudioTimeSeriesResult(
-            studio_metrics={}, studios_analyzed=0, total_studio_years=0
+            studio_metrics={}, quarterly_summary={},
+            studios_analyzed=0, total_studio_years=0,
         )
 
     sorted_years = sorted(all_years)
@@ -147,6 +150,23 @@ def compute_studio_timeseries(
         if yearly_metrics:
             studio_metrics[studio] = yearly_metrics
 
+    # Quarterly summary: studio → {yq_label → credit_count}
+    studio_quarter_credits: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    for c in credits:
+        anime = anime_map.get(c.anime_id)
+        if not anime or not anime.year or not anime.studios:
+            continue
+        yq = get_year_quarter(anime)
+        if yq:
+            label = yq_label(*yq)
+            for studio in anime.studios:
+                studio_quarter_credits[studio][label] += 1
+
+    quarterly_summary = {
+        studio: dict(sorted(qmap.items()))
+        for studio, qmap in sorted(studio_quarter_credits.items())
+    }
+
     logger.info(
         "studio_timeseries_computed",
         studios=len(studio_metrics),
@@ -155,6 +175,7 @@ def compute_studio_timeseries(
 
     return StudioTimeSeriesResult(
         studio_metrics=studio_metrics,
+        quarterly_summary=quarterly_summary,
         studios_analyzed=len(studio_metrics),
         total_studio_years=total_sy,
     )

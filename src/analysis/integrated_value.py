@@ -137,18 +137,20 @@ def optimize_lambda_weights(
         for i, pid in enumerate(person_list):
             X[i, j] = components[name].get(pid, 0.0)
 
-    # Normalize features
+    # Normalize features: standard z-score (x - μ) / σ
+    x_mean_raw = np.mean(X, axis=0)
     x_std = np.std(X, axis=0)
     x_std[x_std == 0] = 1.0
-    std_floor = np.max(x_std) * 0.01
-    x_std = np.maximum(x_std, std_floor)
-    X_norm = X / x_std
+    # Floor: absolute minimum std of 1e-6 to avoid division explosion.
+    # Unlike the old relative floor (1% of max std), this is independent of
+    # other components — patronage's floor doesn't scale with birank's variance.
+    x_std = np.maximum(x_std, 1e-6)
+    X_norm = (X - x_mean_raw) / x_std
 
-    x_mean = np.mean(X_norm, axis=0)
-    X_norm = X_norm - x_mean
-
+    # component_mean stores raw means, component_std stores raw stds.
+    # To normalize a new value x: (x - mean) / std
     component_std = {name: float(x_std[j]) for j, name in enumerate(component_names)}
-    component_mean = {name: float(x_mean[j]) for j, name in enumerate(component_names)}
+    component_mean = {name: float(x_mean_raw[j]) for j, name in enumerate(component_names)}
 
     # PCA: extract PC1 loadings as data-driven weights
     pca = PCA(n_components=1)
@@ -161,9 +163,11 @@ def optimize_lambda_weights(
     if loadings[pfe_idx] < 0:
         loadings = -loadings
 
-    # Absolute loadings → floor at 5% → normalize to sum=1
+    # Absolute loadings → normalize to sum=1
+    # No artificial floor: PCA loadings reflect true data structure.
+    # A near-zero loading means the component is orthogonal to PC1 — forcing
+    # 5% weight on it would inject noise into IV.
     raw_w = np.abs(loadings)
-    raw_w = np.maximum(raw_w, 0.05)
     raw_w /= raw_w.sum()
 
     lambda_weights = {name: float(raw_w[j]) for j, name in enumerate(component_names)}
@@ -190,11 +194,14 @@ def compute_integrated_value(
 ) -> dict[str, float]:
     """Compute integrated value scores.
 
-    IV = (Σ_k λ_k · (x_k/σ_k - μ_k)) × dormancy
+    IV = (Σ_k λ_k · ((x_k - μ_k) / σ_k)) × dormancy
 
-    Components are normalized (÷ std) and centered (- mean) to match the
-    optimization space. This ensures person_fe's negative mean doesn't
-    bias the score downward.
+    Components are z-score normalized: (x - mean) / std.
+    Missing components (person has no value) contribute 0 to the sum,
+    equivalent to "average person" — absence is not penalized.
+
+    D07 note: λ weights come from PCA PC1 loadings (data-driven), not L2-penalized
+    CV optimization. PCA loadings reflect the principal axis of variation.
 
     Args:
         person_fe: person_id → person fixed effect (θ)
@@ -205,7 +212,7 @@ def compute_integrated_value(
         dormancy: person_id → dormancy multiplier (0-1)
         lambdas: component name → weight (in centered normalized space)
         component_std: component name → std for normalization
-        component_mean: component name → mean of normalized features (for centering)
+        component_mean: component name → raw mean (for centering)
 
     Returns:
         person_id → integrated value score
@@ -222,16 +229,26 @@ def compute_integrated_value(
         "patronage": patronage,
     }
 
+    # Components where absence means "no data available" (not "zero contribution").
+    # Missing studio_exposure = AKM couldn't estimate (non-mover), not "bad studio".
+    # Missing patronage/awcc = genuinely no activity → use 0.0 (below-average is correct).
+    _IMPUTE_MEAN_IF_MISSING = {"studio_exposure"}
+
     iv_scores: dict[str, float] = {}
     for pid in all_persons:
-        raw = sum(
-            lambdas.get(name, 0.2) * (
-                scores.get(pid, 0.0)
-                / (component_std.get(name, 1.0) if component_std else 1.0)
-                - (component_mean.get(name, 0.0) if component_mean else 0.0)
-            )
-            for name, scores in components.items()
-        )
+        raw = 0.0
+        for name, scores in components.items():
+            if pid not in scores:
+                if name in _IMPUTE_MEAN_IF_MISSING:
+                    # No data → contribute 0 in z-space (= population mean)
+                    continue
+                # Genuinely absent activity → use 0.0 raw value
+                val = 0.0
+            else:
+                val = scores[pid]
+            if component_std and component_mean:
+                val = (val - component_mean.get(name, 0.0)) / component_std.get(name, 1.0)
+            raw += lambdas.get(name, 0.2) * val
         d = dormancy.get(pid, 1.0)
         iv_scores[pid] = raw * d
 
@@ -292,17 +309,23 @@ def compute_integrated_value_full(
     )
 
     # Build component breakdown (with normalization and centering applied)
+    _IMPUTE_MEAN = {"studio_exposure"}
     component_breakdown: dict[str, dict[str, float]] = {}
     for pid in iv_scores:
-        component_breakdown[pid] = {
-            name: lambdas.get(name, 0.2) * (
-                scores.get(pid, 0.0)
-                / (comp_std.get(name, 1.0) if comp_std else 1.0)
-                - (comp_mean.get(name, 0.0) if comp_mean else 0.0)
-            )
-            for name, scores in components.items()
-        }
-        component_breakdown[pid]["dormancy"] = dormancy.get(pid, 1.0)
+        bd: dict[str, float] = {}
+        for name, scores in components.items():
+            if pid not in scores and name in _IMPUTE_MEAN:
+                bd[name] = 0.0  # mean-imputed → 0 in z-space
+            elif comp_std and comp_mean:
+                val = scores.get(pid, 0.0)
+                bd[name] = lambdas.get(name, 0.2) * (
+                    (val - comp_mean.get(name, 0.0))
+                    / comp_std.get(name, 1.0)
+                )
+            else:
+                bd[name] = lambdas.get(name, 0.2) * scores.get(pid, 0.0)
+        bd["dormancy"] = dormancy.get(pid, 1.0)
+        component_breakdown[pid] = bd
 
     logger.info(
         "integrated_value_computed",

@@ -63,7 +63,8 @@ python-dotenv = ">=1.0"
 [feature.analysis.dependencies]
 networkx = "*"
 pandas = "*"
-numpy = "*"
+numpy = ">=1.26,<2.3"
+numba = ">=0.60"
 matplotlib = "*"
 plotly = ">=6.5.2,<7"
 scipy = "*"
@@ -101,6 +102,22 @@ rust = ">=1.75"
 maturin = ">=1.11.5,<2"
 
 # ============================================================================
+# Feature: viz — Julia/CairoMakie visualization (SVG output)
+# ============================================================================
+[feature.viz.dependencies]
+julia = ">=1.10"
+
+[feature.viz.pypi-dependencies]
+juliacall = ">=0.9"
+
+[feature.viz.tasks]
+reports-v2 = "python scripts/generate_reports_v2.py"
+reports-v2-js = "python scripts/generate_reports_v2.py --backend=js"
+reports-v2-makie = "python scripts/generate_reports_v2.py --backend=makie"
+reports-v2-both = "python scripts/generate_reports_v2.py --backend=both"
+setup-julia = "python scripts/setup_julia_env.py"
+
+# ============================================================================
 # Feature: neo4j — Neo4j graph database export (optional)
 # ============================================================================
 [feature.neo4j.pypi-dependencies]
@@ -118,3 +135,5 @@ scrape = ["scrape"]
 analysis = ["analysis"]
 # serve: API server with analysis backend
 serve = ["analysis", "api"]
+# viz: analysis + Julia/CairoMakie SVG generation
+viz = ["analysis", "viz"]

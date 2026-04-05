@@ -19,6 +19,7 @@ logger = structlog.get_logger()
 try:
     from animetor_eval_core import (
         betweenness_centrality_rs,
+        betweenness_centrality_from_edges_rs,
         build_collaboration_edges_rs,
         degree_centrality_rs,
         eigenvector_centrality_rs,
@@ -28,6 +29,7 @@ try:
     logger.debug("rust_extension_loaded")
 except ImportError:
     RUST_AVAILABLE = False
+    betweenness_centrality_from_edges_rs = None  # type: ignore[assignment]
     logger.debug("rust_extension_unavailable", fallback="networkx")
 
 
@@ -42,6 +44,27 @@ def _nx_graph_to_adjacency(graph: nx.Graph) -> dict[str, dict[str, float]]:
     return adj
 
 
+def _nx_graph_to_edgelist(
+    graph: nx.Graph,
+) -> tuple[list[str], list[tuple[int, int, float]]]:
+    """Convert a NetworkX graph to a compact edge list for Rust consumption.
+
+    Returns:
+        (node_ids, edges) where node_ids[i] is the string ID for node index i,
+        and edges is a list of (u_idx, v_idx, weight) for undirected edges
+        (each edge appears once, both directions handled by Rust).
+    """
+    node_ids = sorted(str(n) for n in graph.nodes())
+    id_to_idx = {nid: i for i, nid in enumerate(node_ids)}
+    edges: list[tuple[int, int, float]] = []
+    for u, v, data in graph.edges(data=True):
+        u_idx = id_to_idx[str(u)]
+        v_idx = id_to_idx[str(v)]
+        w = float(data.get("weight", 1.0))
+        edges.append((u_idx, v_idx, w))
+    return node_ids, edges
+
+
 def betweenness_centrality(
     graph: nx.Graph,
     k: int | None = None,
@@ -49,6 +72,9 @@ def betweenness_centrality(
     seed: int = 42,
 ) -> dict[str, float]:
     """Compute betweenness centrality, using Rust when available.
+
+    For large sparse graphs (>5M edges), uses the memory-efficient edge-list
+    interface to avoid OOM from building a full adjacency dict.
 
     Args:
         graph: NetworkX undirected graph
@@ -60,14 +86,22 @@ def betweenness_centrality(
         Dict mapping node_id to betweenness score
     """
     if RUST_AVAILABLE:
+        n_nodes = graph.number_of_nodes()
+        n_edges = graph.number_of_edges()
+        # Use edge-list interface for large sparse graphs to avoid OOM
+        if n_edges > 5_000_000:
+            node_ids, edges = _nx_graph_to_edgelist(graph)
+            logger.info(
+                "betweenness_rust_edgelist",
+                nodes=n_nodes,
+                edges=n_edges,
+                k=k,
+                seed=seed,
+            )
+            return betweenness_centrality_from_edges_rs(node_ids, edges, k=k, seed=seed)
+        # Small graphs: use adjacency dict interface (faster for small graphs)
         adj = _nx_graph_to_adjacency(graph)
-        n_nodes = len(adj)
-        logger.info(
-            "betweenness_rust",
-            nodes=n_nodes,
-            k=k,
-            seed=seed,
-        )
+        logger.info("betweenness_rust", nodes=n_nodes, k=k, seed=seed)
         return betweenness_centrality_rs(adj, k=k, seed=seed)
 
     # NetworkX fallback

@@ -1,7 +1,6 @@
 """Tests for Double/Debiased Machine Learning module."""
 
 import numpy as np
-import pytest
 
 from src.analysis.dml import (
     DMLReport,

@@ -100,6 +100,11 @@ def compute_talent_pipeline(
             person_highest_stage[pid] = stage
 
     # 1. Junior Development Score
+    # Pre-build person → credits index (O(credits) once, avoids O(persons × credits))
+    person_credits_idx: dict[str, list[Credit]] = defaultdict(list)
+    for c in credits:
+        person_credits_idx[c.person_id].append(c)
+
     # Junior = person whose first credit was at this studio, stage <= 2
     studio_juniors: dict[str, set[str]] = defaultdict(set)
     studio_promoted: dict[str, list[tuple[str, int]]] = defaultdict(list)
@@ -112,18 +117,16 @@ def compute_talent_pipeline(
         # Consider as junior if started at low stage
         early_stages = [
             _STAGE_MAP.get(c.role.value, 0)
-            for c in credits
-            if c.person_id == pid
-            and anime_map.get(c.anime_id)
+            for c in person_credits_idx[pid]
+            if anime_map.get(c.anime_id)
             and anime_map[c.anime_id].year == fy
         ]
         if early_stages and max(early_stages) <= 2:
             studio_juniors[first_studio].add(pid)
             if hs >= 4:
                 ly = max(
-                    (anime_map[c.anime_id].year for c in credits
-                     if c.person_id == pid
-                     and anime_map.get(c.anime_id) and anime_map[c.anime_id].year),
+                    (anime_map[c.anime_id].year for c in person_credits_idx[pid]
+                     if anime_map.get(c.anime_id) and anime_map[c.anime_id].year),
                     default=current_year,
                 )
                 years_to_promote = ly - fy
@@ -155,23 +158,24 @@ def compute_talent_pipeline(
                         flow_matrix[(sb, sa)] += 1
 
     # 3. Brain Drain Index
-    # brain_drain = Σ(outflow × mean_fe) - Σ(inflow × mean_fe)
-    brain_drain: dict[str, float] = defaultdict(float)
-    for (from_s, to_s), count in flow_matrix.items():
-        # Find movers' average FE
-        mover_fes = []
-        for pid, year_studios in person_year_studios.items():
-            for yr, studios in year_studios.items():
-                if from_s in studios:
-                    next_years = [y for y in year_studios if y > yr]
-                    for ny in next_years:
-                        if to_s in year_studios[ny]:
-                            fe = person_fe.get(pid, 0.0)
-                            mover_fes.append(fe)
-                            break
-                    break
+    # Pre-compute per-transition FE sums (O(persons), not O(flow_pairs × persons))
+    # Collect (from_studio, to_studio) → list of mover FEs during flow detection
+    transition_fes: dict[tuple[str, str], list[float]] = defaultdict(list)
+    for pid, year_studios in person_year_studios.items():
+        fe = person_fe.get(pid, 0.0)
+        years = sorted(year_studios.keys())
+        for i in range(len(years) - 1):
+            studios_before = year_studios[years[i]]
+            studios_after = year_studios[years[i + 1]]
+            for sb in studios_before:
+                for sa in studios_after:
+                    if sb != sa:
+                        transition_fes[(sb, sa)].append(fe)
 
-        avg_fe = float(np.mean(mover_fes)) if mover_fes else 0.0
+    brain_drain: dict[str, float] = defaultdict(float)
+    for (from_s, to_s), fes in transition_fes.items():
+        avg_fe = float(np.mean(fes)) if fes else 0.0
+        count = len(fes)
         brain_drain[from_s] += count * avg_fe  # outflow
         brain_drain[to_s] -= count * avg_fe  # inflow
 

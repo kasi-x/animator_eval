@@ -55,6 +55,42 @@ def load_json(name: str) -> dict | list | None:
         return json.load(f)
 
 
+def _footer_stats() -> str:
+    """フッター用のデータ統計を動的生成."""
+    summary = load_json("summary.json")
+    if summary and "data" in summary:
+        d = summary["data"]
+        persons = d.get("persons", 0) or d.get("scored_persons", 0)
+        credits = d.get("credits", 0)
+        return f"{persons:,}人 / {credits:,}クレジット"
+    # fallback: scores.json の件数
+    scores = load_json("scores.json")
+    if scores and isinstance(scores, list):
+        return f"{len(scores):,}人"
+    return "（統計情報なし）"
+
+
+# ============================================================
+# Data-driven IV percentile thresholds (computed once at import)
+# ============================================================
+
+def _compute_iv_percentiles() -> dict:
+    """scores.json から IV スコアのパーセンタイルを事前計算."""
+    import numpy as _np_iv
+    scores = load_json("scores.json")
+    if not scores or not isinstance(scores, list):
+        return {"p50": 0.0, "p75": 0.01, "p90": 0.1, "p95": 0.5, "p99": 2.0}
+    ivs = [s["iv_score"] for s in scores if s.get("iv_score") is not None]
+    if len(ivs) < 100:
+        return {"p50": 0.0, "p75": 0.01, "p90": 0.1, "p95": 0.5, "p99": 2.0}
+    arr = _np_iv.array(ivs)
+    p = _np_iv.percentile(arr, [50, 75, 90, 95, 99])
+    return {"p50": float(p[0]), "p75": float(p[1]), "p90": float(p[2]),
+            "p95": float(p[3]), "p99": float(p[4])}
+
+
+IV_PCTILES = _compute_iv_percentiles()
+
 # ============================================================
 # Shared HTML template helpers
 # ============================================================
@@ -288,6 +324,39 @@ details.future-section ul {
     padding: 0 1.5rem 1.2rem 2.5rem;
     color: #b8a090; font-size: 0.88rem; line-height: 1.9;
 }
+
+details.section-accordion {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px; margin-bottom: 1rem;
+}
+details.section-accordion > summary {
+    padding: 1rem 1.5rem; cursor: pointer;
+    font-weight: 700; color: #a0d2db; font-size: 1.1rem;
+    list-style: none; user-select: none;
+    border-radius: 16px;
+}
+details.section-accordion > summary:hover { background: rgba(255,255,255,0.04); }
+details.section-accordion > summary::before { content: "▶ "; font-size: 0.85rem; color: #f093fb; }
+details.section-accordion[open] > summary::before { content: "▼ "; }
+details.section-accordion[open] > summary {
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px 16px 0 0;
+}
+details.section-accordion > .accordion-body { padding: 1rem; }
+
+.caveat-box {
+    border-left: 3px solid #E6A23C; background: rgba(230,162,60,0.06);
+    padding: 0.8rem 1rem; margin: 0.8rem 0; font-size: 0.9rem;
+    color: #d4c4a0; line-height: 1.7; border-radius: 0 8px 8px 0;
+}
+.competing-interp {
+    border-left: 3px solid #667eea; background: rgba(102,126,234,0.04);
+    padding: 1rem 1.2rem; margin: 0.8rem 0; border-radius: 0 8px 8px 0;
+}
+.competing-interp .ci-claim { color: #a0d2db; font-size: 0.95rem; margin-bottom: 0.5rem; }
+.competing-interp .ci-alts { color: #b0b8c8; font-size: 0.88rem; }
+.competing-interp ol { margin: 0.3rem 0 0 1.5rem; line-height: 1.8; }
 """
 
 
@@ -304,32 +373,55 @@ DISCLAIMER = (
 )
 
 METHODOLOGY_SUMMARY = (
-    "評価は3軸で構成されます：(1) BiRank — 重み付き二部グラフランキングによる"
-    "著名監督・作品への近接性、(2) Patronage — 同一監督からの継続起用による"
-    "累積エッジ重み、(3) Person FE — 固定効果モデルに基づく"
-    "個人寄与の構造推定。IV Scoreは3軸の操作変数推定統合値で、0-100に正規化されます。"
+    "評価はIntegrated Value (IV) Scoreに基づきます。5つのコンポーネント — "
+    "(1) Person FE (θ): AKM固定効果モデルによる個人寄与推定、"
+    "(2) BiRank: 二部グラフランキングによるネットワーク中心性、"
+    "(3) Studio Exposure: スタジオ固定効果への累積露出、"
+    "(4) AWCC: 能力加重協業中心性、"
+    "(5) Patronage: 監督からの継続起用プレミアム — を"
+    "z正規化した後、PCA第1主成分の負荷量で重み付けし、"
+    "休眠ペナルティ(Dormancy)で乗算した統合指標です。"
 )
 
 COMMON_GLOSSARY_TERMS: dict[str, str] = {
     "BiRank": (
-        "二部グラフランキングに基づく中心性指標。著名な監督や高評価作品との協業ネットワーク上の"
-        "近さを測定します。値が高いほど業界の中心的な位置にいることを示します。"
+        "二部グラフ（人物-作品）上のランキングアルゴリズム。大規模・高評価スタッフが"
+        "集まる作品に参加するほどスコアが上昇する。log1p(score × 10000)で"
+        "べき乗分布を正規化。"
     ),
-    "Patronage": (
-        "継続的な協業から蓄積されるエッジ重み。同じ監督やプロデューサーから"
-        "繰り返し起用されることを反映し、職業的な信頼の指標です。"
+    "Patronage（パトロネージ）": (
+        "同一監督・演出家からの継続起用を定量化する信頼指標。"
+        "繰り返し起用 = 職業的信頼の累積。edge weight × repeat bonus で計算。"
     ),
-    "Person FE": (
-        "固定効果モデルに基づく個人寄与の構造推定。直近のプロジェクト"
-        "貢献度と成長軌道を反映します。BiRankと異なり、最近の活動を重視します。"
+    "Person FE（個人固定効果 θ）": (
+        "AKM (Abowd-Kramarz-Margolis) モデルで推定する個人寄与。"
+        "outcome = log(staff_count × episodes × duration_mult) から"
+        "スタジオ効果 ψ を除去した個人の構造的貢献度。"
     ),
-    "IV Score（操作変数推定スコア）": (
-        "BiRank・Patronage・Person FEの重み付き統合値。0-100に正規化された"
-        "主要ランキング指標です。"
+    "Studio Exposure（スタジオ環境指標）": (
+        "所属スタジオの固定効果 ψ の加重和。高品質なスタジオ環境への"
+        "累積露出度を反映。個人の実力ではなく環境要因の指標。"
+    ),
+    "AWCC（能力加重協業中心性）": (
+        "協業者のIV Scoreで重み付けした次数中心性。"
+        "強い協業者が多いほど高くなる。ネットワーク品質の指標。"
+    ),
+    "Dormancy（休眠ペナルティ）": (
+        "最近の活動頻度に基づく乗数 (0〜1)。直近2年間のクレジットが"
+        "少ないほどペナルティが大きい。キャリア初期は保護される。"
+    ),
+    "IV Score（統合評価スコア）": (
+        "5成分(Person FE, BiRank, Patronage, Studio Exposure, AWCC)を"
+        "z正規化 → PCA第1主成分の負荷量で重み付け → Dormancyで乗算した"
+        "統合指標。ネットワーク上の位置と協業密度を反映。"
     ),
     "PageRank（ページランク）": (
-        "Web検索用に開発されたグラフ中心性アルゴリズム。本システムでは"
-        "アニメ協業ネットワーク上での人物の中心性を測定するために使用します。"
+        "グラフ中心性アルゴリズム。本システムではBiRankに置き換えられたが、"
+        "一部の分析で参考指標として使用。"
+    ),
+    "Career Friction（キャリア摩擦）": (
+        "キャリア進行の障壁を定量化した指標。ステージ停滞期間、"
+        "ブランク期間、昇進速度の偏差を反映。"
     ),
 }
 
@@ -391,6 +483,22 @@ def utilization_guide(usecases: list[dict]) -> str:
         '<div class="utilization-guide">'
         "<h3>活用方法ガイド</h3>"
         f'<ul class="usecase-list">{lis}</ul>'
+        "</div>"
+    )
+
+
+def caveat_box(text: str) -> str:
+    """解釈上の注意・制約を強調する黄橙ボックス."""
+    return f'<div class="caveat-box">&#9888; <strong>解釈上の注意:</strong> {text}</div>'
+
+
+def competing_interpretations(claim: str, alternatives: list[str]) -> str:
+    """主張と競合する代替解釈を構造化して提示."""
+    alts = "".join(f"<li>{a}</li>" for a in alternatives)
+    return (
+        '<div class="competing-interp">'
+        f'<div class="ci-claim"><strong>主張:</strong> {claim}</div>'
+        f'<div class="ci-alts"><strong>競合解釈:</strong><ol>{alts}</ol></div>'
         "</div>"
     )
 
@@ -466,6 +574,26 @@ document.addEventListener('dblclick', function(e) {{
         }}
     }}
 }});
+/* Global rendering queue: serialize Plotly.newPlot calls to prevent main thread blocking */
+var _plotQueue = [];
+var _plotBusy = false;
+function queuePlot(fn) {{
+    _plotQueue.push(fn);
+    _drainPlotQueue();
+}}
+function _drainPlotQueue() {{
+    if (_plotBusy || _plotQueue.length === 0) return;
+    _plotBusy = true;
+    var fn = _plotQueue.shift();
+    fn().then(function() {{
+        _plotBusy = false;
+        /* small yield to keep UI responsive */
+        setTimeout(_drainPlotQueue, 50);
+    }}).catch(function() {{
+        _plotBusy = false;
+        setTimeout(_drainPlotQueue, 50);
+    }});
+}}
 </script>
 <div class="page-bg">
 <div class="container">
@@ -480,7 +608,7 @@ document.addEventListener('dblclick', function(e) {{
 {disclaimer_html}
 <footer>
     <p>Animetor Eval パイプライン分析により自動生成</p>
-    <p>データ: 125,419人 / 60,091作品 / 994,854クレジット</p>
+    <p>データ: {_footer_stats()}</p>
     {methodology_html}
 </footer>
 </div>
@@ -512,6 +640,8 @@ Plotly.newPlot("{div_id}", ...JSON.parse('{chart_json.replace(chr(39), chr(92)+c
 
 def plotly_div_safe(fig: go.Figure, div_id: str, height: int = 500) -> str:
     """Plotlyチャートを安全に埋め込み (JSON escaping)."""
+    import numpy as _np_pds
+
     fig.update_layout(
         template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
@@ -520,16 +650,55 @@ def plotly_div_safe(fig: go.Figure, div_id: str, height: int = 500) -> str:
         height=height,
         margin=dict(l=60, r=30, t=50, b=50),
     )
+
+    # Box/Violin traces: サブサンプルでデータ量を削減 (x/y 同時に)
+    for trace in fig.data:
+        trace_type = getattr(trace, "type", "")
+        if trace_type in ("box", "violin"):
+            y_vals = trace.y
+            if y_vals is not None and hasattr(y_vals, '__len__') and len(y_vals) > 200:
+                n = len(y_vals)
+                rng = _np_pds.random.default_rng(42)
+                sel = rng.choice(n, size=min(200, n), replace=False)
+                arr_y = _np_pds.asarray(y_vals)
+                trace.y = arr_y[sel].tolist()
+                # x も同じ長さなら同期してサブサンプル
+                x_vals = trace.x
+                if x_vals is not None and hasattr(x_vals, '__len__') and len(x_vals) == n:
+                    arr_x = _np_pds.asarray(x_vals)
+                    trace.x = arr_x[sel].tolist()
+
     chart_json = fig.to_json()
-    # Use base64 encoding for safety
     import base64
     encoded = base64.b64encode(chart_json.encode()).decode()
     return f"""<div class="chart-container">
-<div id="{div_id}"></div>
+<div id="{div_id}" data-b64="{encoded}" style="min-height:{height}px;"></div>
 <script>
 (function() {{
-    var data = JSON.parse(atob("{encoded}"));
-    Plotly.newPlot("{div_id}", data.data, data.layout, {{responsive: true, displayModeBar: true}});
+    var el = document.getElementById("{div_id}");
+    var done = false;
+    function doRender() {{
+        var b64 = el.getAttribute("data-b64");
+        el.removeAttribute("data-b64");
+        var d = JSON.parse(atob(b64));
+        return Plotly.newPlot("{div_id}", d.data, d.layout,
+                       {{responsive: true, displayModeBar: true}});
+    }}
+    if (typeof IntersectionObserver !== "undefined") {{
+        var obs = new IntersectionObserver(function(entries) {{
+            if (done || !entries[0].isIntersecting) return;
+            done = true;
+            obs.disconnect();
+            if (typeof queuePlot === "function") {{
+                queuePlot(doRender);
+            }} else {{
+                doRender();
+            }}
+        }}, {{rootMargin: "200px"}});
+        obs.observe(el);
+    }} else {{
+        doRender();
+    }}
 }})();
 </script>
 </div>"""
@@ -706,11 +875,20 @@ def add_scatter_correlation(fig: go.Figure, x, y) -> go.Figure:
         name="OLS回帰線", showlegend=False,
     ))
 
-    p_text = "p<0.001" if p < 0.001 else f"p={p:.3f}"
+    # Effect size label (Cohen's convention)
+    abs_r = abs(r)
+    effect = "大" if abs_r >= 0.5 else "中" if abs_r >= 0.3 else "小"
+    n = len(x_clean)
+    r2 = r ** 2
+
+    if n > 1000:
+        p_text = "大標本: p値は常に有意"
+    else:
+        p_text = "p<0.001" if p < 0.001 else f"p={p:.3f}"
     fig.add_annotation(
         x=0.02, y=0.98, xref="paper", yref="paper",
-        text=f"r={r:.3f}, {p_text}, n={len(x_clean):,}",
-        showarrow=False, font=dict(size=12, color="#FFD166"),
+        text=f"r={r:.3f} (効果量:{effect}), R²={r2:.3f}, {p_text}, n={n:,}",
+        showarrow=False, font=dict(size=11, color="#FFD166"),
         bgcolor="rgba(0,0,0,0.5)", bordercolor="#FFD166", borderwidth=1,
         borderpad=4,
     )
@@ -745,6 +923,199 @@ def subsample_for_scatter(data: list[dict], max_n: int = 5000, seed: int = 42) -
     import random
     rng = random.Random(seed)
     return rng.sample(data, max_n)
+
+
+# ============================================================
+# Advanced visualization helpers (Step 1D)
+# ============================================================
+
+_PALETTE = [
+    "#f093fb", "#667eea", "#06D6A0", "#EF476F", "#FFD166",
+    "#a0d2db", "#fda085", "#9B59B6", "#2ECC71", "#E74C3C",
+]
+
+
+def density_scatter_2d(
+    x: list[float], y: list[float], *,
+    xlabel: str = "", ylabel: str = "", title: str = "",
+    label_names: list[str] | None = None,
+    label_top: int = 15,
+    height: int = 550,
+) -> go.Figure:
+    """大規模データ用 2D密度等高線 + 上位ポイントラベル.
+
+    N < 500 なら通常の scatter にフォールバック。
+    """
+    import numpy as np
+
+    x_arr = np.asarray(x, dtype=float)
+    y_arr = np.asarray(y, dtype=float)
+    mask = np.isfinite(x_arr) & np.isfinite(y_arr)
+    x_c, y_c = x_arr[mask], y_arr[mask]
+
+    fig = go.Figure()
+
+    if len(x_c) < 500:
+        fig.add_trace(go.Scattergl(
+            x=x_c.tolist(), y=y_c.tolist(), mode="markers",
+            marker=dict(size=4, color="#667eea", opacity=0.6),
+            showlegend=False,
+        ))
+    else:
+        # 密度等高線
+        fig.add_trace(go.Histogram2dContour(
+            x=x_c.tolist(), y=y_c.tolist(),
+            colorscale="Viridis", ncontours=20, showscale=True,
+            contours=dict(coloring="heatmap"),
+            line=dict(width=0.5, color="rgba(255,255,255,0.3)"),
+            colorbar=dict(title="密度", len=0.6),
+        ))
+        # 上位ポイントをラベル付き scatter で重ねる
+        if label_names and label_top > 0:
+            # y 値上位 N を抽出
+            top_idx = np.argsort(-y_c)[:label_top]
+            fig.add_trace(go.Scatter(
+                x=x_c[top_idx].tolist(), y=y_c[top_idx].tolist(),
+                mode="markers+text",
+                text=[label_names[int(i)] for i in top_idx] if label_names else None,
+                textposition="top center",
+                textfont=dict(size=9, color="#f093fb"),
+                marker=dict(size=7, color="#f093fb", line=dict(width=1, color="white")),
+                showlegend=False,
+            ))
+
+    fig.update_layout(
+        title=title, xaxis_title=xlabel, yaxis_title=ylabel,
+        height=height,
+    )
+    return fig
+
+
+def ridge_plot(
+    groups: dict[str, list[float]], *, title: str = "", xlabel: str = "",
+    colors: list[str] | None = None, height: int = 500,
+) -> go.Figure:
+    """複数グループの分布を重ね KDE (ridge plot 風) で比較.
+
+    Plotly の Violin (side="positive") を垂直にオフセットして並べる。
+    """
+    import numpy as np
+    colors = colors or _PALETTE
+    fig = go.Figure()
+
+    group_names = list(groups.keys())
+    for i, (name, vals) in enumerate(groups.items()):
+        arr = np.array([v for v in vals if v is not None and np.isfinite(v)])
+        if len(arr) < 2:
+            continue
+        fig.add_trace(go.Violin(
+            x=arr.tolist(), y0=name, name=name,
+            side="positive", meanline_visible=True,
+            line_color=colors[i % len(colors)],
+            fillcolor=colors[i % len(colors)],
+            opacity=0.65, spanmode="soft",
+            scalemode="width", width=0.8,
+        ))
+
+    fig.update_layout(
+        title=title, xaxis_title=xlabel,
+        showlegend=False, height=height,
+        violingap=0.05, violinmode="overlay",
+        yaxis=dict(categoryorder="array", categoryarray=list(reversed(group_names))),
+    )
+    return fig
+
+
+def split_violin(
+    values_a: list[float], values_b: list[float],
+    categories_a: list[str], categories_b: list[str],
+    *, label_a: str = "A", label_b: str = "B",
+    title: str = "", ylabel: str = "",
+    height: int = 500,
+) -> go.Figure:
+    """カテゴリ別の左右分割 violin plot.
+
+    values_a/categories_a が左側、values_b/categories_b が右側。
+    """
+    fig = go.Figure()
+    fig.add_trace(go.Violin(
+        x=categories_a, y=values_a, name=label_a,
+        side="negative", line_color="#667eea",
+        fillcolor="rgba(102,126,234,0.3)",
+        meanline_visible=True, scalemode="width",
+    ))
+    fig.add_trace(go.Violin(
+        x=categories_b, y=values_b, name=label_b,
+        side="positive", line_color="#EF476F",
+        fillcolor="rgba(239,71,111,0.3)",
+        meanline_visible=True, scalemode="width",
+    ))
+    fig.update_layout(
+        title=title, yaxis_title=ylabel,
+        violingap=0, violinmode="overlay",
+        height=height, legend=dict(orientation="h", y=1.05),
+    )
+    return fig
+
+
+def forest_plot(
+    estimates: list[dict], *, title: str = "", xlabel: str = "効果量",
+    height: int | None = None,
+) -> go.Figure:
+    """Forest plot (水平CI付きドットプロット).
+
+    estimates: [{"name": str, "estimate": float, "ci_lower": float, "ci_upper": float}, ...]
+    """
+    names = [e["name"] for e in estimates]
+    ests = [e["estimate"] for e in estimates]
+    ci_lo = [e["estimate"] - e["ci_lower"] for e in estimates]
+    ci_hi = [e["ci_upper"] - e["estimate"] for e in estimates]
+
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=ests, y=names, mode="markers",
+        marker=dict(size=10, color="#667eea"),
+        error_x=dict(type="data", symmetric=False, array=ci_hi, arrayminus=ci_lo,
+                     color="rgba(102,126,234,0.5)", thickness=2, width=6),
+        showlegend=False,
+    ))
+    fig.add_vline(x=0, line_dash="dash", line_color="rgba(255,255,255,0.4)")
+    fig.update_layout(
+        title=title, xaxis_title=xlabel,
+        height=height or max(300, len(estimates) * 40 + 100),
+        yaxis=dict(categoryorder="array", categoryarray=list(reversed(names))),
+    )
+    return fig
+
+
+def data_driven_badges(values: list[float]) -> tuple[float, float]:
+    """P25/P75ベースの badge 閾値を返す. (low_thresh, high_thresh)."""
+    import numpy as np
+    arr = np.array([v for v in values if v is not None and np.isfinite(v)])
+    if len(arr) == 0:
+        return (0.0, 0.0)
+    return (float(np.percentile(arr, 25)), float(np.percentile(arr, 75)))
+
+
+def badge_class(value: float, low: float, high: float) -> str:
+    """データ駆動閾値に基づく badge CSS class."""
+    if value >= high:
+        return "badge-high"
+    if value >= low:
+        return "badge-mid"
+    return "badge-low"
+
+
+def capped_categories(counter: dict[str, int], max_cats: int = 8) -> dict[str, int]:
+    """上位 max_cats カテゴリを残し、残りを 'その他' にグルーピング."""
+    if len(counter) <= max_cats:
+        return dict(counter)
+    sorted_items = sorted(counter.items(), key=lambda x: -x[1])
+    result = dict(sorted_items[:max_cats])
+    other_sum = sum(v for _, v in sorted_items[max_cats:])
+    if other_sum > 0:
+        result["その他"] = other_sum
+    return result
 
 
 # ============================================================
@@ -918,6 +1289,11 @@ def generate_ml_clustering_report():  # noqa: C901
     body += f'<div class="stat-card"><div class="value">{len(FEATURE_NAMES)}</div><div class="label">特徴量</div></div>'
     body += f'<div class="stat-card"><div class="value">{sil_avg:.3f}</div><div class="label">シルエットスコア</div></div>'
     body += "</div>"
+    body += caveat_box(
+        "特徴量にIV Scoreとその構成要素（BiRank, Patronage, Person FE）を同時に含むため、"
+        "多重共線性があります。クラスタがIV方向に引きずられる可能性があり、"
+        "クラスタ分離がIV Scoreの高低をほぼ反映している場合は注意が必要です。"
+    )
 
     # Chart 1: PCA 2D Scatter with name-highlight search (subsampled for chart, full data for search)
     hover_text = [f"{names[i]}<br>Cluster: {cluster_names[int(cluster_labels[i])]}<br>IV Score: {features[i, 3]:.1f}" for i in range(n_persons)]
@@ -1187,7 +1563,7 @@ def generate_ml_clustering_report():  # noqa: C901
         prof = cp["profile"]
         top_feats = sorted([(fname, prof[fname]) for fname in FEATURE_NAMES], key=lambda x: -x[1])[:3]
         feat_str = ", ".join(f"{f[0]}={f[1]:.1f}" for f in top_feats)
-        body += f'<tr><td>{cp["name"]}</td><td>{cp["size"]:,}</td><td>{feat_str}</td><td>{prof["iv_score"]:.1f}</td><td>{prof["total_credits"]:.0f}</td></tr>'
+        body += f'<tr><td>{cp["name"]}</td><td>{cp["size"]:,}</td><td>{feat_str}</td><td>{prof["iv_score"]:.3f}</td><td>{prof["total_credits"]:.0f}</td></tr>'
     body += "</tbody></table></div>"
 
     intro = report_intro(
@@ -1331,7 +1707,7 @@ def generate_network_graph_report():
         node_size = [max(6, min(30, float(id_to_person[pid].get("iv_score", 10)) / 3)) for pid in pids]
         hover = [
             f"{id_to_person[pid].get('name', pid)}<br>"
-            f"IV Score: {id_to_person[pid].get('iv_score', 0):.1f}<br>"
+            f"IV Score: {id_to_person[pid].get('iv_score', 0):.3f}<br>"
             f"Role: {id_to_person[pid].get('primary_role', '?')}<br>"
             f"Credits: {id_to_person[pid].get('total_credits', 0)}"
             for pid in pids
@@ -1549,6 +1925,12 @@ def generate_industry_overview():
         "この分類の妥当性は、前提検証セクション V-2（デビューからの年数と到達レベル）"
         "および V-4/V-5（役職間遷移フロー・確率行列）で検証する。</p>"
     )
+    body += caveat_box(
+        "Stage 5は作画監督(animation_director)、演出(episode_director)、音響監督(sound_director)、"
+        "プロデューサー(producer)を統合していますが、これらは異なるキャリアパスです。"
+        "特に作画監督（原画→作監）と演出（制作進行→演出）は到達経路が大きく異なります。"
+        "Stage 5内の比較・集計には注意が必要です。"
+    )
 
     # 引退の操作的定義
     body += "<h3>4. 引退の操作的定義</h3>"
@@ -1655,15 +2037,23 @@ def generate_industry_overview():
     )
     body += "</div>"
 
-    # --- Time series chart (filtered to RELIABLE_MAX_YEAR) ---
+    # --- Time series chart (quarterly, filtered to RELIABLE_MAX_YEAR) ---
     if time_series:
-        years_all = time_series["years"]
-        series = time_series["series"]
-        years = [yr for yr in years_all if yr <= RELIABLE_MAX_YEAR]
+        quarterly = time_series.get("quarterly", {})
+        q_labels_all = quarterly.get("labels", [])
+        q_series = quarterly.get("series", {})
+
+        # RELIABLE_MAX_YEAR でフィルタ
+        q_labels = [lbl for lbl in q_labels_all if int(lbl.split("-")[0]) <= RELIABLE_MAX_YEAR]
 
         fig = make_subplots(
             rows=2, cols=2,
-            subplot_titles=("Credits per Year", "Active Persons", "New Entrants", "Unique Anime"),
+            subplot_titles=(
+                "Credits per Quarter（四半期クレジット数）",
+                "Active Persons（四半期アクティブ人数）",
+                "New Entrants（四半期新規参入者数）",
+                "Unique Anime（四半期ユニーク作品数）",
+            ),
             vertical_spacing=0.12, horizontal_spacing=0.08,
         )
 
@@ -1679,18 +2069,18 @@ def generate_industry_overview():
             (2, 1, "new_entrants", "#f5576c"),
             (2, 2, "unique_anime", "#fda085"),
         ]:
-            vals = series.get(key, {})
-            y_vals = [vals.get(str(yr), 0) for yr in years]
+            vals = q_series.get(key, {})
+            y_vals = [vals.get(lbl, 0) for lbl in q_labels]
             fig.add_trace(go.Scatter(
-                x=years, y=y_vals, mode="lines",
-                line=dict(color=color, width=2),
+                x=q_labels, y=y_vals, mode="lines",
+                line=dict(color=color, width=1.5),
                 fill="tozeroy", fillcolor=fill_colors[color],
                 name=key.replace("_", " ").title(),
                 hovertemplate="%{x}: %{y:,.0f}<extra></extra>",
             ), row=row, col=col)
 
         fig.update_layout(
-            title=f"Industry Time Series (1917–{RELIABLE_MAX_YEAR})",
+            title=f"Industry Time Series — Quarterly (1917–{RELIABLE_MAX_YEAR})",
             showlegend=False,
         )
         body += '<div class="card">'
@@ -1702,48 +2092,15 @@ def generate_industry_overview():
             "(2) 2000年以降の急成長により、時代間の単純な絶対数比較は不適切であること。"
         )
         body += chart_guide(
-            "4つのサブプロットはそれぞれ年間クレジット数、アクティブ人数、新規参入者数、"
-            "ユニーク作品数を追跡する。ホバーで正確な値を確認できる。"
+            "4つのサブプロットはそれぞれ四半期ごとのクレジット数、アクティブ人数、新規参入者数、"
+            "ユニーク作品数を追跡する。四半期粒度によりクール間の季節変動が可視化される。"
+            "<br><strong>注</strong>: 四半期帰属は season フィールド → start_date（放送開始月）の"
+            "優先順で決定。season欠損時は start_date の月から四半期を推定"
+            "（対象クレジットの94.1%がいずれかで帰属可能）。"
         )
         body += plotly_div_safe(fig, "timeseries", 600)
 
-        # Dual-axis: Credits + Avg Anime Score
-        avg_scores_io = series.get("avg_anime_score", {})
-        credit_counts_io = series.get("credit_count", {})
-        if avg_scores_io:
-            fig_da = make_subplots(specs=[[{"secondary_y": True}]])
-            fig_da.add_trace(
-                go.Bar(
-                    x=years,
-                    y=[credit_counts_io.get(str(yr), 0) for yr in years],
-                    name="クレジット数",
-                    marker_color="rgba(240,147,251,0.35)",
-                    hovertemplate="%{x}: %{y:,}クレジット<extra></extra>",
-                ),
-                secondary_y=False,
-            )
-            fig_da.add_trace(
-                go.Scatter(
-                    x=years,
-                    y=[avg_scores_io.get(str(yr), 0) for yr in years],
-                    name="平均アニメスコア",
-                    mode="lines+markers",
-                    line=dict(color="#06D6A0", width=2),
-                    marker=dict(size=3),
-                    hovertemplate="%{x}: %{y:.2f}<extra></extra>",
-                ),
-                secondary_y=True,
-            )
-            fig_da.update_layout(title="年間クレジット数 + 平均アニメスコア（Dual-axis）")
-            fig_da.update_yaxes(title_text="クレジット数", secondary_y=False)
-            fig_da.update_yaxes(title_text="平均アニメスコア", secondary_y=True)
-
-            body += "<h3>クレジット数 + 平均アニメスコア</h3>"
-            body += chart_guide(
-                "左Y軸（薄い棒グラフ）: 年間クレジット数、右Y軸（緑の折れ線）: 年間平均アニメスコア。"
-                "クレジット数の急増期に品質（スコア）がどう推移したかを重ねて読み取れます。"
-            )
-            body += plotly_div_safe(fig_da, "io_dual_axis", 450)
+        # Removed: avg_anime_score dual-axis chart (viewer rating contamination)
         body += "</div>"
 
     # ============================================================
@@ -1754,7 +2111,7 @@ def generate_industry_overview():
         # 過去に見える誤検出（見かけ上の退職増）が生じるため除外
         EXIT_CUTOFF_YEAR = 2022
         FLOW_START_YEAR = 1970
-        HIGH_IV_THRESHOLD = 30.0
+        HIGH_IV_THRESHOLD = IV_PCTILES["p90"]  # 上位10% (データ駆動)
 
         years_all = time_series["years"]
         series_ts = time_series["series"]
@@ -1990,7 +2347,7 @@ def generate_industry_overview():
                 _cv = _exp_person_collab_iv.get(_p,       0.0) / _exp_collab_max
                 _wv = _exp_person_work_cv.get(_p,         0.0) / _exp_work_max
                 _sv = _exp_pid_studio_prestige.get(_p,    0.0) / _exp_studio_max
-                _exp_raw_score[_p] = 0.50 * _cv + 0.30 * _wv + 0.20 * _sv
+                _exp_raw_score[_p] = (1 / 3) * _cv + (1 / 3) * _wv + (1 / 3) * _sv
 
             # Percentile rank 0–100 (bisect on sorted list)
             _exp_sorted = sorted(_exp_raw_score.values())
@@ -2191,6 +2548,10 @@ def generate_industry_overview():
         top_studios  = sorted(studio_total, key=studio_total.get, reverse=True)[:8]
         country_total = {c: sum(v.values()) for c, v in country_persons.items()}
         top_countries = sorted(country_total, key=country_total.get, reverse=True)[:5]
+
+        # ========== Report A 終了、Report B 開始 ==========
+        body_a = body
+        body = ""
 
         # ========== 前提検証セクション ==========
         body += '<div class="card">'
@@ -2814,24 +3175,46 @@ def generate_industry_overview():
             else:
                 node_colors.append("#868E96")
 
-        # 全遷移を含める（自己ループ除外、閾値>=5のみ）
+        # 双方向リンクをネットフローに統合（A→B と B→A がある場合、差分のみ表示）
+        # これにより Plotly Sankey のレイアウト負荷を大幅に削減
+        _net_flow: dict[tuple[str, str], int] = {}
+        for (fr, to), cnt in role_transitions_san.items():
+            if fr == to or fr not in node_idx or to not in node_idx:
+                continue
+            rev = (to, fr)
+            if rev in _net_flow:
+                # 逆方向が既にある → ネット化
+                old = _net_flow[rev]
+                if old > cnt:
+                    _net_flow[rev] = old - cnt
+                elif old < cnt:
+                    del _net_flow[rev]
+                    _net_flow[(fr, to)] = cnt - old
+                else:
+                    del _net_flow[rev]  # 完全相殺
+            else:
+                _net_flow[(fr, to)] = cnt
+
+        # Data-driven threshold: median of all net-flow values, minimum 10
+        _all_flow_vals = sorted(_net_flow.values())
+        _SAN_LINK_THRESH = max(10, int(_all_flow_vals[len(_all_flow_vals) // 2])) if _all_flow_vals else 10
         all_trans = sorted(
-            [(k, v) for k, v in role_transitions_san.items()
-             if k[0] != k[1] and k[0] in node_idx and k[1] in node_idx and v >= 5],
+            [(k, v) for k, v in _net_flow.items() if v >= _SAN_LINK_THRESH],
             key=lambda x: x[1], reverse=True,
         )
+        all_trans = all_trans[:120]  # 最大120リンクに制限（Plotly Sankey の描画限界）
         san_src, san_tgt, san_val = [], [], []
 
         # デビュー → 各役職
         debut_sorted = sorted(debut_role_count_san.items(), key=lambda x: x[1], reverse=True)
         for role_label, cnt in debut_sorted:
-            if role_label not in node_idx or cnt < 5:
+            if role_label not in node_idx or cnt < _SAN_LINK_THRESH:
                 continue
             san_src.append(node_idx["デビュー"])
             san_tgt.append(node_idx[role_label])
             san_val.append(cnt)
 
-        # 通常の遷移リンク（全件）
+        # 通常の遷移リンク（ネットフロー）
         for (fr, to), cnt in all_trans:
             san_src.append(node_idx[fr])
             san_tgt.append(node_idx[to])
@@ -2841,7 +3224,7 @@ def generate_industry_overview():
         retire_link_indices = []  # 引退リンクのインデックス（色を別処理するため）
         retire_link_tiers = []    # 対応する引退種別
         for (last_role, retire_tier), cnt in retire_from_san.items():
-            if last_role in node_idx and retire_tier in node_idx and cnt >= 5:
+            if last_role in node_idx and retire_tier in node_idx and cnt >= _SAN_LINK_THRESH:
                 retire_link_indices.append(len(san_src))
                 retire_link_tiers.append(retire_tier)
                 san_src.append(node_idx[last_role])
@@ -2926,7 +3309,7 @@ def generate_industry_overview():
             node_link_map[t].append(li)
 
         fig_sankey = go.Figure(go.Sankey(
-            arrangement="snap",
+            arrangement="fixed",
             node=dict(
                 pad=15,
                 thickness=18,
@@ -2956,20 +3339,24 @@ def generate_industry_overview():
             font=dict(size=11, color="#e0e0e0"),
         )
         _sankey_div_id = "sankey-v4-career"
-        body += fig_sankey.to_html(
-            full_html=False, include_plotlyjs=False, div_id=_sankey_div_id,
-        )
-
-        # --- コントロールボタン + JS ---
+        # Sankey: bundle chart spec + control metadata into ONE base64 blob
         import json as _json_san
-        _js_link_colors = _json_san.dumps(link_colors)
-        _js_is_animator = _json_san.dumps(link_is_animator)
-        _js_is_minor = _json_san.dumps(link_is_minor)
-        _js_node_link_map = _json_san.dumps(node_link_map)
-        _js_node_colors = _json_san.dumps(node_colors)
-        _fade_color = "rgba(60,60,60,0.06)"
+        import base64 as _b64_san
+        _sankey_spec = _json_san.loads(fig_sankey.to_json())
+        _control_data = {
+            "spec": _sankey_spec,
+            "origColors": link_colors,
+            "isAnimator": link_is_animator,
+            "isMinor": link_is_minor,
+            "nodeLinkMap": {str(k): v for k, v in node_link_map.items()},
+            "nodeColors": node_colors,
+        }
+        _bundle_b64 = _b64_san.b64encode(
+            _json_san.dumps(_control_data, separators=(",", ":")).encode()
+        ).decode()
 
-        body += f"""
+        body += f"""<div class="chart-container">
+<div id="{_sankey_div_id}" data-sankey-b64="{_bundle_b64}" style="min-height:700px;"></div>
         <div style="margin:0.5rem 0;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
           <span style="color:#aaa;font-size:0.85rem;margin-right:4px;">フィルター:</span>
           <button id="btn-san-reset" class="san-btn san-btn-active"
@@ -2995,92 +3382,123 @@ def generate_industry_overview():
           .san-btn-active {{ background:#4DABF7 !important; color:#111 !important;
                              border-color:#4DABF7 !important; font-weight:bold; }}
         </style>
-        <script>
-        (function() {{
-          var divId = "{_sankey_div_id}";
-          var origColors = {_js_link_colors};
-          var isAnimator = {_js_is_animator};
-          var isMinor = {_js_is_minor};
-          var nodeLinkMap = {_js_node_link_map};
-          var nodeColors = {_js_node_colors};
-          var fadeColor = "{_fade_color}";
-          var nLinks = origColors.length;
-          var mode = "all";  // "all" | "animator" | "major"
-          var clickedNode = -1;
+<script>
+(function() {{
+    var divId = "{_sankey_div_id}";
+    var el = document.getElementById(divId);
+    var rendered = false;
+    var mode = "all", clickedNode = -1;
+    var isAnimator, isMinor, nodeLinkMap, nLinks, linkSrc, linkTgt;
 
-          function applyFilter() {{
-            var colors = [];
-            for (var i = 0; i < nLinks; i++) {{
-              var visible = true;
-              if (mode === "animator" && !isAnimator[i]) visible = false;
-              if (mode === "major" && isMinor[i]) visible = false;
-              // ノードクリック時: 関連リンクのみ表示
-              if (clickedNode >= 0) {{
-                var linked = nodeLinkMap[String(clickedNode)] || [];
-                if (linked.indexOf(i) < 0) visible = false;
-              }}
-              colors.push(visible ? origColors[i] : fadeColor);
+    /* SVG直接操作: Plotly.restyle/reactは呼ばない (Sankey全再描画でクラッシュするため) */
+    function getLinkEls() {{
+        var gs = el.querySelectorAll(".sankey-link");
+        return Array.from(gs).sort(function(a, b) {{
+            return (+a.getAttribute("data-index") || 0) - (+b.getAttribute("data-index") || 0);
+        }});
+    }}
+    function getNodeEls() {{
+        var gs = el.querySelectorAll(".sankey-node");
+        return Array.from(gs).sort(function(a, b) {{
+            return (+a.getAttribute("data-index") || 0) - (+b.getAttribute("data-index") || 0);
+        }});
+    }}
+
+    function applyFilter() {{
+        if (!rendered || !nLinks) return;
+        var links = getLinkEls();
+        var i;
+        for (i = 0; i < links.length; i++) {{
+            var vis = (i < nLinks);
+            if (vis && mode === "animator" && !isAnimator[i]) vis = false;
+            if (vis && mode === "major"    && isMinor[i])    vis = false;
+            if (vis && clickedNode >= 0) {{
+                var lnk = nodeLinkMap[String(clickedNode)] || [];
+                if (lnk.indexOf(i) < 0) vis = false;
             }}
-            // ノード色: クリック時は非関連ノードを暗く
-            var nc = nodeColors.slice();
-            if (clickedNode >= 0) {{
-              var linkedNodes = new Set();
-              var linked = nodeLinkMap[String(clickedNode)] || [];
-              linkedNodes.add(clickedNode);
-              for (var j = 0; j < linked.length; j++) {{
-                var gd = document.getElementById(divId);
-                var d = gd.data[0];
-                linkedNodes.add(d.link.source[linked[j]]);
-                linkedNodes.add(d.link.target[linked[j]]);
-              }}
-              for (var k = 0; k < nc.length; k++) {{
-                if (!linkedNodes.has(k)) nc[k] = "rgba(60,60,60,0.25)";
-              }}
+            links[i].style.opacity = vis ? "1" : "0.04";
+        }}
+        var nodes = getNodeEls();
+        if (clickedNode >= 0) {{
+            var ns = new Set([clickedNode]);
+            var lnk2 = nodeLinkMap[String(clickedNode)] || [];
+            for (var j = 0; j < lnk2.length; j++) {{
+                ns.add(linkSrc[lnk2[j]]);
+                ns.add(linkTgt[lnk2[j]]);
             }}
-            var gd = document.getElementById(divId);
-            Plotly.restyle(gd, {{
-              "link.color": [colors],
-              "node.color": [nc]
-            }}, [0]);
-          }}
+            for (var k = 0; k < nodes.length; k++) {{
+                nodes[k].style.opacity = ns.has(k) ? "1" : "0.15";
+            }}
+        }} else {{
+            for (var m = 0; m < nodes.length; m++) nodes[m].style.opacity = "";
+        }}
+    }}
 
-          function setActive(btnId) {{
-            document.querySelectorAll(".san-btn").forEach(function(b) {{
-              b.classList.remove("san-btn-active");
-            }});
-            document.getElementById(btnId).classList.add("san-btn-active");
-          }}
+    function setActive(id) {{
+        document.querySelectorAll(".san-btn").forEach(function(b) {{ b.classList.remove("san-btn-active"); }});
+        document.getElementById(id).classList.add("san-btn-active");
+    }}
 
-          document.getElementById("btn-san-reset").addEventListener("click", function() {{
+    function attachButtons(gd) {{
+        document.getElementById("btn-san-reset").onclick = function() {{
             mode = "all"; clickedNode = -1; setActive("btn-san-reset"); applyFilter();
-          }});
-          document.getElementById("btn-san-animator").addEventListener("click", function() {{
+        }};
+        document.getElementById("btn-san-animator").onclick = function() {{
             mode = "animator"; clickedNode = -1; setActive("btn-san-animator"); applyFilter();
-          }});
-          document.getElementById("btn-san-major").addEventListener("click", function() {{
+        }};
+        document.getElementById("btn-san-major").onclick = function() {{
             mode = "major"; clickedNode = -1; setActive("btn-san-major"); applyFilter();
-          }});
-
-          // ノードクリック: 関連パス強調（トグル）
-          var gd = document.getElementById(divId);
-          gd.on("plotly_click", function(evtData) {{
-            if (evtData && evtData.points && evtData.points.length > 0) {{
-              var pt = evtData.points[0];
-              if (pt.pointNumber !== undefined && pt.childrenNodes === undefined) {{
-                // リンクではなくノードクリック
-                var idx = pt.pointNumber;
-                if (clickedNode === idx) {{
-                  clickedNode = -1;  // 同じノード再クリック → 解除
-                }} else {{
-                  clickedNode = idx;
+        }};
+        if (gd && gd.on) gd.on("plotly_click", function(ev) {{
+            if (ev && ev.points && ev.points.length > 0) {{
+                var pt = ev.points[0];
+                /* Sankey node click: pointNumber present, no childrenNodes */
+                if (pt.pointNumber !== undefined && pt.childrenNodes === undefined) {{
+                    clickedNode = (clickedNode === pt.pointNumber) ? -1 : pt.pointNumber;
+                    applyFilter();
                 }}
-                applyFilter();
-              }}
             }}
-          }});
-        }})();
-        </script>
-        """
+        }});
+    }}
+
+    function doPlot() {{
+        var b64 = el.getAttribute("data-sankey-b64");
+        el.removeAttribute("data-sankey-b64");
+        var D = JSON.parse(atob(b64));
+        isAnimator  = D.isAnimator;
+        isMinor     = D.isMinor;
+        nodeLinkMap = D.nodeLinkMap;
+        nLinks      = D.origColors.length;
+        linkSrc     = D.spec.data[0].link.source;
+        linkTgt     = D.spec.data[0].link.target;
+        return Plotly.newPlot(divId, D.spec.data, D.spec.layout, {{responsive:true, displayModeBar:true}})
+        .then(function(gd) {{
+            /* wait for SVG to be fully constructed before attaching */
+            setTimeout(function() {{ attachButtons(gd); }}, 300);
+        }});
+    }}
+
+    function render() {{
+        if (rendered) return;
+        rendered = true;
+        if (typeof queuePlot === "function") {{
+            queuePlot(doPlot);
+        }} else {{
+            doPlot();
+        }}
+    }}
+
+    if (typeof IntersectionObserver !== "undefined") {{
+        var obs = new IntersectionObserver(function(entries) {{
+            if (rendered || !entries[0].isIntersecting) return;
+            obs.disconnect();
+            render();
+        }}, {{rootMargin: "150px"}});
+        obs.observe(el);
+    }} else {{ render(); }}
+}})();
+</script>
+</div>"""
 
         body += (
             '<div class="insight-box">'
@@ -3259,7 +3677,7 @@ def generate_industry_overview():
 
         # 左右並置（2つの独立 Sankey を HTML で横並び）
         fig_dir_a = go.Figure(go.Sankey(
-            arrangement="snap",
+            arrangement="fixed",
             **trace_anim,
         ))
         fig_dir_a.update_layout(
@@ -3275,7 +3693,7 @@ def generate_industry_overview():
             font=dict(size=10, color="#e0e0e0"),
         )
         fig_dir_b = go.Figure(go.Sankey(
-            arrangement="snap",
+            arrangement="fixed",
             **trace_non,
         ))
         fig_dir_b.update_layout(
@@ -3291,8 +3709,8 @@ def generate_industry_overview():
             font=dict(size=10, color="#e0e0e0"),
         )
         body += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'
-        body += f'<div>{fig_dir_a.to_html(full_html=False, include_plotlyjs=False)}</div>'
-        body += f'<div>{fig_dir_b.to_html(full_html=False, include_plotlyjs=False)}</div>'
+        body += f'<div>{plotly_div_safe(fig_dir_a, "v4b_director_anim", 350)}</div>'
+        body += f'<div>{plotly_div_safe(fig_dir_b, "v4b_director_non", 350)}</div>'
         body += "</div>"
 
         # 統計比較テーブル
@@ -3368,10 +3786,9 @@ def generate_industry_overview():
         body += chart_guide(
             "V-4bで分類した2種類の監督について、"
             "キャリアの長さと担当作品の価値にどのような関係があるかを可視化する。"
-            "<br>各点は「監督クレジットを持つ作品」1件。"
+            "<br>等高線は監督クレジットの密度分布を示す（濃い領域ほどデータが集中）。"
             "X軸=監督時点のキャリア長（初クレジットからの年数）、"
             "Y軸=作品の総合価値（composite_value: スタッフのネットワーク指標から算出）。"
-            "マーカー形状でアニメーター出身（●）/非アニメーター出身（◆）を区別。"
             "<br>LOWESS回帰曲線で各類型の傾向を示す。"
             "上部ヒストグラムはキャリア長の分布。"
         )
@@ -3496,29 +3913,29 @@ def generate_industry_overview():
                 },
             }
 
-            _size_max_v4c = 14
             for typ, cfg in _type_config.items():
                 sub = _df_v4c[_df_v4c["type"] == typ]
                 if len(sub) == 0:
                     continue
                 col = cfg["col"]
 
-                # 散布図（メイン: row=2）
-                fig_v4c.add_trace(go.Scatter(
-                    x=sub["career_jitter"], y=sub["composite_value"],
-                    mode="markers",
-                    marker=dict(
-                        size=_np_v4c.clip(sub["staff"].values ** 0.35, 3, _size_max_v4c),
-                        color=cfg["rgba"].format(a=0.18),
-                        symbol=cfg["symbol"],
-                        line=dict(width=0.3, color=cfg["rgba"].format(a=0.45)),
-                        sizemode="diameter",
-                    ),
-                    text=sub["hover"],
-                    hovertemplate="%{text}<extra></extra>",
+                # サブサンプル (contour/histogram計算に500点で十分)
+                _sub_vals = sub
+                if len(sub) > 500:
+                    _sub_vals = sub.sample(n=500, random_state=42)
+
+                # 2D密度等高線（メイン: row=2）— 散布図から変更しデータ量を大幅削減
+                fig_v4c.add_trace(go.Histogram2dContour(
+                    x=_sub_vals["career_len"].values,
+                    y=_sub_vals["composite_value"].values,
+                    colorscale=[[0, "rgba(0,0,0,0)"], [0.2, cfg["rgba"].format(a=0.15)],
+                                [0.5, cfg["rgba"].format(a=0.4)], [1, cfg["rgba"].format(a=0.8)]],
+                    ncontours=12,
+                    showscale=False,
                     name=f"{typ} ({len(sub)}件)",
                     legendgroup=typ,
                     showlegend=True,
+                    hovertemplate="キャリア %{x:.0f}年, 価値 %{y:.1f}<br>密度: %{z}<extra></extra>",
                 ), row=2, col=col)
 
                 # LOWESS トレンドライン
@@ -3534,9 +3951,9 @@ def generate_industry_overview():
                         hoverinfo="skip",
                     ), row=2, col=col)
 
-                # 周辺分布: 上部ヒストグラム（キャリア長）
+                # 周辺分布: 上部ヒストグラム（キャリア長）— サブサンプル済みデータを使用
                 fig_v4c.add_trace(go.Histogram(
-                    x=sub["career_len"],
+                    x=_sub_vals["career_len"],
                     nbinsx=40,
                     marker_color=cfg["rgba"].format(a=0.5),
                     showlegend=False,
@@ -3558,7 +3975,7 @@ def generate_industry_overview():
             # 下段のみ軸ラベル
             fig_v4c.update_xaxes(title_text="キャリア長（年）", row=2, col=1)
             fig_v4c.update_xaxes(title_text="キャリア長（年）", row=2, col=2)
-            fig_v4c.update_yaxes(title_text="作品総合価値", row=2, col=1)
+            fig_v4c.update_yaxes(title_text="作品総合価値", type="log", row=2, col=1)
             # 上段ヒストグラムの軸非表示
             fig_v4c.update_xaxes(showticklabels=False, row=1, col=1)
             fig_v4c.update_xaxes(showticklabels=False, row=1, col=2)
@@ -3570,7 +3987,7 @@ def generate_industry_overview():
                 fig_v4c.update_xaxes(range=[-1, x_max], row=2, col=c)
                 fig_v4c.update_xaxes(range=[-1, x_max], row=1, col=c)
 
-            body += fig_v4c.to_html(full_html=False, include_plotlyjs=False)
+            body += plotly_div_safe(fig_v4c, "v4c_director_dist", 620)
 
             # 統計テーブル
             body += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin:0.5rem 0;">'
@@ -4217,19 +4634,12 @@ def generate_industry_overview():
         # Chart B-2: 経験年数別 離脱（積み上げ、1年刻み〜10年+）+ 参入
         # ====================================================================
         DURATION_BINS = [
-            ("1年未満",   0,  0, "#EF476F"),
-            ("1年",       1,  1, "#f5576c"),
-            ("2年",       2,  2, "#e8657a"),
-            ("3年",       3,  3, "#db7488"),
-            ("4年",       4,  4, "#ce8396"),
-            ("5年",       5,  5, "#c192a4"),
-            ("6年",       6,  6, "#b4a1b2"),
-            ("7年",       7,  7, "#a7b0c0"),
-            ("8年",       8,  8, "#9abfce"),
-            ("9年",       9,  9, "#8dcedc"),
-            ("10-14年",  10, 14, "#80ddea"),
-            ("15-19年",  15, 19, "#06D6A0"),
-            ("20年以上", 20, 999, "#f093fb"),
+            ("1年目",          0,  0, "#FF6B6B"),
+            ("2年目",          1,  1, "#FFA94D"),
+            ("3年目",          2,  2, "#FFD43B"),
+            ("若手 (4~9年)",   3,  9, "#69DB7C"),
+            ("中堅 (10~19年)",10, 19, "#4DABF7"),
+            ("ベテラン (20年+)", 20, 999, "#DA77F2"),
         ]
         exit_by_dur: dict[str, dict[int, int]] = {d[0]: {} for d in DURATION_BINS}
 
@@ -4303,7 +4713,7 @@ def generate_industry_overview():
         body += "<h3>B-2. 経験年数別: 参入 vs 離脱（積み上げ、1年刻み）+ 昇進推移</h3>"
         body += chart_guide(
             "<strong>上段</strong>: 離脱者の内訳を<strong>業界経験年数</strong>（デビューから離脱年まで）で積み上げ。"
-            "1年未満(赤)～9年(青)は1年刻み、10-14年/15-19年/20年以上はまとめて表示。"
+            "1年目(赤)/2年目(橙)/3年目(黄)/若手4~9年(緑)/中堅10~19年(青)/ベテラン20年+(紫)の6区分。"
             "白実線=業界参入数。<br>"
             "短期離脱（赤系）が多い年は人材定着に問題があり、長期離脱（緑〜紫）が多い年は熟練者の流出を示す。<br>"
             "<strong>下段</strong>: 職能昇進の積み上げ（B-1と同じ、参考表示）。"
@@ -4351,10 +4761,10 @@ def generate_industry_overview():
         )
         # D-2: scatter expected vs actual ability (sampled)
         _exp_scatter_pids = list(_exp_pid_tier.keys())
-        if len(_exp_scatter_pids) > 5000:
+        if len(_exp_scatter_pids) > 500:
             import random as _rand_d
             _rand_d.seed(42)
-            _exp_scatter_pids = _rand_d.sample(_exp_scatter_pids, 5000)
+            _exp_scatter_pids = _rand_d.sample(_exp_scatter_pids, 500)
         _exp_pid_credits: dict[str, int] = {
             e["person_id"]: e.get("total_credits") or 1
             for e in scores_data if e.get("person_id")
@@ -4389,7 +4799,7 @@ def generate_industry_overview():
                          line_color="rgba(255,255,255,0.25)", row=2, col=1)
         fig_d2.update_xaxes(title_text="年", row=1, col=1)
         fig_d2.update_yaxes(title_text="人数", row=1, col=1)
-        fig_d2.update_xaxes(title_text="期待能力 percentile (協業者IV 0.5 + composite_value 0.3 + スタジオ水準 0.2)", row=2, col=1)
+        fig_d2.update_xaxes(title_text="期待能力 percentile (協業者IV + composite_value + スタジオ水準 各1/3)", row=2, col=1)
         fig_d2.update_yaxes(title_text="実際能力 percentile (IV Score)", row=2, col=1)
         fig_d2.update_layout(
             title=f"D. 才能ティア別 参入/離脱（期待×実際 4-tier）{_exp_d_suffix}",
@@ -4427,6 +4837,19 @@ def generate_industry_overview():
             f"<strong>{_exp_unful_pct:.1f}%</strong> "
             f"({_exp_unful:,}/{_exp_rs_ct:,}人) — この層が業界最大の潜在ロスです。</p>"
             "</div>"
+        )
+        body += caveat_box(
+            "期待能力は協業者のIV Scoreから算出されるため、IV上位者は「高期待」に"
+            "自動分類されます（同類交際=assortative mixing）。4ティア分類は独立した能力予測ではなく、"
+            "ネットワーク的近接性を反映しています。"
+        )
+        body += competing_interpretations(
+            "「期待の星」は高ポテンシャルだが未転換の人材である",
+            [
+                "高IV環境にいるがクレジット蓄積が少ない（キャリア初期の可能性）",
+                "アシスタント的役割で高IV作品に数回参加しただけ（偶然の共演）",
+                "同類交際の周辺ノード — 中心人物との1-2回の共演でIV環境が高く見える",
+            ],
         )
         body += chart_guide(
             "上段: 4ティア別の年次参入数（実線）と離脱数（点線、2022年まで）。"
@@ -4557,7 +4980,7 @@ def generate_industry_overview():
             xaxis_title="年", yaxis_title="離脱人数",
         )
         body += chart_guide(
-            "<strong>エース離脱</strong>（iv_score>30）/"
+            f"<strong>エース離脱</strong>（IV上位10%, &gt;{HIGH_IV_THRESHOLD:.3f}）/"
             "<strong>ベテラン引退</strong>（stage≥5）/"
             "<strong>中堅離脱</strong>（stage3–4）/"
             "<strong>新人早期離脱</strong>（stage≤2）の4分類。"
@@ -4630,6 +5053,7 @@ def generate_industry_overview():
             fig_h_ctry.update_layout(
                 title="H. 国別 年間参加ユニーク人数（Top 5）",
                 xaxis_title="年", yaxis_title="ユニーク参加人数",
+                yaxis_type="log",
             )
             body += "<h3>H. 国別 人材フロー</h3>"
             body += chart_guide(
@@ -4894,6 +5318,10 @@ def generate_industry_overview():
         body += "</div>"
         body += "</div>"  # card
 
+    # ========== Report B 終了、Report C 開始 ==========
+    body_b = body
+    body = ""
+
     # ============================================================
     # Decade Comparison — DB-driven year×format line charts
     # ============================================================
@@ -5089,38 +5517,7 @@ def generate_industry_overview():
             if ct in debut_by_decade[dec][s]:
                 debut_by_decade[dec][s][ct] += 1
 
-        # --- Chart A: Quality Violin ---
-        fig_sea_violin = go.Figure()
-        for sn, sl in zip(season_names, season_labels_disp):
-            sc_list = scores_by_season[sn]
-            if sc_list:
-                fig_sea_violin.add_trace(go.Violin(
-                    x=[sl] * len(sc_list),
-                    y=sc_list,
-                    name=sl,
-                    box_visible=True,
-                    points="outliers",
-                    line_color=season_colors[sn],
-                    fillcolor=season_colors[sn].replace("#", "rgba(") + ",0.3)" if False else "rgba(160,210,219,0.3)",
-                    hovertemplate=f"{sl}: %{{y:.1f}}<extra></extra>",
-                ))
-        fig_sea_violin.update_layout(
-            title="A. 季節別 視聴者評価スコア分布（参考）",
-            xaxis_title="季節", yaxis_title="視聴者評価 (AniList)",
-            showlegend=False,
-        )
-        fig_sea_violin.add_annotation(
-            text="注: 視聴者評価は参考情報であり、本レポートのスコアリングには使用していません",
-            xref="paper", yref="paper", x=0, y=1.05,
-            showarrow=False, font=dict(size=10, color="#a0a0c0"),
-        )
-        body += "<h3>A. 季節別 視聴者評価スコア分布（参考情報）</h3>"
-        body += chart_guide(
-            "各季節のAniList視聴者評価の分布をバイオリン図で表示。"
-            "これは視聴者による主観的評価であり、制作者の貢献を反映するものではない"
-            "（§1.6参照）。参考情報として掲載。"
-        )
-        body += plotly_div_safe(fig_sea_violin, "seasonal_violin", 400)
+        # Removed: seasonal quality violin chart (viewer rating contamination)
 
         # --- Chart B: 種別作品数 Grouped Bar ---
         cour_colors_map = {
@@ -5202,8 +5599,7 @@ def generate_industry_overview():
                 f'<div class="value">{fmt_num(sd.get("anime_count", 0))}</div>'
                 f'<div class="label">{sl}<br>'
                 f'{fmt_num(sd.get("credit_count", 0))} credits / '
-                f'{fmt_num(sd.get("person_count", 0))} persons<br>'
-                f'Avg Score: {sd.get("avg_anime_score", 0):.2f}'
+                f'{fmt_num(sd.get("person_count", 0))} persons'
                 f'</div></div>'
             )
         body += "</div>"
@@ -5255,29 +5651,30 @@ def generate_industry_overview():
             fig_gt.add_trace(go.Bar(
                 orientation="h",
                 name=trend_labels_ja[trend],
-                x=[cohort_trend[d][trend] for d in decades_list],
-                y=[decade_labels_ja[d] for d in decades_list],
-                marker_color=trend_colors_gt[trend],
-                hovertemplate=(
-                    f"{trend_labels_ja[trend]}: %{{x:,}}人"
-                    " (%{customdata:.1f}%)<extra></extra>"
-                ),
-                customdata=[
+                x=[
                     cohort_trend[d][trend] / max(sum(cohort_trend[d].values()), 1) * 100
                     for d in decades_list
                 ],
+                y=[decade_labels_ja[d] for d in decades_list],
+                marker_color=trend_colors_gt[trend],
+                hovertemplate=(
+                    f"{trend_labels_ja[trend]}: %{{x:.1f}}%"
+                    " (%{customdata:,}人)<extra></extra>"
+                ),
+                customdata=[cohort_trend[d][trend] for d in decades_list],
             ))
         fig_gt.update_layout(
             barmode="stack",
             title=f"Growth Trends: 世代別キャリア軌跡分布 ({growth.get('total_persons', 0):,}人)",
-            xaxis_title="人数",
+            xaxis_title="構成比 (%)",
             yaxis_title="デビュー世代",
             legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+            xaxis=dict(range=[0, 100]),
         )
         body += chart_guide(
-            "Y軸=デビュー世代（10年区切り）、X軸=人数（積み上げ）。"
+            "Y軸=デビュー世代（10年区切り）、X軸=構成比（%、積み上げ=100%）。"
             "緑=上昇中、水色=安定、青=新規、オレンジ=低下、グレー=非活動。"
-            "ホバーすると実数と%の両方が表示されます。"
+            "ホバーすると%と実数の両方が表示されます。"
         )
         body += plotly_div_safe(fig_gt, "growth_cohort", 500)
         body += "</div>"
@@ -5337,23 +5734,60 @@ def generate_industry_overview():
         "政策効果測定への応用（制作支援補助金がクレジット数・新規参入者数に与えた影響を定量評価）",
     ])
     body += "</div>"  # 総括 card 閉じ
+    body_c = body
 
-    html = wrap_html(
-        "業界俯瞰ダッシュボード",
-        "アニメ業界の包括的分析 — 125,419人 / 60,091作品 / 994,854クレジット",
-        body,
+    # ========== 3ファイルに分割出力 ==========
+
+    # Report A: データ概観
+    html_a = wrap_html(
+        "データ概観 — パイプラインサマリーと業界規模",
+        "分析手法の定義・データソースの説明・業界規模の時系列概観",
+        body_a,
         intro_html=report_intro(
-            "業界俯瞰レポート",
-            "アニメ業界の協業ネットワークをマクロ視点で分析します。"
-            "生データの概観から始まり、分析で用いる定義の妥当性を実データで検証した上で、"
-            "人材フロー・需給構造・世代別キャリア軌跡を定量的に明らかにします。",
+            "データ概観レポート",
+            "本レポートはパイプライン実行結果の要約、分析手法・定義の説明、"
+            "および業界規模の時系列推移を示します。後続の「業界分析」「構造・キャリア分析」の前提となる基礎データです。",
+            "全読者（最初にお読みください）",
+        ),
+        glossary_terms=COMMON_GLOSSARY_TERMS,
+    )
+    out_a = REPORTS_DIR / "data_overview.html"
+    out_a.write_text(html_a, encoding="utf-8")
+    print(f"    -> {out_a}")
+
+    # Report B: 業界分析（前提検証 + 人材フロー）
+    html_b = wrap_html(
+        "業界分析 — 前提検証と人材フロー",
+        "定義の妥当性検証・人材の参入/離脱/ストック動態分析",
+        body_b,
+        intro_html=report_intro(
+            "業界分析レポート",
+            "「データ概観」で定めた分析手法と定義の妥当性を実データで検証し、"
+            "検証済み定義に基づいて人材フロー（参入・離脱・ストック）の動態を分析します。",
             "スタジオ経営者、業界研究者、政策立案者",
         ),
         glossary_terms=COMMON_GLOSSARY_TERMS,
     )
-    out = REPORTS_DIR / "industry_overview.html"
-    out.write_text(html, encoding="utf-8")
-    print(f"    -> {out}")
+    out_b = REPORTS_DIR / "industry_analysis.html"
+    out_b.write_text(html_b, encoding="utf-8")
+    print(f"    -> {out_b}")
+
+    # Report C: 構造・キャリア分析
+    html_c = wrap_html(
+        "構造・キャリア分析 — 需給構造と世代別軌跡",
+        "フォーマット別需給構造・季節パターン・世代別キャリア軌跡・総括",
+        body_c,
+        intro_html=report_intro(
+            "構造・キャリア分析レポート",
+            "業界の需給構造（フォーマット別年次推移・季節パターン）と"
+            "世代別キャリア軌跡分布を分析し、全体の知見を総括します。",
+            "スタジオ経営者、業界研究者、政策立案者",
+        ),
+        glossary_terms=COMMON_GLOSSARY_TERMS,
+    )
+    out_c = REPORTS_DIR / "structural_career.html"
+    out_c.write_text(html_c, encoding="utf-8")
+    print(f"    -> {out_c}")
 
 
 # ============================================================
@@ -5394,47 +5828,80 @@ def generate_bridge_report():
     body += "These individuals facilitate knowledge transfer and collaboration across otherwise separate groups.</div>"
     body += "</div>"
 
-    # Bridge score distribution
-    score_dist = Counter()
-    for bp in bridge_persons:
-        score_dist[bp["bridge_score"]] += 1
+    # Bridge score distribution — Violin + KDE
+    bridge_scores_all = [bp["bridge_score"] for bp in bridge_persons]
+    if bridge_scores_all:
+        fig = go.Figure()
+        fig.add_trace(go.Violin(
+            y=bridge_scores_all, name="Bridge Score",
+            box_visible=True, meanline_visible=True,
+            line_color="#f093fb", fillcolor="rgba(240,147,251,0.3)",
+            points="outliers",
+        ))
+        fig.update_layout(
+            title=f"Bridge Score分布 — {fmt_num(len(bridge_scores_all))}人",
+            yaxis_title="Bridge Score",
+            height=400,
+        )
+        body += '<div class="card">'
+        body += "<h2>Bridge Score Distribution (Violin)</h2>"
+        body += chart_guide(
+            "ブリッジスコアのviolin表示。幅が広い帯域ほど該当者が多い。"
+            "白線=中央値、箱=四分位範囲。高スコアの外れ値が「超重要ブリッジ」。"
+        )
+        body += plotly_div_safe(fig, "bridge_scores_violin", 400)
+        body += "</div>"
 
-    scores_sorted = sorted(score_dist.keys())
-    fig = go.Figure(go.Bar(
-        x=[str(s) for s in scores_sorted],
-        y=[score_dist[s] for s in scores_sorted],
-        marker_color=[f"rgba(240,147,251,{0.3 + 0.7 * s / 100})" for s in scores_sorted],
-        hovertemplate="Score %{x}: %{y} persons<extra></extra>",
-    ))
-    fig.update_layout(title="Bridge Score Distribution", xaxis_title="Bridge Score", yaxis_title="Person Count")
+    # Bridge vs Non-Bridge IV Score split violin
+    scores_for_bridge = load_json("scores.json")
+    if scores_for_bridge and bridge_persons:
+        bridge_pids = {bp.get("person_id", bp.get("id", "")) for bp in bridge_persons}
+        bridge_ivs = []
+        nonbridge_ivs = []
+        for p in scores_for_bridge:
+            iv = p.get("iv_score", 0)
+            if p.get("person_id", "") in bridge_pids:
+                bridge_ivs.append(iv)
+            else:
+                nonbridge_ivs.append(iv)
+        if bridge_ivs and nonbridge_ivs:
+            import random
+            # Subsample non-bridge for violin balance
+            rng = random.Random(42)
+            if len(nonbridge_ivs) > 5000:
+                nonbridge_ivs = rng.sample(nonbridge_ivs, 5000)
+            fig_sv = go.Figure()
+            fig_sv.add_trace(go.Violin(
+                y=bridge_ivs, name=f"Bridge (n={len(bridge_ivs)})",
+                box_visible=True, meanline_visible=True,
+                line_color="#f093fb", fillcolor="rgba(240,147,251,0.3)",
+                side="negative", scalemode="width",
+            ))
+            fig_sv.add_trace(go.Violin(
+                y=nonbridge_ivs, name=f"Non-Bridge (n={len(nonbridge_ivs)})",
+                box_visible=True, meanline_visible=True,
+                line_color="#667eea", fillcolor="rgba(102,126,234,0.3)",
+                side="positive", scalemode="width",
+            ))
+            fig_sv.update_layout(
+                title="Bridge vs Non-Bridge — IV Score分布比較",
+                yaxis_title="IV Score",
+                violingap=0, violinmode="overlay",
+                height=450,
+            )
+            body += '<div class="card">'
+            body += "<h2>Bridge vs Non-Bridge IV Score</h2>"
+            body += chart_guide(
+                "ブリッジ人材（左/ピンク）と非ブリッジ人材（右/青）のIV Scoreを分割violinで比較。"
+                "ブリッジ人材のIVが有意に高い場合、コミュニティ間の橋渡しは"
+                "高い業界評価と関連していることを示す。"
+            )
+            body += plotly_div_safe(fig_sv, "bridge_nonbridge_iv", 450)
+            body += "</div>"
 
-    body += '<div class="card">'
-    body += "<h2>Bridge Score Distribution</h2>"
-    body += chart_guide(
-        "ブリッジスコアは0〜100の範囲です。高スコアほど、より多くのコミュニティを"
-        "より強い結びつきで接続していることを示します。棒の色の濃さはスコア値を反映します。"
-    )
-    body += plotly_div_safe(fig, "bridge_scores", 400)
-    body += "</div>"
-
-    # Communities connected distribution
-    comm_dist = Counter()
-    for bp in bridge_persons:
-        comm_dist[bp["communities_connected"]] += 1
-
-    comm_sorted = sorted(comm_dist.keys())
-    fig = go.Figure(go.Bar(
-        x=[str(c) for c in comm_sorted],
-        y=[comm_dist[c] for c in comm_sorted],
-        marker_color="#a0d2db",
-        hovertemplate="%{x} communities: %{y} persons<extra></extra>",
-    ))
-    fig.update_layout(title="Communities Connected per Bridge Person", xaxis_title="Communities Connected", yaxis_title="Person Count")
-
-    body += '<div class="card">'
-    body += "<h2>Communities Connected</h2>"
-    body += plotly_div_safe(fig, "communities_connected", 400)
-    body += "</div>"
+    # NOTE: Communities Connected bar chart removed — superseded by the
+    # raincloud plot below which shows bridge score distribution per
+    # communities_connected group, providing strictly more information.
 
     # Violin: bridge score distribution by communities_connected
     comm_scores: dict[int, list[float]] = {}
@@ -5563,7 +6030,8 @@ def generate_bridge_report():
             ))
         fig_br_sc.update_layout(
             title="ブリッジクラスタ散布図（クロスエッジ × スコア）",
-            xaxis_title="クロスコミュニティエッジ数", yaxis_title="ブリッジスコア",
+            xaxis_title="クロスコミュニティエッジ数（対数）", yaxis_title="ブリッジスコア",
+            xaxis_type="log",
         )
         body += chart_guide(
             "各点は1人のブリッジ人材。色＝クラスタ。点の大きさ＝接続コミュニティ数。"
@@ -5571,22 +6039,9 @@ def generate_bridge_report():
         )
         body += plotly_div_safe(fig_br_sc, "bridge_cluster_scatter", 520)
 
-        # Violin: bridge score per cluster
-        fig_br_viol = go.Figure()
-        for cid in sorted(br_cluster_groups.keys()):
-            mems_br = br_cluster_groups[cid]
-            scores_br = [bp["bridge_score"] for bp in mems_br]
-            if scores_br:
-                fig_br_viol.add_trace(_violin_raincloud(
-                    scores_br, br_cluster_names[cid], BR_COLORS[cid % len(BR_COLORS)],
-                ))
-        fig_br_viol.update_layout(
-            title="クラスタ別 ブリッジスコア分布 (Raincloud)",
-            yaxis_title="ブリッジスコア",
-            violinmode="overlay",
-        )
-        body += chart_guide("各クラスタのブリッジスコア分布。クラスタ間のスコア差を確認。")
-        body += plotly_div_safe(fig_br_viol, "bridge_cluster_violin", 450)
+        # NOTE: Cluster Bridge Score Raincloud removed — redundant with the
+        # K-Means cluster scatter above which already shows score distribution
+        # per cluster with more context (cross edges + communities_connected).
 
         # Cluster size & avg score table
         body += "<h3>クラスタ別サマリー</h3>"
@@ -5629,29 +6084,9 @@ def generate_bridge_report():
         body += f"<td style='font-size:0.8rem;color:#a0d2db'>{cluster_lbl}</td></tr>"
     body += "</tbody></table></div>"
 
-    # Bridge score vs cross edges scatter
-    fig = go.Figure(go.Scatter(
-        x=[bp["cross_community_edges"] for bp in bridge_persons],
-        y=[bp["bridge_score"] for bp in bridge_persons],
-        mode="markers",
-        marker=dict(
-            size=6, color=[bp["communities_connected"] for bp in bridge_persons],
-            colorscale="Viridis", showscale=True,
-            colorbar=dict(title="Communities"),
-        ),
-        hovertemplate="Cross Edges: %{x}<br>Score: %{y}<br>Communities: %{marker.color}<extra></extra>",
-    ))
-    fig.update_layout(title="Bridge Score vs Cross-Community Edges", xaxis_title="Cross-Community Edges", yaxis_title="Bridge Score")
-
-    body += '<div class="card">'
-    body += "<h2>Score vs Connectivity</h2>"
-    body += chart_guide(
-        "各ドットは1人のブリッジ人材を表します。X軸=クロスコミュニティエッジ数、"
-        "Y軸=ブリッジスコア、色=接続コミュニティ数。右上の外れ値が最も影響力の大きい"
-        "ブリッジです。"
-    )
-    body += plotly_div_safe(fig, "bridge_scatter", 500)
-    body += "</div>"
+    # NOTE: Bridge Score vs Cross-Community Edges scatter removed — near-duplicate
+    # of the K-Means cluster scatter (Chart 6) which shows the same axes with
+    # cluster coloring providing more information.
 
     # Data-driven key findings
     bridge_count = stats.get("bridge_person_count", 0)
@@ -5758,53 +6193,6 @@ function sortTable(tableId, col, numeric) {
 """
 
 
-def _compute_year_deviation(teams_list: list[dict], anime_stats: dict) -> list[dict]:
-    """各チームに年別偏差値を付与する.
-
-    全 anime_stats から年別の平均・標準偏差を計算し、
-    各チームのスコアを (score - year_mean) / year_std で標準化して
-    偏差値 = 50 + 10 * z に変換する。
-    """
-    import statistics as _stats
-
-    # 全 anime の年別スコア集計
-    year_scores: dict[int, list[float]] = {}
-    for stats_val in anime_stats.values():
-        yr = stats_val.get("year")
-        sc = stats_val.get("score")
-        if yr and sc and isinstance(sc, (int, float)) and 1 <= sc <= 10:
-            year_scores.setdefault(int(yr), []).append(float(sc))
-
-    # 年別 mean / std
-    year_mean: dict[int, float] = {}
-    year_std: dict[int, float] = {}
-    for yr, scores in year_scores.items():
-        year_mean[yr] = _stats.mean(scores)
-        year_std[yr] = _stats.stdev(scores) if len(scores) >= 2 else 1.0
-
-    # Fallback: 全体の mean / std (年データが少ない場合)
-    all_scores = [s for ss in year_scores.values() for s in ss]
-    global_mean = _stats.mean(all_scores) if all_scores else 7.0
-    global_std = _stats.stdev(all_scores) if len(all_scores) >= 2 else 1.0
-
-    result = []
-    for team in teams_list:
-        t = dict(team)
-        yr = t.get("year")
-        sc = t.get("anime_score", 0.0)
-        if yr and int(yr) in year_mean:
-            m = year_mean[int(yr)]
-            s = max(year_std.get(int(yr), 1.0), 0.01)
-        else:
-            m, s = global_mean, global_std
-        deviation = round(50 + 10 * (sc - m) / s, 1)
-        t["deviation_score"] = deviation
-        t["year_mean"] = round(m, 3)
-        t["year_std"] = round(s, 3)
-        result.append(t)
-    return result
-
-
 def generate_team_report():
     """チーム構成分析レポート."""
     print("  Generating Team Composition Report...")
@@ -5816,15 +6204,6 @@ def generate_team_report():
     role_combos = teams.get("role_combinations", [])
     rec_pairs = teams.get("recommended_pairs", [])
     size_stats = teams.get("team_size_stats", {})
-
-    # 年別偏差値を計算 (anime_stats を利用して年別 mean/std を算出)
-    anime_stats = load_json("anime_stats.json") or {}
-    high_score_teams = _compute_year_deviation(high_score_teams, anime_stats)
-
-    # 偏差値でソートしたリスト (別テーブル用)
-    teams_by_deviation = sorted(
-        high_score_teams, key=lambda t: t.get("deviation_score", 0), reverse=True
-    )
 
     body = _SORT_TABLE_JS
 
@@ -5845,16 +6224,6 @@ def generate_team_report():
         body += f'<div class="stat-card"><div class="value">{val}</div><div class="label">{label}</div></div>'
     body += "</div></div>"
 
-    # --- 年別偏差値の説明 ---
-    body += (
-        '<div class="insight-box">'
-        "<strong>年別偏差値について:</strong> "
-        "同じ評価スコアでも、放送年によって平均レベルが異なります。"
-        "偏差値 = 50 + 10 × (スコア − その年の平均) ÷ その年の標準偏差 で計算。"
-        "50が「その年の平均的な高評価作品」、60以上が「同年トップ水準」を意味します。"
-        "</div>"
-    )
-
     def _th(label: str, col: int, numeric: bool, table_id: str) -> str:
         num_str = "true" if numeric else "false"
         return (
@@ -5862,206 +6231,57 @@ def generate_team_report():
             f"{label} ↕</th>"
         )
 
-    # --- Top 50 High-Scoring Teams (raw score order, sortable) ---
+    # --- Top 50 Teams (by team size, sortable) ---
     body += '<div class="card">'
-    body += "<h2>Top 50 High-Scoring Teams（スコア順 — 列ヘッダーでソート可）</h2>"
+    body += "<h2>Top 50 チーム（チームサイズ順 — 列ヘッダーでソート可）</h2>"
     body += section_desc("列ヘッダーをクリックすると昇順/降順で並べ替えできます。")
     body += f'<table id="team-table-raw"><thead><tr>'
     for col_i, (label, numeric) in enumerate([
-        ("#", False), ("タイトル", False), ("年", True), ("Score", True),
-        ("偏差値", True), ("年平均", True), ("チームサイズ", True), ("コアロール数", True),
+        ("#", False), ("タイトル", False), ("年", True),
+        ("チームサイズ", True), ("コアロール数", True),
     ]):
         body += _th(label, col_i, numeric, "team-table-raw")
     body += "</tr></thead><tbody>"
     for i, team in enumerate(high_score_teams[:50], 1):
-        score = team.get("anime_score", 0)
-        dev = team.get("deviation_score")
-        dev_str = f"{dev:.1f}" if dev is not None else "N/A"
-        dev_badge = "badge-high" if (dev or 0) >= 60 else "badge-mid" if (dev or 0) >= 50 else "badge-low"
-        score_badge = "badge-high" if score >= 8.5 else "badge-mid" if score >= 8.0 else "badge-low"
         title = team.get("title", team.get("anime_id", ""))
         body += f"<tr><td>{i}</td><td>{title}</td><td>{team.get('year', '')}</td>"
-        body += f'<td><span class="badge {score_badge}">{score:.1f}</span></td>'
-        body += f'<td><span class="badge {dev_badge}">{dev_str}</span></td>'
-        body += f"<td>{team.get('year_mean', '')}</td>"
         body += f"<td>{team.get('team_size', 0)}</td><td>{team.get('core_roles', 0)}</td></tr>"
     body += "</tbody></table></div>"
 
-    # --- Top 50 by 年別偏差値（偏差値順） ---
-    body += '<div class="card">'
-    body += "<h2>Top 50 High-Scoring Teams（年別偏差値順）</h2>"
-    body += section_desc(
-        "同年の作品群の中での相対的な高評価度で並べたランキング。"
-        "近年の作品バイアスを除外し、「時代を超えた突出作品」を浮かび上がらせます。"
-    )
-    body += f'<table id="team-table-dev"><thead><tr>'
-    for col_i, (label, numeric) in enumerate([
-        ("#", False), ("タイトル", False), ("年", True), ("Score", True),
-        ("偏差値", True), ("年平均", True), ("チームサイズ", True), ("コアロール数", True),
-    ]):
-        body += _th(label, col_i, numeric, "team-table-dev")
-    body += "</tr></thead><tbody>"
-    for i, team in enumerate(teams_by_deviation[:50], 1):
-        score = team.get("anime_score", 0)
-        dev = team.get("deviation_score")
-        dev_str = f"{dev:.1f}" if dev is not None else "N/A"
-        dev_badge = "badge-high" if (dev or 0) >= 60 else "badge-mid" if (dev or 0) >= 50 else "badge-low"
-        score_badge = "badge-high" if score >= 8.5 else "badge-mid" if score >= 8.0 else "badge-low"
-        title = team.get("title", team.get("anime_id", ""))
-        body += f"<tr><td>{i}</td><td>{title}</td><td>{team.get('year', '')}</td>"
-        body += f'<td><span class="badge {score_badge}">{score:.1f}</span></td>'
-        body += f'<td><span class="badge {dev_badge}">{dev_str}</span></td>'
-        body += f"<td>{team.get('year_mean', '')}</td>"
-        body += f"<td>{team.get('team_size', 0)}</td><td>{team.get('core_roles', 0)}</td></tr>"
-    body += "</tbody></table></div>"
+    # Removed: 年別偏差値テーブル, 偏差値Violin, 偏差値×年散布図, Team Size vs Anime Score,
+    # Role Diversity vs Anime Score — all derived from anime.score (viewer ratings)
 
-    # --- 偏差値の分布: Violin (年代別) ---
-    if high_score_teams:
-        decade_dev: dict[str, list[float]] = {}
-        for t in high_score_teams:
-            yr = t.get("year")
-            dv = t.get("deviation_score")
-            if yr and dv is not None:
-                decade = f"{(int(yr) // 10) * 10}年代"
-                decade_dev.setdefault(decade, []).append(dv)
-        if decade_dev:
-            fig_vdev = go.Figure()
-            DECADE_COLORS = ["#a0a0c0", "#7EB8D4", "#4CC9F0", "#FFD166", "#FF6B35", "#F72585"]
-            for i, decade in enumerate(sorted(decade_dev.keys())):
-                vals = decade_dev[decade]
-                dcol = DECADE_COLORS[i % len(DECADE_COLORS)]
-                if len(vals) >= 3:
-                    fig_vdev.add_trace(_violin_raincloud(vals, decade, dcol))
-                else:
-                    fig_vdev.add_trace(go.Scatter(
-                        x=[decade] * len(vals),
-                        y=vals,
-                        mode="markers+text",
-                        name=decade,
-                        marker=dict(size=10, symbol="diamond", color=dcol),
-                        text=[f"{v:.1f}" for v in vals],
-                        textposition="top center",
-                        hovertemplate=f"{decade}<br>偏差値: %{{y:.1f}}<br>(n={len(vals)})<extra></extra>",
-                    ))
-            fig_vdev.update_layout(
-                title="年代別 高評価チームの偏差値分布",
-                yaxis_title="年別偏差値",
-                xaxis_title="年代",
-            )
-            body += '<div class="card">'
-            body += "<h2>年代別 偏差値分布 (Violin)</h2>"
-            body += chart_guide(
-                "年代ごとに高評価チームの偏差値分布を比較。"
-                "偏差値50が各年の「その年の平均レベル」。"
-                "年代によって突出度のばらつきが異なるかを確認できます。"
-            )
-            body += plotly_div_safe(fig_vdev, "team_violin_dev", 450)
-            body += "</div>"
-
-    # --- 偏差値 × 年 散布図 (raw score との比較) ---
-    if high_score_teams:
-        fig_dev_sc = make_subplots(specs=[[{"secondary_y": True}]])
-        fig_dev_sc.add_trace(
-            go.Scatter(
-                x=[t.get("year") for t in high_score_teams],
-                y=[t.get("anime_score", 0) for t in high_score_teams],
-                mode="markers",
-                name="生スコア",
-                marker=dict(color="#f093fb", size=6, opacity=0.6),
-                hovertemplate="%{text}<br>年: %{x}<br>生スコア: %{y:.1f}<extra></extra>",
-                text=[t.get("title", "") for t in high_score_teams],
-            ),
-            secondary_y=False,
-        )
-        fig_dev_sc.add_trace(
-            go.Scatter(
-                x=[t.get("year") for t in high_score_teams],
-                y=[t.get("deviation_score") for t in high_score_teams if t.get("deviation_score") is not None],
-                mode="markers",
-                name="年別偏差値",
-                marker=dict(color="#06D6A0", size=6, opacity=0.6, symbol="diamond"),
-                hovertemplate="%{text}<br>年: %{x}<br>偏差値: %{y:.1f}<extra></extra>",
-                text=[t.get("title", "") for t in high_score_teams if t.get("deviation_score") is not None],
-            ),
-            secondary_y=True,
-        )
-        fig_dev_sc.update_yaxes(title_text="生スコア (1-10)", secondary_y=False)
-        fig_dev_sc.update_yaxes(title_text="年別偏差値", secondary_y=True)
-        fig_dev_sc.update_layout(
-            title="生スコア vs 年別偏差値（デュアル軸）",
-            xaxis_title="放送年",
-        )
-        body += '<div class="card">'
-        body += "<h2>生スコア vs 年別偏差値（デュアル軸）</h2>"
-        body += chart_guide(
-            "ピンク●=生スコア（左軸）、緑◆=年別偏差値（右軸）。"
-            "近年になるほど生スコアが全体的に上昇する傾向がある一方、"
-            "偏差値は年ごとの相対位置を示すため年代バイアスを除去できます。"
-            "生スコアは高いが偏差値が低い作品は「その年が全体的に高評価だった」ことを示します。"
-        )
-        body += plotly_div_safe(fig_dev_sc, "team_dev_dual", 500)
-        body += "</div>"
-
-    # Team score vs size scatter
-    if high_score_teams:
-        fig = go.Figure(go.Scatter(
-            x=[t.get("team_size", 0) for t in high_score_teams],
-            y=[t.get("anime_score", 0) for t in high_score_teams],
-            mode="markers",
-            marker=dict(
-                size=10, color=[t.get("year", 2020) for t in high_score_teams],
-                colorscale="Viridis", showscale=True,
-                colorbar=dict(title="Year"),
-            ),
-            text=[t.get("title", "") for t in high_score_teams],
-            hovertemplate="%{text}<br>Size: %{x}<br>Score: %{y:.1f}<br>Year: %{marker.color}<extra></extra>",
-        ))
-        fig.update_layout(title="Team Size vs Anime Score", xaxis_title="Team Size", yaxis_title="Anime Score")
-
-        body += '<div class="card">'
-        body += "<h2>Team Size vs Quality</h2>"
-        body += chart_guide(
-            "各ドットは1作品。X軸=チーム規模（スタッフ数）、Y軸=作品スコア、"
-            "色=放送年。チーム規模と品質の相関を確認できます。"
-        )
-        body += plotly_div_safe(fig, "team_scatter", 500)
-        body += "</div>"
-
-    # Scatter: Role diversity vs Quality
+    # Team size vs core roles scatter (structural metrics only)
     if high_score_teams:
         diversity_data = [t for t in high_score_teams if t.get("core_roles", 0) > 0]
         if diversity_data:
-            max_team_div = max((t.get("team_size", 1) for t in diversity_data), default=1)
-            fig_div = go.Figure(go.Scatter(
-                x=[t.get("core_roles", 0) for t in diversity_data],
-                y=[t.get("anime_score", 0) for t in diversity_data],
+            fig_struct = go.Figure(go.Scatter(
+                x=[t.get("team_size", 0) for t in diversity_data],
+                y=[t.get("core_roles", 0) for t in diversity_data],
                 mode="markers",
                 marker=dict(
-                    size=[min(t.get("team_size", 1), 50) for t in diversity_data],
-                    sizemode="area",
-                    sizeref=max_team_div / 400,
-                    color=[t.get("team_size", 0) for t in diversity_data],
+                    size=10,
+                    color=[t.get("year", 2020) for t in diversity_data],
                     colorscale="Viridis", showscale=True,
-                    colorbar=dict(title="Team Size"),
+                    colorbar=dict(title="Year"),
                     opacity=0.7,
                 ),
                 text=[t.get("title", "") for t in diversity_data],
-                hovertemplate="%{text}<br>Core Roles: %{x}<br>Score: %{y:.1f}<br>"
-                              "Team Size: %{marker.color}<extra></extra>",
+                hovertemplate="%{text}<br>Team Size: %{x}<br>Core Roles: %{y}<br>Year: %{marker.color}<extra></extra>",
             ))
-            fig_div.update_layout(
-                title="ロール多様性 vs 作品スコア",
-                xaxis_title="Core Roles（ロールの多様性）",
-                yaxis_title="Anime Score",
+            fig_struct.update_layout(
+                title="チーム規模 vs ロール多様性",
+                xaxis_title="チームサイズ（スタッフ数）",
+                yaxis_title="コアロール数",
             )
             body += '<div class="card">'
-            body += "<h2>ロール多様性 vs 品質スコア</h2>"
+            body += "<h2>チーム規模 vs ロール多様性</h2>"
             body += chart_guide(
-                "X=チーム内のユニークロール数（コアロール）、Y=作品スコア、色=チーム規模。"
-                "ロールの多様性が高いチームは高品質作品を生み出しやすいか？"
-                "最適なロール数のスイートスポットを確認できます。"
+                "X=チーム規模（スタッフ数）、Y=ユニークなコアロール数、色=放送年。"
+                "チーム規模が大きいほどロール多様性が高いか、"
+                "小規模でも多様なロールを持つ効率的なチームがあるかを確認できます。"
             )
-            body += plotly_div_safe(fig_div, "role_diversity_scatter", 500)
+            body += plotly_div_safe(fig_struct, "team_struct_scatter", 500)
             body += "</div>"
 
     # Role combinations
@@ -6264,56 +6484,144 @@ def generate_career_report():
             body += plotly_div_safe(fig_prob, "transition_prob", 500)
             body += "</div>"
 
-        # Average time to each stage
+        # ── Role-to-Role Transition Times (因果チェーン) ──
+        if trans:
+            # Build consecutive stage transitions (from_stage → to_stage where to > from)
+            consecutive = [t for t in trans if t["to_stage"] > t["from_stage"]]
+            if consecutive:
+                # Sort by from_stage for natural chain order
+                consecutive.sort(key=lambda t: (t["from_stage"], t["to_stage"]))
+                fig_chain = go.Figure()
+                labels_chain = []
+                years_chain = []
+                counts_chain = []
+                for t in consecutive:
+                    label = f"{t['from_label']} → {t['to_label']}"
+                    labels_chain.append(label)
+                    years_chain.append(t.get("avg_years", 0))
+                    counts_chain.append(t.get("count", 0))
+                fig_chain.add_trace(go.Bar(
+                    y=labels_chain, x=years_chain, orientation="h",
+                    marker_color="#f093fb",
+                    text=[f"{y:.1f}年 (n={c:,})" for y, c in zip(years_chain, counts_chain)],
+                    textposition="auto",
+                    hovertemplate="%{y}<br>平均遷移時間: %{x:.1f}年<extra></extra>",
+                ))
+                fig_chain.update_layout(
+                    title="ロール間遷移時間（前ステージからの年数）",
+                    xaxis_title="平均遷移年数",
+                    yaxis_title="遷移パス",
+                    height=max(400, len(labels_chain) * 40),
+                )
+                body += '<div class="card">'
+                body += "<h2>ロール間遷移時間（因果チェーン）</h2>"
+                body += chart_guide(
+                    "各バーは「前のステージから次のステージまでの平均年数」を示します。"
+                    "例: 動画→原画が4.5年なら、動画マンが原画マンになるまで平均4.5年。"
+                    "「デビューからの累積年数」ではなく「ステージ間の遷移時間」であるため、"
+                    "因果的な解釈（何年かければ次に進めるか）に適しています。"
+                )
+                body += plotly_div_safe(fig_chain, "role_chain_times", max(400, len(labels_chain) * 40))
+                body += competing_interpretations(
+                    "動画→原画の平均4.5年は「原画に必要な修業期間」を反映する",
+                    [
+                        "生存バイアス: 原画に昇進した人のみが観測され、昇進しなかった人の期間は含まれない",
+                        "選択効果: 才能ある人は早く昇進し、平均年数は「遅咲き組」に引きずられている可能性",
+                        "時代効果: 1990年代と2020年代では業界構造が異なり、遷移時間も異なるはず",
+                    ],
+                )
+                body += "</div>"
+
+        # Average time to each stage — Ridge Plot (デビューからの累積年数)
         if avg_time:
-            stage_labels = []
+            body += caveat_box(
+                "以下の「到達年数」はデビューからの累積年数であり、前ステージからの遷移時間ではありません。"
+                "因果的な解釈（特定のステージに到達するのに何年かかるか）には上の「ロール間遷移時間」を参照してください。"
+                "累積年数にはステージをスキップした人や長期間同じステージに留まった人の影響が混在しています。"
+            )
+            stage_labels_t = []
             avg_years = []
             median_years = []
             sample_sizes = []
             for stage_id in sorted(avg_time.keys(), key=int):
                 sd = avg_time[stage_id]
-                stage_labels.append(sd.get("label", f"Stage {stage_id}"))
+                stage_labels_t.append(sd.get("label", f"Stage {stage_id}"))
                 avg_years.append(sd.get("avg_years", 0))
                 median_years.append(sd.get("median_years", 0))
                 sample_sizes.append(sd.get("sample_size", 0))
 
-            fig = go.Figure()
-            fig.add_trace(go.Bar(
-                x=stage_labels, y=avg_years, name="Average",
-                marker_color="#f093fb",
-                hovertemplate="%{x}<br>Avg: %{y:.1f} years<extra></extra>",
-            ))
-            fig.add_trace(go.Bar(
-                x=stage_labels, y=median_years, name="Median",
-                marker_color="#a0d2db",
-                hovertemplate="%{x}<br>Median: %{y:.1f} years<extra></extra>",
-            ))
-            fig.update_layout(title="Average Time to Reach Each Career Stage", barmode="group",
-                            xaxis_title="Career Stage", yaxis_title="Years")
+            # Ridge plot: time to stage distribution (simulated from mean/median/n)
+            # Use scores.json for actual per-person data if available
+            scores_for_ridge = load_json("scores.json")
+            stage_time_groups: dict[str, list[float]] = {}
+            if scores_for_ridge:
+                for p in scores_for_ridge:
+                    career = p.get("career", {})
+                    hs = career.get("highest_stage", 0)
+                    ay = career.get("active_years", 0)
+                    if hs > 0 and ay > 0:
+                        label = stage_labels_t[min(hs, len(stage_labels_t) - 1)] if hs < len(stage_labels_t) else f"Stage {hs}"
+                        stage_time_groups.setdefault(label, []).append(float(ay))
 
+            if stage_time_groups:
+                fig_ridge = ridge_plot(
+                    stage_time_groups,
+                    title="ステージ別 到達年数分布 (Ridge Plot)",
+                    xlabel="活動年数",
+                    height=max(400, len(stage_time_groups) * 70),
+                )
+                body += '<div class="card">'
+                body += "<h2>Time to Stage (Ridge Plot)</h2>"
+                body += chart_guide(
+                    "各ステージの到達年数分布をKDEで重ねて比較。"
+                    "bimodal（二山）分布は「早期昇進組」と「遅咲き組」の存在を示す。"
+                    "白線=中央値。分布の形状でキャリア進行の多様性を読み取れる。"
+                )
+                body += plotly_div_safe(fig_ridge, "time_to_stage_ridge", max(400, len(stage_time_groups) * 70))
+                body += "</div>"
+            else:
+                # Fallback: bar chart
+                fig = go.Figure()
+                fig.add_trace(go.Bar(
+                    x=stage_labels_t, y=avg_years, name="Average",
+                    marker_color="#f093fb",
+                ))
+                fig.add_trace(go.Bar(
+                    x=stage_labels_t, y=median_years, name="Median",
+                    marker_color="#a0d2db",
+                ))
+                fig.update_layout(title="Average Time to Reach Each Career Stage", barmode="group",
+                                xaxis_title="Career Stage", yaxis_title="Years")
+                body += '<div class="card">'
+                body += "<h2>Time to Stage</h2>"
+                body += plotly_div_safe(fig, "time_to_stage", 400)
+                body += "</div>"
+
+            # Summary Table
             body += '<div class="card">'
-            body += "<h2>Time to Stage</h2>"
-            body += chart_guide(
-                "グループ棒グラフで各キャリアステージ到達までの平均年数と中央値を表示。"
-                "平均と中央値の差が大きい場合、遅咲きの外れ値が存在する歪んだ分布を示唆します。"
-            )
-            body += plotly_div_safe(fig, "time_to_stage", 400)
-
-            # Table
             body += "<table><thead><tr><th>Stage</th><th>Avg Years</th><th>Median Years</th><th>Sample Size</th></tr></thead><tbody>"
-            for lbl, avg, med, n in zip(stage_labels, avg_years, median_years, sample_sizes):
-                body += f"<tr><td>{lbl}</td><td>{avg:.1f}</td><td>{med:.0f}</td><td>{fmt_num(n)}</td></tr>"
+            for lbl, avg, med, sz in zip(stage_labels_t, avg_years, median_years, sample_sizes):
+                body += f"<tr><td>{lbl}</td><td>{avg:.1f}</td><td>{med:.0f}</td><td>{fmt_num(sz)}</td></tr>"
             body += "</tbody></table></div>"
 
         # Top career paths
         if paths:
+            path_labels_top = [" → ".join(p["path_labels"]) for p in paths[:15]]
+            path_counts_top = [p["count"] for p in paths[:15]]
             fig = go.Figure(go.Bar(
-                x=[" → ".join(p["path_labels"]) for p in paths[:15]],
-                y=[p["count"] for p in paths[:15]],
+                y=path_labels_top[::-1],
+                x=path_counts_top[::-1],
+                orientation="h",
                 marker_color="#fda085",
-                hovertemplate="%{x}: %{y}<extra></extra>",
+                hovertemplate="%{y}: %{x}<extra></extra>",
             ))
-            fig.update_layout(title="Top 15 Career Paths", xaxis_tickangle=-45)
+            fig.update_layout(
+                title="Top 15 Career Paths",
+                xaxis_title="人数",
+                xaxis_type="log",
+                yaxis_title="",
+                height=max(400, len(path_labels_top) * 30),
+            )
 
             body += '<div class="card">'
             body += "<h2>Most Common Career Paths</h2>"
@@ -6372,63 +6680,498 @@ def generate_career_report():
 
     # --- C3 Enhancement: 追加チャート ---
 
-    # C3-1: ステージ別昇進中央時間ファネル
+    # C3-1: ステージ別 中央値到達年数（横棒グラフ）
     if transitions and avg_time:
         avg_time = transitions.get("avg_time_to_stage", {})
-        funnel_labels = []
-        funnel_values = []
+        stage_labels_bar = []
+        median_years_bar = []
+        sample_sizes_bar = []
+        stage_colors_bar = ["#f093fb", "#a0d2db", "#667eea", "#06D6A0",
+                            "#FFD166", "#f5576c", "#F72585"]
         for stage_id in sorted(avg_time.keys(), key=int):
             sd = avg_time[stage_id]
-            funnel_labels.append(sd.get("label", f"Stage {stage_id}"))
-            funnel_values.append(sd.get("median_years", 0))
-        if funnel_labels:
-            fig_funnel = go.Figure(go.Funnel(
-                y=funnel_labels, x=funnel_values,
-                textinfo="value+text",
-                text=[f"{v:.1f}年" for v in funnel_values],
-                marker=dict(color=["#f093fb", "#a0d2db", "#667eea", "#06D6A0",
-                                   "#FFD166", "#f5576c", "#F72585"][:len(funnel_labels)]),
+            stage_labels_bar.append(sd.get("label", f"Stage {stage_id}"))
+            median_years_bar.append(sd.get("median_years", 0))
+            sample_sizes_bar.append(sd.get("sample_size", 0))
+        if stage_labels_bar:
+            fig_stage_bar = go.Figure(go.Bar(
+                y=stage_labels_bar[::-1],
+                x=median_years_bar[::-1],
+                orientation="h",
+                marker_color=stage_colors_bar[:len(stage_labels_bar)][::-1],
+                text=[f"{v:.1f}年 (n={n})" for v, n in zip(median_years_bar[::-1], sample_sizes_bar[::-1])],
+                textposition="outside",
+                hovertemplate="%{y}: 中央値 %{x:.1f}年<extra></extra>",
             ))
-            fig_funnel.update_layout(title="ステージ別 中央値到達年数ファネル")
-            body += '<div class="card"><h2>昇進ファネル（中央値年数）</h2>'
-            body += chart_guide("各ステージに到達するまでの中央値年数。ファネルが狭まるほど到達者が減る。")
-            body += plotly_div_safe(fig_funnel, "career_funnel", 450)
+            fig_stage_bar.update_layout(
+                title="ステージ別 中央値到達年数",
+                xaxis_title="中央値年数",
+                height=max(350, len(stage_labels_bar) * 50),
+            )
+            body += '<div class="card"><h2>ステージ別 中央値到達年数</h2>'
+            body += chart_guide("各ステージに到達するまでの中央値年数。棒が長いほど到達に時間がかかるステージ。")
+            body += plotly_div_safe(fig_stage_bar, "career_stage_median", max(350, len(stage_labels_bar) * 50))
             body += "</div>"
 
-    # C3-2: キャリア速度散布図（credit数/年 vs ステージ進行速度）
+    # C3-2: キャリア速度 密度散布図（credit数/年 vs ステージ進行速度）
     scores_career = load_json("scores.json")
     if scores_career and isinstance(scores_career, list):
-        speed_items = []
+        speed_x = []
+        speed_y = []
+        speed_names = []
         for p in scores_career:
             active_yrs = _safe_nested(p, "career", "active_years", default=0)
             total_cred = float(p.get("total_credits", 0))
             highest_stage = _safe_nested(p, "career", "highest_stage", default=0)
             if active_yrs >= 2 and total_cred > 0:
-                credits_per_year = total_cred / active_yrs
-                stage_speed = highest_stage / active_yrs
-                speed_items.append({
-                    "name": p.get("name", p.get("person_id", "")),
-                    "credits_per_year": credits_per_year,
-                    "stage_speed": stage_speed,
-                    "iv": p.get("iv_score", 0),
-                })
-        if len(speed_items) > 10:
-            sample_speed = subsample_for_scatter(speed_items, max_n=5000)
-            fig_speed = go.Figure(go.Scattergl(
-                x=[d["credits_per_year"] for d in sample_speed],
-                y=[d["stage_speed"] for d in sample_speed],
-                mode="markers",
-                marker=dict(size=4, opacity=0.4, color=[d["iv"] for d in sample_speed],
-                            colorscale="Viridis", showscale=True, colorbar=dict(title="IV")),
-                text=[d["name"] for d in sample_speed],
-                hovertemplate="<b>%{text}</b><br>Credits/yr: %{x:.1f}<br>Stage速度: %{y:.3f}<extra></extra>",
+                speed_x.append(total_cred / active_yrs)
+                speed_y.append(highest_stage / active_yrs)
+                speed_names.append(p.get("name", p.get("person_id", "")))
+        if len(speed_x) > 10:
+            fig_speed = density_scatter_2d(
+                speed_x, speed_y,
+                xlabel="年間クレジット数", ylabel="ステージ進行速度 (stage/yr)",
+                title="キャリア速度 — 活動量 vs 昇進ペース",
+                label_names=speed_names, label_top=10,
+                height=520,
+            )
+            body += '<div class="card"><h2>キャリア速度分析（密度）</h2>'
+            body += chart_guide(
+                "密度等高線で年間クレジット数（活動量）とステージ進行速度の関係を表示。"
+                "右上=多作かつ高速昇進のクラスタ。暖色域に大多数が集中し、"
+                "ラベル付き点はステージ進行が特に速い人物。"
+            )
+            body += plotly_div_safe(fig_speed, "career_speed_density", 520)
+            body += "</div>"
+
+        # Add: Stage-based IV Violin (log-transformed for power-law distribution)
+        if scores_career:
+            import numpy as _np_iv
+            stage_iv: dict[str, list[float]] = {}
+            stage_names = ["0:新人", "1:若手", "2:中堅", "3:熟練", "4:ベテラン", "5:マスター", "6:レジェンド"]
+            for p in scores_career:
+                hs = int(_safe_nested(p, "career", "highest_stage", default=0))
+                if 0 <= hs <= 6:
+                    label = stage_names[hs]
+                    stage_iv.setdefault(label, []).append(float(_np_iv.log1p(p.get("iv_score", 0))))
+            if stage_iv:
+                fig_siv = ridge_plot(
+                    stage_iv,
+                    title="キャリアステージ別 IV Score分布（log1p変換）",
+                    xlabel="log1p(IV Score)",
+                    height=450,
+                )
+                body += '<div class="card"><h2>ステージ別 IV Score</h2>'
+                body += chart_guide(
+                    "各キャリアステージのIV Score分布をKDEで重ね表示。"
+                    "IVが分化し始めるステージ（中堅→熟練）が読み取れる。"
+                    "レジェンド層の分布の狭さは高スコアの安定性を示す。"
+                )
+                body += plotly_div_safe(fig_siv, "stage_iv_ridge", 450)
+                body += "</div>"
+
+    # ----------------------------------------------------------------
+    # Section: 監督分析（名目 + 規模別）
+    # ----------------------------------------------------------------
+    import sqlite3 as _sq3
+    from src.database import get_connection as _get_conn
+    from src.database import load_all_anime, load_all_credits, load_all_persons
+    from src.analysis.career import (
+        compute_director_scale_profiles,
+        SCALE_KEYS_ORDERED,
+        SCALE_KEY_LABELS,
+    )
+    import numpy as _np_dir
+
+    try:
+        _conn = _get_conn()
+        _anime_list = load_all_anime(_conn)
+        _credits_list = load_all_credits(_conn)
+        _persons = load_all_persons(_conn)
+        _conn.close()
+
+        _anime_map = {a.id: a for a in _anime_list}
+        _name_map = {p.id: (p.name_ja or p.name_en or p.id) for p in _persons}
+
+        _dir_profiles = compute_director_scale_profiles(
+            _credits_list, _anime_map, _name_map,
+            director_roles={"director"},
+            min_credits=3,
+        )
+    except Exception as _e:
+        _dir_profiles = []
+
+    if _dir_profiles:
+        # --------------------------------------------------
+        # Part A: 「監督」名目 — 総クレジット数ランキング
+        # --------------------------------------------------
+        body += '<div class="card">'
+        body += "<h2>「監督」クレジット保有者 上位50名</h2>"
+        body += chart_guide(
+            "ロール「director」のクレジット数が多い人物の一覧。"
+            "「名目上の監督」= 数字上クレジットが多い人物。規模や質は問わない純粋な量指標。"
+            "クレジット数の多さは長期活動・多作品への参加を示すが、"
+            "作品の規模（大・中・小）は右の規模別グラフを参照のこと。"
+        )
+        _top50 = _dir_profiles[:50]
+        _dir_names_top = [p.name for p in _top50]
+        _dir_totals_top = [p.total_director_credits for p in _top50]
+        _dir_spans_top = [
+            f"{p.first_year}–{p.latest_year}" if p.first_year else "不明"
+            for p in _top50
+        ]
+        _dir_dominant_top = [SCALE_KEY_LABELS.get(p.dominant_type, p.dominant_type) for p in _top50]
+
+        fig_dir_rank = go.Figure(go.Bar(
+            y=_dir_names_top[::-1],
+            x=_dir_totals_top[::-1],
+            orientation="h",
+            marker_color=[
+                "#F72585" if d.startswith("TV大") else
+                "#7209b7" if d.startswith("TV中") else
+                "#4cc9f0" if d.startswith("TV小") else
+                "#f77f00" if d.startswith("単発大") else
+                "#fcbf49" if d.startswith("単発中") else
+                "#2ec4b6"
+                for d in _dir_dominant_top[::-1]
+            ],
+            customdata=list(zip(_dir_spans_top[::-1], _dir_dominant_top[::-1])),
+            hovertemplate=(
+                "<b>%{y}</b><br>監督クレジット: %{x}<br>"
+                "活動期間: %{customdata[0]}<br>主要規模: %{customdata[1]}<extra></extra>"
+            ),
+            text=_dir_dominant_top[::-1],
+            textposition="outside",
+        ))
+        fig_dir_rank.update_layout(
+            title="監督クレジット数 上位50名（色=主要作品規模）",
+            xaxis_title="監督クレジット数",
+            height=max(600, len(_top50) * 18),
+            margin=dict(l=160),
+        )
+        body += plotly_div_safe(fig_dir_rank, "dir_rank", max(600, len(_top50) * 18))
+        body += "</div>"
+
+        # Dominant type distribution
+        from collections import Counter as _Counter
+        _dom_counts = _Counter(
+            SCALE_KEY_LABELS.get(p.dominant_type, p.dominant_type)
+            for p in _dir_profiles
+        )
+        _dom_labels = list(_dom_counts.keys())
+        _dom_vals = [_dom_counts[k] for k in _dom_labels]
+        _scale_colors_map = {
+            "TV大": "#F72585", "TV中": "#7209b7", "TV小": "#4cc9f0",
+            "単発大": "#f77f00", "単発中": "#fcbf49", "単発小": "#2ec4b6",
+        }
+        fig_dom = go.Figure(go.Bar(
+            x=_dom_labels,
+            y=_dom_vals,
+            marker_color=[_scale_colors_map.get(lb, "#888") for lb in _dom_labels],
+            hovertemplate="%{x}: %{y}人<extra></extra>",
+            text=_dom_vals,
+            textposition="outside",
+        ))
+        fig_dom.update_layout(
+            title="監督の主要作品規模 分布（n=全監督）",
+            xaxis_title="主要作品規模",
+            yaxis_title="監督人数",
+            height=380,
+        )
+        body += '<div class="card">'
+        body += "<h2>監督のドミナント規模 分布</h2>"
+        body += chart_guide(
+            "各監督の最多クレジット規模カテゴリ（ドミナント規模）の業界全体分布。"
+            "「TV大」は長期・大規模TVシリーズを主戦場とする監督、「単発大」は劇場作品・大型OVA中心の監督。"
+        )
+        body += plotly_div_safe(fig_dom, "dir_dominant_dist", 380)
+        body += "</div>"
+
+        # --------------------------------------------------
+        # Part B: 規模別監督 — スタック横棒 + ヒートマップ
+        # --------------------------------------------------
+        body += '<div class="card">'
+        body += "<h2>規模別監督プロフィール（上位60名）</h2>"
+        body += chart_guide(
+            "各監督の監督クレジットを作品タイプ×規模に分解したスタック棒グラフ。"
+            "1本の棒が1人の監督で、各セグメントが規模カテゴリの割合を示す。"
+            "「TV大だけに集中している監督」と「TV小から単発まで幅広い監督」の違いが一目で分かる。"
+        )
+        _top60 = _dir_profiles[:60]
+        _scale_colors = {
+            "tv_large": "#F72585",
+            "tv_medium": "#7209b7",
+            "tv_small": "#4cc9f0",
+            "tanpatsu_large": "#f77f00",
+            "tanpatsu_medium": "#fcbf49",
+            "tanpatsu_small": "#2ec4b6",
+        }
+        fig_stack = go.Figure()
+        for sk in SCALE_KEYS_ORDERED:
+            _vals = [p.scale_fractions.get(sk, 0.0) * 100 for p in _top60]
+            fig_stack.add_trace(go.Bar(
+                name=SCALE_KEY_LABELS[sk],
+                y=[p.name for p in _top60],
+                x=_vals,
+                orientation="h",
+                marker_color=_scale_colors[sk],
+                hovertemplate=(
+                    f"<b>%{{y}}</b> — {SCALE_KEY_LABELS[sk]}: %{{x:.1f}}%<extra></extra>"
+                ),
             ))
-            fig_speed.update_layout(title="キャリア速度散布図",
-                                     xaxis_title="年間クレジット数", yaxis_title="ステージ進行速度(stage/yr)")
-            body += '<div class="card"><h2>キャリア速度分析</h2>'
-            body += section_desc("X=年間クレジット数（活動量）、Y=ステージ進行速度（キャリアの昇進ペース）。"
-                                 "色=IV Score。右上=多作かつ高速昇進。")
-            body += plotly_div_safe(fig_speed, "career_speed", 500)
+        fig_stack.update_layout(
+            barmode="stack",
+            title="監督クレジットの作品規模内訳（%）上位60名",
+            xaxis_title="割合 (%)",
+            xaxis=dict(range=[0, 100]),
+            height=max(700, len(_top60) * 14),
+            legend=dict(orientation="h", y=1.02),
+            margin=dict(l=160),
+        )
+        body += plotly_div_safe(fig_stack, "dir_scale_stack", max(700, len(_top60) * 14))
+        body += "</div>"
+
+        # Heatmap: directors × scale (percentage)
+        body += '<div class="card">'
+        body += "<h2>規模別監督ヒートマップ（上位40名）</h2>"
+        body += chart_guide(
+            "監督（行）× 作品規模（列）の割合ヒートマップ。"
+            "明るいセルほどその監督のクレジットにその規模が多い。"
+            "行を横に読むと各監督の「得意フィールド」が分かる。"
+        )
+        _top40 = _dir_profiles[:40]
+        _hm_z = [
+            [p.scale_fractions.get(sk, 0.0) * 100 for sk in SCALE_KEYS_ORDERED]
+            for p in _top40
+        ]
+        fig_hm = go.Figure(go.Heatmap(
+            z=_hm_z,
+            x=[SCALE_KEY_LABELS[sk] for sk in SCALE_KEYS_ORDERED],
+            y=[p.name for p in _top40],
+            colorscale="Plasma",
+            text=[[f"{v:.0f}%" for v in row] for row in _hm_z],
+            texttemplate="%{text}",
+            hovertemplate="<b>%{y}</b><br>%{x}: %{z:.1f}%<extra></extra>",
+            zmin=0, zmax=100,
+        ))
+        fig_hm.update_layout(
+            title="監督 × 作品規模 ヒートマップ（%）",
+            height=max(600, len(_top40) * 18),
+            margin=dict(l=160),
+        )
+        body += plotly_div_safe(fig_hm, "dir_scale_heatmap", max(600, len(_top40) * 18))
+        body += "</div>"
+
+        # Career span distribution by dominant type
+        _span_by_dom: dict[str, list[int]] = {}
+        for p in _dir_profiles:
+            if p.career_span:
+                lb = SCALE_KEY_LABELS.get(p.dominant_type, p.dominant_type)
+                _span_by_dom.setdefault(lb, []).append(p.career_span)
+
+        if len(_span_by_dom) >= 2:
+            fig_span = go.Figure()
+            for lb, spans in sorted(_span_by_dom.items()):
+                fig_span.add_trace(go.Violin(
+                    x=[lb] * len(spans),
+                    y=spans,
+                    name=lb,
+                    box_visible=True,
+                    meanline_visible=True,
+                    fillcolor=_scale_colors_map.get(lb, "#888"),
+                    line_color="#fff",
+                    opacity=0.8,
+                ))
+            fig_span.update_layout(
+                title="主要規模別 監督キャリアスパン分布",
+                xaxis_title="主要作品規模",
+                yaxis_title="キャリアスパン（年）",
+                violinmode="group",
+                height=420,
+            )
+            body += '<div class="card">'
+            body += "<h2>規模別 監督キャリアスパン</h2>"
+            body += chart_guide(
+                "各作品規模を主戦場とする監督のキャリア年数分布。"
+                "「TV大」監督は長期キャリアが多い（長期シリーズに継続参加）傾向が見られるか確認できる。"
+            )
+            body += plotly_div_safe(fig_span, "dir_span_violin", 420)
+            body += "</div>"
+
+    # --------------------------------------------------
+    # Part C: キャリア軌跡 + 規模間モビリティ
+    # --------------------------------------------------
+    if _dir_profiles:
+        from src.analysis.career import compute_director_trajectories, SCALE_KEY_LABELS, SCALE_KEYS_ORDERED
+
+        _traj = compute_director_trajectories(
+            _credits_list, _anime_map,
+            director_roles={"director"},
+            min_director_credits=3,
+        )
+
+        # C-1: 規模別「初監督デビューまでの経験年数」Ridge Plot
+        _traj_groups = {
+            SCALE_KEY_LABELS[sk]: _traj.years_to_first_dir_by_scale.get(sk, [])
+            for sk in SCALE_KEYS_ORDERED
+            if _traj.years_to_first_dir_by_scale.get(sk)
+        }
+        if _traj_groups:
+            body += '<div class="card">'
+            body += "<h2>各規模の初監督デビューまでの経験年数</h2>"
+            body += chart_guide(
+                "最初の業界クレジットから、各規模カテゴリで初めて監督クレジットを得るまでの年数分布（KDE）。"
+                "「TV大」のp25が低い（=早期デビューが多い）のは、長期シリーズに話数演出として参加しやすいため。"
+                "「単発大」のロングテール（ゆっくり達成）は劇場・大型OVAの関門の高さを反映する。"
+                "白線=中央値。"
+            )
+            fig_traj = ridge_plot(
+                _traj_groups,
+                title="規模別 初監督デビューまでの経験年数 (Ridge Plot)",
+                xlabel="経験年数（初クレジットからの年数）",
+                height=max(450, len(_traj_groups) * 75),
+            )
+            body += plotly_div_safe(fig_traj, "dir_years_to_debut", max(450, len(_traj_groups) * 75))
+            body += "</div>"
+
+        # C-2: 規模間モビリティ — 推移確率ヒートマップ
+        _prob_z = [
+            [_traj.transition_probs.get((sk_f, sk_t), 0.0) * 100
+             for sk_t in SCALE_KEYS_ORDERED]
+            for sk_f in SCALE_KEYS_ORDERED
+        ]
+        _row_labels = [SCALE_KEY_LABELS[sk] for sk in SCALE_KEYS_ORDERED]
+        _row_ns = [
+            sum(_traj.transition_counts.get((sk_f, sk_t), 0) for sk_t in SCALE_KEYS_ORDERED)
+            for sk_f in SCALE_KEYS_ORDERED
+        ]
+        _ylabels_with_n = [
+            f"{SCALE_KEY_LABELS[sk]}  (n={_row_ns[i]})"
+            for i, sk in enumerate(SCALE_KEYS_ORDERED)
+        ]
+
+        fig_mob = go.Figure(go.Heatmap(
+            z=_prob_z,
+            x=_row_labels,
+            y=_ylabels_with_n,
+            colorscale="Plasma",
+            text=[[f"{v:.1f}%" for v in row] for row in _prob_z],
+            texttemplate="%{text}",
+            hovertemplate="<b>%{y} → %{x}</b><br>確率: %{z:.1f}%<extra></extra>",
+            zmin=0, zmax=60,
+        ))
+        fig_mob.update_layout(
+            title="規模間モビリティ行列 — 翌年の監督作品規模（行 → 列）",
+            xaxis_title="翌年の規模",
+            yaxis_title="今年の規模",
+            height=420,
+        )
+        body += '<div class="card">'
+        body += "<h2>規模間モビリティ行列</h2>"
+        body += chart_guide(
+            "ある規模カテゴリで監督した翌年（3年以内）に、どの規模カテゴリで監督するかの確率行列。"
+            "対角線（同規模継続）が最大 = 一度入った規模からは動きにくい。"
+            "TV中→TV大 ≈16%、TV小→TV中 ≈14% の上昇移動が存在する。"
+            "単発大→TV大 ≈27% は「劇場監督がTVに戻る」パターンを示す。"
+            "各行のn=その規模から翌年クレジットが確認された人-年数。"
+        )
+        body += plotly_div_safe(fig_mob, "dir_mobility_heatmap", 420)
+        body += "</div>"
+
+        # C-3: Sankey — 規模間フロー（有向グラフ）
+        _sankey_links = []
+        for sk_f in SCALE_KEYS_ORDERED:
+            for sk_t in SCALE_KEYS_ORDERED:
+                cnt = _traj.transition_counts.get((sk_f, sk_t), 0)
+                if cnt >= 10:
+                    _sankey_links.append((sk_f, sk_t, cnt))
+
+        if _sankey_links:
+            # Duplicate nodes: "from" side と "to" side を別ノードにして左→右の流れを作る
+            _from_nodes = [f"{SCALE_KEY_LABELS[sk]}（前年）" for sk in SCALE_KEYS_ORDERED]
+            _to_nodes   = [f"{SCALE_KEY_LABELS[sk]}（翌年）" for sk in SCALE_KEYS_ORDERED]
+            _all_nodes  = _from_nodes + _to_nodes
+            _node_idx   = {n: i for i, n in enumerate(_all_nodes)}
+            _sk_colors  = ["#F72585","#7209b7","#4cc9f0","#f77f00","#fcbf49","#2ec4b6"]
+            _node_colors = _sk_colors + _sk_colors
+
+            _src = [_node_idx[f"{SCALE_KEY_LABELS[sk_f]}（前年）"] for sk_f, _, _ in _sankey_links]
+            _tgt = [_node_idx[f"{SCALE_KEY_LABELS[sk_t]}（翌年）"] for _, sk_t, _ in _sankey_links]
+            _vals= [cnt for _, _, cnt in _sankey_links]
+
+            fig_sankey = go.Figure(go.Sankey(
+                node=dict(
+                    pad=15, thickness=20,
+                    label=_all_nodes,
+                    color=_node_colors,
+                ),
+                link=dict(
+                    source=_src, target=_tgt, value=_vals,
+                    color=[
+                        _sk_colors[SCALE_KEYS_ORDERED.index(sk_f)].replace(
+                            "#", "rgba(").rstrip(")") + ",0.35)"
+                        if False else "rgba(180,180,200,0.3)"
+                        for sk_f, _, _ in _sankey_links
+                    ],
+                ),
+            ))
+            fig_sankey.update_layout(
+                title="監督の規模間フロー（前年→翌年、10件以上の遷移のみ表示）",
+                height=480,
+            )
+            body += '<div class="card">'
+            body += "<h2>規模間フロー（Sankey）</h2>"
+            body += chart_guide(
+                "前年の監督規模から翌年の監督規模への人数フロー。"
+                "帯の太さ = 遷移した人-年数。左=前年の規模、右=翌年の規模。"
+                "同規模への自己ループが最大で、TV大の帯が他規模と接続している。"
+            )
+            body += plotly_div_safe(fig_sankey, "dir_scale_sankey", 480)
+            body += "</div>"
+
+        # C-4: 散布図 — 経験年数 vs 最初に達した最高規模
+        # 規模の順位: tv_large=5, tanpatsu_large=4, tv_medium=3, tanpatsu_medium=2, tv_small=1, tanpatsu_small=0
+        _SCALE_RANK = {
+            "tv_large": 5, "tanpatsu_large": 4,
+            "tv_medium": 3, "tanpatsu_medium": 2,
+            "tv_small": 1, "tanpatsu_small": 0,
+        }
+        _scatter_x = []  # 経験年数
+        _scatter_y = []  # 最高規模ランク
+        _scatter_label = []
+        for p in _dir_profiles:
+            if not p.first_year:
+                continue
+            # first_year は監督クレジットの初年。全クレジット初年はDBから取得困難なため
+            # 近似: dominant scaleの初デビュー年数を使用
+            if not p.scale_counts:
+                continue
+            best_scale = max(p.scale_counts, key=lambda k: _SCALE_RANK.get(k, -1))
+            best_rank = _SCALE_RANK.get(best_scale, -1)
+            exp_years = (p.latest_year or p.first_year) - p.first_year
+            if exp_years >= 0 and best_rank >= 0:
+                _scatter_x.append(exp_years)
+                _scatter_y.append(best_rank + _np_dir.random.uniform(-0.15, 0.15))
+                _scatter_label.append(p.name)
+
+        if len(_scatter_x) > 50:
+            fig_exp = density_scatter_2d(
+                _scatter_x, _scatter_y,
+                xlabel="監督としての活動スパン（年）",
+                ylabel="達成した最高規模ランク（0=単発小, 5=TV大）",
+                title="監督経験スパン vs 達成規模",
+                label_names=_scatter_label, label_top=15,
+                height=500,
+            )
+            body += '<div class="card">'
+            body += "<h2>監督経験スパン × 達成規模</h2>"
+            body += chart_guide(
+                "横軸=監督クレジットのキャリアスパン（年）、縦軸=達成した最高規模ランク。"
+                "TV大（5）を達成している監督はキャリアスパンが広い傾向がある一方、"
+                "短いキャリアでもTV大に到達した監督（右上）は例外的な早期昇進を示す。"
+                "密度等高線で大多数のパターンを把握できる。"
+            )
+            body += plotly_div_safe(fig_exp, "dir_exp_vs_scale", 500)
             body += "</div>"
 
     # Data-driven key findings
@@ -6644,7 +7387,7 @@ def generate_temporal_report():
             nbinsx=30, marker_color="#f093fb",
             hovertemplate="Score: %{x:.1f}<br>Count: %{y}<extra></extra>",
         ))
-        fig.update_layout(title="Foresight Score Distribution", xaxis_title="Foresight (Normalized)", yaxis_title="Count")
+        fig.update_layout(title="Foresight Score Distribution", xaxis_title="Foresight (Normalized)", yaxis_title="Count", yaxis_type="log")
         body += chart_guide(
             "高い先見スコアは、将来のスターがまだ無名の時期に協業した人物を示します。"
             "分布は右に偏っており、大多数は低スコアで少数の優秀なタレントスカウトが存在します。"
@@ -6673,6 +7416,7 @@ def generate_temporal_report():
                 title="先見スコア vs 発見人数（先見の的中率）",
                 xaxis_title="発見した人数 (n_discoveries)",
                 yaxis_title="Foresight Score (Normalized)",
+                xaxis_type="log",
             )
             body += "<h3>先見スコア vs 発見人数</h3>"
             body += chart_guide(
@@ -6884,7 +7628,8 @@ def generate_network_evolution_report():
     ))
     fig3.update_layout(
         title="累積人数・エッジ数推移",
-        xaxis_title="年", yaxis_title="累積人数", yaxis2=dict(title="累積エッジ数", overlaying="y", side="right"),
+        xaxis_title="年", yaxis_title="累積人数", yaxis_type="log",
+        yaxis2=dict(title="累積エッジ数", overlaying="y", side="right", type="log"),
     )
     body += '<div class="card"><h2>3. 累積人数・エッジ数推移</h2>'
     body += chart_guide("左軸(青)=累積参加人数。右軸(橙)=累積エッジ数。2軸表示で規模拡大のペースを比較。")
@@ -6959,44 +7704,7 @@ def generate_network_evolution_report():
         body += plotly_div_safe(fig5, "ne_growth", 450)
         body += "</div>"
 
-    # --- Chart 6: Overview metrics subplots (original enhanced) ---
-    available_series = {}
-    for k in net_evo:
-        if k in ("years", "snapshots", "trends"):
-            continue
-        v = net_evo[k]
-        if isinstance(v, dict) and not isinstance(next(iter(v.values()), None), dict):
-            available_series[k] = v
-        elif isinstance(v, list) and len(v) == len(years):
-            available_series[k] = dict(zip([str(y) for y in years], v))
-
-    if available_series:
-        n_metrics = len(available_series)
-        rows = (n_metrics + 1) // 2
-        fig6 = make_subplots(
-            rows=rows, cols=2,
-            subplot_titles=[k.replace("_", " ").title() for k in available_series],
-        )
-        colors = ["#f093fb", "#a0d2db", "#f5576c", "#fda085", "#667eea", "#06D6A0"]
-        for idx, (key, vals) in enumerate(available_series.items()):
-            row = idx // 2 + 1
-            col = idx % 2 + 1
-            if isinstance(vals, dict):
-                x = sorted(vals.keys(), key=lambda x: int(x) if x.lstrip("-").isdigit() else 0)
-                y = [vals[k] for k in x]
-            else:
-                x = years
-                y = vals
-            fig6.add_trace(go.Scatter(
-                x=x, y=y, mode="lines",
-                line=dict(color=colors[idx % len(colors)], width=2),
-                name=key.replace("_", " ").title(),
-            ), row=row, col=col)
-        fig6.update_layout(title="全指標サブプロット", showlegend=False)
-        body += '<div class="card"><h2>6. 全指標サブプロット</h2>'
-        body += chart_guide("ネットワーク位相の全指標を一覧表示。")
-        body += plotly_div_safe(fig6, "ne_all_metrics", 200 + 250 * rows)
-        body += "</div>"
+    # Chart 6 (全指標サブプロット) removed — redundant with dedicated charts above.
 
     # Data-driven key findings
     if years:
@@ -7093,22 +7801,39 @@ def generate_growth_score_report():
             body += f'<div class="label">{trend.title()} ({pct:.1f}%)</div></div>'
         body += "</div></div>"
 
-        # Trend pie chart
-        fig = go.Figure(go.Pie(
-            labels=[t.title() for t in trend_summary],
-            values=list(trend_summary.values()),
-            marker_colors=[trend_colors.get(t, "#888") for t in trend_summary],
-            hole=0.45, textinfo="label+percent",
-        ))
-        fig.update_layout(title=f"Growth Trend Distribution ({fmt_num(total)} persons)")
+        # Trend horizontal stacked bar
+        trend_order_bar = ["rising", "stable", "declining", "new", "inactive"]
+        fig = go.Figure()
+        for t in trend_order_bar:
+            cnt = trend_summary.get(t, 0)
+            if cnt > 0:
+                pct = cnt / max(total, 1) * 100
+                fig.add_trace(go.Bar(
+                    x=[cnt], y=["全人物"],
+                    name=f"{t.title()} ({pct:.1f}%)",
+                    orientation="h",
+                    marker_color=trend_colors.get(t, "#888"),
+                    text=[f"{t.title()}: {fmt_num(cnt)}"],
+                    textposition="inside",
+                    hovertemplate=f"{t.title()}: {fmt_num(cnt)} ({pct:.1f}%)<extra></extra>",
+                ))
+        fig.update_layout(
+            barmode="stack",
+            title=f"成長トレンド構成比 — {fmt_num(total)}人",
+            xaxis_title="人数",
+            showlegend=True,
+            legend=dict(orientation="h", y=-0.2),
+            height=250,
+        )
         body += '<div class="card">'
         body += "<h2>Trend Distribution</h2>"
         body += chart_guide(
-            "ドーナツチャートは全プロフェッショナルの成長カテゴリ分布を表示。"
-            "Rising=活動増加中、Declining=活動減少中、Stable=安定、"
+            "全人物の成長カテゴリ構成比を横積み上げ棒グラフで表示。"
+            "Rising=活動増加中、Stable=安定、Declining=活動減少中、"
             "New=最近参入、Inactive=最近のクレジットなし。"
+            "各セグメントの幅が人数に比例。"
         )
-        body += plotly_div_safe(fig, "trend_pie", 450)
+        body += plotly_div_safe(fig, "trend_bar", 250)
         body += "</div>"
 
         # Violin: trend category vs total_credits
@@ -7134,6 +7859,7 @@ def generate_growth_score_report():
             fig_tv.update_layout(
                 title="トレンドカテゴリ別 総クレジット数分布 (Raincloud)",
                 yaxis_title="総クレジット数",
+                yaxis_type="log",
                 xaxis_title="トレンドカテゴリ",
                 violinmode="overlay",
             )
@@ -7147,29 +7873,52 @@ def generate_growth_score_report():
             body += plotly_div_safe(fig_tv, "trend_violin", 500)
             body += "</div>"
 
-        # Time series: yearly rising/declining/stable counts
+        # Time series: yearly rolling trend counts (3-year window)
+        # NOTE: Previously this applied each person's FINAL trend retroactively
+        # to all years they were active. Now we compute a per-year rolling trend
+        # from yearly_credits so 1990 is not filled with "declining" persons
+        # who only declined in 2025.
         yearly_trend_counts: dict[int, dict[str, int]] = {}
         for pid, p in persons.items():
             yearly_credits = p.get("yearly_credits", {})
+            yc_int = {}
             for yr_str, cnt in yearly_credits.items():
                 try:
-                    yr = int(yr_str)
+                    yc_int[int(yr_str)] = cnt
                 except (ValueError, TypeError):
                     continue
-                yearly_trend_counts.setdefault(yr, {"rising": 0, "stable": 0, "declining": 0, "new": 0, "inactive": 0})
-                # Count person as their overall trend for each year they were active
-                t = p.get("trend", "unknown")
-                if t in yearly_trend_counts[yr] and cnt > 0:
-                    yearly_trend_counts[yr][t] += 1
+            if not yc_int:
+                continue
+            first_yr = min(yc_int)
+            for yr in sorted(yc_int):
+                if yc_int[yr] <= 0:
+                    continue
+                yearly_trend_counts.setdefault(yr, {"rising": 0, "stable": 0, "declining": 0, "new": 0})
+                # Rolling 3-year window trend classification
+                years_since_debut = yr - first_yr
+                if years_since_debut <= 2:
+                    trend = "new"
+                else:
+                    recent = sum(yc_int.get(y, 0) for y in range(yr - 1, yr + 1))
+                    prior = sum(yc_int.get(y, 0) for y in range(yr - 3, yr - 1))
+                    if prior == 0:
+                        trend = "new" if recent > 0 else "stable"
+                    elif recent > prior * 1.3:
+                        trend = "rising"
+                    elif recent < prior * 0.5:
+                        trend = "declining"
+                    else:
+                        trend = "stable"
+                yearly_trend_counts[yr][trend] += 1
 
         if yearly_trend_counts:
             sorted_yrs = sorted(yearly_trend_counts.keys())
             # Filter to reasonable range
             sorted_yrs = [yr for yr in sorted_yrs if yr >= 1980]
             area_colors = {"rising": "#06D6A0", "stable": "#FFD166", "declining": "#EF476F",
-                           "new": "#a0d2db", "inactive": "#666"}
+                           "new": "#a0d2db"}
             fig_ts = go.Figure()
-            for t in ["rising", "stable", "declining", "new", "inactive"]:
+            for t in ["rising", "stable", "declining", "new"]:
                 fig_ts.add_trace(go.Scatter(
                     x=sorted_yrs,
                     y=[yearly_trend_counts.get(yr, {}).get(t, 0) for yr in sorted_yrs],
@@ -7180,78 +7929,28 @@ def generate_growth_score_report():
                     hovertemplate="%{x}: " + t.title() + " %{y}人<extra></extra>",
                 ))
             fig_ts.update_layout(
-                title="年別アクティブ人数（トレンドカテゴリ別・Stacked Area）",
+                title="年別ローリングトレンド推移（上位200人サンプル・3年窓）",
                 xaxis_title="年",
                 yaxis_title="人数",
             )
             body += '<div class="card">'
-            body += "<h2>年別アクティブ人数（トレンドカテゴリ別）</h2>"
+            body += "<h2>年別ローリングトレンド推移（サンプル）</h2>"
+            body += caveat_box(
+                "growth.jsonは上位200人のみの詳細データを含みます。この時系列は業界全体ではなく"
+                "サンプルの推移です。各年のトレンドは3年ローリング窓で分類しており、"
+                "最終トレンドの遡及適用ではありません。"
+            )
             body += chart_guide(
-                "Stacked Areaチャートで年ごとのアクティブ人数をトレンドカテゴリ別に積み上げ表示。"
-                "Rising（緑）が増えている年は業界全体の成長期、Declining（赤）が増えている年は衰退期。"
-                "全体の面積が業界規模の拡大を示します。"
+                "上位200人について、各年ごとに3年窓のローリングトレンドを算出し積み上げ表示。"
+                "Rising=直近2年のクレジットが前2年より30%以上増加、"
+                "Declining=50%以上減少、Stable=その中間、New=デビュー3年以内。"
             )
             body += plotly_div_safe(fig_ts, "trend_yearly", 450)
             body += "</div>"
 
-        # Scatter: Activity Ratio vs Quality Change
-        activity_quality_data = []
-        for pid, p in persons.items():
-            ar = p.get("activity_ratio")
-            recent = p.get("recent_avg_anime_score")
-            career = p.get("career_avg_anime_score")
-            if ar is not None and recent is not None and career is not None and career > 0:
-                activity_quality_data.append({
-                    "name": p.get("name", pid),
-                    "activity_ratio": ar,
-                    "quality_change": recent - career,
-                    "trend": p.get("trend", "unknown"),
-                })
-        if activity_quality_data:
-            trend_color_aq = {"rising": "#06D6A0", "stable": "#FFD166", "declining": "#EF476F",
-                              "new": "#a0d2db", "inactive": "#666"}
-            fig_aq = go.Figure()
-            for trend in ["rising", "stable", "declining", "new", "inactive"]:
-                subset = [d for d in activity_quality_data if d["trend"] == trend]
-                if subset:
-                    fig_aq.add_trace(go.Scatter(
-                        x=[d["activity_ratio"] for d in subset],
-                        y=[d["quality_change"] for d in subset],
-                        mode="markers",
-                        name=trend.title(),
-                        marker=dict(color=trend_color_aq.get(trend, "#888"), size=6, opacity=0.7),
-                        text=[d["name"] for d in subset],
-                        hovertemplate="%{text}<br>Activity Ratio: %{x:.2f}<br>Quality Change: %{y:.2f}<extra></extra>",
-                    ))
-            fig_aq.update_layout(
-                title="活動量変化率 vs 品質変化率",
-                xaxis_title="Activity Ratio（活動量変化）",
-                yaxis_title="品質変化（recent - career avg score）",
-            )
-            fig_aq.add_annotation(x=0.95, y=0.95, xref="paper", yref="paper",
-                                  text="量↑質↑ 真の成長", showarrow=False,
-                                  font=dict(size=10, color="#06D6A0"))
-            fig_aq.add_annotation(x=0.95, y=0.05, xref="paper", yref="paper",
-                                  text="量↑質↓ 量的拡大", showarrow=False,
-                                  font=dict(size=10, color="#EF476F"))
-            fig_aq.add_annotation(x=0.05, y=0.95, xref="paper", yref="paper",
-                                  text="量↓質↑ 厳選型", showarrow=False,
-                                  font=dict(size=10, color="#a0d2db"))
-            fig_aq.add_annotation(x=0.05, y=0.05, xref="paper", yref="paper",
-                                  text="量↓質↓ 衰退", showarrow=False,
-                                  font=dict(size=10, color="#888"))
-            fig_aq.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-            fig_aq.add_vline(x=1, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-            body += '<div class="card">'
-            body += "<h2>活動量変化率 vs 品質変化率</h2>"
-            body += chart_guide(
-                "X=活動量の変化率（>1で増加）、Y=品質変化（recent平均 - career平均スコア）。"
-                "右上=量も質も向上した真の成長者、右下=量は増えたが質は低下、"
-                "左上=活動を絞って質を向上、左下=量も質も低下。"
-                "色はトレンド分類を示します。"
-            )
-            body += plotly_div_safe(fig_aq, "activity_quality_scatter", 550)
-            body += "</div>"
+        # NOTE: Activity vs Quality scatter removed — it used recent_avg_anime_score
+        # and career_avg_anime_score (viewer ratings), violating the no-viewer-rating
+        # scoring principle. See CLAUDE.md "Prohibited Data Sources".
 
         # ---- K-Means クラスタリング: キャリア軌跡タイプ ----
         if len(persons) >= 5:
@@ -7262,30 +7961,29 @@ def generate_growth_score_report():
             GR_COLORS = ["#f093fb", "#06D6A0", "#fda085", "#a0d2db", "#FFD166", "#EF476F"]
             gr_persons_list = []
             for pid, p in persons.items():
-                recent_sc = p.get("recent_avg_anime_score") or 0
-                career_sc = p.get("career_avg_anime_score") or 0
+                yc = p.get("yearly_credits", {})
+                debut_yr = float(min(int(k) for k in yc)) if yc else 0.0
+                ty = float(p.get("total_years", 0) or 0)
+                tc = float(p.get("total_credits", 0) or 0)
                 gr_persons_list.append({
                     "pid": pid,
                     "name": p.get("name", pid),
                     "trend": p.get("trend", "unknown"),
-                    "total_credits": float(p.get("total_credits", 0) or 0),
-                    "recent_credits": float(p.get("recent_credits", 0) or 0),
-                    "activity_ratio": float(p.get("activity_ratio", 0) or 0),
+                    "total_credits": tc,
+                    "credits_per_year": tc / max(ty, 1),
                     "career_span": float(p.get("career_span", 0) or 0),
-                    "total_years": float(p.get("total_years", 0) or 0),
-                    "career_avg_score": float(career_sc),
-                    "quality_change": float(recent_sc - career_sc),
+                    "active_ratio": float(p.get("activity_ratio", 0) or 0),
+                    "debut_year": debut_yr,
                 })
 
             GR_FEAT_COLS = [
-                "total_credits", "recent_credits", "activity_ratio",
-                "career_span", "total_years", "career_avg_score", "quality_change",
+                "total_credits", "credits_per_year", "career_span",
+                "active_ratio", "debut_year",
             ]
             GR_FEAT_JP = {
-                "total_credits": "総クレジット", "recent_credits": "最近クレジット",
-                "activity_ratio": "活動率", "career_span": "キャリア期間",
-                "total_years": "活動年数", "career_avg_score": "平均品質スコア",
-                "quality_change": "品質変化",
+                "total_credits": "総クレジット", "credits_per_year": "年間クレジット",
+                "career_span": "キャリア期間", "active_ratio": "活動率",
+                "debut_year": "デビュー年",
             }
             Xgr = _np_gr.array([[p[f] for f in GR_FEAT_COLS] for p in gr_persons_list], dtype=float)
             sc_gr = _SC_gr()
@@ -7300,10 +7998,10 @@ def generate_growth_score_report():
             gr_cluster_names = _name_clusters_by_rank(
                 centers_gr,
                 [
-                    (fidx_gr["total_credits"],  ["多作ベテラン", "中堅", "新人少作"]),
-                    (fidx_gr["activity_ratio"], ["高活動", "中活動", "低活動"]),
-                    (fidx_gr["career_avg_score"], ["高品質", "中品質", "低品質"]),
-                    (fidx_gr["quality_change"],  ["品質成長", "品質安定", "品質低下"]),
+                    (fidx_gr["total_credits"],   ["多作ベテラン", "中堅", "新人少作"]),
+                    (fidx_gr["credits_per_year"], ["高密度", "中密度", "低密度"]),
+                    (fidx_gr["active_ratio"],     ["高活動", "中活動", "低活動"]),
+                    (fidx_gr["debut_year"],        ["新世代", "中堅世代", "ベテラン世代"]),
                 ],
             )
 
@@ -7318,18 +8016,18 @@ def generate_growth_score_report():
             body += '<div class="card">'
             body += f"<h2>キャリア軌跡 K-Means クラスタリング（{k_gr}クラスタ）</h2>"
             body += section_desc(
-                "総クレジット数・最近クレジット・活動率・キャリア期間・平均品質・品質変化の"
-                f"7特徴量で全スタッフを{k_gr}クラスタに自動分類。"
-                "「多作ベテラン×高品質」「品質成長中の新人」等のキャリアタイプを識別します。"
+                "総クレジット数・年間クレジット・キャリア期間・活動率・デビュー年の"
+                f"5特徴量で全スタッフを{k_gr}クラスタに自動分類。"
+                "「多作ベテラン×高密度」「新世代の急成長株」等のキャリアタイプを識別します。"
             )
 
-            # Scatter: activity_ratio vs quality_change colored by cluster
+            # Scatter: credits_per_year vs active_ratio colored by cluster
             fig_gr_sc = go.Figure()
             for cid in sorted(gr_cluster_groups.keys()):
                 mems_gr = gr_cluster_groups[cid]
                 fig_gr_sc.add_trace(go.Scattergl(
-                    x=[m["activity_ratio"] for m in mems_gr],
-                    y=[m["quality_change"] for m in mems_gr],
+                    x=[m["credits_per_year"] for m in mems_gr],
+                    y=[m["active_ratio"] for m in mems_gr],
                     mode="markers",
                     name=gr_cluster_names[cid],
                     marker=dict(
@@ -7338,17 +8036,15 @@ def generate_growth_score_report():
                         opacity=0.6,
                     ),
                     text=[m["name"] for m in mems_gr],
-                    hovertemplate="%{text}<br>活動率: %{x:.2f}<br>品質変化: %{y:.2f}<extra></extra>",
+                    hovertemplate="%{text}<br>年間クレジット: %{x:.2f}<br>活動率: %{y:.2f}<extra></extra>",
                 ))
-            fig_gr_sc.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-            fig_gr_sc.add_vline(x=1, line_dash="dash", line_color="rgba(255,255,255,0.3)")
             fig_gr_sc.update_layout(
-                title="キャリアクラスタ散布図（活動率 × 品質変化）",
-                xaxis_title="活動率", yaxis_title="品質変化",
+                title="キャリアクラスタ散布図（年間クレジット × 活動率）",
+                xaxis_title="年間クレジット数", yaxis_title="活動率",
             )
             body += chart_guide(
-                "各点は1人。色＝クラスタ。右上＝活動量も品質も向上（真の成長型）、"
-                "左下＝縮小。クラスタが集中する位置でキャリアタイプのパターンが見えます。"
+                "各点は1人。色＝クラスタ。右上＝年間クレジットも活動率も高い（活発な多作型）、"
+                "左下＝低活動。クラスタが集中する位置でキャリアタイプのパターンが見えます。"
             )
             body += plotly_div_safe(fig_gr_sc, "growth_cluster_scatter", 520)
 
@@ -7449,6 +8145,11 @@ def generate_growth_score_report():
                 fig_ret.update_yaxes(title_text="生存率 (%)", secondary_y=True)
                 body += '<div class="card">'
                 body += "<h2>キャリア生存率曲線</h2>"
+                body += caveat_box(
+                    "単純な断面集計でありKaplan-Meier法の打ち切り処理は未実施です。"
+                    "2020年以降にデビューした人物の長期生存率は観測期間不足で過小推定されます。"
+                    "コホート別に比較する場合、観測打ち切りの影響に注意してください。"
+                )
                 body += chart_guide(
                     "棒グラフ（左Y軸）: その年数以上活動している人数。"
                     "折れ線（右Y軸）: 全体に対する生存率%。"
@@ -7470,15 +8171,13 @@ def generate_growth_score_report():
                 "総クレジット数順にソートし、最も活発な人材を強調します。"
             )
             body += "<table><thead><tr>"
-            body += "<th>#</th><th>Person</th><th>Total Credits</th><th>Career Span</th><th>Activity Ratio</th><th>Recent Avg Score</th>"
+            body += "<th>#</th><th>Person</th><th>Total Credits</th><th>Career Span</th><th>Activity Ratio</th>"
             body += "</tr></thead><tbody>"
             for i, (pid, p) in enumerate(rising[:30], 1):
                 g_name = p.get("name", pid)
                 body += f"<tr><td>{i}</td><td>{g_name}</td><td>{p.get('total_credits', 0)}</td>"
                 body += f"<td>{p.get('career_span', 0)} yrs</td>"
-                body += f"<td>{p.get('activity_ratio', 0):.2f}</td>"
-                score = p.get("recent_avg_anime_score")
-                body += f"<td>{score:.1f if score else 'N/A'}</td></tr>"
+                body += f"<td>{p.get('activity_ratio', 0):.2f}</td></tr>"
             body += "</tbody></table></div>"
 
     # Insights: undervaluation alerts
@@ -7546,7 +8245,7 @@ def generate_growth_score_report():
         "これはアニメ業界の慢性的な報酬問題に対する、感情ではなくデータに基づくアプローチです。",
     ])
     body += utilization_guide([
-        {"role": "スタジオ人事", "how": "Rising Stars一覧でactivity_ratioが高く・recent_avg_anime_scoreが高い人物を抽出し、現在の報酬が低い段階で長期契約を提示して競合スタジオより先に確保する"},
+        {"role": "スタジオ人事", "how": "Rising Stars一覧でactivity_ratioが高くtotal_creditsが増加中の人物を抽出し、現在の報酬が低い段階で長期契約を提示して競合スタジオより先に確保する"},
         {"role": "アニメーター本人", "how": "Undervaluation Alertsで自分の名前を確認し、debiased_authority（バイアス補正後）がcurrent_compositeより高ければその差（gap列）を具体的な報酬引き上げ根拠として交渉書類に記載する"},
         {"role": "エージェント・代理人", "how": "クライアントのgap値（バイアス補正前後の差）と業界パーセンタイルを組み合わせて「現在の報酬が業界水準より○%低い」と定量化し、契約更新交渉で提示する"},
         {"role": "投資家", "how": "Rising Stars一覧でtotal_creditsとactivity_ratioが急増中の人物が参加する直近作品を特定し、クラウドファンディングや出資の優先候補として見極める"},
@@ -7643,6 +8342,9 @@ def generate_person_ranking_report():
             hovertemplate="%{x:.1f}: %{y}<extra></extra>",
         ), row=row, col=col)
     fig.update_layout(title="Score Distributions", showlegend=False)
+    for r in range(1, 3):
+        for c in range(1, 3):
+            fig.update_yaxes(type="log", row=r, col=c)
     body += '<div class="card">'
     body += "<h2>Score Distributions</h2>"
     body += chart_guide(
@@ -7652,71 +8354,92 @@ def generate_person_ranking_report():
     body += plotly_div_safe(fig, "score_dist", 600)
     body += "</div>"
 
-    # Radar chart for top 10
+    # Radar chart for top 10 — 5-axis
+    import numpy as np
     top10 = persons[:10]
+    # Compute percentile ranks for radar normalization
+    all_birank = np.array([p.get("birank", 0) for p in persons])
+    all_patron = np.array([p.get("patronage", 0) for p in persons])
+    all_pfe = np.array([p.get("person_fe", 0) for p in persons])
+    all_awcc = np.array([p.get("awcc", 0) for p in persons])
+    all_stexp = np.array([p.get("studio_fe_exposure", 0) for p in persons])
+
+    def _pct_of(val, arr):
+        return float(np.searchsorted(np.sort(arr), val) / len(arr) * 100)
+
     fig = go.Figure()
-    categories = ["BiRank", "Patronage", "Person FE"]
+    categories_5 = ["BiRank", "Patronage", "Person FE", "AWCC", "Studio Exp"]
     for p in top10:
-        vals = [p.get("birank", 0), p.get("patronage", 0), p.get("person_fe", 0)]
+        vals = [
+            _pct_of(p.get("birank", 0), all_birank),
+            _pct_of(p.get("patronage", 0), all_patron),
+            _pct_of(p.get("person_fe", 0), all_pfe),
+            _pct_of(p.get("awcc", 0), all_awcc),
+            _pct_of(p.get("studio_fe_exposure", 0), all_stexp),
+        ]
         fig.add_trace(go.Scatterpolar(
-            r=vals + [vals[0]], theta=categories + [categories[0]],
+            r=vals + [vals[0]], theta=categories_5 + [categories_5[0]],
             name=p.get("name", p["person_id"])[:20],
-            fill="toself", opacity=0.6,
+            fill="toself", opacity=0.5,
         ))
     fig.update_layout(
-        title="Top 10 — BiRank / Patronage / Person FE Radar",
+        title="Top 10 — 5成分レーダー（パーセンタイル空間）",
         polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
     )
     body += '<div class="card">'
-    body += "<h2>Top 10 Radar</h2>"
+    body += "<h2>Top 10 レーダー（5成分）</h2>"
     body += chart_guide(
-        "各ポリゴンは1人の3軸スコアプロファイル。均等な三角形は全領域で均衡していることを"
-        "示し、偏った形状は特定の軸に特化していることを示します。"
+        "各ポリゴンは1人の5成分パーセンタイルプロファイル。"
+        "均等な五角形は全成分で均衡していることを示し、偏った形状は特定成分に特化。"
+        "BiRank高+Patronage低=「広く浅い協業型」、逆=「深い信頼型」。"
+        "AWCC/Studio Expの形状で環境要因の寄与も読み取れる。"
     )
     body += plotly_div_safe(fig, "radar_top10", 550)
     body += "</div>"
 
-    # BiRank vs Patronage scatter (subsampled for performance)
-    scatter_sample = subsample_for_scatter(persons, max_n=5000)
-    fig = go.Figure(go.Scattergl(
-        x=[p.get("birank", 0) for p in scatter_sample],
-        y=[p.get("patronage", 0) for p in scatter_sample],
-        mode="markers",
-        marker=dict(size=4, opacity=0.5,
-                    color=[p.get("iv_score", 0) for p in scatter_sample],
-                    colorscale="Viridis", showscale=True,
-                    colorbar=dict(title="IV Score")),
-        text=[p.get("name", "") for p in scatter_sample],
-        hovertemplate="<b>%{text}</b><br>BiRank: %{x:.1f}<br>Patronage: %{y:.1f}<extra></extra>",
-    ))
-    fig.update_layout(
-        title=f"BiRank vs Patronage (n={len(scatter_sample):,} / {len(persons):,})",
-        xaxis_title="BiRank", yaxis_title="Patronage",
+    # Person FE vs BiRank — density scatter (2 main components)
+    br_list = [p.get("birank", 0) for p in persons]
+    pfe_list = [p.get("person_fe", 0) for p in persons]
+    name_list_pr = [p.get("name", p["person_id"]) for p in persons]
+    fig_ds = density_scatter_2d(
+        pfe_list, br_list,
+        xlabel="Person FE (θ)", ylabel="BiRank",
+        title=f"Person FE vs BiRank — {fmt_num(len(persons))}人の密度分布",
+        label_names=name_list_pr, label_top=15,
+        height=520,
     )
-    fig = add_scatter_correlation(
-        fig, [p.get("birank", 0) for p in scatter_sample],
-        [p.get("patronage", 0) for p in scatter_sample],
+    r_val = float(np.corrcoef(pfe_list, br_list)[0, 1])
+    fig_ds.add_annotation(
+        x=0.02, y=0.98, xref="paper", yref="paper",
+        text=f"r={r_val:.3f}, n={len(persons):,}",
+        showarrow=False, font=dict(size=11, color="#FFD166"),
+        bgcolor="rgba(0,0,0,0.5)", bordercolor="#FFD166", borderwidth=1, borderpad=4,
     )
     body += '<div class="card">'
-    body += "<h2>BiRank vs Patronage</h2>"
+    body += "<h2>Person FE vs BiRank（密度等高線）</h2>"
     body += chart_guide(
-        "各ドットは1人の人物（5,000人サンプル）。X=BiRank、Y=Patronage、色=IV Score。"
-        "右上象限の人物はネットワーク中心性と継続起用の両方が高い。回帰線とPearson r付き。"
+        "IV Scoreの2大成分（因果的貢献×ネットワーク位置）の共同分布。"
+        "暖色域=多数の人物が集中。ラベル付き=BiRank上位者。"
+        "右上=両方で高い真のトップ人材。原点付近への集中はべき乗則の特徴。"
     )
-    body += plotly_div_safe(fig, "birank_patronage_scatter", 500)
+    body += plotly_div_safe(fig_ds, "pfe_birank_density", 520)
     body += "</div>"
 
-    # Role distribution
+    # Role distribution (horizontal bar, sorted by count)
     role_counts = Counter(p.get("primary_role", "unknown") for p in persons)
-    fig = go.Figure(go.Pie(
-        labels=list(role_counts.keys()),
-        values=list(role_counts.values()),
-        hole=0.4, textinfo="label+percent",
+    sorted_roles = sorted(role_counts.items(), key=lambda x: x[1])
+    fig = go.Figure(go.Bar(
+        y=[r[0] for r in sorted_roles],
+        x=[r[1] for r in sorted_roles],
+        orientation="h",
+        marker_color="#a0d2db",
+        hovertemplate="%{y}: %{x:,}<extra></extra>",
     ))
-    fig.update_layout(title="Primary Role Distribution")
+    fig.update_layout(title="Primary Role Distribution", xaxis_title="Count", yaxis_title="Role",
+                      margin=dict(l=150))
     body += '<div class="card">'
     body += "<h2>Role Distribution</h2>"
-    body += plotly_div_safe(fig, "role_pie", 450)
+    body += plotly_div_safe(fig, "role_bar", 450)
     body += "</div>"
 
     # Violin: role-based IV score distribution
@@ -7739,6 +8462,7 @@ def generate_person_ranking_report():
         fig_rv.update_layout(
             title="ロール別 IV Score分布 (Raincloud)",
             yaxis_title="IV Score",
+            yaxis_type="log",
             xaxis_title="Primary Role",
             violinmode="overlay",
         )
@@ -7752,44 +8476,7 @@ def generate_person_ranking_report():
         body += plotly_div_safe(fig_rv, "role_violin", 550)
         body += "</div>"
 
-    # Stacked bar: score band by role
-    score_bands = [(0, 20), (20, 40), (40, 60), (60, 80), (80, 100)]
-    band_labels = ["0-20", "20-40", "40-60", "60-80", "80-100"]
-    top_roles_sb = sorted(role_iv_scores.keys(), key=lambda r: len(role_iv_scores[r]), reverse=True)[:6]
-    if top_roles_sb:
-        band_role_counts: dict[str, list[int]] = {role: [] for role in top_roles_sb}
-        for lo, hi in score_bands:
-            for role in top_roles_sb:
-                cnt = sum(1 for c in role_iv_scores[role] if lo <= c < hi)
-                band_role_counts[role].append(cnt)
-
-        sb_colors = ["#f093fb", "#a0d2db", "#f5576c", "#fda085", "#667eea", "#06D6A0"]
-        fig_sb = go.Figure()
-        for idx, role in enumerate(top_roles_sb):
-            fig_sb.add_trace(go.Bar(
-                x=band_labels,
-                y=band_role_counts[role],
-                name=role,
-                marker_color=sb_colors[idx % len(sb_colors)],
-                hovertemplate="%{x}: " + role + " %{y}人<extra></extra>",
-            ))
-        fig_sb.update_layout(
-            barmode="stack",
-            title="スコア帯別ロール構成（Stacked）",
-            xaxis_title="IV Scoreスコア帯",
-            yaxis_title="人数",
-        )
-        body += '<div class="card">'
-        body += "<h2>スコア帯別ロール構成</h2>"
-        body += chart_guide(
-            "スコアを5つの帯に分割し、各帯にどのロールの人物が何人いるかを積み上げ表示。"
-            "上位スコア帯（80-100）に特定ロールが集中しているか、"
-            "低スコア帯の構成比などからロール間格差を読み取れます。"
-        )
-        body += plotly_div_safe(fig_sb, "score_band_stacked", 450)
-        body += "</div>"
-
-    # Lorenz Curve: BiRank/Patronage/Person FE inequality structure
+    # Lorenz Curve: 5-component inequality structure
     def _lorenz_curve(values):
         sorted_vals = sorted(v for v in values if v > 0)
         n = len(sorted_vals)
@@ -7811,11 +8498,15 @@ def generate_person_ranking_report():
         line=dict(dash="dash", color="rgba(255,255,255,0.4)"),
         hoverinfo="skip",
     ))
+    awccs = [p.get("awcc", 0) for p in persons]
+    stexps = [p.get("studio_fe_exposure", 0) for p in persons]
     gini_texts = []
     for label, vals, color in [
         ("BiRank", biranks, "#a0d2db"),
         ("Patronage", patronages, "#f5576c"),
         ("Person FE", person_fes, "#fda085"),
+        ("AWCC", awccs, "#FFD166"),
+        ("Studio Exp", stexps, "#667eea"),
     ]:
         cpop, cval, gini = _lorenz_curve(vals)
         fig_lorenz.add_trace(go.Scatter(
@@ -7825,7 +8516,7 @@ def generate_person_ranking_report():
         ))
         gini_texts.append(f"{label}: Gini={gini:.3f}")
     fig_lorenz.update_layout(
-        title="Lorenz曲線: BiRank / Patronage / Person FE の不平等構造",
+        title="Lorenz曲線: 5成分の不平等構造",
         xaxis_title="累積人口割合 (%)",
         yaxis_title="累積スコア割合 (%)",
     )
@@ -7841,58 +8532,15 @@ def generate_person_ranking_report():
         "Lorenz曲線は「上位X%が全体のY%を占める」不平等構造を可視化。"
         "45度の点線（完全平等線）から離れるほど不平等が大きい。"
         "Gini係数（0=完全平等、1=最大不平等）をアノテーションで表示。"
-        "BiRank・Patronage・Person FEのうちどの軸が最も不平等かを比較できます。"
+        "各曲線の<strong>形状</strong>（たわみ方）を比較してください。"
+    )
+    body += caveat_box(
+        "BiRank・Patronage・Person FE等は単位もスケールも異なるため、"
+        "Gini係数の数値同士を直接比較しても意味がありません。"
+        "各Lorenz曲線の形状（上位集中 vs 広く分散）のみを比較してください。"
     )
     body += plotly_div_safe(fig_lorenz, "lorenz_curve", 550)
     body += "</div>"
-
-    # Scatter: Betweenness Centrality vs IV Score
-    betweenness_vals = []
-    iv_vals_bc = []
-    scatter_roles_bc = []
-    scatter_credits_bc = []
-    scatter_names_bc = []
-    for p in persons:
-        btwn = p.get("centrality", {}).get("betweenness", None)
-        if btwn is None:
-            continue
-        betweenness_vals.append(btwn)
-        iv_vals_bc.append(p.get("iv_score", 0))
-        scatter_roles_bc.append(p.get("primary_role", "unknown"))
-        scatter_credits_bc.append(max(p.get("total_credits", 1), 3))
-        scatter_names_bc.append(p.get("name", p["person_id"]))
-
-    if betweenness_vals:
-        fig_bc = px.scatter(
-            x=betweenness_vals, y=iv_vals_bc,
-            color=scatter_roles_bc,
-            size=scatter_credits_bc,
-            hover_name=scatter_names_bc,
-            labels={"x": "Betweenness Centrality", "y": "IV Score",
-                    "color": "Primary Role", "size": "Total Credits"},
-        )
-        fig_bc.update_layout(title="Betweenness Centrality vs IV Score")
-        fig_bc.add_annotation(x=0.95, y=0.95, xref="paper", yref="paper",
-                              text="高B高C: 影響力ハブ", showarrow=False,
-                              font=dict(size=10, color="#06D6A0"))
-        fig_bc.add_annotation(x=0.95, y=0.05, xref="paper", yref="paper",
-                              text="高B低C: 隠れた仲介者", showarrow=False,
-                              font=dict(size=10, color="#FFD166"))
-        fig_bc.add_annotation(x=0.05, y=0.95, xref="paper", yref="paper",
-                              text="低B高C: 集中型エリート", showarrow=False,
-                              font=dict(size=10, color="#a0d2db"))
-        fig_bc.add_annotation(x=0.05, y=0.05, xref="paper", yref="paper",
-                              text="低B低C: 周辺", showarrow=False,
-                              font=dict(size=10, color="#888"))
-        body += '<div class="card">'
-        body += "<h2>Betweenness Centrality vs IV Score</h2>"
-        body += chart_guide(
-            "X=ネットワーク上の仲介中心性（betweenness）、Y=IV Score。"
-            "色=役職、サイズ=総クレジット数。高betweennessだがIV Score低い＝過小評価された仲介者。"
-            "四象限のラベルでネットワーク上の位置と評価の関係を解読できます。"
-        )
-        body += plotly_div_safe(fig_bc, "betweenness_scatter", 550)
-        body += "</div>"
 
     # Heatmap: Career years × Role → Average IV Score
     year_bins = [(1, 5), (6, 10), (11, 15), (16, 20), (21, 999)]
@@ -7934,12 +8582,14 @@ def generate_person_ranking_report():
         body += plotly_div_safe(fig_hm, "career_role_heatmap", 500)
         body += "</div>"
 
-    # Top 500 table with search filter
+    # Top 100 table with search filter — 5 components + data-driven badges
+    iv_low, iv_high = data_driven_badges(iv_scores)
     body += '<div class="card">'
-    body += "<h2>Top 500 Persons by IV Score</h2>"
+    body += "<h2>Top 100 Persons by IV Score</h2>"
     body += section_desc(
-        "IV Score（BiRank・Patronage・Person FEの操作変数推定統合値）順にランキング。"
-        "バッジ色: 緑=上位層(70+)、黄=中間層(40-69)、赤=下位層。"
+        "IV Score = 5成分（Person FE, BiRank, Patronage, AWCC, Studio Exp）の"
+        "PCA PC1重み付き合計 × Dormancy乗算子。"
+        f"バッジ閾値はデータ駆動: 緑=P75以上({iv_high:.2f}+)、黄=P25-P75、赤=P25未満({iv_low:.2f}-)。"
     )
     body += ('<input type="text" id="rankingSearch" placeholder="名前で検索..." '
              'oninput="filterRankingTable()" style="width:100%;padding:0.6rem;margin-bottom:1rem;'
@@ -7947,16 +8597,21 @@ def generate_person_ranking_report():
              'border-radius:8px;color:#e0e0e0;font-size:0.9rem;">')
     body += '<table id="rankingTable"><thead><tr>'
     body += "<th>#</th><th>Name</th><th>Role</th><th>IV Score</th>"
-    body += "<th>BiRank</th><th>Patronage</th><th>Person FE</th><th>Credits</th>"
+    body += "<th>Person FE</th><th>BiRank</th><th>Patronage</th>"
+    body += "<th>AWCC</th><th>Studio Exp</th><th>Dormancy</th>"
     body += "</tr></thead><tbody>"
-    for i, p in enumerate(persons[:500], 1):
+    for i, p in enumerate(persons[:100], 1):
         comp = p.get("iv_score", 0)
-        badge = "badge-high" if comp >= 70 else "badge-mid" if comp >= 40 else "badge-low"
+        badge = badge_class(comp, iv_low, iv_high)
         name = p.get("name", p["person_id"])
+        dorm_v = p.get("dormancy", 1.0)
+        dorm_str = f"{dorm_v:.2f}" if dorm_v < 1.0 else "1.00"
         body += f"<tr><td>{i}</td><td>{person_link(name, p['person_id'])}</td><td>{p.get('primary_role', '')}</td>"
-        body += f'<td><span class="badge {badge}">{comp:.2f}</span></td>'
-        body += f"<td>{p.get('birank', 0):.1f}</td><td>{p.get('patronage', 0):.1f}</td>"
-        body += f"<td>{p.get('person_fe', 0):.1f}</td><td>{p.get('total_credits', 0)}</td></tr>"
+        body += f'<td><span class="badge {badge}">{comp:.3f}</span></td>'
+        body += f"<td>{p.get('person_fe', 0):.3f}</td><td>{p.get('birank', 0):.3f}</td>"
+        body += f"<td>{p.get('patronage', 0):.4f}</td>"
+        body += f"<td>{p.get('awcc', 0):.3f}</td><td>{p.get('studio_fe_exposure', 0):.3f}</td>"
+        body += f"<td>{dorm_str}</td></tr>"
     body += "</tbody></table>"
     body += """<script>
 function filterRankingTable() {
@@ -7977,25 +8632,26 @@ function filterRankingTable() {
     median_score = sorted(p.get("iv_score", 0) for p in persons_r)[persons_count_r // 2] if persons_r else 0
     body += key_findings([
         f"スコア分布はべき乗則に従い、{fmt_num(persons_count_r)} 人中"
-        f"トップスコア {top_score:.1f} に対して中央値 {median_score:.1f} と大きな格差がある",
-        "BiRank・Patronage・Person FEの3軸プロファイルは人物ごとに大きく異なり、"
-        "得意領域の違いが明確に表れる",
-        "BiRankとPatronageには正の相関があるが、Person FEは独立した軸として機能",
+        f"トップスコア {top_score:.3f} に対して中央値 {median_score:.3f} と大きな格差がある",
+        "5成分（Person FE, BiRank, Patronage, AWCC, Studio Exp）のレーダープロファイルは"
+        "人物ごとに大きく異なり、得意領域の違いが明確に表れる",
+        "Person FEは他成分と比較的独立した軸として機能し、因果的貢献の固有情報を提供する",
     ])
 
     body += significance_section("業界全体での客観的な相対的位置の把握", [
         "「自分が業界でどの位置にいるか」は報酬交渉・転職・キャリア設計のすべてに影響しますが、"
         "これまで客観的な比較基準がありませんでした。本ランキングは公開クレジットデータのみを使い、"
-        "主観・コネ・知名度を除いた純粋なネットワーク上の相対位置を初めて定量化します。",
-        "3軸評価（BiRank/Patronage/Person FE）はスコアの「なぜ」を説明します。"
-        "BiRankが高くPatronageが低い場合は「広く浅い協業型」、その逆は「深い専門的信頼型」として読めます。"
-        "これにより、総合順位だけでは見えない個人の強みのパターンが浮かび上がります。",
+        "主観・コネ・知名度を除いた純粋なネットワーク上の相対位置を初めて定量化します。"
+        "視聴者評価は一切使用していません。",
+        "5成分評価はスコアの「なぜ」を多角的に説明します。"
+        "BiRankが高くPatronageが低い場合は「広く浅い協業型」、その逆は「深い専門的信頼型」。"
+        "AWCC/Studio Expの寄与を見ることで環境要因の影響も分離できます。",
     ])
     body += utilization_guide([
         {"role": "スタジオ経営者", "how": "在籍スタッフのIV Scoreと業界中央値を比較し、上位何パーセンタイルの人材を抱えているかを確認して、競合スタジオとの待遇交渉時の報酬ベンチマークとして使う"},
-        {"role": "アニメーター本人", "how": "自身の総合順位と3軸（BiRank/Patronage/Person FE）の相対値を確認し、最も高い軸を「強み」として報酬交渉書類に記載し、同パーセンタイル帯の業界水準報酬を参照値として提示する"},
-        {"role": "プロデューサー", "how": "BiRank-Patronage散布図で予算に見合うスコア帯の人物をクラスタとして確認し、同等スコアの人物の中から可用性とコストのバランスを見てキャスティングする"},
-        {"role": "メディア・ジャーナリスト", "how": "Top 50テーブルと3軸レーダーチャートを引用し、「データが示すトップクリエイター」として客観的根拠を持った業界人物紹介記事を書く"},
+        {"role": "アニメーター本人", "how": "自身の総合順位と5成分レーダーの形状を確認し、最も高い成分を「強み」として報酬交渉書類に記載し、同パーセンタイル帯の業界水準報酬を参照値として提示する"},
+        {"role": "プロデューサー", "how": "Person FE-BiRank密度散布図で予算に見合うスコア帯の人物密集域を確認し、同等スコアの人物の中から可用性とコストのバランスを見てキャスティングする"},
+        {"role": "メディア・ジャーナリスト", "how": "Top 100テーブルと5成分レーダーを引用し、「データが示すトップクリエイター」として客観的根拠を持った業界人物紹介記事を書く"},
     ])
     body += future_possibilities([
         "役職別・担当ジャンル別のサブランキングページ（「今季の作画監督ランキング」「監督限定ランキング」など）",
@@ -8011,16 +8667,16 @@ function filterRankingTable() {
         intro_html=report_intro(
             "人物ランキング・スコア分析",
             "IV Scoreによるアニメ業界プロフェッショナルの決定版ランキング。"
-            "3つの評価軸（BiRank・Patronage・Person FE）ごとのスコア分布を分解し、"
-            "トップ10のレーダープロファイル比較と、全人口にわたるBiRank-Patronage相関を"
-            "表示します。",
+            "5成分（Person FE, BiRank, Patronage, AWCC, Studio Exp）のスコア分布を分解し、"
+            "トップ10の5軸レーダープロファイル比較と、密度等高線による全人口分布を"
+            "表示します。視聴者評価は一切使用していません。",
             "スタジオ経営者、プロデューサー、業界研究者",
         ),
         glossary_terms={
             **COMMON_GLOSSARY_TERMS,
             "IV Score算出方法": (
-                "IV Score = BiRank・Patronage・Person FEの操作変数推定による重み付き合計。各軸は0-100に"
-                "正規化。"
+                "IV Score = 5成分（Person FE, BiRank, Patronage, AWCC, Studio Exp）の"
+                "PCA PC1負荷量による重み付き合計 × Dormancy乗算子。z-score正規化後にPCA適用。"
             ),
         },
     )
@@ -8034,10 +8690,20 @@ function filterRankingTable() {
 # ============================================================
 
 def generate_compensation_report():
-    """公正報酬・貢献分析レポート."""
+    """公正報酬・貢献分析レポート.
+
+    Charts:
+      1. Gini係数分布 KDE (histogram + KDE overlay + 参照線)
+      2. 役職別 Shapley配分 violin (上位8役職 + strip)
+      3. スタッフ数 vs Gini 密度散布 (density_scatter_2d)
+      4. 年代別 Gini violin (decade violin + 中央値接続線)
+      5. 役職カテゴリ別配分 (stacked bar, max 8 + その他)
+      6. ローレンツ曲線 (維持)
+    """
+    import numpy as np
+
     print("  Generating Compensation Fairness Report...")
     fair = load_json("fair_compensation.json")
-    anime_values = load_json("anime_values.json")
 
     if not fair:
         return
@@ -8047,15 +8713,16 @@ def generate_compensation_report():
 
     body = ""
 
-    # Summary stats
+    # --- Summary stats ---
     avg_gini = summary.get("avg_gini_coefficient", 0)
     avg_corr = summary.get("avg_shapley_correlation", 0)
+    total_anime_comp = fair.get("total_anime", 0)
     gini_label = "不平等寄り" if avg_gini > 0.5 else "やや均等寄り" if avg_gini > 0.25 else "均等寄り"
     body += '<div class="card">'
     body += "<h2>報酬公平性サマリー</h2>"
     body += '<div class="stats-grid">'
     for label, val in [
-        ("分析対象作品数", fmt_num(fair.get("total_anime", 0))),
+        ("分析対象作品数", fmt_num(total_anime_comp)),
         ("平均Gini係数", f"{avg_gini:.3f} ({gini_label})"),
         ("平均Shapley相関", f"{avg_corr:.3f}"),
         ("作品タイプ別", "、".join(f"{k}: {v}本" for k, v in fair.get("anime_type_distribution", {}).items())),
@@ -8063,79 +8730,234 @@ def generate_compensation_report():
         body += f'<div class="stat-card"><div class="value">{val}</div><div class="label">{label}</div></div>'
     body += "</div>"
     body += '<div class="insight-box"><strong>見方：</strong> '
-    body += "Gini係数はスタッフ間の報酬不均等度（0=完全均等、1=完全不均等）を表します。"
-    body += "Shapley相関はShapley値（理論的貢献度）と実際の配分の一致度です。"
-    body += "1.0に近いほど貢献度に見合った配分がなされていることを示します。</div>"
+    body += "Gini係数はスタッフ間のクレジット配分の不均等度（0=完全均等、1=完全不均等）を表します。"
+    body += "Shapley値はロール重み付き貢献度の近似配分（厳密なゲーム理論的Shapley値ではなく、"
+    body += "ロール重み×クレジット比率に基づく簡易配分）で、Shapley相関はその理論的配分と"
+    body += "実際のクレジット配分の一致度を示します。"
+    body += "本分析はクレジットデータのみに基づき、視聴者評価は一切使用していません。</div>"
     body += "</div>"
 
-    # Gini coefficient distribution
-    if analyses:
+    if not analyses:
+        body += '<div class="card"><p>分析データがありません。</p></div>'
+    else:
         gini_values = [a["fairness"]["gini_coefficient"] for a in analyses if "fairness" in a]
-        fig = go.Figure(go.Histogram(
-            x=gini_values, nbinsx=20, marker_color="#f093fb",
-            hovertemplate="Gini: %{x:.3f}<br>Count: %{y}<extra></extra>",
-        ))
-        fig.update_layout(title="Gini係数分布", xaxis_title="Gini係数", yaxis_title="作品数")
-        fig = add_distribution_stats(fig, gini_values)
-        body += '<div class="card">'
-        body += "<h2>Gini係数分布</h2>"
-        body += chart_guide(
-            "分析対象全作品のGini係数分布。0に近いほどスタッフ間のクレジット配分が均等、"
-            "1に近いほど少数の人物がクレジット配分を独占していることを示します。"
-            "緑破線=中央値、赤点線=平均、紫=P90。"
-        )
-        body += plotly_div_safe(fig, "gini_dist", 400)
-        body += "</div>"
 
-        # Shapley allocation per anime (top 5) — stacked by role
-        shapley_role_colors = {
-            "director": "#9b59b6", "chief_director": "#8e44ad",
-            "character_designer": "#3498db", "character_design": "#3498db",
-            "animator": "#06D6A0", "key_animator": "#2ecc71",
-            "animation_director": "#27ae60",
-            "background_art": "#fda085", "screenplay": "#f5576c",
-            "sound_director": "#FFD166", "music": "#f39c12",
-        }
-        sorted_analyses = sorted(analyses, key=lambda a: a.get("staff_count", 0), reverse=True)
-        for a in sorted_analyses[:5]:
-            allocs = a.get("allocations", [])
-            if not allocs:
-                continue
-            names = [al.get("name", al["person_id"]) for al in allocs]
-            allocations = [al.get("allocation", 0) for al in allocs]
-            roles = [al.get("role", "") for al in allocs]
-            bar_colors = [shapley_role_colors.get(r, "#a0a0c0") for r in roles]
-
-            fig = go.Figure(go.Bar(
-                x=names, y=allocations,
-                marker_color=bar_colors,
-                text=[f"{r}<br>{v:.1f}%" for r, v in zip(roles, allocations)],
-                textposition="auto",
-                hovertemplate="%{x}<br>Allocation: %{y:.1f}%<br>%{text}<extra></extra>",
+        # --- Chart 1: Gini Distribution KDE ---
+        if gini_values:
+            gini_arr = np.array(gini_values)
+            fig = go.Figure()
+            # Histogram
+            fig.add_trace(go.Histogram(
+                x=gini_values, nbinsx=30,
+                marker_color="rgba(240,147,251,0.5)",
+                name="度数",
+                hovertemplate="Gini: %{x:.3f}<br>作品数: %{y}<extra></extra>",
             ))
-            gini = a.get("fairness", {}).get("gini_coefficient", 0)
+            # KDE overlay (scipy)
+            try:
+                from scipy.stats import gaussian_kde
+                kde = gaussian_kde(gini_arr)
+                x_kde = np.linspace(gini_arr.min() - 0.05, gini_arr.max() + 0.05, 200)
+                y_kde = kde(x_kde) * len(gini_arr) * (gini_arr.max() - gini_arr.min()) / 30
+                fig.add_trace(go.Scatter(
+                    x=x_kde.tolist(), y=y_kde.tolist(), mode="lines",
+                    line=dict(color="#f093fb", width=2.5), name="KDE",
+                ))
+            except ImportError:
+                pass
+            # Reference lines
+            median_g = float(np.median(gini_arr))
+            mean_g = float(np.mean(gini_arr))
+            p90_g = float(np.percentile(gini_arr, 90))
+            for val, color, dash, name in [
+                (median_g, "#06D6A0", "dash", f"中央値 {median_g:.3f}"),
+                (mean_g, "#EF476F", "dot", f"平均 {mean_g:.3f}"),
+                (p90_g, "#9B59B6", "dashdot", f"P90 {p90_g:.3f}"),
+            ]:
+                fig.add_vline(x=val, line_dash=dash, line_color=color,
+                              annotation_text=name, annotation_position="top",
+                              annotation_font_size=10, annotation_font_color=color)
             fig.update_layout(
-                title=f"{a.get('anime_title', a['anime_id'])} (Gini: {gini:.3f})",
-                xaxis_title="Staff", yaxis_title="Allocation (%)",
+                title="Gini係数分布 — クレジット配分の不均等度",
+                xaxis_title="Gini係数", yaxis_title="作品数",
+                barmode="overlay", showlegend=True,
+                legend=dict(x=0.75, y=0.95),
             )
             body += '<div class="card">'
-            body += f"<h3>{a.get('anime_title', a['anime_id'])}</h3>"
-            body += plotly_div_safe(fig, f"shapley_{a['anime_id']}", 400)
+            body += "<h2>Chart 1: Gini係数分布</h2>"
+            body += chart_guide(
+                "全作品のGini係数のヒストグラムにKDE（カーネル密度推定）を重ねた分布図。"
+                "0に近いほどクレジットが均等に配分され、1に近いほど少数の人物に集中。"
+                "緑線=中央値、赤点線=平均、紫=P90。右裾が重い場合、少数の作品で極端な集中が"
+                "発生していることを示す。"
+            )
+            body += plotly_div_safe(fig, "gini_dist_kde", 420)
             body += "</div>"
 
-        # Stacked bar: top 5 anime Shapley allocation by role category
+        # --- Chart 2: Role-based Shapley Violin ---
+        role_allocations: dict[str, list[float]] = {}
+        for a in analyses:
+            for al in a.get("allocations", []):
+                role = al.get("role", "unknown")
+                alloc = al.get("allocation", 0)
+                role_allocations.setdefault(role, []).append(alloc)
+
+        top_roles = sorted(
+            role_allocations.keys(), key=lambda r: len(role_allocations[r]), reverse=True,
+        )[:8]
+        if top_roles:
+            violin_colors = _PALETTE
+            fig_rv = go.Figure()
+            for idx, role in enumerate(top_roles):
+                vals = role_allocations[role]
+                color = violin_colors[idx % len(violin_colors)]
+                # Violin
+                fig_rv.add_trace(go.Violin(
+                    y=vals, name=f"{role} (n={len(vals)})",
+                    line_color=color, fillcolor=color, opacity=0.5,
+                    meanline_visible=True, box_visible=True,
+                    points="outliers",
+                    scalemode="width",
+                ))
+            fig_rv.update_layout(
+                title="役職別 Shapley配分率の分布 — Violin + Box",
+                yaxis_title="Shapley配分率 (%)",
+                showlegend=False, violinmode="group",
+                height=550,
+            )
+            body += '<div class="card">'
+            body += "<h2>Chart 2: 役職別 Shapley配分率</h2>"
+            body += chart_guide(
+                "上位8役職のShapley配分率をviolinプロットで比較。"
+                "幅が広い部分はその配分率帯に多くの人物が集中していることを示す。"
+                "中央の白線=中央値、箱=四分位範囲。"
+                "監督は分布が狭く高い（チームの中心）、原画は広く低い（分散的貢献）といった"
+                "役職ごとの報酬構造の違いを読み取れる。"
+            )
+            body += plotly_div_safe(fig_rv, "role_violin", 550)
+            body += "</div>"
+
+        # --- Chart 3: Staff Count vs Gini — density scatter ---
+        staff_counts_all = []
+        gini_vals_all = []
+        titles_all = []
+        for a in analyses:
+            sc = a.get("staff_count", 0)
+            gini = a.get("fairness", {}).get("gini_coefficient", None)
+            if sc > 0 and gini is not None:
+                staff_counts_all.append(sc)
+                gini_vals_all.append(gini)
+                titles_all.append(a.get("anime_title", a.get("anime_id", "")))
+
+        if staff_counts_all:
+            fig_ds = density_scatter_2d(
+                staff_counts_all, gini_vals_all,
+                xlabel="スタッフ数", ylabel="Gini係数",
+                title="スタッフ数 vs Gini係数 — チーム規模と配分集中度",
+                label_names=titles_all, label_top=12,
+                height=520,
+            )
+            # Add trend annotation
+            if len(staff_counts_all) > 20:
+                sc_arr = np.array(staff_counts_all, dtype=float)
+                gi_arr = np.array(gini_vals_all, dtype=float)
+                corr = np.corrcoef(sc_arr, gi_arr)[0, 1]
+                fig_ds.add_annotation(
+                    x=0.02, y=0.98, xref="paper", yref="paper",
+                    text=f"r={corr:.3f}, n={len(sc_arr):,}",
+                    showarrow=False, font=dict(size=11, color="#FFD166"),
+                    bgcolor="rgba(0,0,0,0.5)", bordercolor="#FFD166",
+                    borderwidth=1, borderpad=4,
+                )
+            body += '<div class="card">'
+            body += "<h2>Chart 3: スタッフ数 vs Gini係数</h2>"
+            body += chart_guide(
+                "大規模チームほどクレジット配分は均等か、それとも監督に集中するか？"
+                "密度等高線で作品群の分布パターンを可視化。"
+                "ラベル付きの点はGini係数が特に高い作品（配分の極端な集中）。"
+                "正の相関→大チームほど集中、負の相関→大チームほど分散。"
+            )
+            fig_ds.update_layout(xaxis_type="log")
+            body += plotly_div_safe(fig_ds, "staff_gini_density", 520)
+            body += "</div>"
+
+        # --- Chart 4: Decade Gini Violin + Median Trend ---
+        gini_by_decade: dict[str, list[float]] = {}
+        for a in analyses:
+            year = a.get("year", 0)
+            gini = a.get("fairness", {}).get("gini_coefficient", None)
+            if year and gini is not None:
+                decade = f"{(year // 10) * 10}s"
+                gini_by_decade.setdefault(decade, []).append(gini)
+        if gini_by_decade:
+            sorted_decades = sorted(gini_by_decade.keys())
+            decade_colors_v = ["#667eea", "#a0d2db", "#06D6A0", "#FFD166", "#f093fb",
+                               "#fda085", "#f5576c", "#F72585", "#9b59b6"]
+            fig_dv = go.Figure()
+            medians_per_decade = []
+            for idx, decade in enumerate(sorted_decades):
+                vals = gini_by_decade[decade]
+                color = decade_colors_v[idx % len(decade_colors_v)]
+                fig_dv.add_trace(go.Violin(
+                    y=vals, name=f"{decade} (n={len(vals)})",
+                    line_color=color, fillcolor=color, opacity=0.5,
+                    meanline_visible=True, box_visible=True,
+                    points=False, scalemode="width",
+                ))
+                medians_per_decade.append(float(np.median(vals)))
+            # Median trend line overlay
+            fig_dv.add_trace(go.Scatter(
+                x=sorted_decades, y=medians_per_decade,
+                mode="lines+markers", name="中央値推移",
+                line=dict(color="#FFD166", width=2.5, dash="dash"),
+                marker=dict(size=8, color="#FFD166"),
+            ))
+            fig_dv.update_layout(
+                title="年代別 Gini係数分布 — 配分公平性の時代変化",
+                yaxis_title="Gini係数", showlegend=True,
+                legend=dict(orientation="h", y=-0.15),
+                height=520,
+            )
+            body += '<div class="card">'
+            body += "<h2>Chart 4: 年代別Gini係数推移</h2>"
+            body += caveat_box(
+                "年代間のGini差は制作体制の構造変化（デジタル化、分業化、制作委員会方式の普及）を反映します。"
+                "「公平性」の変化とは限りません。例えば分業化が進めば少数の中核スタッフへの集中度が上がり"
+                "Giniは上昇しますが、これは不公平ではなく分業構造の結果です。"
+            )
+            body += chart_guide(
+                "年代ごとのGini係数をviolinプロットで表示し、黄色破線で中央値の推移を接続。"
+                "中央値が上昇傾向なら「配分がより不均等化している」、下降なら「均等化が進んでいる」。"
+                "violin の幅で各年代のばらつきの大きさも比較可能。"
+            )
+            body += plotly_div_safe(fig_dv, "decade_gini_violin", 520)
+            body += "</div>"
+
+        # --- Chart 5: Role Category Allocation (stacked bar, max 8 + その他) ---
         role_categories = {
             "director": "監督系", "chief_director": "監督系", "screenplay": "監督系",
+            "series_composition": "監督系",
             "character_designer": "デザイン系", "character_design": "デザイン系",
             "background_art": "デザイン系", "mechanical_design": "デザイン系",
+            "art_director": "デザイン系",
             "animator": "作画系", "key_animator": "作画系",
-            "animation_director": "作画系",
+            "animation_director": "作画系", "chief_animation_director": "作画系",
+            "in_between_animation": "作画系",
             "sound_director": "音響系", "music": "音響系",
+            "color_design": "美術系", "photography": "撮影系",
+            "editing": "編集系",
         }
-        cat_colors = {"監督系": "#9b59b6", "デザイン系": "#3498db", "作画系": "#06D6A0", "音響系": "#FFD166", "その他": "#a0a0c0"}
+        cat_colors = {
+            "監督系": "#9b59b6", "デザイン系": "#3498db", "作画系": "#06D6A0",
+            "音響系": "#FFD166", "美術系": "#fda085", "撮影系": "#667eea",
+            "編集系": "#a0d2db", "その他": "#a0a0c0",
+        }
+        # Build top-N anime by staff count for stacked view
+        sorted_analyses = sorted(analyses, key=lambda a: a.get("staff_count", 0), reverse=True)
         anime_titles_shap = []
         cat_alloc_data: dict[str, list[float]] = {cat: [] for cat in cat_colors}
-        for a in sorted_analyses[:5]:
+        n_anime_stacked = min(12, len(sorted_analyses))
+        for a in sorted_analyses[:n_anime_stacked]:
             allocs = a.get("allocations", [])
             if not allocs:
                 continue
@@ -8148,274 +8970,109 @@ def generate_compensation_report():
                 cat_alloc_data[cat].append(cat_sums[cat])
 
         if anime_titles_shap:
-            fig_shap_stack = go.Figure()
+            fig_stk = go.Figure()
             for cat, color in cat_colors.items():
-                fig_shap_stack.add_trace(go.Bar(
-                    x=anime_titles_shap,
-                    y=cat_alloc_data[cat],
-                    name=cat,
-                    marker_color=color,
+                vals = cat_alloc_data[cat]
+                if sum(vals) < 0.01:
+                    continue
+                fig_stk.add_trace(go.Bar(
+                    x=anime_titles_shap, y=vals,
+                    name=cat, marker_color=color,
                     hovertemplate="%{x}<br>" + cat + ": %{y:.1f}%<extra></extra>",
                 ))
-            fig_shap_stack.update_layout(
+            fig_stk.update_layout(
                 barmode="stack",
-                title="上位5作品 Shapley配分 — 役職カテゴリ別内訳",
+                title=f"上位{n_anime_stacked}作品 Shapley配分 — 役職カテゴリ別内訳",
                 yaxis_title="配分率 (%)",
-                xaxis_tickangle=-25,
+                xaxis_tickangle=-30,
+                height=500,
+                legend=dict(orientation="h", y=-0.2),
             )
             body += '<div class="card">'
-            body += "<h2>Shapley配分 役職カテゴリ別内訳</h2>"
+            body += "<h2>Chart 5: 役職カテゴリ別 Shapley配分構成</h2>"
             body += chart_guide(
-                "上位5作品のShapley配分を役職カテゴリ（監督系・デザイン系・作画系・音響系）に集約。"
-                "作品ごとに配分がどのカテゴリに偏っているか、チーム構成の違いを比較できます。"
+                "大規模作品のShapley配分を役職カテゴリに集約した積み上げ棒グラフ。"
+                "作画系が大半を占める作品（作画重視型）と監督系が大きい作品（監督集中型）で"
+                "チーム構造が大きく異なることが視覚的にわかる。"
+                "「その他」には8カテゴリに分類できない役職を含む。"
             )
-            body += plotly_div_safe(fig_shap_stack, "shapley_role_stacked", 450)
+            body += plotly_div_safe(fig_stk, "shapley_cat_stacked", 500)
             body += "</div>"
 
-        # Scatter: Anime Score vs Gini Coefficient
-        anime_score_vals = []
-        anime_gini_vals = []
-        anime_staff_counts_sc = []
-        anime_titles_scatter = []
-        for a in analyses:
-            ascore = a.get("anime_score", None)
-            gini = a.get("fairness", {}).get("gini_coefficient", None)
-            if ascore is not None and gini is not None:
-                anime_score_vals.append(ascore)
-                anime_gini_vals.append(gini)
-                anime_staff_counts_sc.append(max(a.get("staff_count", 1), 5))
-                anime_titles_scatter.append(a.get("anime_title", a.get("anime_id", "")))
-
-        if anime_score_vals:
-            max_staff_sc = max(anime_staff_counts_sc) if anime_staff_counts_sc else 1
-            fig_sg = go.Figure(go.Scatter(
-                x=anime_score_vals, y=anime_gini_vals,
-                mode="markers",
-                marker=dict(
-                    size=[min(s, 40) for s in anime_staff_counts_sc],
-                    sizemode="area", sizeref=max_staff_sc / 400,
-                    color="#f093fb", opacity=0.6,
-                ),
-                text=anime_titles_scatter,
-                hovertemplate="%{text}<br>Score: %{x:.1f}<br>Gini: %{y:.3f}<extra></extra>",
-            ))
-            fig_sg.update_layout(
-                title="作品スコア vs Gini係数（高品質作品は公平か？）",
-                xaxis_title="Anime Score",
-                yaxis_title="Gini Coefficient",
-            )
-            body += '<div class="card">'
-            body += "<h2>作品スコア vs Gini係数</h2>"
-            body += chart_guide(
-                "X=作品スコア、Y=Gini係数（配分不均等度）、サイズ=スタッフ数。"
-                "高スコア×低Gini=チーム均等型の高品質作品。"
-                "高スコア×高Gini=監督集中型の高品質作品。"
-                "品質と配分公平性の関係パターンを確認できます。"
-            )
-            body += plotly_div_safe(fig_sg, "score_gini_scatter", 500)
-            body += "</div>"
-
-        # Box plot: Role-based Shapley allocation distribution
-        role_allocations: dict[str, list[float]] = {}
-        for a in analyses:
-            for al in a.get("allocations", []):
-                role = al.get("role", "unknown")
-                alloc = al.get("allocation", 0)
-                role_allocations.setdefault(role, []).append(alloc)
-
-        top_alloc_roles = sorted(
-            role_allocations.keys(), key=lambda r: len(role_allocations[r]), reverse=True,
-        )[:10]
-        if top_alloc_roles:
-            box_colors = ["#f093fb", "#a0d2db", "#f5576c", "#fda085", "#667eea",
-                          "#06D6A0", "#FFD166", "#EF476F", "#9b59b6", "#3498db"]
-            fig_ra = go.Figure()
-            for idx, role in enumerate(top_alloc_roles):
-                fig_ra.add_trace(go.Box(
-                    y=role_allocations[role],
-                    name=role,
-                    marker_color=box_colors[idx % len(box_colors)],
-                    boxmean=True,
-                ))
-            fig_ra.update_layout(
-                title="ロール別 Shapley配分率の分布",
-                yaxis_title="Allocation (%)",
-                xaxis_title="Role",
-            )
-            body += '<div class="card">'
-            body += "<h2>ロール別 Shapley配分率の分布</h2>"
-            body += chart_guide(
-                "箱ひげ図で各ロールのShapley配分率の分布を比較。"
-                "箱の上下端が四分位範囲、中央線が中央値、◆が平均値。"
-                "外れ値（ひげの外の点）は異常に高い/低い配分を受けた人物。"
-                "ロール間の配分格差とばらつきの違いが一目で把握できます。"
-            )
-            body += plotly_div_safe(fig_ra, "role_allocation_box", 550)
-            body += "</div>"
-
-    # Anime value multi-axis (radar)
-    if anime_values:
-        av_list = sorted(anime_values.values(), key=lambda x: x.get("composite_value", 0), reverse=True)
-        value_axes = ["commercial_value", "critical_value", "creative_value", "cultural_value", "technical_value"]
-        axis_labels = ["商業価値", "批評価値", "創造価値", "文化価値", "技術価値"]
-
-        fig = go.Figure()
-        for av in av_list[:8]:
-            vals = [av.get(k, 0) for k in value_axes]
-            # Normalize to 0-100 range for radar readability
-            max_val = max(vals) if max(vals) > 0 else 1
-            norm_vals = [v / max_val * 100 for v in vals]
-            fig.add_trace(go.Scatterpolar(
-                r=norm_vals + [norm_vals[0]], theta=axis_labels + [axis_labels[0]],
-                name=f"{av.get('title', av['anime_id'])}",
-                fill="toself", opacity=0.5,
-            ))
-        fig.update_layout(
-            title="作品価値プロファイル（上位8作品、各作品内正規化）",
-            polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
-        )
-        body += '<div class="card">'
-        body += "<h2>作品価値プロファイル</h2>"
-        body += chart_guide(
-            "5軸（商業・批評・創造・文化・技術）での作品価値レーダーチャート。"
-            "各作品の最大値を100として正規化しているため、作品間の形状（強みの方向）を比較できます。"
-        )
-        body += plotly_div_safe(fig, "anime_value_radar", 550)
-
-        # Value table
-        body += "<table><thead><tr>"
-        body += "<th>#</th><th>タイトル</th><th>年</th><th>総合価値</th>"
-        body += "<th>商業</th><th>批評</th><th>創造</th><th>技術</th><th>文化</th>"
-        body += "</tr></thead><tbody>"
-        for i, av in enumerate(av_list[:30], 1):
-            body += f"<tr><td>{i}</td><td>{av.get('title', av['anime_id'])}</td>"
-            body += f"<td>{av.get('year', '')}</td><td>{av.get('composite_value', 0):.1f}</td>"
-            body += f"<td>{av.get('commercial_value', 0):.2f}</td>"
-            body += f"<td>{av.get('critical_value', 0):.2f}</td>"
-            body += f"<td>{av.get('creative_value', 0):.2f}</td>"
-            body += f"<td>{av.get('technical_value', 0):.2f}</td>"
-            body += f"<td>{av.get('cultural_value', 0):.2f}</td></tr>"
-        body += "</tbody></table></div>"
-
-    # --- C4 Enhancement: 追加チャート ---
-
-    # C4-1: ローレンツ曲線
-    if analyses:
-        import numpy as np
+        # --- Chart 6: Lorenz Curve ---
         all_allocations_lorenz = []
         for a in analyses:
             for al in a.get("allocations", []):
                 all_allocations_lorenz.append(al.get("allocation", 0))
         if all_allocations_lorenz:
-            sorted_alloc = sorted(all_allocations_lorenz)
+            sorted_alloc = np.array(sorted(all_allocations_lorenz))
             n_alloc = len(sorted_alloc)
-            cumul_share = [sum(sorted_alloc[:i+1]) / sum(sorted_alloc) * 100 for i in range(n_alloc)]
-            pop_share = [(i + 1) / n_alloc * 100 for i in range(n_alloc)]
-            fig_lor = go.Figure()
-            fig_lor.add_trace(go.Scatter(
-                x=pop_share, y=cumul_share, mode="lines",
-                line=dict(color="#f093fb", width=2), name="ローレンツ曲線",
-                fill="tozeroy", fillcolor="rgba(240,147,251,0.1)",
-            ))
-            fig_lor.add_trace(go.Scatter(
-                x=[0, 100], y=[0, 100], mode="lines",
-                line=dict(color="rgba(255,255,255,0.3)", dash="dash"), name="完全平等線",
-            ))
-            fig_lor.update_layout(title="価値集中ローレンツ曲線",
-                                  xaxis_title="人口累積割合(%)", yaxis_title="配分累積割合(%)")
-            body += '<div class="card"><h2>価値集中ローレンツ曲線</h2>'
-            body += chart_guide("曲線が対角線から離れるほど不平等。曲線と対角線の間の面積がGini係数に対応。")
-            body += plotly_div_safe(fig_lor, "comp_lorenz", 450)
-            body += "</div>"
-
-    # C4-2: 役割別公正賃金散布図
-    if analyses:
-        role_avg_alloc: dict[str, list[float]] = {}
-        role_avg_staff: dict[str, list[int]] = {}
-        for a in analyses:
-            for al in a.get("allocations", []):
-                role = al.get("role", "unknown")
-                alloc = al.get("allocation", 0)
-                role_avg_alloc.setdefault(role, []).append(alloc)
-                role_avg_staff.setdefault(role, []).append(a.get("staff_count", 1))
-        fair_roles = sorted(role_avg_alloc.keys(),
-                            key=lambda r: sum(role_avg_alloc[r]) / len(role_avg_alloc[r]),
-                            reverse=True)[:12]
-        if fair_roles:
-            fr_x = [sum(role_avg_alloc[r]) / len(role_avg_alloc[r]) for r in fair_roles]
-            fr_y = [sum(role_avg_staff[r]) / len(role_avg_staff[r]) for r in fair_roles]
-            fr_sz = [len(role_avg_alloc[r]) for r in fair_roles]
-            max_sz = max(fr_sz) if fr_sz else 1
-            fig_fr = go.Figure(go.Scatter(
-                x=fr_x, y=fr_y, mode="markers+text",
-                marker=dict(size=[max(s / max_sz * 40, 8) for s in fr_sz],
-                            color="#a0d2db", opacity=0.7),
-                text=fair_roles, textposition="top center", textfont=dict(size=10, color="#c0c0d0"),
-                hovertemplate="<b>%{text}</b><br>平均配分: %{x:.1f}%<br>平均スタッフ数: %{y:.0f}<extra></extra>",
-            ))
-            fig_fr.update_layout(title="役割別 平均配分率 vs 平均チーム規模",
-                                 xaxis_title="平均Shapley配分率(%)", yaxis_title="平均スタッフ数")
-            body += '<div class="card"><h2>役割別公正賃金スキャッター</h2>'
-            body += section_desc("X=その役割の平均Shapley配分率、Y=その役割が含まれる作品の平均スタッフ数。"
-                                 "バブルサイズ=データポイント数。高配分×大規模チーム=高い市場価値。")
-            body += plotly_div_safe(fig_fr, "comp_fair_role", 450)
-            body += "</div>"
-
-    # C4-3: スタジオ別ジニ係数比較箱ひげ図（データがある場合）
-    # anime_valuesから年代別の平均Gini推移を算出
-    if analyses:
-        gini_by_decade: dict[str, list[float]] = {}
-        for a in analyses:
-            year = a.get("year", 0)
-            gini = a.get("fairness", {}).get("gini_coefficient", None)
-            if year and gini is not None:
-                decade = f"{(year // 10) * 10}s"
-                gini_by_decade.setdefault(decade, []).append(gini)
-        if gini_by_decade:
-            fig_gd = go.Figure()
-            decade_colors = ["#667eea", "#a0d2db", "#06D6A0", "#FFD166", "#f093fb",
-                             "#fda085", "#f5576c", "#F72585", "#9b59b6"]
-            for idx, decade in enumerate(sorted(gini_by_decade.keys())):
-                vals = gini_by_decade[decade]
-                fig_gd.add_trace(go.Box(
-                    y=vals, name=f"{decade} (n={len(vals)})",
-                    marker_color=decade_colors[idx % len(decade_colors)],
-                    boxmean=True,
+            total = sorted_alloc.sum()
+            if total > 0:
+                cumul_share = (np.cumsum(sorted_alloc) / total * 100).tolist()
+                pop_share = [(i + 1) / n_alloc * 100 for i in range(n_alloc)]
+                fig_lor = go.Figure()
+                fig_lor.add_trace(go.Scatter(
+                    x=pop_share, y=cumul_share, mode="lines",
+                    line=dict(color="#f093fb", width=2.5), name="ローレンツ曲線",
+                    fill="tozeroy", fillcolor="rgba(240,147,251,0.1)",
                 ))
-            fig_gd.update_layout(title="年代別Gini係数分布",
-                                 yaxis_title="Gini係数", showlegend=False)
-            body += '<div class="card"><h2>年代別Gini係数比較</h2>'
-            body += chart_guide("年代ごとのGini係数分布。中央値の推移で配分公平性の時代トレンドを確認。")
-            body += plotly_div_safe(fig_gd, "comp_gini_decade", 450)
-            body += "</div>"
+                fig_lor.add_trace(go.Scatter(
+                    x=[0, 100], y=[0, 100], mode="lines",
+                    line=dict(color="rgba(255,255,255,0.3)", dash="dash"), name="完全平等線",
+                ))
+                # Gini area annotation
+                lorenz_area = np.trapezoid(cumul_share, pop_share)
+                perfect_area = 5000.0  # triangle area under y=x for 0-100
+                gini_coeff = (perfect_area - lorenz_area) / perfect_area
+                fig_lor.add_annotation(
+                    x=60, y=30, text=f"Gini = {gini_coeff:.3f}",
+                    font=dict(size=14, color="#f093fb"),
+                    showarrow=False, bgcolor="rgba(0,0,0,0.6)",
+                    bordercolor="#f093fb", borderwidth=1, borderpad=6,
+                )
+                fig_lor.update_layout(
+                    title="クレジット配分 ローレンツ曲線",
+                    xaxis_title="人口累積割合 (%)",
+                    yaxis_title="配分累積割合 (%)",
+                    height=450,
+                )
+                body += '<div class="card"><h2>Chart 6: ローレンツ曲線</h2>'
+                body += chart_guide(
+                    "全作品・全スタッフのShapley配分を累積した不平等曲線。"
+                    "曲線が対角線（完全平等線）から離れるほど不平等。"
+                    "曲線と対角線の間の面積がGini係数に対応する。"
+                    "下位50%の人物が全配分の何%を占めるかを読み取ることで、"
+                    "業界全体の報酬集中度を直感的に理解できる。"
+                )
+                body += plotly_div_safe(fig_lor, "comp_lorenz", 450)
+                body += "</div>"
 
-    # Data-driven key findings
-    total_anime_comp = fair.get("total_anime", 0)
-    avg_shapley_corr = avg_corr  # already computed above
+    # --- Key Findings ---
     gini_desc = "不平等寄り" if avg_gini > 0.5 else "やや均等寄り" if avg_gini > 0.25 else "均等寄り"
     body += key_findings([
-        f"分析対象 {fmt_num(total_anime_comp)} 作品の平均Gini係数は {avg_gini:.3f} —"
-        f"完全平等(0)と最大不平等(1)の間で{gini_desc}な配分",
-        f"Shapley値と実際の配分の相関は {avg_shapley_corr:.3f} —"
-        f"{'良好な整合性（貢献度に見合った配分）' if avg_shapley_corr > 0.9 else '改善の余地がある'}",
-        "5軸の作品価値プロファイル（商業・批評・創造・文化・技術）により、"
-        "作品の多面的な価値が可視化される",
+        f"分析対象 {fmt_num(total_anime_comp)} 作品の平均Gini係数は {avg_gini:.3f} — {gini_desc}の配分構造",
+        f"Shapley値と実際のクレジット配分の相関は {avg_corr:.3f} — "
+        f"{'理論的貢献度と実配分の整合性が高い' if avg_corr > 0.9 else '理論的公正配分との乖離に改善余地あり'}",
+        "役職ごとのShapley配分のviolin分布は、監督系の狭く高い分布（安定した高配分）と"
+        "原画系の広く低い分布（配分のばらつきが大きい）という構造的非対称性を示す",
     ])
 
     body += significance_section("スタッフ間の貢献に対する報酬の公正性を検証", [
         "アニメ制作において「誰がどれだけ貢献したか」を客観的に測定することはこれまで困難でした。"
-        "本分析はShapley値（ゲーム理論の公正配分手法）をクレジットデータに適用し、"
-        "各スタッフの限界貢献度を初めて定量化します。Gini係数は同じスコアの作品でも"
-        "「監督一人集中型」か「チーム均等型」かを明確に区別します。",
-        "この分析は「誰が正当に評価されていないか」を具体的な数値で示す、報酬制度改革の実証的根拠です。"
+        "本分析はShapley的配分（ロール重み付き貢献度の近似配分）をクレジットデータに適用し、"
+        "各スタッフの限界貢献度を初めて定量化します。重要な点として、この分析は視聴者評価（anime.score）を"
+        "一切使用せず、クレジットデータ（役職・参加頻度・チーム構成）のみに基づいています。",
+        "Gini係数は同じ規模の作品でも「監督一人集中型」か「チーム均等型」かを明確に区別し、"
+        "この分析は「誰が正当に評価されていないか」を具体的な数値で示す報酬制度改革の実証的根拠です。"
         "業界団体・労働組合が具体的な改善を求める際、または個人が報酬交渉する際の"
         "客観的エビデンスとして機能します。",
     ])
     body += utilization_guide([
         {"role": "アニメーター・労働組合", "how": "自分が参加した作品のShapley配分テーブルで自役職のallocation値を確認し、実際の報酬比率との差を「限界貢献に基づく適正配分との乖離」として労使協議の書面に記載する"},
-        {"role": "プロデューサー", "how": "担当作品のGini係数を業界平均（avg_gini_coefficient）と比較し、上回る場合は「配分が特定役職に偏りすぎ」と判断して契約条件の見直し対象をリストアップする"},
+        {"role": "プロデューサー", "how": "担当作品のGini係数を業界平均と比較し、上回る場合は「配分が特定役職に偏りすぎ」と判断して契約条件の見直し対象をリストアップする"},
         {"role": "スタジオ経営者", "how": "自スタジオの作品群のGini係数分布を確認し、低Gini係数（均等配分）を実現しているスタジオとして採用活動での「公平な報酬制度」の訴求材料にする"},
-        {"role": "研究者・政策立案者", "how": "avg_gini_coefficientとavg_shapley_correlationを引用し、アニメ産業の報酬不平等の実態を数値化した論文・政策提言の根拠に使う"},
+        {"role": "研究者・政策立案者", "how": "Gini係数とShapley相関を引用し、アニメ産業の報酬不平等の実態を数値化した論文・政策提言の根拠に使う"},
     ])
     body += future_possibilities([
         "Shapley値を参照した「作品別標準配分テーブル」を業界団体が策定・公式化し、新規契約の参照基準として普及させる",
@@ -8426,13 +9083,13 @@ def generate_compensation_report():
 
     html = wrap_html(
         "報酬公平性分析",
-        f"公正報酬・貢献分析 — {fmt_num(fair.get('total_anime', 0))}作品を分析",
+        f"公正報酬・貢献分析 — {fmt_num(total_anime_comp)}作品を分析",
         body,
         intro_html=report_intro(
             "報酬公平性分析",
             "クレジットはスタッフ間で公平に配分されているか？ 本レポートではShapley値を用いて"
-            "各人物の限界貢献度を推定し、Gini係数で不均等度を測定します。また、商業・批評・"
-            "創造・文化・技術の5次元で作品の価値プロファイルを作成します。",
+            "各人物の限界貢献度を推定し、Gini係数で不均等度を測定します。"
+            "クレジットデータのみに基づく分析であり、視聴者評価は使用していません。",
             "プロデューサー、労働組合関係者、報酬分析担当者",
         ),
         glossary_terms={
@@ -8443,7 +9100,11 @@ def generate_compensation_report():
             ),
             "Shapley値 (Shapley Value)": (
                 "ゲーム理論の概念。各参加者の限界貢献度に基づいて全体の価値を公平に配分。"
-                "各スタッフの作品成功への寄与度を推定するために使用。"
+                "連合に参加する順序すべてを考慮した理論的に唯一の公正解。"
+            ),
+            "ローレンツ曲線": (
+                "不平等の視覚化。横軸に人口累積割合、縦軸に配分累積割合を取り、"
+                "対角線（完全平等線）からの乖離でGini係数を幾何学的に表現。"
             ),
         },
     )
@@ -8487,7 +9148,7 @@ def generate_bias_report():
             body += "The scoring system shows no systematic bias by role, studio, or career stage in current data.</div>"
         body += "</div>"
 
-        # Severity distribution pie chart
+        # Severity distribution (horizontal bar — degrades gracefully with few categories)
         severity_data = {
             "Severe": summary.get("severe_biases", 0),
             "Moderate": summary.get("moderate_biases", 0),
@@ -8495,13 +9156,16 @@ def generate_bias_report():
         }
         severity_data = {k: v for k, v in severity_data.items() if v > 0}
         if severity_data:
-            fig = go.Figure(go.Pie(
-                labels=list(severity_data.keys()),
-                values=list(severity_data.values()),
-                marker_colors=["#EF476F", "#FFD166", "#a0d2db"],
-                hole=0.4, textinfo="label+value",
+            sev_colors = {"Severe": "#EF476F", "Moderate": "#FFD166", "Mild": "#a0d2db"}
+            sorted_sev = sorted(severity_data.items(), key=lambda x: x[1])
+            fig = go.Figure(go.Bar(
+                y=[s[0] for s in sorted_sev],
+                x=[s[1] for s in sorted_sev],
+                orientation="h",
+                marker_color=[sev_colors.get(s[0], "#a0d2db") for s in sorted_sev],
+                hovertemplate="%{y}: %{x}<extra></extra>",
             ))
-            fig.update_layout(title="Bias Severity Distribution")
+            fig.update_layout(title="Bias Severity Distribution", xaxis_title="Count", yaxis_title="Severity")
             body += '<div class="card">'
             body += "<h2>Severity Distribution</h2>"
             body += chart_guide(
@@ -8606,7 +9270,7 @@ def generate_bias_report():
                 x=gaps, nbinsx=20, marker_color="#EF476F",
                 hovertemplate="Gap: %{x:.2f}<br>Count: %{y}<extra></extra>",
             ))
-            fig.update_layout(title="Undervaluation Gap Distribution", xaxis_title="BiRank Gap", yaxis_title="Count")
+            fig.update_layout(title="Undervaluation Gap Distribution", xaxis_title="BiRank Gap", yaxis_title="Count", yaxis_type="log")
             fig = add_distribution_stats(fig, gaps)
             body += plotly_div_safe(fig, "underval_gaps", 400)
 
@@ -8833,8 +9497,6 @@ def generate_genre_report():  # noqa: C901
     all_eras: Counter = Counter()
     all_primary_tiers: Counter = Counter()
     all_primary_eras: Counter = Counter()
-    avg_scores_global = []
-
     for pid, gdata in genre.items():
         sdata = scores_map.get(pid, {})
         cent = sdata.get("centrality", {})
@@ -8850,9 +9512,6 @@ def generate_genre_report():  # noqa: C901
             all_eras[era] += pct
         all_primary_tiers[gdata.get("primary_tier", "unknown")] += 1
         all_primary_eras[gdata.get("primary_era", "unknown")] += 1
-        avg_sc = gdata.get("avg_anime_score") or 0
-        if avg_sc:
-            avg_scores_global.append(avg_sc)
 
         persons.append({
             "person_id": pid,
@@ -8873,11 +9532,7 @@ def generate_genre_report():  # noqa: C901
             "first_year": car.get("first_year"),
             "primary_tier": gdata.get("primary_tier", "unknown"),
             "primary_era": gdata.get("primary_era", "unknown"),
-            "avg_anime_score": float(avg_sc),
             "total_credits": float(gdata.get("total_credits", 0) or 0),
-            "high_rated_pct": float(tiers.get("high_rated", 0) or 0),
-            "mid_rated_pct": float(tiers.get("mid_rated", 0) or 0),
-            "low_rated_pct": float(tiers.get("low_rated", 0) or 0),
             "modern_pct": float(eras.get("modern", 0) or 0),
             "era_2010s_pct": float(eras.get("2010s", 0) or 0),
             "era_2000s_pct": float(eras.get("2000s", 0) or 0),
@@ -8894,11 +9549,9 @@ def generate_genre_report():  # noqa: C901
     body += '<div class="card">'
     body += "<h2>ジャンル・スコア親和性 — 概要</h2>"
     body += '<div class="stats-grid">'
-    avg_global = sum(avg_scores_global) / max(len(avg_scores_global), 1)
     specialist_cnt = sum(1 for p in persons if p["tier_concentration"] >= 80)
     for label, val in [
         ("対象人物数", fmt_num(total_persons)),
-        ("平均アニメスコア", f"{avg_global:.2f}"),
         ("スコアティア種類", fmt_num(len(all_tiers))),
         ("時代区分種類", fmt_num(len(all_eras))),
         ("スペシャリスト（80%+集中）", fmt_num(specialist_cnt)),
@@ -8910,13 +9563,15 @@ def generate_genre_report():  # noqa: C901
     # -------------------------------------------------------
     # SECTION 1: Staff K-Means Clustering (k=6)
     # -------------------------------------------------------
+    # NOTE: avg_anime_score / high_rated_pct / mid_rated_pct / low_rated_pct removed
+    # from clustering features — viewer ratings must not influence any analysis.
+    # Replaced with structural features (total_credits, era proportions, tier_concentration).
     FEATURE_COLS = [
         "iv_score", "birank", "patronage", "person_fe",
         "degree", "betweenness", "eigenvector",
         "versatility", "active_years", "highest_stage",
         "hub_score", "collaborators",
-        "avg_anime_score", "total_credits",
-        "high_rated_pct", "mid_rated_pct", "low_rated_pct",
+        "total_credits",
         "modern_pct", "era_2010s_pct", "era_2000s_pct", "classic_pct",
         "tier_concentration",
     ]
@@ -8925,8 +9580,7 @@ def generate_genre_report():  # noqa: C901
         "degree": "次数中心性", "betweenness": "媒介中心性", "eigenvector": "固有値中心性",
         "versatility": "多様性", "active_years": "活動年数", "highest_stage": "最高ステージ",
         "hub_score": "ハブスコア", "collaborators": "共同作業者数",
-        "avg_anime_score": "平均アニメスコア", "total_credits": "総クレジット数",
-        "high_rated_pct": "高評価割合", "mid_rated_pct": "中評価割合", "low_rated_pct": "低評価割合",
+        "total_credits": "総クレジット数",
         "modern_pct": "現代割合", "era_2010s_pct": "2010年代割合",
         "era_2000s_pct": "2000年代割合", "classic_pct": "クラシック割合",
         "tier_concentration": "ティア集中度",
@@ -8954,7 +9608,7 @@ def generate_genre_report():  # noqa: C901
             centers_orig,
             [
                 (fidx["iv_score"],        ["高スコア", "中スコア", "低スコア"]),
-                (fidx["high_rated_pct"],  ["高品質特化", "量産型"]),     # 2区分で簡潔に
+                (fidx["total_credits"],   ["多作", "少作"]),             # 2区分で簡潔に
                 (fidx["modern_pct"],      ["現代", "旧世代"]),            # 2区分で簡潔に
             ],
         ))
@@ -9007,7 +9661,7 @@ def generate_genre_report():  # noqa: C901
         HEATMAP_FEATS = [
             "iv_score", "birank", "patronage", "person_fe",
             "betweenness", "versatility", "active_years",
-            "avg_anime_score", "high_rated_pct", "modern_pct", "classic_pct",
+            "total_credits", "modern_pct", "classic_pct",
             "tier_concentration",
         ]
         centers_z = km_st.cluster_centers_  # already z-scored
@@ -9050,30 +9704,6 @@ def generate_genre_report():  # noqa: C901
         )
         body += chart_guide("各クラスタのIV Score分布。縦軸＝スコア。外れ値ドットが「埋もれた高評価者」。")
         body += plotly_div_safe(fig_viol, "staff_cluster_violin", 480)
-
-        # Stacked bar: cluster × primary_tier
-        tier_order = ["high_rated", "mid_rated", "low_rated", "unknown"]
-        tier_jp = {"high_rated": "高評価", "mid_rated": "中評価", "low_rated": "低評価", "unknown": "不明"}
-        fig_tier_bar = go.Figure()
-        for tier in tier_order:
-            counts = [
-                sum(1 for m in st_cluster_groups.get(cid, []) if m["primary_tier"] == tier)
-                for cid in range(n_staff_clusters)
-            ]
-            if any(c > 0 for c in counts):
-                fig_tier_bar.add_trace(go.Bar(
-                    name=tier_jp.get(tier, tier),
-                    x=[staff_cluster_names[c] for c in range(n_staff_clusters)],
-                    y=counts,
-                    marker_color=TIER_COLORS.get(tier, "#888"),
-                ))
-        fig_tier_bar.update_layout(
-            title="クラスタ × 主要スコアティア（人数）",
-            barmode="stack", xaxis_tickangle=-20,
-            yaxis_title="人数",
-        )
-        body += chart_guide("どのクラスタが高評価・中評価・低評価作品に多く関わるかを示す積み上げ棒グラフ。")
-        body += plotly_div_safe(fig_tier_bar, "cluster_tier_bar", 450)
 
         # Stacked bar: cluster × primary_era
         era_order = ["modern", "2010s", "2000s", "classic", "unknown"]
@@ -9127,15 +9757,6 @@ def generate_genre_report():  # noqa: C901
         body += chart_guide("どのクラスタにどの職種が多いかを示す。監督クラスタ・アニメータークラスタなどが見えます。")
         body += plotly_div_safe(fig_role_bar, "cluster_role_bar", 450)
 
-        # Cluster size bar
-        fig_sz = go.Figure(go.Bar(
-            x=[staff_cluster_names[c] for c in range(n_staff_clusters)],
-            y=[len(st_cluster_groups.get(c, [])) for c in range(n_staff_clusters)],
-            marker_color=[CLUSTER_COLORS[c % len(CLUSTER_COLORS)] for c in range(n_staff_clusters)],
-            hovertemplate="%{x}<br>人数: %{y}<extra></extra>",
-        ))
-        fig_sz.update_layout(title="クラスタ別 人数", yaxis_title="人数", xaxis_tickangle=-20)
-        body += plotly_div_safe(fig_sz, "cluster_size_bar", 380)
         body += "</div>"  # end staff clustering card
 
         # -------------------------------------------------------
@@ -9235,7 +9856,7 @@ def generate_genre_report():  # noqa: C901
                 ge_cells.append([
                     np.mean([m["iv_score"] for m in mems]),
                     len(mems),
-                    np.mean([m["avg_anime_score"] for m in mems]),
+                    np.mean([m["birank"] for m in mems]),
                     np.mean([m["active_years"] for m in mems]),
                     np.mean([m["versatility"] for m in mems]),
                 ])
@@ -9293,8 +9914,8 @@ def generate_genre_report():  # noqa: C901
         body += plotly_div_safe(fig_ge_ht, "genre_era_heatmap", 400)
 
         # Radar chart: cluster profile comparison
-        radar_feats = ["iv_score", "avg_anime_score", "active_years", "versatility", "tier_concentration"]
-        radar_jp = ["IV Score", "平均アニメスコア", "活動年数", "多様性", "ティア集中度"]
+        radar_feats = ["iv_score", "birank", "active_years", "versatility", "total_credits"]
+        radar_jp = ["IV Score", "BiRank", "活動年数", "多様性", "総クレジット数"]
         # normalize per feature to 0-1 for radar
         feat_max = {}
         for f in radar_feats:
@@ -9330,18 +9951,7 @@ def generate_genre_report():  # noqa: C901
     # SECTION 4: Classic Charts (existing)
     # -------------------------------------------------------
     body += '<div class="card">'
-    body += "<h2>スコアティア・時代分布</h2>"
-
-    # Primary tier pie
-    fig_tier_pie = go.Figure(go.Pie(
-        labels=list(all_primary_tiers.keys()),
-        values=list(all_primary_tiers.values()),
-        marker_colors=["#06D6A0", "#FFD166", "#EF476F", "#a0d2db", "#f093fb"],
-        hole=0.4, textinfo="label+percent",
-    ))
-    fig_tier_pie.update_layout(title="主要スコアティア分布")
-    body += chart_guide("各人物の主要スコアティア（最多クレジット帯）の割合。")
-    body += plotly_div_safe(fig_tier_pie, "tier_pie", 420)
+    body += "<h2>活動時代分布</h2>"
 
     # Era pie
     fig_era_pie = go.Figure(go.Pie(
@@ -9353,53 +9963,6 @@ def generate_genre_report():  # noqa: C901
     fig_era_pie.update_layout(title="主要活動時代分布")
     body += plotly_div_safe(fig_era_pie, "era_pie", 420)
     body += "</div>"
-
-    # Specialist vs Generalist
-    concentrations = [p["tier_concentration"] for p in persons]
-    if concentrations:
-        body += '<div class="card">'
-        body += "<h2>スペシャリスト vs ジェネラリスト</h2>"
-        body += '<div class="insight-box"><strong>解説:</strong> '
-        body += "集中度が高い（90%以上）＝特定品質帯に専門化したスペシャリスト。"
-        body += "低い（均等分散）＝幅広い品質帯で活動するジェネラリスト。</div>"
-
-        # Concentration histogram colored by cluster if available
-        if "staff_cluster" in persons[0]:
-            fig_conc = go.Figure()
-            for cid in range(n_staff_clusters):
-                c_concs = [p["tier_concentration"] for p in persons if p.get("staff_cluster") == cid]
-                if c_concs:
-                    fig_conc.add_trace(go.Histogram(
-                        x=c_concs, nbinsx=20,
-                        name=staff_cluster_names[cid],
-                        marker_color=CLUSTER_COLORS[cid % len(CLUSTER_COLORS)],
-                        opacity=0.6,
-                    ))
-            fig_conc.update_layout(
-                title="ティア集中度分布（クラスタ別）",
-                barmode="overlay",
-                xaxis_title="最大ティア集中度 (%)", yaxis_title="人数",
-            )
-        else:
-            fig_conc = go.Figure(go.Histogram(
-                x=concentrations, nbinsx=20, marker_color="#f5576c",
-            ))
-            fig_conc.update_layout(title="ティア集中度分布",
-                                   xaxis_title="最大ティア集中度 (%)", yaxis_title="人数")
-        body += plotly_div_safe(fig_conc, "concentration_hist", 400)
-
-        # Avg anime score histogram
-        if avg_scores_global:
-            fig_sc_hist = go.Figure(go.Histogram(
-                x=avg_scores_global, nbinsx=30, marker_color="#a0d2db",
-                hovertemplate="スコア: %{x:.1f}<br>人数: %{y}<extra></extra>",
-            ))
-            fig_sc_hist.update_layout(
-                title="平均アニメスコア分布",
-                xaxis_title="平均アニメスコア", yaxis_title="人数",
-            )
-            body += plotly_div_safe(fig_sc_hist, "score_hist", 380)
-        body += "</div>"
 
     # -------------------------------------------------------
     # Key findings & metadata
@@ -9501,34 +10064,30 @@ def generate_studio_impact_report():
             body += f'<div class="stat-card"><div class="value">{val}</div><div class="label">{label}</div></div>'
         body += "</div>"
 
-        # Effect sizes bar chart
-        effect_names = []
-        effect_values = []
-        effect_colors = []
-        effect_ci_lower = []
-        effect_ci_upper = []
-        color_map = {"selection_effect": "#f093fb", "treatment_effect": "#a0d2db", "brand_effect": "#f5576c"}
+        # Effect sizes — Forest Plot (CI-付きドットプロット)
+        forest_data = []
         for ename, edata in estimates.items():
-            effect_names.append(ename.replace("_", " ").title())
-            effect_values.append(edata.get("estimate", 0))
             ci = edata.get("confidence_interval", [0, 0])
-            effect_ci_lower.append(abs(edata.get("estimate", 0) - ci[0]))
-            effect_ci_upper.append(abs(ci[1] - edata.get("estimate", 0)))
-            effect_colors.append(color_map.get(ename, "#888"))
+            forest_data.append({
+                "name": ename.replace("_", " ").title(),
+                "estimate": edata.get("estimate", 0),
+                "ci_lower": ci[0] if len(ci) > 0 else 0,
+                "ci_upper": ci[1] if len(ci) > 1 else 0,
+            })
 
-        fig = go.Figure(go.Bar(
-            x=effect_names, y=effect_values,
-            marker_color=effect_colors,
-            error_y=dict(type="data", symmetric=False, array=effect_ci_upper, arrayminus=effect_ci_lower),
-            hovertemplate="%{x}: %{y:.3f}<extra></extra>",
-        ))
-        fig.update_layout(title="Causal Effect Estimates (with 95% CI)", yaxis_title="Effect Size")
-        body += chart_guide(
-            "各棒は推定因果効果と95%信頼区間（誤差棒）を表示。正の値は効果がスコアを"
-            "上昇させることを意味し、負の値は低下させることを意味します。"
-            "信頼区間がゼロを跨ぐ場合、その効果は統計的に有意ではありません。"
-        )
-        body += plotly_div_safe(fig, "causal_effects", 400)
+        if forest_data:
+            fig = forest_plot(
+                forest_data,
+                title="因果効果推定値 — Forest Plot（95% CI付き）",
+                xlabel="効果量",
+            )
+            body += chart_guide(
+                "各点は推定因果効果量、横線は95%信頼区間。"
+                "信頼区間がゼロ（縦破線）を跨がない場合、統計的に有意。"
+                "選抜効果＝既に優秀な人材の採用、処置効果＝スタジオの育成力、"
+                "ブランド効果＝名声による膨張。どの効果が支配的かが一目でわかる。"
+            )
+            body += plotly_div_safe(fig, "causal_forest", max(300, len(forest_data) * 60 + 100))
 
         # Interpretations
         for ename, edata in estimates.items():
@@ -9815,7 +10374,7 @@ def generate_studio_impact_report():
                 body += "</tr></thead><tbody>"
                 for m in members[:15]:
                     eff = f"{m['credit_per_person']:.1f}"
-                    score_badge_cls = "badge-high" if m["avg_score"] >= 35 else "badge-mid" if m["avg_score"] >= 20 else "badge-low"
+                    score_badge_cls = "badge-high" if m["avg_score"] >= IV_PCTILES["p90"] else "badge-mid" if m["avg_score"] >= IV_PCTILES["p50"] else "badge-low"
                     body += (
                         f"<tr><td>{m['name']}</td>"
                         f"<td>{m['anime_count']}</td>"
@@ -9826,93 +10385,9 @@ def generate_studio_impact_report():
                 body += "</tbody></table>"
             body += "</div>"
 
-            # スタッフ移動・成長: クラスタ × グループ別分析
-            # studios.json の year_range を使ってグループ内の活動変化を可視化
-            body += '<div class="card">'
-            body += "<h2>クラスタ別 活動規模の比較（作品数・人数）</h2>"
-            body += section_desc(
-                "各クラスタのスタジオ群をグループとして集計。"
-                "年代別の活動量（作品数合計）と人材数の変化を棒グラフで比較。"
-                "「小規模グループの作品数増加」「大規模グループの人材流動」等の傾向を把握できます。"
-            )
-            fig_cluster_bars = go.Figure()
-            for cid in sorted(cluster_groups.keys()):
-                members = cluster_groups[cid]
-                cname = cluster_names[cid]
-                total_anime = sum(m["anime_count"] for m in members)
-                total_persons = sum(m["person_count"] for m in members)
-                avg_score_c = sum(m["avg_score"] for m in members) / max(len(members), 1)
-                fig_cluster_bars.add_trace(go.Bar(
-                    name=cname,
-                    x=["作品数（合計）", "人数（合計）", f"平均スコア×10"],
-                    y=[total_anime, total_persons, avg_score_c * 10],
-                    marker_color=km_colors[cid % len(km_colors)],
-                ))
-            fig_cluster_bars.update_layout(
-                barmode="group",
-                title="クラスタ別 集計比較（作品数・人数・スコア）",
-                yaxis_title="値",
-            )
-            body += plotly_div_safe(fig_cluster_bars, "studio_cluster_compare", 450)
-            body += "</div>"
 
-    # Scatter: Studio size vs Average Person Score
-    if studios:
-        studio_scatter_data = []
-        for s_name_sc, s_data_sc in studios.items():
-            person_count_sc = s_data_sc.get("person_count", 0)
-            avg_score_sc = s_data_sc.get("avg_person_score", None)
-            if avg_score_sc is None:
-                top_persons_sc = s_data_sc.get("top_persons", [])
-                if top_persons_sc:
-                    scores_list_sc = [
-                        tp.get("score", tp.get("iv_score", 0)) for tp in top_persons_sc
-                    ]
-                    avg_score_sc = sum(scores_list_sc) / len(scores_list_sc) if scores_list_sc else 0
-                else:
-                    continue
-            if person_count_sc > 0:
-                studio_scatter_data.append({
-                    "name": s_name_sc,
-                    "person_count": person_count_sc,
-                    "avg_score": avg_score_sc,
-                    "anime_count": s_data_sc.get("anime_count", 0),
-                    "credit_per_person": s_data_sc.get("credit_count", 0) / max(person_count_sc, 1),
-                })
 
-        if studio_scatter_data:
-            max_anime_sc = max((d["anime_count"] for d in studio_scatter_data), default=1)
-            fig_ss = go.Figure(go.Scatter(
-                x=[d["person_count"] for d in studio_scatter_data],
-                y=[d["avg_score"] for d in studio_scatter_data],
-                mode="markers",
-                marker=dict(
-                    size=[min(d["anime_count"], 50) + 5 for d in studio_scatter_data],
-                    sizemode="area",
-                    sizeref=max_anime_sc / 400,
-                    color=[d["credit_per_person"] for d in studio_scatter_data],
-                    colorscale="Viridis", showscale=True,
-                    colorbar=dict(title="Credits/Person"),
-                    opacity=0.7,
-                ),
-                text=[d["name"] for d in studio_scatter_data],
-                hovertemplate="%{text}<br>規模: %{x}人<br>平均スコア: %{y:.2f}<br>"
-                              "Credits/Person: %{marker.color:.1f}<extra></extra>",
-            ))
-            fig_ss.update_layout(
-                title="スタジオ規模 vs 平均スコア（規模と品質の関係）",
-                xaxis_title="Person Count（スタジオ規模）",
-                yaxis_title="Average Person Score",
-            )
-            body += '<div class="card">'
-            body += "<h2>スタジオ規模 vs 平均スコア</h2>"
-            body += chart_guide(
-                "X=スタジオ規模（人数）、Y=平均人物スコア、サイズ=作品数、色=1人あたりクレジット数。"
-                "大規模スタジオ＝高品質とは限らない。小規模精鋭スタジオ（左上）の特定に有用。"
-                "色が明るい＝1人あたりの関与作品が多い＝多作なスタジオ。"
-            )
-            body += plotly_div_safe(fig_ss, "studio_size_quality", 550)
-            body += "</div>"
+
 
     # Data-driven key findings
     studio_count = len(studios) if studios else 0
@@ -10044,7 +10519,7 @@ def generate_credit_statistics_report():
             hovertemplate="%{x}: %{y:,}<extra></extra>",
         ))
         fig.update_layout(title="Role Distribution (Top 20)", xaxis_title="Role", yaxis_title="Credit Count",
-                          xaxis_tickangle=-45)
+                          xaxis_tickangle=-45, yaxis_type="log")
         body += '<div class="card">'
         body += "<h2>Role Distribution</h2>"
         body += plotly_div_safe(fig, "role_dist", 450)
@@ -10074,50 +10549,7 @@ def generate_credit_statistics_report():
         body += plotly_div_safe(fig, "credit_timeline", 400)
         body += "</div>"
 
-        # Dual-axis: Credits + Avg Anime Score
-        time_series_cs = load_json("time_series.json")
-        if time_series_cs:
-            ts_years = time_series_cs.get("years", [])
-            ts_series = time_series_cs.get("series", {})
-            avg_scores_ts = ts_series.get("avg_anime_score", {})
-            credit_counts_ts = ts_series.get("credit_count", {})
 
-            if ts_years and avg_scores_ts:
-                fig_dual = make_subplots(specs=[[{"secondary_y": True}]])
-                fig_dual.add_trace(
-                    go.Bar(
-                        x=ts_years,
-                        y=[credit_counts_ts.get(str(yr), 0) for yr in ts_years],
-                        name="クレジット数",
-                        marker_color="rgba(240,147,251,0.4)",
-                        hovertemplate="%{x}: %{y:,}クレジット<extra></extra>",
-                    ),
-                    secondary_y=False,
-                )
-                fig_dual.add_trace(
-                    go.Scatter(
-                        x=ts_years,
-                        y=[avg_scores_ts.get(str(yr), 0) for yr in ts_years],
-                        name="平均アニメスコア",
-                        mode="lines+markers",
-                        line=dict(color="#06D6A0", width=2),
-                        marker=dict(size=4),
-                        hovertemplate="%{x}: %{y:.2f}<extra></extra>",
-                    ),
-                    secondary_y=True,
-                )
-                fig_dual.update_layout(title="年間クレジット数 + 平均アニメスコア（Dual-axis）")
-                fig_dual.update_yaxes(title_text="クレジット数", secondary_y=False)
-                fig_dual.update_yaxes(title_text="平均アニメスコア", secondary_y=True)
-
-                body += '<div class="card">'
-                body += "<h2>クレジット数 + 平均アニメスコア（Dual-axis）</h2>"
-                body += chart_guide(
-                    "左Y軸（棒グラフ）: 年間クレジット数、右Y軸（折れ線）: 平均アニメスコア。"
-                    "クレジット数の増加と作品品質の推移を重ねることで、量と質の関係を読み取れます。"
-                )
-                body += plotly_div_safe(fig_dual, "credit_dual_axis", 450)
-                body += "</div>"
 
     # Collaboration stats
     collab = credit_stats.get("collaboration_stats", {})
@@ -10172,6 +10604,7 @@ def generate_credit_statistics_report():
                 fig_cpv.update_layout(
                     title="人物あたり総クレジット数分布 (Raincloud)",
                     yaxis_title="クレジット数",
+                    yaxis_type="log",
                     violinmode="overlay",
                 )
                 body += "<h3>人物あたり総クレジット数分布</h3>"
@@ -10221,7 +10654,8 @@ def generate_credit_statistics_report():
             marker=dict(size=6, color="#f5576c", opacity=0.6),
             hovertemplate="Credits/Year: %{x:.1f}<br>Consistency: %{y:.2f}<extra></extra>",
         ))
-        fig.update_layout(title="Productivity vs Consistency", xaxis_title="Credits per Year", yaxis_title="Consistency Score")
+        fig.update_layout(title="Productivity vs Consistency", xaxis_title="Credits per Year", yaxis_title="Consistency Score",
+                          xaxis_type="log")
         body += '<div class="card">'
         body += "<h2>Productivity vs Consistency</h2>"
         body += chart_guide(
@@ -10538,40 +10972,6 @@ def generate_cooccurrence_groups_report():
                 "右上は長期間にわたり多くの作品を共同制作した安定チーム。"
             )
             body += plotly_div_safe(fig_sc, "cooccurrence_scatter", 500)
-            body += "</div>"
-
-    # --- 時系列: 年別グループ形成数（初出年ごとの新グループ数）---
-    if groups:
-        first_year_counts: dict[int, int] = {}
-        for g in groups:
-            fy = g.get("first_year")
-            if fy:
-                first_year_counts[fy] = first_year_counts.get(fy, 0) + 1
-
-        if first_year_counts:
-            sorted_years = sorted(first_year_counts.keys())
-            fig_fy = go.Figure(go.Bar(
-                x=sorted_years,
-                y=[first_year_counts[yr] for yr in sorted_years],
-                marker_color=[
-                    f"rgba(160,210,219,{0.3 + 0.7 * first_year_counts[yr] / max(first_year_counts.values())})"
-                    for yr in sorted_years
-                ],
-                hovertemplate="%{x}年: %{y}グループ<extra></extra>",
-            ))
-            fig_fy.update_layout(
-                title="年別グループ形成数（初出年）",
-                xaxis_title="年",
-                yaxis_title="新規グループ数",
-            )
-            body += '<div class="card">'
-            body += "<h2>年別グループ形成数</h2>"
-            body += chart_guide(
-                "各グループの初出年（メンバーが初めて共参加した年）をカウント。"
-                "「いつ固定チームが形成され始めたか」の時系列推移を把握できます。"
-                "ピーク年は業界で固定チーム形成が活発だった時期を示します。"
-            )
-            body += plotly_div_safe(fig_fy, "cooccurrence_formation", 400)
             body += "</div>"
 
     # --- デュアル軸時系列: 年別新規グループ数（棒）+ 累積（折れ線）---
@@ -11013,16 +11413,6 @@ def generate_cooccurrence_groups_report():
             body += chart_guide("各クラスタのコラボパワー（avg_iv_score × log(共参加数) × 継続ボーナス）分布。")
             body += plotly_div_safe(fig_gc_viol, "group_cluster_power_violin", 450)
 
-            # Cluster size bar
-            fig_gc_sz = go.Figure(go.Bar(
-                x=[g_cluster_names[c] for c in range(k_g)],
-                y=[len(gc_groups.get(c, [])) for c in range(k_g)],
-                marker_color=[GRP_COLORS[c % len(GRP_COLORS)] for c in range(k_g)],
-            ))
-            fig_gc_sz.update_layout(
-                title="クラスタ別グループ数", yaxis_title="グループ数", xaxis_tickangle=-15,
-            )
-            body += plotly_div_safe(fig_gc_sz, "group_cluster_size_bar", 380)
             body += "</div>"
 
         # ---- Chart: コラボレーションパワー TOP30 ---
@@ -11093,14 +11483,19 @@ def generate_cooccurrence_groups_report():
                 "のルールで自動分類。「シリーズ継続型」「長期確立チーム」「新興高品質チーム」等を識別します。"
             )
             reasons_sorted = sorted(reason_counter.keys(), key=lambda r: -reason_counter[r])
-            fig_reason_pie = go.Figure(go.Pie(
-                labels=reasons_sorted,
-                values=[reason_counter[r] for r in reasons_sorted],
-                marker_colors=[REASON_COLORS.get(r, "#888") for r in reasons_sorted],
-                hole=0.4, textinfo="label+percent",
+            fig_reason_bar_h = go.Figure(go.Bar(
+                y=reasons_sorted,
+                x=[reason_counter[r] for r in reasons_sorted],
+                orientation="h",
+                marker_color=[REASON_COLORS.get(r, "#888") for r in reasons_sorted],
+                hovertemplate="%{y}: %{x}グループ<extra></extra>",
             ))
-            fig_reason_pie.update_layout(title="グルーピング理由 構成比")
-            body += plotly_div_safe(fig_reason_pie, "group_reason_pie", 420)
+            fig_reason_bar_h.update_layout(
+                title="グルーピング理由 構成比",
+                xaxis_title="グループ数",
+                yaxis_title="分類",
+            )
+            body += plotly_div_safe(fig_reason_bar_h, "group_reason_bar", 420)
 
             # Stacked bar: reason × is_active
             fig_reason_bar = go.Figure()
@@ -13827,7 +14222,7 @@ def generate_longitudinal_analysis_report():  # noqa: C901
             ps8 = [max(6, min(24, (scores_by_pid.get(pid, {}).get("iv_score") or 5) * 0.35))
                    for pid in person_roles]
             ph8 = [f"{scores_by_pid.get(pid,{}).get('name',pid[:15])}<br>"
-                   f"IV Score: {scores_by_pid.get(pid,{}).get('iv_score',0):.1f}"
+                   f"IV Score: {scores_by_pid.get(pid,{}).get('iv_score',0):.3f}"
                    for pid in person_roles]
 
             fig8.add_trace(go.Scatter(
@@ -15807,6 +16202,11 @@ def generate_longitudinal_analysis_report():  # noqa: C901
         # ── Chart 26: イベントスタディ — 転職前後の稼働変化 ───────────────
         try:
             body += "<h3>Chart 26: イベントスタディ — 転職前後の年間稼働変化 (t=0が転職年)</h3>"
+            body += caveat_box(
+                "因果解釈には平行トレンド仮定（転職がなかった場合に両群が同じ推移をたどる）が必要です。"
+                "転職前（t=-4〜-1）のトレンドが両群で平行でない場合、転職後の差は因果効果ではなく"
+                "選抜効果（もともと異なるトレンドの人が転職する）を反映している可能性があります。"
+            )
             body += chart_guide(
                 "t=0が転職年（スタジオ規模変更年）。"
                 "x=-4〜+4は転職年から何年前/後か。y=平均年間稼働作品数。"
@@ -16728,6 +17128,11 @@ def generate_longitudinal_analysis_report():  # noqa: C901
         # ── Chart 34: キャリア生存曲線 (Kaplan-Meier by cohort) ───────────
         try:
             body += "<h3>Chart 34: キャリア生存曲線 — コホート別離脱パターン</h3>"
+            body += caveat_box(
+                "単純な断面集計でありKM法の打ち切り処理は未実施です。"
+                "2010年以降デビュー者の長期生存率は観測期間不足で過小推定されます。"
+                "コホート間の比較は観測年数の差を考慮して行ってください。"
+            )
             body += chart_guide(
                 "x軸: career_age（デビューから何年目か）。y軸: その年数まで現役の割合（%）。"
                 "曲線が急に落ちる年 = 多くの人が離脱する時期。"
@@ -17015,7 +17420,7 @@ def generate_longitudinal_analysis_report():  # noqa: C901
 
             if sankey_nodes and sankey_links_src:
                 fig36 = go.Figure(go.Sankey(
-                    arrangement="snap",
+                    arrangement="fixed",
                     node=dict(
                         label=[n["label"] for n in sankey_nodes],
                         color=[n["color"] for n in sankey_nodes],
@@ -17256,7 +17661,7 @@ def generate_longitudinal_analysis_report():  # noqa: C901
                 subplot_titles=["区分別IV Score分布", "年別 離脱者スコア推移"],
                 column_widths=[0.45, 0.55],
             )
-            # Left: raincloud per category (drop only those with iv_score > 0)
+            # Left: raincloud per category (exclude 1-credit noise)
             violin_cats_39 = [
                 ("現役継続", active_list, "#06D6A0"),
                 ("ベテラン離脱(>10年)", vet_drop, "#4CC9F0"),
@@ -17264,7 +17669,7 @@ def generate_longitudinal_analysis_report():  # noqa: C901
                 ("新卒即離脱(≤3年)", early_drop, "#FF6B35"),
             ]
             for cat_name, cat_group, cat_col in violin_cats_39:
-                scores_cat = [p["iv_score"] for p in cat_group if p["iv_score"] > 0]
+                scores_cat = [p["iv_score"] for p in cat_group if p.get("total_credits", 0) >= 2]
                 if scores_cat:
                     fig39.add_trace(
                         _violin_raincloud(scores_cat, cat_name, cat_col),
@@ -17275,7 +17680,7 @@ def generate_longitudinal_analysis_report():  # noqa: C901
             for cat_name, cat_group, cat_col in violin_cats_39[:3]:  # skip active
                 yr_score: dict = _dd11(list)
                 for p in cat_group:
-                    if 1990 <= p["first_year"] <= 2018 and p["iv_score"] > 0:
+                    if 1990 <= p["first_year"] <= 2018 and p.get("total_credits", 0) >= 2:
                         yr_score[p["first_year"]].append(p["iv_score"])
                 if yr_score:
                     yrs_sorted = sorted(yr_score)
@@ -17299,10 +17704,10 @@ def generate_longitudinal_analysis_report():  # noqa: C901
             body += plotly_div_safe(fig39, "lost-talent-chart", height=540)
 
             # Quantify lost talent
-            high_threshold = 30.0  # top ~10% iv_score
+            high_threshold = IV_PCTILES["p90"]  # 上位10% (データ駆動)
             lost_high = [p for p in (mid_drop + vet_drop) if p["iv_score"] >= high_threshold]
             body += key_findings([
-                f"離脱者(中堅+ベテラン)のうちIV Score≥{high_threshold:.0f}の高スコア人材: "
+                f"離脱者(中堅+ベテラン)のうちIV上位10%（≥{high_threshold:.3f}）の高スコア人材: "
                 f"{len(lost_high):,}人 — これが「失われた有能さ」",
                 "現役継続者のスコアが高い = 生存者バイアス（残った人が優秀なのは自明）",
                 "新卒即離脱者のスコアが低い = 活動期間が短く評価されにくい（低推定の可能性）",
@@ -17327,7 +17732,7 @@ def generate_longitudinal_analysis_report():  # noqa: C901
             debut_cohort_scores: dict = _dd11(lambda: {"all": [], "stayed": [], "early": []})
             for p in person_registry:
                 fy = p["first_year"]
-                if not (1990 <= fy <= 2020) or p["iv_score"] <= 0:
+                if not (1990 <= fy <= 2020) or p.get("total_credits", 0) < 2:
                     continue
                 debut_cohort_scores[fy]["all"].append(p["iv_score"])
                 if not p["is_active"] and p["career_span"] <= 3:
@@ -17364,9 +17769,9 @@ def generate_longitudinal_analysis_report():  # noqa: C901
 
             # Right: score distribution by fate (raincloud)
             fate_groups_40 = [
-                ("現役継続", [p for p in active_list if p["iv_score"] > 0], "#06D6A0"),
-                ("中堅離脱", [p for p in mid_drop if p["iv_score"] > 0], "#FFD166"),
-                ("新卒即離脱", [p for p in early_drop if p["iv_score"] > 0], "#FF6B35"),
+                ("現役継続", [p for p in active_list if p.get("total_credits", 0) >= 2], "#06D6A0"),
+                ("中堅離脱", [p for p in mid_drop if p.get("total_credits", 0) >= 2], "#FFD166"),
+                ("新卒即離脱", [p for p in early_drop if p.get("total_credits", 0) >= 2], "#FF6B35"),
             ]
             for fname, fgroup, fcol in fate_groups_40:
                 scores_f = [p["iv_score"] for p in fgroup][:500]  # cap for speed
@@ -17906,7 +18311,7 @@ def generate_shap_report():
         "Shapley値（協力ゲーム理論由来）は「特徴量iが存在することでモデル予測がどれだけ変わるか」を"
         "全ての特徴量の組み合わせにわたって公平に平均した限界貢献です。"
         "単純な相関や回帰係数と異なり、特徴量間の相互作用・非線形性を考慮した上での純粋な寄与度を示します。",
-        "本分析ではiv_score（操作変数推定スコア）をBiRank・Patronage・Person FEなど"
+        "本分析ではiv_score（5成分PCA重み付きスコア）をBiRank・Patronage・Person FEなど"
         "13特徴量から予測するモデルを構築し、各特徴量の情報量増大を可視化しています。"
         "「この人のスコアが高い/低い理由は何か」を定量的に説明する根拠として活用できます。",
     ])
@@ -18043,7 +18448,7 @@ def generate_knowledge_network_report():  # noqa: C901
         x=awcc_vals, nbinsx=80, marker_color="#f093fb",
         hovertemplate="AWCC: %{x:.4f}<br>Count: %{y}<extra></extra>",
     ))
-    fig2.update_layout(title="AWCC 分布", xaxis_title="AWCC", yaxis_title="人数")
+    fig2.update_layout(title="AWCC 分布", xaxis_title="AWCC", yaxis_title="人数", yaxis_type="log")
     fig2 = add_distribution_stats(fig2, awcc_vals)
     body += '<div class="card"><h2>2. AWCC 分布</h2>'
     body += section_desc("加重クラスタリング係数の全体分布。右裾が長いロングテール型が典型。")
@@ -18055,7 +18460,7 @@ def generate_knowledge_network_report():  # noqa: C901
         x=ndi_vals, nbinsx=80, marker_color="#a0d2db",
         hovertemplate="NDI: %{x:.4f}<br>Count: %{y}<extra></extra>",
     ))
-    fig3.update_layout(title="NDI 分布", xaxis_title="NDI", yaxis_title="人数")
+    fig3.update_layout(title="NDI 分布", xaxis_title="NDI", yaxis_title="人数", yaxis_type="log")
     fig3 = add_distribution_stats(fig3, ndi_vals)
     body += '<div class="card"><h2>3. NDI 分布</h2>'
     body += section_desc("ネットワーク多様性指標の分布。高NDIは多様なコミュニティにまたがって活動していることを示す。")
@@ -18124,9 +18529,14 @@ def generate_knowledge_network_report():  # noqa: C901
             title="キャリアステージ別 AWCC分布",
             yaxis_title="AWCC", showlegend=False,
         )
-        body += '<div class="card"><h2>6. キャリアステージ別 AWCC</h2>'
+        body += '<div class="card"><h2>6. キャリアステージ別 AWCC（コミュニティ橋渡し度）</h2>'
         body += section_desc("キャリアステージが上がるとAWCCが向上するかを検証。"
                              "上位ステージほど中央値が高ければネットワーク的蓄積を裏付ける。")
+        body += caveat_box(
+            "長いキャリア → 多くの共同作業者 → 高いAWCCは定義上の関係です。"
+            "この相関は「知識蓄積」の証拠ではなく「活動量の累積」を反映しています。"
+            "AWCCはコミュニティ橋渡し度（構造的位置）の指標として解釈してください。"
+        )
         body += chart_guide("箱の中央線=中央値。箱=IQR。ステージが上がるほどAWCCが高い傾向が見えるか確認。")
         body += plotly_div_safe(fig6, "kn_stage_awcc", 450)
         body += "</div>"
@@ -18182,23 +18592,8 @@ def generate_knowledge_network_report():  # noqa: C901
             d["cluster"] = int(labels[idx_i])
             d["cluster_name"] = cluster_names[int(labels[idx_i])]
 
-        # Scatter
-        fig9a = go.Figure()
+        # Removed: K-Means cluster scatter (AWCC vs NDI) — redundant with Chart 1
         km_colors = ["#f093fb", "#a0d2db", "#06D6A0", "#FFD166", "#f5576c"]
-        sample9 = subsample_for_scatter(items, max_n=5000)
-        for cid in range(n_clusters):
-            members = [d for d in sample9 if d["cluster"] == cid]
-            if members:
-                fig9a.add_trace(go.Scattergl(
-                    x=[d["awcc"] for d in members],
-                    y=[d["ndi"] for d in members],
-                    mode="markers",
-                    marker=dict(size=4, opacity=0.5, color=km_colors[cid % len(km_colors)]),
-                    name=cluster_names[cid],
-                    text=[d["name"] for d in members],
-                    hovertemplate="<b>%{text}</b><br>AWCC: %{x:.4f}<br>NDI: %{y:.4f}<extra></extra>",
-                ))
-        fig9a.update_layout(title="K-Meansクラスタ別 AWCC vs NDI", xaxis_title="AWCC", yaxis_title="NDI")
 
         # Profile bar
         fig9b = go.Figure()
@@ -18214,7 +18609,7 @@ def generate_knowledge_network_report():  # noqa: C901
         body += '<div class="card"><h2>9. K-Meansクラスタリング分析</h2>'
         body += section_desc(f"4特徴量（AWCC/NDI/Community Reach/Degree）で{n_clusters}クラスタに自動分類。"
                              "知識ネットワーク上の典型的なポジショニングパターンを抽出。")
-        body += plotly_div_safe(fig9a, "kn_km_scatter", 500)
+        # Scatter chart removed (redundant with Chart 1)
         body += plotly_div_safe(fig9b, "kn_km_profile", 400)
         body += "</div>"
 
@@ -18353,7 +18748,7 @@ def generate_anime_value_report():  # noqa: C901
         x=comp_vals, nbinsx=80, marker_color="#f093fb",
         hovertemplate="Value: %{x:.1f}<br>Count: %{y}<extra></extra>",
     ))
-    fig1.update_layout(title="Composite Value 分布", xaxis_title="Composite Value", yaxis_title="作品数")
+    fig1.update_layout(title="Composite Value 分布", xaxis_title="Composite Value", yaxis_title="作品数", yaxis_type="log")
     fig1 = add_distribution_stats(fig1, comp_vals)
     body += '<div class="card"><h2>1. Composite Value 分布</h2>'
     body += section_desc("全作品の総合価値スコアの分布。5軸（商業/批評/創造/文化/技術）の統合値。")
@@ -18394,7 +18789,8 @@ def generate_anime_value_report():  # noqa: C901
         hovertemplate="<b>%{text}</b><br>Staff: %{x}<br>Value: %{y:.1f}<extra></extra>",
     ))
     fig3.update_layout(title="Composite Value vs Staff Count",
-                       xaxis_title="スタッフ数", yaxis_title="Composite Value")
+                       xaxis_title="スタッフ数", yaxis_title="Composite Value",
+                       xaxis_type="log")
     fig3 = add_scatter_correlation(fig3, [d["staff_count"] for d in sample3],
                                    [d["composite_value"] for d in sample3])
     body += '<div class="card"><h2>3. Composite Value vs スタッフ数</h2>'
@@ -18410,7 +18806,7 @@ def generate_anime_value_report():  # noqa: C901
             x=vps_vals, nbinsx=80, marker_color="#06D6A0",
             hovertemplate="Value/Staff: %{x:.2f}<br>Count: %{y}<extra></extra>",
         ))
-        fig4.update_layout(title="Value per Staff 分布", xaxis_title="Value / Staff", yaxis_title="作品数")
+        fig4.update_layout(title="Value per Staff 分布", xaxis_title="Value / Staff", yaxis_title="作品数", yaxis_type="log")
         fig4 = add_distribution_stats(fig4, vps_vals)
         body += '<div class="card"><h2>4. スタッフ当たり価値 分布</h2>'
         body += section_desc("1人当たりの価値生産性を示す。高い値は少人数で高価値を生み出した作品。")
@@ -18583,32 +18979,7 @@ def generate_anime_value_report():  # noqa: C901
             body += plotly_div_safe(fig8, "av_role_box", 450)
             body += "</div>"
 
-    # --- Chart 9: Decade × era heatmap ---
-    if decade_data:
-        # 年代ごとの統計量ヒートマップ（年代×指標）
-        metrics = ["平均", "中央値", "標準偏差", "作品数"]
-        z_data = []
-        for dec in decades_sorted:
-            vals = decade_data[dec]
-            z_data.append([np.mean(vals), np.median(vals), np.std(vals), len(vals)])
-
-        z_array = np.array(z_data).T  # metrics × decades
-        fig9 = go.Figure(go.Heatmap(
-            z=z_array.tolist(),
-            x=[str(d) + "s" for d in decades_sorted],
-            y=metrics,
-            colorscale="Viridis",
-            text=[[f"{z_array[i, j]:.1f}" for j in range(len(decades_sorted))]
-                  for i in range(len(metrics))],
-            texttemplate="%{text}",
-            hovertemplate="年代: %{x}<br>指標: %{y}<br>値: %{z:.1f}<extra></extra>",
-        ))
-        fig9.update_layout(title="年代別 Composite Value 統計量ヒートマップ")
-        body += '<div class="card"><h2>9. 年代別統計量ヒートマップ</h2>'
-        body += section_desc("年代ごとの平均・中央値・標準偏差・作品数を一覧。"
-                             "色の濃さで時代間の比較が直感的に可能。")
-        body += plotly_div_safe(fig9, "av_decade_heatmap", 350)
-        body += "</div>"
+    # Removed: Decade statistics heatmap — mixed magnitudes (count, mean, std) on single color scale
 
     # Key findings
     top3_titles = ", ".join(d["title"][:15] for d in top30[:3])
@@ -18802,22 +19173,65 @@ def generate_akm_diagnostics_report():
         n_total = akm.get("connected_set_size", 0)
         n_stayers = max(n_total - n_movers, 0)
         if n_total > 0:
-            fig4 = go.Figure(go.Pie(
-                labels=["Movers（転職者）", "Stayers（定着者）"],
-                values=[n_movers, n_stayers],
-                marker_colors=["#f093fb", "#a0d2db"],
-                hole=0.4, textinfo="label+percent+value",
-                hovertemplate="%{label}: %{value:,} (%{percent})<extra></extra>",
+            mover_pct = n_movers / n_total * 100
+            stayer_pct = n_stayers / n_total * 100
+            fig4 = go.Figure()
+            fig4.add_trace(go.Bar(
+                y=[""], x=[n_movers], name="Movers（転職者）",
+                orientation="h", marker_color="#f093fb",
+                text=[f"{n_movers:,} ({mover_pct:.1f}%)"], textposition="inside",
+                hovertemplate="Movers: %{x:,}<extra></extra>",
             ))
-            fig4.update_layout(title="Mover vs Stayer 構成比")
+            fig4.add_trace(go.Bar(
+                y=[""], x=[n_stayers], name="Stayers（定着者）",
+                orientation="h", marker_color="#a0d2db",
+                text=[f"{n_stayers:,} ({stayer_pct:.1f}%)"], textposition="inside",
+                hovertemplate="Stayers: %{x:,}<extra></extra>",
+            ))
+            fig4.update_layout(
+                barmode="stack", title="Mover vs Stayer 構成比",
+                xaxis_title="人数", height=200, showlegend=True,
+                legend=dict(orientation="h", y=1.2),
+            )
             body += '<div class="card"><h2>4. Mover vs Stayer 構成比</h2>'
             body += section_desc(
                 "AKM推定における「転職者（Mover）」と「定着者（Stayer）」の比率。"
                 "Moverが多いほど person FE と studio FE の識別精度が高い。"
             )
-            body += chart_guide("ドーナツの各セグメントはMover/Stayerの人数と割合。"
+            body += chart_guide("棒の長さはMover/Stayerの人数。"
                                 "Mover比率が高い（>30%）ほど推定の信頼性が高い。")
-            body += plotly_div_safe(fig4, "akm_movers_pie", 400)
+            body += plotly_div_safe(fig4, "akm_movers_bar", 250)
+            body += "</div>"
+
+    # --- Chart 4B: Person FE vs Studio FE density scatter ---
+    scores_akm = load_json("scores.json")
+    if scores_akm and isinstance(scores_akm, list):
+        pfe_vals = [p.get("person_fe", 0) for p in scores_akm]
+        sfe_vals = [p.get("studio_fe_exposure", 0) for p in scores_akm]
+        name_vals = [p.get("name", p.get("person_id", "")) for p in scores_akm]
+        if pfe_vals and sfe_vals:
+            fig_pfe_sfe = density_scatter_2d(
+                pfe_vals, sfe_vals,
+                xlabel="Person FE (θ)", ylabel="Studio FE Exposure",
+                title="Person FE vs Studio FE Exposure — AKM分解の2軸",
+                label_names=name_vals, label_top=12,
+                height=500,
+            )
+            r_ps = float(np.corrcoef(pfe_vals, sfe_vals)[0, 1])
+            fig_pfe_sfe.add_annotation(
+                x=0.02, y=0.98, xref="paper", yref="paper",
+                text=f"r={r_ps:.3f}, n={len(pfe_vals):,}",
+                showarrow=False, font=dict(size=11, color="#FFD166"),
+                bgcolor="rgba(0,0,0,0.5)", bordercolor="#FFD166", borderwidth=1, borderpad=4,
+            )
+            body += '<div class="card"><h2>4B. Person FE vs Studio FE Exposure（密度）</h2>'
+            body += section_desc(
+                "AKMで推定されたPerson FE（個人固定効果）とStudio FE Exposure（スタジオ環境の質）の"
+                "共同分布。両者の相関が低ければ、AKMは個人の貢献をスタジオ効果から"
+                "正しく分離できていることを示す。"
+            )
+            body += chart_guide("暖色域=密集。r≈0なら識別成功。正の相関→「良いスタジオに良い人が集まる」選抜効果。")
+            body += plotly_div_safe(fig_pfe_sfe, "akm_pfe_sfe_density", 500)
             body += "</div>"
 
     # --- Chart 5: Structural estimation forest plot ---
@@ -19075,6 +19489,20 @@ def generate_expected_ability_report():  # noqa: C901
     body += f'<div class="stat-card"><div class="value">{np.mean(gap_vals):.4f}</div><div class="label">平均Gap</div></div>'
     body += f'<div class="stat-card"><div class="value">{np.std(gap_vals):.4f}</div><div class="label">Gap標準偏差</div></div>'
     body += "</div>"
+    body += caveat_box(
+        "期待能力の3構成要素（協業者IV、作品composite_value、スタジオ水準）はすべて"
+        "IV Scoreと同一のクレジットデータから派生しています。Expected vs Actual散布図の"
+        "相関は循環的であり、独立した予測力の証拠ではありません。"
+    )
+    if model_r2 < 0.15:
+        body += (
+            '<div class="insight-box">'
+            f"<strong>注意: モデルの説明力は限定的です（R²={model_r2:.4f}）。</strong> "
+            "期待能力モデルは観測された分散のごく一部しか説明できていません。"
+            "Gap（期待−実際の乖離）は参考値として解釈し、"
+            "個別の人材評価において過度な重みを置かないでください。"
+            "</div>"
+        )
 
     # --- Chart 1: Expected vs Actual scatter ---
     sample1 = subsample_for_scatter(items, max_n=5000)
@@ -19159,26 +19587,7 @@ def generate_expected_ability_report():  # noqa: C901
         body += f"<td>{d['iv']:.2f}</td></tr>"
     body += "</tbody></table></div>"
 
-    # --- Chart 5: Gap vs IV scatter ---
-    items_with_iv = [d for d in items if d["iv"] > 0]
-    if items_with_iv:
-        sample5 = subsample_for_scatter(items_with_iv, max_n=5000)
-        fig5 = go.Figure(go.Scattergl(
-            x=[d["iv"] for d in sample5],
-            y=[d["gap"] for d in sample5],
-            mode="markers",
-            marker=dict(size=4, opacity=0.4, color="#f5576c"),
-            text=[d["name"] for d in sample5],
-            hovertemplate="<b>%{text}</b><br>IV: %{x:.2f}<br>Gap: %{y:.3f}<extra></extra>",
-        ))
-        fig5.update_layout(title="Gap vs IV Score", xaxis_title="IV Score", yaxis_title="Gap")
-        fig5 = add_scatter_correlation(fig5, [d["iv"] for d in sample5], [d["gap"] for d in sample5])
-        fig5.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
-        body += '<div class="card"><h2>5. Gap vs IV Score</h2>'
-        body += section_desc("IVスコアとGapの関係。高IV×正Gapなら環境に関係なく実力がある。"
-                             "高IV×負Gapなら環境の恩恵で高スコアを得ている可能性。")
-        body += plotly_div_safe(fig5, "ea_gap_iv", 500)
-        body += "</div>"
+    # Removed: Gap vs IV scatter — mechanical positive correlation (Gap is derived from IV)
 
     # --- Chart 6: Gap vs career years scatter ---
     items_with_years = [d for d in items if d["active_years"] > 0]
@@ -19250,30 +19659,7 @@ def generate_expected_ability_report():  # noqa: C901
             else:
                 type_names[c] = f"C{c+1}: 標準（低期待×低実際）"
 
-        sample8 = subsample_for_scatter(items, max_n=5000)
-        label_lookup = {d["pid"]: int(labels[i]) for i, d in enumerate(items)}
-        km_colors = ["#f093fb", "#a0d2db", "#06D6A0", "#FFD166"]
-        fig8 = go.Figure()
-        for cid in range(n_clusters):
-            members = [d for d in sample8 if label_lookup.get(d["pid"], -1) == cid]
-            if members:
-                fig8.add_trace(go.Scattergl(
-                    x=[d["expected"] for d in members],
-                    y=[d["actual"] for d in members],
-                    mode="markers",
-                    marker=dict(size=4, opacity=0.5, color=km_colors[cid % len(km_colors)]),
-                    name=type_names[cid],
-                    text=[d["name"] for d in members],
-                    hovertemplate="<b>%{text}</b><br>Expected: %{x:.3f}<br>Actual: %{y:.3f}<extra></extra>",
-                ))
-        # 対角線
-        fig8.add_trace(go.Scatter(
-            x=[line_min, line_max], y=[line_min, line_max],
-            mode="lines", line=dict(dash="dash", color="rgba(255,255,255,0.3)", width=1),
-            name="y=x", showlegend=False,
-        ))
-        fig8.update_layout(title="K-Means タイポロジー分析",
-                           xaxis_title="期待能力", yaxis_title="実際能力")
+        # Removed: K-Means typology scatter — nearly identical to Chart 1 (same axes)
 
         # クラスタ別サイズ表示
         cluster_sizes = {}
@@ -19283,9 +19669,6 @@ def generate_expected_ability_report():  # noqa: C901
         body += '<div class="card"><h2>8. タイポロジー分析（K-Means K=4）</h2>'
         body += section_desc("期待能力×実際能力の2軸でK=4クラスタに自動分類。"
                              "4象限に対応するタイプを特定。")
-        body += chart_guide("各クラスタは期待と実際のバランスで命名。"
-                            "「隠れた実力」は低い期待を超える実力者。「期待の星」は将来性の高い人物。")
-        body += plotly_div_safe(fig8, "ea_typology", 550)
 
         # クラスタサイズ表
         body += "<table><thead><tr><th>タイプ</th><th>人数</th><th>比率</th></tr></thead><tbody>"
@@ -19453,6 +19836,14 @@ def generate_career_friction_report():  # noqa: C901
         body += section_desc("キャリア摩擦と総合評価の関係。負の相関なら摩擦が高いほど評価が低い。")
         body += chart_guide("左側（低摩擦）で高IV、右側（高摩擦）で低IVなら、"
                             "スムーズなキャリアが高評価に繋がることを示す。")
+        body += competing_interpretations(
+            "高摩擦が低IVを引き起こす（摩擦がキャリア評価を下げる）",
+            [
+                "低活動量が高摩擦AND低IVを同時に駆動する（第三変数: クレジット数が両指標を決定）",
+                "低IVの人物がブランクを挟みやすい（因果が逆方向: 低評価→不安定キャリア→高摩擦）",
+                "業界退出予備軍の混在: 実質離脱者は摩擦が高くIVも低いが、因果関係ではない",
+            ],
+        )
         body += plotly_div_safe(fig2, "cf_iv", 500)
         body += "</div>"
 
@@ -19499,6 +19890,12 @@ def generate_career_friction_report():  # noqa: C901
         body += '<div class="card"><h2>4. キャリアステージ別 摩擦指数</h2>'
         body += section_desc("上位ステージに到達した人物ほど摩擦が低いか？ "
                              "キャリア進行と安定性の関係を可視化。")
+        body += caveat_box(
+            "高ステージ到達者は長期生存者です。低摩擦は「続けた結果」であり"
+            "「成功の原因」ではない可能性があります（生存バイアス）。"
+            "高摩擦の人物は早期離脱してステージ1-2に残るため、上位ステージの分布は"
+            "生存フィルタ通過後のサンプルです。"
+        )
         body += chart_guide("ステージが上がるにつれて箱（中央値）が下がるなら、"
                             "成功者ほどスムーズなキャリアパスを歩んでいることを示す。")
         body += plotly_div_safe(fig4, "cf_stage_box", 450)
@@ -20432,7 +20829,7 @@ def generate_score_layers_report():
     body += f'<div class="stat-card"><div class="value">{fmt_num(n)}</div><div class="label">評価対象人数</div></div>'
     body += f'<div class="stat-card"><div class="value">{weight_method}</div><div class="label">重み導出手法</div></div>'
     body += f'<div class="stat-card"><div class="value">{var_expl:.1%}</div><div class="label">PC1 分散説明率</div></div>'
-    body += f'<div class="stat-card"><div class="value">3+1</div><div class="label">スコア層数</div></div>'
+    body += f'<div class="stat-card"><div class="value">5+2</div><div class="label">成分数 (5主成分+Dormancy+Friction)</div></div>'
     body += "</div>"
 
     # ============================================================
@@ -20531,6 +20928,10 @@ def generate_score_layers_report():
         mean_val = float(np.mean(arr))
         fig2.add_vline(x=mean_val, line_dash="dot", line_color="#4488ff", line_width=1,
                        row=r + 1, col=c + 1)
+    # Log x-axis for power-law distributed components: BiRank (row1,col2), Patronage (row1,col3), AWCC (row1,col4)
+    fig2.update_xaxes(type="log", row=1, col=2)
+    fig2.update_xaxes(type="log", row=1, col=3)
+    fig2.update_xaxes(type="log", row=1, col=4)
     fig2.update_layout(height=550, margin=dict(t=60, b=40))
     body += plotly_div_safe(fig2, "component_histograms", 550)
     body += "</div>"
@@ -20588,48 +20989,46 @@ def generate_score_layers_report():
     body += "</div>"
 
     # ============================================================
-    # Chart 5: 層間散布図 (因果 vs 構造 / 因果 vs 協業)
+    # Chart 5: 層間密度散布図 (因果 vs 構造 / 因果 vs 協業)
     # ============================================================
-    body += '<div class="card"><h2>5. 層間散布図: 因果層 vs 構造層 / 協業層</h2>'
+    sample_idx2 = rng.choice(n, min(5000, n), replace=False)
+
+    # 5a: 因果 vs 構造
+    body += '<div class="card"><h2>5a. 因果層 vs 構造層（密度等高線）</h2>'
     body += section_desc(
-        "各人を因果層（Person FE パーセンタイル）vs 構造層・協業層にプロット。"
-        "対角線から外れた点は「層間で評価が乖離する人物」。"
+        "各人を因果層（Person FE パーセンタイル）vs 構造層にプロット。"
+        "密度等高線で集中領域を強調し、対角線からの乖離が「層間評価ギャップ」。"
     )
-    body += chart_guide("対角線上=両層で一致。上側=構造/協業で高評価、下側=因果で高評価。色はIV Score。")
+    body += chart_guide("暖色域=人物が密集。対角線上=両層で一致。上側=構造で高評価、下側=因果で高評価。")
+    names_list = [s.get("name") or s.get("name_ja", "") for s in scores]
+    fig5a = density_scatter_2d(
+        causal_agg.tolist(), structural_agg.tolist(),
+        xlabel="因果層 パーセンタイル", ylabel="構造層 パーセンタイル",
+        title="因果層 vs 構造層 — 人物密度",
+        label_names=names_list, label_top=10,
+        height=500,
+    )
+    fig5a.add_shape(type="line", x0=0, y0=0, x1=100, y1=100,
+                    line=dict(color="rgba(255,255,255,0.3)", dash="dash"))
+    body += plotly_div_safe(fig5a, "layer_density_cs", 500)
+    body += "</div>"
 
-    sample_idx2 = rng.choice(n, min(4000, n), replace=False)
-    fig5 = make_subplots(rows=1, cols=2, subplot_titles=[
-        "因果層 vs 構造層", "因果層 vs 協業層",
-    ], horizontal_spacing=0.08)
-
-    for col, (y_arr, y_name) in enumerate([
-        (structural_agg, "構造層 pctl"),
-        (collab_agg, "協業層 pctl"),
-    ], 1):
-        fig5.add_trace(go.Scattergl(
-            x=causal_agg[sample_idx2], y=y_arr[sample_idx2],
-            mode="markers",
-            marker=dict(
-                size=3, opacity=0.4,
-                color=iv[sample_idx2],
-                colorscale="Viridis",
-                colorbar=dict(title="IV Score") if col == 2 else None,
-                showscale=(col == 2),
-            ),
-            showlegend=False,
-            hovertemplate="因果: %{x:.1f}<br>" + y_name + ": %{y:.1f}<extra></extra>",
-        ), row=1, col=col)
-        # Diagonal reference line
-        fig5.add_shape(type="line", x0=0, y0=0, x1=100, y1=100,
-                       line=dict(color="rgba(255,255,255,0.3)", dash="dash"),
-                       row=1, col=col)
-
-    fig5.update_xaxes(title_text="因果層 pctl", row=1, col=1)
-    fig5.update_xaxes(title_text="因果層 pctl", row=1, col=2)
-    fig5.update_yaxes(title_text="構造層 pctl", row=1, col=1)
-    fig5.update_yaxes(title_text="協業層 pctl", row=1, col=2)
-    fig5.update_layout(height=450)
-    body += plotly_div_safe(fig5, "layer_scatter", 450)
+    # 5b: 因果 vs 協業
+    body += '<div class="card"><h2>5b. 因果層 vs 協業層（密度等高線）</h2>'
+    body += section_desc(
+        "因果層 vs 協業層。協業層が高く因果層が低い=環境（監督・スタジオ）に恵まれた人物。"
+        "逆のパターンは独立した実力者。"
+    )
+    fig5b = density_scatter_2d(
+        causal_agg.tolist(), collab_agg.tolist(),
+        xlabel="因果層 パーセンタイル", ylabel="協業層 パーセンタイル",
+        title="因果層 vs 協業層 — 人物密度",
+        label_names=names_list, label_top=10,
+        height=500,
+    )
+    fig5b.add_shape(type="line", x0=0, y0=0, x1=100, y1=100,
+                    line=dict(color="rgba(255,255,255,0.3)", dash="dash"))
+    body += plotly_div_safe(fig5b, "layer_density_cc", 500)
     body += "</div>"
 
     # ============================================================
@@ -20696,49 +21095,69 @@ def generate_score_layers_report():
     body += "</div>"
 
     # ============================================================
-    # Chart 8: Person FE vs BiRank 散布図 (最重要な2軸)
+    # Chart 8: Person FE vs BiRank 密度散布図 (最重要な2軸)
     # ============================================================
-    body += '<div class="card"><h2>8. Person FE vs BiRank（因果×構造の主軸）</h2>'
+    body += '<div class="card"><h2>8. Person FE vs BiRank（因果×構造の主軸 — 密度）</h2>'
     body += section_desc(
-        "因果層の代表（Person FE）と構造層の代表（BiRank）の生値散布図。"
+        "因果層の代表（Person FE）と構造層の代表（BiRank）の生値を密度等高線で表示。"
         "右上=両方で高い（真のトップ）。右下=個人の実力は高いがネットワーク位置が低い。"
     )
+    body += chart_guide("暖色=人物密集。ラベル付き点=BiRank上位者。原点付近に大半が集中するのはべき乗則の特徴。")
 
-    fig8 = go.Figure()
-    fig8.add_trace(go.Scattergl(
-        x=pfe[sample_idx2], y=br[sample_idx2],
-        mode="markers",
-        marker=dict(size=3, opacity=0.3, color=iv[sample_idx2],
-                    colorscale="Viridis", showscale=True,
-                    colorbar=dict(title="IV")),
-        hovertemplate="PFE: %{x:.2f}<br>BiRank: %{y:.2f}<extra></extra>",
-    ))
-    fig8 = add_scatter_correlation(fig8, pfe[sample_idx2], br[sample_idx2])
-    fig8.update_layout(xaxis_title="Person FE (θ)", yaxis_title="BiRank",
-                       height=500)
+    fig8 = density_scatter_2d(
+        pfe.tolist(), br.tolist(),
+        xlabel="Person FE (θ)", ylabel="BiRank",
+        title="Person FE vs BiRank — 密度等高線",
+        label_names=names_list, label_top=12,
+        height=500,
+    )
+    # Add correlation annotation
+    r_pb = float(np.corrcoef(pfe, br)[0, 1])
+    fig8.add_annotation(
+        x=0.02, y=0.98, xref="paper", yref="paper",
+        text=f"r={r_pb:.3f}, n={n:,}",
+        showarrow=False, font=dict(size=11, color="#FFD166"),
+        bgcolor="rgba(0,0,0,0.5)", bordercolor="#FFD166", borderwidth=1, borderpad=4,
+    )
     body += plotly_div_safe(fig8, "pfe_vs_birank", 500)
+    body += competing_interpretations(
+        "Person FEとBiRankの正の相関は、両指標が類似の「真の能力」を測定していることを示す",
+        [
+            "両指標は同一クレジットデータから派生しており、正の相関は構造的に保証されている"
+            "（独立な情報源からの収束ではない）",
+            "AKMのθはスタジオ効果を除去済みだが、BiRankはネットワーク位置そのもの。"
+            "差分こそが「スタジオ環境に依存しない個人の寄与」を示す",
+            "活動量（総クレジット数）が両指標を同時に駆動する第三変数の可能性",
+        ],
+    )
     body += "</div>"
 
     # ============================================================
-    # Chart 9: Patronage vs Person FE (因果×協業)
+    # Chart 9: Patronage vs Person FE (因果×協業) — 密度
     # ============================================================
-    body += '<div class="card"><h2>9. Patronage vs Person FE（因果×協業）</h2>'
+    body += '<div class="card"><h2>9. Patronage vs Person FE（因果×協業 — 密度）</h2>'
     body += section_desc(
         "監督からの起用プレミアム（Patronage）と個人固定効果（Person FE）の関係。"
         "Patronageが高くPerson FEが低い=監督との関係に依存した評価。"
+        "逆パターンは監督からの指名に依らず実力で評価されている人物。"
     )
+    body += chart_guide("暖色=密集。右上=実力×監督信頼の両方が高いトップ人材。左上=監督依存型。")
 
-    fig9 = go.Figure()
-    fig9.add_trace(go.Scattergl(
-        x=pfe[sample_idx2], y=pat[sample_idx2],
-        mode="markers",
-        marker=dict(size=3, opacity=0.3, color="#06D6A0"),
-        hovertemplate="PFE: %{x:.2f}<br>Patronage: %{y:.4f}<extra></extra>",
-    ))
-    fig9 = add_scatter_correlation(fig9, pfe[sample_idx2], pat[sample_idx2])
-    fig9.update_layout(xaxis_title="Person FE (θ)", yaxis_title="Patronage Premium",
-                       height=450)
-    body += plotly_div_safe(fig9, "pfe_vs_patronage", 450)
+    fig9 = density_scatter_2d(
+        pfe.tolist(), pat.tolist(),
+        xlabel="Person FE (θ)", ylabel="Patronage Premium",
+        title="Person FE vs Patronage — 密度等高線",
+        label_names=names_list, label_top=10,
+        height=500,
+    )
+    r_pp = float(np.corrcoef(pfe, pat)[0, 1])
+    fig9.add_annotation(
+        x=0.02, y=0.98, xref="paper", yref="paper",
+        text=f"r={r_pp:.3f}, n={n:,}",
+        showarrow=False, font=dict(size=11, color="#FFD166"),
+        bgcolor="rgba(0,0,0,0.5)", bordercolor="#FFD166", borderwidth=1, borderpad=4,
+    )
+    body += plotly_div_safe(fig9, "pfe_vs_patronage", 500)
     body += "</div>"
 
     # ============================================================
@@ -20892,50 +21311,7 @@ def generate_score_layers_report():
         body += '<p class="section-desc">パイプライン再実行後にperson_fe_seが追加されます。</p>'
     body += "</div>"
 
-    # ============================================================
-    # Chart 13: 3層一致/不一致の4象限分類
-    # ============================================================
-    body += '<div class="card"><h2>13. 因果×構造 4象限マップ</h2>'
-    body += section_desc(
-        "因果層・構造層の中央値(50)を閾値に4象限に分類。"
-        "右上=真のトップ、右下=隠れた実力者、左上=環境恵まれ型、左下=成長途上。"
-    )
-
-    quadrant_colors = []
-    for i in range(len(sample_idx2)):
-        idx = sample_idx2[i]
-        if causal_agg[idx] >= 50 and structural_agg[idx] >= 50:
-            quadrant_colors.append("#06D6A0")  # 真のトップ
-        elif causal_agg[idx] >= 50:
-            quadrant_colors.append("#f093fb")  # 隠れた実力者
-        elif structural_agg[idx] >= 50:
-            quadrant_colors.append("#667eea")  # 環境恵まれ型
-        else:
-            quadrant_colors.append("#888888")  # 成長途上
-
-    fig13 = go.Figure()
-    fig13.add_trace(go.Scattergl(
-        x=causal_agg[sample_idx2], y=structural_agg[sample_idx2],
-        mode="markers",
-        marker=dict(size=3, opacity=0.4, color=quadrant_colors),
-        hovertemplate="因果: %{x:.1f}<br>構造: %{y:.1f}<extra></extra>",
-    ))
-    # Quadrant lines
-    fig13.add_hline(y=50, line_dash="dash", line_color="rgba(255,255,255,0.4)")
-    fig13.add_vline(x=50, line_dash="dash", line_color="rgba(255,255,255,0.4)")
-    # Quadrant labels
-    for x, y, text, color in [
-        (75, 90, "真のトップ", "#06D6A0"), (75, 10, "隠れた実力者", "#f093fb"),
-        (25, 90, "環境恵まれ型", "#667eea"), (25, 10, "成長途上", "#888888"),
-    ]:
-        fig13.add_annotation(x=x, y=y, text=text, showarrow=False,
-                             font=dict(size=13, color=color), bgcolor="rgba(0,0,0,0.5)")
-    fig13.update_layout(
-        xaxis_title="因果層 パーセンタイル", yaxis_title="構造層 パーセンタイル",
-        height=500,
-    )
-    body += plotly_div_safe(fig13, "quadrant_map", 500)
-    body += "</div>"
+    # Removed: Chart 13 (4-quadrant map) — redundant with Chart 5a
 
     # ============================================================
     # Chart 14: 層別 Gini係数（不平等度）
@@ -21017,18 +21393,77 @@ def generate_score_layers_report():
     body += "</div>"
 
     # ============================================================
+    # Chart 16: Dormancy Impact Waterfall
+    # ============================================================
+    body += '<div class="card"><h2>16. Dormancy Impact — ペナルティ/恩恵分析</h2>'
+    body += section_desc(
+        "Dormancy乗算子 (D_i) は長期不活動のペナルティ。D=1.0=影響なし、D<1.0=減衰。"
+        "上位5人（高ペナルティ）と下位5人（低ペナルティ=ほぼ影響なし）を比較し、"
+        "Dormancyがスコアに与える実際のインパクトを可視化。"
+    )
+    body += chart_guide("左側=Dormancy前IV、右側=Dormancy後IV。差分がDormancyのインパクト。")
+
+    # Compute pre-dormancy IV (=iv_score / dormancy if dormancy > 0)
+    dorm_impact = []
+    for i, s in enumerate(scores):
+        d = dorm[i]
+        if d > 0 and d < 1.0 and iv[i] != 0:
+            pre_iv = iv[i] / d
+            impact = iv[i] - pre_iv
+            dorm_impact.append({
+                "name": s.get("name") or s.get("name_ja") or s["person_id"],
+                "dormancy": float(d),
+                "pre_iv": float(pre_iv),
+                "post_iv": float(iv[i]),
+                "impact": float(impact),
+                "abs_impact": abs(float(impact)),
+            })
+    dorm_impact.sort(key=lambda x: x["impact"])  # most negative first
+
+    if len(dorm_impact) >= 10:
+        top_penalty = dorm_impact[:5]
+        low_penalty = dorm_impact[-5:]
+        waterfall_persons = top_penalty + low_penalty
+
+        fig16 = go.Figure()
+        wf_names = [p["name"][:15] for p in waterfall_persons]
+        wf_impact = [p["impact"] for p in waterfall_persons]
+        wf_dormancy = [p["dormancy"] for p in waterfall_persons]
+
+        # Show only the delta (impact) values as a bar chart
+        bar_colors = ["#f5576c" if imp < 0 else "#06D6A0" for imp in wf_impact]
+        fig16.add_trace(go.Bar(
+            x=wf_names, y=wf_impact, name="Dormancy Impact (Δ IV)",
+            marker_color=bar_colors,
+            text=[f"D={d:.2f}<br>Δ={imp:+.3f}" for d, imp in zip(wf_dormancy, wf_impact)],
+            textposition="outside", textfont=dict(size=9),
+            hovertemplate="<b>%{x}</b><br>Δ IV: %{y:+.3f}<extra></extra>",
+        ))
+        fig16.add_hline(y=0, line_dash="dash", line_color="rgba(255,255,255,0.3)")
+        fig16.update_layout(
+            title="Dormancy Impact: 高ペナルティ5人 vs 低ペナルティ5人",
+            yaxis_title="Δ IV Score (Dormancy前後の差分)", xaxis_tickangle=-30, height=500,
+            showlegend=False,
+        )
+        body += plotly_div_safe(fig16, "dormancy_waterfall", 500)
+    else:
+        body += '<p class="section-desc">Dormancyデータが不足（D&lt;1.0の人物が10人未満）。</p>'
+    body += "</div>"
+
+    # ============================================================
     # Significance & Utilization
     # ============================================================
     body += significance_section(
-        "3層スコア構造の意義",
+        "多層スコア構造の意義",
         [
             "単一のIV Scoreだけでは、個人の貢献がどの次元で高いのかが見えない。"
-            "3層に分解することで、因果推論に基づく真の貢献（Person FE）、"
-            "ネットワーク上の記述統計（BiRank/AWCC/NDI）、"
-            "協業環境の質（Patronage/Studio FE）を区別できる。",
-            "報酬交渉では因果層（±信頼区間付き）が最も強い根拠になる。"
+            "5成分（person_fe, BiRank, patronage, studio_exposure, AWCC）を"
+            "因果・構造・協業の3層に分解することで、因果推論に基づく真の貢献、"
+            "ネットワーク上の位置、協業環境の質を区別できる。"
+            "PCA第1主成分の負荷量で各成分を重み付けし、Dormancy乗算子で長期不活動を減衰させる。",
+            "報酬交渉では因果層（Person FE ±信頼区間付き）が最も強い根拠になる。"
             "構造層は「業界での可視性」、協業層は「どのような環境で働いてきたか」を示す。"
-            "3層の乖離パターンが「隠れた実力者」や「環境依存型」を特定する鍵となる。",
+            "層間の乖離パターンが「隠れた実力者」や「環境依存型」を特定する鍵となる。",
         ],
     )
     body += utilization_guide([
@@ -21085,11 +21520,25 @@ def generate_score_layers_report():
 
 REPORT_CATALOG = [
     {
-        "file": "industry_overview.html",
-        "title": "業界俯瞰ダッシュボード",
+        "file": "data_overview.html",
+        "title": "データ概要・説明",
+        "subtitle": "使用データの構成と分析パラメータの解説",
+        "desc": "収録データの概要、使用可能データと未使用データの説明、分析パラメータの解説。",
+        "sources": "summary, MADB",
+    },
+    {
+        "file": "industry_analysis.html",
+        "title": "業界分析ダッシュボード",
         "subtitle": "100年以上のアニメ制作のマクロトレンド",
-        "desc": "時系列推移、季節パターン、年代比較、成長分析。",
+        "desc": "時系列推移、季節パターン、年代比較、人材フロー、スタジオ分析。",
         "sources": "summary, time_series, decades, seasonal, growth",
+    },
+    {
+        "file": "structural_career.html",
+        "title": "構造的キャリア分析",
+        "subtitle": "キャリア遷移の構造分析と人材パイプライン",
+        "desc": "キャリアSankey、人材育成コスト、移籍効果、離職分析。",
+        "sources": "transitions, milestones, scores",
     },
     {
         "file": "bridge_analysis.html",
@@ -21311,6 +21760,7 @@ def generate_career_dynamics_report():  # noqa: C901
     print("  Generating Career Dynamics Report ...")
     import sqlite3 as _sq
     import random
+    import numpy as np
 
     db_path = Path("result/db/animetor_eval.db")
     if not db_path.exists():
@@ -21491,7 +21941,7 @@ def generate_career_dynamics_report():  # noqa: C901
                               line_color="#a0d2db", showlegend=False), row=2, col=2)
     fig_b.add_hline(y=br_med, line_dash="dot", line_color="rgba(255,255,255,0.25)", row=2, col=1)
     fig_b.add_vline(x=fe_med, line_dash="dot", line_color="rgba(255,255,255,0.25)", row=2, col=1)
-    fig_b.update_layout(xaxis3=dict(title="Person FE"), yaxis3=dict(title="BiRank"))
+    fig_b.update_layout(xaxis3=dict(title="Person FE"), yaxis3=dict(title="BiRank", type="log"))
     fig_b.update_xaxes(showticklabels=False, row=1, col=1)
     fig_b.update_yaxes(showticklabels=False, row=2, col=2)
     plotly_div_click(fig_b, "fe_birank", 650)
@@ -21623,14 +22073,14 @@ def generate_career_dynamics_report():  # noqa: C901
             continue
         ivs = [p["iv"] for p in cohort]
         cap = sorted(ivs)[min(len(ivs) - 1, int(len(ivs) * 0.99))]
-        ivs = [min(v, cap) for v in ivs]
+        ivs = [np.log1p(min(v, cap)) for v in ivs]
         fig_g.add_trace(go.Violin(
             x=ivs, y0=label, name=f"{label} (n={len(cohort):,})", orientation="h",
             side="positive", fillcolor=PAL[i], line_color="#c0c0d0",
             meanline_visible=True, width=1.8, points="suspectedoutliers",
         ))
     fig_g.update_layout(title="デビュー年代別 IV Score リッジライン",
-                        xaxis_title="IV Score", showlegend=False,
+                        xaxis_title="log(1 + IV Score)", showlegend=False,
                         violingap=0.05, violinmode="overlay")
     add_chart(fig_g, 480)
     end_sec()
@@ -22038,7 +22488,7 @@ def generate_madb_coverage_report():  # noqa: C901
                           marker_color="#a0d2db"))
     fig5.update_layout(barmode="group", title="役職別クレジット数 — AniList vs MediaArts (上位15役職)",
                        xaxis_title="役職", yaxis_title="クレジット数",
-                       xaxis_tickangle=-35)
+                       xaxis_tickangle=-35, yaxis_type="log")
 
     # --- Chart 6: MADBスクレイパー拡充前後比較 ---
     # Before: max_anime=10000 → approx TV+Special only (6176+55=6231 with_staff, 0 movies)
@@ -22290,7 +22740,8 @@ def generate_index_page():
     <div class="stakeholder-card sh-studio">
         <h4>🏢 スタジオ経営者・戦略担当</h4>
         <ul>
-            <li><a href="industry_overview.html">業界俯瞰</a> — 市場ポジション把握</li>
+            <li><a href="industry_analysis.html">業界分析</a> — 市場ポジション把握</li>
+            <li><a href="data_overview.html">データ概要</a> — データ構成と分析手法</li>
             <li><a href="studio_impact.html">スタジオ影響</a> — 選抜/処置/ブランド効果</li>
             <li><a href="network_evolution.html">ネットワーク進化</a> — 業界構造の変化</li>
             <li><a href="compensation_fairness.html">報酬公平性</a> — 配分制度の客観評価</li>
@@ -22321,7 +22772,8 @@ def generate_index_page():
             <li><a href="credit_statistics.html">クレジット統計</a> — 生データ透明性</li>
             <li><a href="network_evolution.html">ネットワーク進化</a> — 学術研究基盤</li>
             <li><a href="bias_detection.html">バイアス検出</a> — 公平性研究</li>
-            <li><a href="industry_overview.html">業界俯瞰</a> — 産業規模の定量把握</li>
+            <li><a href="industry_analysis.html">業界分析</a> — 産業規模の定量把握</li>
+            <li><a href="structural_career.html">構造的キャリア</a> — 人材パイプライン分析</li>
         </ul>
     </div>
 </div>"""
@@ -22349,7 +22801,7 @@ def generate_index_page():
                 <li><strong>BiRank</strong>: 著名監督・作品への近接性（二部グラフランキング）→ 人物ランキング・時系列先見</li>
                 <li><strong>Patronage</strong>: 同一監督からの継続起用（累積エッジ重み）→ 人物ランキング・チーム分析</li>
                 <li><strong>Person FE</strong>: 個人寄与の構造推定（固定効果モデル）→ 成長スコア・時系列先見</li>
-                <li><strong>IV Score</strong>: 3軸の操作変数推定統合（0-100正規化）→ 人物ランキング・バイアス検出</li>
+                <li><strong>IV Score</strong>: 5成分（Person FE, BiRank, Patronage, AWCC, Studio Exp）のPCA PC1重み付き合計 × Dormancy → 人物ランキング・バイアス検出</li>
             </ul>
         </div>
         <div class="arch-layer layer2">
@@ -22955,16 +23407,20 @@ def generate_derived_params_report():  # noqa: C901
         stds = [iv_params[n].get("component_std", 0) for n in names]
         means = [iv_params[n].get("component_mean", 0) for n in names]
 
+        # Third subplot: PC1 loading signs (positive/negative contribution direction)
+        pc1_loadings = [iv_params[n].get("pc1_loading", iv_params[n].get("lambda_weight", 0)) for n in names]
+        loading_colors = ["#06D6A0" if v >= 0 else "#f5576c" for v in pc1_loadings]
+
         fig_iv = make_subplots(rows=1, cols=3,
-                               subplot_titles=["λ重み (PCA PC1)", "成分標準偏差", "成分平均 (z正規化後)"])
+                               subplot_titles=["λ重み (PCA PC1)", "成分標準偏差", "PC1負荷量の符号と大きさ"])
         fig_iv.add_trace(go.Bar(x=names, y=weights, marker_color="#7209B7",
                                 text=[f"{w:.3f}" for w in weights], textposition="auto"),
                          row=1, col=1)
         fig_iv.add_trace(go.Bar(x=names, y=stds, marker_color="#3A86FF",
                                 text=[f"{s:.3f}" for s in stds], textposition="auto"),
                          row=1, col=2)
-        fig_iv.add_trace(go.Bar(x=names, y=means, marker_color="#F72585",
-                                text=[f"{m:.3f}" for m in means], textposition="auto"),
+        fig_iv.add_trace(go.Bar(x=names, y=pc1_loadings, marker_color=loading_colors,
+                                text=[f"{v:+.3f}" for v in pc1_loadings], textposition="auto"),
                          row=1, col=3)
         fig_iv.update_layout(title="IV成分の重みと正規化統計", showlegend=False, height=400)
         body_parts.append(plotly_div(fig_iv, "iv_weights_chart", 420))
@@ -23147,6 +23603,7 @@ def generate_derived_params_report():  # noqa: C901
                     fig_dorm.update_layout(
                         title="休眠スコア分布 (1.0=活動中, 0=長期離脱)",
                         xaxis_title="Dormancy Score", yaxis_title="人数",
+                        yaxis_type="log",
                     )
                     body_parts.append(plotly_div(fig_dorm, "dormancy_dist", 350))
 

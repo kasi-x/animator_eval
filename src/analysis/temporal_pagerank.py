@@ -278,18 +278,123 @@ def _build_yearly_cumulative_graphs(
 
 
 # =============================================================================
-# Step 2: Warm Start PageRank
+# Step 1+2 Combined: Streaming Build + PageRank (memory-optimized)
 # =============================================================================
+
+
+def _build_and_score_yearly_streaming(
+    credits: list[Credit],
+    anime_map: dict[str, Anime],
+    persons: list,
+    peer_edge_weight: float,
+) -> tuple[dict[int, dict[str, float]], dict[int, set[str]], dict[int, int]]:
+    """Build yearly cumulative graphs and run PageRank in streaming fashion.
+
+    Instead of holding all 98 yearly graphs in memory simultaneously,
+    builds each graph incrementally, runs PageRank, extracts metadata,
+    then frees the graph before building the next one.
+
+    Returns:
+        (yearly_scores, yearly_person_nodes, yearly_person_count)
+        - yearly_scores: {year: {node_id: raw_pagerank_score}}
+        - yearly_person_nodes: {year: set of person node IDs}
+        - yearly_person_count: {year: number of person nodes}
+    """
+    # Group credits by year
+    credits_by_year: dict[int, list[Credit]] = defaultdict(list)
+    for c in credits:
+        anime = anime_map.get(c.anime_id)
+        year = anime.year if anime and anime.year else None
+        if year:
+            credits_by_year[year].append(c)
+
+    if not credits_by_year:
+        return {}, {}, {}
+
+    years = sorted(credits_by_year.keys())
+    person_map = {p.id: p for p in persons}
+
+    yearly_scores: dict[int, dict[str, float]] = {}
+    yearly_person_nodes: dict[int, set[str]] = {}
+    yearly_person_count: dict[int, int] = {}
+    prev_scores: dict[str, float] | None = None
+    prev_graph: nx.DiGraph | None = None
+
+    for year in years:
+        year_credits = credits_by_year[year]
+
+        # Incremental: copy previous year's graph, add delta
+        if prev_graph is None:
+            g = nx.DiGraph()
+        else:
+            g = prev_graph.copy()
+
+        # Add new nodes and bipartite edges (minimal attributes to save memory)
+        for c in year_credits:
+            if c.person_id not in g:
+                g.add_node(c.person_id, type="person")
+
+            if c.anime_id not in g:
+                g.add_node(c.anime_id, type="anime")
+
+            weight = ROLE_WEIGHTS.get(c.role.value, 1.0)
+            if g.has_edge(c.person_id, c.anime_id):
+                g[c.person_id][c.anime_id]["weight"] += weight
+            else:
+                g.add_edge(c.person_id, c.anime_id, weight=weight)
+            if g.has_edge(c.anime_id, c.person_id):
+                g[c.anime_id][c.person_id]["weight"] += weight
+            else:
+                g.add_edge(c.anime_id, c.person_id, weight=weight)
+
+        # Skip peer edges in streaming mode — bipartite edges suffice for PageRank
+        # and cumulative peer edges cause O(n²) memory growth per year.
+
+        # Extract metadata before potential free
+        person_nodes = {
+            n for n in g.nodes() if g.nodes[n].get("type") == "person"
+        }
+        yearly_person_nodes[year] = person_nodes
+        yearly_person_count[year] = len(person_nodes)
+
+        # Run PageRank with warm start
+        if g.number_of_nodes() == 0:
+            yearly_scores[year] = {}
+        else:
+            nstart = None
+            if prev_scores:
+                nodes = set(g.nodes())
+                nstart = {}
+                for node in nodes:
+                    if node in prev_scores:
+                        nstart[node] = prev_scores[node]
+                    else:
+                        nstart[node] = 1.0 / len(nodes)
+                total = sum(nstart.values())
+                if total > 0:
+                    nstart = {k: v / total for k, v in nstart.items()}
+
+            scores = weighted_pagerank(g, nstart=nstart)
+            yearly_scores[year] = scores
+            prev_scores = scores
+
+        prev_graph = g
+
+    # Free the last graph (all scores are extracted)
+    del prev_graph
+
+    logger.info(
+        "yearly_streaming_pagerank_complete",
+        years=len(years),
+        year_range=f"{years[0]}-{years[-1]}",
+    )
+    return yearly_scores, yearly_person_nodes, yearly_person_count
 
 
 def _run_yearly_pagerank_with_warm_start(
     yearly_graphs: dict[int, nx.DiGraph],
 ) -> dict[int, dict[str, float]]:
-    """年ごとにPageRankを実行し、前年のスコアを初期値に使う (warm start).
-
-    Returns:
-        {year: {node_id: raw_pagerank_score}}
-    """
+    """Run PageRank per year with warm start (legacy — used by tests)."""
     years = sorted(yearly_graphs.keys())
     yearly_scores: dict[int, dict[str, float]] = {}
     prev_scores: dict[str, float] | None = None
@@ -302,18 +407,13 @@ def _run_yearly_pagerank_with_warm_start(
 
         nstart = None
         if prev_scores:
-            # Build nstart from previous year's scores
             nodes = set(graph.nodes())
             nstart = {}
-            n_new = 0
             for node in nodes:
                 if node in prev_scores:
                     nstart[node] = prev_scores[node]
                 else:
-                    n_new += 1
                     nstart[node] = 1.0 / len(nodes)
-
-            # Re-normalize so sum = 1
             total = sum(nstart.values())
             if total > 0:
                 nstart = {k: v / total for k, v in nstart.items()}
@@ -330,19 +430,19 @@ def _run_yearly_pagerank_with_warm_start(
 # =============================================================================
 
 
-def _build_birank_timelines(
+def _build_birank_timelines_from_counts(
     yearly_scores: dict[int, dict[str, float]],
-    yearly_graphs: dict[int, nx.DiGraph],
+    yearly_person_count: dict[int, int],
     yearly_normalized: dict[int, dict[str, float]],
     credits: list[Credit],
     anime_map: dict[str, Anime],
 ) -> dict[str, BirankTimeline]:
-    """年次PageRankスコアからBiRankタイムラインを構築する.
+    """年次PageRankスコアからBiRankタイムラインを構築する (graph-free version).
 
     Args:
         yearly_scores: {year: {node_id: raw_pagerank}}
-        yearly_graphs: {year: DiGraph}
-        yearly_normalized: {year: {person_id: 0-100 normalized score}} — 事前計算済み
+        yearly_person_count: {year: person node count} — pre-computed
+        yearly_normalized: {year: {person_id: 0-100 normalized score}}
         credits: 全クレジット
         anime_map: anime_id -> Anime
 
@@ -362,13 +462,6 @@ def _build_birank_timelines(
     for yr in sorted(credits_by_year.keys()):
         cumulative_credit_count += credits_by_year[yr]
         cumulative_by_year[yr] = cumulative_credit_count
-
-    # Precompute person node count per year — O(Y×V) total, not O(P×Y×V)
-    yearly_person_count: dict[int, int] = {}
-    for year, graph in yearly_graphs.items():
-        yearly_person_count[year] = sum(
-            1 for n in graph.nodes() if graph.nodes[n].get("type") == "person"
-        )
 
     # Build timelines
     timelines: dict[str, BirankTimeline] = {}
@@ -415,6 +508,24 @@ def _build_birank_timelines(
         )
 
     return timelines
+
+
+def _build_birank_timelines(
+    yearly_scores: dict[int, dict[str, float]],
+    yearly_graphs: dict[int, nx.DiGraph],
+    yearly_normalized: dict[int, dict[str, float]],
+    credits: list[Credit],
+    anime_map: dict[str, Anime],
+) -> dict[str, BirankTimeline]:
+    """Legacy wrapper — extracts person counts from graphs, delegates to _from_counts."""
+    yearly_person_count = {}
+    for year, graph in yearly_graphs.items():
+        yearly_person_count[year] = sum(
+            1 for n in graph.nodes() if graph.nodes[n].get("type") == "person"
+        )
+    return _build_birank_timelines_from_counts(
+        yearly_scores, yearly_person_count, yearly_normalized, credits, anime_map
+    )
 
 
 def _classify_trajectory(snapshots: list[YearlyBirankSnapshot]) -> str:
@@ -873,28 +984,26 @@ def compute_temporal_pagerank(
     if not credits:
         return TemporalPageRankResult()
 
-    # Step 1: Build yearly cumulative graphs with peer edges
-    yearly_graphs = _build_yearly_cumulative_graphs(
-        credits, anime_map, persons, peer_edge_weight
+    # Step 1+2: Build yearly graphs incrementally and run PageRank on each,
+    # freeing each graph after scoring to avoid holding all 98 graphs (~500MB+).
+    yearly_scores, yearly_person_nodes, yearly_person_count = (
+        _build_and_score_yearly_streaming(
+            credits, anime_map, persons, peer_edge_weight
+        )
     )
-    if not yearly_graphs:
+    if not yearly_scores:
         return TemporalPageRankResult()
-
-    # Step 2: Run warm-start PageRank per year
-    yearly_scores = _run_yearly_pagerank_with_warm_start(yearly_graphs)
 
     # Build normalized scores per year (person nodes only) for foresight
     yearly_normalized: dict[int, dict[str, float]] = {}
     for year, scores in yearly_scores.items():
-        graph = yearly_graphs[year]
-        person_scores = {
-            k: v for k, v in scores.items() if graph.nodes[k].get("type") == "person"
-        }
+        person_nodes = yearly_person_nodes[year]
+        person_scores = {k: v for k, v in scores.items() if k in person_nodes}
         yearly_normalized[year] = normalize_scores(person_scores)
 
-    # Step 3: Build birank timelines (reuses yearly_normalized — no recomputation)
-    birank_timelines = _build_birank_timelines(
-        yearly_scores, yearly_graphs, yearly_normalized, credits, anime_map
+    # Step 3: Build birank timelines
+    birank_timelines = _build_birank_timelines_from_counts(
+        yearly_scores, yearly_person_count, yearly_normalized, credits, anime_map
     )
 
     # Step 4: Compute foresight scores
@@ -916,7 +1025,7 @@ def compute_temporal_pagerank(
     )
 
     elapsed = time.monotonic() - start_time
-    years_computed = sorted(yearly_graphs.keys())
+    years_computed = sorted(yearly_scores.keys())
 
     logger.info(
         "temporal_pagerank_computed",

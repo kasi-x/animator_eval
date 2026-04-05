@@ -634,7 +634,7 @@ class TestCoreTeamPairs:
         persons = []
         credits = []
         n_core = 10
-        n_non_core = 200
+        n_non_core = 150  # Keep below max_staff_per_anime (200)
         for i in range(n_core):
             pid = f"core_{i}"
             persons.append(Person(id=pid, name_en=f"Core {i}"))

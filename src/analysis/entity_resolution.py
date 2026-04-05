@@ -457,6 +457,29 @@ def similarity_based_cluster(
     return canonical_map
 
 
+def _transitive_closure(mapping: dict[str, str]) -> dict[str, str]:
+    """推移閉包を計算し、全てのキーが最終的な canonical ID を直接指すようにする.
+
+    例: {A→B, B→C} → {A→C, B→C}
+    チェーンを辿って終端（他のキーに再マップされない値）を見つける。
+    """
+    if not mapping:
+        return mapping
+
+    # 各キーについてチェーンを辿る
+    resolved: dict[str, str] = {}
+    for key in mapping:
+        target = mapping[key]
+        # チェーンの終端まで辿る（循環防止付き）
+        visited: set[str] = {key}
+        while target in mapping and target not in visited:
+            visited.add(target)
+            target = mapping[target]
+        resolved[key] = target
+
+    return resolved
+
+
 def resolve_all(persons: list[Person]) -> dict[str, str]:
     """全名寄せ処理を実行する.
 
@@ -470,21 +493,23 @@ def resolve_all(persons: list[Person]) -> dict[str, str]:
     cross = cross_source_match(persons)
 
     # Step 3: ローマ字マッチ（既にマッチ済みのものは除外）
-    already_matched = set(exact) | set(cross)
+    # キーと値の両方を除外: canonical ID が後段で再マッチされるのを防ぐ
+    already_matched = set(exact) | set(exact.values()) | set(cross) | set(cross.values())
     remaining = [p for p in persons if p.id not in already_matched]
     romaji = romaji_match(remaining)
 
     # Step 4: 類似度ベースマッチ（既にマッチ済みのものは除外）
-    already_matched = already_matched | set(romaji)
+    already_matched = already_matched | set(romaji) | set(romaji.values())
     remaining = [p for p in persons if p.id not in already_matched]
     similarity = similarity_based_cluster(remaining, threshold=0.95)
 
     # Step 5: AI-assisted matching (LLM) for borderline similarity pairs
-    already_matched = already_matched | set(similarity)
+    already_matched = already_matched | set(similarity) | set(similarity.values())
     ai_merges = _ai_assisted_step(persons, already_matched)
 
-    # 統合
+    # 統合 + 推移閉包
     merged = {**exact, **cross, **romaji, **similarity, **ai_merges}
+    merged = _transitive_closure(merged)
     logger.info(
         "entity_resolution_complete",
         total_merges=len(merged),

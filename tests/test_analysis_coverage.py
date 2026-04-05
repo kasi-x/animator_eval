@@ -26,7 +26,6 @@ from src.analysis.anime_value import (
 )
 from src.analysis.contribution_attribution import (
     ContributionMetrics,
-    RoleWeightEstimation,
     aggregate_contributions_by_person,
     compute_contribution_attribution,
     compute_role_importance,

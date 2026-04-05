@@ -2,6 +2,7 @@
 
 from src.analysis.entity_resolution import (
     _normalize_romaji,
+    _transitive_closure,
     cross_source_match,
     exact_match_cluster,
     normalize_name,
@@ -284,3 +285,44 @@ class TestResolveAll:
         # mal:p2 は mal:p1 にマッチするはず
         assert "mal:p2" in result
         assert result["mal:p2"] == "mal:p1"
+
+
+class TestTransitiveClosure:
+    def test_simple_chain(self):
+        """A→B, B→C → A→C, B→C."""
+        mapping = {"A": "B", "B": "C"}
+        result = _transitive_closure(mapping)
+        assert result["A"] == "C"
+        assert result["B"] == "C"
+
+    def test_longer_chain(self):
+        """A→B→C→D → all point to D."""
+        mapping = {"A": "B", "B": "C", "C": "D"}
+        result = _transitive_closure(mapping)
+        assert result["A"] == "D"
+        assert result["B"] == "D"
+        assert result["C"] == "D"
+
+    def test_no_chain(self):
+        """独立したマッピングはそのまま."""
+        mapping = {"A": "X", "B": "Y"}
+        result = _transitive_closure(mapping)
+        assert result == {"A": "X", "B": "Y"}
+
+    def test_empty(self):
+        assert _transitive_closure({}) == {}
+
+    def test_cycle_protection(self):
+        """循環があっても無限ループしない."""
+        mapping = {"A": "B", "B": "A"}
+        result = _transitive_closure(mapping)
+        # 循環: A→B→A... visited で停止。A→B, B→A のまま
+        assert "A" in result and "B" in result
+
+    def test_diamond(self):
+        """A→B, C→B, B→D → A→D, C→D, B→D."""
+        mapping = {"A": "B", "C": "B", "B": "D"}
+        result = _transitive_closure(mapping)
+        assert result["A"] == "D"
+        assert result["C"] == "D"
+        assert result["B"] == "D"

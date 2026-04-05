@@ -8,13 +8,14 @@
 """
 
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import NamedTuple
 
 import structlog
 
 from src.models import Anime, Credit, Role
 from src.utils.role_groups import CAREER_STAGE
+from src.utils.time_utils import get_year_quarter, yq_label
 
 logger = structlog.get_logger()
 
@@ -42,11 +43,16 @@ class CareerSnapshot:
     active_years: int
     total_credits: int
     yearly_activity: dict[int, int]
+    quarterly_activity: dict[str, int]  # "2020-Q1" → credit count
     role_progression: list[RoleProgressionRecord]
     highest_stage: int
     highest_roles: list[str]
     peak_year: int | None = None
     peak_credits: int = 0
+    first_quarter: str | None = None  # "2020-Q2"
+    latest_quarter: str | None = None
+    # 作品タイプ×規模の分布 (例: {"tv_large": 5, "tv_medium": 12, "tanpatsu_small": 3})
+    scale_profile: dict[str, int] = field(default_factory=dict)
 
     @property
     def career_span_years(self) -> int | None:
@@ -91,16 +97,21 @@ def analyze_career(
             active_years=0,
             total_credits=0,
             yearly_activity={},
+            quarterly_activity={},
             role_progression=[],
             highest_stage=0,
             highest_roles=[],
             peak_year=None,
             peak_credits=0,
+            first_quarter=None,
+            latest_quarter=None,
         )
 
     credits_per_year: dict[int, int] = defaultdict(int)
+    credits_per_quarter: dict[str, int] = defaultdict(int)
     roles_by_year: dict[int, set[Role]] = defaultdict(set)
     years_with_activity = set()
+    scale_counter: dict[str, int] = defaultdict(int)
 
     for credit in person_credit_records:
         anime = anime_map.get(credit.anime_id)
@@ -109,6 +120,11 @@ def analyze_career(
             credits_per_year[year] += 1
             roles_by_year[year].add(credit.role)
             years_with_activity.add(year)
+        yq = get_year_quarter(anime) if anime else None
+        if yq:
+            credits_per_quarter[yq_label(*yq)] += 1
+        if anime and anime.work_type and anime.scale_class:
+            scale_counter[f"{anime.work_type}_{anime.scale_class}"] += 1
 
     first_year = min(years_with_activity) if years_with_activity else None
     latest_year = max(years_with_activity) if years_with_activity else None
@@ -149,17 +165,25 @@ def analyze_career(
             peak_credit_count = credit_count
             peak_year = year
 
+    sorted_quarters = sorted(credits_per_quarter.keys())
+    first_q = sorted_quarters[0] if sorted_quarters else None
+    latest_q = sorted_quarters[-1] if sorted_quarters else None
+
     return CareerSnapshot(
         first_year=first_year,
         latest_year=latest_year,
         active_years=active_years,
         total_credits=len(person_credit_records),
         yearly_activity=dict(sorted(credits_per_year.items())),
+        quarterly_activity=dict(sorted(credits_per_quarter.items())),
         role_progression=role_progression_records,
         highest_stage=highest_stage,
         highest_roles=highest_roles,
         peak_year=peak_year,
         peak_credits=peak_credit_count,
+        first_quarter=first_q,
+        latest_quarter=latest_q,
+        scale_profile=dict(scale_counter),
     )
 
 
@@ -199,3 +223,254 @@ def batch_career_analysis(
 
     logger.info("career_analysis_complete", persons=len(career_snapshots))
     return career_snapshots
+
+
+# ---------------------------------------------------------------------------
+# 規模別カテゴリキーの順序（表示・ソート用）
+# ---------------------------------------------------------------------------
+SCALE_KEYS_ORDERED = [
+    "tv_large",
+    "tv_medium",
+    "tv_small",
+    "tanpatsu_large",
+    "tanpatsu_medium",
+    "tanpatsu_small",
+]
+
+SCALE_KEY_LABELS: dict[str, str] = {
+    "tv_large": "TV大",
+    "tv_medium": "TV中",
+    "tv_small": "TV小",
+    "tanpatsu_large": "単発大",
+    "tanpatsu_medium": "単発中",
+    "tanpatsu_small": "単発小",
+}
+
+
+@dataclass
+class DirectorScaleProfile:
+    """監督1人の作品タイプ×規模プロフィール."""
+
+    person_id: str
+    name: str
+    total_director_credits: int
+    scale_counts: dict[str, int]    # {"tv_large": n, ...}
+    scale_fractions: dict[str, float]  # 0-1, 合計 ≤ 1 (未分類を除く)
+    dominant_type: str              # 最多カテゴリキー ("tv_large" 等)
+    career_span: int | None         # first_year → latest_year
+    first_year: int | None
+    latest_year: int | None
+
+
+def compute_director_scale_profiles(
+    credits: list[Credit],
+    anime_map: dict[str, Anime],
+    person_name_map: dict[str, str],
+    *,
+    director_roles: set[str] | None = None,
+    min_credits: int = 3,
+) -> list[DirectorScaleProfile]:
+    """監督ロールを持つ人物の作品タイプ×規模プロフィールを算出する.
+
+    Args:
+        credits: 全クレジット
+        anime_map: anime_id → Anime
+        person_name_map: person_id → 表示名
+        director_roles: 監督と見なすロール集合 (None = {'director'})
+        min_credits: 最低監督クレジット数（これ未満は除外）
+
+    Returns:
+        DirectorScaleProfile のリスト（total_director_credits 降順）
+    """
+    if director_roles is None:
+        director_roles = {"director"}
+
+    # director ロールのクレジットのみ抽出
+    dir_credits_by_person: dict[str, list[Credit]] = defaultdict(list)
+    for c in credits:
+        if c.role.value in director_roles:
+            dir_credits_by_person[c.person_id].append(c)
+
+    profiles = []
+    for person_id, pcredits in dir_credits_by_person.items():
+        if len(pcredits) < min_credits:
+            continue
+
+        scale_counts: dict[str, int] = defaultdict(int)
+        years = []
+        for c in pcredits:
+            anime = anime_map.get(c.anime_id)
+            if not anime:
+                continue
+            if anime.work_type and anime.scale_class:
+                scale_counts[f"{anime.work_type}_{anime.scale_class}"] += 1
+            if anime.year:
+                years.append(anime.year)
+
+        total_classified = sum(scale_counts.values())
+        scale_fractions = (
+            {k: v / total_classified for k, v in scale_counts.items()}
+            if total_classified > 0
+            else {}
+        )
+        dominant_type = (
+            max(scale_counts, key=lambda k: scale_counts[k])
+            if scale_counts
+            else "unknown"
+        )
+
+        profiles.append(
+            DirectorScaleProfile(
+                person_id=person_id,
+                name=person_name_map.get(person_id, person_id),
+                total_director_credits=len(pcredits),
+                scale_counts=dict(scale_counts),
+                scale_fractions=scale_fractions,
+                dominant_type=dominant_type,
+                career_span=(max(years) - min(years) + 1) if years else None,
+                first_year=min(years) if years else None,
+                latest_year=max(years) if years else None,
+            )
+        )
+
+    profiles.sort(key=lambda p: p.total_director_credits, reverse=True)
+    logger.info("director_scale_profiles", directors=len(profiles))
+    return profiles
+
+
+# ---------------------------------------------------------------------------
+# 監督キャリア軌跡 + 規模間モビリティ
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class DirectorTrajectoryResult:
+    """監督キャリア軌跡と規模間推移の集計結果."""
+
+    # 規模カテゴリ別: 最初の全ロールクレジットから初監督クレジットまでの年数リスト
+    years_to_first_dir_by_scale: dict[str, list[int]]
+
+    # 規模間推移行列: (from_scale, to_scale) -> count (3年以内の連続クレジット間)
+    transition_counts: dict[tuple[str, str], int]
+
+    # 正規化推移確率: (from_scale, to_scale) -> 0.0-1.0
+    transition_probs: dict[tuple[str, str], float]
+
+    # 総監督人数
+    n_directors: int
+
+
+def compute_director_trajectories(
+    credits: list[Credit],
+    anime_map: dict[str, Anime],
+    *,
+    director_roles: set[str] | None = None,
+    min_director_credits: int = 3,
+    max_gap_years: int = 3,
+) -> DirectorTrajectoryResult:
+    """監督のキャリア軌跡と規模間モビリティを集計する.
+
+    Args:
+        credits: 全クレジット
+        anime_map: anime_id → Anime
+        director_roles: 監督ロール集合 (None → {"director"})
+        min_director_credits: 最低監督クレジット数
+        max_gap_years: 連続とみなす最大年間ギャップ
+
+    Returns:
+        DirectorTrajectoryResult
+    """
+    if director_roles is None:
+        director_roles = {"director"}
+
+    # person_id → 全クレジット (any role, year あり)
+    all_credits_by_person: dict[str, list[Credit]] = defaultdict(list)
+    dir_credits_by_person: dict[str, list[Credit]] = defaultdict(list)
+
+    for c in credits:
+        anime = anime_map.get(c.anime_id)
+        if not anime or not anime.year:
+            continue
+        all_credits_by_person[c.person_id].append(c)
+        if c.role.value in director_roles:
+            dir_credits_by_person[c.person_id].append(c)
+
+    # 最低クレジット数フィルタ
+    director_ids = {
+        pid for pid, crds in dir_credits_by_person.items()
+        if len(crds) >= min_director_credits
+    }
+
+    years_to_first: dict[str, list[int]] = defaultdict(list)
+    transition_counts: dict[tuple[str, str], int] = defaultdict(int)
+
+    for pid in director_ids:
+        all_years = [
+            anime_map[c.anime_id].year
+            for c in all_credits_by_person[pid]
+            if anime_map.get(c.anime_id) and anime_map[c.anime_id].year
+        ]
+        if not all_years:
+            continue
+        first_any_year = min(all_years)
+
+        dir_recs = dir_credits_by_person[pid]
+
+        # 規模別: 初監督クレジットまでの年数
+        for scale_key in SCALE_KEYS_ORDERED:
+            wt, sc = scale_key.split("_", 1)
+            scale_dir = [
+                c for c in dir_recs
+                if (a := anime_map.get(c.anime_id))
+                and a.work_type == wt
+                and a.scale_class == sc
+                and a.year
+            ]
+            if scale_dir:
+                first_scale_yr = min(anime_map[c.anime_id].year for c in scale_dir)  # type: ignore[arg-type]
+                years_to_first[scale_key].append(first_scale_yr - first_any_year)
+
+        # 規模間モビリティ: 年ごとのドミナント規模 → 推移
+        year_to_scales: dict[int, list[str]] = defaultdict(list)
+        for c in dir_recs:
+            anime = anime_map.get(c.anime_id)
+            if anime and anime.year and anime.work_type and anime.scale_class:
+                year_to_scales[anime.year].append(f"{anime.work_type}_{anime.scale_class}")
+
+        if len(year_to_scales) < 2:
+            continue
+
+        sorted_years = sorted(year_to_scales.keys())
+        year_dominant = [
+            (yr, max(set(year_to_scales[yr]), key=year_to_scales[yr].count))
+            for yr in sorted_years
+        ]
+        for i in range(len(year_dominant) - 1):
+            yr_from, sc_from = year_dominant[i]
+            yr_to, sc_to = year_dominant[i + 1]
+            if yr_to - yr_from <= max_gap_years:
+                transition_counts[(sc_from, sc_to)] += 1
+
+    # 推移確率を行正規化で計算
+    transition_probs: dict[tuple[str, str], float] = {}
+    for sc_from in SCALE_KEYS_ORDERED:
+        row_total = sum(
+            transition_counts.get((sc_from, sc_to), 0)
+            for sc_to in SCALE_KEYS_ORDERED
+        )
+        if row_total > 0:
+            for sc_to in SCALE_KEYS_ORDERED:
+                cnt = transition_counts.get((sc_from, sc_to), 0)
+                transition_probs[(sc_from, sc_to)] = cnt / row_total
+
+    logger.info(
+        "director_trajectories_computed",
+        n_directors=len(director_ids),
+        scale_keys=len(years_to_first),
+    )
+    return DirectorTrajectoryResult(
+        years_to_first_dir_by_scale=dict(years_to_first),
+        transition_counts=dict(transition_counts),
+        transition_probs=transition_probs,
+        n_directors=len(director_ids),
+    )

@@ -74,14 +74,12 @@ ANIME_TYPE_ROLE_ADJUSTMENTS = {
     },
     AnimeType.TV_2COUR: {
         Role.DIRECTOR: 0.95,  # 監督 -5%（話数多いので分散）
-        Role.ANIMATION_DIRECTOR: 1.15,  # 総作監 +15%
         Role.ANIMATION_DIRECTOR: 1.1,  # 作監 +10%
         Role.KEY_ANIMATOR: 1.05,  # 原画 +5%
         Role.EPISODE_DIRECTOR: 1.15,  # 演出 +15%
     },
     AnimeType.TV_LONG: {
         Role.DIRECTOR: 0.9,  # 監督 -10%
-        Role.ANIMATION_DIRECTOR: 1.2,  # 総作監 +20%
         Role.ANIMATION_DIRECTOR: 1.15,  # 作監 +15%
         Role.KEY_ANIMATOR: 1.1,  # 原画 +10%
         Role.EPISODE_DIRECTOR: 1.2,  # 演出 +20%

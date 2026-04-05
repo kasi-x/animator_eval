@@ -1893,6 +1893,9 @@ def main(
     reverse: bool = typer.Option(
         False, "--reverse", "-r", help="古い順で取得（デフォルト: 新しい順）"
     ),
+    recent: bool = typer.Option(
+        False, "--recent", help="放映開始日が新しい順で取得（新作アニメの追加に使用）"
+    ),
 ) -> None:
     """AniList からクレジットデータを収集する (チェックポイント機能付き)."""
     import json
@@ -2369,7 +2372,9 @@ def main(
 
             # Sort order: by default newest/most relevant first
             # Can be reversed with --reverse flag
-            if reverse:
+            if recent:
+                sort_order = ["START_DATE_DESC"]  # New first (for adding recent anime)
+            elif reverse:
                 sort_order = ["START_DATE_ASC"]  # Old first
             else:
                 sort_order = ["POPULARITY_DESC"]  # New/popular first

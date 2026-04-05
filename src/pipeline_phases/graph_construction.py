@@ -41,23 +41,33 @@ def build_graphs_phase(context: PipelineContext) -> None:
     ):
         with context.monitor.measure("community_detection"):
             try:
-                n_edges = context.collaboration_graph.number_of_edges()
-                if n_edges <= 1_000_000:
-                    communities = nx.community.louvain_communities(
-                        context.collaboration_graph, weight="weight", seed=42
+                from src.analysis.sparse_graph import SparseCollaborationGraph
+
+                if isinstance(context.collaboration_graph, SparseCollaborationGraph):
+                    # Use built-in LPA for sparse graphs (no NetworkX conversion)
+                    context.community_map = (
+                        context.collaboration_graph.community_detection_lpa(seed=42)
                     )
+                    n_communities = len(set(context.community_map.values()))
                 else:
-                    communities = nx.community.asyn_lpa_communities(
-                        context.collaboration_graph, seed=42
-                    )
-                context.community_map = {
-                    member: cid
-                    for cid, members in enumerate(communities)
-                    for member in members
-                }
+                    n_edges = context.collaboration_graph.number_of_edges()
+                    if n_edges <= 1_000_000:
+                        communities = nx.community.louvain_communities(
+                            context.collaboration_graph, weight="weight", seed=42
+                        )
+                    else:
+                        communities = nx.community.asyn_lpa_communities(
+                            context.collaboration_graph, seed=42
+                        )
+                    context.community_map = {
+                        member: cid
+                        for cid, members in enumerate(communities)
+                        for member in members
+                    }
+                    n_communities = len(communities)
                 logger.info(
                     "community_detection_complete",
-                    communities=len(communities),
+                    communities=n_communities,
                     persons_mapped=len(context.community_map),
                 )
             except Exception as e:

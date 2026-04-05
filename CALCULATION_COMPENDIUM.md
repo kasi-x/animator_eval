@@ -164,10 +164,10 @@ D(i, t) = exp(-delta x max(0, gap_i - tau_grace))
 
 - `gap_i` = years since last credited work
 - `tau_grace` = 2 years (no penalty within grace period)
-- `delta` = decay rate (configurable)
+- `delta` = 0.5 (half-life of ~1.4 years past grace period)
 - D = 1.0 if gap <= tau_grace; D -> 0 as gap -> infinity
 
-**Known issue:** Code uses `delta=0.5` but documentation previously stated `delta=0.3`. The difference is significant — at 5-year gap: 0.223 (delta=0.5) vs 0.407 (delta=0.3). The correct value needs justification (todo.md D04).
+**Rationale for delta=0.5:** Anime production is seasonal with typical 1-2 year gaps between projects. A half-life of ~1.4 years (ln(2)/0.5) past the 2-year grace period means a 5-year total gap (3 years past grace) gives D≈0.22, reflecting that such extended absence strongly signals career exit or reduced engagement.
 
 Result stored as `dormancy` in `scores.json`.
 

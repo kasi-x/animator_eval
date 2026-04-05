@@ -204,6 +204,15 @@ def compute_genre_quality(
             q.prestige = 0.4 * norm_sq[i] + 0.3 * norm_br[i] + 0.3 * norm_ps[i]
 
     # 2. Saturation Detection
+    # Pre-build genre → year → set[person_id] index (O(credits), not O(genres×persons×credits))
+    genre_year_staff: dict[str, dict[int, set[str]]] = defaultdict(lambda: defaultdict(set))
+    for c in credits:
+        anime = anime_map.get(c.anime_id)
+        if not anime or not anime.year or not anime.genres:
+            continue
+        for g in anime.genres:
+            genre_year_staff[g][anime.year].add(c.person_id)
+
     saturation: dict[str, GenreSaturation] = {}
     for genre, year_anime in genre_anime_years.items():
         years = sorted(year_anime.keys())
@@ -214,19 +223,13 @@ def compute_genre_quality(
         x = np.array(years, dtype=np.float64)
         anime_slope = _ols_slope(x, counts)
 
-        # Staff/anime ratio per year
-        genre_year_staff: dict[int, set[str]] = defaultdict(set)
-        for pid, cnt in genre_person_credits[genre].items():
-            for c in credits:
-                anime = anime_map.get(c.anime_id)
-                if anime and anime.year and genre in (anime.genres or []):
-                    genre_year_staff[anime.year].add(pid)
-
+        # Staff/anime ratio per year — use pre-built index
+        gys = genre_year_staff.get(genre, {})
         ratios = []
         ratio_years = []
         for y in years:
             n_anime = len(year_anime[y])
-            n_staff = len(genre_year_staff.get(y, set()))
+            n_staff = len(gys.get(y, set()))
             if n_anime > 0:
                 ratios.append(n_staff / n_anime)
                 ratio_years.append(y)

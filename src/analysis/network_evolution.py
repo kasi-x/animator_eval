@@ -13,6 +13,7 @@ import networkx as nx
 import structlog
 
 from src.models import Anime, Credit
+from src.utils.time_utils import get_year_quarter, yq_label
 
 logger = structlog.get_logger()
 
@@ -58,17 +59,21 @@ def compute_network_evolution(
         {years: [...], snapshots: {year: {metrics}}, trends: {...}}
     """
     if not credits:
-        return {"years": [], "snapshots": {}, "trends": {}}
+        return {"years": [], "snapshots": {}, "quarterly_snapshots": {}, "trends": {}}
 
-    # Group credits by year
+    # Group credits by year AND by (year, quarter)
     credits_by_year: dict[int, list[Credit]] = defaultdict(list)
+    credits_by_yq: dict[str, list[Credit]] = defaultdict(list)
     for c in credits:
         anime = anime_map.get(c.anime_id)
         if anime and anime.year:
             credits_by_year[anime.year].append(c)
+            yq = get_year_quarter(anime)
+            if yq:
+                credits_by_yq[yq_label(*yq)].append(c)
 
     if not credits_by_year:
-        return {"years": [], "snapshots": {}, "trends": {}}
+        return {"years": [], "snapshots": {}, "quarterly_snapshots": {}, "trends": {}}
 
     years = sorted(credits_by_year.keys())
     cumulative_persons: set[str] = set()
@@ -136,6 +141,24 @@ def compute_network_evolution(
             "density": round(density, 6),
         }
 
+    # Quarterly snapshots (lighter — person counts only, no edge enumeration)
+    sorted_yq_labels = sorted(credits_by_yq.keys())
+    quarterly_snapshots: dict[str, dict] = {}
+    cumulative_q_persons: set[str] = set()
+    for label in sorted_yq_labels:
+        q_credits = credits_by_yq[label]
+        q_persons = {c.person_id for c in q_credits}
+        q_anime = {c.anime_id for c in q_credits}
+        new_q_persons = q_persons - cumulative_q_persons
+        cumulative_q_persons |= q_persons
+        quarterly_snapshots[label] = {
+            "active_persons": len(q_persons),
+            "new_persons": len(new_q_persons),
+            "cumulative_persons": len(cumulative_q_persons),
+            "unique_anime": len(q_anime),
+            "credit_count": len(q_credits),
+        }
+
     # Compute trends
     if len(years) >= 2:
         first_snap = snapshots[years[0]]
@@ -159,6 +182,13 @@ def compute_network_evolution(
     logger.info(
         "network_evolution_computed",
         years=len(years),
+        quarters=len(sorted_yq_labels),
         graph_based=collaboration_graph is not None,
     )
-    return {"years": years, "snapshots": snapshots, "trends": trends}
+    return {
+        "years": years,
+        "snapshots": snapshots,
+        "quarterly_snapshots": quarterly_snapshots,
+        "quarterly_labels": sorted_yq_labels,
+        "trends": trends,
+    }

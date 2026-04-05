@@ -49,8 +49,9 @@ def compute_core_scores_phase(context: PipelineContext) -> None:
         context.akm_result = estimate_akm(context.credits, context.anime_map)
         context.person_fe = context.akm_result.person_fe
         context.studio_fe = context.akm_result.studio_fe
-        context.studio_assignments = infer_studio_assignment(
-            context.credits, context.anime_map
+        context.studio_assignments = (
+            context.akm_result.studio_assignments
+            or infer_studio_assignment(context.credits, context.anime_map)
         )
     context.monitor.increment_counter("akm_persons", len(context.person_fe))
     context.monitor.increment_counter("akm_studios", len(context.studio_fe))
@@ -95,6 +96,12 @@ def compute_core_scores_phase(context: PipelineContext) -> None:
     )
 
     # 4. Patronage Premium
+    # D18: BiRank → Patronage → IV → (BiRank is NOT recomputed using IV).
+    # The flow is one-directional: BiRank scores directors, patronage uses those
+    # director BiRank scores as weights, then IV combines all 5 components.
+    # There is no feedback loop because BiRank is computed once (step 2) and
+    # never updated with IV scores. The apparent circularity is a pipeline
+    # ordering concern, not an actual circular dependency.
     logger.info("step_start", step="patronage_premium")
     with context.monitor.measure("patronage_premium"):
         # Use BiRank scores for directors
@@ -115,27 +122,33 @@ def compute_core_scores_phase(context: PipelineContext) -> None:
     # space.  Done AFTER patronage (which uses raw probability-space BiRank
     # as director weights in Π=Σ PR_d·log(1+N)), but BEFORE IV computation.
     #
-    # Step 1: ×N → expected-count space (mean≈1).
+    # Step 1: ×N_ref → expected-count space (mean≈1).
+    #   Uses a fixed reference population (N_ref=10000) instead of actual N
+    #   so that scores remain comparable across different dataset sizes.
     # Step 2: log(1+x) → compress power-law tail.
     #
     # BiRank follows a power law: a few hub nodes get scores 100-200× the mean.
     # Without log transform, z-score normalization cannot fix this — BiRank's
     # outlier range (~228) dwarfs person_fe's range (~24), making IV ≈ BiRank.
     # log(1+x) maps [0, 228] → [0, 5.4], comparable to person_fe's [-13, 10].
+    _BIRANK_REF_POPULATION = 10000  # fixed reference — dataset-size-independent
     n_birank = len(context.birank_person_scores)
+    n_anime = len(context.birank_anime_scores)
     if n_birank > 0:
         context.birank_person_scores = {
-            pid: math.log1p(score * n_birank)
+            pid: math.log1p(score * _BIRANK_REF_POPULATION)
             for pid, score in context.birank_person_scores.items()
         }
         context.birank_anime_scores = {
-            aid: math.log1p(score * len(context.birank_anime_scores))
+            aid: math.log1p(score * _BIRANK_REF_POPULATION)
             for aid, score in context.birank_anime_scores.items()
         }
         br_vals = list(context.birank_person_scores.values())
         logger.info(
             "birank_rescaled_log_expected_count",
             n_persons=n_birank,
+            n_anime=n_anime,
+            ref_population=_BIRANK_REF_POPULATION,
             max_score=round(max(br_vals), 4),
             mean_score=round(sum(br_vals) / n_birank, 4),
             median_score=round(sorted(br_vals)[n_birank // 2], 4),

@@ -180,24 +180,8 @@ def run_scoring_pipeline(
             3, "Entity Resolution", (time.monotonic() - phase_start) * 1000
         )
 
-    # Phase 4: Graph Construction
-    logger.info("step_start", step="graph_construction")
-    if ws_broadcaster:
-        ws_broadcaster.update_phase(4, "Graph Construction", "running")
-
-    phase_start = time.monotonic()
-    build_graphs_phase(context)
-
-    if ws_broadcaster:
-        ws_broadcaster.complete_phase(
-            4, "Graph Construction", (time.monotonic() - phase_start) * 1000
-        )
-
-    # Phase 4B: VA Graph Construction (parallel-safe, runs after production graphs)
-    if context.va_credits:
-        build_va_graphs_phase(context)
-
-    # Resume check: after phases 1-4 (data loaded), try to restore checkpoint
+    # Early resume check: skip graph construction if checkpoint covers phases 5+
+    # Graph construction consumes ~80 GB for 43M edges — skip when not needed.
     if resume and not dry_run:
         saved = checkpoint_mgr.load()
         if saved and checkpoint_mgr.is_compatible(saved, context):
@@ -205,6 +189,26 @@ def run_scoring_pipeline(
             logger.info("pipeline_resuming", from_phase=resume_from_phase + 1)
         elif saved:
             logger.info("checkpoint_incompatible", reason="data_changed")
+
+    # Phase 4: Graph Construction (skip if resuming from phase 5+)
+    if resume_from_phase < 4:
+        logger.info("step_start", step="graph_construction")
+        if ws_broadcaster:
+            ws_broadcaster.update_phase(4, "Graph Construction", "running")
+
+        phase_start = time.monotonic()
+        build_graphs_phase(context)
+
+        if ws_broadcaster:
+            ws_broadcaster.complete_phase(
+                4, "Graph Construction", (time.monotonic() - phase_start) * 1000
+            )
+
+        # Phase 4B: VA Graph Construction (parallel-safe, runs after production graphs)
+        if context.va_credits:
+            build_va_graphs_phase(context)
+    else:
+        logger.info("phase_skipped", phase=4, reason="checkpoint_resume")
 
     # Phase 5: Core Scoring (Authority, Trust, Skill + Normalize)
     if resume_from_phase < 5:

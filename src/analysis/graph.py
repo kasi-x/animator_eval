@@ -9,9 +9,11 @@
   - person → person: 共同クレジット関係 (weight = 共演回数 × 役職重み)
 """
 
+import math
 from collections import defaultdict
 
 import networkx as nx
+import numpy as np
 import structlog
 
 from src.models import Anime, Credit, Person, Role
@@ -746,7 +748,8 @@ def _apply_episode_adjustments(
             anime_commits = commitments.get(anime_id, {}) if commitments else {}
             commit_a = anime_commits.get(edge_key[0], w_a)
             commit_b = anime_commits.get(edge_key[1], w_b)
-            new_weight += commit_a * commit_b * ep_w * importance
+            # D03: geometric mean avoids quadratic inflation (dir×dir was 9.0, now 3.0)
+            new_weight += math.sqrt(commit_a * commit_b) * ep_w * importance
             new_shared += 1
 
         if new_weight < 0.001:
@@ -765,8 +768,15 @@ def _build_edges_python(
     anime_map: dict[str, Anime] | None,
     has_episode_data: bool,
     commitments: dict[str, dict[str, float]] | None = None,
+    max_staff_per_anime: int = 200,
 ) -> dict[tuple[str, str], dict[str, float]]:
-    """Build collaboration edges in pure Python with optional episode awareness."""
+    """Build collaboration edges in pure Python with optional episode awareness.
+
+    Args:
+        max_staff_per_anime: Cap staff per anime to prevent O(n²) explosion.
+            Anime with >500 staff are long-running series where individual
+            pair relationships are diluted. Top-weighted staff are kept.
+    """
     anime_credits: dict[str, list[tuple[str, Role, float]]] = defaultdict(list)
     for c in credits:
         w = _role_weight(c.role)
@@ -789,6 +799,12 @@ def _build_edges_python(
 
         if has_episode_data and anime_person_info:
             person_info = anime_person_info.get(anime_id, {})
+            # Cap staff: keep highest-weight persons
+            if len(person_info) > max_staff_per_anime:
+                top = sorted(person_info.items(), key=lambda x: x[1][2], reverse=True)[
+                    :max_staff_per_anime
+                ]
+                person_info = dict(top)
             # CORE_TEAM star topology: O(n×k) instead of O(n²)
             staff_roles = {pid: info[1] for pid, info in person_info.items()}
             valid_pairs = generate_core_team_pairs(staff_roles)
@@ -805,7 +821,7 @@ def _build_edges_python(
                 edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
                 commit_a = anime_commits.get(pid_a, w_a)
                 commit_b = anime_commits.get(pid_b, w_b)
-                edge_weight = commit_a * commit_b * ep_w * importance
+                edge_weight = math.sqrt(commit_a * commit_b) * ep_w * importance
                 edge_data[edge_key]["weight"] += edge_weight
                 edge_data[edge_key]["shared_works"] += 1
         else:
@@ -814,6 +830,12 @@ def _build_edges_python(
             for pid, role, w in staff_list:
                 if pid not in seen_persons or w > seen_persons[pid][1]:
                     seen_persons[pid] = (role, w)
+            # Cap staff: keep highest-weight persons
+            if len(seen_persons) > max_staff_per_anime:
+                top = sorted(seen_persons.items(), key=lambda x: x[1][1], reverse=True)[
+                    :max_staff_per_anime
+                ]
+                seen_persons = dict(top)
             # CORE_TEAM star topology: O(n×k) instead of O(n²)
             staff_roles = {pid: role for pid, (role, _w) in seen_persons.items()}
             valid_pairs = generate_core_team_pairs(staff_roles)
@@ -825,7 +847,7 @@ def _build_edges_python(
                 edge_key = (pid_a, pid_b) if pid_a < pid_b else (pid_b, pid_a)
                 commit_a = anime_commits.get(pid_a, w_a)
                 commit_b = anime_commits.get(pid_b, w_b)
-                edge_weight = commit_a * commit_b * importance
+                edge_weight = math.sqrt(commit_a * commit_b) * importance
                 edge_data[edge_key]["weight"] += edge_weight
                 edge_data[edge_key]["shared_works"] += 1
 
@@ -874,7 +896,7 @@ def _apply_commitment_adjustments(
                 continue
             commit_a = anime_commits.get(pid_a, 1.0)
             commit_b = anime_commits.get(pid_b, 1.0)
-            new_weights[edge_key] += commit_a * commit_b * importance
+            new_weights[edge_key] += math.sqrt(commit_a * commit_b) * importance
             new_shared[edge_key] += 1
 
     edges_to_remove = []
@@ -889,33 +911,22 @@ def _apply_commitment_adjustments(
         del edge_data[key]
 
 
-def create_person_collaboration_network(
+def _build_collaboration_edge_data(
     persons: list[Person],
     credits: list[Credit],
     anime_map: dict[str, Anime] | None = None,
-) -> nx.Graph:
-    """人物間コラボレーション無向グラフを構築する.
+) -> tuple[dict[tuple[str, str], dict[str, float]], dict[str, dict]]:
+    """Build collaboration edge data and node attributes.
 
-    Creates a network of people who worked together on the same anime.
-    同じ作品に参加した人物同士にエッジを張る。
-    エッジ重み = Σ(commitment_a × commitment_b × episode_overlap × work_importance)
-
-    Commitment = sum of role_weight × episode_coverage for each role a person holds.
-    Work importance = anime score / 10.0 (0.1-1.0, default 0.5).
-
-    Episode-aware weighting reduces spurious edges on long-running anime by
-    considering actual episode overlap when available, and applying role-based
-    heuristics when episode data is missing.
-
-    Uses Rust extension for edge aggregation when available (10-30x speedup),
-    falling back to Python with episode-aware weighting.
+    Returns:
+        (edge_data, node_attrs) tuple for graph construction.
     """
     from src.analysis.graph_rust import RUST_AVAILABLE, build_collaboration_edges
 
-    g = nx.Graph()
-
-    for p in persons:
-        g.add_node(p.id, name=p.display_name, name_ja=p.name_ja, name_en=p.name_en)
+    node_attrs = {
+        p.id: {"name": p.display_name, "name_ja": p.name_ja, "name_en": p.name_en}
+        for p in persons
+    }
 
     # 非制作ロール（声優、主題歌等）を除外
     credits = [c for c in credits if c.role not in NON_PRODUCTION_ROLES]
@@ -927,7 +938,6 @@ def create_person_collaboration_network(
     has_episode_data = any(c.episode is not None for c in credits)
 
     # Build per-anime, per-person episode/role info (needed for episode-aware weighting)
-    # Structure: {anime_id: {person_id: (episodes, primary_role, max_weight)}}
     anime_person_info: dict[str, dict[str, tuple[set[int], Role, float]]] | None = None
     if has_episode_data:
         anime_person_info = {}
@@ -942,30 +952,60 @@ def create_person_collaboration_network(
             if w > prev_w:
                 by_person[c.person_id] = (eps, c.role, w)
 
-    if RUST_AVAILABLE and not has_episode_data:
-        # Rust-accelerated edge aggregation, then recompute with commitments
-        edge_data = build_collaboration_edges(persons, credits)
-        _apply_commitment_adjustments(edge_data, credits, anime_map, commitments)
-    elif RUST_AVAILABLE and has_episode_data:
-        # Rust builds base edges, then apply episode + commitment weight adjustments
-        edge_data = build_collaboration_edges(persons, credits)
-        _apply_episode_adjustments(edge_data, anime_person_info, anime_map, commitments)
-    else:
-        # Pure Python path with episode-aware edge aggregation
-        edge_data = _build_edges_python(
-            credits, anime_person_info, anime_map, has_episode_data, commitments
-        )
+    # Single-pass Python builder: generates core-team pairs, applies
+    # commitment adjustments, and caps staff per anime — all in one loop.
+    # The Rust path (build_collaboration_edges) is not used here because it
+    # generates all-pairs edges then filters, requiring 3x pair generation
+    # and >80GB intermediate memory for large datasets.
+    edge_data = _build_edges_python(
+        credits, anime_person_info, anime_map, has_episode_data, commitments
+    )
 
-    # Batch add all edges to graph (single pass, no has_edge() calls)
+    return edge_data, node_attrs
+
+
+def create_person_collaboration_network(
+    persons: list[Person],
+    credits: list[Credit],
+    anime_map: dict[str, Anime] | None = None,
+):
+    """人物間コラボレーション無向グラフを構築する.
+
+    Returns a SparseCollaborationGraph for large graphs (>100K edges)
+    or a NetworkX Graph for small graphs.
+
+    Uses Rust extension for edge aggregation when available (10-30x speedup),
+    falling back to Python with episode-aware weighting.
+    """
+    from src.analysis.sparse_graph import SparseCollaborationGraph
+
+    edge_data, node_attrs = _build_collaboration_edge_data(persons, credits, anime_map)
+
+    n_edges = len(edge_data)
+
+    # Use sparse graph for large graphs (>100K edges) to save memory
+    if n_edges > 100_000:
+        g = SparseCollaborationGraph(edge_data, node_attrs)
+        logger.info(
+            "collaboration_graph_built",
+            nodes=g.number_of_nodes(),
+            edges=g.number_of_edges(),
+            backend="sparse",
+        )
+        return g
+
+    # Small graph: use NetworkX (full API compatibility)
+    g = nx.Graph()
+    for pid, attrs in node_attrs.items():
+        g.add_node(pid, **attrs)
     g.add_edges_from(
         (pid_a, pid_b, attrs) for (pid_a, pid_b), attrs in edge_data.items()
     )
-
     logger.info(
         "collaboration_graph_built",
         nodes=g.number_of_nodes(),
         edges=g.number_of_edges(),
-        episode_aware=has_episode_data,
+        backend="networkx",
     )
     return g
 
@@ -1112,30 +1152,45 @@ def calculate_network_centrality_scores(
     """
     from src.analysis.graph_rust import RUST_AVAILABLE
     from src.analysis import graph_rust
+    from src.analysis.sparse_graph import SparseCollaborationGraph
 
     if graph.number_of_nodes() == 0:
         return {}
 
     n_nodes = graph.number_of_nodes()
+    n_edges = graph.number_of_edges()
     is_large = n_nodes > LARGE_GRAPH_THRESHOLD
+    is_sparse = isinstance(graph, SparseCollaborationGraph)
 
     if is_large:
         logger.info(
             "large_graph_detected",
             nodes=n_nodes,
-            edges=graph.number_of_edges(),
+            edges=n_edges,
             using_approximation=True,
             rust_available=RUST_AVAILABLE,
+            sparse=is_sparse,
         )
 
     metrics: dict[str, dict[str, float]] = {}
 
-    # 次数中心性 (O(V) — NetworkX直接の方が変換オーバーヘッドなく速い)
-    degree = nx.degree_centrality(graph)
+    # 次数中心性 (O(V) — SparseCollaborationGraph + NetworkX互換)
+    deg_raw = graph.degree()
+    s = 1.0 / (n_nodes - 1) if n_nodes > 1 else 1.0
+    if isinstance(deg_raw, dict):
+        # SparseCollaborationGraph returns dict[str, int]
+        degree = {v: d * s for v, d in deg_raw.items()}
+    else:
+        # NetworkX DegreeView — iterable of (node, degree)
+        degree = {v: d * s for v, d in deg_raw}
 
     # 媒介中心性 — 大規模グラフでは近似版を使用
-    if is_large:
-        k = min(100, n_nodes)
+    # For large graphs: use k-sample approximation (k=200 balances accuracy vs speed).
+    # For sparse graphs >5M edges, graph_rust uses the memory-efficient edge-list
+    # interface (no adjacency dict OOM).
+    betweenness: dict = {}
+    if is_large or is_sparse:
+        k = min(200, n_nodes)
         betweenness = graph_rust.betweenness_centrality(graph, k=k, seed=42)
     else:
         betweenness = graph_rust.betweenness_centrality(graph)
@@ -1143,7 +1198,7 @@ def calculate_network_centrality_scores(
     # 近接中心性 — 大規模グラフではスキップ（O(V*(V+E))で高コスト）
     # No Rust acceleration for closeness (rarely used on large graphs)
     closeness: dict = {}
-    if not is_large:
+    if not is_large and not is_sparse:
         for component in nx.connected_components(graph):
             subg = graph.subgraph(component)
             if subg.number_of_nodes() > 1:
@@ -1160,9 +1215,11 @@ def calculate_network_centrality_scores(
                     closeness[n] = 0.0
 
     # 固有ベクトル中心性（最大連結成分のみ）
-    # Skip on very large components — eigenvector iteration is O(V*E) per iteration
+    # Skip on sparse graphs (requires NetworkX conversion) and very large components
     eigenvector: dict = {}
-    if n_nodes > 1:
+    if is_sparse:
+        logger.info("eigenvector_centrality_skipped", reason="sparse graph")
+    elif n_nodes > 1:
         largest_cc = max(nx.connected_components(graph), key=len)
         subg = graph.subgraph(largest_cc)
         cc_nodes = subg.number_of_nodes()
@@ -1192,12 +1249,16 @@ def calculate_network_centrality_scores(
     return metrics
 
 
-def compute_graph_summary(graph: nx.Graph) -> dict:
+def compute_graph_summary(graph) -> dict:
     """グラフレベルの統計サマリーを算出する.
+
+    Works with both NetworkX Graph and SparseCollaborationGraph.
 
     Returns:
         {nodes, edges, density, avg_degree, components, largest_component_size}
     """
+    from src.analysis.sparse_graph import SparseCollaborationGraph
+
     n_nodes = graph.number_of_nodes()
     n_edges = graph.number_of_edges()
 
@@ -1211,32 +1272,46 @@ def compute_graph_summary(graph: nx.Graph) -> dict:
             "largest_component_size": 0,
         }
 
-    density = nx.density(graph)
-    degrees = [d for _, d in graph.degree()]
-    avg_degree = sum(degrees) / len(degrees) if degrees else 0.0
-    components = list(nx.connected_components(graph))
-    largest = max(len(c) for c in components) if components else 0
+    is_sparse = isinstance(graph, SparseCollaborationGraph)
+
+    if is_sparse:
+        import scipy.sparse as sp
+
+        density = 2.0 * n_edges / (n_nodes * (n_nodes - 1)) if n_nodes > 1 else 0.0
+        degree_arr = np.diff(graph.weight_matrix.indptr)
+        avg_degree = float(degree_arr.mean())
+        # Connected components via scipy
+        n_components, labels = sp.csgraph.connected_components(
+            graph.weight_matrix, directed=False
+        )
+        from collections import Counter
+        comp_sizes = Counter(labels)
+        largest = max(comp_sizes.values()) if comp_sizes else 0
+    else:
+        density = nx.density(graph)
+        degrees = [d for _, d in graph.degree()]
+        avg_degree = sum(degrees) / len(degrees) if degrees else 0.0
+        components = list(nx.connected_components(graph))
+        n_components = len(components)
+        largest = max(len(c) for c in components) if components else 0
 
     summary = {
         "nodes": n_nodes,
         "edges": n_edges,
         "density": round(density, 6),
         "avg_degree": round(avg_degree, 2),
-        "components": len(components),
+        "components": n_components,
         "largest_component_size": largest,
     }
 
-    # Clustering coefficient (skip for very large/dense graphs)
-    # Weighted clustering is O(n * d^2) where d = avg_degree
-    # Skip if: nodes > 5000 OR edges > 100K OR avg_degree > 100
-    if n_nodes <= 5000 and n_edges <= 100_000 and avg_degree <= 100:
+    # Clustering coefficient (skip for sparse/large graphs)
+    if not is_sparse and n_nodes <= 5000 and n_edges <= 100_000 and avg_degree <= 100:
         try:
             avg_clustering = nx.average_clustering(graph, weight="weight")
             summary["avg_clustering"] = round(avg_clustering, 4)
         except Exception:
             pass
-    elif n_nodes <= 10_000 and n_edges <= 500_000:
-        # For moderately large graphs, use unweighted clustering (much faster)
+    elif not is_sparse and n_nodes <= 10_000 and n_edges <= 500_000:
         try:
             avg_clustering = nx.average_clustering(graph)
             summary["avg_clustering"] = round(avg_clustering, 4)

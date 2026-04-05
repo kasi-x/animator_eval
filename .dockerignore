@@ -46,3 +46,6 @@ docs/
 
 # Tests (not needed in production container)
 tests/
+
+# Neo4j data (owned by container user, causes build context permission error)
+result/neo4j/

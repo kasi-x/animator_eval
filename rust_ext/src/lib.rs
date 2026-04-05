@@ -40,6 +40,33 @@ fn betweenness_centrality_rs(
     result.into_iter().collect()
 }
 
+/// Compute approximate betweenness centrality from a compact edge list.
+///
+/// Memory-efficient alternative to `betweenness_centrality_rs` for large sparse
+/// graphs where building a full adjacency dict would cause OOM.
+///
+/// Args:
+///     node_ids: Ordered list of node ID strings (position = node index).
+///     edges: List of (u_idx, v_idx, weight) tuples for undirected edges.
+///         Each edge should appear once (not both directions).
+///     k: Number of source samples (None = exact).
+///     seed: Random seed.
+///
+/// Returns:
+///     Dict mapping node_id to betweenness centrality score.
+#[pyfunction]
+#[pyo3(signature = (node_ids, edges, k=None, seed=42))]
+fn betweenness_centrality_from_edges_rs(
+    node_ids: Vec<String>,
+    edges: Vec<(u32, u32, f64)>,
+    k: Option<usize>,
+    seed: u64,
+) -> HashMap<String, f64> {
+    let csr = CsrGraph::from_edges(node_ids, edges);
+    let result = cent::betweenness_centrality(&csr, k, seed);
+    result.into_iter().collect()
+}
+
 /// Compute degree centrality for all nodes.
 ///
 /// Args:
@@ -97,6 +124,7 @@ fn build_collaboration_edges_rs(
 #[pymodule]
 fn animetor_eval_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(betweenness_centrality_rs, m)?)?;
+    m.add_function(wrap_pyfunction!(betweenness_centrality_from_edges_rs, m)?)?;
     m.add_function(wrap_pyfunction!(degree_centrality_rs, m)?)?;
     m.add_function(wrap_pyfunction!(eigenvector_centrality_rs, m)?)?;
     m.add_function(wrap_pyfunction!(build_collaboration_edges_rs, m)?)?;

@@ -558,9 +558,19 @@ def analyze_bridge_importance(
     Returns:
         ブリッジ分析の洞察
     """
-    bridge_persons = bridges_data.get("bridge_persons", [])
+    bridge_persons_raw = bridges_data.get("bridge_persons", [])
 
-    if not bridge_persons:
+    # bridge_persons may be a list of dicts (from detect_bridges) or list of strings
+    # Normalize to list of person_id strings
+    bridge_pids: list[str] = []
+    for bp in bridge_persons_raw:
+        if isinstance(bp, dict):
+            bridge_pids.append(bp.get("person_id", ""))
+        else:
+            bridge_pids.append(str(bp))
+    bridge_pids = [p for p in bridge_pids if p]
+
+    if not bridge_pids:
         return BridgeInsights(
             bridge_persons_count=0,
             avg_betweenness=0.0,
@@ -571,7 +581,7 @@ def analyze_bridge_importance(
 
     # 媒介中心性の平均
     betweenness_scores = []
-    for pid in bridge_persons:
+    for pid in bridge_pids:
         cent = centrality.get(pid, {})
         betweenness = cent.get("betweenness", 0)
         betweenness_scores.append(betweenness)
@@ -586,7 +596,7 @@ def analyze_bridge_importance(
             "betweenness": round(centrality.get(pid, {}).get("betweenness", 0), 4),
             "degree": centrality.get(pid, {}).get("degree", 0),
         }
-        for pid in bridge_persons
+        for pid in bridge_pids
     ]
     top_bridges = sorted(bridge_rankings, key=lambda x: x["betweenness"], reverse=True)[
         :10
@@ -599,18 +609,18 @@ def analyze_bridge_importance(
     brokerage_values = [
         centrality.get(pid, {}).get("betweenness", 0)
         * centrality.get(pid, {}).get("degree", 0)
-        for pid in bridge_persons
+        for pid in bridge_pids
     ]
     info_brokerage = statistics.mean(brokerage_values) if brokerage_values else 0
 
     logger.info(
         "bridge_insights_analyzed",
-        bridges=len(bridge_persons),
+        bridges=len(bridge_pids),
         avg_betweenness=round(avg_betweenness, 4),
     )
 
     return BridgeInsights(
-        bridge_persons_count=len(bridge_persons),
+        bridge_persons_count=len(bridge_pids),
         avg_betweenness=round(avg_betweenness, 4),
         top_bridges=top_bridges,
         circle_connections=circle_connections,

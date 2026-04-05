@@ -15,9 +15,9 @@ def test_parse_role_with_episode_numbers():
 
 def test_parse_role_with_language_specifiers():
     """Test that language-specific roles are correctly parsed."""
-    # 言語指定付きの役職
-    assert parse_role("Script (German; eps 314-400)") == Role.SCREENPLAY
-    assert parse_role("Producer (English)") == Role.PRODUCER
+    # 言語指定付きの役職 → LOCALIZATION
+    assert parse_role("Script (German; eps 314-400)") == Role.LOCALIZATION
+    assert parse_role("Producer (English)") == Role.LOCALIZATION
 
 
 def test_parse_role_voice_actor():
@@ -31,18 +31,18 @@ def test_parse_role_theme_song():
     """Test that theme song roles are correctly categorized."""
     assert parse_role("Theme Song Performance") == Role.MUSIC
     assert parse_role("Theme Song Performance (OP1)") == Role.MUSIC
-    assert parse_role("Theme Song Performance (English; OP2)") == Role.MUSIC
+    assert parse_role("Theme Song Performance (English; OP2)") == Role.LOCALIZATION
     assert parse_role("Insert Song Performance") == Role.MUSIC
     assert parse_role("Theme Song Arrangement (OP2, ED2)") == Role.MUSIC
 
 
 def test_parse_role_adr():
-    """Test that ADR roles are correctly categorized."""
-    assert parse_role("ADR Director (English)") == Role.VOICE_ACTOR
-    assert parse_role("ADR Director (Brazilian Portuguese; 1st dub)") == Role.VOICE_ACTOR
-    assert parse_role("ADR Script (English)") == Role.VOICE_ACTOR
+    """Test that ADR roles are correctly categorized as LOCALIZATION."""
+    assert parse_role("ADR Director (English)") == Role.LOCALIZATION
+    assert parse_role("ADR Director (Brazilian Portuguese; 1st dub)") == Role.LOCALIZATION
+    assert parse_role("ADR Script (English)") == Role.LOCALIZATION
     assert (
-        parse_role("ADR Director Assistant (Brazilian Portuguese; 2nd dub)") == Role.VOICE_ACTOR
+        parse_role("ADR Director Assistant (Brazilian Portuguese; 2nd dub)") == Role.LOCALIZATION
     )
 
 

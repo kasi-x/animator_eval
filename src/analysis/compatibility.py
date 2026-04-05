@@ -1,11 +1,13 @@
 """Compatibility Groups — 全作品横断で相性グループを検出.
 
-共演3回以上のペアを抽出し、共演時 vs 非共演時の残差比較で
+共演3回以上のペアを抽出し、共演時 vs 非共演時の制作規模残差比較で
 相性スコアを算出。正の相性ペアからグループとブリッジ人材を検出。
+anime.score は使用しない（構造指標のみ）。
 """
 
 from collections import defaultdict
 from dataclasses import asdict, dataclass
+import random
 
 import numpy as np
 import structlog
@@ -75,27 +77,39 @@ def compute_compatibility_groups(
         GroupCompatibilityResult
     """
     # Build anime → staff set and person → anime set
+    # Uses staff_count as structural outcome (not anime.score — viewer ratings excluded)
     anime_staff: dict[str, set[str]] = defaultdict(set)
     person_anime: dict[str, set[str]] = defaultdict(set)
-    person_anime_scores: dict[str, dict[str, float]] = defaultdict(dict)
+    person_anime_scale: dict[str, dict[str, float]] = defaultdict(dict)
 
     for c in credits:
         if c.person_id not in iv_scores:
             continue
         anime_staff[c.anime_id].add(c.person_id)
         person_anime[c.person_id].add(c.anime_id)
-        anime = anime_map.get(c.anime_id)
-        if anime and anime.score is not None:
-            person_anime_scores[c.person_id][c.anime_id] = anime.score
+
+    # Compute per-anime production scale (log staff count) as structural outcome
+    for c in credits:
+        if c.person_id not in iv_scores:
+            continue
+        aid = c.anime_id
+        if aid not in person_anime_scale[c.person_id]:
+            staff_count = len(anime_staff.get(aid, set()))
+            if staff_count > 0:
+                person_anime_scale[c.person_id][aid] = float(np.log1p(staff_count))
 
     # Find pairs with sufficient shared works
     # Use anime_staff to count co-occurrences efficiently
     pair_shared: dict[tuple[str, str], set[str]] = defaultdict(set)
     for aid, staff in anime_staff.items():
         staff_list = sorted(staff)
-        # Limit to avoid O(n²) explosion on large casts
+        # D13 fix: Sample up to 50 persons from large casts instead of skipping.
+        # Keeps the O(n²) pair count bounded (50² = 2500 pairs/anime) while
+        # including large productions (blockbusters, long-running TV series).
+        # Deterministic seed based on anime_id ensures reproducibility across runs.
         if len(staff_list) > 50:
-            continue
+            rng = random.Random(hash(aid) & 0x7FFFFFFF)
+            staff_list = sorted(rng.sample(staff_list, 50))
         for i, a in enumerate(staff_list):
             for b in staff_list[i + 1:]:
                 pair_shared[(a, b)].add(aid)
@@ -120,10 +134,10 @@ def compute_compatibility_groups(
     compatible_pairs: list[CompatibilityPair] = []
 
     for (pid_a, pid_b), shared_anime in candidate_pairs.items():
-        a_anime = person_anime_scores.get(pid_a, {})
-        b_anime = person_anime_scores.get(pid_b, {})
+        a_anime = person_anime_scale.get(pid_a, {})
+        b_anime = person_anime_scale.get(pid_b, {})
 
-        # Shared works scores
+        # Shared works production scale
         shared_scores = []
         for aid in shared_anime:
             if aid in a_anime:
@@ -218,28 +232,36 @@ def compute_compatibility_groups(
                     seen_triangles.add(tri)
                     triangles.append(tri)
 
-    # Merge overlapping triangles into groups
-    compatible_groups: list[CompatibleGroup] = []
-    used: set[frozenset[str]] = set()
+    # Merge overlapping triangles into groups using Union-Find
+    # O(triangles × α(n)) instead of O(triangles²)
+    parent: dict[str, str] = {}
+
+    def find(x: str) -> str:
+        while parent.get(x, x) != x:
+            parent[x] = parent.get(parent[x], parent[x])  # path compression
+            x = parent[x]
+        return x
+
+    def union(a: str, b: str) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[ra] = rb
 
     for tri in triangles:
-        if tri in used:
-            continue
-        group_members = set(tri)
-        used.add(tri)
-        # Try to extend with overlapping triangles
-        changed = True
-        while changed:
-            changed = False
-            for other_tri in triangles:
-                if other_tri in used:
-                    continue
-                if group_members & other_tri:
-                    group_members |= other_tri
-                    used.add(other_tri)
-                    changed = True
+        tri_list = list(tri)
+        for i in range(len(tri_list)):
+            if tri_list[i] not in parent:
+                parent[tri_list[i]] = tri_list[i]
+            union(tri_list[0], tri_list[i])
 
-        members = sorted(group_members)
+    # Collect groups from Union-Find
+    groups_by_root: dict[str, set[str]] = defaultdict(set)
+    for node in parent:
+        groups_by_root[find(node)].add(node)
+
+    compatible_groups: list[CompatibleGroup] = []
+    for group_members_set in groups_by_root.values():
+        members = sorted(group_members_set)
         # Compute group compatibility (avg pairwise)
         pair_scores = []
         for i, a in enumerate(members):

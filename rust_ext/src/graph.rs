@@ -25,6 +25,60 @@ pub struct CsrGraph {
 }
 
 impl CsrGraph {
+    /// Build CSR graph from a compact edge list.
+    ///
+    /// - `node_ids`: ordered list of node ID strings (index = node index)
+    /// - `edges`: list of (u_idx, v_idx, weight) for undirected edges
+    ///   Each edge is stored once here; both directions are added internally.
+    ///
+    /// Memory: O(V + E) vs O(V + E) for adjacency dict, but with much lower
+    /// constant factor — no Python string allocation per neighbor entry.
+    pub fn from_edges(node_ids: Vec<String>, edges: Vec<(u32, u32, f64)>) -> Self {
+        let n_nodes = node_ids.len();
+        let id_to_idx: AHashMap<String, u32> = node_ids
+            .iter()
+            .enumerate()
+            .map(|(i, id)| (id.clone(), i as u32))
+            .collect();
+
+        // Count degrees (undirected: each edge contributes to both endpoints)
+        let mut degrees = vec![0usize; n_nodes];
+        for &(u, v, _) in &edges {
+            degrees[u as usize] += 1;
+            degrees[v as usize] += 1;
+        }
+
+        // Build CSR offsets
+        let mut offsets = vec![0usize; n_nodes + 1];
+        for i in 0..n_nodes {
+            offsets[i + 1] = offsets[i] + degrees[i];
+        }
+
+        let total = offsets[n_nodes];
+        let mut neighbors = vec![0u32; total];
+        let mut weights = vec![0.0f64; total];
+        let mut pos = offsets[..n_nodes].to_vec(); // write cursor per node
+
+        for &(u, v, w) in &edges {
+            let (u, v) = (u as usize, v as usize);
+            neighbors[pos[u]] = v as u32;
+            weights[pos[u]] = w;
+            pos[u] += 1;
+            neighbors[pos[v]] = u as u32;
+            weights[pos[v]] = w;
+            pos[v] += 1;
+        }
+
+        CsrGraph {
+            n_nodes,
+            offsets,
+            neighbors,
+            weights,
+            node_ids,
+            id_to_idx,
+        }
+    }
+
     /// Build CSR graph from a Python adjacency dict: `{node_id: {neighbor_id: weight}}`.
     ///
     /// The input represents an undirected graph — each edge appears in both directions

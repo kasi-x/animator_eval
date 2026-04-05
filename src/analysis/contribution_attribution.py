@@ -279,9 +279,11 @@ def compute_shapley_value_approximate(
     staff_quality_avg: float,
     sample_size: int = 100,
 ) -> float:
-    """Shapley値を近似計算（サンプリング法）.
+    """Compute Shapley value for a person's contribution to a work.
 
-    完全計算はO(2^n)で不可能なので、ランダムサンプリングで近似。
+    With an additive value function (each person's contribution is independent),
+    Shapley values equal individual marginal contributions exactly.
+    The sample_size parameter is kept for API compatibility but unused.
 
     Args:
         person_id: person_id
@@ -290,59 +292,21 @@ def compute_shapley_value_approximate(
         anime_value: 作品の総価値
         person_scores: person_id → scores
         staff_quality_avg: スタッフ平均品質
-        sample_size: サンプリング数
+        sample_size: unused (kept for API compatibility)
 
     Returns:
-        Shapley値（近似）
+        Shapley value (= marginal contribution for additive games)
     """
-    import random
+    # With an additive value function (v(S) = sum of individual marginals),
+    # Shapley values equal individual marginal contributions exactly.
+    # No sampling needed — this is a mathematical identity for additive games.
+    role = next((r for pid, r in all_staff if pid == person_id), None)
+    if role is None:
+        return 0.0
 
-    # For small teams (<10), use exact calculation
-    if len(all_staff) <= 10:
-        sample_size = 2 ** len(all_staff)
-
-    # Pre-compute marginal contributions for all staff (PERF-4 optimization)
-    # Eliminates redundant computation across sampling iterations
-    marginal_cache: dict[str, float] = {
-        pid: estimate_marginal_contribution(
-            pid, r, anime_value, person_scores, staff_quality_avg
-        )
-        for pid, r in all_staff
-    }
-
-    marginal_contributions = []
-
-    for _ in range(min(sample_size, 1000)):  # Cap at 1000 samples
-        # Random permutation of staff
-        staff_copy = list(all_staff)
-        random.shuffle(staff_copy)
-
-        # Find position of target person
-        try:
-            position = next(
-                i for i, (pid, _) in enumerate(staff_copy) if pid == person_id
-            )
-        except StopIteration:
-            continue
-
-        # Staff before this person (coalition)
-        coalition = staff_copy[:position]
-
-        # O(1) lookup instead of redundant computation (PERF-4 optimization)
-        value_with_coalition = sum(marginal_cache[pid] for pid, _ in coalition)
-        value_with_person = value_with_coalition + marginal_cache[person_id]
-
-        # Marginal contribution in this permutation
-        marginal = value_with_person - value_with_coalition
-        marginal_contributions.append(marginal)
-
-    # Shapley value = average marginal contribution
-    shapley = (
-        sum(marginal_contributions) / len(marginal_contributions)
-        if marginal_contributions
-        else 0
+    shapley = estimate_marginal_contribution(
+        person_id, role, anime_value, person_scores, staff_quality_avg
     )
-
     return round(shapley, 3)
 
 

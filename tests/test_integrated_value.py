@@ -211,7 +211,7 @@ class TestOptimizeLambdaWeights:
         assert var_expl == 0.0
 
     def test_raw_scale_consistency(self, component_scores, cv_data):
-        """Lambda weights should be bounded by min/max constraints."""
+        """Lambda weights should be non-negative and sum to 1."""
         credits, anime_map = cv_data
         person_ids = sorted({c.person_id for c in credits})
         components = {}
@@ -222,9 +222,11 @@ class TestOptimizeLambdaWeights:
             components[comp_name] = comp
 
         weights, _, comp_std, _, _ = optimize_lambda_weights(components, credits, anime_map)
-        # All weights should be at least 5% (min_weight constraint)
+        # All weights should be non-negative
         for name, w in weights.items():
-            assert w >= 0.04, f"{name} weight {w:.4f} below minimum"
+            assert w >= 0.0, f"{name} weight {w:.4f} is negative"
+        # Weights should sum to 1
+        assert sum(weights.values()) == pytest.approx(1.0, abs=0.01)
         # comp_std should have positive values
         for std in comp_std.values():
             assert std > 0
@@ -290,13 +292,10 @@ class TestScaleRobustness:
             for i in range(20) for j in range(8) if (i + j) % 3 == 0
         ]
         weights, _, _, _, _ = optimize_lambda_weights(components, credits, anime_map)
-        # No single component should dominate above 0.60
+        # Weights should sum to 1 and all be non-negative
+        assert sum(weights.values()) == pytest.approx(1.0, abs=0.01)
         for name, w in weights.items():
-            assert w < 0.60, f"{name} weight = {w:.4f}, expected < 0.60"
-        # All components should have non-trivial weight (5% floor before normalization
-        # may yield < 5% after normalization when other loadings are large)
-        for name, w in weights.items():
-            assert w >= 0.03, f"{name} weight = {w:.4f}, expected >= 0.03"
+            assert w >= 0.0, f"{name} weight = {w:.4f}, negative"
 
 
 class TestPCAWeightDerivation:
@@ -322,12 +321,12 @@ class TestPCAWeightDerivation:
         weights, _, _, _, _ = optimize_lambda_weights(components, [], {})
         assert sum(weights.values()) == pytest.approx(1.0, abs=1e-10)
 
-    def test_pca_weights_minimum_floor(self):
-        """Each component weight must be >= 0.05 (before normalization floor)."""
+    def test_pca_weights_non_negative(self):
+        """Each component weight must be non-negative (absolute PCA loadings)."""
         components = self._build_components()
         weights, _, _, _, _ = optimize_lambda_weights(components, [], {})
         for name, w in weights.items():
-            assert w >= 0.04, f"{name} weight {w:.4f} below floor"
+            assert w >= 0.0, f"{name} weight {w:.4f} is negative"
 
     def test_pca_person_fe_loading_positive(self):
         """person_fe loading should be positive (sign convention)."""

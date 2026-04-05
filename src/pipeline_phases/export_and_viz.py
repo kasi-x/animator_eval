@@ -944,6 +944,26 @@ def export_and_visualize_phase(context: PipelineContext, elapsed: float = 0.0) -
         _generate_visualizations(context)
 
 
+def _get_analysis_result(context: PipelineContext, key: str, default: Any) -> Any:
+    """Get analysis result from context, loading from JSON if flushed to disk."""
+    import json as _json
+
+    from src.utils.config import JSON_DIR
+
+    val = context.analysis_results.get(key)
+    if val is not None:
+        return val
+    # May have been flushed to JSON by Phase 9 OOM prevention
+    json_path = JSON_DIR / f"{key}.json"
+    if json_path.exists():
+        try:
+            with open(json_path, encoding="utf-8") as f:
+                return _json.load(f)
+        except Exception:
+            pass
+    return default
+
+
 def _generate_visualizations(context: PipelineContext) -> None:
     """Generate visualizations using matplotlib and plotly.
 
@@ -998,60 +1018,61 @@ def _generate_visualizations(context: PipelineContext) -> None:
             plot_growth_trends({"trend_summary": trend_counts})
 
         # Network evolution
-        network_evolution = context.analysis_results.get("network_evolution", {})
+        network_evolution = _get_analysis_result(context, "network_evolution", {})
         if network_evolution.get("years"):
             plot_network_evolution(network_evolution)
 
         # Decade comparison
-        decade_data = context.analysis_results.get("decades", {})
+        decade_data = _get_analysis_result(context, "decades", {})
         if decade_data.get("decades"):
             plot_decade_comparison(decade_data)
 
         # Role flow
-        role_flow = context.analysis_results.get("role_flow", {})
+        role_flow = _get_analysis_result(context, "role_flow", {})
         if role_flow.get("links"):
             plot_role_flow_sankey(role_flow)
 
         # Time series
-        time_series = context.analysis_results.get("time_series", {})
+        time_series = _get_analysis_result(context, "time_series", {})
         if time_series.get("years"):
             plot_time_series(time_series)
 
         # Productivity (convert dataclass instances to dicts for visualization)
-        productivity = context.analysis_results.get("productivity", {})
+        productivity = _get_analysis_result(context, "productivity", {})
         if productivity:
             productivity_dicts = {
-                pid: asdict(metrics) for pid, metrics in productivity.items()
+                pid: (asdict(metrics) if hasattr(metrics, "__dataclass_fields__") else metrics)
+                for pid, metrics in productivity.items()
             }
             plot_productivity_distribution(productivity_dicts)
 
         # Influence tree
-        influence = context.analysis_results.get("influence", {})
+        influence = _get_analysis_result(context, "influence", {})
         if influence.get("total_mentors", 0) > 0:
             plot_influence_tree(influence)
 
         # Milestones
-        milestones = context.analysis_results.get("milestones", {})
+        milestones = _get_analysis_result(context, "milestones", {})
         if milestones:
             plot_milestone_summary(milestones)
 
         # Seasonal trends
-        seasonal = context.analysis_results.get("seasonal", {})
+        seasonal = _get_analysis_result(context, "seasonal", {})
         if seasonal.get("by_season"):
             plot_seasonal_trends(seasonal)
 
         # Bridge analysis
-        bridges = context.analysis_results.get("bridges", {})
+        bridges = _get_analysis_result(context, "bridges", {})
         if bridges.get("bridge_persons"):
             plot_bridge_analysis(bridges)
 
         # Collaboration strength
-        collaborations = context.analysis_results.get("collaborations", [])
+        collaborations = _get_analysis_result(context, "collaborations", [])
         if collaborations:
             plot_collaboration_strength(collaborations[:100])
 
         # Tag summary
-        person_tags = context.analysis_results.get("tags", {})
+        person_tags = _get_analysis_result(context, "tags", {})
         if person_tags:
             # Build tags_data structure for visualization
             tag_summary: dict[str, int] = {}
@@ -1065,37 +1086,37 @@ def _generate_visualizations(context: PipelineContext) -> None:
             plot_tag_summary(tags_data)
 
         # Studio comparison
-        studios = context.analysis_results.get("studios", {})
+        studios = _get_analysis_result(context, "studios", {})
         if studios:
             plot_studio_comparison(studios)
 
         # Outlier summary
-        outliers = context.analysis_results.get("outliers", {})
+        outliers = _get_analysis_result(context, "outliers", {})
         if outliers:
             plot_outlier_summary(outliers)
 
         # Transition heatmap
-        transitions = context.analysis_results.get("transitions", {})
+        transitions = _get_analysis_result(context, "transitions", {})
         if transitions.get("transitions"):
             plot_transition_heatmap(transitions)
 
         # Anime stats
-        anime_stats = context.analysis_results.get("anime_stats", {})
+        anime_stats = _get_analysis_result(context, "anime_stats", {})
         if anime_stats:
             plot_anime_stats(anime_stats)
 
         # Genre affinity
-        genre_affinity = context.analysis_results.get("genre_affinity", {})
+        genre_affinity = _get_analysis_result(context, "genre_affinity", {})
         if genre_affinity:
             plot_genre_affinity(genre_affinity)
 
         # Cross-validation stability
-        crossval = context.analysis_results.get("crossval", {})
+        crossval = _get_analysis_result(context, "crossval", {})
         if crossval:
             plot_crossval_stability(crossval)
 
         # Performance metrics
-        performance = context.analysis_results.get("performance", {})
+        performance = _get_analysis_result(context, "performance", {})
         if performance:
             plot_performance_metrics(performance)
 

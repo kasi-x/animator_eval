@@ -230,27 +230,9 @@ def _run_role_flow(context: PipelineContext) -> Any:
 
 def _run_bridges(context: PipelineContext) -> Any:
     """Detect bridge nodes in network using community detection."""
-    communities_map = None
-    if context.collaboration_graph is not None:
-        n_edges = context.collaboration_graph.number_of_edges()
-        try:
-            if n_edges <= 1_000_000:
-                # Louvain for moderate graphs
-                comms = nx.community.louvain_communities(
-                    context.collaboration_graph, weight="weight", seed=42
-                )
-            else:
-                # Async label propagation for large graphs — O(E), much faster
-                # Uses seed=42 for deterministic results
-                comms = nx.community.asyn_lpa_communities(
-                    context.collaboration_graph, seed=42
-                )
-            communities_map = {}
-            for comm_id, members in enumerate(comms):
-                for member in members:
-                    communities_map[member] = comm_id
-        except Exception:
-            logger.warning("community_detection_failed_for_bridges", exc_info=True)
+    # Reuse pre-computed community_map from Phase 4 (avoids redundant community
+    # detection and works with both NetworkX and SparseCollaborationGraph)
+    communities_map = context.community_map if context.community_map else None
     return detect_bridges(
         context.credits,
         communities=communities_map,
@@ -1197,7 +1179,14 @@ def _flush_result_to_json(task_name: str, data: Any, json_dir: Path) -> bool:
     Results flushed here are marked as _FLUSHED in context.analysis_results
     so Phase 10 export skips re-writing them.
     """
+    import dataclasses
     import json as json_mod
+
+    def _default_serializer(obj: Any) -> Any:
+        """Serialize dataclass instances to dicts; fall back to str."""
+        if dataclasses.is_dataclass(obj) and not isinstance(obj, type):
+            return dataclasses.asdict(obj)
+        return str(obj)
 
     # Map task names to their export filenames
     filename = f"{task_name}.json"
@@ -1205,7 +1194,7 @@ def _flush_result_to_json(task_name: str, data: Any, json_dir: Path) -> bool:
     try:
         json_dir.mkdir(parents=True, exist_ok=True)
         with open(filepath, "w", encoding="utf-8") as f:
-            json_mod.dump(data, f, ensure_ascii=False, default=str)
+            json_mod.dump(data, f, ensure_ascii=False, default=_default_serializer)
         logger.debug("analysis_result_flushed", task=task_name, path=str(filepath))
         return True
     except (TypeError, ValueError, OSError) as e:

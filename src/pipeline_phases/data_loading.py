@@ -26,8 +26,6 @@ _ANCHOR_PRODUCTION_ROLES: frozenset[Role] = frozenset(
     {
         Role.DIRECTOR,
         Role.EPISODE_DIRECTOR,
-        Role.EPISODE_DIRECTOR,
-        Role.ANIMATION_DIRECTOR,
         Role.ANIMATION_DIRECTOR,
     }
 )

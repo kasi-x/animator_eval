@@ -18,11 +18,18 @@ if TYPE_CHECKING:
 # Role Groups (frozensets for immutability and set operations)
 # =============================================================================
 
+# DIRECTOR_ROLES: supervisory roles used for patronage and trust relationships.
+# ANIMATION_DIRECTOR (作画監督) is included because they directly supervise key
+# animators (giving patronage to them), making them part of the patronage hierarchy.
+# However, animation directors also RECEIVE patronage from senior directors
+# (DIRECTOR, EPISODE_DIRECTOR) — see patronage_dormancy.py for the two-tier logic.
+# ROLE_CATEGORY correctly maps them to "animation_supervision" (not "direction")
+# for career-stage analysis.
 DIRECTOR_ROLES: frozenset[Role] = frozenset(
     {
         Role.DIRECTOR,
         Role.EPISODE_DIRECTOR,
-        Role.ANIMATION_DIRECTOR,  # supervisory — included for patronage
+        Role.ANIMATION_DIRECTOR,  # supervisory — included for patronage giving
     }
 )
 

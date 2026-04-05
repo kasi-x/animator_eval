@@ -529,7 +529,7 @@ def main():
 
     # 総合ランキング
     print("\n=== 作品価値ランキング（トップ20）===\n")
-    top_anime = rank_anime_by_value(anime_values, dimension="iv_score", top_n=20)
+    top_anime = rank_anime_by_value(anime_values, dimension="overall", top_n=20)
 
     for rank, (anime_id, title, value) in enumerate(top_anime, 1):
         metrics = anime_values[anime_id]

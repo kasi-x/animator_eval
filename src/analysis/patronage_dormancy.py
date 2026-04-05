@@ -14,8 +14,18 @@ from math import exp, log1p
 
 import structlog
 
-from src.models import Anime, Credit
+from src.models import Anime, Credit, Role
 from src.utils.role_groups import DIRECTOR_ROLES
+
+# D12 fix: senior directors (監督・演出) sit above animation directors in the
+# hierarchy. Animation directors supervise key animators (giving them patronage),
+# but they themselves should receive patronage from senior directors.
+# Separating the two tiers avoids same-level circularity while preserving
+# the hierarchical structure: DIRECTOR/EPISODE_DIRECTOR → ANIMATION_DIRECTOR → KEY_ANIMATOR.
+_SENIOR_PATRON_ROLES: frozenset[Role] = frozenset(
+    {Role.DIRECTOR, Role.EPISODE_DIRECTOR}
+)
+from src.utils.time_utils import get_year_quarter, yq_to_float
 
 logger = structlog.get_logger()
 
@@ -59,24 +69,41 @@ def compute_patronage_premium(
     Returns:
         person_id → patronage premium
     """
-    # Identify directors per anime
+    # Identify patron tiers per anime.
+    # anime_directors: all supervisory roles (give patronage to key animators etc.)
+    # anime_senior_directors: top-level directors only (give patronage to animation directors too)
     anime_directors: dict[str, set[str]] = defaultdict(set)
+    anime_senior_directors: dict[str, set[str]] = defaultdict(set)
     for c in credits:
         if c.role in DIRECTOR_ROLES:
             anime_directors[c.anime_id].add(c.person_id)
+        if c.role in _SENIOR_PATRON_ROLES:
+            anime_senior_directors[c.anime_id].add(c.person_id)
 
-    # For each non-director person, count collaborations with each director
+    # For each person, count collaborations with their appropriate patron tier.
+    # D12 fix: animation directors receive patronage from senior directors only
+    #   (not from other animation directors on the same work — same-level circularity).
+    # D17 rationale: senior directors (DIRECTOR, EPISODE_DIRECTOR) don't receive
+    #   patronage — their value is captured by person_fe and BiRank. Including them
+    #   as recipients would create circularity (patronage ↔ BiRank).
     person_director_collabs: dict[str, dict[str, int]] = defaultdict(
         lambda: defaultdict(int)
     )
 
     for c in credits:
-        if c.role in DIRECTOR_ROLES:
-            continue
+        if c.role in _SENIOR_PATRON_ROLES:
+            continue  # Senior directors don't receive patronage
         anime = anime_map.get(c.anime_id)
         if not anime:
             continue
-        for dir_id in anime_directors.get(c.anime_id, set()):
+        # Animation directors: receive only from senior directors (avoid same-level circularity)
+        if c.role == Role.ANIMATION_DIRECTOR:
+            patron_set = anime_senior_directors.get(c.anime_id, set())
+        else:
+            patron_set = anime_directors.get(c.anime_id, set())
+        for dir_id in patron_set:
+            if dir_id == c.person_id:
+                continue  # No self-patronage
             person_director_collabs[c.person_id][dir_id] += 1
 
     # Compute patronage premium: Π_i = Σ_d (PR_d × log(1+N_id))
@@ -122,19 +149,24 @@ def compute_dormancy_penalty(
     if current_year is None:
         current_year = datetime.datetime.now().year
 
-    # Find last active year per person
-    last_year: dict[str, int] = {}
+    # Find last active (year, quarter) per person for quarter-level precision
+    last_yq_float: dict[str, float] = {}
     for c in credits:
         anime = anime_map.get(c.anime_id)
-        if anime and anime.year:
-            if c.person_id not in last_year:
-                last_year[c.person_id] = anime.year
-            else:
-                last_year[c.person_id] = max(last_year[c.person_id], anime.year)
+        if not anime or not anime.year:
+            continue
+        yq = get_year_quarter(anime)
+        if yq:
+            f = yq_to_float(*yq)
+            if c.person_id not in last_yq_float or f > last_yq_float[c.person_id]:
+                last_yq_float[c.person_id] = f
+
+    # Current reference point: end of current year (Q4)
+    current_ref = yq_to_float(current_year, 4)
 
     dormancy: dict[str, float] = {}
-    for pid, ly in last_year.items():
-        gap = current_year - ly
+    for pid, last_f in last_yq_float.items():
+        gap = current_ref - last_f  # gap in fractional years (quarter precision)
         effective_gap = max(0.0, gap - grace_period)
         dormancy[pid] = exp(-decay_rate * effective_gap)
 
@@ -168,17 +200,26 @@ def compute_patronage_and_dormancy(
         credits, anime_map, current_year, decay_rate, grace_period
     )
 
-    # Build patronage details
-    anime_directors: dict[str, set[str]] = defaultdict(set)
+    # Build patronage details (mirrors D12 fix in compute_patronage_premium)
+    _anime_directors: dict[str, set[str]] = defaultdict(set)
+    _anime_senior_directors: dict[str, set[str]] = defaultdict(set)
     for c in credits:
         if c.role in DIRECTOR_ROLES:
-            anime_directors[c.anime_id].add(c.person_id)
+            _anime_directors[c.anime_id].add(c.person_id)
+        if c.role in _SENIOR_PATRON_ROLES:
+            _anime_senior_directors[c.anime_id].add(c.person_id)
 
     patronage_details: dict[str, list[dict]] = defaultdict(list)
     for c in credits:
-        if c.role in DIRECTOR_ROLES:
+        if c.role in _SENIOR_PATRON_ROLES:
             continue
-        for dir_id in anime_directors.get(c.anime_id, set()):
+        if c.role == Role.ANIMATION_DIRECTOR:
+            patron_set = _anime_senior_directors.get(c.anime_id, set())
+        else:
+            patron_set = _anime_directors.get(c.anime_id, set())
+        for dir_id in patron_set:
+            if dir_id == c.person_id:
+                continue
             pr_d = director_birank_scores.get(dir_id, 0.0)
             if pr_d > 0:
                 patronage_details[c.person_id].append({
@@ -253,6 +294,11 @@ def compute_career_aware_dormancy(
         years_norm = min(active_years / 30.0, 1.0)
         stage_norm = min(highest_stage / 6.0, 1.0)
 
+        # D10: Multiplicative form means all 3 factors must be nonzero for
+        # protection. This is intentional: a high-IV person with 0 active years
+        # (career_data missing) shouldn't be protected. The 0.7 threshold is
+        # strict by design — dormancy protection is for clearly established
+        # veterans, not borderline cases.
         career_capital = iv_pctile * years_norm * stage_norm
 
         if career_capital >= career_capital_threshold:

@@ -66,9 +66,12 @@ def compute_role_flow(
             current_roles = year_roles[years[i]]
             next_roles = year_roles[years[i + 1]]
 
-            # Take highest stage role for each year
-            current_best = max(current_roles)
-            next_best = max(next_roles)
+            # Take highest stage role for each year (extract stage number for robust ordering)
+            def _stage_num(s: str) -> int:
+                return int(s.split(":")[0].split()[-1]) if ":" in s else 0
+
+            current_best = max(current_roles, key=_stage_num)
+            next_best = max(next_roles, key=_stage_num)
 
             if current_best != next_best:
                 flow_counts[(current_best, next_best)] += 1

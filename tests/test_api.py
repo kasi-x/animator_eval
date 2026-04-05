@@ -18,11 +18,53 @@ def client():
 def scores_data(tmp_path, monkeypatch):
     """テスト用スコアデータをJSON_DIRに配置."""
     import src.api
+    import src.database
     import src.utils.json_io
 
     # Monkeypatch JSON_DIR in both api and json_io modules
     monkeypatch.setattr(src.api, "JSON_DIR", tmp_path)
     monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path)
+
+    # Set up a test database with schema and 3 test persons
+    db_path = tmp_path / "test_scores.db"
+    monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
+    from src.database import get_connection, init_db
+
+    conn = get_connection()
+    init_db(conn)
+    # Insert test persons
+    conn.execute("INSERT INTO persons (id, name_ja, name_en) VALUES ('p1', '監督A', 'Director A')")
+    conn.execute("INSERT INTO persons (id, name_ja, name_en) VALUES ('p2', '', 'Animator B')")
+    conn.execute("INSERT INTO persons (id, name_ja, name_en) VALUES ('p3', '', 'Newbie C')")
+    # Insert scores
+    conn.execute(
+        "INSERT INTO scores (person_id, iv_score, birank, patronage, person_fe, awcc, dormancy)"
+        " VALUES ('p1', 71.0, 80.0, 70.0, 60.0, 0.5, 1.0)"
+    )
+    conn.execute(
+        "INSERT INTO scores (person_id, iv_score, birank, patronage, person_fe, awcc, dormancy)"
+        " VALUES ('p2', 47.75, 50.0, 40.0, 55.0, 0.3, 0.9)"
+    )
+    conn.execute(
+        "INSERT INTO scores (person_id, iv_score, birank, patronage, person_fe, awcc, dormancy)"
+        " VALUES ('p3', 10.75, 10.0, 5.0, 20.0, 0.1, 0.8)"
+    )
+    # Insert anime and credits for join
+    conn.execute("INSERT INTO anime (id, title_en, year) VALUES ('a1', 'Anime 1', 2023)")
+    conn.execute(
+        "INSERT INTO credits (person_id, anime_id, role, source, credit_year)"
+        " VALUES ('p1', 'a1', 'director', 'test', 2023)"
+    )
+    conn.execute(
+        "INSERT INTO credits (person_id, anime_id, role, source, credit_year)"
+        " VALUES ('p2', 'a1', 'key_animator', 'test', 2023)"
+    )
+    conn.execute(
+        "INSERT INTO credits (person_id, anime_id, role, source, credit_year)"
+        " VALUES ('p3', 'a1', 'key_animator', 'test', 2023)"
+    )
+    conn.commit()
+    conn.close()
 
     # Clear cache to force reload with new paths
     src.utils.json_io.clear_json_cache()
@@ -437,7 +479,7 @@ class TestGetPerson:
         data = resp.json()
         assert data["person_id"] == "p1"
         assert data["birank"] == 80.0
-        assert "breakdown" in data
+        assert "career" in data
 
     def test_not_found(self, client, scores_data):
         resp = client.get("/api/persons/nonexistent")

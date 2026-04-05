@@ -225,6 +225,48 @@ def summary():
     return data
 
 
+_PERSON_SELECT_SQL = """
+    SELECT s.person_id,
+           p.name_ja, p.name_en, p.image_medium,
+           s.iv_score, s.birank, s.patronage, s.person_fe,
+           s.awcc, s.dormancy, s.studio_fe_exposure,
+           MIN(c.credit_year) AS first_year,
+           MAX(c.credit_year) AS latest_year,
+           COUNT(DISTINCT c.anime_id) AS total_works,
+           (SELECT role FROM credits
+            WHERE person_id = s.person_id
+            GROUP BY role ORDER BY COUNT(*) DESC LIMIT 1) AS primary_role
+    FROM scores s
+    JOIN persons p ON s.person_id = p.id
+    LEFT JOIN credits c ON s.person_id = c.person_id
+    WHERE s.iv_score IS NOT NULL {extra_where}
+    GROUP BY s.person_id
+"""
+
+
+def _row_to_person(r) -> dict:
+    return {
+        "person_id": r["person_id"],
+        "name": r["name_ja"] or r["name_en"],
+        "name_ja": r["name_ja"],
+        "name_en": r["name_en"],
+        "image_medium": r["image_medium"],
+        "iv_score": r["iv_score"],
+        "birank": r["birank"],
+        "patronage": r["patronage"],
+        "person_fe": r["person_fe"],
+        "awcc": r["awcc"],
+        "dormancy": r["dormancy"],
+        "studio_fe_exposure": r["studio_fe_exposure"],
+        "primary_role": r["primary_role"],
+        "career": {
+            "first_year": r["first_year"],
+            "latest_year": r["latest_year"],
+            "total_works": r["total_works"],
+        },
+    }
+
+
 @app.get("/api/persons")
 def list_persons(
     page: int = Query(1, ge=1, description="ページ番号"),
@@ -234,27 +276,28 @@ def list_persons(
     ),
 ):
     """全人物スコア一覧（ページネーション対応）."""
-    scores = load_person_scores_from_json()
-    if not scores:
-        return PaginatedResponse(
-            items=[], total=0, page=page, per_page=per_page, pages=0
-        )
-
     valid_sorts = {"iv_score", "person_fe", "birank", "patronage", "dormancy", "awcc"}
     if sort not in valid_sorts:
         raise HTTPException(
             status_code=400, detail=f"Invalid sort: {sort}. Use: {valid_sorts}"
         )
 
-    scores.sort(key=lambda x: x.get(sort, 0), reverse=True)
-    total = len(scores)
-    pages = (total + per_page - 1) // per_page
-    start = (page - 1) * per_page
-    items = scores[start : start + per_page]
+    import sqlite3 as _sqlite3
+    with db_connection() as conn:
+        conn.row_factory = _sqlite3.Row
+        total = conn.execute(
+            "SELECT COUNT(DISTINCT s.person_id) FROM scores s WHERE s.iv_score IS NOT NULL"
+        ).fetchone()[0]
+        pages = (total + per_page - 1) // per_page
+        offset = (page - 1) * per_page
+        sql = _PERSON_SELECT_SQL.format(extra_where="")
+        rows = conn.execute(
+            f"{sql} ORDER BY s.{sort} DESC LIMIT ? OFFSET ?",
+            [per_page, offset],
+        ).fetchall()
 
-    return PaginatedResponse(
-        items=items, total=total, page=page, per_page=per_page, pages=pages
-    )
+    items = [_row_to_person(r) for r in rows]
+    return PaginatedResponse(items=items, total=total, page=page, per_page=per_page, pages=pages)
 
 
 @app.get("/api/persons/search")
@@ -273,11 +316,14 @@ def search(
 @app.get("/api/persons/{person_id}")
 def get_person(person_id: PersonId):
     """人物プロフィール（スコア + ブレークダウン）."""
-    scores = load_person_scores_from_json()
-    for entry in scores:
-        if entry["person_id"] == person_id:
-            return entry
-    raise HTTPException(status_code=404, detail=f"Person {person_id} not found")
+    import sqlite3 as _sqlite3
+    with db_connection() as conn:
+        conn.row_factory = _sqlite3.Row
+        sql = _PERSON_SELECT_SQL.format(extra_where="AND s.person_id = ?")
+        row = conn.execute(sql, [person_id]).fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"Person {person_id} not found")
+    return _row_to_person(row)
 
 
 @app.get("/api/persons/{person_id}/similar")
@@ -286,15 +332,28 @@ def get_similar(
     top_n: int = Query(10, ge=1, le=50, description="類似人物の数"),
 ):
     """類似人物検索（コサイン類似度）."""
-    scores = load_person_scores_from_json()
-    if not scores:
-        raise HTTPException(status_code=404, detail="No scores available")
+    import sqlite3 as _sqlite3
+    with db_connection() as conn:
+        conn.row_factory = _sqlite3.Row
+        # 対象人物と同じ主役職のスコア上位2000人のみで類似計算
+        target = conn.execute(
+            "SELECT person_fe, birank, patronage, awcc, dormancy,"
+            " (SELECT role FROM credits WHERE person_id=s.person_id"
+            "  GROUP BY role ORDER BY COUNT(*) DESC LIMIT 1) AS primary_role"
+            " FROM scores s WHERE s.person_id = ?",
+            [person_id],
+        ).fetchone()
+        if target is None:
+            raise HTTPException(status_code=404, detail=f"Person {person_id} not found")
 
+        sql = _PERSON_SELECT_SQL.format(extra_where="")
+        rows = conn.execute(
+            f"{sql} ORDER BY s.iv_score DESC LIMIT 2000"
+        ).fetchall()
+
+    scores = [_row_to_person(r) for r in rows]
     similar = find_similar_persons(person_id, scores, top_n=top_n)
-    if not similar:
-        raise HTTPException(status_code=404, detail=f"Person {person_id} not found")
-
-    return {"person_id": person_id, "similar": similar}
+    return {"person_id": person_id, "similar": similar or []}
 
 
 @app.get("/api/persons/{person_id}/history")
@@ -320,43 +379,85 @@ def ranking(
     sort: str = Query("iv_score", description="ソート軸"),
     limit: int = Query(50, ge=1, le=500, description="件数"),
 ):
-    """ランキング（フィルタ対応）."""
-    scores = load_person_scores_from_json()
-    if not scores:
-        return {"items": [], "total": 0}
-
-    filtered = scores
-
-    if role:
-        filtered = [s for s in filtered if s.get("primary_role") == role]
-
-    if year_from:
-        filtered = [
-            s
-            for s in filtered
-            if s.get("career", {}).get("first_year")
-            and s["career"]["first_year"] >= year_from
-            or s.get("career", {}).get("latest_year")
-            and s["career"]["latest_year"] >= year_from
-        ]
-
-    if year_to:
-        filtered = [
-            s
-            for s in filtered
-            if s.get("career", {}).get("first_year")
-            and s["career"]["first_year"] <= year_to
-        ]
-
+    """ランキング（フィルタ対応）— SQLiteから直接クエリ."""
     valid_sorts = {"iv_score", "person_fe", "birank", "patronage", "dormancy", "awcc"}
     if sort not in valid_sorts:
         raise HTTPException(status_code=400, detail=f"Invalid sort: {sort}")
 
-    filtered.sort(key=lambda x: x.get(sort, 0), reverse=True)
+    with db_connection() as conn:
+        conn.row_factory = __import__("sqlite3").Row
+        conditions = ["s.iv_score IS NOT NULL"]
+        params: list = []
+
+        if role:
+            conditions.append(
+                "EXISTS (SELECT 1 FROM credits cr WHERE cr.person_id = s.person_id"
+                " AND cr.role = ? GROUP BY cr.role"
+                " HAVING COUNT(*) = (SELECT MAX(cnt) FROM"
+                " (SELECT COUNT(*) AS cnt FROM credits WHERE person_id = s.person_id GROUP BY role)))"
+            )
+            params.append(role)
+
+        if year_from is not None:
+            conditions.append(
+                "EXISTS (SELECT 1 FROM credits cr WHERE cr.person_id = s.person_id"
+                " AND cr.credit_year >= ?)"
+            )
+            params.append(year_from)
+
+        if year_to is not None:
+            conditions.append(
+                "EXISTS (SELECT 1 FROM credits cr WHERE cr.person_id = s.person_id"
+                " AND cr.credit_year <= ?)"
+            )
+            params.append(year_to)
+
+        where = " AND ".join(conditions)
+
+        count_sql = f"SELECT COUNT(DISTINCT s.person_id) FROM scores s WHERE {where}"
+        total = conn.execute(count_sql, params).fetchone()[0]
+
+        sql = f"""
+            SELECT s.person_id,
+                   p.name_ja, p.name_en,
+                   s.iv_score, s.birank, s.patronage, s.person_fe,
+                   s.awcc, s.dormancy,
+                   MIN(c.credit_year) AS first_year,
+                   MAX(c.credit_year) AS latest_year,
+                   (SELECT role FROM credits
+                    WHERE person_id = s.person_id
+                    GROUP BY role ORDER BY COUNT(*) DESC LIMIT 1) AS primary_role
+            FROM scores s
+            JOIN persons p ON s.person_id = p.id
+            LEFT JOIN credits c ON s.person_id = c.person_id
+            WHERE {where}
+            GROUP BY s.person_id
+            ORDER BY s.{sort} DESC
+            LIMIT ?
+        """
+        rows = conn.execute(sql, params + [limit]).fetchall()
+
+    items = [
+        {
+            "person_id": r["person_id"],
+            "name": r["name_ja"] or r["name_en"],
+            "name_ja": r["name_ja"],
+            "name_en": r["name_en"],
+            "iv_score": r["iv_score"],
+            "birank": r["birank"],
+            "patronage": r["patronage"],
+            "person_fe": r["person_fe"],
+            "awcc": r["awcc"],
+            "dormancy": r["dormancy"],
+            "primary_role": r["primary_role"],
+            "career": {"first_year": r["first_year"], "latest_year": r["latest_year"]},
+        }
+        for r in rows
+    ]
 
     return {
-        "items": filtered[:limit],
-        "total": len(filtered),
+        "items": items,
+        "total": total,
         "sort": sort,
         "filters": {"role": role, "year_from": year_from, "year_to": year_to},
     }
@@ -621,9 +722,9 @@ def data_quality():
     with db_connection() as conn:
         stats = get_db_stats(conn)
 
-        total_credits = stats.get("credits", 0)
-        total_persons = stats.get("persons", 0)
-        total_anime = stats.get("anime", 0)
+        total_credits = stats.get("credits_count", 0)
+        total_persons = stats.get("persons_count", 0)
+        total_anime = stats.get("anime_count", 0)
 
         credits_with_source = (
             conn.execute("SELECT COUNT(*) FROM credits WHERE source != ''").fetchone()[

@@ -27,6 +27,9 @@ def post_process_results(context: PipelineContext) -> None:
         - Adds stability field (comparison with previous run)
     """
     # Calculate percentile ranks using bisect (O(n log n) instead of O(n²))
+    # D19: bisect_right gives upper percentile for ties — all tied values get
+    # the same percentile (the highest rank in the tie group / n × 100).
+    # Single-person cohort → 100.0 by convention (only person = top).
     n = len(context.results)
     axes = ("iv_score", "person_fe", "birank", "patronage", "awcc", "dormancy")
     if n > 1:
@@ -34,7 +37,12 @@ def post_process_results(context: PipelineContext) -> None:
             sorted_vals = sorted(r.get(axis, 0) for r in context.results)
             for r in context.results:
                 rank = bisect.bisect_right(sorted_vals, r.get(axis, 0))
-                r[f"{axis}_pct"] = round(rank / n * 100, 1)
+                pct_raw = rank / n * 100
+                # Only the true top rank(s) get 100.0; others cap at 99.9
+                # to avoid rounding artifacts (e.g. 99.95 → 100.0)
+                r[f"{axis}_pct"] = (
+                    100.0 if rank == n else min(round(pct_raw, 1), 99.9)
+                )
     elif n == 1:
         for r in context.results:
             for axis in axes:

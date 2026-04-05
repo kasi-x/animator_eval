@@ -11,6 +11,7 @@ import numpy as np
 import structlog
 
 from src.models import Anime, Credit
+from src.utils.role_groups import CAREER_STAGE_BY_VALUE as _STAGE_MAP
 
 logger = structlog.get_logger()
 
@@ -103,9 +104,6 @@ class GenreEcosystemResult:
     seasonality: dict[str, GenreSeasonality] = field(default_factory=dict)
     careers: dict[str, GenreCareerProfile] = field(default_factory=dict)
 
-
-# Career stage mapping — single source of truth in role_groups.py
-from src.utils.role_groups import CAREER_STAGE_BY_VALUE as _STAGE_MAP
 
 _SEASONS = ["winter", "spring", "summer", "fall"]
 

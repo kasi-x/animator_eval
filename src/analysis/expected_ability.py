@@ -80,6 +80,12 @@ def compute_expected_ability(
     for c in credits:
         person_anime[c.person_id].add(c.anime_id)
 
+    # D16: Simultaneity note — collaborator IV and a person's own IV are computed
+    # from the same pipeline run. This means "expected ability" uses information
+    # that is contemporaneous, not strictly prior. However, the collaborator
+    # average (excluding self) is a leave-one-out estimator, which mitigates
+    # direct self-influence. For strict causal claims, a two-stage approach
+    # (prior-year collaborator IV) would be needed.
     # Compute features for each person
     target_pids = sorted(set(person_fe.keys()) & set(iv_scores.keys()))
     if len(target_pids) < 10:

@@ -6,7 +6,6 @@ title_ja matching, preferring wiki sources as canonical IDs.
 
 import json
 from collections import defaultdict
-from pathlib import Path
 
 import structlog
 
@@ -237,6 +236,7 @@ def run_entity_resolution(context: PipelineContext) -> None:
                         person_id=new_pid,
                         anime_id=c.anime_id,
                         role=c.role,
+                        raw_role=c.raw_role,
                         episode=c.episode,
                         source=c.source,
                     )
@@ -326,7 +326,9 @@ def run_entity_resolution(context: PipelineContext) -> None:
         # Log anomalies (wiki canonical has fewer credits) as JSON
         if anomalies:
             anomalies.sort(key=lambda x: -x["deficit"])
-            anomaly_path = Path("result/json/anime_merge_anomalies.json")
+            from src.utils.config import JSON_DIR
+
+            anomaly_path = JSON_DIR / "anime_merge_anomalies.json"
             anomaly_path.parent.mkdir(parents=True, exist_ok=True)
             anomaly_path.write_text(
                 json.dumps(anomalies, ensure_ascii=False, indent=2),

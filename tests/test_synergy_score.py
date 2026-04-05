@@ -19,12 +19,15 @@ from src.models import Anime, Credit, Role
 
 def _make_chain_anime(
     n: int = 3,
+    base_episodes: int = 12,
+    episodes_delta: int = 0,
     base_score: float = 7.0,
     score_delta: float = 0.5,
 ) -> dict[str, Anime]:
     """Create a chain of anime with sequel relations.
 
     Returns anime_map with a1..aN linked by SEQUEL/PREQUEL.
+    episodes controls the structural production scale trajectory.
     """
     anime_map = {}
     for i in range(1, n + 1):
@@ -43,6 +46,7 @@ def _make_chain_anime(
             id=f"a{i}",
             title_en=f"Franchise Part {i}",
             year=2018 + i,
+            episodes=base_episodes + (i - 1) * episodes_delta,
             score=base_score + (i - 1) * score_delta,
             relations_json=json.dumps(relations),
         )
@@ -242,41 +246,41 @@ class TestComputePairSynergy:
         s5 = _compute_pair_synergy(h5, anime_map)
         assert s5 > s2
 
-    def test_improving_scores_boost_synergy(self):
-        """Rising anime scores increase quality_factor → higher synergy."""
-        # Rising scores
-        anime_rising = _make_chain_anime(3, base_score=6.0, score_delta=1.5)
-        # Flat scores
-        anime_flat = _make_chain_anime(3, base_score=6.0, score_delta=0.0)
+    def test_improving_scale_boosts_synergy(self):
+        """Rising production scale (episodes) → higher synergy."""
+        # Rising episode count (growing franchise)
+        anime_rising = _make_chain_anime(3, base_episodes=6, episodes_delta=6)
+        # Flat episode count
+        anime_flat = _make_chain_anime(3, base_episodes=12, episodes_delta=0)
 
         h = PairHistory(anime_ids=["a1", "a2", "a3"], collab_count=3)
         s_rising = _compute_pair_synergy(h, anime_rising)
         s_flat = _compute_pair_synergy(h, anime_flat)
         assert s_rising > s_flat
 
-    def test_declining_scores_reduce_synergy(self):
-        """Declining anime scores → quality_factor < 1.0 → lower synergy."""
-        anime_declining = _make_chain_anime(3, base_score=9.0, score_delta=-2.0)
+    def test_declining_scale_reduces_synergy(self):
+        """Declining production scale → quality_factor < 1.0."""
+        anime_declining = _make_chain_anime(3, base_episodes=24, episodes_delta=-8)
         quality = _compute_quality_factor(["a1", "a2", "a3"], anime_declining)
         assert quality < 1.0
 
-    def test_no_scores_defaults_to_1(self):
-        """Anime without scores → quality_factor = 1.0."""
+    def test_no_episodes_defaults_to_1(self):
+        """Anime without episode data → quality_factor = 1.0."""
         anime_map = {
-            "a1": Anime(id="a1", title_en="NoScore 1", year=2020),
-            "a2": Anime(id="a2", title_en="NoScore 2", year=2021),
+            "a1": Anime(id="a1", title_en="NoEps 1", year=2020),
+            "a2": Anime(id="a2", title_en="NoEps 2", year=2021),
         }
         quality = _compute_quality_factor(["a1", "a2"], anime_map)
         assert quality == 1.0
 
-    def test_quality_factor_clamped_to_2(self):
-        """Quality factor can't exceed 2.0."""
+    def test_quality_factor_clamped_to_1_5(self):
+        """Quality factor can't exceed 1.5."""
         anime_map = {
-            "a1": Anime(id="a1", title_en="Low", year=2020, score=1.0),
-            "a2": Anime(id="a2", title_en="High", year=2021, score=10.0),
+            "a1": Anime(id="a1", title_en="Short", year=2020, episodes=1),
+            "a2": Anime(id="a2", title_en="Long", year=2021, episodes=100),
         }
         quality = _compute_quality_factor(["a1", "a2"], anime_map)
-        assert quality == 2.0
+        assert quality == 1.5
 
 
 # ============================================================

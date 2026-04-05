@@ -19,6 +19,7 @@ def infer_mentorships(
     anime_map: dict[str, Anime],
     min_shared_works: int = 3,
     min_stage_gap: int = 2,
+    max_persons_per_anime: int = 80,
 ) -> list[dict]:
     """メンター-メンティー関係を推定する.
 
@@ -57,13 +58,17 @@ def infer_mentorships(
             person_modal_stage[pid] = max(set(stages), key=stages.count)
 
     # Find potential mentor-mentee pairs (shared works with stage gap)
+    # Cap persons per anime to avoid O(n²) explosion on long-running series.
+    # Prefer higher-stage persons (more likely to be mentors) when capping.
     pair_shared: dict[tuple[str, str], list[str]] = defaultdict(list)
     for anime_id, creds in anime_credits.items():
         persons = [(c.person_id, CAREER_STAGE.get(c.role, 0)) for c in creds]
+        persons = [p for p in persons if p[1] > 0]
+        if len(persons) > max_persons_per_anime:
+            persons.sort(key=lambda x: x[1], reverse=True)
+            persons = persons[:max_persons_per_anime]
         for i, (p1, s1) in enumerate(persons):
             for p2, s2 in persons[i + 1 :]:
-                if s1 == 0 or s2 == 0:
-                    continue
                 if s1 > s2 and s1 - s2 >= min_stage_gap:
                     pair_shared[(p1, p2)].append(anime_id)
                 elif s2 > s1 and s2 - s1 >= min_stage_gap:

@@ -48,6 +48,9 @@ class PipelineContext:
     visualize: bool
     dry_run: bool
     current_year: int = field(default_factory=lambda: datetime.datetime.now().year)
+    current_quarter: int = field(
+        default_factory=lambda: (datetime.datetime.now().month - 1) // 3 + 1
+    )
 
     # Source data (Phase 1: data_loading)
     persons: list[Person] = field(default_factory=list)
@@ -60,7 +63,7 @@ class PipelineContext:
 
     # Graphs (Phase 4: graph_construction)
     person_anime_graph: nx.Graph | None = None
-    collaboration_graph: nx.Graph | None = None
+    collaboration_graph: Any = None  # nx.Graph | SparseCollaborationGraph
 
     # 8-component structural scoring (Phase 5: core_scoring)
     akm_result: Any = None  # AKMResult dataclass
@@ -264,10 +267,25 @@ class PipelineCheckpoint:
         return phase
 
     def is_compatible(self, checkpoint: dict, context: PipelineContext) -> bool:
-        """Check if checkpoint is compatible with current data."""
-        return checkpoint.get("credit_count") == len(
-            context.credits
-        ) and checkpoint.get("person_count") == len(context.persons)
+        """Check if checkpoint is compatible with current data.
+
+        Allows up to 1% difference in counts to accommodate non-deterministic
+        entity resolution (similarity-based merging depends on iteration order).
+        """
+        saved_credits = checkpoint.get("credit_count", 0)
+        saved_persons = checkpoint.get("person_count", 0)
+        cur_credits = len(context.credits)
+        cur_persons = len(context.persons)
+        # Allow 1% tolerance for entity resolution non-determinism
+        credit_ok = abs(saved_credits - cur_credits) <= max(saved_credits, 1) * 0.01
+        person_ok = abs(saved_persons - cur_persons) <= max(saved_persons, 1) * 0.01
+        if not (credit_ok and person_ok):
+            checkpoint_logger.info(
+                "checkpoint_counts_mismatch",
+                saved_credits=saved_credits, cur_credits=cur_credits,
+                saved_persons=saved_persons, cur_persons=cur_persons,
+            )
+        return credit_ok and person_ok
 
     def delete(self) -> None:
         """Delete checkpoint on successful pipeline completion."""
