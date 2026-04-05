@@ -102,13 +102,13 @@ def _build_collaboration_graph_for_communities() -> nx.Graph:
 
 class TestCommunityDetection:
     def test_detect_communities_empty_graph(self):
-        from src.analysis.community_detection import detect_communities
+        from src.analysis.network.community_detection import detect_communities
 
         result = detect_communities(nx.Graph())
         assert result == {}
 
     def test_detect_communities_small_graph_below_min_size(self):
-        from src.analysis.community_detection import detect_communities
+        from src.analysis.network.community_detection import detect_communities
 
         g = _build_triangle_graph()
         # min_community_size=10 should exclude a 3-node component
@@ -116,7 +116,7 @@ class TestCommunityDetection:
         assert result == {}
 
     def test_detect_communities_finds_clusters(self):
-        from src.analysis.community_detection import detect_communities
+        from src.analysis.network.community_detection import detect_communities
 
         g = _build_collaboration_graph_for_communities()
         result = detect_communities(g, min_community_size=3)
@@ -127,7 +127,7 @@ class TestCommunityDetection:
             assert comm.density >= 0
 
     def test_community_overlap_analysis(self):
-        from src.analysis.community_detection import (
+        from src.analysis.network.community_detection import (
             analyze_community_overlap,
             detect_communities,
         )
@@ -139,13 +139,13 @@ class TestCommunityDetection:
         assert isinstance(bridges, dict)
 
     def test_get_community_formation_period_no_credits(self):
-        from src.analysis.community_detection import get_community_formation_period
+        from src.analysis.network.community_detection import get_community_formation_period
 
         result = get_community_formation_period(["A", "B"], [], {})
         assert result is None
 
     def test_get_community_formation_period_normal(self):
-        from src.analysis.community_detection import get_community_formation_period
+        from src.analysis.network.community_detection import get_community_formation_period
 
         anime_map = {
             "a1": _make_anime("a1", year=2018),
@@ -166,20 +166,20 @@ class TestCommunityDetection:
         assert end <= 2021
 
     def test_compute_prospective_potential_no_history(self):
-        from src.analysis.community_detection import compute_prospective_potential
+        from src.analysis.network.community_detection import compute_prospective_potential
 
         result = compute_prospective_potential("P1", [], {}, 2020, 50.0)
         assert result == 50.0
 
     def test_compute_retrospective_potential_at_peak(self):
-        from src.analysis.community_detection import compute_retrospective_potential
+        from src.analysis.network.community_detection import compute_retrospective_potential
 
         # Already at peak -> returns current_score
         result = compute_retrospective_potential("P1", [], {}, 2020, 80.0, 80.0)
         assert result == 80.0
 
     def test_compute_retrospective_potential_below_peak(self):
-        from src.analysis.community_detection import compute_retrospective_potential
+        from src.analysis.network.community_detection import compute_retrospective_potential
 
         anime_map = {
             "a1": _make_anime("a1", year=2015),
@@ -321,7 +321,7 @@ class TestInsightsReport:
 
 class TestPathFinding:
     def test_find_shortest_path_normal(self):
-        from src.analysis.path_finding import find_shortest_path
+        from src.analysis.network.path_finding import find_shortest_path
 
         g = _build_triangle_graph()
         result = find_shortest_path(g, "A", "C")
@@ -331,7 +331,7 @@ class TestPathFinding:
         assert result.length >= 1
 
     def test_find_shortest_path_same_node(self):
-        from src.analysis.path_finding import find_shortest_path
+        from src.analysis.network.path_finding import find_shortest_path
 
         g = _build_triangle_graph()
         result = find_shortest_path(g, "A", "A")
@@ -340,14 +340,14 @@ class TestPathFinding:
         assert result.path == ["A"]
 
     def test_find_shortest_path_node_not_in_graph(self):
-        from src.analysis.path_finding import find_shortest_path
+        from src.analysis.network.path_finding import find_shortest_path
 
         g = _build_triangle_graph()
         result = find_shortest_path(g, "A", "Z")
         assert result is None
 
     def test_find_shortest_path_no_path(self):
-        from src.analysis.path_finding import find_shortest_path
+        from src.analysis.network.path_finding import find_shortest_path
 
         g = nx.Graph()
         g.add_node("A")
@@ -356,7 +356,7 @@ class TestPathFinding:
         assert result is None
 
     def test_find_all_shortest_paths_normal(self):
-        from src.analysis.path_finding import find_all_shortest_paths
+        from src.analysis.network.path_finding import find_all_shortest_paths
 
         g = _build_triangle_graph()
         results = find_all_shortest_paths(g, "A", "C")
@@ -366,20 +366,20 @@ class TestPathFinding:
         assert len(lengths) == 1
 
     def test_find_all_shortest_paths_missing_node(self):
-        from src.analysis.path_finding import find_all_shortest_paths
+        from src.analysis.network.path_finding import find_all_shortest_paths
 
         g = _build_triangle_graph()
         results = find_all_shortest_paths(g, "A", "Z")
         assert results == []
 
     def test_find_bottleneck_nodes_empty_graph(self):
-        from src.analysis.path_finding import find_bottleneck_nodes
+        from src.analysis.network.path_finding import find_bottleneck_nodes
 
         results = find_bottleneck_nodes(nx.Graph())
         assert results == []
 
     def test_find_bottleneck_nodes_barbell(self):
-        from src.analysis.path_finding import find_bottleneck_nodes
+        from src.analysis.network.path_finding import find_bottleneck_nodes
 
         g = _build_barbell_graph()
         results = find_bottleneck_nodes(g, top_n=3)
@@ -389,7 +389,7 @@ class TestPathFinding:
         assert "C" in top_ids or "D" in top_ids
 
     def test_compute_separation_statistics(self):
-        from src.analysis.path_finding import compute_separation_statistics
+        from src.analysis.network.path_finding import compute_separation_statistics
 
         g = _build_triangle_graph()
         stats = compute_separation_statistics(g)
@@ -398,7 +398,7 @@ class TestPathFinding:
         assert stats["diameter"] >= 1
 
     def test_compute_separation_statistics_empty(self):
-        from src.analysis.path_finding import compute_separation_statistics
+        from src.analysis.network.path_finding import compute_separation_statistics
 
         stats = compute_separation_statistics(nx.Graph())
         assert stats == {}
@@ -422,7 +422,7 @@ class TestTemporalInfluence:
         return credits, anime_map
 
     def test_compute_temporal_profiles_basic(self):
-        from src.analysis.temporal_influence import compute_temporal_profiles
+        from src.analysis.network.temporal_influence import compute_temporal_profiles
 
         credits, anime_map = self._build_temporal_data()
         profiles = compute_temporal_profiles(credits, anime_map)
@@ -432,7 +432,7 @@ class TestTemporalInfluence:
         assert profiles["P2"].career_end == 2018
 
     def test_compute_temporal_profiles_with_scores(self):
-        from src.analysis.temporal_influence import compute_temporal_profiles
+        from src.analysis.network.temporal_influence import compute_temporal_profiles
 
         credits, anime_map = self._build_temporal_data()
         scores = {"P1": {"birank": 10, "patronage": 20, "person_fe": 30, "iv_score": 50}}
@@ -441,13 +441,13 @@ class TestTemporalInfluence:
         assert profiles["P1"].peak_score == 50.0
 
     def test_compute_temporal_profiles_empty(self):
-        from src.analysis.temporal_influence import compute_temporal_profiles
+        from src.analysis.network.temporal_influence import compute_temporal_profiles
 
         profiles = compute_temporal_profiles([], {})
         assert profiles == {}
 
     def test_analyze_cohort_trends(self):
-        from src.analysis.temporal_influence import (
+        from src.analysis.network.temporal_influence import (
             analyze_cohort_trends,
             compute_temporal_profiles,
         )
@@ -460,7 +460,7 @@ class TestTemporalInfluence:
         assert len(cohorts) >= 1
 
     def test_detect_industry_trends(self):
-        from src.analysis.temporal_influence import (
+        from src.analysis.network.temporal_influence import (
             compute_temporal_profiles,
             detect_industry_trends,
         )
@@ -499,7 +499,7 @@ class TestGenreSpecialization:
         return credits, anime_map
 
     def test_compute_genre_profiles(self):
-        from src.analysis.genre_specialization import compute_genre_profiles
+        from src.analysis.genre.specialization import compute_genre_profiles
 
         credits, anime_map = self._build_genre_data()
         profiles = compute_genre_profiles(credits, anime_map)
@@ -509,13 +509,13 @@ class TestGenreSpecialization:
         assert profiles["P1"].primary_genre == "action"
 
     def test_compute_genre_profiles_empty(self):
-        from src.analysis.genre_specialization import compute_genre_profiles
+        from src.analysis.genre.specialization import compute_genre_profiles
 
         profiles = compute_genre_profiles([], {})
         assert profiles == {}
 
     def test_genre_diversity_score(self):
-        from src.analysis.genre_specialization import compute_genre_profiles
+        from src.analysis.genre.specialization import compute_genre_profiles
 
         credits, anime_map = self._build_genre_data()
         profiles = compute_genre_profiles(credits, anime_map)
@@ -526,7 +526,7 @@ class TestGenreSpecialization:
         assert profiles["P1"].specialization_score >= 0.0
 
     def test_find_genre_specialists(self):
-        from src.analysis.genre_specialization import (
+        from src.analysis.genre.specialization import (
             compute_genre_profiles,
             find_genre_specialists,
         )
@@ -539,7 +539,7 @@ class TestGenreSpecialization:
         assert specialists[0][0] == "P1"
 
     def test_compute_genre_similarity_identical(self):
-        from src.analysis.genre_specialization import (
+        from src.analysis.genre.specialization import (
             GenreProfile,
             compute_genre_similarity,
         )
@@ -550,7 +550,7 @@ class TestGenreSpecialization:
         assert sim == 1.0
 
     def test_compute_genre_similarity_orthogonal(self):
-        from src.analysis.genre_specialization import (
+        from src.analysis.genre.specialization import (
             GenreProfile,
             compute_genre_similarity,
         )
@@ -561,7 +561,7 @@ class TestGenreSpecialization:
         assert sim == 0.0
 
     def test_normalize_genre(self):
-        from src.analysis.genre_specialization import normalize_genre
+        from src.analysis.genre.specialization import normalize_genre
 
         assert normalize_genre("Action") == "action"
         assert normalize_genre("Science Fiction") == "sci-fi"
@@ -569,7 +569,7 @@ class TestGenreSpecialization:
         assert normalize_genre("") is None
 
     def test_analyze_genre_trends(self):
-        from src.analysis.genre_specialization import (
+        from src.analysis.genre.specialization import (
             analyze_genre_trends,
             compute_genre_profiles,
         )
@@ -606,14 +606,14 @@ class TestGenreSpecialization:
 
 class TestStructuralHoles:
     def test_compute_network_constraint_isolated(self):
-        from src.analysis.structural_holes import compute_network_constraint
+        from src.analysis.network.structural_holes import compute_network_constraint
 
         g = nx.Graph()
         g.add_node("A")
         assert compute_network_constraint(g, "A") == 1.0
 
     def test_compute_network_constraint_star_center(self):
-        from src.analysis.structural_holes import compute_network_constraint
+        from src.analysis.network.structural_holes import compute_network_constraint
 
         g = _build_star_graph()
         # Center "H" connects to 4 unconnected nodes -> low constraint
@@ -622,7 +622,7 @@ class TestStructuralHoles:
         assert constraint == pytest.approx(0.25, abs=0.01)
 
     def test_compute_effective_size_star(self):
-        from src.analysis.structural_holes import compute_effective_size
+        from src.analysis.network.structural_holes import compute_effective_size
 
         g = _build_star_graph()
         eff_size, efficiency = compute_effective_size(g, "H")
@@ -632,7 +632,7 @@ class TestStructuralHoles:
         assert efficiency > 1.0
 
     def test_compute_effective_size_triangle(self):
-        from src.analysis.structural_holes import compute_effective_size
+        from src.analysis.network.structural_holes import compute_effective_size
 
         g = _build_triangle_graph()
         eff_size, efficiency = compute_effective_size(g, "A")
@@ -640,7 +640,7 @@ class TestStructuralHoles:
         assert eff_size <= 2.0
 
     def test_compute_structural_hole_metrics(self):
-        from src.analysis.structural_holes import compute_structural_hole_metrics
+        from src.analysis.network.structural_holes import compute_structural_hole_metrics
 
         g = _build_barbell_graph()
         metrics = compute_structural_hole_metrics(g)
@@ -649,42 +649,42 @@ class TestStructuralHoles:
         assert metrics["C"].betweenness > 0 or metrics["D"].betweenness > 0
 
     def test_classify_brokerage_role_coordinator(self):
-        from src.analysis.structural_holes import BrokerageRole, classify_brokerage_role
+        from src.analysis.network.structural_holes import BrokerageRole, classify_brokerage_role
 
         groups = {"A": "G1", "B": "G1", "C": "G1"}
         role = classify_brokerage_role("B", "A", "C", groups)
         assert role == BrokerageRole.COORDINATOR
 
     def test_classify_brokerage_role_liaison(self):
-        from src.analysis.structural_holes import BrokerageRole, classify_brokerage_role
+        from src.analysis.network.structural_holes import BrokerageRole, classify_brokerage_role
 
         groups = {"A": "G1", "B": "G2", "C": "G3"}
         role = classify_brokerage_role("B", "A", "C", groups)
         assert role == BrokerageRole.LIAISON
 
     def test_classify_brokerage_role_consultant(self):
-        from src.analysis.structural_holes import BrokerageRole, classify_brokerage_role
+        from src.analysis.network.structural_holes import BrokerageRole, classify_brokerage_role
 
         groups = {"A": "G1", "B": "G2", "C": "G1"}
         role = classify_brokerage_role("B", "A", "C", groups)
         assert role == BrokerageRole.CONSULTANT
 
     def test_classify_brokerage_role_representative(self):
-        from src.analysis.structural_holes import BrokerageRole, classify_brokerage_role
+        from src.analysis.network.structural_holes import BrokerageRole, classify_brokerage_role
 
         groups = {"A": "G1", "B": "G1", "C": "G2"}
         role = classify_brokerage_role("B", "A", "C", groups)
         assert role == BrokerageRole.REPRESENTATIVE
 
     def test_classify_brokerage_role_gatekeeper(self):
-        from src.analysis.structural_holes import BrokerageRole, classify_brokerage_role
+        from src.analysis.network.structural_holes import BrokerageRole, classify_brokerage_role
 
         groups = {"A": "G2", "B": "G1", "C": "G1"}
         role = classify_brokerage_role("B", "A", "C", groups)
         assert role == BrokerageRole.GATEKEEPER
 
     def test_find_structural_hole_spanners(self):
-        from src.analysis.structural_holes import (
+        from src.analysis.network.structural_holes import (
             compute_structural_hole_metrics,
             find_structural_hole_spanners,
         )
@@ -699,7 +699,7 @@ class TestStructuralHoles:
             assert constraint >= 0
 
     def test_compute_brokerage_metrics(self):
-        from src.analysis.structural_holes import compute_brokerage_metrics
+        from src.analysis.network.structural_holes import compute_brokerage_metrics
 
         g = _build_barbell_graph()
         groups = {"A": "G1", "B": "G1", "C": "G1", "D": "G2", "E": "G2", "F": "G2"}
@@ -715,14 +715,14 @@ class TestStructuralHoles:
 
 class TestCorePeriphery:
     def test_identify_core_periphery_empty(self):
-        from src.analysis.core_periphery import identify_core_periphery
+        from src.analysis.network.core_periphery import identify_core_periphery
 
         structure = identify_core_periphery(nx.Graph())
         assert structure.core_size == 0
         assert structure.core_members == []
 
     def test_identify_core_periphery_normal(self):
-        from src.analysis.core_periphery import identify_core_periphery
+        from src.analysis.network.core_periphery import identify_core_periphery
 
         g = _build_collaboration_graph_for_communities()
         structure = identify_core_periphery(g)
@@ -734,7 +734,7 @@ class TestCorePeriphery:
         assert total == g.number_of_nodes()
 
     def test_compute_k_core_numbers(self):
-        from src.analysis.core_periphery import compute_k_core_numbers
+        from src.analysis.network.core_periphery import compute_k_core_numbers
 
         g = _build_collaboration_graph_for_communities()
         k_cores = compute_k_core_numbers(g)
@@ -744,7 +744,7 @@ class TestCorePeriphery:
             assert k_cores[node] >= 3
 
     def test_compute_coreness_score(self):
-        from src.analysis.core_periphery import compute_coreness_score
+        from src.analysis.network.core_periphery import compute_coreness_score
 
         g = _build_collaboration_graph_for_communities()
         # Node in dense clique
@@ -752,7 +752,7 @@ class TestCorePeriphery:
         assert 0 <= score <= 1
 
     def test_find_rising_stars(self):
-        from src.analysis.core_periphery import (
+        from src.analysis.network.core_periphery import (
             compute_coreness_metrics,
             find_rising_stars,
             identify_core_periphery,

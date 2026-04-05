@@ -1,6 +1,6 @@
 """studio モジュールのテスト."""
 
-from src.analysis.studio import compute_studio_analysis
+from src.analysis.studio.profile import compute_studio_analysis
 from src.models import Anime, Credit, Role
 
 

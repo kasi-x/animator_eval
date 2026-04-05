@@ -3,7 +3,7 @@
 import networkx as nx
 import pytest
 
-from src.analysis.knowledge_spanners import (
+from src.analysis.network.knowledge_spanners import (
     KnowledgeSpannerMetrics,
     compute_awcc,
     compute_knowledge_spanners,

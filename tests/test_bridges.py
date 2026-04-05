@@ -1,6 +1,6 @@
 """bridges モジュールのテスト."""
 
-from src.analysis.bridges import detect_bridges, _compute_simple_communities
+from src.analysis.network.bridges import detect_bridges, _compute_simple_communities
 from src.models import Credit, Role
 
 

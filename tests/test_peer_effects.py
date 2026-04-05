@@ -3,7 +3,7 @@
 import networkx as nx
 import pytest
 
-from src.analysis.peer_effects import PeerEffectResult, estimate_peer_effects_2sls
+from src.analysis.network.peer_effects import PeerEffectResult, estimate_peer_effects_2sls
 from src.models import Anime, Credit, Role
 
 

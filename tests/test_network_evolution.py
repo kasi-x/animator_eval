@@ -1,6 +1,6 @@
 """network_evolution モジュールのテスト."""
 
-from src.analysis.network_evolution import compute_network_evolution
+from src.analysis.network.network_evolution import compute_network_evolution
 from src.models import Anime, Credit, Role
 
 

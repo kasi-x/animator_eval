@@ -21874,7 +21874,7 @@ def generate_dml_report():  # noqa: C901
 
     # Load required data from DB
     from src.database import get_all_anime, get_all_credits, get_connection, init_db
-    from src.analysis.dml import run_dml_analysis
+    from src.analysis.causal.dml import run_dml_analysis
 
     scores = load_json("scores.json")
     akm = load_json("akm_diagnostics.json")

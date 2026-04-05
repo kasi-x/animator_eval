@@ -5,7 +5,7 @@ from src.analysis.graph import (
     create_person_collaboration_network,
     determine_primary_role_for_each_person,
 )
-from src.analysis.trust import compute_trust_scores
+from src.analysis.network.trust import compute_trust_scores
 from src.models import Anime, Credit, Person, Role
 from src.pipeline_phases.data_loading import (
     _filter_non_production_persons,

@@ -34,11 +34,31 @@ GITHUB_API_BASE = "https://api.github.com"
 
 # Anime collection files (series-level — contains key staff credits)
 # Maps zip filename -> (collection_type_label, format_code)
-ANIME_COLLECTION_FILES: dict[str, tuple[str, str]] = {
+# Primary: 207-210 are anime TV/Special/OVA/Movie
+# Extended: 101-109, 201-205, 216, 301-305, 315-317, 401, 504-505 for wider coverage
+ANIME_COLLECTION_FILES_PRIMARY: dict[str, tuple[str, str]] = {
     "metadata207_json.zip": ("AnimationTVRegularSeries", "TV"),
     "metadata208_json.zip": ("AnimationTVSpecialSeries", "SPECIAL"),
     "metadata209_json.zip": ("AnimationVideoPackageSeries", "OVA"),
     "metadata210_json.zip": ("AnimationMovieSeries", "MOVIE"),
+}
+
+ANIME_COLLECTION_FILES_EXTENDED: dict[str, tuple[str, str]] = {
+    # Extended Japanese anime sets
+    "metadata201_json.zip": ("AnimationTVSeries", "TV"),
+    "metadata202_json.zip": ("AnimationSpecialSeries", "SPECIAL"),
+    "metadata204_json.zip": ("AnimationVideoPackageSeries", "OVA"),
+    "metadata205_json.zip": ("AnimationMovieSeries", "MOVIE"),
+    "metadata216_json.zip": ("AnimationSeries", "OTHER"),
+    # International anime sets
+    "metadata301_json.zip": ("InternationalAnimationTVSeries", "TV"),
+    "metadata305_json.zip": ("InternationalAnimationMovieSeries", "MOVIE"),
+    "metadata306_json.zip": ("InternationalAnimationVideoPackageSeries", "OVA"),
+    "metadata315_json.zip": ("AnimationVideoSeries", "VIDEO"),
+    "metadata317_json.zip": ("AnimationSeries", "OTHER"),
+    # Additional international sets
+    "metadata401_json.zip": ("AnimationSeries", "OTHER"),
+    "metadata504_json.zip": ("AnimationTVSeries", "TV"),
 }
 
 DEFAULT_DATA_DIR = Path("data/madb")
@@ -256,13 +276,26 @@ def parse_jsonld_dump(json_path: Path, format_code: str = "") -> list[dict]:
 async def download_madb_dataset(
     data_dir: Path,
     version: str = "latest",
+    extended: bool = False,
 ) -> dict[str, Path]:
     """Download MADB dataset from GitHub Releases.
+
+    Args:
+        data_dir: Directory to save extracted files
+        version: Release version ("latest" or tag name)
+        extended: If True, also download extended metadata sets (201-205, 301-317, etc.)
+                  If False, only download primary sets (207-210)
 
     Returns: {anime_type: extracted_json_path}
     """
     data_dir.mkdir(parents=True, exist_ok=True)
     version_file = data_dir / ".version"
+    extended_marker = data_dir / ".extended"
+
+    # Select which files to download
+    collection_files = ANIME_COLLECTION_FILES_PRIMARY.copy()
+    if extended:
+        collection_files.update(ANIME_COLLECTION_FILES_EXTENDED)
 
     # Fetch release info
     async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
@@ -277,10 +310,15 @@ async def download_madb_dataset(
         tag = release["tag_name"]
 
         # Cache check — skip if same version and all files present
-        if version_file.exists() and version_file.read_text().strip() == tag:
+        cached_extended = extended_marker.exists()
+        if (
+            version_file.exists()
+            and version_file.read_text().strip() == tag
+            and (not extended or cached_extended)
+        ):
             cached = {}
             all_cached = True
-            for zip_name, (anime_type, _fmt) in ANIME_COLLECTION_FILES.items():
+            for zip_name, (anime_type, _fmt) in collection_files.items():
                 json_name = zip_name.replace("_json.zip", ".json")
                 json_path = data_dir / json_name
                 if json_path.exists():
@@ -289,7 +327,12 @@ async def download_madb_dataset(
                     all_cached = False
                     break
             if all_cached:
-                log.info("madb_dataset_cached", version=tag, files=len(cached))
+                log.info(
+                    "madb_dataset_cached",
+                    version=tag,
+                    files=len(cached),
+                    extended=extended,
+                )
                 return cached
 
         # Build asset URL map
@@ -298,7 +341,7 @@ async def download_madb_dataset(
         }
 
         downloaded: dict[str, Path] = {}
-        for zip_name, (anime_type, _fmt) in ANIME_COLLECTION_FILES.items():
+        for zip_name, (anime_type, _fmt) in collection_files.items():
             download_url = assets.get(zip_name)
             if not download_url:
                 log.warning("madb_asset_not_found", zip_name=zip_name, version=tag)
@@ -328,7 +371,11 @@ async def download_madb_dataset(
 
         # Record version
         version_file.write_text(tag)
-        log.info("madb_download_complete", version=tag, files=len(downloaded))
+        if extended:
+            extended_marker.write_text("true")
+        log.info(
+            "madb_download_complete", version=tag, files=len(downloaded), extended=extended
+        )
         return downloaded
 
 
@@ -338,6 +385,7 @@ async def scrape_madb(
     version: str = "latest",
     max_anime: int = 0,
     checkpoint_interval: int = 50,
+    extended: bool = False,
 ) -> dict:
     """Fetch credit data from MADB dump.
 
@@ -351,6 +399,7 @@ async def scrape_madb(
         version: Dataset version ("latest" or tag name)
         max_anime: Maximum number of anime to process per collection (0 = unlimited)
         checkpoint_interval: DB commit interval
+        extended: If True, also download extended metadata sets (201-205, 301-317, etc.)
 
     Returns:
         Statistics dict
@@ -375,13 +424,16 @@ async def scrape_madb(
     person_cache: dict[str, Person] = {}  # name -> Person (dedup)
 
     # Phase A: Download dump
-    dataset_files = await download_madb_dataset(data_dir, version=version)
+    dataset_files = await download_madb_dataset(data_dir, version=version, extended=extended)
     if not dataset_files:
         log.warning("madb_no_files_downloaded")
         return stats
 
     # Build format lookup: collection_type -> format_code
-    format_by_type = {label: fmt for _zip, (label, fmt) in ANIME_COLLECTION_FILES.items()}
+    all_collections = ANIME_COLLECTION_FILES_PRIMARY.copy()
+    if extended:
+        all_collections.update(ANIME_COLLECTION_FILES_EXTENDED)
+    format_by_type = {label: fmt for _zip, (label, fmt) in all_collections.items()}
 
     # Phase B: Parse JSON-LD per collection and save to DB immediately
     # (avoids loading all 69K records into memory at once)
@@ -487,6 +539,9 @@ def main(
     data_dir: Path = typer.Option(
         DEFAULT_DATA_DIR, "--data-dir", "-d", help="Download directory"
     ),
+    extended: bool = typer.Option(
+        False, "--extended", help="Download extended metadata sets (201-205, 301-317, etc.)"
+    ),
 ) -> None:
     """Fetch credit data from Media Arts DB dump."""
     from src.database import db_connection, init_db
@@ -503,6 +558,7 @@ def main(
                 version=version,
                 max_anime=max_records,
                 checkpoint_interval=checkpoint,
+                extended=extended,
             )
         )
 

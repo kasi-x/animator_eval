@@ -9,7 +9,7 @@ import numpy as np
 import structlog
 
 from src.analysis.explain import explain_authority, explain_skill, explain_trust
-from src.analysis.integrated_value import compute_studio_exposure
+from src.analysis.scoring.integrated_value import compute_studio_exposure
 from src.models import ScoreResult
 from src.pipeline_phases.context import PipelineContext
 from src.utils.role_groups import DIRECTOR_ROLES

@@ -1759,13 +1759,13 @@ class TestMediaArtsDownload:
     def test_download_cached(self, tmp_path):
         """Cached version skips download."""
         from src.scrapers.mediaarts_scraper import (
-            ANIME_COLLECTION_FILES,
+            ANIME_COLLECTION_FILES_PRIMARY,
             download_madb_dataset,
         )
 
         # Pre-create version file and JSON files
         (tmp_path / ".version").write_text("v1.2.12")
-        for zip_name in ANIME_COLLECTION_FILES:
+        for zip_name in ANIME_COLLECTION_FILES_PRIMARY:
             json_name = zip_name.replace("_json.zip", ".json")
             (tmp_path / json_name).write_text("{}")
 
@@ -1788,7 +1788,7 @@ class TestMediaArtsDownload:
                 return await download_madb_dataset(tmp_path, version="latest")
 
         result = _run(run())
-        assert len(result) == len(ANIME_COLLECTION_FILES)
+        assert len(result) == len(ANIME_COLLECTION_FILES_PRIMARY)
 
 
 class TestJVMGFetchAnimeStaff:

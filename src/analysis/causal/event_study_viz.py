@@ -37,7 +37,7 @@ def plot_event_study(
         figsize: Figure size (width, height) in inches
 
     Example:
-        >>> from src.analysis.structural_estimation import estimate_event_study
+        >>> from src.analysis.causal.structural_estimation import estimate_event_study
         >>> event_results = estimate_event_study(panel_data)
         >>> plot_event_study(event_results, "event_study.png")
     """

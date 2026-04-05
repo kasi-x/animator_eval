@@ -1,8 +1,8 @@
 """エッジケーステスト — 極端な入力での動作確認."""
 
-from src.analysis.normalize import normalize_scores
+from src.analysis.scoring.normalize import normalize_scores
 from src.analysis.career import analyze_career
-from src.analysis.circles import find_director_circles
+from src.analysis.network.circles import find_director_circles
 from src.analysis.anime_stats import compute_anime_stats
 from src.models import Anime, Credit, Role
 

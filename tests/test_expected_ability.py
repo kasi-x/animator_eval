@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.analysis.expected_ability import compute_expected_ability, ExpectedActualResult
+from src.analysis.scoring.expected_ability import compute_expected_ability, ExpectedActualResult
 from src.models import Anime, Credit, Role
 
 

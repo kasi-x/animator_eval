@@ -3,7 +3,7 @@
 import networkx as nx
 import pytest
 
-from src.analysis.birank import BiRankResult, compute_birank
+from src.analysis.scoring.birank import BiRankResult, compute_birank
 
 
 def _make_bipartite_graph(person_anime_edges):

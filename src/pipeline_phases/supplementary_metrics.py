@@ -4,16 +4,16 @@ import structlog
 
 from src.analysis.career import batch_career_analysis
 from src.analysis.career_friction import estimate_career_friction
-from src.analysis.circles import find_director_circles
-from src.analysis.era_effects import compute_era_and_difficulty
+from src.analysis.network.circles import find_director_circles
+from src.analysis.causal.era_effects import compute_era_and_difficulty
 from src.analysis.graph import (
     calculate_network_centrality_scores,
     determine_primary_role_for_each_person,
 )
 from src.analysis.growth import compute_growth_trends
-from src.analysis.network_density import compute_network_density
-from src.analysis.peer_effects import estimate_peer_effects_2sls
-from src.analysis.trust import batch_detect_engagement_decay
+from src.analysis.network.network_density import compute_network_density
+from src.analysis.network.peer_effects import estimate_peer_effects_2sls
+from src.analysis.network.trust import batch_detect_engagement_decay
 from src.analysis.versatility import compute_versatility
 
 # Advanced metrics
@@ -23,7 +23,7 @@ from src.analysis.growth_acceleration import (
 )
 from src.analysis.anime_value import compute_anime_values
 from src.analysis.contribution_attribution import compute_contribution_attribution
-from src.analysis.potential_value import compute_potential_value_scores
+from src.analysis.scoring.potential_value import compute_potential_value_scores
 from src.pipeline_phases.context import PipelineContext
 
 logger = structlog.get_logger()
@@ -76,8 +76,8 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
     # to protect veterans from harsh dormancy penalties
     logger.info("step_start", step="career_aware_dormancy")
     with context.monitor.measure("career_aware_dormancy"):
-        from src.analysis.patronage_dormancy import compute_career_aware_dormancy
-        from src.analysis.integrated_value import compute_integrated_value
+        from src.analysis.scoring.patronage_dormancy import compute_career_aware_dormancy
+        from src.analysis.scoring.integrated_value import compute_integrated_value
 
         career_dormancy = compute_career_aware_dormancy(
             raw_dormancy=context.dormancy_scores,
@@ -88,7 +88,7 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
 
         # Re-compute current IV with career-aware dormancy
         # Fix B01: Use compute_studio_exposure() for consistent year-weighted calculation
-        from src.analysis.integrated_value import compute_studio_exposure
+        from src.analysis.scoring.integrated_value import compute_studio_exposure
         studio_exposure = compute_studio_exposure(
             context.person_fe,
             context.studio_fe,

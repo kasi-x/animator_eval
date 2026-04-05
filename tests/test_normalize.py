@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.analysis.normalize import (
+from src.analysis.scoring.normalize import (
     normalize_all_axes,
     normalize_minmax,
     normalize_percentile,

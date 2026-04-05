@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from src.analysis.patronage_dormancy import (
+from src.analysis.scoring.patronage_dormancy import (
     compute_career_aware_dormancy,
     compute_dormancy_penalty,
     compute_patronage_and_dormancy,

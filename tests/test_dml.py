@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from src.analysis.dml import (
+from src.analysis.causal.dml import (
     DMLReport,
     DualEstimate,
     EstimationResult,

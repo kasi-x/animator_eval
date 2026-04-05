@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from src.analysis.akm import (
+from src.analysis.scoring.akm import (
     AKMResult,
     _build_panel,
     _compute_credit_weight,

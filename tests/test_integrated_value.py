@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.analysis.integrated_value import (
+from src.analysis.scoring.integrated_value import (
     IntegratedValueResult,
     compute_integrated_value,
     compute_integrated_value_full,

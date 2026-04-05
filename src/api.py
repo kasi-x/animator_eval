@@ -801,7 +801,7 @@ def get_person_network(
     hops: int = Query(1, ge=1, le=3, description="ネットワーク深度"),
 ):
     """人物のエゴグラフ（ローカルネットワーク）."""
-    from src.analysis.ego_graph import extract_ego_graph
+    from src.analysis.network.ego_graph import extract_ego_graph
     from src.database import load_all_anime, load_all_credits
 
     with db_connection() as conn:

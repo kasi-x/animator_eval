@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.analysis.individual_contribution import (
+from src.analysis.scoring.individual_contribution import (
     IndividualContributionResult,
     _build_person_features,
     _get_career_band,

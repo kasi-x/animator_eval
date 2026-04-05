@@ -1,6 +1,6 @@
 """Tests for causal studio identification module."""
 
-from src.analysis.causal_studio_identification import (
+from src.analysis.causal.studio_identification import (
     CausalEstimate,
     CareerTrajectory,
     EffectType,
@@ -502,7 +502,7 @@ class TestExportIdentificationReport:
 
     def test_exports_complete_report(self):
         """Exports all required fields."""
-        from src.analysis.causal_studio_identification import IdentificationResult
+        from src.analysis.causal.studio_identification import IdentificationResult
 
         result = IdentificationResult(
             major_studios=["Studio A", "Studio B"],

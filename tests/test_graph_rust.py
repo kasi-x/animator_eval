@@ -279,7 +279,7 @@ class TestRustPythonEquivalence:
 class TestBetweennessCache:
     def test_potential_value_uses_cache(self, weighted_graph):
         """compute_potential_value_scores should use betweenness_cache when provided."""
-        from src.analysis.potential_value import compute_potential_value_scores
+        from src.analysis.scoring.potential_value import compute_potential_value_scores
 
         person_scores = {
             "A": {"birank": 0.8, "patronage": 0.7, "person_fe": 0.6, "iv_score": 0.7},

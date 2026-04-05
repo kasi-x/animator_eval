@@ -1,6 +1,6 @@
 """network_density モジュールのテスト."""
 
-from src.analysis.network_density import compute_network_density
+from src.analysis.network.network_density import compute_network_density
 from src.models import Credit, Role
 
 

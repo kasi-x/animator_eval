@@ -2,9 +2,9 @@
 
 import structlog
 
-from src.analysis.va_character_diversity import compute_character_diversity
-from src.analysis.va_ensemble_synergy import compute_va_ensemble_synergy
-from src.analysis.va_replacement_difficulty import compute_replacement_difficulty
+from src.analysis.va.character_diversity import compute_character_diversity
+from src.analysis.va.ensemble_synergy import compute_va_ensemble_synergy
+from src.analysis.va.replacement_difficulty import compute_replacement_difficulty
 from src.pipeline_phases.context import PipelineContext
 
 logger = structlog.get_logger()

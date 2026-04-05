@@ -2,7 +2,7 @@
 
 import networkx as nx
 
-from src.analysis.pagerank import (
+from src.analysis.scoring.pagerank import (
     compute_authority_scores,
     normalize_scores,
     weighted_pagerank,

@@ -21,21 +21,21 @@ import structlog
 
 from src.analysis.compatibility import compute_compatibility_groups
 from src.analysis.cooccurrence_groups import compute_cooccurrence_groups
-from src.analysis.expected_ability import compute_expected_ability
+from src.analysis.scoring.expected_ability import compute_expected_ability
 from src.analysis.anime_stats import compute_anime_stats
 from src.analysis.bias_detector import detect_systematic_biases, generate_bias_report
-from src.analysis.bridges import detect_bridges
-from src.analysis.causal_studio_identification import (
+from src.analysis.network.bridges import detect_bridges
+from src.analysis.causal.studio_identification import (
     identify_studio_effects,
     export_identification_report,
 )
 from src.analysis.credit_stats import compute_credit_statistics
 from src.analysis.credit_stats_html import generate_credit_stats_html
-from src.analysis.structural_estimation import (
+from src.analysis.causal.structural_estimation import (
     estimate_structural_model,
     export_structural_estimation,
 )
-from src.analysis.structural_estimation_html import generate_html_report
+from src.analysis.causal.structural_estimation_html import generate_html_report
 from src.analysis.collaboration_strength import compute_collaboration_strength
 from src.analysis.compensation_analyzer import (
     batch_analyze_compensation,
@@ -46,35 +46,35 @@ from src.analysis.insights_report import (
     export_insights_report,
 )
 from src.analysis.crossval import cross_validate_scores
-from src.analysis.individual_contribution import compute_individual_profiles
+from src.analysis.scoring.individual_contribution import compute_individual_profiles
 from src.analysis.decade_analysis import compute_decade_analysis
-from src.analysis.genre_affinity import compute_genre_affinity
+from src.analysis.genre.affinity import compute_genre_affinity
 from src.analysis.graphml_export import export_graphml
 from src.analysis.influence import compute_influence_tree
 from src.analysis.mentorship import build_mentorship_tree, infer_mentorships
 from src.analysis.milestones import compute_milestones
-from src.analysis.network_evolution import compute_network_evolution
+from src.analysis.network.network_evolution import compute_network_evolution
 from src.analysis.outliers import detect_outliers
 from src.analysis.person_tags import compute_person_tags
 from src.analysis.productivity import compute_productivity
 from src.analysis.role_flow import compute_role_flow
 from src.analysis.seasonal import compute_seasonal_trends
-from src.analysis.studio import compute_studio_analysis
-from src.analysis.studio_timeseries import compute_studio_timeseries
+from src.analysis.studio.profile import compute_studio_analysis
+from src.analysis.studio.timeseries import compute_studio_timeseries
 from src.analysis.synergy_score import compute_synergy_scores
 from src.analysis.team_composition import analyze_team_patterns
-from src.analysis.dml import run_dml_analysis
-from src.analysis.temporal_pagerank import compute_temporal_pagerank
+from src.analysis.causal.dml import run_dml_analysis
+from src.analysis.network.temporal_pagerank import compute_temporal_pagerank
 from src.analysis.time_series import compute_time_series
 from src.analysis.transitions import compute_role_transitions
 
 # Studio & Genre analysis imports
-from src.analysis.genre_ecosystem import compute_genre_ecosystem
-from src.analysis.genre_network import compute_genre_network
-from src.analysis.genre_quality import compute_genre_quality
+from src.analysis.genre.ecosystem import compute_genre_ecosystem
+from src.analysis.genre.network import compute_genre_network
+from src.analysis.genre.quality import compute_genre_quality
 from src.analysis.production_analysis import StudioTalentDensity, compute_studio_talent_density
-from src.analysis.studio_clustering import compute_studio_clustering
-from src.analysis.studio_network import compute_studio_network
+from src.analysis.studio.clustering import compute_studio_clustering
+from src.analysis.studio.network import compute_studio_network
 from src.analysis.talent_pipeline import compute_talent_pipeline
 from src.pipeline_phases.context import PipelineContext
 
@@ -408,7 +408,7 @@ def _run_structural_estimation(context: PipelineContext) -> Any:
     person_scores = context._shared_person_scores
 
     # Identify major studios
-    from src.analysis.causal_studio_identification import identify_major_studios
+    from src.analysis.causal.studio_identification import identify_major_studios
 
     major_studios, _ = identify_major_studios(
         credits=context.credits,

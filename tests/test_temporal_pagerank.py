@@ -5,7 +5,7 @@ from dataclasses import asdict
 
 import pytest
 
-from src.analysis.temporal_pagerank import (
+from src.analysis.network.temporal_pagerank import (
     YearlyBirankSnapshot,
     _add_peer_edges,
     _build_birank_timelines,
@@ -16,7 +16,7 @@ from src.analysis.temporal_pagerank import (
     _run_yearly_pagerank_with_warm_start,
     compute_temporal_pagerank,
 )
-from src.analysis.pagerank import normalize_scores
+from src.analysis.scoring.pagerank import normalize_scores
 from src.models import Anime, Credit, Person, Role
 
 
@@ -191,7 +191,7 @@ class TestWarmStartPageRank:
         warm_scores = _run_yearly_pagerank_with_warm_start(graphs)
 
         # Also run cold start (no nstart) on the last year's graph
-        from src.analysis.pagerank import weighted_pagerank
+        from src.analysis.scoring.pagerank import weighted_pagerank
 
         last_year = max(graphs.keys())
         cold_scores = weighted_pagerank(graphs[last_year])

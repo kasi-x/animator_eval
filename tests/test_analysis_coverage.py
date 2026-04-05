@@ -43,7 +43,7 @@ from src.analysis.growth_acceleration import (
     find_early_potential,
     find_fast_risers,
 )
-from src.analysis.potential_value import (
+from src.analysis.scoring.potential_value import (
     PotentialValueScore,
     ValueCategory,
     compute_potential_value_scores,
@@ -51,7 +51,7 @@ from src.analysis.potential_value import (
     export_potential_value_report,
     rank_by_potential_value,
 )
-from src.analysis.studio_bias_correction import (
+from src.analysis.studio.bias_correction import (
     DebiasedScore,
     StudioBiasMetrics,
     StudioDisparityResult,
@@ -1371,7 +1371,7 @@ class TestFindUnderOverPerforming:
 class TestIndividualContributionEdgeCases:
     def test_consistency_with_zero_mean(self):
         """anime.score=0 should result in None consistency."""
-        from src.analysis.individual_contribution import compute_consistency
+        from src.analysis.scoring.individual_contribution import compute_consistency
 
         features = {"p1": {"iv_score": 50}}
         anime_map = {
@@ -1383,7 +1383,7 @@ class TestIndividualContributionEdgeCases:
 
     def test_independent_value_with_collaboration_graph(self):
         """Test independent_value uses collaboration_graph when provided."""
-        from src.analysis.individual_contribution import compute_independent_value
+        from src.analysis.scoring.individual_contribution import compute_independent_value
 
         # independent_value now compares collaborator IV residuals with/without
         # the target person, rather than comparing anime.score. Scores on

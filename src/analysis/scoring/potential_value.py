@@ -381,7 +381,7 @@ def export_potential_value_report(
 def main():
     """スタンドアロン実行用エントリーポイント."""
     from src.analysis.graph import create_person_collaboration_network
-    from src.analysis.studio_bias_correction import (
+    from src.analysis.studio.bias_correction import (
         compute_studio_bias_metrics,
         compute_studio_prestige,
         debias_authority_scores,

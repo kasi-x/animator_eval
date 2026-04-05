@@ -127,7 +127,7 @@ def person_fe():
 
 class TestVAGraph:
     def test_build_va_anime_graph(self, va_credits, anime_map):
-        from src.analysis.va_graph import build_va_anime_graph
+        from src.analysis.va.graph import build_va_anime_graph
 
         g = build_va_anime_graph(va_credits, anime_map)
         assert g.number_of_nodes() > 0
@@ -137,7 +137,7 @@ class TestVAGraph:
         assert g.has_edge("va1", "a2")
 
     def test_build_va_collaboration_graph(self, va_credits, anime_map):
-        from src.analysis.va_graph import build_va_collaboration_graph
+        from src.analysis.va.graph import build_va_collaboration_graph
 
         g = build_va_collaboration_graph(va_credits, anime_map)
         assert g.number_of_nodes() > 0
@@ -146,7 +146,7 @@ class TestVAGraph:
         assert g.has_edge(*edge)
 
     def test_build_va_sd_graph(self, va_credits, production_credits, anime_map):
-        from src.analysis.va_graph import build_va_sound_director_graph
+        from src.analysis.va.graph import build_va_sound_director_graph
 
         g = build_va_sound_director_graph(va_credits, production_credits, anime_map)
         assert g.number_of_nodes() > 0
@@ -154,7 +154,7 @@ class TestVAGraph:
         assert g.has_edge("va1", "sd1")
 
     def test_franchise_bonus(self, va_credits):
-        from src.analysis.va_graph import _compute_franchise_bonus
+        from src.analysis.va.graph import _compute_franchise_bonus
 
         bonuses = _compute_franchise_bonus(va_credits)
         # VA1 voices c1 in a1 and a2 -> franchise bonus > 1.0
@@ -169,7 +169,7 @@ class TestVAGraph:
 
 class TestVAAKM:
     def test_estimate_va_akm(self, va_credits, production_credits, anime_map):
-        from src.analysis.va_akm import estimate_va_akm
+        from src.analysis.va.akm import estimate_va_akm
 
         result = estimate_va_akm(va_credits, production_credits, anime_map)
         assert len(result.person_fe) > 0
@@ -177,7 +177,7 @@ class TestVAAKM:
         assert result.n_observations > 0
 
     def test_va_akm_returns_dataclass(self, va_credits, production_credits, anime_map):
-        from src.analysis.va_akm import VAAKMResult, estimate_va_akm
+        from src.analysis.va.akm import VAAKMResult, estimate_va_akm
 
         result = estimate_va_akm(va_credits, production_credits, anime_map)
         assert isinstance(result, VAAKMResult)
@@ -189,7 +189,7 @@ class TestVAAKM:
 
 class TestVATrust:
     def test_compute_va_trust(self, va_credits, production_credits, anime_map):
-        from src.analysis.va_trust import compute_va_trust
+        from src.analysis.va.trust import compute_va_trust
 
         trust = compute_va_trust(va_credits, production_credits, anime_map)
         assert isinstance(trust, dict)
@@ -198,7 +198,7 @@ class TestVATrust:
             assert trust["va1"] >= 0.0
 
     def test_compute_va_patronage(self, va_credits, production_credits, anime_map):
-        from src.analysis.va_trust import compute_va_patronage
+        from src.analysis.va.trust import compute_va_patronage
 
         sd_birank = {"sd1": 0.8, "sd2": 0.5}
         patronage = compute_va_patronage(
@@ -213,7 +213,7 @@ class TestVATrust:
 
 class TestVAIntegratedValue:
     def test_compute_va_iv(self):
-        from src.analysis.va_integrated_value import compute_va_integrated_value
+        from src.analysis.va.integrated_value import compute_va_integrated_value
 
         person_fe = {"va1": 1.0, "va2": 0.5, "va3": -0.3}
         birank = {"va1": 0.8, "va2": 0.6, "va3": 0.2}
@@ -237,7 +237,7 @@ class TestVAIntegratedValue:
 
 class TestCharacterDiversity:
     def test_compute_character_diversity(self, va_credits, anime_map, characters):
-        from src.analysis.va_character_diversity import compute_character_diversity
+        from src.analysis.va.character_diversity import compute_character_diversity
 
         diversity = compute_character_diversity(va_credits, anime_map, characters)
         assert isinstance(diversity, dict)
@@ -248,7 +248,7 @@ class TestCharacterDiversity:
                 assert m.casting_tier in ("lead_specialist", "versatile", "ensemble", "newcomer")
 
     def test_casting_tier_classification(self):
-        from src.analysis.va_character_diversity import _classify_casting_tier
+        from src.analysis.va.character_diversity import _classify_casting_tier
 
         assert _classify_casting_tier(15, 10, 30) == "lead_specialist"
         assert _classify_casting_tier(8, 15, 40) == "versatile"
@@ -262,7 +262,7 @@ class TestCharacterDiversity:
 
 class TestEnsembleSynergy:
     def test_compute_synergy(self, va_credits, anime_map):
-        from src.analysis.va_ensemble_synergy import compute_va_ensemble_synergy
+        from src.analysis.va.ensemble_synergy import compute_va_ensemble_synergy
 
         # Lower min_shared for small test data
         synergy = compute_va_ensemble_synergy(va_credits, anime_map, min_shared=2)
@@ -275,7 +275,7 @@ class TestEnsembleSynergy:
             assert va1_va4 in pair_ids
 
     def test_synergy_sorted_descending(self, va_credits, anime_map):
-        from src.analysis.va_ensemble_synergy import compute_va_ensemble_synergy
+        from src.analysis.va.ensemble_synergy import compute_va_ensemble_synergy
 
         synergy = compute_va_ensemble_synergy(va_credits, anime_map, min_shared=2)
         if len(synergy) >= 2:
@@ -289,7 +289,7 @@ class TestEnsembleSynergy:
 
 class TestReplacementDifficulty:
     def test_compute_rdi(self, va_credits, anime_map):
-        from src.analysis.va_replacement_difficulty import compute_replacement_difficulty
+        from src.analysis.va.replacement_difficulty import compute_replacement_difficulty
 
         rdi = compute_replacement_difficulty(
             va_credits, anime_map, min_characters=2
@@ -322,13 +322,13 @@ class TestProductionAnalysis:
 
 class TestStudioNetwork:
     def test_build_talent_sharing(self, production_credits, anime_map):
-        from src.analysis.studio_network import build_talent_sharing_network
+        from src.analysis.studio.network import build_talent_sharing_network
 
         g = build_talent_sharing_network(production_credits, anime_map)
         assert g.number_of_nodes() >= 0
 
     def test_build_coproduction(self, anime_map):
-        from src.analysis.studio_network import build_coproduction_network
+        from src.analysis.studio.network import build_coproduction_network
 
         g = build_coproduction_network(anime_map)
         assert g.number_of_nodes() >= 0
@@ -337,7 +337,7 @@ class TestStudioNetwork:
             assert g.has_edge("StudioA", "StudioB")
 
     def test_compute_studio_network(self, production_credits, anime_map):
-        from src.analysis.studio_network import compute_studio_network
+        from src.analysis.studio.network import compute_studio_network
 
         result = compute_studio_network(production_credits, anime_map)
         assert result.talent_sharing_graph is not None
@@ -364,7 +364,7 @@ class TestTalentPipeline:
 
 class TestGenreEcosystem:
     def test_compute_genre_ecosystem(self, production_credits, anime_map):
-        from src.analysis.genre_ecosystem import compute_genre_ecosystem
+        from src.analysis.genre.ecosystem import compute_genre_ecosystem
 
         result = compute_genre_ecosystem(production_credits, anime_map)
         assert isinstance(result.trends, dict)
@@ -380,7 +380,7 @@ class TestGenreEcosystem:
 
 class TestGenreNetwork:
     def test_compute_pmi(self, anime_list):
-        from src.analysis.genre_network import _compute_pmi
+        from src.analysis.genre.network import _compute_pmi
 
         pmi = _compute_pmi(anime_list, min_count=1)
         assert isinstance(pmi, dict)
@@ -389,7 +389,7 @@ class TestGenreNetwork:
             assert isinstance(val, float)
 
     def test_compute_genre_network(self, anime_list):
-        from src.analysis.genre_network import compute_genre_network
+        from src.analysis.genre.network import compute_genre_network
 
         result = compute_genre_network(anime_list)
         assert result.pmi_graph is not None
@@ -402,7 +402,7 @@ class TestGenreNetwork:
 
 class TestGenreQuality:
     def test_compute_genre_quality(self, production_credits, anime_map, person_fe):
-        from src.analysis.genre_quality import compute_genre_quality
+        from src.analysis.genre.quality import compute_genre_quality
 
         result = compute_genre_quality(
             production_credits, anime_map, person_fe
@@ -445,7 +445,7 @@ class TestSyntheticVAData:
 class TestStudioClustering:
     def test_name_clusters_by_rank(self):
         import numpy as np
-        from src.analysis.studio_clustering import _name_clusters_by_rank
+        from src.analysis.studio.clustering import _name_clusters_by_rank
 
         centers = np.array([
             [1.0, 10.0],

@@ -10,7 +10,7 @@ import random
 
 import structlog
 
-from src.analysis.birank import compute_birank
+from src.analysis.scoring.birank import compute_birank
 from src.analysis.graph import create_person_anime_network
 from src.models import Anime, Credit, Person
 

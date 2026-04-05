@@ -13,15 +13,15 @@ import math
 
 import structlog
 
-from src.analysis.akm import estimate_akm, infer_studio_assignment
-from src.analysis.birank import compute_birank
+from src.analysis.scoring.akm import estimate_akm, infer_studio_assignment
+from src.analysis.scoring.birank import compute_birank
 from src.analysis.graph import enhance_bipartite_quality
-from src.analysis.integrated_value import (
+from src.analysis.scoring.integrated_value import (
     compute_integrated_value_full,
     compute_studio_exposure,
 )
-from src.analysis.knowledge_spanners import compute_knowledge_spanners
-from src.analysis.patronage_dormancy import (
+from src.analysis.network.knowledge_spanners import compute_knowledge_spanners
+from src.analysis.scoring.patronage_dormancy import (
     compute_dormancy_penalty,
     compute_patronage_premium,
 )
@@ -189,7 +189,7 @@ def compute_core_scores_phase(context: PipelineContext) -> None:
         context.pca_variance_explained = iv_result.pca_variance_explained
 
         # Current IV: apply raw dormancy (career-aware dormancy applied in Phase 6)
-        from src.analysis.integrated_value import compute_integrated_value
+        from src.analysis.scoring.integrated_value import compute_integrated_value
 
         context.iv_scores = compute_integrated_value(
             context.person_fe,

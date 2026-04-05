@@ -1,6 +1,6 @@
 """genre_affinity モジュールのテスト."""
 
-from src.analysis.genre_affinity import compute_genre_affinity, _score_tier, _era
+from src.analysis.genre.affinity import compute_genre_affinity, _score_tier, _era
 from src.models import Anime, Credit, Role
 
 

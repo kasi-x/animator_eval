@@ -19,7 +19,7 @@ import numpy as np
 import structlog
 
 from src.analysis.career import CAREER_STAGE
-from src.analysis.pagerank import normalize_scores, weighted_pagerank
+from src.analysis.scoring.pagerank import normalize_scores, weighted_pagerank
 from src.models import Anime, Credit, Role
 from src.utils.config import ROLE_WEIGHTS
 from src.utils.role_groups import ROLE_CATEGORY

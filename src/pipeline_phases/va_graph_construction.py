@@ -2,7 +2,7 @@
 
 import structlog
 
-from src.analysis.va_graph import (
+from src.analysis.va.graph import (
     build_va_anime_graph,
     build_va_collaboration_graph,
     build_va_sound_director_graph,

@@ -34,7 +34,7 @@ def generate_html_report(
         title: Report title
 
     Example:
-        >>> from src.analysis.structural_estimation import estimate_structural_model
+        >>> from src.analysis.causal.structural_estimation import estimate_structural_model
         >>> result = estimate_structural_model(...)
         >>> generate_html_report(result, "report.html")
     """

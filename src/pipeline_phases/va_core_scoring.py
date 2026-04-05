@@ -2,14 +2,14 @@
 
 import structlog
 
-from src.analysis.birank import compute_birank
-from src.analysis.patronage_dormancy import compute_dormancy_penalty
-from src.analysis.va_akm import estimate_va_akm
-from src.analysis.va_integrated_value import (
+from src.analysis.scoring.birank import compute_birank
+from src.analysis.scoring.patronage_dormancy import compute_dormancy_penalty
+from src.analysis.va.akm import estimate_va_akm
+from src.analysis.va.integrated_value import (
     compute_va_integrated_value,
     compute_va_sd_exposure,
 )
-from src.analysis.va_trust import compute_va_patronage, compute_va_trust
+from src.analysis.va.trust import compute_va_patronage, compute_va_trust
 from src.pipeline_phases.context import PipelineContext
 
 logger = structlog.get_logger()

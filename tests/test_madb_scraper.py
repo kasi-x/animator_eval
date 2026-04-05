@@ -428,13 +428,13 @@ class TestDownloadMADBDataset:
         import asyncio
 
         from src.scrapers.mediaarts_scraper import (
-            ANIME_COLLECTION_FILES,
+            ANIME_COLLECTION_FILES_PRIMARY,
             download_madb_dataset,
         )
 
         # Pre-create version file and JSON files
         (tmp_path / ".version").write_text("v1.2.12")
-        for zip_name in ANIME_COLLECTION_FILES:
+        for zip_name in ANIME_COLLECTION_FILES_PRIMARY:
             json_name = zip_name.replace("_json.zip", ".json")
             (tmp_path / json_name).write_text("{}")
 
@@ -457,7 +457,7 @@ class TestDownloadMADBDataset:
                 return await download_madb_dataset(tmp_path, version="latest")
 
         result = asyncio.run(run())
-        assert len(result) == len(ANIME_COLLECTION_FILES)
+        assert len(result) == len(ANIME_COLLECTION_FILES_PRIMARY)
 
     def test_download_and_extract(self, tmp_path):
         """ZIP download and extraction."""
@@ -555,7 +555,7 @@ class TestMADBIntegration:
         )
 
         # Mock download_madb_dataset to return local file
-        async def mock_download(data_dir, version="latest"):
+        async def mock_download(data_dir, version="latest", **kwargs):
             return {"AnimationTVRegularSeries": json_path}
 
         with patch(
@@ -616,7 +616,7 @@ class TestMADBIntegration:
             json.dumps(json_data, ensure_ascii=False), encoding="utf-8"
         )
 
-        async def mock_download(data_dir, version="latest"):
+        async def mock_download(data_dir, version="latest", **kwargs):
             return {"AnimationTVRegularSeries": json_path}
 
         with patch(
@@ -642,7 +642,7 @@ class TestMADBIntegration:
 
         from src.scrapers.mediaarts_scraper import scrape_madb
 
-        async def mock_download(data_dir, version="latest"):
+        async def mock_download(data_dir, version="latest", **kwargs):
             return {}
 
         with patch(

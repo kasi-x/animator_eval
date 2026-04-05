@@ -1,6 +1,6 @@
 """trust モジュールのテスト."""
 
-from src.analysis.trust import (
+from src.analysis.network.trust import (
     _compute_time_weight,
     compute_trust_scores,
     detect_engagement_decay,

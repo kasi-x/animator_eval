@@ -1,6 +1,6 @@
 """ego_graph モジュールのテスト."""
 
-from src.analysis.ego_graph import extract_ego_graph
+from src.analysis.network.ego_graph import extract_ego_graph
 from src.models import Anime, Credit, Role
 
 

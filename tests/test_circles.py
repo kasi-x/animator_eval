@@ -1,6 +1,6 @@
 """circles モジュールのテスト."""
 
-from src.analysis.circles import find_director_circles, get_person_circles
+from src.analysis.network.circles import find_director_circles, get_person_circles
 from src.models import Anime, Credit, Role
 
 

@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.analysis.studio_timeseries import compute_studio_timeseries, StudioTimeSeriesResult
+from src.analysis.studio.timeseries import compute_studio_timeseries, StudioTimeSeriesResult
 from src.models import Anime, Credit, Role
 
 
