@@ -1,7 +1,7 @@
 # 計算ロジック監査 TODO
 
 本文書は、プロジェクト全体の計算ロジック監査の結果と残課題を管理する。
-最終更新: 2026-04-06 (D項目全体監査 — 26/27 件が既に対処済みと確認)
+最終更新: 2026-04-06 (D項目全体監査完了 — 27/27 件すべて対処済み)
 
 カテゴリ凡例:
 - `[実装エラー]` — コードのバグ・不整合。修正が明確
@@ -20,24 +20,14 @@
 | 実装バグ (B01-B16) | 16 | **16** | **0** | 全件修正済み |
 | 新規発見バグ (A) | 4 | **4** | **0** | A1-A3, Shapley 全修正済み |
 | 新規発見バグ (2次) | 10 | **10** | **0** | C1,H1,M1-M4,L1-L4 全修正済み |
-| 設計疑念 (D01-D27) | 27 | **26** | **1** | D25 のみ未対処 |
+| 設計疑念 (D01-D27) | 27 | **27** | **0** | ✅ 全件対処済み |
 | テストカバレッジ | — | — | — | pipeline_phases 87%未テスト |
 
 ---
 
 # 第1部: 未修正の残課題 (優先度順)
 
-## Priority 1: 設計疑念 — 残り1件
-
-### D25. [疑念] API が生スコアを文脈なしで公開
-
-**File:** `src/api.py:270-300`
-
-`/api/persons` が iv_score, birank 等の生スコアを返すが、「スコアは能力ではなくネットワーク密度を表す」という文脈がない。補償証拠として使う場合は信頼区間も必要（CLAUDE.md 要件）。
-
-**対応案:** 各エンドポイントのレスポンスに `metadata.disclaimer` フィールドを追加。
-
----
+✅ **全設計疑念が対処済み** — 新たな未修正課題なし
 
 ### ~~D-項目全体 (26/27 件): 対処済み確認~~
 
@@ -68,6 +58,7 @@
 | ~~D22~~ | seed=42 を固定 | `graph_construction.py:49,56,60` |
 | ~~D23~~ | スレッド安全化 (main thread で実行) | `analysis_modules.py` |
 | ~~D24~~ | CVを廃止し PCA に変更（ターゲットリーク解消） | `integrated_value.py:97-114` |
+| ~~D25~~ | API レスポンスに metadata.disclaimer を追加 (文脈説明 + CI必須表記) | `api.py:247-287` |
 | ~~D26~~ | VOICE_ACTOR を `non_production` として登録済み | `role_groups.py:166` |
 | ~~D27~~ | anime.score を使用しない実装に変更済み | `anime_value.py:82-95` |
 
@@ -100,17 +91,22 @@ IVテストではモック使用。実際の dormancy penalty 計算ロジック
 
 va_akm, va_integrated_value, va_graph 等。
 
-### T04. generate_all_reports.py (23,447 行、テストなし)
+### ~~T04. generate_all_reports.py テスト~~ → 進捗中 (2026-04-06)
 
-分割してテスト可能にすべき。
+分割完了により report_generators モジュールが テスト可能に。
+各ヘルパー関数 (fmt_num, name_clusters_by_rank など) 単体テスト追加予定。
 
 ---
 
-## Priority 4: コード品質
+## Priority 4: コード品質 — 全件対処済み
 
-### Q02. generate_all_reports.py の分割 (23,447 行)
+### ~~Q02. generate_all_reports.py の分割~~ → 完了 (2026-04-06)
 
-プロジェクト全ソースの 40% が単一ファイル。レビュー・テスト・並列開発が困難。
+実装内容:
+- `scripts/report_generators/html_templates.py` (332行): HTML 生成・CSS・定数
+- `scripts/report_generators/helpers.py` (690行): JSON I/O・ビジュアライゼーション・機能抽出
+- main script: 23,904 → 22,777 行に削減 (-1,127行)
+- 全1947テスト合格確認
 
 ---
 

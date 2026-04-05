@@ -245,6 +245,7 @@ _PERSON_SELECT_SQL = """
 
 
 def _row_to_person(r) -> dict:
+    """Convert database row to person response dict with metadata disclaimer."""
     return {
         "person_id": r["person_id"],
         "name": r["name_ja"] or r["name_en"],
@@ -263,6 +264,22 @@ def _row_to_person(r) -> dict:
             "first_year": r["first_year"],
             "latest_year": r["latest_year"],
             "total_works": r["total_works"],
+        },
+        "metadata": {
+            "disclaimer": (
+                "スコア (iv_score, birank, patronage, person_fe, awcc, dormancy) は、"
+                "公開クレジットデータに基づくネットワーク上の位置・協業密度を示す定量指標です。"
+                "個人の能力・技量・芸術性を評価または測定するものではありません。"
+                "本スコアを雇用・報酬・人事評価の根拠として使用する場合は、"
+                "信頼区間（confidence_lower, confidence_upper）も併用してください。"
+            ),
+            "ci_required_for_compensation": True,
+            "score_interpretation": (
+                "高スコア = ネットワーク中心性・協業密度が高い "
+                "（多くの同僚に信頼されている、規模の大きい作品に参加している、などを示唆）。 "
+                "低スコア = データセット上の可視性が限定的 "
+                "（実力の不足を意味しない）。"
+            ),
         },
     }
 
