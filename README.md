@@ -426,37 +426,48 @@ pixi run lab
 ## Directory Structure
 
 ```
-animator_eval/
+animetor_eval/
 ├── src/
-│   ├── pipeline_phases/     # 10-phase modules
-│   ├── analysis/            # 41+ analysis modules
-│   ├── scrapers/            # Data collection (4 sources)
-│   ├── utils/               # Utilities
-│   ├── i18n/                # Internationalization (EN/JA)
-│   ├── models.py            # Pydantic data models
-│   ├── database.py          # SQLite DAO
-│   ├── pipeline.py          # Orchestrator
-│   ├── api.py               # FastAPI server + WebSocket
-│   ├── cli.py               # CLI entry point (i18n supported)
-│   ├── websocket_manager.py # WebSocket manager
-│   └── ...
-├── static/                  # Frontend (HTML/JS)
-│   ├── pipeline_monitor.html       # Pipeline monitoring UI (JA)
-│   ├── pipeline_monitor_i18n.html  # Multilingual UI (EN/JA switcher)
-│   ├── portfolio.html              # Portfolio SPA
-│   └── portfolio.js                # Portfolio JS
-├── rust_ext/                # Rust extension (PyO3/maturin)
-├── benchmarks/              # Performance benchmarks
-├── tests/                   # 1319 tests
+│   ├── pipeline_phases/        # 10-phase pipeline (data_loading → export)
+│   ├── analysis/               # Analysis modules (grouped by domain)
+│   │   ├── scoring/            #   Core algorithms: AKM, BiRank, IV, PageRank
+│   │   ├── network/            #   Graph analysis: bridges, communities, trust
+│   │   ├── genre/              #   Genre affinity, ecosystem, specialization
+│   │   ├── studio/             #   Studio profiling, clustering, timeseries
+│   │   ├── va/                 #   Voice actor: AKM, graph, trust, diversity
+│   │   ├── causal/             #   Causal inference: DML, structural estimation
+│   │   ├── graph.py            #   Core NetworkX graph builder (shared)
+│   │   ├── visualize.py        #   Static charts (matplotlib)
+│   │   ├── visualize_interactive.py  # Interactive charts (Plotly)
+│   │   └── *.py                #   Career, cohort, compatibility, etc.
+│   ├── scrapers/               # Data collection (AniList, SeesaaWiki)
+│   ├── utils/                  # Config, JSON I/O, role constants
+│   ├── viz/                    # v2 report architecture (chart_spec, renderers)
+│   ├── i18n/                   # EN/JA translations
+│   ├── models.py               # Pydantic v2 data models
+│   ├── database.py             # SQLite DAO (schema v26)
+│   ├── pipeline.py             # Pipeline orchestrator
+│   ├── api.py                  # FastAPI server (42+ endpoints, WebSocket)
+│   └── cli.py                  # CLI (22+ commands, typer + Rich)
+├── scripts/
+│   ├── generate_all_reports.py # Main report generator (HTML + charts)
+│   ├── generate_reports_v2.py  # v2 architecture entry point
+│   ├── report_generators/      # Shared templates & helpers for reports
+│   └── maintenance/            # One-off scripts (scraping fixes, backfill)
+├── tests/                      # 1947 tests (pytest)
+├── docs/                       # All documentation
+│   ├── ARCHITECTURE.md         #   System design and data flow
+│   ├── CALCULATION_COMPENDIUM.md # Formula reference for all metrics
+│   ├── STRUCTURAL_ESTIMATION.md
+│   └── *.md                    #   Neo4j, LLM, event study guides, etc.
+├── static/                     # Frontend (portfolio SPA, pipeline monitor)
+├── rust_ext/                   # PyO3/maturin Rust extension (graph speedup)
 ├── result/
-│   ├── db/                  # SQLite DB
-│   ├── json/                # 26 JSON outputs + performance reports
-│   ├── visualizations/      # Visualization files
-│   └── notebooks/           # Jupyter notebooks
-├── docs/                    # Documentation
-├── CLAUDE.md                # Claude Code instructions
-├── TODO.md                  # Task management
-└── pixi.toml                # Dependency definitions
+│   ├── json/                   # 26 pipeline JSON outputs
+│   └── reports/                # Generated HTML reports
+├── CLAUDE.md                   # Claude Code instructions
+├── todo.md                     # Audit progress tracker
+└── pixi.toml                   # Dependencies
 ```
 
 ## Legal Considerations

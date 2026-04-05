@@ -14,7 +14,7 @@ The goal: make individual contributions visible so that studios pay fair compens
 
 Viewer ratings are driven by factors independent of staff contribution (source material popularity, marketing, streaming platform, broadcast timing). Using them contradicts the project's core principle.
 
-See `todo.md` for the full audit of 16 contamination pathways being removed, and `CALCULATION_COMPENDIUM.md` for the correct formulas.
+See `todo.md` for the full audit of 16 contamination pathways being removed, and `docs/CALCULATION_COMPENDIUM.md` for the correct formulas.
 
 ### Permitted Data Sources
 
@@ -141,24 +141,42 @@ pixi run lab              # JupyterLab
 ```
 animetor_eval/
 |- src/
-|   |- pipeline_phases/     # 10-phase pipeline modules
-|   |- analysis/            # 41+ analysis modules
-|   |- scrapers/            # Data collection (AniList, MAL, MediaArts, JVMG)
-|   |- utils/               # Config, JSON I/O, role groups, performance
+|   |- pipeline_phases/     # 10-phase pipeline (data_loading → export)
+|   |- analysis/            # Analysis modules (grouped by domain)
+|   |   |- scoring/         #   Core algorithms: AKM, BiRank, IV, PageRank
+|   |   |- network/         #   Graph analysis: bridges, communities, trust
+|   |   |- genre/           #   Genre affinity, ecosystem, specialization
+|   |   |- studio/          #   Studio profiling, clustering, timeseries
+|   |   |- va/              #   Voice actor: AKM, graph, trust, diversity
+|   |   |- causal/          #   Causal inference: DML, structural estimation
+|   |   |- graph.py         #   Core NetworkX graph builder (shared)
+|   |   |- visualize.py     #   Static charts (matplotlib)
+|   |   `- *.py             #   Career, cohort, compatibility, etc.
+|   |- scrapers/            # Data collection (AniList, SeesaaWiki)
+|   |- utils/               # Config, JSON I/O, role constants
+|   |- viz/                 # v2 report architecture (chart_spec, renderers)
 |   |- i18n/                # Internationalization (EN/JA)
-|   |- pipeline.py          # Pipeline orchestrator
 |   |- models.py            # Pydantic v2 data models
-|   |- database.py          # SQLite DAO (schema v7)
+|   |- database.py          # SQLite DAO (schema v26)
+|   |- pipeline.py          # Pipeline orchestrator
 |   |- api.py               # FastAPI server (42+ endpoints + WebSocket)
-|   |- cli.py               # CLI (22 commands, typer + Rich)
-|   |- monitoring.py        # Data freshness monitoring
-|   |- websocket_manager.py # WebSocket progress broadcasting
-|- rust_ext/                # PyO3/maturin Rust extension
+|   `- cli.py               # CLI (22+ commands, typer + Rich)
+|- scripts/
+|   |- generate_all_reports.py  # Main report generator
+|   |- generate_reports_v2.py   # v2 architecture entry point
+|   |- report_generators/       # Shared templates & helpers
+|   `- maintenance/             # One-off scripts (scraping fixes, backfill)
+|- tests/                   # 1947 tests (pytest)
+|- docs/                    # All documentation
+|   |- ARCHITECTURE.md      #   System design and data flow
+|   |- CALCULATION_COMPENDIUM.md  # Formula reference
+|   `- *.md                 #   Neo4j, LLM, event study guides
 |- static/                  # Frontend (portfolio SPA, pipeline monitor)
-|- benchmarks/              # Performance benchmarks
-|- tests/                   # Tests
+|- rust_ext/                # PyO3/maturin Rust extension
 |- result/json/             # 26 JSON pipeline outputs
-|- pixi.toml                # Dependencies (composable features)
+|- CLAUDE.md                # Claude Code instructions
+|- todo.md                  # Audit progress tracker
+`- pixi.toml                # Dependencies
 ```
 
 ## Key Patterns

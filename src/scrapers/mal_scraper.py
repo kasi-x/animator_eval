@@ -114,6 +114,13 @@ class JikanClient:
             params["type"] = type_filter
         return await self.get("/top/anime", params=params)
 
+    async def get_all_anime(
+        self, page: int = 1, limit: int = 25
+    ) -> dict:
+        """全アニメをページネーション取得 (order_by=mal_id で安定順序)."""
+        params: dict = {"page": page, "limit": limit, "order_by": "mal_id", "sort": "asc"}
+        return await self.get("/anime", params=params)
+
 
 def parse_anime_data(raw: dict) -> Anime:
     mal_id = raw.get("mal_id")
@@ -240,13 +247,16 @@ async def fetch_top_anime_credits(
 
 @app.command()
 def main(
-    count: int = typer.Option(50, "--count", "-n", help="取得するアニメ数"),
-    type_filter: str = typer.Option("tv", "--type", help="アニメタイプ"),
+    count: int = typer.Option(50, "--count", "-n", help="取得するアニメ数 (0=全アニメ)"),
+    type_filter: str = typer.Option("tv", "--type", help="アニメタイプ (空欄=全タイプ)"),
     resume: bool = typer.Option(
         True, "--resume/--no-resume", help="チェックポイントから再開する"
     ),
     checkpoint_interval: int = typer.Option(
-        10, "--checkpoint-interval", help="チェックポイント保存間隔 (アニメ数)"
+        50, "--checkpoint-interval", help="チェックポイント保存間隔 (アニメ数)"
+    ),
+    fetch_all: bool = typer.Option(
+        False, "--all", help="全アニメを取得 (count=0相当)"
     ),
 ) -> None:
     """MAL (Jikan API) からクレジットデータを収集する."""
@@ -262,14 +272,21 @@ def main(
 
     setup_logging()
 
+    # --all フラグで全アニメを取得
+    if fetch_all:
+        count = 0
+
     # Load checkpoint if resuming
     start_index = 0
+    start_page = 1
     if resume:
         checkpoint = _load_checkpoint(CHECKPOINT_FILE)
         if checkpoint:
+            start_page = checkpoint.get("last_fetched_page", 1)
             start_index = checkpoint.get("last_fetched_index", 0)
             log.info(
                 "checkpoint_loaded",
+                last_fetched_page=start_page,
                 last_fetched_index=start_index,
                 total_anime=checkpoint.get("total_anime", 0),
                 total_persons=checkpoint.get("total_persons", 0),
@@ -285,33 +302,64 @@ def main(
         total_persons = 0
         total_credits = 0
         fetched = 0
+        current_page = start_page
 
         try:
             with db_connection() as conn:
                 init_db(conn)
 
-                pages_needed = (count + 24) // 25
-                for page in range(1, pages_needed + 1):
-                    if fetched >= count:
-                        break
-                    log.info("fetching_top_anime", source="mal", page=page)
-                    resp = await client.get_top_anime(
-                        page=page,
-                        limit=25,
-                        type_filter=type_filter,
-                    )
-                    for raw_anime in resp.get("data", []):
-                        if fetched >= count:
+                # Load existing MAL IDs to avoid duplicates
+                cursor = conn.execute("SELECT mal_id FROM anime WHERE mal_id IS NOT NULL")
+                existing_mal_ids = {row[0] for row in cursor.fetchall()}
+                log.info("loaded_existing_mal_ids", count=len(existing_mal_ids))
+
+                is_fetching_all = count == 0
+                log.info(
+                    "mal_fetch_start",
+                    fetch_all=is_fetching_all,
+                    count=count if count > 0 else "unlimited",
+                    start_page=current_page,
+                )
+
+                while True:
+                    # 全アニメ取得モード: /anime エンドポイント使用
+                    if is_fetching_all:
+                        log.info("fetching_all_anime", source="mal", page=current_page)
+                        resp = await client.get_all_anime(page=current_page, limit=25)
+                    else:
+                        # 人気アニメTop N: /top/anime エンドポイント使用
+                        pages_needed = (count + 24) // 25
+                        if current_page > pages_needed:
                             break
+                        log.info("fetching_top_anime", source="mal", page=current_page)
+                        resp = await client.get_top_anime(
+                            page=current_page,
+                            limit=25,
+                            type_filter=type_filter,
+                        )
+
+                    anime_data = resp.get("data", [])
+                    if not anime_data:
+                        log.info("mal_no_more_data", page=current_page)
+                        break
+
+                    for raw_anime in anime_data:
+                        if not is_fetching_all and fetched >= count:
+                            break
+
                         anime = parse_anime_data(raw_anime)
                         fetched += 1
 
                         # Skip already-processed anime on resume
                         if fetched <= start_index:
+                            continue
+
+                        # Skip anime that already exist in DB to avoid UNIQUE constraint violation
+                        if anime.mal_id and anime.mal_id in existing_mal_ids:
                             log.info(
-                                "skipping_anime",
+                                "skipping_existing_anime",
                                 source="mal",
-                                progress=f"{fetched}/{count}",
+                                mal_id=anime.mal_id,
                                 title=anime.display_title,
                             )
                             continue
@@ -319,7 +367,7 @@ def main(
                         log.info(
                             "fetching_staff",
                             source="mal",
-                            progress=f"{fetched}/{count}",
+                            progress=f"{fetched}" if is_fetching_all else f"{fetched}/{count}",
                             title=anime.display_title,
                         )
                         upsert_anime(conn, anime)
@@ -356,6 +404,7 @@ def main(
                             _save_checkpoint(
                                 CHECKPOINT_FILE,
                                 {
+                                    "last_fetched_page": current_page,
                                     "last_fetched_index": fetched,
                                     "total_anime": total_anime,
                                     "total_persons": total_persons,
@@ -365,8 +414,14 @@ def main(
                                     ).isoformat(),
                                 },
                             )
-                            log.info("checkpoint_saved", last_fetched_index=fetched)
+                            log.info("checkpoint_saved", page=current_page, fetched=fetched)
 
+                    if not is_fetching_all and fetched >= count:
+                        break
+
+                    current_page += 1
+
+                conn.commit()
                 update_data_source(conn, "mal", total_credits)
 
         finally:
