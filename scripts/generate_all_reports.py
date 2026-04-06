@@ -20625,6 +20625,20 @@ REPORT_CATALOG = [
         "desc": "フォーマット別作品数、年代別収録推移、スタッフ情報完全性、ソース別クレジット分布、役職別内訳を含む6チャート。",
         "sources": "SQLite (anime, credits, persons)",
     },
+    {
+        "file": "dml_causal_inference.html",
+        "title": "DML因果推論分析",
+        "subtitle": "Double Machine Learningによる因果効果推定",
+        "desc": "Double ML手法を用いたスタジオ効果・役職効果の因果推定。",
+        "sources": "dml_analysis",
+    },
+    {
+        "file": "derived_params.html",
+        "title": "派生パラメータ一覧",
+        "subtitle": "パイプラインで算出される全パラメータの一覧と分布",
+        "desc": "各分析モジュールが算出するパラメータ（IV重み、閾値、ハイパーパラメータ等）の一覧。",
+        "sources": "derived_params",
+    },
 ]
 
 

@@ -31,7 +31,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from src.reporting.specs.chart import ChartSpec
 from src.reporting.specs.finding import FindingSpec, StrengthLevel
 from src.reporting.specs.forbidden_phrases import find_forbidden
 from src.reporting.specs.report import ReportSpec, ReportType

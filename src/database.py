@@ -25,7 +25,7 @@ logger = structlog.get_logger()
 
 DEFAULT_DB_PATH = DB_PATH
 
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 27
 
 # Fuzzy match rules for unmatched anime titles (90%+ confidence)
 # Entries where SeesaaWiki title slightly differs from AniList title
@@ -336,6 +336,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         24: _migrate_v24_improved_matching,
         25: _migrate_v25_kanji_hira_matching,
         26: _migrate_v26_anime_scale_classification,
+        27: _migrate_v27_normalize_legacy_roles,
     }
 
     for version in range(current + 1, SCHEMA_VERSION + 1):
@@ -1859,6 +1860,33 @@ def _migrate_v26_anime_scale_classification(conn: sqlite3.Connection) -> None:
     compute_anime_scale_classes(conn)
 
 
+def _migrate_v27_normalize_legacy_roles(conn: sqlite3.Connection) -> None:
+    """v27: credits テーブルのレガシーロール値を現行 Role enum 値に正規化.
+
+    かつてコード側の _LEGACY_ROLE_MAP で実行時に変換していた処理を
+    データとして一度だけ適用し、永続化する。
+
+    注意: "other" は Role.OTHER として残す (分類不能クレジット用)。
+          "special" は別概念 (スペシャルサンクス等) なので混同しない。
+    """
+    legacy_map = {
+        "chief_animation_director": "animation_director",
+        "storyboard": "episode_director",
+        "mechanical_designer": "character_designer",
+        "art_director": "background_art",
+        "color_designer": "finishing",
+        "effects": "photography_director",
+        "theme_song": "music",
+        "series_composition": "screenplay",
+        "adr": "voice_actor",
+    }
+    for old_role, new_role in legacy_map.items():
+        conn.execute(
+            "UPDATE credits SET role = ? WHERE role = ?",
+            (new_role, old_role),
+        )
+
+
 def insert_person_affiliation(
     conn: sqlite3.Connection,
     person_id: str,
@@ -2242,20 +2270,6 @@ def load_all_anime(conn: sqlite3.Connection) -> list[Anime]:
     return [Anime.from_db_row(AnimeRow.from_row(row)) for row in rows]
 
 
-_LEGACY_ROLE_MAP: dict[str, str] = {
-    "chief_animation_director": "animation_director",
-    "storyboard": "episode_director",
-    "mechanical_designer": "character_designer",
-    "art_director": "background_art",
-    "color_designer": "finishing",
-    "effects": "photography_director",
-    "theme_song": "music",
-    "series_composition": "screenplay",
-    "adr": "voice_actor",
-    "other": "special",
-}
-
-
 def load_all_credits(conn: sqlite3.Connection) -> list[Credit]:
     """全クレジットを読み込む."""
     from src.db_rows import CreditRow
@@ -2264,21 +2278,8 @@ def load_all_credits(conn: sqlite3.Connection) -> list[Credit]:
     credits: list[Credit] = []
     skipped = 0
     for row in rows:
-        cr = CreditRow.from_row(row)
-        role_str = _LEGACY_ROLE_MAP.get(cr.role, cr.role)
         try:
-            credits.append(Credit.from_db_row(CreditRow(
-                id=cr.id,
-                person_id=cr.person_id,
-                anime_id=cr.anime_id,
-                role=role_str,
-                raw_role=cr.raw_role,
-                episode=cr.episode,
-                source=cr.source,
-                updated_at=cr.updated_at,
-                credit_year=cr.credit_year,
-                credit_quarter=cr.credit_quarter,
-            )))
+            credits.append(Credit.from_db_row(CreditRow.from_row(row)))
         except ValueError:
             skipped += 1
     if skipped:

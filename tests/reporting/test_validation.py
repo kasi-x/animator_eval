@@ -362,6 +362,107 @@ def test_w1_missing_limitations() -> None:
 
 
 # ---------------------------------------------------------------------------
+# R-7: REPRODUCIBILITY requirements
+# ---------------------------------------------------------------------------
+def test_r7_reproducibility_without_inputs() -> None:
+    bad_section = SectionSpec(
+        slug="repro",
+        kind=SectionKind.REPRODUCIBILITY,
+        title="再現性",
+        reproducibility_info=ReproducibilityInfo(inputs=()),  # empty inputs
+    )
+    spec = _minimal_argumentative()
+    sections = tuple(
+        bad_section if s.kind is SectionKind.REPRODUCIBILITY else s for s in spec.sections
+    )
+    bad = ReportSpec(**{**spec.__dict__, "sections": sections})
+    results = validate(bad)
+    assert any(r.rule == "R-7" and r.is_error() for r in results)
+
+
+def test_r7_reproducibility_missing_info() -> None:
+    bad_section = SectionSpec(
+        slug="repro",
+        kind=SectionKind.REPRODUCIBILITY,
+        title="再現性",
+        # reproducibility_info=None (default)
+    )
+    spec = _minimal_argumentative()
+    sections = tuple(
+        bad_section if s.kind is SectionKind.REPRODUCIBILITY else s for s in spec.sections
+    )
+    bad = ReportSpec(**{**spec.__dict__, "sections": sections})
+    results = validate(bad)
+    assert any(r.rule == "R-7" and r.is_error() for r in results)
+
+
+# ---------------------------------------------------------------------------
+# W-2: missing implications
+# ---------------------------------------------------------------------------
+def test_w2_missing_implications() -> None:
+    spec = _minimal_argumentative()
+    sections = tuple(s for s in spec.sections if s.kind is not SectionKind.IMPLICATIONS)
+    spec2 = ReportSpec(**{**spec.__dict__, "sections": sections})
+    results = validate(spec2)
+    warnings = warnings_only(results)
+    assert any(r.rule == "W-2" for r in warnings)
+
+
+# ---------------------------------------------------------------------------
+# W-3: suggestive without competing interpretations
+# ---------------------------------------------------------------------------
+def test_w3_suggestive_without_competing() -> None:
+    f = FindingSpec(
+        slug="F1",
+        claim="探索的主張。",
+        strength=StrengthLevel.SUGGESTIVE,
+        evidence_chart_refs=("scatter1",),
+        # no competing_interpretations
+    )
+    spec = _minimal_argumentative()
+    sections = list(spec.sections)
+    for i, s in enumerate(sections):
+        if s.kind is SectionKind.FINDINGS:
+            sections[i] = SectionSpec(
+                slug=s.slug, kind=s.kind, title=s.title, findings=(f,)
+            )
+    mod = ReportSpec(**{**spec.__dict__, "sections": tuple(sections)})
+    results = validate(mod)
+    warnings = warnings_only(results)
+    assert any(r.rule == "W-3" for r in warnings)
+
+
+# ---------------------------------------------------------------------------
+# W-4: chart without explanation
+# ---------------------------------------------------------------------------
+def test_w4_chart_missing_explanation_fields() -> None:
+    from src.reporting.specs import ExplanationMeta
+
+    bad_chart = ScatterSpec(
+        slug="scatter_noexp",
+        title="テスト",
+        data_key="scatter",
+        explanation=ExplanationMeta(question="", reading_guide=""),  # empty
+        x_field="x",
+        y_field="y",
+    )
+    spec = _minimal_argumentative()
+    sections = list(spec.sections)
+    sections.append(
+        SectionSpec(
+            slug="extra_stats",
+            kind=SectionKind.DESCRIPTIVE_STATS,
+            title="追加",
+            charts=(bad_chart,),
+        )
+    )
+    mod = ReportSpec(**{**spec.__dict__, "sections": tuple(sections)})
+    results = validate(mod)
+    warnings = warnings_only(results)
+    assert any(r.rule == "W-4" for r in warnings)
+
+
+# ---------------------------------------------------------------------------
 # L-1: forbidden phrases
 # ---------------------------------------------------------------------------
 def test_l1_forbidden_phrase_in_finding_claim() -> None:

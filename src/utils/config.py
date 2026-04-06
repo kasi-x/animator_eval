@@ -109,6 +109,7 @@ ROLE_RANK: dict[str, float] = {
     "editing": 1.0,
     "settings": 1.0,
     "voice_actor": 1.0,
+    "other": 1.0,
     "special": 1.0,
 }
 

@@ -119,7 +119,8 @@ NON_PRODUCTION_ROLES: frozenset[Role] = frozenset(
         Role.ORIGINAL_CREATOR,  # 原作者 — 制作スタッフではない
         Role.MUSIC,  # 作曲家・演奏者 — アニメーション制作スタッフではない
         Role.LOCALIZATION,  # 各国語版スタッフ — 日本の制作工程外
-        Role.SPECIAL,  # 制作工程外 + 分類不能
+        Role.OTHER,    # ロール特定不可のクレジット — スコア計算対象外
+        Role.SPECIAL,  # スペシャルサンクス・ゲスト — 制作外特別枠
     }
 )
 
@@ -165,7 +166,8 @@ ROLE_CATEGORY: dict[Role, str] = {
     # Non-production
     Role.VOICE_ACTOR: "non_production",
     Role.LOCALIZATION: "non_production",
-    Role.SPECIAL: "non_production",
+    Role.OTHER: "non_production",    # ロール特定不可
+    Role.SPECIAL: "non_production",  # スペシャルサンクス等
 }
 
 # =============================================================================
@@ -215,8 +217,9 @@ CAREER_STAGE: dict[Role, int] = {
     Role.ORIGINAL_CREATOR: 0,     # 原作（非制作）
     Role.MUSIC: 0,                # 音楽（非制作）
     Role.VOICE_ACTOR: 0,          # 声優（非制作）
-    Role.LOCALIZATION: 0,         # 各国語版スタッフ（非制作）
-    Role.SPECIAL: 0,              # その他（非制作）
+    Role.LOCALIZATION: 0,  # 各国語版スタッフ（非制作）
+    Role.OTHER: 0,         # ロール特定不可（非制作）
+    Role.SPECIAL: 0,       # スペシャルサンクス等（非制作）
 }
 
 # String-keyed version for modules that work with role.value strings

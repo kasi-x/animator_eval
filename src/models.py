@@ -13,9 +13,9 @@ if TYPE_CHECKING:
 
 
 class Role(str, Enum):
-    """アニメ制作における役職 (22分類).
+    """アニメ制作における役職 (23分類).
 
-    統合済み:
+    統合済み (v27マイグレーション後):
       CHIEF_ANIMATION_DIRECTOR → ANIMATION_DIRECTOR
       STORYBOARD → EPISODE_DIRECTOR
       MECHANICAL_DESIGNER → CHARACTER_DESIGNER
@@ -25,7 +25,10 @@ class Role(str, Enum):
       THEME_SONG → MUSIC
       SERIES_COMPOSITION → SCREENPLAY
       ADR → VOICE_ACTOR
-      OTHER → SPECIAL
+
+    OTHER と SPECIAL は別概念:
+      OTHER    = その他 — ロール特定不可・分類不能なクレジット
+      SPECIAL  = スペシャル — スペシャルサンクス・ゲスト参加・制作外特別枠
     """
 
     DIRECTOR = "director"
@@ -50,7 +53,8 @@ class Role(str, Enum):
     SETTINGS = "settings"  # 設定系
     VOICE_ACTOR = "voice_actor"  # +ADR
     LOCALIZATION = "localization"  # 各国語版スタッフ（翻訳・吹替演出・各国版P等）
-    SPECIAL = "special"  # 制作工程外 + 分類不能
+    OTHER = "other"       # その他 — ロール特定不可・分類不能なクレジット
+    SPECIAL = "special"   # スペシャルサンクス・ゲスト参加・制作外特別枠
 
 
 # MAL/AniList の役職文字列 → Role へのマッピング
