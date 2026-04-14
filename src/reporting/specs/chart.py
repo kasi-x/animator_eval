@@ -45,9 +45,9 @@ class BarSpec:
     explanation: ExplanationMeta
     category_field: str
     value_field: str
-    orientation: str = "v"              # "v" or "h"
+    orientation: str = "v"  # "v" or "h"
     color_field: str | None = None
-    error_field: str | None = None      # CI / SE half-width
+    error_field: str | None = None  # CI / SE half-width
     xlabel: str = ""
     ylabel: str = ""
     height: int = 450

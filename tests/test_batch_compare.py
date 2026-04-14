@@ -5,12 +5,36 @@ from src.analysis.batch_compare import compare_groups
 
 def _make_groups():
     group_a = [
-        {"person_id": "p1", "birank": 80, "patronage": 70, "person_fe": 60, "iv_score": 70},
-        {"person_id": "p2", "birank": 90, "patronage": 80, "person_fe": 70, "iv_score": 80},
+        {
+            "person_id": "p1",
+            "birank": 80,
+            "patronage": 70,
+            "person_fe": 60,
+            "iv_score": 70,
+        },
+        {
+            "person_id": "p2",
+            "birank": 90,
+            "patronage": 80,
+            "person_fe": 70,
+            "iv_score": 80,
+        },
     ]
     group_b = [
-        {"person_id": "p3", "birank": 40, "patronage": 50, "person_fe": 55, "iv_score": 48},
-        {"person_id": "p4", "birank": 30, "patronage": 40, "person_fe": 45, "iv_score": 38},
+        {
+            "person_id": "p3",
+            "birank": 40,
+            "patronage": 50,
+            "person_fe": 55,
+            "iv_score": 48,
+        },
+        {
+            "person_id": "p4",
+            "birank": 30,
+            "patronage": 40,
+            "person_fe": 45,
+            "iv_score": 38,
+        },
     ]
     return group_a, group_b
 

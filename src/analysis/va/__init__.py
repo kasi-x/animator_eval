@@ -1,4 +1,5 @@
 """Voice actor analysis subpackage."""
+
 from .akm import *  # noqa: F401,F403
 from .character_diversity import *  # noqa: F401,F403
 from .ensemble_synergy import *  # noqa: F401,F403

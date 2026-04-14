@@ -1,4 +1,5 @@
 """Network analysis subpackage."""
+
 from .bridges import *  # noqa: F401,F403
 from .circles import *  # noqa: F401,F403
 from .community_detection import *  # noqa: F401,F403

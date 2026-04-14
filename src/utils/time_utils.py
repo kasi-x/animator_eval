@@ -80,9 +80,7 @@ def yq_label(year: int, quarter: int) -> str:
     return f"{year}-Q{quarter}"
 
 
-def yq_diff_quarters(
-    y1: int, q1: int, y2: int, q2: int
-) -> int:
+def yq_diff_quarters(y1: int, q1: int, y2: int, q2: int) -> int:
     """Number of quarters between two (year, quarter) pairs.
 
     Returns (y2,q2) - (y1,q1) in quarters. Positive if (y2,q2) is later.

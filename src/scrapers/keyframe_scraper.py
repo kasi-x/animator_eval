@@ -107,7 +107,9 @@ def extract_preload_data(html: str) -> dict | None:
     The site embeds data as: `preloadData = {...};` in a <script> tag.
     """
     # Match preloadData = { ... }; — greedy match for the outermost braces
-    match = re.search(r"preloadData\s*=\s*(\{.*?\})\s*;?\s*(?:</script>|$)", html, re.DOTALL)
+    match = re.search(
+        r"preloadData\s*=\s*(\{.*?\})\s*;?\s*(?:</script>|$)", html, re.DOTALL
+    )
     if not match:
         return None
 
@@ -226,15 +228,17 @@ def parse_credits_from_data(data: dict, slug: str) -> list[dict]:
                     if not name_ja and not name_en:
                         continue
 
-                    credits.append({
-                        "episode": episode_num,
-                        "role_ja": role_ja,
-                        "role_en": role_en,
-                        "person_id": person_id,
-                        "name_ja": name_ja,
-                        "name_en": name_en,
-                        "is_studio": False,
-                    })
+                    credits.append(
+                        {
+                            "episode": episode_num,
+                            "role_ja": role_ja,
+                            "role_en": role_en,
+                            "person_id": person_id,
+                            "name_ja": name_ja,
+                            "name_en": name_en,
+                            "is_studio": False,
+                        }
+                    )
 
     return credits
 
@@ -341,9 +345,7 @@ async def scrape_keyframe(
                 return row["id"]
         return make_keyframe_anime_id(slug)
 
-    async with httpx.AsyncClient(
-        timeout=60.0, follow_redirects=True
-    ) as client:
+    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
         # Phase 1: Discover anime slugs from sitemap
         slugs = await fetch_sitemap(client)
         if not slugs:
@@ -502,9 +504,7 @@ def main(
     delay: float = typer.Option(
         DEFAULT_DELAY, "--delay", "-d", help="Delay between requests (seconds)"
     ),
-    fresh: bool = typer.Option(
-        False, "--fresh", help="Ignore existing checkpoint"
-    ),
+    fresh: bool = typer.Option(False, "--fresh", help="Ignore existing checkpoint"),
     data_dir: Path = typer.Option(
         DEFAULT_DATA_DIR, "--data-dir", help="Data directory"
     ),

@@ -46,8 +46,8 @@ class UncertaintyInfo:
     n_bootstrap: int | None = None
 
     # Derivation metadata (traceability)
-    method: str = ""                # e.g. "analytic_normal", "bootstrap", "delta_method"
-    source_code_ref: str = ""       # e.g. "src/analysis/scoring/akm.py:234"
+    method: str = ""  # e.g. "analytic_normal", "bootstrap", "delta_method"
+    source_code_ref: str = ""  # e.g. "src/analysis/scoring/akm.py:234"
 
     def has_interval(self) -> bool:
         """Return True if both CI bounds are populated."""

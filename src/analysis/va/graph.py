@@ -151,7 +151,7 @@ def build_va_collaboration_graph(
         if not main_vas:
             vas = sorted(va_weights.keys())
             for i, a in enumerate(vas):
-                for b in vas[i + 1:]:
+                for b in vas[i + 1 :]:
                     w = min(va_weights[a], va_weights[b]) * dur_m
                     key = (a, b) if a < b else (b, a)
                     edge_weights[key] += w
@@ -159,7 +159,7 @@ def build_va_collaboration_graph(
 
         # Main ↔ Main: all pairs with co-main bonus
         for i, a in enumerate(main_vas):
-            for b in main_vas[i + 1:]:
+            for b in main_vas[i + 1 :]:
                 co_main = 1.5  # co-main bonus
                 w = min(va_weights[a], va_weights[b]) * dur_m * co_main
                 key = (a, b) if a < b else (b, a)

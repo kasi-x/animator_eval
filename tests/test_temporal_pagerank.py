@@ -46,7 +46,9 @@ def _person(pid: str, name_ja: str = "", name_en: str = "") -> Person:
     return Person(id=pid, name_ja=name_ja, name_en=name_en)
 
 
-def _anime(aid: str, year: int, score: float = 7.0, studios: list[str] | None = None) -> Anime:
+def _anime(
+    aid: str, year: int, score: float = 7.0, studios: list[str] | None = None
+) -> Anime:
     return Anime(
         id=aid,
         title_ja=f"Anime {aid}",
@@ -159,9 +161,7 @@ class TestCumulativeGraphs:
             g.add_node(pid, type="person")
         g.add_node("anime1", type="anime")
 
-        anime_credits = {
-            "anime1": [(pid, Role.KEY_ANIMATOR) for pid in persons_ids]
-        }
+        anime_credits = {"anime1": [(pid, Role.KEY_ANIMATOR) for pid in persons_ids]}
         anime_map = {"anime1": _anime("anime1", 2020, 8.0)}
 
         added = _add_peer_edges(g, anime_credits, anime_map, 0.3)
@@ -239,7 +239,9 @@ class TestBirankTimeline:
         scores = _run_yearly_pagerank_with_warm_start(graphs)
 
         yearly_norm = _build_yearly_normalized(scores, graphs)
-        timelines = _build_birank_timelines(scores, graphs, yearly_norm, credits, anime_map)
+        timelines = _build_birank_timelines(
+            scores, graphs, yearly_norm, credits, anime_map
+        )
 
         # All persons should have timelines
         assert "d1" in timelines
@@ -315,9 +317,14 @@ class TestForesightScores:
         scores = _run_yearly_pagerank_with_warm_start(graphs)
         yearly_norm = _build_yearly_normalized(scores, graphs)
 
-        timelines = _build_birank_timelines(scores, graphs, yearly_norm, credits, anime_map)
+        timelines = _build_birank_timelines(
+            scores, graphs, yearly_norm, credits, anime_map
+        )
         foresight = _compute_foresight_scores(
-            timelines, credits, anime_map, yearly_norm,
+            timelines,
+            credits,
+            anime_map,
+            yearly_norm,
             foresight_horizon_years=5,
             unknown_threshold_percentile=25.0,
         )
@@ -340,9 +347,14 @@ class TestForesightScores:
         scores = _run_yearly_pagerank_with_warm_start(graphs)
         yearly_norm = _build_yearly_normalized(scores, graphs)
 
-        timelines = _build_birank_timelines(scores, graphs, yearly_norm, credits, anime_map)
+        timelines = _build_birank_timelines(
+            scores, graphs, yearly_norm, credits, anime_map
+        )
         foresight = _compute_foresight_scores(
-            timelines, credits, anime_map, yearly_norm,
+            timelines,
+            credits,
+            anime_map,
+            yearly_norm,
         )
 
         # Both are at same level, no established person -> no foresight
@@ -359,8 +371,10 @@ class TestForesightScores:
             _person("y3", "AnimatorY3"),
         ]
         anime_list = [
-            _anime("w1", 2018), _anime("w2", 2018),
-            _anime("w3", 2022), _anime("w4", 2023),
+            _anime("w1", 2018),
+            _anime("w2", 2018),
+            _anime("w3", 2022),
+            _anime("w4", 2023),
         ]
         anime_map = {a.id: a for a in anime_list}
 
@@ -378,7 +392,7 @@ class TestForesightScores:
             _credit("x1", "w4", Role.DIRECTOR),
         ]
 
-        result = compute_temporal_pagerank(credits, anime_map, persons)
+        result, _ = compute_temporal_pagerank(credits, anime_map, persons)
 
         for pid, fs_dict in result.foresight_scores.items():
             # CI bounds should be reasonable
@@ -397,7 +411,9 @@ class TestPromotionDetection:
         graphs = _build_yearly_cumulative_graphs(credits, anime_map, persons, 0.3)
         scores = _run_yearly_pagerank_with_warm_start(graphs)
         yearly_norm = _build_yearly_normalized(scores, graphs)
-        timelines = _build_birank_timelines(scores, graphs, yearly_norm, credits, anime_map)
+        timelines = _build_birank_timelines(
+            scores, graphs, yearly_norm, credits, anime_map
+        )
 
         # Use min_promotions=1 to detect all events (including single promotions)
         promotions = _detect_promotions(credits, anime_map, timelines, min_promotions=1)
@@ -417,7 +433,9 @@ class TestPromotionDetection:
         graphs = _build_yearly_cumulative_graphs(credits, anime_map, persons, 0.3)
         scores = _run_yearly_pagerank_with_warm_start(graphs)
         yearly_norm = _build_yearly_normalized(scores, graphs)
-        timelines = _build_birank_timelines(scores, graphs, yearly_norm, credits, anime_map)
+        timelines = _build_birank_timelines(
+            scores, graphs, yearly_norm, credits, anime_map
+        )
 
         promotions = _detect_promotions(credits, anime_map, timelines, min_promotions=1)
 
@@ -433,7 +451,9 @@ class TestPromotionDetection:
         graphs = _build_yearly_cumulative_graphs(credits, anime_map, persons, 0.3)
         scores = _run_yearly_pagerank_with_warm_start(graphs)
         yearly_norm = _build_yearly_normalized(scores, graphs)
-        timelines = _build_birank_timelines(scores, graphs, yearly_norm, credits, anime_map)
+        timelines = _build_birank_timelines(
+            scores, graphs, yearly_norm, credits, anime_map
+        )
 
         # With min_promotions=5, nothing should pass in this small dataset
         promotions = _detect_promotions(credits, anime_map, timelines, min_promotions=5)
@@ -452,14 +472,16 @@ class TestPromotionDetection:
         # Each animator starts as IN_BETWEEN then gets promoted
         for i in range(5):
             credits.append(_credit(f"a{i}", f"w{i}", Role.IN_BETWEEN))
-            credits.append(_credit(f"a{i}", f"w{i+1}", Role.KEY_ANIMATOR))
+            credits.append(_credit(f"a{i}", f"w{i + 1}", Role.KEY_ANIMATOR))
         # a5 stays in_between
         credits.append(_credit("a5", "w5", Role.IN_BETWEEN))
 
         graphs = _build_yearly_cumulative_graphs(credits, anime_map, persons, 0.3)
         scores = _run_yearly_pagerank_with_warm_start(graphs)
         yearly_norm = _build_yearly_normalized(scores, graphs)
-        timelines = _build_birank_timelines(scores, graphs, yearly_norm, credits, anime_map)
+        timelines = _build_birank_timelines(
+            scores, graphs, yearly_norm, credits, anime_map
+        )
 
         promotions = _detect_promotions(credits, anime_map, timelines, min_promotions=2)
 
@@ -499,7 +521,9 @@ class TestPromotionDetection:
         graphs = _build_yearly_cumulative_graphs(credits, anime_map, persons, 0.3)
         scores = _run_yearly_pagerank_with_warm_start(graphs)
         yearly_norm = _build_yearly_normalized(scores, graphs)
-        timelines = _build_birank_timelines(scores, graphs, yearly_norm, credits, anime_map)
+        timelines = _build_birank_timelines(
+            scores, graphs, yearly_norm, credits, anime_map
+        )
 
         promotions = _detect_promotions(credits, anime_map, timelines, min_promotions=1)
 
@@ -517,7 +541,7 @@ class TestPromotionDetection:
 class TestIntegration:
     def test_empty_data(self):
         """Empty input should return empty result, not crash."""
-        result = compute_temporal_pagerank([], {}, [])
+        result, _ = compute_temporal_pagerank([], {}, [])
         assert result.years_computed == []
         assert result.total_persons == 0
         assert result.birank_timelines == {}
@@ -527,7 +551,7 @@ class TestIntegration:
     def test_serialization(self, basic_data):
         """asdict() output should be JSON-serializable."""
         persons, anime_list, anime_map, credits = basic_data
-        result = compute_temporal_pagerank(credits, anime_map, persons)
+        result, _ = compute_temporal_pagerank(credits, anime_map, persons)
 
         # Should be directly serializable
         result_dict = asdict(result)
@@ -544,7 +568,7 @@ class TestIntegration:
     def test_full_pipeline_integration(self, basic_data):
         """Full compute_temporal_pagerank should produce coherent results."""
         persons, anime_list, anime_map, credits = basic_data
-        result = compute_temporal_pagerank(credits, anime_map, persons)
+        result, _ = compute_temporal_pagerank(credits, anime_map, persons)
 
         assert result.years_computed == [2020, 2021, 2022]
         assert result.total_persons > 0
@@ -566,7 +590,7 @@ class TestIntegration:
             _credit("a1", "w1", Role.KEY_ANIMATOR),
         ]
 
-        result = compute_temporal_pagerank(credits, anime_map, persons)
+        result, _ = compute_temporal_pagerank(credits, anime_map, persons)
         assert result.years_computed == [2020]
         assert result.total_persons == 2
 
@@ -580,5 +604,5 @@ class TestIntegration:
             _credit("d1", "w2", Role.DIRECTOR),  # No year
         ]
 
-        result = compute_temporal_pagerank(credits, anime_map, persons)
+        result, _ = compute_temporal_pagerank(credits, anime_map, persons)
         assert result.years_computed == [2020]

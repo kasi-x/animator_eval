@@ -124,7 +124,10 @@ def ranking(
         help="役職カテゴリでフィルタ (director/animator/designer/technical)",
     ),
     sort_by: str = typer.Option(
-        "iv_score", "--sort", "-s", help="ソート軸 (iv_score/person_fe/birank/patronage)"
+        "iv_score",
+        "--sort",
+        "-s",
+        help="ソート軸 (iv_score/person_fe/birank/patronage)",
     ),
     year_from: int = typer.Option(None, "--year-from", help="キャリア開始年の下限"),
     year_to: int = typer.Option(None, "--year-to", help="最新活動年の上限"),
@@ -469,7 +472,13 @@ def compare(
     table.add_column(name_b[:25], justify="right", style="yellow")
     table.add_column("Diff", justify="right", style="dim")
 
-    for axis, label in (("iv_score", "IV Score"), ("person_fe", "Person FE"), ("birank", "BiRank"), ("patronage", "Patronage"), ("dormancy", "Dormancy")):
+    for axis, label in (
+        ("iv_score", "IV Score"),
+        ("person_fe", "Person FE"),
+        ("birank", "BiRank"),
+        ("patronage", "Patronage"),
+        ("dormancy", "Dormancy"),
+    ):
         va, vb = data_a[axis], data_b[axis]
         diff = va - vb
         diff_str = f"{diff:+.4f}"
@@ -1911,10 +1920,10 @@ def neo4j_export(
     from src.database import (
         db_connection,
         init_db,
-        get_all_anime,
-        get_all_credits,
-        get_all_persons,
-        get_all_scores,
+        load_all_anime,
+        load_all_credits,
+        load_all_persons,
+        load_all_scores,
     )
 
     console.print("\n[bold blue]Neo4j Direct Export[/bold blue]\n")
@@ -1924,10 +1933,10 @@ def neo4j_export(
     with db_connection() as conn:
         init_db(conn)
 
-        persons = get_all_persons(conn)
-        anime_list = get_all_anime(conn)
-        credits = get_all_credits(conn)
-        scores = get_all_scores(conn)
+        persons = load_all_persons(conn)
+        anime_list = load_all_anime(conn)
+        credits = load_all_credits(conn)
+        scores = load_all_scores(conn)
 
     console.print(
         f"[green]✓ Loaded {len(persons):,} persons, {len(anime_list):,} anime, {len(credits):,} credits[/green]\n"

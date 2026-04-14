@@ -10,9 +10,11 @@ Components:
 4. 抜擢検出 (Promotion Detection) — 格上げ起用の検出と信頼度付き帰属
 """
 
+import pickle  # noqa: S403 — self-generated local files only, not network input
 import time
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
+from pathlib import Path
 
 import networkx as nx
 import numpy as np
@@ -31,6 +33,46 @@ logger = structlog.get_logger()
 # =============================================================================
 
 PEER_EDGE_CAP = 15  # Max persons per category per anime for peer edges
+
+
+@dataclass
+class StreamingCheckpoint:
+    """年次グラフストリーミングのチェックポイント.
+
+    累積グラフの状態を保存し、次回実行時に差分年だけ再計算できるようにする。
+    pickle で result/json/ 以下に保存される（自己生成ファイルのみ使用）。
+    """
+
+    last_year: int  # このグラフが表現する最終年（その年まで累積済み）
+    graph: nx.DiGraph  # last_year 時点の累積グラフ
+    prev_scores: dict[str, float]  # last_year の PageRank スコア（warm start 用）
+
+
+def save_streaming_checkpoint(path: Path, checkpoint: StreamingCheckpoint) -> None:
+    """チェックポイントを pickle として保存する."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "wb") as fh:
+        pickle.dump(checkpoint, fh, protocol=pickle.HIGHEST_PROTOCOL)  # noqa: S301
+    logger.info(
+        "birank_checkpoint_saved", last_year=checkpoint.last_year, path=str(path)
+    )
+
+
+def load_streaming_checkpoint(path: Path) -> StreamingCheckpoint | None:
+    """チェックポイントを読み込む. 存在しない/壊れている場合は None."""
+    if not path.exists():
+        return None
+    try:
+        with open(path, "rb") as fh:
+            obj = pickle.load(fh)  # noqa: S301
+        if not isinstance(obj, StreamingCheckpoint):
+            logger.warning("birank_checkpoint_invalid_type", path=str(path))
+            return None
+        logger.info("birank_checkpoint_loaded", last_year=obj.last_year, path=str(path))
+        return obj
+    except Exception as exc:
+        logger.warning("birank_checkpoint_load_failed", path=str(path), error=str(exc))
+        return None
 
 
 def _work_importance(anime: Anime | None) -> float:
@@ -62,19 +104,27 @@ class BirankTimeline:
     """人物の年次BiRank推移."""
 
     person_id: str
+    name: str = ""  # display name resolved from persons list
     snapshots: list[YearlyBirankSnapshot] = field(default_factory=list)
     peak_year: int | None = None
     peak_birank: float = 0.0
     career_start_year: int | None = None
     latest_year: int | None = None
     trajectory: str = "stable"  # "rising" | "stable" | "declining" | "peaked"
+    is_censored: bool = False  # True if latest_year >= RIGHT_CENSOR_CUTOFF (peak may not yet be reached)
 
 
 @dataclass
 class ForesightScore:
-    """先見スコア — 無名時の共演者が後に成長した場合のボーナス."""
+    """先見スコア — 無名時の共演者が後に成長した場合のボーナス.
+
+    Note: This is a retrospective pattern metric. "Foresight" here means
+    a person historically co-appeared with persons who later rose.
+    Predictive validity requires holdout_validation (see TemporalPageRankResult).
+    """
 
     person_id: str
+    name: str = ""  # display name resolved from persons list
     foresight_raw: float = 0.0
     foresight_normalized: float = 0.0  # 0-100
     discoveries: list[dict] = field(default_factory=list)  # top 20 for export
@@ -99,13 +149,25 @@ class PromotionEvent:
 
 @dataclass
 class PromotionCredit:
-    """抜擢クレジット — ある上位者が何人を格上げしたか."""
+    """抜擢クレジット — ある上位者が何人を格上げしたか.
+
+    Note: "Promotion" is attributed to the highest-stage person on the same
+    production. This captures co-credit structural patterns, not verified
+    mentoring relationships. vs_cohort_baseline is a true lift ratio
+    (e.g., 2.3 means 2.3× the stage-cohort baseline promotion success rate).
+    """
 
     person_id: str
+    name: str = ""  # display name resolved from persons list
     promotion_count: int = 0
     successful_promotions: int = 0
     promotion_success_rate: float = 0.0
-    vs_cohort_baseline: float = 0.0  # 同コホートの平均昇格率との比
+    shrunk_success_rate: float = (
+        0.0  # Beta-Binomial posterior mean (preferred for ranking)
+    )
+    vs_cohort_baseline: float = (
+        0.0  # true lift vs stage-cohort baseline (not 0-1 compressed)
+    )
     exclusivity_score: float = 0.0  # 他作品での同時昇格がない度合い
     studio_adjusted_rate: float = 0.0  # スタジオ効果を統制後
     confidence: float = 0.0  # 4因子の幾何平均
@@ -122,6 +184,9 @@ class TemporalPageRankResult:
     years_computed: list[int] = field(default_factory=list)
     total_persons: int = 0
     computation_time_seconds: float = 0.0
+    holdout_validation: dict = field(
+        default_factory=dict
+    )  # foresight holdout eval results
 
 
 # =============================================================================
@@ -287,20 +352,26 @@ def _build_and_score_yearly_streaming(
     anime_map: dict[str, Anime],
     persons: list,
     peer_edge_weight: float,
-) -> tuple[dict[int, dict[str, float]], dict[int, set[str]], dict[int, int]]:
+    resume_checkpoint: StreamingCheckpoint | None = None,
+) -> tuple[
+    dict[int, dict[str, float]],
+    dict[int, set[str]],
+    dict[int, int],
+    StreamingCheckpoint | None,
+]:
     """Build yearly cumulative graphs and run PageRank in streaming fashion.
 
-    Instead of holding all 98 yearly graphs in memory simultaneously,
-    builds each graph incrementally, runs PageRank, extracts metadata,
-    then frees the graph before building the next one.
+    チェックポイントが渡された場合、そのグラフ状態を起点にして
+    resume_checkpoint.last_year より後の年だけ計算する。これにより
+    新規データが少数年分しかない場合の再計算コストを最小化できる。
 
     Returns:
-        (yearly_scores, yearly_person_nodes, yearly_person_count)
-        - yearly_scores: {year: {node_id: raw_pagerank_score}}
+        (yearly_scores, yearly_person_nodes, yearly_person_count, final_checkpoint)
+        - yearly_scores: {year: {node_id: raw_pagerank_score}}  ← 新規年のみ
         - yearly_person_nodes: {year: set of person node IDs}
         - yearly_person_count: {year: number of person nodes}
+        - final_checkpoint: 最終年のグラフ状態（None = 計算なし）
     """
-    # Group credits by year
     credits_by_year: dict[int, list[Credit]] = defaultdict(list)
     for c in credits:
         anime = anime_map.get(c.anime_id)
@@ -309,34 +380,44 @@ def _build_and_score_yearly_streaming(
             credits_by_year[year].append(c)
 
     if not credits_by_year:
-        return {}, {}, {}
+        return {}, {}, {}, None
 
-    years = sorted(credits_by_year.keys())
-    person_map = {p.id: p for p in persons}
+    all_years = sorted(credits_by_year.keys())
+
+    # チェックポイントがある場合はその年以降だけ処理する
+    if resume_checkpoint is not None:
+        skip_up_to = resume_checkpoint.last_year
+        years = [y for y in all_years if y > skip_up_to]
+        prev_graph: nx.DiGraph = resume_checkpoint.graph.copy()
+        prev_scores: dict[str, float] | None = dict(resume_checkpoint.prev_scores)
+        logger.info(
+            "birank_streaming_resumed",
+            checkpoint_year=skip_up_to,
+            new_years=len(years),
+            first_new=years[0] if years else None,
+        )
+    else:
+        years = all_years
+        prev_graph = None
+        prev_scores = None
+
+    if not years:
+        return {}, {}, {}, None
 
     yearly_scores: dict[int, dict[str, float]] = {}
     yearly_person_nodes: dict[int, set[str]] = {}
     yearly_person_count: dict[int, int] = {}
-    prev_scores: dict[str, float] | None = None
-    prev_graph: nx.DiGraph | None = None
 
     for year in years:
         year_credits = credits_by_year[year]
 
-        # Incremental: copy previous year's graph, add delta
-        if prev_graph is None:
-            g = nx.DiGraph()
-        else:
-            g = prev_graph.copy()
+        g = nx.DiGraph() if prev_graph is None else prev_graph.copy()
 
-        # Add new nodes and bipartite edges (minimal attributes to save memory)
         for c in year_credits:
             if c.person_id not in g:
                 g.add_node(c.person_id, type="person")
-
             if c.anime_id not in g:
                 g.add_node(c.anime_id, type="anime")
-
             weight = ROLE_WEIGHTS.get(c.role.value, 1.0)
             if g.has_edge(c.person_id, c.anime_id):
                 g[c.person_id][c.anime_id]["weight"] += weight
@@ -347,40 +428,33 @@ def _build_and_score_yearly_streaming(
             else:
                 g.add_edge(c.anime_id, c.person_id, weight=weight)
 
-        # Skip peer edges in streaming mode — bipartite edges suffice for PageRank
-        # and cumulative peer edges cause O(n²) memory growth per year.
-
-        # Extract metadata before potential free
-        person_nodes = {
-            n for n in g.nodes() if g.nodes[n].get("type") == "person"
-        }
+        person_nodes = {n for n in g.nodes() if g.nodes[n].get("type") == "person"}
         yearly_person_nodes[year] = person_nodes
         yearly_person_count[year] = len(person_nodes)
 
-        # Run PageRank with warm start
         if g.number_of_nodes() == 0:
             yearly_scores[year] = {}
         else:
             nstart = None
             if prev_scores:
                 nodes = set(g.nodes())
-                nstart = {}
-                for node in nodes:
-                    if node in prev_scores:
-                        nstart[node] = prev_scores[node]
-                    else:
-                        nstart[node] = 1.0 / len(nodes)
+                n_nodes = len(nodes)
+                nstart = {node: prev_scores.get(node, 1.0 / n_nodes) for node in nodes}
                 total = sum(nstart.values())
                 if total > 0:
                     nstart = {k: v / total for k, v in nstart.items()}
-
             scores = weighted_pagerank(g, nstart=nstart)
             yearly_scores[year] = scores
             prev_scores = scores
 
         prev_graph = g
 
-    # Free the last graph (all scores are extracted)
+    # Build checkpoint from final state for potential reuse next run
+    final_checkpoint = StreamingCheckpoint(
+        last_year=years[-1],
+        graph=prev_graph,
+        prev_scores=prev_scores or {},
+    )
     del prev_graph
 
     logger.info(
@@ -388,7 +462,7 @@ def _build_and_score_yearly_streaming(
         years=len(years),
         year_range=f"{years[0]}-{years[-1]}",
     )
-    return yearly_scores, yearly_person_nodes, yearly_person_count
+    return yearly_scores, yearly_person_nodes, yearly_person_count, final_checkpoint
 
 
 def _run_yearly_pagerank_with_warm_start(
@@ -602,7 +676,9 @@ def _compute_foresight_scores(
     for year, scores in yearly_normalized.items():
         if scores:
             vals = list(scores.values())
-            year_thresholds[year] = float(np.percentile(vals, unknown_threshold_percentile))
+            year_thresholds[year] = float(
+                np.percentile(vals, unknown_threshold_percentile)
+            )
 
     # Build per-person birank by year lookup
     person_year_birank: dict[str, dict[int, float]] = defaultdict(dict)
@@ -725,6 +801,213 @@ def _compute_foresight_scores(
 
 
 # =============================================================================
+# Step 4b: Foresight Holdout Validation
+# =============================================================================
+
+# Persons still active in recent years haven't reached their peak yet.
+RIGHT_CENSOR_CUTOFF = 2022
+
+
+def _validate_foresight_holdout(
+    credits: list,
+    anime_map: dict,
+    yearly_normalized: dict[int, dict[str, float]],
+    holdout_year: int = 2018,
+) -> dict:
+    """ホールドアウト検証: holdout_year 以前のデータで先見スコアを計算し、
+    2019〜 のブレイク人材をどれだけ予測できるかを評価する.
+
+    先見スコアと2つの素朴ベースライン（活動量、共演者平均birank）を比較。
+    ROC-AUC と precision@k を返す。
+
+    重要: このメトリックは「事前」ではなく「事後」のパターン検出を評価するもの。
+    AUC < 0.6 の場合、指標に予測力はなく活動量やネットワーク位置で説明可能。
+    """
+    # Pre-holdout credits only
+    pre_credits = [
+        c
+        for c in credits
+        if (a := anime_map.get(c.anime_id)) and a.year and a.year <= holdout_year
+    ]
+    if not pre_credits:
+        return {"error": "no_pre_holdout_credits"}
+
+    pre_norm = {yr: sc for yr, sc in yearly_normalized.items() if yr <= holdout_year}
+    post_norm = {yr: sc for yr, sc in yearly_normalized.items() if yr > holdout_year}
+    if not pre_norm or not post_norm:
+        return {"error": "insufficient_year_span"}
+
+    birank_at_holdout = yearly_normalized.get(holdout_year, {})
+    if len(birank_at_holdout) < 10:
+        return {"error": "insufficient_data_at_holdout", "n": len(birank_at_holdout)}
+
+    vals = list(birank_at_holdout.values())
+    low_thr = float(np.percentile(vals, 40))
+    high_thr = float(np.percentile(vals, 65))
+
+    unknowns: set[str] = {pid for pid, br in birank_at_holdout.items() if br < low_thr}
+
+    # Ground truth: unknowns who broke out post-holdout
+    breakout_persons: set[str] = set()
+    for scores in post_norm.values():
+        for pid, br in scores.items():
+            if pid in unknowns and br >= high_thr:
+                breakout_persons.add(pid)
+
+    if len(unknowns) < 20 or len(breakout_persons) < 5:
+        return {
+            "error": "too_few_breakouts",
+            "n_unknowns": len(unknowns),
+            "n_breakouts": len(breakout_persons),
+        }
+
+    # Compute signals over pre-holdout co-appearances
+    credit_count: dict[str, int] = defaultdict(int)
+    partner_biranks: dict[str, list[float]] = defaultdict(list)
+    foresight_signal: dict[str, float] = defaultdict(float)  # keyed by unknown Y
+
+    # Group pre-holdout credits by (year, anime)
+    year_anime_persons: dict[tuple[int, str], list[str]] = defaultdict(list)
+    for c in pre_credits:
+        a = anime_map.get(c.anime_id)
+        yr = a.year if a else None
+        if yr:
+            year_anime_persons[(yr, c.anime_id)].append(c.person_id)
+
+    for (yr, anime_id), persons in year_anime_persons.items():
+        yr_scores = pre_norm.get(yr, {})
+        if not yr_scores:
+            continue
+        yr_vals = list(yr_scores.values())
+        yr_low = float(np.percentile(yr_vals, 40)) if yr_vals else 25.0
+
+        for pid in persons:
+            credit_count[pid] += 1
+            partners = [yr_scores.get(p, 0.0) for p in persons if p != pid]
+            if partners:
+                partner_biranks[pid].extend(partners)
+
+        estabs = [p for p in persons if yr_scores.get(p, 0.0) >= yr_low]
+        unks_here = [
+            p for p in persons if yr_scores.get(p, 0.0) < yr_low and p in unknowns
+        ]
+
+        for x_id in estabs:
+            for y_id in unks_here:
+                y_br = yr_scores.get(y_id, 0.0)
+                foresight_signal[y_id] += 1.0 / (y_br + 1.0)
+
+    all_unknowns = sorted(unknowns)
+    y_true = [1 if pid in breakout_persons else 0 for pid in all_unknowns]
+
+    fs_scores = [foresight_signal.get(pid, 0.0) for pid in all_unknowns]
+    bl_activity = [float(credit_count.get(pid, 0)) for pid in all_unknowns]
+    bl_partner = [
+        float(np.mean(partner_biranks[pid])) if partner_biranks.get(pid) else 0.0
+        for pid in all_unknowns
+    ]
+
+    def _roc_auc(scores: list[float], labels: list[int]) -> float:
+        """Wilcoxon-Mann-Whitney U statistic = AUC."""
+        pos = [s for s, lbl in zip(scores, labels) if lbl == 1]
+        neg = [s for s, lbl in zip(scores, labels) if lbl == 0]
+        if not pos or not neg:
+            return 0.5
+        concordant = sum(p > n for p in pos for n in neg)
+        tied = sum(p == n for p in pos for n in neg)
+        total = len(pos) * len(neg)
+        return (concordant + 0.5 * tied) / total
+
+    def _precision_at_k(scores: list[float], labels: list[int], k: int) -> float:
+        paired = sorted(zip(scores, labels), reverse=True)
+        return sum(lbl for _, lbl in paired[:k]) / k if k > 0 else 0.0
+
+    n = len(all_unknowns)
+    ks = sorted({k for k in [10, 20, 50, 100] if k <= n // 2})
+    if not ks:
+        ks = [max(1, n // 5)]
+
+    return {
+        "holdout_year": holdout_year,
+        "n_unknowns": len(unknowns),
+        "n_breakouts": len(breakout_persons),
+        "breakout_rate": round(len(breakout_persons) / max(len(unknowns), 1), 3),
+        "roc_auc": {
+            "foresight": round(_roc_auc(fs_scores, y_true), 3),
+            "baseline_activity": round(_roc_auc(bl_activity, y_true), 3),
+            "baseline_partner_birank": round(_roc_auc(bl_partner, y_true), 3),
+        },
+        "precision_at_k": {
+            str(k): {
+                "foresight": round(_precision_at_k(fs_scores, y_true, k), 3),
+                "baseline_activity": round(_precision_at_k(bl_activity, y_true, k), 3),
+                "baseline_partner_birank": round(
+                    _precision_at_k(bl_partner, y_true, k), 3
+                ),
+                "random_baseline": round(
+                    len(breakout_persons) / max(len(unknowns), 1), 3
+                ),
+            }
+            for k in ks
+        },
+        "interpretation": (
+            "retrospective_pattern_detection: AUC > 0.6 suggests the co-appearance signal "
+            "carries information beyond activity counts alone. AUC near 0.5 indicates no "
+            "predictive value beyond random."
+        ),
+        "caveats": [
+            "Breakout definition: birank < 40th pct at holdout_year, > 65th pct thereafter",
+            "Foresight signal: sum of 1/(y_birank+1) for each pre-holdout co-appearance",
+            "Recent foresight scorers systematically underscored (discovery-verification lag)",
+        ],
+    }
+
+
+# =============================================================================
+# Step 4c: Beta-Binomial Shrinkage
+# =============================================================================
+
+
+def _beta_binomial_shrinkage(
+    successes: list[int],
+    trials: list[int],
+) -> list[float]:
+    """Beta-Binomial 経験ベイズ縮約.
+
+    素の成功率 s/n ではなく posterior mean = (alpha0+s)/(alpha0+beta0+n) を返す。
+    試行回数が少ない人物の極端な成功率を母集団平均方向に縮小する。
+
+    Prior Beta(alpha0, beta0) はモーメント法で母集団から推定する。
+    """
+    if not trials or all(n == 0 for n in trials):
+        return [0.0] * len(trials)
+
+    rates = [s / n for s, n in zip(successes, trials) if n > 0]
+    if len(rates) < 2:
+        return [s / max(n, 1) for s, n in zip(successes, trials)]
+
+    mu = float(np.mean(rates))
+    var = float(np.var(rates))
+
+    # Method of moments: alpha = mu * precision, beta = (1-mu) * precision
+    # where precision = mu*(1-mu)/var - 1
+    if var <= 1e-9 or mu <= 0 or mu >= 1:
+        alpha0, beta0 = 1.0, 1.0
+    else:
+        precision = mu * (1.0 - mu) / var - 1.0
+        if precision <= 0:
+            alpha0, beta0 = 1.0, 1.0
+        else:
+            alpha0 = max(mu * precision, 0.1)
+            beta0 = max((1.0 - mu) * precision, 0.1)
+
+    return [
+        (alpha0 + s) / (alpha0 + beta0 + n) if n > 0 else alpha0 / (alpha0 + beta0)
+        for s, n in zip(successes, trials)
+    ]
+
+
+# =============================================================================
 # Step 5: Promotion Detection
 # =============================================================================
 
@@ -779,7 +1062,9 @@ def _detect_promotions(
 
     # Pre-build credit index: {(person_id, year): [(anime_id, stage)]}
     # Replaces O(events × C) full-credit scan with O(1) lookup
-    person_year_credits: dict[tuple[str, int], list[tuple[str, int]]] = defaultdict(list)
+    person_year_credits: dict[tuple[str, int], list[tuple[str, int]]] = defaultdict(
+        list
+    )
     for c in credits:
         anime = anime_map.get(c.anime_id)
         yr = anime.year if anime and anime.year else None
@@ -802,9 +1087,7 @@ def _detect_promotions(
             stage = year_stages[year]
             if stage > max_stage_so_far and max_stage_so_far > 0:
                 # Find anime where this promotion happened — O(1) index lookup
-                for anime_id, c_stage in person_year_credits.get(
-                    (person_id, year), []
-                ):
+                for anime_id, c_stage in person_year_credits.get((person_id, year), []):
                     if c_stage == stage:
                         event = PromotionEvent(
                             promotee_id=person_id,
@@ -882,18 +1165,38 @@ def _detect_promotions(
         if len(events) < min_promotions:
             continue
 
-        # Factor 1: Repeated pattern — min(events/5, 1.0)
-        repeated_factor = min(len(events) / 5.0, 1.0)
+        # Successful promotions: promotee continued to higher stages after promotion.
+        # Computed first — needed for vs_cohort_baseline (true lift).
+        successful = 0
+        for event in events:
+            promotee_stages = person_year_stage.get(event.promotee_id, {})
+            future_stages = [s for yr, s in promotee_stages.items() if yr > event.year]
+            if future_stages and max(future_stages) >= event.new_stage:
+                successful += 1
 
-        # Factor 2: Baseline comparison
-        # Average promotion rate for the stages the supervisor promoted FROM
+        actual_success_rate = successful / len(events) if events else 0.0
+
+        # Stage-cohort baseline: average population success rate for the stages promoted FROM.
         baseline_rates = []
         for event in events:
             br = stage_baseline_rate.get(event.previous_max_stage, 0.1)
             baseline_rates.append(br)
-        avg_baseline = sum(baseline_rates) / len(baseline_rates) if baseline_rates else 0.1
-        supervisor_rate = len(events) / max(len(events) + 5, 1)  # smoothed rate
-        baseline_ratio = min(supervisor_rate / max(avg_baseline, 0.01), 3.0) / 3.0
+        avg_baseline = (
+            sum(baseline_rates) / len(baseline_rates) if baseline_rates else 0.1
+        )
+
+        # True lift: supervisor actual success rate / stage-cohort baseline.
+        # e.g., 2.3 means 2.3× the population rate for those stage transitions.
+        vs_cohort_lift = actual_success_rate / max(avg_baseline, 0.01)
+
+        # Factor 1: Repeated pattern — min(events/5, 1.0)
+        repeated_factor = min(len(events) / 5.0, 1.0)
+
+        # Factor 2: Baseline factor for confidence — normalize lift to [0, 1].
+        # Floor at 0.05: successful=0 may reflect data truncation (no future credits),
+        # not confirmed failure. Keeps the geometric mean non-zero when other factors
+        # carry signal.
+        baseline_factor = max(min(vs_cohort_lift / 3.0, 1.0), 0.05)
 
         # Factor 3: Exclusivity — promotees not promoted elsewhere in same year
         exclusive_count = 0
@@ -905,43 +1208,35 @@ def _detect_promotions(
                 exclusive_count += 1
         exclusivity = exclusive_count / len(events) if events else 0.0
 
-        # Factor 4: Studio effect — supervisor promotes more than studio average
+        # Factor 4: Studio effect — supervisor success rate vs studio baseline
         studio_factors = []
         for event in events:
             studio = anime_studios.get(event.anime_id)
             if studio and studio in studio_rates:
                 sr = studio_rates[studio]
-                studio_factors.append(min(supervisor_rate / max(sr, 0.01), 3.0) / 3.0)
+                studio_factors.append(
+                    min(actual_success_rate / max(sr, 0.01), 3.0) / 3.0
+                )
             else:
                 studio_factors.append(0.5)  # neutral when no studio data
         studio_adjusted = (
             sum(studio_factors) / len(studio_factors) if studio_factors else 0.5
         )
 
-        # Geometric mean of 4 factors
-        factors = [repeated_factor, baseline_ratio, exclusivity, studio_adjusted]
+        # Geometric mean of 4 factors → confidence in [0, 1]
+        factors = [repeated_factor, baseline_factor, exclusivity, studio_adjusted]
         confidence = float(np.prod(factors) ** (1.0 / len(factors)))
 
         # Set per-event confidence
         for event in events:
             event.confidence = confidence
 
-        # Successful promotions: promotee continued to higher stages after promotion
-        successful = 0
-        for event in events:
-            promotee_stages = person_year_stage.get(event.promotee_id, {})
-            future_stages = [
-                s for yr, s in promotee_stages.items() if yr > event.year
-            ]
-            if future_stages and max(future_stages) >= event.new_stage:
-                successful += 1
-
         results[supervisor_id] = PromotionCredit(
             person_id=supervisor_id,
             promotion_count=len(events),
             successful_promotions=successful,
-            promotion_success_rate=successful / len(events) if events else 0.0,
-            vs_cohort_baseline=baseline_ratio,
+            promotion_success_rate=round(actual_success_rate, 4),
+            vs_cohort_baseline=round(vs_cohort_lift, 3),
             exclusivity_score=exclusivity,
             studio_adjusted_rate=studio_adjusted,
             confidence=round(confidence, 4),
@@ -964,7 +1259,8 @@ def compute_temporal_pagerank(
     foresight_horizon_years: int = 10,
     unknown_threshold_percentile: float = 25.0,
     min_promotions_for_credit: int = 2,
-) -> TemporalPageRankResult:
+    resume_checkpoint: StreamingCheckpoint | None = None,
+) -> tuple[TemporalPageRankResult, StreamingCheckpoint | None]:
     """時系列PageRankの全計算を実行する.
 
     Args:
@@ -975,20 +1271,26 @@ def compute_temporal_pagerank(
         foresight_horizon_years: 先見スコアの観測期間 (default: 5)
         unknown_threshold_percentile: 「無名」の閾値パーセンタイル (default: 25.0)
         min_promotions_for_credit: 抜擢クレジットの最小回数 (default: 2)
+        resume_checkpoint: ストリーミングチェックポイント。渡された場合は
+            checkpoint.last_year 以降の年だけ計算する。
 
     Returns:
-        TemporalPageRankResult with all computed data
+        (TemporalPageRankResult, final_checkpoint)
+        final_checkpoint は次回呼び出し時の resume_checkpoint として使える。
     """
     start_time = time.monotonic()
 
     if not credits:
-        return TemporalPageRankResult()
+        return TemporalPageRankResult(), None
 
-    # Step 1+2: Build yearly graphs incrementally and run PageRank on each,
-    # freeing each graph after scoring to avoid holding all 98 graphs (~500MB+).
-    yearly_scores, yearly_person_nodes, yearly_person_count = (
+    # Step 1+2: Build yearly graphs incrementally and run PageRank on each.
+    yearly_scores, yearly_person_nodes, yearly_person_count, final_checkpoint = (
         _build_and_score_yearly_streaming(
-            credits, anime_map, persons, peer_edge_weight
+            credits,
+            anime_map,
+            persons,
+            peer_edge_weight,
+            resume_checkpoint=resume_checkpoint,
         )
     )
     if not yearly_scores:
@@ -1024,6 +1326,38 @@ def compute_temporal_pagerank(
         min_promotions=min_promotions_for_credit,
     )
 
+    # Step 6: Name resolution — attach display names to all result objects.
+    person_name_map: dict[str, str] = {p.id: p.display_name for p in persons}
+    for pid, tl in birank_timelines.items():
+        tl.name = person_name_map.get(pid, "")
+    for pid, fs in foresight_scores.items():
+        fs.name = person_name_map.get(pid, "")
+        for disc in fs.discoveries:
+            disc["name"] = person_name_map.get(disc.get("person_id", ""), "")
+    for pid, pc in promotion_credits.items():
+        pc.name = person_name_map.get(pid, "")
+
+    # Step 7: Beta-Binomial shrinkage on promotion success rates.
+    if promotion_credits:
+        pc_list = list(promotion_credits.values())
+        shrunk = _beta_binomial_shrinkage(
+            [pc.successful_promotions for pc in pc_list],
+            [pc.promotion_count for pc in pc_list],
+        )
+        for pc, s in zip(pc_list, shrunk):
+            pc.shrunk_success_rate = round(s, 4)
+
+    # Step 8: Mark right-censored timelines (person still active — peak not yet reached).
+    for tl in birank_timelines.values():
+        tl.is_censored = (
+            tl.latest_year is not None and tl.latest_year >= RIGHT_CENSOR_CUTOFF
+        )
+
+    # Step 9: Foresight holdout validation (train ≤ 2018, test 2019+).
+    holdout_result = _validate_foresight_holdout(
+        credits, anime_map, yearly_normalized, holdout_year=2018
+    )
+
     elapsed = time.monotonic() - start_time
     years_computed = sorted(yearly_scores.keys())
 
@@ -1033,18 +1367,17 @@ def compute_temporal_pagerank(
         timelines=len(birank_timelines),
         foresight_persons=len(foresight_scores),
         promotions=sum(pc.promotion_count for pc in promotion_credits.values()),
+        holdout_roc=holdout_result.get("roc_auc", {}).get("foresight"),
         elapsed_seconds=round(elapsed, 2),
     )
 
-    return TemporalPageRankResult(
-        birank_timelines={
-            pid: asdict(tl) for pid, tl in birank_timelines.items()
-        },
+    result = TemporalPageRankResult(
+        birank_timelines={pid: asdict(tl) for pid, tl in birank_timelines.items()},
         foresight_scores={pid: asdict(fs) for pid, fs in foresight_scores.items()},
-        promotion_credits={
-            pid: asdict(pc) for pid, pc in promotion_credits.items()
-        },
+        promotion_credits={pid: asdict(pc) for pid, pc in promotion_credits.items()},
         years_computed=years_computed,
         total_persons=len(birank_timelines),
         computation_time_seconds=round(elapsed, 2),
+        holdout_validation=holdout_result,
     )
+    return result, final_checkpoint

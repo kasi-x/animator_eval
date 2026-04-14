@@ -33,9 +33,15 @@ def scores_data(tmp_path, monkeypatch):
     conn = get_connection()
     init_db(conn)
     # Insert test persons
-    conn.execute("INSERT INTO persons (id, name_ja, name_en) VALUES ('p1', '監督A', 'Director A')")
-    conn.execute("INSERT INTO persons (id, name_ja, name_en) VALUES ('p2', '', 'Animator B')")
-    conn.execute("INSERT INTO persons (id, name_ja, name_en) VALUES ('p3', '', 'Newbie C')")
+    conn.execute(
+        "INSERT INTO persons (id, name_ja, name_en) VALUES ('p1', '監督A', 'Director A')"
+    )
+    conn.execute(
+        "INSERT INTO persons (id, name_ja, name_en) VALUES ('p2', '', 'Animator B')"
+    )
+    conn.execute(
+        "INSERT INTO persons (id, name_ja, name_en) VALUES ('p3', '', 'Newbie C')"
+    )
     # Insert scores
     conn.execute(
         "INSERT INTO scores (person_id, iv_score, birank, patronage, person_fe, awcc, dormancy)"
@@ -50,7 +56,9 @@ def scores_data(tmp_path, monkeypatch):
         " VALUES ('p3', 10.75, 10.0, 5.0, 20.0, 0.1, 0.8)"
     )
     # Insert anime and credits for join
-    conn.execute("INSERT INTO anime (id, title_en, year) VALUES ('a1', 'Anime 1', 2023)")
+    conn.execute(
+        "INSERT INTO anime (id, title_en, year) VALUES ('a1', 'Anime 1', 2023)"
+    )
     conn.execute(
         "INSERT INTO credits (person_id, anime_id, role, source, credit_year)"
         " VALUES ('p1', 'a1', 'director', 'test', 2023)"

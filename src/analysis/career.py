@@ -254,10 +254,10 @@ class DirectorScaleProfile:
     person_id: str
     name: str
     total_director_credits: int
-    scale_counts: dict[str, int]    # {"tv_large": n, ...}
+    scale_counts: dict[str, int]  # {"tv_large": n, ...}
     scale_fractions: dict[str, float]  # 0-1, 合計 ≤ 1 (未分類を除く)
-    dominant_type: str              # 最多カテゴリキー ("tv_large" 等)
-    career_span: int | None         # first_year → latest_year
+    dominant_type: str  # 最多カテゴリキー ("tv_large" 等)
+    career_span: int | None  # first_year → latest_year
     first_year: int | None
     latest_year: int | None
 
@@ -397,7 +397,8 @@ def compute_director_trajectories(
 
     # 最低クレジット数フィルタ
     director_ids = {
-        pid for pid, crds in dir_credits_by_person.items()
+        pid
+        for pid, crds in dir_credits_by_person.items()
         if len(crds) >= min_director_credits
     }
 
@@ -420,7 +421,8 @@ def compute_director_trajectories(
         for scale_key in SCALE_KEYS_ORDERED:
             wt, sc = scale_key.split("_", 1)
             scale_dir = [
-                c for c in dir_recs
+                c
+                for c in dir_recs
                 if (a := anime_map.get(c.anime_id))
                 and a.work_type == wt
                 and a.scale_class == sc
@@ -435,7 +437,9 @@ def compute_director_trajectories(
         for c in dir_recs:
             anime = anime_map.get(c.anime_id)
             if anime and anime.year and anime.work_type and anime.scale_class:
-                year_to_scales[anime.year].append(f"{anime.work_type}_{anime.scale_class}")
+                year_to_scales[anime.year].append(
+                    f"{anime.work_type}_{anime.scale_class}"
+                )
 
         if len(year_to_scales) < 2:
             continue
@@ -455,8 +459,7 @@ def compute_director_trajectories(
     transition_probs: dict[tuple[str, str], float] = {}
     for sc_from in SCALE_KEYS_ORDERED:
         row_total = sum(
-            transition_counts.get((sc_from, sc_to), 0)
-            for sc_to in SCALE_KEYS_ORDERED
+            transition_counts.get((sc_from, sc_to), 0) for sc_to in SCALE_KEYS_ORDERED
         )
         if row_total > 0:
             for sc_to in SCALE_KEYS_ORDERED:

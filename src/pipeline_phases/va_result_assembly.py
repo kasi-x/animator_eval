@@ -43,15 +43,17 @@ def assemble_va_results(context: PipelineContext) -> None:
 
         # Add diversity metrics if available
         if diversity_metrics:
-            result.update({
-                "character_diversity_index": diversity_metrics.cdi,
-                "casting_tier": diversity_metrics.casting_tier,
-                "main_count": diversity_metrics.main_count,
-                "supporting_count": diversity_metrics.supporting_count,
-                "background_count": diversity_metrics.background_count,
-                "unique_characters": diversity_metrics.unique_characters,
-                "genre_entropy": diversity_metrics.genre_entropy,
-            })
+            result.update(
+                {
+                    "character_diversity_index": diversity_metrics.cdi,
+                    "casting_tier": diversity_metrics.casting_tier,
+                    "main_count": diversity_metrics.main_count,
+                    "supporting_count": diversity_metrics.supporting_count,
+                    "background_count": diversity_metrics.background_count,
+                    "unique_characters": diversity_metrics.unique_characters,
+                    "genre_entropy": diversity_metrics.genre_entropy,
+                }
+            )
 
         results.append(result)
 

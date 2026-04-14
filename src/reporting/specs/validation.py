@@ -211,7 +211,10 @@ def _validate_single_finding(
                     )
                 )
 
-    if finding.strength is StrengthLevel.STRONG and not finding.competing_interpretations:
+    if (
+        finding.strength is StrengthLevel.STRONG
+        and not finding.competing_interpretations
+    ):
         errors.append(
             ValidationError(
                 rule="R-3",
@@ -460,7 +463,8 @@ def _check_recommendations(spec: ReportSpec) -> list[ValidationError]:
         # W-3: suggestive / exploratory findings without competing interpretations
         for finding in section.findings:
             if (
-                finding.strength in (StrengthLevel.SUGGESTIVE, StrengthLevel.EXPLORATORY)
+                finding.strength
+                in (StrengthLevel.SUGGESTIVE, StrengthLevel.EXPLORATORY)
                 and not finding.competing_interpretations
             ):
                 warnings.append(

@@ -150,7 +150,9 @@ def optimize_lambda_weights(
     # component_mean stores raw means, component_std stores raw stds.
     # To normalize a new value x: (x - mean) / std
     component_std = {name: float(x_std[j]) for j, name in enumerate(component_names)}
-    component_mean = {name: float(x_mean_raw[j]) for j, name in enumerate(component_names)}
+    component_mean = {
+        name: float(x_mean_raw[j]) for j, name in enumerate(component_names)
+    }
 
     # PCA: extract PC1 loadings as data-driven weights
     pca = PCA(n_components=1)
@@ -159,7 +161,9 @@ def optimize_lambda_weights(
     variance_explained = float(pca.explained_variance_ratio_[0])
 
     # Sign convention: flip so person_fe loading is positive
-    pfe_idx = component_names.index("person_fe") if "person_fe" in component_names else 0
+    pfe_idx = (
+        component_names.index("person_fe") if "person_fe" in component_names else 0
+    )
     if loadings[pfe_idx] < 0:
         loadings = -loadings
 
@@ -247,7 +251,9 @@ def compute_integrated_value(
             else:
                 val = scores[pid]
             if component_std and component_mean:
-                val = (val - component_mean.get(name, 0.0)) / component_std.get(name, 1.0)
+                val = (val - component_mean.get(name, 0.0)) / component_std.get(
+                    name, 1.0
+                )
             raw += lambdas.get(name, 0.2) * val
         d = dormancy.get(pid, 1.0)
         iv_scores[pid] = raw * d
@@ -303,7 +309,13 @@ def compute_integrated_value_full(
 
     # Compute IV scores (pass component_std + mean for consistent normalization)
     iv_scores = compute_integrated_value(
-        person_fe, birank, studio_exposure, awcc, patronage, dormancy, lambdas,
+        person_fe,
+        birank,
+        studio_exposure,
+        awcc,
+        patronage,
+        dormancy,
+        lambdas,
         component_std=comp_std if comp_std else None,
         component_mean=comp_mean if comp_mean else None,
     )
@@ -319,8 +331,7 @@ def compute_integrated_value_full(
             elif comp_std and comp_mean:
                 val = scores.get(pid, 0.0)
                 bd[name] = lambdas.get(name, 0.2) * (
-                    (val - comp_mean.get(name, 0.0))
-                    / comp_std.get(name, 1.0)
+                    (val - comp_mean.get(name, 0.0)) / comp_std.get(name, 1.0)
                 )
             else:
                 bd[name] = lambdas.get(name, 0.2) * scores.get(pid, 0.0)

@@ -14,6 +14,7 @@ from src.analysis.uncertainty import analytic_ci, bootstrap_ci, delta_method_ci
 # analytic_ci
 # ---------------------------------------------------------------------------
 
+
 def test_analytic_ci_symmetric() -> None:
     ui = analytic_ci(estimate=10.0, standard_error=2.0, n=100)
     # 95% CI with z ≈ 1.96: half-width ≈ 3.92
@@ -42,6 +43,7 @@ def test_analytic_ci_bad_level() -> None:
 # ---------------------------------------------------------------------------
 # bootstrap_ci
 # ---------------------------------------------------------------------------
+
 
 def test_bootstrap_ci_mean() -> None:
     rng = np.random.default_rng(0)
@@ -76,6 +78,7 @@ def test_bootstrap_ci_custom_statistic() -> None:
 # ---------------------------------------------------------------------------
 # delta_method_ci
 # ---------------------------------------------------------------------------
+
 
 def test_delta_method_log() -> None:
     """Delta method for g(X) = log(X): g'(X) = 1/X."""

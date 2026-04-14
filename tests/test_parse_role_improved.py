@@ -39,10 +39,13 @@ def test_parse_role_theme_song():
 def test_parse_role_adr():
     """Test that ADR roles are correctly categorized as LOCALIZATION."""
     assert parse_role("ADR Director (English)") == Role.LOCALIZATION
-    assert parse_role("ADR Director (Brazilian Portuguese; 1st dub)") == Role.LOCALIZATION
+    assert (
+        parse_role("ADR Director (Brazilian Portuguese; 1st dub)") == Role.LOCALIZATION
+    )
     assert parse_role("ADR Script (English)") == Role.LOCALIZATION
     assert (
-        parse_role("ADR Director Assistant (Brazilian Portuguese; 2nd dub)") == Role.LOCALIZATION
+        parse_role("ADR Director Assistant (Brazilian Portuguese; 2nd dub)")
+        == Role.LOCALIZATION
     )
 
 

@@ -290,18 +290,22 @@ def get_community_formation_period(
 
 def detect_communities(
     collaboration_graph: nx.Graph,
-    min_community_size: int = 3,
-    resolution: float = 1.0,
+    min_community_size: int = 5,
+    resolution: float = 0.5,
 ) -> dict[int, Community]:
     """コラボレーショングラフからコミュニティを検出する.
 
     Louvain法でモジュラリティを最大化するコミュニティ分割を見つける。
     密に連携するクリエイター集団（派閥）を自動的に抽出。
 
+    greedy_modularity_communities (Clauset-Newman-Moore) は resolution limit の
+    影響でノード数に近い微細コミュニティを生成する。louvain_communities は
+    ランダム化反復によりより粗粒なコミュニティを得る（seed=42 で再現性確保）。
+
     Args:
         collaboration_graph: Person間のコラボレーショングラフ
         min_community_size: 最小コミュニティサイズ（これより小さいものは除外）
-        resolution: 解像度パラメータ（大きいほど小さいコミュニティに分割）
+        resolution: 解像度パラメータ（大きいほど小さいコミュニティに分割、0.5で粗粒化）
 
     Returns:
         コミュニティID → Community情報の辞書
@@ -317,12 +321,12 @@ def detect_communities(
         resolution=resolution,
     )
 
-    # Louvain法でコミュニティ検出
-    # NetworkXのgreedy_modularity_communitiesを使用（Louvain相当）
-    communities_list = nx.community.greedy_modularity_communities(
+    # Louvain法でコミュニティ検出（NetworkX 3.x 内蔵、seed=42 で再現性確保）
+    communities_list = nx.community.louvain_communities(
         collaboration_graph,
         weight="weight",
         resolution=resolution,
+        seed=42,
     )
 
     # Community オブジェクトに変換
@@ -699,10 +703,10 @@ def main():
     """スタンドアロン実行用エントリーポイント."""
     from src.analysis.graph import create_person_collaboration_network
     from src.database import (
-        get_all_anime,
-        get_all_credits,
-        get_all_persons,
-        get_all_scores,
+        load_all_anime,
+        load_all_credits,
+        load_all_persons,
+        load_all_scores,
         get_connection,
         init_db,
     )
@@ -710,10 +714,10 @@ def main():
     conn = get_connection()
     init_db(conn)
 
-    persons = get_all_persons(conn)
-    anime_list = get_all_anime(conn)
-    credits = get_all_credits(conn)
-    scores_list = get_all_scores(conn)
+    persons = load_all_persons(conn)
+    anime_list = load_all_anime(conn)
+    credits = load_all_credits(conn)
+    scores_list = load_all_scores(conn)
 
     # マップ作成
     anime_map = {a.id: a for a in anime_list}

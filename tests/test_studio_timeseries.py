@@ -2,7 +2,10 @@
 
 import pytest
 
-from src.analysis.studio.timeseries import compute_studio_timeseries, StudioTimeSeriesResult
+from src.analysis.studio.timeseries import (
+    compute_studio_timeseries,
+    StudioTimeSeriesResult,
+)
 from src.models import Anime, Credit, Role
 
 
@@ -36,7 +39,9 @@ def credits():
         # Bones staff 2020
         Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="test"),
         Credit(person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"),
-        Credit(person_id="p3", anime_id="a1", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p3", anime_id="a1", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
         # Bones staff 2021 (p1, p2 retained; p4 new)
         Credit(person_id="p1", anime_id="a2", role=Role.DIRECTOR, source="test"),
         Credit(person_id="p2", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
@@ -59,9 +64,7 @@ def credits():
 
 @pytest.fixture
 def iv_scores():
-    return {
-        f"p{i}": float(i * 10) for i in range(1, 11)
-    }
+    return {f"p{i}": float(i * 10) for i in range(1, 11)}
 
 
 @pytest.fixture
@@ -97,7 +100,9 @@ class TestBasicMetrics:
         assert "Bones" in result.studio_metrics
         assert "MAPPA" in result.studio_metrics
 
-    def test_total_studio_years(self, credits, anime_map, iv_scores, studio_assignments):
+    def test_total_studio_years(
+        self, credits, anime_map, iv_scores, studio_assignments
+    ):
         result = compute_studio_timeseries(
             credits, anime_map, iv_scores, studio_assignments
         )
@@ -116,14 +121,16 @@ class TestBasicMetrics:
         # 2022: p1, p4, p5 → 3
         assert bones[2]["staff_count"] == 3
 
-    def test_bones_avg_anime_score(self, credits, anime_map, iv_scores, studio_assignments):
+    def test_bones_avg_anime_score(
+        self, credits, anime_map, iv_scores, studio_assignments
+    ):
         result = compute_studio_timeseries(
             credits, anime_map, iv_scores, studio_assignments
         )
         bones = result.studio_metrics["Bones"]
-        assert bones[0]["avg_anime_score"] == 8.0   # a1
-        assert bones[1]["avg_anime_score"] == 7.5   # a2
-        assert bones[2]["avg_anime_score"] == 9.0   # a3
+        assert bones[0]["avg_anime_score"] == 8.0  # a1
+        assert bones[1]["avg_anime_score"] == 7.5  # a2
+        assert bones[2]["avg_anime_score"] == 9.0  # a3
 
     def test_mappa_staff_count(self, credits, anime_map, iv_scores, studio_assignments):
         result = compute_studio_timeseries(
@@ -145,7 +152,9 @@ class TestBasicMetrics:
 class TestRetentionCalculation:
     """Retention = intersection/prev_staff; same staff → 1.0, complete turnover → 0."""
 
-    def test_first_year_zero_retention(self, credits, anime_map, iv_scores, studio_assignments):
+    def test_first_year_zero_retention(
+        self, credits, anime_map, iv_scores, studio_assignments
+    ):
         result = compute_studio_timeseries(
             credits, anime_map, iv_scores, studio_assignments
         )
@@ -165,14 +174,22 @@ class TestRetentionCalculation:
     def test_high_retention_same_staff(self):
         """All same staff across years → retention=1.0."""
         anime_map = {
-            "a1": Anime(id="a1", title_en="X1", year=2020, score=7.0, studios=["StudioX"]),
-            "a2": Anime(id="a2", title_en="X2", year=2021, score=7.5, studios=["StudioX"]),
+            "a1": Anime(
+                id="a1", title_en="X1", year=2020, score=7.0, studios=["StudioX"]
+            ),
+            "a2": Anime(
+                id="a2", title_en="X2", year=2021, score=7.5, studios=["StudioX"]
+            ),
         }
         credits = [
             Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="test"),
-            Credit(person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"),
+            Credit(
+                person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"
+            ),
             Credit(person_id="p1", anime_id="a2", role=Role.DIRECTOR, source="test"),
-            Credit(person_id="p2", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
+            Credit(
+                person_id="p2", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"
+            ),
         ]
         iv_scores = {"p1": 50.0, "p2": 40.0}
         assignments = {
@@ -187,14 +204,22 @@ class TestRetentionCalculation:
     def test_complete_turnover_zero_retention(self):
         """Completely different staff between years → retention=0."""
         anime_map = {
-            "a1": Anime(id="a1", title_en="Y1", year=2020, score=7.0, studios=["StudioY"]),
-            "a2": Anime(id="a2", title_en="Y2", year=2021, score=7.0, studios=["StudioY"]),
+            "a1": Anime(
+                id="a1", title_en="Y1", year=2020, score=7.0, studios=["StudioY"]
+            ),
+            "a2": Anime(
+                id="a2", title_en="Y2", year=2021, score=7.0, studios=["StudioY"]
+            ),
         }
         credits = [
             Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="test"),
-            Credit(person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"),
+            Credit(
+                person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"
+            ),
             Credit(person_id="p3", anime_id="a2", role=Role.DIRECTOR, source="test"),
-            Credit(person_id="p4", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
+            Credit(
+                person_id="p4", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"
+            ),
         ]
         iv_scores = {"p1": 50.0, "p2": 40.0, "p3": 60.0, "p4": 30.0}
         assignments = {
@@ -242,13 +267,29 @@ class TestSingleStudio:
         }
         credits = [
             Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="test"),
-            Credit(person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"),
+            Credit(
+                person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"
+            ),
             Credit(person_id="p1", anime_id="a2", role=Role.DIRECTOR, source="test"),
-            Credit(person_id="p2", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
-            Credit(person_id="p3", anime_id="a2", role=Role.ANIMATION_DIRECTOR, source="test"),
+            Credit(
+                person_id="p2", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"
+            ),
+            Credit(
+                person_id="p3",
+                anime_id="a2",
+                role=Role.ANIMATION_DIRECTOR,
+                source="test",
+            ),
             Credit(person_id="p1", anime_id="a3", role=Role.DIRECTOR, source="test"),
-            Credit(person_id="p3", anime_id="a3", role=Role.ANIMATION_DIRECTOR, source="test"),
-            Credit(person_id="p4", anime_id="a3", role=Role.KEY_ANIMATOR, source="test"),
+            Credit(
+                person_id="p3",
+                anime_id="a3",
+                role=Role.ANIMATION_DIRECTOR,
+                source="test",
+            ),
+            Credit(
+                person_id="p4", anime_id="a3", role=Role.KEY_ANIMATOR, source="test"
+            ),
         ]
         iv_scores = {"p1": 80.0, "p2": 50.0, "p3": 60.0, "p4": 40.0}
         assignments = {

@@ -17,7 +17,7 @@ class StatCardSpec:
     label: str
     value_field: str
     value_format: str = "{:,.0f}"
-    badge: str = ""      # "high" | "mid" | "low" | ""
+    badge: str = ""  # "high" | "mid" | "low" | ""
     sublabel: str = ""
 
 
@@ -34,6 +34,6 @@ class TableSpec:
     data_key: str
     columns: tuple[tuple[str, str], ...]
     sortable: bool = True
-    searchable: bool = False         # e.g. N1 browser
+    searchable: bool = False  # e.g. N1 browser
     max_rows: int | None = 100
     explanation: ExplanationMeta | None = None

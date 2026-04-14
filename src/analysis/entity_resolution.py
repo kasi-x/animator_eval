@@ -494,7 +494,9 @@ def resolve_all(persons: list[Person]) -> dict[str, str]:
 
     # Step 3: ローマ字マッチ（既にマッチ済みのものは除外）
     # キーと値の両方を除外: canonical ID が後段で再マッチされるのを防ぐ
-    already_matched = set(exact) | set(exact.values()) | set(cross) | set(cross.values())
+    already_matched = (
+        set(exact) | set(exact.values()) | set(cross) | set(cross.values())
+    )
     remaining = [p for p in persons if p.id not in already_matched]
     romaji = romaji_match(remaining)
 
@@ -549,9 +551,7 @@ def _ai_assisted_step(
         logger.info("ai_entity_resolution_skipped", reason="llm_not_available")
         return {}
 
-    candidates = find_ai_match_candidates(
-        persons, already_matched, max_candidates=500
-    )
+    candidates = find_ai_match_candidates(persons, already_matched, max_candidates=500)
     if not candidates:
         return {}
 

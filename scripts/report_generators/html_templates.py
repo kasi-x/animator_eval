@@ -540,6 +540,349 @@ function _drainPlotQueue() {{
 </html>"""
 
 
+# =========================================================================
+# v2 Report Philosophy components
+# =========================================================================
+
+# Additional CSS for v2 components (appended to COMMON_CSS in wrap_html_v2)
+V2_CSS = """
+/* Stratification tabs */
+.strat-tabs {
+    display: flex; flex-wrap: wrap; gap: 0.4rem;
+    margin: 1rem 0; padding: 0.5rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+.strat-tab {
+    padding: 0.4rem 1rem; border-radius: 8px;
+    font-size: 0.82rem; font-weight: 600;
+    cursor: pointer; border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.03); color: #a0a0c0;
+    transition: all 0.2s;
+}
+.strat-tab:hover { background: rgba(240,147,251,0.1); color: #e0e0e0; }
+.strat-tab.active {
+    background: rgba(240,147,251,0.2); color: #f093fb;
+    border-color: rgba(240,147,251,0.4);
+}
+.strat-panel { display: none; }
+.strat-panel.active { display: block; }
+
+/* Method note */
+.method-note {
+    margin: 0.8rem 0; padding: 0;
+}
+.method-note details summary {
+    cursor: pointer; color: #7b8794;
+    font-size: 0.85rem; user-select: none;
+}
+.method-note .note-body {
+    margin-top: 0.5rem; font-size: 0.82rem;
+    color: #8a94a0; line-height: 1.5;
+}
+
+/* v2 Interpretation section */
+.v2-interpretation {
+    border-top: 1px solid #3a3a5c;
+    margin-top: 1.5rem; padding-top: 1rem;
+}
+.v2-interpretation h3 {
+    color: #c0a0d0; font-size: 1rem;
+    margin-bottom: 0.8rem;
+}
+.v2-interpretation .interp-claim {
+    color: #d0d0e0; font-size: 0.92rem;
+    line-height: 1.7; margin-bottom: 0.8rem;
+}
+.v2-interpretation .interp-alternatives {
+    border-left: 2px solid #667eea;
+    padding-left: 1rem; margin: 0.8rem 0;
+}
+.v2-interpretation .interp-alternatives h4 {
+    color: #667eea; font-size: 0.88rem; margin-bottom: 0.4rem;
+}
+.v2-interpretation .interp-alternatives ol {
+    margin: 0.3rem 0 0 1.2rem;
+    color: #b0b8c8; font-size: 0.85rem; line-height: 1.8;
+}
+.v2-interpretation .interp-premises {
+    font-size: 0.82rem; color: #8a94a0;
+    margin-top: 0.8rem; font-style: italic;
+}
+
+/* Null findings */
+.null-findings {
+    border-left: 3px solid #5a5a8a;
+    background: rgba(90,90,138,0.06);
+    padding: 1rem 1.2rem; margin: 1rem 0;
+    border-radius: 0 8px 8px 0;
+}
+.null-findings strong { color: #8080b0; }
+.null-findings p { font-size: 0.9rem; color: #a0a0c0; line-height: 1.7; }
+
+/* Data statement */
+.data-statement {
+    border-left: 3px solid #5a5a8a;
+    margin-top: 2rem;
+}
+.data-statement h2 { color: #a0a0c0; font-size: 1.3rem; }
+.data-statement table { font-size: 0.85rem; }
+.data-statement td { padding: 0.5rem; }
+.data-statement .ds-label {
+    color: #9a9ab0; vertical-align: top; width: 25%;
+    font-weight: 600;
+}
+"""
+
+# Tab switching JavaScript (embedded in wrap_html_v2)
+_TAB_SWITCH_JS = """
+function switchTab(groupId, tabKey) {
+    var group = document.getElementById(groupId);
+    if (!group) return;
+    var tabs = group.querySelectorAll('.strat-tab');
+    tabs.forEach(function(t) {
+        t.classList.toggle('active', t.getAttribute('data-key') === tabKey);
+    });
+    var panels = document.querySelectorAll('.strat-panel[data-group="' + groupId + '"]');
+    panels.forEach(function(p) {
+        p.classList.toggle('active', p.getAttribute('data-key') === tabKey);
+    });
+    // Force render lazy-loaded Plotly charts that are now visible
+    panels.forEach(function(p) {
+        if (p.getAttribute('data-key') !== tabKey) return;
+        var charts = p.querySelectorAll('[data-b64]');
+        charts.forEach(function(el) {
+            var b64 = el.getAttribute('data-b64');
+            if (!b64) return;
+            el.removeAttribute('data-b64');
+            var d = JSON.parse(atob(b64));
+            if (typeof queuePlot === 'function') {
+                queuePlot(function() {
+                    return Plotly.newPlot(el.id, d.data, d.layout,
+                        {responsive: true, displayModeBar: true});
+                });
+            } else {
+                Plotly.newPlot(el.id, d.data, d.layout,
+                    {responsive: true, displayModeBar: true});
+            }
+        });
+        // Resize already-rendered Plotly charts (they may have wrong dimensions)
+        var rendered = p.querySelectorAll('.js-plotly-plot');
+        rendered.forEach(function(el) { Plotly.Plots.resize(el); });
+    });
+}
+"""
+
+
+def stratification_tabs(
+    group_id: str,
+    axes: dict[str, str],
+    active: str = "",
+) -> str:
+    """Generate tab buttons for stratification axes.
+
+    Args:
+        group_id: unique HTML id for this tab group
+        axes: {tab_key: display_label} e.g. {"all": "全体", "tier": "Tier別", ...}
+        active: key of the initially active tab (defaults to first)
+
+    Returns:
+        HTML string with tab buttons. Pair with strat_panel() for content.
+    """
+    if not active:
+        active = next(iter(axes))
+    tabs = []
+    for key, label in axes.items():
+        cls = "strat-tab active" if key == active else "strat-tab"
+        tabs.append(
+            f'<div class="{cls}" data-key="{key}" '
+            f"""onclick="switchTab('{group_id}','{key}')">{label}</div>"""
+        )
+    return (
+        f'<div class="strat-tabs" id="{group_id}">'
+        + "".join(tabs)
+        + "</div>"
+    )
+
+
+def strat_panel(group_id: str, key: str, content: str, active: bool = False) -> str:
+    """Wrap content in a stratification panel that shows/hides with tabs.
+
+    Args:
+        group_id: must match the group_id used in stratification_tabs()
+        key: tab key this panel corresponds to
+        content: HTML content for this panel
+        active: whether this panel is initially visible
+    """
+    cls = "strat-panel active" if active else "strat-panel"
+    return f'<div class="{cls}" data-group="{group_id}" data-key="{key}">{content}</div>'
+
+
+def method_note_block(text: str) -> str:
+    """Collapsible method note per v2 structure."""
+    return (
+        '<div class="method-note">'
+        "<details>"
+        '<summary style="cursor:pointer;color:#7b8794;font-size:0.85rem;">'
+        "Method Note / 方法論</summary>"
+        f'<div class="note-body">{text}</div>'
+        "</details>"
+        "</div>"
+    )
+
+
+def interpretation_block(
+    claim: str,
+    alternatives: list[str],
+    premises: str = "",
+    author: str = "Animetor Eval analysis system",
+) -> str:
+    """v2 Interpretation section: labeled, authored, with alternatives.
+
+    Per v2 Section 5: interpretation must be structurally separated from
+    findings, explicitly labeled, state authorship, present at least 1
+    alternative interpretation, and disclose premises.
+    """
+    alts_html = "".join(f"<li>{a}</li>" for a in alternatives)
+    premises_html = (
+        f'<p class="interp-premises"><strong>前提 / Premises:</strong> {premises}</p>'
+        if premises else ""
+    )
+    return (
+        '<div class="v2-interpretation">'
+        '<h3>Interpretation / 解釈</h3>'
+        f'<p style="font-size:0.78rem;color:#8a94a0;margin-bottom:0.5rem;">'
+        f"Author: {author}</p>"
+        f'<div class="interp-claim">{claim}</div>'
+        '<div class="interp-alternatives">'
+        "<h4>Alternative Interpretations / 代替解釈</h4>"
+        f"<ol>{alts_html}</ol>"
+        "</div>"
+        f"{premises_html}"
+        "</div>"
+    )
+
+
+def null_findings_block(text: str) -> str:
+    """v2 Section 3.5: Null results are products, not failures.
+
+    Used when analysis finds no pattern / no significant difference.
+    """
+    return (
+        '<div class="null-findings">'
+        "<strong>Null Finding / 帰無結果</strong>"
+        f"<p>{text}</p>"
+        "</div>"
+    )
+
+
+def wrap_html_v2(
+    title: str,
+    subtitle: str,
+    body: str,
+    *,
+    doc_type: str = "main",
+    intro_html: str = "",
+    glossary_terms: dict[str, str] | None = None,
+    data_statement_html: str = "",
+    disclaimer_html: str = "",
+) -> str:
+    """v2-compliant HTML wrapper.
+
+    Args:
+        doc_type: 'main', 'brief', or 'appendix' — controls header styling
+        data_statement_html: pre-rendered data statement (from SectionBuilder)
+        disclaimer_html: pre-rendered v2 disclaimer (from SectionBuilder)
+    """
+    ts = datetime.now().strftime("%Y-%m-%d %H:%M")
+    glossary_html = build_glossary(glossary_terms) if glossary_terms else ""
+
+    # Fallback to v1 disclaimer if v2 not provided
+    if not disclaimer_html:
+        disclaimer_html = (
+            '<div class="disclaimer-block">'
+            "<h3>免責事項 (Disclaimer)</h3>"
+            f"<p>{DISCLAIMER}</p>"
+            "</div>"
+        )
+
+    footer_stats = helpers.get_footer_stats()
+    doc_label = {"main": "", "brief": " [Executive Brief]", "appendix": " [Technical Appendix]"}
+
+    return f"""<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{title}{doc_label.get(doc_type, '')}</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>{COMMON_CSS}
+{V2_CSS}</style>
+</head>
+<body>
+<div id="copy-toast" class="copy-toast"></div>
+<script>
+function showCopyToast(txt) {{
+    var t = document.getElementById('copy-toast');
+    t.textContent = 'Copied: ' + txt;
+    t.style.opacity = '1';
+    setTimeout(function() {{ t.style.opacity = '0'; }}, 1500);
+}}
+document.addEventListener('dblclick', function(e) {{
+    var el = e.target;
+    if (el.tagName === 'text' || (el.tagName === 'tspan' && el.closest && el.closest('text'))) {{
+        var textEl = el.tagName === 'tspan' ? el.closest('text') : el;
+        if (textEl && textEl.closest('.js-plotly-plot')) {{
+            var txt = textEl.textContent.trim();
+            if (txt) {{
+                navigator.clipboard.writeText(txt).then(function() {{
+                    showCopyToast(txt);
+                }});
+            }}
+        }}
+    }}
+}});
+var _plotQueue = [];
+var _plotBusy = false;
+function queuePlot(fn) {{
+    _plotQueue.push(fn);
+    _drainPlotQueue();
+}}
+function _drainPlotQueue() {{
+    if (_plotBusy || _plotQueue.length === 0) return;
+    _plotBusy = true;
+    var fn = _plotQueue.shift();
+    fn().then(function() {{
+        _plotBusy = false;
+        setTimeout(_drainPlotQueue, 50);
+    }}).catch(function() {{
+        _plotBusy = false;
+        setTimeout(_drainPlotQueue, 50);
+    }});
+}}
+{_TAB_SWITCH_JS}
+</script>
+<div class="page-bg">
+<div class="container">
+<header>
+    <h1>{title}</h1>
+    <p class="subtitle">{subtitle}</p>
+    <p class="timestamp">生成日時: {ts}</p>
+</header>
+{intro_html}
+{body}
+{glossary_html}
+{data_statement_html}
+{disclaimer_html}
+<footer>
+    <p>Animetor Eval — 自動生成レポート (v2)</p>
+    <p>データ: {footer_stats}</p>
+</footer>
+</div>
+</div>
+</body>
+</html>"""
+
+
 def plotly_div(fig: go.Figure, div_id: str, height: int = 500) -> str:
     """Plotlyチャートをdivとして埋め込み."""
     fig.update_layout(
@@ -600,8 +943,11 @@ def plotly_div_safe(fig: go.Figure, div_id: str, height: int = 500) -> str:
     var el = document.getElementById("{div_id}");
     var done = false;
     function doRender() {{
+        if (done) return;
         var b64 = el.getAttribute("data-b64");
+        if (!b64) {{ done = true; return; }}
         el.removeAttribute("data-b64");
+        done = true;
         var d = JSON.parse(atob(b64));
         return Plotly.newPlot("{div_id}", d.data, d.layout,
                        {{responsive: true, displayModeBar: true}});
@@ -609,7 +955,6 @@ def plotly_div_safe(fig: go.Figure, div_id: str, height: int = 500) -> str:
     if (typeof IntersectionObserver !== "undefined") {{
         var obs = new IntersectionObserver(function(entries) {{
             if (done || !entries[0].isIntersecting) return;
-            done = true;
             obs.disconnect();
             if (typeof queuePlot === "function") {{
                 queuePlot(doRender);

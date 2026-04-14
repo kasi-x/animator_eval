@@ -13,13 +13,24 @@ from src.analysis.causal.dml import (
 from src.models import Anime, Credit, Role
 
 
-def _make_anime(aid: str, year: int = 2020, studio: str = "StudioA",
-                episodes: int = 12, duration: int = 24, genres: list | None = None,
-                fmt: str = "TV") -> Anime:
+def _make_anime(
+    aid: str,
+    year: int = 2020,
+    studio: str = "StudioA",
+    episodes: int = 12,
+    duration: int = 24,
+    genres: list | None = None,
+    fmt: str = "TV",
+) -> Anime:
     return Anime(
-        id=aid, title_ja=f"Anime {aid}", year=year,
-        studios=[studio], episodes=episodes, duration=duration,
-        genres=genres or ["Action"], format=fmt,
+        id=aid,
+        title_ja=f"Anime {aid}",
+        year=year,
+        studios=[studio],
+        episodes=episodes,
+        duration=duration,
+        genres=genres or ["Action"],
+        format=fmt,
     )
 
 
@@ -100,8 +111,11 @@ class TestDualEstimate:
         ols = EstimationResult(theta=1.5, se=0.1)
         dml = EstimationResult(theta=1.0, se=0.1)
         est = DualEstimate(
-            parameter="test", description="test",
-            ols=ols, dml=dml, n_obs=100,
+            parameter="test",
+            description="test",
+            ols=ols,
+            dml=dml,
+            n_obs=100,
         )
         assert abs(est.bias - 0.5) < 1e-6
         assert abs(est.bias_pct - 50.0) < 1e-6
@@ -110,8 +124,11 @@ class TestDualEstimate:
         ols = EstimationResult(theta=1.0, se=0.1)
         dml = EstimationResult(theta=0.8, se=0.1)
         est = DualEstimate(
-            parameter="person_fe", description="test",
-            ols=ols, dml=dml, n_obs=500,
+            parameter="person_fe",
+            description="test",
+            ols=ols,
+            dml=dml,
+            n_obs=500,
         )
         d = est.to_dict()
         assert d["parameter"] == "person_fe"
@@ -123,6 +140,7 @@ class TestRunDMLAnalysis:
     def _make_dataset(self, n_anime=50, n_persons=30):
         """Build synthetic dataset for DML integration test."""
         import random
+
         random.seed(42)
 
         anime_map = {}
@@ -135,14 +153,18 @@ class TestRunDMLAnalysis:
             aid = f"a{i}"
             studio = random.choice(studios)
             anime_map[aid] = _make_anime(
-                aid, year=2010 + i % 15, studio=studio,
+                aid,
+                year=2010 + i % 15,
+                studio=studio,
                 episodes=random.randint(1, 26),
             )
             # Add credits
             n_staff = random.randint(5, 20)
             for j in range(n_staff):
                 pid = f"p{j % n_persons}"
-                role = random.choice([Role.KEY_ANIMATOR, Role.DIRECTOR, Role.ANIMATION_DIRECTOR])
+                role = random.choice(
+                    [Role.KEY_ANIMATOR, Role.DIRECTOR, Role.ANIMATION_DIRECTOR]
+                )
                 credits.append(_make_credit(pid, aid, role))
 
         for i in range(n_persons):
@@ -171,6 +193,7 @@ class TestRunDMLAnalysis:
         report = run_dml_analysis(credits, anime_map, person_fe, studio_fe)
         d = report.to_dict()
         import json
+
         # Should be JSON-serializable
         json_str = json.dumps(d)
         assert len(json_str) > 0

@@ -163,11 +163,15 @@ def _filter_non_production_persons(
         # (director/storyboard/etc.), they are treated as a source-material author,
         # not as animation production staff.
         role_set = {c.role for c in person_credits}
-        if Role.ORIGINAL_CREATOR in role_set and not (role_set & _ANCHOR_PRODUCTION_ROLES):
+        if Role.ORIGINAL_CREATOR in role_set and not (
+            role_set & _ANCHOR_PRODUCTION_ROLES
+        ):
             oc_count = sum(1 for c in person_credits if c.role == Role.ORIGINAL_CREATOR)
             prod_count = sum(
-                1 for c in person_credits
-                if c.role not in NON_PRODUCTION_ROLES and c.role != Role.ORIGINAL_CREATOR
+                1
+                for c in person_credits
+                if c.role not in NON_PRODUCTION_ROLES
+                and c.role != Role.ORIGINAL_CREATOR
             )
             if oc_count > prod_count:
                 non_production_ids.add(pid)
@@ -190,7 +194,9 @@ def _llm_filter_organizations(
 
     # Collect known studio names from DB
     try:
-        rows = conn.execute("SELECT name FROM studios WHERE name IS NOT NULL").fetchall()
+        rows = conn.execute(
+            "SELECT name FROM studios WHERE name IS NOT NULL"
+        ).fetchall()
         studio_names = {r[0].strip() for r in rows if r[0]}
     except Exception:
         studio_names = set()
@@ -332,9 +338,7 @@ def load_pipeline_data(context: PipelineContext, conn: sqlite3.Connection) -> No
         valid_persons, all_credits
     )
     if non_production_ids:
-        logger.info(
-            "filtered_non_production_persons", count=len(non_production_ids)
-        )
+        logger.info("filtered_non_production_persons", count=len(non_production_ids))
 
     # LLM-assisted organization detection (studio DB cross-ref + batch LLM)
     llm_org_ids = _llm_filter_organizations(filtered_persons, conn)

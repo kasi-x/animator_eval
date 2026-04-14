@@ -8,6 +8,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The goal: make individual contributions visible so that studios pay fair compensation, contributing to a healthier anime industry. Scores reflect network position and collaboration density, never subjective "ability" judgments.
 
+## Report Writing Philosophy
+
+See `docs/REPORT_PHILOSOPHY.md` for the full philosophy (v2). Key principles:
+
+- **Transparent perspectivism**: "Objective disclosure" is impossible — every metric embeds choices (which indicator, which time window, which threshold). The obligation is to make those choices visible and verifiable, not to hide them behind a neutral tone.
+- **Findings / Interpretation structural separation**: Every report section has a Findings layer (no evaluative adjectives, no causal verbs, no normative language) and an optional Interpretation layer (explicitly labelled, first-person subject, at least one alternative interpretation stated).
+- **No "implied advocacy"**: Do not arrange facts to lead the reader to a predetermined conclusion without stating it. If a conclusion follows from the data, state it explicitly in the Interpretation section. The v1 "Implied Business Value" approach is prohibited.
+- **Document separation by audience**: Executive brief (2–4 pages, findings + charts only) / Main report / Technical appendix / Data statement — not three layers crammed into one document.
+- **Mandatory method gates**: Confidence intervals required for all individual-level estimates. Null-model comparison required for all group-level claims. Holdout validation required for any predictive claim. Publication blocked until these are satisfied.
+- **No adjectives that interpret**: Use the narrowest accurate label. "翌年クレジット可視性喪失率" not "離職率".
+
 ## Critical Design Principle: No Viewer Ratings
 
 **anime.score (AniList/MAL viewer ratings) must NEVER be used in any scoring formula.**

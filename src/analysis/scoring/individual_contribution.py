@@ -415,9 +415,16 @@ def _get_iv_numba_kernel():
 
     @njit(parallel=True, cache=True)
     def _iv_kernel(
-        P_indptr, P_indices, CC_indptr, CC_indices,
-        iv_vec, anime_iv_sum, anime_count, n_collabs,
-        min_collab, n_persons,
+        P_indptr,
+        P_indices,
+        CC_indptr,
+        CC_indices,
+        iv_vec,
+        anime_iv_sum,
+        anime_count,
+        n_collabs,
+        min_collab,
+        n_persons,
     ):
         """Numba-compiled independent value computation over CSR arrays.
 
@@ -531,8 +538,14 @@ def _get_iv_numba_kernel():
 
 
 def _compute_iv_numba(
-    P, collab_count, iv_vec, anime_iv_sum, anime_count,
-    n_collabs, n_persons, feature_pids,
+    P,
+    collab_count,
+    iv_vec,
+    anime_iv_sum,
+    anime_count,
+    n_collabs,
+    n_persons,
+    feature_pids,
 ):
     """Compute independent values using Numba JIT-compiled kernel.
 
@@ -543,16 +556,29 @@ def _compute_iv_numba(
     except ImportError:
         logger.warning("numba_unavailable", msg="falling back to Python implementation")
         return _compute_iv_python(
-            P, collab_count, iv_vec, anime_iv_sum, anime_count,
-            n_collabs, n_persons, feature_pids,
+            P,
+            collab_count,
+            iv_vec,
+            anime_iv_sum,
+            anime_count,
+            n_collabs,
+            n_persons,
+            feature_pids,
         )
 
     logger.info("independent_value_numba", n_persons=n_persons)
 
     values, valid = kernel(
-        P.indptr, P.indices, collab_count.indptr, collab_count.indices,
-        iv_vec, anime_iv_sum, anime_count, n_collabs,
-        MIN_COLLABORATORS, n_persons,
+        P.indptr,
+        P.indices,
+        collab_count.indptr,
+        collab_count.indices,
+        iv_vec,
+        anime_iv_sum,
+        anime_count,
+        n_collabs,
+        MIN_COLLABORATORS,
+        n_persons,
     )
 
     result: dict[str, float | None] = {}
@@ -565,8 +591,14 @@ def _compute_iv_numba(
 
 
 def _compute_iv_python(
-    P, collab_count, iv_vec, anime_iv_sum, anime_count,
-    n_collabs, n_persons, feature_pids,
+    P,
+    collab_count,
+    iv_vec,
+    anime_iv_sum,
+    anime_count,
+    n_collabs,
+    n_persons,
+    feature_pids,
 ):
     """Pure-Python fallback for independent value computation (CSR-native)."""
     P_indptr = P.indptr
@@ -582,13 +614,13 @@ def _compute_iv_python(
             continue
 
         pid_iv = iv_vec[x_idx]
-        x_anime_set = set(P_indices[P_indptr[x_idx]:P_indptr[x_idx + 1]].tolist())
-        collab_indices = CC_indices[CC_indptr[x_idx]:CC_indptr[x_idx + 1]]
+        x_anime_set = set(P_indices[P_indptr[x_idx] : P_indptr[x_idx + 1]].tolist())
+        collab_indices = CC_indices[CC_indptr[x_idx] : CC_indptr[x_idx + 1]]
 
         diffs = []
         for c_idx in collab_indices:
             collab_iv = iv_vec[c_idx]
-            c_anime = P_indices[P_indptr[c_idx]:P_indptr[c_idx + 1]]
+            c_anime = P_indices[P_indptr[c_idx] : P_indptr[c_idx + 1]]
             if len(c_anime) == 0:
                 continue
 
@@ -708,8 +740,14 @@ def compute_independent_value(
     # Compiles the triple-nested loop (person × collaborator × anime) to native code.
     # Uses raw CSR arrays with binary search — avoids all Python object overhead.
     result = _compute_iv_numba(
-        P, collab_count, iv_vec, anime_iv_sum, anime_count,
-        n_collabs, n_persons, feature_pids,
+        P,
+        collab_count,
+        iv_vec,
+        anime_iv_sum,
+        anime_count,
+        n_collabs,
+        n_persons,
+        feature_pids,
     )
 
     computed = sum(1 for v in result.values() if v is not None)

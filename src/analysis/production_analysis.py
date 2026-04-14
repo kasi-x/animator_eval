@@ -115,7 +115,9 @@ def compute_studio_talent_density(
             p30 = global_fe_percentiles["p30"]
             for v in fe_values:
                 if v >= p70:
-                    tiers["star" if v >= float(np.percentile(fe_arr, 90)) else "strong"] += 1
+                    tiers[
+                        "star" if v >= float(np.percentile(fe_arr, 90)) else "strong"
+                    ] += 1
                 elif v >= p30:
                     tiers["average"] += 1
                 else:

@@ -71,8 +71,7 @@ def compute_va_core_scores_phase(context: PipelineContext) -> None:
     with context.monitor.measure("va_patronage"):
         # Use production BiRank for sound directors
         sd_birank = {
-            pid: context.birank_person_scores.get(pid, 0.0)
-            for pid in context.va_sd_fe
+            pid: context.birank_person_scores.get(pid, 0.0) for pid in context.va_sd_fe
         }
         context.va_patronage_scores = compute_va_patronage(
             context.va_credits,

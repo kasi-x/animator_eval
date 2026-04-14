@@ -51,7 +51,9 @@ def _discover_definitions() -> None:
         try:
             importlib.import_module(module_name)
         except Exception as exc:
-            logger.warning("definition_import_failed", module=module_name, error=str(exc))
+            logger.warning(
+                "definition_import_failed", module=module_name, error=str(exc)
+            )
 
 
 @app.command()
@@ -75,7 +77,11 @@ def validate(
     entry = get_entry(slug)
     spec = entry.build_spec()
 
-    from src.reporting.specs.validation import errors_only, validate as run_validate, warnings_only
+    from src.reporting.specs.validation import (
+        errors_only,
+        validate as run_validate,
+        warnings_only,
+    )
 
     results = run_validate(spec)
     errors = errors_only(results)
@@ -110,7 +116,9 @@ def validate_all() -> None:
         results = run_validate(spec)
         errors = errors_only(results)
         status = "FAIL" if errors else "OK"
-        typer.echo(f"  {status}  {slug}" + (f"  ({len(errors)} errors)" if errors else ""))
+        typer.echo(
+            f"  {status}  {slug}" + (f"  ({len(errors)} errors)" if errors else "")
+        )
         total_errors += len(errors)
 
     if total_errors:

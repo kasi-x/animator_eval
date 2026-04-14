@@ -125,9 +125,7 @@ def compute_time_series(
     # Build quarterly series
     yq_active = {label: len(yq_persons[label]) for label in sorted_yq_labels}
     yq_new = {
-        label: sum(
-            1 for pid in yq_persons[label] if person_first_yq.get(pid) == label
-        )
+        label: sum(1 for pid in yq_persons[label] if person_first_yq.get(pid) == label)
         for label in sorted_yq_labels
     }
     yq_credit_count = {label: yq_credits[label] for label in sorted_yq_labels}

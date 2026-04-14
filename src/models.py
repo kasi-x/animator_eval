@@ -53,8 +53,8 @@ class Role(str, Enum):
     SETTINGS = "settings"  # 設定系
     VOICE_ACTOR = "voice_actor"  # +ADR
     LOCALIZATION = "localization"  # 各国語版スタッフ（翻訳・吹替演出・各国版P等）
-    OTHER = "other"       # その他 — ロール特定不可・分類不能なクレジット
-    SPECIAL = "special"   # スペシャルサンクス・ゲスト参加・制作外特別枠
+    OTHER = "other"  # その他 — ロール特定不可・分類不能なクレジット
+    SPECIAL = "special"  # スペシャルサンクス・ゲスト参加・制作外特別枠
 
 
 # MAL/AniList の役職文字列 → Role へのマッピング
@@ -1331,7 +1331,7 @@ class Anime(BaseModel):
     rankings_json: str | None = None  # ランキング情報
 
     # v26: K-means 規模分類
-    work_type: str | None = None   # 'tv' | 'tanpatsu'
+    work_type: str | None = None  # 'tv' | 'tanpatsu'
     scale_class: str | None = None  # 'large' | 'medium' | 'small'
 
     @computed_field  # type: ignore[prop-decorator]
@@ -1511,6 +1511,10 @@ class ScoreResult(BaseModel):
     ndi: float = 0.0
     iv_score: float = 0.0
     iv_score_historical: float = 0.0
+    #: 初期クレジットから推定したキャリア畑（加工データ、pipeline Phase 6 で計算）
+    #: 値: 'animator' / 'animator_director' / 'director' /
+    #:     'production' / 'technical' / 'multi_track'
+    career_track: str = "multi_track"
 
     @classmethod
     def from_db_row(cls, row: "ScoreRow") -> "ScoreResult":
@@ -1523,6 +1527,7 @@ class ScoreResult(BaseModel):
             dormancy=row.dormancy,
             awcc=row.awcc,
             iv_score=row.iv_score,
+            career_track=getattr(row, "career_track", "multi_track"),
         )
 
 

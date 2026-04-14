@@ -36,16 +36,24 @@ def career_data():
         # p1 (Q3): in_between -> key_animator -> animation_director -> AD (2 upgrades / 3 trans)
         Credit(person_id="p1", anime_id="a1", role=Role.IN_BETWEEN, source="test"),
         Credit(person_id="p1", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
-        Credit(person_id="p1", anime_id="a3", role=Role.ANIMATION_DIRECTOR, source="test"),
-        Credit(person_id="p1", anime_id="a4", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p1", anime_id="a3", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
+        Credit(
+            person_id="p1", anime_id="a4", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
         # p2 (Q3): key_animator throughout (0 upgrades / 3 transitions)
         Credit(person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"),
         Credit(person_id="p2", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
         Credit(person_id="p2", anime_id="a3", role=Role.KEY_ANIMATOR, source="test"),
         Credit(person_id="p2", anime_id="a4", role=Role.KEY_ANIMATOR, source="test"),
         # p3 (Q2): AD -> AD -> KA -> KA (0 upgrades, 1 downgrade)
-        Credit(person_id="p3", anime_id="a1", role=Role.ANIMATION_DIRECTOR, source="test"),
-        Credit(person_id="p3", anime_id="a2", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p3", anime_id="a1", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
+        Credit(
+            person_id="p3", anime_id="a2", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
         Credit(person_id="p3", anime_id="a3", role=Role.KEY_ANIMATOR, source="test"),
         Credit(person_id="p3", anime_id="a4", role=Role.KEY_ANIMATOR, source="test"),
         # p4 (Q2): stayer at KA
@@ -77,8 +85,14 @@ def career_data():
 
     # Scores determine quartile: Q0=[p7,p8], Q1=[p5,p6], Q2=[p3,p4], Q3=[p1,p2]
     person_scores = {
-        "p1": 90.0, "p2": 85.0, "p3": 70.0, "p4": 65.0,
-        "p5": 50.0, "p6": 45.0, "p7": 30.0, "p8": 25.0,
+        "p1": 90.0,
+        "p2": 85.0,
+        "p3": 70.0,
+        "p4": 65.0,
+        "p5": 50.0,
+        "p6": 45.0,
+        "p7": 30.0,
+        "p8": 25.0,
     }
 
     return anime_map, credits, person_scores
@@ -93,7 +107,9 @@ class TestCareerFriction:
         assert len(result.friction_index) > 0
         # All friction values should be in [0, 1]
         for pid, friction in result.friction_index.items():
-            assert 0.0 <= friction <= 1.0, f"{pid} has friction {friction} outside [0, 1]"
+            assert 0.0 <= friction <= 1.0, (
+                f"{pid} has friction {friction} outside [0, 1]"
+            )
 
     def test_upgrade_reduces_friction(self, career_data):
         """Person who upgrades (p1) has lower friction than stayer (p2)."""

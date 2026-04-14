@@ -32,15 +32,23 @@ from src.reporting.specs.chart import (
 
 # Shared palette — same values used in helpers.py
 _PALETTE = [
-    "#667eea", "#f093fb", "#06D6A0", "#FFD166",
-    "#EF476F", "#a0d2db", "#26547C", "#F72585",
-    "#4CC9F0", "#7209B7",
+    "#667eea",
+    "#f093fb",
+    "#06D6A0",
+    "#FFD166",
+    "#EF476F",
+    "#a0d2db",
+    "#26547C",
+    "#F72585",
+    "#4CC9F0",
+    "#7209B7",
 ]
 
 
 # ---------------------------------------------------------------------------
 # Individual renderers
 # ---------------------------------------------------------------------------
+
 
 def _render_scatter(spec: ScatterSpec, rows: list[dict[str, Any]]) -> go.Figure:
     x = [r[spec.x_field] for r in rows]
@@ -60,10 +68,22 @@ def _render_scatter(spec: ScatterSpec, rows: list[dict[str, Any]]) -> go.Figure:
         vals = [(r.get(spec.y_field, 0), r.get(spec.label_field, "")) for r in rows]
         vals.sort(key=lambda t: -t[0])
         top_labels = {v[1] for v in vals[: spec.label_top_n]}
-        text = [r.get(spec.label_field, "") if r.get(spec.label_field, "") in top_labels else "" for r in rows]
+        text = [
+            r.get(spec.label_field, "")
+            if r.get(spec.label_field, "") in top_labels
+            else ""
+            for r in rows
+        ]
 
     fig = go.Figure(
-        go.Scatter(x=x, y=y, mode="markers", marker=marker, text=text, textposition="top center")
+        go.Scatter(
+            x=x,
+            y=y,
+            mode="markers",
+            marker=marker,
+            text=text,
+            textposition="top center",
+        )
     )
     fig.update_layout(
         title=spec.title,
@@ -87,7 +107,11 @@ def _render_bar(spec: BarSpec, rows: list[dict[str, Any]]) -> go.Figure:
             error = {"type": "data", "array": errs, "visible": True}
 
     if spec.orientation == "h":
-        fig = go.Figure(go.Bar(y=cats, x=vals, orientation="h", marker_color="#667eea", error_x=error))
+        fig = go.Figure(
+            go.Bar(
+                y=cats, x=vals, orientation="h", marker_color="#667eea", error_x=error
+            )
+        )
     else:
         fig = go.Figure(go.Bar(x=cats, y=vals, marker_color="#667eea", error_y=error))
 
@@ -243,7 +267,13 @@ def _render_line(spec: LineSpec, rows: list[dict[str, Any]]) -> go.Figure:
             ys.append(r[spec.y_field])
         for i, (name, (xs, ys)) in enumerate(series.items()):
             fig.add_trace(
-                go.Scatter(x=xs, y=ys, mode="lines+markers", name=str(name), line_color=_PALETTE[i % len(_PALETTE)])
+                go.Scatter(
+                    x=xs,
+                    y=ys,
+                    mode="lines+markers",
+                    name=str(name),
+                    line_color=_PALETTE[i % len(_PALETTE)],
+                )
             )
     else:
         x = [r[spec.x_field] for r in rows]

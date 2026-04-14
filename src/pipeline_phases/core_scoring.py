@@ -67,8 +67,8 @@ def compute_core_scores_phase(context: PipelineContext) -> None:
             role_damping=None,  # auto-calibrate from data
         )
         # Retrieve calibration results stored on graph by enhance_bipartite_quality
-        context.quality_calibration = (
-            context.person_anime_graph.graph.get("_quality_calibration", {})
+        context.quality_calibration = context.person_anime_graph.graph.get(
+            "_quality_calibration", {}
         )
 
     # 2. BiRank (bipartite PageRank)
@@ -108,7 +108,9 @@ def compute_core_scores_phase(context: PipelineContext) -> None:
         context.patronage_scores = compute_patronage_premium(
             context.credits, context.anime_map, context.birank_person_scores
         )
-    context.monitor.increment_counter("patronage_persons", len(context.patronage_scores))
+    context.monitor.increment_counter(
+        "patronage_persons", len(context.patronage_scores)
+    )
 
     # 5. Dormancy Penalty
     logger.info("step_start", step="dormancy_penalty")
@@ -164,8 +166,7 @@ def compute_core_scores_phase(context: PipelineContext) -> None:
             studio_assignments=context.studio_assignments,
         )
         awcc_scores = {
-            pid: m.awcc
-            for pid, m in context.knowledge_spanner_scores.items()
+            pid: m.awcc for pid, m in context.knowledge_spanner_scores.items()
         }
         # Historical IV: no dormancy applied (dormancy=1.0 for everyone)
         no_dormancy = {pid: 1.0 for pid in context.dormancy_scores}

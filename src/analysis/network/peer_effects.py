@@ -138,7 +138,13 @@ def _build_peer_data(
             pid_list.append(pid)
 
     if not y_list:
-        return np.array([]), np.array([]).reshape(0, 3), np.array([]).reshape(0, 3), np.array([]), []
+        return (
+            np.array([]),
+            np.array([]).reshape(0, 3),
+            np.array([]).reshape(0, 3),
+            np.array([]),
+            [],
+        )
 
     return (
         np.array(y_list, dtype=np.float64),
@@ -264,7 +270,11 @@ def estimate_peer_effects_2sls(
         X_bar = X_bar[idx]
         Y_bar = Y_bar[idx]
         pid_list = [pid_list[i] for i in idx]
-        logger.info("peer_effects_subsampled", original=len(full_pid_list), sampled=MAX_OBS_FOR_2SLS)
+        logger.info(
+            "peer_effects_subsampled",
+            original=len(full_pid_list),
+            sampled=MAX_OBS_FOR_2SLS,
+        )
 
     # Build instruments
     Z = _build_instruments(pid_list, collaboration_graph, person_scores)
@@ -308,8 +318,8 @@ def estimate_peer_effects_2sls(
 
     # Extract coefficients
     # coefs: [intercept, c1, c2, c3, a1, a2, a3, b]
-    own_effect = float(np.mean(coefs[1:1 + k_x]))  # avg own effect
-    exogenous_effect = float(np.mean(coefs[1 + k_x:1 + 2 * k_x]))
+    own_effect = float(np.mean(coefs[1 : 1 + k_x]))  # avg own effect
+    exogenous_effect = float(np.mean(coefs[1 + k_x : 1 + 2 * k_x]))
     endogenous_effect = float(coefs[-1])
 
     if not identified:
@@ -323,8 +333,8 @@ def estimate_peer_effects_2sls(
         try:
             coefs_ols, _, _, _ = np.linalg.lstsq(W_ols, y, rcond=None)
             endogenous_effect = float(coefs_ols[-1])
-            own_effect = float(np.mean(coefs_ols[1:1 + k_x]))
-            exogenous_effect = float(np.mean(coefs_ols[1 + k_x:1 + 2 * k_x]))
+            own_effect = float(np.mean(coefs_ols[1 : 1 + k_x]))
+            exogenous_effect = float(np.mean(coefs_ols[1 + k_x : 1 + 2 * k_x]))
         except np.linalg.LinAlgError:
             pass
 

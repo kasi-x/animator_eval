@@ -126,7 +126,11 @@ def estimate_role_weights(
 
     for i, aid in enumerate(anime_ids):
         creds = anime_credits[aid]
-        n_staff = anime_staff_counts[aid] if anime_staff_counts and aid in anime_staff_counts else len(creds)
+        n_staff = (
+            anime_staff_counts[aid]
+            if anime_staff_counts and aid in anime_staff_counts
+            else len(creds)
+        )
         if n_staff < 2:
             continue
 
@@ -171,7 +175,9 @@ def estimate_role_weights(
     floor = 0.01
     raw_weights = np.maximum(beta, floor)
     weight_sum = raw_weights.sum()
-    normalized = raw_weights / weight_sum if weight_sum > 0 else np.ones(n_roles) / n_roles
+    normalized = (
+        raw_weights / weight_sum if weight_sum > 0 else np.ones(n_roles) / n_roles
+    )
 
     result.weights = {all_roles[i]: float(normalized[i]) for i in range(n_roles)}
     result.coefficients = {all_roles[i]: float(beta[i]) for i in range(n_roles)}
@@ -254,9 +260,7 @@ def estimate_marginal_contribution(
         限界貢献度
     """
     # Person's quality
-    person_quality = person_scores.get(person_id, {}).get(
-        "iv_score", staff_quality_avg
-    )
+    person_quality = person_scores.get(person_id, {}).get("iv_score", staff_quality_avg)
 
     # Role importance
     role_weight = compute_role_importance(role)
@@ -529,10 +533,10 @@ def main():
     """スタンドアロン実行用エントリーポイント."""
     from src.analysis.anime_value import compute_anime_values
     from src.database import (
-        get_all_anime,
-        get_all_credits,
-        get_all_persons,
-        get_all_scores,
+        load_all_anime,
+        load_all_credits,
+        load_all_persons,
+        load_all_scores,
         get_connection,
         init_db,
     )
@@ -540,10 +544,10 @@ def main():
     conn = get_connection()
     init_db(conn)
 
-    persons = get_all_persons(conn)
-    anime_list = get_all_anime(conn)
-    credits = get_all_credits(conn)
-    scores_list = get_all_scores(conn)
+    persons = load_all_persons(conn)
+    anime_list = load_all_anime(conn)
+    credits = load_all_credits(conn)
+    scores_list = load_all_scores(conn)
 
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
     person_scores = {

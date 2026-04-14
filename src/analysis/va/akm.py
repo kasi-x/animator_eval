@@ -290,18 +290,22 @@ def estimate_va_akm(
     for k in range(n_obs):
         obs_counts[va_ind[k]] += 1
 
-    fitted = np.array([
-        va_fe_arr[va_ind[k]] + sd_fe_arr[sd_ind[k]] for k in range(n_obs)
-    ])
+    fitted = np.array(
+        [va_fe_arr[va_ind[k]] + sd_fe_arr[sd_ind[k]] for k in range(n_obs)]
+    )
     residuals_arr = y - fitted
 
-    sigma2_resid = float(np.mean(residuals_arr ** 2)) if n_obs > 0 else 1.0
+    sigma2_resid = float(np.mean(residuals_arr**2)) if n_obs > 0 else 1.0
     active = obs_counts > 0
     if np.any(active):
         sigma2_raw = float(np.var(va_fe_arr[active]))
         n_bar = float(np.mean(obs_counts[active]))
         sigma2_signal = max(sigma2_raw - sigma2_resid / n_bar, sigma2_raw * 0.1)
-        kappa = float(np.clip(sigma2_resid / sigma2_signal if sigma2_signal > 0 else 10.0, 2.0, 50.0))
+        kappa = float(
+            np.clip(
+                sigma2_resid / sigma2_signal if sigma2_signal > 0 else 10.0, 2.0, 50.0
+            )
+        )
         mu = float(np.mean(va_fe_arr[active]))
 
         for i in range(n_va):
@@ -312,7 +316,7 @@ def estimate_va_akm(
             va_fe_arr[i] = reliability * va_fe_arr[i] + (1 - reliability) * mu
 
     # Compute R²
-    ss_res = float(np.sum(residuals_arr ** 2))
+    ss_res = float(np.sum(residuals_arr**2))
     ss_tot = float(np.sum((y - np.mean(y)) ** 2))
     r_squared = 1.0 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
 

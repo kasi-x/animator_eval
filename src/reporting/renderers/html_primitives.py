@@ -212,8 +212,8 @@ _KATEX_HEAD = (
     f'<script defer src="{_KATEX_BASE}/katex.min.js"></script>\n'
     f'<script defer src="{_KATEX_BASE}/contrib/auto-render.min.js" '
     'onload="renderMathInElement(document.body,{delimiters:['
-    '{left:\'$$\',right:\'$$\',display:true},'
-    '{left:\'$\',right:\'$\',display:false}]});"></script>'
+    "{left:'$$',right:'$$',display:true},"
+    "{left:'$',right:'$',display:false}]});\"></script>"
 )
 
 
@@ -233,7 +233,9 @@ def wrap_html_with_katex(
     ``extra_css`` lets individual reports append report-specific CSS without
     editing the shared modules.
     """
-    base = wrap_html(title, subtitle, body, intro_html=intro_html, glossary_terms=glossary_terms)
+    base = wrap_html(
+        title, subtitle, body, intro_html=intro_html, glossary_terms=glossary_terms
+    )
     # Inject KaTeX assets + ACADEMIC_CSS directly before ``</head>``.
     head_closing = "</head>"
     injection = (

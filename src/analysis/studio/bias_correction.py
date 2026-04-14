@@ -282,9 +282,9 @@ def debias_birank_scores(
         cross_studio_bonus = min(0.1, metrics.cross_studio_works * 0.02)  # Up to +10%
 
         # Debiased birank
-        debiased_birank = original_birank * (
-            1 - studio_bias
-        ) * diversity_factor + (original_birank * cross_studio_bonus)
+        debiased_birank = original_birank * (1 - studio_bias) * diversity_factor + (
+            original_birank * cross_studio_bonus
+        )
 
         debiased[person_id] = DebiasedScore(
             person_id=person_id,
@@ -500,10 +500,10 @@ def compute_studio_disparity(
 def main():
     """スタンドアロン実行用エントリーポイント."""
     from src.database import (
-        get_all_anime,
-        get_all_credits,
-        get_all_persons,
-        get_all_scores,
+        load_all_anime,
+        load_all_credits,
+        load_all_persons,
+        load_all_scores,
         get_connection,
         init_db,
     )
@@ -511,17 +511,16 @@ def main():
     conn = get_connection()
     init_db(conn)
 
-    persons = get_all_persons(conn)
-    anime_list = get_all_anime(conn)
-    credits = get_all_credits(conn)
-    scores_list = get_all_scores(conn)
+    persons = load_all_persons(conn)
+    anime_list = load_all_anime(conn)
+    credits = load_all_credits(conn)
+    scores_list = load_all_scores(conn)
 
     # マップ作成
     anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
     person_scores = {
-        s.person_id: {"birank": s.birank, "iv_score": s.iv_score}
-        for s in scores_list
+        s.person_id: {"birank": s.birank, "iv_score": s.iv_score} for s in scores_list
     }
 
     # スタジオバイアス分析

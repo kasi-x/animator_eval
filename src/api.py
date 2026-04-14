@@ -149,7 +149,9 @@ if STATIC_DIR.exists():
 
 # Mount report files (path from config, overridable via ANIMETOR_REPORTS_DIR)
 if REPORTS_DIR.exists():
-    app.mount("/reports", StaticFiles(directory=str(REPORTS_DIR), html=True), name="reports")
+    app.mount(
+        "/reports", StaticFiles(directory=str(REPORTS_DIR), html=True), name="reports"
+    )
 
 
 # --- Response Models ---
@@ -298,6 +300,7 @@ def list_persons(
         )
 
     import sqlite3 as _sqlite3
+
     with db_connection() as conn:
         conn.row_factory = _sqlite3.Row
         total = conn.execute(
@@ -312,7 +315,9 @@ def list_persons(
         ).fetchall()
 
     items = [_row_to_person(r) for r in rows]
-    return PaginatedResponse(items=items, total=total, page=page, per_page=per_page, pages=pages)
+    return PaginatedResponse(
+        items=items, total=total, page=page, per_page=per_page, pages=pages
+    )
 
 
 @app.get("/api/persons/search")
@@ -332,6 +337,7 @@ def search(
 def get_person(person_id: PersonId):
     """人物プロフィール（スコア + ブレークダウン）."""
     import sqlite3 as _sqlite3
+
     with db_connection() as conn:
         conn.row_factory = _sqlite3.Row
         sql = _PERSON_SELECT_SQL.format(extra_where="AND s.person_id = ?")
@@ -348,6 +354,7 @@ def get_similar(
 ):
     """類似人物検索（コサイン類似度）."""
     import sqlite3 as _sqlite3
+
     with db_connection() as conn:
         conn.row_factory = _sqlite3.Row
         # 対象人物と同じ主役職のスコア上位2000人のみで類似計算
@@ -362,9 +369,7 @@ def get_similar(
             raise HTTPException(status_code=404, detail=f"Person {person_id} not found")
 
         sql = _PERSON_SELECT_SQL.format(extra_where="")
-        rows = conn.execute(
-            f"{sql} ORDER BY s.iv_score DESC LIMIT 2000"
-        ).fetchall()
+        rows = conn.execute(f"{sql} ORDER BY s.iv_score DESC LIMIT 2000").fetchall()
 
     scores = [_row_to_person(r) for r in rows]
     similar = find_similar_persons(person_id, scores, top_n=top_n)
@@ -808,7 +813,9 @@ def get_person_network(
 
     anime_map = {a.id: a for a in anime_list}
     scores = load_person_scores_from_json()
-    person_scores = {r["person_id"]: r.get("iv_score", 0) for r in scores} if scores else None
+    person_scores = (
+        {r["person_id"]: r.get("iv_score", 0) for r in scores} if scores else None
+    )
 
     result = extract_ego_graph(
         person_id, credits, anime_map, hops=hops, person_scores=person_scores
@@ -862,7 +869,9 @@ def predict(
 
     anime_map = {a.id: a for a in anime_list}
     scores = load_person_scores_from_json()
-    person_scores = {r["person_id"]: r.get("iv_score", 0) for r in scores} if scores else None
+    person_scores = (
+        {r["person_id"]: r.get("iv_score", 0) for r in scores} if scores else None
+    )
 
     result = predict_anime_score(
         team_ids, credits, anime_map, person_scores=person_scores

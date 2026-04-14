@@ -84,11 +84,13 @@ class TestDetectBridges:
         G = nx.Graph()
         G.add_edges_from(
             [("p1", "p2"), ("p1", "p3"), ("p2", "p3")],
-            weight=5, shared_works=3,
+            weight=5,
+            shared_works=3,
         )
         G.add_edges_from(
             [("p4", "p5"), ("p4", "p6"), ("p5", "p6")],
-            weight=5, shared_works=3,
+            weight=5,
+            shared_works=3,
         )
         # Weak bridge between clusters
         G.add_edge("p2", "p4", weight=1, shared_works=1)

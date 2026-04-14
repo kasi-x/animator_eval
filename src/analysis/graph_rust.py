@@ -170,7 +170,9 @@ def build_collaboration_edges(
                 pair_persons.add(a)
                 pair_persons.add(b)
             # Build staff list for Rust (only persons with edges)
-            staff_for_rust = [(pid, staff[pid][1]) for pid in pair_persons if pid in staff]
+            staff_for_rust = [
+                (pid, staff[pid][1]) for pid in pair_persons if pid in staff
+            ]
             if staff_for_rust:
                 anime_staff_list.append((anime_id, staff_for_rust))
 
@@ -198,7 +200,9 @@ def build_collaboration_edges(
         for anime_id, staff_info in anime_staff.items():
             staff_roles = {pid: role for pid, (role, _w) in staff_info.items()}
             for pair in generate_core_team_pairs(staff_roles):
-                canonical = (pair[0], pair[1]) if pair[0] < pair[1] else (pair[1], pair[0])
+                canonical = (
+                    (pair[0], pair[1]) if pair[0] < pair[1] else (pair[1], pair[0])
+                )
                 valid_pair_set.add(canonical)
 
         for edge_key, attrs in edge_data.items():

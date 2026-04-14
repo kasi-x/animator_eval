@@ -150,8 +150,12 @@ def compute_studio_clustering(
     # Build studio-level aggregates
     studio_staff: dict[str, set[str]] = defaultdict(set)
     studio_anime: dict[str, set[str]] = defaultdict(set)
-    studio_genre_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    studio_format_counts: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    studio_genre_counts: dict[str, dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
+    studio_format_counts: dict[str, dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
 
     for c in credits:
         anime = anime_map.get(c.anime_id)
@@ -173,13 +177,12 @@ def compute_studio_clustering(
         studio_avg_birank[studio] = float(np.mean(biranks)) if biranks else 0.0
 
     # Build feature vectors for studios with talent density
-    studios = sorted(
-        s for s in talent_density
-        if len(studio_staff.get(s, set())) >= 5
-    )
+    studios = sorted(s for s in talent_density if len(studio_staff.get(s, set())) >= 5)
 
     if len(studios) < n_clusters:
-        logger.info("studio_clustering_skipped", studios=len(studios), min_needed=n_clusters)
+        logger.info(
+            "studio_clustering_skipped", studios=len(studios), min_needed=n_clusters
+        )
         return StudioClusteringResult()
 
     features: list[list[float]] = []
@@ -239,10 +242,7 @@ def compute_studio_clustering(
             feature_vector=features[i],
         )
 
-    centroids = {
-        cid: centers_original[cid].tolist()
-        for cid in range(actual_k)
-    }
+    centroids = {cid: centers_original[cid].tolist() for cid in range(actual_k)}
 
     logger.info(
         "studio_clustering_computed",

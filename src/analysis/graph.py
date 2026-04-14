@@ -114,13 +114,14 @@ def create_person_anime_network(
     # Pre-compute per-anime production scale (duration × staff)
     anime_prod_scale: dict[str, float] = {}
     for aid in anime_staff_count:
-        anime_prod_scale[aid] = (
-            _work_importance(anime_map.get(aid))
-            * _staff_scale(anime_staff_count.get(aid, 1), log_baseline)
+        anime_prod_scale[aid] = _work_importance(anime_map.get(aid)) * _staff_scale(
+            anime_staff_count.get(aid, 1), log_baseline
         )
 
     # Ensure all credited persons have type="person" even if not in persons list
-    credit_person_ids = {c.person_id for c in credits if c.role not in NON_PRODUCTION_ROLES}
+    credit_person_ids = {
+        c.person_id for c in credits if c.role not in NON_PRODUCTION_ROLES
+    }
     for pid in credit_person_ids:
         if pid not in g:
             g.add_node(pid, type="person", name="", name_ja="", name_en="")
@@ -139,8 +140,11 @@ def create_person_anime_network(
             g[c.person_id][c.anime_id]["roles"].append(c.role.value)
         else:
             g.add_edge(
-                c.person_id, c.anime_id,
-                weight=weight, role_w=w_role, prod_scale=w_prod,
+                c.person_id,
+                c.anime_id,
+                weight=weight,
+                role_w=w_role,
+                prod_scale=w_prod,
                 roles=[c.role.value],
             )
         # anime → person (逆方向)
@@ -193,9 +197,7 @@ def _dual_quality(
     if role_weights and len(role_weights) == len(fe_vals):
         total_w = sum(role_weights)
         if total_w > 0:
-            weighted_mean = sum(
-                f * w for f, w in zip(fe_vals, role_weights)
-            ) / total_w
+            weighted_mean = sum(f * w for f, w in zip(fe_vals, role_weights)) / total_w
         else:
             weighted_mean = sum(fe_vals) / len(fe_vals)
     else:
@@ -379,7 +381,10 @@ def enhance_bipartite_quality(
     # Calibrate parameters from data (or use override)
     if role_damping is None:
         cal_damping, cal_blend, cal_top_frac = _calibrate_quality_params(
-            shifted_fe, anime_staff_sets, person_anime_role_w, person_fe,
+            shifted_fe,
+            anime_staff_sets,
+            person_anime_role_w,
+            person_fe,
         )
     else:
         cal_damping = role_damping
@@ -396,13 +401,21 @@ def enhance_bipartite_quality(
 
         # Non-director quality (used as boost for directors)
         nd_fes = [shifted_fe[p] for p in non_directors if p in shifted_fe]
-        nd_rws = [person_anime_role_w.get((p, aid), 1.0) for p in non_directors if p in shifted_fe]
+        nd_rws = [
+            person_anime_role_w.get((p, aid), 1.0)
+            for p in non_directors
+            if p in shifted_fe
+        ]
         if nd_fes:
-            quality_non_dir[aid] = _dual_quality(nd_fes, nd_rws, cal_top_frac, cal_blend)
+            quality_non_dir[aid] = _dual_quality(
+                nd_fes, nd_rws, cal_top_frac, cal_blend
+            )
 
         # Director quality (used as boost for non-directors)
         d_fes = [shifted_fe[p] for p in directors if p in shifted_fe]
-        d_rws = [person_anime_role_w.get((p, aid), 1.0) for p in directors if p in shifted_fe]
+        d_rws = [
+            person_anime_role_w.get((p, aid), 1.0) for p in directors if p in shifted_fe
+        ]
         if d_fes:
             quality_dir[aid] = _dual_quality(d_fes, d_rws, cal_top_frac, cal_blend)
 
@@ -410,7 +423,9 @@ def enhance_bipartite_quality(
     for aid, pids in anime_staff_sets.items():
         if aid not in quality_non_dir and aid not in quality_dir:
             all_fes = [shifted_fe[p] for p in pids if p in shifted_fe]
-            all_rws = [person_anime_role_w.get((p, aid), 1.0) for p in pids if p in shifted_fe]
+            all_rws = [
+                person_anime_role_w.get((p, aid), 1.0) for p in pids if p in shifted_fe
+            ]
             if all_fes:
                 q = _dual_quality(all_fes, all_rws, cal_top_frac, cal_blend)
                 quality_non_dir[aid] = q
@@ -449,7 +464,7 @@ def enhance_bipartite_quality(
             else:
                 q_boost = boost_dir.get(aid, 1.0)
 
-            new_weight = (role_w ** cal_damping) * prod_scale * q_boost
+            new_weight = (role_w**cal_damping) * prod_scale * q_boost
 
             data["weight"] = new_weight
             if graph.has_edge(aid, pid):
@@ -468,11 +483,15 @@ def enhance_bipartite_quality(
         "boost_non_dir_range": (
             round(min(boost_non_dir.values()), 4),
             round(max(boost_non_dir.values()), 4),
-        ) if boost_non_dir else (0, 0),
+        )
+        if boost_non_dir
+        else (0, 0),
         "boost_dir_range": (
             round(min(boost_dir.values()), 4),
             round(max(boost_dir.values()), 4),
-        ) if boost_dir else (0, 0),
+        )
+        if boost_dir
+        else (0, 0),
     }
 
     logger.info(
@@ -481,12 +500,12 @@ def enhance_bipartite_quality(
         role_damping=round(cal_damping, 3),
         blend=round(cal_blend, 3),
         top_fraction=round(cal_top_frac, 3),
-        median_boost_non_dir=round(
-            statistics.median(boost_non_dir.values()), 4
-        ) if boost_non_dir else 0,
-        median_boost_dir=round(
-            statistics.median(boost_dir.values()), 4
-        ) if boost_dir else 0,
+        median_boost_non_dir=round(statistics.median(boost_non_dir.values()), 4)
+        if boost_non_dir
+        else 0,
+        median_boost_dir=round(statistics.median(boost_dir.values()), 4)
+        if boost_dir
+        else 0,
         anime_with_directors=len(anime_directors),
     )
 
@@ -1285,6 +1304,7 @@ def compute_graph_summary(graph) -> dict:
             graph.weight_matrix, directed=False
         )
         from collections import Counter
+
         comp_sizes = Counter(labels)
         largest = max(comp_sizes.values()) if comp_sizes else 0
     else:

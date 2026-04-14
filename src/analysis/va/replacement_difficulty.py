@@ -80,7 +80,9 @@ def compute_replacement_difficulty(
     char_vas: dict[str, set[str]] = defaultdict(set)
 
     # Track franchise participation: (person_id, character_id) -> set of anime_ids
-    va_char_anime: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+    va_char_anime: dict[str, dict[str, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
 
     for cva in va_credits:
         pid = cva.person_id
@@ -159,8 +161,7 @@ def compute_replacement_difficulty(
     raw_franchise: dict[str, float] = {}
     for pid in qualifying:
         char_anime_counts = [
-            len(anime_ids)
-            for anime_ids in va_char_anime[pid].values()
+            len(anime_ids) for anime_ids in va_char_anime[pid].values()
         ]
         if not char_anime_counts:
             raw_franchise[pid] = 0.0
@@ -171,8 +172,7 @@ def compute_replacement_difficulty(
             raw_franchise[pid] = 0.0
         else:
             raw_franchise[pid] = (
-                len(multi_entry) / len(char_anime_counts)
-                * math.log1p(sum(multi_entry))
+                len(multi_entry) / len(char_anime_counts) * math.log1p(sum(multi_entry))
             )
 
     # Normalize all components

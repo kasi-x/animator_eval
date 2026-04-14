@@ -82,7 +82,7 @@ def compute_va_ensemble_synergy(
 
         # Main <-> Main
         for i, a in enumerate(main_vas):
-            for b in main_vas[i + 1:]:
+            for b in main_vas[i + 1 :]:
                 key = (a, b) if a < b else (b, a)
                 pair_shared[key].add(aid)
 
@@ -114,19 +114,19 @@ def compute_va_ensemble_synergy(
 
         # Synergy formula
         synergy = (
-            math.sqrt(n_shared)
-            * (1.0 + co_main / n_shared)
-            * math.log1p(n_genres)
+            math.sqrt(n_shared) * (1.0 + co_main / n_shared) * math.log1p(n_genres)
         )
 
-        results.append(VASynergy(
-            va_a=va_a,
-            va_b=va_b,
-            shared_anime=n_shared,
-            co_main_count=co_main,
-            distinct_genres=n_genres,
-            synergy_score=synergy,
-        ))
+        results.append(
+            VASynergy(
+                va_a=va_a,
+                va_b=va_b,
+                shared_anime=n_shared,
+                co_main_count=co_main,
+                distinct_genres=n_genres,
+                synergy_score=synergy,
+            )
+        )
 
     results.sort(key=lambda s: s.synergy_score, reverse=True)
     logger.info("va_ensemble_synergy_computed", pairs=len(results))

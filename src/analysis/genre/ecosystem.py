@@ -306,7 +306,9 @@ def compute_genre_ecosystem(
 
         careers[genre] = GenreCareerProfile(
             genre=genre,
-            avg_years_to_stage_4=float(np.mean(years_to_stage4)) if years_to_stage4 else 0.0,
+            avg_years_to_stage_4=float(np.mean(years_to_stage4))
+            if years_to_stage4
+            else 0.0,
             promotion_rate=n_promoted / n_total if n_total > 0 else 0.0,
             retention_rate=n_active_recent / n_total if n_total > 0 else 0.0,
             unique_staff=n_total,

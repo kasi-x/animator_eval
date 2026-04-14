@@ -81,7 +81,9 @@ def compute_cooccurrence_groups(
         return _empty_result(min_shared_works, max_group_size)
 
     # Step 2: anime_id → {person_id → set[role]} のマップ構築
-    anime_to_staff: dict[str, dict[str, set[str]]] = defaultdict(lambda: defaultdict(set))
+    anime_to_staff: dict[str, dict[str, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
     for c in core_credits:
         anime_to_staff[c.anime_id][c.person_id].add(c.role.value)
 
@@ -151,9 +153,7 @@ def compute_cooccurrence_groups(
 
         # タイトルリスト
         shared_anime_titles = [
-            anime_map[aid].display_title
-            for aid in anime_ids
-            if aid in anime_map
+            anime_map[aid].display_title for aid in anime_ids if aid in anime_map
         ]
 
         groups.append(

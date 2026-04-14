@@ -143,9 +143,7 @@ def compute_expected_ability(
         # Feature 2: studio FE exposure
         year_studio = studio_assignments.get(pid, {})
         if year_studio:
-            studio_fes = [
-                studio_fe.get(s, 0.0) for s in set(year_studio.values())
-            ]
+            studio_fes = [studio_fe.get(s, 0.0) for s in set(year_studio.values())]
             features[i, 2] = sum(studio_fes) / len(studio_fes) if studio_fes else 0.0
 
         # Feature 3: avg director birank

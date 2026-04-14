@@ -12,6 +12,10 @@ import time
 import structlog
 
 from src.database import (
+    compute_feat_career_annual,
+    compute_feat_credit_activity,
+    compute_feat_person_role_progression,
+    compute_feat_studio_affiliation,
     db_connection,
     get_connection,
     has_credits_changed_since_last_run,
@@ -136,6 +140,31 @@ def run_scoring_pipeline(
         if ws_broadcaster:
             ws_broadcaster.error_phase(1, "Data Loading", "No credits in database")
         return []
+
+    # Phase 1.5: 派生特徴量の事前集計 (best-effort, non-blocking)
+    # クレジット生データから計算し、次フェーズ以降・レポート生成で再利用可能にする
+    try:
+        compute_feat_credit_activity(
+            conn,
+            current_year=context.current_year,
+            current_quarter=context.current_quarter,
+        )
+    except Exception:
+        logger.exception("feat_credit_activity_skipped")
+    try:
+        compute_feat_career_annual(conn)
+    except Exception:
+        logger.exception("feat_career_annual_skipped")
+    try:
+        compute_feat_studio_affiliation(conn)
+    except Exception:
+        logger.exception("feat_studio_affiliation_skipped")
+    try:
+        compute_feat_person_role_progression(conn, current_year=context.current_year)
+    except Exception:
+        logger.exception("feat_person_role_progression_skipped")
+    # NOTE: compute_feat_credit_contribution / feat_work_context / feat_causal_estimates は
+    # feat_person_scores 依存のため export_and_visualize_phase (Phase 10) で呼び出す
 
     # Phase 2: Validation
     logger.info("step_start", step="validation")

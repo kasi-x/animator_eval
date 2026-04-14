@@ -478,7 +478,9 @@ def analyze_career_trajectories(
 
         # Pre-major data
         trajectory.pre_years = [a.start_year for a in pre_affiliations]
-        trajectory.pre_person_fe_scores = [a.avg_person_fe_score for a in pre_affiliations]
+        trajectory.pre_person_fe_scores = [
+            a.avg_person_fe_score for a in pre_affiliations
+        ]
         trajectory.pre_avg_person_fe = (
             sum(trajectory.pre_person_fe_scores) / len(trajectory.pre_person_fe_scores)
             if trajectory.pre_person_fe_scores
@@ -501,7 +503,8 @@ def analyze_career_trajectories(
                 a.avg_person_fe_score for a in post_affiliations
             ]
             trajectory.post_avg_person_fe = (
-                sum(trajectory.post_person_fe_scores) / len(trajectory.post_person_fe_scores)
+                sum(trajectory.post_person_fe_scores)
+                / len(trajectory.post_person_fe_scores)
                 if trajectory.post_person_fe_scores
                 else 0
             )
@@ -543,7 +546,8 @@ def analyze_career_trajectories(
         if len(trajectory.pre_person_fe_scores) >= 3:
             # Compute first derivatives (velocities)
             velocities = [
-                trajectory.pre_person_fe_scores[i + 1] - trajectory.pre_person_fe_scores[i]
+                trajectory.pre_person_fe_scores[i + 1]
+                - trajectory.pre_person_fe_scores[i]
                 for i in range(len(trajectory.pre_person_fe_scores) - 1)
             ]
             # Compute second derivative (acceleration) - average change in velocity
@@ -653,11 +657,11 @@ def analyze_studio_transitions(
                 transition_year=to_aff.start_year,
                 before_person_fe=from_aff.avg_person_fe_score,
                 after_person_fe=to_aff.avg_person_fe_score,
-                person_fe_change=to_aff.avg_person_fe_score - from_aff.avg_person_fe_score,
+                person_fe_change=to_aff.avg_person_fe_score
+                - from_aff.avg_person_fe_score,
                 before_birank=from_aff.avg_birank_score,
                 after_birank=to_aff.avg_birank_score,
-                birank_change=to_aff.avg_birank_score
-                - from_aff.avg_birank_score,
+                birank_change=to_aff.avg_birank_score - from_aff.avg_birank_score,
             )
 
             transitions.append(transition)

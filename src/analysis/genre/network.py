@@ -62,7 +62,7 @@ def _compute_pmi(
         for g in genres:
             genre_count[g] += 1
         for i, g1 in enumerate(genres):
-            for g2 in genres[i + 1:]:
+            for g2 in genres[i + 1 :]:
                 pair_count[(g1, g2)] += 1
 
     if total == 0:
@@ -102,7 +102,9 @@ def build_genre_pmi_network(
     g = nx.Graph()
     for (g1, g2), value in pmi.items():
         if value >= min_pmi:
-            g.add_edge(g1, g2, weight=max(value, 0.01))  # positive weights for community detection
+            g.add_edge(
+                g1, g2, weight=max(value, 0.01)
+            )  # positive weights for community detection
 
     logger.info(
         "genre_pmi_network_built",
@@ -173,7 +175,9 @@ def compute_genre_network(
 
     if pmi_graph.number_of_nodes() > 2:
         try:
-            comms = nx.community.louvain_communities(pmi_graph, weight="weight", seed=42)
+            comms = nx.community.louvain_communities(
+                pmi_graph, weight="weight", seed=42
+            )
             for fam_id, members in enumerate(comms):
                 family_names[fam_id] = sorted(members)
                 for genre in members:

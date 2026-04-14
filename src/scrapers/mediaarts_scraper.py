@@ -375,7 +375,10 @@ async def download_madb_dataset(
         if extended:
             extended_marker.write_text("true")
         log.info(
-            "madb_download_complete", version=tag, files=len(downloaded), extended=extended
+            "madb_download_complete",
+            version=tag,
+            files=len(downloaded),
+            extended=extended,
         )
         return downloaded
 
@@ -425,7 +428,9 @@ async def scrape_madb(
     person_cache: dict[str, Person] = {}  # name -> Person (dedup)
 
     # Phase A: Download dump
-    dataset_files = await download_madb_dataset(data_dir, version=version, extended=extended)
+    dataset_files = await download_madb_dataset(
+        data_dir, version=version, extended=extended
+    )
     if not dataset_files:
         log.warning("madb_no_files_downloaded")
         return stats
@@ -441,7 +446,9 @@ async def scrape_madb(
     total_processed = 0
     for anime_type, json_path in dataset_files.items():
         format_code = format_by_type.get(anime_type, "")
-        log.info("madb_parsing", file=json_path.name, type=anime_type, format=format_code)
+        log.info(
+            "madb_parsing", file=json_path.name, type=anime_type, format=format_code
+        )
         records = parse_jsonld_dump(json_path, format_code=format_code)
         if max_anime > 0:
             records = records[:max_anime]
@@ -531,7 +538,10 @@ async def scrape_madb(
 @app.command()
 def main(
     max_records: int = typer.Option(
-        0, "--max-records", "-n", help="Maximum number of anime per collection (0 = unlimited)"
+        0,
+        "--max-records",
+        "-n",
+        help="Maximum number of anime per collection (0 = unlimited)",
     ),
     checkpoint: int = typer.Option(
         50, "--checkpoint", "-c", help="Checkpoint interval"
@@ -541,7 +551,9 @@ def main(
         DEFAULT_DATA_DIR, "--data-dir", "-d", help="Download directory"
     ),
     extended: bool = typer.Option(
-        False, "--extended", help="Download extended metadata sets (201-205, 301-317, etc.)"
+        False,
+        "--extended",
+        help="Download extended metadata sets (201-205, 301-317, etc.)",
     ),
 ) -> None:
     """Fetch credit data from Media Arts DB dump."""

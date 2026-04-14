@@ -235,7 +235,9 @@ class TestComputePotentialValueScores:
         assert result == {}
 
     def test_missing_debiased_defaults_to_original(self):
-        ps = {"p1": {"birank": 0.5, "patronage": 0.3, "person_fe": 0.4, "iv_score": 0.4}}
+        ps = {
+            "p1": {"birank": 0.5, "patronage": 0.3, "person_fe": 0.4, "iv_score": 0.4}
+        }
         result = compute_potential_value_scores(ps, {}, {}, {}, nx.Graph())
         assert result["p1"].debiased_birank == 0.5
 
@@ -250,7 +252,9 @@ class TestComputePotentialValueScores:
 
     def test_hidden_gem_category(self):
         """Person with authority_improvement > 0.1 and skill > 0.6 => HIDDEN_GEM."""
-        ps = {"p1": {"birank": 0.3, "patronage": 0.3, "person_fe": 0.7, "iv_score": 0.4}}
+        ps = {
+            "p1": {"birank": 0.3, "patronage": 0.3, "person_fe": 0.7, "iv_score": 0.4}
+        }
         debiased = {"p1": {"debiased_birank": 0.5}}  # improvement = 0.2 > 0.1
         growth = {
             "p1": {"growth_velocity": 0.0, "momentum_score": 0.0, "career_years": 10}
@@ -262,7 +266,9 @@ class TestComputePotentialValueScores:
 
     def test_rising_star_category(self):
         """Person with velocity > 2.0 and authority > 0.5 => RISING_STAR."""
-        ps = {"p1": {"birank": 0.6, "patronage": 0.5, "person_fe": 0.6, "iv_score": 0.57}}
+        ps = {
+            "p1": {"birank": 0.6, "patronage": 0.5, "person_fe": 0.6, "iv_score": 0.57}
+        }
         debiased = {"p1": {"debiased_birank": 0.6}}
         growth = {
             "p1": {"growth_velocity": 3.0, "momentum_score": 0.5, "career_years": 8}
@@ -364,10 +370,16 @@ class TestRoleWeightEstimation:
     def _make_credits(self, n_anime=50):
         """Generate synthetic credits for OLS estimation testing."""
         import random
+
         random.seed(42)
         credits = []
-        roles = [Role.DIRECTOR, Role.KEY_ANIMATOR, Role.ANIMATION_DIRECTOR,
-                 Role.SCREENPLAY, Role.EPISODE_DIRECTOR]
+        roles = [
+            Role.DIRECTOR,
+            Role.KEY_ANIMATOR,
+            Role.ANIMATION_DIRECTOR,
+            Role.SCREENPLAY,
+            Role.EPISODE_DIRECTOR,
+        ]
         for i in range(n_anime):
             aid = f"a{i}"
             # Bigger anime have more directors/animators
@@ -845,7 +857,12 @@ class TestComputeStudioDisparity:
         anime_map = {f"a{i}": _anime(f"a{i}", studios=["StudioA"]) for i in range(6)}
         credits = [_credit(f"p{i}", f"a{i}") for i in range(6)]
         person_scores = {
-            f"p{i}": {"birank": 0.5, "patronage": 0.4, "person_fe": 0.6, "iv_score": 0.5}
+            f"p{i}": {
+                "birank": 0.5,
+                "patronage": 0.4,
+                "person_fe": 0.6,
+                "iv_score": 0.5,
+            }
             for i in range(6)
         }
         result = compute_studio_disparity(
@@ -1245,7 +1262,12 @@ class TestComputeAnimeValues:
         credits_big = [_credit(f"p{i}", "a_big") for i in range(5)]
         credits_small = [_credit("p1", "a_small")]
         scores = {
-            f"p{i}": {"birank": 0.5, "patronage": 0.5, "person_fe": 0.5, "iv_score": 0.5}
+            f"p{i}": {
+                "birank": 0.5,
+                "patronage": 0.5,
+                "person_fe": 0.5,
+                "iv_score": 0.5,
+            }
             for i in range(5)
         }
         result_big = compute_anime_values(anime_big, credits_big, scores)
@@ -1383,7 +1405,9 @@ class TestIndividualContributionEdgeCases:
 
     def test_independent_value_with_collaboration_graph(self):
         """Test independent_value uses collaboration_graph when provided."""
-        from src.analysis.scoring.individual_contribution import compute_independent_value
+        from src.analysis.scoring.individual_contribution import (
+            compute_independent_value,
+        )
 
         # independent_value now compares collaborator IV residuals with/without
         # the target person, rather than comparing anime.score. Scores on

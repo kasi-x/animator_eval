@@ -265,7 +265,9 @@ class TestOpportunityResidual:
         residuals, _ = compute_opportunity_residual(features)
         vals = [v for v in residuals.values() if v is not None]
         assert abs(np.mean(vals)) < 0.1
-        assert abs(np.std(vals) - 1.0) < 0.3  # studentized residuals have wider distribution
+        assert (
+            abs(np.std(vals) - 1.0) < 0.3
+        )  # studentized residuals have wider distribution
 
     def test_insufficient_data(self):
         """With <10 persons, should return None values."""
@@ -335,9 +337,7 @@ class TestConsistency:
         akm_residuals = {("p1", f"a{i}"): 0.1 * (-1) ** i for i in range(6)}
         # p2: larger residuals (wider variance → raises ref_scale)
         credits += [_make_credit("p2", f"a{i}") for i in range(6, 12)]
-        akm_residuals.update(
-            {("p2", f"a{i}"): -10 + (i - 6) * 4 for i in range(6, 12)}
-        )
+        akm_residuals.update({("p2", f"a{i}"): -10 + (i - 6) * 4 for i in range(6, 12)})
 
         result = compute_consistency(
             features, credits, anime_map, akm_residuals=akm_residuals

@@ -121,9 +121,7 @@ def _disambiguate(
 
     # Step 1: exact year
     if madb_year is not None:
-        exact_year = [
-            aid for aid in valid if anime_by_id[aid].get("year") == madb_year
-        ]
+        exact_year = [aid for aid in valid if anime_by_id[aid].get("year") == madb_year]
         if len(exact_year) == 1:
             return exact_year
         if exact_year:
@@ -135,9 +133,7 @@ def _disambiguate(
         best_prio = _format_priority(anime_by_id[best])
         # Only disambiguate if the best is strictly better than the rest
         same_prio = [
-            aid
-            for aid in valid
-            if _format_priority(anime_by_id[aid]) == best_prio
+            aid for aid in valid if _format_priority(anime_by_id[aid]) == best_prio
         ]
         if len(same_prio) == 1:
             return [best]
@@ -351,7 +347,10 @@ def match_anime_titles(
             ):
                 continue
             # MADB title must be a substantial portion of AniList title
-            if normalized in anilist_norm and len(normalized) >= len(anilist_norm) * 0.4:
+            if (
+                normalized in anilist_norm
+                and len(normalized) >= len(anilist_norm) * 0.4
+            ):
                 contain_hits.append(aid)
 
         if contain_hits:

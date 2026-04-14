@@ -131,10 +131,7 @@ def estimate_career_friction(
 
     # Compute population-level upgrade rates by score percentile
     # Group persons into quartiles by score
-    scored_persons = [
-        (pid, person_scores.get(pid, 0.0))
-        for pid in transitions
-    ]
+    scored_persons = [(pid, person_scores.get(pid, 0.0)) for pid in transitions]
     scored_persons.sort(key=lambda x: x[1])
 
     # Expected upgrade rate per quartile
@@ -173,7 +170,9 @@ def estimate_career_friction(
     role_friction: dict[str, float] = {}
     for stage_from, to_counts in transition_matrix.items():
         total = sum(to_counts.values())
-        upgrades = sum(cnt for stage_to, cnt in to_counts.items() if stage_to > stage_from)
+        upgrades = sum(
+            cnt for stage_to, cnt in to_counts.items() if stage_to > stage_from
+        )
         key = f"stage_{stage_from}_up"
         role_friction[key] = 1.0 - (upgrades / total) if total > 0 else 0.0
 
@@ -206,7 +205,9 @@ def estimate_career_friction(
     # Era friction
     era_friction: dict[int, float] = {}
     for decade, upgrade_flags in era_upgrades.items():
-        era_friction[decade] = 1.0 - float(np.mean(upgrade_flags)) if upgrade_flags else 0.0
+        era_friction[decade] = (
+            1.0 - float(np.mean(upgrade_flags)) if upgrade_flags else 0.0
+        )
 
     # Convert transition matrix to regular dict
     tm_dict = {k: dict(v) for k, v in transition_matrix.items()}

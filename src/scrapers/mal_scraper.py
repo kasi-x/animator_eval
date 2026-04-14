@@ -114,11 +114,14 @@ class JikanClient:
             params["type"] = type_filter
         return await self.get("/top/anime", params=params)
 
-    async def get_all_anime(
-        self, page: int = 1, limit: int = 25
-    ) -> dict:
+    async def get_all_anime(self, page: int = 1, limit: int = 25) -> dict:
         """全アニメをページネーション取得 (order_by=mal_id で安定順序)."""
-        params: dict = {"page": page, "limit": limit, "order_by": "mal_id", "sort": "asc"}
+        params: dict = {
+            "page": page,
+            "limit": limit,
+            "order_by": "mal_id",
+            "sort": "asc",
+        }
         return await self.get("/anime", params=params)
 
 
@@ -247,17 +250,19 @@ async def fetch_top_anime_credits(
 
 @app.command()
 def main(
-    count: int = typer.Option(50, "--count", "-n", help="取得するアニメ数 (0=全アニメ)"),
-    type_filter: str = typer.Option("tv", "--type", help="アニメタイプ (空欄=全タイプ)"),
+    count: int = typer.Option(
+        50, "--count", "-n", help="取得するアニメ数 (0=全アニメ)"
+    ),
+    type_filter: str = typer.Option(
+        "tv", "--type", help="アニメタイプ (空欄=全タイプ)"
+    ),
     resume: bool = typer.Option(
         True, "--resume/--no-resume", help="チェックポイントから再開する"
     ),
     checkpoint_interval: int = typer.Option(
         50, "--checkpoint-interval", help="チェックポイント保存間隔 (アニメ数)"
     ),
-    fetch_all: bool = typer.Option(
-        False, "--all", help="全アニメを取得 (count=0相当)"
-    ),
+    fetch_all: bool = typer.Option(False, "--all", help="全アニメを取得 (count=0相当)"),
 ) -> None:
     """MAL (Jikan API) からクレジットデータを収集する."""
     from src.database import (
@@ -309,7 +314,9 @@ def main(
                 init_db(conn)
 
                 # Load existing MAL IDs to avoid duplicates
-                cursor = conn.execute("SELECT mal_id FROM anime WHERE mal_id IS NOT NULL")
+                cursor = conn.execute(
+                    "SELECT mal_id FROM anime WHERE mal_id IS NOT NULL"
+                )
                 existing_mal_ids = {row[0] for row in cursor.fetchall()}
                 log.info("loaded_existing_mal_ids", count=len(existing_mal_ids))
 
@@ -367,7 +374,9 @@ def main(
                         log.info(
                             "fetching_staff",
                             source="mal",
-                            progress=f"{fetched}" if is_fetching_all else f"{fetched}/{count}",
+                            progress=f"{fetched}"
+                            if is_fetching_all
+                            else f"{fetched}/{count}",
                             title=anime.display_title,
                         )
                         upsert_anime(conn, anime)
@@ -414,7 +423,9 @@ def main(
                                     ).isoformat(),
                                 },
                             )
-                            log.info("checkpoint_saved", page=current_page, fetched=fetched)
+                            log.info(
+                                "checkpoint_saved", page=current_page, fetched=fetched
+                            )
 
                     if not is_fetching_all and fetched >= count:
                         break

@@ -318,9 +318,7 @@ def _build_panel(
         if c.person_id not in person_first_year:
             person_first_year[c.person_id] = year
         else:
-            person_first_year[c.person_id] = min(
-                person_first_year[c.person_id], year
-            )
+            person_first_year[c.person_id] = min(person_first_year[c.person_id], year)
 
     # Precompute staff count per anime (production scale proxy)
     anime_staff_count: dict[str, int] = {}
@@ -350,6 +348,7 @@ def _build_panel(
         eps = anime.episodes or 1
         dur = anime.duration or 24
         from src.utils.config import DURATION_BASELINE_MINUTES
+
         dur_mult = min(dur / DURATION_BASELINE_MINUTES, 2.0)
         outcome = math.log1p(staff_cnt) * math.log1p(eps) * dur_mult
 
@@ -411,9 +410,14 @@ def _build_panel(
 
     if not obs_y:
         return (
-            person_list, [], studio_list,
-            np.array([]), np.array([]), np.array([]),
-            np.array([]).reshape(0, 2), np.array([]),
+            person_list,
+            [],
+            studio_list,
+            np.array([]),
+            np.array([]),
+            np.array([]),
+            np.array([]).reshape(0, 2),
+            np.array([]),
         )
 
     y = np.array(obs_y, dtype=np.float64)
@@ -478,19 +482,22 @@ def _debias_by_obs_count(
 
     # Only debias if slope is meaningfully negative (the expected artifact)
     if slope >= 0:
-        log.info("akm_debias_skipped", slope=round(slope, 4), reason="non_negative_slope")
+        log.info(
+            "akm_debias_skipped", slope=round(slope, 4), reason="non_negative_slope"
+        )
         return person_fe_arr
 
     # D09 fix: require statistical significance (p < 0.05) before debiasing.
     # A tiny negative slope (e.g. -0.001) should not trigger correction.
     residuals = fe_active - X_debias @ b_debias
-    rss = float(np.sum(residuals ** 2))
+    rss = float(np.sum(residuals**2))
     mse = rss / max(n_active - 2, 1)
     xtx_inv = np.linalg.inv(X_debias.T @ X_debias)
     se_slope = float(np.sqrt(mse * xtx_inv[1, 1]))
     t_stat = slope / se_slope if se_slope > 1e-12 else 0.0
     # One-sided test: we only care about negative slope
     from scipy.stats import t as t_dist
+
     p_value = float(t_dist.cdf(t_stat, df=max(n_active - 2, 1)))
     if p_value > 0.05:
         log.info(
@@ -579,7 +586,9 @@ def _redistribute_studio_fe(
         return person_fe_arr, 0.0
 
     # --- Step 1: Contribution share at primary studio ---
-    person_studio_w: dict[int, dict[int, float]] = defaultdict(lambda: defaultdict(float))
+    person_studio_w: dict[int, dict[int, float]] = defaultdict(
+        lambda: defaultdict(float)
+    )
     for k in range(n_obs):
         person_studio_w[int(person_ind[k])][int(studio_ind[k])] += float(w[k])
 
@@ -701,9 +710,7 @@ def _redistribute_studio_fe(
         median_redistribution=round(float(np.median(nonzero)), 4)
         if len(nonzero) > 0
         else 0.0,
-        pct95_redistribution=round(
-            float(np.percentile(np.abs(nonzero), 95)), 4
-        )
+        pct95_redistribution=round(float(np.percentile(np.abs(nonzero), 95)), 4)
         if len(nonzero) > 0
         else 0.0,
         max_abs_redistribution=round(float(np.max(np.abs(redistribution))), 4),
@@ -963,7 +970,7 @@ def _shrink_person_fe(
         obs_counts[person_ind[k]] += 1
 
     # Estimate κ from data
-    sigma2_resid = float(np.mean(residuals ** 2)) if n_obs > 0 else 1.0
+    sigma2_resid = float(np.mean(residuals**2)) if n_obs > 0 else 1.0
 
     active = obs_counts > 0
     if not np.any(active):
@@ -973,7 +980,9 @@ def _shrink_person_fe(
     n_bar = float(np.mean(obs_counts[active]))
 
     # σ²_signal = σ²_raw - σ²_noise, where σ²_noise ≈ σ²_resid / n̄
-    sigma2_signal = max(sigma2_person_raw - sigma2_resid / n_bar, sigma2_person_raw * 0.1)
+    sigma2_signal = max(
+        sigma2_person_raw - sigma2_resid / n_bar, sigma2_person_raw * 0.1
+    )
 
     kappa = sigma2_resid / sigma2_signal if sigma2_signal > 0 else 10.0
     # D05: κ bounds rationale:

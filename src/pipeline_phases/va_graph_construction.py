@@ -51,7 +51,5 @@ def build_va_graphs_phase(context: PipelineContext) -> None:
         va_collab_edges=context.va_collaboration_graph.number_of_edges()
         if context.va_collaboration_graph
         else 0,
-        va_sd_edges=context.va_sd_graph.number_of_edges()
-        if context.va_sd_graph
-        else 0,
+        va_sd_edges=context.va_sd_graph.number_of_edges() if context.va_sd_graph else 0,
     )

@@ -111,12 +111,13 @@ def compute_compatibility_groups(
             rng = random.Random(hash(aid) & 0x7FFFFFFF)
             staff_list = sorted(rng.sample(staff_list, 50))
         for i, a in enumerate(staff_list):
-            for b in staff_list[i + 1:]:
+            for b in staff_list[i + 1 :]:
                 pair_shared[(a, b)].add(aid)
 
     # Filter to pairs with enough shared works
     candidate_pairs = {
-        pair: shared for pair, shared in pair_shared.items()
+        pair: shared
+        for pair, shared in pair_shared.items()
         if len(shared) >= min_shared_works
     }
 
@@ -195,13 +196,15 @@ def compute_compatibility_groups(
 
         compat_score = float(np.mean(diffs))
 
-        compatible_pairs.append(CompatibilityPair(
-            person_a=pid_a,
-            person_b=pid_b,
-            shared_works=len(shared_anime),
-            compatibility_score=round(compat_score, 4),
-            avg_shared_score=round(avg_shared, 2),
-        ))
+        compatible_pairs.append(
+            CompatibilityPair(
+                person_a=pid_a,
+                person_b=pid_b,
+                shared_works=len(shared_anime),
+                compatibility_score=round(compat_score, 4),
+                avg_shared_score=round(avg_shared, 2),
+            )
+        )
 
     # Sort by compatibility score descending
     compatible_pairs.sort(key=lambda p: p.compatibility_score, reverse=True)
@@ -265,7 +268,7 @@ def compute_compatibility_groups(
         # Compute group compatibility (avg pairwise)
         pair_scores = []
         for i, a in enumerate(members):
-            for b in members[i + 1:]:
+            for b in members[i + 1 :]:
                 key = (min(a, b), max(a, b))
                 if key in pair_compat:
                     pair_scores.append(pair_compat[key])
@@ -279,11 +282,13 @@ def compute_compatibility_groups(
         else:
             group_shared = []
 
-        compatible_groups.append(CompatibleGroup(
-            members=members,
-            group_compatibility=round(group_compat, 4),
-            shared_works=group_shared[:20],
-        ))
+        compatible_groups.append(
+            CompatibleGroup(
+                members=members,
+                group_compatibility=round(group_compat, 4),
+                shared_works=group_shared[:20],
+            )
+        )
 
     compatible_groups.sort(key=lambda g: g.group_compatibility, reverse=True)
 

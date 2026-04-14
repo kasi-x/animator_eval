@@ -32,6 +32,7 @@ from src.reporting.specs import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _explanation() -> ExplanationMeta:
     return ExplanationMeta(question="何を見せるか?", reading_guide="x=横, y=縦。")
 
@@ -139,6 +140,7 @@ def _sample_data() -> dict:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_assemble_minimal() -> None:
     """A minimal valid spec produces an HTML document."""
@@ -264,9 +266,7 @@ def test_stat_cards_rendered() -> None:
             slug="cards_sec",
             kind=SectionKind.CARD_GROUP,
             title="カード",
-            cards=(
-                StatCardSpec(label="人数", value_field="total_persons"),
-            ),
+            cards=(StatCardSpec(label="人数", value_field="total_persons"),),
         ),
     ]
     new_spec = ReportSpec(**{**spec.__dict__, "sections": tuple(sections)})

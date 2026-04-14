@@ -64,7 +64,12 @@ from src.analysis.studio.timeseries import compute_studio_timeseries
 from src.analysis.synergy_score import compute_synergy_scores
 from src.analysis.team_composition import analyze_team_patterns
 from src.analysis.causal.dml import run_dml_analysis
-from src.analysis.network.temporal_pagerank import compute_temporal_pagerank
+from src.analysis.network.temporal_pagerank import (
+    StreamingCheckpoint,
+    compute_temporal_pagerank,
+    load_streaming_checkpoint,
+    save_streaming_checkpoint,
+)
 from src.analysis.time_series import compute_time_series
 from src.analysis.transitions import compute_role_transitions
 
@@ -72,7 +77,10 @@ from src.analysis.transitions import compute_role_transitions
 from src.analysis.genre.ecosystem import compute_genre_ecosystem
 from src.analysis.genre.network import compute_genre_network
 from src.analysis.genre.quality import compute_genre_quality
-from src.analysis.production_analysis import StudioTalentDensity, compute_studio_talent_density
+from src.analysis.production_analysis import (
+    StudioTalentDensity,
+    compute_studio_talent_density,
+)
 from src.analysis.studio.clustering import compute_studio_clustering
 from src.analysis.studio.network import compute_studio_network
 from src.analysis.talent_pipeline import compute_talent_pipeline
@@ -104,9 +112,7 @@ class AnalysisTask:
 
 def _run_anime_stats(context: PipelineContext) -> Any:
     """Compute anime quality statistics."""
-    return compute_anime_stats(
-        context.credits, context.anime_map, context.iv_scores
-    )
+    return compute_anime_stats(context.credits, context.anime_map, context.iv_scores)
 
 
 def _run_studios(context: PipelineContext) -> Any:
@@ -343,7 +349,9 @@ def _run_compensation_analyzer(context: PipelineContext) -> Any:
 
     # Get anime with contributions
     anime_with_contribs = [
-        anime for anime in context.anime_map.values() if anime.id in context.contribution_data
+        anime
+        for anime in context.anime_map.values()
+        if anime.id in context.contribution_data
     ]
 
     # Analyze compensation
@@ -354,9 +362,7 @@ def _run_compensation_analyzer(context: PipelineContext) -> Any:
     )
 
     # Build anime_scores dict for scatter chart
-    anime_scores = {
-        a.id: a.score for a in anime_with_contribs if a.score is not None
-    }
+    anime_scores = {a.id: a.score for a in anime_with_contribs if a.score is not None}
 
     # Export report
     return export_compensation_report(analyses, person_names, anime_scores=anime_scores)
@@ -454,15 +460,133 @@ def _run_individual_contribution(context: PipelineContext) -> Any:
     )
 
 
-def _run_temporal_pagerank(context: PipelineContext) -> Any:
-    """Compute temporal PageRank (yearly authority, foresight, promotions)."""
-    return asdict(
-        compute_temporal_pagerank(
-            credits=context.credits,
-            anime_map=context.anime_map,
-            persons=context.persons,
-        )
+def _compute_year_fingerprint(credits: list, anime_map: dict) -> dict[int, dict]:
+    """クレジットデータから年別フィンガープリントを計算する.
+
+    各年について (credit_count, anime_count, person_count) を集計。
+    BiRank 計算の入力が変化したかどうかを検出するために使用する。
+    """
+    from collections import defaultdict
+
+    year_data: dict[int, dict] = defaultdict(
+        lambda: {"credit_count": 0, "anime_set": set(), "person_set": set()}
     )
+    for credit in credits:
+        anime = anime_map.get(credit.anime_id)
+        if anime and anime.year:
+            d = year_data[anime.year]
+            d["credit_count"] += 1
+            d["anime_set"].add(credit.anime_id)
+            d["person_set"].add(credit.person_id)
+    return {
+        y: {
+            "credit_count": d["credit_count"],
+            "anime_count": len(d["anime_set"]),
+            "person_count": len(d["person_set"]),
+        }
+        for y, d in year_data.items()
+    }
+
+
+def _find_earliest_changed_year(
+    current_fp: dict[int, dict],
+    stored_fp: dict[int, dict],
+) -> int | None:
+    """入力データが変化した最初の年を返す。変化がなければ None。
+
+    current_fp: 現在のクレジットデータから計算したフィンガープリント
+    stored_fp:  前回 BiRank を計算したときのフィンガープリント (DB から取得)
+
+    年昇順で走査し、最初の不一致年を返す。
+    stored_fp にない年 (新年) も「変化あり」と判定する。
+    current_fp にない年が stored_fp にある (データ削除) も「変化あり」と判定する。
+    """
+    all_years = sorted(set(current_fp) | set(stored_fp))
+    for year in all_years:
+        cur = current_fp.get(year)
+        prev = stored_fp.get(year)
+        if cur != prev:
+            return year
+    return None
+
+
+def _run_temporal_pagerank(context: PipelineContext) -> Any:
+    """Compute temporal PageRank (yearly authority, foresight, promotions).
+
+    変更検出によるスキップ / 最小範囲再計算ロジック:
+    1. 年別フィンガープリント (credit_count / anime_count / person_count) を計算し、
+       前回計算時の値 (birank_compute_state) と比較する。
+    2. 変化がなければ計算をスキップする（return None）。
+    3. 変化が検出された場合、最初に変化した年 (resume_from) を特定する。
+    4. resume_from > checkpoint.last_year なら StreamingCheckpoint を使って差分計算。
+    5. resume_from <= checkpoint.last_year なら、チェックポイントが古い入力を含むため
+       チェックポイントを破棄してフルスクラッチ計算する。
+    """
+    import sqlite3
+
+    from src.database import DEFAULT_DB_PATH, load_birank_compute_state
+    from src.utils.config import JSON_DIR
+
+    checkpoint_path = JSON_DIR / "birank_graph_checkpoint.pkl"
+
+    # --- 現在データのフィンガープリントを計算 ---
+    current_fp = _compute_year_fingerprint(context.credits, context.anime_map)
+
+    # --- 保存済みフィンガープリントを DB から取得 ---
+    stored_fp: dict[int, dict] = {}
+    try:
+        conn_check = sqlite3.connect(DEFAULT_DB_PATH)
+        conn_check.row_factory = sqlite3.Row
+        stored_fp = load_birank_compute_state(conn_check)
+        conn_check.close()
+    except Exception:
+        pass  # テーブル未作成 → フルスクラッチで続行
+
+    # --- 変更検出: 最初に変化した年を特定 ---
+    resume_from = _find_earliest_changed_year(current_fp, stored_fp)
+    if resume_from is None:
+        logger.info("temporal_pagerank_skipped_no_changes")
+        return None  # _persist_birank_annual がこの None を検知してスキップ
+
+    logger.info("temporal_pagerank_change_detected", resume_from=resume_from)
+
+    # --- チェックポイント読み込み ---
+    # チェックポイントは resume_from より前の状態を持っている場合のみ有効。
+    # resume_from <= checkpoint.last_year の場合、チェックポイントは
+    # 変更のあった年以降のデータを含んでいるため使用できない。
+    checkpoint: StreamingCheckpoint | None = None
+    candidate = load_streaming_checkpoint(checkpoint_path)
+    if candidate is not None:
+        if candidate.last_year < resume_from:
+            checkpoint = candidate  # チェックポイント年 < 変更年 → 有効
+            logger.info(
+                "birank_checkpoint_valid",
+                checkpoint_year=candidate.last_year,
+                resume_from=resume_from,
+            )
+        else:
+            logger.info(
+                "birank_checkpoint_discarded_stale",
+                checkpoint_year=candidate.last_year,
+                resume_from=resume_from,
+            )
+
+    # --- 計算実行 ---
+    result, final_checkpoint = compute_temporal_pagerank(
+        credits=context.credits,
+        anime_map=context.anime_map,
+        persons=context.persons,
+        resume_checkpoint=checkpoint,
+    )
+
+    # --- チェックポイント保存 ---
+    if final_checkpoint is not None:
+        save_streaming_checkpoint(checkpoint_path, final_checkpoint)
+
+    # フィンガープリントを結果に含めてエクスポート側で保存できるようにする
+    result_dict = asdict(result)
+    result_dict["_input_fingerprint"] = current_fp
+    return result_dict
 
 
 def _run_akm_diagnostics(context: PipelineContext) -> Any:
@@ -587,9 +711,7 @@ def _run_derived_params_report(context: PipelineContext) -> Any:
                 "max_staff": max(staff_counts),
                 "mean_staff": round(statistics.mean(staff_counts), 1),
                 "p25_staff": round(sorted(staff_counts)[len(staff_counts) // 4], 1),
-                "p75_staff": round(
-                    sorted(staff_counts)[3 * len(staff_counts) // 4], 1
-                ),
+                "p75_staff": round(sorted(staff_counts)[3 * len(staff_counts) // 4], 1),
             },
         }
 
@@ -674,7 +796,9 @@ def _run_derived_params_report(context: PipelineContext) -> Any:
             "diagnostics": {
                 "n_persons": len(pat_vals),
                 "nonzero": nonzero,
-                "nonzero_fraction": round(nonzero / len(pat_vals), 4) if pat_vals else 0,
+                "nonzero_fraction": round(nonzero / len(pat_vals), 4)
+                if pat_vals
+                else 0,
                 "mean": round(statistics.mean(pat_vals), 4),
                 "max": round(max(pat_vals), 4),
             },
@@ -686,8 +810,10 @@ def _run_derived_params_report(context: PipelineContext) -> Any:
 def _run_dml_analysis(context: PipelineContext) -> Any:
     """Run DML causal inference: OLS vs DML comparison for each parameter."""
     report = run_dml_analysis(
-        context.credits, context.anime_map,
-        context.person_fe, context.studio_fe,
+        context.credits,
+        context.anime_map,
+        context.person_fe,
+        context.studio_fe,
     )
     return report.to_dict()
 
@@ -838,9 +964,7 @@ def _run_studio_clustering(context: PipelineContext) -> Any:
     # Reuse talent density from studio_talent_density task if available
     cached_td = context.analysis_results.get("studio_talent_density")
     if cached_td:
-        talent_density = {
-            s: StudioTalentDensity(**v) for s, v in cached_td.items()
-        }
+        talent_density = {s: StudioTalentDensity(**v) for s, v in cached_td.items()}
     else:
         talent_density = compute_studio_talent_density(
             context.credits, context.anime_map, context.person_fe
@@ -849,9 +973,7 @@ def _run_studio_clustering(context: PipelineContext) -> Any:
     # Get studio network data for eigenvector centrality
     studio_net = context.analysis_results.get("studio_network", {})
     centrality = studio_net.get("centrality", {})
-    eigenvector = {
-        s: c.get("eigenvector", 0.0) for s, c in centrality.items()
-    }
+    eigenvector = {s: c.get("eigenvector", 0.0) for s, c in centrality.items()}
 
     # Get talent pipeline data
     pipeline_data = context.analysis_results.get("talent_pipeline", {})
@@ -940,11 +1062,16 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
     AnalysisTask("studios", _run_studios),
     AnalysisTask("seasonal", _run_seasonal),
     AnalysisTask(
-        "collaborations", _run_collaborations, monitor_step="collaboration_strength",
-        needs_collab_graph=True, memory_heavy=True,
+        "collaborations",
+        _run_collaborations,
+        monitor_step="collaboration_strength",
+        needs_collab_graph=True,
+        memory_heavy=True,
     ),
     AnalysisTask("outliers", _run_outliers, monitor_step="outlier_detection"),
-    AnalysisTask("teams", _run_teams, monitor_step="team_composition", memory_heavy=True),
+    AnalysisTask(
+        "teams", _run_teams, monitor_step="team_composition", memory_heavy=True
+    ),
     AnalysisTask(
         "graphml",
         _run_graphml,
@@ -960,18 +1087,31 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
     AnalysisTask("tags", _run_tags, monitor_step="person_tags"),
     AnalysisTask("transitions", _run_transitions),
     AnalysisTask("role_flow", _run_role_flow, monitor_step="role_flow"),
-    AnalysisTask("bridges", _run_bridges, monitor_step="bridge_detection",
-                 needs_collab_graph=True, memory_heavy=True),
-    AnalysisTask("mentorships", _run_mentorships, monitor_step="mentorship_inference",
-                 memory_heavy=True),
+    AnalysisTask(
+        "bridges",
+        _run_bridges,
+        monitor_step="bridge_detection",
+        needs_collab_graph=True,
+        memory_heavy=True,
+    ),
+    AnalysisTask(
+        "mentorships",
+        _run_mentorships,
+        monitor_step="mentorship_inference",
+        memory_heavy=True,
+    ),
     AnalysisTask("milestones", _run_milestones, monitor_step="milestones"),
     AnalysisTask(
-        "network_evolution", _run_network_evolution, monitor_step="network_evolution",
+        "network_evolution",
+        _run_network_evolution,
+        monitor_step="network_evolution",
         needs_collab_graph=True,
     ),
     AnalysisTask("genre_affinity", _run_genre_affinity, monitor_step="genre_affinity"),
     AnalysisTask("productivity", _run_productivity, monitor_step="productivity"),
-    AnalysisTask("influence", _run_influence, monitor_step="influence_tree", memory_heavy=True),
+    AnalysisTask(
+        "influence", _run_influence, monitor_step="influence_tree", memory_heavy=True
+    ),
     AnalysisTask("crossval", _run_crossval, monitor_step="cross_validation"),
     AnalysisTask("bias_report", _run_bias_detector, monitor_step="bias_detection"),
     AnalysisTask(
@@ -1203,17 +1343,20 @@ def _flush_result_to_json(task_name: str, data: Any, json_dir: Path) -> bool:
 
 
 # Results read by later tasks within Phase 9 — must stay in memory
-_KEEP_IN_MEMORY = frozenset({
-    "bridges",           # read by _run_insights_report
-    "_anime_staff_sets", # read by _run_akm_diagnostics
-    "_graph_summary",    # used by export phase
-    "studio_talent_density",  # read by _run_studio_clustering
-    "studio_network",    # read by _run_studio_clustering
-    "talent_pipeline",   # read by _run_studio_clustering
-    "tags",              # read by run_analysis_modules_phase (tag assignment)
-    "performance",       # added at end
-    "crossval",          # read by export summary
-})
+_KEEP_IN_MEMORY = frozenset(
+    {
+        "bridges",  # read by _run_insights_report
+        "_anime_staff_sets",  # read by _run_akm_diagnostics
+        "_graph_summary",  # used by export phase
+        "studio_talent_density",  # read by _run_studio_clustering
+        "studio_network",  # read by _run_studio_clustering
+        "talent_pipeline",  # read by _run_studio_clustering
+        "tags",  # read by run_analysis_modules_phase (tag assignment)
+        "performance",  # added at end
+        "crossval",  # read by export summary
+    }
+)
+
 
 def _run_task_batch(
     tasks: list[AnalysisTask],
@@ -1246,8 +1389,14 @@ def _run_task_batch(
 
                 if result is not None:
                     with results_lock:
-                        if task_name == "mentorships" and isinstance(result, dict) and "mentorship_tree" in result:
-                            context.analysis_results["mentorship_tree"] = result["mentorship_tree"]
+                        if (
+                            task_name == "mentorships"
+                            and isinstance(result, dict)
+                            and "mentorship_tree" in result
+                        ):
+                            context.analysis_results["mentorship_tree"] = result[
+                                "mentorship_tree"
+                            ]
                             context.analysis_results[task_name] = result["mentorships"]
                         else:
                             context.analysis_results[task_name] = result
@@ -1255,7 +1404,9 @@ def _run_task_batch(
                     # Eagerly flush to JSON and evict from memory if safe
                     if json_dir and task_name not in _KEEP_IN_MEMORY:
                         data = context.analysis_results.get(task_name)
-                        if data is not None and _flush_result_to_json(task_name, data, json_dir):
+                        if data is not None and _flush_result_to_json(
+                            task_name, data, json_dir
+                        ):
                             with results_lock:
                                 context.analysis_results[task_name] = None
                                 if not hasattr(context, "_flushed_tasks"):
@@ -1312,7 +1463,9 @@ def run_analysis_modules_phase(
 
     # Pre-build shared dicts — avoids 1-2 GB duplicate per task
     context._shared_person_scores = {r["person_id"]: r for r in context.results}
-    context._shared_person_names = {p.id: p.name_ja or p.name_en or p.id for p in context.persons}
+    context._shared_person_names = {
+        p.id: p.name_ja or p.name_en or p.id for p in context.persons
+    }
 
     # Free redundant anime_list — anime_map has same data, all tasks now use anime_map
     context.anime_list = []
@@ -1350,7 +1503,9 @@ def run_analysis_modules_phase(
             tasks=[t.name for t in batch1_tasks],
             workers=b1_workers,
         )
-        c, f = _run_task_batch(batch1_tasks, context, results_lock, b1_workers, "batch1", json_dir=JSON_DIR)
+        c, f = _run_task_batch(
+            batch1_tasks, context, results_lock, b1_workers, "batch1", json_dir=JSON_DIR
+        )
         completed_count += c
         failed_count += f
 
@@ -1396,7 +1551,12 @@ def run_analysis_modules_phase(
                 workers=b2a_workers,
             )
             c, f = _run_task_batch(
-                b2_light, context, results_lock, b2a_workers, "batch2", json_dir=JSON_DIR
+                b2_light,
+                context,
+                results_lock,
+                b2a_workers,
+                "batch2",
+                json_dir=JSON_DIR,
             )
             completed_count += c
             failed_count += f
@@ -1423,7 +1583,14 @@ def run_analysis_modules_phase(
             # Sequential execution: with 167K persons + 2.9M credits, even 2 workers
             # can push memory past 123 GB.  Sequential + eager flush keeps RSS ~40 GB.
             light_workers = 1
-            c, f = _run_task_batch(all_light, context, results_lock, light_workers, "all", json_dir=JSON_DIR)
+            c, f = _run_task_batch(
+                all_light,
+                context,
+                results_lock,
+                light_workers,
+                "all",
+                json_dir=JSON_DIR,
+            )
             completed_count += c
             failed_count += f
 
@@ -1432,7 +1599,9 @@ def run_analysis_modules_phase(
                 "analysis_heavy_sequential",
                 tasks=[t.name for t in all_heavy],
             )
-            c, f = _run_task_batch(all_heavy, context, results_lock, 1, "all", json_dir=JSON_DIR)
+            c, f = _run_task_batch(
+                all_heavy, context, results_lock, 1, "all", json_dir=JSON_DIR
+            )
             completed_count += c
             failed_count += f
 

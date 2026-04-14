@@ -24,7 +24,9 @@ class StudioYearMetrics:
     avg_anime_score: float  # average work score
     staff_count: int  # unique staff count
     avg_staff_iv: float  # staff average IV
-    talent_retention: float  # retention rate from prior year (fraction of prev staff retained)
+    talent_retention: (
+        float  # retention rate from prior year (fraction of prev staff retained)
+    )
     new_talent_ratio: float  # fraction of staff new this year
 
 
@@ -94,8 +96,10 @@ def compute_studio_timeseries(
 
     if not all_studios or not all_years:
         return StudioTimeSeriesResult(
-            studio_metrics={}, quarterly_summary={},
-            studios_analyzed=0, total_studio_years=0,
+            studio_metrics={},
+            quarterly_summary={},
+            studios_analyzed=0,
+            total_studio_years=0,
         )
 
     sorted_years = sorted(all_years)
@@ -151,7 +155,9 @@ def compute_studio_timeseries(
             studio_metrics[studio] = yearly_metrics
 
     # Quarterly summary: studio → {yq_label → credit_count}
-    studio_quarter_credits: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    studio_quarter_credits: dict[str, dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
     for c in credits:
         anime = anime_map.get(c.anime_id)
         if not anime or not anime.year or not anime.studios:

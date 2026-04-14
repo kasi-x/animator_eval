@@ -23,6 +23,7 @@ from src.analysis.growth_acceleration import (
 )
 from src.analysis.anime_value import compute_anime_values
 from src.analysis.contribution_attribution import compute_contribution_attribution
+from src.analysis.network.multilayer import infer_all_career_tracks
 from src.analysis.scoring.potential_value import compute_potential_value_scores
 from src.pipeline_phases.context import PipelineContext
 
@@ -76,7 +77,9 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
     # to protect veterans from harsh dormancy penalties
     logger.info("step_start", step="career_aware_dormancy")
     with context.monitor.measure("career_aware_dormancy"):
-        from src.analysis.scoring.patronage_dormancy import compute_career_aware_dormancy
+        from src.analysis.scoring.patronage_dormancy import (
+            compute_career_aware_dormancy,
+        )
         from src.analysis.scoring.integrated_value import compute_integrated_value
 
         career_dormancy = compute_career_aware_dormancy(
@@ -89,14 +92,14 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
         # Re-compute current IV with career-aware dormancy
         # Fix B01: Use compute_studio_exposure() for consistent year-weighted calculation
         from src.analysis.scoring.integrated_value import compute_studio_exposure
+
         studio_exposure = compute_studio_exposure(
             context.person_fe,
             context.studio_fe,
             studio_assignments=context.studio_assignments,
         )
         awcc_scores = {
-            pid: m.awcc
-            for pid, m in context.knowledge_spanner_scores.items()
+            pid: m.awcc for pid, m in context.knowledge_spanner_scores.items()
         }
         # Fix B02: Pass component_std and component_mean for consistent normalization
         context.iv_scores = compute_integrated_value(
@@ -295,3 +298,10 @@ def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
             for pid, p in potential_scores.items()
         }
         logger.info("potential_value_computed", persons=len(potential_scores))
+
+    # Career Track Inference (persisted to DB via result_assembly Phase 7)
+    logger.info("step_start", step="career_tracks")
+    with context.monitor.measure("career_tracks"):
+        context.career_tracks = infer_all_career_tracks(
+            context.credits, context.anime_map
+        )

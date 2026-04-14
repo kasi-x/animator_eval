@@ -567,9 +567,9 @@ class TestCoreTeamPairs:
     def test_non_core_connects_to_core(self):
         """Non-core staff should connect to all core members."""
         staff = {
-            "p1": Role.DIRECTOR,           # core
-            "p2": Role.KEY_ANIMATOR,        # core
-            "p3": Role.IN_BETWEEN,          # non-core
+            "p1": Role.DIRECTOR,  # core
+            "p2": Role.KEY_ANIMATOR,  # core
+            "p3": Role.IN_BETWEEN,  # non-core
         }
         pairs = generate_core_team_pairs(staff)
         pair_set = {tuple(sorted(p)) for p in pairs}
@@ -582,9 +582,9 @@ class TestCoreTeamPairs:
     def test_non_core_not_connected_to_each_other(self):
         """Non-core staff (e.g. two in-betweeners) should not connect."""
         staff = {
-            "p1": Role.DIRECTOR,           # core
-            "p2": Role.IN_BETWEEN,          # non-core
-            "p3": Role.IN_BETWEEN,          # non-core
+            "p1": Role.DIRECTOR,  # core
+            "p2": Role.IN_BETWEEN,  # non-core
+            "p3": Role.IN_BETWEEN,  # non-core
         }
         pairs = generate_core_team_pairs(staff)
         pair_set = {tuple(sorted(p)) for p in pairs}

@@ -267,7 +267,7 @@ def classify_person_or_org(
     for batch_start in range(0, len(candidates), LLM_BATCH_SIZE):
         batch = candidates[batch_start : batch_start + LLM_BATCH_SIZE]
         name_list = "\n".join(
-            f"{i+1}. {p.name_ja or p.name_en}" for i, p in enumerate(batch)
+            f"{i + 1}. {p.name_ja or p.name_en}" for i, p in enumerate(batch)
         )
         prompt = _ORG_CLASSIFICATION_PROMPT + name_list
 
@@ -323,7 +323,9 @@ def classify_person_or_org(
     if conn is not None:
         conn.commit()
 
-    result.total_classified = result.from_cache + result.from_llm + result.from_studio_db
+    result.total_classified = (
+        result.from_cache + result.from_llm + result.from_studio_db
+    )
     logger.info(
         "org_classification_complete",
         orgs=len(result.org_ids),
@@ -386,7 +388,9 @@ def normalize_names(
     """
     paren_re = re.compile(r"[（(「]")
     slash_re = re.compile(r"\s*/\s*")
-    multi_re = re.compile(r"[、，,]\s*(?=[^\d])")  # comma not before digits (episode lists)
+    multi_re = re.compile(
+        r"[、，,]\s*(?=[^\d])"
+    )  # comma not before digits (episode lists)
 
     # Identify candidates needing normalization
     candidates: list[Person] = []
@@ -440,7 +444,7 @@ def normalize_names(
     for batch_start in range(0, len(uncached), LLM_BATCH_SIZE):
         batch = uncached[batch_start : batch_start + LLM_BATCH_SIZE]
         name_list = "\n".join(
-            f"{i+1}. {p.name_ja or p.name_en}" for i, p in enumerate(batch)
+            f"{i + 1}. {p.name_ja or p.name_en}" for i, p in enumerate(batch)
         )
         prompt = _NAME_NORM_PROMPT + name_list
 

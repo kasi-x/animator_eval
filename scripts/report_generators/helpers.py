@@ -17,7 +17,6 @@ JSON_DIR = Path("result/json")
 # Go Explorer server URL (pixi run explorer でポート 3000 起動)
 EXPLORER_URL = "http://localhost:3000"
 
-
 def person_link(name: str, person_id: str) -> str:
     """個人名を Go Explorer の詳細ページへのリンクに変換する."""
     if not person_id:
@@ -57,9 +56,62 @@ def get_footer_stats() -> str:
     return "（統計情報なし）"
 
 
+# ---------------------------------------------------------------------------
+# データアクセサ (テーブル名ベース)
+# JSON ファイルから読む。将来 DB からの直接読み込みに置き換え可能。
+# 性別・ロール等の軸別集計はレポート側で conn.execute(SQL) を使うこと。
+# ---------------------------------------------------------------------------
+
+def get_feat_person_scores() -> list[dict]:
+    """scores.json (feat_person_scores 互換) を返す."""
+    return load_json("scores.json") or []
+
+
+def get_agg_milestones() -> dict:
+    """milestones.json (agg_milestones 互換) を返す."""
+    return load_json("milestones.json") or {}
+
+
+def get_agg_director_circles() -> dict:
+    """circles.json (agg_director_circles 互換) を返す."""
+    return load_json("circles.json") or {}
+
+
+def get_feat_mentorships() -> list:
+    """mentorships.json (feat_mentorships 互換) を返す."""
+    return load_json("mentorships.json") or []
+
+
+def get_feat_career() -> dict:
+    """growth.json (feat_career 互換) を返す."""
+    return load_json("growth.json") or {}
+
+
+def get_feat_genre_affinity() -> dict:
+    """genre_affinity.json (feat_genre_affinity 互換) を返す."""
+    return load_json("genre_affinity.json") or {}
+
+
+def get_feat_network() -> dict:
+    """bridges.json (feat_network 互換) を返す."""
+    return load_json("bridges.json") or {}
+
+
+def get_feat_cluster_membership() -> dict:
+    """feat_cluster_membership — JSON 未出力のため空を返す.
+    レポート内で conn.execute() を使うこと。
+    """
+    return {}
+
+
+def get_feat_birank_annual() -> dict:
+    """temporal_pagerank.json (feat_birank_annual 互換) を返す."""
+    return load_json("temporal_pagerank.json") or {}
+
+
 def compute_iv_percentiles() -> dict:
-    """scores.json から IV スコアのパーセンタイルを事前計算."""
-    scores = load_json("scores.json")
+    """IV スコアのパーセンタイルを事前計算."""
+    scores = get_feat_person_scores()
     if not scores or not isinstance(scores, list):
         return {"p50": 0.0, "p75": 0.01, "p90": 0.1, "p95": 0.5, "p99": 2.0}
     ivs = [s["iv_score"] for s in scores if s.get("iv_score") is not None]

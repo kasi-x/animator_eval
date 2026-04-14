@@ -94,7 +94,9 @@ def compute_genre_affinity(
             "eras": dict(era_pct),
             "primary_tier": primary_tier,
             "primary_era": primary_era,
-            "avg_anime_score": round(sum(scores) / len(scores), 2) if scores else None,  # display-only
+            "avg_anime_score": round(sum(scores) / len(scores), 2)
+            if scores
+            else None,  # display-only
             "total_credits": total,
         }
 

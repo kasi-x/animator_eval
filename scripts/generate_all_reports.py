@@ -45,6 +45,9 @@ from report_generators.helpers import (
     ridge_plot, split_violin, forest_plot, data_driven_badges,
     badge_class, capped_categories, safe_nested, extract_features,
     get_footer_stats, compute_iv_percentiles, FEATURE_NAMES,
+    get_feat_person_scores, get_agg_milestones, get_agg_director_circles,
+    get_feat_mentorships, get_feat_career, get_feat_genre_affinity,
+    get_feat_network, get_feat_cluster_membership, get_feat_birank_annual,
 )
 
 from report_generators.html_templates import (
@@ -67,7 +70,7 @@ IV_PCTILES = compute_iv_percentiles()
 def generate_ml_clustering_report():  # noqa: C901
     """MLクラスタリング分析レポート."""
     print("  Generating ML Clustering Report...")
-    scores = load_json("scores.json")
+    scores = get_feat_person_scores()
     if not scores or not isinstance(scores, list) or len(scores) < 10:
         print("    [SKIP] Not enough data in scores.json")
         return
@@ -463,7 +466,7 @@ def generate_ml_clustering_report():  # noqa: C901
 def generate_explorer_data():
     """Goエクスプローラー用軽量データを出力."""
     print("  Generating explorer data...")
-    scores = load_json("scores.json")
+    scores = get_feat_person_scores()
     if not scores or not isinstance(scores, list):
         print("    [SKIP] scores.json not available")
         return
@@ -487,9 +490,9 @@ def generate_explorer_data():
 def generate_network_graph_report():
     """ネットワークグラフレポート."""
     print("  Generating Network Graph Report...")
-    scores = load_json("scores.json")
+    scores = get_feat_person_scores()
     collabs = load_json("collaborations.json")
-    mentorships = load_json("mentorships.json")
+    mentorships = get_feat_mentorships()
     ml_clusters = load_json("ml_clusters.json")
 
     if not scores or not isinstance(scores, list):
@@ -660,9 +663,9 @@ def generate_industry_overview():
     time_series = load_json("time_series.json")
     seasonal = load_json("seasonal.json")
     insights = load_json("insights_report.json")
-    growth = load_json("growth.json")
-    scores_data = load_json("scores.json")
-    milestones_data = load_json("milestones.json")
+    growth = get_feat_career()
+    scores_data = get_feat_person_scores()
+    milestones_data = get_agg_milestones()
 
     if not summary:
         return
@@ -743,18 +746,28 @@ def generate_industry_overview():
         "<table style='width:100%;font-size:0.85rem;margin:0.5rem 0;'>"
         "<thead><tr><th>ソース</th><th>性質</th><th>主な収録範囲</th><th>制約</th></tr></thead>"
         "<tbody>"
+        "<tr><td><strong>SeesaaWiki</strong></td><td>ユーザー編集型ウィキ</td>"
+        "<td>日本アニメ制作スタッフ情報（最大規模）</td>"
+        "<td>編集者によるばらつき、重複名義の統一必要 → entity resolution で対応</td></tr>"
+        "<tr><td><strong>Keyframe</strong></td><td>セレクティブ動画スタッフDB</td>"
+        "<td>動画スタッフ・原画スタッフ（コアスタッフに特化）</td>"
+        "<td>キーフレーム関連職に限定、スタジオ別確認済み</td></tr>"
         "<tr><td><strong>AniList</strong></td><td>ユーザー投稿型データベース</td>"
         "<td>TV/映画/OVA/ONA のスタッフ・声優クレジット</td>"
         "<td>登録密度が作品ごとに不均一（例: 動画マン網羅作品と主要スタッフのみの作品が混在）</td></tr>"
-        "<tr><td><strong>MADB</strong></td><td>文化庁メディア芸術データベース</td>"
-        "<td>シリーズ単位の主要スタッフ</td>"
+        "<tr><td><strong>MediaArts</strong></td><td>文化庁メディア芸術データベース</td>"
+        "<td>シリーズ単位の主要スタッフ（国内外アニメ）</td>"
         "<td>括弧付き名前（例:「神谷純(サルゲッチュ)」）による重複あり → entity resolution で統合済み</td></tr>"
+        "<tr><td><strong>MAL</strong></td><td>MyAnimeList (Jikan API)</td>"
+        "<td>スタッフクレジット（国際向け）</td>"
+        "<td>登録範囲は AniList より限定的、補足データ</td></tr>"
         "</tbody></table>"
         '<div class="insight-box" style="border-left-color:#FFD166;">'
-        "<strong>データ品質上の制約</strong>: "
-        "AniListのクレジット登録密度は作品により大きく異なる。"
-        "同じスタジオの作品でもクレジット数が10倍以上異なることがあり、"
-        "staff_count ベースの指標はこの不均一性の影響を受ける。"
+        "<strong>データ統合戦略</strong>: "
+        "5 つの独立したソースを entity resolution で統一。"
+        "SeesaaWiki が最大規模（1.6M クレジット）で、"
+        "Keyframe（動画専門）と AniList（スタッフ密度）で補完。"
+        "同じスタッフが複数ソースに登録されている場合は、正規化後に統合。"
         f"<br>また、{RELIABLE_MAX_YEAR + 1}年以降のデータは収録が不完全なため分析対象外とする。"
         "</div>"
     )
@@ -980,9 +993,10 @@ def generate_industry_overview():
     # 人材フロー率 — 完全書き換え v2
     # ============================================================
     if scores_data and isinstance(scores_data, list) and time_series:
-        # 離脱カウント上限: 2023年以降はデータ欠損により最終クレジット年が
-        # 過去に見える誤検出（見かけ上の退職増）が生じるため除外
-        EXIT_CUTOFF_YEAR = 2022
+        # 退職: 5年以上クレジットなし (RELIABLE_MAX_YEAR=2025 - 5 = 2020)
+        # 準退職: 3年以上クレジットなし (2025 - 3 = 2022) — 直近分析用
+        EXIT_CUTOFF_YEAR = 2020
+        SEMI_EXIT_CUTOFF_YEAR = 2022
         FLOW_START_YEAR = 1970
         HIGH_IV_THRESHOLD = IV_PCTILES["p90"]  # 上位10% (データ駆動)
 
@@ -1457,43 +1471,72 @@ def generate_industry_overview():
         conn_val = _get_conn()
         conn_val.row_factory = _sqlite3.Row
         rows_val = conn_val.execute(
-            "SELECT c.person_id, c.role, a.year "
-            "FROM credits c JOIN anime a ON c.anime_id = a.id "
-            "WHERE a.year IS NOT NULL"
+            "SELECT c.person_id, c.role, c.credit_year, c.credit_quarter "
+            "FROM credits c "
+            "WHERE c.credit_year IS NOT NULL AND c.credit_quarter IS NOT NULL"
         ).fetchall()
         conn_val.close()
 
-        # person_id → {role_label: sorted set of years}
+        # Gender data from DB for V-1d fan chart segmentation
+        conn_gdr = _get_conn()
+        conn_gdr.row_factory = _sqlite3.Row
+        rows_gdr = conn_gdr.execute(
+            "SELECT id, gender FROM persons WHERE gender IN ('Female', 'Male')"
+        ).fetchall()
+        conn_gdr.close()
+        pid_gender_v1d: dict[str, str] = {
+            r["id"]: ("F" if r["gender"] == "Female" else "M") for r in rows_gdr
+        }
+
+        # Work count query for V-1e annual work count fan chart
+        conn_wc = _get_conn()
+        conn_wc.row_factory = _sqlite3.Row
+        rows_wc = conn_wc.execute(
+            "SELECT c.person_id, a.year, COUNT(DISTINCT c.anime_id) as cnt "
+            "FROM credits c JOIN anime a ON c.anime_id = a.id "
+            "WHERE a.year IS NOT NULL "
+            "GROUP BY c.person_id, a.year"
+        ).fetchall()
+        conn_wc.close()
+        _v1e_pid_yr_cnt: dict[str, dict[int, int]] = {}
+        for _rwc in rows_wc:
+            _pid_wc = _rwc["person_id"]
+            if _pid_wc not in _v1e_pid_yr_cnt:
+                _v1e_pid_yr_cnt[_pid_wc] = {}
+            _v1e_pid_yr_cnt[_pid_wc][_rwc["year"]] = _rwc["cnt"]
+
+        # person_id → {role_label: sorted set of quarter-indices (year*4 + quarter-1)}
         from collections import defaultdict as _ddict_val
-        pid_role_years: dict[str, dict[str, set[int]]] = _ddict_val(lambda: _ddict_val(set))
+        pid_role_qtrs: dict[str, dict[str, set[int]]] = _ddict_val(lambda: _ddict_val(set))
         for r in rows_val:
             label = _ROLE_LABEL_V1.get(r["role"])
-            if label:
-                pid_role_years[r["person_id"]][label].add(r["year"])
+            if label and r["credit_quarter"]:
+                qidx = r["credit_year"] * 4 + (r["credit_quarter"] - 1)
+                pid_role_qtrs[r["person_id"]][label].add(qidx)
 
-        # 同一役職内の連続登場間隔を計算
-        # Each record: (gap, year_of_return, career_exp_at_return, role_label)
+        # 同一役職内の連続登場間隔を計算（単位: 四半期）
+        # Each record: (gap_q, year_of_return, career_exp_years_at_return, role_label)
         gap_by_stage: dict[str, list[int]] = _ddict_val(list)
-        gap_records: list[tuple[int, int, int, str]] = []  # (gap, year, exp, role)
-        for pid, role_dict in pid_role_years.items():
+        gap_records: list[tuple[int, int, int, str]] = []  # (gap_q, year, exp_yr, role)
+        for pid, role_dict in pid_role_qtrs.items():
             fy = pid_first_year.get(pid)
-            for role_label, year_set in role_dict.items():
-                years_sorted = sorted(year_set)
-                for i in range(1, len(years_sorted)):
-                    gap = years_sorted[i] - years_sorted[i - 1]
-                    if gap >= 1:  # 同年は除外
-                        gap_by_stage[role_label].append(gap)
-                        ret_year = years_sorted[i]
+            for role_label, qtr_set in role_dict.items():
+                qtrs_sorted = sorted(qtr_set)
+                for i in range(1, len(qtrs_sorted)):
+                    gap_q = qtrs_sorted[i] - qtrs_sorted[i - 1]
+                    if gap_q >= 1:  # 同四半期クレジットは除外
+                        gap_by_stage[role_label].append(gap_q)
+                        ret_year = qtrs_sorted[i] // 4
                         exp = (ret_year - fy) if fy is not None else -1
-                        gap_records.append((gap, ret_year, exp, role_label))
+                        gap_records.append((gap_q, ret_year, exp, role_label))
 
-        # --- V-1: 同一職種内クレジット間隔 Violin Plot ---
-        body += "<h3>V-1. 同一職種内のクレジット再登場間隔（年）</h3>"
+        # --- V-1: 同一職種内クレジット間隔 Box Plot ---
+        body += "<h3>V-1. 同一職種内のクレジット再登場間隔（四半期）</h3>"
         body += chart_guide(
             "同じ職種（ステージ）で連続してクレジットされた場合の間隔分布。"
             "監督→原画のような<strong>キャリア転向は除外</strong>し、"
-            "同一職種内での活動間隔のみを計算。"
-            "赤点線は現在の引退判定ライン（3年間クレジットなし）を示す。"
+            "同一職種内での活動間隔のみを計算。<strong>単位は四半期（1Q=3ヶ月）</strong>。"
+            "赤点線は現在の引退判定ライン（3年＝12Q）を示す。"
         )
         import numpy as _np_val
         fig_v1 = go.Figure()
@@ -1522,18 +1565,18 @@ def generate_industry_overview():
             p99 = float(_np_val.percentile(arr, 99))
             gap_stats_rows.append((sg, len(vals), p50, p90, p95, p99))
 
-        # 引退判定ライン
-        fig_v1.add_hline(y=3, line_dash="dash", line_color="#EF476F",
-                         annotation_text="引退判定ライン (3年)", annotation_position="top right",
+        # 引退判定ライン (3年 = 12四半期)
+        fig_v1.add_hline(y=12, line_dash="dash", line_color="#EF476F",
+                         annotation_text="引退判定ライン (3年=12Q)", annotation_position="top right",
                          annotation_font_color="#EF476F")
         fig_v1.update_layout(
-            height=450, yaxis_title="クレジット間隔（年）",
+            height=450, yaxis_title="クレジット間隔（四半期）",
             xaxis_title="職種",
             showlegend=False,
             yaxis=dict(
                 type="log",
-                tickvals=[1, 2, 3, 5, 10, 20, 30],
-                ticktext=["1", "2", "3", "5", "10", "20", "30"],
+                tickvals=[1, 2, 4, 8, 12, 20, 40, 80],
+                ticktext=["1Q", "2Q", "4Q", "8Q", "12Q(3年)", "20Q", "40Q", "80Q"],
             ),
         )
         body += plotly_div_safe(fig_v1, "gap_violin", 450)
@@ -1541,20 +1584,24 @@ def generate_industry_overview():
         # パーセンタイル表
         body += (
             "<table style='width:100%;margin:0.8rem 0;font-size:0.85rem;'>"
-            "<thead><tr><th>職種</th><th>N</th><th>中央値</th>"
-            "<th>90%tile</th><th>95%tile</th><th>99%tile</th></tr></thead><tbody>"
+            "<thead><tr><th>職種</th><th>N</th>"
+            "<th>中央値</th><th>90%tile</th><th>95%tile</th><th>99%tile</th>"
+            "</tr></thead><tbody>"
         )
         for sg, n, p50, p90, p95, p99 in gap_stats_rows:
             body += (
-                f"<tr><td>{sg}</td><td>{n:,}</td><td>{p50:.1f}年</td>"
-                f"<td>{p90:.1f}年</td><td>{p95:.1f}年</td><td>{p99:.1f}年</td></tr>"
+                f"<tr><td>{sg}</td><td>{n:,}</td>"
+                f"<td>{p50:.1f}Q ({p50/4:.1f}年)</td>"
+                f"<td>{p90:.1f}Q ({p90/4:.1f}年)</td>"
+                f"<td>{p95:.1f}Q ({p95/4:.1f}年)</td>"
+                f"<td>{p99:.1f}Q ({p99/4:.1f}年)</td></tr>"
             )
         body += "</tbody></table>"
 
         # --- V-1b: 時代別の再登場間隔推移 ---
-        body += "<h4>V-1b. 時代別の再登場間隔推移</h4>"
+        body += "<h4>V-1b. 時代別の再登場間隔推移（四半期）</h4>"
         body += chart_guide(
-            "再登場年の年代別に中央値・P90・P95を折れ線で表示。"
+            "再登場年の年代別に中央値・P95を折れ線で表示（単位: 四半期）。"
             "業界の制作サイクル変化（デジタル化、深夜アニメ増加など）が"
             "再登場間隔に与えた影響を可視化する。"
         )
@@ -1594,22 +1641,22 @@ def generate_industry_overview():
                     line=dict(color=gc, width=1, dash="dash"),
                     legendgroup=sg, opacity=0.6, connectgaps=False,
                 ))
-            fig_v1b.add_hline(y=3, line_dash="dot", line_color="#EF476F",
-                              annotation_text="引退判定ライン",
+            fig_v1b.add_hline(y=12, line_dash="dot", line_color="#EF476F",
+                              annotation_text="引退判定ライン (12Q=3年)",
                               annotation_position="top right",
                               annotation_font_color="#EF476F")
             fig_v1b.update_layout(
-                height=450, yaxis_title="クレジット間隔（年）",
+                height=450, yaxis_title="クレジット間隔（四半期）",
                 xaxis_title="5年期間",
                 legend=dict(font_size=10),
             )
             body += plotly_div_safe(fig_v1b, "gap_era_trend", 450)
 
         # --- V-1c: 経験年数別の再登場間隔 ---
-        body += "<h4>V-1c. 経験年数別の再登場間隔</h4>"
+        body += "<h4>V-1c. 経験年数別の再登場間隔（ヒートマップ・四半期）</h4>"
         body += chart_guide(
-            "デビューからの経験年数を5年刻みでビン化し、各ビンでの再登場間隔の"
-            "中央値・P90・P95をヒートマップで表示。"
+            "デビューからの経験年数を5年刻みでビン化し、各ビンでの再登場間隔（四半期）の"
+            "中央値・P95をヒートマップで表示。"
             "ベテランほど間隔が長くなる傾向（他プロジェクト掛け持ち・選別的参加）や、"
             "新人の高頻度参加パターンを確認する。"
         )
@@ -1663,12 +1710,12 @@ def generate_industry_overview():
                               horizontal_spacing=0.12)
             # Hover text with N
             hover_med = [[f"{hm_stages_used[i]}<br>{exp_labels[j]}<br>"
-                          f"中央値: {hm_median[i][j]:.1f}年<br>N={hm_n[i][j]:,}"
+                          f"中央値: {hm_median[i][j]:.1f}Q ({hm_median[i][j]/4:.1f}年)<br>N={hm_n[i][j]:,}"
                           if hm_median[i][j] is not None else ""
                           for j in range(len(exp_labels))]
                          for i in range(len(hm_stages_used))]
             hover_p95 = [[f"{hm_stages_used[i]}<br>{exp_labels[j]}<br>"
-                          f"P95: {hm_p95[i][j]:.1f}年<br>N={hm_n[i][j]:,}"
+                          f"P95: {hm_p95[i][j]:.1f}Q ({hm_p95[i][j]/4:.1f}年)<br>N={hm_n[i][j]:,}"
                           if hm_p95[i][j] is not None else ""
                           for j in range(len(exp_labels))]
                          for i in range(len(hm_stages_used))]
@@ -1676,34 +1723,694 @@ def generate_industry_overview():
                 z=hm_median, x=exp_labels, y=hm_stages_used,
                 colorscale="YlOrRd", hovertext=hover_med,
                 hovertemplate="%{hovertext}<extra></extra>",
-                colorbar=dict(title="年", x=0.42),
-                zmin=0, zmax=5,
+                colorbar=dict(title="四半期", x=0.42),
+                zmin=0, zmax=20,
             ), row=1, col=1)
             fig_v1c.add_trace(go.Heatmap(
                 z=hm_p95, x=exp_labels, y=hm_stages_used,
                 colorscale="YlOrRd", hovertext=hover_p95,
                 hovertemplate="%{hovertext}<extra></extra>",
-                colorbar=dict(title="年", x=1.02),
-                zmin=0, zmax=10,
+                colorbar=dict(title="四半期", x=1.02),
+                zmin=0, zmax=40,
             ), row=1, col=2)
             fig_v1c.update_layout(height=350)
             body += plotly_div_safe(fig_v1c, "gap_exp_heatmap", 350)
+
+        # --- V-1d: Fan Chart (custom SVG+JS) ---
+        body += "<h4>V-1d. 個人軌跡 Fan Chart: キャリア年数 × 再登場間隔</h4>"
+        body += chart_guide(
+            "ファンチャート：P10–P90の帯が時間とともに広がる様子でキャリアパスの多様化を示す。"
+            "太線＝P50中央値、内帯＝P25–P75、外帯＝P10–P90、細線＝個人軌跡サンプル。"
+            "<strong>ホバーでその年のパーセンタイル値を確認、クリックでフォーカスを固定。</strong>"
+            "職種ボタンで切り替え。Y軸は対数スケール。"
+        )
+
+        # 職種ごとの個人軌跡: role → list of [(exp_yr, gap_q), ...]
+        # Store (pid, pts) pairs so we can attach segment tags to sampled trajectories
+        _v1d_role_trajs: dict[str, list[tuple[str, list[tuple[int, int]]]]] = _ddict_val(list)
+        for pid, role_dict in pid_role_qtrs.items():
+            fy = pid_first_year.get(pid)
+            if fy is None:
+                continue
+            for role_label, qtr_set in role_dict.items():
+                if role_label not in gap_order:
+                    continue
+                qtrs_s = sorted(qtr_set)
+                pts_v1d: list[tuple[int, int]] = []
+                for i in range(1, len(qtrs_s)):
+                    gq = qtrs_s[i] - qtrs_s[i - 1]
+                    if gq >= 1:
+                        ey = qtrs_s[i] // 4 - fy
+                        if 0 <= ey <= 30:
+                            pts_v1d.append((ey, gq))
+                if len(pts_v1d) >= 2:
+                    _v1d_role_trajs[role_label].append((pid, pts_v1d))
+
+        # career_year ビン → パーセンタイル (rolling ±1)
+        _v1d_career_bins: dict[str, dict[int, list[int]]] = _ddict_val(lambda: _ddict_val(list))
+        for gap_q, _ret_yr, exp, sg in gap_records:
+            if sg in gap_order and 0 <= exp <= 30:
+                _v1d_career_bins[sg][exp].append(gap_q)
+
+        # --- Segment bins for fan chart (gender / debut decade / IV band) ---
+        _ALL_DECADE_KEYS_V1D = [
+            "~1989", "1990-94", "1995-99", "2000-04",
+            "2005-09", "2010-14", "2015-19", "2020+",
+        ]
+        _SEG_GENDER_COLORS = {"F": "#f48fb1", "M": "#64b5f6"}
+        _SEG_GENDER_LABELS = {"F": "女性", "M": "男性"}
+        _SEG_DECADE_COLORS = dict(zip(
+            _ALL_DECADE_KEYS_V1D,
+            ["#8be9fd", "#50fa7b", "#ffb86c", "#ff79c6",
+             "#bd93f9", "#ff5555", "#f1fa8c", "#6272a4"],
+        ))
+        _SEG_DECADE_LABELS = {k: k + " デビュー" for k in _ALL_DECADE_KEYS_V1D}
+        _SEG_IV_COLORS = {"top25": "#69db7c", "mid50": "#ffd43b", "bot25": "#ff6b6b"}
+        _SEG_IV_LABELS = {"top25": "IV 上位25%", "mid50": "IV 中位50%", "bot25": "IV 下位25%"}
+
+        def _debut_decade_key_v1d(fy_: int | None) -> str | None:
+            if fy_ is None:
+                return None
+            if fy_ < 1990: return "~1989"
+            if fy_ < 1995: return "1990-94"
+            if fy_ < 2000: return "1995-99"
+            if fy_ < 2005: return "2000-04"
+            if fy_ < 2010: return "2005-09"
+            if fy_ < 2015: return "2010-14"
+            if fy_ < 2020: return "2015-19"
+            return "2020+"
+
+        _iv_vals_v1d = sorted(v for v in pid_iv.values() if v and v > 0)
+        _iv_q25_v1d = float(_np_val.percentile(_iv_vals_v1d, 25)) if _iv_vals_v1d else 0.0
+        _iv_q75_v1d = float(_np_val.percentile(_iv_vals_v1d, 75)) if _iv_vals_v1d else 1.0
+
+        def _iv_band_v1d(pid_: str) -> str | None:
+            iv_ = pid_iv.get(pid_) or 0.0
+            if iv_ <= 0:
+                return None
+            if iv_ >= _iv_q75_v1d:
+                return "top25"
+            if iv_ <= _iv_q25_v1d:
+                return "bot25"
+            return "mid50"
+
+        # sg → seg_type → seg_key → cy → [gap_q]
+        _v1d_seg_bins: dict[str, dict[str, dict[str, dict[int, list]]]] = {
+            sg: {
+                "gender":  {"F": _ddict_val(list), "M": _ddict_val(list)},
+                "decade":  {k: _ddict_val(list) for k in _ALL_DECADE_KEYS_V1D},
+                "iv":      {"top25": _ddict_val(list), "mid50": _ddict_val(list), "bot25": _ddict_val(list)},
+            }
+            for sg in gap_order
+        }
+        for _pid_s, _rd in pid_role_qtrs.items():
+            _fy_s = pid_first_year.get(_pid_s)
+            if _fy_s is None:
+                continue
+            _gdr_s = pid_gender_v1d.get(_pid_s)
+            _dk_s  = _debut_decade_key_v1d(_fy_s)
+            _ib_s  = _iv_band_v1d(_pid_s)
+            for _rl_s, _qs in _rd.items():
+                if _rl_s not in gap_order:
+                    continue
+                _qtrs_s2 = sorted(_qs)
+                for _ii in range(1, len(_qtrs_s2)):
+                    _gq_s = _qtrs_s2[_ii] - _qtrs_s2[_ii - 1]
+                    if _gq_s < 1:
+                        continue
+                    _ey_s = _qtrs_s2[_ii] // 4 - _fy_s
+                    if not (0 <= _ey_s <= 30):
+                        continue
+                    if _gdr_s in ("F", "M"):
+                        _v1d_seg_bins[_rl_s]["gender"][_gdr_s][_ey_s].append(_gq_s)
+                    if _dk_s:
+                        _v1d_seg_bins[_rl_s]["decade"][_dk_s][_ey_s].append(_gq_s)
+                    if _ib_s:
+                        _v1d_seg_bins[_rl_s]["iv"][_ib_s][_ey_s].append(_gq_s)
+
+        def _compute_seg_fan_v1d(
+            cy_bins: dict[int, list[int]],
+            color: str, label: str, min_n: int = 5,
+        ) -> dict:
+            p10_, p25_, p50_, p75_, p90_ = [], [], [], [], []
+            n_tot_ = 0
+            for cy_ in range(31):
+                v_ = cy_bins.get(cy_, [])
+                n_tot_ += len(v_)
+                if len(v_) >= min_n:
+                    _a = _np_val.array(v_)
+                    p10_.append(round(float(_np_val.percentile(_a, 10)), 2))
+                    p25_.append(round(float(_np_val.percentile(_a, 25)), 2))
+                    p50_.append(round(float(_np_val.percentile(_a, 50)), 2))
+                    p75_.append(round(float(_np_val.percentile(_a, 75)), 2))
+                    p90_.append(round(float(_np_val.percentile(_a, 90)), 2))
+                else:
+                    for _lst_ in [p10_, p25_, p50_, p75_, p90_]:
+                        _lst_.append(None)
+            return {
+                "color": color, "label": label, "n": n_tot_,
+                "x": list(range(31)),
+                "p10": p10_, "p25": p25_, "p50": p50_, "p75": p75_, "p90": p90_,
+            }
+
+        # --- V-1e work count bins ---
+        _v1e_wc_bins: dict[int, list[int]] = _ddict_val(list)  # cy → [work_count]
+        _v1e_trajs_raw: list[tuple[str, list[tuple[int, int]]]] = []
+        for _pid_e, _yr_cnt_e in _v1e_pid_yr_cnt.items():
+            _fy_e = pid_first_year.get(_pid_e)
+            if _fy_e is None:
+                continue
+            # Use latest_year from scores data, fall back to last credited year
+            _ly_e = pid_latest_year.get(_pid_e) or max(_yr_cnt_e.keys(), default=_fy_e)
+            _pts_e = []
+            # Iterate over full career range including years with 0 works
+            for _yr_e in range(_fy_e, min(_fy_e + 31, _ly_e + 1)):
+                _cy_e = _yr_e - _fy_e
+                _cnt_e = _yr_cnt_e.get(_yr_e, 0)
+                _v1e_wc_bins[_cy_e].append(_cnt_e)
+                _pts_e.append((_cy_e, _cnt_e))
+            if len(_pts_e) >= 2:
+                _v1e_trajs_raw.append((_pid_e, _pts_e))
+
+        # V-1e segment bins (gender / debut decade / IV band)
+        _v1e_seg_bins: dict[str, dict[str, dict[int, list]]] = {
+            "gender": {"F": _ddict_val(list), "M": _ddict_val(list)},
+            "decade": {k: _ddict_val(list) for k in _ALL_DECADE_KEYS_V1D},
+            "iv": {"top25": _ddict_val(list), "mid50": _ddict_val(list), "bot25": _ddict_val(list)},
+        }
+        for _pid_e2, _pts_e2 in _v1e_trajs_raw:
+            _gdr_e2 = pid_gender_v1d.get(_pid_e2)
+            _dk_e2 = _debut_decade_key_v1d(pid_first_year.get(_pid_e2))
+            _ib_e2 = _iv_band_v1d(_pid_e2)
+            for _cy_e2b, _cnt_e2b in _pts_e2:
+                if _gdr_e2 in ("F", "M"):
+                    _v1e_seg_bins["gender"][_gdr_e2][_cy_e2b].append(_cnt_e2b)
+                if _dk_e2:
+                    _v1e_seg_bins["decade"][_dk_e2][_cy_e2b].append(_cnt_e2b)
+                if _ib_e2:
+                    _v1e_seg_bins["iv"][_ib_e2][_cy_e2b].append(_cnt_e2b)
+
+        import random as _rng_v1d
+        import json as _json_v1d
+        _rng_v1d.seed(42)
+        _MAX_SPAG = 80  # 400 → 80: 863KB→~175KB のインライン JS データ削減でクラッシュ防止
+        _role_vol_v1d = {sg: len(gap_by_stage.get(sg, [])) for sg in gap_order}
+        _v1d_roles = sorted(gap_order, key=lambda s: _role_vol_v1d.get(s, 0), reverse=True)
+        _v1d_init_role = next(
+            (s for s in ["原画", "作画監督", "動画"] if s in _v1d_roles), _v1d_roles[0]
+        )
+
+        # Build JSON data: role → {color, x, p10..p90, trajs, n_total}
+        _v1d_chart: dict = {}
+        for sg in _v1d_roles:
+            gc = gap_colors[gap_order.index(sg)]
+            _cy_x31 = list(range(0, 31))
+            pcts_v1d: dict[str, list] = {k: [] for k in ("p10", "p25", "p50", "p75", "p90")}
+            for cy in _cy_x31:
+                combined_v1d: list[int] = []
+                for delta in (-1, 0, 1):
+                    combined_v1d.extend(_v1d_career_bins[sg].get(cy + delta, []))
+                if len(combined_v1d) >= 10:
+                    arr_v = _np_val.array(combined_v1d)
+                    for pk, pv in zip(
+                        ("p10", "p25", "p50", "p75", "p90"), (10, 25, 50, 75, 90)
+                    ):
+                        pcts_v1d[pk].append(round(float(_np_val.percentile(arr_v, pv)), 2))
+                else:
+                    for pk in pcts_v1d:
+                        pcts_v1d[pk].append(None)
+            # P95/P99 per career year (exact, no rolling)
+            p95_v1d: list = []
+            p99_v1d: list = []
+            for cy in _cy_x31:
+                exact = _v1d_career_bins[sg].get(cy, [])
+                if len(exact) >= 10:
+                    arr_e = _np_val.array(exact)
+                    p95_v1d.append(round(float(_np_val.percentile(arr_e, 95)), 2))
+                    p99_v1d.append(round(float(_np_val.percentile(arr_e, 99)), 2))
+                else:
+                    p95_v1d.append(None)
+                    p99_v1d.append(None)
+
+            # Histogram bins per career year (exact, fine-grained upper tail)
+            _V1D_HBINS = [
+                (1, 1, "1Q"), (2, 2, "2Q"), (3, 4, "3-4Q"),
+                (5, 8, "5-8Q"), (9, 12, "9-12Q"),
+                (13, 20, "13-20Q"), (21, 40, "21-40Q"), (41, 9999, "41Q+"),
+            ]
+            hist_v1d: dict = {}
+            for cy in _cy_x31:
+                vals_cy = _v1d_career_bins[sg].get(cy, [])
+                n_cy = len(vals_cy)
+                bins_cy = []
+                for lo, hi, lbl in _V1D_HBINS:
+                    cnt = sum(1 for v in vals_cy if lo <= v <= hi)
+                    bins_cy.append({
+                        "l": lbl,
+                        "n": cnt,
+                        "p": round(cnt / n_cy * 100, 1) if n_cy > 0 else 0,
+                    })
+                hist_v1d[str(cy)] = {"n": n_cy, "b": bins_cy}
+
+            trajs_raw_pid = _v1d_role_trajs.get(sg, [])  # list of (pid, pts)
+            trajs_raw = [pts for _, pts in trajs_raw_pid]   # pts-only for density
+            sampled_trajs_pid = _rng_v1d.sample(trajs_raw_pid, min(len(trajs_raw_pid), _MAX_SPAG))
+
+            # Density weighting: (career_year, gap_q_bin_of_2) → count
+            _density_map: dict[tuple[int, int], int] = {}
+            for traj in trajs_raw:
+                for cy_t, gq_t in traj:
+                    key = (cy_t, (gq_t // 2) * 2)
+                    _density_map[key] = _density_map.get(key, 0) + 1
+            max_density = max(_density_map.values(), default=1)
+
+            # Bubble density (1-quarter bins, capped at 40Q)
+            _bub_d: dict[tuple[int, int], int] = {}
+            for traj in trajs_raw:
+                for cy_t, gq_t in traj:
+                    _kb = (cy_t, min(gq_t, 40))
+                    _bub_d[_kb] = _bub_d.get(_kb, 0) + 1
+            _bubbles_data = sorted(
+                [{"cy": _cb[0], "gq": _cb[1], "n": _cv}
+                 for _cb, _cv in _bub_d.items()],
+                key=lambda x: x["n"], reverse=True,
+            )[:250]
+
+            def _traj_weight(traj: list[tuple[int, int]]) -> float:
+                if not traj:
+                    return 0.0
+                scores = [_density_map.get((cy_t, (gq_t // 2) * 2), 0) for cy_t, gq_t in traj]
+                return round(sum(scores) / len(scores) / max_density, 3)
+
+            # Trajectories with segment tags (g=gender, d=decade, v=iv_band)
+            weighted_trajs = []
+            for (_pid_t, _traj_t) in sampled_trajs_pid:
+                _wt: dict = {"pts": sorted(_traj_t), "w": _traj_weight(_traj_t)}
+                _g_t = pid_gender_v1d.get(_pid_t)
+                _d_t = _debut_decade_key_v1d(pid_first_year.get(_pid_t))
+                _v_t = _iv_band_v1d(_pid_t)
+                if _g_t: _wt["g"] = _g_t
+                if _d_t: _wt["d"] = _d_t
+                if _v_t: _wt["v"] = _v_t
+                weighted_trajs.append(_wt)
+
+            # Segment fans (no individual trajectories — bands only)
+            _seg_fans: dict = {}
+            for _st in ("gender", "decade", "iv"):
+                _seg_fans[_st] = {}
+                _seg_bins_for_type = _v1d_seg_bins.get(sg, {}).get(_st, {})
+                if _st == "gender":
+                    for _k in ("F", "M"):
+                        _seg_fans[_st][_k] = _compute_seg_fan_v1d(
+                            _seg_bins_for_type.get(_k, {}),
+                            _SEG_GENDER_COLORS[_k], _SEG_GENDER_LABELS[_k],
+                        )
+                elif _st == "decade":
+                    for _k in _ALL_DECADE_KEYS_V1D:
+                        _seg_fans[_st][_k] = _compute_seg_fan_v1d(
+                            _seg_bins_for_type.get(_k, {}),
+                            _SEG_DECADE_COLORS[_k], _SEG_DECADE_LABELS[_k],
+                        )
+                elif _st == "iv":
+                    for _k in ("top25", "mid50", "bot25"):
+                        _seg_fans[_st][_k] = _compute_seg_fan_v1d(
+                            _seg_bins_for_type.get(_k, {}),
+                            _SEG_IV_COLORS[_k], _SEG_IV_LABELS[_k],
+                        )
+
+            _v1d_chart[sg] = {
+                "color": gc,
+                "n_total": len(trajs_raw),
+                "x": _cy_x31,
+                **pcts_v1d,
+                "p95": p95_v1d,
+                "p99": p99_v1d,
+                "hist": hist_v1d,
+                "trajs": weighted_trajs,
+                "segs": _seg_fans,
+                "bubbles": _bubbles_data,
+            }
+
+        _v1d_data_json = _json_v1d.dumps(_v1d_chart, ensure_ascii=False)
+        import base64 as _b64_v1d
+        _v1d_data_b64 = _b64_v1d.b64encode(_v1d_data_json.encode()).decode()
+        _v1d_roles_json = _json_v1d.dumps(_v1d_roles, ensure_ascii=False)
+        _v1d_init_json = _json_v1d.dumps(_v1d_init_role, ensure_ascii=False)
+
+        # --- V-1e work count data ---
+        _v1e_p10, _v1e_p25, _v1e_p50, _v1e_p75, _v1e_p90 = [], [], [], [], []
+        _v1e_p95 = []
+        _v1e_n_list = []
+        for cy in range(31):
+            _vals_e = _v1e_wc_bins.get(cy, [])
+            _v1e_n_list.append(len(_vals_e))
+            if len(_vals_e) >= 10:
+                _arr_e = _np_val.array(_vals_e)
+                _v1e_p10.append(round(float(_np_val.percentile(_arr_e, 10)), 2))
+                _v1e_p25.append(round(float(_np_val.percentile(_arr_e, 25)), 2))
+                _v1e_p50.append(round(float(_np_val.percentile(_arr_e, 50)), 2))
+                _v1e_p75.append(round(float(_np_val.percentile(_arr_e, 75)), 2))
+                _v1e_p90.append(round(float(_np_val.percentile(_arr_e, 90)), 2))
+                _v1e_p95.append(round(float(_np_val.percentile(_arr_e, 95)), 2))
+            else:
+                for _l in [_v1e_p10, _v1e_p25, _v1e_p50, _v1e_p75, _v1e_p90, _v1e_p95]:
+                    _l.append(None)
+        # Sampled trajectories (density weighted, same approach as V-1d)
+        _rng_v1d.seed(99)
+        _v1e_sampled = _rng_v1d.sample(_v1e_trajs_raw, min(len(_v1e_trajs_raw), 500))
+        _v1e_density: dict[tuple[int, int], int] = {}
+        for _, _tr_e in _v1e_trajs_raw:
+            for _cy_e2, _ct_e2 in _tr_e:
+                _k_e = (_cy_e2, min(_ct_e2, 20))
+                _v1e_density[_k_e] = _v1e_density.get(_k_e, 0) + 1
+        _v1e_max_d = max(_v1e_density.values(), default=1)
+        def _v1e_tw(tr: list) -> float:
+            if not tr: return 0.0
+            _s = [_v1e_density.get((_c, min(_ct, 20)), 0) for _c, _ct in tr]
+            return round(sum(_s) / len(_s) / _v1e_max_d, 3)
+        _v1e_trajs_js = [{"pts": t[1], "w": _v1e_tw(t[1])} for t in _v1e_sampled]
+        _v1e_chart_json = _json_v1d.dumps({
+            "x": list(range(31)),
+            "n": _v1e_n_list,
+            "p10": _v1e_p10, "p25": _v1e_p25, "p50": _v1e_p50,
+            "p75": _v1e_p75, "p90": _v1e_p90, "p95": _v1e_p95,
+            "trajs": _v1e_trajs_js,
+        }, ensure_ascii=False)
+
+        # V-1d segment decade color map (mirrors Python _SEG_DECADE_COLORS)
+        _v1d_dcolors_js = _json_v1d.dumps(dict(zip(
+            _ALL_DECADE_KEYS_V1D,
+            ["#8be9fd","#50fa7b","#ffb86c","#ff79c6","#bd93f9","#ff5555","#f1fa8c","#6272a4"],
+        )))
+
+        # JS fan chart — tooltip built entirely with DOM APIs (no innerHTML)
+        _v1d_js = (
+            "(function(){"
+            "var DATA=null;"  # DATA は IntersectionObserver 発火時に base64 属性からデコード
+            "var ROLES=__ROLES__;"
+            "var cur=__INIT__;"
+            "var actG=new Set(),actD=new Set(),actV=new Set();"
+            "var showBubbles=false;"
+            "var locked=false,lastCy=-1;"
+            "var NS='http://www.w3.org/2000/svg';"
+            "var GCOLORS={F:'#f48fb1',M:'#64b5f6'};"
+            "var GLABELS={F:'\u5973\u6027',M:'\u7537\u6027'};"
+            "var DKEYS=['~1989','1990-94','1995-99','2000-04','2005-09','2010-14','2015-19','2020+'];"
+            "var DCOLORS=__DCOLORS__;"
+            "var VCOLORS={top25:'#69db7c',mid50:'#ffd43b',bot25:'#ff6b6b'};"
+            "var VLABELS={top25:'IV\u4e0a\u4f4d25%',mid50:'IV\u4e2d\u4f4d50%',bot25:'IV\u4e0b\u4f4d25%'};"
+            "var wrap=document.getElementById('v1d-wrap');"
+            "var svg=document.getElementById('v1d-svg');"
+            "var tip=document.getElementById('v1d-tip');"
+            "var mL=60,mR=24,mT=32,mB=52,H=470,W,cW,cH;"
+            "function rsz(){W=wrap.clientWidth||820;cW=W-mL-mR;cH=H-mT-mB;svg.setAttribute('width',W);svg.setAttribute('height',H);}"
+            "function xS(v){return mL+v/30*cW;}"
+            "function yS(q){if(!q||q<=0)return mT+cH;var t=Math.log(Math.max(q,0.5))/Math.log(90);return mT+cH*(1-Math.max(0,Math.min(1,t)));}"
+            "function se(tag,a,txt){var e=document.createElementNS(NS,tag);for(var k in(a||{}))e.setAttribute(k,a[k]);if(txt!==undefined)e.textContent=txt;return e;}"
+            "function lp(xs,ys){var d='',pv=true;for(var i=0;i<xs.length;i++){if(ys[i]==null){pv=true;continue;}d+=(pv?'M':'L')+xS(xs[i]).toFixed(1)+','+yS(ys[i]).toFixed(1);pv=false;}return d;}"
+            "function ap(xs,yt,yb){var segs=[],sg=null;for(var i=0;i<xs.length;i++){if(yt[i]!=null&&yb[i]!=null){if(!sg){sg=[];segs.push(sg);}sg.push(i);}else sg=null;}var d='';segs.forEach(function(sg){d+='M'+xS(xs[sg[0]]).toFixed(1)+','+yS(yt[sg[0]]).toFixed(1);for(var i=1;i<sg.length;i++)d+='L'+xS(xs[sg[i]]).toFixed(1)+','+yS(yt[sg[i]]).toFixed(1);for(var i=sg.length-1;i>=0;i--)d+='L'+xS(xs[sg[i]]).toFixed(1)+','+yS(yb[sg[i]]).toFixed(1);d+='Z';});return d;}"
+            "function pctile(arr,p){if(!arr.length)return null;var i=(p/100)*(arr.length-1);var lo=Math.floor(i),hi=Math.ceil(i);return arr[lo]+(arr[hi]-arr[lo])*(i-lo);}"
+            "function hasFilters(){return actG.size>0||actD.size>0||actV.size>0;}"
+            "function matchTraj(tr){if(actG.size>0&&!(tr.g&&actG.has(tr.g)))return false;if(actD.size>0&&!(tr.d&&actD.has(tr.d)))return false;if(actV.size>0&&!(tr.v&&actV.has(tr.v)))return false;return true;}"
+            "function trajColor(tr,baseC){if(actV.size>0&&tr.v&&VCOLORS[tr.v])return VCOLORS[tr.v];if(actG.size>0&&tr.g&&GCOLORS[tr.g])return GCOLORS[tr.g];if(actD.size>0&&tr.d&&DCOLORS[tr.d])return DCOLORS[tr.d];return baseC;}"
+            "function computeBands(trajs){var byY={};trajs.forEach(function(tr){tr.pts.forEach(function(pt){var cy=pt[0],gq=pt[1];if(!byY[cy])byY[cy]=[];byY[cy].push(gq);});});var p10=[],p25=[],p50=[],p75=[],p90=[],p95=[];for(var i=0;i<=30;i++){var arr=(byY[i]||[]).slice().sort(function(a,b){return a-b;});if(arr.length>=5){p10.push(pctile(arr,10));p25.push(pctile(arr,25));p50.push(pctile(arr,50));p75.push(pctile(arr,75));p90.push(pctile(arr,90));p95.push(pctile(arr,95));}else{p10.push(null);p25.push(null);p50.push(null);p75.push(null);p90.push(null);p95.push(null);}}return{p10:p10,p25:p25,p50:p50,p75:p75,p90:p90,p95:p95};}"
+            "function drawSegFanBands(sd,xArr){var c=sd.color;var a90=ap(xArr,sd.p10,sd.p90);if(a90)svg.appendChild(se('path',{d:a90,fill:c,opacity:'0.07',stroke:'none'}));var a75=ap(xArr,sd.p25,sd.p75);if(a75)svg.appendChild(se('path',{d:a75,fill:c,opacity:'0.18',stroke:'none'}));var pd50=lp(xArr,sd.p50);if(pd50)svg.appendChild(se('path',{d:pd50,stroke:c,'stroke-width':'2',fill:'none',opacity:'0.85'}));}"
+            "function renderBubbles(filtered){var bub={};filtered.forEach(function(tr){tr.pts.forEach(function(pt){var cy=pt[0],gq=Math.min(pt[1],40);var k=cy+','+gq;bub[k]=(bub[k]||0)+1;});});var items=Object.keys(bub).map(function(k){var p=k.split(',');return{cy:+p[0],gq:+p[1],n:bub[k]};});items.sort(function(a,b){return b.n-a.n;});items=items.slice(0,200);var maxN=items.length?items[0].n:1;var gB=se('g',{opacity:'0.75'});items.forEach(function(it){var r=Math.sqrt(it.n/maxN)*12;gB.appendChild(se('circle',{cx:xS(it.cy).toFixed(1),cy:yS(it.gq).toFixed(1),r:r.toFixed(1),fill:'#ffd43b',stroke:'#111','stroke-width':'0.5',opacity:'0.65'}));});svg.appendChild(gB);}"
+            "function render(){"
+            "  if(!DATA)return;"
+            "  rsz();svg.textContent='';"
+            "  var d=DATA[cur];if(!d)return;var c=d.color;"
+            "  var filtered=hasFilters()?d.trajs.filter(matchTraj):d.trajs;"
+            "  var bands=hasFilters()?computeBands(filtered):{p10:d.p10,p25:d.p25,p50:d.p50,p75:d.p75,p90:d.p90,p95:d.p95};"
+            "  var yT=[1,2,4,8,12,20,40,80],yL=['1Q','2Q','4Q','8Q','12Q(3\u5e74)','20Q','40Q','80Q'];"
+            "  var gG=se('g');yT.forEach(function(v,i){var ty=yS(v).toFixed(1);gG.appendChild(se('line',{x1:mL,y1:ty,x2:W-mR,y2:ty,stroke:'#2a2a2a','stroke-width':'1'}));gG.appendChild(se('text',{x:mL-7,y:parseFloat(ty)+4,'text-anchor':'end',fill:'#777','font-size':'10'},yL[i]));});svg.appendChild(gG);"
+            "  var gTr=se('g',{fill:'none'});"
+            "  filtered.forEach(function(tr){var pts=tr.pts,w=tr.w||0;if(pts.length<2)return;var tc=trajColor(tr,c);var pd='M'+xS(pts[0][0]).toFixed(1)+','+yS(pts[0][1]).toFixed(1);for(var i=1;i<pts.length;i++)pd+='L'+xS(pts[i][0]).toFixed(1)+','+yS(pts[i][1]).toFixed(1);var sw=(0.5+2.0*w).toFixed(2);var op=(0.06+0.34*w).toFixed(3);gTr.appendChild(se('path',{d:pd,stroke:tc,'stroke-width':sw,opacity:op}));});svg.appendChild(gTr);"
+            "  var a90=ap(d.x,bands.p10,bands.p90),a75=ap(d.x,bands.p25,bands.p75);"
+            "  if(a90)svg.appendChild(se('path',{d:a90,fill:c,opacity:'0.1',stroke:'none'}));"
+            "  if(a75)svg.appendChild(se('path',{d:a75,fill:c,opacity:'0.25',stroke:'none'}));"
+            "  var a95b=ap(d.x,bands.p90,bands.p95);if(a95b)svg.appendChild(se('path',{d:a95b,fill:'#ff6b6b',opacity:'0.18',stroke:'none'}));"
+            "  [[bands.p10,'1','3,3','0.5'],[bands.p90,'1','3,3','0.5'],[bands.p25,'1.5','','0.7'],[bands.p75,'1.5','','0.7']].forEach(function(spec){var pd=lp(d.x,spec[0]);if(!pd)return;var a={d:pd,stroke:c,'stroke-width':spec[1],fill:'none',opacity:spec[3]};if(spec[2])a['stroke-dasharray']=spec[2];svg.appendChild(se('path',a));});"
+            "  var pd50=lp(d.x,bands.p50);if(pd50)svg.appendChild(se('path',{d:pd50,stroke:'#ffffff','stroke-width':'2.5',fill:'none',opacity:'0.9'}));"
+            "  var pd95=lp(d.x,bands.p95);if(pd95)svg.appendChild(se('path',{d:pd95,stroke:'#ff6b6b','stroke-width':'1.2','stroke-dasharray':'2,4',fill:'none',opacity:'0.65'}));"
+            "  var pd99=lp(d.x,d.p99);if(pd99)svg.appendChild(se('path',{d:pd99,stroke:c,'stroke-width':'0.8','stroke-dasharray':'1,7',fill:'none',opacity:'0.2'}));"
+            "  if(actG.size>0&&d.segs&&d.segs.gender){actG.forEach(function(k){var sd=d.segs.gender[k];if(sd&&sd.n>=5)drawSegFanBands(sd,d.x);});}"
+            "  if(actD.size>0&&d.segs&&d.segs.decade){actD.forEach(function(k){var sd=d.segs.decade[k];if(sd&&sd.n>=5)drawSegFanBands(sd,d.x);});}"
+            "  if(actV.size>0&&d.segs&&d.segs.iv){actV.forEach(function(k){var sd=d.segs.iv[k];if(sd&&sd.n>=5)drawSegFanBands(sd,d.x);});}"
+            "  if(showBubbles)renderBubbles(filtered);"
+            "  var ry=yS(12).toFixed(1);"
+            "  svg.appendChild(se('line',{x1:mL,y1:ry,x2:W-mR,y2:ry,stroke:'#EF476F','stroke-width':'1.5','stroke-dasharray':'5,3'}));"
+            "  svg.appendChild(se('text',{x:W-mR-4,y:parseFloat(ry)-5,'text-anchor':'end',fill:'#EF476F','font-size':'10'},'\u5f15\u9000\u5224\u5b9a\u30e9\u30a4\u30f3 (12Q=3\u5e74)'));"
+            "  var gAx=se('g');"
+            "  gAx.appendChild(se('line',{x1:mL,y1:mT+cH,x2:W-mR,y2:mT+cH,stroke:'#444','stroke-width':'1'}));"
+            "  gAx.appendChild(se('line',{x1:mL,y1:mT,x2:mL,y2:mT+cH,stroke:'#444','stroke-width':'1'}));"
+            "  var xA={0:'\u30c7\u30d3\u30e5\u30fc',5:'\u4e2d\u5805',10:'\u30d9\u30c6\u30e9\u30f3',20:'\u30ec\u30b8\u30a7\u30f3\u30c9'};"
+            "  for(var xv=0;xv<=30;xv+=5){var tx=xS(xv).toFixed(1);gAx.appendChild(se('line',{x1:tx,y1:mT+cH,x2:tx,y2:mT+cH+5,stroke:'#444','stroke-width':'1'}));gAx.appendChild(se('text',{x:tx,y:mT+cH+15,'text-anchor':'middle',fill:'#888','font-size':'10'},xv+'\u5e74'));if(xA[xv])gAx.appendChild(se('text',{x:tx,y:mT+cH+27,'text-anchor':'middle',fill:'#555','font-size':'9'},xA[xv]));}"
+            "  gAx.appendChild(se('text',{x:mL+cW/2,y:H-3,'text-anchor':'middle',fill:'#aaa','font-size':'11'},'\u30c7\u30d3\u30e5\u30fc\u304b\u3089\u306e\u7d4c\u9a13\u5e74\u6570'));"
+            "  var gYL=se('g',{transform:'translate('+(mL-46)+','+(mT+cH/2)+') rotate(-90)'});gYL.appendChild(se('text',{x:0,y:0,'text-anchor':'middle',fill:'#aaa','font-size':'11'},'\u518d\u767b\u5834\u9593\u9694\uff08\u56db\u534a\u671f\uff09'));gAx.appendChild(gYL);svg.appendChild(gAx);"
+            "  var nShown=filtered.length,nTotal=d.trajs.length;"
+            "  var legSpec=[{l:'P90\u2013P95 \u4e0a\u4f4d5%\u5e2f',t:'area95'},{l:'P10\u2013P90 \u5e2f',t:'area',op:0.1},{l:'P25\u2013P75 \u5e2f',t:'area',op:0.25},{l:'P50 \u4e2d\u592e\u5024 (\u767d)',t:'bold50'},{l:'\u8ecc\u8de1 ('+nShown+(nShown<nTotal?'/'+nTotal:'')+'\u4eba)',t:'spag'}];"
+            "  var gLg=se('g'),lx=mL+8,ly=mT+8;"
+            "  legSpec.forEach(function(it,idx){var iy=ly+idx*15;if(it.t==='area95'){gLg.appendChild(se('rect',{x:lx,y:iy+1,width:20,height:7,fill:'#ff6b6b',opacity:'0.5',rx:2}));}else if(it.t==='area'){gLg.appendChild(se('rect',{x:lx,y:iy+1,width:20,height:7,fill:c,opacity:it.op,rx:2}));}else{var la={x1:lx,y1:iy+4,x2:lx+20,y2:iy+4,stroke:it.t==='bold50'?'#ffffff':c};if(it.t==='bold50'){la['stroke-width']='2.5';}else if(it.t==='spag'){la['stroke-width']='0.8';la['opacity']='0.5';}else{la['stroke-width']='1.5';la['opacity']='0.75';}gLg.appendChild(se('line',la));}gLg.appendChild(se('text',{x:lx+26,y:iy+9,fill:'#999','font-size':'9.5'},it.l));});svg.appendChild(gLg);"
+            "  svg.appendChild(se('g',{id:'v1d-fl'}));"
+            "  var ov=se('rect',{x:mL,y:mT,width:cW,height:cH,fill:'transparent',cursor:'crosshair'});"
+            "  ov.addEventListener('mousemove',function(e){if(!locked)drawF(e);});"
+            "  ov.addEventListener('click',function(e){"
+            "    var rect2=svg.getBoundingClientRect();"
+            "    var cy2=Math.round((e.clientX-rect2.left-mL)/cW*30);"
+            "    cy2=Math.max(0,Math.min(30,cy2));"
+            "    if(locked&&lastCy===cy2){locked=false;lastCy=-1;clrF();}"
+            "    else{locked=true;lastCy=cy2;drawF(e);showDetail(cy2);}"
+            "  });"
+            "  ov.addEventListener('mouseleave',function(){if(!locked)clrF();});"
+            "  svg.appendChild(ov);"
+            "}"
+            "function drawF(e){"
+            "  var rect=svg.getBoundingClientRect();"
+            "  var cy=Math.round((e.clientX-rect.left-mL)/cW*30);"
+            "  cy=Math.max(0,Math.min(30,cy));"
+            "  var fl=document.getElementById('v1d-fl');if(!fl)return;fl.textContent='';"
+            "  var d=DATA[cur],fx=xS(cy).toFixed(1);"
+            "  fl.appendChild(se('line',{x1:fx,y1:mT,x2:fx,y2:mT+cH,stroke:'#fff','stroke-width':'1',opacity:'0.55','stroke-dasharray':'3,2'}));"
+            "  fl.appendChild(se('rect',{x:parseFloat(fx)-18,y:mT-22,width:36,height:16,fill:'#1a1a1a',rx:3}));"
+            "  fl.appendChild(se('text',{x:fx,y:mT-10,'text-anchor':'middle',fill:'#eee','font-size':'10','font-weight':'bold'},cy+'\u5e74\u76ee'));"
+            "  var filtered=hasFilters()?d.trajs.filter(matchTraj):d.trajs;"
+            "  var bands=hasFilters()?computeBands(filtered):{p10:d.p10,p25:d.p25,p50:d.p50,p75:d.p75,p90:d.p90,p95:d.p95};"
+            "  var pK=['p10','p25','p50','p75','p90'],pLb=['P10','P25','P50','P75','P90'],pC=['#74C0FC','#4DABF7','#ffffff','#FFA94D','#FF6B6B'];"
+            "  var tipData=[];"
+            "  pK.forEach(function(pk,i){var v=bands[pk][cy];if(v==null)return;"
+            "    var fy_=yS(v).toFixed(1);"
+            "    fl.appendChild(se('circle',{cx:fx,cy:fy_,r:'7',fill:pC[i],opacity:'0.25'}));"
+            "    fl.appendChild(se('circle',{cx:fx,cy:fy_,r:'3.5',fill:pC[i],stroke:'#111','stroke-width':'1.2'}));"
+            "    var anchor='start',lx2=parseFloat(fx)+8;"
+            "    if(parseFloat(fx)+85>W-mR){anchor='end';lx2=parseFloat(fx)-8;}"
+            "    fl.appendChild(se('text',{x:lx2,y:parseFloat(fy_)+4,'text-anchor':anchor,fill:pC[i],'font-size':pk==='p50'?'10':'9','font-weight':pk==='p50'?'bold':'normal'},pLb[i]+': '+v.toFixed(1)+'Q'));"
+            "    tipData.push({lbl:pLb[i],col:pC[i],val:v});"
+            "  });"
+            "  if(locked)fl.appendChild(se('text',{x:fx,y:mT+cH+44,'text-anchor':'middle',fill:'#FFD166','font-size':'9.5'},'[\u56fa\u5b9a\u4e2d] \u30af\u30ea\u30c3\u30af\u3067\u89e3\u9664'));"
+            "  tip.textContent='';"
+            "  var t0=document.createElement('div');t0.style.fontWeight='bold';t0.style.marginBottom='3px';"
+            "  t0.textContent=cy+'\u5e74\u76ee \u2014 '+cur+(hasFilters()?' [\u30d5\u30a3\u30eb\u30bf\u30fc\u4e2d]':'');tip.appendChild(t0);"
+            "  tipData.forEach(function(td){var row=document.createElement('div');var sp=document.createElement('span');sp.style.color=td.col;sp.textContent=td.lbl;row.appendChild(sp);row.appendChild(document.createTextNode(': '+td.val.toFixed(1)+'Q / '+(td.val/4).toFixed(1)+'\u5e74'));tip.appendChild(row);});"
+            "  var svgR=svg.getBoundingClientRect();var tipX=e.clientX-svgR.left+14;"
+            "  if(tipX+175>W)tipX=e.clientX-svgR.left-185;"
+            "  tip.style.left=tipX+'px';tip.style.top=Math.max(mT,e.clientY-svgR.top-30)+'px';tip.style.display='block';"
+            "}"
+            "function showDetail(cy){"
+            "  var d=DATA[cur];"
+            "  var det=document.getElementById('v1d-detail');"
+            "  var hist=d.hist[String(cy)];"
+            "  det.textContent='';"
+            "  if(!hist||hist.n<5){det.style.display='none';return;}"
+            "  det.style.display='block';"
+            "  var hdr=document.createElement('div');"
+            "  hdr.style.cssText='display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;';"
+            "  var ht=document.createElement('span');"
+            "  ht.style.cssText='font-weight:bold;font-size:13px;color:#eee;';"
+            "  ht.textContent='\u7d4c\u9a13 '+cy+'\u5e74\u76ee \u2014 '+cur+' (N='+hist.n+'\u4ef6)';"
+            "  var hx=document.createElement('button');"
+            "  hx.textContent='\u00d7';"
+            "  hx.style.cssText='background:none;border:none;color:#888;font-size:18px;cursor:pointer;line-height:1;';"
+            "  hx.onclick=function(){locked=false;lastCy=-1;clrF();};"
+            "  hdr.appendChild(ht);hdr.appendChild(hx);"
+            "  det.appendChild(hdr);"
+            "  var ct=document.createElement('div');"
+            "  ct.style.cssText='display:flex;gap:24px;flex-wrap:wrap;';"
+            "  var hcol=document.createElement('div');"
+            "  hcol.style.cssText='flex:1;min-width:220px;';"
+            "  var hsvg2=document.createElementNS(NS,'svg');"
+            "  var nBins=hist.b.length,bH=22,hPL=58,hPR=100,hPT=8,hPB=8;"
+            "  var hH2=nBins*(bH+4)+hPT+hPB;"
+            "  hsvg2.setAttribute('width','100%');hsvg2.setAttribute('height',hH2);"
+            "  hsvg2.setAttribute('viewBox','0 0 400 '+hH2);"
+            "  hsvg2.style.display='block';"
+            "  var maxPct=Math.max.apply(null,hist.b.map(function(b){return b.p;}));"
+            "  hist.b.forEach(function(bin,i){"
+            "    var by=hPT+i*(bH+4);"
+            "    var bwMax=400-hPL-hPR;"
+            "    var bw=(bin.p/Math.max(maxPct,0.1))*bwMax;"
+            "    var op=(0.3+0.7*(i/(hist.b.length-1))).toFixed(2);"
+            "    hsvg2.appendChild(se('rect',{x:hPL,y:by+2,width:Math.max(bw,0).toFixed(1),"
+            "      height:bH-4,fill:d.color,opacity:op,rx:2}));"
+            "    hsvg2.appendChild(se('text',{x:hPL-5,y:by+bH/2+1,'text-anchor':'end',"
+            "      fill:'#999','font-size':'11'},bin.l));"
+            "    if(bw>2)hsvg2.appendChild(se('text',{x:hPL+bw+5,y:by+bH/2+1,"
+            "      fill:'#ccc','font-size':'10'},"
+            "      bin.n+'\u4ef6 ('+bin.p+'%)'));"
+            "    if(bin.l==='9-12Q'){"
+            "      hsvg2.appendChild(se('line',{x1:hPL,y1:by+bH+2,x2:hPL+bwMax,y2:by+bH+2,"
+            "        stroke:'#EF476F','stroke-width':'0.8','stroke-dasharray':'3,2',opacity:'0.6'}));"
+            "      hsvg2.appendChild(se('text',{x:hPL+bwMax,y:by+bH+10,'text-anchor':'end',"
+            "        fill:'#EF476F','font-size':'8'},'\u2191 \u5f15\u9000\u5224\u5b9a\u5883\u754c (12Q)'));"
+            "    }"
+            "  });"
+            "  hcol.appendChild(hsvg2);ct.appendChild(hcol);"
+            "  var scol=document.createElement('div');"
+            "  scol.style.cssText='min-width:190px;';"
+            "  var tbl=document.createElement('table');"
+            "  tbl.style.cssText='width:100%;border-collapse:collapse;font-size:11px;';"
+            "  var sRows=["
+            "    {k:'p10',l:'P10',c:'#74C0FC'},"
+            "    {k:'p25',l:'P25',c:'#4DABF7'},"
+            "    {k:'p50',l:'P50 \u4e2d\u592e\u5024',c:'#fff',b:true},"
+            "    {k:'p75',l:'P75',c:'#FFA94D'},"
+            "    {k:'p90',l:'P90',c:'#FF6B6B'},"
+            "    {k:'p95',l:'P95',c:'#f03e3e'},"
+            "    {k:'p99',l:'P99 \u4e0a\u4f4d1%',c:'#c92a2a'},"
+            "  ];"
+            "  sRows.forEach(function(sr){"
+            "    var v=d[sr.k][cy];if(v==null)return;"
+            "    var tr2=document.createElement('tr');"
+            "    tr2.style.borderBottom='1px solid #232335';"
+            "    var td1=document.createElement('td');"
+            "    td1.style.cssText='padding:4px 8px 4px 2px;color:'+sr.c+(sr.b?';font-weight:bold':'');"
+            "    td1.textContent=sr.l;"
+            "    var td2=document.createElement('td');"
+            "    td2.style.cssText='padding:4px 6px;color:#ddd;text-align:right;font-variant-numeric:tabular-nums;'+(sr.b?'font-weight:bold;':'');"
+            "    td2.textContent=v.toFixed(1)+'Q';"
+            "    var td3=document.createElement('td');"
+            "    td3.style.cssText='padding:4px 2px;color:#666;font-size:10px;';"
+            "    td3.textContent='('+(v/4).toFixed(2)+'\u5e74)';"
+            "    tr2.appendChild(td1);tr2.appendChild(td2);tr2.appendChild(td3);"
+            "    tbl.appendChild(tr2);"
+            "  });"
+            "  var tail=hist.b.slice(5).reduce(function(s,b){return s+b.n;},0);"
+            "  var tailPct=hist.n>0?(tail/hist.n*100).toFixed(1):'0';"
+            "  var sep2=document.createElement('tr');"
+            "  var sepTd=document.createElement('td');"
+            "  sepTd.setAttribute('colspan','3');"
+            "  sepTd.style.cssText='padding:7px 2px 2px;border-top:1px solid #3a3a4a;color:#aaa;font-size:10px;';"
+            "  sepTd.textContent='\u5f15\u9000\u5224\u5b9a\u57df (12Q+): '+tailPct+'% \u2014 '+tail+'\u4ef6';"
+            "  sep2.appendChild(sepTd);tbl.appendChild(sep2);"
+            "  scol.appendChild(tbl);ct.appendChild(scol);"
+            "  det.appendChild(ct);"
+            "}"
+            "function clrF(){var fl=document.getElementById('v1d-fl');if(fl)fl.textContent='';tip.style.display='none';var det=document.getElementById('v1d-detail');if(det){det.textContent='';det.style.display='none';}}"
+            "function buildFilterUI(){"
+            "  var sbc=document.getElementById('v1d-sbtns');sbc.textContent='';"
+            "  var sh=function(t){var s=document.createElement('div');s.className='v1d-sec';s.textContent=t;sbc.appendChild(s);};"
+            "  var sp=function(){var s=document.createElement('div');s.className='v1d-sep';sbc.appendChild(s);};"
+            "  sh('\u25be \u5b9f\u7e3e\u5c5e\u6027');"
+            "  var row1=document.createElement('div');row1.style.cssText='display:flex;align-items:center;gap:4px;flex-wrap:wrap;';"
+            "  var lbl1=document.createElement('span');lbl1.style.cssText='color:#666;font-size:10px;min-width:52px;';lbl1.textContent='\u6027\u5225:';row1.appendChild(lbl1);"
+            "  ['F','M'].forEach(function(k){var btn=document.createElement('button');btn.textContent=GLABELS[k];btn.className='v1d-fb'+(actG.has(k)?' v1d-fb-active':'');btn.style.borderColor=GCOLORS[k];if(actG.has(k))btn.style.background=GCOLORS[k]+'33';btn.onclick=function(){if(actG.has(k))actG.delete(k);else actG.add(k);locked=false;lastCy=-1;clrF();buildFilterUI();render();};row1.appendChild(btn);});sbc.appendChild(row1);"
+            "  var row2=document.createElement('div');row2.style.cssText='display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;';"
+            "  var lbl2=document.createElement('span');lbl2.style.cssText='color:#666;font-size:10px;min-width:52px;';lbl2.textContent='\u5e74\u4ee3:';row2.appendChild(lbl2);"
+            "  DKEYS.forEach(function(k){var btn=document.createElement('button');btn.textContent=k;btn.className='v1d-fb'+(actD.has(k)?' v1d-fb-active':'');btn.style.borderColor=DCOLORS[k]||'#555';if(actD.has(k))btn.style.background=(DCOLORS[k]||'#555')+'33';btn.onclick=function(){if(actD.has(k))actD.delete(k);else actD.add(k);locked=false;lastCy=-1;clrF();buildFilterUI();render();};row2.appendChild(btn);});sbc.appendChild(row2);"
+            "  sp();"
+            "  sh('\u25be \u30e2\u30c7\u30eb\u63a8\u5b9a\uff08\u8aa4\u5dee\u3042\u308a\uff09');"
+            "  var row3=document.createElement('div');row3.style.cssText='display:flex;align-items:center;gap:4px;flex-wrap:wrap;';"
+            "  var lbl3=document.createElement('span');lbl3.style.cssText='color:#666;font-size:10px;min-width:52px;';lbl3.textContent='IV\u5e2f\u57df:';row3.appendChild(lbl3);"
+            "  ['top25','mid50','bot25'].forEach(function(k){var btn=document.createElement('button');btn.textContent=VLABELS[k];btn.className='v1d-fb'+(actV.has(k)?' v1d-fb-active':'');btn.style.borderColor=VCOLORS[k];if(actV.has(k))btn.style.background=VCOLORS[k]+'33';btn.onclick=function(){if(actV.has(k))actV.delete(k);else actV.add(k);locked=false;lastCy=-1;clrF();buildFilterUI();render();};row3.appendChild(btn);});sbc.appendChild(row3);"
+            "  sp();"
+            "  var row4=document.createElement('div');row4.style.cssText='display:flex;align-items:center;gap:8px;';"
+            "  var bub=document.createElement('button');bub.textContent='\u30d0\u30d6\u30eb\u5bc6\u5ea6 '+(showBubbles?'\u25a0':'\u25a1');bub.className='v1d-fb'+(showBubbles?' v1d-fb-active':'');bub.onclick=function(){showBubbles=!showBubbles;buildFilterUI();render();};row4.appendChild(bub);"
+            "  if(hasFilters()){var rst=document.createElement('button');rst.textContent='\u30d5\u30a3\u30eb\u30bf\u89e3\u9664';rst.className='v1d-fb';rst.style.cssText+='border-color:#ff6b6b!important;color:#ff9999!important;';rst.onclick=function(){actG.clear();actD.clear();actV.clear();locked=false;lastCy=-1;clrF();buildFilterUI();render();};row4.appendChild(rst);var nFilt=DATA[cur].trajs.filter(matchTraj).length;var inf=document.createElement('span');inf.style.cssText='color:#aaa;font-size:10px;';inf.textContent=nFilt+'/'+DATA[cur].trajs.length+'\u4eba\u8868\u793a';row4.appendChild(inf);}"
+            "  sbc.appendChild(row4);"
+            "}"
+            "var bc=document.getElementById('v1d-btns');"
+            "ROLES.forEach(function(role){"
+            "  var btn=document.createElement('button');btn.textContent=role;"
+            "  btn.className='v1d-rb'+(role===cur?' v1d-active':'');"
+            "  btn.onclick=function(){cur=role;locked=false;lastCy=-1;clrF();actG.clear();actD.clear();actV.clear();document.querySelectorAll('.v1d-rb').forEach(function(b){b.classList.toggle('v1d-active',b.textContent===role);});buildFilterUI();render();};"
+            "  bc.appendChild(btn);"
+            "});"
+            "buildFilterUI();"
+            "(function(){"
+            "var _v1dDone=false;"
+            "function _v1dFirst(){"
+            "  if(_v1dDone)return;_v1dDone=true;"
+            "  var _ds=document.getElementById('v1d-data-store');"
+            "  DATA=JSON.parse(atob(_ds.getAttribute('data-v1d')));"
+            "  _ds.removeAttribute('data-v1d');"
+            "  render();"
+            "}"
+            "if(typeof IntersectionObserver!=='undefined'){"
+            "  var _v1dObs=new IntersectionObserver(function(es){"
+            "    if(!es[0].isIntersecting)return;"
+            "    _v1dObs.disconnect();_v1dFirst();"
+            "  },{rootMargin:'300px'});"
+            "  _v1dObs.observe(document.getElementById('v1d-wrap'));"
+            "}else{_v1dFirst();}"
+            "})();"
+            "window.addEventListener('resize',function(){render();});"
+            "})()"
+        ).replace("__ROLES__", _v1d_roles_json
+         ).replace("__INIT__", _v1d_init_json
+         ).replace("__DCOLORS__", _v1d_dcolors_js)
+
+        body += (
+            "<style>"
+            "#v1d-wrap{position:relative;width:100%;}"
+            "#v1d-btns{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px;}"
+            "#v1d-sbtns{display:flex;flex-direction:column;gap:0;margin-bottom:10px;"
+            "padding:8px 0 6px 0;border-top:1px solid #2a2a3a;}"
+            ".v1d-rb{background:#1e1e2e;color:#aaa;border:1px solid #444;border-radius:4px;"
+            "padding:4px 10px;font-size:12px;cursor:pointer;transition:all .15s;}"
+            ".v1d-rb:hover{background:#2a2a3e;color:#ddd;}"
+            ".v1d-active{background:#3a3a5e!important;color:#fff!important;border-color:#7b7bcc!important;}"
+            ".v1d-fb{background:#141420;color:#888;border:1px solid #444;border-radius:4px;"
+            "padding:2px 8px;font-size:11px;cursor:pointer;transition:all .15s;}"
+            ".v1d-fb:hover{background:#1e1e2e;color:#ccc;}"
+            ".v1d-fb-active{background:#1e2a1e!important;color:#eee!important;font-weight:bold;}"
+            ".v1d-sec{color:#3a4460;font-size:9px;letter-spacing:0.4px;margin-bottom:2px;}"
+            ".v1d-sep{border-top:1px solid #1e2030;margin:4px 0 3px;}"
+            "#v1d-svg{display:block;background:#111;border-radius:6px;min-height:470px;}"
+            "#v1d-tip{position:absolute;background:#1a1a2e;border:1px solid #444;"
+            "border-radius:5px;padding:8px 10px;font-size:11px;color:#ccc;"
+            "pointer-events:none;display:none;white-space:nowrap;z-index:10;line-height:1.7;}"
+            "</style>"
+            '<div id="v1d-wrap">'
+            '<div id="v1d-btns"></div>'
+            '<div id="v1d-sbtns"></div>'
+            '<svg id="v1d-svg" height="470"></svg>'
+            '<div id="v1d-tip"></div>'
+            '<div id="v1d-detail" style="display:none;background:#141424;'
+            'border:1px solid #333;border-radius:6px;padding:14px;margin-top:10px;"></div>'
+            "</div>"
+            f'<div id="v1d-data-store" data-v1d="{_v1d_data_b64}" style="display:none"></div>'
+            f"<script>{_v1d_js}</script>"
+        )
+
         # Data-driven V-1 insight: check P95 against threshold for each role
-        _v1_within = [sg for sg, _n, _p50, _p90, p95, _p99 in gap_stats_rows if p95 <= 3.0]
-        _v1_exceed = [(sg, p95) for sg, _n, _p50, _p90, p95, _p99 in gap_stats_rows if p95 > 3.0]
+        _V1_RETIRE_Q = 12  # 3年 = 12四半期
+        _v1_within = [sg for sg, _n, _p50, _p90, p95, _p99 in gap_stats_rows if p95 <= _V1_RETIRE_Q]
+        _v1_exceed = [(sg, p95) for sg, _n, _p50, _p90, p95, _p99 in gap_stats_rows if p95 > _V1_RETIRE_Q]
         _v1_within_str = "、".join(_v1_within) if _v1_within else "（該当なし）"
         if _v1_exceed:
-            _v1_exceed_str = "、".join(f"{sg}（P95={p95:.1f}年）" for sg, p95 in _v1_exceed)
+            _v1_exceed_str = "、".join(
+                f"{sg}（P95={p95:.0f}Q/{p95/4:.1f}年）" for sg, p95 in _v1_exceed
+            )
             _v1_exception = (
-                f"<br><strong>例外</strong>: {_v1_exceed_str} は95パーセンタイルが3年を超えており、"
+                f"<br><strong>例外</strong>: {_v1_exceed_str} は95パーセンタイルが12Q（3年）を超えており、"
                 "この閾値では実際にはまだ活動中の人物を引退と判定する過小カウントの可能性がある。"
             )
         else:
             _v1_exception = ""
         body += (
             '<div class="insight-box">'
-            "<strong>検証結果: 引退閾値 3年の妥当性</strong><br>"
-            f"95パーセンタイルが3年以内の職種: <strong>{_v1_within_str}</strong>"
+            "<strong>検証結果: 引退閾値 3年（12Q）の妥当性</strong><br>"
+            f"95パーセンタイルが12Q（3年）以内の職種: <strong>{_v1_within_str}</strong>"
             f"（{len(_v1_within)}/{len(gap_stats_rows)}職種）。"
             f"これらの職種では「3年間クレジットなし＝引退」とした場合、"
             "活動中の人物を誤って引退と判定するリスクは5%未満に抑えられる。"
@@ -1711,6 +2418,235 @@ def generate_industry_overview():
             "<br>→ この閾値を以降の人材フロー分析（引退判定）およびサンキーダイアグラム"
             "（引退ノード）に適用する。"
             "</div>"
+        )
+
+        # --- V-1e: 年間活動本数 Fan Chart ---
+        body += "<h4>V-1e. 個人軌跡 Fan Chart: キャリア年数 × 年間活動本数</h4>"
+        body += chart_guide(
+            "キャリア年数ごとの年間活動本数（参加した distinct アニメ本数）の分布。"
+            "新人期は本数が多く、中堅以降は選択的参加で本数が減少する傾向を確認できる。"
+            "<strong>ホバーでパーセンタイル確認、クリックで固定。</strong>"
+            "白線＝P50中央値、帯＝P25–P75 / P10–P90。"
+        )
+        # Build fan chart for work count
+        _v1e_p10_list, _v1e_p25_list, _v1e_p50_list, _v1e_p75_list, _v1e_p90_list, _v1e_p95_list = [], [], [], [], [], []
+        _v1e_n_cy_list = []
+        for _cy_e3 in range(31):
+            _vals_e3 = _v1e_wc_bins.get(_cy_e3, [])
+            _v1e_n_cy_list.append(len(_vals_e3))
+            if len(_vals_e3) >= 10:
+                _arr_e3 = _np_val.array(_vals_e3)
+                _v1e_p10_list.append(round(float(_np_val.percentile(_arr_e3, 10)), 2))
+                _v1e_p25_list.append(round(float(_np_val.percentile(_arr_e3, 25)), 2))
+                _v1e_p50_list.append(round(float(_np_val.percentile(_arr_e3, 50)), 2))
+                _v1e_p75_list.append(round(float(_np_val.percentile(_arr_e3, 75)), 2))
+                _v1e_p90_list.append(round(float(_np_val.percentile(_arr_e3, 90)), 2))
+                _v1e_p95_list.append(round(float(_np_val.percentile(_arr_e3, 95)), 2))
+            else:
+                for _l3 in [_v1e_p10_list, _v1e_p25_list, _v1e_p50_list, _v1e_p75_list, _v1e_p90_list, _v1e_p95_list]:
+                    _l3.append(None)
+
+        import json as _json_v1e
+        import random as _rng_v1e
+        _rng_v1e.seed(77)
+        _v1e_sampled2 = _rng_v1e.sample(_v1e_trajs_raw, min(len(_v1e_trajs_raw), 150))  # 400→150
+        _v1e_density2: dict[tuple[int, int], int] = {}
+        for _pid2x, _tr2x in _v1e_trajs_raw:
+            for _cy2, _ct2 in _tr2x:
+                _k2 = (_cy2, min(_ct2, 15))
+                _v1e_density2[_k2] = _v1e_density2.get(_k2, 0) + 1
+        _v1e_max_d2 = max(_v1e_density2.values(), default=1)
+        def _v1e_tw2(tr_: list) -> float:
+            if not tr_: return 0.0
+            _s2 = [_v1e_density2.get((_c_, min(_ct_, 15)), 0) for _c_, _ct_ in tr_]
+            return round(sum(_s2) / len(_s2) / _v1e_max_d2, 3)
+        _v1e_trajs_js2 = []
+        for (_pid2s, _pts2s) in _v1e_sampled2:
+            _wt2e: dict = {"pts": list(_pts2s), "w": _v1e_tw2(_pts2s)}
+            _g2e = pid_gender_v1d.get(_pid2s)
+            _d2e = _debut_decade_key_v1d(pid_first_year.get(_pid2s))
+            _v2e = _iv_band_v1d(_pid2s)
+            if _g2e: _wt2e["g"] = _g2e
+            if _d2e: _wt2e["d"] = _d2e
+            if _v2e: _wt2e["v"] = _v2e
+            _v1e_trajs_js2.append(_wt2e)
+        # Segment fans for V-1e
+        _v1e_seg_fans2: dict = {}
+        for _st_e2 in ("gender", "decade", "iv"):
+            _v1e_seg_fans2[_st_e2] = {}
+            _sbt_e2 = _v1e_seg_bins.get(_st_e2, {})
+            if _st_e2 == "gender":
+                for _k_e2 in ("F", "M"):
+                    _v1e_seg_fans2[_st_e2][_k_e2] = _compute_seg_fan_v1d(
+                        _sbt_e2.get(_k_e2, {}), _SEG_GENDER_COLORS[_k_e2], _SEG_GENDER_LABELS[_k_e2])
+            elif _st_e2 == "decade":
+                for _k_e2 in _ALL_DECADE_KEYS_V1D:
+                    _v1e_seg_fans2[_st_e2][_k_e2] = _compute_seg_fan_v1d(
+                        _sbt_e2.get(_k_e2, {}), _SEG_DECADE_COLORS[_k_e2], _SEG_DECADE_LABELS[_k_e2])
+            elif _st_e2 == "iv":
+                for _k_e2 in ("top25", "mid50", "bot25"):
+                    _v1e_seg_fans2[_st_e2][_k_e2] = _compute_seg_fan_v1d(
+                        _sbt_e2.get(_k_e2, {}), _SEG_IV_COLORS[_k_e2], _SEG_IV_LABELS[_k_e2])
+        # Bubble density for V-1e
+        _v1e_bub2: dict[tuple[int, int], int] = {}
+        for _pid2b, _traj2b in _v1e_trajs_raw:
+            for _cy2b, _ct2b in _traj2b:
+                _kb2 = (_cy2b, min(_ct2b, 15))
+                _v1e_bub2[_kb2] = _v1e_bub2.get(_kb2, 0) + 1
+        _v1e_bubbles2 = sorted(
+            [{"cy": _cb2[0], "wc": _cb2[1], "n": _cv2} for _cb2, _cv2 in _v1e_bub2.items()],
+            key=lambda x: x["n"], reverse=True,
+        )[:250]
+        _v1e_chart_raw2 = {
+            "x": list(range(31)),
+            "n": _v1e_n_cy_list,
+            "p10": _v1e_p10_list, "p25": _v1e_p25_list, "p50": _v1e_p50_list,
+            "p75": _v1e_p75_list, "p90": _v1e_p90_list, "p95": _v1e_p95_list,
+            "trajs": _v1e_trajs_js2,
+            "segs": _v1e_seg_fans2,
+            "bubbles": _v1e_bubbles2,
+        }
+        import base64 as _b64_v1e
+        _v1e_chart_json2 = _json_v1e.dumps(_v1e_chart_raw2, ensure_ascii=False)
+        _v1e_data_b64 = _b64_v1e.b64encode(_v1e_chart_json2.encode()).decode()
+
+        # V-1e JS (linear Y scale, same filter/bubble features as V-1d)
+        _v1e_js = (
+            "(function(){"
+            "var D=null;"
+            "var actG=new Set(),actD=new Set(),actV=new Set();"
+            "var showBubbles=false;"
+            "var locked=false,lastCy=-1;"
+            "var NS='http://www.w3.org/2000/svg';"
+            "var GCOLORS={F:'#f48fb1',M:'#64b5f6'};"
+            "var GLABELS={F:'\u5973\u6027',M:'\u7537\u6027'};"
+            "var DKEYS=['~1989','1990-94','1995-99','2000-04','2005-09','2010-14','2015-19','2020+'];"
+            "var DCOLORS=__DCOLORS__;"
+            "var VCOLORS={top25:'#69db7c',mid50:'#ffd43b',bot25:'#ff6b6b'};"
+            "var VLABELS={top25:'IV\u4e0a\u4f4d25%',mid50:'IV\u4e2d\u4f4d50%',bot25:'IV\u4e0b\u4f4d25%'};"
+            "var wrap=document.getElementById('v1e-wrap');"
+            "var svg=document.getElementById('v1e-svg');"
+            "var tip=document.getElementById('v1e-tip');"
+            "var mL=60,mR=24,mT=32,mB=52,H=420,W,cW,cH;"
+            "function rsz(){W=wrap.clientWidth||820;cW=W-mL-mR;cH=H-mT-mB;svg.setAttribute('width',W);svg.setAttribute('height',H);}"
+            "function xS(v){return mL+v/30*cW;}"
+            "function yMax(){var m=0;D.p95.forEach(function(v){if(v&&v>m)m=v;});return Math.max(m*1.1,5);}"
+            "function yS(v,ym){if(v==null||v<0)return mT+cH;return mT+cH*(1-Math.min(1,v/ym));}"
+            "function se(tag,a,txt){var e=document.createElementNS(NS,tag);for(var k in(a||{}))e.setAttribute(k,a[k]);if(txt!==undefined)e.textContent=txt;return e;}"
+            "function lp2(xs,ys,ym){var d='',pv=true;for(var i=0;i<xs.length;i++){if(ys[i]==null){pv=true;continue;}d+=(pv?'M':'L')+xS(xs[i]).toFixed(1)+','+yS(ys[i],ym).toFixed(1);pv=false;}return d;}"
+            "function ap2(xs,yt,yb,ym){var segs=[],sg=null;for(var i=0;i<xs.length;i++){if(yt[i]!=null&&yb[i]!=null){if(!sg){sg=[];segs.push(sg);}sg.push(i);}else sg=null;}var d='';segs.forEach(function(sg){d+='M'+xS(xs[sg[0]]).toFixed(1)+','+yS(yt[sg[0]],ym).toFixed(1);for(var i=1;i<sg.length;i++)d+='L'+xS(xs[sg[i]]).toFixed(1)+','+yS(yt[sg[i]],ym).toFixed(1);for(var i=sg.length-1;i>=0;i--)d+='L'+xS(xs[sg[i]]).toFixed(1)+','+yS(yb[sg[i]],ym).toFixed(1);d+='Z';});return d;}"
+            "function pctile(arr,p){if(!arr.length)return null;var i=(p/100)*(arr.length-1);var lo=Math.floor(i),hi=Math.ceil(i);return arr[lo]+(arr[hi]-arr[lo])*(i-lo);}"
+            "function hasFilters(){return actG.size>0||actD.size>0||actV.size>0;}"
+            "function matchTraj(tr){if(actG.size>0&&!(tr.g&&actG.has(tr.g)))return false;if(actD.size>0&&!(tr.d&&actD.has(tr.d)))return false;if(actV.size>0&&!(tr.v&&actV.has(tr.v)))return false;return true;}"
+            "function trajColor(tr,baseC){if(actV.size>0&&tr.v&&VCOLORS[tr.v])return VCOLORS[tr.v];if(actG.size>0&&tr.g&&GCOLORS[tr.g])return GCOLORS[tr.g];if(actD.size>0&&tr.d&&DCOLORS[tr.d])return DCOLORS[tr.d];return baseC;}"
+            "function computeBands(trajs){var byY={};trajs.forEach(function(tr){tr.pts.forEach(function(pt){var cy=pt[0],v=pt[1];if(!byY[cy])byY[cy]=[];byY[cy].push(v);});});var p10=[],p25=[],p50=[],p75=[],p90=[],p95=[];for(var i=0;i<=30;i++){var arr=(byY[i]||[]).slice().sort(function(a,b){return a-b;});if(arr.length>=5){p10.push(pctile(arr,10));p25.push(pctile(arr,25));p50.push(pctile(arr,50));p75.push(pctile(arr,75));p90.push(pctile(arr,90));p95.push(pctile(arr,95));}else{p10.push(null);p25.push(null);p50.push(null);p75.push(null);p90.push(null);p95.push(null);}}return{p10:p10,p25:p25,p50:p50,p75:p75,p90:p90,p95:p95};}"
+            "function drawSegFanBands2(sd,xArr,ym){var c=sd.color;var a90=ap2(xArr,sd.p10,sd.p90,ym);if(a90)svg.appendChild(se('path',{d:a90,fill:c,opacity:'0.07',stroke:'none'}));var a75=ap2(xArr,sd.p25,sd.p75,ym);if(a75)svg.appendChild(se('path',{d:a75,fill:c,opacity:'0.18',stroke:'none'}));var pd50=lp2(xArr,sd.p50,ym);if(pd50)svg.appendChild(se('path',{d:pd50,stroke:c,'stroke-width':'2',fill:'none',opacity:'0.85'}));}"
+            "function renderBubbles2(filtered,ym){var bub={};filtered.forEach(function(tr){tr.pts.forEach(function(pt){var cy=pt[0],wc=Math.min(pt[1],15);var k=cy+','+wc;bub[k]=(bub[k]||0)+1;});});var items=Object.keys(bub).map(function(k){var p=k.split(',');return{cy:+p[0],wc:+p[1],n:bub[k]};});items.sort(function(a,b){return b.n-a.n;});items=items.slice(0,200);var maxN=items.length?items[0].n:1;var gB=se('g',{opacity:'0.75'});items.forEach(function(it){var r=Math.sqrt(it.n/maxN)*12;gB.appendChild(se('circle',{cx:xS(it.cy).toFixed(1),cy:yS(it.wc,ym).toFixed(1),r:r.toFixed(1),fill:'#ffd43b',stroke:'#111','stroke-width':'0.5',opacity:'0.65'}));});svg.appendChild(gB);}"
+            "function render(){"
+            "  if(!D)return;"
+            "  rsz();svg.textContent='';"
+            "  var ym=yMax();var c='#74b9ff';"
+            "  var filtered=hasFilters()?D.trajs.filter(matchTraj):D.trajs;"
+            "  var bands=hasFilters()?computeBands(filtered):{p10:D.p10,p25:D.p25,p50:D.p50,p75:D.p75,p90:D.p90,p95:D.p95};"
+            "  var gG=se('g');for(var yi=1;yi<=Math.ceil(ym);yi++){if(yi>20)break;var ty=yS(yi,ym).toFixed(1);gG.appendChild(se('line',{x1:mL,y1:ty,x2:W-mR,y2:ty,stroke:'#2a2a2a','stroke-width':'1'}));gG.appendChild(se('text',{x:mL-7,y:parseFloat(ty)+4,'text-anchor':'end',fill:'#777','font-size':'10'},yi+'\u672c'));}svg.appendChild(gG);"
+            "  var gTr=se('g',{fill:'none'});filtered.forEach(function(tr){var pts=tr.pts,w=tr.w||0;if(pts.length<2)return;var tc=trajColor(tr,c);var pd='M'+xS(pts[0][0]).toFixed(1)+','+yS(pts[0][1],ym).toFixed(1);for(var i=1;i<pts.length;i++)pd+='L'+xS(pts[i][0]).toFixed(1)+','+yS(pts[i][1],ym).toFixed(1);var sw=(0.4+1.5*w).toFixed(2);var op=(0.05+0.30*w).toFixed(3);gTr.appendChild(se('path',{d:pd,stroke:tc,'stroke-width':sw,opacity:op}));});svg.appendChild(gTr);"
+            "  var a90=ap2(D.x,bands.p10,bands.p90,ym),a75=ap2(D.x,bands.p25,bands.p75,ym);"
+            "  if(a90)svg.appendChild(se('path',{d:a90,fill:c,opacity:'0.1',stroke:'none'}));if(a75)svg.appendChild(se('path',{d:a75,fill:c,opacity:'0.25',stroke:'none'}));"
+            "  var a95b=ap2(D.x,bands.p90,bands.p95,ym);if(a95b)svg.appendChild(se('path',{d:a95b,fill:'#ff6b6b',opacity:'0.18',stroke:'none'}));"
+            "  [[bands.p10,'1','3,3','0.5'],[bands.p90,'1','3,3','0.5'],[bands.p25,'1.5','','0.7'],[bands.p75,'1.5','','0.7']].forEach(function(spec){var pd=lp2(D.x,spec[0],ym);if(!pd)return;var a={d:pd,stroke:c,'stroke-width':spec[1],fill:'none',opacity:spec[3]};if(spec[2])a['stroke-dasharray']=spec[2];svg.appendChild(se('path',a));});"
+            "  var pd50=lp2(D.x,bands.p50,ym);if(pd50)svg.appendChild(se('path',{d:pd50,stroke:'#ffffff','stroke-width':'2.5',fill:'none',opacity:'0.9'}));"
+            "  var pd95=lp2(D.x,bands.p95,ym);if(pd95)svg.appendChild(se('path',{d:pd95,stroke:'#ff6b6b','stroke-width':'1.2','stroke-dasharray':'2,4',fill:'none',opacity:'0.65'}));"
+            "  if(actG.size>0&&D.segs&&D.segs.gender){actG.forEach(function(k){var sd=D.segs.gender[k];if(sd&&sd.n>=5)drawSegFanBands2(sd,D.x,ym);});}"
+            "  if(actD.size>0&&D.segs&&D.segs.decade){actD.forEach(function(k){var sd=D.segs.decade[k];if(sd&&sd.n>=5)drawSegFanBands2(sd,D.x,ym);});}"
+            "  if(actV.size>0&&D.segs&&D.segs.iv){actV.forEach(function(k){var sd=D.segs.iv[k];if(sd&&sd.n>=5)drawSegFanBands2(sd,D.x,ym);});}"
+            "  if(showBubbles)renderBubbles2(filtered,ym);"
+            "  var gAx=se('g');gAx.appendChild(se('line',{x1:mL,y1:mT+cH,x2:W-mR,y2:mT+cH,stroke:'#444','stroke-width':'1'}));gAx.appendChild(se('line',{x1:mL,y1:mT,x2:mL,y2:mT+cH,stroke:'#444','stroke-width':'1'}));"
+            "  var xA={0:'\u30c7\u30d3\u30e5\u30fc',5:'\u4e2d\u5805',10:'\u30d9\u30c6\u30e9\u30f3',20:'\u30ec\u30b8\u30a7\u30f3\u30c9'};"
+            "  for(var xv=0;xv<=30;xv+=5){var tx=xS(xv).toFixed(1);gAx.appendChild(se('line',{x1:tx,y1:mT+cH,x2:tx,y2:mT+cH+5,stroke:'#444','stroke-width':'1'}));gAx.appendChild(se('text',{x:tx,y:mT+cH+15,'text-anchor':'middle',fill:'#888','font-size':'10'},xv+'\u5e74'));if(xA[xv])gAx.appendChild(se('text',{x:tx,y:mT+cH+27,'text-anchor':'middle',fill:'#555','font-size':'9'},xA[xv]));}"
+            "  gAx.appendChild(se('text',{x:mL+cW/2,y:H-3,'text-anchor':'middle',fill:'#aaa','font-size':'11'},'\u30c7\u30d3\u30e5\u30fc\u304b\u3089\u306e\u7d4c\u9a13\u5e74\u6570'));"
+            "  var gYL=se('g',{transform:'translate('+(mL-46)+','+(mT+cH/2)+') rotate(-90)'});gYL.appendChild(se('text',{x:0,y:0,'text-anchor':'middle',fill:'#aaa','font-size':'11'},'\u5e74\u9593\u6d3b\u52d5\u672c\u6570'));gAx.appendChild(gYL);svg.appendChild(gAx);"
+            "  var nShown=filtered.length,nTotal=D.trajs.length;"
+            "  var legSpec=[{l:'P90\u2013P95 \u4e0a\u4f4d5%\u5e2f',t:'area95'},{l:'P10\u2013P90 \u5e2f',t:'area',op:0.1},{l:'P25\u2013P75 \u5e2f',t:'area',op:0.25},{l:'P50 \u4e2d\u592e\u5024 (\u767d)',t:'bold50'},{l:'\u8ecc\u8de1 ('+nShown+(nShown<nTotal?'/'+nTotal:'')+'\u4eba)',t:'spag'}];"
+            "  var gLg=se('g'),lx=mL+8,ly=mT+8;legSpec.forEach(function(it,idx){var iy=ly+idx*15;if(it.t==='area95'){gLg.appendChild(se('rect',{x:lx,y:iy+1,width:20,height:7,fill:'#ff6b6b',opacity:'0.5',rx:2}));}else if(it.t==='area'){gLg.appendChild(se('rect',{x:lx,y:iy+1,width:20,height:7,fill:c,opacity:it.op,rx:2}));}else{var la={x1:lx,y1:iy+4,x2:lx+20,y2:iy+4,stroke:it.t==='bold50'?'#ffffff':c};if(it.t==='bold50'){la['stroke-width']='2.5';}else if(it.t==='spag'){la['stroke-width']='0.8';la['opacity']='0.5';}else{la['stroke-width']='1.5';la['opacity']='0.75';}gLg.appendChild(se('line',la));}gLg.appendChild(se('text',{x:lx+26,y:iy+9,fill:'#999','font-size':'9.5'},it.l));});svg.appendChild(gLg);"
+            "  svg.appendChild(se('g',{id:'v1e-fl'}));"
+            "  var ov=se('rect',{x:mL,y:mT,width:cW,height:cH,fill:'transparent',cursor:'crosshair'});"
+            "  ov.addEventListener('mousemove',function(e){if(!locked)drawFe(e,ym);});"
+            "  ov.addEventListener('click',function(e){var r2=svg.getBoundingClientRect();var cy2=Math.round((e.clientX-r2.left-mL)/cW*30);cy2=Math.max(0,Math.min(30,cy2));if(locked&&lastCy===cy2){locked=false;lastCy=-1;clrFe();}else{locked=true;lastCy=cy2;drawFe(e,ym);}});"
+            "  ov.addEventListener('mouseleave',function(){if(!locked)clrFe();});svg.appendChild(ov);"
+            "}"
+            "function drawFe(e,ym){var rect=svg.getBoundingClientRect();var cy=Math.round((e.clientX-rect.left-mL)/cW*30);cy=Math.max(0,Math.min(30,cy));"
+            "  var fl=document.getElementById('v1e-fl');if(!fl)return;fl.textContent='';var fx=xS(cy).toFixed(1);"
+            "  fl.appendChild(se('line',{x1:fx,y1:mT,x2:fx,y2:mT+cH,stroke:'#fff','stroke-width':'1',opacity:'0.55','stroke-dasharray':'3,2'}));"
+            "  fl.appendChild(se('rect',{x:parseFloat(fx)-18,y:mT-22,width:36,height:16,fill:'#1a1a1a',rx:3}));"
+            "  fl.appendChild(se('text',{x:fx,y:mT-10,'text-anchor':'middle',fill:'#eee','font-size':'10','font-weight':'bold'},cy+'\u5e74\u76ee'));"
+            "  var filtered=hasFilters()?D.trajs.filter(matchTraj):D.trajs;"
+            "  var bands=hasFilters()?computeBands(filtered):{p10:D.p10,p25:D.p25,p50:D.p50,p75:D.p75,p90:D.p90,p95:D.p95};"
+            "  var pK=['p10','p25','p50','p75','p90','p95'],pC=['#74C0FC','#4DABF7','#ffffff','#FFA94D','#FF6B6B','#f03e3e'];"
+            "  tip.textContent='';var t0=document.createElement('div');t0.style.fontWeight='bold';t0.style.marginBottom='3px';"
+            "  t0.textContent=cy+'\u5e74\u76ee \u2014 \u5e74\u9593\u6d3b\u52d5\u672c\u6570 (N='+D.n[cy]+')'+(hasFilters()?' [\u30d5\u30a3\u30eb\u30bf\u30fc\u4e2d]':'');tip.appendChild(t0);"
+            "  pK.forEach(function(pk,i){var v=bands[pk][cy];if(v==null)return;var fy_=yS(v,ym).toFixed(1);fl.appendChild(se('circle',{cx:fx,cy:fy_,r:'4',fill:pC[i],stroke:'#111','stroke-width':'1.2'}));var row=document.createElement('div');var sp=document.createElement('span');sp.style.color=pC[i];sp.textContent=pk.toUpperCase();row.appendChild(sp);row.appendChild(document.createTextNode(': '+v.toFixed(1)+'\u672c'));tip.appendChild(row);});"
+            "  if(locked)fl.appendChild(se('text',{x:fx,y:mT+cH+44,'text-anchor':'middle',fill:'#FFD166','font-size':'9.5'},'[\u56fa\u5b9a\u4e2d] \u30af\u30ea\u30c3\u30af\u3067\u89e3\u9664'));"
+            "  var svgR=svg.getBoundingClientRect();var tipX=e.clientX-svgR.left+14;if(tipX+175>W)tipX=e.clientX-svgR.left-185;"
+            "  tip.style.left=tipX+'px';tip.style.top=Math.max(mT,e.clientY-svgR.top-30)+'px';tip.style.display='block';"
+            "}"
+            "function clrFe(){var fl=document.getElementById('v1e-fl');if(fl)fl.textContent='';tip.style.display='none';}"
+            "function buildFilterUI2(){var sbc=document.getElementById('v1e-sbtns');sbc.textContent='';"
+            "  var sh=function(t){var s=document.createElement('div');s.className='v1d-sec';s.textContent=t;sbc.appendChild(s);};"
+            "  var sp=function(){var s=document.createElement('div');s.className='v1d-sep';sbc.appendChild(s);};"
+            "  sh('\u25be \u5b9f\u7e3e\u5c5e\u6027');"
+            "  var row1=document.createElement('div');row1.style.cssText='display:flex;align-items:center;gap:4px;flex-wrap:wrap;';var lbl1=document.createElement('span');lbl1.style.cssText='color:#666;font-size:10px;min-width:52px;';lbl1.textContent='\u6027\u5225:';row1.appendChild(lbl1);"
+            "  ['F','M'].forEach(function(k){var btn=document.createElement('button');btn.textContent=GLABELS[k];btn.className='v1d-fb'+(actG.has(k)?' v1d-fb-active':'');btn.style.borderColor=GCOLORS[k];if(actG.has(k))btn.style.background=GCOLORS[k]+'33';btn.onclick=function(){if(actG.has(k))actG.delete(k);else actG.add(k);locked=false;lastCy=-1;clrFe();buildFilterUI2();render();};row1.appendChild(btn);});sbc.appendChild(row1);"
+            "  var row2=document.createElement('div');row2.style.cssText='display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin-top:4px;';var lbl2=document.createElement('span');lbl2.style.cssText='color:#666;font-size:10px;min-width:52px;';lbl2.textContent='\u5e74\u4ee3:';row2.appendChild(lbl2);"
+            "  DKEYS.forEach(function(k){var btn=document.createElement('button');btn.textContent=k;btn.className='v1d-fb'+(actD.has(k)?' v1d-fb-active':'');btn.style.borderColor=DCOLORS[k]||'#555';if(actD.has(k))btn.style.background=(DCOLORS[k]||'#555')+'33';btn.onclick=function(){if(actD.has(k))actD.delete(k);else actD.add(k);locked=false;lastCy=-1;clrFe();buildFilterUI2();render();};row2.appendChild(btn);});sbc.appendChild(row2);"
+            "  sp();"
+            "  sh('\u25be \u30e2\u30c7\u30eb\u63a8\u5b9a\uff08\u8aa4\u5dee\u3042\u308a\uff09');"
+            "  var row3=document.createElement('div');row3.style.cssText='display:flex;align-items:center;gap:4px;flex-wrap:wrap;';var lbl3=document.createElement('span');lbl3.style.cssText='color:#666;font-size:10px;min-width:52px;';lbl3.textContent='IV\u5e2f\u57df:';row3.appendChild(lbl3);"
+            "  ['top25','mid50','bot25'].forEach(function(k){var btn=document.createElement('button');btn.textContent=VLABELS[k];btn.className='v1d-fb'+(actV.has(k)?' v1d-fb-active':'');btn.style.borderColor=VCOLORS[k];if(actV.has(k))btn.style.background=VCOLORS[k]+'33';btn.onclick=function(){if(actV.has(k))actV.delete(k);else actV.add(k);locked=false;lastCy=-1;clrFe();buildFilterUI2();render();};row3.appendChild(btn);});sbc.appendChild(row3);"
+            "  sp();"
+            "  var row4=document.createElement('div');row4.style.cssText='display:flex;align-items:center;gap:8px;';"
+            "  var bub=document.createElement('button');bub.textContent='\u30d0\u30d6\u30eb\u5bc6\u5ea6 '+(showBubbles?'\u25a0':'\u25a1');bub.className='v1d-fb'+(showBubbles?' v1d-fb-active':'');bub.onclick=function(){showBubbles=!showBubbles;buildFilterUI2();render();};row4.appendChild(bub);"
+            "  if(hasFilters()){var rst=document.createElement('button');rst.textContent='\u30d5\u30a3\u30eb\u30bf\u89e3\u9664';rst.className='v1d-fb';rst.style.cssText+='border-color:#ff6b6b!important;color:#ff9999!important;';rst.onclick=function(){actG.clear();actD.clear();actV.clear();locked=false;lastCy=-1;clrFe();buildFilterUI2();render();};row4.appendChild(rst);var nFilt=D.trajs.filter(matchTraj).length;var inf=document.createElement('span');inf.style.cssText='color:#aaa;font-size:10px;';inf.textContent=nFilt+'/'+D.trajs.length+'\u4eba\u8868\u793a';row4.appendChild(inf);}"
+            "  sbc.appendChild(row4);"
+            "}"
+            "buildFilterUI2();"
+            "(function(){"
+            "var _v1eDone=false;"
+            "function _v1eFirst(){"
+            "  if(_v1eDone)return;_v1eDone=true;"
+            "  var _ds=document.getElementById('v1e-data-store');"
+            "  D=JSON.parse(atob(_ds.getAttribute('data-v1e')));"
+            "  _ds.removeAttribute('data-v1e');"
+            "  render();"
+            "}"
+            "if(typeof IntersectionObserver!=='undefined'){"
+            "  var _v1eObs=new IntersectionObserver(function(es){"
+            "    if(!es[0].isIntersecting)return;"
+            "    _v1eObs.disconnect();_v1eFirst();"
+            "  },{rootMargin:'300px'});"
+            "  _v1eObs.observe(document.getElementById('v1e-wrap'));"
+            "}else{_v1eFirst();}"
+            "})();"
+            "window.addEventListener('resize',function(){render();});"
+            "})()"
+        ).replace("__DCOLORS__", _v1d_dcolors_js)
+
+        body += (
+            "<style>"
+            "#v1e-wrap{position:relative;width:100%;}"
+            "#v1e-sbtns{display:flex;flex-direction:column;gap:0;margin-bottom:10px;"
+            "padding:8px 0 6px 0;border-top:1px solid #2a2a3a;}"
+            "#v1e-svg{display:block;background:#111;border-radius:6px;min-height:420px;}"
+            "#v1e-tip{position:absolute;background:#1a1a2e;border:1px solid #444;"
+            "border-radius:5px;padding:8px 10px;font-size:11px;color:#ccc;"
+            "pointer-events:none;display:none;white-space:nowrap;z-index:10;line-height:1.7;}"
+            "</style>"
+            '<div id="v1e-wrap">'
+            '<div id="v1e-sbtns"></div>'
+            '<svg id="v1e-svg" height="420"></svg>'
+            '<div id="v1e-tip"></div>'
+            "</div>"
+            f'<div id="v1e-data-store" data-v1e="{_v1e_data_b64}" style="display:none"></div>'
+            f"<script>{_v1e_js}</script>"
         )
 
         # --- V-2: デビューからの年数と職能レベルの関係 ---
@@ -1988,6 +2924,7 @@ def generate_industry_overview():
             "作画監督", "キャラデザ", "演出", "監督",
         ]
         # レイヤー定義: {ラベル: (x, y)}  x=0.0~1.0, y=0.0~1.0
+        # ※ CGI監督を撮影監督の直後に配置 — 技術系部門監督として同グループ
         _SANKEY_POS = {
             "デビュー":      (0.01, 0.35),
             # Layer 1: 入門 (Stage 1-2)
@@ -2000,14 +2937,15 @@ def generate_industry_overview():
             "背景美術":      (0.30, 0.55),
             "仕上げ":        (0.30, 0.70),
             # Layer 3: 上級 (Stage 4-5)
-            "作画監督":      (0.52, 0.10),
-            "キャラデザ":    (0.52, 0.28),
-            "脚本":          (0.52, 0.45),
-            "演出":          (0.52, 0.60),
-            "撮影監督":      (0.52, 0.72),
-            "音響監督":      (0.52, 0.82),
-            "プロデューサー": (0.52, 0.92),
-            "CGI監督":       (0.52, 0.55),
+            # 各ノード間隔 ~0.12 以上を確保してラベル重複を防ぐ
+            "作画監督":      (0.52, 0.06),
+            "キャラデザ":    (0.52, 0.18),
+            "脚本":          (0.52, 0.30),
+            "演出":          (0.52, 0.42),
+            "撮影監督":      (0.52, 0.54),
+            "CGI監督":       (0.52, 0.66),
+            "音響監督":      (0.52, 0.78),
+            "プロデューサー": (0.52, 0.90),
             # Layer 4: 頂点 (Stage 6)
             "監督":          (0.80, 0.30),
             # 引退ノード（4段、右端に縦並び）
@@ -2068,14 +3006,16 @@ def generate_industry_overview():
             else:
                 _net_flow[(fr, to)] = cnt
 
-        # Data-driven threshold: median of all net-flow values, minimum 10
+        # Threshold: 75th percentile of all net-flow values, minimum 10
+        # (median だと通過リンクが多すぎてレンダリングが重くなる)
         _all_flow_vals = sorted(_net_flow.values())
-        _SAN_LINK_THRESH = max(10, int(_all_flow_vals[len(_all_flow_vals) // 2])) if _all_flow_vals else 10
+        _p75_idx = int(len(_all_flow_vals) * 0.75)
+        _SAN_LINK_THRESH = max(10, int(_all_flow_vals[_p75_idx])) if _all_flow_vals else 10
         all_trans = sorted(
             [(k, v) for k, v in _net_flow.items() if v >= _SAN_LINK_THRESH],
             key=lambda x: x[1], reverse=True,
         )
-        all_trans = all_trans[:120]  # 最大120リンクに制限（Plotly Sankey の描画限界）
+        all_trans = all_trans[:50]  # 遷移リンクを50本に制限（debut/retire込みで総計≤80を確保）
         san_src, san_tgt, san_val = [], [], []
 
         # デビュー → 各役職
@@ -2094,10 +3034,15 @@ def generate_industry_overview():
             san_val.append(cnt)
 
         # 各役職 → 引退種別ノード（4つの引退ノードへ直接）
+        # 引退リンクが多くなりすぎないよう上位20本に絞る
         retire_link_indices = []  # 引退リンクのインデックス（色を別処理するため）
         retire_link_tiers = []    # 対応する引退種別
-        for (last_role, retire_tier), cnt in retire_from_san.items():
-            if last_role in node_idx and retire_tier in node_idx and cnt >= _SAN_LINK_THRESH:
+        _retire_sorted = sorted(
+            [(k, v) for k, v in retire_from_san.items() if v >= _SAN_LINK_THRESH],
+            key=lambda x: x[1], reverse=True,
+        )[:20]
+        for (last_role, retire_tier), cnt in _retire_sorted:
+            if last_role in node_idx and retire_tier in node_idx:
                 retire_link_indices.append(len(san_src))
                 retire_link_tiers.append(retire_tier)
                 san_src.append(node_idx[last_role])
@@ -2182,7 +3127,10 @@ def generate_industry_overview():
             node_link_map[t].append(li)
 
         fig_sankey = go.Figure(go.Sankey(
-            arrangement="fixed",
+            # arrangement="fixed" はオーバーラップ解決ソルバーが
+            # リンク数140本+値域2500倍超でブラウザをハングさせるため "freeform" に変更。
+            # freeform は x/y 初期位置を尊重しつつ iterative solver を走らせない。
+            arrangement="freeform",
             node=dict(
                 pad=15,
                 thickness=18,
@@ -2264,17 +3212,13 @@ def generate_industry_overview():
     var isAnimator, isMinor, nodeLinkMap, nLinks, linkSrc, linkTgt;
 
     /* SVG直接操作: Plotly.restyle/reactは呼ばない (Sankey全再描画でクラッシュするため) */
+    /* Plotly は .sankey-link / .sankey-node に data-index を付与しないため
+       DOM順序 = data配列順序 をそのまま使う */
     function getLinkEls() {{
-        var gs = el.querySelectorAll(".sankey-link");
-        return Array.from(gs).sort(function(a, b) {{
-            return (+a.getAttribute("data-index") || 0) - (+b.getAttribute("data-index") || 0);
-        }});
+        return Array.from(el.querySelectorAll(".sankey-link"));
     }}
     function getNodeEls() {{
-        var gs = el.querySelectorAll(".sankey-node");
-        return Array.from(gs).sort(function(a, b) {{
-            return (+a.getAttribute("data-index") || 0) - (+b.getAttribute("data-index") || 0);
-        }});
+        return Array.from(el.querySelectorAll(".sankey-node"));
     }}
 
     function applyFilter() {{
@@ -2520,12 +3464,16 @@ def generate_industry_overview():
                     src.append(idx["デビュー"])
                     tgt.append(idx[lbl])
                     val.append(cnt)
-            # 通常遷移（自己ループ除外）
-            for (fr, to), cnt in trans.items():
-                if fr != to and fr in idx and to in idx and cnt >= 2:
-                    src.append(idx[fr])
-                    tgt.append(idx[to])
-                    val.append(cnt)
+            # 通常遷移: 上位60本のみ（多すぎるとレンダリングが重い）
+            _v4b_trans_sorted = sorted(
+                [(cnt, fr, to) for (fr, to), cnt in trans.items()
+                 if fr != to and fr in idx and to in idx and cnt >= 2],
+                reverse=True,
+            )[:60]
+            for cnt, fr, to in _v4b_trans_sorted:
+                src.append(idx[fr])
+                tgt.append(idx[to])
+                val.append(cnt)
 
             # リンク色（logアルファ）
             max_v = max(val) if val else 1
@@ -2550,7 +3498,7 @@ def generate_industry_overview():
 
         # 左右並置（2つの独立 Sankey を HTML で横並び）
         fig_dir_a = go.Figure(go.Sankey(
-            arrangement="fixed",
+            # arrangement="fixed" は x/y 未指定で全ノードをゼロから解くためクラッシュ原因 → 削除
             **trace_anim,
         ))
         fig_dir_a.update_layout(
@@ -2566,7 +3514,7 @@ def generate_industry_overview():
             font=dict(size=10, color="#e0e0e0"),
         )
         fig_dir_b = go.Figure(go.Sankey(
-            arrangement="fixed",
+            # arrangement="fixed" は x/y 未指定で全ノードをゼロから解くためクラッシュ原因 → 削除
             **trace_non,
         ))
         fig_dir_b.update_layout(
@@ -4664,13 +5612,1068 @@ def generate_industry_overview():
 
 
 # ============================================================
+# Report 2b: Network Analysis (Academic) — Burt / Multilayer / Temporal / AKM
+# ============================================================
+
+
+def generate_network_analysis_report():  # noqa: C901
+    """学術的ネットワーク分析レポート.
+
+    4セクション:
+      1. Burt構造的空隙 + Gould-Fernandez ブローカー役割
+      2. マルチレイヤーネットワーク（役職別レイヤー × キャリア畑）
+      3. 時間ネットワーク（5年スライディングウィンドウ）
+      4. AKM Limited Mobility Bias 診断
+    """
+    print("  Generating Network Analysis Report (Academic)...")
+
+    import sqlite3 as _sqlite3
+    import numpy as np
+    from collections import defaultdict
+    from scipy.stats import pearsonr
+
+    from src.database import (
+        get_connection as _get_conn,
+        load_all_anime,
+        load_all_credits,
+        load_all_persons,
+        load_all_scores,
+    )
+    from src.analysis.network.structural_holes import (
+        compute_structural_hole_metrics,
+        compute_brokerage_metrics,
+        BrokerageRole,
+    )
+    from src.analysis.network.multilayer import (
+        build_layer_graphs,
+        compute_multilayer_centrality,
+        infer_all_career_tracks,
+        LAYER_NAMES,
+        CAREER_TRACKS,
+    )
+    from src.analysis.network.temporal_bridge import (
+        compute_temporal_bridges,
+        compute_bridge_lifespan,
+        get_person_temporal_trajectory,
+        get_era_top_bridges,
+    )
+
+    # ------------------------------------------------------------------
+    # Data Loading
+    # ------------------------------------------------------------------
+    bridges_data = get_feat_network()
+    if not bridges_data:
+        print("    [SKIP] bridges.json not found")
+        return
+
+    conn = _get_conn()
+    conn.row_factory = _sqlite3.Row
+
+    try:
+        persons_list = load_all_persons(conn)
+        anime_list = load_all_anime(conn)
+        credits_list = load_all_credits(conn)
+        scores_list = load_all_scores(conn)
+    finally:
+        conn.close()
+
+    anime_map = {a.id: a for a in anime_list}
+    person_names = {p.id: (p.name_ja or p.name_en or p.id) for p in persons_list}
+    scores_map = {s.person_id: s for s in scores_list}
+
+    bridge_persons = bridges_data.get("bridge_persons", [])
+    top_bridge_ids = [bp["person_id"] for bp in bridge_persons[:500]]
+    top_bridge_score = {bp["person_id"]: bp["bridge_score"] for bp in bridge_persons[:500]}
+
+    body = ""
+
+    # ------------------------------------------------------------------
+    # Summary header
+    # ------------------------------------------------------------------
+    body += '<div class="card">'
+    body += "<h2>概要 — 学術的ネットワーク分析フレームワーク</h2>"
+    body += section_desc(
+        "本レポートは独自の Bridge Score を学術的に確立された指標群と並置し、"
+        "ネットワーク科学の標準フレームワーク（Burt 1992, Gould &amp; Fernandez 1989, "
+        "Freeman 1977）との整合性を検証します。"
+        "さらにマルチレイヤー分析・時間ネットワーク・AKM バイアス診断を通じて、"
+        "アニメ産業の人材ネットワーク構造を多角的に記述します。"
+    )
+    body += "</div>"
+
+    # ==================================================================
+    # Section 1: Structural Holes & Brokerage (Burt / Gould-Fernandez)
+    # ==================================================================
+    body += '<div class="card"><h2>Section 1: Burt構造的空隙 &amp; Gould-Fernandez ブローカー役割</h2>'
+    body += section_desc(
+        "独自の Bridge Score を Freeman (1977) の betweenness centrality、"
+        "Burt (1992, 2004) の constraint・effective size、"
+        "Gould &amp; Fernandez (1989) のブローカー役割5類型と相関させ、"
+        "指標の外部妥当性を示します。"
+    )
+    body += "</div>"
+
+    try:
+        import networkx as nx
+        from src.analysis.graph import create_person_collaboration_network
+
+        # top bridge personsのサブグラフを構築（全体計算はO(N²)で非現実的）
+        bridge_credits = [c for c in credits_list if c.person_id in set(top_bridge_ids)]
+        collab_subgraph = create_person_collaboration_network(bridge_credits, anime_map)
+
+        sh_metrics = compute_structural_hole_metrics(collab_subgraph)
+
+        # キャリア畑を推定（Section 2 でも使用）
+        career_tracks = infer_all_career_tracks(credits_list, anime_map)
+
+        # GF brokerage: group=role_category
+        from src.utils.role_groups import ROLE_CATEGORY
+        from src.models import Role
+        person_role_groups: dict[str, str] = {}
+        for c in bridge_credits:
+            if c.person_id not in person_role_groups:
+                person_role_groups[c.person_id] = ROLE_CATEGORY.get(c.role, "non_production")
+
+        brokerage_by_role = compute_brokerage_metrics(collab_subgraph, person_role_groups)
+
+        # GF brokerage: group=career_track
+        person_career_groups = {pid: career_tracks.get(pid, "multi_track")
+                                for pid in collab_subgraph.nodes()}
+        brokerage_by_track = compute_brokerage_metrics(collab_subgraph, person_career_groups)
+
+        # データを結合
+        combined: list[dict] = []
+        for pid in top_bridge_ids:
+            sh = sh_metrics.get(pid)
+            if sh is None:
+                continue
+            combined.append({
+                "pid": pid,
+                "name": person_names.get(pid, pid),
+                "bridge_score": top_bridge_score.get(pid, 0),
+                "constraint": sh.constraint,
+                "effective_size": sh.effective_size,
+                "efficiency": sh.efficiency,
+                "betweenness": sh.betweenness,
+                "redundancy": sh.redundancy,
+                "career_track": career_tracks.get(pid, "multi_track"),
+                "dominant_role_track": brokerage_by_track.get(pid).dominant_role.value
+                    if brokerage_by_track.get(pid) and brokerage_by_track[pid].dominant_role
+                    else "unknown",
+            })
+
+        if combined:
+            # ---- Chart 1-1: Bridge Score vs Burt Constraint ----
+            x1 = [d["constraint"] for d in combined]
+            y1 = [d["bridge_score"] for d in combined]
+            colors1 = [d["dominant_role_track"] for d in combined]
+            track_color_map = {
+                "coordinator": "#667eea", "consultant": "#06D6A0",
+                "representative": "#FFD166", "gatekeeper": "#f093fb",
+                "liaison": "#f5576c", "unknown": "#aaaaaa",
+            }
+            r_val, p_val = pearsonr(x1, y1) if len(x1) > 5 else (0, 1)
+
+            fig1 = go.Figure()
+            for role_val in ["gatekeeper", "liaison", "coordinator", "consultant", "representative", "unknown"]:
+                mask = [d for d in combined if d["dominant_role_track"] == role_val]
+                if not mask:
+                    continue
+                fig1.add_trace(go.Scatter(
+                    x=[d["constraint"] for d in mask],
+                    y=[d["bridge_score"] for d in mask],
+                    mode="markers",
+                    name=role_val.capitalize(),
+                    marker=dict(color=track_color_map.get(role_val, "#aaa"), size=6, opacity=0.7),
+                    text=[d["name"] for d in mask],
+                    hovertemplate="<b>%{text}</b><br>Constraint: %{x:.3f}<br>Bridge Score: %{y}",
+                ))
+            fig1.add_annotation(
+                text=f"r = {r_val:.3f}, p = {p_val:.3e}",
+                xref="paper", yref="paper", x=0.98, y=0.98,
+                showarrow=False, align="right",
+                font=dict(size=13, color="#333"),
+            )
+            fig1.update_layout(
+                title="Chart 1-1: Bridge Score vs Burt Constraint (期待: 負相関)",
+                xaxis_title="Burt Constraint（低＝構造的空隙を活用）",
+                yaxis_title="Bridge Score",
+                height=450, legend_title="GF Dominant Role",
+            )
+            body += '<div class="card">'
+            body += "<h3>1-1. Bridge Score vs Burt Constraint</h3>"
+            body += chart_guide(
+                "x軸 = Burt's Constraint（低いほど構造的空隙を多く活用している）。"
+                "y軸 = 独自Bridge Score（0-100）。"
+                "負の相関が見られれば、Bridge Scoreが構造的空隙指標と整合していることを示す。"
+                f"Pearson r = {r_val:.3f}。"
+                "色 = Gould-Fernandez の支配的ブローカー役割。"
+            )
+            body += plotly_div_safe(fig1, "s1_constraint_scatter", 450)
+            body += "</div>"
+
+            # ---- Chart 1-2: Bridge Score vs Effective Size ----
+            y2 = [d["effective_size"] for d in combined]
+            r2, p2 = pearsonr(y1, y2) if len(y2) > 5 else (0, 1)
+            fig2 = go.Figure(go.Scatter(
+                x=y1, y=y2, mode="markers",
+                marker=dict(color="#06D6A0", size=5, opacity=0.6),
+                text=[d["name"] for d in combined],
+                hovertemplate="<b>%{text}</b><br>Bridge Score: %{x}<br>Effective Size: %{y:.2f}",
+            ))
+            fig2.add_annotation(
+                text=f"r = {r2:.3f}, p = {p2:.3e}",
+                xref="paper", yref="paper", x=0.02, y=0.98,
+                showarrow=False, font=dict(size=13, color="#333"),
+            )
+            fig2.update_layout(
+                title="Chart 1-2: Bridge Score vs Effective Size（期待: 正相関）",
+                xaxis_title="Bridge Score",
+                yaxis_title="Burt Effective Size（冗長性除去後の実質接続数）",
+                height=400,
+            )
+            body += '<div class="card">'
+            body += "<h3>1-2. Bridge Score vs Effective Size</h3>"
+            body += chart_guide(
+                "Effective Size = 冗長な接続を除いた実質的なネットワーク範囲。"
+                "Bridge Scoreとの正相関は、越境者ほど非重複な接続を持つことを意味する。"
+                f"Pearson r = {r2:.3f}。"
+            )
+            body += plotly_div_safe(fig2, "s1_effsize_scatter", 400)
+            body += "</div>"
+
+            # ---- Chart 1-3: Bridge Score vs Betweenness ----
+            y3 = [d["betweenness"] for d in combined]
+            r3, p3 = pearsonr(y1, y3) if len(y3) > 5 else (0, 1)
+            fig3 = go.Figure(go.Scatter(
+                x=y1, y=y3, mode="markers",
+                marker=dict(color="#f093fb", size=5, opacity=0.6),
+                text=[d["name"] for d in combined],
+                hovertemplate="<b>%{text}</b><br>Bridge Score: %{x}<br>Betweenness: %{y:.4f}",
+            ))
+            fig3.add_annotation(
+                text=f"r = {r3:.3f}",
+                xref="paper", yref="paper", x=0.02, y=0.98,
+                showarrow=False, font=dict(size=13),
+            )
+            fig3.update_layout(
+                title="Chart 1-3: Bridge Score vs Betweenness Centrality（Freeman 1977）",
+                xaxis_title="Bridge Score",
+                yaxis_title="Betweenness Centrality（Freeman 1977）",
+                height=400,
+            )
+            body += '<div class="card">'
+            body += "<h3>1-3. Bridge Score vs Freeman Betweenness</h3>"
+            body += chart_guide(
+                "Freeman (1977) の betweenness centrality は「最も教科書的な橋指標」。"
+                "Bridge Score との相関が高ければ妥当性の傍証となり、"
+                "低ければ独自指標がコミュニティサイズ補正という付加価値を持つことを示す。"
+                f"Pearson r = {r3:.3f}。"
+            )
+            body += plotly_div_safe(fig3, "s1_betweenness_scatter", 400)
+            body += "</div>"
+
+            # ---- Chart 1-4: GF Brokerage Type Distribution (2系列) ----
+            role_order = ["coordinator", "gatekeeper", "representative", "consultant", "liaison"]
+            role_labels_ja = {
+                "coordinator": "Coordinator\n（同コミュニティ内）",
+                "gatekeeper": "Gatekeeper\n（外→内への門番）",
+                "representative": "Representative\n（内→外の代表）",
+                "consultant": "Consultant\n（外部コンサル）",
+                "liaison": "Liaison\n（全異なるコミュニティ）",
+            }
+            # 役職カテゴリ版
+            role_counts_by_role = {r: 0 for r in role_order}
+            for m in brokerage_by_role.values():
+                if m.dominant_role:
+                    role_counts_by_role[m.dominant_role.value] = \
+                        role_counts_by_role.get(m.dominant_role.value, 0) + 1
+            # キャリア畑版
+            role_counts_by_track = {r: 0 for r in role_order}
+            for m in brokerage_by_track.values():
+                if m.dominant_role:
+                    role_counts_by_track[m.dominant_role.value] = \
+                        role_counts_by_track.get(m.dominant_role.value, 0) + 1
+
+            fig4 = go.Figure()
+            fig4.add_trace(go.Bar(
+                name="group=役職カテゴリ",
+                x=[role_labels_ja.get(r, r) for r in role_order],
+                y=[role_counts_by_role.get(r, 0) for r in role_order],
+                marker_color="#667eea",
+            ))
+            fig4.add_trace(go.Bar(
+                name="group=キャリア畑",
+                x=[role_labels_ja.get(r, r) for r in role_order],
+                y=[role_counts_by_track.get(r, 0) for r in role_order],
+                marker_color="#f093fb",
+            ))
+            fig4.update_layout(
+                title="Chart 1-4: GF ブローカー役割分布（group定義の比較）",
+                xaxis_title="ブローカー役割 (Gould & Fernandez 1989)",
+                yaxis_title="人数",
+                barmode="group", height=450,
+            )
+            body += '<div class="card">'
+            body += "<h3>1-4. Gould-Fernandez ブローカー役割分布</h3>"
+            body += chart_guide(
+                "Gould &amp; Fernandez (1989) の5類型ブローカー役割。"
+                "青 = group を現在の役職カテゴリで定義した場合、"
+                "ピンク = group をキャリア畑（初期クレジットから推定）で定義した場合。"
+                "Gatekeeper（外→内の門番）と Liaison（完全に異なるグループ間）の比率に注目。"
+            )
+            body += plotly_div_safe(fig4, "s1_gf_dist", 450)
+            body += "</div>"
+
+            # ---- Chart 1-5: キャリア畑別 × ブローカー役割 Stacked Bar ----
+            track_role_counts: dict[str, dict[str, int]] = {
+                track: {r: 0 for r in role_order} for track in CAREER_TRACKS
+            }
+            for pid, m in brokerage_by_track.items():
+                if not m.dominant_role:
+                    continue
+                track = career_tracks.get(pid, "multi_track")
+                if track in track_role_counts:
+                    role_v = m.dominant_role.value
+                    track_role_counts[track][role_v] = \
+                        track_role_counts[track].get(role_v, 0) + 1
+
+            track_colors = {
+                "coordinator": "#667eea", "gatekeeper": "#f093fb",
+                "representative": "#FFD166", "consultant": "#06D6A0",
+                "liaison": "#f5576c",
+            }
+            fig5 = go.Figure()
+            for role_v in role_order:
+                fig5.add_trace(go.Bar(
+                    name=role_labels_ja.get(role_v, role_v),
+                    x=CAREER_TRACKS,
+                    y=[track_role_counts[t].get(role_v, 0) for t in CAREER_TRACKS],
+                    marker_color=track_colors.get(role_v, "#aaa"),
+                ))
+            fig5.update_layout(
+                title="Chart 1-5: キャリア畑別 × GFブローカー役割（積み上げ）",
+                xaxis_title="キャリア畑",
+                yaxis_title="人数",
+                barmode="stack", height=450,
+                legend_title="GF役割",
+            )
+            body += '<div class="card">'
+            body += "<h3>1-5. キャリア畑別ブローカー役割の内訳</h3>"
+            body += chart_guide(
+                "各キャリア畑（アニメーター・ディレクター・制作・技術・混合）が"
+                "どのブローカー役割を担うかの分布。"
+                "仮説：animator畑は Gatekeeper 型（外部への出口制御）、"
+                "director畑は Liaison 型（複数コミュニティをまたぐ）が多いか？"
+            )
+            body += plotly_div_safe(fig5, "s1_track_broker", 450)
+            body += "</div>"
+
+            # ---- Chart 1-6: Correlation Table ----
+            metrics_names = ["constraint", "effective_size", "efficiency", "betweenness", "redundancy"]
+            metrics_labels = ["Burt Constraint", "Effective Size", "Efficiency", "Betweenness (Freeman)", "Redundancy"]
+            table_html = '<table class="data-table"><thead><tr>'
+            table_html += "<th>指標</th><th>Bridge Scoreとの Pearson r</th><th>p値</th><th>解釈</th></tr></thead><tbody>"
+            interpretations = {
+                "constraint": "負 = Bridge Score高い人ほど制約低い（構造的空隙を活用）",
+                "effective_size": "正 = Bridge Score高い人ほど実質接続範囲が広い",
+                "efficiency": "正 = Bridge Score高い人ほどネットワーク効率が高い",
+                "betweenness": "正 = Bridge Scoreとbetweennessは類似概念",
+                "redundancy": "負 = Bridge Score高い人ほど冗長接続が少ない",
+            }
+            for mname, mlabel in zip(metrics_names, metrics_labels):
+                vals = [d[mname] for d in combined]
+                if len(vals) > 5:
+                    r_m, p_m = pearsonr(y1, vals)
+                    sig = "***" if p_m < 0.001 else "**" if p_m < 0.01 else "*" if p_m < 0.05 else ""
+                    table_html += (
+                        f"<tr><td>{mlabel}</td>"
+                        f"<td><strong>{r_m:.3f}</strong>{sig}</td>"
+                        f"<td>{p_m:.3e}</td>"
+                        f"<td>{interpretations.get(mname, '')}</td></tr>"
+                    )
+            table_html += "</tbody></table>"
+            table_html += '<p class="footnote">*** p&lt;0.001, ** p&lt;0.01, * p&lt;0.05</p>'
+
+            body += '<div class="card">'
+            body += "<h3>1-6. Bridge Score と学術指標の相関一覧</h3>"
+            body += chart_guide(
+                "Bridge Scoreが各学術指標とどの程度相関するかを示す。"
+                "相関の方向が理論予測と一致することが外部妥当性の証拠となる。"
+            )
+            body += table_html
+            body += "</div>"
+
+    except Exception as e:
+        body += f'<div class="card"><p class="warning">Section 1 計算エラー: {e}</p></div>'
+        import traceback
+        traceback.print_exc()
+
+    # ==================================================================
+    # Section 2: Multilayer Network
+    # ==================================================================
+    body += '<div class="card"><h2>Section 2: マルチレイヤーネットワーク分析</h2>'
+    body += section_desc(
+        "アニメクレジットを役職カテゴリで4レイヤー（direction / animation / production / technical）に分離し、"
+        "各レイヤーで betweenness centrality を計算します。"
+        "同時に初期クレジットからキャリア畑を推定し、"
+        "「アニメーターではないルートで監督になる人」を定量的に特定します。"
+        "（Mucha et al. 2010, De Domenico et al. 2014）"
+    )
+    body += "</div>"
+
+    try:
+        layer_graphs = build_layer_graphs(credits_list, anime_map)
+        ml_centrality = compute_multilayer_centrality(layer_graphs, career_tracks, top_n=500)
+
+        if ml_centrality:
+            ml_list = sorted(
+                ml_centrality.values(),
+                key=lambda m: m.aggregate_betweenness,
+                reverse=True,
+            )
+
+            # ---- Chart 2-1: Heatmap person × layer (top 50) ----
+            top50 = ml_list[:50]
+            hm_labels = [person_names.get(m.person_id, m.person_id)[:20] for m in top50]
+            hm_data = np.array([
+                [m.direction_betweenness, m.animation_betweenness,
+                 m.production_betweenness, m.technical_betweenness]
+                for m in top50
+            ])
+            fig_hm = px.imshow(
+                hm_data,
+                x=["Direction", "Animation", "Production", "Technical"],
+                y=hm_labels,
+                color_continuous_scale="Viridis",
+                labels=dict(color="Betweenness"),
+                title="Chart 2-1: レイヤー別 Betweenness Heatmap（上位50人）",
+                aspect="auto",
+            )
+            fig_hm.update_layout(height=900, xaxis_side="top")
+            body += '<div class="card">'
+            body += "<h3>2-1. レイヤー別 Betweenness Centrality Heatmap</h3>"
+            body += chart_guide(
+                "各行 = 人物（aggregate betweenness 上位50人）、各列 = 役職レイヤー。"
+                "濃い色ほど当該レイヤーで中心的な位置。"
+                "「animation列が濃く direction列が薄い」= アニメーター畑の人。"
+                "「両方濃い」= 作監上がりの監督など、キャリア架け橋の存在。"
+            )
+            body += plotly_div_safe(fig_hm, "s2_heatmap", 900)
+            body += "</div>"
+
+            # ---- Chart 2-2: Parallel Coordinates (top 100, colored by career_track) ----
+            top100 = ml_list[:100]
+            track_color_idx = {t: i for i, t in enumerate(CAREER_TRACKS)}
+            track_palette = ["#667eea", "#f093fb", "#FFD166", "#06D6A0", "#f5576c"]
+            fig_pc = go.Figure(go.Parcoords(
+                line=dict(
+                    color=[track_color_idx.get(m.career_track, 0) for m in top100],
+                    colorscale=[[i / max(len(CAREER_TRACKS) - 1, 1), c]
+                                for i, c in enumerate(track_palette)],
+                    showscale=False,
+                ),
+                dimensions=[
+                    dict(label="Direction", values=[m.direction_betweenness for m in top100]),
+                    dict(label="Animation", values=[m.animation_betweenness for m in top100]),
+                    dict(label="Production", values=[m.production_betweenness for m in top100]),
+                    dict(label="Technical", values=[m.technical_betweenness for m in top100]),
+                ],
+            ))
+            fig_pc.update_layout(
+                title="Chart 2-2: 4レイヤー Betweenness Parallel Coordinates（キャリア畑で色分け）",
+                height=400,
+            )
+            # 凡例テキストを追加
+            legend_text = " | ".join(
+                f'<span style="color:{c}">■ {t}</span>'
+                for t, c in zip(CAREER_TRACKS, track_palette)
+            )
+            body += '<div class="card">'
+            body += "<h3>2-2. Parallel Coordinates — キャリア畑 × レイヤー中心性</h3>"
+            body += f'<p class="chart-legend">{legend_text}</p>'
+            body += chart_guide(
+                "各折れ線 = 1人物。4軸 = 役職レイヤーの betweenness。"
+                "色 = キャリア畑（初期クレジットから推定）。"
+                "animator畑（紫）の線が animation軸・direction軸の両方で高い場合、"
+                "その人物はアニメーター出身で演出層でも影響力を持つ「架け橋人材」。"
+            )
+            body += plotly_div_safe(fig_pc, "s2_parcoords", 400)
+            body += "</div>"
+
+            # ---- Chart 2-3: Grouped bar — career_track × layer participation ----
+            track_layer_counts: dict[str, dict[str, int]] = {
+                t: {l: 0 for l in LAYER_NAMES} for t in CAREER_TRACKS
+            }
+            for m in ml_centrality.values():
+                for l in m.layers_active:
+                    if m.career_track in track_layer_counts:
+                        track_layer_counts[m.career_track][l] += 1
+
+            layer_colors_map = {
+                "direction": "#667eea", "animation": "#f093fb",
+                "production": "#FFD166", "technical": "#06D6A0",
+            }
+            fig_gb = go.Figure()
+            for l in LAYER_NAMES:
+                fig_gb.add_trace(go.Bar(
+                    name=l.capitalize(),
+                    x=CAREER_TRACKS,
+                    y=[track_layer_counts[t][l] for t in CAREER_TRACKS],
+                    marker_color=layer_colors_map.get(l, "#aaa"),
+                ))
+            fig_gb.update_layout(
+                title="Chart 2-3: キャリア畑 × レイヤー参加人数",
+                xaxis_title="キャリア畑", yaxis_title="人数",
+                barmode="group", height=400,
+            )
+            body += '<div class="card">'
+            body += "<h3>2-3. キャリア畑別レイヤー参加分布</h3>"
+            body += chart_guide(
+                "各キャリア畑の人物が何レイヤーに出現するかを集計。"
+                "animator畑は animation層に集中するはずだが、"
+                "direction層への参加率が高ければ「作監上がりの演出家」が多い証拠。"
+                "production畑は production層にのみ出現し、他レイヤーに少ない傾向。"
+            )
+            body += plotly_div_safe(fig_gb, "s2_track_layer", 400)
+            body += "</div>"
+
+            # ---- Chart 2-4: Scatter — animation_btw vs direction_btw, colored by career_track ----
+            fig_sc = go.Figure()
+            for track, color in zip(CAREER_TRACKS, track_palette):
+                track_members = [m for m in ml_list if m.career_track == track]
+                if not track_members:
+                    continue
+                fig_sc.add_trace(go.Scatter(
+                    x=[m.animation_betweenness for m in track_members],
+                    y=[m.direction_betweenness for m in track_members],
+                    mode="markers",
+                    name=track,
+                    marker=dict(color=color, size=6, opacity=0.7),
+                    text=[person_names.get(m.person_id, m.person_id) for m in track_members],
+                    hovertemplate="<b>%{text}</b><br>Animation: %{x:.4f}<br>Direction: %{y:.4f}",
+                ))
+            fig_sc.update_layout(
+                title="Chart 2-4: Animation vs Direction Betweenness（キャリア畑別）",
+                xaxis_title="Animation Layer Betweenness",
+                yaxis_title="Direction Layer Betweenness",
+                height=450,
+            )
+            body += '<div class="card">'
+            body += "<h3>2-4. Animation vs Direction — ルート別の分布</h3>"
+            body += chart_guide(
+                "x軸 = animationレイヤーでの中心性、y軸 = directionレイヤーでの中心性。"
+                "右下 = 純粋なアニメーター（animation高・direction低）。"
+                "左上 = 純粋な演出家（direction高・animation低）。"
+                "右上 = 両方で中心 = 作監上がりの監督など。"
+                "「アニメーターではないルートで監督になる人」は左上クラスタに現れる。"
+            )
+            body += plotly_div_safe(fig_sc, "s2_anim_dir_scatter", 450)
+            body += "</div>"
+
+            # ---- Chart 2-5: Sankey — career_track → dominant layer ----
+            # 各人物の dominant layer = 最も高い betweenness を持つ層
+            layer_field_map = {
+                "direction": "direction_betweenness",
+                "animation": "animation_betweenness",
+                "production": "production_betweenness",
+                "technical": "technical_betweenness",
+            }
+            track_to_layer: dict[str, dict[str, int]] = {
+                t: {l: 0 for l in LAYER_NAMES} for t in CAREER_TRACKS
+            }
+            for m in ml_centrality.values():
+                track = m.career_track
+                if track not in track_to_layer:
+                    continue
+                layer_vals = {l: getattr(m, f"{l}_betweenness") for l in LAYER_NAMES}
+                dom_layer = max(layer_vals, key=layer_vals.get)
+                if layer_vals[dom_layer] > 0:
+                    track_to_layer[track][dom_layer] += 1
+
+            all_nodes = list(CAREER_TRACKS) + list(LAYER_NAMES)
+            node_idx = {n: i for i, n in enumerate(all_nodes)}
+            sankey_src, sankey_tgt, sankey_val = [], [], []
+            for track in CAREER_TRACKS:
+                for layer in LAYER_NAMES:
+                    val = track_to_layer[track].get(layer, 0)
+                    if val > 0:
+                        sankey_src.append(node_idx[track])
+                        sankey_tgt.append(node_idx[layer])
+                        sankey_val.append(val)
+
+            fig_sk = go.Figure(go.Sankey(
+                node=dict(
+                    label=all_nodes,
+                    color=(track_palette + [layer_colors_map.get(l, "#aaa") for l in LAYER_NAMES]),
+                ),
+                link=dict(source=sankey_src, target=sankey_tgt, value=sankey_val),
+            ))
+            fig_sk.update_layout(
+                title="Chart 2-5: キャリア畑 → 主要活動レイヤー（Sankey）",
+                height=400,
+            )
+            body += '<div class="card">'
+            body += "<h3>2-5. キャリア畑 → 主要活動レイヤー フロー</h3>"
+            body += chart_guide(
+                "左 = キャリア畑（初期クレジット推定）、右 = 各人物の主要活動レイヤー（最高betweenness）。"
+                "animator畑からdirectionレイヤーへのフロー = 作監・原画出身の演出家の数。"
+                "director畑からanimationレイヤーへのフローは少ないはず（逆方向は少ない）。"
+            )
+            body += plotly_div_safe(fig_sk, "s2_sankey", 400)
+            body += "</div>"
+
+    except Exception as e:
+        body += f'<div class="card"><p class="warning">Section 2 計算エラー: {e}</p></div>'
+        import traceback
+        traceback.print_exc()
+
+    # ==================================================================
+    # Section 3: Temporal Bridge Analysis
+    # ==================================================================
+    body += '<div class="card"><h2>Section 3: 時間ネットワーク分析（5年スライディングウィンドウ）</h2>'
+    body += section_desc(
+        "5年スライディングウィンドウ（2年ステップ、1980-2025）でグラフを再構築し、"
+        "ブリッジ人物の出現・消滅・寿命・世代交代を分析します。"
+        "「業界拡大期にブリッジが増えたか」「長寿ブリッジはどこの畑か」など、"
+        "静的分析では見えなかった時間パターンを可視化します。"
+        "（Holme &amp; Saramäki 2012 の temporal networks フレームワーク）"
+    )
+    body += "</div>"
+
+    try:
+        print("      Computing temporal bridges (may take 1-3 minutes)...")
+        snapshots = compute_temporal_bridges(
+            credits_list, anime_map,
+            window_size=5, step=2, start_year=1980, end_year=2025,
+            min_community_size=5, top_n_bridges=30,
+        )
+
+        if snapshots:
+            lifespan_map = compute_bridge_lifespan(snapshots)
+            era_tops = get_era_top_bridges(snapshots)
+
+            # ---- Chart 3-1: Bridge count over time ----
+            years_x = [(s.window_start + s.window_end) / 2 for s in snapshots]
+            bridge_counts_y = [s.bridge_count for s in snapshots]
+            total_persons_y = [s.total_persons for s in snapshots]
+
+            fig_t1 = go.Figure()
+            fig_t1.add_trace(go.Scatter(
+                x=years_x, y=bridge_counts_y, name="ブリッジ人物数",
+                mode="lines+markers", line=dict(color="#f093fb", width=2),
+            ))
+            fig_t1.add_trace(go.Scatter(
+                x=years_x, y=total_persons_y, name="総人物数",
+                mode="lines", line=dict(color="#667eea", width=1, dash="dot"),
+                yaxis="y2",
+            ))
+            fig_t1.update_layout(
+                title="Chart 3-1: ブリッジ人物数の推移（5年ウィンドウ）",
+                xaxis_title="年（ウィンドウ中心）",
+                yaxis_title="ブリッジ人物数",
+                yaxis2=dict(title="総人物数", overlaying="y", side="right", showgrid=False),
+                height=400,
+            )
+            body += '<div class="card">'
+            body += "<h3>3-1. ブリッジ人物数の時間的推移</h3>"
+            body += chart_guide(
+                "実線（左軸）= 各5年ウィンドウでブリッジと判定された人物数。"
+                "点線（右軸）= 総参加人物数（規模の基準値）。"
+                "「業界拡大期（2000年代）にブリッジが増えたか」"
+                "「コロナ禍（2020-）でブリッジが減ったか」などのトレンドを読む。"
+            )
+            body += plotly_div_safe(fig_t1, "s3_bridge_time", 400)
+            body += "</div>"
+
+            # ---- Chart 3-2: Person × window heatmap (top 30 persistent bridges) ----
+            if lifespan_map:
+                top30_persistent = sorted(
+                    lifespan_map.values(),
+                    key=lambda s: (s.lifespan_windows, s.total_windows_as_bridge),
+                    reverse=True,
+                )[:30]
+                top30_ids = [s.person_id for s in top30_persistent]
+                trajectories = get_person_temporal_trajectory(snapshots, top30_ids)
+
+                hm2_data = np.array([
+                    [1 if v is not None else 0 for v in trajectories[pid]]
+                    for pid in top30_ids
+                ])
+                hm2_xlabels = [f"{s.window_start}-{s.window_end}" for s in snapshots]
+                hm2_ylabels = [
+                    person_names.get(pid, pid)[:20] for pid in top30_ids
+                ]
+
+                fig_hm2 = px.imshow(
+                    hm2_data,
+                    x=hm2_xlabels,
+                    y=hm2_ylabels,
+                    color_continuous_scale=[[0, "#1a1a2e"], [1, "#f093fb"]],
+                    labels=dict(color="Bridge (1=Yes)"),
+                    title="Chart 3-2: 人物 × ウィンドウ ブリッジ履歴（持続ブリッジTop30）",
+                    aspect="auto",
+                )
+                fig_hm2.update_layout(height=700, xaxis_tickangle=45)
+                body += '<div class="card">'
+                body += "<h3>3-2. 持続ブリッジのキャリアアーク</h3>"
+                body += chart_guide(
+                    "各行 = 長寿ブリッジ上位30人、各列 = 5年ウィンドウ。"
+                    "色付き = そのウィンドウでブリッジと判定。"
+                    "長い連続した帯 = 長期にわたって越境コラボを維持してきた人材。"
+                    "短い帯が多い人物 = 特定プロジェクト期のみ越境（スポット型）。"
+                )
+                body += plotly_div_safe(fig_hm2, "s3_career_arc", 700)
+                body += "</div>"
+
+            # ---- Chart 3-3: Bridge lifespan distribution ----
+            if lifespan_map:
+                lifespans = [s.lifespan_windows for s in lifespan_map.values()]
+                fig_t3 = go.Figure(go.Histogram(
+                    x=lifespans, nbinsx=20,
+                    marker_color="#06D6A0",
+                    opacity=0.8,
+                ))
+                fig_t3.update_layout(
+                    title=f"Chart 3-3: ブリッジ寿命分布（{fmt_num(len(lifespans))}人）",
+                    xaxis_title="連続ウィンドウ数（寿命）",
+                    yaxis_title="人数",
+                    height=350,
+                )
+                body += '<div class="card">'
+                body += "<h3>3-3. ブリッジ寿命分布</h3>"
+                body += chart_guide(
+                    "x軸 = 連続してブリッジであったウィンドウ数（5年×連続数）。"
+                    "1ウィンドウのみ = 「一発屋ブリッジ」（特定作品のみ越境）。"
+                    "多ウィンドウ = 「長期ブリッジ」（継続的に越境コラボを維持）。"
+                    "分布が右に裾を引くほど、一部の人物に橋渡し機能が集中している。"
+                )
+                body += plotly_div_safe(fig_t3, "s3_lifespan_hist", 350)
+                body += "</div>"
+
+            # ---- Chart 3-4: Era top bridges ----
+            if era_tops:
+                eras_with_data = [(era, tops) for era, tops in era_tops.items() if tops]
+                if eras_with_data:
+                    fig_t4 = go.Figure()
+                    era_colors = ["#667eea", "#f093fb", "#FFD166", "#06D6A0", "#f5576c"]
+                    for (era_label, tops), color in zip(eras_with_data, era_colors):
+                        names = [person_names.get(pid, pid)[:20] for pid, _ in tops[:5]]
+                        scores_e = [score for _, score in tops[:5]]
+                        fig_t4.add_trace(go.Bar(
+                            name=era_label,
+                            x=names,
+                            y=scores_e,
+                            marker_color=color,
+                        ))
+                    fig_t4.update_layout(
+                        title="Chart 3-4: 時代別トップブリッジ人物（上位5人）",
+                        xaxis_title="人物",
+                        yaxis_title="累積ブリッジスコア",
+                        barmode="group",
+                        height=450,
+                        xaxis_tickangle=45,
+                    )
+                    body += '<div class="card">'
+                    body += "<h3>3-4. 時代別トップブリッジ — 世代交代の可視化</h3>"
+                    body += chart_guide(
+                        "各時代（1990s/2000s/2010s/2020s）における累積ブリッジスコア上位5人。"
+                        "世代が変わるにつれてトップブリッジ人材が入れ替わっているか。"
+                        "複数時代に登場する人物 = 真の長期ブリッジ。"
+                    )
+                    body += plotly_div_safe(fig_t4, "s3_era_tops", 450)
+                    body += "</div>"
+
+    except Exception as e:
+        body += f'<div class="card"><p class="warning">Section 3 計算エラー（時間がかかる場合があります）: {e}</p></div>'
+        import traceback
+        traceback.print_exc()
+
+    # ==================================================================
+    # Section 4: AKM Limited Mobility Bias Diagnostics
+    # ==================================================================
+    body += '<div class="card"><h2>Section 4: AKM Limited Mobility Bias 診断</h2>'
+    body += section_desc(
+        "AKM モデル（Abowd, Kramarz, Margolis 1999）の person fixed effect θ には、"
+        "スタジオ間移動が少ないと connected set 内で θ と ψ が交絡する "
+        "limited mobility bias が存在します（Andrews et al. 2008, AER）。"
+        "本セクションは完全な KSS (Kline, Saggio &amp; Sølvsten 2020, Econometrica) "
+        "補正ではなく、バイアスの方向・大きさ・リスク対象を診断します。"
+    )
+    body += "</div>"
+
+    try:
+        conn4 = _get_conn()
+        conn4.row_factory = _sqlite3.Row
+
+        # Studio ↔ Person 二部グラフの構築
+        rows_studio = conn4.execute("""
+            SELECT DISTINCT c.person_id, a.studio_id
+            FROM credits c
+            JOIN anime a ON a.id = c.anime_id
+            WHERE a.studio_id IS NOT NULL
+              AND c.person_id IS NOT NULL
+        """).fetchall()
+        conn4.close()
+
+        import networkx as nx
+        bipartite_G = nx.Graph()
+        for row in rows_studio:
+            pid = row["person_id"]
+            sid = f"studio:{row['studio_id']}"
+            bipartite_G.add_node(pid, bipartite=0)
+            bipartite_G.add_node(sid, bipartite=1)
+            bipartite_G.add_edge(pid, sid)
+
+        # Connected set の特定
+        connected_sets = list(nx.connected_components(bipartite_G))
+        cs_sizes = sorted([len(cs) for cs in connected_sets], reverse=True)
+        largest_cs_size = cs_sizes[0] if cs_sizes else 0
+        total_nodes = bipartite_G.number_of_nodes()
+        total_persons_akm = sum(
+            1 for n in bipartite_G.nodes()
+            if not str(n).startswith("studio:")
+        )
+        total_studios = sum(
+            1 for n in bipartite_G.nodes()
+            if str(n).startswith("studio:")
+        )
+
+        # Person ごとのスタジオ移動回数
+        person_studio_counts: dict[str, int] = defaultdict(int)
+        person_studios: dict[str, set] = defaultdict(set)
+        for row in rows_studio:
+            pid = row["person_id"]
+            sid = row["studio_id"]
+            person_studios[pid].add(sid)
+
+        for pid, studios in person_studios.items():
+            person_studio_counts[pid] = len(studios)
+
+        move_counts = list(person_studio_counts.values())
+        single_movers = sum(1 for c in move_counts if c <= 1)
+        multi_movers = sum(1 for c in move_counts if c > 1)
+        pct_single = single_movers / max(len(move_counts), 1) * 100
+
+        # AKMスコアと移動回数の対応（scores_map から person_fe を取得）
+        combined_akm: list[dict] = []
+        for pid, studio_count in person_studio_counts.items():
+            s = scores_map.get(pid)
+            if s is None:
+                continue
+            combined_akm.append({
+                "pid": pid,
+                "studio_count": studio_count,
+                "person_fe": getattr(s, "person_fe", 0) or 0,
+            })
+
+        # Stats サマリー
+        body += '<div class="card">'
+        body += "<h3>4-0. AKM データ概要</h3>"
+        body += '<div class="stats-grid">'
+        for label, val in [
+            ("総Connected Set数", fmt_num(len(connected_sets))),
+            ("最大Connected Set サイズ", fmt_num(largest_cs_size)),
+            ("最大 CS の割合", f"{largest_cs_size / max(total_nodes, 1) * 100:.1f}%"),
+            ("分析対象 Person 数", fmt_num(total_persons_akm)),
+            ("分析対象 Studio 数", fmt_num(total_studios)),
+            ("Single-mover 割合", f"{pct_single:.1f}%"),
+        ]:
+            body += f'<div class="stat-card"><div class="value">{val}</div><div class="label">{label}</div></div>'
+        body += "</div>"
+        body += caveat_box(
+            f"Single-mover（スタジオ移動1回以下）が {pct_single:.1f}% です。"
+            "この割合が高いほど、person FE θ と studio FE ψ の交絡（limited mobility bias）が深刻です。"
+            "Andrews et al. (2008) の指摘では、θ の分散が過大推定される方向にバイアスがかかります。"
+            "完全な補正は KSS (2020) の leave-one-out 推定が必要で、本レポートは診断のみです。"
+        )
+        body += "</div>"
+
+        # ---- Chart 4-1: Connected set size distribution ----
+        cs_sizes_trimmed = cs_sizes[:50]  # 上位50
+        fig_akm1 = go.Figure(go.Bar(
+            x=list(range(1, len(cs_sizes_trimmed) + 1)),
+            y=cs_sizes_trimmed,
+            marker_color="#667eea",
+        ))
+        fig_akm1.add_hline(
+            y=largest_cs_size * 0.01,
+            line_dash="dot", line_color="red",
+            annotation_text="1% of largest CS",
+        )
+        fig_akm1.update_layout(
+            title=f"Chart 4-1: Connected Set サイズ分布（上位50 / 全{fmt_num(len(connected_sets))}件）",
+            xaxis_title="順位", yaxis_title="ノード数（person + studio）",
+            height=350,
+        )
+        body += '<div class="card">'
+        body += "<h3>4-1. Connected Set サイズ分布</h3>"
+        body += chart_guide(
+            "AKM 推定は connected set ごとに独立に識別される。"
+            "1つの大きな connected set に大部分の person が含まれれば、"
+            "推定の有効サンプルサイズが大きく安定性が高い。"
+            "多数の小さな connected set に分散していれば、"
+            "各 θ の推定精度が低くなり、バイアスリスクが高まる。"
+        )
+        body += plotly_div_safe(fig_akm1, "s4_cs_dist", 350)
+        body += "</div>"
+
+        # ---- Chart 4-2: Studio move count distribution ----
+        if move_counts:
+            from collections import Counter as _Counter
+            move_dist = _Counter(min(c, 10) for c in move_counts)
+            x_moves = sorted(move_dist.keys())
+            y_moves = [move_dist[x] for x in x_moves]
+            x_labels = [str(x) if x < 10 else "10+" for x in x_moves]
+            fig_akm2 = go.Figure(go.Bar(
+                x=x_labels, y=y_moves,
+                marker_color=[
+                    "#f5576c" if x <= 1 else "#06D6A0" for x in x_moves
+                ],
+            ))
+            fig_akm2.update_layout(
+                title=f"Chart 4-2: スタジオ移動回数分布（赤=1回以下、緑=複数）",
+                xaxis_title="スタジオ数（1人あたり）",
+                yaxis_title="人数",
+                height=350,
+            )
+            body += '<div class="card">'
+            body += "<h3>4-2. スタジオ移動回数分布</h3>"
+            body += chart_guide(
+                "赤 = 1スタジオのみ（single-mover、バイアスリスク高）。"
+                "緑 = 複数スタジオ（multi-mover、θ が studio FE と識別可能）。"
+                "アニメ業界では「フリー原画マン（多スタジオ）」と"
+                "「元請け専属監督（単一スタジオ）」で分布が大きく異なる。"
+            )
+            body += plotly_div_safe(fig_akm2, "s4_move_dist", 350)
+            body += "</div>"
+
+        # ---- Chart 4-3: Studio count vs person_fe ----
+        if combined_akm:
+            sc_sample = combined_akm[:5000]  # サンプリング
+            fig_akm3 = go.Figure(go.Scatter(
+                x=[d["studio_count"] for d in sc_sample],
+                y=[d["person_fe"] for d in sc_sample],
+                mode="markers",
+                marker=dict(color="#f093fb", size=3, opacity=0.4),
+                hovertemplate="Studio count: %{x}<br>Person FE: %{y:.3f}",
+            ))
+            # Single-movers の平均 vs multi-movers の平均
+            single_fe = [d["person_fe"] for d in combined_akm if d["studio_count"] <= 1]
+            multi_fe = [d["person_fe"] for d in combined_akm if d["studio_count"] > 1]
+            if single_fe:
+                fig_akm3.add_hline(
+                    y=np.mean(single_fe), line_dash="dash", line_color="red",
+                    annotation_text=f"Single-mover avg FE: {np.mean(single_fe):.3f}",
+                )
+            if multi_fe:
+                fig_akm3.add_hline(
+                    y=np.mean(multi_fe), line_dash="dash", line_color="green",
+                    annotation_text=f"Multi-mover avg FE: {np.mean(multi_fe):.3f}",
+                )
+            fig_akm3.update_layout(
+                title="Chart 4-3: スタジオ数 vs Person FE θ（バイアスリスク診断）",
+                xaxis_title="参加スタジオ数",
+                yaxis_title="Person Fixed Effect θ",
+                height=400,
+            )
+            body += '<div class="card">'
+            body += "<h3>4-3. スタジオ移動回数 vs Person FE</h3>"
+            body += chart_guide(
+                "x軸 = 参加スタジオ数（移動回数の代理変数）。y軸 = 推定された person FE θ。"
+                "「高θ × 低スタジオ数」の領域にいる人物は bias リスクが高い。"
+                "赤破線 = single-mover 平均 FE、緑破線 = multi-mover 平均 FE。"
+                "両者に差があれば、θ が studio FE と交絡している可能性を示す。"
+            )
+            body += plotly_div_safe(fig_akm3, "s4_fe_scatter", 400)
+            body += "</div>"
+
+    except Exception as e:
+        body += f'<div class="card"><p class="warning">Section 4 計算エラー: {e}</p></div>'
+        import traceback
+        traceback.print_exc()
+
+    # ------------------------------------------------------------------
+    # Assemble HTML
+    # ------------------------------------------------------------------
+    # 参考文献を body に追加（wrap_html は footnote_html 引数を持たない）
+    body += (
+        '<div class="card"><h3>参考文献</h3><p style="font-size:0.88em;line-height:1.8">'
+        "Burt, R.S. (1992). <em>Structural Holes</em>. Harvard University Press.<br>"
+        "Burt, R.S. (2004). Structural Holes and Good Ideas. <em>AJS</em>, 110(2), 349-399.<br>"
+        "Freeman, L.C. (1977). A Set of Measures of Centrality. <em>Sociometry</em>, 40(1), 35-41.<br>"
+        "Gould, R.V. &amp; Fernandez, R.M. (1989). Structures of Mediation. <em>ASR</em>, 54(1), 89-126.<br>"
+        "Andrews, M. et al. (2008). High Wage Workers. <em>AER</em>, 98(5), 1851-1868.<br>"
+        "Kline, P., Saggio, R., &amp; Sølvsten, M. (2020). Leave-out estimation. <em>Econometrica</em>, 88(6), 2411-2461.<br>"
+        "Holme, P., &amp; Saramäki, J. (2012). Temporal Networks. <em>Physics Reports</em>, 519(3), 97-125.<br>"
+        "Mucha, P.J. et al. (2010). Community Structure in Multilayer Networks. <em>Science</em>, 328(5980), 876-878."
+        "</p></div>"
+    )
+
+    html = wrap_html(
+        "ネットワーク分析（学術的フレームワーク）",
+        "Burt構造的空隙 / マルチレイヤー / 時間ネットワーク / AKMバイアス診断",
+        body,
+        intro_html=report_intro(
+            "ネットワーク分析（学術的フレームワーク）",
+            "本レポートは独自の Bridge Score を学術的に確立された指標群と並置し、"
+            "Burt (1992, 2004) の構造的空隙理論、Gould &amp; Fernandez (1989) のブローカー役割分類、"
+            "Freeman (1977) の betweenness centrality との整合性を検証します。"
+            "さらにマルチレイヤー分析（役職別レイヤー × キャリア畑）、"
+            "時間ネットワーク（5年スライディングウィンドウ）、"
+            "AKM Limited Mobility Bias 診断を通じて、"
+            "アニメ産業の人材ネットワーク構造を多角的に記述します。",
+            "ネットワーク研究者、産業経済学者、スタジオ戦略担当者",
+        ),
+        glossary_terms={
+            **COMMON_GLOSSARY_TERMS,
+            "Burt Constraint": (
+                "Ronald Burt (1992) のネットワーク制約指数。"
+                "低いほど冗長でない多様な接続を持ち、構造的空隙を活用している。"
+            ),
+            "Effective Size": (
+                "Burt の有効ネットワークサイズ。"
+                "冗長な接続を除いた実質的な情報源の数。"
+            ),
+            "Gould-Fernandez Brokerage": (
+                "Gould &amp; Fernandez (1989) の5類型ブローカー役割。"
+                "Coordinator（同グループ内仲介）、Gatekeeper（外→内）、"
+                "Representative（内→外）、Consultant（外部助言）、"
+                "Liaison（全異グループ間）。"
+            ),
+            "キャリア畑 (Career Track)": (
+                "初期クレジット（デビューから3年）の最頻役職カテゴリから推定したバックグラウンド。"
+                "animator / director / production / technical / multi_track の5種。"
+            ),
+            "アニメーター監督 (Animator-Director)": (
+                "原画・作監などアニメーション工程出身で監督になった人物。"
+                "キャリア畑が animator で、最終キャリアステージが direction の場合に該当。"
+                "宮崎駿・庵野秀明・山田尚子など。"
+            ),
+            "AKM Limited Mobility Bias": (
+                "Abowd-Kramarz-Margolis モデルで、スタジオ間移動が少ない場合に"
+                "person FE θ が studio FE ψ と交絡して過大推定されるバイアス。"
+                "Andrews et al. (2008, AER) が指摘、KSS (2020, Econometrica) が補正法を提案。"
+            ),
+            "Connected Set": (
+                "AKM 推定でパラメータが識別可能な最大連結成分。"
+                "person-studio 二部グラフの連結成分として定義される。"
+            ),
+        },
+    )
+    out = REPORTS_DIR / "network_analysis.html"
+    out.write_text(html, encoding="utf-8")
+    print(f"    -> {out}")
+
+
+# ============================================================
 # Report 2: Network & Bridge Analysis
 # ============================================================
 
 def generate_bridge_report():
     """ネットワークブリッジ分析レポート."""
     print("  Generating Bridge Analysis Report...")
-    bridges = load_json("bridges.json")
+    bridges = get_feat_network()
     if not bridges:
         return
 
@@ -4726,7 +6729,7 @@ def generate_bridge_report():
         body += "</div>"
 
     # Bridge vs Non-Bridge IV Score split violin
-    scores_for_bridge = load_json("scores.json")
+    scores_for_bridge = get_feat_person_scores()
     if scores_for_bridge and bridge_persons:
         bridge_pids = {bp.get("person_id", bp.get("id", "")) for bp in bridge_persons}
         bridge_ivs = []
@@ -5425,7 +7428,7 @@ def generate_career_report():
 
             # Ridge plot: time to stage distribution (simulated from mean/median/n)
             # Use scores.json for actual per-person data if available
-            scores_for_ridge = load_json("scores.json")
+            scores_for_ridge = get_feat_person_scores()
             stage_time_groups: dict[str, list[float]] = {}
             if scores_for_ridge:
                 for p in scores_for_ridge:
@@ -5587,7 +7590,7 @@ def generate_career_report():
             body += "</div>"
 
     # C3-2: キャリア速度 密度散布図（credit数/年 vs ステージ進行速度）
-    scores_career = load_json("scores.json")
+    scores_career = get_feat_person_scores()
     if scores_career and isinstance(scores_career, list):
         speed_x = []
         speed_y = []
@@ -6120,7 +8123,7 @@ def generate_career_report():
 def generate_temporal_report():
     """時系列BiRank・先見レポート."""
     print("  Generating Temporal BiRank & Foresight Report...")
-    tp = load_json("temporal_pagerank.json")
+    tp = get_feat_birank_annual()
     if not tp:
         return
 
@@ -6231,28 +8234,126 @@ def generate_temporal_report():
         body += "</div>"
 
     # Top persons table
+    n_censored = sum(1 for _, _, _, d in persons_by_peak if d.get("is_censored"))
     body += '<div class="card">'
     body += "<h2>Top 30 by Peak BiRank</h2>"
+    if n_censored:
+        body += (
+            f'<div class="insight-box" style="border-left-color:#f5a623">'
+            f"<strong>右打ち切り注意:</strong> {n_censored} 人が 2022年以降も活動中のため、"
+            "観測済みピークは真のピークの下限値です。現役者のピーク順位は過小評価される傾向があります。"
+            "</div>"
+        )
     body += "<table><thead><tr>"
-    body += "<th>#</th><th>Person</th><th>Peak BiRank</th><th>Peak Year</th><th>Career Start</th><th>Trajectory</th>"
+    body += "<th>#</th><th>Person</th><th>Peak BiRank</th><th>Peak Year</th><th>Career Start</th><th>Trajectory</th><th>Status</th>"
     body += "</tr></thead><tbody>"
     for i, (pid, peak, peak_yr, data) in enumerate(persons_by_peak[:30], 1):
         traj = data.get("trajectory", "unknown")
         badge = "badge-high" if traj == "rising" else "badge-mid" if traj == "stable" else "badge-low"
-        t_name = data.get("name", pid)
+        t_name = data.get("name") or pid
+        censored = data.get("is_censored", False)
+        status_cell = '<span class="badge badge-mid">現役(打ち切り)</span>' if censored else '<span class="badge badge-low">確定</span>'
         body += f"<tr><td>{i}</td><td>{t_name}</td><td>{peak:.4f}</td><td>{peak_yr}</td>"
         body += f"<td>{data.get('career_start_year', '')}</td>"
-        body += f'<td><span class="badge {badge}">{traj}</span></td></tr>'
+        body += f'<td><span class="badge {badge}">{traj}</span></td>'
+        body += f"<td>{status_cell}</td></tr>"
     body += "</tbody></table></div>"
+
+    # Holdout validation section (insert before foresight scores)
+    holdout = tp.get("holdout_validation", {})
+    if holdout and "error" not in holdout:
+        body += '<div class="card">'
+        body += "<h2>先見スコア — ホールドアウト予測検証</h2>"
+        body += (
+            '<div class="insight-box" style="border-left-color:#f5a623">'
+            "<strong>方法論上の注意:</strong> 先見スコアは定義上「後知恵」の指標です。"
+            "スコアは <em>全データ</em> を用いて「誰が後に高ランクになった人と早期に共演していたか」を遡って計算します。"
+            "以下のホールドアウト検証では、2018年以前のデータのみでスコアを計算し、"
+            "2019年以降のブレイク人材をどれだけ説明できるかを2つの素朴ベースラインと比較します。"
+            "</div>"
+        )
+        h_year = holdout.get("holdout_year", 2018)
+        n_unk = holdout.get("n_unknowns", 0)
+        n_br = holdout.get("n_breakouts", 0)
+        br_rate = holdout.get("breakout_rate", 0)
+        roc = holdout.get("roc_auc", {})
+        pak = holdout.get("precision_at_k", {})
+
+        # ROC-AUC bar chart
+        roc_labels = ["先見スコア", "活動量ベースライン", "共演者平均BiRank"]
+        roc_vals = [roc.get("foresight", 0.5), roc.get("baseline_activity", 0.5), roc.get("baseline_partner_birank", 0.5)]
+        roc_colors = ["#f093fb", "#a0d2db", "#fda085"]
+        fig_roc = go.Figure(go.Bar(
+            x=roc_labels, y=roc_vals,
+            marker_color=roc_colors,
+            text=[f"{v:.3f}" for v in roc_vals],
+            textposition="outside",
+        ))
+        fig_roc.add_hline(y=0.5, line_dash="dash", line_color="#888", annotation_text="ランダム (0.50)")
+        fig_roc.update_layout(
+            title=f"ROC-AUC: {h_year}以前データ → {h_year+1}以降ブレイク予測",
+            yaxis_title="ROC-AUC", yaxis_range=[0.4, 1.0],
+            xaxis_title="",
+        )
+        body += chart_guide(
+            f"訓練データ: {h_year}年以前のクレジット。"
+            f"テスト: {n_unk:,}人の低BiRank者のうち{n_br:,}人({br_rate:.1%})が{h_year+1}以降にブレイク。"
+            "0.5=ランダム予測と同等。0.6以上でベースラインを超える予測力があると解釈できます。"
+        )
+        body += plotly_div_safe(fig_roc, "holdout_roc", 400)
+
+        # Precision@k table
+        if pak:
+            body += "<h3>Precision@k 比較</h3>"
+            body += "<table><thead><tr><th>k</th><th>先見スコア</th><th>活動量</th><th>共演者平均BiRank</th><th>ランダム</th></tr></thead><tbody>"
+            for k_str, row in sorted(pak.items(), key=lambda x: int(x[0])):
+                fs_p = row.get("foresight", 0)
+                bl_a = row.get("baseline_activity", 0)
+                bl_p = row.get("baseline_partner_birank", 0)
+                rand = row.get("random_baseline", 0)
+                best = max(fs_p, bl_a, bl_p)
+                def _fmt(v: float, is_best: bool) -> str:
+                    s = f"{v:.3f}"
+                    return f"<strong>{s}</strong>" if is_best and v == best else s
+                body += (
+                    f"<tr><td>@{k_str}</td>"
+                    f"<td>{_fmt(fs_p, True)}</td>"
+                    f"<td>{_fmt(bl_a, True)}</td>"
+                    f"<td>{_fmt(bl_p, True)}</td>"
+                    f"<td>{rand:.3f}</td></tr>"
+                )
+            body += "</tbody></table>"
+        body += (
+            '<details><summary><strong>[方法論ノート — Layer 3]</strong></summary>'
+            "<p>ブレイク定義: ホールドアウト時点のBiRank &lt; 40パーセンタイル かつ その後 &gt; 65パーセンタイル到達。"
+            "先見信号: sum(1/(y_birank+1)) for each pre-holdout co-appearance with unknown Y。"
+            "ROC-AUCはWilcoxon-Mann-Whitney U統計量。"
+            "近年の発見者は「発見→検証ラグ」により系統的に過小評価される（右打ち切り問題と同構造）。</p>"
+            "</details>"
+        )
+        body += "</div>"
+    elif holdout.get("error"):
+        body += (
+            f'<div class="card"><div class="insight-box" style="border-left-color:#e74c3c">'
+            f"<strong>ホールドアウト検証スキップ:</strong> {holdout.get('error')} "
+            f"(n_unknowns={holdout.get('n_unknowns', 'N/A')}, n_breakouts={holdout.get('n_breakouts', 'N/A')})"
+            "</div></div>"
+        )
 
     # Foresight scores
     if foresight:
         foresight_list = sorted(foresight.values(), key=lambda x: x.get("foresight_normalized", 0), reverse=True)
 
         body += '<div class="card">'
-        body += "<h2>Foresight Scores (Early Adopter Detection)</h2>"
-        body += '<div class="insight-box"><strong>Foresight</strong> measures the ability to identify talent early. '
-        body += f"{len(foresight_list)} persons demonstrated significant foresight in collaborator selection.</div>"
+        body += "<h2>先見的共演パターン (Retrospective Co-appearance Score)</h2>"
+        body += (
+            '<div class="insight-box">'
+            f"<strong>事後的パターン検出:</strong> {len(foresight_list)} 人が、"
+            "後に高BiRankを獲得した人物と、その人物がまだ低BiRankだった時期に共演していた構造的パターンを持ちます。"
+            "このスコアは「目利き能力の証明」ではなく「共演パターンの記述」です。"
+            "スコアが高いほど、将来のスターと早期に同じ現場にいた回数と規模が大きい。"
+            "</div>"
+        )
 
         # Foresight distribution
         fig = go.Figure(go.Histogram(
@@ -6260,10 +8361,10 @@ def generate_temporal_report():
             nbinsx=30, marker_color="#f093fb",
             hovertemplate="Score: %{x:.1f}<br>Count: %{y}<extra></extra>",
         ))
-        fig.update_layout(title="Foresight Score Distribution", xaxis_title="Foresight (Normalized)", yaxis_title="Count", yaxis_type="log")
+        fig.update_layout(title="共演パターンスコア分布", xaxis_title="Score (Normalized)", yaxis_title="Count", yaxis_type="log")
         body += chart_guide(
-            "高い先見スコアは、将来のスターがまだ無名の時期に協業した人物を示します。"
-            "分布は右に偏っており、大多数は低スコアで少数の優秀なタレントスカウトが存在します。"
+            "スコアは「後に高ランクになった人と、彼らがまだ無名だった時期に共演した頻度×強度」の事後計算値。"
+            "分布は右に偏っており、大多数が低スコア、少数が構造的に多くのブレイク人材と同じ現場にいた。"
         )
         body += plotly_div_safe(fig, "foresight_dist", 400)
 
@@ -6278,135 +8379,218 @@ def generate_temporal_report():
                     color=[f.get("confidence_upper", 0) - f.get("confidence_lower", 0)
                            for f in foresight_list],
                     colorscale="Viridis", showscale=True,
-                    colorbar=dict(title="信頼区間幅"),
+                    colorbar=dict(title="Bootstrap CI幅"),
                     opacity=0.7,
                 ),
-                text=[f.get("name", f["person_id"]) for f in foresight_list],
-                hovertemplate="%{text}<br>Discoveries: %{x}<br>Foresight: %{y:.1f}<br>"
-                              "信頼区間幅: %{marker.color:.1f}<extra></extra>",
+                text=[f.get("name") or f["person_id"] for f in foresight_list],
+                hovertemplate="%{text}<br>共演人数: %{x}<br>Score: %{y:.1f}<br>"
+                              "CI幅: %{marker.color:.1f}<extra></extra>",
             ))
             fig_fs.update_layout(
-                title="先見スコア vs 発見人数（先見の的中率）",
-                xaxis_title="発見した人数 (n_discoveries)",
-                yaxis_title="Foresight Score (Normalized)",
+                title="共演パターンスコア vs 対象人数",
+                xaxis_title="後にブレイクした共演者数",
+                yaxis_title="Score (Normalized)",
                 xaxis_type="log",
             )
-            body += "<h3>先見スコア vs 発見人数</h3>"
+            body += "<h3>スコア vs 対象人数</h3>"
             body += chart_guide(
-                "X=発見した人数、Y=先見スコア（正規化）、色=信頼区間の幅（狭いほど確実）。"
-                "右上の人物は多くの将来のスターを発見し、高い先見スコアを持つ最優秀スカウト。"
-                "発見数が少なくてもスコアが高い＝少数だが的確な目利き。"
+                "X=後にブレイクした共演者の延べ人数、Y=スコア（正規化）、色=Bootstrap信頼区間幅（狭いほど安定）。"
+                "右上ほど「多くのブレイク人材と早期に共演していた」。"
+                "ただし活動量が多いほどスコアが上がる傾向があり（上記ホールドアウト検証参照）、"
+                "単純な活動量効果との分離が今後の課題。"
             )
             body += plotly_div_safe(fig_fs, "foresight_scatter", 500)
 
         # Top foresight table
-        body += "<h3>Top 30 Foresight Persons</h3>"
+        body += "<h3>Top 30 — 共演パターンスコア上位</h3>"
         body += "<table><thead><tr>"
-        body += "<th>#</th><th>Person</th><th>Foresight (Norm)</th><th>Foresight (Raw)</th><th>Discoveries</th><th>Confidence</th>"
+        body += "<th>#</th><th>氏名</th><th>Score</th><th>Raw</th><th>共演人数</th><th>Bootstrap 95% CI</th>"
         body += "</tr></thead><tbody>"
         for i, f in enumerate(foresight_list[:30], 1):
             norm = f.get("foresight_normalized", 0)
             badge = "badge-high" if norm >= 70 else "badge-mid" if norm >= 30 else "badge-low"
-            conf = f"[{f.get('confidence_lower', 0):.1f}, {f.get('confidence_upper', 0):.1f}]"
-            f_name = f.get("name", f["person_id"])
+            ci_lo = f.get("confidence_lower", 0)
+            ci_hi = f.get("confidence_upper", 0)
+            conf = f"[{ci_lo:.1f}, {ci_hi:.1f}]"
+            f_name = f.get("name") or f["person_id"]
             body += f"<tr><td>{i}</td><td>{f_name}</td>"
             body += f'<td><span class="badge {badge}">{norm:.1f}</span></td>'
             body += f"<td>{f.get('foresight_raw', 0):.4f}</td>"
             body += f"<td>{f.get('n_discoveries', 0)}</td><td>{conf}</td></tr>"
-        body += "</tbody></table></div>"
+        body += "</tbody></table>"
+        body += (
+            '<details><summary><strong>[方法論ノート — Layer 3]</strong></summary>'
+            "<p>Algorithm: 年T において birank &lt; 25th pct の人物Y と共演した established 者X に対し、"
+            "Yが T+10年以内に +5pt 以上 birank 成長した場合、X に growth×1/(y_birank+1) を加算。"
+            "Bootstrap CI: 200 iterations (events をリサンプル)。"
+            "既知の限界: (1)共演=指導ではない (2)活動量と強く相関 (3)右打ち切りにより近年の発見者は過小評価。</p>"
+            "</details>"
+        )
+        body += "</div>"
 
     # Promotion analysis
     if promotions:
-        promo_list = sorted(promotions.values(), key=lambda x: x.get("promotion_count", 0), reverse=True)
+        # Rank by shrunk_success_rate (Beta-Binomial posterior mean) — preferred over raw rate
+        promo_list = sorted(
+            promotions.values(),
+            key=lambda x: x.get("shrunk_success_rate", x.get("promotion_success_rate", 0)),
+            reverse=True,
+        )
 
         body += '<div class="card">'
-        body += "<h2>Promotion Credit Analysis</h2>"
-        body += f'<div class="insight-box"><strong>{len(promo_list)}</strong> persons with promotion track records. '
-        body += "Promotion credits measure how effectively a person nurtures talent that later achieves prominence.</div>"
+        body += "<h2>昇進クレジット分析</h2>"
+        body += (
+            f'<div class="insight-box"><strong>{len(promo_list)}</strong> 人がキャリアステージ昇進イベントの帰属先として記録されています。<br>'
+            "<strong>定義上の注意:</strong> ここでの「昇進」は「同じ現場で上位役職者が最上位」として帰属されたもので、"
+            "直接の指導関係とは区別が必要です。30人いる現場で1人が後に昇進すれば、残り29人全員にもカウントが付きます。<br>"
+            "ランキングは <strong>Beta-Binomial縮約後成功率</strong>（試行数が少ない人物の極端な値を母集団平均方向に修正）。"
+            "vs Baseline列は実際の成功率÷ステージコホート基準値（例: 2.3x＝同ステージ集団の2.3倍の成功率）。"
+            "</div>"
+        )
 
-        # Success rate distribution
-        fig = go.Figure(go.Histogram(
-            x=[p.get("promotion_success_rate", 0) * 100 for p in promo_list],
-            nbinsx=20, marker_color="#a0d2db",
-            hovertemplate="Rate: %{x:.0f}%<br>Count: %{y}<extra></extra>",
-        ))
-        fig.update_layout(title="Promotion Success Rate Distribution", xaxis_title="Success Rate (%)", yaxis_title="Count")
-        body += plotly_div_safe(fig, "promo_dist", 400)
+        # Dual histogram: raw rate vs shrunk rate
+        if any(p.get("shrunk_success_rate", 0) > 0 for p in promo_list):
+            raw_rates = [p.get("promotion_success_rate", 0) * 100 for p in promo_list]
+            shrunk_rates = [p.get("shrunk_success_rate", p.get("promotion_success_rate", 0)) * 100 for p in promo_list]
+            fig_promo = go.Figure()
+            fig_promo.add_trace(go.Histogram(
+                x=raw_rates, name="素の成功率", nbinsx=20, marker_color="#a0d2db", opacity=0.7,
+                hovertemplate="Rate: %{x:.0f}%<br>Count: %{y}<extra>素の成功率</extra>",
+            ))
+            fig_promo.add_trace(go.Histogram(
+                x=shrunk_rates, name="縮約後成功率", nbinsx=20, marker_color="#f093fb", opacity=0.7,
+                hovertemplate="Rate: %{x:.0f}%<br>Count: %{y}<extra>縮約後</extra>",
+            ))
+            fig_promo.update_layout(
+                title="昇進成功率分布: 素の値 vs Beta-Binomial縮約後",
+                xaxis_title="Success Rate (%)", yaxis_title="Count",
+                barmode="overlay",
+            )
+            body += chart_guide(
+                "素の成功率（水色）は試行数が少ない人物で0%か100%に張り付く。"
+                "Beta-Binomial縮約後（紫）は母集団の事前分布で補正し、試行数が少ないほど平均値に引き寄せられる。"
+                "縮約後の値がランキングの基準。"
+            )
+            body += plotly_div_safe(fig_promo, "promo_dist", 420)
+        else:
+            fig = go.Figure(go.Histogram(
+                x=[p.get("promotion_success_rate", 0) * 100 for p in promo_list],
+                nbinsx=20, marker_color="#a0d2db",
+                hovertemplate="Rate: %{x:.0f}%<br>Count: %{y}<extra></extra>",
+            ))
+            fig.update_layout(title="昇進成功率分布", xaxis_title="Success Rate (%)", yaxis_title="Count")
+            body += plotly_div_safe(fig, "promo_dist", 400)
 
-        # Top promoters table
-        body += "<h3>Top 20 Talent Promoters</h3>"
+        # Top promoters table — ranked by shrunk rate
+        body += "<h3>Top 20 — Beta-Binomial縮約後成功率ランキング</h3>"
         body += "<table><thead><tr>"
-        body += "<th>#</th><th>Person</th><th>Promotions</th><th>Successful</th><th>Success Rate</th><th>vs Baseline</th>"
+        body += "<th>#</th><th>氏名</th><th>昇進数</th><th>成功数</th><th>素の成功率</th><th>縮約後成功率</th><th>vs Baseline</th>"
         body += "</tr></thead><tbody>"
         for i, p in enumerate(promo_list[:20], 1):
-            rate = p.get("promotion_success_rate", 0) * 100
-            badge = "badge-high" if rate >= 50 else "badge-mid" if rate >= 25 else "badge-low"
-            p_name = p.get("name", p["person_id"])
+            raw_rate = p.get("promotion_success_rate", 0) * 100
+            shrunk = p.get("shrunk_success_rate", p.get("promotion_success_rate", 0)) * 100
+            vs_bl = p.get("vs_cohort_baseline", 0)
+            badge = "badge-high" if shrunk >= 50 else "badge-mid" if shrunk >= 25 else "badge-low"
+            bl_badge = "badge-high" if vs_bl >= 2.0 else "badge-mid" if vs_bl >= 1.0 else "badge-low"
+            p_name = p.get("name") or p["person_id"]
             body += f"<tr><td>{i}</td><td>{p_name}</td>"
             body += f"<td>{p.get('promotion_count', 0)}</td><td>{p.get('successful_promotions', 0)}</td>"
-            body += f'<td><span class="badge {badge}">{rate:.0f}%</span></td>'
-            body += f"<td>{p.get('vs_cohort_baseline', 0):.2f}x</td></tr>"
-        body += "</tbody></table></div>"
+            body += f"<td>{raw_rate:.0f}%</td>"
+            body += f'<td><span class="badge {badge}">{shrunk:.0f}%</span></td>'
+            body += f'<td><span class="badge {bl_badge}">{vs_bl:.2f}x</span></td></tr>'
+        body += "</tbody></table>"
+        body += (
+            '<details><summary><strong>[方法論ノート — Layer 3]</strong></summary>'
+            "<p><strong>縮約:</strong> Beta-Binomial 経験ベイズ。Prior Beta(α₀,β₀) をモーメント法で母集団から推定。"
+            "Posterior mean = (α₀+s)/(α₀+β₀+n)。試行数 n が大きいほど素の成功率に近づき、小さいほど母集団平均に引き寄せられる。<br>"
+            "<strong>vs Baseline:</strong> (実際の成功率) / (昇進前ステージのコホート平均昇進率)。"
+            "成功率は「昇進した人物が昇進後もさらに上位ステージに進んだ割合」。<br>"
+            "<strong>帰属の限界:</strong> 30人の現場で1人が昇進すれば残り29人全員にカウントされる。"
+            "役職ペア（監督→演出）への絞り込みや複数作品での継続性要件は未実装。</p>"
+            "</details>"
+        )
+        body += "</div>"
 
     # Data-driven key findings
     foresight_count = len(foresight)
     promo_count = len(promotions)
     year_span = f"{min(years_computed)}-{max(years_computed)}" if years_computed else "N/A"
+    holdout_note = ""
+    if holdout and "roc_auc" in holdout:
+        fs_auc = holdout["roc_auc"].get("foresight", 0.5)
+        bl_auc = holdout["roc_auc"].get("baseline_activity", 0.5)
+        if fs_auc > bl_auc + 0.03:
+            holdout_note = f"ホールドアウト検証ではROC-AUC {fs_auc:.3f}（活動量ベースライン {bl_auc:.3f}）を上回り、共演パターン信号に付加的情報があることが示された"
+        else:
+            holdout_note = f"ホールドアウト検証ではROC-AUC {fs_auc:.3f}（活動量ベースライン {bl_auc:.3f}と近接）。共演パターン信号は活動量で大部分説明できる可能性がある"
     body += key_findings([
-        f"BiRankは静的ではなく、{year_span} の {len(years_computed)} 年間で"
-        "動的に変化し、キャリアフェーズに応じたピークと転換が観察される",
-        f"先見スコア保持者 {fmt_num(foresight_count)} 人は将来著名になる人材と早期に協業しており、"
-        "タレントスカウトとしての能力が数値化されている",
-        f"昇進クレジット追跡対象 {fmt_num(promo_count)} 人の育成実績が測定され、"
-        "後に頭角を現す人材の育成者が特定されている",
+        f"BiRankは {year_span} の {len(years_computed)} 年間で動的に変化し、"
+        "個人のキャリアフェーズに応じたピークと転換が観察される",
+        f"{fmt_num(foresight_count)} 人が、後に高BiRankを獲得した人物と彼らの無名時代に共演していた"
+        "構造的パターンを持つ（事後的記述。因果解釈には追加検証が必要）",
+        holdout_note or f"昇進クレジット追跡対象 {fmt_num(promo_count)} 人について、"
+        "キャリアステージ昇進の帰属構造が記録されている",
     ])
 
-    body += significance_section("才能の早期発見と「事前」の評価", [
-        "従来の評価は「事後」— すでに有名になった人物を高く評価するものでした。"
-        "本分析は「事前」— まだ無名の段階で将来の星を見抜いた人物（先見スコア）と、"
-        "BiRankがピーク前の急上昇期にある人材を特定することで、投資判断のタイミングを前倒しにします。",
-        "先見スコアは「誰が新しい才能を最初に発見してきたか」を定量化し、"
-        "主観的な「目利き」を客観的な指標に変換します。"
-        "昇進クレジット保持者は「育てる力」が数値で証明された人物であり、"
-        "社内メンター選定の根拠として機能します。",
+    body += significance_section("時系列BiRankで何が分かるか", [
+        "BiRankの時系列推移は「いつ、どの時期にネットワーク上の重要性が変化したか」を記述します。"
+        "現役で上昇中（rising）の人物は打ち切りにより過小評価される傾向があるため、"
+        "Peak BiRankと「現役/確定」ステータスを合わせて参照してください。",
+        "共演パターンスコアと昇進クレジットはいずれも共演構造の記述であり、"
+        "「目利き能力の証明」や「育成力の証明」として使用する場合は"
+        "上記のホールドアウト検証結果と方法論上の限界を参照してください。"
+        "活動量・時代効果・役職構成との交絡が未制御です。",
     ])
     body += utilization_guide([
-        {"role": "タレントスカウト", "how": "Foresight Scores上位者のDiscoveries列を確認し、その人物が過去に早期発見した人のBiRank推移を追跡して、現在も同様の「無名の新星」を抱えていないか調べる"},
-        {"role": "スタジオ経営層", "how": "BiRank Evolution（Top 10）チャートで急上昇中（ピーク前のJ字カーブ）を示す人物を特定し、ピーク前の現時点で長期契約オファーを出して将来の主力スタッフを確保する"},
-        {"role": "アニメーター（若手）", "how": "Top 30 Talent PromotersでSuccess Rateが高い監督・プロデューサーを確認し、その人物との協業を積極的に狙うことでキャリア加速を期待できる"},
-        {"role": "スタジオ育成担当", "how": "昇進クレジット上位者をプロモーション実績として評価し、若手指導役として正式にアサインするメンタリング制度の候補者リストに加える"},
+        {"role": "スタジオ人事", "how": "BiRank Evolution（Top 10）でtrajectory=risingかつis_censored=Trueの人物を抽出。現役上昇中＝現時点でのエンゲージメント検討候補。ピーク前の現時点で契約検討するための一次情報として使用"},
+        {"role": "リサーチャー", "how": "ホールドアウト検証のROC-AUCを確認し、共演パターン信号が活動量ベースラインを上回るかどうかを確認してから分析に使用する。AUC < 0.6なら共演パターンよりも活動量指標を優先すべき"},
+        {"role": "制作担当", "how": "昇進クレジット上位者の「vs Baseline」列を確認。2.0x以上かつ縮約後成功率50%以上が確認できる人物は、同ステージ間の業界平均比較において際立つ共演パターンを持つ"},
+        {"role": "若手スタッフ", "how": "昇進クレジット上位者との共演歴を自身のキャリアと照合する際は、因果関係ではなく相関であることを念頭に置く。縮約後成功率と試行数（Promotions列）の両方を確認すること"},
     ])
     body += future_possibilities([
-        "先見スコアの「先見スコア」— 誰の目利きが長期的に正確だったかを毎年検証し、「最も信頼できるスカウト」を特定",
-        "先見スコアとその後のキャリア成功の時差分析（発見から何年後に正解だったと分かるかのラグ計測）",
-        "映画・ゲーム・VTuber産業への先見スコア手法の応用（アニメ以外のコンテンツ産業への横展開）",
-        "昇進クレジット保持者を社内メンター制度に組み込む標準フレームワークの業界提案",
+        "役職ペア絞り込み: 「監督→演出」「作監→原画」など指導構造が明確な上下役職ペアのみを昇進エッジとして抽出し、30人共演問題を緩和",
+        "傾向スコアマッチング: 年代・役職・活動量でマッチさせた対照群との比較で共演→昇進の因果効果を推定",
+        "Discovery-Verification ラグ分布の推定: 共演から「ブレイク確認」までの時間分布を計測し、近年の発見者の系統的過小評価を定量化",
+        "時代・ジャンル固定効果の導入: era×genre FEを回帰に追加し、共演パターン信号から時代効果を除去",
     ])
 
     html = wrap_html(
-        "時系列BiRank・先見スコア分析",
-        f"時系列BiRank推定・先見スコア分析 — {fmt_num(tp.get('total_persons', 0))}人 / {len(years_computed)}年間",
+        "時系列BiRank・共演パターン分析",
+        f"時系列BiRank推定・共演パターン分析 — {fmt_num(tp.get('total_persons', 0))}人 / {len(years_computed)}年間",
         body,
         intro_html=report_intro(
-            "時系列BiRank・先見分析",
+            "時系列BiRank・共演パターン分析",
             "BiRankは静的ではなく、キャリアの進行とともに変化します。本レポートでは"
-            "各人物のネットワーク中心性の時系列変化を追跡し、将来の人材を"
-            "先見的に発見する個人を特定し、育成効果を測定します。",
-            "タレントスカウト、スタジオ経営層、キャリア研究者",
+            "各人物のネットワーク中心性の時系列変化を追跡し、後にブレイクした人材との"
+            "共演パターンを事後的に記述します。予測的解釈にはホールドアウト検証結果を参照してください。",
+            "スタジオ人事、リサーチャー、キャリア研究者",
         ),
         glossary_terms={
             **COMMON_GLOSSARY_TERMS,
-            "時系列PageRank (Temporal PageRank)": (
-                "協業グラフの年次スナップショットに対して計算されたPageRank。"
-                "キャリアを通じたネットワーク中心性の変化を示します。"
+            "時系列PageRank": (
+                "協業グラフの年次累積スナップショットに対してWarm-start PageRankを繰り返し計算したもの。"
+                "厳密な temporal PageRank（時間順序保存）ではなく年次静的PageRankの反復。"
+                "キャリアを通じたネットワーク中心性の変化の近似的記述。"
             ),
-            "先見スコア (Foresight Score)": (
-                "後に高ランクとなる人物と早期に協業した頻度を測定。"
-                "人材を認知される前に発見する能力の指標。"
+            "共演パターンスコア (旧称: 先見スコア)": (
+                "後に高BiRankとなった人物と、彼らの低BiRank時代に共演していた頻度×強度の事後計算値。"
+                "「目利き能力」の証明ではなく共演構造の記述。"
+                "予測的解釈にはホールドアウト検証（ROC-AUC）を確認のこと。"
             ),
-            "昇進クレジット (Promotion Credit)": (
-                "後に著名になる人材をどれだけ効果的に育成したかを追跡。"
-                "高い値は優れたメンタリング実績を意味します。"
+            "昇進クレジット": (
+                "キャリアステージ昇進イベントを、同じ現場にいた最上位役職者に帰属したもの。"
+                "直接の指導関係とは区別が必要（共演=指導ではない）。"
+                "ランキングはBeta-Binomial縮約後の成功率を使用（素の成功率は試行数が少ない場合に不安定）。"
+            ),
+            "Beta-Binomial縮約": (
+                "試行数が少ない人物の成功率を母集団の事前分布方向に修正する経験ベイズ手法。"
+                "Posterior mean = (α₀+successes)/(α₀+β₀+trials)。"
+                "試行数が多いほど素の成功率に近づき、少ないほど母集団平均に引き寄せられる。"
+            ),
+            "右打ち切り (Right Censoring)": (
+                "現役で活動継続中の人物は真のピークに未達の可能性があり、"
+                "観測済みのPeak BiRankは下限値として解釈すべき状態。"
+                "is_censored=Trueの人物はPeak順位が過小評価される傾向がある。"
             ),
         },
     )
@@ -6655,7 +8839,7 @@ def generate_network_evolution_report():
 def generate_growth_score_report():
     """成長・スコア分析レポート."""
     print("  Generating Growth & Score Report...")
-    growth = load_json("growth.json")
+    growth = get_feat_career()
     insights = load_json("insights_report.json")
 
     body = ""
@@ -6981,7 +9165,7 @@ def generate_growth_score_report():
             body += "</div>"
 
         # Bar+Line: Career Year Retention Curve
-        scores_for_retention = load_json("scores.json")
+        scores_for_retention = get_feat_person_scores()
         if scores_for_retention:
             active_years_list = [
                 p.get("career", {}).get("active_years", 0)
@@ -7165,7 +9349,7 @@ def generate_growth_score_report():
 def generate_person_ranking_report():
     """人物ランキング・スコア分析レポート."""
     print("  Generating Person Ranking Report...")
-    scores = load_json("scores.json")
+    scores = get_feat_person_scores()
     profiles = load_json("individual_profiles.json")
 
     if not scores:
@@ -8344,12 +10528,12 @@ def generate_bias_report():
 def generate_genre_report():  # noqa: C901
     """ジャンル親和性分析レポート（スタッフクラスタリング + ジャンル年代クラスタリング）."""
     print("  Generating Genre Analysis Report...")
-    genre = load_json("genre_affinity.json")
+    genre = get_feat_genre_affinity()
 
     if not genre:
         return
 
-    scores_list = load_json("scores.json") or []
+    scores_list = get_feat_person_scores() or []
     scores_map = {p["person_id"]: p for p in scores_list if isinstance(p, dict)}
 
     import numpy as np
@@ -10626,9 +12810,9 @@ def generate_cohort_animation_report():  # noqa: C901
 
     print("  Generating Cohort Animation Report...")
 
-    scores_data = load_json("scores.json")
-    growth_data = load_json("growth.json") or {}
-    milestones_data = load_json("milestones.json") or {}
+    scores_data = get_feat_person_scores()
+    growth_data = get_feat_career() or {}
+    milestones_data = get_agg_milestones() or {}
     anime_stats = load_json("anime_stats.json") or {}
     ml_data = load_json("ml_clusters.json") or {}
     time_series_data = load_json("time_series.json") or {}
@@ -12286,12 +14470,12 @@ def generate_longitudinal_analysis_report():  # noqa: C901
 
     print("  Generating Longitudinal Analysis Report...")
 
-    scores_data = load_json("scores.json")
-    milestones_data = load_json("milestones.json") or {}
+    scores_data = get_feat_person_scores()
+    milestones_data = get_agg_milestones() or {}
     transitions_data = load_json("transitions.json") or {}
     role_flow_data = load_json("role_flow.json") or {}
-    temporal_pr_data = load_json("temporal_pagerank.json") or {}
-    growth_data = load_json("growth.json") or {}
+    temporal_pr_data = get_feat_birank_annual() or {}
+    growth_data = get_feat_career() or {}
     time_series_data = load_json("time_series.json") or {}
     decades_data = load_json("decades.json") or {}
     individual_profiles = load_json("individual_profiles.json") or {}
@@ -14395,7 +16579,7 @@ def generate_longitudinal_analysis_report():  # noqa: C901
         genre_decade = _sd["genre_decade"]
 
         # Load scores for survivorship analysis (scores.json is a list of dicts)
-        _scores_s8_list = load_json("scores.json") or []
+        _scores_s8_list = get_feat_person_scores() or []
         _score_by_pid: dict = {}
         if isinstance(_scores_s8_list, list):
             for pdata in _scores_s8_list:
@@ -15948,8 +18132,8 @@ def generate_longitudinal_analysis_report():  # noqa: C901
         from collections import defaultdict as _dd11
         import numpy as _np11
 
-        scores_data_all = load_json("scores.json") or []
-        milestones_data_s11 = load_json("milestones.json") or {}
+        scores_data_all = get_feat_person_scores() or []
+        milestones_data_s11 = get_agg_milestones() or {}
         CURRENT_YEAR = 2025
         DROPOUT_THRESHOLD = 5  # last credit ≥5 years ago = considered quit
 
@@ -16930,7 +19114,7 @@ def generate_shap_report():
     ウォーターフォールで可視化する。
     """
     print("  Generating SHAP Score Explanation Report...")
-    scores_data = load_json("scores.json")
+    scores_data = get_feat_person_scores()
     if not scores_data or not isinstance(scores_data, list):
         print("  [SKIP] scores.json not found or invalid")
         return
@@ -17245,7 +19429,7 @@ def generate_knowledge_network_report():  # noqa: C901
     """知識ネットワーク分析レポート."""
     print("  Generating Knowledge Network Report...")
     spanners = load_json("knowledge_spanners.json")
-    scores = load_json("scores.json")
+    scores = get_feat_person_scores()
 
     if not spanners:
         return
@@ -17761,7 +19945,7 @@ def generate_anime_value_report():  # noqa: C901
         # anime_valsからタイトルルックアップ
         title_lookup = {aid: info.get("title", aid) for aid, info in anime_vals.items()}
         # scores.jsonから名前ルックアップ
-        scores_data = load_json("scores.json")
+        scores_data = get_feat_person_scores()
         name_lookup: dict[str, str] = {}
         if scores_data and isinstance(scores_data, list):
             for s in scores_data:
@@ -18077,7 +20261,7 @@ def generate_akm_diagnostics_report():
             body += "</div>"
 
     # --- Chart 4B: Person FE vs Studio FE density scatter ---
-    scores_akm = load_json("scores.json")
+    scores_akm = get_feat_person_scores()
     if scores_akm and isinstance(scores_akm, list):
         pfe_vals = [p.get("person_fe", 0) for p in scores_akm]
         sfe_vals = [p.get("studio_fe_exposure", 0) for p in scores_akm]
@@ -18306,7 +20490,7 @@ def generate_expected_ability_report():  # noqa: C901
     """期待能力分析レポート."""
     print("  Generating Expected Ability Report...")
     ea_data = load_json("expected_ability.json")
-    scores = load_json("scores.json")
+    scores = get_feat_person_scores()
 
     if not ea_data:
         return
@@ -18620,7 +20804,7 @@ def generate_career_friction_report():  # noqa: C901
     """キャリア摩擦分析レポート."""
     print("  Generating Career Friction Report...")
     friction_data = load_json("career_friction.json")
-    scores = load_json("scores.json")
+    scores = get_feat_person_scores()
 
     if not friction_data:
         return
@@ -19329,7 +21513,7 @@ def generate_compatibility_report():  # noqa: C901
     """相性分析レポート."""
     print("  Generating Compatibility Report...")
     compat_data = load_json("compatibility_groups.json")
-    scores = load_json("scores.json")
+    scores = get_feat_person_scores()
 
     if not compat_data:
         return
@@ -19647,7 +21831,7 @@ def generate_score_layers_report():
     の3層の特性差・相関・分布を15チャートで可視化。
     """
     print("  Generating Score Layers Analysis Report...")
-    scores = load_json("scores.json")
+    scores = get_feat_person_scores()
     iv_data = load_json("iv_weights.json")
     profiles = load_json("individual_profiles.json")
     if not scores or len(scores) < 50:
@@ -20414,6 +22598,13 @@ REPORT_CATALOG = [
         "sources": "transitions, milestones, scores",
     },
     {
+        "file": "network_analysis.html",
+        "title": "ネットワーク分析（学術的フレームワーク）",
+        "subtitle": "Burt構造的空隙 / マルチレイヤー / 時間ネットワーク / AKMバイアス",
+        "desc": "Bridge ScoreとBurt (1992)・Freeman (1977) の相関検証、役職別4レイヤー分析、5年スライディングウィンドウ、AKM limited mobility bias診断。",
+        "sources": "bridges.json, DB credits/anime",
+    },
+    {
         "file": "bridge_analysis.html",
         "title": "ネットワークブリッジ分析",
         "subtitle": "コミュニティ間ブリッジ人材と接続性",
@@ -20654,10 +22845,10 @@ def generate_career_dynamics_report():  # noqa: C901
         print("  [SKIP] DB not found")
         return
 
-    scores_data = load_json("scores.json")
+    scores_data = get_feat_person_scores()
     transitions_data = load_json("transitions.json")
     role_flow_data = load_json("role_flow.json")
-    milestones_data = load_json("milestones.json")
+    milestones_data = get_agg_milestones()
     if not scores_data:
         return
 
@@ -21829,7 +24020,7 @@ def run_interactive_visualizations():
         return
 
     # Load data
-    scores_data = load_json("scores.json")
+    scores_data = get_feat_person_scores()
     time_series = load_json("time_series.json")
     collabs = load_json("collaborations.json")
 
@@ -21887,10 +24078,10 @@ def generate_dml_report():  # noqa: C901
     print("  Generating DML Causal Inference Report...")
 
     # Load required data from DB
-    from src.database import get_all_anime, get_all_credits, get_connection, init_db
+    from src.database import load_all_anime, load_all_credits, get_connection, init_db
     from src.analysis.causal.dml import run_dml_analysis
 
-    scores = load_json("scores.json")
+    scores = get_feat_person_scores()
     akm = load_json("akm_diagnostics.json")
     if not scores or not akm:
         print("    [SKIP] scores.json or akm_diagnostics.json not found")
@@ -21906,8 +24097,8 @@ def generate_dml_report():  # noqa: C901
 
     conn = get_connection()
     init_db(conn)
-    credits = get_all_credits(conn)
-    anime_list = get_all_anime(conn)
+    credits = load_all_credits(conn)
+    anime_list = load_all_anime(conn)
     conn.close()
 
     anime_map = {a.id: a for a in anime_list}
@@ -22175,7 +24366,7 @@ def generate_derived_params_report():  # noqa: C901
     print("  Generating Derived Parameters Report...")
     params = load_json("derived_params.json")
     iv_data = load_json("iv_weights.json")
-    scores_data = load_json("scores.json")
+    scores_data = get_feat_person_scores()
     if not params or not params.get("sections"):
         print("  [SKIP] derived_params.json not found")
         return
@@ -22694,6 +24885,7 @@ def main(only: str | None = None):
     # Build report list
     all_generators = [
         ("industry_overview",      generate_industry_overview),
+        ("network_analysis",       generate_network_analysis_report),
         ("bridge",                 generate_bridge_report),
         ("team",                   generate_team_report),
         ("career",                 generate_career_report),
@@ -22777,15 +24969,8 @@ def main(only: str | None = None):
 
 
 if __name__ == "__main__":
-    import sys
-    only_arg = None
-    for arg in sys.argv[1:]:
-        if arg.startswith("--only="):
-            only_arg = arg.split("=", 1)[1]
-        elif sys.argv[sys.argv.index(arg) - 1] == "--only" if arg != "--only" else False:
-            pass
-        elif arg == "--only":
-            idx = sys.argv.index(arg)
-            if idx + 1 < len(sys.argv):
-                only_arg = sys.argv[idx + 1]
-    main(only=only_arg)
+    import argparse
+    parser = argparse.ArgumentParser(description="Animetor Eval — Report Generator")
+    parser.add_argument("--only", help="カンマ区切りのレポート名 (例: person_ranking,career)")
+    args = parser.parse_args()
+    main(only=args.only)

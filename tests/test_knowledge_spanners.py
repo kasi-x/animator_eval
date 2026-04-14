@@ -27,8 +27,12 @@ def bridge_graph():
     g.add_edges_from([("B", "A1"), ("B", "C1")])
 
     communities = {
-        "A1": 0, "A2": 0, "A3": 0,
-        "C1": 1, "C2": 1, "C3": 1,
+        "A1": 0,
+        "A2": 0,
+        "A3": 0,
+        "C1": 1,
+        "C2": 1,
+        "C3": 1,
         "B": 2,  # bridge in its own community or assigned to either
     }
     return g, communities

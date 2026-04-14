@@ -172,7 +172,9 @@ class TestScoreHistory:
         for auth in [50.0, 60.0, 70.0]:
             save_score_history(
                 stats_conn,
-                ScoreResult(person_id="p1", birank=auth, patronage=40.0, person_fe=30.0),
+                ScoreResult(
+                    person_id="p1", birank=auth, patronage=40.0, person_fe=30.0
+                ),
             )
         stats_conn.commit()
 

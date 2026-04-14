@@ -44,16 +44,19 @@ class SubsampleSpec:
 # Standard subsamples (era × role × band)
 # ---------------------------------------------------------------------------
 
+
 def _era_filter(start: int, end: int) -> Callable[[dict], bool]:
     def _f(row: dict) -> bool:
         year = row.get("first_year") or row.get("debut_year") or 0
         return start <= year < end
+
     return _f
 
 
 def _field_equals(field: str, value: Any) -> Callable[[dict], bool]:
     def _f(row: dict) -> bool:
         return row.get(field) == value
+
     return _f
 
 
@@ -69,6 +72,7 @@ STANDARD_SUBSAMPLES: tuple[SubsampleSpec, ...] = (
 # ---------------------------------------------------------------------------
 # Grid runner
 # ---------------------------------------------------------------------------
+
 
 def run_robustness_grid(
     data: Sequence[dict[str, Any]],

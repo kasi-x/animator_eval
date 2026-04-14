@@ -38,39 +38,29 @@ def _make_data():
     ]
     # Add 15 more unique staff to a1 (total 18)
     for i, role in enumerate(_FILLER_ROLES):
-        credits.append(
-            Credit(person_id=f"a1_extra_{i}", anime_id="a1", role=role)
-        )
-    credits.append(
-        Credit(person_id="a1_extra_13", anime_id="a1", role=Role.LAYOUT)
-    )
+        credits.append(Credit(person_id=f"a1_extra_{i}", anime_id="a1", role=role))
+    credits.append(Credit(person_id="a1_extra_13", anime_id="a1", role=Role.LAYOUT))
     credits.append(
         Credit(person_id="a1_extra_14", anime_id="a1", role=Role.CGI_DIRECTOR)
     )
 
     # Large team (a2): p1 director, p2 key + 14 filler → 16 unique
     credits.append(Credit(person_id="p1", anime_id="a2", role=Role.DIRECTOR))
-    credits.append(
-        Credit(person_id="p2", anime_id="a2", role=Role.KEY_ANIMATOR)
-    )
+    credits.append(Credit(person_id="p2", anime_id="a2", role=Role.KEY_ANIMATOR))
     for i, role in enumerate(_FILLER_ROLES):
-        credits.append(
-            Credit(person_id=f"a2_extra_{i}", anime_id="a2", role=role)
-        )
-    credits.append(
-        Credit(person_id="a2_extra_13", anime_id="a2", role=Role.LAYOUT)
-    )
+        credits.append(Credit(person_id=f"a2_extra_{i}", anime_id="a2", role=role))
+    credits.append(Credit(person_id="a2_extra_13", anime_id="a2", role=Role.LAYOUT))
 
     # Small team (a3): only 2 staff — below min_staff
-    credits.extend([
-        Credit(person_id="p4", anime_id="a3", role=Role.DIRECTOR),
-        Credit(person_id="p5", anime_id="a3", role=Role.KEY_ANIMATOR),
-    ])
+    credits.extend(
+        [
+            Credit(person_id="p4", anime_id="a3", role=Role.DIRECTOR),
+            Credit(person_id="p5", anime_id="a3", role=Role.KEY_ANIMATOR),
+        ]
+    )
 
     # Tiny team (a4): only 1 staff — below min_staff
-    credits.append(
-        Credit(person_id="p1", anime_id="a4", role=Role.DIRECTOR)
-    )
+    credits.append(Credit(person_id="p1", anime_id="a4", role=Role.DIRECTOR))
 
     return credits, anime_map
 

@@ -119,7 +119,7 @@ NON_PRODUCTION_ROLES: frozenset[Role] = frozenset(
         Role.ORIGINAL_CREATOR,  # 原作者 — 制作スタッフではない
         Role.MUSIC,  # 作曲家・演奏者 — アニメーション制作スタッフではない
         Role.LOCALIZATION,  # 各国語版スタッフ — 日本の制作工程外
-        Role.OTHER,    # ロール特定不可のクレジット — スコア計算対象外
+        Role.OTHER,  # ロール特定不可のクレジット — スコア計算対象外
         Role.SPECIAL,  # スペシャルサンクス・ゲスト — 制作外特別枠
     }
 )
@@ -166,7 +166,7 @@ ROLE_CATEGORY: dict[Role, str] = {
     # Non-production
     Role.VOICE_ACTOR: "non_production",
     Role.LOCALIZATION: "non_production",
-    Role.OTHER: "non_production",    # ロール特定不可
+    Role.OTHER: "non_production",  # ロール特定不可
     Role.SPECIAL: "non_production",  # スペシャルサンクス等
 }
 
@@ -191,35 +191,35 @@ ROLE_CATEGORY: dict[Role, str] = {
 
 CAREER_STAGE: dict[Role, int] = {
     # Animation track
-    Role.IN_BETWEEN: 1,           # 動画
+    Role.IN_BETWEEN: 1,  # 動画
     Role.SECOND_KEY_ANIMATOR: 2,  # 第二原画
-    Role.KEY_ANIMATOR: 3,         # 原画
-    Role.LAYOUT: 3,               # レイアウト（原画工程の一部）
-    Role.CHARACTER_DESIGNER: 4,   # キャラクターデザイン
-    Role.ANIMATION_DIRECTOR: 5,   # 作画監督・総作画監督（部門監督）
-    Role.EPISODE_DIRECTOR: 5,     # 演出・絵コンテ
-    Role.DIRECTOR: 6,             # 監督（全体統括）
+    Role.KEY_ANIMATOR: 3,  # 原画
+    Role.LAYOUT: 3,  # レイアウト（原画工程の一部）
+    Role.CHARACTER_DESIGNER: 4,  # キャラクターデザイン
+    Role.ANIMATION_DIRECTOR: 5,  # 作画監督・総作画監督（部門監督）
+    Role.EPISODE_DIRECTOR: 5,  # 演出・絵コンテ
+    Role.DIRECTOR: 6,  # 監督（全体統括）
     # Technical track — 部門監督 = 作画監督相当
-    Role.PHOTOGRAPHY_DIRECTOR: 5, # 撮影監督
-    Role.CGI_DIRECTOR: 5,         # CGI監督
+    Role.PHOTOGRAPHY_DIRECTOR: 5,  # 撮影監督
+    Role.CGI_DIRECTOR: 5,  # CGI監督
     # Art / Sound / Writing
-    Role.BACKGROUND_ART: 3,       # 美術・背景
-    Role.SOUND_DIRECTOR: 5,       # 音響監督（部門監督）
-    Role.SCREENPLAY: 4,           # 脚本・シリーズ構成
+    Role.BACKGROUND_ART: 3,  # 美術・背景
+    Role.SOUND_DIRECTOR: 5,  # 音響監督（部門監督）
+    Role.SCREENPLAY: 4,  # 脚本・シリーズ構成
     # Production management
-    Role.PRODUCTION_MANAGER: 2,   # 制作進行・制作デスク
-    Role.PRODUCER: 5,             # プロデューサー
+    Role.PRODUCTION_MANAGER: 2,  # 制作進行・制作デスク
+    Role.PRODUCER: 5,  # プロデューサー
     # Finishing / Editing / Settings
-    Role.FINISHING: 3,            # 仕上げ・色彩設計
-    Role.EDITING: 3,              # 編集
-    Role.SETTINGS: 3,             # 設定
+    Role.FINISHING: 3,  # 仕上げ・色彩設計
+    Role.EDITING: 3,  # 編集
+    Role.SETTINGS: 3,  # 設定
     # Non-production — パイプラインで除外されるため Stage 0
-    Role.ORIGINAL_CREATOR: 0,     # 原作（非制作）
-    Role.MUSIC: 0,                # 音楽（非制作）
-    Role.VOICE_ACTOR: 0,          # 声優（非制作）
+    Role.ORIGINAL_CREATOR: 0,  # 原作（非制作）
+    Role.MUSIC: 0,  # 音楽（非制作）
+    Role.VOICE_ACTOR: 0,  # 声優（非制作）
     Role.LOCALIZATION: 0,  # 各国語版スタッフ（非制作）
-    Role.OTHER: 0,         # ロール特定不可（非制作）
-    Role.SPECIAL: 0,       # スペシャルサンクス等（非制作）
+    Role.OTHER: 0,  # ロール特定不可（非制作）
+    Role.SPECIAL: 0,  # スペシャルサンクス等（非制作）
 }
 
 # String-keyed version for modules that work with role.value strings

@@ -218,3 +218,21 @@ va_akm, va_integrated_value, va_graph 等。
 | 順序 | 対象 | 作業量 |
 |------|------|--------|
 | D1 | generate_all_reports.py 分割 | 大 |
+
+
+---
+
+## DB 層分離 — 将来タスク
+
+_DB集約リファクタリングで特定した、次フェーズの課題。_
+
+### Phase E: feat_* テーブルの層別分離
+
+`feat_career` と `feat_network` は現在 L2 (集約数値) と L3 (独自計算) が混在している。
+修正頻度が異なるため、将来的に分離することが望ましい。
+
+| 順序 | 対象 | 内容 | 作業量 |
+|------|------|------|--------|
+| E1 | `feat_career` 分離 | `agg_person_career` (L2: first_year/active_years/total_credits等) と `feat_career_scores` (L3: growth_trend/activity_ratio等) に分割 | 大 |
+| E2 | `feat_network` 分離 | `agg_person_network` (L2: n_collaborators/n_unique_anime) と `feat_network_scores` (L3: centrality/bridge_score等) に分割 | 中 |
+| E3 | `corrections_*` テーブル | クレジット年補正・ロール正規化などの修正差分を生データから分離して追跡 | 中 |

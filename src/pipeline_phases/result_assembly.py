@@ -10,6 +10,7 @@ import structlog
 
 from src.analysis.explain import explain_authority, explain_skill, explain_trust
 from src.analysis.scoring.integrated_value import compute_studio_exposure
+from src.database import upsert_career_tracks
 from src.models import ScoreResult
 from src.pipeline_phases.context import PipelineContext
 from src.utils.role_groups import DIRECTOR_ROLES
@@ -100,16 +101,18 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
             iv_score_historical=context.iv_scores_historical.get(pid, 0.0),
         )
         scores_by_pid[pid] = score
-        score_rows.append((
-            pid,
-            score.person_fe,
-            score.studio_fe_exposure,
-            score.birank,
-            score.patronage,
-            score.dormancy,
-            score.awcc,
-            score.iv_score,
-        ))
+        score_rows.append(
+            (
+                pid,
+                score.person_fe,
+                score.studio_fe_exposure,
+                score.birank,
+                score.patronage,
+                score.dormancy,
+                score.awcc,
+                score.iv_score,
+            )
+        )
 
     # Batch upsert scores (single transaction instead of 125K individual INSERTs)
     conn.executemany(
@@ -133,9 +136,7 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
     now = datetime.datetime.now()
     run_year = now.year
     run_quarter = (now.month - 1) // 3 + 1
-    history_rows = [
-        (*row, run_year, run_quarter) for row in score_rows
-    ]
+    history_rows = [(*row, run_year, run_quarter) for row in score_rows]
     conn.executemany(
         """INSERT INTO score_history
                (person_id, person_fe, studio_fe_exposure, birank,
@@ -150,11 +151,20 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
         quarter=run_quarter,
     )
 
+    # Persist career tracks to scores table (v28 migration)
+    if context.career_tracks:
+        upsert_career_tracks(conn, context.career_tracks)
+        logger.info("career_tracks_persisted", count=len(context.career_tracks))
+
     for pid in all_person_ids:
         score = scores_by_pid[pid]
 
         # Build result entry
-        node_data = context.person_anime_graph.nodes.get(pid, {}) if context.person_anime_graph else {}
+        node_data = (
+            context.person_anime_graph.nodes.get(pid, {})
+            if context.person_anime_graph
+            else {}
+        )
 
         # Peer boost
         peer_boost = 0.0
@@ -170,6 +180,7 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
             "name": node_data.get("name", ""),
             "name_ja": node_data.get("name_ja", ""),
             "name_en": node_data.get("name_en", ""),
+            "career_track": context.career_tracks.get(pid, "multi_track"),
             # 8-component structural scores
             "iv_score": round(score.iv_score, 4),
             "person_fe": round(score.person_fe, 4),
@@ -194,7 +205,9 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
                 "person_fe_ci_95": [
                     round(score.person_fe - 1.96 * se, 4),
                     round(score.person_fe + 1.96 * se, 4),
-                ] if se is not None else None,
+                ]
+                if se is not None
+                else None,
                 "n_obs": n_obs,
                 "interpretation": "AKM固定効果: 因果推論に基づく個人の生産貢献",
             },

@@ -81,9 +81,7 @@ def _findings_section(chart_slug: str = "scatter1") -> SectionSpec:
                 strength=StrengthLevel.STRONG,
                 evidence_chart_refs=(chart_slug,),
                 competing_interpretations=("代替解釈A",),
-                uncertainty=UncertaintyInfo(
-                    estimate=0.5, ci_lower=0.4, ci_upper=0.6
-                ),
+                uncertainty=UncertaintyInfo(estimate=0.5, ci_lower=0.4, ci_upper=0.6),
             ),
         ),
     )
@@ -137,8 +135,13 @@ def test_r1_section_order_violation() -> None:
     # Swap METHODS and FINDINGS to violate order
     sections = list(spec.sections)
     i_methods = next(i for i, s in enumerate(sections) if s.kind is SectionKind.METHODS)
-    i_findings = next(i for i, s in enumerate(sections) if s.kind is SectionKind.FINDINGS)
-    sections[i_methods], sections[i_findings] = sections[i_findings], sections[i_methods]
+    i_findings = next(
+        i for i, s in enumerate(sections) if s.kind is SectionKind.FINDINGS
+    )
+    sections[i_methods], sections[i_findings] = (
+        sections[i_findings],
+        sections[i_methods],
+    )
     bad = ReportSpec(**{**spec.__dict__, "sections": tuple(sections)})
     results = validate(bad)
     assert any(r.rule == "R-1" and r.is_error() for r in results)
@@ -171,9 +174,7 @@ def test_r3_evidence_ref_missing_chart() -> None:
                 strength=StrengthLevel.STRONG,
                 evidence_chart_refs=("does_not_exist",),
                 competing_interpretations=("代替解釈A",),
-                uncertainty=UncertaintyInfo(
-                    estimate=0.5, ci_lower=0.4, ci_upper=0.6
-                ),
+                uncertainty=UncertaintyInfo(estimate=0.5, ci_lower=0.4, ci_upper=0.6),
             ),
         ),
     )
@@ -183,9 +184,7 @@ def test_r3_evidence_ref_missing_chart() -> None:
     bad = ReportSpec(**{**spec.__dict__, "sections": sections})
     results = validate(bad)
     assert any(
-        r.rule == "R-3"
-        and r.is_error()
-        and "does_not_exist" in r.message
+        r.rule == "R-3" and r.is_error() and "does_not_exist" in r.message
         for r in results
     )
 
@@ -208,8 +207,7 @@ def test_r3_strong_requires_competing_interpretations() -> None:
     bad = ReportSpec(**{**spec.__dict__, "sections": tuple(sections)})
     results = validate(bad)
     assert any(
-        r.rule == "R-3" and r.is_error() and "competing" in r.message
-        for r in results
+        r.rule == "R-3" and r.is_error() and "competing" in r.message for r in results
     )
 
 
@@ -229,7 +227,9 @@ def test_r3_claim_empty_is_error() -> None:
             )
     bad = ReportSpec(**{**spec.__dict__, "sections": tuple(sections)})
     results = validate(bad)
-    assert any(r.rule == "R-3" and r.is_error() and "claim" in r.message for r in results)
+    assert any(
+        r.rule == "R-3" and r.is_error() and "claim" in r.message for r in results
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -373,7 +373,8 @@ def test_r7_reproducibility_without_inputs() -> None:
     )
     spec = _minimal_argumentative()
     sections = tuple(
-        bad_section if s.kind is SectionKind.REPRODUCIBILITY else s for s in spec.sections
+        bad_section if s.kind is SectionKind.REPRODUCIBILITY else s
+        for s in spec.sections
     )
     bad = ReportSpec(**{**spec.__dict__, "sections": sections})
     results = validate(bad)
@@ -389,7 +390,8 @@ def test_r7_reproducibility_missing_info() -> None:
     )
     spec = _minimal_argumentative()
     sections = tuple(
-        bad_section if s.kind is SectionKind.REPRODUCIBILITY else s for s in spec.sections
+        bad_section if s.kind is SectionKind.REPRODUCIBILITY else s
+        for s in spec.sections
     )
     bad = ReportSpec(**{**spec.__dict__, "sections": sections})
     results = validate(bad)

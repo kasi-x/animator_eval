@@ -139,13 +139,17 @@ class TestCommunityDetection:
         assert isinstance(bridges, dict)
 
     def test_get_community_formation_period_no_credits(self):
-        from src.analysis.network.community_detection import get_community_formation_period
+        from src.analysis.network.community_detection import (
+            get_community_formation_period,
+        )
 
         result = get_community_formation_period(["A", "B"], [], {})
         assert result is None
 
     def test_get_community_formation_period_normal(self):
-        from src.analysis.network.community_detection import get_community_formation_period
+        from src.analysis.network.community_detection import (
+            get_community_formation_period,
+        )
 
         anime_map = {
             "a1": _make_anime("a1", year=2018),
@@ -166,20 +170,26 @@ class TestCommunityDetection:
         assert end <= 2021
 
     def test_compute_prospective_potential_no_history(self):
-        from src.analysis.network.community_detection import compute_prospective_potential
+        from src.analysis.network.community_detection import (
+            compute_prospective_potential,
+        )
 
         result = compute_prospective_potential("P1", [], {}, 2020, 50.0)
         assert result == 50.0
 
     def test_compute_retrospective_potential_at_peak(self):
-        from src.analysis.network.community_detection import compute_retrospective_potential
+        from src.analysis.network.community_detection import (
+            compute_retrospective_potential,
+        )
 
         # Already at peak -> returns current_score
         result = compute_retrospective_potential("P1", [], {}, 2020, 80.0, 80.0)
         assert result == 80.0
 
     def test_compute_retrospective_potential_below_peak(self):
-        from src.analysis.network.community_detection import compute_retrospective_potential
+        from src.analysis.network.community_detection import (
+            compute_retrospective_potential,
+        )
 
         anime_map = {
             "a1": _make_anime("a1", year=2015),
@@ -435,7 +445,9 @@ class TestTemporalInfluence:
         from src.analysis.network.temporal_influence import compute_temporal_profiles
 
         credits, anime_map = self._build_temporal_data()
-        scores = {"P1": {"birank": 10, "patronage": 20, "person_fe": 30, "iv_score": 50}}
+        scores = {
+            "P1": {"birank": 10, "patronage": 20, "person_fe": 30, "iv_score": 50}
+        }
         profiles = compute_temporal_profiles(credits, anime_map, current_scores=scores)
         # P1 snapshots should reflect the current scores
         assert profiles["P1"].peak_score == 50.0
@@ -640,7 +652,9 @@ class TestStructuralHoles:
         assert eff_size <= 2.0
 
     def test_compute_structural_hole_metrics(self):
-        from src.analysis.network.structural_holes import compute_structural_hole_metrics
+        from src.analysis.network.structural_holes import (
+            compute_structural_hole_metrics,
+        )
 
         g = _build_barbell_graph()
         metrics = compute_structural_hole_metrics(g)
@@ -649,35 +663,50 @@ class TestStructuralHoles:
         assert metrics["C"].betweenness > 0 or metrics["D"].betweenness > 0
 
     def test_classify_brokerage_role_coordinator(self):
-        from src.analysis.network.structural_holes import BrokerageRole, classify_brokerage_role
+        from src.analysis.network.structural_holes import (
+            BrokerageRole,
+            classify_brokerage_role,
+        )
 
         groups = {"A": "G1", "B": "G1", "C": "G1"}
         role = classify_brokerage_role("B", "A", "C", groups)
         assert role == BrokerageRole.COORDINATOR
 
     def test_classify_brokerage_role_liaison(self):
-        from src.analysis.network.structural_holes import BrokerageRole, classify_brokerage_role
+        from src.analysis.network.structural_holes import (
+            BrokerageRole,
+            classify_brokerage_role,
+        )
 
         groups = {"A": "G1", "B": "G2", "C": "G3"}
         role = classify_brokerage_role("B", "A", "C", groups)
         assert role == BrokerageRole.LIAISON
 
     def test_classify_brokerage_role_consultant(self):
-        from src.analysis.network.structural_holes import BrokerageRole, classify_brokerage_role
+        from src.analysis.network.structural_holes import (
+            BrokerageRole,
+            classify_brokerage_role,
+        )
 
         groups = {"A": "G1", "B": "G2", "C": "G1"}
         role = classify_brokerage_role("B", "A", "C", groups)
         assert role == BrokerageRole.CONSULTANT
 
     def test_classify_brokerage_role_representative(self):
-        from src.analysis.network.structural_holes import BrokerageRole, classify_brokerage_role
+        from src.analysis.network.structural_holes import (
+            BrokerageRole,
+            classify_brokerage_role,
+        )
 
         groups = {"A": "G1", "B": "G1", "C": "G2"}
         role = classify_brokerage_role("B", "A", "C", groups)
         assert role == BrokerageRole.REPRESENTATIVE
 
     def test_classify_brokerage_role_gatekeeper(self):
-        from src.analysis.network.structural_holes import BrokerageRole, classify_brokerage_role
+        from src.analysis.network.structural_holes import (
+            BrokerageRole,
+            classify_brokerage_role,
+        )
 
         groups = {"A": "G2", "B": "G1", "C": "G1"}
         role = classify_brokerage_role("B", "A", "C", groups)

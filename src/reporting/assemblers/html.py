@@ -39,6 +39,7 @@ from src.reporting.specs.validation import errors_only, validate
 # Section renderers (one per SectionKind)
 # ---------------------------------------------------------------------------
 
+
 def _esc(text: str) -> str:
     """Escape HTML entities."""
     return html.escape(text)
@@ -122,7 +123,9 @@ def _render_methods(section: SectionSpec, _data: dict[str, Any]) -> str:
 
     if info.code_references:
         parts.append('<p class="code-ref">実装参照: ')
-        parts.append(", ".join(f"<code>{_esc(ref)}</code>" for ref in info.code_references))
+        parts.append(
+            ", ".join(f"<code>{_esc(ref)}</code>" for ref in info.code_references)
+        )
         parts.append("</p>")
 
     parts.append("</div>")
@@ -137,7 +140,9 @@ def _render_reproducibility(section: SectionSpec, _data: dict[str, Any]) -> str:
     parts: list[str] = ['<div class="reproducibility-section"><dl>']
     parts.append(f"<dt>入力</dt><dd>{', '.join(info.inputs)}</dd>")
     if info.entry_points:
-        parts.append(f"<dt>エントリポイント</dt><dd>{', '.join(info.entry_points)}</dd>")
+        parts.append(
+            f"<dt>エントリポイント</dt><dd>{', '.join(info.entry_points)}</dd>"
+        )
     if info.seeds:
         seeds_str = ", ".join(f"{k}={v}" for k, v in info.seeds)
         parts.append(f"<dt>シード</dt><dd>{seeds_str}</dd>")
@@ -145,9 +150,13 @@ def _render_reproducibility(section: SectionSpec, _data: dict[str, Any]) -> str:
         params_str = ", ".join(f"{k}={v}" for k, v in info.parameters)
         parts.append(f"<dt>パラメータ</dt><dd>{params_str}</dd>")
     if info.pipeline_run_id:
-        parts.append(f"<dt>実行 ID</dt><dd><code>{_esc(info.pipeline_run_id)}</code></dd>")
+        parts.append(
+            f"<dt>実行 ID</dt><dd><code>{_esc(info.pipeline_run_id)}</code></dd>"
+        )
     if info.data_snapshot_date:
-        parts.append(f"<dt>スナップショット</dt><dd>{_esc(info.data_snapshot_date)}</dd>")
+        parts.append(
+            f"<dt>スナップショット</dt><dd>{_esc(info.data_snapshot_date)}</dd>"
+        )
     parts.append("</dl>")
 
     if info.db_queries:
@@ -167,7 +176,11 @@ def _render_finding_card(f: FindingSpec) -> str:
     parts: list[str] = [f'<div class="finding-card {strength_cls}">']
 
     # Header: slug + strength badge
-    strength_label = {"strong": "★★★ Strong", "suggestive": "★★☆ Suggestive", "exploratory": "★☆☆ Exploratory"}
+    strength_label = {
+        "strong": "★★★ Strong",
+        "suggestive": "★★☆ Suggestive",
+        "exploratory": "★☆☆ Exploratory",
+    }
     parts.append(
         f'<div class="finding-header">'
         f'<span class="finding-slug">{_esc(f.slug)}</span>'
@@ -209,14 +222,15 @@ def _render_finding_card(f: FindingSpec) -> str:
             f"<p>{_esc(f.justification)}</p>"
         )
         if f.source_code_ref:
-            parts.append(f'<p class="code-ref">参照: <code>{_esc(f.source_code_ref)}</code></p>')
+            parts.append(
+                f'<p class="code-ref">参照: <code>{_esc(f.source_code_ref)}</code></p>'
+            )
         parts.append("</details>")
 
     # Competing interpretations
     if f.competing_interpretations:
         parts.append(
-            '<details class="finding-robustness">'
-            "<summary>競合解釈</summary><ul>"
+            '<details class="finding-robustness"><summary>競合解釈</summary><ul>'
         )
         for alt in f.competing_interpretations:
             parts.append(f"<li>{_esc(alt)}</li>")
@@ -292,7 +306,7 @@ def _render_tables(section: SectionSpec, data: dict[str, Any]) -> str:
             rows = rows[: tbl.max_rows]
 
         parts.append(f"<h4>{_esc(tbl.title)}</h4>")
-        parts.append('<table><thead><tr>')
+        parts.append("<table><thead><tr>")
         for _field, display in tbl.columns:
             parts.append(f"<th>{_esc(display)}</th>")
         parts.append("</tr></thead><tbody>")
@@ -376,7 +390,10 @@ def _render_section(section: SectionSpec, data: dict[str, Any]) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-def assemble(spec: ReportSpec, data: dict[str, Any], *, skip_validation: bool = False) -> str:
+
+def assemble(
+    spec: ReportSpec, data: dict[str, Any], *, skip_validation: bool = False
+) -> str:
     """Assemble a complete HTML report from a spec and provider data.
 
     Parameters
@@ -408,7 +425,9 @@ def assemble(spec: ReportSpec, data: dict[str, Any], *, skip_validation: bool = 
             raise ValueError(f"ReportSpec '{spec.slug}' has validation errors: {msgs}")
 
     # Build intro
-    intro_html = report_intro(spec.title, spec.intro, spec.audience) if spec.intro else ""
+    intro_html = (
+        report_intro(spec.title, spec.intro, spec.audience) if spec.intro else ""
+    )
 
     # Render all sections
     section_html_parts: list[str] = []
@@ -419,7 +438,9 @@ def assemble(spec: ReportSpec, data: dict[str, Any], *, skip_validation: bool = 
     body = "\n\n".join(section_html_parts)
 
     # Merge glossary terms (spec-specific + common)
-    glossary: dict[str, str] = dict(COMMON_GLOSSARY_TERMS) if isinstance(COMMON_GLOSSARY_TERMS, dict) else {}
+    glossary: dict[str, str] = (
+        dict(COMMON_GLOSSARY_TERMS) if isinstance(COMMON_GLOSSARY_TERMS, dict) else {}
+    )
     for term in spec.glossary_terms:
         if ":" in term:
             k, v = term.split(":", 1)

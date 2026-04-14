@@ -354,6 +354,4 @@ class TestBatchComputeConfidence:
         assert upper <= 100.0
         # Should be in the vicinity of 80, not 2.0
         mid = (lower + upper) / 2
-        assert mid > 50.0, (
-            f"Mid-point {mid} should be > 50 since person_fe_pct=80"
-        )
+        assert mid > 50.0, f"Mid-point {mid} should be > 50 since person_fe_pct=80"

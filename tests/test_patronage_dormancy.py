@@ -17,6 +17,7 @@ from src.models import Anime, Credit, Role
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 def _make_anime(aid: str, year: int = 2020, season: str | None = None) -> Anime:
     return Anime(id=aid, title_ja=f"Anime {aid}", year=year, season=season)
 
@@ -46,6 +47,7 @@ def simple_credits_and_maps():
 # ---------------------------------------------------------------------------
 # Patronage Premium
 # ---------------------------------------------------------------------------
+
 
 class TestPatronagePremium:
     def test_basic_computation(self, simple_credits_and_maps):
@@ -128,6 +130,7 @@ class TestPatronagePremium:
 # ---------------------------------------------------------------------------
 # Dormancy Penalty
 # ---------------------------------------------------------------------------
+
 
 class TestDormancyPenalty:
     def test_active_person_no_penalty(self):
@@ -215,6 +218,7 @@ class TestDormancyPenalty:
 # Combined
 # ---------------------------------------------------------------------------
 
+
 class TestPatronageAndDormancy:
     def test_combined_result(self, simple_credits_and_maps):
         credits, anime_map, director_birank = simple_credits_and_maps
@@ -232,6 +236,7 @@ class TestPatronageAndDormancy:
 # Career-Aware Dormancy
 # ---------------------------------------------------------------------------
 
+
 class TestCareerAwareDormancy:
     def test_veteran_protected(self):
         """High career capital → dormancy floored at 0.5."""
@@ -239,8 +244,11 @@ class TestCareerAwareDormancy:
         iv_historical = {"P1": 10.0}
         career_data = {"P1": {"active_years": 30, "highest_stage": 6}}
         result = compute_career_aware_dormancy(
-            raw_dormancy, iv_historical, career_data,
-            career_capital_threshold=0.7, dormancy_floor=0.5,
+            raw_dormancy,
+            iv_historical,
+            career_data,
+            career_capital_threshold=0.7,
+            dormancy_floor=0.5,
         )
         assert result["P1"] == 0.5  # max(0.1, 0.5)
 
@@ -250,8 +258,11 @@ class TestCareerAwareDormancy:
         iv_historical = {"P1": 1.0}
         career_data = {"P1": {"active_years": 2, "highest_stage": 1}}
         result = compute_career_aware_dormancy(
-            raw_dormancy, iv_historical, career_data,
-            career_capital_threshold=0.7, dormancy_floor=0.5,
+            raw_dormancy,
+            iv_historical,
+            career_data,
+            career_capital_threshold=0.7,
+            dormancy_floor=0.5,
         )
         assert result["P1"] == 0.1  # not protected
 
@@ -261,7 +272,9 @@ class TestCareerAwareDormancy:
         iv_historical = {"P1": 10.0}
         career_data = {}
         result = compute_career_aware_dormancy(
-            raw_dormancy, iv_historical, career_data,
+            raw_dormancy,
+            iv_historical,
+            career_data,
         )
         assert result["P1"] == 0.3
 
@@ -276,7 +289,10 @@ class TestCareerAwareDormancy:
         iv_historical = {"P1": 10.0}
         career_data = {"P1": {"active_years": 25, "highest_stage": 5}}
         result = compute_career_aware_dormancy(
-            raw_dormancy, iv_historical, career_data,
-            career_capital_threshold=0.7, dormancy_floor=0.5,
+            raw_dormancy,
+            iv_historical,
+            career_data,
+            career_capital_threshold=0.7,
+            dormancy_floor=0.5,
         )
         assert result["P1"] == 0.9  # max(0.9, 0.5) = 0.9

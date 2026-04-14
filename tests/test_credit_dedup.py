@@ -149,7 +149,9 @@ class TestMergeDuplicateCredits:
         """Credits without duplicates should pass through unchanged."""
         credits = [
             Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="anilist"),
-            Credit(person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR, source="anilist"),
+            Credit(
+                person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR, source="anilist"
+            ),
             Credit(person_id="p1", anime_id="a2", role=Role.DIRECTOR, source="anilist"),
         ]
         merged = _merge_duplicate_credits(credits)

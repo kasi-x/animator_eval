@@ -59,9 +59,7 @@ def compute_awcc(
         if degree == 0:
             awcc_scores[node] = 0.0
             continue
-        neighbor_communities = {
-            communities[n] for n in neighbors if n in communities
-        }
+        neighbor_communities = {communities[n] for n in neighbors if n in communities}
         awcc_scores[node] = len(neighbor_communities) / degree
 
     return awcc_scores
@@ -128,21 +126,26 @@ def compute_ndi_approximate(
 
     # Build regression features for sample
     sample_ids = list(exact_ndi.keys())
-    X_sample = np.array([
+    X_sample = np.array(
         [
-            degrees.get(n, 0),
-            awcc.get(n, 0),
-            betweenness.get(n, 0),
-        ]
-        for n in sample_ids
-    ], dtype=np.float64)
+            [
+                degrees.get(n, 0),
+                awcc.get(n, 0),
+                betweenness.get(n, 0),
+            ]
+            for n in sample_ids
+        ],
+        dtype=np.float64,
+    )
     y_sample = np.array([exact_ndi[n] for n in sample_ids], dtype=np.float64)
 
     # Add intercept
-    X_sample_with_intercept = np.column_stack([
-        np.ones(len(sample_ids)),
-        X_sample,
-    ])
+    X_sample_with_intercept = np.column_stack(
+        [
+            np.ones(len(sample_ids)),
+            X_sample,
+        ]
+    )
 
     # Fit OLS
     try:
@@ -157,12 +160,14 @@ def compute_ndi_approximate(
         if node in exact_ndi:
             ndi_scores[node] = exact_ndi[node]
         else:
-            features = np.array([
-                1.0,  # intercept
-                degrees.get(node, 0),
-                awcc.get(node, 0),
-                betweenness.get(node, 0),
-            ])
+            features = np.array(
+                [
+                    1.0,  # intercept
+                    degrees.get(node, 0),
+                    awcc.get(node, 0),
+                    betweenness.get(node, 0),
+                ]
+            )
             pred = float(np.dot(coefs, features))
             ndi_scores[node] = max(0.0, min(1.0, pred))  # clamp to [0, 1]
 
@@ -203,9 +208,7 @@ def compute_knowledge_spanners(
         if node not in communities:
             continue
         neighbors = list(collaboration_graph.neighbors(node))
-        community_reach = len({
-            communities[n] for n in neighbors if n in communities
-        })
+        community_reach = len({communities[n] for n in neighbors if n in communities})
         result[node] = KnowledgeSpannerMetrics(
             awcc=awcc_scores.get(node, 0.0),
             ndi=ndi_scores.get(node, 0.0),

@@ -43,12 +43,16 @@ PROCESSED_DIR: Path = DATA_DIR / "processed"
 RESULT_DIR: Path = Path(os.environ.get("ANIMETOR_RESULT_DIR", str(ROOT_DIR / "result")))
 DB_DIR: Path = RESULT_DIR / "db"
 JSON_DIR: Path = Path(os.environ.get("ANIMETOR_JSON_DIR", str(RESULT_DIR / "json")))
-REPORTS_DIR: Path = Path(os.environ.get("ANIMETOR_REPORTS_DIR", str(RESULT_DIR / "reports")))
+REPORTS_DIR: Path = Path(
+    os.environ.get("ANIMETOR_REPORTS_DIR", str(RESULT_DIR / "reports"))
+)
 HTML_DIR: Path = Path(os.environ.get("ANIMETOR_HTML_DIR", str(RESULT_DIR / "html")))
 NOTEBOOKS_DIR: Path = RESULT_DIR / "notebooks"
 
 # DB ファイルパス (database.py はここを参照する)
-DB_PATH: Path = Path(os.environ.get("ANIMETOR_DB_PATH", str(DB_DIR / "animetor_eval.db")))
+DB_PATH: Path = Path(
+    os.environ.get("ANIMETOR_DB_PATH", str(DB_DIR / "animetor_eval.db"))
+)
 
 # =============================================================================
 # PageRank パラメータ
@@ -68,20 +72,20 @@ CONVERGENCE_THRESHOLD: float = float(os.environ.get("ANIMETOR_PAGERANK_TOL", "1e
 # multipliers only affect graph edge weights (one of many IV inputs).
 # If better calibration data becomes available (e.g., salary surveys), update here.
 COMMITMENT_MULTIPLIERS: dict[str, float] = {
-    "direction": 3.0,           # 監督・演出系 — 作品全体の責任
+    "direction": 3.0,  # 監督・演出系 — 作品全体の責任
     "animation_supervision": 2.8,  # 作画監督系 — 作画品質の責任
-    "animation": 2.0,           # アニメーター系 — 作画実務
-    "design": 2.3,              # デザイン系 — ビジュアル設計
-    "technical": 2.0,           # 技術系 — 撮影・CG・エフェクト
-    "art": 1.3,                 # 美術系 — 背景美術
-    "sound": 1.8,               # 音響系 — 音響・音楽
-    "writing": 1.8,             # 脚本系 — 脚本・原作
-    "production": 1.5,          # 制作系 — プロデューサー
+    "animation": 2.0,  # アニメーター系 — 作画実務
+    "design": 2.3,  # デザイン系 — ビジュアル設計
+    "technical": 2.0,  # 技術系 — 撮影・CG・エフェクト
+    "art": 1.3,  # 美術系 — 背景美術
+    "sound": 1.8,  # 音響系 — 音響・音楽
+    "writing": 1.8,  # 脚本系 — 脚本・原作
+    "production": 1.5,  # 制作系 — プロデューサー
     "production_management": 1.2,  # 制作進行・デスク系 — 現場管理
-    "finishing": 1.2,           # 仕上げ系 — 仕上・検査
-    "editing": 1.5,             # 編集系 — 編集・ポスプロ
-    "settings": 1.5,            # 設定系 — 設定・プロップ
-    "non_production": 0.5,      # 非制作部門
+    "finishing": 1.2,  # 仕上げ系 — 仕上・検査
+    "editing": 1.5,  # 編集系 — 編集・ポスプロ
+    "settings": 1.5,  # 設定系 — 設定・プロップ
+    "non_production": 0.5,  # 非制作部門
 }
 
 # =============================================================================
@@ -142,22 +146,30 @@ BIRANK_TOL: float = float(os.environ.get("ANIMETOR_BIRANK_TOL", "1e-6"))
 
 # role hierarchy compression in edge weight
 # 0.0 = role title ignored, 0.5 = sqrt compression, 1.0 = full hierarchy
-BIRANK_ROLE_DAMPING: float = float(os.environ.get("ANIMETOR_BIRANK_ROLE_DAMPING", "0.5"))
+BIRANK_ROLE_DAMPING: float = float(
+    os.environ.get("ANIMETOR_BIRANK_ROLE_DAMPING", "0.5")
+)
 
 # =============================================================================
 # AKM parameters  (ANIMETOR_AKM_* でオーバーライド可)
 # =============================================================================
 AKM_MAX_ITER: int = int(os.environ.get("ANIMETOR_AKM_MAX_ITER", "50"))
 AKM_TOL: float = float(os.environ.get("ANIMETOR_AKM_TOL", "1e-8"))
-AKM_MIN_MOVER_FRACTION: float = float(os.environ.get("ANIMETOR_AKM_MIN_MOVER_FRACTION", "0.10"))
+AKM_MIN_MOVER_FRACTION: float = float(
+    os.environ.get("ANIMETOR_AKM_MIN_MOVER_FRACTION", "0.10")
+)
 
 # =============================================================================
 # Dormancy parameters  (ANIMETOR_DORMANCY_* でオーバーライド可)
 # =============================================================================
 # 0.5 gives 50% weight at 1 year past grace period — a suitable half-life
 # for a seasonal industry where 1-2 year gaps between projects are common.
-DORMANCY_DECAY_RATE: float = float(os.environ.get("ANIMETOR_DORMANCY_DECAY_RATE", "0.5"))
-DORMANCY_GRACE_PERIOD: float = float(os.environ.get("ANIMETOR_DORMANCY_GRACE_PERIOD", "2.0"))
+DORMANCY_DECAY_RATE: float = float(
+    os.environ.get("ANIMETOR_DORMANCY_DECAY_RATE", "0.5")
+)
+DORMANCY_GRACE_PERIOD: float = float(
+    os.environ.get("ANIMETOR_DORMANCY_GRACE_PERIOD", "2.0")
+)
 
 # =============================================================================
 # IV (Integrated Value) parameters
@@ -169,8 +181,12 @@ IV_CV_SEED: int = int(os.environ.get("ANIMETOR_IV_CV_SEED", "42"))
 # Duration-based work importance weighting
 # =============================================================================
 # 30分アニメを基準 (1.0x), ミニアニメは減衰, 映画は増幅
-DURATION_BASELINE_MINUTES: int = int(os.environ.get("ANIMETOR_DURATION_BASELINE_MINUTES", "30"))
-DURATION_MAX_MULTIPLIER: float = float(os.environ.get("ANIMETOR_DURATION_MAX_MULTIPLIER", "2.0"))
+DURATION_BASELINE_MINUTES: int = int(
+    os.environ.get("ANIMETOR_DURATION_BASELINE_MINUTES", "30")
+)
+DURATION_MAX_MULTIPLIER: float = float(
+    os.environ.get("ANIMETOR_DURATION_MAX_MULTIPLIER", "2.0")
+)
 
 # =============================================================================
 # Normalization
@@ -181,7 +197,9 @@ NORMALIZATION_METHOD: str = os.environ.get("ANIMETOR_NORMALIZATION_METHOD", "min
 # =============================================================================
 # Scraping  (ANIMETOR_SCRAPE_* でオーバーライド可)
 # =============================================================================
-SCRAPE_CHECKPOINT_INTERVAL: int = int(os.environ.get("ANIMETOR_SCRAPE_CHECKPOINT_INTERVAL", "3"))
+SCRAPE_CHECKPOINT_INTERVAL: int = int(
+    os.environ.get("ANIMETOR_SCRAPE_CHECKPOINT_INTERVAL", "3")
+)
 SCRAPE_DELAY_SECONDS: float = float(os.environ.get("ANIMETOR_SCRAPE_DELAY", "1.0"))
 SCRAPE_MAX_RETRIES: int = int(os.environ.get("ANIMETOR_SCRAPE_MAX_RETRIES", "3"))
 
@@ -199,6 +217,7 @@ LLM_BATCH_SIZE: int = int(os.environ.get("ANIMETOR_LLM_BATCH_SIZE", "30"))
 # =============================================================================
 # Helpers
 # =============================================================================
+
 
 def load_dotenv_if_exists(env_path: Path | None = None) -> bool:
     """Load an additional .env file (e.g. per-environment override).

@@ -9,33 +9,59 @@ from src.models import Anime, Character, CharacterVoiceActor, Credit, Role
 # Fixtures
 # ============================================================
 
+
 @pytest.fixture
 def anime_map():
     """Minimal anime map for testing."""
     return {
         "a1": Anime(
-            id="a1", title_ja="作品1", year=2020, episodes=12, duration=24,
-            genres=["Action", "Adventure"], studios=["StudioA"],
+            id="a1",
+            title_ja="作品1",
+            year=2020,
+            episodes=12,
+            duration=24,
+            genres=["Action", "Adventure"],
+            studios=["StudioA"],
             season="winter",
         ),
         "a2": Anime(
-            id="a2", title_ja="作品2", year=2021, episodes=24, duration=24,
-            genres=["Action", "Drama"], studios=["StudioA", "StudioB"],
+            id="a2",
+            title_ja="作品2",
+            year=2021,
+            episodes=24,
+            duration=24,
+            genres=["Action", "Drama"],
+            studios=["StudioA", "StudioB"],
             season="spring",
         ),
         "a3": Anime(
-            id="a3", title_ja="作品3", year=2022, episodes=12, duration=24,
-            genres=["Drama", "Romance"], studios=["StudioB"],
+            id="a3",
+            title_ja="作品3",
+            year=2022,
+            episodes=12,
+            duration=24,
+            genres=["Drama", "Romance"],
+            studios=["StudioB"],
             season="summer",
         ),
         "a4": Anime(
-            id="a4", title_ja="作品4", year=2023, episodes=13, duration=24,
-            genres=["Action", "Sci-Fi"], studios=["StudioC"],
+            id="a4",
+            title_ja="作品4",
+            year=2023,
+            episodes=13,
+            duration=24,
+            genres=["Action", "Sci-Fi"],
+            studios=["StudioC"],
             season="fall",
         ),
         "a5": Anime(
-            id="a5", title_ja="作品5", year=2024, episodes=12, duration=24,
-            genres=["Comedy", "Romance"], studios=["StudioA"],
+            id="a5",
+            title_ja="作品5",
+            year=2024,
+            episodes=12,
+            duration=24,
+            genres=["Comedy", "Romance"],
+            studios=["StudioA"],
             season="winter",
         ),
     }
@@ -51,23 +77,75 @@ def va_credits():
     """Voice actor credits for testing."""
     return [
         # VA1 = main star (multiple MAIN roles across anime)
-        CharacterVoiceActor(character_id="c1", person_id="va1", anime_id="a1", character_role="MAIN"),
-        CharacterVoiceActor(character_id="c1", person_id="va1", anime_id="a2", character_role="MAIN"),  # same char = franchise
-        CharacterVoiceActor(character_id="c2", person_id="va1", anime_id="a3", character_role="MAIN"),
-        CharacterVoiceActor(character_id="c3", person_id="va1", anime_id="a4", character_role="SUPPORTING"),
+        CharacterVoiceActor(
+            character_id="c1", person_id="va1", anime_id="a1", character_role="MAIN"
+        ),
+        CharacterVoiceActor(
+            character_id="c1", person_id="va1", anime_id="a2", character_role="MAIN"
+        ),  # same char = franchise
+        CharacterVoiceActor(
+            character_id="c2", person_id="va1", anime_id="a3", character_role="MAIN"
+        ),
+        CharacterVoiceActor(
+            character_id="c3",
+            person_id="va1",
+            anime_id="a4",
+            character_role="SUPPORTING",
+        ),
         # VA2 = supporting specialist
-        CharacterVoiceActor(character_id="c4", person_id="va2", anime_id="a1", character_role="SUPPORTING"),
-        CharacterVoiceActor(character_id="c5", person_id="va2", anime_id="a2", character_role="SUPPORTING"),
-        CharacterVoiceActor(character_id="c6", person_id="va2", anime_id="a3", character_role="SUPPORTING"),
-        CharacterVoiceActor(character_id="c7", person_id="va2", anime_id="a4", character_role="SUPPORTING"),
-        CharacterVoiceActor(character_id="c8", person_id="va2", anime_id="a5", character_role="MAIN"),
+        CharacterVoiceActor(
+            character_id="c4",
+            person_id="va2",
+            anime_id="a1",
+            character_role="SUPPORTING",
+        ),
+        CharacterVoiceActor(
+            character_id="c5",
+            person_id="va2",
+            anime_id="a2",
+            character_role="SUPPORTING",
+        ),
+        CharacterVoiceActor(
+            character_id="c6",
+            person_id="va2",
+            anime_id="a3",
+            character_role="SUPPORTING",
+        ),
+        CharacterVoiceActor(
+            character_id="c7",
+            person_id="va2",
+            anime_id="a4",
+            character_role="SUPPORTING",
+        ),
+        CharacterVoiceActor(
+            character_id="c8", person_id="va2", anime_id="a5", character_role="MAIN"
+        ),
         # VA3 = background with few credits
-        CharacterVoiceActor(character_id="c9", person_id="va3", anime_id="a1", character_role="BACKGROUND"),
-        CharacterVoiceActor(character_id="c10", person_id="va3", anime_id="a2", character_role="BACKGROUND"),
+        CharacterVoiceActor(
+            character_id="c9",
+            person_id="va3",
+            anime_id="a1",
+            character_role="BACKGROUND",
+        ),
+        CharacterVoiceActor(
+            character_id="c10",
+            person_id="va3",
+            anime_id="a2",
+            character_role="BACKGROUND",
+        ),
         # VA4 = co-stars with VA1 often
-        CharacterVoiceActor(character_id="c11", person_id="va4", anime_id="a1", character_role="MAIN"),
-        CharacterVoiceActor(character_id="c11", person_id="va4", anime_id="a2", character_role="MAIN"),
-        CharacterVoiceActor(character_id="c12", person_id="va4", anime_id="a3", character_role="SUPPORTING"),
+        CharacterVoiceActor(
+            character_id="c11", person_id="va4", anime_id="a1", character_role="MAIN"
+        ),
+        CharacterVoiceActor(
+            character_id="c11", person_id="va4", anime_id="a2", character_role="MAIN"
+        ),
+        CharacterVoiceActor(
+            character_id="c12",
+            person_id="va4",
+            anime_id="a3",
+            character_role="SUPPORTING",
+        ),
     ]
 
 
@@ -116,14 +194,20 @@ def characters():
 def person_fe():
     """Person FE for testing."""
     return {
-        "p1": 1.5, "p2": 0.8, "p3": 1.2, "p4": 0.5,
-        "p5": 0.3, "p6": 0.9, "p7": -0.2,
+        "p1": 1.5,
+        "p2": 0.8,
+        "p3": 1.2,
+        "p4": 0.5,
+        "p5": 0.3,
+        "p6": 0.9,
+        "p7": -0.2,
     }
 
 
 # ============================================================
 # VA Graph Tests
 # ============================================================
+
 
 class TestVAGraph:
     def test_build_va_anime_graph(self, va_credits, anime_map):
@@ -167,6 +251,7 @@ class TestVAGraph:
 # VA AKM Tests
 # ============================================================
 
+
 class TestVAAKM:
     def test_estimate_va_akm(self, va_credits, production_credits, anime_map):
         from src.analysis.va.akm import estimate_va_akm
@@ -186,6 +271,7 @@ class TestVAAKM:
 # ============================================================
 # VA Trust Tests
 # ============================================================
+
 
 class TestVATrust:
     def test_compute_va_trust(self, va_credits, production_credits, anime_map):
@@ -211,6 +297,7 @@ class TestVATrust:
 # VA Integrated Value Tests
 # ============================================================
 
+
 class TestVAIntegratedValue:
     def test_compute_va_iv(self):
         from src.analysis.va.integrated_value import compute_va_integrated_value
@@ -235,6 +322,7 @@ class TestVAIntegratedValue:
 # VA Character Diversity Tests
 # ============================================================
 
+
 class TestCharacterDiversity:
     def test_compute_character_diversity(self, va_credits, anime_map, characters):
         from src.analysis.va.character_diversity import compute_character_diversity
@@ -245,7 +333,12 @@ class TestCharacterDiversity:
             # Check that CDI is in [0, 1]
             for pid, m in diversity.items():
                 assert 0.0 <= m.cdi <= 1.0
-                assert m.casting_tier in ("lead_specialist", "versatile", "ensemble", "newcomer")
+                assert m.casting_tier in (
+                    "lead_specialist",
+                    "versatile",
+                    "ensemble",
+                    "newcomer",
+                )
 
     def test_casting_tier_classification(self):
         from src.analysis.va.character_diversity import _classify_casting_tier
@@ -259,6 +352,7 @@ class TestCharacterDiversity:
 # ============================================================
 # VA Ensemble Synergy Tests
 # ============================================================
+
 
 class TestEnsembleSynergy:
     def test_compute_synergy(self, va_credits, anime_map):
@@ -287,13 +381,14 @@ class TestEnsembleSynergy:
 # VA Replacement Difficulty Tests
 # ============================================================
 
+
 class TestReplacementDifficulty:
     def test_compute_rdi(self, va_credits, anime_map):
-        from src.analysis.va.replacement_difficulty import compute_replacement_difficulty
-
-        rdi = compute_replacement_difficulty(
-            va_credits, anime_map, min_characters=2
+        from src.analysis.va.replacement_difficulty import (
+            compute_replacement_difficulty,
         )
+
+        rdi = compute_replacement_difficulty(va_credits, anime_map, min_characters=2)
         assert isinstance(rdi, dict)
         for pid, rd in rdi.items():
             assert 0.0 <= rd.rdi <= 1.0
@@ -303,8 +398,11 @@ class TestReplacementDifficulty:
 # Production Analysis Tests
 # ============================================================
 
+
 class TestProductionAnalysis:
-    def test_compute_studio_talent_density(self, production_credits, anime_map, person_fe):
+    def test_compute_studio_talent_density(
+        self, production_credits, anime_map, person_fe
+    ):
         from src.analysis.production_analysis import compute_studio_talent_density
 
         density = compute_studio_talent_density(
@@ -319,6 +417,7 @@ class TestProductionAnalysis:
 # ============================================================
 # Studio Network Tests
 # ============================================================
+
 
 class TestStudioNetwork:
     def test_build_talent_sharing(self, production_credits, anime_map):
@@ -348,6 +447,7 @@ class TestStudioNetwork:
 # Talent Pipeline Tests
 # ============================================================
 
+
 class TestTalentPipeline:
     def test_compute_talent_pipeline(self, production_credits, anime_map, person_fe):
         from src.analysis.talent_pipeline import compute_talent_pipeline
@@ -361,6 +461,7 @@ class TestTalentPipeline:
 # ============================================================
 # Genre Ecosystem Tests
 # ============================================================
+
 
 class TestGenreEcosystem:
     def test_compute_genre_ecosystem(self, production_credits, anime_map):
@@ -377,6 +478,7 @@ class TestGenreEcosystem:
 # ============================================================
 # Genre Network Tests
 # ============================================================
+
 
 class TestGenreNetwork:
     def test_compute_pmi(self, anime_list):
@@ -400,13 +502,12 @@ class TestGenreNetwork:
 # Genre Quality Tests
 # ============================================================
 
+
 class TestGenreQuality:
     def test_compute_genre_quality(self, production_credits, anime_map, person_fe):
         from src.analysis.genre.quality import compute_genre_quality
 
-        result = compute_genre_quality(
-            production_credits, anime_map, person_fe
-        )
+        result = compute_genre_quality(production_credits, anime_map, person_fe)
         assert isinstance(result.quality, dict)
         assert isinstance(result.saturation, dict)
         assert isinstance(result.mobility, dict)
@@ -415,6 +516,7 @@ class TestGenreQuality:
 # ============================================================
 # Synthetic VA Data Tests
 # ============================================================
+
 
 class TestSyntheticVAData:
     def test_generate_synthetic_va_data(self):
@@ -442,16 +544,19 @@ class TestSyntheticVAData:
 # Studio Clustering Tests
 # ============================================================
 
+
 class TestStudioClustering:
     def test_name_clusters_by_rank(self):
         import numpy as np
         from src.analysis.studio.clustering import _name_clusters_by_rank
 
-        centers = np.array([
-            [1.0, 10.0],
-            [3.0, 5.0],
-            [2.0, 1.0],
-        ])
+        centers = np.array(
+            [
+                [1.0, 10.0],
+                [3.0, 5.0],
+                [2.0, 1.0],
+            ]
+        )
         specs = [(0, ["high", "mid", "low"]), (1, ["big", "medium", "small"])]
         names = _name_clusters_by_rank(centers, specs)
         assert len(names) == 3
@@ -462,6 +567,7 @@ class TestStudioClustering:
 # ============================================================
 # Model Tests
 # ============================================================
+
 
 class TestVAScoreResult:
     def test_va_score_result_creation(self):

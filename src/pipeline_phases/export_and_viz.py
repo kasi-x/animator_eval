@@ -153,9 +153,7 @@ def _transform_cooccurrence_groups(data: dict, context: PipelineContext) -> dict
     if not data:
         return {}
     pid_to_name = _build_pid_to_name(context)
-    aid_to_title = {
-        anime.id: anime.display_title for anime in context.anime_list
-    }
+    aid_to_title = {anime.id: anime.display_title for anime in context.anime_list}
     for group in data.get("groups", []):
         group["member_names"] = [
             pid_to_name.get(pid, pid) for pid in group.get("members", [])
@@ -701,7 +699,9 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         filename="derived_params.json",
         data_getter=lambda ctx: ctx.analysis_results.get("derived_params"),
         log_message="derived_params_saved",
-        log_metrics=lambda data: {"sections": len(data.get("sections", {}))} if data else {},
+        log_metrics=lambda data: (
+            {"sections": len(data.get("sections", {}))} if data else {}
+        ),
     ),
     # Knowledge spanners
     ExportSpec(
@@ -724,9 +724,7 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         filename="era_effects.json",
         data_getter=lambda ctx: ctx.analysis_results.get("era_effects"),
         log_message="era_effects_saved",
-        log_metrics=lambda data: (
-            {"years": len(data.get("era_fe", {}))} if data else {}
-        ),
+        log_metrics=lambda data: {"years": len(data.get("era_fe", {}))} if data else {},
     ),
     # Studio timeseries
     ExportSpec(
@@ -754,7 +752,9 @@ EXPORT_REGISTRY: list[ExportSpec] = [
     # Compatibility groups
     ExportSpec(
         filename="compatibility_groups.json",
-        data_getter=lambda ctx: ctx.analysis_results.get("compatibility_groups_analysis"),
+        data_getter=lambda ctx: ctx.analysis_results.get(
+            "compatibility_groups_analysis"
+        ),
         log_message="compatibility_groups_saved",
         log_metrics=lambda data: (
             {
@@ -808,7 +808,9 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         filename="genre_ecosystem.json",
         data_getter=lambda ctx: ctx.analysis_results.get("genre_ecosystem"),
         log_message="genre_ecosystem_saved",
-        log_metrics=lambda data: {"genres": len(data.get("trends", {}))} if data else {},
+        log_metrics=lambda data: (
+            {"genres": len(data.get("trends", {}))} if data else {}
+        ),
     ),
     ExportSpec(
         filename="genre_network.json",
@@ -938,10 +940,293 @@ def export_and_visualize_phase(context: PipelineContext, elapsed: float = 0.0) -
             total_specs=len(EXPORT_REGISTRY),
         )
 
+    # Persist computed features to DB (feat_* tables)
+    _persist_features_to_db(context)
+
     # Generate visualizations if requested
     if context.visualize:
         logger.info("step_start", step="visualization")
         _generate_visualizations(context)
+
+
+def _persist_features_to_db(context: PipelineContext) -> None:
+    """パイプライン計算結果を feat_* テーブルに永続化する.
+
+    JSON エクスポートと同じデータを DB にも書き込み、次回パイプラインで再利用できるようにする。
+    DB 書き込みは best-effort — 失敗してもパイプライン全体は継続する。
+    """
+    from src.database import (
+        compute_feat_credit_contribution,
+        compute_feat_person_role_progression,
+        compute_feat_work_context,
+        compute_feat_work_scale_tier,
+        get_connection,
+        upsert_agg_director_circles,
+        upsert_agg_milestones,
+        upsert_feat_career,
+        upsert_feat_contribution,
+        upsert_feat_genre_affinity,
+        upsert_feat_mentorships,
+        upsert_feat_network,
+        upsert_feat_person_scores,
+    )
+
+    if not context.results:
+        return
+
+    try:
+        with context.monitor.measure("feat_db_persist"):
+            conn = get_connection()
+
+            # --- feat_person_scores + feat_network + feat_career ---
+            upsert_feat_person_scores(conn, context.results)
+            upsert_feat_network(conn, context.results)
+            upsert_feat_career(conn, context.results)
+
+            # --- feat_network: bridge_score / n_bridge_communities (bridges 分析結果) ---
+            bridges_analysis = context.analysis_results.get("bridges") or {}
+            bridge_persons = bridges_analysis.get("bridge_persons") or []
+            if bridge_persons:
+                conn.executemany(
+                    """
+                    UPDATE feat_network
+                    SET bridge_score = ?,
+                        n_bridge_communities = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE person_id = ?
+                    """,
+                    [
+                        (
+                            bp.get("bridge_score"),
+                            bp.get("communities_connected"),
+                            bp["person_id"],
+                        )
+                        for bp in bridge_persons
+                        if "person_id" in bp
+                    ],
+                )
+
+            # --- feat_genre_affinity ---
+            genre_data = context.analysis_results.get("genre_affinity") or {}
+            genre_rows: list[dict] = []
+            if isinstance(genre_data, dict):
+                for pid, genres in genre_data.items():
+                    if isinstance(genres, dict):
+                        for genre, info in genres.items():
+                            score = (
+                                info.get("score") if isinstance(info, dict) else info
+                            )
+                            work_count = (
+                                info.get("count") if isinstance(info, dict) else None
+                            )
+                            genre_rows.append(
+                                {
+                                    "person_id": pid,
+                                    "genre": genre,
+                                    "affinity_score": score,
+                                    "work_count": work_count,
+                                }
+                            )
+            if genre_rows:
+                upsert_feat_genre_affinity(conn, genre_rows)
+
+            # --- feat_contribution ---
+            contrib_data = context.analysis_results.get("individual_profiles") or {}
+            contrib_rows: list[dict] = []
+            if isinstance(contrib_data, dict):
+                for pid, prof in contrib_data.items():
+                    if isinstance(prof, dict):
+                        contrib_rows.append({"person_id": pid, **prof})
+            elif isinstance(contrib_data, list):
+                contrib_rows = contrib_data
+            if contrib_rows:
+                upsert_feat_contribution(conn, contrib_rows)
+
+            # --- agg_milestones ---
+            milestones_raw = _get_analysis_result(context, "milestones", {})
+            if isinstance(milestones_raw, dict) and milestones_raw:
+                upsert_agg_milestones(conn, milestones_raw)
+
+            # --- agg_director_circles ---
+            if context.circles:
+                upsert_agg_director_circles(conn, context.circles)
+
+            # --- feat_mentorships ---
+            mentorships_raw = _get_analysis_result(context, "mentorships", [])
+            if isinstance(mentorships_raw, list) and mentorships_raw:
+                upsert_feat_mentorships(conn, mentorships_raw)
+
+            conn.commit()
+            logger.info(
+                "feat_tables_persisted",
+                scores=len(context.results),
+                genre_rows=len(genre_rows),
+                contrib_rows=len(contrib_rows),
+            )
+
+            # feat_credit_contribution は feat_person_scores が確定した後に計算
+            compute_feat_credit_contribution(conn)
+
+            # feat_work_context: credit_contribution の career_year を使うため後続
+            try:
+                compute_feat_work_context(conn, current_year=context.current_year)
+                compute_feat_work_scale_tier(
+                    conn
+                )  # format+episodes+durationで規模ティア付与
+            except Exception:
+                logger.exception("feat_work_context_skipped")
+
+            # feat_person_role_progression: Phase 1.5 でも動くが scores 後に更新
+            try:
+                compute_feat_person_role_progression(
+                    conn, current_year=context.current_year
+                )
+            except Exception:
+                logger.exception("feat_person_role_progression_skipped")
+
+            # feat_causal_estimates: パイプライン context から因果推論結果を保存
+            try:
+                _persist_causal_estimates(conn, context)
+            except Exception:
+                logger.exception("feat_causal_estimates_skipped")
+
+            # feat_cluster_membership: 複数クラスタリング次元を1行に集約
+            try:
+                _persist_cluster_membership(conn, context)
+            except Exception:
+                logger.exception("feat_cluster_membership_skipped")
+
+            # feat_birank_annual: 年次BiRankスナップショット (1980年以降)
+            try:
+                _persist_birank_annual(conn, context)
+            except Exception:
+                logger.exception("feat_birank_annual_skipped")
+
+            conn.close()
+    except Exception:
+        logger.exception("feat_db_persist_failed")
+
+
+def _persist_causal_estimates(conn: Any, context: PipelineContext) -> None:
+    """因果推論結果を feat_causal_estimates に保存する.
+
+    PipelineContext の peer_effect_result, career_friction, era_effects から
+    per-person の値を収集して upsert する。
+    """
+    from src.database import upsert_feat_causal_estimates
+
+    # ピア効果: person_peer_boost (per-person)
+    peer_boosts: dict[str, float] = {}
+    if context.peer_effect_result is not None and context.peer_effect_result.identified:
+        peer_boosts = context.peer_effect_result.person_peer_boost or {}
+
+    # キャリア摩擦指数 (per-person)
+    friction_index: dict[str, float] = context.career_friction or {}
+
+    # 時代固定効果: era_fe は年→値のマップ。各人のデビュー年に対応する値を割り当てる
+    era_fe_by_person: dict[str, float] = {}
+    if context.era_effects is not None:
+        era_fe: dict[int, float] = getattr(context.era_effects, "era_fe", {}) or {}
+        if era_fe:
+            # 各 person のデビュー年を credits から取得
+            debut_rows = conn.execute("""
+                SELECT person_id, MIN(credit_year) AS debut_year
+                FROM credits
+                WHERE credit_year IS NOT NULL AND credit_year > 1900
+                GROUP BY person_id
+            """).fetchall()
+            for row in debut_rows:
+                # デビュー年の era_fe（なければ最近傍年で補完）
+                dy = row["debut_year"]
+                if dy in era_fe:
+                    era_fe_by_person[row["person_id"]] = era_fe[dy]
+                else:
+                    # 最近傍年で補完
+                    nearest = min(era_fe.keys(), key=lambda y: abs(y - dy))
+                    era_fe_by_person[row["person_id"]] = era_fe[nearest]
+
+    all_pids = (
+        set(peer_boosts)
+        | set(friction_index)
+        | set(era_fe_by_person)
+        | set(context.iv_scores)
+    )
+    if not all_pids:
+        return
+
+    upsert_feat_causal_estimates(
+        conn,
+        peer_boosts=peer_boosts,
+        friction_index=friction_index,
+        era_fe_by_person=era_fe_by_person,
+        iv_scores=context.iv_scores,
+    )
+
+
+def _persist_cluster_membership(conn: Any, context: PipelineContext) -> None:
+    """各クラスタリング次元を feat_cluster_membership に保存する.
+
+    - community_map (Phase 4 グラフコミュニティ)
+    - career_tracks (Phase 6)
+    - growth_trend (Phase 9 analysis: growth)
+    - studio_cluster (Phase 9 analysis: studio_clustering + feat_studio_affiliation)
+    - cooccurrence_group (Phase 9 analysis: cooccurrence_groups)
+    """
+    from src.database import upsert_feat_cluster_membership
+
+    growth_data = _get_analysis_result(context, "growth", {})
+    studio_clustering = _get_analysis_result(context, "studio_clustering", {})
+    cooccurrence_groups = _get_analysis_result(context, "cooccurrence_groups", {})
+
+    if not (
+        context.community_map
+        or context.career_tracks
+        or growth_data
+        or studio_clustering
+        or cooccurrence_groups
+    ):
+        return
+
+    upsert_feat_cluster_membership(
+        conn,
+        community_map=context.community_map,
+        career_tracks=context.career_tracks,
+        growth_data=growth_data,
+        studio_clustering=studio_clustering,
+        cooccurrence_groups=cooccurrence_groups,
+    )
+
+
+def _persist_birank_annual(conn: Any, context: PipelineContext) -> None:
+    """年次BiRankスナップショットを feat_birank_annual に保存し、フィンガープリントを記録する.
+
+    temporal_pagerank が None を返した場合（変更なし判定でスキップ）は何もしない。
+    計算が実行された場合は全年のスナップショットをアップサートし（ON CONFLICT DO UPDATE）、
+    次回の変更検出に使うフィンガープリントを birank_compute_state に書き込む。
+    """
+    from src.database import (
+        _BIRANK_ANNUAL_MIN_YEAR,
+        upsert_birank_compute_state,
+        upsert_feat_birank_annual,
+    )
+
+    temporal_pr = _get_analysis_result(context, "temporal_pagerank", None)
+    if not temporal_pr:
+        return  # None (スキップ) or empty dict
+
+    birank_timelines = temporal_pr.get("birank_timelines", {})
+    if not birank_timelines:
+        return
+
+    # 変更のあった年を含む全年分をアップサート（ON CONFLICT DO UPDATE で上書き可）
+    upsert_feat_birank_annual(conn, birank_timelines, min_year=_BIRANK_ANNUAL_MIN_YEAR)
+
+    # 今回の計算に使った入力フィンガープリントを記録（次回変更検出に使用）
+    input_fp: dict[int, dict] = temporal_pr.get("_input_fingerprint", {})
+    if input_fp:
+        # int キーは JSON ラウンドトリップで str に変換されることがあるため正規化
+        normalized: dict[int, dict] = {int(y): v for y, v in input_fp.items()}
+        upsert_birank_compute_state(conn, normalized)
 
 
 def _get_analysis_result(context: PipelineContext, key: str, default: Any) -> Any:
@@ -1003,7 +1288,9 @@ def _generate_visualizations(context: PipelineContext) -> None:
 
         # Collaboration network
         if context.collaboration_graph:
-            iv_scores_for_plot = {r["person_id"]: r["iv_score"] for r in context.results}
+            iv_scores_for_plot = {
+                r["person_id"]: r["iv_score"] for r in context.results
+            }
             plot_collaboration_network(
                 context.collaboration_graph,
                 iv_scores_for_plot,
@@ -1041,7 +1328,11 @@ def _generate_visualizations(context: PipelineContext) -> None:
         productivity = _get_analysis_result(context, "productivity", {})
         if productivity:
             productivity_dicts = {
-                pid: (asdict(metrics) if hasattr(metrics, "__dataclass_fields__") else metrics)
+                pid: (
+                    asdict(metrics)
+                    if hasattr(metrics, "__dataclass_fields__")
+                    else metrics
+                )
                 for pid, metrics in productivity.items()
             }
             plot_productivity_distribution(productivity_dicts)

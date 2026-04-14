@@ -25,14 +25,17 @@ logger = structlog.get_logger()
 
 DEFAULT_DB_PATH = DB_PATH
 
-SCHEMA_VERSION = 27
+SCHEMA_VERSION = 44
 
 # Fuzzy match rules for unmatched anime titles (90%+ confidence)
 # Entries where SeesaaWiki title slightly differs from AniList title
 _FUZZY_MATCH_RULES = {
     "AKIBA'S TRIP -THE ANIMATION-": ("Akiba's Trip -The Animation-", 2017),
     "Vivy -Fluorite Eye's Song-": ("Vivy -Fluorite Eye's Song-", 2021),
-    "妖怪ウォッチJam 妖怪学園Y 〜Nとの遭遇〜": ("妖怪ウォッチJam: 妖怪学園Y 〜Nとの遭遇〜", 2020),
+    "妖怪ウォッチJam 妖怪学園Y 〜Nとの遭遇〜": (
+        "妖怪ウォッチJam: 妖怪学園Y 〜Nとの遭遇〜",
+        2020,
+    ),
     "ウルトラヴァイオレット：コード044": ("ウルトラヴァイオレットコード044", 2008),
     "魔法遊戯 飛び出す!!ハナマル大冒険": ("魔法遊戯: 飛び出す!!ハナマル大冒険", 2001),
     "お前が魔王に勝てると思うなと勇者パーティを追放されたので王都で気ままに暮らしたい": (
@@ -40,12 +43,21 @@ _FUZZY_MATCH_RULES = {
         2026,
     ),
     "神霊狩/GHOST HOUND": ("神霊狩 Ghost Hound", 2007),
-    "うたの☆プリンスさまっ♪ マジLOVEレボリューションズ": ("うたの☆プリンスさまっ♪マジLOVEレボリューションス", 2015),
+    "うたの☆プリンスさまっ♪ マジLOVEレボリューションズ": (
+        "うたの☆プリンスさまっ♪マジLOVEレボリューションス",
+        2015,
+    ),
     "フォーチュンクエストL": ("フォーチュン·クエストL", 1997),
     "マンガで分かる！Fate/Grand Order": ("マンガでわかる！Fate/Grand Order", 2018),
     "シュヴァリエ 〜Le Chevalier D'Eon〜": ("シェヴァリエ ~Le Chevalier D'Eon~", 2006),
-    "乙女はお姉さまに恋してる 2人のエルダー": ("処女はお姉さまに恋してる ～2人のエルダー～", 2012),
-    "無職転生\ufffd\ufffd 〜異世界行ったら本気だす〜": ("無職転生 ～異世界行ったら本気だす～", 2021),
+    "乙女はお姉さまに恋してる 2人のエルダー": (
+        "処女はお姉さまに恋してる ～2人のエルダー～",
+        2012,
+    ),
+    "無職転生\ufffd\ufffd 〜異世界行ったら本気だす〜": (
+        "無職転生 ～異世界行ったら本気だす～",
+        2021,
+    ),
     "ドラゴノーツ -ザ・レゾナンス-": ("ドラゴノーツ-ザ・レソナンス-", 2007),
     "アクティヴレイド2nd 機動強襲室第八係": ("アクティヴレイド 機動強襲室第八係", 2016),
     "W'z《ウィズ》": ("W'ｚ《ウィズ》", 2019),
@@ -55,21 +67,37 @@ _FUZZY_MATCH_RULES = {
     # v24 追加 (85%+ confidence, 手動確認済)
     "ゾイドフューザーズ": ("ゾイド・フューザース", 2004),
     "ゆるゆり さん☆ハイ!": ("ゆるゆり さん☆はい！", 2015),
-    "スラップアップパーティー -アラド戦記-": ("アラド戦記 ～スラップアップパーティー～", 2009),
+    "スラップアップパーティー -アラド戦記-": (
+        "アラド戦記 ～スラップアップパーティー～",
+        2009,
+    ),
     "TOKKO 特公": ("TOKKÔ[特公]", 2006),
     "I・R・I・A ZEIRAM THE ANIMATION": ("I・Я・I・A ZЁIЯAM THE ANIMATION", 1994),
-    "ビーストウォーズネオ 超生命体トランスフォーマー": ("ビーストウォーズⅡ（セカンド） 超生命体トランスフォーマー", 1998),
+    "ビーストウォーズネオ 超生命体トランスフォーマー": (
+        "ビーストウォーズⅡ（セカンド） 超生命体トランスフォーマー",
+        1998,
+    ),
     "おちゃめなふたご クレア学院物語": ("おちゃめな双子　－クレア学院物語－", 1991),
     "サンリオ世界名作劇場": ("サンリオ・アニメ世界名作劇場", 2001),
-    "まほろまてぃっく特別編 ただいま◆おかえり": ("まほろまてぃっく ただいま◇おかえり", 2009),
+    "まほろまてぃっく特別編 ただいま◆おかえり": (
+        "まほろまてぃっく ただいま◇おかえり",
+        2009,
+    ),
     "空の境界 第五章　矛盾螺旋": ("空の境界 矛盾螺旋", 2008),
     "空の境界 第七章　殺人考察（後）": ("空の境界 殺人考察(後)", 2009),
     "東京魔人學園剣風帖 龍龍 第弐幕": ("東京魔人學園剣風帖　龖（トウ） 第弐幕", 2007),
     "メジャーセカンド（第2シリーズ）": ("メジャー2nd 第２シリーズ", 2020),
-    "テイルズ オブ シンフォニア THE ANIMATION（第3期）": ("テイルズ オブ シンフォニア THE ANIMATION テセアラ編", 2010),
-    "テイルズ オブ シンフォニア THE ANIMATION（第2期）": ("テイルズ オブ シンフォニア THE ANIMATION テセアラ編", 2010),
+    "テイルズ オブ シンフォニア THE ANIMATION（第3期）": (
+        "テイルズ オブ シンフォニア THE ANIMATION テセアラ編",
+        2010,
+    ),
+    "テイルズ オブ シンフォニア THE ANIMATION（第2期）": (
+        "テイルズ オブ シンフォニア THE ANIMATION テセアラ編",
+        2010,
+    ),
     "マジでオタクなイングリッシュ!りぼんちゃん the TV": (
-        "マジでオタクなイングリッシュ! りぼんちゃん ~英語で戦う魔法少女~ the TV", 2013,
+        "マジでオタクなイングリッシュ! りぼんちゃん ~英語で戦う魔法少女~ the TV",
+        2013,
     ),
     "Bビーダマン爆外伝V": ("B[ボンバーマン]ビーダマン爆外伝Ｖ", 1999),
     "Bビーダマン爆外伝": ("B[ボンバーマン]ビーダマン爆外伝", 1998),
@@ -77,16 +105,20 @@ _FUZZY_MATCH_RULES = {
     "頭文字D Fourth Stage": ("頭文字〈イニシャル〉D FOURTH STAGE", 2004),
     "頭文字D Fifth Stage": ("頭文字〈イニシャル〉D Fifth Stage", 2012),
     "攻殻機動隊 ARISE　border:1 Ghost Pain": (
-        "攻殻機動隊ARISE -GHOST IN THE SHELL- border:1 Ghost Pain", 2013,
+        "攻殻機動隊ARISE -GHOST IN THE SHELL- border:1 Ghost Pain",
+        2013,
     ),
     "攻殻機動隊 ARISE　border:2 Ghost Whispers": (
-        "攻殻機動隊ARISE -GHOST IN THE SHELL- border:2 Ghost Whispers", 2013,
+        "攻殻機動隊ARISE -GHOST IN THE SHELL- border:2 Ghost Whispers",
+        2013,
     ),
     "攻殻機動隊 ARISE　border:3 Ghost Tears": (
-        "攻殻機動隊ARISE -GHOST IN THE SHELL- border:3 Ghost Tears", 2014,
+        "攻殻機動隊ARISE -GHOST IN THE SHELL- border:3 Ghost Tears",
+        2014,
     ),
     "攻殻機動隊 ARISE　border:4 Ghost Stands Alone": (
-        "攻殻機動隊ARISE -GHOST IN THE SHELL- border:4 Ghost Stands Alone", 2014,
+        "攻殻機動隊ARISE -GHOST IN THE SHELL- border:4 Ghost Stands Alone",
+        2014,
     ),
 }
 
@@ -278,6 +310,345 @@ def init_db(conn: sqlite3.Connection) -> None:
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
+
+        -- ============================================================
+        -- feat_* テーブル群: パイプラインが計算した派生特徴量
+        -- 生データテーブル (persons/anime/credits/studios) とは命名で区別
+        -- ============================================================
+
+        -- 全スコア指標 (scores テーブルの上位互換。scores は後方互換のため残す)
+        CREATE TABLE IF NOT EXISTS feat_person_scores (
+            person_id TEXT PRIMARY KEY,
+            run_id INTEGER REFERENCES pipeline_runs(id),
+            -- AKM 固定効果
+            person_fe REAL,
+            person_fe_se REAL,
+            person_fe_n_obs INTEGER,
+            studio_fe_exposure REAL,
+            -- BiRank・ネットワーク
+            birank REAL,
+            patronage REAL,
+            awcc REAL,
+            -- IV 修正因子
+            dormancy REAL,
+            ndi REAL,
+            career_friction REAL,
+            peer_boost REAL,
+            -- 統合スコア
+            iv_score REAL,
+            -- パーセンタイル順位 (0–100)
+            iv_score_pct REAL,
+            person_fe_pct REAL,
+            birank_pct REAL,
+            patronage_pct REAL,
+            awcc_pct REAL,
+            dormancy_pct REAL,
+            -- 信頼区間
+            confidence REAL,
+            score_range_low REAL,
+            score_range_high REAL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- グラフ構造から導出されたネットワーク指標
+        CREATE TABLE IF NOT EXISTS feat_network (
+            person_id TEXT PRIMARY KEY,
+            run_id INTEGER REFERENCES pipeline_runs(id),
+            degree_centrality REAL,
+            betweenness_centrality REAL,
+            closeness_centrality REAL,
+            eigenvector_centrality REAL,
+            hub_score REAL,
+            n_collaborators INTEGER,
+            n_unique_anime INTEGER,
+            bridge_score REAL,
+            n_bridge_communities INTEGER,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- キャリア軌跡から導出された指標
+        CREATE TABLE IF NOT EXISTS feat_career (
+            person_id TEXT PRIMARY KEY,
+            run_id INTEGER REFERENCES pipeline_runs(id),
+            first_year INTEGER,
+            latest_year INTEGER,
+            active_years INTEGER,
+            total_credits INTEGER,
+            highest_stage INTEGER,
+            primary_role TEXT,
+            career_track TEXT,
+            peak_year INTEGER,
+            peak_credits INTEGER,
+            growth_trend TEXT,
+            growth_score REAL,
+            activity_ratio REAL,
+            recent_credits INTEGER,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- ジャンル × 人物の親和性スコア (人物ごとに複数行)
+        CREATE TABLE IF NOT EXISTS feat_genre_affinity (
+            person_id TEXT NOT NULL,
+            genre TEXT NOT NULL,
+            run_id INTEGER REFERENCES pipeline_runs(id),
+            affinity_score REAL,
+            work_count INTEGER,
+            PRIMARY KEY (person_id, genre)
+        );
+
+        -- 個人貢献プロファイル (Layer 2)
+        CREATE TABLE IF NOT EXISTS feat_contribution (
+            person_id TEXT PRIMARY KEY,
+            run_id INTEGER REFERENCES pipeline_runs(id),
+            peer_percentile REAL,
+            opportunity_residual REAL,
+            consistency REAL,
+            independent_value REAL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_feat_person_scores_iv ON feat_person_scores(iv_score);
+        CREATE INDEX IF NOT EXISTS idx_feat_career_first_year ON feat_career(first_year);
+        CREATE INDEX IF NOT EXISTS idx_feat_career_track ON feat_career(career_track);
+        CREATE INDEX IF NOT EXISTS idx_feat_genre_genre ON feat_genre_affinity(genre);
+
+        -- クレジット活動パターン (空白期間・活動密度・休止履歴)
+        -- abs_quarter = year * 4 + (quarter - 1)  例: 2020Q1 → 8080
+        CREATE TABLE IF NOT EXISTS feat_credit_activity (
+            person_id TEXT PRIMARY KEY,
+            first_abs_quarter INTEGER,
+            last_abs_quarter INTEGER,
+            activity_span_quarters INTEGER,
+            active_quarters INTEGER,
+            density REAL,
+            n_gaps INTEGER,
+            mean_gap_quarters REAL,
+            median_gap_quarters REAL,
+            min_gap_quarters INTEGER,
+            max_gap_quarters INTEGER,
+            std_gap_quarters REAL,
+            consecutive_quarters INTEGER,
+            consecutive_rate REAL,
+            n_hiatuses INTEGER,
+            longest_hiatus_quarters INTEGER,
+            quarters_since_last_credit INTEGER,
+            active_years INTEGER,
+            n_year_gaps INTEGER,
+            mean_year_gap REAL,
+            max_year_gap INTEGER,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_feat_credit_activity_span
+            ON feat_credit_activity(activity_span_quarters);
+        CREATE INDEX IF NOT EXISTS idx_feat_credit_activity_last
+            ON feat_credit_activity(last_abs_quarter);
+
+        -- キャリア年 × 職種カテゴリ別集計
+        -- career_year = credit_year - first_credit_year (0=デビュー年)
+        CREATE TABLE IF NOT EXISTS feat_career_annual (
+            person_id TEXT NOT NULL,
+            career_year INTEGER NOT NULL,
+            credit_year INTEGER NOT NULL,
+            n_works INTEGER NOT NULL DEFAULT 0,
+            n_credits INTEGER NOT NULL DEFAULT 0,
+            n_roles INTEGER NOT NULL DEFAULT 0,
+            works_direction INTEGER NOT NULL DEFAULT 0,
+            works_animation_supervision INTEGER NOT NULL DEFAULT 0,
+            works_animation INTEGER NOT NULL DEFAULT 0,
+            works_design INTEGER NOT NULL DEFAULT 0,
+            works_technical INTEGER NOT NULL DEFAULT 0,
+            works_art INTEGER NOT NULL DEFAULT 0,
+            works_sound INTEGER NOT NULL DEFAULT 0,
+            works_writing INTEGER NOT NULL DEFAULT 0,
+            works_production INTEGER NOT NULL DEFAULT 0,
+            works_production_management INTEGER NOT NULL DEFAULT 0,
+            works_finishing INTEGER NOT NULL DEFAULT 0,
+            works_editing INTEGER NOT NULL DEFAULT 0,
+            works_settings INTEGER NOT NULL DEFAULT 0,
+            works_other INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (person_id, career_year)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_feat_career_annual_year
+            ON feat_career_annual(career_year);
+        CREATE INDEX IF NOT EXISTS idx_feat_career_annual_credit_year
+            ON feat_career_annual(credit_year);
+
+        -- 人物ごとの年次BiRankスナップショット (v42)
+        -- 1980年以降のみ保存（それ以前はグラフが極小でスコアが無意味）
+        -- birank: その年の全人物内での 0-100 正規化スコア
+        -- raw_pagerank: PageRank生値（正規化前）
+        -- graph_size: その年の累積グラフにおける人物ノード数
+        -- n_credits_cumulative: その年までの業界累積クレジット数（正規化の母集団規模指標）
+        CREATE TABLE IF NOT EXISTS feat_birank_annual (
+            person_id TEXT NOT NULL,
+            year INTEGER NOT NULL,
+            birank REAL NOT NULL,
+            raw_pagerank REAL,
+            graph_size INTEGER,
+            n_credits_cumulative INTEGER,
+            PRIMARY KEY (person_id, year)
+        );
+        CREATE INDEX IF NOT EXISTS idx_feat_birank_annual_year
+            ON feat_birank_annual(year);
+
+        -- birank_compute_state: BiRank 計算に使った入力データのフィンガープリント（年別）
+        -- 変更検出に使用: 各年のクレジット数・アニメ数・人物数が前回計算時と異なれば再計算
+        CREATE TABLE IF NOT EXISTS birank_compute_state (
+            year INTEGER PRIMARY KEY,
+            credit_count INTEGER NOT NULL,
+            anime_count INTEGER NOT NULL,
+            person_count INTEGER NOT NULL,
+            computed_at REAL NOT NULL    -- unix timestamp
+        );
+
+        -- 個人のスタジオ所属年別集計
+        -- anime_studios + credits を結合して「その年どのスタジオの作品に参加したか」を集計
+        CREATE TABLE IF NOT EXISTS feat_studio_affiliation (
+            person_id TEXT NOT NULL,
+            credit_year INTEGER NOT NULL,
+            studio_id TEXT NOT NULL,
+            studio_name TEXT NOT NULL DEFAULT '',
+            n_works INTEGER NOT NULL DEFAULT 0,    -- そのスタジオの作品に参加した数
+            n_credits INTEGER NOT NULL DEFAULT 0,  -- クレジット行数
+            is_main_studio INTEGER NOT NULL DEFAULT 0, -- 主要スタジオ (anime_studios.is_main)
+            PRIMARY KEY (person_id, credit_year, studio_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_feat_studio_aff_person
+            ON feat_studio_affiliation(person_id);
+        CREATE INDEX IF NOT EXISTS idx_feat_studio_aff_studio
+            ON feat_studio_affiliation(studio_id, credit_year);
+
+        -- 個人 × 作品 × 役職ごとのスコア貢献推定
+        -- production_scale: AKM 目的変数 (完全計算)
+        -- edge_weight: グラフ辺寄与 (完全計算)
+        -- iv_contrib_est: IV スコアへの按分推定 (edge_weight_share × iv_score)
+        CREATE TABLE IF NOT EXISTS feat_credit_contribution (
+            person_id TEXT NOT NULL,
+            anime_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            credit_year INTEGER,
+            -- AKM 目的変数 (生産規模の対数)
+            production_scale REAL,
+            -- グラフ辺寄与
+            role_weight REAL,
+            episode_coverage REAL,
+            dur_mult REAL,
+            edge_weight REAL,
+            -- IV スコアへの按分 (edge_weight / 人物の total_edge_weight × iv_score)
+            edge_weight_share REAL,
+            iv_contrib_est REAL,
+            PRIMARY KEY (person_id, anime_id, role)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_feat_credit_contrib_anime
+            ON feat_credit_contribution(anime_id);
+        CREATE INDEX IF NOT EXISTS idx_feat_credit_contrib_year
+            ON feat_credit_contribution(credit_year);
+
+        -- 個人の作品コントリビュート集計
+        CREATE TABLE IF NOT EXISTS feat_person_work_summary (
+            person_id TEXT PRIMARY KEY,
+            n_distinct_works INTEGER,
+            total_production_scale REAL,
+            mean_production_scale REAL,
+            max_production_scale REAL,
+            best_work_anime_id TEXT,
+            total_edge_weight REAL,
+            mean_edge_weight_per_work REAL,
+            max_edge_weight REAL,
+            top_contrib_anime_id TEXT,
+            total_iv_contrib_est REAL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- 作品ごとのチーム統計 (v38) + 規模ティア (v44)
+        CREATE TABLE IF NOT EXISTS feat_work_context (
+            anime_id TEXT PRIMARY KEY,
+            credit_year INTEGER,
+            n_staff INTEGER,
+            n_distinct_roles INTEGER,
+            n_direction INTEGER,
+            n_animation_supervision INTEGER,
+            n_animation INTEGER,
+            n_design INTEGER,
+            n_technical INTEGER,
+            n_art INTEGER,
+            n_sound INTEGER,
+            n_writing INTEGER,
+            n_production INTEGER,
+            n_other INTEGER,
+            mean_career_year REAL,
+            median_career_year REAL,
+            max_career_year INTEGER,
+            production_scale REAL,
+            difficulty_score REAL,
+            -- 作品規模ティア (v44): format + episodes + duration のみで計算
+            scale_tier INTEGER,
+            scale_label TEXT,
+            scale_raw REAL,
+            format_group TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_feat_work_context_year
+            ON feat_work_context(credit_year);
+        -- Note: idx_feat_work_context_tier は v44 マイグレーションで追加
+
+        -- 個人×職種カテゴリの時系列進行 (v39)
+        CREATE TABLE IF NOT EXISTS feat_person_role_progression (
+            person_id TEXT NOT NULL,
+            role_category TEXT NOT NULL,
+            first_year INTEGER,
+            last_year INTEGER,
+            peak_year INTEGER,
+            n_works INTEGER,
+            n_credits INTEGER,
+            career_year_first INTEGER,
+            still_active INTEGER,
+            PRIMARY KEY (person_id, role_category)
+        );
+        CREATE INDEX IF NOT EXISTS idx_feat_role_prog_person
+            ON feat_person_role_progression(person_id);
+        CREATE INDEX IF NOT EXISTS idx_feat_role_prog_category
+            ON feat_person_role_progression(role_category);
+
+        -- 因果推論結果 (v40)
+        CREATE TABLE IF NOT EXISTS feat_causal_estimates (
+            person_id TEXT PRIMARY KEY,
+            peer_effect_boost REAL,
+            career_friction REAL,
+            era_fe REAL,
+            era_deflated_iv REAL,
+            opportunity_residual REAL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- クラスタリング帰属 — 複数次元を1行に集約 (v41)
+        CREATE TABLE IF NOT EXISTS feat_cluster_membership (
+            person_id TEXT PRIMARY KEY,
+            -- グラフコミュニティ検出 (Phase 4: Louvain / Leiden)
+            community_id INTEGER,
+            -- キャリアトラック (Phase 6: ルールベース分類)
+            career_track TEXT,
+            -- 成長トレンド (Phase 9: growth analysis)
+            growth_trend TEXT,
+            -- 主要所属スタジオのクラスタ (K-Means on studio features)
+            studio_cluster_id INTEGER,
+            studio_cluster_name TEXT,
+            -- 共同クレジットグループ (Phase 9: cooccurrence_groups)
+            cooccurrence_group_id INTEGER,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_feat_cluster_community
+            ON feat_cluster_membership(community_id);
+        CREATE INDEX IF NOT EXISTS idx_feat_cluster_career_track
+            ON feat_cluster_membership(career_track);
+        CREATE INDEX IF NOT EXISTS idx_feat_cluster_growth
+            ON feat_cluster_membership(growth_trend);
+        CREATE INDEX IF NOT EXISTS idx_feat_cluster_studio
+            ON feat_cluster_membership(studio_cluster_id);
     """)
     conn.commit()
     _run_migrations(conn)
@@ -337,6 +708,24 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         25: _migrate_v25_kanji_hira_matching,
         26: _migrate_v26_anime_scale_classification,
         27: _migrate_v27_normalize_legacy_roles,
+        28: _migrate_v28_add_career_track,
+        29: _migrate_v29_add_feat_tables,
+        30: _migrate_v30_add_feat_credit_activity,
+        31: _migrate_v31_add_feat_career_annual,
+        32: _migrate_v32_add_feat_studio_affiliation,
+        33: _migrate_v33_add_feat_credit_contribution,
+        34: _migrate_v34_add_agg_milestones,
+        35: _migrate_v35_add_agg_director_circles,
+        36: _migrate_v36_add_feat_mentorships,
+        37: _migrate_v37_credit_contribution_career_year,
+        38: _migrate_v38_add_feat_work_context,
+        39: _migrate_v39_add_feat_person_role_progression,
+        40: _migrate_v40_add_feat_causal_estimates,
+        41: _migrate_v41_add_feat_cluster_membership,
+        42: _migrate_v42_add_feat_birank_annual,
+        43: _migrate_v43_add_birank_compute_state,
+        44: _migrate_v44_add_work_scale_tier,
+        45: _migrate_v45_add_feat_career_gaps,
     }
 
     for version in range(current + 1, SCHEMA_VERSION + 1):
@@ -771,7 +1160,9 @@ def _migrate_v18_add_score_history_quarter(conn: sqlite3.Connection) -> None:
         try:
             conn.execute(f"ALTER TABLE score_history ADD COLUMN {col}")
         except sqlite3.OperationalError:
-            logger.debug("column_already_exists", table="score_history", column=col_name)
+            logger.debug(
+                "column_already_exists", table="score_history", column=col_name
+            )
     conn.executescript("""
         CREATE INDEX IF NOT EXISTS idx_score_history_yq
             ON score_history(year, quarter);
@@ -850,6 +1241,7 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
     def _normalize(s: str) -> str:
         """NFKC正規化 + 記号/空白除去 + 小文字."""
         import html
+
         # HTMLエンティティをデコード: &#9825; → ♡
         s = html.unescape(s)
         s = unicodedata.normalize("NFKC", s).lower().strip()
@@ -857,7 +1249,8 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
         s = s.replace("\u3008", "<").replace("\u3009", ">")
         s = re.sub(
             r"[\s\u3000・\-–—―~〜!！?？、。,.'\"()\（\）\[\]【】「」『』《》☆★♪♡♥♡−＝<>〈〉◆◇#\$%@&*]+",
-            "", s,
+            "",
+            s,
         )
         return s
 
@@ -876,10 +1269,18 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
     def _normalize_roman_greek(s: str) -> str:
         """ギリシャ文字・ローマ数字を ASCII に変換."""
         for old, new in [
-            ("ΖΖ", "ZZ"), ("Ζ", "Z"),
-            ("Ⅲ", "III"), ("Ⅱ", "II"), ("Ⅰ", "I"),
-            ("Ⅳ", "IV"), ("Ⅴ", "V"), ("Ⅵ", "VI"),
-            ("Ⅶ", "VII"), ("Ⅷ", "VIII"), ("Ⅸ", "IX"), ("Ⅹ", "X"),
+            ("ΖΖ", "ZZ"),
+            ("Ζ", "Z"),
+            ("Ⅲ", "III"),
+            ("Ⅱ", "II"),
+            ("Ⅰ", "I"),
+            ("Ⅳ", "IV"),
+            ("Ⅴ", "V"),
+            ("Ⅵ", "VI"),
+            ("Ⅶ", "VII"),
+            ("Ⅷ", "VIII"),
+            ("Ⅸ", "IX"),
+            ("Ⅹ", "X"),
         ]:
             s = s.replace(old, new)
         return s
@@ -892,10 +1293,11 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
         """
         s = unicodedata.normalize("NFKC", s)
         return "".join(
-            c for c in s
-            if "\u4e00" <= c <= "\u9fff"   # CJK統合漢字
-            or "\u3400" <= c <= "\u4dbf"   # CJK拡張A
-            or "\u3040" <= c <= "\u309f"   # ひらがな
+            c
+            for c in s
+            if "\u4e00" <= c <= "\u9fff"  # CJK統合漢字
+            or "\u3400" <= c <= "\u4dbf"  # CJK拡張A
+            or "\u3040" <= c <= "\u309f"  # ひらがな
         )
 
     def _strip_reading_parens(s: str) -> str:
@@ -1072,7 +1474,8 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
             nk = _normalize(sja)
             if len(nk) >= 5:
                 rev_candidates = [
-                    entry for ref_nk, entry in ref_entries_for_containment
+                    entry
+                    for ref_nk, entry in ref_entries_for_containment
                     if ref_nk != nk and nk in ref_nk
                 ]
                 if 0 < len(rev_candidates) <= 10:
@@ -1120,7 +1523,8 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
             nk = _normalize(sja)
             if 4 <= len(nk) < 5:
                 rev_candidates = [
-                    entry for ref_nk, entry in ref_entries_for_containment
+                    entry
+                    for ref_nk, entry in ref_entries_for_containment
                     if ref_nk != nk and nk in ref_nk
                 ]
                 if 0 < len(rev_candidates) <= 10:
@@ -1144,7 +1548,8 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
                 if 0 < len(fwd_candidates) <= 10:
                     # 最長一致を優先
                     fwd_candidates.sort(
-                        key=lambda e: len(_normalize(e[6])), reverse=True,
+                        key=lambda e: len(_normalize(e[6])),
+                        reverse=True,
                     )
                     match = _pick_best(fwd_candidates[:3], year_hint)
 
@@ -1199,7 +1604,8 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
                 # 前方包含も試みる (ratio>60%)
                 if len(mk) >= 6:
                     mv_cands = [
-                        entry for ref_nk, entry in ref_entries_for_containment
+                        entry
+                        for ref_nk, entry in ref_entries_for_containment
                         if ref_nk != mk
                         and len(ref_nk) >= 5
                         and ref_nk in mk
@@ -1310,8 +1716,7 @@ def _migrate_v20_add_credit_temporal(conn: sqlite3.Connection) -> None:
 
         # 各エピソードのクレジットを更新
         ep_credits = conn.execute(
-            "SELECT rowid, episode FROM credits "
-            "WHERE anime_id = ? AND episode > 0",
+            "SELECT rowid, episode FROM credits WHERE anime_id = ? AND episode > 0",
             (anime_id,),
         ).fetchall()
 
@@ -1404,8 +1809,7 @@ def _migrate_v21_enhanced_title_matching(conn: sqlite3.Connection) -> None:
                 pass
 
         ep_credits = conn.execute(
-            "SELECT rowid, episode FROM credits "
-            "WHERE anime_id = ? AND episode > 0",
+            "SELECT rowid, episode FROM credits WHERE anime_id = ? AND episode > 0",
             (anime_id,),
         ).fetchall()
 
@@ -1488,8 +1892,7 @@ def _migrate_v22_deep_title_matching(conn: sqlite3.Connection) -> None:
                 pass
 
         ep_credits = conn.execute(
-            "SELECT rowid, episode FROM credits "
-            "WHERE anime_id = ? AND episode > 0",
+            "SELECT rowid, episode FROM credits WHERE anime_id = ? AND episode > 0",
             (anime_id,),
         ).fetchall()
 
@@ -1573,8 +1976,7 @@ def _migrate_v23_fuzzy_match_rules(conn: sqlite3.Connection) -> None:
                 pass
 
         ep_credits = conn.execute(
-            "SELECT rowid, episode FROM credits "
-            "WHERE anime_id = ? AND episode > 0",
+            "SELECT rowid, episode FROM credits WHERE anime_id = ? AND episode > 0",
             (anime_id,),
         ).fetchall()
 
@@ -1726,13 +2128,15 @@ def _migrate_v25_kanji_hira_matching(conn: sqlite3.Connection) -> None:
                 pass
         batch = []
         for rowid, ep in conn.execute(
-            "SELECT rowid, episode FROM credits WHERE anime_id=? AND episode>0", (anime_id,)
+            "SELECT rowid, episode FROM credits WHERE anime_id=? AND episode>0",
+            (anime_id,),
         ).fetchall():
             air = sd + timedelta(days=(ep - 1) * interval_days)
             batch.append((air.year, (air.month - 1) // 3 + 1, rowid))
         if batch:
             conn.executemany(
-                "UPDATE credits SET credit_year=?, credit_quarter=? WHERE rowid=?", batch
+                "UPDATE credits SET credit_year=?, credit_quarter=? WHERE rowid=?",
+                batch,
             )
             ep_updated += len(batch)
 
@@ -1800,7 +2204,12 @@ def compute_anime_scale_classes(conn: sqlite3.Connection) -> dict[str, int]:
         labels = km.fit_predict(X)
         # Sort clusters by median total_credits → small/medium/large
         medians = [
-            (int(np.median([data[i][2] for i in range(len(data)) if labels[i] == cl])), cl)
+            (
+                int(
+                    np.median([data[i][2] for i in range(len(data)) if labels[i] == cl])
+                ),
+                cl,
+            )
             for cl in range(K)
         ]
         medians.sort()
@@ -1814,9 +2223,7 @@ def compute_anime_scale_classes(conn: sqlite3.Connection) -> dict[str, int]:
     conn.execute("UPDATE anime SET work_type = NULL, scale_class = NULL")
 
     # Assign work_type for all anime with known format
-    conn.execute(
-        "UPDATE anime SET work_type = 'tv' WHERE format IN ('TV', 'TV_SHORT')"
-    )
+    conn.execute("UPDATE anime SET work_type = 'tv' WHERE format IN ('TV', 'TV_SHORT')")
     conn.execute(
         "UPDATE anime SET work_type = 'tanpatsu'"
         " WHERE format IN ('OVA', 'MOVIE', 'ONA', 'SPECIAL')"
@@ -1824,13 +2231,9 @@ def compute_anime_scale_classes(conn: sqlite3.Connection) -> dict[str, int]:
 
     # Assign scale_class in batches
     for anime_id, scale in tv_map.items():
-        conn.execute(
-            "UPDATE anime SET scale_class = ? WHERE id = ?", (scale, anime_id)
-        )
+        conn.execute("UPDATE anime SET scale_class = ? WHERE id = ?", (scale, anime_id))
     for anime_id, scale in tan_map.items():
-        conn.execute(
-            "UPDATE anime SET scale_class = ? WHERE id = ?", (scale, anime_id)
-        )
+        conn.execute("UPDATE anime SET scale_class = ? WHERE id = ?", (scale, anime_id))
 
     null_count = conn.execute(
         "SELECT COUNT(*) FROM anime WHERE work_type IS NOT NULL AND scale_class IS NULL"
@@ -1885,6 +2288,1740 @@ def _migrate_v27_normalize_legacy_roles(conn: sqlite3.Connection) -> None:
             "UPDATE credits SET role = ? WHERE role = ?",
             (new_role, old_role),
         )
+
+
+def _migrate_v28_add_career_track(conn: sqlite3.Connection) -> None:
+    """v28: scores テーブルに career_track カラムを追加.
+
+    career_track は生データではなくパイプラインが推定した加工データ（派生属性）。
+    scores テーブルに置くことで生データ（credits）との分離を維持する。
+
+    値: 'animator' / 'animator_director' / 'director' /
+        'production' / 'technical' / 'multi_track'
+    """
+    conn.executescript("""
+        ALTER TABLE scores ADD COLUMN career_track TEXT NOT NULL DEFAULT 'multi_track';
+        CREATE INDEX IF NOT EXISTS idx_scores_career_track ON scores(career_track);
+    """)
+
+
+def _migrate_v29_add_feat_tables(conn: sqlite3.Connection) -> None:
+    """v29: feat_* 派生特徴量テーブル群を追加.
+
+    生データ (persons/anime/credits) とパイプライン計算結果を命名で明確に分離する。
+    feat_person_scores, feat_network, feat_career, feat_genre_affinity, feat_contribution
+    の 5 テーブルを追加し、JSON ファイルへの依存を段階的に削減する。
+    """
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS feat_person_scores (
+            person_id TEXT PRIMARY KEY,
+            run_id INTEGER REFERENCES pipeline_runs(id),
+            person_fe REAL,
+            person_fe_se REAL,
+            person_fe_n_obs INTEGER,
+            studio_fe_exposure REAL,
+            birank REAL,
+            patronage REAL,
+            awcc REAL,
+            dormancy REAL,
+            ndi REAL,
+            career_friction REAL,
+            peer_boost REAL,
+            iv_score REAL,
+            iv_score_pct REAL,
+            person_fe_pct REAL,
+            birank_pct REAL,
+            patronage_pct REAL,
+            awcc_pct REAL,
+            dormancy_pct REAL,
+            confidence REAL,
+            score_range_low REAL,
+            score_range_high REAL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS feat_network (
+            person_id TEXT PRIMARY KEY,
+            run_id INTEGER REFERENCES pipeline_runs(id),
+            degree_centrality REAL,
+            betweenness_centrality REAL,
+            closeness_centrality REAL,
+            eigenvector_centrality REAL,
+            hub_score REAL,
+            n_collaborators INTEGER,
+            n_unique_anime INTEGER,
+            bridge_score REAL,
+            n_bridge_communities INTEGER,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS feat_career (
+            person_id TEXT PRIMARY KEY,
+            run_id INTEGER REFERENCES pipeline_runs(id),
+            first_year INTEGER,
+            latest_year INTEGER,
+            active_years INTEGER,
+            total_credits INTEGER,
+            highest_stage INTEGER,
+            primary_role TEXT,
+            career_track TEXT,
+            peak_year INTEGER,
+            peak_credits INTEGER,
+            growth_trend TEXT,
+            growth_score REAL,
+            activity_ratio REAL,
+            recent_credits INTEGER,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS feat_genre_affinity (
+            person_id TEXT NOT NULL,
+            genre TEXT NOT NULL,
+            run_id INTEGER REFERENCES pipeline_runs(id),
+            affinity_score REAL,
+            work_count INTEGER,
+            PRIMARY KEY (person_id, genre)
+        );
+
+        CREATE TABLE IF NOT EXISTS feat_contribution (
+            person_id TEXT PRIMARY KEY,
+            run_id INTEGER REFERENCES pipeline_runs(id),
+            peer_percentile REAL,
+            opportunity_residual REAL,
+            consistency REAL,
+            independent_value REAL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_feat_person_scores_iv ON feat_person_scores(iv_score);
+        CREATE INDEX IF NOT EXISTS idx_feat_career_first_year ON feat_career(first_year);
+        CREATE INDEX IF NOT EXISTS idx_feat_career_track ON feat_career(career_track);
+        CREATE INDEX IF NOT EXISTS idx_feat_genre_genre ON feat_genre_affinity(genre);
+    """)
+
+
+# ================================================================
+# feat_* DAO: 派生特徴量の一括書き込み / 読み込み
+# ================================================================
+
+
+def upsert_feat_person_scores(
+    conn: sqlite3.Connection,
+    rows: list[dict],
+    run_id: int | None = None,
+) -> None:
+    """feat_person_scores を一括 upsert する.
+
+    Args:
+        conn: SQLite 接続
+        rows: scores.json の各エントリと同形式の dict リスト。
+              必須キー: person_id。残りは欠損時に None。
+        run_id: pipeline_runs.id (省略可)
+    """
+
+    def _pct(d: dict, key: str) -> float | None:
+        return d.get(key)
+
+    def _conf(d: dict) -> tuple:
+        sr = d.get("score_range") or {}
+        return (
+            d.get("confidence"),
+            sr.get("low") if isinstance(sr, dict) else None,
+            sr.get("high") if isinstance(sr, dict) else None,
+        )
+
+    batch = []
+    for d in rows:
+        conf, sr_low, sr_high = _conf(d)
+        batch.append(
+            (
+                d["person_id"],
+                run_id,
+                d.get("person_fe"),
+                d.get("person_fe_se"),
+                d.get("person_fe_n_obs"),
+                d.get("studio_fe_exposure"),
+                d.get("birank"),
+                d.get("patronage"),
+                d.get("awcc"),
+                d.get("dormancy"),
+                d.get("ndi"),
+                d.get("career_friction"),
+                d.get("peer_boost"),
+                d.get("iv_score"),
+                _pct(d, "iv_score_pct"),
+                _pct(d, "person_fe_pct"),
+                _pct(d, "birank_pct"),
+                _pct(d, "patronage_pct"),
+                _pct(d, "awcc_pct"),
+                _pct(d, "dormancy_pct"),
+                conf,
+                sr_low,
+                sr_high,
+            )
+        )
+    conn.executemany(
+        """
+        INSERT INTO feat_person_scores (
+            person_id, run_id,
+            person_fe, person_fe_se, person_fe_n_obs, studio_fe_exposure,
+            birank, patronage, awcc,
+            dormancy, ndi, career_friction, peer_boost,
+            iv_score,
+            iv_score_pct, person_fe_pct, birank_pct, patronage_pct,
+            awcc_pct, dormancy_pct,
+            confidence, score_range_low, score_range_high,
+            updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+        ON CONFLICT(person_id) DO UPDATE SET
+            run_id=excluded.run_id,
+            person_fe=excluded.person_fe, person_fe_se=excluded.person_fe_se,
+            person_fe_n_obs=excluded.person_fe_n_obs,
+            studio_fe_exposure=excluded.studio_fe_exposure,
+            birank=excluded.birank, patronage=excluded.patronage, awcc=excluded.awcc,
+            dormancy=excluded.dormancy, ndi=excluded.ndi,
+            career_friction=excluded.career_friction, peer_boost=excluded.peer_boost,
+            iv_score=excluded.iv_score,
+            iv_score_pct=excluded.iv_score_pct, person_fe_pct=excluded.person_fe_pct,
+            birank_pct=excluded.birank_pct, patronage_pct=excluded.patronage_pct,
+            awcc_pct=excluded.awcc_pct, dormancy_pct=excluded.dormancy_pct,
+            confidence=excluded.confidence,
+            score_range_low=excluded.score_range_low,
+            score_range_high=excluded.score_range_high,
+            updated_at=CURRENT_TIMESTAMP
+    """,
+        batch,
+    )
+    logger.info("feat_person_scores_upserted", count=len(batch))
+
+
+def upsert_feat_network(
+    conn: sqlite3.Connection,
+    rows: list[dict],
+    run_id: int | None = None,
+) -> None:
+    """feat_network を一括 upsert する.
+
+    各 dict に person_id と centrality/hub_score/bridge 情報を含める。
+    scores.json の centrality サブ dict および bridges.json から構築する。
+    """
+    batch = []
+    for d in rows:
+        c = d.get("centrality") or {}
+        batch.append(
+            (
+                d["person_id"],
+                run_id,
+                c.get("degree"),
+                c.get("betweenness"),
+                c.get("closeness"),
+                c.get("eigenvector"),
+                (d.get("network") or {}).get("hub_score"),
+                (d.get("network") or {}).get("collaborators"),
+                (d.get("network") or {}).get("unique_anime"),
+                d.get("bridge_score"),
+                d.get("n_bridge_communities"),
+            )
+        )
+    conn.executemany(
+        """
+        INSERT INTO feat_network (
+            person_id, run_id,
+            degree_centrality, betweenness_centrality,
+            closeness_centrality, eigenvector_centrality,
+            hub_score, n_collaborators, n_unique_anime,
+            bridge_score, n_bridge_communities,
+            updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+        ON CONFLICT(person_id) DO UPDATE SET
+            run_id=excluded.run_id,
+            degree_centrality=excluded.degree_centrality,
+            betweenness_centrality=excluded.betweenness_centrality,
+            closeness_centrality=excluded.closeness_centrality,
+            eigenvector_centrality=excluded.eigenvector_centrality,
+            hub_score=excluded.hub_score,
+            n_collaborators=excluded.n_collaborators,
+            n_unique_anime=excluded.n_unique_anime,
+            bridge_score=excluded.bridge_score,
+            n_bridge_communities=excluded.n_bridge_communities,
+            updated_at=CURRENT_TIMESTAMP
+    """,
+        batch,
+    )
+    logger.info("feat_network_upserted", count=len(batch))
+
+
+def upsert_feat_career(
+    conn: sqlite3.Connection,
+    rows: list[dict],
+    run_id: int | None = None,
+) -> None:
+    """feat_career を一括 upsert する.
+
+    scores.json の career/growth サブ dict および growth.json から構築する。
+    """
+    batch = []
+    for d in rows:
+        car = d.get("career") or {}
+        grw = d.get("growth") or {}
+        batch.append(
+            (
+                d["person_id"],
+                run_id,
+                car.get("first_year"),
+                car.get("latest_year"),
+                car.get("active_years"),
+                d.get("total_credits"),
+                car.get("highest_stage"),
+                d.get("primary_role"),
+                d.get("career_track"),
+                car.get("peak_year"),
+                car.get("peak_credits"),
+                grw.get("trend"),
+                d.get("growth_score"),
+                grw.get("activity_ratio"),
+                grw.get("recent_credits"),
+            )
+        )
+    conn.executemany(
+        """
+        INSERT INTO feat_career (
+            person_id, run_id,
+            first_year, latest_year, active_years, total_credits,
+            highest_stage, primary_role, career_track,
+            peak_year, peak_credits,
+            growth_trend, growth_score, activity_ratio, recent_credits,
+            updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+        ON CONFLICT(person_id) DO UPDATE SET
+            run_id=excluded.run_id,
+            first_year=excluded.first_year, latest_year=excluded.latest_year,
+            active_years=excluded.active_years, total_credits=excluded.total_credits,
+            highest_stage=excluded.highest_stage, primary_role=excluded.primary_role,
+            career_track=excluded.career_track,
+            peak_year=excluded.peak_year, peak_credits=excluded.peak_credits,
+            growth_trend=excluded.growth_trend, growth_score=excluded.growth_score,
+            activity_ratio=excluded.activity_ratio, recent_credits=excluded.recent_credits,
+            updated_at=CURRENT_TIMESTAMP
+    """,
+        batch,
+    )
+    logger.info("feat_career_upserted", count=len(batch))
+
+
+def upsert_feat_genre_affinity(
+    conn: sqlite3.Connection,
+    rows: list[dict],
+    run_id: int | None = None,
+) -> None:
+    """feat_genre_affinity を一括 upsert する.
+
+    Args:
+        rows: {"person_id", "genre", "affinity_score", "work_count"} の dict リスト
+    """
+    batch = [
+        (
+            d["person_id"],
+            d["genre"],
+            run_id,
+            d.get("affinity_score"),
+            d.get("work_count"),
+        )
+        for d in rows
+    ]
+    conn.executemany(
+        """
+        INSERT INTO feat_genre_affinity (person_id, genre, run_id, affinity_score, work_count)
+        VALUES (?,?,?,?,?)
+        ON CONFLICT(person_id, genre) DO UPDATE SET
+            run_id=excluded.run_id,
+            affinity_score=excluded.affinity_score,
+            work_count=excluded.work_count
+    """,
+        batch,
+    )
+    logger.info("feat_genre_affinity_upserted", count=len(batch))
+
+
+def upsert_feat_contribution(
+    conn: sqlite3.Connection,
+    rows: list[dict],
+    run_id: int | None = None,
+) -> None:
+    """feat_contribution を一括 upsert する.
+
+    individual_profiles.json のエントリから構築する。
+    """
+    batch = [
+        (
+            d["person_id"],
+            run_id,
+            d.get("peer_percentile"),
+            d.get("opportunity_residual"),
+            d.get("consistency"),
+            d.get("independent_value"),
+        )
+        for d in rows
+    ]
+    conn.executemany(
+        """
+        INSERT INTO feat_contribution (
+            person_id, run_id,
+            peer_percentile, opportunity_residual, consistency, independent_value,
+            updated_at
+        ) VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)
+        ON CONFLICT(person_id) DO UPDATE SET
+            run_id=excluded.run_id,
+            peer_percentile=excluded.peer_percentile,
+            opportunity_residual=excluded.opportunity_residual,
+            consistency=excluded.consistency,
+            independent_value=excluded.independent_value,
+            updated_at=CURRENT_TIMESTAMP
+    """,
+        batch,
+    )
+    logger.info("feat_contribution_upserted", count=len(batch))
+
+
+def upsert_agg_milestones(
+    conn: sqlite3.Connection,
+    milestones_dict: dict,
+    run_id: int | None = None,
+) -> None:
+    """agg_milestones を一括 upsert する (L2: キャリアイベント).
+
+    Args:
+        milestones_dict: {person_id: [{type, year, anime_id, anime_title, description}]}
+    """
+    batch = []
+    for person_id, events in milestones_dict.items():
+        if not isinstance(events, list):
+            continue
+        for ev in events:
+            if not isinstance(ev, dict):
+                continue
+            batch.append(
+                (
+                    person_id,
+                    ev.get("type") or "",
+                    int(ev.get("year") or 0),
+                    ev.get("anime_id") or "",
+                    ev.get("anime_title"),
+                    ev.get("description"),
+                )
+            )
+    if not batch:
+        return
+    conn.executemany(
+        """
+        INSERT INTO agg_milestones (person_id, event_type, year, anime_id, anime_title, description)
+        VALUES (?,?,?,?,?,?)
+        ON CONFLICT(person_id, event_type, year, anime_id) DO UPDATE SET
+            anime_title=excluded.anime_title,
+            description=excluded.description
+    """,
+        batch,
+    )
+    logger.info("agg_milestones_upserted", count=len(batch))
+
+
+def upsert_agg_director_circles(
+    conn: sqlite3.Connection,
+    circles_dict: dict,
+    run_id: int | None = None,
+) -> None:
+    """agg_director_circles を一括 upsert する (L2: 共同クレジット集計).
+
+    Args:
+        circles_dict: {director_id: obj} ここで obj は DirectorCircle dataclass
+                      または {members: [{person_id, shared_works, hit_rate, roles, latest_year}]} dict。
+    """
+    import dataclasses
+    import json as _json
+
+    batch = []
+    for director_id, circle in circles_dict.items():
+        # dataclass の場合は dict に変換
+        if dataclasses.is_dataclass(circle) and not isinstance(circle, type):
+            circle = dataclasses.asdict(circle)
+        if not isinstance(circle, dict):
+            continue
+        for member in circle.get("members", []):
+            if dataclasses.is_dataclass(member) and not isinstance(member, type):
+                member = dataclasses.asdict(member)
+            if not isinstance(member, dict):
+                continue
+            pid = member.get("person_id")
+            if not pid:
+                continue
+            roles = member.get("roles") or []
+            batch.append(
+                (
+                    pid,
+                    director_id,
+                    member.get("shared_works") or 0,
+                    member.get("hit_rate"),
+                    _json.dumps(roles, ensure_ascii=False)
+                    if isinstance(roles, list)
+                    else roles,
+                    member.get("latest_year"),
+                )
+            )
+    if not batch:
+        return
+    conn.executemany(
+        """
+        INSERT INTO agg_director_circles
+            (person_id, director_id, shared_works, hit_rate, roles, latest_year)
+        VALUES (?,?,?,?,?,?)
+        ON CONFLICT(person_id, director_id) DO UPDATE SET
+            shared_works=excluded.shared_works,
+            hit_rate=excluded.hit_rate,
+            roles=excluded.roles,
+            latest_year=excluded.latest_year
+    """,
+        batch,
+    )
+    logger.info("agg_director_circles_upserted", count=len(batch))
+
+
+def upsert_feat_mentorships(
+    conn: sqlite3.Connection,
+    mentorships_list: list,
+    run_id: int | None = None,
+) -> None:
+    """feat_mentorships を一括 upsert する (L3: メンター推定).
+
+    Args:
+        mentorships_list: [{mentor_id, mentee_id, n_shared_works, hit_rate,
+                            mentor_stage, mentee_stage, first_year, latest_year}]
+    """
+    batch = [
+        (
+            m["mentor_id"],
+            m["mentee_id"],
+            m.get("n_shared_works") or 0,
+            m.get("hit_rate"),
+            m.get("mentor_stage"),
+            m.get("mentee_stage"),
+            m.get("first_year"),
+            m.get("latest_year"),
+        )
+        for m in mentorships_list
+        if isinstance(m, dict) and m.get("mentor_id") and m.get("mentee_id")
+    ]
+    if not batch:
+        return
+    conn.executemany(
+        """
+        INSERT INTO feat_mentorships
+            (mentor_id, mentee_id, n_shared_works, hit_rate,
+             mentor_stage, mentee_stage, first_year, latest_year)
+        VALUES (?,?,?,?,?,?,?,?)
+        ON CONFLICT(mentor_id, mentee_id) DO UPDATE SET
+            n_shared_works=excluded.n_shared_works,
+            hit_rate=excluded.hit_rate,
+            mentor_stage=excluded.mentor_stage,
+            mentee_stage=excluded.mentee_stage,
+            first_year=excluded.first_year,
+            latest_year=excluded.latest_year
+    """,
+        batch,
+    )
+    logger.info("feat_mentorships_upserted", count=len(batch))
+
+
+def load_feat_person_scores(conn: sqlite3.Connection) -> dict[str, dict]:
+    """feat_person_scores を person_id → dict で返す."""
+    rows = conn.execute("SELECT * FROM feat_person_scores").fetchall()
+    return {r["person_id"]: dict(r) for r in rows}
+
+
+def load_feat_network(conn: sqlite3.Connection) -> dict[str, dict]:
+    """feat_network を person_id → dict で返す."""
+    rows = conn.execute("SELECT * FROM feat_network").fetchall()
+    return {r["person_id"]: dict(r) for r in rows}
+
+
+def load_feat_career(conn: sqlite3.Connection) -> dict[str, dict]:
+    """feat_career を person_id → dict で返す."""
+    rows = conn.execute("SELECT * FROM feat_career").fetchall()
+    return {r["person_id"]: dict(r) for r in rows}
+
+
+def _migrate_v30_add_feat_credit_activity(conn: sqlite3.Connection) -> None:
+    """v30: feat_credit_activity テーブルを追加.
+
+    個人ごとの空白期間・活動密度・休止履歴を事前集計して格納する。
+    次回パイプライン起動時に compute_feat_credit_activity() で全件再計算する。
+    """
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS feat_credit_activity (
+            person_id TEXT PRIMARY KEY,
+            first_abs_quarter INTEGER,
+            last_abs_quarter INTEGER,
+            activity_span_quarters INTEGER,
+            active_quarters INTEGER,
+            density REAL,
+            n_gaps INTEGER,
+            mean_gap_quarters REAL,
+            median_gap_quarters REAL,
+            min_gap_quarters INTEGER,
+            max_gap_quarters INTEGER,
+            std_gap_quarters REAL,
+            consecutive_quarters INTEGER,
+            consecutive_rate REAL,
+            n_hiatuses INTEGER,
+            longest_hiatus_quarters INTEGER,
+            quarters_since_last_credit INTEGER,
+            active_years INTEGER,
+            n_year_gaps INTEGER,
+            mean_year_gap REAL,
+            max_year_gap INTEGER,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_feat_credit_activity_span
+            ON feat_credit_activity(activity_span_quarters);
+        CREATE INDEX IF NOT EXISTS idx_feat_credit_activity_last
+            ON feat_credit_activity(last_abs_quarter);
+    """)
+
+
+def compute_feat_credit_activity(
+    conn: sqlite3.Connection,
+    current_year: int | None = None,
+    current_quarter: int | None = None,
+    batch_size: int = 5000,
+) -> int:
+    """個人ごとのクレジット空白期間・活動パターンを計算して feat_credit_activity に保存する.
+
+    計算内容:
+    - 四半期精度ギャップ: mean/median/min/max/std の間隔 (quarters)
+    - 連続参加率: 間隔が1四半期の割合
+    - 休止 (n ≥ 4Q): 件数・最長期間
+    - 年レベルギャップ (quarter=NULL のクレジットも含む)
+    - 最終クレジットからの経過四半期
+
+    abs_quarter 表現: year * 4 + (quarter - 1)
+    例: 2020Q1 → 8080, 2020Q4 → 8083
+
+    Args:
+        conn: SQLite 接続
+        current_year: 基準年 (省略時: 現在年)
+        current_quarter: 基準四半期 (省略時: 現在四半期)
+        batch_size: 一括 INSERT のバッチサイズ
+
+    Returns:
+        書き込んだ行数
+    """
+    import datetime
+    import math
+    import statistics
+
+    if current_year is None:
+        current_year = datetime.datetime.now().year
+    if current_quarter is None:
+        current_quarter = (datetime.datetime.now().month - 1) // 3 + 1
+    current_abs_q = current_year * 4 + current_quarter - 1
+
+    # --- Step 1: 四半期精度データ (LAG で連続差分) ---
+    # CTE で per-person gap リストを取得 (SQLite window functions)
+    quarter_gaps_sql = """
+        WITH distinct_quarters AS (
+            SELECT
+                person_id,
+                credit_year * 4 + credit_quarter - 1 AS abs_quarter
+            FROM credits
+            WHERE credit_year IS NOT NULL AND credit_quarter IS NOT NULL
+            GROUP BY person_id, credit_year, credit_quarter
+        ),
+        with_lag AS (
+            SELECT
+                person_id,
+                abs_quarter,
+                LAG(abs_quarter) OVER (
+                    PARTITION BY person_id ORDER BY abs_quarter
+                ) AS prev_quarter
+            FROM distinct_quarters
+        )
+        SELECT person_id, abs_quarter - prev_quarter AS gap
+        FROM with_lag
+        WHERE prev_quarter IS NOT NULL
+        ORDER BY person_id, gap
+    """
+
+    # --- Step 2: 活動範囲 (四半期) ---
+    activity_sql = """
+        SELECT
+            person_id,
+            MIN(credit_year * 4 + credit_quarter - 1) AS first_abs_quarter,
+            MAX(credit_year * 4 + credit_quarter - 1) AS last_abs_quarter,
+            COUNT(DISTINCT credit_year * 4 + credit_quarter - 1) AS active_quarters
+        FROM credits
+        WHERE credit_year IS NOT NULL AND credit_quarter IS NOT NULL
+        GROUP BY person_id
+    """
+
+    # --- Step 3: 年レベルギャップ (全クレジット対象) ---
+    year_gaps_sql = """
+        WITH distinct_years AS (
+            SELECT person_id, credit_year
+            FROM credits
+            WHERE credit_year IS NOT NULL
+            GROUP BY person_id, credit_year
+        ),
+        with_lag AS (
+            SELECT
+                person_id,
+                credit_year - LAG(credit_year) OVER (
+                    PARTITION BY person_id ORDER BY credit_year
+                ) AS gap
+            FROM distinct_years
+        )
+        SELECT
+            person_id,
+            COUNT(*) AS n_year_gaps,
+            AVG(gap) AS mean_year_gap,
+            MAX(gap) AS max_year_gap
+        FROM with_lag
+        WHERE gap IS NOT NULL
+        GROUP BY person_id
+    """
+
+    year_activity_sql = """
+        SELECT person_id, COUNT(DISTINCT credit_year) AS active_years
+        FROM credits
+        WHERE credit_year IS NOT NULL
+        GROUP BY person_id
+    """
+
+    logger.info("feat_credit_activity_compute_start")
+
+    # 活動範囲を読み込み
+    activity_rows = conn.execute(activity_sql).fetchall()
+    activity = {
+        r["person_id"]: {
+            "first_abs_quarter": r["first_abs_quarter"],
+            "last_abs_quarter": r["last_abs_quarter"],
+            "active_quarters": r["active_quarters"],
+        }
+        for r in activity_rows
+    }
+
+    # 年レベルギャップ
+    year_gaps = {
+        r["person_id"]: {
+            "n_year_gaps": r["n_year_gaps"],
+            "mean_year_gap": r["mean_year_gap"],
+            "max_year_gap": r["max_year_gap"],
+        }
+        for r in conn.execute(year_gaps_sql).fetchall()
+    }
+    year_activity = {
+        r["person_id"]: r["active_years"]
+        for r in conn.execute(year_activity_sql).fetchall()
+    }
+
+    # ギャップを person_id ごとに集計 (streaming で読み込み)
+    gaps_by_person: dict[str, list[int]] = {}
+    cur = conn.execute(quarter_gaps_sql)
+    for row in cur:
+        pid = row["person_id"]
+        if pid not in gaps_by_person:
+            gaps_by_person[pid] = []
+        gaps_by_person[pid].append(row["gap"])
+
+    logger.info(
+        "feat_credit_activity_data_loaded",
+        persons_with_quarters=len(activity),
+        persons_with_gaps=len(gaps_by_person),
+    )
+
+    # 統計計算してバッチ挿入
+    batch: list[tuple] = []
+    total_written = 0
+
+    for pid, act in activity.items():
+        first_q = act["first_abs_quarter"]
+        last_q = act["last_abs_quarter"]
+        active_q = act["active_quarters"]
+        span = last_q - first_q  # 0 の場合は活動が1四半期のみ
+        density = active_q / (span + 1) if span >= 0 else 1.0
+
+        gaps = gaps_by_person.get(pid, [])
+        n_gaps = len(gaps)
+
+        if n_gaps > 0:
+            mean_gap = sum(gaps) / n_gaps
+            median_gap = statistics.median(gaps)
+            min_gap = min(gaps)
+            max_gap = max(gaps)
+            variance = sum((g - mean_gap) ** 2 for g in gaps) / n_gaps
+            std_gap = math.sqrt(variance)
+            consec = sum(1 for g in gaps if g == 1)
+            consec_rate = consec / n_gaps
+            hiatuses = [g for g in gaps if g >= 4]
+            n_hiatuses = len(hiatuses)
+            longest_hiatus = max(hiatuses) if hiatuses else 0
+        else:
+            mean_gap = median_gap = min_gap = max_gap = std_gap = None
+            consec = consec_rate = 0
+            n_hiatuses = longest_hiatus = 0
+
+        yg = year_gaps.get(pid, {})
+        batch.append(
+            (
+                pid,
+                first_q,
+                last_q,
+                span,
+                active_q,
+                round(density, 4),
+                n_gaps,
+                round(mean_gap, 4) if mean_gap is not None else None,
+                round(median_gap, 4) if median_gap is not None else None,
+                min_gap,
+                max_gap,
+                round(std_gap, 4) if std_gap is not None else None,
+                consec,
+                round(consec_rate, 4) if n_gaps > 0 else None,
+                n_hiatuses,
+                longest_hiatus or None,
+                current_abs_q - last_q,
+                year_activity.get(pid),
+                yg.get("n_year_gaps"),
+                round(yg["mean_year_gap"], 4) if yg.get("mean_year_gap") else None,
+                yg.get("max_year_gap"),
+            )
+        )
+
+        if len(batch) >= batch_size:
+            _insert_feat_credit_activity_batch(conn, batch)
+            total_written += len(batch)
+            batch = []
+
+    if batch:
+        _insert_feat_credit_activity_batch(conn, batch)
+        total_written += len(batch)
+
+    conn.commit()
+    logger.info("feat_credit_activity_computed", rows=total_written)
+    return total_written
+
+
+def _insert_feat_credit_activity_batch(
+    conn: sqlite3.Connection, batch: list[tuple]
+) -> None:
+    conn.executemany(
+        """
+        INSERT INTO feat_credit_activity (
+            person_id,
+            first_abs_quarter, last_abs_quarter, activity_span_quarters,
+            active_quarters, density,
+            n_gaps, mean_gap_quarters, median_gap_quarters,
+            min_gap_quarters, max_gap_quarters, std_gap_quarters,
+            consecutive_quarters, consecutive_rate,
+            n_hiatuses, longest_hiatus_quarters,
+            quarters_since_last_credit,
+            active_years, n_year_gaps, mean_year_gap, max_year_gap,
+            updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+        ON CONFLICT(person_id) DO UPDATE SET
+            first_abs_quarter=excluded.first_abs_quarter,
+            last_abs_quarter=excluded.last_abs_quarter,
+            activity_span_quarters=excluded.activity_span_quarters,
+            active_quarters=excluded.active_quarters,
+            density=excluded.density,
+            n_gaps=excluded.n_gaps,
+            mean_gap_quarters=excluded.mean_gap_quarters,
+            median_gap_quarters=excluded.median_gap_quarters,
+            min_gap_quarters=excluded.min_gap_quarters,
+            max_gap_quarters=excluded.max_gap_quarters,
+            std_gap_quarters=excluded.std_gap_quarters,
+            consecutive_quarters=excluded.consecutive_quarters,
+            consecutive_rate=excluded.consecutive_rate,
+            n_hiatuses=excluded.n_hiatuses,
+            longest_hiatus_quarters=excluded.longest_hiatus_quarters,
+            quarters_since_last_credit=excluded.quarters_since_last_credit,
+            active_years=excluded.active_years,
+            n_year_gaps=excluded.n_year_gaps,
+            mean_year_gap=excluded.mean_year_gap,
+            max_year_gap=excluded.max_year_gap,
+            updated_at=CURRENT_TIMESTAMP
+    """,
+        batch,
+    )
+
+
+def load_feat_credit_activity(conn: sqlite3.Connection) -> dict[str, dict]:
+    """feat_credit_activity を person_id → dict で返す."""
+    rows = conn.execute("SELECT * FROM feat_credit_activity").fetchall()
+    return {r["person_id"]: dict(r) for r in rows}
+
+
+def _migrate_v31_add_feat_career_annual(conn: sqlite3.Connection) -> None:
+    """v31: feat_career_annual テーブルを追加.
+
+    個人のキャリア年（デビューからの経過年数）× 職種カテゴリ別に
+    作品数・クレジット数を集計して格納する。
+    """
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS feat_career_annual (
+            person_id TEXT NOT NULL,
+            career_year INTEGER NOT NULL,
+            credit_year INTEGER NOT NULL,
+            n_works INTEGER NOT NULL DEFAULT 0,
+            n_credits INTEGER NOT NULL DEFAULT 0,
+            n_roles INTEGER NOT NULL DEFAULT 0,
+            works_direction INTEGER NOT NULL DEFAULT 0,
+            works_animation_supervision INTEGER NOT NULL DEFAULT 0,
+            works_animation INTEGER NOT NULL DEFAULT 0,
+            works_design INTEGER NOT NULL DEFAULT 0,
+            works_technical INTEGER NOT NULL DEFAULT 0,
+            works_art INTEGER NOT NULL DEFAULT 0,
+            works_sound INTEGER NOT NULL DEFAULT 0,
+            works_writing INTEGER NOT NULL DEFAULT 0,
+            works_production INTEGER NOT NULL DEFAULT 0,
+            works_production_management INTEGER NOT NULL DEFAULT 0,
+            works_finishing INTEGER NOT NULL DEFAULT 0,
+            works_editing INTEGER NOT NULL DEFAULT 0,
+            works_settings INTEGER NOT NULL DEFAULT 0,
+            works_other INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (person_id, career_year)
+        );
+        CREATE INDEX IF NOT EXISTS idx_feat_career_annual_year
+            ON feat_career_annual(career_year);
+        CREATE INDEX IF NOT EXISTS idx_feat_career_annual_credit_year
+            ON feat_career_annual(credit_year);
+    """)
+
+
+def compute_feat_career_annual(
+    conn: sqlite3.Connection,
+    batch_size: int = 2000,
+) -> int:
+    """個人 × キャリア年 × 職種カテゴリ別の作品数・クレジット数を集計して feat_career_annual に保存.
+
+    career_year = credit_year - first_credit_year  (0 = デビュー年)
+
+    職種カテゴリは src/utils/role_groups.py の ROLE_CATEGORY に従い 14 種に分類。
+    未知の役職は works_other にカウントする。
+
+    Args:
+        conn: SQLite 接続
+        batch_size: 一括 INSERT のバッチサイズ (person 単位)
+
+    Returns:
+        書き込んだ行数
+    """
+    from src.utils.role_groups import ROLE_CATEGORY
+
+    # role → column名 マッピング
+    CAT_COL = {
+        "direction": "works_direction",
+        "animation_supervision": "works_animation_supervision",
+        "animation": "works_animation",
+        "design": "works_design",
+        "technical": "works_technical",
+        "art": "works_art",
+        "sound": "works_sound",
+        "writing": "works_writing",
+        "production": "works_production",
+        "production_management": "works_production_management",
+        "finishing": "works_finishing",
+        "editing": "works_editing",
+        "settings": "works_settings",
+    }
+    ALL_CATS = list(CAT_COL.keys())
+
+    logger.info("feat_career_annual_compute_start")
+
+    # デビュー年を取得 (credit_year の最小値)
+    debut_sql = """
+        SELECT person_id, MIN(credit_year) AS debut_year
+        FROM credits
+        WHERE credit_year IS NOT NULL
+        GROUP BY person_id
+    """
+    debut_year = {
+        r["person_id"]: r["debut_year"] for r in conn.execute(debut_sql).fetchall()
+    }
+
+    # person × year × role の集計 (ユニーク作品数・クレジット数)
+    agg_sql = """
+        SELECT
+            person_id,
+            credit_year,
+            role,
+            COUNT(DISTINCT anime_id) AS n_works,
+            COUNT(*) AS n_credits
+        FROM credits
+        WHERE credit_year IS NOT NULL
+        GROUP BY person_id, credit_year, role
+        ORDER BY person_id, credit_year
+    """
+
+    # person_id ごとにまとめて処理
+    current_pid: str | None = None
+    current_years: dict[int, dict] = {}  # credit_year → row_accumulator
+
+    def _make_row_acc() -> dict:
+        return {
+            "n_works": 0,
+            "n_credits": 0,
+            "roles": set(),
+            **{col: 0 for col in CAT_COL.values()},
+            "works_other": 0,
+        }
+
+    rows_to_insert: list[tuple] = []
+    total_written = 0
+
+    def _flush_person(pid: str, years: dict[int, dict]) -> None:
+        nonlocal rows_to_insert, total_written
+        debut = debut_year.get(pid)
+        if debut is None:
+            return
+        for credit_year, acc in sorted(years.items()):
+            career_y = credit_year - debut
+            rows_to_insert.append(
+                (
+                    pid,
+                    career_y,
+                    credit_year,
+                    acc["n_works"],
+                    acc["n_credits"],
+                    len(acc["roles"]),
+                    acc["works_direction"],
+                    acc["works_animation_supervision"],
+                    acc["works_animation"],
+                    acc["works_design"],
+                    acc["works_technical"],
+                    acc["works_art"],
+                    acc["works_sound"],
+                    acc["works_writing"],
+                    acc["works_production"],
+                    acc["works_production_management"],
+                    acc["works_finishing"],
+                    acc["works_editing"],
+                    acc["works_settings"],
+                    acc["works_other"],
+                )
+            )
+        if len(rows_to_insert) >= batch_size * 10:
+            _insert_career_annual_batch(conn, rows_to_insert)
+            total_written += len(rows_to_insert)
+            rows_to_insert = []
+
+    for row in conn.execute(agg_sql):
+        pid = row["person_id"]
+        if pid != current_pid:
+            if current_pid is not None:
+                _flush_person(current_pid, current_years)
+            current_pid = pid
+            current_years = {}
+
+        yr = row["credit_year"]
+        if yr not in current_years:
+            current_years[yr] = _make_row_acc()
+        acc = current_years[yr]
+
+        role = row["role"]
+        cat = ROLE_CATEGORY.get(role, "other")
+        col = CAT_COL.get(cat, "works_other")
+        acc[col] += row["n_works"]
+        acc["n_works"] += row["n_works"]
+        acc["n_credits"] += row["n_credits"]
+        acc["roles"].add(role)
+
+    if current_pid is not None:
+        _flush_person(current_pid, current_years)
+
+    if rows_to_insert:
+        _insert_career_annual_batch(conn, rows_to_insert)
+        total_written += len(rows_to_insert)
+
+    conn.commit()
+    logger.info("feat_career_annual_computed", rows=total_written)
+    return total_written
+
+
+def _insert_career_annual_batch(conn: sqlite3.Connection, batch: list[tuple]) -> None:
+    conn.executemany(
+        """
+        INSERT INTO feat_career_annual (
+            person_id, career_year, credit_year,
+            n_works, n_credits, n_roles,
+            works_direction, works_animation_supervision, works_animation,
+            works_design, works_technical, works_art, works_sound, works_writing,
+            works_production, works_production_management, works_finishing,
+            works_editing, works_settings, works_other
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ON CONFLICT(person_id, career_year) DO UPDATE SET
+            credit_year=excluded.credit_year,
+            n_works=excluded.n_works, n_credits=excluded.n_credits,
+            n_roles=excluded.n_roles,
+            works_direction=excluded.works_direction,
+            works_animation_supervision=excluded.works_animation_supervision,
+            works_animation=excluded.works_animation,
+            works_design=excluded.works_design,
+            works_technical=excluded.works_technical,
+            works_art=excluded.works_art,
+            works_sound=excluded.works_sound,
+            works_writing=excluded.works_writing,
+            works_production=excluded.works_production,
+            works_production_management=excluded.works_production_management,
+            works_finishing=excluded.works_finishing,
+            works_editing=excluded.works_editing,
+            works_settings=excluded.works_settings,
+            works_other=excluded.works_other
+    """,
+        batch,
+    )
+
+
+def load_feat_career_annual(
+    conn: sqlite3.Connection,
+    person_id: str | None = None,
+) -> list[dict]:
+    """feat_career_annual を返す.
+
+    Args:
+        person_id: 特定の人物に絞る場合に指定 (省略時は全件)
+
+    Returns:
+        {person_id, career_year, credit_year, n_works, ...} の list
+    """
+    if person_id is not None:
+        rows = conn.execute(
+            "SELECT * FROM feat_career_annual WHERE person_id=? ORDER BY career_year",
+            (person_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM feat_career_annual ORDER BY person_id, career_year"
+        ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def _migrate_v33_add_feat_credit_contribution(conn: sqlite3.Connection) -> None:
+    """v33: feat_credit_contribution / feat_person_work_summary テーブルを追加."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS feat_credit_contribution (
+            person_id TEXT NOT NULL,
+            anime_id TEXT NOT NULL,
+            role TEXT NOT NULL,
+            credit_year INTEGER,
+            production_scale REAL,
+            role_weight REAL,
+            episode_coverage REAL,
+            dur_mult REAL,
+            edge_weight REAL,
+            edge_weight_share REAL,
+            iv_contrib_est REAL,
+            PRIMARY KEY (person_id, anime_id, role)
+        );
+        CREATE INDEX IF NOT EXISTS idx_feat_credit_contrib_anime
+            ON feat_credit_contribution(anime_id);
+        CREATE INDEX IF NOT EXISTS idx_feat_credit_contrib_year
+            ON feat_credit_contribution(credit_year);
+
+        CREATE TABLE IF NOT EXISTS feat_person_work_summary (
+            person_id TEXT PRIMARY KEY,
+            n_distinct_works INTEGER,
+            total_production_scale REAL,
+            mean_production_scale REAL,
+            max_production_scale REAL,
+            best_work_anime_id TEXT,
+            total_edge_weight REAL,
+            mean_edge_weight_per_work REAL,
+            max_edge_weight REAL,
+            top_contrib_anime_id TEXT,
+            total_iv_contrib_est REAL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+
+def _migrate_v34_add_agg_milestones(conn: sqlite3.Connection) -> None:
+    """v34: agg_milestones テーブルを追加 (L2: 生データから抽出したキャリアイベント)."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS agg_milestones (
+            person_id   TEXT NOT NULL,
+            event_type  TEXT NOT NULL,
+            year        INTEGER NOT NULL DEFAULT 0,
+            anime_id    TEXT NOT NULL DEFAULT '',
+            anime_title TEXT,
+            description TEXT,
+            PRIMARY KEY (person_id, event_type, year, anime_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_agg_milestones_person ON agg_milestones(person_id);
+        CREATE INDEX IF NOT EXISTS idx_agg_milestones_year   ON agg_milestones(year);
+    """)
+
+
+def _migrate_v35_add_agg_director_circles(conn: sqlite3.Connection) -> None:
+    """v35: agg_director_circles テーブルを追加 (L2: 共同クレジット数の集計)."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS agg_director_circles (
+            person_id    TEXT NOT NULL,
+            director_id  TEXT NOT NULL,
+            shared_works INTEGER DEFAULT 0,
+            hit_rate     REAL,
+            roles        TEXT DEFAULT '[]',
+            latest_year  INTEGER,
+            PRIMARY KEY (person_id, director_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_agg_dir_circles_person
+            ON agg_director_circles(person_id);
+        CREATE INDEX IF NOT EXISTS idx_agg_dir_circles_director
+            ON agg_director_circles(director_id);
+    """)
+
+
+def _migrate_v36_add_feat_mentorships(conn: sqlite3.Connection) -> None:
+    """v36: feat_mentorships テーブルを追加 (L3: アルゴリズムによるメンター推定)."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS feat_mentorships (
+            mentor_id      TEXT NOT NULL,
+            mentee_id      TEXT NOT NULL,
+            n_shared_works INTEGER DEFAULT 0,
+            hit_rate       REAL,
+            mentor_stage   INTEGER,
+            mentee_stage   INTEGER,
+            first_year     INTEGER,
+            latest_year    INTEGER,
+            PRIMARY KEY (mentor_id, mentee_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_feat_mentorships_mentor
+            ON feat_mentorships(mentor_id);
+        CREATE INDEX IF NOT EXISTS idx_feat_mentorships_mentee
+            ON feat_mentorships(mentee_id);
+    """)
+
+
+def _migrate_v32_add_feat_studio_affiliation(conn: sqlite3.Connection) -> None:
+    """v32: feat_studio_affiliation テーブルを追加.
+
+    個人が年別にどのスタジオの作品に参加したかを事前集計する。
+    """
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS feat_studio_affiliation (
+            person_id TEXT NOT NULL,
+            credit_year INTEGER NOT NULL,
+            studio_id TEXT NOT NULL,
+            studio_name TEXT NOT NULL DEFAULT '',
+            n_works INTEGER NOT NULL DEFAULT 0,
+            n_credits INTEGER NOT NULL DEFAULT 0,
+            is_main_studio INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (person_id, credit_year, studio_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_feat_studio_aff_person
+            ON feat_studio_affiliation(person_id);
+        CREATE INDEX IF NOT EXISTS idx_feat_studio_aff_studio
+            ON feat_studio_affiliation(studio_id, credit_year);
+    """)
+
+
+def compute_feat_studio_affiliation(
+    conn: sqlite3.Connection,
+    batch_size: int = 10000,
+) -> int:
+    """個人 × 年 × スタジオ別の参加作品数を集計して feat_studio_affiliation に保存.
+
+    credits → anime_studios → studios を結合して、
+    「その年どのスタジオの作品に参加したか」を個人ごとに集計する。
+    主要スタジオ (is_main=1) のみを対象にすることで、制作委員会などを除外できる。
+
+    Args:
+        conn: SQLite 接続
+        batch_size: 一括 INSERT のバッチサイズ
+
+    Returns:
+        書き込んだ行数
+    """
+    logger.info("feat_studio_affiliation_compute_start")
+
+    sql = """
+        SELECT
+            c.person_id,
+            c.credit_year,
+            ast.studio_id,
+            COALESCE(s.name, '') AS studio_name,
+            ast.is_main,
+            COUNT(DISTINCT c.anime_id) AS n_works,
+            COUNT(*) AS n_credits
+        FROM credits c
+        INNER JOIN anime_studios ast ON ast.anime_id = c.anime_id
+        LEFT JOIN studios s ON s.id = ast.studio_id
+        WHERE c.credit_year IS NOT NULL
+        GROUP BY c.person_id, c.credit_year, ast.studio_id, ast.is_main
+        ORDER BY c.person_id, c.credit_year
+    """
+
+    batch: list[tuple] = []
+    total_written = 0
+
+    for row in conn.execute(sql):
+        batch.append(
+            (
+                row["person_id"],
+                row["credit_year"],
+                row["studio_id"],
+                row["studio_name"],
+                row["n_works"],
+                row["n_credits"],
+                row["is_main"],
+            )
+        )
+        if len(batch) >= batch_size:
+            conn.executemany(
+                """
+                INSERT INTO feat_studio_affiliation
+                    (person_id, credit_year, studio_id, studio_name,
+                     n_works, n_credits, is_main_studio)
+                VALUES (?,?,?,?,?,?,?)
+                ON CONFLICT(person_id, credit_year, studio_id) DO UPDATE SET
+                    studio_name=excluded.studio_name,
+                    n_works=excluded.n_works,
+                    n_credits=excluded.n_credits,
+                    is_main_studio=excluded.is_main_studio
+            """,
+                batch,
+            )
+            total_written += len(batch)
+            batch = []
+
+    if batch:
+        conn.executemany(
+            """
+            INSERT INTO feat_studio_affiliation
+                (person_id, credit_year, studio_id, studio_name,
+                 n_works, n_credits, is_main_studio)
+            VALUES (?,?,?,?,?,?,?)
+            ON CONFLICT(person_id, credit_year, studio_id) DO UPDATE SET
+                studio_name=excluded.studio_name,
+                n_works=excluded.n_works,
+                n_credits=excluded.n_credits,
+                is_main_studio=excluded.is_main_studio
+        """,
+            batch,
+        )
+        total_written += len(batch)
+
+    conn.commit()
+    logger.info("feat_studio_affiliation_computed", rows=total_written)
+    return total_written
+
+
+def load_feat_studio_affiliation(
+    conn: sqlite3.Connection,
+    person_id: str | None = None,
+    studio_id: str | None = None,
+    main_only: bool = False,
+) -> list[dict]:
+    """feat_studio_affiliation を返す.
+
+    Args:
+        person_id: 特定人物に絞る (省略時は全件)
+        studio_id: 特定スタジオに絞る (省略時は全件)
+        main_only: True の場合 is_main_studio=1 のみ返す
+    """
+    where_clauses = []
+    params: list = []
+    if person_id is not None:
+        where_clauses.append("person_id = ?")
+        params.append(person_id)
+    if studio_id is not None:
+        where_clauses.append("studio_id = ?")
+        params.append(studio_id)
+    if main_only:
+        where_clauses.append("is_main_studio = 1")
+    where = ("WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+    rows = conn.execute(
+        f"SELECT * FROM feat_studio_affiliation {where} ORDER BY credit_year",
+        params,
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def compute_feat_credit_contribution(
+    conn: sqlite3.Connection,
+    batch_size: int = 5000,
+) -> tuple[int, int]:
+    """個人 × 作品 × 役職ごとのスコア貢献量を計算して保存する.
+
+    計算内容:
+    - production_scale: AKM 目的変数 log1p(staff_count) × log1p(episodes) × dur_mult
+      → その作品がいかに「大規模な制作」かを表す。回帰の被説明変数そのもの。
+    - edge_weight: グラフ辺寄与 role_weight × episode_coverage × dur_mult
+      → その役職・参加規模がネットワーク上でどれだけの重みを持つか。
+    - iv_contrib_est: edge_weight_share × iv_score
+      → IV スコアへの比例按分。真の LOO marginal の近似。
+
+    注意: iv_contrib_est は近似値。正確な marginal はパイプライン再実行が必要。
+
+    Args:
+        conn: SQLite 接続
+        batch_size: INSERT バッチサイズ
+
+    Returns:
+        (feat_credit_contribution 行数, feat_person_work_summary 行数)
+    """
+    import math
+
+    from src.utils.config import (
+        DURATION_BASELINE_MINUTES,
+        DURATION_MAX_MULTIPLIER,
+        ROLE_WEIGHTS,
+    )
+
+    logger.info("feat_credit_contribution_compute_start")
+
+    # --- アニメ staff_count を事前計算 ---
+    staff_sql = """
+        SELECT anime_id, COUNT(DISTINCT person_id) AS staff_count
+        FROM credits GROUP BY anime_id
+    """
+    anime_staff: dict[str, int] = {
+        r["anime_id"]: r["staff_count"] for r in conn.execute(staff_sql).fetchall()
+    }
+
+    # --- アニメメタデータ ---
+    anime_sql = "SELECT id, episodes, duration, format FROM anime"
+    anime_meta: dict[str, dict] = {
+        r["id"]: {"eps": r["episodes"] or 1, "dur": r["duration"], "fmt": r["format"]}
+        for r in conn.execute(anime_sql).fetchall()
+    }
+
+    # format → dur_mult のフォールバック (duration=NULL 時)
+    FORMAT_DUR: dict[str | None, float] = {
+        "MOVIE": DURATION_MAX_MULTIPLIER,
+        "TV_SHORT": 0.25,
+        "SPECIAL": 0.8,
+        "ONA": 0.8,
+        "TV": 0.8,
+        "OVA": 1.0,
+        "MUSIC": 0.25,
+        None: 1.0,
+    }
+
+    def _dur_mult(dur: float | None, fmt: str | None) -> float:
+        if dur is not None:
+            return min(dur / DURATION_BASELINE_MINUTES, DURATION_MAX_MULTIPLIER)
+        return FORMAT_DUR.get(fmt, 1.0)
+
+    # --- (person, anime, role) 集計クエリ ---
+    # episode_coverage: episode>0 の distinct episode 数 / anime.episodes
+    agg_sql = """
+        SELECT
+            c.person_id, c.anime_id, c.role,
+            MIN(c.credit_year) AS credit_year,
+            COUNT(DISTINCT CASE WHEN c.episode > 0 THEN c.episode END) AS ep_count
+        FROM credits c
+        GROUP BY c.person_id, c.anime_id, c.role
+        ORDER BY c.person_id
+    """
+
+    # --- person の iv_score をロード ---
+    iv_by_pid: dict[str, float] = {}
+    for r in conn.execute(
+        "SELECT person_id, iv_score FROM feat_person_scores"
+    ).fetchall():
+        if r["iv_score"] is not None:
+            iv_by_pid[r["person_id"]] = r["iv_score"]
+
+    # --- 計算・バッチ INSERT ---
+    current_pid: str | None = None
+    # person 内の (anime_id → edge_weight の max, production_scale の max) を追跡
+    person_anime_ew: dict[str, float] = {}  # anime_id → max edge_weight in this person
+    person_anime_ps: dict[str, float] = {}  # anime_id → production_scale
+    person_total_ew: float = 0.0
+
+    rows_contrib: list[tuple] = []
+    rows_summary: list[tuple] = []
+    total_contrib = 0
+    total_summary = 0
+
+    def _flush_person(pid: str) -> None:
+        nonlocal rows_summary, total_summary
+        if not person_anime_ew:
+            return
+        iv = iv_by_pid.get(pid, 0.0)
+        total_ew = person_total_ew
+        n_works = len(person_anime_ew)
+        total_ps = sum(person_anime_ps.values())
+        max_ps = max(person_anime_ps.values())
+        best_work = max(person_anime_ps, key=person_anime_ps.__getitem__)
+        max_ew = max(person_anime_ew.values())
+        top_work = max(person_anime_ew, key=person_anime_ew.__getitem__)
+        mean_ew = total_ew / n_works if n_works > 0 else 0.0
+        mean_ps = total_ps / n_works if n_works > 0 else 0.0
+        # iv_contrib_est ≈ iv_score (sum of shares = 1.0 when ew > 0)
+        rows_summary.append(
+            (
+                pid,
+                n_works,
+                round(total_ps, 6),
+                round(mean_ps, 6),
+                round(max_ps, 6),
+                best_work,
+                round(total_ew, 6),
+                round(mean_ew, 6),
+                round(max_ew, 6),
+                top_work,
+                round(iv, 6),
+            )
+        )
+
+    def _finalize_person_ew(pid: str) -> None:
+        """person の全クレジット処理後に edge_weight_share と iv_contrib_est を確定."""
+        # rows_contrib の末尾から当 person 分を逆引きして更新するより
+        # 2パスが安全。ここでは person total_ew を context として残し、
+        # 2nd pass (UPDATE) で行う。
+        pass
+
+    for row in conn.execute(agg_sql):
+        pid = row["person_id"]
+        if pid != current_pid:
+            if current_pid is not None:
+                _flush_person(current_pid)
+            current_pid = pid
+            person_anime_ew = {}
+            person_anime_ps = {}
+            person_total_ew = 0.0
+
+        aid = row["anime_id"]
+        role_str = row["role"]
+        meta = anime_meta.get(aid, {"eps": 1, "dur": None, "fmt": None})
+        staff_cnt = anime_staff.get(aid, 1)
+
+        # dur_mult
+        dm = _dur_mult(meta["dur"], meta["fmt"])
+
+        # production_scale
+        ps = math.log1p(staff_cnt) * math.log1p(meta["eps"]) * dm
+
+        # episode_coverage
+        ep_cnt = row["ep_count"] or 0
+        total_eps = meta["eps"]
+        if ep_cnt > 0 and total_eps > 1:
+            ep_cov = min(ep_cnt / total_eps, 1.0)
+        else:
+            ep_cov = 1.0
+
+        # role_weight
+        rw = ROLE_WEIGHTS.get(role_str, 1.0)
+
+        # edge_weight
+        ew = rw * ep_cov * dm
+
+        # 蓄積
+        person_anime_ew[aid] = max(person_anime_ew.get(aid, 0.0), ew)
+        person_anime_ps[aid] = max(person_anime_ps.get(aid, 0.0), ps)
+        person_total_ew += ew
+
+        rows_contrib.append(
+            (
+                pid,
+                aid,
+                role_str,
+                row["credit_year"],
+                round(ps, 6),
+                round(rw, 4),
+                round(ep_cov, 4),
+                round(dm, 4),
+                round(ew, 6),
+                None,
+                None,  # edge_weight_share / iv_contrib_est: 2nd pass で更新
+            )
+        )
+
+        if len(rows_contrib) >= batch_size:
+            conn.executemany(
+                """
+                INSERT INTO feat_credit_contribution
+                    (person_id, anime_id, role, credit_year,
+                     production_scale, role_weight, episode_coverage, dur_mult, edge_weight,
+                     edge_weight_share, iv_contrib_est)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                ON CONFLICT(person_id, anime_id, role) DO UPDATE SET
+                    credit_year=excluded.credit_year,
+                    production_scale=excluded.production_scale,
+                    role_weight=excluded.role_weight,
+                    episode_coverage=excluded.episode_coverage,
+                    dur_mult=excluded.dur_mult,
+                    edge_weight=excluded.edge_weight,
+                    edge_weight_share=excluded.edge_weight_share,
+                    iv_contrib_est=excluded.iv_contrib_est
+            """,
+                rows_contrib,
+            )
+            total_contrib += len(rows_contrib)
+            rows_contrib = []
+
+        if len(rows_summary) >= batch_size:
+            _write_summary_batch(conn, rows_summary)
+            total_summary += len(rows_summary)
+            rows_summary = []
+
+    # 最後の person
+    if current_pid is not None:
+        _flush_person(current_pid)
+
+    # 残りをフラッシュ
+    if rows_contrib:
+        conn.executemany(
+            """
+            INSERT INTO feat_credit_contribution
+                (person_id, anime_id, role, credit_year,
+                 production_scale, role_weight, episode_coverage, dur_mult, edge_weight,
+                 edge_weight_share, iv_contrib_est)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(person_id, anime_id, role) DO UPDATE SET
+                credit_year=excluded.credit_year,
+                production_scale=excluded.production_scale,
+                role_weight=excluded.role_weight,
+                episode_coverage=excluded.episode_coverage,
+                dur_mult=excluded.dur_mult,
+                edge_weight=excluded.edge_weight,
+                edge_weight_share=excluded.edge_weight_share,
+                iv_contrib_est=excluded.iv_contrib_est
+        """,
+            rows_contrib,
+        )
+        total_contrib += len(rows_contrib)
+
+    if rows_summary:
+        _write_summary_batch(conn, rows_summary)
+        total_summary += len(rows_summary)
+
+    conn.commit()
+    logger.info("feat_credit_contribution_phase1_done", rows=total_contrib)
+
+    # --- 2nd pass: edge_weight_share と iv_contrib_est を UPDATE ---
+    # feat_person_work_summary の total_edge_weight を使って按分
+    logger.info("feat_credit_contribution_phase2_start")
+    update_sql = """
+        UPDATE feat_credit_contribution
+        SET
+            edge_weight_share = CASE
+                WHEN s.total_edge_weight > 0
+                THEN feat_credit_contribution.edge_weight / s.total_edge_weight
+                ELSE NULL END,
+            iv_contrib_est = CASE
+                WHEN s.total_edge_weight > 0
+                THEN feat_credit_contribution.edge_weight / s.total_edge_weight * COALESCE(p.iv_score, 0)
+                ELSE NULL END
+        FROM feat_person_work_summary s
+        LEFT JOIN feat_person_scores p ON p.person_id = s.person_id
+        WHERE feat_credit_contribution.person_id = s.person_id
+    """
+    conn.execute(update_sql)
+    conn.commit()
+    logger.info(
+        "feat_credit_contribution_computed",
+        contrib_rows=total_contrib,
+        summary_rows=total_summary,
+    )
+    return total_contrib, total_summary
+
+
+def _write_summary_batch(conn: sqlite3.Connection, rows: list[tuple]) -> None:
+    conn.executemany(
+        """
+        INSERT INTO feat_person_work_summary
+            (person_id, n_distinct_works,
+             total_production_scale, mean_production_scale, max_production_scale, best_work_anime_id,
+             total_edge_weight, mean_edge_weight_per_work, max_edge_weight, top_contrib_anime_id,
+             total_iv_contrib_est, updated_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+        ON CONFLICT(person_id) DO UPDATE SET
+            n_distinct_works=excluded.n_distinct_works,
+            total_production_scale=excluded.total_production_scale,
+            mean_production_scale=excluded.mean_production_scale,
+            max_production_scale=excluded.max_production_scale,
+            best_work_anime_id=excluded.best_work_anime_id,
+            total_edge_weight=excluded.total_edge_weight,
+            mean_edge_weight_per_work=excluded.mean_edge_weight_per_work,
+            max_edge_weight=excluded.max_edge_weight,
+            top_contrib_anime_id=excluded.top_contrib_anime_id,
+            total_iv_contrib_est=excluded.total_iv_contrib_est,
+            updated_at=CURRENT_TIMESTAMP
+    """,
+        rows,
+    )
+
+
+def load_feat_credit_contribution(
+    conn: sqlite3.Connection,
+    person_id: str | None = None,
+    anime_id: str | None = None,
+    min_edge_weight: float | None = None,
+) -> list[dict]:
+    """feat_credit_contribution を返す.
+
+    Args:
+        person_id: 特定人物に絞る
+        anime_id: 特定作品に絞る
+        min_edge_weight: この値以上の edge_weight に絞る
+    """
+    where: list[str] = []
+    params: list = []
+    if person_id is not None:
+        where.append("person_id = ?")
+        params.append(person_id)
+    if anime_id is not None:
+        where.append("anime_id = ?")
+        params.append(anime_id)
+    if min_edge_weight is not None:
+        where.append("edge_weight >= ?")
+        params.append(min_edge_weight)
+    w = ("WHERE " + " AND ".join(where)) if where else ""
+    rows = conn.execute(
+        f"SELECT * FROM feat_credit_contribution {w} ORDER BY iv_contrib_est DESC NULLS LAST",
+        params,
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def load_feat_person_work_summary(
+    conn: sqlite3.Connection,
+    person_id: str | None = None,
+) -> dict | list[dict]:
+    """feat_person_work_summary を返す.
+
+    Args:
+        person_id: 特定人物 → dict を返す。省略時 → list[dict] を返す。
+    """
+    if person_id is not None:
+        row = conn.execute(
+            "SELECT * FROM feat_person_work_summary WHERE person_id = ?", (person_id,)
+        ).fetchone()
+        return dict(row) if row else {}
+    rows = conn.execute("SELECT * FROM feat_person_work_summary").fetchall()
+    return [dict(r) for r in rows]
+
+
+def upsert_career_tracks(
+    conn: sqlite3.Connection,
+    career_tracks: dict[str, str],
+) -> None:
+    """person_id → career_track のマッピングを scores テーブルに一括書き込む.
+
+    scores 行が既に存在する person_id のみ更新する（INSERT しない）。
+    まだスコアが計算されていない人物（新規スクレイプ直後など）はスキップされる。
+
+    Args:
+        conn: SQLite 接続
+        career_tracks: person_id → career_track の辞書
+    """
+    rows = [(track, pid) for pid, track in career_tracks.items()]
+    conn.executemany(
+        "UPDATE scores SET career_track = ?, updated_at = CURRENT_TIMESTAMP WHERE person_id = ?",
+        rows,
+    )
+    logger.info("career_tracks_upserted", count=len(rows))
 
 
 def insert_person_affiliation(
@@ -2229,8 +4366,8 @@ def upsert_score(conn: sqlite3.Connection, score: ScoreResult) -> None:
     conn.execute(
         """INSERT INTO scores
                (person_id, person_fe, studio_fe_exposure, birank,
-                patronage, dormancy, awcc, iv_score)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                patronage, dormancy, awcc, iv_score, career_track)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(person_id) DO UPDATE SET
                person_fe = excluded.person_fe,
                studio_fe_exposure = excluded.studio_fe_exposure,
@@ -2239,6 +4376,7 @@ def upsert_score(conn: sqlite3.Connection, score: ScoreResult) -> None:
                dormancy = excluded.dormancy,
                awcc = excluded.awcc,
                iv_score = excluded.iv_score,
+               career_track = excluded.career_track,
                updated_at = CURRENT_TIMESTAMP
         """,
         (
@@ -2250,6 +4388,7 @@ def upsert_score(conn: sqlite3.Connection, score: ScoreResult) -> None:
             score.dormancy,
             score.awcc,
             score.iv_score,
+            score.career_track,
         ),
     )
 
@@ -2391,80 +4530,74 @@ def get_data_sources(conn: sqlite3.Connection) -> list[dict]:
 def load_all_scores(conn: sqlite3.Connection) -> list[ScoreResult]:
     """全スコアを読み込む."""
     rows = conn.execute("SELECT * FROM scores").fetchall()
-    cols = set(rows[0].keys()) if rows else set()
-    result = []
-    for row in rows:
-        kwargs: dict = {"person_id": row["person_id"]}
-        for field in ("person_fe", "studio_fe_exposure", "birank", "patronage",
-                       "dormancy", "awcc", "iv_score"):
-            if field in cols:
-                kwargs[field] = row[field]
-        result.append(ScoreResult(**kwargs))
-    return result
+    return [
+        ScoreResult(
+            person_id=row["person_id"],
+            person_fe=row["person_fe"],
+            studio_fe_exposure=row["studio_fe_exposure"],
+            birank=row["birank"],
+            patronage=row["patronage"],
+            dormancy=row["dormancy"],
+            awcc=row["awcc"],
+            iv_score=row["iv_score"],
+            career_track=row["career_track"]
+            if "career_track" in row.keys()
+            else "multi_track",
+        )
+        for row in rows
+    ]
 
 
 def load_all_characters(conn: sqlite3.Connection) -> list:
-    """Load all characters from the database.
-
-    Returns:
-        List of Character objects.
-    """
+    """Load all characters from the database."""
+    import json as _json
     from src.models import Character
 
-    try:
-        rows = conn.execute("SELECT * FROM characters").fetchall()
-    except Exception:
-        return []
-    if not rows:
-        return []
-
+    rows = conn.execute("SELECT * FROM characters").fetchall()
     result = []
-    cols = set(rows[0].keys())
     for row in rows:
-        kwargs: dict = {"id": row["id"]}
-        for field in ("name_ja", "name_en", "anilist_id", "image_large",
-                       "image_medium", "description", "gender",
-                       "date_of_birth", "age", "blood_type",
-                       "favourites", "site_url"):
-            if field in cols and row[field] is not None:
-                kwargs[field] = row[field]
-        if "aliases" in cols and row["aliases"]:
-            import json as _json
+        aliases: list = []
+        if row["aliases"]:
             try:
-                kwargs["aliases"] = _json.loads(row["aliases"])
+                aliases = _json.loads(row["aliases"])
             except (ValueError, TypeError):
                 pass
-        result.append(Character(**kwargs))
+        result.append(
+            Character(
+                id=row["id"],
+                name_ja=row["name_ja"] or "",
+                name_en=row["name_en"] or "",
+                anilist_id=row["anilist_id"],
+                image_large=row["image_large"],
+                image_medium=row["image_medium"],
+                description=row["description"],
+                gender=row["gender"],
+                date_of_birth=row["date_of_birth"],
+                age=row["age"],
+                blood_type=row["blood_type"],
+                favourites=row["favourites"],
+                site_url=row["site_url"],
+                aliases=aliases,
+            )
+        )
     return result
 
 
 def load_all_voice_actor_credits(conn: sqlite3.Connection) -> list:
-    """Load all character_voice_actors records.
-
-    Returns:
-        List of CharacterVoiceActor objects.
-    """
+    """Load all character_voice_actors records."""
     from src.models import CharacterVoiceActor
 
-    try:
-        rows = conn.execute("SELECT * FROM character_voice_actors").fetchall()
-    except Exception:
-        return []
-    if not rows:
-        return []
-
-    result = []
-    for row in rows:
-        result.append(
-            CharacterVoiceActor(
-                character_id=row["character_id"],
-                person_id=row["person_id"],
-                anime_id=row["anime_id"],
-                character_role=row["character_role"] or "",
-                source=row.get("source", "") or "",
-            )
+    rows = conn.execute("SELECT * FROM character_voice_actors").fetchall()
+    return [
+        CharacterVoiceActor(
+            character_id=row["character_id"],
+            person_id=row["person_id"],
+            anime_id=row["anime_id"],
+            character_role=row["character_role"] or "",
+            source=row["source"] or "",
         )
-    return result
+        for row in rows
+    ]
 
 
 def record_pipeline_run(
@@ -2622,82 +4755,10 @@ def get_score_history_by_quarter(
     return [dict(r) for r in rows]
 
 
-def get_all_persons(conn: sqlite3.Connection) -> list[Person]:
-    """全人物データを取得する."""
-    import json
-
-    rows = conn.execute("SELECT * FROM persons").fetchall()
-    return [
-        Person(
-            id=row["id"],
-            name_ja=row["name_japanese"],
-            name_en=row["name_english"],
-            source=row["source"],
-            mal_id=row["mal_id"],
-            anilist_id=row["anilist_id"],
-            aliases=json.loads(row["aliases"]) if row["aliases"] else [],
-        )
-        for row in rows
-    ]
-
-
 def get_all_person_ids(conn: sqlite3.Connection) -> set[str]:
     """既存の全人物IDを高速取得する（スキップ判定用）."""
     rows = conn.execute("SELECT id FROM persons").fetchall()
     return {row["id"] for row in rows}
-
-
-def get_all_anime(conn: sqlite3.Connection) -> list[Anime]:
-    """全アニメデータを取得する."""
-    rows = conn.execute("SELECT * FROM anime").fetchall()
-    return [
-        Anime(
-            id=row["id"],
-            title_ja=row["title_japanese"],
-            title_en=row["title_english"],
-            year=row["year"],
-            season=row["season"],
-            episodes=row["episodes"],
-            format=row["format"],
-            source=row["source"],
-            score=row["score"],
-            mal_id=row["mal_id"],
-            anilist_id=row["anilist_id"],
-        )
-        for row in rows
-    ]
-
-
-def get_all_credits(conn: sqlite3.Connection) -> list[Credit]:
-    """全クレジットデータを取得する."""
-    from src.models import Role
-
-    rows = conn.execute("SELECT * FROM credits").fetchall()
-    return [
-        Credit(
-            person_id=row["person_id"],
-            anime_id=row["anime_id"],
-            role=Role(row["role"]),
-            episode=row["episode"] if row["episode"] != -1 else None,
-            source=row["source"],
-        )
-        for row in rows
-    ]
-
-
-def get_all_scores(conn: sqlite3.Connection) -> list[ScoreResult]:
-    """全スコアデータを取得する."""
-    rows = conn.execute("SELECT * FROM scores").fetchall()
-    cols = set(rows[0].keys()) if rows else set()
-    result = []
-    for row in rows:
-        kwargs: dict = {"person_id": row["person_id"]}
-        for field in ("person_fe", "studio_fe_exposure", "birank", "patronage",
-                       "dormancy", "awcc", "iv_score"):
-            if field in cols:
-                kwargs[field] = row[field]
-        result.append(ScoreResult(**kwargs))
-    return result
 
 
 # ---------------------------------------------------------------------------
@@ -2705,9 +4766,7 @@ def get_all_scores(conn: sqlite3.Connection) -> list[ScoreResult]:
 # ---------------------------------------------------------------------------
 
 
-def get_llm_decision(
-    conn: sqlite3.Connection, name: str, task: str
-) -> dict | None:
+def get_llm_decision(conn: sqlite3.Connection, name: str, task: str) -> dict | None:
     """LLM判定キャッシュを取得する.
 
     Args:
@@ -2752,9 +4811,7 @@ def upsert_llm_decision(
     )
 
 
-def get_all_llm_decisions(
-    conn: sqlite3.Connection, task: str
-) -> dict[str, dict]:
+def get_all_llm_decisions(conn: sqlite3.Connection, task: str) -> dict[str, dict]:
     """指定タスクの全LLM判定キャッシュを一括取得する.
 
     Returns:
@@ -2773,3 +4830,1388 @@ def get_all_llm_decisions(
         except (json.JSONDecodeError, TypeError):
             continue
     return result
+
+
+# =============================================================================
+# v37–v40 マイグレーション関数
+# =============================================================================
+
+
+def _migrate_v37_credit_contribution_career_year(conn: sqlite3.Connection) -> None:
+    """v37: feat_credit_contribution にキャリア年次列を追加.
+
+    debut_year, career_year_at_credit, is_debut_work の3列を追加し、
+    credits テーブルから個人のデビュー年を計算してバックフィルする。
+    """
+    for col_def in [
+        "debut_year INTEGER",
+        "career_year_at_credit INTEGER",
+        "is_debut_work INTEGER",
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE feat_credit_contribution ADD COLUMN {col_def}")
+        except Exception:
+            pass  # already exists
+
+    # 各 person のデビュー年をメモリに読み込み
+    debut_map: dict[str, int] = {
+        r["person_id"]: r["debut_year"]
+        for r in conn.execute("""
+            SELECT person_id, MIN(credit_year) AS debut_year
+            FROM credits
+            WHERE credit_year IS NOT NULL AND credit_year > 1900
+            GROUP BY person_id
+        """).fetchall()
+    }
+
+    batch: list[tuple] = []
+    for row in conn.execute(
+        "SELECT person_id, anime_id, role, credit_year FROM feat_credit_contribution"
+    ):
+        debut = debut_map.get(row["person_id"])
+        if debut is None or row["credit_year"] is None:
+            continue
+        cy = row["credit_year"] - debut
+        is_debut = 1 if row["credit_year"] == debut else 0
+        batch.append(
+            (debut, cy, is_debut, row["person_id"], row["anime_id"], row["role"])
+        )
+        if len(batch) >= 10000:
+            conn.executemany(
+                """UPDATE feat_credit_contribution
+                   SET debut_year=?, career_year_at_credit=?, is_debut_work=?
+                   WHERE person_id=? AND anime_id=? AND role=?""",
+                batch,
+            )
+            batch.clear()
+    if batch:
+        conn.executemany(
+            """UPDATE feat_credit_contribution
+               SET debut_year=?, career_year_at_credit=?, is_debut_work=?
+               WHERE person_id=? AND anime_id=? AND role=?""",
+            batch,
+        )
+    logger.info(
+        "feat_credit_contribution_career_year_backfilled", persons=len(debut_map)
+    )
+
+
+def _migrate_v38_add_feat_work_context(conn: sqlite3.Connection) -> None:
+    """v38: feat_work_context テーブルを追加."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS feat_work_context (
+            anime_id TEXT PRIMARY KEY,
+            credit_year INTEGER,
+            n_staff INTEGER,
+            n_distinct_roles INTEGER,
+            n_direction INTEGER,
+            n_animation_supervision INTEGER,
+            n_animation INTEGER,
+            n_design INTEGER,
+            n_technical INTEGER,
+            n_art INTEGER,
+            n_sound INTEGER,
+            n_writing INTEGER,
+            n_production INTEGER,
+            n_other INTEGER,
+            mean_career_year REAL,
+            median_career_year REAL,
+            max_career_year INTEGER,
+            production_scale REAL,
+            difficulty_score REAL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_feat_work_context_year
+            ON feat_work_context(credit_year);
+    """)
+
+
+def _migrate_v39_add_feat_person_role_progression(conn: sqlite3.Connection) -> None:
+    """v39: feat_person_role_progression テーブルを追加."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS feat_person_role_progression (
+            person_id TEXT NOT NULL,
+            role_category TEXT NOT NULL,
+            first_year INTEGER,
+            last_year INTEGER,
+            peak_year INTEGER,
+            n_works INTEGER,
+            n_credits INTEGER,
+            career_year_first INTEGER,
+            still_active INTEGER,
+            PRIMARY KEY (person_id, role_category)
+        );
+        CREATE INDEX IF NOT EXISTS idx_feat_role_prog_person
+            ON feat_person_role_progression(person_id);
+        CREATE INDEX IF NOT EXISTS idx_feat_role_prog_category
+            ON feat_person_role_progression(role_category);
+    """)
+
+
+def _migrate_v40_add_feat_causal_estimates(conn: sqlite3.Connection) -> None:
+    """v40: feat_causal_estimates テーブルを追加."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS feat_causal_estimates (
+            person_id TEXT PRIMARY KEY,
+            peer_effect_boost REAL,
+            career_friction REAL,
+            era_fe REAL,
+            era_deflated_iv REAL,
+            opportunity_residual REAL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+    """)
+
+
+# =============================================================================
+# v37: feat_credit_contribution への career_year 付与を含む compute
+# =============================================================================
+
+
+def _backfill_credit_contribution_career_year(conn: sqlite3.Connection) -> None:
+    """feat_credit_contribution の career_year 関連列を計算・更新する.
+
+    compute_feat_credit_contribution の INSERT 後に呼び出す。
+    既存行 (debut_year IS NULL) のみ更新する。
+    """
+    debut_map: dict[str, int] = {
+        r["person_id"]: r["debut_year"]
+        for r in conn.execute("""
+            SELECT person_id, MIN(credit_year) AS debut_year
+            FROM credits
+            WHERE credit_year IS NOT NULL AND credit_year > 1900
+            GROUP BY person_id
+        """).fetchall()
+    }
+
+    batch: list[tuple] = []
+    for row in conn.execute(
+        """SELECT person_id, anime_id, role, credit_year
+           FROM feat_credit_contribution
+           WHERE debut_year IS NULL"""
+    ):
+        debut = debut_map.get(row["person_id"])
+        if debut is None or row["credit_year"] is None:
+            continue
+        cy = row["credit_year"] - debut
+        is_debut = 1 if row["credit_year"] == debut else 0
+        batch.append(
+            (debut, cy, is_debut, row["person_id"], row["anime_id"], row["role"])
+        )
+        if len(batch) >= 10000:
+            conn.executemany(
+                """UPDATE feat_credit_contribution
+                   SET debut_year=?, career_year_at_credit=?, is_debut_work=?
+                   WHERE person_id=? AND anime_id=? AND role=?""",
+                batch,
+            )
+            batch.clear()
+    if batch:
+        conn.executemany(
+            """UPDATE feat_credit_contribution
+               SET debut_year=?, career_year_at_credit=?, is_debut_work=?
+               WHERE person_id=? AND anime_id=? AND role=?""",
+            batch,
+        )
+    conn.commit()
+
+
+# =============================================================================
+# v38: feat_work_context の compute 関数
+# =============================================================================
+
+
+def compute_feat_work_context(
+    conn: sqlite3.Connection,
+    current_year: int | None = None,
+) -> int:
+    """作品ごとのチーム統計を集計して feat_work_context に保存.
+
+    feat_credit_contribution の career_year_at_credit を使うため、
+    _backfill_credit_contribution_career_year() 実行後に呼ぶこと。
+
+    Args:
+        conn: SQLite 接続
+        current_year: 現在の年 (省略時は credits の最大年を使用)
+
+    Returns:
+        書き込んだ行数
+    """
+    import math
+    import statistics
+
+    from src.utils.config import DURATION_BASELINE_MINUTES, DURATION_MAX_MULTIPLIER
+    from src.utils.role_groups import ROLE_CATEGORY
+
+    logger.info("feat_work_context_compute_start")
+
+    if current_year is None:
+        row = conn.execute(
+            "SELECT MAX(credit_year) FROM credits WHERE credit_year IS NOT NULL"
+        ).fetchone()
+        current_year = row[0] if row and row[0] else 2024
+
+    # アニメメタデータ
+    FORMAT_DUR: dict[str | None, float] = {
+        "MOVIE": DURATION_MAX_MULTIPLIER,
+        "TV_SHORT": 0.25,
+        "SPECIAL": 0.8,
+        "ONA": 0.8,
+        "TV": 0.8,
+        "OVA": 1.0,
+        "MUSIC": 0.25,
+        None: 1.0,
+    }
+    anime_meta: dict[str, dict] = {}
+    for r in conn.execute("SELECT id, episodes, duration, format FROM anime"):
+        dur = r["duration"]
+        dm = (
+            min(dur / DURATION_BASELINE_MINUTES, DURATION_MAX_MULTIPLIER)
+            if dur is not None
+            else FORMAT_DUR.get(r["format"], 1.0)
+        )
+        anime_meta[r["id"]] = {
+            "eps": r["episodes"] or 1,
+            "dm": dm,
+            "year": None,  # populated below
+        }
+
+    # アニメの代表年（credits の最小 credit_year）
+    for r in conn.execute(
+        "SELECT anime_id, MIN(credit_year) AS yr FROM credits "
+        "WHERE credit_year IS NOT NULL GROUP BY anime_id"
+    ):
+        if r["anime_id"] in anime_meta:
+            anime_meta[r["anime_id"]]["year"] = r["yr"]
+
+    # staff_count per anime
+    staff_count: dict[str, int] = {
+        r["anime_id"]: r["cnt"]
+        for r in conn.execute(
+            "SELECT anime_id, COUNT(DISTINCT person_id) AS cnt FROM credits GROUP BY anime_id"
+        )
+    }
+
+    # feat_credit_contribution からロール・キャリア年次を取得
+    # (person_id, anime_id, role, career_year_at_credit) を集計
+    CATEGORY_COLS = {
+        "direction": "n_direction",
+        "animation_supervision": "n_animation_supervision",
+        "animation": "n_animation",
+        "design": "n_design",
+        "technical": "n_technical",
+        "art": "n_art",
+        "sound": "n_sound",
+        "writing": "n_writing",
+        "production": "n_production",
+        "production_management": "n_production",  # merge into production
+        "finishing": "n_other",
+        "editing": "n_other",
+        "settings": "n_other",
+        "other": "n_other",
+    }
+    COL_ZERO = {v: 0 for v in CATEGORY_COLS.values()}
+
+    # anime_id → {person_id: (max_career_year, role_categories)}
+    anime_data: dict[str, dict] = {}
+
+    for row in conn.execute(
+        """SELECT fcc.anime_id, fcc.person_id, fcc.role, fcc.career_year_at_credit
+           FROM feat_credit_contribution fcc
+           ORDER BY fcc.anime_id"""
+    ):
+        aid = row["anime_id"]
+        pid = row["person_id"]
+        if aid not in anime_data:
+            anime_data[aid] = {}
+        if pid not in anime_data[aid]:
+            anime_data[aid][pid] = {"max_cy": None, "cats": set()}
+        cy = row["career_year_at_credit"]
+        if cy is not None:
+            prev = anime_data[aid][pid]["max_cy"]
+            anime_data[aid][pid]["max_cy"] = cy if prev is None else max(prev, cy)
+        cat = ROLE_CATEGORY.get(row["role"], "other")
+        anime_data[aid][pid]["cats"].add(cat)
+
+    rows_out: list[tuple] = []
+    for aid, persons in anime_data.items():
+        meta = anime_meta.get(aid, {"eps": 1, "dm": 1.0, "year": None})
+        sc = staff_count.get(aid, len(persons))
+
+        # production_scale
+        ps = math.log1p(sc) * math.log1p(meta["eps"]) * meta["dm"]
+
+        # career years (one value per person — use max role career year)
+        career_years = [
+            v["max_cy"] for v in persons.values() if v["max_cy"] is not None
+        ]
+        mean_cy = (
+            round(sum(career_years) / len(career_years), 2) if career_years else None
+        )
+        median_cy = round(statistics.median(career_years), 2) if career_years else None
+        max_cy = max(career_years) if career_years else None
+
+        # role category counts (unique persons per category)
+        col_counts = dict(COL_ZERO)
+        role_set: set[str] = set()
+        for pdata in persons.values():
+            for cat in pdata["cats"]:
+                col = CATEGORY_COLS.get(cat, "n_other")
+                col_counts[col] += 1
+                role_set.add(cat)
+
+        rows_out.append(
+            (
+                aid,
+                meta["year"],
+                sc,
+                len(role_set),
+                col_counts["n_direction"],
+                col_counts["n_animation_supervision"],
+                col_counts["n_animation"],
+                col_counts["n_design"],
+                col_counts["n_technical"],
+                col_counts["n_art"],
+                col_counts["n_sound"],
+                col_counts["n_writing"],
+                col_counts["n_production"],
+                col_counts["n_other"],
+                mean_cy,
+                median_cy,
+                max_cy,
+                round(ps, 6),
+                None,  # difficulty_score: era_effects から別途更新
+            )
+        )
+
+    conn.executemany(
+        """INSERT INTO feat_work_context
+               (anime_id, credit_year, n_staff, n_distinct_roles,
+                n_direction, n_animation_supervision, n_animation, n_design,
+                n_technical, n_art, n_sound, n_writing, n_production, n_other,
+                mean_career_year, median_career_year, max_career_year,
+                production_scale, difficulty_score, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+           ON CONFLICT(anime_id) DO UPDATE SET
+               credit_year=excluded.credit_year,
+               n_staff=excluded.n_staff,
+               n_distinct_roles=excluded.n_distinct_roles,
+               n_direction=excluded.n_direction,
+               n_animation_supervision=excluded.n_animation_supervision,
+               n_animation=excluded.n_animation,
+               n_design=excluded.n_design,
+               n_technical=excluded.n_technical,
+               n_art=excluded.n_art,
+               n_sound=excluded.n_sound,
+               n_writing=excluded.n_writing,
+               n_production=excluded.n_production,
+               n_other=excluded.n_other,
+               mean_career_year=excluded.mean_career_year,
+               median_career_year=excluded.median_career_year,
+               max_career_year=excluded.max_career_year,
+               production_scale=excluded.production_scale,
+               updated_at=CURRENT_TIMESTAMP""",
+        rows_out,
+    )
+    conn.commit()
+    logger.info("feat_work_context_computed", rows=len(rows_out))
+    return len(rows_out)
+
+
+# =============================================================================
+# v39: feat_person_role_progression の compute 関数
+# =============================================================================
+
+
+def compute_feat_person_role_progression(
+    conn: sqlite3.Connection,
+    current_year: int | None = None,
+    active_threshold_years: int = 3,
+    batch_size: int = 10000,
+) -> int:
+    """個人×職種カテゴリの時系列進行を集計して feat_person_role_progression に保存.
+
+    Args:
+        conn: SQLite 接続
+        current_year: 現在の年 (省略時は credits の最大年)
+        active_threshold_years: 最終クレジットからこの年数以内なら still_active=1
+        batch_size: INSERT バッチサイズ
+
+    Returns:
+        書き込んだ行数
+    """
+    from collections import defaultdict
+
+    from src.utils.role_groups import ROLE_CATEGORY
+
+    logger.info("feat_person_role_progression_compute_start")
+
+    if current_year is None:
+        row = conn.execute(
+            "SELECT MAX(credit_year) FROM credits WHERE credit_year IS NOT NULL"
+        ).fetchone()
+        current_year = row[0] if row and row[0] else 2024
+
+    # デビュー年 per person
+    debut_map: dict[str, int] = {
+        r["person_id"]: r["debut_year"]
+        for r in conn.execute("""
+            SELECT person_id, MIN(credit_year) AS debut_year
+            FROM credits
+            WHERE credit_year IS NOT NULL AND credit_year > 1900
+            GROUP BY person_id
+        """).fetchall()
+    }
+
+    # (person_id, role_category) → {year: n_works}
+    # credits から直接集計
+    pid_cat_years: dict[tuple[str, str], dict[int, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
+    pid_cat_credits: dict[tuple[str, str], int] = defaultdict(int)
+
+    for row in conn.execute(
+        """SELECT c.person_id, c.role, c.credit_year,
+                  COUNT(DISTINCT c.anime_id) AS n_works
+           FROM credits c
+           WHERE c.credit_year IS NOT NULL AND c.credit_year > 1900
+           GROUP BY c.person_id, c.role, c.credit_year"""
+    ):
+        cat = ROLE_CATEGORY.get(row["role"], "other")
+        key = (row["person_id"], cat)
+        pid_cat_years[key][row["credit_year"]] += row["n_works"]
+        pid_cat_credits[key] += 1
+
+    rows_out: list[tuple] = []
+    for (pid, cat), year_works in pid_cat_years.items():
+        if not year_works:
+            continue
+        first_year = min(year_works)
+        last_year = max(year_works)
+        peak_year = max(year_works, key=year_works.__getitem__)
+        n_works = sum(year_works.values())
+        n_credits = pid_cat_credits[(pid, cat)]
+        debut = debut_map.get(pid)
+        career_year_first = first_year - debut if debut is not None else None
+        still_active = 1 if current_year - last_year <= active_threshold_years else 0
+
+        rows_out.append(
+            (
+                pid,
+                cat,
+                first_year,
+                last_year,
+                peak_year,
+                n_works,
+                n_credits,
+                career_year_first,
+                still_active,
+            )
+        )
+
+        if len(rows_out) >= batch_size:
+            conn.executemany(
+                """INSERT INTO feat_person_role_progression
+                       (person_id, role_category, first_year, last_year, peak_year,
+                        n_works, n_credits, career_year_first, still_active)
+                   VALUES (?,?,?,?,?,?,?,?,?)
+                   ON CONFLICT(person_id, role_category) DO UPDATE SET
+                       first_year=excluded.first_year,
+                       last_year=excluded.last_year,
+                       peak_year=excluded.peak_year,
+                       n_works=excluded.n_works,
+                       n_credits=excluded.n_credits,
+                       career_year_first=excluded.career_year_first,
+                       still_active=excluded.still_active""",
+                rows_out,
+            )
+            rows_out.clear()
+
+    if rows_out:
+        conn.executemany(
+            """INSERT INTO feat_person_role_progression
+                   (person_id, role_category, first_year, last_year, peak_year,
+                    n_works, n_credits, career_year_first, still_active)
+               VALUES (?,?,?,?,?,?,?,?,?)
+               ON CONFLICT(person_id, role_category) DO UPDATE SET
+                   first_year=excluded.first_year,
+                   last_year=excluded.last_year,
+                   peak_year=excluded.peak_year,
+                   n_works=excluded.n_works,
+                   n_credits=excluded.n_credits,
+                   career_year_first=excluded.career_year_first,
+                   still_active=excluded.still_active""",
+            rows_out,
+        )
+
+    conn.commit()
+    total = conn.execute(
+        "SELECT COUNT(*) FROM feat_person_role_progression"
+    ).fetchone()[0]
+    logger.info("feat_person_role_progression_computed", rows=total)
+    return total
+
+
+# =============================================================================
+# v40: feat_causal_estimates の upsert 関数 (パイプラインから呼び出し)
+# =============================================================================
+
+
+def upsert_feat_causal_estimates(
+    conn: sqlite3.Connection,
+    peer_boosts: dict[str, float],
+    friction_index: dict[str, float],
+    era_fe_by_person: dict[str, float],
+    iv_scores: dict[str, float],
+    opportunity_residuals: dict[str, float] | None = None,
+) -> int:
+    """因果推論結果を feat_causal_estimates に保存する.
+
+    Args:
+        conn: SQLite 接続
+        peer_boosts: person_id → ピア効果ブースト (PeerEffectResult.person_peer_boost)
+        friction_index: person_id → キャリア摩擦指数 (0=摩擦なし, 1=最大)
+        era_fe_by_person: person_id → 当人のデビュー年に対応する時代固定効果
+        iv_scores: person_id → IV スコア (era_deflated_iv 計算用)
+        opportunity_residuals: person_id → 機会補正残差 (省略可)
+
+    Returns:
+        書き込んだ行数
+    """
+    all_pids = set(peer_boosts) | set(friction_index) | set(era_fe_by_person)
+    rows: list[tuple] = []
+    for pid in all_pids:
+        era = era_fe_by_person.get(pid)
+        iv = iv_scores.get(pid)
+        # era_deflated_iv: iv_score を時代固定効果で補正 (era_fe > 0 の年は恵まれた時代)
+        era_deflated = (
+            round(iv - era, 6) if (iv is not None and era is not None) else None
+        )
+        rows.append(
+            (
+                pid,
+                round(peer_boosts.get(pid, 0.0), 6),
+                round(friction_index.get(pid, 0.0), 6),
+                round(era, 6) if era is not None else None,
+                era_deflated,
+                round(opportunity_residuals[pid], 6)
+                if opportunity_residuals and pid in opportunity_residuals
+                else None,
+            )
+        )
+
+    conn.executemany(
+        """INSERT INTO feat_causal_estimates
+               (person_id, peer_effect_boost, career_friction, era_fe,
+                era_deflated_iv, opportunity_residual, updated_at)
+           VALUES (?,?,?,?,?,?,CURRENT_TIMESTAMP)
+           ON CONFLICT(person_id) DO UPDATE SET
+               peer_effect_boost=excluded.peer_effect_boost,
+               career_friction=excluded.career_friction,
+               era_fe=excluded.era_fe,
+               era_deflated_iv=excluded.era_deflated_iv,
+               opportunity_residual=excluded.opportunity_residual,
+               updated_at=CURRENT_TIMESTAMP""",
+        rows,
+    )
+    conn.commit()
+    logger.info("feat_causal_estimates_upserted", count=len(rows))
+    return len(rows)
+
+
+def load_feat_causal_estimates(
+    conn: sqlite3.Connection,
+    person_id: str | None = None,
+) -> dict[str, dict] | dict:
+    """feat_causal_estimates を返す.
+
+    Args:
+        person_id: 特定人物 → dict を返す。省略時 → {person_id: dict} を返す。
+    """
+    if person_id is not None:
+        row = conn.execute(
+            "SELECT * FROM feat_causal_estimates WHERE person_id=?", (person_id,)
+        ).fetchone()
+        return dict(row) if row else {}
+    rows = conn.execute("SELECT * FROM feat_causal_estimates").fetchall()
+    return {r["person_id"]: dict(r) for r in rows}
+
+
+def load_feat_work_context(
+    conn: sqlite3.Connection,
+    anime_id: str | None = None,
+) -> dict[str, dict] | dict:
+    """feat_work_context を返す.
+
+    Args:
+        anime_id: 特定作品 → dict を返す。省略時 → {anime_id: dict} を返す。
+    """
+    if anime_id is not None:
+        row = conn.execute(
+            "SELECT * FROM feat_work_context WHERE anime_id=?", (anime_id,)
+        ).fetchone()
+        return dict(row) if row else {}
+    rows = conn.execute("SELECT * FROM feat_work_context").fetchall()
+    return {r["anime_id"]: dict(r) for r in rows}
+
+
+def load_feat_person_role_progression(
+    conn: sqlite3.Connection,
+    person_id: str | None = None,
+    role_category: str | None = None,
+) -> list[dict]:
+    """feat_person_role_progression を返す.
+
+    Args:
+        person_id: 特定人物に絞る
+        role_category: 特定職種カテゴリに絞る
+    """
+    where: list[str] = []
+    params: list = []
+    if person_id is not None:
+        where.append("person_id = ?")
+        params.append(person_id)
+    if role_category is not None:
+        where.append("role_category = ?")
+        params.append(role_category)
+    w = ("WHERE " + " AND ".join(where)) if where else ""
+    rows = conn.execute(
+        f"SELECT * FROM feat_person_role_progression {w} ORDER BY role_category",
+        params,
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# =============================================================================
+# v41: feat_cluster_membership マイグレーション + upsert + load
+# =============================================================================
+
+
+def _migrate_v41_add_feat_cluster_membership(conn: sqlite3.Connection) -> None:
+    """v41: feat_cluster_membership テーブルを追加."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS feat_cluster_membership (
+            person_id TEXT PRIMARY KEY,
+            community_id INTEGER,
+            career_track TEXT,
+            growth_trend TEXT,
+            studio_cluster_id INTEGER,
+            studio_cluster_name TEXT,
+            cooccurrence_group_id INTEGER,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_feat_cluster_community
+            ON feat_cluster_membership(community_id);
+        CREATE INDEX IF NOT EXISTS idx_feat_cluster_career_track
+            ON feat_cluster_membership(career_track);
+        CREATE INDEX IF NOT EXISTS idx_feat_cluster_growth
+            ON feat_cluster_membership(growth_trend);
+        CREATE INDEX IF NOT EXISTS idx_feat_cluster_studio
+            ON feat_cluster_membership(studio_cluster_id);
+    """)
+
+
+def upsert_feat_cluster_membership(
+    conn: sqlite3.Connection,
+    community_map: dict[str, int],
+    career_tracks: dict[str, str],
+    growth_data: dict,
+    studio_clustering: dict,
+    cooccurrence_groups: dict,
+    studio_affiliation: dict[str, str] | None = None,
+) -> int:
+    """クラスタリング帰属を feat_cluster_membership に保存する.
+
+    Args:
+        conn: SQLite 接続
+        community_map: person_id → community_id (Phase 4 グラフコミュニティ)
+        career_tracks: person_id → career_track 文字列 (Phase 6)
+        growth_data: growth.json 相当 {"persons": {pid: {"trend": ...}}} または list
+        studio_clustering: studio_clustering.json 相当 {"assignments": {studio: {...}}}
+        cooccurrence_groups: cooccurrence_groups.json 相当 {"groups": [{members: [...]}]}
+        studio_affiliation: person_id → main_studio_id (省略時は feat_studio_affiliation から取得)
+
+    Returns:
+        書き込んだ行数
+    """
+    # --- growth_trend per person ---
+    growth_trend_map: dict[str, str] = {}
+    persons_data = (
+        growth_data.get("persons", {}) if isinstance(growth_data, dict) else {}
+    )
+    if isinstance(persons_data, dict):
+        for pid, info in persons_data.items():
+            if isinstance(info, dict) and "trend" in info:
+                growth_trend_map[pid] = info["trend"]
+    elif isinstance(persons_data, list):
+        for info in persons_data:
+            if isinstance(info, dict) and "person_id" in info and "trend" in info:
+                growth_trend_map[info["person_id"]] = info["trend"]
+
+    # --- studio cluster per person (via main studio) ---
+    # studio_clustering.json: {"assignments": {studio_name: {cluster_id, cluster_name, ...}}}
+    studio_cluster_map: dict[
+        str, tuple[int | None, str | None]
+    ] = {}  # person_id → (id, name)
+    assignments = {}
+    if isinstance(studio_clustering, dict):
+        assignments = studio_clustering.get("assignments", {})
+
+    # person → main studio from feat_studio_affiliation (most frequent studio overall)
+    if studio_affiliation is None:
+        rows = conn.execute("""
+            SELECT person_id, studio_name
+            FROM feat_studio_affiliation
+            WHERE n_works = (
+                SELECT MAX(n_works2.n_works)
+                FROM feat_studio_affiliation n_works2
+                WHERE n_works2.person_id = feat_studio_affiliation.person_id
+            )
+            GROUP BY person_id
+        """).fetchall()
+        studio_affiliation = {r["person_id"]: r["studio_name"] for r in rows}
+
+    for pid, studio_name in (studio_affiliation or {}).items():
+        info = assignments.get(studio_name)
+        if info and isinstance(info, dict):
+            studio_cluster_map[pid] = (info.get("cluster_id"), info.get("cluster_name"))
+
+    # --- cooccurrence_group_id per person (inverted index) ---
+    cooccurrence_map: dict[str, int] = {}
+    groups = []
+    if isinstance(cooccurrence_groups, dict):
+        groups = cooccurrence_groups.get("groups", [])
+    for idx, group in enumerate(groups):
+        if isinstance(group, dict):
+            for pid in group.get("members", []):
+                cooccurrence_map[pid] = idx
+
+    # --- 全 person_id の集合 ---
+    all_pids: set[str] = (
+        set(community_map)
+        | set(career_tracks)
+        | set(growth_trend_map)
+        | set(studio_cluster_map)
+        | set(cooccurrence_map)
+    )
+
+    rows_out: list[tuple] = []
+    for pid in all_pids:
+        sc = studio_cluster_map.get(pid, (None, None))
+        rows_out.append(
+            (
+                pid,
+                community_map.get(pid),
+                career_tracks.get(pid),
+                growth_trend_map.get(pid),
+                sc[0],
+                sc[1],
+                cooccurrence_map.get(pid),
+            )
+        )
+
+    conn.executemany(
+        """INSERT INTO feat_cluster_membership
+               (person_id, community_id, career_track, growth_trend,
+                studio_cluster_id, studio_cluster_name, cooccurrence_group_id,
+                updated_at)
+           VALUES (?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+           ON CONFLICT(person_id) DO UPDATE SET
+               community_id=excluded.community_id,
+               career_track=excluded.career_track,
+               growth_trend=excluded.growth_trend,
+               studio_cluster_id=excluded.studio_cluster_id,
+               studio_cluster_name=excluded.studio_cluster_name,
+               cooccurrence_group_id=excluded.cooccurrence_group_id,
+               updated_at=CURRENT_TIMESTAMP""",
+        rows_out,
+    )
+    conn.commit()
+    logger.info("feat_cluster_membership_upserted", count=len(rows_out))
+    return len(rows_out)
+
+
+def load_feat_cluster_membership(
+    conn: sqlite3.Connection,
+    person_id: str | None = None,
+    community_id: int | None = None,
+    career_track: str | None = None,
+    growth_trend: str | None = None,
+) -> dict[str, dict] | dict:
+    """feat_cluster_membership を返す.
+
+    Args:
+        person_id: 特定人物 → dict を返す。省略時 → {person_id: dict} を返す。
+        community_id: コミュニティIDで絞る
+        career_track: キャリアトラックで絞る
+        growth_trend: 成長トレンドで絞る
+    """
+    if person_id is not None:
+        row = conn.execute(
+            "SELECT * FROM feat_cluster_membership WHERE person_id=?", (person_id,)
+        ).fetchone()
+        return dict(row) if row else {}
+
+    where: list[str] = []
+    params: list = []
+    if community_id is not None:
+        where.append("community_id = ?")
+        params.append(community_id)
+    if career_track is not None:
+        where.append("career_track = ?")
+        params.append(career_track)
+    if growth_trend is not None:
+        where.append("growth_trend = ?")
+        params.append(growth_trend)
+    w = ("WHERE " + " AND ".join(where)) if where else ""
+    rows = conn.execute(f"SELECT * FROM feat_cluster_membership {w}", params).fetchall()
+    return {r["person_id"]: dict(r) for r in rows}
+
+
+# =============================================================================
+# v42: feat_birank_annual — 年次BiRankスナップショット
+# =============================================================================
+
+_BIRANK_ANNUAL_MIN_YEAR = 1980  # それ以前はグラフが極小でスコアが無意味
+
+
+def _migrate_v42_add_feat_birank_annual(conn: sqlite3.Connection) -> None:
+    """v42: feat_birank_annual テーブルを追加."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS feat_birank_annual (
+            person_id TEXT NOT NULL,
+            year INTEGER NOT NULL,
+            birank REAL NOT NULL,
+            raw_pagerank REAL,
+            graph_size INTEGER,
+            n_credits_cumulative INTEGER,
+            PRIMARY KEY (person_id, year)
+        );
+        CREATE INDEX IF NOT EXISTS idx_feat_birank_annual_year
+            ON feat_birank_annual(year);
+    """)
+    conn.commit()
+
+
+def upsert_feat_birank_annual(
+    conn: sqlite3.Connection,
+    birank_timelines: dict[str, dict],
+    min_year: int = _BIRANK_ANNUAL_MIN_YEAR,
+) -> int:
+    """年次BiRankスナップショットを feat_birank_annual に保存する.
+
+    Args:
+        conn: SQLite 接続
+        birank_timelines: {person_id: {"snapshots": [{year, birank, raw_pagerank,
+            graph_size, n_credits_cumulative}, ...], ...}}
+            compute_temporal_pagerank の戻り値を asdict() したもの。
+        min_year: この年以降のスナップショットのみ保存（デフォルト 1980）
+
+    Returns:
+        書き込んだ行数
+    """
+    rows: list[tuple] = []
+    for pid, tl in birank_timelines.items():
+        for snap in tl.get("snapshots", []):
+            year = snap.get("year")
+            birank = snap.get("birank")
+            if year is None or birank is None or year < min_year:
+                continue
+            rows.append(
+                (
+                    pid,
+                    year,
+                    float(birank),
+                    snap.get("raw_pagerank"),
+                    snap.get("graph_size"),
+                    snap.get("n_credits_cumulative"),
+                )
+            )
+
+    conn.executemany(
+        """INSERT INTO feat_birank_annual
+               (person_id, year, birank, raw_pagerank, graph_size, n_credits_cumulative)
+           VALUES (?, ?, ?, ?, ?, ?)
+           ON CONFLICT(person_id, year) DO UPDATE SET
+               birank = excluded.birank,
+               raw_pagerank = excluded.raw_pagerank,
+               graph_size = excluded.graph_size,
+               n_credits_cumulative = excluded.n_credits_cumulative""",
+        rows,
+    )
+    conn.commit()
+    logger.info("feat_birank_annual_upserted", count=len(rows), min_year=min_year)
+    return len(rows)
+
+
+def load_feat_birank_annual(
+    conn: sqlite3.Connection,
+    person_id: str | None = None,
+    year_from: int | None = None,
+    year_to: int | None = None,
+) -> list[dict] | dict[str, list[dict]]:
+    """feat_birank_annual を返す.
+
+    Args:
+        person_id: 特定人物 → list[dict] (年昇順)。省略時 → {person_id: list[dict]}。
+        year_from: この年以降（inclusive）
+        year_to: この年以前（inclusive）
+
+    Returns:
+        person_id 指定時: [{"year": ..., "birank": ..., ...}, ...]
+        全件時: {"person_id": [snapshots...], ...}
+    """
+    where: list[str] = []
+    params: list = []
+    if person_id is not None:
+        where.append("person_id = ?")
+        params.append(person_id)
+    if year_from is not None:
+        where.append("year >= ?")
+        params.append(year_from)
+    if year_to is not None:
+        where.append("year <= ?")
+        params.append(year_to)
+    w = ("WHERE " + " AND ".join(where)) if where else ""
+    rows = conn.execute(
+        f"SELECT person_id, year, birank, raw_pagerank, graph_size, n_credits_cumulative "
+        f"FROM feat_birank_annual {w} ORDER BY person_id, year",
+        params,
+    ).fetchall()
+
+    if person_id is not None:
+        return [dict(r) for r in rows]
+
+    result: dict[str, list[dict]] = {}
+    for r in rows:
+        result.setdefault(r["person_id"], []).append(dict(r))
+    return result
+
+
+# =============================================================================
+# v43: birank_compute_state — BiRank 計算入力フィンガープリント（変更検出用）
+# =============================================================================
+
+
+def _migrate_v43_add_birank_compute_state(conn: sqlite3.Connection) -> None:
+    """v43: birank_compute_state テーブルを追加."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS birank_compute_state (
+            year INTEGER PRIMARY KEY,
+            credit_count INTEGER NOT NULL,
+            anime_count INTEGER NOT NULL,
+            person_count INTEGER NOT NULL,
+            computed_at REAL NOT NULL
+        );
+    """)
+    conn.commit()
+
+
+def upsert_birank_compute_state(
+    conn: sqlite3.Connection,
+    states: dict[int, dict],
+) -> None:
+    """年別 BiRank 計算フィンガープリントを保存する.
+
+    Args:
+        conn: SQLite 接続
+        states: {year: {"credit_count": int, "anime_count": int, "person_count": int}}
+                各年について、計算に使用したクレジット数・アニメ数・人物数を記録。
+    """
+    import time as _time
+
+    now = _time.time()
+    rows = [
+        (yr, d["credit_count"], d["anime_count"], d["person_count"], now)
+        for yr, d in states.items()
+    ]
+    conn.executemany(
+        """INSERT INTO birank_compute_state
+               (year, credit_count, anime_count, person_count, computed_at)
+           VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(year) DO UPDATE SET
+               credit_count = excluded.credit_count,
+               anime_count  = excluded.anime_count,
+               person_count = excluded.person_count,
+               computed_at  = excluded.computed_at""",
+        rows,
+    )
+    conn.commit()
+    logger.debug("birank_compute_state_upserted", count=len(rows))
+
+
+def load_birank_compute_state(conn: sqlite3.Connection) -> dict[int, dict]:
+    """保存済み BiRank 計算フィンガープリントを返す.
+
+    Returns:
+        {year: {"credit_count": int, "anime_count": int, "person_count": int}}
+    """
+    rows = conn.execute(
+        "SELECT year, credit_count, anime_count, person_count "
+        "FROM birank_compute_state ORDER BY year"
+    ).fetchall()
+    return {
+        r["year"]: {
+            "credit_count": r["credit_count"],
+            "anime_count": r["anime_count"],
+            "person_count": r["person_count"],
+        }
+        for r in rows
+    }
+
+
+# =============================================================================
+# v44: 作品規模ティア — format + episodes + duration のみで計算
+# スタッフ数はデータ品質が低い（中央値 2〜11）ため使用しない
+# =============================================================================
+
+# format_group: 類似フォーマットをグループ化
+_FORMAT_GROUP: dict[str | None, str] = {
+    "MOVIE": "movie",
+    "TV": "tv",
+    "TV_SHORT": "tv_short",
+    "OVA": "ova",
+    "ONA": "ona",
+    "SPECIAL": "special",
+    "MUSIC": "music",
+    None: "other",
+}
+
+
+# (format_group, episode_bracket) → base_score
+# episode_bracket: 話数で大まかに区分
+#   TV:      4-cour+(48+) → major, 2-cour(24-47) → large, 1-cour(12-23) → standard,
+#            half-cour(6-11) → small, <6 → micro
+#   ONA:     24+ → large, 12-23 → standard, 6-11 → small, <6 → micro
+#   OVA:     6+ → standard, 3-5 → small, 1-2 → micro
+#   MOVIE:   長尺(90min+) → major, 標準(45-89min) → large, 短編(<45min) → standard
+#   SPECIAL: small
+#   TV_SHORT:話数で TV に準ずるが一段下
+#   MUSIC:   micro
+def _compute_scale_raw(
+    fmt: str | None,
+    episodes: int | None,
+    duration: int | None,  # minutes per episode
+) -> float:
+    """format + episodes + duration から連続スコアを計算.
+
+    スタッフ数を使わないため、スクレイピング不完全な作品でも公平に評価できる。
+
+    Returns:
+        scale_raw: 0.0〜5.0 の連続値
+    """
+    eps = episodes or 1
+    dur = duration or 0  # minutes per episode
+    total_min = eps * dur  # 総時間 (分)
+
+    group = _FORMAT_GROUP.get(fmt, "other")
+
+    if group == "movie":
+        # 映画: 総時間で評価（話数は通常1なので意味がない）
+        if total_min >= 120:
+            return 5.0
+        elif total_min >= 90:
+            return 4.5
+        elif total_min >= 60:
+            return 4.0
+        elif total_min >= 30:
+            return 3.0
+        else:
+            return 2.5  # 短編映画
+
+    elif group == "tv":
+        if eps >= 48:
+            return 5.0  # 4-cour以上 (4クール+)
+        elif eps >= 36:
+            return 4.5  # 3-cour
+        elif eps >= 24:
+            return 4.0  # 2-cour
+        elif eps >= 13:
+            return 3.0  # 1-cour (13話)
+        elif eps >= 10:
+            return 2.5  # 12話近辺
+        elif eps >= 6:
+            return 2.0  # 半クール
+        else:
+            return 1.5  # 単発〜5話
+
+    elif group == "ona":
+        if eps >= 24:
+            return 4.0
+        elif eps >= 12:
+            return 3.0
+        elif eps >= 6:
+            return 2.0
+        elif eps >= 3:
+            return 1.5
+        else:
+            return 1.0
+
+    elif group == "ova":
+        if eps >= 6:
+            return 3.0
+        elif eps >= 3:
+            return 2.0
+        else:
+            return 1.5
+
+    elif group == "tv_short":
+        # TV_SHORTは話数が多くても尺が短い → 一段下げ
+        if eps >= 48:
+            return 4.0
+        elif eps >= 24:
+            return 3.0
+        elif eps >= 12:
+            return 2.0
+        else:
+            return 1.5
+
+    elif group == "special":
+        # SPECIAL: 基本的に単発、総時間で微調整
+        if total_min >= 60:
+            return 2.5
+        else:
+            return 1.5
+
+    elif group == "music":
+        return 1.0
+
+    else:
+        return 1.5  # OTHER/unknown
+
+
+# scale_raw → (tier, label)
+_TIER_THRESHOLDS: list[tuple[float, int, str]] = [
+    (4.5, 5, "major"),  # scale_raw >= 4.5 → tier 5
+    (3.5, 4, "large"),  # scale_raw >= 3.5 → tier 4
+    (2.5, 3, "standard"),  # scale_raw >= 2.5 → tier 3
+    (1.5, 2, "small"),  # scale_raw >= 1.5 → tier 2
+    (0.0, 1, "micro"),  # それ以下 → tier 1
+]
+
+
+def _scale_raw_to_tier(raw: float) -> tuple[int, str]:
+    for threshold, tier, label in _TIER_THRESHOLDS:
+        if raw >= threshold:
+            return tier, label
+    return 1, "micro"
+
+
+def _migrate_v44_add_work_scale_tier(conn: sqlite3.Connection) -> None:
+    """v44: feat_work_context に作品規模ティア列を追加してバックフィル.
+
+    スタッフ数を使わず format + episodes + duration だけで計算する。
+    これにより、スクレイピング不完全な作品でも正確に規模を把握できる。
+    """
+    for col_def in [
+        "scale_tier INTEGER",
+        "scale_label TEXT",
+        "scale_raw REAL",
+        "format_group TEXT",
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE feat_work_context ADD COLUMN {col_def}")
+        except Exception:
+            pass
+
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_feat_work_context_tier ON feat_work_context(scale_tier)"
+        )
+    except Exception:
+        pass
+
+    compute_feat_work_scale_tier(conn)
+
+
+def compute_feat_work_scale_tier(
+    conn: sqlite3.Connection,
+    batch_size: int = 5000,
+) -> int:
+    """全作品の scale_tier を計算して feat_work_context に書き込む.
+
+    feat_work_context が存在しない作品 (ID が credits にあるが work_context に未登録) も
+    anime テーブルから直接処理して INSERT する。
+
+    Returns:
+        更新した行数
+    """
+    logger.info("work_scale_tier_compute_start")
+
+    rows = conn.execute("SELECT id, format, episodes, duration FROM anime").fetchall()
+
+    updates: list[tuple] = []
+    inserts: list[tuple] = []  # feat_work_context に未登録の作品
+    existing = {
+        r["anime_id"]
+        for r in conn.execute("SELECT anime_id FROM feat_work_context").fetchall()
+    }
+
+    for row in rows:
+        aid = row["id"]
+        raw = _compute_scale_raw(row["format"], row["episodes"], row["duration"])
+        tier, label = _scale_raw_to_tier(raw)
+        grp = _FORMAT_GROUP.get(row["format"], "other")
+
+        if aid in existing:
+            updates.append((tier, label, round(raw, 2), grp, aid))
+        else:
+            # anime テーブルにあるが feat_work_context 未登録 → 最小限の行を INSERT
+            inserts.append((aid, tier, label, round(raw, 2), grp))
+
+        if len(updates) >= batch_size:
+            conn.executemany(
+                """UPDATE feat_work_context
+                   SET scale_tier=?, scale_label=?, scale_raw=?, format_group=?
+                   WHERE anime_id=?""",
+                updates,
+            )
+            updates.clear()
+        if len(inserts) >= batch_size:
+            conn.executemany(
+                """INSERT OR IGNORE INTO feat_work_context
+                       (anime_id, scale_tier, scale_label, scale_raw, format_group)
+                   VALUES (?,?,?,?,?)""",
+                inserts,
+            )
+            inserts.clear()
+
+    if updates:
+        conn.executemany(
+            """UPDATE feat_work_context
+               SET scale_tier=?, scale_label=?, scale_raw=?, format_group=?
+               WHERE anime_id=?""",
+            updates,
+        )
+    if inserts:
+        conn.executemany(
+            """INSERT OR IGNORE INTO feat_work_context
+                   (anime_id, scale_tier, scale_label, scale_raw, format_group)
+               VALUES (?,?,?,?,?)""",
+            inserts,
+        )
+
+    conn.commit()
+    total = conn.execute(
+        "SELECT COUNT(*) FROM feat_work_context WHERE scale_tier IS NOT NULL"
+    ).fetchone()[0]
+    logger.info("work_scale_tier_computed", rows=total)
+    return total
+
+
+# ── v45: feat_career_gaps ───────────────────────────────────────────
+
+
+def _migrate_v45_add_feat_career_gaps(conn: sqlite3.Connection) -> None:
+    """v45: feat_career_gaps — キャリアギャップ (退職/準退職/復職) 統計テーブル."""
+    conn.executescript("""
+        CREATE TABLE IF NOT EXISTS feat_career_gaps (
+            person_id TEXT NOT NULL,
+            gap_start_year INTEGER NOT NULL,  -- 最後のクレジット年
+            gap_end_year INTEGER,             -- 復帰年 (NULL = 未復帰)
+            gap_length INTEGER NOT NULL,      -- ギャップ年数
+            returned INTEGER NOT NULL DEFAULT 0,  -- 復帰したか (0/1)
+            gap_type TEXT NOT NULL,           -- 'semi_exit' (3-4yr) / 'exit' (5+yr)
+            PRIMARY KEY (person_id, gap_start_year)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_feat_career_gaps_type
+            ON feat_career_gaps(gap_type);
+        CREATE INDEX IF NOT EXISTS idx_feat_career_gaps_returned
+            ON feat_career_gaps(returned);
+    """)
+    conn.commit()
+
+
+def compute_feat_career_gaps(
+    conn: sqlite3.Connection,
+    *,
+    semi_exit_years: int = 3,
+    exit_years: int = 5,
+    reliable_max_year: int = 2025,
+) -> int:
+    """キャリアギャップを計算して feat_career_gaps に保存.
+
+    各人のクレジット年リストから連続するギャップを検出:
+    - semi_exit: semi_exit_years <= gap < exit_years (準退職)
+    - exit: gap >= exit_years (退職)
+    - returned: ギャップ後にクレジットがあれば True
+
+    Returns:
+        Total rows written.
+    """
+    logger = structlog.get_logger()
+    logger.info("feat_career_gaps_compute_start",
+                semi_exit_years=semi_exit_years, exit_years=exit_years)
+
+    # Get all person credit years (distinct)
+    rows = conn.execute("""
+        SELECT c.person_id, GROUP_CONCAT(DISTINCT a.year) AS years
+        FROM credits c
+        JOIN anime a ON c.anime_id = a.id
+        WHERE a.year IS NOT NULL
+        GROUP BY c.person_id
+    """).fetchall()
+
+    inserts: list[tuple] = []
+    for row in rows:
+        pid = row[0]
+        year_strs = row[1]
+        if not year_strs:
+            continue
+        years = sorted(set(int(y) for y in year_strs.split(",")))
+        if len(years) < 2:
+            continue
+
+        for i in range(len(years) - 1):
+            gap = years[i + 1] - years[i]
+            if gap >= semi_exit_years:
+                gap_start = years[i]
+                gap_end = years[i + 1]
+                gap_type = "exit" if gap >= exit_years else "semi_exit"
+                inserts.append((
+                    pid,
+                    gap_start,
+                    gap_end,
+                    gap,
+                    1,  # returned = True (there is a subsequent credit)
+                    gap_type,
+                ))
+
+        # Check if the person's last credit year indicates an ongoing gap
+        last_year = years[-1]
+        ongoing_gap = reliable_max_year - last_year
+        if ongoing_gap >= semi_exit_years:
+            gap_type = "exit" if ongoing_gap >= exit_years else "semi_exit"
+            inserts.append((
+                pid,
+                last_year,
+                None,  # gap_end = NULL (not yet returned)
+                ongoing_gap,
+                0,  # returned = False
+                gap_type,
+            ))
+
+    conn.execute("DELETE FROM feat_career_gaps")
+    if inserts:
+        conn.executemany(
+            """INSERT OR REPLACE INTO feat_career_gaps
+               (person_id, gap_start_year, gap_end_year, gap_length, returned, gap_type)
+               VALUES (?,?,?,?,?,?)""",
+            inserts,
+        )
+    conn.commit()
+
+    total = conn.execute("SELECT COUNT(*) FROM feat_career_gaps").fetchone()[0]
+    n_returned = conn.execute(
+        "SELECT COUNT(*) FROM feat_career_gaps WHERE returned = 1"
+    ).fetchone()[0]
+    n_exit = conn.execute(
+        "SELECT COUNT(*) FROM feat_career_gaps WHERE gap_type = 'exit'"
+    ).fetchone()[0]
+    n_semi = conn.execute(
+        "SELECT COUNT(*) FROM feat_career_gaps WHERE gap_type = 'semi_exit'"
+    ).fetchone()[0]
+    logger.info("feat_career_gaps_computed",
+                total=total, returned=n_returned, exits=n_exit, semi_exits=n_semi)
+    return total

@@ -34,11 +34,21 @@ def studio_data():
       p7, p8: Studio C only (p8 added to a3 too for connected set)
     """
     anime_map = {
-        "a1": Anime(id="a1", title_en="Alpha", year=2018, score=9.0, studios=["StudioA"]),
-        "a2": Anime(id="a2", title_en="Beta", year=2019, score=8.5, studios=["StudioA"]),
-        "a3": Anime(id="a3", title_en="Gamma", year=2019, score=7.0, studios=["StudioB"]),
-        "a4": Anime(id="a4", title_en="Delta", year=2020, score=6.5, studios=["StudioB"]),
-        "a5": Anime(id="a5", title_en="Epsilon", year=2021, score=5.0, studios=["StudioC"]),
+        "a1": Anime(
+            id="a1", title_en="Alpha", year=2018, score=9.0, studios=["StudioA"]
+        ),
+        "a2": Anime(
+            id="a2", title_en="Beta", year=2019, score=8.5, studios=["StudioA"]
+        ),
+        "a3": Anime(
+            id="a3", title_en="Gamma", year=2019, score=7.0, studios=["StudioB"]
+        ),
+        "a4": Anime(
+            id="a4", title_en="Delta", year=2020, score=6.5, studios=["StudioB"]
+        ),
+        "a5": Anime(
+            id="a5", title_en="Epsilon", year=2021, score=5.0, studios=["StudioC"]
+        ),
     }
 
     credits = [
@@ -49,13 +59,21 @@ def studio_data():
         Credit(person_id="p2", anime_id="a3", role=Role.KEY_ANIMATOR, source="test"),
         Credit(person_id="p2", anime_id="a5", role=Role.KEY_ANIMATOR, source="test"),
         # p3, p4: stayers at A
-        Credit(person_id="p3", anime_id="a1", role=Role.ANIMATION_DIRECTOR, source="test"),
-        Credit(person_id="p3", anime_id="a2", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p3", anime_id="a1", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
+        Credit(
+            person_id="p3", anime_id="a2", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
         Credit(person_id="p4", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"),
         Credit(person_id="p4", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
         # p5, p6: stayers at B
-        Credit(person_id="p5", anime_id="a3", role=Role.ANIMATION_DIRECTOR, source="test"),
-        Credit(person_id="p5", anime_id="a4", role=Role.ANIMATION_DIRECTOR, source="test"),
+        Credit(
+            person_id="p5", anime_id="a3", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
+        Credit(
+            person_id="p5", anime_id="a4", role=Role.ANIMATION_DIRECTOR, source="test"
+        ),
         Credit(person_id="p6", anime_id="a3", role=Role.KEY_ANIMATOR, source="test"),
         Credit(person_id="p6", anime_id="a4", role=Role.KEY_ANIMATOR, source="test"),
         # p7: stayer at C
@@ -93,8 +111,12 @@ class TestInferStudioAssignment:
 
     def test_anime_without_studio_skipped(self):
         """Credits for anime with no studio are ignored."""
-        anime_map = {"a1": Anime(id="a1", title_en="NoStudio", year=2020, score=7.0, studios=[])}
-        credits = [Credit(person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR, source="test")]
+        anime_map = {
+            "a1": Anime(id="a1", title_en="NoStudio", year=2020, score=7.0, studios=[])
+        }
+        credits = [
+            Credit(person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR, source="test")
+        ]
         result = infer_studio_assignment(credits, anime_map)
         assert "p1" not in result
 
@@ -180,27 +202,65 @@ class TestEstimateAKM:
         # Override anime_map: give StudioA many episodes (large scale)
         # and StudioC few episodes (small scale)
         anime_map = {
-            "a1": Anime(id="a1", title_en="Alpha", year=2018, score=9.0,
-                        studios=["StudioA"], episodes=24),
-            "a2": Anime(id="a2", title_en="Beta", year=2019, score=8.5,
-                        studios=["StudioA"], episodes=24),
-            "a3": Anime(id="a3", title_en="Gamma", year=2019, score=7.0,
-                        studios=["StudioB"], episodes=12),
-            "a4": Anime(id="a4", title_en="Delta", year=2020, score=6.5,
-                        studios=["StudioB"], episodes=12),
-            "a5": Anime(id="a5", title_en="Epsilon", year=2021, score=5.0,
-                        studios=["StudioC"], episodes=1),
+            "a1": Anime(
+                id="a1",
+                title_en="Alpha",
+                year=2018,
+                score=9.0,
+                studios=["StudioA"],
+                episodes=24,
+            ),
+            "a2": Anime(
+                id="a2",
+                title_en="Beta",
+                year=2019,
+                score=8.5,
+                studios=["StudioA"],
+                episodes=24,
+            ),
+            "a3": Anime(
+                id="a3",
+                title_en="Gamma",
+                year=2019,
+                score=7.0,
+                studios=["StudioB"],
+                episodes=12,
+            ),
+            "a4": Anime(
+                id="a4",
+                title_en="Delta",
+                year=2020,
+                score=6.5,
+                studios=["StudioB"],
+                episodes=12,
+            ),
+            "a5": Anime(
+                id="a5",
+                title_en="Epsilon",
+                year=2021,
+                score=5.0,
+                studios=["StudioC"],
+                episodes=1,
+            ),
         }
         # Add extra staff to StudioA anime for larger staff counts
         extra_credits = list(base_credits)
         for i in range(10, 20):
             extra_credits.append(
-                Credit(person_id=f"extra{i}", anime_id="a1",
-                       role=Role.KEY_ANIMATOR, source="test")
+                Credit(
+                    person_id=f"extra{i}",
+                    anime_id="a1",
+                    role=Role.KEY_ANIMATOR,
+                    source="test",
+                )
             )
             extra_credits.append(
-                Credit(person_id=f"extra{i}", anime_id="a2",
-                       role=Role.KEY_ANIMATOR, source="test")
+                Credit(
+                    person_id=f"extra{i}",
+                    anime_id="a2",
+                    role=Role.KEY_ANIMATOR,
+                    source="test",
+                )
             )
         result = estimate_akm(extra_credits, anime_map)
         if "StudioA" in result.studio_fe and "StudioC" in result.studio_fe:
@@ -224,7 +284,12 @@ class TestEstimateAKM:
                 id=aid, title_en=f"Anime {i}", year=2020, score=7.0, studios=[studio]
             )
             credits.append(
-                Credit(person_id=f"p{i}", anime_id=aid, role=Role.KEY_ANIMATOR, source="test")
+                Credit(
+                    person_id=f"p{i}",
+                    anime_id=aid,
+                    role=Role.KEY_ANIMATOR,
+                    source="test",
+                )
             )
         # Add a second year for each person so they have transitions
         for i in range(1, 11):
@@ -234,7 +299,12 @@ class TestEstimateAKM:
                 id=aid2, title_en=f"Anime {i}b", year=2021, score=7.0, studios=[studio]
             )
             credits.append(
-                Credit(person_id=f"p{i}", anime_id=aid2, role=Role.KEY_ANIMATOR, source="test")
+                Credit(
+                    person_id=f"p{i}",
+                    anime_id=aid2,
+                    role=Role.KEY_ANIMATOR,
+                    source="test",
+                )
             )
 
         result = estimate_akm(credits, anime_map)
@@ -255,17 +325,27 @@ class TestEstimateAKM:
         """Co-production (multiple studios) distributes credit weight equally."""
         anime_map = {
             "a1": Anime(
-                id="a1", title_en="CoProduction", year=2020, score=8.0,
+                id="a1",
+                title_en="CoProduction",
+                year=2020,
+                score=8.0,
                 studios=["StudioA", "StudioB"],
             ),
             "a2": Anime(
-                id="a2", title_en="Solo", year=2021, score=7.0,
+                id="a2",
+                title_en="Solo",
+                year=2021,
+                score=7.0,
                 studios=["StudioA"],
             ),
         }
         credits = [
-            Credit(person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"),
-            Credit(person_id="p1", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"),
+            Credit(
+                person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR, source="test"
+            ),
+            Credit(
+                person_id="p1", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"
+            ),
         ]
         assignments = infer_studio_assignment(credits, anime_map)
         # p1 in 2020: StudioA and StudioB both get 0.5 weight
@@ -290,7 +370,9 @@ class TestShrinkPersonFE:
         person_ind = rng.randint(0, n_persons, size=n_obs).astype(np.int32)
         residuals = rng.randn(n_obs) * 0.5
 
-        shrunk = _shrink_person_fe(person_fe, person_ind, residuals, n_obs, n_persons, log)
+        shrunk = _shrink_person_fe(
+            person_fe, person_ind, residuals, n_obs, n_persons, log
+        )
         assert np.std(shrunk) < np.std(person_fe)
 
     def test_low_obs_persons_shrunk_more(self):
@@ -300,7 +382,9 @@ class TestShrinkPersonFE:
         log = structlog.get_logger()
         n_persons = 20
         # Person 0: 1 observation, Person 1: 50 observations
-        person_ind = np.array([0] + [1] * 50 + list(range(2, n_persons)) * 3, dtype=np.int32)
+        person_ind = np.array(
+            [0] + [1] * 50 + list(range(2, n_persons)) * 3, dtype=np.int32
+        )
         n_obs = len(person_ind)
         person_fe = np.zeros(n_persons)
         person_fe[0] = 2.0  # extreme value, 1 obs
@@ -309,7 +393,9 @@ class TestShrinkPersonFE:
             person_fe[i] = 0.0
         residuals = np.random.RandomState(42).randn(n_obs) * 0.5
 
-        shrunk = _shrink_person_fe(person_fe, person_ind, residuals, n_obs, n_persons, log)
+        shrunk = _shrink_person_fe(
+            person_fe, person_ind, residuals, n_obs, n_persons, log
+        )
         # Person 0 (1 obs) should be shrunk more toward mean
         # Person 1 (50 obs) should retain more of their raw value
         shrink_0 = abs(shrunk[0] - person_fe[0])
@@ -331,7 +417,9 @@ class TestShrinkPersonFE:
         person_ind = rng.randint(0, n_persons, size=n_obs).astype(np.int32)
         residuals = rng.randn(n_obs) * 0.3
 
-        shrunk = _shrink_person_fe(person_fe, person_ind, residuals, n_obs, n_persons, log)
+        shrunk = _shrink_person_fe(
+            person_fe, person_ind, residuals, n_obs, n_persons, log
+        )
         # Ordering should be preserved (higher raw → higher shrunk)
         active = np.array([np.sum(person_ind == i) > 0 for i in range(n_persons)])
         raw_order = np.argsort(person_fe[active])
@@ -345,7 +433,9 @@ class TestShrinkPersonFE:
         import structlog
 
         log = structlog.get_logger()
-        result = _shrink_person_fe(np.array([]), np.array([], dtype=np.int32), np.array([]), 0, 0, log)
+        result = _shrink_person_fe(
+            np.array([]), np.array([], dtype=np.int32), np.array([]), 0, 0, log
+        )
         assert len(result) == 0
 
     def test_akm_integration_shrinkage_applied(self):
@@ -358,19 +448,49 @@ class TestShrinkPersonFE:
             studio = f"Studio{chr(65 + i % 3)}"
             aid = f"a{i}"
             score = 7.0 + (i % 5) * 0.3
-            anime_map[aid] = Anime(id=aid, title_en=f"A{i}", year=2018 + i // 4, score=score, studios=[studio])
+            anime_map[aid] = Anime(
+                id=aid,
+                title_en=f"A{i}",
+                year=2018 + i // 4,
+                score=score,
+                studios=[studio],
+            )
 
         # 15 regular persons with multiple credits
         for p in range(15):
             for a in range(20):
                 if (p + a) % 3 == 0:
-                    credits.append(Credit(person_id=f"p{p}", anime_id=f"a{a}", role=Role.KEY_ANIMATOR, source="t"))
+                    credits.append(
+                        Credit(
+                            person_id=f"p{p}",
+                            anime_id=f"a{a}",
+                            role=Role.KEY_ANIMATOR,
+                            source="t",
+                        )
+                    )
 
         # 1 person on single high-score anime
-        anime_map["a_special"] = Anime(id="a_special", title_en="Special", year=2022, score=9.5, studios=["StudioA"])
-        credits.append(Credit(person_id="p_rare", anime_id="a_special", role=Role.KEY_ANIMATOR, source="t"))
+        anime_map["a_special"] = Anime(
+            id="a_special",
+            title_en="Special",
+            year=2022,
+            score=9.5,
+            studios=["StudioA"],
+        )
+        credits.append(
+            Credit(
+                person_id="p_rare",
+                anime_id="a_special",
+                role=Role.KEY_ANIMATOR,
+                source="t",
+            )
+        )
         # Also give them a link to make connected
-        credits.append(Credit(person_id="p_rare", anime_id="a0", role=Role.KEY_ANIMATOR, source="t"))
+        credits.append(
+            Credit(
+                person_id="p_rare", anime_id="a0", role=Role.KEY_ANIMATOR, source="t"
+            )
+        )
 
         result = estimate_akm(credits, anime_map)
 
@@ -404,12 +524,16 @@ class TestDebiasObsCount:
         person_fe = 0.5 - 0.15 * np.log1p(credit_counts) + rng.normal(0, 0.1, n_persons)
 
         old_corr = float(np.corrcoef(person_fe, np.log1p(credit_counts))[0, 1])
-        assert old_corr < -0.3, f"Pre-condition: expect negative correlation, got {old_corr}"
+        assert old_corr < -0.3, (
+            f"Pre-condition: expect negative correlation, got {old_corr}"
+        )
 
         debiased = _debias_by_obs_count(person_fe.copy(), credit_counts, n_persons, log)
 
         new_corr = float(np.corrcoef(debiased, np.log1p(credit_counts))[0, 1])
-        assert abs(new_corr) < 0.05, f"After debiasing, correlation should be ~0, got {new_corr:.4f}"
+        assert abs(new_corr) < 0.05, (
+            f"After debiasing, correlation should be ~0, got {new_corr:.4f}"
+        )
 
     def test_preserves_ordering_within_bracket(self):
         """Within same credit count, relative ordering should be preserved."""
@@ -433,7 +557,7 @@ class TestDebiasObsCount:
             for i in range(19):
                 assert grp_slice[i] > grp_slice[i + 1], (
                     f"Ordering broken at group {grp_start}, idx {i}: "
-                    f"{grp_slice[i]:.4f} <= {grp_slice[i+1]:.4f}"
+                    f"{grp_slice[i]:.4f} <= {grp_slice[i + 1]:.4f}"
                 )
 
     def test_skips_positive_slope(self):
@@ -469,12 +593,20 @@ class TestWeightedObservations:
         """Data with through and episodic roles for weight testing."""
         anime_map = {
             "a1": Anime(
-                id="a1", title_en="Alpha", year=2018, score=9.0,
-                studios=["StudioA"], episodes=24,
+                id="a1",
+                title_en="Alpha",
+                year=2018,
+                score=9.0,
+                studios=["StudioA"],
+                episodes=24,
             ),
             "a2": Anime(
-                id="a2", title_en="Beta", year=2020, score=7.0,
-                studios=["StudioB"], episodes=12,
+                id="a2",
+                title_en="Beta",
+                year=2020,
+                score=7.0,
+                studios=["StudioB"],
+                episodes=12,
             ),
         }
         return anime_map
@@ -491,12 +623,19 @@ class TestWeightedObservations:
     def test_episode_coverage_scales_weight(self):
         """Episodic role on 2/24 episodes should weigh less than through role on full series."""
         anime = Anime(
-            id="a1", title_en="A", year=2020, score=8.0,
-            studios=["StudioA"], episodes=24,
+            id="a1",
+            title_en="A",
+            year=2020,
+            score=8.0,
+            studios=["StudioA"],
+            episodes=24,
         )
         # Key Animator credited on eps 3 and 7
         w_partial = _compute_credit_weight(
-            Role.KEY_ANIMATOR, "Key Animation (eps 3, 7)", anime, 5,
+            Role.KEY_ANIMATOR,
+            "Key Animation (eps 3, 7)",
+            anime,
+            5,
         )
         # Director (through role, full coverage)
         w_through = _compute_credit_weight(Role.DIRECTOR, None, anime, 5)
@@ -522,12 +661,20 @@ class TestWeightedObservations:
         """Director+Character Designer should have higher w_obs than Director alone."""
         anime_map = {
             "a1": Anime(
-                id="a1", title_en="A", year=2020, score=8.0,
-                studios=["StudioA"], episodes=12,
+                id="a1",
+                title_en="A",
+                year=2020,
+                score=8.0,
+                studios=["StudioA"],
+                episodes=12,
             ),
             "a2": Anime(
-                id="a2", title_en="B", year=2021, score=7.5,
-                studios=["StudioB"], episodes=12,
+                id="a2",
+                title_en="B",
+                year=2021,
+                score=7.5,
+                studios=["StudioB"],
+                episodes=12,
             ),
         }
         # p1: director + character designer on a1
@@ -535,7 +682,9 @@ class TestWeightedObservations:
         # Both also on a2 (for connected set)
         credits = [
             Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="t"),
-            Credit(person_id="p1", anime_id="a1", role=Role.CHARACTER_DESIGNER, source="t"),
+            Credit(
+                person_id="p1", anime_id="a1", role=Role.CHARACTER_DESIGNER, source="t"
+            ),
             Credit(person_id="p1", anime_id="a2", role=Role.DIRECTOR, source="t"),
             Credit(person_id="p2", anime_id="a1", role=Role.DIRECTOR, source="t"),
             Credit(person_id="p2", anime_id="a2", role=Role.KEY_ANIMATOR, source="t"),
@@ -607,9 +756,7 @@ class TestWeightedObservations:
         # Person 1: 10 observations (high count)
         # Remaining: 5 obs each
         person_ind_parts = (
-            [0] * 3
-            + [1] * 10
-            + [i for i in range(2, n_persons) for _ in range(5)]
+            [0] * 3 + [1] * 10 + [i for i in range(2, n_persons) for _ in range(5)]
         )
         person_ind = np.array(person_ind_parts, dtype=np.int32)
         n_obs = len(person_ind)
@@ -622,7 +769,9 @@ class TestWeightedObservations:
 
         residuals = np.random.RandomState(42).randn(n_obs) * 0.5
 
-        shrunk = _shrink_person_fe(person_fe, person_ind, residuals, n_obs, n_persons, log)
+        shrunk = _shrink_person_fe(
+            person_fe, person_ind, residuals, n_obs, n_persons, log
+        )
 
         # Person 1 (10 obs) should retain more of raw value than Person 0 (3 obs)
         shrink_0 = abs(shrunk[0] - person_fe[0])
@@ -637,8 +786,9 @@ class TestWeightedObservations:
 class TestRedistributeStudioFE:
     """Tests for mover-calibrated studio FE redistribution."""
 
-    def _build_synthetic_data(self, *, n_movers=30, n_stayers_per_studio=20,
-                               absorption=0.5):
+    def _build_synthetic_data(
+        self, *, n_movers=30, n_stayers_per_studio=20, absorption=0.5
+    ):
         """Build synthetic AKM state with controlled absorption.
 
         Creates 2 studios:
@@ -705,16 +855,27 @@ class TestRedistributeStudioFE:
         # (already random, no correlation)
 
         # Stayers at good studio: person_fe depressed (absorbed into studio_fe)
-        person_fe[n_movers:n_movers + n_stayers_per_studio] -= absorption
+        person_fe[n_movers : n_movers + n_stayers_per_studio] -= absorption
         # Stayers at bad studio: person_fe inflated (absorbed from studio_fe)
-        person_fe[n_movers + n_stayers_per_studio:] += absorption
+        person_fe[n_movers + n_stayers_per_studio :] += absorption
 
         person_list = [f"p{i}" for i in range(n_persons)]
         movers_set = {f"p{i}" for i in range(n_movers)}
         log = structlog.get_logger()
 
-        return (person_fe, studio_fe, person_ind, studio_ind, w,
-                person_list, movers_set, n_obs, n_persons, n_studios, log)
+        return (
+            person_fe,
+            studio_fe,
+            person_ind,
+            studio_ind,
+            w,
+            person_list,
+            movers_set,
+            n_obs,
+            n_persons,
+            n_studios,
+            log,
+        )
 
     def test_absorption_detected_and_corrected(self):
         """When stayers show absorption, α > 0 and redistribution is applied."""
@@ -727,8 +888,8 @@ class TestRedistributeStudioFE:
         # Stayers at good studio (indices 30-49) should have higher FE after
         n_movers = 30
         n_sps = 20
-        mean_raw_good = float(np.mean(person_fe[n_movers:n_movers + n_sps]))
-        mean_adj_good = float(np.mean(adj[n_movers:n_movers + n_sps]))
+        mean_raw_good = float(np.mean(person_fe[n_movers : n_movers + n_sps]))
+        mean_adj_good = float(np.mean(adj[n_movers : n_movers + n_sps]))
         assert mean_adj_good > mean_raw_good, (
             f"Stayers at good studio: adj {mean_adj_good:.3f} should be > "
             f"raw {mean_raw_good:.3f}"
@@ -778,6 +939,7 @@ class TestRedistributeStudioFE:
     def test_high_weight_gets_more_redistribution(self):
         """Person with higher observation weight gets more redistribution."""
         import structlog
+
         log = structlog.get_logger()
 
         n_persons = 60
@@ -840,8 +1002,17 @@ class TestRedistributeStudioFE:
         movers_set = {f"p{i}" for i in range(20)}
 
         adj, alpha = _redistribute_studio_fe(
-            person_fe.copy(), studio_fe, person_ind, studio_ind, w,
-            person_list, movers_set, n_obs, n_persons, n_studios, log,
+            person_fe.copy(),
+            studio_fe,
+            person_ind,
+            studio_ind,
+            w,
+            person_list,
+            movers_set,
+            n_obs,
+            n_persons,
+            n_studios,
+            log,
         )
 
         if alpha < 0.01:
@@ -859,6 +1030,7 @@ class TestRedistributeStudioFE:
     def test_insufficient_data_skips(self):
         """With too few persons, redistribution is skipped."""
         import structlog
+
         log = structlog.get_logger()
 
         person_fe = np.array([0.5, -0.5])
@@ -868,8 +1040,17 @@ class TestRedistributeStudioFE:
         w = np.array([1.0, 1.0])
 
         adj, alpha = _redistribute_studio_fe(
-            person_fe, studio_fe, person_ind, studio_ind, w,
-            ["p0", "p1"], {"p0"}, 2, 2, 1, log,
+            person_fe,
+            studio_fe,
+            person_ind,
+            studio_ind,
+            w,
+            ["p0", "p1"],
+            {"p0"},
+            2,
+            2,
+            1,
+            log,
         )
         assert alpha == 0.0
         np.testing.assert_array_equal(adj, person_fe)
@@ -884,8 +1065,12 @@ class TestRedistributeStudioFE:
             aid = f"a{i}"
             score = 5.0 + (i % 3) * 2.0  # A=5-7, B=7-9, C varies
             anime_map[aid] = Anime(
-                id=aid, title_en=f"A{i}", year=2015 + i // 6,
-                score=score, studios=[studio], episodes=12,
+                id=aid,
+                title_en=f"A{i}",
+                year=2015 + i // 6,
+                score=score,
+                studios=[studio],
+                episodes=12,
             )
 
         # 20 movers across studios
@@ -893,25 +1078,36 @@ class TestRedistributeStudioFE:
             src_idx = m % 3
             dst_idx = (m + 1) % 3
             for i in range(src_idx * 10, src_idx * 10 + 5):
-                credits.append(Credit(
-                    person_id=f"mover{m}", anime_id=f"a{i}",
-                    role=Role.KEY_ANIMATOR, source="t",
-                ))
+                credits.append(
+                    Credit(
+                        person_id=f"mover{m}",
+                        anime_id=f"a{i}",
+                        role=Role.KEY_ANIMATOR,
+                        source="t",
+                    )
+                )
             for i in range(dst_idx * 10, dst_idx * 10 + 5):
-                credits.append(Credit(
-                    person_id=f"mover{m}", anime_id=f"a{i}",
-                    role=Role.KEY_ANIMATOR, source="t",
-                ))
+                credits.append(
+                    Credit(
+                        person_id=f"mover{m}",
+                        anime_id=f"a{i}",
+                        role=Role.KEY_ANIMATOR,
+                        source="t",
+                    )
+                )
 
         # 30 stayers
         for s in range(30):
             studio_idx = s % 3
             for i in range(studio_idx * 10, studio_idx * 10 + 10):
-                credits.append(Credit(
-                    person_id=f"stayer{s}", anime_id=f"a{i}",
-                    role=Role.DIRECTOR if s < 3 else Role.KEY_ANIMATOR,
-                    source="t",
-                ))
+                credits.append(
+                    Credit(
+                        person_id=f"stayer{s}",
+                        anime_id=f"a{i}",
+                        role=Role.DIRECTOR if s < 3 else Role.KEY_ANIMATOR,
+                        source="t",
+                    )
+                )
 
         result = estimate_akm(credits, anime_map)
         assert isinstance(result, AKMResult)

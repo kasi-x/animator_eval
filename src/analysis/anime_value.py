@@ -165,12 +165,8 @@ def compute_creative_value(
         if is_animator_role(c.role) and c.person_id in person_scores
     ]
 
-    avg_director_skill = (
-        sum(director_fes) / len(director_fes) if director_fes else 0.5
-    )
-    avg_animator_skill = (
-        sum(animator_fes) / len(animator_fes) if animator_fes else 0.5
-    )
+    avg_director_skill = sum(director_fes) / len(director_fes) if director_fes else 0.5
+    avg_animator_skill = sum(animator_fes) / len(animator_fes) if animator_fes else 0.5
 
     skill_score = avg_director_skill * 0.6 + avg_animator_skill * 0.4
 
@@ -499,9 +495,9 @@ def find_overperforming_works(
 def main():
     """スタンドアロン実行用エントリーポイント."""
     from src.database import (
-        get_all_anime,
-        get_all_credits,
-        get_all_scores,
+        load_all_anime,
+        load_all_credits,
+        load_all_scores,
         get_connection,
         init_db,
     )
@@ -509,9 +505,9 @@ def main():
     conn = get_connection()
     init_db(conn)
 
-    anime_list = get_all_anime(conn)
-    credits = get_all_credits(conn)
-    scores_list = get_all_scores(conn)
+    anime_list = load_all_anime(conn)
+    credits = load_all_credits(conn)
+    scores_list = load_all_scores(conn)
 
     person_scores = {
         s.person_id: {

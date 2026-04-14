@@ -134,8 +134,12 @@ def compute_genre_quality(
     birank = birank_scores or {}
 
     # Build genre → person credits mapping
-    genre_person_credits: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
-    genre_anime_years: dict[str, dict[int, set[str]]] = defaultdict(lambda: defaultdict(set))
+    genre_person_credits: dict[str, dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
+    genre_anime_years: dict[str, dict[int, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
     anime_staff_count: dict[str, int] = defaultdict(int)
     person_anime_genres: dict[str, list[tuple[str, list[str]]]] = defaultdict(list)
 
@@ -152,7 +156,10 @@ def compute_genre_quality(
     for c in credits:
         anime = anime_map.get(c.anime_id)
         if anime and anime.year:
-            if c.person_id not in person_first_year or anime.year < person_first_year[c.person_id]:
+            if (
+                c.person_id not in person_first_year
+                or anime.year < person_first_year[c.person_id]
+            ):
                 person_first_year[c.person_id] = anime.year
 
     for c in credits:
@@ -205,7 +212,9 @@ def compute_genre_quality(
 
     # 2. Saturation Detection
     # Pre-build genre → year → set[person_id] index (O(credits), not O(genres×persons×credits))
-    genre_year_staff: dict[str, dict[int, set[str]]] = defaultdict(lambda: defaultdict(set))
+    genre_year_staff: dict[str, dict[int, set[str]]] = defaultdict(
+        lambda: defaultdict(set)
+    )
     for c in credits:
         anime = anime_map.get(c.anime_id)
         if not anime or not anime.year or not anime.genres:
@@ -233,10 +242,14 @@ def compute_genre_quality(
             if n_anime > 0:
                 ratios.append(n_staff / n_anime)
                 ratio_years.append(y)
-        ratio_slope = _ols_slope(
-            np.array(ratio_years, dtype=np.float64),
-            np.array(ratios, dtype=np.float64),
-        ) if len(ratios) >= 3 else 0.0
+        ratio_slope = (
+            _ols_slope(
+                np.array(ratio_years, dtype=np.float64),
+                np.array(ratios, dtype=np.float64),
+            )
+            if len(ratios) >= 3
+            else 0.0
+        )
 
         # Newcomer FE trend
         newcomer_fe_by_year: dict[int, list[float]] = defaultdict(list)
@@ -248,10 +261,14 @@ def compute_genre_quality(
                     newcomer_fe_by_year[fy].append(fe)
         nc_years = sorted(newcomer_fe_by_year.keys())
         nc_fes = [float(np.mean(newcomer_fe_by_year[y])) for y in nc_years]
-        newcomer_slope = _ols_slope(
-            np.array(nc_years, dtype=np.float64),
-            np.array(nc_fes, dtype=np.float64),
-        ) if len(nc_fes) >= 3 else 0.0
+        newcomer_slope = (
+            _ols_slope(
+                np.array(nc_years, dtype=np.float64),
+                np.array(nc_fes, dtype=np.float64),
+            )
+            if len(nc_fes) >= 3
+            else 0.0
+        )
 
         is_saturated = anime_slope > 0.3 and ratio_slope < -0.1 and newcomer_slope < 0
 
@@ -267,7 +284,9 @@ def compute_genre_quality(
     mobility: dict[str, GenreMobility] = {}
 
     # Build person → genre credit counts
-    person_genre_credits: dict[str, dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    person_genre_credits: dict[str, dict[str, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
     for c in credits:
         anime = anime_map.get(c.anime_id)
         if anime and anime.genres:

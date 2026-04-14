@@ -29,11 +29,7 @@ def compute_va_supplementary_metrics_phase(context: PipelineContext) -> None:
     logger.info("step_start", step="va_character_diversity")
     with context.monitor.measure("va_character_diversity"):
         # Get person genders for gender_range computation
-        person_gender = {
-            p.id: p.gender
-            for p in context.persons
-            if p.gender
-        }
+        person_gender = {p.id: p.gender for p in context.persons if p.gender}
         diversity = compute_character_diversity(
             context.va_credits,
             context.anime_map,
@@ -54,18 +50,13 @@ def compute_va_supplementary_metrics_phase(context: PipelineContext) -> None:
     logger.info("step_start", step="va_replacement_difficulty")
     with context.monitor.measure("va_replacement_difficulty"):
         # Get casting tiers from diversity results
-        casting_tiers = {
-            pid: m.casting_tier
-            for pid, m in diversity.items()
-        }
+        casting_tiers = {pid: m.casting_tier for pid, m in diversity.items()}
         rdi = compute_replacement_difficulty(
             context.va_credits,
             context.anime_map,
             casting_tiers=casting_tiers,
         )
-        context.va_replacement_difficulty = {
-            pid: rd.rdi for pid, rd in rdi.items()
-        }
+        context.va_replacement_difficulty = {pid: rd.rdi for pid, rd in rdi.items()}
 
     logger.info(
         "va_supplementary_complete",

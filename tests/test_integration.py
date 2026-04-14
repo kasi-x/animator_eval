@@ -61,9 +61,7 @@ class TestFullPipeline:
         from src.pipeline import run_scoring_pipeline
 
         results = run_scoring_pipeline()
-        has_multiple = any(
-            r["birank"] > 0 and r["person_fe"] != 0 for r in results
-        )
+        has_multiple = any(r["birank"] > 0 and r["person_fe"] != 0 for r in results)
         assert has_multiple
 
     def test_iv_score_ordering(self, synthetic_db):

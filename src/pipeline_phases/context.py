@@ -72,8 +72,12 @@ class PipelineContext:
     studio_fe: dict[str, float] = field(default_factory=dict)  # ψ_j
     birank_person_scores: dict[str, float] = field(default_factory=dict)
     birank_anime_scores: dict[str, float] = field(default_factory=dict)
-    community_map: dict[str, int] = field(default_factory=dict)  # person_id → community_id
-    studio_assignments: dict[str, dict] = field(default_factory=dict)  # person_id → {year → studio}
+    community_map: dict[str, int] = field(
+        default_factory=dict
+    )  # person_id → community_id
+    studio_assignments: dict[str, dict] = field(
+        default_factory=dict
+    )  # person_id → {year → studio}
 
     # Phase 6 new components
     knowledge_spanner_scores: dict[str, Any] = field(default_factory=dict)
@@ -85,12 +89,16 @@ class PipelineContext:
 
     # Integrated Value (replaces composite_scores semantically)
     iv_scores: dict[str, float] = field(default_factory=dict)
-    iv_scores_historical: dict[str, float] = field(default_factory=dict)  # dormancy-free
+    iv_scores_historical: dict[str, float] = field(
+        default_factory=dict
+    )  # dormancy-free
     iv_lambda_weights: dict[str, float] = field(default_factory=dict)
     iv_component_std: dict[str, float] | None = None  # for consistent normalization
     iv_component_mean: dict[str, float] | None = None
     pca_variance_explained: float = 0.0  # IV PCA PC1 variance explained
-    quality_calibration: dict[str, Any] = field(default_factory=dict)  # BiRank quality params
+    quality_calibration: dict[str, Any] = field(
+        default_factory=dict
+    )  # BiRank quality params
 
     # Supplementary metrics (Phase 6)
     decay_results: dict[str, list[dict]] = field(default_factory=dict)
@@ -109,6 +117,9 @@ class PipelineContext:
     anime_values: dict[str, Any] = field(default_factory=dict)
     contribution_data: dict[str, Any] = field(default_factory=dict)
     potential_value_scores: dict[str, Any] = field(default_factory=dict)
+    # career_track per person_id (Phase 6 supplementary_metrics)
+    # 値: 'animator' / 'animator_director' / 'director' / 'production' / 'technical' / 'multi_track'
+    career_tracks: dict[str, str] = field(default_factory=dict)
 
     # =========================================================================
     # Voice Actor Pipeline (Phases 4B–7B, parallel with production pipeline)
@@ -282,8 +293,10 @@ class PipelineCheckpoint:
         if not (credit_ok and person_ok):
             checkpoint_logger.info(
                 "checkpoint_counts_mismatch",
-                saved_credits=saved_credits, cur_credits=cur_credits,
-                saved_persons=saved_persons, cur_persons=cur_persons,
+                saved_credits=saved_credits,
+                cur_credits=cur_credits,
+                saved_persons=saved_persons,
+                cur_persons=cur_persons,
             )
         return credit_ok and person_ok
 

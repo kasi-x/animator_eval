@@ -32,6 +32,7 @@ from src.reporting.specs.finding import UncertaintyInfo
 # Analytic (normal approximation)
 # ---------------------------------------------------------------------------
 
+
 def analytic_ci(
     estimate: float,
     standard_error: float,
@@ -70,6 +71,7 @@ def analytic_ci(
 # ---------------------------------------------------------------------------
 # Bootstrap
 # ---------------------------------------------------------------------------
+
 
 def bootstrap_ci(
     sample: Sequence[float] | np.ndarray,
@@ -136,6 +138,7 @@ def bootstrap_ci(
 # Delta method
 # ---------------------------------------------------------------------------
 
+
 def delta_method_ci(
     estimate: float,
     gradient: float,
@@ -178,6 +181,7 @@ def delta_method_ci(
 # ---------------------------------------------------------------------------
 # Internals
 # ---------------------------------------------------------------------------
+
 
 def _normal_quantile(p: float) -> float:
     """Approximate the standard normal quantile (inverse CDF).

@@ -222,11 +222,13 @@ def compute_patronage_and_dormancy(
                 continue
             pr_d = director_birank_scores.get(dir_id, 0.0)
             if pr_d > 0:
-                patronage_details[c.person_id].append({
-                    "director_id": dir_id,
-                    "anime_id": c.anime_id,
-                    "director_birank": round(pr_d, 6),
-                })
+                patronage_details[c.person_id].append(
+                    {
+                        "director_id": dir_id,
+                        "anime_id": c.anime_id,
+                        "director_birank": round(pr_d, 6),
+                    }
+                )
 
     return PatronageDormancyResult(
         patronage_premium=patronage,

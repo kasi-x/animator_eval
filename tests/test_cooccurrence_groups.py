@@ -13,6 +13,7 @@ from src.models import Anime, Credit, Role
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _anime(aid: str, year: int) -> Anime:
     return Anime(id=aid, title_en=f"Anime {aid}", year=year)
 
@@ -47,6 +48,7 @@ def _make_basic_data():
 # COOCCURRENCE_ROLES の確認
 # ---------------------------------------------------------------------------
 
+
 class TestCooccurrenceRoles:
     def test_director_included(self):
         assert Role.DIRECTOR in COOCCURRENCE_ROLES
@@ -68,6 +70,7 @@ class TestCooccurrenceRoles:
 # 基本動作確認
 # ---------------------------------------------------------------------------
 
+
 class TestBasicDetection:
     def test_detects_three_person_group(self):
         anime_map, credits = _make_basic_data()
@@ -85,7 +88,9 @@ class TestBasicDetection:
         anime_map, credits = _make_basic_data()
         result = compute_cooccurrence_groups(credits, anime_map, min_shared_works=3)
         group = next(
-            g for g in result["groups"] if frozenset(g["members"]) == frozenset({"p1", "p2", "p3"})
+            g
+            for g in result["groups"]
+            if frozenset(g["members"]) == frozenset({"p1", "p2", "p3"})
         )
         assert group["shared_works"] == 3
 
@@ -93,7 +98,9 @@ class TestBasicDetection:
         anime_map, credits = _make_basic_data()
         result = compute_cooccurrence_groups(credits, anime_map, min_shared_works=3)
         group = next(
-            g for g in result["groups"] if frozenset(g["members"]) == frozenset({"p1", "p2", "p3"})
+            g
+            for g in result["groups"]
+            if frozenset(g["members"]) == frozenset({"p1", "p2", "p3"})
         )
         assert set(group["shared_anime"]) == {"a1", "a2", "a3"}
 
@@ -101,7 +108,9 @@ class TestBasicDetection:
         anime_map, credits = _make_basic_data()
         result = compute_cooccurrence_groups(credits, anime_map, min_shared_works=3)
         group = next(
-            g for g in result["groups"] if frozenset(g["members"]) == frozenset({"p1", "p2", "p3"})
+            g
+            for g in result["groups"]
+            if frozenset(g["members"]) == frozenset({"p1", "p2", "p3"})
         )
         assert "director" in group["roles"]["p1"]
         assert "character_designer" in group["roles"]["p2"]
@@ -116,6 +125,7 @@ class TestBasicDetection:
 # ---------------------------------------------------------------------------
 # min_shared_works しきい値フィルタ
 # ---------------------------------------------------------------------------
+
 
 class TestThresholdFilter:
     def test_below_threshold_not_detected(self):
@@ -156,17 +166,15 @@ class TestThresholdFilter:
     def test_non_core_roles_ignored(self):
         """KEY_ANIMATOR のみのクレジットはフィルタされる."""
         anime_map = {f"a{i}": _anime(f"a{i}", 2020 + i) for i in range(1, 4)}
-        credits = [
-            # コアロール以外のみ
-            _credit("p1", aid, Role.KEY_ANIMATOR)
-            for aid in ("a1", "a2", "a3")
-        ] + [
-            _credit("p2", aid, Role.KEY_ANIMATOR)
-            for aid in ("a1", "a2", "a3")
-        ] + [
-            _credit("p3", aid, Role.KEY_ANIMATOR)
-            for aid in ("a1", "a2", "a3")
-        ]
+        credits = (
+            [
+                # コアロール以外のみ
+                _credit("p1", aid, Role.KEY_ANIMATOR)
+                for aid in ("a1", "a2", "a3")
+            ]
+            + [_credit("p2", aid, Role.KEY_ANIMATOR) for aid in ("a1", "a2", "a3")]
+            + [_credit("p3", aid, Role.KEY_ANIMATOR) for aid in ("a1", "a2", "a3")]
+        )
         result = compute_cooccurrence_groups(credits, anime_map, min_shared_works=3)
         assert result["groups"] == []
 
@@ -174,6 +182,7 @@ class TestThresholdFilter:
 # ---------------------------------------------------------------------------
 # is_active フラグ
 # ---------------------------------------------------------------------------
+
 
 class TestIsActiveFlag:
     def test_is_active_recent_year(self):
@@ -196,7 +205,9 @@ class TestIsActiveFlag:
         ]
         result = compute_cooccurrence_groups(credits, anime_map, min_shared_works=3)
         group = next(
-            g for g in result["groups"] if frozenset(g["members"]) == frozenset({"p1", "p2", "p3"})
+            g
+            for g in result["groups"]
+            if frozenset(g["members"]) == frozenset({"p1", "p2", "p3"})
         )
         assert group["is_active"] is True
 
@@ -220,7 +231,9 @@ class TestIsActiveFlag:
         ]
         result = compute_cooccurrence_groups(credits, anime_map, min_shared_works=3)
         group = next(
-            g for g in result["groups"] if frozenset(g["members"]) == frozenset({"p1", "p2", "p3"})
+            g
+            for g in result["groups"]
+            if frozenset(g["members"]) == frozenset({"p1", "p2", "p3"})
         )
         assert group["is_active"] is False
 
@@ -228,6 +241,7 @@ class TestIsActiveFlag:
 # ---------------------------------------------------------------------------
 # temporal_slices の構造
 # ---------------------------------------------------------------------------
+
 
 class TestTemporalSlices:
     def test_slice_keys_present(self):
@@ -262,22 +276,19 @@ class TestTemporalSlices:
 # 4人グループの検出
 # ---------------------------------------------------------------------------
 
+
 class TestFourPersonGroup:
     def test_four_person_group_detected(self):
         anime_map = {f"a{i}": _anime(f"a{i}", 2018 + i) for i in range(1, 4)}
-        credits = [
-            _credit("p1", aid, Role.DIRECTOR)
-            for aid in ("a1", "a2", "a3")
-        ] + [
-            _credit("p2", aid, Role.CHARACTER_DESIGNER)
-            for aid in ("a1", "a2", "a3")
-        ] + [
-            _credit("p3", aid, Role.BACKGROUND_ART)
-            for aid in ("a1", "a2", "a3")
-        ] + [
-            _credit("p4", aid, Role.FINISHING)
-            for aid in ("a1", "a2", "a3")
-        ]
+        credits = (
+            [_credit("p1", aid, Role.DIRECTOR) for aid in ("a1", "a2", "a3")]
+            + [
+                _credit("p2", aid, Role.CHARACTER_DESIGNER)
+                for aid in ("a1", "a2", "a3")
+            ]
+            + [_credit("p3", aid, Role.BACKGROUND_ART) for aid in ("a1", "a2", "a3")]
+            + [_credit("p4", aid, Role.FINISHING) for aid in ("a1", "a2", "a3")]
+        )
         result = compute_cooccurrence_groups(
             credits, anime_map, min_shared_works=3, max_group_size=4
         )
@@ -302,6 +313,7 @@ class TestFourPersonGroup:
 # ---------------------------------------------------------------------------
 # サマリー構造
 # ---------------------------------------------------------------------------
+
 
 class TestSummary:
     def test_summary_keys(self):
@@ -330,6 +342,7 @@ class TestSummary:
 # エッジケース
 # ---------------------------------------------------------------------------
 
+
 class TestEdgeCases:
     def test_empty_credits(self):
         result = compute_cooccurrence_groups([], {}, min_shared_works=3)
@@ -349,7 +362,9 @@ class TestEdgeCases:
             credits, anime_map, iv_scores=scores, min_shared_works=3
         )
         group = next(
-            g for g in result["groups"] if frozenset(g["members"]) == frozenset({"p1", "p2", "p3"})
+            g
+            for g in result["groups"]
+            if frozenset(g["members"]) == frozenset({"p1", "p2", "p3"})
         )
         expected = round((80.0 + 60.0 + 70.0) / 3, 1)
         assert group["avg_iv_score"] == pytest.approx(expected, abs=0.1)

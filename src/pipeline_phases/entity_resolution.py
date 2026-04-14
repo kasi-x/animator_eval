@@ -194,16 +194,18 @@ def _resolve_anime_entities(
                 and other_credits > canonical_credits
                 and other_credits > 0
             ):
-                anomalies.append({
-                    "title_ja": title,
-                    "canonical_id": canonical.id,
-                    "canonical_source": canonical_src,
-                    "canonical_credits": canonical_credits,
-                    "other_id": other.id,
-                    "other_source": other_src,
-                    "other_credits": other_credits,
-                    "deficit": other_credits - canonical_credits,
-                })
+                anomalies.append(
+                    {
+                        "title_ja": title,
+                        "canonical_id": canonical.id,
+                        "canonical_source": canonical_src,
+                        "canonical_credits": canonical_credits,
+                        "other_id": other.id,
+                        "other_source": other_src,
+                        "other_credits": other_credits,
+                        "deficit": other_credits - canonical_credits,
+                    }
+                )
 
     return canonical_map, anomalies
 
@@ -249,7 +251,8 @@ def run_entity_resolution(context: PipelineContext) -> None:
 
         # === Anime entity resolution (cross-source, wiki-preferred) ===
         anime_canonical_map, anomalies = _resolve_anime_entities(
-            context.anime_list, context.credits,
+            context.anime_list,
+            context.credits,
         )
 
         if anime_canonical_map:
@@ -352,9 +355,7 @@ def run_entity_resolution(context: PipelineContext) -> None:
             # anime canonical_map keys are non-canonical anime_ids, not person_ids
             pass
         persons_before = len(context.persons)
-        context.persons = [
-            p for p in context.persons if p.id not in all_non_canonical
-        ]
+        context.persons = [p for p in context.persons if p.id not in all_non_canonical]
         removed = persons_before - len(context.persons)
         if removed > 0:
             logger.info(

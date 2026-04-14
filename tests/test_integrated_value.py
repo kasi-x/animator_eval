@@ -65,7 +65,9 @@ def cv_data():
         for p_idx in range(5):
             pid = f"p{p_idx + a_idx * 2}"  # overlapping persons across anime
             credits.append(
-                Credit(person_id=pid, anime_id=aid, role=Role.KEY_ANIMATOR, source="test")
+                Credit(
+                    person_id=pid, anime_id=aid, role=Role.KEY_ANIMATOR, source="test"
+                )
             )
     return credits, anime_map
 
@@ -180,7 +182,9 @@ class TestOptimizeLambdaWeights:
                 comp[pid] = 0.1 + i * 0.05
             components[comp_name] = comp
 
-        weights, cv_mse, comp_std, comp_mean, var_expl = optimize_lambda_weights(components, credits, anime_map)
+        weights, cv_mse, comp_std, comp_mean, var_expl = optimize_lambda_weights(
+            components, credits, anime_map
+        )
         assert len(weights) == len(components)
         total = sum(weights.values())
         assert total == pytest.approx(1.0, abs=0.05)
@@ -195,7 +199,9 @@ class TestOptimizeLambdaWeights:
 
     def test_cv_empty_components(self):
         """Empty components returns empty weights."""
-        weights, mse, comp_std, comp_mean, var_expl = optimize_lambda_weights({}, [], {})
+        weights, mse, comp_std, comp_mean, var_expl = optimize_lambda_weights(
+            {}, [], {}
+        )
         assert weights == {}
         assert mse == 0.0
         assert var_expl == 0.0
@@ -204,8 +210,12 @@ class TestOptimizeLambdaWeights:
         """Too few persons (< 10) returns equal weights."""
         components = {"a": {"p1": 1.0}, "b": {"p1": 2.0}}
         anime_map = {"a1": Anime(id="a1", title_en="X", year=2020, score=7.0)}
-        credits = [Credit(person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR, source="test")]
-        weights, mse, comp_std, comp_mean, var_expl = optimize_lambda_weights(components, credits, anime_map)
+        credits = [
+            Credit(person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR, source="test")
+        ]
+        weights, mse, comp_std, comp_mean, var_expl = optimize_lambda_weights(
+            components, credits, anime_map
+        )
         assert weights["a"] == pytest.approx(0.5)
         assert weights["b"] == pytest.approx(0.5)
         assert var_expl == 0.0
@@ -221,7 +231,9 @@ class TestOptimizeLambdaWeights:
                 comp[pid] = 0.1 + i * 0.05
             components[comp_name] = comp
 
-        weights, _, comp_std, _, _ = optimize_lambda_weights(components, credits, anime_map)
+        weights, _, comp_std, _, _ = optimize_lambda_weights(
+            components, credits, anime_map
+        )
         # All weights should be non-negative
         for name, w in weights.items():
             assert w >= 0.0, f"{name} weight {w:.4f} is negative"
@@ -282,14 +294,24 @@ class TestScaleRobustness:
         }
         anime_map = {
             f"a{i}": Anime(
-                id=f"a{i}", title_en=f"Anime {i}", year=2018 + i, score=6.0 + i * 0.3,
+                id=f"a{i}",
+                title_en=f"Anime {i}",
+                year=2018 + i,
+                score=6.0 + i * 0.3,
                 studios=["S1"],
             )
             for i in range(8)
         }
         credits = [
-            Credit(person_id=f"p{i}", anime_id=f"a{j}", role=Role.KEY_ANIMATOR, source="test")
-            for i in range(20) for j in range(8) if (i + j) % 3 == 0
+            Credit(
+                person_id=f"p{i}",
+                anime_id=f"a{j}",
+                role=Role.KEY_ANIMATOR,
+                source="test",
+            )
+            for i in range(20)
+            for j in range(8)
+            if (i + j) % 3 == 0
         ]
         weights, _, _, _, _ = optimize_lambda_weights(components, credits, anime_map)
         # Weights should sum to 1 and all be non-negative

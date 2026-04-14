@@ -40,9 +40,7 @@ def post_process_results(context: PipelineContext) -> None:
                 pct_raw = rank / n * 100
                 # Only the true top rank(s) get 100.0; others cap at 99.9
                 # to avoid rounding artifacts (e.g. 99.95 → 100.0)
-                r[f"{axis}_pct"] = (
-                    100.0 if rank == n else min(round(pct_raw, 1), 99.9)
-                )
+                r[f"{axis}_pct"] = 100.0 if rank == n else min(round(pct_raw, 1), 99.9)
     elif n == 1:
         for r in context.results:
             for axis in axes:
@@ -60,9 +58,7 @@ def post_process_results(context: PipelineContext) -> None:
         source_counts = {pid: len(srcs) for pid, srcs in sources_per_person.items()}
 
         # Pass AKM residuals for analytical person_fe CI (B09 fix)
-        akm_residuals = (
-            context.akm_result.residuals if context.akm_result else None
-        )
+        akm_residuals = context.akm_result.residuals if context.akm_result else None
         batch_compute_confidence(
             context.results,
             sources_per_person=source_counts,

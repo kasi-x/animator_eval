@@ -33,15 +33,19 @@ def _make_chain_anime(
     for i in range(1, n + 1):
         relations = []
         if i > 1:
-            relations.append({
-                "related_anime_id": f"a{i - 1}",
-                "relation_type": "PREQUEL",
-            })
+            relations.append(
+                {
+                    "related_anime_id": f"a{i - 1}",
+                    "relation_type": "PREQUEL",
+                }
+            )
         if i < n:
-            relations.append({
-                "related_anime_id": f"a{i + 1}",
-                "relation_type": "SEQUEL",
-            })
+            relations.append(
+                {
+                    "related_anime_id": f"a{i + 1}",
+                    "relation_type": "SEQUEL",
+                }
+            )
         anime_map[f"a{i}"] = Anime(
             id=f"a{i}",
             title_en=f"Franchise Part {i}",
@@ -61,6 +65,7 @@ def _credit(pid: str, aid: str, role: Role = Role.DIRECTOR) -> Credit:
 # Chain Detection
 # ============================================================
 
+
 class TestBuildSequelChains:
     def test_simple_trilogy(self):
         """Three anime linked by SEQUEL/PREQUEL → one chain."""
@@ -76,9 +81,13 @@ class TestBuildSequelChains:
         for i in range(3, 5):
             relations = []
             if i > 3:
-                relations.append({"related_anime_id": f"a{i - 1}", "relation_type": "PREQUEL"})
+                relations.append(
+                    {"related_anime_id": f"a{i - 1}", "relation_type": "PREQUEL"}
+                )
             if i < 4:
-                relations.append({"related_anime_id": f"a{i + 1}", "relation_type": "SEQUEL"})
+                relations.append(
+                    {"related_anime_id": f"a{i + 1}", "relation_type": "SEQUEL"}
+                )
             anime_map[f"a{i}"] = Anime(
                 id=f"a{i}",
                 title_en=f"Other Series {i}",
@@ -101,12 +110,22 @@ class TestBuildSequelChains:
         """ALTERNATIVE relation type should not create chain links."""
         anime_map = {
             "a1": Anime(
-                id="a1", title_en="Original", year=2020, score=8.0,
-                relations_json=json.dumps([{"related_anime_id": "a2", "relation_type": "ALTERNATIVE"}]),
+                id="a1",
+                title_en="Original",
+                year=2020,
+                score=8.0,
+                relations_json=json.dumps(
+                    [{"related_anime_id": "a2", "relation_type": "ALTERNATIVE"}]
+                ),
             ),
             "a2": Anime(
-                id="a2", title_en="Alt Version", year=2021, score=7.0,
-                relations_json=json.dumps([{"related_anime_id": "a1", "relation_type": "ALTERNATIVE"}]),
+                id="a2",
+                title_en="Alt Version",
+                year=2021,
+                score=7.0,
+                relations_json=json.dumps(
+                    [{"related_anime_id": "a1", "relation_type": "ALTERNATIVE"}]
+                ),
             ),
         }
         chains = _build_sequel_chains(anime_map)
@@ -123,6 +142,7 @@ class TestBuildSequelChains:
 # ============================================================
 # Senior Staff Extraction
 # ============================================================
+
 
 class TestExtractSeniorStaff:
     def test_filters_to_cooccurrence_roles(self):
@@ -153,6 +173,7 @@ class TestExtractSeniorStaff:
 # ============================================================
 # Pair Tracking
 # ============================================================
+
 
 class TestTrackPairOccurrences:
     def test_pair_across_chain(self):
@@ -196,6 +217,7 @@ class TestTrackPairOccurrences:
 # ============================================================
 # Pair Synergy Scoring
 # ============================================================
+
 
 class TestComputePairSynergy:
     def test_single_collab_zero(self):
@@ -287,6 +309,7 @@ class TestComputePairSynergy:
 # Group Synergy
 # ============================================================
 
+
 class TestGroupSynergy:
     def test_trio_multiplier(self):
         """Trio gets 1.1× multiplier."""
@@ -303,7 +326,8 @@ class TestGroupSynergy:
         """Quartet gets 1.2× multiplier."""
         pair_synergies = {
             frozenset({f"p{i}", f"p{j}"}): 1.0
-            for i in range(1, 5) for j in range(i + 1, 5)
+            for i in range(1, 5)
+            for j in range(i + 1, 5)
         }
         group = frozenset({"p1", "p2", "p3", "p4"})
         result = _compute_group_synergy(group, pair_synergies)
@@ -333,6 +357,7 @@ class TestGroupSynergy:
 # Person Aggregation
 # ============================================================
 
+
 class TestAggregatePersonSynergy:
     def test_basic_aggregation(self):
         """Person participating in 2 pairs → sum of synergies."""
@@ -341,8 +366,12 @@ class TestAggregatePersonSynergy:
             frozenset({"p1", "p3"}): 0.3,
         }
         pair_histories = {
-            frozenset({"p1", "p2"}): [PairHistory(anime_ids=["a1", "a2"], collab_count=2)],
-            frozenset({"p1", "p3"}): [PairHistory(anime_ids=["a1", "a2"], collab_count=2)],
+            frozenset({"p1", "p2"}): [
+                PairHistory(anime_ids=["a1", "a2"], collab_count=2)
+            ],
+            frozenset({"p1", "p3"}): [
+                PairHistory(anime_ids=["a1", "a2"], collab_count=2)
+            ],
         }
         anime_map = _make_chain_anime(2)
         result = _aggregate_person_synergy(pair_synergies, anime_map, pair_histories)
@@ -361,9 +390,7 @@ class TestAggregatePersonSynergy:
 
     def test_top_pairs_limited_to_5(self):
         """top_pairs should have at most 5 entries."""
-        pair_synergies = {
-            frozenset({"p1", f"p{i}"}): 0.1 * i for i in range(2, 10)
-        }
+        pair_synergies = {frozenset({"p1", f"p{i}"}): 0.1 * i for i in range(2, 10)}
         pair_histories = {
             k: [PairHistory(anime_ids=["a1", "a2"], collab_count=2)]
             for k in pair_synergies
@@ -392,6 +419,7 @@ class TestAggregatePersonSynergy:
 # ============================================================
 # Full Pipeline (compute_synergy_scores)
 # ============================================================
+
 
 class TestComputeSynergyScores:
     def test_output_structure(self):
@@ -454,6 +482,7 @@ class TestComputeSynergyScores:
 # Edge Cases
 # ============================================================
 
+
 class TestEdgeCases:
     def test_empty_credits(self):
         """Empty credits list → empty result."""
@@ -470,7 +499,9 @@ class TestEdgeCases:
         """Malformed JSON in relations_json should not crash."""
         anime_map = {
             "a1": Anime(
-                id="a1", title_en="Bad JSON", year=2020,
+                id="a1",
+                title_en="Bad JSON",
+                year=2020,
                 relations_json="not valid json{",
             ),
         }
@@ -481,12 +512,22 @@ class TestEdgeCases:
         """SIDE_STORY relation should be included in chains."""
         anime_map = {
             "a1": Anime(
-                id="a1", title_en="Main", year=2020, score=7.0,
-                relations_json=json.dumps([{"related_anime_id": "a2", "relation_type": "SIDE_STORY"}]),
+                id="a1",
+                title_en="Main",
+                year=2020,
+                score=7.0,
+                relations_json=json.dumps(
+                    [{"related_anime_id": "a2", "relation_type": "SIDE_STORY"}]
+                ),
             ),
             "a2": Anime(
-                id="a2", title_en="Side Story", year=2021, score=7.5,
-                relations_json=json.dumps([{"related_anime_id": "a1", "relation_type": "PARENT"}]),
+                id="a2",
+                title_en="Side Story",
+                year=2021,
+                score=7.5,
+                relations_json=json.dumps(
+                    [{"related_anime_id": "a1", "relation_type": "PARENT"}]
+                ),
             ),
         }
         chains = _build_sequel_chains(anime_map)
@@ -496,12 +537,22 @@ class TestEdgeCases:
         """PARENT relation should be included in chains."""
         anime_map = {
             "a1": Anime(
-                id="a1", title_en="Parent", year=2020, score=8.0,
-                relations_json=json.dumps([{"related_anime_id": "a2", "relation_type": "PARENT"}]),
+                id="a1",
+                title_en="Parent",
+                year=2020,
+                score=8.0,
+                relations_json=json.dumps(
+                    [{"related_anime_id": "a2", "relation_type": "PARENT"}]
+                ),
             ),
             "a2": Anime(
-                id="a2", title_en="Child", year=2021, score=7.0,
-                relations_json=json.dumps([{"related_anime_id": "a1", "relation_type": "PARENT"}]),
+                id="a2",
+                title_en="Child",
+                year=2021,
+                score=7.0,
+                relations_json=json.dumps(
+                    [{"related_anime_id": "a1", "relation_type": "PARENT"}]
+                ),
             ),
         }
         chains = _build_sequel_chains(anime_map)

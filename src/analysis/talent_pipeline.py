@@ -118,15 +118,17 @@ def compute_talent_pipeline(
         early_stages = [
             _STAGE_MAP.get(c.role.value, 0)
             for c in person_credits_idx[pid]
-            if anime_map.get(c.anime_id)
-            and anime_map[c.anime_id].year == fy
+            if anime_map.get(c.anime_id) and anime_map[c.anime_id].year == fy
         ]
         if early_stages and max(early_stages) <= 2:
             studio_juniors[first_studio].add(pid)
             if hs >= 4:
                 ly = max(
-                    (anime_map[c.anime_id].year for c in person_credits_idx[pid]
-                     if anime_map.get(c.anime_id) and anime_map[c.anime_id].year),
+                    (
+                        anime_map[c.anime_id].year
+                        for c in person_credits_idx[pid]
+                        if anime_map.get(c.anime_id) and anime_map[c.anime_id].year
+                    ),
                     default=current_year,
                 )
                 years_to_promote = ly - fy
@@ -141,7 +143,9 @@ def compute_talent_pipeline(
             juniors=len(juniors),
             promotions=len(promoted),
             promotion_rate=len(promoted) / len(juniors) if juniors else 0.0,
-            avg_promotion_speed=float(np.mean(promotion_speeds)) if promotion_speeds else 0.0,
+            avg_promotion_speed=float(np.mean(promotion_speeds))
+            if promotion_speeds
+            else 0.0,
         )
 
     # 2. Talent Flow Matrix

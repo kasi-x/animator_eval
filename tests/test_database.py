@@ -121,7 +121,9 @@ class TestScoreCrud:
         upsert_person(db_conn, Person(id="mal:p1"))
         upsert_score(
             db_conn,
-            ScoreResult(person_id="mal:p1", birank=80.0, patronage=60.0, person_fe=70.0),
+            ScoreResult(
+                person_id="mal:p1", birank=80.0, patronage=60.0, person_fe=70.0
+            ),
         )
         db_conn.commit()
 

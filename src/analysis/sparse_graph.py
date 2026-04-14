@@ -57,7 +57,7 @@ class SparseCollaborationGraph:
         node_set: set[str] = set()
         if node_attrs:
             node_set.update(node_attrs.keys())
-        for (a, b) in edge_data:
+        for a, b in edge_data:
             node_set.add(a)
             node_set.add(b)
 
@@ -109,11 +109,17 @@ class SparseCollaborationGraph:
             nodes=n,
             edges=self._n_edges,
             memory_mb=round(
-                (self.weight_matrix.data.nbytes + self.weight_matrix.indices.nbytes
-                 + self.weight_matrix.indptr.nbytes
-                 + self.shared_works_matrix.data.nbytes
-                 + self.shared_works_matrix.indices.nbytes
-                 + self.shared_works_matrix.indptr.nbytes) / 1024 / 1024, 1
+                (
+                    self.weight_matrix.data.nbytes
+                    + self.weight_matrix.indices.nbytes
+                    + self.weight_matrix.indptr.nbytes
+                    + self.shared_works_matrix.data.nbytes
+                    + self.shared_works_matrix.indices.nbytes
+                    + self.shared_works_matrix.indptr.nbytes
+                )
+                / 1024
+                / 1024,
+                1,
             ),
         )
 
@@ -162,10 +168,14 @@ class SparseCollaborationGraph:
             u = self.node_ids[int(i)]
             v_node = self.node_ids[int(j)]
             if data:
-                yield u, v_node, {
-                    "weight": float(w),
-                    "shared_works": sw_dict.get((int(i), int(j)), 0),
-                }
+                yield (
+                    u,
+                    v_node,
+                    {
+                        "weight": float(w),
+                        "shared_works": sw_dict.get((int(i), int(j)), 0),
+                    },
+                )
             else:
                 yield u, v_node
 
@@ -230,7 +240,6 @@ class SparseCollaborationGraph:
             self.shared_works_matrix.resize((n, n))
         if attrs:
             self.node_attrs[node] = attrs
-
 
     def community_detection_lpa(self, seed: int = 42) -> dict[str, int]:
         """Label Propagation Algorithm for community detection on sparse matrix.

@@ -27,8 +27,8 @@ class RegistryEntry:
     """One entry in the report registry."""
 
     slug: str
-    build_spec: Callable[[], Any]          # () -> ReportSpec
-    provide: Callable[[Path], dict]        # (json_dir) -> data dict
+    build_spec: Callable[[], Any]  # () -> ReportSpec
+    provide: Callable[[Path], dict]  # (json_dir) -> data dict
 
 
 # Global mutable registry

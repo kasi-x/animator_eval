@@ -63,9 +63,7 @@ def _compute_difficulty(
     total = sum(role_counts.values())
     if total > 0 and len(role_counts) > 1:
         entropy = -sum(
-            (cnt / total) * log2(cnt / total)
-            for cnt in role_counts.values()
-            if cnt > 0
+            (cnt / total) * log2(cnt / total) for cnt in role_counts.values() if cnt > 0
         )
     else:
         entropy = 0.0
@@ -132,7 +130,9 @@ def compute_era_and_difficulty(
 
     if len(all_y) < 10:
         logger.warning("era_effects_too_few_obs", n=len(all_y))
-        return EraEffectResult(era_fe={}, difficulty_scores=difficulty_scores, difficulty_beta=0.0)
+        return EraEffectResult(
+            era_fe={}, difficulty_scores=difficulty_scores, difficulty_beta=0.0
+        )
 
     # Year demeaning: absorb year means
     year_means: dict[int, float] = {}
@@ -148,10 +148,13 @@ def compute_era_and_difficulty(
     }
 
     # Regress demeaned y on difficulty to get β
-    y_demeaned = np.array([
-        all_y[i] - year_means.get(all_years[i], global_mean)
-        for i in range(len(all_y))
-    ], dtype=np.float64)
+    y_demeaned = np.array(
+        [
+            all_y[i] - year_means.get(all_years[i], global_mean)
+            for i in range(len(all_y))
+        ],
+        dtype=np.float64,
+    )
     d_arr = np.array(all_difficulty, dtype=np.float64)
 
     # Normalize difficulty to prevent numerical issues
@@ -162,9 +165,9 @@ def compute_era_and_difficulty(
         d_normalized = d_arr
 
     # OLS: y_demeaned = β × difficulty + ε
-    if np.sum(d_normalized ** 2) > 0:
+    if np.sum(d_normalized**2) > 0:
         difficulty_beta = float(
-            np.sum(y_demeaned * d_normalized) / np.sum(d_normalized ** 2)
+            np.sum(y_demeaned * d_normalized) / np.sum(d_normalized**2)
         )
         # Scale back
         if d_std > 0:

@@ -3,7 +3,10 @@
 import networkx as nx
 import pytest
 
-from src.analysis.network.peer_effects import PeerEffectResult, estimate_peer_effects_2sls
+from src.analysis.network.peer_effects import (
+    PeerEffectResult,
+    estimate_peer_effects_2sls,
+)
 from src.models import Anime, Credit, Role
 
 
@@ -24,16 +27,24 @@ def peer_data():
     # Put persons p1-p7 in anime a1 (7 persons)
     for i in range(1, 8):
         role = Role.KEY_ANIMATOR if i > 1 else Role.DIRECTOR
-        credits.append(Credit(person_id=f"p{i}", anime_id="a1", role=role, source="test"))
+        credits.append(
+            Credit(person_id=f"p{i}", anime_id="a1", role=role, source="test")
+        )
 
     # Put persons p3-p10 in anime a2 (8 persons)
     for i in range(3, 11):
         role = Role.ANIMATION_DIRECTOR if i == 3 else Role.KEY_ANIMATOR
-        credits.append(Credit(person_id=f"p{i}", anime_id="a2", role=role, source="test"))
+        credits.append(
+            Credit(person_id=f"p{i}", anime_id="a2", role=role, source="test")
+        )
 
     # Put persons p5-p10 in anime a3 (6 persons)
     for i in range(5, 11):
-        credits.append(Credit(person_id=f"p{i}", anime_id="a3", role=Role.KEY_ANIMATOR, source="test"))
+        credits.append(
+            Credit(
+                person_id=f"p{i}", anime_id="a3", role=Role.KEY_ANIMATOR, source="test"
+            )
+        )
 
     # Person scores
     person_scores = {f"p{i}": 50.0 + i * 5.0 for i in range(1, 11)}
@@ -76,14 +87,18 @@ class TestPeerEffects:
     def test_peer_effects_produces_result(self, peer_data):
         """Returns a PeerEffectResult with valid fields."""
         credits, anime_map, person_scores, collab_graph = peer_data
-        result = estimate_peer_effects_2sls(credits, anime_map, person_scores, collab_graph)
+        result = estimate_peer_effects_2sls(
+            credits, anime_map, person_scores, collab_graph
+        )
         assert isinstance(result, PeerEffectResult)
         assert result.n_observations > 0
 
     def test_peer_boost_dict(self, peer_data):
         """person_peer_boost has entries for persons who appear in the data."""
         credits, anime_map, person_scores, collab_graph = peer_data
-        result = estimate_peer_effects_2sls(credits, anime_map, person_scores, collab_graph)
+        result = estimate_peer_effects_2sls(
+            credits, anime_map, person_scores, collab_graph
+        )
         assert len(result.person_peer_boost) > 0
         # At least some persons from our fixture should have a boost value
         for pid, boost in result.person_peer_boost.items():
@@ -92,7 +107,9 @@ class TestPeerEffects:
     def test_endogenous_effect_bounded(self, peer_data):
         """Endogenous effect coefficient is finite."""
         credits, anime_map, person_scores, collab_graph = peer_data
-        result = estimate_peer_effects_2sls(credits, anime_map, person_scores, collab_graph)
+        result = estimate_peer_effects_2sls(
+            credits, anime_map, person_scores, collab_graph
+        )
         import math
 
         assert math.isfinite(result.endogenous_effect)
@@ -102,7 +119,9 @@ class TestPeerEffects:
     def test_too_few_observations(self, tiny_data):
         """Returns empty result when observations < 20."""
         credits, anime_map, person_scores, collab_graph = tiny_data
-        result = estimate_peer_effects_2sls(credits, anime_map, person_scores, collab_graph)
+        result = estimate_peer_effects_2sls(
+            credits, anime_map, person_scores, collab_graph
+        )
         assert result.n_observations == 0
         assert result.person_peer_boost == {}
         assert result.identified is False
@@ -124,7 +143,12 @@ class TestPeerEffects:
             for p_idx in range(5):
                 pid = f"p{a_idx}_{p_idx}"
                 credits.append(
-                    Credit(person_id=pid, anime_id=aid, role=Role.KEY_ANIMATOR, source="test")
+                    Credit(
+                        person_id=pid,
+                        anime_id=aid,
+                        role=Role.KEY_ANIMATOR,
+                        source="test",
+                    )
                 )
 
         # All persons have identical scores -> instrument has no variation
@@ -138,6 +162,8 @@ class TestPeerEffects:
                 for j in range(i + 1, len(pids)):
                     collab_graph.add_edge(pids[i], pids[j])
 
-        result = estimate_peer_effects_2sls(credits, anime_map, person_scores, collab_graph)
+        result = estimate_peer_effects_2sls(
+            credits, anime_map, person_scores, collab_graph
+        )
         # With identical scores, instruments are weak
         assert not result.identified

@@ -148,8 +148,11 @@ def _fit_dml(
     for train_idx, test_idx in kf.split(X):
         # E[Y|X]
         my = GradientBoostingRegressor(
-            n_estimators=200, max_depth=4, learning_rate=0.05,
-            subsample=0.8, random_state=seed,
+            n_estimators=200,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            random_state=seed,
         )
         my.fit(X[train_idx], Y[train_idx])
         yh = my.predict(X[test_idx])
@@ -160,8 +163,11 @@ def _fit_dml(
 
         # E[D|X]
         md = GradientBoostingRegressor(
-            n_estimators=200, max_depth=4, learning_rate=0.05,
-            subsample=0.8, random_state=seed,
+            n_estimators=200,
+            max_depth=4,
+            learning_rate=0.05,
+            subsample=0.8,
+            random_state=seed,
         )
         md.fit(X[train_idx], D[train_idx])
         dh = md.predict(X[test_idx])
@@ -171,7 +177,7 @@ def _fit_dml(
         r2_d_list.append(1 - ss_r / ss_t if ss_t > 0 else 0.0)
 
     # θ̂ = (D̃'Ỹ) / (D̃'D̃)
-    denom = np.sum(D_resid ** 2)
+    denom = np.sum(D_resid**2)
     if denom < 1e-10:
         return EstimationResult(theta=0.0, se=0.0)
 
@@ -179,11 +185,12 @@ def _fit_dml(
 
     # Neyman orthogonal score SE
     psi = D_resid * (Y_resid - theta * D_resid)
-    J = np.mean(D_resid ** 2)
-    se = float(np.sqrt(np.mean(psi ** 2) / (J ** 2) / n))
+    J = np.mean(D_resid**2)
+    se = float(np.sqrt(np.mean(psi**2) / (J**2) / n))
 
     return EstimationResult(
-        theta=theta, se=se,
+        theta=theta,
+        se=se,
         r2_y=float(np.mean(r2_y_list)),
         r2_d=float(np.mean(r2_d_list)),
     )
@@ -196,12 +203,12 @@ def _fit_ols(Y: np.ndarray, D: np.ndarray, X: np.ndarray) -> EstimationResult:
         beta = np.linalg.lstsq(Z, Y, rcond=None)[0]
         theta = float(beta[0])
         resid = Y - Z @ beta
-        sigma2 = np.sum(resid ** 2) / max(len(Y) - Z.shape[1], 1)
+        sigma2 = np.sum(resid**2) / max(len(Y) - Z.shape[1], 1)
         ZtZ_inv = np.linalg.inv(Z.T @ Z + 1e-6 * np.eye(Z.shape[1]))
         se = float(np.sqrt(sigma2 * ZtZ_inv[0, 0]))
 
         # R²
-        ss_res = np.sum(resid ** 2)
+        ss_res = np.sum(resid**2)
         ss_tot = np.sum((Y - np.mean(Y)) ** 2)
         r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
     except np.linalg.LinAlgError:
@@ -228,7 +235,12 @@ def _build_anime_features(
             all_formats.add(a.format)
     genre_list = sorted(all_genres)
     format_list = sorted(all_formats)
-    return genre_list, format_list, {g: i for i, g in enumerate(genre_list)}, {f: i for i, f in enumerate(format_list)}
+    return (
+        genre_list,
+        format_list,
+        {g: i for i, g in enumerate(genre_list)},
+        {f: i for i, f in enumerate(format_list)},
+    )
 
 
 def _anime_feature_vector(
@@ -255,11 +267,13 @@ def _anime_feature_vector(
     if anime.format and anime.format in format_idx:
         format_vec[format_idx[anime.format]] = 1.0
 
-    return np.concatenate([
-        [s_fe, year, episodes, duration, n_staff],
-        genre_vec,
-        format_vec,
-    ])
+    return np.concatenate(
+        [
+            [s_fe, year, episodes, duration, n_staff],
+            genre_vec,
+            format_vec,
+        ]
+    )
 
 
 # =============================================================================
@@ -277,7 +291,9 @@ def _estimate_person_fe_effect(
 
     Y = log(production_scale), D = person_fe, X = studio/genre/format/year/role
     """
-    genre_list, format_list, genre_idx, format_idx = _build_anime_features(anime_map, studio_fe)
+    genre_list, format_list, genre_idx, format_idx = _build_anime_features(
+        anime_map, studio_fe
+    )
     n_genres, n_formats = len(genre_list), len(format_list)
 
     role_list = sorted({r.value for r in Role})
@@ -313,7 +329,13 @@ def _estimate_person_fe_effect(
             continue
 
         base_feat = _anime_feature_vector(
-            anime, studio_fe, genre_idx, format_idx, ns, n_genres, n_formats,
+            anime,
+            studio_fe,
+            genre_idx,
+            format_idx,
+            ns,
+            n_genres,
+            n_formats,
         )
         role_vec = np.zeros(n_roles)
         role_vec[role_idx.get(c.role.value, 0)] = 1.0
@@ -338,20 +360,26 @@ def _estimate_person_fe_effect(
     elif dml.p_value < 0.05 and dml.theta < 0.7:
         interp = f"person_fe は有意だが OLS 過大推定 (DML θ={dml.theta:.3f} < OLS θ={ols.theta:.3f})。交絡バイアス大。"
     elif dml.p_value >= 0.05:
-        interp = f"person_fe は交絡除去後に非有意 (p={dml.p_value:.3f})。因果的解釈に注意。"
+        interp = (
+            f"person_fe は交絡除去後に非有意 (p={dml.p_value:.3f})。因果的解釈に注意。"
+        )
     else:
         interp = f"DML θ={dml.theta:.3f}, OLS θ={ols.theta:.3f}。バイアス={ols.theta - dml.theta:+.3f}。"
 
     est = DualEstimate(
         parameter="person_fe",
         description="AKM個人固定効果 → log(production_scale)",
-        ols=ols, dml=dml,
-        n_obs=len(Y), interpretation=interp,
+        ols=ols,
+        dml=dml,
+        n_obs=len(Y),
+        interpretation=interp,
     )
     logger.info(
         "dml_person_fe_done",
-        ols_theta=round(ols.theta, 4), dml_theta=round(dml.theta, 4),
-        bias=round(est.bias, 4), p_dml=round(dml.p_value, 4),
+        ols_theta=round(ols.theta, 4),
+        dml_theta=round(dml.theta, 4),
+        bias=round(est.bias, 4),
+        p_dml=round(dml.p_value, 4),
     )
     return est
 
@@ -432,7 +460,9 @@ def _estimate_studio_switch_effect(
 
         n_movers += 1
         first_year = years[0]
-        primary_role = person_roles[pid].most_common(1)[0][0] if person_roles[pid] else "other"
+        primary_role = (
+            person_roles[pid].most_common(1)[0][0] if person_roles[pid] else "other"
+        )
         role_vec = np.zeros(n_roles)
         if primary_role in role_idx:
             role_vec[role_idx[primary_role]] = 1.0
@@ -447,10 +477,14 @@ def _estimate_studio_switch_effect(
 
             rows_Y.append(avg_p)
             rows_D.append(post)
-            rows_X.append(np.concatenate([
-                [cy, ya, yr, person_fe[pid]],
-                role_vec,
-            ]))
+            rows_X.append(
+                np.concatenate(
+                    [
+                        [cy, ya, yr, person_fe[pid]],
+                        role_vec,
+                    ]
+                )
+            )
             career_years_all.append(cy)
 
     if len(rows_Y) < _DML_MIN_OBS or n_movers < 20:
@@ -465,18 +499,28 @@ def _estimate_studio_switch_effect(
     ols = _fit_ols(Y, D, X)
     dml = _fit_dml(Y, D, X)
 
-    naive = (np.mean(post_perfs) - np.mean(pre_perfs)) if pre_perfs and post_perfs else 0.0
+    naive = (
+        (np.mean(post_perfs) - np.mean(pre_perfs)) if pre_perfs and post_perfs else 0.0
+    )
 
     # CATE by career stage
     cate_results: list[StudioCATEResult] = []
-    for stage, lo, hi in [("新人(0-5年)", 0, 5), ("中堅(5-15年)", 5, 15), ("ベテラン(15年+)", 15, 100)]:
+    for stage, lo, hi in [
+        ("新人(0-5年)", 0, 5),
+        ("中堅(5-15年)", 5, 15),
+        ("ベテラン(15年+)", 15, 100),
+    ]:
         mask = (career_arr >= lo) & (career_arr < hi)
         if mask.sum() >= 50:
             sub_dml = _fit_dml(Y[mask], D[mask], X[mask])
-            cate_results.append(StudioCATEResult(
-                stage=stage, theta=round(sub_dml.theta, 4),
-                se=round(sub_dml.se, 4), n_obs=int(mask.sum()),
-            ))
+            cate_results.append(
+                StudioCATEResult(
+                    stage=stage,
+                    theta=round(sub_dml.theta, 4),
+                    se=round(sub_dml.se, 4),
+                    n_obs=int(mask.sum()),
+                )
+            )
 
     # Interpretation
     if dml.p_value < 0.05 and dml.theta > 0:
@@ -485,21 +529,28 @@ def _estimate_studio_switch_effect(
             f"ナイーブ差分 {naive:+.3f} との差 = 選抜バイアス {naive - dml.theta:+.3f}。"
         )
     elif dml.p_value < 0.05:
-        interp = f"移籍の因果効果は有意に負 (θ={dml.theta:+.3f})。移籍は平均的にマイナス。"
+        interp = (
+            f"移籍の因果効果は有意に負 (θ={dml.theta:+.3f})。移籍は平均的にマイナス。"
+        )
     else:
         interp = f"移籍の因果効果は非有意 (p={dml.p_value:.3f})。観測差 ({naive:+.3f}) は交絡で説明可能。"
 
     est = DualEstimate(
         parameter="studio_switch",
         description="スタジオ移籍 (post_switch) → log(production_scale)",
-        ols=ols, dml=dml,
-        n_obs=len(Y), interpretation=interp,
+        ols=ols,
+        dml=dml,
+        n_obs=len(Y),
+        interpretation=interp,
     )
 
     logger.info(
         "dml_studio_done",
-        ols_theta=round(ols.theta, 4), dml_theta=round(dml.theta, 4),
-        bias=round(est.bias, 4), naive_diff=round(naive, 4), n_movers=n_movers,
+        ols_theta=round(ols.theta, 4),
+        dml_theta=round(dml.theta, 4),
+        bias=round(est.bias, 4),
+        naive_diff=round(naive, 4),
+        n_movers=n_movers,
     )
     return est, cate_results
 
@@ -543,7 +594,9 @@ def run_dml_analysis(
         report.estimates.append(est1)
 
     # Pattern 2: Studio switch effect
-    est2, cate = _estimate_studio_switch_effect(credits, anime_map, person_fe, studio_fe)
+    est2, cate = _estimate_studio_switch_effect(
+        credits, anime_map, person_fe, studio_fe
+    )
     if est2:
         report.estimates.append(est2)
     report.studio_cate = cate

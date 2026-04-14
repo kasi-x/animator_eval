@@ -321,12 +321,14 @@ def _aggregate_person_synergy(
                 if anime:
                     franchise = anime.display_title
                 total_collabs = sum(h.collab_count for h in histories)
-            top_pairs.append({
-                "partner_id": partner_id,
-                "synergy_value": round(synergy, 4),
-                "collaboration_count": total_collabs,
-                "franchise_title": franchise,
-            })
+            top_pairs.append(
+                {
+                    "partner_id": partner_id,
+                    "synergy_value": round(synergy, 4),
+                    "collaboration_count": total_collabs,
+                    "franchise_title": franchise,
+                }
+            )
 
         result[pid] = PersonSynergyBoost(
             total_synergy=round(sum(s for _, s in pairs), 4),
@@ -380,9 +382,7 @@ def compute_synergy_scores(
     pair_synergies: dict[frozenset[str], float] = {}
     for pair_key, histories in pair_histories.items():
         # Sum synergy across all chains where the pair co-occurs
-        total = sum(
-            _compute_pair_synergy(h, anime_map) for h in histories
-        )
+        total = sum(_compute_pair_synergy(h, anime_map) for h in histories)
         pair_synergies[pair_key] = total
 
     # Step 5: Detect groups (3+ members with mutual pairwise synergy)
@@ -433,9 +433,7 @@ def compute_synergy_scores(
                     boosted_pairs.add(pair_key)
 
     # Step 6: Aggregate person-level synergy
-    person_boosts = _aggregate_person_synergy(
-        pair_synergies, anime_map, pair_histories
-    )
+    person_boosts = _aggregate_person_synergy(pair_synergies, anime_map, pair_histories)
 
     # Step 7: Build top synergy pairs output
     active_pairs = {k: v for k, v in pair_synergies.items() if v > 0}
@@ -454,13 +452,15 @@ def compute_synergy_scores(
             if first_anime:
                 franchise = first_anime.display_title
 
-        top_pairs_list.append({
-            "members": members,
-            "synergy_value": round(synergy, 4),
-            "collaboration_count": total_collabs,
-            "franchise_title": franchise,
-            "chain_anime_ids": chain_ids,
-        })
+        top_pairs_list.append(
+            {
+                "members": members,
+                "synergy_value": round(synergy, 4),
+                "collaboration_count": total_collabs,
+                "franchise_title": franchise,
+                "chain_anime_ids": chain_ids,
+            }
+        )
 
     # Convert PersonSynergyBoost to dicts for JSON
     person_boosts_dict = {}

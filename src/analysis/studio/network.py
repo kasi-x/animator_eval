@@ -108,7 +108,7 @@ def build_coproduction_network(
             continue
         studios = sorted(anime.studios)
         for i, s1 in enumerate(studios):
-            for s2 in studios[i + 1:]:
+            for s2 in studios[i + 1 :]:
                 edge_weights[(s1, s2)] += 1
 
     g = nx.Graph()
@@ -200,11 +200,13 @@ def compute_studio_network(
     # Talent flow edges (for export)
     flow_edges = []
     for s1, s2, data in talent_g.edges(data=True):
-        flow_edges.append({
-            "studio_a": s1,
-            "studio_b": s2,
-            "shared_persons": data.get("shared_persons", 0),
-        })
+        flow_edges.append(
+            {
+                "studio_a": s1,
+                "studio_b": s2,
+                "shared_persons": data.get("shared_persons", 0),
+            }
+        )
 
     logger.info(
         "studio_network_computed",

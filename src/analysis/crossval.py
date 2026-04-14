@@ -97,9 +97,7 @@ def cross_validate_scores(
                 sorted(fold_birank.items(), key=lambda x: -x[1]), 1
             )
         }
-        fold_top10 = set(
-            sorted(fold_birank, key=fold_birank.get, reverse=True)[:10]
-        )
+        fold_top10 = set(sorted(fold_birank, key=fold_birank.get, reverse=True)[:10])
 
         # Correlation
         correlation = _rank_correlation(full_ranking, fold_ranking)

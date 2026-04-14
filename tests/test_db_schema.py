@@ -32,6 +32,7 @@ from src.db_rows import TABLE_ROW_MAP, AnimeRow, CreditRow, PersonRow, ScoreRow
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="module")
 def fresh_conn(tmp_path_factory):
     """フルマイグレーション済みの空DBコネクション."""
@@ -55,6 +56,7 @@ def _dataclass_fields(cls) -> set[str]:
 # ---------------------------------------------------------------------------
 # Test 1: dataclass フィールド ⊆ DB カラム (未定義カラムへのアクセスを防ぐ)
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize("table,row_cls", list(TABLE_ROW_MAP.items()))
 def test_row_fields_subset_of_db_schema(fresh_conn, table, row_cls):
@@ -95,6 +97,7 @@ def test_db_schema_subset_of_row_fields(fresh_conn, table, row_cls):
 # ---------------------------------------------------------------------------
 # Test 2: Pydantic モデルが DB dataclass の主要フィールドをカバーする
 # ---------------------------------------------------------------------------
+
 
 def test_person_model_covers_person_row():
     """Person モデルが PersonRow の主要フィールドをカバーすること."""
@@ -152,6 +155,7 @@ def test_score_result_covers_score_row():
 # Test 3: OpenAPI スキーマ / API ルートの整合性
 # ---------------------------------------------------------------------------
 
+
 def test_openapi_key_routes_exist():
     """主要APIルートが OpenAPI スキーマに含まれていること."""
     from src.api import app
@@ -194,13 +198,22 @@ def test_api_person_response_contains_score_fields(tmp_path, monkeypatch):
     conn.close()
 
     from src.api import app
+
     client = TestClient(app)
     resp = client.get("/api/persons/p1")
     assert resp.status_code == 200, resp.text
 
     body = resp.json()
     # scores テーブルの全カラム名が API レスポンスに存在すること
-    score_cols = {"person_fe", "studio_fe_exposure", "birank", "patronage", "dormancy", "awcc", "iv_score"}
+    score_cols = {
+        "person_fe",
+        "studio_fe_exposure",
+        "birank",
+        "patronage",
+        "dormancy",
+        "awcc",
+        "iv_score",
+    }
     missing = score_cols - set(body.keys())
     assert not missing, (
         f"GET /api/persons/{{id}} レスポンスに scores カラムが存在しない: {missing}\n"
