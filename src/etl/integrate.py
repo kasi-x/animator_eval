@@ -1,0 +1,429 @@
+"""Bronze → Silver ETL: src_* テーブルから正規化された anime/persons/credits テーブルへ統合."""
+
+from __future__ import annotations
+
+import json
+import sqlite3
+
+import structlog
+
+from src.models import Anime, Credit, Person, parse_role
+
+log = structlog.get_logger()
+
+
+def _anime_to_analysis(anime: Anime) -> dict:
+    """Anime モデルから anime_analysis 用の dict を生成 (score カラムは含まない)."""
+    return {
+        k: v for k, v in {
+            "id": anime.id,
+            "title_ja": anime.title_ja,
+            "title_en": anime.title_en,
+            "year": anime.year,
+            "season": anime.season,
+            "quarter": getattr(anime, "quarter", None),
+            "episodes": anime.episodes,
+            "format": anime.format,
+            "duration": anime.duration,
+            "start_date": anime.start_date,
+            "end_date": anime.end_date,
+            "status": anime.status,
+            "source": anime.source,
+            "work_type": getattr(anime, "work_type", None),
+            "scale_class": getattr(anime, "scale_class", None),
+            "mal_id": anime.mal_id,
+            "anilist_id": anime.anilist_id,
+            "ann_id": getattr(anime, "ann_id", None),
+            "allcinema_id": getattr(anime, "allcinema_id", None),
+            "madb_id": getattr(anime, "madb_id", None),
+        }.items()
+        if v is not None
+    }
+
+
+def _anime_to_display(anime: Anime) -> dict:
+    """Anime モデルから anime_display 用の dict を生成 (score + 表示専用カラム)."""
+    result: dict = {"id": anime.id}
+    if anime.score is not None:
+        result["score"] = anime.score
+    for attr in (
+        "popularity_rank", "favourites", "mean_score",
+        "description", "cover_large", "cover_extra_large", "cover_medium",
+        "cover_large_path", "banner", "banner_path", "site_url",
+        "country_of_origin", "is_adult",
+        "relations_json", "external_links_json", "rankings_json",
+    ):
+        v = getattr(anime, attr, None)
+        if v is not None:
+            result[attr] = v
+    # Serialize lists to JSON strings for display columns
+    for attr in ("genres", "tags", "studios", "synonyms"):
+        v = getattr(anime, attr, None)
+        if v:
+            result[attr] = json.dumps(v, ensure_ascii=False)
+    return result
+
+
+def integrate_anilist(conn: sqlite3.Connection) -> dict[str, int]:
+    """src_anilist_* → canonical anime / persons / credits."""
+    from src.database import insert_credit, upsert_anime, upsert_anime_analysis, upsert_anime_display, upsert_person
+
+    stats = {"anime": 0, "persons": 0, "credits": 0}
+
+    # Anime
+    for row in conn.execute("SELECT * FROM src_anilist_anime"):
+        anime = Anime(
+            id=f"anilist:{row['anilist_id']}",
+            title_ja=row["title_ja"] or "",
+            title_en=row["title_en"] or "",
+            year=row["year"],
+            season=row["season"],
+            episodes=row["episodes"],
+            format=row["format"],
+            status=row["status"],
+            start_date=row["start_date"],
+            end_date=row["end_date"],
+            duration=row["duration"],
+            source=row["source"],
+            description=row["description"],
+            score=row["score"],
+            genres=json.loads(row["genres"] or "[]"),
+            tags=json.loads(row["tags"] or "[]"),
+            studios=json.loads(row["studios"] or "[]"),
+            synonyms=json.loads(row["synonyms"] or "[]"),
+            cover_large=row["cover_large"],
+            cover_medium=row["cover_medium"],
+            banner=row["banner"],
+            popularity_rank=row["popularity"],
+            favourites=row["favourites"],
+            site_url=row["site_url"],
+            mal_id=row["mal_id"],
+            anilist_id=row["anilist_id"],
+        )
+        upsert_anime(conn, anime)
+        upsert_anime_analysis(conn, _anime_to_analysis(anime))
+        upsert_anime_display(conn, _anime_to_display(anime))
+        stats["anime"] += 1
+
+    # Persons
+    for row in conn.execute("SELECT * FROM src_anilist_persons"):
+        person = Person(
+            id=f"anilist:p{row['anilist_id']}",
+            name_ja=row["name_ja"] or "",
+            name_en=row["name_en"] or "",
+            aliases=json.loads(row["aliases"] or "[]"),
+            date_of_birth=row["date_of_birth"],
+            age=row["age"],
+            gender=row["gender"],
+            years_active=json.loads(row["years_active"] or "[]"),
+            hometown=row["hometown"],
+            blood_type=row["blood_type"],
+            description=row["description"],
+            image_large=row["image_large"],
+            image_medium=row["image_medium"],
+            favourites=row["favourites"],
+            site_url=row["site_url"],
+            anilist_id=row["anilist_id"],
+        )
+        upsert_person(conn, person)
+        stats["persons"] += 1
+
+    # Credits
+    for row in conn.execute("SELECT * FROM src_anilist_credits"):
+        anime_id = f"anilist:{row['anilist_anime_id']}"
+        person_id = f"anilist:p{row['anilist_person_id']}"
+        credit = Credit(
+            person_id=person_id,
+            anime_id=anime_id,
+            role=parse_role(row["role"]),
+            raw_role=row["role_raw"],
+            source="anilist",
+        )
+        insert_credit(conn, credit)
+        stats["credits"] += 1
+
+    log.info("etl_anilist_done", **stats)
+    return stats
+
+
+def integrate_ann(conn: sqlite3.Connection) -> dict[str, int]:
+    """src_ann_* → canonical anime / persons / credits."""
+    from src.database import insert_credit, upsert_anime, upsert_anime_analysis, upsert_anime_display, upsert_person
+
+    stats = {"anime": 0, "persons": 0, "credits": 0}
+
+    # Anime
+    for row in conn.execute("SELECT * FROM src_ann_anime"):
+        anime = Anime(
+            id=f"ann-{row['ann_id']}",
+            title_en=row["title_en"] or "",
+            title_ja=row["title_ja"] or "",
+            year=row["year"],
+            episodes=row["episodes"],
+            format=row["format"],
+            genres=json.loads(row["genres"] or "[]"),
+            start_date=row["start_date"],
+            end_date=row["end_date"],
+            ann_id=row["ann_id"],
+        )
+        upsert_anime(conn, anime)
+        upsert_anime_analysis(conn, _anime_to_analysis(anime))
+        upsert_anime_display(conn, _anime_to_display(anime))
+        stats["anime"] += 1
+
+    # Persons
+    for row in conn.execute("SELECT * FROM src_ann_persons"):
+        person = Person(
+            id=f"ann-{row['ann_id']}",
+            name_en=row["name_en"] or "",
+            name_ja=row["name_ja"] or "",
+            date_of_birth=row["date_of_birth"],
+            hometown=row["hometown"],
+            blood_type=row["blood_type"],
+            site_url=row["website"],
+            description=row["description"],
+            ann_id=row["ann_id"],
+        )
+        upsert_person(conn, person)
+        stats["persons"] += 1
+
+    # Credits — only insert if both anime and person already exist in canonical tables
+    for row in conn.execute("""
+        SELECT c.*, a.id AS canon_anime_id, p.id AS canon_person_id
+        FROM src_ann_credits c
+        JOIN anime a ON a.ann_id = c.ann_anime_id
+        JOIN persons p ON p.ann_id = c.ann_person_id
+    """):
+        credit = Credit(
+            person_id=row["canon_person_id"],
+            anime_id=row["canon_anime_id"],
+            role=parse_role(row["role"]),
+            raw_role=row["role_raw"],
+            source="ann",
+        )
+        insert_credit(conn, credit)
+        stats["credits"] += 1
+
+    log.info("etl_ann_done", **stats)
+    return stats
+
+
+def integrate_allcinema(conn: sqlite3.Connection) -> dict[str, int]:
+    """src_allcinema_* → canonical anime / persons / credits."""
+    from src.database import insert_credit, upsert_anime, upsert_anime_analysis, upsert_anime_display, upsert_person
+    from src.scrapers.allcinema_scraper import _JOB_ROLE_MAP
+
+    stats = {"anime": 0, "persons": 0, "credits": 0}
+
+    # Anime
+    for row in conn.execute("SELECT * FROM src_allcinema_anime"):
+        anime = Anime(
+            id=f"allcinema:{row['allcinema_id']}",
+            title_ja=row["title_ja"] or "",
+            year=row["year"],
+            start_date=row["start_date"],
+            description=row["synopsis"],
+            allcinema_id=row["allcinema_id"],
+        )
+        upsert_anime(conn, anime)
+        conn.execute(
+            "UPDATE anime SET allcinema_id = ? WHERE id = ?",
+            (row["allcinema_id"], f"allcinema:{row['allcinema_id']}"),
+        )
+        upsert_anime_analysis(conn, _anime_to_analysis(anime))
+        upsert_anime_display(conn, _anime_to_display(anime))
+        stats["anime"] += 1
+
+    # Persons
+    for row in conn.execute("SELECT * FROM src_allcinema_persons"):
+        person = Person(
+            id=f"allcinema:{row['allcinema_id']}",
+            name_ja=row["name_ja"] or "",
+            name_en=row["name_en"] or "",
+            allcinema_id=row["allcinema_id"],
+        )
+        upsert_person(conn, person)
+        conn.execute(
+            "UPDATE persons SET allcinema_id = ? WHERE id = ?",
+            (row["allcinema_id"], f"allcinema:{row['allcinema_id']}"),
+        )
+        stats["persons"] += 1
+
+    # Credits — resolve role from job_name
+    for row in conn.execute("SELECT * FROM src_allcinema_credits"):
+        anime_id = f"allcinema:{row['allcinema_anime_id']}"
+        person_id = f"allcinema:{row['allcinema_person_id']}"
+        job_name = row["job_name"] or ""
+        role_str = _JOB_ROLE_MAP.get(job_name, "other")
+        try:
+            role = parse_role(role_str)
+        except Exception:
+            role = parse_role("other")
+        credit = Credit(
+            person_id=person_id,
+            anime_id=anime_id,
+            role=role,
+            raw_role=job_name,
+            source="allcinema",
+        )
+        insert_credit(conn, credit)
+        stats["credits"] += 1
+
+    log.info("etl_allcinema_done", **stats)
+    return stats
+
+
+def integrate_seesaawiki(conn: sqlite3.Connection) -> dict[str, int]:
+    """src_seesaawiki_* → canonical anime / persons / credits.
+
+    seesaawiki には グローバル人物 ID がないため、person は名前ベースで作成する。
+    """
+    from src.database import insert_credit, upsert_anime, upsert_anime_analysis, upsert_anime_display, upsert_person
+    from src.scrapers.seesaawiki_scraper import make_seesaa_person_id
+
+    stats = {"anime": 0, "persons": 0, "credits": 0}
+    person_cache: dict[str, str] = {}
+
+    # Anime
+    for row in conn.execute("SELECT * FROM src_seesaawiki_anime"):
+        anime = Anime(
+            id=row["id"],
+            title_ja=row["title_ja"] or "",
+            year=row["year"],
+            episodes=row["episodes"],
+        )
+        upsert_anime(conn, anime)
+        upsert_anime_analysis(conn, _anime_to_analysis(anime))
+        upsert_anime_display(conn, _anime_to_display(anime))
+        stats["anime"] += 1
+
+    # Credits (persons created on demand)
+    for row in conn.execute(
+        "SELECT * FROM src_seesaawiki_credits WHERE is_company = 0"
+    ):
+        name = row["person_name"]
+        if name not in person_cache:
+            pid = make_seesaa_person_id(name)
+            person = Person(id=pid, name_ja=name)
+            upsert_person(conn, person)
+            person_cache[name] = pid
+            stats["persons"] += 1
+        person_id = person_cache[name]
+        credit = Credit(
+            person_id=person_id,
+            anime_id=row["anime_src_id"],
+            role=parse_role(row["role"]),
+            raw_role=row["role_raw"],
+            episode=row["episode"] if row["episode"] != -1 else None,
+            source="seesaawiki",
+        )
+        insert_credit(conn, credit)
+        stats["credits"] += 1
+
+    log.info("etl_seesaawiki_done", **stats)
+    return stats
+
+
+def integrate_keyframe(conn: sqlite3.Connection) -> dict[str, int]:
+    """src_keyframe_* → canonical anime / persons / credits."""
+    from src.database import insert_credit, upsert_anime, upsert_anime_analysis, upsert_anime_display, upsert_person
+    from src.scrapers.keyframe_scraper import make_keyframe_anime_id, make_keyframe_person_id
+
+    stats = {"anime": 0, "persons": 0, "credits": 0}
+    person_cache: set[str] = set()
+
+    # Anime
+    for row in conn.execute("SELECT * FROM src_keyframe_anime"):
+        # If anilist_id maps to an existing canonical entry, skip creating a new one
+        existing_id: str | None = None
+        if row["anilist_id"]:
+            r = conn.execute(
+                "SELECT id FROM anime WHERE anilist_id = ?", (row["anilist_id"],)
+            ).fetchone()
+            if r:
+                existing_id = r[0]
+
+        if existing_id:
+            conn.execute(
+                "UPDATE anime SET title_en = COALESCE(NULLIF(?, ''), title_en) WHERE id = ?",
+                (row["title_en"], existing_id),
+            )
+            upsert_anime_analysis(conn, {
+                "id": existing_id,
+                "title_en": row["title_en"] or "",
+            })
+        else:
+            anime = Anime(
+                id=make_keyframe_anime_id(row["slug"]),
+                title_en=row["title_en"] or "",
+                title_ja=row["title_ja"] or "",
+                anilist_id=row["anilist_id"],
+            )
+            upsert_anime(conn, anime)
+            upsert_anime_analysis(conn, _anime_to_analysis(anime))
+            upsert_anime_display(conn, _anime_to_display(anime))
+            stats["anime"] += 1
+
+    # Credits (persons created on demand)
+    for row in conn.execute("SELECT * FROM src_keyframe_credits"):
+        slug = row["keyframe_slug"]
+        person_id = make_keyframe_person_id(row["kf_person_id"])
+        if person_id not in person_cache:
+            person = Person(
+                id=person_id,
+                name_ja=row["name_ja"] or "",
+                name_en=row["name_en"] or "",
+            )
+            upsert_person(conn, person)
+            person_cache.add(person_id)
+            stats["persons"] += 1
+
+        # Resolve anime_id: check if anilist-matched ID exists
+        kf_anime_id = make_keyframe_anime_id(slug)
+        r = conn.execute(
+            "SELECT id FROM src_keyframe_anime WHERE slug = ?", (slug,)
+        ).fetchone()
+        anilist_id = r["anilist_id"] if r else None
+        if anilist_id:
+            existing = conn.execute(
+                "SELECT id FROM anime WHERE anilist_id = ?", (anilist_id,)
+            ).fetchone()
+            if existing:
+                kf_anime_id = existing[0]
+
+        role_ja = row["role_ja"] or ""
+        role_en = row["role_en"] or ""
+        role = parse_role(role_ja) if role_ja else parse_role(role_en)
+        credit = Credit(
+            person_id=person_id,
+            anime_id=kf_anime_id,
+            role=role,
+            raw_role=role_ja or role_en,
+            episode=row["episode"] if row["episode"] != -1 else None,
+            source="keyframe",
+        )
+        insert_credit(conn, credit)
+        stats["credits"] += 1
+
+    log.info("etl_keyframe_done", **stats)
+    return stats
+
+
+def run_integration(conn: sqlite3.Connection) -> dict[str, dict[str, int]]:
+    """全ソーステーブルを正規化テーブルに統合する."""
+    results: dict[str, dict[str, int]] = {}
+    for source, fn in [
+        ("anilist", integrate_anilist),
+        ("ann", integrate_ann),
+        ("allcinema", integrate_allcinema),
+        ("seesaawiki", integrate_seesaawiki),
+        ("keyframe", integrate_keyframe),
+    ]:
+        try:
+            results[source] = fn(conn)
+        except Exception as exc:
+            log.error("etl_source_failed", source=source, error=str(exc))
+            results[source] = {"error": str(exc)}
+    conn.commit()
+    log.info("etl_integration_done", sources=list(results.keys()))
+    return results
