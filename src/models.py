@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, Field, computed_field
 
 if TYPE_CHECKING:
-    from src.db_rows import AnimeRow, CreditRow, PersonRow, ScoreRow, VARow
+    from src.db_rows import AnimeRow, CreditRow, PersonRow, ScoreRow
 
 
 class Role(str, Enum):
@@ -1103,6 +1103,40 @@ ROLE_MAP: dict[str, Role] = {
     "ラボ・マネージメント": Role.SPECIAL,
     # 曲名(ロールではない)
     "曲名": Role.SPECIAL,
+    # === ANN固有ロール (英語表記) ===
+    # ANN Encyclopedia は英語ロール名を使用する
+    "direction": Role.DIRECTOR,
+    "chief direction": Role.DIRECTOR,
+    "series direction": Role.DIRECTOR,
+    "assistant direction": Role.EPISODE_DIRECTOR,
+    "episode direction": Role.EPISODE_DIRECTOR,
+    "unit direction": Role.EPISODE_DIRECTOR,
+    "animation direction": Role.ANIMATION_DIRECTOR,
+    "chief animation direction": Role.ANIMATION_DIRECTOR,
+    "action animation direction": Role.ANIMATION_DIRECTOR,
+    "mecha animation direction": Role.ANIMATION_DIRECTOR,
+    "effects animation direction": Role.ANIMATION_DIRECTOR,
+    "finish animation": Role.FINISHING,
+    "creature design": Role.CHARACTER_DESIGNER,
+    "weapon design": Role.CHARACTER_DESIGNER,
+    "color setting": Role.FINISHING,
+    "digital paint": Role.FINISHING,
+    "photography": Role.PHOTOGRAPHY_DIRECTOR,
+    "compositing": Role.PHOTOGRAPHY_DIRECTOR,
+    "cgi direction": Role.CGI_DIRECTOR,
+    "3d direction": Role.CGI_DIRECTOR,
+    "cg direction": Role.CGI_DIRECTOR,
+    "3d cgi": Role.CGI_DIRECTOR,
+    "sound direction": Role.SOUND_DIRECTOR,
+    "original work": Role.ORIGINAL_CREATOR,
+    "original novel": Role.ORIGINAL_CREATOR,
+    "original manga": Role.ORIGINAL_CREATOR,
+    "executive producer": Role.PRODUCER,
+    "line producer": Role.PRODUCER,
+    "animation producer": Role.PRODUCER,
+    "production management": Role.PRODUCTION_MANAGER,
+    "setting design": Role.SETTINGS,
+    "setting": Role.SETTINGS,
 }
 
 
@@ -1218,6 +1252,8 @@ class Person(BaseModel):
     mal_id: int | None = None
     anilist_id: int | None = None
     madb_id: str | None = None  # メディア芸術DB URI
+    ann_id: int | None = None  # Anime News Network Encyclopedia ID
+    allcinema_id: int | None = None  # allcinema.net person ID
 
     # 画像（AniList）
     image_large: str | None = None
@@ -1255,6 +1291,7 @@ class Person(BaseModel):
             mal_id=row.mal_id,
             anilist_id=row.anilist_id,
             madb_id=row.madb_id,
+            ann_id=getattr(row, "ann_id", None),
             image_large=row.image_large,
             image_medium=row.image_medium,
             image_large_path=row.image_large_path,
@@ -1271,8 +1308,12 @@ class Person(BaseModel):
         )
 
 
-class Anime(BaseModel):
-    """アニメ作品."""
+class AnimeAnalysis(BaseModel):
+    """アニメ作品（分析層 — スコア・表示情報を含まない）.
+
+    silver.analysis 層のモデル。anime.score など視聴者評価は一切含まない。
+    新規の分析コードはこの型をアノテーションとして使うこと。
+    """
 
     id: str
     title_ja: str = ""
@@ -1284,7 +1325,67 @@ class Anime(BaseModel):
     mal_id: int | None = None
     anilist_id: int | None = None
     madb_id: str | None = None  # メディア芸術DB URI
+    ann_id: int | None = None  # Anime News Network Encyclopedia ID
+    allcinema_id: int | None = None  # allcinema.net cinema ID
+
+    # 詳細情報（構造的メタデータ）
+    format: str | None = None  # TV, MOVIE, OVA, ONA, SPECIAL, MUSIC
+    status: str | None = None  # FINISHED, RELEASING, NOT_YET_RELEASED, CANCELLED
+    start_date: str | None = None  # YYYY-MM-DD
+    end_date: str | None = None
+    duration: int | None = None  # 分/話
+    source: str | None = None  # ORIGINAL, MANGA, LIGHT_NOVEL, etc.
+
+    # v26: K-means 規模分類
+    work_type: str | None = None  # 'tv' | 'tanpatsu'
+    scale_class: str | None = None  # 'large' | 'medium' | 'small'
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def display_title(self) -> str:
+        return self.title_ja or self.title_en or self.id
+
+
+class AnimeDisplay(BaseModel):
+    """アニメ作品の表示情報（スコア・画像・説明等）.
+
+    silver.display 層のモデル。分析コードからの参照禁止。
+    レポートの表示用メタデータとしてのみ使用する。
+    """
+
+    id: str
     score: float | None = None
+    popularity: int | None = None
+    popularity_rank: int | None = None
+    favourites: int | None = None
+    mean_score: int | None = None
+    description: str | None = None
+    cover_large: str | None = None
+    cover_extra_large: str | None = None
+    cover_medium: str | None = None
+    cover_large_path: str | None = None
+    banner: str | None = None
+    banner_path: str | None = None
+    site_url: str | None = None
+    genres: list[str] = Field(default_factory=list)
+    tags: list[dict] = Field(default_factory=list)
+    studios: list[str] = Field(default_factory=list)
+    synonyms: list[str] = Field(default_factory=list)
+    country_of_origin: str | None = None
+    is_adult: bool | None = None
+    relations_json: str | None = None
+    external_links_json: str | None = None
+    rankings_json: str | None = None
+
+
+class Anime(AnimeAnalysis):
+    """アニメ作品（後方互換シム）.
+
+    新規コードは AnimeAnalysis を使うこと。
+    score フィールドは表示専用 — スコア算出・エッジ重みへの使用禁止。
+    """
+
+    score: float | None = None  # 表示専用: 視聴者評価はスコア算出に使用禁止
 
     # 画像（AniList）
     cover_large: str | None = None
@@ -1294,14 +1395,8 @@ class Anime(BaseModel):
     cover_large_path: str | None = None  # ローカル保存パス
     banner_path: str | None = None
 
-    # 詳細情報
+    # 詳細情報（表示用）
     description: str | None = None  # あらすじ
-    format: str | None = None  # TV, MOVIE, OVA, ONA, SPECIAL, MUSIC
-    status: str | None = None  # FINISHED, RELEASING, NOT_YET_RELEASED, CANCELLED
-    start_date: str | None = None  # YYYY-MM-DD
-    end_date: str | None = None
-    duration: int | None = None  # 分/話
-    source: str | None = None  # ORIGINAL, MANGA, LIGHT_NOVEL, etc.
 
     # 分類・タグ
     genres: list[str] = Field(default_factory=list)
@@ -1330,20 +1425,11 @@ class Anime(BaseModel):
     external_links_json: str | None = None  # 外部リンク（配信サイト等）
     rankings_json: str | None = None  # ランキング情報
 
-    # v26: K-means 規模分類
-    work_type: str | None = None  # 'tv' | 'tanpatsu'
-    scale_class: str | None = None  # 'large' | 'medium' | 'small'
-
     @computed_field  # type: ignore[prop-decorator]
     @property
     def studio(self) -> str | None:
         """主制作スタジオ（studiosリストの先頭、後方互換用）."""
         return self.studios[0] if self.studios else None
-
-    @computed_field  # type: ignore[prop-decorator]
-    @property
-    def display_title(self) -> str:
-        return self.title_ja or self.title_en or self.id
 
     @classmethod
     def from_db_row(cls, row: "AnimeRow") -> "Anime":
