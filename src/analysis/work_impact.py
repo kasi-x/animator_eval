@@ -81,7 +81,7 @@ def compute_work_impact(
                     "anime_id": c.anime_id,
                     "title": anime.title_en or anime.title_ja or c.anime_id,
                     "year": anime.year,
-                    "anime_score": anime.score,
+                    "anime_score": getattr(anime, "score", None),  # display-only
                     "role": c.role.value,
                     "stage": stage,
                     "team_size": team_size,

@@ -60,8 +60,9 @@ def compute_decade_analysis(
         yd["credits"] += 1
         yd["persons"].add(c.person_id)
         yd["anime"].add(c.anime_id)
-        if anime.score:
-            yd["scores"].append(anime.score)
+        _disp = getattr(anime, "score", None)  # display-only
+        if _disp:
+            yd["scores"].append(_disp)
         yd["roles"][c.role.value] += 1
         yd["person_credits"][c.person_id] += 1
 

@@ -216,8 +216,7 @@ class Neo4jWriter:
             anime.season = a.season,
             anime.episodes = a.episodes,
             anime.mal_id = a.mal_id,
-            anime.anilist_id = a.anilist_id,
-            anime.score = a.score
+            anime.anilist_id = a.anilist_id
         """
 
         with self.driver.session() as session:
@@ -233,7 +232,6 @@ class Neo4jWriter:
                         "episodes": a.episodes,
                         "mal_id": a.mal_id,
                         "anilist_id": a.anilist_id,
-                        "score": a.score,
                     }
                     for a in batch
                 ]

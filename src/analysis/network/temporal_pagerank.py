@@ -307,7 +307,6 @@ def _build_yearly_cumulative_graphs(
                         type="anime",
                         name=anime.display_title,
                         year=anime.year,
-                        score=anime.score,
                     )
                 else:
                     g.add_node(c.anime_id, type="anime", name=c.anime_id)

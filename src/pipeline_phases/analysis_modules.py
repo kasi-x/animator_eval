@@ -15,7 +15,6 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-import networkx as nx
 import numpy as np
 import structlog
 
@@ -85,6 +84,23 @@ from src.analysis.studio.clustering import compute_studio_clustering
 from src.analysis.studio.network import compute_studio_network
 from src.analysis.talent_pipeline import compute_talent_pipeline
 from src.pipeline_phases.context import PipelineContext
+
+# New analysis modules (Phase 2A-2N)
+from src.analysis.attrition.entry_cohort_attrition import run_entry_cohort_attrition
+from src.analysis.attrition.generational_health import run_generational_health
+from src.analysis.attrition.attrition_risk_model import run_attrition_risk_model
+from src.analysis.market.monopsony import run_monopsony_analysis
+from src.analysis.gender.bottleneck import run_gender_bottleneck
+from src.analysis.talent.undervalued import run_undervalued_talent
+from src.analysis.talent.succession import run_succession_matrix
+from src.analysis.genre.whitespace import run_genre_whitespace
+from src.analysis.network.trust_entry import run_trust_entry_analysis
+from src.analysis.studio.benchmark_card import compute_studio_benchmark_cards
+from src.analysis.mentor.director_value_add import run_director_value_add
+from src.analysis.team.chemistry import run_team_chemistry
+from src.analysis.team.templates import cluster_team_patterns
+from src.analysis.network.independent_unit import run_independent_units
+from src.analysis.person_parameters import compute_person_parameters
 
 logger = structlog.get_logger()
 
@@ -361,8 +377,8 @@ def _run_compensation_analyzer(context: PipelineContext) -> Any:
         total_budget_per_anime=100.0,  # Normalized budget
     )
 
-    # Build anime_scores dict for scatter chart
-    anime_scores = {a.id: a.score for a in anime_with_contribs if a.score is not None}
+    # Build anime_scores dict for scatter chart (display-only)
+    anime_scores = {a.id: s for a in anime_with_contribs if (s := getattr(a, "score", None)) is not None}
 
     # Export report
     return export_compensation_report(analyses, person_names, anime_scores=anime_scores)
@@ -1056,6 +1072,265 @@ def _run_credit_stats(context: PipelineContext) -> Any:
     return stats
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# New analysis tasks (Phase 2A-2N): attrition / market / gender / talent / etc.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _run_entry_cohort_attrition(context: PipelineContext) -> Any:
+    import sqlite3
+    from src.database import DEFAULT_DB_PATH
+    conn = sqlite3.connect(DEFAULT_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        return run_entry_cohort_attrition(conn)
+    finally:
+        conn.close()
+
+
+def _run_generational_health(context: PipelineContext) -> Any:
+    import sqlite3
+    from src.database import DEFAULT_DB_PATH
+    conn = sqlite3.connect(DEFAULT_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        return run_generational_health(conn)
+    finally:
+        conn.close()
+
+
+def _run_attrition_risk_model(context: PipelineContext) -> Any:
+    import sqlite3
+    from src.database import DEFAULT_DB_PATH
+    conn = sqlite3.connect(DEFAULT_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        return run_attrition_risk_model(conn)
+    finally:
+        conn.close()
+
+
+def _run_monopsony_analysis(context: PipelineContext) -> Any:
+    return run_monopsony_analysis(context.studio_assignments, context.person_fe)
+
+
+def _run_gender_bottleneck(context: PipelineContext) -> Any:
+    import sqlite3
+    from src.database import DEFAULT_DB_PATH
+    conn = sqlite3.connect(DEFAULT_DB_PATH)
+    conn.row_factory = sqlite3.Row
+    try:
+        return run_gender_bottleneck(conn)
+    finally:
+        conn.close()
+
+
+def _run_succession_matrix(context: PipelineContext) -> Any:
+    return run_succession_matrix(context.person_fe, context.credits, context.studio_assignments)
+
+
+def _run_team_chemistry(context: PipelineContext) -> Any:
+    return run_team_chemistry(context.credits, context.anime_map, context.iv_scores)
+
+
+def _run_team_templates(context: PipelineContext) -> Any:
+    return cluster_team_patterns(context.credits, context.anime_map, context.iv_scores)
+
+
+def _run_independent_units(context: PipelineContext) -> Any:
+    if not context.community_map:
+        return {"error": "no_community_map"}
+    return run_independent_units(
+        context.community_map, context.credits, context.anime_map, context.person_fe
+    )
+
+
+def _run_studio_benchmark_cards(context: PipelineContext) -> Any:
+    from src.utils.config import JSON_DIR
+    import json
+
+    # Load expected_ability from flushed JSON or in-memory
+    expected_ability: dict = {}
+    ea_data = context.analysis_results.get("expected_ability")
+    if ea_data is None:
+        ea_path = JSON_DIR / "expected_ability.json"
+        if ea_path.exists():
+            with open(ea_path, encoding="utf-8") as f:
+                ea_data = json.load(f)
+    if isinstance(ea_data, dict):
+        expected_ability = {pid: d.get("gap", {}) for pid, d in ea_data.items() if isinstance(d, dict)}
+
+    studios_json: list[dict] = []
+    studios_data = context.analysis_results.get("studios")
+    if studios_data is None:
+        studios_path = JSON_DIR / "studios.json"
+        if studios_path.exists():
+            with open(studios_path, encoding="utf-8") as f:
+                studios_json = json.load(f)
+    elif isinstance(studios_data, list):
+        studios_json = studios_data
+
+    return compute_studio_benchmark_cards(
+        context.studio_assignments, context.person_fe, expected_ability,
+        context.credits, studios_json
+    )
+
+
+def _run_director_value_add(context: PipelineContext) -> Any:
+    from src.utils.config import JSON_DIR
+    import json
+
+    mentorships_data = context.analysis_results.get("mentorships")
+    if mentorships_data is None:
+        m_path = JSON_DIR / "mentorships.json"
+        if m_path.exists():
+            with open(m_path, encoding="utf-8") as f:
+                mentorships_data = json.load(f)
+    if not mentorships_data:
+        return {"error": "no_mentorships_data"}
+
+    if isinstance(mentorships_data, dict):
+        # Flatten to list
+        mentorships_list = [
+            {"mentor_id": k, "mentee_id": v, "shared_works": 1, "confidence": 0.5}
+            for k, v in mentorships_data.items()
+        ] if not isinstance(list(mentorships_data.values())[0], dict) else list(mentorships_data.values())
+    elif isinstance(mentorships_data, list):
+        mentorships_list = mentorships_data
+    else:
+        return {"error": "unknown_mentorships_format"}
+
+    return run_director_value_add(mentorships_list, context.person_fe, context.credits, context.anime_map)
+
+
+def _run_undervalued_talent(context: PipelineContext) -> Any:
+    from src.utils.config import JSON_DIR
+    import json
+
+    expected_ability: dict = {}
+    ea_data = context.analysis_results.get("expected_ability")
+    if ea_data is None:
+        ea_path = JSON_DIR / "expected_ability.json"
+        if ea_path.exists():
+            with open(ea_path, encoding="utf-8") as f:
+                ea_data = json.load(f)
+    if isinstance(ea_data, dict):
+        expected_ability = ea_data
+
+    genre_affinity_list: list = []
+    ga_data = context.analysis_results.get("genre_affinity")
+    if ga_data is None:
+        ga_path = JSON_DIR / "genre_affinity.json"
+        if ga_path.exists():
+            with open(ga_path, encoding="utf-8") as f:
+                ga_raw = json.load(f)
+            if isinstance(ga_raw, dict):
+                for pid, genres in ga_raw.items():
+                    if isinstance(genres, dict):
+                        for genre, score in genres.items():
+                            genre_affinity_list.append({"person_id": pid, "genre": genre, "affinity_score": score})
+    elif isinstance(ga_data, dict):
+        for pid, genres in ga_data.items():
+            if isinstance(genres, dict):
+                for genre, score in genres.items():
+                    genre_affinity_list.append({"person_id": pid, "genre": genre, "affinity_score": score})
+
+    return run_undervalued_talent(expected_ability, context.results, genre_affinity_list)
+
+
+def _run_genre_whitespace(context: PipelineContext) -> Any:
+    from src.utils.config import JSON_DIR
+    import json
+
+    genre_ecosystem: dict = {}
+    ge_data = context.analysis_results.get("genre_ecosystem")
+    if ge_data is None:
+        ge_path = JSON_DIR / "genre_ecosystem.json"
+        if ge_path.exists():
+            with open(ge_path, encoding="utf-8") as f:
+                ge_data = json.load(f)
+    if isinstance(ge_data, dict):
+        genre_ecosystem = ge_data.get("trends", ge_data)
+
+    genre_affinity_list: list = []
+    ga_data = context.analysis_results.get("genre_affinity")
+    if ga_data is None:
+        ga_path = JSON_DIR / "genre_affinity.json"
+        if ga_path.exists():
+            with open(ga_path, encoding="utf-8") as f:
+                ga_raw = json.load(f)
+            if isinstance(ga_raw, dict):
+                for pid, genres in ga_raw.items():
+                    if isinstance(genres, dict):
+                        for genre, score in genres.items():
+                            genre_affinity_list.append({"person_id": pid, "genre": genre, "affinity_score": score})
+    elif isinstance(ga_data, dict):
+        for pid, genres in ga_data.items():
+            if isinstance(genres, dict):
+                for genre, score in genres.items():
+                    genre_affinity_list.append({"person_id": pid, "genre": genre, "affinity_score": score})
+
+    return run_genre_whitespace(genre_ecosystem, genre_affinity_list, context.results)
+
+
+def _run_trust_entry(context: PipelineContext) -> Any:
+    bridges_data = context.analysis_results.get("bridges")
+    if not bridges_data:
+        from src.utils.config import JSON_DIR
+        import json
+        b_path = JSON_DIR / "bridges.json"
+        if b_path.exists():
+            with open(b_path, encoding="utf-8") as f:
+                bridges_data = json.load(f)
+    if not bridges_data:
+        return {"error": "no_bridges_data"}
+
+    return run_trust_entry_analysis(
+        bridges_data, context.person_fe, context.birank_person_scores
+    )
+
+
+def _run_person_parameters(context: PipelineContext) -> Any:
+    """Batch 3: compute Person Parameter Card (depends on mentorships + genre_affinity)."""
+    from src.utils.config import JSON_DIR
+    import json
+
+    # Load mentorships
+    mentorships_data = context.analysis_results.get("mentorships")
+    if mentorships_data is None:
+        m_path = JSON_DIR / "mentorships.json"
+        if m_path.exists():
+            with open(m_path, encoding="utf-8") as f:
+                mentorships_data = json.load(f)
+    mentorship_list = mentorships_data if isinstance(mentorships_data, list) else []
+
+    # Load genre_affinity
+    ga_data = context.analysis_results.get("genre_affinity")
+    if ga_data is None:
+        ga_path = JSON_DIR / "genre_affinity.json"
+        if ga_path.exists():
+            with open(ga_path, encoding="utf-8") as f:
+                ga_data = json.load(f)
+    genre_affinity = ga_data if isinstance(ga_data, dict) else {}
+
+    # Load compatibility
+    compat_data = context.analysis_results.get("compatibility_groups_analysis")
+    if compat_data is None:
+        c_path = JSON_DIR / "compatibility_groups_analysis.json"
+        if c_path.exists():
+            with open(c_path, encoding="utf-8") as f:
+                compat_data = json.load(f)
+    compatibility_boost: dict = {}
+    if isinstance(compat_data, dict):
+        boost_raw = compat_data.get("compatibility_boost") or compat_data.get("boost", {})
+        if isinstance(boost_raw, dict):
+            compatibility_boost = boost_raw
+
+    return compute_person_parameters(
+        context.results, mentorship_list, genre_affinity, compatibility_boost
+    )
+
+
 # Registry of all analysis tasks (order-independent for parallel execution)
 ANALYSIS_TASKS: list[AnalysisTask] = [
     AnalysisTask("anime_stats", _run_anime_stats),
@@ -1261,6 +1536,101 @@ ANALYSIS_TASKS: list[AnalysisTask] = [
         _run_dml_analysis,
         monitor_step="dml_analysis",
         condition=lambda ctx: ctx.akm_result is not None and len(ctx.person_fe) > 50,
+    ),
+    # ========== New audience-driven analysis modules ==========
+    AnalysisTask(
+        "entry_cohort_attrition",
+        _run_entry_cohort_attrition,
+        monitor_step="entry_cohort_attrition",
+        condition=lambda ctx: len(ctx.credits) > 1000,
+    ),
+    AnalysisTask(
+        "monopsony_analysis",
+        _run_monopsony_analysis,
+        monitor_step="monopsony_analysis",
+        condition=lambda ctx: len(ctx.studio_assignments) > 10,
+    ),
+    AnalysisTask(
+        "gender_bottleneck",
+        _run_gender_bottleneck,
+        monitor_step="gender_bottleneck",
+    ),
+    AnalysisTask(
+        "generational_health",
+        _run_generational_health,
+        monitor_step="generational_health",
+    ),
+    AnalysisTask(
+        "succession_matrix",
+        _run_succession_matrix,
+        monitor_step="succession_matrix",
+        condition=lambda ctx: len(ctx.person_fe) > 0,
+    ),
+    AnalysisTask(
+        "team_chemistry",
+        _run_team_chemistry,
+        monitor_step="team_chemistry",
+        memory_heavy=True,
+    ),
+    AnalysisTask(
+        "team_templates",
+        _run_team_templates,
+        monitor_step="team_templates",
+        memory_heavy=True,
+    ),
+    AnalysisTask(
+        "independent_units",
+        _run_independent_units,
+        monitor_step="independent_units",
+        condition=lambda ctx: ctx.community_map is not None,
+    ),
+    AnalysisTask(
+        "attrition_risk_model",
+        _run_attrition_risk_model,
+        monitor_step="attrition_risk_model",
+        memory_heavy=True,
+        condition=lambda ctx: len(ctx.credits) > 5000,
+    ),
+    # Batch 3 tasks (depend on earlier batch outputs — handled separately):
+    # studio_benchmark_cards, director_value_add, undervalued_talent,
+    # genre_whitespace, trust_entry, person_parameters
+]
+
+# Tasks that depend on other batch-2 outputs (run after main batches complete)
+BATCH3_TASKS: list[AnalysisTask] = [
+    AnalysisTask(
+        "studio_benchmark_cards",
+        _run_studio_benchmark_cards,
+        monitor_step="studio_benchmark_cards",
+        condition=lambda ctx: len(ctx.person_fe) > 0,
+        memory_heavy=True,
+    ),
+    AnalysisTask(
+        "director_value_add",
+        _run_director_value_add,
+        monitor_step="director_value_add",
+        memory_heavy=True,
+    ),
+    AnalysisTask(
+        "undervalued_talent",
+        _run_undervalued_talent,
+        monitor_step="undervalued_talent",
+    ),
+    AnalysisTask(
+        "genre_whitespace",
+        _run_genre_whitespace,
+        monitor_step="genre_whitespace",
+    ),
+    AnalysisTask(
+        "trust_entry",
+        _run_trust_entry,
+        monitor_step="trust_entry",
+        condition=lambda ctx: bool(ctx.analysis_results.get("bridges") or True),
+    ),
+    AnalysisTask(
+        "person_parameters",
+        _run_person_parameters,
+        monitor_step="person_parameters",
     ),
 ]
 
@@ -1605,6 +1975,12 @@ def run_analysis_modules_phase(
             completed_count += c
             failed_count += f
 
+    # Batch 3: depends on outputs from earlier batches (mentorships, genre_affinity, etc.)
+    logger.info("analysis_batch3_start", tasks=[t.name for t in BATCH3_TASKS])
+    c, f = _run_task_batch(BATCH3_TASKS, context, results_lock, 1, "batch3", json_dir=JSON_DIR)
+    completed_count += c
+    failed_count += f
+
     # Apply tags to result entries on the main thread (D23: thread-safe mutation)
     person_tag_assignments = context.analysis_results.get("tags")
     if person_tag_assignments:
@@ -1625,5 +2001,5 @@ def run_analysis_modules_phase(
         "analysis_modules_parallel_complete",
         completed=completed_count,
         failed=failed_count,
-        total=len(ANALYSIS_TASKS),
+        total=len(ANALYSIS_TASKS) + len(BATCH3_TASKS),
     )

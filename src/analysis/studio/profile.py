@@ -62,8 +62,9 @@ def compute_studio_analysis(
         titles = []
         for aid in anime_ids:
             a = anime_map[aid]
-            if a.score:
-                anime_scores.append(a.score)
+            _disp = getattr(a, "score", None)  # display-only
+            if _disp:
+                anime_scores.append(_disp)
             if a.year:
                 years.append(a.year)
             titles.append(a.display_title)

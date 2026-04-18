@@ -78,12 +78,13 @@ def explain_person_summary(
             continue
         seen_anime.add(c.anime_id)
         anime = anime_map.get(c.anime_id)
-        if anime and anime.score:
+        _disp = getattr(anime, "score", None)  # display-only
+        if anime and _disp:
             top_works.append(
                 {
                     "title": anime.title_ja or anime.title_en or anime.id,
                     "year": anime.year,
-                    "score": anime.score,
+                    "score": _disp,
                     "role": c.role.value,
                 }
             )
@@ -341,7 +342,7 @@ def explain_authority(
                     "anime_id": anime.id,
                     "title": anime.title_ja or anime.title_en or anime.id,
                     "year": anime.year,
-                    "score": anime.score or 0,
+                    "score": getattr(anime, "score", None) or 0,  # display-only
                     "role": c.role.value,
                 }
             )
@@ -436,13 +437,14 @@ def explain_skill(
             continue
         seen.add(c.anime_id)
         anime = anime_map.get(c.anime_id)
-        if anime and anime.score:
+        _disp = getattr(anime, "score", None)  # display-only
+        if anime and _disp:
             works.append(
                 {
                     "anime_id": anime.id,
                     "title": anime.title_ja or anime.title_en or anime.id,
                     "year": anime.year,
-                    "score": anime.score,
+                    "score": _disp,
                 }
             )
 

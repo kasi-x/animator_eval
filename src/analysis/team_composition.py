@@ -64,7 +64,7 @@ def analyze_team_patterns(
             "anime_id": anime_id,
             "title": anime.display_title,
             "year": anime.year,
-            "anime_score": anime.score,
+            "anime_score": getattr(anime, "score", None),  # display-only
             "team_size": team_size,
             "core_roles": core_count,
             "roles": {r: sorted(set(pids)) for r, pids in roles.items()},

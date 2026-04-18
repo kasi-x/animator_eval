@@ -71,9 +71,10 @@ def compute_studio_timeseries(
         anime = anime_map.get(c.anime_id)
         if not anime or not anime.year or not anime.studios:
             continue
-        if anime.score is not None:
+        _disp = getattr(anime, "score", None)  # display-only
+        if _disp is not None:
             for studio in anime.studios:
-                studio_year_anime_scores[(studio, anime.year)].append(anime.score)
+                studio_year_anime_scores[(studio, anime.year)].append(_disp)
 
     # Compute year-specific studio FE from AKM residuals
     studio_year_resid: dict[tuple[str, int], list[float]] = defaultdict(list)

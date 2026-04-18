@@ -76,7 +76,7 @@ def predict_anime_score(
                 "anime_id": anime_id,
                 "title": anime.display_title,
                 "year": anime.year,
-                "score": anime.score,  # kept for display only
+                "score": getattr(anime, "score", None),  # display-only
                 "staff_count": staff_count,
                 "overlap_count": len(overlap),
                 "overlap_ratio": len(overlap) / len(team_set),

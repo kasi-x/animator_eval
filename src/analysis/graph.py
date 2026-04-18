@@ -85,7 +85,7 @@ def create_person_anime_network(
         )
     anime_map: dict[str, Anime] = {}
     for a in anime_list:
-        g.add_node(a.id, type="anime", name=a.display_title, year=a.year, score=a.score)
+        g.add_node(a.id, type="anime", name=a.display_title, year=a.year)
         anime_map[a.id] = a
 
     # Pre-compute staff count per anime from credits
@@ -940,7 +940,6 @@ def _build_collaboration_edge_data(
     Returns:
         (edge_data, node_attrs) tuple for graph construction.
     """
-    from src.analysis.graph_rust import RUST_AVAILABLE, build_collaboration_edges
 
     node_attrs = {
         p.id: {"name": p.display_name, "name_ja": p.name_ja, "name_en": p.name_en}

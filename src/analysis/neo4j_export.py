@@ -108,7 +108,7 @@ def export_neo4j_csv(
                     a.episodes or "",
                     a.mal_id or "",
                     a.anilist_id or "",
-                    a.score or "",
+                    getattr(a, "score", None) or "",  # display-only
                     "Anime",
                 ]
             )

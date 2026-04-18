@@ -40,7 +40,7 @@ def compute_growth_trends(
             person_years[c.person_id][anime.year].append(
                 {
                     "anime_id": c.anime_id,
-                    "score": anime.score,
+                    "score": getattr(anime, "score", None),  # display-only
                     "role": c.role.value,
                 }
             )

@@ -58,7 +58,7 @@ def compute_anime_stats(
         entry: dict = {
             "title": anime.title_ja or anime.title_en or anime_id,
             "year": anime.year,
-            "score": anime.score,
+            "score": getattr(anime, "score", None),  # display-only
             "credit_count": len(acredits),
             "unique_persons": len(person_ids),
             "role_distribution": dict(
@@ -162,7 +162,7 @@ def compute_person_anime_stats(
                     {
                         "title": anime.title_ja or anime.title_en or c.anime_id,
                         "year": anime.year,
-                        "score": anime.score,
+                        "score": getattr(anime, "score", None),  # display-only
                         "role": c.role.value,
                     }
                 )

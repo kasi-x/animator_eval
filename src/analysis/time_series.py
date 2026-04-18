@@ -78,8 +78,9 @@ def compute_time_series(
         year_persons[c_year].add(c.person_id)
         year_credits[c_year] += 1
         year_anime[c_year].add(c.anime_id)
-        if anime.score:
-            year_scores[c_year].append(anime.score)
+        _disp = getattr(anime, "score", None)  # display-only
+        if _disp:
+            year_scores[c_year].append(_disp)
 
         # Quarterly aggregation
         if c_quarter is not None:

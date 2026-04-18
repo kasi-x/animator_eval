@@ -68,12 +68,13 @@ def compute_genre_affinity(
         for c in pcreds:
             anime = anime_map.get(c.anime_id)
             if anime:
-                tier = _score_tier(anime.score)  # display-only — not used in scoring
+                _disp = getattr(anime, "score", None)  # display-only
+                tier = _score_tier(_disp)
                 era = _era(anime.year)
                 tier_counts[tier] += 1
                 era_counts[era] += 1
-                if anime.score is not None:
-                    scores.append(anime.score)  # display-only — informational metadata
+                if _disp is not None:
+                    scores.append(_disp)  # display-only — informational metadata
 
         total = len(pcreds)
         if total == 0:
