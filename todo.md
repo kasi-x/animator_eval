@@ -236,3 +236,39 @@ _DB集約リファクタリングで特定した、次フェーズの課題。_
 | E1 | `feat_career` 分離 | `agg_person_career` (L2: first_year/active_years/total_credits等) と `feat_career_scores` (L3: growth_trend/activity_ratio等) に分割 | 大 |
 | E2 | `feat_network` 分離 | `agg_person_network` (L2: n_collaborators/n_unique_anime) と `feat_network_scores` (L3: centrality/bridge_score等) に分割 | 中 |
 | E3 | `corrections_*` テーブル | クレジット年補正・ロール正規化などの修正差分を生データから分離して追跡 | 中 |
+
+---
+
+## detailed_todo.md 実装状況 (2026-04-19)
+
+`detailed_todo.md` (母データ再構築 & レポート再編) の段階別進捗。レート制限で中断、次セッション (3am reset 後) に継続。
+
+### 完了
+
+- **Phase 1 (部分)**: v50 migration 骨格 (`src/database.py`: SCHEMA_VERSION 49→50, `_migrate_v50_canonical_silver` 追加), `upsert_anime` silver 限定化 (score/popularity/cover/description 除外)
+- **Phase 1 (部分)**: `src/utils/display_lookup.py` bronze 表示ヘルパ + `tests/test_display_lookup.py` (13 tests green)
+- **Phase 3 (部分)**: `docs/REPORT_INVENTORY.md` 52 ファイル audience 分類 (policy=5 / hr=6 / biz=5 / technical_appendix=15 / archived=3)
+- **Phase 3 (部分)**: 12 本 archive 済 (`scripts/report_generators/reports/archived/`)
+- **Phase 3 (部分)**: 7 本の禁止語 rewrite (industry_overview Chart D, index_page, network_analysis, mgmt_director_mentor, biz_undervalued_talent, brief index 3 本)
+- **Phase 4 (骨格)**: `scripts/report_generators/{lint_vocab,lint_structure,ci_check_lineage}.py`, `forbidden_vocab.yaml`, `vocab_replacements.yaml`
+- **Phase 4 (骨格)**: `scripts/export_data_dictionary.py`, `scripts/monitoring/{compute_quality_snapshot,check_quality_anomaly}.py`, `.pre-commit-config.yaml`, `docs/DATA_DICTIONARY.md`, `tests/test_statistical_invariants.py`
+- **Taskfile 拡張**: `lint-vocab`, `lint-structure`, `ci-check-lineage`, `gates`, `migrate`, `data-dictionary`, `quality-snapshot`, `reports-v2*`, `etl`, `ci` など 13 タスク追加
+
+### 残 (次セッション)
+
+- **Phase 1**:
+  - Task 1-4: ETL migration (`src/etl/integrate.py` を silver-only に)
+  - Task 1-5: analysis 層 — anime.score 参照全削除 (`src/analysis/**`)
+  - Task 1-6: Pydantic `Anime` シム削除 (`src/models.py`)
+  - Task 1-7: import guard — `src/analysis/` / `src/pipeline_phases/` から display_lookup 禁止
+  - Task 1-8〜1-11: sources/roles/external_ids/aliases lookup backfill
+  - Task 1-12: YAML schema SSoT
+- **Phase 2**: gold `meta_*` テーブル (未着手)
+- **Phase 3**: Task 3-4 v2 section structure 統一 (未着手)
+- **Phase 4**: v51 migration 本体統合 (worktree commit b3c24ff の残り)
+
+### 参照
+
+- 指示書: `detailed_todo.md` (2232行)
+- CHECKPOINT 3 は user pre-approval 済 (2026-04-19 指示) — approval 不要で進む
+- 命名改善は積極的に行う (user 指示)
