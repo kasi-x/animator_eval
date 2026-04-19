@@ -118,12 +118,20 @@ def _merge_duplicate_credits(credits: list[Credit]) -> list[Credit]:
 
 # Source priority for anime canonical ID selection.
 # Wiki sources preferred because they have episode-level credit data.
-_SOURCE_PRIORITY = {"seesaa": 0, "keyframe": 1, "anilist": 2, "madb": 3}
+_SOURCE_PRIORITY = {"seesaa": 0, "keyframe": 1, "anilist": 2, "ann": 3, "madb": 4, "allcinema": 5}
 
 
 def _anime_source(anime_id: str) -> str:
-    """Extract source prefix from anime_id (e.g. 'seesaa:a_xxx' → 'seesaa')."""
-    return anime_id.split(":")[0] if ":" in anime_id else "unknown"
+    """Extract source prefix from anime_id.
+
+    Handles both colon-separated ('seesaa:a_xxx' → 'seesaa') and
+    hyphen-separated ('ann-123' → 'ann') formats.
+    """
+    if ":" in anime_id:
+        return anime_id.split(":")[0]
+    if anime_id.startswith("ann-"):
+        return "ann"
+    return "unknown"
 
 
 def _resolve_anime_entities(
@@ -226,7 +234,19 @@ def run_entity_resolution(context: PipelineContext) -> None:
     """
     with context.monitor.measure("entity_resolution"):
         # === Person entity resolution ===
-        context.canonical_map = resolve_all(context.persons)
+        # クレジット・アニメメタを渡して ML ホモニム分割を有効化
+        credits_by_person: dict[str, list] = defaultdict(list)
+        for c in context.credits:
+            credits_by_person[c.person_id].append(c)
+
+        from src.analysis.ml_homonym_split import build_anime_meta
+        anime_meta = build_anime_meta(context.anime_list)
+
+        context.canonical_map = resolve_all(
+            context.persons,
+            credits_by_person=credits_by_person,
+            anime_meta=anime_meta,
+        )
 
         # Replace person_id in credits with canonical IDs
         if context.canonical_map:
@@ -248,6 +268,26 @@ def run_entity_resolution(context: PipelineContext) -> None:
             context.monitor.increment_counter(
                 "persons_resolved", len(context.canonical_map)
             )
+
+            # 数値IDを canonical person に伝播する
+            # 例: ANN person が AniList person にマージされたとき、
+            # AniList person の ann_id に ANN person の ann_id をセットする
+            persons_by_id = {p.id: p for p in context.persons}
+            for dup_id, canonical_id in context.canonical_map.items():
+                dup = persons_by_id.get(dup_id)
+                canon = persons_by_id.get(canonical_id)
+                if not dup or not canon:
+                    continue
+                if dup.ann_id and not canon.ann_id:
+                    canon.ann_id = dup.ann_id
+                if dup.anilist_id and not canon.anilist_id:
+                    canon.anilist_id = dup.anilist_id
+                if dup.mal_id and not canon.mal_id:
+                    canon.mal_id = dup.mal_id
+                if dup.madb_id and not canon.madb_id:
+                    canon.madb_id = dup.madb_id
+                if dup.name_ja and not canon.name_ja:
+                    canon.name_ja = dup.name_ja
 
         # === Anime entity resolution (cross-source, wiki-preferred) ===
         anime_canonical_map, anomalies = _resolve_anime_entities(
@@ -313,6 +353,8 @@ def run_entity_resolution(context: PipelineContext) -> None:
                         canon.mal_id = other.mal_id
                     if not canon.madb_id and other.madb_id:
                         canon.madb_id = other.madb_id
+                    if not canon.ann_id and other.ann_id:
+                        canon.ann_id = other.ann_id
 
             context.anime_list = list(canonical_anime.values())
             context.anime_map = {a.id: a for a in context.anime_list}

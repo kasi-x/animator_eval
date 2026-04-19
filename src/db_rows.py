@@ -23,7 +23,7 @@ SQLite から取得した raw 値をそのまま保持し、JSON 文字列のパ
 from __future__ import annotations
 
 import dataclasses
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 
 # ---------------------------------------------------------------------------
@@ -76,6 +76,8 @@ class PersonRow:
     favourites: int | None = None
     site_url: str | None = None
     madb_id: str | None = None
+    ann_id: int | None = None
+    allcinema_id: int | None = None
 
     @classmethod
     def from_row(cls, row) -> "PersonRow":
@@ -132,6 +134,8 @@ class AnimeRow:
     external_links_json: str | None = None
     rankings_json: str | None = None
     madb_id: str | None = None
+    ann_id: int | None = None
+    allcinema_id: int | None = None
     quarter: int | None = None
     work_type: str | None = None
     scale_class: str | None = None
@@ -667,6 +671,10 @@ class FeatWorkContextRow:
     max_career_year: int | None = None
     production_scale: float | None = None
     difficulty_score: float | None = None
+    scale_raw: float | None = None
+    scale_tier: int | None = None
+    scale_label: str | None = None
+    format_group: str | None = None
     updated_at: str | None = None
 
     @classmethod

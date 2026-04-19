@@ -12,7 +12,6 @@ used as a drop-in replacement for collaboration_graph in the pipeline.
 
 from __future__ import annotations
 
-from collections import defaultdict
 from typing import Any, Iterator
 
 import numpy as np

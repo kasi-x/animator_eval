@@ -67,13 +67,43 @@ def _is_japanese_name(name: str) -> bool:
     )
 
 
-def exact_match_cluster(persons: list[Person]) -> dict[str, str]:
+def _definitely_different(p1: Person, p2: Person) -> bool:
+    """数値IDが両者とも設定されており、かつ異なる場合は確実に別人.
+
+    ANN/AniList/MAL などのソースでは同名別人に別IDが付与されるため、
+    数値IDの不一致は同一人物でないことの確実な証拠となる。
+    """
+    if p1.ann_id and p2.ann_id and p1.ann_id != p2.ann_id:
+        return True
+    if p1.anilist_id and p2.anilist_id and p1.anilist_id != p2.anilist_id:
+        return True
+    if p1.mal_id and p2.mal_id and p1.mal_id != p2.mal_id:
+        return True
+    return False
+
+
+def _numeric_id_key(p: Person) -> tuple:
+    """同名グループ内でホモニム分割するためのキー.
+
+    数値IDが設定されている場合はそれを使い、未設定の場合は person_id 自体をキーにする。
+    これにより同じ名前でも異なる数値IDを持つ人物は別クラスタに分離される。
+    """
+    return (p.ann_id, p.anilist_id, p.mal_id)
+
+
+def exact_match_cluster(
+    persons: list[Person],
+    ml_clusters: dict[str, str] | None = None,
+) -> dict[str, str]:
     """完全一致による名寄せ（最も保守的）.
 
     正規化後の名前が完全一致する場合のみ統合する。
     日本語名を優先し、英語名のみでのマッチは日本語名がない場合のみ許容する。
     これにより、異なる漢字で同じローマ字表記のケース（例: 岡遼子 vs 岡亮子）での
     false positive を防ぐ。
+
+    ホモニム保護: ann_id / anilist_id / mal_id が両者ともセットされており
+    かつ異なる場合はマージしない（同名別人）。
 
     Returns: {person_id: canonical_id}
     """
@@ -106,39 +136,59 @@ def exact_match_cluster(persons: list[Person]) -> dict[str, str]:
 
     canonical_map: dict[str, str] = {}
 
+    def _merge_group(ids: list[str], name: str, strategy: str) -> None:
+        """同名グループ内でホモニム保護しながらマージする."""
+        unique_ids = list(dict.fromkeys(ids))
+        if len(unique_ids) < 2:
+            return
+        # ホモニム分割: 以下の場合はマージ不可として別クラスタに分離
+        #   1. 数値ID（ann_id/anilist_id/mal_id）が両方セットかつ異なる
+        #   2. ML クラスタリングで異なるクラスタに分類された
+        clusters: list[list[str]] = []
+        for pid in unique_ids:
+            placed = False
+            p = persons_by_id[pid]
+            for cluster in clusters:
+                rep_id = cluster[0]
+                rep = persons_by_id[rep_id]
+                # 数値 ID による確実な別人判定
+                if _definitely_different(p, rep):
+                    continue
+                # ML クラスタによる別人判定
+                if ml_clusters:
+                    p_cluster = ml_clusters.get(pid)
+                    rep_cluster = ml_clusters.get(rep_id)
+                    if (p_cluster is not None and rep_cluster is not None
+                            and p_cluster != rep_cluster):
+                        continue
+                cluster.append(pid)
+                placed = True
+                break
+            if not placed:
+                clusters.append([pid])
+
+        for cluster in clusters:
+            if len(cluster) < 2:
+                continue
+            canonical = cluster[0]
+            for pid in cluster[1:]:
+                if pid not in canonical_map:
+                    canonical_map[pid] = canonical
+                    logger.info(
+                        "entity_merged",
+                        source=pid,
+                        canonical=canonical,
+                        strategy=strategy,
+                        name=name,
+                    )
+
     # 日本語名での統合（最優先）
     for name_ja, ids in ja_name_groups.items():
-        if len(ids) < 2:
-            continue
-        unique_ids = list(dict.fromkeys(ids))
-        canonical = unique_ids[0]
-        for pid in unique_ids[1:]:
-            if pid not in canonical_map:
-                canonical_map[pid] = canonical
-                logger.info(
-                    "entity_merged",
-                    source=pid,
-                    canonical=canonical,
-                    strategy="exact_match",
-                    name=name_ja,
-                )
+        _merge_group(ids, name_ja, "exact_match")
 
     # 英語名での統合（日本語名を持たない人物のみ）
     for name_en, ids in en_name_groups.items():
-        if len(ids) < 2:
-            continue
-        unique_ids = list(dict.fromkeys(ids))
-        canonical = unique_ids[0]
-        for pid in unique_ids[1:]:
-            if pid not in canonical_map:
-                canonical_map[pid] = canonical
-                logger.info(
-                    "entity_merged",
-                    source=pid,
-                    canonical=canonical,
-                    strategy="exact_match",
-                    name=name_en,
-                )
+        _merge_group(ids, name_en, "exact_match")
 
     # エイリアスでの統合（補助的、既にマッチしていない場合のみ）
     for alias, ids in alias_groups.items():
@@ -147,19 +197,7 @@ def exact_match_cluster(persons: list[Person]) -> dict[str, str]:
         unique_ids = list(dict.fromkeys(ids))
         # エイリアスマッチは両方が日本語名を持たない場合のみ許可
         valid_ids = [pid for pid in unique_ids if not persons_by_id[pid].name_ja]
-        if len(valid_ids) < 2:
-            continue
-        canonical = valid_ids[0]
-        for pid in valid_ids[1:]:
-            if pid not in canonical_map:
-                canonical_map[pid] = canonical
-                logger.info(
-                    "entity_merged",
-                    source=pid,
-                    canonical=canonical,
-                    strategy="exact_match",
-                    name=alias,
-                )
+        _merge_group(valid_ids, alias, "exact_match_alias")
 
     return canonical_map
 
@@ -242,13 +280,16 @@ def romaji_match(persons: list[Person]) -> dict[str, str]:
 def cross_source_match(persons: list[Person]) -> dict[str, str]:
     """異なるデータソース間の名寄せ.
 
-    MAL/MADB の人物を AniList に対して名前の完全一致で統合する。
+    MAL/MADB/ANN の人物を AniList に対して名前の完全一致で統合する。
     MADB人物は name_ja の正規化一致のみ使用（法的リスク回避）。
+    ANN人物は name_ja + name_en の完全一致。ホモニム保護付き。
     """
     # ソース別に分類
     mal_persons: dict[str, Person] = {}
     anilist_persons: dict[str, Person] = {}
     madb_persons: dict[str, Person] = {}
+    ann_persons: dict[str, Person] = {}
+    allcinema_persons: dict[str, Person] = {}
 
     for p in persons:
         if p.id.startswith("mal:"):
@@ -257,14 +298,23 @@ def cross_source_match(persons: list[Person]) -> dict[str, str]:
             anilist_persons[p.id] = p
         elif p.id.startswith("madb:"):
             madb_persons[p.id] = p
+        elif p.id.startswith("ann-"):
+            ann_persons[p.id] = p
+        elif p.id.startswith("allcinema:"):
+            allcinema_persons[p.id] = p
 
-    # AniList の正規化日本語名インデックス（MADB マッチング用）
+    # AniList の正規化名インデックス（ja/en）
     anilist_ja_index: dict[str, list[str]] = defaultdict(list)
+    anilist_en_index: dict[str, list[str]] = defaultdict(list)
     for pid, p in anilist_persons.items():
         if p.name_ja:
             n = normalize_name(p.name_ja)
-            if n and len(n) >= 3:  # 短い名前はスキップ（法的リスク）
+            if n and len(n) >= 3:
                 anilist_ja_index[n].append(pid)
+        if p.name_en:
+            n = normalize_name(p.name_en)
+            if n and len(n) >= 5:
+                anilist_en_index[n].append(pid)
 
     # MAL の正規化名インデックス
     mal_name_index: dict[str, list[str]] = defaultdict(list)
@@ -276,22 +326,24 @@ def cross_source_match(persons: list[Person]) -> dict[str, str]:
 
     canonical_map: dict[str, str] = {}
 
-    # MAL → AniList マッチング（既存ロジック）
+    # MAL → AniList マッチング
     for anilist_pid, p in anilist_persons.items():
         for name in [p.name_ja, p.name_en] + p.aliases:
             n = normalize_name(name)
             if n and n in mal_name_index:
                 mal_ids = mal_name_index[n]
                 if len(mal_ids) == 1:
-                    canonical_map[anilist_pid] = mal_ids[0]
-                    logger.info(
-                        "entity_merged",
-                        source=anilist_pid,
-                        canonical=mal_ids[0],
-                        strategy="cross_source",
-                        name=n,
-                    )
-                    break
+                    mal_p = next(mp for mid, mp in mal_persons.items() if mid == mal_ids[0])
+                    if not _definitely_different(p, mal_p):
+                        canonical_map[anilist_pid] = mal_ids[0]
+                        logger.info(
+                            "entity_merged",
+                            source=anilist_pid,
+                            canonical=mal_ids[0],
+                            strategy="cross_source",
+                            name=n,
+                        )
+                        break
                 else:
                     logger.debug(
                         "ambiguous_cross_source_match",
@@ -309,14 +361,16 @@ def cross_source_match(persons: list[Person]) -> dict[str, str]:
         if n in anilist_ja_index:
             anilist_ids = anilist_ja_index[n]
             if len(anilist_ids) == 1:
-                canonical_map[madb_pid] = anilist_ids[0]
-                logger.info(
-                    "entity_merged",
-                    source=madb_pid,
-                    canonical=anilist_ids[0],
-                    strategy="cross_source_madb",
-                    name=n,
-                )
+                al_p = anilist_persons[anilist_ids[0]]
+                if not _definitely_different(p, al_p):
+                    canonical_map[madb_pid] = anilist_ids[0]
+                    logger.info(
+                        "entity_merged",
+                        source=madb_pid,
+                        canonical=anilist_ids[0],
+                        strategy="cross_source_madb",
+                        name=n,
+                    )
             else:
                 logger.debug(
                     "ambiguous_cross_source_match",
@@ -324,6 +378,108 @@ def cross_source_match(persons: list[Person]) -> dict[str, str]:
                     candidates=anilist_ids,
                     source="madb",
                 )
+
+    # ANN → AniList マッチング（name_ja 優先、なければ name_en）
+    # ANN person は ann_id を持つため、ホモニム保護が効く
+    for ann_pid, p in ann_persons.items():
+        if ann_pid in canonical_map:
+            continue
+        matched = False
+        # name_ja での照合（最優先）
+        if p.name_ja:
+            n = normalize_name(p.name_ja)
+            if n and len(n) >= 3 and n in anilist_ja_index:
+                al_ids = anilist_ja_index[n]
+                if len(al_ids) == 1:
+                    al_p = anilist_persons[al_ids[0]]
+                    if not _definitely_different(p, al_p):
+                        canonical_map[ann_pid] = al_ids[0]
+                        logger.info(
+                            "entity_merged",
+                            source=ann_pid,
+                            canonical=al_ids[0],
+                            strategy="cross_source_ann",
+                            name=n,
+                        )
+                        matched = True
+                elif len(al_ids) > 1:
+                    logger.debug(
+                        "ambiguous_cross_source_match",
+                        name=n,
+                        candidates=al_ids,
+                        source="ann",
+                    )
+        # name_en でのフォールバック（name_ja がない ANN 人物向け）
+        if not matched and p.name_en and not p.name_ja:
+            n = normalize_name(p.name_en)
+            if n and len(n) >= 5 and n in anilist_en_index:
+                al_ids = anilist_en_index[n]
+                if len(al_ids) == 1:
+                    al_p = anilist_persons[al_ids[0]]
+                    if not _definitely_different(p, al_p):
+                        canonical_map[ann_pid] = al_ids[0]
+                        logger.info(
+                            "entity_merged",
+                            source=ann_pid,
+                            canonical=al_ids[0],
+                            strategy="cross_source_ann_en",
+                            name=n,
+                        )
+
+    # allcinema → AniList/ANN マッチング（name_ja の完全一致、ホモニム保護付き）
+    # allcinema persons は allcinema_id を持つため数値ID保護が効く
+    ann_ja_index: dict[str, list[str]] = defaultdict(list)
+    for ann_pid, p in ann_persons.items():
+        if p.name_ja:
+            n = normalize_name(p.name_ja)
+            if n and len(n) >= 3:
+                ann_ja_index[n].append(ann_pid)
+
+    for ac_pid, p in allcinema_persons.items():
+        if ac_pid in canonical_map:
+            continue
+        if not p.name_ja:
+            continue
+        n = normalize_name(p.name_ja)
+        if not n or len(n) < 3:
+            continue
+        matched = False
+        # AniList 優先
+        if n in anilist_ja_index:
+            al_ids = anilist_ja_index[n]
+            if len(al_ids) == 1:
+                al_p = anilist_persons[al_ids[0]]
+                if not _definitely_different(p, al_p):
+                    canonical_map[ac_pid] = al_ids[0]
+                    logger.info(
+                        "entity_merged",
+                        source=ac_pid,
+                        canonical=al_ids[0],
+                        strategy="cross_source_allcinema",
+                        name=n,
+                    )
+                    matched = True
+            elif len(al_ids) > 1:
+                logger.debug(
+                    "ambiguous_cross_source_match",
+                    name=n,
+                    candidates=al_ids,
+                    source="allcinema",
+                )
+        # ANN フォールバック
+        if not matched and n in ann_ja_index:
+            ann_ids = ann_ja_index[n]
+            if len(ann_ids) == 1:
+                ann_p = ann_persons[ann_ids[0]]
+                if not _definitely_different(p, ann_p):
+                    canonical_map[ac_pid] = ann_ids[0]
+                    logger.info(
+                        "entity_merged",
+                        source=ac_pid,
+                        canonical=ann_ids[0],
+                        strategy="cross_source_allcinema_ann",
+                        name=n,
+                    )
 
     return canonical_map
 
@@ -480,14 +636,33 @@ def _transitive_closure(mapping: dict[str, str]) -> dict[str, str]:
     return resolved
 
 
-def resolve_all(persons: list[Person]) -> dict[str, str]:
+def resolve_all(
+    persons: list[Person],
+    credits_by_person: dict[str, list] | None = None,
+    anime_meta: dict[str, dict] | None = None,
+) -> dict[str, str]:
     """全名寄せ処理を実行する.
+
+    Args:
+        persons: 全人物リスト
+        credits_by_person: {person_id: [Credit, ...]} (ML 分割に使用)
+        anime_meta: {anime_id: {"year": int, "studios": list}} (ML 分割に使用)
 
     Returns: {person_id: canonical_id}
     未統合の人物はマッピングに含まれない。
     """
-    # Step 1: 完全一致
-    exact = exact_match_cluster(persons)
+    # Step 0: ML クレジットパターンによる同名別人分離
+    ml_clusters: dict[str, str] | None = None
+    if credits_by_person and anime_meta:
+        try:
+            from src.analysis.ml_homonym_split import split_homonym_groups
+            ml_clusters = split_homonym_groups(persons, credits_by_person, anime_meta)
+            logger.info("ml_homonym_split_applied", n_clustered=len(ml_clusters))
+        except Exception as exc:
+            logger.warning("ml_homonym_split_failed", error=str(exc))
+
+    # Step 1: 完全一致（ML クラスタを guard として使用）
+    exact = exact_match_cluster(persons, ml_clusters=ml_clusters)
 
     # Step 2: クロスソースマッチ（完全一致）
     cross = cross_source_match(persons)

@@ -16,6 +16,7 @@ import structlog
 
 from src.models import Anime, Credit, Role
 from src.utils.role_groups import DIRECTOR_ROLES
+from src.utils.time_utils import get_year_quarter, yq_to_float
 
 # D12 fix: senior directors (監督・演出) sit above animation directors in the
 # hierarchy. Animation directors supervise key animators (giving them patronage),
@@ -25,7 +26,6 @@ from src.utils.role_groups import DIRECTOR_ROLES
 _SENIOR_PATRON_ROLES: frozenset[Role] = frozenset(
     {Role.DIRECTOR, Role.EPISODE_DIRECTOR}
 )
-from src.utils.time_utils import get_year_quarter, yq_to_float
 
 logger = structlog.get_logger()
 

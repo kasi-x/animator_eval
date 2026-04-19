@@ -333,8 +333,6 @@ def get_person_temporal_trajectory(
     Returns:
         person_id → [cross_edges_or_none, ...] のリスト（snapshots と同じ長さ）
     """
-    pid_set = set(person_ids)
-
     # top_bridges のルックアップを事前構築
     snap_bridge_scores: list[dict[str, int]] = []
     for snap in snapshots:

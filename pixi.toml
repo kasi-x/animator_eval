@@ -30,6 +30,12 @@ reports-new = "PYTHONNOUSERSITE=1 python -m src.reporting.cli"
 build-explorer = "cd cmd/explorer && go build -o ../../bin/explorer ."
 explorer = "bin/explorer -data ./result/json -static ./static/explorer -port 3000"
 
+# Scrapers
+scrape-allcinema = "python -m src.scrapers.allcinema_scraper run"
+scrape-allcinema-cinema = "python -m src.scrapers.allcinema_scraper cinema"
+scrape-allcinema-persons = "python -m src.scrapers.allcinema_scraper persons"
+scrape-keyframe = "python -m src.scrapers.keyframe_scraper"
+
 # Utilities
 synthetic = "python -m src.synthetic"
 build-rust = "maturin develop --release --manifest-path rust_ext/Cargo.toml --uv"
@@ -69,12 +75,14 @@ numba = ">=0.60"
 matplotlib = "*"
 plotly = ">=6.5.2,<7"
 scipy = "*"
-scikit-learn = "*"
-shap = ">=0.44"
+scikit-learn = ">=1.0,<1.7"
+shap = ">=0.44,<0.49"
 
 [feature.analysis.pypi-dependencies]
 openskill = "*"
 rapidfuzz = ">=3.0"
+lifelines = ">=0.30"
+econml = ">=0.16.0"
 
 # ============================================================================
 # Feature: api — FastAPI web server

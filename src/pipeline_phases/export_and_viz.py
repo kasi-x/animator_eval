@@ -835,6 +835,87 @@ EXPORT_REGISTRY: list[ExportSpec] = [
         transformer=_transform_summary,
         log_message="summary_saved",
     ),
+    # ========== New audience-driven analysis outputs ==========
+    ExportSpec(
+        filename="entry_cohort_attrition.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("entry_cohort_attrition"),
+        log_message="entry_cohort_attrition_saved",
+        log_metrics=lambda data: {"n_cohort": data.get("n_cohort", 0)} if data else {},
+    ),
+    ExportSpec(
+        filename="monopsony_analysis.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("monopsony_analysis"),
+        log_message="monopsony_analysis_saved",
+    ),
+    ExportSpec(
+        filename="gender_bottleneck.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("gender_bottleneck"),
+        log_message="gender_bottleneck_saved",
+    ),
+    ExportSpec(
+        filename="generational_health.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("generational_health"),
+        log_message="generational_health_saved",
+    ),
+    ExportSpec(
+        filename="studio_benchmark_cards.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("studio_benchmark_cards"),
+        log_message="studio_benchmark_cards_saved",
+        log_metrics=lambda data: {"n_studios": len(data)} if data else {},
+    ),
+    ExportSpec(
+        filename="director_value_add.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("director_value_add"),
+        log_message="director_value_add_saved",
+    ),
+    ExportSpec(
+        filename="attrition_risk_model.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("attrition_risk_model"),
+        condition=lambda data: bool(data and data.get("c_index", 0) >= 0.70),
+        log_message="attrition_risk_model_saved",
+        log_metrics=lambda data: {"c_index": data.get("c_index", 0)} if data else {},
+    ),
+    ExportSpec(
+        filename="succession_matrix.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("succession_matrix"),
+        log_message="succession_matrix_saved",
+    ),
+    ExportSpec(
+        filename="team_chemistry.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("team_chemistry"),
+        log_message="team_chemistry_saved",
+    ),
+    ExportSpec(
+        filename="undervalued_talent.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("undervalued_talent"),
+        log_message="undervalued_talent_saved",
+    ),
+    ExportSpec(
+        filename="genre_whitespace.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("genre_whitespace"),
+        log_message="genre_whitespace_saved",
+    ),
+    ExportSpec(
+        filename="team_templates.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("team_templates"),
+        log_message="team_templates_saved",
+    ),
+    ExportSpec(
+        filename="trust_entry.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("trust_entry"),
+        log_message="trust_entry_saved",
+    ),
+    ExportSpec(
+        filename="independent_units.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("independent_units"),
+        log_message="independent_units_saved",
+    ),
+    ExportSpec(
+        filename="person_parameters.json",
+        data_getter=lambda ctx: ctx.analysis_results.get("person_parameters"),
+        log_message="person_parameters_saved",
+        log_metrics=lambda data: {"persons": len(data)} if data else {},
+    ),
 ]
 
 

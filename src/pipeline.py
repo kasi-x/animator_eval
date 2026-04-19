@@ -101,6 +101,10 @@ def run_scoring_pipeline(
     conn = get_connection()
     init_db(conn)
 
+    # ETL: src_* → canonical tables
+    from src.etl.integrate import run_integration
+    run_integration(conn)
+
     # Incremental mode: skip pipeline if data hasn't changed
     if incremental and not dry_run:
         if not has_credits_changed_since_last_run(conn):
