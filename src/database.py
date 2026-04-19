@@ -366,6 +366,223 @@ def init_db(conn: sqlite3.Connection) -> None:
             notes TEXT
         );
 
+        -- common: Person Parameter Card (10軸 × 3列 + archetype)
+        CREATE TABLE IF NOT EXISTS meta_common_person_parameters (
+            person_id TEXT PRIMARY KEY,
+            scale_reach_pct REAL,
+            scale_reach_ci_low REAL,
+            scale_reach_ci_high REAL,
+            collab_width_pct REAL,
+            collab_width_ci_low REAL,
+            collab_width_ci_high REAL,
+            continuity_pct REAL,
+            continuity_ci_low REAL,
+            continuity_ci_high REAL,
+            mentor_contribution_pct REAL,
+            mentor_contribution_ci_low REAL,
+            mentor_contribution_ci_high REAL,
+            centrality_pct REAL,
+            centrality_ci_low REAL,
+            centrality_ci_high REAL,
+            trust_accum_pct REAL,
+            trust_accum_ci_low REAL,
+            trust_accum_ci_high REAL,
+            role_evolution_pct REAL,
+            role_evolution_ci_low REAL,
+            role_evolution_ci_high REAL,
+            genre_specialization_pct REAL,
+            genre_specialization_ci_low REAL,
+            genre_specialization_ci_high REAL,
+            recent_activity_pct REAL,
+            recent_activity_ci_low REAL,
+            recent_activity_ci_high REAL,
+            compatibility_pct REAL,
+            compatibility_ci_low REAL,
+            compatibility_ci_high REAL,
+            archetype TEXT,
+            archetype_confidence REAL,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- policy: 離職分析 (cohort × treatment)
+        CREATE TABLE IF NOT EXISTS meta_policy_attrition (
+            cohort_year INTEGER NOT NULL,
+            treatment TEXT NOT NULL,
+            ate REAL,
+            ate_ci_low REAL,
+            ate_ci_high REAL,
+            hazard_ratio REAL,
+            hr_ci_low REAL,
+            hr_ci_high REAL,
+            n_treated INTEGER,
+            n_control INTEGER,
+            p_value REAL,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (cohort_year, treatment)
+        );
+
+        -- policy: 労働市場集中度 (year × studio)
+        CREATE TABLE IF NOT EXISTS meta_policy_monopsony (
+            year INTEGER NOT NULL,
+            studio TEXT NOT NULL,
+            hhi REAL,
+            hhi_star REAL,
+            hhi_ci_low REAL,
+            hhi_ci_high REAL,
+            logit_stay_beta REAL,
+            logit_stay_se REAL,
+            n_persons INTEGER,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (year, studio)
+        );
+
+        -- policy: ジェンダー生存分析 (transition_stage × cohort)
+        CREATE TABLE IF NOT EXISTS meta_policy_gender (
+            transition_stage TEXT NOT NULL,
+            cohort TEXT NOT NULL,
+            survival_prob REAL,
+            survival_ci_low REAL,
+            survival_ci_high REAL,
+            log_rank_chi2 REAL,
+            log_rank_p REAL,
+            n_female INTEGER,
+            n_male INTEGER,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (transition_stage, cohort)
+        );
+
+        -- policy: 世代別キャリア生存曲線 (cohort × career_year_bin)
+        CREATE TABLE IF NOT EXISTS meta_policy_generation (
+            cohort TEXT NOT NULL,
+            career_year_bin INTEGER NOT NULL,
+            survival_rate REAL,
+            survival_ci_low REAL,
+            survival_ci_high REAL,
+            n_at_risk INTEGER,
+            n_events INTEGER,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (cohort, career_year_bin)
+        );
+
+        -- hr: スタジオベンチマーク (studio × year)
+        CREATE TABLE IF NOT EXISTS meta_hr_studio_benchmark (
+            studio TEXT NOT NULL,
+            year INTEGER NOT NULL,
+            r5_retention REAL,
+            r5_ci_low REAL,
+            r5_ci_high REAL,
+            value_added REAL,
+            va_ci_low REAL,
+            va_ci_high REAL,
+            h_score REAL,
+            attraction_rate REAL,
+            n_persons INTEGER,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (studio, year)
+        );
+
+        -- hr: 監督育成貢献カード (director_id)
+        CREATE TABLE IF NOT EXISTS meta_hr_mentor_card (
+            director_id TEXT PRIMARY KEY,
+            mentor_score REAL,
+            mentor_ci_low REAL,
+            mentor_ci_high REAL,
+            null_permutation_p REAL,
+            n_mentees INTEGER,
+            n_works INTEGER,
+            archetype TEXT,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- hr: 離職リスクプロファイル (person_id) — 認証必須
+        CREATE TABLE IF NOT EXISTS meta_hr_attrition_risk (
+            person_id TEXT PRIMARY KEY,
+            predicted_risk REAL,
+            risk_ci_low REAL,
+            risk_ci_high REAL,
+            c_index REAL,
+            shap_feature1 TEXT, shap_value1 REAL,
+            shap_feature2 TEXT, shap_value2 REAL,
+            shap_feature3 TEXT, shap_value3 REAL,
+            shap_feature4 TEXT, shap_value4 REAL,
+            shap_feature5 TEXT, shap_value5 REAL,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- hr: 後継者候補 (veteran × candidate、aggregate公開)
+        CREATE TABLE IF NOT EXISTS meta_hr_succession (
+            veteran_id TEXT NOT NULL,
+            candidate_id TEXT NOT NULL,
+            successor_score REAL,
+            role TEXT,
+            overlap_works INTEGER,
+            career_gap_years REAL,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (veteran_id, candidate_id)
+        );
+
+        -- biz: ジャンル空白地図 (genre × year)
+        CREATE TABLE IF NOT EXISTS meta_biz_whitespace (
+            genre TEXT NOT NULL,
+            year INTEGER NOT NULL,
+            cagr REAL,
+            cagr_ci_low REAL,
+            cagr_ci_high REAL,
+            penetration REAL,
+            whitespace_score REAL,
+            n_anime INTEGER,
+            n_staff INTEGER,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (genre, year)
+        );
+
+        -- biz: 過小露出人材 (person_id)
+        CREATE TABLE IF NOT EXISTS meta_biz_undervalued (
+            person_id TEXT PRIMARY KEY,
+            undervaluation_score REAL,
+            archetype TEXT,
+            network_reach REAL,
+            opportunity_residual REAL,
+            career_band TEXT,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- biz: 信頼ネットワーク参入ゲートキーパー (gatekeeper_id)
+        CREATE TABLE IF NOT EXISTS meta_biz_trust_entry (
+            gatekeeper_id TEXT PRIMARY KEY,
+            gatekeeper_score REAL,
+            reach_score REAL,
+            n_new_entrants INTEGER,
+            avg_entry_speed REAL,
+            community_diversity REAL,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
+        -- biz: チームテンプレート (cluster × tier)
+        CREATE TABLE IF NOT EXISTS meta_biz_team_template (
+            cluster_id TEXT NOT NULL,
+            tier TEXT NOT NULL,
+            role_distribution TEXT,
+            avg_career_years REAL,
+            silhouette_score REAL,
+            n_teams INTEGER,
+            representative_works TEXT,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (cluster_id, tier)
+        );
+
+        -- biz: 独立制作ユニット (community_id)
+        CREATE TABLE IF NOT EXISTS meta_biz_independent_unit (
+            community_id TEXT PRIMARY KEY,
+            coverage REAL,
+            density REAL,
+            value_generated REAL,
+            n_members INTEGER,
+            n_works INTEGER,
+            core_studio TEXT,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+
         CREATE INDEX IF NOT EXISTS idx_credits_person ON credits(person_id);
         CREATE INDEX IF NOT EXISTS idx_credits_anime ON credits(anime_id);
         CREATE INDEX IF NOT EXISTS idx_credits_role ON credits(role);
@@ -6737,11 +6954,15 @@ def _migrate_v48_add_source_tables(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v49_add_silver_layer(conn: sqlite3.Connection) -> None:
-    """v49: Silver 層 (anime_analysis / anime_display) と Gold 層 (meta_lineage) を追加.
+    """v49: Silver 層・Gold 層テーブル群を追加.
 
-    anime_analysis: スコアカラムを持たない分析専用テーブル
-    anime_display:  score/popularity/description などの表示専用テーブル
-    meta_lineage:   Gold テーブルのデータ系譜 (lineage) 管理
+    anime_analysis:  スコアカラムを持たない分析専用テーブル (silver.analysis)
+    anime_display:   score/popularity/description など表示専用テーブル (silver.display)
+    meta_lineage:    Gold テーブルのデータ系譜 (lineage) 管理
+    meta_common_*:   共通 Gold テーブル
+    meta_policy_*:   政策提言 Brief 用 Gold テーブル
+    meta_hr_*:       人材評価 Brief 用 Gold テーブル
+    meta_biz_*:      新たな試み Brief 用 Gold テーブル
     """
     stmts = [
         """CREATE TABLE IF NOT EXISTS anime_analysis (
@@ -6783,6 +7004,102 @@ def _migrate_v49_add_silver_layer(conn: sqlite3.Connection) -> None:
             computed_at TIMESTAMP NOT NULL,
             ci_method TEXT, null_model TEXT, holdout_method TEXT,
             row_count INTEGER, notes TEXT)""",
+        # Gold tables — common
+        """CREATE TABLE IF NOT EXISTS meta_common_person_parameters (
+            person_id TEXT PRIMARY KEY,
+            scale_reach_pct REAL, scale_reach_ci_low REAL, scale_reach_ci_high REAL,
+            collab_width_pct REAL, collab_width_ci_low REAL, collab_width_ci_high REAL,
+            continuity_pct REAL, continuity_ci_low REAL, continuity_ci_high REAL,
+            mentor_contribution_pct REAL, mentor_contribution_ci_low REAL, mentor_contribution_ci_high REAL,
+            centrality_pct REAL, centrality_ci_low REAL, centrality_ci_high REAL,
+            trust_accum_pct REAL, trust_accum_ci_low REAL, trust_accum_ci_high REAL,
+            role_evolution_pct REAL, role_evolution_ci_low REAL, role_evolution_ci_high REAL,
+            genre_specialization_pct REAL, genre_specialization_ci_low REAL, genre_specialization_ci_high REAL,
+            recent_activity_pct REAL, recent_activity_ci_low REAL, recent_activity_ci_high REAL,
+            compatibility_pct REAL, compatibility_ci_low REAL, compatibility_ci_high REAL,
+            archetype TEXT, archetype_confidence REAL,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
+        # Gold tables — policy
+        """CREATE TABLE IF NOT EXISTS meta_policy_attrition (
+            cohort_year INTEGER NOT NULL, treatment TEXT NOT NULL,
+            ate REAL, ate_ci_low REAL, ate_ci_high REAL,
+            hazard_ratio REAL, hr_ci_low REAL, hr_ci_high REAL,
+            n_treated INTEGER, n_control INTEGER, p_value REAL,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (cohort_year, treatment))""",
+        """CREATE TABLE IF NOT EXISTS meta_policy_monopsony (
+            year INTEGER NOT NULL, studio TEXT NOT NULL,
+            hhi REAL, hhi_star REAL, hhi_ci_low REAL, hhi_ci_high REAL,
+            logit_stay_beta REAL, logit_stay_se REAL, n_persons INTEGER,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (year, studio))""",
+        """CREATE TABLE IF NOT EXISTS meta_policy_gender (
+            transition_stage TEXT NOT NULL, cohort TEXT NOT NULL,
+            survival_prob REAL, survival_ci_low REAL, survival_ci_high REAL,
+            log_rank_chi2 REAL, log_rank_p REAL, n_female INTEGER, n_male INTEGER,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (transition_stage, cohort))""",
+        """CREATE TABLE IF NOT EXISTS meta_policy_generation (
+            cohort TEXT NOT NULL, career_year_bin INTEGER NOT NULL,
+            survival_rate REAL, survival_ci_low REAL, survival_ci_high REAL,
+            n_at_risk INTEGER, n_events INTEGER,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (cohort, career_year_bin))""",
+        # Gold tables — hr
+        """CREATE TABLE IF NOT EXISTS meta_hr_studio_benchmark (
+            studio TEXT NOT NULL, year INTEGER NOT NULL,
+            r5_retention REAL, r5_ci_low REAL, r5_ci_high REAL,
+            value_added REAL, va_ci_low REAL, va_ci_high REAL,
+            h_score REAL, attraction_rate REAL, n_persons INTEGER,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (studio, year))""",
+        """CREATE TABLE IF NOT EXISTS meta_hr_mentor_card (
+            director_id TEXT PRIMARY KEY,
+            mentor_score REAL, mentor_ci_low REAL, mentor_ci_high REAL,
+            null_permutation_p REAL, n_mentees INTEGER, n_works INTEGER, archetype TEXT,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
+        """CREATE TABLE IF NOT EXISTS meta_hr_attrition_risk (
+            person_id TEXT PRIMARY KEY,
+            predicted_risk REAL, risk_ci_low REAL, risk_ci_high REAL, c_index REAL,
+            shap_feature1 TEXT, shap_value1 REAL,
+            shap_feature2 TEXT, shap_value2 REAL,
+            shap_feature3 TEXT, shap_value3 REAL,
+            shap_feature4 TEXT, shap_value4 REAL,
+            shap_feature5 TEXT, shap_value5 REAL,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
+        """CREATE TABLE IF NOT EXISTS meta_hr_succession (
+            veteran_id TEXT NOT NULL, candidate_id TEXT NOT NULL,
+            successor_score REAL, role TEXT, overlap_works INTEGER, career_gap_years REAL,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (veteran_id, candidate_id))""",
+        # Gold tables — biz
+        """CREATE TABLE IF NOT EXISTS meta_biz_whitespace (
+            genre TEXT NOT NULL, year INTEGER NOT NULL,
+            cagr REAL, cagr_ci_low REAL, cagr_ci_high REAL,
+            penetration REAL, whitespace_score REAL, n_anime INTEGER, n_staff INTEGER,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (genre, year))""",
+        """CREATE TABLE IF NOT EXISTS meta_biz_undervalued (
+            person_id TEXT PRIMARY KEY,
+            undervaluation_score REAL, archetype TEXT,
+            network_reach REAL, opportunity_residual REAL, career_band TEXT,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
+        """CREATE TABLE IF NOT EXISTS meta_biz_trust_entry (
+            gatekeeper_id TEXT PRIMARY KEY,
+            gatekeeper_score REAL, reach_score REAL,
+            n_new_entrants INTEGER, avg_entry_speed REAL, community_diversity REAL,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
+        """CREATE TABLE IF NOT EXISTS meta_biz_team_template (
+            cluster_id TEXT NOT NULL, tier TEXT NOT NULL,
+            role_distribution TEXT, avg_career_years REAL, silhouette_score REAL,
+            n_teams INTEGER, representative_works TEXT,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (cluster_id, tier))""",
+        """CREATE TABLE IF NOT EXISTS meta_biz_independent_unit (
+            community_id TEXT PRIMARY KEY,
+            coverage REAL, density REAL, value_generated REAL,
+            n_members INTEGER, n_works INTEGER, core_studio TEXT,
+            computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
     ]
     for stmt in stmts:
         try:
