@@ -62,7 +62,7 @@ def test_parse_role_core_staff():
 def test_parse_role_other():
     """Test that unmapped roles fall back to OTHER."""
     assert parse_role("Endcard (ep 1)") == Role.SPECIAL
-    assert parse_role("Photography (eps 2-6)") == Role.SPECIAL
+    assert parse_role("Photography (eps 2-6)") == Role.PHOTOGRAPHY_DIRECTOR
     assert parse_role("Script Assistance (eps 24, 25)") == Role.SPECIAL
     assert parse_role("Unknown Role") == Role.SPECIAL
 

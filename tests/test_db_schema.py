@@ -19,13 +19,11 @@ from __future__ import annotations
 
 import dataclasses
 import sqlite3
-from pathlib import Path
 
 import pytest
 
-import src.database as db_module
 from src.database import get_connection, init_db
-from src.db_rows import TABLE_ROW_MAP, AnimeRow, CreditRow, PersonRow, ScoreRow
+from src.db_rows import TABLE_ROW_MAP, AnimeRow, PersonRow, ScoreRow
 
 
 # ---------------------------------------------------------------------------
