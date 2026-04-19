@@ -1,3 +1,6 @@
+# DEPRECATED (Phase 3-5, 2026-04-19): merged into growth_scores. 構造的キャリア章に吸収.
+# This module is retained in archived/ for regeneration and audit only.
+# It is NOT in V2_REPORT_CLASSES and will not run in default generation.
 """Structural Career report — v2 compliant.
 
 Covers career pipeline structure:

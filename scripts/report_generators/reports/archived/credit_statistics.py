@@ -1,3 +1,6 @@
+# DEPRECATED (Phase 3-5, 2026-04-19): merged into industry_overview. Data Statement 章に吸収.
+# This module is retained in archived/ for regeneration and audit only.
+# It is NOT in V2_REPORT_CLASSES and will not run in default generation.
 """Credit Statistics report — v2 compliant.
 
 Credit distribution patterns with rich visualizations:

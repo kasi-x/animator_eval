@@ -1,3 +1,6 @@
+# DEPRECATED (Phase 3-5, 2026-04-19): merged into policy_attrition. KM/Cox を付録として統合.
+# This module is retained in archived/ for regeneration and audit only.
+# It is NOT in V2_REPORT_CLASSES and will not run in default generation.
 """Exit Analysis report -- career gap / return statistics.
 
 Analyzes the reliability of exit/semi-exit classifications using two data

@@ -1,3 +1,6 @@
+# DEPRECATED (Phase 3-5, 2026-04-19): merged into mgmt_team_chemistry. チーム構造章に統合.
+# This module is retained in archived/ for regeneration and audit only.
+# It is NOT in V2_REPORT_CLASSES and will not run in default generation.
 """Team Analysis report — v2 compliant.
 
 Covers production team structure by scale tier:

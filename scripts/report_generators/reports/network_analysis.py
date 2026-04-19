@@ -1,6 +1,6 @@
 """Network Analysis report — v2 compliant, DB-driven.
 
-Entirely driven by pre-computed feat_network and related tables.
+Reads pre-computed feat_network and related tables only.
 No graph construction, no betweenness computation from scratch.
 
 Sections (each has 2 charts — overview + deeper insight):
@@ -56,7 +56,7 @@ class NetworkAnalysisReport(BaseReportGenerator):
         ),
         "Hub Score": (
             "HITSアルゴリズムにおけるhubスコア。"
-            "多くの優れたauthorityノードへリンクするノードが高いスコアを持つ。"
+            "多くの高 authority スコアのノードへリンクするノードが高い値を持つ。"
         ),
         "AKM Limited Mobility Bias": (
             "Abowd-Kramarz-Margolisモデルで、スタジオ間移動が少ない場合に"
@@ -807,8 +807,10 @@ class NetworkAnalysisReport(BaseReportGenerator):
                 "<p>AKMモデルは同一の連結集合内でスタジオ間を移動する人物が存在することで識別される。"
                 "n_unique_anime が少ない人物（Limited mobility）では person_fe が "
                 "studio FE と交絡しやすく、推定値の信頼区間が実質的に広い。"
-                "負の相関（多作品参加者の person_fe が低い）は能力の過小評価ではなく、"
-                "スタジオ変動の吸収による識別改善の結果である可能性がある。</p>"
+                "負の相関（多作品参加者の person_fe が低い）はスタジオ変動の吸収に伴う"
+                "識別改善の副作用である可能性があり、person_fe は構造的な個人寄与の推定値であって"
+                "個人の能力水準を示すものではない。代替解釈として、ネットワーク位置の差異が同値の"
+                "個人寄与指標に異なる値を与える可能性も残る。</p>"
             ),
             section_id="akm_mobility_overview",
         )

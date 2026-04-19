@@ -1,48 +1,168 @@
-# v2 report vocabulary enforcement
-# Section: ability_framing — Findings セクションで使用禁止
+# ======================================================================
+# Forbidden Vocabulary Dictionary (v2 Report Philosophy — Gate 1)
+# ----------------------------------------------------------------------
+# Purpose:
+#   Enforce the project's Report Writing Philosophy (see
+#   docs/REPORT_PHILOSOPHY.md and CLAUDE.md §Legal Constraints).
+#
+#   Terms listed here are banned from report output because they either
+#   (a) frame structural metrics as individual "ability" — a legal
+#       liability under Japanese defamation law (信用毀損), or
+#   (b) state causal claims without a named identification strategy, or
+#   (c) insert evaluative adjectives that substitute author judgement
+#       for the narrowest accurate label.
+#
+#   CLAUDE.md: "Never frame low scores as 'lack of ability' — scores
+#   represent network density and position only."
+#
+# Structure:
+#   Three categories, each with `ja` / `en` term lists, a `reason`
+#   describing why the term is banned, and a `severity` (`error`).
+#   Replacement mappings live in `vocab_replacements.yaml`.
+#
+# Compatibility:
+#   The original keys (`ability_framing`, `causal_verbs`,
+#   `evaluative_adjectives`, `interpretation_markers`) are preserved so
+#   simpler consumers continue to load the list of terms.
+# ======================================================================
+
+# ----------------------------------------------------------------------
+# Category 1: ability_framing
+# ----------------------------------------------------------------------
+# Violates the project's core design principle (CLAUDE.md): scores
+# reflect network position and co-credit density, never ability.
+# Legal risk: defamation (信用毀損) if a person is framed as having
+# "low ability".  Banned unconditionally.
+# ----------------------------------------------------------------------
 ability_framing:
+  severity: error
+  reason: >
+    Frames structural / network metrics as individual ability. Violates
+    the project's core design principle (scores reflect network
+    position and co-credit density, never ability). Legal risk:
+    defamation (信用毀損).
   ja:
     - 能力
-    - 優秀
     - 実力
-    - 劣る
-    - 優れる
-    - 劣っている
     - 才能
     - センス
     - 技能水準
+    - 優秀
+    - 優れる
+    - 優れた
+    - 劣る
+    - 劣っている
+    - 劣った
+    - 卓越
+    - 傑出
+    - 一流
+    - 有能
+    - 無能
+    - 腕前
+    - 力量
+    - 適性
   en:
     - ability
     - talent
+    - talented
     - skill level
+    - competent
+    - incompetent
     - inferior
     - superior
-    - incompetent
-    - competent
+    - gifted
+    - mediocre
+    - capable
+    - incapable
+    - aptitude
 
-# Section: causal_verbs — Findings セクション禁止 (Interpretation 内は warning のみ)
+# ----------------------------------------------------------------------
+# Category 2: causal_verbs / causal_claim_no_evidence
+# ----------------------------------------------------------------------
+# Asserts causation without naming an identification strategy (DiD, IV,
+# RDD, event study, etc.). v2 philosophy requires explicit labelling;
+# Findings sections must be associational only. Inside an explicitly
+# labelled Interpretation section, callers may downgrade to warning.
+# ----------------------------------------------------------------------
 causal_verbs:
+  severity: error
+  reason: >
+    Asserts causation without naming an identification strategy
+    (DiD, IV, RDD, event study, etc.). Findings sections must remain
+    associational; causal claims require an explicitly labelled
+    Interpretation section with identification strategy stated.
   ja:
     - 引き起こす
     - 原因となる
+    - のせいで
     - もたらす
+    - 招く
+    - 導く
+    - 起因する
+    - 影響で
   en:
     - cause
+    - causes
+    - caused
     - lead to
+    - leads to
+    - led to
     - result in
+    - results in
+    - resulted in
     - due to
+    - because of
+    - drives
+    - driven by
 
-# Section: evaluative_adjectives — Findings セクション禁止
+# ----------------------------------------------------------------------
+# Category 3: evaluative_adjectives
+# ----------------------------------------------------------------------
+# Substitutes author evaluation for a neutral, numeric descriptor.
+# v2 philosophy: "use the narrowest accurate label" — replace with a
+# percentile, count, or structural metric.
+# ----------------------------------------------------------------------
 evaluative_adjectives:
+  severity: error
+  reason: >
+    Substitutes author evaluation for a neutral numeric descriptor.
+    Use the narrowest accurate label (percentile, count, or structural
+    metric) instead.
   ja:
     - 素晴らしい
+    - 素晴らしく
+    - 見事な
     - ひどい
+    - 悪い
+    - 良好な
+    - 不良な
+    - 優良な
+    - 立派な
+    - 惨い
+    - 酷い
   en:
     - excellent
+    - exceptional
+    - outstanding
+    - remarkable
     - terrible
+    - awful
+    - impressive
+    - wonderful
 
-# Section: interpretation_markers — Interpretation 外での使用は warning
+# ----------------------------------------------------------------------
+# Category 4: interpretation_markers (non-blocking, informational)
+# ----------------------------------------------------------------------
+# Presence of these terms indicates the text is likely Interpretation
+# rather than Findings. Callers can use this list to detect section
+# context and downgrade severity accordingly. This category emits no
+# errors on its own.
+# ----------------------------------------------------------------------
 interpretation_markers:
+  severity: info
+  reason: >
+    Signals interpretive (non-Findings) content. Used by the linter to
+    identify Interpretation context; not itself a violation.
   ja:
     - 解釈
     - 推測

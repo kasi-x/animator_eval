@@ -1,4 +1,10 @@
-"""過小評価タレント・プール分析 — v2 compliant."""
+"""露出機会ギャップ人材プール分析 — v2 compliant.
+
+Narrow label per REPORT_INVENTORY §Vocabulary concerns: renamed from
+"過小評価タレント・プール" to "露出機会ギャップ人材プール" to remove
+talent/ability framing. Class name kept stable for V2_REPORT_CLASSES
+compatibility.
+"""
 
 from __future__ import annotations
 
@@ -37,7 +43,7 @@ def _sf(v: object, default: float = 0.0) -> float:
 
 class BizUndervaluedTalentReport(BaseReportGenerator):
     name = "biz_undervalued_talent"
-    title = "過小評価タレント・プール"
+    title = "露出機会ギャップ人材プール"
     subtitle = "U_pスコア分布 / K=5アーキタイプ / 復帰兆候"
     filename = "biz_undervalued_talent.html"
     doc_type = "brief"
@@ -82,7 +88,7 @@ class BizUndervaluedTalentReport(BaseReportGenerator):
                     f"[v2: {'; '.join(violations)}]</p>"
                 )
             return ReportSection(
-                title="U_pスコア分布（構造的過小評価の閾値）",
+                title="U_pスコア分布（露出機会ギャップの閾値）",
                 findings_html=findings,
                 method_note=(
                     "U_p = percentile(person_fe) - percentile(total_credits),"
@@ -113,7 +119,7 @@ class BizUndervaluedTalentReport(BaseReportGenerator):
             )
         )
         fig.update_layout(
-            title="U_pスコア 四分位値と構造的過小評価閾値",
+            title="U_pスコア 四分位値と露出機会ギャップ閾値",
             xaxis_title="パーセンタイル",
             yaxis_title="U_pスコア",
             height=420,
@@ -124,7 +130,7 @@ class BizUndervaluedTalentReport(BaseReportGenerator):
         )
         findings = (
             f"<p>スコア付与対象: {n_total:,}名。"
-            f"構造的過小評価（U_p ≥ {_THRESHOLD_UP:.0f}）: {n_structural:,}名"
+            f"露出機会ギャップ（U_p ≥ {_THRESHOLD_UP:.0f}）: {n_structural:,}名"
             f"（全体の{rate_str}%）。"
             f"U_pスコア分布: p25={p25:.1f}, p50={p50:.1f}, p75={p75:.1f}。"
             f"点線は構造的閾値={_THRESHOLD_UP:.0f}ptを示す。</p>"
@@ -137,7 +143,7 @@ class BizUndervaluedTalentReport(BaseReportGenerator):
             )
 
         return ReportSection(
-            title="U_pスコア分布（構造的過小評価の閾値）",
+            title="U_pスコア分布（露出機会ギャップの閾値）",
             findings_html=findings,
             visualization_html=plotly_div_safe(
                 fig, "chart_up_dist", height=420
@@ -276,7 +282,7 @@ class BizUndervaluedTalentReport(BaseReportGenerator):
             go.Indicator(
                 mode="gauge+number+delta",
                 value=recovery_count,
-                title={"text": "復帰兆候保有者数（構造的過小評価プール内）"},
+                title={"text": "復帰兆候保有者数（露出機会ギャッププール内）"},
                 gauge={
                     "axis": {"range": [0, max(n_structural, 1)]},
                     "bar": {"color": "#f093fb"},
@@ -302,7 +308,7 @@ class BizUndervaluedTalentReport(BaseReportGenerator):
         fig.update_layout(height=420)
 
         findings = (
-            f"<p>構造的過小評価プール: {n_structural:,}名。"
+            f"<p>露出機会ギャッププール: {n_structural:,}名。"
             f"復帰兆候保有者（U_p ≥ 30 かつ fe_pct ≥ 60 かつ"
             f" recent_credits &gt; 0）: {recovery_count:,}名"
             f"（プール比={ratio * 100:.1f}%）。"

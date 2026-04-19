@@ -58,34 +58,36 @@ REPORTS_DIR = Path("result/reports")
 # ── Report categories (for --category filter) ─────────────────────
 
 REPORT_CATEGORIES: dict[str, list[str]] = {
+    # Phase 3-5 (2026-04-19): 12 reports moved to archived/ and removed
+    # from V2_REPORT_CLASSES. See docs/REPORT_INVENTORY.md for the
+    # consolidate_into map. Only live, audience-aligned categories below.
     "overview": [
-        "index_page", "industry_overview", "industry_analysis",
+        "index_page", "industry_overview", "person_parameter_card",
+        "bias_detection",
     ],
-    "person": [
-        "person_ranking", "structural_career", "career_transitions",
-        "career_dynamics",
+    "brief_index": [
+        "policy_brief_index", "hr_brief_index", "biz_brief_index",
     ],
-    "network": [
-        "bridge_analysis", "network_analysis", "network_graph",
-        "network_evolution", "knowledge_network", "team_analysis",
+    "policy": [
+        "policy_attrition", "policy_monopsony", "policy_gender_bottleneck",
+        "policy_generational_health", "compensation_fairness",
     ],
-    "career": [
-        "longitudinal_analysis", "cohort_animation", "growth_scores",
-        "career_friction_report",
+    "hr": [
+        "mgmt_studio_benchmark", "mgmt_director_mentor",
+        "mgmt_attrition_risk", "mgmt_succession", "mgmt_team_chemistry",
+        "growth_scores",
     ],
-    "scoring": [
-        "compensation_fairness", "bias_detection", "score_layers_analysis",
-        "expected_ability_report", "anime_value_report", "ml_clustering",
-        "genre_analysis", "credit_statistics",
+    "biz": [
+        "biz_genre_whitespace", "biz_undervalued_talent", "biz_trust_entry",
+        "biz_team_template", "biz_independent_unit",
     ],
     "technical": [
-        "akm_diagnostics", "dml_causal_inference", "studio_impact",
-        "shap_explanation", "temporal_foresight", "compatibility",
-        "cooccurrence_groups", "derived_params", "madb_coverage",
-        "studio_timeseries",
-    ],
-    "exit": [
-        "exit_analysis",
+        "akm_diagnostics", "dml_causal_inference", "score_layers_analysis",
+        "shap_explanation", "longitudinal_analysis", "ml_clustering",
+        "network_analysis", "network_graph", "network_evolution",
+        "cooccurrence_groups", "madb_coverage", "derived_params",
+        "cohort_animation", "knowledge_network", "temporal_foresight",
+        "bridge_analysis",
     ],
 }
 

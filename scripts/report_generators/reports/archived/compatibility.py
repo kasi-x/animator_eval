@@ -1,3 +1,6 @@
+# DEPRECATED (Phase 3-5, 2026-04-19): merged into mgmt_team_chemistry. 相性指標を統合.
+# This module is retained in archived/ for regeneration and audit only.
+# It is NOT in V2_REPORT_CLASSES and will not run in default generation.
 """Compatibility report — v2 compliant.
 
 Collaboration compatibility analysis computed from raw credit tables.

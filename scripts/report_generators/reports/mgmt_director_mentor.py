@@ -1,4 +1,4 @@
-"""監督育成力ランキング — v2 compliant.
+"""監督育成実績プロファイル — v2 compliant.
 
 Management brief: director mentoring value-add.
 - Section 1: M̂_d ranking (EB shrinkage), Top 20
@@ -41,7 +41,7 @@ def _safe_float(v: object, default: float = 0.0) -> float:
 
 class MgmtDirectorMentorReport(BaseReportGenerator):
     name = "mgmt_director_mentor"
-    title = "監督育成力ランキング"
+    title = "監督育成実績プロファイル"
     subtitle = "M̂_d EB縮小推定 + 置換ヌルモデル"
     filename = "mgmt_director_mentor.html"
     doc_type = "brief"
@@ -69,7 +69,7 @@ class MgmtDirectorMentorReport(BaseReportGenerator):
 
         if not rankings:
             findings = (
-                "<p>監督育成力ランキングデータが利用できません"
+                "<p>監督育成実績プロファイルデータが利用できません"
                 "（director_value_add.rankings）。"
                 "パイプラインのメンタリングモジュールの実行が必要です。</p>"
             )
@@ -80,7 +80,7 @@ class MgmtDirectorMentorReport(BaseReportGenerator):
                     f"[v2: {'; '.join(violations)}]</p>"
                 )
             return ReportSection(
-                title="監督育成力ランキング（M̂_d）",
+                title="監督育成実績プロファイル（M̂_d）",
                 findings_html=findings,
                 section_id="director_ranking",
             )
@@ -140,7 +140,7 @@ class MgmtDirectorMentorReport(BaseReportGenerator):
         )
         fig.add_vline(x=0, line_dash="dash", line_color="#a0a0a0")
         fig.update_layout(
-            title="監督育成力ランキング（M̂_d、EB縮小推定値、上位20）",
+            title="監督育成実績プロファイル（M̂_d、EB縮小推定値、上位20）",
             xaxis_title="M̂_d（メンティー固定効果平均変化量）",
             yaxis_title="",
             height=560,
@@ -149,7 +149,7 @@ class MgmtDirectorMentorReport(BaseReportGenerator):
         fig.update_yaxes(autorange="reversed")
 
         findings = (
-            f"<p>育成力推定値（M̂_d）が算出された監督数: {n_total:,}人。"
+            f"<p>育成実績推定値（M̂_d）が算出された監督数: {n_total:,}人。"
             f"置換ヌルモデルに対してp<0.05の監督数: {n_significant:,}人。"
             f"M̂_d範囲: {m_min:.3f}〜{m_max:.3f}。"
             f"オレンジ色のバーはp<0.05（ヌルモデル有意）、"
@@ -163,7 +163,7 @@ class MgmtDirectorMentorReport(BaseReportGenerator):
             )
 
         return ReportSection(
-            title="監督育成力ランキング（M̂_d）",
+            title="監督育成実績プロファイル（M̂_d）",
             findings_html=findings,
             visualization_html=plotly_div_safe(
                 fig, "chart_director_ranking", height=560

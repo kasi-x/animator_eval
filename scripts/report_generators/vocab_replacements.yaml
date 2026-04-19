@@ -1,30 +1,103 @@
-# 禁止語 → 推奨代替語
+# ======================================================================
+# Vocabulary Replacement Suggestions (v2 Report Philosophy — Gate 1)
+# ----------------------------------------------------------------------
+# Mapping banned term -> recommended neutral phrasing.
+#
+# Rule (v2 philosophy): use the narrowest accurate label. Prefer a
+# numeric descriptor or structural metric name over an evaluative one.
+#
+# Used by:
+#   scripts/report_generators/lint_vocab.py
+# When a banned term is detected the linter prints the suggested
+# replacement from this file (if present).
+#
+# Structure:
+#   Top-level `ja:` and `en:` maps of banned -> suggestion. Latin keys
+#   are matched case-insensitively by the linter.
+# ======================================================================
+
 ja:
-  能力: 構造スコア
-  優秀: 高スコア群（数値表現を使う）
-  実力: ネットワーク位置
+  # ---- ability_framing ----------------------------------------------
+  能力: クレジット密度 / ネットワーク位置 / 構造スコア
+  実力: ネットワーク位置 / 構造指標値
+  才能: クレジット密度 / 協業回数
+  センス: (削除) 客観指標を直接参照する
+  技能水準: 役職構成 / ロール分布
+  優秀: 高スコア群 / 上位パーセンタイル
+  優れる: 上位パーセンタイルに属する
+  優れた: 上位パーセンタイルの
   劣る: 下位パーセンタイル
-  優れる: 上位パーセンタイル
-  才能: 構造的貢献
-  センス: パターン適合度
-  技能水準: 構造スコアレベル
-  素晴らしい: 高水準（数値表現を使う）
-  ひどい: 低水準（数値表現を使う）
-  引き起こす: と関連する
-  原因となる: と相関する
-  もたらす: と連動する
+  劣っている: 下位パーセンタイル
+  劣った: 下位パーセンタイル
+  卓越: 上位X%以内 (数値を使う)
+  傑出: 上位X%以内 (数値を使う)
+  一流: 中心性上位群 / 高信頼スコア群
+  有能: 高クレジット密度の
+  無能: (使用禁止) 下位パーセンタイル
+  腕前: 役職構成 / クレジット分布
+  力量: 構造スコア値
+  適性: 役職構成との一致度
+
+  # ---- causal_verbs -------------------------------------------------
+  引き起こす: と関連する / と同時に観測される
+  原因となる: と関連する / と同時に観測される
+  のせいで: に伴って / と関連して
+  もたらす: に付随する / と同時に観測される
+  招く: に先行する / と関連する
+  導く: に先行する / と関連する
+  起因する: に関連する (DiD/IV 等なしでは因果不可)
+  影響で: と関連して / に伴って
+
+  # ---- evaluative_adjectives ---------------------------------------
+  素晴らしい: 上位パーセンタイル (数値で)
+  素晴らしく: 上位パーセンタイルに属し (数値で)
+  見事な: 上位X%以内
+  ひどい: 下位パーセンタイル (数値で)
+  悪い: 下位パーセンタイル / スコアがN未満
+  良好な: 上位パーセンタイル
+  不良な: 下位パーセンタイル
+  優良な: 上位パーセンタイル
+  立派な: 上位パーセンタイル
+  惨い: 下位パーセンタイル (数値で)
+  酷い: 下位パーセンタイル (数値で)
 
 en:
-  ability: structural score
-  talent: network position
-  skill level: structural score level
+  # ---- ability_framing ----------------------------------------------
+  ability: structural score / network position / credit density
+  talent: credit density / co-credit count
+  talented: upper-percentile / high structural score
+  skill level: role mix / credit composition
+  competent: upper-percentile / higher structural score
+  incompetent: (do not use) lower-percentile
   inferior: lower-percentile
-  superior: higher-percentile
-  incompetent: lower structural score
-  competent: higher structural score
-  excellent: high-scoring
-  terrible: low-scoring
-  cause: associate with
-  lead to: correlate with
-  result in: co-occur with
-  due to: associated with
+  superior: upper-percentile
+  gifted: upper-percentile
+  mediocre: median-band / mid-percentile
+  capable: role-active / credit-active
+  incapable: (do not use) lower-percentile
+  aptitude: role-mix alignment
+
+  # ---- causal_verbs -------------------------------------------------
+  cause: be associated with
+  causes: is associated with
+  caused: was associated with
+  lead to: be associated with
+  leads to: is associated with
+  led to: was associated with
+  result in: be associated with
+  results in: is associated with
+  resulted in: was associated with
+  due to: in association with / concurrent with
+  because of: in association with
+  drives: is associated with (no identification strategy stated)
+  driven by: associated with (no identification strategy stated)
+
+  # ---- evaluative_adjectives ---------------------------------------
+  excellent: upper-percentile / top X%
+  exceptional: upper-percentile / top X%
+  outstanding: upper-percentile / top X%
+  remarkable: upper-percentile / top X%
+  terrible: lower-percentile / bottom X%
+  awful: lower-percentile / bottom X%
+  impressive: upper-percentile / top X%
+  wonderful: upper-percentile / top X%

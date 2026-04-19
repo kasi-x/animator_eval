@@ -161,6 +161,10 @@ class CreditRow:
     raw_role: str = ""
     episode: int = -1
     source: str = ""
+    # v50: evidence_source is the canonical new name (C-1 in detailed_todo.md).
+    # Kept in sync with `source` by triggers until a future migration drops
+    # `source` entirely.
+    evidence_source: str = ""
     updated_at: str | None = None
     credit_year: int | None = None
     credit_quarter: int | None = None

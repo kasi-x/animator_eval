@@ -1,3 +1,6 @@
+# DEPRECATED (Phase 3-5, 2026-04-19): merged into biz_genre_whitespace. ジャンル需給詳細章に吸収.
+# This module is retained in archived/ for regeneration and audit only.
+# It is NOT in V2_REPORT_CLASSES and will not run in default generation.
 """Genre Analysis report — v2 compliant.
 
 Rich visualization port from original generate_genre_report():

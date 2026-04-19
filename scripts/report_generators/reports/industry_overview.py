@@ -8,7 +8,7 @@ Sections:
   2. Workforce Stock (stacked area by career stage over time) [Chart A]
   3. Entry/Exit/Career-Up Rates by stage [Chart B]
   4. Career Stage Milestones (debut seasons by era) [Chart C]
-  5. Expected x Actual Ability 4-tier (scatter + bar) [Chart D]
+  5. Collaborator IV mean x Individual IV percentile 4-group (scatter + bar) [Chart D]
   6. Role-Specific Annual Trends [Chart E]
   7. Value Flow (area), Loss Type (bar), Role Composition (pie) [Charts F1-F3]
   8. Studio-Level Flow [Chart G]
@@ -86,10 +86,10 @@ ROLE_TYPE_DEF: dict[str, tuple[str, str]] = {
 }
 
 _EXP_TIER_DEFS = [
-    ("優秀確定", "#F72585"),
-    ("期待の星", "#FFD166"),
-    ("隠れた実力", "#06D6A0"),
-    ("標準", "#a0a0c0"),
+    ("高期待・高実績群", "#F72585"),
+    ("高期待・低実績群", "#FFD166"),
+    ("低期待・高実績群", "#06D6A0"),
+    ("低期待・低実績群", "#a0a0c0"),
 ]
 
 LOSS_TYPES = ["エース離脱", "上級ランク引退", "中級ランク離脱", "初級ランク早期離脱"]
@@ -1235,26 +1235,26 @@ class IndustryOverviewReport(BaseReportGenerator):
                 idx = bisect.bisect_left(act_sorted, v)
                 exp_pid_actual[p] = (idx / act_n) * 100.0
 
-            # Assign tiers
+            # Assign groups
             for p in pid_iv:
                 hi_exp = exp_pid_expected.get(p, 0.0) >= _EXP_HIGH_PCTILE
                 hi_act = exp_pid_actual.get(p, 0.0) >= _EXP_HIGH_PCTILE
                 t = (
-                    "優秀確定" if hi_exp and hi_act else
-                    "期待の星" if hi_exp else
-                    "隠れた実力" if hi_act else
-                    "標準"
+                    "高期待・高実績群" if hi_exp and hi_act else
+                    "高期待・低実績群" if hi_exp else
+                    "低期待・高実績群" if hi_act else
+                    "低期待・低実績群"
                 )
                 exp_pid_tier[p] = t
                 exp_tier_sizes[t] += 1
             computation_ok = True
 
         except Exception:
-            # Fallback: 2-tier only
+            # Fallback: 2-group only
             iv_sorted = sorted(pid_iv.values())
             thr = iv_sorted[int(len(iv_sorted) * 0.70)] if iv_sorted else 0.0
             for p, v in pid_iv.items():
-                t = "優秀確定" if v >= thr else "標準"
+                t = "高期待・高実績群" if v >= thr else "低期待・低実績群"
                 exp_pid_tier[p] = t
                 exp_tier_sizes[t] += 1
 
@@ -1278,8 +1278,8 @@ class IndustryOverviewReport(BaseReportGenerator):
         fig_d = make_subplots(
             rows=2, cols=1,
             subplot_titles=(
-                "D-1. Tier別 参入（実線）/ 退職（点線）",
-                "D-2. 期待能力 vs 実際能力 分布",
+                "D-1. 群別 参入（実線）/ 翌年クレジット可視性喪失（点線）",
+                "D-2. 協業者 IV 平均 vs 個人 IV パーセンタイル 分布",
             ),
             vertical_spacing=0.14,
             row_heights=[0.5, 0.5],
@@ -1327,8 +1327,8 @@ class IndustryOverviewReport(BaseReportGenerator):
                     ),
                     hovertemplate=(
                         f"{t}<br>"
-                        "期待: %{x:.1f}パーセンタイル<br>"
-                        "実績: %{y:.1f}パーセンタイル<extra></extra>"
+                        "協業者IV平均: %{x:.1f}パーセンタイル<br>"
+                        "個人IV: %{y:.1f}パーセンタイル<extra></extra>"
                     ),
                 ), row=2, col=1)
             fig_d.add_hline(
@@ -1343,13 +1343,13 @@ class IndustryOverviewReport(BaseReportGenerator):
         fig_d.update_xaxes(title_text="年", row=1, col=1)
         fig_d.update_yaxes(title_text="人数", row=1, col=1)
         fig_d.update_xaxes(
-            title_text="期待能力パーセンタイル", row=2, col=1,
+            title_text="協業者 IV 平均（パーセンタイル）", row=2, col=1,
         )
         fig_d.update_yaxes(
-            title_text="実際能力パーセンタイル（IV Score）", row=2, col=1,
+            title_text="個人 IV スコア（パーセンタイル）", row=2, col=1,
         )
         fig_d.update_layout(
-            title="D. 4ティア分類（期待 × 実績）",
+            title="D. 協業者 IV 平均 × 個人 IV パーセンタイル 4群分類",
             height=820,
         )
 
@@ -1364,7 +1364,7 @@ class IndustryOverviewReport(BaseReportGenerator):
 
         gender_table = (
             '<table style="width:100%;font-size:0.85rem;margin:1rem 0;">'
-            "<thead><tr><th>ティア</th><th>合計</th>"
+            "<thead><tr><th>群</th><th>合計</th>"
             "<th>女性</th><th>男性</th></tr></thead><tbody>"
         )
         exp_total = sum(exp_tier_sizes.values()) or 1
@@ -1382,29 +1382,33 @@ class IndustryOverviewReport(BaseReportGenerator):
         gender_table += "</tbody></table>"
 
         findings = (
-            f"<p>期待能力（協業者 IV 平均）× 実際能力（IV Score パーセンタイル）"
-            f"に基づく4ティア分類、閾値は {_EXP_HIGH_PCTILE:.0f} パーセンタイル。</p>"
+            f"<p>協業者 IV 平均（ネットワーク位置の代理変数）× 個人 IV パーセンタイル"
+            f"に基づく 4 群分類、閾値は両軸とも {_EXP_HIGH_PCTILE:.0f} パーセンタイル。"
+            f"本分類は構造的ネットワーク位置の記述であり、個人の能力評価ではない。</p>"
             f"{gender_table}"
         )
 
         return ReportSection(
-            title="期待能力 × 実際能力 -- 4ティア分類",
+            title="協業者 IV 平均 × 個人 IV パーセンタイル -- 4 群分類",
             findings_html=findings,
             visualization_html=viz_html,
             method_note=(
-                "期待能力 = 協業者の IV 平均（ネットワーク上の位置）。"
-                "実際能力 = IV Score パーセンタイル。閾値: "
+                "X 軸 = 協業者の IV 平均（ネットワーク上の位置の代理）。"
+                "Y 軸 = 個人 IV スコアのパーセンタイル。閾値: "
                 f"両軸とも {_EXP_HIGH_PCTILE:.0f} パーセンタイル。"
                 "全構成要素は構造的データのみ（視聴者評価は使用しない）。"
                 "散布図は500人のサンプル。バブルサイズ = total_credits^0.4。"
             ),
             interpretation_html=(
-                "<p>『期待の星』象限（期待高、実績低）は、高IV環境にいる"
-                "キャリア初期の人物で、まだ十分なクレジットを累積していない"
-                "人物を表す可能性がある。別の解釈: 同類選好（assortative mixing）により、"
-                "高IV協業者環境では周辺的な参加者も機械的に高期待へと分類される可能性がある。</p>"
+                "<p>『高期待・低実績群』象限は、高IV協業者ネットワーク上に位置しながら"
+                "個人 IV スコアのパーセンタイルが相対的に低い集団を指す。"
+                "キャリア初期でクレジット累積が少ない人物を含み得る。"
+                "別の解釈: 同類選好（assortative mixing）により、"
+                "高IV環境では周辺的な参加者も機械的にネットワーク位置上位へと分類される可能性がある。"
+                "このラベルは個人の能力を示すものではなく、ネットワーク位置と IV パーセンタイルの"
+                "相対関係のみを記述する。</p>"
             ),
-            section_id="four_tier",
+            section_id="four_group_network_vs_iv",
         )
 
     # ==================================================================

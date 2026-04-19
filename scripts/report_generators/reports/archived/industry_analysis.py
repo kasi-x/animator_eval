@@ -1,3 +1,6 @@
+# DEPRECATED (Phase 3-5, 2026-04-19): merged into industry_overview. common 版と重複を解消.
+# This module is retained in archived/ for regeneration and audit only.
+# It is NOT in V2_REPORT_CLASSES and will not run in default generation.
 """Industry Analysis dashboard — v2 compliant.
 
 Covers macro industry trends:

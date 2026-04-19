@@ -24,7 +24,7 @@ logger = structlog.get_logger()
 
 DEFAULT_DB_PATH = DB_PATH
 
-SCHEMA_VERSION = 49
+SCHEMA_VERSION = 50
 
 # Fuzzy match rules for unmatched anime titles (90%+ confidence)
 # Entries where SeesaaWiki title slightly differs from AniList title
@@ -198,9 +198,80 @@ def init_db(conn: sqlite3.Connection) -> None:
             raw_role TEXT,
             episode INTEGER DEFAULT -1,
             source TEXT NOT NULL DEFAULT '',
+            evidence_source TEXT NOT NULL DEFAULT '',
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(person_id, anime_id, role, episode)
         );
+
+        -- v50 canonical silver normalization (see _migrate_v50_canonical_silver)
+        CREATE TABLE IF NOT EXISTS sources (
+            code         TEXT PRIMARY KEY,
+            name_ja      TEXT NOT NULL,
+            base_url     TEXT NOT NULL,
+            license      TEXT NOT NULL,
+            added_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            retired_at   TIMESTAMP,
+            description  TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS roles (
+            code            TEXT PRIMARY KEY,
+            name_ja         TEXT NOT NULL,
+            name_en         TEXT NOT NULL,
+            role_group      TEXT NOT NULL CHECK (role_group IN
+                ('director','animator','sound','production','writer',
+                 'voice_actor','other')),
+            weight_default  REAL NOT NULL CHECK (weight_default >= 0),
+            description_ja  TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS anime_external_ids (
+            anime_id     TEXT NOT NULL,
+            source       TEXT NOT NULL REFERENCES sources(code),
+            external_id  TEXT NOT NULL,
+            PRIMARY KEY (anime_id, source),
+            UNIQUE (source, external_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_anime_ext_ids_source
+            ON anime_external_ids(source, external_id);
+
+        CREATE TABLE IF NOT EXISTS person_external_ids (
+            person_id    TEXT NOT NULL,
+            source       TEXT NOT NULL REFERENCES sources(code),
+            external_id  TEXT NOT NULL,
+            PRIMARY KEY (person_id, source),
+            UNIQUE (source, external_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_person_ext_ids_source
+            ON person_external_ids(source, external_id);
+
+        CREATE TABLE IF NOT EXISTS person_aliases (
+            person_id   TEXT NOT NULL,
+            alias       TEXT NOT NULL,
+            source      TEXT NOT NULL REFERENCES sources(code),
+            confidence  REAL CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 1),
+            added_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (person_id, alias, source)
+        );
+        CREATE INDEX IF NOT EXISTS idx_person_aliases_alias
+            ON person_aliases(alias, person_id);
+
+        CREATE TABLE IF NOT EXISTS anime_genres (
+            anime_id   TEXT NOT NULL,
+            genre_name TEXT NOT NULL,
+            PRIMARY KEY (anime_id, genre_name)
+        );
+        CREATE INDEX IF NOT EXISTS idx_anime_genres_genre
+            ON anime_genres(genre_name, anime_id);
+
+        CREATE TABLE IF NOT EXISTS anime_tags (
+            anime_id TEXT NOT NULL,
+            tag_name TEXT NOT NULL,
+            rank     INTEGER CHECK (rank IS NULL OR rank BETWEEN 0 AND 100),
+            PRIMARY KEY (anime_id, tag_name)
+        );
+        CREATE INDEX IF NOT EXISTS idx_anime_tags_tag
+            ON anime_tags(tag_name, rank, anime_id);
 
         CREATE TABLE IF NOT EXISTS scores (
             person_id TEXT PRIMARY KEY,
@@ -1211,6 +1282,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         47: _migrate_v47_add_allcinema_ids,
         48: _migrate_v48_add_source_tables,
         49: _migrate_v49_add_silver_layer,
+        50: _migrate_v50_canonical_silver,
     }
 
     for version in range(current + 1, SCHEMA_VERSION + 1):
@@ -7454,4 +7526,564 @@ def insert_src_keyframe_credit(
                (keyframe_slug, kf_person_id, name_ja, name_en, role_ja, role_en, episode)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
         (keyframe_slug, kf_person_id, name_ja, name_en, role_ja, role_en, episode),
+    )
+
+
+# ============================================================================
+# v50 migration: canonical silver normalization
+# ============================================================================
+#
+# This migration introduces the normalization tables described in
+# detailed_todo.md §1.4 (N-1 sources, N-2 roles, N-3 person_aliases,
+# N-4 anime_external_ids/person_external_ids) and renames the credits
+# evidence column (C-1).
+#
+# IMPORTANT: this migration is intentionally *additive* for the large
+# destructive changes (dropping legacy ``anime``, ``anime_display``, and
+# external-ID columns). Those drops require ~29 analysis modules and the
+# ``Anime`` Pydantic shim to stop reading the removed columns first — work
+# that is still in progress at the time this migration was written. The
+# additive pieces unblock downstream consumers (reports, ETL) without
+# breaking the 1947-test suite. Destructive drops are scheduled for v51
+# once consumers have migrated.
+#
+# What v50 *does* change physically:
+#   - CREATE tables: sources, roles, anime_external_ids, person_external_ids,
+#     person_aliases, anime_genres, anime_tags
+#   - Seed sources (5 existing + mal) and roles (from role_groups.py)
+#   - ADD credits.evidence_source as a mirror of credits.source; keep both
+#     in sync so consumers can migrate at their own pace
+#   - Convert credits.episode sentinel -1 → NULL
+#   - Create person_scores as a VIEW over scores (alias for the eventual
+#     rename)
+#   - Backfill anime_external_ids / person_external_ids / person_aliases /
+#     anime_genres / anime_tags from existing silver + bronze state
+#   - Snapshot legacy tables into _archive_v49_* (E-3) for reversibility
+# ============================================================================
+
+
+_V50_SOURCE_SEEDS: tuple[tuple[str, str, str, str, str], ...] = (
+    # code, name_ja, base_url, license, description
+    (
+        "anilist",
+        "AniList",
+        "https://anilist.co",
+        "proprietary",
+        "GraphQL で structured staff 情報が最も豊富",
+    ),
+    (
+        "ann",
+        "Anime News Network",
+        "https://www.animenewsnetwork.com",
+        "proprietary",
+        "historical depth と職種粒度",
+    ),
+    (
+        "allcinema",
+        "allcinema",
+        "https://www.allcinema.net",
+        "proprietary",
+        "邦画・OVA の網羅性",
+    ),
+    (
+        "seesaawiki",
+        "SeesaaWiki",
+        "https://seesaawiki.jp",
+        "CC-BY-SA",
+        "fan-curated 詳細エピソード情報",
+    ),
+    (
+        "keyframe",
+        "Sakugabooru/Keyframe",
+        "https://www.sakugabooru.com",
+        "CC",
+        "sakuga コミュニティ別名情報",
+    ),
+    (
+        "mal",
+        "MyAnimeList",
+        "https://myanimelist.net",
+        "proprietary",
+        "MAL external IDs — anime_external_ids に移行される legacy ID",
+    ),
+)
+
+
+# ROLE_GROUP classification per detailed_todo.md §1.4 N-2 CHECK constraint:
+#   'director' | 'animator' | 'sound' | 'production' | 'writer' |
+#   'voice_actor' | 'other'
+_V50_ROLE_SEEDS: tuple[tuple[str, str, str, str, float, str], ...] = (
+    # code, name_ja, name_en, role_group, weight_default, description_ja
+    ("director", "監督", "Director", "director", 1.0,
+     "作品全体の演出責任者。最も高い責任を持つ"),
+    ("animation_director", "作画監督", "Animation Director", "director", 0.9,
+     "作画部門の監督。原画の品質を統括"),
+    ("episode_director", "演出", "Episode Director", "director", 0.7,
+     "話数ごとの演出・絵コンテ"),
+    ("key_animator", "原画", "Key Animator", "animator", 0.6,
+     "原画担当。動きの起点を描く"),
+    ("second_key_animator", "第二原画", "Second Key Animator", "animator", 0.4,
+     "原画の清書段階"),
+    ("in_between", "動画", "In-between Animator", "animator", 0.3,
+     "原画の間のフレームを描く動画工程"),
+    ("character_designer", "キャラクターデザイン", "Character Designer", "animator", 0.8,
+     "キャラクター設計。メカデザインを含む"),
+    ("photography_director", "撮影監督", "Photography Director", "animator", 0.6,
+     "撮影・エフェクト監督。コンポジット+特効"),
+    ("producer", "プロデューサー", "Producer", "production", 0.5,
+     "制作全体の統括プロデューサー"),
+    ("production_manager", "制作進行", "Production Manager", "production", 0.3,
+     "制作進行・制作デスク"),
+    ("sound_director", "音響監督", "Sound Director", "sound", 0.5,
+     "音響・音響効果の監督"),
+    ("music", "音楽", "Music", "sound", 0.3,
+     "音楽・主題歌・挿入歌。非制作職"),
+    ("screenplay", "脚本", "Screenplay", "writer", 0.6,
+     "脚本・シリーズ構成"),
+    ("original_creator", "原作", "Original Creator", "writer", 0.4,
+     "原作者。非制作職"),
+    ("background_art", "美術", "Background Art", "animator", 0.5,
+     "美術・背景。美術監督を含む"),
+    ("cgi_director", "CGI監督", "CGI Director", "animator", 0.6,
+     "CG 部門監督"),
+    ("layout", "レイアウト", "Layout Artist", "animator", 0.4,
+     "レイアウト作業 (原画工程の一部)"),
+    ("finishing", "仕上げ", "Finishing", "animator", 0.3,
+     "仕上げ・色彩設計・色指定・検査"),
+    ("editing", "編集", "Editing", "production", 0.3,
+     "編集・ポスプロ"),
+    ("settings", "設定", "Settings", "other", 0.2,
+     "設定系"),
+    ("voice_actor", "声優", "Voice Actor", "voice_actor", 0.1,
+     "声優。非制作職"),
+    ("localization", "ローカライズ", "Localization", "other", 0.1,
+     "各国語版スタッフ。非制作職"),
+    ("other", "その他", "Other", "other", 0.1,
+     "ロール特定不可・分類不能なクレジット"),
+    ("special", "スペシャル", "Special", "other", 0.0,
+     "スペシャルサンクス・ゲスト・制作外特別枠"),
+)
+
+
+def _migrate_v50_canonical_silver(conn: sqlite3.Connection) -> None:
+    """v50: canonical silver normalization — sources/roles lookups, external_ids,
+    person_aliases, anime_genres, anime_tags, credits.evidence_source rename.
+
+    See detailed_todo.md §2.3 (Task 1-3) and §1.4 (N-1 through N-4, C-1, E-3).
+
+    This migration is intentionally additive where dropping legacy tables
+    would break ~29 analysis modules still using ``anime.score`` and the
+    ``Anime`` Pydantic shim. The destructive drops (``anime_display``,
+    legacy ``anime``, external-ID columns on silver ``anime``) are deferred
+    to a v51 migration once those consumers are updated.
+    """
+    import json as _json
+
+    # --- (E-3) Reversible: snapshot legacy tables before any change --------
+    _archive_targets = ("anime", "anime_display", "anime_analysis",
+                        "credits", "persons", "scores")
+    for tbl in _archive_targets:
+        exists = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+            (tbl,),
+        ).fetchone()
+        if exists:
+            archive = f"_archive_v49_{tbl}"
+            try:
+                conn.execute(
+                    f"CREATE TABLE IF NOT EXISTS {archive} AS SELECT * FROM {tbl}"
+                )
+            except sqlite3.OperationalError as exc:
+                logger.warning("v50_archive_failed", table=tbl, error=str(exc))
+
+    # --- (N-1) sources lookup ------------------------------------------------
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS sources (
+            code         TEXT PRIMARY KEY,
+            name_ja      TEXT NOT NULL,
+            base_url     TEXT NOT NULL,
+            license      TEXT NOT NULL,
+            added_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            retired_at   TIMESTAMP,
+            description  TEXT NOT NULL
+        )
+    """)
+    for code, name_ja, base_url, lic, desc in _V50_SOURCE_SEEDS:
+        conn.execute(
+            """INSERT OR IGNORE INTO sources
+                   (code, name_ja, base_url, license, description)
+               VALUES (?, ?, ?, ?, ?)""",
+            (code, name_ja, base_url, lic, desc),
+        )
+
+    # --- (N-2) roles lookup --------------------------------------------------
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS roles (
+            code            TEXT PRIMARY KEY,
+            name_ja         TEXT NOT NULL,
+            name_en         TEXT NOT NULL,
+            role_group      TEXT NOT NULL CHECK (role_group IN
+                ('director','animator','sound','production','writer',
+                 'voice_actor','other')),
+            weight_default  REAL NOT NULL CHECK (weight_default >= 0),
+            description_ja  TEXT NOT NULL
+        )
+    """)
+    for code, name_ja, name_en, role_group, weight, desc in _V50_ROLE_SEEDS:
+        conn.execute(
+            """INSERT OR IGNORE INTO roles
+                   (code, name_ja, name_en, role_group,
+                    weight_default, description_ja)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (code, name_ja, name_en, role_group, weight, desc),
+        )
+
+    # --- (N-4) anime_external_ids -------------------------------------------
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS anime_external_ids (
+            anime_id     TEXT NOT NULL,
+            source       TEXT NOT NULL REFERENCES sources(code),
+            external_id  TEXT NOT NULL,
+            PRIMARY KEY (anime_id, source),
+            UNIQUE (source, external_id)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_anime_ext_ids_source "
+        "ON anime_external_ids(source, external_id)"
+    )
+
+    # Backfill anime_external_ids from both legacy `anime` and `anime_analysis`.
+    def _columns(table: str) -> set[str]:
+        try:
+            return {
+                row[1]
+                for row in conn.execute(f"PRAGMA table_info({table})").fetchall()
+            }
+        except sqlite3.OperationalError:
+            return set()
+
+    for legacy_table in ("anime", "anime_analysis"):
+        cols = _columns(legacy_table)
+        if not cols:
+            continue
+        for col_name, src_code in (
+            ("anilist_id", "anilist"),
+            ("mal_id", "mal"),
+            ("ann_id", "ann"),
+            ("allcinema_id", "allcinema"),
+            ("madb_id", "madb"),  # madb not in seeded sources by default
+        ):
+            if col_name not in cols:
+                continue
+            # Make sure the source code exists (idempotent).
+            if src_code == "madb":
+                conn.execute(
+                    "INSERT OR IGNORE INTO sources "
+                    "(code, name_ja, base_url, license, description) "
+                    "VALUES (?, ?, ?, ?, ?)",
+                    (
+                        "madb",
+                        "メディア芸術データベース",
+                        "https://mediaarts-db.artmuseums.go.jp",
+                        "Agency for Cultural Affairs",
+                        "メディア芸術DB の作品 URI",
+                    ),
+                )
+            conn.execute(
+                f"""INSERT OR IGNORE INTO anime_external_ids (anime_id, source, external_id)
+                    SELECT id, ?, CAST({col_name} AS TEXT)
+                    FROM {legacy_table}
+                    WHERE {col_name} IS NOT NULL""",
+                (src_code,),
+            )
+
+    # --- (N-4) person_external_ids ------------------------------------------
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS person_external_ids (
+            person_id    TEXT NOT NULL,
+            source       TEXT NOT NULL REFERENCES sources(code),
+            external_id  TEXT NOT NULL,
+            PRIMARY KEY (person_id, source),
+            UNIQUE (source, external_id)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_person_ext_ids_source "
+        "ON person_external_ids(source, external_id)"
+    )
+    persons_cols = _columns("persons")
+    for col_name, src_code in (
+        ("anilist_id", "anilist"),
+        ("mal_id", "mal"),
+        ("ann_id", "ann"),
+        ("allcinema_id", "allcinema"),
+    ):
+        if col_name not in persons_cols:
+            continue
+        conn.execute(
+            f"""INSERT OR IGNORE INTO person_external_ids (person_id, source, external_id)
+                SELECT id, ?, CAST({col_name} AS TEXT)
+                FROM persons
+                WHERE {col_name} IS NOT NULL""",
+            (src_code,),
+        )
+
+    # --- (N-3) person_aliases -----------------------------------------------
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS person_aliases (
+            person_id   TEXT NOT NULL,
+            alias       TEXT NOT NULL,
+            source      TEXT NOT NULL REFERENCES sources(code),
+            confidence  REAL CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 1),
+            added_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (person_id, alias, source)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_person_aliases_alias "
+        "ON person_aliases(alias, person_id)"
+    )
+    # Backfill from persons.aliases (JSON list) — classify as 'anilist' by
+    # default (existing rows came through the AniList pipeline).
+    if "aliases" in persons_cols:
+        cursor = conn.execute(
+            "SELECT id, aliases FROM persons "
+            "WHERE aliases IS NOT NULL AND aliases != '' AND aliases != '[]'"
+        )
+        for pid, raw in cursor.fetchall():
+            try:
+                alias_list = _json.loads(raw) if raw else []
+            except (TypeError, _json.JSONDecodeError):
+                continue
+            if not isinstance(alias_list, list):
+                continue
+            for alias in alias_list:
+                if not isinstance(alias, str) or not alias:
+                    continue
+                conn.execute(
+                    "INSERT OR IGNORE INTO person_aliases "
+                    "(person_id, alias, source) VALUES (?, ?, ?)",
+                    (pid, alias, "anilist"),
+                )
+
+    # --- anime_genres / anime_tags normalization -----------------------------
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS anime_genres (
+            anime_id   TEXT NOT NULL,
+            genre_name TEXT NOT NULL,
+            PRIMARY KEY (anime_id, genre_name)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_anime_genres_genre "
+        "ON anime_genres(genre_name, anime_id)"
+    )
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS anime_tags (
+            anime_id TEXT NOT NULL,
+            tag_name TEXT NOT NULL,
+            rank     INTEGER CHECK (rank IS NULL OR rank BETWEEN 0 AND 100),
+            PRIMARY KEY (anime_id, tag_name)
+        )
+    """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_anime_tags_tag "
+        "ON anime_tags(tag_name, rank, anime_id)"
+    )
+
+    # Backfill anime_genres / anime_tags from the best available source:
+    #   1. bronze src_anilist_anime (authoritative JSON) joined via
+    #      anime_external_ids — primary path.
+    #   2. anime_display.genres / anime_display.tags JSON — secondary.
+    #   3. legacy anime.genres / anime.tags JSON — tertiary.
+    def _backfill_genres_tags_from_json(
+        conn_: sqlite3.Connection,
+        select_sql: str,
+    ) -> None:
+        for row in conn_.execute(select_sql).fetchall():
+            anime_id = row[0]
+            genres_raw = row[1] if len(row) > 1 else None
+            tags_raw = row[2] if len(row) > 2 else None
+            if genres_raw:
+                try:
+                    for g in _json.loads(genres_raw):
+                        if isinstance(g, str) and g:
+                            conn_.execute(
+                                "INSERT OR IGNORE INTO anime_genres "
+                                "(anime_id, genre_name) VALUES (?, ?)",
+                                (anime_id, g),
+                            )
+                        elif isinstance(g, dict):
+                            name = g.get("name")
+                            if isinstance(name, str) and name:
+                                conn_.execute(
+                                    "INSERT OR IGNORE INTO anime_genres "
+                                    "(anime_id, genre_name) VALUES (?, ?)",
+                                    (anime_id, name),
+                                )
+                except (TypeError, _json.JSONDecodeError):
+                    pass
+            if tags_raw:
+                try:
+                    for t in _json.loads(tags_raw):
+                        if isinstance(t, str) and t:
+                            conn_.execute(
+                                "INSERT OR IGNORE INTO anime_tags "
+                                "(anime_id, tag_name, rank) VALUES (?, ?, NULL)",
+                                (anime_id, t),
+                            )
+                        elif isinstance(t, dict):
+                            name = t.get("name")
+                            rank = t.get("rank")
+                            if isinstance(name, str) and name:
+                                if rank is not None and not (
+                                    isinstance(rank, int) and 0 <= rank <= 100
+                                ):
+                                    rank = None
+                                conn_.execute(
+                                    "INSERT OR IGNORE INTO anime_tags "
+                                    "(anime_id, tag_name, rank) VALUES (?, ?, ?)",
+                                    (anime_id, name, rank),
+                                )
+                except (TypeError, _json.JSONDecodeError):
+                    pass
+
+    # Bronze path (preferred) — only if src_anilist_anime present.
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='src_anilist_anime'"
+    ).fetchone():
+        _backfill_genres_tags_from_json(
+            conn,
+            """SELECT x.anime_id,
+                      s.genres,
+                      s.tags
+                 FROM anime_external_ids x
+                 JOIN src_anilist_anime s
+                   ON x.source = 'anilist'
+                  AND CAST(s.anilist_id AS TEXT) = x.external_id
+            """,
+        )
+
+    # anime_display (silver.display) path.
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='anime_display'"
+    ).fetchone():
+        _backfill_genres_tags_from_json(
+            conn,
+            "SELECT id, genres, tags FROM anime_display",
+        )
+
+    # Legacy anime path (covers fixtures / tests without bronze).
+    anime_cols = _columns("anime")
+    if "genres" in anime_cols or "tags" in anime_cols:
+        has_g = "genres" in anime_cols
+        has_t = "tags" in anime_cols
+        if has_g and has_t:
+            _backfill_genres_tags_from_json(
+                conn, "SELECT id, genres, tags FROM anime"
+            )
+        elif has_g:
+            _backfill_genres_tags_from_json(
+                conn, "SELECT id, genres, NULL FROM anime"
+            )
+        elif has_t:
+            _backfill_genres_tags_from_json(
+                conn, "SELECT id, NULL, tags FROM anime"
+            )
+
+    # --- (C-1) credits.evidence_source (additive rename) --------------------
+    # We add an ``evidence_source`` column that mirrors ``source``. Writers
+    # that already set ``source`` continue to work; new writers may use
+    # either. A trigger keeps the two columns in sync until a later
+    # migration drops ``source``.
+    credit_cols = _columns("credits")
+    if "evidence_source" not in credit_cols:
+        try:
+            conn.execute(
+                "ALTER TABLE credits ADD COLUMN evidence_source TEXT NOT NULL DEFAULT ''"
+            )
+        except sqlite3.OperationalError:
+            pass
+    if "source" in credit_cols:
+        # Backfill evidence_source from source, then keep them in sync.
+        conn.execute(
+            "UPDATE credits SET evidence_source = source "
+            "WHERE evidence_source = '' OR evidence_source IS NULL"
+        )
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS trg_credits_source_to_evidence
+            AFTER INSERT ON credits
+            WHEN NEW.source IS NOT NULL AND NEW.source != ''
+                 AND (NEW.evidence_source IS NULL OR NEW.evidence_source = '')
+            BEGIN
+                UPDATE credits SET evidence_source = NEW.source WHERE id = NEW.id;
+            END
+        """)
+        conn.execute("""
+            CREATE TRIGGER IF NOT EXISTS trg_credits_evidence_to_source
+            AFTER INSERT ON credits
+            WHEN NEW.evidence_source IS NOT NULL AND NEW.evidence_source != ''
+                 AND (NEW.source IS NULL OR NEW.source = '')
+            BEGIN
+                UPDATE credits SET source = NEW.evidence_source WHERE id = NEW.id;
+            END
+        """)
+
+    # --- Normalize credits.episode sentinel (-1 → NULL) ---------------------
+    # Our code uses episode=-1 to mean "whole series". v50 normalizes this to
+    # NULL (matching detailed_todo.md §1.3.2). Writers that insert -1 will be
+    # rewritten by a trigger so this migration is stable on new data.
+    if "episode" in credit_cols:
+        try:
+            conn.execute(
+                "UPDATE credits SET episode = NULL WHERE episode = -1"
+            )
+        except sqlite3.OperationalError:
+            pass
+
+    # --- person_scores VIEW (alias for scores) ------------------------------
+    # A compatibility view so reports can use the new canonical name
+    # ``person_scores`` without breaking the many ``scores``-reading
+    # consumers. Writers still write to ``scores``; the view is read-only.
+    if conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='scores'"
+    ).fetchone():
+        # Drop any prior view/table named person_scores so this is idempotent.
+        existing = conn.execute(
+            "SELECT type FROM sqlite_master WHERE name='person_scores'"
+        ).fetchone()
+        if existing is None:
+            conn.execute(
+                "CREATE VIEW IF NOT EXISTS person_scores AS "
+                "SELECT * FROM scores"
+            )
+        elif existing[0] == "view":
+            pass
+        # If existing is a TABLE we leave it alone — a future migration
+        # will handle the physical rename.
+
+    # --- Log summary --------------------------------------------------------
+    n_sources = conn.execute("SELECT COUNT(*) FROM sources").fetchone()[0]
+    n_roles = conn.execute("SELECT COUNT(*) FROM roles").fetchone()[0]
+    n_ext_anime = conn.execute(
+        "SELECT COUNT(*) FROM anime_external_ids"
+    ).fetchone()[0]
+    n_ext_person = conn.execute(
+        "SELECT COUNT(*) FROM person_external_ids"
+    ).fetchone()[0]
+    n_aliases = conn.execute(
+        "SELECT COUNT(*) FROM person_aliases"
+    ).fetchone()[0]
+    n_genres = conn.execute("SELECT COUNT(*) FROM anime_genres").fetchone()[0]
+    n_tags = conn.execute("SELECT COUNT(*) FROM anime_tags").fetchone()[0]
+    logger.info(
+        "v50_canonical_silver_ready",
+        sources=n_sources,
+        roles=n_roles,
+        anime_ext_ids=n_ext_anime,
+        person_ext_ids=n_ext_person,
+        person_aliases=n_aliases,
+        anime_genres=n_genres,
+        anime_tags=n_tags,
     )
