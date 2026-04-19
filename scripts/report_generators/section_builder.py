@@ -296,3 +296,98 @@ class SectionBuilder:
   </div>
 </div>
 """
+
+    def method_note_from_lineage(self, table_name: str, conn: "sqlite3.Connection") -> str:
+        """meta_lineage を読んで Method Note HTML を自動生成する.
+
+        手書き method_note は禁止。このメソッド経由でのみ生成すること。
+
+        Args:
+            table_name: meta_lineage に登録されたテーブル名 (例: 'meta_policy_attrition')
+            conn: SQLite 接続
+
+        Returns:
+            HTML 文字列
+
+        Raises:
+            ValueError: table_name が meta_lineage に未登録の場合
+        """
+        import json as _json
+        import sqlite3 as _sqlite3
+
+        row = conn.execute(
+            "SELECT * FROM meta_lineage WHERE table_name = ?", (table_name,)
+        ).fetchone()
+        if row is None:
+            raise ValueError(
+                f"No lineage registered for '{table_name}'. "
+                "Call register_meta_lineage() before generating method notes."
+            )
+
+        col_names = [d[0] for d in conn.execute(
+            "SELECT * FROM meta_lineage WHERE 0"
+        ).description or []]
+        if not col_names:
+            col_names = [
+                "table_name", "audience", "source_silver_tables",
+                "source_bronze_forbidden", "source_display_allowed",
+                "formula_version", "computed_at",
+                "ci_method", "null_model", "holdout_method",
+                "row_count", "notes",
+            ]
+        data = dict(zip(col_names, row))
+
+        # Parse silver source tables
+        try:
+            silver_tables: list[str] = _json.loads(data.get("source_silver_tables", "[]"))
+        except (ValueError, TypeError):
+            silver_tables = []
+
+        parts: list[str] = ['<div style="font-size:0.82rem;line-height:1.6;color:#8a94a0;">']
+
+        # Silver sources
+        if silver_tables:
+            tbl_html = ", ".join(f"<code>{t}</code>" for t in silver_tables)
+            parts.append(f"<p><strong>データソース (silver 層):</strong> {tbl_html}</p>")
+
+        # Score prohibition confirmation
+        if data.get("source_bronze_forbidden", 1):
+            parts.append(
+                "<p><strong>スコア非使用確認:</strong> "
+                "このテーブルの算出に <code>anime.score</code>（視聴者評価）は使用していない。"
+                " / <em>anime.score (viewer ratings) was not used in this computation.</em></p>"
+            )
+
+        # CI method
+        if data.get("ci_method"):
+            parts.append(f"<p><strong>信頼区間:</strong> {data['ci_method']}</p>")
+
+        # Null model
+        if data.get("null_model"):
+            parts.append(f"<p><strong>Null モデル:</strong> {data['null_model']}</p>")
+
+        # Holdout method
+        if data.get("holdout_method"):
+            parts.append(f"<p><strong>検証手法:</strong> {data['holdout_method']}</p>")
+
+        # Formula version + computed_at
+        fv = data.get("formula_version", "")
+        ca = data.get("computed_at", "")
+        if fv or ca:
+            meta_parts = []
+            if fv:
+                meta_parts.append(f"formula_version={fv}")
+            if ca:
+                meta_parts.append(f"computed_at={ca}")
+            parts.append(f"<p><strong>メタ:</strong> {', '.join(meta_parts)}</p>")
+
+        # Row count
+        if data.get("row_count") is not None:
+            parts.append(f"<p><strong>行数:</strong> {data['row_count']:,}</p>")
+
+        # Notes
+        if data.get("notes"):
+            parts.append(f"<p><strong>備考:</strong> {data['notes']}</p>")
+
+        parts.append("</div>")
+        return "\n".join(parts)
