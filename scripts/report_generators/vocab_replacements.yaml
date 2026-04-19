@@ -1,0 +1,30 @@
+# 禁止語 → 推奨代替語
+ja:
+  能力: 構造スコア
+  優秀: 高スコア群（数値表現を使う）
+  実力: ネットワーク位置
+  劣る: 下位パーセンタイル
+  優れる: 上位パーセンタイル
+  才能: 構造的貢献
+  センス: パターン適合度
+  技能水準: 構造スコアレベル
+  素晴らしい: 高水準（数値表現を使う）
+  ひどい: 低水準（数値表現を使う）
+  引き起こす: と関連する
+  原因となる: と相関する
+  もたらす: と連動する
+
+en:
+  ability: structural score
+  talent: network position
+  skill level: structural score level
+  inferior: lower-percentile
+  superior: higher-percentile
+  incompetent: lower structural score
+  competent: higher structural score
+  excellent: high-scoring
+  terrible: low-scoring
+  cause: associate with
+  lead to: correlate with
+  result in: co-occur with
+  due to: associated with

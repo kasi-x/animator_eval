@@ -36,6 +36,8 @@ _PROHIBITED_ADJECTIVES_JA = {
     "驚くべき", "注目すべき", "特に重要", "素晴らしい", "優れた",
     "懸念される", "健全な", "堅調な", "印象的な", "期待できる",
     "残念な", "著しい", "顕著な", "飛躍的な",
+    # ability framing (v2 philosophy gate)
+    "能力", "優秀", "実力", "才能", "センス", "技能水準",
 }
 
 _PROHIBITED_CAUSAL_VERBS_EN = {

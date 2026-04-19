@@ -17,7 +17,6 @@ Usage:
 
 from .index_page import IndexPageReport
 from .industry_overview import IndustryOverviewReport
-from .person_ranking import PersonRankingReport
 # Phase 1 additional
 from .career_transitions import CareerTransitionsReport
 from .structural_career import StructuralCareerReport
@@ -39,8 +38,6 @@ from .career_friction_report import CareerFrictionReport
 from .compensation_fairness import CompensationFairnessReport
 from .bias_detection import BiasDetectionReport
 from .score_layers_analysis import ScoreLayersAnalysisReport
-from .expected_ability_report import ExpectedAbilityReport
-from .anime_value_report import AnimeValueReport
 from .ml_clustering import MLClusteringReport
 from .genre_analysis import GenreAnalysisReport
 from .credit_statistics import CreditStatisticsReport
@@ -57,57 +54,93 @@ from .madb_coverage import MADBCoverageReport
 from .studio_timeseries import StudioTimeseriesReport
 # Phase 6: Exit & return analysis
 from .exit_analysis import ExitAnalysisReport
+# Phase 7: Policy briefs
+from .policy_attrition import PolicyAttritionReport
+from .policy_monopsony import PolicyMonopsonyReport
+from .policy_gender_bottleneck import PolicyGenderBottleneckReport
+from .policy_generational_health import PolicyGenerationalHealthReport
+# Phase 8: Management (hr) briefs
+from .mgmt_studio_benchmark import MgmtStudioBenchmarkReport
+from .mgmt_director_mentor import MgmtDirectorMentorReport
+from .mgmt_attrition_risk import MgmtAttritionRiskReport
+from .mgmt_succession import MgmtSuccessionReport
+from .mgmt_team_chemistry import MgmtTeamChemistryReport
+# Phase 9: Biz briefs
+from .biz_undervalued_talent import BizUndervaluedTalentReport
+from .biz_genre_whitespace import BizGenreWhitespaceReport
+from .biz_team_template import BizTeamTemplateReport
+from .biz_trust_entry import BizTrustEntryReport
+from .biz_independent_unit import BizIndependentUnitReport
+# Phase 10: Person parameter card + 3 audience brief indices
+from .person_parameter_card import PersonParameterCardReport
+from .policy_brief_index import PolicyBriefIndexReport
+from .hr_brief_index import HrBriefIndexReport
+from .biz_brief_index import BizBriefIndexReport
 
 #: All v2 report classes, in generation order
 V2_REPORT_CLASSES = [
-    # Phase 1: High-visibility
+    # common: audience-agnostic landing pages
     IndexPageReport,
     IndustryOverviewReport,
-    PersonRankingReport,
-    CareerTransitionsReport,
-    StructuralCareerReport,
+    CreditStatisticsReport,
+    BiasDetectionReport,
+    PersonParameterCardReport,
+    # common: brief index pages (audience entry points)
+    PolicyBriefIndexReport,
+    HrBriefIndexReport,
+    BizBriefIndexReport,
+    # policy brief
+    PolicyAttritionReport,
+    PolicyMonopsonyReport,
+    PolicyGenderBottleneckReport,
+    PolicyGenerationalHealthReport,
+    CompensationFairnessReport,
     IndustryAnalysisReport,
-    # Phase 2: Network
-    BridgeAnalysisReport,
+    CareerTransitionsReport,
+    CareerFrictionReport,
+    ExitAnalysisReport,
+    # hr brief
+    MgmtStudioBenchmarkReport,
+    MgmtDirectorMentorReport,
+    MgmtAttritionRiskReport,
+    MgmtSuccessionReport,
+    MgmtTeamChemistryReport,
+    GrowthScoresReport,
+    StructuralCareerReport,
+    CareerDynamicsReport,
+    StudioImpactReport,
+    StudioTimeseriesReport,
+    TeamAnalysisReport,
+    CompatibilityReport,
+    # biz brief
+    BizGenreWhitespaceReport,
+    BizUndervaluedTalentReport,
+    BizTrustEntryReport,
+    BizTeamTemplateReport,
+    BizIndependentUnitReport,
+    GenreAnalysisReport,
+    # technical appendix
+    AKMDiagnosticsReport,
+    DMLCausalInferenceReport,
+    ScoreLayersAnalysisReport,
+    SHAPExplanationReport,
+    LongitudinalAnalysisReport,
+    MLClusteringReport,
     NetworkAnalysisReport,
     NetworkGraphReport,
     NetworkEvolutionReport,
-    KnowledgeNetworkReport,
-    TeamAnalysisReport,
-    # Phase 3: Career & longitudinal
-    LongitudinalAnalysisReport,
-    CareerDynamicsReport,
-    CohortAnimationReport,
-    GrowthScoresReport,
-    CareerFrictionReport,
-    # Phase 4: Scoring & fairness
-    CompensationFairnessReport,
-    BiasDetectionReport,
-    ScoreLayersAnalysisReport,
-    ExpectedAbilityReport,
-    AnimeValueReport,
-    MLClusteringReport,
-    GenreAnalysisReport,
-    CreditStatisticsReport,
-    # Phase 5: Technical & specialized
-    AKMDiagnosticsReport,
-    DMLCausalInferenceReport,
-    StudioImpactReport,
-    SHAPExplanationReport,
-    TemporalForesightReport,
-    CompatibilityReport,
     CooccurrenceGroupsReport,
-    DerivedParamsReport,
     MADBCoverageReport,
-    StudioTimeseriesReport,
-    # Phase 6: Exit & return
-    ExitAnalysisReport,
+    DerivedParamsReport,
+    CohortAnimationReport,
+    KnowledgeNetworkReport,
+    TemporalForesightReport,
+    BridgeAnalysisReport,
 ]
 
 __all__ = [
     "IndexPageReport",
     "IndustryOverviewReport",
-    "PersonRankingReport",
     "CareerTransitionsReport",
     "StructuralCareerReport",
     "IndustryAnalysisReport",
@@ -125,8 +158,6 @@ __all__ = [
     "CompensationFairnessReport",
     "BiasDetectionReport",
     "ScoreLayersAnalysisReport",
-    "ExpectedAbilityReport",
-    "AnimeValueReport",
     "MLClusteringReport",
     "GenreAnalysisReport",
     "CreditStatisticsReport",
@@ -141,5 +172,23 @@ __all__ = [
     "MADBCoverageReport",
     "StudioTimeseriesReport",
     "ExitAnalysisReport",
+    "PolicyAttritionReport",
+    "PolicyMonopsonyReport",
+    "PolicyGenderBottleneckReport",
+    "PolicyGenerationalHealthReport",
+    "MgmtStudioBenchmarkReport",
+    "MgmtDirectorMentorReport",
+    "MgmtAttritionRiskReport",
+    "MgmtSuccessionReport",
+    "MgmtTeamChemistryReport",
+    "BizUndervaluedTalentReport",
+    "BizGenreWhitespaceReport",
+    "BizTeamTemplateReport",
+    "BizTrustEntryReport",
+    "BizIndependentUnitReport",
+    "PersonParameterCardReport",
+    "PolicyBriefIndexReport",
+    "HrBriefIndexReport",
+    "BizBriefIndexReport",
     "V2_REPORT_CLASSES",
 ]

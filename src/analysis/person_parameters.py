@@ -409,8 +409,6 @@ def populate_meta_common_person_parameters(
     Returns:
         upsert した行数
     """
-    import sqlite3 as _sqlite3
-
     if not person_params:
         return 0
 

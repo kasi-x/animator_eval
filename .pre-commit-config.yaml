@@ -1,0 +1,21 @@
+repos:
+  - repo: local
+    hooks:
+      - id: report-vocabulary-lint
+        name: Report vocabulary lint (forbid 能力/ability framing)
+        entry: pixi run python scripts/lint_report_vocabulary.py
+        language: system
+        files: ^scripts/report_generators/reports/
+        pass_filenames: true
+
+      - id: ci-check-lineage
+        name: Check no bronze leak in public reports
+        entry: pixi run python scripts/ci_check_lineage.py
+        language: system
+        pass_filenames: false
+
+      - id: section-structure-enforce
+        name: Enforce v2 section structure
+        entry: pixi run pytest tests/test_report_structure.py -x
+        language: system
+        pass_filenames: false

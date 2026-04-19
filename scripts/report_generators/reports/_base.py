@@ -118,3 +118,90 @@ class BaseReportGenerator(ABC):
 
         log.info("report_written", report=self.name, path=str(out_path))
         return out_path
+
+    def render_unified_structure(
+        self,
+        sections: "list[ReportSection]",
+        meta_table: str | None = None,
+        *,
+        overview_html: str = "",
+        interpretation_html: str = "",
+        data_statement_params: "DataStatementParams | None" = None,
+        extra_glossary: "dict[str, str] | None" = None,
+    ) -> "Path":
+        """Render a report using the mandatory v2 unified section structure.
+
+        Structure enforced:
+          1. 概要 (overview)
+          2. Findings (each section in `sections`)
+          3. Method Note (auto-generated from meta_lineage if meta_table given)
+          4. Interpretation (optional, must have at least one alternative)
+          5. Data Statement
+          6. Disclaimers
+
+        Args:
+            sections: List of ReportSection (Findings content).
+            meta_table: meta_lineage table name for auto Method Note.
+                        If None, no Method Note is generated.
+            overview_html: Optional intro paragraph (the 概要 section).
+            interpretation_html: Optional interpretation block (must be labelled,
+                                  contain at least one alternative interpretation).
+            data_statement_params: Override defaults for the data statement.
+            extra_glossary: Additional glossary terms.
+
+        Returns:
+            Path to the written HTML file.
+        """
+        from ..section_builder import ReportSection as _RS
+
+        parts: list[str] = []
+
+        # 1. 概要
+        if overview_html:
+            parts.append(
+                f'<div class="card" id="overview">'
+                f"<h2>概要 / Overview</h2>{overview_html}</div>"
+            )
+
+        # 2. Findings
+        for section in sections:
+            violations = self.builder.validate_findings(section.findings_html)
+            if violations:
+                log.warning(
+                    "findings_violations",
+                    report=self.name,
+                    section=section.title,
+                    violations=violations,
+                )
+            parts.append(self.builder.build_section(section))
+
+        # 3. Method Note (auto-generated from meta_lineage)
+        if meta_table:
+            try:
+                method_html = self.builder.method_note_from_lineage(meta_table, self.conn)
+                parts.append(
+                    f'<div class="card method-note-auto" id="method-note">'
+                    f"<h2>Method Note</h2>{method_html}</div>"
+                )
+            except ValueError as e:
+                log.warning("method_note_lineage_missing", meta_table=meta_table, error=str(e))
+
+        # 4. Interpretation (optional)
+        if interpretation_html:
+            parts.append(
+                '<div class="card interpretation" id="interpretation"'
+                ' style="border-left:3px solid #c0a0d0;">'
+                '<h2>Interpretation / 解釈</h2>'
+                '<p style="font-size:0.8rem;color:#9090b0;">'
+                "以下は分析者の解釈であり、代替解釈が存在する。 / "
+                "The following reflects the analyst's interpretation; "
+                "alternative interpretations exist.</p>"
+                f"{interpretation_html}</div>"
+            )
+
+        body = "\n".join(parts)
+        return self.write_report(
+            body,
+            data_statement_params=data_statement_params,
+            extra_glossary=extra_glossary,
+        )

@@ -1,0 +1,53 @@
+# v2 report vocabulary enforcement
+# Section: ability_framing — Findings セクションで使用禁止
+ability_framing:
+  ja:
+    - 能力
+    - 優秀
+    - 実力
+    - 劣る
+    - 優れる
+    - 劣っている
+    - 才能
+    - センス
+    - 技能水準
+  en:
+    - ability
+    - talent
+    - skill level
+    - inferior
+    - superior
+    - incompetent
+    - competent
+
+# Section: causal_verbs — Findings セクション禁止 (Interpretation 内は warning のみ)
+causal_verbs:
+  ja:
+    - 引き起こす
+    - 原因となる
+    - もたらす
+  en:
+    - cause
+    - lead to
+    - result in
+    - due to
+
+# Section: evaluative_adjectives — Findings セクション禁止
+evaluative_adjectives:
+  ja:
+    - 素晴らしい
+    - ひどい
+  en:
+    - excellent
+    - terrible
+
+# Section: interpretation_markers — Interpretation 外での使用は warning
+interpretation_markers:
+  ja:
+    - 解釈
+    - 推測
+    - 考えられる
+  en:
+    - we interpret
+    - we speculate
+    - we conclude
