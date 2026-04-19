@@ -3112,6 +3112,7 @@ async def scrape_seesaawiki(
         update_data_source,
         upsert_anime,
         upsert_person,
+        upsert_src_seesaawiki_anime,
     )
 
     if data_dir is None:
@@ -3279,6 +3280,7 @@ async def scrape_seesaawiki(
                 title_ja=page_title,
             )
             upsert_anime(conn, anime)
+            upsert_src_seesaawiki_anime(conn, anime_id, page_title, None, None)
             stats["anime_created"] += 1
 
             # Derive total episode count from parsed data (for open-ended ranges)
@@ -3387,11 +3389,15 @@ def _save_credit(
     When parsed.episode_from is set (open-ended range like "4話〜"),
     expands to episode_from..total_episodes using the anime's episode count.
     """
-    from src.database import insert_person_affiliation
+    from src.database import insert_person_affiliation, insert_src_seesaawiki_credit
 
     if parsed.is_company:
         # Store as studio involvement, not person credit
         _save_studio_credit(conn, anime_id, parsed.name, parsed.role, stats)
+        insert_src_seesaawiki_credit(
+            conn, anime_id, parsed.name, parsed.role, parsed.role,
+            affiliation=None, is_company=True,
+        )
         return
 
     if parsed.name not in person_cache:
@@ -3428,17 +3434,26 @@ def _save_credit(
                 source="seesaawiki",
             )
             insert_credit(conn, credit)
+            insert_src_seesaawiki_credit(
+                conn, anime_id, parsed.name, str(role), parsed.role,
+                episode=ep, affiliation=parsed.affiliation,
+            )
             stats["credits_created"] += 1
     else:
+        ep_num = episode if episode is not None else -1
         credit = Credit(
             person_id=person.id,
             anime_id=anime_id,
             role=role,
             raw_role=parsed.role,
-            episode=episode if episode is not None else -1,
+            episode=ep_num,
             source="seesaawiki",
         )
         insert_credit(conn, credit)
+        insert_src_seesaawiki_credit(
+            conn, anime_id, parsed.name, str(role), parsed.role,
+            episode=ep_num, affiliation=parsed.affiliation,
+        )
         stats["credits_created"] += 1
 
     # Record studio affiliation if present (e.g. "太郎(Xスタジオ)")
@@ -3531,6 +3546,7 @@ def reparse_from_raw(
         update_data_source,
         upsert_anime,
         upsert_person,
+        upsert_src_seesaawiki_anime,
     )
 
     if data_dir is None:
@@ -3625,6 +3641,7 @@ def reparse_from_raw(
         # DB upsert
         anime = Anime(id=anime_id, title_ja=title)
         upsert_anime(conn, anime)
+        upsert_src_seesaawiki_anime(conn, anime_id, title, None, None)
         stats["anime_created"] += 1
 
         total_episodes = (

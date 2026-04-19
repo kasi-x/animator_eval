@@ -227,11 +227,11 @@ app = typer.Typer()
 
 # Batch save helper functions (must be defined before main())
 def save_anime_batch_to_database(conn, anime_batch):
-    """Save a batch of anime to database."""
-    from src.database import upsert_anime
+    """Save a batch of anime to src_anilist_anime."""
+    from src.database import upsert_src_anilist_anime
 
     for anime in anime_batch:
-        upsert_anime(conn, anime)
+        upsert_src_anilist_anime(conn, anime)
 
 
 def save_studios_to_database(conn, studios, anime_studios):
@@ -253,11 +253,11 @@ def save_relations_to_database(conn, relations):
 
 
 def save_persons_batch_to_database(conn, persons_batch):
-    """Save a batch of persons to database."""
-    from src.database import upsert_person
+    """Save a batch of persons to src_anilist_persons."""
+    from src.database import upsert_src_anilist_person
 
     for person in persons_batch:
-        upsert_person(conn, person)
+        upsert_src_anilist_person(conn, person)
 
 
 def _make_rate_limit_text(cl):
@@ -286,11 +286,19 @@ def _make_rate_limit_text(cl):
 
 
 def save_credits_batch_to_database(conn, credits_batch):
-    """Save a batch of credits to database."""
-    from src.database import insert_credit
+    """Save a batch of credits to src_anilist_credits."""
+    from src.database import insert_src_anilist_credit
 
     for credit in credits_batch:
-        insert_credit(conn, credit)
+        try:
+            anilist_anime_id = int(credit.anime_id.split(":")[-1])
+            anilist_person_id = int(credit.person_id.removeprefix("anilist:p"))
+        except (ValueError, AttributeError):
+            continue
+        insert_src_anilist_credit(
+            conn, anilist_anime_id, anilist_person_id,
+            str(credit.role), credit.raw_role or "",
+        )
 
 
 class AniListClient:

@@ -302,9 +302,11 @@ async def scrape_keyframe(
     """
     from src.database import (
         insert_credit,
+        insert_src_keyframe_credit,
         update_data_source,
         upsert_anime,
         upsert_person,
+        upsert_src_keyframe_anime,
     )
 
     if data_dir is None:
@@ -407,6 +409,7 @@ async def scrape_keyframe(
                     if anilist_id is not None:
                         anime.anilist_id = anilist_id
                     upsert_anime(conn, anime)
+                upsert_src_keyframe_anime(conn, slug, "", title, anilist_id)
 
                 stats["anime_fetched"] += 1
 
@@ -447,6 +450,12 @@ async def scrape_keyframe(
                         source="keyframe",
                     )
                     insert_credit(conn, credit)
+                    insert_src_keyframe_credit(
+                        conn, slug, credit_data["person_id"],
+                        credit_data["name_ja"], credit_data["name_en"],
+                        credit_data["role_ja"] or "", credit_data["role_en"] or "",
+                        episode=credit_data["episode"],
+                    )
                     stats["credits_created"] += 1
 
                 processed_slugs.add(slug)
