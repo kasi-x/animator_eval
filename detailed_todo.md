@@ -83,9 +83,12 @@
 │ Silver (単一層。score / popularity / favourites / image 無し)     │
 │  ─ anime              (元 anime_analysis をリネーム。score なし)   │
 │  ─ persons                                                         │
-│  ─ credits            (episode NULL = 全話通し; sentinel -1 廃止)  │
+│  ─ credits            (episode NULL = 全話通し; evidence_source)   │
 │  ─ studios, anime_studios (既存)                                   │
 │  ─ anime_genres, anime_tags (新設: JSON 正規化)                    │
+│  ─ anime_external_ids, person_external_ids (新設: N-4)             │
+│  ─ person_aliases (新設: N-3 entity resolution 証跡)                │
+│  ─ sources (新設: N-1 lookup), roles (新設: N-2 lookup)              │
 │  ─ anime_relations, characters, character_voice_actors (既存)      │
 │  (廃止: legacy `anime` / `anime_display`)                          │
 └─────────────────────────────────────────────────────────────────┘
@@ -102,6 +105,8 @@
 │  ─ meta_biz_whitespace          (新たな試み Brief ジャンル空白地)    │
 │  ─ meta_biz_undervalued         (新たな試み Brief 過小露出群)       │
 │  ─ meta_biz_trust_entry         (新たな試み Brief 信頼ネット参入)    │
+│  ─ meta_entity_resolution_audit (V-2 defamation 防御)              │
+│  ─ meta_quality_snapshot        (V-3 anomaly 検知)                │
 │  (既存 feat_* は維持しつつ、meta_* は feat_* から派生)              │
 └─────────────────────────────────────────────────────────────────┘
                               ↓ scripts/report_generators/reports/
@@ -136,15 +141,20 @@
 
 この並立状態こそ問題の本体。**user 指示「silver にスコアを入れない」**を徹底するために、以下のように**物理再編**する (destructive OK):
 
-**TO-BE**:
+**TO-BE** (Phase 1.4 の深掘り改善を含む):
 
 1. **`anime_display` テーブルを DROP**。score/description/cover_* は bronze にのみ残し、display_lookup helper で参照する
 2. **legacy `anime` テーブルを DROP**。scraper/ETL/analysis を `anime_analysis` に切替えた上で削除
 3. **`anime_analysis` を `anime` に rename**。名前は「どの層か」ではなく「何のデータか」を表すべき。silver が唯一の canonical table になるので suffix 不要
 4. **`anime_genres` / `anime_tags` を新設** (正規化)。bronze の JSON から ETL 時に展開
 5. **`studios` / `anime_studios` は既存を流用** (`src/database.py:254-271`)。無変更
+6. **(C-1) `credits.source` → `credits.evidence_source` にリネーム** (anime.source = 原作タイプ との命名衝突解消)
+7. **(N-1) `sources` lookup テーブル新設**。ハードコード CHECK を FK に置換
+8. **(N-2) `roles` lookup テーブル新設**。`role_groups.py` を DB 化
+9. **(N-3) `person_aliases` 新設**。entity resolution 証跡 (defamation 防御)
+10. **(N-4) `anime_external_ids` / `person_external_ids` 新設**。横並び ID カラムを廃止し新 ID 追加の migration を不要化
 
-結果として silver には `anime` (clean)、`persons`、`credits`、`studios`、`anime_studios`、`anime_genres`、`anime_tags`、`anime_relations`、`characters`、`character_voice_actors` のみが残る。
+結果として silver には `anime` (clean)、`persons`、`credits`、`studios`、`anime_studios`、`anime_genres`、`anime_tags`、`anime_external_ids`、`person_external_ids`、`person_aliases`、`sources`、`roles`、`anime_relations`、`characters`、`character_voice_actors` が残る。
 
 ### 1.3 テーブル設計原則 (効率性 × 自己説明性)
 
@@ -220,6 +230,277 @@
 - `anime.studios` JSON は `anime_studios(anime_id, studio_id, is_main)` の完全な冗長コピー。非効率かつ同期ずれの温床
 - silver.anime から JSON 列を落とし、analysis は `anime_studios` JOIN に切替 (Task 1-5 の 4)
 
+### 1.4 2026-04-19 深掘り改善 (正規化・拡張性・検証容易性)
+
+反省セッションで「正規化・将来のデータ追加・他人検証」の 3 観点で設計を再検討した結果、以下 11 項目を追加する。優先度別に分類 (🔴=v50 必須 / 🟠=Phase 1 内 / 🟡=Phase 2 / 🟢=Phase 4)。
+
+#### 🔴 C-1. `credits.source` → `credits.evidence_source` リネーム (命名衝突解消)
+
+**問題**: `anime.source` (= 原作タイプ MANGA/NOVEL/ORIGINAL) と `credits.source` (= スクレイピング出所 anilist/ann 等) が**同一の column 名で異なる意味**。SQL を読む他人が真っ先に誤読する罠。
+
+**解**: v50 migration で `ALTER TABLE credits RENAME COLUMN source TO evidence_source`。コード側 (`src/etl/*`, `src/analysis/*`) の `credits.source` 参照を一括置換。H4 (hard constraint) も文言を `evidence_source` に更新。
+
+対応 task: **Task 1-3 (v50 migration) に組み込む**。後からやると参照箇所が倍になる。
+
+#### 🔴 N-1. `sources` lookup テーブル (ハードコード CHECK を廃止)
+
+**問題**: `CHECK (evidence_source IN ('anilist','ann','allcinema','seesaawiki','keyframe'))` が複数テーブルに散在。新ソース追加 (例: `madb`, `jvmg`) のたびに全 CHECK を migration で更新する必要あり。
+
+**解**:
+```sql
+CREATE TABLE sources (
+    code         TEXT PRIMARY KEY,            -- 'anilist' 等
+    name_ja      TEXT NOT NULL,               -- 'AniList' / 'アニメニュースネットワーク'
+    base_url     TEXT NOT NULL,
+    license      TEXT NOT NULL,               -- 'CC-BY-SA' / 'proprietary' 等
+    added_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    retired_at   TIMESTAMP,                   -- NULL = active
+    description  TEXT NOT NULL                -- なぜこのソースを信用するか
+);
+-- 既存 5 ソースをシード INSERT
+INSERT INTO sources (code, name_ja, base_url, license, description) VALUES
+    ('anilist','AniList','https://anilist.co','proprietary','GraphQL で structured staff 情報が最も豊富'),
+    ('ann','Anime News Network','https://www.animenewsencyclopedia.com','proprietary','historical depth と職種粒度'),
+    ('allcinema','allcinema','https://www.allcinema.net','proprietary','邦画・OVA の網羅性'),
+    ('seesaawiki','SeesaaWiki','https://seesaawiki.jp','CC-BY-SA','fan-curated 詳細エピソード情報'),
+    ('keyframe','Sakugabooru/Keyframe','https://www.sakugabooru.com','CC','sakuga コミュニティ別名情報');
+```
+`credits.evidence_source`, `anime_external_ids.source`, `person_external_ids.source`, `person_aliases.source` から FK。CHECK 制約は削除。新ソース追加 = 1 行 INSERT のみ、migration 不要。
+
+対応 task: **新設 Task 1-8**。
+
+#### 🟠 N-2. `roles` lookup テーブル (`role_groups.py` を DB 化)
+
+**問題**: 24 role enum + ロール重み (`_ROLE_WEIGHT`) が `src/utils/role_groups.py` にハードコード。役職ラベル (JP/EN) もコード中に散在。
+
+**解**:
+```sql
+CREATE TABLE roles (
+    code            TEXT PRIMARY KEY,         -- 'director' / 'key_animator' 等
+    name_ja         TEXT NOT NULL,            -- '監督' / '作画監督'
+    name_en         TEXT NOT NULL,
+    role_group      TEXT NOT NULL CHECK (role_group IN ('director','animator','sound','production','writer','voice_actor','other')),
+    weight_default  REAL NOT NULL CHECK (weight_default > 0),  -- _ROLE_WEIGHT 由来
+    description_ja  TEXT NOT NULL             -- "作品全体の演出責任者。最も高い責任を持つ"
+);
+```
+
+`credits.role` から FK。重みの履歴化は `feat_role_weights(role_code, formula_version, weight)` で対応。
+
+対応 task: **新設 Task 1-9**。
+
+#### 🟠 N-3. `person_aliases` 正規化 (法的防御線)
+
+**問題**: 人物別名の出所を追跡できない現状は defamation 監査時に弱い。
+
+**解**:
+```sql
+CREATE TABLE person_aliases (
+    person_id   TEXT NOT NULL,
+    alias       TEXT NOT NULL,
+    source      TEXT NOT NULL REFERENCES sources(code),   -- 'anilist'/'ann'/'romaji_auto'/'ai_merge'
+    confidence  REAL CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 1),
+    added_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (person_id, alias, source),
+    FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE CASCADE
+);
+CREATE INDEX idx_person_aliases_alias ON person_aliases(alias, person_id);
+```
+
+`persons.aliases` (JSON or semicolon-sep の既存カラム) から ETL で展開。レビュアは `SELECT * FROM person_aliases WHERE person_id = ?` で「なぜ A と B が同一人物か」を一発検証。
+
+対応 task: **新設 Task 1-10**。
+
+#### 🟠 N-4. `anime_external_ids` / `person_external_ids` (横長テーブルの解消)
+
+**問題**: `anime` に `mal_id, anilist_id, ann_id, allcinema_id, madb_id` が横並び。新 ID 追加 = `ALTER TABLE anime ADD COLUMN ...`。persons も同様。
+
+**解**:
+```sql
+CREATE TABLE anime_external_ids (
+    anime_id     TEXT NOT NULL,
+    source       TEXT NOT NULL REFERENCES sources(code),
+    external_id  TEXT NOT NULL,
+    PRIMARY KEY (anime_id, source),
+    UNIQUE (source, external_id),
+    FOREIGN KEY (anime_id) REFERENCES anime(id) ON DELETE CASCADE
+);
+CREATE INDEX idx_anime_ext_ids_source ON anime_external_ids(source, external_id);
+
+CREATE TABLE person_external_ids (
+    person_id    TEXT NOT NULL,
+    source       TEXT NOT NULL REFERENCES sources(code),
+    external_id  TEXT NOT NULL,
+    PRIMARY KEY (person_id, source),
+    UNIQUE (source, external_id),
+    FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE CASCADE
+);
+```
+
+silver `anime` / `persons` から個別 ID カラム (mal_id/anilist_id/ann_id/...) を**全削除**。migration で既存値を新テーブルへ移行。新 ID 追加 = row 追加のみ。
+
+対応 task: **新設 Task 1-11**。
+
+#### 🟡 N-5. `anime.start_date` の format 強制
+
+**問題**: TEXT 型なので「2023/04/05」等の揺れが混入し得る。他人検証時に日付比較が信用できない。
+
+**解**:
+```sql
+start_date TEXT CHECK (
+    start_date IS NULL OR
+    start_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+)
+-- end_date も同様
+```
+
+Task 1-1 の DDL に組み込む。
+
+#### 🟡 E-1. 宣言的 YAML スキーマ (SSoT)
+
+**問題**: DDL が Python 文字列 list (`src/database.py` 2000+ 行)。新カラム追加で init_db + migration + Pydantic + docs の 4 箇所を手で同期する必要がある。
+
+**解**: `schema/silver/anime.yaml` 等を新設し、Python がこれを読んで DDL / Pydantic / docs/DATA_DICTIONARY.md を**自動生成**する。
+```yaml
+# schema/silver/anime.yaml (例)
+table: anime
+layer: silver
+description: |
+  正規化済み作品マスタ。1 row = 1 作品。score/popularity/description は bronze のみ。
+columns:
+  id:
+    type: TEXT
+    primary_key: true
+    description: 'anilist:N / ann:N / keyframe:slug 形式の合成 ID'
+  year:
+    type: INTEGER
+    nullable: true
+    description: 放送/公開年 (NULL = 未確定作品)
+    check: 'year IS NULL OR year BETWEEN 1910 AND 2100'
+indexes:
+  - columns: [year]
+  - columns: [year, format]
+    description: 年×フォーマット集計 hotpath
+```
+
+**利点**: 1 箇所編集 = 3 箇所自動追随。外部レビュアは YAML だけ読めば schema 全貌を把握できる。
+
+対応 task: **新設 Task 1-12** (Phase 1 終盤でのリファクタ)。実装コスト大のため Phase 1 内必須ではないが、基盤として強く推奨。
+
+#### 🟡 E-2. `meta_lineage` に `rng_seed` / `git_sha` / `inputs_hash` 追加
+
+**目的**: 他人が「同じコミット・同じ seed・同じ入力」で再計算して byte-identical な結果を得られることを保証。
+```sql
+ALTER TABLE meta_lineage ADD COLUMN rng_seed INTEGER;
+ALTER TABLE meta_lineage ADD COLUMN git_sha TEXT NOT NULL DEFAULT '';
+ALTER TABLE meta_lineage ADD COLUMN inputs_hash TEXT NOT NULL DEFAULT '';
+```
+
+Phase 2 の Task 2-1 (meta_lineage DDL) に組み込む。
+
+#### 🟡 E-3. Reversible migrations (検証時のロールバック)
+
+**目的**: 「v49 migration 適用後に v48 に戻して再検証」を可能に。
+
+**解**: 各 destructive migration で、DROP/RENAME の前に `CREATE TABLE _archive_v{N}_{name} AS SELECT * FROM {name}` で snapshot を取る。後に不要になったら `scripts/maintenance/purge_archive.py` で手動削除。
+
+Task 1-3 の v50 migration に `_archive_v49_anime`, `_archive_v49_anime_display` を追加。
+
+#### 🟡 V-1. `docs/DATA_DICTIONARY.md` 自動生成
+
+**目的**: 外部レビュアが schema 全体を 1 枚で把握できる data dictionary を schema + lineage から自動生成。
+
+**実装**: `scripts/export_data_dictionary.py`。schema YAML (E-1 導入後) + `meta_lineage` を読み、全テーブルのカラム・値域・FK・意味・出所を 1 枚のマークダウンに統合。CI で再生成して diff がある場合 fail。
+
+対応 task: **新設 Task 4-5** (Phase 4 gate 自動化と同時)。
+
+#### 🟡 V-2. `meta_entity_resolution_audit` テーブル (defamation 防御)
+
+**目的**: 人物統合の理由を全 person について検証可能にする。法的最大の防御線。
+
+**解**:
+```sql
+CREATE TABLE meta_entity_resolution_audit (
+    person_id          TEXT PRIMARY KEY,
+    canonical_name     TEXT NOT NULL,
+    merge_method       TEXT NOT NULL CHECK (merge_method IN
+        ('exact_match','cross_source','romaji','similarity','ai_assisted','manual')),
+    merge_confidence   REAL NOT NULL CHECK (merge_confidence BETWEEN 0 AND 1),
+    merged_from_keys   TEXT NOT NULL,                    -- JSON array: ["anilist:123","ann:456"]
+    merge_evidence     TEXT NOT NULL,                    -- 自然文: "Jaro-Winkler=0.97, 共作 3 本"
+    merged_at          TIMESTAMP NOT NULL,
+    reviewed_by        TEXT,                             -- NULL = automatic
+    reviewed_at        TIMESTAMP,
+    FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE CASCADE
+);
+```
+
+`src/analysis/entity_resolution.py` から upsert する。H3 (entity resolution ロジック不変) を侵さない *記録* のみの追加なのでリスク低。
+
+対応 task: **新設 Task 2-6** (Phase 2 gold 層と同時)。
+
+#### 🟢 V-3. `meta_quality_snapshot` (anomaly detection)
+
+**目的**: 新 scraping データが壊れていた場合の早期警告。
+```sql
+CREATE TABLE meta_quality_snapshot (
+    computed_at    TIMESTAMP NOT NULL,
+    table_name     TEXT NOT NULL,
+    metric         TEXT NOT NULL,             -- 'row_count' / 'null_rate_year' / 'distinct_studios' 等
+    value          REAL NOT NULL,
+    PRIMARY KEY (computed_at, table_name, metric)
+);
+```
+
+毎回 pipeline で snapshot を取り、前回比 3σ 超の変動で CI fail。
+
+対応 task: **新設 Task 4-6** (Phase 4 gate 拡張)。
+
+#### 🟢 V-4. Statistical invariant テスト群
+
+**目的**: schema や unit test とは別の「結果の統計性質」レベル検証。
+- `test_null_model_pvalues_uniform` — null model の p 値が一様分布か KS 検定
+- `test_meta_policy_attrition_ate_sign` — 理論的に符号が決まる指標の符号検証
+- `test_meta_common_person_parameters_pct_range` — percentile は 0-100 に必ず収まる
+
+対応 task: **新設 Task 4-7** (Phase 4 gate 拡張)。
+
+#### 🟢 V-5. `feat_credit_consensus` (多ソース一致度)
+
+**目的**: 単一ソースのみの credit (= 検証弱い) を report でフラグ可能にする。
+```sql
+CREATE TABLE feat_credit_consensus (
+    person_id          TEXT NOT NULL,
+    anime_id           TEXT NOT NULL,
+    role               TEXT NOT NULL,
+    n_sources_agree    INTEGER NOT NULL,
+    sources_agree      TEXT NOT NULL,          -- JSON array
+    consensus_score    REAL NOT NULL CHECK (consensus_score BETWEEN 0 AND 1),
+    PRIMARY KEY (person_id, anime_id, role)
+);
+```
+
+Phase 2 の feat_* 整理 (Task 2-4) に組み込む。
+
+#### 1.4.x 実装順序と既存 task への影響
+
+| 改善 | 挿入先 | 優先度 |
+|---|---|---|
+| C-1 credits.source rename | Task 1-3 migration | 🔴 v50 必須 |
+| N-1 sources lookup | 新設 Task 1-8 | 🔴 v50 必須 |
+| N-4 external_ids 分離 | 新設 Task 1-11 | 🔴 v50 必須 |
+| N-2 roles lookup | 新設 Task 1-9 | 🟠 Phase 1 内 |
+| N-3 person_aliases | 新設 Task 1-10 | 🟠 Phase 1 内 |
+| N-5 start_date CHECK | Task 1-1 DDL | 🟡 Phase 1 内 (軽い) |
+| E-1 YAML schema | 新設 Task 1-12 | 🟡 Phase 1 終盤 |
+| E-2 lineage rng_seed | Task 2-1 | 🟡 Phase 2 |
+| E-3 Reversible migration | Task 1-3 | 🟡 Phase 1 内 |
+| V-1 DATA_DICTIONARY | 新設 Task 4-5 | 🟡 Phase 4 |
+| V-2 entity_resolution_audit | 新設 Task 2-6 | 🟠 Phase 2 |
+| V-3 quality_snapshot | 新設 Task 4-6 | 🟢 Phase 4 |
+| V-4 statistical invariants | 新設 Task 4-7 | 🟢 Phase 4 |
+| V-5 credit_consensus | Task 2-4 feat_\* 整理 | 🟢 Phase 2 |
+
 ---
 
 ## 2. Phase 1: データ層の再構築
@@ -251,31 +532,26 @@ CREATE TABLE IF NOT EXISTS anime (
     episodes      INTEGER CHECK (episodes IS NULL OR episodes > 0),
     format        TEXT    CHECK (format IN ('TV','MOVIE','OVA','ONA','SPECIAL','MUSIC')),
     duration      INTEGER CHECK (duration IS NULL OR duration > 0),  -- 1話あたり分; production_scale の入力
-    start_date    TEXT,                                      -- ISO 8601 'YYYY-MM-DD' (string で保持)
-    end_date      TEXT,
+    start_date    TEXT    CHECK (start_date IS NULL OR start_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),  -- ISO 8601 'YYYY-MM-DD' (N-5 format 強制)
+    end_date      TEXT    CHECK (end_date   IS NULL OR end_date   GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
     status        TEXT    CHECK (status IN ('FINISHED','RELEASING','NOT_YET_RELEASED','CANCELLED','HIATUS') OR status IS NULL),
     source        TEXT,                                      -- 原作タイプ (ORIGINAL/MANGA/LIGHT_NOVEL 等)
     work_type     TEXT    CHECK (work_type IN ('tv','tanpatsu') OR work_type IS NULL),
     scale_class   TEXT    CHECK (scale_class IN ('large','medium','small') OR scale_class IS NULL),
-    mal_id        INTEGER,
-    anilist_id    INTEGER,
-    ann_id        INTEGER,
-    allcinema_id  INTEGER,
-    madb_id       TEXT,
-    updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(mal_id),
-    UNIQUE(anilist_id)
+    -- external ID 群は N-4 で anime_external_ids へ分離 (silver.anime からは削除)
+    updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 意図的に含めない (silver 層からの score 汚染防止):
 --   score, popularity, popularity_rank, favourites, mean_score
 --   description, cover_*, banner, site_url
 --   genres/tags/studios/synonyms (JSON) → 正規化テーブルへ
+--   mal_id/anilist_id/ann_id/allcinema_id/madb_id → anime_external_ids へ (N-4)
 
 CREATE INDEX IF NOT EXISTS idx_anime_year      ON anime(year);
 CREATE INDEX IF NOT EXISTS idx_anime_format    ON anime(format);
-CREATE INDEX IF NOT EXISTS idx_anime_anilist   ON anime(anilist_id);
 CREATE INDEX IF NOT EXISTS idx_anime_year_fmt  ON anime(year, format);  -- 年×フォーマット集計 hotpath
+-- idx_anime_anilist は anime_external_ids へ移動 (N-4)
 ```
 
 **新規正規化テーブル** (JSON 分解先、FK + 逆索引):
@@ -304,29 +580,31 @@ CREATE INDEX IF NOT EXISTS idx_anime_tags_tag ON anime_tags(tag_name, rank DESC,
 
 ```sql
 CREATE TABLE IF NOT EXISTS credits (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    person_id   TEXT    NOT NULL,
-    anime_id    TEXT    NOT NULL,
-    role        TEXT    NOT NULL,                 -- Role enum 24 種 (src/utils/role_groups.py)
-    raw_role    TEXT,                             -- 元ソースの生の役職名
-    episode     INTEGER CHECK (episode IS NULL OR episode > 0),
-                                                  -- NULL = 全話通し (作品レベル)
-                                                  -- 整数 = 特定話数 (話数指定クレジット)
-    source      TEXT    NOT NULL,                 -- 'anilist'/'ann'/'allcinema'/'seesaawiki'/'keyframe'
-    updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(person_id, anime_id, role, episode, source),   -- source を UNIQUE に追加 (同一 credit 同一 role を複数ソースから拾う場合がある)
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    person_id         TEXT    NOT NULL,
+    anime_id          TEXT    NOT NULL,
+    role              TEXT    NOT NULL REFERENCES roles(code),   -- N-2: roles lookup に FK
+    raw_role          TEXT,                              -- 元ソースの生の役職名
+    episode           INTEGER CHECK (episode IS NULL OR episode > 0),
+                                                         -- NULL = 全話通し (作品レベル)
+                                                         -- 整数 = 特定話数 (話数指定クレジット)
+    evidence_source   TEXT    NOT NULL REFERENCES sources(code), -- C-1/N-1: anime.source との名前衝突を解消
+    updated_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(person_id, anime_id, role, episode, evidence_source),
     FOREIGN KEY (person_id) REFERENCES persons(id),
     FOREIGN KEY (anime_id)  REFERENCES anime(id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_credits_person       ON credits(person_id);
-CREATE INDEX IF NOT EXISTS idx_credits_anime        ON credits(anime_id);
-CREATE INDEX IF NOT EXISTS idx_credits_role         ON credits(role);
-CREATE INDEX IF NOT EXISTS idx_credits_anime_role   ON credits(anime_id, role);     -- team 分析 hotpath
-CREATE INDEX IF NOT EXISTS idx_credits_person_src   ON credits(person_id, source);  -- entity resolution
+CREATE INDEX IF NOT EXISTS idx_credits_person           ON credits(person_id);
+CREATE INDEX IF NOT EXISTS idx_credits_anime            ON credits(anime_id);
+CREATE INDEX IF NOT EXISTS idx_credits_role             ON credits(role);
+CREATE INDEX IF NOT EXISTS idx_credits_anime_role       ON credits(anime_id, role);              -- team 分析 hotpath
+CREATE INDEX IF NOT EXISTS idx_credits_person_evidence  ON credits(person_id, evidence_source); -- entity resolution
 ```
 
-**注意**: 現 `credits.episode` は `DEFAULT -1` を sentinel に使っている。migration で `episode = -1` を `NULL` に書換える必要がある (Task 1-3 参照)。
+**注意**:
+- 現 `credits.episode` は `DEFAULT -1` を sentinel に使っている。migration で `episode = -1` を `NULL` に書換える必要がある (Task 1-3 参照)
+- `source` → `evidence_source` rename (C-1) はすべてのコード参照点で置換必要 (Task 1-3 に具体手順)
 
 **`scores` → `person_scores` リネーム**:
 
@@ -408,31 +686,91 @@ def get_display_genres(conn, anime_id: str) -> list[str]:
 - 関数 docstring に「分析に使うな」を明記
 - レポートコード内でこのヘルパーを呼んだ行は**必ず隣にコメント**で「表示用に参考値として取得」と記す (コードレビューの目印)
 
-### 2.3 Task 1-3: スキーマ migration v47→v48 (canonical rename + 正規化)
+### 2.3 Task 1-3: スキーマ migration v49→v50 (canonical rename + 正規化 + lookup 導入)
 
-**場所**: `src/database.py` の `_run_migrations()` 内。schema version を v47 → v48 に進める。
+**場所**: `src/database.py` の `_run_migrations()` 内。現 `SCHEMA_VERSION = 49` を `50` に進める (`_migrate_v50_canonical_silver` 関数として追加)。
 
 **方針** (destructive OK):
+
+Phase 1.4 の改善を**全て v50 で一度に**適用。後からやると参照箇所が倍になるものを先に倒す:
+
+- (C-1) `credits.source` → `credits.evidence_source` に rename
+- (N-1) `sources` lookup テーブル新設 + 5 ソースシード
+- (N-4) `anime_external_ids` / `person_external_ids` 新設し、silver anime/persons から ID カラム群を移行後 DROP
 - `anime_analysis` → `anime` に rename (canonical silver を確立)
-- legacy `anime` は DROP (必要データは既に `anime_analysis` に複製済みのはず。不足分は bronze から再充填)
-- `anime_display` は DROP (silver から display を完全撤去)
+- legacy `anime` は補填後 DROP
+- `anime_display` は DROP
 - `scores` → `person_scores` に rename
 - `credits.episode = -1` を `NULL` に書換
 - `anime_genres` / `anime_tags` を新設し bronze から展開
 - `PRAGMA foreign_keys = ON` を get_connection で ON に
+- (E-3) destructive 操作の前に `_archive_v49_{table}` でスナップショット
 
 **手順**:
 
 ```sql
 BEGIN TRANSACTION;
 
--- (0) legacy `anime` に anime_analysis が持たない行があれば補填 (破壊的 rename の前段)
---     anime_analysis に存在しない id を旧 anime から持ってくる
+-- (E-3) 破壊前スナップショット (ロールバック/検証用)。後日 scripts/maintenance/purge_archive.py で削除
+CREATE TABLE IF NOT EXISTS _archive_v49_anime          AS SELECT * FROM anime;
+CREATE TABLE IF NOT EXISTS _archive_v49_anime_display  AS SELECT * FROM anime_display;
+CREATE TABLE IF NOT EXISTS _archive_v49_anime_analysis AS SELECT * FROM anime_analysis;
+CREATE TABLE IF NOT EXISTS _archive_v49_credits        AS SELECT * FROM credits;
+CREATE TABLE IF NOT EXISTS _archive_v49_persons        AS SELECT * FROM persons;
+CREATE TABLE IF NOT EXISTS _archive_v49_scores         AS SELECT * FROM scores;
+
+-- (N-1) sources lookup テーブル新設
+CREATE TABLE IF NOT EXISTS sources (
+    code         TEXT PRIMARY KEY,
+    name_ja      TEXT NOT NULL,
+    base_url     TEXT NOT NULL,
+    license      TEXT NOT NULL,
+    added_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    retired_at   TIMESTAMP,
+    description  TEXT NOT NULL
+);
+INSERT OR IGNORE INTO sources (code, name_ja, base_url, license, description) VALUES
+    ('anilist',   'AniList',                   'https://anilist.co',               'proprietary', 'GraphQL で structured staff 情報が最も豊富'),
+    ('ann',       'Anime News Network',        'https://www.animenewsnetwork.com', 'proprietary', 'historical depth と職種粒度'),
+    ('allcinema', 'allcinema',                 'https://www.allcinema.net',        'proprietary', '邦画・OVA の網羅性'),
+    ('seesaawiki','SeesaaWiki',                'https://seesaawiki.jp',            'CC-BY-SA',    'fan-curated 詳細エピソード情報'),
+    ('keyframe',  'Sakugabooru/Keyframe',      'https://www.sakugabooru.com',      'CC',          'sakuga コミュニティ別名情報');
+
+-- (0) legacy `anime` に anime_analysis が持たない行を補填 (rename 前に)
 INSERT OR IGNORE INTO anime_analysis
     (id, title_ja, title_en, year, season, episodes, mal_id, anilist_id, updated_at)
 SELECT id, title_ja, title_en, year, season, episodes, mal_id, anilist_id, updated_at
-FROM anime  -- legacy
+FROM anime
 WHERE id NOT IN (SELECT id FROM anime_analysis);
+
+-- (N-4) anime_external_ids 新設 + 既存 ID カラムから移行
+CREATE TABLE IF NOT EXISTS anime_external_ids (
+    anime_id     TEXT NOT NULL,
+    source       TEXT NOT NULL REFERENCES sources(code),
+    external_id  TEXT NOT NULL,
+    PRIMARY KEY (anime_id, source),
+    UNIQUE (source, external_id),
+    FOREIGN KEY (anime_id) REFERENCES anime_analysis(id) ON DELETE CASCADE
+);
+INSERT OR IGNORE INTO anime_external_ids (anime_id, source, external_id)
+SELECT id, 'anilist',   CAST(anilist_id   AS TEXT) FROM anime_analysis WHERE anilist_id   IS NOT NULL
+UNION ALL SELECT id, 'mal',       CAST(mal_id       AS TEXT) FROM anime_analysis WHERE mal_id       IS NOT NULL
+UNION ALL SELECT id, 'ann',       CAST(ann_id       AS TEXT) FROM anime_analysis WHERE ann_id       IS NOT NULL
+UNION ALL SELECT id, 'allcinema', CAST(allcinema_id AS TEXT) FROM anime_analysis WHERE allcinema_id IS NOT NULL
+UNION ALL SELECT id, 'madb',      madb_id                     FROM anime_analysis WHERE madb_id      IS NOT NULL;
+-- 注意: 'mal' を sources に追加 INSERT しておく (上の seed に含めるか別途 INSERT)
+
+-- (N-4) person_external_ids 新設 + 既存 ID カラムから移行 (persons の ID カラムを要調査、同様に処理)
+CREATE TABLE IF NOT EXISTS person_external_ids (
+    person_id    TEXT NOT NULL,
+    source       TEXT NOT NULL REFERENCES sources(code),
+    external_id  TEXT NOT NULL,
+    PRIMARY KEY (person_id, source),
+    UNIQUE (source, external_id),
+    FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE CASCADE
+);
+-- 既存 persons テーブルの ID カラム (anilist_id, mal_id, ann_id 等) から同様に INSERT
+-- (カラム存在は PRAGMA table_info で動的検知、存在するもののみ移行)
 
 -- (1) legacy `anime` を DROP (silver から score 汚染源を消す)
 DROP TABLE anime;
@@ -440,7 +778,7 @@ DROP TABLE anime;
 -- (2) anime_display を DROP (silver から display 責務を完全撤去)
 DROP TABLE anime_display;
 
--- (3) 正規化テーブルを先に作成 (まだ無ければ)
+-- (3) 正規化テーブル anime_genres / anime_tags を作成
 CREATE TABLE IF NOT EXISTS anime_genres (
     anime_id   TEXT NOT NULL,
     genre_name TEXT NOT NULL,
@@ -478,30 +816,39 @@ WHERE json_extract(je.value, '$.name') IS NOT NULL;
 -- (5) credits.episode の sentinel -1 を NULL に正規化
 UPDATE credits SET episode = NULL WHERE episode = -1;
 
+-- (C-1) credits.source → credits.evidence_source にリネーム (SQLite 3.25+)
+ALTER TABLE credits RENAME COLUMN source TO evidence_source;
+
 -- (6) scores → person_scores にリネーム
 ALTER TABLE scores RENAME TO person_scores;
 
--- (7) 既存 anime_analysis を canonical 名 `anime` に rename
+-- (7) 既存 anime_analysis を canonical 名 `anime` に rename + 外部 ID カラムを DROP
 ALTER TABLE anime_analysis RENAME TO anime;
--- インデックスは自動追従するが、名前は idx_anime_analysis_* のまま残るので改名:
+-- N-4: anime テーブルから external ID カラムを削除 (anime_external_ids に移行済)
+ALTER TABLE anime DROP COLUMN mal_id;
+ALTER TABLE anime DROP COLUMN anilist_id;
+ALTER TABLE anime DROP COLUMN ann_id;
+ALTER TABLE anime DROP COLUMN allcinema_id;
+ALTER TABLE anime DROP COLUMN madb_id;
+-- index 名改名
 DROP INDEX IF EXISTS idx_anime_analysis_year;
 DROP INDEX IF EXISTS idx_anime_analysis_format;
 DROP INDEX IF EXISTS idx_anime_analysis_anilist;
 CREATE INDEX IF NOT EXISTS idx_anime_year     ON anime(year);
 CREATE INDEX IF NOT EXISTS idx_anime_format   ON anime(format);
-CREATE INDEX IF NOT EXISTS idx_anime_anilist  ON anime(anilist_id);
 CREATE INDEX IF NOT EXISTS idx_anime_year_fmt ON anime(year, format);
+CREATE INDEX IF NOT EXISTS idx_anime_ext_ids_source ON anime_external_ids(source, external_id);
 
--- (8) credits ホットパス index を追加
-CREATE INDEX IF NOT EXISTS idx_credits_anime_role  ON credits(anime_id, role);
-CREATE INDEX IF NOT EXISTS idx_credits_person_src  ON credits(person_id, source);
+-- (8) credits ホットパス index を追加 (C-1 で index 名も evidence_source に)
+CREATE INDEX IF NOT EXISTS idx_credits_anime_role      ON credits(anime_id, role);
+CREATE INDEX IF NOT EXISTS idx_credits_person_evidence ON credits(person_id, evidence_source);
 
--- (9) meta_lineage から source_display_allowed カラムを DROP
+-- (9) meta_lineage 更新: source_display_allowed DROP, description ADD
 ALTER TABLE meta_lineage DROP COLUMN source_display_allowed;
--- 代わりに description カラムを追加 (自己説明)
 ALTER TABLE meta_lineage ADD COLUMN description TEXT NOT NULL DEFAULT '';
 
-UPDATE schema_meta SET version = '48';
+-- (10) schema version を v50 に
+UPDATE schema_meta SET version = '50';
 
 COMMIT;
 ```
@@ -520,9 +867,11 @@ def get_connection(path: str = DEFAULT_DB_PATH) -> sqlite3.Connection:
 **注意**:
 - 全て 1 transaction 内で実行 (失敗時ロールバック)
 - migration は idempotent に: 各 DDL で実在チェック (`PRAGMA table_info`、`sqlite_master`) を噛ませ、既実行でも落ちないこと
+- `_archive_v49_*` は後日 `scripts/maintenance/purge_archive.py` で容量回収 (即 DROP しない = 検証に使える)
 - bronze (`src_anilist_anime.score` など) は**無変更**。score の復元が必要なら bronze から取れる
-- DROP TABLE `anime` / `anime_display` のリスク: FK 参照が壊れるテーブル (credits.anime_id, anime_studios.anime_id 等) は PRAGMA foreign_keys=OFF で実行するか、migration 完了後に FK を再張る
-- SQLite 3.35+ で `DROP COLUMN` 使用可能 (pixi で入る sqlite は 3.46+ なので問題なし)
+- DROP TABLE `anime` / `anime_display` の FK リスク: `PRAGMA foreign_keys = OFF;` の状態で migration 実行 → 末尾で ON に戻す
+- SQLite 3.25+ で `RENAME COLUMN`、3.35+ で `DROP COLUMN` 使用可能 (pixi で入る sqlite は 3.46+ なので問題なし)
+- Task 1-9 (roles lookup), 1-10 (person_aliases) は**本 v50 とは別の v51 migration**として切り出してもよい (テスト影響が集中しすぎないよう)
 
 ### 2.4 Task 1-4: ETL (`src/etl/integrate.py`) を修正
 
@@ -733,18 +1082,182 @@ class _AnalysisImportGuard:
 
 実装優先度は低い (4.x の lint を優先)。時間余裕があれば入れる。
 
-### 2.8 Phase 1 の完了判定
+### 2.8 Task 1-8: `sources` lookup テーブルと FK への切替 (N-1)
+
+**場所**: `src/database.py` の `init_db()` + Task 1-3 の v50 migration 内。
+
+**手順**:
+1. v50 migration で `sources` テーブル新設 + 5 ソース + `mal` をシード INSERT (Task 1-3 (N-1) 参照)
+2. `credits.evidence_source` を `REFERENCES sources(code)` 付きで再定義
+3. `anime_external_ids.source` / `person_external_ids.source` / `person_aliases.source` も同 FK
+4. 既存の CHECK 制約 (`CHECK (source IN (...))`) を**全削除**
+5. 新ソース追加時の手順を `CLAUDE.md` に追記:
+   > 新データソースを追加する場合は `INSERT INTO sources (code, name_ja, base_url, license, description) VALUES (...)` を 1 行追加すれば schema migration 不要。
+
+**ETL 側の影響**:
+- scraper が直接 `credits` を書く箇所で `evidence_source = '<code>'` を渡す (既存 `source` を rename するだけ)
+- 新規 scraper 追加時、sources 行が無ければ INSERT してから credits を書く (ETL 先頭に upsert 処理)
+
+### 2.9 Task 1-9: `roles` lookup テーブルと role_groups.py の DB 化 (N-2)
+
+**場所**: `src/database.py` + `src/utils/role_groups.py` + 新規 `scripts/maintenance/seed_roles.py`
+
+**手順**:
+1. v50 (または v51) migration で `roles` テーブル新設 (1.4 N-2 の DDL)
+2. `src/utils/role_groups.py` の 24 role + `_ROLE_WEIGHT` + 日本語ラベル (別途要取得) を seed_roles.py から INSERT
+3. `credits.role` を `REFERENCES roles(code)` の FK 付きに
+4. `role_groups.py` は**互換シム** (DB から毎回読むキャッシュ関数 `load_roles()` で返す) に変換。既存 import 継続
+   ```python
+   @lru_cache
+   def load_roles() -> dict[str, Role]:
+       conn = get_connection()
+       rows = conn.execute("SELECT code, name_ja, name_en, role_group, weight_default FROM roles").fetchall()
+       return {r["code"]: Role(**r) for r in rows}
+   DIRECTOR_ROLES = frozenset(r.code for r in load_roles().values() if r.role_group == 'director')
+   ```
+5. レポート render の役職ラベル翻訳を DB 由来に (`roles.name_ja` を使う)
+
+**利点**:
+- i18n が DB row 1 つで済む
+- 重み履歴化 (`feat_role_weights(role_code, formula_version, weight)`) が楽
+- テストが DB 初期化時の seed を確認するだけになる
+
+**注意**: このタスクは blast radius が広い (role 関連コードほぼ全てに触れる)。v50 から独立した v51 migration として切り出すのが安全。
+
+### 2.10 Task 1-10: `person_aliases` 正規化と entity resolution 証跡 (N-3)
+
+**場所**: `src/database.py` の v50 migration + `src/analysis/entity_resolution.py` (H3 により**ロジック不変**、記録追加のみ)
+
+**手順**:
+1. v50 migration で `person_aliases` テーブル新設 (1.4 N-3 の DDL)
+2. 既存 `persons.aliases` カラム (形式要確認: JSON / semicolon-sep) から ETL で 1 行ずつ展開
+3. entity resolution 実行時に merge 由来の alias (`exact_match` / `romaji` / `similarity` / `ai_assisted`) を `person_aliases` に追記。`source` カラムで出所を区別
+4. 既存 `persons.aliases` カラムは**当面維持** (後方互換)。Phase 2 完了後に DROP 検討
+5. レポートから `SELECT alias FROM person_aliases WHERE person_id = ?` で全別名を引ける API を `src/utils/display_lookup.py` に追加 (analysis から呼び出し禁止は変わらず)
+
+### 2.11 Task 1-11: `anime_external_ids` / `person_external_ids` 移行 (N-4)
+
+**場所**: `src/database.py` の v50 migration (Task 1-3 に具体手順含む)
+
+**追加作業** (migration 後):
+1. analysis / scraper / CLI が `anime.anilist_id`, `anime.mal_id` 等を直接参照している箇所を grep で列挙:
+   ```bash
+   rg '\banime\.(anilist_id|mal_id|ann_id|allcinema_id|madb_id)\b' src/ tests/ scripts/
+   ```
+2. 各参照を JOIN に書換:
+   ```sql
+   -- Before: SELECT score FROM src_anilist_anime WHERE anilist_id = ?
+   -- After:  SELECT s.score FROM src_anilist_anime s
+   --         JOIN anime_external_ids x ON x.external_id = CAST(s.anilist_id AS TEXT) AND x.source='anilist'
+   --         WHERE x.anime_id = ?
+   ```
+3. `src/utils/display_lookup.py` の `_anilist_id` helper を `anime_external_ids` 経由にリファクタ
+4. `Pydantic` 側の `AnimeAnalysis` から `anilist_id` 等を削除 (externalids は別 model or dict で持つ)
+
+### 2.12 Task 1-12: 宣言的 YAML スキーマと code-gen (E-1)
+
+**場所**: 新規 `schema/` ディレクトリ + `scripts/gen_schema.py`
+
+**優先度**: Phase 1 必須ではない (実装コスト大)。Phase 1 終盤 or Phase 2 と並行。ただし**将来の全改修の基盤**になるので早期導入推奨。
+
+**構成**:
+```
+schema/
+├── bronze/
+│   ├── src_anilist_anime.yaml
+│   ├── src_ann_credits.yaml
+│   └── ...
+├── silver/
+│   ├── anime.yaml
+│   ├── persons.yaml
+│   ├── credits.yaml
+│   ├── sources.yaml
+│   ├── roles.yaml
+│   └── ...
+├── gold/
+│   ├── meta_lineage.yaml
+│   ├── meta_common_person_parameters.yaml
+│   └── ...
+└── _shared/
+    └── types.yaml                   -- 再利用される CHECK 制約の共有 (ISO 日付フォーマット等)
+```
+
+**code-gen が生成するもの**:
+1. **DDL**: Python が YAML を読み、`init_db()` 内で `CREATE TABLE` を組み立てる。現在ハードコードの DDL を全削除
+2. **Pydantic model**: `src/models.py` のテーブル対応モデルを YAML から生成 (or 検証テストで同期チェック)
+3. **docs/DATA_DICTIONARY.md**: 全 column の意味・値域・FK を 1 枚マークダウン (V-1 の基盤)
+
+**最小 YAML 例** (`schema/silver/anime.yaml`):
+```yaml
+table: anime
+layer: silver
+description: |
+  正規化済み作品マスタ。1 row = 1 作品。
+  score/popularity/description は bronze (src_anilist_anime) のみに存在。
+columns:
+  id:
+    type: TEXT
+    primary_key: true
+    description: "'anilist:N' / 'ann:N' / 'keyframe:slug' 形式の合成 ID"
+  title_ja:
+    type: TEXT
+    nullable: false
+    default: "''"
+    description: 邦題
+  year:
+    type: INTEGER
+    nullable: true
+    description: 放送/公開年 (NULL = 未確定作品)
+    check: "year IS NULL OR year BETWEEN 1910 AND 2100"
+  format:
+    type: TEXT
+    nullable: true
+    check: "format IN ('TV','MOVIE','OVA','ONA','SPECIAL','MUSIC') OR format IS NULL"
+  start_date:
+    type: TEXT
+    nullable: true
+    check: "start_date IS NULL OR start_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'"
+    description: ISO 8601 YYYY-MM-DD
+indexes:
+  - name: idx_anime_year
+    columns: [year]
+  - name: idx_anime_year_fmt
+    columns: [year, format]
+    description: 年×フォーマット集計 hotpath
+```
+
+**検証**: tests に YAML schema と実 SQLite schema の差分検知テスト (`tests/test_schema_sync.py`) を追加。
+
+### 2.13 Phase 1 の完了判定
 
 以下がすべて満たされたら Phase 1 完了:
 
+**基本 silver 層**:
 - [ ] `PRAGMA table_info(anime);` で score / popularity / favourites / description / cover_* / banner カラムが**存在しない**
+- [ ] `PRAGMA table_info(anime);` で mal_id / anilist_id / ann_id / allcinema_id / madb_id が**存在しない** (N-4 で移行済)
 - [ ] `anime_genres`, `anime_tags` テーブルが作成され、データが入っている
 - [ ] `src/utils/display_lookup.py` が存在し、レポート層から呼び出し可
 - [ ] `src/etl/integrate.py` が silver に score 等を書かない
 - [ ] `scripts/maintenance/seed_medallion.py` が成功
+
+**正規化・拡張性 (Phase 1.4 追加)**:
+- [ ] `sources` テーブルが存在し、5 ソース + 'mal' がシード済み (N-1)
+- [ ] `credits.source` が **存在せず**、`credits.evidence_source` が REFERENCES sources(code) で設定済み (C-1)
+- [ ] `anime_external_ids` / `person_external_ids` テーブルが存在し、既存 ID が移行済み (N-4)
+- [ ] (任意) `roles` テーブルが存在し、24 role がシード済み (N-2)。`credits.role` が FK (v51 に切り出してもよい)
+- [ ] (任意) `person_aliases` テーブルが存在し、既存 aliases が移行済み (N-3)
+- [ ] (任意) `schema/*.yaml` が揃い、`scripts/gen_schema.py` が DDL を生成できる (E-1)
+- [ ] `PRAGMA foreign_keys = ON` が `get_connection()` で設定済み
+- [ ] `_archive_v49_*` テーブルが migration 後も残っている (E-3)
+- [ ] `start_date` / `end_date` カラムの CHECK 制約が ISO 日付フォーマット (N-5)
+
+**汚染検知**:
 - [ ] `rg '\ba\.score\b|\banime\.score\b' src/analysis/ src/pipeline_phases/` が 0 件 (コメント除く)
 - [ ] `rg 'from src\.utils\.display_lookup' src/analysis/ src/pipeline_phases/` が 0 件
-- [ ] 既存 1947 テストが green
+- [ ] `rg '\bcredits\.source\b' src/` が 0 件 (C-1 rename 後)
+
+**テスト・lint**:
+- [ ] 既存 1947 テストが green (+ 新規テスト追加)
 - [ ] `pixi run pipeline` が正常終了
 - [ ] `pixi run lint` が clean
 
@@ -949,6 +1462,98 @@ def method_note_from_lineage(self, table_name: str, conn) -> str:
 ```
 
 **効用**: v2 Philosophy の「method note 義務」を**レポートの書き手から取り除き**、データ層に記録された事実から自動生成される。手書き method note は禁止に。
+
+### 3.6 Task 2-6: `meta_entity_resolution_audit` テーブル (V-2)
+
+**目的**: 人物統合の理由を全 person について検証可能にする。defamation 防御の最大の切り札。
+
+**場所**: `src/database.py` に DDL 追加 (既存 v49 migration の拡張として、あるいは v50 migration に含める)
+
+**DDL**:
+```sql
+CREATE TABLE IF NOT EXISTS meta_entity_resolution_audit (
+    person_id          TEXT PRIMARY KEY,
+    canonical_name     TEXT NOT NULL,
+    merge_method       TEXT NOT NULL CHECK (merge_method IN
+        ('exact_match','cross_source','romaji','similarity','ai_assisted','manual')),
+    merge_confidence   REAL NOT NULL CHECK (merge_confidence BETWEEN 0 AND 1),
+    merged_from_keys   TEXT NOT NULL,                -- JSON array: ["anilist:123","ann:456"]
+    merge_evidence     TEXT NOT NULL,                -- 自然文: "Jaro-Winkler=0.97, 共作 3 本"
+    merged_at          TIMESTAMP NOT NULL,
+    reviewed_by        TEXT,                         -- NULL = automatic
+    reviewed_at        TIMESTAMP,
+    FOREIGN KEY (person_id) REFERENCES persons(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_era_method ON meta_entity_resolution_audit(merge_method, merge_confidence);
+```
+
+**運用**:
+- `src/analysis/entity_resolution.py` の各 step (exact_match / cross_source / romaji / similarity / ai_assisted) が merge を決定した時点で、**判断の証拠**を文字列化して `meta_entity_resolution_audit` に upsert
+- `merge_evidence` は自然文で残す (再実行時に構造化するのではなく、当時の判断を凍結)
+- `reviewed_by` + `reviewed_at` は人間レビューが入った場合のみ埋める
+- H3 (entity resolution ロジック不変) を侵さない **記録のみ** の追加なのでリスク低
+
+**lineage 登録**:
+```python
+conn.execute("""
+    INSERT OR REPLACE INTO meta_lineage
+        (table_name, audience, description, source_silver_tables, source_bronze_forbidden,
+         formula_version, computed_at, row_count, notes)
+    VALUES ('meta_entity_resolution_audit', 'technical_appendix',
+            '各人物の statistical identity を決定した判断根拠。法的レビュー時に merge_method と merge_evidence を参照。',
+            '["persons"]', 1, 'v1.0', CURRENT_TIMESTAMP,
+            (SELECT COUNT(*) FROM meta_entity_resolution_audit),
+            'legal defense layer; freeze of entity resolution decisions')
+""")
+```
+
+### 3.7 Task 2-7: `meta_lineage` の拡張 (E-2) + `feat_credit_consensus` (V-5)
+
+**E-2 lineage 拡張** (`meta_lineage` に再現性メタデータ追加):
+```sql
+ALTER TABLE meta_lineage ADD COLUMN rng_seed INTEGER;                        -- 確率的アルゴリズムの seed
+ALTER TABLE meta_lineage ADD COLUMN git_sha TEXT NOT NULL DEFAULT '';        -- 計算時の commit SHA
+ALTER TABLE meta_lineage ADD COLUMN inputs_hash TEXT NOT NULL DEFAULT '';    -- 入力 feat_* の内容 hash
+```
+
+各 meta_* を計算する関数の入口で:
+```python
+import subprocess, hashlib, json
+git_sha = subprocess.check_output(['git','rev-parse','HEAD']).decode().strip()
+inputs_hash = hashlib.sha256(json.dumps(input_summary, sort_keys=True).encode()).hexdigest()[:16]
+# upsert meta_lineage with git_sha / inputs_hash / rng_seed
+```
+
+**V-5 feat_credit_consensus** (複数ソース一致度の事前集計):
+```sql
+CREATE TABLE IF NOT EXISTS feat_credit_consensus (
+    person_id          TEXT NOT NULL,
+    anime_id           TEXT NOT NULL,
+    role               TEXT NOT NULL,
+    n_sources_agree    INTEGER NOT NULL,
+    sources_agree      TEXT NOT NULL,      -- JSON array: ["anilist","ann"]
+    consensus_score    REAL NOT NULL CHECK (consensus_score BETWEEN 0 AND 1),
+    PRIMARY KEY (person_id, anime_id, role)
+);
+```
+
+生成ロジック:
+```sql
+-- credits から (person, anime, role) ごとに evidence_source の count を取り score 化
+INSERT OR REPLACE INTO feat_credit_consensus
+SELECT person_id, anime_id, role,
+       COUNT(DISTINCT evidence_source) AS n_sources_agree,
+       json_group_array(DISTINCT evidence_source) AS sources_agree,
+       CASE COUNT(DISTINCT evidence_source)
+           WHEN 1 THEN 0.5
+           WHEN 2 THEN 0.75
+           ELSE 0.9 + 0.02 * (COUNT(DISTINCT evidence_source) - 2)
+       END AS consensus_score
+FROM credits
+GROUP BY person_id, anime_id, role;
+```
+
+レポート側では低 consensus credit を⚠️表示に使える (検証容易性の向上)。
 
 ---
 
@@ -1307,13 +1912,160 @@ repos:
         pass_filenames: false
 ```
 
-### 5.5 Phase 4 完了判定
+### 5.5 Task 4-5: `docs/DATA_DICTIONARY.md` 自動生成 (V-1)
 
+**目的**: 外部レビュアが schema + lineage を 1 枚のマークダウンで把握できる状態を保つ。
+
+**場所**: 新規 `scripts/export_data_dictionary.py`
+
+**入力**:
+- Task 1-12 (E-1) で作成する `schema/**/*.yaml` (無い場合は SQLite の `sqlite_master` + `PRAGMA table_info` から動的生成)
+- `meta_lineage` (テーブルの意味、CI/null_model/holdout 手法)
+
+**出力形式** (マークダウン 1 枚):
+```markdown
+# Animetor Eval Data Dictionary
+
+自動生成: 2026-04-19 10:00:00 JST
+対応 schema version: v50
+
+## 層別テーブル一覧
+
+### Silver (正規化済み, 分析用)
+- `anime` — 正規化済み作品マスタ
+- `persons` — 人物マスタ (canonical id + aliases 別テーブル)
+- `credits` — 作品×人物×役職 (evidence_source 必須)
+- ...
+
+## silver.anime
+**意味**: 正規化済み作品マスタ。1 row = 1 作品。
+**score/popularity は bronze のみ** (silver に含めない hard constraint)。
+
+| カラム | 型 | NULL | CHECK | 意味 |
+|--------|----|----|-------|------|
+| id | TEXT | NOT NULL | PK | 'anilist:N' / 'ann:N' 等 |
+| title_ja | TEXT | NOT NULL | — | 邦題 |
+| year | INTEGER | NULL 可 | year BETWEEN 1910 AND 2100 | 放送/公開年 |
+| ... | ... | ... | ... | ... |
+
+**インデックス**:
+- `idx_anime_year_fmt (year, format)` — 年×フォーマット集計 hotpath
+
+**FK**: —
+
+**lineage**: this table is pure silver (not in meta_lineage). 依存レポート経路は meta_* 経由のみ
+
+---
+
+## gold.meta_common_person_parameters
+**意味**: (meta_lineage.description から自動抽出)
+**source_silver_tables**: anime, credits, persons, feat_person_scores, feat_career
+**CI 方法**: bootstrap_n1000
+**Null model**: degree_preserving_rewiring_n500
+**git_sha**: ...
+**formula_version**: v2.0
+
+| カラム | ... |
+```
+
+**CI 連携**: pre-commit hook で re-generate し、diff があれば fail (schema 更新時は DATA_DICTIONARY.md も必ず同時 commit)
+
+### 5.6 Task 4-6: `meta_quality_snapshot` と前回比 anomaly 検知 (V-3)
+
+**目的**: scraping データ異常の早期警告。
+
+**場所**: `src/database.py` に DDL + `src/pipeline_phases/quality_snapshot.py` (新 phase)
+
+**DDL**:
+```sql
+CREATE TABLE IF NOT EXISTS meta_quality_snapshot (
+    computed_at    TIMESTAMP NOT NULL,
+    table_name     TEXT NOT NULL,
+    metric         TEXT NOT NULL,
+    value          REAL NOT NULL,
+    PRIMARY KEY (computed_at, table_name, metric)
+);
+CREATE INDEX IF NOT EXISTS idx_quality_snapshot_metric ON meta_quality_snapshot(table_name, metric, computed_at);
+```
+
+**計測メトリクス** (pipeline 毎回):
+```python
+metrics = [
+    ("anime",   "row_count",           SELECT COUNT(*) FROM anime),
+    ("anime",   "null_rate_year",      AVG(CASE WHEN year IS NULL THEN 1.0 ELSE 0.0 END) FROM anime),
+    ("anime",   "distinct_formats",    COUNT(DISTINCT format) FROM anime),
+    ("credits", "row_count",           SELECT COUNT(*) FROM credits),
+    ("credits", "unique_persons",      COUNT(DISTINCT person_id) FROM credits),
+    ("credits", "unique_anime",        COUNT(DISTINCT anime_id) FROM credits),
+    ("credits", "evidence_sources",    COUNT(DISTINCT evidence_source) FROM credits),
+    ("persons", "row_count",           ...),
+    ...
+]
+```
+
+**anomaly 検知** (`scripts/ci_check_quality_drift.py`):
+```python
+for (table, metric), group in last_30_days_grouped():
+    mean, std = group.mean, group.std
+    latest = group.latest
+    if abs(latest - mean) > 3 * std:
+        errors.append(f"{table}.{metric} drift: latest={latest}, mean={mean}, 3σ={3*std}")
+if errors:
+    raise SystemExit(errors)
+```
+
+CI で毎 pipeline 後に実行。新 scraping データで row_count が急減したら detect。
+
+### 5.7 Task 4-7: Statistical invariant テスト群 (V-4)
+
+**目的**: schema / unit test とは別の「結果の統計性質」レベルの検証。
+
+**場所**: `tests/test_gold_invariants.py` (新規)
+
+**テスト例**:
+```python
+def test_null_model_pvalues_uniform(meta_lineage_rows):
+    """null model で作った p 値が一様分布に従うか (Kolmogorov-Smirnov)。
+    大きく外れるなら null model の実装が壊れている可能性。
+    """
+    pvalues = conn.execute("SELECT null_model_p FROM meta_policy_gender").fetchall()
+    ks_stat, p = scipy.stats.kstest(pvalues, 'uniform')
+    assert p > 0.05, f"p-values deviate from uniform (KS p={p})"
+
+def test_meta_common_person_parameters_pct_range(conn):
+    """全 percentile 列が 0-100 に収まることを検証。"""
+    for col in ['scale_reach_pct', 'collab_width_pct', ...]:
+        row = conn.execute(f"SELECT MIN({col}), MAX({col}) FROM meta_common_person_parameters").fetchone()
+        assert 0 <= row[0] and row[1] <= 100, f"{col} out of range: {row}"
+
+def test_meta_biz_whitespace_cagr_sign(conn):
+    """CAGR と penetration の同時低下ジャンルが whitespace_score 上位に来ることを検証。"""
+    ...
+
+def test_meta_lineage_ci_method_required(conn):
+    """個人レベル推定の meta_* は必ず ci_method が非 NULL。"""
+    rows = conn.execute("""
+        SELECT table_name FROM meta_lineage
+        WHERE ci_method IS NULL AND audience IN ('policy','hr','biz')
+        AND table_name LIKE '%person%'
+    """).fetchall()
+    assert not rows, f"Individual-level tables missing CI method: {rows}"
+```
+
+### 5.8 Phase 4 完了判定
+
+**v2 gate (従来)**:
 - [ ] `scripts/lint_report_vocabulary.py` が存在し、禁止語を検出する
 - [ ] `scripts/report_generators/forbidden_vocab.yaml` が編集可能な形で存在
 - [ ] Section 構造 enforce が SectionBuilder.validate() で実装
 - [ ] `scripts/ci_check_lineage.py` が lineage を検証
 - [ ] pre-commit hook に 3 つ統合されている
+
+**検証容易性 gate (1.4 追加)**:
+- [ ] `scripts/export_data_dictionary.py` が `docs/DATA_DICTIONARY.md` を再生成 (V-1)
+- [ ] `meta_quality_snapshot` が毎 pipeline で snapshot を記録 (V-3)
+- [ ] `scripts/ci_check_quality_drift.py` が 3σ 超を検知 (V-3)
+- [ ] `tests/test_gold_invariants.py` で statistical invariant が green (V-4)
 - [ ] `pixi run lint && pixi run test && pre-commit run --all-files` が全て green
 
 ---
@@ -1326,18 +2078,20 @@ repos:
 Phase 1 (データ層) ─────────────────┐
    ├─ 1-1: silver anime DDL 再設計   │
    ├─ 1-2: display_lookup helper    ├─→ Phase 2 (gold 層)
-   ├─ 1-3: migration v47→v48        │    ├─ 2-1: meta_lineage
-   ├─ 1-4: ETL 修正 (FORBIDDEN guard)│    ├─ 2-2: meta_common_person_parameters
-   ├─ 1-5: analysis 層切替           │    ├─ 2-3: 各 audience meta_*
-   ├─ 1-6: Pydantic 分割             │    ├─ 2-4: feat_* 整理
-   └─ 1-7: import guard             │    └─ 2-5: Method Note 自動生成
-                                     │                 │
-                                     │                 ▼
-                                     │       Phase 3 (レポート再編)
-                                     │           ├─ 3-1: INVENTORY.md
-                                     │           ├─ 3-2: brief index
-                                     │           ├─ 3-3: 語彙置換
-                                     │           ├─ 3-4: 構造統一
+   ├─ 1-3: migration v49→v50        │    ├─ 2-1: meta_lineage
+   │       ├─ C-1 evidence_source   │    ├─ 2-2: meta_common_person_parameters
+   │       ├─ N-1 sources lookup    │    ├─ 2-3: 各 audience meta_*
+   │       ├─ N-4 external_ids 分離 │    ├─ 2-4: feat_* 整理 (+ V-5 consensus)
+   │       └─ E-3 archive snapshot  │    ├─ 2-5: Method Note 自動生成
+   ├─ 1-4: ETL 修正 (FORBIDDEN guard)│    ├─ 2-6: entity_resolution_audit (V-2)
+   ├─ 1-5: analysis 層切替           │    └─ 2-7: lineage 拡張 (E-2) + consensus
+   ├─ 1-6: Pydantic 分割             │                 │
+   ├─ 1-7: import guard              │                 ▼
+   ├─ 1-8: sources lookup (N-1)     │       Phase 3 (レポート再編)
+   ├─ 1-9: roles lookup (N-2; v51)  │           ├─ 3-1: INVENTORY.md
+   ├─ 1-10: person_aliases (N-3)    │           ├─ 3-2: brief index
+   ├─ 1-11: external_ids 参照置換    │           ├─ 3-3: 語彙置換
+   └─ 1-12: YAML schema SSoT (E-1)  │           ├─ 3-4: 構造統一
                                      │           └─ 3-5: archive 移動
                                      │                         │
                                      │                         ▼
@@ -1345,12 +2099,18 @@ Phase 1 (データ層) ─────────────────┐
                                              ├─ 4-1: 禁止語 lint
                                              ├─ 4-2: section enforce
                                              ├─ 4-3: lineage check
-                                             └─ 4-4: pre-commit
+                                             ├─ 4-4: pre-commit
+                                             ├─ 4-5: DATA_DICTIONARY (V-1)
+                                             ├─ 4-6: quality_snapshot (V-3)
+                                             └─ 4-7: statistical invariants (V-4)
 ```
 
 **並列化可能**:
 - Phase 1 の 1-3 完了後、Phase 2 の 2-1 (meta_lineage DDL) は開始可能
+- 1-9 (roles lookup, N-2) は blast radius 大のため v51 migration として独立切り出し可能
+- 1-12 (YAML schema, E-1) は実装コスト大。Phase 2 と並行推奨
 - Phase 4 の 4-1 (禁止語 lint) は Phase 3 を待たず開始可能 (語彙辞書の完成)
+- 4-5 (DATA_DICTIONARY) は 1-12 (YAML schema) 導入後に効果最大
 
 ### 6.2 commit 単位の粒度
 
