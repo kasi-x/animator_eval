@@ -1,0 +1,370 @@
+// Animetor Eval Database Schema (v54)
+// ====================================
+// 3-Layer Architecture: BRONZE (raw) → SILVER (canonical, score-free) → GOLD (precomputed)
+// 
+// SILVER is the authoritative layer for all scoring calculations.
+// BRONZE contains external data (AniList, MyAnimeList, etc.) with anime.score.
+// GOLD contains precomputed scores and analysis metadata.
+
+// =============================================================================
+// SILVER LAYER - Canonical Score-Free Core Data
+// =============================================================================
+// Used by: src/analysis/*, src/pipeline_phases/*
+// Constraint: Never contains anime.score, popularity, or other subjective metrics
+// Update frequency: Via scraper → BRONZE → SILVER ETL pipeline
+
+table anime {
+  id string [pk, note: "Unique anime identifier (format: 'anilist:ID' or 'mal:ID')"]
+  title_ja string [not null, note: "Japanese title (primary language)"]
+  title_en string [not null, note: "English/romanized title"]
+  year int [note: "Release year (can be NULL for incomplete data)"]
+  season string [note: "Season (winter|spring|summer|fall), NULL if unknown"]
+  episodes int [note: "Episode count, NULL for incomplete data"]
+  format string [note: "TV, Movie, OVA, Special, etc."]
+  status string [note: "Finished, OnGoing, Announced"]
+  start_date string [note: "YYYY-MM-DD format, NULL if unknown"]
+  end_date string [note: "YYYY-MM-DD format, NULL if ongoing/unknown"]
+  duration int [note: "Total duration in minutes (episodes × avg_episode_length)"]
+  source string [note: "Source data (AniList, MyAnimeList, SeesaaWiki, etc.)"]
+  quarter int [note: "Quarter (1-4) derived from season or start_date"]
+  work_type string [note: "Classification: tanpatsu (single), series, multi_season"]
+  scale_class string [note: "Scale tier: micro, small, medium, large, mega"]
+  updated_at timestamp [default: "CURRENT_TIMESTAMP"]
+}
+
+table persons {
+  id string [pk, note: "Unique person identifier"]
+  name_ja string [not null, note: "Japanese name (primary)"]
+  name_en string [not null, note: "English/romanized name"]
+  aliases string [not null, note: "JSON array of known aliases"]
+  mal_id int [note: "MyAnimeList person ID (external reference)"]
+  anilist_id int [note: "AniList person ID (external reference)"]
+  canonical_id string [note: "Canonical merged ID if this person is a duplicate"]
+  updated_at timestamp [default: "CURRENT_TIMESTAMP"]
+  image_large string
+  image_medium string
+  image_large_path string
+  image_medium_path string
+  date_of_birth string [note: "YYYY-MM-DD"]
+  age int
+  gender string [note: "M|F|Unknown"]
+  years_active string [note: "e.g. '2010-2023'"]
+  hometown string
+  blood_type string
+  description string
+  favourites int [note: "Popularity count from source"]
+  site_url string [note: "URL to profile on original source"]
+  madb_id string [note: "Media Arts Database ID"]
+  ann_id int [note: "ANN (Anime News Network) ID"]
+  allcinema_id int [note: "AllCinema ID"]
+}
+
+table credits {
+  id int [pk, increment]
+  person_id string [not null, note: "Foreign key to persons.id"]
+  anime_id string [not null, note: "Foreign key to anime.id"]
+  role string [not null, note: "Normalized role category"]
+  raw_role string [note: "Original role string from source"]
+  episode int [default: -1, note: "-1 = series-wide credit, else specific episode"]
+  evidence_source string [note: "Source of this credit (anilist|mal|seesaawiki|ann)"]
+  updated_at timestamp [default: "CURRENT_TIMESTAMP"]
+  credit_year int [note: "Year when credit was published"]
+  credit_quarter int [note: "Quarter when credit was published (1-4)"]
+}
+
+table roles {
+  code string [pk, note: "Internal role code (e.g., 'key_animator', 'director')"]
+  name_ja string [not null, note: "Japanese role name"]
+  name_en string [not null, note: "English role name"]
+  role_group string [not null, note: "Category: director|animator|sound|production|writer|voice_actor|other"]
+  weight_default float [not null, note: "Default commitment multiplier (0.0-3.0)"]
+  description_ja string [not null, note: "Full description of role responsibilities"]
+}
+
+table sources {
+  code string [pk, note: "Source identifier (anilist|mal|seesaawiki|ann|allcinema|madb)"]
+  name_ja string [not null, note: "Japanese source name"]
+  base_url string [not null, note: "Base URL of source"]
+  license string [not null, note: "License type (CC, proprietary, public-domain, etc.)"]
+  added_at timestamp [not null, default: "CURRENT_TIMESTAMP"]
+  retired_at timestamp [note: "If retired, when it was removed from pipeline"]
+  description string [not null, note: "Notes on data quality, coverage, and limitations"]
+}
+
+// Extended SILVER tables (entity normalization)
+table anime_external_ids {
+  anime_id string [pk, not null]
+  mal_id int
+  anilist_id int
+  ann_id int
+  allcinema_id int
+  seesaa_url string
+}
+
+table anime_genres {
+  anime_id string [not null]
+  genre string [not null]
+  source string [note: "Where this genre came from"]
+}
+
+table anime_tags {
+  anime_id string [not null]
+  tag string [not null]
+  weight float [note: "Popularity of tag"]
+}
+
+table person_aliases {
+  person_id string [pk, not null]
+  alias string [pk, not null, note: "Alternative name"]
+  language string [note: "Language context of alias"]
+}
+
+table person_ext_ids {
+  person_id string [pk, not null]
+  mal_id int
+  anilist_id int
+  ann_id int
+  allcinema_id int
+  madb_id string
+}
+
+// SILVER analysis snapshots (populated by phase 9)
+table anime_analysis {
+  anime_id string [pk, not null]
+  staff_count int [note: "Total unique staff on this work"]
+  director_count int
+  animator_count int
+  avg_animator_experience int [note: "Years active for average animator"]
+  key_animator_turnover_rate float [note: "Fraction of new key animators vs. repeat"]
+  production_scale_score int [note: "Normalized scale 0-100"]
+  // ... 18 more columns for analysis metrics
+}
+
+table anime_display {
+  anime_id string [pk, not null]
+  // 24 columns for visualization in reports
+  // (charts, sparklines, aggregated metrics)
+}
+
+// =============================================================================
+// BRONZE LAYER - Raw External Data (Score-Contaminated)
+// =============================================================================
+// Used only by: scrapers, ETL pipeline ingestion
+// Constraint: Never imported by src/analysis/* or src/pipeline_phases/*
+// Contains: anime.score, popularity, descriptions - all external fields
+
+table src_anilist_anime {
+  id int [pk]
+  anilist_id int
+  title_ja string
+  title_en string
+  year int
+  season string
+  episodes int
+  score float [note: "⚠️  USER RATINGS - PROHIBITED IN SCORING"]
+  popularity int [note: "⚠️  POPULARITY METRIC - PROHIBITED IN SCORING"]
+  status string
+  format string
+  start_date string
+  end_date string
+  description string
+  image_large string
+  image_medium string
+  // ... more external fields
+  fetched_at timestamp
+}
+
+table src_anilist_persons {
+  id int [pk]
+  anilist_id int
+  name_ja string
+  name_en string
+  age int
+  gender string
+  date_of_birth string
+  description string
+  image_large string
+  image_medium string
+  site_url string
+  favorites int
+  fetched_at timestamp
+}
+
+table src_anilist_credits {
+  id int [pk]
+  person_anilist_id int
+  anime_anilist_id int
+  role string
+  fetched_at timestamp
+}
+
+table src_mal_anime {
+  id int [pk]
+  mal_id int
+  title_ja string
+  title_en string
+  score float [note: "⚠️  USER RATINGS"]
+  rank int
+  popularity int [note: "⚠️  POPULARITY"]
+  episodes int
+  status string
+  aired_from string
+  aired_to string
+  source string
+  studios string
+  producers string
+  licensors string
+  // ... 20+ more external fields
+  fetched_at timestamp
+}
+
+table src_mal_persons {
+  id int [pk]
+  mal_id int
+  name_ja string
+  name_en string
+  // ... external fields
+  fetched_at timestamp
+}
+
+table src_mal_credits {
+  id int [pk]
+  person_mal_id int
+  anime_mal_id int
+  role string
+  fetched_at timestamp
+}
+
+// SeesaaWiki, ANN, AllCinema, MADB sources follow same pattern...
+// (tables: src_seesaawiki_*, src_ann_*, src_allcinema_*, src_madb_*)
+
+// =============================================================================
+// GOLD LAYER - Precomputed Scores & Metadata
+// =============================================================================
+// Read-only audit trail with formula metadata
+// Generated by: src/analysis/scoring/* modules
+// Used by: reports, API endpoints
+
+table scores {
+  id int [pk, increment]
+  person_id string [not null, note: "Foreign key to persons.id"]
+  anime_id string [note: "Foreign key to anime.id (optional for person-level scores)"]
+  person_fe float [note: "AKM person fixed effect (network position)"]
+  studio_fe_exposure float [note: "Average studio fixed effect (opportunity control)"]
+  birank float [note: "Bipartite PageRank (collaboration influence)"]
+  patronage float [note: "Repeat collaboration strength"]
+  dormancy float [note: "Multiplicative decay for inactive periods"]
+  awcc float [note: "Average weighted clustering coefficient"]
+  iv_score float [note: "Integrated Value = f(person_fe, birank, studio_fe, awcc, patronage) * dormancy"]
+  peer_percentile int [note: "Percentile within same role/cohort (0-100)"]
+  career_track string [note: "single_track|multi_track|in_transition"]
+  confidence_lower float [note: "95% CI lower bound (analytical SE)"]
+  confidence_upper float [note: "95% CI upper bound (analytical SE)"]
+  computed_at timestamp [not null]
+  formula_version string [note: "Reference to src/analysis/scoring/*.py formula identifier"]
+}
+
+table score_history {
+  id int [pk, increment]
+  person_id string [not null]
+  anime_id string
+  quarter string [note: "YYYY-Q1|Q2|Q3|Q4 (temporal snapshot)"]
+  // ... same columns as scores, plus temporal metadata
+  computed_at timestamp
+}
+
+table va_scores {
+  id int [pk, increment]
+  voice_actor_id string
+  anime_id string [note: "Anime this VA appeared in"]
+  role string [note: "Character name or role type"]
+  // Voice actor specific metrics
+  co_appearance_frequency int [note: "Times appeared with same character actor"]
+  character_centrality float
+  series_prominence float
+  computed_at timestamp
+}
+
+// GOLD metadata tables (audit trail)
+table meta_lineage {
+  id int [pk, increment]
+  report_name string [not null, note: "Name of report this formula is used in"]
+  formula_version string [not null, note: "e.g., 'akm_v2_2026'"]
+  component string [not null, note: "iv_score|person_fe|birank|etc."]
+  description_ja string
+  ci_method string [note: "How CI is computed (analytical_se|bootstrap|null_model)"]
+  null_model string [note: "Comparison baseline (random_graph|degree_null|etc.)"]
+  holdout_method string [note: "Validation approach (temporal_split|random_holdout|etc.)"]
+  row_count int [note: "Sample size used to fit formula"]
+  code_ref string [note: "File path in src/analysis/"]
+  git_commit string [note: "Commit where formula was last changed"]
+  updated_at timestamp [default: "CURRENT_TIMESTAMP"]
+}
+
+table meta_policy_attrition {
+  person_id string
+  anime_id string
+  cohort_id string
+  prediction_next_year_credit boolean [note: "Did they credit in next year? (holdout validation)"]
+  predicted_probability float [note: "Model's prediction"]
+  computed_at timestamp
+}
+
+table meta_policy_monopsony {
+  person_id string
+  primary_studio_id string
+  exposure_ratio float [note: "Work for primary studio / total work"]
+  market_concentration float [note: "HHI-based measure"]
+  computed_at timestamp
+}
+
+table meta_policy_gender_bottleneck {
+  person_id string
+  role string
+  gender string
+  cohort_percentile int [note: "Percentile within gender × role cohort"]
+  barrier_signal boolean [note: "Career progression interrupted?"]
+  computed_at timestamp
+}
+
+table meta_hr_career_stage {
+  person_id string
+  active_years int
+  experience_level string [note: "junior|mid|senior|veteran"]
+  career_trajectory string [note: "growth|stable|declining|irregular"]
+  next_milestone string [note: "e.g., 'first_directorship'"]
+  computed_at timestamp
+}
+
+// Feature tables (Phase 9 analysis outputs)
+table feat_person_scores {
+  person_id string [pk, not null]
+  network_position float
+  collaboration_density float
+  // ... 16 more features for clustering
+}
+
+table feat_network {
+  person_id string [pk, not null]
+  betweenness_centrality float
+  closeness_centrality float
+  eigenvector_centrality float
+  // ... graph topology features
+}
+
+table feat_career {
+  person_id string [pk, not null]
+  years_active int
+  year_first_credit int
+  year_last_credit int
+  annual_credit_trend float
+  // ... career trajectory features
+}
+
+// Relationships (for visualization and referential integrity)
+Ref: credits.person_id > persons.id
+Ref: credits.anime_id > anime.id
+Ref: credits.role > roles.code
+Ref: anime.source > sources.code
+Ref: scores.person_id > persons.id
+Ref: meta_lineage.report_name > meta_policy_attrition.person_id [note: "Audit trail linkage"]

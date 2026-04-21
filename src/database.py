@@ -127,9 +127,14 @@ def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
     if db_path is None:
         db_path = DEFAULT_DB_PATH
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(db_path), timeout=30.0)
+    # Check if new BEFORE connecting
+    is_new_db = not db_path.exists()
+    # Use autocommit mode (isolation_level=None) - set BEFORE connect to prevent locking
+    conn = sqlite3.connect(str(db_path), timeout=30.0, isolation_level=None)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA journal_mode=WAL")
+    # Only set WAL if DB already existed
+    if not is_new_db:
+        conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA foreign_keys=ON")
     return conn
 
@@ -159,9 +164,58 @@ def db_connection(
         conn.close()
 
 
+def _execute_sql_script(conn: sqlite3.Connection, script: str) -> None:
+    """Execute SQL script by parsing statements individually.
+    
+    Avoids executescript() which has locking issues with WAL mode.
+    """
+    statements = []
+    current = []
+    in_string = False
+    quote_char = None
+    
+    i = 0
+    while i < len(script):
+        char = script[i]
+        
+        if char == '-' and i + 1 < len(script) and script[i+1] == '-' and not in_string:
+            while i < len(script) and script[i] != '\n':
+                i += 1
+            i += 1
+            continue
+        
+        if char in ('"', "'", '`') and (i == 0 or script[i-1] != '\\'):
+            if not in_string:
+                in_string = True
+                quote_char = char
+            elif char == quote_char:
+                in_string = False
+                quote_char = None
+        
+        if char == ';' and not in_string:
+            current.append(char)
+            stmt = ''.join(current).strip()
+            if stmt:
+                statements.append(stmt)
+            current = []
+        else:
+            current.append(char)
+        
+        i += 1
+    
+    for stmt in statements:
+        if stmt and not stmt.startswith('--'):
+            conn.execute(stmt)
+            conn.commit()
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     """テーブルを作成する."""
-    conn.executescript("""
+    # Use autocommit mode (isolation_level=None) and custom SQL parser to avoid locking
+    old_isolation = conn.isolation_level
+    conn.isolation_level = None
+    try:
+        _execute_sql_script(conn, """
         CREATE TABLE IF NOT EXISTS persons (
             id TEXT PRIMARY KEY,
             name_ja TEXT NOT NULL DEFAULT '',
@@ -182,13 +236,13 @@ def init_db(conn: sqlite3.Connection) -> None:
             year INTEGER,
             season TEXT,
             episodes INTEGER,
-            mal_id INTEGER,
-            anilist_id INTEGER,
-            score REAL,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(mal_id),
-            UNIQUE(anilist_id)
+            start_date TEXT CHECK (
+                start_date IS NULL
+                OR start_date GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+            ),
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE INDEX IF NOT EXISTS idx_anime_year ON anime(year);
 
         CREATE TABLE IF NOT EXISTS credits (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -198,7 +252,6 @@ def init_db(conn: sqlite3.Connection) -> None:
             raw_role TEXT,
             episode INTEGER DEFAULT -1,
             source TEXT NOT NULL DEFAULT '',
-            evidence_source TEXT NOT NULL DEFAULT '',
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(person_id, anime_id, role, episode)
         );
@@ -1244,6 +1297,10 @@ def init_db(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_feat_cluster_studio
             ON feat_cluster_membership(studio_cluster_id);
     """)
+    finally:
+        # Restore isolation level and enable WAL
+        conn.isolation_level = old_isolation
+        conn.execute("PRAGMA journal_mode=WAL")
     conn.commit()
     _run_migrations(conn)
 

@@ -762,5 +762,56 @@ GraphMLエクスポート機能実装済み（`src/analysis/neo4j_export.py`）
 
 ---
 
-**Last Updated**: 2026-02-10
-**Version**: 1.0.0
+## スキーマ・リファレンス
+
+### Database Markup Language (DBML)
+
+完全なスキーマドキュメント: `docs/schema.dbml`
+
+DBML形式により、以下を可視化できます：
+- テーブル関係図（Entity Relationship Diagram）
+- 3層アーキテクチャ（BRONZE/SILVER/GOLD）
+- データ型と制約
+- 外部キー関係
+
+**DBMLの閲覧**: [DBDiagram.io](https://dbdiagram.io) にuploadして可視化
+
+### テーブル分類
+
+#### SILVER Layer (84 tables, 3 categories)
+**コア (5 tables)**: `anime`, `persons`, `credits`, `roles`, `sources`
+**拡張 (5 tables)**: `anime_external_ids`, `anime_genres`, `anime_tags`, `person_aliases`, `person_ext_ids`
+**分析 (2 tables)**: `anime_analysis`, `anime_display`
+
+#### BRONZE Layer (13 tables)
+**データソース**: `src_anilist_*`, `src_mal_*`, `src_seesaawiki_*`, `src_ann_*`, `src_allcinema_*`, `src_madb_*`
+⚠️ Contains anime.score, popularity - NEVER used in scoring formulas
+
+#### GOLD Layer (17+ tables)
+**スコア (3 tables)**: `scores`, `score_history`, `va_scores`
+**メタ (17 tables)**: `meta_*` (formula lineage, policy analysis outputs)
+**特徴 (17 tables)**: `feat_*` (clustering features for Phase 9)
+
+### 重要な設計決定
+
+1. **SILVER-onlyスコアリング**: `src/analysis/*` は SILVER層のみを読取
+   - Exception: `src/utils/display_lookup.py` (UI表示用のBRONZEアクセス)
+   
+2. **Audit Trail**: `meta_lineage` テーブル記録
+   - formula_version, ci_method, null_model, holdout_method
+   - inputs_hash (入力データ変更検出)
+   - git_commit (どのコード版で計算したか)
+
+3. **Confidence Intervals**: 全個人別スコアに必須
+   - `scores.confidence_lower`, `scores.confidence_upper`
+   - 95% CI (analytical SE = sigma/sqrt(n))
+
+4. **バージョン管理**: SQLiteマイグレーション (v1-v54)
+   - Phase 4までに v54スキーマ確定
+   - 以降の破壊的変更は v55+
+
+---
+
+**Last Updated**: 2026-04-21
+**Version**: 1.1.0
+**Schema**: v54
