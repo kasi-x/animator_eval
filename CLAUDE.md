@@ -243,6 +243,79 @@ animetor_eval/
 - SQLite WAL mode (storage)
 - ruff (lint/format), pytest (tests)
 
+## Schema Management (SQLModel + Atlas)
+
+The project uses **SQLModel + Atlas** for schema-as-code and automated migrations:
+
+### Single Source of Truth
+
+- **`src/models_v2.py`**: 37 SQLModel table definitions (SILVER, BRONZE, GOLD layers)
+  - All constraints, foreign keys, indexes defined in Python
+  - Never scatter DDL — always update SQLModel first
+  - Version controlled and peer reviewable
+
+### 3-Layer Architecture (Detailed)
+
+#### BRONZE Layer (Source Data)
+Raw external data from scrapers, **includes anime.score**:
+- `src_anilist_anime`, `src_anilist_credits`, `src_anilist_persons` — AniList GraphQL
+- `src_ann_*` — Anime News Network
+- `src_allcinema_*` — AllCinema
+- `src_seesaawiki_*` — SeesaaWiki
+- `src_mal_anime`, `src_mal_characters` — MyAnimeList
+- `src_madb_anime` — MADB (Japanese production database)
+
+**Data policy**: Immutable snapshots of external sources. Retained for audit trail and historical comparison. Never used for scoring.
+
+#### SILVER Layer (Canonical Data)
+Normalized, integrated, **score-free** data for all computations:
+- **Core**: `anime`, `persons`, `credits`, `studios`, `anime_studios`
+- **Lookup tables**: `roles` (24 standard roles), `sources` (5 data sources)
+- **Relationships**: `anime_genres`, `anime_tags`, `anime_relations`, `characters`, `character_voice_actors`
+- **Normalization**: `anime_external_ids`, `person_external_ids`, `person_aliases`
+- **Metadata**: `analysis`, `display_lookup`, `ext_ids`
+
+**Key constraint**: NO anime.score / popularity / favourites / description in SILVER. These live only in BRONZE.
+
+#### GOLD Layer (Analysis Output)
+Precomputed metrics for reporting (one row per person-audience combination):
+- **Aggregation**: `agg_genre_affinity`, `agg_role_ecosystem`, `agg_studio_team_composition`
+- **Features**: `feat_career_dynamics`, `feat_network_centrality` (+ 15+ more from existing pipeline)
+- **Metadata**: `meta_policy_score`, `meta_hr_observation` (+ 10+ audience-specific tables)
+- **Audit**: `meta_lineage` (formula version, CI method, null model, holdout validation, inputs hash)
+
+**Data policy**: Computed from SILVER layer only. One write per pipeline run. Read by report generators and API.
+
+### Display Lookup (Bronze ↔ Report Access)
+
+Reports need anime.score, description, images (from BRONZE) for display. Use helper:
+
+```python
+# reports/person_card.py
+from src.utils.display_lookup import get_display_metadata
+
+display = get_display_metadata(anime_id, 'anilist')  # ← Only path from SILVER to BRONZE
+return {
+    'score': display['score'],  # From BRONZE
+    'description': display['description'],  # From BRONZE
+    'person_fe': person_scores['theta_i'],  # From GOLD (computed from SILVER)
+}
+```
+
+**Rule**: Analysis code (`src/analysis/`+) never imports `display_lookup`. Reports only.
+
+### Automated Migrations
+
+- **`atlas.hcl`**: Atlas configuration (dev/prod environments)
+- **`migrations/v55_add_gold_layer.sql`**: Generated migration for GOLD tables
+- **Future**: `pixi run python -m atlas migrate diff` auto-generates new migrations
+- **Idempotency**: All migration statements use `IF NOT EXISTS`
+
+### Generated Documentation
+
+- **`docs/schema.dbml`**: DBDiagram.io-compatible ER diagram (auto-generated via `scripts/generate_dbml.py`)
+- **`docs/DATA_DICTIONARY.md`**: Column-level documentation (auto-generated from SQLModel)
+
 ## Legal Constraints
 
 These are hard requirements, not suggestions:
