@@ -21,6 +21,11 @@ test = "pytest tests/ -v"
 lint = "ruff check src/ tests/"
 format = "ruff format src/ tests/"
 
+# Database schema management
+schema-inspect = "atlas schema inspect sqlite://./data/animetor.db --format hcl"
+schema-diff = "atlas schema diff --env dev"
+schema-lint = "atlas schema lint --env dev"
+
 # Benchmarks
 bench = "python benchmarks/bench_pipeline.py"
 
@@ -91,6 +96,14 @@ econml = ">=0.16.0"
 fastapi = ">=0.100"
 uvicorn = {version = ">=0.20", extras = ["standard"]}
 slowapi = ">=0.1.9"
+sqlmodel = ">=0.0.14"
+
+# ============================================================================
+# Feature: db — Database schema management (SQLModel + Atlas)
+# ============================================================================
+[feature.db.pypi-dependencies]
+sqlalchemy = ">=2.0"
+atlas-provider-sqlalchemy = ">=0.1"
 
 # ============================================================================
 # Feature: dev — testing, linting, notebooks
@@ -133,12 +146,12 @@ neo4j = ">=5.0"
 # ============================================================================
 [environments]
 # default: everything (development, testing, CI)
-default = ["scrape", "analysis", "api", "dev", "rust", "neo4j"]
+default = ["scrape", "analysis", "api", "dev", "rust", "neo4j", "db"]
 # scrape: minimal env for running scrapers only
 scrape = ["scrape"]
 # analysis: pipeline + scoring (no scrapers, no API server)
 analysis = ["analysis"]
 # serve: API server with analysis backend
-serve = ["analysis", "api"]
+serve = ["analysis", "api", "db"]
 # viz: analysis + Julia/CairoMakie SVG generation
 viz = ["analysis", "viz"]

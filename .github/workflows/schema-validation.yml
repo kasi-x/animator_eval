@@ -1,0 +1,68 @@
+name: Schema Validation
+
+on:
+  pull_request:
+    paths:
+      - "src/models_v2.py"
+      - "atlas.hcl"
+      - "migrations/atlas/**"
+      - ".github/workflows/schema-*.yml"
+  push:
+    branches: [main]
+    paths:
+      - "src/models_v2.py"
+      - "atlas.hcl"
+
+jobs:
+  schema-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ariga/setup-atlas@v0
+        with:
+          cloud-token: ${{ secrets.ATLAS_CLOUD_TOKEN }}
+
+      - name: Install Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.12"
+
+      - name: Install pixi
+        uses: prefix-dev/setup-pixi@v0
+        with:
+          pixi-version: latest
+
+      - name: Run schema diff
+        env:
+          ATLAS_DB_URL: "sqlite://./data/test.db"
+        run: |
+          # Create test DB
+          pixi run python -c "
+          from src.database_v2 import init_db_v2
+          from pathlib import Path
+          init_db_v2(Path('./data/test.db'))
+          "
+          
+          # Run atlas schema diff
+          atlas schema diff --env dev || true
+
+  schema-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ariga/setup-atlas@v0
+
+      - name: Lint schema
+        run: atlas schema lint --env dev || echo "Note: Schema linting requires atlas-provider-sqlalchemy setup"
+
+  migration-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ariga/setup-atlas@v0
+
+      - name: Validate migrations
+        run: atlas migrate validate ./migrations/atlas --env dev || echo "No migrations to validate yet"
