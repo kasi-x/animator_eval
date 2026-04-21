@@ -391,8 +391,152 @@ class MetaLineage(SQLModel, table=True):
     )
 
 
-# Note: Additional GOLD tables (meta_policy_*, feat_*, agg_*) to be added
-# as schema evolves. Template structure established above.
+class MetaPolicyScore(SQLModel, table=True):
+    """Scoring policy metadata: decision points, weights, thresholds."""
+
+    __tablename__ = "meta_policy_score"
+
+    id: Optional[int] = Field(primary_key=True, default=None)
+    policy_version: str = Field(description="Scoring policy version (e.g., 'v1.0')")
+    score_type: str = Field(description="Which score type (authority, trust, etc)")
+    component_name: str = Field(description="Component name (e.g., 'pagerank_weight')")
+    component_value: str = Field(description="Parameter value (may be JSON)")
+    rationale: Optional[str] = Field(default=None, description="Why this value was chosen")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "policy_version",
+            "score_type",
+            "component_name",
+            name="uq_policy_component",
+        ),
+    )
+
+
+class MetaHRObservation(SQLModel, table=True):
+    """Human Resource observations for labor economics analysis."""
+
+    __tablename__ = "meta_hr_observation"
+
+    id: Optional[int] = Field(primary_key=True, default=None)
+    person_id: str = Field(foreign_key="persons.id")
+    observation_type: str = Field(
+        description="Type (salary, role_change, studio_change, etc)"
+    )
+    observation_value: Optional[str] = Field(default=None, description="Value or category")
+    source: Optional[str] = Field(default=None, description="Evidence source")
+    year: Optional[int] = Field(default=None, description="Year of observation")
+    confidence: Optional[float] = Field(default=None, ge=0, le=1)
+    recorded_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class FeatCreditContribution(SQLModel, table=True):
+    """Feature: Credit contribution metrics."""
+
+    __tablename__ = "feat_credit_contribution"
+
+    id: Optional[int] = Field(primary_key=True, default=None)
+    person_id: str = Field(foreign_key="persons.id")
+    year: int = Field(description="Calendar year")
+    total_credits: int = Field(description="Total credits this year")
+    unique_works: int = Field(description="Number of unique anime/works")
+    unique_studios: int = Field(description="Number of unique studios")
+    avg_role_weight: Optional[float] = Field(default=None)
+    computed_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("person_id", "year", name="uq_contrib_person_year"),
+    )
+
+
+class FeatNetworkCentrality(SQLModel, table=True):
+    """Feature: Network centrality measures."""
+
+    __tablename__ = "feat_network_centrality"
+
+    id: Optional[int] = Field(primary_key=True, default=None)
+    person_id: str = Field(foreign_key="persons.id")
+    betweenness: Optional[float] = Field(default=None, description="Betweenness centrality")
+    closeness: Optional[float] = Field(default=None, description="Closeness centrality")
+    eigenvector: Optional[float] = Field(default=None, description="Eigenvector centrality")
+    degree: Optional[int] = Field(default=None, description="Network degree")
+    computed_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("person_id", name="uq_centrality_person"),
+    )
+
+
+class FeatCareerDynamics(SQLModel, table=True):
+    """Feature: Career progression and mobility."""
+
+    __tablename__ = "feat_career_dynamics"
+
+    id: Optional[int] = Field(primary_key=True, default=None)
+    person_id: str = Field(foreign_key="persons.id")
+    career_start_year: Optional[int] = Field(default=None)
+    career_end_year: Optional[int] = Field(default=None)
+    role_changes: int = Field(default=0, description="Number of distinct roles held")
+    studio_switches: int = Field(default=0, description="Number of studio changes")
+    dormancy_periods: int = Field(default=0, description="Gaps in active years")
+    computed_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("person_id", name="uq_dynamics_person"),
+    )
+
+
+class AggStudioTeamComposition(SQLModel, table=True):
+    """Aggregation: Studio team composition by year/role."""
+
+    __tablename__ = "agg_studio_team_composition"
+
+    id: Optional[int] = Field(primary_key=True, default=None)
+    studio_id: Optional[str] = Field(default=None)
+    year: int = Field()
+    role: str = Field(foreign_key="roles.code")
+    person_count: int = Field(description="Number of distinct persons")
+    avg_person_score: Optional[float] = Field(default=None)
+    computed_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("studio_id", "year", "role", name="uq_team_studio_year_role"),
+    )
+
+
+class AggGenreAffinity(SQLModel, table=True):
+    """Aggregation: Person-genre affinity matrix."""
+
+    __tablename__ = "agg_genre_affinity"
+
+    id: Optional[int] = Field(primary_key=True, default=None)
+    person_id: str = Field(foreign_key="persons.id")
+    genre: str = Field(description="Anime genre")
+    work_count: int = Field(description="Works in this genre")
+    avg_role_weight: Optional[float] = Field(default=None)
+    computed_at: datetime = Field(default_factory=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("person_id", "genre", name="uq_affinity_person_genre"),
+    )
+
+
+class AggRoleEcosystem(SQLModel, table=True):
+    """Aggregation: Role-level ecosystem statistics."""
+
+    __tablename__ = "agg_role_ecosystem"
+
+    id: Optional[int] = Field(primary_key=True, default=None)
+    role: str = Field(foreign_key="roles.code", primary_key=True)
+    year: int = Field(primary_key=True)
+    total_persons: int = Field()
+    active_persons: int = Field(description="Persons with at least 1 credit this year")
+    avg_credits_per_person: Optional[float] = Field(default=None)
+    median_salary_estimate: Optional[float] = Field(
+        default=None, description="(if available from HR sources)"
+    )
+    computed_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 # =============================================================================
@@ -417,6 +561,179 @@ class SchemaMeta(SQLModel, table=True):
     version: str = Field(primary_key=True, description="Schema version (e.g., '54')")
     applied_at: datetime = Field(default_factory=datetime.utcnow)
     description: Optional[str] = Field(default=None)
+
+
+# =============================================================================
+# BRONZE LAYER: Raw External Data (13 tables)
+# =============================================================================
+# Each BRONZE table mirrors raw API responses from external sources.
+# anime.score is stored here (NEVER in SILVER layer).
+# These tables are appended to, never deleted from (audit trail).
+
+
+class SrcAnimelistAnime(SQLModel, table=True):
+    """Raw AniList anime data (https://anilist.co)."""
+
+    __tablename__ = "src_anilist_anime"
+
+    anilist_id: int = Field(primary_key=True)
+    title_ja: Optional[str] = Field(default=None)
+    title_en: Optional[str] = Field(default=None)
+    year: Optional[int] = Field(default=None)
+    season: Optional[str] = Field(default=None)
+    episodes: Optional[int] = Field(default=None)
+    format: Optional[str] = Field(default=None)
+    status: Optional[str] = Field(default=None)
+    score: Optional[float] = Field(default=None, description="Viewer rating 0-100 (NEVER use in scoring)")
+    popularity: Optional[int] = Field(default=None)
+    popularity_rank: Optional[int] = Field(default=None)
+    favourites: Optional[int] = Field(default=None)
+    mean_score: Optional[float] = Field(default=None)
+    genres: Optional[str] = Field(default=None, description="JSON array of genres")
+    tags: Optional[str] = Field(default=None, description="JSON array of tags with rank")
+    studios: Optional[str] = Field(default=None, description="JSON array of studio names")
+    source: Optional[str] = Field(default=None)
+    start_date: Optional[str] = Field(default=None)
+    end_date: Optional[str] = Field(default=None)
+    description: Optional[str] = Field(default=None)
+    cover_image_url: Optional[str] = Field(default=None)
+    banner_image_url: Optional[str] = Field(default=None)
+    site_url: Optional[str] = Field(default=None)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SrcAnimelistPersons(SQLModel, table=True):
+    """Raw AniList person data."""
+
+    __tablename__ = "src_anilist_persons"
+
+    anilist_id: int = Field(primary_key=True)
+    name: Optional[str] = Field(default=None)
+    name_ja: Optional[str] = Field(default=None)
+    name_en: Optional[str] = Field(default=None)
+    description: Optional[str] = Field(default=None)
+    image_url: Optional[str] = Field(default=None)
+    site_url: Optional[str] = Field(default=None)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SrcAnimelistCredits(SQLModel, table=True):
+    """Raw AniList staff credits."""
+
+    __tablename__ = "src_anilist_credits"
+
+    id: Optional[int] = Field(primary_key=True, default=None)
+    anilist_anime_id: int = Field(foreign_key="src_anilist_anime.anilist_id")
+    anilist_person_id: int = Field(foreign_key="src_anilist_persons.anilist_id")
+    role: str = Field(description="Raw role from AniList")
+    sub_role: Optional[str] = Field(default=None)
+
+
+class SrcAnnAnime(SQLModel, table=True):
+    """Raw Anime News Network anime data."""
+
+    __tablename__ = "src_ann_anime"
+
+    ann_id: str = Field(primary_key=True)
+    title: Optional[str] = Field(default=None)
+    title_ja: Optional[str] = Field(default=None)
+    episodes: Optional[int] = Field(default=None)
+    type: Optional[str] = Field(default=None)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SrcAnnPersons(SQLModel, table=True):
+    """Raw ANN person data."""
+
+    __tablename__ = "src_ann_persons"
+
+    ann_id: str = Field(primary_key=True)
+    name: Optional[str] = Field(default=None)
+
+
+class SrcAnnCredits(SQLModel, table=True):
+    """Raw ANN staff credits."""
+
+    __tablename__ = "src_ann_credits"
+
+    id: Optional[int] = Field(primary_key=True, default=None)
+    ann_anime_id: str = Field(foreign_key="src_ann_anime.ann_id")
+    ann_person_id: str = Field(foreign_key="src_ann_persons.ann_id")
+    role: Optional[str] = Field(default=None)
+
+
+class SrcAllcinemaAnime(SQLModel, table=True):
+    """Raw allcinema anime data (日本映画)."""
+
+    __tablename__ = "src_allcinema_anime"
+
+    allcinema_id: str = Field(primary_key=True)
+    title: Optional[str] = Field(default=None)
+    title_ja: Optional[str] = Field(default=None)
+    year: Optional[int] = Field(default=None)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SrcAllcinemaPersons(SQLModel, table=True):
+    """Raw allcinema person data."""
+
+    __tablename__ = "src_allcinema_persons"
+
+    allcinema_id: str = Field(primary_key=True)
+    name: Optional[str] = Field(default=None)
+
+
+class SrcAllcinemaCredits(SQLModel, table=True):
+    """Raw allcinema staff credits."""
+
+    __tablename__ = "src_allcinema_credits"
+
+    id: Optional[int] = Field(primary_key=True, default=None)
+    allcinema_anime_id: str = Field(foreign_key="src_allcinema_anime.allcinema_id")
+    allcinema_person_id: str = Field(foreign_key="src_allcinema_persons.allcinema_id")
+    role: Optional[str] = Field(default=None)
+
+
+class SrcSeesaawikiAnime(SQLModel, table=True):
+    """Raw SeesaaWiki anime data (fan-curated episode info)."""
+
+    __tablename__ = "src_seesaawiki_anime"
+
+    seesaawiki_id: str = Field(primary_key=True)
+    title: Optional[str] = Field(default=None)
+    episodes_data: Optional[str] = Field(default=None, description="JSON episode-level staff info")
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SrcMalAnime(SQLModel, table=True):
+    """Raw MyAnimeList anime data."""
+
+    __tablename__ = "src_mal_anime"
+
+    mal_id: int = Field(primary_key=True)
+    title: Optional[str] = Field(default=None)
+    title_ja: Optional[str] = Field(default=None)
+    episodes: Optional[int] = Field(default=None)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+class SrcMalCharacters(SQLModel, table=True):
+    """Raw MAL character data (optional)."""
+
+    __tablename__ = "src_mal_characters"
+
+    mal_id: int = Field(primary_key=True)
+    name: Optional[str] = Field(default=None)
+
+
+class SrcMadbAnime(SQLModel, table=True):
+    """Raw MADB (移動教室) anime data."""
+
+    __tablename__ = "src_madb_anime"
+
+    madb_id: str = Field(primary_key=True)
+    title: Optional[str] = Field(default=None)
+    updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 # =============================================================================
