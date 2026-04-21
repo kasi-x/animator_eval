@@ -214,6 +214,7 @@ def init_db(conn: sqlite3.Connection) -> None:
     # Use autocommit mode (isolation_level=None) and custom SQL parser to avoid locking
     old_isolation = conn.isolation_level
     conn.isolation_level = None
+    conn.commit()  # Ensure clean state before autocommit
     try:
         _execute_sql_script(conn, """
         CREATE TABLE IF NOT EXISTS persons (
@@ -1298,10 +1299,11 @@ def init_db(conn: sqlite3.Connection) -> None:
             ON feat_cluster_membership(studio_cluster_id);
     """)
     finally:
+        # Ensure all transactions are committed before restoring isolation level
+        conn.commit()
         # Restore isolation level and enable WAL
         conn.isolation_level = old_isolation
         conn.execute("PRAGMA journal_mode=WAL")
-    conn.commit()
     _run_migrations(conn)
 
 

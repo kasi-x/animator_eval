@@ -348,7 +348,7 @@ class DisplayLookup(SQLModel, table=True):
 class PersonScores(SQLModel, table=True):
     """Person scores and fixed effects (SILVER -> GOLD)."""
 
-    __tablename__ = "person_scores"
+    __tablename__ = "scores"
 
     id: Optional[int] = Field(primary_key=True, default=None)
     person_id: str = Field(foreign_key="persons.id")
