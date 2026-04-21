@@ -49,9 +49,9 @@ class BizBriefIndexReport(BaseReportGenerator):
 coverage × density × V_G 独立ユニット指標を提供する。</p>
 
 <p>これらは機会の存在を示す記述的指標であり、事業成功を保証するものではない。
-本 brief は個人の能力・適性の評価ではなく、市場構造と協業ネットワークの
-記述である / The brief surfaces structural signals of untried
-opportunities; they do not guarantee success and they do not assess
+本 brief はネットワーク位置・協業パターンの記述であり、個人のクレジット密度や
+ネットワーク構造の評価であり、市場構造と協業ネットワークの分析である / 
+The brief surfaces structural signals of untried opportunities; they do not guarantee success and they do not assess
 individual performance.</p>
 
 <p>anime.score (視聴者評価) は全 biz テーブルの算出に使用していない /

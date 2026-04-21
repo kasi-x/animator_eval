@@ -28,6 +28,36 @@ Animetor Evalはアニメ業界の制作者を**ネットワーク科学**の手
 4. **保守性**: 小さな関数（<100行）、明確な責務分離
 5. **法的配慮**: 信用毀損リスクを考慮した保守的な名寄せ
 
+### データベース3層モデル (v53-v54)
+
+Animetor Evalは**3層データベースアーキテクチャ**を採用しており、データの源泉から分析出力まで、各層で異なるデータ品質・スコープを保証します：
+
+#### BRONZE層（生データ、未加工）
+- **テーブル**: `src_anilist_anime`, `src_mal_anime`, `src_jvmg_*`
+- **特性**: 外部ソースから直接スクレイプしたデータ
+- **anime.scoreを含む**: 視聴者評価スコアが保持される
+- **用途**: 監査、歴史的比較、外部検証のみ
+- **読取**: Display lookupヘルパー経由のみ（UIメタデータ用）
+- **変更**: スクレイパー更新; 分析コードから完全隔離
+
+#### SILVER層（正規化データ、スコア無し）
+- **テーブル**: `anime`, `anime_external_ids`, `anime_display`, `anime_genres`, `anime_tags`, `credits`, `persons`, `roles`
+- **特性**: 構造的データのみ、スコアリングに必要なメタデータ
+- **anime.scoreを除外**: v53マイグレーション（スコア/人気度/説明/ジャンル/スタジオ列削除）
+- **credits.sourceを削除**: v54マイグレーション（「evidence_source」のみ保持）
+- **用途**: **すべての分析・スコアリング計算**
+- **読取**: `src/analysis/*`, `src/pipeline_phases/*` により専有使用
+- **制約**: `display_lookup`インポート禁止（分析コードから厳密に隔離）
+
+#### GOLD層（分析出力、オーディエンス別）
+- **テーブル**: `scores`, `score_history`, `meta_*` テーブル群
+- **特性**: 計算結果とメタデータ系譜
+- **meta_lineageテーブル**: formula_version, ci_method, null_model, holdout_method, inputs_hash, row_count を記録
+- **用途**: レポート生成、API応答、監査証拠
+- **アクセス**: レポートジェネレータ、API層、フロントエンド
+
+**重要**: 分析コードは**SILVER層のみ読取**。BRONZE層へのアクセスは`src/utils/display_lookup.py`ヘルパー経由のみ（UI表示用）。これにより、viewer ratings（anime.score）に依存しないスコアリング完全性を保証。
+
 ---
 
 ## パイプラインアーキテクチャ

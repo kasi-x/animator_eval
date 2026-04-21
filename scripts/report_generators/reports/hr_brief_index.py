@@ -52,10 +52,10 @@ class HrBriefIndexReport(BaseReportGenerator):
 (5) チーム適合は過去共演頻度の記述統計であり選抜基準ではない。</p>
 
 <p>本 brief は「人材評価」ではなく「配置適合度プロファイル」として
-設計されており、個人の能力ではなくチーム・スタジオ単位の構造的
-パターンを扱う。人事・報酬決定の単独根拠として使用することを
+設計されており、個人のネットワーク位置・協業パターンではなく
+チーム・スタジオ単位の構造的パターンを扱う。人事・報酬決定の単独根拠として使用することを
 運営者は推奨しない / This brief is designed as a "placement fitness
-profile", not a "talent evaluation". Metrics describe structural
+profile", not a "personnel evaluation". Metrics describe structural
 patterns at the team and studio level; the operators do not recommend
 using these metrics as the sole basis for personnel decisions.</p>
 
@@ -91,7 +91,7 @@ anime.score was not used in any hr-brief computation.</p>
 摩擦が低い」という仮説に基づく記述指標である。代替解釈として、
 同類選好 (assortative mixing) により類似した役職水準・スタジオ背景の
 スタッフが反復共演しているだけで、適合度スコアが高い組み合わせが
-将来のアウトプットを改善するとは限らない。本 brief は個人の能力や
+将来のアウトプットを改善するとは限らない。本 brief は個人のネットワーク位置や
 職業的価値の評価ではなく、構造的な配置パターンの記述である。</p>
 """
 

@@ -46,14 +46,14 @@ class BizIndependentUnitReport(BaseReportGenerator):
             data = {}
         sb = SectionBuilder()
         sections = [
-            sb.build_section(self._build_viability_ranking(sb, data)),
+            sb.build_section(self._build_viability_distribution(sb, data)),
             sb.build_section(self._build_role_coverage(sb, data)),
         ]
         return self.write_report("\n".join(sections))
 
-    # ── Section 1: Viability ranking scatter ─────────────────────────
+    # ── Section 1: Viability distribution scatter ─────────────────────────
 
-    def _build_viability_ranking(
+    def _build_viability_distribution(
         self, sb: SectionBuilder, data: dict
     ) -> ReportSection:
         cs = data.get("community_scores", {})

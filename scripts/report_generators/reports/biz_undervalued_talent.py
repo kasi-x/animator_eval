@@ -81,7 +81,7 @@ class BizUndervaluedTalentReport(BaseReportGenerator):
 
         if not data:
             findings = (
-                "<p>undervalued_talent.json が存在しないか空です。"
+                "<p>exposure_gap.json が存在しないか空です。"
                 "U_pスコア分布データが取得できません。</p>"
             )
             violations = sb.validate_findings(findings)
@@ -173,7 +173,7 @@ class BizUndervaluedTalentReport(BaseReportGenerator):
         if not archetypes:
             findings = (
                 "<p>アーキタイプデータが利用できません"
-                "（undervalued_talent.archetypes）。</p>"
+                "（exposure_gap.archetypes）。</p>"
             )
             violations = sb.validate_findings(findings)
             if violations:
@@ -264,7 +264,7 @@ class BizUndervaluedTalentReport(BaseReportGenerator):
         if not data:
             findings = (
                 "<p>復帰兆候データが利用できません"
-                "（undervalued_talent.recovery_signal_count）。</p>"
+                "（exposure_gap.recovery_signal_count）。</p>"
             )
             violations = sb.validate_findings(findings)
             if violations:

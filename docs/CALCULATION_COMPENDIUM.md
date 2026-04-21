@@ -3,6 +3,25 @@
 > **Purpose:** Reference document for every scoring formula, classification rule, and statistical method used in the pipeline and report generation. Covers both the core evaluation pipeline (`src/`) and the report generator (`scripts/generate_all_reports.py`).
 >
 > **Design principle:** All formulas use only structural/objective data (credit records, roles, production metadata, co-credit relationships). Viewer ratings (anime.score) are never used in any scoring formula. See the "Prohibited Inputs" column in each section.
+>
+> **Data sources:** All calculations read exclusively from the **SILVER layer** (`anime`, `credits`, `persons` tables). The BRONZE layer (`src_anilist_anime`, etc.) contains anime.score but is never imported by analysis code. See docs/ARCHITECTURE.md §Database 3層モデル for layer details.
+
+---
+
+## Data Sources — Permitted Tables
+
+| Layer | Table | Used For | anime.score | Notes |
+|-------|-------|----------|---|---|
+| **SILVER** | `anime` | All scoring calculations | ❌ (dropped in v53) | 16 columns: id, title_ja, title_en, year, season, format, episodes, duration, etc. |
+| **SILVER** | `anime_external_ids` | Work ID mapping | ❌ | madb_id, anilist_id, mal_id per work |
+| **SILVER** | `anime_display` | UI display metadata | ✓ (available if needed) | Sourced from anime_external_ids; never used in scoring |
+| **SILVER** | `credits` | Co-credit relationships, role data | ❌ | person_id, anime_id, role, evidence_source, episode_coverage |
+| **SILVER** | `persons` | Person metadata | ❌ | id, ruby_name, roman_name, first_credit_year |
+| **SILVER** | `roles` | Role classifications | ❌ | role type, weight, category (director/key_animator/etc.) |
+| **SILVER** | `scores`, `score_history` | Computed output | ✓ (filled by computation) | AKM theta, BiRank, IV, etc. — read-only output |
+| **SILVER** | `meta_lineage` | Metadata lineage | N/A | Formula version, CI method, null model, lineage — read-only audit trail |
+| **BRONZE** | `src_anilist_anime` | External validation only | ✓ (viewer ratings) | Never imported by `src/analysis/`, `src/pipeline_phases/` |
+| **BRONZE** | `src_mal_anime` | External validation only | ✓ (viewer ratings) | Never imported by analysis code |
 
 ---
 

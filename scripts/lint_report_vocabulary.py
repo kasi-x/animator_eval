@@ -46,6 +46,7 @@ def _collect_string_literals(tree: ast.AST) -> list[tuple[int, str]]:
 
 def _check_file(path: Path, vocab: dict, replacements: dict) -> list[str]:
     """Check a single file for vocabulary violations. Returns list of error messages."""
+    import re
     try:
         source = path.read_text(encoding="utf-8")
         tree = ast.parse(source, filename=str(path))
@@ -90,7 +91,9 @@ def _check_file(path: Path, vocab: dict, replacements: dict) -> list[str]:
                     f"(ability/evaluative framing). Suggestion: '{suggestion}'"
                 )
         for word in en_errors:
-            if word.lower() in text.lower():
+            # Use word boundary regex for English words
+            pattern = r'\b' + re.escape(word) + r'\b'
+            if re.search(pattern, text, re.IGNORECASE):
                 suggestion = all_en_replacements.get(word, "—")
                 errors.append(
                     f"{path}:{lineno}: ERROR: forbidden word '{word}' in string literal "
@@ -106,7 +109,9 @@ def _check_file(path: Path, vocab: dict, replacements: dict) -> list[str]:
                     f"Allowed in Interpretation sections only. Suggestion: '{suggestion}'"
                 )
         for word in en_warnings:
-            if word.lower() in text.lower():
+            # Use word boundary regex for English words
+            pattern = r'\b' + re.escape(word) + r'\b'
+            if re.search(pattern, text, re.IGNORECASE):
                 suggestion = all_en_replacements.get(word, "—")
                 errors.append(
                     f"{path}:{lineno}: WARNING: causal verb '{word}' in string literal. "
