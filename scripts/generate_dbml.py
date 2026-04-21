@@ -108,7 +108,9 @@ def generate_dbml(db_path: Path | None = None) -> str:
 
             # Constraints
             constraints = []
-            if col_name in [c["name"] for c in pk.get("constrained_columns", [])]:
+            # Check if column is in primary key
+            pk_cols = pk.get("constrained_columns", []) if pk else []
+            if col_name in pk_cols:
                 constraints.append("pk")
             if not col["nullable"]:
                 constraints.append("not null")
@@ -121,9 +123,10 @@ def generate_dbml(db_path: Path | None = None) -> str:
 
         # Foreign keys (in comment form for DBML)
         for fk in fks:
-            local_col = ", ".join(fk["constrained_columns"])
-            remote_col = ", ".join(fk["elements"])
-            dbml.append(f"  // FK: {local_col} -> {fk['referred_table']}.{remote_col}")
+            local_col = ", ".join(fk.get("constrained_columns", []))
+            remote_table = fk.get("referred_table", "?")
+            remote_col = ", ".join(fk.get("referred_columns", []))
+            dbml.append(f"  // FK: {local_col} -> {remote_table}.{remote_col}")
 
         dbml.append("}")
         dbml.append("")
