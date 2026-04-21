@@ -129,8 +129,8 @@ def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     # Check if new BEFORE connecting
     is_new_db = not db_path.exists()
-    # Use autocommit mode (isolation_level=None) - set BEFORE connect to prevent locking
-    conn = sqlite3.connect(str(db_path), timeout=30.0, isolation_level=None)
+    # Regular isolation mode for normal operations (init_db will set autocommit temporarily)
+    conn = sqlite3.connect(str(db_path), timeout=30.0)
     conn.row_factory = sqlite3.Row
     # Only set WAL if DB already existed
     if not is_new_db:
