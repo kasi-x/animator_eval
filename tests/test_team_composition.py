@@ -1,7 +1,7 @@
 """team_composition モジュールのテスト."""
 
 from src.analysis.team_composition import analyze_team_patterns
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 # Roles used to populate large teams
 _FILLER_ROLES = [
@@ -69,12 +69,12 @@ class TestAnalyzeTeamPatterns:
     def test_finds_high_score_teams(self):
         credits, anime_map = _make_data()
         result = analyze_team_patterns(credits, anime_map, min_staff=15)
-        assert result["total_high_score"] == 2  # a1 (18 staff) and a2 (16 staff)
+        assert result["total_large_teams"] == 2  # a1 (18 staff) and a2 (16 staff)
 
     def test_team_size(self):
         credits, anime_map = _make_data()
         result = analyze_team_patterns(credits, anime_map, min_staff=15)
-        teams = result["high_score_teams"]
+        teams = result["large_teams"]
         a1_team = next(t for t in teams if t["anime_id"] == "a1")
         assert a1_team["team_size"] == 18  # p1, p2, p3 + 15 filler
 
@@ -106,25 +106,23 @@ class TestAnalyzeTeamPatterns:
         result = analyze_team_patterns(
             credits, anime_map, person_scores=scores, min_staff=15
         )
-        teams = result["high_score_teams"]
+        teams = result["large_teams"]
         a1_team = next(t for t in teams if t["anime_id"] == "a1")
         assert "avg_person_score" in a1_team
 
     def test_empty(self):
         result = analyze_team_patterns([], {})
-        assert result["total_high_score"] == 0
+        assert result["total_large_teams"] == 0
 
     def test_min_staff_filter(self):
         credits, anime_map = _make_data()
         # a1 has 18 staff, a2 has 16 — only a1 passes min_staff=17
         result = analyze_team_patterns(credits, anime_map, min_staff=17)
-        assert result["total_high_score"] == 1  # Only a1
+        assert result["total_large_teams"] == 1  # Only a1
 
-    def test_sorted_by_score(self):
+    def test_sorted_by_team_size(self):
         credits, anime_map = _make_data()
         result = analyze_team_patterns(credits, anime_map, min_staff=15)
-        teams = result["high_score_teams"]
+        teams = result["large_teams"]
         for i in range(len(teams) - 1):
-            assert (teams[i].get("anime_score") or 0) >= (
-                teams[i + 1].get("anime_score") or 0
-            )
+            assert teams[i]["team_size"] >= teams[i + 1]["team_size"]

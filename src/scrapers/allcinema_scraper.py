@@ -117,6 +117,7 @@ _JOB_ROLE_MAP: dict[str, str] = {
 
 # ─── データクラス ─────────────────────────────────────────────────────────────
 
+
 @dataclass
 class AllcinemaCredit:
     allcinema_person_id: int
@@ -147,6 +148,7 @@ class AllcinemaPersonRecord:
 
 
 # ─── HTTP クライアント ────────────────────────────────────────────────────────
+
 
 class AllcinemaClient:
     """allcinema 非同期 HTTP クライアント (指数バックオフ付き)."""
@@ -195,8 +197,12 @@ class AllcinemaClient:
                     wait = max(int(raw_ra), 5)
                 except (ValueError, TypeError):
                     wait = int(min(backoff * 2, 300))
-                log.warning("allcinema_rate_limited", status=resp.status_code,
-                            wait=wait, attempt=attempt)
+                log.warning(
+                    "allcinema_rate_limited",
+                    status=resp.status_code,
+                    wait=wait,
+                    attempt=attempt,
+                )
                 await asyncio.sleep(wait)
                 backoff = min(max(backoff * 2, wait), 300)
                 attempt += 1
@@ -261,6 +267,7 @@ class AllcinemaClient:
 
 # ─── フェーズ 1: サイトマップ取得 ────────────────────────────────────────────
 
+
 async def fetch_sitemap_ids(
     client: AllcinemaClient,
     pattern: str,
@@ -291,6 +298,7 @@ async def fetch_sitemap_ids(
 
 
 # ─── フェーズ 2: Cinema ページ解析 ───────────────────────────────────────────
+
 
 def _parse_cinema_html(html: str, cinema_id: int) -> AllcinemaAnimeRecord | None:
     """Cinema ページの HTML から AllcinemaAnimeRecord を返す。アニメ以外は None。"""
@@ -339,7 +347,10 @@ def _parse_cinema_html(html: str, cinema_id: int) -> AllcinemaAnimeRecord | None
     if m_cj:
         try:
             cdata = json.loads(m_cj.group(1))
-            for section_key, target_list in [("staff", staff_list), ("cast", cast_list)]:
+            for section_key, target_list in [
+                ("staff", staff_list),
+                ("cast", cast_list),
+            ]:
                 for job_entry in cdata.get(section_key, {}).get("jobs", []):
                     job = job_entry.get("job", {})
                     job_name = job.get("jobname", "")
@@ -352,15 +363,19 @@ def _parse_cinema_html(html: str, cinema_id: int) -> AllcinemaAnimeRecord | None
                         pname = p.get("personnamemain", {})
                         name_ja = pname.get("personname", "")
                         name_en = pname.get("englishname", "")
-                        target_list.append(AllcinemaCredit(
-                            allcinema_person_id=pid,
-                            name_ja=name_ja,
-                            name_en=name_en,
-                            job_name=job_name,
-                            job_id=job_id,
-                        ))
+                        target_list.append(
+                            AllcinemaCredit(
+                                allcinema_person_id=pid,
+                                name_ja=name_ja,
+                                name_en=name_en,
+                                job_name=job_name,
+                                job_id=job_id,
+                            )
+                        )
         except (json.JSONDecodeError, KeyError) as exc:
-            log.warning("allcinema_credit_parse_error", cinema_id=cinema_id, error=str(exc))
+            log.warning(
+                "allcinema_credit_parse_error", cinema_id=cinema_id, error=str(exc)
+            )
 
     return AllcinemaAnimeRecord(
         cinema_id=cinema_id,
@@ -385,6 +400,7 @@ async def scrape_cinema(
 
 
 # ─── フェーズ 3: Person ページ解析 ───────────────────────────────────────────
+
 
 def _parse_person_html(html: str, person_id: int) -> AllcinemaPersonRecord:
     """Person ページの HTML から AllcinemaPersonRecord を返す."""
@@ -444,6 +460,7 @@ def save_person_record(conn, rec: AllcinemaPersonRecord) -> None:
 
 # ─── チェックポイント ─────────────────────────────────────────────────────────
 
+
 def _load_checkpoint(path: Path) -> dict:
     if path.exists():
         try:
@@ -459,6 +476,7 @@ def _save_checkpoint(path: Path, data: dict) -> None:
 
 
 # ─── Phase 2 実行 ─────────────────────────────────────────────────────────────
+
 
 async def _run_scrape_cinema(
     limit: int,
@@ -498,7 +516,9 @@ async def _run_scrape_cinema(
             anime_count = 0
             credit_count = 0
 
-            log.info("allcinema_cinema_scrape_start", pending=total, completed=len(completed))
+            log.info(
+                "allcinema_cinema_scrape_start", pending=total, completed=len(completed)
+            )
 
             for cinema_id in pending:
                 rec = await scrape_cinema(client, cinema_id)
@@ -540,6 +560,7 @@ async def _run_scrape_cinema(
 
 # ─── Phase 3 実行 ─────────────────────────────────────────────────────────────
 
+
 async def _run_scrape_persons(
     limit: int,
     batch_save: int,
@@ -561,8 +582,10 @@ async def _run_scrape_persons(
     all_person_ids = [row[0] for row in rows]
 
     if not all_person_ids:
-        log.warning("allcinema_persons_no_credits",
-                    msg="Run cinema phase first to populate credits")
+        log.warning(
+            "allcinema_persons_no_credits",
+            msg="Run cinema phase first to populate credits",
+        )
         return
 
     pending = [pid for pid in all_person_ids if pid not in completed_persons]
@@ -610,6 +633,7 @@ async def _run_scrape_persons(
 
 # ─── CLI ─────────────────────────────────────────────────────────────────────
 
+
 @app.command("sitemap")
 def cmd_sitemap(
     data_dir: Path = typer.Option(DEFAULT_DATA_DIR, help="チェックポイント保存先"),
@@ -645,13 +669,15 @@ def cmd_cinema(
     db_path: str = typer.Option("", help="DB パス (空=デフォルト)"),
 ) -> None:
     """Phase 2: cinema ページをスクレイプしてアニメとクレジットを DB に保存."""
-    asyncio.run(_run_scrape_cinema(
-        limit=limit,
-        batch_save=batch_save,
-        delay=delay,
-        data_dir=data_dir,
-        db_path=db_path or None,
-    ))
+    asyncio.run(
+        _run_scrape_cinema(
+            limit=limit,
+            batch_save=batch_save,
+            delay=delay,
+            data_dir=data_dir,
+            db_path=db_path or None,
+        )
+    )
 
 
 @app.command("persons")
@@ -663,13 +689,15 @@ def cmd_persons(
     db_path: str = typer.Option("", help="DB パス (空=デフォルト)"),
 ) -> None:
     """Phase 3: person ページをスクレイプして名前・よみがなを DB に補完."""
-    asyncio.run(_run_scrape_persons(
-        limit=limit,
-        batch_save=batch_save,
-        delay=delay,
-        data_dir=data_dir,
-        db_path=db_path or None,
-    ))
+    asyncio.run(
+        _run_scrape_persons(
+            limit=limit,
+            batch_save=batch_save,
+            delay=delay,
+            data_dir=data_dir,
+            db_path=db_path or None,
+        )
+    )
 
 
 @app.command("run")
@@ -681,15 +709,25 @@ def cmd_run(
     skip_persons: bool = typer.Option(False, help="Phase 3 をスキップ"),
 ) -> None:
     """Phase 2 → Phase 3 を続けて実行."""
-    asyncio.run(_run_scrape_cinema(
-        limit=limit, batch_save=SCRAPE_CHECKPOINT_INTERVAL,
-        delay=delay, data_dir=data_dir, db_path=db_path or None,
-    ))
+    asyncio.run(
+        _run_scrape_cinema(
+            limit=limit,
+            batch_save=SCRAPE_CHECKPOINT_INTERVAL,
+            delay=delay,
+            data_dir=data_dir,
+            db_path=db_path or None,
+        )
+    )
     if not skip_persons:
-        asyncio.run(_run_scrape_persons(
-            limit=limit, batch_save=SCRAPE_CHECKPOINT_INTERVAL,
-            delay=delay, data_dir=data_dir, db_path=db_path or None,
-        ))
+        asyncio.run(
+            _run_scrape_persons(
+                limit=limit,
+                batch_save=SCRAPE_CHECKPOINT_INTERVAL,
+                delay=delay,
+                data_dir=data_dir,
+                db_path=db_path or None,
+            )
+        )
 
 
 if __name__ == "__main__":

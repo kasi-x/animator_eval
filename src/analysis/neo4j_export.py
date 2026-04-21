@@ -10,7 +10,7 @@ from pathlib import Path
 
 import structlog
 
-from src.models import Anime, Credit, Person, ScoreResult
+from src.models import AnimeAnalysis as Anime, Credit, Person, ScoreResult
 
 logger = structlog.get_logger()
 

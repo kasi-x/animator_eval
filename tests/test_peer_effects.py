@@ -7,7 +7,7 @@ from src.analysis.network.peer_effects import (
     PeerEffectResult,
     estimate_peer_effects_2sls,
 )
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 @pytest.fixture

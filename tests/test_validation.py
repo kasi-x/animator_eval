@@ -5,7 +5,7 @@ import sqlite3
 import pytest
 
 from src.database import init_db, insert_credit, upsert_anime, upsert_person
-from src.models import Anime, Credit, Person, Role
+from src.models import BronzeAnime as Anime, Credit, Person, Role
 from src.validation import (
     ValidationResult,
     validate_all,
@@ -80,7 +80,7 @@ class TestReferentialIntegrity:
 
     def test_orphan_person_credit(self, populated_conn):
         populated_conn.execute(
-            "INSERT INTO credits (person_id, anime_id, role, source) VALUES ('ghost', 'a1', 'other', 'test')"
+            "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES ('ghost', 'a1', 'other', 'test')"
         )
         populated_conn.commit()
         result = validate_referential_integrity(populated_conn)
@@ -89,7 +89,7 @@ class TestReferentialIntegrity:
 
     def test_orphan_anime_credit(self, populated_conn):
         populated_conn.execute(
-            "INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p1', 'ghost_anime', 'other', 'test')"
+            "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES ('p1', 'ghost_anime', 'other', 'test')"
         )
         populated_conn.commit()
         result = validate_referential_integrity(populated_conn)
@@ -142,7 +142,7 @@ class TestCreditQuality:
             "animation_director",
         ]:
             populated_conn.execute(
-                "INSERT OR IGNORE INTO credits (person_id, anime_id, role, raw_role, source) VALUES ('p1', 'a1', ?, ?, 'test')",
+                "INSERT OR IGNORE INTO credits (person_id, anime_id, role, raw_role, evidence_source) VALUES ('p1', 'a1', ?, ?, 'test')",
                 (role, role),
             )
         populated_conn.commit()

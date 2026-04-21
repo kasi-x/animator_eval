@@ -1,5 +1,8 @@
 """pipeline モジュールの統合テスト."""
 
+import time
+from pathlib import Path
+
 import pytest
 
 from src.database import (
@@ -11,7 +14,7 @@ from src.database import (
     upsert_anime,
     upsert_person,
 )
-from src.models import Anime, Credit, Person, Role
+from src.models import BronzeAnime as Anime, Credit, Person, Role
 from src.pipeline import run_scoring_pipeline
 
 
@@ -122,6 +125,60 @@ class TestScoringPipeline:
             assert "person_fe" in r
             assert "birank" in r
             assert "dormancy" in r
+
+    def test_records_meta_quality_snapshot(self, populated_db):
+        run_scoring_pipeline()
+        conn = get_connection()
+        try:
+            count = conn.execute(
+                "SELECT COUNT(*) FROM meta_quality_snapshot"
+            ).fetchone()[0]
+            assert count > 0
+        finally:
+            conn.close()
+
+    def test_phase9_skips_recompute_when_hash_unchanged(self, populated_db):
+        run_scoring_pipeline()
+
+        conn = get_connection()
+        try:
+            first = conn.execute(
+                """
+                SELECT input_hash, computed_at, output_path
+                FROM calc_execution_records
+                WHERE scope = 'phase9_analysis_modules'
+                  AND calc_name = 'anime_stats'
+                """
+            ).fetchone()
+            assert first is not None
+        finally:
+            conn.close()
+
+        output_path = Path(first["output_path"])
+        assert output_path.exists()
+        first_mtime = output_path.stat().st_mtime
+
+        time.sleep(1.1)
+        run_scoring_pipeline()
+
+        conn = get_connection()
+        try:
+            second = conn.execute(
+                """
+                SELECT input_hash, computed_at, output_path
+                FROM calc_execution_records
+                WHERE scope = 'phase9_analysis_modules'
+                  AND calc_name = 'anime_stats'
+                """
+            ).fetchone()
+            assert second is not None
+        finally:
+            conn.close()
+
+        second_mtime = output_path.stat().st_mtime
+        assert second["input_hash"] == first["input_hash"]
+        assert second["computed_at"] == first["computed_at"]
+        assert second_mtime == first_mtime
 
 
 class TestIncrementalPipeline:

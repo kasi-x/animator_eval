@@ -1,7 +1,7 @@
 """cohort モジュールのテスト."""
 
 from src.analysis.cohort import compute_cohort_analysis
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_multi_generation_data():

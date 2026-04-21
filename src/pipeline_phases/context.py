@@ -17,7 +17,13 @@ from typing import Any
 import networkx as nx
 import structlog
 
-from src.models import Anime, Character, CharacterVoiceActor, Credit, Person
+from src.models import (
+    AnimeAnalysis as Anime,
+    Character,
+    CharacterVoiceActor,
+    Credit,
+    Person,
+)
 from src.utils.performance import PerformanceMonitor, get_monitor
 
 checkpoint_logger = structlog.get_logger()

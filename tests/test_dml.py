@@ -10,7 +10,7 @@ from src.analysis.causal.dml import (
     _fit_ols,
     run_dml_analysis,
 )
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_anime(

@@ -25,7 +25,7 @@ import httpx
 import structlog
 import typer
 
-from src.models import Anime, Credit, Person, parse_role
+from src.models import BronzeAnime, Credit, Person, parse_role
 from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL
 
 log = structlog.get_logger()
@@ -464,7 +464,7 @@ async def scrape_madb(
             studios = record["studios"]
 
             anime_id = f"madb:{madb_id}"
-            anime = Anime(
+            anime = BronzeAnime(
                 id=anime_id,
                 title_ja=title,
                 year=year,

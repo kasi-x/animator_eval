@@ -69,7 +69,7 @@ def backfill_anilist(conn: sqlite3.Connection) -> dict[str, int]:
             c.role,
             c.raw_role
         FROM credits c
-        WHERE c.source = 'anilist'
+        WHERE c.evidence_source = 'anilist'
           AND c.anime_id LIKE 'anilist:%'
           AND c.person_id LIKE 'anilist:p%'
     """)
@@ -122,7 +122,7 @@ def backfill_ann(conn: sqlite3.Connection) -> dict[str, int]:
         FROM credits c
         JOIN anime   a ON a.id = c.anime_id
         JOIN persons p ON p.id = c.person_id
-        WHERE c.source = 'ann'
+        WHERE c.evidence_source = 'ann'
           AND a.ann_id IS NOT NULL
           AND p.ann_id IS NOT NULL
     """)
@@ -208,7 +208,7 @@ def backfill_seesaawiki(conn: sqlite3.Connection) -> dict[str, int]:
             0
         FROM credits c
         JOIN persons p ON p.id = c.person_id
-        WHERE c.source = 'seesaawiki'
+        WHERE c.evidence_source = 'seesaawiki'
           AND c.anime_id LIKE 'seesaa:%'
     """)
     stats["credits"] = conn.execute(
@@ -256,7 +256,7 @@ def backfill_keyframe(conn: sqlite3.Connection) -> dict[str, int]:
             CASE WHEN c.episode = -1 THEN -1 ELSE COALESCE(c.episode, -1) END
         FROM credits c
         JOIN persons p ON p.id = c.person_id
-        WHERE c.source = 'keyframe'
+        WHERE c.evidence_source = 'keyframe'
           AND c.anime_id LIKE 'keyframe:%'
           AND c.person_id LIKE 'keyframe:p_%'
     """)
@@ -307,7 +307,7 @@ def run_backfill(conn: sqlite3.Connection) -> None:
 
     # keyframe の注記
     kf_total = conn.execute(
-        "SELECT COUNT(*) FROM credits WHERE source='keyframe'"
+        "SELECT COUNT(*) FROM credits WHERE evidence_source='keyframe'"
     ).fetchone()[0]
     kf_backfilled = conn.execute(
         "SELECT COUNT(*) FROM src_keyframe_credits"

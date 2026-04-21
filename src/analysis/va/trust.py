@@ -12,7 +12,7 @@ from collections import defaultdict
 import structlog
 
 from src.analysis.va.graph import _char_role_weight
-from src.models import Anime, CharacterVoiceActor, Credit, Role
+from src.models import AnimeAnalysis as Anime, CharacterVoiceActor, Credit, Role
 
 logger = structlog.get_logger()
 

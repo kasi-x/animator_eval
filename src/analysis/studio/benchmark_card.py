@@ -105,6 +105,7 @@ def compute_value_add(
     Returns {studio_id: {va, va_shrunk, ci_lower, ci_upper, n}}
     """
     fe_sorted = np.sort(np.array(list(person_fe.values())))
+
     def _fe_pct(fe: float) -> float:
         idx = np.searchsorted(fe_sorted, fe)
         return float(idx / max(len(fe_sorted) - 1, 1))
@@ -267,7 +268,12 @@ def compute_studio_benchmark_cards(
         arr = np.array([v for _, v in values])
         sorted_arr = np.sort(arr)
         return {
-            sid: round(float(np.searchsorted(sorted_arr, v) / max(len(sorted_arr) - 1, 1) * 100), 1)
+            sid: round(
+                float(
+                    np.searchsorted(sorted_arr, v) / max(len(sorted_arr) - 1, 1) * 100
+                ),
+                1,
+            )
             for sid, v in values
         }
 

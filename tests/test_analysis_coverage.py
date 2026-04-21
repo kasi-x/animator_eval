@@ -64,7 +64,7 @@ from src.analysis.studio.bias_correction import (
     find_overvalued_by_studio,
     find_undervalued_by_studio,
 )
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 # ============================================================

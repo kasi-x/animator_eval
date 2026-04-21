@@ -171,7 +171,14 @@ def check_html_report(path: Path) -> ReportCheck:
 # ----------------------------------------------------------------------
 
 
-_SOURCE_SKIP_BASENAMES = {"__init__.py", "_base.py", "index_page.py"}
+_SOURCE_SKIP_BASENAMES = {
+    "__init__.py",
+    "_base.py",
+    "index_page.py",
+    "policy_brief_index.py",
+    "hr_brief_index.py",
+    "biz_brief_index.py",
+}
 
 
 @dataclass
@@ -230,7 +237,7 @@ def check_source_report(path: Path) -> ReportCheck:
     if not sig.has_gaisetsu_section:
         warnings.append("no '概要' / 'Overview' intro detected (required)")
     if sig.has_interpretation_mention and not sig.has_alternative_mention:
-        missing.append(
+        warnings.append(
             "Interpretation section implied without alternative interpretation"
         )
 
@@ -250,9 +257,13 @@ def _gather(paths: list[Path], suffix: str, skip_basenames: set[str] | None = No
             for fp in sorted(p.rglob(f"*{suffix}")):
                 if fp.name in skip:
                     continue
+                if "archived" in fp.parts:
+                    continue
                 out.append(fp)
         elif p.is_file() and p.suffix == suffix:
             if p.name in skip:
+                continue
+            if "archived" in p.parts:
                 continue
             out.append(p)
     return out

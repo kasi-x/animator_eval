@@ -10,7 +10,7 @@ from itertools import combinations
 
 import structlog
 
-from src.models import Anime, Credit, Role
+from src.models import AnimeAnalysis as Anime, Credit, Role
 
 logger = structlog.get_logger()
 

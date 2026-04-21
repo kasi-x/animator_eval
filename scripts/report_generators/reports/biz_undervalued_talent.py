@@ -2,8 +2,11 @@
 
 Narrow label per REPORT_INVENTORY §Vocabulary concerns: renamed from
 "過小評価タレント・プール" to "露出機会ギャップ人材プール" to remove
-talent/ability framing. Class name kept stable for V2_REPORT_CLASSES
+evaluation framing. Class name kept stable for V2_REPORT_CLASSES
 compatibility.
+
+Note: Class name BizUndervaluedTalentReport retained for compatibility;
+internal references use "exposure_gap" for data path.
 """
 
 from __future__ import annotations
@@ -49,7 +52,7 @@ class BizUndervaluedTalentReport(BaseReportGenerator):
     doc_type = "brief"
 
     def generate(self) -> Path | None:
-        data = _load("undervalued_talent")
+        data = _load("exposure_gap")
         if not isinstance(data, dict):
             data = {}
         sb = SectionBuilder()

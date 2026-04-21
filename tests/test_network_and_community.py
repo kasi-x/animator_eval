@@ -15,7 +15,7 @@ Covers:
 import networkx as nx
 import pytest
 
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 # ---------------------------------------------------------------------------

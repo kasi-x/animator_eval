@@ -13,7 +13,7 @@ import typer
 from dotenv import find_dotenv, dotenv_values
 
 from src.models import (
-    Anime,
+    BronzeAnime,
     AnimeRelation,
     AnimeStudio,
     Character,
@@ -23,6 +23,7 @@ from src.models import (
     Studio,
     parse_role,
 )
+from src.scrapers.cache_store import load_cached_json, save_cached_json
 from src.utils.episode_parser import parse_episodes
 from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL
 
@@ -228,10 +229,14 @@ app = typer.Typer()
 # Batch save helper functions (must be defined before main())
 def save_anime_batch_to_database(conn, anime_batch):
     """Save a batch of anime to src_anilist_anime."""
-    from src.database import upsert_src_anilist_anime
+    from src.database import upsert_anime, upsert_src_anilist_anime
 
     for anime in anime_batch:
-        upsert_src_anilist_anime(conn, anime)
+        # Backward compatibility for tests/callers that still pass generic objects.
+        if hasattr(anime, "anilist_id"):
+            upsert_src_anilist_anime(conn, anime)
+        else:
+            upsert_anime(conn, anime)
 
 
 def save_studios_to_database(conn, studios, anime_studios):
@@ -254,10 +259,13 @@ def save_relations_to_database(conn, relations):
 
 def save_persons_batch_to_database(conn, persons_batch):
     """Save a batch of persons to src_anilist_persons."""
-    from src.database import upsert_src_anilist_person
+    from src.database import upsert_person, upsert_src_anilist_person
 
     for person in persons_batch:
-        upsert_src_anilist_person(conn, person)
+        if hasattr(person, "anilist_id"):
+            upsert_src_anilist_person(conn, person)
+        else:
+            upsert_person(conn, person)
 
 
 def _make_rate_limit_text(cl):
@@ -287,17 +295,24 @@ def _make_rate_limit_text(cl):
 
 def save_credits_batch_to_database(conn, credits_batch):
     """Save a batch of credits to src_anilist_credits."""
-    from src.database import insert_src_anilist_credit
+    from src.database import insert_credit, insert_src_anilist_credit
 
     for credit in credits_batch:
+        if not (hasattr(credit, "anime_id") and hasattr(credit, "person_id")):
+            insert_credit(conn, credit)
+            continue
         try:
             anilist_anime_id = int(credit.anime_id.split(":")[-1])
             anilist_person_id = int(credit.person_id.removeprefix("anilist:p"))
         except (ValueError, AttributeError):
+            insert_credit(conn, credit)
             continue
         insert_src_anilist_credit(
-            conn, anilist_anime_id, anilist_person_id,
-            str(credit.role), credit.raw_role or "",
+            conn,
+            anilist_anime_id,
+            anilist_person_id,
+            str(credit.role),
+            credit.raw_role or "",
         )
 
 
@@ -418,6 +433,11 @@ class AniListClient:
         self._last_request_time = time.monotonic()
 
     async def query(self, query: str, variables: dict) -> dict:
+        cache_key = {"query": query, "variables": variables}
+        cached = load_cached_json("anilist/graphql", cache_key)
+        if cached is not None:
+            return cached
+
         await self._rate_limit()
         for attempt in range(5):
             try:
@@ -618,7 +638,9 @@ class AniListClient:
                         errors=data["errors"],
                         variables=variables,
                     )
-                return data.get("data", {})
+                result = data.get("data", {})
+                save_cached_json("anilist/graphql", cache_key, result)
+                return result
             except httpx.HTTPError as e:
                 log.warning(
                     "request_failed",
@@ -751,7 +773,7 @@ def parse_anilist_person(staff: dict) -> Person:
     )
 
 
-def parse_anilist_anime(raw: dict) -> Anime:
+def parse_anilist_anime(raw: dict) -> BronzeAnime:
     """Parse comprehensive anime data from AniList API response."""
     import json as _json
 
@@ -879,7 +901,7 @@ def parse_anilist_anime(raw: dict) -> Anime:
         if rankings:
             rankings_json = _json.dumps(rankings, ensure_ascii=False)
 
-    return Anime(
+    return BronzeAnime(
         id=f"anilist:{anilist_id}",
         title_ja=title.get("native") or "",
         title_en=title.get("english") or title.get("romaji") or "",
@@ -1269,7 +1291,7 @@ def parse_anilist_relations(raw: dict, anime_id: str) -> list[AnimeRelation]:
 async def fetch_top_anime_credits(
     n_anime: int = 50,
     show_progress: bool = True,
-) -> tuple[list[Anime], list[Person], list[Credit]]:
+) -> tuple[list[BronzeAnime], list[Person], list[Credit]]:
     """Fetch anime credits with optional rich progress visualization."""
     from rich.console import Console
     from rich.progress import (
@@ -1285,7 +1307,7 @@ async def fetch_top_anime_credits(
     import time as time_module
 
     client = AniListClient()
-    all_anime: list[Anime] = []
+    all_anime: list[BronzeAnime] = []
     all_persons: list[Person] = []
     all_credits: list[Credit] = []
     seen_person_ids: set[str] = set()
@@ -2284,7 +2306,7 @@ def main(
                             anilist_id = anime_dict["anilist_id"]
                             anime_id = anime_dict["id"]
                             # Reconstruct Anime object
-                            anime = Anime(**anime_dict)
+                            anime = BronzeAnime(**anime_dict)
                             anime_items.append((anime, anilist_id, anime_id))
 
                         # Apply reverse sorting if needed

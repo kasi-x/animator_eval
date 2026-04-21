@@ -23428,12 +23428,16 @@ def generate_madb_coverage_report():  # noqa: C901
 
     # --- Stat cards ---
     total_anime = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]
-    madb_anime = conn.execute("SELECT COUNT(*) FROM anime WHERE madb_id IS NOT NULL").fetchone()[0]
+    madb_anime = conn.execute(
+        "SELECT COUNT(*) FROM anime_external_ids WHERE source='madb'"
+    ).fetchone()[0]
     total_credits = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
-    madb_credits = conn.execute("SELECT COUNT(*) FROM credits WHERE source='mediaarts'").fetchone()[0]
+    madb_credits = conn.execute(
+        "SELECT COUNT(*) FROM credits WHERE evidence_source='mediaarts'"
+    ).fetchone()[0]
     total_persons = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
     with_staff = conn.execute(
-        "SELECT COUNT(DISTINCT anime_id) FROM credits WHERE source='mediaarts'"
+        "SELECT COUNT(DISTINCT anime_id) FROM credits WHERE evidence_source='mediaarts'"
     ).fetchone()[0]
     metadata_only = madb_anime - with_staff
 
@@ -23450,8 +23454,9 @@ def generate_madb_coverage_report():  # noqa: C901
             END as era,
             COALESCE(format, 'UNKNOWN') as fmt,
             COUNT(*) as cnt
-        FROM anime
-        WHERE madb_id IS NOT NULL AND year IS NOT NULL
+        FROM anime a
+        JOIN anime_external_ids x ON x.anime_id = a.id AND x.source = 'madb'
+        WHERE year IS NOT NULL
         GROUP BY era, fmt
         ORDER BY era, fmt
     """).fetchall()
@@ -23476,8 +23481,9 @@ def generate_madb_coverage_report():  # noqa: C901
     # --- Chart 2: 年別登録数推移 (line per format) ---
     rows2 = conn.execute("""
         SELECT year, COALESCE(format, 'UNKNOWN') as fmt, COUNT(*) as cnt
-        FROM anime
-        WHERE madb_id IS NOT NULL AND year BETWEEN 1960 AND 2025
+        FROM anime a
+        JOIN anime_external_ids x ON x.anime_id = a.id AND x.source = 'madb'
+        WHERE year BETWEEN 1960 AND 2025
         GROUP BY year, fmt
         ORDER BY year, fmt
     """).fetchall()
@@ -23504,8 +23510,8 @@ def generate_madb_coverage_report():  # noqa: C901
                COUNT(*) as total,
                COUNT(DISTINCT c.anime_id) as with_staff
         FROM anime a
-        LEFT JOIN credits c ON c.anime_id = a.id AND c.source = 'mediaarts'
-        WHERE a.madb_id IS NOT NULL
+        JOIN anime_external_ids x ON x.anime_id = a.id AND x.source = 'madb'
+        LEFT JOIN credits c ON c.anime_id = a.id AND c.evidence_source = 'mediaarts'
         GROUP BY fmt
         ORDER BY total DESC
     """).fetchall()
@@ -23527,7 +23533,8 @@ def generate_madb_coverage_report():  # noqa: C901
 
     # --- Chart 4: ソース別クレジット数 (pie) ---
     src_rows = conn.execute(
-        "SELECT COALESCE(source,'N/A') as src, COUNT(*) as cnt FROM credits GROUP BY src ORDER BY cnt DESC"
+        "SELECT COALESCE(evidence_source,'N/A') as src, COUNT(*) as cnt "
+        "FROM credits GROUP BY src ORDER BY cnt DESC"
     ).fetchall()
     src_labels = [r["src"] for r in src_rows]
     src_vals = [r["cnt"] for r in src_rows]
@@ -23542,9 +23549,9 @@ def generate_madb_coverage_report():  # noqa: C901
 
     # --- Chart 5: 役職別クレジット数 (AniList vs MediaArts, top 15 roles) ---
     role_rows = conn.execute("""
-        SELECT role, source, COUNT(*) as cnt
+        SELECT role, evidence_source AS source, COUNT(*) as cnt
         FROM credits
-        WHERE source IN ('anilist', 'mediaarts') AND role != 'special'
+        WHERE evidence_source IN ('anilist', 'mediaarts') AND role != 'special'
         GROUP BY role, source
         ORDER BY role, source
     """).fetchall()

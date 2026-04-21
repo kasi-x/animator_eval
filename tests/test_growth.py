@@ -1,7 +1,7 @@
 """growth モジュールのテスト."""
 
 from src.analysis.growth import compute_growth_trends
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_data():
@@ -73,8 +73,8 @@ class TestComputeGrowthTrends:
     def test_recent_avg_anime_score(self):
         credits, anime_map = _make_data()
         result = compute_growth_trends(credits, anime_map, window=3)
-        # p1 recent: a3 (8.0), a4 (8.5), a5 (7.5)
-        assert result["p1"].recent_avg_anime_score == 8.0
+        # anime.score is no longer used in analysis modules.
+        assert result["p1"].recent_avg_anime_score is None
 
     def test_empty(self):
         result = compute_growth_trends([], {})

@@ -273,9 +273,7 @@ def test_bad_json_in_bronze_returns_empty(conn):
 
 
 def test_cache_returns_memoized_value(conn):
-    conn.execute(
-        "INSERT INTO src_anilist_anime (anilist_id, score) VALUES (7, 70.0)"
-    )
+    conn.execute("INSERT INTO src_anilist_anime (anilist_id, score) VALUES (7, 70.0)")
     conn.commit()
     assert get_display_score(conn, "anilist:7") == 70.0
 

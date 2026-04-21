@@ -164,7 +164,11 @@ def compute_mentor_effect(
 
     # Cross-director variance for EB prior
     mentor_means = np.array([np.mean(v) for v in mentor_residuals.values() if v])
-    tau2 = max(float(np.var(mentor_means)) - global_var / max(len(all_residuals) // max(len(mentor_residuals), 1), 1), 1e-6)
+    tau2 = max(
+        float(np.var(mentor_means))
+        - global_var / max(len(all_residuals) // max(len(mentor_residuals), 1), 1),
+        1e-6,
+    )
 
     # Permutation null: shuffle mentor labels n_perm times
     rng = np.random.default_rng(42)
@@ -181,7 +185,9 @@ def compute_mentor_effect(
         if perm_effects:
             perm_max_effects.append(float(max(abs(e) for e in perm_effects)))
 
-    perm_max = np.array(perm_max_effects) if perm_max_effects else np.array([float("inf")])
+    perm_max = (
+        np.array(perm_max_effects) if perm_max_effects else np.array([float("inf")])
+    )
 
     results: dict = {}
     for mentor_id, residuals in mentor_residuals.items():
@@ -198,7 +204,10 @@ def compute_mentor_effect(
 
         # Bootstrap CI
         boots = [float(rng.choice(arr, n, replace=True).mean()) for _ in range(500)]
-        ci = [round(float(np.percentile(boots, 2.5)), 4), round(float(np.percentile(boots, 97.5)), 4)]
+        ci = [
+            round(float(np.percentile(boots, 2.5)), 4),
+            round(float(np.percentile(boots, 97.5)), 4),
+        ]
 
         # Permutation p-value
         null_p = float(np.mean(perm_max >= abs(m_raw)))

@@ -1,7 +1,7 @@
 """anime_stats モジュールのテスト."""
 
 from src.analysis.anime_stats import compute_anime_stats
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_data():

@@ -17,7 +17,7 @@ from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
 
 from src.analysis.production_analysis import StudioTalentDensity
-from src.models import Anime, Credit
+from src.models import AnimeAnalysis as Anime, Credit
 
 logger = structlog.get_logger()
 

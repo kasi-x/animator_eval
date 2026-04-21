@@ -1,7 +1,7 @@
 """collaboration_strength モジュールのテスト."""
 
 from src.analysis.collaboration_strength import compute_collaboration_strength
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_data():

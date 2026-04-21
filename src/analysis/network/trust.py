@@ -13,7 +13,7 @@ from typing import NamedTuple
 import numpy as np
 import structlog
 
-from src.models import Anime, Credit, Role
+from src.models import AnimeAnalysis as Anime, Credit, Role
 from src.utils.config import ROLE_WEIGHTS
 from src.utils.role_groups import DIRECTOR_ROLES, NON_PRODUCTION_ROLES
 

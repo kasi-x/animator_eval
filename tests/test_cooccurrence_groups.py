@@ -6,7 +6,7 @@ from src.analysis.cooccurrence_groups import (
     COOCCURRENCE_ROLES,
     compute_cooccurrence_groups,
 )
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 # ---------------------------------------------------------------------------

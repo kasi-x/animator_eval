@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.models import Anime
+    from src.models import AnimeAnalysis
 
 SEASON_TO_QUARTER: dict[str, int] = {
     "winter": 1,
@@ -40,7 +40,7 @@ def _quarter_from_start_date(start_date: str | None) -> int | None:
     return None
 
 
-def get_year_quarter(anime: Anime) -> tuple[int, int] | None:
+def get_year_quarter(anime: AnimeAnalysis) -> tuple[int, int] | None:
     """Extract (year, quarter) from an Anime object.
 
     Returns None if year is missing.

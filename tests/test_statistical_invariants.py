@@ -27,6 +27,7 @@ requires_meta_tables = pytest.mark.requires_meta_tables
 def _resolve_db_path() -> Path | None:
     try:
         from src.utils.config import DB_PATH  # type: ignore[import-not-found]
+
         p = Path(DB_PATH)
         return p if p.exists() else None
     except Exception:
@@ -34,10 +35,13 @@ def _resolve_db_path() -> Path | None:
 
 
 def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
-    return conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
-        (name,),
-    ).fetchone() is not None
+    return (
+        conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?",
+            (name,),
+        ).fetchone()
+        is not None
+    )
 
 
 def _column_names(conn: sqlite3.Connection, table: str) -> list[str]:
@@ -72,7 +76,8 @@ def test_null_model_pvalues_uniform(conn: sqlite3.Connection) -> None:
         pytest.skip("scipy not available")
 
     tables = [
-        r[0] for r in conn.execute(
+        r[0]
+        for r in conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'meta_%'"
         )
     ]

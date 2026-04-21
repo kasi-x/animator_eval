@@ -747,9 +747,9 @@ def data_quality():
         total_anime = stats.get("anime_count", 0)
 
         credits_with_source = (
-            conn.execute("SELECT COUNT(*) FROM credits WHERE source != ''").fetchone()[
-                0
-            ]
+            conn.execute(
+                "SELECT COUNT(*) FROM credits WHERE evidence_source != ''"
+            ).fetchone()[0]
             if total_credits
             else 0
         )
@@ -770,14 +770,18 @@ def data_quality():
 
         anime_with_score = (
             conn.execute(
-                "SELECT COUNT(*) FROM anime WHERE score IS NOT NULL"
+                "SELECT COUNT(*) FROM anime_display WHERE score IS NOT NULL"
             ).fetchone()[0]
             if total_anime
             else 0
         )
 
         source_count = conn.execute(
-            "SELECT COUNT(DISTINCT source) FROM credits WHERE source != ''"
+            """
+            SELECT COUNT(DISTINCT evidence_source)
+            FROM credits
+            WHERE evidence_source != ''
+            """
         ).fetchone()[0]
 
         latest_year_row = conn.execute(

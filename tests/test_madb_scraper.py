@@ -578,7 +578,7 @@ class TestMADBIntegration:
 
         # All saved with madb: IDs
         credits = db_conn.execute(
-            "SELECT * FROM credits WHERE source='mediaarts'"
+            "SELECT * FROM credits WHERE evidence_source='mediaarts'"
         ).fetchall()
         assert len(credits) == 2
 
@@ -589,7 +589,13 @@ class TestMADBIntegration:
 
         anime = db_conn.execute("SELECT * FROM anime WHERE id LIKE 'madb:%'").fetchall()
         assert len(anime) == 1
-        assert anime[0]["madb_id"] == "A001"
+        ext = db_conn.execute(
+            "SELECT external_id FROM anime_external_ids "
+            "WHERE anime_id = ? AND source = 'madb'",
+            (anime[0]["id"],),
+        ).fetchone()
+        assert ext is not None
+        assert ext["external_id"] == "A001"
 
     def test_scrape_multiple_contributor_fields(self, db_conn, tmp_path):
         """creator + contributor + originalWorkCreator are merged."""

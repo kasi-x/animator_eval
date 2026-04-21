@@ -12,7 +12,7 @@ from src.analysis.scoring.individual_contribution import (
     compute_opportunity_residual,
     compute_peer_percentile,
 )
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 # --- Fixtures ---

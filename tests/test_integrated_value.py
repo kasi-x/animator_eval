@@ -9,7 +9,7 @@ from src.analysis.scoring.integrated_value import (
     compute_studio_exposure,
     optimize_lambda_weights,
 )
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 @pytest.fixture

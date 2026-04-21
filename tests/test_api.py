@@ -60,15 +60,15 @@ def scores_data(tmp_path, monkeypatch):
         "INSERT INTO anime (id, title_en, year) VALUES ('a1', 'Anime 1', 2023)"
     )
     conn.execute(
-        "INSERT INTO credits (person_id, anime_id, role, source, credit_year)"
+        "INSERT INTO credits (person_id, anime_id, role, evidence_source, credit_year)"
         " VALUES ('p1', 'a1', 'director', 'test', 2023)"
     )
     conn.execute(
-        "INSERT INTO credits (person_id, anime_id, role, source, credit_year)"
+        "INSERT INTO credits (person_id, anime_id, role, evidence_source, credit_year)"
         " VALUES ('p2', 'a1', 'key_animator', 'test', 2023)"
     )
     conn.execute(
-        "INSERT INTO credits (person_id, anime_id, role, source, credit_year)"
+        "INSERT INTO credits (person_id, anime_id, role, evidence_source, credit_year)"
         " VALUES ('p3', 'a1', 'key_animator', 'test', 2023)"
     )
     conn.commit()
@@ -801,11 +801,15 @@ class TestDataQuality:
         conn = get_connection()
         init_db(conn)
         conn.execute(
-            "INSERT INTO anime (id, title_en, year, score) VALUES ('a1', 'Test', 2024, 8.0)"
+            "INSERT INTO anime (id, title_en, year) VALUES ('a1', 'Test', 2024)"
         )
+        conn.execute(
+            "INSERT INTO anime_analysis (id, title_en, year) VALUES ('a1', 'Test', 2024)"
+        )
+        conn.execute("INSERT INTO anime_display (id, score) VALUES ('a1', 8.0)")
         conn.execute("INSERT INTO persons (id, name_en) VALUES ('p1', 'Person')")
         conn.execute(
-            "INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p1', 'a1', 'director', 'test')"
+            "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES ('p1', 'a1', 'director', 'test')"
         )
         conn.commit()
         conn.close()
@@ -832,10 +836,10 @@ class TestPersonNetwork:
         conn.execute("INSERT INTO persons (id, name_en) VALUES ('p2', 'Animator')")
         conn.execute("INSERT INTO anime (id, title_en) VALUES ('a1', 'Test')")
         conn.execute(
-            "INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p1', 'a1', 'director', 'test')"
+            "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES ('p1', 'a1', 'director', 'test')"
         )
         conn.execute(
-            "INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p2', 'a1', 'key_animator', 'test')"
+            "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES ('p2', 'a1', 'key_animator', 'test')"
         )
         conn.commit()
         conn.close()
@@ -862,10 +866,10 @@ class TestRecommend:
         conn.execute("INSERT INTO persons (id, name_en) VALUES ('p2', 'Animator B')")
         conn.execute("INSERT INTO anime (id, title_en) VALUES ('a1', 'Test')")
         conn.execute(
-            "INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p1', 'a1', 'director', 'test')"
+            "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES ('p1', 'a1', 'director', 'test')"
         )
         conn.execute(
-            "INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p2', 'a1', 'key_animator', 'test')"
+            "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES ('p2', 'a1', 'key_animator', 'test')"
         )
         conn.commit()
         conn.close()
@@ -888,11 +892,11 @@ class TestPredict:
         conn = get_connection()
         init_db(conn)
         conn.execute("INSERT INTO persons (id, name_en) VALUES ('p1', 'Director')")
+        conn.execute("INSERT INTO anime (id, title_en) VALUES ('a1', 'Test')")
+        conn.execute("INSERT INTO anime_analysis (id, title_en) VALUES ('a1', 'Test')")
+        conn.execute("INSERT INTO anime_display (id, score) VALUES ('a1', 8.0)")
         conn.execute(
-            "INSERT INTO anime (id, title_en, score) VALUES ('a1', 'Test', 8.0)"
-        )
-        conn.execute(
-            "INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p1', 'a1', 'director', 'test')"
+            "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES ('p1', 'a1', 'director', 'test')"
         )
         conn.commit()
         conn.close()

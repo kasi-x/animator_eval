@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import structlog
 
-from src.models import Anime, Credit
+from src.models import AnimeAnalysis as Anime, Credit
 from src.utils.role_groups import CAREER_STAGE_BY_VALUE
 
 logger = structlog.get_logger()

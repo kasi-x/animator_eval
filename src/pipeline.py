@@ -103,6 +103,7 @@ def run_scoring_pipeline(
 
     # ETL: src_* → canonical tables
     from src.etl.integrate import run_integration
+
     run_integration(conn)
 
     # Incremental mode: skip pipeline if data hasn't changed
@@ -206,7 +207,7 @@ def run_scoring_pipeline(
         ws_broadcaster.update_phase(3, "Entity Resolution", "running")
 
     phase_start = time.monotonic()
-    run_entity_resolution(context)
+    run_entity_resolution(context, conn=conn)
 
     if ws_broadcaster:
         ws_broadcaster.complete_phase(
@@ -322,6 +323,14 @@ def run_scoring_pipeline(
 
         phase_start = time.monotonic()
         run_analysis_modules_phase(context)
+        person_params = context.analysis_results.get("person_parameters")
+        if person_params:
+            from src.analysis.person_parameters import (
+                populate_meta_common_person_parameters,
+            )
+
+            with db_connection() as meta_conn:
+                populate_meta_common_person_parameters(meta_conn, person_params)
 
         if ws_broadcaster:
             ws_broadcaster.complete_phase(
@@ -353,6 +362,15 @@ def run_scoring_pipeline(
             elapsed=elapsed,
             mode="resume" if resume else ("incremental" if incremental else "full"),
         )
+        # Phase 4-6 / V-3: persist per-run quality snapshots for drift checks.
+        try:
+            from scripts.monitoring.compute_quality_snapshot import compute_and_write
+
+            compute_and_write(conn)
+        except ImportError:
+            logger.exception("quality_snapshot_import_failed")
+        except Exception:
+            logger.exception("quality_snapshot_write_failed")
 
     # Log performance summary and export report
     context.monitor.record_memory("pipeline_end")

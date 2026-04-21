@@ -17,7 +17,7 @@ from src.analysis.network.temporal_pagerank import (
     compute_temporal_pagerank,
 )
 from src.analysis.scoring.pagerank import normalize_scores
-from src.models import Anime, Credit, Person, Role
+from src.models import BronzeAnime as Anime, Credit, Person, Role
 
 
 # =============================================================================

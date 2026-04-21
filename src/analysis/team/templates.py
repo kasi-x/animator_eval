@@ -54,6 +54,7 @@ def cluster_team_patterns(
     # fe percentile lookup
     fe_values = np.array(list(iv_scores.values())) if iv_scores else np.array([0.5])
     fe_sorted = np.sort(fe_values)
+
     def _fe_pct(pid: str) -> float:
         fe = iv_scores.get(pid, 0.0) or 0.0
         idx = np.searchsorted(fe_sorted, fe)
@@ -82,15 +83,23 @@ def cluster_team_patterns(
         role_counts = Counter(roles)
         len(role_counts)
         role_entropy = float(
-            -np.sum([c / sum(role_counts.values()) * np.log(c / sum(role_counts.values()) + 1e-9)
-                     for c in role_counts.values()])
+            -np.sum(
+                [
+                    c
+                    / sum(role_counts.values())
+                    * np.log(c / sum(role_counts.values()) + 1e-9)
+                    for c in role_counts.values()
+                ]
+            )
         )
 
         fe_pcts = [_fe_pct(p) for p in set(persons)]
         fe_mean = float(np.mean(fe_pcts))
         fe_std = float(np.std(fe_pcts)) if len(fe_pcts) > 1 else 0.0
 
-        feature_vecs.append((aid, np.array([size, role_entropy, fe_mean, fe_std]), success))
+        feature_vecs.append(
+            (aid, np.array([size, role_entropy, fe_mean, fe_std]), success)
+        )
 
     if len(feature_vecs) < 5:
         return {"error": "insufficient_teams", "n_teams": len(feature_vecs)}

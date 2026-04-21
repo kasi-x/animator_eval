@@ -1,7 +1,5 @@
 """CLI コマンドのテスト."""
 
-import sqlite3
-
 import pytest
 from typer.testing import CliRunner
 
@@ -13,54 +11,12 @@ runner = CliRunner()
 @pytest.fixture()
 def populated_db(monkeypatch, tmp_path):
     """テスト用のDBを作成しmonkeypatchでCLIに注入する."""
+    import src.database as db_mod
+    from src.database import get_connection, init_db
+
     db_path = tmp_path / "test.db"
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    conn.executescript("""
-        CREATE TABLE persons (
-            id TEXT PRIMARY KEY,
-            name_ja TEXT DEFAULT '',
-            name_en TEXT DEFAULT '',
-            aliases TEXT DEFAULT '[]',
-            mal_id INTEGER,
-            anilist_id INTEGER,
-            canonical_id TEXT,
-            UNIQUE(mal_id),
-            UNIQUE(anilist_id)
-        );
-        CREATE TABLE anime (
-            id TEXT PRIMARY KEY,
-            title_ja TEXT DEFAULT '',
-            title_en TEXT DEFAULT '',
-            year INTEGER,
-            season TEXT,
-            episodes INTEGER,
-            mal_id INTEGER,
-            anilist_id INTEGER,
-            score REAL,
-            UNIQUE(mal_id),
-            UNIQUE(anilist_id)
-        );
-        CREATE TABLE credits (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            person_id TEXT NOT NULL,
-            anime_id TEXT NOT NULL,
-            role TEXT NOT NULL,
-            episode INTEGER DEFAULT -1,
-            source TEXT DEFAULT '',
-            UNIQUE(person_id, anime_id, role, episode)
-        );
-        CREATE TABLE scores (
-            person_id TEXT PRIMARY KEY,
-            iv_score REAL DEFAULT 0.0,
-            person_fe REAL DEFAULT 0.0,
-            birank REAL DEFAULT 0.0,
-            patronage REAL DEFAULT 0.0,
-            dormancy REAL DEFAULT 1.0,
-            awcc REAL DEFAULT 0.0,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-    """)
+    conn = get_connection(db_path)
+    init_db(conn)
     conn.executemany(
         "INSERT INTO persons (id, name_ja, name_en) VALUES (?, ?, ?)",
         [
@@ -70,14 +26,25 @@ def populated_db(monkeypatch, tmp_path):
         ],
     )
     conn.executemany(
-        "INSERT INTO anime (id, title_ja, title_en, year, score) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO anime (id, title_ja, title_en, year) VALUES (?, ?, ?, ?)",
         [
-            ("a1", "進撃の巨人", "Attack on Titan", 2013, 8.4),
-            ("a2", "甲鉄城のカバネリ", "Kabaneri", 2016, 7.2),
+            ("a1", "進撃の巨人", "Attack on Titan", 2013),
+            ("a2", "甲鉄城のカバネリ", "Kabaneri", 2016),
         ],
     )
     conn.executemany(
-        "INSERT INTO credits (person_id, anime_id, role, source) VALUES (?, ?, ?, ?)",
+        "INSERT INTO anime_analysis (id, title_ja, title_en, year) VALUES (?, ?, ?, ?)",
+        [
+            ("a1", "進撃の巨人", "Attack on Titan", 2013),
+            ("a2", "甲鉄城のカバネリ", "Kabaneri", 2016),
+        ],
+    )
+    conn.executemany(
+        "INSERT INTO anime_display (id, score) VALUES (?, ?)",
+        [("a1", 8.4), ("a2", 7.2)],
+    )
+    conn.executemany(
+        "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES (?, ?, ?, ?)",
         [
             ("p1", "a1", "director", "anilist"),
             ("p2", "a1", "key_animator", "anilist"),
@@ -97,12 +64,7 @@ def populated_db(monkeypatch, tmp_path):
     conn.commit()
     conn.close()
 
-    def patched_get(db_path=None):
-        c = sqlite3.connect(str(db_path or tmp_path / "test.db"))
-        c.row_factory = sqlite3.Row
-        return c
-
-    monkeypatch.setattr("src.database.get_connection", patched_get)
+    monkeypatch.setattr(db_mod, "DEFAULT_DB_PATH", db_path)
     return db_path
 
 
@@ -160,25 +122,16 @@ class TestRankingCommand:
         assert result.exit_code == 1
 
     def test_ranking_empty_db(self, monkeypatch, tmp_path):
-        import sqlite3
+        import src.database as db_mod
+        from src.database import get_connection, init_db
 
         db_path = tmp_path / "empty.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.executescript("""
-            CREATE TABLE persons (id TEXT PRIMARY KEY, name_ja TEXT DEFAULT '', name_en TEXT DEFAULT '', aliases TEXT DEFAULT '[]', mal_id INTEGER, anilist_id INTEGER, canonical_id TEXT);
-            CREATE TABLE anime (id TEXT PRIMARY KEY, title_ja TEXT DEFAULT '', title_en TEXT DEFAULT '', year INTEGER, season TEXT, episodes INTEGER, mal_id INTEGER, anilist_id INTEGER, score REAL);
-            CREATE TABLE credits (id INTEGER PRIMARY KEY AUTOINCREMENT, person_id TEXT, anime_id TEXT, role TEXT, episode INTEGER DEFAULT -1, source TEXT DEFAULT '');
-            CREATE TABLE scores (person_id TEXT PRIMARY KEY, iv_score REAL DEFAULT 0.0, person_fe REAL DEFAULT 0.0, birank REAL DEFAULT 0.0, patronage REAL DEFAULT 0.0, dormancy REAL DEFAULT 1.0, awcc REAL DEFAULT 0.0, updated_at TIMESTAMP);
-        """)
+        conn = get_connection(db_path)
+        init_db(conn)
         conn.commit()
         conn.close()
 
-        def patched_get(db_path=None):
-            c = sqlite3.connect(str(tmp_path / "empty.db"))
-            c.row_factory = sqlite3.Row
-            return c
-
-        monkeypatch.setattr("src.database.get_connection", patched_get)
+        monkeypatch.setattr(db_mod, "DEFAULT_DB_PATH", db_path)
         result = runner.invoke(app, ["ranking"])
         assert "No scores found" in result.output
 
@@ -619,11 +572,15 @@ class TestDataQualityCommand:
         conn = get_connection()
         init_db(conn)
         conn.execute(
-            "INSERT INTO anime (id, title_en, year, score) VALUES ('a1', 'Test', 2024, 8.0)"
+            "INSERT INTO anime (id, title_en, year) VALUES ('a1', 'Test', 2024)"
         )
+        conn.execute(
+            "INSERT INTO anime_analysis (id, title_en, year) VALUES ('a1', 'Test', 2024)"
+        )
+        conn.execute("INSERT INTO anime_display (id, score) VALUES ('a1', 8.0)")
         conn.execute("INSERT INTO persons (id, name_en) VALUES ('p1', 'Person')")
         conn.execute(
-            "INSERT INTO credits (person_id, anime_id, role, source) VALUES ('p1', 'a1', 'director', 'test')"
+            "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES ('p1', 'a1', 'director', 'test')"
         )
         conn.commit()
         conn.close()

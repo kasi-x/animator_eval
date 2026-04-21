@@ -293,7 +293,7 @@ tasks:
   quality-check:
     desc: Check for 3σ anomalies vs prior snapshot
     cmds:
-      - pixi run python scripts/monitoring/check_quality_anomaly.py
+      - pixi run python scripts/ci_check_quality_drift.py
 
   # ============================================================================
   # Schema Migration

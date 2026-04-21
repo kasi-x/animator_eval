@@ -8,7 +8,7 @@ from collections import defaultdict
 
 import structlog
 
-from src.models import Anime, Credit
+from src.models import AnimeAnalysis as Anime, Credit
 
 logger = structlog.get_logger()
 

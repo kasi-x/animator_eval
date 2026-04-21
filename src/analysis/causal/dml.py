@@ -29,7 +29,7 @@ from scipy import stats as scipy_stats
 from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.model_selection import KFold
 
-from src.models import Anime, Credit, Role
+from src.models import AnimeAnalysis as Anime, Credit, Role
 
 logger = structlog.get_logger()
 

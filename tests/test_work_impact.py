@@ -1,7 +1,7 @@
 """work_impact モジュールのテスト."""
 
 from src.analysis.work_impact import compute_work_impact
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_data():

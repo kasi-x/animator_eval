@@ -9,6 +9,7 @@ before running the remaining tasks in "batch 2".
 """
 
 import gc
+import hashlib
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
@@ -83,6 +84,11 @@ from src.analysis.production_analysis import (
 from src.analysis.studio.clustering import compute_studio_clustering
 from src.analysis.studio.network import compute_studio_network
 from src.analysis.talent_pipeline import compute_talent_pipeline
+from src.database import (
+    db_connection,
+    get_calc_execution_hashes,
+    record_calc_execution,
+)
 from src.pipeline_phases.context import PipelineContext
 
 # New analysis modules (Phase 2A-2N)
@@ -103,6 +109,8 @@ from src.analysis.network.independent_unit import run_independent_units
 from src.analysis.person_parameters import compute_person_parameters
 
 logger = structlog.get_logger()
+
+_CALC_RECORD_SCOPE = "phase9_analysis_modules"
 
 
 @dataclass
@@ -378,7 +386,11 @@ def _run_compensation_analyzer(context: PipelineContext) -> Any:
     )
 
     # Build anime_scores dict for scatter chart (display-only)
-    anime_scores = {a.id: s for a in anime_with_contribs if (s := getattr(a, "score", None)) is not None}
+    anime_scores = {
+        a.id: s
+        for a in anime_with_contribs
+        if (s := getattr(a, "score", None)) is not None
+    }
 
     # Export report
     return export_compensation_report(analyses, person_names, anime_scores=anime_scores)
@@ -1080,6 +1092,7 @@ def _run_credit_stats(context: PipelineContext) -> Any:
 def _run_entry_cohort_attrition(context: PipelineContext) -> Any:
     import sqlite3
     from src.database import DEFAULT_DB_PATH
+
     conn = sqlite3.connect(DEFAULT_DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
@@ -1091,6 +1104,7 @@ def _run_entry_cohort_attrition(context: PipelineContext) -> Any:
 def _run_generational_health(context: PipelineContext) -> Any:
     import sqlite3
     from src.database import DEFAULT_DB_PATH
+
     conn = sqlite3.connect(DEFAULT_DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
@@ -1102,6 +1116,7 @@ def _run_generational_health(context: PipelineContext) -> Any:
 def _run_attrition_risk_model(context: PipelineContext) -> Any:
     import sqlite3
     from src.database import DEFAULT_DB_PATH
+
     conn = sqlite3.connect(DEFAULT_DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
@@ -1117,6 +1132,7 @@ def _run_monopsony_analysis(context: PipelineContext) -> Any:
 def _run_gender_bottleneck(context: PipelineContext) -> Any:
     import sqlite3
     from src.database import DEFAULT_DB_PATH
+
     conn = sqlite3.connect(DEFAULT_DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
@@ -1126,7 +1142,9 @@ def _run_gender_bottleneck(context: PipelineContext) -> Any:
 
 
 def _run_succession_matrix(context: PipelineContext) -> Any:
-    return run_succession_matrix(context.person_fe, context.credits, context.studio_assignments)
+    return run_succession_matrix(
+        context.person_fe, context.credits, context.studio_assignments
+    )
 
 
 def _run_team_chemistry(context: PipelineContext) -> Any:
@@ -1158,7 +1176,9 @@ def _run_studio_benchmark_cards(context: PipelineContext) -> Any:
             with open(ea_path, encoding="utf-8") as f:
                 ea_data = json.load(f)
     if isinstance(ea_data, dict):
-        expected_ability = {pid: d.get("gap", {}) for pid, d in ea_data.items() if isinstance(d, dict)}
+        expected_ability = {
+            pid: d.get("gap", {}) for pid, d in ea_data.items() if isinstance(d, dict)
+        }
 
     studios_json: list[dict] = []
     studios_data = context.analysis_results.get("studios")
@@ -1171,8 +1191,11 @@ def _run_studio_benchmark_cards(context: PipelineContext) -> Any:
         studios_json = studios_data
 
     return compute_studio_benchmark_cards(
-        context.studio_assignments, context.person_fe, expected_ability,
-        context.credits, studios_json
+        context.studio_assignments,
+        context.person_fe,
+        expected_ability,
+        context.credits,
+        studios_json,
     )
 
 
@@ -1191,16 +1214,22 @@ def _run_director_value_add(context: PipelineContext) -> Any:
 
     if isinstance(mentorships_data, dict):
         # Flatten to list
-        mentorships_list = [
-            {"mentor_id": k, "mentee_id": v, "shared_works": 1, "confidence": 0.5}
-            for k, v in mentorships_data.items()
-        ] if not isinstance(list(mentorships_data.values())[0], dict) else list(mentorships_data.values())
+        mentorships_list = (
+            [
+                {"mentor_id": k, "mentee_id": v, "shared_works": 1, "confidence": 0.5}
+                for k, v in mentorships_data.items()
+            ]
+            if not isinstance(list(mentorships_data.values())[0], dict)
+            else list(mentorships_data.values())
+        )
     elif isinstance(mentorships_data, list):
         mentorships_list = mentorships_data
     else:
         return {"error": "unknown_mentorships_format"}
 
-    return run_director_value_add(mentorships_list, context.person_fe, context.credits, context.anime_map)
+    return run_director_value_add(
+        mentorships_list, context.person_fe, context.credits, context.anime_map
+    )
 
 
 def _run_undervalued_talent(context: PipelineContext) -> Any:
@@ -1228,14 +1257,24 @@ def _run_undervalued_talent(context: PipelineContext) -> Any:
                 for pid, genres in ga_raw.items():
                     if isinstance(genres, dict):
                         for genre, score in genres.items():
-                            genre_affinity_list.append({"person_id": pid, "genre": genre, "affinity_score": score})
+                            genre_affinity_list.append(
+                                {
+                                    "person_id": pid,
+                                    "genre": genre,
+                                    "affinity_score": score,
+                                }
+                            )
     elif isinstance(ga_data, dict):
         for pid, genres in ga_data.items():
             if isinstance(genres, dict):
                 for genre, score in genres.items():
-                    genre_affinity_list.append({"person_id": pid, "genre": genre, "affinity_score": score})
+                    genre_affinity_list.append(
+                        {"person_id": pid, "genre": genre, "affinity_score": score}
+                    )
 
-    return run_undervalued_talent(expected_ability, context.results, genre_affinity_list)
+    return run_undervalued_talent(
+        expected_ability, context.results, genre_affinity_list
+    )
 
 
 def _run_genre_whitespace(context: PipelineContext) -> Any:
@@ -1263,12 +1302,20 @@ def _run_genre_whitespace(context: PipelineContext) -> Any:
                 for pid, genres in ga_raw.items():
                     if isinstance(genres, dict):
                         for genre, score in genres.items():
-                            genre_affinity_list.append({"person_id": pid, "genre": genre, "affinity_score": score})
+                            genre_affinity_list.append(
+                                {
+                                    "person_id": pid,
+                                    "genre": genre,
+                                    "affinity_score": score,
+                                }
+                            )
     elif isinstance(ga_data, dict):
         for pid, genres in ga_data.items():
             if isinstance(genres, dict):
                 for genre, score in genres.items():
-                    genre_affinity_list.append({"person_id": pid, "genre": genre, "affinity_score": score})
+                    genre_affinity_list.append(
+                        {"person_id": pid, "genre": genre, "affinity_score": score}
+                    )
 
     return run_genre_whitespace(genre_ecosystem, genre_affinity_list, context.results)
 
@@ -1278,6 +1325,7 @@ def _run_trust_entry(context: PipelineContext) -> Any:
     if not bridges_data:
         from src.utils.config import JSON_DIR
         import json
+
         b_path = JSON_DIR / "bridges.json"
         if b_path.exists():
             with open(b_path, encoding="utf-8") as f:
@@ -1322,7 +1370,9 @@ def _run_person_parameters(context: PipelineContext) -> Any:
                 compat_data = json.load(f)
     compatibility_boost: dict = {}
     if isinstance(compat_data, dict):
-        boost_raw = compat_data.get("compatibility_boost") or compat_data.get("boost", {})
+        boost_raw = compat_data.get("compatibility_boost") or compat_data.get(
+            "boost", {}
+        )
         if isinstance(boost_raw, dict):
             compatibility_boost = boost_raw
 
@@ -1728,6 +1778,70 @@ _KEEP_IN_MEMORY = frozenset(
 )
 
 
+def _build_phase9_input_hash(context: PipelineContext) -> str:
+    """Build deterministic hash for Phase 9 inputs."""
+    digest = hashlib.sha256()
+    digest.update(f"credits={len(context.credits)}".encode("utf-8"))
+    digest.update(f"persons={len(context.persons)}".encode("utf-8"))
+    digest.update(f"anime={len(context.anime_map)}".encode("utf-8"))
+    digest.update(f"results={len(context.results)}".encode("utf-8"))
+
+    # Include stable subset of structural scores (person_id-ordered).
+    for row in sorted(context.results, key=lambda r: r.get("person_id", "")):
+        pid = row.get("person_id", "")
+        iv = float(row.get("iv_score", 0.0) or 0.0)
+        fe = float(row.get("person_fe", 0.0) or 0.0)
+        br = float(row.get("birank", 0.0) or 0.0)
+        pa = float(row.get("patronage", 0.0) or 0.0)
+        do = float(row.get("dormancy", 1.0) or 1.0)
+        digest.update(
+            f"{pid}|{iv:.8f}|{fe:.8f}|{br:.8f}|{pa:.8f}|{do:.8f}".encode("utf-8")
+        )
+
+    return digest.hexdigest()
+
+
+def _is_task_cache_eligible(task_name: str) -> bool:
+    """Whether task can be skipped by cached hash + JSON artifact."""
+    if task_name in _KEEP_IN_MEMORY:
+        return False
+    if task_name == "mentorships":
+        # Produces mentorship_tree side-channel used later in export.
+        return False
+    return True
+
+
+def _filter_cached_tasks(
+    tasks: list[AnalysisTask],
+    context: PipelineContext,
+    phase_input_hash: str,
+    json_dir: Path,
+) -> tuple[list[AnalysisTask], list[str]]:
+    """Split tasks into runnable and cached-by-hash."""
+    with db_connection() as conn:
+        recorded = get_calc_execution_hashes(conn, _CALC_RECORD_SCOPE)
+
+    runnable: list[AnalysisTask] = []
+    skipped: list[str] = []
+    for task in tasks:
+        if not _is_task_cache_eligible(task.name):
+            runnable.append(task)
+            continue
+        task_hash = hashlib.sha256(
+            f"{phase_input_hash}|{task.name}|v1".encode("utf-8")
+        ).hexdigest()
+        out_path = json_dir / f"{task.name}.json"
+        if recorded.get(task.name) == task_hash and out_path.exists():
+            context.analysis_results[task.name] = None
+            if not hasattr(context, "_flushed_tasks"):
+                context._flushed_tasks = set()
+            context._flushed_tasks.add(task.name)
+            skipped.append(task.name)
+            continue
+        runnable.append(task)
+    return runnable, skipped
+
+
 def _run_task_batch(
     tasks: list[AnalysisTask],
     context: PipelineContext,
@@ -1735,16 +1849,17 @@ def _run_task_batch(
     max_workers: int,
     batch_label: str,
     json_dir: Path | None = None,
-) -> tuple[int, int]:
+) -> tuple[int, int, list[str]]:
     """Run a batch of analysis tasks in parallel.
 
     If json_dir is provided, large results are flushed to JSON and evicted
     from memory to prevent OOM on datasets with 150K+ persons.
 
-    Returns (completed_count, failed_count).
+    Returns (completed_count, failed_count, completed_task_names).
     """
     completed = 0
     failed = 0
+    completed_tasks: list[str] = []
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_task = {
@@ -1784,6 +1899,7 @@ def _run_task_batch(
                                 context._flushed_tasks.add(task_name)
 
                     completed += 1
+                    completed_tasks.append(task_name)
                     logger.debug(
                         "analysis_task_complete",
                         task=task_name,
@@ -1806,7 +1922,7 @@ def _run_task_batch(
                 )
                 failed += 1
 
-    return completed, failed
+    return completed, failed, completed_tasks
 
 
 def run_analysis_modules_phase(
@@ -1845,6 +1961,7 @@ def run_analysis_modules_phase(
     # Split tasks into graph-dependent (batch 1) and graph-independent (batch 2)
     batch1_tasks = [t for t in ANALYSIS_TASKS if t.needs_collab_graph]
     batch2_tasks = [t for t in ANALYSIS_TASKS if not t.needs_collab_graph]
+    phase_input_hash = _build_phase9_input_hash(context)
 
     has_large_graph = (
         context.collaboration_graph is not None
@@ -1873,9 +1990,27 @@ def run_analysis_modules_phase(
             tasks=[t.name for t in batch1_tasks],
             workers=b1_workers,
         )
-        c, f = _run_task_batch(
-            batch1_tasks, context, results_lock, b1_workers, "batch1", json_dir=JSON_DIR
+        runnable_b1, skipped_b1 = _filter_cached_tasks(
+            batch1_tasks, context, phase_input_hash, JSON_DIR
         )
+        if skipped_b1:
+            logger.info("analysis_batch_cached", batch="batch1", tasks=skipped_b1)
+        c, f, done_names = _run_task_batch(
+            runnable_b1, context, results_lock, b1_workers, "batch1", json_dir=JSON_DIR
+        )
+        if done_names:
+            with db_connection() as conn:
+                for task_name in done_names:
+                    task_hash = hashlib.sha256(
+                        f"{phase_input_hash}|{task_name}|v1".encode("utf-8")
+                    ).hexdigest()
+                    record_calc_execution(
+                        conn,
+                        _CALC_RECORD_SCOPE,
+                        task_name,
+                        task_hash,
+                        output_path=str(JSON_DIR / f"{task_name}.json"),
+                    )
         completed_count += c
         failed_count += f
 
@@ -1920,14 +2055,32 @@ def run_analysis_modules_phase(
                 tasks=len(b2_light),
                 workers=b2a_workers,
             )
-            c, f = _run_task_batch(
-                b2_light,
+            runnable_b2_light, skipped_b2_light = _filter_cached_tasks(
+                b2_light, context, phase_input_hash, JSON_DIR
+            )
+            if skipped_b2_light:
+                logger.info("analysis_batch_cached", batch="batch2a", tasks=skipped_b2_light)
+            c, f, done_names = _run_task_batch(
+                runnable_b2_light,
                 context,
                 results_lock,
                 b2a_workers,
                 "batch2",
                 json_dir=JSON_DIR,
             )
+            if done_names:
+                with db_connection() as conn:
+                    for task_name in done_names:
+                        task_hash = hashlib.sha256(
+                            f"{phase_input_hash}|{task_name}|v1".encode("utf-8")
+                        ).hexdigest()
+                        record_calc_execution(
+                            conn,
+                            _CALC_RECORD_SCOPE,
+                            task_name,
+                            task_hash,
+                            output_path=str(JSON_DIR / f"{task_name}.json"),
+                        )
             completed_count += c
             failed_count += f
 
@@ -1937,9 +2090,27 @@ def run_analysis_modules_phase(
                 tasks=[t.name for t in b2_heavy],
                 workers=1,
             )
-            c, f = _run_task_batch(
-                b2_heavy, context, results_lock, 1, "batch2", json_dir=JSON_DIR
+            runnable_b2_heavy, skipped_b2_heavy = _filter_cached_tasks(
+                b2_heavy, context, phase_input_hash, JSON_DIR
             )
+            if skipped_b2_heavy:
+                logger.info("analysis_batch_cached", batch="batch2b", tasks=skipped_b2_heavy)
+            c, f, done_names = _run_task_batch(
+                runnable_b2_heavy, context, results_lock, 1, "batch2", json_dir=JSON_DIR
+            )
+            if done_names:
+                with db_connection() as conn:
+                    for task_name in done_names:
+                        task_hash = hashlib.sha256(
+                            f"{phase_input_hash}|{task_name}|v1".encode("utf-8")
+                        ).hexdigest()
+                        record_calc_execution(
+                            conn,
+                            _CALC_RECORD_SCOPE,
+                            task_name,
+                            task_hash,
+                            output_path=str(JSON_DIR / f"{task_name}.json"),
+                        )
             completed_count += c
             failed_count += f
     else:
@@ -1953,14 +2124,32 @@ def run_analysis_modules_phase(
             # Sequential execution: with 167K persons + 2.9M credits, even 2 workers
             # can push memory past 123 GB.  Sequential + eager flush keeps RSS ~40 GB.
             light_workers = 1
-            c, f = _run_task_batch(
-                all_light,
+            runnable_all_light, skipped_all_light = _filter_cached_tasks(
+                all_light, context, phase_input_hash, JSON_DIR
+            )
+            if skipped_all_light:
+                logger.info("analysis_batch_cached", batch="all_light", tasks=skipped_all_light)
+            c, f, done_names = _run_task_batch(
+                runnable_all_light,
                 context,
                 results_lock,
                 light_workers,
                 "all",
                 json_dir=JSON_DIR,
             )
+            if done_names:
+                with db_connection() as conn:
+                    for task_name in done_names:
+                        task_hash = hashlib.sha256(
+                            f"{phase_input_hash}|{task_name}|v1".encode("utf-8")
+                        ).hexdigest()
+                        record_calc_execution(
+                            conn,
+                            _CALC_RECORD_SCOPE,
+                            task_name,
+                            task_hash,
+                            output_path=str(JSON_DIR / f"{task_name}.json"),
+                        )
             completed_count += c
             failed_count += f
 
@@ -1969,15 +2158,53 @@ def run_analysis_modules_phase(
                 "analysis_heavy_sequential",
                 tasks=[t.name for t in all_heavy],
             )
-            c, f = _run_task_batch(
-                all_heavy, context, results_lock, 1, "all", json_dir=JSON_DIR
+            runnable_all_heavy, skipped_all_heavy = _filter_cached_tasks(
+                all_heavy, context, phase_input_hash, JSON_DIR
             )
+            if skipped_all_heavy:
+                logger.info("analysis_batch_cached", batch="all_heavy", tasks=skipped_all_heavy)
+            c, f, done_names = _run_task_batch(
+                runnable_all_heavy, context, results_lock, 1, "all", json_dir=JSON_DIR
+            )
+            if done_names:
+                with db_connection() as conn:
+                    for task_name in done_names:
+                        task_hash = hashlib.sha256(
+                            f"{phase_input_hash}|{task_name}|v1".encode("utf-8")
+                        ).hexdigest()
+                        record_calc_execution(
+                            conn,
+                            _CALC_RECORD_SCOPE,
+                            task_name,
+                            task_hash,
+                            output_path=str(JSON_DIR / f"{task_name}.json"),
+                        )
             completed_count += c
             failed_count += f
 
     # Batch 3: depends on outputs from earlier batches (mentorships, genre_affinity, etc.)
     logger.info("analysis_batch3_start", tasks=[t.name for t in BATCH3_TASKS])
-    c, f = _run_task_batch(BATCH3_TASKS, context, results_lock, 1, "batch3", json_dir=JSON_DIR)
+    runnable_b3, skipped_b3 = _filter_cached_tasks(
+        BATCH3_TASKS, context, phase_input_hash, JSON_DIR
+    )
+    if skipped_b3:
+        logger.info("analysis_batch_cached", batch="batch3", tasks=skipped_b3)
+    c, f, done_names = _run_task_batch(
+        runnable_b3, context, results_lock, 1, "batch3", json_dir=JSON_DIR
+    )
+    if done_names:
+        with db_connection() as conn:
+            for task_name in done_names:
+                task_hash = hashlib.sha256(
+                    f"{phase_input_hash}|{task_name}|v1".encode("utf-8")
+                ).hexdigest()
+                record_calc_execution(
+                    conn,
+                    _CALC_RECORD_SCOPE,
+                    task_name,
+                    task_hash,
+                    output_path=str(JSON_DIR / f"{task_name}.json"),
+                )
     completed_count += c
     failed_count += f
 

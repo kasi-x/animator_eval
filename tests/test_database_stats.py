@@ -19,7 +19,7 @@ from src.database import (
     upsert_person,
     SCHEMA_VERSION,
 )
-from src.models import Anime, Credit, Person, Role, ScoreResult
+from src.models import BronzeAnime as Anime, Credit, Person, Role, ScoreResult
 
 
 @pytest.fixture

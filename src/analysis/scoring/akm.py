@@ -24,7 +24,7 @@ from dataclasses import dataclass
 import numpy as np
 import structlog
 
-from src.models import Anime, Credit, Role
+from src.models import AnimeAnalysis as Anime, Credit, Role
 from src.utils.config import ROLE_WEIGHTS
 from src.utils.episode_parser import parse_episodes
 from src.utils.role_groups import EPISODIC_ROLES, THROUGH_ROLES

@@ -51,7 +51,10 @@ def train_survival_model(df: Any) -> tuple[Any, float, float, dict]:
     # structured array for sksurv
     def _to_structured(subset: "pd.DataFrame"):
         return np.array(
-            [(bool(row["event"]), float(row["duration"])) for _, row in subset.iterrows()],
+            [
+                (bool(row["event"]), float(row["duration"]))
+                for _, row in subset.iterrows()
+            ],
             dtype=[("event", "?"), ("duration", "<f8")],
         )
 
@@ -86,7 +89,6 @@ def _fallback_survival_model(df: Any) -> tuple[Any, float, float, dict]:
     except ImportError:
         return None, 0.0, 1.0, {}
 
-
     df = df.dropna().copy()
     feature_cols = ["debut_studio_tier", "early_density", "debut_year"]
 
@@ -109,9 +111,14 @@ def _fallback_survival_model(df: Any) -> tuple[Any, float, float, dict]:
     risk_scores = cph.predict_partial_hazard(test_df[feature_cols])
 
     from lifelines.utils import concordance_index as ci_func
+
     c_idx = float(ci_func(test_df["duration"], -risk_scores, test_df["event"]))
 
-    coefs = {col: round(float(cph.summary.loc[col, "coef"]), 4) for col in feature_cols if col in cph.summary.index}
+    coefs = {
+        col: round(float(cph.summary.loc[col, "coef"]), 4)
+        for col in feature_cols
+        if col in cph.summary.index
+    }
 
     if c_idx < C_INDEX_GATE:
         return None, c_idx, 1.0, coefs
@@ -119,7 +126,9 @@ def _fallback_survival_model(df: Any) -> tuple[Any, float, float, dict]:
     return cph, c_idx, 0.0, coefs
 
 
-def compute_attrition_risk_scores(model: Any, df: Any, c_index: float) -> dict[str, Any]:
+def compute_attrition_risk_scores(
+    model: Any, df: Any, c_index: float
+) -> dict[str, Any]:
     """Predict aggregate attrition patterns.
 
     Returns {aggregate_by_tier, feature_importance, c_index, published}
@@ -137,7 +146,11 @@ def compute_attrition_risk_scores(model: Any, df: Any, c_index: float) -> dict[s
     try:
         risk_scores = model.predict(X)
     except Exception:
-        return {"published": False, "reason": "prediction_failed", "c_index": round(c_index, 4)}
+        return {
+            "published": False,
+            "reason": "prediction_failed",
+            "c_index": round(c_index, 4),
+        }
 
     df = df.copy()
     df["risk_score"] = risk_scores

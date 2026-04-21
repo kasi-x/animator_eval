@@ -6,7 +6,7 @@ from src.analysis.scoring.expected_ability import (
     compute_expected_ability,
     ExpectedActualResult,
 )
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 @pytest.fixture

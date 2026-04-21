@@ -14,7 +14,7 @@ from dataclasses import dataclass
 import numpy as np
 import structlog
 
-from src.models import Anime, CharacterVoiceActor
+from src.models import AnimeAnalysis as Anime, CharacterVoiceActor
 
 logger = structlog.get_logger()
 

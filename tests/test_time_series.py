@@ -1,7 +1,7 @@
 """time_series モジュールのテスト."""
 
 from src.analysis.time_series import compute_time_series
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_data():
@@ -50,10 +50,10 @@ class TestComputeTimeSeries:
         result = compute_time_series(credits, anime_map)
         assert result["series"]["credit_count"][2020] == 4
 
-    def test_avg_anime_score(self):
+    def test_avg_staff_count(self):
         credits, anime_map = _make_data()
         result = compute_time_series(credits, anime_map)
-        assert result["series"]["avg_anime_score"][2018] == 7.0
+        assert result["series"]["avg_staff_count"][2018] == 2.0
 
     def test_unique_anime(self):
         credits, anime_map = _make_data()

@@ -10,7 +10,7 @@ Provides dataclass definitions for common return patterns to enable:
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from src.models import Anime, Credit
+from src.models import AnimeAnalysis as Anime, Credit
 
 # ============================================================================
 # Person Metrics Dataclasses (dict[str, dataclass] pattern)

@@ -14,7 +14,7 @@ from collections import defaultdict
 import structlog
 
 from src.analysis.career import CAREER_STAGE
-from src.models import Anime, Credit
+from src.models import AnimeAnalysis as Anime, Credit
 from src.utils.role_groups import (
     DIRECTOR_ROLES as _DIRECTOR_ROLES,
     MENTEE_ROLES as _MENTEE_ROLES,

@@ -1384,7 +1384,7 @@ class IndustryOverviewReport(BaseReportGenerator):
         findings = (
             f"<p>協業者 IV 平均（ネットワーク位置の代理変数）× 個人 IV パーセンタイル"
             f"に基づく 4 群分類、閾値は両軸とも {_EXP_HIGH_PCTILE:.0f} パーセンタイル。"
-            f"本分類は構造的ネットワーク位置の記述であり、個人の能力評価ではない。</p>"
+            f"本分類は構造的ネットワーク位置の記述であり、個人評価を目的としない。</p>"
             f"{gender_table}"
         )
 
@@ -1405,7 +1405,7 @@ class IndustryOverviewReport(BaseReportGenerator):
                 "キャリア初期でクレジット累積が少ない人物を含み得る。"
                 "別の解釈: 同類選好（assortative mixing）により、"
                 "高IV環境では周辺的な参加者も機械的にネットワーク位置上位へと分類される可能性がある。"
-                "このラベルは個人の能力を示すものではなく、ネットワーク位置と IV パーセンタイルの"
+                "このラベルは個人評価を示すものではなく、ネットワーク位置と IV パーセンタイルの"
                 "相対関係のみを記述する。</p>"
             ),
             section_id="four_group_network_vs_iv",

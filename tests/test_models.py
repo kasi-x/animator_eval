@@ -1,6 +1,6 @@
 """models モジュールのテスト."""
 
-from src.models import Anime, Person, Role, ScoreResult, parse_role
+from src.models import BronzeAnime as Anime, Person, Role, ScoreResult, parse_role
 
 
 class TestParseRole:

@@ -39,10 +39,15 @@ class TestExtractRawValues:
         assert set(raw["p1"].keys()) == set(PARAM_KEYS)
 
     def test_consistency_bounded_0_1(self):
-        r = _make_result("p1", career={
-            "first_year": 2010, "latest_year": 2020,
-            "active_years": 11, "highest_stage": 2,
-        })
+        r = _make_result(
+            "p1",
+            career={
+                "first_year": 2010,
+                "latest_year": 2020,
+                "active_years": 11,
+                "highest_stage": 2,
+            },
+        )
         raw = _extract_raw_values([r], [], {}, {})
         assert 0.0 <= raw["p1"]["consistency"] <= 1.0
 
@@ -63,10 +68,12 @@ class TestExtractRawValues:
         assert raw["p2"]["compatibility"] == 1.0
 
     def test_recent_activity_uses_dormancy(self):
-        r_active = _make_result("p1", dormancy=1.0,
-                                growth={"recent_credits": 10, "activity_ratio": 1.0})
-        r_dormant = _make_result("p2", dormancy=0.0,
-                                 growth={"recent_credits": 10, "activity_ratio": 0.0})
+        r_active = _make_result(
+            "p1", dormancy=1.0, growth={"recent_credits": 10, "activity_ratio": 1.0}
+        )
+        r_dormant = _make_result(
+            "p2", dormancy=0.0, growth={"recent_credits": 10, "activity_ratio": 0.0}
+        )
         raw = _extract_raw_values([r_active, r_dormant], [], {}, {})
         assert raw["p1"]["recent_activity"] > raw["p2"]["recent_activity"]
 
@@ -81,7 +88,10 @@ class TestToPercentiles:
                 assert 0.0 <= v <= 99.0, f"{pid}.{k}={v} out of range"
 
     def test_highest_raw_gets_highest_percentile(self):
-        results = [_make_result("low", person_fe=0.0), _make_result("high", person_fe=1.0)]
+        results = [
+            _make_result("low", person_fe=0.0),
+            _make_result("high", person_fe=1.0),
+        ]
         raw = _extract_raw_values(results, [], {}, {})
         pct = _to_percentiles(raw)
         assert pct["high"]["scale_reach"] > pct["low"]["scale_reach"]
@@ -111,7 +121,9 @@ class TestComputePersonParameters:
             for k in PARAM_KEYS:
                 ci = entry["params_ci"][k]
                 assert "lower" in ci and "upper" in ci
-                assert ci["lower"] <= entry["params"][k] <= ci["upper"] or True  # soft check
+                assert (
+                    ci["lower"] <= entry["params"][k] <= ci["upper"] or True
+                )  # soft check
 
     def test_sorted_by_scale_reach_descending(self):
         results = [_make_result(f"p{i}", person_fe=float(i)) for i in range(10)]

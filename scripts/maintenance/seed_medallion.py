@@ -346,7 +346,10 @@ def report(conn: sqlite3.Connection) -> None:
         print(f"  person: {r[0]:28s}  {r[1] or r[2]}")
 
     rows = conn.execute(
-        "SELECT p.name_ja, a.title_ja, c.role, c.source FROM credits c JOIN persons p ON p.id=c.person_id JOIN anime a ON a.id=c.anime_id WHERE c.source IN ('anilist','ann','allcinema') ORDER BY c.source, p.name_ja"
+        "SELECT p.name_ja, a.title_ja, c.role, c.evidence_source "
+        "FROM credits c JOIN persons p ON p.id=c.person_id JOIN anime a ON a.id=c.anime_id "
+        "WHERE c.evidence_source IN ('anilist','ann','allcinema') "
+        "ORDER BY c.evidence_source, p.name_ja"
     ).fetchall()
     print(f"\n── クレジット ({len(rows)} 件) ──────────────────────")
     for r in rows:

@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 import structlog
 
 from src.analysis.cooccurrence_groups import COOCCURRENCE_ROLES
-from src.models import Anime, Credit
+from src.models import AnimeAnalysis as Anime, Credit
 
 logger = structlog.get_logger()
 

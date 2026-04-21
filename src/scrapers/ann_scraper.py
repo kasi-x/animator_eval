@@ -44,8 +44,7 @@ log = structlog.get_logger()
 
 # ─── URLs ────────────────────────────────────────────────────────────────────
 MASTERLIST_URL = (
-    "https://cdn.animenewsnetwork.com/encyclopedia/reports.xml"
-    "?tag=masterlist&nlist=all"
+    "https://cdn.animenewsnetwork.com/encyclopedia/reports.xml?tag=masterlist&nlist=all"
 )
 ANIME_API_URL = "https://www.animenewsnetwork.com/encyclopedia/api.xml"
 PEOPLE_API_URL = ANIME_API_URL  # 人物も同じ XML エンドポイント: ?people=ID
@@ -82,6 +81,7 @@ app = typer.Typer()
 
 # ─── データクラス ─────────────────────────────────────────────────────────────
 
+
 @dataclass
 class AnnStaffEntry:
     ann_person_id: int
@@ -117,6 +117,7 @@ class AnnPersonDetail:
 
 # ─── HTTP クライアント ────────────────────────────────────────────────────────
 
+
 class AnnClient:
     """ANN 非同期 HTTP クライアント (指数バックオフ付き)."""
 
@@ -150,7 +151,9 @@ class AnnClient:
             except (httpx.TimeoutException, httpx.ConnectError) as exc:
                 if attempt >= 5:
                     raise
-                log.warning("ann_request_error", url=url, error=str(exc), retry=attempt + 1)
+                log.warning(
+                    "ann_request_error", url=url, error=str(exc), retry=attempt + 1
+                )
                 await asyncio.sleep(min(backoff, 120))
                 backoff *= 2
                 attempt += 1
@@ -162,8 +165,12 @@ class AnnClient:
                     retry_after = max(int(raw_ra), 5)
                 except (ValueError, TypeError):
                     retry_after = int(min(backoff * 2, 300))
-                log.warning("ann_rate_limited", status=resp.status_code,
-                            wait=retry_after, attempt=attempt)
+                log.warning(
+                    "ann_rate_limited",
+                    status=resp.status_code,
+                    wait=retry_after,
+                    attempt=attempt,
+                )
                 await asyncio.sleep(retry_after)
                 backoff = min(max(backoff * 2, retry_after), 300)
                 attempt += 1
@@ -174,6 +181,7 @@ class AnnClient:
 
 
 # ─── フェーズ 1: マスターリスト取得 ─────────────────────────────────────────
+
 
 async def fetch_masterlist(client: AnnClient) -> list[int]:
     """CDN マスターリスト XML から全アニメ ID を取得する.
@@ -216,7 +224,9 @@ async def _probe_max_id(client: AnnClient) -> list[int]:
     known_high = 27000
     probe_ids = list(range(known_high - 49, known_high + 1))
     try:
-        resp = await client.get(f"{ANIME_API_URL}?anime={'/'.join(str(i) for i in probe_ids)}")
+        resp = await client.get(
+            f"{ANIME_API_URL}?anime={'/'.join(str(i) for i in probe_ids)}"
+        )
         root = ET.fromstring(resp.text)
         found_ids = [int(el.get("id")) for el in root.findall("anime") if el.get("id")]
         if found_ids:
@@ -234,6 +244,7 @@ async def _probe_max_id(client: AnnClient) -> list[int]:
 
 
 # ─── フェーズ 2: アニメ XML 解析 ────────────────────────────────────────────
+
 
 def _parse_vintage(vintage: str) -> tuple[int | None, str | None, str | None]:
     """Vintage 文字列から (year, start_date, end_date) を解析する.
@@ -254,8 +265,18 @@ def _parse_vintage(vintage: str) -> tuple[int | None, str | None, str | None]:
     m = date_re.search(vintage)
     if m:
         months = {
-            "Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6,
-            "Jul": 7, "Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12,
+            "Jan": 1,
+            "Feb": 2,
+            "Mar": 3,
+            "Apr": 4,
+            "May": 5,
+            "Jun": 6,
+            "Jul": 7,
+            "Aug": 8,
+            "Sep": 9,
+            "Oct": 10,
+            "Nov": 11,
+            "Dec": 12,
         }
         sm, sd, sy = m.group(1), int(m.group(2)), int(m.group(3))
         year = sy
@@ -322,11 +343,13 @@ def parse_anime_xml(root: ET.Element) -> list[AnnAnimeRecord]:
             name = (person_el.text or "").strip()
             task = (task_el.text or "").strip()
             if name and task:
-                rec.staff.append(AnnStaffEntry(
-                    ann_person_id=pid,
-                    name_en=name,
-                    task=task,
-                ))
+                rec.staff.append(
+                    AnnStaffEntry(
+                        ann_person_id=pid,
+                        name_en=name,
+                        task=task,
+                    )
+                )
 
         records.append(rec)
 
@@ -353,6 +376,7 @@ async def fetch_anime_batch(
 
 
 # ─── フェーズ 3: 人物 XML 解析 ─────────────────────────────────────────────
+
 
 def parse_person_xml(root: ET.Element) -> list[AnnPersonDetail]:
     """ANN XML API レスポンス (<ann>) から AnnPersonDetail リストを返す."""
@@ -403,16 +427,18 @@ def parse_person_xml(root: ET.Element) -> list[AnnPersonDetail]:
             elif itype == "biography" and text:
                 description = text[:2000]
 
-        results.append(AnnPersonDetail(
-            ann_id=ann_id,
-            name_en=name_en,
-            name_ja=name_ja,
-            date_of_birth=date_of_birth,
-            hometown=hometown,
-            blood_type=blood_type,
-            website=website,
-            description=description,
-        ))
+        results.append(
+            AnnPersonDetail(
+                ann_id=ann_id,
+                name_en=name_en,
+                name_ja=name_ja,
+                date_of_birth=date_of_birth,
+                hometown=hometown,
+                blood_type=blood_type,
+                website=website,
+                description=description,
+            )
+        )
     return results
 
 
@@ -436,6 +462,7 @@ async def fetch_person_batch(
 
 
 # ─── DB 保存ヘルパー ─────────────────────────────────────────────────────────
+
 
 def save_ann_anime(conn, rec: AnnAnimeRecord) -> None:
     """AnnAnimeRecord を src_ann_anime に保存する."""
@@ -470,6 +497,7 @@ def save_person_detail(conn, detail: AnnPersonDetail) -> None:
 
 # ─── チェックポイント ────────────────────────────────────────────────────────
 
+
 def _load_checkpoint(path: Path) -> dict:
     if path.exists():
         with open(path) as f:
@@ -484,6 +512,7 @@ def _save_checkpoint(path: Path, data: dict) -> None:
 
 
 # ─── typer コマンド ──────────────────────────────────────────────────────────
+
 
 @app.command("scrape-anime")
 def cmd_scrape_anime(
@@ -543,13 +572,19 @@ async def _run_scrape_anime(
         if limit:
             pending = pending[:limit]
 
-        log.info("ann_anime_scrape_start",
-                 total=len(all_ids), completed=len(completed), pending=len(pending))
+        log.info(
+            "ann_anime_scrape_start",
+            total=len(all_ids),
+            completed=len(completed),
+            pending=len(pending),
+        )
 
         total_anime = 0
         total_credits = 0
 
-        batches = [pending[i:i + batch_size] for i in range(0, len(pending), batch_size)]
+        batches = [
+            pending[i : i + batch_size] for i in range(0, len(pending), batch_size)
+        ]
 
         done_this_run = 0
         for batch_idx, batch in enumerate(batches):
@@ -569,14 +604,21 @@ async def _run_scrape_anime(
             if (batch_idx + 1) % max(1, checkpoint_interval // batch_size) == 0:
                 cp["completed_ids"] = list(completed)
                 _save_checkpoint(cp_path, cp)
-                log.info("ann_anime_progress",
-                         done=done_this_run, remaining=len(pending) - done_this_run,
-                         total_anime=total_anime, total_credits=total_credits)
+                log.info(
+                    "ann_anime_progress",
+                    done=done_this_run,
+                    remaining=len(pending) - done_this_run,
+                    total_anime=total_anime,
+                    total_credits=total_credits,
+                )
 
         cp["completed_ids"] = list(completed)
         _save_checkpoint(cp_path, cp)
-        log.info("ann_anime_scrape_done",
-                 total_anime=total_anime, total_credits=total_credits)
+        log.info(
+            "ann_anime_scrape_done",
+            total_anime=total_anime,
+            total_credits=total_credits,
+        )
 
     finally:
         await client.close()
@@ -629,10 +671,14 @@ async def _run_scrape_persons(
     if limit:
         pending = pending[:limit]
 
-    log.info("ann_persons_scrape_start",
-             total=len(all_ann_ids), completed=len(completed), pending=len(pending))
+    log.info(
+        "ann_persons_scrape_start",
+        total=len(all_ann_ids),
+        completed=len(completed),
+        pending=len(pending),
+    )
 
-    batches = [pending[i:i + batch_size] for i in range(0, len(pending), batch_size)]
+    batches = [pending[i : i + batch_size] for i in range(0, len(pending), batch_size)]
     done_this_run = 0
 
     client = AnnClient(delay=delay)
@@ -650,8 +696,11 @@ async def _run_scrape_persons(
             if (batch_idx + 1) % max(1, checkpoint_interval // batch_size) == 0:
                 cp["completed_ids"] = list(completed)
                 _save_checkpoint(cp_path, cp)
-                log.info("ann_persons_progress",
-                         done=done_this_run, remaining=len(pending) - done_this_run)
+                log.info(
+                    "ann_persons_progress",
+                    done=done_this_run,
+                    remaining=len(pending) - done_this_run,
+                )
 
         cp["completed_ids"] = list(completed)
         _save_checkpoint(cp_path, cp)
@@ -668,16 +717,26 @@ def cmd_scrape_all(
     data_dir: Path = typer.Option(DEFAULT_DATA_DIR, help="チェックポイント保存先"),
 ) -> None:
     """Phase 1-3 を順番に実行する."""
-    asyncio.run(_run_scrape_anime(
-        limit=limit, batch_size=BATCH_SIZE, delay=delay,
-        checkpoint_interval=SCRAPE_CHECKPOINT_INTERVAL,
-        data_dir=data_dir, resume=True,
-    ))
-    asyncio.run(_run_scrape_persons(
-        limit=0, batch_size=BATCH_SIZE, delay=delay,
-        checkpoint_interval=SCRAPE_CHECKPOINT_INTERVAL,
-        data_dir=data_dir, resume=True,
-    ))
+    asyncio.run(
+        _run_scrape_anime(
+            limit=limit,
+            batch_size=BATCH_SIZE,
+            delay=delay,
+            checkpoint_interval=SCRAPE_CHECKPOINT_INTERVAL,
+            data_dir=data_dir,
+            resume=True,
+        )
+    )
+    asyncio.run(
+        _run_scrape_persons(
+            limit=0,
+            batch_size=BATCH_SIZE,
+            delay=delay,
+            checkpoint_interval=SCRAPE_CHECKPOINT_INTERVAL,
+            data_dir=data_dir,
+            resume=True,
+        )
+    )
 
 
 if __name__ == "__main__":

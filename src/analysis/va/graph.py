@@ -14,7 +14,7 @@ from collections import defaultdict
 import networkx as nx
 import structlog
 
-from src.models import Anime, CharacterVoiceActor, Credit, Role
+from src.models import AnimeAnalysis as Anime, CharacterVoiceActor, Credit, Role
 
 logger = structlog.get_logger()
 

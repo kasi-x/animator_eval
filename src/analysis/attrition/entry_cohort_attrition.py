@@ -135,9 +135,11 @@ def build_entry_cohort_dataset(
 
         role = meta["primary_role"]
         role_cat = (
-            "direction" if "director" in role.lower() else
-            "animation" if "animat" in role.lower() else
-            "other"
+            "direction"
+            if "director" in role.lower()
+            else "animation"
+            if "animat" in role.lower()
+            else "other"
         )
 
         dataset.append(
@@ -226,7 +228,9 @@ def compute_cox_ph(dataset: list[dict]) -> dict:
     import pandas as pd
 
     df = pd.DataFrame(dataset)
-    df = df[["duration", "event", "debut_studio_tier", "early_density", "debut_year"]].copy()
+    df = df[
+        ["duration", "event", "debut_studio_tier", "early_density", "debut_year"]
+    ].copy()
     df = df.dropna()
 
     if len(df) < 30:
@@ -298,8 +302,12 @@ def compute_dml_attrition(
         Y_tr, Y_te = Y[train_idx], Y[test_idx]
         D_tr, D_te = D[train_idx], D[test_idx]
 
-        g_model = GradientBoostingRegressor(n_estimators=100, max_depth=3, random_state=42)
-        m_model = GradientBoostingRegressor(n_estimators=100, max_depth=3, random_state=42)
+        g_model = GradientBoostingRegressor(
+            n_estimators=100, max_depth=3, random_state=42
+        )
+        m_model = GradientBoostingRegressor(
+            n_estimators=100, max_depth=3, random_state=42
+        )
 
         g_model.fit(X_tr, Y_tr)
         m_model.fit(X_tr, D_tr)
@@ -316,13 +324,13 @@ def compute_dml_attrition(
         r2_d_scores.append(1 - ss_res_d / ss_tot_d if ss_tot_d > 0 else 0.0)
 
     # Final OLS on residuals
-    denom = np.sum(D_res ** 2)
+    denom = np.sum(D_res**2)
     if denom < 1e-10:
         return {"error": "no_treatment_variation", "n": n}
 
     theta = float(np.sum(D_res * Y_res) / denom)
     epsilon = Y_res - theta * D_res
-    se = float(np.sqrt(np.sum(epsilon ** 2 * D_res ** 2) / denom ** 2))
+    se = float(np.sqrt(np.sum(epsilon**2 * D_res**2) / denom**2))
 
     logger.info("dml_attrition_done", theta=round(theta, 4), se=round(se, 4), n=n)
     return {
@@ -332,7 +340,8 @@ def compute_dml_attrition(
         "ci_upper": theta + 1.96 * se,
         "t_stat": theta / se if se > 0 else 0.0,
         "p_value": float(
-            2 * (1 - __import__("scipy").stats.norm.cdf(abs(theta / se if se > 0 else 0)))
+            2
+            * (1 - __import__("scipy").stats.norm.cdf(abs(theta / se if se > 0 else 0)))
         ),
         "n": n,
         "r2_y": float(np.mean(r2_y_scores)),

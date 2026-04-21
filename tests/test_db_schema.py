@@ -117,7 +117,7 @@ def test_person_model_covers_person_row():
 
 def test_anime_model_covers_anime_row():
     """Anime モデルが AnimeRow の主要フィールドをカバーすること."""
-    from src.models import Anime
+    from src.models import BronzeAnime as Anime
 
     anime_fields = set(Anime.model_fields.keys())
     row_fields = _dataclass_fields(AnimeRow)

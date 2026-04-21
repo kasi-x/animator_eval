@@ -10,7 +10,7 @@ from dataclasses import dataclass
 
 import structlog
 
-from src.models import Anime, Character, CharacterVoiceActor
+from src.models import AnimeAnalysis as Anime, Character, CharacterVoiceActor
 
 logger = structlog.get_logger()
 

@@ -228,9 +228,9 @@ class MADBCoverageReport(BaseReportGenerator):
     def _build_source_comparison_section(self, sb: SectionBuilder) -> ReportSection:
         try:
             rows = self.conn.execute("""
-                SELECT source, COUNT(DISTINCT anime_id) AS n_anime, COUNT(*) AS n_credits
+                SELECT evidence_source AS source, COUNT(DISTINCT anime_id) AS n_anime, COUNT(*) AS n_credits
                 FROM credits
-                WHERE source IS NOT NULL
+                WHERE evidence_source IS NOT NULL
                 GROUP BY source
                 ORDER BY n_credits DESC
             """).fetchall()
@@ -241,7 +241,7 @@ class MADBCoverageReport(BaseReportGenerator):
             return ReportSection(
                 title="ソース別カバレッジ比較",
                 findings_html=(
-                    "<p>ソース別内訳データがありません（credits.sourceカラム）。"
+                    "<p>ソース別内訳データがありません（credits.evidence_sourceカラム）。"
                     "ソースには以下が含まれる: AniList（主要アニメメタデータ＋スタッフ）、"
                     "MADB/SeesaaWiki（日本の制作Wiki — より完全な日本語クレジットレコード）、"
                     "MAL/Jikan（補足）。"
@@ -275,7 +275,7 @@ class MADBCoverageReport(BaseReportGenerator):
             findings_html=findings,
             visualization_html=plotly_div_safe(fig, "chart_source", height=380),
             method_note=(
-                "ソースは credits.source（データ来歴トラッキング）から取得。"
+                "ソースは credits.evidence_source（データ来歴トラッキング）から取得。"
                 "AniList: 国際的なアニメDBで近年作品に強い。"
                 "MADB/SeesaaWiki: 日本の制作Wikiで日本固有の役職に強い。"
                 "カバレッジバイアス: MADB は 2000年以前の作品を過剰代表、"

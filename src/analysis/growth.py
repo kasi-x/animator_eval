@@ -1,13 +1,13 @@
 """成長予測 — キャリアトレンドに基づく人物の成長傾向分析.
 
-キャリアデータと過去スコアから、
+    キャリアデータと過去クレジット密度から、
 各人物の成長トレンドを推定する。
 """
 
 import structlog
 
 from src.analysis.protocols import GrowthMetrics
-from src.models import Anime, Credit
+from src.models import AnimeAnalysis as Anime, Credit
 
 logger = structlog.get_logger()
 
@@ -38,11 +38,7 @@ def compute_growth_trends(
         anime = anime_map.get(c.anime_id)
         if anime and anime.year:
             person_years[c.person_id][anime.year].append(
-                {
-                    "anime_id": c.anime_id,
-                    "score": getattr(anime, "score", None),  # display-only
-                    "role": c.role.value,
-                }
+                {"anime_id": c.anime_id, "role": c.role.value}
             )
 
     if not person_years:
@@ -97,16 +93,6 @@ def compute_growth_trends(
             else:
                 trend = "stable"
 
-        # Average anime scores for recent vs career
-        recent_scores = []
-        career_scores = []
-        for y, entries in yearly.items():
-            for e in entries:
-                if e["score"]:
-                    career_scores.append(e["score"])
-                    if y in recent_years:
-                        recent_scores.append(e["score"])
-
         results[pid] = GrowthMetrics(
             yearly_credits=dict(sorted(yearly_counts.items())),
             trend=trend,
@@ -115,16 +101,8 @@ def compute_growth_trends(
             total_years=total_years,
             career_span=career_span,
             activity_ratio=round(recent_credits / max(total_credits, 1), 3),
-            recent_avg_anime_score=(
-                round(sum(recent_scores) / len(recent_scores), 2)
-                if recent_scores
-                else None
-            ),
-            career_avg_anime_score=(
-                round(sum(career_scores) / len(career_scores), 2)
-                if career_scores
-                else None
-            ),
+            recent_avg_anime_score=None,
+            career_avg_anime_score=None,
             current_score=person_scores.get(pid) if person_scores else None,
         )
 

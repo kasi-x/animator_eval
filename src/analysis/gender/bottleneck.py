@@ -35,10 +35,10 @@ def compute_gender_survival_by_stage(conn: sqlite3.Connection) -> dict[str, Any]
 
     rows = conn.execute(
         """
-        SELECT p.person_id, p.gender,
+        SELECT p.id AS person_id, p.gender,
                fc.first_year, fc.latest_year, fc.highest_stage, fc.active_years
         FROM persons p
-        JOIN feat_career fc ON fc.person_id = p.person_id
+        JOIN feat_career fc ON fc.person_id = p.id
         WHERE p.gender IN ('F', 'M')
         """
     ).fetchall()
@@ -49,8 +49,17 @@ def compute_gender_survival_by_stage(conn: sqlite3.Connection) -> dict[str, Any]
             "data_quality_note": "persons.gender の記録率が低い — 結果の代表性を確認してください",
         }
 
-    df = pd.DataFrame(rows, columns=["person_id", "gender", "first_year", "latest_year",
-                                     "highest_stage", "active_years"])
+    df = pd.DataFrame(
+        rows,
+        columns=[
+            "person_id",
+            "gender",
+            "first_year",
+            "latest_year",
+            "highest_stage",
+            "active_years",
+        ],
+    )
 
     total_persons = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
     n_with_gender = len(df)
@@ -59,7 +68,9 @@ def compute_gender_survival_by_stage(conn: sqlite3.Connection) -> dict[str, Any]
         "data_quality": {
             "total_persons": total_persons,
             "persons_with_gender": n_with_gender,
-            "coverage_pct": round(100 * n_with_gender / total_persons, 1) if total_persons else 0,
+            "coverage_pct": round(100 * n_with_gender / total_persons, 1)
+            if total_persons
+            else 0,
             "note": "gender 欠損率が高い場合、サンプリングバイアスに注意",
         }
     }
@@ -75,7 +86,9 @@ def compute_gender_survival_by_stage(conn: sqlite3.Connection) -> dict[str, Any]
             for _, row in grp.iterrows():
                 reached = int(row["highest_stage"] >= stage_threshold)
                 if reached:
-                    dur = max(1, (row["latest_year"] or row["first_year"]) - row["first_year"])
+                    dur = max(
+                        1, (row["latest_year"] or row["first_year"]) - row["first_year"]
+                    )
                 else:
                     dur = max(1, row["active_years"] or 1)
                 durs.append(dur)
@@ -94,7 +107,9 @@ def compute_gender_survival_by_stage(conn: sqlite3.Connection) -> dict[str, Any]
         kmf_m.fit(dur_m, evt_m)
 
         try:
-            lr = logrank_test(dur_f, dur_m, event_observed_A=evt_f, event_observed_B=evt_m)
+            lr = logrank_test(
+                dur_f, dur_m, event_observed_A=evt_f, event_observed_B=evt_m
+            )
             p_value = float(lr.p_value)
         except Exception:
             p_value = None
@@ -140,7 +155,7 @@ def compute_promotion_gap_oaxaca(conn: sqlite3.Connection) -> dict[str, Any]:
         SELECT p.gender, fc.highest_stage, fc.active_years,
                fc.total_credits, fc.first_year
         FROM persons p
-        JOIN feat_career fc ON fc.person_id = p.person_id
+        JOIN feat_career fc ON fc.person_id = p.id
         WHERE p.gender IN ('F', 'M')
         """
     ).fetchall()
@@ -148,8 +163,16 @@ def compute_promotion_gap_oaxaca(conn: sqlite3.Connection) -> dict[str, Any]:
     if not rows:
         return {"error": "no_gender_data"}
 
-    df = pd.DataFrame(rows, columns=["gender", "highest_stage", "active_years",
-                                     "total_credits", "first_year"])
+    df = pd.DataFrame(
+        rows,
+        columns=[
+            "gender",
+            "highest_stage",
+            "active_years",
+            "total_credits",
+            "first_year",
+        ],
+    )
     df = df.dropna()
 
     outcome_threshold = 3
@@ -164,7 +187,11 @@ def compute_promotion_gap_oaxaca(conn: sqlite3.Connection) -> dict[str, Any]:
     X_m, Y_m = X[~is_F], Y[~is_F]
 
     if len(X_f) < 10 or len(X_m) < 10:
-        return {"error": "insufficient_gendered_data", "n_F": int(is_F.sum()), "n_M": int((~is_F).sum())}
+        return {
+            "error": "insufficient_gendered_data",
+            "n_F": int(is_F.sum()),
+            "n_M": int((~is_F).sum()),
+        }
 
     # Pooled model
     model_pool = LogisticRegression(max_iter=500)
@@ -190,7 +217,9 @@ def compute_promotion_gap_oaxaca(conn: sqlite3.Connection) -> dict[str, Any]:
         "raw_gap": round(raw_gap, 4),
         "explained": round(explained, 4),
         "unexplained": round(unexplained, 4),
-        "explained_fraction": round(explained / raw_gap, 4) if abs(raw_gap) > 0.001 else None,
+        "explained_fraction": round(explained / raw_gap, 4)
+        if abs(raw_gap) > 0.001
+        else None,
         "components": explained_components,
         "n_F": int(is_F.sum()),
         "n_M": int((~is_F).sum()),
@@ -215,10 +244,10 @@ def compute_studio_gender_fe(conn: sqlite3.Connection) -> dict[str, Any]:
         SELECT p.gender, fc.person_id, fc.highest_stage, fc.active_years,
                fc.first_year, sa.studio_id
         FROM persons p
-        JOIN feat_career fc ON fc.person_id = p.person_id
-        JOIN feat_studio_affiliation sa ON sa.person_id = p.person_id
+        JOIN feat_career fc ON fc.person_id = p.id
+        JOIN feat_studio_affiliation sa ON sa.person_id = p.id
         WHERE p.gender IN ('F', 'M')
-        GROUP BY p.person_id, sa.studio_id
+        GROUP BY p.id, sa.studio_id
         HAVING COUNT(*) >= 1
         """
     ).fetchall()
@@ -227,8 +256,18 @@ def compute_studio_gender_fe(conn: sqlite3.Connection) -> dict[str, Any]:
         return {"error": "no_data"}
 
     import pandas as pd
-    df = pd.DataFrame(rows, columns=["gender", "person_id", "highest_stage",
-                                     "active_years", "first_year", "studio_id"])
+
+    df = pd.DataFrame(
+        rows,
+        columns=[
+            "gender",
+            "person_id",
+            "highest_stage",
+            "active_years",
+            "first_year",
+            "studio_id",
+        ],
+    )
     df = df.dropna()
 
     # per-studio: promotion gap (simple rate difference F - M, min 5 per gender)

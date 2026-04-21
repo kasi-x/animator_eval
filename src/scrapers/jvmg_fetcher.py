@@ -14,7 +14,8 @@ import httpx
 import structlog
 import typer
 
-from src.models import Anime, Credit, Person, parse_role
+from src.models import BronzeAnime, Credit, Person, parse_role
+from src.scrapers.cache_store import load_cached_json, save_cached_json
 
 log = structlog.get_logger()
 
@@ -98,6 +99,11 @@ class WikidataClient:
 
     async def query(self, sparql: str) -> list[dict]:
         """SPARQL クエリを実行."""
+        cache_key = {"sparql": sparql}
+        cached = load_cached_json("wikidata/sparql", cache_key)
+        if cached is not None:
+            return cached
+
         await self._rate_limit()
         for attempt in range(3):
             try:
@@ -116,7 +122,9 @@ class WikidataClient:
                     continue
                 resp.raise_for_status()
                 data = resp.json()
-                return data.get("results", {}).get("bindings", [])
+                result = data.get("results", {}).get("bindings", [])
+                save_cached_json("wikidata/sparql", cache_key, result)
+                return result
             except httpx.HTTPError as e:
                 log.warning(
                     "wikidata_query_failed",
@@ -139,9 +147,9 @@ class WikidataClient:
 
 def parse_wikidata_results(
     bindings: list[dict],
-) -> tuple[list[Anime], list[Person], list[Credit]]:
+) -> tuple[list[BronzeAnime], list[Person], list[Credit]]:
     """Wikidata SPARQL 結果をパースする."""
-    anime_map: dict[str, Anime] = {}
+    anime_map: dict[str, BronzeAnime] = {}
     person_map: dict[str, Person] = {}
     credits: list[Credit] = []
 
@@ -169,7 +177,7 @@ def parse_wikidata_results(
                     year = int(float(year_str))
                 except ValueError:
                     pass
-            anime_map[anime_id] = Anime(
+            anime_map[anime_id] = BronzeAnime(
                 id=anime_id,
                 title_en=anime_label,
                 year=year,
@@ -197,10 +205,10 @@ def parse_wikidata_results(
 
 async def fetch_anime_staff(
     max_records: int = 5000,
-) -> tuple[list[Anime], list[Person], list[Credit]]:
+) -> tuple[list[BronzeAnime], list[Person], list[Credit]]:
     """Wikidata からアニメスタッフデータを取得."""
     client = WikidataClient()
-    all_anime: list[Anime] = []
+    all_anime: list[BronzeAnime] = []
     all_persons: list[Person] = []
     all_credits: list[Credit] = []
 

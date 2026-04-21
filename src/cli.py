@@ -52,7 +52,13 @@ def stats(lang: str = lang_option) -> None:
 
         # ソース分布
         source_dist = conn.execute(
-            "SELECT source, COUNT(*) as cnt FROM credits GROUP BY source ORDER BY cnt DESC"
+            """
+            SELECT evidence_source AS source_code, COUNT(*) as cnt
+            FROM credits
+            WHERE evidence_source != ''
+            GROUP BY source_code
+            ORDER BY cnt DESC
+            """
         ).fetchall()
 
         # 年代分布
@@ -87,7 +93,7 @@ def stats(lang: str = lang_option) -> None:
         src_table.add_column(t("cli.stats.source"), style="cyan")
         src_table.add_column(t("cli.stats.count"), justify="right", style="green")
         for row in source_dist:
-            src_table.add_row(row["source"] or "(empty)", f"{row['cnt']:,}")
+            src_table.add_row(row["source_code"] or "(empty)", f"{row['cnt']:,}")
         console.print(src_table)
 
     if year_dist:
@@ -267,9 +273,12 @@ def profile(person_id: str = typer.Argument(help="人物ID (例: anilist:p100)")
         ).fetchone()
 
         credits = conn.execute(
-            """SELECT c.role, c.source, a.title_ja, a.title_en, a.year, a.score
+            """SELECT c.role,
+                      c.evidence_source AS source,
+                      a.title_ja, a.title_en, a.year, d.score
                FROM credits c
                JOIN anime a ON c.anime_id = a.id
+               LEFT JOIN anime_display d ON d.id = a.id
                WHERE c.person_id = ?
                ORDER BY a.year DESC""",
             (person_id,),
@@ -672,8 +681,10 @@ def timeline(
             raise typer.Exit(1)
 
         credits = conn.execute(
-            """SELECT c.role, a.title_ja, a.title_en, a.year, a.score
-               FROM credits c JOIN anime a ON c.anime_id = a.id
+            """SELECT c.role, a.title_ja, a.title_en, a.year, d.score
+               FROM credits c
+               JOIN anime a ON c.anime_id = a.id
+               LEFT JOIN anime_display d ON d.id = a.id
                WHERE c.person_id = ? AND a.year IS NOT NULL
                ORDER BY a.year""",
             (person_id,),
@@ -1663,9 +1674,9 @@ def data_quality() -> None:
         total_anime = stats.get("anime", 0)
 
         credits_with_source = (
-            conn.execute("SELECT COUNT(*) FROM credits WHERE source != ''").fetchone()[
-                0
-            ]
+            conn.execute(
+                "SELECT COUNT(*) FROM credits WHERE evidence_source != ''"
+            ).fetchone()[0]
             if total_credits
             else 0
         )
@@ -1686,14 +1697,18 @@ def data_quality() -> None:
 
         anime_with_score = (
             conn.execute(
-                "SELECT COUNT(*) FROM anime WHERE score IS NOT NULL"
+                "SELECT COUNT(*) FROM anime_display WHERE score IS NOT NULL"
             ).fetchone()[0]
             if total_anime
             else 0
         )
 
         source_count = conn.execute(
-            "SELECT COUNT(DISTINCT source) FROM credits WHERE source != ''"
+            """
+            SELECT COUNT(DISTINCT evidence_source)
+            FROM credits
+            WHERE evidence_source != ''
+            """
         ).fetchone()[0]
 
         latest_year_row = conn.execute(

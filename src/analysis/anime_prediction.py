@@ -11,7 +11,7 @@ from collections import defaultdict
 
 import structlog
 
-from src.models import Anime, Credit
+from src.models import AnimeAnalysis as Anime, Credit
 
 logger = structlog.get_logger()
 
@@ -76,7 +76,6 @@ def predict_anime_score(
                 "anime_id": anime_id,
                 "title": anime.display_title,
                 "year": anime.year,
-                "score": getattr(anime, "score", None),  # display-only
                 "staff_count": staff_count,
                 "overlap_count": len(overlap),
                 "overlap_ratio": len(overlap) / len(team_set),

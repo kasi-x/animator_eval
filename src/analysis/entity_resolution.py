@@ -158,8 +158,11 @@ def exact_match_cluster(
                 if ml_clusters:
                     p_cluster = ml_clusters.get(pid)
                     rep_cluster = ml_clusters.get(rep_id)
-                    if (p_cluster is not None and rep_cluster is not None
-                            and p_cluster != rep_cluster):
+                    if (
+                        p_cluster is not None
+                        and rep_cluster is not None
+                        and p_cluster != rep_cluster
+                    ):
                         continue
                 cluster.append(pid)
                 placed = True
@@ -333,7 +336,9 @@ def cross_source_match(persons: list[Person]) -> dict[str, str]:
             if n and n in mal_name_index:
                 mal_ids = mal_name_index[n]
                 if len(mal_ids) == 1:
-                    mal_p = next(mp for mid, mp in mal_persons.items() if mid == mal_ids[0])
+                    mal_p = next(
+                        mp for mid, mp in mal_persons.items() if mid == mal_ids[0]
+                    )
                     if not _definitely_different(p, mal_p):
                         canonical_map[anilist_pid] = mal_ids[0]
                         logger.info(
@@ -656,6 +661,7 @@ def resolve_all(
     if credits_by_person and anime_meta:
         try:
             from src.analysis.ml_homonym_split import split_homonym_groups
+
             ml_clusters = split_homonym_groups(persons, credits_by_person, anime_meta)
             logger.info("ml_homonym_split_applied", n_clustered=len(ml_clusters))
         except Exception as exc:

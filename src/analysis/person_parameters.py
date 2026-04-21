@@ -23,12 +23,12 @@ logger = structlog.get_logger()
 # Archetype labels (K=6 centroids ranked by parameter profile)
 # -------------------------------------------------------------------
 ARCHETYPE_LABELS = [
-    "構造中核型",        # 中心性・信頼蓄積 高
-    "育成型",           # 育成貢献 高
+    "構造中核型",  # 中心性・信頼蓄積 高
+    "育成型",  # 育成貢献 高
     "スペシャリスト型",  # ジャンル特化 高, 協業幅 低
     "広域ジェネラリスト型",  # 協業幅 高, 継続力 中
-    "現役トップ型",      # 直近活発度 + 規模到達力 高
-    "レガシー型",        # 継続力 + 信頼蓄積 高, 直近活発度 低
+    "現役トップ型",  # 直近活発度 + 規模到達力 高
+    "レガシー型",  # 継続力 + 信頼蓄積 高, 直近活発度 低
 ]
 
 PARAM_KEYS = [
@@ -61,6 +61,7 @@ PARAM_NAMES_JA = {
 # -------------------------------------------------------------------
 # Raw value extraction helpers
 # -------------------------------------------------------------------
+
 
 def _extract_raw_values(
     results: list[dict],
@@ -116,7 +117,9 @@ def _extract_raw_values(
 
         # --- 7. 役割進化: highest_stage × (active_years / career_span) ---
         # Rewards reaching higher stages while staying consistently active.
-        role_evolution_raw = highest_stage * (active_years / career_span) if career_span > 1 else 0.0
+        role_evolution_raw = (
+            highest_stage * (active_years / career_span) if career_span > 1 else 0.0
+        )
 
         # --- 8. ジャンル特化: max share across score_tiers (genre concentration) ---
         ga = genre_affinity.get(pid, {})
@@ -160,6 +163,7 @@ def _extract_raw_values(
 # Percentile normalization
 # -------------------------------------------------------------------
 
+
 def _to_percentiles(raw: dict[str, dict[str, float]]) -> dict[str, dict[str, float]]:
     """各パラメータを 0-99 percentile に変換する."""
     pids = list(raw.keys())
@@ -184,6 +188,7 @@ def _to_percentiles(raw: dict[str, dict[str, float]]) -> dict[str, dict[str, flo
 # Bootstrap CI
 # -------------------------------------------------------------------
 
+
 def _bootstrap_ci(
     values: list[float],
     n_boot: int = 500,
@@ -197,7 +202,9 @@ def _bootstrap_ci(
         v = float(arr[0])
         return (v, v)
     rng = np.random.default_rng(42)
-    boot_means = [rng.choice(arr, size=len(arr), replace=True).mean() for _ in range(n_boot)]
+    boot_means = [
+        rng.choice(arr, size=len(arr), replace=True).mean() for _ in range(n_boot)
+    ]
     lo = float(np.percentile(boot_means, 100 * alpha / 2))
     hi = float(np.percentile(boot_means, 100 * (1 - alpha / 2)))
     return (round(lo, 2), round(hi, 2))
@@ -234,6 +241,7 @@ def _compute_ci(
 # Archetype classification (K-means K=6)
 # -------------------------------------------------------------------
 
+
 def _assign_archetypes(
     pct: dict[str, dict[str, float]],
 ) -> dict[str, tuple[str, int]]:
@@ -261,7 +269,10 @@ def _assign_archetypes(
     # Map each cluster idx to archetype based on which param is highest relative to others
     cluster_to_archetype = _name_clusters(centers)
 
-    return {pid: (cluster_to_archetype[labels[i]], int(labels[i])) for i, pid in enumerate(pids)}
+    return {
+        pid: (cluster_to_archetype[labels[i]], int(labels[i]))
+        for i, pid in enumerate(pids)
+    }
 
 
 def _name_clusters(centers: np.ndarray) -> dict[int, str]:
@@ -317,6 +328,7 @@ def _name_clusters(centers: np.ndarray) -> dict[int, str]:
 # Main entry point
 # -------------------------------------------------------------------
 
+
 def compute_person_parameters(
     results: list[dict],
     mentorship_list: list[dict] | None = None,
@@ -344,13 +356,17 @@ def compute_person_parameters(
 
     logger.info("person_parameters_start", n_persons=len(results))
 
-    raw = _extract_raw_values(results, mentorship_list, genre_affinity, compatibility_boost)
+    raw = _extract_raw_values(
+        results, mentorship_list, genre_affinity, compatibility_boost
+    )
     pct = _to_percentiles(raw)
     ci = _compute_ci(pct, raw)
     archetypes = _assign_archetypes(pct)
 
     # Build name lookup
-    pid_to_names = {r["person_id"]: (r.get("name", ""), r.get("name_ja", "")) for r in results}
+    pid_to_names = {
+        r["person_id"]: (r.get("name", ""), r.get("name_ja", "")) for r in results
+    }
 
     output = []
     for pid, params in pct.items():
@@ -366,8 +382,7 @@ def compute_person_parameters(
             "params": {k: params.get(k, 0.0) for k in PARAM_KEYS},
             "params_ja": {PARAM_NAMES_JA[k]: params.get(k, 0.0) for k in PARAM_KEYS},
             "params_ci": {
-                k: {"lower": ci[pid][k][0], "upper": ci[pid][k][1]}
-                for k in PARAM_KEYS
+                k: {"lower": ci[pid][k][0], "upper": ci[pid][k][1]} for k in PARAM_KEYS
             },
         }
         output.append(entry)
@@ -380,16 +395,16 @@ def compute_person_parameters(
 
 # Mapping from compute_person_parameters PARAM_KEYS → meta_common_person_parameters columns
 _PARAM_TO_DB_COL = {
-    "scale_reach":    "scale_reach",
+    "scale_reach": "scale_reach",
     "collab_breadth": "collab_width",
-    "consistency":    "continuity",
-    "mentor_value":   "mentor_contribution",
-    "centrality":     "centrality",
-    "trust_depth":    "trust_accum",
+    "consistency": "continuity",
+    "mentor_value": "mentor_contribution",
+    "centrality": "centrality",
+    "trust_depth": "trust_accum",
     "role_evolution": "role_evolution",
-    "genre_spec":     "genre_specialization",
+    "genre_spec": "genre_specialization",
     "recent_activity": "recent_activity",
-    "compatibility":  "compatibility",
+    "compatibility": "compatibility",
 }
 
 
@@ -419,7 +434,11 @@ def populate_meta_common_person_parameters(
         ci = entry.get("params_ci", {})
         archetype = entry.get("archetype")
 
-        row: dict = {"person_id": pid, "archetype": archetype, "archetype_confidence": None}
+        row: dict = {
+            "person_id": pid,
+            "archetype": archetype,
+            "archetype_confidence": None,
+        }
         for param_key, db_prefix in _PARAM_TO_DB_COL.items():
             row[f"{db_prefix}_pct"] = params.get(param_key)
             ci_entry = ci.get(param_key, {})
@@ -443,13 +462,20 @@ def populate_meta_common_person_parameters(
 
     # Register lineage
     from src.database import register_meta_lineage
+
     register_meta_lineage(
         conn,
         table_name="meta_common_person_parameters",
         audience="common",
-        source_silver_tables=["anime_analysis", "credits", "persons",
-                              "feat_person_scores", "feat_career",
-                              "feat_genre_affinity", "feat_network"],
+        source_silver_tables=[
+            "anime_analysis",
+            "credits",
+            "persons",
+            "feat_person_scores",
+            "feat_career",
+            "feat_genre_affinity",
+            "feat_network",
+        ],
         formula_version="v2.0",
         ci_method="bootstrap_n1000",
         null_model="degree_preserving_rewiring_n500",

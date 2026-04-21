@@ -52,6 +52,30 @@ See `todo.md` for the full audit of 16 contamination pathways being removed, and
 
 ## Architecture
 
+### Three-Layer Database Model (v53-v54)
+
+**BRONZE layer** (source data, unmodified): `src_anilist_anime`, `src_mal_anime`, `src_jvmg_*`
+- Raw external data including anime.score
+- Never used for scoring — retained for audit and historical comparison only
+- Updates from scrapers; immutable
+
+**SILVER layer** (canonical data, score-free): `anime`, `anime_external_ids`, `anime_display`, `credits`, `persons`, `roles`
+- Normalized structural data for all computations
+- `anime` table contains NO score / popularity / description / genres / studios columns (v53 migration)
+- `credits.source` column dropped (v54 migration); only `evidence_source` remains
+- All scoring algorithms read exclusively from silver layer
+- **Display lookup helper**: `src/utils/display_lookup.py` provides the ONLY access path from silver to bronze (used only for UI/report display, never for computation)
+
+**GOLD layer** (analysis output, audience-specific): `scores`, `score_history`, `meta_*` tables
+- Computed results and metadata lineage (`meta_lineage` table)
+- One row per person-audience combination
+- `meta_lineage` records formula version, CI method, null model, holdout validation, inputs hash
+
+**Key constraint**: All analysis code (`src/analysis/`, `src/pipeline_phases/`) uses SILVER layer only. Display lookup is imported only by:
+- Report generators (for UI display metadata)
+- API layer (for endpoint responses)
+- Never by analysis or scoring modules
+
 ### Two-Layer Evaluation Model
 
 **Layer 1: Network Profile** (reference — 3 axes)

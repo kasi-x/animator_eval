@@ -1,7 +1,7 @@
 """role_flow モジュールのテスト."""
 
 from src.analysis.role_flow import compute_role_flow
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_data():

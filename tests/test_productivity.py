@@ -1,7 +1,7 @@
 """productivity モジュールのテスト."""
 
 from src.analysis.productivity import compute_productivity
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_data():

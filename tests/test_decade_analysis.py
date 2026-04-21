@@ -1,7 +1,7 @@
 """decade_analysis モジュールのテスト."""
 
 from src.analysis.decade_analysis import compute_decade_analysis
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_data():
@@ -42,10 +42,10 @@ class TestComputeDecadeAnalysis:
         result = compute_decade_analysis(credits, anime_map)
         assert result["decades"]["2020s"]["unique_persons"] == 3  # p1, p2, p3
 
-    def test_avg_anime_score(self):
+    def test_avg_staff_count(self):
         credits, anime_map = _make_data()
         result = compute_decade_analysis(credits, anime_map)
-        assert result["decades"]["2000s"]["avg_anime_score"] == 7.0
+        assert result["decades"]["2000s"]["avg_staff_count"] == 2.0
 
     def test_role_distribution(self):
         credits, anime_map = _make_data()

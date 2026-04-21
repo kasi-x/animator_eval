@@ -25,7 +25,7 @@ import httpx
 import structlog
 import typer
 
-from src.models import Anime, Credit, Person, parse_role
+from src.models import BronzeAnime, Credit, Person, parse_role
 
 log = structlog.get_logger()
 
@@ -340,7 +340,12 @@ async def scrape_keyframe(
         """Resolve anime ID: use existing DB entry if anilist_id matches."""
         if anilist_id is not None:
             row = conn.execute(
-                "SELECT id FROM anime WHERE anilist_id = ?", (anilist_id,)
+                """
+                SELECT anime_id AS id
+                FROM anime_external_ids
+                WHERE source = 'anilist' AND external_id = ?
+                """,
+                (str(anilist_id),),
             ).fetchone()
             if row:
                 stats["anime_matched_existing"] += 1
@@ -401,7 +406,7 @@ async def scrape_keyframe(
                         (title, anime_id),
                     )
                 else:
-                    anime = Anime(
+                    anime = BronzeAnime(
                         id=anime_id,
                         title_en=title,
                         year=season_year,
@@ -451,9 +456,13 @@ async def scrape_keyframe(
                     )
                     insert_credit(conn, credit)
                     insert_src_keyframe_credit(
-                        conn, slug, credit_data["person_id"],
-                        credit_data["name_ja"], credit_data["name_en"],
-                        credit_data["role_ja"] or "", credit_data["role_en"] or "",
+                        conn,
+                        slug,
+                        credit_data["person_id"],
+                        credit_data["name_ja"],
+                        credit_data["name_en"],
+                        credit_data["role_ja"] or "",
+                        credit_data["role_en"] or "",
                         episode=credit_data["episode"],
                     )
                     stats["credits_created"] += 1

@@ -11,6 +11,7 @@ from __future__ import annotations
 import sqlite3
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import structlog
 
@@ -19,6 +20,9 @@ from ..section_builder import DataStatementParams, SectionBuilder
 from ..stratified_loader import StratifiedDataProvider
 
 log = structlog.get_logger()
+
+if TYPE_CHECKING:
+    from ..section_builder import ReportSection
 
 
 class BaseReportGenerator(ABC):
@@ -121,7 +125,7 @@ class BaseReportGenerator(ABC):
 
     def render_unified_structure(
         self,
-        sections: "list[ReportSection]",
+        sections: list["ReportSection"],
         meta_table: str | None = None,
         *,
         overview_html: str = "",
@@ -152,7 +156,15 @@ class BaseReportGenerator(ABC):
         Returns:
             Path to the written HTML file.
         """
-        from ..section_builder import ReportSection as _RS
+        self.builder.validate(
+            has_overview=bool(overview_html and overview_html.strip()),
+            has_findings=bool(sections),
+            has_method_note=bool(meta_table),
+            has_data_statement=True,
+            has_disclaimers=True,
+            interpretation_html=interpretation_html,
+            method_note_auto_generated=True,
+        )
 
         parts: list[str] = []
 

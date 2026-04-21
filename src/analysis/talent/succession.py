@@ -32,7 +32,9 @@ def compute_retirement_risk(
     Returns {person_id: retire_risk_score}
     """
     # Build credit counts per person per year
-    person_year_credits: dict[str, dict[int, int]] = defaultdict(lambda: defaultdict(int))
+    person_year_credits: dict[str, dict[int, int]] = defaultdict(
+        lambda: defaultdict(int)
+    )
     for c in credits:
         if hasattr(c, "person_id"):
             pid = c.person_id
@@ -87,6 +89,7 @@ def find_succession_candidates(
     """
     fe_values = np.array(list(person_fe.values()))
     fe_sorted = np.sort(fe_values)
+
     def _fe_pct(fe: float) -> float:
         idx = np.searchsorted(fe_sorted, fe)
         return float(idx / max(len(fe_sorted) - 1, 1) * 100)
@@ -115,22 +118,29 @@ def find_succession_candidates(
 
     # High-risk veterans
     high_risk = {
-        pid: risk for pid, risk in retire_risk.items()
+        pid: risk
+        for pid, risk in retire_risk.items()
         if risk >= risk_threshold and _fe_pct(person_fe.get(pid, 0)) >= 70
     }
 
     results: dict = {}
     all_candidates = [pid for pid in person_fe if _fe_pct(person_fe[pid]) >= 40]
-    max_co = max(
-        (max(co_credit_freq[v].values()) if co_credit_freq.get(v) else 1)
-        for v in high_risk
-    ) if high_risk else 1
+    max_co = (
+        max(
+            (max(co_credit_freq[v].values()) if co_credit_freq.get(v) else 1)
+            for v in high_risk
+        )
+        if high_risk
+        else 1
+    )
 
     for veteran_id in high_risk:
         vet_studio = None
         vet_yr_map = studio_assignments.get(veteran_id, {})
         if vet_yr_map:
-            vet_studio = max(set(vet_yr_map.values()), key=list(vet_yr_map.values()).count)
+            vet_studio = max(
+                set(vet_yr_map.values()), key=list(vet_yr_map.values()).count
+            )
 
         vet_fe_pct = _fe_pct(person_fe.get(veteran_id, 0))
         scored: list[tuple[str, float, dict]] = []
@@ -148,7 +158,9 @@ def find_succession_candidates(
             cand_studio = None
             cand_yr_map = studio_assignments.get(cand_id, {})
             if cand_yr_map:
-                cand_studio = max(set(cand_yr_map.values()), key=list(cand_yr_map.values()).count)
+                cand_studio = max(
+                    set(cand_yr_map.values()), key=list(cand_yr_map.values()).count
+                )
             same_studio = 1.0 if cand_studio and cand_studio == vet_studio else 0.0
 
             # co-credit frequency
@@ -160,7 +172,11 @@ def find_succession_candidates(
                 (
                     cand_id,
                     total,
-                    {"similarity": round(sim, 3), "same_studio": same_studio, "co_credit": round(co_score, 3)},
+                    {
+                        "similarity": round(sim, 3),
+                        "same_studio": same_studio,
+                        "co_credit": round(co_score, 3),
+                    },
                 )
             )
 
@@ -183,7 +199,9 @@ def run_succession_matrix(
         return {"error": "no_person_fe"}
 
     retire_risk = compute_retirement_risk(person_fe, credits)
-    succession = find_succession_candidates(person_fe, credits, studio_assignments, retire_risk)
+    succession = find_succession_candidates(
+        person_fe, credits, studio_assignments, retire_risk
+    )
 
     high_risk_count = sum(1 for r in retire_risk.values() if r >= 0.6)
 
@@ -198,7 +216,9 @@ def run_succession_matrix(
             "n_veterans_matched": len(succession),
             "avg_candidates_per_veteran": round(
                 np.mean([len(v) for v in succession.values()]), 2
-            ) if succession else 0.0,
+            )
+            if succession
+            else 0.0,
         },
         "succession_matrix": succession,
         "method_notes": {

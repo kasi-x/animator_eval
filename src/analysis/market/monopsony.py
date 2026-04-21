@@ -105,9 +105,7 @@ def compute_mobility_rates(
 
             career_idx = years.index(y0)
             career_stage = (
-                "early" if career_idx < 3
-                else "mid" if career_idx < 10
-                else "senior"
+                "early" if career_idx < 3 else "mid" if career_idx < 10 else "senior"
             )
             window_mobile[career_stage].append(moved)
 

@@ -35,20 +35,27 @@ def compute_gatekeeper_scores(
         mu, sigma = arr.mean(), arr.std()
         return [(v - mu) / sigma if sigma > 0 else 0.0 for v in values]
 
-    betweenness_vals = [float(p.get("betweenness_centrality") or p.get("betweenness") or 0.0)
-                        for p in bridge_persons]
+    betweenness_vals = [
+        float(p.get("betweenness_centrality") or p.get("betweenness") or 0.0)
+        for p in bridge_persons
+    ]
     bridge_score_vals = [float(p.get("bridge_score") or 0.0) for p in bridge_persons]
 
     # fe percentile
     fe_values = np.array(list(person_fe.values()))
     fe_sorted = np.sort(fe_values)
+
     def _fe_pct(fe: float) -> float:
         idx = np.searchsorted(fe_sorted, fe)
         return float(idx / max(len(fe_sorted) - 1, 1) * 100)
 
-    fe_pcts = [_fe_pct(person_fe.get(p.get("person_id", ""), 0.0)) for p in bridge_persons]
-    birank_vals = [float(birank_person_scores.get(p.get("person_id", ""), 0.0))
-                   for p in bridge_persons]
+    fe_pcts = [
+        _fe_pct(person_fe.get(p.get("person_id", ""), 0.0)) for p in bridge_persons
+    ]
+    birank_vals = [
+        float(birank_person_scores.get(p.get("person_id", ""), 0.0))
+        for p in bridge_persons
+    ]
 
     z_between = _z_score(betweenness_vals)
     z_bridge = _z_score(bridge_score_vals)
@@ -67,7 +74,9 @@ def compute_gatekeeper_scores(
             "z_bridge": round(z_bridge[i], 4),
         }
 
-    top_100 = sorted(all_scores.items(), key=lambda x: x[1]["gatekeeper_score"], reverse=True)[:100]
+    top_100 = sorted(
+        all_scores.items(), key=lambda x: x[1]["gatekeeper_score"], reverse=True
+    )[:100]
 
     return {
         "top_100": [{"person_id": pid, **d} for pid, d in top_100],
@@ -136,7 +145,9 @@ def run_trust_entry_analysis(
     if not bridges_result or not person_fe:
         return {"error": "missing_inputs"}
 
-    gatekeeper = compute_gatekeeper_scores(bridges_result, person_fe, birank_person_scores)
+    gatekeeper = compute_gatekeeper_scores(
+        bridges_result, person_fe, birank_person_scores
+    )
     top_100 = gatekeeper.get("top_100", [])
 
     reach = compute_reach_metric(

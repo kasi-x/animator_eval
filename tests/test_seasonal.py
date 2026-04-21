@@ -1,7 +1,7 @@
 """seasonal モジュールのテスト."""
 
 from src.analysis.seasonal import compute_seasonal_trends
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_test_data():

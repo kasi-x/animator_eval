@@ -7,15 +7,16 @@ import sqlite3
 
 import structlog
 
-from src.models import Anime, Credit, Person, parse_role
+from src.models import BronzeAnime, Credit, Person, parse_role
 
 log = structlog.get_logger()
 
 
-def _anime_to_analysis(anime: Anime) -> dict:
-    """Anime モデルから anime_analysis 用の dict を生成 (score カラムは含まない)."""
+def _anime_to_analysis(anime: BronzeAnime) -> dict:
+    """BronzeAnime から anime_analysis 用の dict を生成 (score カラムは含まない)."""
     return {
-        k: v for k, v in {
+        k: v
+        for k, v in {
             "id": anime.id,
             "title_ja": anime.title_ja,
             "title_en": anime.title_en,
@@ -41,38 +42,65 @@ def _anime_to_analysis(anime: Anime) -> dict:
     }
 
 
-def _anime_to_display(anime: Anime) -> dict:
-    """Anime モデルから anime_display 用の dict を生成 (score + 表示専用カラム)."""
-    result: dict = {"id": anime.id}
-    if anime.score is not None:
-        result["score"] = anime.score
-    for attr in (
-        "popularity_rank", "favourites", "mean_score",
-        "description", "cover_large", "cover_extra_large", "cover_medium",
-        "cover_large_path", "banner", "banner_path", "site_url",
-        "country_of_origin", "is_adult",
-        "relations_json", "external_links_json", "rankings_json",
-    ):
-        v = getattr(anime, attr, None)
-        if v is not None:
-            result[attr] = v
-    # Serialize lists to JSON strings for display columns
-    for attr in ("genres", "tags", "studios", "synonyms"):
-        v = getattr(anime, attr, None)
-        if v:
-            result[attr] = json.dumps(v, ensure_ascii=False)
-    return result
+def _upsert_anime_genres_tags(
+    conn: sqlite3.Connection,
+    anime_id: str,
+    genres: list | None,
+    tags: list | None,
+) -> None:
+    """Normalize genre/tag JSON into silver anime_genres/anime_tags."""
+    conn.execute("DELETE FROM anime_genres WHERE anime_id = ?", (anime_id,))
+    conn.execute("DELETE FROM anime_tags WHERE anime_id = ?", (anime_id,))
+
+    for g in genres or []:
+        if isinstance(g, str) and g:
+            conn.execute(
+                "INSERT OR IGNORE INTO anime_genres (anime_id, genre_name) VALUES (?, ?)",
+                (anime_id, g),
+            )
+        elif isinstance(g, dict):
+            name = g.get("name")
+            if isinstance(name, str) and name:
+                conn.execute(
+                    "INSERT OR IGNORE INTO anime_genres (anime_id, genre_name) VALUES (?, ?)",
+                    (anime_id, name),
+                )
+
+    for t in tags or []:
+        if isinstance(t, str) and t:
+            conn.execute(
+                "INSERT OR IGNORE INTO anime_tags (anime_id, tag_name, rank) VALUES (?, ?, NULL)",
+                (anime_id, t),
+            )
+            continue
+        if not isinstance(t, dict):
+            continue
+        name = t.get("name")
+        if not isinstance(name, str) or not name:
+            continue
+        rank = t.get("rank")
+        if rank is not None and not (isinstance(rank, int) and 0 <= rank <= 100):
+            rank = None
+        conn.execute(
+            "INSERT OR IGNORE INTO anime_tags (anime_id, tag_name, rank) VALUES (?, ?, ?)",
+            (anime_id, name, rank),
+        )
 
 
 def integrate_anilist(conn: sqlite3.Connection) -> dict[str, int]:
     """src_anilist_* → canonical anime / persons / credits."""
-    from src.database import insert_credit, upsert_anime, upsert_anime_analysis, upsert_anime_display, upsert_person
+    from src.database import (
+        insert_credit,
+        upsert_anime,
+        upsert_anime_analysis,
+        upsert_person,
+    )
 
     stats = {"anime": 0, "persons": 0, "credits": 0}
 
     # Anime
     for row in conn.execute("SELECT * FROM src_anilist_anime"):
-        anime = Anime(
+        anime = BronzeAnime(
             id=f"anilist:{row['anilist_id']}",
             title_ja=row["title_ja"] or "",
             title_en=row["title_en"] or "",
@@ -102,7 +130,12 @@ def integrate_anilist(conn: sqlite3.Connection) -> dict[str, int]:
         )
         upsert_anime(conn, anime)
         upsert_anime_analysis(conn, _anime_to_analysis(anime))
-        upsert_anime_display(conn, _anime_to_display(anime))
+        _upsert_anime_genres_tags(
+            conn,
+            anime.id,
+            genres=json.loads(row["genres"] or "[]"),
+            tags=json.loads(row["tags"] or "[]"),
+        )
         stats["anime"] += 1
 
     # Persons
@@ -148,13 +181,18 @@ def integrate_anilist(conn: sqlite3.Connection) -> dict[str, int]:
 
 def integrate_ann(conn: sqlite3.Connection) -> dict[str, int]:
     """src_ann_* → canonical anime / persons / credits."""
-    from src.database import insert_credit, upsert_anime, upsert_anime_analysis, upsert_anime_display, upsert_person
+    from src.database import (
+        insert_credit,
+        upsert_anime,
+        upsert_anime_analysis,
+        upsert_person,
+    )
 
     stats = {"anime": 0, "persons": 0, "credits": 0}
 
     # Anime
     for row in conn.execute("SELECT * FROM src_ann_anime"):
-        anime = Anime(
+        anime = BronzeAnime(
             id=f"ann-{row['ann_id']}",
             title_en=row["title_en"] or "",
             title_ja=row["title_ja"] or "",
@@ -168,7 +206,12 @@ def integrate_ann(conn: sqlite3.Connection) -> dict[str, int]:
         )
         upsert_anime(conn, anime)
         upsert_anime_analysis(conn, _anime_to_analysis(anime))
-        upsert_anime_display(conn, _anime_to_display(anime))
+        _upsert_anime_genres_tags(
+            conn,
+            anime.id,
+            genres=json.loads(row["genres"] or "[]"),
+            tags=[],
+        )
         stats["anime"] += 1
 
     # Persons
@@ -191,7 +234,10 @@ def integrate_ann(conn: sqlite3.Connection) -> dict[str, int]:
     for row in conn.execute("""
         SELECT c.*, a.id AS canon_anime_id, p.id AS canon_person_id
         FROM src_ann_credits c
-        JOIN anime a ON a.ann_id = c.ann_anime_id
+        JOIN anime_external_ids x
+          ON x.source = 'ann'
+         AND x.external_id = CAST(c.ann_anime_id AS TEXT)
+        JOIN anime a ON a.id = x.anime_id
         JOIN persons p ON p.ann_id = c.ann_person_id
     """):
         credit = Credit(
@@ -210,14 +256,19 @@ def integrate_ann(conn: sqlite3.Connection) -> dict[str, int]:
 
 def integrate_allcinema(conn: sqlite3.Connection) -> dict[str, int]:
     """src_allcinema_* → canonical anime / persons / credits."""
-    from src.database import insert_credit, upsert_anime, upsert_anime_analysis, upsert_anime_display, upsert_person
+    from src.database import (
+        insert_credit,
+        upsert_anime,
+        upsert_anime_analysis,
+        upsert_person,
+    )
     from src.scrapers.allcinema_scraper import _JOB_ROLE_MAP
 
     stats = {"anime": 0, "persons": 0, "credits": 0}
 
     # Anime
     for row in conn.execute("SELECT * FROM src_allcinema_anime"):
-        anime = Anime(
+        anime = BronzeAnime(
             id=f"allcinema:{row['allcinema_id']}",
             title_ja=row["title_ja"] or "",
             year=row["year"],
@@ -226,12 +277,7 @@ def integrate_allcinema(conn: sqlite3.Connection) -> dict[str, int]:
             allcinema_id=row["allcinema_id"],
         )
         upsert_anime(conn, anime)
-        conn.execute(
-            "UPDATE anime SET allcinema_id = ? WHERE id = ?",
-            (row["allcinema_id"], f"allcinema:{row['allcinema_id']}"),
-        )
         upsert_anime_analysis(conn, _anime_to_analysis(anime))
-        upsert_anime_display(conn, _anime_to_display(anime))
         stats["anime"] += 1
 
     # Persons
@@ -278,7 +324,12 @@ def integrate_seesaawiki(conn: sqlite3.Connection) -> dict[str, int]:
 
     seesaawiki には グローバル人物 ID がないため、person は名前ベースで作成する。
     """
-    from src.database import insert_credit, upsert_anime, upsert_anime_analysis, upsert_anime_display, upsert_person
+    from src.database import (
+        insert_credit,
+        upsert_anime,
+        upsert_anime_analysis,
+        upsert_person,
+    )
     from src.scrapers.seesaawiki_scraper import make_seesaa_person_id
 
     stats = {"anime": 0, "persons": 0, "credits": 0}
@@ -286,7 +337,7 @@ def integrate_seesaawiki(conn: sqlite3.Connection) -> dict[str, int]:
 
     # Anime
     for row in conn.execute("SELECT * FROM src_seesaawiki_anime"):
-        anime = Anime(
+        anime = BronzeAnime(
             id=row["id"],
             title_ja=row["title_ja"] or "",
             year=row["year"],
@@ -294,7 +345,6 @@ def integrate_seesaawiki(conn: sqlite3.Connection) -> dict[str, int]:
         )
         upsert_anime(conn, anime)
         upsert_anime_analysis(conn, _anime_to_analysis(anime))
-        upsert_anime_display(conn, _anime_to_display(anime))
         stats["anime"] += 1
 
     # Credits (persons created on demand)
@@ -326,8 +376,16 @@ def integrate_seesaawiki(conn: sqlite3.Connection) -> dict[str, int]:
 
 def integrate_keyframe(conn: sqlite3.Connection) -> dict[str, int]:
     """src_keyframe_* → canonical anime / persons / credits."""
-    from src.database import insert_credit, upsert_anime, upsert_anime_analysis, upsert_anime_display, upsert_person
-    from src.scrapers.keyframe_scraper import make_keyframe_anime_id, make_keyframe_person_id
+    from src.database import (
+        insert_credit,
+        upsert_anime,
+        upsert_anime_analysis,
+        upsert_person,
+    )
+    from src.scrapers.keyframe_scraper import (
+        make_keyframe_anime_id,
+        make_keyframe_person_id,
+    )
 
     stats = {"anime": 0, "persons": 0, "credits": 0}
     person_cache: set[str] = set()
@@ -338,7 +396,12 @@ def integrate_keyframe(conn: sqlite3.Connection) -> dict[str, int]:
         existing_id: str | None = None
         if row["anilist_id"]:
             r = conn.execute(
-                "SELECT id FROM anime WHERE anilist_id = ?", (row["anilist_id"],)
+                """
+                SELECT anime_id AS id
+                FROM anime_external_ids
+                WHERE source = 'anilist' AND external_id = ?
+                """,
+                (str(row["anilist_id"]),),
             ).fetchone()
             if r:
                 existing_id = r[0]
@@ -348,12 +411,15 @@ def integrate_keyframe(conn: sqlite3.Connection) -> dict[str, int]:
                 "UPDATE anime SET title_en = COALESCE(NULLIF(?, ''), title_en) WHERE id = ?",
                 (row["title_en"], existing_id),
             )
-            upsert_anime_analysis(conn, {
-                "id": existing_id,
-                "title_en": row["title_en"] or "",
-            })
+            upsert_anime_analysis(
+                conn,
+                {
+                    "id": existing_id,
+                    "title_en": row["title_en"] or "",
+                },
+            )
         else:
-            anime = Anime(
+            anime = BronzeAnime(
                 id=make_keyframe_anime_id(row["slug"]),
                 title_en=row["title_en"] or "",
                 title_ja=row["title_ja"] or "",
@@ -361,7 +427,6 @@ def integrate_keyframe(conn: sqlite3.Connection) -> dict[str, int]:
             )
             upsert_anime(conn, anime)
             upsert_anime_analysis(conn, _anime_to_analysis(anime))
-            upsert_anime_display(conn, _anime_to_display(anime))
             stats["anime"] += 1
 
     # Credits (persons created on demand)
@@ -386,7 +451,12 @@ def integrate_keyframe(conn: sqlite3.Connection) -> dict[str, int]:
         anilist_id = r["anilist_id"] if r else None
         if anilist_id:
             existing = conn.execute(
-                "SELECT id FROM anime WHERE anilist_id = ?", (anilist_id,)
+                """
+                SELECT anime_id AS id
+                FROM anime_external_ids
+                WHERE source = 'anilist' AND external_id = ?
+                """,
+                (str(anilist_id),),
             ).fetchone()
             if existing:
                 kf_anime_id = existing[0]

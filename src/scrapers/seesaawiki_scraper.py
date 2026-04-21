@@ -30,7 +30,7 @@ import structlog
 import typer
 from bs4 import BeautifulSoup
 
-from src.models import Anime, Credit, Person, parse_role
+from src.models import BronzeAnime, Credit, Person, parse_role
 from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL, SCRAPE_DELAY_SECONDS
 
 log = structlog.get_logger()
@@ -3275,7 +3275,7 @@ async def scrape_seesaawiki(
             )
 
             # Upsert anime
-            anime = Anime(
+            anime = BronzeAnime(
                 id=anime_id,
                 title_ja=page_title,
             )
@@ -3395,8 +3395,13 @@ def _save_credit(
         # Store as studio involvement, not person credit
         _save_studio_credit(conn, anime_id, parsed.name, parsed.role, stats)
         insert_src_seesaawiki_credit(
-            conn, anime_id, parsed.name, parsed.role, parsed.role,
-            affiliation=None, is_company=True,
+            conn,
+            anime_id,
+            parsed.name,
+            parsed.role,
+            parsed.role,
+            affiliation=None,
+            is_company=True,
         )
         return
 
@@ -3435,8 +3440,13 @@ def _save_credit(
             )
             insert_credit(conn, credit)
             insert_src_seesaawiki_credit(
-                conn, anime_id, parsed.name, str(role), parsed.role,
-                episode=ep, affiliation=parsed.affiliation,
+                conn,
+                anime_id,
+                parsed.name,
+                str(role),
+                parsed.role,
+                episode=ep,
+                affiliation=parsed.affiliation,
             )
             stats["credits_created"] += 1
     else:
@@ -3451,8 +3461,13 @@ def _save_credit(
         )
         insert_credit(conn, credit)
         insert_src_seesaawiki_credit(
-            conn, anime_id, parsed.name, str(role), parsed.role,
-            episode=ep_num, affiliation=parsed.affiliation,
+            conn,
+            anime_id,
+            parsed.name,
+            str(role),
+            parsed.role,
+            episode=ep_num,
+            affiliation=parsed.affiliation,
         )
         stats["credits_created"] += 1
 
@@ -3570,7 +3585,7 @@ def reparse_from_raw(
     _reset_save_caches()
 
     # Clear existing seesaa data from DB
-    conn.execute("DELETE FROM credits WHERE source='seesaawiki'")
+    conn.execute("DELETE FROM credits WHERE evidence_source='seesaawiki'")
     conn.execute("DELETE FROM persons WHERE id LIKE 'seesaa:%'")
     conn.execute("DELETE FROM anime WHERE id LIKE 'seesaa:%'")
     try:
@@ -3639,7 +3654,7 @@ def reparse_from_raw(
         )
 
         # DB upsert
-        anime = Anime(id=anime_id, title_ja=title)
+        anime = BronzeAnime(id=anime_id, title_ja=title)
         upsert_anime(conn, anime)
         upsert_src_seesaawiki_anime(conn, anime_id, title, None, None)
         stats["anime_created"] += 1

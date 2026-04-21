@@ -97,7 +97,10 @@ def validate_data_completeness(conn: sqlite3.Connection) -> ValidationResult:
 
     # スコアが不明のアニメ
     no_score = conn.execute("""
-        SELECT COUNT(*) FROM anime WHERE score IS NULL
+        SELECT COUNT(*)
+        FROM anime a
+        LEFT JOIN anime_display d ON d.id = a.id
+        WHERE d.score IS NULL
     """).fetchone()[0]
 
     total_anime = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]
@@ -196,18 +199,18 @@ def validate_credit_quality(conn: sqlite3.Connection) -> ValidationResult:
 
     # 同一ソースからの重複（同じ person×anime×role が複数エピソードで）
     source_dupes = conn.execute("""
-        SELECT source, COUNT(*) as total,
+        SELECT evidence_source AS source_code, COUNT(*) as total,
                COUNT(DISTINCT person_id || '|' || anime_id || '|' || role) as unique_count
         FROM credits
-        WHERE source != ''
-        GROUP BY source
+        WHERE evidence_source != ''
+        GROUP BY source_code
     """).fetchall()
 
     for row in source_dupes:
         total, unique = row["total"], row["unique_count"]
         if total > unique * 2:
             result.add_warning(
-                f"high_episode_density_{row['source']}: {total} credits but only {unique} unique person-anime-role combos"
+                f"high_episode_density_{row['source_code']}: {total} credits but only {unique} unique person-anime-role combos"
             )
 
     result.stats["multi_role_pairs"] = len(multi_role)
@@ -243,17 +246,17 @@ def validate_data_freshness(
 
     # データソースごとの最新クレジット年
     source_freshness = conn.execute("""
-        SELECT c.source, MAX(a.year) as latest_year, COUNT(*) as credit_count
+        SELECT c.evidence_source AS source_code, MAX(a.year) as latest_year, COUNT(*) as credit_count
         FROM credits c
         JOIN anime a ON c.anime_id = a.id
-        WHERE a.year IS NOT NULL AND c.source != ''
-        GROUP BY c.source
+        WHERE a.year IS NOT NULL AND c.evidence_source != ''
+        GROUP BY source_code
     """).fetchall()
 
     stale_sources = []
     for row in source_freshness:
         if row["latest_year"] and row["latest_year"] < cutoff_year:
-            stale_sources.append(row["source"])
+            stale_sources.append(row["source_code"])
 
     if stale_sources:
         result.add_warning(
@@ -285,14 +288,15 @@ def validate_data_freshness(
     single_source = conn.execute("""
         SELECT COUNT(*) FROM (
             SELECT person_id FROM credits
-            WHERE source != ''
+            WHERE evidence_source != ''
             GROUP BY person_id
-            HAVING COUNT(DISTINCT source) = 1
+            HAVING COUNT(DISTINCT evidence_source) = 1
         )
     """).fetchone()[0]
 
     credited_persons = conn.execute("""
-        SELECT COUNT(DISTINCT person_id) FROM credits WHERE source != ''
+        SELECT COUNT(DISTINCT person_id) FROM credits
+        WHERE evidence_source != ''
     """).fetchone()[0]
 
     if credited_persons > 10 and single_source / credited_persons > 0.8:

@@ -139,9 +139,7 @@ def _table_exists(conn: sqlite3.Connection, table: str) -> bool:
     return row is not None
 
 
-def _fetch_from_anilist(
-    conn: sqlite3.Connection, external_id: str, column: str
-) -> Any:
+def _fetch_from_anilist(conn: sqlite3.Connection, external_id: str, column: str) -> Any:
     """Look up a column in ``src_anilist_anime`` keyed by ``anilist_id``."""
     if not _table_exists(conn, "src_anilist_anime"):
         return None
@@ -158,9 +156,7 @@ def _fetch_from_anilist(
     return row[0]
 
 
-def _fetch_from_ann(
-    conn: sqlite3.Connection, external_id: str, column: str
-) -> Any:
+def _fetch_from_ann(conn: sqlite3.Connection, external_id: str, column: str) -> Any:
     if not _table_exists(conn, "src_ann_anime"):
         return None
     try:
@@ -305,9 +301,7 @@ def _route_with_fallback(
     return None
 
 
-def _cached(
-    conn: sqlite3.Connection, anime_id: str, field: str, compute
-) -> Any:
+def _cached(conn: sqlite3.Connection, anime_id: str, field: str, compute) -> Any:
     key = (id(conn), anime_id, field)
     hit, cached_value = _cache_get(key)
     if hit:
@@ -336,9 +330,7 @@ def get_display_score(conn: sqlite3.Connection, anime_id: str) -> float | None:
     return _cached(conn, anime_id, "score", _compute)
 
 
-def get_display_popularity(
-    conn: sqlite3.Connection, anime_id: str
-) -> int | None:
+def get_display_popularity(conn: sqlite3.Connection, anime_id: str) -> int | None:
     """AniList popularity (user-list count). Display only — audience metric.
 
     Source: AniList only.
@@ -351,9 +343,7 @@ def get_display_popularity(
     return _cached(conn, anime_id, "popularity", _compute)
 
 
-def get_display_favourites(
-    conn: sqlite3.Connection, anime_id: str
-) -> int | None:
+def get_display_favourites(conn: sqlite3.Connection, anime_id: str) -> int | None:
     """AniList favourites count. Display only.
 
     Source: AniList only.
@@ -366,9 +356,7 @@ def get_display_favourites(
     return _cached(conn, anime_id, "favourites", _compute)
 
 
-def get_display_description(
-    conn: sqlite3.Connection, anime_id: str
-) -> str | None:
+def get_display_description(conn: sqlite3.Connection, anime_id: str) -> str | None:
     """Work synopsis for display. Never enter this into scoring.
 
     Fallback precedence: anilist > allcinema (``synopsis``) > ann > seesaawiki
@@ -399,9 +387,7 @@ def get_display_description(
     return _cached(conn, anime_id, "description", _compute)
 
 
-def get_display_cover_url(
-    conn: sqlite3.Connection, anime_id: str
-) -> str | None:
+def get_display_cover_url(conn: sqlite3.Connection, anime_id: str) -> str | None:
     """Cover image URL (large → medium). Display only.
 
     Source: AniList only — it is the only bronze table that stores image
@@ -445,9 +431,7 @@ def get_display_cover_url(
     return _cached(conn, anime_id, "cover_url", _compute)
 
 
-def get_display_banner_url(
-    conn: sqlite3.Connection, anime_id: str
-) -> str | None:
+def get_display_banner_url(conn: sqlite3.Connection, anime_id: str) -> str | None:
     """Banner image URL. Display only. AniList source only."""
 
     def _compute() -> str | None:
@@ -457,9 +441,7 @@ def get_display_banner_url(
     return _cached(conn, anime_id, "banner_url", _compute)
 
 
-def get_display_site_url(
-    conn: sqlite3.Connection, anime_id: str
-) -> str | None:
+def get_display_site_url(conn: sqlite3.Connection, anime_id: str) -> str | None:
     """Canonical site URL for the work (AniList page). Display only."""
 
     def _compute() -> str | None:
@@ -482,9 +464,7 @@ def _parse_json_list(raw: Any) -> list:
     return parsed if isinstance(parsed, list) else []
 
 
-def get_display_genres(
-    conn: sqlite3.Connection, anime_id: str
-) -> list[str]:
+def get_display_genres(conn: sqlite3.Connection, anime_id: str) -> list[str]:
     """Display-oriented genre list (raw AniList JSON).
 
     Analysis code should read the normalized ``anime_genres`` junction
@@ -498,9 +478,7 @@ def get_display_genres(
     return _cached(conn, anime_id, "genres", _compute)
 
 
-def get_display_tags(
-    conn: sqlite3.Connection, anime_id: str
-) -> list[dict]:
+def get_display_tags(conn: sqlite3.Connection, anime_id: str) -> list[dict]:
     """Display-oriented tag list (raw AniList JSON with name/rank)."""
 
     def _compute() -> list[dict]:
@@ -510,9 +488,7 @@ def get_display_tags(
     return _cached(conn, anime_id, "tags", _compute)
 
 
-def get_display_synonyms(
-    conn: sqlite3.Connection, anime_id: str
-) -> list[str]:
+def get_display_synonyms(conn: sqlite3.Connection, anime_id: str) -> list[str]:
     """Alternate titles for display. AniList source only."""
 
     def _compute() -> list[str]:

@@ -14,7 +14,8 @@ import httpx
 import structlog
 import typer
 
-from src.models import Anime, Credit, Person, parse_role
+from src.models import BronzeAnime, Credit, Person, parse_role
+from src.scrapers.cache_store import load_cached_json, save_cached_json
 
 log = structlog.get_logger()
 
@@ -67,6 +68,11 @@ class JikanClient:
         self._last_request_time = time.monotonic()
 
     async def get(self, endpoint: str, params: dict | None = None) -> dict:
+        cache_key = {"endpoint": endpoint, "params": params or {}}
+        cached = load_cached_json("mal/rest", cache_key)
+        if cached is not None:
+            return cached
+
         await self._rate_limit()
         url = f"{BASE_URL}{endpoint}"
         for attempt in range(5):
@@ -83,7 +89,9 @@ class JikanClient:
                     await asyncio.sleep(retry_after)
                     continue
                 resp.raise_for_status()
-                return resp.json()
+                data = resp.json()
+                save_cached_json("mal/rest", cache_key, data)
+                return data
             except httpx.HTTPError as e:
                 log.warning(
                     "request_failed",
@@ -125,7 +133,7 @@ class JikanClient:
         return await self.get("/anime", params=params)
 
 
-def parse_anime_data(raw: dict) -> Anime:
+def parse_anime_data(raw: dict) -> BronzeAnime:
     mal_id = raw.get("mal_id")
     titles = raw.get("titles", [])
     title_ja, title_en = "", ""
@@ -144,7 +152,7 @@ def parse_anime_data(raw: dict) -> Anime:
     from_prop = prop.get("from", {}) or {}
     year = raw.get("year") or from_prop.get("year")
 
-    return Anime(
+    return BronzeAnime(
         id=f"mal:{mal_id}",
         title_ja=title_ja,
         title_en=title_en,
@@ -184,7 +192,7 @@ def parse_staff_data(
 
 async def fetch_top_anime_credits(
     n_anime: int = 50, type_filter: str = "tv"
-) -> tuple[list[Anime], list[Person], list[Credit]]:
+) -> tuple[list[BronzeAnime], list[Person], list[Credit]]:
     client = JikanClient()
     all_anime, all_persons, all_credits = [], [], []
     seen: set[str] = set()
@@ -315,9 +323,17 @@ def main(
 
                 # Load existing MAL IDs to avoid duplicates
                 cursor = conn.execute(
-                    "SELECT mal_id FROM anime WHERE mal_id IS NOT NULL"
+                    """
+                    SELECT external_id
+                    FROM anime_external_ids
+                    WHERE source = 'mal' AND external_id != ''
+                    """
                 )
-                existing_mal_ids = {row[0] for row in cursor.fetchall()}
+                existing_mal_ids = {
+                    int(row[0])
+                    for row in cursor.fetchall()
+                    if str(row[0]).isdigit()
+                }
                 log.info("loaded_existing_mal_ids", count=len(existing_mal_ids))
 
                 is_fetching_all = count == 0

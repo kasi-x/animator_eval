@@ -1,3 +1,4 @@
+# ruff: noqa: E402
 """Pipeline phases — modular decomposition of scoring pipeline.
 
 This package decomposes the monolithic run_scoring_pipeline() function into
@@ -17,6 +18,10 @@ This package decomposes the monolithic run_scoring_pipeline() function into
 Each phase is <200 lines, testable in isolation, and has explicit
 inputs/outputs via the PipelineContext dataclass.
 """
+
+from src.utils.import_guard import install_display_lookup_boundary_guard
+
+install_display_lookup_boundary_guard()
 
 from src.pipeline_phases.analysis_modules import run_analysis_modules_phase
 from src.pipeline_phases.context import PipelineCheckpoint, PipelineContext

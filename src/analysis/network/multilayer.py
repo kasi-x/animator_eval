@@ -27,7 +27,7 @@ import structlog
 from src.utils.role_groups import ROLE_CATEGORY
 
 if TYPE_CHECKING:
-    from src.models import Anime, Credit
+    from src.models import AnimeAnalysis as Anime, Credit
 
 logger = structlog.get_logger()
 

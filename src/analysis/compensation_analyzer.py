@@ -16,7 +16,7 @@ from enum import Enum
 
 import structlog
 
-from src.models import Anime, Role
+from src.models import AnimeAnalysis as Anime, Role
 
 logger = structlog.get_logger()
 

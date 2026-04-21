@@ -48,8 +48,7 @@ def compute_pair_residuals(
 
     # Work residual
     work_residual: dict[str, float] = {
-        aid: float(np.log(scale)) - mean_log_scale
-        for aid, scale in work_scale.items()
+        aid: float(np.log(scale)) - mean_log_scale for aid, scale in work_scale.items()
     }
 
     # Anime → persons mapping
@@ -138,10 +137,18 @@ def run_team_chemistry(
 
     n_pairs = len(pair_results)
     n_significant = sum(1 for d in pair_results.values() if d.get("significant"))
-    n_positive = sum(1 for d in pair_results.values() if d.get("significant") and d.get("mean_res", 0) > 0)
+    n_positive = sum(
+        1
+        for d in pair_results.values()
+        if d.get("significant") and d.get("mean_res", 0) > 0
+    )
 
     top_positive = sorted(
-        [(k, d) for k, d in pair_results.items() if d.get("significant") and d.get("mean_res", 0) > 0],
+        [
+            (k, d)
+            for k, d in pair_results.items()
+            if d.get("significant") and d.get("mean_res", 0) > 0
+        ],
         key=lambda x: x[1]["mean_res"],
         reverse=True,
     )[:20]

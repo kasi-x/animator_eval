@@ -4,7 +4,7 @@ from pathlib import Path
 
 from src.analysis.credit_stats import compute_credit_statistics
 from src.analysis.credit_stats_html import generate_credit_stats_html
-from src.models import Credit, Anime
+from src.models import Credit, BronzeAnime as Anime
 
 
 def test_compute_credit_statistics_basic():

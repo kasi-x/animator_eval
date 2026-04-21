@@ -30,7 +30,9 @@ class TestValidateFindings:
         assert any("優秀" in v for v in violations)
 
     def test_causal_verb_en(self):
-        violations = self.sb.validate_findings("High patronage scores cause better retention.")
+        violations = self.sb.validate_findings(
+            "High patronage scores cause better retention."
+        )
         assert any("cause" in v.lower() for v in violations)
 
     def test_causal_verb_ja(self):
@@ -59,6 +61,7 @@ class TestMethodNoteFromLineage:
 
     def test_raises_on_missing_table(self):
         import sqlite3
+
         conn = sqlite3.connect(":memory:")
         conn.execute(
             """CREATE TABLE meta_lineage (
@@ -76,6 +79,7 @@ class TestMethodNoteFromLineage:
 
     def test_generates_html_with_lineage(self):
         import sqlite3
+
         conn = sqlite3.connect(":memory:")
         conn.execute(
             """CREATE TABLE meta_lineage (
@@ -89,9 +93,20 @@ class TestMethodNoteFromLineage:
         )
         conn.execute(
             "INSERT INTO meta_lineage VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-            ("meta_test", "policy", '["anime_analysis","credits"]',
-             1, 0, "v1.0", "2026-01-01", "bootstrap_n1000",
-             None, None, 100, "test"),
+            (
+                "meta_test",
+                "policy",
+                '["anime_analysis","credits"]',
+                1,
+                0,
+                "v1.0",
+                "2026-01-01",
+                "bootstrap_n1000",
+                None,
+                None,
+                100,
+                "test",
+            ),
         )
         sb = SectionBuilder()
         html = sb.method_note_from_lineage("meta_test", conn)
@@ -129,10 +144,60 @@ class TestBuildSection:
         sb = SectionBuilder()
         s_without = ReportSection(title="T", findings_html="<p>x</p>")
         s_with = ReportSection(
-            title="T", findings_html="<p>x</p>",
+            title="T",
+            findings_html="<p>x</p>",
             interpretation_html="<p>alternative: ...</p>",
         )
         html_without = sb.build_section(s_without)
         html_with = sb.build_section(s_with)
         assert "Interpretation" not in html_without
         assert "Interpretation" in html_with
+
+
+class TestValidateSectionStructure:
+    def test_validate_passes_with_required_sections(self):
+        sb = SectionBuilder()
+        sb.validate(
+            has_overview=True,
+            has_findings=True,
+            has_method_note=True,
+            has_data_statement=True,
+            has_disclaimers=True,
+            interpretation_html="<p>代替解釈: 別の説明可能性がある。</p>",
+            method_note_auto_generated=True,
+        )
+
+    def test_validate_raises_on_missing_required(self):
+        sb = SectionBuilder()
+        with pytest.raises(ValueError, match="Missing required sections"):
+            sb.validate(
+                has_overview=False,
+                has_findings=True,
+                has_method_note=True,
+                has_data_statement=True,
+                has_disclaimers=True,
+            )
+
+    def test_validate_requires_alternative_interpretation(self):
+        sb = SectionBuilder()
+        with pytest.raises(ValueError, match="alternative interpretation"):
+            sb.validate(
+                has_overview=True,
+                has_findings=True,
+                has_method_note=True,
+                has_data_statement=True,
+                has_disclaimers=True,
+                interpretation_html="<p>解釈のみ</p>",
+            )
+
+    def test_validate_requires_auto_generated_method_note(self):
+        sb = SectionBuilder()
+        with pytest.raises(ValueError, match="auto-generated"):
+            sb.validate(
+                has_overview=True,
+                has_findings=True,
+                has_method_note=True,
+                has_data_statement=True,
+                has_disclaimers=True,
+                method_note_auto_generated=False,
+            )

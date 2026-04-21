@@ -72,7 +72,9 @@ def compute_unit_viability(
     # Communities
     communities = community_map.get("communities", {})
     if not communities:
-        communities = {k: v for k, v in community_map.items() if isinstance(v, (list, dict))}
+        communities = {
+            k: v for k, v in community_map.items() if isinstance(v, (list, dict))
+        }
 
     results: dict = {}
     for comm_id, community in communities.items():
@@ -96,10 +98,10 @@ def compute_unit_viability(
 
         # Density = internal edges / possible
         member_set = set(members)
-        internal_edges = sum(
-            len(co_credit_edges.get(pid, set()) & member_set)
-            for pid in members
-        ) // 2
+        internal_edges = (
+            sum(len(co_credit_edges.get(pid, set()) & member_set) for pid in members)
+            // 2
+        )
         max_edges = n * (n - 1) // 2
         density = internal_edges / max_edges if max_edges > 0 else 0.0
 
@@ -115,9 +117,7 @@ def compute_unit_viability(
             for role in person_roles.get(pid, set()):
                 role_counts[role] += 1
         redundancy = {
-            role: count
-            for role, count in role_counts.most_common(10)
-            if count >= 2
+            role: count for role, count in role_counts.most_common(10) if count >= 2
         }
 
         results[str(comm_id)] = {
@@ -148,7 +148,11 @@ def run_independent_units(
     if not viability:
         return {"error": "no_viable_communities", "n_evaluated": 0}
 
-    viable = {cid: d for cid, d in viability.items() if d["coverage"] >= _REQUIRED_ROLE_COVERAGE}
+    viable = {
+        cid: d
+        for cid, d in viability.items()
+        if d["coverage"] >= _REQUIRED_ROLE_COVERAGE
+    }
 
     ranked = sorted(viable.items(), key=lambda x: x[1]["viability"], reverse=True)
 

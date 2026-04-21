@@ -69,10 +69,16 @@ def compute_whitespace_score(
             continue
 
         cagr = float(eco.get("cagr_5y") or eco.get("cagr") or 0.0)
-        penetration = float(eco.get("penetration") or eco.get("active_persons_pct") or 0.0)
+        penetration = float(
+            eco.get("penetration") or eco.get("active_persons_pct") or 0.0
+        )
         n_specialists = specialist_count.get(genre, 0)
 
-        whitespace = cagr * penetration / float(np.log(n_specialists + 1) if n_specialists > 0 else 1.0)
+        whitespace = (
+            cagr
+            * penetration
+            / float(np.log(n_specialists + 1) if n_specialists > 0 else 1.0)
+        )
         results[genre] = {
             "whitespace_score": round(whitespace, 4),
             "cagr": round(cagr, 4),
@@ -81,7 +87,9 @@ def compute_whitespace_score(
         }
 
     # Add rank
-    sorted_genres = sorted(results.items(), key=lambda x: x[1]["whitespace_score"], reverse=True)
+    sorted_genres = sorted(
+        results.items(), key=lambda x: x[1]["whitespace_score"], reverse=True
+    )
     for rank, (genre, _) in enumerate(sorted_genres, 1):
         results[genre]["rank"] = rank
 
@@ -145,7 +153,9 @@ def run_genre_whitespace(
     transition_matrix = compute_genre_transition_matrix(genre_affinity, scores)
 
     top_10 = dict(
-        sorted(whitespace.items(), key=lambda x: x[1]["whitespace_score"], reverse=True)[:10]
+        sorted(
+            whitespace.items(), key=lambda x: x[1]["whitespace_score"], reverse=True
+        )[:10]
     )
 
     return {

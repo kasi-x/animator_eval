@@ -56,7 +56,8 @@ def compute_cohort_survival_rates(conn: sqlite3.Connection) -> dict[str, Any]:
             if threshold_year > _RELIABLE_MAX_YEAR:
                 return None  # type: ignore[return-value]
             active = sum(
-                1 for p in cohort
+                1
+                for p in cohort
                 if (p["latest_year"] or p["first_year"]) >= threshold_year
             )
             return round(active / n, 4) if n > 0 else 0.0

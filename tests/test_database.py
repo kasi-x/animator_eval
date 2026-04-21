@@ -4,6 +4,8 @@ import pytest
 
 from src.database import (
     db_connection,
+    ensure_calc_execution_records,
+    get_calc_execution_hashes,
     get_connection,
     init_db,
     insert_credit,
@@ -11,11 +13,14 @@ from src.database import (
     load_all_credits,
     load_all_persons,
     load_all_scores,
+    record_calc_execution,
+    register_meta_lineage,
+    upsert_meta_entity_resolution_audit,
     upsert_anime,
     upsert_person,
     upsert_score,
 )
-from src.models import Anime, Credit, Person, Role, ScoreResult
+from src.models import BronzeAnime as Anime, Credit, Person, Role, ScoreResult
 
 
 @pytest.fixture
@@ -177,3 +182,101 @@ class TestDbConnection:
         # Connection should be closed — executing should raise
         with pytest.raises(Exception):
             conn.execute("SELECT 1")
+
+
+class TestMetaLineageAndAudit:
+    def test_register_meta_lineage_persists_extended_fields(self, db_conn):
+        register_meta_lineage(
+            db_conn,
+            table_name="meta_policy_attrition",
+            audience="policy",
+            source_silver_tables=["credits", "persons"],
+            formula_version="v2.1",
+            description="Policy attrition summary table.",
+            ci_method="bootstrap_n1000",
+            row_count=12,
+            rng_seed=42,
+            git_sha="deadbeef",
+            inputs_hash="abc123",
+            notes="test lineage row",
+        )
+        db_conn.commit()
+
+        row = db_conn.execute(
+            "SELECT description, rng_seed, git_sha, inputs_hash "
+            "FROM meta_lineage WHERE table_name = 'meta_policy_attrition'"
+        ).fetchone()
+        assert row is not None
+        assert row["description"] == "Policy attrition summary table."
+        assert row["rng_seed"] == 42
+        assert row["git_sha"] == "deadbeef"
+        assert row["inputs_hash"] == "abc123"
+
+    def test_upsert_meta_entity_resolution_audit_writes_rows_and_lineage(self, db_conn):
+        upsert_person(db_conn, Person(id="p_canon", name_ja="正規名"))
+        count = upsert_meta_entity_resolution_audit(
+            db_conn,
+            [
+                {
+                    "person_id": "p_canon",
+                    "canonical_name": "正規名",
+                    "merge_method": "exact_match",
+                    "merge_confidence": 0.98,
+                    "merged_from_keys": '["p_dup1","p_dup2"]',
+                    "merge_evidence": "2 aliases merged",
+                    "reviewed_by": None,
+                    "reviewed_at": None,
+                }
+            ],
+        )
+        db_conn.commit()
+
+        assert count == 1
+        audit_row = db_conn.execute(
+            "SELECT canonical_name, merge_method, merge_confidence "
+            "FROM meta_entity_resolution_audit WHERE person_id = 'p_canon'"
+        ).fetchone()
+        assert audit_row is not None
+        assert audit_row["canonical_name"] == "正規名"
+        assert audit_row["merge_method"] == "exact_match"
+        assert audit_row["merge_confidence"] == 0.98
+
+        lineage_row = db_conn.execute(
+            "SELECT table_name FROM meta_lineage "
+            "WHERE table_name = 'meta_entity_resolution_audit'"
+        ).fetchone()
+        assert lineage_row is not None
+
+
+class TestCalcExecutionRecords:
+    def test_record_and_read_hashes(self, db_conn):
+        ensure_calc_execution_records(db_conn)
+        record_calc_execution(
+            db_conn,
+            scope="phase9_analysis_modules",
+            calc_name="anime_stats",
+            input_hash="abc123",
+            output_path="result/json/anime_stats.json",
+        )
+        db_conn.commit()
+
+        hashes = get_calc_execution_hashes(db_conn, "phase9_analysis_modules")
+        assert hashes["anime_stats"] == "abc123"
+
+    def test_upsert_overwrites_hash(self, db_conn):
+        record_calc_execution(
+            db_conn,
+            scope="phase9_analysis_modules",
+            calc_name="anime_stats",
+            input_hash="h1",
+        )
+        record_calc_execution(
+            db_conn,
+            scope="phase9_analysis_modules",
+            calc_name="anime_stats",
+            input_hash="h2",
+        )
+        db_conn.commit()
+
+        hashes = get_calc_execution_hashes(db_conn, "phase9_analysis_modules")
+        assert hashes["anime_stats"] == "h2"

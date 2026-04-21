@@ -12,7 +12,7 @@ from collections import defaultdict
 
 import structlog
 
-from src.models import Anime, Credit
+from src.models import AnimeAnalysis as Anime, Credit
 
 logger = structlog.get_logger()
 
@@ -31,7 +31,7 @@ def compute_anime_stats(
 
     Returns:
         {anime_id: {
-            title, year, score,
+            title, year,
             credit_count, unique_persons, role_distribution,
             avg_person_score, top_persons,
         }}
@@ -58,7 +58,7 @@ def compute_anime_stats(
         entry: dict = {
             "title": anime.title_ja or anime.title_en or anime_id,
             "year": anime.year,
-            "score": getattr(anime, "score", None),  # display-only
+            "score": getattr(anime, "score", None),
             "credit_count": len(acredits),
             "unique_persons": len(person_ids),
             "role_distribution": dict(
@@ -105,10 +105,10 @@ def compute_person_anime_stats(
             total_works: int,
             total_credits: int,
             role_distribution: {role: count},
-            avg_anime_score: float | None,
+            avg_work_staff_count: float | None,
             year_range: [first_year, latest_year],
             studios: list[str],  # unique studios
-            top_works: list[{title, year, score, role}],  # top 5 by anime score
+            top_works: list[{title, year, staff_count, role}],  # top 5 by staff_count
         }}
     """
     if not credits:
@@ -128,13 +128,15 @@ def compute_person_anime_stats(
         for c in pcredits:
             role_dist[c.role.value] += 1
 
-        # アニメスコアの平均
-        scores = [
-            anime_map[aid].score
+        # 作品規模（ユニーク参加者数）
+        anime_staff_count = {
+            aid: len({c.person_id for c in credits if c.anime_id == aid})
             for aid in anime_ids
-            if aid in anime_map and anime_map[aid].score is not None
-        ]
-        avg_score = round(sum(scores) / len(scores), 2) if scores else None
+        }
+        staff_counts = list(anime_staff_count.values())
+        avg_staff_count = (
+            round(sum(staff_counts) / len(staff_counts), 2) if staff_counts else None
+        )
 
         # 年範囲
         years = [
@@ -147,13 +149,15 @@ def compute_person_anime_stats(
         # ユニークスタジオ
         studios = sorted(
             {
-                anime_map[aid].studio
+                studio
                 for aid in anime_ids
-                if aid in anime_map and anime_map[aid].studio
+                if aid in anime_map
+                for studio in (getattr(anime_map[aid], "studios", []) or [])
+                if studio
             }
         )
 
-        # Top 5 works by anime score
+        # Top 5 works by staff count
         work_entries = []
         for c in pcredits:
             anime = anime_map.get(c.anime_id)
@@ -162,7 +166,7 @@ def compute_person_anime_stats(
                     {
                         "title": anime.title_ja or anime.title_en or c.anime_id,
                         "year": anime.year,
-                        "score": getattr(anime, "score", None),  # display-only
+                        "staff_count": anime_staff_count.get(c.anime_id, 0),
                         "role": c.role.value,
                     }
                 )
@@ -175,7 +179,7 @@ def compute_person_anime_stats(
                 unique_works.append(w)
         top_works = sorted(
             unique_works,
-            key=lambda w: w["score"] if w["score"] is not None else -1,
+            key=lambda w: w["staff_count"],
             reverse=True,
         )[:5]
 
@@ -185,7 +189,7 @@ def compute_person_anime_stats(
             "role_distribution": dict(
                 sorted(role_dist.items(), key=lambda x: x[1], reverse=True)
             ),
-            "avg_anime_score": avg_score,
+            "avg_work_staff_count": avg_staff_count,
             "year_range": year_range,
             "studios": studios,
             "top_works": top_works,

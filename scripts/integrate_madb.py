@@ -74,10 +74,10 @@ def take_snapshot(conn) -> DBSnapshot:
     ).fetchone()[0]
 
     snap.anilist_credits = conn.execute(
-        "SELECT COUNT(*) FROM credits WHERE source != 'mediaarts'"
+        "SELECT COUNT(*) FROM credits WHERE evidence_source != 'mediaarts'"
     ).fetchone()[0]
     snap.madb_credits = conn.execute(
-        "SELECT COUNT(*) FROM credits WHERE source = 'mediaarts'"
+        "SELECT COUNT(*) FROM credits WHERE evidence_source = 'mediaarts'"
     ).fetchone()[0]
 
     # Anime without any credits (N/A placeholders)
@@ -98,7 +98,7 @@ def take_snapshot(conn) -> DBSnapshot:
     # Role distribution (MADB credits)
     rows = conn.execute(
         """SELECT role, COUNT(*) AS cnt FROM credits
-           WHERE source = 'mediaarts'
+           WHERE evidence_source = 'mediaarts'
            GROUP BY role ORDER BY cnt DESC LIMIT 15"""
     ).fetchall()
     snap.role_distribution = {r[0]: r[1] for r in rows}

@@ -1,7 +1,7 @@
 """transitions モジュールのテスト."""
 
 from src.analysis.transitions import compute_role_transitions
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_credits_and_anime():

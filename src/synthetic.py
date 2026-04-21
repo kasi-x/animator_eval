@@ -17,7 +17,7 @@ from src.database import (
     upsert_anime,
     upsert_person,
 )
-from src.models import Anime, Character, CharacterVoiceActor, Credit, Person, Role
+from src.models import BronzeAnime, Character, CharacterVoiceActor, Credit, Person, Role
 
 logger = structlog.get_logger()
 
@@ -41,7 +41,7 @@ def generate_synthetic_data(
     n_animators: int = 100,
     n_anime: int = 50,
     seed: int = 42,
-) -> tuple[list[Person], list[Anime], list[Credit]]:
+) -> tuple[list[Person], list[BronzeAnime], list[Credit]]:
     """合成データを生成する.
 
     Args:
@@ -97,7 +97,7 @@ def generate_synthetic_data(
         n_studios = rng.choices([1, 2], weights=[0.7, 0.3])[0]
         anime_studios = rng.sample(studio_names, min(n_studios, len(studio_names)))
         anime_list.append(
-            Anime(
+            BronzeAnime(
                 id=f"syn:anime{i}",
                 title_ja=f"合成アニメ{i:03d}",
                 title_en=f"Synthetic Anime {i:03d}",
@@ -183,7 +183,7 @@ def generate_synthetic_data(
 
 
 def generate_synthetic_va_data(
-    anime_list: list[Anime],
+    anime_list: list[BronzeAnime],
     n_voice_actors: int = 30,
     n_characters: int = 60,
     n_sound_directors: int = 5,

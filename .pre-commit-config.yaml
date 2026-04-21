@@ -41,7 +41,7 @@ repos:
 
       - id: quality-snapshot-drift
         name: meta_quality_snapshot anomaly check
-        entry: pixi run python scripts/monitoring/check_quality_anomaly.py
+        entry: pixi run python scripts/ci_check_quality_drift.py
         language: system
         # Runs on pipeline / scraper changes. CI also runs it after pipeline runs.
         files: ^(src/pipeline|src/scrapers|src/database\.py).*

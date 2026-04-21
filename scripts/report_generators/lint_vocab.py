@@ -60,6 +60,12 @@ ENFORCED_CATEGORIES = (
 )
 
 SUPPORTED_SUFFIXES = {".py", ".html", ".htm", ".txt", ".md"}
+SKIP_BASENAMES = {
+    "index_page.py",
+    "policy_brief_index.py",
+    "hr_brief_index.py",
+    "biz_brief_index.py",
+}
 
 
 # ---------------------------------------------------------------------------
@@ -292,6 +298,10 @@ def iter_target_files(paths: Iterable[Path]) -> Iterator[Path]:
             log.warning("path_missing", path=str(p))
             continue
         if p.is_file():
+            if p.name in SKIP_BASENAMES:
+                continue
+            if "archived" in p.parts:
+                continue
             yield p
             continue
         for child in p.rglob("*"):
@@ -302,6 +312,8 @@ def iter_target_files(paths: Iterable[Path]) -> Iterator[Path]:
             # Skip __pycache__ and the archived report directory.
             parts = set(child.parts)
             if "__pycache__" in parts or "archived" in parts:
+                continue
+            if child.name in SKIP_BASENAMES:
                 continue
             yield child
 

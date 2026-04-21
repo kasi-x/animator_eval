@@ -19,3 +19,7 @@ def pytest_configure(config):
         logger_factory=structlog.PrintLoggerFactory(),
         cache_logger_on_first_use=False,
     )
+    config.addinivalue_line(
+        "markers",
+        "requires_meta_tables: skip unless the meta_* tables are populated",
+    )

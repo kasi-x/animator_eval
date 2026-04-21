@@ -16,8 +16,8 @@ Every section rendered by this module follows the mandatory v2 structure:
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
-from typing import Any
+import sqlite3
+from dataclasses import dataclass
 
 
 # =========================================================================
@@ -134,6 +134,14 @@ class DataStatementParams:
 class SectionBuilder:
     """Builds v2-compliant report sections and validates findings text."""
 
+    _ALT_INTERPRETATION_TOKENS = (
+        "代替解釈",
+        "別の解釈",
+        "もう一つの解釈",
+        "alternative interpretation",
+        "another interpretation",
+    )
+
     def validate_findings(self, text: str) -> list[str]:
         """Check findings text for REPORT_PHILOSOPHY v2 violations.
 
@@ -183,6 +191,50 @@ class SectionBuilder:
                 violations.append(f"Selection rhetoric in findings (JA): '{sel}'")
 
         return violations
+
+    def validate(
+        self,
+        *,
+        has_overview: bool,
+        has_findings: bool,
+        has_method_note: bool,
+        has_data_statement: bool,
+        has_disclaimers: bool,
+        interpretation_html: str | None = None,
+        method_note_auto_generated: bool = True,
+    ) -> None:
+        """Validate required v2 section structure before rendering.
+
+        Raises:
+            ValueError: if required sections are missing or constraints are violated.
+        """
+        missing: list[str] = []
+        if not has_overview:
+            missing.append("概要 / Overview")
+        if not has_findings:
+            missing.append("Findings")
+        if not has_method_note:
+            missing.append("Method Note")
+        if not has_data_statement:
+            missing.append("Data Statement")
+        if not has_disclaimers:
+            missing.append("Disclaimers")
+        if missing:
+            raise ValueError(f"Missing required sections: {', '.join(missing)}")
+
+        if has_method_note and not method_note_auto_generated:
+            raise ValueError("Method Note must be auto-generated from meta_lineage")
+
+        if interpretation_html:
+            interp_lower = interpretation_html.lower()
+            has_alt = any(
+                token.lower() in interp_lower for token in self._ALT_INTERPRETATION_TOKENS
+            )
+            if not has_alt:
+                raise ValueError(
+                    "Interpretation section must contain at least one "
+                    "alternative interpretation"
+                )
 
     def build_section(self, section: ReportSection) -> str:
         """Render a ReportSection to v2-compliant HTML."""
@@ -299,7 +351,9 @@ class SectionBuilder:
 </div>
 """
 
-    def method_note_from_lineage(self, table_name: str, conn: "sqlite3.Connection") -> str:
+    def method_note_from_lineage(
+        self, table_name: str, conn: sqlite3.Connection
+    ) -> str:
         """meta_lineage を読んで Method Note HTML を自動生成する.
 
         手書き method_note は禁止。このメソッド経由でのみ生成すること。
@@ -315,8 +369,6 @@ class SectionBuilder:
             ValueError: table_name が meta_lineage に未登録の場合
         """
         import json as _json
-        import sqlite3 as _sqlite3
-
         row = conn.execute(
             "SELECT * FROM meta_lineage WHERE table_name = ?", (table_name,)
         ).fetchone()
@@ -352,6 +404,9 @@ class SectionBuilder:
             tbl_html = ", ".join(f"<code>{t}</code>" for t in silver_tables)
             parts.append(f"<p><strong>データソース (silver 層):</strong> {tbl_html}</p>")
 
+        if data.get("description"):
+            parts.append(f"<p><strong>指標の説明:</strong> {data['description']}</p>")
+
         # Score prohibition confirmation
         if data.get("source_bronze_forbidden", 1):
             parts.append(
@@ -381,6 +436,12 @@ class SectionBuilder:
                 meta_parts.append(f"formula_version={fv}")
             if ca:
                 meta_parts.append(f"computed_at={ca}")
+            if data.get("git_sha"):
+                meta_parts.append(f"git_sha={data['git_sha']}")
+            if data.get("rng_seed") is not None:
+                meta_parts.append(f"rng_seed={data['rng_seed']}")
+            if data.get("inputs_hash"):
+                meta_parts.append(f"inputs_hash={data['inputs_hash'][:12]}…")
             parts.append(f"<p><strong>メタ:</strong> {', '.join(meta_parts)}</p>")
 
         # Row count

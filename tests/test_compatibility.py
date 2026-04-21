@@ -6,7 +6,7 @@ from src.analysis.compatibility import (
     compute_compatibility_groups,
     GroupCompatibilityResult,
 )
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 @pytest.fixture

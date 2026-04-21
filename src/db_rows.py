@@ -99,46 +99,16 @@ class AnimeRow:
     year: int | None = None
     season: str | None = None
     episodes: int | None = None
-    mal_id: int | None = None
-    anilist_id: int | None = None
-    score: float | None = None
-    updated_at: str | None = None
-    cover_large: str | None = None
-    cover_extra_large: str | None = None
-    cover_medium: str | None = None
-    banner: str | None = None
-    cover_large_path: str | None = None
-    banner_path: str | None = None
-    description: str | None = None
     format: str | None = None
     status: str | None = None
     start_date: str | None = None
     end_date: str | None = None
     duration: int | None = None
     source: str | None = None
-    genres: str = "[]"  # JSON 文字列
-    tags: str = "[]"  # JSON 文字列
-    popularity_rank: int | None = None
-    favourites: int | None = None
-    studios: str = "[]"  # JSON 文字列
-    synonyms: str = "[]"  # JSON 文字列
-    mean_score: int | None = None
-    country_of_origin: str | None = None
-    is_licensed: int | None = None  # SQLite BOOLEAN → 0/1
-    is_adult: int | None = None
-    hashtag: str | None = None
-    site_url: str | None = None
-    trailer_url: str | None = None
-    trailer_site: str | None = None
-    relations_json: str | None = None
-    external_links_json: str | None = None
-    rankings_json: str | None = None
-    madb_id: str | None = None
-    ann_id: int | None = None
-    allcinema_id: int | None = None
     quarter: int | None = None
     work_type: str | None = None
     scale_class: str | None = None
+    updated_at: str | None = None
 
     @classmethod
     def from_row(cls, row) -> "AnimeRow":
@@ -160,11 +130,7 @@ class CreditRow:
     role: str
     raw_role: str = ""
     episode: int = -1
-    source: str = ""
-    # v50: evidence_source is the canonical new name (C-1 in detailed_todo.md).
-    # Kept in sync with `source` by triggers until a future migration drops
-    # `source` entirely.
-    evidence_source: str = ""
+    evidence_source: str | None = None
     updated_at: str | None = None
     credit_year: int | None = None
     credit_quarter: int | None = None

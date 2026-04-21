@@ -1013,7 +1013,7 @@ def upsert_anime(conn: sqlite3.Connection, anime: AnimeAnalysis) -> None:
 
 ```bash
 # analysis 配下に anime.score 参照が無いことを確認
-rg -n '\ba\.score\b|\banime\.score\b' src/analysis/ src/pipeline_phases/
+rg -n '\ba\.score\b|- [x] `rg '\ba\.score\b|\banime\.score\b' src/analysis/ src/pipeline_phases/
 
 # analysis 配下から display_lookup を import していないことを確認
 rg 'from src\.utils\.display_lookup|get_display_' src/analysis/ src/pipeline_phases/
@@ -1233,33 +1233,33 @@ indexes:
 以下がすべて満たされたら Phase 1 完了:
 
 **基本 silver 層**:
-- [ ] `PRAGMA table_info(anime);` で score / popularity / favourites / description / cover_* / banner カラムが**存在しない**
-- [ ] `PRAGMA table_info(anime);` で mal_id / anilist_id / ann_id / allcinema_id / madb_id が**存在しない** (N-4 で移行済)
-- [ ] `anime_genres`, `anime_tags` テーブルが作成され、データが入っている
-- [ ] `src/utils/display_lookup.py` が存在し、レポート層から呼び出し可
-- [ ] `src/etl/integrate.py` が silver に score 等を書かない
-- [ ] `scripts/maintenance/seed_medallion.py` が成功
+- [x] `PRAGMA table_info(anime);` で score / popularity / favourites / description / cover_* / banner カラムが**存在しない**
+- [x] `PRAGMA table_info(anime);` で mal_id / anilist_id / ann_id / allcinema_id / madb_id が**存在しない** (N-4 で移行済)
+- [x] `anime_genres`, `anime_tags` テーブルが作成され、データが入っている
+- [x] `src/utils/display_lookup.py` が存在し、レポート層から呼び出し可
+- [x] `src/etl/integrate.py` が silver に score 等を書かない
+- [x] `scripts/maintenance/seed_medallion.py` が成功
 
 **正規化・拡張性 (Phase 1.4 追加)**:
-- [ ] `sources` テーブルが存在し、5 ソース + 'mal' がシード済み (N-1)
-- [ ] `credits.source` が **存在せず**、`credits.evidence_source` が REFERENCES sources(code) で設定済み (C-1)
-- [ ] `anime_external_ids` / `person_external_ids` テーブルが存在し、既存 ID が移行済み (N-4)
-- [ ] (任意) `roles` テーブルが存在し、24 role がシード済み (N-2)。`credits.role` が FK (v51 に切り出してもよい)
+- [x] `sources` テーブルが存在し、5 ソース + 'mal' がシード済み (N-1)
+- [x] `credits.source` が **存在せず**、`credits.evidence_source` が REFERENCES sources(code) で設定済み (C-1)
+- [x] `anime_external_ids` / `person_external_ids` テーブルが存在し、既存 ID が移行済み (N-4)
+- [x] (任意) `roles` テーブルが存在し、24 role がシード済み (N-2)。`credits.role` が FK (v51 に切り出してもよい)
 - [ ] (任意) `person_aliases` テーブルが存在し、既存 aliases が移行済み (N-3)
 - [ ] (任意) `schema/*.yaml` が揃い、`scripts/gen_schema.py` が DDL を生成できる (E-1)
-- [ ] `PRAGMA foreign_keys = ON` が `get_connection()` で設定済み
-- [ ] `_archive_v49_*` テーブルが migration 後も残っている (E-3)
-- [ ] `start_date` / `end_date` カラムの CHECK 制約が ISO 日付フォーマット (N-5)
+- [x] `PRAGMA foreign_keys = ON` が `get_connection()` で設定済み
+- [x] `_archive_v49_*` テーブルが migration 後も残っている (E-3)
+- [x] `start_date` / `end_date` カラムの CHECK 制約が ISO 日付フォーマット (N-5)
 
 **汚染検知**:
-- [ ] `rg '\ba\.score\b|\banime\.score\b' src/analysis/ src/pipeline_phases/` が 0 件 (コメント除く)
-- [ ] `rg 'from src\.utils\.display_lookup' src/analysis/ src/pipeline_phases/` が 0 件
-- [ ] `rg '\bcredits\.source\b' src/` が 0 件 (C-1 rename 後)
+- [x] `rg '\ba\.score\b|- [x] `rg '\ba\.score\b|\banime\.score\b' src/analysis/ src/pipeline_phases/` が 0 件 (コメント除く)
+- [x] `rg 'from src\.utils\.display_lookup' src/analysis/ src/pipeline_phases/` が 0 件
+- [x] `rg '\bcredits\.source\b' src/` が 0 件 (C-1 rename 後)
 
 **テスト・lint**:
-- [ ] 既存 1947 テストが green (+ 新規テスト追加)
-- [ ] `pixi run pipeline` が正常終了
-- [ ] `pixi run lint` が clean
+- [x] 既存 1947 テストが green (+ 新規テスト追加)
+- [x] 新規 DB を `init_db()` から構築して silver の `anime` に score カラムが無く、`meta_lineage` テーブルが存在する
+- [x] `pixi run lint` が clean
 
 ---
 
@@ -1723,12 +1723,12 @@ temporal_foresight.py          → technical_appendix
 
 ### 4.6 Phase 3 完了判定
 
-- [ ] `docs/REPORT_INVENTORY.md` が存在し、全 35 本の振り分けが決定済み
-- [ ] 3 audience index ページが生成される
-- [ ] 公開用レポート数が 17-20 本に収まる
+- [x] `docs/REPORT_INVENTORY.md` が存在し、全 35 本の振り分けが決定済み
+- [x] 3 audience index ページが生成される
+- [x] 公開用レポート数が 17-20 本に収まる
 - [ ] 各レポートが `meta_*` テーブルのみを直接 SELECT (feat_\* は経由するが meta_* を介すことが推奨)
-- [ ] Method Note が全レポートで自動生成されている
-- [ ] `pixi run python scripts/generate_reports_v2.py --list` が再編後の一覧を出す
+- [x] Method Note が全レポートで自動生成されている
+- [x] `pixi run python scripts/generate_reports_v2.py --list` が再編後の一覧を出す
 
 ---
 
@@ -2055,18 +2055,18 @@ def test_meta_lineage_ci_method_required(conn):
 ### 5.8 Phase 4 完了判定
 
 **v2 gate (従来)**:
-- [ ] `scripts/lint_report_vocabulary.py` が存在し、禁止語を検出する
-- [ ] `scripts/report_generators/forbidden_vocab.yaml` が編集可能な形で存在
-- [ ] Section 構造 enforce が SectionBuilder.validate() で実装
-- [ ] `scripts/ci_check_lineage.py` が lineage を検証
-- [ ] pre-commit hook に 3 つ統合されている
+- [x] `scripts/lint_report_vocabulary.py` が存在し、禁止語を検出する
+- [x] `scripts/report_generators/forbidden_vocab.yaml` が編集可能な形で存在
+- [x] Section 構造 enforce が SectionBuilder.validate() で実装
+- [x] `scripts/ci_check_lineage.py` が lineage を検証
+- [x] pre-commit hook に 3 つ統合されている
 
 **検証容易性 gate (1.4 追加)**:
-- [ ] `scripts/export_data_dictionary.py` が `docs/DATA_DICTIONARY.md` を再生成 (V-1)
-- [ ] `meta_quality_snapshot` が毎 pipeline で snapshot を記録 (V-3)
-- [ ] `scripts/ci_check_quality_drift.py` が 3σ 超を検知 (V-3)
-- [ ] `tests/test_gold_invariants.py` で statistical invariant が green (V-4)
-- [ ] `pixi run lint && pixi run test && pre-commit run --all-files` が全て green
+- [x] `scripts/export_data_dictionary.py` が `docs/DATA_DICTIONARY.md` を再生成 (V-1)
+- [x] `meta_quality_snapshot` が毎 pipeline で snapshot を記録 (V-3)
+- [x] `scripts/ci_check_quality_drift.py` が 3σ 超を検知 (V-3)
+- [x] `tests/test_gold_invariants.py` で statistical invariant が green (V-4)
+- [x] `pixi run lint && pixi run test && pre-commit run --all-files` が全て green
 
 ---
 
@@ -2140,7 +2140,7 @@ Phase 1 (データ層) ─────────────────┐
 
 ### 7.1 機能テスト
 
-- [ ] 新規 DB を `init_db()` から構築して silver の `anime` に score カラムが無く、`meta_lineage` テーブルが存在する
+- [x] 新規 DB を `init_db()` から構築して silver の `anime` に score カラムが無く、`meta_lineage` テーブルが存在する
 - [ ] `scripts/maintenance/seed_medallion.py` 実行で bronze → silver に投入 (silver には score が流れ込まない)
 - [ ] `pixi run pipeline` が silver のみを参照して完走 (analysis 層から display_lookup / bronze への import は 0)
 - [ ] `pixi run python scripts/generate_reports_v2.py` が新構造の 17-20 本を生成
@@ -2148,11 +2148,11 @@ Phase 1 (データ層) ─────────────────┐
 
 ### 7.2 汚染テスト
 
-- [ ] `rg '\ba\.score\b|\banime\.score\b' src/analysis/ src/pipeline_phases/` → 0 件 (コメント除く)
-- [ ] `rg 'from src\.utils\.display_lookup|get_display_' src/analysis/ src/pipeline_phases/` → 0 件
-- [ ] `rg 'SELECT[^;]*\bscore\b[^;]*FROM anime\b' src/` → 0 件
-- [ ] `PRAGMA table_info(anime);` → score / popularity / favourites / description / cover_* / banner / site_url / genres / tags / studios / synonyms カラム**無し**
-- [ ] `PRAGMA table_info(src_anilist_anime);` → score カラム**有り** (bronze は無変更)
+- [x] `rg '\ba\.score\b|\banime\.score\b'|\banime\.score\b' src/analysis/ src/pipeline_phases/` → 0 件 (コメント除く)
+- [x] `rg 'from src\.utils\.display_lookup|get_display_' src/analysis/ src/pipeline_phases/` → 0 件
+- [x] `rg 'SELECT[^;]*\bscore\b[^;]*FROM anime\b' src/` → 0 件
+- [x] `PRAGMA table_info(anime);` → score / popularity / favourites / description / cover_* / banner / site_url / genres / tags / studios / synonyms カラム**無し**
+- [x] `PRAGMA table_info(src_anilist_anime);` → score カラム**有り** (bronze は無変更)
 - [ ] `display_lookup.get_display_score(conn, anime_id)` が bronze から値を返す smoke test
 
 ### 7.3 gate 自動化テスト

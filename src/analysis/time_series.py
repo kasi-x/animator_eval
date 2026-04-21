@@ -3,7 +3,7 @@
 年ごと、四半期ごとの:
 - アクティブ人物数
 - 新規参入者数
-- 平均スコアの推移
+- 制作規模指標の推移
 - 役職分布の変化
 
 credit_year / credit_quarter が設定されている場合はそちらを優先し、
@@ -14,7 +14,7 @@ from collections import defaultdict
 
 import structlog
 
-from src.models import Anime, Credit
+from src.models import AnimeAnalysis as Anime, Credit
 from src.utils.time_utils import get_year_quarter, yq_label
 
 logger = structlog.get_logger()
@@ -49,8 +49,6 @@ def compute_time_series(
     year_persons: dict[int, set[str]] = defaultdict(set)
     year_credits: dict[int, int] = defaultdict(int)
     year_anime: dict[int, set[str]] = defaultdict(set)
-    year_scores: dict[int, list[float]] = defaultdict(list)
-
     yq_persons: dict[str, set[str]] = defaultdict(set)
     yq_credits: dict[str, int] = defaultdict(int)
     yq_anime: dict[str, set[str]] = defaultdict(set)
@@ -78,10 +76,6 @@ def compute_time_series(
         year_persons[c_year].add(c.person_id)
         year_credits[c_year] += 1
         year_anime[c_year].add(c.anime_id)
-        _disp = getattr(anime, "score", None)  # display-only
-        if _disp:
-            year_scores[c_year].append(_disp)
-
         # Quarterly aggregation
         if c_quarter is not None:
             label = yq_label(c_year, c_quarter)
@@ -110,16 +104,24 @@ def compute_time_series(
                 person_first_yq[pid] = label
 
     # Build annual series
+    anime_staff_count = {
+        aid: len({c.person_id for c in credits if c.anime_id == aid})
+        for aid in {c.anime_id for c in credits}
+    }
     active_persons = {y: len(year_persons[y]) for y in years}
     new_entrants = {
         y: sum(1 for pid in year_persons[y] if person_first_year.get(pid) == y)
         for y in years
     }
     credit_count = {y: year_credits[y] for y in years}
-    avg_anime_score = {
-        y: round(sum(year_scores[y]) / len(year_scores[y]), 2)
+    avg_staff_count = {
+        y: round(
+            sum(anime_staff_count.get(aid, 0) for aid in year_anime[y])
+            / len(year_anime[y]),
+            2,
+        )
         for y in years
-        if year_scores[y]
+        if year_anime[y]
     }
     unique_anime = {y: len(year_anime[y]) for y in years}
 
@@ -150,7 +152,7 @@ def compute_time_series(
             "active_persons": active_persons,
             "new_entrants": new_entrants,
             "credit_count": credit_count,
-            "avg_anime_score": avg_anime_score,
+            "avg_staff_count": avg_staff_count,
             "unique_anime": unique_anime,
         },
         "quarterly": {

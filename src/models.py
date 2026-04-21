@@ -1378,61 +1378,75 @@ class AnimeDisplay(BaseModel):
     rankings_json: str | None = None
 
 
-class Anime(AnimeAnalysis):
-    """アニメ作品（後方互換シム）.
+class BronzeAnime(BaseModel):
+    """アニメ作品（bronze/raw 用モデル）.
 
-    新規コードは AnimeAnalysis を使うこと。
-    score フィールドは表示専用 — スコア算出・エッジ重みへの使用禁止。
+    表示・収集補助メタデータを含む。分析層は AnimeAnalysis を使うこと。
     """
 
-    score: float | None = None  # 表示専用: 視聴者評価はスコア算出に使用禁止
+    id: str
+    title_ja: str = ""
+    title_en: str = ""
+    year: int | None = None
+    season: str | None = None
+    quarter: int | None = None
+    episodes: int | None = None
+    mal_id: int | None = None
+    anilist_id: int | None = None
+    madb_id: str | None = None
+    ann_id: int | None = None
+    allcinema_id: int | None = None
+    format: str | None = None
+    status: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    duration: int | None = None
+    source: str | None = None
+    work_type: str | None = None
+    scale_class: str | None = None
 
-    # 画像（AniList）
+    score: float | None = None
     cover_large: str | None = None
     cover_extra_large: str | None = None
     cover_medium: str | None = None
     banner: str | None = None
-    cover_large_path: str | None = None  # ローカル保存パス
+    cover_large_path: str | None = None
     banner_path: str | None = None
-
-    # 詳細情報（表示用）
-    description: str | None = None  # あらすじ
-
-    # 分類・タグ
+    description: str | None = None
     genres: list[str] = Field(default_factory=list)
-    tags: list[dict] = Field(default_factory=list)  # [{"name": str, "rank": int}]
-
-    # 人気度指標
+    tags: list[dict] = Field(default_factory=list)
     popularity_rank: int | None = None
     favourites: int | None = None
-    mean_score: int | None = None  # 単純平均スコア（averageScoreとは別算出）
-
-    # 制作情報
+    mean_score: int | None = None
     studios: list[str] = Field(default_factory=list)
-
-    # 追加メタデータ（AniList拡張）
-    synonyms: list[str] = Field(default_factory=list)  # 別名・別タイトル
-    country_of_origin: str | None = None  # ISO 3166-1 alpha-2 (JP, CN, KR, etc.)
+    synonyms: list[str] = Field(default_factory=list)
+    country_of_origin: str | None = None
     is_licensed: bool | None = None
-    is_adult: bool | None = None  # R18フラグ
-    hashtag: str | None = None  # 公式Twitterハッシュタグ
-    site_url: str | None = None  # AniList URL
-    trailer_url: str | None = None  # トレーラーURL
-    trailer_site: str | None = None  # トレーラーサイト名 (youtube, dailymotion)
+    is_adult: bool | None = None
+    hashtag: str | None = None
+    site_url: str | None = None
+    trailer_url: str | None = None
+    trailer_site: str | None = None
+    relations_json: str | None = None
+    external_links_json: str | None = None
+    rankings_json: str | None = None
 
-    # 複合データ（JSON文字列でDB保存）
-    relations_json: str | None = None  # 関連作品（続編/前日譚等）
-    external_links_json: str | None = None  # 外部リンク（配信サイト等）
-    rankings_json: str | None = None  # ランキング情報
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def display_title(self) -> str:
+        return self.title_ja or self.title_en or self.id
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def studio(self) -> str | None:
-        """主制作スタジオ（studiosリストの先頭、後方互換用）."""
         return self.studios[0] if self.studios else None
 
     @classmethod
-    def from_db_row(cls, row: "AnimeRow") -> "Anime":
+    def from_db_row(cls, row: "AnimeRow") -> "BronzeAnime":
+        genres_raw = getattr(row, "genres", "[]")
+        tags_raw = getattr(row, "tags", "[]")
+        studios_raw = getattr(row, "studios", "[]")
+        synonyms_raw = getattr(row, "synonyms", "[]")
         return cls(
             id=row.id,
             title_ja=row.title_ja,
@@ -1441,40 +1455,50 @@ class Anime(AnimeAnalysis):
             season=row.season,
             quarter=row.quarter,
             episodes=row.episodes,
-            mal_id=row.mal_id,
-            anilist_id=row.anilist_id,
-            madb_id=row.madb_id,
-            score=row.score,
-            cover_large=row.cover_large,
-            cover_extra_large=row.cover_extra_large,
-            cover_medium=row.cover_medium,
-            banner=row.banner,
-            cover_large_path=row.cover_large_path,
-            banner_path=row.banner_path,
-            description=row.description,
+            mal_id=getattr(row, "mal_id", None),
+            anilist_id=getattr(row, "anilist_id", None),
+            madb_id=getattr(row, "madb_id", None),
+            ann_id=getattr(row, "ann_id", None),
+            allcinema_id=getattr(row, "allcinema_id", None),
+            score=getattr(row, "score", None),
+            cover_large=getattr(row, "cover_large", None),
+            cover_extra_large=getattr(row, "cover_extra_large", None),
+            cover_medium=getattr(row, "cover_medium", None),
+            banner=getattr(row, "banner", None),
+            cover_large_path=getattr(row, "cover_large_path", None),
+            banner_path=getattr(row, "banner_path", None),
+            description=getattr(row, "description", None),
             format=row.format,
             status=row.status,
             start_date=row.start_date,
             end_date=row.end_date,
             duration=row.duration,
             source=row.source,
-            genres=json.loads(row.genres),
-            tags=json.loads(row.tags),
-            popularity_rank=row.popularity_rank,
-            favourites=row.favourites,
-            studios=json.loads(row.studios),
-            synonyms=json.loads(row.synonyms),
-            mean_score=row.mean_score,
-            country_of_origin=row.country_of_origin,
-            is_licensed=bool(row.is_licensed) if row.is_licensed is not None else None,
-            is_adult=bool(row.is_adult) if row.is_adult is not None else None,
-            hashtag=row.hashtag,
-            site_url=row.site_url,
-            trailer_url=row.trailer_url,
-            trailer_site=row.trailer_site,
-            relations_json=row.relations_json,
-            external_links_json=row.external_links_json,
-            rankings_json=row.rankings_json,
+            genres=json.loads(genres_raw or "[]"),
+            tags=json.loads(tags_raw or "[]"),
+            popularity_rank=getattr(row, "popularity_rank", None),
+            favourites=getattr(row, "favourites", None),
+            studios=json.loads(studios_raw or "[]"),
+            synonyms=json.loads(synonyms_raw or "[]"),
+            mean_score=getattr(row, "mean_score", None),
+            country_of_origin=getattr(row, "country_of_origin", None),
+            is_licensed=(
+                bool(getattr(row, "is_licensed"))
+                if getattr(row, "is_licensed", None) is not None
+                else None
+            ),
+            is_adult=(
+                bool(getattr(row, "is_adult"))
+                if getattr(row, "is_adult", None) is not None
+                else None
+            ),
+            hashtag=getattr(row, "hashtag", None),
+            site_url=getattr(row, "site_url", None),
+            trailer_url=getattr(row, "trailer_url", None),
+            trailer_site=getattr(row, "trailer_site", None),
+            relations_json=getattr(row, "relations_json", None),
+            external_links_json=getattr(row, "external_links_json", None),
+            rankings_json=getattr(row, "rankings_json", None),
             work_type=row.work_type,
             scale_class=row.scale_class,
         )
@@ -1556,18 +1580,21 @@ class Credit(BaseModel):
     raw_role: str | None = None  # 元のロール文字列（API由来）を保存
     episode: int | None = None
     source: str = ""
+    evidence_source: str | None = None
     credit_year: int | None = None  # 帰属年（長期作品は話数ごとに異なる）
     credit_quarter: int | None = None  # 帰属四半期 (1-4)
 
     @classmethod
     def from_db_row(cls, row: "CreditRow") -> "Credit":
+        src = row.evidence_source or ""
         return cls(
             person_id=row.person_id,
             anime_id=row.anime_id,
             role=Role(row.role),
             raw_role=row.raw_role or None,
             episode=row.episode if row.episode != -1 else None,
-            source=row.source,
+            source=src,
+            evidence_source=src,
             credit_year=row.credit_year,
             credit_quarter=row.credit_quarter,
         )

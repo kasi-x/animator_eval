@@ -2,7 +2,13 @@
 
 import pytest
 
-from src.models import Anime, Character, CharacterVoiceActor, Credit, Role
+from src.models import (
+    BronzeAnime as Anime,
+    Character,
+    CharacterVoiceActor,
+    Credit,
+    Role,
+)
 
 
 # ============================================================

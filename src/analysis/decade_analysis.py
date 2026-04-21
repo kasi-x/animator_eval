@@ -3,14 +3,14 @@
 各年代 (2000s, 2010s, 2020s 等) について:
 - クレジット数・人物数の推移
 - 役職分布の変化
-- 平均作品スコアの推移
+- 平均作品規模（スタッフ数）の推移
 """
 
 from collections import defaultdict
 
 import structlog
 
-from src.models import Anime, Credit
+from src.models import AnimeAnalysis as Anime, Credit
 
 logger = structlog.get_logger()
 
@@ -29,7 +29,7 @@ def compute_decade_analysis(
                     "credit_count": int,
                     "unique_persons": int,
                     "unique_anime": int,
-                    "avg_anime_score": float,
+                    "avg_staff_count": float,
                     "role_distribution": {role: count},
                     "top_persons": [{person_id, credits}],
                 },
@@ -44,7 +44,7 @@ def compute_decade_analysis(
             "credits": 0,
             "persons": set(),
             "anime": set(),
-            "scores": [],
+            "staff_counts": [],
             "roles": defaultdict(int),
             "person_credits": defaultdict(int),
         }
@@ -60,9 +60,6 @@ def compute_decade_analysis(
         yd["credits"] += 1
         yd["persons"].add(c.person_id)
         yd["anime"].add(c.anime_id)
-        _disp = getattr(anime, "score", None)  # display-only
-        if _disp:
-            yd["scores"].append(_disp)
         yd["roles"][c.role.value] += 1
         yd["person_credits"][c.person_id] += 1
 
@@ -75,7 +72,7 @@ def compute_decade_analysis(
                 "credit_count": 0,
                 "persons": set(),
                 "anime": set(),
-                "scores": [],
+                "staff_counts": [],
                 "role_distribution": defaultdict(int),
                 "person_credits": defaultdict(int),
             }
@@ -83,11 +80,17 @@ def compute_decade_analysis(
         dd["credit_count"] += yd["credits"]
         dd["persons"].update(yd["persons"])
         dd["anime"].update(yd["anime"])
-        dd["scores"].extend(yd["scores"])
         for role, cnt in yd["roles"].items():
             dd["role_distribution"][role] += cnt
         for pid, cnt in yd["person_credits"].items():
             dd["person_credits"][pid] += cnt
+
+    anime_staff_count = {
+        aid: len({c.person_id for c in credits if c.anime_id == aid})
+        for aid in {c.anime_id for c in credits}
+    }
+    for dd in decades.values():
+        dd["staff_counts"].extend(anime_staff_count.get(aid, 0) for aid in dd["anime"])
 
     # Format decades
     formatted_decades = {}
@@ -98,8 +101,10 @@ def compute_decade_analysis(
             "credit_count": dd["credit_count"],
             "unique_persons": len(dd["persons"]),
             "unique_anime": len(dd["anime"]),
-            "avg_anime_score": round(sum(dd["scores"]) / len(dd["scores"]), 2)
-            if dd["scores"]
+            "avg_staff_count": round(
+                sum(dd["staff_counts"]) / len(dd["staff_counts"]), 2
+            )
+            if dd["staff_counts"]
             else None,
             "role_distribution": dict(
                 sorted(dd["role_distribution"].items(), key=lambda x: -x[1])
@@ -116,8 +121,12 @@ def compute_decade_analysis(
             "credits": yd["credits"],
             "persons": len(yd["persons"]),
             "anime": len(yd["anime"]),
-            "avg_score": round(sum(yd["scores"]) / len(yd["scores"]), 2)
-            if yd["scores"]
+            "avg_staff_count": round(
+                sum(anime_staff_count.get(aid, 0) for aid in yd["anime"])
+                / len(yd["anime"]),
+                2,
+            )
+            if yd["anime"]
             else None,
         }
 

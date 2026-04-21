@@ -13,7 +13,7 @@ from src.analysis.role_flow import compute_role_flow
 from src.analysis.team_composition import analyze_team_patterns
 from src.analysis.time_series import compute_time_series
 from src.analysis.versatility import compute_versatility
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 class TestSinglePersonDataset:

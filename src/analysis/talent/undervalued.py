@@ -39,19 +39,17 @@ def compute_undervaluation_score(
     {s["person_id"]: s for s in scores if "person_id" in s}
 
     # fe percentile
-    fe_values = np.array([
-        s.get("person_fe", 0.0) for s in scores if "person_fe" in s
-    ])
+    fe_values = np.array([s.get("person_fe", 0.0) for s in scores if "person_fe" in s])
     if len(fe_values) == 0:
         return {}
 
     fe_sorted = np.sort(fe_values)
 
     # recent_credits from expected_ability or scores
-    activity_values = np.array([
-        s.get("total_credits", 0) or s.get("recent_credits", 0)
-        for s in scores
-    ], dtype=float)
+    activity_values = np.array(
+        [s.get("total_credits", 0) or s.get("recent_credits", 0) for s in scores],
+        dtype=float,
+    )
     act_sorted = np.sort(activity_values)
 
     def _pct(arr_sorted: np.ndarray, v: float) -> float:
@@ -106,12 +104,14 @@ def cluster_undervaluation_archetypes(
         d = undervalued_pool[pid]
         s = score_map.get(pid, {})
         dormancy = s.get("dormancy", 1.0) or 1.0
-        feature_matrix.append([
-            d["u_score"],
-            d["fe_pct"],
-            d["activity_pct"],
-            float(dormancy),
-        ])
+        feature_matrix.append(
+            [
+                d["u_score"],
+                d["fe_pct"],
+                d["activity_pct"],
+                float(dormancy),
+            ]
+        )
         valid_pids.append(pid)
 
     X = np.array(feature_matrix)
@@ -125,9 +125,7 @@ def cluster_undervaluation_archetypes(
     # Name archetypes by dominant feature profile
     cluster_data: dict[int, list] = defaultdict(list)
     for i, pid in enumerate(valid_pids):
-        cluster_data[int(labels[i])].append(
-            {"pid": pid, "features": feature_matrix[i]}
-        )
+        cluster_data[int(labels[i])].append({"pid": pid, "features": feature_matrix[i]})
 
     archetypes: dict = {}
     scaler.inverse_transform(km.cluster_centers_)
@@ -174,7 +172,8 @@ def run_undervalued_talent(
     # recovery signals: high u_score AND has any recent credit
     score_map = {s["person_id"]: s for s in scores if "person_id" in s}
     recovery_candidates = sum(
-        1 for pid, d in structural_pool.items()
+        1
+        for pid, d in structural_pool.items()
         if (score_map.get(pid, {}).get("recent_credits", 0) or 0) > 0
         and d["fe_pct"] >= 60
     )
@@ -185,9 +184,15 @@ def run_undervalued_talent(
         "structural_rate": round(n_structural / n_total, 4) if n_total > 0 else 0.0,
         "recovery_signal_count": recovery_candidates,
         "u_score_distribution": {
-            "p25": round(float(np.percentile([d["u_score"] for d in u_scores.values()], 25)), 2),
-            "p50": round(float(np.percentile([d["u_score"] for d in u_scores.values()], 50)), 2),
-            "p75": round(float(np.percentile([d["u_score"] for d in u_scores.values()], 75)), 2),
+            "p25": round(
+                float(np.percentile([d["u_score"] for d in u_scores.values()], 25)), 2
+            ),
+            "p50": round(
+                float(np.percentile([d["u_score"] for d in u_scores.values()], 50)), 2
+            ),
+            "p75": round(
+                float(np.percentile([d["u_score"] for d in u_scores.values()], 75)), 2
+            ),
         },
         "archetypes": archetypes,
         "method_notes": {

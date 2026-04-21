@@ -10,7 +10,7 @@ from src.analysis.scoring.patronage_dormancy import (
     compute_patronage_and_dormancy,
     compute_patronage_premium,
 )
-from src.models import Anime, Credit, Role
+from src.models import BronzeAnime as Anime, Credit, Role
 
 
 # ---------------------------------------------------------------------------
