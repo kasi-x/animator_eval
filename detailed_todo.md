@@ -2230,3 +2230,89 @@ Phase 1 (データ層) ─────────────────┐
 ---
 
 以上。不明点があれば本書の該当 Task 番号 (例: Task 2-3) を添えて質問すること。
+
+---
+
+## 7. 完了状況 (2026-04-21 現在)
+
+### 7.1 Phase 1: データ層 — ✅ COMPLETE
+
+**実装完了**:
+- [x] v53 migration: anime テーブル再設計 (16 columns, NO score/popularity)
+- [x] v54 migration: credits.source 削除 (evidence_source のみ保持)
+- [x] SILVER 層 100% score-free (検証済み: 0 references)
+- [x] BRONZE 層 分離 (src_anilist_anime, src_mal_anime)
+- [x] display_lookup helper (UI metadata 用)
+
+### 7.2 Phase 2: Gold 層 — ✅ COMPLETE
+
+**実装完了**:
+- [x] meta_lineage テーブル (v54 で導入)
+- [x] Method Notes auto-generation (SectionBuilder.method_note_from_lineage)
+- [x] 3 Audience Brief Indices (PolicyBriefIndexReport, HrBriefIndexReport, BizBriefIndexReport)
+- [x] Report inventory mapping (37 active + 12 archived)
+
+### 7.3 Phase 3: レポート再編 — ✅ COMPLETE
+
+**実装完了**:
+- [x] REPORT_INVENTORY.md (35+ reports mapped to 3 audiences)
+- [x] CALCULATION_COMPENDIUM.md (Data Sources + v53-v54 schema reference)
+- [x] Vocabulary enforcement (39 files checked, 0 violations)
+- [x] Full test suite (2161 passed, 4 skipped)
+
+**Vocabulary fixes (4 public reports)**:
+- [x] biz_brief_index.py: "能力・適性" → "ネットワーク位置・協業パターン"
+- [x] hr_brief_index.py: "talent evaluation" → "personnel evaluation"
+- [x] index_page.py: "能力の測定" → "ネットワーク位置と協業密度の定量化"
+- [x] biz_undervalued_talent.py: error messages (exposure_gap path)
+
+### 7.4 Phase 4: Gate 自動化 — 🟡 IN PROGRESS
+
+**実装完了**:
+- [x] Vocabulary lint word boundary fix (prevents false positives like "viability" containing "ability")
+- [x] lint_report_vocabulary.py (39 files, 0 violations)
+- [x] SectionBuilder.validate() (section structure enforcement)
+- [x] Database timeout improvement (30s for initialization)
+- [x] Pre-commit hook integration (vocabulary + structure checks)
+
+**実装待ち**:
+- [ ] Meta_lineage population (5 reports: policy_attrition, policy_monopsony, policy_gender_bottleneck, mgmt_studio_benchmark, biz_genre_whitespace)
+- [ ] Pipeline smoke test (fresh v54 schema validation)
+- [ ] Method Notes validation gate
+- [ ] Full lineage check implementation
+- [ ] Technical appendix vocabulary audit (acceptable violations documented)
+
+### 7.5 テスト結果
+
+```
+pytest tests/
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2161 passed, 4 skipped, 143 warnings in 1029.72s (0:17:09) ✅
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+pixi run python scripts/lint_report_vocabulary.py
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[lint_report_vocabulary] OK — 39 file(s) checked, no violations ✅
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+```
+
+### 7.6 Known Issues & Workarounds
+
+**Issue**: Database lock on init_db() when called from Python import context
+- **Workaround**: Extended connection timeout to 30s
+- **Root cause**: TBD (possibly module-level connection or executescript + WAL interaction)
+- **Impact**: Low (affects new DB initialization in test/dev only; production uses existing DB)
+
+**Issue**: Meta_lineage population pending
+- **Status**: Schema ready, first 5 reports pending manual registration
+- **Blocker**: Database lock issue (being investigated)
+
+### 7.7 ファイル変更サマリー
+
+**Committed changes** (3 commits):
+- d7ced3c: Phase 2-3 completion (203 files changed: CLAUDE.md, ARCHITECTURE.md, method_notes.py, etc.)
+- 7d7bd5c: Phase 4 vocabulary (8 files: lint fix + 4 report fixes)
+- 7c833c7: Database timeout (1 file: src/database.py)
+
+**Total**: 212 files modified across Phase 2-4 completion
+
