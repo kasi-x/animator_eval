@@ -221,7 +221,7 @@ class ReportBrief:
             r'\bskill\b',             # Not "skilled", "skillset"
             r'\btalent\b',            # Not "talent pool" - exact word only
             r'\bcompetence\b',        # Exact match
-            r'\bcapability\b',        # Exact match (distinct from "capability")
+            r'\bcapability\b',        # Exact match
         }
         import re
         
@@ -260,10 +260,14 @@ class ReportBrief:
     
     def to_dict(self) -> dict:
         """Export report as dictionary (for JSON serialization)."""
+        from datetime import datetime
+        
         return {
             "metadata": self.metadata.to_dict(),
             "sections": self.sections,
             "method_gates": [mg.to_dict() for mg in self.method_gates],
+            "lineage": self.lineage.to_dict() if self.lineage else None,
+            "generated_at": datetime.now().isoformat(),
         }
 
 

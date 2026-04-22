@@ -129,6 +129,17 @@ tasks:
     cmds:
       - pixi run python -m src.pipeline --profile
 
+  # Report briefs
+  report-briefs:
+    desc: Generate all report briefs (policy, HR, business)
+    cmds:
+      - pixi run python scripts/generate_briefs_v2.py
+
+  report-validate:
+    desc: Validate existing report briefs (gates + vocabulary)
+    cmds:
+      - pixi run python scripts/generate_briefs_v2.py --validate-only
+
   # Testing
   test:
     desc: Run all tests

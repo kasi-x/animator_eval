@@ -316,6 +316,110 @@ return {
 - **`docs/schema.dbml`**: DBDiagram.io-compatible ER diagram (auto-generated via `scripts/generate_dbml.py`)
 - **`docs/DATA_DICTIONARY.md`**: Column-level documentation (auto-generated from SQLModel)
 
+## Report Briefs Architecture (Phase 4)
+
+### Overview
+
+Report Briefs is a 3-audience document system replacing the monolithic report architecture. Each brief is independently published but shares infrastructure (method gates, vocabulary enforcement, lineage tracking).
+
+### Briefs
+
+| Brief | Audience | Primary Sections | Use Case |
+|-------|----------|------------------|----------|
+| **Policy Brief** | Policymakers, labor regulators | Market concentration, gender bottleneck, attrition, policy recommendations | Antitrust review, labor regulation, equity policy |
+| **HR Brief** | Studio managers, recruiters | Team chemistry, succession planning, compensation fairness, retention action | Hiring strategy, talent development, retention |
+| **Business Brief** | Investors, studio executives | Market whitespace, emerging teams, undervalued staff, investment action | M&A, partnerships, growth opportunities |
+
+### Infrastructure (scripts/report_generators/)
+
+```
+report_brief.py              # Base class + MethodGate, LineageMetadata
+├── ReportBrief              # Abstract brief with validation, vocabulary enforcement
+├── MethodGate               # Transparent methodology declaration
+└── LineageMetadata          # Data lineage + confidence intervals
+
+briefs/
+├── __init__.py
+├── policy_brief.py          # Policy brief implementation (4 sections)
+├── hr_brief.py              # HR brief implementation (4 sections)
+└── business_brief.py        # Business brief implementation (4 sections)
+
+generate_briefs_v2.py        # Orchestrator: generate → validate → summarize
+```
+
+### Key Features
+
+**1. Method Gates (3 per brief)**
+Each brief declares its methodology transparently:
+- Algorithm: What calculation method?
+- CI/Validation: How do we know it works?
+- Null model: What would random data produce?
+- Confidence intervals: What's the uncertainty band?
+- Limitations: What could go wrong?
+
+**2. Vocabulary Enforcement**
+Automated detection blocks prohibited terms (ability, skill, talent, competence, capability) using regex with word boundaries. Prevents misinterpretation of scores as subjective "talent" judgments.
+
+**3. Findings/Interpretation Separation**
+- **Findings**: Neutral facts, no adjectives, no causal language
+- **Interpretation**: First-person ("I observe..."), multiple hypotheses, decision implications
+
+**4. Lineage Tracking**
+Every brief records:
+- Data cutoff date
+- Generation timestamp
+- Analyst notes
+- Confidence interval source (analytical vs. heuristic)
+
+### Usage
+
+```bash
+# Generate all briefs (regenerates JSON files)
+task report-briefs
+
+# Validate existing briefs (check gates + vocabulary)
+task report-validate
+
+# Python API
+from scripts.report_generators.briefs.policy_brief import generate_policy_brief
+
+policy = generate_policy_brief()
+policy.validate()  # (is_valid, error_list)
+policy.to_dict()   # JSON-serializable dict
+```
+
+### Output Format
+
+All briefs export to `result/json/{brief_id}_brief.json` with structure:
+```json
+{
+  "metadata": { "title", "description", "audience", "target_readers" },
+  "sections": {
+    "section_1": { "findings": "...", "interpretation": "..." },
+    ...
+  },
+  "method_gates": [
+    { "name", "algorithm", "ci_method", "validation_method", "null_model", "limitations" },
+    ...
+  ],
+  "lineage": { "data_cutoff", "analyst_notes", "confidence_interval_source" },
+  "generated_at": "2026-04-22T12:58:00Z"
+}
+```
+
+### Vocabulary Rules
+
+**Prohibited (all exact word matches):**
+- ability, skill, talent, competence, capability
+
+**Permitted (preferred terms):**
+- network position, centrality, opportunity
+- collaboration density, co-credit frequency
+- production scale, studio exposure
+- career trajectory, role progression
+
+**Rationale:** These prohibited terms imply subjective judgment. Scores measure structural network position, not individual quality.
+
 ## Legal Constraints
 
 These are hard requirements, not suggestions:
