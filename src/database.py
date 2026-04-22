@@ -8911,3 +8911,192 @@ def _migrate_v54_drop_legacy_credit_source(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_credits_role ON credits(role);
         CREATE INDEX IF NOT EXISTS idx_credits_yq ON credits(credit_year, credit_quarter);
     """)
+
+
+# ============================================================================
+# PHASE 1 SCHEMA MIGRATION: v54 → v55
+# ============================================================================
+# Migration adds lookup tables (sources, roles, person_aliases) to enforce
+# normalization and enable FK constraints.
+# ============================================================================
+
+
+def _migrate_v54_to_v55(conn: sqlite3.Connection) -> None:
+    """Migrate schema from v54 to v55.
+    
+    Adds:
+    - sources table (canonical credit data sources)
+    - roles table (role types)
+    - person_aliases table (entity resolution audit trail)
+    
+    No breaking changes to existing tables.
+    """
+    cursor = conn.cursor()
+    
+    # 1. Create sources lookup table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS sources (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            description TEXT
+        )
+    """)
+    
+    # Populate sources from existing credit data
+    sources_set = {"anilist", "mal", "ann", "allcinema", "seesaawiki", "keyframe"}
+    for source in sources_set:
+        cursor.execute(
+            "INSERT OR IGNORE INTO sources (id, name) VALUES (?, ?)",
+            (source, source.upper()),
+        )
+    logger.info("sources_table_created", count=len(sources_set))
+    
+    # 2. Create roles lookup table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS roles (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            category TEXT,
+            description TEXT
+        )
+    """)
+    
+    # Populate roles (from role_groups.py constants)
+    from src.utils.role_groups import ROLE_NAMES, ANIMATOR_ROLES, DIRECTOR_ROLES, SUPPORT_ROLES
+    
+    role_mapping = {
+        "animator": ANIMATOR_ROLES,
+        "director": DIRECTOR_ROLES,
+        "support": SUPPORT_ROLES,
+    }
+    
+    role_count = 0
+    for category, roles in role_mapping.items():
+        for role in roles:
+            cursor.execute(
+                "INSERT OR IGNORE INTO roles (id, name, category) VALUES (?, ?, ?)",
+                (role, role.replace("_", " ").title(), category),
+            )
+            role_count += 1
+    logger.info("roles_table_created", count=role_count)
+    
+    # 3. Create person_aliases table (entity resolution audit)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS person_aliases (
+            person_id TEXT NOT NULL,
+            alias_name TEXT NOT NULL,
+            source TEXT NOT NULL,
+            confidence REAL DEFAULT 0.5,
+            matched_to TEXT,
+            notes TEXT,
+            PRIMARY KEY (person_id, alias_name, source),
+            FOREIGN KEY (person_id) REFERENCES persons(id)
+        )
+    """)
+    logger.info("person_aliases_table_created")
+    
+    # 4. Add FK constraint to credits.source -> sources.id
+    # (SQLite doesn't support adding FK to existing column, so skip for v55)
+    # Will be enforced in application code + next migration
+    
+    conn.commit()
+    _set_schema_version(conn, 55)
+    logger.info("schema_migration_complete", to_version=55)
+
+
+# ============================================================================
+# PHASE 1 SCHEMA MIGRATION: v55 → v56 (OPTIONAL — Genre Normalization)
+# ============================================================================
+
+
+def _migrate_v55_to_v56(conn: sqlite3.Connection) -> None:
+    """Migrate schema from v55 to v56.
+    
+    Normalizes anime.genres JSON into anime_genres N-M table.
+    Optional but recommended for query efficiency.
+    """
+    cursor = conn.cursor()
+    
+    # 1. Create genres lookup table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS genres (
+            id INTEGER PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE
+        )
+    """)
+    
+    # 2. Create anime_genres N-M table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS anime_genres (
+            anime_id TEXT NOT NULL,
+            genre_id INTEGER NOT NULL,
+            PRIMARY KEY (anime_id, genre_id),
+            FOREIGN KEY (anime_id) REFERENCES anime(id),
+            FOREIGN KEY (genre_id) REFERENCES genres(id)
+        )
+    """)
+    logger.info("anime_genres_table_created")
+    
+    # 3. Migrate existing genres JSON → N-M rows
+    import json
+    
+    cursor.execute("SELECT id, genres FROM anime WHERE genres IS NOT NULL")
+    anime_genres_list = cursor.fetchall()
+    
+    genre_seen = {}
+    rows_inserted = 0
+    
+    for anime_id, genres_json in anime_genres_list:
+        try:
+            genres = json.loads(genres_json) if isinstance(genres_json, str) else []
+            for genre_name in genres:
+                # Insert genre if not seen
+                if genre_name not in genre_seen:
+                    cursor.execute(
+                        "INSERT INTO genres (name) VALUES (?)",
+                        (genre_name,),
+                    )
+                    genre_id = cursor.lastrowid
+                    genre_seen[genre_name] = genre_id
+                else:
+                    genre_id = genre_seen[genre_name]
+                
+                # Insert anime_genre link
+                cursor.execute(
+                    "INSERT OR IGNORE INTO anime_genres (anime_id, genre_id) VALUES (?, ?)",
+                    (anime_id, genre_id),
+                )
+                rows_inserted += 1
+        except json.JSONDecodeError:
+            logger.warning("genres_json_decode_error", anime_id=anime_id)
+    
+    logger.info(
+        "genres_migrated",
+        anime_count=len(anime_genres_list),
+        genre_rows=rows_inserted,
+    )
+    
+    # 4. Drop genres column from anime (if schema allows)
+    # Note: SQLite doesn't support DROP COLUMN easily, so we leave it for safety
+    logger.warning("genres_column_not_dropped", reason="SQLite limitation; column remains for rollback safety")
+    
+    conn.commit()
+    _set_schema_version(conn, 56)
+    logger.info("schema_migration_complete", to_version=56)
+
+
+def ensure_phase1_schema(conn: sqlite3.Connection) -> None:
+    """Ensure Phase 1 schema is applied (v55 at minimum).
+    
+    Call this at startup to auto-migrate if needed.
+    """
+    current = get_schema_version(conn)
+    
+    if current < 55:
+        logger.info("applying_phase1_migration", from_version=current, to_version=55)
+        _migrate_v54_to_v55(conn)
+    
+    if current < 56:
+        logger.info("applying_phase1_optional_migration", from_version=current, to_version=56)
+        # Commented out: only run manually or with flag
+        # _migrate_v55_to_v56(conn)
