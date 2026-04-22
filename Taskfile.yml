@@ -448,3 +448,34 @@ tasks:
       - task stats
       - echo ""
       - task ranking
+
+  # Phase 2F: Report Versioning
+  report-versions:
+    desc: Show version history of all briefs
+    cmds:
+      - pixi run python -c "
+import sys
+from pathlib import Path
+sys.path.insert(0, str(Path.cwd()))
+from scripts.report_generators.versioning import get_report_git_history
+
+for brief_id in ['policy', 'hr', 'business']:
+    history = get_report_git_history(brief_id, max_versions=10)
+    print(f'\n📋 {brief_id.upper()} Brief Versions:')
+    print(f'  Total: {history.total_versions}')
+    if history.current_version:
+        print(f'  Latest: {history.current_version.version_sha} ({history.current_version.timestamp})')
+        print(f'         by {history.current_version.author}')
+      "
+
+  # Phase 2G: Report API
+  report-api:
+    desc: Start Report API server (FastAPI on port 8000)
+    cmds:
+      - pixi run uvicorn scripts.report_api:app --reload --host 0.0.0.0 --port 8000
+
+  report-api-docs:
+    desc: Show Report API documentation
+    cmds:
+      - pixi run python scripts/report_api.py | grep -A 50 "endpoints"
+      - echo "\n📖 Full docs: http://localhost:8000/docs (after running 'task report-api')"

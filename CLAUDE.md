@@ -729,3 +729,99 @@ Without PDF support, HTML exports work perfectly for:
 - Browser-based viewing
 - Print via browser (Ctrl+P)
 
+
+## Phase 2F: Report Versioning (NEW)
+
+**Report History Tracking via Git**
+
+The `scripts/report_generators/versioning.py` module provides:
+
+- **`get_report_git_history(brief_id, max_versions=20)`**: Extract version history for any brief
+- **`compare_versions(brief_id, v1_sha, v2_sha)`**: Compare two versions (sections changed, size delta)
+- **`rollback_to_version(brief_id, target_sha)`**: Restore a brief to a previous version
+
+**Usage:**
+
+```bash
+task report-versions    # Show version history of all briefs
+```
+
+**Python API:**
+
+```python
+from scripts.report_generators.versioning import get_report_git_history
+
+history = get_report_git_history("policy", max_versions=10)
+print(f"Total versions: {history.total_versions}")
+print(f"Latest: {history.current_version.version_sha}")
+```
+
+**Features:**
+- ✅ Full git history extraction (author, timestamp, commit message)
+- ✅ Section-level change tracking
+- ✅ File size deltas
+- ✅ Safe rollback with validation
+
+## Phase 2G: Report API Integration (NEW)
+
+**FastAPI REST + WebSocket Server**
+
+`scripts/report_api.py` implements a complete REST API for report operations:
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/health` | GET | Health check |
+| `/api/briefs/generate` | POST | Generate all briefs (async) |
+| `/api/briefs/status` | GET | Status of all 3 briefs |
+| `/api/briefs/{id}` | GET | Get brief JSON |
+| `/api/briefs/{id}/html` | GET | Get brief as self-contained HTML |
+| `/api/briefs/{id}/history` | GET | Version history |
+| `/api/briefs/{id}/compare` | GET | Compare versions (`?v1=sha&v2=sha`) |
+| `/api/briefs/{id}/rollback` | POST | Restore version (`?target_sha=sha`) |
+| `/api/appendix` | GET | Get technical appendix |
+| `/api/appendix/regenerate` | POST | Regenerate appendix (async) |
+| `/ws/regenerate` | WS | Live regeneration feedback |
+| `/api/docs` | GET | API documentation |
+
+**Usage:**
+
+```bash
+task report-api                 # Start server on localhost:8000
+task report-api-docs            # Show API documentation
+```
+
+**Example Requests:**
+
+```bash
+# Get brief status
+curl http://localhost:8000/api/briefs/status
+
+# Get policy brief JSON
+curl http://localhost:8000/api/briefs/policy
+
+# Get policy brief as HTML
+curl -o policy.html http://localhost:8000/api/briefs/policy/html
+
+# Generate all briefs (background)
+curl -X POST http://localhost:8000/api/briefs/generate
+
+# View API docs (interactive Swagger UI)
+open http://localhost:8000/docs
+```
+
+**Architecture:**
+- ✅ FastAPI (async/await)
+- ✅ CORS enabled (web frontend ready)
+- ✅ Background task support (long-running operations)
+- ✅ WebSocket for live feedback
+- ✅ Pydantic models for validation
+- ✅ Structured logging (structlog)
+
+**New Taskfile Commands:**
+
+```bash
+task report-versions        # Show version history
+task report-api             # Start API server (localhost:8000)
+task report-api-docs        # Show endpoint documentation
+```
+
