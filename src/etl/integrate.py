@@ -241,7 +241,10 @@ def integrate_ann(conn: sqlite3.Connection) -> dict[str, int]:
           ON x.source = 'ann'
          AND x.external_id = CAST(c.ann_anime_id AS TEXT)
         JOIN anime a ON a.id = x.anime_id
-        JOIN persons p ON p.ann_id = c.ann_person_id
+        JOIN person_external_ids pei
+          ON pei.source = 'ann'
+         AND pei.external_id = CAST(c.ann_person_id AS TEXT)
+        JOIN persons p ON p.id = pei.person_id
     """):
         credit = Credit(
             person_id=row["canon_person_id"],
@@ -368,7 +371,7 @@ def integrate_seesaawiki(conn: sqlite3.Connection) -> dict[str, int]:
             anime_id=row["anime_src_id"],
             role=parse_role(row["role"]),
             raw_role=row["role_raw"],
-            episode=row["episode"] if row["episode"] != -1 else None,
+            episode=row["episode"],
             source="seesaawiki",
         )
         insert_credit(conn, credit)
@@ -473,7 +476,7 @@ def integrate_keyframe(conn: sqlite3.Connection) -> dict[str, int]:
             anime_id=kf_anime_id,
             role=role,
             raw_role=role_ja or role_en,
-            episode=row["episode"] if row["episode"] != -1 else None,
+            episode=row["episode"],
             source="keyframe",
         )
         insert_credit(conn, credit)
