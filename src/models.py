@@ -1290,17 +1290,17 @@ class Person(BaseModel):
             aliases=json.loads(row.aliases),
             mal_id=row.mal_id,
             anilist_id=row.anilist_id,
-            madb_id=row.madb_id,
+            madb_id=getattr(row, "madb_id", None),
             ann_id=getattr(row, "ann_id", None),
-            image_large=row.image_large,
-            image_medium=row.image_medium,
-            image_large_path=row.image_large_path,
-            image_medium_path=row.image_medium_path,
+            image_large=getattr(row, "image_large", None),
+            image_medium=getattr(row, "image_medium", None),
+            image_large_path=getattr(row, "image_large_path", None),
+            image_medium_path=getattr(row, "image_medium_path", None),
             date_of_birth=row.date_of_birth,
-            age=row.age,
-            gender=row.gender,
-            years_active=json.loads(row.years_active),
-            hometown=row.hometown,
+            age=getattr(row, "age", None),
+            gender=getattr(row, "gender", None),
+            years_active=json.loads(getattr(row, "years_active", "[]")),
+            hometown=getattr(row, "hometown", None),
             blood_type=row.blood_type,
             description=row.description,
             favourites=row.favourites,
@@ -1311,8 +1311,9 @@ class Person(BaseModel):
 class AnimeAnalysis(BaseModel):
     """アニメ作品（分析層 — スコア・表示情報を含まない）.
 
-    silver.analysis 層のモデル。anime.score など視聴者評価は一切含まない。
-    新規の分析コードはこの型をアノテーションとして使うこと。
+    DEPRECATED: anime_analysis テーブルへの書き込みは v53 以降フリーズ済み。
+    新規分析コードは Anime モデルを使用すること。
+    このクラスは既存分析モジュール (skill.py 等) との後方互換のため残存。
     """
 
     id: str
@@ -1334,7 +1335,8 @@ class AnimeAnalysis(BaseModel):
     start_date: str | None = None  # YYYY-MM-DD
     end_date: str | None = None
     duration: int | None = None  # 分/話
-    source: str | None = None  # ORIGINAL, MANGA, LIGHT_NOVEL, etc.
+    original_work_type: str | None = None  # ORIGINAL, MANGA, LIGHT_NOVEL, etc.
+    source: str | None = None  # legacy alias for original_work_type
 
     # v26: K-means 規模分類
     work_type: str | None = None  # 'tv' | 'tanpatsu'
@@ -1347,10 +1349,10 @@ class AnimeAnalysis(BaseModel):
 
 
 class AnimeDisplay(BaseModel):
-    """アニメ作品の表示情報（スコア・画像・説明等）.
+    """DEPRECATED: anime_display テーブルは v55 migration で削除済み.
 
-    silver.display 層のモデル。分析コードからの参照禁止。
-    レポートの表示用メタデータとしてのみ使用する。
+    display metadata は src.utils.display_lookup 経由で bronze から取得すること。
+    このクラスは後方互換のためのみ残存。新規コードでは使用しないこと。
     """
 
     id: str
@@ -1401,7 +1403,8 @@ class BronzeAnime(BaseModel):
     start_date: str | None = None
     end_date: str | None = None
     duration: int | None = None
-    source: str | None = None
+    original_work_type: str | None = None
+    source: str | None = None  # legacy alias for original_work_type
     work_type: str | None = None
     scale_class: str | None = None
 
@@ -1473,7 +1476,8 @@ class BronzeAnime(BaseModel):
             start_date=row.start_date,
             end_date=row.end_date,
             duration=row.duration,
-            source=row.source,
+            original_work_type=getattr(row, "original_work_type", None) or getattr(row, "source", None),
+            source=getattr(row, "original_work_type", None) or getattr(row, "source", None),
             genres=json.loads(genres_raw or "[]"),
             tags=json.loads(tags_raw or "[]"),
             popularity_rank=getattr(row, "popularity_rank", None),

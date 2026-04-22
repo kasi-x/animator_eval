@@ -202,7 +202,19 @@ def get_display_description(conn: sqlite3.Connection, anime_id: str) -> Optional
         result = _query_bronze(conn, anime_id, "synopsis")
     else:
         result = _query_bronze(conn, anime_id, "description")
-    
+
+    # Cross-source fallback via anime_external_ids when primary is NULL
+    if result is None:
+        try:
+            ac_row = conn.execute(
+                "SELECT external_id FROM anime_external_ids WHERE anime_id = ? AND source = 'allcinema'",
+                (anime_id,),
+            ).fetchone()
+            if ac_row:
+                result = _query_bronze(conn, f"allcinema:{ac_row[0]}", "synopsis")
+        except sqlite3.OperationalError:
+            pass
+
     _CACHE[cache_key] = result
     return result
 
@@ -252,14 +264,16 @@ def get_display_genres(conn: sqlite3.Connection, anime_id: str) -> Optional[list
     
     genres_json = _query_bronze(conn, anime_id, "genres")
     if not genres_json:
-        _CACHE[cache_key] = None
-        return None
-    
+        _CACHE[cache_key] = []
+        return []
+
     try:
         result = json.loads(genres_json) if isinstance(genres_json, str) else genres_json
+        if not isinstance(result, list):
+            result = []
     except (json.JSONDecodeError, TypeError):
-        result = None
-    
+        result = []
+
     _CACHE[cache_key] = result
     return result
 
@@ -282,14 +296,16 @@ def get_display_tags(conn: sqlite3.Connection, anime_id: str) -> Optional[list[d
     
     tags_json = _query_bronze(conn, anime_id, "tags")
     if not tags_json:
-        _CACHE[cache_key] = None
-        return None
-    
+        _CACHE[cache_key] = []
+        return []
+
     try:
         result = json.loads(tags_json) if isinstance(tags_json, str) else tags_json
+        if not isinstance(result, list):
+            result = []
     except (json.JSONDecodeError, TypeError):
-        result = None
-    
+        result = []
+
     _CACHE[cache_key] = result
     return result
 
@@ -312,13 +328,15 @@ def get_display_synonyms(conn: sqlite3.Connection, anime_id: str) -> Optional[li
     
     synonyms_json = _query_bronze(conn, anime_id, "synonyms")
     if not synonyms_json:
-        _CACHE[cache_key] = None
-        return None
-    
+        _CACHE[cache_key] = []
+        return []
+
     try:
         result = json.loads(synonyms_json) if isinstance(synonyms_json, str) else synonyms_json
+        if not isinstance(result, list):
+            result = []
     except (json.JSONDecodeError, TypeError):
-        result = None
+        result = []
     
     _CACHE[cache_key] = result
     return result

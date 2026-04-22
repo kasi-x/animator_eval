@@ -210,7 +210,13 @@ def _execute_sql_script(conn: sqlite3.Connection, script: str) -> None:
 
 
 def init_db(conn: sqlite3.Connection) -> None:
-    """テーブルを作成する."""
+    """テーブルを作成する (delegates to init_db_v2 target schema)."""
+    from src.database_v2 import init_db_v2
+    init_db_v2(conn)
+
+
+def _init_db_legacy(conn: sqlite3.Connection) -> None:
+    """Legacy DDL — kept for reference only, not called in production."""
     # Use autocommit mode (isolation_level=None) and custom SQL parser to avoid locking
     old_isolation = conn.isolation_level
     conn.isolation_level = None
@@ -339,7 +345,7 @@ def init_db(conn: sqlite3.Connection) -> None:
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        CREATE TABLE IF NOT EXISTS data_sources (
+        CREATE TABLE IF NOT EXISTS source_scrape_status (
             source TEXT PRIMARY KEY,
             last_scraped_at TIMESTAMP,
             item_count INTEGER DEFAULT 0,
@@ -405,71 +411,14 @@ def init_db(conn: sqlite3.Connection) -> None:
             UNIQUE(anime_id, related_anime_id, relation_type)
         );
 
-        -- ============================================================
-        -- Silver layer: analysis と display の分離
-        -- anime_analysis: score/popularity/favourites を意図的に含まない分析専用層
-        -- anime_display:  score を含む表示専用層。analysis 層からは参照禁止
-        -- ============================================================
+        -- anime_analysis removed: v50 migration renamed it to `anime` (canonical silver).
+        -- Fresh installs create `anime` directly; legacy upgrade path preserved in _migrate_v50_*.
+        -- anime_display deprecated: dropped in v55 migration via display_lookup bronze path.
 
-        CREATE TABLE IF NOT EXISTS anime_analysis (
-            id TEXT PRIMARY KEY,
-            title_ja TEXT NOT NULL DEFAULT '',
-            title_en TEXT NOT NULL DEFAULT '',
-            year INTEGER,
-            season TEXT,
-            quarter INTEGER,
-            episodes INTEGER,
-            format TEXT,
-            duration INTEGER,
-            start_date TEXT,
-            end_date TEXT,
-            status TEXT,
-            source TEXT,
-            work_type TEXT,
-            scale_class TEXT,
-            mal_id INTEGER,
-            anilist_id INTEGER,
-            ann_id INTEGER,
-            allcinema_id INTEGER,
-            madb_id TEXT,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(mal_id),
-            UNIQUE(anilist_id)
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_anime_analysis_year ON anime_analysis(year);
-        CREATE INDEX IF NOT EXISTS idx_anime_analysis_format ON anime_analysis(format);
-        CREATE INDEX IF NOT EXISTS idx_anime_analysis_anilist ON anime_analysis(anilist_id);
-
-        CREATE TABLE IF NOT EXISTS anime_display (
-            id TEXT PRIMARY KEY,
-            score REAL,
-            popularity INTEGER,
-            popularity_rank INTEGER,
-            favourites INTEGER,
-            mean_score INTEGER,
-            description TEXT,
-            cover_large TEXT,
-            cover_extra_large TEXT,
-            cover_medium TEXT,
-            cover_large_path TEXT,
-            banner TEXT,
-            banner_path TEXT,
-            site_url TEXT,
-            genres TEXT DEFAULT '[]',
-            tags TEXT DEFAULT '[]',
-            studios TEXT DEFAULT '[]',
-            synonyms TEXT DEFAULT '[]',
-            country_of_origin TEXT,
-            is_adult INTEGER,
-            relations_json TEXT,
-            external_links_json TEXT,
-            rankings_json TEXT,
-            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (id) REFERENCES anime_analysis(id) ON DELETE CASCADE
-        );
-
-        CREATE INDEX IF NOT EXISTS idx_anime_display_score ON anime_display(score);
+        -- anime_display deprecated: display metadata comes from bronze via display_lookup.
+        -- Dropped in v55 migration. See TASK_CARDS/01_schema_fix/04_anime_display_removal.md
+        -- CREATE TABLE IF NOT EXISTS anime_display ( ... );
+        -- CREATE INDEX IF NOT EXISTS idx_anime_display_score ON anime_display(score);
 
         -- ============================================================
         -- Gold layer: レポート直読用の事前集計テーブル (meta_*)
@@ -1304,7 +1253,6 @@ def init_db(conn: sqlite3.Connection) -> None:
         # Restore isolation level and enable WAL
         conn.isolation_level = old_isolation
         conn.execute("PRAGMA journal_mode=WAL")
-    _run_migrations(conn)
 
 
 def get_schema_version(conn: sqlite3.Connection) -> int:
@@ -1328,7 +1276,10 @@ def _set_schema_version(conn: sqlite3.Connection, version: int) -> None:
 
 
 def _run_migrations(conn: sqlite3.Connection) -> None:
-    """未適用のマイグレーションを順番に実行する."""
+    """No-op: target schema is created by init_db_v2 directly; no incremental migrations."""
+    return
+
+    # Legacy migration table — kept for reference, never executed
     current = get_schema_version(conn)
     if current >= SCHEMA_VERSION:
         return
@@ -4677,7 +4628,7 @@ def upsert_career_tracks(
     """
     rows = [(track, pid) for pid, track in career_tracks.items()]
     conn.executemany(
-        "UPDATE scores SET career_track = ?, updated_at = CURRENT_TIMESTAMP WHERE person_id = ?",
+        "UPDATE person_scores SET career_track = ?, updated_at = CURRENT_TIMESTAMP WHERE person_id = ?",
         rows,
     )
     logger.info("career_tracks_upserted", count=len(rows))
@@ -4728,35 +4679,22 @@ def get_unfetchable_person_ids(
 
 
 def upsert_person(conn: sqlite3.Connection, person: Person) -> None:
-    """人物を挿入または更新する（包括的データ対応）."""
+    """人物を挿入または更新する."""
     import json
 
     conn.execute(
         """INSERT INTO persons (
-               id, name_ja, name_en, aliases, mal_id, anilist_id, madb_id, ann_id, allcinema_id,
-               image_large, image_medium, image_large_path, image_medium_path,
-               date_of_birth, age, gender, years_active, hometown, blood_type,
-               description, favourites, site_url
+               id, name_ja, name_en, aliases, mal_id, anilist_id,
+               date_of_birth, blood_type, description, favourites, site_url
            )
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
                name_ja = COALESCE(NULLIF(excluded.name_ja, ''), persons.name_ja),
                name_en = COALESCE(NULLIF(excluded.name_en, ''), persons.name_en),
                aliases = excluded.aliases,
                mal_id = COALESCE(excluded.mal_id, persons.mal_id),
                anilist_id = COALESCE(excluded.anilist_id, persons.anilist_id),
-               madb_id = COALESCE(excluded.madb_id, persons.madb_id),
-               ann_id = COALESCE(excluded.ann_id, persons.ann_id),
-               allcinema_id = COALESCE(excluded.allcinema_id, persons.allcinema_id),
-               image_large = COALESCE(excluded.image_large, persons.image_large),
-               image_medium = COALESCE(excluded.image_medium, persons.image_medium),
-               image_large_path = COALESCE(excluded.image_large_path, persons.image_large_path),
-               image_medium_path = COALESCE(excluded.image_medium_path, persons.image_medium_path),
                date_of_birth = COALESCE(excluded.date_of_birth, persons.date_of_birth),
-               age = COALESCE(excluded.age, persons.age),
-               gender = COALESCE(excluded.gender, persons.gender),
-               years_active = COALESCE(excluded.years_active, persons.years_active),
-               hometown = COALESCE(excluded.hometown, persons.hometown),
                blood_type = COALESCE(excluded.blood_type, persons.blood_type),
                description = COALESCE(excluded.description, persons.description),
                favourites = COALESCE(excluded.favourites, persons.favourites),
@@ -4769,18 +4707,7 @@ def upsert_person(conn: sqlite3.Connection, person: Person) -> None:
             json.dumps(person.aliases, ensure_ascii=False),
             person.mal_id,
             person.anilist_id,
-            person.madb_id,
-            person.ann_id,
-            getattr(person, "allcinema_id", None),
-            person.image_large,
-            person.image_medium,
-            person.image_large_path,
-            person.image_medium_path,
             person.date_of_birth,
-            person.age,
-            person.gender,
-            json.dumps(person.years_active, ensure_ascii=False),
-            person.hometown,
             person.blood_type,
             person.description,
             person.favourites,
@@ -4796,7 +4723,7 @@ def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
     conn.execute(
         """INSERT INTO anime (
                id, title_ja, title_en, year, season, episodes, format, status,
-               start_date, end_date, duration, source, quarter, work_type, scale_class
+               start_date, end_date, duration, original_work_type, quarter, work_type, scale_class
            )
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
@@ -4810,7 +4737,7 @@ def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
                 start_date = COALESCE(excluded.start_date, anime.start_date),
                 end_date = COALESCE(excluded.end_date, anime.end_date),
                 duration = COALESCE(excluded.duration, anime.duration),
-                source = COALESCE(excluded.source, anime.source),
+                original_work_type = COALESCE(excluded.original_work_type, anime.original_work_type),
                 quarter = COALESCE(excluded.quarter, anime.quarter),
                 work_type = COALESCE(excluded.work_type, anime.work_type),
                 scale_class = COALESCE(excluded.scale_class, anime.scale_class),
@@ -4828,7 +4755,7 @@ def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
             anime.start_date,
             anime.end_date,
             anime.duration,
-            anime.source,
+            getattr(anime, "original_work_type", None) or getattr(anime, "source", None),
             anime.quarter,
             anime.work_type,
             anime.scale_class,
@@ -4861,62 +4788,79 @@ def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
         },
     )
 
-    conn.execute(
-        """
-        INSERT INTO anime_display (
-            id, score, popularity_rank, favourites, description,
-            cover_large, cover_extra_large, cover_medium, banner,
-            cover_large_path, banner_path, site_url, genres, tags, studios, synonyms,
-            country_of_origin, is_adult, relations_json, external_links_json, rankings_json
+    # Write studios to normalized tables (replaces anime_display.studios JSON denorm).
+    for i, studio_name in enumerate(anime.studios or []):
+        studio_id = studio_name.lower().replace(" ", "_")
+        conn.execute(
+            "INSERT OR IGNORE INTO studios (id, name) VALUES (?, ?)",
+            (studio_id, studio_name),
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(id) DO UPDATE SET
-            score = COALESCE(excluded.score, anime_display.score),
-            popularity_rank = COALESCE(excluded.popularity_rank, anime_display.popularity_rank),
-            favourites = COALESCE(excluded.favourites, anime_display.favourites),
-            description = COALESCE(excluded.description, anime_display.description),
-            cover_large = COALESCE(excluded.cover_large, anime_display.cover_large),
-            cover_extra_large = COALESCE(excluded.cover_extra_large, anime_display.cover_extra_large),
-            cover_medium = COALESCE(excluded.cover_medium, anime_display.cover_medium),
-            banner = COALESCE(excluded.banner, anime_display.banner),
-            cover_large_path = COALESCE(excluded.cover_large_path, anime_display.cover_large_path),
-            banner_path = COALESCE(excluded.banner_path, anime_display.banner_path),
-            site_url = COALESCE(excluded.site_url, anime_display.site_url),
-            genres = COALESCE(excluded.genres, anime_display.genres),
-            tags = COALESCE(excluded.tags, anime_display.tags),
-            studios = COALESCE(excluded.studios, anime_display.studios),
-            synonyms = COALESCE(excluded.synonyms, anime_display.synonyms),
-            country_of_origin = COALESCE(excluded.country_of_origin, anime_display.country_of_origin),
-            is_adult = COALESCE(excluded.is_adult, anime_display.is_adult),
-            relations_json = COALESCE(excluded.relations_json, anime_display.relations_json),
-            external_links_json = COALESCE(excluded.external_links_json, anime_display.external_links_json),
-            rankings_json = COALESCE(excluded.rankings_json, anime_display.rankings_json),
-            updated_at = CURRENT_TIMESTAMP
-        """,
-        (
-            anime.id,
-            anime.score,
-            anime.popularity_rank,
-            anime.favourites,
-            anime.description,
-            anime.cover_large,
-            anime.cover_extra_large,
-            anime.cover_medium,
-            anime.banner,
-            anime.cover_large_path,
-            anime.banner_path,
-            anime.site_url,
-            json.dumps(anime.genres, ensure_ascii=False),
-            json.dumps(anime.tags, ensure_ascii=False),
-            json.dumps(anime.studios, ensure_ascii=False),
-            json.dumps(anime.synonyms, ensure_ascii=False),
-            anime.country_of_origin,
-            1 if anime.is_adult else (0 if anime.is_adult is not None else None),
-            anime.relations_json,
-            anime.external_links_json,
-            anime.rankings_json,
-        ),
-    )
+        conn.execute(
+            "INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main) VALUES (?, ?, ?)",
+            (anime.id, studio_id, 1 if i == 0 else 0),
+        )
+
+    # anime_display deprecated (v55 migration drops it); skip gracefully if gone.
+    # Full write-path removal is handled in 03_consistency/02_stop_anime_display_writes.
+    try:
+        conn.execute(
+            """
+            INSERT INTO anime_display (
+                id, score, popularity_rank, favourites, description,
+                cover_large, cover_extra_large, cover_medium, banner,
+                cover_large_path, banner_path, site_url, genres, tags, studios, synonyms,
+                country_of_origin, is_adult, relations_json, external_links_json, rankings_json
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                score = COALESCE(excluded.score, anime_display.score),
+                popularity_rank = COALESCE(excluded.popularity_rank, anime_display.popularity_rank),
+                favourites = COALESCE(excluded.favourites, anime_display.favourites),
+                description = COALESCE(excluded.description, anime_display.description),
+                cover_large = COALESCE(excluded.cover_large, anime_display.cover_large),
+                cover_extra_large = COALESCE(excluded.cover_extra_large, anime_display.cover_extra_large),
+                cover_medium = COALESCE(excluded.cover_medium, anime_display.cover_medium),
+                banner = COALESCE(excluded.banner, anime_display.banner),
+                cover_large_path = COALESCE(excluded.cover_large_path, anime_display.cover_large_path),
+                banner_path = COALESCE(excluded.banner_path, anime_display.banner_path),
+                site_url = COALESCE(excluded.site_url, anime_display.site_url),
+                genres = COALESCE(excluded.genres, anime_display.genres),
+                tags = COALESCE(excluded.tags, anime_display.tags),
+                studios = COALESCE(excluded.studios, anime_display.studios),
+                synonyms = COALESCE(excluded.synonyms, anime_display.synonyms),
+                country_of_origin = COALESCE(excluded.country_of_origin, anime_display.country_of_origin),
+                is_adult = COALESCE(excluded.is_adult, anime_display.is_adult),
+                relations_json = COALESCE(excluded.relations_json, anime_display.relations_json),
+                external_links_json = COALESCE(excluded.external_links_json, anime_display.external_links_json),
+                rankings_json = COALESCE(excluded.rankings_json, anime_display.rankings_json),
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (
+                anime.id,
+                anime.score,
+                anime.popularity_rank,
+                anime.favourites,
+                anime.description,
+                anime.cover_large,
+                anime.cover_extra_large,
+                anime.cover_medium,
+                anime.banner,
+                anime.cover_large_path,
+                anime.banner_path,
+                anime.site_url,
+                json.dumps(anime.genres, ensure_ascii=False),
+                json.dumps(anime.tags, ensure_ascii=False),
+                json.dumps(anime.studios, ensure_ascii=False),
+                json.dumps(anime.synonyms, ensure_ascii=False),
+                anime.country_of_origin,
+                1 if anime.is_adult else (0 if anime.is_adult is not None else None),
+                anime.relations_json,
+                anime.external_links_json,
+                anime.rankings_json,
+            ),
+        )
+    except sqlite3.OperationalError:
+        pass
 
     # Keep external identifiers in normalized table (anime_external_ids).
     for source, external_id in (
@@ -4967,22 +4911,8 @@ _ANIME_ANALYSIS_COLUMNS = (
 
 
 def upsert_anime_analysis(conn: sqlite3.Connection, row: dict) -> None:
-    """anime_analysis (silver.analysis) へ upsert。score カラムは受け付けない."""
-    if "score" in row:
-        raise ValueError("score must not enter silver.analysis layer (anime_analysis)")
-    cols = [c for c in _ANIME_ANALYSIS_COLUMNS if c in row]
-    if not cols:
-        return
-    placeholders = ", ".join("?" * len(cols))
-    col_list = ", ".join(cols)
-    updates = ", ".join(
-        f"{c} = COALESCE(excluded.{c}, anime_analysis.{c})" for c in cols if c != "id"
-    )
-    conn.execute(
-        f"INSERT INTO anime_analysis ({col_list}) VALUES ({placeholders})"
-        f" ON CONFLICT(id) DO UPDATE SET {updates}, updated_at = CURRENT_TIMESTAMP",
-        [row[c] for c in cols],
-    )
+    """No-op: anime_analysis table removed in target schema (v2)."""
+    return
 
 
 def ensure_meta_quality_snapshot(conn: sqlite3.Connection) -> None:
@@ -5085,7 +5015,7 @@ def register_meta_lineage(
     import subprocess as _subprocess
 
     lineage_cols = {
-        row[1] for row in conn.execute("PRAGMA table_info(meta_lineage)").fetchall()
+        row[1] for row in conn.execute("PRAGMA table_info(ops_lineage)").fetchall()
     }
     if row_count is None:
         try:
@@ -5159,7 +5089,7 @@ def register_meta_lineage(
     placeholders = ", ".join(["?"] * len(insert_cols) + ["CURRENT_TIMESTAMP"])
 
     conn.execute(
-        f"""INSERT INTO meta_lineage ({insert_cols_sql})
+        f"""INSERT INTO ops_lineage ({insert_cols_sql})
             VALUES ({placeholders})
             ON CONFLICT(table_name) DO UPDATE SET
                 {update_clause},
@@ -5191,7 +5121,7 @@ def upsert_meta_entity_resolution_audit(
         f"{c}=excluded.{c}" for c in cols if c not in {"person_id", "reviewed_at"}
     )
     conn.executemany(
-        f"""INSERT INTO meta_entity_resolution_audit ({", ".join(cols)})
+        f"""INSERT INTO ops_entity_resolution_audit ({", ".join(cols)})
             VALUES ({placeholders})
             ON CONFLICT(person_id) DO UPDATE SET
                 {update_clause},
@@ -5200,7 +5130,7 @@ def upsert_meta_entity_resolution_audit(
     )
     register_meta_lineage(
         conn,
-        table_name="meta_entity_resolution_audit",
+        table_name="ops_entity_resolution_audit",
         audience="technical_appendix",
         source_silver_tables=["persons", "credits", "person_aliases"],
         formula_version="v2.0",
@@ -5345,7 +5275,7 @@ def insert_anime_relation(conn: sqlite3.Connection, relation: AnimeRelation) -> 
 def upsert_score(conn: sqlite3.Connection, score: ScoreResult) -> None:
     """スコアを挿入または更新する."""
     conn.execute(
-        """INSERT INTO scores
+        """INSERT INTO person_scores
                (person_id, person_fe, studio_fe_exposure, birank,
                 patronage, dormancy, awcc, iv_score, career_track)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -5501,7 +5431,7 @@ def get_db_stats(conn: sqlite3.Connection) -> dict[str, int | float]:
     """DB統計情報を取得する."""
     stats: dict[str, int | float] = {}
 
-    for table in ("persons", "anime", "credits", "scores"):
+    for table in ("persons", "anime", "credits", "person_scores"):
         stats[f"{table}_count"] = conn.execute(
             f"SELECT COUNT(*) FROM {table}"
         ).fetchone()[0]  # noqa: S608
@@ -5565,7 +5495,7 @@ def search_persons(
                   s.iv_score, s.person_fe, s.birank, s.patronage,
                   (SELECT COUNT(*) FROM credits c WHERE c.person_id = p.id) as credit_count
            FROM persons p
-           LEFT JOIN scores s ON p.id = s.person_id
+           LEFT JOIN person_scores s ON p.id = s.person_id
            WHERE p.name_ja LIKE ? OR p.name_en LIKE ? COLLATE NOCASE OR p.id LIKE ?
            ORDER BY s.iv_score DESC NULLS LAST
            LIMIT ?""",
@@ -5582,7 +5512,7 @@ def update_data_source(
 ) -> None:
     """データソースの最終取得日時を更新する."""
     conn.execute(
-        """INSERT INTO data_sources (source, last_scraped_at, item_count, status)
+        """INSERT INTO ops_source_scrape_status (source, last_scraped_at, item_count, status)
            VALUES (?, CURRENT_TIMESTAMP, ?, ?)
            ON CONFLICT(source) DO UPDATE SET
                last_scraped_at = CURRENT_TIMESTAMP,
@@ -5593,17 +5523,22 @@ def update_data_source(
     )
 
 
-def get_data_sources(conn: sqlite3.Connection) -> list[dict]:
-    """全データソースの情報を取得する."""
+def get_source_scrape_status(conn: sqlite3.Connection) -> list[dict]:
+    """Return scrape sync state per source (last_scraped_at, item_count, status)."""
     rows = conn.execute(
-        "SELECT source, last_scraped_at, item_count, status FROM data_sources ORDER BY source"
+        "SELECT source, last_scraped_at, item_count, status FROM ops_source_scrape_status ORDER BY source"
     ).fetchall()
     return [dict(r) for r in rows]
 
 
+def get_data_sources(conn: sqlite3.Connection) -> list[dict]:
+    """Alias for get_source_scrape_status."""
+    return get_source_scrape_status(conn)
+
+
 def load_all_scores(conn: sqlite3.Connection) -> list[ScoreResult]:
     """全スコアを読み込む."""
-    rows = conn.execute("SELECT * FROM scores").fetchall()
+    rows = conn.execute("SELECT * FROM person_scores").fetchall()
     return [
         ScoreResult(
             person_id=row["person_id"],
@@ -8624,25 +8559,10 @@ def _migrate_v50_canonical_silver(conn: sqlite3.Connection) -> None:
         except sqlite3.OperationalError:
             pass
 
-    # --- person_scores VIEW (alias for scores) ------------------------------
-    # A compatibility view so reports can use the new canonical name
-    # ``person_scores`` without breaking the many ``scores``-reading
-    # consumers. Writers still write to ``scores``; the view is read-only.
-    if conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='scores'"
-    ).fetchone():
-        # Drop any prior view/table named person_scores so this is idempotent.
-        existing = conn.execute(
-            "SELECT type FROM sqlite_master WHERE name='person_scores'"
-        ).fetchone()
-        if existing is None:
-            conn.execute(
-                "CREATE VIEW IF NOT EXISTS person_scores AS SELECT * FROM scores"
-            )
-        elif existing[0] == "view":
-            pass
-        # If existing is a TABLE we leave it alone — a future migration
-        # will handle the physical rename.
+    # --- person_scores VIEW removed ------------------------------------------
+    # v50: VIEW person_scores was a compatibility alias for the scores table.
+    # v55 migration now performs a physical ALTER TABLE scores RENAME TO person_scores,
+    # so the VIEW is no longer created here.
 
     # --- Log summary --------------------------------------------------------
     n_sources = conn.execute("SELECT COUNT(*) FROM sources").fetchone()[0]
@@ -8669,7 +8589,7 @@ def _migrate_v50_canonical_silver(conn: sqlite3.Connection) -> None:
 def _migrate_v51_meta_lineage_and_audit(conn: sqlite3.Connection) -> None:
     """v51: expand meta_lineage reproducibility fields + add ER audit table."""
     lineage_cols = {
-        row[1] for row in conn.execute("PRAGMA table_info(meta_lineage)").fetchall()
+        row[1] for row in conn.execute("PRAGMA table_info(ops_lineage)").fetchall()
     }
     if "description" not in lineage_cols:
         conn.execute(
@@ -8969,10 +8889,42 @@ def _migrate_v54_to_v55(conn: sqlite3.Connection) -> None:
     """)
     logger.info("person_aliases_table_created")
     
-    # 4. Add FK constraint to credits.source -> sources.id
-    # (SQLite doesn't support adding FK to existing column, so skip for v55)
-    # Will be enforced in application code + next migration
-    
+    # 4. Drop deprecated anime_display table
+    # (display metadata now comes from bronze via display_lookup helper)
+    cursor.execute("DROP TABLE IF EXISTS anime_display")
+    logger.info("anime_display_dropped")
+
+    # 5. Physical rename: scores → person_scores
+    # Drop the compat VIEW from v50 first (if it still exists), then rename.
+    if cursor.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='scores'"
+    ).fetchone():
+        # Drop any pre-existing person_scores (TABLE or VIEW) before rename.
+        # DROP VIEW IF EXISTS fails if name belongs to a TABLE, so check type first.
+        ps_type = cursor.execute(
+            "SELECT type FROM sqlite_master WHERE name='person_scores'"
+        ).fetchone()
+        if ps_type:
+            stmt = "DROP TABLE" if ps_type[0] == "table" else "DROP VIEW"
+            cursor.execute(f"{stmt} person_scores")
+        cursor.execute("ALTER TABLE scores RENAME TO person_scores")
+        logger.info("scores_renamed_to_person_scores")
+
+    # 6. Physical rename: va_scores → voice_actor_scores (naming symmetry with person_scores)
+    if cursor.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='va_scores'"
+    ).fetchone():
+        cursor.execute("ALTER TABLE va_scores RENAME TO voice_actor_scores")
+        logger.info("va_scores_renamed_to_voice_actor_scores")
+
+    # 7. Physical rename: data_sources → source_scrape_status
+    # (disambiguate from the `sources` canonical lookup table)
+    if cursor.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='data_sources'"
+    ).fetchone():
+        cursor.execute("ALTER TABLE data_sources RENAME TO source_scrape_status")
+        logger.info("data_sources_renamed_to_source_scrape_status")
+
     conn.commit()
     _set_schema_version(conn, 55)
     logger.info("schema_migration_complete", to_version=55)
@@ -8985,10 +8937,15 @@ def _migrate_v54_to_v55(conn: sqlite3.Connection) -> None:
 
 def _migrate_v55_to_v56(conn: sqlite3.Connection) -> None:
     """Migrate schema from v55 to v56.
-    
+
     Normalizes anime.genres JSON into anime_genres N-M table.
     Optional but recommended for query efficiency.
     """
+    # STATUS: deferred — intentionally NOT registered in migrations dict.
+    # Execution cost is high (full-table JSON expansion) and current
+    # production DBs are already post-v53 (no genres JSON column).
+    # Schedule explicitly via a separate task when data shape changes.
+    # See TASK_CARDS/01_schema_fix/06_v56_defer_comment.md for context.
     cursor = conn.cursor()
     
     # 1. Create genres lookup table

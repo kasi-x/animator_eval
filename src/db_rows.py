@@ -61,23 +61,13 @@ class PersonRow:
     mal_id: int | None = None
     anilist_id: int | None = None
     canonical_id: str | None = None
-    updated_at: str | None = None
-    image_large: str | None = None
-    image_medium: str | None = None
-    image_large_path: str | None = None
-    image_medium_path: str | None = None
     date_of_birth: str | None = None
-    age: int | None = None
-    gender: str | None = None
-    years_active: str = "[]"  # JSON 文字列
-    hometown: str | None = None
     blood_type: str | None = None
     description: str | None = None
     favourites: int | None = None
     site_url: str | None = None
-    madb_id: str | None = None
-    ann_id: int | None = None
-    allcinema_id: int | None = None
+    image_medium: str | None = None
+    updated_at: str | None = None
 
     @classmethod
     def from_row(cls, row) -> "PersonRow":
@@ -104,7 +94,7 @@ class AnimeRow:
     start_date: str | None = None
     end_date: str | None = None
     duration: int | None = None
-    source: str | None = None
+    original_work_type: str | None = None
     quarter: int | None = None
     work_type: str | None = None
     scale_class: str | None = None
@@ -706,7 +696,7 @@ TABLE_ROW_MAP: dict[str, type] = {
     "persons": PersonRow,
     "anime": AnimeRow,
     "credits": CreditRow,
-    "scores": ScoreRow,
+    "person_scores": ScoreRow,
     "score_history": ScoreHistoryRow,
     "character_voice_actors": VARow,
     # L2: 集約数値 (agg_*)

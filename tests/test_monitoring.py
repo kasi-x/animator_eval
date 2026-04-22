@@ -19,12 +19,12 @@ runner = CliRunner()
 
 @pytest.fixture()
 def db_conn(tmp_path):
-    """Create an in-memory-like SQLite DB with data_sources table."""
+    """Create an in-memory-like SQLite DB with ops_source_scrape_status table."""
     db_path = tmp_path / "test.db"
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
     conn.execute("""
-        CREATE TABLE data_sources (
+        CREATE TABLE ops_source_scrape_status (
             source TEXT PRIMARY KEY,
             last_scraped_at TIMESTAMP,
             item_count INTEGER DEFAULT 0,
@@ -37,7 +37,7 @@ def db_conn(tmp_path):
 
 @pytest.fixture()
 def populated_freshness_db(monkeypatch, tmp_path):
-    """DB with data_sources and full schema for CLI testing."""
+    """DB with ops_source_scrape_status and full schema for CLI testing."""
     db_path = tmp_path / "test.db"
     conn = sqlite3.connect(str(db_path))
     conn.row_factory = sqlite3.Row
@@ -83,7 +83,7 @@ def populated_freshness_db(monkeypatch, tmp_path):
             patronage REAL DEFAULT 0.0,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-        CREATE TABLE IF NOT EXISTS data_sources (
+        CREATE TABLE IF NOT EXISTS ops_source_scrape_status (
             source TEXT PRIMARY KEY,
             last_scraped_at TIMESTAMP,
             item_count INTEGER DEFAULT 0,
@@ -100,15 +100,15 @@ def populated_freshness_db(monkeypatch, tmp_path):
     stale_time = (now - timedelta(hours=500)).strftime("%Y-%m-%d %H:%M:%S")
 
     conn.execute(
-        "INSERT INTO data_sources (source, last_scraped_at, item_count, status) VALUES (?, ?, ?, ?)",
+        "INSERT INTO ops_source_scrape_status (source, last_scraped_at, item_count, status) VALUES (?, ?, ?, ?)",
         ("anilist", fresh_time, 1500, "ok"),
     )
     conn.execute(
-        "INSERT INTO data_sources (source, last_scraped_at, item_count, status) VALUES (?, ?, ?, ?)",
+        "INSERT INTO ops_source_scrape_status (source, last_scraped_at, item_count, status) VALUES (?, ?, ?, ?)",
         ("mal", stale_time, 800, "ok"),
     )
     conn.execute(
-        "INSERT INTO data_sources (source, last_scraped_at, item_count, status) VALUES (?, ?, ?, ?)",
+        "INSERT INTO ops_source_scrape_status (source, last_scraped_at, item_count, status) VALUES (?, ?, ?, ?)",
         ("mediaarts", None, 0, "ok"),
     )
     conn.commit()
@@ -132,7 +132,7 @@ class TestCheckDataFreshness:
         now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc)
         scraped_at = (now - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
         db_conn.execute(
-            "INSERT INTO data_sources (source, last_scraped_at, item_count, status) VALUES (?, ?, ?, ?)",
+            "INSERT INTO ops_source_scrape_status (source, last_scraped_at, item_count, status) VALUES (?, ?, ?, ?)",
             ("anilist", scraped_at, 1000, "ok"),
         )
         db_conn.commit()
@@ -152,7 +152,7 @@ class TestCheckDataFreshness:
         now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc)
         scraped_at = (now - timedelta(hours=500)).strftime("%Y-%m-%d %H:%M:%S")
         db_conn.execute(
-            "INSERT INTO data_sources (source, last_scraped_at, item_count, status) VALUES (?, ?, ?, ?)",
+            "INSERT INTO ops_source_scrape_status (source, last_scraped_at, item_count, status) VALUES (?, ?, ?, ?)",
             ("anilist", scraped_at, 500, "ok"),
         )
         db_conn.commit()
@@ -167,7 +167,7 @@ class TestCheckDataFreshness:
     def test_never_scraped_source(self, db_conn):
         """Source with NULL last_scraped_at should be stale."""
         db_conn.execute(
-            "INSERT INTO data_sources (source, last_scraped_at, item_count, status) VALUES (?, ?, ?, ?)",
+            "INSERT INTO ops_source_scrape_status (source, last_scraped_at, item_count, status) VALUES (?, ?, ?, ?)",
             ("wikidata", None, 0, "ok"),
         )
         db_conn.commit()
@@ -185,7 +185,7 @@ class TestCheckDataFreshness:
         # 20 days ago -- should be fresh for mediaarts (threshold=720h)
         scraped_at = (now - timedelta(hours=480)).strftime("%Y-%m-%d %H:%M:%S")
         db_conn.execute(
-            "INSERT INTO data_sources (source, last_scraped_at, item_count, status) VALUES (?, ?, ?, ?)",
+            "INSERT INTO ops_source_scrape_status (source, last_scraped_at, item_count, status) VALUES (?, ?, ?, ?)",
             ("mediaarts", scraped_at, 200, "ok"),
         )
         db_conn.commit()
@@ -201,7 +201,7 @@ class TestCheckDataFreshness:
         now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc)
         scraped_at = (now - timedelta(hours=200)).strftime("%Y-%m-%d %H:%M:%S")
         db_conn.execute(
-            "INSERT INTO data_sources (source, last_scraped_at, item_count, status) VALUES (?, ?, ?, ?)",
+            "INSERT INTO ops_source_scrape_status (source, last_scraped_at, item_count, status) VALUES (?, ?, ?, ?)",
             ("custom_source", scraped_at, 100, "ok"),
         )
         db_conn.commit()
@@ -224,15 +224,15 @@ class TestCheckDataFreshness:
         stale = (now - timedelta(hours=500)).strftime("%Y-%m-%d %H:%M:%S")
 
         db_conn.execute(
-            "INSERT INTO data_sources VALUES (?, ?, ?, ?)",
+            "INSERT INTO ops_source_scrape_status VALUES (?, ?, ?, ?)",
             ("anilist", fresh, 1000, "ok"),
         )
         db_conn.execute(
-            "INSERT INTO data_sources VALUES (?, ?, ?, ?)",
+            "INSERT INTO ops_source_scrape_status VALUES (?, ?, ?, ?)",
             ("mal", stale, 500, "ok"),
         )
         db_conn.execute(
-            "INSERT INTO data_sources VALUES (?, ?, ?, ?)",
+            "INSERT INTO ops_source_scrape_status VALUES (?, ?, ?, ?)",
             ("wikidata", None, 0, "pending"),
         )
         db_conn.commit()
@@ -256,11 +256,11 @@ class TestGetFreshnessSummary:
         now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc)
         fresh = (now - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
         db_conn.execute(
-            "INSERT INTO data_sources VALUES (?, ?, ?, ?)",
+            "INSERT INTO ops_source_scrape_status VALUES (?, ?, ?, ?)",
             ("anilist", fresh, 1000, "ok"),
         )
         db_conn.execute(
-            "INSERT INTO data_sources VALUES (?, ?, ?, ?)", ("mal", fresh, 800, "ok")
+            "INSERT INTO ops_source_scrape_status VALUES (?, ?, ?, ?)", ("mal", fresh, 800, "ok")
         )
         db_conn.commit()
 
@@ -276,11 +276,11 @@ class TestGetFreshnessSummary:
         now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc)
         stale = (now - timedelta(hours=500)).strftime("%Y-%m-%d %H:%M:%S")
         db_conn.execute(
-            "INSERT INTO data_sources VALUES (?, ?, ?, ?)",
+            "INSERT INTO ops_source_scrape_status VALUES (?, ?, ?, ?)",
             ("anilist", stale, 100, "ok"),
         )
         db_conn.execute(
-            "INSERT INTO data_sources VALUES (?, ?, ?, ?)", ("mal", None, 0, "ok")
+            "INSERT INTO ops_source_scrape_status VALUES (?, ?, ?, ?)", ("mal", None, 0, "ok")
         )
         db_conn.commit()
 
@@ -296,11 +296,11 @@ class TestGetFreshnessSummary:
         stale = (now - timedelta(hours=500)).strftime("%Y-%m-%d %H:%M:%S")
 
         db_conn.execute(
-            "INSERT INTO data_sources VALUES (?, ?, ?, ?)",
+            "INSERT INTO ops_source_scrape_status VALUES (?, ?, ?, ?)",
             ("anilist", fresh, 1000, "ok"),
         )
         db_conn.execute(
-            "INSERT INTO data_sources VALUES (?, ?, ?, ?)", ("mal", stale, 500, "ok")
+            "INSERT INTO ops_source_scrape_status VALUES (?, ?, ?, ?)", ("mal", stale, 500, "ok")
         )
         db_conn.commit()
 
@@ -321,7 +321,7 @@ class TestGetFreshnessSummary:
         now = datetime(2026, 2, 10, 12, 0, 0, tzinfo=timezone.utc)
         fresh = (now - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
         db_conn.execute(
-            "INSERT INTO data_sources VALUES (?, ?, ?, ?)",
+            "INSERT INTO ops_source_scrape_status VALUES (?, ?, ?, ?)",
             ("anilist", fresh, 1000, "ok"),
         )
         db_conn.commit()
@@ -356,7 +356,7 @@ class TestFreshnessCliCommand:
         assert "Stale" in result.output or "Never scraped" in result.output
 
     def test_freshness_empty_db(self, monkeypatch, tmp_path):
-        """Empty data_sources table shows 'No data sources registered.'"""
+        """Empty ops_source_scrape_status table shows 'No data sources registered.'"""
         db_path = tmp_path / "empty.db"
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
@@ -364,8 +364,8 @@ class TestFreshnessCliCommand:
             CREATE TABLE persons (id TEXT PRIMARY KEY, name_ja TEXT DEFAULT '', name_en TEXT DEFAULT '', aliases TEXT DEFAULT '[]', mal_id INTEGER, anilist_id INTEGER, canonical_id TEXT, UNIQUE(mal_id), UNIQUE(anilist_id));
             CREATE TABLE anime (id TEXT PRIMARY KEY, title_ja TEXT DEFAULT '', title_en TEXT DEFAULT '', year INTEGER, season TEXT, episodes INTEGER, mal_id INTEGER, anilist_id INTEGER, score REAL, UNIQUE(mal_id), UNIQUE(anilist_id));
             CREATE TABLE credits (id INTEGER PRIMARY KEY AUTOINCREMENT, person_id TEXT NOT NULL, anime_id TEXT NOT NULL, role TEXT NOT NULL, episode INTEGER DEFAULT -1, source TEXT DEFAULT '', evidence_source TEXT, UNIQUE(person_id, anime_id, role, episode));
-            CREATE TABLE scores (person_id TEXT PRIMARY KEY, iv_score REAL DEFAULT 0.0, person_fe REAL DEFAULT 0.0, birank REAL DEFAULT 0.0, patronage REAL DEFAULT 0.0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-            CREATE TABLE data_sources (source TEXT PRIMARY KEY, last_scraped_at TIMESTAMP, item_count INTEGER DEFAULT 0, status TEXT DEFAULT 'ok');
+            CREATE TABLE person_scores (person_id TEXT PRIMARY KEY, iv_score REAL DEFAULT 0.0, person_fe REAL DEFAULT 0.0, birank REAL DEFAULT 0.0, patronage REAL DEFAULT 0.0, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
+            CREATE TABLE ops_source_scrape_status (source TEXT PRIMARY KEY, last_scraped_at TIMESTAMP, item_count INTEGER DEFAULT 0, status TEXT DEFAULT 'ok');
             CREATE TABLE schema_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
         """)
         conn.commit()
@@ -397,7 +397,7 @@ class TestFreshnessApiEndpoint:
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
         conn.executescript("""
-            CREATE TABLE data_sources (
+            CREATE TABLE ops_source_scrape_status (
                 source TEXT PRIMARY KEY,
                 last_scraped_at TIMESTAMP,
                 item_count INTEGER DEFAULT 0,
@@ -407,7 +407,7 @@ class TestFreshnessApiEndpoint:
         now = datetime.now(timezone.utc)
         fresh = (now - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
         conn.execute(
-            "INSERT INTO data_sources VALUES (?, ?, ?, ?)",
+            "INSERT INTO ops_source_scrape_status VALUES (?, ?, ?, ?)",
             ("anilist", fresh, 1000, "ok"),
         )
         conn.commit()
@@ -443,7 +443,7 @@ class TestFreshnessApiEndpoint:
         conn = sqlite3.connect(str(db_path))
         conn.row_factory = sqlite3.Row
         conn.execute("""
-            CREATE TABLE data_sources (
+            CREATE TABLE ops_source_scrape_status (
                 source TEXT PRIMARY KEY,
                 last_scraped_at TIMESTAMP,
                 item_count INTEGER DEFAULT 0,

@@ -188,7 +188,7 @@ def test_api_person_response_contains_score_fields(tmp_path, monkeypatch):
     init_db(conn)
     conn.execute("INSERT INTO persons(id, name_ja) VALUES ('p1', 'テスト太郎')")
     conn.execute(
-        "INSERT INTO scores(person_id, iv_score, birank, person_fe, "
+        "INSERT INTO person_scores(person_id, iv_score, birank, person_fe, "
         "studio_fe_exposure, patronage, dormancy, awcc) "
         "VALUES ('p1', 0.9, 0.8, 0.7, 0.6, 0.5, 0.95, 0.4)"
     )

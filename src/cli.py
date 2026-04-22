@@ -35,7 +35,7 @@ def stats(lang: str = lang_option) -> None:
     """DB の統計情報を表示する / Display database statistics."""
     setup_logging()
 
-    from src.database import db_connection, get_data_sources, init_db
+    from src.database import db_connection, get_source_scrape_status, init_db
 
     with db_connection() as conn:
         init_db(conn)
@@ -43,7 +43,7 @@ def stats(lang: str = lang_option) -> None:
         n_persons = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
         n_anime = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]
         n_credits = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
-        n_scores = conn.execute("SELECT COUNT(*) FROM scores").fetchone()[0]
+        n_scores = conn.execute("SELECT COUNT(*) FROM person_scores").fetchone()[0]
 
         # 役職分布
         role_dist = conn.execute(
@@ -66,7 +66,7 @@ def stats(lang: str = lang_option) -> None:
             "SELECT year, COUNT(*) as cnt FROM anime WHERE year IS NOT NULL GROUP BY year ORDER BY year DESC LIMIT 10"
         ).fetchall()
 
-        data_sources = get_data_sources(conn)
+        data_sources = get_source_scrape_status(conn)
 
     # Use i18n for output
     console.print(f"\n[bold blue]{t('cli.stats.title')}[/bold blue]\n")
@@ -200,7 +200,7 @@ def ranking(
                 f"""SELECT s.person_id, p.name_ja, p.name_en,
                           s.iv_score, s.person_fe, s.birank, s.patronage,
                           s.dormancy, s.awcc
-                   FROM scores s
+                   FROM person_scores s
                    JOIN persons p ON s.person_id = p.id
                    ORDER BY {order_col} DESC
                    LIMIT ?""",  # noqa: S608
@@ -269,16 +269,18 @@ def profile(person_id: str = typer.Argument(help="人物ID (例: anilist:p100)")
             raise typer.Exit(1)
 
         score = conn.execute(
-            "SELECT * FROM scores WHERE person_id = ?", (person_id,)
+            "SELECT * FROM person_scores WHERE person_id = ?", (person_id,)
         ).fetchone()
 
         credits = conn.execute(
             """SELECT c.role,
                       c.evidence_source AS source,
-                      a.title_ja, a.title_en, a.year, d.score
+                      a.title_ja, a.title_en, a.year,
+                      b.score
                FROM credits c
                JOIN anime a ON c.anime_id = a.id
-               LEFT JOIN anime_display d ON d.id = a.id
+               LEFT JOIN anime_external_ids ext ON ext.anime_id = a.id AND ext.source = 'anilist'
+               LEFT JOIN src_anilist_anime b ON b.anilist_id = CAST(ext.external_id AS INTEGER)
                WHERE c.person_id = ?
                ORDER BY a.year DESC""",
             (person_id,),
@@ -434,7 +436,7 @@ def compare(
             if not person:
                 return None
             score = conn.execute(
-                "SELECT * FROM scores WHERE person_id = ?", (pid,)
+                "SELECT * FROM person_scores WHERE person_id = ?", (pid,)
             ).fetchone()
             credit_count = conn.execute(
                 "SELECT COUNT(*) FROM credits WHERE person_id = ?", (pid,)
@@ -599,7 +601,7 @@ def export(
             """SELECT s.person_id, p.name_ja, p.name_en,
                       s.iv_score, s.person_fe, s.studio_fe_exposure,
                       s.birank, s.patronage, s.dormancy, s.awcc
-               FROM scores s
+               FROM person_scores s
                JOIN persons p ON s.person_id = p.id
                ORDER BY s.iv_score DESC""",
         ).fetchall()
@@ -681,10 +683,11 @@ def timeline(
             raise typer.Exit(1)
 
         credits = conn.execute(
-            """SELECT c.role, a.title_ja, a.title_en, a.year, d.score
+            """SELECT c.role, a.title_ja, a.title_en, a.year, b.score
                FROM credits c
                JOIN anime a ON c.anime_id = a.id
-               LEFT JOIN anime_display d ON d.id = a.id
+               LEFT JOIN anime_external_ids ext ON ext.anime_id = a.id AND ext.source = 'anilist'
+               LEFT JOIN src_anilist_anime b ON b.anilist_id = CAST(ext.external_id AS INTEGER)
                WHERE c.person_id = ? AND a.year IS NOT NULL
                ORDER BY a.year""",
             (person_id,),
@@ -1682,7 +1685,7 @@ def data_quality() -> None:
         )
 
         persons_with_score = (
-            conn.execute("SELECT COUNT(*) FROM scores").fetchone()[0]
+            conn.execute("SELECT COUNT(*) FROM person_scores").fetchone()[0]
             if total_persons
             else 0
         )
@@ -1697,7 +1700,7 @@ def data_quality() -> None:
 
         anime_with_score = (
             conn.execute(
-                "SELECT COUNT(*) FROM anime_display WHERE score IS NOT NULL"
+                "SELECT COUNT(*) FROM src_anilist_anime WHERE score IS NOT NULL"
             ).fetchone()[0]
             if total_anime
             else 0
@@ -1758,11 +1761,10 @@ def freshness(lang: str = lang_option) -> None:
     """Display data source freshness status."""
     setup_logging()
 
-    from src.database import db_connection, init_db
+    from src.database import db_connection
     from src.monitoring import check_data_freshness
 
     with db_connection() as conn:
-        init_db(conn)
         reports = check_data_freshness(conn)
 
     if not reports:

@@ -1408,7 +1408,7 @@ def plot_anime_stats(
     persons = [e.get("unique_persons", 0) for e in entries]
     avg_person_scores = [e.get("avg_person_score", 0) or 0 for e in entries]
 
-    if not any(s > 0 for s in scores):
+    if not any(p > 0 for p in persons):
         return
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))

@@ -44,8 +44,8 @@ def dormancy_full():
 
 @pytest.fixture
 def dormancy_partial():
-    """p5 is dormant (penalty = 0.3), others active."""
-    return {"p1": 1.0, "p2": 1.0, "p3": 1.0, "p4": 1.0, "p5": 0.3}
+    """p1 (highest scorer) is dormant (penalty = 0.3), others active."""
+    return {"p1": 0.3, "p2": 1.0, "p3": 1.0, "p4": 1.0, "p5": 1.0}
 
 
 @pytest.fixture
@@ -86,7 +86,7 @@ class TestComputeIntegratedValue:
         )
         assert len(iv) == 5
         for pid, score in iv.items():
-            assert score > 0
+            assert score >= 0  # min scorer maps to 0.0 after B02 renormalization
 
     def test_monotonicity(self, component_scores, lambdas, dormancy_full):
         """Higher components lead to higher IV."""
@@ -110,7 +110,7 @@ class TestComputeIntegratedValue:
             studio_exposure=component_scores["studio_exposure"],
             awcc=component_scores["awcc"],
             patronage=component_scores["patronage"],
-            dormancy={"p5": 1.0},
+            dormancy={"p1": 1.0},
             lambdas=lambdas,
         )
         iv_dormant = compute_integrated_value(
@@ -122,9 +122,8 @@ class TestComputeIntegratedValue:
             dormancy=dormancy_partial,
             lambdas=lambdas,
         )
-        assert iv_dormant["p5"] < iv_full["p5"]
-        # Dormancy is 0.3, so dormant IV should be 30% of full IV
-        assert iv_dormant["p5"] == pytest.approx(iv_full["p5"] * 0.3)
+        # After B02 renormalization, dormancy reduces a non-minimum scorer's relative position
+        assert iv_dormant["p1"] < iv_full["p1"]
 
     def test_empty_components(self):
         """Handles empty component dicts."""

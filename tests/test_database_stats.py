@@ -61,7 +61,7 @@ class TestGetDbStats:
         assert stats["persons_count"] == 2
         assert stats["anime_count"] == 2
         assert stats["credits_count"] == 3
-        assert stats["scores_count"] == 0
+        assert stats["person_scores_count"] == 0
 
     def test_year_range(self, stats_conn):
         stats = get_db_stats(stats_conn)

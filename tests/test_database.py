@@ -42,7 +42,7 @@ class TestInitDb:
         assert "persons" in table_names
         assert "anime" in table_names
         assert "credits" in table_names
-        assert "scores" in table_names
+        assert "person_scores" in table_names
 
 
 class TestPersonCrud:
@@ -204,7 +204,7 @@ class TestMetaLineageAndAudit:
 
         row = db_conn.execute(
             "SELECT description, rng_seed, git_sha, inputs_hash "
-            "FROM meta_lineage WHERE table_name = 'meta_policy_attrition'"
+            "FROM ops_lineage WHERE table_name = 'meta_policy_attrition'"
         ).fetchone()
         assert row is not None
         assert row["description"] == "Policy attrition summary table."
@@ -234,7 +234,7 @@ class TestMetaLineageAndAudit:
         assert count == 1
         audit_row = db_conn.execute(
             "SELECT canonical_name, merge_method, merge_confidence "
-            "FROM meta_entity_resolution_audit WHERE person_id = 'p_canon'"
+            "FROM ops_entity_resolution_audit WHERE person_id = 'p_canon'"
         ).fetchone()
         assert audit_row is not None
         assert audit_row["canonical_name"] == "正規名"
@@ -242,8 +242,8 @@ class TestMetaLineageAndAudit:
         assert audit_row["merge_confidence"] == 0.98
 
         lineage_row = db_conn.execute(
-            "SELECT table_name FROM meta_lineage "
-            "WHERE table_name = 'meta_entity_resolution_audit'"
+            "SELECT table_name FROM ops_lineage "
+            "WHERE table_name = 'ops_entity_resolution_audit'"
         ).fetchone()
         assert lineage_row is not None
 
