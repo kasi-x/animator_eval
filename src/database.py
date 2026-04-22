@@ -9099,4 +9099,6 @@ def ensure_phase1_schema(conn: sqlite3.Connection) -> None:
     if current < 56:
         logger.info("applying_phase1_optional_migration", from_version=current, to_version=56)
         # Commented out: only run manually or with flag
+        # v56 genre normalization assumes anime table has genres JSON column
+        # Current production DB has been refactored; v56 not applicable
         # _migrate_v55_to_v56(conn)
