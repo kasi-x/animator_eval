@@ -14,6 +14,7 @@ from pathlib import Path
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from ..helpers import insert_lineage
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
@@ -57,6 +58,30 @@ class PolicyGenderBottleneckReport(BaseReportGenerator):
             sb.build_section(self._build_oaxaca(sb, data)),
             sb.build_section(self._build_studio_fe(sb, data)),
         ]
+        insert_lineage(
+            self.conn,
+            table_name="meta_policy_gender",
+            audience="policy",
+            source_silver_tables=["credits", "persons", "anime"],
+            formula_version="v1.0",
+            ci_method=(
+                "Greenwood formula for KM stage-survival curves (95% CI); "
+                "bootstrap 95% CI (2000 draws, seed=42) for Oaxaca-Blinder decomposition"
+            ),
+            null_model=(
+                "Gender-randomized cohort (100 draws, seed=42) preserving cohort-year "
+                "structure; compares observed promotion gap to null distribution"
+            ),
+            holdout_method="Leave-one-studio-out (top 20 studios by headcount)",
+            description=(
+                "Gender bottleneck analysis: stage-transition survival by gender, "
+                "Oaxaca-Blinder decomposition of promotion rate gap, "
+                "and studio-level gender fixed effects (gamma_j). "
+                "Promotion defined as advancing from stage S to S+2 within 5 years. "
+                "No anime.score or audience metrics used."
+            ),
+            rng_seed=42,
+        )
         return self.write_report("\n".join(sections))
 
     # ── Section 1: Survival by stage (gender comparison) ─────────

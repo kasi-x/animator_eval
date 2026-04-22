@@ -36,7 +36,7 @@ class TestMergeDuplicateCredits:
                 person_id="p1",
                 anime_id="a1",
                 role=Role.KEY_ANIMATOR,
-                episode=-1,
+                episode=None,
                 source="anilist",
             ),
             Credit(
@@ -53,13 +53,13 @@ class TestMergeDuplicateCredits:
         assert merged[0].episode == 18
 
     def test_unknown_episode_replaced(self):
-        """episode=-1 should be replaced by specific episode numbers."""
+        """episode=None should be replaced by specific episode numbers."""
         credits = [
             Credit(
                 person_id="p1",
                 anime_id="a1",
                 role=Role.KEY_ANIMATOR,
-                episode=-1,
+                episode=None,
                 source="anilist",
             ),
             Credit(

@@ -278,9 +278,9 @@ def main(
         init_db,
         insert_credit,
         update_data_source,
-        upsert_anime,
         upsert_person,
     )
+    from src.etl.integrate import upsert_canonical_anime
     from src.log import setup_logging
 
     setup_logging()
@@ -395,7 +395,7 @@ def main(
                             else f"{fetched}/{count}",
                             title=anime.display_title,
                         )
-                        upsert_anime(conn, anime)
+                        upsert_canonical_anime(conn, anime, evidence_source="mal")
                         total_anime += 1
 
                         try:

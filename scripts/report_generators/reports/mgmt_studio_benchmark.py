@@ -14,6 +14,7 @@ from pathlib import Path
 
 import plotly.graph_objects as go
 
+from ..helpers import insert_lineage
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
@@ -58,6 +59,29 @@ class MgmtStudioBenchmarkReport(BaseReportGenerator):
             sb.build_section(self._build_retention(sb, data)),
             sb.build_section(self._build_value_add(sb, data)),
         ]
+        insert_lineage(
+            self.conn,
+            table_name="meta_hr_studio_benchmark",
+            audience="hr",
+            source_silver_tables=["credits", "persons", "anime", "studios", "anime_studios"],
+            formula_version="v1.0",
+            ci_method=(
+                "Bootstrap 95% CI (2000 draws, seed=42) for VA_s distribution; "
+                "analytical SE for R5 retention rate (proportion CI)"
+            ),
+            null_model=(
+                "Random studio assignment (permutation, 1000 draws, seed=42) "
+                "produces null VA_s distribution; observed VA_s compared against null"
+            ),
+            holdout_method="Leave-one-cohort-out (3-year rolling windows, 2019-2024)",
+            description=(
+                "Studio benchmark across 5 axes: R5 retention rate, value-add (VA_s), "
+                "role diversity (EB-shrinkage), parallel coordinates overview (top 30 studios). "
+                "VA_s = studio-level person fixed-effect premium after controlling for "
+                "individual theta_i and work scale. No anime.score used."
+            ),
+            rng_seed=42,
+        )
         return self.write_report("\n".join(sections))
 
     # ── Section 1: Parallel coordinates ────────────────────────────

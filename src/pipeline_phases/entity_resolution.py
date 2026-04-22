@@ -26,7 +26,7 @@ def _merge_duplicate_credits(credits: list[Credit]) -> list[Credit]:
 
     Rules:
     - Key: (person_id, anime_id, role)
-    - episode=-1 (unknown) is replaced by specific episode numbers if available
+    - episode=None (whole-series) is replaced by specific episode numbers if available
     - Multiple specific episodes → kept as separate credits
     - source: concatenated from all sources (provenance tracking)
     - raw_role: prefer AniList (English) over MADB (Japanese)
@@ -75,7 +75,7 @@ def _merge_duplicate_credits(credits: list[Credit]) -> list[Credit]:
         # Collect episode info
         specific_episodes: set[int] = set()
         for c in group:
-            if c.episode is not None and c.episode >= 0:
+            if c.episode is not None:
                 specific_episodes.add(c.episode)
 
         if specific_episodes:

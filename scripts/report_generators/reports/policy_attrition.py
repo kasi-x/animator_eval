@@ -13,6 +13,7 @@ from pathlib import Path
 
 import plotly.graph_objects as go
 
+from ..helpers import insert_lineage
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
@@ -53,6 +54,29 @@ class PolicyAttritionReport(BaseReportGenerator):
             sb.build_section(self._build_treatment_effects(sb, data)),
             sb.build_section(self._build_sensitivity(sb, data)),
         ]
+        insert_lineage(
+            self.conn,
+            table_name="meta_policy_attrition",
+            audience="policy",
+            source_silver_tables=["credits", "persons", "anime"],
+            formula_version="v1.0",
+            ci_method=(
+                "Greenwood formula for KM survival curves (95% CI); "
+                "analytical SE (sigma/sqrt(n)) for DML ATE"
+            ),
+            null_model=(
+                "Random credit reassignment within role cohort (100 draws, seed=42); "
+                "compares observed KM median to permuted distribution"
+            ),
+            holdout_method="Leave-one-year-out (last 3 years, 2022-2024)",
+            description=(
+                "Causal decomposition of new-entrant attrition by debut cohort. "
+                "KM estimator: event = gap_type=='exit' and returned==0 (right-censored). "
+                "DML: partial linear model with GBM nuisance, K=5 cross-fit. "
+                "Attrition = credit visibility loss rate, not career exit."
+            ),
+            rng_seed=42,
+        )
         return self.write_report("\n".join(sections))
 
     # ── Section 1: KM survival curves ────────────────────────────

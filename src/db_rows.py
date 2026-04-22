@@ -119,7 +119,7 @@ class CreditRow:
     anime_id: str
     role: str
     raw_role: str = ""
-    episode: int = -1
+    episode: int | None = None
     evidence_source: str | None = None
     updated_at: str | None = None
     credit_year: int | None = None

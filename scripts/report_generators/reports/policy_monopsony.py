@@ -14,6 +14,7 @@ from pathlib import Path
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from ..helpers import insert_lineage
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
@@ -60,6 +61,30 @@ class PolicyMonopsonyReport(BaseReportGenerator):
             sb.build_section(self._build_mobility(sb, data)),
             sb.build_section(self._build_lockin(sb, data)),
         ]
+        insert_lineage(
+            self.conn,
+            table_name="meta_policy_monopsony",
+            audience="policy",
+            source_silver_tables=["credits", "persons", "anime", "studios", "anime_studios"],
+            formula_version="v1.0",
+            ci_method=(
+                "Analytical SE (OLS residual variance / sqrt(n)) for lock-in regression; "
+                "bootstrap 95% CI (1000 draws, seed=42) for HHI year-level estimates"
+            ),
+            null_model=(
+                "Permutation test: random studio assignment preserving studio size distribution "
+                "(100 draws, seed=42); compares observed HHI to null HHI distribution"
+            ),
+            holdout_method="Year-based 5-fold cross-validation (rolling window, 5-year gaps)",
+            description=(
+                "Labor market fluidity and monopsony analysis for credited staff. "
+                "HHI = sum(share_studio^2)*10000 per year across all credited roles. "
+                "Mobility = fraction changing primary studio within 3-year window. "
+                "Lock-in regression: OLS with person and year fixed effects, "
+                "outcome = log(years at same studio). Source-free of anime.score."
+            ),
+            rng_seed=42,
+        )
         return self.write_report("\n".join(sections))
 
     # ── Section 1: HHI time series ────────────────────────────────

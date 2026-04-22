@@ -298,16 +298,22 @@ tasks:
       - pixi run python scripts/report_generators/lint_structure.py {{.CLI_ARGS | default "scripts/report_generators/reports/"}}
 
   ci-check-lineage:
-    desc: Feature lineage check — meta_* tables with anime.score leak or unlabeled audience
+    desc: Feature lineage check — bronze leaks + lineage quality (semver, hash, description, staleness)
     cmds:
       - pixi run python scripts/report_generators/ci_check_lineage.py
 
+  ci-check-method-notes:
+    desc: Validate Method Notes are backed by meta_lineage rows (5 required reports)
+    cmds:
+      - pixi run python scripts/report_generators/ci_check_method_notes.py
+
   gates:
-    desc: Run all v2 gates (vocab + structure + lineage)
+    desc: Run all v2 gates (vocab + structure + lineage + method notes)
     cmds:
       - task lint-vocab
       - task lint-structure
       - task ci-check-lineage
+      - task ci-check-method-notes
 
   data-dictionary:
     desc: Regenerate docs/DATA_DICTIONARY.md from schema + meta_lineage

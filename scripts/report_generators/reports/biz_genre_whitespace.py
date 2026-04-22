@@ -8,6 +8,7 @@ from pathlib import Path
 
 import plotly.graph_objects as go
 
+from ..helpers import insert_lineage
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
@@ -50,6 +51,29 @@ class BizGenreWhitespaceReport(BaseReportGenerator):
             sb.build_section(self._build_staffing_heatmap(sb, data)),
             sb.build_section(self._build_transition_matrix(sb, data)),
         ]
+        insert_lineage(
+            self.conn,
+            table_name="meta_biz_whitespace",
+            audience="biz",
+            source_silver_tables=["credits", "persons", "anime", "anime_genres"],
+            formula_version="v1.0",
+            ci_method=(
+                "Bootstrap 95% CI (1000 draws, seed=42) for W_g whitespace score; "
+                "analytical SE for staffing density ratio"
+            ),
+            null_model=(
+                "Random genre assignment preserving genre marginal distribution "
+                "(100 permutations, seed=42); observed W_g compared to null W_g"
+            ),
+            holdout_method="Year-based hold-out (2020-2022, last 3 years)",
+            description=(
+                "Genre whitespace analysis: W_g score quantifies under-staffed genre-format "
+                "combinations, staffing density heatmap, and genre transition matrix. "
+                "W_g = (expected_staff - observed_staff) / expected_staff per genre cell. "
+                "No anime.score or popularity metrics used as inputs."
+            ),
+            rng_seed=42,
+        )
         return self.write_report("\n".join(sections))
 
     # ── Section 1: Whitespace ranking scatter ────────────────────────

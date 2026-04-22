@@ -5146,6 +5146,16 @@ def upsert_meta_entity_resolution_audit(
 def insert_credit(conn: sqlite3.Connection, credit: Credit) -> None:
     """クレジットを挿入する（重複は無視）."""
     source = credit.evidence_source or credit.source
+    raw_role = credit.raw_role or ""
+    # SQLite UNIQUE treats NULL != NULL, so whole-series credits (episode=None)
+    # need an explicit existence check to avoid duplicates.
+    if credit.episode is None:
+        exists = conn.execute(
+            "SELECT 1 FROM credits WHERE person_id=? AND anime_id=? AND raw_role=? AND episode IS NULL",
+            (credit.person_id, credit.anime_id, raw_role),
+        ).fetchone()
+        if exists:
+            return
     conn.execute(
         """INSERT OR IGNORE INTO credits
            (person_id, anime_id, role, raw_role, episode, evidence_source)
@@ -5154,8 +5164,8 @@ def insert_credit(conn: sqlite3.Connection, credit: Credit) -> None:
             credit.person_id,
             credit.anime_id,
             credit.role.value,
-            credit.raw_role or "",  # 元のロール文字列を保存（NOT NULL）
-            credit.episode if credit.episode is not None else -1,
+            raw_role,
+            credit.episode,
             source,
         ),
     )
@@ -7901,7 +7911,7 @@ def insert_src_seesaawiki_credit(
     person_name: str,
     role: str,
     role_raw: str,
-    episode: int = -1,
+    episode: int | None = None,
     affiliation: str | None = None,
     is_company: bool = False,
 ) -> None:
@@ -7950,7 +7960,7 @@ def insert_src_keyframe_credit(
     name_en: str,
     role_ja: str,
     role_en: str,
-    episode: int = -1,
+    episode: int | None = None,
 ) -> None:
     """KeyFrame クレジット生データを src_keyframe_credits に保存."""
     conn.execute(

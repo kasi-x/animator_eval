@@ -411,9 +411,9 @@ async def scrape_madb(
     from src.database import (
         insert_credit,
         update_data_source,
-        upsert_anime,
         upsert_person,
     )
+    from src.etl.integrate import upsert_canonical_anime
 
     if data_dir is None:
         data_dir = DEFAULT_DATA_DIR
@@ -472,7 +472,7 @@ async def scrape_madb(
                 madb_id=madb_id,
                 studios=studios,
             )
-            upsert_anime(conn, anime)
+            upsert_canonical_anime(conn, anime, evidence_source="madb")
             stats["anime_fetched"] += 1
 
             if not contributors:

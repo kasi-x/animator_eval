@@ -229,14 +229,15 @@ app = typer.Typer()
 # Batch save helper functions (must be defined before main())
 def save_anime_batch_to_database(conn, anime_batch):
     """Save a batch of anime to src_anilist_anime."""
-    from src.database import upsert_anime, upsert_src_anilist_anime
+    from src.database import upsert_src_anilist_anime
+    from src.etl.integrate import upsert_canonical_anime
 
     for anime in anime_batch:
         # Backward compatibility for tests/callers that still pass generic objects.
         if hasattr(anime, "anilist_id"):
             upsert_src_anilist_anime(conn, anime)
         else:
-            upsert_anime(conn, anime)
+            upsert_canonical_anime(conn, anime, evidence_source="anilist")
 
 
 def save_studios_to_database(conn, studios, anime_studios):

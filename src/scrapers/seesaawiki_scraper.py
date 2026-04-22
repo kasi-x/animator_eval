@@ -3110,10 +3110,10 @@ async def scrape_seesaawiki(
     from src.database import (
         insert_credit,
         update_data_source,
-        upsert_anime,
         upsert_person,
         upsert_src_seesaawiki_anime,
     )
+    from src.etl.integrate import upsert_canonical_anime
 
     if data_dir is None:
         data_dir = DEFAULT_DATA_DIR
@@ -3279,7 +3279,7 @@ async def scrape_seesaawiki(
                 id=anime_id,
                 title_ja=page_title,
             )
-            upsert_anime(conn, anime)
+            upsert_canonical_anime(conn, anime, evidence_source="seesaawiki")
             upsert_src_seesaawiki_anime(conn, anime_id, page_title, None, None)
             stats["anime_created"] += 1
 
@@ -3313,7 +3313,7 @@ async def scrape_seesaawiki(
                     stats,
                     anime_id,
                     credit,
-                    episode=-1,
+                    episode=None,
                     upsert_person=upsert_person,
                     insert_credit=insert_credit,
                     total_episodes=total_episodes,
@@ -3450,13 +3450,12 @@ def _save_credit(
             )
             stats["credits_created"] += 1
     else:
-        ep_num = episode if episode is not None else -1
         credit = Credit(
             person_id=person.id,
             anime_id=anime_id,
             role=role,
             raw_role=parsed.role,
-            episode=ep_num,
+            episode=episode,
             source="seesaawiki",
         )
         insert_credit(conn, credit)
@@ -3466,7 +3465,7 @@ def _save_credit(
             parsed.name,
             str(role),
             parsed.role,
-            episode=ep_num,
+            episode=episode,
             affiliation=parsed.affiliation,
         )
         stats["credits_created"] += 1
@@ -3559,10 +3558,10 @@ def reparse_from_raw(
     from src.database import (
         insert_credit,
         update_data_source,
-        upsert_anime,
         upsert_person,
         upsert_src_seesaawiki_anime,
     )
+    from src.etl.integrate import upsert_canonical_anime
 
     if data_dir is None:
         data_dir = DEFAULT_DATA_DIR
@@ -3655,7 +3654,7 @@ def reparse_from_raw(
 
         # DB upsert
         anime = BronzeAnime(id=anime_id, title_ja=title)
-        upsert_anime(conn, anime)
+        upsert_canonical_anime(conn, anime, evidence_source="seesaawiki")
         upsert_src_seesaawiki_anime(conn, anime_id, title, None, None)
         stats["anime_created"] += 1
 
@@ -3684,7 +3683,7 @@ def reparse_from_raw(
                 stats,
                 anime_id,
                 credit,
-                episode=-1,
+                episode=None,
                 upsert_person=upsert_person,
                 insert_credit=insert_credit,
                 total_episodes=total_episodes,

@@ -4,8 +4,10 @@
 Includes JSON I/O, feature extraction, visualization utilities, and data-driven clustering.
 """
 
+import hashlib
 import json
 import random
+import sqlite3
 from pathlib import Path
 
 import numpy as np
@@ -591,3 +593,88 @@ def extract_features(scores: list[dict]):
         rows.append(row)
 
     return ids, names, np.array(rows, dtype=np.float64), roles
+
+
+# ---------------------------------------------------------------------------
+# meta_lineage registration
+# ---------------------------------------------------------------------------
+
+def insert_lineage(
+    conn: sqlite3.Connection,
+    *,
+    table_name: str,
+    audience: str,
+    source_silver_tables: list[str],
+    formula_version: str,
+    description: str,
+    ci_method: str | None = None,
+    null_model: str | None = None,
+    holdout_method: str | None = None,
+    inputs_hash: str | None = None,
+    notes: str | None = None,
+    rng_seed: int | None = None,
+) -> None:
+    """Idempotently insert/replace a lineage row into meta_lineage.
+
+    Gracefully skips if meta_lineage does not exist (fresh v2 schema uses
+    ops_lineage instead; CI checks against whichever table the environment has).
+
+    INSERT OR REPLACE ensures re-running a report overwrites rather than
+    duplicates the row.
+    """
+    # Check which lineage table is available
+    available = {
+        r[0]
+        for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('meta_lineage','ops_lineage')"
+        ).fetchall()
+    }
+    if not available:
+        return
+
+    target_table = "meta_lineage" if "meta_lineage" in available else "ops_lineage"
+
+    cols = {r[1] for r in conn.execute(f"PRAGMA table_info({target_table})").fetchall()}
+    if not cols:
+        return
+
+    if inputs_hash is None:
+        payload = json.dumps(
+            {"table_name": table_name, "sources": sorted(source_silver_tables), "version": formula_version},
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        inputs_hash = hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+    values: dict = {
+        "table_name": table_name,
+        "audience": audience,
+        "source_silver_tables": json.dumps(source_silver_tables, ensure_ascii=False),
+        "source_bronze_forbidden": 1,
+        "source_display_allowed": 0,
+        "description": description,
+        "formula_version": formula_version,
+        "ci_method": ci_method,
+        "null_model": null_model,
+        "holdout_method": holdout_method,
+        "notes": notes,
+        "rng_seed": rng_seed,
+        "inputs_hash": inputs_hash or "",
+        "git_sha": "",
+    }
+
+    insert_cols = [c for c in values if c in cols]
+    insert_cols_sql = ", ".join(insert_cols + ["computed_at"])
+    placeholders = ", ".join(["?"] * len(insert_cols) + ["CURRENT_TIMESTAMP"])
+    update_clause = ", ".join(
+        f"{c} = excluded.{c}" for c in insert_cols if c != "table_name"
+    )
+
+    conn.execute(
+        f"""INSERT INTO {target_table} ({insert_cols_sql})
+            VALUES ({placeholders})
+            ON CONFLICT(table_name) DO UPDATE SET
+                {update_clause},
+                computed_at = CURRENT_TIMESTAMP""",
+        [values[c] for c in insert_cols],
+    )

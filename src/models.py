@@ -1596,7 +1596,7 @@ class Credit(BaseModel):
             anime_id=row.anime_id,
             role=Role(row.role),
             raw_role=row.raw_role or None,
-            episode=row.episode if row.episode != -1 else None,
+            episode=row.episode,
             source=src,
             evidence_source=src,
             credit_year=row.credit_year,

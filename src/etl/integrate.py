@@ -88,6 +88,28 @@ def _upsert_anime_genres_tags(
         )
 
 
+def upsert_canonical_anime(
+    conn: sqlite3.Connection,
+    anime_model: object,
+    *,
+    evidence_source: str,
+) -> None:
+    """Single entry point for scrapers to persist an anime to the silver layer.
+
+    All scrapers must call this instead of importing upsert_anime directly.
+    Schema evolution (new columns, dual-write to bronze) only requires
+    touching this function.
+
+    Args:
+        conn: SQLite connection.
+        anime_model: Pydantic Anime or BronzeAnime model instance.
+        evidence_source: Source identifier (e.g. 'anilist', 'keyframe').
+    """
+    from src.database import upsert_anime
+
+    upsert_anime(conn, anime_model)  # type: ignore[arg-type]
+
+
 def integrate_anilist(conn: sqlite3.Connection) -> dict[str, int]:
     """src_anilist_* → canonical anime / persons / credits."""
     from src.database import (

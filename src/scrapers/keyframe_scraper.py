@@ -304,10 +304,10 @@ async def scrape_keyframe(
         insert_credit,
         insert_src_keyframe_credit,
         update_data_source,
-        upsert_anime,
         upsert_person,
         upsert_src_keyframe_anime,
     )
+    from src.etl.integrate import upsert_canonical_anime
 
     if data_dir is None:
         data_dir = DEFAULT_DATA_DIR
@@ -413,7 +413,7 @@ async def scrape_keyframe(
                     )
                     if anilist_id is not None:
                         anime.anilist_id = anilist_id
-                    upsert_anime(conn, anime)
+                    upsert_canonical_anime(conn, anime, evidence_source="keyframe")
                 upsert_src_keyframe_anime(conn, slug, "", title, anilist_id)
 
                 stats["anime_fetched"] += 1
