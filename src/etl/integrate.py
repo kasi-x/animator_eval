@@ -8,6 +8,7 @@ import sqlite3
 import structlog
 
 from src.models import BronzeAnime, Credit, Person, parse_role
+from src.etl.sources import get_source_prefix, get_all_sources
 
 log = structlog.get_logger()
 
@@ -97,11 +98,12 @@ def integrate_anilist(conn: sqlite3.Connection) -> dict[str, int]:
     )
 
     stats = {"anime": 0, "persons": 0, "credits": 0}
+    prefix = get_source_prefix(conn, "anilist")
 
     # Anime
     for row in conn.execute("SELECT * FROM src_anilist_anime"):
         anime = BronzeAnime(
-            id=f"anilist:{row['anilist_id']}",
+            id=f"{prefix}{row['anilist_id']}",
             title_ja=row["title_ja"] or "",
             title_en=row["title_en"] or "",
             year=row["year"],
@@ -141,7 +143,7 @@ def integrate_anilist(conn: sqlite3.Connection) -> dict[str, int]:
     # Persons
     for row in conn.execute("SELECT * FROM src_anilist_persons"):
         person = Person(
-            id=f"anilist:p{row['anilist_id']}",
+            id=f"{prefix}p{row['anilist_id']}",
             name_ja=row["name_ja"] or "",
             name_en=row["name_en"] or "",
             aliases=json.loads(row["aliases"] or "[]"),
@@ -163,8 +165,8 @@ def integrate_anilist(conn: sqlite3.Connection) -> dict[str, int]:
 
     # Credits
     for row in conn.execute("SELECT * FROM src_anilist_credits"):
-        anime_id = f"anilist:{row['anilist_anime_id']}"
-        person_id = f"anilist:p{row['anilist_person_id']}"
+        anime_id = f"{prefix}{row['anilist_anime_id']}"
+        person_id = f"{prefix}p{row['anilist_person_id']}"
         credit = Credit(
             person_id=person_id,
             anime_id=anime_id,
@@ -189,11 +191,12 @@ def integrate_ann(conn: sqlite3.Connection) -> dict[str, int]:
     )
 
     stats = {"anime": 0, "persons": 0, "credits": 0}
+    prefix = get_source_prefix(conn, "ann")
 
     # Anime
     for row in conn.execute("SELECT * FROM src_ann_anime"):
         anime = BronzeAnime(
-            id=f"ann-{row['ann_id']}",
+            id=f"{prefix}{row['ann_id']}",
             title_en=row["title_en"] or "",
             title_ja=row["title_ja"] or "",
             year=row["year"],
@@ -217,7 +220,7 @@ def integrate_ann(conn: sqlite3.Connection) -> dict[str, int]:
     # Persons
     for row in conn.execute("SELECT * FROM src_ann_persons"):
         person = Person(
-            id=f"ann-{row['ann_id']}",
+            id=f"{prefix}{row['ann_id']}",
             name_en=row["name_en"] or "",
             name_ja=row["name_ja"] or "",
             date_of_birth=row["date_of_birth"],
@@ -265,11 +268,12 @@ def integrate_allcinema(conn: sqlite3.Connection) -> dict[str, int]:
     from src.scrapers.allcinema_scraper import _JOB_ROLE_MAP
 
     stats = {"anime": 0, "persons": 0, "credits": 0}
+    prefix = get_source_prefix(conn, "allcinema")
 
     # Anime
     for row in conn.execute("SELECT * FROM src_allcinema_anime"):
         anime = BronzeAnime(
-            id=f"allcinema:{row['allcinema_id']}",
+            id=f"{prefix}{row['allcinema_id']}",
             title_ja=row["title_ja"] or "",
             year=row["year"],
             start_date=row["start_date"],
@@ -283,7 +287,7 @@ def integrate_allcinema(conn: sqlite3.Connection) -> dict[str, int]:
     # Persons
     for row in conn.execute("SELECT * FROM src_allcinema_persons"):
         person = Person(
-            id=f"allcinema:{row['allcinema_id']}",
+            id=f"{prefix}{row['allcinema_id']}",
             name_ja=row["name_ja"] or "",
             name_en=row["name_en"] or "",
             allcinema_id=row["allcinema_id"],
@@ -291,14 +295,14 @@ def integrate_allcinema(conn: sqlite3.Connection) -> dict[str, int]:
         upsert_person(conn, person)
         conn.execute(
             "UPDATE persons SET allcinema_id = ? WHERE id = ?",
-            (row["allcinema_id"], f"allcinema:{row['allcinema_id']}"),
+            (row["allcinema_id"], f"{prefix}{row['allcinema_id']}"),
         )
         stats["persons"] += 1
 
     # Credits — resolve role from job_name
     for row in conn.execute("SELECT * FROM src_allcinema_credits"):
-        anime_id = f"allcinema:{row['allcinema_anime_id']}"
-        person_id = f"allcinema:{row['allcinema_person_id']}"
+        anime_id = f"{prefix}{row['allcinema_anime_id']}"
+        person_id = f"{prefix}{row['allcinema_person_id']}"
         job_name = row["job_name"] or ""
         role_str = _JOB_ROLE_MAP.get(job_name, "other")
         try:
@@ -482,18 +486,31 @@ def integrate_keyframe(conn: sqlite3.Connection) -> dict[str, int]:
 def run_integration(conn: sqlite3.Connection) -> dict[str, dict[str, int]]:
     """全ソーステーブルを正規化テーブルに統合する."""
     results: dict[str, dict[str, int]] = {}
-    for source, fn in [
-        ("anilist", integrate_anilist),
-        ("ann", integrate_ann),
-        ("allcinema", integrate_allcinema),
-        ("seesaawiki", integrate_seesaawiki),
-        ("keyframe", integrate_keyframe),
-    ]:
+    
+    # Get available sources from database (or use defaults)
+    source_funcs = {
+        "anilist": integrate_anilist,
+        "ann": integrate_ann,
+        "allcinema": integrate_allcinema,
+        "seesaawiki": integrate_seesaawiki,
+        "keyframe": integrate_keyframe,
+    }
+    
+    # Get sources from DB or use all defined functions
+    available_sources = get_all_sources(conn)
+    
+    for source in available_sources:
+        if source not in source_funcs:
+            log.warning("unknown_source_in_db", source=source)
+            continue
+        
+        fn = source_funcs[source]
         try:
             results[source] = fn(conn)
         except Exception as exc:
             log.error("etl_source_failed", source=source, error=str(exc))
             results[source] = {"error": str(exc)}
+    
     conn.commit()
     log.info("etl_integration_done", sources=list(results.keys()))
     return results
