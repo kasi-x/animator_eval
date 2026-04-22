@@ -246,7 +246,7 @@ Three hypotheses:
    have lower opportunity cost to exit. Evidence: studio controls show 19% lower exit
    at top-5 studios, consistent with higher pay at larger studios.
 
-3. *Cohort effect*: Recent entrants (post-2019) experience higher exit rates due to
+3. *Cohort effect*: Recent entrants (post-2019) experience higher exit rates concurrent with
    industry shifts (increased outsourcing, COVID disruptions, restructuring). Evidence:
    1.23× excess hazard in 2019+ cohort.
 

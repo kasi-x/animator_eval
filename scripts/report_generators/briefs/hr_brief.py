@@ -195,7 +195,7 @@ I observe that career progression is faster at major studios (1.6×) and follows
 pathways. This has operational implications:
 
 1. **Top-studio advantage**: Major studios promote faster.
-   - Likely cause: More projects → more opportunities to demonstrate leadership
+   - Plausible mechanism: More projects → more opportunities to demonstrate leadership
    - Alternative: Selection effect (top studios recruit higher-potential staff)
    - Recommendation: Smaller studios should formalize mentorship (external training) to
      offset project volume disadvantage
@@ -270,7 +270,7 @@ to ~8% smaller-scale projects (controlling for role and tenure). This has two im
 2. **Career trajectory risk**: Lower project scale early means lower baseline for future
    negotiations and opportunities. The gap compounds over time.
 
-**Root causes (plausible):**
+**Contributing factors (plausible):**
 - *Homophily bias*: Male directors preferentially hire male staff (familiar networks)
 - *Stereotype threat*: Women assigned to "safer" roles, smaller projects
 - *Composition effect*: Women concentrated in roles that naturally get smaller projects
@@ -293,7 +293,7 @@ is structural.
 **Alternative interpretation:**
 Gender gap could reflect self-selection: women may prefer smaller projects (less travel,
 manageable scope). However, exit rates don't support this — women exit faster from
-larger projects too (Cox HR = 1.23), suggesting exit is driven by other factors (burnout?)
+larger projects too (Cox HR = 1.23), suggesting exit is associated with other factors (burnout?)
 rather than project size preference.
         """,
     )
