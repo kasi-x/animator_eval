@@ -155,6 +155,16 @@ tasks:
     cmds:
       - pixi run python scripts/report_diff.py
 
+  report-export-html:
+    desc: Export all briefs to standalone HTML
+    cmds:
+      - pixi run python scripts/generate_exports.py --format html
+
+  report-export-pdf:
+    desc: Export all briefs to PDF (requires wkhtmltopdf)
+    cmds:
+      - pixi run python scripts/generate_exports.py --format pdf
+
   # Testing
   test:
     desc: Run all tests

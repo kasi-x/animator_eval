@@ -641,3 +641,91 @@ task nightly             # Full nightly: generate, validate, diff
 3. **On Merge to Main**: CI continues
    - Reports auto-published to `result/json/`
    - Artifacts available for web serving
+
+## Export System (Phase 2E)
+
+### HTML Export
+
+**`scripts/report_generators/export.py`**
+- Converts brief JSON to self-contained HTML
+- BriefHTMLRenderer class with:
+  - Professional CSS styling (light/dark mode support)
+  - Responsive layout (mobile-friendly)
+  - Method gates summary
+  - Section-by-section rendering (Findings + Interpretation)
+  - Print-ready styling (@page, @media print)
+
+### PDF Export
+
+**`scripts/generate_exports.py`** (Orchestrator)
+- Generates HTML for all briefs
+- Optionally converts HTML → PDF using wkhtmltopdf
+- Requirements: `apt-get install wkhtmltopdf`
+- Graceful fallback if wkhtmltopdf unavailable
+
+### Taskfile Commands
+
+```bash
+task report-export-html      # Export all briefs to HTML
+task report-export-pdf       # Export all briefs to HTML + PDF
+```
+
+### Output Structure
+
+```
+result/html/
+├── policy_brief.html      # 18 KB (responsive, self-contained)
+├── hr_brief.html          # 20 KB
+├── business_brief.html    # 21 KB
+├── policy_brief.pdf       # (if wkhtmltopdf installed)
+├── hr_brief.pdf
+└── business_brief.pdf
+```
+
+### Styling Features
+
+- **Professional Design**: Blue/gray color scheme, semantic headings
+- **Method Gates Summary**: Algorithm, validation, null model visible
+- **Dark Mode**: Automatic CSS support (prefers-color-scheme: dark)
+- **Print-Optimized**: Page breaks, margins, font sizing for 11pt
+- **Mobile-Friendly**: Responsive grid layout (320px+)
+- **Accessibility**: Semantic HTML, sufficient color contrast
+
+### Usage
+
+```python
+from scripts.report_generators.export import render_brief_html, generate_pdf_from_html
+
+# Render HTML
+html_path = render_brief_html("policy", output_dir="result/html")
+
+# Generate PDF (if wkhtmltopdf available)
+generate_pdf_from_html(html_path, "policy_brief.pdf")
+```
+
+### HTML Features
+
+1. **Self-contained**: All CSS embedded (no external dependencies)
+2. **Print-friendly**: Styled for A4 paper
+3. **Metadata display**: Audience, generated date, section count, gates count
+4. **Sections with findings + interpretation**
+5. **Disclaimer box** (standardized legal notice)
+6. **Footer** with generation timestamp
+
+### Optional: PDF Generation
+
+PDF generation requires wkhtmltopdf system package:
+```bash
+# Ubuntu/Debian
+sudo apt-get install wkhtmltopdf
+
+# Or use Puppeteer (Node.js alternative):
+npm install puppeteer
+```
+
+Without PDF support, HTML exports work perfectly for:
+- Email distribution
+- Web serving
+- Browser-based viewing
+- Print via browser (Ctrl+P)
+
