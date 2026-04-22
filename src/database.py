@@ -8923,33 +8923,35 @@ def _migrate_v54_drop_legacy_credit_source(conn: sqlite3.Connection) -> None:
 
 def _migrate_v54_to_v55(conn: sqlite3.Connection) -> None:
     """Migrate schema from v54 to v55.
-    
+
     Adds:
-    - sources table (canonical credit data sources)
     - roles table (role types)
     - person_aliases table (entity resolution audit trail)
-    
+
+    Seeds:
+    - sources lookup (DDL defined in init_db / v50 migration)
+
     No breaking changes to existing tables.
     """
     cursor = conn.cursor()
-    
-    # 1. Create sources lookup table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS sources (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE,
-            description TEXT
-        )
-    """)
-    
-    # Populate sources from existing credit data
-    sources_set = {"anilist", "mal", "ann", "allcinema", "seesaawiki", "keyframe"}
-    for source in sources_set:
+
+    # 1. Seed sources lookup table (DDL is in init_db() / _migrate_v50_canonical_silver)
+    # PK=code, with name_ja/base_url/license/description columns
+    SOURCE_SEEDS = [
+        ("anilist",    "AniList",               "https://anilist.co",                "proprietary", "GraphQL で structured staff 情報が最も豊富"),
+        ("mal",        "MyAnimeList",            "https://myanimelist.net",           "proprietary", "viewer ratings の参照源 (表示のみ、分析不使用)"),
+        ("ann",        "Anime News Network",     "https://www.animenewsnetwork.com",  "proprietary", "historical depth と職種粒度"),
+        ("allcinema",  "allcinema",              "https://www.allcinema.net",         "proprietary", "邦画・OVA の網羅性"),
+        ("seesaawiki", "SeesaaWiki",             "https://seesaawiki.jp",             "CC-BY-SA",    "fan-curated 詳細エピソード情報"),
+        ("keyframe",   "Sakugabooru/Keyframe",   "https://www.sakugabooru.com",       "CC",          "sakuga コミュニティ別名情報"),
+        ("madb",       "メディア芸術データベース",   "https://mediaarts-db.bunka.go.jp",  "CC-BY",       "文化庁運営の公的日本語作品データベース"),
+    ]
+    for code, name_ja, base_url, license_, desc in SOURCE_SEEDS:
         cursor.execute(
-            "INSERT OR IGNORE INTO sources (id, name) VALUES (?, ?)",
-            (source, source.upper()),
+            "INSERT OR IGNORE INTO sources (code, name_ja, base_url, license, description) VALUES (?, ?, ?, ?, ?)",
+            (code, name_ja, base_url, license_, desc),
         )
-    logger.info("sources_table_created", count=len(sources_set))
+    logger.info("sources_seeded", count=len(SOURCE_SEEDS))
     
     # 2. Create roles lookup table
     cursor.execute("""
@@ -8962,7 +8964,7 @@ def _migrate_v54_to_v55(conn: sqlite3.Connection) -> None:
     """)
     
     # Populate roles (from role_groups.py constants)
-    from src.utils.role_groups import ROLE_NAMES, ANIMATOR_ROLES, DIRECTOR_ROLES, SUPPORT_ROLES
+    from src.utils.role_groups import ANIMATOR_ROLES, DIRECTOR_ROLES, SUPPORT_ROLES
     
     role_mapping = {
         "animator": ANIMATOR_ROLES,
