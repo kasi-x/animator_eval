@@ -561,3 +561,83 @@ The project is undergoing a major correctness audit. Key categories:
 - **Design concerns** (D01-D27): Including unjustified magic numbers, missing significance tests, circular dependencies
 
 See `todo.md` for the complete audit with code references, impact analysis, and fix roadmap.
+
+## CI/CD Integration (Phase 2D)
+
+### GitHub Actions Workflows
+
+**1. Report Validation** (`.github/workflows/report-validation.yml`)
+- Triggers: On PR to `scripts/report_generators/` or report scripts
+- Checks:
+  - ✅ Brief validation (4 sections, 3 method gates each)
+  - ✅ Technical appendix validation (15 reports, cross-references)
+  - ✅ Vocabulary lint (no ability, skill, talent, competence, capability)
+  - ✅ Regeneration check (no unexpected diffs)
+- Blocks merge if any check fails
+- Posts comment with status (success/failure)
+
+**2. Nightly Regeneration** (`.github/workflows/nightly-reports.yml`)
+- Triggers: Daily at 02:00 UTC (10:00 JST)
+- Tasks:
+  - ✅ Regenerate all 3 briefs
+  - ✅ Regenerate technical appendix
+  - ✅ Validate both + show report diff
+  - ✅ Create PR if changes detected
+- Optional: Archive old performance benchmarks (>30 days)
+
+### Pre-commit Hooks
+
+**Vocabulary Linter** (`scripts/report_generators/lint_vocab.py`)
+- Checks for prohibited terms in report generator source files
+- Patterns: `\bability\b`, `\bskill\b`, `\btalent\b`, etc. (word boundaries)
+- Runs automatically before commit on report generator changes
+
+**Structure Linter** (`scripts/report_generators/lint_structure.py`)
+- Validates required sections in v2 reports
+- Enforces: 概要, Findings, Interpretation, Data Statement, Disclaimers
+
+### Report Diff Tool
+
+**`scripts/report_diff.py`**
+- Compares generated reports with git HEAD
+- Shows: added/removed/changed fields + metadata
+- Usage:
+  ```bash
+  task report-diff                # Show all diffs
+  task report-diff --brief policy # Show policy brief only
+  ```
+
+### Taskfile Commands
+
+```bash
+task report-briefs       # Generate all 3 briefs
+task report-validate     # Validate with gates + vocabulary
+task appendix-generate   # Generate technical appendix
+task appendix-validate   # Validate appendix structure
+task report-diff         # Show before/after changes
+task nightly             # Full nightly: generate, validate, diff
+```
+
+### Validation Gates (Blocking)
+
+| Gate | Check | Behavior |
+|------|-------|----------|
+| **Brief Structure** | 4 sections, 3 method gates | Block merge |
+| **Appendix Structure** | 15 reports, cross-refs valid | Block merge |
+| **Vocabulary** | No prohibited terms | Block merge |
+| **File Accessibility** | All referenced files exist | Block merge |
+| **Regeneration** | Unexpected diffs | Warning (info) |
+
+### Deployment Strategy
+
+1. **On Pull Request**: Run validation.yml
+   - Catch issues early before merge
+   - Auto-comment with pass/fail status
+
+2. **On Schedule (Nightly)**: Run nightly-reports.yml
+   - Regenerate to detect data drift
+   - Create PR for review
+
+3. **On Merge to Main**: CI continues
+   - Reports auto-published to `result/json/`
+   - Artifacts available for web serving

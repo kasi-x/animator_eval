@@ -150,6 +150,11 @@ tasks:
     cmds:
       - pixi run python scripts/generate_technical_appendix.py --validate-only
 
+  report-diff:
+    desc: Show before/after diffs for reports (compared to git HEAD)
+    cmds:
+      - pixi run python scripts/report_diff.py
+
   # Testing
   test:
     desc: Run all tests
@@ -415,6 +420,17 @@ tasks:
       - task graphs-interactive
       - task report-full
       - echo "✅ Full refresh complete"
+
+  nightly:
+    desc: "Nightly: regenerate briefs + appendix + validate"
+    cmds:
+      - echo "🌙 Running nightly report regeneration..."
+      - task report-briefs
+      - task appendix-generate
+      - task report-validate
+      - task appendix-validate
+      - task report-diff
+      - echo "✅ Nightly complete"
 
   quick-stats:
     desc: Quick stats overview (DB stats + ranking)

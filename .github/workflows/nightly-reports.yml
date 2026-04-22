@@ -1,0 +1,94 @@
+name: Nightly Report Regeneration
+
+on:
+  schedule:
+    # Run at 02:00 UTC every day (10:00 JST)
+    - cron: '0 2 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+jobs:
+  regenerate-reports:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.12']
+    
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for diff
+      
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.4.1
+        with:
+          pixi-version: latest
+          environments: default
+      
+      - name: Run nightly regeneration
+        run: |
+          echo "🌙 Nightly report regeneration started..."
+          task nightly
+      
+      - name: Create PR if changes detected
+        if: success()
+        uses: actions/create-pull-request@v5
+        with:
+          commit-message: 'chore: nightly report regeneration'
+          title: '[Nightly] Report Regeneration'
+          body: |
+            🤖 Automated nightly report regeneration
+            
+            - ✅ Regenerated all 3 briefs
+            - ✅ Regenerated technical appendix
+            - ✅ All validation passed
+            
+            Review changes above before merging.
+          branch: nightly/report-regeneration
+          delete-branch: true
+      
+      - name: Notify on failure
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **Nightly Report Regeneration FAILED**\n\nSee workflow logs: ' + context.server_url + '/' + context.repo.owner + '/' + context.repo.repo + '/actions/runs/' + context.runId
+            })
+
+  # Optional: archive old performance benchmark files
+  cleanup-old-benchmarks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Archive old benchmark files
+        run: |
+          echo "📦 Archiving old performance benchmarks..."
+          
+          # Find benchmark files older than 30 days
+          find result/json -name "performance_*.json" -mtime +30 2>/dev/null | while read file; do
+            echo "  Archiving: $file"
+            mkdir -p result/json/archives
+            mv "$file" result/json/archives/
+          done
+          
+          if [ "$(ls -A result/json/archives 2>/dev/null)" ]; then
+            echo "✅ Old benchmarks archived"
+          else
+            echo "ℹ️  No old benchmarks to archive"
+          fi
+      
+      - name: Commit cleanup if needed
+        run: |
+          git add result/json/archives/
+          if git diff --cached --quiet; then
+            echo "No cleanup needed"
+          else
+            git config user.name "GitHub Actions"
+            git config user.email "actions@github.com"
+            git commit -m "chore: archive old performance benchmarks"
+            git push
+          fi

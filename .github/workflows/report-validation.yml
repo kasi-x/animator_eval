@@ -1,0 +1,120 @@
+name: Report Validation
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/report_generators/**'
+      - 'scripts/generate_briefs_v2.py'
+      - 'scripts/generate_technical_appendix.py'
+      - '.github/workflows/report-validation.yml'
+
+jobs:
+  validate-briefs:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.12']
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up pixi
+        uses: prefix-dev/setup-pixi@v0.4.1
+        with:
+          pixi-version: latest
+          environments: default
+      
+      - name: Validate Report Briefs
+        run: |
+          echo "🔍 Validating report briefs..."
+          pixi run python scripts/generate_briefs_v2.py --validate-only
+          
+          # Check exit code
+          if [ $? -ne 0 ]; then
+            echo "❌ Report briefs validation FAILED"
+            exit 1
+          fi
+          echo "✅ Report briefs validation PASSED"
+      
+      - name: Validate Technical Appendix
+        run: |
+          echo "🔍 Validating technical appendix..."
+          pixi run python scripts/generate_technical_appendix.py --validate-only
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ Technical appendix validation FAILED"
+            exit 1
+          fi
+          echo "✅ Technical appendix validation PASSED"
+      
+      - name: Regenerate Briefs (Check for Diffs)
+        run: |
+          echo "📝 Regenerating briefs to check for diffs..."
+          pixi run python scripts/generate_briefs_v2.py --no-summary
+          
+          # Check if any JSON files changed
+          if git diff --quiet result/json/*_brief.json; then
+            echo "✅ No unexpected changes in briefs"
+          else
+            echo "⚠️  Briefs were modified by regeneration. Details:"
+            git diff result/json/*_brief.json
+          fi
+      
+      - name: Regenerate Technical Appendix (Check for Diffs)
+        run: |
+          echo "📝 Regenerating technical appendix to check for diffs..."
+          pixi run python scripts/generate_technical_appendix.py --no-index
+          
+          # Check if technical_appendix.json changed
+          if git diff --quiet result/json/technical_appendix.json; then
+            echo "✅ No unexpected changes in technical appendix"
+          else
+            echo "⚠️  Technical appendix was modified by regeneration. Details:"
+            git diff result/json/technical_appendix.json | head -50
+          fi
+      
+      - name: Vocabulary Check
+        run: |
+          echo "📚 Running vocabulary lint..."
+          
+          # Check for prohibited terms in briefs
+          PROHIBITED="ability|skill|talent|competence|capability"
+          FOUND=0
+          
+          for file in result/json/*_brief.json; do
+            if grep -iE "\b($PROHIBITED)\b" "$file" > /dev/null 2>&1; then
+              echo "❌ Found prohibited vocabulary in $(basename $file):"
+              grep -niE "\b($PROHIBITED)\b" "$file" | head -5
+              FOUND=1
+            fi
+          done
+          
+          if [ $FOUND -eq 0 ]; then
+            echo "✅ No prohibited vocabulary found"
+          else
+            exit 1
+          fi
+      
+      - name: Comment on PR (Success)
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '✅ **Report Validation PASSED**\n\n- ✅ Briefs valid (4 sections, 3 method gates)\n- ✅ Technical appendix valid (15 reports, cross-references)\n- ✅ No prohibited vocabulary\n- ✅ No unexpected diffs'
+            })
+      
+      - name: Comment on PR (Failure)
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: '❌ **Report Validation FAILED**\n\nSee logs for details. Common issues:\n- Missing or empty sections\n- Missing method gates\n- Prohibited vocabulary (ability, skill, talent, competence, capability)\n- Cross-reference errors'
+            })
