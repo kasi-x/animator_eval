@@ -24,7 +24,7 @@ logger = structlog.get_logger()
 
 DEFAULT_DB_PATH = DB_PATH
 
-SCHEMA_VERSION = 54
+SCHEMA_VERSION = 55
 
 # Fuzzy match rules for unmatched anime titles (90%+ confidence)
 # Entries where SeesaaWiki title slightly differs from AniList title
@@ -1388,6 +1388,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         52: _migrate_v52_add_calc_execution_records,
         53: _migrate_v53_slim_anime_table,
         54: _migrate_v54_drop_legacy_credit_source,
+        55: _migrate_v54_to_v55,
     }
 
     for version in range(current + 1, SCHEMA_VERSION + 1):
@@ -8925,7 +8926,6 @@ def _migrate_v54_to_v55(conn: sqlite3.Connection) -> None:
     """Migrate schema from v54 to v55.
 
     Adds:
-    - roles table (role types)
     - person_aliases table (entity resolution audit trail)
 
     Seeds:
@@ -8953,36 +8953,8 @@ def _migrate_v54_to_v55(conn: sqlite3.Connection) -> None:
         )
     logger.info("sources_seeded", count=len(SOURCE_SEEDS))
     
-    # 2. Create roles lookup table
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS roles (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL UNIQUE,
-            category TEXT,
-            description TEXT
-        )
-    """)
-    
-    # Populate roles (from role_groups.py constants)
-    from src.utils.role_groups import ANIMATOR_ROLES, DIRECTOR_ROLES, SUPPORT_ROLES
-    
-    role_mapping = {
-        "animator": ANIMATOR_ROLES,
-        "director": DIRECTOR_ROLES,
-        "support": SUPPORT_ROLES,
-    }
-    
-    role_count = 0
-    for category, roles in role_mapping.items():
-        for role in roles:
-            cursor.execute(
-                "INSERT OR IGNORE INTO roles (id, name, category) VALUES (?, ?, ?)",
-                (role, role.replace("_", " ").title(), category),
-            )
-            role_count += 1
-    logger.info("roles_table_created", count=role_count)
-    
-    # 3. Create person_aliases table (entity resolution audit)
+    # 2. Create person_aliases table (entity resolution audit)
+    # (roles table DDL and seeds are handled by init_db / _migrate_v50_canonical_silver)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS person_aliases (
             person_id TEXT NOT NULL,
@@ -9086,21 +9058,3 @@ def _migrate_v55_to_v56(conn: sqlite3.Connection) -> None:
     _set_schema_version(conn, 56)
     logger.info("schema_migration_complete", to_version=56)
 
-
-def ensure_phase1_schema(conn: sqlite3.Connection) -> None:
-    """Ensure Phase 1 schema is applied (v55 at minimum).
-    
-    Call this at startup to auto-migrate if needed.
-    """
-    current = get_schema_version(conn)
-    
-    if current < 55:
-        logger.info("applying_phase1_migration", from_version=current, to_version=55)
-        _migrate_v54_to_v55(conn)
-    
-    if current < 56:
-        logger.info("applying_phase1_optional_migration", from_version=current, to_version=56)
-        # Commented out: only run manually or with flag
-        # v56 genre normalization assumes anime table has genres JSON column
-        # Current production DB has been refactored; v56 not applicable
-        # _migrate_v55_to_v56(conn)
