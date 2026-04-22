@@ -258,6 +258,25 @@ def compute_integrated_value(
         d = dormancy.get(pid, 1.0)
         iv_scores[pid] = raw * d
 
+    # BUG FIX B02: Re-normalize IV scores after dormancy multiplication
+    # Dormancy decay can push scores below min, breaking percentile calculations.
+    # Solution: Re-scale to [0, 1] using min/max of dormancy-adjusted scores.
+    if iv_scores:
+        min_iv = min(iv_scores.values())
+        max_iv = max(iv_scores.values())
+        if max_iv > min_iv:
+            # Re-normalize to approximately [0, 1]
+            iv_scores = {
+                pid: (score - min_iv) / (max_iv - min_iv) if max_iv > min_iv else 0.5
+                for pid, score in iv_scores.items()
+            }
+        logger.info(
+            "iv_renormalized",
+            min_iv=round(min_iv, 4),
+            max_iv=round(max_iv, 4),
+            count=len(iv_scores),
+        )
+
     return iv_scores
 
 
