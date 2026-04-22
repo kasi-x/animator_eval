@@ -1,0 +1,242 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "description": "Technical appendix catalog: cross-references technical reports to main briefs",
+    "audience": ["Researchers", "Policymakers (technical annex)", "Investors (detail-oriented)"]
+  },
+  "reports": [
+    {
+      "id": "akm_diagnostics",
+      "title": "AKM Decomposition: Individual & Studio Effects",
+      "category": "core_scoring",
+      "description": "Estimates person and studio fixed effects from production scale. Separates individual contribution from opportunity/studio factors.",
+      "file_path": "result/json/akm_diagnostics.json",
+      "algorithm": "OLS FE with 2-way fixed effects",
+      "data_source": "production_scale aggregates",
+      "briefs_referenced": ["hr", "business"],
+      "sections_referenced": {
+        "hr": ["compensation_fairness"],
+        "business": ["undervalued_staff"]
+      },
+      "has_confidence_intervals": true,
+      "has_validation": true,
+      "analyst_notes": "Core component of Integrated Value (IV). CIs are analytical (SE = sigma/sqrt(n))."
+    },
+    {
+      "id": "bias_report",
+      "title": "Demographic & Role Bias Analysis",
+      "category": "bias",
+      "description": "Identifies disparities in opportunity (production scale, role assignment) and outcomes by demographic and role group.",
+      "file_path": "result/json/bias_report.json",
+      "algorithm": "Group comparisons + logistic regression",
+      "data_source": "person attributes + production history",
+      "briefs_referenced": ["policy", "hr"],
+      "sections_referenced": {
+        "policy": ["gender_bottleneck"],
+        "hr": ["compensation_fairness"]
+      },
+      "has_confidence_intervals": true,
+      "has_null_model": true,
+      "analyst_notes": "Gender/role gap analysis. Null model: random assignment."
+    },
+    {
+      "id": "iv_weights",
+      "title": "Integrated Value (IV) Component Weights",
+      "category": "core_scoring",
+      "description": "Documents the 5 IV components: AKM, Authority (PageRank), Trust (edge weight), Credit Density, Patronage. Shows lambda weights and dormancy adjustment.",
+      "file_path": "result/json/iv_weights.json",
+      "algorithm": "Weighted linear combination with dormancy multiplier",
+      "data_source": "AKM + graph centrality + edge weight aggregates",
+      "briefs_referenced": ["business", "hr"],
+      "sections_referenced": {
+        "business": ["undervalued_staff"],
+        "hr": ["succession_potential"]
+      },
+      "has_confidence_intervals": true,
+      "has_null_model": false,
+      "has_validation": true,
+      "analyst_notes": "Lambda weights are fixed priors (CV optimization against anime.score removed). Dormancy applied multiplicatively."
+    },
+    {
+      "id": "network_centrality",
+      "title": "Network Centrality & Position Metrics",
+      "category": "network",
+      "description": "Computes degree, betweenness, closeness, eigenvector centrality. Identifies central figures and key connectors.",
+      "file_path": "result/json/network_evolution.json",
+      "algorithm": "Brandes' betweenness (Rust), eigenvector (rayon parallel)",
+      "data_source": "co-credit collaboration graph",
+      "briefs_referenced": ["policy", "business"],
+      "sections_referenced": {
+        "policy": ["market_concentration"],
+        "business": ["emerging_teams"]
+      },
+      "has_null_model": true,
+      "analyst_notes": "Rust extension provides 50-100x speedup. Falls back to NetworkX if Rust unavailable."
+    },
+    {
+      "id": "bridges",
+      "title": "Structural Holes & Bridge Detection",
+      "category": "network",
+      "description": "Identifies people who bridge disconnected network regions (gatekeepers, cross-studio connectors). Measures brokerage potential.",
+      "file_path": "result/json/bridges.json",
+      "algorithm": "Constraint metric (Burt's), community-bridging edges",
+      "data_source": "community-detected subgraphs + co-credit edges",
+      "briefs_referenced": ["policy"],
+      "sections_referenced": {
+        "policy": ["market_concentration"]
+      },
+      "has_validation": true,
+      "analyst_notes": "Key for understanding industry fragmentation and gatekeeping."
+    },
+    {
+      "id": "knowledge_spanners",
+      "title": "Knowledge Spanners: High Betweenness People",
+      "category": "network",
+      "description": "Lists people with high betweenness centrality — those who control information flow between network clusters.",
+      "file_path": "result/json/knowledge_spanners.json",
+      "algorithm": "Betweenness centrality (Brandes, normalized)",
+      "data_source": "co-credit collaboration graph",
+      "briefs_referenced": ["business"],
+      "sections_referenced": {
+        "business": ["emerging_teams", "market_whitespace"]
+      },
+      "has_null_model": true,
+      "analyst_notes": "Useful for identifying industry connectors and potential mentors/leaders."
+    },
+    {
+      "id": "dml_analysis",
+      "title": "Double Machine Learning (DML) Causal Estimates",
+      "category": "causal",
+      "description": "Estimates causal effect of key variables (studio prestige, role type, peer network) on person FE. Uses orthogonal ML to control for confounding.",
+      "file_path": "result/json/dml_analysis.json",
+      "algorithm": "Double ML with nuisance estimation (RF), Neyman orthogonality",
+      "data_source": "AKM components + person/role covariates",
+      "briefs_referenced": ["hr", "business"],
+      "sections_referenced": {
+        "hr": ["team_chemistry", "compensation_fairness"],
+        "business": ["undervalued_staff"]
+      },
+      "has_confidence_intervals": true,
+      "has_validation": true,
+      "analyst_notes": "CIs are analytical (not bootstrap). Orthogonality verified via debiased LASSO."
+    },
+    {
+      "id": "causal_identification",
+      "title": "Causal Identification Strategy & Assumptions",
+      "category": "causal",
+      "description": "Documents causal assumptions (unconfoundedness, overlap, SUTVA). Specifies what claims can be causal vs. associational.",
+      "file_path": "result/json/causal_identification.json",
+      "algorithm": "Identification proof + sensitivity analysis (e.g., Rotnitzky bounds)",
+      "data_source": "domain knowledge + covariate balance checks",
+      "briefs_referenced": ["policy"],
+      "sections_referenced": {
+        "policy": ["recommendations"]
+      },
+      "has_validation": true,
+      "analyst_notes": "Every causal claim must cite this. Non-causal findings labeled 'associational'."
+    },
+    {
+      "id": "career_friction",
+      "title": "Career Friction & Attrition Dynamics",
+      "category": "career",
+      "description": "Analyzes patterns of career exit (gaps > 2 years). Compares attrition rates by gender, role, and studio cohort.",
+      "file_path": "result/json/career_friction.json",
+      "algorithm": "Kaplan-Meier survival curves, Cox proportional hazards",
+      "data_source": "credit timeline + career gaps",
+      "briefs_referenced": ["policy", "hr"],
+      "sections_referenced": {
+        "policy": ["attrition_dynamics"],
+        "hr": ["retention_action"]
+      },
+      "has_confidence_intervals": true,
+      "has_null_model": true,
+      "analyst_notes": "Note: 'attrition' is narrow (credit gap) — may reflect freelance variability."
+    },
+    {
+      "id": "generational_health",
+      "title": "Generational & Cohort Analysis",
+      "category": "career",
+      "description": "Tracks career trajectories by entry cohort. Measures progression speed, peak timing, sustainability.",
+      "file_path": "result/json/generational_health.json",
+      "algorithm": "Cohort event study + spline fitting",
+      "data_source": "production scale trajectories over time",
+      "briefs_referenced": ["hr", "policy"],
+      "sections_referenced": {
+        "hr": ["succession_potential", "team_chemistry"],
+        "policy": ["attrition_dynamics"]
+      },
+      "has_confidence_intervals": true,
+      "analyst_notes": "Cohorts show distinct lifecycle patterns. Early cohorts show sustainability; recent cohorts still ramping."
+    },
+    {
+      "id": "genre_ecosystem",
+      "title": "Genre Ecosystem: Specialists & Crossovers",
+      "category": "genre",
+      "description": "Maps person expertise by genre. Identifies genre specialists vs. versatile generalists. Genre affinity scores.",
+      "file_path": "result/json/genre_ecosystem.json",
+      "algorithm": "Herfindahl index (specialization) + cosine similarity",
+      "data_source": "role × anime genre co-occurrence",
+      "briefs_referenced": ["business"],
+      "sections_referenced": {
+        "business": ["market_whitespace", "emerging_teams"]
+      },
+      "has_validation": true,
+      "analyst_notes": "Genre matters for niche expertise. Useful for identifying specialized talent pools."
+    },
+    {
+      "id": "studio_network",
+      "title": "Studio Collaboration Network & Ecosystem",
+      "category": "studio",
+      "description": "Models studios as nodes with edges representing co-production and shared talent. Identifies studio clusters and competitive vs. cooperative dynamics.",
+      "file_path": "result/json/studio_network.json",
+      "algorithm": "Studio co-production graph + modularity-based clustering",
+      "data_source": "studio participation in anime + shared person affiliations",
+      "briefs_referenced": ["policy", "business"],
+      "sections_referenced": {
+        "policy": ["market_concentration"],
+        "business": ["investment_action"]
+      },
+      "has_validation": true,
+      "analyst_notes": "Studio concentration is primary policy concern. Shared talent indicates ecosystem openness."
+    },
+    {
+      "id": "credit_intervals",
+      "title": "Confidence Interval Methodology & Validation",
+      "category": "confidence",
+      "description": "Documents CI computation for all person-level estimates. Specifies whether analytical (SE formula) or bootstrap. Validates coverage.",
+      "file_path": "result/json/credit_intervals.json",
+      "algorithm": "Analytical SEs (Delta method) + bootstrap validation",
+      "data_source": "residual variance + sample size statistics",
+      "briefs_referenced": ["policy", "hr", "business"],
+      "sections_referenced": {},
+      "has_validation": true,
+      "analyst_notes": "All person-level estimates in public reports MUST include CIs. Blocking legal requirement."
+    },
+    {
+      "id": "anime_stats",
+      "title": "Dataset Statistics & Quality Report",
+      "category": "data_quality",
+      "description": "Summary statistics: anime count, credit count, person count, genres, date ranges. Data completeness metrics.",
+      "file_path": "result/json/anime_stats.json",
+      "algorithm": "Descriptive statistics",
+      "data_source": "SILVER layer (airing + credits + persons)",
+      "briefs_referenced": [],
+      "sections_referenced": {},
+      "has_validation": false,
+      "analyst_notes": "Sanity check on dataset size and composition."
+    },
+    {
+      "id": "performance_archive",
+      "title": "Performance Benchmarks Archive (Deprecated)",
+      "category": "archival",
+      "description": "Archive of 140+ performance profiling runs. Superseded by inline profiling and Rust acceleration.",
+      "file_path": "result/json/performance_20260415_204327.json",
+      "algorithm": "N/A (deprecated)",
+      "data_source": "Old pipeline profiling",
+      "briefs_referenced": [],
+      "sections_referenced": {},
+      "deprecated": true,
+      "deprecation_reason": "Pipeline performance normalized; Rust acceleration removed need for continuous benchmarking."
+    }
+  ]
+}

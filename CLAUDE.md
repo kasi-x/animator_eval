@@ -420,6 +420,126 @@ All briefs export to `result/json/{brief_id}_brief.json` with structure:
 
 **Rationale:** These prohibited terms imply subjective judgment. Scores measure structural network position, not individual quality.
 
+## Technical Appendix Architecture (Phase 2C)
+
+### Overview
+
+The Technical Appendix consolidates 15+ research reports into a unified document with cross-references to the 3 main briefs (Policy, HR, Business). Each technical report includes methodology, validation, and links to specific brief sections it supports.
+
+### Core Components
+
+**TechnicalReport** (`technical_appendix.py`)
+- Metadata: id, title, category, description, file_path
+- Methodology: algorithm, data_source, time_window
+- Quality gates: has_confidence_intervals, has_null_model, has_validation
+- Cross-references: briefs_referenced, sections_referenced (e.g., {"policy": ["market_concentration"]})
+- Deprecation tracking: deprecated flag + reason
+
+**TechnicalAppendix**
+- Aggregates multiple TechnicalReport instances
+- Validates: file accessibility, brief references, core reports have gates
+- Exports: unified JSON with category index and cross-reference matrix
+
+**Catalog** (`technical_appendix_catalog.json`)
+- Declarative list of 15 reports
+- Metadata for discovery and validation
+
+### Reports (15 total)
+
+| Category | Count | Examples |
+|----------|-------|----------|
+| **Core Scoring** | 2 | AKM Decomposition, IV Weights |
+| **Network Analysis** | 3 | Centrality, Bridges, Knowledge Spanners |
+| **Bias Detection** | 1 | Demographic & Role Disparities |
+| **Causal Inference** | 2 | DML Estimates, Identification Strategy |
+| **Career Dynamics** | 2 | Attrition, Generational Cohorts |
+| **Genre Analysis** | 1 | Specialists & Crossovers |
+| **Studio Profiling** | 1 | Collaboration Network |
+| **Confidence Methods** | 1 | CI Methodology & Validation |
+| **Data Quality** | 1 | Dataset Statistics |
+| **Archival** | 1 | Performance Benchmarks (deprecated) |
+
+### Cross-References (Matrix)
+
+Each brief links to specific reports:
+
+- **Policy Brief** (6 reports): Bias, Causal ID, Career, Network, Studio
+- **HR Brief** (5 reports): AKM, Bias, Career, DML, IV
+- **Business Brief** (6 reports): AKM, DML, Genre, IV, Knowledge Spanners, Studio
+
+Example: Policy's **market_concentration** section links to:
+- Network/Bridges (structural holes)
+- Studio/Network (co-production clusters)
+- Causal/ID (identification assumptions)
+
+### Usage
+
+```bash
+# Generate technical appendix (all reports + cross-references)
+task appendix-generate
+
+# Validate appendix structure + cross-references
+task appendix-validate
+
+# Python API
+from scripts.report_generators.technical_appendix import create_default_appendix
+
+appendix = create_default_appendix()
+is_valid, errors = appendix.validate()
+appendix_dict = appendix.to_dict()
+
+# Get all reports supporting HR brief
+hr_reports = appendix.get_by_brief("hr")  # dict[category -> list[TechnicalReport]]
+```
+
+### Output Format
+
+Exports to `result/json/technical_appendix.json`:
+```json
+{
+  "metadata": {
+    "generated_at": "2026-04-22T13:01:50Z",
+    "total_reports": 15,
+    "active_reports": 14
+  },
+  "reports_by_category": {
+    "core_scoring": [...],
+    "network": [...],
+    ...
+  },
+  "cross_references": {
+    "policy": { "total": 6, "by_category": {...} },
+    "hr": { "total": 5, "by_category": {...} },
+    "business": { "total": 6, "by_category": {...} }
+  }
+}
+```
+
+### Quality Gates for Core Reports
+
+All core_scoring reports require at least one of:
+- `has_confidence_intervals: true` — Analytical SEs or bootstrap
+- `has_null_model: true` — What would random data produce?
+
+This ensures readers can assess uncertainty + significance.
+
+### Deprecation Strategy
+
+Old/redundant reports (e.g., 140+ performance benchmark JSONs) are:
+1. Marked `deprecated: true` in catalog
+2. Excluded from active counts + brief cross-references
+3. Retained for historical audit trail
+4. Included in archival category for documentation
+
+Example:
+```json
+{
+  "id": "performance_archive",
+  "deprecated": true,
+  "deprecation_reason": "Pipeline performance normalized; Rust acceleration removed need for continuous benchmarking."
+}
+```
+
 ## Legal Constraints
 
 These are hard requirements, not suggestions:
