@@ -143,7 +143,7 @@ def test_pipeline_completes_on_fresh_schema(tmp_path, monkeypatch) -> None:
     from src.pipeline import run_scoring_pipeline
 
     persons, anime_list, credits = generate_synthetic_data(
-        n_directors=5, n_animators=20, n_anime=10, seed=99
+        n_directors=5, n_animators=30, n_anime=15, seed=99
     )
     conn = get_connection()
     init_db(conn)
