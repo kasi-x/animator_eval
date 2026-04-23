@@ -7,16 +7,16 @@ Endpoints:
   GET /api/summary          — pipeline summary
   GET /api/health           — health check
 
-Person endpoints (mounted from ``src.api.persons``):
+Person endpoints (mounted from ``src.routers.persons``):
   GET /api/persons, /api/persons/search, /api/persons/{id}
   GET /api/persons/{id}/similar, /api/persons/{id}/history
   GET /api/persons/{id}/network, /api/persons/{id}/milestones
   GET /api/persons/{id}/profile
 
-i18n endpoint (mounted from ``src.api.i18n``):
+i18n endpoint (mounted from ``src.routers.i18n``):
   GET /api/i18n/{language}
 
-Report endpoints (mounted from ``src.api.reports``):
+Report endpoints (mounted from ``src.routers.reports``):
   POST /api/briefs/generate, GET /api/briefs/status, /api/briefs/{id}/...
   GET /api/appendix, POST /api/appendix/regenerate, WS /ws/regenerate
 """
@@ -44,8 +44,8 @@ from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
 
 from src.analysis.gold_writer import GoldReader
-from src.api.i18n import router as i18n_router
-from src.api.persons import router as persons_router
+from src.routers.i18n import router as i18n_router
+from src.routers.persons import router as persons_router
 from src.api_reports import router as reports_router
 from src.api_validators import AnimeId
 from src.database import (

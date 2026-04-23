@@ -1,9 +1,9 @@
-"""Re-export shim — canonical location is ``src.api.validators``.
+"""Re-export shim — canonical location is ``src.routers.validators``.
 
 Keep this file for backwards compatibility with existing imports.
 """
 
-from src.api.validators import (  # noqa: F401
+from src.routers.validators import (  # noqa: F401
     AnimeId,
     PersonId,
     SafeQueryString,
