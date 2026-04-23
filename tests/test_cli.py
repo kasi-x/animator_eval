@@ -143,54 +143,6 @@ def populated_duckdb_with_history(monkeypatch, tmp_path):
     return tmp_path
 
 
-@pytest.fixture()
-def populated_db(monkeypatch, tmp_path):
-    """テスト用のDBを作成しmonkeypatchでCLIに注入する."""
-    import src.database as db_mod
-    from src.database import get_connection, init_db
-
-    db_path = tmp_path / "test.db"
-    conn = get_connection(db_path)
-    init_db(conn)
-    conn.executemany(
-        "INSERT INTO persons (id, name_ja, name_en) VALUES (?, ?, ?)",
-        [
-            ("p1", "荒木哲郎", "Tetsuro Araki"),
-            ("p2", "今井有文", "Arifumi Imai"),
-            ("p3", "浅野恭司", "Kyoji Asano"),
-        ],
-    )
-    conn.executemany(
-        "INSERT INTO anime (id, title_ja, title_en, year) VALUES (?, ?, ?, ?)",
-        [
-            ("a1", "進撃の巨人", "Attack on Titan", 2013),
-            ("a2", "甲鉄城のカバネリ", "Kabaneri", 2016),
-        ],
-    )
-    conn.executemany(
-        "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES (?, ?, ?, ?)",
-        [
-            ("p1", "a1", "director", "anilist"),
-            ("p2", "a1", "key_animator", "anilist"),
-            ("p3", "a1", "character_designer", "anilist"),
-            ("p1", "a2", "director", "anilist"),
-            ("p2", "a2", "key_animator", "anilist"),
-        ],
-    )
-    conn.executemany(
-        "INSERT INTO person_scores (person_id, birank, patronage, person_fe, iv_score) VALUES (?, ?, ?, ?, ?)",
-        [
-            ("p1", 85.0, 70.0, 60.0, 73.0),
-            ("p2", 60.0, 80.0, 90.0, 74.5),
-            ("p3", 40.0, 50.0, 55.0, 47.75),
-        ],
-    )
-    conn.commit()
-    conn.close()
-
-    monkeypatch.setattr(db_mod, "DEFAULT_DB_PATH", db_path)
-    return db_path
-
 
 class TestStatsCommand:
     def test_stats_displays_tables(self, populated_duckdb):
@@ -255,18 +207,18 @@ class TestRankingCommand:
 
 
 class TestProfileCommand:
-    def test_profile_existing_person(self, populated_db):
+    def test_profile_existing_person(self, populated_duckdb):
         result = runner.invoke(app, ["profile", "p1"])
         assert result.exit_code == 0
         assert "荒木哲郎" in result.output
         assert "BiRank" in result.output
 
-    def test_profile_not_found(self, populated_db):
+    def test_profile_not_found(self, populated_duckdb):
         result = runner.invoke(app, ["profile", "nonexistent"])
         assert result.exit_code == 1
         assert "not found" in result.output
 
-    def test_profile_shows_credits(self, populated_db):
+    def test_profile_shows_credits(self, populated_duckdb):
         result = runner.invoke(app, ["profile", "p2"])
         assert result.exit_code == 0
         assert "Credits" in result.output

@@ -86,43 +86,22 @@ def run_scoring_pipeline(
         compute_feat_credit_activity_ddb,
         compute_feat_person_role_progression_ddb,
     )
-    from src.database import (
-        compute_feat_studio_affiliation,
-        db_connection,
-        get_connection,
-        has_credits_changed_since_last_run,
-        init_db,
-        record_pipeline_run,
-    )
-    from src.etl.integrate import run_integration
     from src.utils.performance import reset_monitor
 
     t_start = time.monotonic()
     reset_monitor()
 
-    # ── DB setup ─────────────────────────────────────────────────────────────
-    conn = get_connection()
-    init_db(conn)
-    run_integration(conn)
-
-    # ── Incremental mode ─────────────────────────────────────────────────────
+    # ── Incremental mode (JSON cache only — DB change detection removed) ──────
     if incremental and not dry_run:
-        if not has_credits_changed_since_last_run(conn):
-            conn.close()
-            from src.utils.json_io import load_person_scores_from_json
+        from src.utils.json_io import load_person_scores_from_json
 
-            cached = load_person_scores_from_json()
-            if cached:
-                logger.info("incremental_cached", persons=len(cached))
-                return cached
-            logger.info("incremental_fallback", reason="no_cached_results")
-            conn = get_connection()
-        else:
-            logger.info("incremental_detected_changes", mode="full_recompute")
+        cached = load_person_scores_from_json()
+        if cached:
+            logger.info("incremental_cached", persons=len(cached))
+            return cached
+        logger.info("incremental_fallback", reason="no_cached_results")
 
     # ── Phase 1.5: pre-aggregate derived features ────────────────────────────
-    # Three functions migrated to DuckDB (silver.duckdb → gold.duckdb).
-    # feat_studio_affiliation remains SQLite until anime_studios moves to silver.
     current_year = datetime.datetime.now().year
     current_quarter = (datetime.datetime.now().month - 1) // 3 + 1
     for fn, label in [
@@ -133,7 +112,6 @@ def run_scoring_pipeline(
             "credit_activity",
         ),
         (compute_feat_career_annual_ddb, "career_annual"),
-        (lambda: compute_feat_studio_affiliation(conn), "studio_affiliation"),
         (
             lambda: compute_feat_person_role_progression_ddb(current_year=current_year),
             "role_progression",
@@ -143,7 +121,6 @@ def run_scoring_pipeline(
             fn()
         except Exception:
             logger.exception("feat_skipped", label=label)
-    conn.close()
 
     # ── WebSocket broadcaster ─────────────────────────────────────────────────
     ws_broadcaster = None
@@ -247,22 +224,6 @@ def run_scoring_pipeline(
     from src.pipeline_phases.context import PipelineCheckpoint
 
     PipelineCheckpoint(JSON_DIR).delete()
-
-    # ── Pipeline record + quality snapshot ───────────────────────────────────
-    with db_connection() as conn2:
-        record_pipeline_run(
-            conn2,
-            credit_count=len(ctx.credits),
-            person_count=len(ctx.results),
-            elapsed=elapsed,
-            mode="incremental" if incremental else "full",
-        )
-        try:
-            from scripts.monitoring.compute_quality_snapshot import compute_and_write
-
-            compute_and_write(conn2)
-        except Exception:
-            logger.exception("quality_snapshot_failed")
 
     # ── Performance report ────────────────────────────────────────────────────
     ctx.monitor.record_memory("pipeline_end")

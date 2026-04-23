@@ -7,16 +7,11 @@ Generates synthetic data that mimics the structure of the actual anime industry:
 """
 
 import random
+from pathlib import Path
 
+import duckdb
 import structlog
 
-from src.database import (
-    get_connection,
-    init_db,
-    insert_credit,
-    upsert_anime,
-    upsert_person,
-)
 from src.models import BronzeAnime, Character, CharacterVoiceActor, Credit, Person, Role
 
 logger = structlog.get_logger()
@@ -290,13 +285,27 @@ def generate_synthetic_va_data(
     return va_persons + sd_persons, characters, va_credits, sd_credits
 
 
-def populate_db_with_synthetic(
+def populate_silver_duckdb(
+    silver_path: Path | str | None = None,
     n_directors: int = 10,
     n_animators: int = 100,
     n_anime: int = 50,
     seed: int = 42,
 ) -> None:
-    """Populate the DB with synthetic data."""
+    """Populate silver.duckdb with synthetic data.
+
+    Args:
+        silver_path: Path to silver.duckdb (uses DEFAULT_SILVER_PATH if None)
+        n_directors: number of directors
+        n_animators: number of animators
+        n_anime: number of anime works
+        seed: random seed
+    """
+    from src.analysis.silver_reader import DEFAULT_SILVER_PATH
+
+    if silver_path is None:
+        silver_path = DEFAULT_SILVER_PATH
+
     persons, anime_list, credits = generate_synthetic_data(
         n_directors=n_directors,
         n_animators=n_animators,
@@ -304,20 +313,102 @@ def populate_db_with_synthetic(
         seed=seed,
     )
 
-    conn = get_connection()
-    init_db(conn)
+    conn = duckdb.connect(str(silver_path))
 
+    # Create tables
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS persons (
+            id VARCHAR PRIMARY KEY,
+            name_ja VARCHAR DEFAULT '',
+            name_en VARCHAR DEFAULT '',
+            name_ko VARCHAR DEFAULT '',
+            name_zh VARCHAR DEFAULT '',
+            aliases VARCHAR DEFAULT '[]',
+            image_medium VARCHAR,
+            date_of_birth DATE,
+            site_url VARCHAR,
+            gender VARCHAR
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS anime (
+            id VARCHAR PRIMARY KEY,
+            title_ja VARCHAR DEFAULT '',
+            title_en VARCHAR DEFAULT '',
+            year INTEGER,
+            season VARCHAR,
+            quarter INTEGER,
+            episodes INTEGER,
+            format VARCHAR,
+            status VARCHAR,
+            start_date DATE,
+            end_date DATE,
+            duration INTEGER,
+            source_mat VARCHAR,
+            work_type VARCHAR,
+            scale_class VARCHAR,
+            studios VARCHAR DEFAULT '[]'
+        )"""
+    )
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS credits (
+            person_id VARCHAR,
+            anime_id VARCHAR,
+            role VARCHAR,
+            credit_year INTEGER DEFAULT 0,
+            credit_quarter INTEGER DEFAULT 0,
+            episode VARCHAR,
+            raw_role VARCHAR,
+            evidence_source VARCHAR DEFAULT ''
+        )"""
+    )
+
+    # Insert persons
     for p in persons:
-        upsert_person(conn, p)
+        conn.execute(
+            "INSERT OR REPLACE INTO persons (id, name_ja, name_en, gender) VALUES (?, ?, ?, ?)",
+            [p.id, p.name_ja, p.name_en, p.gender],
+        )
+
+    # Insert anime
     for a in anime_list:
-        upsert_anime(conn, a)
+        studios_str = str(a.studios) if a.studios else "[]"
+        conn.execute(
+            "INSERT OR REPLACE INTO anime (id, title_ja, title_en, year, season, episodes, studios) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [a.id, a.title_ja, a.title_en, a.year, a.season, a.episodes, studios_str],
+        )
+
+    # Insert credits
     for c in credits:
-        insert_credit(conn, c)
+        conn.execute(
+            "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES (?, ?, ?, ?)",
+            [c.person_id, c.anime_id, c.role.value, c.source or "synthetic"],
+        )
 
     conn.commit()
     conn.close()
 
-    logger.info("Synthetic data populated in DB")
+    logger.info("Synthetic data populated in silver.duckdb")
+
+
+def populate_db_with_synthetic(
+    n_directors: int = 10,
+    n_animators: int = 100,
+    n_anime: int = 50,
+    seed: int = 42,
+) -> None:
+    """Deprecated: use populate_silver_duckdb instead."""
+    logger.warning(
+        "populate_db_with_synthetic is deprecated; use populate_silver_duckdb instead"
+    )
+    populate_silver_duckdb(
+        silver_path=None,
+        n_directors=n_directors,
+        n_animators=n_animators,
+        n_anime=n_anime,
+        seed=seed,
+    )
 
 
 def main() -> None:

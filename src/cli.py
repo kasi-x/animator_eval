@@ -257,52 +257,62 @@ def profile(person_id: str = typer.Argument(help="Person ID (e.g. anilist:p100)"
     """Display a specific person's profile."""
     setup_logging()
 
-    from src.database import db_connection, init_db
+    from src.analysis.gold_writer import gold_connect_with_silver
+    from src.utils.display_lookup import get_display_score
 
-    with db_connection() as conn:
-        init_db(conn)
+    try:
+        with gold_connect_with_silver() as conn:
+            rel = conn.execute("SELECT * FROM persons WHERE id = ?", [person_id])
+            cols = [d[0] for d in rel.description]
+            person_row = rel.fetchone()
+            if not person_row:
+                console.print(f"[red]Person not found: {person_id}[/red]")
+                raise typer.Exit(1)
+            person = dict(zip(cols, person_row))
 
-        person = conn.execute(
-            "SELECT * FROM persons WHERE id = ?", (person_id,)
-        ).fetchone()
-        if not person:
-            console.print(f"[red]Person not found: {person_id}[/red]")
-            raise typer.Exit(1)
+            rel = conn.execute(
+                "SELECT * FROM person_scores WHERE person_id = ?", [person_id]
+            )
+            cols = [d[0] for d in rel.description]
+            score_row = rel.fetchone()
+            score = dict(zip(cols, score_row)) if score_row else None
 
-        score = conn.execute(
-            "SELECT * FROM person_scores WHERE person_id = ?", (person_id,)
-        ).fetchone()
+            rel = conn.execute(
+                """SELECT c.role, c.evidence_source AS source, c.anime_id,
+                          a.title_ja, a.title_en, a.year
+                   FROM credits c
+                   JOIN anime a ON c.anime_id = a.id
+                   WHERE c.person_id = ?
+                   ORDER BY a.year DESC NULLS LAST""",
+                [person_id],
+            )
+            cols = [d[0] for d in rel.description]
+            credits = [dict(zip(cols, r)) for r in rel.fetchall()]
+    except typer.Exit:
+        raise
+    except Exception:
+        console.print("[red]Database unavailable — run pipeline first.[/red]")
+        raise typer.Exit(1)
 
-        credits = conn.execute(
-            """SELECT c.role,
-                      c.evidence_source AS source,
-                      a.title_ja, a.title_en, a.year,
-                      b.score
-               FROM credits c
-               JOIN anime a ON c.anime_id = a.id
-               LEFT JOIN anime_external_ids ext ON ext.anime_id = a.id AND ext.source = 'anilist'
-               LEFT JOIN src_anilist_anime b ON b.anilist_id = CAST(ext.external_id AS INTEGER)
-               WHERE c.person_id = ?
-               ORDER BY a.year DESC""",
-            (person_id,),
-        ).fetchall()
+    for c in credits:
+        c["score"] = get_display_score(c["anime_id"])
 
-    name = person["name_ja"] or person["name_en"] or person_id
+    name = person.get("name_ja") or person.get("name_en") or person_id
     console.print(f"\n[bold blue]Profile: {name}[/bold blue]")
     console.print(f"  ID: {person_id}")
-    if person["name_ja"]:
+    if person.get("name_ja"):
         console.print(f"  Name (JA): {person['name_ja']}")
-    if person["name_en"]:
+    if person.get("name_en"):
         console.print(f"  Name (EN): {person['name_en']}")
 
     if score:
         console.print("\n[bold]Scores:[/bold]")
-        console.print(f"  IV Score:    [magenta]{score['iv_score']:.2f}[/magenta]")
-        console.print(f"  Person FE:   [blue]{score['person_fe']:.4f}[/blue]")
-        console.print(f"  BiRank:      [green]{score['birank']:.4f}[/green]")
-        console.print(f"  Patronage:   [yellow]{score['patronage']:.4f}[/yellow]")
-        console.print(f"  Dormancy:    {score['dormancy']:.2f}")
-        console.print(f"  AWCC:        {score['awcc']:.4f}")
+        console.print(f"  IV Score:    [magenta]{(score.get('iv_score') or 0):.2f}[/magenta]")
+        console.print(f"  Person FE:   [blue]{(score.get('person_fe') or 0):.4f}[/blue]")
+        console.print(f"  BiRank:      [green]{(score.get('birank') or 0):.4f}[/green]")
+        console.print(f"  Patronage:   [yellow]{(score.get('patronage') or 0):.4f}[/yellow]")
+        console.print(f"  Dormancy:    {(score.get('dormancy') or 0):.2f}")
+        console.print(f"  AWCC:        {(score.get('awcc') or 0):.4f}")
 
     if credits:
         console.print(f"\n[bold]Credits ({len(credits)} total):[/bold]")
@@ -313,9 +323,9 @@ def profile(person_id: str = typer.Argument(help="Person ID (e.g. anilist:p100)"
         table.add_column("Score", justify="right")
 
         for c in credits[:20]:
-            title = c["title_ja"] or c["title_en"] or ""
-            year = str(c["year"]) if c["year"] else "?"
-            anime_score = f"{c['score']:.1f}" if c["score"] else "-"
+            title = c.get("title_ja") or c.get("title_en") or ""
+            year = str(c["year"]) if c.get("year") else "?"
+            anime_score = f"{c['score']:.1f}" if c.get("score") else "-"
             table.add_row(year, title[:40], c["role"], anime_score)
 
         console.print(table)
@@ -703,30 +713,36 @@ def timeline(
     from pathlib import Path
 
     from src.analysis.career import CAREER_STAGE
+    from src.analysis.gold_writer import gold_connect_with_silver
     from src.analysis.visualize import plot_person_timeline
-    from src.database import db_connection, init_db
     from src.models import Role
+    from src.utils.display_lookup import get_display_score
 
-    with db_connection() as conn:
-        init_db(conn)
+    try:
+        with gold_connect_with_silver() as conn:
+            rel = conn.execute("SELECT * FROM persons WHERE id = ?", [person_id])
+            cols = [d[0] for d in rel.description]
+            person_row = rel.fetchone()
+            if not person_row:
+                console.print(f"[red]Person not found: {person_id}[/red]")
+                raise typer.Exit(1)
+            person = dict(zip(cols, person_row))
 
-        person = conn.execute(
-            "SELECT * FROM persons WHERE id = ?", (person_id,)
-        ).fetchone()
-        if not person:
-            console.print(f"[red]Person not found: {person_id}[/red]")
-            raise typer.Exit(1)
-
-        credits = conn.execute(
-            """SELECT c.role, a.title_ja, a.title_en, a.year, b.score
-               FROM credits c
-               JOIN anime a ON c.anime_id = a.id
-               LEFT JOIN anime_external_ids ext ON ext.anime_id = a.id AND ext.source = 'anilist'
-               LEFT JOIN src_anilist_anime b ON b.anilist_id = CAST(ext.external_id AS INTEGER)
-               WHERE c.person_id = ? AND a.year IS NOT NULL
-               ORDER BY a.year""",
-            (person_id,),
-        ).fetchall()
+            rel = conn.execute(
+                """SELECT c.role, c.anime_id, a.title_ja, a.title_en, a.year
+                   FROM credits c
+                   JOIN anime a ON c.anime_id = a.id
+                   WHERE c.person_id = ? AND a.year IS NOT NULL
+                   ORDER BY a.year""",
+                [person_id],
+            )
+            cols = [d[0] for d in rel.description]
+            credits = [dict(zip(cols, r)) for r in rel.fetchall()]
+    except typer.Exit:
+        raise
+    except Exception:
+        console.print("[red]Database unavailable — run pipeline first.[/red]")
+        raise typer.Exit(1)
 
     if not credits:
         console.print(f"[yellow]No credits with year data for {person_id}[/yellow]")
@@ -740,9 +756,9 @@ def timeline(
         year = c["year"]
         credits_by_year[year].append(
             {
-                "anime_title": c["title_ja"] or c["title_en"] or "",
+                "anime_title": c.get("title_ja") or c.get("title_en") or "",
                 "role": c["role"],
-                "score": c["score"],
+                "score": get_display_score(c["anime_id"]),
             }
         )
         try:
@@ -754,7 +770,7 @@ def timeline(
             max_stage_so_far = stage
         career_stages[year] = max(career_stages.get(year, 0), max_stage_so_far)
 
-    name = person["name_ja"] or person["name_en"] or person_id
+    name = person.get("name_ja") or person.get("name_en") or person_id
     out_path = Path(output) if output else None
 
     plot_person_timeline(
@@ -1798,59 +1814,8 @@ def freshness(lang: str = lang_option) -> None:
     """Display data source freshness status."""
     setup_logging()
 
-    from src.database import db_connection
-    from src.freshness import check_data_freshness
-
-    with db_connection() as conn:
-        reports = check_data_freshness(conn)
-
-    if not reports:
-        console.print("[yellow]No data sources registered.[/yellow]")
-        raise typer.Exit()
-
-    console.print("\n[bold blue]Data Source Freshness[/bold blue]\n")
-
-    table = Table()
-    table.add_column("Source", style="cyan")
-    table.add_column("Last Scraped", style="dim")
-    table.add_column("Age (hours)", justify="right")
-    table.add_column("Items", justify="right", style="green")
-    table.add_column("Threshold (h)", justify="right", style="dim")
-    table.add_column("Status")
-
-    for r in reports:
-        if r.hours_since_scrape is None:
-            age_str = "-"
-            status_str = "[red]Never scraped[/red]"
-        elif r.is_stale:
-            age_str = f"{r.hours_since_scrape:.1f}"
-            status_str = "[yellow]Stale[/yellow]"
-        else:
-            age_str = f"{r.hours_since_scrape:.1f}"
-            status_str = "[green]Fresh[/green]"
-
-        table.add_row(
-            r.source,
-            r.last_scraped_at or "-",
-            age_str,
-            str(r.item_count),
-            str(r.threshold_hours),
-            status_str,
-        )
-
-    console.print(table)
-
-    stale_count = sum(1 for r in reports if r.is_stale)
-    if stale_count == 0:
-        console.print("\n[bold green]All sources are fresh.[/bold green]")
-    elif stale_count == len(reports):
-        console.print(
-            f"\n[bold red]All {stale_count} sources are stale or never scraped.[/bold red]"
-        )
-    else:
-        console.print(
-            f"\n[bold yellow]{stale_count} of {len(reports)} sources need attention.[/bold yellow]"
-        )
+    # Freshness data lives in ops_source_scrape_status — not yet in DuckDB.
+    console.print("[yellow]Freshness data not available (SQLite ops tables not yet migrated).[/yellow]")
 
 
 if __name__ == "__main__":
@@ -1954,26 +1919,17 @@ def neo4j_export(
     """
     setup_logging()
 
-    from src.database import (
-        db_connection,
-        init_db,
-        load_all_anime,
-        load_all_credits,
-        load_all_persons,
-        load_all_scores,
-    )
+    from src.analysis.gold_writer import GoldReader
+    from src.analysis.silver_reader import load_anime_silver, load_credits_silver, load_persons_silver
 
     console.print("\n[bold blue]Neo4j Direct Export[/bold blue]\n")
 
-    # Load data from SQLite
-    console.print("[cyan]Loading data from SQLite...[/cyan]")
-    with db_connection() as conn:
-        init_db(conn)
-
-        persons = load_all_persons(conn)
-        anime_list = load_all_anime(conn)
-        credits = load_all_credits(conn)
-        scores = load_all_scores(conn)
+    # Load data from DuckDB
+    console.print("[cyan]Loading data from DuckDB...[/cyan]")
+    persons = load_persons_silver()
+    anime_list = load_anime_silver()
+    credits = load_credits_silver()
+    scores = GoldReader().person_scores()
 
     console.print(
         f"[green]✓ Loaded {len(persons):,} persons, {len(anime_list):,} anime, {len(credits):,} credits[/green]\n"

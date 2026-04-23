@@ -9,10 +9,8 @@ import pytest
 from src.analysis.calc_cache import get_calc_execution_hashes
 from src.database import (
     get_connection,
-    has_credits_changed_since_last_run,
     init_db,
     insert_credit,
-    record_pipeline_run,
     upsert_anime,
     upsert_person,
 )
@@ -144,17 +142,6 @@ class TestScoringPipeline:
             assert "birank" in r
             assert "dormancy" in r
 
-    def test_records_meta_quality_snapshot(self, populated_db):
-        run_scoring_pipeline()
-        conn = get_connection()
-        try:
-            count = conn.execute(
-                "SELECT COUNT(*) FROM meta_quality_snapshot"
-            ).fetchone()[0]
-            assert count > 0
-        finally:
-            conn.close()
-
     def test_phase9_skips_recompute_when_hash_unchanged(self, populated_db, tmp_path):
         import src.analysis.calc_cache as _cc
 
@@ -252,50 +239,6 @@ class TestIncrementalPipeline:
         results2 = run_scoring_pipeline(incremental=False)
         assert len(results1) > 0
         assert len(results2) > 0
-
-
-class TestHasCreditsChanged:
-    """has_credits_changed_since_last_run のユニットテスト."""
-
-    def test_no_previous_run_returns_true(self, populated_db):
-        conn = get_connection()
-        assert has_credits_changed_since_last_run(conn) is True
-        conn.close()
-
-    def test_same_counts_returns_false(self, populated_db):
-        conn = get_connection()
-        # Record a run matching current state
-        credit_count = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
-        person_count = conn.execute(
-            "SELECT COUNT(DISTINCT person_id) FROM credits"
-        ).fetchone()[0]
-        record_pipeline_run(conn, credit_count, person_count, 1.0)
-        conn.commit()
-
-        assert has_credits_changed_since_last_run(conn) is False
-        conn.close()
-
-    def test_new_credit_returns_true(self, populated_db):
-        conn = get_connection()
-        # Record current state
-        credit_count = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
-        person_count = conn.execute(
-            "SELECT COUNT(DISTINCT person_id) FROM credits"
-        ).fetchone()[0]
-        record_pipeline_run(conn, credit_count, person_count, 1.0)
-        conn.commit()
-
-        # Add new credit
-        insert_credit(
-            conn,
-            Credit(
-                person_id="p4", anime_id="a2", role=Role.KEY_ANIMATOR, source="test"
-            ),
-        )
-        conn.commit()
-
-        assert has_credits_changed_since_last_run(conn) is True
-        conn.close()
 
 
 class TestResumePipeline:

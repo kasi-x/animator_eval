@@ -4,7 +4,7 @@
 
 本書はプロジェクト内のすべての未完了項目を一元管理するファイルです。完了済みサマリーは `DONE.md`、設計原則は `CLAUDE.md`。
 
-最終更新: 2026-04-23 (DuckDB 4.2/4.3 完了、4.4 残務整理)
+最終更新: 2026-04-23 (DuckDB 4.4 大幅進捗: cli.py 全コマンド移行、database.py 1544行に削減)
 
 ## 実行指示書は `TASK_CARDS/`
 
@@ -29,7 +29,7 @@ TASK_CARDS/
 | 優先度 | カテゴリ | 内容 |
 |--------|---------|------|
 | 🟠 Major | コード一貫性 | scraper 統一、テスト AnimeAnalysis 移行 |
-| 🟠 Major | DuckDB 全面移行 | 4.1 ✅ 4.2 ✅ 4.3 ✅(display_lookup)。次: 4.4 SQLite 完全撤去 |
+| 🟠 Major | DuckDB 全面移行 | 4.1 ✅ 4.2 ✅ 4.3 ✅ 4.4 大幅進捗 (cli.py 全移行、database.py 1544行)。残: synthetic.py / scripts/ |
 | 🟠 Major | Hamilton 導入 | H-1〜H-5 全完了 ✅ (H-4: pipeline.py 430→210行, ctx ノード化) |
 | 🟠 Major | レポートシステム統廃合 | 3 系統 → 1 系統、v1 monolith 解体 |
 | 🟡 Minor | テストカバレッジ | analysis_modules、テストファイル分割 |
@@ -141,8 +141,17 @@ silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行
 - [x] `analysis/llm_pipeline.py` の SQLite LLM キャッシュを gold.duckdb に移植 — 既に `calc_cache` DuckDB 経由
 - [x] `migrate_to_v2.py` 削除 (commit c26fadd)
 - [x] `src/routers/persons.py` の `db_connection` → `gold_connect_with_silver()` に移行 (commit 818bb09)
-- [ ] `src/database.py` を廃止 (9000 行 → 残存 DAO を `src/db/` に移管)
-  - 残存利用箇所: `pipeline.py`, `cli.py`, `synthetic.py`, `scripts/`
+- [x] `src/cli.py` の 9 コマンド (stats/ranking/search/compare/history/export/validate/data-quality/entity-resolution) を DuckDB に移行 (2026-04-24)
+- [x] `src/database.py` 不使用 migration コード削除: 9229 → 3497 行 (-62%) (commit bdc62cb, 8aa4c02)
+- [x] `src/cli.py` 残存コマンド移行: `profile`, `timeline` → `gold_connect_with_silver()` + `get_display_score()`; `freshness` スタブ化; `neo4j_export` → silver_reader + GoldReader (2026-04-23)
+- [x] `src/database.py` superseded 関数群削除: 3497 → 1544 行 (-56%): `upsert_score`, `save/get_score_history`, `record/get_last_pipeline_run`, `has_credits_changed_since_last_run`, `update/get_data_sources`, `get_db_stats`, `search_persons` 削除 (2026-04-23)
+- [x] `tests/test_database.py`, `tests/test_database_stats.py` 削除 (superseded 関数のテスト) (2026-04-23)
+- [ ] `src/database.py` 完全廃止 (1544 行 → `src/db/` に残存 DAO 移管)
+  - 残存: `upsert_person`, `upsert_anime`, `insert_credit` (ETL + synthetic.py + tests が依存)
+  - 残存: `compute_feat_career_annual`, `compute_feat_studio_affiliation`, `compute_feat_career_gaps` (generate_reports_v2.py が動的ロード)
+  - 残存: scraper 系 (`upsert_src_anilist_anime`, `upsert_character`, `upsert_studio` 等)
+  - 残存: `src/synthetic.py` が SQLite 経由で E2E テストデータを投入 (silver.duckdb への直書き化で廃止可)
+  - 残存: `scripts/` の多数スクリプト (maintenance/report 系)
 - [ ] `database_v2.py` / `models_v2.py` を廃止 (`init_db_v2` が `init_db` 経由で使用中)
 - [ ] Entity resolution の書き込み経路 (`llm_pipeline.py` 経由) を DuckDB に切替
 - [ ] Atlas migration を DuckDB 環境で再生成
