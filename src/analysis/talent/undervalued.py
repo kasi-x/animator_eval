@@ -83,7 +83,7 @@ def cluster_undervaluation_archetypes(
     undervalued_pool: dict[str, Any],
     scores: list[dict],
 ) -> dict[str, Any]:
-    """K-means K=5 クラスタリング → アーキタイプ命名.
+    """K-means K=5 clustering → archetype naming.
 
     Features: u_score, fe_pct, activity_pct, dormancy (from scores)
 

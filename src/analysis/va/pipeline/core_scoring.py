@@ -28,7 +28,22 @@ def compute_va_core_scores_phase(context: PipelineContext) -> None:
     """
     if skip_if_no_va_credits(context, "va_scoring_skipped"):
         return
+    _run_va_akm(context)
+    _run_va_birank(context)
+    _run_va_trust(context)
+    _run_va_patronage(context)
+    _run_va_dormancy(context)
+    _run_va_awcc_placeholder(context)
+    _run_va_iv(context)
+    logger.info(
+        "va_core_scoring_complete",
+        va_person_fe=len(context.va_person_fe),
+        va_birank=len(context.va_birank_scores),
+        va_iv=len(context.va_iv_scores),
+    )
 
+
+def _run_va_akm(context: PipelineContext) -> None:
     with va_step(context, "va_akm"):
         akm_result = estimate_va_akm(
             context.va_credits, context.credits, context.anime_map
@@ -36,6 +51,8 @@ def compute_va_core_scores_phase(context: PipelineContext) -> None:
         context.va_person_fe = akm_result.person_fe
         context.va_sd_fe = akm_result.sd_fe
 
+
+def _run_va_birank(context: PipelineContext) -> None:
     with va_step(context, "va_birank"):
         if context.va_anime_graph and context.va_anime_graph.number_of_edges() > 0:
             birank_result = compute_birank(context.va_anime_graph)
@@ -47,6 +64,8 @@ def compute_va_core_scores_phase(context: PipelineContext) -> None:
         else:
             context.va_birank_scores = {}
 
+
+def _run_va_trust(context: PipelineContext) -> None:
     with va_step(context, "va_trust"):
         context.va_trust_scores = compute_va_trust(
             context.va_credits,
@@ -55,6 +74,8 @@ def compute_va_core_scores_phase(context: PipelineContext) -> None:
             current_year=context.current_year,
         )
 
+
+def _run_va_patronage(context: PipelineContext) -> None:
     with va_step(context, "va_patronage"):
         sd_birank = {
             pid: context.birank_person_scores.get(pid, 0.0) for pid in context.va_sd_fe
@@ -66,22 +87,38 @@ def compute_va_core_scores_phase(context: PipelineContext) -> None:
             sd_birank,
         )
 
+
+def _run_va_dormancy(context: PipelineContext) -> None:
     with va_step(context, "va_dormancy"):
-        va_pseudo_credits = [
-            Credit(
-                person_id=cva.person_id,
-                anime_id=cva.anime_id,
-                role=Role.VOICE_ACTOR,
-            )
-            for cva in context.va_credits
-        ]
         context.va_dormancy_scores = compute_dormancy_penalty(
-            va_pseudo_credits, context.anime_map, current_year=context.current_year
+            _va_credits_to_pseudo_credits(context.va_credits),
+            context.anime_map,
+            current_year=context.current_year,
         )
 
-    # VA AWCC (placeholder — VA community bridging is less applicable)
+
+def _va_credits_to_pseudo_credits(va_credits) -> list[Credit]:
+    """Convert VA credit records to Credit objects with Role.VOICE_ACTOR for dormancy computation."""
+    return [
+        Credit(
+            person_id=cva.person_id,
+            anime_id=cva.anime_id,
+            role=Role.VOICE_ACTOR,
+        )
+        for cva in va_credits
+    ]
+
+
+def _run_va_awcc_placeholder(context: PipelineContext) -> None:
+    """Set VA AWCC scores to 0.0 for all VA persons.
+
+    VA AWCC is structurally 0: voice actors work within a single production unit
+    and do not bridge separate communities the way animation staff do.
+    """
     context.va_awcc_scores = {pid: 0.0 for pid in context.va_person_ids}
 
+
+def _run_va_iv(context: PipelineContext) -> None:
     with va_step(context, "va_iv"):
         sd_exposure = compute_va_sd_exposure(
             context.va_sd_fe,
@@ -95,13 +132,6 @@ def compute_va_core_scores_phase(context: PipelineContext) -> None:
             patronage=context.va_patronage_scores,
             dormancy=context.va_dormancy_scores,
         )
-
-    logger.info(
-        "va_core_scoring_complete",
-        va_person_fe=len(context.va_person_fe),
-        va_birank=len(context.va_birank_scores),
-        va_iv=len(context.va_iv_scores),
-    )
 
 
 def _build_sd_assignments(

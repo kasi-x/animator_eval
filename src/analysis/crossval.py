@@ -18,7 +18,7 @@ logger = structlog.get_logger()
 
 
 def _rank_correlation(ranks_a: dict[str, int], ranks_b: dict[str, int]) -> float:
-    """Spearman の順位相関係数を計算する."""
+    """Compute Spearman rank correlation coefficient."""
     common = set(ranks_a) & set(ranks_b)
     if len(common) < 2:
         return 0.0

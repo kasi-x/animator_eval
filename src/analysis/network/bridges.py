@@ -181,7 +181,7 @@ def _compute_simple_communities(
     persons: set[str],
     edges: dict[tuple[str, str], list[str]],
 ) -> dict[str, int]:
-    """Union-Find で簡易コミュニティを計算."""
+    """Compute simple communities using Union-Find."""
     parent: dict[str, str] = {p: p for p in persons}
 
     def find(x: str) -> str:

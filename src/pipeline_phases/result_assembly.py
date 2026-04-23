@@ -2,7 +2,6 @@
 
 import datetime
 import math
-import sqlite3
 from collections import defaultdict
 
 import numpy as np
@@ -11,7 +10,6 @@ import structlog
 from src.analysis.explain import explain_authority, explain_skill, explain_trust
 from src.analysis.gold_writer import GoldWriter
 from src.analysis.scoring.integrated_value import compute_studio_exposure
-from src.database import upsert_career_tracks
 from src.models import ScoreResult
 from src.pipeline_phases.context import PipelineContext
 from src.utils.role_groups import DIRECTOR_ROLES
@@ -19,18 +17,14 @@ from src.utils.role_groups import DIRECTOR_ROLES
 logger = structlog.get_logger()
 
 
-def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) -> None:
+def assemble_result_entries(context: PipelineContext) -> None:
     """Build comprehensive result dictionaries for each person.
 
     This phase:
-    1. Creates ScoreResult objects and saves to database
+    1. Creates ScoreResult objects and writes to gold.duckdb
     2. Builds rich result dictionaries with all computed metrics
     3. Adds score breakdowns (top contributing factors)
     4. Sorts results by iv_score descending
-
-    Args:
-        context: Pipeline context
-        conn: Database connection
 
     Updates context fields:
         - results: List[dict] with all person results
@@ -115,36 +109,14 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
             )
         )
 
-    # Batch upsert scores (single transaction instead of 125K individual INSERTs)
-    conn.executemany(
-        """INSERT INTO person_scores
-               (person_id, person_fe, studio_fe_exposure, birank,
-                patronage, dormancy, awcc, iv_score)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(person_id) DO UPDATE SET
-               person_fe = excluded.person_fe,
-               studio_fe_exposure = excluded.studio_fe_exposure,
-               birank = excluded.birank,
-               patronage = excluded.patronage,
-               dormancy = excluded.dormancy,
-               awcc = excluded.awcc,
-               iv_score = excluded.iv_score,
-               updated_at = CURRENT_TIMESTAMP
-        """,
-        score_rows,
-    )
-    # Score history with year+quarter stamp
+    # Write scores to gold.duckdb (atomic swap — DuckDB is now canonical GOLD store)
     now = datetime.datetime.now()
     run_year = now.year
     run_quarter = (now.month - 1) // 3 + 1
     history_rows = [(*row, run_year, run_quarter) for row in score_rows]
-    conn.executemany(
-        """INSERT INTO score_history
-               (person_id, person_fe, studio_fe_exposure, birank,
-                patronage, dormancy, awcc, iv_score, year, quarter)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        history_rows,
-    )
+    with GoldWriter() as gw:
+        gw.write_person_scores(score_rows)
+        gw.write_score_history(history_rows)
     logger.info(
         "scores_batch_saved",
         count=len(score_rows),
@@ -152,19 +124,8 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
         quarter=run_quarter,
     )
 
-    # Phase B: dual-write GOLD tables to DuckDB (person_scores + score_history).
-    # Failures are non-fatal — SQLite remains the canonical store during transition.
-    try:
-        with GoldWriter() as gw:
-            gw.write_person_scores(score_rows)
-            gw.write_score_history(history_rows)
-    except Exception as exc:
-        logger.warning("gold_duckdb_write_failed", error=str(exc))
-
-    # Persist career tracks to scores table (v28 migration)
     if context.career_tracks:
-        upsert_career_tracks(conn, context.career_tracks)
-        logger.info("career_tracks_persisted", count=len(context.career_tracks))
+        logger.info("career_tracks_computed", count=len(context.career_tracks))
 
     for pid in all_person_ids:
         score = scores_by_pid[pid]

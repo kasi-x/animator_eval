@@ -1,4 +1,4 @@
-"""Event study visualization (イベントスタディの可視化).
+"""Event study visualization.
 
 This module provides visualization functions for event study results,
 enabling visual inspection of parallel trends and dynamic treatment effects.

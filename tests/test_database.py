@@ -15,6 +15,7 @@ from src.database import (
     load_all_scores,
     record_calc_execution,
     register_meta_lineage,
+    search_persons,
     upsert_meta_entity_resolution_audit,
     upsert_anime,
     upsert_person,
@@ -280,3 +281,49 @@ class TestCalcExecutionRecords:
 
         hashes = get_calc_execution_hashes(db_conn, "phase9_analysis_modules")
         assert hashes["anime_stats"] == "h2"
+
+
+class TestSearchPersons:
+    @pytest.fixture
+    def populated_conn(self, db_conn):
+        persons = [
+            Person(id="p1", name_ja="宮崎駿", name_en="Hayao Miyazaki"),
+            Person(id="p2", name_ja="김철수", name_ko="김철수", name_en="Kim Cheolsu"),
+            Person(id="p3", name_zh="张三", name_en="Zhang San"),
+            Person(id="p4", name_ja="田中太郎", name_en="Taro Tanaka", aliases=["たなかたろう"]),
+        ]
+        for p in persons:
+            upsert_person(db_conn, p)
+        db_conn.commit()
+        return db_conn
+
+    def test_search_by_name_ja(self, populated_conn):
+        results = search_persons(populated_conn, "宮崎")
+        assert any(r["id"] == "p1" for r in results)
+
+    def test_search_by_name_en(self, populated_conn):
+        results = search_persons(populated_conn, "Miyazaki")
+        assert any(r["id"] == "p1" for r in results)
+
+    def test_search_by_name_ko(self, populated_conn):
+        results = search_persons(populated_conn, "김철수")
+        assert any(r["id"] == "p2" for r in results)
+
+    def test_search_by_name_zh(self, populated_conn):
+        results = search_persons(populated_conn, "张三")
+        assert any(r["id"] == "p3" for r in results)
+
+    def test_search_by_alias(self, populated_conn):
+        results = search_persons(populated_conn, "たなかたろう")
+        assert any(r["id"] == "p4" for r in results)
+
+    def test_result_includes_multilang_fields(self, populated_conn):
+        results = search_persons(populated_conn, "김철수")
+        assert len(results) >= 1
+        row = next(r for r in results if r["id"] == "p2")
+        assert "name_ko" in row
+        assert "name_zh" in row
+
+    def test_no_match_returns_empty(self, populated_conn):
+        results = search_persons(populated_conn, "존재하지않는이름xyz")
+        assert results == []

@@ -1,4 +1,4 @@
-"""Expected vs Actual Ability — 期待能力と実績の比較.
+"""Expected vs Actual Ability — comparison of expected and realized contribution.
 
 Estimates expected performance from environment (collaborators, studio, works)
 and compares with actual contribution (person_fe).

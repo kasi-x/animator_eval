@@ -33,6 +33,9 @@ def _anime_to_analysis(anime: BronzeAnime) -> dict:
             "source": anime.source,
             "work_type": getattr(anime, "work_type", None),
             "scale_class": getattr(anime, "scale_class", None),
+            "country_of_origin": getattr(anime, "country_of_origin", None),
+            "synonyms": getattr(anime, "synonyms", None),
+            "is_adult": getattr(anime, "is_adult", None),
             "mal_id": anime.mal_id,
             "anilist_id": anime.anilist_id,
             "ann_id": getattr(anime, "ann_id", None),
@@ -151,6 +154,10 @@ def integrate_anilist(conn: sqlite3.Connection) -> dict[str, int]:
             site_url=row["site_url"],
             mal_id=row["mal_id"],
             anilist_id=row["anilist_id"],
+            country_of_origin=row["country_of_origin"] if "country_of_origin" in row.keys() else None,
+            is_licensed=bool(row["is_licensed"]) if row["is_licensed"] is not None and "is_licensed" in row.keys() else None,
+            is_adult=bool(row["is_adult"]) if row["is_adult"] is not None and "is_adult" in row.keys() else None,
+            mean_score=row["mean_score"] if "mean_score" in row.keys() else None,
         )
         upsert_anime(conn, anime)
         upsert_anime_analysis(conn, _anime_to_analysis(anime))
@@ -164,11 +171,15 @@ def integrate_anilist(conn: sqlite3.Connection) -> dict[str, int]:
 
     # Persons
     for row in conn.execute("SELECT * FROM src_anilist_persons"):
+        row_keys = row.keys()
         person = Person(
             id=f"{prefix}p{row['anilist_id']}",
             name_ja=row["name_ja"] or "",
             name_en=row["name_en"] or "",
+            name_ko=row["name_ko"] or "" if "name_ko" in row_keys else "",
+            name_zh=row["name_zh"] or "" if "name_zh" in row_keys else "",
             aliases=json.loads(row["aliases"] or "[]"),
+            nationality=json.loads(row["nationality"] or "[]") if "nationality" in row_keys else [],
             date_of_birth=row["date_of_birth"],
             age=row["age"],
             gender=row["gender"],

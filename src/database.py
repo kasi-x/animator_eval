@@ -24,7 +24,7 @@ logger = structlog.get_logger()
 
 DEFAULT_DB_PATH = DB_PATH
 
-SCHEMA_VERSION = 56
+SCHEMA_VERSION = 58
 
 # Fuzzy match rules for unmatched anime titles (90%+ confidence)
 # Entries where SeesaaWiki title slightly differs from AniList title
@@ -338,7 +338,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_anime_tags_tag
             ON anime_tags(tag_name, rank, anime_id);
 
-        CREATE TABLE IF NOT EXISTS scores (
+        CREATE TABLE IF NOT EXISTS person_scores (
             person_id TEXT PRIMARY KEY,
             person_fe REAL NOT NULL DEFAULT 0.0,
             studio_fe_exposure REAL NOT NULL DEFAULT 0.0,
@@ -4734,10 +4734,10 @@ def upsert_person(
             """INSERT OR IGNORE INTO persons (
                    id, name_ja, name_en, name_ko, name_zh, aliases, nationality,
                    mal_id, anilist_id,
-                   date_of_birth, hometown, blood_type, description, favourites, site_url,
+                   date_of_birth, hometown, blood_type, description, years_active, favourites, site_url,
                    name_priority
                )
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 person.id,
                 person.name_ja,
@@ -4752,6 +4752,7 @@ def upsert_person(
                 person.hometown,
                 person.blood_type,
                 person.description,
+                json.dumps(getattr(person, "years_active", []) or [], ensure_ascii=False),
                 person.favourites,
                 person.site_url,
                 incoming_priority,
@@ -4783,6 +4784,8 @@ def upsert_person(
 
     final_aliases = json.dumps(old_aliases, ensure_ascii=False)
 
+    incoming_years_active = json.dumps(getattr(person, "years_active", []) or [], ensure_ascii=False)
+
     if update_primary:
         conn.execute(
             """UPDATE persons SET
@@ -4798,6 +4801,7 @@ def upsert_person(
                    hometown  = COALESCE(?, hometown),
                    blood_type = COALESCE(?, blood_type),
                    description = COALESCE(?, description),
+                   years_active = CASE WHEN ? != '[]' THEN ? ELSE years_active END,
                    favourites = COALESCE(?, favourites),
                    site_url  = COALESCE(?, site_url),
                    name_priority = ?
@@ -4808,7 +4812,9 @@ def upsert_person(
                 json.dumps(person.nationality, ensure_ascii=False),
                 person.mal_id, person.anilist_id,
                 person.date_of_birth, person.hometown, person.blood_type,
-                person.description, person.favourites, person.site_url,
+                person.description,
+                incoming_years_active, incoming_years_active,
+                person.favourites, person.site_url,
                 max(incoming_priority, existing_priority),
                 person.id,
             ),
@@ -4825,6 +4831,7 @@ def upsert_person(
                    hometown  = COALESCE(?, hometown),
                    blood_type = COALESCE(?, blood_type),
                    description = COALESCE(?, description),
+                   years_active = CASE WHEN ? != '[]' THEN ? ELSE years_active END,
                    favourites = COALESCE(?, favourites),
                    site_url  = COALESCE(?, site_url)
                WHERE id = ?""",
@@ -4833,7 +4840,9 @@ def upsert_person(
                 json.dumps(person.nationality, ensure_ascii=False),
                 person.mal_id, person.anilist_id,
                 person.date_of_birth, person.hometown, person.blood_type,
-                person.description, person.favourites, person.site_url,
+                person.description,
+                incoming_years_active, incoming_years_active,
+                person.favourites, person.site_url,
                 person.id,
             ),
         )
@@ -4934,12 +4943,15 @@ def normalize_primary_names_by_credits(conn: sqlite3.Connection) -> int:
 
 def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
     """Insert or update an anime (canonical silver: structural columns only)."""
+    import json as _json
+
     conn.execute(
         """INSERT INTO anime (
                id, title_ja, title_en, year, season, episodes, format, status,
-               start_date, end_date, duration, original_work_type, quarter, work_type, scale_class
+               start_date, end_date, duration, original_work_type, quarter, work_type, scale_class,
+               country_of_origin, synonyms, is_adult
            )
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
                 title_ja = COALESCE(NULLIF(excluded.title_ja, ''), anime.title_ja),
                 title_en = COALESCE(NULLIF(excluded.title_en, ''), anime.title_en),
@@ -4955,6 +4967,9 @@ def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
                 quarter = COALESCE(excluded.quarter, anime.quarter),
                 work_type = COALESCE(excluded.work_type, anime.work_type),
                 scale_class = COALESCE(excluded.scale_class, anime.scale_class),
+                country_of_origin = COALESCE(excluded.country_of_origin, anime.country_of_origin),
+                synonyms = CASE WHEN excluded.synonyms != '[]' THEN excluded.synonyms ELSE anime.synonyms END,
+                is_adult = COALESCE(excluded.is_adult, anime.is_adult),
                 updated_at = CURRENT_TIMESTAMP
         """,
         (
@@ -4973,6 +4988,9 @@ def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
             anime.quarter,
             anime.work_type,
             anime.scale_class,
+            getattr(anime, "country_of_origin", None),
+            _json.dumps(getattr(anime, "synonyms", []) or [], ensure_ascii=False),
+            1 if getattr(anime, "is_adult", None) else (0 if getattr(anime, "is_adult", None) is not None else None),
         ),
     )
 
@@ -5311,8 +5329,8 @@ def insert_credit(conn: sqlite3.Connection, credit: Credit) -> None:
             return
     conn.execute(
         """INSERT OR IGNORE INTO credits
-           (person_id, anime_id, role, raw_role, episode, evidence_source)
-           VALUES (?, ?, ?, ?, ?, ?)""",
+           (person_id, anime_id, role, raw_role, episode, evidence_source, affiliation, position)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             credit.person_id,
             credit.anime_id,
@@ -5320,6 +5338,8 @@ def insert_credit(conn: sqlite3.Connection, credit: Credit) -> None:
             raw_role,
             credit.episode,
             source,
+            credit.affiliation,
+            credit.position,
         ),
     )
 
@@ -5384,12 +5404,13 @@ def insert_character_voice_actor(
 def upsert_studio(conn: sqlite3.Connection, studio: Studio) -> None:
     """Insert or update a studio."""
     conn.execute(
-        """INSERT INTO studios (id, name, anilist_id, is_animation_studio, favourites, site_url)
-           VALUES (?, ?, ?, ?, ?, ?)
+        """INSERT INTO studios (id, name, anilist_id, is_animation_studio, country_of_origin, favourites, site_url)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
                name = COALESCE(NULLIF(excluded.name, ''), studios.name),
                anilist_id = COALESCE(excluded.anilist_id, studios.anilist_id),
                is_animation_studio = COALESCE(excluded.is_animation_studio, studios.is_animation_studio),
+               country_of_origin = COALESCE(excluded.country_of_origin, studios.country_of_origin),
                favourites = COALESCE(excluded.favourites, studios.favourites),
                site_url = COALESCE(excluded.site_url, studios.site_url)
         """,
@@ -5400,6 +5421,7 @@ def upsert_studio(conn: sqlite3.Connection, studio: Studio) -> None:
             1
             if studio.is_animation_studio
             else (0 if studio.is_animation_studio is not None else None),
+            getattr(studio, "country_of_origin", None),
             studio.favourites,
             studio.site_url,
         ),
@@ -5607,19 +5629,24 @@ def search_persons(
         limit: maximum number of results
 
     Returns:
-        [{id, name_ja, name_en, iv_score, credit_count}]
+        [{id, name_ja, name_en, name_ko, name_zh, iv_score, credit_count}]
     """
     pattern = f"%{query}%"
     rows = conn.execute(
-        """SELECT p.id, p.name_ja, p.name_en,
+        """SELECT p.id, p.name_ja, p.name_en, p.name_ko, p.name_zh,
                   s.iv_score, s.person_fe, s.birank, s.patronage,
                   (SELECT COUNT(*) FROM credits c WHERE c.person_id = p.id) as credit_count
            FROM persons p
            LEFT JOIN person_scores s ON p.id = s.person_id
-           WHERE p.name_ja LIKE ? OR p.name_en LIKE ? COLLATE NOCASE OR p.id LIKE ?
+           WHERE p.name_ja LIKE ?
+              OR p.name_en LIKE ? COLLATE NOCASE
+              OR p.name_ko LIKE ?
+              OR p.name_zh LIKE ?
+              OR p.aliases LIKE ? COLLATE NOCASE
+              OR p.id LIKE ?
            ORDER BY s.iv_score DESC NULLS LAST
            LIMIT ?""",
-        (pattern, pattern, pattern, limit),
+        (pattern, pattern, pattern, pattern, pattern, pattern, limit),
     ).fetchall()
     return [dict(r) for r in rows]
 
@@ -7764,8 +7791,9 @@ def upsert_src_anilist_anime(conn: sqlite3.Connection, anime: "Anime") -> None:
                anilist_id, title_ja, title_en, year, season, episodes, format,
                status, start_date, end_date, duration, source, description,
                score, genres, tags, studios, synonyms, cover_large, cover_medium,
-               banner, popularity, favourites, site_url, mal_id
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+               banner, popularity, favourites, site_url, mal_id,
+               country_of_origin, is_licensed, is_adult, mean_score, relations_json
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(anilist_id) DO UPDATE SET
                title_ja = COALESCE(NULLIF(excluded.title_ja, ''), src_anilist_anime.title_ja),
                title_en = COALESCE(NULLIF(excluded.title_en, ''), src_anilist_anime.title_en),
@@ -7781,7 +7809,13 @@ def upsert_src_anilist_anime(conn: sqlite3.Connection, anime: "Anime") -> None:
                genres = excluded.genres,
                tags = excluded.tags,
                studios = excluded.studios,
+               synonyms = excluded.synonyms,
                cover_large = COALESCE(excluded.cover_large, src_anilist_anime.cover_large),
+               country_of_origin = COALESCE(excluded.country_of_origin, src_anilist_anime.country_of_origin),
+               is_licensed = COALESCE(excluded.is_licensed, src_anilist_anime.is_licensed),
+               is_adult = COALESCE(excluded.is_adult, src_anilist_anime.is_adult),
+               mean_score = COALESCE(excluded.mean_score, src_anilist_anime.mean_score),
+               relations_json = COALESCE(excluded.relations_json, src_anilist_anime.relations_json),
                scraped_at = CURRENT_TIMESTAMP""",
         (
             anime.anilist_id,
@@ -7809,6 +7843,11 @@ def upsert_src_anilist_anime(conn: sqlite3.Connection, anime: "Anime") -> None:
             anime.favourites,
             anime.site_url,
             anime.mal_id,
+            anime.country_of_origin,
+            1 if anime.is_licensed else (0 if anime.is_licensed is not None else None),
+            1 if anime.is_adult else (0 if anime.is_adult is not None else None),
+            anime.mean_score,
+            anime.relations_json,
         ),
     )
 

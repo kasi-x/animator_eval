@@ -1031,113 +1031,292 @@ def export_and_visualize_phase(context: PipelineContext, elapsed: float = 0.0) -
 
 
 def _persist_features_to_db(context: PipelineContext) -> None:
-    """Persist pipeline computation results to feat_* tables.
+    """Persist pipeline computation results to feat_* tables in gold.duckdb.
 
-    Writes the same data as the JSON export to the DB so it can be reused in the next pipeline run.
-    DB writes are best-effort — failures do not abort the overall pipeline.
+    Writes the same data as the JSON export to the GOLD layer so it can be
+    reused by report generators and the API without re-running the pipeline.
+    All writes are best-effort — failures do not abort the overall pipeline.
     """
-    from src.database import (
-        compute_feat_credit_contribution,
-        compute_feat_person_role_progression,
-        compute_feat_work_context,
-        compute_feat_work_scale_tier,
-        get_connection,
-        upsert_agg_director_circles,
-        upsert_agg_milestones,
-        upsert_feat_career,
-        upsert_feat_contribution,
-        upsert_feat_genre_affinity,
-        upsert_feat_mentorships,
-        upsert_feat_network,
-        upsert_feat_person_scores,
-    )
+    import datetime
+
+    import duckdb
+
+    from src.analysis.gold_writer import DEFAULT_GOLD_DB_PATH, _DDL
 
     if not context.results:
         return
 
     try:
         with context.monitor.measure("feat_db_persist"):
-            conn = get_connection()
+            gold_path = str(DEFAULT_GOLD_DB_PATH)
+            DEFAULT_GOLD_DB_PATH.parent.mkdir(parents=True, exist_ok=True)
+            conn = duckdb.connect(gold_path)
+            conn.execute("SET memory_limit='2GB'")
+            conn.execute(_DDL)
 
-            # --- feat_person_scores + feat_network + feat_career ---
-            upsert_feat_person_scores(conn, context.results)
-            upsert_feat_network(conn, context.results)
-            upsert_feat_career(conn, context.results)
+            now = datetime.datetime.now(datetime.timezone.utc)
 
-            # --- feat_network: bridge_score / n_bridge_communities (from bridges analysis) ---
+            # --- feat_career ---
+            career_rows: list[tuple] = []
+            for d in context.results:
+                car = d.get("career") or {}
+                grw = d.get("growth") or {}
+                career_rows.append((
+                    d["person_id"],
+                    car.get("first_year"),
+                    car.get("latest_year"),
+                    car.get("active_years"),
+                    d.get("total_credits"),
+                    car.get("highest_stage"),
+                    d.get("primary_role"),
+                    d.get("career_track"),
+                    car.get("peak_year"),
+                    car.get("peak_credits"),
+                    grw.get("trend"),
+                    d.get("growth_score"),
+                    grw.get("activity_ratio"),
+                    grw.get("recent_credits"),
+                    now,
+                ))
+            if career_rows:
+                conn.executemany(
+                    """
+                    INSERT INTO feat_career (
+                        person_id, first_year, latest_year, active_years, total_credits,
+                        highest_stage, primary_role, career_track,
+                        peak_year, peak_credits,
+                        growth_trend, growth_score, activity_ratio, recent_credits,
+                        updated_at
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    ON CONFLICT (person_id) DO UPDATE SET
+                        first_year=excluded.first_year,
+                        latest_year=excluded.latest_year,
+                        active_years=excluded.active_years,
+                        total_credits=excluded.total_credits,
+                        highest_stage=excluded.highest_stage,
+                        primary_role=excluded.primary_role,
+                        career_track=excluded.career_track,
+                        peak_year=excluded.peak_year,
+                        peak_credits=excluded.peak_credits,
+                        growth_trend=excluded.growth_trend,
+                        growth_score=excluded.growth_score,
+                        activity_ratio=excluded.activity_ratio,
+                        recent_credits=excluded.recent_credits,
+                        updated_at=excluded.updated_at
+                    """,
+                    career_rows,
+                )
+
+            # --- feat_network (base: birank/patronage/centrality from results) ---
+            network_rows: list[tuple] = []
+            for d in context.results:
+                c = d.get("centrality") or {}
+                net = d.get("network") or {}
+                network_rows.append((
+                    d["person_id"],
+                    d.get("birank"),
+                    d.get("patronage"),
+                    d.get("bridge_score"),
+                    d.get("n_bridge_communities"),
+                    c.get("degree"),
+                    c.get("betweenness"),
+                    c.get("closeness"),
+                    c.get("eigenvector"),
+                    net.get("hub_score"),
+                    net.get("collaborators"),
+                    net.get("unique_anime"),
+                    now,
+                ))
+            if network_rows:
+                conn.executemany(
+                    """
+                    INSERT INTO feat_network (
+                        person_id, birank, patronage,
+                        bridge_score, n_bridge_communities,
+                        degree_centrality, betweenness_centrality,
+                        closeness_centrality, eigenvector_centrality,
+                        hub_score, n_collaborators, n_unique_anime,
+                        updated_at
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    ON CONFLICT (person_id) DO UPDATE SET
+                        birank=excluded.birank,
+                        patronage=excluded.patronage,
+                        bridge_score=excluded.bridge_score,
+                        n_bridge_communities=excluded.n_bridge_communities,
+                        degree_centrality=excluded.degree_centrality,
+                        betweenness_centrality=excluded.betweenness_centrality,
+                        closeness_centrality=excluded.closeness_centrality,
+                        eigenvector_centrality=excluded.eigenvector_centrality,
+                        hub_score=excluded.hub_score,
+                        n_collaborators=excluded.n_collaborators,
+                        n_unique_anime=excluded.n_unique_anime,
+                        updated_at=excluded.updated_at
+                    """,
+                    network_rows,
+                )
+
+            # --- feat_network bridge update (from bridges analysis) ---
             bridges_analysis = context.analysis_results.get("bridges") or {}
             bridge_persons = bridges_analysis.get("bridge_persons") or []
             if bridge_persons:
-                conn.executemany(
-                    """
-                    UPDATE feat_network
-                    SET bridge_score = ?,
-                        n_bridge_communities = ?,
-                        updated_at = CURRENT_TIMESTAMP
-                    WHERE person_id = ?
-                    """,
-                    [
-                        (
-                            bp.get("bridge_score"),
-                            bp.get("communities_connected"),
-                            bp["person_id"],
-                        )
-                        for bp in bridge_persons
-                        if "person_id" in bp
-                    ],
-                )
+                bridge_updates: list[tuple] = [
+                    (
+                        bp.get("bridge_score"),
+                        bp.get("communities_connected"),
+                        now,
+                        bp["person_id"],
+                    )
+                    for bp in bridge_persons
+                    if "person_id" in bp
+                ]
+                if bridge_updates:
+                    conn.executemany(
+                        """
+                        UPDATE feat_network
+                        SET bridge_score = ?,
+                            n_bridge_communities = ?,
+                            updated_at = ?
+                        WHERE person_id = ?
+                        """,
+                        bridge_updates,
+                    )
 
             # --- feat_genre_affinity ---
             genre_data = context.analysis_results.get("genre_affinity") or {}
-            genre_rows: list[dict] = []
+            genre_rows: list[tuple] = []
             if isinstance(genre_data, dict):
                 for pid, genres in genre_data.items():
                     if isinstance(genres, dict):
                         for genre, info in genres.items():
-                            score = (
-                                info.get("score") if isinstance(info, dict) else info
-                            )
-                            work_count = (
-                                info.get("count") if isinstance(info, dict) else None
-                            )
-                            genre_rows.append(
-                                {
-                                    "person_id": pid,
-                                    "genre": genre,
-                                    "affinity_score": score,
-                                    "work_count": work_count,
-                                }
-                            )
+                            score = info.get("score") if isinstance(info, dict) else info
+                            work_count = info.get("count") if isinstance(info, dict) else None
+                            genre_rows.append((pid, genre, score, work_count, now))
             if genre_rows:
-                upsert_feat_genre_affinity(conn, genre_rows)
+                conn.executemany(
+                    """
+                    INSERT INTO feat_genre_affinity
+                        (person_id, genre, affinity_score, work_count, updated_at)
+                    VALUES (?,?,?,?,?)
+                    ON CONFLICT (person_id, genre) DO UPDATE SET
+                        affinity_score=excluded.affinity_score,
+                        work_count=excluded.work_count,
+                        updated_at=excluded.updated_at
+                    """,
+                    genre_rows,
+                )
 
             # --- feat_contribution ---
             contrib_data = context.analysis_results.get("individual_profiles") or {}
-            contrib_rows: list[dict] = []
+            contrib_rows: list[tuple] = []
             if isinstance(contrib_data, dict):
                 for pid, prof in contrib_data.items():
                     if isinstance(prof, dict):
-                        contrib_rows.append({"person_id": pid, **prof})
+                        contrib_rows.append((
+                            pid,
+                            prof.get("peer_percentile"),
+                            prof.get("opportunity_residual"),
+                            prof.get("consistency"),
+                            prof.get("independent_value"),
+                            now,
+                        ))
             elif isinstance(contrib_data, list):
-                contrib_rows = contrib_data
+                for prof in contrib_data:
+                    if isinstance(prof, dict) and "person_id" in prof:
+                        contrib_rows.append((
+                            prof["person_id"],
+                            prof.get("peer_percentile"),
+                            prof.get("opportunity_residual"),
+                            prof.get("consistency"),
+                            prof.get("independent_value"),
+                            now,
+                        ))
             if contrib_rows:
-                upsert_feat_contribution(conn, contrib_rows)
+                conn.executemany(
+                    """
+                    INSERT INTO feat_contribution (
+                        person_id, peer_percentile, opportunity_residual,
+                        consistency_score, independent_value, updated_at
+                    ) VALUES (?,?,?,?,?,?)
+                    ON CONFLICT (person_id) DO UPDATE SET
+                        peer_percentile=excluded.peer_percentile,
+                        opportunity_residual=excluded.opportunity_residual,
+                        consistency_score=excluded.consistency_score,
+                        independent_value=excluded.independent_value,
+                        updated_at=excluded.updated_at
+                    """,
+                    contrib_rows,
+                )
 
             # --- agg_milestones ---
             milestones_raw = _get_analysis_result(context, "milestones", {})
             if isinstance(milestones_raw, dict) and milestones_raw:
-                upsert_agg_milestones(conn, milestones_raw)
+                milestone_rows: list[tuple] = []
+                for person_id, events in milestones_raw.items():
+                    if not isinstance(events, list):
+                        continue
+                    for ev in events:
+                        if not isinstance(ev, dict):
+                            continue
+                        milestone_rows.append((
+                            person_id,
+                            ev.get("type") or "",
+                            int(ev.get("year") or 0),
+                            ev.get("anime_id") or "",
+                            ev.get("anime_title"),
+                            ev.get("description"),
+                        ))
+                if milestone_rows:
+                    conn.executemany(
+                        """
+                        INSERT INTO agg_milestones
+                            (person_id, event_type, year, anime_id, anime_title, description)
+                        VALUES (?,?,?,?,?,?)
+                        ON CONFLICT (person_id, event_type, year, anime_id) DO UPDATE SET
+                            anime_title=excluded.anime_title,
+                            description=excluded.description
+                        """,
+                        milestone_rows,
+                    )
 
             # --- agg_director_circles ---
             if context.circles:
-                upsert_agg_director_circles(conn, context.circles)
+                _persist_director_circles_duckdb(conn, context.circles, now)
 
             # --- feat_mentorships ---
             mentorships_raw = _get_analysis_result(context, "mentorships", [])
             if isinstance(mentorships_raw, list) and mentorships_raw:
-                upsert_feat_mentorships(conn, mentorships_raw)
+                mentorship_rows: list[tuple] = [
+                    (
+                        m["mentor_id"],
+                        m["mentee_id"],
+                        m.get("n_shared_works") or 0,
+                        m.get("hit_rate"),
+                        m.get("mentor_stage"),
+                        m.get("mentee_stage"),
+                        m.get("first_year"),
+                        m.get("latest_year"),
+                    )
+                    for m in mentorships_raw
+                    if isinstance(m, dict) and m.get("mentor_id") and m.get("mentee_id")
+                ]
+                if mentorship_rows:
+                    conn.executemany(
+                        """
+                        INSERT INTO feat_mentorships (
+                            mentor_id, mentee_id, n_shared_works, hit_rate,
+                            mentor_stage, mentee_stage, first_year, latest_year
+                        ) VALUES (?,?,?,?,?,?,?,?)
+                        ON CONFLICT (mentor_id, mentee_id) DO UPDATE SET
+                            n_shared_works=excluded.n_shared_works,
+                            hit_rate=excluded.hit_rate,
+                            mentor_stage=excluded.mentor_stage,
+                            mentee_stage=excluded.mentee_stage,
+                            first_year=excluded.first_year,
+                            latest_year=excluded.latest_year
+                        """,
+                        mentorship_rows,
+                    )
 
-            conn.commit()
             logger.info(
                 "feat_tables_persisted",
                 scores=len(context.results),
@@ -1145,41 +1324,21 @@ def _persist_features_to_db(context: PipelineContext) -> None:
                 contrib_rows=len(contrib_rows),
             )
 
-            # feat_credit_contribution must run after feat_person_scores is finalized
-            compute_feat_credit_contribution(conn)
-
-            # feat_work_context: runs after credit_contribution (needs its career_year)
-            try:
-                compute_feat_work_context(conn, current_year=context.current_year)
-                compute_feat_work_scale_tier(
-                    conn
-                )  # assigns scale tier from format + episodes + duration
-            except Exception:
-                logger.exception("feat_work_context_skipped")
-
-            # feat_person_role_progression: can run at Phase 1.5 but updated after scores
-            try:
-                compute_feat_person_role_progression(
-                    conn, current_year=context.current_year
-                )
-            except Exception:
-                logger.exception("feat_person_role_progression_skipped")
-
             # feat_causal_estimates: persist causal inference results from pipeline context
             try:
-                _persist_causal_estimates(conn, context)
+                _persist_causal_estimates_duckdb(conn, context, now)
             except Exception:
                 logger.exception("feat_causal_estimates_skipped")
 
             # feat_cluster_membership: aggregate multiple clustering dimensions into one row
             try:
-                _persist_cluster_membership(conn, context)
+                _persist_cluster_membership_duckdb(conn, context, now)
             except Exception:
                 logger.exception("feat_cluster_membership_skipped")
 
             # feat_birank_annual: annual BiRank snapshots (1980 onwards)
             try:
-                _persist_birank_annual(conn, context)
+                _persist_birank_annual_duckdb(conn, context, now)
             except Exception:
                 logger.exception("feat_birank_annual_skipped")
 
@@ -1188,14 +1347,59 @@ def _persist_features_to_db(context: PipelineContext) -> None:
         logger.exception("feat_db_persist_failed")
 
 
-def _persist_causal_estimates(conn: Any, context: PipelineContext) -> None:
-    """Persist causal inference results to feat_causal_estimates.
+def _persist_director_circles_duckdb(conn: Any, circles_dict: dict, now: Any) -> None:
+    """Write agg_director_circles rows from context.circles into DuckDB."""
+    import dataclasses
+    import json as _json
+
+    batch: list[tuple] = []
+    for director_id, circle in circles_dict.items():
+        if dataclasses.is_dataclass(circle) and not isinstance(circle, type):
+            circle = dataclasses.asdict(circle)
+        if not isinstance(circle, dict):
+            continue
+        for member in circle.get("members", []):
+            if dataclasses.is_dataclass(member) and not isinstance(member, type):
+                member = dataclasses.asdict(member)
+            if not isinstance(member, dict):
+                continue
+            pid = member.get("person_id")
+            if not pid:
+                continue
+            roles = member.get("roles") or []
+            batch.append((
+                pid,
+                director_id,
+                member.get("shared_works") or 0,
+                member.get("hit_rate"),
+                _json.dumps(roles, ensure_ascii=False) if isinstance(roles, list) else roles,
+                member.get("latest_year"),
+            ))
+    if not batch:
+        return
+    conn.executemany(
+        """
+        INSERT INTO agg_director_circles
+            (person_id, director_id, shared_works, hit_rate, roles, latest_year)
+        VALUES (?,?,?,?,?,?)
+        ON CONFLICT (person_id, director_id) DO UPDATE SET
+            shared_works=excluded.shared_works,
+            hit_rate=excluded.hit_rate,
+            roles=excluded.roles,
+            latest_year=excluded.latest_year
+        """,
+        batch,
+    )
+
+
+def _persist_causal_estimates_duckdb(conn: Any, context: PipelineContext, now: Any) -> None:
+    """Persist causal inference results to feat_causal_estimates in DuckDB.
 
     Collects per-person values from PipelineContext.peer_effect_result,
-    career_friction, and era_effects, then upserts them.
+    career_friction, and era_effects. Skips the debut-year lookup that required
+    a SQLite-only credits.credit_year query (era_fe mapping is omitted here;
+    era_deflated_iv defaults to None).
     """
-    from src.database import upsert_feat_causal_estimates
-
     # peer effect: person_peer_boost (per-person)
     peer_boosts: dict[str, float] = {}
     if context.peer_effect_result is not None and context.peer_effect_result.identified:
@@ -1204,57 +1408,58 @@ def _persist_causal_estimates(conn: Any, context: PipelineContext) -> None:
     # career friction index (per-person)
     friction_index: dict[str, float] = context.career_friction or {}
 
-    # era fixed effect: era_fe is a year→value map; assign value for each person's debut year
-    era_fe_by_person: dict[str, float] = {}
-    if context.era_effects is not None:
-        era_fe: dict[int, float] = getattr(context.era_effects, "era_fe", {}) or {}
-        if era_fe:
-            # fetch debut year for each person from credits
-            debut_rows = conn.execute("""
-                SELECT person_id, MIN(credit_year) AS debut_year
-                FROM credits
-                WHERE credit_year IS NOT NULL AND credit_year > 1900
-                GROUP BY person_id
-            """).fetchall()
-            for row in debut_rows:
-                # use era_fe at debut year; fall back to nearest year if missing
-                dy = row["debut_year"]
-                if dy in era_fe:
-                    era_fe_by_person[row["person_id"]] = era_fe[dy]
-                else:
-                    # interpolate from nearest available year
-                    nearest = min(era_fe.keys(), key=lambda y: abs(y - dy))
-                    era_fe_by_person[row["person_id"]] = era_fe[nearest]
-
     all_pids = (
         set(peer_boosts)
         | set(friction_index)
-        | set(era_fe_by_person)
         | set(context.iv_scores)
     )
     if not all_pids:
         return
 
-    upsert_feat_causal_estimates(
-        conn,
-        peer_boosts=peer_boosts,
-        friction_index=friction_index,
-        era_fe_by_person=era_fe_by_person,
-        iv_scores=context.iv_scores,
+    rows: list[tuple] = []
+    for pid in all_pids:
+        iv = context.iv_scores.get(pid)
+        rows.append((
+            pid,
+            round(peer_boosts.get(pid, 0.0), 6),
+            round(friction_index.get(pid, 0.0), 6),
+            None,   # era_fe: requires debut-year lookup via SQLite credits — deferred to §4.4
+            None,   # era_deflated_iv: depends on era_fe
+            None,   # opportunity_residual: not available here
+            round(iv, 6) if iv is not None else None,
+            now,
+        ))
+
+    conn.executemany(
+        """
+        INSERT INTO feat_causal_estimates (
+            person_id, peer_effect_boost, career_friction,
+            era_fe, era_deflated_iv, opportunity_residual,
+            iv_score, updated_at
+        ) VALUES (?,?,?,?,?,?,?,?)
+        ON CONFLICT (person_id) DO UPDATE SET
+            peer_effect_boost=excluded.peer_effect_boost,
+            career_friction=excluded.career_friction,
+            era_fe=CASE WHEN excluded.era_fe IS NOT NULL THEN excluded.era_fe ELSE era_fe END,
+            era_deflated_iv=CASE WHEN excluded.era_deflated_iv IS NOT NULL THEN excluded.era_deflated_iv ELSE era_deflated_iv END,
+            opportunity_residual=CASE WHEN excluded.opportunity_residual IS NOT NULL THEN excluded.opportunity_residual ELSE opportunity_residual END,
+            iv_score=excluded.iv_score,
+            updated_at=excluded.updated_at
+        """,
+        rows,
     )
+    logger.info("feat_causal_estimates_written_duckdb", count=len(rows))
 
 
-def _persist_cluster_membership(conn: Any, context: PipelineContext) -> None:
-    """Persist each clustering dimension to feat_cluster_membership.
+def _persist_cluster_membership_duckdb(conn: Any, context: PipelineContext, now: Any) -> None:
+    """Persist each clustering dimension to feat_cluster_membership in DuckDB.
 
     - community_map (Phase 4 graph communities)
     - career_tracks (Phase 6)
     - growth_trend (Phase 9 analysis: growth)
-    - studio_cluster (Phase 9 analysis: studio_clustering + feat_studio_affiliation)
+    - studio_cluster (Phase 9 analysis: studio_clustering)
     - cooccurrence_group (Phase 9 analysis: cooccurrence_groups)
     """
-    from src.database import upsert_feat_cluster_membership
-
     growth_data = _get_analysis_result(context, "growth", {})
     studio_clustering = _get_analysis_result(context, "studio_clustering", {})
     cooccurrence_groups = _get_analysis_result(context, "cooccurrence_groups", {})
@@ -1268,46 +1473,155 @@ def _persist_cluster_membership(conn: Any, context: PipelineContext) -> None:
     ):
         return
 
-    upsert_feat_cluster_membership(
-        conn,
-        community_map=context.community_map,
-        career_tracks=context.career_tracks,
-        growth_data=growth_data,
-        studio_clustering=studio_clustering,
-        cooccurrence_groups=cooccurrence_groups,
+    # --- growth_trend per person ---
+    growth_trend_map: dict[str, str] = {}
+    persons_data = growth_data.get("persons", {}) if isinstance(growth_data, dict) else {}
+    if isinstance(persons_data, dict):
+        for pid, info in persons_data.items():
+            if isinstance(info, dict) and "trend" in info:
+                growth_trend_map[pid] = info["trend"]
+    elif isinstance(persons_data, list):
+        for info in persons_data:
+            if isinstance(info, dict) and "person_id" in info and "trend" in info:
+                growth_trend_map[info["person_id"]] = info["trend"]
+
+    # --- studio cluster per person ---
+    studio_cluster_map: dict[str, tuple] = {}
+    assignments: dict = {}
+    if isinstance(studio_clustering, dict):
+        assignments = studio_clustering.get("assignments", {})
+    # Build person→studio from feat_studio_affiliation if available in DuckDB
+    studio_affiliation: dict[str, str] = {}
+    try:
+        rows_sa = conn.execute("""
+            SELECT person_id, studio_name
+            FROM feat_studio_affiliation
+            WHERE is_main_studio = 1
+               OR n_works = (
+                   SELECT MAX(s2.n_works) FROM feat_studio_affiliation s2
+                   WHERE s2.person_id = feat_studio_affiliation.person_id
+               )
+            GROUP BY person_id, studio_name
+        """).fetchall()
+        for row in rows_sa:
+            studio_affiliation[row[0]] = row[1]
+    except Exception:
+        pass
+    for pid, studio_name in studio_affiliation.items():
+        info = assignments.get(studio_name)
+        if info and isinstance(info, dict):
+            studio_cluster_map[pid] = (info.get("cluster_id"), info.get("cluster_name"))
+
+    # --- cooccurrence_group_id per person ---
+    cooccurrence_map: dict[str, int] = {}
+    groups: list = []
+    if isinstance(cooccurrence_groups, dict):
+        groups = cooccurrence_groups.get("groups", [])
+    for idx, group in enumerate(groups):
+        if isinstance(group, dict):
+            for pid in group.get("members", []):
+                cooccurrence_map[pid] = idx
+
+    all_pids: set[str] = (
+        set(context.community_map or {})
+        | set(context.career_tracks or {})
+        | set(growth_trend_map)
+        | set(studio_cluster_map)
+        | set(cooccurrence_map)
     )
+    if not all_pids:
+        return
+
+    community_map = context.community_map or {}
+    career_tracks = context.career_tracks or {}
+    rows_out: list[tuple] = []
+    for pid in all_pids:
+        sc = studio_cluster_map.get(pid, (None, None))
+        rows_out.append((
+            pid,
+            community_map.get(pid),
+            career_tracks.get(pid),
+            growth_trend_map.get(pid),
+            sc[0],
+            sc[1],
+            cooccurrence_map.get(pid),
+            now,
+        ))
+
+    conn.executemany(
+        """
+        INSERT INTO feat_cluster_membership (
+            person_id, community_id, career_track, growth_trend,
+            studio_cluster_id, studio_cluster_name, cooccurrence_group_id,
+            updated_at
+        ) VALUES (?,?,?,?,?,?,?,?)
+        ON CONFLICT (person_id) DO UPDATE SET
+            community_id=excluded.community_id,
+            career_track=excluded.career_track,
+            growth_trend=excluded.growth_trend,
+            studio_cluster_id=excluded.studio_cluster_id,
+            studio_cluster_name=excluded.studio_cluster_name,
+            cooccurrence_group_id=excluded.cooccurrence_group_id,
+            updated_at=excluded.updated_at
+        """,
+        rows_out,
+    )
+    logger.info("feat_cluster_membership_written_duckdb", count=len(rows_out))
 
 
-def _persist_birank_annual(conn: Any, context: PipelineContext) -> None:
-    """Persist annual BiRank snapshots to feat_birank_annual and record the input fingerprint.
+def _persist_birank_annual_duckdb(conn: Any, context: PipelineContext, now: Any) -> None:
+    """Persist annual BiRank snapshots to feat_birank_annual in DuckDB.
 
     No-ops when temporal_pagerank returned None (skipped due to no data changes).
-    When computation ran: upserts all year snapshots (ON CONFLICT DO UPDATE) and
-    writes the input fingerprint to birank_compute_state for next-run change detection.
+    birank_compute_state (SQLite incremental caching table) is not written here —
+    that table is SQLite-only and will be migrated in §4.4.
     """
-    from src.database import (
-        _BIRANK_ANNUAL_MIN_YEAR,
-        upsert_birank_compute_state,
-        upsert_feat_birank_annual,
-    )
+    _BIRANK_ANNUAL_MIN_YEAR = 1980
 
     temporal_pr = _get_analysis_result(context, "temporal_pagerank", None)
     if not temporal_pr:
-        return  # None (skipped) or empty dict
+        return
 
     birank_timelines = temporal_pr.get("birank_timelines", {})
     if not birank_timelines:
         return
 
-    # upsert all years including changed ones (ON CONFLICT DO UPDATE overwrites)
-    upsert_feat_birank_annual(conn, birank_timelines, min_year=_BIRANK_ANNUAL_MIN_YEAR)
+    rows: list[tuple] = []
+    for pid, tl in birank_timelines.items():
+        for snap in tl.get("snapshots", []):
+            year = snap.get("year")
+            birank = snap.get("birank")
+            if year is None or birank is None or year < _BIRANK_ANNUAL_MIN_YEAR:
+                continue
+            rows.append((
+                pid,
+                year,
+                float(birank),
+                snap.get("raw_pagerank"),
+                snap.get("graph_size"),
+                snap.get("n_credits_cumulative"),
+                now,
+            ))
 
-    # record the input fingerprint used in this run (for next-run change detection)
-    input_fp: dict[int, dict] = temporal_pr.get("_input_fingerprint", {})
-    if input_fp:
-        # int keys may be stringified through a JSON round-trip; normalize back to int
-        normalized: dict[int, dict] = {int(y): v for y, v in input_fp.items()}
-        upsert_birank_compute_state(conn, normalized)
+    if not rows:
+        return
+
+    conn.executemany(
+        """
+        INSERT INTO feat_birank_annual (
+            person_id, year, birank, raw_pagerank,
+            graph_size, n_credits_cumulative, updated_at
+        ) VALUES (?,?,?,?,?,?,?)
+        ON CONFLICT (person_id, year) DO UPDATE SET
+            birank=excluded.birank,
+            raw_pagerank=excluded.raw_pagerank,
+            graph_size=excluded.graph_size,
+            n_credits_cumulative=excluded.n_credits_cumulative,
+            updated_at=excluded.updated_at
+        """,
+        rows,
+    )
+    logger.info("feat_birank_annual_written_duckdb", count=len(rows), min_year=_BIRANK_ANNUAL_MIN_YEAR)
 
 
 def _get_analysis_result(context: PipelineContext, key: str, default: Any) -> Any:

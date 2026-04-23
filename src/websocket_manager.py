@@ -1,7 +1,7 @@
-"""WebSocket マネージャー — リアルタイム進捗配信.
+"""WebSocket manager — real-time progress broadcasting.
 
-パイプライン実行中の進捗、スコア更新などをWebSocket経由で配信。
-複数クライアントへのブロードキャスト対応。
+Broadcasts pipeline progress, score updates, etc. over WebSocket.
+Supports broadcasting to multiple clients simultaneously.
 """
 
 import asyncio
@@ -14,10 +14,7 @@ logger = structlog.get_logger()
 
 
 class WebSocketManager:
-    """WebSocket接続管理とブロードキャスト配信クラス.
-
-    複数のWebSocketクライアントを管理し、メッセージを一斉配信。
-    """
+    """Manages WebSocket connections and broadcasts messages to all clients."""
 
     def __init__(self):
         """Initialize WebSocket manager."""
@@ -117,10 +114,7 @@ def get_websocket_manager() -> WebSocketManager:
 
 
 class PipelineProgressBroadcaster:
-    """Pipeline進捗をWebSocket配信するヘルパークラス.
-
-    パイプライン実行中に使用し、各フェーズの進捗をリアルタイム配信。
-    """
+    """Helper class that broadcasts pipeline phase progress over WebSocket."""
 
     def __init__(self, manager: WebSocketManager | None = None):
         """Initialize progress broadcaster.
@@ -133,7 +127,7 @@ class PipelineProgressBroadcaster:
         self.total_phases = 10
 
     def start_pipeline(self, total_phases: int = 10):
-        """Pipeline開始を通知.
+        """Broadcast pipeline start notification.
 
         Args:
             total_phases: Total number of pipeline phases
@@ -212,7 +206,7 @@ class PipelineProgressBroadcaster:
         )
 
     def complete_pipeline(self, total_persons: int, duration_seconds: float):
-        """Pipeline完了を通知.
+        """Broadcast pipeline completion notification.
 
         Args:
             total_persons: Total persons scored

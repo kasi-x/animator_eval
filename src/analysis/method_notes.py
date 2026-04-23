@@ -4,7 +4,7 @@ Provides utilities to render method notes from meta_lineage metadata.
 Integrated into BaseReportGenerator.write_report() for v2 compliance.
 """
 
-import sqlite3
+import duckdb
 from dataclasses import dataclass
 from typing import Optional
 
@@ -24,7 +24,7 @@ class MethodMetadata:
     inputs_hash: Optional[str]
 
 
-def load_method_metadata(conn: sqlite3.Connection, table_name: str) -> Optional[MethodMetadata]:
+def load_method_metadata(conn: duckdb.DuckDBPyConnection, table_name: str) -> Optional[MethodMetadata]:
     """Load method metadata for a report from meta_lineage.
     
     Args:
@@ -105,7 +105,7 @@ def render_method_notes(metadata: MethodMetadata) -> str:
     return "\n".join(html_parts)
 
 
-def audit_method_completeness(conn: sqlite3.Connection, table_name: str) -> tuple[list[str], list[str]]:
+def audit_method_completeness(conn: duckdb.DuckDBPyConnection, table_name: str) -> tuple[list[str], list[str]]:
     """Audit method metadata completeness.
     
     Args:

@@ -15,6 +15,7 @@ Every section rendered by this module follows the mandatory v2 structure:
 
 from __future__ import annotations
 
+import json
 import re
 import sqlite3
 from dataclasses import dataclass
@@ -381,38 +382,24 @@ class SectionBuilder:
 
     @staticmethod
     def _load_lineage_row(table_name: str, conn: sqlite3.Connection) -> dict:
-        """Fetch the meta_lineage row for table_name as a column→value dict.
-
-        Falls back to a hard-coded column list when the cursor description
-        is unavailable (defensive — older sqlite3 versions / mock cursors).
-        """
-        row = conn.execute(
+        """Fetch the meta_lineage row for table_name as a column→value dict."""
+        cursor = conn.execute(
             "SELECT * FROM meta_lineage WHERE table_name = ?", (table_name,)
-        ).fetchone()
+        )
+        row = cursor.fetchone()
         if row is None:
             raise ValueError(
                 f"No lineage registered for '{table_name}'. "
                 "Call register_meta_lineage() before generating method notes."
             )
-        col_names = [d[0] for d in conn.execute(
-            "SELECT * FROM meta_lineage WHERE 0"
-        ).description or []]
-        if not col_names:
-            col_names = [
-                "table_name", "audience", "source_silver_tables",
-                "source_bronze_forbidden", "source_display_allowed",
-                "formula_version", "computed_at",
-                "ci_method", "null_model", "holdout_method",
-                "row_count", "notes",
-            ]
+        col_names = [d[0] for d in cursor.description]
         return dict(zip(col_names, row))
 
     @staticmethod
     def _parse_silver_tables(data: dict) -> list[str]:
         """JSON-decode source_silver_tables, defaulting to [] on bad data."""
-        import json as _json
         try:
-            return _json.loads(data.get("source_silver_tables", "[]"))
+            return json.loads(data.get("source_silver_tables", "[]"))
         except (ValueError, TypeError):
             return []
 

@@ -1,4 +1,4 @@
-"""Temporal Influence Analysis — 時系列での影響力変化追跡.
+"""Temporal Influence Analysis — tracking influence changes over time.
 
 クリエイターのBiRank/Patronage/Person FEスコアが時間とともにどう変化するかを分析。
 キャリアの転換点、急上昇期、衰退期などを特定し、業界トレンドを可視化。
@@ -83,7 +83,7 @@ def compute_temporal_profiles(
     Returns:
         person_id → TemporalProfile
     """
-    # person_id → year → credits のマッピング
+    # person_id → year → credits mapping
     person_year_credits: dict[str, dict[int, list[Credit]]] = defaultdict(
         lambda: defaultdict(list)
     )
@@ -333,7 +333,7 @@ def detect_industry_trends(
                     sum(year_composites) / len(year_composites), 2
                 )
 
-    # defaultdictを通常のdictに変換
+    # Convert defaultdict to regular dict
     result = {}
     for year in sorted(year_stats.keys()):
         stats = year_stats[year]

@@ -106,6 +106,11 @@ def load_anime_silver(path: Path | str | None = None) -> list:
     anime_list = []
     for r in rows:
         try:
+            studios_raw = r.get("studios")
+            if isinstance(studios_raw, (list, tuple)):
+                studios = list(studios_raw)
+            else:
+                studios = []
             anime_list.append(AnimeAnalysis(
                 id=r["id"],
                 title_ja=r.get("title_ja") or "",
@@ -123,6 +128,7 @@ def load_anime_silver(path: Path | str | None = None) -> list:
                 source=r.get("source_mat"),
                 work_type=r.get("work_type"),
                 scale_class=r.get("scale_class"),
+                studios=studios,
             ))
         except Exception:
             logger.debug("silver_anime_skip", id=r.get("id"))

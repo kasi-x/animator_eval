@@ -34,6 +34,17 @@ jobs:
           fi
           echo "✅ meta_lineage reference gate PASSED"
 
+      - name: Method Notes validation gate
+        run: |
+          echo "📋 Checking meta_lineage rows have required method note fields..."
+          pixi run python scripts/report_generators/ci_check_method_notes.py
+          if [ $? -ne 0 ]; then
+            echo "❌ Method Notes validation FAILED"
+            exit 1
+          fi
+          echo "✅ Method Notes validation PASSED"
+
+
       - name: Validate Report Briefs
         run: |
           echo "🔍 Validating report briefs..."

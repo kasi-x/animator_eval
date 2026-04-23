@@ -1,4 +1,4 @@
-"""Multilayer Network Analysis — 役職レイヤー別ネットワーク分析.
+"""Multilayer Network Analysis — network analysis by role layer.
 
 アニメクレジットを役職カテゴリで分離し、4つのレイヤーグラフを構築する。
 各レイヤーでの betweenness / degree centrality を計算することで
@@ -36,11 +36,11 @@ logger = structlog.get_logger()
 # Layer Definitions
 # =============================================================================
 
-#: role_category → layer_name の対応表（4レイヤー粗粒化）
+#: role_category → layer_name mapping (4-layer coarse-graining)
 ROLE_CATEGORY_TO_LAYER: dict[str, str] = {
     # Direction layer
     "direction": "direction",
-    # Animation layer（作画・デザイン・仕上げ全般）
+    # Animation layer (drawing, design, finishing)
     "animation_supervision": "animation",
     "animation": "animation",
     "design": "animation",
@@ -51,7 +51,7 @@ ROLE_CATEGORY_TO_LAYER: dict[str, str] = {
     # Production layer
     "production": "production",
     "production_management": "production",
-    # Technical layer（撮影・CG・美術・音楽・脚本）
+    # Technical layer (photography, CG, art, music, screenplay)
     "technical": "technical",
     "art": "technical",
     "sound": "technical",
@@ -61,7 +61,7 @@ ROLE_CATEGORY_TO_LAYER: dict[str, str] = {
 LAYER_NAMES: list[str] = ["direction", "animation", "production", "technical"]
 
 #: career track names (values of career_track)
-#: animator_director = アニメーター出身で後に監督となった人物（宮崎駿・庵野秀明・山田尚子など）
+#: animator_director = persons who began as animators and later became directors
 CAREER_TRACKS: list[str] = [
     "animator",  # 原画・作監など、アニメーター工程が主体
     "animator_director",  # アニメーター出身で演出・監督へ転向した人物
@@ -71,7 +71,7 @@ CAREER_TRACKS: list[str] = [
     "multi_track",  # 複数畑・分類困難
 ]
 
-#: role_category → career_track の基本マッピング（初期クレジット判定用）
+#: role_category → career_track basic mapping (for initial credit classification)
 ROLE_CATEGORY_TO_TRACK: dict[str, str] = {
     "animation_supervision": "animator",
     "animation": "animator",
@@ -209,7 +209,7 @@ def infer_career_track(
 
     base_track = top_track
 
-    # animator 畑で、かつキャリア後半に direction クレジットが出現するか確認
+    # Check if credits are from the animation track and direction credits appear in the latter career
     # (animator_director determination)
     if base_track == "animator" and career_span >= 5:
         # second half of career = career_span/2 years after debut
@@ -243,7 +243,7 @@ def infer_all_career_tracks(
     Returns:
         person_id → career_track の辞書
     """
-    # person_id → credits のマッピングを構築
+    # Build person_id → credits mapping
     person_credits_map: dict[str, list[Credit]] = defaultdict(list)
     for c in credits:
         person_credits_map[c.person_id].append(c)
@@ -300,7 +300,7 @@ def build_layer_graphs(
     for layer_name, layer_creds in layer_credits.items():
         G = nx.Graph()
 
-        # anime_id → [person_id] の集約
+        # Aggregate anime_id → [person_id]
         anime_persons: dict[str, list[str]] = defaultdict(list)
         for c in layer_creds:
             if c.anime_id in anime_map:
@@ -390,7 +390,7 @@ def compute_multilayer_centrality(
             )
             continue
 
-        # k=100 近似 betweenness（大グラフ）または完全計算（小グラフ）
+        # k=100 approximate betweenness (large graph) or exact computation (small graph)
         k = 100 if n_nodes > 500 else None
         btw = nx.betweenness_centrality(
             G, k=k, weight="weight", normalized=True, seed=42
@@ -411,7 +411,7 @@ def compute_multilayer_centrality(
     for btw in layer_betweenness.values():
         all_persons.update(btw.keys())
 
-    # MultilayerCentrality を組み立て
+    # Assemble MultilayerCentrality
     results: dict[str, MultilayerCentrality] = {}
 
     for pid in all_persons:
@@ -440,7 +440,7 @@ def compute_multilayer_centrality(
             layers_active=layers_active,
         )
 
-    # top_n に絞る
+    # Trim to top_n
     sorted_results = sorted(
         results.values(),
         key=lambda m: m.aggregate_betweenness,

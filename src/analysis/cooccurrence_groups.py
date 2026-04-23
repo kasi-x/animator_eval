@@ -29,7 +29,7 @@ COOCCURRENCE_ROLES: frozenset[Role] = frozenset(
     }
 )
 
-# temporal_slices の区切り
+# temporal_slices boundaries
 _PERIODS = [
     ("〜1999", None, 1999),
     ("2000-2004", 2000, 2004),
@@ -69,7 +69,7 @@ def compute_cooccurrence_groups(
     if iv_scores is None:
         iv_scores = {}
 
-    # Step 1: コアスタッフのクレジットのみ抽出
+    # Step 1: extract credits for core staff only
     core_credits = [c for c in credits if c.role in COOCCURRENCE_ROLES]
     logger.info(
         "cooccurrence_filter",
@@ -80,14 +80,14 @@ def compute_cooccurrence_groups(
     if not core_credits:
         return _empty_result(min_shared_works, max_group_size)
 
-    # Step 2: anime_id → {person_id → set[role]} のマップ構築
+    # Step 2: build anime_id → {person_id → set[role]} mapping
     anime_to_staff: dict[str, dict[str, set[str]]] = defaultdict(
         lambda: defaultdict(set)
     )
     for c in core_credits:
         anime_to_staff[c.anime_id][c.person_id].add(c.role.value)
 
-    # Step 3: 全k-組み合わせ (k=3..max_group_size) を共起カウント
+    # Step 3: co-occurrence count for all k-combinations (k=3..max_group_size)
     # group_counts: frozenset[person_id] → list[anime_id]
     group_counts: dict[frozenset, list[str]] = defaultdict(list)
 
@@ -108,7 +108,7 @@ def compute_cooccurrence_groups(
             for combo in combinations(persons, k):
                 group_counts[frozenset(combo)].append(anime_id)
 
-    # Step 4: min_shared_works でフィルタ
+    # Step 4: filter by min_shared_works
     filtered: list[tuple[frozenset, list[str]]] = [
         (group, anime_ids)
         for group, anime_ids in group_counts.items()
@@ -122,7 +122,7 @@ def compute_cooccurrence_groups(
         min_shared_works=min_shared_works,
     )
 
-    # Step 5: shared_works 降順ソート + メタデータ付与
+    # Step 5: sort by shared_works descending + attach metadata
     filtered.sort(key=lambda x: (-len(x[1]), -len(x[0])))
 
     groups = []
@@ -172,7 +172,7 @@ def compute_cooccurrence_groups(
             }
         )
 
-    # Step 6: サマリー
+    # Step 6: summary
     by_size: dict[str, int] = defaultdict(int)
     for g in groups:
         by_size[str(g["size"])] += 1
@@ -214,7 +214,7 @@ def _build_temporal_slices(groups: list[dict]) -> list[dict]:
             if fy <= period_end and ly >= period_start:
                 active_in_period.append(g)
 
-        # top_groups: shared_works 降順で上位5件
+        # top_groups: top 5 by shared_works descending
         top_groups = sorted(active_in_period, key=lambda g: -g["shared_works"])[:5]
 
         slices.append(

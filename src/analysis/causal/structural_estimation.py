@@ -1,4 +1,4 @@
-"""Structural estimation of major studio effects (構造推定).
+"""Structural estimation of major studio effects.
 
 ⚠️ 参考分析（Reference Analysis）
 本モジュールの結果は研究参考情報として提供されます。

@@ -68,6 +68,8 @@ CREATE TABLE IF NOT EXISTS credits (
     raw_role        VARCHAR,
     episode         INTEGER,
     evidence_source VARCHAR NOT NULL,
+    affiliation     VARCHAR,
+    position        INTEGER,
     updated_at      TIMESTAMP DEFAULT now()
 );
 """
@@ -152,22 +154,38 @@ def _build_persons_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
 # All credit rows are kept as evidence (no key-level dedup; unique index
 # on (person_id, anime_id, role, episode, evidence_source) handles exact dups).
 # evidence_source uses the explicit column if present, falls back to 'source'.
-_CREDITS_SQL = """
+# affiliation/position are optional columns — use NULL when absent from parquet
+# to avoid DuckDB 1.4.3 binder error (alias self-reference when column missing).
+_CREDITS_SQL_TMPL = """
 INSERT INTO credits
-SELECT DISTINCT
-    person_id,
-    anime_id,
-    role,
-    raw_role,
-    episode,
-    COALESCE(evidence_source, source) AS evidence_source,
-    now()                             AS updated_at
-FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
-WHERE  person_id IS NOT NULL
-  AND  anime_id IS NOT NULL
-  AND  role IS NOT NULL
-  AND  COALESCE(evidence_source, source) IS NOT NULL
+SELECT person_id, anime_id, role, raw_role, episode,
+       evidence_source, affiliation, position, updated_at
+FROM (
+    SELECT DISTINCT
+        person_id,
+        anime_id,
+        role,
+        raw_role,
+        episode,
+        COALESCE(evidence_source, source) AS evidence_source,
+        {affiliation}                     AS affiliation,
+        {position}                        AS position,
+        now()                             AS updated_at
+    FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE  person_id IS NOT NULL
+      AND  anime_id IS NOT NULL
+      AND  role IS NOT NULL
+      AND  COALESCE(evidence_source, source) IS NOT NULL
+) sub
 """
+
+
+def _build_credits_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
+    cols = _parquet_columns(conn, glob)
+    return _CREDITS_SQL_TMPL.format(
+        affiliation="TRY_CAST(affiliation AS VARCHAR)" if "affiliation" in cols else "NULL::VARCHAR",
+        position="TRY_CAST(position AS INTEGER)" if "position" in cols else "NULL::INTEGER",
+    )
 
 
 def integrate(
@@ -213,8 +231,8 @@ def integrate(
             counts["persons"] = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
             logger.info("silver_persons", count=counts["persons"])
 
-            # credits
-            conn.execute(_CREDITS_SQL, [credits_glob])
+            # credits (column mapping is schema-dependent — see _build_credits_sql)
+            conn.execute(_build_credits_sql(conn, credits_glob), [credits_glob])
             counts["credits"] = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
             logger.info("silver_credits", count=counts["credits"])
 

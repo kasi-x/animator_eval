@@ -1,4 +1,4 @@
-"""Double/Debiased Machine Learning — 二重機械学習による因果推論.
+"""Double/Debiased Machine Learning — causal inference via doubly robust ML.
 
 Chernozhukov, Chetverikov, Demirer, Duflo, Hansen, Newey, Robins (2018):
 "Double/debiased machine learning for treatment and structural parameters"
@@ -61,7 +61,7 @@ class EstimationResult:
 
 @dataclass
 class DualEstimate:
-    """OLS vs DML の2パターン比較."""
+    """Two-pattern comparison: OLS vs DML."""
 
     parameter: str  # 推定対象の名前
     description: str  # 日本語の説明
@@ -197,7 +197,7 @@ def _fit_dml(
 
 
 def _fit_ols(Y: np.ndarray, D: np.ndarray, X: np.ndarray) -> EstimationResult:
-    """Naive OLS: Y = θ·D + X·β + ε (線形、cross-fittingなし)."""
+    """Naive OLS: Y = θ·D + X·β + ε (linear, no cross-fitting)."""
     Z = np.column_stack([D.reshape(-1, 1), X])
     try:
         beta = np.linalg.lstsq(Z, Y, rcond=None)[0]
@@ -287,7 +287,7 @@ def _estimate_person_fe_effect(
     person_fe: dict[str, float],
     studio_fe: dict[str, float],
 ) -> DualEstimate | None:
-    """person_fe が production_scale を因果的に説明するか検証.
+    """Verify whether person_fe causally explains production_scale.
 
     Y = log(production_scale), D = person_fe, X = studio/genre/format/year/role
     """

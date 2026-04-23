@@ -1,18 +1,11 @@
-"""Phase 1: Data Loading — load persons, anime, and credits from database."""
+"""Phase 1: Data Loading — load persons, anime, and credits from silver.duckdb."""
 
 import re
-import sqlite3
 from collections import defaultdict
 
 import structlog
 
-from src.database import (
-    load_all_anime,
-    load_all_characters,
-    load_all_credits,
-    load_all_persons,
-    load_all_voice_actor_credits,
-)
+from src.analysis.silver_reader import load_anime_silver, load_credits_silver, load_persons_silver
 from src.models import Credit, Person
 from src.pipeline_phases.context import PipelineContext
 from src.models import Role
@@ -65,7 +58,7 @@ _ORG_SUFFIX_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Leading special symbol → garbage data (e.g. "○フジテレビ[ロゴ]", "※以下…", "★")
+# Leading special symbol → garbage data (e.g. "○broadcaster[logo]", "※footnote…", "★")
 _ORG_SYMBOL_RE = re.compile(r"^[○◎★☆●■□\[【※〔◆▼▶]")
 
 
@@ -180,9 +173,7 @@ def _filter_non_production_persons(
     return filtered, non_production_ids
 
 
-def _llm_filter_organizations(
-    persons: list[Person], conn: sqlite3.Connection
-) -> set[str]:
+def _llm_filter_organizations(persons: list[Person]) -> set[str]:
     """Use LLM + studio DB to detect organizations masquerading as persons.
 
     Returns set of person_ids identified as organizations.
@@ -192,21 +183,13 @@ def _llm_filter_organizations(
     except ImportError:
         return set()
 
-    # Collect known studio names from DB
-    try:
-        rows = conn.execute(
-            "SELECT name FROM studios WHERE name IS NOT NULL"
-        ).fetchall()
-        studio_names = {r[0].strip() for r in rows if r[0]}
-    except Exception:
-        studio_names = set()
-
-    result = classify_person_or_org(persons, studio_names=studio_names, conn=conn)
+    result = classify_person_or_org(persons, studio_names=set(), conn=None)
     return result.org_ids
 
 
 def _llm_normalize_names(
-    persons: list[Person], credits: list[Credit], conn: sqlite3.Connection | None = None
+    persons: list[Person],
+    credits: list[Credit],
 ) -> tuple[list[Person], list[Credit]]:
     """Use LLM to normalize names with parenthetical annotations.
 
@@ -220,7 +203,7 @@ def _llm_normalize_names(
     except ImportError:
         return persons, []
 
-    norm_results = normalize_names(persons, conn=conn)
+    norm_results = normalize_names(persons, conn=None)
     if not norm_results:
         return persons, []
 
@@ -303,12 +286,8 @@ def _llm_normalize_names(
     return updated, extra_credits
 
 
-def load_pipeline_data(context: PipelineContext, conn: sqlite3.Connection) -> None:
-    """Load all data from database into context.
-
-    Args:
-        context: Pipeline context to populate
-        conn: Database connection
+def load_pipeline_data(context: PipelineContext) -> None:
+    """Load all data from silver.duckdb into context.
 
     Updates context fields:
         - persons: List of all Person objects
@@ -317,9 +296,9 @@ def load_pipeline_data(context: PipelineContext, conn: sqlite3.Connection) -> No
         - anime_map: Dict mapping anime_id to Anime object
     """
     with context.monitor.measure("data_loading"):
-        all_persons = load_all_persons(conn)
-        context.anime_list = load_all_anime(conn)
-        all_credits = load_all_credits(conn)
+        all_persons = load_persons_silver()
+        context.anime_list = load_anime_silver()
+        all_credits = load_credits_silver()
 
     # Filter out garbage/placeholder person entries
     garbage_ids: set[str] = set()
@@ -340,16 +319,14 @@ def load_pipeline_data(context: PipelineContext, conn: sqlite3.Connection) -> No
     if non_production_ids:
         logger.info("filtered_non_production_persons", count=len(non_production_ids))
 
-    # LLM-assisted organization detection (studio DB cross-ref + batch LLM)
-    llm_org_ids = _llm_filter_organizations(filtered_persons, conn)
+    # LLM-assisted organization detection (batch LLM, no DB caching during pipeline)
+    llm_org_ids = _llm_filter_organizations(filtered_persons)
     if llm_org_ids:
         filtered_persons = [p for p in filtered_persons if p.id not in llm_org_ids]
         logger.info("filtered_llm_orgs", count=len(llm_org_ids))
 
     # LLM-assisted name normalization (parenthetical removal, multi-person split)
-    filtered_persons, extra_credits = _llm_normalize_names(
-        filtered_persons, all_credits, conn=conn
-    )
+    filtered_persons, extra_credits = _llm_normalize_names(filtered_persons, all_credits)
 
     context.persons = filtered_persons
 
@@ -365,14 +342,10 @@ def load_pipeline_data(context: PipelineContext, conn: sqlite3.Connection) -> No
     # Build anime_map for quick lookups
     context.anime_map = {a.id: a for a in context.anime_list}
 
-    # Load voice actor / character data for VA pipeline
-    _load_va_data(context, conn)
-
     # Update monitoring counters
     context.monitor.increment_counter("persons_loaded", len(context.persons))
     context.monitor.increment_counter("anime_loaded", len(context.anime_list))
     context.monitor.increment_counter("credits_loaded", len(context.credits))
-    context.monitor.increment_counter("va_credits_loaded", len(context.va_credits))
     context.monitor.record_memory("after_data_load")
 
     logger.info(
@@ -380,37 +353,4 @@ def load_pipeline_data(context: PipelineContext, conn: sqlite3.Connection) -> No
         persons=len(context.persons),
         anime=len(context.anime_list),
         credits=len(context.credits),
-        va_credits=len(context.va_credits),
-        characters=len(context.characters),
-        va_persons=len(context.va_person_ids),
-    )
-
-
-def _load_va_data(context: PipelineContext, conn: sqlite3.Connection) -> None:
-    """Load voice actor and character data for the VA pipeline.
-
-    Populates context.va_credits, context.characters, context.character_map,
-    and context.va_person_ids.
-    """
-    try:
-        context.va_credits = load_all_voice_actor_credits(conn)
-        context.characters = load_all_characters(conn)
-    except Exception:
-        logger.debug("va_data_not_available", msg="tables may not exist yet")
-        return
-
-    if not context.va_credits:
-        return
-
-    # Build character lookup
-    context.character_map = {c.id: c for c in context.characters}
-
-    # Identify all person IDs that appear as voice actors
-    context.va_person_ids = {cva.person_id for cva in context.va_credits}
-
-    logger.info(
-        "va_data_loaded",
-        va_credits=len(context.va_credits),
-        characters=len(context.characters),
-        va_persons=len(context.va_person_ids),
     )

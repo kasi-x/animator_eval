@@ -321,7 +321,7 @@ def explain_authority(
     *,
     _person_credits: list[Credit] | None = None,
 ) -> list[dict]:
-    """BiRank スコアの主要寄与要因を返す.
+    """Return the primary contributing factors for a BiRank score.
 
     高評価/高プロフィール作品への参加が BiRank に寄与する。
     """
@@ -360,7 +360,7 @@ def explain_trust(
     _person_credits: list[Credit] | None = None,
     _anime_directors: dict[str, set[str]] | None = None,
 ) -> list[dict]:
-    """Patronage スコアの主要寄与要因を返す.
+    """Return the primary contributing factors for a Patronage score.
 
     同じ監督との繰り返し共演が Patronage に寄与する。
     """
@@ -417,7 +417,7 @@ def explain_skill(
     *,
     _person_credits: list[Credit] | None = None,
 ) -> list[dict]:
-    """Person FE スコアの主要寄与要因を返す.
+    """Return the primary contributing factors for a Person FE score.
 
     高評価作品への参加が Person FE レーティングに影響する。
     年代順にソートして、最近の実績を強調する。

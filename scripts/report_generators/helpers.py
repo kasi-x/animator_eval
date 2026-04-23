@@ -16,11 +16,11 @@ import plotly.graph_objects as go
 # Global directories (must be configured by main script)
 JSON_DIR = Path("result/json")
 
-# Go Explorer server URL (pixi run explorer でポート 3000 起動)
+# Go Explorer server URL (start with: pixi run explorer, port 3000)
 EXPLORER_URL = "http://localhost:3000"
 
 def person_link(name: str, person_id: str) -> str:
-    """個人名を Go Explorer の詳細ページへのリンクに変換する."""
+    """Convert a person's name to a link to the Go Explorer detail page."""
     if not person_id:
         return name
     url = f"{EXPLORER_URL}/#person/{person_id}"
@@ -34,7 +34,7 @@ def person_link(name: str, person_id: str) -> str:
 
 
 def load_json(name: str) -> dict | list | None:
-    """JSONファイルを安全にロード."""
+    """Safely load a JSON file."""
     path = JSON_DIR / name
     if not path.exists():
         print(f"  [SKIP] {name} not found")
@@ -44,14 +44,14 @@ def load_json(name: str) -> dict | list | None:
 
 
 def get_footer_stats() -> str:
-    """フッター用のデータ統計を動的生成."""
+    """Dynamically generate data statistics for the footer."""
     summary = load_json("summary.json")
     if summary and "data" in summary:
         d = summary["data"]
         persons = d.get("persons", 0) or d.get("scored_persons", 0)
         credits = d.get("credits", 0)
         return f"{persons:,}人 / {credits:,}クレジット"
-    # fallback: scores.json の件数
+    # fallback: record count from scores.json
     scores = load_json("scores.json")
     if scores and isinstance(scores, list):
         return f"{len(scores):,}人"
@@ -59,60 +59,60 @@ def get_footer_stats() -> str:
 
 
 # ---------------------------------------------------------------------------
-# データアクセサ (テーブル名ベース)
-# JSON ファイルから読む。将来 DB からの直接読み込みに置き換え可能。
-# 性別・ロール等の軸別集計はレポート側で conn.execute(SQL) を使うこと。
+# Data accessors (table-name-based)
+# Read from JSON files. Can be replaced with direct DB reads in the future.
+# For axis aggregations by gender/role etc., use conn.execute(SQL) in the report.
 # ---------------------------------------------------------------------------
 
 def get_feat_person_scores() -> list[dict]:
-    """scores.json (feat_person_scores 互換) を返す."""
+    """Return scores.json (feat_person_scores compatible)."""
     return load_json("scores.json") or []
 
 
 def get_agg_milestones() -> dict:
-    """milestones.json (agg_milestones 互換) を返す."""
+    """Return milestones.json (agg_milestones compatible)."""
     return load_json("milestones.json") or {}
 
 
 def get_agg_director_circles() -> dict:
-    """circles.json (agg_director_circles 互換) を返す."""
+    """Return circles.json (agg_director_circles compatible)."""
     return load_json("circles.json") or {}
 
 
 def get_feat_mentorships() -> list:
-    """mentorships.json (feat_mentorships 互換) を返す."""
+    """Return mentorships.json (feat_mentorships compatible)."""
     return load_json("mentorships.json") or []
 
 
 def get_feat_career() -> dict:
-    """growth.json (feat_career 互換) を返す."""
+    """Return growth.json (feat_career compatible)."""
     return load_json("growth.json") or {}
 
 
 def get_feat_genre_affinity() -> dict:
-    """genre_affinity.json (feat_genre_affinity 互換) を返す."""
+    """Return genre_affinity.json (feat_genre_affinity compatible)."""
     return load_json("genre_affinity.json") or {}
 
 
 def get_feat_network() -> dict:
-    """bridges.json (feat_network 互換) を返す."""
+    """Return bridges.json (feat_network compatible)."""
     return load_json("bridges.json") or {}
 
 
 def get_feat_cluster_membership() -> dict:
-    """feat_cluster_membership — JSON 未出力のため空を返す.
-    レポート内で conn.execute() を使うこと。
+    """feat_cluster_membership — not output to JSON, returns empty.
+    Use conn.execute() inside the report instead.
     """
     return {}
 
 
 def get_feat_birank_annual() -> dict:
-    """temporal_pagerank.json (feat_birank_annual 互換) を返す."""
+    """Return temporal_pagerank.json (feat_birank_annual compatible)."""
     return load_json("temporal_pagerank.json") or {}
 
 
 def compute_iv_percentiles() -> dict:
-    """IV スコアのパーセンタイルを事前計算."""
+    """Pre-compute percentiles of IV scores."""
     scores = get_feat_person_scores()
     if not scores or not isinstance(scores, list):
         return {"p50": 0.0, "p75": 0.01, "p90": 0.1, "p95": 0.5, "p99": 2.0}
@@ -126,7 +126,7 @@ def compute_iv_percentiles() -> dict:
 
 
 def fmt_num(n: int | float) -> str:
-    """数値をフォーマット."""
+    """Format a number."""
     if isinstance(n, float):
         if n >= 1000:
             return f"{n:,.0f}"
@@ -138,24 +138,24 @@ def name_clusters_by_rank(
     centers,
     feat_specs: list[tuple[int, list[str]]],
 ) -> dict[int, str]:
-    """K-Meansクラスタの重心の相対ランクを基に動的にクラスタ名を付与する.
+    """Dynamically assign cluster names based on the relative rank of K-Means centroids.
 
-    固定閾値（>= 70 等）の代わりに、重心同士の相対順位でラベルを決定するため
-    データセットのスケールに依存しない。
+    Instead of fixed thresholds (e.g., >= 70), labels are determined by the relative
+    ordering of centroids, so results are scale-independent.
 
     Args:
-        centers: 逆変換済み重心配列 (n_clusters × n_features)
-        feat_specs: [(feat_idx, [label_最高, label_中間, ..., label_最低])] のリスト。
-                    各特徴量について、重心値が高いクラスタから順にラベルを割り当てる。
+        centers: Inverse-transformed centroid array (n_clusters × n_features)
+        feat_specs: List of (feat_idx, [label_highest, label_mid, ..., label_lowest]).
+                    For each feature, labels are assigned in descending centroid value order.
 
     Returns:
-        {cluster_id: "C{n}: label1×label2×..."} の辞書
+        Dict of {cluster_id: "C{n}: label1×label2×..."}
     """
     n_clusters = len(centers)
     feat_labels: dict[int, list[str]] = {c: [] for c in range(n_clusters)}
 
     for feat_idx, label_list in feat_specs:
-        # 高い順にソート
+        # sort descending
         ranked = sorted(range(n_clusters), key=lambda c: -float(centers[c, feat_idx]))
         n_labels = len(label_list)
         for rank, cid in enumerate(ranked):
@@ -166,11 +166,11 @@ def name_clusters_by_rank(
 
 
 def name_clusters_distinctive(centers_orig, feature_names: list[str]) -> dict[int, str]:
-    """各クラスタを最も特徴的な次元のz-scoreで命名する（重複なし保証）.
+    """Name each cluster by the z-score of its most distinctive dimensions (guaranteed unique).
 
-    各クラスタについて |z-score| が最大の上位3特徴量を選び、
-    その方向（高/低）を日本語ラベルで表現する。
-    同一名が衝突した場合は末尾に番号を付与して一意性を保証する。
+    For each cluster, the top-3 features with the largest |z-score| are selected,
+    and their direction (high/low) is expressed with Japanese labels.
+    If the same name collides, a numeric suffix is appended to ensure uniqueness.
     """
     mean = centers_orig.mean(axis=0)
     std = centers_orig.std(axis=0) + 1e-10
@@ -211,7 +211,7 @@ def name_clusters_distinctive(centers_orig, feature_names: list[str]) -> dict[in
             parts.append(lbl)
         raw_names.append("・".join(parts))
 
-    # 重複排除
+    # deduplicate
     count: dict[str, int] = {}
     names: dict[int, str] = {}
     for c, nm in enumerate(raw_names):

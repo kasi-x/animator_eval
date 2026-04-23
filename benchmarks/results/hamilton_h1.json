@@ -1,0 +1,15 @@
+{
+  "threadpool_seconds": 15.2961,
+  "hamilton_seconds": 3.4149,
+  "overhead_fraction": -0.7767,
+  "overhead_threshold": 0.2,
+  "passed": true,
+  "credit_count": 1848,
+  "synthetic_params": {
+    "n_directors": 10,
+    "n_animators": 100,
+    "n_anime": 50,
+    "seed": 42
+  },
+  "timestamp": "2026-04-23T06:27:28.697903+00:00"
+}

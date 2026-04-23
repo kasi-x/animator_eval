@@ -285,7 +285,7 @@ def compute_director_scale_profiles(
     if director_roles is None:
         director_roles = {"director"}
 
-    # director ロールのクレジットのみ抽出
+    # Extract credits for the director role only
     dir_credits_by_person: dict[str, list[Credit]] = defaultdict(list)
     for c in credits:
         if c.role.value in director_roles:
@@ -383,7 +383,7 @@ def compute_director_trajectories(
     if director_roles is None:
         director_roles = {"director"}
 
-    # person_id → 全クレジット (any role, year あり)
+    # person_id → all credits (any role, with year)
     all_credits_by_person: dict[str, list[Credit]] = defaultdict(list)
     dir_credits_by_person: dict[str, list[Credit]] = defaultdict(list)
 

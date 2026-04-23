@@ -1,4 +1,4 @@
-"""Path Finding — クリエイター間のコラボ経路探索.
+"""Path Finding — collaboration path search between creators.
 
 2人のクリエイター間の最短コラボ経路、全経路、ボトルネック検出を行う。
 「6次の隔たり」理論の検証や、意外な繋がりの発見に活用。

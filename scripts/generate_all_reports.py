@@ -5678,7 +5678,7 @@ def generate_network_analysis_report():  # noqa: C901
         conn.close()
 
     anime_map = {a.id: a for a in anime_list}
-    person_names = {p.id: (p.name_ja or p.name_en or p.id) for p in persons_list}
+    person_names = {p.id: (p.name_ja or p.name_zh or p.name_en or p.id) for p in persons_list}
     scores_map = {s.person_id: s for s in scores_list}
 
     bridge_persons = bridges_data.get("bridge_persons", [])
@@ -7667,7 +7667,7 @@ def generate_career_report():
         _conn.close()
 
         _anime_map = {a.id: a for a in _anime_list}
-        _name_map = {p.id: (p.name_ja or p.name_en or p.id) for p in _persons}
+        _name_map = {p.id: (p.name_ja or p.name_zh or p.name_en or p.id) for p in _persons}
 
         _dir_profiles = compute_director_scale_profiles(
             _credits_list, _anime_map, _name_map,

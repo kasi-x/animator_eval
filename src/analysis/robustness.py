@@ -15,7 +15,7 @@ Typical usage (compensation fairness)::
         subsamples=STANDARD_SUBSAMPLES,
         ci_fn=lambda sample: bootstrap_ci(sample, gini, seed=42),
     )
-    # grid = [{"name": "全体", "estimate": 0.38, "ci_lower": 0.34, "ci_upper": 0.42}, ...]
+    # grid = [{"name": "all", "estimate": 0.38, "ci_lower": 0.34, "ci_upper": 0.42}, ...]
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ from typing import Any, Callable, Sequence
 
 import numpy as np
 
-from src.reporting.specs.finding import UncertaintyInfo
+from src.analysis.uncertainty import UncertaintyInfo
 
 
 @dataclass(frozen=True)

@@ -7,7 +7,7 @@ Reuses build_entry_cohort_dataset() from entry_cohort_attrition.py.
 
 from __future__ import annotations
 
-import sqlite3
+import duckdb
 from typing import Any
 
 import numpy as np
@@ -173,7 +173,7 @@ def compute_attrition_risk_scores(
     }
 
 
-def run_attrition_risk_model(conn: sqlite3.Connection) -> dict[str, Any]:
+def run_attrition_risk_model(conn: duckdb.DuckDBPyConnection) -> dict[str, Any]:
     """Attrition risk score — main entry point."""
     from src.analysis.attrition.entry_cohort_attrition import build_entry_cohort_dataset
 

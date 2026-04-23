@@ -2,10 +2,15 @@
 
 Detects orphan credits, missing data, and outliers to ensure
 scoring reliability.
+
+Accepts DuckDB connections (silver.duckdb) or any connection supporting
+the PEP-249-like .execute(sql[, params]).fetchone()[0] API.
 """
 
-import sqlite3
+from __future__ import annotations
+
 from dataclasses import dataclass, field
+from typing import Any
 
 import structlog
 
@@ -29,7 +34,7 @@ class ValidationResult:
         self.warnings.append(msg)
 
 
-def validate_referential_integrity(conn: sqlite3.Connection) -> ValidationResult:
+def validate_referential_integrity(conn: Any) -> ValidationResult:
     """Referential integrity check — detect orphan credits."""
     result = ValidationResult()
 
@@ -63,7 +68,7 @@ def validate_referential_integrity(conn: sqlite3.Connection) -> ValidationResult
     return result
 
 
-def validate_data_completeness(conn: sqlite3.Connection) -> ValidationResult:
+def validate_data_completeness(conn: Any) -> ValidationResult:
     """Data completeness check — detect missing names and titles."""
     result = ValidationResult()
 
@@ -95,35 +100,18 @@ def validate_data_completeness(conn: sqlite3.Connection) -> ValidationResult:
     if no_year > 0:
         result.add_warning(f"no_year_anime: {no_year} anime have no year")
 
-    # anime with no score (display metadata from bronze src_anilist_anime via anime_external_ids)
-    no_score = conn.execute("""
-        SELECT COUNT(*)
-        FROM anime a
-        LEFT JOIN anime_external_ids ext ON ext.anime_id = a.id AND ext.source = 'anilist'
-        LEFT JOIN src_anilist_anime b ON b.anilist_id = CAST(ext.external_id AS INTEGER)
-        WHERE b.score IS NULL
-    """).fetchone()[0]
-
-    total_anime = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]
-    if total_anime > 0 and no_score / total_anime > 0.5:
-        result.add_warning(
-            f"low_score_coverage: {no_score}/{total_anime} anime have no score "
-            f"({no_score / total_anime:.0%})"
-        )
-
     result.stats.update(
         {
             "nameless_persons": nameless,
             "titleless_anime": titleless,
             "no_year_anime": no_year,
-            "no_score_anime": no_score,
         }
     )
 
     return result
 
 
-def validate_credit_distribution(conn: sqlite3.Connection) -> ValidationResult:
+def validate_credit_distribution(conn: Any) -> ValidationResult:
     """Credit distribution check — detect unusual skew."""
     result = ValidationResult()
 
@@ -131,7 +119,7 @@ def validate_credit_distribution(conn: sqlite3.Connection) -> ValidationResult:
     no_credits = conn.execute("""
         SELECT COUNT(*) FROM persons p
         LEFT JOIN credits c ON p.id = c.person_id
-        WHERE c.id IS NULL
+        WHERE c.person_id IS NULL
     """).fetchone()[0]
 
     if no_credits > 0:
@@ -143,7 +131,7 @@ def validate_credit_distribution(conn: sqlite3.Connection) -> ValidationResult:
     no_anime_credits = conn.execute("""
         SELECT COUNT(*) FROM anime a
         LEFT JOIN credits c ON a.id = c.anime_id
-        WHERE c.id IS NULL
+        WHERE c.anime_id IS NULL
     """).fetchone()[0]
 
     if no_anime_credits > 0:
@@ -181,7 +169,7 @@ def validate_credit_distribution(conn: sqlite3.Connection) -> ValidationResult:
     return result
 
 
-def validate_credit_quality(conn: sqlite3.Connection) -> ValidationResult:
+def validate_credit_quality(conn: Any) -> ValidationResult:
     """Credit quality check — detect duplicates and abnormal patterns."""
     result = ValidationResult()
 
@@ -207,11 +195,10 @@ def validate_credit_quality(conn: sqlite3.Connection) -> ValidationResult:
         GROUP BY source_code
     """).fetchall()
 
-    for row in source_dupes:
-        total, unique = row["total"], row["unique_count"]
+    for source_code, total, unique in source_dupes:
         if total > unique * 2:
             result.add_warning(
-                f"high_episode_density_{row['source_code']}: {total} credits but only {unique} unique person-anime-role combos"
+                f"high_episode_density_{source_code}: {total} credits but only {unique} unique person-anime-role combos"
             )
 
     result.stats["multi_role_pairs"] = len(multi_role)
@@ -220,7 +207,7 @@ def validate_credit_quality(conn: sqlite3.Connection) -> ValidationResult:
 
 
 def validate_data_freshness(
-    conn: sqlite3.Connection,
+    conn: Any,
     stale_years: int = 5,
 ) -> ValidationResult:
     """Data freshness check — detect stale data.
@@ -255,9 +242,9 @@ def validate_data_freshness(
     """).fetchall()
 
     stale_sources = []
-    for row in source_freshness:
-        if row["latest_year"] and row["latest_year"] < cutoff_year:
-            stale_sources.append(row["source_code"])
+    for source_code, latest_year, _count in source_freshness:
+        if latest_year and latest_year < cutoff_year:
+            stale_sources.append(source_code)
 
     if stale_sources:
         result.add_warning(
@@ -318,7 +305,7 @@ def validate_data_freshness(
     return result
 
 
-def validate_all(conn: sqlite3.Connection) -> ValidationResult:
+def validate_all(conn: Any) -> ValidationResult:
     """Run all validation checks and return a combined result."""
     combined = ValidationResult()
 

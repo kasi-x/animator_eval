@@ -13,6 +13,9 @@ import os
 import re
 from pathlib import Path
 
+import httpx
+from src.utils.config import LLM_BASE_URL, LLM_MODEL_NAME, LLM_TIMEOUT
+
 # ---------------------------------------------------------------------------
 # Script detection — table-driven Unicode range lookup
 # ---------------------------------------------------------------------------
@@ -88,7 +91,7 @@ _TOKENS_JSON_PATH = Path(__file__).parent / "hometown_tokens.json"
 def _load_tokens_json() -> dict:
     try:
         return json.loads(_TOKENS_JSON_PATH.read_text(encoding="utf-8"))
-    except Exception:
+    except (OSError, json.JSONDecodeError):
         return {"tokens": {}, "arabic_tokens": {}, "_cache": {}}
 
 
@@ -122,39 +125,39 @@ _ARABIC_RE = (
 )
 
 
+def _atomic_write_json(path: Path, data: dict) -> None:
+    """Write *data* to *path* atomically via a sibling tmp file."""
+    tmp = path.parent / f".{path.stem}_{os.getpid()}.tmp"
+    tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def _save_hometown_cache(hometown_key: str, code: str | None) -> None:
     """Persist an LLM-inferred nationality to the JSON cache (atomic write)."""
     _HOMETOWN_CACHE[hometown_key] = code
     try:
         data = _load_tokens_json()
         data["_cache"] = _HOMETOWN_CACHE
-        tmp = _TOKENS_JSON_PATH.parent / (
-            f".hometown_tokens_{os.getpid()}.tmp"
-        )
-        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(tmp, _TOKENS_JSON_PATH)
-    except Exception:
+        _atomic_write_json(_TOKENS_JSON_PATH, data)
+    except OSError:
         pass  # cache persistence failure is non-fatal
 
 
-def _llm_infer_nationality(hometown: str) -> str | None:
-    """Ask the local LLM to infer the ISO 3166-1 alpha-2 country code for a hometown.
+# ---------------------------------------------------------------------------
+# LLM nationality inference — decomposed helpers
+# ---------------------------------------------------------------------------
 
-    Returns a 2-letter code (e.g. "JP") or None when unknown/unavailable.
-    Gracefully degrades: returns None if Ollama is not reachable.
-    """
-    try:
-        import httpx
-        from src.utils.config import LLM_BASE_URL, LLM_MODEL_NAME, LLM_TIMEOUT
-    except ImportError:
-        return None
-
-    prompt = (
+def _build_llm_prompt(hometown: str) -> str:
+    return (
         "You are a geography expert. Given a hometown/city/location string, "
         "output ONLY the ISO 3166-1 alpha-2 country code (e.g. JP, CN, KR, US). "
         "If you cannot determine the country, output NULL.\n\n"
         f"Location: {hometown}\nCountry code:"
     )
+
+
+def _call_ollama_generate(prompt: str) -> str | None:
+    """POST to Ollama /api/generate and return the raw response text, or None on error."""
     try:
         ollama_base = LLM_BASE_URL.replace("/v1", "")
         resp = httpx.post(
@@ -168,15 +171,74 @@ def _llm_infer_nationality(hometown: str) -> str | None:
             timeout=LLM_TIMEOUT,
         )
         resp.raise_for_status()
-        raw = (resp.json().get("response") or resp.json().get("thinking") or "").strip()
-        # Extract first 2-letter all-caps word
-        m = re.search(r"\b([A-Z]{2})\b", raw)
-        code = m.group(1) if m else None
-        if code == "NU":  # LLM sometimes outputs "NULL"
-            code = None
-        return code
-    except Exception:
+        payload = resp.json()
+        return (payload.get("response") or payload.get("thinking") or "").strip()
+    except (httpx.HTTPError, ValueError):
         return None
+
+
+def _parse_country_code(raw: str) -> str | None:
+    """Extract an ISO 3166-1 alpha-2 code from a raw LLM response string."""
+    if raw.upper().startswith("NULL"):
+        return None
+    m = re.search(r"\b([A-Z]{2})\b", raw)
+    return m.group(1) if m else None
+
+
+def _llm_infer_nationality(hometown: str) -> str | None:
+    """Ask the local LLM to infer the ISO 3166-1 alpha-2 country code for a hometown.
+
+    Returns a 2-letter code (e.g. "JP") or None when unknown/unavailable.
+    Gracefully degrades: returns None if Ollama is not reachable.
+    """
+    prompt = _build_llm_prompt(hometown)
+    raw = _call_ollama_generate(prompt)
+    if raw is None:
+        return None
+    return _parse_country_code(raw)
+
+
+# ---------------------------------------------------------------------------
+# infer_nationalities — decomposed helpers
+# ---------------------------------------------------------------------------
+
+def _from_script_direct(script: str) -> list[str] | None:
+    """Return a single-country list for unambiguous scripts, else None."""
+    if script == "ko":
+        return ["KR"]
+    if script == "ja":
+        return ["JP"]
+    if script == "th":
+        return ["TH"]
+    return None
+
+
+def _resolve_zh_or_ja(hometown: str, *, use_llm: bool) -> list[str]:
+    """Resolve nationality for a zh_or_ja script name using hometown tokens, cache, or LLM."""
+    low = hometown.lower()
+    if _JAPANESE_RE.search(low):
+        return ["JP"]
+    if _CHINESE_RE.search(low):
+        return ["CN"]
+    if _KOREAN_RE.search(low):
+        return ["KR"]
+    cache_key = hometown.strip()
+    if cache_key in _HOMETOWN_CACHE:
+        cached = _HOMETOWN_CACHE[cache_key]
+        return [cached] if cached else []
+    if use_llm:
+        code = _llm_infer_nationality(hometown)
+        _save_hometown_cache(cache_key, code)
+        return [code] if code else []
+    return []
+
+
+def _resolve_arabic(hometown_lower: str) -> list[str]:
+    """Resolve nationality for an Arabic-script name using Arabic hometown tokens."""
+    m = _ARABIC_RE.search(hometown_lower)
+    if m:
+        return [_ARABIC_HOMETOWN_TOKENS[m.group().lower()]]
+    return []
 
 
 # ---------------------------------------------------------------------------
@@ -212,41 +274,18 @@ def infer_nationalities(
     """
     script = detect_name_script(name_native)
 
-    if script == "ko":
-        return ["KR"]
-    if script == "ja":
-        return ["JP"]
-    if script == "th":
-        return ["TH"]
+    direct = _from_script_direct(script)
+    if direct is not None:
+        return direct
 
     if not hometown:
         return []
 
-    low = hometown.lower()
-
     if script == "zh_or_ja":
-        if _JAPANESE_RE.search(low):
-            return ["JP"]
-        if _CHINESE_RE.search(low):
-            return ["CN"]
-        if _KOREAN_RE.search(low):
-            return ["KR"]
-        # Check LLM cache keyed on original hometown string (case-preserved)
-        cache_key = hometown.strip()
-        if cache_key in _HOMETOWN_CACHE:
-            cached = _HOMETOWN_CACHE[cache_key]
-            return [cached] if cached else []
-        if use_llm:
-            code = _llm_infer_nationality(hometown)
-            _save_hometown_cache(cache_key, code)
-            return [code] if code else []
-        return []
+        return _resolve_zh_or_ja(hometown, use_llm=use_llm)
 
     if script == "ar":
-        m = _ARABIC_RE.search(low)
-        if m:
-            return [_ARABIC_HOMETOWN_TOKENS[m.group().lower()]]
-        return []
+        return _resolve_arabic(hometown.lower())
 
     # hi / ru / el / en — not inferable from script alone
     return []

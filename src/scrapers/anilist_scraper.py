@@ -1,7 +1,7 @@
-"""AniList GraphQL API によるスタッフクレジット収集.
+"""AniList GraphQL API staff credit collection.
 
-httpx (async) + structlog + typer で構成。
-レート制限: 90 requests/minute (未認証) / より高い (認証済み)。
+Built with httpx (async) + structlog + typer.
+Rate limit: 90 requests/minute (unauthenticated) / higher (authenticated).
 """
 
 import asyncio
@@ -26,17 +26,17 @@ from src.models import (
 from src.scrapers.cache_store import load_cached_json, save_cached_json
 from src.utils.episode_parser import parse_episodes
 from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL
-from src.utils.name_utils import assign_native_name_fields, infer_nationalities
+from src.utils.name_utils import parse_anilist_native_name
 
 _env = dotenv_values(find_dotenv())
 
 log = structlog.get_logger()
 
 ANILIST_URL = "https://graphql.anilist.co"
-# AniList公式: 90 req/min（ヘッダー表示）だが、2026-02時点で degraded state
-# 実効 ~18-19 req/window → バースト方式: 高速で叩いて429が来たら待つ
-# 参考: https://docs.anilist.co/guide/rate-limiting
-REQUEST_INTERVAL = 0.1  # バースト方式: 最小間隔で叩き、429で自動待機
+# AniList official: 90 req/min (per header), but in degraded state as of 2026-02
+# Effective ~18-19 req/window → burst mode: hit rapidly then back off on 429
+# Reference: https://docs.anilist.co/guide/rate-limiting
+REQUEST_INTERVAL = 0.1  # burst mode: minimum interval, auto-backoff on 429
 
 ANIME_STAFF_QUERY = """
 query ($id: Int, $staffPage: Int, $staffPerPage: Int, $charPage: Int, $charPerPage: Int) {
@@ -255,12 +255,12 @@ def save_persons_batch_to_bronze(persons_bw, persons_batch):
 
 
 def _make_rate_limit_text(cl):
-    """API消費量バーを生成 (used/max)."""
+    """Generate an API consumption bar (used/max)."""
     from rich.text import Text
 
     if cl.rate_limit_max is None and cl.requests_remaining is None:
         return Text("")
-    # ヘッダーは90と言うが実際は~20 (degraded + burst limiter)
+    # Header says 90 but effective is ~20 (degraded + burst limiter)
     header_limit = cl.rate_limit_max or 90
     remaining = (
         cl.requests_remaining if cl.requests_remaining is not None else header_limit
@@ -286,7 +286,7 @@ def save_credits_batch_to_bronze(credits_bw, credits_batch):
 
 
 class AniListClient:
-    """AniList GraphQL 非同期クライアント (認証サポート)."""
+    """Async AniList GraphQL client (with authentication support)."""
 
     def __init__(self) -> None:
         self._last_request_time = 0.0
@@ -302,11 +302,11 @@ class AniListClient:
         # Rate limit tracking
         self.requests_remaining = None
         self.rate_limit_reset_at = None
-        self.rate_limit_max = None  # X-RateLimit-Limit (90=認証済み, 30=未認証)
+        self.rate_limit_max = None  # X-RateLimit-Limit (90=authenticated, 30=unauthenticated)
         self._auth_reported = False
-        self._requests_since_reset = 0  # 直近のリセットからのリクエスト数
-        self._requests_total = 0  # プロセス起動からの総リクエスト数
-        self._last_remaining_before_429 = None  # 429直前のX-RateLimit-Remaining
+        self._requests_since_reset = 0  # request count since last reset
+        self._requests_total = 0  # total request count since process start
+        self._last_remaining_before_429 = None  # X-RateLimit-Remaining just before 429
         # Callback: called with remaining seconds during rate limit wait
         # signature: on_rate_limit(remaining_secs: int | None)  None=wait ended
         self.on_rate_limit: callable | None = None
@@ -315,7 +315,7 @@ class AniListClient:
         await self._client.aclose()
 
     async def verify_auth(self) -> bool:
-        """トークンの有効性を検証し、rate limitウィンドウの残量を同期する。
+        """Verify token validity and sync the remaining rate-limit window quota.
 
         Returns:
             True if authenticated (rate_limit >= 90), False otherwise.
@@ -343,9 +343,9 @@ class AniListClient:
                 if reset_at:
                     self.rate_limit_reset_at = int(reset_at)
 
-                # API側のウィンドウ残量から、前回実行分の消費を推定
+                # Estimate carry-over consumption from the previous run using the API window remaining
                 already_used = self.rate_limit_max - self.requests_remaining
-                if already_used > 1:  # 1 = 今のverify_auth自身
+                if already_used > 1:  # 1 = this verify_auth call itself
                     carry_over = already_used - 1
                     log.info(
                         "rate_limit_window_carry_over",
@@ -354,7 +354,7 @@ class AniListClient:
                         limit=self.rate_limit_max,
                         carry_over_from_previous=carry_over,
                     )
-                    # ウィンドウの残りが少ない場合、リセットまで待つ
+                    # Wait for reset when little quota remains
                     if self.requests_remaining < 10 and self.rate_limit_reset_at:
                         wait_secs = max(0, self.rate_limit_reset_at - time.time())
                         if wait_secs > 0:
@@ -388,7 +388,7 @@ class AniListClient:
                         source="anilist",
                         rate_limit=self.rate_limit_max,
                         requests_remaining=self.requests_remaining,
-                        hint="トークンが無効・期限切れです。https://anilist.co/settings/developer で再取得してください",
+                        hint="Token is invalid or expired. Reissue at https://anilist.co/settings/developer",
                     )
                 return False
         except Exception as e:
@@ -427,14 +427,14 @@ class AniListClient:
                 self._requests_total += 1
 
                 if resp.status_code == 429:
-                    # 429時はX-RateLimit-*ヘッダーが来ないことがある
+                    # X-RateLimit-* headers may be absent on a 429 response
                     retry_after = int(resp.headers.get("Retry-After", 10))
                     limit = (
                         self.rate_limit_max
                         or int(resp.headers.get("X-RateLimit-Limit", 0))
                         or None
                     )
-                    # 429レスポンス自体のヘッダーも確認
+                    # Also check headers on the 429 response itself
                     remaining_in_429 = resp.headers.get("X-RateLimit-Remaining")
                     limit_in_429 = resp.headers.get("X-RateLimit-Limit")
                     log.warning(
@@ -448,20 +448,20 @@ class AniListClient:
                         header_limit=limit_in_429,
                         rate_limit_max=limit,
                         authenticated=bool(self._access_token),
-                        note="limit < 90: トークンが無効か未認証の可能性"
+                        note="limit < 90: token may be invalid or unauthenticated"
                         if limit and limit < 90
                         else None,
                     )
                     self.requests_remaining = 0
                     self._requests_since_reset = 0
                     self._last_remaining_before_429 = None
-                    # X-RateLimit-Resetがあればそちらを優先（API側の正確なリセット時刻）
+                    # Prefer X-RateLimit-Reset when available (accurate API reset time)
                     reset_header = resp.headers.get("X-RateLimit-Reset")
                     if reset_header:
                         reset_at = int(reset_header)
                         wait_seconds = (
                             max(reset_at - time.time(), retry_after) + 1
-                        )  # +1秒余裕
+                        )  # +1 second buffer
                     else:
                         wait_seconds = retry_after + 1
                     self.rate_limit_reset_at = time.time() + wait_seconds
@@ -471,7 +471,7 @@ class AniListClient:
                         wait_seconds=int(wait_seconds),
                         reset_header=reset_header,
                     )
-                    # 0.5秒刻みでコールバックを呼びながら待機
+                    # Wait in 0.5-second steps, calling the callback each tick
                     remaining = wait_seconds
                     while remaining > 0:
                         if self.on_rate_limit:
@@ -479,8 +479,8 @@ class AniListClient:
                         await asyncio.sleep(0.5)
                         remaining -= 0.5
                     if self.on_rate_limit:
-                        self.on_rate_limit(None)  # 待機終了
-                    # 待機後にプローブで実際の残量を確認
+                        self.on_rate_limit(None)  # wait ended
+                    # Probe the real remaining quota after waiting
                     try:
                         probe_resp = await self._client.post(
                             ANILIST_URL,
@@ -506,7 +506,7 @@ class AniListClient:
                             probe_limit=probe_limit,
                         )
                         if probe_resp.status_code == 429:
-                            # まだリセットされていない → さらに待つ
+                            # Not yet reset — wait a bit more
                             extra_wait = (
                                 int(probe_resp.headers.get("Retry-After", 30)) + 1
                             )
@@ -520,7 +520,7 @@ class AniListClient:
                         self.requests_remaining = self.rate_limit_max or 90
                     continue
 
-                # 正常レスポンスからrate limit情報を取得
+                # Extract rate limit info from the successful response
                 if "X-RateLimit-Remaining" in resp.headers:
                     self.requests_remaining = int(
                         resp.headers.get("X-RateLimit-Remaining", -1)
@@ -537,7 +537,7 @@ class AniListClient:
                                 "auth_confirmed",
                                 source="anilist",
                                 rate_limit=self.rate_limit_max,
-                                status="認証済み",
+                                status="authenticated",
                             )
                         elif self._access_token:
                             log.warning(
@@ -545,7 +545,7 @@ class AniListClient:
                                 source="anilist",
                                 rate_limit=self.rate_limit_max,
                                 expected=90,
-                                hint="トークンが無効・期限切れの可能性。https://anilist.co/settings/developer で再取得してください",
+                                hint="Token may be invalid or expired. Reissue at https://anilist.co/settings/developer",
                             )
 
                 # Handle invalid token: fall back to unauthenticated
@@ -588,7 +588,7 @@ class AniListClient:
                             error_message=str(parse_error),
                         )
 
-                # 404 = 存在しないリソース → リトライ不要、Noneを返す
+                # 404 = resource does not exist → no retry needed, return None
                 if resp.status_code == 404:
                     log.warning(
                         "resource_not_found",
@@ -718,16 +718,15 @@ def parse_anilist_person(staff: dict) -> Person:
     years_active_raw = staff.get("yearsActive", [])
     years_active = [y for y in years_active_raw if y] if years_active_raw else []
 
-    native = name.get("native") or ""
     hometown_val = staff.get("homeTown")
-    nationality = infer_nationalities(native, hometown_val)
-    name_ja, name_ko, name_zh = assign_native_name_fields(native, nationality)
+    name_ja, name_ko, name_zh, native, nationality = parse_anilist_native_name(name, hometown_val)
 
     return Person(
         id=person_id,
         name_ja=name_ja,
         name_ko=name_ko,
         name_zh=name_zh,
+        name_native_raw=native,
         name_en=name.get("full") or "",
         aliases=aliases,
         nationality=nationality,
@@ -964,10 +963,8 @@ def parse_anilist_staff(
         years_active_raw = node.get("yearsActive", [])
         years_active = [y for y in years_active_raw if y] if years_active_raw else []
 
-        native = name.get("native") or ""
         hometown_val = node.get("homeTown")
-        nationality = infer_nationalities(native, hometown_val)
-        name_ja, name_ko, name_zh = assign_native_name_fields(native, nationality)
+        name_ja, name_ko, name_zh, native, nationality = parse_anilist_native_name(name, hometown_val)
 
         persons.append(
             Person(
@@ -975,6 +972,7 @@ def parse_anilist_staff(
                 name_ja=name_ja,
                 name_ko=name_ko,
                 name_zh=name_zh,
+                name_native_raw=native,
                 name_en=name.get("full") or "",
                 aliases=aliases,
                 nationality=nationality,
@@ -1076,10 +1074,8 @@ def parse_anilist_voice_actors(
                 [y for y in years_active_raw if y] if years_active_raw else []
             )
 
-            native = name.get("native") or ""
             hometown_val = va.get("homeTown")
-            nationality = infer_nationalities(native, hometown_val)
-            name_ja, name_ko, name_zh = assign_native_name_fields(native, nationality)
+            name_ja, name_ko, name_zh, native, nationality = parse_anilist_native_name(name, hometown_val)
 
             persons.append(
                 Person(
@@ -1087,6 +1083,7 @@ def parse_anilist_voice_actors(
                     name_ja=name_ja,
                     name_ko=name_ko,
                     name_zh=name_zh,
+                    name_native_raw=native,
                     name_en=name.get("full") or "",
                     aliases=aliases,
                     nationality=nationality,
@@ -1115,7 +1112,7 @@ def parse_anilist_voice_actors(
                     person_id=person_id,
                     anime_id=anime_id,
                     role=parse_role("voice actor"),  # Will map to Role.VOICE_ACTOR
-                    raw_role="Voice Actor",  # 元のロール文字列
+                    raw_role="Voice Actor",  # original role string
                     source="anilist",
                 )
             )
@@ -1332,7 +1329,7 @@ async def fetch_top_anime_credits(
                 TimeElapsedColumn(),
             )
             task_p1 = bar_p1.add_task("", total=pages_needed)
-            status_p1 = Text("📋 アニメリスト取得中...", style="bold cyan")
+            status_p1 = Text("📋 Fetching anime list...", style="bold cyan")
 
             def _make_p1_group():
                 parts = [status_p1, bar_p1]
@@ -1355,12 +1352,12 @@ async def fetch_top_anime_credits(
                         anime_ids.append((anime.anilist_id, anime.id))
                     bar_p1.update(task_p1, advance=1)
                     status_p1 = Text(
-                        f"📋 アニメリスト取得中 ({page}/{pages_needed})",
+                        f"📋 Fetching anime list ({page}/{pages_needed})",
                         style="bold cyan",
                     )
                     live_p1.update(_make_p1_group())
 
-            console.print(f"✅ アニメリスト取得完了: {len(anime_ids)}件\n")
+            console.print(f"✅ Anime list complete: {len(anime_ids)} titles\n")
 
             # Phase 2: Fetch staff info with live dashboard
             bar_p2 = Progress(
@@ -1376,7 +1373,7 @@ async def fetch_top_anime_credits(
                 TimeRemainingColumn(),
             )
             task_p2 = bar_p2.add_task("", total=len(anime_ids))
-            status_p2 = Text("📋 スタッフ情報取得中...", style="bold green")
+            status_p2 = Text("📋 Fetching staff info...", style="bold green")
 
             def _make_p2_group():
                 parts = [status_p2, bar_p2]
@@ -2566,7 +2563,7 @@ def main(
                                             person_id=f"anilist:p{va_id}",
                                             anime_id=anime_id,
                                             role=parse_role("Voice Actor"),
-                                            raw_role="Voice Actor",  # 元のロール文字列
+                                            raw_role="Voice Actor",  # original role string
                                             source="anilist",
                                         )
                                     )

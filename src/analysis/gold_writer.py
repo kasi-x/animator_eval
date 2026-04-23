@@ -21,8 +21,9 @@ from __future__ import annotations
 
 import datetime
 import os
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterator
 
 import duckdb
 import structlog
@@ -38,6 +39,12 @@ DEFAULT_GOLD_DB_PATH: Path = Path(
         str(Path(__file__).resolve().parent.parent.parent / "result" / "gold.duckdb"),
     )
 )
+
+def _get_default_silver_path() -> Path:
+    """Return the current silver.duckdb path (reads from silver_reader so monkeypatches propagate)."""
+    from src.analysis.silver_reader import DEFAULT_SILVER_PATH
+
+    return DEFAULT_SILVER_PATH
 
 # DDL — GOLD tables in DuckDB (columnar; no sqlite_master, no WAL)
 _DDL = """
@@ -65,6 +72,200 @@ CREATE TABLE IF NOT EXISTS score_history (
     year                INTEGER,
     quarter             INTEGER
 );
+
+CREATE TABLE IF NOT EXISTS feat_career (
+    person_id           TEXT PRIMARY KEY,
+    first_year          INTEGER,
+    latest_year         INTEGER,
+    active_years        INTEGER,
+    total_credits       INTEGER,
+    highest_stage       INTEGER,
+    primary_role        TEXT,
+    career_track        TEXT,
+    peak_year           INTEGER,
+    peak_credits        INTEGER,
+    growth_trend        TEXT,
+    growth_score        DOUBLE,
+    activity_ratio      DOUBLE,
+    recent_credits      INTEGER,
+    updated_at          TIMESTAMP DEFAULT current_timestamp
+);
+
+CREATE TABLE IF NOT EXISTS feat_career_gaps (
+    person_id           TEXT NOT NULL,
+    gap_start_year      INTEGER NOT NULL,
+    gap_end_year        INTEGER,
+    gap_length          INTEGER NOT NULL,
+    returned            INTEGER NOT NULL DEFAULT 0,
+    gap_type            TEXT NOT NULL,
+    PRIMARY KEY (person_id, gap_start_year)
+);
+
+CREATE TABLE IF NOT EXISTS feat_studio_affiliation (
+    person_id           TEXT NOT NULL,
+    credit_year         INTEGER NOT NULL,
+    studio_id           TEXT NOT NULL,
+    studio_name         TEXT NOT NULL DEFAULT '',
+    n_works             INTEGER NOT NULL DEFAULT 0,
+    n_credits           INTEGER NOT NULL DEFAULT 0,
+    is_main_studio      INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (person_id, credit_year, studio_id)
+);
+
+CREATE TABLE IF NOT EXISTS meta_lineage (
+    table_name              TEXT PRIMARY KEY,
+    audience                TEXT NOT NULL,
+    source_silver_tables    TEXT NOT NULL,
+    source_bronze_forbidden INTEGER NOT NULL DEFAULT 1,
+    source_display_allowed  INTEGER NOT NULL DEFAULT 0,
+    description             TEXT NOT NULL DEFAULT '',
+    formula_version         TEXT NOT NULL,
+    computed_at             TIMESTAMP NOT NULL,
+    ci_method               TEXT,
+    null_model              TEXT,
+    holdout_method          TEXT,
+    row_count               INTEGER,
+    notes                   TEXT,
+    rng_seed                INTEGER,
+    git_sha                 TEXT NOT NULL DEFAULT '',
+    inputs_hash             TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS meta_common_person_parameters (
+    person_id               TEXT PRIMARY KEY,
+    scale_reach_pct         DOUBLE,
+    scale_reach_ci_low      DOUBLE,
+    scale_reach_ci_high     DOUBLE,
+    collab_width_pct        DOUBLE,
+    collab_width_ci_low     DOUBLE,
+    collab_width_ci_high    DOUBLE,
+    continuity_pct          DOUBLE,
+    continuity_ci_low       DOUBLE,
+    continuity_ci_high      DOUBLE,
+    mentor_contribution_pct DOUBLE,
+    mentor_contribution_ci_low  DOUBLE,
+    mentor_contribution_ci_high DOUBLE,
+    centrality_pct          DOUBLE,
+    centrality_ci_low       DOUBLE,
+    centrality_ci_high      DOUBLE,
+    trust_accum_pct         DOUBLE,
+    trust_accum_ci_low      DOUBLE,
+    trust_accum_ci_high     DOUBLE,
+    role_evolution_pct      DOUBLE,
+    role_evolution_ci_low   DOUBLE,
+    role_evolution_ci_high  DOUBLE,
+    genre_specialization_pct    DOUBLE,
+    genre_specialization_ci_low DOUBLE,
+    genre_specialization_ci_high DOUBLE,
+    recent_activity_pct     DOUBLE,
+    recent_activity_ci_low  DOUBLE,
+    recent_activity_ci_high DOUBLE,
+    compatibility_pct       DOUBLE,
+    compatibility_ci_low    DOUBLE,
+    compatibility_ci_high   DOUBLE,
+    archetype               TEXT,
+    archetype_confidence    DOUBLE,
+    computed_at             TIMESTAMP DEFAULT current_timestamp
+);
+
+CREATE TABLE IF NOT EXISTS feat_network (
+    person_id               TEXT PRIMARY KEY,
+    birank                  DOUBLE,
+    patronage               DOUBLE,
+    bridge_score            DOUBLE,
+    n_bridge_communities    INTEGER,
+    degree_centrality       DOUBLE,
+    betweenness_centrality  DOUBLE,
+    closeness_centrality    DOUBLE,
+    eigenvector_centrality  DOUBLE,
+    hub_score               DOUBLE,
+    n_collaborators         INTEGER,
+    n_unique_anime          INTEGER,
+    updated_at              TIMESTAMP DEFAULT current_timestamp
+);
+
+CREATE TABLE IF NOT EXISTS feat_genre_affinity (
+    person_id               TEXT NOT NULL,
+    genre                   TEXT NOT NULL,
+    affinity_score          DOUBLE,
+    work_count              INTEGER,
+    updated_at              TIMESTAMP DEFAULT current_timestamp,
+    PRIMARY KEY (person_id, genre)
+);
+
+CREATE TABLE IF NOT EXISTS feat_contribution (
+    person_id               TEXT PRIMARY KEY,
+    peer_percentile         DOUBLE,
+    opportunity_residual    DOUBLE,
+    consistency_score       DOUBLE,
+    independent_value       DOUBLE,
+    updated_at              TIMESTAMP DEFAULT current_timestamp
+);
+
+CREATE TABLE IF NOT EXISTS feat_causal_estimates (
+    person_id               TEXT PRIMARY KEY,
+    peer_effect_boost       DOUBLE,
+    career_friction         DOUBLE,
+    era_fe                  DOUBLE,
+    era_deflated_iv         DOUBLE,
+    opportunity_residual    DOUBLE,
+    iv_score                DOUBLE,
+    updated_at              TIMESTAMP DEFAULT current_timestamp
+);
+
+CREATE TABLE IF NOT EXISTS feat_cluster_membership (
+    person_id               TEXT PRIMARY KEY,
+    community_id            INTEGER,
+    career_track            TEXT,
+    growth_trend            TEXT,
+    studio_cluster_id       INTEGER,
+    studio_cluster_name     TEXT,
+    cooccurrence_group_id   INTEGER,
+    updated_at              TIMESTAMP DEFAULT current_timestamp
+);
+
+CREATE TABLE IF NOT EXISTS feat_birank_annual (
+    person_id               TEXT NOT NULL,
+    year                    INTEGER NOT NULL,
+    birank                  DOUBLE NOT NULL,
+    raw_pagerank            DOUBLE,
+    graph_size              INTEGER,
+    n_credits_cumulative    INTEGER,
+    updated_at              TIMESTAMP DEFAULT current_timestamp,
+    PRIMARY KEY (person_id, year)
+);
+
+CREATE TABLE IF NOT EXISTS agg_milestones (
+    person_id               TEXT NOT NULL,
+    event_type              TEXT NOT NULL,
+    year                    INTEGER NOT NULL,
+    anime_id                TEXT NOT NULL DEFAULT '',
+    anime_title             TEXT,
+    description             TEXT,
+    PRIMARY KEY (person_id, event_type, year, anime_id)
+);
+
+CREATE TABLE IF NOT EXISTS agg_director_circles (
+    person_id               TEXT NOT NULL,
+    director_id             TEXT NOT NULL,
+    shared_works            INTEGER NOT NULL DEFAULT 0,
+    hit_rate                DOUBLE,
+    roles                   TEXT,
+    latest_year             INTEGER,
+    PRIMARY KEY (person_id, director_id)
+);
+
+CREATE TABLE IF NOT EXISTS feat_mentorships (
+    mentor_id               TEXT NOT NULL,
+    mentee_id               TEXT NOT NULL,
+    n_shared_works          INTEGER NOT NULL DEFAULT 0,
+    hit_rate                DOUBLE,
+    mentor_stage            INTEGER,
+    mentee_stage            INTEGER,
+    first_year              INTEGER,
+    latest_year             INTEGER,
+    PRIMARY KEY (mentor_id, mentee_id)
+);
 """
 
 
@@ -72,6 +273,115 @@ def _open(db_path: Path | str | None = None) -> duckdb.DuckDBPyConnection:
     path = str(db_path or DEFAULT_GOLD_DB_PATH)
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     return duckdb.connect(path)
+
+
+# ---------------------------------------------------------------------------
+# Read-only context managers — for analysis modules
+# ---------------------------------------------------------------------------
+
+@contextmanager
+def gold_connect(
+    path: Path | str | None = None,
+    *,
+    memory_limit: str = "2GB",
+) -> Iterator[duckdb.DuckDBPyConnection]:
+    """Open gold.duckdb read-only for the duration of one query block.
+
+    Per-query open/close so analysis modules never pin to a stale inode
+    after the pipeline atomically swaps gold.duckdb.
+    """
+    p = str(path or DEFAULT_GOLD_DB_PATH)
+    conn = duckdb.connect(p, read_only=True)
+    try:
+        conn.execute(f"SET memory_limit='{memory_limit}'")
+        conn.execute("SET temp_directory='/tmp/duckdb_spill'")
+        yield conn
+    finally:
+        conn.close()
+
+
+@contextmanager
+def gold_connect_with_silver(
+    gold_path: Path | str | None = None,
+    silver_path: Path | str | None = None,
+    *,
+    memory_limit: str = "2GB",
+) -> Iterator[duckdb.DuckDBPyConnection]:
+    """Open gold.duckdb + ATTACH silver.duckdb as views.
+
+    Creates views for SILVER tables (persons, anime, credits, anime_studios)
+    so existing SQL queries work without table-prefix changes.
+    Intended for analysis modules that JOIN feat_* (GOLD) with persons/anime (SILVER).
+    """
+    g_path = str(gold_path or DEFAULT_GOLD_DB_PATH)
+    s_path = str(silver_path or _get_default_silver_path())
+    conn = duckdb.connect(g_path, read_only=False)
+    try:
+        conn.execute(f"SET memory_limit='{memory_limit}'")
+        conn.execute("SET temp_directory='/tmp/duckdb_spill'")
+        if Path(s_path).exists():
+            conn.execute(f"ATTACH '{s_path}' AS sv (READ_ONLY TRUE)")
+            for tbl in ("persons", "anime", "credits"):
+                conn.execute(
+                    f"CREATE OR REPLACE TEMP VIEW {tbl} AS SELECT * FROM sv.{tbl}"
+                )
+        yield conn
+    finally:
+        conn.close()
+
+
+# ---------------------------------------------------------------------------
+# feat_* sync — copy feat_* tables from SQLite to gold.duckdb
+# (transition helper: keeps SQLite as compute target, gold.duckdb as read target)
+# ---------------------------------------------------------------------------
+
+_FEAT_TABLES = (
+    "feat_career",
+    "feat_career_gaps",
+    "feat_studio_affiliation",
+    "meta_lineage",
+    "meta_common_person_parameters",
+)
+
+
+def sync_feat_from_sqlite(
+    sqlite_path: Path | str,
+    gold_path: Path | str | None = None,
+) -> dict[str, int]:
+    """Copy feat_* and meta_* rows from SQLite into gold.duckdb.
+
+    Uses DuckDB's SQLite scanner to read directly — no Python iteration.
+    Returns {table_name: rows_copied}.
+    Non-fatal: returns empty dict on any error (gold.duckdb may not exist yet).
+    """
+    g_path = str(gold_path or DEFAULT_GOLD_DB_PATH)
+    s_path = str(sqlite_path)
+    if not Path(s_path).exists():
+        return {}
+    if not Path(g_path).exists():
+        return {}
+
+    copied: dict[str, int] = {}
+    try:
+        conn = duckdb.connect(g_path)
+        conn.execute("SET memory_limit='2GB'")
+        conn.execute(f"ATTACH '{s_path}' AS sl (TYPE SQLITE, READ_ONLY TRUE)")
+        conn.execute(_DDL)
+
+        for table in _FEAT_TABLES:
+            try:
+                conn.execute(f"DELETE FROM {table}")
+                conn.execute(f"INSERT INTO {table} SELECT * FROM sl.{table}")
+                n = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                copied[table] = n
+            except Exception as exc:
+                logger.debug("feat_sync_table_skip", table=table, error=str(exc))
+        conn.close()
+    except Exception as exc:
+        logger.warning("feat_sync_failed", error=str(exc))
+    if copied:
+        logger.info("feat_synced_to_gold", tables=copied)
+    return copied
 
 
 # ---------------------------------------------------------------------------

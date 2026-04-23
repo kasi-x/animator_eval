@@ -156,13 +156,24 @@ def test_pipeline_completes_on_fresh_schema(tmp_path, monkeypatch) -> None:
     conn.commit()
     conn.close()
 
+    from tests.conftest import build_silver_duckdb
+    import src.analysis.silver_reader
+    import src.analysis.gold_writer
+
+    silver_path = tmp_path / "silver.duckdb"
+    gold_path = tmp_path / "gold.duckdb"
+    build_silver_duckdb(silver_path, persons, anime_list, credits)
+    monkeypatch.setattr(src.analysis.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(src.analysis.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+
     results = run_scoring_pipeline(enable_websocket=False)
 
     assert len(results) > 0, "Pipeline produced no results"
     assert all("person_id" in r for r in results), "Results missing person_id field"
     assert all("iv_score" in r for r in results), "Results missing iv_score field"
 
-    conn2 = get_connection()
-    n_scores = conn2.execute("SELECT COUNT(*) FROM person_scores").fetchone()[0]
-    conn2.close()
-    assert n_scores > 0, "person_scores TABLE not populated after pipeline run"
+    from src.analysis.gold_writer import gold_connect
+
+    with gold_connect() as conn2:
+        n_scores = conn2.execute("SELECT COUNT(*) FROM person_scores").fetchone()[0]
+    assert n_scores > 0, "person_scores not populated in gold.duckdb after pipeline run"

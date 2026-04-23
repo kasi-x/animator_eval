@@ -1,14 +1,12 @@
 """拡張エッジケーステスト — 境界値・異常値の網羅的テスト."""
 
 from src.analysis.collaboration_strength import compute_collaboration_strength
-from src.analysis.comparison_matrix import build_comparison_matrix
 from src.analysis.decade_analysis import compute_decade_analysis
 from src.analysis.network.ego_graph import extract_ego_graph
 from src.analysis.growth import compute_growth_trends
 from src.analysis.network.network_density import compute_network_density
 from src.analysis.outliers import detect_outliers
 from src.analysis.person_tags import compute_person_tags
-from src.analysis.recommendation import recommend_for_team
 from src.analysis.role_flow import compute_role_flow
 from src.analysis.team_composition import analyze_team_patterns
 from src.analysis.time_series import compute_time_series
@@ -81,25 +79,7 @@ class TestAllSameScores:
             for i in range(20)
         ]
         out = detect_outliers(results)
-        # IQR = 0, so no outliers by IQR method
-        # All z-scores = 0
         assert out["total_outliers"] == 0
-
-    def test_comparison_all_same(self):
-        results = [
-            {
-                "person_id": f"p{i}",
-                "name": f"P{i}",
-                "birank": 50,
-                "patronage": 50,
-                "person_fe": 50,
-                "iv_score": 50,
-            }
-            for i in range(3)
-        ]
-        cm = build_comparison_matrix(["p0", "p1"], results)
-        dom = cm["pairwise_dominance"]["p0"]["p1"]
-        assert dom["ties"] == 4
 
     def test_tags_all_same(self):
         results = [
@@ -114,7 +94,6 @@ class TestAllSameScores:
             for i in range(10)
         ]
         tags = compute_person_tags(results)
-        # No one should be "high" since all are at same level
         for pid_tags in tags.values():
             assert "top_talent" not in pid_tags
 
@@ -162,7 +141,6 @@ class TestLargeTeam:
         ]
         result = extract_ego_graph("p0", credits, anime_map, hops=1)
         assert result["total_nodes"] == 15
-        # All 15 are connected to each other through a1
 
     def test_network_density_dense(self):
         credits = [
@@ -170,46 +148,5 @@ class TestLargeTeam:
             for i in range(10)
         ]
         result = compute_network_density(credits)
-        # Everyone has 9 collaborators
         for pid in result:
             assert result[pid].collaborator_count == 9
-
-
-class TestRecommendationEdgeCases:
-    def test_recommend_all_team_members(self):
-        """When all persons are in the team, no recommendations."""
-        results = [
-            {
-                "person_id": "p1",
-                "birank": 50,
-                "patronage": 50,
-                "person_fe": 50,
-                "iv_score": 50,
-            },
-            {
-                "person_id": "p2",
-                "birank": 50,
-                "patronage": 50,
-                "person_fe": 50,
-                "iv_score": 50,
-            },
-        ]
-        credits = [
-            Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR),
-            Credit(person_id="p2", anime_id="a1", role=Role.KEY_ANIMATOR),
-        ]
-        recs = recommend_for_team(["p1", "p2"], results, credits)
-        assert recs == []
-
-    def test_recommend_nonexistent_team(self):
-        results = [
-            {
-                "person_id": "p1",
-                "birank": 50,
-                "patronage": 50,
-                "person_fe": 50,
-                "iv_score": 50,
-            }
-        ]
-        recs = recommend_for_team(["nonexistent"], results, [])
-        assert recs == []

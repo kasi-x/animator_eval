@@ -32,10 +32,11 @@ _BIRANK_REF_POPULATION = 10000
 
 
 @tag(stage="phase5", cost="expensive", domain="scoring")
-def akm_estimation(ctx: PipelineContext) -> Any:
+def akm_estimation(ctx: PipelineContext, graphs_built: Any) -> Any:
     """AKM person/studio fixed effects estimation.
 
     Writes: ctx.akm_result, ctx.person_fe, ctx.studio_fe, ctx.studio_assignments.
+    Depends on graphs_built to enforce post-entity-resolution execution order.
     """
     from src.analysis.scoring.akm import estimate_akm, infer_studio_assignment
 

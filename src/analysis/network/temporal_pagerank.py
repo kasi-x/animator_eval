@@ -971,7 +971,7 @@ def _beta_binomial_shrinkage(
     successes: list[int],
     trials: list[int],
 ) -> list[float]:
-    """Beta-Binomial 経験ベイズ縮約.
+    """Beta-Binomial empirical Bayes shrinkage.
 
     素の成功率 s/n ではなく posterior mean = (alpha0+s)/(alpha0+beta0+n) を返す。
     試行回数が少ない人物の極端な成功率を母集団平均方向に縮小する。

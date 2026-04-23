@@ -58,7 +58,7 @@ def compute_time_series(
         if not anime:
             continue
 
-        # credit_year/credit_quarter を優先（長期作品の話数別帰属）
+        # Prefer credit_year/credit_quarter (episode-level attribution for long-running works)
         c_year = c.credit_year
         c_quarter = c.credit_quarter
 

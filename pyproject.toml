@@ -1,0 +1,3 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = ["result", ".pixi", "rust_ext", "node_modules", ".git", "__pycache__", "benchmarks"]

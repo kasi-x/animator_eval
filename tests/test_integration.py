@@ -53,12 +53,27 @@ def synthetic_db(tmp_path_factory):
     conn.commit()
     conn.close()
 
+    from tests.conftest import build_silver_duckdb
+    import src.analysis.silver_reader
+    import src.analysis.gold_writer
+
+    silver_path = tmp_path / "silver.duckdb"
+    gold_path = tmp_path / "gold.duckdb"
+    build_silver_duckdb(silver_path, persons, anime_list, credits)
+
+    orig_silver = src.analysis.silver_reader.DEFAULT_SILVER_PATH
+    orig_gold = src.analysis.gold_writer.DEFAULT_GOLD_DB_PATH
+    src.analysis.silver_reader.DEFAULT_SILVER_PATH = silver_path
+    src.analysis.gold_writer.DEFAULT_GOLD_DB_PATH = gold_path
+
     yield db_path
 
     src.database.DEFAULT_DB_PATH = orig_db
     src.pipeline.JSON_DIR = orig_pipeline
     src.utils.config.JSON_DIR = orig_config
     src.utils.json_io.JSON_DIR = orig_json_io
+    src.analysis.silver_reader.DEFAULT_SILVER_PATH = orig_silver
+    src.analysis.gold_writer.DEFAULT_GOLD_DB_PATH = orig_gold
 
 
 @pytest.fixture(scope="class")
@@ -104,6 +119,16 @@ def synthetic_db_fresh(monkeypatch, tmp_path):
     conn.commit()
     conn.close()
 
+    from tests.conftest import build_silver_duckdb
+    import src.analysis.silver_reader
+    import src.analysis.gold_writer
+
+    silver_path = tmp_path / "silver.duckdb"
+    gold_path = tmp_path / "gold.duckdb"
+    build_silver_duckdb(silver_path, persons, anime_list, credits)
+    monkeypatch.setattr(src.analysis.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(src.analysis.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+
     return db_path
 
 
@@ -126,10 +151,12 @@ class TestFullPipeline:
         assert iv_scores == sorted(iv_scores, reverse=True)
 
     def test_scores_in_db(self, synthetic_db, pipeline_results):
-        """スコアがDBに保存される (pipeline_results で実行済みであることが前提)."""
-        conn = get_connection()
-        scores = conn.execute("SELECT COUNT(*) FROM person_scores").fetchone()[0]
-        conn.close()
+        """スコアがgold.duckdbに保存される."""
+        import src.analysis.gold_writer
+        from src.analysis.gold_writer import gold_connect
+
+        with gold_connect() as conn:
+            scores = conn.execute("SELECT COUNT(*) FROM person_scores").fetchone()[0]
         assert scores > 0
 
     def test_report_generation(self, pipeline_results, tmp_path):

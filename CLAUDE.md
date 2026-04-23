@@ -120,7 +120,6 @@ Vocabulary enforcement: `ability`, `skill`, `talent`, `competence`, `capability`
 
 ```bash
 pixi install              # 依存インストール
-pixi run test             # pytest tests/ -v
 pixi run lint             # ruff check
 pixi run format           # ruff format
 pixi run pipeline         # フルパイプライン
@@ -131,6 +130,22 @@ pixi run build-rust       # Rust 拡張ビルド
 pixi run serve            # API サーバー (localhost:8000)
 pixi run lab              # JupyterLab
 ```
+
+### テストの走らせ方 (重要: デフォルトでフル実行しないこと)
+
+作業中は必ず **変更影響のあるテストだけ** を走らせる。2450+ 件の全件走行は PR/ship 直前のみ。
+
+| コマンド | 用途 | 備考 |
+|---|---|---|
+| `pixi run test-impact` | **デフォルト**: 変更影響のみ | `pytest --testmon`。初回は全件走って `.testmondata` を構築、2 回目以降が高速 |
+| `pixi run test-quick` | デバッグ反復中 | `pytest -x --lf` (前回失敗のみ + 即停止) |
+| `pixi run test-scoped tests/test_foo.py -k bar` | 明示ターゲット | パス or `-k` 指定で最小実行 |
+| `pixi run test` | PR/ship 直前のみ | フル 2450+、並列 (`-n auto --dist loadscope`) |
+| `pixi run test-impact-reset` | スキーマ変更後 | `.testmondata` を捨てる (`models_v2.py` 変更後に必須) |
+
+- Claude は「とりあえずテスト」で `pixi run test` を選ばない。まず `test-impact`。
+- 特定モジュールしか触っていないことが明らかな場合は `test-scoped` で更に絞る。
+- testmon がスキーマ変更を追えず取りこぼす可能性があるときは `test-impact-reset` → `test-impact` の順で流す。
 
 Task 系統は `task --list` で確認。
 
@@ -173,7 +188,7 @@ animetor_eval/
 
 ### Testing
 
-- **Monkeypatch `DEFAULT_DB_PATH`** (関数 `get_connection` ではなく): pipeline が module load 時に import するため、関数を差し替えても効かない
+- **Monkeypatch `DEFAULT_DB_PATH`** (関数 `get_connection` ではなく): pipeline が module load 時に import するため、関数を差し替えても効かない。DuckDB 移行後は `DEFAULT_SILVER_PATH` (silver.duckdb) と `DEFAULT_GOLD_DB_PATH` (gold.duckdb) も同様に monkeypatch が必要 (`TODO.md §4` Phase D 完了後に対応)
 - **JSON_DIR の patch**: `src.pipeline.JSON_DIR`, `src.analysis.visualize.JSON_DIR`, `src.utils.config.JSON_DIR` の 3 箇所
 - **structlog + pytest**: `cache_logger_on_first_use=False` + `PrintLoggerFactory()` で "I/O operation on closed file" を回避 (`tests/conftest.py`)
 - **Dataclass 戻り値**: analysis 関数は dataclass を返す。attr access (`result.field`)、dict 化は `asdict()`
@@ -195,7 +210,7 @@ animetor_eval/
 
 ## Tech Stack
 
-Python 3.12, pixi (conda-forge + pypi), NetworkX, Pydantic v2, httpx, structlog, typer + Rich, FastAPI + uvicorn + WebSocket, matplotlib + Plotly, Rust/PyO3/maturin, **sf-hamilton** (Phase 9 DAG PoC, H-1), SQLite WAL (→ DuckDB silver/gold 移行中 `TODO.md §4`; Cards 03/04 完了、Card 05 進行中), ruff, pytest (2450+ tests)。
+Python 3.12, pixi (conda-forge + pypi), NetworkX, Pydantic v2, httpx, structlog, typer + Rich, FastAPI + uvicorn + WebSocket, matplotlib + Plotly, Rust/PyO3/maturin, **sf-hamilton** (Phase 9 DAG PoC, H-1), SQLite WAL (BRONZE/SILVER/GOLD 現在も SQLite; DuckDB 移行中 `TODO.md §4` — Phase A ✅ Cards 03/04/05 完了、次: Card 06 GOLD DuckDB 化), ruff, pytest (2450+ tests)。
 
 ## Known Issues
 

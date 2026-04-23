@@ -1,29 +1,23 @@
 """Phase 2: Validation — data quality checks."""
 
-import sqlite3
-
 import structlog
 
+from src.analysis.silver_reader import silver_connect
 from src.pipeline_phases.context import PipelineContext
 from src.validation import ValidationResult, validate_all
 
 logger = structlog.get_logger()
 
 
-def run_validation_phase(
-    context: PipelineContext, conn: sqlite3.Connection
-) -> ValidationResult:
-    """Run data validation checks.
-
-    Args:
-        context: Pipeline context
-        conn: Database connection
+def run_validation_phase(context: PipelineContext) -> ValidationResult:
+    """Run data validation checks against silver.duckdb.
 
     Returns:
         ValidationResult with passed flag, errors, and warnings
     """
     with context.monitor.measure("validation"):
-        validation = validate_all(conn)
+        with silver_connect() as conn:
+            validation = validate_all(conn)
 
     if not validation.passed:
         for err in validation.errors:

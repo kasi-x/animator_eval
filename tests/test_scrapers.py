@@ -45,6 +45,7 @@ class TestAniListParser:
                 "node": {
                     "id": 100,
                     "name": {"full": "Tetsuro Araki", "native": "荒木哲郎"},
+                    "homeTown": "東京都",  # hometown needed: pure kanji is zh_or_ja ambiguous
                 },
             },
             {

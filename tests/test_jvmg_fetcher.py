@@ -134,7 +134,7 @@ class TestParseWikidataResults:
 
 class TestWikidataRoleMap:
     def test_all_values_parseable(self):
-        from src.models import parse_role, Role, ROLE_MAP
+        from src.models import parse_role, Role
         for prop, token in WIKIDATA_ROLE_MAP.items():
             role = parse_role(token)
             assert role != Role.SPECIAL, (

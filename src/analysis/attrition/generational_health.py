@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import sqlite3
 from collections import defaultdict
 from typing import Any
 
+import duckdb
 import structlog
 
 logger = structlog.get_logger()
@@ -14,7 +14,7 @@ _RELIABLE_MAX_YEAR = 2025
 _EXIT_CUTOFF_YEAR = 2022  # 2023+ は離脱データを除外
 
 
-def compute_cohort_survival_rates(conn: sqlite3.Connection) -> dict[str, Any]:
+def compute_cohort_survival_rates(conn: duckdb.DuckDBPyConnection) -> dict[str, Any]:
     """S(5), S(10), S(15), S(20) per debut_decade.
 
     S(t) = fraction of cohort still active (any credit) t years after debut.
@@ -74,7 +74,7 @@ def compute_cohort_survival_rates(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 def compute_generation_pyramid(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     year_range: tuple[int, int] = (2010, 2025),
 ) -> dict[str, Any]:
     """Headcount by calendar year × career-year bin.
@@ -115,7 +115,7 @@ def compute_generation_pyramid(
                 bin_15_plus += 1
 
         total = bin_0_5 + bin_5_15 + bin_15_plus
-        if total == 0:
+        if not total:
             continue
 
         results[str(year)] = {
@@ -129,7 +129,7 @@ def compute_generation_pyramid(
     return results
 
 
-def compute_flow_accounting(conn: sqlite3.Connection) -> dict[str, Any]:
+def compute_flow_accounting(conn: duckdb.DuckDBPyConnection) -> dict[str, Any]:
     """Annual entry / exit / net flow / dependency ratio.
 
     entry = first_year == calendar_year
@@ -167,7 +167,7 @@ def compute_flow_accounting(conn: sqlite3.Connection) -> dict[str, Any]:
     return results
 
 
-def run_generational_health(conn: sqlite3.Connection) -> dict[str, Any]:
+def run_generational_health(conn: duckdb.DuckDBPyConnection) -> dict[str, Any]:
     """Generational health indicators — main entry point."""
     survival = compute_cohort_survival_rates(conn)
     pyramid = compute_generation_pyramid(conn)

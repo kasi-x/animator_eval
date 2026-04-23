@@ -658,7 +658,7 @@ class SrcAnnCredits(SQLModel, table=True):
 
 
 class SrcAllcinemaAnime(SQLModel, table=True):
-    """Raw allcinema anime data (日本映画)."""
+    """Raw allcinema anime data (Japanese films)."""
 
     __tablename__ = "src_allcinema_anime"
 
@@ -722,7 +722,7 @@ class SrcMalCharacters(SQLModel, table=True):
 
 
 class SrcMadbAnime(SQLModel, table=True):
-    """Raw MADB (移動教室) anime data."""
+    """Raw MADB (Media Arts Database) anime data."""
 
     __tablename__ = "src_madb_anime"
 

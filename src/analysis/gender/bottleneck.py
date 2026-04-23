@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-import sqlite3
+import duckdb
 from typing import Any
 
 import structlog
@@ -19,7 +19,7 @@ logger = structlog.get_logger()
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def compute_gender_survival_by_stage(conn: sqlite3.Connection) -> dict[str, Any]:
+def compute_gender_survival_by_stage(conn: duckdb.DuckDBPyConnection) -> dict[str, Any]:
     """KM survival by stage transition (gender comparison) + log-rank test.
 
     Returns {transition: {F: {timeline, survival, ci}, M: {}, logrank_p, n_F, n_M}}
@@ -137,12 +137,12 @@ def compute_gender_survival_by_stage(conn: sqlite3.Connection) -> dict[str, Any]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Oaxaca-Blinder 分解
+# Oaxaca-Blinder decomposition
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def compute_promotion_gap_oaxaca(conn: sqlite3.Connection) -> dict[str, Any]:
-    """Oaxaca-Blinder 分解: 昇進率ギャップの説明・未説明成分.
+def compute_promotion_gap_oaxaca(conn: duckdb.DuckDBPyConnection) -> dict[str, Any]:
+    """Oaxaca-Blinder decomposition: explained/unexplained components of the promotion rate gap.
 
     outcome: highest_stage >= 3 (binary)
     covariates: active_years, total_credits, first_year (cohort)
@@ -233,7 +233,7 @@ def compute_promotion_gap_oaxaca(conn: sqlite3.Connection) -> dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def compute_studio_gender_fe(conn: sqlite3.Connection) -> dict[str, Any]:
+def compute_studio_gender_fe(conn: duckdb.DuckDBPyConnection) -> dict[str, Any]:
     """Studio-level gender interaction — Cox model (simplified studio FE).
 
     For each studio: compare promotion rate gap F vs M after controlling for
@@ -304,7 +304,7 @@ def compute_studio_gender_fe(conn: sqlite3.Connection) -> dict[str, Any]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def run_gender_bottleneck(conn: sqlite3.Connection) -> dict[str, Any]:
+def run_gender_bottleneck(conn: duckdb.DuckDBPyConnection) -> dict[str, Any]:
     """Gender bottleneck analysis — main entry point."""
     survival = compute_gender_survival_by_stage(conn)
     oaxaca = compute_promotion_gap_oaxaca(conn)

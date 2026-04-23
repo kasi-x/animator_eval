@@ -12,12 +12,10 @@ Tests the compute_core_scores_phase() orchestrator, which:
 from __future__ import annotations
 
 import math
-import sqlite3
 from pathlib import Path
 
 import pytest
 
-from src.models import AnimeAnalysis as Anime, Credit, Person, Role
 from src.pipeline_phases.context import PipelineContext
 from src.synthetic import generate_synthetic_data
 
@@ -62,13 +60,23 @@ def _make_context(monkeypatch, tmp_path: Path) -> PipelineContext:
     for c in credits:
         insert_credit(conn, c)
     conn.commit()
+    conn.close()
+
+    from tests.conftest import build_silver_duckdb
+    import src.analysis.silver_reader
+    import src.analysis.gold_writer
+
+    silver_path = tmp_path / "silver.duckdb"
+    gold_path = tmp_path / "gold.duckdb"
+    build_silver_duckdb(silver_path, persons, anime_list, credits)
+    monkeypatch.setattr(src.analysis.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(src.analysis.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
 
     ctx = PipelineContext(visualize=False, dry_run=False)
-    load_pipeline_data(ctx, conn)
-    run_validation_phase(ctx, conn)
+    load_pipeline_data(ctx)
+    run_validation_phase(ctx)
     run_entity_resolution(ctx)
     build_graphs_phase(ctx)
-    conn.close()
     return ctx
 
 

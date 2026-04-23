@@ -142,3 +142,95 @@ def agg_credits_per_person_ddb(
         rel = conn.execute(sql)
         cols = [d[0] for d in rel.description]
         return [dict(zip(cols, row)) for row in rel.fetchall()]
+
+
+# ---------------------------------------------------------------------------
+# 4. Network density — collaborator counts via self-join (Phase 6 feed)
+#
+# Replaces an O(N²) Python loop in src/analysis/network/network_density.py
+# (anime → set of persons → cross-product collaborator count).
+# Pure aggregation: vectorized hash join + GROUP BY in DuckDB.
+# ---------------------------------------------------------------------------
+
+def agg_collaborator_counts_ddb(
+    silver_path: Path | str | None = None,
+) -> list[dict[str, Any]]:
+    """Compute (person_id, n_collaborators, n_works) via DuckDB self-join.
+
+    Returns rows with: person_id, n_collaborators (distinct co-credited persons
+    excluding self), n_works (distinct anime).
+
+    Equivalent Python: build anime→{persons}, then for each person union
+    persons across their anime, subtract self. DuckDB does this as a vectorized
+    hash join + COUNT DISTINCT, avoiding the per-anime Python set update loop.
+    """
+    sql = """
+    WITH pairs AS (
+        SELECT a.person_id AS pid, b.person_id AS collab_id
+        FROM credits a
+        JOIN credits b ON a.anime_id = b.anime_id
+        WHERE a.person_id <> b.person_id
+    )
+    SELECT
+        pid AS person_id,
+        COUNT(DISTINCT collab_id) AS n_collaborators
+    FROM pairs
+    GROUP BY pid
+    ORDER BY pid
+    """
+    with silver_connect(silver_path) as conn:
+        rel = conn.execute(sql)
+        cols = [d[0] for d in rel.description]
+        return [dict(zip(cols, row)) for row in rel.fetchall()]
+
+
+# ---------------------------------------------------------------------------
+# 5. Patronage director-collab feed — Phase 5 patronage_premium input
+#
+# For each (recipient_person, director) pair, count how many anime they
+# co-credited on. This is the N_id term in Π_i = Σ_d (PR_d × log(1+N_id)).
+# Replaces a defaultdict-of-defaultdict counter built in Python from a full
+# credits scan; here we let DuckDB push down the role filter and group.
+# ---------------------------------------------------------------------------
+
+# Roles that we treat as "directors" for the patronage-feed PoC.
+# Mirrors DIRECTOR_ROLES in src/utils/role_groups.py at a coarse level —
+# enough to demonstrate the speedup without coupling the bench to the
+# project's role-group module.
+_DIRECTOR_ROLE_NAMES: tuple[str, ...] = (
+    "director",
+    "episode_director",
+    "chief_director",
+    "series_director",
+)
+
+
+def agg_patronage_collabs_ddb(
+    silver_path: Path | str | None = None,
+    director_roles: tuple[str, ...] = _DIRECTOR_ROLE_NAMES,
+) -> list[dict[str, Any]]:
+    """Per (person_id, director_id), count distinct shared anime.
+
+    Returns rows with: person_id, director_id, n_collabs.
+    Excludes self-loops.
+    """
+    placeholders = ",".join(["?"] * len(director_roles))
+    sql = f"""
+    WITH dirs AS (
+        SELECT DISTINCT anime_id, person_id AS director_id
+        FROM credits
+        WHERE role IN ({placeholders})
+    )
+    SELECT
+        c.person_id,
+        d.director_id,
+        COUNT(DISTINCT c.anime_id) AS n_collabs
+    FROM credits c
+    JOIN dirs    d ON d.anime_id = c.anime_id
+    WHERE c.person_id <> d.director_id
+    GROUP BY c.person_id, d.director_id
+    """
+    with silver_connect(silver_path) as conn:
+        rel = conn.execute(sql, list(director_roles))
+        cols = [d[0] for d in rel.description]
+        return [dict(zip(cols, row)) for row in rel.fetchall()]

@@ -9,8 +9,7 @@ duration = gap_start_year - debut_year (event) / obs_window_end - debut_year (ce
 
 from __future__ import annotations
 
-import sqlite3
-
+import duckdb
 import numpy as np
 import structlog
 
@@ -22,7 +21,7 @@ logger = structlog.get_logger()
 
 
 def build_entry_cohort_dataset(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     *,
     first_year_min: int = 2010,
     first_year_max: int = 2018,
@@ -215,7 +214,7 @@ def compute_kaplan_meier_by_cohort(dataset: list[dict]) -> dict:
 
 
 def compute_cox_ph(dataset: list[dict]) -> dict:
-    """Cox PH 回帰. 共変量: debut_studio_tier, early_density, debut_year.
+    """Cox PH regression. Covariates: debut_studio_tier, early_density, debut_year.
 
     Returns {covariate: {coef, se, hr, ci_lower, ci_upper, p_value}}
     """
@@ -268,7 +267,7 @@ def compute_dml_attrition(
     dataset: list[dict],
     treatment: str = "debut_studio_tier",
 ) -> dict:
-    """DML: debut_studio_tier → exit 因果効果.
+    """DML: causal effect of debut_studio_tier → exit.
 
     Partial Linear Model: Y = θ·D + g(X) + ε, D = m(X) + V
     Cross-fitting K=5 with GradientBoosting nuisance.
@@ -357,7 +356,7 @@ def compute_dml_attrition(
 
 
 def compute_sensitivity(
-    conn: sqlite3.Connection,
+    conn: duckdb.DuckDBPyConnection,
     *,
     exit_thresholds: tuple[int, ...] = (3, 5, 7),
     first_year_min: int = 2010,
@@ -433,7 +432,7 @@ def compute_sensitivity(
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def run_entry_cohort_attrition(conn: sqlite3.Connection) -> dict:
+def run_entry_cohort_attrition(conn: duckdb.DuckDBPyConnection) -> dict:
     """New-entrant attrition causal decomposition — main entry point."""
     dataset = build_entry_cohort_dataset(conn)
     if not dataset:

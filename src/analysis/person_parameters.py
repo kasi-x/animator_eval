@@ -1,9 +1,9 @@
-"""Person Parameter Card — 10軸パラメータカードの計算.
+"""Person Parameter Card — compute 10-axis parameter cards.
 
-各個人を10個の日本語パラメータ (0-99 percentile + CI) で表現し、
-K-means K=6 によるアーキタイプ分類を付与する。
+Represents each person with 10 parameters (0-99 percentile + CI) and
+assigns an archetype label via K-means K=6.
 
-全パラメータは anime.score を使用せず、構造的クレジットデータのみから算出。
+All parameters are derived from structural credit data only — anime.score is never used.
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ import numpy as np
 import structlog
 
 if TYPE_CHECKING:
-    import sqlite3
+    pass
 
 logger = structlog.get_logger()
 
@@ -93,35 +93,35 @@ def _extract_raw_values(
         active_years = career.get("active_years") or 0
         highest_stage = career.get("highest_stage") or 0
 
-        # --- 1. 規模到達力: AKM person_fe percentile (raw = person_fe) ---
+        # --- 1. scale_reach: AKM person_fe percentile (raw = person_fe) ---
         scale_reach_raw = r.get("person_fe", 0.0)
 
-        # --- 2. 協業幅: role category entropy (versatility_score 0-100) ---
+        # --- 2. collab_breadth: role category entropy (versatility_score 0-100) ---
         collab_breadth_raw = versatility.get("score", 0.0)
 
-        # --- 3. 継続力: active_years / career_span (activity density) ---
+        # --- 3. consistency: active_years / career_span (activity density) ---
         # Represents how consistently they stayed active throughout their career.
         # CV-based variant would need annual credit series not stored in results.
         consistency_raw = active_years / career_span if career_span > 1 else 0.0
 
-        # --- 4. 育成貢献: mentor residual proxy = weighted mentee count ---
+        # --- 4. mentor_value: mentor residual proxy = weighted mentee count ---
         n_mentees = mentor_mentee_count.get(pid, 0)
         mentor_confidence = mentor_confidence_sum.get(pid, 0.0)
         mentor_value_raw = n_mentees * (mentor_confidence / max(n_mentees, 1))
 
-        # --- 5. 中心性: BiRank (weighted PageRank proxy) ---
+        # --- 5. centrality: BiRank (weighted PageRank proxy) ---
         centrality_raw = r.get("birank", 0.0)
 
-        # --- 6. 信頼蓄積: patronage (cumulative edge weight) ---
+        # --- 6. trust_depth: patronage (cumulative edge weight) ---
         trust_depth_raw = r.get("patronage", 0.0)
 
-        # --- 7. 役割進化: highest_stage × (active_years / career_span) ---
+        # --- 7. role_evolution: highest_stage × (active_years / career_span) ---
         # Rewards reaching higher stages while staying consistently active.
         role_evolution_raw = (
             highest_stage * (active_years / career_span) if career_span > 1 else 0.0
         )
 
-        # --- 8. ジャンル特化: max share across score_tiers (genre concentration) ---
+        # --- 8. genre_spec: max share across score_tiers (genre concentration) ---
         ga = genre_affinity.get(pid, {})
         score_tiers = ga.get("score_tiers") or {}
         # Use credit-weighted tier concentration: max share ignoring 'unknown'
@@ -134,13 +134,13 @@ def _extract_raw_values(
             known_eras = {k: v for k, v in eras.items() if k != "unknown"}
             genre_spec_raw = max(known_eras.values()) / 100.0 if known_eras else 0.0
 
-        # --- 9. 直近活発度: recent_credits weighted by dormancy inverse ---
+        # --- 9. recent_activity: recent_credits weighted by dormancy inverse ---
         recent_credits = growth.get("recent_credits") or 0
         dormancy = r.get("dormancy", 0.5)
         # dormancy 1.0 = fully active, 0.0 = completely dormant
         recent_activity_raw = recent_credits * dormancy
 
-        # --- 10. 相性指標: compatibility boost score (higher = more compatible partners) ---
+        # --- 10. compatibility: compatibility boost score (higher = more compatible partners) ---
         compatibility_raw = compatibility_boost.get(pid, 0.0)
 
         raw[pid] = {
@@ -245,7 +245,7 @@ def _compute_ci(
 def _assign_archetypes(
     pct: dict[str, dict[str, float]],
 ) -> dict[str, tuple[str, int]]:
-    """K-means K=6 でアーキタイプを分類する."""
+    """Classify persons into archetypes using K-means with K=6."""
     try:
         from sklearn.cluster import KMeans
         from sklearn.preprocessing import StandardScaler
@@ -338,9 +338,9 @@ def compute_person_parameters(
     """Compute 10-parameter cards for all persons.
 
     Args:
-        results: scores.json 形式のリスト (pipeline context.results)
-        mentorship_list: mentorships.json 形式のリスト
-        genre_affinity: genre_affinity.json 形式の dict (pid → {...})
+        results: list in scores.json format (pipeline context.results)
+        mentorship_list: list in mentorships.json format
+        genre_affinity: dict in genre_affinity.json format (pid → {...})
         compatibility_boost: person_compatibility_boost dict (pid → float)
 
     Returns:
@@ -408,22 +408,19 @@ _PARAM_TO_DB_COL = {
 }
 
 
-def populate_meta_common_person_parameters(
-    conn: "sqlite3.Connection",
-    person_params: list[dict],
-) -> int:
-    """compute_person_parameters の出力を meta_common_person_parameters に upsert する.
-
-    既存の JSON 出力 (pipeline export) は deprecate せず並存させること。
-    Phase 3 完了後に JSON 出力を削除予定。
+def populate_meta_common_person_parameters(person_params: list[dict]) -> int:
+    """Upsert compute_person_parameters output into meta_common_person_parameters in gold.duckdb.
 
     Args:
-        conn: SQLite 接続
-        person_params: compute_person_parameters() の戻り値
+        person_params: return value of compute_person_parameters()
 
     Returns:
-        upsert した行数
+        number of rows upserted
     """
+    import duckdb
+
+    from src.analysis.gold_writer import DEFAULT_GOLD_DB_PATH
+
     if not person_params:
         return 0
 
@@ -454,34 +451,15 @@ def populate_meta_common_person_parameters(
     col_list = ", ".join(cols)
     update_clause = ", ".join(f"{c}=excluded.{c}" for c in cols if c != "person_id")
 
-    conn.executemany(
-        f"INSERT INTO meta_common_person_parameters ({col_list}) VALUES ({placeholders})"
-        f" ON CONFLICT(person_id) DO UPDATE SET {update_clause}",
-        [[r[c] for c in cols] for r in rows],
-    )
-
-    # Register lineage
-    from src.database import register_meta_lineage
-
-    register_meta_lineage(
-        conn,
-        table_name="meta_common_person_parameters",
-        audience="common",
-        source_silver_tables=[
-            "anime_analysis",
-            "credits",
-            "persons",
-            "feat_person_scores",
-            "feat_career",
-            "feat_genre_affinity",
-            "feat_network",
-        ],
-        formula_version="v2.0",
-        ci_method="bootstrap_n1000",
-        null_model="degree_preserving_rewiring_n500",
-        row_count=len(rows),
-        notes="10 axes per Person Parameter Card; archetypes by K-means K=6",
-    )
+    conn = duckdb.connect(str(DEFAULT_GOLD_DB_PATH))
+    try:
+        conn.executemany(
+            f"INSERT INTO meta_common_person_parameters ({col_list}) VALUES ({placeholders})"
+            f" ON CONFLICT(person_id) DO UPDATE SET {update_clause}",
+            [[r[c] for c in cols] for r in rows],
+        )
+    finally:
+        conn.close()
 
     logger.info("meta_common_person_parameters_upserted", n=len(rows))
     return len(rows)

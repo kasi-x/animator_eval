@@ -1,4 +1,4 @@
-"""Community Detection — クリエイター派閥の自動検出.
+"""Community Detection — automatic detection of creator factions.
 
 Louvain法を使用してコラボレーションネットワークからコミュニティ（派閥）を検出する。
 密に連携するクリエイター集団を可視化し、スタジオや監督を超えた実質的な協力関係を明らかにする。
@@ -321,7 +321,7 @@ def detect_communities(
         resolution=resolution,
     )
 
-    # Louvain法でコミュニティ検出（NetworkX 3.x 内蔵、seed=42 で再現性確保）
+    # Detect communities via Louvain (built-in NetworkX 3.x, seed=42 for reproducibility)
     communities_list = nx.community.louvain_communities(
         collaboration_graph,
         weight="weight",
@@ -329,7 +329,7 @@ def detect_communities(
         seed=42,
     )
 
-    # Community オブジェクトに変換
+    # Convert to Community objects
     communities: dict[int, Community] = {}
     community_id = 0
 
@@ -457,7 +457,7 @@ def compute_community_features(
     Returns:
         community_id → 特徴量辞書
     """
-    # person_id → credits のマッピング
+    # person_id → credits mapping
     person_credits: dict[str, list[Credit]] = defaultdict(list)
     for credit in credits:
         person_credits[credit.person_id].append(credit)
@@ -734,7 +734,7 @@ def main():
     # bridge analysis
     bridges = analyze_community_overlap(communities, collab_graph)
 
-    # エクスポート (function call kept for side effects, return value unused)
+    # Export (function call kept for side effects, return value unused)
     _ = export_communities_for_visualization(communities, features, person_names)
 
     # display results

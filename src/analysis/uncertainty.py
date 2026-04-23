@@ -25,7 +25,26 @@ from typing import Callable, Sequence
 
 import numpy as np
 
-from src.reporting.specs.finding import UncertaintyInfo
+from dataclasses import dataclass, field as _field
+
+
+@dataclass
+class UncertaintyInfo:
+    """Uncertainty bounds attached to a statistic."""
+
+    estimate: float | None = None
+    ci_lower: float | None = None
+    ci_upper: float | None = None
+    ci_level: float = 0.95
+    standard_error: float | None = None
+    p_value: float | None = None
+    n: int | None = None
+    n_bootstrap: int | None = None
+    method: str = ""
+    source_code_ref: str = ""
+
+    def has_interval(self) -> bool:
+        return self.ci_lower is not None and self.ci_upper is not None
 
 
 # ---------------------------------------------------------------------------

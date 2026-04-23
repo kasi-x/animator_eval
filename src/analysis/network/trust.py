@@ -221,7 +221,7 @@ def batch_detect_engagement_decay(
     Returns:
         {person_id: [{"director_id": ..., "status": "decayed", ...}, ...]}
     """
-    # Step 1: 事前集計（credits を1回だけスキャン）
+    # Step 1: pre-aggregate (scan credits exactly once)
     director_works: dict[str, list[tuple[int, str]]] = defaultdict(list)
     person_anime: dict[str, set[str]] = defaultdict(set)
     director_ids: set[str] = set()
@@ -238,12 +238,12 @@ def batch_detect_engagement_decay(
     for dir_id in director_works:
         director_works[dir_id].sort()
 
-    # Step 2: 監督ごとにコラボレーターを特定（共演のあるペアのみ）
+    # Step 2: identify collaborators per director (only pairs with actual co-credits)
     director_anime_sets: dict[str, set[str]] = {
         dir_id: {aid for _, aid in works} for dir_id, works in director_works.items()
     }
 
-    # Step 3: 共演ペアのみ検査
+    # Step 3: inspect co-credit pairs only
     decay_results: dict[str, list[dict]] = {}
     pairs_checked = 0
 

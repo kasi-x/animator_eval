@@ -10,11 +10,18 @@ This enables auditing and prevents accidental contamination of analysis layer.
 """
 
 import json
-import sqlite3
+import os
+from pathlib import Path
 from typing import Optional, Any
+
+import duckdb
 import structlog
 
 logger = structlog.get_logger()
+
+DEFAULT_BRONZE_PATH: Path = Path(
+    os.environ.get("ANIMETOR_BRONZE_PATH", "result/anime.db")
+)
 
 __all__ = [
     "get_display_score",
@@ -35,7 +42,7 @@ _CACHE: dict = {}
 
 def clear_cache():
     """Clear the display layer query cache.
-    
+
     Use in tests after modifying data or between test cases.
     """
     global _CACHE
@@ -43,83 +50,106 @@ def clear_cache():
     logger.debug("display_cache_cleared")
 
 
-def _get_source_info(anime_id: str) -> tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+def _get_source_info(
+    anime_id: str,
+) -> tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
     """Parse anime_id to determine source and ID.
-    
+
     Args:
         anime_id: Formatted ID like "anilist:123", "ann:456", "seesaawiki:slug", etc.
-        
+
     Returns:
         (source, table_name, id_column, id_value) or (None, None, None, None) if invalid
     """
     if not anime_id or not isinstance(anime_id, str):
         return None, None, None, None
-    
+
     # Seesaawiki uses text ID with explicit prefix handling
     if anime_id.startswith("seesaawiki:"):
         _, id_str = anime_id.split(":", 1)
         return "seesaawiki", "src_seesaawiki_anime", "id", id_str
-    
+
     # Try colon separator first (anilist:, allcinema:, keyframe:)
     if ":" in anime_id:
         source, id_str = anime_id.split(":", 1)
         table = f"src_{source}_anime"
         id_column = f"{source}_id"
         return source, table, id_column, id_str
-    
+
     # Try hyphen separator (ann-, mal-)
     if "-" in anime_id:
         source, id_str = anime_id.split("-", 1)
         table = f"src_{source}_anime"
         id_column = f"{source}_id"
         return source, table, id_column, id_str
-    
+
     return None, None, None, None
 
 
+def _open_bronze(bronze_path: Path | str | None) -> Optional[duckdb.DuckDBPyConnection]:
+    """Open an in-memory DuckDB connection with the bronze SQLite file attached.
+
+    Returns None if the file does not exist, so callers can short-circuit.
+    """
+    bp = Path(bronze_path) if bronze_path is not None else DEFAULT_BRONZE_PATH
+    if not bp.exists():
+        return None
+    conn = duckdb.connect(":memory:")
+    conn.execute(f"ATTACH '{bp}' AS bronze (TYPE SQLITE, READ_ONLY TRUE)")
+    return conn
+
+
 def _query_bronze(
-    conn: sqlite3.Connection,
     anime_id: str,
     field: str,
+    bronze_path: Path | str | None = None,
 ) -> Optional[Any]:
     """Query a field from the appropriate bronze table.
-    
+
     Args:
-        conn: Database connection
         anime_id: Formatted ID (e.g., "anilist:123", "ann:456")
         field: Field name to retrieve
-        
+        bronze_path: Path to the SQLite file; defaults to DEFAULT_BRONZE_PATH
+
     Returns:
         Field value or None if not found
     """
     source, table, id_col, id_val = _get_source_info(anime_id)
-    
+
     if not source:
         return None
-    
-    try:
-        query = f"SELECT {field} FROM {table} WHERE {id_col} = ?"
-        # Try integer ID first (for most sources)
-        try:
-            id_val_typed = int(id_val)
-        except (ValueError, TypeError):
-            id_val_typed = id_val  # For seesaawiki which uses text
-        
-        cursor = conn.execute(query, (id_val_typed,))
-        row = cursor.fetchone()
-        return row[0] if row else None
-    except sqlite3.OperationalError:
+
+    conn = _open_bronze(bronze_path)
+    if conn is None:
         return None
 
+    try:
+        try:
+            id_typed: int | str = int(id_val)  # type: ignore[arg-type]
+        except (ValueError, TypeError):
+            id_typed = id_val  # For seesaawiki which uses text
 
-def get_display_score(conn: sqlite3.Connection, anime_id: str) -> Optional[float]:
+        row = conn.execute(
+            f"SELECT {field} FROM bronze.{table} WHERE {id_col} = ?",
+            [id_typed],
+        ).fetchone()
+        return row[0] if row else None
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
+def get_display_score(
+    anime_id: str, bronze_path: Path | str | None = None
+) -> Optional[float]:
     """Get anime viewer score (anime.score from AniList).
 
     **DISPLAY ONLY** — NOT for analysis scoring. Returns None if unavailable.
 
     Args:
-        conn: Database connection
         anime_id: Anime ID (e.g., "anilist:123")
+        bronze_path: Path to the SQLite file; defaults to DEFAULT_BRONZE_PATH
 
     Returns:
         Viewer score (0-100) or None if not found
@@ -127,20 +157,22 @@ def get_display_score(conn: sqlite3.Connection, anime_id: str) -> Optional[float
     cache_key = f"score:{anime_id}"
     if cache_key in _CACHE:
         return _CACHE[cache_key]
-    
-    result = _query_bronze(conn, anime_id, "score")
+
+    result = _query_bronze(anime_id, "score", bronze_path)
     _CACHE[cache_key] = result
     return result
 
 
-def get_display_popularity(conn: sqlite3.Connection, anime_id: str) -> Optional[int]:
+def get_display_popularity(
+    anime_id: str, bronze_path: Path | str | None = None
+) -> Optional[int]:
     """Get anime popularity rank from AniList.
 
     **DISPLAY ONLY** — NOT for analysis. Returns None if unavailable.
 
     Args:
-        conn: Database connection
         anime_id: Anime ID
+        bronze_path: Path to the SQLite file; defaults to DEFAULT_BRONZE_PATH
 
     Returns:
         Popularity rank (lower is more popular) or None
@@ -148,20 +180,22 @@ def get_display_popularity(conn: sqlite3.Connection, anime_id: str) -> Optional[
     cache_key = f"popularity:{anime_id}"
     if cache_key in _CACHE:
         return _CACHE[cache_key]
-    
-    result = _query_bronze(conn, anime_id, "popularity")
+
+    result = _query_bronze(anime_id, "popularity", bronze_path)
     _CACHE[cache_key] = result
     return result
 
 
-def get_display_favourites(conn: sqlite3.Connection, anime_id: str) -> Optional[int]:
+def get_display_favourites(
+    anime_id: str, bronze_path: Path | str | None = None
+) -> Optional[int]:
     """Get anime favourites count from AniList.
 
     **DISPLAY ONLY** — NOT for analysis. Returns None if unavailable.
 
     Args:
-        conn: Database connection
         anime_id: Anime ID
+        bronze_path: Path to the SQLite file; defaults to DEFAULT_BRONZE_PATH
 
     Returns:
         Favourites count or None
@@ -169,31 +203,63 @@ def get_display_favourites(conn: sqlite3.Connection, anime_id: str) -> Optional[
     cache_key = f"favourites:{anime_id}"
     if cache_key in _CACHE:
         return _CACHE[cache_key]
-    
-    result = _query_bronze(conn, anime_id, "favourites")
+
+    result = _query_bronze(anime_id, "favourites", bronze_path)
     _CACHE[cache_key] = result
     return result
 
 
-def _query_primary_description(conn: sqlite3.Connection, anime_id: str, source: str) -> Optional[str]:
+def _query_primary_description(
+    anime_id: str,
+    source: str,
+    bronze_path: Path | str | None = None,
+) -> Optional[str]:
     field = "synopsis" if source == "allcinema" else "description"
-    return _query_bronze(conn, anime_id, field)
+    return _query_bronze(anime_id, field, bronze_path)
 
 
-def _query_fallback_description(conn: sqlite3.Connection, anime_id: str) -> Optional[str]:
+def _query_fallback_description(
+    anime_id: str,
+    bronze_path: Path | str | None = None,
+) -> Optional[str]:
+    """Look up allcinema synopsis via anime_external_ids cross-reference.
+
+    anime_external_ids is a SILVER table that lives in the same SQLite file
+    as the bronze src_* tables.
+    """
+    conn = _open_bronze(bronze_path)
+    if conn is None:
+        return None
+
     try:
         row = conn.execute(
-            "SELECT external_id FROM anime_external_ids WHERE anime_id = ? AND source = 'allcinema'",
-            (anime_id,),
+            "SELECT external_id FROM bronze.anime_external_ids "
+            "WHERE anime_id = ? AND source = 'allcinema'",
+            [anime_id],
         ).fetchone()
-        if row:
-            return _query_bronze(conn, f"allcinema:{row[0]}", "synopsis")
-    except sqlite3.OperationalError:
-        pass
-    return None
+        if not row:
+            return None
+
+        allcinema_id_str = row[0]
+        try:
+            allcinema_id: int | str = int(allcinema_id_str)
+        except (ValueError, TypeError):
+            allcinema_id = allcinema_id_str
+
+        result = conn.execute(
+            "SELECT synopsis FROM bronze.src_allcinema_anime WHERE allcinema_id = ?",
+            [allcinema_id],
+        ).fetchone()
+        return result[0] if result else None
+    except Exception:
+        return None
+    finally:
+        conn.close()
 
 
-def get_display_description(conn: sqlite3.Connection, anime_id: str) -> Optional[str]:
+def get_display_description(
+    anime_id: str, bronze_path: Path | str | None = None
+) -> Optional[str]:
     """Get anime description/synopsis from source.
 
     **DISPLAY ONLY** — NOT for analysis. Returns None if unavailable.
@@ -204,21 +270,23 @@ def get_display_description(conn: sqlite3.Connection, anime_id: str) -> Optional
     if cache_key in _CACHE:
         return _CACHE[cache_key]
     source, _, _, _ = _get_source_info(anime_id)
-    result = _query_primary_description(conn, anime_id, source)
+    result = _query_primary_description(anime_id, source, bronze_path)
     if result is None:
-        result = _query_fallback_description(conn, anime_id)
+        result = _query_fallback_description(anime_id, bronze_path)
     _CACHE[cache_key] = result
     return result
 
 
-def get_display_cover_url(conn: sqlite3.Connection, anime_id: str) -> Optional[str]:
+def get_display_cover_url(
+    anime_id: str, bronze_path: Path | str | None = None
+) -> Optional[str]:
     """Get anime cover image URL.
 
     **DISPLAY ONLY** — NOT for analysis. Returns None if unavailable.
 
     Args:
-        conn: Database connection
         anime_id: Anime ID
+        bronze_path: Path to the SQLite file; defaults to DEFAULT_BRONZE_PATH
 
     Returns:
         URL to cover image or None
@@ -226,26 +294,28 @@ def get_display_cover_url(conn: sqlite3.Connection, anime_id: str) -> Optional[s
     cache_key = f"cover_url:{anime_id}"
     if cache_key in _CACHE:
         return _CACHE[cache_key]
-    
+
     # Only anilist has cover images in bronze
     source, _, _, _ = _get_source_info(anime_id)
     if source != "anilist":
         _CACHE[cache_key] = None
         return None
-    
-    result = _query_bronze(conn, anime_id, "cover_large")
+
+    result = _query_bronze(anime_id, "cover_large", bronze_path)
     _CACHE[cache_key] = result
     return result
 
 
-def get_display_genres(conn: sqlite3.Connection, anime_id: str) -> Optional[list[str]]:
+def get_display_genres(
+    anime_id: str, bronze_path: Path | str | None = None
+) -> Optional[list[str]]:
     """Get anime genres as a list.
 
     **DISPLAY ONLY** — NOT for analysis. Returns None if unavailable.
 
     Args:
-        conn: Database connection
         anime_id: Anime ID
+        bronze_path: Path to the SQLite file; defaults to DEFAULT_BRONZE_PATH
 
     Returns:
         List of genre strings or None
@@ -253,8 +323,8 @@ def get_display_genres(conn: sqlite3.Connection, anime_id: str) -> Optional[list
     cache_key = f"genres:{anime_id}"
     if cache_key in _CACHE:
         return _CACHE[cache_key]
-    
-    genres_json = _query_bronze(conn, anime_id, "genres")
+
+    genres_json = _query_bronze(anime_id, "genres", bronze_path)
     if not genres_json:
         _CACHE[cache_key] = []
         return []
@@ -270,14 +340,16 @@ def get_display_genres(conn: sqlite3.Connection, anime_id: str) -> Optional[list
     return result
 
 
-def get_display_tags(conn: sqlite3.Connection, anime_id: str) -> Optional[list[dict]]:
+def get_display_tags(
+    anime_id: str, bronze_path: Path | str | None = None
+) -> Optional[list[dict]]:
     """Get anime tags with metadata.
 
     **DISPLAY ONLY** — NOT for analysis. Returns None if unavailable.
 
     Args:
-        conn: Database connection
         anime_id: Anime ID
+        bronze_path: Path to the SQLite file; defaults to DEFAULT_BRONZE_PATH
 
     Returns:
         List of tag dicts (with 'name', 'rank' fields) or None
@@ -285,8 +357,8 @@ def get_display_tags(conn: sqlite3.Connection, anime_id: str) -> Optional[list[d
     cache_key = f"tags:{anime_id}"
     if cache_key in _CACHE:
         return _CACHE[cache_key]
-    
-    tags_json = _query_bronze(conn, anime_id, "tags")
+
+    tags_json = _query_bronze(anime_id, "tags", bronze_path)
     if not tags_json:
         _CACHE[cache_key] = []
         return []
@@ -302,14 +374,16 @@ def get_display_tags(conn: sqlite3.Connection, anime_id: str) -> Optional[list[d
     return result
 
 
-def get_display_synonyms(conn: sqlite3.Connection, anime_id: str) -> Optional[list[str]]:
+def get_display_synonyms(
+    anime_id: str, bronze_path: Path | str | None = None
+) -> Optional[list[str]]:
     """Get anime title synonyms/alternative titles.
 
     **DISPLAY ONLY** — NOT for analysis. Returns None if unavailable.
 
     Args:
-        conn: Database connection
         anime_id: Anime ID
+        bronze_path: Path to the SQLite file; defaults to DEFAULT_BRONZE_PATH
 
     Returns:
         List of alternative titles or None
@@ -317,8 +391,8 @@ def get_display_synonyms(conn: sqlite3.Connection, anime_id: str) -> Optional[li
     cache_key = f"synonyms:{anime_id}"
     if cache_key in _CACHE:
         return _CACHE[cache_key]
-    
-    synonyms_json = _query_bronze(conn, anime_id, "synonyms")
+
+    synonyms_json = _query_bronze(anime_id, "synonyms", bronze_path)
     if not synonyms_json:
         _CACHE[cache_key] = []
         return []
@@ -329,40 +403,42 @@ def get_display_synonyms(conn: sqlite3.Connection, anime_id: str) -> Optional[li
             result = []
     except (json.JSONDecodeError, TypeError):
         result = []
-    
+
     _CACHE[cache_key] = result
     return result
 
 
 def get_display_metadata(
-    conn: sqlite3.Connection, anime_id: str
+    anime_id: str,
+    bronze_path: Path | str | None = None,
 ) -> Optional[dict]:
     """Get all display metadata for an anime in one call.
 
     **DISPLAY ONLY** — NOT for analysis.
 
     Args:
-        conn: Database connection
         anime_id: Anime ID
+        bronze_path: Path to the SQLite file; defaults to DEFAULT_BRONZE_PATH
 
     Returns:
-        Dict with keys: score, popularity, favourites, description, or None
+        Dict with keys: score, popularity, favourites, description,
+        cover_url, genres, tags, synonyms
     """
     cache_key = f"metadata:{anime_id}"
     if cache_key in _CACHE:
         return _CACHE[cache_key]
-    
+
     result = {
-        "score": get_display_score(conn, anime_id),
-        "popularity": get_display_popularity(conn, anime_id),
-        "favourites": get_display_favourites(conn, anime_id),
-        "description": get_display_description(conn, anime_id),
-        "cover_url": get_display_cover_url(conn, anime_id),
-        "genres": get_display_genres(conn, anime_id),
-        "tags": get_display_tags(conn, anime_id),
-        "synonyms": get_display_synonyms(conn, anime_id),
+        "score": get_display_score(anime_id, bronze_path),
+        "popularity": get_display_popularity(anime_id, bronze_path),
+        "favourites": get_display_favourites(anime_id, bronze_path),
+        "description": get_display_description(anime_id, bronze_path),
+        "cover_url": get_display_cover_url(anime_id, bronze_path),
+        "genres": get_display_genres(anime_id, bronze_path),
+        "tags": get_display_tags(anime_id, bronze_path),
+        "synonyms": get_display_synonyms(anime_id, bronze_path),
     }
-    
+
     _CACHE[cache_key] = result
     return result
 

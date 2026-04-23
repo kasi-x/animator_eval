@@ -377,7 +377,7 @@ KNOWN_ROLES_JA: set[str] = {
     "モデリング協力",
     "シニアデジタルアーティスト",
     "デジタルアーティスト",
-    # 作画 extended
+    # animation drawing (extended)
     "動画作監",
     "原画作監",
     "作監",
@@ -415,7 +415,7 @@ KNOWN_ROLES_JA: set[str] = {
     "アニメーションストーリーボード",
     "変身原画",
     "アクション作画",
-    # 仕上 extended
+    # finishing (extended)
     "仕上助手",
     "仕上特効",
     "仕上検査補佐",
@@ -434,12 +434,12 @@ KNOWN_ROLES_JA: set[str] = {
     "デジタル動画",
     "動画チーフ",
     "動仕制作",
-    # 編集 extended
+    # editing (extended)
     "オンライン編集",
     "HD編集",
     "フォーマット編集",
     "デジタル編集",
-    # 撮影 extended
+    # photography (extended)
     "コンポジット撮影",
     "撮影協力",
     "撮影チーフ",
@@ -449,7 +449,7 @@ KNOWN_ROLES_JA: set[str] = {
     "スキャン",
     "スキャニング",
     "フィルム",
-    # 美術 extended
+    # art/background (extended)
     "美術監督補佐",
     "美術協力",
     "美術背景",
@@ -457,7 +457,7 @@ KNOWN_ROLES_JA: set[str] = {
     "背景協力",
     "背景管理",
     "背景監修",
-    # 設定 extended
+    # settings/design sheets (extended)
     "設定管理",
     "画面設計",
     "原図",
@@ -467,15 +467,15 @@ KNOWN_ROLES_JA: set[str] = {
     "衣装協力",
     "服装設定",
     "キャラクター監修",
-    # 音響 extended
+    # sound (extended)
     "音楽制作協力",
     "音楽ディレクター",
     "サウンドミキサー",
-    # 演出 extended
+    # direction/episode direction (extended)
     "演出補",
     "演出協力",
     "ディレクター",
-    # 制作管理 extended
+    # production management (extended)
     "制作管理",
     "制作プロデューサー",
     "CG制作プロデューサー",
@@ -485,7 +485,7 @@ KNOWN_ROLES_JA: set[str] = {
     "モデル協力",
     "モデル進行管理",
     "進行協力",
-    # デザイン extended
+    # design (extended)
     "デザイン協力",
     "ロゴデザイン",
     "タイトルデザイン",
@@ -518,7 +518,7 @@ KNOWN_ROLES_JA: set[str] = {
     "コーディネーター",
     "フォント協力",
     "プロモーション協力",
-    # 音楽 extended
+    # music (extended)
     "挿入歌",
     "ボーカル",
     "Lyrics",
@@ -533,7 +533,7 @@ KNOWN_ROLES_JA: set[str] = {
     "振り付け",
     "楽器監修",
     "主題歌協力",
-    # 制作補助
+    # production support
     "補佐",
     "デジタル作画",
     "原案協力",
@@ -542,48 +542,48 @@ KNOWN_ROLES_JA: set[str] = {
     "ツール開発",
     "モーションアドバイザー",
     "ゲストメカニックデザイン",
-    # その他（作品固有だが一応認識）
+    # misc (work-specific but recognized)
     "児童画",
     "WEBプロモーション",
     "作品提供",
     "メカニカルコーディネーター",
-    # === LLM検証 (2026-03-16) で検出された未登録ロール ===
-    # 音響系
+    # === Unregistered roles detected by LLM validation (2026-03-16) ===
+    # sound-related
     "録音監督",
     "音響制作デスク",
     "音響調整",
-    # 制作管理系
+    # production management-related
     "プロダクションマネージャー",
     "プロデューサー補",
     "製作補",
-    # 文芸系
+    # literary / script-related
     "文芸助手",
     "脚本構成",
-    # CG / ポスプロ
+    # CG / post-production
     "3DCG監督",
     "デジタル特殊効果",
     "テレシネ",
-    # デザイン / 設定系
+    # design / settings-related
     "美術設定監修",
     "デザイン監修",
     "色設定",
     "アクセサリーデザイン案",
-    # 協力 / プロデュース
+    # cooperation / produce
     "プロデュース協力",
     "キャスティング",
-    # 音楽系
+    # music-related
     "演奏",
     "指揮",
     "OPテーマプロデューサー",
     "OPテーマ音楽制作協力",
-    # 放送 / メディア
+    # broadcasting / media
     "NETプロデューサー",
     "データ放送",
     "掲載",
-    # 監修
+    # supervision
     "時代考証",
     # === UNKNOWN roles (2026-03-16 full scan, freq >= 10) ===
-    # アニメーション協力 / 制作協力系
+    # animation cooperation / production support
     "アニメーション協力",
     "アニメーション制作統括",
     "アニメーション共同制作",
@@ -594,22 +594,22 @@ KNOWN_ROLES_JA: set[str] = {
     "制作アシスタント",
     "制作広報",
     "制作デスク補",
-    # 振付
+    # choreography
     "ダンス振付",
     "振付",
-    # 動画検査系
+    # in-between QC
     "動画検査補佐",
     "動画管理",
     "動画検査・デジタル修正",
-    # 作画監督系
+    # animation direction
     "作監協力",
     "作監補佐",
     "アクション・エフェクト作画監督",
     "チーフアニメーター",
     "キャラ原図・総作画監督",
-    # キーアニメーター
+    # key animator
     "キーアニメーター",
-    # VFX / デジタル系
+    # VFX / digital
     "ビジュアルエフェクト",
     "デジタルワークス",
     "デジタルコンポジット",
@@ -626,7 +626,7 @@ KNOWN_ROLES_JA: set[str] = {
     "VTRワーク",
     "VTR編集",
     "デジタルエフェクト",
-    # 演出系
+    # direction-related
     "アニメーション演出",
     "演出補佐",
     "チーフ演出",
@@ -634,7 +634,7 @@ KNOWN_ROLES_JA: set[str] = {
     "監督補佐",
     "監督補",
     "監督助手",
-    # 3D系
+    # 3D-related
     "3Dアニメーター",
     "3D監督",
     "3DCGディレクター",
@@ -651,7 +651,7 @@ KNOWN_ROLES_JA: set[str] = {
     "3DCG制作協力",
     "3DCG協力",
     "3DCGモデリング",
-    # 撮影系
+    # photography-related
     "撮影チーム長",
     "BGスキャニング",
     "撮影管理",
@@ -660,7 +660,7 @@ KNOWN_ROLES_JA: set[str] = {
     "副撮影監督",
     "撮影監督補",
     "撮影助手",
-    # 編集系
+    # editing-related
     "VTR編集",
     "オンライン編集担当",
     "HD編集助手",
@@ -682,10 +682,10 @@ KNOWN_ROLES_JA: set[str] = {
     "ビデオ編集デスク",
     "ビデオ編集助手",
     "ビデオフォーマット編集",
-    # ポストプロダクション
+    # post-production
     "ポストプロダクション",
     "フィルムレコーディング",
-    # 音響系
+    # sound-related
     "アシスタントミキサー",
     "サウンドエディター",
     "サウンド・エディター",
@@ -714,7 +714,7 @@ KNOWN_ROLES_JA: set[str] = {
     "オーディオディレクター",
     "MAスタジオ",
     "フォーリー",
-    # 音楽系
+    # music-related
     "作編曲",
     "音楽製作",
     "音楽制作担当",
@@ -735,7 +735,7 @@ KNOWN_ROLES_JA: set[str] = {
     "オリジナルサウンドトラック盤",
     "主題歌プロデュース",
     "主題歌制作",
-    # プロデューサー系
+    # producer-related
     "ラインプロデューサー",
     "協力プロデューサー",
     "アニメーション制作プロデューサー",
@@ -754,7 +754,7 @@ KNOWN_ROLES_JA: set[str] = {
     "総合プロデューサー",
     "アニメーションプロデュース",
     "担当プロデューサー",
-    # 制作管理系
+    # production management-related
     "プロダクションマネージャー",
     "プロダクション・マネージャー",
     "プログラムマネージャー",
@@ -764,7 +764,7 @@ KNOWN_ROLES_JA: set[str] = {
     "製作管理",
     "製作デスク",
     "製作補",
-    # 宣伝・マーケティング系
+    # promotion / marketing
     "プロモーション",
     "宣伝広報",
     "宣伝プロデュース",
@@ -778,7 +778,7 @@ KNOWN_ROLES_JA: set[str] = {
     "販促",
     "販促担当",
     "販売プロモーション",
-    # デザイン系
+    # design-related
     "モンスターデザイン",
     "セットデザイン",
     "コスチュームデザイン",
@@ -812,14 +812,14 @@ KNOWN_ROLES_JA: set[str] = {
     "イメージボード",
     "ビジュアルアート",
     "ビジュアルコンセプト",
-    # 美術系
+    # art / background
     "美術助手",
     "美術設定協力",
     "美術設定補佐",
     "背景デザイン",
     "背景担当",
     "背景監督",
-    # 設定系
+    # settings sheets
     "設定デザイン",
     "設定担当",
     "設定マネージャー",
@@ -829,14 +829,14 @@ KNOWN_ROLES_JA: set[str] = {
     "小物デザイン",
     "衣装デザイン協力",
     "衣装コンセプトデザイン・アシスタント",
-    # 色彩系
+    # color design
     "色彩設計補",
     "色彩設計/指定検査",
     "色彩設計・指定検査",
     "色彩設定補佐",
     "カラーコーディネイト",
     "カラリスト",
-    # テロップ / タイトル
+    # telop / title
     "テロップ",
     "タイトルリスワーク",
     "タイトル・リスワーク",
@@ -845,14 +845,14 @@ KNOWN_ROLES_JA: set[str] = {
     "筆文字",
     "サブタイトル",
     "サブタイトル題字",
-    # CG系追加
+    # CG-related (additional)
     "CGラインディレクター",
     "CGテクニカルディレクター",
     "モデリングディレクター",
     "モデリング/リギング",
     "モデリング・リギング",
     "CG制作担当",
-    # 文芸系
+    # literary / script-related
     "文芸制作",
     "文芸協力",
     "文芸設定",
@@ -875,7 +875,7 @@ KNOWN_ROLES_JA: set[str] = {
     "ホームページ",
     "HP制作",
     "携帯サイト",
-    # 版権 / ライセンス
+    # rights / licensing
     "版権制作",
     "版権担当",
     "版権管理",
@@ -884,7 +884,7 @@ KNOWN_ROLES_JA: set[str] = {
     "ライツプロモート",
     "国内ライセンス",
     "MDライセンス担当",
-    # 特殊
+    # special
     "特別協力",
     "作品協力",
     "資料協力",
@@ -895,7 +895,7 @@ KNOWN_ROLES_JA: set[str] = {
     "アドバイザー",
     "アシスタントエンジニア",
     "テクニカルディレクター",
-    # OP/ED/PV系
+    # OP/ED/PV
     "オープニングアニメーション",
     "OP/EDアニメーション",
     "予告編ディレクター",
@@ -907,16 +907,16 @@ KNOWN_ROLES_JA: set[str] = {
     "コミック",
     "コミック協力",
     "連載協力",
-    # 制作委員会（記録用）
+    # production committee (record only)
     "製作委員会",
-    # カード原画（作品固有）
+    # card key animation (work-specific)
     "アニメオリジナルカード原画",
-    # スタジオ関連
+    # studio-related
     "スタジオ制作担当",
     "演技事務",
     "ストーリーボード",
     "アニメーションストーリーボード",
-    # その他
+    # other / misc
     "デザイン",
     "担当",
     "AP",
@@ -969,12 +969,12 @@ KNOWN_ROLES_JA: set[str] = {
     "アニメーションツール",
     "放送進行協力",
     # === Round 2 (2026-03-16, post-HTML-fix scan, freq >= 50) ===
-    # 表記揺れ
+    # spelling variants
     "第2原画",
-    # キャラクター / メカ略称
+    # character / mecha abbreviations
     "キャラクター",
     "メカニック",
-    # CG / 3D追加
+    # CG / 3D (additional)
     "CGアニメーション",
     "3D.C.G.I",
     "3Dアニメーション",
@@ -985,27 +985,27 @@ KNOWN_ROLES_JA: set[str] = {
     "CGアセット",
     "3D背景",
     "CGカメラワーク",
-    # ツール / テック
+    # tools / tech
     "ツール・スクリプト開発",
-    # 仕上系追加
+    # finishing (additional)
     "仕上げ検査補佐",
     "彩色チェック",
     "色指定・色検査",
-    # デザイン / 背景追加
+    # design / background (additional)
     "背景レイアウト",
     "サブ・小物",
-    # デジタル
+    # digital
     "デジタルワーク",
     "2Dエフェクト&コンポジット",
-    # 翻訳
+    # translation
     "翻訳",
-    # アイキャッチ
+    # eyecatch
     "アイキャッチ原画",
     "提供バックイラスト",
-    # 作品固有だが高頻度
+    # work-specific but high-frequency
     "プリ☆チャンライブ演出",
     "プリパラライブ演出",
-    # freq >= 30 の一般ロール
+    # general roles with freq >= 30
     "カット制作・モデリング協力",
     "色彩設計/指定検査",
     "ストーリーエディター",
@@ -1022,11 +1022,11 @@ KNOWN_ROLES_JA: set[str] = {
     "実写ロケ協力",
     "HDビデオ編集スタジオ",
     "制作事務",
-    # 括弧付きロール（作品固有修飾子）
+    # parenthetical roles (work-specific modifiers)
     "脚本協力",
     "脚本協力(忍術創案)",
     # === Round 3 (2026-03-16, post-HTML-fix round 2, freq >= 100) ===
-    # 作画系
+    # animation drawing
     "ペイント検査",
     "エフェクト作監",
     "第一原画",
@@ -1041,16 +1041,16 @@ KNOWN_ROLES_JA: set[str] = {
     "仕上検査協力",
     "BANK原画",
     "BANK管理",
-    # 演出・絵コンテ系
+    # direction / storyboard
     "絵コンテ協力",
     "演助",
     "次回予告",
-    # 制作進行系
+    # production management
     "進行補佐",
     "制作話数担当",
     "仕上管理",
     "仕上制作",
-    # CG系
+    # CG
     "CGスタッフ",
     "CGアーティスト",
     "CGIアート",
@@ -1064,7 +1064,7 @@ KNOWN_ROLES_JA: set[str] = {
     "3DCG制作進行",
     "CG背景",
     "2D撮影",
-    # デザイン系
+    # design-related
     "モデリングデザイナー",
     "デザイナー",
     "チーフデザイナー",
@@ -1073,41 +1073,41 @@ KNOWN_ROLES_JA: set[str] = {
     "サブキャラクター設定",
     "サブ設定協力",
     "小物・エフェクト設定",
-    # レイアウト
+    # layout
     "レイアウト協力",
     # VFX
     "VFX",
-    # 音楽系
+    # music-related
     "エンディング曲",
     "オープニング曲",
     "音効",
-    # 仕上系
+    # finishing
     "着彩",
     "指定検査",
-    # 衣装系
+    # costume
     "衣装設定",
-    # 美術系
+    # art / background
     "美術ボード協力",
-    # イラスト系
+    # illustration
     "イラストレーション",
     "エンディングイラスト",
     "アイキャッチイラスト",
-    # 撮影系
+    # photography-related
     "撮影担当",
     "デジタル背景",
     "実写撮影",
     "TAP",
-    # 配信系
+    # distribution
     "配信担当",
-    # === Round 4 (2026-03-16, freq >= 20 体系的追加) ===
-    # ---- 動画仕上系 (表記揺れ: 動仕 は登録済み) ----
+    # === Round 4 (2026-03-16, freq >= 20 systematic additions) ===
+    # ---- in-between finishing (spelling variants: 動仕 already registered) ----
     "動画仕上",
     "動画仕上げ",
     "動画仕上管理",
     "動画仕上進行",
     "動画仕上協力",
     "動仕協力",
-    # ---- レイアウト系 ----
+    # ---- layout ----
     "レイアウトチェック",
     "レイアウト・チェック",
     "レイアウトチェッカー",
@@ -1115,7 +1115,7 @@ KNOWN_ROLES_JA: set[str] = {
     "メインレイアウト",
     "レイアウト作監",
     "レイアウト作画監督補佐",
-    # ---- 作画系 追加 ----
+    # ---- animation drawing (additional) ----
     "原画作画監督",
     "チーフ作画監督",
     "特別作画監督",
@@ -1160,7 +1160,7 @@ KNOWN_ROLES_JA: set[str] = {
     "原絵師",
     "絵師頭",
     "割絵",
-    # ---- 仕上系 追加 ----
+    # ---- finishing (additional) ----
     "仕上検査補",
     "仕上げ検査補佐",
     "仕上げ検査協力",
@@ -1178,7 +1178,7 @@ KNOWN_ROLES_JA: set[str] = {
     "色検査",
     "色彩",
     "動画チェック補佐",
-    # ---- デジタル / TP系 ----
+    # ---- digital / TP ----
     "TP",
     "TP協力",
     "TP修正",
@@ -1195,7 +1195,7 @@ KNOWN_ROLES_JA: set[str] = {
     "デジタルラボ",
     "デジタルCG制作",
     "コンピューター処理",
-    # ---- CG系 追加 ----
+    # ---- CG (additional) ----
     "CG美術",
     "CG作成",
     "CGコンポジター",
@@ -1228,7 +1228,7 @@ KNOWN_ROLES_JA: set[str] = {
     "CGデザイン",
     "CGテクニカルデザイナー",
     "CG制作コーディネーター",
-    # ---- 3D系 追加 ----
+    # ---- 3D (additional) ----
     "3D撮影",
     "3DCGI協力",
     "3D.CGI",
@@ -1252,7 +1252,7 @@ KNOWN_ROLES_JA: set[str] = {
     "3Dスペシャルエフェクト",
     "3Dデザイン・モデリング",
     "3D協力",
-    # ---- 2D系 追加 ----
+    # ---- 2D (additional) ----
     "2Dworks",
     "2DWorks",
     "2DCGI",
@@ -1265,7 +1265,7 @@ KNOWN_ROLES_JA: set[str] = {
     "2DCGデザイン",
     "2Dデザイン協力",
     "2Dマテリアルデザイン",
-    # ---- コンポジット / 撮影系 追加 ----
+    # ---- composite / photography (additional) ----
     "コンポジター",
     "コンポジッター",
     "リードコンポジッター",
@@ -1286,7 +1286,7 @@ KNOWN_ROLES_JA: set[str] = {
     "背景監督補",
     "背景進行補佐",
     "背景用モデリング",
-    # ---- 演出系 追加 ----
+    # ---- direction (additional) ----
     "演出監督",
     "コーナー監督",
     "担当演出",
@@ -1300,7 +1300,7 @@ KNOWN_ROLES_JA: set[str] = {
     "絵コンテ演出",
     "絵コンテ清書",
     "コンテ協力",
-    # ---- 美術系 追加 ----
+    # ---- art / background (additional) ----
     "美術制作",
     "美術設計",
     "美術補正",
@@ -1315,7 +1315,7 @@ KNOWN_ROLES_JA: set[str] = {
     "美監補佐",
     "担当美術",
     "話数背景担当",
-    # ---- 設定系 追加 ----
+    # ---- settings sheets (additional) ----
     "画面設定",
     "メカ設定",
     "メカ設定協力",
@@ -1327,7 +1327,7 @@ KNOWN_ROLES_JA: set[str] = {
     "設定補",
     "料理設定",
     "服装デザイン",
-    # ---- デザイン系 追加 ----
+    # ---- design (additional) ----
     "サブキャラデザイン",
     "ゲストキャラクターデザイン協力",
     "ちびキャラデザイン",
@@ -1355,7 +1355,7 @@ KNOWN_ROLES_JA: set[str] = {
     "クリーチャーモデリング",
     "コスチュームデザイン協力",
     "キャラモデラー",
-    # ---- モデリング / リギング ----
+    # ---- modeling / rigging ----
     "モデリングスーパーバイザー",
     "モデリングアーティスト",
     "モデリングチーフ",
@@ -1365,19 +1365,19 @@ KNOWN_ROLES_JA: set[str] = {
     "リギング",
     "リギングスーパーバイザー",
     "セットアップ",
-    # ---- モーション ----
+    # ---- motion ----
     "モーションキャプチャー",
     "モーションデザイナー",
     "モーションディレクター",
     "モーショングラフィック",
-    # ---- 監修系 ----
+    # ---- supervision ----
     "エフェクト監修",
     "LO監修",
     "特殊効果監修",
     "脚本監修",
     "シナリオ監修",
     "特効監修",
-    # ---- エフェクト ----
+    # ---- effects ----
     "エフェクトディレクター",
     "エフェクトスーパーバイザー",
     "エフェクトデザイナー",
@@ -1385,7 +1385,7 @@ KNOWN_ROLES_JA: set[str] = {
     "エフェクト原案",
     "AE・特効",
     "エアブラシワーク",
-    # ---- 制作管理系 追加 ----
+    # ---- production management (additional) ----
     "制作コーディネーター",
     "制作進行アシスタント",
     "制作進行補",
@@ -1418,10 +1418,10 @@ KNOWN_ROLES_JA: set[str] = {
     "OP制作進行",
     "ED制作進行",
     "話数制作担当",
-    # ---- 音響系 追加 ----
+    # ---- sound (additional) ----
     "録音進行",
     "整音助手",
-    # ---- 音楽系 追加 ----
+    # ---- music (additional) ----
     "エンディングテーマ",
     "コーラス",
     "ベース",
@@ -1443,14 +1443,14 @@ KNOWN_ROLES_JA: set[str] = {
     "レコーディング&ミキサー",
     "レコーディング&ミキシングエンジニア",
     "レコーディング&ミックスエンジニア",
-    # ---- 声優 / ナレ系 ----
+    # ---- voice actor / narration ----
     "ナレーション",
     "パーソナリティ",
     "ダンサー",
     "出演",
     "方言指導",
     "俳優担当",
-    # ---- 営業 / プロモ系 追加 ----
+    # ---- sales / promotion (additional) ----
     "劇場宣伝",
     "パッケージ営業",
     "海外販売",
@@ -1470,15 +1470,15 @@ KNOWN_ROLES_JA: set[str] = {
     "パッケージ製造",
     "統括プロデューサー",
     "アドバイザリープロデューサー",
-    # ---- 翻訳 / 海外 ----
+    # ---- translation / overseas ----
     "和訳",
     "通訳",
     "翻訳協力",
     "韓国語通訳・翻訳",
-    # ---- 実写系 ----
+    # ---- live-action ----
     "実写協力",
     "実写撮影",
-    # ---- 色彩追加 ----
+    # ---- color (additional) ----
     "カラーコーディネーター",
     "カラーマネジメント",
     "ゲスト色彩設計",
@@ -1486,12 +1486,12 @@ KNOWN_ROLES_JA: set[str] = {
     "色設計・検査",
     "色指定・検査・貼込",
     "色指定補助",
-    # ---- 編集系 追加 ----
+    # ---- editing (additional) ----
     "ビデオ編集担当",
     "VIDEO編集",
     "フォーマット編集担当",
     "DCPマスタリング",
-    # ---- イラスト系 追加 ----
+    # ---- illustration (additional) ----
     "アイキャッチ作画",
     "アイキャッチデザイナー",
     "エンドイラスト",
@@ -1503,12 +1503,12 @@ KNOWN_ROLES_JA: set[str] = {
     "絵本イラスト",
     "EDカードイラスト",
     "ENDカード原画",
-    # ---- OP/ED制作系 ----
+    # ---- OP/ED production ----
     "エンディング制作",
     "エンディングディレクター",
     "OP作画監督",
     "ED作画監督",
-    # ---- 脚本系追加 ----
+    # ---- screenplay (additional) ----
     "脚色",
     "脚本制作",
     "脚本事務",
@@ -1516,15 +1516,15 @@ KNOWN_ROLES_JA: set[str] = {
     "ストーリー",
     "ストーリー/脚本",
     "シリーズ構成協力",
-    # ---- レンダリング / テクニカル ----
+    # ---- rendering / technical ----
     "レンダリング",
     "テクスチャペインター",
     "プログラマー",
     "R&D・インフラ開発",
-    # ---- Director等英語 ----
+    # ---- English titles (Director, etc.) ----
     "Director",
     "Producer",
-    # ---- 放送 / その他 ----
+    # ---- broadcast / misc ----
     "放送",
     "DA",
     "PD",
@@ -1541,14 +1541,14 @@ KNOWN_ROLES_JA: set[str] = {
     "ライン",
     "タイミング撮影",
     "線撮",
-    "デザインワーク",  # 表記揺れ（デザインワークス は登録済み）
+    "デザインワーク",  # spelling variant (デザインワークス already registered)
     # ---- Live2D / VFX ----
     "VFXスーパーバイザー",
     "Live2Dアニメーター",
-    # 正規化先のbase roles
+    # base roles for normalization
     "チーフ",
     "リード",
-    # Round 5.5: 最終残りロール
+    # Round 5.5: final remaining roles
     "オペレーター",
     "エンジニア",
     "調整助手",
@@ -1577,7 +1577,7 @@ KNOWN_ROLES_JA: set[str] = {
     "一部原曲・作曲",
     "原画作監補",
     "words",
-    # === Round 5 (2026-03-16, 残り一般ロール freq >= 20) ===
+    # === Round 5 (2026-03-16, remaining general roles freq >= 20) ===
     "動画検査協力",
     "リードCGアニメーター",
     "リードモデラー",
@@ -1585,7 +1585,7 @@ KNOWN_ROLES_JA: set[str] = {
     "サブキャラクター",
     "アニメオリジナルカード絵作画",
     "リードアーティスト",
-    # メタ — parse_credit_line でスタジオ名→OTHER変換時に使用
+    # meta — used in parse_credit_line for studio name → OTHER conversion
     "OTHER",
 }
 
@@ -1600,7 +1600,7 @@ _SKIP_SUBSTRINGS: tuple[str, ...] = (
     "ログインする",
     "利用規約",
     "先頭へ",
-    "最強カード",  # 遊戯王カードゲーム関連ノイズ
+    "最強カード",  # Yu-Gi-Oh card game noise
 )
 
 # Metadata "role" words that match colon pattern but are NOT credits
@@ -1684,7 +1684,7 @@ _METADATA_ROLES: set[str] = {
     "CODE",
 }
 
-# TV番組コーナー名・冗談系 — credit lineとしてパースしない
+# TV show corner names / joke credits — not parsed as credit lines
 _JOKE_CORNER_SUBSTRINGS: tuple[str, ...] = (
     "ポケモン講座",
     "ポケモン川柳",
@@ -1736,25 +1736,25 @@ _JOKE_CORNER_SUBSTRINGS: tuple[str, ...] = (
 # Regex: episode header detection
 _RE_EPISODE = re.compile(r"(?:第|#)\s*(\d+)\s*話?")
 
-# Regex: generic credit line — "何か：名前" or "何か　名前" pattern
+# Regex: generic credit line — "Something：Name" or "Something　Name" pattern
 # Supports two separator styles:
-#   1. Colon: "脚本：山田太郎" or "脚本:山田太郎"
-#   2. Space: "脚本　山田太郎" — after NFKC normalization, fullwidth space → half-width
+#   1. Colon: "脚本：PersonName" or "脚本:PersonName"
+#   2. Space: "脚本　PersonName" — after NFKC normalization, fullwidth space → half-width
 # Role part: sequence of non-separator chars (CJK, Latin, digits, etc.)
-# Allows multi-role joined by ・/／  (e.g. "絵コンテ・演出：田中")
+# Allows multi-role joined by ・/／  (e.g. "絵コンテ・演出：PersonName")
 _RE_CREDIT_COLON = re.compile(
     r"([^\s：:、,・/／]{2,}(?:\s*[・/／]\s*[^\s：:、,・/／]{2,})*)"
     r"\s*[：:]\s*(.+)"
 )
 # Space-separated pattern: role must be CJK-heavy to avoid false matches on English text
-# e.g. "脚本　山田太郎" (post-NFKC: "脚本 山田太郎")
+# e.g. "脚本　PersonName" (post-NFKC: "脚本 PersonName")
 _RE_CREDIT_SPACE = re.compile(
     r"([\u3000-\u9fff\uf900-\ufaff]{2,}(?:\s*[・/／]\s*[\u3000-\u9fff\uf900-\ufaff]{2,})*)"
     r"\s{1,4}"  # 1-4 spaces (post-NFKC fullwidth → single half-width)
     r"([^\s].+)"
 )
 
-# Regex: multi-role split — "絵コンテ・演出" → ["絵コンテ", "演出"]
+# Regex: multi-role split — e.g. "絵コンテ・演出" → ["絵コンテ", "演出"]
 _RE_MULTI_ROLE = re.compile(r"\s*[・/／]\s*")
 
 # Regex: name separators
@@ -2088,7 +2088,7 @@ def _is_company_name(name: str) -> bool:
 
 
 # Regex for space-separated Japanese names within a names field
-# e.g. "白男川由美 清水理智子 荻原穂美" → 3 names
+# e.g. multiple CJK names in a row → split into separate entries
 # Matches: CJK surname(1-3 chars) + optional space + CJK given name(1-4 chars)
 _RE_JA_NAME = re.compile(r"[\u3000-\u9fff\uf900-\ufaff]{2,6}")
 
@@ -2117,7 +2117,7 @@ def _split_space_separated_names(names_text: str) -> list[str]:
         return tokens
 
     # Mixed CJK + Latin names: split on 2+ spaces (common formatting)
-    # e.g. "竹村美音  前田紗希  THU YEN  MINH CHAU"
+    # e.g. "CJKName  CJKName  THU YEN  MINH CHAU"
     multi_space_parts = re.split(r"\s{2,}", names_text.strip())
     if len(multi_space_parts) >= 2:
         ja_count = sum(
@@ -2131,16 +2131,16 @@ def _split_space_separated_names(names_text: str) -> list[str]:
     return [names_text]
 
 
-# Regex: parenthetical affiliation — "太郎(Xスタジオ)" or "太郎（Xスタジオ）"
+# Regex: parenthetical affiliation — "PersonName(StudioName)" or "PersonName（StudioName）"
 _RE_AFFILIATION = re.compile(r"\s*[\(（]([^)）]+)[\)）]\s*$")
-# Regex: trailing bracket content — episode ranges "〔3-8,25〕" "[1-3]" etc.
+# Regex: trailing bracket content — episode ranges e.g. "〔3-8,25〕" "[1-3]" etc.
 _RE_BRACKET_SUFFIX = re.compile(r"\s*[〔\[【]([^〕\]】]*)[〕\]】]\s*$")
 
-# Episode range notation: 第1話〜第21話, 1-21, #35, etc.
+# Episode range notation: e.g. 第1話〜第21話, 1-21, #35, etc.
 _RE_EP_RANGE = re.compile(r"(?:第\s*)?(\d+)\s*話?\s*[〜~\-ー–]\s*(?:第\s*)?(\d+)\s*話?")
 _RE_EP_SINGLE = re.compile(r"(?:第\s*)?(\d+)\s*話")
 _RE_EP_HASH = re.compile(r"#\s*(\d+)")
-# Open-ended range: "4話〜" or "第4話-" (N onwards, no end specified)
+# Open-ended range: e.g. "4話〜" or "第4話-" (N onwards, no end specified)
 _RE_EP_OPEN = re.compile(r"(?:第\s*)?(\d+)\s*話?\s*[〜~\-ー–]\s*$")
 
 
@@ -2162,21 +2162,21 @@ def _parse_episode_ranges(text: str) -> tuple[list[int] | None, int | None]:
     segments = re.split(r"[、,]", text)
     for seg in segments:
         seg = seg.strip()
-        # Try closed range first: 第1話〜第21話, 1-21, etc.
+        # Try closed range first: e.g. 第1話〜第21話, 1-21, etc.
         m = _RE_EP_RANGE.search(seg)
         if m:
             start, end = int(m.group(1)), int(m.group(2))
             if 0 < start <= end <= 9999:
                 episodes.update(range(start, end + 1))
             continue
-        # Try open-ended range: 4話〜 (N onwards, resolve later with total_episodes)
+        # Try open-ended range: e.g. 4話〜 (N onwards, resolve later with total_episodes)
         m = _RE_EP_OPEN.search(seg)
         if m:
             ep = int(m.group(1))
             if 0 < ep <= 9999:
                 episode_from = ep
             continue
-        # Try single with 話 or 第: 第35話
+        # Try single episode with 話 or 第: e.g. 第35話
         m = _RE_EP_SINGLE.search(seg)
         if m:
             ep = int(m.group(1))
@@ -2235,7 +2235,7 @@ def _clean_name(
         # Remove the parenthetical either way
         name = name[: m.start()]
 
-    # Strip trailing bracket content: "高寺雄〔3-8,25〕" → "高寺雄"
+    # Strip trailing bracket content: e.g. "PersonName〔3-8,25〕" → "PersonName"
     bm = _RE_BRACKET_SUFFIX.search(name)
     if bm:
         # Try parsing bracket content as episode ranges too
@@ -2291,7 +2291,7 @@ class ParsedCredit:
 
 
 # Regex for tabular format: multiple "Role Name" pairs on one line separated by spaces
-# e.g. "美術監督 東潤一         色彩設計 江口亜紗美"
+# e.g. "art_director PersonName         color_designer PersonName"
 # Detects: known_role + spaces + name + multiple_spaces + known_role
 _RE_TABULAR = re.compile(
     r"([\u3000-\u9fff\uf900-\ufaff]{2,})"  # role1 (CJK)
@@ -2375,7 +2375,7 @@ def _normalize_role(role: str) -> str:
 def _try_parse_tabular(line: str) -> list[ParsedCredit] | None:
     """Try to parse a tabular format line with multiple role-name pairs.
 
-    e.g. "美術監督 東潤一         色彩設計 江口亜紗美"
+    e.g. "art_director PersonName         color_designer PersonName"
     Returns None if not tabular format.
     """
     m = _RE_TABULAR.match(line)
@@ -2383,7 +2383,7 @@ def _try_parse_tabular(line: str) -> list[ParsedCredit] | None:
         return None
     role1, name1, role2, rest = m.group(1), m.group(2), m.group(3), m.group(4)
     # BOTH roles must be known to avoid false positives where person names
-    # in the name field get mistaken for role2 (e.g. "背景進行補佐 竹村美音 前田紗希 ...")
+    # in the name field get mistaken for role2 (e.g. "BGM_role PersonName PersonName ...")
     if role1 not in KNOWN_ROLES_JA or role2 not in KNOWN_ROLES_JA:
         return None
 
@@ -2434,7 +2434,7 @@ def parse_credit_line(line: str) -> list[ParsedCredit]:
     # Skip lines that look like JS/JSON fragments (ad scripts)
     if line.startswith(("{", "}", "var ", "function")) or "zoneid" in line.lower():
         return []
-    # Skip indented lines — these are name continuations (e.g. "　　　石井里奈　福島光瑠")
+    # Skip indented lines — these are name continuations (e.g. "　　　PersonName　PersonName")
     # not "Role　Name" pairs. Check the RAW line before strip().
     stripped_raw = raw_line.lstrip("\n\r")
     if stripped_raw and stripped_raw[0] in (" ", "\u3000", "\t"):
@@ -2444,11 +2444,11 @@ def parse_credit_line(line: str) -> list[ParsedCredit]:
         return []
     if any(sub in line for sub in _SKIP_SUBSTRINGS):
         return []
-    # Skip TV show corner names / joke credits (e.g. "ポケモン川柳：...", "DUEL：...")
+    # Skip TV show corner names / joke credits (e.g. Pokémon segment names, "DUEL：...")
     if any(sub in line for sub in _JOKE_CORNER_SUBSTRINGS):
         return []
-    # Skip voice actor cast lines: "キャラ名(CV：声優名)" or "キャラ名（CV：..."
-    # Also "CV：声優名" (CV as role)
+    # Skip voice actor cast lines: "CharName(CV：VoiceName)" or "CharName（CV：..."
+    # Also "CV：VoiceName" (CV as role)
     if "(CV" in line or "（CV" in line or "(cv" in line:
         return []
     if line.startswith("CV") and ("：" in line or ":" in line):
@@ -2474,7 +2474,7 @@ def parse_credit_line(line: str) -> list[ParsedCredit]:
     if len(line) > 500:
         return []
 
-    # Try tabular format first: "美術監督 東潤一         色彩設計 江口亜紗美"
+    # Try tabular format first: e.g. "美術監督 PersonName         色彩設計 PersonName"
     # Only when no colon present (colon lines are unambiguous)
     if "：" not in line and ":" not in line:
         tabular = _try_parse_tabular(line)
@@ -2493,7 +2493,7 @@ def parse_credit_line(line: str) -> list[ParsedCredit]:
     role_text = match.group(1)
     names_text = match.group(2)
 
-    # Skip episode title lines: "Karte：00「オペの順番」", "EPISODE:001「...」",
+    # Skip episode title lines: "Karte：00「EpisodeTitle」", "EPISODE:001「...」",
     # "PHASE:01「...」", "Mission：8「...」", etc.
     # Detected when names_text starts with a digit or「 (episode number/title).
     names_stripped = names_text.strip()
@@ -2505,31 +2505,31 @@ def parse_credit_line(line: str) -> list[ParsedCredit]:
             return []
 
     # For space-separated matches, require at least one known role to prevent
-    # person-name lines like "伊藤良樹　河村徹" from being misinterpreted.
+    # person-name lines like "PersonName　PersonName" from being misinterpreted.
     # Colon-separated lines ("RoleName：PersonName") are unambiguous and parsed for all roles.
     if space_match:
         candidate_roles = _RE_MULTI_ROLE.split(role_text)
         if not any(r.strip() in KNOWN_ROLES_JA for r in candidate_roles):
             return []
 
-    # Skip metadata lines (e.g. "話数：24", "放送時間：日曜 18:00")
+    # Skip metadata lines (e.g. "話数：24", "放送時間：schedule")
     if role_text in _METADATA_ROLES:
         return []
 
     # When the "role" text is actually a company/studio name
-    # (e.g. "スタジオ・ブーメラン：田中太郎"), mark names with that affiliation.
+    # (e.g. "StudioName：PersonName"), mark names with that affiliation.
     # The role is set to "OTHER" (production support at the named studio).
     role_is_company = _is_company_name(role_text)
     company_affiliation: str | None = role_text if role_is_company else None
 
-    # Split multi-role: "絵コンテ・演出" → ["絵コンテ", "演出"]
+    # Split multi-role: e.g. "絵コンテ・演出" → ["絵コンテ", "演出"]
     # BUT only split if ALL parts are known roles. Otherwise keep as one compound role.
     # e.g. "メカ・エフェクト作画監督" → keep as-is (compound role name)
     #      "脚本・絵コンテ・原画" → split (all parts are known)
     #      "プロダクション・マネージャー" → keep as-is (compound role name)
     raw_parts = _RE_MULTI_ROLE.split(role_text)
     raw_parts = [r.strip() for r in raw_parts if r.strip()]
-    # Special case: "作" in compound roles means "作曲" (e.g. "作・編曲" = "作曲・編曲")
+    # Special case: "作" in compound roles means "作曲" (composition) (e.g. "作・編曲" = "作曲・編曲")
     raw_parts = ["作曲" if r == "作" else r for r in raw_parts]
     raw_parts = [r for r in raw_parts if len(r) >= 2]
 
@@ -2546,14 +2546,13 @@ def parse_credit_line(line: str) -> list[ParsedCredit]:
         roles = [role_text]
 
     # Normalize unknown roles via suffix pattern matching.
-    # e.g. "演奏作画協力" → "協力" (SPECIAL), "Cパート原画" → "原画",
-    #      "アルマノクス総作画監督" → "総作画監督"
+    # e.g. compound-prefix + 協力 → "協力" (SPECIAL); prefix + 原画 → "原画"
     roles = [_normalize_role(r) for r in roles]
 
     # Split names — order is preserved (position 0 = first listed = most senior)
     # Use paren-aware splitter to avoid breaking episode ranges inside ()（）
     raw_names = _split_names_paren_aware(names_text)
-    # Further split space-separated Japanese names (e.g. "白男川由美 清水理智子 荻原穂美")
+    # Further split space-separated Japanese names (e.g. multiple names in a row)
     expanded_names: list[str] = []
     for n in raw_names:
         expanded_names.extend(_split_space_separated_names(n))
@@ -2599,22 +2598,22 @@ def parse_credit_line(line: str) -> list[ParsedCredit]:
 
 
 # =============================================================================
-# LLM委託パース問題 (2026-03-16 品質監査)
+# LLM-delegated parsing problems (quality audit 2026-03-16)
 #
-# 以下の問題は正規表現での対処コストが高く、LLM (Ollama/Qwen3) に委託する:
+# The following issues have high regex-mitigation cost and are delegated to LLM (Ollama/Qwen3):
 #
-# 1. 非アニメページ（年表・索引ページ）の誤パース
-#    例: "2010年代後半" ページで会社名がロールとしてパースされる
-#    理由: ページ種別の判定は正規表現では困難。タイトルパターンの網羅が非現実的
-#    対処: parse_with_llm() で unknown role 率 >50% の場合にフォールバック済み
+# 1. Mis-parsing of non-anime pages (timeline/index pages)
+#    e.g. company names are parsed as roles on "2010年代後半" pages
+#    Reason: page-type detection is hard with regex; enumerating title patterns is unrealistic
+#    Handled: parse_with_llm() falls back when unknown-role rate > 50%
 #
-# 2. キャスト行の一部が正規表現のセクションヘッダー検出を回避するケース
-#    例: ヘッダーなしでキャラ名：声優名が並ぶページ
-#    理由: セクションヘッダーがない場合、キャラ名とロール名の区別は文脈依存
-#    対処: validate_parse_with_llm() で検出可能。reparse --llm で修正される
+# 2. Some cast lines bypass regex section-header detection
+#    e.g. pages where キャラ名：声優名 appear without a section header
+#    Reason: distinguishing character names from role names is context-dependent without headers
+#    Handled: detectable by validate_parse_with_llm(); fixed via reparse --llm
 #
-# これらはreparse時に --llm フラグで Tier2 LLMパーサーにフォールバックされる。
-# 正規表現パーサー単体では対応不要（コスト対効果が見合わない）。
+# These are handled at reparse time with the --llm flag (Tier-2 LLM parser fallback).
+# The regex parser alone does not need to handle them (cost/benefit does not justify it).
 # =============================================================================
 
 # Cast/voice actor section headers — lines after these are character:VA, not staff credits
@@ -3437,6 +3436,8 @@ def _save_credit(
                 raw_role=parsed.role,
                 episode=ep,
                 source="seesaawiki",
+                affiliation=parsed.affiliation,
+                position=parsed.position,
             )
             credits_bw.append(credit.model_dump(mode="json"))
             stats["credits_created"] += 1
@@ -3448,6 +3449,8 @@ def _save_credit(
             raw_role=parsed.role,
             episode=episode,
             source="seesaawiki",
+            affiliation=parsed.affiliation,
+            position=parsed.position,
         )
         credits_bw.append(credit.model_dump(mode="json"))
         stats["credits_created"] += 1

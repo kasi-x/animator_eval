@@ -1,4 +1,4 @@
-"""Studio Time Series Evaluation — 年単位でスタジオを継続評価.
+"""Studio Time Series Evaluation — ongoing annual evaluation of studios.
 
 Tracks studio performance over time: staff metrics, retention rates,
 talent quality, and year-specific studio fixed effects.

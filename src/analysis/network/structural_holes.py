@@ -1,4 +1,4 @@
-"""Structural Holes Analysis — 構造的空隙とブローカー役割分析.
+"""Structural Holes Analysis — structural hole and broker role analysis.
 
 Ronald Burt の構造的空隙理論に基づき、ネットワーク内の「橋渡し役」を特定。
 異なるグループを繋ぐクリエイターは、情報優位性と制御力を持つ。
@@ -21,7 +21,7 @@ logger = structlog.get_logger()
 
 
 class BrokerageRole(Enum):
-    """Gould & Fernandez (1989) の5つのブローカー役割."""
+    """Five broker roles from Gould & Fernandez (1989)."""
 
     COORDINATOR = "coordinator"  # 同じグループ内の仲介（A-B-C 全員が同じグループ）
     CONSULTANT = "consultant"  # 外部コンサルタント（Bだけ外部、A-Cは同じ内部グループ）
@@ -274,23 +274,23 @@ def classify_brokerage_role(
     group_b = groups.get(person_id, "unknown")
     group_c = groups.get(target_id, "unknown")
 
-    # Coordinator: A, B, C 全員が同じグループ
+    # Coordinator: A, B, C all in the same group
     if group_a == group_b == group_c:
         return BrokerageRole.COORDINATOR
 
-    # Consultant: Bだけ外部、A-Cは同じ内部グループ
+    # Consultant: only B is external; A and C are in the same internal group
     if group_a == group_c != group_b:
         return BrokerageRole.CONSULTANT
 
-    # Representative: A-Bは内部、Cは外部
+    # Representative: A and B are internal; C is external
     if group_a == group_b != group_c:
         return BrokerageRole.REPRESENTATIVE
 
-    # Gatekeeper: Aは外部、B-Cは内部
+    # Gatekeeper: A is external; B and C are internal
     if group_b == group_c != group_a:
         return BrokerageRole.GATEKEEPER
 
-    # Liaison: A, B, C 全員が異なるグループ
+    # Liaison: A, B, C are all in different groups
     if group_a != group_b != group_c != group_a:
         return BrokerageRole.LIAISON
 

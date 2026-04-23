@@ -134,6 +134,8 @@ class CreditRow:
     updated_at: str | None = None
     credit_year: int | None = None
     credit_quarter: int | None = None
+    affiliation: str | None = None
+    position: int | None = None
 
     @classmethod
     def from_row(cls, row) -> "CreditRow":

@@ -1,4 +1,4 @@
-"""entity_resolution モジュールのテスト."""
+"""Tests for the entity_resolution module."""
 
 from src.analysis.entity_resolution import (
     _normalize_romaji,
@@ -21,7 +21,7 @@ class TestNormalizeName:
         assert normalize_name("  Hayao   Miyazaki  ") == "hayao miyazaki"
 
     def test_nfkc(self):
-        # 全角英字 → 半角
+        # Fullwidth ASCII → halfwidth
         assert normalize_name("Ｈａｙａｏ") == "hayao"
 
     def test_honorific_removal(self):

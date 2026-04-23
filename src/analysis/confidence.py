@@ -87,7 +87,7 @@ def compute_person_fe_ci(
     sigma_resid: float,
     ci_level: float = 0.95,
 ) -> tuple[float, float]:
-    """person_fe の解析的信頼区間を算出.
+    """Compute analytical confidence intervals for person_fe.
 
     SE_i = σ_resid / √n_obs_i, CI = θ_i ± t_{n-1,α/2} × SE_i.
 

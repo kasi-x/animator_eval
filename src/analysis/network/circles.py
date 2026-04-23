@@ -114,7 +114,7 @@ def find_director_circles(
                 ):
                     stats["latest_year"] = year
 
-        # min_shared_works 以上の共演者をサークルメンバーとする
+        # Include co-workers with >= min_shared_works as circle members
         circle_members = []
         total_director_works = len(anime_ids_directed)
         for person_id, stats in collaborator_statistics.items():

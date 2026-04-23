@@ -30,7 +30,7 @@ if TYPE_CHECKING:
 
 logger = structlog.get_logger()
 
-# DBSCAN パラメータ
+# DBSCAN parameters
 MIN_CREDITS_FOR_SPLIT = 3  # これ未満のクレジット数の人物は ML 判定をスキップ
 MIN_SAMPLES = 1  # 孤立点も1クラスタとして扱う
 DEFAULT_EPSILON = 0.35  # キャリブレーション失敗時のフォールバック
@@ -42,7 +42,7 @@ _W_ROLE_CAT = 2.0
 _W_STUDIO = 1.0
 _W_ANIME = 0.5
 
-# decade インデックス: 1920s〜2020s = 11バケット
+# decade index: 1920s–2020s = 11 buckets
 _DECADE_START = 1920
 _N_DECADES = 11  # 1920, 1930, ..., 2020
 
@@ -330,7 +330,7 @@ def split_homonym_groups(
 
         dist_mat = _cosine_dist_matrix(X)
 
-        # DBSCAN: min_samples=1 で孤立点も独立クラスタとして扱う
+        # DBSCAN: min_samples=1 so isolated points form their own cluster
         db = DBSCAN(eps=epsilon, min_samples=MIN_SAMPLES, metric="precomputed")
         labels = db.fit_predict(dist_mat)
 
@@ -364,11 +364,11 @@ def split_homonym_groups(
 
 
 def build_anime_meta(anime_list: list) -> dict[str, dict]:
-    """anime_list から anime_meta dict を構築するヘルパー。"""
+    """Helper to build an anime_meta dict from anime_list."""
     return {
         a.id: {
             "year": a.year,
-            "studios": a.studios if isinstance(a.studios, list) else [],
+            "studios": getattr(a, "studios", None) or [],
         }
         for a in anime_list
     }

@@ -443,11 +443,11 @@ class CooccurrenceGroupsReport(BaseReportGenerator):
         try:
             for pid in all_pids:
                 prow = self.conn.execute(
-                    "SELECT name_ja, name_en FROM persons WHERE id = ?",
+                    "SELECT name_ja, name_zh, name_en FROM persons WHERE id = ?",
                     (pid,),
                 ).fetchone()
                 if prow:
-                    pid_name_map[pid] = prow["name_ja"] or prow["name_en"] or pid
+                    pid_name_map[pid] = prow["name_ja"] or prow["name_zh"] or prow["name_en"] or pid
         except Exception:
             pass
 

@@ -1,4 +1,4 @@
-"""Potential Value Score — 潜在価値スコアの統合.
+"""Potential Value Score — integrated potential value score.
 
 既存のAuthority/Trust/Skillに、新しい補正・拡張を統合:
 1. Studio-debiased Authority（スタジオバイアス補正）

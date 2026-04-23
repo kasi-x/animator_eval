@@ -1,4 +1,4 @@
-"""structlog 設定."""
+"""structlog configuration."""
 
 import sys
 
@@ -6,7 +6,7 @@ import structlog
 
 
 def setup_logging(json_output: bool = False) -> None:
-    """structlog を設定する."""
+    """Configure structlog."""
     processors: list[structlog.types.Processor] = [
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,

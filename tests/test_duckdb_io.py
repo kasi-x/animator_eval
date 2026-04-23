@@ -214,3 +214,68 @@ class TestAggCreditsPerPersonDdb:
         p0_rows = [r for r in rows if r["person_id"] == "p0"]
         assert any(r["credit_year"] == 2020 for r in p0_rows)
         assert any(r["credit_year"] == 2021 for r in p0_rows)
+
+
+class TestAggCollaboratorCountsDdb:
+    """Phase A PoC: self-join collaborator count (Phase 6 network_density feed)."""
+
+    def test_counts_distinct_collaborators(self, silver_path):
+        from src.analysis.duckdb_io import agg_collaborator_counts_ddb
+
+        # Fixture has (p0,p1 on a1) and (p2 on a2)
+        rows = agg_collaborator_counts_ddb(silver_path)
+        by_pid = {r["person_id"]: r["n_collaborators"] for r in rows}
+        assert by_pid.get("p0") == 1  # collabs with p1
+        assert by_pid.get("p1") == 1  # collabs with p0
+        assert "p2" not in by_pid     # sole staff on a2, no collaborators
+
+    def test_excludes_self(self, tmp_path):
+        from src.analysis.duckdb_io import agg_collaborator_counts_ddb
+
+        path = tmp_path / "selfcollab.duckdb"
+        conn = duckdb.connect(str(path))
+        conn.execute(
+            "CREATE TABLE credits (person_id VARCHAR, anime_id VARCHAR,"
+            " role VARCHAR, evidence_source VARCHAR)"
+        )
+        # Same person credited twice on same anime — should not count as collaborator of self
+        conn.executemany(
+            "INSERT INTO credits VALUES (?,?,?,?)",
+            [("p0", "a1", "director", "t"), ("p0", "a1", "storyboard", "t")],
+        )
+        conn.close()
+        rows = agg_collaborator_counts_ddb(path)
+        assert rows == []  # p0 alone → no collaborator rows
+
+
+class TestAggPatronageCollabsDdb:
+    """Phase A PoC: per (person, director) shared-work count."""
+
+    def test_counts_director_collabs(self, tmp_path):
+        from src.analysis.duckdb_io import agg_patronage_collabs_ddb
+
+        path = tmp_path / "patronage.duckdb"
+        conn = duckdb.connect(str(path))
+        conn.execute(
+            "CREATE TABLE credits (person_id VARCHAR, anime_id VARCHAR,"
+            " role VARCHAR, evidence_source VARCHAR)"
+        )
+        conn.executemany(
+            "INSERT INTO credits VALUES (?,?,?,?)",
+            [
+                ("dir1", "a1", "director",      "t"),
+                ("p1",   "a1", "key_animator",  "t"),
+                ("p2",   "a1", "key_animator",  "t"),
+                ("dir1", "a2", "director",      "t"),
+                ("p1",   "a2", "key_animator",  "t"),
+            ],
+        )
+        conn.close()
+        rows = agg_patronage_collabs_ddb(path)
+        by_pair = {(r["person_id"], r["director_id"]): r["n_collabs"] for r in rows}
+        # p1 worked with dir1 on a1 and a2 → 2 distinct anime
+        assert by_pair[("p1", "dir1")] == 2
+        # p2 worked with dir1 on a1 only
+        assert by_pair[("p2", "dir1")] == 1
+        # Directors themselves should not appear as recipients of their own patronage
+        assert ("dir1", "dir1") not in by_pair

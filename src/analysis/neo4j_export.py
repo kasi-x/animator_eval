@@ -1,4 +1,4 @@
-"""Neo4j 互換 CSV エクスポート.
+"""Neo4j-compatible CSV export.
 
 Neo4j の `neo4j-admin database import` で取り込める CSV を出力する。
 ノードファイル: persons.csv, anime.csv
@@ -22,7 +22,7 @@ def export_neo4j_csv(
     scores: list[ScoreResult] | None = None,
     output_dir: Path | None = None,
 ) -> Path:
-    """Neo4j インポート用 CSV ファイルを出力する.
+    """Output CSV files for Neo4j import.
 
     Args:
         persons: 人物リスト

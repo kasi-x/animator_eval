@@ -119,7 +119,7 @@ class ScoreLayersAnalysisReport(BaseReportGenerator):
             rows = self.conn.execute("""
                 SELECT
                     fps.person_id,
-                    p.name_ja, p.name_en,
+                    p.name_ja, p.name_zh, p.name_en,
                     fps.person_fe, fps.person_fe_se, fps.person_fe_n_obs,
                     fps.birank, fps.patronage, fps.awcc,
                     fps.ndi, fps.studio_fe_exposure, fps.iv_score,
@@ -178,7 +178,7 @@ class ScoreLayersAnalysisReport(BaseReportGenerator):
         collab_agg = (pat_pct + st_pct) / 2
 
         names = [
-            d.get("name_ja") or d.get("name_en") or d["person_id"]
+            d.get("name_ja") or d.get("name_zh") or d.get("name_en") or d["person_id"]
             for d in data
         ]
 
@@ -1124,7 +1124,7 @@ class ScoreLayersAnalysisReport(BaseReportGenerator):
         try:
             rows = self.conn.execute("""
                 SELECT
-                    p.name_ja, p.name_en, fps.person_id,
+                    p.name_ja, p.name_zh, p.name_en, fps.person_id,
                     fps.person_fe, fps.person_fe_se, fps.person_fe_n_obs
                 FROM feat_person_scores fps
                 JOIN persons p ON fps.person_id = p.id
@@ -1140,7 +1140,7 @@ class ScoreLayersAnalysisReport(BaseReportGenerator):
         for r in rows:
             pfe_val = r["person_fe"]
             se = r["person_fe_se"]
-            name = r["name_ja"] or r["name_en"] or r["person_id"]
+            name = r["name_ja"] or r["name_zh"] or r["name_en"] or r["person_id"]
             ci_persons.append({
                 "name": name,
                 "pfe": pfe_val,

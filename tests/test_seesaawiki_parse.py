@@ -1,8 +1,6 @@
 """Tests for seesaawiki_scraper parse functions (no network calls)."""
 from __future__ import annotations
 
-import pytest
-
 from src.scrapers.seesaawiki_scraper import (
     ParsedCredit,
     parse_credit_line,

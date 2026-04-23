@@ -1,4 +1,4 @@
-"""Core-Periphery Structure Analysis — コア-ペリフェリー構造分析.
+"""Core-Periphery Structure Analysis — core-periphery structural analysis.
 
 業界ネットワークの「コア」（密に繋がった elite）と「ペリフェリー」（疎な周辺）を識別。
 コアへの参入障壁、モビリティパターン、セミペリフェリーの役割を分析。

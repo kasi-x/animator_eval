@@ -1,4 +1,4 @@
-"""Systematic Bias Detector — 構造的バイアスの検出.
+"""Systematic Bias Detector — detection of structural bias.
 
 業界全体で特定のグループ（役職、スタジオ、キャリアステージ）が
 系統的に過小/過大評価されているかを統計的に検出。
@@ -64,12 +64,12 @@ def _compute_ttest_and_effect(gaps: list[float]) -> tuple[float, float]:
         return 1.0, 0.0
 
     try:
-        # scipy.statsがあれば使う
+        # Use scipy.stats if available
         import scipy.stats
 
         t_stat, p_value = scipy.stats.ttest_1samp(gaps, 0)
     except ImportError:
-        # scipyがない場合は簡易計算
+        # Fallback calculation when scipy is unavailable
         mean_gap = statistics.mean(gaps)
         std_gap = statistics.stdev(gaps) if len(gaps) > 1 else 1.0
         n = len(gaps)
@@ -79,7 +79,7 @@ def _compute_ttest_and_effect(gaps: list[float]) -> tuple[float, float]:
         # exact computation requires scipy
         p_value = 0.05 if abs(t_stat) > 2.0 else 0.5
 
-    # Cohen's d（効果量）
+    # Cohen's d (effect size)
     std_gap = statistics.stdev(gaps) if len(gaps) > 1 else 1.0
     mean_gap = statistics.mean(gaps)
     cohens_d = mean_gap / std_gap if std_gap > 0 else 0.0
@@ -107,7 +107,7 @@ def detect_role_bias(
 
     for anime_id, anime_contribs in contributions.items():
         for person_id, contrib_dict in anime_contribs.items():
-            # contribution_dict から必要な情報を取得
+            # Extract required fields from contribution_dict
             shapley = contrib_dict.get("shapley_value", 0)
             role_str = contrib_dict.get("role", "other")
 
@@ -183,11 +183,11 @@ def detect_studio_bias(
         if person_id not in bias_metrics:
             continue
 
-        # スタジオ情報取得
+        # Fetch studio information
         bias_info = bias_metrics[person_id]
         primary_studio = bias_info.get("primary_studio", "unknown")
 
-        # 補正前と補正後のAuthority
+        # Authority before and after correction
         original = debiased_dict.get("original_birank", 0)
         debiased = debiased_dict.get("debiased_birank", 0)
 

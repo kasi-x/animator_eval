@@ -133,6 +133,7 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
             blood_type       TEXT,
             description      TEXT,
             gender           TEXT,
+            years_active     TEXT NOT NULL DEFAULT '[]',
             favourites       INTEGER,
             site_url         TEXT,
             image_medium     TEXT,
@@ -162,6 +163,9 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
             original_work_type TEXT,
             work_type          TEXT,
             scale_class        TEXT,
+            country_of_origin  TEXT,
+            synonyms           TEXT NOT NULL DEFAULT '[]',
+            is_adult           INTEGER,
             updated_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_anime_year    ON anime(year);
@@ -177,6 +181,8 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
             evidence_source TEXT NOT NULL DEFAULT '',
             credit_year     INTEGER,
             credit_quarter  INTEGER,
+            affiliation     TEXT,
+            position        INTEGER,
             updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(person_id, anime_id, raw_role, episode)
         );
@@ -260,6 +266,7 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
             name                TEXT NOT NULL DEFAULT '',
             anilist_id          INTEGER,
             is_animation_studio INTEGER,
+            country_of_origin   TEXT,
             favourites          INTEGER,
             site_url            TEXT,
             updated_at          TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1045,32 +1052,37 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
         -- ============================================================
 
         CREATE TABLE IF NOT EXISTS src_anilist_anime (
-            anilist_id   INTEGER PRIMARY KEY,
-            title_ja     TEXT NOT NULL DEFAULT '',
-            title_en     TEXT NOT NULL DEFAULT '',
-            year         INTEGER,
-            season       TEXT,
-            episodes     INTEGER,
-            format       TEXT,
-            status       TEXT,
-            start_date   TEXT,
-            end_date     TEXT,
-            duration     INTEGER,
-            source       TEXT,
-            description  TEXT,
-            score        REAL,
-            genres       TEXT DEFAULT '[]',
-            tags         TEXT DEFAULT '[]',
-            studios      TEXT DEFAULT '[]',
-            synonyms     TEXT DEFAULT '[]',
-            cover_large  TEXT,
-            cover_medium TEXT,
-            banner       TEXT,
-            popularity   INTEGER,
-            favourites   INTEGER,
-            site_url     TEXT,
-            mal_id       INTEGER,
-            scraped_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            anilist_id        INTEGER PRIMARY KEY,
+            title_ja          TEXT NOT NULL DEFAULT '',
+            title_en          TEXT NOT NULL DEFAULT '',
+            year              INTEGER,
+            season            TEXT,
+            episodes          INTEGER,
+            format            TEXT,
+            status            TEXT,
+            start_date        TEXT,
+            end_date          TEXT,
+            duration          INTEGER,
+            source            TEXT,
+            description       TEXT,
+            score             REAL,
+            genres            TEXT DEFAULT '[]',
+            tags              TEXT DEFAULT '[]',
+            studios           TEXT DEFAULT '[]',
+            synonyms          TEXT DEFAULT '[]',
+            cover_large       TEXT,
+            cover_medium      TEXT,
+            banner            TEXT,
+            popularity        INTEGER,
+            favourites        INTEGER,
+            site_url          TEXT,
+            mal_id            INTEGER,
+            country_of_origin TEXT,
+            is_licensed       INTEGER,
+            is_adult          INTEGER,
+            mean_score        INTEGER,
+            relations_json    TEXT,
+            scraped_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS src_anilist_persons (
@@ -1236,8 +1248,10 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
     _seed_sources(conn)
     _seed_roles(conn)
     _upgrade_v56_multilang(conn)
+    _upgrade_v57_structural_metadata(conn)
+    _upgrade_v58_credits_metadata(conn)
     conn.execute(
-        "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '56')"
+        "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '58')"
         " ON CONFLICT(key) DO UPDATE SET value = excluded.value"
     )
     conn.commit()
@@ -1258,6 +1272,48 @@ def _upgrade_v56_multilang(conn: sqlite3.Connection) -> None:
         ("src_anilist_persons", "name_zh",   "TEXT NOT NULL DEFAULT ''"),
         ("src_anilist_persons", "nationality", "TEXT NOT NULL DEFAULT '[]'"),
         ("person_aliases",     "lang",       "TEXT"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
+        except Exception:
+            pass  # column already exists
+
+
+def _upgrade_v57_structural_metadata(conn: sqlite3.Connection) -> None:
+    """Add structural metadata columns missing from v56 databases.
+
+    Safe to call on fresh DBs too — ALTER TABLE failures are caught.
+    """
+    for table, col, defn in [
+        # Silver anime: factual production metadata
+        ("anime",               "country_of_origin", "TEXT"),
+        ("anime",               "synonyms",          "TEXT NOT NULL DEFAULT '[]'"),
+        ("anime",               "is_adult",          "INTEGER"),
+        # Silver studios: studio nationality
+        ("studios",             "country_of_origin", "TEXT"),
+        # Silver persons: career timeline
+        ("persons",             "years_active",      "TEXT NOT NULL DEFAULT '[]'"),
+        # Bronze src_anilist_anime: raw field preservation
+        ("src_anilist_anime",   "country_of_origin", "TEXT"),
+        ("src_anilist_anime",   "is_licensed",       "INTEGER"),
+        ("src_anilist_anime",   "is_adult",          "INTEGER"),
+        ("src_anilist_anime",   "mean_score",        "INTEGER"),
+        ("src_anilist_anime",   "relations_json",    "TEXT"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
+        except Exception:
+            pass  # column already exists
+
+
+def _upgrade_v58_credits_metadata(conn: sqlite3.Connection) -> None:
+    """Add affiliation and position columns to credits table for v58.
+
+    Safe to call on fresh DBs too — ALTER TABLE failures are caught.
+    """
+    for table, col, defn in [
+        ("credits", "affiliation", "TEXT"),
+        ("credits", "position",    "INTEGER"),
     ]:
         try:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")

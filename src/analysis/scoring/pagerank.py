@@ -86,7 +86,7 @@ def compute_authority_scores(
     graph: nx.DiGraph,
     person_only: bool = True,
 ) -> dict[str, float]:
-    """Authority スコアを算出する.
+    """Compute Authority scores.
 
     Args:
         graph: 二部グラフ (person ↔ anime)
@@ -123,9 +123,7 @@ def main() -> None:
         load_credits_silver,
         load_persons_silver,
     )
-    from src.database import get_connection, init_db, upsert_score
     from src.log import setup_logging
-    from src.models import ScoreResult
     from src.utils.config import JSON_DIR
 
     setup_logging()
@@ -140,14 +138,6 @@ def main() -> None:
 
     graph = create_person_anime_network(persons, anime_list, credits)
     authority = compute_authority_scores(graph)
-
-    # write scores back to SQLite (legacy path — pipeline uses GoldWriter)
-    conn = get_connection()
-    init_db(conn)
-    for person_id, score in authority.items():
-        upsert_score(conn, ScoreResult(person_id=person_id, authority=score))
-    conn.commit()
-    conn.close()
 
     # JSON output
     JSON_DIR.mkdir(parents=True, exist_ok=True)

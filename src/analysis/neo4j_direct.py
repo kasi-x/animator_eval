@@ -1,4 +1,4 @@
-"""Neo4j 直接接続 — Python driver経由でグラフデータベースの読み書き.
+"""Neo4j direct connection — read/write to graph database via Python driver.
 
 大規模運用向けの機能。CSV exportと違い、リアルタイムでNeo4jに読み書きする。
 
@@ -35,7 +35,7 @@ logger = structlog.get_logger()
 
 
 class Neo4jWriter:
-    """Neo4j データベースへの直接書き込みクラス.
+    """Direct write class for the Neo4j database.
 
     Attributes:
         driver: Neo4j driver instance

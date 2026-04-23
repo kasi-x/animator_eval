@@ -1,4 +1,4 @@
-"""Individual Contribution Profile — 個人貢献指標の算出.
+"""Individual Contribution Profile — computation of individual contribution metrics.
 
 ネットワーク指標（Authority/Trust/Skill）とは別の測定器として、
 機会を統制した上での個人の独自の貢献を定量化する。
@@ -69,7 +69,7 @@ def _build_person_features(
     career_data: dict[str, dict],
 ) -> dict[str, dict]:
     """Build feature vectors for each person."""
-    # person → クレジット一覧を事前構築
+    # Pre-build person → credit list
     person_credits: dict[str, list[Credit]] = defaultdict(list)
     for c in credits:
         person_credits[c.person_id].append(c)
@@ -83,7 +83,7 @@ def _build_person_features(
             _seen_pa.add(key)
             anime_staff_counts[c.anime_id] += 1
 
-    # person → スタジオ一覧
+    # person → studio list
     person_studios: dict[str, list[str]] = defaultdict(list)
     for c in credits:
         anime = anime_map.get(c.anime_id)
@@ -99,7 +99,7 @@ def _build_person_features(
         rp = role_profiles.get(pid, {})
         primary_role = rp.get("primary_role", "unknown")
 
-        # キャリア年数 (career_data values may be CareerSnapshot or dict)
+        # Career years (career_data values may be CareerSnapshot or dict)
         cd = career_data.get(pid)
         if cd is None:
             career_years = 0
@@ -108,7 +108,7 @@ def _build_person_features(
         else:
             career_years = getattr(cd, "active_years", 0)
         if career_years == 0:
-            # credits から計算
+            # Compute from credits
             pc = person_credits.get(pid, [])
             years = set()
             for c in pc:
@@ -357,7 +357,7 @@ def compute_consistency(
     Returns:
         person_id → consistency (0-1, 1=完全に安定)
     """
-    # person → AKM残差リスト（スタジオ・年次効果を除いた個人の貢献安定性）
+    # person → list of AKM residuals (contribution stability after removing studio/year effects)
     person_work_values: dict[str, list[float]] = defaultdict(list)
     person_seen_anime: dict[str, set] = defaultdict(set)
 

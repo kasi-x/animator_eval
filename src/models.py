@@ -1356,10 +1356,23 @@ class AnimeAnalysis(BaseModel):
     work_type: str | None = None  # 'tv' | 'tanpatsu'
     scale_class: str | None = None  # 'large' | 'medium' | 'small'
 
+    # v57: structural metadata
+    country_of_origin: str | None = None  # ISO 3166-1 alpha-2 (JP/CN/KR…)
+    synonyms: list[str] = Field(default_factory=list)
+    is_adult: bool | None = None
+    studios: list[str] = Field(default_factory=list)
+    genres: list[str] = Field(default_factory=list)
+    tags: list[dict] = Field(default_factory=list)
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def display_title(self) -> str:
         return self.title_ja or self.title_en or self.id
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def studio(self) -> str | None:
+        return self.studios[0] if self.studios else None
 
 
 class BronzeAnime(BaseModel):
@@ -1535,6 +1548,7 @@ class Studio(BaseModel):
     name: str = ""
     anilist_id: int | None = None
     is_animation_studio: bool | None = None
+    country_of_origin: str | None = None  # ISO 3166-1 alpha-2
     favourites: int | None = None
     site_url: str | None = None
 
@@ -1569,6 +1583,8 @@ class Credit(BaseModel):
     evidence_source: str | None = None
     credit_year: int | None = None  # attribution year (may differ per episode for long-running titles)
     credit_quarter: int | None = None  # attribution quarter (1-4)
+    affiliation: str | None = None  # subcontractor studio/company (SeesaaWiki)
+    position: int | None = None  # 0-based order within role; Bronze preservation only, not for analysis
 
     @classmethod
     def from_db_row(cls, row: "CreditRow") -> "Credit":

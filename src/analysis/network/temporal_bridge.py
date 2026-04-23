@@ -1,4 +1,4 @@
-"""Temporal Bridge Analysis — 時間ネットワーク上のブリッジ分析.
+"""Temporal Bridge Analysis — bridge analysis on the temporal network.
 
 5年スライディングウィンドウでコラボレーショングラフを再構築し、
 ブリッジ人物の時間変化・寿命・世代交代を分析する。
@@ -114,7 +114,7 @@ def compute_temporal_bridges(
         detect_communities,
     )
 
-    # anime_id → year のキャッシュ
+    # Cache: anime_id → year
     anime_year: dict[str, int | None] = {aid: a.year for aid, a in anime_map.items()}
 
     snapshots: list[TemporalBridgeSnapshot] = []
@@ -151,7 +151,7 @@ def compute_temporal_bridges(
             continue
 
         # build collaboration graph
-        # anime_id → [person_id] の集約
+        # Aggregate anime_id → [person_id]
         anime_persons: dict[str, list[str]] = defaultdict(list)
         for c in window_credits:
             anime_persons[c.anime_id].append(c.person_id)
@@ -203,7 +203,7 @@ def compute_temporal_bridges(
         bridges = analyze_community_overlap(communities, G)
         bridge_ids = set(bridges.keys())
 
-        # top_n_bridges: cross_community_edges 数が多い順に並べる
+        # top_n_bridges: sort by cross_community_edges count descending
         # bridges[pid] = [(community_id, connections_count), ...]
         bridge_scores: list[tuple[str, int]] = [
             (pid, sum(count for _, count in comm_list))
@@ -258,7 +258,7 @@ def compute_bridge_lifespan(
     Returns:
         person_id → BridgeLifespanStats
     """
-    # person_id → ブリッジだったウィンドウの開始年リスト（時系列順）
+    # person_id → list of window start years when they were a bridge (chronological)
     person_bridge_windows: dict[str, list[int]] = defaultdict(list)
 
     for snap in sorted(snapshots, key=lambda s: s.window_start):
@@ -333,7 +333,7 @@ def get_person_temporal_trajectory(
     Returns:
         person_id → [cross_edges_or_none, ...] のリスト（snapshots と同じ長さ）
     """
-    # top_bridges のルックアップを事前構築
+    # Pre-build lookup for top_bridges
     snap_bridge_scores: list[dict[str, int]] = []
     for snap in snapshots:
         score_map = {pid: score for pid, score in snap.top_bridges}
@@ -344,7 +344,7 @@ def get_person_temporal_trajectory(
     for snap, score_map in zip(snapshots, snap_bridge_scores):
         for pid in person_ids:
             if pid in snap.bridge_person_ids:
-                # top_bridges に含まれていれば score、含まれていなければ 1
+                # score if in top_bridges, else 1
                 trajectories[pid].append(score_map.get(pid, 1))
             else:
                 trajectories[pid].append(None)

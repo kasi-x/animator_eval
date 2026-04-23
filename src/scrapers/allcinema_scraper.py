@@ -1,18 +1,18 @@
-"""allcinema.net スクレイパー.
+"""allcinema.net scraper.
 
-3フェーズ構成:
-  Phase 1 (sitemap):  サイトマップ XML.gz から全 cinema/person ID を取得
-  Phase 2 (cinema):   各 cinema ページの CreditJson からアニメのスタッフ情報を取得
-  Phase 3 (persons):  Phase 2 で収集した person ID の名前・よみがな等を取得
+3-phase structure:
+  Phase 1 (sitemap):  retrieve all cinema/person IDs from sitemap XML.gz files
+  Phase 2 (cinema):   extract anime staff info from CreditJson embedded in each cinema page
+  Phase 3 (persons):  fetch name and yomigana for each person ID collected in Phase 2
 
-データソース:
+Data sources:
   Sitemap (cinema) : https://www.allcinema.net/sitemap_c{N}.xml.gz  (3 files)
   Sitemap (person) : https://www.allcinema.net/sitemap_p{N}.xml.gz  (12 files)
   Cinema page      : https://www.allcinema.net/cinema/{id}   (HTML, CreditJson embedded)
   Person page      : https://www.allcinema.net/person/{id}   (HTML, name + yomigana)
 
-レート制限: robots.txt には Disallow なし。2 req/sec 上限で運用。
-著作権: 株式会社スティングレイ。クレジットデータは公表済み事実として使用。
+Rate limit: no Disallow in robots.txt. Running at ≤2 req/sec.
+Copyright: Stingray Co., Ltd. Credit data used as publicly disclosed facts.
 """
 
 from __future__ import annotations
@@ -64,8 +64,8 @@ HEADERS = {
     "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
 }
 
-# allcinema jobname → 内部 Role 文字列へのマッピング
-# jobid も参考として記載するが、マッピングは jobname ベース
+# Mapping from allcinema jobname → internal Role string
+# jobid is included for reference but the mapping is jobname-based
 _JOB_ROLE_MAP: dict[str, str] = {
     "監督": "director",
     "総監督": "director",
@@ -109,7 +109,7 @@ _JOB_ROLE_MAP: dict[str, str] = {
 }
 
 
-# ─── データクラス ─────────────────────────────────────────────────────────────
+# ─── Data classes ────────────────────────────────────────────────────────────
 
 
 @dataclass
@@ -117,7 +117,7 @@ class AllcinemaCredit:
     allcinema_person_id: int
     name_ja: str
     name_en: str
-    job_name: str  # 生のジョブ名
+    job_name: str  # raw job name from source
     job_id: int
 
 
@@ -137,18 +137,18 @@ class AllcinemaAnimeRecord:
 class AllcinemaPersonRecord:
     allcinema_id: int
     name_ja: str
-    yomigana: str = ""  # よみがな (ひらがな)
+    yomigana: str = ""  # reading (hiragana)
     name_en: str = ""
 
 
-# ─── HTTP クライアント ────────────────────────────────────────────────────────
+# ─── HTTP client ─────────────────────────────────────────────────────────────
 
 
 class AllcinemaClient:
-    """allcinema 非同期 HTTP クライアント.
+    """Async HTTP client for allcinema.
 
-    GET は共通 RetryingHttpClient (http_client.py) に委譲。
-    CSRF を伴う POST (/ajax/person) は 419 リトライ等の独自挙動のため自前。
+    GET requests are delegated to the shared RetryingHttpClient (http_client.py).
+    CSRF-bearing POST (/ajax/person) uses custom handling for 419 retries etc.
     """
 
     def __init__(self, delay: float = DEFAULT_DELAY, transport=None) -> None:
@@ -160,14 +160,14 @@ class AllcinemaClient:
             headers=HEADERS,
             transport=transport,
         )
-        # post_ajax で同じ httpx Client が必要なので参照を露出
+        # Expose the underlying httpx Client so post_ajax can share it
         self._client = self._http._client
 
     async def close(self) -> None:
         await self._http.aclose()
 
     async def get(self, url: str) -> httpx.Response:
-        """GET リクエスト. 5xx/429 は共通 client が retry。404 は呼び出し側ハンドリング。"""
+        """GET request. 5xx/429 are retried by the shared client; 404 is handled by the caller."""
         resp = await self._http.get(url)
         if resp.status_code == 404:
             return resp
@@ -179,9 +179,9 @@ class AllcinemaClient:
         return resp
 
     async def post_ajax(self, ajax_data: str, key: int, page: int = 1) -> dict:
-        """CSRF 付き POST で /ajax/person エンドポイントを叩く."""
+        """Hit the /ajax/person endpoint via a CSRF-authenticated POST."""
         if not self._csrf_token:
-            # CSRF トークンを取得するためにまず person ページを GET
+            # GET the person page first to obtain the CSRF token
             await self.get(f"{PERSON_BASE}{key}")
 
         backoff = 4.0
@@ -223,7 +223,7 @@ class AllcinemaClient:
             return resp.json()
 
 
-# ─── フェーズ 1: サイトマップ取得 ────────────────────────────────────────────
+# ─── Phase 1: Sitemap retrieval ──────────────────────────────────────────────
 
 
 async def fetch_sitemap_ids(
@@ -231,7 +231,7 @@ async def fetch_sitemap_ids(
     pattern: str,
     count: int,
 ) -> list[int]:
-    """サイトマップ XML.gz から ID のリストを取得する."""
+    """Retrieve a list of IDs from a sitemap XML.gz file."""
     ids: list[int] = []
     for n in range(1, count + 1):
         url = pattern.format(n=n)
@@ -255,12 +255,12 @@ async def fetch_sitemap_ids(
     return ids
 
 
-# ─── フェーズ 2: Cinema ページ解析 ───────────────────────────────────────────
+# ─── Phase 2: Cinema page parsing ───────────────────────────────────────────
 
 
 def _parse_cinema_html(html: str, cinema_id: int) -> AllcinemaAnimeRecord | None:
-    """Cinema ページの HTML から AllcinemaAnimeRecord を返す。アニメ以外は None。"""
-    # PageSetting からメタデータ取得
+    """Parse a cinema page HTML and return an AllcinemaAnimeRecord, or None for non-anime."""
+    # Extract metadata from PageSetting
     m_ps = re.search(r"var PageSetting = function\(\)\{(.*?)\};", html, re.DOTALL)
     if not m_ps:
         return None
@@ -278,22 +278,22 @@ def _parse_cinema_html(html: str, cinema_id: int) -> AllcinemaAnimeRecord | None
     if m_sy:
         synopsis = m_sy.group(1).replace('\\"', '"').replace("\\n", "\n")
 
-    # タイトルと年
+    # Title and year
     title_ja = ""
     year: int | None = None
     m_title = re.search(r"<title>(.*?)</title>", html)
     if m_title:
         raw_title = m_title.group(1)
-        # "映画アニメ タイトル (YYYY) - allcinema" → "タイトル", YYYY
+        # "映画アニメ TITLE (YYYY) - allcinema" → "TITLE", YYYY
         m_year = re.search(r"\((\d{4})\)", raw_title)
         if m_year:
             year = int(m_year.group(1))
-        # タイトル部分の抽出
+        # Extract the title portion
         clean = re.sub(r"\s*\(\d{4}\)\s*-\s*allcinema\s*$", "", raw_title)
         clean = re.sub(r"^(映画アニメ|テレビアニメ|映画)\s*", "", clean).strip()
         title_ja = clean
 
-    # CreditJson 取得 (HTML 中に直接埋め込まれている)
+    # Retrieve CreditJson (embedded directly in the HTML)
     m_cj = re.search(
         r"CreditJson = function\(\)\{\s*this\.data = (\{.*?\});\s*\}",
         html,
@@ -349,7 +349,7 @@ async def scrape_cinema(
     client: AllcinemaClient,
     cinema_id: int,
 ) -> AllcinemaAnimeRecord | None:
-    """単一 cinema ページをスクレイプして返す。404 または非アニメは None。"""
+    """Scrape a single cinema page and return the record, or None for 404 or non-anime."""
     url = f"{CINEMA_BASE}{cinema_id}"
     resp = await client.get(url)
     if resp.status_code == 404:
@@ -357,11 +357,11 @@ async def scrape_cinema(
     return _parse_cinema_html(resp.text, cinema_id)
 
 
-# ─── フェーズ 3: Person ページ解析 ───────────────────────────────────────────
+# ─── Phase 3: Person page parsing ───────────────────────────────────────────
 
 
 def _parse_person_html(html: str, person_id: int) -> AllcinemaPersonRecord:
-    """Person ページの HTML から AllcinemaPersonRecord を返す."""
+    """Parse a person page HTML and return an AllcinemaPersonRecord."""
     name_ja = ""
     m_h1 = re.search(r'<div\s+class\s*=\s*"person-area-name"\s*>(.*?)</div>', html)
     if m_h1:
@@ -371,7 +371,7 @@ def _parse_person_html(html: str, person_id: int) -> AllcinemaPersonRecord:
         if m_title:
             name_ja = m_title.group(1).strip()
 
-    # よみがな: keywords meta に "name,よみがな" 形式で記載
+    # yomigana: listed in the keywords meta tag as "name,yomigana"
     yomigana = ""
     m_kw = re.search(r'name="keywords"\s+content="([^"]*)"', html)
     if m_kw:
@@ -390,7 +390,7 @@ async def scrape_person(
     client: AllcinemaClient,
     person_id: int,
 ) -> AllcinemaPersonRecord | None:
-    """単一 person ページをスクレイプして返す。404 は None。"""
+    """Scrape a single person page and return the record, or None for 404."""
     url = f"{PERSON_BASE}{person_id}"
     resp = await client.get(url)
     if resp.status_code == 404:
@@ -398,11 +398,11 @@ async def scrape_person(
     return _parse_person_html(resp.text, person_id)
 
 
-# ─── Bronze 書き込み ──────────────────────────────────────────────────────────
+# ─── Bronze writes ────────────────────────────────────────────────────────────
 
 
 def save_anime_record(anime_bw, credits_bw, rec: AllcinemaAnimeRecord) -> int:
-    """AllcinemaAnimeRecord を BRONZE parquet に書き出してクレジット数を返す。"""
+    """Write an AllcinemaAnimeRecord to BRONZE and return the credit count."""
     anime_row = dataclasses.asdict(rec)
     # credits are in staff/cast lists — write credits separately
     all_credits = rec.staff + rec.cast
@@ -417,11 +417,11 @@ def save_anime_record(anime_bw, credits_bw, rec: AllcinemaAnimeRecord) -> int:
 
 
 def save_person_record(persons_bw, rec: AllcinemaPersonRecord) -> None:
-    """AllcinemaPersonRecord を BRONZE parquet に書き出す."""
+    """Write an AllcinemaPersonRecord to BRONZE."""
     persons_bw.append(dataclasses.asdict(rec))
 
 
-# ─── チェックポイント ─────────────────────────────────────────────────────────
+# ─── Checkpoint ──────────────────────────────────────────────────────────────
 
 
 def _load_checkpoint(path: Path) -> dict:
@@ -438,7 +438,7 @@ def _save_checkpoint(path: Path, data: dict) -> None:
     path.write_text(json.dumps(data))
 
 
-# ─── Phase 2 実行 ─────────────────────────────────────────────────────────────
+# ─── Phase 2 execution ───────────────────────────────────────────────────────
 
 
 async def _run_scrape_cinema(
@@ -522,7 +522,7 @@ async def _run_scrape_cinema(
     )
 
 
-# ─── Phase 3 実行 ─────────────────────────────────────────────────────────────
+# ─── Phase 3 execution ───────────────────────────────────────────────────────
 
 
 async def _run_scrape_persons(
@@ -605,9 +605,9 @@ async def _run_scrape_persons(
 
 @app.command("sitemap")
 def cmd_sitemap(
-    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, help="チェックポイント保存先"),
+    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, help="checkpoint save directory"),
 ) -> None:
-    """サイトマップから cinema/person ID 一覧を取得してファイルに保存."""
+    """Fetch the cinema/person ID list from sitemaps and save to files."""
     log_path = configure_file_logging("allcinema")
     log.info("allcinema_sitemap_command_start", log_file=str(log_path))
 
@@ -633,12 +633,12 @@ def cmd_sitemap(
 
 @app.command("cinema")
 def cmd_cinema(
-    limit: int = typer.Option(0, help="0=全件"),
-    batch_save: int = typer.Option(SCRAPE_CHECKPOINT_INTERVAL, help="コミット間隔"),
-    delay: float = typer.Option(DEFAULT_DELAY, help="リクエスト間隔(秒)"),
+    limit: int = typer.Option(0, help="0=all"),
+    batch_save: int = typer.Option(SCRAPE_CHECKPOINT_INTERVAL, help="commit interval"),
+    delay: float = typer.Option(DEFAULT_DELAY, help="request interval (seconds)"),
     data_dir: Path = typer.Option(DEFAULT_DATA_DIR),
 ) -> None:
-    """Phase 2: cinema ページをスクレイプしてアニメとクレジットを BRONZE に保存."""
+    """Phase 2: scrape cinema pages and save anime and credits to BRONZE."""
     log_path = configure_file_logging("allcinema")
     log.info("allcinema_cinema_command_start", log_file=str(log_path), limit=limit)
     asyncio.run(
@@ -653,12 +653,12 @@ def cmd_cinema(
 
 @app.command("persons")
 def cmd_persons(
-    limit: int = typer.Option(0, help="0=全件"),
-    batch_save: int = typer.Option(SCRAPE_CHECKPOINT_INTERVAL, help="コミット間隔"),
-    delay: float = typer.Option(DEFAULT_DELAY, help="リクエスト間隔(秒)"),
+    limit: int = typer.Option(0, help="0=all"),
+    batch_save: int = typer.Option(SCRAPE_CHECKPOINT_INTERVAL, help="commit interval"),
+    delay: float = typer.Option(DEFAULT_DELAY, help="request interval (seconds)"),
     data_dir: Path = typer.Option(DEFAULT_DATA_DIR),
 ) -> None:
-    """Phase 3: person ページをスクレイプして名前・よみがなを BRONZE に保存."""
+    """Phase 3: scrape person pages and save names and yomigana to BRONZE."""
     log_path = configure_file_logging("allcinema")
     log.info("allcinema_persons_command_start", log_file=str(log_path), limit=limit)
     asyncio.run(
@@ -673,12 +673,12 @@ def cmd_persons(
 
 @app.command("run")
 def cmd_run(
-    limit: int = typer.Option(0, help="各フェーズの処理件数上限 (0=全件)"),
+    limit: int = typer.Option(0, help="max items per phase (0=all)"),
     delay: float = typer.Option(DEFAULT_DELAY),
     data_dir: Path = typer.Option(DEFAULT_DATA_DIR),
-    skip_persons: bool = typer.Option(False, help="Phase 3 をスキップ"),
+    skip_persons: bool = typer.Option(False, help="skip Phase 3"),
 ) -> None:
-    """Phase 2 → Phase 3 を続けて実行."""
+    """Run Phase 2 then Phase 3 in sequence."""
     log_path = configure_file_logging("allcinema")
     log.info("allcinema_run_command_start", log_file=str(log_path), limit=limit)
     asyncio.run(

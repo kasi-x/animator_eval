@@ -1,4 +1,4 @@
-"""OpenSkill ベースの Skill スコア算出.
+"""OpenSkill-based Skill score computation.
 
 制作規模（スタッフ数）を「試合結果」と見立て、
 各アニメーターのスキルレーティングを算出する。
@@ -38,7 +38,7 @@ def compute_skill_scores(
     credits: list[Credit],
     anime_map: dict[str, Anime],
 ) -> dict[str, float]:
-    """OpenSkill を用いて Skill スコアを算出する.
+    """Compute Skill scores using OpenSkill.
 
     各作品を「試合」として扱い、スタッフ数（制作規模）で順位付けする。
     同じ作品に参加したスタッフはチームとして扱う。
@@ -70,7 +70,7 @@ def compute_skill_scores(
         logger.warning("No anime with staff found")
         return {}
 
-    # anime_id → [person_id] (対象役職のみ)
+    # anime_id → [person_id] (target roles only)
     staff_by_anime: dict[str, list[str]] = {}
     for credit in credits:
         if credit.role in SKILL_ROLES:
@@ -78,7 +78,7 @@ def compute_skill_scores(
             if credit.person_id not in staff_by_anime[credit.anime_id]:
                 staff_by_anime[credit.anime_id].append(credit.person_id)
 
-    # OpenSkill モデル初期化
+    # Initialize OpenSkill model
     model = PlackettLuce()
 
     # ratings for all participants

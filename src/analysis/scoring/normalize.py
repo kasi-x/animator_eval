@@ -27,7 +27,7 @@ def normalize_minmax(
     scores: dict[str, float],
     target_maximum_value: float = 100.0,
 ) -> dict[str, float]:
-    """min-max 正規化: [0, target_maximum_value].
+    """Min-max normalization: [0, target_maximum_value].
 
     Rescales scores linearly to range from 0 to target_maximum_value.
     """
@@ -74,7 +74,7 @@ def normalize_zscore(
     scores: dict[str, float],
     target_maximum_value: float = 100.0,
 ) -> dict[str, float]:
-    """z-score 正規化: 平均50, 標準偏差に基づきスケール.
+    """Z-score normalization: mean 50, scaled by standard deviation.
 
     Normalizes using z-scores: mean maps to target_maximum_value/2, ±2σ map to 0 or target_maximum_value.
     z-score を [0, target_maximum_value] にクリップする。

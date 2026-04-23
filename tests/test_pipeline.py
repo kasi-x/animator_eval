@@ -82,7 +82,22 @@ def populated_db(tmp_path, monkeypatch):
     conn.commit()
     conn.close()
 
-    # get_connection をパッチしてテストDBを使う
+    # Build silver.duckdb for load_pipeline_data
+    from tests.conftest import build_silver_duckdb
+
+    silver_path = tmp_path / "silver.duckdb"
+    build_silver_duckdb(silver_path, persons, anime_list, credits_data)
+
+    # Build empty gold.duckdb for GoldWriter
+    import src.analysis.gold_writer
+
+    gold_path = tmp_path / "gold.duckdb"
+    monkeypatch.setattr(src.analysis.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+
+    import src.analysis.silver_reader
+
+    monkeypatch.setattr(src.analysis.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
+
     import src.database
 
     monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
@@ -92,8 +107,6 @@ def populated_db(tmp_path, monkeypatch):
     import src.utils.json_io
 
     monkeypatch.setattr(src.pipeline, "JSON_DIR", json_dir)
-    # export_and_viz.py が実行時に src.utils.config.JSON_DIR を import するため
-    # 本番ディレクトリへの書き込みを防ぐために必須
     monkeypatch.setattr(src.utils.config, "JSON_DIR", json_dir)
     monkeypatch.setattr(src.utils.json_io, "JSON_DIR", json_dir)
 

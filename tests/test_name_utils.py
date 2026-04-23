@@ -2,11 +2,6 @@
 from __future__ import annotations
 
 import json
-import tempfile
-from pathlib import Path
-from unittest.mock import patch
-
-import pytest
 
 from src.utils.name_utils import (
     assign_native_name_fields,
@@ -15,7 +10,6 @@ from src.utils.name_utils import (
     _HOMETOWN_CACHE,
     _TOKENS_JSON_PATH,
     _load_tokens_json,
-    _save_hometown_cache,
 )
 
 

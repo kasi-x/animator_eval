@@ -5,7 +5,6 @@ title_ja matching, preferring wiki sources as canonical IDs.
 """
 
 import json
-import sqlite3
 from collections import defaultdict
 
 import structlog
@@ -226,23 +225,16 @@ def _resolve_anime_entities(
     return canonical_map, anomalies
 
 
-def run_entity_resolution(
-    context: PipelineContext,
-    conn: sqlite3.Connection | None = None,
-) -> None:
+def run_entity_resolution(context: PipelineContext) -> None:
     """Perform entity resolution for both persons and anime.
 
     Person resolution: Deduplicate person identities across sources.
     Anime resolution: Merge anime across sources by title_ja, preferring wiki.
 
-    Args:
-        context: Pipeline context
-
     Updates context fields:
         - canonical_map: Dict mapping duplicate person_id to canonical person_id
         - credits: List of credits with resolved person_ids and anime_ids
         - anime_list / anime_map: Deduplicated anime (non-canonical removed)
-        - (optional) writes meta_entity_resolution_audit rows when conn is provided
     """
     with context.monitor.measure("entity_resolution"):
         # === Person entity resolution ===
@@ -419,53 +411,3 @@ def run_entity_resolution(
                 persons_after=len(context.persons),
             )
 
-        if conn is not None and context.canonical_map:
-            from src.database import upsert_meta_entity_resolution_audit
-
-            persons_by_id = {p.id: p for p in context.persons}
-            grouped: dict[str, list[str]] = defaultdict(list)
-            for dup_id, canonical_id in context.canonical_map.items():
-                grouped[canonical_id].append(dup_id)
-
-            audit_rows: list[dict] = []
-            for canonical_id, dup_ids in grouped.items():
-                canonical = persons_by_id.get(canonical_id)
-                canonical_name = (
-                    canonical.name_ja
-                    if canonical and canonical.name_ja
-                    else canonical.name_en
-                    if canonical and canonical.name_en
-                    else canonical_id
-                )
-                cross_source = any(
-                    (
-                        ":" in d
-                        and ":" in canonical_id
-                        and d.split(":")[0] != canonical_id.split(":")[0]
-                    )
-                    or (d.startswith("ann-") != canonical_id.startswith("ann-"))
-                    for d in dup_ids
-                )
-                method = "cross_source" if cross_source else "exact_match"
-                confidence = 0.90 if cross_source else 0.98
-                evidence = (
-                    f"{len(dup_ids)} aliases merged into canonical id '{canonical_id}' "
-                    f"without changing resolver logic."
-                )
-                audit_rows.append(
-                    {
-                        "person_id": canonical_id,
-                        "canonical_name": canonical_name,
-                        "merge_method": method,
-                        "merge_confidence": confidence,
-                        "merged_from_keys": json.dumps(
-                            sorted(dup_ids), ensure_ascii=False
-                        ),
-                        "merge_evidence": evidence,
-                        "reviewed_by": None,
-                        "reviewed_at": None,
-                    }
-                )
-            if audit_rows:
-                upserted = upsert_meta_entity_resolution_audit(conn, audit_rows)
-                logger.info("entity_resolution_audit_upserted", rows=upserted)
