@@ -57,16 +57,23 @@ class PersonRow:
     id: str
     name_ja: str = ""
     name_en: str = ""
+    name_ko: str = ""
+    name_zh: str = ""
     aliases: str = "[]"  # JSON array string
+    nationality: str = "[]"  # JSON array string
     mal_id: int | None = None
     anilist_id: int | None = None
     canonical_id: str | None = None
     date_of_birth: str | None = None
+    hometown: str | None = None
     blood_type: str | None = None
     description: str | None = None
+    gender: str | None = None
+    years_active: str = "[]"  # JSON array string
     favourites: int | None = None
     site_url: str | None = None
     image_medium: str | None = None
+    name_priority: int = 0
     updated_at: str | None = None
 
     @classmethod
@@ -98,6 +105,9 @@ class AnimeRow:
     quarter: int | None = None
     work_type: str | None = None
     scale_class: str | None = None
+    country_of_origin: str | None = None
+    synonyms: str = "[]"  # JSON array string
+    is_adult: int | None = None
     updated_at: str | None = None
 
     @classmethod
