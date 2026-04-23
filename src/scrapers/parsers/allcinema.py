@@ -8,6 +8,8 @@ from dataclasses import dataclass, field
 
 import structlog
 
+from src.utils.name_utils import assign_native_name_fields
+
 log = structlog.get_logger()
 
 

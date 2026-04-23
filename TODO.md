@@ -10,12 +10,10 @@
 
 | 優先度 | カテゴリ | 内容 |
 |--------|---------|------|
-| 🟡 Maintenance | スキーマ後続 | v56 多言語・v57 構造的メタデータのフォローアップ |
-| 🟡 Minor | スクレイパー強化 | §7.1 差分更新の残務 (hash 計算 / フィルタ / E2E)、retry refactor |
+| 🟡 Maintenance | スキーマ後続 | v56 既存データ再スクレイプ (name_ja 誤入り修正)、v57 title.native |
 | 🟢 Future | データ修正 | WIKIDATA_ROLE_MAP 修正後の JVMG credits 再マップ |
-| 🟢 Future | アーキテクチャ | similarity.py / recommendation.py 重複確認 |
 
-**完了済み大項目** (→ `DONE.md`): anime.score 汚染除去、Phase 1-4 基盤、DuckDB §4 全フェーズ、Hamilton H-1〜H-7 (PipelineContext 完全削除)、レポート統廃合 §8、アーキテクチャ §9/11、ドキュメント §12、テストカバレッジ §6、feat_* 層別分離 §13、scraper queries/parsers 分離 §3
+**完了済み大項目** (→ `DONE.md`): anime.score 汚染除去、Phase 1-4 基盤、DuckDB §4 全フェーズ、Hamilton H-1〜H-7 (PipelineContext 完全削除)、レポート統廃合 §8、アーキテクチャ §9/11、ドキュメント §12、テストカバレッジ §6、feat_* 層別分離 §13、scraper queries/parsers 分離 §3、§7.1 差分更新 (hash比較フィルタ + E2E)、§7.3 retry refactor、§9 similarity/recommendation スタブ化
 
 ---
 
@@ -38,46 +36,35 @@
 
 ---
 
-## SECTION 7: スクレイパー強化残務
+## SECTION 7: スクレイパー強化残務 (すべて完了 2026-04-24)
 
-### 7.1 差分更新 — Parquet + DuckDB ベース (進行中)
+### 7.1 差分更新 — Parquet + DuckDB ベース ✅
+- [x] `hash_utils.py`, anilist/ann/allcinema/seesaawiki hash 計算
+- [x] integrate_duckdb.py REPLACE upsert, anilist `--since YYYY-MM-DD` mode
+- [x] hash 比較フィルタリング (UPDATE skip) — ecd6477
+- [x] E2E テスト (hash差分検出) — 1a8dfcd
 
-✅ **実装完了 (2026-04-24)**:
-- [x] `hash_utils.py` 作成
-- [x] anilist_scraper fetched_at/content_hash 追加
-- [x] ann / allcinema / seesaawiki scraper に hash 計算追加
-- [x] integrate_duckdb.py REPLACE upsert
-- [x] anilist `--since YYYY-MM-DD` mode
-
-**残務 (パフォーマンス tuning)**:
-- [ ] hash 比較フィルタリング (WHERE content_hash != ?) で UPDATE skip
-- [ ] E2E テスト (--since mode で真の差分検出確認)
-
-### 7.3 anilist_scraper retry refactor (完了 2026-04-24)
-
-- [x] 共通部分を `RetryingHttpClient` に委譲、X-RateLimit-* 専用 callback hook を追加
+### 7.3 anilist_scraper retry refactor ✅ (3cf8ad1)
 
 ---
 
-## SECTION 9: アーキテクチャ整理 残務
+## SECTION 9: アーキテクチャ整理 ✅
 
-- [ ] `similarity.py` と `recommendation.py` の機能重複確認 (低優先度)
+similarity.py / recommendation.py はスタブ化済 (2行)、重複整理完了。
 
 ---
 
 ## 実施順序
 
 ```
-短期 (独立・並行可):
-  §1    v56/v57 スキーマ後続タスク
-  §7.1  差分更新の hash / フィルタ / E2E
+短期:
+  §1    v56 既存データ再スクレイプ (backfill_anilist_hometown.py)
 
 中期:
-  §3    JVMG credits 再マップ (スキーマ確定後)
-  §7.3  retry refactor
+  §3    JVMG credits 再マップ (WIKIDATA_ROLE_MAP 確定後)
 
 長期:
-  §9    similarity / recommendation 重複整理
+  §1 v57 title.native → titles_alt (v58 実施時)
 ```
 
 ---
