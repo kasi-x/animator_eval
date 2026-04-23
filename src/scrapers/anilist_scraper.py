@@ -5,6 +5,7 @@ Rate limit: 90 requests/minute (unauthenticated) / higher (authenticated).
 """
 
 import asyncio
+import datetime as dt
 import time
 
 import httpx
@@ -22,6 +23,7 @@ from src.runtime.models import (
     parse_role,
 )
 from src.scrapers.cache_store import load_cached_json, save_cached_json
+from src.scrapers.hash_utils import hash_anime_data
 from src.scrapers.parsers.anilist import (  # noqa: F401
     parse_anilist_person,
     parse_anilist_anime,
@@ -55,9 +57,14 @@ app = typer.Typer()
 
 # Batch save helper functions (must be defined before main())
 def save_anime_batch_to_bronze(anime_bw, anime_batch):
-    """Save a batch of anime to BRONZE parquet."""
+    """Save a batch of anime to BRONZE parquet with hash tracking."""
+    now = dt.datetime.utcnow().isoformat()
     for anime in anime_batch:
-        anime_bw.append(anime.model_dump(mode="json"))
+        anime_dict = anime.model_dump(mode="json")
+        # Add fetched_at and content_hash for diff detection
+        anime_dict["fetched_at"] = now
+        anime_dict["content_hash"] = hash_anime_data(anime_dict)
+        anime_bw.append(anime_dict)
 
 
 def save_studios_to_bronze(studios_bw, anime_studios_bw, studios, anime_studios):

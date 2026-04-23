@@ -96,11 +96,12 @@ H-1〜H-7 完了 (詳細: DONE.md)。実装計画: `docs/ARCHITECTURE_CLEANUP.md
 
 ## SECTION 7: スクレイパー強化残務
 
-### 7.1 差分更新 — ブロック中 (スキーマ変更待ち)
+### 7.1 差分更新 — Parquet + DuckDB ベース
 
-- [ ] `src_*_anime` テーブルに `fetched_at` / `content_hash` カラム追加
-- [ ] upsert 時に hash 比較して変更時のみ update
-- [ ] scraper 側に `--since YYYY-MM-DD` mode 実装
+- [ ] BronzeWriter に `fetched_at` / `content_hash` フィールド追加 (parquet に含める)
+- [ ] scraper 側で hash 計算 (anime dict) → BronzeWriter に渡す
+- [ ] integrate_duckdb.py で Parquet → SILVER DuckDB 統合時に hash 比較してからマージ
+- [ ] scraper CLI に `--since YYYY-MM-DD` mode: 前回 SILVER fetch 以降の差分のみ処理
 
 ### 7.3 anilist_scraper retry refactor (任意)
 
@@ -116,9 +117,9 @@ H-1〜H-7 完了 (詳細: DONE.md)。実装計画: `docs/ARCHITECTURE_CLEANUP.md
 
 ## SECTION 13: 将来タスク
 
-- [ ] `agg_person_career` (L2) / `feat_career_scores` (L3) 分割
-- [ ] `agg_person_network` (L2) / `feat_network_scores` (L3) 分割
-- [ ] `corrections_*` テーブル: クレジット年補正・ロール正規化の修正差分追跡
+- [x] `agg_person_career` (L2) / `feat_career_scores` (L3) 分割 (2026-04-24)
+- [x] `agg_person_network` (L2) / `feat_network_scores` (L3) 分割 (2026-04-24)
+- [x] `corrections_*` テーブル: クレジット年補正・ロール正規化の修正差分追跡 (2026-04-24)
 
 ---
 
