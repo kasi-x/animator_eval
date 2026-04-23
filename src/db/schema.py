@@ -1,6 +1,6 @@
 """BRONZE layer schema initialization.
 
-Extracted from database_v2.py to consolidate schema management.
+Consolidates all schema DDL and initialization functions for BRONZE layer.
 BRONZE tables store raw scraper data (legacy SQLite, now parquet).
 SILVER/GOLD tables are in DuckDB.
 """

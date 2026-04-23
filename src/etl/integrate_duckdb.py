@@ -29,8 +29,9 @@ DEFAULT_BRONZE_ROOT = Path(
 )
 
 # Minimal DDL for the three core SILVER tables.
-# Full schema (studios, anime_genres, anime_tags, …) lives in models_v2.py
-# and is handled by the SQLite ETL until 06_sqlite_decommission.
+# Full BRONZE schema lives in src/db/schema.py.
+# Additional SILVER tables (studios, anime_genres, anime_tags, …) are handled
+# by separate integration modules.
 _DDL = """
 CREATE TABLE IF NOT EXISTS anime (
     id          VARCHAR PRIMARY KEY,
