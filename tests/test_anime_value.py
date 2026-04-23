@@ -12,7 +12,6 @@ from src.analysis.anime_value import (
     rank_anime_by_value,
 )
 
-import networkx as nx
 import pytest
 
 from src.models import BronzeAnime as Anime, Credit, Role

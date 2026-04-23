@@ -13,8 +13,6 @@ All async tests use asyncio.run() wrappers since pytest-asyncio is not available
 """
 
 import asyncio
-import json
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -22,12 +20,7 @@ import pytest
 
 from src.models import Role
 from src.scrapers.exceptions import (
-    AuthenticationError,
-    ContentValidationError,
-    DataParseError,
     EndpointUnreachableError,
-    RateLimitError,
-    ScraperError,
 )
 
 

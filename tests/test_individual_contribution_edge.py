@@ -1,11 +1,8 @@
 """individual_contribution.py edge case tests."""
-import pytest
 from src.models import BronzeAnime as Anime, Credit, Role
 
 import networkx as nx
-import pytest
 
-from src.models import BronzeAnime as Anime, Credit, Role
 
 
 def _anime(

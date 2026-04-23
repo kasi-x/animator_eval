@@ -4,10 +4,8 @@ from __future__ import annotations
 
 import gzip
 import json
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
-import pytest
 
 
 # ---------------------------------------------------------------------------
@@ -19,9 +17,11 @@ class TestTimingHook:
     def test_logs_on_node_execution(self, tmp_path):
         from src.pipeline_phases.lifecycle import TimingHook
 
+        import time
+
         hook = TimingHook()
         hook.run_before_node_execution(node_name="test_node", node_tags={})
-        import time; time.sleep(0.01)
+        time.sleep(0.01)
         with patch("src.pipeline_phases.lifecycle.log") as mock_log:
             hook.run_after_node_execution(
                 node_name="test_node",

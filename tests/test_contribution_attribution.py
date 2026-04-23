@@ -12,8 +12,6 @@ from src.analysis.contribution_attribution import (
     set_role_weights,
 )
 
-import networkx as nx
-import pytest
 
 from src.models import BronzeAnime as Anime, Credit, Role
 

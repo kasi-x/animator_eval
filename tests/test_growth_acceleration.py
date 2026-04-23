@@ -7,7 +7,6 @@ from src.analysis.growth_acceleration import (
     find_fast_risers,
 )
 
-import networkx as nx
 import pytest
 
 from src.models import BronzeAnime as Anime, Credit, Role

@@ -13,7 +13,6 @@ from src.analysis.studio.bias_correction import (
     find_undervalued_by_studio,
 )
 
-import networkx as nx
 import pytest
 
 from src.models import BronzeAnime as Anime, Credit, Role

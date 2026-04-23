@@ -308,10 +308,6 @@ class TestResumePipeline:
 
     def test_resume_creates_checkpoint(self, populated_db, monkeypatch):
         """CheckpointHook がパイプライン実行中に checkpoint を書き込む."""
-        import gzip, json
-        import src.pipeline
-
-        json_dir = src.pipeline.JSON_DIR
         saved: list = []
 
         orig_save = __import__(
