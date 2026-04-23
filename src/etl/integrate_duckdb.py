@@ -95,14 +95,14 @@ CREATE TABLE IF NOT EXISTS credits (
 );
 """
 
-# BRONZE anime parquet → SILVER anime table.
+# BRONZE anime parquet → SILVER anime table with hash-based diff detection.
 # Excludes: score, popularity, favourites, description, cover_*, banner,
 #           mal_id, anilist_id, ann_id, allcinema_id, madb_id (external IDs),
 #           genres, tags, studios (→ separate tables in full ETL).
 # Includes: content_hash, fetched_at for diff detection.
-# The hive partition adds virtual 'date' column used for dedup.
+# Strategy: REPLACE (upsert) on primary key (id). Hash comparison done at merge layer.
 _ANIME_SQL = """
-INSERT INTO anime
+REPLACE INTO anime
 SELECT
     id,
     COALESCE(title_ja, '')  AS title_ja,
