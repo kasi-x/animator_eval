@@ -33,6 +33,7 @@ from src.scrapers.parsers.anilist import (  # noqa: F401
     parse_anilist_studios,
     parse_anilist_relations,
 )
+from src.scrapers.retrying_http_client import RetryingHttpClient
 from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL
 
 _env = dotenv_values(find_dotenv())
@@ -159,8 +160,8 @@ class AniListClient:
             log.info("anilist_token_loaded", will_attempt_auth=True)
         else:
             log.info("anilist_no_token", will_use_unauthenticated=True)
-        # Create client without default headers (auth added per-request in query())
-        self._client = httpx.AsyncClient(timeout=60.0)
+        # Create RetryingHttpClient (handles retries + rate limit backoff)
+        self._client = RetryingHttpClient(timeout=60.0)
 
         # Rate limit tracking
         self.requests_remaining = None
@@ -175,7 +176,7 @@ class AniListClient:
         self.on_rate_limit: callable | None = None
 
     async def close(self) -> None:
-        await self._client.aclose()
+        await self._client.close()
 
     async def verify_auth(self) -> bool:
         """Verify token validity and sync the remaining rate-limit window quota.
@@ -271,226 +272,127 @@ class AniListClient:
             return cached
 
         await self._rate_limit()
-        for attempt in range(5):
-            try:
-                # Build headers with auth token if available (per AniList docs)
-                headers = {
-                    "Content-Type": "application/json",
-                    "Accept": "application/json",
-                }
-                if self._access_token:
-                    headers["Authorization"] = f"Bearer {self._access_token}"
 
-                resp = await self._client.post(
-                    ANILIST_URL,
-                    json={"query": query, "variables": variables},
-                    headers=headers,
-                )
-                self._requests_since_reset += 1
-                self._requests_total += 1
+        # Build headers with auth token if available
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+        if self._access_token:
+            headers["Authorization"] = f"Bearer {self._access_token}"
 
-                if resp.status_code == 429:
-                    # X-RateLimit-* headers may be absent on a 429 response
-                    retry_after = int(resp.headers.get("Retry-After", 10))
-                    limit = (
-                        self.rate_limit_max
-                        or int(resp.headers.get("X-RateLimit-Limit", 0))
-                        or None
-                    )
-                    # Also check headers on the 429 response itself
-                    remaining_in_429 = resp.headers.get("X-RateLimit-Remaining")
-                    limit_in_429 = resp.headers.get("X-RateLimit-Limit")
-                    log.warning(
-                        "rate_limited",
-                        source="anilist",
-                        retry_after_seconds=retry_after,
-                        requests_since_reset=self._requests_since_reset,
-                        requests_total=self._requests_total,
-                        last_known_remaining=self._last_remaining_before_429,
-                        header_remaining=remaining_in_429,
-                        header_limit=limit_in_429,
-                        rate_limit_max=limit,
-                        authenticated=bool(self._access_token),
-                        note="limit < 90: token may be invalid or unauthenticated"
-                        if limit and limit < 90
-                        else None,
-                    )
-                    self.requests_remaining = 0
-                    self._requests_since_reset = 0
-                    self._last_remaining_before_429 = None
-                    # Prefer X-RateLimit-Reset when available (accurate API reset time)
-                    reset_header = resp.headers.get("X-RateLimit-Reset")
-                    if reset_header:
-                        reset_at = int(reset_header)
-                        wait_seconds = (
-                            max(reset_at - time.time(), retry_after) + 1
-                        )  # +1 second buffer
-                    else:
-                        wait_seconds = retry_after + 1
-                    self.rate_limit_reset_at = time.time() + wait_seconds
-                    log.info(
-                        "rate_limit_waiting",
-                        source="anilist",
-                        wait_seconds=int(wait_seconds),
-                        reset_header=reset_header,
-                    )
-                    # Wait in 0.5-second steps, calling the callback each tick
-                    remaining = wait_seconds
-                    while remaining > 0:
-                        if self.on_rate_limit:
-                            self.on_rate_limit(int(remaining))
-                        await asyncio.sleep(0.5)
-                        remaining -= 0.5
-                    if self.on_rate_limit:
-                        self.on_rate_limit(None)  # wait ended
-                    # Probe the real remaining quota after waiting
-                    try:
-                        probe_resp = await self._client.post(
-                            ANILIST_URL,
-                            json={
-                                "query": "query { SiteStatistics { anime { pageInfo { total } } } }",
-                                "variables": {},
-                            },
-                            headers=headers,
-                        )
-                        probe_remaining = probe_resp.headers.get(
-                            "X-RateLimit-Remaining"
-                        )
-                        probe_limit = probe_resp.headers.get("X-RateLimit-Limit")
-                        if probe_remaining is not None:
-                            self.requests_remaining = int(probe_remaining)
-                        else:
-                            self.requests_remaining = self.rate_limit_max or 90
+        # Context to capture rate limit headers from the request
+        rate_limit_context: dict = {}
+
+        try:
+            resp = await self._client.post(
+                ANILIST_URL,
+                json={"query": query, "variables": variables},
+                headers=headers,
+                on_rate_limit=self.on_rate_limit,
+                rate_limit_context=rate_limit_context,
+            )
+            self._requests_since_reset += 1
+            self._requests_total += 1
+
+            # Update internal rate limit tracking from context
+            if rate_limit_context.get("remaining") is not None:
+                self.requests_remaining = rate_limit_context["remaining"]
+                self._last_remaining_before_429 = self.requests_remaining
+                self.rate_limit_reset_at = rate_limit_context.get("reset_at", 0)
+                limit_val = rate_limit_context.get("limit")
+                if limit_val and self.rate_limit_max is None:
+                    self.rate_limit_max = limit_val
+                    if self.rate_limit_max >= 90:
                         log.info(
-                            "rate_limit_probe_after_wait",
+                            "auth_confirmed",
                             source="anilist",
-                            probe_status=probe_resp.status_code,
-                            probe_remaining=probe_remaining,
-                            probe_limit=probe_limit,
+                            rate_limit=self.rate_limit_max,
+                            status="authenticated",
                         )
-                        if probe_resp.status_code == 429:
-                            # Not yet reset — wait a bit more
-                            extra_wait = (
-                                int(probe_resp.headers.get("Retry-After", 30)) + 1
-                            )
-                            log.warning(
-                                "rate_limit_not_yet_reset",
-                                source="anilist",
-                                extra_wait_seconds=extra_wait,
-                            )
-                            await asyncio.sleep(extra_wait)
-                    except Exception:
-                        self.requests_remaining = self.rate_limit_max or 90
-                    continue
-
-                # Extract rate limit info from the successful response
-                if "X-RateLimit-Remaining" in resp.headers:
-                    self.requests_remaining = int(
-                        resp.headers.get("X-RateLimit-Remaining", -1)
-                    )
-                    self._last_remaining_before_429 = self.requests_remaining
-                    self.rate_limit_reset_at = int(
-                        resp.headers.get("X-RateLimit-Reset", 0)
-                    )
-                    limit_val = resp.headers.get("X-RateLimit-Limit")
-                    if limit_val and self.rate_limit_max is None:
-                        self.rate_limit_max = int(limit_val)
-                        if self.rate_limit_max >= 90:
-                            log.info(
-                                "auth_confirmed",
-                                source="anilist",
-                                rate_limit=self.rate_limit_max,
-                                status="authenticated",
-                            )
-                        elif self._access_token:
-                            log.warning(
-                                "auth_token_ineffective",
-                                source="anilist",
-                                rate_limit=self.rate_limit_max,
-                                expected=90,
-                                hint="Token may be invalid or expired. Reissue at https://anilist.co/settings/developer",
-                            )
-
-                # Handle invalid token: fall back to unauthenticated
-                if resp.status_code in (400, 401) and self._access_token:
-                    try:
-                        data = resp.json()
-                        errors = data.get("errors", [])
-                        # Log detailed error info
+                    elif self._access_token:
                         log.warning(
-                            "auth_error_response",
+                            "auth_token_ineffective",
                             source="anilist",
-                            status=resp.status_code,
+                            rate_limit=self.rate_limit_max,
+                            expected=90,
+                            hint="Token may be invalid or expired. Reissue at https://anilist.co/settings/developer",
+                        )
+
+            # Handle invalid token: fall back to unauthenticated
+            if resp.status_code in (400, 401) and self._access_token:
+                try:
+                    data = resp.json()
+                    errors = data.get("errors", [])
+                    log.warning(
+                        "auth_error_response",
+                        source="anilist",
+                        status=resp.status_code,
+                        errors=errors,
+                        token_format="JWT"
+                        if "." in self._access_token
+                        else "non-JWT",
+                    )
+                    error_str = str(errors).lower()
+                    if (
+                        "token" in error_str
+                        or "auth" in error_str
+                        or "invalid" in error_str
+                    ):
+                        log.warning(
+                            "invalid_token_disabling",
+                            source="anilist",
                             errors=errors,
-                            token_format="JWT"
-                            if "." in self._access_token
-                            else "non-JWT",
+                            fallback="unauthenticated",
                         )
-                        # Check if error is token-related
-                        error_str = str(errors).lower()
-                        if (
-                            "token" in error_str
-                            or "auth" in error_str
-                            or "invalid" in error_str
-                        ):
-                            log.warning(
-                                "invalid_token_disabling",
-                                source="anilist",
-                                errors=errors,
-                                fallback="unauthenticated",
-                            )
-                            self._access_token = (
-                                None  # Disable token for future requests
-                            )
-                            continue  # Retry without token
-                    except Exception as parse_error:
-                        log.warning(
-                            "failed_to_parse_error_response",
-                            source="anilist",
-                            error_type=type(parse_error).__name__,
-                            error_message=str(parse_error),
+                        self._access_token = None
+                        # Retry without token
+                        headers.pop("Authorization", None)
+                        resp = await self._client.post(
+                            ANILIST_URL,
+                            json={"query": query, "variables": variables},
+                            headers=headers,
+                            on_rate_limit=self.on_rate_limit,
+                            rate_limit_context=rate_limit_context,
                         )
-
-                # 404 = resource does not exist → no retry needed, return None
-                if resp.status_code == 404:
+                except Exception as parse_error:
                     log.warning(
-                        "resource_not_found",
+                        "failed_to_parse_error_response",
                         source="anilist",
-                        status=404,
-                        variables=variables,
+                        error_type=type(parse_error).__name__,
+                        error_message=str(parse_error),
                     )
-                    return None
 
-                resp.raise_for_status()
-                data = resp.json()
-                if "errors" in data:
-                    log.warning(
-                        "graphql_errors",
-                        source="anilist",
-                        errors=data["errors"],
-                        variables=variables,
-                    )
-                result = data.get("data", {})
-                save_cached_json("anilist/graphql", cache_key, result)
-                return result
-            except httpx.HTTPError as e:
+            # 404 = resource does not exist → return None
+            if resp.status_code == 404:
                 log.warning(
-                    "request_failed",
+                    "resource_not_found",
                     source="anilist",
-                    attempt=attempt + 1,
+                    status=404,
                     variables=variables,
-                    error_type=type(e).__name__,
-                    error_message=str(e),
                 )
-                if attempt < 4:
-                    await asyncio.sleep(2 ** (attempt + 1))
-        from src.scrapers.exceptions import EndpointUnreachableError
+                return None
 
-        raise EndpointUnreachableError(
-            "Failed to query AniList after 5 attempts",
-            source="anilist",
-            url=ANILIST_URL,
-        )
+            resp.raise_for_status()
+            data = resp.json()
+            if "errors" in data:
+                log.warning(
+                    "graphql_errors",
+                    source="anilist",
+                    errors=data["errors"],
+                    variables=variables,
+                )
+            result = data.get("data", {})
+            save_cached_json("anilist/graphql", cache_key, result)
+            return result
+
+        except httpx.HTTPError as e:
+            from src.scrapers.exceptions import EndpointUnreachableError
+            raise EndpointUnreachableError(
+                "Failed to query AniList",
+                source="anilist",
+                url=ANILIST_URL,
+            ) from e
 
     async def get_top_anime(
         self, page: int = 1, per_page: int = 50, sort: list = None

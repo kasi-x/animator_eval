@@ -340,6 +340,71 @@ CREATE TABLE IF NOT EXISTS ops_entity_resolution_audit (
     reviewed_by         TEXT,
     reviewed_at         TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS agg_person_career (
+    person_id      TEXT PRIMARY KEY,
+    first_year     INTEGER,
+    latest_year    INTEGER,
+    active_years   INTEGER,
+    total_credits  INTEGER,
+    recent_credits INTEGER,
+    highest_stage  INTEGER,
+    primary_role   TEXT,
+    peak_year      INTEGER,
+    peak_credits   INTEGER,
+    updated_at     TIMESTAMP DEFAULT current_timestamp
+);
+
+CREATE TABLE IF NOT EXISTS feat_career_scores (
+    person_id      TEXT PRIMARY KEY,
+    career_track   TEXT,
+    growth_trend   TEXT,
+    growth_score   DOUBLE,
+    activity_ratio DOUBLE,
+    updated_at     TIMESTAMP DEFAULT current_timestamp
+);
+
+CREATE TABLE IF NOT EXISTS agg_person_network (
+    person_id            TEXT PRIMARY KEY,
+    n_collaborators      INTEGER,
+    n_unique_anime       INTEGER,
+    n_bridge_communities INTEGER,
+    updated_at           TIMESTAMP DEFAULT current_timestamp
+);
+
+CREATE TABLE IF NOT EXISTS feat_network_scores (
+    person_id               TEXT PRIMARY KEY,
+    birank                  DOUBLE,
+    patronage               DOUBLE,
+    degree_centrality       DOUBLE,
+    betweenness_centrality  DOUBLE,
+    closeness_centrality    DOUBLE,
+    eigenvector_centrality  DOUBLE,
+    hub_score               DOUBLE,
+    bridge_score            DOUBLE,
+    updated_at              TIMESTAMP DEFAULT current_timestamp
+);
+
+CREATE TABLE IF NOT EXISTS corrections_credit_year (
+    id                    BIGINT PRIMARY KEY,
+    credit_id             BIGINT NOT NULL,
+    credit_year_original  INTEGER,
+    credit_year_corrected INTEGER NOT NULL,
+    reason                TEXT NOT NULL DEFAULT '',
+    corrected_at          TIMESTAMP DEFAULT current_timestamp,
+    corrected_by          TEXT NOT NULL DEFAULT ''
+);
+
+CREATE TABLE IF NOT EXISTS corrections_role (
+    id                 BIGINT PRIMARY KEY,
+    credit_id          BIGINT NOT NULL,
+    role_original      TEXT NOT NULL,
+    role_corrected     TEXT NOT NULL,
+    raw_role_override  TEXT,
+    reason             TEXT NOT NULL DEFAULT '',
+    corrected_at       TIMESTAMP DEFAULT current_timestamp,
+    corrected_by       TEXT NOT NULL DEFAULT ''
+);
 """
 
 

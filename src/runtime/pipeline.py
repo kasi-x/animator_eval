@@ -14,6 +14,7 @@ import time
 
 import structlog
 
+from src.pipeline_phases.lifecycle import PipelineCheckpoint
 from src.utils.config import JSON_DIR  # noqa: F401 — imported for test monkeypatch compatibility
 
 logger = structlog.get_logger()

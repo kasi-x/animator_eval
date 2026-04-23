@@ -77,8 +77,8 @@ class TestPhase14DagBuilds:
 class TestLoadingResolutionNodeNames:
     def test_loading_node_names_count(self):
         from src.pipeline_phases.hamilton_modules.loading import NODE_NAMES
-        # H-4: added "ctx" node (DAG entry point); was 2, now 3
-        assert len(NODE_NAMES) == 3
+        # ctx + raw_data_loaded + loaded_data + data_validated = 4
+        assert len(NODE_NAMES) == 4
 
     def test_resolution_node_names_count(self):
         from src.pipeline_phases.hamilton_modules.resolution import NODE_NAMES
@@ -101,11 +101,11 @@ class TestLoadingResolutionNodeNames:
 
 
 class TestNodeChaining:
-    def test_data_validated_depends_on_raw_data_loaded(self):
-        """data_validated must take raw_data_loaded as parameter to enforce ordering."""
+    def test_data_validated_depends_on_loaded_data(self):
+        """data_validated takes loaded_data (pass-through of raw_data_loaded)."""
         from src.pipeline_phases.hamilton_modules.loading import data_validated
         params = inspect.signature(data_validated).parameters
-        assert "raw_data_loaded" in params
+        assert "loaded_data" in params
 
     def test_entity_resolution_depends_on_data_validated(self):
         from src.pipeline_phases.hamilton_modules.resolution import entity_resolution_run

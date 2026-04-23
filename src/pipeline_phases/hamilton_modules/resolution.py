@@ -13,7 +13,7 @@ from typing import Any
 
 from hamilton.function_modifiers import tag
 
-from src.pipeline_phases.pipeline_types import EntityResolutionResult, GraphsResult
+from src.pipeline_phases.pipeline_types import EntityResolutionResult, GraphsResult, LoadedData
 
 NODE_NAMES: list[str] = [
     "entity_resolution_run",
@@ -24,7 +24,7 @@ NODE_NAMES: list[str] = [
 
 
 @tag(stage="phase3", cost="moderate", domain="resolution")
-def entity_resolution_run(ctx: dict, data_validated: Any) -> Any:
+def entity_resolution_run(loaded_data: LoadedData, data_validated: Any, ctx: Any) -> Any:
     """5-step entity resolution: exact → cross-source → romaji → similarity → AI (Phase 3).
 
     Deduplicates person and anime entities across sources (AniList, MADB, etc.),
@@ -34,14 +34,8 @@ def entity_resolution_run(ctx: dict, data_validated: Any) -> Any:
     Depends on data_validated to run after Phase 2.
     """
     from src.pipeline_phases.entity_resolution import run_entity_resolution
-    from src.pipeline_phases.pipeline_types import LoadedData
 
-    loaded = LoadedData(
-        persons=list(ctx.persons),
-        credits=list(ctx.credits),
-        anime_list=list(ctx.anime_list),
-    )
-    result = run_entity_resolution(loaded)
+    result = run_entity_resolution(loaded_data)
 
     ctx.canonical_map = result.canonical_map
     ctx.credits = result.resolved_credits

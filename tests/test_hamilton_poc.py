@@ -18,20 +18,54 @@ import pytest
 
 @pytest.fixture()
 def minimal_context():
-    """Minimal PipelineContext for testing Hamilton nodes."""
-    from src.pipeline_phases.context import PipelineContext
+    """Minimal context namespace for testing Hamilton nodes."""
+    import types
 
-    ctx = PipelineContext.__new__(PipelineContext)
-    ctx.persons = []
-    ctx.credits = []
-    ctx.anime_map = {}
-    ctx.anime_list = []
-    ctx.results = []
-    ctx.iv_scores = {}
-    ctx.collaboration_graph = None
-    ctx.anime_graphs = {}
-    ctx.analysis_results = {}
-    ctx.monitor = _DummyMonitor()
+    ctx = types.SimpleNamespace(
+        persons=[],
+        credits=[],
+        anime_map={},
+        anime_list=[],
+        results=[],
+        iv_scores={},
+        iv_scores_historical={},
+        iv_lambda_weights={},
+        person_fe={},
+        studio_fe={},
+        studio_assignments={},
+        birank_person_scores={},
+        birank_anime_scores={},
+        community_map={},
+        knowledge_spanner_scores={},
+        patronage_scores={},
+        dormancy_scores={},
+        quality_calibration={},
+        akm_result=None,
+        birank_result=None,
+        collaboration_graph=None,
+        person_anime_graph=None,
+        betweenness_cache={},
+        centrality={},
+        decay_results={},
+        role_profiles={},
+        career_data={},
+        circles={},
+        network_density={},
+        growth_data={},
+        versatility={},
+        career_friction={},
+        peer_effect_result=None,
+        era_effects=None,
+        studio_bias_metrics={},
+        growth_acceleration_data={},
+        anime_values={},
+        contribution_data={},
+        potential_value_scores={},
+        career_tracks={},
+        anime_graphs={},
+        analysis_results={},
+        monitor=_DummyMonitor(),
+    )
     return ctx
 
 

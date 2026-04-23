@@ -701,6 +701,147 @@ class FeatBirankAnnualRow:
 
 
 # ---------------------------------------------------------------------------
+# agg_person_career table (L2: raw career aggregates)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class AggPersonCareerRow:
+    """One row of the agg_person_career table (L2 layer)."""
+
+    person_id: str
+    run_id: int | None = None
+    first_year: int | None = None
+    latest_year: int | None = None
+    active_years: int | None = None
+    total_credits: int | None = None
+    recent_credits: int | None = None
+    highest_stage: int | None = None
+    primary_role: str | None = None
+    peak_year: int | None = None
+    peak_credits: int | None = None
+    updated_at: str | None = None
+
+    @classmethod
+    def from_row(cls, row) -> "AggPersonCareerRow":
+        return _from_sqlite_row(cls, row)  # type: ignore[return-value]
+
+
+# ---------------------------------------------------------------------------
+# feat_career_scores table (L3: derived career scores)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class FeatCareerScoresRow:
+    """One row of the feat_career_scores table (L3 layer)."""
+
+    person_id: str
+    run_id: int | None = None
+    career_track: str | None = None
+    growth_trend: str | None = None
+    growth_score: float | None = None
+    activity_ratio: float | None = None
+    updated_at: str | None = None
+
+    @classmethod
+    def from_row(cls, row) -> "FeatCareerScoresRow":
+        return _from_sqlite_row(cls, row)  # type: ignore[return-value]
+
+
+# ---------------------------------------------------------------------------
+# agg_person_network table (L2: raw network aggregates)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class AggPersonNetworkRow:
+    """One row of the agg_person_network table (L2 layer)."""
+
+    person_id: str
+    run_id: int | None = None
+    n_collaborators: int | None = None
+    n_unique_anime: int | None = None
+    n_bridge_communities: int | None = None
+    updated_at: str | None = None
+
+    @classmethod
+    def from_row(cls, row) -> "AggPersonNetworkRow":
+        return _from_sqlite_row(cls, row)  # type: ignore[return-value]
+
+
+# ---------------------------------------------------------------------------
+# feat_network_scores table (L3: derived network scores)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class FeatNetworkScoresRow:
+    """One row of the feat_network_scores table (L3 layer)."""
+
+    person_id: str
+    run_id: int | None = None
+    birank: float | None = None
+    patronage: float | None = None
+    degree_centrality: float | None = None
+    betweenness_centrality: float | None = None
+    closeness_centrality: float | None = None
+    eigenvector_centrality: float | None = None
+    hub_score: float | None = None
+    bridge_score: float | None = None
+    updated_at: str | None = None
+
+    @classmethod
+    def from_row(cls, row) -> "FeatNetworkScoresRow":
+        return _from_sqlite_row(cls, row)  # type: ignore[return-value]
+
+
+# ---------------------------------------------------------------------------
+# corrections_credit_year table (audit: credit year corrections)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class CorrectionsCreditYearRow:
+    """One row of the corrections_credit_year table (INSERT-ONLY audit log)."""
+
+    id: int = 0
+    credit_id: int = 0
+    credit_year_original: int | None = None
+    credit_year_corrected: int = 0
+    reason: str = ""
+    corrected_at: str | None = None
+    corrected_by: str = ""
+
+    @classmethod
+    def from_row(cls, row) -> "CorrectionsCreditYearRow":
+        return _from_sqlite_row(cls, row)  # type: ignore[return-value]
+
+
+# ---------------------------------------------------------------------------
+# corrections_role table (audit: role normalization corrections)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(slots=True)
+class CorrectionsRoleRow:
+    """One row of the corrections_role table (INSERT-ONLY audit log)."""
+
+    id: int = 0
+    credit_id: int = 0
+    role_original: str = ""
+    role_corrected: str = ""
+    raw_role_override: str | None = None
+    reason: str = ""
+    corrected_at: str | None = None
+    corrected_by: str = ""
+
+    @classmethod
+    def from_row(cls, row) -> "CorrectionsRoleRow":
+        return _from_sqlite_row(cls, row)  # type: ignore[return-value]
+
+
+# ---------------------------------------------------------------------------
 # mapping from table name → Row class (used by schema tests)
 # ---------------------------------------------------------------------------
 
@@ -718,10 +859,14 @@ TABLE_ROW_MAP: dict[str, type] = {
     "feat_studio_affiliation": FeatStudioAffiliationRow,
     "agg_milestones": AggMilestoneRow,
     "agg_director_circles": AggDirectorCircleRow,
+    "agg_person_career": AggPersonCareerRow,
+    "agg_person_network": AggPersonNetworkRow,
     # L3: computed features (feat_*)
     "feat_person_scores": FeatPersonScoresRow,
     "feat_network": FeatNetworkRow,
+    "feat_network_scores": FeatNetworkScoresRow,
     "feat_career": FeatCareerRow,
+    "feat_career_scores": FeatCareerScoresRow,
     "feat_genre_affinity": FeatGenreAffinityRow,
     "feat_contribution": FeatContributionRow,
     "feat_credit_contribution": FeatCreditContributionRow,
@@ -734,4 +879,7 @@ TABLE_ROW_MAP: dict[str, type] = {
     "feat_cluster_membership": FeatClusterMembershipRow,
     # v42
     "feat_birank_annual": FeatBirankAnnualRow,
+    # v60 L2/L3 split and corrections
+    "corrections_credit_year": CorrectionsCreditYearRow,
+    "corrections_role": CorrectionsRoleRow,
 }

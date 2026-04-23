@@ -81,6 +81,31 @@
 - カード 05 (analysis cutover): data_loading.py 等が SQLite 継続使用 → 未完了
 - カード 06 (SQLite decommission): カード05依存 → 未着手
 
+### DuckDB 残務完了 (2026-04-24)
+- `compute_feat_studio_affiliation` DuckDB 移植: silver studios/anime_studios ETL + feat_precompute.py compute_feat_studio_affiliation_ddb() + pipeline Phase 1.5 組み込み
+- Entity resolution 書き込み経路 DuckDB 化: gold_writer.py に ops_entity_resolution_audit DDL + write_entity_resolution_audit_ddb()
+- Atlas migration DuckDB 環境再生成: atlas.hcl env "duckdb"、migrations/legacy_sqlite/ 退避、migrations/duckdb/v1_initial.sql 生成
+
+### Hamilton H-7: PipelineContext 完全削除 (2026-04-24)
+- context.py 315 行削除、va/pipeline/_common.py 40 行削除
+- 27 ファイル修正、56 Hamilton node を typed inputs へ変換、195 参照 → 0
+- pipeline_types.py (LoadedData, EntityResolutionResult, GraphsResult, CoreScoresResult, SupplementaryMetricsResult, VAScoresResult) 導入
+- PipelineCheckpoint 削除、lifecycle.py 簡略化、export_and_viz.py は ExportContext + dict パラメータ化
+- commit 6da958d
+
+### テストカバレッジ整理 (2026-04-24)
+- `tests/unit/test_analysis_modules.py` 16 tests: AnalysisTask・_execute_analysis_task・_run_task_batch スレッド安全性・失敗分離・ANALYSIS_TASKS 不変条件
+- tests/conftest.py に 9 fixtures 集約、19 ファイル 6532 bytes 重複削除
+- unit/integration ディレクトリ分離: unit 7 ファイル (name_utils/models/protocols/episode_parser/parse_role/role_groups/normalize)、integration 6 ファイル (integration/pipeline/pipeline_v55_smoke/statistical_invariants/hamilton_phase1_4/hamilton_phase5_8)
+
+### feat_* 層別分離 / corrections テーブル (2026-04-24)
+- `agg_person_career` (L2) / `feat_career_scores` (L3) 分割
+- `agg_person_network` (L2) / `feat_network_scores` (L3) 分割
+- `corrections_*` テーブル: クレジット年補正・ロール正規化の修正差分追跡
+
+### scraper queries/parsers 分離 (2026-04-24)
+- 他 scraper クエリ・パース関数を `src/scrapers/queries/` / `src/scrapers/parsers/` に分離
+
 ---
 
 ## スキーマ進化
@@ -103,3 +128,22 @@
 - **GPU (cuGraph / cuDF)**: Rust 比較データ不在、投資合わない
 
 詳細: `~/.claude/projects/-home-user-dev-animetor-eval/memory/feedback_framework_rejections.md`
+
+---
+
+## §7.3 retry refactor 完了（2026-04-24）
+
+- [x] `RetryingHttpClient` 新規作成（`src/scrapers/retrying_http_client.py`）
+  - httpx.AsyncClient を委譲パターンで包装
+  - 5回リトライ + 指数バックオフ実装
+  - X-RateLimit-* ヘッダー callback 機構（グローバル + per-request）
+- [x] AniListClient リファクタ
+  - 429/retry ロジック → RetryingHttpClient に委譲
+  - rate_limit_context dict で X-RateLimit-* 値を更新
+  - コード行数削減: query() 291行 → 99行
+- [x] テスト修正
+  - cache bypass 追加（load_cached_json mock）
+  - rate_limit_context dict の更新確認
+  - 329行 → 99行で確認: test_query_success, test_query_429_rate_limit, test_query_429_with_callback 全て PASS
+- [x] バグ修正
+  - context dict の falsy check 修正: `or {}` → `is not None`（空の dict でも保持）

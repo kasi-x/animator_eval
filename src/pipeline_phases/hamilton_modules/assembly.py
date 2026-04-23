@@ -6,6 +6,8 @@ SupplementaryMetricsResult) instead of ctx: PipelineContext.
 
 from __future__ import annotations
 
+from typing import Any
+
 from hamilton.function_modifiers import tag
 
 from src.pipeline_phases.pipeline_types import (
@@ -18,6 +20,7 @@ from src.pipeline_phases.pipeline_types import (
 NODE_NAMES: list[str] = [
     "results_assembled",
     "results_post_processed",
+    "ctx_results_populated",
 ]
 
 
@@ -60,3 +63,10 @@ def results_post_processed(
         results_assembled, entity_resolved.resolved_credits, ctx_core_populated.akm_result
     )
     return results_assembled
+
+
+@tag(stage="phase8", cost="cheap", domain="assembly")
+def ctx_results_populated(results_post_processed: list[dict], ctx: Any) -> list[dict]:
+    """H-5 bridge: write results to ctx for Phase 9/10 compatibility."""
+    ctx.results = results_post_processed
+    return results_post_processed

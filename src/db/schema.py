@@ -1164,8 +1164,10 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
     _upgrade_v57_structural_metadata(conn)
     _upgrade_v58_credits_metadata(conn)
     _upgrade_v59_names_alt(conn)
+    _upgrade_v60_feat_split(conn)
+    _upgrade_v60_corrections(conn)
     conn.execute(
-        "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '59')"
+        "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '60')"
         " ON CONFLICT(key) DO UPDATE SET value = excluded.value"
     )
     conn.commit()
@@ -1307,3 +1309,110 @@ def _upgrade_v59_names_alt(conn: sqlite3.Connection) -> None:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
         except Exception:
             pass  # column already exists
+
+
+def _upgrade_v60_feat_split(conn: sqlite3.Connection) -> None:
+    """Split feat_career/feat_network into L2 (agg_*) and L3 (feat_*_scores).
+
+    L2 = raw aggregates (pure GROUP BY/MAX/MIN from SILVER).
+    L3 = derived scores (growth trends, centrality metrics, etc.).
+
+    Safe to call on fresh DBs — CREATE TABLE IF NOT EXISTS will not error.
+    """
+    stmts = [
+        # agg_person_career (L2: 生集約)
+        """CREATE TABLE IF NOT EXISTS agg_person_career (
+            person_id      TEXT PRIMARY KEY,
+            run_id         INTEGER REFERENCES pipeline_runs(id),
+            first_year     INTEGER,
+            latest_year    INTEGER,
+            active_years   INTEGER,
+            total_credits  INTEGER,
+            recent_credits INTEGER,
+            highest_stage  INTEGER,
+            primary_role   TEXT,
+            peak_year      INTEGER,
+            peak_credits   INTEGER,
+            updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_agg_person_career_first ON agg_person_career(first_year)",
+        "CREATE INDEX IF NOT EXISTS idx_agg_person_career_role  ON agg_person_career(primary_role)",
+        # feat_career_scores (L3: 派生スコア)
+        """CREATE TABLE IF NOT EXISTS feat_career_scores (
+            person_id      TEXT PRIMARY KEY,
+            run_id         INTEGER REFERENCES pipeline_runs(id),
+            career_track   TEXT,
+            growth_trend   TEXT,
+            growth_score   REAL,
+            activity_ratio REAL,
+            updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_feat_career_scores_track ON feat_career_scores(career_track)",
+        # agg_person_network (L2: 生集約)
+        """CREATE TABLE IF NOT EXISTS agg_person_network (
+            person_id            TEXT PRIMARY KEY,
+            run_id               INTEGER REFERENCES pipeline_runs(id),
+            n_collaborators      INTEGER,
+            n_unique_anime       INTEGER,
+            n_bridge_communities INTEGER,
+            updated_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        # feat_network_scores (L3: 派生スコア)
+        """CREATE TABLE IF NOT EXISTS feat_network_scores (
+            person_id               TEXT PRIMARY KEY,
+            run_id                  INTEGER REFERENCES pipeline_runs(id),
+            birank                  REAL,
+            patronage               REAL,
+            degree_centrality       REAL,
+            betweenness_centrality  REAL,
+            closeness_centrality    REAL,
+            eigenvector_centrality  REAL,
+            hub_score               REAL,
+            bridge_score            REAL,
+            updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+    ]
+    for s in stmts:
+        try:
+            conn.execute(s)
+        except Exception:
+            pass
+
+
+def _upgrade_v60_corrections(conn: sqlite3.Connection) -> None:
+    """Add corrections_* tables for tracking credit year and role corrections.
+
+    Both tables are INSERT-ONLY for audit trail.
+    corrections_credit_year: tracks manual year corrections for credits.
+    corrections_role: tracks role normalization corrections.
+    """
+    stmts = [
+        """CREATE TABLE IF NOT EXISTS corrections_credit_year (
+            id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+            credit_id             INTEGER NOT NULL REFERENCES credits(id),
+            credit_year_original  INTEGER,
+            credit_year_corrected INTEGER NOT NULL,
+            reason                TEXT NOT NULL DEFAULT '',
+            corrected_at          TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            corrected_by          TEXT NOT NULL DEFAULT ''
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_corr_year_credit ON corrections_credit_year(credit_id)",
+        "CREATE INDEX IF NOT EXISTS idx_corr_year_at ON corrections_credit_year(corrected_at)",
+        """CREATE TABLE IF NOT EXISTS corrections_role (
+            id                 INTEGER PRIMARY KEY AUTOINCREMENT,
+            credit_id          INTEGER NOT NULL REFERENCES credits(id),
+            role_original      TEXT NOT NULL,
+            role_corrected     TEXT NOT NULL,
+            raw_role_override  TEXT,
+            reason             TEXT NOT NULL DEFAULT '',
+            corrected_at       TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            corrected_by       TEXT NOT NULL DEFAULT ''
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_corr_role_credit ON corrections_role(credit_id)",
+        "CREATE INDEX IF NOT EXISTS idx_corr_role_at ON corrections_role(corrected_at)",
+    ]
+    for s in stmts:
+        try:
+            conn.execute(s)
+        except Exception:
+            pass

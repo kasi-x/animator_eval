@@ -38,6 +38,9 @@ class AllcinemaPersonRecord:
     name_ja: str
     yomigana: str = ""  # reading (hiragana)
     name_en: str = ""
+    name_ko: str = ""
+    name_zh: str = ""
+    names_alt: str = "{}"  # JSON dict for non-JA/EN/KO/ZH scripts (not typically populated from allcinema)
     hometown: str = ""
 
 
@@ -153,5 +156,8 @@ def _parse_person_html(html: str, person_id: int) -> AllcinemaPersonRecord:
         allcinema_id=person_id,
         name_ja=name_ja,
         yomigana=yomigana,
+        name_ko="",
+        name_zh="",
+        names_alt="{}",
         hometown=hometown,
     )

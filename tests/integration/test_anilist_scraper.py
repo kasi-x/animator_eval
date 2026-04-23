@@ -68,14 +68,17 @@ class TestAniListClient:
         )
 
         client = AniListClient()
-        client._client = AsyncMock()
-        client._client.post = AsyncMock(return_value=mock_response)
+        # Mock the internal httpx.AsyncClient inside RetryingHttpClient
+        client._client._client = AsyncMock()
+        client._client._client.post = AsyncMock(return_value=mock_response)
         client._last_request_time = 0.0
 
-        result = _run(client.query("query {}", {}))
-        assert result == {"Page": {"media": []}}
-        assert client.requests_remaining == 89
-        assert client.rate_limit_max == 90
+        # Bypass cache
+        with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+            result = _run(client.query("query {}", {}))
+            assert result == {"Page": {"media": []}}
+            assert client.requests_remaining == 89
+            assert client.rate_limit_max == 90
         _run(client.close())
 
     def test_query_429_rate_limit(self):
@@ -90,6 +93,11 @@ class TestAniListClient:
         success_response = httpx.Response(
             200,
             json={"data": {"result": "ok"}},
+            headers={
+                "X-RateLimit-Remaining": "85",
+                "X-RateLimit-Reset": "0",
+                "X-RateLimit-Limit": "90",
+            },
             request=httpx.Request("POST", "https://graphql.anilist.co"),
         )
 
@@ -97,22 +105,29 @@ class TestAniListClient:
         probe_response = httpx.Response(
             200,
             json={"data": {}},
+            headers={
+                "X-RateLimit-Remaining": "85",
+                "X-RateLimit-Reset": "0",
+                "X-RateLimit-Limit": "90",
+            },
             request=httpx.Request("POST", "https://graphql.anilist.co"),
         )
 
         client = AniListClient()
-        client._client = AsyncMock()
-        client._client.post = AsyncMock(
+        # Mock the internal httpx.AsyncClient inside RetryingHttpClient
+        client._client._client = AsyncMock()
+        client._client._client.post = AsyncMock(
             side_effect=[rate_limit_response, probe_response, success_response]
         )
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                return await client.query("query {}", {})
+                with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+                    return await client.query("query {}", {})
 
         result = _run(run())
         assert result == {"result": "ok"}
-        assert client._client.post.call_count == 3  # 429 + probe + success
+        assert client._client._client.post.call_count == 3  # 429 + probe + success
         _run(client.close())
 
     def test_query_429_with_callback(self):
@@ -127,27 +142,39 @@ class TestAniListClient:
         success_response = httpx.Response(
             200,
             json={"data": {"ok": True}},
+            headers={
+                "X-RateLimit-Remaining": "85",
+                "X-RateLimit-Reset": "0",
+                "X-RateLimit-Limit": "90",
+            },
             request=httpx.Request("POST", "https://graphql.anilist.co"),
         )
 
         probe_response = httpx.Response(
             200,
             json={"data": {}},
+            headers={
+                "X-RateLimit-Remaining": "85",
+                "X-RateLimit-Reset": "0",
+                "X-RateLimit-Limit": "90",
+            },
             request=httpx.Request("POST", "https://graphql.anilist.co"),
         )
 
         callback_calls = []
 
         client = AniListClient()
-        client._client = AsyncMock()
-        client._client.post = AsyncMock(
+        # Mock the internal httpx.AsyncClient inside RetryingHttpClient
+        client._client._client = AsyncMock()
+        client._client._client.post = AsyncMock(
             side_effect=[rate_limit_response, probe_response, success_response]
         )
         client.on_rate_limit = lambda secs: callback_calls.append(secs)
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                return await client.query("query {}", {})
+                with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+                    return await client.query("query {}", {})
 
         _run(run())
         # Callback should have been called with seconds and then None

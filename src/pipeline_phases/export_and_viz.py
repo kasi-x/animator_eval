@@ -1107,6 +1107,76 @@ def _persist_features_to_db(context: dict) -> None:
                     career_rows,
                 )
 
+            # --- agg_person_career (L2: raw aggregates) ---
+            agg_career_rows: list[tuple] = []
+            for d in context.results:
+                car = d.get("career") or {}
+                grw = d.get("growth") or {}
+                agg_career_rows.append((
+                    d["person_id"],
+                    car.get("first_year"),
+                    car.get("latest_year"),
+                    car.get("active_years"),
+                    d.get("total_credits"),
+                    grw.get("recent_credits"),
+                    car.get("highest_stage"),
+                    d.get("primary_role"),
+                    car.get("peak_year"),
+                    car.get("peak_credits"),
+                    now,
+                ))
+            if agg_career_rows:
+                conn.executemany(
+                    """
+                    INSERT INTO agg_person_career (
+                        person_id, first_year, latest_year, active_years, total_credits,
+                        recent_credits, highest_stage, primary_role, peak_year, peak_credits,
+                        updated_at
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                    ON CONFLICT (person_id) DO UPDATE SET
+                        first_year=excluded.first_year,
+                        latest_year=excluded.latest_year,
+                        active_years=excluded.active_years,
+                        total_credits=excluded.total_credits,
+                        recent_credits=excluded.recent_credits,
+                        highest_stage=excluded.highest_stage,
+                        primary_role=excluded.primary_role,
+                        peak_year=excluded.peak_year,
+                        peak_credits=excluded.peak_credits,
+                        updated_at=excluded.updated_at
+                    """,
+                    agg_career_rows,
+                )
+
+            # --- feat_career_scores (L3: derived scores) ---
+            career_score_rows: list[tuple] = []
+            for d in context.results:
+                grw = d.get("growth") or {}
+                career_score_rows.append((
+                    d["person_id"],
+                    d.get("career_track"),
+                    grw.get("trend"),
+                    d.get("growth_score"),
+                    grw.get("activity_ratio"),
+                    now,
+                ))
+            if career_score_rows:
+                conn.executemany(
+                    """
+                    INSERT INTO feat_career_scores (
+                        person_id, career_track, growth_trend, growth_score, activity_ratio,
+                        updated_at
+                    ) VALUES (?,?,?,?,?,?)
+                    ON CONFLICT (person_id) DO UPDATE SET
+                        career_track=excluded.career_track,
+                        growth_trend=excluded.growth_trend,
+                        growth_score=excluded.growth_score,
+                        activity_ratio=excluded.activity_ratio,
+                        updated_at=excluded.updated_at
+                    """,
+                    career_score_rows,
+                )
+
             # --- feat_network (base: birank/patronage/centrality from results) ---
             network_rows: list[tuple] = []
             for d in context.results:
@@ -1155,6 +1225,71 @@ def _persist_features_to_db(context: dict) -> None:
                     network_rows,
                 )
 
+            # --- agg_person_network (L2: raw aggregates) ---
+            agg_network_rows: list[tuple] = []
+            for d in context.results:
+                net = d.get("network") or {}
+                agg_network_rows.append((
+                    d["person_id"],
+                    net.get("collaborators"),
+                    net.get("unique_anime"),
+                    d.get("n_bridge_communities"),
+                    now,
+                ))
+            if agg_network_rows:
+                conn.executemany(
+                    """
+                    INSERT INTO agg_person_network (
+                        person_id, n_collaborators, n_unique_anime, n_bridge_communities, updated_at
+                    ) VALUES (?,?,?,?,?)
+                    ON CONFLICT (person_id) DO UPDATE SET
+                        n_collaborators=excluded.n_collaborators,
+                        n_unique_anime=excluded.n_unique_anime,
+                        n_bridge_communities=excluded.n_bridge_communities,
+                        updated_at=excluded.updated_at
+                    """,
+                    agg_network_rows,
+                )
+
+            # --- feat_network_scores (L3: derived scores) ---
+            network_score_rows: list[tuple] = []
+            for d in context.results:
+                c = d.get("centrality") or {}
+                net = d.get("network") or {}
+                network_score_rows.append((
+                    d["person_id"],
+                    d.get("birank"),
+                    d.get("patronage"),
+                    c.get("degree"),
+                    c.get("betweenness"),
+                    c.get("closeness"),
+                    c.get("eigenvector"),
+                    net.get("hub_score"),
+                    d.get("bridge_score"),
+                    now,
+                ))
+            if network_score_rows:
+                conn.executemany(
+                    """
+                    INSERT INTO feat_network_scores (
+                        person_id, birank, patronage, degree_centrality, betweenness_centrality,
+                        closeness_centrality, eigenvector_centrality, hub_score, bridge_score,
+                        updated_at
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?)
+                    ON CONFLICT (person_id) DO UPDATE SET
+                        birank=excluded.birank,
+                        patronage=excluded.patronage,
+                        degree_centrality=excluded.degree_centrality,
+                        betweenness_centrality=excluded.betweenness_centrality,
+                        closeness_centrality=excluded.closeness_centrality,
+                        eigenvector_centrality=excluded.eigenvector_centrality,
+                        hub_score=excluded.hub_score,
+                        bridge_score=excluded.bridge_score,
+                        updated_at=excluded.updated_at
+                    """,
+                    network_score_rows,
+                )
+
             # --- feat_network bridge update (from bridges analysis) ---
             bridges_analysis = context.analysis_results.get("bridges") or {}
             bridge_persons = bridges_analysis.get("bridge_persons") or []
@@ -1179,6 +1314,20 @@ def _persist_features_to_db(context: dict) -> None:
                         WHERE person_id = ?
                         """,
                         bridge_updates,
+                    )
+                    # Also update feat_network_scores (L3 scores)
+                    conn.executemany(
+                        """
+                        UPDATE feat_network_scores
+                        SET bridge_score = ?,
+                            updated_at = ?
+                        WHERE person_id = ?
+                        """,
+                        [
+                            (bp.get("bridge_score"), now, bp["person_id"])
+                            for bp in bridge_persons
+                            if "person_id" in bp
+                        ],
                     )
 
             # --- feat_genre_affinity ---

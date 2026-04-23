@@ -16,8 +16,32 @@ from pathlib import Path
 
 import pytest
 
-from src.pipeline_phases.context import PipelineContext
 from src.testing.fixtures import generate_synthetic_data
+
+
+class _DummyMonitor:
+    def measure(self, name):
+        from contextlib import nullcontext
+        return nullcontext()
+
+    def record_memory(self, label):
+        pass
+
+    def increment_counter(self, key, value=1):
+        pass
+
+
+class _FakeContext:
+    def __init__(self, visualize=False, dry_run=False):
+        import datetime
+        self.visualize = visualize
+        self.dry_run = dry_run
+        self.monitor = _DummyMonitor()
+        self.current_year = datetime.datetime.now().year
+        self.betweenness_cache = {}
+
+
+PipelineContext = _FakeContext
 
 
 # ---------------------------------------------------------------------------

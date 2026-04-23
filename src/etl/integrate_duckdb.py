@@ -76,6 +76,9 @@ CREATE TABLE IF NOT EXISTS persons (
     id          VARCHAR PRIMARY KEY,
     name_ja     VARCHAR NOT NULL DEFAULT '',
     name_en     VARCHAR NOT NULL DEFAULT '',
+    name_ko     VARCHAR NOT NULL DEFAULT '',
+    name_zh     VARCHAR NOT NULL DEFAULT '',
+    names_alt   VARCHAR NOT NULL DEFAULT '{}',
     birth_date  VARCHAR,
     death_date  VARCHAR,
     website_url VARCHAR,
@@ -141,15 +144,17 @@ SELECT * FROM filtered
 
 # BRONZE persons → SILVER persons.
 # date_of_birth → birth_date, site_url → website_url.
-# Template uses {birth_date} and {website_url} placeholders that are filled by
-# _build_persons_sql() after inspecting the parquet schema (optional columns vary
-# across scrapers; e.g. jvmg writes no date_of_birth).
+# Template uses {birth_date}, {website_url}, {name_ko}, {name_zh}, {names_alt} placeholders
+# that are filled by _build_persons_sql() after inspecting the parquet schema.
 _PERSONS_SQL_TMPL = """
 INSERT INTO persons
 SELECT
     id,
     COALESCE(name_ja, '')       AS name_ja,
     COALESCE(name_en, '')       AS name_en,
+    {name_ko}                   AS name_ko,
+    {name_zh}                   AS name_zh,
+    {names_alt}                 AS names_alt,
     {birth_date}                AS birth_date,
     NULL                        AS death_date,
     {website_url}               AS website_url,
@@ -178,6 +183,9 @@ def _parquet_columns(conn: duckdb.DuckDBPyConnection, glob: str) -> set[str]:
 def _build_persons_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
     cols = _parquet_columns(conn, glob)
     return _PERSONS_SQL_TMPL.format(
+        name_ko="COALESCE(name_ko, '')" if "name_ko" in cols else "''::VARCHAR",
+        name_zh="COALESCE(name_zh, '')" if "name_zh" in cols else "''::VARCHAR",
+        names_alt="COALESCE(names_alt, '{}')" if "names_alt" in cols else "'{}'::VARCHAR",
         birth_date="date_of_birth" if "date_of_birth" in cols else "NULL::VARCHAR",
         website_url="site_url" if "site_url" in cols else "NULL::VARCHAR",
     )
