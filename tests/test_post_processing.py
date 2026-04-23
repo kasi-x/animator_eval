@@ -1,6 +1,52 @@
-"""Tests for post_processing phase — percentiles, confidence intervals."""
+"""Tests for Phase 8 post_processing — percentiles, confidence intervals."""
+
+from __future__ import annotations
 
 import pytest
+
+from src.models import Credit, Role
+from src.pipeline_phases.context import PipelineContext
+from src.pipeline_phases.post_processing import post_process_results
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+_AXES = ("iv_score", "person_fe", "birank", "patronage", "awcc", "dormancy")
+
+
+def _make_ctx(results: list[dict], credits: list[Credit] | None = None) -> PipelineContext:
+    ctx = PipelineContext.__new__(PipelineContext)
+    ctx.results = results
+    ctx.credits = credits or []
+    ctx.akm_result = None
+
+    class _M:
+        def measure(self, _):
+            from contextlib import nullcontext
+            return nullcontext()
+
+    ctx.monitor = _M()
+    return ctx
+
+
+def _result(pid: str, **kw) -> dict:
+    base = {
+        "person_id": pid,
+        "iv_score": 0.0,
+        "person_fe": 0.0,
+        "birank": 0.0,
+        "patronage": 0.0,
+        "awcc": 0.0,
+        "dormancy": 1.0,
+    }
+    base.update(kw)
+    return base
+
+
+def _credit(pid: str, src: str = "anilist") -> Credit:
+    return Credit(person_id=pid, anime_id="a1", role=Role.DIRECTOR, source=src)
 
 
 # ---------------------------------------------------------------------------
@@ -99,3 +145,86 @@ class TestPercentileCalculation:
         self._compute_percentiles(results, ("iv_score",))
         assert results[0]["iv_score_pct"] == pytest.approx(33.3, abs=0.1)
         assert results[2]["iv_score_pct"] == 100.0
+
+
+# ---------------------------------------------------------------------------
+# Integration: post_process_results via PipelineContext
+# ---------------------------------------------------------------------------
+
+
+class TestPostProcessResults:
+    def test_single_person_all_axes_100(self):
+        ctx = _make_ctx([_result("p1", iv_score=0.5)])
+        post_process_results(ctx)
+        for axis in _AXES:
+            assert ctx.results[0][f"{axis}_pct"] == 100.0
+
+    def test_top_scorer_gets_100(self):
+        ctx = _make_ctx([
+            _result("p1", iv_score=0.9),
+            _result("p2", iv_score=0.5),
+            _result("p3", iv_score=0.1),
+        ])
+        post_process_results(ctx)
+        top = next(r for r in ctx.results if r["person_id"] == "p1")
+        assert top["iv_score_pct"] == 100.0
+
+    def test_all_pct_fields_added(self):
+        ctx = _make_ctx([_result("p1"), _result("p2")])
+        post_process_results(ctx)
+        for r in ctx.results:
+            for axis in _AXES:
+                assert f"{axis}_pct" in r
+
+    def test_pct_values_in_0_100(self):
+        ctx = _make_ctx([_result(f"p{i}", iv_score=float(i)) for i in range(10)])
+        post_process_results(ctx)
+        for r in ctx.results:
+            for axis in _AXES:
+                pct = r[f"{axis}_pct"]
+                assert 0.0 <= pct <= 100.0, f"{axis}_pct={pct}"
+
+    def test_empty_results_no_crash(self):
+        ctx = _make_ctx([])
+        post_process_results(ctx)
+
+    def test_confidence_field_added(self):
+        ctx = _make_ctx([_result("p1")], [_credit("p1")])
+        post_process_results(ctx)
+        assert "confidence" in ctx.results[0]
+
+    def test_confidence_is_float(self):
+        ctx = _make_ctx([_result("p1")], [_credit("p1")])
+        post_process_results(ctx)
+        assert isinstance(ctx.results[0]["confidence"], float)
+
+    def test_confidence_non_negative(self):
+        ctx = _make_ctx([_result("p1")], [_credit("p1")])
+        post_process_results(ctx)
+        assert ctx.results[0]["confidence"] >= 0.0
+
+    def test_score_range_field_added(self):
+        ctx = _make_ctx([_result("p1")], [_credit("p1")])
+        post_process_results(ctx)
+        assert "score_range" in ctx.results[0]
+
+    def test_multi_source_lower_confidence_interval(self):
+        # More sources → higher confidence → narrower interval (lower confidence float)
+        ctx = _make_ctx(
+            [_result("p1"), _result("p2")],
+            [
+                _credit("p1", "anilist"),
+                _credit("p1", "ann"),
+                _credit("p1", "mal"),
+                _credit("p2", "anilist"),
+            ],
+        )
+        post_process_results(ctx)
+        p1 = next(r["confidence"] for r in ctx.results if r["person_id"] == "p1")
+        p2 = next(r["confidence"] for r in ctx.results if r["person_id"] == "p2")
+        assert p1 <= p2
+
+    def test_no_credits_still_adds_confidence(self):
+        ctx = _make_ctx([_result("p1")], [])
+        post_process_results(ctx)
+        assert "confidence" in ctx.results[0]

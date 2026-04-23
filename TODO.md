@@ -1,6 +1,6 @@
 # TODO.md — 未完了作業の一元管理
 
-作成日: 2026-04-22 / 最終更新: 2026-04-23 (Card 05 step 3 完了)
+作成日: 2026-04-22 / 最終更新: 2026-04-23 (多言語名対応 v56 実装完了)
 
 本書はプロジェクト内のすべての未完了項目を一元管理するファイルです。完了済みサマリーは `DONE.md`、設計原則は `CLAUDE.md`。
 
@@ -43,75 +43,75 @@ TASK_CARDS/
 
 ## 🔴 SECTION 1: スキーマ整合性修復
 
-### 根本問題
-- `src/database.py:27` に `SCHEMA_VERSION = 54`
-- `_migrate_v54_to_v55()` (line 8924) が定義済みだが `migrations` dict に未登録
-- `_migrate_v55_to_v56()` (line 9012) はコメントアウト
-- `ensure_phase1_schema()` (line 9088) は定義のみで呼び出しなし
+### 根本問題 (2026-04-23 時点の状態)
+- ~~`SCHEMA_VERSION = 54`~~ → **56 に更新済み**
+- ~~`_migrate_v54_to_v55()` が未登録~~ → **v55/v56 登録済み**
+- `_run_migrations` は no-op — 実際のスキーマは `database_v2.py` の `init_db_v2()` が管理
+- v56 は `_upgrade_v56_multilang()` として `init_db_v2` 末尾で呼ばれる（既存 DB の ALTER TABLE も担う）
+- `ensure_phase1_schema()` は定義のみ。未使用のため削除対象
 
-### 1.1 `sources` テーブル DDL 衝突解消
+### 1.1 ~~`sources` テーブル DDL 衝突解消~~ → 完了済み
 
-**問題**: DDL が 2 系統に分岐
-- `init_db()` line 261: PK=`code TEXT`、カラム `name_ja, base_url, license, description`
-- `_migrate_v54_to_v55()` line 8938: PK=`id TEXT`、カラム `name TEXT, description TEXT` (別物)
+- [x] `_migrate_v54_to_v55()` は INSERT ONLY — DDL 衝突なし
 
-フレッシュインストールは `init_db()` の PK=`code` を作る。v55 が後から `CREATE TABLE IF NOT EXISTS sources (id TEXT PRIMARY KEY ...)` を流すと `IF NOT EXISTS` でスキップされ壊れる。
+### 1.2 ~~v55 migration の正規登録~~ → 完了済み (v56 まで)
 
-**修正** (`src/database.py:8936-8952`):
-- [ ] `_migrate_v54_to_v55()` の `sources` DDL を削除
-- [ ] seed INSERT のみに変更 (code, name_ja, base_url, license, description の 5 行)
+- [x] `migrations[55/56]` 登録済み
+- [x] `SCHEMA_VERSION = 56` に更新済み
+- [x] `ensure_phase1_schema()` 削除済み
 
-### 1.2 v55 migration の正規登録
+### 1.3 `scores` → `person_scores` 物理リネーム → 実質完了
 
-- [ ] 1.1 完了後、`_migrate_v54_to_v55` を `migrations[55]` に登録
-- [ ] `SCHEMA_VERSION = 55` に更新
-- [ ] `ensure_phase1_schema()` を削除
+- [x] `_migrate_v54_to_v55()` で ALTER TABLE 実施済み (既存 DB は v55 で rename 済み)
+- [x] `upsert_score()` / `load_all_scores()` は `person_scores` を使用
+- [ ] `_init_db_legacy()` line 341: `scores` TABLE DDL → `person_scores` にリネーム (参照のみコードだが整合性のため)
 
-### 1.3 `scores` → `person_scores` 物理リネーム
+### 1.5 ~~`anime_analysis` DDL 除去~~ → 完了済み
 
-**参照残存箇所**: `src/api.py` 6箇所、`src/cli.py` 6箇所、`src/database.py` 2箇所、tests 複数
+- [x] `_init_db_legacy()` はコメントアウト済み (lines 419-426)
+- [x] `_migrate_v49_add_silver_layer()` 内 DDL は v49→v50 upgrade transit 用として保持
 
-- [ ] v55 migration に追加: `ALTER TABLE scores RENAME TO person_scores` (VIEW 先削除後)
-- [ ] 一括置換: `rg -l 'FROM scores\b|INTO scores\b' src/ tests/ | xargs sed -i ...`
+### 1.6 `_migrate_v56_to_v57_genre_normalization` の扱い
 
-### 1.5 `anime_analysis` DDL 除去
+- [x] 関数名に `_genre_normalization` サフィックス付記済み
+- [x] `migrations` dict に未登録のまま (deferred)
 
-**現状**: v50 で `anime` にリネーム済みにもかかわらず `init_db()` に DDL が残存 (line 289, 414, 7457)、インデックス 3 本も残存 (line 440-442)。
+### 🟡 Maintenance: v56 安定後の legacy migration 削除
 
-- [ ] `init_db()` から `anime_analysis` DDL とインデックス (`idx_anime_analysis_*` 3本) を削除
-
-### 1.6 `_migrate_v55_to_v56` の扱い
-
-ジャンル正規化 (anime_genres/anime_tags JSON 展開) を含むため実行コスト高。本作業では保留。
-- [ ] 関数上部に `# STATUS: deferred — high execution cost` コメント付記
-- [ ] `migrations` dict に未登録のまま残す
-
-### 🟡 Maintenance: v55 安定後の legacy migration 削除
-
-`src/database.py` が 8,925 行に膨れている主因は v1-v54 の migration 関数群 (~7,000 行)。production DB が v55 で安定したら:
-- [ ] `src/db/schema.py` = `init_db()` + 最新 DDL (single source of truth)
+`src/database.py` が 9,000 行超に膨れている主因は v1-v55 の migration 関数群 (~7,000 行)。production DB が v56 で安定したら:
+- [ ] `src/db/schema.py` = `init_db_v2()` + 最新 DDL (single source of truth)
 - [ ] `src/db/dao.py` = upsert/query ヘルパー群
-- [ ] v1-v54 の migration 関数をまとめて削除 (git history で参照可)
+- [ ] v1-v55 の migration 関数をまとめて削除 (git history で参照可)
 
 ### 検証
 
 ```bash
 pixi run test
-sqlite3 result/animetor.db "PRAGMA user_version;"                # 55
-sqlite3 result/animetor.db "SELECT COUNT(*) FROM sources;"       # 5
-sqlite3 result/animetor.db "SELECT type, sql FROM sqlite_master WHERE name='person_scores';"  # type=table
+sqlite3 result/animetor.db "SELECT value FROM schema_meta WHERE key='schema_version';"  # 56
+sqlite3 result/animetor.db "SELECT COUNT(*) FROM sources;"       # 7
+sqlite3 result/animetor.db "PRAGMA table_info(persons);" | grep name_ko  # name_ko あり
 rg 'FROM scores\b|INTO scores\b' src/ tests/                     # 0 件
-rg 'anime_analysis' src/                                         # 0 件
 ```
+
+### 🆕 多言語名対応 後続タスク
+
+v56 スキーマで追加したフィールドを活用するためのフォローアップ:
+
+- [ ] **既存データ再スクレイプ**: 現在 `name_ja` に誤って入っている韓国・中国名を修正するため、`hometown` を取得してスクレイパーを再実行
+- [x] **検索 API 拡張** (`src/api.py`): `search_persons()` に `name_ko`, `name_zh`, `aliases` LIKE 追加 (2026-04-23)
+- [x] **CLI search 拡張** (`src/cli.py`): `search_persons()` 経由なので自動的に対応
+- [x] **レポートジェネレーター**: SQL COALESCE に `name_zh` 追加 (db_loaders / bridge_analysis / network_analysis / network_graph / cooccurrence_groups / score_layers_analysis / generate_all_reports, 2026-04-23). Python-level `format_person_name()` への切り替えは将来対応 (v1 monolith 分解後)
+- [ ] **国籍別集計クエリ**: `nationality` JSON カラムを使った「韓国人スタッフ比率」等のサンプルクエリを `docs/` に追加
+- [ ] **ANN / allcinema スクレイパー**: 非 AniList ソースも `name_ko`/`name_zh` に対応
 
 ---
 
 ## 🟠 SECTION 2: Phase 4 残務
 
-### 2.2 Pipeline smoke test
+### 2.2 Pipeline smoke test ✅ DONE
 
-- [ ] フレッシュ v55 schema でパイプラインが完走することを確認する test を `tests/test_pipeline_v55_smoke.py` として追加
-- [ ] CI (`.github/workflows/`) に組み込む
+- [x] `tests/test_pipeline_v55_smoke.py`: 6 tests — schema version / ops_lineage / person_scores is table / deprecated tables absent / sources seeded / pipeline completion
+- [x] CI (`.github/workflows/ci.yml`): `pixi run test` で自動実行済み
 
 ### 2.3 Method Notes validation gate
 
@@ -142,10 +142,10 @@ src/scrapers/mediaarts_scraper.py:475
 - [ ] パース関数を `src/scrapers/parsers/` に分離 (`_parse_anime_staff` 等)
 - [ ] scraper 本体は「fetch → parse → write」の orchestration だけに
 
-### 3.2 `anime_display` 書き込み停止
+### 3.2 `anime_display` 書き込み停止 ✅ DONE
 
-- [ ] `upsert_anime_display()` 呼び出し箇所を全削除
-- [ ] display は `src/utils/display_lookup.py` 経由で bronze から読む設計に統一
+- [x] `upsert_anime_display()` 削除済み (grep で確認)
+- [x] `display_lookup.py` 経由で bronze から読む設計に統一済み
 
 ### 3.4 `credits.episode` sentinel 除去 ✅ DONE (2026-04-23)
 
@@ -165,24 +165,14 @@ src/scrapers/mediaarts_scraper.py:475
 - [ ] 短期: `BronzeAnime` シム維持 (破壊しない)
 - [ ] 中長期: `AnimeAnalysis(...)` に段階移行 (`rg 'Anime\(.*score=' tests/ --count` でスコープ確認)
 
-### 3.7 `jvmg_fetcher.py` の `WIKIDATA_ROLE_MAP` バグ修正
+### 3.7 `jvmg_fetcher.py` の `WIKIDATA_ROLE_MAP` バグ修正 ✅ DONE (2026-04-23)
 
-**現状** (`src/scrapers/jvmg_fetcher.py:45-50`): プロパティ → role の対応が 3 件誤り。
-
-| Prop | 現在の map (誤) | Wikidata 実定義 (2026-04-23 確認) |
-|---|---|---|
-| P58 | `episode director` | `screenwriter` |
-| P1040 | `animation director` | `film editor` |
-| P3174 | `episode_director` | `art director` |
-| P57 | `director` | `director` (これは正しい) |
-
-**影響**: BRONZE `credits` テーブルに誤ったロールが混入している可能性。JVMG 由来 credits は既に投入済みなら遡って再分類が必要。
-
-- [ ] 正しい map に修正 (`P57→director, P58→screenwriter, P1040→editor, P3174→art_director`)
-- [ ] `parse_role()` 側が `screenwriter`/`editor`/`art_director` を 24 種の role_groups に正しく落とせるか検証
-- [ ] P10800 (animation director) の存在確認 — あれば追加
-- [ ] 既存 JVMG-source の credits を再スクレイプ or 再マップ (どちらが現実的か判断)
-- [ ] 新規 `wikidata_world_scraper.py` と map を共有 — `src/scrapers/wikidata_role_map.py` に定数を切り出して 2 scraper で import
+- [x] 正しい map に修正: `P57→director, P58→screenplay, P1040→film editor, P3174→art director`
+- [x] `parse_role()` 側: `"film editor"` / `"editor"` / `"screenwriter"` を ROLE_MAP に追加
+- [x] P10800 (animation director): property ID 未検証のため SPARQL から除外、wikidata_role_map.py に TODO 記載
+- [x] `src/scrapers/wikidata_role_map.py` に切り出して将来の wikidata_world_scraper と共有可能に
+- [x] SPARQL を UNION ベースに書き換え — ?role を直接 BIND するので P3831 qualifier なしでもロールが取れる
+- [ ] 既存 JVMG-source の credits を再スクレイプ or 再マップ (将来作業、DB にデータがあれば)
 
 **関連**: 新規 `wikidata_world_scraper.py` (世界アニメ DB 拡張) の設計で発覚。新 scraper 側は正した map で実装するので追加バグは生まない。
 
@@ -319,8 +309,8 @@ H-1 終了時に以下のいずれかなら H-2 以降中止:
 ### 6.1 pipeline_phases ユニットテスト (13/15 未テスト)
 
 重要度順:
-- [ ] Phase 5 `core_scoring.py` — 補償根拠の中核
-- [ ] Phase 8 `post_processing.py` — パーセンタイル・CI 計算
+- [x] Phase 5 `core_scoring.py` — 完了 (2026-04-23): `tests/test_core_scoring_phase.py` 20 tests (AKM / BiRank / IV / patronage / dormancy)
+- [x] Phase 8 `post_processing.py` — 完了 (2026-04-23): `tests/test_post_processing.py` 18 tests (percentile bisect logic / all-axes / confidence float / score_range)
 - [ ] Phase 9 `analysis_modules.py` — 並列実行 (Hamilton 化で一部解消見込み)
 
 ### 6.2 `patronage_dormancy.py` 直接テスト
@@ -433,13 +423,16 @@ tests/test_akm.py                 1102 行
 | | path | 役割 |
 |---|------|------|
 | メイン | `src/api.py` 1,322 行 42+ endpoint | persons/scores 照会、i18n、WebSocket |
-| レポート | `scripts/report_api.py` ~250 行 12 endpoint | brief 生成、versioning |
+| ~~レポート~~ | ~~`scripts/report_api.py`~~ → `src/api_reports.py` 11 endpoint | brief 生成、versioning、appendix |
 
-**問題**: URL 衝突 (両方 `/api/...`)、認証・デプロイが 2 プロセス。
+**旧問題**: URL 衝突 (両方 `/api/...`)、認証・デプロイが 2 プロセス。→ 解消済。
 
-- [ ] `scripts/report_api.py` を `src/api/report_routes.py` に移し、メイン app に `include_router()` で合流
-- [ ] Taskfile `report-api` は `pixi run serve` に統合
-- [ ] `src/api.py` 自体を `src/api/{persons,reports,i18n}.py` の router 単位に分割 (1,322 行の分解)
+- [x] `scripts/report_api.py` を `src/api_reports.py` に移し、メイン app に `include_router()` で合流 (2026-04-23)
+  - `src/api.py` 既存のため package 化は保留、sibling file として配置 (`src/api_validators.py` パターン踏襲)
+  - 3 pre-existing bugs 修正: `import json` 欠落 (旧 line 95, 118, 178)
+  - APIRouter 化に伴い独自 FastAPI app / CORS middleware は削除 (main app の設定を継承)
+- [x] Taskfile `report-api` task 削除、`task serve` に統合 (2026-04-23)
+- [ ] `src/api.py` 自体を `src/api/{persons,reports,i18n}.py` の router 単位に分割 (1,322 行の分解) — 既存 `src/api.py` を package 化する際に `src/api_reports.py` → `src/api/reports.py` へ移動する
 
 ---
 
