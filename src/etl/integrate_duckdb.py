@@ -100,35 +100,43 @@ CREATE TABLE IF NOT EXISTS credits (
 #           mal_id, anilist_id, ann_id, allcinema_id, madb_id (external IDs),
 #           genres, tags, studios (→ separate tables in full ETL).
 # Includes: content_hash, fetched_at for diff detection.
-# Strategy: REPLACE (upsert) on primary key (id). Hash comparison done at merge layer.
+# Strategy: REPLACE (upsert) on primary key (id), skipping rows with unchanged hash.
 _ANIME_SQL = """
-REPLACE INTO anime
-SELECT
-    id,
-    COALESCE(title_ja, '')  AS title_ja,
-    COALESCE(title_en, '')  AS title_en,
-    year,
-    season,
-    quarter,
-    episodes,
-    format,
-    duration,
-    start_date,
-    end_date,
-    status,
-    COALESCE(original_work_type, source) AS source_mat,
-    work_type,
-    scale_class,
-    TRY_CAST(fetched_at AS TIMESTAMP) AS fetched_at,
-    content_hash,
-    now()                   AS updated_at
-FROM (
-    SELECT *,
-           ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
-    FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
-    WHERE  id IS NOT NULL
+WITH bronze AS (
+    SELECT
+        id,
+        COALESCE(title_ja, '')  AS title_ja,
+        COALESCE(title_en, '')  AS title_en,
+        year,
+        season,
+        quarter,
+        episodes,
+        format,
+        duration,
+        start_date,
+        end_date,
+        status,
+        COALESCE(original_work_type, source) AS source_mat,
+        work_type,
+        scale_class,
+        TRY_CAST(fetched_at AS TIMESTAMP) AS fetched_at,
+        content_hash,
+        now()                   AS updated_at
+    FROM (
+        SELECT *,
+               ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
+        FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
+        WHERE  id IS NOT NULL
+    )
+    WHERE _rn = 1
+),
+filtered AS (
+    SELECT bronze.* FROM bronze
+    LEFT JOIN anime old ON bronze.id = old.id
+    WHERE bronze.content_hash != old.content_hash OR old.id IS NULL
 )
-WHERE _rn = 1
+REPLACE INTO anime
+SELECT * FROM filtered
 """
 
 # BRONZE persons → SILVER persons.
