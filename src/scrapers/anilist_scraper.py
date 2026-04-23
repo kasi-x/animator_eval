@@ -56,6 +56,36 @@ app = typer.Typer()
 
 
 # Batch save helper functions (must be defined before main())
+def get_anime_ids_to_skip_since(since_str: str) -> set[str]:
+    """Get anime IDs fetched after since_dt from SILVER.anime.
+
+    Returns: set of anime IDs to skip (already fetched recently)
+    """
+    import duckdb
+    from pathlib import Path
+
+    try:
+        since_dt = dt.datetime.fromisoformat(since_str)
+        silver_path = Path("result/silver.duckdb")
+        if not silver_path.exists():
+            log.warning("since_mode_no_silver", since=since_str)
+            return set()
+
+        conn = duckdb.connect(str(silver_path), read_only=True)
+        result = conn.execute(
+            "SELECT id FROM anime WHERE fetched_at >= ? ORDER BY fetched_at DESC",
+            [since_dt]
+        ).fetchall()
+        conn.close()
+
+        skipped_ids = {row[0] for row in result}
+        log.info("since_mode_loaded", since=since_str, skipped_count=len(skipped_ids))
+        return skipped_ids
+    except Exception as e:
+        log.error("since_mode_error", since=since_str, error=str(e))
+        return set()
+
+
 def save_anime_batch_to_bronze(anime_bw, anime_batch):
     """Save a batch of anime to BRONZE parquet with hash tracking."""
     now = dt.datetime.utcnow().isoformat()
@@ -940,6 +970,10 @@ async def _fetch_staff_phase(
     with Live(_make_2a_group(), console=console, refresh_per_second=4) as live:
         live_2a = live
         for loop_idx, (anime, anilist_id, anime_id) in enumerate(anime_ids):
+            # Skip if already fetched (--since mode)
+            if anime_id in since_ids:
+                continue
+
             title = anime.title_ja or anime.title_en or anime_id
             title_line = Text(f"📋 {title}", style="bold cyan")
             live.update(_make_2a_group())
@@ -1165,6 +1199,11 @@ def main(
     recent: bool = typer.Option(
         False, "--recent", help="放映開始日が新しい順で取得（新作アニメの追加に使用）"
     ),
+    since: str = typer.Option(
+        None,
+        "--since",
+        help="ISO形式の日時以降のみ差分更新 (YYYY-MM-DDTHH:MM:SS、SILVER.anime のfetched_at基準)",
+    ),
 ) -> None:
     """AniList からクレジットデータを収集する (チェックポイント機能付き)."""
     import json
@@ -1280,8 +1319,13 @@ def main(
             )
 
     # Fetch with incremental saving
-    async def fetch_with_checkpoints():
-        """Execute scraping with checkpoint-based incremental saving."""
+    async def fetch_with_checkpoints(since_ids: set[str] | None = None):
+        """Execute scraping with checkpoint-based incremental saving.
+
+        Args:
+            since_ids: Set of anime IDs already fetched (skip them)
+        """
+        since_ids = since_ids or set()
         from rich.progress import (
             Progress,
             SpinnerColumn,
@@ -1959,7 +2003,15 @@ def main(
         finally:
             await client.close()
 
-    asyncio.run(fetch_with_checkpoints())
+    # Handle --since mode: skip anime already fetched
+    since_ids = set()
+    if since:
+        since_ids = get_anime_ids_to_skip_since(since)
+        console.print(
+            f"[cyan]✓ --since mode: {len(since_ids)} anime to skip[/cyan]"
+        )
+
+    asyncio.run(fetch_with_checkpoints(since_ids))
 
 
 @app.command("fetch-persons")
