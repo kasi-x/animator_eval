@@ -17,7 +17,7 @@ from ..ci_utils import distribution_summary, format_ci, format_distribution_inli
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
 from ..sql_fragments import person_display_name_sql
-from ._base import BaseReportGenerator
+from ._base import BaseReportGenerator, append_validation_warnings
 
 _TIER_COLORS = {1: "#667eea", 2: "#a0d2db", 3: "#06D6A0", 4: "#FFD166", 5: "#f5576c"}
 _COMMUNITY_PALETTE = [
@@ -42,11 +42,11 @@ class NetworkGraphReport(BaseReportGenerator):
         sections.append(sb.build_section(self._build_ego_stats_section(sb)))
         return self.write_report("\n".join(sections))
 
-    # ── Section 1: Network scatter (degree vs betweenness, colored by tier) ──
+    # ── Section 1 helpers ──────────────────────────────────────────
 
-    def _build_scatter_network_section(self, sb: SectionBuilder) -> ReportSection:
+    def _fetch_scatter_network_rows(self) -> list:
         try:
-            rows = self.conn.execute(f"""
+            return self.conn.execute(f"""
                 SELECT
                     fn.person_id,
                     {person_display_name_sql('fn.person_id')},
@@ -74,24 +74,18 @@ class NetworkGraphReport(BaseReportGenerator):
                 LIMIT 3000
             """).fetchall()
         except Exception:
-            rows = []
+            return []
 
-        if not rows:
-            return ReportSection(
-                title="次数 vs 媒介中心性（Tier色分け）",
-                findings_html="<p>ネットワーク散布図データが取得できませんでした。</p>",
-                section_id="net_scatter",
-            )
-
-        n = len(rows)
-        findings = (
+    def _findings_scatter_network(self, n: int) -> str:
+        return (
             f"<p>次数中心性 vs 媒介中心性の散布図（上位{n:,}名、次数中心性順）。"
             "ノード色はモーダル作品Scale Tier（1=極小〜5=大規模）。"
             "次数が高く媒介が低い人物は密なコミュニティ内に埋め込まれている可能性がある。"
             "媒介が高く次数が中程度の人物はコミュニティ間のブリッジ的位置にある可能性がある。</p>"
         )
 
-        # Group by tier for separate scatter traces
+    def _make_scatter_network_figure(self, rows: list) -> go.Figure:
+        n = len(rows)
         tier_data: dict[int | str, list] = {}
         for r in rows:
             t = r["tier"] if r["tier"] is not None else "unknown"
@@ -120,15 +114,30 @@ class NetworkGraphReport(BaseReportGenerator):
             yaxis_title="媒介中心性",
             legend=dict(orientation="v"),
         )
+        return fig
 
-        violations = sb.validate_findings(findings)
-        if violations:
-            findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
+    # ── Section 1: Network scatter (degree vs betweenness, colored by tier) ──
+
+    def _build_scatter_network_section(self, sb: SectionBuilder) -> ReportSection:
+        rows = self._fetch_scatter_network_rows()
+
+        if not rows:
+            return ReportSection(
+                title="次数 vs 媒介中心性（Tier色分け）",
+                findings_html="<p>ネットワーク散布図データが取得できませんでした。</p>",
+                section_id="net_scatter",
+            )
+
+        findings = self._findings_scatter_network(len(rows))
+        findings = append_validation_warnings(findings, sb)
 
         return ReportSection(
             title="次数 vs 媒介中心性（Tier色分け）",
             findings_html=findings,
-            visualization_html=plotly_div_safe(fig, "chart_net_scatter", height=520),
+            visualization_html=plotly_div_safe(
+                self._make_scatter_network_figure(rows),
+                "chart_net_scatter", height=520,
+            ),
             method_note=(
                 "degree_centrality による上位3,000名。"
                 "媒介中心性は大規模グラフではk-pivot近似を使用する場合あり。"
@@ -139,11 +148,11 @@ class NetworkGraphReport(BaseReportGenerator):
             section_id="net_scatter",
         )
 
-    # ── Section 2: Community scatter ─────────────────────────────
+    # ── Section 2 helpers ──────────────────────────────────────────
 
-    def _build_community_scatter_section(self, sb: SectionBuilder) -> ReportSection:
+    def _fetch_community_scatter_rows(self) -> list:
         try:
-            rows = self.conn.execute(f"""
+            return self.conn.execute(f"""
                 SELECT
                     fn.person_id,
                     {person_display_name_sql('fn.person_id')},
@@ -158,29 +167,22 @@ class NetworkGraphReport(BaseReportGenerator):
                 LIMIT 2000
             """).fetchall()
         except Exception:
-            rows = []
+            return []
 
-        if not rows:
-            return ReportSection(
-                title="コミュニティ別散布図",
-                findings_html="<p>コミュニティ散布図データが取得できませんでした。</p>",
-                section_id="comm_scatter",
-            )
-
-        n = len(rows)
-        findings = (
+    def _findings_community_scatter(self, n: int) -> str:
+        return (
             f"<p>上位{n:,}名の次数中心性 vs ブリッジスコア（コミュニティ別色分け）。"
             "次数とブリッジスコアの両方が高い人物は、複数コミュニティを接続する"
             "構造的仲介者の位置を占める可能性がある。</p>"
         )
 
-        # Group by community
+    def _make_community_scatter_figure(self, rows: list) -> go.Figure:
+        n = len(rows)
         comm_data: dict[str, list] = {}
         for r in rows:
             c = str(r["community_id"]) if r["community_id"] is not None else "none"
             comm_data.setdefault(c, []).append(r)
 
-        # Limit to top 15 communities by size, merge rest
         top_comms = sorted(comm_data.keys(), key=lambda c: -len(comm_data[c]))[:14]
         other_rows: list = []
         for c in list(comm_data.keys()):
@@ -214,15 +216,30 @@ class NetworkGraphReport(BaseReportGenerator):
             xaxis_title="次数中心性",
             yaxis_title="ブリッジスコア",
         )
+        return fig
 
-        violations = sb.validate_findings(findings)
-        if violations:
-            findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
+    # ── Section 2: Community scatter ─────────────────────────────
+
+    def _build_community_scatter_section(self, sb: SectionBuilder) -> ReportSection:
+        rows = self._fetch_community_scatter_rows()
+
+        if not rows:
+            return ReportSection(
+                title="コミュニティ別散布図",
+                findings_html="<p>コミュニティ散布図データが取得できませんでした。</p>",
+                section_id="comm_scatter",
+            )
+
+        findings = self._findings_community_scatter(len(rows))
+        findings = append_validation_warnings(findings, sb)
 
         return ReportSection(
             title="コミュニティ別散布図",
             findings_html=findings,
-            visualization_html=plotly_div_safe(fig, "chart_comm_scatter", height=500),
+            visualization_html=plotly_div_safe(
+                self._make_community_scatter_figure(rows),
+                "chart_comm_scatter", height=500,
+            ),
             method_note=(
                 "degree_centrality による上位2,000名。"
                 "コミュニティは feat_cluster_membership.community_id より（Louvain）。"
@@ -233,11 +250,11 @@ class NetworkGraphReport(BaseReportGenerator):
             section_id="comm_scatter",
         )
 
-    # ── Section 3: Gender distribution in network ─────────────────
+    # ── Section 3 helpers ──────────────────────────────────────────
 
-    def _build_gender_distribution_section(self, sb: SectionBuilder) -> ReportSection:
+    def _fetch_gender_distribution_rows(self) -> list:
         try:
-            rows = self.conn.execute("""
+            return self.conn.execute("""
                 SELECT
                     p.gender,
                     fn.degree_centrality,
@@ -249,7 +266,40 @@ class NetworkGraphReport(BaseReportGenerator):
                   AND p.gender IS NOT NULL
             """).fetchall()
         except Exception:
-            rows = []
+            return []
+
+    def _findings_gender_distribution(self, gender_deg: dict[str, list[float]]) -> str:
+        findings = "<p>性別別次数中心性分布:</p><ul>"
+        for g, vals in sorted(gender_deg.items()):
+            gs = distribution_summary(vals, label=g)
+            findings += (
+                f"<li><strong>{g}</strong> (n={gs['n']:,}): "
+                f"{format_distribution_inline(gs)}, "
+                f"{format_ci((gs['ci_lower'], gs['ci_upper']))}</li>"
+            )
+        findings += "</ul>"
+        return findings
+
+    def _make_gender_distribution_figure(self, gender_deg: dict[str, list[float]]) -> go.Figure:
+        gender_colors = {"Male": "#667eea", "Female": "#f5576c", "unknown": "#a0a0c0"}
+        fig = go.Figure()
+        for g, vals in sorted(gender_deg.items()):
+            fig.add_trace(go.Violin(
+                y=vals[:2000] if len(vals) > 2000 else vals,
+                name=g, box_visible=True, meanline_visible=True,
+                points=False,
+                marker_color=gender_colors.get(g, "#a0a0c0"),
+            ))
+        fig.update_layout(
+            title="性別別 次数中心性",
+            yaxis_title="次数中心性",
+        )
+        return fig
+
+    # ── Section 3: Gender distribution in network ─────────────────
+
+    def _build_gender_distribution_section(self, sb: SectionBuilder) -> ReportSection:
+        rows = self._fetch_gender_distribution_rows()
 
         if not rows:
             return ReportSection(
@@ -262,38 +312,16 @@ class NetworkGraphReport(BaseReportGenerator):
         for r in rows:
             gender_deg.setdefault(r["gender"], []).append(r["degree_centrality"])
 
-        findings = "<p>性別別次数中心性分布:</p><ul>"
-        for g, vals in sorted(gender_deg.items()):
-            gs = distribution_summary(vals, label=g)
-            findings += (
-                f"<li><strong>{g}</strong> (n={gs['n']:,}): "
-                f"{format_distribution_inline(gs)}, "
-                f"{format_ci((gs['ci_lower'], gs['ci_upper']))}</li>"
-            )
-        findings += "</ul>"
-
-        fig = go.Figure()
-        gender_colors = {"Male": "#667eea", "Female": "#f5576c", "unknown": "#a0a0c0"}
-        for g, vals in sorted(gender_deg.items()):
-            fig.add_trace(go.Violin(
-                y=vals[:2000] if len(vals) > 2000 else vals,
-                name=g, box_visible=True, meanline_visible=True,
-                points=False,
-                marker_color=gender_colors.get(g, "#a0a0c0"),
-            ))
-        fig.update_layout(
-            title="性別別 次数中心性",
-            yaxis_title="次数中心性",
-        )
-
-        violations = sb.validate_findings(findings)
-        if violations:
-            findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
+        findings = self._findings_gender_distribution(gender_deg)
+        findings = append_validation_warnings(findings, sb)
 
         return ReportSection(
             title="性別別ネットワーク分布",
             findings_html=findings,
-            visualization_html=plotly_div_safe(fig, "chart_gender_net", height=420),
+            visualization_html=plotly_div_safe(
+                self._make_gender_distribution_figure(gender_deg),
+                "chart_gender_net", height=420,
+            ),
             method_note=(
                 "性別は persons.gender より（データソース由来の二値分類）。"
                 "gender が NULL の人物は除外。"
@@ -304,11 +332,11 @@ class NetworkGraphReport(BaseReportGenerator):
             section_id="gender_network",
         )
 
-    # ── Section 4: Ego-network statistics ─────────────────────────
+    # ── Section 4 helpers ──────────────────────────────────────────
 
-    def _build_ego_stats_section(self, sb: SectionBuilder) -> ReportSection:
+    def _fetch_ego_stats_rows(self) -> list:
         try:
-            rows = self.conn.execute(f"""
+            return self.conn.execute(f"""
                 SELECT
                     fn.person_id,
                     {person_display_name_sql('fn.person_id')},
@@ -330,21 +358,16 @@ class NetworkGraphReport(BaseReportGenerator):
                 LIMIT 20
             """).fetchall()
         except Exception:
-            rows = []
+            return []
 
-        if not rows:
-            return ReportSection(
-                title="Top 20 ハブのEgo-network統計",
-                findings_html="<p>ハブEgo-networkデータが取得できませんでした。</p>",
-                section_id="ego_stats",
-            )
-
-        findings = (
+    def _findings_ego_stats(self) -> str:
+        return (
             "<p>次数中心性上位20名のネットワーク指標プロファイル。"
             "ブリッジスコア・NDI・AWCC・コミュニティ架橋数は、"
             "構造的位置の相補的な特徴付けを提供する。</p>"
         )
 
+    def _make_ego_stats_table(self, rows: list) -> str:
         def _fmt_opt(val, fmt):
             return f"{val:{fmt}}" if val is not None else "—"
 
@@ -363,7 +386,7 @@ class NetworkGraphReport(BaseReportGenerator):
             f"</tr>"
             for i, r in enumerate(rows, 1)
         )
-        table_html = (
+        return (
             '<div style="overflow-x:auto;"><table>'
             "<thead><tr>"
             "<th>#</th><th>名前</th><th>次数</th><th>媒介</th>"
@@ -373,14 +396,25 @@ class NetworkGraphReport(BaseReportGenerator):
             f"<tbody>{table_rows}</tbody></table></div>"
         )
 
-        violations = sb.validate_findings(findings)
-        if violations:
-            findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
+    # ── Section 4: Ego-network statistics ─────────────────────────
+
+    def _build_ego_stats_section(self, sb: SectionBuilder) -> ReportSection:
+        rows = self._fetch_ego_stats_rows()
+
+        if not rows:
+            return ReportSection(
+                title="Top 20 ハブのEgo-network統計",
+                findings_html="<p>ハブEgo-networkデータが取得できませんでした。</p>",
+                section_id="ego_stats",
+            )
+
+        findings = self._findings_ego_stats()
+        findings = append_validation_warnings(findings, sb)
 
         return ReportSection(
             title="Top 20 ハブのEgo-network統計",
             findings_html=findings,
-            visualization_html=table_html,
+            visualization_html=self._make_ego_stats_table(rows),
             method_note=(
                 "degree_centrality, betweenness_centrality, bridge_score, "
                 "n_bridge_communities は feat_network より。"

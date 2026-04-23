@@ -25,7 +25,7 @@ from ..color_utils import hex_to_rgba
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
 from ..sql_fragments import person_display_name_sql
-from ._base import BaseReportGenerator
+from ._base import BaseReportGenerator, append_validation_warnings
 
 _TIER_COLORS = {1: "#667eea", 2: "#a0d2db", 3: "#06D6A0", 4: "#FFD166", 5: "#f5576c"}
 _TRACK_COLORS = {
@@ -59,11 +59,11 @@ class BridgeAnalysisReport(BaseReportGenerator):
         sections.append(sb.build_section(self._build_tier_betweenness_deeper(sb)))
         return self.write_report("\n".join(sections))
 
-    # ── Section 1a: Betweenness Centrality Distribution ────────
+    # ── Section 1a helpers ─────────────────────────────────────
 
-    def _build_betweenness_distribution(self, sb: SectionBuilder) -> ReportSection:
+    def _fetch_betweenness_distribution_rows(self) -> list:
         try:
-            rows = self.conn.execute(f"""
+            return self.conn.execute(f"""
                 SELECT fn.person_id, fn.betweenness_centrality, fn.degree_centrality,
                        {person_display_name_sql('fn.person_id')},
                        fc.first_year, p.gender
@@ -74,54 +74,45 @@ class BridgeAnalysisReport(BaseReportGenerator):
                   AND fn.betweenness_centrality > 0
             """).fetchall()
         except Exception:
-            rows = []
+            return []
 
-        if not rows:
-            return ReportSection(
-                title="媒介中心性分布",
-                findings_html="<p>媒介中心性データが利用不可。feat_networkテーブルにデータが存在しない。</p>",
-                section_id="betweenness_dist",
-            )
-
-        vals = [r["betweenness_centrality"] for r in rows]
-        summ = distribution_summary(vals, label="betweenness_centrality")
-
-        # Top 10 by betweenness
-        rows_sorted = sorted(rows, key=lambda r: r["betweenness_centrality"], reverse=True)
-        top10 = rows_sorted[:10]
-
-        findings = (
+    def _findings_betweenness_overview(self, summ: dict) -> str:
+        return (
             f"<p>媒介中心性が正の値を持つ人物は{summ['n']:,}名。"
             f"分布: {format_distribution_inline(summ)}、"
             f"{format_ci((summ['ci_lower'], summ['ci_upper']))}。</p>"
         )
 
-        # Gender stratification
+    def _findings_gender_strata(self, rows: list, value_key: str) -> str:
         gender_groups: dict[str, list[float]] = {}
         for r in rows:
             g = r["gender"] or "不明"
-            gender_groups.setdefault(g, []).append(r["betweenness_centrality"])
+            gender_groups.setdefault(g, []).append(r[value_key])
 
-        if len(gender_groups) > 1:
-            findings += "<p>性別別:</p><ul>"
-            for g, gvals in sorted(gender_groups.items()):
-                gs = distribution_summary(gvals, label=g)
-                findings += (
-                    f"<li><strong>{g}</strong> (n={gs['n']:,}): "
-                    f"median={gs['median']:.6f}、{format_ci((gs['ci_lower'], gs['ci_upper']))}</li>"
-                )
-            findings += "</ul>"
+        if len(gender_groups) <= 1:
+            return ""
 
-        # Top 10 list
-        findings += "<p>媒介中心性上位10名:</p><ol>"
-        for r in top10:
-            findings += (
+        out = "<p>性別別:</p><ul>"
+        for g, gvals in sorted(gender_groups.items()):
+            gs = distribution_summary(gvals, label=g)
+            out += (
+                f"<li><strong>{g}</strong> (n={gs['n']:,}): "
+                f"median={gs['median']:.6f}、{format_ci((gs['ci_lower'], gs['ci_upper']))}</li>"
+            )
+        out += "</ul>"
+        return out
+
+    def _findings_betweenness_top10(self, rows_sorted: list) -> str:
+        out = "<p>媒介中心性上位10名:</p><ol>"
+        for r in rows_sorted[:10]:
+            out += (
                 f"<li>{r['name']} — betweenness={r['betweenness_centrality']:.6f}、"
                 f"degree={r['degree_centrality']:.6f}</li>"
             )
-        findings += "</ol>"
+        out += "</ol>"
+        return out
 
-        # Violin plot
+    def _make_betweenness_violin(self, vals: list[float], summ: dict) -> go.Figure:
         fig = go.Figure()
         fig.add_trace(go.Violin(
             y=vals, name="媒介中心性",
@@ -139,15 +130,36 @@ class BridgeAnalysisReport(BaseReportGenerator):
             showarrow=True, arrowhead=2, ax=60, ay=0,
             font=dict(color="#f093fb", size=11),
         )
+        return fig
 
-        violations = sb.validate_findings(findings)
-        if violations:
-            findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
+    # ── Section 1a: Betweenness Centrality Distribution ────────
+
+    def _build_betweenness_distribution(self, sb: SectionBuilder) -> ReportSection:
+        rows = self._fetch_betweenness_distribution_rows()
+
+        if not rows:
+            return ReportSection(
+                title="媒介中心性分布",
+                findings_html="<p>媒介中心性データが利用不可。feat_networkテーブルにデータが存在しない。</p>",
+                section_id="betweenness_dist",
+            )
+
+        vals = [r["betweenness_centrality"] for r in rows]
+        summ = distribution_summary(vals, label="betweenness_centrality")
+        rows_sorted = sorted(rows, key=lambda r: r["betweenness_centrality"], reverse=True)
+
+        findings = self._findings_betweenness_overview(summ)
+        findings += self._findings_gender_strata(rows, "betweenness_centrality")
+        findings += self._findings_betweenness_top10(rows_sorted)
+        findings = append_validation_warnings(findings, sb)
 
         return ReportSection(
             title="媒介中心性分布",
             findings_html=findings,
-            visualization_html=plotly_div_safe(fig, "chart_betweenness_violin", height=420),
+            visualization_html=plotly_div_safe(
+                self._make_betweenness_violin(vals, summ),
+                "chart_betweenness_violin", height=420,
+            ),
             method_note=(
                 "媒介中心性は feat_network.betweenness_centrality 由来"
                 "（Phase 5/6: Rust拡張またはNetworkX経由のBrandesアルゴリズム）。"
@@ -164,11 +176,11 @@ class BridgeAnalysisReport(BaseReportGenerator):
             section_id="betweenness_dist",
         )
 
-    # ── Section 1b: Betweenness vs Degree scatter ──────────────
+    # ── Section 1b helpers ─────────────────────────────────────
 
-    def _build_betweenness_deeper(self, sb: SectionBuilder) -> ReportSection:
+    def _fetch_betweenness_deeper_rows(self) -> list:
         try:
-            rows = self.conn.execute(f"""
+            return self.conn.execute(f"""
                 SELECT fn.person_id, fn.betweenness_centrality, fn.degree_centrality,
                        fn.n_collaborators,
                        {person_display_name_sql('fn.person_id')},
@@ -181,60 +193,60 @@ class BridgeAnalysisReport(BaseReportGenerator):
                   AND fn.betweenness_centrality > 0
             """).fetchall()
         except Exception:
-            rows = []
+            return []
 
-        if not rows:
-            return ReportSection(
-                title="媒介中心性 × 次数中心性",
-                findings_html="<p>散布図に必要なデータが利用不可。</p>",
-                section_id="betweenness_vs_degree",
-            )
+    def _compute_structural_bridges(
+        self, rows: list
+    ) -> tuple[float, float, list]:
+        all_betw = [r["betweenness_centrality"] for r in rows]
+        all_deg = [r["degree_centrality"] for r in rows]
+        p75_betw = float(np.percentile(all_betw, 75))
+        p25_deg = float(np.percentile(all_deg, 25))
+        structural_bridges = [
+            r for r in rows
+            if r["betweenness_centrality"] >= p75_betw
+            and r["degree_centrality"] <= p25_deg
+        ]
+        return p75_betw, p25_deg, structural_bridges
 
-        # Subsample for visualization if too many points
-        rng = random.Random(42)
-        display_rows = rng.sample(rows, min(3000, len(rows))) if len(rows) > 3000 else rows
+    def _findings_deeper_overview(self, rows: list, corr: float) -> str:
+        return (
+            f"<p>{len(rows):,}名の媒介中心性と次数中心性の関係を分析。"
+            f"両指標のPearson相関係数は{corr:.4f}。</p>"
+        )
 
+    def _findings_structural_bridges(self, structural_bridges: list) -> str:
+        out = (
+            f"<p>構造的ブリッジ候補（媒介中心性≥75パーセンタイル かつ "
+            f"次数中心性≤25パーセンタイル）は{len(structural_bridges):,}名。"
+            f"これらの人物は少数の協業者で異なるコミュニティ間を接続している。</p>"
+        )
+        if structural_bridges:
+            sb_sorted = sorted(structural_bridges,
+                               key=lambda r: r["betweenness_centrality"], reverse=True)[:5]
+            out += "<p>構造的ブリッジ上位5名:</p><ol>"
+            for r in sb_sorted:
+                out += (
+                    f"<li>{r['name']} — betweenness={r['betweenness_centrality']:.6f}、"
+                    f"degree={r['degree_centrality']:.6f}、"
+                    f"collaborators={r['n_collaborators'] or 0}</li>"
+                )
+            out += "</ol>"
+        return out
+
+    def _make_betweenness_degree_scatter(
+        self,
+        display_rows: list,
+        all_rows: list,
+        structural_bridges: list,
+        p75_betw: float,
+        p25_deg: float,
+    ) -> go.Figure:
         betw = [r["betweenness_centrality"] for r in display_rows]
         deg = [r["degree_centrality"] for r in display_rows]
         names = [r["name"] for r in display_rows]
         iv_scores = [r["iv_score"] if r["iv_score"] is not None else 0 for r in display_rows]
 
-        # Correlation
-        corr = float(np.corrcoef(
-            [r["betweenness_centrality"] for r in rows],
-            [r["degree_centrality"] for r in rows]
-        )[0, 1]) if len(rows) >= 3 else float("nan")
-
-        # High-betweenness-low-degree: structural bridges
-        all_betw = [r["betweenness_centrality"] for r in rows]
-        all_deg = [r["degree_centrality"] for r in rows]
-        p75_betw = float(np.percentile(all_betw, 75))
-        p25_deg = float(np.percentile(all_deg, 25))
-        structural_bridges = [r for r in rows
-                              if r["betweenness_centrality"] >= p75_betw
-                              and r["degree_centrality"] <= p25_deg]
-
-        findings = (
-            f"<p>{len(rows):,}名の媒介中心性と次数中心性の関係を分析。"
-            f"両指標のPearson相関係数は{corr:.4f}。</p>"
-            f"<p>構造的ブリッジ候補（媒介中心性≥75パーセンタイル かつ "
-            f"次数中心性≤25パーセンタイル）は{len(structural_bridges):,}名。"
-            f"これらの人物は少数の協業者で異なるコミュニティ間を接続している。</p>"
-        )
-
-        if structural_bridges:
-            sb_sorted = sorted(structural_bridges,
-                               key=lambda r: r["betweenness_centrality"], reverse=True)[:5]
-            findings += "<p>構造的ブリッジ上位5名:</p><ol>"
-            for r in sb_sorted:
-                findings += (
-                    f"<li>{r['name']} — betweenness={r['betweenness_centrality']:.6f}、"
-                    f"degree={r['degree_centrality']:.6f}、"
-                    f"collaborators={r['n_collaborators'] or 0}</li>"
-                )
-            findings += "</ol>"
-
-        # Scatter plot
         fig = go.Figure()
         fig.add_trace(go.Scattergl(
             x=deg, y=betw,
@@ -254,7 +266,6 @@ class BridgeAnalysisReport(BaseReportGenerator):
             ),
         ))
 
-        # Highlight structural bridges
         if structural_bridges:
             sb_display = [r for r in display_rows
                           if r["betweenness_centrality"] >= p75_betw
@@ -270,7 +281,6 @@ class BridgeAnalysisReport(BaseReportGenerator):
                     hoverinfo="skip",
                 ))
 
-        # Reference lines for thresholds
         fig.add_hline(y=p75_betw, line_dash="dot", line_color="rgba(240,147,251,0.5)",
                       annotation_text="betweenness P75", annotation_position="top left")
         fig.add_vline(x=p25_deg, line_dash="dot", line_color="rgba(102,126,234,0.5)",
@@ -283,15 +293,43 @@ class BridgeAnalysisReport(BaseReportGenerator):
             xaxis_type="log", yaxis_type="log",
             showlegend=True,
         )
+        return fig
 
-        violations = sb.validate_findings(findings)
-        if violations:
-            findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
+    # ── Section 1b: Betweenness vs Degree scatter ──────────────
+
+    def _build_betweenness_deeper(self, sb: SectionBuilder) -> ReportSection:
+        rows = self._fetch_betweenness_deeper_rows()
+
+        if not rows:
+            return ReportSection(
+                title="媒介中心性 × 次数中心性",
+                findings_html="<p>散布図に必要なデータが利用不可。</p>",
+                section_id="betweenness_vs_degree",
+            )
+
+        rng = random.Random(42)
+        display_rows = rng.sample(rows, min(3000, len(rows))) if len(rows) > 3000 else rows
+
+        corr = float(np.corrcoef(
+            [r["betweenness_centrality"] for r in rows],
+            [r["degree_centrality"] for r in rows]
+        )[0, 1]) if len(rows) >= 3 else float("nan")
+
+        p75_betw, p25_deg, structural_bridges = self._compute_structural_bridges(rows)
+
+        findings = self._findings_deeper_overview(rows, corr)
+        findings += self._findings_structural_bridges(structural_bridges)
+        findings = append_validation_warnings(findings, sb)
 
         return ReportSection(
             title="媒介中心性 × 次数中心性",
             findings_html=findings,
-            visualization_html=plotly_div_safe(fig, "chart_betweenness_vs_degree", height=500),
+            visualization_html=plotly_div_safe(
+                self._make_betweenness_degree_scatter(
+                    display_rows, rows, structural_bridges, p75_betw, p25_deg
+                ),
+                "chart_betweenness_vs_degree", height=500,
+            ),
             method_note=(
                 "betweenness_centrality（Y）と degree_centrality（X）の散布図、"
                 "両指標とも feat_network 由来。両対数スケール。"
@@ -312,11 +350,11 @@ class BridgeAnalysisReport(BaseReportGenerator):
             section_id="betweenness_vs_degree",
         )
 
-    # ── Section 2a: Cross-Studio-Cluster Bridges ───────────────
+    # ── Section 2a helpers ─────────────────────────────────────
 
-    def _build_cross_studio_bridges(self, sb: SectionBuilder) -> ReportSection:
+    def _fetch_cross_studio_bridges_rows(self) -> list:
         try:
-            rows = self.conn.execute(f"""
+            return self.conn.execute(f"""
                 SELECT
                     fsa.person_id,
                     {person_display_name_sql('fsa.person_id')},
@@ -338,7 +376,53 @@ class BridgeAnalysisReport(BaseReportGenerator):
                 ORDER BY n_clusters DESC, total_works DESC
             """).fetchall()
         except Exception:
-            rows = []
+            return []
+
+    def _build_cluster_dist(self, rows: list) -> dict[int, int]:
+        cluster_dist: dict[int, int] = {}
+        for r in rows:
+            nc = r["n_clusters"]
+            cluster_dist[nc] = cluster_dist.get(nc, 0) + 1
+        return cluster_dist
+
+    def _findings_cluster_distribution(self, rows: list, cluster_dist: dict[int, int]) -> str:
+        out = (
+            f"<p>2つ以上のスタジオクラスタで活動する人物は{len(rows):,}名。</p>"
+            "<p>横断クラスタ数別の人数分布:</p><ul>"
+        )
+        for nc in sorted(cluster_dist):
+            out += f"<li><strong>{nc}クラスタ</strong>: {cluster_dist[nc]:,}名</li>"
+        out += "</ul>"
+        return out
+
+    def _findings_cross_studio_top20(self, rows: list) -> str:
+        out = "<p>スタジオクラスタ横断上位20名:</p><ol>"
+        for r in rows[:20]:
+            out += (
+                f"<li>{r['name']} — {r['n_clusters']}クラスタ、"
+                f"{r['n_studios']}スタジオ、{r['total_works']}作品</li>"
+            )
+        out += "</ol>"
+        return out
+
+    def _make_cross_studio_bar(self, cluster_dist: dict[int, int], total: int) -> go.Figure:
+        fig = go.Figure(go.Bar(
+            x=[str(nc) for nc in sorted(cluster_dist)],
+            y=[cluster_dist[nc] for nc in sorted(cluster_dist)],
+            marker_color="#f093fb",
+            hovertemplate="%{x}クラスタ: %{y:,}名<extra></extra>",
+        ))
+        fig.update_layout(
+            title=f"スタジオクラスタ横断数別人数 ({total:,}名)",
+            xaxis_title="横断クラスタ数",
+            yaxis_title="人数",
+        )
+        return fig
+
+    # ── Section 2a: Cross-Studio-Cluster Bridges ───────────────
+
+    def _build_cross_studio_bridges(self, sb: SectionBuilder) -> ReportSection:
+        rows = self._fetch_cross_studio_bridges_rows()
 
         if not rows:
             return ReportSection(
@@ -351,51 +435,18 @@ class BridgeAnalysisReport(BaseReportGenerator):
                 section_id="cross_studio_bridges",
             )
 
-        # Distribution of n_clusters
-        n_clusters_vals = [r["n_clusters"] for r in rows]
-        cluster_dist: dict[int, int] = {}
-        for nc in n_clusters_vals:
-            cluster_dist[nc] = cluster_dist.get(nc, 0) + 1
-
-        top20 = rows[:20]
-
-        findings = (
-            f"<p>2つ以上のスタジオクラスタで活動する人物は{len(rows):,}名。</p>"
-            "<p>横断クラスタ数別の人数分布:</p><ul>"
-        )
-        for nc in sorted(cluster_dist):
-            findings += f"<li><strong>{nc}クラスタ</strong>: {cluster_dist[nc]:,}名</li>"
-        findings += "</ul>"
-
-        findings += "<p>スタジオクラスタ横断上位20名:</p><ol>"
-        for r in top20:
-            findings += (
-                f"<li>{r['name']} — {r['n_clusters']}クラスタ、"
-                f"{r['n_studios']}スタジオ、{r['total_works']}作品</li>"
-            )
-        findings += "</ol>"
-
-        # Bar chart: persons per n_clusters count
-        fig = go.Figure(go.Bar(
-            x=[str(nc) for nc in sorted(cluster_dist)],
-            y=[cluster_dist[nc] for nc in sorted(cluster_dist)],
-            marker_color="#f093fb",
-            hovertemplate="%{x}クラスタ: %{y:,}名<extra></extra>",
-        ))
-        fig.update_layout(
-            title=f"スタジオクラスタ横断数別人数 ({len(rows):,}名)",
-            xaxis_title="横断クラスタ数",
-            yaxis_title="人数",
-        )
-
-        violations = sb.validate_findings(findings)
-        if violations:
-            findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
+        cluster_dist = self._build_cluster_dist(rows)
+        findings = self._findings_cluster_distribution(rows, cluster_dist)
+        findings += self._findings_cross_studio_top20(rows)
+        findings = append_validation_warnings(findings, sb)
 
         return ReportSection(
             title="スタジオクラスタ横断ブリッジ",
             findings_html=findings,
-            visualization_html=plotly_div_safe(fig, "chart_cross_studio_dist", height=400),
+            visualization_html=plotly_div_safe(
+                self._make_cross_studio_bar(cluster_dist, len(rows)),
+                "chart_cross_studio_dist", height=400,
+            ),
             method_note=(
                 "スタジオクラスタ横断ブリッジはインラインで算出: "
                 "feat_studio_affiliation と feat_cluster_membership.studio_cluster_name を JOIN し、"
@@ -413,11 +464,11 @@ class BridgeAnalysisReport(BaseReportGenerator):
             section_id="cross_studio_bridges",
         )
 
-    # ── Section 2b: Cross-studio deeper — betweenness vs n_clusters ─
+    # ── Section 2b helpers ─────────────────────────────────────
 
-    def _build_cross_studio_deeper(self, sb: SectionBuilder) -> ReportSection:
+    def _fetch_cross_studio_deeper_rows(self) -> list:
         try:
-            rows = self.conn.execute(f"""
+            return self.conn.execute(f"""
                 SELECT
                     fsa.person_id,
                     {person_display_name_sql('fsa.person_id')},
@@ -437,24 +488,18 @@ class BridgeAnalysisReport(BaseReportGenerator):
                 HAVING n_clusters >= 1
             """).fetchall()
         except Exception:
-            rows = []
+            return []
 
-        if not rows:
-            return ReportSection(
-                title="クラスタ横断数 × 媒介中心性 × IVスコア",
-                findings_html="<p>横断分析に必要なデータが利用不可。</p>",
-                section_id="cross_studio_deeper",
-            )
-
-        # Group by n_clusters for box plot
+    def _group_by_n_clusters(self, rows: list) -> dict[int, list[float]]:
         cluster_groups: dict[int, list[float]] = {}
         for r in rows:
             nc = r["n_clusters"]
             if r["betweenness_centrality"] and r["betweenness_centrality"] > 0:
                 cluster_groups.setdefault(nc, []).append(r["betweenness_centrality"])
+        return cluster_groups
 
-        # Compute medians per group
-        findings = (
+    def _findings_cross_studio_deeper(self, rows: list, cluster_groups: dict) -> str:
+        out = (
             f"<p>{len(rows):,}名についてクラスタ横断数と媒介中心性の関係を分析。</p>"
             "<p>クラスタ横断数別の媒介中心性分布:</p><ul>"
         )
@@ -462,15 +507,16 @@ class BridgeAnalysisReport(BaseReportGenerator):
             vals = cluster_groups[nc]
             if len(vals) >= 3:
                 s = distribution_summary(vals, label=f"{nc}_clusters")
-                findings += (
+                out += (
                     f"<li><strong>{nc}クラスタ</strong> (n={s['n']:,}): "
                     f"median={s['median']:.6f}、{format_ci((s['ci_lower'], s['ci_upper']))}</li>"
                 )
             else:
-                findings += f"<li><strong>{nc}クラスタ</strong>: n={len(vals)}（CI算出不可）</li>"
-        findings += "</ul>"
+                out += f"<li><strong>{nc}クラスタ</strong>: n={len(vals)}（CI算出不可）</li>"
+        out += "</ul>"
+        return out
 
-        # Box plot per n_clusters
+    def _make_cross_studio_box(self, cluster_groups: dict[int, list[float]]) -> go.Figure:
         fig = go.Figure()
         for idx, nc in enumerate(sorted(cluster_groups)):
             vals = cluster_groups[nc]
@@ -482,22 +528,37 @@ class BridgeAnalysisReport(BaseReportGenerator):
                     marker_color=color,
                     boxpoints="outliers",
                 ))
-
         fig.update_layout(
             title="クラスタ横断数別 媒介中心性分布",
             yaxis_title="媒介中心性",
             xaxis_title="横断クラスタ数",
             yaxis_type="log",
         )
+        return fig
 
-        violations = sb.validate_findings(findings)
-        if violations:
-            findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
+    # ── Section 2b: Cross-studio deeper — betweenness vs n_clusters ─
+
+    def _build_cross_studio_deeper(self, sb: SectionBuilder) -> ReportSection:
+        rows = self._fetch_cross_studio_deeper_rows()
+
+        if not rows:
+            return ReportSection(
+                title="クラスタ横断数 × 媒介中心性 × IVスコア",
+                findings_html="<p>横断分析に必要なデータが利用不可。</p>",
+                section_id="cross_studio_deeper",
+            )
+
+        cluster_groups = self._group_by_n_clusters(rows)
+        findings = self._findings_cross_studio_deeper(rows, cluster_groups)
+        findings = append_validation_warnings(findings, sb)
 
         return ReportSection(
             title="クラスタ横断数 × 媒介中心性",
             findings_html=findings,
-            visualization_html=plotly_div_safe(fig, "chart_cross_studio_box", height=460),
+            visualization_html=plotly_div_safe(
+                self._make_cross_studio_box(cluster_groups),
+                "chart_cross_studio_box", height=460,
+            ),
             method_note=(
                 "betweenness_centrality を n_clusters（COUNT DISTINCT studio_cluster_name）"
                 "でグルーピングしたボックスプロット。Y軸ログスケール。"
@@ -515,11 +576,11 @@ class BridgeAnalysisReport(BaseReportGenerator):
             section_id="cross_studio_deeper",
         )
 
-    # ── Section 3a: Career Track Structure ─────────────────────
+    # ── Section 3a helpers ─────────────────────────────────────
 
-    def _build_career_track_structure(self, sb: SectionBuilder) -> ReportSection:
+    def _fetch_career_track_structure_rows(self) -> list:
         try:
-            rows = self.conn.execute("""
+            return self.conn.execute("""
                 SELECT fcm.career_track, COUNT(*) AS n_persons
                 FROM feat_cluster_membership fcm
                 WHERE fcm.career_track IS NOT NULL AND fcm.career_track != ''
@@ -527,7 +588,41 @@ class BridgeAnalysisReport(BaseReportGenerator):
                 ORDER BY n_persons DESC
             """).fetchall()
         except Exception:
-            rows = []
+            return []
+
+    def _findings_career_track_breakdown(self, rows: list, total_persons: int) -> str:
+        out = (
+            f"<p>{len(rows)}種類のキャリアトラックが検出され、合計{total_persons:,}名に割り当て。</p>"
+            "<p>キャリアトラック別人数:</p><ul>"
+        )
+        for r in rows:
+            pct = r["n_persons"] / max(total_persons, 1) * 100
+            out += (
+                f"<li><strong>{r['career_track']}</strong>: "
+                f"{r['n_persons']:,}名 ({pct:.1f}%)</li>"
+            )
+        out += "</ul>"
+        return out
+
+    def _make_career_track_pie(self, rows: list, total_persons: int) -> go.Figure:
+        labels = [r["career_track"] for r in rows]
+        values = [r["n_persons"] for r in rows]
+        colors = [_TRACK_COLORS.get(l, "#a0a0c0") for l in labels]
+
+        fig = go.Figure(go.Pie(
+            labels=labels,
+            values=values,
+            marker=dict(colors=colors),
+            textinfo="label+percent",
+            hovertemplate="%{label}: %{value:,}名 (%{percent})<extra></extra>",
+        ))
+        fig.update_layout(title=f"キャリアトラック構成 — {total_persons:,}名")
+        return fig
+
+    # ── Section 3a: Career Track Structure ─────────────────────
+
+    def _build_career_track_structure(self, sb: SectionBuilder) -> ReportSection:
+        rows = self._fetch_career_track_structure_rows()
 
         if not rows:
             return ReportSection(
@@ -540,44 +635,16 @@ class BridgeAnalysisReport(BaseReportGenerator):
             )
 
         total_persons = sum(r["n_persons"] for r in rows)
-        n_tracks = len(rows)
-
-        findings = (
-            f"<p>{n_tracks}種類のキャリアトラックが検出され、合計{total_persons:,}名に割り当て。</p>"
-            "<p>キャリアトラック別人数:</p><ul>"
-        )
-        for r in rows:
-            pct = r["n_persons"] / max(total_persons, 1) * 100
-            findings += (
-                f"<li><strong>{r['career_track']}</strong>: "
-                f"{r['n_persons']:,}名 ({pct:.1f}%)</li>"
-            )
-        findings += "</ul>"
-
-        # Pie chart for career track distribution
-        labels = [r["career_track"] for r in rows]
-        values = [r["n_persons"] for r in rows]
-        colors = [_TRACK_COLORS.get(l, "#a0a0c0") for l in labels]
-
-        fig = go.Figure(go.Pie(
-            labels=labels,
-            values=values,
-            marker=dict(colors=colors),
-            textinfo="label+percent",
-            hovertemplate="%{label}: %{value:,}名 (%{percent})<extra></extra>",
-        ))
-        fig.update_layout(
-            title=f"キャリアトラック構成 — {total_persons:,}名",
-        )
-
-        violations = sb.validate_findings(findings)
-        if violations:
-            findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
+        findings = self._findings_career_track_breakdown(rows, total_persons)
+        findings = append_validation_warnings(findings, sb)
 
         return ReportSection(
             title="キャリアトラック構成",
             findings_html=findings,
-            visualization_html=plotly_div_safe(fig, "chart_career_track_pie", height=420),
+            visualization_html=plotly_div_safe(
+                self._make_career_track_pie(rows, total_persons),
+                "chart_career_track_pie", height=420,
+            ),
             method_note=(
                 "キャリアトラックは feat_cluster_membership.career_track 由来"
                 "（Phase 6 のルールベース分類）。"
@@ -588,12 +655,11 @@ class BridgeAnalysisReport(BaseReportGenerator):
             section_id="career_track_structure",
         )
 
-    # ── Section 3b: Career Track Deeper — Cross-Track Collaboration ─
+    # ── Section 3b helpers ─────────────────────────────────────
 
-    def _build_career_track_deeper(self, sb: SectionBuilder) -> ReportSection:
-        """Betweenness distribution by career track + cross-track collaboration matrix."""
+    def _fetch_career_track_deeper_rows(self) -> list:
         try:
-            rows = self.conn.execute("""
+            return self.conn.execute("""
                 SELECT fcm.career_track,
                        fn.betweenness_centrality,
                        fn.degree_centrality,
@@ -606,21 +672,17 @@ class BridgeAnalysisReport(BaseReportGenerator):
                   AND fn.betweenness_centrality IS NOT NULL
             """).fetchall()
         except Exception:
-            rows = []
+            return []
 
-        if not rows:
-            return ReportSection(
-                title="キャリアトラック別ネットワーク指標",
-                findings_html="<p>キャリアトラック別ネットワーク分析に必要なデータが利用不可。</p>",
-                section_id="career_track_deeper",
-            )
-
+    def _group_by_career_track(self, rows: list) -> dict[str, list[dict]]:
         track_groups: dict[str, list[dict]] = {}
         for r in rows:
             track_groups.setdefault(r["career_track"], []).append(r)
+        return track_groups
 
-        findings = (
-            f"<p>{len(rows):,}名のキャリアトラック別ネットワーク指標を分析。</p>"
+    def _findings_career_track_network(self, track_groups: dict, total: int) -> str:
+        out = (
+            f"<p>{total:,}名のキャリアトラック別ネットワーク指標を分析。</p>"
             "<p>トラック別の媒介中心性と協業者数:</p><ul>"
         )
         for track in sorted(track_groups, key=lambda t: len(track_groups[t]), reverse=True):
@@ -632,14 +694,15 @@ class BridgeAnalysisReport(BaseReportGenerator):
             if betw_vals:
                 s = distribution_summary(betw_vals, label=track)
                 avg_collab = sum(collab_vals) / max(len(collab_vals), 1)
-                findings += (
+                out += (
                     f"<li><strong>{track}</strong> (n={len(members):,}): "
                     f"betweenness median={s['median']:.6f}、"
                     f"平均協業者数={avg_collab:.0f}</li>"
                 )
-        findings += "</ul>"
+        out += "</ul>"
+        return out
 
-        # Box plot of betweenness by career track
+    def _make_career_track_betweenness_violin(self, track_groups: dict) -> go.Figure:
         fig = go.Figure()
         for idx, track in enumerate(sorted(track_groups,
                                            key=lambda t: len(track_groups[t]), reverse=True)):
@@ -656,22 +719,38 @@ class BridgeAnalysisReport(BaseReportGenerator):
                     fillcolor=hex_to_rgba(color, 0.3),
                     points="outliers" if len(betw_vals) > 40 else "all",
                 ))
-
         fig.update_layout(
             title="キャリアトラック別 媒介中心性分布",
             yaxis_title="媒介中心性",
             yaxis_type="log",
             violinmode="group",
         )
+        return fig
 
-        violations = sb.validate_findings(findings)
-        if violations:
-            findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
+    # ── Section 3b: Career Track Deeper — Cross-Track Collaboration ─
+
+    def _build_career_track_deeper(self, sb: SectionBuilder) -> ReportSection:
+        """Betweenness distribution by career track + cross-track collaboration matrix."""
+        rows = self._fetch_career_track_deeper_rows()
+
+        if not rows:
+            return ReportSection(
+                title="キャリアトラック別ネットワーク指標",
+                findings_html="<p>キャリアトラック別ネットワーク分析に必要なデータが利用不可。</p>",
+                section_id="career_track_deeper",
+            )
+
+        track_groups = self._group_by_career_track(rows)
+        findings = self._findings_career_track_network(track_groups, len(rows))
+        findings = append_validation_warnings(findings, sb)
 
         return ReportSection(
             title="キャリアトラック別ネットワーク指標",
             findings_html=findings,
-            visualization_html=plotly_div_safe(fig, "chart_career_track_betweenness", height=480),
+            visualization_html=plotly_div_safe(
+                self._make_career_track_betweenness_violin(track_groups),
+                "chart_career_track_betweenness", height=480,
+            ),
             method_note=(
                 "career_track 別の betweenness_centrality バイオリンプロット。"
                 "Y軸ログスケール。betweenness = 0 の人物は"
@@ -688,11 +767,11 @@ class BridgeAnalysisReport(BaseReportGenerator):
             section_id="career_track_deeper",
         )
 
-    # ── Section 4a: Betweenness by Scale Tier ──────────────────
+    # ── Section 4a helpers ─────────────────────────────────────
 
-    def _build_tier_betweenness(self, sb: SectionBuilder) -> ReportSection:
+    def _fetch_tier_betweenness_rows(self) -> list:
         try:
-            rows = self.conn.execute("""
+            return self.conn.execute("""
                 SELECT
                     fwc.scale_tier AS tier,
                     fwc.scale_label AS tier_label,
@@ -709,31 +788,26 @@ class BridgeAnalysisReport(BaseReportGenerator):
                 ORDER BY fwc.scale_tier
             """).fetchall()
         except Exception:
-            rows = []
+            return []
 
-        if not rows:
-            return ReportSection(
-                title="作品規模Tier別 媒介中心性",
-                findings_html="<p>Tier別媒介中心性データが利用不可。</p>",
-                section_id="tier_betweenness",
-            )
-
-        findings = "<p>作品規模Tier別の平均媒介中心性と協業者数:</p><ul>"
+    def _findings_tier_betweenness(self, rows: list) -> str:
+        out = "<p>作品規模Tier別の平均媒介中心性と協業者数:</p><ul>"
         for r in rows:
             label = r["tier_label"] or f"Tier {r['tier']}"
-            findings += (
+            out += (
                 f"<li><strong>{label}</strong>: "
                 f"平均betweenness={r['avg_betweenness']:.6f}、"
                 f"平均degree={r['avg_degree']:.6f}、"
                 f"平均協業者数={r['avg_collaborators']:.0f}、"
                 f"n={r['n_persons']:,}</li>"
             )
-        findings += "</ul>"
+        out += "</ul>"
+        return out
 
+    def _make_tier_betweenness_bar(self, rows: list) -> go.Figure:
         tiers = [r["tier"] for r in rows]
         tier_labels = [r["tier_label"] or f"T{r['tier']}" for r in rows]
 
-        # Grouped bar: avg betweenness + avg degree
         fig = make_subplots(specs=[[{"secondary_y": True}]])
         fig.add_trace(go.Bar(
             x=tier_labels,
@@ -758,15 +832,30 @@ class BridgeAnalysisReport(BaseReportGenerator):
         )
         fig.update_yaxes(title_text="平均媒介中心性", secondary_y=False)
         fig.update_yaxes(title_text="平均協業者数", secondary_y=True)
+        return fig
 
-        violations = sb.validate_findings(findings)
-        if violations:
-            findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
+    # ── Section 4a: Betweenness by Scale Tier ──────────────────
+
+    def _build_tier_betweenness(self, sb: SectionBuilder) -> ReportSection:
+        rows = self._fetch_tier_betweenness_rows()
+
+        if not rows:
+            return ReportSection(
+                title="作品規模Tier別 媒介中心性",
+                findings_html="<p>Tier別媒介中心性データが利用不可。</p>",
+                section_id="tier_betweenness",
+            )
+
+        findings = self._findings_tier_betweenness(rows)
+        findings = append_validation_warnings(findings, sb)
 
         return ReportSection(
             title="作品規模Tier別 媒介中心性",
             findings_html=findings,
-            visualization_html=plotly_div_safe(fig, "chart_tier_betweenness", height=420),
+            visualization_html=plotly_div_safe(
+                self._make_tier_betweenness_bar(rows),
+                "chart_tier_betweenness", height=420,
+            ),
             method_note=(
                 "Average betweenness_centrality per scale_tier. "
                 "A person may appear in multiple tiers if credited on works of different tiers. "
@@ -784,11 +873,11 @@ class BridgeAnalysisReport(BaseReportGenerator):
             section_id="tier_betweenness",
         )
 
-    # ── Section 4b: Tier deeper — per-tier violin of betweenness ─
+    # ── Section 4b helpers ─────────────────────────────────────
 
-    def _build_tier_betweenness_deeper(self, sb: SectionBuilder) -> ReportSection:
+    def _fetch_tier_betweenness_deeper_rows(self) -> list:
         try:
-            rows = self.conn.execute("""
+            return self.conn.execute("""
                 SELECT
                     fwc.scale_tier AS tier,
                     fwc.scale_label AS tier_label,
@@ -802,16 +891,12 @@ class BridgeAnalysisReport(BaseReportGenerator):
                   AND fwc.scale_tier IS NOT NULL
             """).fetchall()
         except Exception:
-            rows = []
+            return []
 
-        if not rows:
-            return ReportSection(
-                title="Tier別 媒介中心性分布（詳細）",
-                findings_html="<p>Tier別媒介中心性分布の詳細データが利用不可。</p>",
-                section_id="tier_betweenness_deeper",
-            )
-
-        # Deduplicate: take max betweenness per person per tier
+    def _deduplicate_tier_person_betweenness(
+        self, rows: list
+    ) -> tuple[dict[int, list[float]], dict[int, str]]:
+        """Take max betweenness per (person, tier) pair; return grouped vals + label map."""
         tier_person: dict[tuple[int, str], float] = {}
         tier_labels_map: dict[int, str] = {}
         for r in rows:
@@ -824,20 +909,28 @@ class BridgeAnalysisReport(BaseReportGenerator):
         for (tier, _pid), val in tier_person.items():
             tier_groups.setdefault(tier, []).append(val)
 
-        findings = "<p>Tier別の媒介中心性全分布（ユニーク人物単位）:</p><ul>"
+        return tier_groups, tier_labels_map
+
+    def _findings_tier_betweenness_deeper(
+        self, tier_groups: dict, tier_labels_map: dict
+    ) -> str:
+        out = "<p>Tier別の媒介中心性全分布（ユニーク人物単位）:</p><ul>"
         for tier in sorted(tier_groups):
             vals = tier_groups[tier]
             if len(vals) >= 3:
                 s = distribution_summary(vals, label=f"tier_{tier}")
                 label = tier_labels_map.get(tier, f"Tier {tier}")
-                findings += (
+                out += (
                     f"<li><strong>{label}</strong> (n={s['n']:,}): "
                     f"{format_distribution_inline(s)}、"
                     f"{format_ci((s['ci_lower'], s['ci_upper']))}</li>"
                 )
-        findings += "</ul>"
+        out += "</ul>"
+        return out
 
-        # Violin per tier
+    def _make_tier_betweenness_violin(
+        self, tier_groups: dict, tier_labels_map: dict
+    ) -> go.Figure:
         fig = go.Figure()
         for tier in sorted(tier_groups):
             vals = tier_groups[tier]
@@ -852,22 +945,37 @@ class BridgeAnalysisReport(BaseReportGenerator):
                     fillcolor=hex_to_rgba(color, 0.3),
                     points="outliers" if len(vals) > 40 else "all",
                 ))
-
         fig.update_layout(
             title="Tier別 媒介中心性全分布（バイオリン）",
             yaxis_title="媒介中心性",
             yaxis_type="log",
             violinmode="group",
         )
+        return fig
 
-        violations = sb.validate_findings(findings)
-        if violations:
-            findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
+    # ── Section 4b: Tier deeper — per-tier violin of betweenness ─
+
+    def _build_tier_betweenness_deeper(self, sb: SectionBuilder) -> ReportSection:
+        rows = self._fetch_tier_betweenness_deeper_rows()
+
+        if not rows:
+            return ReportSection(
+                title="Tier別 媒介中心性分布（詳細）",
+                findings_html="<p>Tier別媒介中心性分布の詳細データが利用不可。</p>",
+                section_id="tier_betweenness_deeper",
+            )
+
+        tier_groups, tier_labels_map = self._deduplicate_tier_person_betweenness(rows)
+        findings = self._findings_tier_betweenness_deeper(tier_groups, tier_labels_map)
+        findings = append_validation_warnings(findings, sb)
 
         return ReportSection(
             title="Tier別 媒介中心性分布（詳細）",
             findings_html=findings,
-            visualization_html=plotly_div_safe(fig, "chart_tier_betweenness_violin", height=480),
+            visualization_html=plotly_div_safe(
+                self._make_tier_betweenness_violin(tier_groups, tier_labels_map),
+                "chart_tier_betweenness_violin", height=480,
+            ),
             method_note=(
                 "scale_tier 別の betweenness_centrality 全分布をバイオリンプロットで表示。"
                 "Tierごとに人物単位で重複排除（最大 betweenness を採用）。"

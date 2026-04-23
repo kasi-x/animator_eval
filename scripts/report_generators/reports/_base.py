@@ -25,6 +25,14 @@ if TYPE_CHECKING:
     from ..section_builder import ReportSection
 
 
+def append_validation_warnings(findings: str, sb: SectionBuilder) -> str:
+    """Append validation warnings to findings HTML if violations exist."""
+    violations = sb.validate_findings(findings)
+    if violations:
+        findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
+    return findings
+
+
 class BaseReportGenerator(ABC):
     """Abstract base for v2-compliant report generators.
 
