@@ -61,6 +61,21 @@
 - **T03 VA モジュール** `tests/test_va_modules.py`: +20 tests (TestVaAkm 4件・TestVaGraph 4件・TestEnsembleSynergy 3件 追加、計38件)
 - **T03 VA パイプライン** `tests/test_va_pipeline_phases.py`: 新規10 tests — graph_construction / core_scoring / supplementary_metrics / result_assembly 各 smoke test
 
+### source-aware upsert_person + normalize_primary_names_by_credits (2026-04-23)
+- `_SOURCE_PRIORITY` 定数: anilist=3, mal/seesaawiki/mediaarts=2, ann/jvmg/keyframe/allcinema=1
+- `upsert_person(conn, person, source="")` に `source` パラメータ追加: 優先度に基づく primary name 制御 + displaced 名を aliases へ保存
+- `normalize_primary_names_by_credits(conn)`: ETL + entity resolution 後に最多クレジット源の名前を primary に昇格
+- `PersonRow` / `Person` に `name_priority` フィールド追加 + `from_db_row()` マッピング
+- `PersonRow` に `name_ko`, `name_zh`, `nationality`, `hometown`, `gender` 追加 (DB 整合)
+- `integrate.py` 全5呼び出しに `source=` 引数追加 (anilist/ann/allcinema/seesaawiki/keyframe)
+- `tests/test_upsert_person_source.py`: 15 tests — 新規/高優先度上書き/低優先度スキップ/aliases 蓄積/normalize
+
+### 多言語検索・表示対応 (2026-04-23)
+- `search_persons()` に `name_ko`, `name_zh`, `aliases` LIKE 追加 (韓国語・中国語・別名検索)
+- `TestSearchPersons` 7 tests 追加 (`tests/test_database.py`)
+- report generators (db_loaders / bridge_analysis / network_analysis / network_graph / cooccurrence_groups / score_layers_analysis / generate_all_reports) の SQL COALESCE に `name_zh` 追加
+- `wikidata_role_map.py`: `src/scrapers/wikidata_role_map.py` に正しい map 切り出し済み確認
+
 ### DuckDB カード状態確認 (2026-04-23)
 - カード 01-04 完了確認: bronze_writer / 全6 scraper 移行済み / integrate_duckdb.py / gold_writer.py 存在確認
 - カード 05 (analysis cutover): data_loading.py 等が SQLite 継続使用 → 未完了

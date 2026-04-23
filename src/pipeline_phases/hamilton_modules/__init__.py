@@ -1,30 +1,45 @@
-"""Hamilton module package for Phase 9 analysis nodes.
+"""Hamilton module package for pipeline nodes (Phase 1-9).
 
-Each submodule contains pure functions that Hamilton treats as DAG nodes.
-All functions take ctx: PipelineContext as their sole input (H-1 pattern).
-H-2 will decompose PipelineContext into explicit typed inputs.
+H-1 (Phase 9 analysis): core, studio, genre, network, causal — ctx-based nodes.
+H-2 (Phase 5-8 scoring): scoring, metrics, assembly — ctx-based, chained ordering.
+H-3 (Phase 1-4 load/graph): loading, resolution — ctx-based, chained ordering.
+H-4 will replace ctx with explicit typed inputs throughout.
 
 Usage::
 
     from hamilton import driver
-    from hamilton.execution import executors
-    from src.pipeline_phases.hamilton_modules import core, studio, genre, network
+    from src.pipeline_phases.hamilton_modules import (
+        loading, resolution, scoring, metrics, assembly,
+        core, studio, genre, network, causal,
+    )
 
     dr = (
         driver.Builder()
-        .with_modules(core, studio, genre, network)
-        .with_executor(executors.SynchronousLocalTaskExecutor())
+        .with_modules(loading, resolution, scoring, metrics, assembly,
+                      core, studio, genre, network, causal)
         .build()
     )
     results = dr.execute(
-        final_vars=core.NODE_NAMES + studio.NODE_NAMES + genre.NODE_NAMES + network.NODE_NAMES,
+        final_vars=["results_post_processed"] + core.NODE_NAMES + ...,
         inputs={"ctx": context},
     )
 """
 
-from src.pipeline_phases.hamilton_modules import core, studio, genre, network, causal
+from src.pipeline_phases.hamilton_modules import (
+    assembly,
+    causal,
+    core,
+    genre,
+    loading,
+    metrics,
+    network,
+    resolution,
+    scoring,
+    studio,
+)
 
-ALL_NODE_NAMES: list[str] = (
+# Phase 9 analysis nodes (H-1)
+ANALYSIS_NODE_NAMES: list[str] = (
     core.NODE_NAMES
     + studio.NODE_NAMES
     + genre.NODE_NAMES
@@ -32,4 +47,39 @@ ALL_NODE_NAMES: list[str] = (
     + causal.NODE_NAMES
 )
 
-__all__ = ["core", "studio", "genre", "network", "causal", "ALL_NODE_NAMES"]
+# Phase 5-8 scoring nodes (H-2)
+SCORING_NODE_NAMES: list[str] = (
+    scoring.NODE_NAMES
+    + metrics.NODE_NAMES
+    + assembly.NODE_NAMES
+)
+
+# Phase 1-4 loading/graph nodes (H-3)
+LOADING_NODE_NAMES: list[str] = (
+    loading.NODE_NAMES
+    + resolution.NODE_NAMES
+)
+
+# All node names (Phase 1-9)
+ALL_NODE_NAMES: list[str] = (
+    LOADING_NODE_NAMES
+    + SCORING_NODE_NAMES
+    + ANALYSIS_NODE_NAMES
+)
+
+__all__ = [
+    "assembly",
+    "causal",
+    "core",
+    "genre",
+    "loading",
+    "metrics",
+    "network",
+    "resolution",
+    "scoring",
+    "studio",
+    "ALL_NODE_NAMES",
+    "ANALYSIS_NODE_NAMES",
+    "LOADING_NODE_NAMES",
+    "SCORING_NODE_NAMES",
+]

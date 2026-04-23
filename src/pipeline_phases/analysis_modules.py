@@ -550,9 +550,6 @@ def _run_temporal_pagerank(context: PipelineContext) -> Any:
     5. If resume_from <= checkpoint.last_year, the checkpoint contains stale inputs;
        discard it and recompute from scratch.
     """
-    import sqlite3
-
-    from src.database import DEFAULT_DB_PATH, load_birank_compute_state
     from src.utils.config import JSON_DIR
 
     checkpoint_path = JSON_DIR / "birank_graph_checkpoint.pkl"
@@ -560,15 +557,8 @@ def _run_temporal_pagerank(context: PipelineContext) -> Any:
     # --- compute fingerprint of current data ---
     current_fp = _compute_year_fingerprint(context.credits, context.anime_map)
 
-    # --- load stored fingerprint from DB ---
+    # --- birank_compute_state migrated to gold.duckdb (TODO Card 06 follow-up) ---
     stored_fp: dict[int, dict] = {}
-    try:
-        conn_check = sqlite3.connect(DEFAULT_DB_PATH)
-        conn_check.row_factory = sqlite3.Row
-        stored_fp = load_birank_compute_state(conn_check)
-        conn_check.close()
-    except Exception:
-        pass  # table not yet created → run from scratch
 
     # --- change detection: find the earliest year that changed ---
     resume_from = _find_earliest_changed_year(current_fp, stored_fp)
@@ -1090,39 +1080,24 @@ def _run_credit_stats(context: PipelineContext) -> Any:
 
 
 def _run_entry_cohort_attrition(context: PipelineContext) -> Any:
-    import sqlite3
-    from src.database import DEFAULT_DB_PATH
+    from src.analysis.gold_writer import gold_connect
 
-    conn = sqlite3.connect(DEFAULT_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
+    with gold_connect() as conn:
         return run_entry_cohort_attrition(conn)
-    finally:
-        conn.close()
 
 
 def _run_generational_health(context: PipelineContext) -> Any:
-    import sqlite3
-    from src.database import DEFAULT_DB_PATH
+    from src.analysis.gold_writer import gold_connect
 
-    conn = sqlite3.connect(DEFAULT_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
+    with gold_connect() as conn:
         return run_generational_health(conn)
-    finally:
-        conn.close()
 
 
 def _run_attrition_risk_model(context: PipelineContext) -> Any:
-    import sqlite3
-    from src.database import DEFAULT_DB_PATH
+    from src.analysis.gold_writer import gold_connect
 
-    conn = sqlite3.connect(DEFAULT_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
+    with gold_connect() as conn:
         return run_attrition_risk_model(conn)
-    finally:
-        conn.close()
 
 
 def _run_monopsony_analysis(context: PipelineContext) -> Any:
@@ -1130,15 +1105,10 @@ def _run_monopsony_analysis(context: PipelineContext) -> Any:
 
 
 def _run_gender_bottleneck(context: PipelineContext) -> Any:
-    import sqlite3
-    from src.database import DEFAULT_DB_PATH
+    from src.analysis.gold_writer import gold_connect_with_silver
 
-    conn = sqlite3.connect(DEFAULT_DB_PATH)
-    conn.row_factory = sqlite3.Row
-    try:
+    with gold_connect_with_silver() as conn:
         return run_gender_bottleneck(conn)
-    finally:
-        conn.close()
 
 
 def _run_succession_matrix(context: PipelineContext) -> Any:
@@ -2252,18 +2222,20 @@ def run_analysis_modules_hamilton(context: PipelineContext) -> dict:
     """
     from hamilton import driver
     from src.pipeline_phases.hamilton_modules import core, studio, genre, network, causal
-    from src.pipeline_phases.hamilton_modules import ALL_NODE_NAMES
+    from src.pipeline_phases.hamilton_modules import ANALYSIS_NODE_NAMES
+    from src.pipeline_phases.lifecycle import TimingHook
 
     dr = (
         driver.Builder()
         .with_modules(core, studio, genre, network, causal)
+        .with_adapters(TimingHook())
         .build()
     )
 
-    logger.info("hamilton_execute_start", node_count=len(ALL_NODE_NAMES))
+    logger.info("hamilton_execute_start", node_count=len(ANALYSIS_NODE_NAMES))
 
     results: dict[str, Any] = {}
-    for node_name in ALL_NODE_NAMES:
+    for node_name in ANALYSIS_NODE_NAMES:
         try:
             node_result = dr.execute([node_name], inputs={"ctx": context})
             results[node_name] = node_result.get(node_name)
@@ -2271,5 +2243,5 @@ def run_analysis_modules_hamilton(context: PipelineContext) -> dict:
             logger.warning("hamilton_node_failed", node=node_name, error=str(exc))
             results[node_name] = None
 
-    logger.info("hamilton_execute_complete", total=len(ALL_NODE_NAMES))
+    logger.info("hamilton_execute_complete", total=len(ANALYSIS_NODE_NAMES))
     return results

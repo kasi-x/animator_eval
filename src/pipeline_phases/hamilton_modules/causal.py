@@ -12,6 +12,8 @@ H-1 notes:
 
 from __future__ import annotations
 
+from hamilton.function_modifiers import tag
+
 from typing import Any
 
 import structlog
@@ -40,6 +42,7 @@ NODE_NAMES: list[str] = [
 ]
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def causal_identification(ctx: PipelineContext) -> Any:
     """Identify causal studio effects via DiD."""
     from src.analysis.causal.studio_identification import (
@@ -56,6 +59,7 @@ def causal_identification(ctx: PipelineContext) -> Any:
     return result
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def structural_estimation(ctx: PipelineContext) -> Any:
     """Structural estimation with fixed effects and DiD (research-grade).
 
@@ -78,12 +82,14 @@ def structural_estimation(ctx: PipelineContext) -> Any:
     return result
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def dml_analysis(ctx: PipelineContext) -> Any:
     """Double Machine Learning causal analysis."""
     from src.analysis.causal.dml import run_dml_analysis
     return run_dml_analysis(ctx.credits, ctx.anime_map, ctx.person_fe, ctx.studio_fe)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def compensation(ctx: PipelineContext) -> Any:
     """Batch compensation analysis.
 
@@ -95,6 +101,7 @@ def compensation(ctx: PipelineContext) -> Any:
     return {}
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def bias_detection(ctx: PipelineContext) -> Any:
     """Detect systematic biases in score distribution."""
     from src.analysis.bias_detector import detect_systematic_biases, generate_bias_report
@@ -107,6 +114,7 @@ def bias_detection(ctx: PipelineContext) -> Any:
     return result
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def entry_cohort_attrition(ctx: PipelineContext) -> Any:
     """Entry cohort attrition analysis.
 
@@ -117,6 +125,7 @@ def entry_cohort_attrition(ctx: PipelineContext) -> Any:
     return {}
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def generational_health(ctx: PipelineContext) -> Any:
     """Generational health metrics.
 
@@ -126,6 +135,7 @@ def generational_health(ctx: PipelineContext) -> Any:
     return {}
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def attrition_risk(ctx: PipelineContext) -> Any:
     """Attrition risk model.
 
@@ -135,12 +145,14 @@ def attrition_risk(ctx: PipelineContext) -> Any:
     return {}
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def monopsony(ctx: PipelineContext) -> Any:
     """Monopsony market power analysis (policy brief input)."""
     from src.analysis.market.monopsony import run_monopsony_analysis
     return run_monopsony_analysis(ctx.studio_assignments, ctx.person_fe)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def gender_bottleneck(ctx: PipelineContext) -> Any:
     """Gender bottleneck analysis.
 
@@ -150,6 +162,7 @@ def gender_bottleneck(ctx: PipelineContext) -> Any:
     return {}
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def undervalued_talent(ctx: PipelineContext) -> Any:
     """Undervalued talent identification.
 
@@ -160,6 +173,7 @@ def undervalued_talent(ctx: PipelineContext) -> Any:
     return {}
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def succession_matrix(ctx: PipelineContext) -> Any:
     """Succession matrix — who can replace whom (HR brief input)."""
     if not ctx.studio_assignments or not ctx.person_fe:
@@ -172,6 +186,7 @@ def succession_matrix(ctx: PipelineContext) -> Any:
         return {}
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def director_value_add(ctx: PipelineContext) -> Any:
     """Director value-add: mentor contribution to animator trajectories."""
     from src.analysis.mentor.director_value_add import run_director_value_add
@@ -179,12 +194,14 @@ def director_value_add(ctx: PipelineContext) -> Any:
     return run_director_value_add([], ctx.person_fe, ctx.credits, ctx.anime_map)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def team_chemistry(ctx: PipelineContext) -> Any:
     """Team chemistry analysis — collaboration effectiveness."""
     from src.analysis.team.chemistry import run_team_chemistry
     return run_team_chemistry(ctx.credits, ctx.anime_map, ctx.iv_scores)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def team_templates(ctx: PipelineContext) -> Any:
     """Cluster team composition patterns into archetypes."""
     from src.analysis.team.templates import cluster_team_patterns

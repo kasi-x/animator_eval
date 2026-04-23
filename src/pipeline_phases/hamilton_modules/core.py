@@ -6,6 +6,8 @@ All take ctx: PipelineContext for H-1 PoC; H-2 will decompose to explicit inputs
 
 from __future__ import annotations
 
+from hamilton.function_modifiers import tag
+
 from typing import Any
 
 import numpy as np
@@ -29,24 +31,28 @@ NODE_NAMES: list[str] = [
 ]
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def anime_stats(ctx: PipelineContext) -> Any:
     """Compute anime quality statistics."""
     from src.analysis.anime_stats import compute_anime_stats
     return compute_anime_stats(ctx.credits, ctx.anime_map, ctx.iv_scores)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def seasonal(ctx: PipelineContext) -> Any:
     """Compute seasonal activity patterns."""
     from src.analysis.seasonal import compute_seasonal_trends
     return compute_seasonal_trends(ctx.credits, ctx.anime_map, ctx.iv_scores)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def outliers(ctx: PipelineContext) -> Any:
     """Detect statistical outliers in score distribution."""
     from src.analysis.outliers import detect_outliers
     return detect_outliers(ctx.results)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def teams(ctx: PipelineContext) -> Any:
     """Analyze team composition patterns."""
     from src.analysis.team_composition import analyze_team_patterns
@@ -60,6 +66,7 @@ def teams(ctx: PipelineContext) -> Any:
     return analyze_team_patterns(ctx.credits, ctx.anime_map, person_scores=top_persons)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def crossval(ctx: PipelineContext) -> Any:
     """Cross-validate scores for statistical reliability (skipped when >200 persons)."""
     from src.analysis.crossval import cross_validate_scores
@@ -69,36 +76,42 @@ def crossval(ctx: PipelineContext) -> Any:
     return cross_validate_scores(ctx.persons, ctx.anime_list, ctx.credits, n_folds=n_folds)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def role_flow(ctx: PipelineContext) -> Any:
     """Compute role transition flows (career progression patterns)."""
     from src.analysis.role_flow import compute_role_flow
     return compute_role_flow(ctx.credits, ctx.anime_map)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def transitions(ctx: PipelineContext) -> Any:
     """Compute role transition matrix."""
     from src.analysis.transitions import compute_role_transitions
     return compute_role_transitions(ctx.credits, ctx.anime_map)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def time_series(ctx: PipelineContext) -> Any:
     """Compute time-series scores for trend analysis."""
     from src.analysis.time_series import compute_time_series
     return compute_time_series(ctx.credits, ctx.anime_map)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def decade_analysis(ctx: PipelineContext) -> Any:
     """Compute decade-level statistics."""
     from src.analysis.decade_analysis import compute_decade_analysis
     return compute_decade_analysis(ctx.credits, ctx.anime_map)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def bridges(ctx: PipelineContext) -> Any:
     """Detect bridge persons connecting communities."""
     from src.analysis.network.bridges import detect_bridges
     return detect_bridges(ctx.credits, collaboration_graph=ctx.collaboration_graph)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def mentorships(ctx: PipelineContext) -> Any:
     """Infer and build mentorship tree."""
     from src.analysis.mentorship import build_mentorship_tree, infer_mentorships
@@ -106,6 +119,7 @@ def mentorships(ctx: PipelineContext) -> Any:
     return build_mentorship_tree(inferred)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def milestones(ctx: PipelineContext) -> Any:
     """Compute career milestones for each person."""
     from src.analysis.milestones import compute_milestones

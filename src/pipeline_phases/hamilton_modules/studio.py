@@ -5,6 +5,8 @@ Hamilton nodes for studio profiling, benchmarking, clustering, and timeseries.
 
 from __future__ import annotations
 
+from hamilton.function_modifiers import tag
+
 from typing import Any
 
 from src.pipeline_phases.context import PipelineContext
@@ -21,12 +23,14 @@ NODE_NAMES: list[str] = [
 ]
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def studios(ctx: PipelineContext) -> Any:
     """Compute studio performance analysis."""
     from src.analysis.studio.profile import compute_studio_analysis
     return compute_studio_analysis(ctx.credits, ctx.anime_map, ctx.iv_scores)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def studio_timeseries(ctx: PipelineContext) -> Any:
     """Compute per-studio time-series metrics."""
     from src.analysis.studio.timeseries import compute_studio_timeseries
@@ -35,12 +39,14 @@ def studio_timeseries(ctx: PipelineContext) -> Any:
     )
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def studio_network(ctx: PipelineContext) -> Any:
     """Compute inter-studio collaboration network."""
     from src.analysis.studio.network import compute_studio_network
     return compute_studio_network(ctx.credits, ctx.anime_map)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def studio_clustering(ctx: PipelineContext) -> Any:
     """Cluster studios by talent density and collaboration patterns.
 
@@ -57,12 +63,14 @@ def studio_clustering(ctx: PipelineContext) -> Any:
     )
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def studio_talent_density(ctx: PipelineContext) -> Any:
     """Compute talent density metrics per studio."""
     from src.analysis.production_analysis import compute_studio_talent_density
     return compute_studio_talent_density(ctx.credits, ctx.anime_map, ctx.person_fe)
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def studio_benchmark_cards(ctx: PipelineContext) -> Any:
     """Compute studio benchmark cards (HR brief input)."""
     from src.analysis.studio.benchmark_card import compute_studio_benchmark_cards
@@ -72,6 +80,7 @@ def studio_benchmark_cards(ctx: PipelineContext) -> Any:
     )
 
 
+@tag(stage="phase9", cost="moderate", domain="analysis")
 def talent_pipeline(ctx: PipelineContext) -> Any:
     """Compute talent pipeline metrics (succession + development)."""
     from src.analysis.talent_pipeline import compute_talent_pipeline

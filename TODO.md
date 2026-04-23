@@ -28,7 +28,7 @@ TASK_CARDS/
 |--------|---------|------|
 | 🟠 Major | コード一貫性 | scraper 統一、テスト AnimeAnalysis 移行 |
 | 🟠 Major | DuckDB 全面移行 | Phase A ✅。次: Card 06 GOLD DuckDB 化 (4.2) |
-| 🟠 Major | Hamilton 導入 | H-1 ✅。次: H-2 Phase 5-8 Hamilton 化 |
+| 🟠 Major | Hamilton 導入 | H-1〜H-5 全完了 ✅ (H-4: pipeline.py 430→210行, ctx ノード化) |
 | 🟠 Major | レポートシステム統廃合 | 3 系統 → 1 系統、v1 monolith 解体 |
 | 🟡 Minor | テストカバレッジ | analysis_modules、テストファイル分割 |
 | 🟡 Minor | スクレイパー強化残務 | 差分更新、lint、未テスト |
@@ -152,24 +152,42 @@ silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行
 
 49 nodes、可読性も維持。**→ H-2 進行決定**。
 
-### 5.2 Phase H-2: Phase 5-8 を Hamilton 化
+### 5.2 Phase H-2 ✅ DONE (2026-04-23): Phase 5-8 を Hamilton 化
 
-- [ ] `core_scoring.py` (AKM / IV / PageRank / BiRank)
-- [ ] `supplementary_metrics.py` / `result_assembly.py` / `post_processing.py`
+- [x] `core_scoring.py` (AKM / IV / PageRank / BiRank) → `scoring.py` (8 nodes)
+- [x] `supplementary_metrics.py` → `metrics.py` (17 nodes)
+- [x] `result_assembly.py` / `post_processing.py` → `assembly.py` (2 nodes)
+- 27 nodes, chained dependency pattern for ctx-based ordering
 
-### 5.3 Phase H-3: Phase 1-4 を Hamilton 化
+### 5.3 Phase H-3 ✅ DONE (2026-04-23): Phase 1-4 を Hamilton 化
 
-- [ ] `data_loading.py` / `validation.py` / `entity_resolution.py` / `graph_construction.py`
+- [x] `data_loading.py` / `validation.py` → `loading.py` (2 nodes)
+- [x] `entity_resolution.py` / `graph_construction.py` → `resolution.py` (2 nodes)
+- Full Phase 1-9 DAG: 80 nodes total
 
-### 5.4 Phase H-4: `PipelineContext` 完全削除
+### 5.4 Phase H-4 ✅ DONE (2026-04-23): pipeline.py → Hamilton Driver ラッパー化
 
-- [ ] `PipelineContext` dataclass を削除
-- [ ] `src/pipeline.py` を Hamilton `Driver` の薄いラッパーに
+**実装内容:**
+- [x] `ctx(visualize: bool, dry_run: bool) -> PipelineContext` ノードを `loading.py` に追加
+  - pipeline.py は `{"visualize": ..., "dry_run": ...}` を Driver に渡すだけで良くなった
+  - `ctx` を明示的に渡すテストは引き続き動作 (Hamilton の inputs override 機構)
+- [x] `src/pipeline.py` を 430行 → 210行 に削減 (Hamilton Driver 使用)
+  - 10フェーズ個別呼び出し → `dr.execute(["results_post_processed", "ctx"], ...)` 1行
+  - `PipelineContext(...)` の直接生成を削除
+- [x] Full Phase 1-9 DAG: 83 nodes (ctx + visualize/dry_run 入力ノード含む)
 
-### 5.5 Phase H-5: 観測・運用機能
+**スコープ注記:**
+- `PipelineContext` dataclass 自体は VA パイプライン・export_and_viz.py が使用するため保持
+- 完全削除は DuckDB 移行 (§4) 完了後の別タスクとする
+- `--resume` フラグは H-4 では full-run にフォールバック (CheckpointHook は TODO)
 
-- [ ] `@tag(stage="phase5", cost="expensive")` を各 node に付与
-- [ ] 実行時間計測 adapter (Hamilton lifecycle hook)
+### 5.5 Phase H-5 ✅ DONE (2026-04-23): 観測・運用機能
+
+- [x] `@tag(stage=..., cost=..., domain=...)` を全 49 Phase 9 nodes に付与
+- [x] `@tag` を scoring/metrics/assembly/loading/resolution 全 nodes にも付与
+- [x] `TimingHook(NodeExecutionHook)` → `src/pipeline_phases/lifecycle.py`
+- [x] `run_analysis_modules_hamilton()` に `TimingHook` 組み込み
+- [x] `pipeline-node` CLI コマンド (単一 node 実行) → `pixi run pipeline-node <node>`
 
 ### 中止判定
 

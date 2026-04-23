@@ -2271,3 +2271,58 @@ def performance(
     except Exception as e:
         console.print(f"[red]✗ Failed to load report: {e}[/red]")
         raise
+
+
+@app.command("pipeline-node")
+def pipeline_node(
+    node_name: str = typer.Argument(..., help="Hamilton node name to execute"),
+    db: str = typer.Option("", help="Database path (default: project default)"),
+) -> None:
+    """Execute a single Hamilton node and print its result.
+
+    Useful for partial re-execution or debugging individual pipeline steps.
+    Requires the full pipeline context to be bootstrapped first.
+
+    Example::
+
+        pixi run python -m src.cli pipeline-node akm_estimation
+        pixi run python -m src.cli pipeline-node graphs_built
+    """
+    from hamilton import driver
+    from src.pipeline_phases.hamilton_modules import (
+        assembly, causal, core, genre, loading, metrics,
+        network, resolution, scoring, studio,
+    )
+    from src.pipeline_phases.lifecycle import TimingHook
+
+    dr = (
+        driver.Builder()
+        .with_modules(loading, resolution, scoring, metrics, assembly,
+                      core, studio, genre, network, causal)
+        .with_adapters(TimingHook())
+        .build()
+    )
+
+    # Validate node exists
+    available = {v.name for v in dr.list_available_variables()}
+    if node_name not in available:
+        close = sorted(n for n in available if node_name.lower() in n.lower())[:5]
+        console.print(f"[red]Node '{node_name}' not found.[/red]")
+        if close:
+            console.print(f"Did you mean: {', '.join(close)}")
+        raise typer.Exit(1)
+
+    from src.pipeline_phases.context import PipelineContext
+    ctx = PipelineContext(visualize=False, dry_run=False)
+
+    try:
+        result = dr.execute([node_name], inputs={"ctx": ctx})
+        value = result.get(node_name)
+        console.print(f"[green]✓[/green] {node_name}: ", end="")
+        if isinstance(value, (dict, list)):
+            console.print(f"{type(value).__name__}[{len(value)}]")
+        else:
+            console.print(repr(value)[:200])
+    except Exception as exc:
+        console.print(f"[red]✗ {node_name} failed: {exc}[/red]")
+        raise typer.Exit(1)

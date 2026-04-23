@@ -15,6 +15,7 @@ pipeline-viz = "python -m src.pipeline --visualize"
 pipeline-inc = "python -m src.pipeline --incremental"
 pipeline-resume = "python -m src.pipeline --resume"
 pipeline-llm = { cmd = "python -m src.pipeline", env = { ANIMETOR_LLM = "1" } }
+pipeline-node = "python -m src.cli pipeline-node"  # H-5: partial re-execution
 
 # Development tools — 4-tier test strategy
 # --dist loadscope: keeps class tests on one worker → class-scoped fixtures run once, not N×
@@ -39,7 +40,6 @@ bench-duckdb-synth = "python benchmarks/bench_duckdb.py --synth --repeat 5"
 
 # Reports & Explorer
 reports = "PYTHONNOUSERSITE=1 python scripts/generate_all_reports.py"
-reports-new = "PYTHONNOUSERSITE=1 python -m src.reporting.cli"
 build-explorer = "cd cmd/explorer && go build -o ../../bin/explorer ."
 explorer = "bin/explorer -data ./result/json -static ./static/explorer -port 3000"
 
@@ -140,18 +140,6 @@ rust = ">=1.75"
 maturin = ">=1.11.5,<2"
 
 # ============================================================================
-# Feature: viz — Julia/CairoMakie visualization (SVG output)
-# ============================================================================
-[feature.viz.dependencies]
-julia = ">=1.10"
-
-[feature.viz.pypi-dependencies]
-juliacall = ">=0.9"
-
-[feature.viz.tasks]
-setup-julia = "python scripts/setup_julia_env.py"
-
-# ============================================================================
 # Feature: neo4j — Neo4j graph database export (optional)
 # ============================================================================
 [feature.neo4j.pypi-dependencies]
@@ -169,5 +157,3 @@ scrape = ["scrape"]
 analysis = ["analysis"]
 # serve: API server with analysis backend
 serve = ["analysis", "api", "db"]
-# viz: analysis + Julia/CairoMakie SVG generation
-viz = ["analysis", "viz"]

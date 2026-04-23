@@ -59,13 +59,13 @@ class TestHamiltonDagConstruction:
     def test_all_node_names_are_in_dag(self):
         from hamilton import driver
         from src.pipeline_phases.hamilton_modules import (
-            ALL_NODE_NAMES,
+            ANALYSIS_NODE_NAMES,
             core, studio, genre, network, causal,
         )
 
         dr = driver.Builder().with_modules(core, studio, genre, network, causal).build()
         available = {v.name for v in dr.list_available_variables()}
-        for name in ALL_NODE_NAMES:
+        for name in ANALYSIS_NODE_NAMES:
             assert name in available, f"Node '{name}' not found in Hamilton DAG"
 
     def test_ctx_is_input_node(self):
@@ -79,14 +79,14 @@ class TestHamiltonDagConstruction:
     def test_total_node_count(self):
         from hamilton import driver
         from src.pipeline_phases.hamilton_modules import (
-            ALL_NODE_NAMES,
+            ANALYSIS_NODE_NAMES,
             core, studio, genre, network, causal,
         )
 
         dr = driver.Builder().with_modules(core, studio, genre, network, causal).build()
-        # ALL_NODE_NAMES + ctx input = total
+        # ANALYSIS_NODE_NAMES (Phase 9) + ctx input = total
         n_available = len([v for v in dr.list_available_variables() if v.name != "ctx"])
-        assert n_available == len(ALL_NODE_NAMES)
+        assert n_available == len(ANALYSIS_NODE_NAMES)
 
 
 # ---------------------------------------------------------------------------
@@ -164,10 +164,10 @@ class TestRunAnalysisModulesHamilton:
 
     def test_result_keys_match_node_names(self, minimal_context):
         from src.pipeline_phases.analysis_modules import run_analysis_modules_hamilton
-        from src.pipeline_phases.hamilton_modules import ALL_NODE_NAMES
+        from src.pipeline_phases.hamilton_modules import ANALYSIS_NODE_NAMES
 
         results = run_analysis_modules_hamilton(minimal_context)
-        for name in ALL_NODE_NAMES:
+        for name in ANALYSIS_NODE_NAMES:
             assert name in results, f"Missing key '{name}' in Hamilton results"
 
     def test_does_not_raise(self, minimal_context):
