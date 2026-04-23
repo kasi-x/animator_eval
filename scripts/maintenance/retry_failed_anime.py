@@ -30,7 +30,6 @@ from rich.table import Table
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.update_anime_credits import fetch_and_update_anime
-from src.db import get_connection, init_db
 from src.scrapers.anilist_scraper import AniListClient
 
 logger = structlog.get_logger()

@@ -1,0 +1,8 @@
+{"source": "wikidata", "path": "/home/user/dev/animetor_eval/logs/scrapers/wikidata_2026-04-24.jsonl", "event": "scraper_log_file_attached", "level": "info", "timestamp": "2026-04-23T19:24:45.177022Z"}
+{"log_file": "/home/user/dev/animetor_eval/logs/scrapers/wikidata_2026-04-24.jsonl", "event": "wikidata_fetch_command_start", "level": "info", "timestamp": "2026-04-23T19:24:45.177200Z"}
+{"source": "wikidata", "offset": 0, "event": "fetching_wikidata", "level": "info", "timestamp": "2026-04-23T19:24:45.217668Z"}
+{"source": "wikidata", "url": "https://query.wikidata.org/sparql", "status": 504, "wait_s": 8, "attempt": 1, "max_attempts": 8, "event": "http_rate_limited", "level": "warning", "timestamp": "2026-04-23T19:25:50.683872Z"}
+{"source": "wikidata", "path": "/home/user/dev/animetor_eval/logs/scrapers/wikidata_2026-04-24.jsonl", "event": "scraper_log_file_attached", "level": "info", "timestamp": "2026-04-23T19:27:03.038898Z"}
+{"log_file": "/home/user/dev/animetor_eval/logs/scrapers/wikidata_2026-04-24.jsonl", "event": "wikidata_fetch_command_start", "level": "info", "timestamp": "2026-04-23T19:27:03.039033Z"}
+{"source": "wikidata", "offset": 0, "event": "fetching_wikidata", "level": "info", "timestamp": "2026-04-23T19:27:03.078018Z"}
+{"source": "wikidata", "url": "https://query.wikidata.org/sparql", "status": 429, "wait_s": 40, "attempt": 1, "max_attempts": 8, "event": "http_rate_limited", "level": "warning", "timestamp": "2026-04-23T19:28:04.369702Z"}

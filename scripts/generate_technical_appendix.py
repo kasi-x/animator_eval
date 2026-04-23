@@ -147,7 +147,7 @@ if __name__ == "__main__":
         if args.validate_only:
             log.info("technical_appendix_validate_mode")
             is_valid, results = validate_appendix()
-            print(f"\n✅ Validation passed" if is_valid else f"\n❌ Validation failed")
+            print("\n✅ Validation passed" if is_valid else "\n❌ Validation failed")
             print(f"   {results['total_reports']} reports, {len(results.get('errors', []))} issues")
             if results.get('errors'):
                 print("\nErrors:")

@@ -893,14 +893,14 @@ class IndustryOverviewReport(BaseReportGenerator):
                 y=[entry_by_gender[g_label].get(yr, 0) for yr in valid_years],
                 name=f"参入（{g_name}）", mode="lines",
                 line=dict(color="#06D6A0", width=2),
-                hovertemplate=f"Entry %{{x}}: %{{y:,}}<extra></extra>",
+                hovertemplate="Entry %{x}: %{y:,}<extra></extra>",
             ))
             fig_g.add_trace(go.Scatter(
                 x=exit_xs,
                 y=[exit_by_gender[g_label].get(yr, 0) for yr in exit_xs],
                 name=f"退職（{g_name}）", mode="lines",
                 line=dict(color="#EF476F", width=2, dash="dot"),
-                hovertemplate=f"Exit %{{x}}: %{{y:,}}<extra></extra>",
+                hovertemplate="Exit %{x}: %{y:,}<extra></extra>",
             ))
             fig_g.update_layout(
                 title=f"B. 参入 vs 退職 -- {g_name}",
@@ -1467,7 +1467,7 @@ class IndustryOverviewReport(BaseReportGenerator):
 
         findings = (
             "<p>役職別の年次参入・退職数。"
-            f"アニメーター（動画/原画）が件数で最大カテゴリを占める。</p>"
+            "アニメーター（動画/原画）が件数で最大カテゴリを占める。</p>"
         )
 
         return ReportSection(
@@ -1689,7 +1689,7 @@ class IndustryOverviewReport(BaseReportGenerator):
         viz_html = plotly_div_safe(fig_g, "chart_g_studio", height=420)
 
         findings = (
-            f"<p>述べ参加人年で見た上位8スタジオ: "
+            "<p>述べ参加人年で見た上位8スタジオ: "
             + ", ".join(f"{s} ({studio_total[s]:,})" for s in top_studios[:4])
             + f" 他 {len(top_studios) - 4} スタジオ。</p>"
         )
@@ -1759,7 +1759,7 @@ class IndustryOverviewReport(BaseReportGenerator):
         viz_html = plotly_div_safe(fig_h, "chart_h_country", height=380)
 
         findings = (
-            f"<p>述べクレジット人年で見た上位5カ国: "
+            "<p>述べクレジット人年で見た上位5カ国: "
             + ", ".join(
                 f"{c} ({country_total[c]:,})" for c in top_countries
             )

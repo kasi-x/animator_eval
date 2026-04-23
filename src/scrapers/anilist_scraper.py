@@ -809,11 +809,15 @@ async def _fetch_staff_phase(
     time_module,
     studios_pending=None,
     relations_pending=None,
+    since_ids=None,
 ):
     """Phase 2A: Fetch staff lists (credits and person IDs) for each anime.
 
     Iterates over all anime, fetches minimal staff data, saves anime/credits
     to the database, and handles checkpointing.
+
+    Args:
+        since_ids: Set of anime IDs already fetched (skip them) or None.
 
     Returns:
         set of all person IDs that need to be fetched in Phase 2B.
@@ -823,6 +827,7 @@ async def _fetch_staff_phase(
     from rich.console import Group
     from rich.text import Text
 
+    since_ids = since_ids or set()
     console.print()
     console.print(
         Rule("[bold cyan]フェーズ2A: スタッフリスト収集[/bold cyan]", style="cyan")
@@ -1840,6 +1845,7 @@ def main(
                 time_module,
                 studios_pending=studios_pending,
                 relations_pending=relations_pending,
+                since_ids=since_ids,
             )
 
             # Phase 2A サマリ

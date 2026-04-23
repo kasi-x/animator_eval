@@ -97,7 +97,7 @@ class RetryingHttpClient:
 
                 return resp
 
-            except httpx.HTTPError as e:
+            except httpx.HTTPError:
                 if attempt < 4:
                     await asyncio.sleep(2 ** (attempt + 1))
                 else:

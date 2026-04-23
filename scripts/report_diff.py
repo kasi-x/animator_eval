@@ -81,7 +81,7 @@ def show_brief_diff(brief_id: str, brief_type: str = "generated") -> None:
     print("=" * 60)
     
     if old_data is None:
-        print(f"  (No prior version in git)")
+        print("  (No prior version in git)")
         print(f"  • Sections: {len(new_data.get('sections', {}))}")
         print(f"  • Method gates: {len(new_data.get('method_gates', []))}")
         print(f"  • Generated: {new_data.get('generated_at', 'N/A')}")
@@ -120,11 +120,11 @@ def show_appendix_diff() -> None:
         log.warning("no_git_version", file=file_path)
         old_data = None
     
-    print(f"\n📚 Technical Appendix")
+    print("\n📚 Technical Appendix")
     print("=" * 60)
     
     if old_data is None:
-        print(f"  (No prior version in git)")
+        print("  (No prior version in git)")
         metadata = new_data.get('metadata', {})
         print(f"  • Total reports: {metadata.get('total_reports', 0)}")
         print(f"  • Active reports: {metadata.get('active_reports', 0)}")

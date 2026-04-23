@@ -1,7 +1,6 @@
 """Phase 9 analysis_modules parallel execution tests."""
 
 import os
-import pytest
 from concurrent.futures import ThreadPoolExecutor
 
 from src.pipeline_phases.analysis_modules import (

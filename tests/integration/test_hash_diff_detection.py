@@ -1,12 +1,10 @@
 """E2E test for hash-based diff detection in §7.1 scraper + integrate workflow."""
 
-import sqlite3
 import tempfile
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import duckdb
-import pytest
 
 from src.scrapers.hash_utils import hash_anime_data
 
@@ -43,7 +41,6 @@ def test_hash_diff_detection_skip_unchanged():
         # Simulate second scrape: same anime, same hash
         anime1_v2 = {"id": "anime_1", "title_ja": "Test Anime 1"}  # Identical
         hash1_v2 = hash_anime_data(anime1_v2)
-        now2 = now + timedelta(hours=1)
 
         # Test the hash comparison logic (simulate DuckDB filtered WHERE clause)
         existing = conn.execute(

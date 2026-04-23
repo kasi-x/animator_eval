@@ -13,11 +13,9 @@ import sqlite3
 import sys
 from collections import defaultdict
 from datetime import datetime
-from math import log1p
 from pathlib import Path
 from statistics import mean, median, stdev
 
-import numpy as np
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -25,7 +23,6 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from src.db import get_connection
-from src.runtime.models import Role
 
 JSON_DIR = Path("result/json")
 REPORTS_DIR = Path("result/reports")

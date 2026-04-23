@@ -25,7 +25,6 @@ sys.path.insert(0, str(Path(__file__).parents[2]))
 from src.db import get_connection, init_db
 from src.utils.name_utils import (
     detect_name_script,
-    infer_nationalities,
     _HOMETOWN_CACHE,
     _llm_infer_nationality,
     _save_hometown_cache,
