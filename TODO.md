@@ -10,13 +10,12 @@
 
 | 優先度 | カテゴリ | 内容 |
 |--------|---------|------|
-| 🟡 Minor | テストカバレッジ | analysis_modules ユニットテスト、tests/ ディレクトリ整理 |
-| 🟡 Minor | スクレイパー強化 | 差分更新、retry refactor |
 | 🟡 Maintenance | スキーマ後続 | v56 多言語・v57 構造的メタデータのフォローアップ |
-| 🟢 Future | DuckDB 残務 | studio_affiliation 移植、entity resolution 書き込み経路 |
-| 🟢 Future | feat_* 層別分離 | L2/L3 分割 |
+| 🟡 Minor | スクレイパー強化 | §7.1 差分更新の残務 (hash 計算 / フィルタ / E2E)、retry refactor |
+| 🟢 Future | データ修正 | WIKIDATA_ROLE_MAP 修正後の JVMG credits 再マップ |
+| 🟢 Future | アーキテクチャ | similarity.py / recommendation.py 重複確認 |
 
-**完了済み大項目**: DuckDB §4 全フェーズ ✅、Hamilton H-1〜H-7 ✅、レポート統廃合 §8 ✅、アーキテクチャ §9/11 ✅、ドキュメント §12 ✅
+**完了済み大項目** (→ `DONE.md`): anime.score 汚染除去、Phase 1-4 基盤、DuckDB §4 全フェーズ、Hamilton H-1〜H-7 (PipelineContext 完全削除)、レポート統廃合 §8、アーキテクチャ §9/11、ドキュメント §12、テストカバレッジ §6、feat_* 層別分離 §13、scraper queries/parsers 分離 §3
 
 ---
 
@@ -33,64 +32,9 @@
 
 ---
 
-## SECTION 3: コード一貫性 残務
+## SECTION 3: データ修正 残務
 
-- [x] 他 scraper クエリ・パース関数を `src/scrapers/queries/` / `src/scrapers/parsers/` に分離 (2026-04-24)
 - [ ] 既存 JVMG-source の credits を再スクレイプ or 再マップ (WIKIDATA_ROLE_MAP 修正後)
-
----
-
-## SECTION 4: DuckDB 残務
-
-§4.1〜§4.5 完了 (詳細: DONE.md)。
-
-- [x] `compute_feat_studio_affiliation` DuckDB 移植 — silver に studios/anime_studios ETL 追加、feat_precompute.py に compute_feat_studio_affiliation_ddb() 追加、pipeline Phase 1.5 組み込み (2026-04-24)
-- [x] Entity resolution 書き込み経路 DuckDB 化 — gold_writer.py に ops_entity_resolution_audit DDL + write_entity_resolution_audit_ddb() 追加 (2026-04-24)
-- [x] Atlas migration DuckDB 環境再生成 — atlas.hcl に env "duckdb" 追加、migrations/legacy_sqlite/ へ旧 SQL 退避、migrations/duckdb/v1_initial.sql 生成 (2026-04-24)
-
----
-
-## SECTION 5: Hamilton 残務
-
-H-1〜H-7 完了 (詳細: DONE.md)。実装計画: `docs/ARCHITECTURE_CLEANUP.md` Phase C
-
-### H-7: PipelineContext 完全削除 ✅ 完了 (2026-04-24)
-
-**完了内容**: VA pipeline → typed inputs 化 + context.py 削除
-
-**進捗** (2026-04-24): Phase 1-8 + VA pure function 化完了。context.py 削除、195→0 参照。
-
-- [x] `pipeline_types.py` 作成 (LoadedData, EntityResolutionResult, GraphsResult, CoreScoresResult, SupplementaryMetricsResult, VAScoresResult)
-- [x] `data_loading.py` → pure function (→ LoadedData)
-- [x] `entity_resolution.py` → pure function (LoadedData → EntityResolutionResult)
-- [x] `graph_construction.py` → pure function (EntityResolutionResult → GraphsResult)
-- [x] Hamilton adapter 更新: loading.py, resolution.py
-- [x] metrics.py Phase 6 単純 8 nodes → typed inputs 変換 (engagement_decay, role_classification, career_analysis, director_circles, versatility_computed, network_density_computed, growth_trends_precomputed, career_tracks_inferred) (2026-04-24)
-- [x] metrics.py centrality_metrics + betweenness_cache ノード分離 (context 参照削除)
-- [x] scoring.py Phase 5 の 8 nodes → typed inputs 変換 (context 参照削除)
-- [x] metrics.py 残り 8 nodes → typed inputs 変換 (context 参照削除)
-- [x] `assembly.py` Hamilton node + `result_assembly.py` / `post_processing.py` 変換 (context 参照削除)
-- [x] VA pipeline を ctx を受け取らない形に refactor: core_scoring.py / graph_construction.py / supplementary_metrics.py / result_assembly.py → VAScoresResult 戻り値化 (2026-04-24)
-- [x] `export_and_viz.py` ctx 参照削除 (ExportContext 型 + dict パラメータ化)
-- [x] `src/pipeline_phases/context.py` を削除 (2026-04-24)
-- [x] PipelineCheckpoint 削除、lifecycle.py 簡略化 (2026-04-24)
-- [x] loading.py ctx ノード削除 → raw_data_loaded が LoadedData 直接返却 (2026-04-24)
-
-**影響度**:
-- context.py 削除 (315 行)
-- va/pipeline/_common.py 削除 (40 行)
-- 27 ファイル修正 (import / type hint / 関数シグニチャ)
-- 56 Hamilton node → typed inputs 対応完了
-- 195 PipelineContext 参照 → 0
-- commit 6da958d
-
----
-
-## SECTION 6: テストカバレッジ
-
-- [x] Phase 9 `analysis_modules.py` の並列実行テスト (2026-04-24): `tests/unit/test_analysis_modules.py` 16 tests — AnalysisTask・_execute_analysis_task・_run_task_batch スレッド安全性・失敗分離・ANALYSIS_TASKS 不変条件
-- [x] fixture を `tests/conftest.py` に集約 (2026-04-24): 9 fixtures をconftest に統一、19 ファイルから 6532 bytes の重複削除（自動スクリプト）
-- [x] `tests/unit/` / `tests/integration/` の最低限分離 (2026-04-24): unit→7ファイル (name_utils/models/protocols/episode_parser/parse_role/role_groups/normalize)、integration→6ファイル (integration/pipeline/pipeline_v55_smoke/statistical_invariants/hamilton_phase1_4/hamilton_phase5_8) を git mv で移動
 
 ---
 
@@ -98,16 +42,15 @@ H-1〜H-7 完了 (詳細: DONE.md)。実装計画: `docs/ARCHITECTURE_CLEANUP.md
 
 ### 7.1 差分更新 — Parquet + DuckDB ベース (進行中)
 
-**実装済み (2026-04-24)**:
-- [x] `hash_utils.py` 作成: 安定 SHA256 hash
-- [x] anilist_scraper `save_anime_batch_to_bronze()`: fetched_at + content_hash 追加
-- [x] integrate_duckdb.py anime DDL: fetched_at, content_hash カラム追加
-- [x] integrate_duckdb.py INSERT → REPLACE (upsert) に変更
-- [x] anilist_scraper `--since YYYY-MM-DD` mode: SILVER fetch 以降の差分のみ処理
+✅ **実装完了 (2026-04-24)**:
+- [x] `hash_utils.py` 作成
+- [x] anilist_scraper fetched_at/content_hash 追加
+- [x] ann / allcinema / seesaawiki scraper に hash 計算追加
+- [x] integrate_duckdb.py REPLACE upsert
+- [x] anilist `--since YYYY-MM-DD` mode
 
-**次：**
-- [ ] ann / allcinema / seesaawiki scraper に hash 計算追加
-- [ ] hash 比較フィルタリング（Python or DuckDB）で冗長 update 最適化
+**残務 (パフォーマンス tuning)**:
+- [ ] hash 比較フィルタリング (WHERE content_hash != ?) で UPDATE skip
 - [ ] E2E テスト (--since mode で真の差分検出確認)
 
 ### 7.3 anilist_scraper retry refactor (任意)
@@ -122,28 +65,19 @@ H-1〜H-7 完了 (詳細: DONE.md)。実装計画: `docs/ARCHITECTURE_CLEANUP.md
 
 ---
 
-## SECTION 13: 将来タスク
-
-- [x] `agg_person_career` (L2) / `feat_career_scores` (L3) 分割 (2026-04-24)
-- [x] `agg_person_network` (L2) / `feat_network_scores` (L3) 分割 (2026-04-24)
-- [x] `corrections_*` テーブル: クレジット年補正・ロール正規化の修正差分追跡 (2026-04-24)
-
----
-
 ## 実施順序
 
 ```
-次 (任意・並行可):
+短期 (独立・並行可):
   §1    v56/v57 スキーマ後続タスク
-  §6    テスト整理
+  §7.1  差分更新の hash / フィルタ / E2E
 
 中期:
-  §4    DuckDB 残務 (studio_affiliation 等)
-  §7.1  差分更新 (スキーマ変更後)
+  §3    JVMG credits 再マップ (スキーマ確定後)
+  §7.3  retry refactor
 
 長期:
-  §5 H-7   PipelineContext 完全削除
-  §13      feat_* 分離、corrections テーブル
+  §9    similarity / recommendation 重複整理
 ```
 
 ---
