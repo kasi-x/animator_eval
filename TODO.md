@@ -197,6 +197,42 @@ silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行
 
 **結論**: H-2 以降を完全実施。Phase 5-8, Phase 1-4 の Hamilton 化、PipelineContext 削除へ進む。
 
+### 5.6 H-4 残務: `--resume` (CheckpointHook)
+
+**背景**: H-4 では `--resume` フラグは full-run にフォールバック。
+Hamilton lifecycle hooks を使ったチェックポイント保存・復元が必要。
+
+- [ ] `CheckpointHook(NodeExecutionHook)` を `lifecycle.py` に追加
+  - `run_after_node_execution` で `node_name == "results_post_processed"` を検出
+  - `node_kwargs["ctx"]` を取得して `PipelineCheckpoint(dir).save(8, ctx)` を呼ぶ
+- [ ] `pipeline.py` の resume パスを実装
+  - checkpoint load → `last_completed_phase >= 7` なら ctx restore + Phase 9 のみ実行
+  - `dr.execute(ANALYSIS_NODE_NAMES, inputs={"ctx": restored_ctx})` で Phase 9 を再実行
+  - Phase 5 (scoring) スキップは `overrides={"akm_estimation": …, …}` で対応予定
+- [ ] `PipelineCheckpoint.save(9, ctx)` を `dr.execute()` 完了後に呼ぶ (pipeline.py)
+  - Phase 5 チェックポイント: scoring node の side-effect ctx fields を保存する構造に変更が必要
+    → H-4 段階では Phase 7/9 のみ保存、Phase 5 スキップは別タスク
+
+### 5.7 H-4 残務: `PipelineContext` 完全削除
+
+**背景**: H-4 では ctx-based H-2 パターン(全 node が ctx を受け取り mutate)のまま。
+完全削除には全 83 node の引数を explicit typed inputs に書き直す必要がある。
+
+**ブロック要因**:
+- VA pipeline (`src/analysis/va/pipeline/`) が ctx を直接使用
+- `export_and_viz.py` (1507 行) に 71 箇所の ctx 参照
+- 全 scoring/metrics node が ctx フィールドを side-effect で書き込む
+
+**事前条件**: DuckDB §4 完了後 (silver → DuckDB 化で ctx.credits 等の型が変わるため)
+
+- [ ] 全 Hamilton node を `ctx: PipelineContext` → 明示的 typed inputs に変換
+  - 例: `akm_estimation(credits, anime_map) -> AKMResult`
+  - 例: `birank_computation(person_anime_graph, akm_estimation) -> BiRankResult`
+- [ ] VA pipeline を Hamilton module 化 (or ctx を受け取らない形に refactor)
+- [ ] `export_and_viz.py` を ExportSpec registry 経由の pure function 群に分解
+- [ ] `src/pipeline_phases/context.py` を削除
+- [ ] `DEFAULT_DB_PATH` monkeypatch を全テストから除去 (db_path を explicit input に)
+
 ---
 
 ## SECTION 6: テストカバレッジ
