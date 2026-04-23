@@ -3,8 +3,10 @@
 import time
 from pathlib import Path
 
+import duckdb
 import pytest
 
+from src.analysis.calc_cache import get_calc_execution_hashes
 from src.database import (
     get_connection,
     has_credits_changed_since_last_run,
@@ -102,6 +104,12 @@ def populated_db(tmp_path, monkeypatch):
 
     monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
 
+    import src.analysis.calc_cache
+
+    monkeypatch.setattr(
+        src.analysis.calc_cache, "DEFAULT_CACHE_PATH", tmp_path / "cache.duckdb"
+    )
+
     import src.pipeline
     import src.utils.config
     import src.utils.json_io
@@ -147,10 +155,19 @@ class TestScoringPipeline:
         finally:
             conn.close()
 
-    def test_phase9_skips_recompute_when_hash_unchanged(self, populated_db):
+    def test_phase9_skips_recompute_when_hash_unchanged(self, populated_db, tmp_path):
+        import src.analysis.calc_cache as _cc
+
+        cache_path = _cc.DEFAULT_CACHE_PATH
         run_scoring_pipeline()
 
-        conn = get_connection()
+        # Read first-run record from DuckDB cache
+        first_hashes = get_calc_execution_hashes(
+            "phase9_analysis_modules", path=cache_path
+        )
+        assert "anime_stats" in first_hashes
+
+        conn = duckdb.connect(str(cache_path))
         try:
             first = conn.execute(
                 """
@@ -161,17 +178,18 @@ class TestScoringPipeline:
                 """
             ).fetchone()
             assert first is not None
+            first_hash, first_computed_at, first_output_path = first
         finally:
             conn.close()
 
-        output_path = Path(first["output_path"])
+        output_path = Path(first_output_path)
         assert output_path.exists()
         first_mtime = output_path.stat().st_mtime
 
         time.sleep(1.1)
         run_scoring_pipeline()
 
-        conn = get_connection()
+        conn = duckdb.connect(str(cache_path))
         try:
             second = conn.execute(
                 """
@@ -182,12 +200,13 @@ class TestScoringPipeline:
                 """
             ).fetchone()
             assert second is not None
+            second_hash, second_computed_at, second_output_path = second
         finally:
             conn.close()
 
         second_mtime = output_path.stat().st_mtime
-        assert second["input_hash"] == first["input_hash"]
-        assert second["computed_at"] == first["computed_at"]
+        assert second_hash == first_hash
+        assert second_computed_at == first_computed_at
         assert second_mtime == first_mtime
 
 
@@ -277,3 +296,54 @@ class TestHasCreditsChanged:
 
         assert has_credits_changed_since_last_run(conn) is True
         conn.close()
+
+
+class TestResumePipeline:
+    """resume=True パスのテスト (CheckpointHook §5.6)."""
+
+    def test_resume_full_run_when_no_checkpoint(self, populated_db):
+        """チェックポイントなしなら resume=True でもフル実行される."""
+        results = run_scoring_pipeline(resume=True)
+        assert len(results) > 0
+
+    def test_resume_creates_checkpoint(self, populated_db, monkeypatch):
+        """CheckpointHook がパイプライン実行中に checkpoint を書き込む."""
+        import gzip, json
+        import src.pipeline
+
+        json_dir = src.pipeline.JSON_DIR
+        saved: list = []
+
+        orig_save = __import__(
+            "src.pipeline_phases.context", fromlist=["PipelineCheckpoint"]
+        ).PipelineCheckpoint.save
+
+        def _spy(self, phase, ctx):
+            orig_save(self, phase, ctx)
+            saved.append(phase)
+
+        monkeypatch.setattr(
+            __import__("src.pipeline_phases.context", fromlist=["PipelineCheckpoint"])
+            .PipelineCheckpoint,
+            "save",
+            _spy,
+        )
+
+        run_scoring_pipeline(resume=False)
+        assert 8 in saved, "CheckpointHook must save phase-8 checkpoint during run"
+
+    def test_resume_restores_same_result_count(self, populated_db):
+        """チェックポイントから再開しても結果件数が同じ."""
+        r1 = run_scoring_pipeline(resume=False)
+        r2 = run_scoring_pipeline(resume=True)
+        assert len(r2) == len(r1)
+
+    def test_resume_deletes_checkpoint_after_success(self, populated_db):
+        """パイプライン正常完了後にチェックポイントが削除される."""
+        import src.pipeline
+
+        json_dir = src.pipeline.JSON_DIR
+        run_scoring_pipeline(resume=False)
+        run_scoring_pipeline(resume=False)
+        ckpt = Path(json_dir) / "pipeline_checkpoint.json.gz"
+        assert not ckpt.exists()
