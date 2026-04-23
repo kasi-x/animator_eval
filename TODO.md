@@ -1,8 +1,8 @@
 # TODO.md — 未完了作業の一元管理
 
-作成日: 2026-04-22 / 最終更新: 2026-04-27
+作成日: 2026-04-22 / 最終更新: 2026-04-24
 
-本書はプロジェクト内のすべての**未完了**項目を一元管理するファイルです。完了済みサマリーは `DONE.md`、設計原則は `CLAUDE.md`。
+本書はプロジェクト内のすべての**未完了**項目を一元管理するファイルです。完了済みは `DONE.md`、設計原則は `CLAUDE.md`。
 
 ---
 
@@ -10,15 +10,14 @@
 
 | 優先度 | カテゴリ | 内容 |
 |--------|---------|------|
-| ✅ Done | レポートシステム統廃合 | `generate_reports_v2.py` → `generate_reports.py` リネーム、v1 shim 撤去 (2026-04-24 完了) |
 | 🟡 Minor | テストカバレッジ | analysis_modules ユニットテスト、tests/ ディレクトリ整理 |
-| 🟡 Minor | スクレイパー強化残務 | 差分更新、retry refactor |
-| 🟡 Maintenance | スキーマ後続タスク | v56 多言語・v57 構造的メタデータのフォローアップ |
-| 🟡 Maintenance | アーキテクチャ整理 | src/ 平置き解消、analysis/ subpackage 化 |
+| 🟡 Minor | スクレイパー強化 | 差分更新、retry refactor |
+| 🟡 Maintenance | スキーマ後続 | v56 多言語・v57 構造的メタデータのフォローアップ |
+| 🟢 Future | DuckDB 残務 | studio_affiliation 移植、entity resolution 書き込み経路 |
 | 🟢 Future | Hamilton H-7 | PipelineContext 完全削除 (ctx → typed inputs) |
 | 🟢 Future | feat_* 層別分離 | L2/L3 分割 |
 
-**完了済み大項目**: DuckDB §4 全フェーズ ✅、Hamilton H-1〜H-6 ✅、レポート統廃合 §8 ✅、アーキテクチャ §9 ✅、ドキュメント §12 ✅
+**完了済み大項目**: DuckDB §4 全フェーズ ✅、Hamilton H-1〜H-6 ✅、レポート統廃合 §8 ✅、アーキテクチャ §9/11 ✅、ドキュメント §12 ✅
 
 ---
 
@@ -27,54 +26,34 @@
 ### v56 多言語名対応
 
 - [ ] 既存データ再スクレイプ: `hometown` 取得後に韓国・中国名の `name_ja` 誤入りを修正
-- [x] ✅ `nationality` JSON カラムを使ったサンプルクエリを `docs/` に追加: `docs/V56_MULTILANG_SCHEMA_GUIDE.md` (7 queries) (2026-04-25)
-- [ ] ANN / allcinema スクレイパーの `name_ko`/`name_zh` 対応
+- [ ] ANN / allcinema スクレイパーの `name_ko`/`name_zh` 対応 (+ タイ/ベトナム等は `names_alt` へ)
 
 ### v57 構造的メタデータ
 
-- [x] ✅ `anime.country_of_origin` 多数決で `studios.country_of_origin` を埋める: `src/etl/populate_v57_metadata.py` + tests (2026-04-25)
-- [ ] `title.native` を `country_of_origin` 分岐で `title_zh`/`title_ko` へ格納 (v58 予定)
-- [x] ✅ `years_active` 自動計算: `src/etl/populate_v57_years_active.py` (YYYY-YYYY形式、クレジット期間から推定) (2026-04-26)
-
-### src/db/ 後続 ✅ 完了
-
-- [x] ✅ `init_db_v2` 抽出: `database_v2.py` → `src/db/schema.py` (1291 行 DDL + helper)
-- [x] ✅ `database_v2.py` 廃止: 121 行の薄いラッパー → **削除**
-- [x] ✅ `generate_dbml.py` 移行: SQLAlchemy 除去、SQL 直接解析 (regex-based)
-- [x] ✅ `models_v2.py` 廃止: コード内での参照なし → **削除**
+- [ ] `title.native` を `country_of_origin` 分岐で `titles_alt` JSON へ格納 (v58 予定、names_alt 同パターン)
 
 ---
 
 ## SECTION 3: コード一貫性 残務
 
-### 3.1 Scraper 残務 (任意)
-
-- [ ] 他 scraper クエリ・パース関数を `src/scrapers/queries/` / `src/scrapers/parsers/` に分離
-
-### 3.7 JVMG 再スクレイプ
-
+- [x] 他 scraper クエリ・パース関数を `src/scrapers/queries/` / `src/scrapers/parsers/` に分離 (2026-04-24)
 - [ ] 既存 JVMG-source の credits を再スクレイプ or 再マップ (WIKIDATA_ROLE_MAP 修正後)
 
 ---
 
-## SECTION 4: DuckDB 後続タスク
+## SECTION 4: DuckDB 残務
 
-§4.1〜§4.5 はすべて完了 (詳細: DONE.md)。残務:
+§4.1〜§4.5 完了 (詳細: DONE.md)。
 
-- [x] ✅ `scripts/generate_reports_v2.py` DuckDB 移行: gold_connect (GOLD layer) に切替
-- [x] ✅ `scripts/report_generators/db_loaders.py` DuckDB 対応: conn: Any に統一
-- [x] ✅ `CLAUDE.md` testing patterns: monkeypatch パターン明確化
-- [ ] `compute_feat_studio_affiliation` DuckDB 移植 (現在コメント化、anime_studios silver 化時に検討)
-- [ ] Entity resolution 書き込み経路 DuckDB 化 (現在未使用、将来の entity resolution phase で検討)
-- [ ] Atlas migration DuckDB 環境再生成 (低優先度、schema.dbml 参照)
+- [x] `compute_feat_studio_affiliation` DuckDB 移植 — silver に studios/anime_studios ETL 追加、feat_precompute.py に compute_feat_studio_affiliation_ddb() 追加、pipeline Phase 1.5 組み込み (2026-04-24)
+- [x] Entity resolution 書き込み経路 DuckDB 化 — gold_writer.py に ops_entity_resolution_audit DDL + write_entity_resolution_audit_ddb() 追加 (2026-04-24)
+- [ ] Atlas migration DuckDB 環境再生成 (低優先度)
 
 ---
 
 ## SECTION 5: Hamilton 残務
 
-H-1〜H-6 はすべて完了 (詳細: DONE.md)。
-
-実装計画: `docs/ARCHITECTURE_CLEANUP.md` Phase C
+H-1〜H-6 完了 (詳細: DONE.md)。実装計画: `docs/ARCHITECTURE_CLEANUP.md` Phase C
 
 ### H-7: PipelineContext 完全削除
 
@@ -89,14 +68,11 @@ H-1〜H-6 はすべて完了 (詳細: DONE.md)。
 
 ## SECTION 6: テストカバレッジ
 
-### 6.1 analysis_modules ユニットテスト
-
-- [ ] Phase 9 `analysis_modules.py` の並列実行テスト
-
-### 6.4 テストファイル整理
-
-- [ ] fixture を `tests/conftest.py` + `tests/fixtures/` に集約
-- [ ] `tests/unit/` / `tests/integration/` の最低限分離
+- [x] Phase 9 `analysis_modules.py` の並列実行テスト — 3 unit tests (2026-04-24)
+- [x] fixture を `tests/conftest.py` + `tests/fixtures/` に集約 — phase 1: shared DuckDB fixtures (2026-04-24)
+  - [ ] phase 2: duplicate fixture removal from 140+ test files (automated tooling needed)
+- [x] `tests/unit/` / `tests/integration/` の最低限分離 — directory structure + conftest inheritance (2026-04-24)
+  - [ ] phase 2: automated test classification by import pattern
 
 ---
 
@@ -114,55 +90,9 @@ H-1〜H-6 はすべて完了 (詳細: DONE.md)。
 
 ---
 
-## SECTION 8: レポートシステム
-
-§8.1〜§8.4 完了 (詳細: DONE.md)。
-
-- [x] ✅ `scripts/generate_reports_v2.py` → `scripts/generate_reports.py` リネーム (2026-04-24)
-- [x] ✅ v1 shim (`generate_all_reports.py`) 撤去、v2 に統合 (2026-04-24)
-
----
-
 ## SECTION 9: アーキテクチャ整理 残務
 
 - [ ] `similarity.py` と `recommendation.py` の機能重複確認 (低優先度)
-
----
-
-## SECTION 11: レイアウト・命名整理
-
-実装計画: `docs/ARCHITECTURE_CLEANUP.md` Phase A/B (ファイル移動マップ・import 置換表・検証手順)
-
-### 11.1 `src/` 直下の平置き解消 ✅ 完了
-
-```
-src/db/        ← ✅ 完了 (etl.py, scraper.py, init.py)
-src/runtime/   ← ✅ 完了 (api.py, cli.py, pipeline.py)
-src/infra/     ← ✅ 完了 (log.py, websocket.py, freshness.py)
-src/testing/   ← ✅ 完了 (fixtures.py, synthetic.py → fixtures.py)
-```
-
-### 11.2 `src/analysis/` 69 本平置きの統合 ✅ 完了
-
-- [x] ✅ `analysis/graph/`, `analysis/career/`, `analysis/entity/` に整理 (backward compat redirect files + __init__.py re-export) (2026-04-27)
-  - analysis/graph: graph.py, graph_rust.py, graphml_export.py, cooccurrence_groups.py, collaboration_strength.py, sparse_graph.py
-  - analysis/career: career.py, career_friction.py, growth.py, growth_acceleration.py, milestones.py, transitions.py, talent_pipeline.py
-  - analysis/entity: entity_resolution.py, entity_resolution_eval.py, ai_entity_resolution.py, ml_homonym_split.py
-  - Backward compat: src/analysis/{graph,graph_rust,graphml_export,career_friction,entity_resolution,entity_resolution_eval}.py redirect files
-
-### 11.3 命名ゆらぎの解消
-
-- [x] ✅ `_v2` suffix 廃止: `database_v2` / `models_v2` 削除完了 (§4 での対応)
-- [x] ✅ `generate_reports_v2.py` → `generate_reports.py` (2026-04-24)
-- [x] ✅ `src/infra/log.py` → `src/infra/logging.py` (2026-04-27)
-
----
-
-## SECTION 12: ドキュメント整理
-
-### 12.4 CLAUDE.md ドリフト修正 (随時)
-
-- [x] ✅ Testing patterns を `src.db.init.DEFAULT_DB_PATH` monkeypatch パターンに更新 (2026-04-27)
 
 ---
 
@@ -179,16 +109,15 @@ src/testing/   ← ✅ 完了 (fixtures.py, synthetic.py → fixtures.py)
 ```
 次 (任意・並行可):
   §1    v56/v57 スキーマ後続タスク
-  §6.4  テスト整理
+  §6    テスト整理
 
 中期:
-  §4    DuckDB 後続 (studio_affiliation 等)
+  §4    DuckDB 残務 (studio_affiliation 等)
   §7.1  差分更新 (スキーマ変更後)
-  §11   レイアウト整理
 
 長期:
   §5 H-7   PipelineContext 完全削除
-  §11-13   命名・feat_* 分離
+  §13      feat_* 分離、corrections テーブル
 ```
 
 ---
