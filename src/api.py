@@ -11,6 +11,10 @@ Endpoints:
   GET /api/anime/{id}       — anime detail
   GET /api/summary          — pipeline summary
   GET /api/health           — health check
+
+Report endpoints (mounted from ``src.api_reports``):
+  POST /api/briefs/generate, GET /api/briefs/status, /api/briefs/{id}/...
+  GET /api/appendix, POST /api/appendix/regenerate, WS /ws/regenerate
 """
 
 import os
@@ -38,6 +42,7 @@ from starlette.responses import JSONResponse
 from src.analysis.explain import explain_individual_profile
 from src.analysis.gold_writer import GoldReader
 from src.analysis.similarity import find_similar_persons
+from src.api_reports import router as reports_router
 from src.api_validators import AnimeId, PersonId, validate_query_string
 from src.database import (
     DEFAULT_DB_PATH,
@@ -125,6 +130,10 @@ async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
         status_code=429,
         content={"detail": "Rate limit exceeded. Try again later."},
     )
+
+
+# --- Report router (briefs, versioning, technical appendix) ---
+app.include_router(reports_router)
 
 
 # --- API Key Auth (for write endpoints) ---
