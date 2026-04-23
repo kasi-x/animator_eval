@@ -25,7 +25,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from src.db import get_connection
-from src.models import Role
+from src.runtime.models import Role
 
 JSON_DIR = Path("result/json")
 REPORTS_DIR = Path("result/reports")

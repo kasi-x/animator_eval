@@ -25,7 +25,7 @@ import httpx
 import structlog
 import typer
 
-from src.models import BronzeAnime, Credit, Person, parse_role
+from src.runtime.models import BronzeAnime, Credit, Person, parse_role
 
 log = structlog.get_logger()
 
@@ -483,7 +483,7 @@ def main(
     ),
 ) -> None:
     """Fetch credit data from KeyFrame Staff List."""
-    from src.log import setup_logging
+    from src.infra.log import setup_logging
     from src.scrapers.logging_utils import configure_file_logging
 
     setup_logging()

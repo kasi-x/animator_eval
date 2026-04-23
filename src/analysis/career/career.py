@@ -13,7 +13,7 @@ from typing import NamedTuple
 
 import structlog
 
-from src.models import AnimeAnalysis as Anime, Credit, Role
+from src.runtime.models import AnimeAnalysis as Anime, Credit, Role
 from src.utils.role_groups import CAREER_STAGE
 from src.utils.time_utils import get_year_quarter, yq_label
 

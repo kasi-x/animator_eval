@@ -1,7 +1,7 @@
 """ego_graph モジュールのテスト."""
 
 from src.analysis.network.ego_graph import extract_ego_graph
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_data():

@@ -1,7 +1,7 @@
 """collab_diversity モジュールのテスト."""
 
 from src.analysis.collab_diversity import compute_collab_diversity
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_data():

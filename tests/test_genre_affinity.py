@@ -1,7 +1,7 @@
 """genre_affinity モジュールのテスト."""
 
 from src.analysis.genre.affinity import compute_genre_affinity, _score_tier, _era
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_data():

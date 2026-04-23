@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from src.models import Role
+from src.runtime.models import Role
 
 
 def _run(coro):

@@ -6,7 +6,7 @@ from src.analysis.studio.timeseries import (
     compute_studio_timeseries,
     StudioTimeSeriesResult,
 )
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 @pytest.fixture

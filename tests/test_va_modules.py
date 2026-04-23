@@ -4,7 +4,7 @@ import pytest
 
 # VA modules import AnimeAnalysis but duck-type genres; use BronzeAnime so
 # character_diversity and replacement_difficulty can access anime.genres.
-from src.models import BronzeAnime as Anime, Character, CharacterVoiceActor, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Character, CharacterVoiceActor, Credit, Role
 
 
 # ---------------------------------------------------------------------------

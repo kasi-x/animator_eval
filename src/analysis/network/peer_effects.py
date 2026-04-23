@@ -12,7 +12,7 @@ import networkx as nx
 import numpy as np
 import structlog
 
-from src.models import AnimeAnalysis as Anime, Credit
+from src.runtime.models import AnimeAnalysis as Anime, Credit
 from src.utils.config import ROLE_WEIGHTS
 
 logger = structlog.get_logger()

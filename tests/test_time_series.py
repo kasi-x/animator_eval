@@ -1,7 +1,7 @@
 """time_series モジュールのテスト."""
 
 from src.analysis.time_series import compute_time_series
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_data():

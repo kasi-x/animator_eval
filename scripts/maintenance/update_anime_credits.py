@@ -32,7 +32,7 @@ from src.db import (
     upsert_character,
     upsert_studio,
 )
-from src.models import AnimeRelation, AnimeStudio, Character, CharacterVoiceActor, Credit, Studio, parse_role
+from src.runtime.models import AnimeRelation, AnimeStudio, Character, CharacterVoiceActor, Credit, Studio, parse_role
 from src.scrapers.anilist_scraper import (
     ANIME_STAFF_MINIMAL_QUERY,
     AniListClient,

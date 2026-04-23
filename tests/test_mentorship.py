@@ -5,7 +5,7 @@ from src.analysis.mentorship import (
     build_mentorship_tree,
     _compute_confidence,
 )
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_mentorship_data():

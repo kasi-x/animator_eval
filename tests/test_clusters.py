@@ -1,7 +1,7 @@
 """clusters モジュールのテスト."""
 
 from src.analysis.clusters import compute_cluster_stats, detect_collaboration_clusters
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_test_data():

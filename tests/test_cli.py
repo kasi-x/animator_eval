@@ -3,7 +3,7 @@
 import pytest
 from typer.testing import CliRunner
 
-from src.cli import app
+from src.runtime.cli import app
 
 runner = CliRunner()
 

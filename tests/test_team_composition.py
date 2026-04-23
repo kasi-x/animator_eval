@@ -1,7 +1,7 @@
 """team_composition モジュールのテスト."""
 
 from src.analysis.team_composition import analyze_team_patterns
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 # Roles used to populate large teams
 _FILLER_ROLES = [

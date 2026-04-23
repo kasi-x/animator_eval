@@ -1,6 +1,6 @@
 """クレジット重複マージのテスト."""
 
-from src.models import Credit, Role
+from src.runtime.models import Credit, Role
 from src.pipeline_phases.entity_resolution import _merge_duplicate_credits
 
 

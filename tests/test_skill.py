@@ -1,7 +1,7 @@
 """skill モジュールのテスト."""
 
 from src.analysis.skill import compute_skill_scores
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 class TestComputeSkillScores:

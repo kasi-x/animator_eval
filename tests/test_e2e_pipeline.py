@@ -8,14 +8,14 @@ import json
 
 import pytest
 
-from src.synthetic import generate_synthetic_data
+from src.testing.fixtures import generate_synthetic_data
 
 
 @pytest.fixture
 def synthetic_pipeline(monkeypatch, tmp_path):
     """合成データでパイプラインを実行するフィクスチャ."""
-    import src.database
-    import src.pipeline
+    import src.db.init
+    import src.runtime.pipeline
     import src.utils.json_io
     import src.utils.config
 
@@ -24,8 +24,8 @@ def synthetic_pipeline(monkeypatch, tmp_path):
     json_dir = tmp_path / "json"
     json_dir.mkdir()
 
-    monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
-    monkeypatch.setattr(src.pipeline, "JSON_DIR", json_dir)
+    monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(src.runtime.pipeline, "JSON_DIR", json_dir)
     monkeypatch.setattr(src.utils.json_io, "JSON_DIR", json_dir)
     monkeypatch.setattr(src.utils.config, "JSON_DIR", json_dir)
 
@@ -69,7 +69,7 @@ def synthetic_pipeline(monkeypatch, tmp_path):
     monkeypatch.setattr(src.analysis.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
 
     # パイプライン実行
-    from src.pipeline import run_scoring_pipeline
+    from src.runtime.pipeline import run_scoring_pipeline
 
     results = run_scoring_pipeline(visualize=False, dry_run=False)
 

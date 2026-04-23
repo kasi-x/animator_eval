@@ -9,7 +9,7 @@ from src.db import (
     upsert_anime,
     upsert_person,
 )
-from src.synthetic import generate_synthetic_data
+from src.testing.fixtures import generate_synthetic_data
 
 
 # ---------------------------------------------------------------------------
@@ -23,18 +23,18 @@ def synthetic_db(tmp_path_factory):
     db_path = tmp_path / "integration.db"
     json_dir = tmp_path / "json"
 
-    import src.database
-    import src.pipeline
+    import src.db.init
+    import src.runtime.pipeline
     import src.utils.config
     import src.utils.json_io
 
-    orig_db = src.database.DEFAULT_DB_PATH
-    orig_pipeline = src.pipeline.JSON_DIR
+    orig_db = src.db.init.DEFAULT_DB_PATH
+    orig_pipeline = src.runtime.pipeline.JSON_DIR
     orig_config = src.utils.config.JSON_DIR
     orig_json_io = src.utils.json_io.JSON_DIR
 
-    src.database.DEFAULT_DB_PATH = db_path
-    src.pipeline.JSON_DIR = json_dir
+    src.db.init.DEFAULT_DB_PATH = db_path
+    src.runtime.pipeline.JSON_DIR = json_dir
     src.utils.config.JSON_DIR = json_dir
     src.utils.json_io.JSON_DIR = json_dir
 
@@ -68,8 +68,8 @@ def synthetic_db(tmp_path_factory):
 
     yield db_path
 
-    src.database.DEFAULT_DB_PATH = orig_db
-    src.pipeline.JSON_DIR = orig_pipeline
+    src.db.init.DEFAULT_DB_PATH = orig_db
+    src.runtime.pipeline.JSON_DIR = orig_pipeline
     src.utils.config.JSON_DIR = orig_config
     src.utils.json_io.JSON_DIR = orig_json_io
     src.analysis.silver_reader.DEFAULT_SILVER_PATH = orig_silver
@@ -79,7 +79,7 @@ def synthetic_db(tmp_path_factory):
 @pytest.fixture(scope="class")
 def pipeline_results(synthetic_db):
     """パイプラインを1回だけ実行し、結果をクラス全体でキャッシュする."""
-    from src.pipeline import run_scoring_pipeline
+    from src.runtime.pipeline import run_scoring_pipeline
 
     return run_scoring_pipeline()
 
@@ -94,13 +94,13 @@ def synthetic_db_fresh(monkeypatch, tmp_path):
     db_path = tmp_path / "integration.db"
     json_dir = tmp_path / "json"
 
-    import src.database
-    import src.pipeline
+    import src.db.init
+    import src.runtime.pipeline
     import src.utils.config
     import src.utils.json_io
 
-    monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
-    monkeypatch.setattr(src.pipeline, "JSON_DIR", json_dir)
+    monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(src.runtime.pipeline, "JSON_DIR", json_dir)
     monkeypatch.setattr(src.utils.config, "JSON_DIR", json_dir)
     monkeypatch.setattr(src.utils.json_io, "JSON_DIR", json_dir)
 
@@ -160,7 +160,7 @@ class TestFullPipeline:
 
     def test_report_generation(self, pipeline_results, tmp_path):
         """レポート生成が正常に完了する."""
-        from src.report import (
+        from src.runtime.report import (
             generate_csv_report,
             generate_json_report,
             generate_text_report,
@@ -255,7 +255,7 @@ class TestFullPipeline:
 class TestDryRun:
     def test_dry_run_returns_empty(self, synthetic_db_fresh):
         """dry-run モードではスコア計算を行わず空リストを返す."""
-        from src.pipeline import run_scoring_pipeline
+        from src.runtime.pipeline import run_scoring_pipeline
 
         results = run_scoring_pipeline(dry_run=True)
         assert results == []

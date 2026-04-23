@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.models import (
+from src.runtime.models import (
     BronzeAnime as Anime,
     Character,
     CharacterVoiceActor,

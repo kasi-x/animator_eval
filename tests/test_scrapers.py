@@ -1,6 +1,6 @@
 """スクレイパーのパーサーテスト（APIは呼ばない）."""
 
-from src.models import Role
+from src.runtime.models import Role
 from src.scrapers.anilist_scraper import parse_anilist_anime, parse_anilist_staff
 from src.scrapers.mal_scraper import parse_anime_data, parse_staff_data
 

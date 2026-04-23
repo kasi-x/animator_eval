@@ -70,7 +70,7 @@ def load_persons_silver(path: Path | str | None = None) -> list:
       website_url → site_url
     Missing silver columns (aliases, mal_id, anilist_id, …) get safe defaults.
     """
-    from src.models import Person
+    from src.runtime.models import Person
 
     with silver_connect(path) as conn:
         rows = _rows_as_dicts(conn, "SELECT * FROM persons")
@@ -98,7 +98,7 @@ def load_anime_silver(path: Path | str | None = None) -> list:
     Related tables (anime_genres, anime_tags, anime_studios, anime_external_ids)
     are not yet in silver; genres/tags/studios default to empty lists.
     """
-    from src.models import AnimeAnalysis
+    from src.runtime.models import AnimeAnalysis
 
     with silver_connect(path) as conn:
         rows = _rows_as_dicts(conn, "SELECT * FROM anime")
@@ -142,7 +142,7 @@ def load_credits_silver(path: Path | str | None = None) -> list:
     and `credit_quarter` are not yet in silver (Card 06 scope); they default
     to None which is safe — callers that need them fall back to SQLite.
     """
-    from src.models import Credit, Role
+    from src.runtime.models import Credit, Role
 
     with silver_connect(path) as conn:
         rows = _rows_as_dicts(conn, "SELECT * FROM credits")
@@ -192,7 +192,7 @@ def silver_available(path: Path | str | None = None) -> bool:
 
 def load_all_credits(path: Path | str | None = None) -> list:
     """Load credits from silver.duckdb as Credit objects. Returns [] if unavailable."""
-    from src.models import Credit, Role
+    from src.runtime.models import Credit, Role
 
     if not silver_available(path):
         return []
@@ -224,7 +224,7 @@ def load_all_credits(path: Path | str | None = None) -> list:
 
 def load_all_anime(path: Path | str | None = None) -> list:
     """Load anime from silver.duckdb (base fields only). Returns [] if unavailable."""
-    from src.models import AnimeAnalysis
+    from src.runtime.models import AnimeAnalysis
 
     if not silver_available(path):
         return []

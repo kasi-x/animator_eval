@@ -122,7 +122,7 @@ class TestSilverConnect:
 class TestLoadPersonsSilver:
     def test_returns_person_models(self, silver_path):
         from src.analysis.silver_reader import load_persons_silver
-        from src.models import Person
+        from src.runtime.models import Person
 
         persons = load_persons_silver(silver_path)
         assert len(persons) == 2
@@ -156,7 +156,7 @@ class TestLoadPersonsSilver:
 class TestLoadAnimeSilver:
     def test_returns_anime_models(self, silver_path):
         from src.analysis.silver_reader import load_anime_silver
-        from src.models import AnimeAnalysis
+        from src.runtime.models import AnimeAnalysis
 
         anime_list = load_anime_silver(silver_path)
         assert len(anime_list) == 2
@@ -186,7 +186,7 @@ class TestLoadAnimeSilver:
 class TestLoadCreditsSilver:
     def test_returns_credit_models(self, silver_path):
         from src.analysis.silver_reader import load_credits_silver
-        from src.models import Credit
+        from src.runtime.models import Credit
 
         credits = load_credits_silver(silver_path)
         assert len(credits) == 3
@@ -201,7 +201,7 @@ class TestLoadCreditsSilver:
 
     def test_role_parsed(self, silver_path):
         from src.analysis.silver_reader import load_credits_silver
-        from src.models import Role
+        from src.runtime.models import Role
 
         credits = load_credits_silver(silver_path)
         roles = {c.role for c in credits}

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.models import Credit, Role
+from src.runtime.models import Credit, Role
 from src.pipeline_phases.context import PipelineContext
 from src.pipeline_phases.post_processing import post_process_results
 

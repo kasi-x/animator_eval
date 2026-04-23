@@ -11,7 +11,7 @@ from src.analysis.ai_entity_resolution import (
     ask_llm_if_same_person,
     check_llm_available,
 )
-from src.models import Person
+from src.runtime.models import Person
 
 
 class TestCheckLLMAvailable:

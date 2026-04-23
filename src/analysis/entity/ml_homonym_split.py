@@ -117,7 +117,7 @@ def build_feature_matrix(
         X: shape (len(valid_pids), n_features), L2 正規化済み
         valid_pids: MIN_CREDITS_FOR_SPLIT 以上のクレジットを持つ person_id リスト
     """
-    from src.models import Role
+    from src.runtime.models import Role
 
     all_roles = [r.value for r in Role]
     role_idx = {r: i for i, r in enumerate(all_roles)}

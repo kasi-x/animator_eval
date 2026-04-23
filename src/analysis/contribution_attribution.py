@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 import numpy as np
 import structlog
 
-from src.models import Credit, Role
+from src.runtime.models import Credit, Role
 
 logger = structlog.get_logger()
 

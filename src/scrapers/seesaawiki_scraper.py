@@ -30,7 +30,7 @@ import structlog
 import typer
 from bs4 import BeautifulSoup
 
-from src.models import BronzeAnime, Credit, Person, parse_role
+from src.runtime.models import BronzeAnime, Credit, Person, parse_role
 from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL, SCRAPE_DELAY_SECONDS
 
 log = structlog.get_logger()
@@ -3482,7 +3482,7 @@ def _save_studio_credit(
     stats: dict,
 ) -> None:
     """Write studio/company credit to BRONZE parquet."""
-    from src.models import AnimeStudio, Studio
+    from src.runtime.models import AnimeStudio, Studio
 
     studio_id = f"seesaa:s_{hashlib.sha256(unicodedata.normalize('NFKC', studio_name).encode()).hexdigest()[:12]}"
 
@@ -3716,7 +3716,7 @@ def scrape(
     ),
 ) -> None:
     """Fetch and parse credit data from SeesaaWiki."""
-    from src.log import setup_logging
+    from src.infra.log import setup_logging
 
     setup_logging()
 
@@ -3753,7 +3753,7 @@ def reparse(
     Re-parses all raw/*.html files and writes to BRONZE parquet.
     Use this after updating the parser.
     """
-    from src.log import setup_logging
+    from src.infra.log import setup_logging
 
     setup_logging()
 
@@ -3782,7 +3782,7 @@ def validate_samples(
     and asks the local LLM to check for systemic issues.
     """
     import random
-    from src.log import setup_logging
+    from src.infra.log import setup_logging
 
     setup_logging()
 

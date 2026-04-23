@@ -86,7 +86,6 @@ def populate_studios_country_of_origin(conn: duckdb.DuckDBPyConnection) -> dict[
 
 def main() -> None:
     import argparse
-    from pathlib import Path
 
     from src.analysis.gold_writer import gold_connect
 
@@ -94,7 +93,7 @@ def main() -> None:
         description="Populate studios.country_of_origin via majority vote from anime"
     )
     parser.add_argument("--gold-path", default=None, help="Path to GOLD DuckDB (default: env ANIMETOR_GOLD_DB_PATH)")
-    args = parser.parse_args()
+    parser.parse_args()
 
     with gold_connect() as conn:
         result = populate_studios_country_of_origin(conn)

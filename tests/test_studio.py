@@ -1,7 +1,7 @@
 """studio モジュールのテスト."""
 
 from src.analysis.studio.profile import compute_studio_analysis
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_test_data():

@@ -23,7 +23,7 @@ import sqlite3
 import pytest
 
 from src.db import get_connection, init_db
-from src.db_rows import TABLE_ROW_MAP, AnimeRow, PersonRow, ScoreRow
+from src.db.rows import TABLE_ROW_MAP, AnimeRow, PersonRow, ScoreRow
 
 
 # ---------------------------------------------------------------------------
@@ -99,7 +99,7 @@ def test_db_schema_subset_of_row_fields(fresh_conn, table, row_cls):
 
 def test_person_model_covers_person_row():
     """Person モデルが PersonRow の主要フィールドをカバーすること."""
-    from src.models import Person
+    from src.runtime.models import Person
 
     person_fields = set(Person.model_fields.keys())
     row_fields = _dataclass_fields(PersonRow)
@@ -117,7 +117,7 @@ def test_person_model_covers_person_row():
 
 def test_anime_model_covers_anime_row():
     """Anime モデルが AnimeRow の主要フィールドをカバーすること."""
-    from src.models import BronzeAnime as Anime
+    from src.runtime.models import BronzeAnime as Anime
 
     anime_fields = set(Anime.model_fields.keys())
     row_fields = _dataclass_fields(AnimeRow)
@@ -134,7 +134,7 @@ def test_anime_model_covers_anime_row():
 
 def test_score_result_covers_score_row():
     """ScoreResult モデルが ScoreRow の主要フィールドをカバーすること."""
-    from src.models import ScoreResult
+    from src.runtime.models import ScoreResult
 
     score_fields = set(ScoreResult.model_fields.keys())
     row_fields = _dataclass_fields(ScoreRow)
@@ -156,7 +156,7 @@ def test_score_result_covers_score_row():
 
 def test_openapi_key_routes_exist():
     """主要APIルートが OpenAPI スキーマに含まれていること."""
-    from src.api import app
+    from src.runtime.api import app
 
     schema = app.openapi()
     paths = set(schema.get("paths", {}).keys())
@@ -179,7 +179,7 @@ def test_api_person_response_contains_score_fields(tmp_path, monkeypatch):
     import duckdb
     import src.analysis.gold_writer
     import src.analysis.silver_reader
-    import src.api
+    import src.runtime.api
     import src.utils.json_io
     from fastapi.testclient import TestClient
     from src.analysis.gold_writer import _DDL
@@ -188,7 +188,7 @@ def test_api_person_response_contains_score_fields(tmp_path, monkeypatch):
     gold_path = tmp_path / "gold.duckdb"
     monkeypatch.setattr(src.analysis.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
     monkeypatch.setattr(src.analysis.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
-    monkeypatch.setattr(src.api, "JSON_DIR", tmp_path)
+    monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path)
     monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path)
 
     sconn = duckdb.connect(str(silver_path))
@@ -208,7 +208,7 @@ def test_api_person_response_contains_score_fields(tmp_path, monkeypatch):
     gconn.close()
 
     src.utils.json_io.clear_json_cache()
-    from src.api import app
+    from src.runtime.api import app
 
     client = TestClient(app)
     resp = client.get("/api/persons/p1")

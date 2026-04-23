@@ -18,7 +18,7 @@ from collections import Counter, defaultdict
 import networkx as nx
 import structlog
 
-from src.models import Credit
+from src.runtime.models import Credit
 
 logger = structlog.get_logger()
 

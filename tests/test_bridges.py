@@ -1,7 +1,7 @@
 """bridges モジュールのテスト."""
 
 from src.analysis.network.bridges import detect_bridges, _compute_simple_communities
-from src.models import Credit, Role
+from src.runtime.models import Credit, Role
 
 
 def _make_two_clusters():

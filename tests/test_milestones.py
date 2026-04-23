@@ -1,7 +1,7 @@
 """milestones モジュールのテスト."""
 
 from src.analysis.milestones import compute_milestones
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_career():

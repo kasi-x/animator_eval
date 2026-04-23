@@ -14,8 +14,8 @@ from src.db import (
     upsert_anime,
     upsert_person,
 )
-from src.models import BronzeAnime as Anime, Credit, Person, Role
-from src.pipeline import run_scoring_pipeline
+from src.runtime.models import BronzeAnime as Anime, Credit, Person, Role
+from src.runtime.pipeline import run_scoring_pipeline
 
 
 @pytest.fixture
@@ -98,9 +98,9 @@ def populated_db(tmp_path, monkeypatch):
 
     monkeypatch.setattr(src.analysis.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
 
-    import src.database
+    import src.db.init
 
-    monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
 
     import src.analysis.calc_cache
 
@@ -108,11 +108,11 @@ def populated_db(tmp_path, monkeypatch):
         src.analysis.calc_cache, "DEFAULT_CACHE_PATH", tmp_path / "cache.duckdb"
     )
 
-    import src.pipeline
+    import src.runtime.pipeline
     import src.utils.config
     import src.utils.json_io
 
-    monkeypatch.setattr(src.pipeline, "JSON_DIR", json_dir)
+    monkeypatch.setattr(src.runtime.pipeline, "JSON_DIR", json_dir)
     monkeypatch.setattr(src.utils.config, "JSON_DIR", json_dir)
     monkeypatch.setattr(src.utils.json_io, "JSON_DIR", json_dir)
 
@@ -279,9 +279,9 @@ class TestResumePipeline:
 
     def test_resume_deletes_checkpoint_after_success(self, populated_db):
         """パイプライン正常完了後にチェックポイントが削除される."""
-        import src.pipeline
+        import src.runtime.pipeline
 
-        json_dir = src.pipeline.JSON_DIR
+        json_dir = src.runtime.pipeline.JSON_DIR
         run_scoring_pipeline(resume=False)
         run_scoring_pipeline(resume=False)
         ckpt = Path(json_dir) / "pipeline_checkpoint.json.gz"

@@ -126,20 +126,20 @@ def test_fresh_init_sources_seeded(tmp_path: Path) -> None:
 
 def test_pipeline_completes_on_fresh_schema(tmp_path, monkeypatch) -> None:
     """Full pipeline must complete on a fresh v56 schema and populate person_scores."""
-    import src.database
-    import src.pipeline
+    import src.db.init
+    import src.runtime.pipeline
     import src.utils.config
 
     db_path = tmp_path / "smoke.db"
     json_dir = tmp_path / "json"
     json_dir.mkdir()
 
-    monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
-    monkeypatch.setattr(src.pipeline, "JSON_DIR", json_dir)
+    monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(src.runtime.pipeline, "JSON_DIR", json_dir)
     monkeypatch.setattr(src.utils.config, "JSON_DIR", json_dir)
 
-    from src.synthetic import generate_synthetic_data
-    from src.pipeline import run_scoring_pipeline
+    from src.testing.fixtures import generate_synthetic_data
+    from src.runtime.pipeline import run_scoring_pipeline
 
     persons, anime_list, credits = generate_synthetic_data(
         n_directors=5, n_animators=30, n_anime=15, seed=99

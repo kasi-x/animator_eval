@@ -3,7 +3,7 @@
 import sqlite3
 from typing import Any
 
-from src.models import (
+from src.runtime.models import (
     Character,
     CharacterVoiceActor,
     Studio,

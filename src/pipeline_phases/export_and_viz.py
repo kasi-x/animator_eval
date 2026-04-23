@@ -1808,7 +1808,7 @@ def _generate_visualizations(context: PipelineContext) -> None:
 
         # Generate interactive dashboard (HTML)
         from src.utils.config import JSON_DIR
-        from src.report import generate_visual_dashboard
+        from src.runtime.report import generate_visual_dashboard
 
         generate_visual_dashboard(
             results=context.results,

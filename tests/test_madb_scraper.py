@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 
 import httpx
 
-from src.models import Role, parse_role
+from src.runtime.models import Role, parse_role
 from src.scrapers.mediaarts_scraper import (
     _extract_name_from_schema,
     _extract_studios,
@@ -643,7 +643,7 @@ class TestEntityResolutionMADB:
     def test_madb_to_anilist_match(self):
         """MADB person matches AniList person."""
         from src.analysis.entity_resolution import cross_source_match
-        from src.models import Person
+        from src.runtime.models import Person
 
         persons = [
             Person(id="anilist:1", name_ja="宮崎駿", name_en="Hayao Miyazaki"),
@@ -655,7 +655,7 @@ class TestEntityResolutionMADB:
     def test_madb_short_name_skipped(self):
         """Short names (< 3 chars) are skipped."""
         from src.analysis.entity_resolution import cross_source_match
-        from src.models import Person
+        from src.runtime.models import Person
 
         persons = [
             Person(id="anilist:1", name_ja="太郎", name_en="Taro"),
@@ -668,7 +668,7 @@ class TestEntityResolutionMADB:
     def test_madb_ambiguous_skipped(self):
         """Ambiguous matches (multiple same names) are skipped."""
         from src.analysis.entity_resolution import cross_source_match
-        from src.models import Person
+        from src.runtime.models import Person
 
         persons = [
             Person(id="anilist:1", name_ja="田中太郎"),
@@ -681,7 +681,7 @@ class TestEntityResolutionMADB:
     def test_madb_no_match(self):
         """No match."""
         from src.analysis.entity_resolution import cross_source_match
-        from src.models import Person
+        from src.runtime.models import Person
 
         persons = [
             Person(id="anilist:1", name_ja="宮崎駿"),

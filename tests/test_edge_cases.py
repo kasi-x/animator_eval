@@ -4,7 +4,7 @@ from src.analysis.scoring.normalize import normalize_scores
 from src.analysis.career import analyze_career
 from src.analysis.network.circles import find_director_circles
 from src.analysis.anime_stats import compute_anime_stats
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 class TestNormalizationEdgeCases:

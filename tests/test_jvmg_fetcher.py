@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from src.models import Role
+from src.runtime.models import Role
 from src.scrapers.jvmg_fetcher import parse_wikidata_results
 from src.scrapers.wikidata_role_map import WIKIDATA_ROLE_MAP
 
@@ -134,7 +134,7 @@ class TestParseWikidataResults:
 
 class TestWikidataRoleMap:
     def test_all_values_parseable(self):
-        from src.models import parse_role, Role
+        from src.runtime.models import parse_role, Role
         for prop, token in WIKIDATA_ROLE_MAP.items():
             role = parse_role(token)
             assert role != Role.SPECIAL, (

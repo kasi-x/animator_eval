@@ -12,7 +12,7 @@ from src.analysis.graph import (
     _work_importance,
     _episode_coverage,
 )
-from src.models import BronzeAnime as Anime, Credit, Person, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Person, Role
 from src.utils.role_groups import generate_core_team_pairs
 
 

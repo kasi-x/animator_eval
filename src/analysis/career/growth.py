@@ -7,7 +7,7 @@
 import structlog
 
 from src.analysis.protocols import GrowthMetrics
-from src.models import AnimeAnalysis as Anime, Credit
+from src.runtime.models import AnimeAnalysis as Anime, Credit
 
 logger = structlog.get_logger()
 

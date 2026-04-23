@@ -5,7 +5,7 @@ from src.analysis.network.trust import (
     compute_trust_scores,
     detect_engagement_decay,
 )
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 class TestTimeWeight:

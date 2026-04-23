@@ -10,7 +10,7 @@ from src.db import (
     normalize_primary_names_by_credits,
     upsert_person,
 )
-from src.models import Person
+from src.runtime.models import Person
 
 
 @pytest.fixture

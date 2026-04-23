@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 import networkx as nx
 import structlog
 
-from src.models import AnimeAnalysis as Anime
+from src.runtime.models import AnimeAnalysis as Anime
 
 logger = structlog.get_logger()
 

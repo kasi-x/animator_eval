@@ -54,8 +54,8 @@ from src.analysis.silver_reader import (
 )
 from src.routers.i18n import router as i18n_router
 from src.routers.persons import router as persons_router
-from src.api_reports import router as reports_router
-from src.api_validators import AnimeId
+from src.routers.reports import router as reports_router
+from src.routers.validators import AnimeId
 from src.utils.config import JSON_DIR, REPORTS_DIR
 from src.utils.json_io import (
     load_anime_statistics_from_json,
@@ -890,7 +890,7 @@ async def websocket_pipeline_progress(websocket: WebSocket):
             console.log('Pipeline update:', data);
         };
     """
-    from src.websocket_manager import get_websocket_manager
+    from src.infra.websocket import get_websocket_manager
 
     manager = get_websocket_manager()
     await manager.connect(websocket)
@@ -954,7 +954,7 @@ async def run_pipeline_async(
     # Run pipeline in background task
     async def run_pipeline_task():
         """Background task to run pipeline with WebSocket updates."""
-        from src.pipeline import run_scoring_pipeline
+        from src.runtime.pipeline import run_scoring_pipeline
 
         try:
             logger.info("pipeline_task_started", job_id=job_id)
@@ -983,7 +983,7 @@ async def run_pipeline_async(
 
 def main() -> None:
     """Start the API server."""
-    from src.log import setup_logging
+    from src.infra.log import setup_logging
 
     setup_logging()
     logger.info("starting_api_server", host="0.0.0.0", port=8000)

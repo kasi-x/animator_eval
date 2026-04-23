@@ -9,10 +9,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from src.models import Role
+from src.runtime.models import Role
 
 if TYPE_CHECKING:
-    from src.models import Credit
+    from src.runtime.models import Credit
 
 # =============================================================================
 # Role Groups (frozensets for immutability and set operations)

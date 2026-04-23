@@ -6,7 +6,7 @@ from src.analysis.crossval import (
     _rank_correlation,
     cross_validate_scores,
 )
-from src.models import BronzeAnime as Anime, Credit, Person, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Person, Role
 
 
 def _make_test_data():

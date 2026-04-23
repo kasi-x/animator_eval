@@ -6,7 +6,7 @@ from src.analysis.graph import (
     determine_primary_role_for_each_person,
 )
 from src.analysis.network.trust import compute_trust_scores
-from src.models import BronzeAnime as Anime, Credit, Person, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Person, Role
 from src.pipeline_phases.data_loading import (
     _filter_non_production_persons,
     _is_garbage_person,

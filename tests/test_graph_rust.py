@@ -14,7 +14,7 @@ from src.analysis.graph_rust import (
     eigenvector_centrality,
     build_collaboration_edges,
 )
-from src.models import Credit, Person, Role
+from src.runtime.models import Credit, Person, Role
 
 
 # ---------------------------------------------------------------------------

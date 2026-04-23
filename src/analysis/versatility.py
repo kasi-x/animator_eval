@@ -9,7 +9,7 @@ from collections import defaultdict
 import structlog
 
 from src.analysis.protocols import VersatilityMetrics
-from src.models import Credit, Role
+from src.runtime.models import Credit, Role
 from src.utils.role_groups import ROLE_CATEGORY
 
 logger = structlog.get_logger()

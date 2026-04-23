@@ -13,7 +13,7 @@ from src.analysis.va.integrated_value import (
 )
 from src.analysis.va.pipeline._common import skip_if_no_va_credits, va_step
 from src.analysis.va.trust import compute_va_patronage, compute_va_trust
-from src.models import Credit, Role
+from src.runtime.models import Credit, Role
 from src.pipeline_phases.context import PipelineContext
 
 logger = structlog.get_logger()

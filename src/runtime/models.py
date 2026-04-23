@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel, Field, computed_field
 
 if TYPE_CHECKING:
-    from src.db_rows import AnimeRow, CreditRow, PersonRow, ScoreRow
+    from src.db.rows import AnimeRow, CreditRow, PersonRow, ScoreRow
 
 
 class Role(str, Enum):

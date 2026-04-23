@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 if TYPE_CHECKING:
-    from src.models import AnimeAnalysis as Anime, Credit
+    from src.runtime.models import AnimeAnalysis as Anime, Credit
 
 logger = structlog.get_logger()
 

@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from src.log import setup_logging
+from src.infra.log import setup_logging
 from src.i18n import set_language, t
 
 app = typer.Typer(name="animetor-eval", help="Anime industry personnel network evaluation tool")
@@ -629,7 +629,7 @@ def export(
     from pathlib import Path
 
     from src.analysis.gold_writer import gold_connect_with_silver
-    from src.report import (
+    from src.runtime.report import (
         generate_csv_report,
         generate_html_report,
         generate_json_report,
@@ -715,7 +715,7 @@ def timeline(
     from src.analysis.career import CAREER_STAGE
     from src.analysis.gold_writer import gold_connect_with_silver
     from src.analysis.visualize import plot_person_timeline
-    from src.models import Role
+    from src.runtime.models import Role
     from src.utils.display_lookup import get_display_score
 
     try:
@@ -982,7 +982,7 @@ def validate() -> None:
     setup_logging()
 
     from src.analysis.gold_writer import gold_connect_with_silver
-    from src.validation import validate_all
+    from src.infra.validation import validate_all
 
     try:
         with gold_connect_with_silver() as conn:
@@ -1915,7 +1915,7 @@ def neo4j_export(
     Requires Neo4j 5.0+ running and neo4j Python driver installed.
 
     Example:
-        pixi run python -c 'from src.cli import app; app()' neo4j-export --password mypass
+        pixi run python -c 'from src.runtime.cli import app; app()' neo4j-export --password mypass
     """
     setup_logging()
 
@@ -1992,7 +1992,7 @@ def neo4j_query(
     """Execute Cypher query against Neo4j database.
 
     Example:
-        pixi run python -c 'from src.cli import app; app()' neo4j-query "MATCH (p:Person) RETURN p.name_en LIMIT 5"
+        pixi run python -c 'from src.runtime.cli import app; app()' neo4j-query "MATCH (p:Person) RETURN p.name_en LIMIT 5"
     """
     setup_logging()
 
@@ -2041,7 +2041,7 @@ def neo4j_stats(
     """Show Neo4j database statistics.
 
     Example:
-        pixi run python -c 'from src.cli import app; app()' neo4j-stats --password mypass
+        pixi run python -c 'from src.runtime.cli import app; app()' neo4j-stats --password mypass
     """
     setup_logging()
 

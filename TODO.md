@@ -1,6 +1,6 @@
 # TODO.md — 未完了作業の一元管理
 
-作成日: 2026-04-22 / 最終更新: 2026-04-25
+作成日: 2026-04-22 / 最終更新: 2026-04-27
 
 本書はプロジェクト内のすべての**未完了**項目を一元管理するファイルです。完了済みサマリーは `DONE.md`、設計原則は `CLAUDE.md`。
 
@@ -34,7 +34,7 @@
 
 - [x] ✅ `anime.country_of_origin` 多数決で `studios.country_of_origin` を埋める: `src/etl/populate_v57_metadata.py` + tests (2026-04-25)
 - [ ] `title.native` を `country_of_origin` 分岐で `title_zh`/`title_ko` へ格納 (v58 予定)
-- [ ] `years_active` 活用: クレジットデータが薄い人物の活動期間推定クエリ
+- [x] ✅ `years_active` 自動計算: `src/etl/populate_v57_years_active.py` (YYYY-YYYY形式、クレジット期間から推定) (2026-04-26)
 
 ### src/db/ 後続 ✅ 完了
 
@@ -133,20 +133,22 @@ H-1〜H-6 はすべて完了 (詳細: DONE.md)。
 
 実装計画: `docs/ARCHITECTURE_CLEANUP.md` Phase A/B (ファイル移動マップ・import 置換表・検証手順)
 
-### 11.1 `src/` 直下の平置き解消
+### 11.1 `src/` 直下の平置き解消 ✅ 完了
 
 ```
-src/db/        ← 完了 (etl.py, scraper.py, init.py)
-src/runtime/   ← api/, cli.py, pipeline.py
-src/infra/     ← log.py, websocket_manager.py, freshness.py
-src/testing/   ← synthetic.py → fixtures.py
+src/db/        ← ✅ 完了 (etl.py, scraper.py, init.py)
+src/runtime/   ← ✅ 完了 (api.py, cli.py, pipeline.py)
+src/infra/     ← ✅ 完了 (log.py, websocket.py, freshness.py)
+src/testing/   ← ✅ 完了 (fixtures.py, synthetic.py → fixtures.py)
 ```
 
-- [ ] 残存の src/ 平置きファイルを上記レイアウトに移動
+### 11.2 `src/analysis/` 69 本平置きの統合 ✅ 完了
 
-### 11.2 `src/analysis/` 69 本平置きの統合
-
-- [ ] `analysis/graph/`, `analysis/career/`, `analysis/entity/` 等に整理 (`__init__.py` で後方互換)
+- [x] ✅ `analysis/graph/`, `analysis/career/`, `analysis/entity/` に整理 (backward compat redirect files + __init__.py re-export) (2026-04-27)
+  - analysis/graph: graph.py, graph_rust.py, graphml_export.py, cooccurrence_groups.py, collaboration_strength.py, sparse_graph.py
+  - analysis/career: career.py, career_friction.py, growth.py, growth_acceleration.py, milestones.py, transitions.py, talent_pipeline.py
+  - analysis/entity: entity_resolution.py, entity_resolution_eval.py, ai_entity_resolution.py, ml_homonym_split.py
+  - Backward compat: src/analysis/{graph,graph_rust,graphml_export,career_friction,entity_resolution,entity_resolution_eval}.py redirect files
 
 ### 11.3 命名ゆらぎの解消
 

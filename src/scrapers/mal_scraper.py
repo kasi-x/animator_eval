@@ -12,7 +12,7 @@ from pathlib import Path
 import structlog
 import typer
 
-from src.models import BronzeAnime, Credit, Person, parse_role
+from src.runtime.models import BronzeAnime, Credit, Person, parse_role
 from src.scrapers.cache_store import load_cached_json, save_cached_json
 from src.scrapers.http_client import RetryingHttpClient
 from src.scrapers.logging_utils import configure_file_logging
@@ -261,7 +261,7 @@ def main(
     fetch_all: bool = typer.Option(False, "--all", help="fetch all anime (equivalent to count=0)"),
 ) -> None:
     """Collect credit data from MAL (Jikan API)."""
-    from src.log import setup_logging
+    from src.infra.log import setup_logging
     from src.scrapers.bronze_writer import BronzeWriter
 
     setup_logging()

@@ -6,8 +6,8 @@ from datetime import datetime, timedelta, timezone
 import pytest
 from typer.testing import CliRunner
 
-from src.cli import app
-from src.freshness import (
+from src.runtime.cli import app
+from src.infra.freshness import (
     DEFAULT_THRESHOLD_HOURS,
     FRESHNESS_THRESHOLDS,
     check_data_freshness,
@@ -119,7 +119,7 @@ def populated_freshness_db(monkeypatch, tmp_path):
         c.row_factory = sqlite3.Row
         return c
 
-    monkeypatch.setattr("src.database.get_connection", patched_get)
+    monkeypatch.setattr("src.db.init.get_connection", patched_get)
     return db_path
 
 
@@ -376,7 +376,7 @@ class TestFreshnessCliCommand:
             c.row_factory = sqlite3.Row
             return c
 
-        monkeypatch.setattr("src.database.get_connection", patched_get)
+        monkeypatch.setattr("src.db.init.get_connection", patched_get)
 
         result = runner.invoke(app, ["freshness"])
         assert result.exit_code == 0
@@ -391,7 +391,7 @@ class TestFreshnessApiEndpoint:
         """GET /api/freshness returns empty dict (Bronze Parquet migration pending)."""
         from fastapi.testclient import TestClient
 
-        from src.api import app as fastapi_app
+        from src.runtime.api import app as fastapi_app
 
         client = TestClient(fastapi_app)
         response = client.get("/api/freshness")
@@ -402,7 +402,7 @@ class TestFreshnessApiEndpoint:
         """GET /api/freshness returns empty dict regardless of DB state."""
         from fastapi.testclient import TestClient
 
-        from src.api import app as fastapi_app
+        from src.runtime.api import app as fastapi_app
 
         client = TestClient(fastapi_app)
         response = client.get("/api/freshness")

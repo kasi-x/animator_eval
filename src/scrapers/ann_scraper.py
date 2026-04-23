@@ -29,7 +29,7 @@ import httpx
 import structlog
 import typer
 
-from src.models import parse_role
+from src.runtime.models import parse_role
 from src.scrapers.logging_utils import configure_file_logging
 from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL, SCRAPE_DELAY_SECONDS
 

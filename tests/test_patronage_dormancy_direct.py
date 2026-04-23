@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from src.models import AnimeAnalysis as Anime, Credit, Role
+from src.runtime.models import AnimeAnalysis as Anime, Credit, Role
 
 
 # ---------------------------------------------------------------------------

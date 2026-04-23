@@ -1,7 +1,7 @@
 """career モジュールのテスト."""
 
 from src.analysis.career import analyze_career, batch_career_analysis
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_career_data():

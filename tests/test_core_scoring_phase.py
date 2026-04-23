@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 from src.pipeline_phases.context import PipelineContext
-from src.synthetic import generate_synthetic_data
+from src.testing.fixtures import generate_synthetic_data
 
 
 # ---------------------------------------------------------------------------
@@ -27,16 +27,16 @@ from src.synthetic import generate_synthetic_data
 
 def _make_context(monkeypatch, tmp_path: Path) -> PipelineContext:
     """Return a PipelineContext populated through Phases 1-4."""
-    import src.database
-    import src.pipeline
+    import src.db.init
+    import src.runtime.pipeline
     import src.utils.config
 
     db_path = tmp_path / "core_scoring.db"
     json_dir = tmp_path / "json"
     json_dir.mkdir()
 
-    monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
-    monkeypatch.setattr(src.pipeline, "JSON_DIR", json_dir)
+    monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(src.runtime.pipeline, "JSON_DIR", json_dir)
     monkeypatch.setattr(src.utils.config, "JSON_DIR", json_dir)
 
     from src.pipeline_phases import (

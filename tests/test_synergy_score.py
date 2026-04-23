@@ -14,7 +14,7 @@ from src.analysis.synergy_score import (
     compute_synergy_scores,
     PairHistory,
 )
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_chain_anime(

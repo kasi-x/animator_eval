@@ -549,12 +549,12 @@ def _html_escape(text: str) -> str:
 
 def main() -> None:
     """Load scores from the DB and generate a report."""
-    from src.log import setup_logging
+    from src.infra.log import setup_logging
 
     setup_logging()
 
     # Run the pipeline first to compute scores
-    from src.pipeline import run_scoring_pipeline
+    from src.runtime.pipeline import run_scoring_pipeline
 
     results = run_scoring_pipeline()
 

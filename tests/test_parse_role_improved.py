@@ -1,6 +1,6 @@
 """Tests for improved parse_role function."""
 
-from src.models import Role, parse_role
+from src.runtime.models import Role, parse_role
 
 
 def test_parse_role_with_episode_numbers():

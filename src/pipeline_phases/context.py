@@ -18,7 +18,7 @@ from typing import Any
 import networkx as nx
 import structlog
 
-from src.models import (
+from src.runtime.models import (
     AnimeAnalysis as Anime,
     Character,
     CharacterVoiceActor,

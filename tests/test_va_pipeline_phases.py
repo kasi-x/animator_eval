@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.models import BronzeAnime, CharacterVoiceActor, Credit, Role
+from src.runtime.models import BronzeAnime, CharacterVoiceActor, Credit, Role
 from src.pipeline_phases.context import PipelineContext
 
 

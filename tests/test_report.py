@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from src.report import (
+from src.runtime.report import (
     generate_csv_report,
     generate_html_report,
     generate_json_report,

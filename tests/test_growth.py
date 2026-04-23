@@ -1,7 +1,7 @@
 """growth モジュールのテスト."""
 
 from src.analysis.growth import compute_growth_trends
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_data():

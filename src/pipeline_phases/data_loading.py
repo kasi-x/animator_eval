@@ -6,9 +6,9 @@ from collections import defaultdict
 import structlog
 
 from src.analysis.silver_reader import load_anime_silver, load_credits_silver, load_persons_silver
-from src.models import Credit, Person
+from src.runtime.models import Credit, Person
 from src.pipeline_phases.context import PipelineContext
-from src.models import Role
+from src.runtime.models import Role
 from src.utils.role_groups import NON_PRODUCTION_ROLES
 
 # Roles that definitively identify animation production staff.

@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from src.models import AnimeAnalysis
+    from src.runtime.models import AnimeAnalysis
 
 SEASON_TO_QUARTER: dict[str, int] = {
     "winter": 1,

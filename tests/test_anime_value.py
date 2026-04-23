@@ -14,7 +14,7 @@ from src.analysis.anime_value import (
 
 import pytest
 
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 def _anime(

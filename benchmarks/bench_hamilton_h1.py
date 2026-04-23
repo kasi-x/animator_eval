@@ -22,7 +22,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 import structlog
 
-from src.log import setup_logging
+from src.infra.log import setup_logging
 
 setup_logging()
 logger = structlog.get_logger()
@@ -47,7 +47,7 @@ def _populate_temp_db(db_path: Path) -> int:
         upsert_anime,
         upsert_person,
     )
-    from src.synthetic import generate_synthetic_data
+    from src.testing.fixtures import generate_synthetic_data
 
     persons, anime_list, credits = generate_synthetic_data(
         n_directors=SYNTH_DIRECTORS,
@@ -128,17 +128,17 @@ def main() -> int:
         json_dir.mkdir()
 
         import src.analysis.visualize
-        import src.database
-        import src.pipeline
+        import src.db.init
+        import src.runtime.pipeline
         import src.utils.config
 
-        original_db_path = src.database.DEFAULT_DB_PATH
-        original_pipeline_json = src.pipeline.JSON_DIR
+        original_db_path = src.db.init.DEFAULT_DB_PATH
+        original_pipeline_json = src.runtime.pipeline.JSON_DIR
         original_config_json = src.utils.config.JSON_DIR
         original_viz_json = src.analysis.visualize.JSON_DIR
 
-        src.database.DEFAULT_DB_PATH = db_path
-        src.pipeline.JSON_DIR = json_dir
+        src.db.init.DEFAULT_DB_PATH = db_path
+        src.runtime.pipeline.JSON_DIR = json_dir
         src.utils.config.JSON_DIR = json_dir
         src.analysis.visualize.JSON_DIR = json_dir
 
@@ -161,8 +161,8 @@ def main() -> int:
             del ctx_ham
 
         finally:
-            src.database.DEFAULT_DB_PATH = original_db_path
-            src.pipeline.JSON_DIR = original_pipeline_json
+            src.db.init.DEFAULT_DB_PATH = original_db_path
+            src.runtime.pipeline.JSON_DIR = original_pipeline_json
             src.utils.config.JSON_DIR = original_config_json
             src.analysis.visualize.JSON_DIR = original_viz_json
 

@@ -3,7 +3,7 @@
 import csv
 
 from src.analysis.neo4j_export import export_neo4j_csv
-from src.models import BronzeAnime as Anime, Credit, Person, Role, ScoreResult
+from src.runtime.models import BronzeAnime as Anime, Credit, Person, Role, ScoreResult
 
 
 def _sample_data():

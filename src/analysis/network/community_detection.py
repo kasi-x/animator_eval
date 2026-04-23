@@ -12,7 +12,7 @@ from dataclasses import dataclass, field
 import networkx as nx
 import structlog
 
-from src.models import AnimeAnalysis as Anime, Credit
+from src.runtime.models import AnimeAnalysis as Anime, Credit
 
 logger = structlog.get_logger()
 

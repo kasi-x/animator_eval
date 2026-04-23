@@ -22,7 +22,7 @@ from src.analysis.calc_cache import (
     get_all_llm_decisions_bulk,
     upsert_llm_decision,
 )
-from src.models import Person
+from src.runtime.models import Person
 from src.utils.config import (
     LLM_BASE_URL,
     LLM_BATCH_SIZE,

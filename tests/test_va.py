@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.models import (
+from src.runtime.models import (
     BronzeAnime as Anime,
     Character,
     CharacterVoiceActor,
@@ -427,7 +427,7 @@ class TestProductionAnalysis:
 
 class TestSyntheticVAData:
     def test_generate_synthetic_va_data(self):
-        from src.synthetic import generate_synthetic_data, generate_synthetic_va_data
+        from src.testing.fixtures import generate_synthetic_data, generate_synthetic_va_data
 
         _, anime_list, _ = generate_synthetic_data(
             n_directors=3, n_animators=10, n_anime=10, seed=42
@@ -454,7 +454,7 @@ class TestSyntheticVAData:
 
 class TestVAScoreResult:
     def test_va_score_result_creation(self):
-        from src.models import VAScoreResult
+        from src.runtime.models import VAScoreResult
 
         result = VAScoreResult(
             person_id="va1",

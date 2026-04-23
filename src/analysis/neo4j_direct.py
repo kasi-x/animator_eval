@@ -29,7 +29,7 @@ from typing import Any
 
 import structlog
 
-from src.models import AnimeAnalysis as Anime, Credit, Person, ScoreResult
+from src.runtime.models import AnimeAnalysis as Anime, Credit, Person, ScoreResult
 
 logger = structlog.get_logger()
 

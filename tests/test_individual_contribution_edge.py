@@ -1,5 +1,5 @@
 """individual_contribution.py edge case tests."""
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 import networkx as nx
 

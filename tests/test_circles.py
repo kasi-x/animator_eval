@@ -1,7 +1,7 @@
 """circles モジュールのテスト."""
 
 from src.analysis.network.circles import find_director_circles, get_person_circles
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_test_data():

@@ -12,7 +12,7 @@ from collections import defaultdict
 import structlog
 
 from src.analysis.protocols import NetworkDensityMetrics
-from src.models import Credit
+from src.runtime.models import Credit
 
 logger = structlog.get_logger()
 

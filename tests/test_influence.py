@@ -5,7 +5,7 @@ from src.analysis.influence import (
     _get_highest_stage,
     compute_influence_tree,
 )
-from src.models import BronzeAnime as Anime, Credit, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_test_data():

@@ -5,7 +5,7 @@ from typing import Any
 
 import structlog
 
-from src.models import Person, Credit, BronzeAnime
+from src.runtime.models import Person, Credit, BronzeAnime
 
 logger = structlog.get_logger()
 

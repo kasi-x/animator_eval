@@ -26,7 +26,7 @@ if str(_ROOT) not in sys.path:
 
 import structlog  # noqa: E402
 
-from src.log import setup_logging  # noqa: E402
+from src.infra.log import setup_logging  # noqa: E402
 
 setup_logging()
 logger = structlog.get_logger()
@@ -56,7 +56,7 @@ def _build_synthetic_db(
     import random
     from src.db import init_db, get_connection
     from src.db import DEFAULT_DB_PATH
-    import src.database as db_mod
+    import src.db.init as db_mod
 
     db_path = tmp_path / "bench.db"
     db_mod.DEFAULT_DB_PATH = db_path

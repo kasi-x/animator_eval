@@ -14,7 +14,7 @@ from src.analysis.scoring.akm import (
     find_connected_set,
     infer_studio_assignment,
 )
-from src.models import BronzeAnime as Anime, Credit, Person, Role
+from src.runtime.models import BronzeAnime as Anime, Credit, Person, Role
 
 
 @pytest.fixture

@@ -10,7 +10,7 @@ from src.analysis.entity_resolution import (
     romaji_match,
     similarity_based_cluster,
 )
-from src.models import Person
+from src.runtime.models import Person
 
 
 class TestNormalizeName:

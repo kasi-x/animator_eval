@@ -6,7 +6,7 @@ import pytest
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
-from src.api import app
+from src.runtime.api import app
 
 
 @pytest.fixture
@@ -18,12 +18,12 @@ def client():
 def scores_data(tmp_path, monkeypatch):
     """テスト用スコアデータをJSON_DIRに配置."""
     import src.analysis.gold_writer
-    import src.api
-    import src.database
+    import src.runtime.api
+    import src.db.init
     import src.utils.json_io
 
     # Monkeypatch JSON_DIR in both api and json_io modules
-    monkeypatch.setattr(src.api, "JSON_DIR", tmp_path)
+    monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path)
     monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path)
     # Disable DuckDB GOLD path so ranking falls back to SQLite
     monkeypatch.setattr(
@@ -35,7 +35,7 @@ def scores_data(tmp_path, monkeypatch):
     # Set up a test database with schema and 3 test persons
     import src.db.init
     db_path = tmp_path / "test_scores.db"
-    monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
     monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
     from src.db import get_connection, init_db
 
@@ -436,10 +436,10 @@ def persons_duckdb_data(tmp_path, monkeypatch):
     import duckdb
     import src.analysis.gold_writer
     import src.analysis.silver_reader
-    import src.api
+    import src.runtime.api
     import src.utils.json_io
 
-    monkeypatch.setattr(src.api, "JSON_DIR", tmp_path)
+    monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path)
     monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path)
 
     silver_path = tmp_path / "silver.duckdb"
@@ -513,9 +513,9 @@ class TestSummary:
         assert "data" in data
 
     def test_summary_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -627,9 +627,9 @@ class TestStudios:
         assert "MAPPA" in data
 
     def test_studios_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -646,9 +646,9 @@ class TestSeasonal:
         assert "by_season" in data
 
     def test_seasonal_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -666,9 +666,9 @@ class TestCrossval:
         assert "fold_results" in data
 
     def test_crossval_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -691,9 +691,9 @@ class TestCollaborations:
         assert data["total"] >= 1
 
     def test_collaborations_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -710,9 +710,9 @@ class TestOutliers:
         assert data["total_outliers"] == 1
 
     def test_outliers_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -729,9 +729,9 @@ class TestTeams:
         assert data["total_high_score"] == 1
 
     def test_teams_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -753,9 +753,9 @@ class TestGrowth:
         assert data["total"] == 1
 
     def test_growth_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -772,9 +772,9 @@ class TestTimeSeries:
         assert data["years"] == [2020, 2021, 2022]
 
     def test_time_series_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -791,9 +791,9 @@ class TestDecades:
         assert "2020s" in data["decades"]
 
     def test_decades_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -816,9 +816,9 @@ class TestTags:
         assert "p1" in data["persons"]
 
     def test_tags_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -835,9 +835,9 @@ class TestRoleFlow:
         assert data["total_transitions"] == 5
 
     def test_role_flow_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -860,11 +860,10 @@ class TestCompare:
 
 class TestDataQuality:
     def test_data_quality(self, client, tmp_path, monkeypatch):
-        import src.database
         import src.db.init
 
         db_path = tmp_path / "quality.db"
-        monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
+        monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
         monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
 
         from src.db import get_connection, init_db
@@ -899,11 +898,10 @@ class TestPersonNetwork:
 
 class TestRecommend:
     def test_recommend(self, client, scores_data, monkeypatch, tmp_path):
-        import src.database
         import src.db.init
 
         db_path = tmp_path / "rec.db"
-        monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
+        monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
         monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
 
         from src.db import get_connection, init_db
@@ -930,11 +928,10 @@ class TestRecommend:
 
 class TestPredict:
     def test_predict(self, client, scores_data, monkeypatch, tmp_path):
-        import src.database
         import src.db.init
 
         db_path = tmp_path / "pred.db"
-        monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
+        monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
         monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
 
         from src.db import get_connection, init_db
@@ -958,11 +955,10 @@ class TestPredict:
 class TestDbStats:
     def test_stats(self, client, tmp_path, monkeypatch):
         """DB統計は実際のDBが必要なので基本的な接続テスト."""
-        import src.database
         import src.db.init
 
         db_path = tmp_path / "test_api.db"
-        monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
+        monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
         monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
 
         from src.db import get_connection, init_db
@@ -987,9 +983,9 @@ class TestBridgesApi:
         assert data["stats"]["total_communities"] == 2
 
     def test_bridges_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -1007,9 +1003,9 @@ class TestMentorshipsApi:
         assert data["mentorships"][0]["mentor_id"] == "p1"
 
     def test_mentorships_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -1031,9 +1027,9 @@ class TestMilestonesApi:
         assert resp.status_code == 404
 
     def test_milestones_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -1050,9 +1046,9 @@ class TestNetworkEvolutionApi:
         assert data["years"] == [2018, 2019, 2020]
 
     def test_net_evo_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -1080,9 +1076,9 @@ class TestGenreAffinityApi:
         assert resp.status_code == 404
 
     def test_genre_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -1100,9 +1096,9 @@ class TestProductivityApi:
         assert data["items"][0]["person_id"] == "p1"
 
     def test_prod_missing(self, client, tmp_path, monkeypatch):
-        import src.api
+        import src.runtime.api
 
-        monkeypatch.setattr(src.api, "JSON_DIR", tmp_path / "empty")
+        monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path / "empty")
         import src.utils.json_io
 
         monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path / "empty")
@@ -1196,7 +1192,7 @@ class TestApiKeyAuth:
     def test_verify_api_key_allows_dev_mode(self):
         """verify_api_key allows requests when API_SECRET_KEY is not set."""
         from unittest.mock import MagicMock
-        from src.api import verify_api_key
+        from src.runtime.api import verify_api_key
 
         request = MagicMock()
         request.headers = {}
@@ -1209,7 +1205,7 @@ class TestApiKeyAuth:
     def test_verify_api_key_rejects_bad_key(self, monkeypatch):
         """verify_api_key raises HTTPException for wrong key."""
         from unittest.mock import MagicMock
-        from src.api import verify_api_key
+        from src.runtime.api import verify_api_key
 
         monkeypatch.setenv("API_SECRET_KEY", "correct-key")
         request = MagicMock()
@@ -1224,7 +1220,7 @@ class TestRateLimiting:
 
     def test_rate_limit_handler_registered(self, client):
         """Rate limit exception handler is registered on the app."""
-        from src.api import app
+        from src.runtime.api import app
 
         # Verify that app has the limiter configured
         assert hasattr(app.state, "limiter")

@@ -5,8 +5,8 @@ import sqlite3
 import pytest
 
 from src.db import init_db, insert_credit, upsert_anime, upsert_person
-from src.models import BronzeAnime as Anime, Credit, Person, Role
-from src.validation import (
+from src.runtime.models import BronzeAnime as Anime, Credit, Person, Role
+from src.infra.validation import (
     ValidationResult,
     validate_all,
     validate_credit_distribution,
@@ -125,13 +125,13 @@ class TestCreditDistribution:
 
 class TestCreditQuality:
     def test_clean_data_no_warnings(self, populated_conn):
-        from src.validation import validate_credit_quality
+        from src.infra.validation import validate_credit_quality
 
         result = validate_credit_quality(populated_conn)
         assert result.stats["multi_role_pairs"] == 0
 
     def test_detects_multi_role(self, populated_conn):
-        from src.validation import validate_credit_quality
+        from src.infra.validation import validate_credit_quality
 
         # Add 5 different roles for same person-anime pair
         for role in [

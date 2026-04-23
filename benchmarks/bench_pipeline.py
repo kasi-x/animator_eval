@@ -23,7 +23,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 import structlog
 
-from src.log import setup_logging
+from src.infra.log import setup_logging
 
 setup_logging()
 logger = structlog.get_logger()
@@ -57,7 +57,7 @@ def _populate_temp_db(db_path: Path) -> int:
     Returns the number of credits inserted.
     """
     from src.db import get_connection, init_db, insert_credit, upsert_anime, upsert_person
-    from src.synthetic import generate_synthetic_data
+    from src.testing.fixtures import generate_synthetic_data
 
     persons, anime_list, credits = generate_synthetic_data(
         n_directors=SYNTH_DIRECTORS,
@@ -90,7 +90,7 @@ def _populate_temp_db(db_path: Path) -> int:
 
 def _run_full_pipeline() -> tuple[float, list[dict]]:
     """Run the full scoring pipeline and return (elapsed_seconds, results)."""
-    from src.pipeline import run_scoring_pipeline
+    from src.runtime.pipeline import run_scoring_pipeline
 
     t0 = time.monotonic()
     results = run_scoring_pipeline(enable_websocket=False)
@@ -242,18 +242,18 @@ def main() -> int:
         json_dir.mkdir()
 
         # Monkeypatch module-level paths to use temp directories
-        import src.database
-        import src.pipeline
+        import src.db.init
+        import src.runtime.pipeline
         import src.utils.config
         import src.analysis.visualize
 
-        original_db_path = src.database.DEFAULT_DB_PATH
-        original_pipeline_json = src.pipeline.JSON_DIR
+        original_db_path = src.db.init.DEFAULT_DB_PATH
+        original_pipeline_json = src.runtime.pipeline.JSON_DIR
         original_config_json = src.utils.config.JSON_DIR
         original_viz_json = src.analysis.visualize.JSON_DIR
 
-        src.database.DEFAULT_DB_PATH = db_path
-        src.pipeline.JSON_DIR = json_dir
+        src.db.init.DEFAULT_DB_PATH = db_path
+        src.runtime.pipeline.JSON_DIR = json_dir
         src.utils.config.JSON_DIR = json_dir
         src.analysis.visualize.JSON_DIR = json_dir
 
@@ -283,8 +283,8 @@ def main() -> int:
 
         finally:
             # Restore original paths
-            src.database.DEFAULT_DB_PATH = original_db_path
-            src.pipeline.JSON_DIR = original_pipeline_json
+            src.db.init.DEFAULT_DB_PATH = original_db_path
+            src.runtime.pipeline.JSON_DIR = original_pipeline_json
             src.utils.config.JSON_DIR = original_config_json
             src.analysis.visualize.JSON_DIR = original_viz_json
 

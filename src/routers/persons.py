@@ -24,7 +24,7 @@ from src.analysis.silver_reader import (
     load_all_anime as silver_load_anime,
     load_all_credits as silver_load_credits,
 )
-from src.api_validators import PersonId, validate_query_string
+from src.routers.validators import PersonId, validate_query_string
 from src.utils.json_io import (
     load_career_milestones_from_json,
     load_individual_profiles_from_json,

@@ -12,7 +12,7 @@ from pathlib import Path
 import duckdb
 import structlog
 
-from src.models import BronzeAnime, Character, CharacterVoiceActor, Credit, Person, Role
+from src.runtime.models import BronzeAnime, Character, CharacterVoiceActor, Credit, Person, Role
 
 logger = structlog.get_logger()
 
@@ -415,7 +415,7 @@ def main() -> None:
     """Entry point."""
     import argparse
 
-    from src.log import setup_logging
+    from src.infra.log import setup_logging
 
     setup_logging()
 

@@ -389,7 +389,7 @@ def generate(
     check_only: bool,
 ) -> int:
     if not db_path.exists():
-        # Build an ephemeral schema-only DB by importing src.database.
+        # Build an ephemeral schema-only DB by importing src.db.init.
         log.info("bootstrapping_temp_db", reason="db_missing", db_path=str(db_path))
         import tempfile
 

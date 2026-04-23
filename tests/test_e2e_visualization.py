@@ -6,15 +6,15 @@ PNG ファイルが正しく生成されることを検証する。
 
 import pytest
 
-from src.synthetic import generate_synthetic_data
+from src.testing.fixtures import generate_synthetic_data
 
 
 @pytest.fixture
 def viz_pipeline(monkeypatch, tmp_path):
     """可視化付きパイプラインを実行するフィクスチャ."""
     import src.analysis.visualize
-    import src.database
-    import src.pipeline
+    import src.db.init
+    import src.runtime.pipeline
     import src.utils.config
 
     # DB/JSON/result を一時ディレクトリに差し替え
@@ -24,8 +24,8 @@ def viz_pipeline(monkeypatch, tmp_path):
     result_dir = tmp_path / "result"
     result_dir.mkdir()
 
-    monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
-    monkeypatch.setattr(src.pipeline, "JSON_DIR", json_dir)
+    monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(src.runtime.pipeline, "JSON_DIR", json_dir)
     # visualize.py もモジュールレベルで JSON_DIR をインポートしているため直接差し替え
     monkeypatch.setattr(src.utils.config, "JSON_DIR", json_dir)
     monkeypatch.setattr(src.analysis.visualize, "JSON_DIR", json_dir)
@@ -68,7 +68,7 @@ def viz_pipeline(monkeypatch, tmp_path):
     monkeypatch.setattr(src.analysis.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
 
     # 可視化付きでパイプライン実行
-    from src.pipeline import run_scoring_pipeline
+    from src.runtime.pipeline import run_scoring_pipeline
 
     results = run_scoring_pipeline(visualize=True, dry_run=False)
 

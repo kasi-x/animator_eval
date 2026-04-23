@@ -126,7 +126,7 @@ def run_scoring_pipeline(
     ws_broadcaster = None
     if enable_websocket:
         try:
-            from src.websocket_manager import PipelineProgressBroadcaster
+            from src.infra.websocket import PipelineProgressBroadcaster
 
             ws_broadcaster = PipelineProgressBroadcaster()
             ws_broadcaster.start_pipeline(total_phases=10)
@@ -245,7 +245,7 @@ def main() -> None:
     """Entry point."""
     import argparse
 
-    from src.log import setup_logging
+    from src.infra.log import setup_logging
 
     setup_logging()
 

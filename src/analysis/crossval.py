@@ -12,7 +12,7 @@ import structlog
 
 from src.analysis.scoring.birank import compute_birank
 from src.analysis.graph import create_person_anime_network
-from src.models import AnimeAnalysis as Anime, Credit, Person
+from src.runtime.models import AnimeAnalysis as Anime, Credit, Person
 
 logger = structlog.get_logger()
 

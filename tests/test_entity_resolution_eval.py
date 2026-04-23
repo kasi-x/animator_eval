@@ -9,7 +9,7 @@ from src.analysis.entity_resolution_eval import (
     format_resolution_report,
     generate_resolution_report,
 )
-from src.models import Person
+from src.runtime.models import Person
 
 
 class TestGenerateResolutionReport:

@@ -10,7 +10,7 @@ from typing import Any
 
 import structlog
 
-from src.models import Credit
+from src.runtime.models import Credit
 
 logger = structlog.get_logger()
 

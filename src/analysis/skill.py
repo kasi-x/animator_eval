@@ -17,7 +17,7 @@ import numpy as np
 import structlog
 from openskill.models import PlackettLuce
 
-from src.models import AnimeAnalysis as Anime, Credit
+from src.runtime.models import AnimeAnalysis as Anime, Credit
 from src.utils.role_groups import SKILL_EVALUATED_ROLES as SKILL_ROLES
 
 logger = structlog.get_logger()

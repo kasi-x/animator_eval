@@ -160,19 +160,19 @@ class TestCheckpointHook:
 
 class TestResumePathUnit:
     def test_build_phase14_driver_builds(self):
-        from src.pipeline import _build_phase14_driver
+        from src.runtime.pipeline import _build_phase14_driver
         dr = _build_phase14_driver()
         assert dr is not None
 
     def test_build_driver_with_checkpoint(self, tmp_path, monkeypatch):
-        import src.pipeline as _pl
+        import src.runtime.pipeline as _pl
 
         monkeypatch.setattr(_pl, "JSON_DIR", tmp_path)
         dr = _pl._build_driver(with_checkpoint=True)
         assert dr is not None
 
     def test_build_driver_without_checkpoint(self, tmp_path, monkeypatch):
-        import src.pipeline as _pl
+        import src.runtime.pipeline as _pl
 
         monkeypatch.setattr(_pl, "JSON_DIR", tmp_path)
         dr = _pl._build_driver(with_checkpoint=False)

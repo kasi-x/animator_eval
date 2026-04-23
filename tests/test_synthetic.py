@@ -1,6 +1,6 @@
 """合成データ生成のテスト."""
 
-from src.synthetic import generate_synthetic_data
+from src.testing.fixtures import generate_synthetic_data
 
 
 class TestGenerateSyntheticData:

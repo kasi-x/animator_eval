@@ -13,7 +13,7 @@ from dataclasses import dataclass
 import httpx
 import structlog
 
-from src.models import Person
+from src.runtime.models import Person
 from src.utils.config import (
     LLM_BASE_URL,
     LLM_MAX_TOKENS,

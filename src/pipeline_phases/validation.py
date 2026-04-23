@@ -4,7 +4,7 @@ import structlog
 
 from src.analysis.silver_reader import silver_connect
 from src.pipeline_phases.context import PipelineContext
-from src.validation import ValidationResult, validate_all
+from src.infra.validation import ValidationResult, validate_all
 
 logger = structlog.get_logger()
 

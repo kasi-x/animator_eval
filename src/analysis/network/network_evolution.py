@@ -12,7 +12,7 @@ from collections import defaultdict
 import networkx as nx
 import structlog
 
-from src.models import AnimeAnalysis as Anime, Credit
+from src.runtime.models import AnimeAnalysis as Anime, Credit
 from src.utils.time_utils import get_year_quarter, yq_label
 
 logger = structlog.get_logger()

@@ -1,7 +1,7 @@
 """versatility モジュールのテスト."""
 
 from src.analysis.versatility import compute_versatility
-from src.models import Credit, Role
+from src.runtime.models import Credit, Role
 from src.utils.role_groups import ROLE_CATEGORY
 
 

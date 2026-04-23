@@ -22,7 +22,7 @@ import structlog
 
 from src.analysis.career import CAREER_STAGE
 from src.analysis.scoring.pagerank import normalize_scores, weighted_pagerank
-from src.models import AnimeAnalysis as Anime, Credit, Role
+from src.runtime.models import AnimeAnalysis as Anime, Credit, Role
 from src.utils.config import ROLE_WEIGHTS
 from src.utils.role_groups import ROLE_CATEGORY
 

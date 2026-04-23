@@ -1,6 +1,6 @@
 """Tests for centralized role grouping module."""
 
-from src.models import Role
+from src.runtime.models import Role
 from src.utils.role_groups import (
     ANIMATOR_ROLES,
     CORE_TEAM_ROLES,
