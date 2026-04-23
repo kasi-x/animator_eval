@@ -137,15 +137,13 @@ pixi run lab              # JupyterLab
 
 | コマンド | 用途 | 備考 |
 |---|---|---|
-| `pixi run test-impact` | **デフォルト**: 変更影響のみ | `pytest --testmon`。初回は全件走って `.testmondata` を構築、2 回目以降が高速 |
+| `pixi run test-scoped tests/test_foo.py` | **デフォルト**: 明示ターゲット | パス or `-k` 指定で最小実行。複数ファイルはスペース区切りで渡す |
 | `pixi run test-quick` | デバッグ反復中 | `pytest -x --lf` (前回失敗のみ + 即停止) |
-| `pixi run test-scoped tests/test_foo.py -k bar` | 明示ターゲット | パス or `-k` 指定で最小実行 |
 | `pixi run test` | PR/ship 直前のみ | フル 2450+、並列 (`-n auto --dist loadscope`) |
-| `pixi run test-impact-reset` | スキーマ変更後 | `.testmondata` を捨てる (`models_v2.py` 変更後に必須) |
 
-- Claude は「とりあえずテスト」で `pixi run test` を選ばない。まず `test-impact`。
-- 特定モジュールしか触っていないことが明らかな場合は `test-scoped` で更に絞る。
-- testmon がスキーマ変更を追えず取りこぼす可能性があるときは `test-impact-reset` → `test-impact` の順で流す。
+- Claude は「とりあえずテスト」で `pixi run test` を選ばない。まず **`test-scoped`** で変更箇所に対応するテストファイルを明示指定する。
+- `pixi run test-impact` (testmon) は **使わない**: 変更と無関係なテストを引き込み、このリポジトリでは現実的に完走しない (2026-04-23 ユーザー確定)。
+- 対象テストファイルが分からない時は `grep -rn "from src.foo" tests/` などで touched module の dependents を探して列挙する。
 
 Task 系統は `task --list` で確認。
 
