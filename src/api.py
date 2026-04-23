@@ -1077,7 +1077,7 @@ def db_stats():
 @app.get("/api/freshness")
 def freshness():
     """Data source freshness check."""
-    from src.monitoring import get_freshness_summary
+    from src.freshness import get_freshness_summary
 
     with db_connection() as conn:
         return get_freshness_summary(conn)

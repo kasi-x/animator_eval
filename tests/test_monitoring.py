@@ -7,7 +7,7 @@ import pytest
 from typer.testing import CliRunner
 
 from src.cli import app
-from src.monitoring import (
+from src.freshness import (
     DEFAULT_THRESHOLD_HOURS,
     FRESHNESS_THRESHOLDS,
     check_data_freshness,

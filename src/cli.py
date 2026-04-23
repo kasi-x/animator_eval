@@ -1762,7 +1762,7 @@ def freshness(lang: str = lang_option) -> None:
     setup_logging()
 
     from src.database import db_connection
-    from src.monitoring import check_data_freshness
+    from src.freshness import check_data_freshness
 
     with db_connection() as conn:
         reports = check_data_freshness(conn)

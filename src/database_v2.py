@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import Generator
 
 import structlog
-from sqlalchemy import create_engine, event, text
+from sqlalchemy import event
 from sqlalchemy.engine import Engine
 from sqlmodel import Session, create_engine as create_sqlmodel_engine
 

@@ -4686,57 +4686,257 @@ def get_unfetchable_person_ids(
     return {row[0] for row in rows}
 
 
-def upsert_person(conn: sqlite3.Connection, person: Person) -> None:
-    """Insert or update a person."""
+# Source priority for canonical name selection.
+# Higher value = more authoritative for primary name fields.
+_SOURCE_PRIORITY: dict[str, int] = {
+    "anilist": 3,
+    "mal": 2,
+    "seesaawiki": 2,
+    "mediaarts": 2,
+    "ann": 1,
+    "jvmg": 1,
+    "keyframe": 1,
+    "allcinema": 1,
+}
+
+# CJK name fields where historical variants should be preserved in aliases.
+_CJK_NAME_FIELDS: tuple[str, ...] = ("name_ja", "name_ko", "name_zh")
+
+
+def upsert_person(
+    conn: sqlite3.Connection,
+    person: Person,
+    source: str = "",
+) -> None:
+    """Insert or update a person with source-aware primary name selection.
+
+    Primary name determination:
+    1. Higher-priority source wins (anilist=3 > mal/seesaawiki=2 > ann/others=1).
+    2. When a CJK name field changes, the displaced value is added to aliases
+       so no name history is lost.
+    3. Non-name fields (bio, dates, social) always use COALESCE (first non-null wins).
+
+    Call normalize_primary_names_by_credits() after full ETL + entity resolution
+    to re-rank primary names by credit count (most-used name = primary).
+    """
     import json
 
-    conn.execute(
-        """INSERT INTO persons (
-               id, name_ja, name_en, name_ko, name_zh, aliases, nationality,
-               mal_id, anilist_id,
-               date_of_birth, hometown, blood_type, description, favourites, site_url
-           )
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET
-               name_ja = COALESCE(NULLIF(excluded.name_ja, ''), persons.name_ja),
-               name_en = COALESCE(NULLIF(excluded.name_en, ''), persons.name_en),
-               name_ko = COALESCE(NULLIF(excluded.name_ko, ''), persons.name_ko),
-               name_zh = COALESCE(NULLIF(excluded.name_zh, ''), persons.name_zh),
-               aliases = excluded.aliases,
-               nationality = COALESCE(NULLIF(excluded.nationality, '[]'), persons.nationality),
-               mal_id = COALESCE(excluded.mal_id, persons.mal_id),
-               anilist_id = COALESCE(excluded.anilist_id, persons.anilist_id),
-               date_of_birth = COALESCE(excluded.date_of_birth, persons.date_of_birth),
-               hometown = COALESCE(excluded.hometown, persons.hometown),
-               blood_type = COALESCE(excluded.blood_type, persons.blood_type),
-               description = COALESCE(excluded.description, persons.description),
-               favourites = COALESCE(excluded.favourites, persons.favourites),
-               site_url = COALESCE(excluded.site_url, persons.site_url)
-        """,
-        (
-            person.id,
-            person.name_ja,
-            person.name_en,
-            person.name_ko,
-            person.name_zh,
-            json.dumps(person.aliases, ensure_ascii=False),
-            json.dumps(person.nationality, ensure_ascii=False),
-            person.mal_id,
-            person.anilist_id,
-            person.date_of_birth,
-            person.hometown,
-            person.blood_type,
-            person.description,
-            person.favourites,
-            person.site_url,
-        ),
-    )
+    incoming_priority = _SOURCE_PRIORITY.get(source, 0)
+
+    existing = conn.execute(
+        "SELECT name_ja, name_ko, name_zh, aliases, name_priority FROM persons WHERE id = ?",
+        (person.id,),
+    ).fetchone()
+
+    if existing is None:
+        # New record — straightforward insert
+        conn.execute(
+            """INSERT OR IGNORE INTO persons (
+                   id, name_ja, name_en, name_ko, name_zh, aliases, nationality,
+                   mal_id, anilist_id,
+                   date_of_birth, hometown, blood_type, description, favourites, site_url,
+                   name_priority
+               )
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                person.id,
+                person.name_ja,
+                person.name_en,
+                person.name_ko,
+                person.name_zh,
+                json.dumps(person.aliases, ensure_ascii=False),
+                json.dumps(person.nationality, ensure_ascii=False),
+                person.mal_id,
+                person.anilist_id,
+                person.date_of_birth,
+                person.hometown,
+                person.blood_type,
+                person.description,
+                person.favourites,
+                person.site_url,
+                incoming_priority,
+            ),
+        )
+        return
+
+    # Existing record — check name field conflicts and preserve history in aliases.
+    existing_priority: int = existing["name_priority"] or 0
+    old_aliases: list[str] = json.loads(existing["aliases"] or "[]")
+
+    # Collect displaced CJK names before deciding whether to update primaries.
+    displaced: list[str] = []
+    for field in _CJK_NAME_FIELDS:
+        old_val: str = existing[field] or ""
+        new_val: str = getattr(person, field, "") or ""
+        if old_val and new_val and old_val != new_val:
+            displaced.append(old_val)
+
+    # Decide whether incoming source can update primary name fields.
+    update_primary = incoming_priority >= existing_priority
+
+    # Add displaced names to aliases (regardless of who wins primary).
+    for name in displaced:
+        if name not in old_aliases:
+            old_aliases.append(name)
+
+    # Also absorb any aliases the incoming record carries.
+    for alias in person.aliases:
+        if alias and alias not in old_aliases:
+            old_aliases.append(alias)
+
+    final_aliases = json.dumps(old_aliases, ensure_ascii=False)
+
+    if update_primary:
+        conn.execute(
+            """UPDATE persons SET
+                   name_ja   = COALESCE(NULLIF(?, ''), name_ja),
+                   name_en   = COALESCE(NULLIF(?, ''), name_en),
+                   name_ko   = COALESCE(NULLIF(?, ''), name_ko),
+                   name_zh   = COALESCE(NULLIF(?, ''), name_zh),
+                   aliases   = ?,
+                   nationality = COALESCE(NULLIF(?, '[]'), nationality),
+                   mal_id    = COALESCE(?, mal_id),
+                   anilist_id = COALESCE(?, anilist_id),
+                   date_of_birth = COALESCE(?, date_of_birth),
+                   hometown  = COALESCE(?, hometown),
+                   blood_type = COALESCE(?, blood_type),
+                   description = COALESCE(?, description),
+                   favourites = COALESCE(?, favourites),
+                   site_url  = COALESCE(?, site_url),
+                   name_priority = ?
+               WHERE id = ?""",
+            (
+                person.name_ja, person.name_en, person.name_ko, person.name_zh,
+                final_aliases,
+                json.dumps(person.nationality, ensure_ascii=False),
+                person.mal_id, person.anilist_id,
+                person.date_of_birth, person.hometown, person.blood_type,
+                person.description, person.favourites, person.site_url,
+                max(incoming_priority, existing_priority),
+                person.id,
+            ),
+        )
+    else:
+        # Lower-priority source: skip primary name fields, update metadata + aliases only.
+        conn.execute(
+            """UPDATE persons SET
+                   aliases   = ?,
+                   nationality = COALESCE(NULLIF(?, '[]'), nationality),
+                   mal_id    = COALESCE(?, mal_id),
+                   anilist_id = COALESCE(?, anilist_id),
+                   date_of_birth = COALESCE(?, date_of_birth),
+                   hometown  = COALESCE(?, hometown),
+                   blood_type = COALESCE(?, blood_type),
+                   description = COALESCE(?, description),
+                   favourites = COALESCE(?, favourites),
+                   site_url  = COALESCE(?, site_url)
+               WHERE id = ?""",
+            (
+                final_aliases,
+                json.dumps(person.nationality, ensure_ascii=False),
+                person.mal_id, person.anilist_id,
+                person.date_of_birth, person.hometown, person.blood_type,
+                person.description, person.favourites, person.site_url,
+                person.id,
+            ),
+        )
+
+
+def normalize_primary_names_by_credits(conn: sqlite3.Connection) -> int:
+    """Post-ETL: re-rank primary names by credit count (most-used name = primary).
+
+    Run AFTER integrate_* functions and entity resolution are complete.
+
+    For each person, finds which source contributed the most credits.
+    If that source's name differs from the current primary, swaps:
+      old primary → aliases, source name → primary.
+
+    Returns the number of persons whose primary name was updated.
+    """
+    import json
+
+    # Count credits per (person_id, evidence_source)
+    credit_counts: dict[tuple[str, str], int] = {}
+    for row in conn.execute(
+        "SELECT person_id, evidence_source, COUNT(*) AS n FROM credits "
+        "WHERE evidence_source != '' GROUP BY person_id, evidence_source"
+    ):
+        credit_counts[(row["person_id"], row["evidence_source"])] = row["n"]
+
+    # Source → bronze name table mapping
+    _BRONZE_NAME_QUERY: dict[str, str] = {
+        "anilist": "SELECT name_ja, name_en FROM src_anilist_persons "
+                   "WHERE anilist_id = CAST(? AS INT)",
+        "ann":     "SELECT name_ja, name_en FROM src_ann_persons "
+                   "WHERE ann_id = CAST(? AS INT)",
+        "mal":     "SELECT name_ja, name_en FROM src_mal_persons "
+                   "WHERE mal_id = CAST(? AS INT)",
+    }
+
+    # Build (person_id → best source) mapping by credit count
+    best: dict[str, tuple[str, int]] = {}  # person_id → (source, n_credits)
+    for (pid, src), n in credit_counts.items():
+        cur_src, cur_n = best.get(pid, ("", 0))
+        if n > cur_n or (n == cur_n and _SOURCE_PRIORITY.get(src, 0) > _SOURCE_PRIORITY.get(cur_src, 0)):
+            best[pid] = (src, n)
+
+    updated = 0
+    for pid, (top_src, _) in best.items():
+        query = _BRONZE_NAME_QUERY.get(top_src)
+        if not query:
+            continue  # source not in our name-lookup table
+
+        # Look up external ID for this person/source
+        ext_row = conn.execute(
+            "SELECT external_id FROM person_external_ids WHERE person_id = ? AND source = ?",
+            (pid, top_src),
+        ).fetchone()
+        if not ext_row:
+            continue
+
+        bronze_row = conn.execute(query, (ext_row["external_id"],)).fetchone()
+        if not bronze_row:
+            continue
+
+        top_name_ja = bronze_row["name_ja"] or ""
+        top_name_en = bronze_row["name_en"] or ""
+
+        current = conn.execute(
+            "SELECT name_ja, name_en, aliases FROM persons WHERE id = ?", (pid,)
+        ).fetchone()
+        if not current:
+            continue
+
+        cur_ja = current["name_ja"] or ""
+        cur_en = current["name_en"] or ""
+        if top_name_ja == cur_ja and top_name_en == cur_en:
+            continue  # already correct
+
+        old_aliases: list[str] = json.loads(current["aliases"] or "[]")
+        for old_name in (cur_ja, cur_en):
+            if old_name and old_name not in old_aliases:
+                old_aliases.append(old_name)
+
+        conn.execute(
+            """UPDATE persons SET
+                   name_ja = COALESCE(NULLIF(?, ''), name_ja),
+                   name_en = COALESCE(NULLIF(?, ''), name_en),
+                   aliases = ?
+               WHERE id = ?""",
+            (
+                top_name_ja, top_name_en,
+                json.dumps(old_aliases, ensure_ascii=False),
+                pid,
+            ),
+        )
+        updated += 1
+
+    logger.info("normalize_primary_names_done", updated=updated)
+    return updated
 
 
 def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
     """Insert or update an anime (canonical silver: structural columns only)."""
-    import json
-
     conn.execute(
         """INSERT INTO anime (
                id, title_ja, title_en, year, season, episodes, format, status,
@@ -5280,8 +5480,6 @@ def load_all_persons(conn: sqlite3.Connection) -> list[Person]:
 
 def load_all_anime(conn: sqlite3.Connection) -> list[Anime]:
     """Load all anime from the database."""
-    import json
-
     from src.db_rows import AnimeRow
 
     rows = conn.execute("SELECT * FROM anime").fetchall()

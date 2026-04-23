@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import gzip
 import json
 import re
@@ -398,8 +399,6 @@ async def scrape_person(
 
 
 # ─── Bronze 書き込み ──────────────────────────────────────────────────────────
-
-import dataclasses
 
 
 def save_anime_record(anime_bw, credits_bw, rec: AllcinemaAnimeRecord) -> int:

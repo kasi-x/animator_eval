@@ -143,7 +143,6 @@ class TestPatronagePremium:
         """Π_i = Σ PR_d × log(1+N_id) — more collabs with same director → higher score."""
         from src.analysis.scoring.patronage_dormancy import compute_patronage_premium
         n = 4
-        anime_map = {f"a{i}": _anime(f"a{i}", year=2020 + i) for i in range(n)}
         credits_repeat = [_credit("dir1", f"a{i}", "director") for i in range(n)]
         credits_repeat += [_credit("p_repeat", f"a{i}", "key_animator") for i in range(n)]
 
