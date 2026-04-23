@@ -39,9 +39,9 @@
 ### src/db/ 後続 ✅ 完了
 
 - [x] ✅ `init_db_v2` 抽出: `database_v2.py` → `src/db/schema.py` (1291 行 DDL + helper)
-- [x] ✅ `database_v2.py` 廃止: 121 行の薄いラッパーに (使用箇所なし)
+- [x] ✅ `database_v2.py` 廃止: 121 行の薄いラッパー → **削除**
 - [x] ✅ `generate_dbml.py` 移行: SQLAlchemy 除去、SQL 直接解析 (regex-based)
-- [x] ✅ `models_v2.py` 廃止: コード内での参照なし (完全に unused)
+- [x] ✅ `models_v2.py` 廃止: コード内での参照なし → **削除**
 
 ---
 
