@@ -48,13 +48,14 @@ TASK_CARDS/
 
 - [x] `_init_db_legacy()` line 341: `scores` TABLE DDL → `person_scores` にリネーム (2026-04-23)
 
-### 🟡 Maintenance: legacy migration 削除
+### 🟡 Maintenance: legacy migration 削除 ✅ DONE (2026-04-24)
 
-`src/database.py` が 9,000 行超に膨れている主因は v1-v55 の migration 関数群 (~7,000 行)。production DB が v57 で安定したら:
+`src/database.py`: 9229 行 → 3497 行 (-62%)。
 
-- [ ] `src/db/schema.py` = `init_db_v2()` + 最新 DDL (single source of truth)
-- [ ] `src/db/dao.py` = upsert/query ヘルパー群
-- [ ] v1-v55 の migration 関数をまとめて削除 (git history で参照可)
+- [x] v1-v56 の migration 関数群 (~7,000 行) 削除 (DuckDB 移行のため SQLite 不使用)
+- [x] `_init_db_legacy` (1050 行) + `_execute_sql_script` 削除
+- [ ] `src/db/schema.py` = `init_db_v2()` + 最新 DDL (single source of truth) — §4.4 完了後
+- [ ] `src/db/dao.py` = upsert/query ヘルパー群 — §4.4 完了後
 
 ### 🆕 多言語名対応 後続タスク (v56)
 
