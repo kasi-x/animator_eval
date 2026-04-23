@@ -1234,7 +1234,7 @@ class TestWikidataParsers:
                 "person": {"value": "http://wikidata.org/entity/Q200"},
                 "personLabel": {"value": "Shinichiro Watanabe"},
                 "personLabelJa": {"value": "渡辺信一郎"},
-                "roleLabel": {"value": "director"},
+                "role": {"value": "director"},
             }
         ]
         anime_list, persons, credits = parse_wikidata_results(bindings)
@@ -1256,7 +1256,7 @@ class TestWikidataParsers:
                 "animeLabel": {"value": "Test"},
                 "person": {"value": "http://wd/Q2"},
                 "personLabel": {"value": "Person"},
-                "roleLabel": {"value": ""},
+                "role": {"value": ""},
             }
         ]
         anime_list, persons, credits = parse_wikidata_results(bindings)
@@ -1279,7 +1279,7 @@ class TestWikidataParsers:
                 "year": {"value": "2005.0"},
                 "person": {"value": "http://wd/Q2"},
                 "personLabel": {"value": "Person"},
-                "roleLabel": {"value": "director"},
+                "role": {"value": "director"},
             }
         ]
         anime_list, _, _ = parse_wikidata_results(bindings)
@@ -1294,14 +1294,14 @@ class TestWikidataParsers:
                 "animeLabel": {"value": "Test"},
                 "person": {"value": "http://wd/Q2"},
                 "personLabel": {"value": "Person"},
-                "roleLabel": {"value": "director"},
+                "role": {"value": "director"},
             },
             {
                 "anime": {"value": "http://wd/Q1"},
                 "animeLabel": {"value": "Test"},
                 "person": {"value": "http://wd/Q2"},
                 "personLabel": {"value": "Person"},
-                "roleLabel": {"value": "episode_director"},
+                "role": {"value": "episode_director"},
             },
         ]
         anime_list, persons, credits = parse_wikidata_results(bindings)
@@ -1319,7 +1319,7 @@ class TestWikidataParsers:
                 "year": {"value": ""},
                 "person": {"value": "http://wd/Q2"},
                 "personLabel": {"value": "Person"},
-                "roleLabel": {"value": "director"},
+                "role": {"value": "director"},
             }
         ]
         anime_list, _, _ = parse_wikidata_results(bindings)
@@ -1806,7 +1806,7 @@ class TestJVMGFetchAnimeStaff:
                 "animeLabel": {"value": f"Anime {i}"},
                 "person": {"value": f"http://wd/P{i}"},
                 "personLabel": {"value": f"Person {i}"},
-                "roleLabel": {"value": "director"},
+                "role": {"value": "director"},
             }
             for i in range(500)
         ]
