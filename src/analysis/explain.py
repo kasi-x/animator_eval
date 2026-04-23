@@ -1,4 +1,4 @@
-"""スコア説明 — なぜそのスコアになったかを説明する.
+"""Score explanation — explain why a person received their score.
 
 各軸のスコアに対して、主要な寄与要因を抽出し、
 個人が自身の評価根拠を理解できるようにする。
@@ -26,7 +26,7 @@ def explain_person_summary(
     growth_velocity: float | None = None,
     individual_profile: dict | None = None,
 ) -> dict:
-    """個人向けの評価サマリーを生成する.
+    """Generate an evaluation summary for a specific person.
 
     スコアの根拠、キャリアの特徴、過小評価の有無を
     個人が理解できる形でまとめる。
@@ -50,7 +50,7 @@ def explain_person_summary(
     if not person_credits:
         return {"person_id": person_id, "summary": "データなし"}
 
-    # --- キャリア基本情報 ---
+    # --- basic career information ---
     years = set()
     roles = defaultdict(int)
     studios: set[str] = set()
@@ -70,7 +70,7 @@ def explain_person_summary(
     career_span = (latest_year - first_year + 1) if first_year and latest_year else 0
     top_roles = sorted(roles.items(), key=lambda x: -x[1])[:3]
 
-    # --- 主要作品 ---
+    # --- key works ---
     top_works = []
     seen_anime = set()
     for c in person_credits:
@@ -90,7 +90,7 @@ def explain_person_summary(
             )
     top_works.sort(key=lambda w: w["score"], reverse=True)
 
-    # --- 監督との関係 ---
+    # --- relationships with directors ---
     anime_directors: dict[str, set[str]] = defaultdict(set)
     for c in credits:
         if c.role in DIRECTOR_ROLES:
@@ -104,14 +104,14 @@ def explain_person_summary(
     top_directors = sorted(director_count.items(), key=lambda x: -x[1])[:5]
     repeat_directors = sum(1 for _, cnt in director_count.items() if cnt >= 2)
 
-    # --- 過小評価の判定 ---
+    # --- undervaluation assessment ---
     undervaluation_gap = None
     if scores and debiased_authority is not None:
         gap = debiased_authority - scores.get("birank", 0)
         if gap > 0.05:
             undervaluation_gap = round(gap * 100, 1)
 
-    # --- 成長トレンド ---
+    # --- growth trend ---
     growth_trend = None
     if growth_velocity is not None:
         if growth_velocity > 1.0:
@@ -123,7 +123,7 @@ def explain_person_summary(
         else:
             growth_trend = "declining"
 
-    # --- 信頼度の解釈 ---
+    # --- confidence interpretation ---
     confidence_label = None
     if confidence is not None:
         if confidence >= 0.8:
@@ -199,7 +199,7 @@ def explain_person_summary(
 def explain_individual_profile(
     individual_profile: dict,
 ) -> dict:
-    """個人貢献プロファイル（Layer 2）の解釈を返す.
+    """Return interpretation of the Individual Contribution Profile (Layer 2).
 
     peer_percentile, opportunity_residual, consistency, independent_value
     の各指標を人間が理解しやすい形に翻訳する。
@@ -347,7 +347,7 @@ def explain_authority(
                 }
             )
 
-    # 高スコア作品順にソート
+    # sort by descending score
     works.sort(key=lambda w: w["score"], reverse=True)
     return works[:10]
 
@@ -372,7 +372,7 @@ def explain_trust(
     if not person_credits:
         return []
 
-    # 監督IDを特定 (use pre-built index if available)
+    # identify director IDs (use pre-built index if available)
     if _anime_directors is not None:
         anime_directors = _anime_directors
     else:
@@ -381,7 +381,7 @@ def explain_trust(
             if c.role in DIRECTOR_ROLES:
                 anime_directors[c.anime_id].add(c.person_id)
 
-    # 各監督との共演回数を数える
+    # count co-credits with each director
     director_collabs: dict[str, list[str]] = defaultdict(list)
     for c in person_credits:
         for dir_id in anime_directors.get(c.anime_id, set()):
@@ -448,6 +448,6 @@ def explain_skill(
                 }
             )
 
-    # 最新順
+    # most recent first
     works.sort(key=lambda w: w["year"] or 0, reverse=True)
     return works[:10]

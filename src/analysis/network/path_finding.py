@@ -15,7 +15,7 @@ logger = structlog.get_logger()
 
 @dataclass
 class CollaborationPath:
-    """コラボレーション経路.
+    """Collaboration path.
 
     Attributes:
         source: 始点のperson_id
@@ -40,7 +40,7 @@ def find_shortest_path(
     target: str,
     weight: str | None = "weight",
 ) -> CollaborationPath | None:
-    """2人のクリエイター間の最短経路を見つける.
+    """Find the shortest path between two creators.
 
     Args:
         collaboration_graph: コラボレーショングラフ
@@ -72,17 +72,17 @@ def find_shortest_path(
 
     try:
         if weight:
-            # 重み付き最短経路（Dijkstra）
+            # weighted shortest path (Dijkstra)
             path = nx.dijkstra_path(collaboration_graph, source, target, weight=weight)
             path_weight = nx.dijkstra_path_length(
                 collaboration_graph, source, target, weight=weight
             )
         else:
-            # 重みなし最短経路（BFS）
+            # unweighted shortest path (BFS)
             path = nx.shortest_path(collaboration_graph, source, target)
             path_weight = len(path) - 1
 
-        # 経路上のエッジ情報収集
+        # collect edge info along the path
         shared_works_info = []
         for i in range(len(path) - 1):
             edge_data = collaboration_graph.get_edge_data(path[i], path[i + 1])
@@ -128,7 +128,7 @@ def find_all_shortest_paths(
     target: str,
     cutoff: int | None = None,
 ) -> list[CollaborationPath]:
-    """2人のクリエイター間の全最短経路を見つける.
+    """Find all shortest paths between two creators.
 
     同じ長さの最短経路が複数ある場合、全てを返す。
 
@@ -154,11 +154,11 @@ def find_all_shortest_paths(
 
         results = []
         for path in all_paths:
-            # 経路長チェック
+            # check path length
             if cutoff and len(path) - 1 > cutoff:
                 continue
 
-            # エッジ情報収集
+            # collect edge info
             total_weight = 0.0
             shared_works_info = []
             for i in range(len(path) - 1):
@@ -211,7 +211,7 @@ def find_all_simple_paths(
     target: str,
     cutoff: int = 5,
 ) -> list[CollaborationPath]:
-    """2人のクリエイター間の全単純経路を見つける.
+    """Find all simple paths between two creators.
 
     単純経路: 同じノードを2度通らない経路
 
@@ -239,7 +239,7 @@ def find_all_simple_paths(
 
         results = []
         for path in all_paths:
-            # エッジ情報収集
+            # collect edge info
             total_weight = 0.0
             shared_works_info = []
             for i in range(len(path) - 1):
@@ -266,7 +266,7 @@ def find_all_simple_paths(
                 )
             )
 
-        # 長さ順にソート
+        # sort by length
         results.sort(key=lambda x: (x.length, -x.total_weight))
 
         logger.info(
@@ -290,7 +290,7 @@ def compute_separation_statistics(
     collaboration_graph: nx.Graph,
     sample_size: int = 100,
 ) -> dict:
-    """ネットワーク全体の「隔たり」統計を計算.
+    """Compute network-wide separation statistics.
 
     ランダムサンプリングで平均経路長、最大経路長、連結成分などを算出。
 
@@ -304,7 +304,7 @@ def compute_separation_statistics(
     if collaboration_graph.number_of_nodes() == 0:
         return {}
 
-    # 連結成分分析
+    # connected component analysis
     if nx.is_connected(collaboration_graph):
         largest_cc = collaboration_graph
         n_components = 1
@@ -313,7 +313,7 @@ def compute_separation_statistics(
         n_components = len(components)
         largest_cc = collaboration_graph.subgraph(max(components, key=len)).copy()
 
-    # 最大連結成分のみで経路長計算
+    # compute path lengths only on the largest connected component
     if largest_cc.number_of_nodes() < 2:
         return {
             "n_components": n_components,
@@ -322,12 +322,12 @@ def compute_separation_statistics(
             "diameter": 0,
         }
 
-    # 平均経路長とdiameter
+    # average path length and diameter
     try:
         avg_path_length = nx.average_shortest_path_length(largest_cc, weight="weight")
         diameter = nx.diameter(largest_cc)
     except Exception:
-        # グラフが大きすぎる場合はサンプリング
+        # sample if the graph is too large
         import random
 
         nodes = list(largest_cc.nodes())
@@ -372,7 +372,7 @@ def find_bottleneck_nodes(
     collaboration_graph: nx.Graph,
     top_n: int = 10,
 ) -> list[tuple[str, float]]:
-    """ネットワークのボトルネック（重要中継点）を特定.
+    """Identify network bottlenecks (critical relay nodes).
 
     Betweenness Centrality が高いノード = 多くの経路が通過する重要人物
 
@@ -386,7 +386,7 @@ def find_bottleneck_nodes(
     if collaboration_graph.number_of_nodes() == 0:
         return []
 
-    # グラフが大きい場合は近似計算
+    # use approximation for large graphs
     if collaboration_graph.number_of_nodes() > 1000:
         betweenness = nx.betweenness_centrality(
             collaboration_graph,
@@ -396,7 +396,7 @@ def find_bottleneck_nodes(
     else:
         betweenness = nx.betweenness_centrality(collaboration_graph, weight="weight")
 
-    # 上位N件を抽出
+    # extract top-N
     top_bottlenecks = sorted(betweenness.items(), key=lambda x: x[1], reverse=True)[
         :top_n
     ]
@@ -431,7 +431,7 @@ def main():
     logger.info("building_collaboration_graph")
     collab_graph = create_person_collaboration_network(credits, anime_map)
 
-    # 統計計算
+    # compute statistics
     stats = compute_separation_statistics(collab_graph)
     print("\nネットワーク統計:")
     print(f"  連結成分数: {stats.get('n_components', 'N/A')}")
@@ -441,13 +441,13 @@ def main():
     print(f"  平均経路長: {stats.get('avg_path_length', 'N/A')}")
     print(f"  Diameter: {stats.get('diameter', 'N/A')}")
 
-    # ボトルネック検出
+    # bottleneck detection
     bottlenecks = find_bottleneck_nodes(collab_graph, top_n=5)
     print("\nボトルネック人物（重要中継点）:")
     for person_id, score in bottlenecks:
         print(f"  - {person_names.get(person_id, person_id)}: {score:.4f}")
 
-    # 経路探索例（上位2人の間）
+    # path search example (between top 2 persons)
     if len(persons) >= 2:
         source_id = persons[0].id
         target_id = persons[1].id

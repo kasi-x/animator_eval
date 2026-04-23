@@ -1,4 +1,4 @@
-"""独立ユニット形成可能性 — コミュニティ viability スコア."""
+"""Independent unit formation potential — community viability score."""
 
 from __future__ import annotations
 
@@ -139,7 +139,7 @@ def run_independent_units(
     anime_map: dict[str, Any],
     person_fe: dict[str, float],
 ) -> dict[str, Any]:
-    """独立ユニット形成可能性 — メインエントリポイント."""
+    """Independent unit formation potential — main entry point."""
     if not community_map:
         return {"error": "no_community_map"}
 

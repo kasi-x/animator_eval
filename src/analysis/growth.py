@@ -1,4 +1,4 @@
-"""成長予測 — キャリアトレンドに基づく人物の成長傾向分析.
+"""Growth prediction — analyse each person's growth tendency based on career trends.
 
     キャリアデータと過去クレジット密度から、
 各人物の成長トレンドを推定する。
@@ -18,7 +18,7 @@ def compute_growth_trends(
     person_scores: dict[str, float] | None = None,
     window: int = 3,
 ) -> dict[str, GrowthMetrics]:
-    """人物ごとの成長トレンドを算出する.
+    """Compute the growth trend for each person.
 
     Args:
         credits: 全クレジット

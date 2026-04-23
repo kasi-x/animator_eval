@@ -1,4 +1,4 @@
-"""後継計画マトリクス — 退職リスク / 後継候補.
+"""Succession planning matrix — retirement risk / successor candidates.
 
 RetireRisk = sigmoid(career_years - 25) × (1 - normalized_slope)
 """
@@ -194,7 +194,7 @@ def run_succession_matrix(
     credits: list[Any],
     studio_assignments: dict[str, dict[int, str]],
 ) -> dict[str, Any]:
-    """後継計画マトリクス — メインエントリポイント."""
+    """Succession planning matrix — main entry point."""
     if not person_fe:
         return {"error": "no_person_fe"}
 

@@ -1,4 +1,4 @@
-"""ジャンル親和性 — 人物のジャンル傾向分析.
+"""Genre affinity — analyse each person's genre tendencies.
 
 各人物がどのジャンル（アニメのスコア帯・年代帯）で多く仕事をしているかを分析する。
 （MAL/AniListのジャンルタグが利用可能になるまでは、スコア帯・年代帯で代用）
@@ -14,7 +14,7 @@ logger = structlog.get_logger()
 
 
 def _score_tier(score: float | None) -> str:
-    """スコアティア — 表示用のみ（スコア計算には使わない）."""
+    """Score tier — for display only (never used in score computation)."""
     if score is None:
         return "unknown"
     if score >= 8.0:
@@ -25,7 +25,7 @@ def _score_tier(score: float | None) -> str:
 
 
 def _era(year: int | None) -> str:
-    """年を時代に分類."""
+    """Classify a year into a decade label."""
     if year is None:
         return "unknown"
     if year >= 2020:
@@ -41,7 +41,7 @@ def compute_genre_affinity(
     credits: list[Credit],
     anime_map: dict[str, Anime],
 ) -> dict[str, dict]:
-    """人物ごとのジャンル親和性を計算する.
+    """Compute per-person genre affinity.
 
     Args:
         credits: クレジットリスト

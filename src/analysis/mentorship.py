@@ -1,4 +1,4 @@
-"""メンターシップ推定 — 師弟関係の自動推定.
+"""Mentorship inference — automatically infer mentor-mentee relationships.
 
 上位役職者（監督・作画監督）と下位役職者（原画・動画）が同一作品に
 繰り返し参加するパターンから、メンター-メンティー関係を推定する。
@@ -21,7 +21,7 @@ def infer_mentorships(
     min_stage_gap: int = 2,
     max_persons_per_anime: int = 80,
 ) -> list[dict]:
-    """メンター-メンティー関係を推定する.
+    """Infer mentor-mentee relationships.
 
     Args:
         credits: クレジットリスト
@@ -116,7 +116,7 @@ def infer_mentorships(
 
 
 def _compute_confidence(shared_works: int, stage_gap: int, year_span: int) -> float:
-    """メンターシップの信頼度 (0-100)."""
+    """Mentorship confidence score (0-100)."""
     # More shared works = higher confidence
     work_score = min(40, shared_works * 8)
     # Larger stage gap = more likely real mentorship
@@ -127,7 +127,7 @@ def _compute_confidence(shared_works: int, stage_gap: int, year_span: int) -> fl
 
 
 def build_mentorship_tree(mentorships: list[dict]) -> dict:
-    """メンターシップの木構造を構築する.
+    """Build the mentorship tree structure.
 
     Returns:
         {mentor_id: [mentee_ids], "roots": [top-level mentor IDs]}

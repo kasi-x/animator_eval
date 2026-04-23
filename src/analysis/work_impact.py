@@ -1,4 +1,4 @@
-"""作品インパクト — 人物がどの作品で最もインパクトを残したか.
+"""Work impact — identify the works where a person had the most impact.
 
 高評価作品への参加、チーム内での役職の高さ、その人の全キャリアに占める
 その作品の重要度を総合的にスコアリングする。
@@ -19,7 +19,7 @@ def compute_work_impact(
     anime_map: dict[str, Anime],
     person_scores: dict[str, float] | None = None,
 ) -> dict[str, list[dict]]:
-    """人物ごとの作品インパクトを計算する.
+    """Compute per-person work impact.
 
     Args:
         credits: クレジットリスト

@@ -1,4 +1,4 @@
-"""役職フロー分析 — Sankey ダイアグラム用の役職遷移フローデータを生成する.
+"""Role flow analysis — generate role transition flow data for Sankey diagrams.
 
 キャリアの中で role A → role B へ遷移した人数をカウントし、
 フロー（Sankey）図の入力データとして出力する。
@@ -30,7 +30,7 @@ def compute_role_flow(
     credits: list[Credit],
     anime_map: dict[str, Anime],
 ) -> dict:
-    """役職遷移フローデータを生成する.
+    """Generate role transition flow data.
 
     Args:
         credits: 全クレジット

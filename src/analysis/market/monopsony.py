@@ -1,4 +1,4 @@
-"""人材市場流動性・独占度分析 — HHI / 移籍率 / Lock-in 回帰.
+"""Labour market liquidity and concentration analysis — HHI / transfer rate / lock-in regression.
 
 studio_assignments: {person_id: {year: studio_id}}
 person_fe: {person_id: float}  — AKM person fixed effect
@@ -15,7 +15,7 @@ import structlog
 logger = structlog.get_logger()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# HHI 時系列
+# HHI time series
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -23,7 +23,7 @@ def compute_hhi_timeseries(
     studio_assignments: dict[str, dict[int, str]],
     year_range: tuple[int, int] = (1990, 2025),
 ) -> dict[str, Any]:
-    """年別 HHI (Herfindahl-Hirschman Index) を計算する.
+    """Compute annual HHI (Herfindahl-Hirschman Index).
 
     HHI_y = Σ share_{s,y}² × 10000
     normalized HHI* = (HHI - 1/N) / (1 - 1/N)
@@ -63,7 +63,7 @@ def compute_hhi_timeseries(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 移籍率
+# transfer rate
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -71,7 +71,7 @@ def compute_mobility_rates(
     studio_assignments: dict[str, dict[int, str]],
     window: int = 5,
 ) -> dict[str, Any]:
-    """キャリアステージ別・時代別 移籍率を計算する.
+    """Compute transfer rates by career stage and era.
 
     mobility_{p,5y}: 5年間に1度でもスタジオが変わった場合 1
 
@@ -224,7 +224,7 @@ def run_monopsony_analysis(
     studio_assignments: dict[str, dict[int, str]],
     person_fe: dict[str, float],
 ) -> dict[str, Any]:
-    """人材市場流動性・独占度分析 — メインエントリポイント."""
+    """Labour market liquidity and concentration analysis — main entry point."""
     if not studio_assignments:
         return {"error": "no_studio_assignments"}
 

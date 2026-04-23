@@ -33,7 +33,7 @@ logger = structlog.get_logger()
 
 @dataclass
 class TemporalBridgeSnapshot:
-    """時間ウィンドウごとのブリッジ分析結果.
+    """Bridge analysis result per time window.
 
     Attributes:
         window_start: ウィンドウ開始年
@@ -56,7 +56,7 @@ class TemporalBridgeSnapshot:
 
 @dataclass
 class BridgeLifespanStats:
-    """ブリッジ寿命の統計情報.
+    """Bridge lifespan statistics.
 
     Attributes:
         person_id: person_id
@@ -90,7 +90,7 @@ def compute_temporal_bridges(
     min_community_size: int = 5,
     top_n_bridges: int = 30,
 ) -> list[TemporalBridgeSnapshot]:
-    """スライディングウィンドウでブリッジ分析を実施する.
+    """Run bridge analysis using a sliding window.
 
     各ウィンドウ [window_start, window_start + window_size) の期間のクレジットのみを
     使ってコラボレーショングラフを再構築し、コミュニティ検出 → ブリッジ判定を行う。
@@ -108,7 +108,7 @@ def compute_temporal_bridges(
     Returns:
         TemporalBridgeSnapshot のリスト（時系列順）
     """
-    # インポートを遅延（循環依存回避）
+    # deferred import (avoid circular dependency)
     from src.analysis.network.community_detection import (
         analyze_community_overlap,
         detect_communities,
@@ -130,7 +130,7 @@ def compute_temporal_bridges(
     for w_start in windows:
         w_end = w_start + window_size - 1
 
-        # ウィンドウ内のクレジットを抽出
+        # extract credits within the window
         window_credits = [
             c
             for c in credits
@@ -142,7 +142,7 @@ def compute_temporal_bridges(
         ]
 
         if len(window_credits) < 10:
-            # データが少なすぎるウィンドウはスキップ
+            # skip windows with too little data
             logger.debug(
                 "temporal_window_skipped_insufficient_data",
                 window_start=w_start,
@@ -150,7 +150,7 @@ def compute_temporal_bridges(
             )
             continue
 
-        # コラボレーショングラフを構築
+        # build collaboration graph
         # anime_id → [person_id] の集約
         anime_persons: dict[str, list[str]] = defaultdict(list)
         for c in window_credits:
@@ -175,7 +175,7 @@ def compute_temporal_bridges(
         if G.number_of_nodes() < min_community_size * 2:
             continue
 
-        # コミュニティ検出（Phase 0 で修正済みの Louvain を使用）
+        # community detection (use fixed Louvain from Phase 0)
         try:
             communities = detect_communities(G, min_community_size=min_community_size)
         except Exception as e:
@@ -187,7 +187,7 @@ def compute_temporal_bridges(
             continue
 
         if len(communities) < 2:
-            # コミュニティが1つ以下ならブリッジは存在しない
+            # if ≤1 community, no bridges exist
             snapshots.append(
                 TemporalBridgeSnapshot(
                     window_start=w_start,
@@ -199,7 +199,7 @@ def compute_temporal_bridges(
             )
             continue
 
-        # ブリッジ判定（複数コミュニティに接続している人物）
+        # bridge check (persons connected to multiple communities)
         bridges = analyze_community_overlap(communities, G)
         bridge_ids = set(bridges.keys())
 
@@ -247,7 +247,7 @@ def compute_temporal_bridges(
 def compute_bridge_lifespan(
     snapshots: list[TemporalBridgeSnapshot],
 ) -> dict[str, BridgeLifespanStats]:
-    """各人物のブリッジ寿命を計算する.
+    """Compute bridge lifespan for each person.
 
     「寿命」= 連続してブリッジであったウィンドウ数の最大値
     「総ウィンドウ数」= ブリッジとして出現したウィンドウ数（連続不問）
@@ -271,12 +271,12 @@ def compute_bridge_lifespan(
         windows_sorted = sorted(windows)
         total = len(windows_sorted)
 
-        # 連続ウィンドウの最大長を計算
-        # ウィンドウは step 刻みなので、連続 = 差が step 以下
+        # compute maximum length of consecutive windows
+        # windows advance by step, so consecutive = difference ≤ step
         if len(windows_sorted) == 1:
             max_consecutive = 1
         else:
-            # ウィンドウのステップを推定（最頻差分）
+            # estimate window step (most frequent difference)
             diffs = [
                 windows_sorted[i + 1] - windows_sorted[i]
                 for i in range(len(windows_sorted) - 1)
@@ -288,7 +288,7 @@ def compute_bridge_lifespan(
             else:
                 step_estimate = 2
 
-            # 連続グループを検出
+            # detect consecutive groups
             max_consecutive = 1
             current = 1
             for i in range(1, len(windows_sorted)):
@@ -321,7 +321,7 @@ def get_person_temporal_trajectory(
     snapshots: list[TemporalBridgeSnapshot],
     person_ids: list[str],
 ) -> dict[str, list[int | None]]:
-    """対象人物 × 時間ウィンドウ の in/out 行列を返す.
+    """Return an in/out matrix of target persons × time windows.
 
     各ウィンドウで当該人物がブリッジであれば cross_community_edges 数、
     そうでなければ None を返す（ヒートマップ用）。
@@ -357,7 +357,7 @@ def get_era_top_bridges(
     era_boundaries: list[int] | None = None,
     top_n: int = 5,
 ) -> dict[str, list[tuple[str, int]]]:
-    """時代別のトップブリッジ人物を集計する.
+    """Aggregate top bridge persons by era.
 
     Args:
         snapshots: compute_temporal_bridges の出力
@@ -370,7 +370,7 @@ def get_era_top_bridges(
     if era_boundaries is None:
         era_boundaries = [1990, 2000, 2010, 2020, 2030]
 
-    # 時代ラベルを定義
+    # define era labels
     era_labels = []
     for i, boundary in enumerate(era_boundaries[:-1]):
         label = f"{boundary}s"

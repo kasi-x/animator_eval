@@ -1,4 +1,4 @@
-"""時系列PageRank — 年次スナップショットによる動的BiRank評価.
+"""Temporal PageRank — dynamic BiRank evaluation via annual snapshots.
 
 年ごとの累積グラフでPageRankを実行し、BiRank推移・先見スコア・抜擢検出を算出する。
 Phase 9 分析モジュールとして動作（コアスコアリングには影響しない独立した補足分析）。
@@ -37,7 +37,7 @@ PEER_EDGE_CAP = 15  # Max persons per category per anime for peer edges
 
 @dataclass
 class StreamingCheckpoint:
-    """年次グラフストリーミングのチェックポイント.
+    """Checkpoint for annual graph streaming.
 
     累積グラフの状態を保存し、次回実行時に差分年だけ再計算できるようにする。
     pickle で result/json/ 以下に保存される（自己生成ファイルのみ使用）。
@@ -49,7 +49,7 @@ class StreamingCheckpoint:
 
 
 def save_streaming_checkpoint(path: Path, checkpoint: StreamingCheckpoint) -> None:
-    """チェックポイントを pickle として保存する."""
+    """Save the checkpoint as a pickle file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "wb") as fh:
         pickle.dump(checkpoint, fh, protocol=pickle.HIGHEST_PROTOCOL)  # noqa: S301
@@ -59,7 +59,7 @@ def save_streaming_checkpoint(path: Path, checkpoint: StreamingCheckpoint) -> No
 
 
 def load_streaming_checkpoint(path: Path) -> StreamingCheckpoint | None:
-    """チェックポイントを読み込む. 存在しない/壊れている場合は None."""
+    """Load a checkpoint; return None if missing or corrupt."""
     if not path.exists():
         return None
     try:
@@ -90,7 +90,7 @@ def _work_importance(anime: Anime | None) -> float:
 
 @dataclass(frozen=True)
 class YearlyBirankSnapshot:
-    """1年分のBiRank評価."""
+    """BiRank evaluation for a single year."""
 
     year: int
     birank: float  # 0-100 normalized within year
@@ -101,7 +101,7 @@ class YearlyBirankSnapshot:
 
 @dataclass
 class BirankTimeline:
-    """人物の年次BiRank推移."""
+    """Annual BiRank trajectory of a person."""
 
     person_id: str
     name: str = ""  # display name resolved from persons list
@@ -116,7 +116,7 @@ class BirankTimeline:
 
 @dataclass
 class ForesightScore:
-    """先見スコア — 無名時の共演者が後に成長した場合のボーナス.
+    """Foresight score — bonus when obscure co-credits later grow prominent.
 
     Note: This is a retrospective pattern metric. "Foresight" here means
     a person historically co-appeared with persons who later rose.
@@ -135,7 +135,7 @@ class ForesightScore:
 
 @dataclass
 class PromotionEvent:
-    """1回の抜擢イベント."""
+    """A single scouting/promotion event."""
 
     promotee_id: str
     anime_id: str
@@ -149,7 +149,7 @@ class PromotionEvent:
 
 @dataclass
 class PromotionCredit:
-    """抜擢クレジット — ある上位者が何人を格上げしたか.
+    """Promotion credits — how many persons a senior person has elevated.
 
     Note: "Promotion" is attributed to the highest-stage person on the same
     production. This captures co-credit structural patterns, not verified
@@ -176,7 +176,7 @@ class PromotionCredit:
 
 @dataclass
 class TemporalPageRankResult:
-    """時系列PageRankの全結果."""
+    """Full results of temporal PageRank."""
 
     birank_timelines: dict = field(default_factory=dict)  # person_id -> dict
     foresight_scores: dict = field(default_factory=dict)  # person_id -> dict
@@ -200,7 +200,7 @@ def _add_peer_edges(
     anime_map: dict[str, Anime],
     peer_edge_weight: float,
 ) -> int:
-    """同役職カテゴリの人同士に双方向エッジを追加する.
+    """Add bidirectional edges between persons in the same role category.
 
     Args:
         graph: 二部グラフ (person ↔ anime)
@@ -250,7 +250,7 @@ def _build_yearly_cumulative_graphs(
     persons: list,
     peer_edge_weight: float,
 ) -> dict[int, nx.DiGraph]:
-    """年ごとの累積二部グラフをインクリメンタルに構築する.
+    """Incrementally build the cumulative bipartite graph year by year.
 
     前年のグラフを copy() して今年の差分だけ追加する。
     O(Y × C_year) — 毎年全クレジットを再走査する O(Y × C_total) に比べて高速。
@@ -383,7 +383,7 @@ def _build_and_score_yearly_streaming(
 
     all_years = sorted(credits_by_year.keys())
 
-    # チェックポイントがある場合はその年以降だけ処理する
+    # if a checkpoint exists, process only from that year onward
     if resume_checkpoint is not None:
         skip_up_to = resume_checkpoint.last_year
         years = [y for y in all_years if y > skip_up_to]
@@ -510,7 +510,7 @@ def _build_birank_timelines_from_counts(
     credits: list[Credit],
     anime_map: dict[str, Anime],
 ) -> dict[str, BirankTimeline]:
-    """年次PageRankスコアからBiRankタイムラインを構築する (graph-free version).
+    """Build a BiRank timeline from annual PageRank scores (graph-free version).
 
     Args:
         yearly_scores: {year: {node_id: raw_pagerank}}
@@ -602,7 +602,7 @@ def _build_birank_timelines(
 
 
 def _classify_trajectory(snapshots: list[YearlyBirankSnapshot]) -> str:
-    """スナップショット列からキャリア軌道を分類する.
+    """Classify career trajectories from a sequence of snapshots.
 
     Returns: "rising" | "stable" | "declining" | "peaked"
     """
@@ -650,7 +650,7 @@ def _compute_foresight_scores(
     foresight_horizon_years: int = 10,
     unknown_threshold_percentile: float = 25.0,
 ) -> dict[str, ForesightScore]:
-    """先見スコアを計算する.
+    """Compute foresight scores.
 
     Algorithm:
     1. Year T: find "unknown" Y (birank < 25th percentile) and "established" X (> 25th)
@@ -813,7 +813,7 @@ def _validate_foresight_holdout(
     yearly_normalized: dict[int, dict[str, float]],
     holdout_year: int = 2018,
 ) -> dict:
-    """ホールドアウト検証: holdout_year 以前のデータで先見スコアを計算し、
+    """Holdout validation: compute foresight scores using only data before holdout_year,
     2019〜 のブレイク人材をどれだけ予測できるかを評価する.
 
     先見スコアと2つの素朴ベースライン（活動量、共演者平均birank）を比較。
@@ -1017,7 +1017,7 @@ def _detect_promotions(
     birank_timelines: dict[str, BirankTimeline],
     min_promotions: int = 2,
 ) -> dict[str, PromotionCredit]:
-    """抜擢イベントを検出し、上位者に帰属する.
+    """Detect promotion events and attribute them to senior persons.
 
     Algorithm:
     1. Build CAREER_STAGE timeline per person
@@ -1260,7 +1260,7 @@ def compute_temporal_pagerank(
     min_promotions_for_credit: int = 2,
     resume_checkpoint: StreamingCheckpoint | None = None,
 ) -> tuple[TemporalPageRankResult, StreamingCheckpoint | None]:
-    """時系列PageRankの全計算を実行する.
+    """Run all temporal PageRank computations.
 
     Args:
         credits: 全クレジットデータ

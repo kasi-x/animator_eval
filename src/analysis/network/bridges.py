@@ -1,4 +1,4 @@
-"""ブリッジ検出 — コミュニティ間をつなぐキーパーソンの特定.
+"""Bridge detection — identify key persons who connect communities.
 
 グラフ理論のブリッジ概念を応用し、異なるコラボレーション
 クラスター間を橋渡しする人物を検出する。
@@ -28,7 +28,7 @@ def detect_bridges(
     communities: dict[str, int] | None = None,
     collaboration_graph: "nx.Graph | None" = None,
 ) -> dict:
-    """コミュニティ間ブリッジを検出する.
+    """Detect bridges between communities.
 
     Args:
         credits: クレジットリスト

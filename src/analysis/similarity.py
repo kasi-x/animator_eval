@@ -1,4 +1,4 @@
-"""類似人物検索 — スコアプロファイルの類似度を算出する.
+"""Similar-person search — compute similarity across score profiles.
 
 3軸スコアベクトル [person_fe, birank, patronage] のコサイン類似度で
 類似プロファイルの人物を検索する。
@@ -12,7 +12,7 @@ logger = structlog.get_logger()
 
 
 def _cosine_similarity(a: tuple[float, ...], b: tuple[float, ...]) -> float:
-    """2つのベクトルのコサイン類似度を算出する."""
+    """Compute the cosine similarity between two vectors."""
     dot = sum(x * y for x, y in zip(a, b))
     norm_a = math.sqrt(sum(x * x for x in a))
     norm_b = math.sqrt(sum(x * x for x in b))
@@ -26,7 +26,7 @@ def find_similar_persons(
     results: list[dict],
     top_n: int = 10,
 ) -> list[dict]:
-    """スコアプロファイルが類似した人物を検索する.
+    """Search for persons with similar score profiles.
 
     Args:
         target_id: 対象人物ID

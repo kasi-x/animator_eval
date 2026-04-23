@@ -1,4 +1,4 @@
-"""監督サークル分析 — 監督ごとの常連アニメーターグループを特定する.
+"""Director circle analysis — identify regular animator groups per director.
 
 「監督サークル」とは、特定の監督と頻繁に共演するアニメーターの集合。
 アニメ業界では、監督が信頼するスタッフを繰り返し起用する傾向があり、
@@ -18,7 +18,7 @@ logger = structlog.get_logger()
 
 @dataclass
 class AnimatorInDirectorsCircle:
-    """監督サークルに属するアニメーターのメンバー情報.
+    """Member information of an animator who belongs to a director's circle.
 
     Represents an animator who frequently collaborates with a specific director.
     """
@@ -32,7 +32,7 @@ class AnimatorInDirectorsCircle:
 
 @dataclass
 class DirectorCircle:
-    """監督とその常連メンバー集団.
+    """A director and their regular member group.
 
     Represents a director and their circle of frequent collaborators.
     """
@@ -43,7 +43,7 @@ class DirectorCircle:
 
 @dataclass
 class PersonCircleMembership:
-    """特定人物が属する監督サークルの情報.
+    """Director circle information for a specific person.
 
     Represents a person's membership in a director's circle.
     """
@@ -63,7 +63,7 @@ def find_director_circles(
     min_shared_works: int = 2,
     min_director_works: int = 3,
 ) -> dict[str, DirectorCircle]:
-    """監督サークルを特定する.
+    """Identify director circles.
 
     Identifies circles of animators who frequently collaborate with specific directors.
 
@@ -76,13 +76,13 @@ def find_director_circles(
     Returns:
         {director_id: DirectorCircle}
     """
-    # 監督ごとの作品を特定
+    # identify works per director
     works_by_each_director: dict[str, set[str]] = defaultdict(set)
     for c in credits:
         if c.role in DIRECTOR_ROLES:
             works_by_each_director[c.person_id].add(c.anime_id)
 
-    # 作品ごとのスタッフ
+    # staff per work
     staff_per_anime: dict[str, list[tuple[str, Role]]] = defaultdict(list)
     for c in credits:
         if c.role in ANIMATOR_ROLES:
@@ -94,7 +94,7 @@ def find_director_circles(
         if len(anime_ids_directed) < min_director_works:
             continue
 
-        # この監督の各作品に参加したアニメーター
+        # animators who participated in each work of this director
         collaborator_statistics: dict[str, dict] = defaultdict(
             lambda: {"shared_works": 0, "roles": set(), "latest_year": None}
         )
@@ -149,7 +149,7 @@ def get_person_circles(
     person_id: str,
     circles: dict[str, DirectorCircle],
 ) -> list[PersonCircleMembership]:
-    """特定人物が属する監督サークルを返す.
+    """Return the director circles that a specific person belongs to.
 
     Returns the list of director circles a person belongs to.
 

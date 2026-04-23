@@ -1,4 +1,4 @@
-"""チーム構成分析 — アニメ作品のスタッフ構成パターンを分析する.
+"""Team composition analysis — analyse staff composition patterns for anime works.
 
 成功作品のチーム構成パターンを特定し、
 個人の貢献がどのようなチーム文脈で発揮されるかを可視化する。
@@ -21,7 +21,7 @@ def analyze_team_patterns(
     min_score: float = 7.0,
     min_staff: int = 15,
 ) -> dict:
-    """大規模制作のチーム構成パターンを分析する.
+    """Analyse team composition patterns for large-scale productions.
 
     Args:
         credits: 全クレジット

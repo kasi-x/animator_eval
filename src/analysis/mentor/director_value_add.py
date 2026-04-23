@@ -1,4 +1,4 @@
-"""監督育成力ランキング — DML-based mentor effect estimation.
+"""Director mentoring-power ranking — DML-based mentor effect estimation.
 
 Input:
     mentorships_list: [{mentor_id, mentee_id, shared_works, confidence}]
@@ -18,7 +18,7 @@ import structlog
 logger = structlog.get_logger()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# データ構築
+# data construction
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -235,7 +235,7 @@ def run_director_value_add(
     credits: list[Any],
     anime_map: dict[str, Any],
 ) -> dict[str, Any]:
-    """監督育成力ランキング — メインエントリポイント."""
+    """Director mentoring-power ranking — main entry point."""
     if not mentorships or not person_fe:
         return {"error": "missing_inputs"}
 

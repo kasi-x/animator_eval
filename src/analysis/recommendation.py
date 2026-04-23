@@ -1,4 +1,4 @@
-"""推薦エンジン — チーム構成に基づく人材推薦.
+"""Recommendation engine — recommend personnel based on team composition.
 
 既存チームメンバーのスコアプロファイルを分析し、
 相補的な人材を推薦する。
@@ -19,7 +19,7 @@ def recommend_for_team(
     credits: list[Credit],
     top_n: int = 10,
 ) -> list[dict]:
-    """チームに対して相補的な人材を推薦する.
+    """Recommend complementary personnel for a team.
 
     Args:
         team_person_ids: 既存チームメンバーのID

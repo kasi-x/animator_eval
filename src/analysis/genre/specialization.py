@@ -18,7 +18,7 @@ logger = structlog.get_logger()
 
 @dataclass
 class GenreProfile:
-    """ジャンルプロファイル.
+    """Genre profile.
 
     Attributes:
         person_id: person_id
@@ -40,7 +40,7 @@ class GenreProfile:
 
 
 def normalize_genre(genre: str | None) -> str | None:
-    """ジャンル名の正規化.
+    """Normalise a genre name.
 
     Args:
         genre: ジャンル文字列
@@ -51,10 +51,10 @@ def normalize_genre(genre: str | None) -> str | None:
     if not genre:
         return None
 
-    # 小文字化、空白除去
+    # lowercase and strip whitespace
     normalized = genre.lower().strip()
 
-    # カテゴリマッピング（必要に応じて拡張）
+    # category mapping (extend as needed)
     genre_map = {
         "action": "action",
         "adventure": "adventure",
@@ -89,7 +89,7 @@ def compute_genre_profiles(
     anime_map: dict[str, Anime],
     person_scores: dict[str, dict] | None = None,
 ) -> dict[str, GenreProfile]:
-    """ジャンルプロファイルを計算.
+    """Compute genre profiles.
 
     Args:
         credits: 全クレジット
@@ -104,7 +104,7 @@ def compute_genre_profiles(
         lambda: defaultdict(list)
     )
 
-    # ジャンル別作品数（業界全体）
+    # work count per genre (industry-wide)
     global_genre_counts: dict[str, int] = defaultdict(int)
     genre_anime_map: dict[str, list[str]] = defaultdict(list)
 
@@ -113,17 +113,17 @@ def compute_genre_profiles(
         if not anime:
             continue
 
-        # アニメのジャンル取得（仮定: anime.genres が list[str]）
-        # 実際のデータ構造に合わせて調整必要
+        # get anime genres (assumption: anime.genres is list[str])
+        # adjust to match actual data structure
         genres = []
         if hasattr(anime, "genres") and anime.genres:
             genres = anime.genres
         elif hasattr(anime, "tags") and anime.tags:
-            # tagsをジャンルとして使用
+            # use tags as genres
             genres = anime.tags
 
         if not genres:
-            # ジャンル情報がない場合は "unknown"
+            # use "unknown" when no genre info
             genres = ["unknown"]
 
         for genre_raw in genres:
@@ -134,18 +134,18 @@ def compute_genre_profiles(
                     genre_anime_map[genre].append(anime.id)
                     global_genre_counts[genre] += 1
 
-    # 平均作品数計算
+    # compute average work count
     avg_anime_per_genre = (
         sum(global_genre_counts.values()) / len(global_genre_counts)
         if global_genre_counts
         else 0
     )
 
-    # プロファイル作成
+    # build profiles
     profiles: dict[str, GenreProfile] = {}
 
     for person_id, genre_credits_map in person_genre_credits.items():
-        # ジャンル分布（作品数）
+        # genre distribution (work counts)
         genre_distribution = {
             genre: len({c.anime_id for c in credits_list})
             for genre, credits_list in genre_credits_map.items()
@@ -155,7 +155,7 @@ def compute_genre_profiles(
         if total_anime == 0:
             continue
 
-        # 主要ジャンル
+        # primary genres
         primary_genre = max(genre_distribution.items(), key=lambda x: x[1])[0]
 
         # Shannon entropy（多様性）
@@ -165,30 +165,30 @@ def compute_genre_profiles(
             if p > 0:
                 entropy -= p * math.log2(p)
 
-        # 最大エントロピー（均等分布）
+        # maximum entropy (uniform distribution)
         max_entropy = (
             math.log2(len(genre_distribution)) if len(genre_distribution) > 1 else 1
         )
 
-        # 正規化された多様性（0-1）
+        # normalised diversity (0-1)
         genre_diversity = entropy / max_entropy if max_entropy > 0 else 0
 
-        # 特化度スコア（多様性の逆、0-100）
+        # specialisation score (inverse of diversity, 0-100)
         specialization_score = (1 - genre_diversity) * 100
 
-        # ニッチジャンル検出（業界平均より少ない）
+        # niche genre detection (below industry average)
         niche_genres = [
             genre
             for genre, count in genre_distribution.items()
             if global_genre_counts[genre] < avg_anime_per_genre
         ]
 
-        # ジャンルごとの平均スコア（仮定: スコアは一定）
+        # average score per genre (assumption: score is constant)
         genre_scores = {}
         if person_scores and person_id in person_scores:
             base_score = person_scores[person_id].get("iv_score", 0)
-            # 実際にはジャンルごとに異なるスコアを計算すべきだが、
-            # ここでは簡易的に全ジャンル同じスコアとする
+            # ideally compute a distinct score per genre, but
+            # simplified here: same score for all genres
             for genre in genre_distribution:
                 genre_scores[genre] = base_score
 
@@ -212,7 +212,7 @@ def find_genre_specialists(
     min_works: int = 3,
     top_n: int = 10,
 ) -> list[tuple[str, int, float]]:
-    """特定ジャンルのスペシャリストを見つける.
+    """Find specialists in a specific genre.
 
     Args:
         profiles: ジャンルプロファイル
@@ -232,7 +232,7 @@ def find_genre_specialists(
                 (person_id, works_in_genre, profile.specialization_score)
             )
 
-    # 作品数 × 特化度 でソート
+    # sort by work count × specialisation
     specialists.sort(key=lambda x: x[1] * x[2], reverse=True)
 
     logger.info(
@@ -248,7 +248,7 @@ def find_genre_specialists(
 def analyze_genre_trends(
     profiles: dict[str, GenreProfile],
 ) -> dict[str, dict]:
-    """ジャンルごとのトレンド分析.
+    """Genre-level trend analysis.
 
     Args:
         profiles: ジャンルプロファイル
@@ -274,7 +274,7 @@ def analyze_genre_trends(
             if profile.primary_genre == genre and profile.specialization_score > 70:
                 stats["specialists"] += 1
 
-    # 平均特化度計算
+    # compute average specialisation
     for genre, stats in genre_stats.items():
         genre_profiles = [p for p in profiles.values() if genre in p.genre_distribution]
         if genre_profiles:
@@ -294,7 +294,7 @@ def compute_genre_similarity(
     profile1: GenreProfile,
     profile2: GenreProfile,
 ) -> float:
-    """2人のクリエイターのジャンル類似度を計算（コサイン類似度）.
+    """Compute genre similarity between two creators (cosine similarity).
 
     Args:
         profile1: クリエイター1のプロファイル
@@ -303,7 +303,7 @@ def compute_genre_similarity(
     Returns:
         類似度（0-1、1に近いほど似ている）
     """
-    # 全ジャンルのユニオン
+    # union of all genres
     all_genres = set(profile1.genre_distribution.keys()) | set(
         profile2.genre_distribution.keys()
     )
@@ -311,11 +311,11 @@ def compute_genre_similarity(
     if not all_genres:
         return 0.0
 
-    # ベクトル作成
+    # create vectors
     vec1 = [profile1.genre_distribution.get(g, 0) for g in all_genres]
     vec2 = [profile2.genre_distribution.get(g, 0) for g in all_genres]
 
-    # コサイン類似度
+    # cosine similarity
     dot_product = sum(v1 * v2 for v1, v2 in zip(vec1, vec2))
     mag1 = math.sqrt(sum(v * v for v in vec1))
     mag2 = math.sqrt(sum(v * v for v in vec2))
@@ -332,7 +332,7 @@ def find_similar_creators_by_genre(
     target_person_id: str,
     top_n: int = 5,
 ) -> list[tuple[str, float]]:
-    """ジャンル嗜好が似ているクリエイターを見つける.
+    """Find creators with similar genre preferences.
 
     Args:
         profiles: ジャンルプロファイル
@@ -357,7 +357,7 @@ def find_similar_creators_by_genre(
         if similarity > 0:
             similarities.append((person_id, similarity))
 
-    # 類似度順にソート
+    # sort by similarity
     similarities.sort(key=lambda x: x[1], reverse=True)
 
     logger.info(
@@ -394,10 +394,10 @@ def main():
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
     scores_map = {s.person_id: {"iv_score": s.iv_score} for s in scores_list}
 
-    # ジャンルプロファイル計算
+    # compute genre profiles
     profiles = compute_genre_profiles(credits, anime_map, scores_map)
 
-    # ジャンルトレンド
+    # genre trends
     genre_trends = analyze_genre_trends(profiles)
 
     print("\nジャンルトレンド（上位10）:")
@@ -410,7 +410,7 @@ def main():
         print(f"  総作品数: {stats['total_works']}")
         print(f"  平均特化度: {stats['avg_specialization']}")
 
-    # 特化度分布
+    # specialisation distribution
     specializations = [p.specialization_score for p in profiles.values()]
     if specializations:
         avg_spec = sum(specializations) / len(specializations)
@@ -426,7 +426,7 @@ def main():
             f"  低特化 (<30): {low_spec} ({100 * low_spec / len(specializations):.1f}%)"
         )
 
-    # ジャンルスペシャリスト例
+    # genre specialist examples
     if genre_trends:
         top_genre = max(genre_trends.items(), key=lambda x: x[1]["total_works"])[0]
         specialists = find_genre_specialists(profiles, top_genre, min_works=2, top_n=5)

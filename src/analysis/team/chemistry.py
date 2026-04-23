@@ -1,4 +1,4 @@
-"""チーム化学反応 — ペア残差 / ネットワーク / 橋渡し人物.
+"""Team chemistry — pair residuals / network / bridge persons.
 
 Y_{a,ij} = log(production_scale_a) - expected(a)
 Pair-level mean residual, BH-corrected p-values.
@@ -129,7 +129,7 @@ def run_team_chemistry(
     anime_map: dict[str, Any],
     iv_scores: dict[str, float],
 ) -> dict[str, Any]:
-    """チーム化学反応 — メインエントリポイント."""
+    """Team chemistry — main entry point."""
     pair_results = compute_pair_residuals(credits, anime_map, iv_scores)
 
     if not pair_results:

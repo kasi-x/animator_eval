@@ -1,4 +1,4 @@
-"""新卒離職因果分解 — Kaplan-Meier / Cox PH / DML.
+"""New-entrant attrition causal decomposition — Kaplan-Meier / Cox PH / DML.
 
 デビューコホート (first_year 2010-2018) の離職生存時間を分析し、
 初期スタジオ tier の因果効果を DML で推定する。
@@ -17,7 +17,7 @@ import structlog
 logger = structlog.get_logger()
 
 # ─────────────────────────────────────────────────────────────────────────────
-# データ構築
+# data construction
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -28,7 +28,7 @@ def build_entry_cohort_dataset(
     first_year_max: int = 2018,
     obs_window_end: int = 2020,
 ) -> "list[dict]":
-    """デビューコホートの生存時間データセットを構築する.
+    """Build a survival-time dataset for debut cohorts.
 
     Returns list of dicts with keys:
         person_id, debut_year, duration, event,
@@ -168,7 +168,7 @@ def build_entry_cohort_dataset(
 
 
 def compute_kaplan_meier_by_cohort(dataset: list[dict]) -> dict:
-    """デビュー年代別 KM 生存曲線.
+    """Kaplan-Meier survival curves by debut decade.
 
     Returns {decade: {timeline, survival, ci_lower, ci_upper, n_at_risk, n_events}}
     """
@@ -352,7 +352,7 @@ def compute_dml_attrition(
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# 感度分析
+# sensitivity analysis
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -364,7 +364,7 @@ def compute_sensitivity(
     first_year_max: int = 2018,
     obs_window_end: int = 2020,
 ) -> dict:
-    """exit定義 3/5/7年の感度分析.
+    """Sensitivity analysis with exit defined as 3/5/7 years.
 
     Returns {threshold: {n_events, event_rate, km_median_survival}}
     """
@@ -434,7 +434,7 @@ def compute_sensitivity(
 
 
 def run_entry_cohort_attrition(conn: sqlite3.Connection) -> dict:
-    """新卒離職因果分解 — メインエントリポイント."""
+    """New-entrant attrition causal decomposition — main entry point."""
     dataset = build_entry_cohort_dataset(conn)
     if not dataset:
         return {

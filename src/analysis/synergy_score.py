@@ -1,4 +1,4 @@
-"""シナジースコア — シークエルチェーン内の上級職繰り返しペアリング効果.
+"""Synergy score — repeated senior-role pairing effect within sequel chains.
 
 上級職（COOCCURRENCE_ROLES: 10ロール）が同一フランチャイズ（シークエルチェーン）内で
 繰り返し共同制作する場合の品質向上を定量化する。

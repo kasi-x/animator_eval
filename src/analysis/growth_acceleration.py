@@ -23,7 +23,7 @@ logger = structlog.get_logger()
 
 @dataclass
 class AccelerationMetrics:
-    """成長指標.
+    """Growth metrics.
 
     Attributes:
         person_id: person_id
@@ -57,7 +57,7 @@ def compute_growth_metrics(
     anime_map: dict[str, Anime],
     current_year: int = 2026,
 ) -> dict[str, AccelerationMetrics]:
-    """成長指標を計算.
+    """Compute growth metrics.
 
     Args:
         credits: 全クレジット
@@ -215,7 +215,7 @@ def find_fast_risers(
     min_velocity: float = 2.0,
     top_n: int = 20,
 ) -> list[tuple[str, float, float]]:
-    """急成長中のクリエイターを発見.
+    """Discover rapidly-growing creators.
 
     Args:
         growth_metrics: 成長指標
@@ -248,7 +248,7 @@ def find_early_potential(
     min_momentum: float = 1.0,
     top_n: int = 20,
 ) -> list[tuple[str, int, float]]:
-    """早期キャリアのポテンシャル人材を発見.
+    """Discover high-potential early-career persons.
 
     Args:
         growth_metrics: 成長指標
@@ -279,7 +279,7 @@ def compute_adjusted_person_fe_with_growth(
     growth_metrics: dict[str, AccelerationMetrics],
     growth_weight: float = 0.3,
 ) -> dict[str, float]:
-    """成長率を考慮したSkillスコアを計算.
+    """Compute a Skill score adjusted for growth rate.
 
     Adjusted Skill = Skill * (1 + growth_bonus)
     growth_bonus = (velocity + acceleration) * growth_weight
@@ -361,11 +361,11 @@ def main():
         for s in scores_list
     }
 
-    # 成長指標計算
+    # compute growth metrics
     logger.info("computing_growth_metrics")
     growth_metrics = compute_growth_metrics(credits, anime_map)
 
-    # 急成長人材
+    # rapidly-growing persons
     print("\n=== 急成長中のクリエイター（Fast Risers）===\n")
     fast_risers = find_fast_risers(growth_metrics, min_velocity=2.0, top_n=10)
 
@@ -380,7 +380,7 @@ def main():
         print(f"  キャリア: {metrics.career_years}年")
         print()
 
-    # 早期ポテンシャル
+    # early-career potential
     print("\n=== 早期キャリアのポテンシャル人材 ===\n")
     early_potential = find_early_potential(
         growth_metrics, max_career_years=5, min_momentum=1.0, top_n=10
@@ -396,7 +396,7 @@ def main():
         print(f"  総クレジット: {metrics.total_credits}")
         print()
 
-    # 成長率調整Skill
+    # growth-rate-adjusted Skill score
     logger.info("computing_adjusted_skills")
     adjusted_skills = compute_adjusted_person_fe_with_growth(
         person_scores, growth_metrics, growth_weight=0.3

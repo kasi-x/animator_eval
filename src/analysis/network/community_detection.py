@@ -19,7 +19,7 @@ logger = structlog.get_logger()
 
 @dataclass
 class Community:
-    """コミュニティ（派閥）の情報.
+    """Community (faction) information.
 
     Attributes:
         community_id: コミュニティID
@@ -58,7 +58,7 @@ def detect_mentorships_in_community(
     anime_map: dict[str, Anime],
     min_shared_works: int = 2,
 ) -> list[tuple[str, str, float]]:
-    """コミュニティ内の師弟関係を検出.
+    """Detect mentor-mentee relationships within a community.
 
     Args:
         community_members: コミュニティのメンバーIDリスト
@@ -103,7 +103,7 @@ def compute_prospective_potential(
     evaluation_year: int,
     current_score: float,
 ) -> float:
-    """当時の潜在能力を推定（未来データを使わない前向き推定）.
+    """Estimate potential at the time (prospective — no future data used).
 
     Args:
         person_id: 評価対象のperson_id
@@ -181,7 +181,7 @@ def compute_retrospective_potential(
     current_score: float,
     future_peak_score: float,
 ) -> float:
-    """事後推定の潜在能力（未来データを使った後付け推定）.
+    """Retrospective potential estimate (uses future data).
 
     Args:
         person_id: 評価対象のperson_id
@@ -236,7 +236,7 @@ def get_community_formation_period(
     credits: list[Credit],
     anime_map: dict[str, Anime],
 ) -> tuple[int, int] | None:
-    """コミュニティの形成期（最も活発だった期間）を特定.
+    """Identify the formation period of a community (most active period).
 
     Args:
         community_members: コミュニティメンバー
@@ -293,7 +293,7 @@ def detect_communities(
     min_community_size: int = 5,
     resolution: float = 0.5,
 ) -> dict[int, Community]:
-    """コラボレーショングラフからコミュニティを検出する.
+    """Detect communities from the collaboration graph.
 
     Louvain法でモジュラリティを最大化するコミュニティ分割を見つける。
     密に連携するクリエイター集団（派閥）を自動的に抽出。
@@ -337,26 +337,26 @@ def detect_communities(
         members = list(comm_set)
         size = len(members)
 
-        # 最小サイズフィルタ
+        # minimum size filter
         if size < min_community_size:
             continue
 
-        # サブグラフ作成
+        # create subgraph
         subgraph = collaboration_graph.subgraph(members)
 
-        # 内部密度計算
+        # compute internal density
         possible_edges = size * (size - 1) / 2
         actual_edges = subgraph.number_of_edges()
         density = actual_edges / possible_edges if possible_edges > 0 else 0
 
-        # 外部エッジ数計算
+        # compute external edge count
         external_edges = 0
         for member in members:
             for neighbor in collaboration_graph.neighbors(member):
                 if neighbor not in comm_set:
                     external_edges += 1
 
-        # 中心的メンバー（次数順）
+        # central members (by degree)
         degrees = {node: subgraph.degree(node, weight="weight") for node in members}
         top_members = sorted(degrees.items(), key=lambda x: x[1], reverse=True)[:5]
 
@@ -373,7 +373,7 @@ def detect_communities(
 
         community_id += 1
 
-    # 全体のモジュラリティ計算
+    # compute overall modularity
     partition = {}
     for comm_id, comm in communities.items():
         for member in comm.members:
@@ -401,7 +401,7 @@ def analyze_community_overlap(
     communities: dict[int, Community],
     collaboration_graph: nx.Graph,
 ) -> dict[str, list[tuple[int, int]]]:
-    """コミュニティ間の重複分析.
+    """Overlap analysis between communities.
 
     複数のコミュニティにまたがる「ブリッジ」的な人物を特定。
 
@@ -416,19 +416,19 @@ def analyze_community_overlap(
         lambda: defaultdict(int)
     )
 
-    # 各人物がどのコミュニティと何回繋がっているかカウント
+    # count how many times each person connects to each community
     for person_id in collaboration_graph.nodes():
         for neighbor in collaboration_graph.neighbors(person_id):
-            # 隣人が属するコミュニティを見つける
+            # find communities the neighbour belongs to
             for comm_id, comm in communities.items():
                 if neighbor in comm.members:
                     person_connections[person_id][comm_id] += 1
 
-    # 複数コミュニティに接続している人物のみ抽出
+    # extract only persons connected to multiple communities
     bridges = {}
     for person_id, connections in person_connections.items():
         if len(connections) >= 2:
-            # 接続数順にソート
+            # sort by connection count
             sorted_connections = sorted(
                 connections.items(), key=lambda x: x[1], reverse=True
             )
@@ -444,7 +444,7 @@ def compute_community_features(
     anime_map: dict[str, Anime],
     person_scores: dict[str, dict] | None = None,
 ) -> dict[int, dict]:
-    """コミュニティの特徴量を計算.
+    """Compute community features.
 
     各コミュニティの平均スコア、活動期間、役職分布、師弟関係、時系列能力などを算出。
 
@@ -465,7 +465,7 @@ def compute_community_features(
     features = {}
 
     for comm_id, comm in communities.items():
-        # メンバーのクレジット集約
+        # aggregate member credits
         all_years = []
         all_roles: dict[str, int] = defaultdict(int)
         total_credits = 0
@@ -479,11 +479,11 @@ def compute_community_features(
                     all_years.append(anime.year)
                 all_roles[cred.role.value] += 1
 
-        # 活動期間
+        # activity period
         active_period = (min(all_years), max(all_years)) if all_years else (None, None)
         active_years = len(set(all_years)) if all_years else 0
 
-        # 平均スコア
+        # average score
         avg_scores = {}
         if person_scores:
             scores_in_comm = [
@@ -495,7 +495,7 @@ def compute_community_features(
                     if values:
                         avg_scores[f"avg_{key}"] = round(sum(values) / len(values), 2)
 
-        # トップ役職
+        # top roles
         top_roles = sorted(all_roles.items(), key=lambda x: x[1], reverse=True)[:3]
 
         # Detect mentorships within community
@@ -620,7 +620,7 @@ def export_communities_for_visualization(
     features: dict[int, dict],
     person_names: dict[str, str] | None = None,
 ) -> dict:
-    """可視化用にコミュニティデータをエクスポート.
+    """Export community data for visualisation.
 
     Args:
         communities: コミュニティ情報
@@ -640,7 +640,7 @@ def export_communities_for_visualization(
     ):
         comm_features = features.get(comm_id, {})
 
-        # メンバー名の取得
+        # get member names
         members_with_names = []
         if person_names:
             for member_id in comm.members:
@@ -728,15 +728,15 @@ def main():
     logger.info("building_collaboration_graph")
     collab_graph = create_person_collaboration_network(credits, anime_map)
 
-    # コミュニティ検出
+    # community detection
     communities = detect_communities(collab_graph, min_community_size=5)
 
-    # 特徴量計算
+    # compute features
     features = compute_community_features(
         communities, credits, anime_map, person_scores
     )
 
-    # ブリッジ分析
+    # bridge analysis
     bridges = analyze_community_overlap(communities, collab_graph)
 
     # エクスポート (function call kept for side effects, return value unused)
@@ -756,7 +756,7 @@ def main():
         for person_id, degree in comm.top_members[:3]:
             print(f"    - {person_names.get(person_id, person_id)} (次数: {degree})")
 
-        # 師弟関係
+        # mentor-mentee relationships
         if comm.mentorship_pairs:
             print(f"  師弟関係: {len(comm.mentorship_pairs)}組")
             for mentor_id, mentee_id, confidence in comm.mentorship_pairs[:3]:
@@ -764,7 +764,7 @@ def main():
                 mentee_name = person_names.get(mentee_id, mentee_id)
                 print(f"    - {mentor_name} → {mentee_name} (信頼度: {confidence:.1f})")
 
-        # 能力指標
+        # capability metrics
         if comm.avg_ability_at_formation > 0:
             print(f"  形成期の平均能力: {comm.avg_ability_at_formation:.1f}")
             print(f"  当時推定の潜在能力: {comm.avg_prospective_potential:.1f}")

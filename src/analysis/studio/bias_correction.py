@@ -23,7 +23,7 @@ logger = structlog.get_logger()
 
 @dataclass
 class StudioBiasMetrics:
-    """スタジオバイアスの指標.
+    """Studio bias metrics.
 
     Attributes:
         person_id: person_id
@@ -46,7 +46,7 @@ class StudioBiasMetrics:
 
 @dataclass
 class DebiasedScore:
-    """バイアス補正後のスコア.
+    """Bias-corrected score.
 
     Attributes:
         person_id: person_id
@@ -66,7 +66,7 @@ class DebiasedScore:
 
 
 def extract_studio_from_anime(anime: Anime) -> str | None:
-    """アニメからスタジオ名を抽出.
+    """Extract studio names from an anime.
 
     Args:
         anime: Animeオブジェクト
@@ -80,7 +80,7 @@ def extract_studio_from_anime(anime: Anime) -> str | None:
 
 
 def extract_all_studios(anime: Anime) -> list[str]:
-    """アニメの全スタジオを抽出.
+    """Extract all studios from an anime.
 
     Args:
         anime: Animeオブジェクト
@@ -97,7 +97,7 @@ def compute_studio_bias_metrics(
     credits: list[Credit],
     anime_map: dict[str, Anime],
 ) -> dict[str, StudioBiasMetrics]:
-    """スタジオバイアス指標を計算.
+    """Compute studio bias metrics.
 
     Args:
         credits: 全クレジット
@@ -185,7 +185,7 @@ def compute_studio_prestige(
     anime_map: dict[str, Anime],
     person_scores: dict[str, dict],
 ) -> dict[str, float]:
-    """スタジオごとの「威信」を計算.
+    """Compute "prestige" per studio.
 
     所属クリエイターの平均スコアから推定。
 
@@ -310,7 +310,7 @@ def find_undervalued_by_studio(
     debiased: dict[str, DebiasedScore],
     top_n: int = 20,
 ) -> list[tuple[str, float, float]]:
-    """スタジオバイアスで過小評価されている人材を発見.
+    """Discover persons undervalued due to studio bias.
 
     補正後のスコアが大きく上昇した人 = 実力が過小評価されていた
 
@@ -348,7 +348,7 @@ def find_overvalued_by_studio(
     debiased: dict[str, DebiasedScore],
     top_n: int = 20,
 ) -> list[tuple[str, float, float]]:
-    """スタジオバイアスで過大評価されている人材を発見.
+    """Discover persons overvalued due to studio bias.
 
     補正後のスコアが大きく下降した人 = スタジオの威信で評価されていた
 
@@ -384,7 +384,7 @@ def find_overvalued_by_studio(
 
 @dataclass
 class StudioDisparityResult:
-    """スタジオ間待遇差分析結果.
+    """Cross-studio compensation gap analysis result.
 
     Attributes:
         studio: スタジオ名
@@ -411,7 +411,7 @@ def compute_studio_disparity(
     person_scores: dict[str, dict],
     min_persons: int = 5,
 ) -> dict[str, StudioDisparityResult]:
-    """スタジオ間の待遇差（スコア分布）を分析.
+    """Analyse the compensation gap (score distribution) between studios.
 
     同程度のPerson FEを持つ人材がスタジオによって
     異なるBiRank/Patronage評価を受けているかを検出。
@@ -523,15 +523,15 @@ def main():
         s.person_id: {"birank": s.birank, "iv_score": s.iv_score} for s in scores_list
     }
 
-    # スタジオバイアス分析
+    # studio bias analysis
     logger.info("computing_studio_bias_metrics")
     bias_metrics = compute_studio_bias_metrics(credits, anime_map)
 
-    # スタジオ威信
+    # studio prestige
     logger.info("computing_studio_prestige")
     studio_prestige = compute_studio_prestige(credits, anime_map, person_scores)
 
-    # バイアス補正
+    # bias correction
     logger.info("debiasing_birank_scores")
     debiased = debias_birank_scores(
         person_scores, bias_metrics, studio_prestige, debias_strength=0.3

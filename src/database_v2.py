@@ -136,6 +136,7 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
             favourites       INTEGER,
             site_url         TEXT,
             image_medium     TEXT,
+            name_priority    INTEGER NOT NULL DEFAULT 0,
             updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(mal_id),
             UNIQUE(anilist_id)

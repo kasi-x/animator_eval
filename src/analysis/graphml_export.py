@@ -25,7 +25,7 @@ def export_graphml(
     max_edges: int = 1_000_000,
     top_n_persons: int = 5000,
 ) -> Path:
-    """コラボレーショングラフをGraphML形式でエクスポートする.
+    """Export the collaboration graph in GraphML format.
 
     大規模グラフ (>max_edges) の場合はiv_scoreスコア上位top_n_personsの
     サブグラフのみエクスポートする（Gephi等でも62M辺は扱えないため）。

@@ -1,4 +1,4 @@
-"""ジェンダー・ボトルネック分析 — 昇進 KM / Oaxaca-Blinder / スタジオ FE.
+"""Gender bottleneck analysis — promotion KM / Oaxaca-Blinder / studio FE.
 
 注意: gender データは欠損率が高い。
 データ品質の制約を必ず結果に含める。
@@ -20,7 +20,7 @@ logger = structlog.get_logger()
 
 
 def compute_gender_survival_by_stage(conn: sqlite3.Connection) -> dict[str, Any]:
-    """ステージ遷移別 KM (gender 比較) + log-rank test.
+    """KM survival by stage transition (gender comparison) + log-rank test.
 
     Returns {transition: {F: {timeline, survival, ci}, M: {}, logrank_p, n_F, n_M}}
     """
@@ -229,12 +229,12 @@ def compute_promotion_gap_oaxaca(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# スタジオ gender FE
+# studio gender fixed effects
 # ─────────────────────────────────────────────────────────────────────────────
 
 
 def compute_studio_gender_fe(conn: sqlite3.Connection) -> dict[str, Any]:
-    """スタジオ別 gender interaction — Cox model (simplified studio FE).
+    """Studio-level gender interaction — Cox model (simplified studio FE).
 
     For each studio: compare promotion rate gap F vs M after controlling for
     cohort and credits. Returns top/bottom studios by gamma_j.
@@ -305,7 +305,7 @@ def compute_studio_gender_fe(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 def run_gender_bottleneck(conn: sqlite3.Connection) -> dict[str, Any]:
-    """ジェンダー・ボトルネック分析 — メインエントリポイント."""
+    """Gender bottleneck analysis — main entry point."""
     survival = compute_gender_survival_by_stage(conn)
     oaxaca = compute_promotion_gap_oaxaca(conn)
     studio_fe = compute_studio_gender_fe(conn)

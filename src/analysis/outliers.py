@@ -1,4 +1,4 @@
-"""外れ値検出 — スコア分布における統計的外れ値を特定する.
+"""Outlier detection — identify statistical outliers in the score distribution.
 
 IQR 法と Z-score 法の両方を使用して、
 極端に高い/低いスコアの人物を検出する。
@@ -15,7 +15,7 @@ def detect_outliers(
     iqr_multiplier: float = 1.5,
     zscore_threshold: float = 2.5,
 ) -> dict:
-    """スコア分布における外れ値を検出する.
+    """Detect outliers in the score distribution.
 
     Args:
         results: スコア結果リスト ({person_id, authority, trust, ...})

@@ -1,4 +1,4 @@
-"""ジャンル空白地分析 — Whitespace スコア / 遷移行列.
+"""Genre whitespace analysis — Whitespace score / transition matrix.
 
 Input (from JSON):
     genre_ecosystem: {genre: {cagr_5y, penetration, specialist_count, ...}}
@@ -100,7 +100,7 @@ def compute_genre_transition_matrix(
     genre_affinity: list[dict],
     scores: list[dict],
 ) -> dict[str, Any]:
-    """ジャンル移行確率行列: specialist が career 中にどのジャンルに移行したか.
+    """Genre transition probability matrix: which genres do specialists migrate to during their career.
 
     Uses genre_affinity timeline data if available, else derives from
     top genre per person cross-tab.
@@ -145,7 +145,7 @@ def run_genre_whitespace(
     genre_affinity: list[dict],
     scores: list[dict],
 ) -> dict[str, Any]:
-    """ジャンル空白地分析 — メインエントリポイント."""
+    """Genre whitespace analysis — main entry point."""
     if not genre_ecosystem:
         return {"error": "no_genre_ecosystem_data"}
 

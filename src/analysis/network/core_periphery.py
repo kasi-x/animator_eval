@@ -19,7 +19,7 @@ logger = structlog.get_logger()
 
 
 class CoreStatus(Enum):
-    """ネットワーク上の位置."""
+    """Position in the network."""
 
     CORE = "core"  # 密に繋がったエリート層
     SEMI_PERIPHERY = "semi_periphery"  # 中間層（コアとペリフェリーの橋渡し）
@@ -29,7 +29,7 @@ class CoreStatus(Enum):
 
 @dataclass
 class CorenessMetrics:
-    """コア性の指標.
+    """Core-ness metrics.
 
     Attributes:
         person_id: person_id
@@ -54,7 +54,7 @@ class CorenessMetrics:
 
 @dataclass
 class CorePeripheryStructure:
-    """コア-ペリフェリー構造の全体像.
+    """Overall core-periphery structure.
 
     Attributes:
         core_members: コアメンバーのIDリスト
@@ -80,7 +80,7 @@ class CorePeripheryStructure:
 def compute_k_core_numbers(
     graph: nx.Graph,
 ) -> dict[str, int]:
-    """k-コア番号を計算.
+    """Compute k-core numbers.
 
     k-core: 次数≥kのノードのみで構成される最大部分グラフ
 
@@ -99,7 +99,7 @@ def compute_coreness_score(
     k_core: int,
     max_k: int,
 ) -> float:
-    """コア性スコアを計算.
+    """Compute core-ness scores.
 
     複数の指標を統合:
     - k-core番号（正規化）
@@ -142,7 +142,7 @@ def identify_core_periphery(
     core_threshold: float = 0.7,
     semi_threshold: float = 0.4,
 ) -> CorePeripheryStructure:
-    """コア-ペリフェリー構造を識別.
+    """Identify the core-periphery structure.
 
     Args:
         graph: ネットワークグラフ
@@ -224,7 +224,7 @@ def compute_coreness_metrics(
     graph: nx.Graph,
     core_structure: CorePeripheryStructure,
 ) -> dict[str, CorenessMetrics]:
-    """全ノードのコア性指標を計算.
+    """Compute core-ness metrics for all nodes.
 
     Args:
         graph: ネットワークグラフ
@@ -305,7 +305,7 @@ def find_rising_stars(
     min_core_ratio: float = 0.5,
     top_n: int = 20,
 ) -> list[tuple[str, float, float]]:
-    """「上昇中の新星」を特定.
+    """Identify "rising stars".
 
     セミペリフェリーまたはペリフェリーだが、
     コアメンバーと多く繋がっている = コアへの候補
@@ -342,7 +342,7 @@ def analyze_core_accessibility(
     structure: CorePeripheryStructure,
     metrics: dict[str, CorenessMetrics],
 ) -> dict[str, float]:
-    """コアへのアクセシビリティを分析.
+    """Analyse accessibility to the core.
 
     Args:
         structure: コア-ペリフェリー構造
@@ -436,13 +436,13 @@ def main():
     logger.info("building_collaboration_graph")
     collab_graph = create_person_collaboration_network(credits, anime_map)
 
-    # コア-ペリフェリー分析
+    # core-periphery analysis
     logger.info("identifying_core_periphery")
     structure = identify_core_periphery(
         collab_graph, core_threshold=0.7, semi_threshold=0.4
     )
 
-    # コア性指標計算
+    # compute core-ness metrics
     logger.info("computing_coreness_metrics")
     metrics = compute_coreness_metrics(collab_graph, structure)
 
@@ -464,7 +464,7 @@ def main():
     for pid, name, coreness in core_with_names[:10]:
         print(f"{name}: coreness={coreness:.3f}")
 
-    # 上昇中の新星
+    # rising stars
     print("\n=== 上昇中の新星（コア候補）===\n")
     rising = find_rising_stars(metrics, structure, min_core_ratio=0.5, top_n=10)
 
@@ -475,7 +475,7 @@ def main():
         print(f"  コア接続率: {core_ratio:.1%}")
         print()
 
-    # アクセシビリティ分析
+    # accessibility analysis
     print("\n=== コアへのアクセシビリティ ===\n")
     accessibility = analyze_core_accessibility(structure, metrics)
 

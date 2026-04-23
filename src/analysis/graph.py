@@ -1,4 +1,4 @@
-"""コラボレーショングラフ構築 (NetworkX).
+"""Collaboration graph construction (NetworkX).
 
 ノード種別:
   - person: アニメーター、監督等
@@ -31,7 +31,7 @@ logger = structlog.get_logger()
 
 
 def _role_weight(role: Role) -> float:
-    """役職に応じたエッジ重みを返す."""
+    """Return the edge weight corresponding to a role."""
     return ROLE_WEIGHTS.get(role.value, 1.0)
 
 
@@ -65,7 +65,7 @@ def create_person_anime_network(
     anime_list: list[Anime],
     credits: list[Credit],
 ) -> nx.DiGraph:
-    """二部グラフ (person ↔ anime) を構築する.
+    """Build a bipartite graph (person ↔ anime).
 
     Edge weights combine three factors:
       weight = role_weight × work_importance(duration) × staff_scale(staff_count)
@@ -75,7 +75,7 @@ def create_person_anime_network(
     """
     g = nx.DiGraph()
 
-    # ノード追加
+    # add nodes
     for p in persons:
         g.add_node(
             p.id,
@@ -126,7 +126,7 @@ def create_person_anime_network(
         if pid not in g:
             g.add_node(pid, type="person", name="", name_ja="", name_en="")
 
-    # クレジットエッジ（非制作ロールを除外）
+    # credit edges (non-production roles excluded)
     for c in credits:
         if c.role in NON_PRODUCTION_ROLES:
             continue
@@ -946,7 +946,7 @@ def _build_collaboration_edge_data(
         for p in persons
     }
 
-    # 非制作ロール（声優、主題歌等）を除外
+    # exclude non-production roles (voice actors, theme songs, etc.)
     credits = [c for c in credits if c.role not in NON_PRODUCTION_ROLES]
 
     # Compute commitment data for all anime
@@ -987,7 +987,7 @@ def create_person_collaboration_network(
     credits: list[Credit],
     anime_map: dict[str, Anime] | None = None,
 ):
-    """人物間コラボレーション無向グラフを構築する.
+    """Build an undirected person-to-person collaboration graph.
 
     Returns a SparseCollaborationGraph for large graphs (>100K edges)
     or a NetworkX Graph for small graphs.
@@ -1032,7 +1032,7 @@ def create_director_animator_network(
     credits: list[Credit],
     anime_map: dict[str, Anime] | None = None,
 ) -> nx.DiGraph:
-    """監督→アニメーター の有向グラフを構築する.
+    """Build a directed director → animator graph.
 
     Creates a directed network showing which directors worked with which animators.
     同一作品で監督/演出とアニメーターが共演した場合にエッジを張る。
@@ -1084,7 +1084,7 @@ def create_director_animator_network(
 def determine_primary_role_for_each_person(
     credits: list[Credit],
 ) -> dict[str, dict[str, int | str]]:
-    """各人物の役職分布と主要カテゴリを算出する.
+    """Compute the role distribution and primary category for each person.
 
     Determines each person's primary role category based on their credit distribution.
     Returns:
@@ -1120,7 +1120,7 @@ def determine_primary_role_for_each_person(
 
     result: dict[str, dict[str, int | str]] = {}
     for pid, role_counts in person_roles.items():
-        # カテゴリ別の集計
+        # aggregate by category
         category_counts: dict[str, int] = defaultdict(int)
         total = 0
         for role_str, count in role_counts.items():
@@ -1155,7 +1155,7 @@ def calculate_network_centrality_scores(
     graph: nx.Graph,
     person_ids: set[str] | None = None,
 ) -> dict[str, dict[str, float]]:
-    """各種中心性指標を算出する.
+    """Compute various centrality metrics.
 
     Calculates how central each person is to the collaboration network.
     大規模グラフ (>500ノード) の場合は近似アルゴリズムを使用する。
@@ -1192,7 +1192,7 @@ def calculate_network_centrality_scores(
 
     metrics: dict[str, dict[str, float]] = {}
 
-    # 次数中心性 (O(V) — SparseCollaborationGraph + NetworkX互換)
+    # degree centrality (O(V) — SparseCollaborationGraph + NetworkX compatible)
     deg_raw = graph.degree()
     s = 1.0 / (n_nodes - 1) if n_nodes > 1 else 1.0
     if isinstance(deg_raw, dict):
@@ -1202,7 +1202,7 @@ def calculate_network_centrality_scores(
         # NetworkX DegreeView — iterable of (node, degree)
         degree = {v: d * s for v, d in deg_raw}
 
-    # 媒介中心性 — 大規模グラフでは近似版を使用
+    # betweenness centrality — use approximation for large graphs
     # For large graphs: use k-sample approximation (k=200 balances accuracy vs speed).
     # For sparse graphs >5M edges, graph_rust uses the memory-efficient edge-list
     # interface (no adjacency dict OOM).
@@ -1213,7 +1213,7 @@ def calculate_network_centrality_scores(
     else:
         betweenness = graph_rust.betweenness_centrality(graph)
 
-    # 近接中心性 — 大規模グラフではスキップ（O(V*(V+E))で高コスト）
+    # closeness centrality — skip for large graphs (O(V*(V+E)) is expensive)
     # No Rust acceleration for closeness (rarely used on large graphs)
     closeness: dict = {}
     if not is_large and not is_sparse:
@@ -1232,7 +1232,7 @@ def calculate_network_centrality_scores(
                 for n in component:
                     closeness[n] = 0.0
 
-    # 固有ベクトル中心性（最大連結成分のみ）
+    # eigenvector centrality (largest connected component only)
     # Skip on sparse graphs (requires NetworkX conversion) and very large components
     eigenvector: dict = {}
     if is_sparse:
@@ -1268,7 +1268,7 @@ def calculate_network_centrality_scores(
 
 
 def compute_graph_summary(graph) -> dict:
-    """グラフレベルの統計サマリーを算出する.
+    """Compute a graph-level statistics summary.
 
     Works with both NetworkX Graph and SparseCollaborationGraph.
 
@@ -1342,7 +1342,7 @@ def compute_graph_summary(graph) -> dict:
 
 
 def main() -> None:
-    """エントリーポイント: DBからデータを読み込みグラフを構築して保存."""
+    """Entry point: load data from DB, build the graph, and save."""
     import json
 
     from src.database import (
@@ -1369,19 +1369,19 @@ def main() -> None:
         logger.warning("No credits found in DB. Run scraper first.")
         return
 
-    # 二部グラフ
+    # bipartite graph
     bp_graph = create_person_anime_network(persons, anime_list, credits)
 
-    # コラボレーショングラフ
+    # collaboration graph
     anime_map = {a.id: a for a in anime_list}
     collab_graph = create_person_collaboration_network(
         persons, credits, anime_map=anime_map
     )
 
-    # 監督→アニメーターグラフ
+    # director → animator graph
     da_graph = create_director_animator_network(credits, anime_map=anime_map)
 
-    # 統計出力
+    # output statistics
     stats = {
         "bipartite": {
             "nodes": bp_graph.number_of_nodes(),

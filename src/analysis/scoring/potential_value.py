@@ -19,7 +19,7 @@ logger = structlog.get_logger()
 
 
 class ValueCategory(Enum):
-    """潜在価値のカテゴリ."""
+    """Potential value category."""
 
     ELITE = "elite"  # 既に確立されたエリート（高Authority + 高Trust）
     RISING_STAR = "rising_star"  # 急成長中（高Growth + 中Authority）
@@ -31,23 +31,23 @@ class ValueCategory(Enum):
 
 @dataclass
 class PotentialValueScore:
-    """潜在価値スコアの統合.
+    """Integrated potential value score.
 
     Attributes:
         person_id: person_id
-        # 既存スコア
+        # existing scores
         person_fe: Person Fixed Effect
         birank: BiRank
         patronage: Patronage
         iv_score: IV Score (primary ranking metric)
-        # 補正・拡張スコア
+        # corrected/extended scores
         debiased_birank: スタジオバイアス補正Authority
         adjusted_person_fe: 成長率考慮Skill
         structural_advantage: 構造的優位性スコア
-        # 統合スコア
+        # integrated score
         potential_value: 総合潜在価値スコア（0-100）
         category: 価値カテゴリ
-        # 内訳
+        # breakdown
         elite_score: エリート要素
         growth_score: 成長要素
         hidden_score: 過小評価要素
@@ -79,7 +79,7 @@ def compute_structural_advantage(
     person_id: str,
     betweenness_cache: dict[str, float] | None = None,
 ) -> float:
-    """構造的優位性スコアを計算.
+    """Compute structural advantage score.
 
     Betweenness + Structural holes の組み合わせ
 
@@ -119,7 +119,7 @@ def compute_potential_value_scores(
     collaboration_graph: nx.Graph,
     betweenness_cache: dict[str, float] | None = None,
 ) -> dict[str, PotentialValueScore]:
-    """潜在価値スコアを計算.
+    """Compute potential value scores.
 
     Args:
         person_scores: 元のスコア辞書
@@ -255,7 +255,7 @@ def rank_by_potential_value(
     category: ValueCategory | None = None,
     top_n: int = 50,
 ) -> list[tuple[str, float, ValueCategory]]:
-    """潜在価値スコアでランキング.
+    """Rank by potential value score.
 
     Args:
         potential_scores: 潜在価値スコア
@@ -295,7 +295,7 @@ def export_potential_value_report(
     potential_scores: dict[str, PotentialValueScore],
     person_names: dict[str, str],
 ) -> dict:
-    """潜在価値レポートをエクスポート.
+    """Export a potential value report.
 
     Args:
         potential_scores: 潜在価値スコア
@@ -424,7 +424,7 @@ def main():
     logger.info("building_collaboration_graph")
     collab_graph = create_person_collaboration_network(credits, anime_map)
 
-    # スタジオバイアス補正
+    # studio bias correction
     logger.info("computing_studio_bias_correction")
     bias_metrics = compute_studio_bias_metrics(credits, anime_map)
     studio_prestige = compute_studio_prestige(credits, anime_map, person_scores)
@@ -436,7 +436,7 @@ def main():
         pid: {"debiased_birank": d.debiased_birank} for pid, d in debiased.items()
     }
 
-    # 成長率分析
+    # growth rate analysis
     logger.info("computing_growth_metrics")
     growth_metrics = compute_growth_metrics(credits, anime_map)
     adjusted_person_fes = compute_adjusted_person_fe_with_growth(
@@ -452,13 +452,13 @@ def main():
         for pid, m in growth_metrics.items()
     }
 
-    # 潜在価値スコア計算
+    # compute potential value scores
     logger.info("computing_potential_value_scores")
     potential_scores = compute_potential_value_scores(
         person_scores, debiased_dict, growth_dict, adjusted_person_fes, collab_graph
     )
 
-    # レポート生成
+    # generate report
     logger.info("exporting_report")
     report = export_potential_value_report(potential_scores, person_names)
 
@@ -482,13 +482,13 @@ def main():
         )
         print()
 
-    # カテゴリ別分布
+    # distribution by category
     print("\n=== カテゴリ別分布 ===\n")
     for category, count in report["category_distribution"].items():
         percentage = count / report["total_persons"] * 100
         print(f"{category}: {count}人 ({percentage:.1f}%)")
 
-    # カテゴリ別トップ
+    # top by category
     print("\n=== カテゴリ別トップ5 ===\n")
     for category in ValueCategory:
         cat_name = category.value

@@ -1,4 +1,4 @@
-"""エゴグラフ — 特定人物を中心としたローカルネットワークを抽出する.
+"""Ego graph — extract the local network centred on a specific person.
 
 指定した人物のN-hop近傍のコラボレーターを抽出し、
 サブグラフとして返す。プロフィール表示やネットワーク図に使用。
@@ -20,7 +20,7 @@ def extract_ego_graph(
     hops: int = 1,
     person_scores: dict[str, float] | None = None,
 ) -> dict:
-    """指定人物のエゴグラフ（ローカルネットワーク）を抽出する.
+    """Extract the ego graph (local network) of the specified person.
 
     Args:
         person_id: 中心人物ID

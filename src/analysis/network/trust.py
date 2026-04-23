@@ -1,4 +1,4 @@
-"""継続起用 (Trust) スコア算出 — 累積エッジ重み + 時間減衰.
+"""Trust score computation — cumulative edge weight + time decay.
 
 Trust は「同じ監督/演出家から繰り返し起用されること」を測る。
 エッジ重みは共演回数と役職重みに基づき、
@@ -21,7 +21,7 @@ logger = structlog.get_logger()
 
 
 class DirectorEngagementRecord(NamedTuple):
-    """監督との共演記録 — 役職の重要度と時間経過を表す."""
+    """Co-credit record with a director — represents role importance and elapsed time."""
 
     role_importance_weight: (
         float  # 役職の重み (animation_director=2.5, key_animator=1.0, etc.)
@@ -29,7 +29,7 @@ class DirectorEngagementRecord(NamedTuple):
     years_since_collaboration: float  # 共演からの経過年数
 
 
-# 減衰パラメータ
+# decay parameters
 DECAY_HALF_LIFE_YEARS = 3.0  # 3年で半減
 DECAY_LAMBDA = math.log(2) / DECAY_HALF_LIFE_YEARS
 
@@ -41,12 +41,12 @@ def _role_importance(role: Role) -> float:
 
 @functools.lru_cache(maxsize=100)
 def _compute_time_weight_cached(years_ago: int) -> float:
-    """時間減衰重み: exp(-λt) (cached for repeated lookups)."""
+    """Time-decay weight: exp(-λt) (cached for repeated lookups)."""
     return math.exp(-DECAY_LAMBDA * max(0, years_ago))
 
 
 def _compute_time_weight(years_ago: float) -> float:
-    """時間減衰重み: exp(-λt)."""
+    """Time-decay weight: exp(-λt)."""
     # Use cached version for integer years (common case)
     if years_ago == int(years_ago):
         return _compute_time_weight_cached(int(years_ago))
@@ -58,14 +58,14 @@ def compute_trust_scores(
     anime_map: dict[str, Anime],
     current_year: int = 2026,
 ) -> dict[str, float]:
-    """全人物の Trust スコアを算出する.
+    """Compute Trust scores for all persons.
 
     Trust = Σ (各監督からの起用) において:
       - 起用回数が多いほど高い
       - 上位役職ほど高い
       - 最近の起用ほど高い（時間減衰）
     """
-    # 監督ノードを特定
+    # identify director nodes
     director_credits: dict[str, set[str]] = defaultdict(set)  # person_id → {anime_id}
     animator_credits: dict[str, list[Credit]] = defaultdict(list)
 
@@ -82,7 +82,7 @@ def compute_trust_scores(
         for anime_id in anime_ids:
             anime_directors[anime_id].add(dir_id)
 
-    # 各人物の Trust スコアを算出
+    # compute Trust score for each person
     # Pre-compute anime years and director work counts (avoid repeated lookups)
     anime_years: dict[str, int] = {
         aid: a.year if a.year else current_year - 5 for aid, a in anime_map.items()
@@ -95,7 +95,7 @@ def compute_trust_scores(
     trust_scores: dict[str, float] = {}
 
     for person_id, person_credits in animator_credits.items():
-        # 監督との共演を集計
+        # aggregate co-credits with each director
         collaborations_with_each_director: dict[str, list[DirectorEngagementRecord]] = (
             defaultdict(list)
         )
@@ -105,7 +105,7 @@ def compute_trust_scores(
                 c.anime_id, current_year - 5
             )
 
-            # この作品の監督を特定
+            # identify the director(s) of this work
             for dir_id in anime_directors.get(c.anime_id, set()):
                 if dir_id == person_id:
                     continue  # 自分自身は除外
@@ -126,7 +126,7 @@ def compute_trust_scores(
             all_collaborations_with_this_director,
         ) in collaborations_with_each_director.items():
             how_many_times_worked_together = len(all_collaborations_with_this_director)
-            # 繰り返し起用ボーナス: log(1 + n) で飽和
+            # repeat engagement bonus: saturates at log(1 + n)
             repeat_engagement_boost = math.log1p(how_many_times_worked_together)
 
             weighted_collaboration_sum = sum(
@@ -136,7 +136,7 @@ def compute_trust_scores(
             )
             total_trust_score += repeat_engagement_boost * weighted_collaboration_sum
 
-            # 監督自身の著名度ボーナス（監督クレジット数に基づく、pre-computed）
+            # director prominence bonus (based on director credit count, pre-computed)
             how_many_works_director_has_directed = director_work_counts.get(dir_id, 0)
             director_prominence_multiplier = math.log1p(
                 how_many_works_director_has_directed
@@ -147,7 +147,7 @@ def compute_trust_scores(
 
         trust_scores[person_id] = total_trust_score
 
-    # 正規化 (0-100)
+    # normalise (0-100)
     if trust_scores:
         values = np.array(list(trust_scores.values()))
         min_val = values.min()
@@ -171,11 +171,11 @@ def detect_engagement_decay(
     anime_map: dict[str, Anime],
     window_size: int = 5,
 ) -> dict:
-    """特定のアニメーター×監督ペアの起用減衰を検出する.
+    """Detect engagement decay for a specific animator × director pair.
 
     直近 window_size 作品での起用率と期待値を比較。
     """
-    # 監督の作品を年代順で取得
+    # get director's works in chronological order
     director_works = []
     for c in credits:
         if c.person_id == director_id and c.role in DIRECTOR_ROLES:
@@ -188,12 +188,12 @@ def detect_engagement_decay(
     if len(director_works) < window_size:
         return {"status": "insufficient_data", "works": len(director_works)}
 
-    # 全体の起用率
+    # overall engagement rate
     animator_anime_ids = {c.anime_id for c in credits if c.person_id == person_id}
     total_appearances = sum(1 for _, aid in director_works if aid in animator_anime_ids)
     expected_rate = total_appearances / len(director_works) if director_works else 0
 
-    # 直近 window の起用率
+    # recent-window engagement rate
     recent_works = director_works[-window_size:]
     recent_appearances = sum(1 for _, aid in recent_works if aid in animator_anime_ids)
     recent_rate = recent_appearances / window_size
@@ -213,7 +213,7 @@ def batch_detect_engagement_decay(
     anime_map: dict[str, Anime],
     window_size: int = 5,
 ) -> dict[str, list[dict]]:
-    """全アニメーター×監督ペアの起用減衰をバッチ検出する.
+    """Batch-detect engagement decay for all animator × director pairs.
 
     最適化版: credits を1回スキャンして事前集計し、
     共演のあるペアのみを検査する。
@@ -258,18 +258,18 @@ def batch_detect_engagement_decay(
             if pid in director_ids:
                 continue
 
-            # 共演がなければスキップ
+            # skip if no co-credits
             shared = p_anime & dir_anime
             if not shared:
                 continue
 
             pairs_checked += 1
 
-            # 全体の起用率
+            # overall engagement rate
             total_appearances = len(shared)
             expected_rate = total_appearances / len(works)
 
-            # 直近 window の起用率
+            # recent-window engagement rate
             recent_appearances = sum(1 for _, aid in recent_works if aid in p_anime)
             recent_rate = recent_appearances / window_size
 

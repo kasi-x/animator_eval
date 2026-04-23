@@ -1,4 +1,4 @@
-"""時系列分析 — 業界全体の年次・四半期統計推移を分析する.
+"""Time-series analysis — analyse annual and quarterly industry-wide statistics.
 
 年ごと、四半期ごとの:
 - アクティブ人物数
@@ -24,7 +24,7 @@ def compute_time_series(
     credits: list[Credit],
     anime_map: dict[str, Anime],
 ) -> dict:
-    """年次・四半期の時系列統計を算出する.
+    """Compute annual and quarterly time-series statistics.
 
     credit_year/credit_quarter があるクレジットはそちらを使用（長期作品の話数別帰属）。
     なければ anime の year/quarter にフォールバック。
@@ -62,7 +62,7 @@ def compute_time_series(
         c_year = c.credit_year
         c_quarter = c.credit_quarter
 
-        # フォールバック: anime の year/quarter
+        # fallback: use anime.year / anime.quarter
         if c_year is None:
             c_year = anime.year
         if c_year is None:

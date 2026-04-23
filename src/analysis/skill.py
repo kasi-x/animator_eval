@@ -24,7 +24,7 @@ logger = structlog.get_logger()
 
 
 class ScoredAnimeRecord(NamedTuple):
-    """制作規模付き作品の記録.
+    """Record of a work with production scale.
 
     Records an anime with its staff count and year for skill rating calculation.
     """
@@ -81,7 +81,7 @@ def compute_skill_scores(
     # OpenSkill モデル初期化
     model = PlackettLuce()
 
-    # 全参加者のレーティング
+    # ratings for all participants
     all_staff_member_ids: set[str] = set()
     for staff_list in staff_by_anime.values():
         all_staff_member_ids.update(staff_list)
@@ -90,17 +90,17 @@ def compute_skill_scores(
         person_id: model.rating() for person_id in all_staff_member_ids
     }
 
-    # 年代ごとにバッチ処理（同年の作品をスタッフ数順にランク）
+    # batch by year (rank same-year works by staff count)
     anime_records_by_year: dict[int, list[ScoredAnimeRecord]] = {}
     for anime_record in anime_by_year_and_scale:
         anime_records_by_year.setdefault(anime_record.year, []).append(anime_record)
 
     for year in sorted(anime_records_by_year.keys()):
         yearly_anime_records = anime_records_by_year[year]
-        # スタッフ数降順でランク（大規模制作 = 上位）
+        # rank by descending staff count (large-scale = top)
         yearly_anime_records.sort(key=lambda record: record.score, reverse=True)
 
-        # 各作品のスタッフをチームとして構成
+        # form teams from each work's staff
         team_rating_objects = []
         team_member_ids: list[list[str]] = []
 
@@ -115,7 +115,7 @@ def compute_skill_scores(
         if len(team_rating_objects) < 2:
             continue
 
-        # ランクは 1-indexed（1位 = 最大規模の作品チーム）
+        # rank is 1-indexed (rank 1 = largest-scale work team)
         competition_ranks = list(range(1, len(team_rating_objects) + 1))
 
         try:
@@ -130,7 +130,7 @@ def compute_skill_scores(
         except Exception:
             logger.debug("skipping_year_rating_update", year=year)
 
-    # mu を抽出して正規化
+    # extract and normalise mu values
     skill_scores: dict[str, float] = {}
     for person_id, rating_object in person_ratings.items():
         skill_scores[person_id] = rating_object.mu  # type: ignore[union-attr]

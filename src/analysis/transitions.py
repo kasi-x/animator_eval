@@ -1,4 +1,4 @@
-"""役職遷移分析 — アニメーターのキャリアパスを分析する.
+"""Role transition analysis — analyse career paths of animators.
 
 業界全体の役職遷移パターンを算出:
 - 遷移確率（動画→原画、原画→作画監督、etc.）
@@ -29,7 +29,7 @@ STAGE_LABELS = {
 
 
 class YearlyStageRecord(NamedTuple):
-    """年ごとの役職ステージ記録.
+    """Per-year role stage record.
 
     Records the career stage for a given year.
     """
@@ -40,7 +40,7 @@ class YearlyStageRecord(NamedTuple):
 
 @dataclass(frozen=True)
 class TransitionStatistics:
-    """役職遷移の統計情報.
+    """Role transition statistics.
 
     Statistics about role transitions between career stages.
     """
@@ -55,7 +55,7 @@ class TransitionStatistics:
 
 @dataclass(frozen=True)
 class CareerPathRecord:
-    """キャリアパスの記録.
+    """Career path record.
 
     Records a specific career progression path and its frequency.
     """
@@ -67,7 +67,7 @@ class CareerPathRecord:
 
 @dataclass(frozen=True)
 class TimeToStageStatistics:
-    """ステージ到達時間の統計.
+    """Time-to-stage statistics.
 
     Statistics about time taken to reach a career stage.
     """
@@ -82,7 +82,7 @@ def compute_role_transitions(
     credits: list[Credit],
     anime_map: dict[str, Anime],
 ) -> dict:
-    """業界全体の役職遷移統計を計算する.
+    """Compute industry-wide role transition statistics.
 
     Returns:
         {

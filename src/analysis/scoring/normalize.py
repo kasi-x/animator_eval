@@ -1,4 +1,4 @@
-"""スコア正規化 — 各軸のスコアを 0-100 スケールに正規化する.
+"""Score normalisation — normalise each score axis to a 0-100 scale.
 
 異なるアルゴリズム由来の Authority / Trust / Skill を比較可能にするため、
 min-max / percentile / z-score 正規化で 0-100 に揃える。
@@ -13,7 +13,7 @@ logger = structlog.get_logger()
 
 
 class NormalizationMethod(str, Enum):
-    """スコア正規化の戦略を定義する列挙型.
+    """Enum defining score normalisation strategies.
 
     Defines the strategy for normalizing scores to a common scale.
     """
@@ -52,7 +52,7 @@ def normalize_percentile(
     scores: dict[str, float],
     target_maximum_value: float = 100.0,
 ) -> dict[str, float]:
-    """パーセンタイル正規化: 順位ベースで [0, target_maximum_value].
+    """Percentile normalisation: rank-based mapping to [0, target_maximum_value].
 
     Assigns scores based on percentile rank.
     """
@@ -112,7 +112,7 @@ def normalize_scores(
     target_maximum_value: float = 100.0,
     method: str | NormalizationMethod | None = None,
 ) -> dict[str, float]:
-    """スコア辞書を正規化する.
+    """Normalise a score dictionary.
 
     Normalizes a dictionary of scores using the specified method.
 
@@ -149,7 +149,7 @@ def normalize_all_axes(
     skill_scores: dict[str, float],
     method: str | None = None,
 ) -> tuple[dict[str, float], dict[str, float], dict[str, float]]:
-    """3軸全てを正規化する.
+    """Normalise all three axes.
 
     Returns:
         (normalized_authority, normalized_trust, normalized_skill)

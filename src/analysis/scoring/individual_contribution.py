@@ -22,19 +22,19 @@ from src.models import AnimeAnalysis as Anime, Credit
 
 logger = structlog.get_logger()
 
-# キャリア年数バンドの幅
+# width of each career-year band
 CAREER_BAND_WIDTH = 5
-# コホートの最小人数（これ未満はマージまたは null）
+# minimum cohort size (merge or null if below)
 MIN_COHORT_SIZE = 5
-# 一貫性スコア算出に必要な最小作品数
+# minimum works required to compute a consistency score
 MIN_WORKS_FOR_CONSISTENCY = 5
-# 独立貢献度算出に必要な最小コラボレーター数
+# minimum collaborators required to compute independent contribution
 MIN_COLLABORATORS = 3
 
 
 @dataclass
 class IndividualProfile:
-    """個人貢献プロファイル."""
+    """Individual contribution profile."""
 
     person_id: str
     peer_percentile: float | None = None
@@ -46,7 +46,7 @@ class IndividualProfile:
 
 @dataclass
 class IndividualContributionResult:
-    """全体の結果."""
+    """Overall result."""
 
     profiles: dict  # person_id -> IndividualProfile (as dict)
     model_r_squared: float | None = None
@@ -55,7 +55,7 @@ class IndividualContributionResult:
 
 
 def _get_career_band(years: int) -> str:
-    """キャリア年数をバンドに変換."""
+    """Convert career years to a band label."""
     lower = (years // CAREER_BAND_WIDTH) * CAREER_BAND_WIDTH
     upper = lower + CAREER_BAND_WIDTH - 1
     return f"{lower}-{upper}y"
@@ -68,7 +68,7 @@ def _build_person_features(
     role_profiles: dict[str, dict],
     career_data: dict[str, dict],
 ) -> dict[str, dict]:
-    """各人の特徴量を構築する."""
+    """Build feature vectors for each person."""
     # person → クレジット一覧を事前構築
     person_credits: dict[str, list[Credit]] = defaultdict(list)
     for c in credits:
@@ -95,7 +95,7 @@ def _build_person_features(
         pid = r["person_id"]
         iv_score = r.get("iv_score", 0)
 
-        # 役職
+        # role
         rp = role_profiles.get(pid, {})
         primary_role = rp.get("primary_role", "unknown")
 
@@ -118,7 +118,7 @@ def _build_person_features(
             if years:
                 career_years = max(years) - min(years) + 1
 
-        # 参加作品の平均スタッフ数（機会の指標 — anime.score は使わない）
+        # average staff count of participated works (opportunity indicator — anime.score not used)
         pc = person_credits.get(pid, [])
         staff_counts_list = []
         seen_anime = set()
@@ -129,7 +129,7 @@ def _build_person_features(
             staff_counts_list.append(anime_staff_counts.get(c.anime_id, 1))
         avg_staff_count = np.mean(staff_counts_list) if staff_counts_list else 0
 
-        # スタジオ規模（所属スタジオの頻度）
+        # studio scale (studio frequency)
         studios = person_studios.get(pid, [])
         # D20: unique_studios is an opportunity proxy. More studios = more diverse
         # experience. It's deliberately simple (count, not quality). In the OLS
@@ -155,7 +155,7 @@ def compute_peer_percentile(
     features: dict[str, dict],
     community_map: dict[str, int] | None = None,
 ) -> dict[str, dict]:
-    """コホート内パーセンタイルを算出.
+    """Compute within-cohort percentiles.
 
     D14 known limitation: peer_percentile is a rank transform of iv_score within
     role × career_band cohorts. It is NOT an independent evaluation axis — it's
@@ -170,7 +170,7 @@ def compute_peer_percentile(
     Returns:
         person_id → {peer_percentile, peer_cohort, cluster_percentile?, cluster_id?, cluster_size?}
     """
-    # コホートを構成: role × career_band
+    # form cohorts: role × career_band
     cohorts: dict[tuple[str, str], list[tuple[str, float]]] = defaultdict(list)
     for pid, f in features.items():
         key = (f["primary_role"], f["career_band"])
@@ -220,11 +220,11 @@ def compute_peer_percentile(
                 "cohort_size": len(members),
             }
 
-        # パーセンタイル算出 (bisect for O(n log n) instead of O(n²))
+        # compute percentile (bisect for O(n log n) instead of O(n²))
         scores = sorted([s for _, s in cohort_members])
         n_members = len(scores)
         for pid, score in cohort_members:
-            # パーセンタイル: この人より低い人の割合
+            # percentile: fraction of persons ranked below this person
             rank = bisect.bisect_right(scores, score)
             percentile = round(rank / n_members * 100, 1)
             result[pid] = {
@@ -259,7 +259,7 @@ def compute_peer_percentile(
 def compute_opportunity_residual(
     features: dict[str, dict],
 ) -> tuple[dict[str, float], float]:
-    """機会統制残差を算出.
+    """Compute opportunity-controlled residuals.
 
     OLS: composite ~ career_years + avg_staff_count + unique_studios + role_dummies
 
@@ -274,13 +274,13 @@ def compute_opportunity_residual(
         logger.warning("insufficient_data_for_regression", persons=len(pids))
         return {pid: None for pid in pids}, None
 
-    # 役職のダミー変数化
+    # dummy-encode roles
     roles = sorted({f["primary_role"] for f in features.values()})
     role_to_idx = {r: i for i, r in enumerate(roles)}
 
     y = np.array([features[pid]["iv_score"] for pid in pids])
 
-    # 特徴量行列: [career_years, avg_staff_count, unique_studios, role_dummies...]
+    # feature matrix: [career_years, avg_staff_count, unique_studios, role_dummies...]
     n = len(pids)
     n_roles = max(len(roles) - 1, 0)  # Fix B06: 1ロール時は0列（零列を避ける）
     X = np.zeros((n, 3 + n_roles))
@@ -294,13 +294,13 @@ def compute_opportunity_residual(
         if ridx > 0 and ridx <= n_roles:
             X[i, 2 + ridx] = 1.0
 
-    # 切片を追加
+    # add intercept
     X = np.column_stack([np.ones(n), X])
 
     # OLS: β = (X'X)^-1 X'y with leverage correction (studentized residuals)
     try:
         XtX = X.T @ X
-        # 正則化（特異行列対策）
+        # regularisation (guard against singular matrix)
         XtX += np.eye(XtX.shape[0]) * 1e-8
         XtX_inv = np.linalg.inv(XtX)
         beta = XtX_inv @ (X.T @ y)
@@ -342,7 +342,7 @@ def compute_consistency(
     anime_map: dict[str, Anime],
     akm_residuals: dict[tuple[str, str], float] | None = None,
 ) -> dict[str, float | None]:
-    """作品間の一貫性スコアを算出.
+    """Compute consistency scores across works.
 
     AKM残差が利用可能な場合はそれを使用し、スタジオや年次効果を除いた
     個人の純粋な貢献度の安定性を計測する。残差がない場合はフォールバック
@@ -661,7 +661,7 @@ def compute_independent_value(
     anime_map: dict[str, Anime],
     collaboration_graph: nx.Graph | None = None,
 ) -> dict[str, float | None]:
-    """独立貢献度を算出 (scipy.sparse vectorized).
+    """Compute independent contribution (scipy.sparse vectorised).
 
     対象者Xのコラボレーターについて、
     「Xと共演した作品での残差」vs「共演していない作品での残差」の差分平均。
@@ -764,7 +764,7 @@ def _assemble_individual_profiles(
     consistency_scores: dict,
     independent_values: dict,
 ) -> dict:
-    """統合ステップ：4つの指標を1人のプロファイルに集約.
+    """Integration step: aggregate four metrics into a single person profile.
 
     Args:
         features: person_id → 特徴量辞書
@@ -807,7 +807,7 @@ def compute_individual_profiles(
     akm_residuals: dict[tuple[str, str], float] | None = None,
     community_map: dict[str, int] | None = None,
 ) -> IndividualContributionResult:
-    """全指標を統合して Individual Contribution Profile を算出.
+    """Integrate all metrics to compute the Individual Contribution Profile.
 
     Args:
         results: パイプラインの結果リスト（person_id, composite 等を含む）
@@ -824,28 +824,28 @@ def compute_individual_profiles(
     """
     logger.info("computing_individual_profiles", persons=len(results))
 
-    # 特徴量構築
+    # build features
     features = _build_person_features(
         results, credits, anime_map, role_profiles, career_data
     )
 
-    # 1. ピア比較パーセンタイル（+ クラスタベース）
+    # 1. peer comparison percentile (+ cluster-based)
     peer_data = compute_peer_percentile(features, community_map=community_map)
 
-    # 2. 機会統制残差
+    # 2. opportunity-controlled residual
     residuals, r_squared = compute_opportunity_residual(features)
 
-    # 3. 一貫性スコア（AKM残差を使用可能）
+    # 3. consistency score (can use AKM residuals)
     consistency_scores = compute_consistency(
         features, credits, anime_map, akm_residuals=akm_residuals
     )
 
-    # 4. 独立貢献度（セレクションバイアス軽減版）
+    # 4. independent contribution (selection-bias-reduced version)
     independent_values = compute_independent_value(
         features, credits, anime_map, collaboration_graph
     )
 
-    # 統合：4つの指標を1つのプロファイルに
+    # integrate: combine four metrics into one profile
     profiles = _assemble_individual_profiles(
         features, peer_data, residuals, consistency_scores, independent_values
     )

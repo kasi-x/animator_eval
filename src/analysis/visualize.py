@@ -1,4 +1,4 @@
-"""グラフ可視化 (matplotlib)."""
+"""Graph visualisation (matplotlib)."""
 
 from pathlib import Path
 
@@ -12,7 +12,7 @@ from src.utils.config import JSON_DIR
 
 matplotlib.use("Agg")
 
-# 日本語フォント設定
+# Japanese font configuration
 matplotlib.rcParams["font.family"] = [
     "Noto Serif CJK JP",
     "Noto Sans CJK JP",
@@ -26,7 +26,7 @@ def plot_performance_metrics(
     perf_data: dict,
     output_path: Path | None = None,
 ) -> None:
-    """パフォーマンスメトリクスの可視化.
+    """Visualise performance metrics.
 
     Args:
         perf_data: performance.json のデータ
@@ -145,7 +145,7 @@ def plot_score_distribution(
     scores: dict[str, dict],
     output_path: Path | None = None,
 ) -> None:
-    """3軸スコアの分布をヒストグラムで可視化."""
+    """Visualise the distribution of 3-axis scores as histograms."""
     if not scores:
         logger.warning("No scores to plot")
         return
@@ -191,7 +191,7 @@ def plot_top_persons_radar(
     top_n: int = 10,
     output_path: Path | None = None,
 ) -> None:
-    """上位人物の3軸レーダーチャート."""
+    """3-axis radar chart of top-ranked persons."""
     if not results:
         return
 
@@ -233,11 +233,11 @@ def plot_collaboration_network(
     top_n: int = 50,
     output_path: Path | None = None,
 ) -> None:
-    """コラボレーションネットワークの可視化."""
+    """Visualise the collaboration network."""
     if graph.number_of_nodes() == 0:
         return
 
-    # 上位ノードに絞る
+    # limit to top nodes
     if scores and len(graph.nodes) > top_n:
         top_nodes = sorted(scores, key=scores.get, reverse=True)[:top_n]
         subgraph = graph.subgraph(top_nodes).copy()
@@ -251,13 +251,13 @@ def plot_collaboration_network(
 
     pos = nx.spring_layout(subgraph, k=2.0, iterations=50, seed=42)
 
-    # ノードサイズ = スコア
+    # node size = score
     if scores:
         node_sizes = [scores.get(n, 10) * 5 + 50 for n in subgraph.nodes()]
     else:
         node_sizes = [100] * subgraph.number_of_nodes()
 
-    # エッジの太さ = weight
+    # edge thickness = weight
     edge_weights = [subgraph[u][v].get("weight", 1) for u, v in subgraph.edges()]
     max_w = max(edge_weights) if edge_weights else 1
     edge_widths = [w / max_w * 3 + 0.5 for w in edge_weights]
@@ -283,7 +283,7 @@ def plot_collaboration_network(
     logger.info("collaboration_network_saved", path=str(output_path))
 
 
-# キャリアステージの数値→ラベルマッピング
+# numeric-to-label mapping for career stages
 _STAGE_LABELS = {
     1: "In-Between",
     2: "2nd Key",
@@ -301,7 +301,7 @@ def plot_person_timeline(
     person_name: str = "",
     output_path: Path | None = None,
 ) -> None:
-    """人物のキャリアタイムラインを可視化.
+    """Visualise a person's career timeline.
 
     Args:
         person_id: 人物ID
@@ -409,7 +409,7 @@ def plot_growth_trends(
     growth_data: dict,
     output_path: Path | None = None,
 ) -> None:
-    """成長トレンド分布をバーチャートで可視化.
+    """Visualise the growth trend distribution as a bar chart.
 
     Args:
         growth_data: growth.json の内容 (trend_summary キー含む)
@@ -468,7 +468,7 @@ def plot_network_evolution(
     evolution_data: dict,
     output_path: Path | None = None,
 ) -> None:
-    """ネットワーク進化をラインチャートで可視化.
+    """Visualise network evolution as a line chart.
 
     Args:
         evolution_data: network_evolution.json の内容
@@ -551,7 +551,7 @@ def plot_decade_comparison(
     decade_data: dict,
     output_path: Path | None = None,
 ) -> None:
-    """年代別比較をグループバーチャートで可視化.
+    """Visualise decade-level comparison as a grouped bar chart.
 
     Args:
         decade_data: decades.json の内容
@@ -613,7 +613,7 @@ def plot_role_flow_sankey(
     role_flow_data: dict,
     output_path: Path | None = None,
 ) -> None:
-    """役職遷移フローを簡易サンキー風チャートで可視化.
+    """Visualise role transition flow as a simplified Sankey-style chart.
 
     matplotlib のみで表現する (plotly なし)。
     """
@@ -684,7 +684,7 @@ def plot_time_series(
     ts_data: dict,
     output_path: Path | None = None,
 ) -> None:
-    """年別クレジット数と人数の時系列チャート.
+    """Time-series chart of annual credit counts and person counts.
 
     Args:
         ts_data: time_series.json の内容 (years, series キー含む)
@@ -740,7 +740,7 @@ def plot_productivity_distribution(
     prod_data: dict,
     output_path: Path | None = None,
 ) -> None:
-    """生産性分布の可視化.
+    """Visualise the productivity distribution.
 
     Args:
         prod_data: productivity.json の内容 ({person_id: {credits_per_year, ...}})
@@ -809,7 +809,7 @@ def plot_influence_tree(
     influence_data: dict,
     output_path: Path | None = None,
 ) -> None:
-    """影響力ツリーの可視化.
+    """Visualise the influence tree.
 
     Args:
         influence_data: influence.json の内容
@@ -865,7 +865,7 @@ def plot_milestone_summary(
     milestones_data: dict[str, list[dict]],
     output_path: Path | None = None,
 ) -> None:
-    """マイルストーン種別分布の可視化.
+    """Visualise the milestone-type distribution.
 
     Args:
         milestones_data: milestones.json の内容 ({person_id: [milestone, ...]})
@@ -941,7 +941,7 @@ def plot_seasonal_trends(
     seasonal_data: dict,
     output_path: Path | None = None,
 ) -> None:
-    """シーズン別トレンドの可視化.
+    """Visualise seasonal trends.
 
     Args:
         seasonal_data: seasonal.json の内容
@@ -1031,7 +1031,7 @@ def plot_bridge_analysis(
     bridge_data: dict,
     output_path: Path | None = None,
 ) -> None:
-    """ブリッジパーソンのスコア分布と上位者の可視化.
+    """Visualise bridge persons: score distribution and top-ranked entries.
 
     Args:
         bridge_data: bridges.json の内容
@@ -1092,7 +1092,7 @@ def plot_collaboration_strength(
     collab_pairs: list[dict],
     output_path: Path | None = None,
 ) -> None:
-    """コラボレーション強度の分布と上位ペアの可視化.
+    """Visualise collaboration strength: distribution and top pairs.
 
     Args:
         collab_pairs: collaborations.json の内容 (list of pair dicts)
@@ -1143,7 +1143,7 @@ def plot_tag_summary(
     tags_data: dict,
     output_path: Path | None = None,
 ) -> None:
-    """タグ分布の可視化.
+    """Visualise the tag distribution.
 
     Args:
         tags_data: tags.json の内容 (tag_summary キー含む)
@@ -1195,7 +1195,7 @@ def plot_studio_comparison(
     studio_data: dict[str, dict],
     output_path: Path | None = None,
 ) -> None:
-    """スタジオ間の人材比較チャート.
+    """Cross-studio personnel comparison chart.
 
     Args:
         studio_data: studios.json の内容 ({studio_name: {...}})
@@ -1253,7 +1253,7 @@ def plot_outlier_summary(
     outlier_data: dict,
     output_path: Path | None = None,
 ) -> None:
-    """外れ値の軸別分布を可視化.
+    """Visualise the per-axis distribution of outliers.
 
     Args:
         outlier_data: outliers.json の内容
@@ -1312,7 +1312,7 @@ def plot_transition_heatmap(
     transition_data: dict,
     output_path: Path | None = None,
 ) -> None:
-    """役職遷移のヒートマップを可視化.
+    """Visualise role transitions as a heatmap.
 
     Args:
         transition_data: transitions.json の内容
@@ -1394,7 +1394,7 @@ def plot_anime_stats(
     anime_data: dict[str, dict],
     output_path: Path | None = None,
 ) -> None:
-    """アニメ統計の可視化 — スタッフ数 vs スコアの散布図.
+    """Anime statistics visualisation — scatter plot of staff count vs score.
 
     Args:
         anime_data: anime_stats.json の内容 ({anime_id: {...}})
@@ -1462,7 +1462,7 @@ def plot_genre_affinity(
     genre_data: dict[str, dict],
     output_path: Path | None = None,
 ) -> None:
-    """ジャンル親和性の可視化 — スコア層・時代分布.
+    """Genre affinity visualisation — score tier and era distribution.
 
     Args:
         genre_data: genre_affinity.json の内容 ({person_id: {primary_tier, primary_era, ...}})
@@ -1544,7 +1544,7 @@ def plot_crossval_stability(
     crossval_data: dict,
     output_path: Path | None = None,
 ) -> None:
-    """交差検証安定性の可視化.
+    """Visualise cross-validation stability.
 
     Args:
         crossval_data: crossval.json の内容

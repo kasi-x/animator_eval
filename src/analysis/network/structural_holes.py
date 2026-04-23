@@ -32,7 +32,7 @@ class BrokerageRole(Enum):
 
 @dataclass
 class StructuralHoleMetrics:
-    """構造的空隙の指標.
+    """Structural hole metrics.
 
     Attributes:
         person_id: person_id
@@ -57,7 +57,7 @@ class StructuralHoleMetrics:
 
 @dataclass
 class BrokerageMetrics:
-    """ブローカー役割の指標.
+    """Broker role metrics.
 
     Attributes:
         person_id: person_id
@@ -84,7 +84,7 @@ def compute_network_constraint(
     graph: nx.Graph,
     person_id: str,
 ) -> float:
-    """ネットワーク制約指数を計算（Burt's Constraint）.
+    """Compute network constraint index (Burt's Constraint).
 
     制約が低い = 構造的空隙が多い = 自律的
 
@@ -129,7 +129,7 @@ def compute_effective_size(
     graph: nx.Graph,
     person_id: str,
 ) -> tuple[float, float]:
-    """有効ネットワークサイズを計算.
+    """Compute effective network size.
 
     冗長な接続を除外した「実質的な」接続数。
 
@@ -166,7 +166,7 @@ def identify_bridges(
     graph: nx.Graph,
     person_id: str,
 ) -> int:
-    """橋となっている辺の数を数える.
+    """Count the number of bridge edges.
 
     橋: 削除するとネットワークが分断される辺
 
@@ -192,7 +192,7 @@ def identify_bridges(
 def compute_structural_hole_metrics(
     collaboration_graph: nx.Graph,
 ) -> dict[str, StructuralHoleMetrics]:
-    """全員の構造的空隙指標を計算.
+    """Compute structural hole metrics for all persons.
 
     Args:
         collaboration_graph: コラボレーショングラフ
@@ -256,7 +256,7 @@ def classify_brokerage_role(
     target_id: str,
     groups: dict[str, str],
 ) -> BrokerageRole:
-    """ブローカー役割を分類（Gould & Fernandez 1989）.
+    """Classify broker roles (Gould & Fernandez 1989).
 
     A (source) → B (person) → C (target) の関係で、
     A, B, C の所属グループから役割を判定。
@@ -302,7 +302,7 @@ def compute_brokerage_metrics(
     collaboration_graph: nx.Graph,
     groups: dict[str, str],
 ) -> dict[str, BrokerageMetrics]:
-    """ブローカー役割の指標を計算.
+    """Compute broker role metrics.
 
     Args:
         collaboration_graph: コラボレーショングラフ
@@ -361,7 +361,7 @@ def find_structural_hole_spanners(
     metrics: dict[str, StructuralHoleMetrics],
     top_n: int = 20,
 ) -> list[tuple[str, float, float]]:
-    """構造的空隙を最も活用している人物を特定.
+    """Identify persons who exploit structural holes the most.
 
     低い制約 + 高い効率 = 構造的空隙の活用
 
@@ -400,7 +400,7 @@ def find_key_brokers(
     role: BrokerageRole | None = None,
     top_n: int = 20,
 ) -> list[tuple[str, int, BrokerageRole]]:
-    """主要なブローカーを特定.
+    """Identify key brokers.
 
     Args:
         brokerage_metrics: ブローカー指標
@@ -458,7 +458,7 @@ def main():
     anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
 
-    # グループ定義（例: 役職カテゴリ）
+    # group definitions (e.g. role category)
     from src.utils.role_groups import get_role_category
 
     person_groups = {}
@@ -470,11 +470,11 @@ def main():
     logger.info("building_collaboration_graph")
     collab_graph = create_person_collaboration_network(credits, anime_map)
 
-    # 構造的空隙分析
+    # structural hole analysis
     logger.info("computing_structural_holes")
     sh_metrics = compute_structural_hole_metrics(collab_graph)
 
-    # ブローカー分析
+    # broker analysis
     logger.info("computing_brokerage")
     brokerage = compute_brokerage_metrics(collab_graph, person_groups)
 
@@ -499,7 +499,7 @@ def main():
         role_name = dominant_role.value if dominant_role else "unknown"
         print(f"{name}: {count}回のブローカー役割（主に {role_name}）")
 
-    # 役割別トップ
+    # top by role
     print("\n=== 役割別ブローカー ===\n")
     for role in BrokerageRole:
         top_in_role = find_key_brokers(brokerage, role=role, top_n=3)

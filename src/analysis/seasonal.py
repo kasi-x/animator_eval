@@ -1,4 +1,4 @@
-"""季節トレンド分析 — シーズンごとのクレジットパターンを分析する.
+"""Seasonal trend analysis — analyse credit patterns by season.
 
 アニメの放送シーズン（冬/春/夏/秋）ごとに、
 人材の参加パターンと役職分布を計算する。
@@ -16,7 +16,7 @@ SEASON_ORDER = {"winter": 0, "spring": 1, "summer": 2, "fall": 3}
 
 
 def _infer_season(anime: Anime) -> str | None:
-    """アニメのシーズンを推定する."""
+    """Infer the season of an anime."""
     if anime.season:
         return anime.season.lower()
     return None
@@ -27,7 +27,7 @@ def compute_seasonal_trends(
     anime_map: dict[str, Anime],
     person_scores: dict[str, float] | None = None,
 ) -> dict:
-    """シーズンごとのトレンド分析.
+    """Seasonal trend analysis.
 
     Args:
         credits: クレジットリスト
@@ -139,7 +139,7 @@ def compute_person_seasonal_activity(
     credits: list[Credit],
     anime_map: dict[str, Anime],
 ) -> dict[str, dict]:
-    """人物ごとの季節活動パターンを算出する.
+    """Compute seasonal activity patterns per person.
 
     Args:
         credits: クレジットリスト
@@ -156,7 +156,7 @@ def compute_person_seasonal_activity(
     if not credits:
         return {}
 
-    # 人物ごとにシーズン別クレジットを集計
+    # aggregate credits by season per person
     person_season_credits: dict[str, dict[str, int]] = defaultdict(
         lambda: defaultdict(int)
     )
@@ -176,7 +176,7 @@ def compute_person_seasonal_activity(
 
     results: dict[str, dict] = {}
     for person_id, season_dist in person_season_credits.items():
-        # 最も活発なシーズン
+        # most active season
         primary_season = max(season_dist, key=season_dist.get) if season_dist else None  # type: ignore[arg-type]
 
         works_per_season = {

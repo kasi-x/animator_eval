@@ -1,4 +1,4 @@
-"""スコア安定性検出 — 前回実行との差分を検出する.
+"""Score stability detection — detect differences from the previous run.
 
 新データ追加時にスコアが大きく変動した人物を検出し、
 データ品質問題の早期発見に役立てる。
@@ -17,7 +17,7 @@ def compare_scores(
     previous_path: Path,
     threshold: float = 10.0,
 ) -> dict:
-    """現在のスコアと前回の scores.json を比較する.
+    """Compare current scores with the previous scores.json.
 
     Args:
         current: 今回のパイプライン結果
@@ -52,7 +52,7 @@ def compare_scores(
     new_persons = sorted(curr_ids - prev_ids)
     removed_persons = sorted(prev_ids - curr_ids)
 
-    # ランク計算
+    # compute ranks
     prev_ranked = {pid: i + 1 for i, pid in enumerate(prev_map)}
     curr_ranked = {pid: i + 1 for i, pid in enumerate(curr_map)}
 

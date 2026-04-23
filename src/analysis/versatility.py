@@ -1,4 +1,4 @@
-"""役職多様性スコア — 複数の役割カテゴリでの活躍度を測定する.
+"""Role versatility score — measure activity across multiple role categories.
 
 異なる職種を経験している人物はより汎用的な能力を持つとみなし、
 versatility_score で評価する。
@@ -19,7 +19,7 @@ def compute_versatility(
     credits: list[Credit],
     person_ids: set[str] | None = None,
 ) -> dict[str, VersatilityMetrics]:
-    """人物ごとの役職多様性を計算する.
+    """Compute per-person role versatility.
 
     Args:
         credits: クレジットリスト

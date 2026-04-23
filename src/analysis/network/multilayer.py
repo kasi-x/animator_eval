@@ -60,7 +60,7 @@ ROLE_CATEGORY_TO_LAYER: dict[str, str] = {
 
 LAYER_NAMES: list[str] = ["direction", "animation", "production", "technical"]
 
-#: キャリア畑の名称（career_track の値）
+#: career track names (values of career_track)
 #: animator_director = アニメーター出身で後に監督となった人物（宮崎駿・庵野秀明・山田尚子など）
 CAREER_TRACKS: list[str] = [
     "animator",  # 原画・作監など、アニメーター工程が主体
@@ -98,7 +98,7 @@ ROLE_CATEGORY_TO_TRACK: dict[str, str] = {
 
 @dataclass
 class MultilayerCentrality:
-    """各レイヤーにおける中心性指標.
+    """Centrality metrics per layer.
 
     Attributes:
         person_id: person_id
@@ -140,7 +140,7 @@ def infer_career_track(
     person_credits: list[Credit],
     anime_map: dict[str, Anime],
 ) -> str:
-    """初期クレジットからキャリア畑を推定し、animator_director を明示的に区別する.
+    """Infer career track from early credits, distinguishing animator_director explicitly.
 
     判定ロジック:
     1. 初期3年クレジット（少ない場合はキャリア全体）の最頻役職カテゴリ → 基本 track
@@ -160,7 +160,7 @@ def infer_career_track(
     if not person_credits:
         return "multi_track"
 
-    # デビュー年を特定
+    # identify debut year
     years = []
     for c in person_credits:
         anime = anime_map.get(c.anime_id)
@@ -175,7 +175,7 @@ def infer_career_track(
     career_span = max(latest_year - debut_year, 1)
     early_cutoff = debut_year + 3
 
-    # 初期クレジット（最初の3年間）を取得
+    # get early credits (first 3 years)
     early_credits = [
         c
         for c in person_credits
@@ -186,10 +186,10 @@ def infer_career_track(
         )
     ]
 
-    # 初期クレジットが少ない場合はキャリア全体で判定
+    # if early credits are sparse, use entire career
     target_credits = early_credits if len(early_credits) >= 3 else person_credits
 
-    # 役職カテゴリのカウント
+    # count role categories
     track_counts: Counter[str] = Counter()
     for c in target_credits:
         cat = ROLE_CATEGORY.get(c.role, "non_production")
@@ -203,16 +203,16 @@ def infer_career_track(
     total = sum(track_counts.values())
     top_track, top_count = track_counts.most_common(1)[0]
 
-    # 過半数を占めるカテゴリがなければ multi_track
+    # if no category is a majority, assign multi_track
     if top_count / total < 0.5:
         return "multi_track"
 
     base_track = top_track
 
     # animator 畑で、かつキャリア後半に direction クレジットが出現するか確認
-    # （animator_director の判定）
+    # (animator_director determination)
     if base_track == "animator" and career_span >= 5:
-        # キャリア後半 = デビューから career_span/2 年以降
+        # second half of career = career_span/2 years after debut
         mid_year = debut_year + career_span // 2
         late_credits = [
             c
@@ -234,7 +234,7 @@ def infer_all_career_tracks(
     credits: list[Credit],
     anime_map: dict[str, Anime],
 ) -> dict[str, str]:
-    """全人物のキャリア畑を一括推定する.
+    """Infer career tracks for all persons in batch.
 
     Args:
         credits: 全クレジット
@@ -272,7 +272,7 @@ def build_layer_graphs(
     credits: list[Credit],
     anime_map: dict[str, Anime],
 ) -> dict[str, nx.Graph]:
-    """役職カテゴリでフィルタして4つのレイヤーグラフを構築する.
+    """Build four layer graphs filtered by role category.
 
     各レイヤーのグラフは、そのレイヤーに属する役職でクレジットされた人物同士の
     コラボレーションエッジのみを含む。
@@ -284,7 +284,7 @@ def build_layer_graphs(
     Returns:
         layer_name → nx.Graph の辞書
     """
-    # レイヤー別にクレジットを分類
+    # classify credits by layer
     layer_credits: dict[str, list[Credit]] = {name: [] for name in LAYER_NAMES}
 
     for c in credits:
@@ -293,8 +293,8 @@ def build_layer_graphs(
         if layer:
             layer_credits[layer].append(c)
 
-    # 各レイヤーでコラボレーショングラフを構築
-    # 同一作品に同じレイヤーで参加した人物同士をエッジで結ぶ
+    # build collaboration graph per layer
+    # connect persons who participated in the same work within the same layer
     layer_graphs: dict[str, nx.Graph] = {}
 
     for layer_name, layer_creds in layer_credits.items():
@@ -306,15 +306,15 @@ def build_layer_graphs(
             if c.anime_id in anime_map:
                 anime_persons[c.anime_id].append(c.person_id)
 
-        # 同一作品の人物ペアにエッジを追加（重み = 共演作品数）
+        # add edges for person pairs on the same work (weight = shared work count)
         for anime_id, person_ids in anime_persons.items():
-            # 重複除去
+            # deduplicate
             unique_persons = list(set(person_ids))
             n = len(unique_persons)
             if n < 2:
                 continue
 
-            # 全ペア組み合わせ（レイヤーごとなので密度は低い）
+            # all pairwise combinations (low density because within a layer)
             for i in range(n):
                 for j in range(i + 1, n):
                     a, b = unique_persons[i], unique_persons[j]
@@ -344,7 +344,7 @@ def compute_multilayer_centrality(
     career_tracks: dict[str, str],
     top_n: int = 500,
 ) -> dict[str, MultilayerCentrality]:
-    """各レイヤーで betweenness + degree centrality を計算する.
+    """Compute betweenness + degree centrality per layer.
 
     大規模グラフ対策: グラフのノード数 > 500 の場合は k=100 近似 betweenness を使用
     （CLAUDE.md パフォーマンスガイドライン準拠）。
@@ -359,7 +359,7 @@ def compute_multilayer_centrality(
     Returns:
         person_id → MultilayerCentrality
     """
-    # レイヤー別に betweenness + degree centrality を計算
+    # compute betweenness + degree centrality per layer
     layer_betweenness: dict[str, dict[str, float]] = {}
     layer_degree: dict[str, dict[str, float]] = {}
 
@@ -406,7 +406,7 @@ def compute_multilayer_centrality(
             approximate=(k is not None),
         )
 
-    # 全レイヤーに出現する person_id を収集
+    # collect person_ids that appear in all layers
     all_persons: set[str] = set()
     for btw in layer_betweenness.values():
         all_persons.update(btw.keys())
@@ -511,7 +511,7 @@ def main() -> None:
             f"layers={m.layer_count})"
         )
 
-    # キャリア畑別の分布
+    # distribution by career track
     track_dist = Counter(career_tracks.values())
     print("\n=== キャリア畑分布 ===")
     for track, count in track_dist.most_common():

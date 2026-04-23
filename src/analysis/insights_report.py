@@ -42,7 +42,7 @@ class PageRankInsights:
 
 @dataclass
 class BiasInsights:
-    """バイアス補正の洞察.
+    """Bias correction insights.
 
     Attributes:
         total_persons_affected: 影響を受けた人数
@@ -63,7 +63,7 @@ class BiasInsights:
 
 @dataclass
 class GrowthInsights:
-    """成長率分析の洞察.
+    """Growth rate analysis insights.
 
     Attributes:
         rising_stars_count: 急成長中の人材数
@@ -82,7 +82,7 @@ class GrowthInsights:
 
 @dataclass
 class PotentialValueInsights:
-    """潜在価値分析の洞察.
+    """Potential value analysis insights.
 
     Attributes:
         category_distribution: カテゴリ別分布
@@ -101,7 +101,7 @@ class PotentialValueInsights:
 
 @dataclass
 class BridgeInsights:
-    """ブリッジ分析の洞察.
+    """Bridge analysis insights.
 
     Attributes:
         bridge_persons_count: ブリッジ人材の数
@@ -120,7 +120,7 @@ class BridgeInsights:
 
 @dataclass
 class UndervaluationAlert:
-    """個人の過小評価アラート.
+    """Individual undervaluation alert.
 
     Attributes:
         person_id: 対象者ID
@@ -143,7 +143,7 @@ class UndervaluationAlert:
 
 @dataclass
 class ComprehensiveInsights:
-    """包括的洞察レポート.
+    """Comprehensive insights report.
 
     Attributes:
         pagerank: PageRank分析
@@ -191,11 +191,11 @@ def analyze_pagerank_distribution(
             network_structure={},
         )
 
-    # スコアリストを取得
+    # retrieve score list
     scores = [s.get("birank", 0) for s in person_scores.values()]
     sorted_scores = sorted(scores, reverse=True)
 
-    # 上位10%のシェア
+    # share of top 10%
     top_10_count = max(1, len(scores) // 10)
     top_10_sum = sum(sorted_scores[:top_10_count])
     total_sum = sum(scores)
@@ -208,23 +208,23 @@ def analyze_pagerank_distribution(
     else:
         herfindahl = 0
 
-    # 統計量
+    # statistics
     avg_score = statistics.mean(scores) if scores else 0
     median_score = statistics.median(scores) if scores else 0
 
-    # 上位者の特徴分析
+    # feature analysis of top persons
     top_10_persons = sorted(
         person_scores.items(), key=lambda x: x[1].get("birank", 0), reverse=True
     )[:10]
 
-    # 役職分布
+    # role distribution
     top_roles = defaultdict(int)
     for pid, _ in top_10_persons:
         role_info = role_profiles.get(pid, {})
         primary_role = role_info.get("primary_role", "unknown")
         top_roles[primary_role] += 1
 
-    # ネットワーク特性（中心性）
+    # network characteristics (centrality)
     top_betweenness = []
     for pid, _ in top_10_persons:
         cent = centrality.get(pid, {})
@@ -242,7 +242,7 @@ def analyze_pagerank_distribution(
         },
     }
 
-    # ネットワーク構造
+    # network structure
     all_betweenness = [c.get("betweenness", 0) for c in centrality.values()]
     network_structure = {
         "avg_betweenness": round(statistics.mean(all_betweenness), 4)
@@ -271,7 +271,7 @@ def analyze_bias_correction_impact(
     studio_bias_metrics: dict[str, Any],
     person_names: dict[str, str],
 ) -> BiasInsights:
-    """スタジオバイアス補正の影響を分析.
+    """Analyse the impact of studio bias correction.
 
     Args:
         studio_bias_metrics: スタジオバイアスメトリクス
@@ -293,7 +293,7 @@ def analyze_bias_correction_impact(
             cross_studio_value=0.0,
         )
 
-    # 補正値を計算
+    # compute correction values
     corrections = []
     for pid, debiased_dict in debiased_scores.items():
         original = debiased_dict.get("original_birank", 0)
@@ -309,14 +309,14 @@ def analyze_bias_correction_impact(
             }
         )
 
-    # 上位/下位ランキング
+    # top/bottom ranking
     top_gainers = sorted(corrections, key=lambda x: x["correction"], reverse=True)[:10]
     top_losers = sorted(corrections, key=lambda x: x["correction"])[:10]
 
-    # 平均補正値
+    # average correction value
     avg_correction = statistics.mean([c["correction"] for c in corrections])
 
-    # スタジオ別効果
+    # effect by studio
     studio_effects = {}
     studio_corrections = defaultdict(list)
 
@@ -338,7 +338,7 @@ def analyze_bias_correction_impact(
                 else "undervalued",
             }
 
-    # クロススタジオ活動の価値
+    # value of cross-studio activity
     cross_studio_values = []
     for pid, bias_info in bias_metrics.items():
         cross_studio_works = bias_info.get("cross_studio_works", 0)
@@ -372,7 +372,7 @@ def analyze_growth_patterns(
     growth_acceleration_data: dict[str, Any],
     person_names: dict[str, str],
 ) -> GrowthInsights:
-    """成長パターンを分析.
+    """Analyse growth patterns.
 
     Args:
         growth_acceleration_data: 成長率データ
@@ -392,17 +392,17 @@ def analyze_growth_patterns(
             early_career_impact=0.0,
         )
 
-    # 成長トレンド集計
+    # aggregate growth trends
     rising_count = sum(1 for g in growth_metrics.values() if g.get("trend") == "rising")
     stagnant_count = sum(
         1 for g in growth_metrics.values() if g.get("trend") in ["stable", "declining"]
     )
 
-    # 平均成長速度
+    # average growth speed
     velocities = [g.get("growth_velocity", 0) for g in growth_metrics.values()]
     avg_velocity = statistics.mean(velocities) if velocities else 0
 
-    # トップ急成長者
+    # top rapidly-growing persons
     top_risers_data = [
         {
             "person_id": pid,
@@ -415,7 +415,7 @@ def analyze_growth_patterns(
     ]
     top_risers = sorted(top_risers_data, key=lambda x: x["momentum"], reverse=True)[:10]
 
-    # 早期キャリアボーナスの効果
+    # effect of early-career bonus
     early_bonuses = [
         g.get("early_career_bonus", 0)
         for g in growth_metrics.values()
@@ -442,7 +442,7 @@ def analyze_potential_value_categories(
     potential_value_scores: dict[str, dict],
     person_names: dict[str, str],
 ) -> PotentialValueInsights:
-    """潜在価値カテゴリを分析.
+    """Analyse potential value categories.
 
     Args:
         potential_value_scores: 潜在価値スコア
@@ -460,7 +460,7 @@ def analyze_potential_value_categories(
             elite_vs_hidden={},
         )
 
-    # カテゴリ分布
+    # category distribution
     category_dist = defaultdict(int)
     for p in potential_value_scores.values():
         category = p.get("category", "unknown")
@@ -484,7 +484,7 @@ def analyze_potential_value_categories(
         :10
     ]
 
-    # 構造的優位性の効果
+    # effect of structural advantage
     structural_scores = [
         p.get("structural_score", 0) for p in potential_value_scores.values()
     ]
@@ -548,7 +548,7 @@ def analyze_bridge_importance(
     person_names: dict[str, str],
     centrality: dict[str, dict],
 ) -> BridgeInsights:
-    """ブリッジの重要性を分析.
+    """Analyse bridge importance.
 
     Args:
         bridges_data: ブリッジデータ
@@ -579,7 +579,7 @@ def analyze_bridge_importance(
             information_brokerage=0.0,
         )
 
-    # 媒介中心性の平均
+    # average betweenness centrality
     betweenness_scores = []
     for pid in bridge_pids:
         cent = centrality.get(pid, {})
@@ -588,7 +588,7 @@ def analyze_bridge_importance(
 
     avg_betweenness = statistics.mean(betweenness_scores) if betweenness_scores else 0
 
-    # トップブリッジ人材
+    # top bridge persons
     bridge_rankings = [
         {
             "person_id": pid,
@@ -602,10 +602,10 @@ def analyze_bridge_importance(
         :10
     ]
 
-    # サークル間接続数（エッジ数の近似）
+    # inter-circle connection count (approximation via edge count)
     circle_connections = bridges_data.get("total_bridge_edges", 0)
 
-    # 情報仲介の価値（betweenness × degree の平均）
+    # information brokerage value (average of betweenness × degree)
     brokerage_values = [
         centrality.get(pid, {}).get("betweenness", 0)
         * centrality.get(pid, {}).get("degree", 0)
@@ -635,7 +635,7 @@ def generate_recommendations(
     potential: PotentialValueInsights,
     bridges: BridgeInsights,
 ) -> list[str]:
-    """個人の適正評価に向けた提言を生成.
+    """Generate recommendations for fair individual evaluation.
 
     Args:
         pagerank: PageRank分析
@@ -649,14 +649,14 @@ def generate_recommendations(
     """
     recommendations = []
 
-    # スコア集中 → 評価が少数に偏っている
+    # score concentration → evaluation concentrated in a few persons
     if pagerank.concentration_ratio > 0.1:
         recommendations.append(
             f"評価が上位に集中している（上位10%が全体の{pagerank.top_percentile_share:.1f}%を占有）。"
             "中堅〜若手の貢献が可視化されていない可能性がある。"
         )
 
-    # スタジオバイアス → 過小評価されている個人がいる
+    # studio bias → some persons are undervalued
     if abs(bias.avg_correction) > 1.0:
         if bias.avg_correction > 0:
             recommendations.append(
@@ -675,7 +675,7 @@ def generate_recommendations(
             "スタジオ横断的な経験は個人の市場価値を高める。"
         )
 
-    # 成長中の個人 → 報酬が追いついていない可能性
+    # growing persons → compensation may not yet reflect their growth
     if growth.rising_stars_count > 0:
         recommendations.append(
             f"{growth.rising_stars_count}名が急成長中（平均成長速度{growth.avg_velocity:.1f}/年）。"
@@ -702,7 +702,7 @@ def generate_recommendations(
             "この貢献は従来のスコアでは見えにくく、報酬に反映されにくい。"
         )
 
-    # ブリッジ人材 → 業界に不可欠だが評価されにくい
+    # bridge persons → indispensable to the industry but hard to evaluate
     if bridges.bridge_persons_count > 0:
         recommendations.append(
             f"{bridges.bridge_persons_count}名がスタジオ間の橋渡し役を担い、"
@@ -720,7 +720,7 @@ def generate_key_findings(
     potential: PotentialValueInsights,
     bridges: BridgeInsights,
 ) -> list[str]:
-    """主要な発見を生成.
+    """Generate key findings.
 
     Args:
         pagerank: PageRank分析
@@ -744,21 +744,21 @@ def generate_key_findings(
         f"上位者の共通点: {top_role}が多数、平均媒介中心性{pagerank.top_characteristics.get('avg_betweenness', 0):.4f}"
     )
 
-    # バイアス
+    # bias
     if bias.top_gainers:
         top_gainer = bias.top_gainers[0]
         findings.append(
             f"最大の補正: {top_gainer['name']}が+{top_gainer['correction']:.1f}点上昇（スタジオバイアス補正）"
         )
 
-    # 成長
+    # growth
     if growth.top_risers:
         top_riser = growth.top_risers[0]
         findings.append(
             f"最高成長: {top_riser['name']}がモメンタム{top_riser['momentum']:.1f}（キャリア{top_riser['career_years']}年）"
         )
 
-    # 潜在価値
+    # potential value
     category_names = {
         "elite": "エリート",
         "rising_star": "ライジングスター",
@@ -776,7 +776,7 @@ def generate_key_findings(
         f"潜在価値分布: {category_names.get(top_category[0], top_category[0])}が最多（{top_category[1]}名）"
     )
 
-    # ブリッジ
+    # bridges
     if bridges.top_bridges:
         top_bridge = bridges.top_bridges[0]
         findings.append(
@@ -792,7 +792,7 @@ def identify_undervaluation_alerts(
     person_names: dict[str, str],
     top_n: int = 20,
 ) -> list[UndervaluationAlert]:
-    """過小評価されている個人を特定する.
+    """Identify undervalued individuals.
 
     スタジオバイアス補正と潜在価値分析を組み合わせて、
     現在の評価が不当に低い可能性のある個人を抽出する。
@@ -818,11 +818,11 @@ def identify_undervaluation_alerts(
         if gap <= 0.03:
             continue
 
-        # 潜在価値カテゴリ
+        # potential valueカテゴリ
         pv = potential_value_scores.get(pid, {})
         category = pv.get("category", "unknown")
 
-        # 過小評価の推定原因
+        # estimated cause of undervaluation
         bias_info = bias_metrics.get(pid, {})
         primary_studio = bias_info.get("primary_studio", "")
         cross_studio_works = bias_info.get("cross_studio_works", 0)
@@ -868,7 +868,7 @@ def generate_comprehensive_insights(
     bridges_data: dict[str, Any],
     person_names: dict[str, str],
 ) -> ComprehensiveInsights:
-    """包括的洞察レポートを生成.
+    """Generate a comprehensive insights report.
 
     Args:
         person_scores: person_id → scores
@@ -885,20 +885,20 @@ def generate_comprehensive_insights(
     """
     logger.info("generating_comprehensive_insights")
 
-    # 各分析を実行
+    # run each analysis
     pagerank = analyze_pagerank_distribution(person_scores, centrality, role_profiles)
     bias = analyze_bias_correction_impact(studio_bias_metrics, person_names)
     growth = analyze_growth_patterns(growth_acceleration_data, person_names)
     potential = analyze_potential_value_categories(potential_value_scores, person_names)
     bridges = analyze_bridge_importance(bridges_data, person_names, centrality)
 
-    # 提言と発見を生成
+    # generate recommendations and findings
     recommendations = generate_recommendations(
         pagerank, bias, growth, potential, bridges
     )
     key_findings = generate_key_findings(pagerank, bias, growth, potential, bridges)
 
-    # 過小評価アラート
+    # undervaluation alerts
     undervaluation_alerts = identify_undervaluation_alerts(
         studio_bias_metrics, potential_value_scores, person_names
     )
@@ -925,7 +925,7 @@ def generate_comprehensive_insights(
 def export_insights_report(
     insights: ComprehensiveInsights,
 ) -> dict:
-    """洞察レポートをJSON形式でエクスポート.
+    """Export the insights report to JSON format.
 
     Args:
         insights: 包括的洞察

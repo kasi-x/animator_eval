@@ -1,4 +1,4 @@
-"""世代交代健全性指標 — コホート生存率 / 世代ピラミッド / フロー会計."""
+"""Generational health indicators — cohort survival rate / generational pyramid / flow accounting."""
 
 from __future__ import annotations
 
@@ -77,7 +77,7 @@ def compute_generation_pyramid(
     conn: sqlite3.Connection,
     year_range: tuple[int, int] = (2010, 2025),
 ) -> dict[str, Any]:
-    """カレンダー年別 キャリア年数ビン別 人材在籍数.
+    """Headcount by calendar year × career-year bin.
 
     career_year = calendar_year - first_year
 
@@ -130,7 +130,7 @@ def compute_generation_pyramid(
 
 
 def compute_flow_accounting(conn: sqlite3.Connection) -> dict[str, Any]:
-    """年別 入職 / 離職 / 純フロー / 依存比率.
+    """Annual entry / exit / net flow / dependency ratio.
 
     entry = first_year == calendar_year
     exit  = latest_year == calendar_year AND calendar_year < EXIT_CUTOFF_YEAR
@@ -168,7 +168,7 @@ def compute_flow_accounting(conn: sqlite3.Connection) -> dict[str, Any]:
 
 
 def run_generational_health(conn: sqlite3.Connection) -> dict[str, Any]:
-    """世代交代健全性指標 — メインエントリポイント."""
+    """Generational health indicators — main entry point."""
     survival = compute_cohort_survival_rates(conn)
     pyramid = compute_generation_pyramid(conn)
     flow = compute_flow_accounting(conn)

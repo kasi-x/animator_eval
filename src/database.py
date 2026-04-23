@@ -24,7 +24,7 @@ logger = structlog.get_logger()
 
 DEFAULT_DB_PATH = DB_PATH
 
-SCHEMA_VERSION = 55
+SCHEMA_VERSION = 56
 
 # Fuzzy match rules for unmatched anime titles (90%+ confidence)
 # Entries where SeesaaWiki title slightly differs from AniList title
@@ -234,6 +234,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             mal_id INTEGER,
             anilist_id INTEGER,
             canonical_id TEXT,
+            name_priority INTEGER NOT NULL DEFAULT 0,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(mal_id),
             UNIQUE(anilist_id)

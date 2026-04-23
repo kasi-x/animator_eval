@@ -1,4 +1,4 @@
-"""スタジオ分析 — スタジオごとの人材評価傾向を分析する.
+"""Studio analysis — analyse personnel evaluation tendencies per studio.
 
 スタジオとスタッフの関係を分析し、
 スタジオ間での評価・待遇差の可視化に活用する。
@@ -18,7 +18,7 @@ def compute_studio_analysis(
     anime_map: dict[str, Anime],
     person_scores: dict[str, float] | None = None,
 ) -> dict[str, dict]:
-    """スタジオごとの分析を実行する.
+    """Run analysis for each studio.
 
     Args:
         credits: クレジットリスト

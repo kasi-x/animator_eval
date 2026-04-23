@@ -1,4 +1,4 @@
-"""スタジオ・ベンチマーク・カード — R5 / Value-Add / 役割多様性.
+"""Studio benchmark card — R5 / Value-Add / role diversity.
 
 5-axis percentile composite per studio.
 """

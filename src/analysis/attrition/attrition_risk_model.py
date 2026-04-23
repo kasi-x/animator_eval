@@ -1,4 +1,4 @@
-"""離職リスクスコア — Random Survival Forest.
+"""Attrition risk score — Random Survival Forest.
 
 C-index gate: >= 0.70 on test set before publishing results.
 
@@ -174,7 +174,7 @@ def compute_attrition_risk_scores(
 
 
 def run_attrition_risk_model(conn: sqlite3.Connection) -> dict[str, Any]:
-    """離職リスクスコア — メインエントリポイント."""
+    """Attrition risk score — main entry point."""
     from src.analysis.attrition.entry_cohort_attrition import build_entry_cohort_dataset
 
     import pandas as pd

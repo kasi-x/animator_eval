@@ -1,4 +1,4 @@
-"""ネットワーク進化 — 人物ネットワークの時系列変化追跡.
+"""Network evolution — track time-series changes in the person network.
 
 年ごとにコラボレーションネットワークがどう変化したかを追跡する。
 新規コラボの増加率、ネットワーク密度推移、コア人材の安定性などを計測。
@@ -46,7 +46,7 @@ def compute_network_evolution(
     anime_map: dict[str, Anime],
     collaboration_graph: nx.Graph | None = None,
 ) -> dict:
-    """年ごとのネットワーク進化を計算する.
+    """Compute the network evolution year by year.
 
     Args:
         credits: クレジットリスト

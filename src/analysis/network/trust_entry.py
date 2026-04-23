@@ -1,4 +1,4 @@
-"""信頼ネット参入経路 — ゲートキーパースコア / リーチ指標.
+"""Trust network entry path — gatekeeper score / reach metrics.
 
 Input (from existing JSON + context):
     bridges_result: result of detect_bridges() — {bridge_persons: [...]}
@@ -141,7 +141,7 @@ def run_trust_entry_analysis(
     birank_person_scores: dict[str, float],
     collaboration_graph: Any = None,
 ) -> dict[str, Any]:
-    """信頼ネット参入経路 — メインエントリポイント."""
+    """Trust network entry path — main entry point."""
     if not bridges_result or not person_fe:
         return {"error": "missing_inputs"}
 

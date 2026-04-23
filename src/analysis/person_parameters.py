@@ -69,7 +69,7 @@ def _extract_raw_values(
     genre_affinity: dict[str, dict],
     compatibility_boost: dict[str, float],
 ) -> dict[str, dict[str, float]]:
-    """各 person の 10 パラメータの生の値を抽出する."""
+    """Extract the raw 10-parameter values for each person."""
 
     # Build mentor → mentee count index (for mentor_value raw score)
     mentor_mentee_count: dict[str, int] = defaultdict(int)
@@ -165,7 +165,7 @@ def _extract_raw_values(
 
 
 def _to_percentiles(raw: dict[str, dict[str, float]]) -> dict[str, dict[str, float]]:
-    """各パラメータを 0-99 percentile に変換する."""
+    """Convert each parameter to a 0-99 percentile."""
     pids = list(raw.keys())
     pct: dict[str, dict[str, float]] = {pid: {} for pid in pids}
 
@@ -214,7 +214,7 @@ def _compute_ci(
     pct: dict[str, dict[str, float]],
     raw: dict[str, dict[str, float]],
 ) -> dict[str, dict[str, tuple[float, float]]]:
-    """各パラメータの CI を計算する.
+    """Compute the CI for each parameter.
 
     CI approach per parameter:
     - scale_reach: analytical (SE already in scores.json as person_fe_se, skip here)
@@ -276,7 +276,7 @@ def _assign_archetypes(
 
 
 def _name_clusters(centers: np.ndarray) -> dict[int, str]:
-    """クラスタ重心をパラメータランクで archetype 名にマップする."""
+    """Map cluster centroids to archetype names by parameter rank."""
     # For each cluster, find the top-2 dominant parameters
     # Then match to predefined archetype profiles
     archetype_profiles = {
@@ -335,7 +335,7 @@ def compute_person_parameters(
     genre_affinity: dict[str, dict] | None = None,
     compatibility_boost: dict[str, float] | None = None,
 ) -> list[dict]:
-    """10パラメータカードを全 person について計算する.
+    """Compute 10-parameter cards for all persons.
 
     Args:
         results: scores.json 形式のリスト (pipeline context.results)

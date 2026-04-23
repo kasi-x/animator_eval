@@ -1,4 +1,4 @@
-"""名寄せ処理 — 同一人物の異表記を統合する.
+"""Entity resolution — merge variant spellings of the same person.
 
 名寄せの精度は法的要件（信用毀損リスク）に直結するため、
 保守的なマッチング（高精度・低再現率）を採用する。
@@ -21,7 +21,7 @@ logger = structlog.get_logger()
 
 
 def normalize_name(name: str) -> str:
-    """名前文字列を正規化する.
+    """Normalise a name string.
 
     - NFKC正規化（全角→半角、互換文字統一）
     - 空白統一
@@ -31,18 +31,18 @@ def normalize_name(name: str) -> str:
     if not name:
         return ""
 
-    # NFKC正規化
+    # NFKC normalisation
     name = unicodedata.normalize("NFKC", name)
 
-    # 空白の統一
+    # normalise whitespace
     name = re.sub(r"\s+", " ", name).strip()
 
-    # 敬称除去
+    # strip honorifics
     honorifics = ["さん", "先生", "氏", "様", "san", "sensei"]
     for h in honorifics:
         name = re.sub(rf"\s*{re.escape(h)}$", "", name)
 
-    # 英語名は小文字化
+    # lowercase English names
     if all(ord(c) < 128 or c.isspace() for c in name):
         name = name.lower()
 
@@ -50,7 +50,7 @@ def normalize_name(name: str) -> str:
 
 
 def _is_kanji(char: str) -> bool:
-    """漢字かどうかを判定."""
+    """Return True if the character is a kanji."""
     cp = ord(char)
     return (
         (0x4E00 <= cp <= 0x9FFF)  # CJK統合漢字
@@ -60,7 +60,7 @@ def _is_kanji(char: str) -> bool:
 
 
 def _is_japanese_name(name: str) -> bool:
-    """日本語の名前かどうかを判定."""
+    """Return True if the name appears to be Japanese."""
     return any(
         _is_kanji(c) or ("\u3040" <= c <= "\u309f") or ("\u30a0" <= c <= "\u30ff")
         for c in name
@@ -68,7 +68,7 @@ def _is_japanese_name(name: str) -> bool:
 
 
 def _definitely_different(p1: Person, p2: Person) -> bool:
-    """数値IDが両者とも設定されており、かつ異なる場合は確実に別人.
+    """Return True when numeric IDs are both set and differ — guaranteed different persons.
 
     ANN/AniList/MAL などのソースでは同名別人に別IDが付与されるため、
     数値IDの不一致は同一人物でないことの確実な証拠となる。
@@ -83,7 +83,7 @@ def _definitely_different(p1: Person, p2: Person) -> bool:
 
 
 def _numeric_id_key(p: Person) -> tuple:
-    """同名グループ内でホモニム分割するためのキー.
+    """Key used to split homonyms within a same-name group.
 
     数値IDが設定されている場合はそれを使い、未設定の場合は person_id 自体をキーにする。
     これにより同じ名前でも異なる数値IDを持つ人物は別クラスタに分離される。
@@ -95,7 +95,7 @@ def exact_match_cluster(
     persons: list[Person],
     ml_clusters: dict[str, str] | None = None,
 ) -> dict[str, str]:
-    """完全一致による名寄せ（最も保守的）.
+    """Entity resolution by exact match (most conservative).
 
     正規化後の名前が完全一致する場合のみ統合する。
     日本語名を優先し、英語名のみでのマッチは日本語名がない場合のみ許容する。
@@ -107,13 +107,13 @@ def exact_match_cluster(
 
     Returns: {person_id: canonical_id}
     """
-    # スクリプト別名前グループ
+    # name groups by script
     ja_name_groups: dict[str, list[str]] = defaultdict(list)
     ko_name_groups: dict[str, list[str]] = defaultdict(list)
     zh_name_groups: dict[str, list[str]] = defaultdict(list)
-    # 英語名でのグループ化（ネイティブ名を持たない人物のみ）
+    # group by English name (only persons without a native name)
     en_name_groups: dict[str, list[str]] = defaultdict(list)
-    # エイリアスでのグループ化
+    # group by alias
     alias_groups: dict[str, list[str]] = defaultdict(list)
 
     persons_by_id = {p.id: p for p in persons}
@@ -135,13 +135,13 @@ def exact_match_cluster(
             if normalized_zh:
                 zh_name_groups[normalized_zh].append(p.id)
                 has_native = True
-        # 英語名はネイティブ名を持たない人物のみ
+        # English name only for persons without a native name
         if not has_native and p.name_en:
             normalized_en = normalize_name(p.name_en)
             if normalized_en:
                 en_name_groups[normalized_en].append(p.id)
 
-        # エイリアスは補助的に使用
+        # aliases used as secondary signal
         for alias in p.aliases:
             normalized_alias = normalize_name(alias)
             if normalized_alias:
@@ -150,12 +150,12 @@ def exact_match_cluster(
     canonical_map: dict[str, str] = {}
 
     def _merge_group(ids: list[str], name: str, strategy: str) -> None:
-        """同名グループ内でホモニム保護しながらマージする."""
+        """Merge within a same-name group while protecting against homonym collisions."""
         unique_ids = list(dict.fromkeys(ids))
         if len(unique_ids) < 2:
             return
-        # ホモニム分割: 以下の場合はマージ不可として別クラスタに分離
-        #   1. 数値ID（ann_id/anilist_id/mal_id）が両方セットかつ異なる
+        # homonym split: separate into different clusters when merge is not allowed
+        #   1. numeric IDs (ann_id/anilist_id/mal_id) are both set and differ
         #   2. ML クラスタリングで異なるクラスタに分類された
         clusters: list[list[str]] = []
         for pid in unique_ids:
@@ -164,10 +164,10 @@ def exact_match_cluster(
             for cluster in clusters:
                 rep_id = cluster[0]
                 rep = persons_by_id[rep_id]
-                # 数値 ID による確実な別人判定
+                # guaranteed different persons via numeric ID
                 if _definitely_different(p, rep):
                     continue
-                # ML クラスタによる別人判定
+                # different-person determination via ML cluster
                 if ml_clusters:
                     p_cluster = ml_clusters.get(pid)
                     rep_cluster = ml_clusters.get(rep_id)
@@ -198,7 +198,7 @@ def exact_match_cluster(
                         name=name,
                     )
 
-    # スクリプト別名前での統合（ネイティブ名は互いに独立）
+    # merge by script-specific name (native names are independent of each other)
     for name_ja, ids in ja_name_groups.items():
         _merge_group(ids, name_ja, "exact_match")
     for name_ko, ids in ko_name_groups.items():
@@ -206,16 +206,16 @@ def exact_match_cluster(
     for name_zh, ids in zh_name_groups.items():
         _merge_group(ids, name_zh, "exact_match")
 
-    # 英語名での統合（ネイティブ名を持たない人物のみ）
+    # merge by English name (only persons without a native name)
     for name_en, ids in en_name_groups.items():
         _merge_group(ids, name_en, "exact_match")
 
-    # エイリアスでの統合（補助的、既にマッチしていない場合のみ）
+    # merge by alias (secondary, only when not already matched)
     for alias, ids in alias_groups.items():
         if len(ids) < 2:
             continue
         unique_ids = list(dict.fromkeys(ids))
-        # エイリアスマッチはネイティブ名を持たない場合のみ許可
+        # alias match allowed only when person has no native name
         valid_ids = [
             pid for pid in unique_ids
             if not (persons_by_id[pid].name_ja
@@ -228,7 +228,7 @@ def exact_match_cluster(
 
 
 def _normalize_romaji(name: str) -> str:
-    """ローマ字名を正規化する.
+    """Normalise a romanised name.
 
     - 小文字化
     - ハイフン・アポストロフィ除去
@@ -240,20 +240,20 @@ def _normalize_romaji(name: str) -> str:
 
     name = name.lower().strip()
 
-    # 記号除去
+    # strip symbols
     name = name.replace("-", "").replace("'", "").replace("'", "")
 
-    # 長音マクロン除去
+    # strip long-vowel macrons
     macron_map = str.maketrans("āēīōūÅĒĪŌŪ", "aeiouaeiou")
     name = name.translate(macron_map)
 
-    # 名前パーツをソート（"yamada taro" == "taro yamada"）
+    # sort name parts ("yamada taro" == "taro yamada")
     parts = sorted(name.split())
     return " ".join(parts)
 
 
 def romaji_match(persons: list[Person]) -> dict[str, str]:
-    """ローマ字名の正規化比較による名寄せ.
+    """Entity resolution by normalised romanised-name comparison.
 
     英語名(name_en)のローマ字表記を正規化して比較する。
     名前の語順違い（姓名の入れ替え）を吸収する。
@@ -261,7 +261,7 @@ def romaji_match(persons: list[Person]) -> dict[str, str]:
     """
     MIN_NAME_LENGTH = 5  # "Ai Li" のような短い名前は除外
 
-    # ソース別に分類
+    # classify by source
     mal_persons: dict[str, Person] = {}
     anilist_persons: dict[str, Person] = {}
 
@@ -271,7 +271,7 @@ def romaji_match(persons: list[Person]) -> dict[str, str]:
         elif p.id.startswith("anilist:"):
             anilist_persons[p.id] = p
 
-    # MAL の正規化ローマ字インデックス
+    # normalised romaji index for MAL
     mal_romaji_index: dict[str, list[str]] = defaultdict(list)
     for pid, p in mal_persons.items():
         if p.name_en and len(p.name_en) >= MIN_NAME_LENGTH:
@@ -303,13 +303,13 @@ def romaji_match(persons: list[Person]) -> dict[str, str]:
 
 
 def cross_source_match(persons: list[Person]) -> dict[str, str]:
-    """異なるデータソース間の名寄せ.
+    """Entity resolution across different data sources.
 
     MAL/MADB/ANN の人物を AniList に対して名前の完全一致で統合する。
     MADB人物は name_ja の正規化一致のみ使用（法的リスク回避）。
     ANN人物は name_ja + name_en の完全一致。ホモニム保護付き。
     """
-    # ソース別に分類
+    # classify by source
     mal_persons: dict[str, Person] = {}
     anilist_persons: dict[str, Person] = {}
     madb_persons: dict[str, Person] = {}
@@ -351,7 +351,7 @@ def cross_source_match(persons: list[Person]) -> dict[str, str]:
             if n and len(n) >= 5:
                 anilist_en_index[n].append(pid)
 
-    # MAL の正規化名インデックス
+    # normalised name index for MAL
     mal_name_index: dict[str, list[str]] = defaultdict(list)
     for pid, p in mal_persons.items():
         for name in [p.name_ja, p.name_en] + p.aliases:
@@ -503,7 +503,7 @@ def cross_source_match(persons: list[Person]) -> dict[str, str]:
                     candidates=al_ids,
                     source="allcinema",
                 )
-        # ANN フォールバック
+        # ANN fallback
         if not matched and n in ann_ja_index:
             ann_ids = ann_ja_index[n]
             if len(ann_ids) == 1:
@@ -524,7 +524,7 @@ def cross_source_match(persons: list[Person]) -> dict[str, str]:
 def similarity_based_cluster(
     persons: list[Person], threshold: float = 0.95
 ) -> dict[str, str]:
-    """文字列類似度による名寄せ（最も保守的）.
+    """Entity resolution by string similarity (most conservative).
 
     Jaro-Winkler類似度を使用し、極めて高い閾値（デフォルト0.95）で
     類似名を統合する。false positiveを避けるため、同一ソース内でのみ比較する。
@@ -549,7 +549,7 @@ def similarity_based_cluster(
 
     MIN_NAME_LENGTH = 5
 
-    # ソース別に分類
+    # classify by source
     persons_by_source: dict[str, list[Person]] = defaultdict(list)
     for p in persons:
         source = p.id.split(":")[0] if ":" in p.id else "unknown"
@@ -557,12 +557,12 @@ def similarity_based_cluster(
 
     canonical_map: dict[str, str] = {}
 
-    # 各ソース内で類似度マッチング
+    # similarity matching within each source
     for source, source_persons in persons_by_source.items():
         if len(source_persons) < 2:
             continue
 
-        # 名前 → person_id のマッピング構築
+        # build name → person_id mapping
         name_to_ids: dict[str, list[str]] = defaultdict(list)
 
         for p in source_persons:
@@ -617,12 +617,12 @@ def similarity_based_cluster(
                         ids1 = name_to_ids[name1]
                         ids2 = name_to_ids[name2]
 
-                        # 1対1マッチのみ受け入れ（曖昧性排除）
+                        # accept only 1-to-1 matches (reject ambiguous)
                         if len(ids1) == 1 and len(ids2) == 1:
                             canonical = ids1[0]
                             target = ids2[0]
 
-                            # まだマッピングされていない場合のみ追加
+                            # add only if not yet mapped
                             if target not in canonical_map:
                                 canonical_map[target] = canonical
                                 logger.info(
@@ -651,7 +651,7 @@ def similarity_based_cluster(
 
 
 def _transitive_closure(mapping: dict[str, str]) -> dict[str, str]:
-    """推移閉包を計算し、全てのキーが最終的な canonical ID を直接指すようにする.
+    """Compute transitive closure so every key points directly to its final canonical ID.
 
     例: {A→B, B→C} → {A→C, B→C}
     チェーンを辿って終端（他のキーに再マップされない値）を見つける。
@@ -659,11 +659,11 @@ def _transitive_closure(mapping: dict[str, str]) -> dict[str, str]:
     if not mapping:
         return mapping
 
-    # 各キーについてチェーンを辿る
+    # trace the chain for each key
     resolved: dict[str, str] = {}
     for key in mapping:
         target = mapping[key]
-        # チェーンの終端まで辿る（循環防止付き）
+        # follow chain to end (with cycle guard)
         visited: set[str] = {key}
         while target in mapping and target not in visited:
             visited.add(target)
@@ -678,7 +678,7 @@ def resolve_all(
     credits_by_person: dict[str, list] | None = None,
     anime_meta: dict[str, dict] | None = None,
 ) -> dict[str, str]:
-    """全名寄せ処理を実行する.
+    """Run all entity resolution steps.
 
     Args:
         persons: 全人物リスト
@@ -706,7 +706,7 @@ def resolve_all(
     cross = cross_source_match(persons)
 
     # Step 3: ローマ字マッチ（既にマッチ済みのものは除外）
-    # キーと値の両方を除外: canonical ID が後段で再マッチされるのを防ぐ
+    # exclude both keys and values: prevents canonical IDs from being re-matched downstream
     already_matched = (
         set(exact) | set(exact.values()) | set(cross) | set(cross.values())
     )
@@ -722,7 +722,7 @@ def resolve_all(
     already_matched = already_matched | set(similarity) | set(similarity.values())
     ai_merges = _ai_assisted_step(persons, already_matched)
 
-    # 統合 + 推移閉包
+    # merge + transitive closure
     merged = {**exact, **cross, **romaji, **similarity, **ai_merges}
     merged = _transitive_closure(merged)
     logger.info(

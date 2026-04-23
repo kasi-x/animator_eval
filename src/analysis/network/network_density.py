@@ -1,4 +1,4 @@
-"""ネットワーク密度指標 — 個人のローカルネットワーク特性を計算する.
+"""Network density metrics — compute local network characteristics per person.
 
 各人物について:
 - collaborator_count: ユニーク共同作業者数
@@ -21,7 +21,7 @@ def compute_network_density(
     credits: list[Credit],
     person_scores: dict[str, float] | None = None,
 ) -> dict[str, NetworkDensityMetrics]:
-    """人物ごとのネットワーク密度を計算する.
+    """Compute network density for each person.
 
     Args:
         credits: クレジットリスト

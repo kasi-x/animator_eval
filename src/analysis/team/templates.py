@@ -1,4 +1,4 @@
-"""チーム組成テンプレート — K=5 クラスタリング.
+"""Team composition templates — K=5 clustering.
 
 成功定義: scale_tier >= 4 の作品で構成されるチーム。
 """

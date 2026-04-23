@@ -1,4 +1,4 @@
-"""生産性指標 — クレジット密度と効率の分析.
+"""Productivity metrics — analyse credit density and efficiency.
 
 キャリア年数あたりのクレジット数（生産性指標）を計算する。
 高い生産性 = 毎年多くの作品に参加。
@@ -18,7 +18,7 @@ def compute_productivity(
     credits: list[Credit],
     anime_map: dict[str, Anime],
 ) -> dict[str, ProductivityMetrics]:
-    """人物ごとの生産性指標を計算する.
+    """Compute productivity metrics for each person.
 
     Args:
         credits: クレジットリスト

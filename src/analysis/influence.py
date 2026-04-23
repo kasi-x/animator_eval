@@ -1,4 +1,4 @@
-"""影響伝播分析 — メンター・メンティー関係と影響ツリーの構築.
+"""Influence propagation analysis — build mentor-mentee relationships and influence trees.
 
 ディレクターとその下で働いたアニメーターの関係を追跡し、
 「誰の門下から誰がディレクターに成長したか」を分析する。
@@ -28,7 +28,7 @@ def _find_mentor_mentee_pairs(
     anime_map: dict[str, Anime],
     min_shared_works: int = 2,
 ) -> dict[str, dict[str, dict]]:
-    """メンター・メンティーペアを検出する.
+    """Detect mentor-mentee pairs.
 
     条件:
     - メンター: 同作品でディレクター系の役職
@@ -84,7 +84,7 @@ def _find_mentor_mentee_pairs(
 
 
 def _get_highest_stage(person_id: str, credits: list[Credit]) -> int:
-    """人物の最高キャリアステージを返す."""
+    """Return the highest career stage of a person."""
     stages = [CAREER_STAGE.get(c.role, 0) for c in credits if c.person_id == person_id]
     return max(stages) if stages else 0
 
@@ -95,7 +95,7 @@ def compute_influence_tree(
     person_scores: dict[str, float] | None = None,
     min_shared_works: int = 2,
 ) -> dict:
-    """影響ツリーを構築する.
+    """Build an influence tree.
 
     Args:
         credits: クレジットリスト

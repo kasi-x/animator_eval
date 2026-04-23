@@ -40,7 +40,7 @@ logger = structlog.get_logger()
 
 @dataclass
 class EstimationResult:
-    """単一推定手法の結果."""
+    """Result of a single estimation method."""
 
     theta: float  # point estimate
     se: float  # standard error
@@ -93,7 +93,7 @@ class DualEstimate:
 
 @dataclass
 class StudioCATEResult:
-    """スタジオ移籍 CATE（異質処置効果）."""
+    """Studio transfer CATE (conditional average treatment effect)."""
 
     stage: str
     theta: float
@@ -103,7 +103,7 @@ class StudioCATEResult:
 
 @dataclass
 class DMLReport:
-    """全パラメータの OLS vs DML 比較レポート."""
+    """OLS vs DML comparison report for all parameters."""
 
     estimates: list[DualEstimate] = field(default_factory=list)
     studio_cate: list[StudioCATEResult] = field(default_factory=list)
@@ -395,7 +395,7 @@ def _estimate_studio_switch_effect(
     person_fe: dict[str, float],
     studio_fe: dict[str, float],
 ) -> tuple[DualEstimate | None, list[StudioCATEResult]]:
-    """スタジオ移籍の因果効果を OLS vs DML で比較推定.
+    """Estimate the causal effect of studio transfer via OLS vs DML.
 
     D = post_switch (binary), Y = log(production_scale), X = career controls
     """
@@ -566,7 +566,7 @@ def run_dml_analysis(
     person_fe: dict[str, float],
     studio_fe: dict[str, float],
 ) -> DMLReport:
-    """全パラメータについて OLS vs DML の2パターン推定を実行.
+    """Run OLS vs DML estimation for all parameters.
 
     Args:
         credits: 全クレジットデータ

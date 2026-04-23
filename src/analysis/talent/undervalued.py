@@ -1,4 +1,4 @@
-"""過小評価タレント・プール — U_p スコア / K=5 アーキタイプ.
+"""Undervalued talent pool — U_p score / K=5 archetypes.
 
 Input (all from in-memory or JSON):
     expected_ability: {person_id: {expected, actual, gap}}
@@ -16,7 +16,7 @@ import structlog
 
 logger = structlog.get_logger()
 
-# アーキタイプ名 (K=5)
+# archetype names (K=5)
 _ARCHETYPE_NAMES = [
     "育児・介護復帰型",
     "スタジオ倒産型",
@@ -158,7 +158,7 @@ def run_undervalued_talent(
     scores: list[dict],
     genre_affinity: list[dict],
 ) -> dict[str, Any]:
-    """過小評価タレント・プール — メインエントリポイント."""
+    """Undervalued talent pool — main entry point."""
     if not scores:
         return {"error": "no_scores_data"}
 

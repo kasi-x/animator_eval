@@ -16,7 +16,7 @@ logger = structlog.get_logger()
 
 @dataclass
 class TemporalSnapshot:
-    """ある時点でのスコアスナップショット.
+    """Score snapshot at a point in time.
 
     Attributes:
         year: 年
@@ -41,7 +41,7 @@ class TemporalSnapshot:
 
 @dataclass
 class TemporalProfile:
-    """クリエイターの時系列プロファイル.
+    """Time-series profile of a creator.
 
     Attributes:
         person_id: person_id
@@ -72,7 +72,7 @@ def compute_temporal_profiles(
     current_scores: dict[str, dict] | None = None,
     window_years: int = 3,
 ) -> dict[str, TemporalProfile]:
-    """時系列プロファイルを計算.
+    """Compute the time-series profile.
 
     Args:
         credits: 全クレジット
@@ -96,21 +96,21 @@ def compute_temporal_profiles(
     profiles: dict[str, TemporalProfile] = {}
 
     for person_id, year_credits in person_year_credits.items():
-        # 年ごとにスナップショット作成
+        # create snapshot per year
         snapshots = []
         years = sorted(year_credits.keys())
 
         for year in years:
             year_creds = year_credits[year]
 
-            # その年のコラボレーター数（概算）
+            # collaborator count for that year (approximate)
             collaborators = set()
             for cred in year_creds:
-                # 同じアニメに参加した他のスタッフをカウント（簡易版）
-                # 本来は anime → staff のマッピングが必要
+                # count other staff on the same anime (simplified)
+                # proper implementation requires anime → staff mapping
                 pass
 
-            # 主要役職
+            # primary role
             role_counts = defaultdict(int)
             for cred in year_creds:
                 role_counts[cred.role.value] += 1
@@ -118,8 +118,8 @@ def compute_temporal_profiles(
                 max(role_counts.items(), key=lambda x: x[1])[0] if role_counts else None
             )
 
-            # スコアは現在の値を使用（時点ごとの再計算は重い）
-            # 実際の実装では、その時点までのクレジットで再計算が望ましい
+            # use current score value (per-time recomputation is expensive)
+            # in a real implementation, recompute from credits up to that point
             current = current_scores.get(person_id, {}) if current_scores else {}
 
             snapshot = TemporalSnapshot(
@@ -134,17 +134,17 @@ def compute_temporal_profiles(
             )
             snapshots.append(snapshot)
 
-        # キャリア統計
+        # career statistics
         if snapshots:
             career_start = snapshots[0].year
             career_end = snapshots[-1].year
 
-            # ピーク検出
+            # peak detection
             peak_snapshot = max(snapshots, key=lambda s: s.iv_score)
             peak_year = peak_snapshot.year
             peak_score = peak_snapshot.iv_score
 
-            # 成長率計算（最初と最後のスコア比較）
+            # compute growth rate (compare first and last score)
             if len(snapshots) > 1 and snapshots[0].iv_score > 0:
                 years_diff = career_end - career_start
                 if years_diff > 0:
@@ -157,7 +157,7 @@ def compute_temporal_profiles(
             else:
                 growth_rate = 0.0
 
-            # トレンド判定
+            # determine trend
             if len(snapshots) >= 3:
                 recent_avg = sum(s.iv_score for s in snapshots[-3:]) / 3
                 early_avg = sum(s.iv_score for s in snapshots[:3]) / 3
@@ -170,7 +170,7 @@ def compute_temporal_profiles(
             else:
                 trend = "stable"
 
-            # ターニングポイント検出（クレジット数が急増/急減した年）
+            # detect turning points (years with sharp increase/decrease in credits)
             turning_points = []
             for i in range(1, len(snapshots)):
                 prev = snapshots[i - 1]
@@ -202,7 +202,7 @@ def analyze_cohort_trends(
     profiles: dict[str, TemporalProfile],
     cohort_window: int = 5,
 ) -> dict[str, dict]:
-    """コホート別のトレンド分析.
+    """Trend analysis by cohort.
 
     同じ時期にデビューしたクリエイターのグループ（コホート）ごとに
     平均的な成長パターンを分析。
@@ -214,7 +214,7 @@ def analyze_cohort_trends(
     Returns:
         cohort_key → 統計情報
     """
-    # コホート分類
+    # cohort classification
     cohorts: dict[str, list[TemporalProfile]] = defaultdict(list)
 
     for profile in profiles.values():
@@ -223,7 +223,7 @@ def analyze_cohort_trends(
             cohort_key = f"{cohort_start}-{cohort_start + cohort_window - 1}"
             cohorts[cohort_key].append(profile)
 
-    # 各コホートの統計
+    # statistics per cohort
     cohort_stats = {}
 
     for cohort_key, cohort_profiles in cohorts.items():
@@ -265,7 +265,7 @@ def detect_industry_trends(
     min_year: int | None = None,
     max_year: int | None = None,
 ) -> dict[int, dict]:
-    """業界全体のトレンドを検出.
+    """Detect industry-wide trends.
 
     各年の新規参入者数、平均スコア、役職分布などを集計。
 
@@ -277,7 +277,7 @@ def detect_industry_trends(
     Returns:
         year → 統計情報
     """
-    # 年ごとの集計
+    # aggregate by year
     year_stats: dict[int, dict] = defaultdict(
         lambda: {
             "new_entrants": 0,
@@ -288,7 +288,7 @@ def detect_industry_trends(
         }
     )
 
-    # 年範囲の決定
+    # determine year range
     all_years = set()
     for profile in profiles.values():
         for snapshot in profile.snapshots:
@@ -302,12 +302,12 @@ def detect_industry_trends(
     if max_year is None:
         max_year = max(all_years)
 
-    # 新規参入者カウント
+    # count new entrants
     for profile in profiles.values():
         if profile.career_start and min_year <= profile.career_start <= max_year:
             year_stats[profile.career_start]["new_entrants"] += 1
 
-    # 各年のアクティビティ集計
+    # aggregate activity per year
     for profile in profiles.values():
         for snapshot in profile.snapshots:
             if min_year <= snapshot.year <= max_year:
@@ -317,11 +317,11 @@ def detect_industry_trends(
                 if snapshot.primary_role:
                     stats["role_distribution"][snapshot.primary_role] += 1
 
-    # 平均スコア計算
+    # compute average score
     for year, stats in year_stats.items():
         active = stats["active_persons"]
         if active > 0:
-            # その年にアクティブだった人のスコア平均
+            # average score of persons active that year
             year_composites = [
                 snapshot.iv_score
                 for profile in profiles.values()
@@ -383,10 +383,10 @@ def main():
         for s in scores_list
     }
 
-    # 時系列プロファイル計算
+    # compute time-series profiles
     profiles = compute_temporal_profiles(credits, anime_map, scores_map)
 
-    # コホート分析
+    # cohort analysis
     cohort_stats = analyze_cohort_trends(profiles)
 
     print("\nコホート分析:")
@@ -396,7 +396,7 @@ def main():
         print(f"  平均成長率: {stats['avg_growth_rate']}%/年")
         print(f"  トレンド分布: {stats['trend_distribution']}")
 
-    # 業界トレンド
+    # industry trends
     industry_trends = detect_industry_trends(profiles)
 
     print("\n業界トレンド（直近5年）:")
@@ -408,7 +408,7 @@ def main():
         print(f"  アクティブ: {stats['active_persons']}人")
         print(f"  総クレジット: {stats['total_credits']}")
 
-    # トレンド分布
+    # trend distribution
     trends = [p.trend for p in profiles.values()]
     trend_counts = {
         "rising": trends.count("rising"),

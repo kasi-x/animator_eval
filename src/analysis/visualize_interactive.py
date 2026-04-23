@@ -18,7 +18,7 @@ def plot_interactive_score_distribution(
     scores_data: list[dict],
     output_path: Path | None = None,
 ) -> None:
-    """スコア分布のインタラクティブヒストグラム.
+    """Interactive histogram of score distribution.
 
     Interactive histogram of score distributions with hover details.
 
@@ -111,7 +111,7 @@ def plot_interactive_radar(
     top_n: int = 10,
     output_path: Path | None = None,
 ) -> None:
-    """トップNのレーダーチャート（インタラクティブ）.
+    """Interactive radar chart of the top-N persons.
 
     Interactive radar chart for top N persons with toggleable traces.
 
@@ -169,7 +169,7 @@ def plot_interactive_scatter(
     y_axis: str = "patronage",
     output_path: Path | None = None,
 ) -> None:
-    """2軸スコアの散布図（インタラクティブ）.
+    """Interactive scatter plot of two score axes.
 
     Interactive scatter plot with hover details and zoom.
 
@@ -231,7 +231,7 @@ def plot_interactive_timeline(
     timeline_data: dict,
     output_path: Path | None = None,
 ) -> None:
-    """年代別のクレジット数推移（インタラクティブ）.
+    """Interactive trend of annual credit counts.
 
     Interactive timeline of credit counts over years.
 
@@ -280,7 +280,7 @@ def plot_interactive_network(
     top_n: int = 50,
     output_path: Path | None = None,
 ) -> None:
-    """コラボレーションネットワーク（インタラクティブ）.
+    """Interactive collaboration network.
 
     Interactive network graph of collaboration relationships.
 
@@ -396,7 +396,7 @@ def generate_interactive_dashboard(
     timeline_data: dict | None = None,
     output_dir: Path | None = None,
 ) -> None:
-    """全てのインタラクティブ可視化を生成.
+    """Generate all interactive visualisations.
 
     Generates all interactive visualizations in HTML format.
 
@@ -456,7 +456,7 @@ def generate_interactive_dashboard(
 
 
 def main() -> None:
-    """エントリーポイント: JSONデータからインタラクティブ可視化を生成."""
+    """Entry point: generate interactive visualisations from JSON data."""
     import json
 
     from src.utils.config import JSON_DIR

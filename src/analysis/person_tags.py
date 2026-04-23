@@ -1,4 +1,4 @@
-"""人物タグ — スコアとキャリアデータに基づく自動タグ付け.
+"""Person tags — automatic tagging based on scores and career data.
 
 各人物に対して、その特性を示す自動タグを付与する:
 - "veteran" / "newcomer" — キャリア年数
@@ -14,7 +14,7 @@ logger = structlog.get_logger()
 
 
 def compute_person_tags(results: list[dict]) -> dict[str, list[str]]:
-    """スコア結果から人物タグを自動生成する.
+    """Auto-generate person tags from scoring results.
 
     Args:
         results: パイプライン結果 (scores.json の内容)

@@ -1,4 +1,4 @@
-"""キャリアマイルストーン — 重要なキャリアイベントの検出.
+"""Career milestones — detect significant career events.
 
 クレジットデータから、役職昇進、初監督作品、最高評価作品への参加など、
 キャリア上の重要マイルストーンを自動検出する。
@@ -17,7 +17,7 @@ def compute_milestones(
     anime_map: dict[str, Anime],
     person_id: str | None = None,
 ) -> dict[str, list[dict]]:
-    """人物ごとのキャリアマイルストーンを計算する.
+    """Compute career milestones for each person.
 
     Args:
         credits: クレジットリスト

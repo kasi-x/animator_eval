@@ -1,4 +1,4 @@
-"""重み付き PageRank による Authority スコア算出.
+"""Authority score computation via weighted PageRank.
 
 PR(u) = (1-d)/N + d * Σ [PR(v) * W(v,u) / L(v)]   for v in B_u
 
@@ -24,7 +24,7 @@ def weighted_pagerank(
     tol: float = CONVERGENCE_THRESHOLD,
     nstart: dict[str, float] | None = None,
 ) -> dict[str, float]:
-    """重み付き PageRank を計算する.
+    """Compute weighted PageRank.
 
     NetworkX の pagerank に weight パラメータを渡すことで
     重み付きバージョンを使用する。
@@ -66,7 +66,7 @@ def weighted_pagerank(
 
 
 def normalize_scores(scores: dict[str, float]) -> dict[str, float]:
-    """スコアを 0-100 の範囲に正規化する."""
+    """Normalise scores to the 0-100 range."""
     if not scores:
         return {}
 
@@ -114,7 +114,7 @@ def compute_authority_scores(
 
 
 def main() -> None:
-    """エントリーポイント: グラフを構築し Authority スコアを算出."""
+    """Entry point: build the graph and compute Authority scores."""
     import json
 
     from src.analysis.graph import create_person_anime_network
@@ -147,7 +147,7 @@ def main() -> None:
     graph = create_person_anime_network(persons, anime_list, credits)
     authority = compute_authority_scores(graph)
 
-    # DB に保存
+    # save to DB
     for person_id, score in authority.items():
         upsert_score(conn, ScoreResult(person_id=person_id, authority=score))
     conn.commit()
