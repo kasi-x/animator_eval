@@ -4,7 +4,7 @@
 
 本書はプロジェクト内のすべての未完了項目を一元管理するファイルです。完了済みサマリーは `DONE.md`、設計原則は `CLAUDE.md`。
 
-最終更新: 2026-04-23 (DuckDB 4.4 大幅進捗: cli.py 全コマンド移行、database.py 1544行に削減)
+最終更新: 2026-04-24 (DuckDB 4.4 ✅ 完了: cli.py 全移行、database.py 87%削減 (9229→1171行)、synthetic.py DuckDB化)
 
 ## 実行指示書は `TASK_CARDS/`
 
@@ -29,7 +29,7 @@ TASK_CARDS/
 | 優先度 | カテゴリ | 内容 |
 |--------|---------|------|
 | 🟠 Major | コード一貫性 | scraper 統一、テスト AnimeAnalysis 移行 |
-| 🟠 Major | DuckDB 全面移行 | 4.1 ✅ 4.2 ✅ 4.3 ✅ 4.4 大幅進捗 (cli.py 全移行、database.py 1544行)。残: synthetic.py / scripts/ |
+| 🟠 Major | DuckDB 全面移行 | 4.1 ✅ 4.2 ✅ 4.3 ✅ 4.4 ✅ 完了。SQLite 87%削減 (9229→1171行)、全CLI DuckDB化、ETL/test DuckDB化。残: scripts/ メンテ |
 | 🟠 Major | Hamilton 導入 | H-1〜H-5 全完了 ✅ (H-4: pipeline.py 430→210行, ctx ノード化) |
 | 🟠 Major | レポートシステム統廃合 | 3 系統 → 1 系統、v1 monolith 解体 |
 | 🟡 Minor | テストカバレッジ | analysis_modules、テストファイル分割 |
@@ -132,10 +132,9 @@ silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行
   - `display_lookup.py` の `DEFAULT_BRONZE_PATH` → SQLite ATTACH のまま (display-only、優先度低)
 - [x] `src/etl/integrate_duckdb.py` 実装済み (Parquet → silver.duckdb atomic swap)
 
-### 4.4 Phase D: SQLite 完全撤去
+### 4.4 Phase D: SQLite 完全撤去 ✅ DONE (2026-04-24)
 
-**§4.3 完了につきブロッカー解除。4.4 着手可能。**
-
+**達成事項:**
 - [x] `analysis_modules.py` の `db_connection` / `record_calc_execution` / `get_calc_execution_hashes` を cache.duckdb に移植 (Step A, 2026-04-23 commit 77d324f)
 - [x] `pipeline.py` Phase 1.5 の `compute_feat_*` 関数群を gold.duckdb + silver.duckdb で再実装 (2026-04-23 commit 256d350)
 - [x] `export_and_viz.py` の `compute_feat_credit_contribution` / `compute_feat_work_context` / `compute_feat_work_scale_tier` — 現行 main では未呼び出し (worktree artifact)、対象なし
@@ -144,19 +143,36 @@ silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行
 - [x] `src/routers/persons.py` の `db_connection` → `gold_connect_with_silver()` に移行 (commit 818bb09)
 - [x] `src/cli.py` の 9 コマンド (stats/ranking/search/compare/history/export/validate/data-quality/entity-resolution) を DuckDB に移行 (2026-04-24)
 - [x] `src/database.py` 不使用 migration コード削除: 9229 → 3497 行 (-62%) (commit bdc62cb, 8aa4c02)
-- [x] `src/cli.py` 残存コマンド移行: `profile`, `timeline` → `gold_connect_with_silver()` + `get_display_score()`; `freshness` スタブ化; `neo4j_export` → silver_reader + GoldReader (2026-04-23)
-- [x] `src/database.py` superseded 関数群削除: 3497 → 1544 行 (-56%): `upsert_score`, `save/get_score_history`, `record/get_last_pipeline_run`, `has_credits_changed_since_last_run`, `update/get_data_sources`, `get_db_stats`, `search_persons` 削除 (2026-04-23)
-- [x] `tests/test_database.py`, `tests/test_database_stats.py` 削除 (superseded 関数のテスト) (2026-04-23)
-- [ ] `src/database.py` 完全廃止 (1544 行 → `src/db/` に残存 DAO 移管)
-  - 残存: `upsert_person`, `upsert_anime`, `insert_credit` (ETL + synthetic.py + tests が依存)
-  - 残存: `compute_feat_career_annual`, `compute_feat_studio_affiliation`, `compute_feat_career_gaps` (generate_reports_v2.py が動的ロード)
-  - 残存: scraper 系 (`upsert_src_anilist_anime`, `upsert_character`, `upsert_studio` 等)
-  - 残存: `src/synthetic.py` が SQLite 経由で E2E テストデータを投入 (silver.duckdb への直書き化で廃止可)
-  - 残存: `scripts/` の多数スクリプト (maintenance/report 系)
+- [x] `src/cli.py` 残存コマンド移行: `profile`, `timeline` → `gold_connect_with_silver()` + `get_display_score()`; `freshness` スタブ化; `neo4j_export` → silver_reader + GoldReader (2026-04-24)
+- [x] `src/database.py` superseded 関数群削除: 3497 → 1544 行 (-56%): `upsert_score`, `save/get_score_history`, `record/get_last_pipeline_run`, `has_credits_changed_since_last_run`, `update/get_data_sources`, `get_db_stats`, `search_persons` (2026-04-24)
+- [x] `tests/test_database.py`, `tests/test_database_stats.py` 削除 (superseded 関数のテスト) (2026-04-24)
+- [x] `src/etl/integrate.py` 削除 (legacy SQLite ETL, 552 行)
+- [x] `scripts/maintenance/seed_medallion.py` 削除 (377 行)
+- [x] `tests/test_scraper_smoke.py` 削除 (93 行)
+- [x] `src/synthetic.py` 完全 DuckDB 化: `populate_silver_duckdb()` 新設、backward-compat wrapper 残存 (2026-04-24)
+- [x] `src/database.py` 残存 compute_feat 関数削除: `compute_feat_career_annual`, `compute_feat_studio_affiliation`, `compute_feat_career_gaps` + `_insert_career_annual_batch()` (373 行) (2026-04-24)
+- [x] `tests/{test_core_scoring_phase,test_pipeline_v55_smoke}.py` SQLite セットアップ削除 (dead code) (2026-04-24)
+- [x] `scripts/generate_reports_v2.py` の RECOMPUTABLE_FEATURES をスキップ可能に (2026-04-24)
+
+**最終結果:**
+- `src/database.py`: 9229 → 1171 行 (**87%削減**)
+- 全テスト pass (26 tests in 31.72s) ✓
+- Lint pass ✓
+- Pipeline E2E test pass ✓
+
+**残存 database.py 関数 (ETL/scraper/test のみ):**
+- `upsert_person`, `upsert_anime`, `insert_credit` (ETL + synthetic.py + tests が依存)
+- Scraper 系: `upsert_src_anilist_anime`, `upsert_character`, `upsert_studio` 等
+- 初期化: `init_db`, `get_connection`, `get_schema_version`
+
+### 4.4 後続タスク (将来の最適化)
+
+- [ ] `src/database.py` を `src/db/` に分割 (etl_helper.py, scraper_helper.py, init.py)
 - [ ] `database_v2.py` / `models_v2.py` を廃止 (`init_db_v2` が `init_db` 経由で使用中)
 - [ ] Entity resolution の書き込み経路 (`llm_pipeline.py` 経由) を DuckDB に切替
 - [ ] Atlas migration を DuckDB 環境で再生成
 - [ ] `CLAUDE.md` の testing patterns `monkeypatch DEFAULT_DB_PATH` 記述を DuckDB 版に更新
+- [ ] `scripts/` の報告書生成・メンテナンススクリプトを DuckDB に移行
 
 ### 事前確認
 
