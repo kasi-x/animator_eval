@@ -369,11 +369,13 @@ tests/test_akm.py                 1102 行
      - MAL/Jikan: `updated_at` でフィルタ
 - **先行実装可**: `content_hash` 算出 (sha256 of canonical JSON of relevant fields)。スキーマ側 agent 完了後に配線
 
-### 7.2 ANN Phase 3 を HTML スクレイプに書き換え
+### 7.2 ANN Phase 3 を HTML スクレイプに書き換え ✅ 完了 (2026-04-23)
 
 - **背景**: ANN `?people=ID` API が `<warning>ignored</warning>` を返す (2026-04-23 確認)。Phase 3 (scrape-persons) が完全に空振り
-- **着手済み**: `ann_scraper.py` に `PEOPLE_HTML_BASE`, `parse_person_html`, `_parse_dob_html` 追加、`tests/test_ann_scraper_parse.py` に 9 件のテスト追加、`tests/fixtures/scrapers/ann/person_260.html` 取得済み
-- [ ] `cmd_scrape_persons` 内の `_run_scrape_persons` を XML batch fetch から HTML page fetch に切り替え (1 person = 1 GET、レート制限注意)
+- **完了**:
+  - `ann_scraper.py` に `PEOPLE_HTML_BASE`, `parse_person_html`, `_parse_dob_html` 追加
+  - `_run_scrape_persons` は per-ID HTML fetch loop (`fetch_person_html`) 実装済み、`AnnClient._throttle()` で rate limit (1.5s)、checkpoint 保存、`BronzeWriter("ann", table="persons")` 経由で BRONZE 書き込み
+  - `tests/test_ann_scraper_parse.py` 46 件 (parse / _parse_dob_html / DOB 形式 / Cloudflare ブロック / minimal field) green
 
 ### 7.3 anilist_scraper retry refactor (任意)
 
@@ -394,7 +396,7 @@ tests/test_akm.py                 1102 行
 | endpoint | 症状 | 対応 |
 |---|---|---|
 | ANN `cdn.animenewsnetwork.com/encyclopedia/reports.xml?tag=masterlist&nlist=all` | HTML を返す | fallback `_probe_max_id` で動作中。本来 nlist 正規パラメータ調査要 |
-| ANN `?people=ID` API | `<warning>ignored</warning>` | 7.2 で対応中 |
+| ANN `?people=ID` API | `<warning>ignored</warning>` | 7.2 で HTML scrape (people.php?id=N) に切替済 ✅ |
 
 ### 7.6 lint 残債
 
