@@ -16,6 +16,7 @@ from src.models import BronzeAnime, Credit, Person, parse_role
 from src.scrapers.cache_store import load_cached_json, save_cached_json
 from src.scrapers.http_client import RetryingHttpClient
 from src.scrapers.logging_utils import configure_file_logging
+from src.scrapers.wikidata_role_map import WIKIDATA_ROLE_MAP  # noqa: F401  re-exported
 
 log = structlog.get_logger()
 
@@ -23,31 +24,33 @@ WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
 REQUEST_INTERVAL = 2.0  # Wikidata enforces strict rate limits
 
 # Query to retrieve anime works and their staff
+# UNION-based query: each branch binds ?role from the property used so we always
+# know the staff role even when P3831 qualifiers are absent.
+# Role tokens below come from `WIKIDATA_ROLE_MAP` (imported above). Keep SPARQL
+# BIND values in sync with that dict — tokens must be parse_role()-compatible
+# (see src/models.py ROLE_MAP), otherwise credits fall back to Role.SPECIAL.
+#
+# Properties intentionally omitted here (see wikidata_role_map.py):
+#   P1040 — "film editor": no English key in ROLE_MAP yet.
+#   P10800 — property ID unverified on wikidata.org.
 ANIME_STAFF_QUERY = """
-SELECT ?anime ?animeLabel ?year ?person ?personLabel ?personLabelJa ?roleLabel
+SELECT ?anime ?animeLabel ?year ?person ?personLabel ?personLabelJa ?role
 WHERE {{
   ?anime wdt:P31/wdt:P279* wd:Q63952888 .  # anime series
-  ?anime wdt:P57|wdt:P1040|wdt:P3174|wdt:P58 ?person .
   OPTIONAL {{ ?anime wdt:P577 ?date . BIND(YEAR(?date) AS ?year) }}
-  OPTIONAL {{
-    ?anime p:P57|p:P1040|p:P3174|p:P58 ?stmt .
-    ?stmt ps:P57|ps:P1040|ps:P3174|ps:P58 ?person .
-    ?stmt pq:P3831 ?role .
-  }}
   OPTIONAL {{ ?person rdfs:label ?personLabelJa . FILTER(LANG(?personLabelJa) = "ja") }}
+  {{
+    ?anime wdt:P57 ?person . BIND("director" AS ?role)
+  }} UNION {{
+    ?anime wdt:P58 ?person . BIND("screenplay" AS ?role)
+  }} UNION {{
+    ?anime wdt:P3174 ?person . BIND("art director" AS ?role)
+  }}
   SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en,ja" . }}
 }}
 LIMIT {limit}
 OFFSET {offset}
 """
-
-# Property mapping
-WIKIDATA_ROLE_MAP = {
-    "P57": "director",
-    "P1040": "animation director",
-    "P3174": "episode_director",
-    "P58": "episode director",
-}
 
 app = typer.Typer()
 
@@ -125,7 +128,7 @@ def parse_wikidata_results(
         person_uri = row.get("person", {}).get("value", "")
         person_label = row.get("personLabel", {}).get("value", "")
         person_label_ja = row.get("personLabelJa", {}).get("value", "")
-        role_label = row.get("roleLabel", {}).get("value", "")
+        role_label = row.get("role", {}).get("value", "")
 
         if not anime_uri or not person_uri:
             continue
