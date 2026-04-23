@@ -460,7 +460,7 @@ def main() -> None:
     import json
 
     from src.utils.config import JSON_DIR
-    from src.infra.log import setup_logging
+    from src.infra.logging import setup_logging
 
     setup_logging()
 

@@ -549,7 +549,7 @@ def _html_escape(text: str) -> str:
 
 def main() -> None:
     """Load scores from the DB and generate a report."""
-    from src.infra.log import setup_logging
+    from src.infra.logging import setup_logging
 
     setup_logging()
 

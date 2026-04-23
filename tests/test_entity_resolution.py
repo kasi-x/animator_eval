@@ -1,6 +1,6 @@
 """Tests for the entity_resolution module."""
 
-from src.analysis.entity_resolution import (
+from src.analysis.entity.entity_resolution import (
     _normalize_romaji,
     _transitive_closure,
     cross_source_match,

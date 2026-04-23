@@ -3716,7 +3716,7 @@ def scrape(
     ),
 ) -> None:
     """Fetch and parse credit data from SeesaaWiki."""
-    from src.infra.log import setup_logging
+    from src.infra.logging import setup_logging
 
     setup_logging()
 
@@ -3753,7 +3753,7 @@ def reparse(
     Re-parses all raw/*.html files and writes to BRONZE parquet.
     Use this after updating the parser.
     """
-    from src.infra.log import setup_logging
+    from src.infra.logging import setup_logging
 
     setup_logging()
 
@@ -3782,7 +3782,7 @@ def validate_samples(
     and asks the local LLM to check for systemic issues.
     """
     import random
-    from src.infra.log import setup_logging
+    from src.infra.logging import setup_logging
 
     setup_logging()
 

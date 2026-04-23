@@ -544,7 +544,7 @@ def main(
     ),
 ) -> None:
     """Fetch credit data from Media Arts DB dump."""
-    from src.infra.log import setup_logging
+    from src.infra.logging import setup_logging
     from src.scrapers.logging_utils import configure_file_logging
 
     setup_logging()

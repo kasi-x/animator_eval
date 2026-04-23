@@ -415,7 +415,7 @@ def main() -> None:
     """Entry point."""
     import argparse
 
-    from src.infra.log import setup_logging
+    from src.infra.logging import setup_logging
 
     setup_logging()
 

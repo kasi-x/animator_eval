@@ -6,7 +6,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from src.infra.log import setup_logging
+from src.infra.logging import setup_logging
 from src.i18n import set_language, t
 
 app = typer.Typer(name="animetor-eval", help="Anime industry personnel network evaluation tool")

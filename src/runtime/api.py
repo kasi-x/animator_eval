@@ -983,7 +983,7 @@ async def run_pipeline_async(
 
 def main() -> None:
     """Start the API server."""
-    from src.infra.log import setup_logging
+    from src.infra.logging import setup_logging
 
     setup_logging()
     logger.info("starting_api_server", host="0.0.0.0", port=8000)

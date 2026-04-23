@@ -154,7 +154,7 @@ src/testing/   ← ✅ 完了 (fixtures.py, synthetic.py → fixtures.py)
 
 - [x] ✅ `_v2` suffix 廃止: `database_v2` / `models_v2` 削除完了 (§4 での対応)
 - [x] ✅ `generate_reports_v2.py` → `generate_reports.py` (2026-04-24)
-- [ ] `src/log.py` → `src/infra/logging.py`
+- [x] ✅ `src/infra/log.py` → `src/infra/logging.py` (2026-04-27)
 
 ---
 
@@ -162,7 +162,7 @@ src/testing/   ← ✅ 完了 (fixtures.py, synthetic.py → fixtures.py)
 
 ### 12.4 CLAUDE.md ドリフト修正 (随時)
 
-- [ ] Testing patterns を `src.db.init.DEFAULT_DB_PATH` monkeypatch パターンに更新
+- [x] ✅ Testing patterns を `src.db.init.DEFAULT_DB_PATH` monkeypatch パターンに更新 (2026-04-27)
 
 ---
 

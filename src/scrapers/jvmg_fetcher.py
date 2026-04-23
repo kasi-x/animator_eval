@@ -224,7 +224,7 @@ def main(
     ),
 ) -> None:
     """Collect anime staff data from Wikidata."""
-    from src.infra.log import setup_logging
+    from src.infra.logging import setup_logging
     from src.scrapers.bronze_writer import BronzeWriter
 
     setup_logging()

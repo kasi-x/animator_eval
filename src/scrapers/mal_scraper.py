@@ -261,7 +261,7 @@ def main(
     fetch_all: bool = typer.Option(False, "--all", help="fetch all anime (equivalent to count=0)"),
 ) -> None:
     """Collect credit data from MAL (Jikan API)."""
-    from src.infra.log import setup_logging
+    from src.infra.logging import setup_logging
     from src.scrapers.bronze_writer import BronzeWriter
 
     setup_logging()

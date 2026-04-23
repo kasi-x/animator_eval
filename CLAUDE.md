@@ -184,11 +184,11 @@ animetor_eval/
 
 ### Testing
 
-- **Monkeypatch `DEFAULT_DB_PATH`** (関数 `get_connection` ではなく): pipeline が module load 時に import するため、関数を差し替えても効かない。正確には `src.db.init.DEFAULT_DB_PATH` と `src.database.DEFAULT_DB_PATH` 両方を patch 用（後方互換）。DuckDB 層も同様: `DEFAULT_SILVER_PATH` (silver_reader) と `DEFAULT_GOLD_DB_PATH` (gold_writer) を monkeypatch する (`test_feat_precompute.py` 参照）
+- **Monkeypatch `DEFAULT_DB_PATH`** (関数 `get_connection` ではなく): pipeline が module load 時に import するため、関数を差し替えても効かない。正確には `src.db.init.DEFAULT_DB_PATH` を patch。DuckDB 層も同様: `DEFAULT_SILVER_PATH` (silver_reader) と `DEFAULT_GOLD_DB_PATH` (gold_writer) を monkeypatch する。
 - **JSON_DIR の patch**: `src.pipeline.JSON_DIR`, `src.analysis.visualize.JSON_DIR`, `src.utils.config.JSON_DIR` の 3 箇所
 - **structlog + pytest**: `cache_logger_on_first_use=False` + `PrintLoggerFactory()` で "I/O operation on closed file" を回避 (`tests/conftest.py`)
 - **Dataclass 戻り値**: analysis 関数は dataclass を返す。attr access (`result.field`)、dict 化は `asdict()`
-- **E2E**: 合成データ (`src/synthetic.py`、5 directors / 30 animators / 15 anime)
+- **E2E**: 合成データ (`src/testing/fixtures.py`、5 directors / 30 animators / 15 anime)
 
 ### Code Conventions
 

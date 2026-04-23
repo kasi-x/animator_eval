@@ -1350,7 +1350,7 @@ def main() -> None:
         load_credits_silver,
         load_persons_silver,
     )
-    from src.infra.log import setup_logging
+    from src.infra.logging import setup_logging
     from src.utils.config import JSON_DIR
 
     setup_logging()

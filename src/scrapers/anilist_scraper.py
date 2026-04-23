@@ -1751,7 +1751,7 @@ def main(
     """AniList からクレジットデータを収集する (チェックポイント機能付き)."""
     import json
     from pathlib import Path
-    from src.infra.log import setup_logging
+    from src.infra.logging import setup_logging
     from rich.console import Console
     from src.scrapers.logging_utils import configure_file_logging
 
@@ -2553,7 +2553,7 @@ def fetch_persons(
     """Bronze クレジットに含まれる未取得の個人情報を取得する."""
     import asyncio
     import time as time_module
-    from src.infra.log import setup_logging
+    from src.infra.logging import setup_logging
     from src.scrapers.logging_utils import configure_file_logging
 
     setup_logging(log_level)
@@ -2777,7 +2777,7 @@ def process_downloads(
 ) -> None:
     """Process pending image downloads from queue."""
     import asyncio
-    from src.infra.log import setup_logging
+    from src.infra.logging import setup_logging
     from src.scrapers.logging_utils import configure_file_logging
     from src.utils.download_queue import DownloadQueue
     from src.scrapers.image_downloader import (
