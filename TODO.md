@@ -147,13 +147,12 @@ src/scrapers/mediaarts_scraper.py:475
 - [ ] `upsert_anime_display()` 呼び出し箇所を全削除
 - [ ] display は `src/utils/display_lookup.py` 経由で bronze から読む設計に統一
 
-### 3.4 `credits.episode` sentinel 除去
+### 3.4 `credits.episode` sentinel 除去 ✅ DONE (2026-04-23)
 
-**現状**: `DEFAULT -1` (sentinel = 全話通し) の設計。NULL 意味付けに変更すべき。
-
-- [ ] v55 migration に追加: `UPDATE credits SET episode = NULL WHERE episode = -1`
-- [ ] DDL の `DEFAULT -1` を削除
-- [ ] 既存の `-1` チェックを `IS NULL` に一括置換: `rg 'episode.*-1|episode == -1|episode < 0' src/`
+- [x] init_db() DDL の `DEFAULT -1` 削除 → `episode INTEGER` (NULL 意味)
+- [x] v50 migration に既存の UPDATE あり (`UPDATE credits SET episode = NULL WHERE episode = -1`)
+- [x] `insert_credit()` は NULL-aware dedup 済み (`episode IS NULL` チェック)
+- [x] コードレベルの `-1` チェックなし (grep で確認済み)
 
 ### 3.5 `src/etl/__init__.py` が空
 

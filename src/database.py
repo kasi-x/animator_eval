@@ -261,7 +261,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             anime_id TEXT NOT NULL,
             role TEXT NOT NULL,
             raw_role TEXT,
-            episode INTEGER DEFAULT -1,
+            episode INTEGER,
             source TEXT NOT NULL DEFAULT '',
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(person_id, anime_id, role, episode)
@@ -426,8 +426,8 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
         -- CREATE INDEX IF NOT EXISTS idx_anime_display_score ON anime_display(score);
 
         -- ============================================================
-        -- Gold layer: レポート直読用の事前集計テーブル (meta_*)
-        -- feat_* を原料として派生。レポートはここだけを SELECT する
+        -- Gold layer: pre-aggregated tables for direct report reads (meta_*)
+        -- Derived from feat_* tables. Reports SELECT only from here.
         -- ============================================================
 
         CREATE TABLE IF NOT EXISTS meta_lineage (
@@ -471,7 +471,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_calc_exec_scope_hash
             ON calc_execution_records(scope, input_hash);
 
-        -- common: Person Parameter Card (10軸 × 3列 + archetype)
+        -- common: Person Parameter Card (10 axes × 3 columns + archetype)
         CREATE TABLE IF NOT EXISTS meta_common_person_parameters (
             person_id TEXT PRIMARY KEY,
             scale_reach_pct REAL,
@@ -509,7 +509,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        -- policy: 離職分析 (cohort × treatment)
+        -- policy: attrition analysis (cohort × treatment)
         CREATE TABLE IF NOT EXISTS meta_policy_attrition (
             cohort_year INTEGER NOT NULL,
             treatment TEXT NOT NULL,
@@ -526,7 +526,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             PRIMARY KEY (cohort_year, treatment)
         );
 
-        -- policy: 労働市場集中度 (year × studio)
+        -- policy: labour market concentration (year × studio)
         CREATE TABLE IF NOT EXISTS meta_policy_monopsony (
             year INTEGER NOT NULL,
             studio TEXT NOT NULL,
@@ -541,7 +541,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             PRIMARY KEY (year, studio)
         );
 
-        -- policy: ジェンダー生存分析 (transition_stage × cohort)
+        -- policy: gender survival analysis (transition_stage × cohort)
         CREATE TABLE IF NOT EXISTS meta_policy_gender (
             transition_stage TEXT NOT NULL,
             cohort TEXT NOT NULL,
@@ -556,7 +556,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             PRIMARY KEY (transition_stage, cohort)
         );
 
-        -- policy: 世代別キャリア生存曲線 (cohort × career_year_bin)
+        -- policy: generational career survival curves (cohort × career_year_bin)
         CREATE TABLE IF NOT EXISTS meta_policy_generation (
             cohort TEXT NOT NULL,
             career_year_bin INTEGER NOT NULL,
@@ -569,7 +569,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             PRIMARY KEY (cohort, career_year_bin)
         );
 
-        -- hr: スタジオベンチマーク (studio × year)
+        -- hr: studio benchmark (studio × year)
         CREATE TABLE IF NOT EXISTS meta_hr_studio_benchmark (
             studio TEXT NOT NULL,
             year INTEGER NOT NULL,
@@ -586,7 +586,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             PRIMARY KEY (studio, year)
         );
 
-        -- hr: 監督育成貢献カード (director_id)
+        -- hr: director mentoring contribution card (director_id)
         CREATE TABLE IF NOT EXISTS meta_hr_mentor_card (
             director_id TEXT PRIMARY KEY,
             mentor_score REAL,
@@ -599,7 +599,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        -- hr: 離職リスクプロファイル (person_id) — 認証必須
+        -- hr: attrition risk profile (person_id) — authentication required
         CREATE TABLE IF NOT EXISTS meta_hr_attrition_risk (
             person_id TEXT PRIMARY KEY,
             predicted_risk REAL,
@@ -614,7 +614,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        -- hr: 後継者候補 (veteran × candidate、aggregate公開)
+        -- hr: successor candidates (veteran × candidate, aggregate published)
         CREATE TABLE IF NOT EXISTS meta_hr_succession (
             veteran_id TEXT NOT NULL,
             candidate_id TEXT NOT NULL,
@@ -626,7 +626,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             PRIMARY KEY (veteran_id, candidate_id)
         );
 
-        -- biz: ジャンル空白地図 (genre × year)
+        -- biz: genre whitespace map (genre × year)
         CREATE TABLE IF NOT EXISTS meta_biz_whitespace (
             genre TEXT NOT NULL,
             year INTEGER NOT NULL,
@@ -641,7 +641,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             PRIMARY KEY (genre, year)
         );
 
-        -- biz: 過小露出人材 (person_id)
+        -- biz: underexposed talent (person_id)
         CREATE TABLE IF NOT EXISTS meta_biz_undervalued (
             person_id TEXT PRIMARY KEY,
             undervaluation_score REAL,
@@ -652,7 +652,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        -- biz: 信頼ネットワーク参入ゲートキーパー (gatekeeper_id)
+        -- biz: trust network entry gatekeepers (gatekeeper_id)
         CREATE TABLE IF NOT EXISTS meta_biz_trust_entry (
             gatekeeper_id TEXT PRIMARY KEY,
             gatekeeper_score REAL,
@@ -663,7 +663,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             computed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        -- biz: チームテンプレート (cluster × tier)
+        -- biz: team templates (cluster × tier)
         CREATE TABLE IF NOT EXISTS meta_biz_team_template (
             cluster_id TEXT NOT NULL,
             tier TEXT NOT NULL,
@@ -676,7 +676,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             PRIMARY KEY (cluster_id, tier)
         );
 
-        -- biz: 独立制作ユニット (community_id)
+        -- biz: independent production units (community_id)
         CREATE TABLE IF NOT EXISTS meta_biz_independent_unit (
             community_id TEXT PRIMARY KEY,
             coverage REAL,
@@ -735,8 +735,8 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
         );
 
         -- ============================================================
-        -- src_* テーブル群: ソース別生スクレイプデータ (メダリオン Bronze 層)
-        -- canonical テーブル (anime/persons/credits) とは完全に分離
+        -- src_* table group: raw scraped data by source (Medallion Bronze layer)
+        -- Fully separated from canonical tables (anime/persons/credits)
         -- ============================================================
 
         CREATE TABLE IF NOT EXISTS src_anilist_anime (
@@ -917,45 +917,45 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_src_keyframe_credits_slug ON src_keyframe_credits(keyframe_slug);
 
         -- ============================================================
-        -- feat_* テーブル群: パイプラインが計算した派生特徴量
-        -- 生データテーブル (persons/anime/credits/studios) とは命名で区別
+        -- feat_* table group: derived features computed by the pipeline
+        -- Distinguished from raw data tables (persons/anime/credits/studios) by naming convention
         -- ============================================================
 
-        -- 全スコア指標 (scores テーブルの上位互換。scores は後方互換のため残す)
+        -- All score metrics (supersedes the scores table; scores is kept for backwards compatibility)
         CREATE TABLE IF NOT EXISTS feat_person_scores (
             person_id TEXT PRIMARY KEY,
             run_id INTEGER REFERENCES pipeline_runs(id),
-            -- AKM 固定効果
+            -- AKM fixed effects
             person_fe REAL,
             person_fe_se REAL,
             person_fe_n_obs INTEGER,
             studio_fe_exposure REAL,
-            -- BiRank・ネットワーク
+            -- BiRank / network
             birank REAL,
             patronage REAL,
             awcc REAL,
-            -- IV 修正因子
+            -- IV correction factors
             dormancy REAL,
             ndi REAL,
             career_friction REAL,
             peer_boost REAL,
-            -- 統合スコア
+            -- integrated score
             iv_score REAL,
-            -- パーセンタイル順位 (0–100)
+            -- percentile ranks (0–100)
             iv_score_pct REAL,
             person_fe_pct REAL,
             birank_pct REAL,
             patronage_pct REAL,
             awcc_pct REAL,
             dormancy_pct REAL,
-            -- 信頼区間
+            -- confidence intervals
             confidence REAL,
             score_range_low REAL,
             score_range_high REAL,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        -- グラフ構造から導出されたネットワーク指標
+        -- Network metrics derived from graph structure
         CREATE TABLE IF NOT EXISTS feat_network (
             person_id TEXT PRIMARY KEY,
             run_id INTEGER REFERENCES pipeline_runs(id),
@@ -971,7 +971,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        -- キャリア軌跡から導出された指標
+        -- Metrics derived from career trajectory
         CREATE TABLE IF NOT EXISTS feat_career (
             person_id TEXT PRIMARY KEY,
             run_id INTEGER REFERENCES pipeline_runs(id),
@@ -991,7 +991,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        -- ジャンル × 人物の親和性スコア (人物ごとに複数行)
+        -- Genre × person affinity scores (multiple rows per person)
         CREATE TABLE IF NOT EXISTS feat_genre_affinity (
             person_id TEXT NOT NULL,
             genre TEXT NOT NULL,
@@ -1001,7 +1001,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             PRIMARY KEY (person_id, genre)
         );
 
-        -- 個人貢献プロファイル (Layer 2)
+        -- Individual contribution profile (Layer 2)
         CREATE TABLE IF NOT EXISTS feat_contribution (
             person_id TEXT PRIMARY KEY,
             run_id INTEGER REFERENCES pipeline_runs(id),
@@ -1017,8 +1017,8 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_feat_career_track ON feat_career(career_track);
         CREATE INDEX IF NOT EXISTS idx_feat_genre_genre ON feat_genre_affinity(genre);
 
-        -- クレジット活動パターン (空白期間・活動密度・休止履歴)
-        -- abs_quarter = year * 4 + (quarter - 1)  例: 2020Q1 → 8080
+        -- Credit activity pattern (gaps, activity density, hiatus history)
+        -- abs_quarter = year * 4 + (quarter - 1)  e.g. 2020Q1 → 8080
         CREATE TABLE IF NOT EXISTS feat_credit_activity (
             person_id TEXT PRIMARY KEY,
             first_abs_quarter INTEGER,
@@ -1049,8 +1049,8 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_feat_credit_activity_last
             ON feat_credit_activity(last_abs_quarter);
 
-        -- キャリア年 × 職種カテゴリ別集計
-        -- career_year = credit_year - first_credit_year (0=デビュー年)
+        -- Annual aggregation by career year × role category
+        -- career_year = credit_year - first_credit_year (0 = debut year)
         CREATE TABLE IF NOT EXISTS feat_career_annual (
             person_id TEXT NOT NULL,
             career_year INTEGER NOT NULL,
@@ -1080,12 +1080,12 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_feat_career_annual_credit_year
             ON feat_career_annual(credit_year);
 
-        -- 人物ごとの年次BiRankスナップショット (v42)
-        -- 1980年以降のみ保存（それ以前はグラフが極小でスコアが無意味）
-        -- birank: その年の全人物内での 0-100 正規化スコア
-        -- raw_pagerank: PageRank生値（正規化前）
-        -- graph_size: その年の累積グラフにおける人物ノード数
-        -- n_credits_cumulative: その年までの業界累積クレジット数（正規化の母集団規模指標）
+        -- Annual BiRank snapshot per person (v42)
+        -- Stored from 1980 onwards only (earlier graphs are too small for meaningful scores)
+        -- birank: 0-100 normalised score among all persons in that year
+        -- raw_pagerank: raw PageRank value (before normalisation)
+        -- graph_size: number of person nodes in the cumulative graph for that year
+        -- n_credits_cumulative: cumulative industry credit count up to that year (population-size proxy)
         CREATE TABLE IF NOT EXISTS feat_birank_annual (
             person_id TEXT NOT NULL,
             year INTEGER NOT NULL,
@@ -1098,8 +1098,8 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_feat_birank_annual_year
             ON feat_birank_annual(year);
 
-        -- birank_compute_state: BiRank 計算に使った入力データのフィンガープリント（年別）
-        -- 変更検出に使用: 各年のクレジット数・アニメ数・人物数が前回計算時と異なれば再計算
+        -- birank_compute_state: fingerprint of input data used for BiRank computation (per year)
+        -- Used for change detection: recompute if credit/anime/person count differs from previous run
         CREATE TABLE IF NOT EXISTS birank_compute_state (
             year INTEGER PRIMARY KEY,
             credit_count INTEGER NOT NULL,
@@ -1108,16 +1108,16 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             computed_at REAL NOT NULL    -- unix timestamp
         );
 
-        -- 個人のスタジオ所属年別集計
-        -- anime_studios + credits を結合して「その年どのスタジオの作品に参加したか」を集計
+        -- Annual studio affiliation aggregation per person
+        -- Joins anime_studios + credits to count works per studio per year
         CREATE TABLE IF NOT EXISTS feat_studio_affiliation (
             person_id TEXT NOT NULL,
             credit_year INTEGER NOT NULL,
             studio_id TEXT NOT NULL,
             studio_name TEXT NOT NULL DEFAULT '',
-            n_works INTEGER NOT NULL DEFAULT 0,    -- そのスタジオの作品に参加した数
-            n_credits INTEGER NOT NULL DEFAULT 0,  -- クレジット行数
-            is_main_studio INTEGER NOT NULL DEFAULT 0, -- 主要スタジオ (anime_studios.is_main)
+            n_works INTEGER NOT NULL DEFAULT 0,    -- number of works at this studio
+            n_credits INTEGER NOT NULL DEFAULT 0,  -- credit row count
+            is_main_studio INTEGER NOT NULL DEFAULT 0, -- main studio flag (anime_studios.is_main)
             PRIMARY KEY (person_id, credit_year, studio_id)
         );
 
@@ -1126,23 +1126,23 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_feat_studio_aff_studio
             ON feat_studio_affiliation(studio_id, credit_year);
 
-        -- 個人 × 作品 × 役職ごとのスコア貢献推定
-        -- production_scale: AKM 目的変数 (完全計算)
-        -- edge_weight: グラフ辺寄与 (完全計算)
-        -- iv_contrib_est: IV スコアへの按分推定 (edge_weight_share × iv_score)
+        -- Per-person × work × role score contribution estimates
+        -- production_scale: AKM outcome variable (fully computed)
+        -- edge_weight: graph edge contribution (fully computed)
+        -- iv_contrib_est: IV score share estimate (edge_weight_share × iv_score)
         CREATE TABLE IF NOT EXISTS feat_credit_contribution (
             person_id TEXT NOT NULL,
             anime_id TEXT NOT NULL,
             role TEXT NOT NULL,
             credit_year INTEGER,
-            -- AKM 目的変数 (生産規模の対数)
+            -- AKM outcome variable (log production scale)
             production_scale REAL,
-            -- グラフ辺寄与
+            -- graph edge contribution
             role_weight REAL,
             episode_coverage REAL,
             dur_mult REAL,
             edge_weight REAL,
-            -- IV スコアへの按分 (edge_weight / 人物の total_edge_weight × iv_score)
+            -- IV score share (edge_weight / person's total_edge_weight × iv_score)
             edge_weight_share REAL,
             iv_contrib_est REAL,
             PRIMARY KEY (person_id, anime_id, role)
@@ -1153,7 +1153,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_feat_credit_contrib_year
             ON feat_credit_contribution(credit_year);
 
-        -- 個人の作品コントリビュート集計
+        -- Per-person work contribution summary
         CREATE TABLE IF NOT EXISTS feat_person_work_summary (
             person_id TEXT PRIMARY KEY,
             n_distinct_works INTEGER,
@@ -1169,7 +1169,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        -- 作品ごとのチーム統計 (v38) + 規模ティア (v44)
+        -- Per-work team statistics (v38) + scale tier (v44)
         CREATE TABLE IF NOT EXISTS feat_work_context (
             anime_id TEXT PRIMARY KEY,
             credit_year INTEGER,
@@ -1190,7 +1190,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             max_career_year INTEGER,
             production_scale REAL,
             difficulty_score REAL,
-            -- 作品規模ティア (v44): format + episodes + duration のみで計算
+            -- Work scale tier (v44): computed from format + episodes + duration only
             scale_tier INTEGER,
             scale_label TEXT,
             scale_raw REAL,
@@ -1199,9 +1199,9 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_feat_work_context_year
             ON feat_work_context(credit_year);
-        -- Note: idx_feat_work_context_tier は v44 マイグレーションで追加
+        -- Note: idx_feat_work_context_tier added by v44 migration
 
-        -- 個人×職種カテゴリの時系列進行 (v39)
+        -- Per-person role-category time-series progression (v39)
         CREATE TABLE IF NOT EXISTS feat_person_role_progression (
             person_id TEXT NOT NULL,
             role_category TEXT NOT NULL,
@@ -1219,7 +1219,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_feat_role_prog_category
             ON feat_person_role_progression(role_category);
 
-        -- 因果推論結果 (v40)
+        -- Causal inference results (v40)
         CREATE TABLE IF NOT EXISTS feat_causal_estimates (
             person_id TEXT PRIMARY KEY,
             peer_effect_boost REAL,
@@ -1230,19 +1230,19 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
-        -- クラスタリング帰属 — 複数次元を1行に集約 (v41)
+        -- Cluster memberships — multiple dimensions collapsed to one row (v41)
         CREATE TABLE IF NOT EXISTS feat_cluster_membership (
             person_id TEXT PRIMARY KEY,
-            -- グラフコミュニティ検出 (Phase 4: Louvain / Leiden)
+            -- Graph community detection (Phase 4: Louvain / Leiden)
             community_id INTEGER,
-            -- キャリアトラック (Phase 6: ルールベース分類)
+            -- Career track (Phase 6: rule-based classification)
             career_track TEXT,
-            -- 成長トレンド (Phase 9: growth analysis)
+            -- Growth trend (Phase 9: growth analysis)
             growth_trend TEXT,
-            -- 主要所属スタジオのクラスタ (K-Means on studio features)
+            -- Primary studio cluster (K-Means on studio features)
             studio_cluster_id INTEGER,
             studio_cluster_name TEXT,
-            -- 共同クレジットグループ (Phase 9: cooccurrence_groups)
+            -- Co-credit group (Phase 9: cooccurrence_groups)
             cooccurrence_group_id INTEGER,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -7840,7 +7840,9 @@ def upsert_src_anilist_person(conn: sqlite3.Connection, person: "Person") -> Non
                scraped_at = CURRENT_TIMESTAMP""",
         (
             person.anilist_id,
-            person.name_ja,
+            # BRONZE: use name_native_raw so ambiguous CJK (zh_or_ja, nationality=[])
+            # is preserved even when SILVER name_ja is empty.
+            person.name_ja or getattr(person, "name_native_raw", ""),
             person.name_en,
             person.name_ko,
             person.name_zh,
