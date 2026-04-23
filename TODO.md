@@ -407,7 +407,7 @@ analysis/compat/  analysis/viz/      analysis/io/       analysis/quality/
 ### 12.4 CLAUDE.md ドリフト修正 (随時)
 
 - [x] 「1394 tests」→「2450+ tests」更新済み
-- [ ] Testing patterns の `monkeypatch DEFAULT_DB_PATH` → DuckDB 切替後に更新 (Section 4 Phase D 完了時)
+- [x] Testing patterns の `monkeypatch DEFAULT_DB_PATH` → DuckDB (silver/gold) 版に更新 (2026-04-23)
 - [x] `src/models.py` の `AnimeAnalysis` DEPRECATED コメント: 既に削除済み
 
 ---

@@ -176,3 +176,32 @@ class TestRunAnalysisModulesHamilton:
         # Should complete without raising even when individual nodes fail on empty context
         results = run_analysis_modules_hamilton(minimal_context)
         assert isinstance(results, dict)
+
+
+# ---------------------------------------------------------------------------
+# run_analysis_modules_phase() — ThreadPoolExecutor parallel path
+# ---------------------------------------------------------------------------
+
+class TestRunAnalysisModulesPhase:
+    def test_runs_without_exception(self, minimal_context, tmp_path, monkeypatch):
+        from src.pipeline_phases.analysis_modules import run_analysis_modules_phase
+        import src.utils.config as cfg
+
+        monkeypatch.setattr(cfg, "JSON_DIR", tmp_path)
+        run_analysis_modules_phase(minimal_context, max_workers=2)
+
+    def test_populates_analysis_results(self, minimal_context, tmp_path, monkeypatch):
+        from src.pipeline_phases.analysis_modules import run_analysis_modules_phase
+        import src.utils.config as cfg
+
+        monkeypatch.setattr(cfg, "JSON_DIR", tmp_path)
+        run_analysis_modules_phase(minimal_context, max_workers=2)
+        assert isinstance(minimal_context.analysis_results, dict)
+
+    def test_max_workers_one(self, minimal_context, tmp_path, monkeypatch):
+        """Single-worker path exercises the same code without parallelism."""
+        from src.pipeline_phases.analysis_modules import run_analysis_modules_phase
+        import src.utils.config as cfg
+
+        monkeypatch.setattr(cfg, "JSON_DIR", tmp_path)
+        run_analysis_modules_phase(minimal_context, max_workers=1)

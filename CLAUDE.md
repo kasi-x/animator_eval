@@ -186,7 +186,7 @@ animetor_eval/
 
 ### Testing
 
-- **Monkeypatch `DEFAULT_DB_PATH`** (関数 `get_connection` ではなく): pipeline が module load 時に import するため、関数を差し替えても効かない。DuckDB 移行後は `DEFAULT_SILVER_PATH` (silver.duckdb) と `DEFAULT_GOLD_DB_PATH` (gold.duckdb) も同様に monkeypatch が必要 (`TODO.md §4` Phase D 完了後に対応)
+- **Monkeypatch `DEFAULT_DB_PATH`** (関数 `get_connection` ではなく): pipeline が module load 時に import するため、関数を差し替えても効かない。DuckDB 層も同様: `DEFAULT_SILVER_PATH` (silver_reader) と `DEFAULT_GOLD_DB_PATH` (gold_writer) を monkeypatch する (`test_feat_precompute.py` 参照)
 - **JSON_DIR の patch**: `src.pipeline.JSON_DIR`, `src.analysis.visualize.JSON_DIR`, `src.utils.config.JSON_DIR` の 3 箇所
 - **structlog + pytest**: `cache_logger_on_first_use=False` + `PrintLoggerFactory()` で "I/O operation on closed file" を回避 (`tests/conftest.py`)
 - **Dataclass 戻り値**: analysis 関数は dataclass を返す。attr access (`result.field`)、dict 化は `asdict()`
