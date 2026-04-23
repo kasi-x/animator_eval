@@ -72,15 +72,14 @@ TASK_CARDS/
 
 ## SECTION 3: コード一貫性 (残務のみ)
 
-### 3.1 Scraper 統一
+### 3.1 Scraper 統一 ✅ DONE (監査済み 2026-04-24)
 
-**現状**: 6 scraper が `upsert_anime()` を直接呼び、`integrate.py` の dual-write パターンを bypass。
+全 scraper が `BronzeWriter` (src/scrapers/bronze_writer.py) 経由で書き込み。
+`upsert_anime()` 直接呼び出しはゼロ。
 
-- [ ] 各 scraper はモデルを組み立て、`integrate_*()` 関数 (or 新ラッパー `upsert_canonical_anime()`) 経由に統一
-- [ ] `upsert_anime()` を bronze upsert に改名 or 内部で dual-write
+残務 (任意):
 - [ ] GraphQL クエリ文字列を `src/scrapers/queries/` に分離 (`PERSON_DETAILS_QUERY` 等)
 - [ ] パース関数を `src/scrapers/parsers/` に分離 (`_parse_anime_staff` 等)
-- [ ] scraper 本体は「fetch → parse → write」の orchestration だけに
 
 ### 3.6 テストの `Anime(score=..., studios=...)` 移行
 
@@ -260,9 +259,9 @@ silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行
 
 ### 6.4 テストファイル分割
 
-- [ ] `test_scraper_coverage.py` を scraper 別に分割 (`test_anilist_scraper.py`, `test_mal_scraper.py` 等)
-- [ ] `test_analysis_coverage.py` は submodule 単位に分割
-- [ ] `test_va_studio_genre.py` → `test_va.py` + `test_studio.py` + `test_genre.py`
+- [x] `test_scraper_coverage.py` → 6 scraper 別ファイル (2026-04-24)
+- [x] `test_analysis_coverage.py` → 6 submodule 別ファイル (2026-04-24)
+- [x] `test_va_studio_genre.py` → `test_va.py` + `test_studio_analysis.py` + `test_genre_analysis.py` (2026-04-24)
 - [ ] fixture は `tests/conftest.py` + `tests/fixtures/` に寄せる
 - [ ] `tests/unit/` / `tests/integration/` の最低限分離
 
