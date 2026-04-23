@@ -44,6 +44,28 @@
 - `generate_all_reports.py` 分割 (23,904 → 22,777 行、-1,127 行)
 - Lint エラー 9 件修正
 
+### Phase 4 残務 (2026-04-23)
+- **§1.4** `anime_display` 廃止: DDL コメントアウト済、v55 migration に DROP TABLE、分析コードの参照 0 件
+- **§2.1** meta_lineage population: 5 briefs 全て実装済み確認 (policy_attrition / policy_monopsony / policy_gender_bottleneck / mgmt_studio_benchmark / biz_genre_whitespace)
+- **§2.4** ci_check_lineage.py: bronze leak detection + lineage quality validation (semver / hex hash / staleness ≤30d) 完全実装済み確認
+- **§2.5** vocabulary audit: `lint_vocab.py` に definitional filter + exceptions YAML (16 entries) 追加。56 files 0 violations
+- **§3.3** ops_entity_resolution_audit 書き込み: `pipeline_phases/entity_resolution.py:422-471` で生成・upsert 済み確認
+- **§6.4** report helpers 単体テスト: `tests/test_report_helpers.py` 46 tests — fmt_num / name_clusters_* / adaptive_height / insert_lineage / subsample_for_scatter / capped_categories / safe_nested / data_driven_badges / badge_class / add_distribution_stats
+
+### lint 整理 (2026-04-23)
+- `scripts/lint_report_vocabulary.py` 削除 (外部呼び出しなし、`scripts/report_generators/lint_vocab.py` に完全移行)
+- `scripts/analyze_credit_intervals.py` DISCLAIMER 免除を exceptions YAML に登録
+
+### テストカバレッジ追加 (2026-04-23)
+- **T02** `tests/test_patronage_dormancy_direct.py`: 12 tests — dormancy 指数減衰/猶予期間/最新クレジット/単調性 + patronage premium 検証
+- **T03 VA モジュール** `tests/test_va_modules.py`: +20 tests (TestVaAkm 4件・TestVaGraph 4件・TestEnsembleSynergy 3件 追加、計38件)
+- **T03 VA パイプライン** `tests/test_va_pipeline_phases.py`: 新規10 tests — graph_construction / core_scoring / supplementary_metrics / result_assembly 各 smoke test
+
+### DuckDB カード状態確認 (2026-04-23)
+- カード 01-04 完了確認: bronze_writer / 全6 scraper 移行済み / integrate_duckdb.py / gold_writer.py 存在確認
+- カード 05 (analysis cutover): data_loading.py 等が SQLite 継続使用 → 未完了
+- カード 06 (SQLite decommission): カード05依存 → 未着手
+
 ---
 
 ## スキーマ進化
