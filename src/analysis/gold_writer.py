@@ -27,6 +27,8 @@ from typing import Any
 import duckdb
 import structlog
 
+from src.etl.atomic_swap import atomic_duckdb_swap
+
 logger = structlog.get_logger()
 
 # Can be overridden in tests via monkeypatch
@@ -77,26 +79,47 @@ def _open(db_path: Path | str | None = None) -> duckdb.DuckDBPyConnection:
 # ---------------------------------------------------------------------------
 
 class GoldWriter:
-    """Context manager that writes GOLD tables to DuckDB.
+    """Atomic-swap writer for gold.duckdb.
+
+    Builds a fresh DB file at gold.duckdb.new, then os.replace() into
+    target on context exit. Readers holding the old inode are not blocked.
+
+    Pipeline writes once per run, so fresh-build (vs incremental) is fine.
 
     with GoldWriter(db_path) as gw:
         gw.write_person_scores(score_rows)
         gw.write_score_history(history_rows)
     """
 
-    def __init__(self, db_path: Path | str | None = None) -> None:
-        self._path = db_path
+    def __init__(
+        self,
+        db_path: Path | str | None = None,
+        *,
+        memory_limit: str = "4GB",
+    ) -> None:
+        self._path = Path(db_path or DEFAULT_GOLD_DB_PATH)
+        self._memory_limit = memory_limit
         self._conn: duckdb.DuckDBPyConnection | None = None
+        self._swap_ctx = None
 
     def __enter__(self) -> "GoldWriter":
-        self._conn = _open(self._path)
+        self._swap_ctx = atomic_duckdb_swap(self._path)
+        tmp_path = self._swap_ctx.__enter__()
+        self._conn = duckdb.connect(str(tmp_path))
+        self._conn.execute(f"SET memory_limit='{self._memory_limit}'")
+        self._conn.execute("SET temp_directory='/tmp/duckdb_spill'")
         self._conn.execute(_DDL)
         return self
 
-    def __exit__(self, *_: object) -> None:
-        if self._conn:
-            self._conn.close()
-            self._conn = None
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        try:
+            if self._conn:
+                self._conn.close()
+                self._conn = None
+        finally:
+            if self._swap_ctx is not None:
+                self._swap_ctx.__exit__(exc_type, exc_val, exc_tb)
+                self._swap_ctx = None
 
     def write_person_scores(
         self, rows: list[tuple[Any, ...]]

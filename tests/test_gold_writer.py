@@ -238,3 +238,56 @@ class TestRankingQuery:
         by_pid = {r["person_id"]: r for r in rows}
         assert by_pid["p1"]["first_year"] == 2020
         assert by_pid["p1"]["latest_year"] == 2022
+
+
+class TestGoldWriterAtomicSwap:
+    def test_atomic_swap_replaces_stale_file(self, tmp_path):
+        from src.analysis.gold_writer import GoldWriter, GoldReader
+
+        target = tmp_path / "gold.duckdb"
+        target.write_bytes(b"OLD_GARBAGE")
+
+        with GoldWriter(target) as gw:
+            gw.write_person_scores(SCORE_ROWS)
+
+        assert target.exists()
+        # Must be a valid duckdb now (not OLD_GARBAGE)
+        rows = GoldReader(target).person_scores()
+        assert len(rows) == 3
+
+    def test_exception_preserves_old_file(self, tmp_path):
+        from src.analysis.gold_writer import GoldWriter, GoldReader
+
+        target = tmp_path / "gold.duckdb"
+        with GoldWriter(target) as gw:
+            gw.write_person_scores(SCORE_ROWS)
+
+        with pytest.raises(RuntimeError, match="boom"):
+            with GoldWriter(target) as gw:
+                gw.write_person_scores([("p_new", 9.0, 0.5, 0.8, 0.3, 0.0, 0.7, 9.0)])
+                raise RuntimeError("boom")
+
+        # Original file preserved (p_new not present)
+        ids = {r["person_id"] for r in GoldReader(target).person_scores()}
+        assert "p_new" not in ids
+        assert "p1" in ids
+        assert not (tmp_path / "gold.duckdb.new").exists()
+
+    def test_no_stale_tmp_after_success(self, tmp_path):
+        from src.analysis.gold_writer import GoldWriter
+
+        target = tmp_path / "gold.duckdb"
+        with GoldWriter(target) as gw:
+            gw.write_person_scores(SCORE_ROWS)
+
+        assert not (tmp_path / "gold.duckdb.new").exists()
+
+    def test_memory_limit_set(self, tmp_path):
+        from src.analysis.gold_writer import GoldWriter
+
+        target = tmp_path / "gold.duckdb"
+        with GoldWriter(target, memory_limit="512MB") as gw:
+            limit = gw._conn.execute(
+                "SELECT current_setting('memory_limit')"
+            ).fetchone()[0]
+        assert limit and "MB" in limit.upper().replace("MIB", "MB")
