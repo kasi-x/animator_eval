@@ -395,15 +395,13 @@ analysis/compat/  analysis/viz/      analysis/io/       analysis/quality/
 
 - [x] 全9ファイルを `docs/archive/` に移動済み
 
-### 12.2 CLAUDE.md スリム化 (827 行 → ~300 行目標)
+### 12.2 CLAUDE.md スリム化 ✅ DONE (2026-04-24)
 
-- [ ] Phase 2C/2D/2E/2F/2G の詳細 (~400 行) を `docs/` サブファイルへ退避
-- [ ] CLAUDE.md はプロジェクト原則・禁止事項・ディレクトリ案内に絞る
+- [x] 225 行に到達。Phase 2C-G 詳細は以前に削除済み
 
-### 12.3 README.md スリム化 (512 行 → ~150 行目標)
+### 12.3 README.md スリム化 ✅ DONE (2026-04-24)
 
-- [ ] README.md = 「何をやっていてどう始めるか」(外部向け) に限定
-- [ ] API/CLI/Architecture の詳細は `docs/` へ
+- [x] 88 行。Quick Start + 概要のみ。詳細は docs/ に
 
 ### 12.4 CLAUDE.md ドリフト修正 (随時)
 

@@ -81,10 +81,12 @@ def run_scoring_pipeline(
     """
     import datetime
 
+    from src.analysis.feat_precompute import (
+        compute_feat_career_annual_ddb,
+        compute_feat_credit_activity_ddb,
+        compute_feat_person_role_progression_ddb,
+    )
     from src.database import (
-        compute_feat_career_annual,
-        compute_feat_credit_activity,
-        compute_feat_person_role_progression,
         compute_feat_studio_affiliation,
         db_connection,
         get_connection,
@@ -119,22 +121,21 @@ def run_scoring_pipeline(
             logger.info("incremental_detected_changes", mode="full_recompute")
 
     # ── Phase 1.5: pre-aggregate derived features ────────────────────────────
-    # Computed from raw credit data; reusable by report generators.
+    # Three functions migrated to DuckDB (silver.duckdb → gold.duckdb).
+    # feat_studio_affiliation remains SQLite until anime_studios moves to silver.
     current_year = datetime.datetime.now().year
     current_quarter = (datetime.datetime.now().month - 1) // 3 + 1
     for fn, label in [
         (
-            lambda: compute_feat_credit_activity(
-                conn, current_year=current_year, current_quarter=current_quarter
+            lambda: compute_feat_credit_activity_ddb(
+                current_year=current_year, current_quarter=current_quarter
             ),
             "credit_activity",
         ),
-        (lambda: compute_feat_career_annual(conn), "career_annual"),
+        (compute_feat_career_annual_ddb, "career_annual"),
         (lambda: compute_feat_studio_affiliation(conn), "studio_affiliation"),
         (
-            lambda: compute_feat_person_role_progression(
-                conn, current_year=current_year
-            ),
+            lambda: compute_feat_person_role_progression_ddb(current_year=current_year),
             "role_progression",
         ),
     ]:

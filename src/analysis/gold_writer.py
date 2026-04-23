@@ -363,6 +363,23 @@ def gold_connect(
 
 
 @contextmanager
+def gold_connect_write(
+    path: Path | str | None = None,
+    *,
+    memory_limit: str = "2GB",
+) -> Iterator[duckdb.DuckDBPyConnection]:
+    """Open gold.duckdb read-write for incremental feature table updates."""
+    p = str(path or DEFAULT_GOLD_DB_PATH)
+    conn = duckdb.connect(p, read_only=False)
+    try:
+        conn.execute(f"SET memory_limit='{memory_limit}'")
+        conn.execute("SET temp_directory='/tmp/duckdb_spill'")
+        yield conn
+    finally:
+        conn.close()
+
+
+@contextmanager
 def gold_connect_with_silver(
     gold_path: Path | str | None = None,
     silver_path: Path | str | None = None,
