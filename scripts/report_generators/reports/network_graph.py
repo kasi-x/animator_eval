@@ -16,6 +16,7 @@ import plotly.graph_objects as go
 from ..ci_utils import distribution_summary, format_ci, format_distribution_inline
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
+from ..sql_fragments import person_display_name_sql
 from ._base import BaseReportGenerator
 
 _TIER_COLORS = {1: "#667eea", 2: "#a0d2db", 3: "#06D6A0", 4: "#FFD166", 5: "#f5576c"}
@@ -45,10 +46,10 @@ class NetworkGraphReport(BaseReportGenerator):
 
     def _build_scatter_network_section(self, sb: SectionBuilder) -> ReportSection:
         try:
-            rows = self.conn.execute("""
+            rows = self.conn.execute(f"""
                 SELECT
                     fn.person_id,
-                    COALESCE(NULLIF(p.name_ja,''), NULLIF(p.name_en,''), fn.person_id) AS name,
+                    {person_display_name_sql('fn.person_id')},
                     fn.degree_centrality,
                     fn.betweenness_centrality,
                     fps.awcc,
@@ -142,10 +143,10 @@ class NetworkGraphReport(BaseReportGenerator):
 
     def _build_community_scatter_section(self, sb: SectionBuilder) -> ReportSection:
         try:
-            rows = self.conn.execute("""
+            rows = self.conn.execute(f"""
                 SELECT
                     fn.person_id,
-                    COALESCE(NULLIF(p.name_ja,''), NULLIF(p.name_en,''), fn.person_id) AS name,
+                    {person_display_name_sql('fn.person_id')},
                     fn.degree_centrality,
                     fn.bridge_score,
                     fcm.community_id
@@ -307,10 +308,10 @@ class NetworkGraphReport(BaseReportGenerator):
 
     def _build_ego_stats_section(self, sb: SectionBuilder) -> ReportSection:
         try:
-            rows = self.conn.execute("""
+            rows = self.conn.execute(f"""
                 SELECT
                     fn.person_id,
-                    COALESCE(NULLIF(p.name_ja,''), NULLIF(p.name_en,''), fn.person_id) AS name,
+                    {person_display_name_sql('fn.person_id')},
                     fn.degree_centrality,
                     fn.betweenness_centrality,
                     fn.bridge_score,

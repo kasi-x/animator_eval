@@ -16,6 +16,8 @@ from __future__ import annotations
 import json as _json
 import sqlite3
 
+from .sql_fragments import person_display_name_sql
+
 
 # ---------------------------------------------------------------------------
 # feat_person_scores (+ feat_career + feat_network JOIN)
@@ -39,11 +41,11 @@ def load_feat_person_scores(conn: sqlite3.Connection) -> list[dict]:
       growth: {trend, activity_ratio, recent_credits},
       primary_role, total_credits, career_track
     """
-    sql = """
+    sql = f"""
         SELECT
             fps.person_id,
-            COALESCE(NULLIF(p.name_ja, ''), NULLIF(p.name_en, ''), fps.person_id) AS name,
-            p.name_ja, p.name_en, p.gender,
+            {person_display_name_sql('fps.person_id')},
+            p.name_ja, p.name_zh, p.name_en, p.gender,
             fps.iv_score, fps.person_fe, fps.studio_fe_exposure,
             fps.birank, fps.patronage, fps.dormancy, fps.awcc,
             fps.ndi, fps.career_friction, fps.peer_boost,
@@ -171,11 +173,11 @@ def load_agg_director_circles(conn: sqlite3.Connection) -> dict[str, dict]:
     """agg_director_circles から circles.json 互換の
     {director_id: {members: [...]}} を全件返す。
     """
-    sql = """
+    sql = f"""
         SELECT
             dc.person_id, dc.director_id,
             dc.shared_works, dc.hit_rate, dc.roles, dc.latest_year,
-            COALESCE(NULLIF(p.name_ja, ''), NULLIF(p.name_en, ''), dc.person_id) AS member_name
+            {person_display_name_sql('dc.person_id', 'member_name')}
         FROM agg_director_circles dc
         LEFT JOIN persons p ON dc.person_id = p.id
         ORDER BY dc.director_id, dc.shared_works DESC
@@ -227,9 +229,9 @@ def load_feat_mentorships(conn: sqlite3.Connection) -> list[dict]:
 
 def load_feat_career(conn: sqlite3.Connection) -> dict:
     """feat_career から growth.json の persons セクション互換データを全件返す."""
-    rows = conn.execute("""
+    rows = conn.execute(f"""
         SELECT fc.person_id,
-               COALESCE(NULLIF(p.name_ja,''), NULLIF(p.name_en,''), fc.person_id) AS name,
+               {person_display_name_sql('fc.person_id')},
                fc.growth_trend, fc.activity_ratio, fc.recent_credits, fc.total_credits
         FROM feat_career fc
         LEFT JOIN persons p ON fc.person_id = p.id
@@ -284,10 +286,10 @@ def load_feat_network(conn: sqlite3.Connection) -> dict:
     community レベルのデータ (cross_community_edges, community_connectivity, stats) は
     DB テーブルに存在しないため空を返す。
     """
-    rows = conn.execute("""
+    rows = conn.execute(f"""
         SELECT
             fn.person_id,
-            COALESCE(NULLIF(p.name_ja, ''), NULLIF(p.name_en, ''), fn.person_id) AS name,
+            {person_display_name_sql('fn.person_id')},
             fn.bridge_score,
             fn.n_bridge_communities AS communities_connected
         FROM feat_network fn

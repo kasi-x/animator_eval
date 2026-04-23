@@ -21,8 +21,10 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from ..ci_utils import distribution_summary, format_ci, format_distribution_inline
+from ..color_utils import hex_to_rgba
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
+from ..sql_fragments import person_display_name_sql
 from ._base import BaseReportGenerator
 
 _TIER_COLORS = {1: "#667eea", 2: "#a0d2db", 3: "#06D6A0", 4: "#FFD166", 5: "#f5576c"}
@@ -36,13 +38,6 @@ _TRACK_COLORS = {
 }
 _CLUSTER_COLORS = ["#f093fb", "#06D6A0", "#fda085", "#a0d2db", "#FFD166",
                    "#667eea", "#f5576c", "#b8c0ff"]
-
-
-def _hex_to_rgba(hex_color: str, alpha: float = 0.3) -> str:
-    """Convert #RRGGBB to rgba(r,g,b,alpha)."""
-    h = hex_color.lstrip("#")
-    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-    return f"rgba({r},{g},{b},{alpha})"
 
 
 class BridgeAnalysisReport(BaseReportGenerator):
@@ -68,9 +63,9 @@ class BridgeAnalysisReport(BaseReportGenerator):
 
     def _build_betweenness_distribution(self, sb: SectionBuilder) -> ReportSection:
         try:
-            rows = self.conn.execute("""
+            rows = self.conn.execute(f"""
                 SELECT fn.person_id, fn.betweenness_centrality, fn.degree_centrality,
-                       COALESCE(NULLIF(p.name_ja,''), NULLIF(p.name_en,''), fn.person_id) AS name,
+                       {person_display_name_sql('fn.person_id')},
                        fc.first_year, p.gender
                 FROM feat_network fn
                 JOIN persons p ON fn.person_id = p.id
@@ -173,10 +168,10 @@ class BridgeAnalysisReport(BaseReportGenerator):
 
     def _build_betweenness_deeper(self, sb: SectionBuilder) -> ReportSection:
         try:
-            rows = self.conn.execute("""
+            rows = self.conn.execute(f"""
                 SELECT fn.person_id, fn.betweenness_centrality, fn.degree_centrality,
                        fn.n_collaborators,
-                       COALESCE(NULLIF(p.name_ja,''), NULLIF(p.name_en,''), fn.person_id) AS name,
+                       {person_display_name_sql('fn.person_id')},
                        fps.iv_score
                 FROM feat_network fn
                 JOIN persons p ON fn.person_id = p.id
@@ -321,10 +316,10 @@ class BridgeAnalysisReport(BaseReportGenerator):
 
     def _build_cross_studio_bridges(self, sb: SectionBuilder) -> ReportSection:
         try:
-            rows = self.conn.execute("""
+            rows = self.conn.execute(f"""
                 SELECT
                     fsa.person_id,
-                    COALESCE(NULLIF(p.name_ja,''), NULLIF(p.name_en,''), fsa.person_id) AS name,
+                    {person_display_name_sql('fsa.person_id')},
                     COUNT(DISTINCT fcm_studio.studio_cluster_name) AS n_clusters,
                     COUNT(DISTINCT fsa.studio_id) AS n_studios,
                     SUM(fsa.n_works) AS total_works,
@@ -422,10 +417,10 @@ class BridgeAnalysisReport(BaseReportGenerator):
 
     def _build_cross_studio_deeper(self, sb: SectionBuilder) -> ReportSection:
         try:
-            rows = self.conn.execute("""
+            rows = self.conn.execute(f"""
                 SELECT
                     fsa.person_id,
-                    COALESCE(NULLIF(p.name_ja,''), NULLIF(p.name_en,''), fsa.person_id) AS name,
+                    {person_display_name_sql('fsa.person_id')},
                     COUNT(DISTINCT fcm_studio.studio_cluster_name) AS n_clusters,
                     COUNT(DISTINCT fsa.studio_id) AS n_studios,
                     fn.betweenness_centrality,
@@ -658,7 +653,7 @@ class BridgeAnalysisReport(BaseReportGenerator):
                     name=f"{track} (n={len(betw_vals):,})",
                     box_visible=True, meanline_visible=True,
                     line_color=color,
-                    fillcolor=_hex_to_rgba(color, 0.3),
+                    fillcolor=hex_to_rgba(color, 0.3),
                     points="outliers" if len(betw_vals) > 40 else "all",
                 ))
 
@@ -854,7 +849,7 @@ class BridgeAnalysisReport(BaseReportGenerator):
                     name=f"{label} (n={len(vals):,})",
                     box_visible=True, meanline_visible=True,
                     line_color=color,
-                    fillcolor=_hex_to_rgba(color, 0.3),
+                    fillcolor=hex_to_rgba(color, 0.3),
                     points="outliers" if len(vals) > 40 else "all",
                 ))
 

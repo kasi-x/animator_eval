@@ -18,8 +18,10 @@ import numpy as np
 import plotly.graph_objects as go
 
 from ..ci_utils import distribution_summary, format_ci, format_distribution_inline
+from ..color_utils import hex_to_rgba
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
+from ..sql_fragments import person_display_name_sql
 from ._base import BaseReportGenerator
 
 _TRACK_PALETTE = ["#667eea", "#f093fb", "#FFD166", "#06D6A0", "#f5576c", "#aaaaaa"]
@@ -31,12 +33,6 @@ _TIER_COLORS = {
     "micro": "#f5576c",
     "unknown": "#aaaaaa",
 }
-
-
-def _rgba(hex_color: str, alpha: float = 0.3) -> str:
-    h = hex_color.lstrip("#")
-    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-    return f"rgba({r},{g},{b},{alpha})"
 
 
 class NetworkAnalysisReport(BaseReportGenerator):
@@ -172,7 +168,7 @@ class NetworkAnalysisReport(BaseReportGenerator):
                     box_visible=True,
                     meanline_visible=True,
                     line_color=color,
-                    fillcolor=_rgba(color, 0.25),
+                    fillcolor=hex_to_rgba(color, 0.25),
                     points=False,
                 ))
 
@@ -212,7 +208,7 @@ class NetworkAnalysisReport(BaseReportGenerator):
     # ==================================================================
 
     def _build_centrality_deeper(self, sb: SectionBuilder) -> ReportSection:
-        rows = self.conn.execute("""
+        rows = self.conn.execute(f"""
             SELECT fn.person_id,
                    fn.betweenness_centrality,
                    fn.degree_centrality,
@@ -221,7 +217,7 @@ class NetworkAnalysisReport(BaseReportGenerator):
                    fps.awcc,
                    COALESCE(fcm.career_track, 'unknown') AS career_track,
                    p.gender,
-                   COALESCE(NULLIF(p.name_ja,''), NULLIF(p.name_en,''), fn.person_id) AS name
+                   {person_display_name_sql('fn.person_id')}
             FROM feat_network fn
             LEFT JOIN feat_person_scores fps ON fn.person_id = fps.person_id
             LEFT JOIN feat_cluster_membership fcm ON fn.person_id = fcm.person_id
@@ -329,13 +325,13 @@ class NetworkAnalysisReport(BaseReportGenerator):
     # ==================================================================
 
     def _build_hub_broker_overview(self, sb: SectionBuilder) -> ReportSection:
-        rows = self.conn.execute("""
+        rows = self.conn.execute(f"""
             SELECT fn.person_id,
                    fn.betweenness_centrality,
                    fn.degree_centrality,
                    fn.hub_score,
                    fn.n_collaborators,
-                   COALESCE(NULLIF(p.name_ja,''), NULLIF(p.name_en,''), fn.person_id) AS name,
+                   {person_display_name_sql('fn.person_id')},
                    COALESCE(fcm.career_track, 'unknown') AS career_track
             FROM feat_network fn
             LEFT JOIN persons p ON fn.person_id = p.id
@@ -419,11 +415,11 @@ class NetworkAnalysisReport(BaseReportGenerator):
     # ==================================================================
 
     def _build_hub_broker_deeper(self, sb: SectionBuilder) -> ReportSection:
-        rows = self.conn.execute("""
+        rows = self.conn.execute(f"""
             SELECT fn.betweenness_centrality,
                    fn.hub_score,
                    fn.degree_centrality,
-                   COALESCE(NULLIF(p.name_ja,''), NULLIF(p.name_en,''), fn.person_id) AS name,
+                   {person_display_name_sql('fn.person_id')},
                    COALESCE(fcm.career_track, 'unknown') AS career_track
             FROM feat_network fn
             LEFT JOIN persons p ON fn.person_id = p.id
