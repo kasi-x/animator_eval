@@ -167,11 +167,13 @@ class TestPhase58DagBuilds:
 class TestNodeNameLists:
     def test_scoring_node_names_nonempty(self):
         from src.pipeline_phases.hamilton_modules.scoring import NODE_NAMES
-        assert len(NODE_NAMES) == 8
+        # H-4: added core_scores + ctx_core_populated; was 8, now 10
+        assert len(NODE_NAMES) == 10
 
     def test_metrics_node_names_nonempty(self):
         from src.pipeline_phases.hamilton_modules.metrics import NODE_NAMES
-        assert len(NODE_NAMES) == 17
+        # H-4: added supplementary_metrics + ctx_metrics_populated; was 17, now 19
+        assert len(NODE_NAMES) == 19
 
     def test_assembly_node_names_nonempty(self):
         from src.pipeline_phases.hamilton_modules.assembly import NODE_NAMES
@@ -197,62 +199,113 @@ class TestNodeNameLists:
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture()
+def empty_entity_resolved():
+    from src.pipeline_phases.pipeline_types import EntityResolutionResult
+    return EntityResolutionResult(
+        resolved_credits=[], canonical_map={}, persons=[], anime_list=[], anime_map={}
+    )
+
+
+@pytest.fixture()
+def empty_graphs_result():
+    from src.pipeline_phases.pipeline_types import GraphsResult
+    return GraphsResult(person_anime_graph=None, collaboration_graph=None, community_map={})
+
+
+@pytest.fixture()
+def empty_core_scores():
+    from src.pipeline_phases.pipeline_types import CoreScoresResult
+    return CoreScoresResult()
+
+
+@pytest.fixture()
+def empty_supplementary_metrics():
+    from src.pipeline_phases.pipeline_types import SupplementaryMetricsResult
+    return SupplementaryMetricsResult()
+
+
 class TestScoringNodesMinimal:
-    def test_akm_estimation_on_empty_credits(self, minimal_ctx):
+    def test_akm_estimation_on_empty_credits(self, empty_entity_resolved, empty_graphs_result):
+        # H-4: takes typed bags instead of ctx
         from src.pipeline_phases.hamilton_modules.scoring import akm_estimation
-        result = akm_estimation(minimal_ctx, graphs_built=None)
+        result = akm_estimation(empty_entity_resolved, empty_graphs_result)
         assert result is not None
 
-    def test_birank_rescaled_on_empty_scores(self, minimal_ctx):
+    def test_birank_rescaled_on_empty_scores(self):
         from src.pipeline_phases.hamilton_modules.scoring import birank_rescaled
-        result = birank_rescaled(minimal_ctx, dormancy_penalty_computation={})
+        result = birank_rescaled(
+            birank_computation={"person_scores": {}, "anime_scores": {}},
+            dormancy_penalty_computation={},
+        )
         assert isinstance(result, dict)
+        assert "person_scores" in result
 
-    def test_knowledge_spanners_without_graph(self, minimal_ctx):
+    def test_knowledge_spanners_without_graph(self, empty_graphs_result):
         from src.pipeline_phases.hamilton_modules.scoring import knowledge_spanners_computation
-        result = knowledge_spanners_computation(minimal_ctx, birank_computation=None)
+        result = knowledge_spanners_computation(empty_graphs_result, birank_computation={})
         assert result is not None
 
-    def test_patronage_premium_on_empty_credits(self, minimal_ctx):
+    def test_patronage_premium_on_empty_credits(self, empty_entity_resolved):
         from src.pipeline_phases.hamilton_modules.scoring import patronage_premium_computation
-        result = patronage_premium_computation(minimal_ctx, birank_computation=None)
+        result = patronage_premium_computation(
+            empty_entity_resolved,
+            birank_computation={"person_scores": {}, "anime_scores": {}},
+        )
         assert isinstance(result, dict)
 
-    def test_dormancy_penalty_on_empty_credits(self, minimal_ctx):
+    def test_dormancy_penalty_on_empty_credits(self, empty_entity_resolved):
         from src.pipeline_phases.hamilton_modules.scoring import dormancy_penalty_computation
-        result = dormancy_penalty_computation(minimal_ctx, patronage_premium_computation={})
+        result = dormancy_penalty_computation(empty_entity_resolved, patronage_premium_computation={})
         assert isinstance(result, dict)
 
 
 class TestMetricsNodesMinimal:
-    def test_role_classification_on_empty_credits(self, minimal_ctx):
+    def test_role_classification_on_empty_credits(self, empty_entity_resolved):
+        # H-4: takes entity_resolved instead of ctx
         from src.pipeline_phases.hamilton_modules.metrics import role_classification
-        result = role_classification(minimal_ctx, engagement_decay={})
+        result = role_classification(empty_entity_resolved, engagement_decay={})
         assert isinstance(result, dict)
 
-    def test_career_analysis_on_empty_credits(self, minimal_ctx):
+    def test_career_analysis_on_empty_credits(self, empty_entity_resolved):
         from src.pipeline_phases.hamilton_modules.metrics import career_analysis
-        result = career_analysis(minimal_ctx, role_classification={})
+        result = career_analysis(empty_entity_resolved, role_classification={})
         assert isinstance(result, dict)
 
-    def test_centrality_without_graph(self, minimal_ctx):
+    def test_centrality_without_graph(self, empty_entity_resolved, empty_graphs_result):
         from src.pipeline_phases.hamilton_modules.metrics import centrality_metrics
-        result = centrality_metrics(minimal_ctx, versatility_computed={})
+        result = centrality_metrics(empty_graphs_result, empty_entity_resolved, versatility_computed={})
         assert isinstance(result, dict)
+        assert "centrality" in result
+        assert "betweenness_cache" in result
 
-    def test_career_tracks_on_empty_credits(self, minimal_ctx):
+    def test_career_tracks_on_empty_credits(self, empty_entity_resolved):
         from src.pipeline_phases.hamilton_modules.metrics import career_tracks_inferred
-        result = career_tracks_inferred(minimal_ctx, potential_value_computed={})
+        result = career_tracks_inferred(empty_entity_resolved, potential_value_computed={})
         assert isinstance(result, dict)
 
 
 class TestAssemblyNodesMinimal:
-    def test_results_assembled_on_empty_context(self, minimal_ctx):
+    def test_results_assembled_on_empty_typed_bags(
+        self, empty_entity_resolved, empty_graphs_result, empty_core_scores,
+        empty_supplementary_metrics, minimal_ctx
+    ):
+        # H-4: takes typed bags + ctx (for ctx.results population)
         from src.pipeline_phases.hamilton_modules.assembly import results_assembled
-        result = results_assembled(minimal_ctx, career_tracks_inferred={})
+        result = results_assembled(
+            empty_entity_resolved, empty_graphs_result,
+            empty_core_scores, empty_supplementary_metrics, minimal_ctx
+        )
         assert isinstance(result, list)
 
-    def test_results_post_processed_on_empty_results(self, minimal_ctx):
+    def test_results_post_processed_on_empty_results(
+        self, empty_entity_resolved, empty_core_scores, minimal_ctx
+    ):
         from src.pipeline_phases.hamilton_modules.assembly import results_post_processed
-        result = results_post_processed(minimal_ctx, results_assembled=[])
+        result = results_post_processed(
+            results_assembled=[],
+            entity_resolved=empty_entity_resolved,
+            ctx_core_populated=empty_core_scores,
+            ctx=minimal_ctx,
+        )
         assert isinstance(result, list)

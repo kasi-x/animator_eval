@@ -11,6 +11,7 @@ from typing import Any, Callable
 import structlog
 
 from src.pipeline_phases.context import PipelineContext
+from src.pipeline_phases.pipeline_types import ExportContext
 from src.utils.json_io import save_json_to_file
 
 logger = structlog.get_logger()
@@ -977,13 +978,13 @@ def export_single_result_file(
     return True
 
 
-def export_and_visualize_phase(context: PipelineContext, elapsed: float = 0.0) -> None:
+def export_and_visualize_phase(context: ExportContext | PipelineContext, elapsed: float = 0.0) -> None:
     """Export all results to JSON and generate visualizations.
 
     Uses declarative registry to export all 26 JSON files.
 
     Args:
-        context: Pipeline context
+        context: Export context (lightweight) or pipeline context (full)
         elapsed: Pipeline elapsed time in seconds
     """
     from src.utils.config import JSON_DIR

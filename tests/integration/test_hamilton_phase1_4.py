@@ -82,7 +82,8 @@ class TestLoadingResolutionNodeNames:
 
     def test_resolution_node_names_count(self):
         from src.pipeline_phases.hamilton_modules.resolution import NODE_NAMES
-        assert len(NODE_NAMES) == 2
+        # H-4: added entity_resolved + graphs_result bridge nodes; was 2, now 4
+        assert len(NODE_NAMES) == 4
 
     def test_loading_node_names_in_all_names(self):
         from src.pipeline_phases.hamilton_modules import ALL_NODE_NAMES, LOADING_NODE_NAMES
@@ -116,10 +117,13 @@ class TestNodeChaining:
         params = inspect.signature(graphs_built).parameters
         assert "entity_resolution_run" in params
 
-    def test_akm_estimation_takes_ctx_only(self):
+    def test_akm_estimation_takes_typed_bags(self):
+        # H-4: akm_estimation takes entity_resolved + graphs_result (no ctx)
         from src.pipeline_phases.hamilton_modules.scoring import akm_estimation
         params = inspect.signature(akm_estimation).parameters
-        assert "ctx" in params
+        assert "entity_resolved" in params
+        assert "graphs_result" in params
+        assert "ctx" not in params
 
     def test_bipartite_enhanced_depends_on_akm(self):
         from src.pipeline_phases.hamilton_modules.scoring import bipartite_enhanced
@@ -136,10 +140,11 @@ class TestNodeChaining:
         params = inspect.signature(engagement_decay).parameters
         assert "integrated_value_computation" in params
 
-    def test_results_assembled_depends_on_career_tracks(self):
+    def test_results_assembled_depends_on_metrics_bridge(self):
+        # H-4: results_assembled depends on ctx_metrics_populated (final Phase 6 bridge)
         from src.pipeline_phases.hamilton_modules.assembly import results_assembled
         params = inspect.signature(results_assembled).parameters
-        assert "career_tracks_inferred" in params
+        assert "ctx_metrics_populated" in params
 
 
 # ---------------------------------------------------------------------------

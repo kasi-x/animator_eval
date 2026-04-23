@@ -14,6 +14,7 @@ from typing import Any
 from hamilton.function_modifiers import tag
 
 from src.pipeline_phases.context import PipelineContext
+from src.pipeline_phases.pipeline_types import EntityResolutionResult, GraphsResult
 
 NODE_NAMES: list[str] = [
     "entity_resolution_run",
@@ -93,10 +94,8 @@ def graphs_built(ctx: PipelineContext, entity_resolution_run: Any) -> Any:
 
 
 @tag(stage="phase4", cost="cheap", domain="resolution")
-def entity_resolved(entity_resolution_run: Any, ctx: PipelineContext) -> "EntityResolutionResult":
+def entity_resolved(entity_resolution_run: Any, ctx: PipelineContext) -> EntityResolutionResult:
     """H-4 bridge: expose post-resolution data as EntityResolutionResult for scoring nodes."""
-    from src.pipeline_phases.pipeline_types import EntityResolutionResult
-
     return EntityResolutionResult(
         resolved_credits=ctx.credits,
         canonical_map=ctx.canonical_map,
@@ -107,10 +106,8 @@ def entity_resolved(entity_resolution_run: Any, ctx: PipelineContext) -> "Entity
 
 
 @tag(stage="phase4", cost="cheap", domain="resolution")
-def graphs_result(graphs_built: Any, ctx: PipelineContext) -> "GraphsResult":
+def graphs_result(graphs_built: Any, ctx: PipelineContext) -> GraphsResult:
     """H-4 bridge: expose post-graph-construction data as GraphsResult for scoring nodes."""
-    from src.pipeline_phases.pipeline_types import GraphsResult
-
     return GraphsResult(
         person_anime_graph=ctx.person_anime_graph,
         collaboration_graph=ctx.collaboration_graph,

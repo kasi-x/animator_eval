@@ -7,8 +7,6 @@ populated for Phase 9/10 compatibility.
 
 from __future__ import annotations
 
-from typing import Any
-
 from hamilton.function_modifiers import tag
 
 from src.pipeline_phases.pipeline_types import (
@@ -30,7 +28,6 @@ def results_assembled(
     graphs_result: GraphsResult,
     ctx_core_populated: CoreScoresResult,
     ctx_metrics_populated: SupplementaryMetricsResult,
-    ctx: Any,
 ) -> list[dict]:
     """Assemble comprehensive result dict for each scored person (Phase 7).
 
@@ -38,16 +35,13 @@ def results_assembled(
     growth, versatility, breakdown (top contributing factors).
     Also writes score rows to gold.duckdb.
 
-    Populates ctx.results for Phase 9/10 compatibility.
     Depends on ctx_metrics_populated (last Phase 6 bridge node).
     """
     from src.pipeline_phases.result_assembly import assemble_result_entries
 
-    entries = assemble_result_entries(
+    return assemble_result_entries(
         entity_resolved, graphs_result, ctx_core_populated, ctx_metrics_populated
     )
-    ctx.results = entries
-    return entries
 
 
 @tag(stage="phase8", cost="cheap", domain="assembly")
@@ -55,17 +49,13 @@ def results_post_processed(
     results_assembled: list[dict],
     entity_resolved: EntityResolutionResult,
     ctx_core_populated: CoreScoresResult,
-    ctx: Any,
 ) -> list[dict]:
     """Post-process results: percentile ranks, confidence intervals (Phase 8).
 
     Adds *_pct fields (iv_score_pct, person_fe_pct, etc.) and confidence field.
     Mutates results_assembled in-place.
-
-    Updates ctx.results with percentile-enriched entries.
     """
     from src.pipeline_phases.post_processing import post_process_results
 
     post_process_results(results_assembled, entity_resolved.resolved_credits, ctx_core_populated.akm_result)
-    ctx.results = results_assembled
     return results_assembled
