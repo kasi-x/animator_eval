@@ -1,0 +1,44 @@
+{
+  "_comment": "Token sets for hometown → nationality inference. Tokens are matched case-insensitively as substrings. Add new tokens here; the LLM cache in '_cache' is auto-populated at runtime and should not be hand-edited.",
+  "tokens": {
+    "JP": [
+      "japan", "tokyo", "osaka", "kyoto", "yokohama", "nagoya", "sapporo",
+      "fukuoka", "kobe", "kawasaki", "saitama", "hiroshima", "sendai",
+      "kitakyushu", "chiba", "sakai", "niigata", "hamamatsu", "sagamihara",
+      "shizuoka", "okayama", "kumamoto", "kagoshima", "kanazawa", "naha",
+      "matsuyama", "nagasaki", "oita", "miyazaki", "akita", "aomori",
+      "morioka", "yamagata", "fukushima", "utsunomiya", "maebashi",
+      "nagano", "kofu", "tottori", "matsue", "takamatsu", "kochi",
+      "佐賀", "日本", "東京", "大阪", "京都", "横浜", "名古屋", "札幌",
+      "福岡", "神戸", "埼玉", "千葉", "広島", "仙台", "新潟"
+    ],
+    "CN": [
+      "china", "prc", "mainland", "beijing", "shanghai", "guangzhou",
+      "shenzhen", "chengdu", "wuhan", "hangzhou", "nanjing", "tianjin",
+      "xian", "xi'an", "chongqing", "taipei", "taiwan",
+      "hong kong", "hongkong", "hk",
+      "中国", "北京", "上海", "广州", "深圳", "成都", "武汉", "重庆",
+      "台湾", "台北", "香港"
+    ],
+    "KR": [
+      "korea", "south korea", "seoul", "busan", "incheon", "daegu",
+      "daejeon", "gwangju", "ulsan", "suwon", "창원",
+      "한국", "서울", "부산", "인천", "대구"
+    ]
+  },
+  "arabic_tokens": {
+    "egypt": "EG", "cairo": "EG", "alexandria": "EG", "مصر": "EG", "القاهرة": "EG",
+    "saudi": "SA", "riyadh": "SA", "jeddah": "SA", "السعودية": "SA", "الرياض": "SA",
+    "uae": "AE", "dubai": "AE", "abu dhabi": "AE", "الإمارات": "AE", "دبي": "AE",
+    "jordan": "JO", "amman": "JO", "الأردن": "JO",
+    "kuwait": "KW", "الكويت": "KW",
+    "qatar": "QA", "doha": "QA", "قطر": "QA",
+    "lebanon": "LB", "beirut": "LB", "لبنان": "LB",
+    "morocco": "MA", "casablanca": "MA", "المغرب": "MA",
+    "tunisia": "TN", "tunis": "TN", "تونس": "TN",
+    "algeria": "DZ", "algiers": "DZ", "الجزائر": "DZ",
+    "iraq": "IQ", "baghdad": "IQ", "العراق": "IQ",
+    "syria": "SY", "damascus": "SY", "سوريا": "SY"
+  },
+  "_cache": {}
+}

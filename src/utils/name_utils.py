@@ -8,7 +8,11 @@ person_aliases.lang.
 
 from __future__ import annotations
 
+import json
+import os
 import re
+import tempfile
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Script detection — table-driven Unicode range lookup
@@ -76,63 +80,104 @@ def detect_name_script(name: str) -> str:
 
 
 # ---------------------------------------------------------------------------
-# Hometown token sets and compiled regexes for nationality inference
+# Hometown token sets — loaded from JSON, with LLM fallback + cache
 # ---------------------------------------------------------------------------
 
-_CHINESE_HOMETOWN_TOKENS: frozenset[str] = frozenset({
-    "china", "prc", "mainland", "beijing", "shanghai", "guangzhou",
-    "shenzhen", "chengdu", "wuhan", "hangzhou", "nanjing", "tianjin",
-    "xian", "xi'an", "chongqing", "中国", "北京", "上海", "广州", "深圳",
-    "成都", "武汉", "重庆", "台湾", "台北", "taipei", "taiwan",
-    "hong kong", "hongkong", "hk", "香港",
-})
+_TOKENS_JSON_PATH = Path(__file__).parent / "hometown_tokens.json"
 
-_KOREAN_HOMETOWN_TOKENS: frozenset[str] = frozenset({
-    "korea", "south korea", "seoul", "busan", "incheon", "daegu",
-    "daejeon", "gwangju", "ulsan", "suwon", "창원",
-    "한국", "서울", "부산", "인천", "대구",
-})
 
-_JAPANESE_HOMETOWN_TOKENS: frozenset[str] = frozenset({
-    "japan", "tokyo", "osaka", "kyoto", "yokohama", "nagoya", "sapporo",
-    "fukuoka", "kobe", "kawasaki", "saitama", "hiroshima", "sendai",
-    "kitakyushu", "chiba", "sakai", "niigata", "hamamatsu", "sagamihara",
-    "shizuoka", "okayama", "kumamoto", "kagoshima", "kanazawa", "naha",
-    "matsuyama", "nagasaki", "oita", "miyazaki", "akita", "aomori",
-    "morioka", "yamagata", "fukushima", "utsunomiya", "maebashi",
-    "nagano", "kofu", "tottori", "matsue", "takamatsu", "kochi",
-    "佐賀", "日本", "東京", "大阪", "京都", "横浜", "名古屋", "札幌",
-    "福岡", "神戸", "埼玉", "千葉", "広島", "仙台", "新潟",
-})
+def _load_tokens_json() -> dict:
+    try:
+        return json.loads(_TOKENS_JSON_PATH.read_text(encoding="utf-8"))
+    except Exception:
+        return {"tokens": {}, "arabic_tokens": {}, "_cache": {}}
 
-# Arabic hometown → ISO 3166-1 alpha-2 country
-_ARABIC_HOMETOWN_TOKENS: dict[str, str] = {
-    "egypt": "EG", "cairo": "EG", "alexandria": "EG", "مصر": "EG", "القاهرة": "EG",
-    "saudi": "SA", "riyadh": "SA", "jeddah": "SA", "السعودية": "SA", "الرياض": "SA",
-    "uae": "AE", "dubai": "AE", "abu dhabi": "AE", "الإمارات": "AE", "دبي": "AE",
-    "jordan": "JO", "amman": "JO", "الأردن": "JO",
-    "kuwait": "KW", "الكويت": "KW",
-    "qatar": "QA", "doha": "QA", "قطر": "QA",
-    "lebanon": "LB", "beirut": "LB", "لبنان": "LB",
-    "morocco": "MA", "casablanca": "MA", "المغرب": "MA",
-    "tunisia": "TN", "tunis": "TN", "تونس": "TN",
-    "algeria": "DZ", "algiers": "DZ", "الجزائر": "DZ",
-    "iraq": "IQ", "baghdad": "IQ", "العراق": "IQ",
-    "syria": "SY", "damascus": "SY", "سوريا": "SY",
-}
+
+_tokens_data = _load_tokens_json()
+
+_JAPANESE_HOMETOWN_TOKENS: frozenset[str] = frozenset(_tokens_data["tokens"].get("JP", []))
+_CHINESE_HOMETOWN_TOKENS:  frozenset[str] = frozenset(_tokens_data["tokens"].get("CN", []))
+_KOREAN_HOMETOWN_TOKENS:   frozenset[str] = frozenset(_tokens_data["tokens"].get("KR", []))
+_ARABIC_HOMETOWN_TOKENS:   dict[str, str] = _tokens_data.get("arabic_tokens", {})
+# Mutable dict; updated at runtime by LLM cache writes
+_HOMETOWN_CACHE: dict[str, str | None] = _tokens_data.get("_cache", {})
+
 
 def _build_hometown_re(tokens: frozenset[str]) -> re.Pattern[str]:
     """Compile tokens into a single regex (longest match first to avoid prefix shadowing)."""
+    if not tokens:
+        return re.compile(r"(?!)")  # never-matches sentinel
     alts = sorted(map(re.escape, tokens), key=len, reverse=True)
     return re.compile("|".join(alts), re.IGNORECASE)
 
-_CHINESE_RE   = _build_hometown_re(_CHINESE_HOMETOWN_TOKENS)
-_KOREAN_RE    = _build_hometown_re(_KOREAN_HOMETOWN_TOKENS)
-_JAPANESE_RE  = _build_hometown_re(_JAPANESE_HOMETOWN_TOKENS)
+
+_JAPANESE_RE = _build_hometown_re(_JAPANESE_HOMETOWN_TOKENS)
+_CHINESE_RE  = _build_hometown_re(_CHINESE_HOMETOWN_TOKENS)
+_KOREAN_RE   = _build_hometown_re(_KOREAN_HOMETOWN_TOKENS)
 
 # Arabic: sorted longest-first so "hong kong" matches before "hong"
 _arabic_keys_sorted = sorted(_ARABIC_HOMETOWN_TOKENS.keys(), key=len, reverse=True)
-_ARABIC_RE = re.compile("|".join(map(re.escape, _arabic_keys_sorted)), re.IGNORECASE)
+_ARABIC_RE = (
+    re.compile("|".join(map(re.escape, _arabic_keys_sorted)), re.IGNORECASE)
+    if _arabic_keys_sorted else re.compile(r"(?!)")
+)
+
+
+def _save_hometown_cache(hometown_key: str, code: str | None) -> None:
+    """Persist an LLM-inferred nationality to the JSON cache (atomic write)."""
+    _HOMETOWN_CACHE[hometown_key] = code
+    try:
+        data = _load_tokens_json()
+        data["_cache"] = _HOMETOWN_CACHE
+        tmp = _TOKENS_JSON_PATH.parent / (
+            f".hometown_tokens_{os.getpid()}.tmp"
+        )
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, _TOKENS_JSON_PATH)
+    except Exception:
+        pass  # cache persistence failure is non-fatal
+
+
+def _llm_infer_nationality(hometown: str) -> str | None:
+    """Ask the local LLM to infer the ISO 3166-1 alpha-2 country code for a hometown.
+
+    Returns a 2-letter code (e.g. "JP") or None when unknown/unavailable.
+    Gracefully degrades: returns None if Ollama is not reachable.
+    """
+    try:
+        import httpx
+        from src.utils.config import LLM_BASE_URL, LLM_MODEL_NAME, LLM_TIMEOUT
+    except ImportError:
+        return None
+
+    prompt = (
+        "You are a geography expert. Given a hometown/city/location string, "
+        "output ONLY the ISO 3166-1 alpha-2 country code (e.g. JP, CN, KR, US). "
+        "If you cannot determine the country, output NULL.\n\n"
+        f"Location: {hometown}\nCountry code:"
+    )
+    try:
+        ollama_base = LLM_BASE_URL.replace("/v1", "")
+        resp = httpx.post(
+            f"{ollama_base}/api/generate",
+            json={
+                "model": LLM_MODEL_NAME,
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": 0.0, "num_predict": 10},
+            },
+            timeout=LLM_TIMEOUT,
+        )
+        resp.raise_for_status()
+        raw = (resp.json().get("response") or resp.json().get("thinking") or "").strip()
+        # Extract first 2-letter all-caps word
+        m = re.search(r"\b([A-Z]{2})\b", raw)
+        code = m.group(1) if m else None
+        if code == "NU":  # LLM sometimes outputs "NULL"
+            code = None
+        return code
+    except Exception:
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -147,7 +192,12 @@ def lang_of_alias(alias: str) -> str | None:
     return _SCRIPT_TO_LANG.get(detect_name_script(alias))
 
 
-def infer_nationalities(name_native: str, hometown: str | None) -> list[str]:
+def infer_nationalities(
+    name_native: str,
+    hometown: str | None,
+    *,
+    use_llm: bool = False,
+) -> list[str]:
     """Infer ISO 3166-1 alpha-2 nationality codes from native script and hometown.
 
     Returns a list because dual nationality is possible (e.g. ["JP", "KR"]).
@@ -156,6 +206,10 @@ def infer_nationalities(name_native: str, hometown: str | None) -> list[str]:
     Conservative by design: prefers [] over a wrong guess.
     Confident single-script → single-country mappings: Hangul→KR, Thai→TH.
     All others require a hometown hint or remain [].
+
+    Args:
+        use_llm: When True, fall back to local Ollama LLM for unknown hometowns
+                 and cache the result in hometown_tokens.json._cache.
     """
     script = detect_name_script(name_native)
 
@@ -178,6 +232,15 @@ def infer_nationalities(name_native: str, hometown: str | None) -> list[str]:
             return ["CN"]
         if _KOREAN_RE.search(low):
             return ["KR"]
+        # Check LLM cache keyed on original hometown string (case-preserved)
+        cache_key = hometown.strip()
+        if cache_key in _HOMETOWN_CACHE:
+            cached = _HOMETOWN_CACHE[cache_key]
+            return [cached] if cached else []
+        if use_llm:
+            code = _llm_infer_nationality(hometown)
+            _save_hometown_cache(cache_key, code)
+            return [code] if code else []
         return []
 
     if script == "ar":
