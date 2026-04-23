@@ -38,8 +38,10 @@
 
 ### src/db/ 後続
 
-- [ ] `database_v2.py` / `models_v2.py` 廃止 (`init_db_v2` が `init_db` 経由でまだ使用中)
-- [ ] `src/db/schema.py` に最新 DDL を single source of truth として集約
+- [x] ✅ `init_db_v2` 抽出: `database_v2.py` → `src/db/schema.py` (1291 行 DDL + helper)
+- [x] ✅ `database_v2.py` 廃止: 121 行の薄いラッパーに (create_sqlalchemy_engine 保持、generate_dbml.py 用)
+- [ ] `generate_dbml.py` 移行: DuckDB schema 検査に切り替え or Atlas 設定参照に変更
+- [ ] `models_v2.py` 廃止: generate_dbml.py の最後の依存を解決後
 
 ---
 
