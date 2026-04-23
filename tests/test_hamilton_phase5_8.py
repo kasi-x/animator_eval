@@ -200,7 +200,7 @@ class TestNodeNameLists:
 class TestScoringNodesMinimal:
     def test_akm_estimation_on_empty_credits(self, minimal_ctx):
         from src.pipeline_phases.hamilton_modules.scoring import akm_estimation
-        result = akm_estimation(minimal_ctx)
+        result = akm_estimation(minimal_ctx, graphs_built=None)
         assert result is not None
 
     def test_birank_rescaled_on_empty_scores(self, minimal_ctx):

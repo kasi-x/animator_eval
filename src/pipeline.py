@@ -166,6 +166,12 @@ def run_scoring_pipeline(
         inputs={"visualize": visualize, "dry_run": False},
     )
     ctx = result["ctx"]
+
+    # ── Phase 9: Analysis modules ─────────────────────────────────────────────
+    from src.pipeline_phases.analysis_modules import run_analysis_modules_phase
+
+    run_analysis_modules_phase(ctx)
+
     elapsed = time.monotonic() - t_start
 
     # ── VA Pipeline (Phases 4B-7B) ────────────────────────────────────────────
