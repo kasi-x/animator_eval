@@ -672,26 +672,7 @@ class TestTagsCommand:
 
 
 class TestDataQualityCommand:
-    def test_data_quality_shows_score(self, monkeypatch, tmp_path):
-        import src.database
-
-        db_path = tmp_path / "dq.db"
-        monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
-
-        from src.database import get_connection, init_db
-
-        conn = get_connection()
-        init_db(conn)
-        conn.execute(
-            "INSERT INTO anime (id, title_en, year) VALUES ('a1', 'Test', 2024)"
-        )
-        conn.execute("INSERT INTO persons (id, name_en) VALUES ('p1', 'Person')")
-        conn.execute(
-            "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES ('p1', 'a1', 'director', 'test')"
-        )
-        conn.commit()
-        conn.close()
-
+    def test_data_quality_shows_score(self, populated_duckdb):
         result = runner.invoke(app, ["data-quality"])
         assert result.exit_code == 0
         assert "Data Quality Score" in result.output

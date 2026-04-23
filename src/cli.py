@@ -618,7 +618,7 @@ def export(
     setup_logging()
     from pathlib import Path
 
-    from src.database import db_connection, init_db
+    from src.analysis.gold_writer import gold_connect_with_silver
     from src.report import (
         generate_csv_report,
         generate_html_report,
@@ -626,18 +626,20 @@ def export(
         generate_text_report,
     )
 
-    with db_connection() as conn:
-        init_db(conn)
-
-        # join scores + persons into the results format expected by downstream functions
-        rows = conn.execute(
-            """SELECT s.person_id, p.name_ja, p.name_en,
-                      s.iv_score, s.person_fe, s.studio_fe_exposure,
-                      s.birank, s.patronage, s.dormancy, s.awcc
-               FROM person_scores s
-               JOIN persons p ON s.person_id = p.id
-               ORDER BY s.iv_score DESC""",
-        ).fetchall()
+    try:
+        with gold_connect_with_silver() as conn:
+            rel = conn.execute(
+                """SELECT s.person_id, p.name_ja, p.name_en,
+                          s.iv_score, s.person_fe, s.studio_fe_exposure,
+                          s.birank, s.patronage, s.dormancy, s.awcc
+                   FROM person_scores s
+                   JOIN persons p ON s.person_id = p.id
+                   ORDER BY s.iv_score DESC""",
+            )
+            cols = [d[0] for d in rel.description]
+            rows = [dict(zip(cols, row)) for row in rel.fetchall()]
+    except Exception:
+        rows = []
 
     if not rows:
         console.print(
@@ -963,12 +965,15 @@ def validate() -> None:
     """Run data quality checks on the DB."""
     setup_logging()
 
-    from src.database import db_connection, init_db
+    from src.analysis.gold_writer import gold_connect_with_silver
     from src.validation import validate_all
 
-    with db_connection() as conn:
-        init_db(conn)
-        result = validate_all(conn)
+    try:
+        with gold_connect_with_silver() as conn:
+            result = validate_all(conn)
+    except Exception as exc:
+        console.print(f"[yellow]Could not open database: {exc}[/yellow]")
+        raise typer.Exit(1)
 
     if result.passed:
         console.print("[bold green]Validation PASSED[/bold green]")
@@ -1706,15 +1711,12 @@ def data_quality() -> None:
     setup_logging()
 
     from src.analysis.data_quality import compute_data_quality_score
-    from src.database import db_connection, get_db_stats, init_db
+    from src.analysis.gold_writer import gold_connect_with_silver
 
-    with db_connection() as conn:
-        init_db(conn)
-
-        stats = get_db_stats(conn)
-        total_credits = stats.get("credits", 0)
-        total_persons = stats.get("persons", 0)
-        total_anime = stats.get("anime", 0)
+    with gold_connect_with_silver() as conn:
+        total_persons = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
+        total_anime = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]
+        total_credits = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
 
         credits_with_source = (
             conn.execute(
@@ -1738,13 +1740,8 @@ def data_quality() -> None:
             else 0
         )
 
-        anime_with_score = (
-            conn.execute(
-                "SELECT COUNT(*) FROM src_anilist_anime WHERE score IS NOT NULL"
-            ).fetchone()[0]
-            if total_anime
-            else 0
-        )
+        # BRONZE table (src_anilist_anime) not yet in DuckDB — stub as 0
+        anime_with_score = 0
 
         source_count = conn.execute(
             """
@@ -1890,30 +1887,13 @@ def entity_resolution_check(
         format_resolution_report,
         generate_resolution_report,
     )
-    from src.database import db_connection, init_db
-    from src.models import Person
+    from src.analysis.silver_reader import load_persons_silver
 
-    with db_connection() as conn:
-        init_db(conn)
-        person_rows = conn.execute("SELECT * FROM persons").fetchall()
+    persons = load_persons_silver()
 
-    if not person_rows:
+    if not persons:
         console.print("[yellow]No persons in database[/yellow]")
         return
-
-    import json
-
-    persons = [
-        Person(
-            id=row["id"],
-            name_ja=row["name_ja"],
-            name_en=row["name_en"],
-            aliases=json.loads(row["aliases"])
-            if row["aliases"] and row["aliases"] != "[]"
-            else [],
-        )
-        for row in person_rows
-    ]
 
     console.print(f"[cyan]Loaded {len(persons):,} persons[/cyan]\n")
 
