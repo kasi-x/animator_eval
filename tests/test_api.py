@@ -35,7 +35,7 @@ def scores_data(tmp_path, monkeypatch):
     # Set up a test database with schema and 3 test persons
     db_path = tmp_path / "test_scores.db"
     monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
-    from src.database import get_connection, init_db
+    from src.db import get_connection, init_db
 
     conn = get_connection()
     init_db(conn)
@@ -863,7 +863,7 @@ class TestDataQuality:
         db_path = tmp_path / "quality.db"
         monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
 
-        from src.database import get_connection, init_db
+        from src.db import get_connection, init_db
 
         conn = get_connection()
         init_db(conn)
@@ -900,7 +900,7 @@ class TestRecommend:
         db_path = tmp_path / "rec.db"
         monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
 
-        from src.database import get_connection, init_db
+        from src.db import get_connection, init_db
 
         conn = get_connection()
         init_db(conn)
@@ -929,7 +929,7 @@ class TestPredict:
         db_path = tmp_path / "pred.db"
         monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
 
-        from src.database import get_connection, init_db
+        from src.db import get_connection, init_db
 
         conn = get_connection()
         init_db(conn)
@@ -955,7 +955,7 @@ class TestDbStats:
         db_path = tmp_path / "test_api.db"
         monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
 
-        from src.database import get_connection, init_db
+        from src.db import get_connection, init_db
 
         conn = get_connection()
         init_db(conn)

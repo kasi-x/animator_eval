@@ -22,7 +22,7 @@ import sqlite3
 
 import pytest
 
-from src.database import get_connection, init_db
+from src.db import get_connection, init_db
 from src.db_rows import TABLE_ROW_MAP, AnimeRow, PersonRow, ScoreRow
 
 

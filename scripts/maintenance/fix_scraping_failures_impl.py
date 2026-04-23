@@ -33,7 +33,7 @@ from rich.table import Table
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from scripts.update_anime_credits import fetch_and_update_anime
-from src.database import (
+from src.db import (
     get_connection,
     init_db,
     insert_anime_relation,

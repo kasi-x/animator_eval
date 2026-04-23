@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import structlog
 
-from src.database import get_source_scrape_status
+from src.db import get_source_scrape_status
 
 logger = structlog.get_logger()
 

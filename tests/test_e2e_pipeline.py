@@ -30,7 +30,7 @@ def synthetic_pipeline(monkeypatch, tmp_path):
     monkeypatch.setattr(src.utils.config, "JSON_DIR", json_dir)
 
     # 合成データを生成してDBに投入
-    from src.database import (
+    from src.db import (
         get_connection,
         init_db,
         insert_credit,

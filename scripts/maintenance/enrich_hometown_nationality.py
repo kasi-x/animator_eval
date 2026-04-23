@@ -22,7 +22,7 @@ from typing import Literal
 # Project root on path
 sys.path.insert(0, str(Path(__file__).parents[2]))
 
-from src.database import get_connection, init_db
+from src.db import get_connection, init_db
 from src.utils.name_utils import (
     detect_name_script,
     infer_nationalities,

@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from src.database import (
+from src.db import (
     get_connection,
     init_db,
     normalize_primary_names_by_credits,

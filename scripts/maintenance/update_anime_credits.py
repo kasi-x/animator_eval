@@ -22,7 +22,7 @@ from pathlib import Path
 
 import structlog
 
-from src.database import (
+from src.db import (
     get_connection,
     insert_anime_relation,
     insert_anime_studio,

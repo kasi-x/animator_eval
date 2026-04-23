@@ -393,7 +393,7 @@ def generate(
         log.info("bootstrapping_temp_db", reason="db_missing", db_path=str(db_path))
         import tempfile
 
-        from src.database import init_db
+        from src.db import init_db
 
         with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
             tmp_path = Path(tmp.name)

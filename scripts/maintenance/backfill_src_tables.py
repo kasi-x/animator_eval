@@ -318,7 +318,7 @@ def run_backfill(conn: sqlite3.Connection) -> None:
 
 
 if __name__ == "__main__":
-    from src.database import get_connection, init_db
+    from src.db import get_connection, init_db
 
     conn = get_connection()
     init_db(conn)

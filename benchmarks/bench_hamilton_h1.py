@@ -40,7 +40,7 @@ OVERHEAD_THRESHOLD = 0.20  # H-1 acceptance gate
 
 
 def _populate_temp_db(db_path: Path) -> int:
-    from src.database import (
+    from src.db import (
         get_connection,
         init_db,
         insert_credit,
@@ -71,7 +71,7 @@ def _populate_temp_db(db_path: Path) -> int:
 
 def _build_context_through_phase8():
     """Run phases 1-8 to produce a fully-populated PipelineContext for Phase 9."""
-    from src.database import get_connection, init_db
+    from src.db import get_connection, init_db
     from src.pipeline_phases import (
         PipelineContext,
         assemble_result_entries,

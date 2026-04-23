@@ -26,7 +26,7 @@ from rich.table import Table
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from src.analysis.anime_title_matching import AnimeMatch, match_anime_titles
-from src.database import get_connection, init_db
+from src.db import get_connection, init_db
 from src.scrapers.mediaarts_scraper import scrape_madb
 
 log = structlog.get_logger()
@@ -403,7 +403,7 @@ def main() -> None:
 
     # In dry-run mode, work on a copy of the DB to avoid lock contention
     # with other running processes (e.g. backfill scrapers)
-    from src.database import DEFAULT_DB_PATH
+    from src.db import DEFAULT_DB_PATH
 
     db_path = DEFAULT_DB_PATH
     tmp_dir = None

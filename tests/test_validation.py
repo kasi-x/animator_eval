@@ -4,7 +4,7 @@ import sqlite3
 
 import pytest
 
-from src.database import init_db, insert_credit, upsert_anime, upsert_person
+from src.db import init_db, insert_credit, upsert_anime, upsert_person
 from src.models import BronzeAnime as Anime, Credit, Person, Role
 from src.validation import (
     ValidationResult,

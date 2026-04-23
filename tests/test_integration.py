@@ -2,7 +2,7 @@
 
 import pytest
 
-from src.database import (
+from src.db import (
     get_connection,
     init_db,
     insert_credit,

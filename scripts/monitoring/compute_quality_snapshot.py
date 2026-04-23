@@ -111,7 +111,7 @@ def compute_and_write(
 
     Returns the list of rows written.
     """
-    from src.database import ensure_meta_quality_snapshot
+    from src.db import ensure_meta_quality_snapshot
 
     ensure_meta_quality_snapshot(conn)
     computed_at = computed_at or datetime.now(timezone.utc).isoformat(

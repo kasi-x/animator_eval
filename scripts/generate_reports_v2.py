@@ -49,7 +49,7 @@ from pathlib import Path
 # Ensure project root is in path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.database import get_connection
+from src.db import get_connection
 from scripts.report_generators.reports import V2_REPORT_CLASSES
 
 REPORTS_DIR = Path("result/reports")

@@ -7,7 +7,7 @@ import duckdb
 import pytest
 
 from src.analysis.calc_cache import get_calc_execution_hashes
-from src.database import (
+from src.db import (
     get_connection,
     init_db,
     insert_credit,

@@ -54,8 +54,8 @@ def _build_synthetic_db(
     starts to dominate per-row SQLite overhead.
     """
     import random
-    from src.database import init_db, get_connection
-    from src.database import DEFAULT_DB_PATH
+    from src.db import init_db, get_connection
+    from src.db import DEFAULT_DB_PATH
     import src.database as db_mod
 
     db_path = tmp_path / "bench.db"

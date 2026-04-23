@@ -40,7 +40,7 @@ def main():
     )
     args = parser.parse_args()
 
-    from src.database import get_connection
+    from src.db import get_connection
 
     conn = get_connection()
     print("データベースに接続しました。分析中...")

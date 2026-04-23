@@ -18,7 +18,7 @@ import structlog
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from src.database import get_connection, init_db
+from src.db import get_connection, init_db
 from src.utils.episode_parser import parse_episodes
 
 logger = structlog.get_logger()

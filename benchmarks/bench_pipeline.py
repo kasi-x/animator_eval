@@ -56,7 +56,7 @@ def _populate_temp_db(db_path: Path) -> int:
 
     Returns the number of credits inserted.
     """
-    from src.database import get_connection, init_db, insert_credit, upsert_anime, upsert_person
+    from src.db import get_connection, init_db, insert_credit, upsert_anime, upsert_person
     from src.synthetic import generate_synthetic_data
 
     persons, anime_list, credits = generate_synthetic_data(
@@ -103,7 +103,7 @@ def _run_individual_phases(json_dir: Path) -> dict[str, float]:
 
     Returns a dict mapping phase name to elapsed seconds.
     """
-    from src.database import get_connection, init_db
+    from src.db import get_connection, init_db
     from src.pipeline_phases import (
         PipelineContext,
         assemble_result_entries,

@@ -14,7 +14,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from src.database import SCHEMA_VERSION, get_schema_version, init_db
+from src.db import SCHEMA_VERSION, get_schema_version, init_db
 
 
 # ---------------------------------------------------------------------------

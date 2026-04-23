@@ -372,7 +372,7 @@ class IndexPageReport(BaseReportGenerator):
             stats["tier5"] = 0
 
         try:
-            from src.database import SCHEMA_VERSION
+            from src.db import SCHEMA_VERSION
             stats["schema_version"] = SCHEMA_VERSION
         except Exception:
             stats["schema_version"] = "?"

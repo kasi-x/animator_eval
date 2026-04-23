@@ -11,7 +11,7 @@ Phase 3-5 (2026-04-19) consolidation:
 
 Usage:
     from scripts.report_generators.reports import V2_REPORT_CLASSES
-    from src.database import get_connection
+    from src.db import get_connection
 
     with get_connection() as conn:
         for cls in V2_REPORT_CLASSES:

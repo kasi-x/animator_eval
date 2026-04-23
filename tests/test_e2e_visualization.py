@@ -31,7 +31,7 @@ def viz_pipeline(monkeypatch, tmp_path):
     monkeypatch.setattr(src.analysis.visualize, "JSON_DIR", json_dir)
 
     # 合成データをDBに投入
-    from src.database import (
+    from src.db import (
         get_connection,
         init_db,
         insert_credit,
