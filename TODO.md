@@ -53,9 +53,9 @@
 - [ ] hash 比較フィルタリング (WHERE content_hash != ?) で UPDATE skip
 - [ ] E2E テスト (--since mode で真の差分検出確認)
 
-### 7.3 anilist_scraper retry refactor (任意)
+### 7.3 anilist_scraper retry refactor (完了 2026-04-24)
 
-- [ ] 共通部分を `RetryingHttpClient` に委譲、X-RateLimit-* 専用 callback hook を追加
+- [x] 共通部分を `RetryingHttpClient` に委譲、X-RateLimit-* 専用 callback hook を追加
 
 ---
 
