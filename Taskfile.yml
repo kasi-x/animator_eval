@@ -128,10 +128,8 @@ tasks:
           pixi run lint
         fi
 
-  format:
-    desc: Format code
-    cmds:
-      - pixi run format
+  # format / serve / lab / synthetic / build-rust: use `pixi run <task>` directly
+  # (pass-through wrappers removed — see pixi.toml [tasks] for canonical definitions)
 
   # ==========================================================================
   # CLI shortcuts
@@ -150,29 +148,6 @@ tasks:
     desc: Export data
     cmds:
       - pixi run python -c 'from src.cli import app; app()' export --format {{.FORMAT | default "json"}}
-
-  # ==========================================================================
-  # Utilities
-  # ==========================================================================
-  serve:
-    desc: Start API server
-    cmds:
-      - pixi run serve
-
-  lab:
-    desc: Start Jupyter Lab
-    cmds:
-      - pixi run lab
-
-  synthetic:
-    desc: Generate synthetic test data
-    cmds:
-      - pixi run synthetic
-
-  build-rust:
-    desc: Build Rust extensions
-    cmds:
-      - pixi run build-rust
 
   # ==========================================================================
   # Graphs & reports
@@ -266,7 +241,7 @@ tasks:
         '
 
   # Report API endpoints (briefs, versioning, appendix) are now served by the
-  # main FastAPI app — run `task serve` to start on port 8000.
+  # main FastAPI app — run `pixi run serve` to start on port 8000.
 
   # ==========================================================================
   # v2 Gate Automation

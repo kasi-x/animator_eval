@@ -215,7 +215,7 @@ scrapers ──→ bronze/source=X/date=Y/*.parquet   (per-source append-only、
   - network: community_detection, path_finding, multilayer, core_periphery, structural_holes, temporal_bridge, temporal_influence
   - scoring: potential_value, pagerank (write path のみ legacy get_connection 残存)
   - graph, anime_value, contribution_attribution, genre/specialization, growth_acceleration, studio/bias_correction
-- [ ] ベンチマーク: Phase 5/6 の時間比較
+- [x] ベンチマーク: Phase 5/6 の時間比較 (`pixi run bench-duckdb-synth` — prod-scale 500k credits で Phase 5/6 平均 5.4×、`patronage_summary` 単体 11.8×、結果は `result/duckdb_phase_a_benchmark.json`)
 
 **Card 05 で積み越し** (pipeline_phases + attrition/gender は GOLD テーブル依存のため Card 06 に):
 - `pipeline_phases/{data_loading,validation,entity_resolution,result_assembly}.py` — GOLD 書き込みと conn 共用
@@ -483,18 +483,16 @@ result/makie/             生成物 3.6MB
 
 - [ ] `juliacall` を使う利用箇所を確認 (setup script のみなら削除)。matplotlib/Plotly と役割重複
 
-### 9.4 Taskfile 81 タスクの圧縮
+### 9.4 Taskfile 81 タスクの圧縮 ✅
 
-```
-scrape         vs  scrape-old
-scrape-update  vs  scrape-update-old
-scrape-all     vs  scrape-all-old
-fix-retry, fix-all, fix-backfill, fix-cleanup, fix-status
-```
-
-- [ ] `-old` variants は `--reverse` フラグ違いのみ。`task scrape ORDER=reverse` にパラメタ化
-- [ ] `fix-*` が参照している `scripts/fix_scraping_failures.sh` を確認し不要なら削除
-- [ ] Taskfile と `pixi.toml tasks` で重複定義があるものは Taskfile に寄せる
+- [x] `-old` variants → `scrape ORDER=reverse` にパラメタ化済み
+- [x] `fix-*` → `fix STEP=status|retry|backfill|cleanup|all` にパラメタ化済み
+- [x] Taskfile 重複 pass-through wrapper 削除 (`format`/`serve`/`lab`/`synthetic`/`build-rust`)。
+      canonical = `pixi run <task>` (CLAUDE.md + README 記載の形)
+- **結果**: 51 → 46 (Taskfile), 32 (pixi.toml `[tasks]`)。合計 78。
+  残る Taskfile tasks は composite workflow (ci/refresh/nightly/report-full/gates) と
+  mode/flag 付き wrapper (pipeline MODE=, test MODE=, lint FIX=, clean WHAT=, fix STEP=,
+  reports-v2 AUDIENCE=, migrate STATUS=, data-dictionary CHECK=) のみ。
 
 ### 9.5 `src/monitoring.py` → `src/freshness.py` リネーム
 
