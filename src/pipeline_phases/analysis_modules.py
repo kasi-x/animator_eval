@@ -2230,3 +2230,46 @@ def run_analysis_modules_phase(
         failed=failed_count,
         total=len(ANALYSIS_TASKS) + len(BATCH3_TASKS),
     )
+
+
+# ---------------------------------------------------------------------------
+# Hamilton H-1 PoC — alternative execution path
+#
+# Activated by ANIMETOR_USE_HAMILTON=1 environment variable.
+# Runs a subset of analysis modules via Hamilton's declarative DAG executor.
+# PipelineContext is passed as-is (H-1 pattern); H-2 will decompose inputs.
+#
+# Coverage: core + studio + genre + network + causal modules (~45 nodes).
+# Excluded: temporal_pagerank (complex state), credit_stats (HTML generation),
+#           graphml_export, AKM diagnostics (batch-only), insights_report.
+# ---------------------------------------------------------------------------
+
+def run_analysis_modules_hamilton(context: PipelineContext) -> dict:
+    """Execute analysis modules via Hamilton DAG driver (H-1 PoC).
+
+    Returns dict of {node_name: result} for all executed nodes.
+    Errors are caught per-node and logged; the pipeline does not abort.
+    """
+    from hamilton import driver
+    from src.pipeline_phases.hamilton_modules import core, studio, genre, network, causal
+    from src.pipeline_phases.hamilton_modules import ALL_NODE_NAMES
+
+    dr = (
+        driver.Builder()
+        .with_modules(core, studio, genre, network, causal)
+        .build()
+    )
+
+    logger.info("hamilton_execute_start", node_count=len(ALL_NODE_NAMES))
+
+    results: dict[str, Any] = {}
+    for node_name in ALL_NODE_NAMES:
+        try:
+            node_result = dr.execute([node_name], inputs={"ctx": context})
+            results[node_name] = node_result.get(node_name)
+        except Exception as exc:
+            logger.warning("hamilton_node_failed", node=node_name, error=str(exc))
+            results[node_name] = None
+
+    logger.info("hamilton_execute_complete", total=len(ALL_NODE_NAMES))
+    return results

@@ -69,6 +69,7 @@ rich = "*"
 typer = "*"
 httpx = "*"
 pyarrow = ">=23.0.1,<24"
+sf-hamilton = ">=1.88.0,<2"
 
 # ============================================================================
 # Feature: scrape — web scraping and data collection
