@@ -67,6 +67,8 @@ CREATE TABLE IF NOT EXISTS anime (
     source_mat  VARCHAR,
     work_type   VARCHAR,
     scale_class VARCHAR,
+    fetched_at  TIMESTAMP,
+    content_hash VARCHAR,
     updated_at  TIMESTAMP DEFAULT now()
 );
 
@@ -97,6 +99,7 @@ CREATE TABLE IF NOT EXISTS credits (
 # Excludes: score, popularity, favourites, description, cover_*, banner,
 #           mal_id, anilist_id, ann_id, allcinema_id, madb_id (external IDs),
 #           genres, tags, studios (→ separate tables in full ETL).
+# Includes: content_hash, fetched_at for diff detection.
 # The hive partition adds virtual 'date' column used for dedup.
 _ANIME_SQL = """
 INSERT INTO anime
@@ -116,6 +119,8 @@ SELECT
     COALESCE(original_work_type, source) AS source_mat,
     work_type,
     scale_class,
+    TRY_CAST(fetched_at AS TIMESTAMP) AS fetched_at,
+    content_hash,
     now()                   AS updated_at
 FROM (
     SELECT *,
