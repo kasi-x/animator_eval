@@ -1,4 +1,4 @@
-"""DB-backed data loaders for report generation.
+"""DB-backed data loaders for report generation (GOLD layer, DuckDB).
 
 各関数はテーブル名に対応した命名規則を持つ:
   load_{table_name}(conn) → そのテーブルの全件を JSON 互換 dict/list で返す
@@ -14,7 +14,7 @@
 from __future__ import annotations
 
 import json as _json
-import sqlite3
+from typing import Any
 
 from .sql_fragments import person_display_name_sql
 
@@ -23,7 +23,7 @@ from .sql_fragments import person_display_name_sql
 # feat_person_scores (+ feat_career + feat_network JOIN)
 # ---------------------------------------------------------------------------
 
-def load_feat_person_scores(conn: sqlite3.Connection) -> list[dict]:
+def load_feat_person_scores(conn: Any) -> list[dict]:
     """feat_person_scores JOIN feat_career JOIN feat_network JOIN persons から
     scores.json 互換のリストを全件返す。
 
@@ -142,7 +142,7 @@ def load_feat_person_scores(conn: sqlite3.Connection) -> list[dict]:
 # agg_milestones
 # ---------------------------------------------------------------------------
 
-def load_agg_milestones(conn: sqlite3.Connection) -> dict[str, list[dict]]:
+def load_agg_milestones(conn: Any) -> dict[str, list[dict]]:
     """agg_milestones から milestones.json 互換の {person_id: [events]} を全件返す."""
     rows = conn.execute("""
         SELECT person_id, event_type, year, anime_id, anime_title, description
@@ -169,7 +169,7 @@ def load_agg_milestones(conn: sqlite3.Connection) -> dict[str, list[dict]]:
 # agg_director_circles
 # ---------------------------------------------------------------------------
 
-def load_agg_director_circles(conn: sqlite3.Connection) -> dict[str, dict]:
+def load_agg_director_circles(conn: Any) -> dict[str, dict]:
     """agg_director_circles から circles.json 互換の
     {director_id: {members: [...]}} を全件返す。
     """
@@ -209,7 +209,7 @@ def load_agg_director_circles(conn: sqlite3.Connection) -> dict[str, dict]:
 # feat_mentorships
 # ---------------------------------------------------------------------------
 
-def load_feat_mentorships(conn: sqlite3.Connection) -> list[dict]:
+def load_feat_mentorships(conn: Any) -> list[dict]:
     """feat_mentorships から mentorships.json 互換のリストを全件返す."""
     rows = conn.execute("""
         SELECT
@@ -227,7 +227,7 @@ def load_feat_mentorships(conn: sqlite3.Connection) -> list[dict]:
 # feat_career (growth.json 互換)
 # ---------------------------------------------------------------------------
 
-def load_feat_career(conn: sqlite3.Connection) -> dict:
+def load_feat_career(conn: Any) -> dict:
     """feat_career から growth.json の persons セクション互換データを全件返す."""
     rows = conn.execute(f"""
         SELECT fc.person_id,
@@ -256,7 +256,7 @@ def load_feat_career(conn: sqlite3.Connection) -> dict:
 # feat_genre_affinity
 # ---------------------------------------------------------------------------
 
-def load_feat_genre_affinity(conn: sqlite3.Connection) -> dict[str, dict]:
+def load_feat_genre_affinity(conn: Any) -> dict[str, dict]:
     """feat_genre_affinity から {person_id: {genre: {score, count}}} を全件返す."""
     rows = conn.execute("""
         SELECT person_id, genre, affinity_score, work_count
@@ -280,7 +280,7 @@ def load_feat_genre_affinity(conn: sqlite3.Connection) -> dict[str, dict]:
 # feat_network (bridge_persons)
 # ---------------------------------------------------------------------------
 
-def load_feat_network(conn: sqlite3.Connection) -> dict:
+def load_feat_network(conn: Any) -> dict:
     """feat_network から bridges.json の bridge_persons セクション互換データを返す.
 
     community レベルのデータ (cross_community_edges, community_connectivity, stats) は
@@ -318,7 +318,7 @@ def load_feat_network(conn: sqlite3.Connection) -> dict:
 # feat_cluster_membership
 # ---------------------------------------------------------------------------
 
-def load_feat_cluster_membership(conn: sqlite3.Connection) -> dict[str, dict]:
+def load_feat_cluster_membership(conn: Any) -> dict[str, dict]:
     """feat_cluster_membership から {person_id: {community_id, career_track, ...}} を全件返す."""
     rows = conn.execute("""
         SELECT
@@ -349,7 +349,7 @@ def load_feat_cluster_membership(conn: sqlite3.Connection) -> dict[str, dict]:
 # feat_birank_annual (temporal_pagerank.json 互換)
 # ---------------------------------------------------------------------------
 
-def load_feat_birank_annual(conn: sqlite3.Connection) -> dict:
+def load_feat_birank_annual(conn: Any) -> dict:
     """feat_birank_annual から temporal_pagerank.json 互換データを全件返す.
 
     返却形式:
@@ -419,7 +419,7 @@ def load_feat_birank_annual(conn: sqlite3.Connection) -> dict:
 # feat_credit_activity
 # ---------------------------------------------------------------------------
 
-def load_feat_credit_activity(conn: sqlite3.Connection) -> dict[str, dict]:
+def load_feat_credit_activity(conn: Any) -> dict[str, dict]:
     """feat_credit_activity から {person_id: {...}} を全件返す."""
     rows = conn.execute("""
         SELECT person_id,
@@ -441,7 +441,7 @@ def load_feat_credit_activity(conn: sqlite3.Connection) -> dict[str, dict]:
 # ---------------------------------------------------------------------------
 
 def load_feat_career_annual(
-    conn: sqlite3.Connection,
+    conn: Any,
     person_id: str | None = None,
 ) -> dict[str, list[dict]]:
     """feat_career_annual から {person_id: [year_rows]} を返す.
@@ -472,7 +472,7 @@ def load_feat_career_annual(
 # ---------------------------------------------------------------------------
 
 def load_feat_studio_affiliation(
-    conn: sqlite3.Connection,
+    conn: Any,
     person_id: str | None = None,
 ) -> dict[str, list[dict]]:
     """feat_studio_affiliation から {person_id: [year_studio_rows]} を返す."""
@@ -502,7 +502,7 @@ def load_feat_studio_affiliation(
 # ---------------------------------------------------------------------------
 
 def load_feat_credit_contribution(
-    conn: sqlite3.Connection,
+    conn: Any,
     *,
     person_id: str | None = None,
     anime_id: str | None = None,
@@ -533,7 +533,7 @@ def load_feat_credit_contribution(
 # feat_person_work_summary
 # ---------------------------------------------------------------------------
 
-def load_feat_person_work_summary(conn: sqlite3.Connection) -> dict[str, dict]:
+def load_feat_person_work_summary(conn: Any) -> dict[str, dict]:
     """feat_person_work_summary から {person_id: {...}} を全件返す."""
     rows = conn.execute("""
         SELECT person_id,
@@ -553,7 +553,7 @@ def load_feat_person_work_summary(conn: sqlite3.Connection) -> dict[str, dict]:
 # ---------------------------------------------------------------------------
 
 def load_feat_work_context(
-    conn: sqlite3.Connection,
+    conn: Any,
     anime_id: str | None = None,
 ) -> dict[str, dict]:
     """feat_work_context から {anime_id: {...}} を返す.
@@ -576,7 +576,7 @@ def load_feat_work_context(
 # ---------------------------------------------------------------------------
 
 def load_feat_person_role_progression(
-    conn: sqlite3.Connection,
+    conn: Any,
     person_id: str | None = None,
 ) -> dict[str, list[dict]]:
     """feat_person_role_progression から {person_id: [role_entries]} を返す."""
@@ -604,7 +604,7 @@ def load_feat_person_role_progression(
 # feat_causal_estimates
 # ---------------------------------------------------------------------------
 
-def load_feat_causal_estimates(conn: sqlite3.Connection) -> dict[str, dict]:
+def load_feat_causal_estimates(conn: Any) -> dict[str, dict]:
     """feat_causal_estimates から {person_id: {...}} を全件返す."""
     rows = conn.execute("""
         SELECT person_id,

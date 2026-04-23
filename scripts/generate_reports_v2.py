@@ -49,7 +49,7 @@ from pathlib import Path
 # Ensure project root is in path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.db import get_connection
+from src.analysis.gold_writer import gold_connect
 from scripts.report_generators.reports import V2_REPORT_CLASSES
 
 REPORTS_DIR = Path("result/reports")
@@ -276,10 +276,8 @@ def main(
                 print(f"  {f}: {spec.get('description', '?')}")
         return
 
-    # ── Connect ────────────────────────────────────────────────────
-    conn = get_connection()
-
-    # ── Inject exit thresholds into industry_overview module ───────
+    # ── Connect to GOLD DuckDB ────────────────────────────────────
+    # Inject exit thresholds before opening connection
     try:
         from scripts.report_generators.reports import industry_overview as io_mod
         io_mod.EXIT_CUTOFF_YEAR = io_mod.RELIABLE_MAX_YEAR - exit_years
@@ -287,49 +285,48 @@ def main(
     except Exception:
         pass
 
-    # ── Recompute DB features ──────────────────────────────────────
-    if recompute:
-        print("\n--- Recomputing DB features ---")
-        if recompute == "all":
-            feats = list(RECOMPUTABLE_FEATURES)
-        else:
-            feats = [f.strip() for f in recompute.split(",")]
-        _recompute_features(
-            conn, feats,
-            exit_years=exit_years,
-            semi_exit_years=semi_exit_years,
-        )
-        print()
-
-    # ── Generate reports ───────────────────────────────────────────
-    n_ok = 0
-    n_fail = 0
-    n_skip = 0
-    t_start = time.monotonic()
-
-    for cls in classes_to_run:
-        name = getattr(cls, "name", cls.__name__)
-        print(f"  [{name}]", end=" ", flush=True)
-        t0 = time.monotonic()
-        try:
-            report = cls(conn)
-            out = report.generate()
-            elapsed = time.monotonic() - t0
-            if out:
-                print(f"-> {out} ({elapsed:.1f}s)")
-                n_ok += 1
+    with gold_connect() as conn:
+        # ── Recompute DB features ──────────────────────────────────────
+        if recompute:
+            print("\n--- Recomputing DB features ---")
+            if recompute == "all":
+                feats = list(RECOMPUTABLE_FEATURES)
             else:
-                print(f"[SKIP] no output ({elapsed:.1f}s)")
-                n_skip += 1
-        except Exception as exc:
-            elapsed = time.monotonic() - t0
-            print(f"[ERROR] {type(exc).__name__}: {exc} ({elapsed:.1f}s)")
-            n_fail += 1
-            if not force:
-                print("  (use --force to continue after errors)")
-                break
+                feats = [f.strip() for f in recompute.split(",")]
+            _recompute_features(
+                conn, feats,
+                exit_years=exit_years,
+                semi_exit_years=semi_exit_years,
+            )
+            print()
 
-    conn.close()
+        # ── Generate reports ───────────────────────────────────────────
+        n_ok = 0
+        n_fail = 0
+        n_skip = 0
+        t_start = time.monotonic()
+
+        for cls in classes_to_run:
+            name = getattr(cls, "name", cls.__name__)
+            print(f"  [{name}]", end=" ", flush=True)
+            t0 = time.monotonic()
+            try:
+                report = cls(conn)
+                out = report.generate()
+                elapsed = time.monotonic() - t0
+                if out:
+                    print(f"-> {out} ({elapsed:.1f}s)")
+                    n_ok += 1
+                else:
+                    print(f"[SKIP] no output ({elapsed:.1f}s)")
+                    n_skip += 1
+            except Exception as exc:
+                elapsed = time.monotonic() - t0
+                print(f"[ERROR] {type(exc).__name__}: {exc} ({elapsed:.1f}s)")
+                n_fail += 1
+                if not force:
+                    print("  (use --force to continue after errors)")
+                    break
 
     total = time.monotonic() - t_start
     print()
