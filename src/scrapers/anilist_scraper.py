@@ -1910,9 +1910,12 @@ def main(
     from pathlib import Path
     from src.log import setup_logging
     from rich.console import Console
+    from src.scrapers.logging_utils import configure_file_logging
 
     # Setup logging with specified level
     setup_logging()
+    log_path = configure_file_logging("anilist")
+    log.info("anilist_command_start", log_file=str(log_path))
 
     # Configure structlog level filter
     import structlog
@@ -2710,8 +2713,11 @@ def fetch_persons(
     import asyncio
     import time as time_module
     from src.log import setup_logging
+    from src.scrapers.logging_utils import configure_file_logging
 
     setup_logging(log_level)
+    log_path = configure_file_logging("anilist")
+    log.info("anilist_fetch_persons_command_start", log_file=str(log_path))
 
     async def _run():
         from rich.console import Console
@@ -2931,6 +2937,7 @@ def process_downloads(
     """Process pending image downloads from queue."""
     import asyncio
     from src.log import setup_logging
+    from src.scrapers.logging_utils import configure_file_logging
     from src.utils.download_queue import DownloadQueue
     from src.scrapers.image_downloader import (
         download_person_images,
@@ -2944,6 +2951,8 @@ def process_downloads(
 
     # Setup
     setup_logging()
+    log_path = configure_file_logging("anilist")
+    log.info("anilist_process_downloads_command_start", log_file=str(log_path))
     console = Console()
 
     # Load queue

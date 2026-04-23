@@ -16,6 +16,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import json
 import re
 import time
@@ -685,8 +686,6 @@ async def fetch_person_html(
 
 # ─── Bronze 書き込みヘルパー ─────────────────────────────────────────────────
 
-import dataclasses
-
 
 def save_ann_anime(anime_bw, credits_bw, rec: AnnAnimeRecord) -> int:
     """AnnAnimeRecord を BRONZE parquet に書き出してクレジット数を返す."""
@@ -856,7 +855,7 @@ def cmd_scrape_persons(
     people.php?id=NUM の HTML ページを 1 件ずつスクレイプする実装に切り替え済み。
     バッチ取得不可のためスループットは約 40 件/分 (1.5s 間隔)。
     """
-    log_path = configure_file_logging("ann")
+    configure_file_logging("ann")
     asyncio.run(
         _run_scrape_persons(
             limit=limit,

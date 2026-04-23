@@ -6,16 +6,16 @@ httpx + structlog + typer で構成。
 
 import asyncio
 import json
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-import httpx
 import structlog
 import typer
 
 from src.models import BronzeAnime, Credit, Person, parse_role
 from src.scrapers.cache_store import load_cached_json, save_cached_json
+from src.scrapers.http_client import RetryingHttpClient
+from src.scrapers.logging_utils import configure_file_logging
 
 log = structlog.get_logger()
 
@@ -49,23 +49,20 @@ def _delete_checkpoint(path: Path) -> None:
 
 
 class JikanClient:
-    """Jikan API 非同期クライアント."""
+    """Jikan API 非同期クライアント (RetryingHttpClient ラッパー)."""
 
-    def __init__(self) -> None:
-        self._last_request_time = 0.0
-        self._client = httpx.AsyncClient(
+    def __init__(self, transport=None) -> None:
+        self._http = RetryingHttpClient(
+            source="mal",
+            base_url=BASE_URL,
+            delay=REQUEST_INTERVAL,
             timeout=30.0,
             headers={"Accept": "application/json"},
+            transport=transport,
         )
 
     async def close(self) -> None:
-        await self._client.aclose()
-
-    async def _rate_limit(self) -> None:
-        elapsed = time.monotonic() - self._last_request_time
-        if elapsed < REQUEST_INTERVAL:
-            await asyncio.sleep(REQUEST_INTERVAL - elapsed)
-        self._last_request_time = time.monotonic()
+        await self._http.aclose()
 
     async def get(self, endpoint: str, params: dict | None = None) -> dict:
         cache_key = {"endpoint": endpoint, "params": params or {}}
@@ -73,42 +70,11 @@ class JikanClient:
         if cached is not None:
             return cached
 
-        await self._rate_limit()
-        url = f"{BASE_URL}{endpoint}"
-        for attempt in range(5):
-            try:
-                resp = await self._client.get(url, params=params)
-                if resp.status_code == 429:
-                    retry_after = int(resp.headers.get("Retry-After", 3))
-                    log.warning(
-                        "rate_limited",
-                        source="mal",
-                        retry_after_seconds=retry_after,
-                        url=url,
-                    )
-                    await asyncio.sleep(retry_after)
-                    continue
-                resp.raise_for_status()
-                data = resp.json()
-                save_cached_json("mal/rest", cache_key, data)
-                return data
-            except httpx.HTTPError as e:
-                log.warning(
-                    "request_failed",
-                    source="mal",
-                    attempt=attempt + 1,
-                    error_type=type(e).__name__,
-                    error_message=str(e),
-                )
-                if attempt < 4:
-                    await asyncio.sleep(2 ** (attempt + 1))
-        from src.scrapers.exceptions import EndpointUnreachableError
-
-        raise EndpointUnreachableError(
-            f"Failed to fetch {url} after 5 attempts",
-            source="mal",
-            url=url,
-        )
+        resp = await self._http.get(endpoint, params=params)
+        resp.raise_for_status()
+        data = resp.json()
+        save_cached_json("mal/rest", cache_key, data)
+        return data
 
     async def get_anime_staff(self, mal_id: int) -> list[dict]:
         data = await self.get(f"/anime/{mal_id}/staff")
@@ -277,6 +243,8 @@ def main(
     from src.scrapers.bronze_writer import BronzeWriter
 
     setup_logging()
+    log_path = configure_file_logging("mal")
+    log.info("mal_scrape_command_start", log_file=str(log_path), count=count)
 
     # --all フラグで全アニメを取得
     if fetch_all:

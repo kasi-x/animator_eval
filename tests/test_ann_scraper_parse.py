@@ -1,6 +1,6 @@
 """ANN scraper parser unit tests.
 
-Driven by real ANN XML responses captured to tests/fixtures/scrapers/ann/.
+Driven by real ANN XML/HTML responses captured to tests/fixtures/scrapers/ann/.
 No network required — these tests verify parse functions only.
 
 Capture commands (for refresh):
@@ -10,6 +10,8 @@ Capture commands (for refresh):
         > tests/fixtures/scrapers/ann/persons_batch.xml
     curl -sSL 'https://cdn.animenewsnetwork.com/encyclopedia/reports.xml?tag=masterlist&nlist=all' \\
         > tests/fixtures/scrapers/ann/masterlist_html_response.html
+    curl -sSL 'https://www.animenewsnetwork.com/encyclopedia/people.php?id=260' \\
+        > tests/fixtures/scrapers/ann/person_260.html
 """
 
 from __future__ import annotations
@@ -21,8 +23,10 @@ import pytest
 
 from src.scrapers.ann_scraper import (
     _normalize_format,
+    _parse_dob_html,
     _parse_vintage,
     parse_anime_xml,
+    parse_person_html,
     parse_person_xml,
 )
 
@@ -166,3 +170,124 @@ def test_masterlist_returns_html_not_xml():
     text = _load("masterlist_html_response.html")
     stripped = text.lstrip()
     assert stripped.startswith("<!DOCTYPE") or stripped.startswith("<html")
+
+
+# ---------------------------------------------------------------------------
+# _parse_dob_html — date-of-birth format normalisation
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("text,expected", [
+    ("1941-01-05", "1941-01-05"),          # ISO: そのまま
+    ("Jan 5, 1941", "1941-01-05"),          # 略月名
+    ("January 5, 1941", "1941-01-05"),      # 完全月名
+    ("1941", "1941"),                       # 年のみ
+    ("born 1941 somewhere", "1941"),        # 年を含む文字列
+    ("", None),                             # 空文字 → None
+    ("unknown", None),                      # 数字なし → None
+])
+def test_parse_dob_html(text, expected):
+    assert _parse_dob_html(text) == expected
+
+
+# ---------------------------------------------------------------------------
+# parse_person_html — real fixture: person_260.html (Yūji Yamaguchi)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def person_260():
+    return parse_person_html(_load("person_260.html"), ann_id=260)
+
+
+def test_person_html_returns_detail(person_260):
+    assert person_260 is not None
+
+
+def test_person_html_ann_id(person_260):
+    assert person_260.ann_id == 260
+
+
+def test_person_html_english_name(person_260):
+    assert "YAMAGUCHI" in person_260.name_en or "Yamaguchi" in person_260.name_en
+
+
+def test_person_html_japanese_name(person_260):
+    assert "山口" in person_260.name_ja
+
+
+def test_person_html_no_birth_date(person_260):
+    # Person 260 has no birthdate in the fixture — field should be None
+    assert person_260.date_of_birth is None
+
+
+def test_person_html_cloudflare_block_returns_none():
+    """Cloudflare challenge page → None (not a crash)."""
+    cf_html = (
+        "<html><head><title>Just a moment...</title></head>"
+        "<body>Please wait while we verify your browser.</body></html>"
+    )
+    result = parse_person_html(cf_html, ann_id=999)
+    assert result is None
+
+
+def test_person_html_minimal_fields():
+    """Minimal valid page: only h1 present — returns detail with blank optional fields."""
+    html = """
+    <html><head><title>Test Person - Anime News Network</title></head>
+    <body>
+      <div id="page-title">
+        <h1 id="page_header">Test Person</h1>
+      </div>
+    </body></html>
+    """
+    result = parse_person_html(html, ann_id=1)
+    assert result is not None
+    assert result.name_en == "Test Person"
+    assert result.date_of_birth is None
+    assert result.hometown is None
+
+
+def test_person_html_with_birth_date():
+    """infotype div containing birthdate is extracted correctly."""
+    html = """
+    <html><head><title>Born Person - Anime News Network</title></head>
+    <body>
+      <div id="page-title">
+        <h1 id="page_header">Born Person</h1>
+        宮崎 駿
+      </div>
+      <div id="infotype-5" class="encyc-info-type">
+        <strong>Birthdate:</strong> <span>1941-01-05</span>
+      </div>
+      <div id="infotype-7" class="encyc-info-type">
+        <strong>Hometown:</strong> <span>Tokyo</span>
+      </div>
+      <div id="infotype-8" class="encyc-info-type">
+        <strong>Blood type:</strong> <span>A</span>
+      </div>
+    </body></html>
+    """
+    result = parse_person_html(html, ann_id=2)
+    assert result is not None
+    assert result.name_en == "Born Person"
+    assert "宮崎" in result.name_ja
+    assert result.date_of_birth == "1941-01-05"
+    assert result.hometown == "Tokyo"
+    assert result.blood_type == "A"
+
+
+def test_person_html_dob_month_name():
+    """Birth date in 'January 5, 1941' format is normalised to ISO."""
+    html = """
+    <html><head><title>X - Anime News Network</title></head>
+    <body>
+      <div id="page-title"><h1 id="page_header">X</h1></div>
+      <div id="infotype-5" class="encyc-info-type">
+        <strong>Birthdate:</strong> <span>January 5, 1941</span>
+      </div>
+    </body></html>
+    """
+    result = parse_person_html(html, ann_id=3)
+    assert result is not None
+    assert result.date_of_birth == "1941-01-05"

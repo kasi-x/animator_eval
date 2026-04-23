@@ -6,16 +6,16 @@ SPARQL エンドポイント: https://query.wikidata.org/sparql
 
 import asyncio
 import json
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-import httpx
 import structlog
 import typer
 
 from src.models import BronzeAnime, Credit, Person, parse_role
 from src.scrapers.cache_store import load_cached_json, save_cached_json
+from src.scrapers.http_client import RetryingHttpClient
+from src.scrapers.logging_utils import configure_file_logging
 
 log = structlog.get_logger()
 
@@ -76,73 +76,38 @@ def _delete_checkpoint(path: Path) -> None:
 
 
 class WikidataClient:
-    """Wikidata SPARQL 非同期クライアント."""
+    """Wikidata SPARQL 非同期クライアント (RetryingHttpClient ラッパー)."""
 
-    def __init__(self) -> None:
-        self._client = httpx.AsyncClient(
+    def __init__(self, transport=None) -> None:
+        self._http = RetryingHttpClient(
+            source="wikidata",
+            delay=REQUEST_INTERVAL,
             timeout=120.0,
             headers={
                 "User-Agent": "AnimetorEval/0.1 (research project)",
                 "Accept": "application/sparql-results+json",
             },
+            transport=transport,
         )
-        self._last_request_time = 0.0
 
     async def close(self) -> None:
-        await self._client.aclose()
-
-    async def _rate_limit(self) -> None:
-        elapsed = time.monotonic() - self._last_request_time
-        if elapsed < REQUEST_INTERVAL:
-            await asyncio.sleep(REQUEST_INTERVAL - elapsed)
-        self._last_request_time = time.monotonic()
+        await self._http.aclose()
 
     async def query(self, sparql: str) -> list[dict]:
-        """SPARQL クエリを実行."""
         cache_key = {"sparql": sparql}
         cached = load_cached_json("wikidata/sparql", cache_key)
         if cached is not None:
             return cached
 
-        await self._rate_limit()
-        for attempt in range(3):
-            try:
-                resp = await self._client.get(
-                    WIKIDATA_SPARQL,
-                    params={"query": sparql, "format": "json"},
-                )
-                if resp.status_code == 429:
-                    wait = int(resp.headers.get("Retry-After", 30))
-                    log.warning(
-                        "wikidata_rate_limited",
-                        source="wikidata",
-                        retry_after_seconds=wait,
-                    )
-                    await asyncio.sleep(wait)
-                    continue
-                resp.raise_for_status()
-                data = resp.json()
-                result = data.get("results", {}).get("bindings", [])
-                save_cached_json("wikidata/sparql", cache_key, result)
-                return result
-            except httpx.HTTPError as e:
-                log.warning(
-                    "wikidata_query_failed",
-                    source="wikidata",
-                    attempt=attempt + 1,
-                    error_type=type(e).__name__,
-                    error_message=str(e),
-                )
-                if attempt < 2:
-                    await asyncio.sleep(2 ** (attempt + 1))
-        from src.scrapers.exceptions import EndpointUnreachableError
-
-        log.error("wikidata_sparql_unreachable", source="wikidata", url=WIKIDATA_SPARQL)
-        raise EndpointUnreachableError(
-            "Wikidata SPARQL endpoint unreachable after 3 attempts",
-            source="wikidata",
-            url=WIKIDATA_SPARQL,
+        resp = await self._http.get(
+            WIKIDATA_SPARQL,
+            params={"query": sparql, "format": "json"},
         )
+        resp.raise_for_status()
+        data = resp.json()
+        result = data.get("results", {}).get("bindings", [])
+        save_cached_json("wikidata/sparql", cache_key, result)
+        return result
 
 
 def parse_wikidata_results(
@@ -260,6 +225,8 @@ def main(
     from src.scrapers.bronze_writer import BronzeWriter
 
     setup_logging()
+    log_path = configure_file_logging("wikidata")
+    log.info("wikidata_fetch_command_start", log_file=str(log_path))
 
     # Load checkpoint if resuming
     start_offset = 0

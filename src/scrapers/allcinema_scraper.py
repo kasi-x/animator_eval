@@ -21,7 +21,6 @@ import asyncio
 import gzip
 import json
 import re
-import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -30,6 +29,8 @@ import httpx
 import structlog
 import typer
 
+from src.scrapers.http_client import RetryingHttpClient
+from src.scrapers.logging_utils import configure_file_logging
 from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL, SCRAPE_DELAY_SECONDS
 
 log = structlog.get_logger()
@@ -143,74 +144,38 @@ class AllcinemaPersonRecord:
 
 
 class AllcinemaClient:
-    """allcinema 非同期 HTTP クライアント (指数バックオフ付き)."""
+    """allcinema 非同期 HTTP クライアント.
 
-    def __init__(self, delay: float = DEFAULT_DELAY) -> None:
-        self._delay = delay
-        self._last_request = 0.0
-        self._session_cookie: str = ""
+    GET は共通 RetryingHttpClient (http_client.py) に委譲。
+    CSRF を伴う POST (/ajax/person) は 419 リトライ等の独自挙動のため自前。
+    """
+
+    def __init__(self, delay: float = DEFAULT_DELAY, transport=None) -> None:
         self._csrf_token: str = ""
-        self._client = httpx.AsyncClient(
+        self._http = RetryingHttpClient(
+            source="allcinema",
+            delay=delay,
             timeout=30.0,
             headers=HEADERS,
-            follow_redirects=True,
+            transport=transport,
         )
+        # post_ajax で同じ httpx Client が必要なので参照を露出
+        self._client = self._http._client
 
     async def close(self) -> None:
-        await self._client.aclose()
-
-    async def _throttle(self) -> None:
-        elapsed = time.monotonic() - self._last_request
-        wait = self._delay - elapsed
-        if wait > 0:
-            await asyncio.sleep(wait)
-        self._last_request = time.monotonic()
+        await self._http.aclose()
 
     async def get(self, url: str) -> httpx.Response:
-        """GET リクエスト。429/503 は指数バックオフでリトライ。"""
-        backoff = 4.0
-        attempt = 0
-        while True:
-            await self._throttle()
-            try:
-                resp = await self._client.get(url)
-            except (httpx.TimeoutException, httpx.ConnectError) as exc:
-                if attempt >= 5:
-                    raise
-                log.warning("allcinema_request_error", url=url, error=str(exc))
-                await asyncio.sleep(min(backoff, 120))
-                backoff *= 2
-                attempt += 1
-                continue
-
-            if resp.status_code in (429, 503, 522, 524):
-                raw_ra = resp.headers.get("Retry-After", "")
-                try:
-                    wait = max(int(raw_ra), 5)
-                except (ValueError, TypeError):
-                    wait = int(min(backoff * 2, 300))
-                log.warning(
-                    "allcinema_rate_limited",
-                    status=resp.status_code,
-                    wait=wait,
-                    attempt=attempt,
-                )
-                await asyncio.sleep(wait)
-                backoff = min(max(backoff * 2, wait), 300)
-                attempt += 1
-                continue
-
-            if resp.status_code == 404:
-                return resp  # caller handles 404
-
-            resp.raise_for_status()
-            # キャッシュ: CSRF token と session cookie を更新
-            if resp.status_code == 200:
-                m = re.search(r'name="csrf-token"\s+content="([^"]+)"', resp.text)
-                if m:
-                    self._csrf_token = m.group(1)
-                # httpx は自動でクッキーを管理するのでここでは何もしない
+        """GET リクエスト. 5xx/429 は共通 client が retry。404 は呼び出し側ハンドリング。"""
+        resp = await self._http.get(url)
+        if resp.status_code == 404:
             return resp
+        resp.raise_for_status()
+        if resp.status_code == 200:
+            m = re.search(r'name="csrf-token"\s+content="([^"]+)"', resp.text)
+            if m:
+                self._csrf_token = m.group(1)
+        return resp
 
     async def post_ajax(self, ajax_data: str, key: int, page: int = 1) -> dict:
         """CSRF 付き POST で /ajax/person エンドポイントを叩く."""
@@ -644,6 +609,8 @@ def cmd_sitemap(
     data_dir: Path = typer.Option(DEFAULT_DATA_DIR, help="チェックポイント保存先"),
 ) -> None:
     """サイトマップから cinema/person ID 一覧を取得してファイルに保存."""
+    log_path = configure_file_logging("allcinema")
+    log.info("allcinema_sitemap_command_start", log_file=str(log_path))
 
     async def _run() -> None:
         client = AllcinemaClient()
@@ -673,6 +640,8 @@ def cmd_cinema(
     data_dir: Path = typer.Option(DEFAULT_DATA_DIR),
 ) -> None:
     """Phase 2: cinema ページをスクレイプしてアニメとクレジットを BRONZE に保存."""
+    log_path = configure_file_logging("allcinema")
+    log.info("allcinema_cinema_command_start", log_file=str(log_path), limit=limit)
     asyncio.run(
         _run_scrape_cinema(
             limit=limit,
@@ -691,6 +660,8 @@ def cmd_persons(
     data_dir: Path = typer.Option(DEFAULT_DATA_DIR),
 ) -> None:
     """Phase 3: person ページをスクレイプして名前・よみがなを BRONZE に保存."""
+    log_path = configure_file_logging("allcinema")
+    log.info("allcinema_persons_command_start", log_file=str(log_path), limit=limit)
     asyncio.run(
         _run_scrape_persons(
             limit=limit,
@@ -709,6 +680,8 @@ def cmd_run(
     skip_persons: bool = typer.Option(False, help="Phase 3 をスキップ"),
 ) -> None:
     """Phase 2 → Phase 3 を続けて実行."""
+    log_path = configure_file_logging("allcinema")
+    log.info("allcinema_run_command_start", log_file=str(log_path), limit=limit)
     asyncio.run(
         _run_scrape_cinema(
             limit=limit,

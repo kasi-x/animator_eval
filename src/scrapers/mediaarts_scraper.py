@@ -545,8 +545,11 @@ def main(
 ) -> None:
     """Fetch credit data from Media Arts DB dump."""
     from src.log import setup_logging
+    from src.scrapers.logging_utils import configure_file_logging
 
     setup_logging()
+    log_path = configure_file_logging("mediaarts")
+    log.info("mediaarts_command_start", log_file=str(log_path))
 
     stats = asyncio.run(
         scrape_madb(

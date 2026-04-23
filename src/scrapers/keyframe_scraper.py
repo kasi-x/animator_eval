@@ -484,8 +484,11 @@ def main(
 ) -> None:
     """Fetch credit data from KeyFrame Staff List."""
     from src.log import setup_logging
+    from src.scrapers.logging_utils import configure_file_logging
 
     setup_logging()
+    log_path = configure_file_logging("keyframe")
+    log.info("keyframe_command_start", log_file=str(log_path))
 
     stats = asyncio.run(
         scrape_keyframe(

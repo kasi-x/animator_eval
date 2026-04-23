@@ -814,18 +814,18 @@ class TestAniListBatchSave:
 
 
 class TestJikanClient:
+    """JikanClient now wraps RetryingHttpClient.
+    These tests use httpx.MockTransport for end-to-end retry verification."""
+
     def test_get_success(self):
         from src.scrapers.mal_scraper import JikanClient
 
-        mock_response = httpx.Response(
-            200,
-            json={"data": [{"mal_id": 1}]},
-            request=httpx.Request("GET", "https://api.jikan.moe/v4/test"),
-        )
+        def handler(req):
+            return httpx.Response(200, json={"data": [{"mal_id": 1}]})
 
-        client = JikanClient()
-        client._client = AsyncMock()
-        client._client.get = AsyncMock(return_value=mock_response)
+        client = JikanClient(transport=httpx.MockTransport(handler))
+        # Disable throttle for fast tests
+        client._http._delay = 0.0
 
         result = _run(client.get("/test"))
         assert result == {"data": [{"mal_id": 1}]}
@@ -834,20 +834,18 @@ class TestJikanClient:
     def test_get_429_rate_limit(self):
         from src.scrapers.mal_scraper import JikanClient
 
-        rate_limited = httpx.Response(
-            429,
-            headers={"Retry-After": "1"},
-            request=httpx.Request("GET", "https://api.jikan.moe/v4/test"),
-        )
-        success = httpx.Response(
-            200,
-            json={"data": []},
-            request=httpx.Request("GET", "https://api.jikan.moe/v4/test"),
-        )
+        seq = [429, 200]
+        idx = {"i": 0}
 
-        client = JikanClient()
-        client._client = AsyncMock()
-        client._client.get = AsyncMock(side_effect=[rate_limited, success])
+        def handler(req):
+            s = seq[idx["i"]]
+            idx["i"] += 1
+            if s == 429:
+                return httpx.Response(429, headers={"Retry-After": "1"}, text="x")
+            return httpx.Response(200, json={"data": []})
+
+        client = JikanClient(transport=httpx.MockTransport(handler))
+        client._http._delay = 0.0
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
@@ -855,20 +853,23 @@ class TestJikanClient:
 
         result = _run(run())
         assert result == {"data": []}
+        assert idx["i"] == 2
         _run(client.close())
 
     def test_get_all_attempts_fail(self):
         from src.scrapers.mal_scraper import JikanClient
 
-        client = JikanClient()
-        client._client = AsyncMock()
-        client._client.get = AsyncMock(side_effect=httpx.ConnectError("down"))
+        def handler(req):
+            raise httpx.ConnectError("down")
+
+        client = JikanClient(transport=httpx.MockTransport(handler))
+        client._http._delay = 0.0
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
                 return await client.get("/test")
 
-        with pytest.raises(EndpointUnreachableError):
+        with pytest.raises(httpx.ConnectError):
             _run(run())
         _run(client.close())
 
@@ -1161,18 +1162,19 @@ class TestMediaArtsParsers:
 
 
 class TestWikidataClient:
+    """WikidataClient now wraps RetryingHttpClient (MockTransport-friendly)."""
+
     def test_query_success(self):
         from src.scrapers.jvmg_fetcher import WikidataClient
 
-        mock_response = httpx.Response(
-            200,
-            json={"results": {"bindings": [{"anime": {"value": "http://wd/Q1"}}]}},
-            request=httpx.Request("GET", "https://query.wikidata.org/sparql"),
-        )
+        def handler(req):
+            return httpx.Response(
+                200,
+                json={"results": {"bindings": [{"anime": {"value": "http://wd/Q1"}}]}},
+            )
 
-        client = WikidataClient()
-        client._client = AsyncMock()
-        client._client.get = AsyncMock(return_value=mock_response)
+        client = WikidataClient(transport=httpx.MockTransport(handler))
+        client._http._delay = 0.0
 
         result = _run(client.query("SELECT ?anime WHERE {}"))
         assert len(result) == 1
@@ -1181,20 +1183,18 @@ class TestWikidataClient:
     def test_query_429_rate_limit(self):
         from src.scrapers.jvmg_fetcher import WikidataClient
 
-        rate_limited = httpx.Response(
-            429,
-            headers={"Retry-After": "1"},
-            request=httpx.Request("GET", "https://query.wikidata.org/sparql"),
-        )
-        success = httpx.Response(
-            200,
-            json={"results": {"bindings": []}},
-            request=httpx.Request("GET", "https://query.wikidata.org/sparql"),
-        )
+        seq = [429, 200]
+        idx = {"i": 0}
 
-        client = WikidataClient()
-        client._client = AsyncMock()
-        client._client.get = AsyncMock(side_effect=[rate_limited, success])
+        def handler(req):
+            s = seq[idx["i"]]
+            idx["i"] += 1
+            if s == 429:
+                return httpx.Response(429, headers={"Retry-After": "1"}, text="x")
+            return httpx.Response(200, json={"results": {"bindings": []}})
+
+        client = WikidataClient(transport=httpx.MockTransport(handler))
+        client._http._delay = 0.0
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
@@ -1207,15 +1207,17 @@ class TestWikidataClient:
     def test_query_all_attempts_fail(self):
         from src.scrapers.jvmg_fetcher import WikidataClient
 
-        client = WikidataClient()
-        client._client = AsyncMock()
-        client._client.get = AsyncMock(side_effect=httpx.ConnectError("timeout"))
+        def handler(req):
+            raise httpx.ConnectError("timeout")
+
+        client = WikidataClient(transport=httpx.MockTransport(handler))
+        client._http._delay = 0.0
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
                 return await client.query("SELECT ?x WHERE {}")
 
-        with pytest.raises(EndpointUnreachableError):
+        with pytest.raises(httpx.ConnectError):
             _run(run())
         _run(client.close())
 
