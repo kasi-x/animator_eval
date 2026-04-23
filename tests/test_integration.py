@@ -152,7 +152,6 @@ class TestFullPipeline:
 
     def test_scores_in_db(self, synthetic_db, pipeline_results):
         """スコアがgold.duckdbに保存される."""
-        import src.analysis.gold_writer
         from src.analysis.gold_writer import gold_connect
 
         with gold_connect() as conn:

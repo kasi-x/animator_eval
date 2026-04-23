@@ -25,7 +25,7 @@ from typing import Callable, Sequence
 
 import numpy as np
 
-from dataclasses import dataclass, field as _field
+from dataclasses import dataclass
 
 
 @dataclass
