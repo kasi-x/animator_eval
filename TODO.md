@@ -1,6 +1,6 @@
 # TODO.md — 未完了作業の一元管理
 
-作成日: 2026-04-22 / 最終更新: 2026-04-24
+作成日: 2026-04-22 / 最終更新: 2026-04-25
 
 本書はプロジェクト内のすべての**未完了**項目を一元管理するファイルです。完了済みサマリーは `DONE.md`、設計原則は `CLAUDE.md`。
 
@@ -10,7 +10,7 @@
 
 | 優先度 | カテゴリ | 内容 |
 |--------|---------|------|
-| 🟠 Major | レポートシステム残務 | `generate_reports_v2.py` → `generate_reports.py` リネーム、v1 shim 撤去 |
+| ✅ Done | レポートシステム統廃合 | `generate_reports_v2.py` → `generate_reports.py` リネーム、v1 shim 撤去 (2026-04-24 完了) |
 | 🟡 Minor | テストカバレッジ | analysis_modules ユニットテスト、tests/ ディレクトリ整理 |
 | 🟡 Minor | スクレイパー強化残務 | 差分更新、retry refactor |
 | 🟡 Maintenance | スキーマ後続タスク | v56 多言語・v57 構造的メタデータのフォローアップ |
@@ -27,12 +27,12 @@
 ### v56 多言語名対応
 
 - [ ] 既存データ再スクレイプ: `hometown` 取得後に韓国・中国名の `name_ja` 誤入りを修正
-- [ ] `nationality` JSON カラムを使ったサンプルクエリを `docs/` に追加
+- [x] ✅ `nationality` JSON カラムを使ったサンプルクエリを `docs/` に追加: `docs/V56_MULTILANG_SCHEMA_GUIDE.md` (7 queries) (2026-04-25)
 - [ ] ANN / allcinema スクレイパーの `name_ko`/`name_zh` 対応
 
 ### v57 構造的メタデータ
 
-- [ ] `anime.country_of_origin` 多数決で `studios.country_of_origin` を埋めるバッチ SQL
+- [x] ✅ `anime.country_of_origin` 多数決で `studios.country_of_origin` を埋める: `src/etl/populate_v57_metadata.py` + tests (2026-04-25)
 - [ ] `title.native` を `country_of_origin` 分岐で `title_zh`/`title_ko` へ格納 (v58 予定)
 - [ ] `years_active` 活用: クレジットデータが薄い人物の活動期間推定クエリ
 
@@ -74,6 +74,8 @@
 
 H-1〜H-6 はすべて完了 (詳細: DONE.md)。
 
+実装計画: `docs/ARCHITECTURE_CLEANUP.md` Phase C
+
 ### H-7: PipelineContext 完全削除
 
 **ブロック要因**: VA pipeline が ctx を直接使用、export_and_viz.py に 71 箇所 ctx 参照。DuckDB §4 完了後が前提。
@@ -114,9 +116,10 @@ H-1〜H-6 はすべて完了 (詳細: DONE.md)。
 
 ## SECTION 8: レポートシステム
 
-§8.1〜§8.3 完了 (詳細: DONE.md)。残務:
+§8.1〜§8.4 完了 (詳細: DONE.md)。
 
-- [ ] `scripts/generate_reports_v2.py` → `scripts/generate_reports.py` リネーム (v1 shim 撤去後)
+- [x] ✅ `scripts/generate_reports_v2.py` → `scripts/generate_reports.py` リネーム (2026-04-24)
+- [x] ✅ v1 shim (`generate_all_reports.py`) 撤去、v2 に統合 (2026-04-24)
 
 ---
 
@@ -127,6 +130,8 @@ H-1〜H-6 はすべて完了 (詳細: DONE.md)。
 ---
 
 ## SECTION 11: レイアウト・命名整理
+
+実装計画: `docs/ARCHITECTURE_CLEANUP.md` Phase A/B (ファイル移動マップ・import 置換表・検証手順)
 
 ### 11.1 `src/` 直下の平置き解消
 
@@ -145,8 +150,8 @@ src/testing/   ← synthetic.py → fixtures.py
 
 ### 11.3 命名ゆらぎの解消
 
-- [ ] `_v2` suffix 廃止: `database_v2` / `models_v2` は破棄 or 正式名昇格
-- [ ] `generate_reports_v2.py` → `generate_reports.py`
+- [x] ✅ `_v2` suffix 廃止: `database_v2` / `models_v2` 削除完了 (§4 での対応)
+- [x] ✅ `generate_reports_v2.py` → `generate_reports.py` (2026-04-24)
 - [ ] `src/log.py` → `src/infra/logging.py`
 
 ---
@@ -172,7 +177,6 @@ src/testing/   ← synthetic.py → fixtures.py
 ```
 次 (任意・並行可):
   §1    v56/v57 スキーマ後続タスク
-  §8    generate_reports.py リネーム
   §6.4  テスト整理
 
 中期:

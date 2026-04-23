@@ -29,7 +29,7 @@ repos:
         entry: pixi run python scripts/report_generators/ci_check_lineage.py
         language: system
         # Runs only when schema, lineage config, or report generators change.
-        files: ^(src/database\.py|src/reporting/|scripts/report_generators/|schema/).*
+        files: ^(src/database\.py|scripts/report_generators/|schema/).*
         pass_filenames: false
 
       - id: data-dictionary-up-to-date

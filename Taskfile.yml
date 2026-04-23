@@ -220,7 +220,7 @@ tasks:
         ARGS=""
         [ "$DRY" = "1" ] && ARGS="$ARGS --dry-run"
         [ "$AUDIENCE" != "all" ] && ARGS="$ARGS --audience $AUDIENCE"
-        PYTHONNOUSERSITE=1 pixi run python scripts/generate_reports_v2.py $ARGS
+        PYTHONNOUSERSITE=1 pixi run python scripts/generate_reports.py $ARGS
 
   report-versions:
     desc: Show version history of all briefs

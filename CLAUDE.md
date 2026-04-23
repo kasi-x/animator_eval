@@ -108,11 +108,11 @@ Vocabulary enforcement: `ability`, `skill`, `talent`, `competence`, `capability`
 
 ### Report System Status (2026-04)
 
-**3 系統が並存**しており統廃合計画中 (`TODO.md §8.1`):
+**v2 統一化済み** (2026-04-24):
 
-1. `scripts/generate_all_reports.py` (v1, monolith, 24k 行) = `pixi run reports`
-2. `scripts/generate_reports_v2.py` + `scripts/report_generators/reports/*.py` (v2 orchestrator) = `task report-*`
-3. `src/reporting/` (v3 class-based、~2700 行) = `pixi run reports-new`
+1. `scripts/generate_reports.py` (旧 v2) — 主系統、v1 slim 機能統合済み
+2. `scripts/report_generators/reports/*.py` — 37 レポートクラス
+3. v1 shim (`generate_all_reports.py`) → 削除、v2 に `--explorer`, `--viz` フラグで統合
 
 新規レポートは v2 (`scripts/report_generators/reports/`) に追加する。
 
@@ -158,7 +158,6 @@ animetor_eval/
 │   ├── utils/             # config, json_io, role_groups, display_lookup 等
 │   ├── viz/               # v2 report architecture (chart_spec, renderers)
 │   ├── i18n/              # EN/JA translations
-│   ├── reporting/         # v3 class-based report system
 │   ├── etl/               # integrate.py (integrate_anilist 等)
 │   ├── models.py          # Pydantic v2 モデル
 │   ├── models_v2.py       # SQLModel schema (single source of truth)
@@ -168,8 +167,7 @@ animetor_eval/
 │   └── cli.py             # typer + Rich (33 commands)
 ├── scripts/
 │   ├── generate_briefs_v2.py       # brief orchestrator
-│   ├── generate_reports_v2.py      # v2 class dispatcher
-│   ├── generate_all_reports.py     # v1 monolith (分解中)
+│   ├── generate_reports.py         # v2 class dispatcher (v1 shim 統合済み)
 │   ├── report_generators/          # v2 の実装 + lint / ci / template / base class
 │   ├── monitoring/                 # quality snapshot / anomaly detection
 │   └── maintenance/                # 一度きりスクリプト
