@@ -66,13 +66,13 @@ def minimal_va_context():
 
 class TestVaGraphConstructionPhase:
     def test_builds_va_graphs(self, minimal_va_context):
-        from src.pipeline_phases.va_graph_construction import build_va_graphs_phase
+        from src.analysis.va.pipeline import build_va_graphs_phase
         build_va_graphs_phase(minimal_va_context)
         assert minimal_va_context.va_anime_graph is not None
         assert minimal_va_context.va_collaboration_graph is not None
 
     def test_va_anime_graph_has_edges(self, minimal_va_context):
-        from src.pipeline_phases.va_graph_construction import build_va_graphs_phase
+        from src.analysis.va.pipeline import build_va_graphs_phase
         build_va_graphs_phase(minimal_va_context)
         assert minimal_va_context.va_anime_graph.number_of_edges() > 0
 
@@ -82,14 +82,14 @@ class TestVaGraphConstructionPhase:
         ctx.credits = []
         ctx.anime_map = {}
         ctx.va_person_ids = set()
-        from src.pipeline_phases.va_graph_construction import build_va_graphs_phase
+        from src.analysis.va.pipeline import build_va_graphs_phase
         build_va_graphs_phase(ctx)  # should not raise
 
 
 class TestVaCoreScoringPhase:
     def test_scores_populated_after_run(self, minimal_va_context):
-        from src.pipeline_phases.va_graph_construction import build_va_graphs_phase
-        from src.pipeline_phases.va_core_scoring import compute_va_core_scores_phase
+        from src.analysis.va.pipeline import build_va_graphs_phase
+        from src.analysis.va.pipeline import compute_va_core_scores_phase
         build_va_graphs_phase(minimal_va_context)
         compute_va_core_scores_phase(minimal_va_context)
         assert isinstance(minimal_va_context.va_iv_scores, dict)
@@ -97,16 +97,16 @@ class TestVaCoreScoringPhase:
     def test_skips_gracefully_without_va_credits(self):
         ctx = PipelineContext(visualize=False, dry_run=True)
         ctx.va_credits = []
-        from src.pipeline_phases.va_core_scoring import compute_va_core_scores_phase
+        from src.analysis.va.pipeline import compute_va_core_scores_phase
         compute_va_core_scores_phase(ctx)  # should not raise
         assert ctx.va_iv_scores == {}
 
 
 class TestVaSupplementaryMetricsPhase:
     def test_runs_without_error(self, minimal_va_context):
-        from src.pipeline_phases.va_graph_construction import build_va_graphs_phase
-        from src.pipeline_phases.va_core_scoring import compute_va_core_scores_phase
-        from src.pipeline_phases.va_supplementary_metrics import (
+        from src.analysis.va.pipeline import build_va_graphs_phase
+        from src.analysis.va.pipeline import compute_va_core_scores_phase
+        from src.analysis.va.pipeline import (
             compute_va_supplementary_metrics_phase,
         )
         build_va_graphs_phase(minimal_va_context)
@@ -116,7 +116,7 @@ class TestVaSupplementaryMetricsPhase:
     def test_skips_gracefully_without_va_credits(self):
         ctx = PipelineContext(visualize=False, dry_run=True)
         ctx.va_credits = []
-        from src.pipeline_phases.va_supplementary_metrics import (
+        from src.analysis.va.pipeline import (
             compute_va_supplementary_metrics_phase,
         )
         compute_va_supplementary_metrics_phase(ctx)  # should not raise
@@ -124,9 +124,9 @@ class TestVaSupplementaryMetricsPhase:
 
 class TestVaResultAssemblyPhase:
     def test_assembles_results_list(self, minimal_va_context):
-        from src.pipeline_phases.va_graph_construction import build_va_graphs_phase
-        from src.pipeline_phases.va_core_scoring import compute_va_core_scores_phase
-        from src.pipeline_phases.va_result_assembly import assemble_va_results
+        from src.analysis.va.pipeline import build_va_graphs_phase
+        from src.analysis.va.pipeline import compute_va_core_scores_phase
+        from src.analysis.va.pipeline import assemble_va_results
         build_va_graphs_phase(minimal_va_context)
         compute_va_core_scores_phase(minimal_va_context)
         assemble_va_results(minimal_va_context)
@@ -136,15 +136,15 @@ class TestVaResultAssemblyPhase:
         ctx = PipelineContext(visualize=False, dry_run=True)
         ctx.va_credits = []
         ctx.va_person_ids = set()
-        from src.pipeline_phases.va_result_assembly import assemble_va_results
+        from src.analysis.va.pipeline import assemble_va_results
         assemble_va_results(ctx)
         assert ctx.va_results == []
 
     def test_results_sorted_by_va_iv_desc(self, minimal_va_context):
         """VA results should be sorted by va_iv_score descending."""
-        from src.pipeline_phases.va_graph_construction import build_va_graphs_phase
-        from src.pipeline_phases.va_core_scoring import compute_va_core_scores_phase
-        from src.pipeline_phases.va_result_assembly import assemble_va_results
+        from src.analysis.va.pipeline import build_va_graphs_phase
+        from src.analysis.va.pipeline import compute_va_core_scores_phase
+        from src.analysis.va.pipeline import assemble_va_results
         build_va_graphs_phase(minimal_va_context)
         compute_va_core_scores_phase(minimal_va_context)
         assemble_va_results(minimal_va_context)
@@ -153,9 +153,9 @@ class TestVaResultAssemblyPhase:
 
     def test_result_contains_required_keys(self, minimal_va_context):
         """Each result row must include the canonical VA scoring keys."""
-        from src.pipeline_phases.va_graph_construction import build_va_graphs_phase
-        from src.pipeline_phases.va_core_scoring import compute_va_core_scores_phase
-        from src.pipeline_phases.va_result_assembly import assemble_va_results
+        from src.analysis.va.pipeline import build_va_graphs_phase
+        from src.analysis.va.pipeline import compute_va_core_scores_phase
+        from src.analysis.va.pipeline import assemble_va_results
         build_va_graphs_phase(minimal_va_context)
         compute_va_core_scores_phase(minimal_va_context)
         assemble_va_results(minimal_va_context)

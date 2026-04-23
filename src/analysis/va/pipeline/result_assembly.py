@@ -8,19 +8,11 @@ logger = structlog.get_logger()
 
 
 def assemble_va_results(context: PipelineContext) -> None:
-    """Build comprehensive VA result dictionaries.
-
-    Args:
-        context: Pipeline context (must have VA scores computed)
-
-    Updates context fields:
-        - va_results: list of VA score dicts
-    """
+    """Build comprehensive VA result dictionaries into context.va_results."""
     if not context.va_person_ids:
         logger.debug("va_result_assembly_skipped", reason="no_va_persons")
         return
 
-    # Build person_id -> name mapping
     pid_to_name = {p.id: p.name_ja or p.name_en or p.id for p in context.persons}
 
     results = []
@@ -41,7 +33,6 @@ def assemble_va_results(context: PipelineContext) -> None:
             "replacement_difficulty": context.va_replacement_difficulty.get(pid, 0.0),
         }
 
-        # Add diversity metrics if available
         if diversity_metrics:
             result.update(
                 {
@@ -57,7 +48,6 @@ def assemble_va_results(context: PipelineContext) -> None:
 
         results.append(result)
 
-    # Sort by VA IV score descending
     results.sort(key=lambda r: r.get("va_iv_score", 0.0), reverse=True)
     context.va_results = results
 

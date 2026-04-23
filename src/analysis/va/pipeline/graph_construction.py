@@ -7,6 +7,7 @@ from src.analysis.va.graph import (
     build_va_collaboration_graph,
     build_va_sound_director_graph,
 )
+from src.analysis.va.pipeline._common import skip_if_no_va_credits, va_step
 from src.pipeline_phases.context import PipelineContext
 
 logger = structlog.get_logger()
@@ -23,22 +24,16 @@ def build_va_graphs_phase(context: PipelineContext) -> None:
         - va_collaboration_graph: VA-VA collaboration graph
         - va_sd_graph: VA-Sound Director bipartite graph
     """
-    if not context.va_credits:
-        logger.debug("va_graph_skipped", reason="no_va_credits")
+    if skip_if_no_va_credits(context, "va_graph_skipped"):
         return
 
-    with context.monitor.measure("va_graph_construction"):
-        # 1. VA-Anime bipartite (for BiRank)
+    with va_step(context, "va_graph_construction"):
         context.va_anime_graph = build_va_anime_graph(
             context.va_credits, context.anime_map
         )
-
-        # 2. VA collaboration (VA-VA)
         context.va_collaboration_graph = build_va_collaboration_graph(
             context.va_credits, context.anime_map
         )
-
-        # 3. VA-Sound Director bipartite
         context.va_sd_graph = build_va_sound_director_graph(
             context.va_credits, context.credits, context.anime_map
         )
