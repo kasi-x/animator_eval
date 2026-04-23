@@ -1137,12 +1137,16 @@ ROLE_MAP: dict[str, Role] = {
     "production management": Role.PRODUCTION_MANAGER,
     "setting design": Role.SETTINGS,
     "setting": Role.SETTINGS,
+    # Wikidata property labels (P58, P1040, P3174, P10800)
+    "screenwriter": Role.SCREENPLAY,
+    "film editor": Role.EDITING,
+    "editor": Role.EDITING,
 }
 
 
 # Suffix-based role classification for Japanese roles not in ROLE_MAP.
 # Longer suffixes first to avoid partial matches.
-# This catches compound roles like "銃器エフェクト作画監督" → ANIMATION_DIRECTOR.
+# This catches compound roles like "銃器エフェクト作画監督" (compound anim. director) → ANIMATION_DIRECTOR.
 _ROLE_SUFFIX_CLASSIFY: list[tuple[str, Role]] = [
     ("総作画監督", Role.ANIMATION_DIRECTOR),
     ("作画監督", Role.ANIMATION_DIRECTOR),
@@ -1250,6 +1254,7 @@ class Person(BaseModel):
     name_en: str = ""
     name_ko: str = ""
     name_zh: str = ""
+    name_native_raw: str = ""  # raw AniList name.native before script routing (bronze use)
     aliases: list[str] = Field(default_factory=list)
     nationality: list[str] = Field(default_factory=list)  # ISO 3166-1 alpha-2, e.g. ["JP", "KR"]
     mal_id: int | None = None
@@ -1278,6 +1283,9 @@ class Person(BaseModel):
 
     # External links
     site_url: str | None = None
+
+    # Source priority level of the current primary name (anilist=3, mal/seesaawiki=2, ann/others=1, 0=unknown)
+    name_priority: int = 0
 
     @computed_field  # type: ignore[prop-decorator]
     @property
@@ -1311,6 +1319,7 @@ class Person(BaseModel):
             description=row.description,
             favourites=row.favourites,
             site_url=row.site_url,
+            name_priority=getattr(row, "name_priority", 0) or 0,
         )
 
 

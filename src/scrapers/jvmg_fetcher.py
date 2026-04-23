@@ -30,9 +30,7 @@ REQUEST_INTERVAL = 2.0  # Wikidata enforces strict rate limits
 # BIND values in sync with that dict — tokens must be parse_role()-compatible
 # (see src/models.py ROLE_MAP), otherwise credits fall back to Role.SPECIAL.
 #
-# Properties intentionally omitted here (see wikidata_role_map.py):
-#   P1040 — "film editor": no English key in ROLE_MAP yet.
-#   P10800 — property ID unverified on wikidata.org.
+# P10800 ("animation director") omitted — property ID unverified on wikidata.org.
 ANIME_STAFF_QUERY = """
 SELECT ?anime ?animeLabel ?year ?person ?personLabel ?personLabelJa ?role
 WHERE {{
@@ -43,6 +41,8 @@ WHERE {{
     ?anime wdt:P57 ?person . BIND("director" AS ?role)
   }} UNION {{
     ?anime wdt:P58 ?person . BIND("screenplay" AS ?role)
+  }} UNION {{
+    ?anime wdt:P1040 ?person . BIND("film editor" AS ?role)
   }} UNION {{
     ?anime wdt:P3174 ?person . BIND("art director" AS ?role)
   }}
