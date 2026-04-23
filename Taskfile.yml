@@ -320,6 +320,27 @@ tasks:
       - pixi run python scripts/maintenance/seed_medallion.py
 
   # ==========================================================================
+  # LLM data enrichment
+  # ==========================================================================
+  # MODE=run (default) | dry-run | cached | script-only
+  #   run         — infer via LLM + write nationality to DB (requires Ollama)
+  #   dry-run     — infer + cache but no DB writes
+  #   cached      — apply already-cached LLM results to DB (no Ollama needed)
+  #   show        — print the LLM cache and exit
+  # LIMIT=N       — max persons to process (default 200)
+  enrich-hometown:
+    desc: 'LLM: infer nationality from hometown, cache in hometown_tokens.json (MODE=run|dry-run|cached|show, LIMIT=200)'
+    vars:
+      _MODE: '{{.MODE | default "run"}}'
+      _FLAGS: >-
+        {{if eq ._MODE "dry-run"}}--dry-run{{end}}
+        {{if eq ._MODE "cached"}}--script-only{{end}}
+        {{if eq ._MODE "show"}}--show-cached{{end}}
+        --limit {{.LIMIT | default "200"}}
+    cmds:
+      - pixi run python scripts/maintenance/enrich_hometown_nationality.py {{._FLAGS}}
+
+  # ==========================================================================
   # CI & cleanup
   # ==========================================================================
   ci:
