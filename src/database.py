@@ -4800,67 +4800,6 @@ def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
             (anime.id, studio_id, 1 if i == 0 else 0),
         )
 
-    # anime_display deprecated (v55 migration drops it); skip gracefully if gone.
-    # Full write-path removal is handled in 03_consistency/02_stop_anime_display_writes.
-    try:
-        conn.execute(
-            """
-            INSERT INTO anime_display (
-                id, score, popularity_rank, favourites, description,
-                cover_large, cover_extra_large, cover_medium, banner,
-                cover_large_path, banner_path, site_url, genres, tags, studios, synonyms,
-                country_of_origin, is_adult, relations_json, external_links_json, rankings_json
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(id) DO UPDATE SET
-                score = COALESCE(excluded.score, anime_display.score),
-                popularity_rank = COALESCE(excluded.popularity_rank, anime_display.popularity_rank),
-                favourites = COALESCE(excluded.favourites, anime_display.favourites),
-                description = COALESCE(excluded.description, anime_display.description),
-                cover_large = COALESCE(excluded.cover_large, anime_display.cover_large),
-                cover_extra_large = COALESCE(excluded.cover_extra_large, anime_display.cover_extra_large),
-                cover_medium = COALESCE(excluded.cover_medium, anime_display.cover_medium),
-                banner = COALESCE(excluded.banner, anime_display.banner),
-                cover_large_path = COALESCE(excluded.cover_large_path, anime_display.cover_large_path),
-                banner_path = COALESCE(excluded.banner_path, anime_display.banner_path),
-                site_url = COALESCE(excluded.site_url, anime_display.site_url),
-                genres = COALESCE(excluded.genres, anime_display.genres),
-                tags = COALESCE(excluded.tags, anime_display.tags),
-                studios = COALESCE(excluded.studios, anime_display.studios),
-                synonyms = COALESCE(excluded.synonyms, anime_display.synonyms),
-                country_of_origin = COALESCE(excluded.country_of_origin, anime_display.country_of_origin),
-                is_adult = COALESCE(excluded.is_adult, anime_display.is_adult),
-                relations_json = COALESCE(excluded.relations_json, anime_display.relations_json),
-                external_links_json = COALESCE(excluded.external_links_json, anime_display.external_links_json),
-                rankings_json = COALESCE(excluded.rankings_json, anime_display.rankings_json),
-                updated_at = CURRENT_TIMESTAMP
-            """,
-            (
-                anime.id,
-                anime.score,
-                anime.popularity_rank,
-                anime.favourites,
-                anime.description,
-                anime.cover_large,
-                anime.cover_extra_large,
-                anime.cover_medium,
-                anime.banner,
-                anime.cover_large_path,
-                anime.banner_path,
-                anime.site_url,
-                json.dumps(anime.genres, ensure_ascii=False),
-                json.dumps(anime.tags, ensure_ascii=False),
-                json.dumps(anime.studios, ensure_ascii=False),
-                json.dumps(anime.synonyms, ensure_ascii=False),
-                anime.country_of_origin,
-                1 if anime.is_adult else (0 if anime.is_adult is not None else None),
-                anime.relations_json,
-                anime.external_links_json,
-                anime.rankings_json,
-            ),
-        )
-    except sqlite3.OperationalError:
-        pass
 
     # Keep external identifiers in normalized table (anime_external_ids).
     for source, external_id in (
@@ -5375,47 +5314,6 @@ def load_all_anime(conn: sqlite3.Connection) -> list[Anime]:
         anime = by_id.get(row["anime_id"])
         if anime is not None and row["name"]:
             anime.studios.append(row["name"])
-
-    # Synonyms remain display metadata; hydrate from anime_display if available.
-    display_exists = conn.execute(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='anime_display'"
-    ).fetchone()
-    if display_exists:
-        for row in conn.execute(
-            """
-            SELECT id, score, popularity, popularity_rank, favourites, synonyms,
-                   country_of_origin, is_adult, site_url, genres, tags, studios
-            FROM anime_display
-            """
-        ).fetchall():
-            anime = by_id.get(row["id"])
-            if anime is None:
-                continue
-            anime.score = row["score"]
-            anime.popularity_rank = row["popularity_rank"] or row["popularity"]
-            anime.favourites = row["favourites"]
-            anime.country_of_origin = row["country_of_origin"]
-            anime.is_adult = bool(row["is_adult"]) if row["is_adult"] is not None else None
-            anime.site_url = row["site_url"]
-            if not anime.genres:
-                try:
-                    anime.genres = json.loads(row["genres"] or "[]")
-                except (TypeError, ValueError):
-                    anime.genres = []
-            if not anime.tags:
-                try:
-                    anime.tags = json.loads(row["tags"] or "[]")
-                except (TypeError, ValueError):
-                    anime.tags = []
-            if not anime.studios:
-                try:
-                    anime.studios = json.loads(row["studios"] or "[]")
-                except (TypeError, ValueError):
-                    anime.studios = []
-            try:
-                anime.synonyms = json.loads(row["synonyms"] or "[]")
-            except (TypeError, ValueError):
-                anime.synonyms = []
 
     return anime_list
 

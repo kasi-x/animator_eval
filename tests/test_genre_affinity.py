@@ -5,11 +5,13 @@ from src.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_data():
+    # score= is display metadata (not used in scoring formulas);
+    # kept to test avg_anime_score and score_tiers display functionality.
     anime_map = {
-        "a1": Anime(id="a1", title_en="Old Classic", year=1995, score=9.0),
+        "a1": Anime(id="a1", title_en="Old Classic", year=1995, score=8.5),
         "a2": Anime(id="a2", title_en="Mid Show", year=2015, score=7.0),
-        "a3": Anime(id="a3", title_en="Modern Hit", year=2023, score=8.5),
-        "a4": Anime(id="a4", title_en="Modern Mid", year=2022, score=6.0),
+        "a3": Anime(id="a3", title_en="Modern Hit", year=2023, score=8.8),
+        "a4": Anime(id="a4", title_en="Modern Mid", year=2022, score=7.2),
     }
     credits = [
         Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR),

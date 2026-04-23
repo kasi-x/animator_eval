@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 import structlog
 
-from src.database import get_data_sources
+from src.database import get_source_scrape_status
 
 logger = structlog.get_logger()
 
@@ -50,7 +50,7 @@ def check_data_freshness(
     if now is None:
         now = datetime.now(timezone.utc)
 
-    sources = get_data_sources(conn)
+    sources = get_source_scrape_status(conn)
     reports: list[FreshnessReport] = []
 
     for src in sources:

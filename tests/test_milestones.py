@@ -6,10 +6,10 @@ from src.models import BronzeAnime as Anime, Credit, Role
 
 def _make_career():
     anime_map = {
-        "a1": Anime(id="a1", title_en="First Show", year=2015, score=6.0),
-        "a2": Anime(id="a2", title_en="Second Show", year=2017, score=7.5),
-        "a3": Anime(id="a3", title_en="Third Show", year=2019, score=9.0),
-        "a4": Anime(id="a4", title_en="Director Debut", year=2021, score=8.0),
+        "a1": Anime(id="a1", title_en="First Show", year=2015),
+        "a2": Anime(id="a2", title_en="Second Show", year=2017),
+        "a3": Anime(id="a3", title_en="Third Show", year=2019),
+        "a4": Anime(id="a4", title_en="Director Debut", year=2021),
     }
     credits = [
         Credit(person_id="p1", anime_id="a1", role=Role.IN_BETWEEN),

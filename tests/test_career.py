@@ -7,10 +7,10 @@ from src.models import BronzeAnime as Anime, Credit, Role
 def _make_career_data():
     """テスト用キャリアデータ: 動画→原画→作監の昇進パターン."""
     anime_map = {
-        "a1": Anime(id="a1", title_en="Early Work", year=2018, score=6.0),
-        "a2": Anime(id="a2", title_en="Growth Phase", year=2020, score=7.0),
-        "a3": Anime(id="a3", title_en="Key Work", year=2022, score=8.0),
-        "a4": Anime(id="a4", title_en="Latest Work", year=2024, score=8.5),
+        "a1": Anime(id="a1", title_en="Early Work", year=2018),
+        "a2": Anime(id="a2", title_en="Growth Phase", year=2020),
+        "a3": Anime(id="a3", title_en="Key Work", year=2022),
+        "a4": Anime(id="a4", title_en="Latest Work", year=2024),
     }
     credits = [
         # 2018: 動画 (in-between)

@@ -24,8 +24,8 @@ def _sample_data():
         Person(id="p3", name_en="Animator C"),
     ]
     anime_list = [
-        Anime(id="a1", title_en="Anime 1", year=2020, score=8.5),
-        Anime(id="a2", title_en="Anime 2", year=2021, score=7.0),
+        Anime(id="a1", title_en="Anime 1", year=2020),
+        Anime(id="a2", title_en="Anime 2", year=2021),
     ]
     credits = [
         Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR),
@@ -64,7 +64,7 @@ class TestImplicitPersonNodes:
     def test_credit_person_not_in_persons_list_gets_type_attribute(self):
         """Person referenced in credits but not in persons list should still get type='person'."""
         persons = [Person(id="p1", name_en="Known Person")]
-        anime_list = [Anime(id="a1", title_en="Anime 1", year=2020, score=8.0)]
+        anime_list = [Anime(id="a1", title_en="Anime 1", year=2020)]
         credits = [
             Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR),
             Credit(person_id="p_unknown", anime_id="a1", role=Role.KEY_ANIMATOR),
@@ -77,7 +77,7 @@ class TestImplicitPersonNodes:
     def test_known_person_retains_attributes(self):
         """Persons in the persons list should keep their original attributes."""
         persons = [Person(id="p1", name_en="Known Person")]
-        anime_list = [Anime(id="a1", title_en="Anime 1", year=2020, score=8.0)]
+        anime_list = [Anime(id="a1", title_en="Anime 1", year=2020)]
         credits = [
             Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR),
         ]
@@ -414,12 +414,12 @@ class TestComputeAnimeCommitments:
 class TestWorkImportance:
     def test_no_duration_returns_default(self):
         """No duration → default 1.0."""
-        anime = Anime(id="a1", title_en="Great Anime", score=9.0)
+        anime = Anime(id="a1", title_en="Great Anime")
         assert _work_importance(anime) == 1.0
 
     def test_no_duration_low_score(self):
         """No duration regardless of score → default 1.0."""
-        anime = Anime(id="a1", title_en="Low Anime", score=3.0)
+        anime = Anime(id="a1", title_en="Low Anime")
         assert _work_importance(anime) == 1.0
 
     def test_very_short_duration_clamped(self):
@@ -465,7 +465,7 @@ class TestCommitmentWeighting:
             Person(id="p2", name_en="Single-Role"),
             Person(id="p3", name_en="Reference"),
         ]
-        anime_map = {"a1": Anime(id="a1", title_en="Anime 1", score=8.0)}
+        anime_map = {"a1": Anime(id="a1", title_en="Anime 1")}
         credits = [
             # p1 has KEY_ANIMATOR + ANIMATION_DIRECTOR
             Credit(person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR),
@@ -489,7 +489,7 @@ class TestCommitmentWeighting:
             Person(id="p3", name_en="Director"),
         ]
         anime_map = {
-            "a1": Anime(id="a1", title_en="Long Anime", episodes=50, score=7.0)
+            "a1": Anime(id="a1", title_en="Long Anime", episodes=50)
         }
         credits = [
             # p3 is director (through-role, full coverage)

@@ -54,6 +54,12 @@ DB_PATH: Path = Path(
     os.environ.get("ANIMETOR_DB_PATH", str(DB_DIR / "animetor_eval.db"))
 )
 
+# DuckDB GOLD layer — Phase B: pipeline output (person_scores, score_history, etc.)
+# Write: pipeline (once per run). Read: API + report generators.
+GOLD_DB_PATH: Path = Path(
+    os.environ.get("ANIMETOR_GOLD_DB_PATH", str(RESULT_DIR / "gold.duckdb"))
+)
+
 # =============================================================================
 # PageRank パラメータ
 # =============================================================================

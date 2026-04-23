@@ -14,24 +14,24 @@ def anime_map():
     """8 anime works across different studios and years."""
     return {
         "a1": Anime(
-            id="a1", title_en="Work A", year=2018, score=8.5, studios=["Alpha"]
+            id="a1", title_en="Work A", year=2018, studios=["Alpha"]
         ),
         "a2": Anime(
-            id="a2", title_en="Work B", year=2019, score=7.0, studios=["Alpha"]
+            id="a2", title_en="Work B", year=2019, studios=["Alpha"]
         ),
-        "a3": Anime(id="a3", title_en="Work C", year=2019, score=9.0, studios=["Beta"]),
-        "a4": Anime(id="a4", title_en="Work D", year=2020, score=6.5, studios=["Beta"]),
+        "a3": Anime(id="a3", title_en="Work C", year=2019, studios=["Beta"]),
+        "a4": Anime(id="a4", title_en="Work D", year=2020, studios=["Beta"]),
         "a5": Anime(
-            id="a5", title_en="Work E", year=2020, score=8.0, studios=["Alpha"]
+            id="a5", title_en="Work E", year=2020, studios=["Alpha"]
         ),
         "a6": Anime(
-            id="a6", title_en="Work F", year=2021, score=7.5, studios=["Gamma"]
+            id="a6", title_en="Work F", year=2021, studios=["Gamma"]
         ),
         "a7": Anime(
-            id="a7", title_en="Work G", year=2021, score=8.8, studios=["Alpha"]
+            id="a7", title_en="Work G", year=2021, studios=["Alpha"]
         ),
         "a8": Anime(
-            id="a8", title_en="Work H", year=2022, score=6.0, studios=["Gamma"]
+            id="a8", title_en="Work H", year=2022, studios=["Gamma"]
         ),
     }
 

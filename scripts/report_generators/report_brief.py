@@ -324,7 +324,7 @@ class BusinessBrief(ReportBrief):
         super().__init__(
             audience=AudienceType.BUSINESS_INNOVATION,
             title="Market Opportunities & Innovation Brief",
-            description="Market whitespace, independent talent, and emerging collaborations",
+            description="Market whitespace, independent staff, and emerging collaborations",
             target_readers=[
                 "Investors",
                 "Business development",
@@ -335,7 +335,7 @@ class BusinessBrief(ReportBrief):
                 "Investment opportunities",
                 "Partnership potential",
                 "Market entry strategy",
-                "Talent acquisition targets",
+                "Staff recruitment targets",
             ],
         )
 

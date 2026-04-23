@@ -6,14 +6,16 @@ from src.models import BronzeAnime as Anime, Credit, Role
 
 def _make_test_data():
     anime_map = {
+        # score= is display metadata (not used in any scoring formula);
+        # kept here to test avg_anime_score display functionality.
         "a1": Anime(
-            id="a1", title_en="Show A", year=2020, score=8.0, studios=["Studio Ghibli"]
+            id="a1", title_en="Show A", year=2020, studios=["Studio Ghibli"], score=8.0
         ),
         "a2": Anime(
-            id="a2", title_en="Show B", year=2021, score=7.5, studios=["Studio Ghibli"]
+            id="a2", title_en="Show B", year=2021, studios=["Studio Ghibli"], score=7.5
         ),
         "a3": Anime(
-            id="a3", title_en="Show C", year=2022, score=9.0, studios=["MAPPA"]
+            id="a3", title_en="Show C", year=2022, studios=["MAPPA"], score=9.0
         ),
         "a4": Anime(id="a4", title_en="Show D", year=2023, studios=["MAPPA"]),
         "a5": Anime(id="a5", title_en="Show E", year=2023),  # no studio

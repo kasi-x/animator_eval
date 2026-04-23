@@ -36,8 +36,8 @@ def stats_conn(tmp_path):
         Person(id="p2", name_en="Person Two", name_ja="人物2"),
     ]
     anime_list = [
-        Anime(id="a1", title_en="Anime One", year=2022, score=8.0),
-        Anime(id="a2", title_en="Anime Two", year=2024, score=7.0),
+        Anime(id="a1", title_en="Anime One", year=2022),
+        Anime(id="a2", title_en="Anime Two", year=2024),
     ]
     credits_data = [
         Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="test"),

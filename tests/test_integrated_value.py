@@ -59,7 +59,6 @@ def cv_data():
             id=aid,
             title_en=f"Anime {a_idx}",
             year=2018 + a_idx,
-            score=6.0 + a_idx * 0.5,
             studios=["S1"],
         )
         for p_idx in range(5):
@@ -208,7 +207,7 @@ class TestOptimizeLambdaWeights:
     def test_cv_few_persons(self):
         """Too few persons (< 10) returns equal weights."""
         components = {"a": {"p1": 1.0}, "b": {"p1": 2.0}}
-        anime_map = {"a1": Anime(id="a1", title_en="X", year=2020, score=7.0)}
+        anime_map = {"a1": Anime(id="a1", title_en="X", year=2020)}
         credits = [
             Credit(person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR, source="test")
         ]
@@ -296,7 +295,6 @@ class TestScaleRobustness:
                 id=f"a{i}",
                 title_en=f"Anime {i}",
                 year=2018 + i,
-                score=6.0 + i * 0.3,
                 studios=["S1"],
             )
             for i in range(8)

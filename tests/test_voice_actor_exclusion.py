@@ -25,8 +25,8 @@ def _make_credits_with_voice_actors():
         Person(id="song1", name_en="Singer F"),  # 主題歌のみ
     ]
     anime_list = [
-        Anime(id="a1", title_en="Anime 1", year=2023, score=8.0),
-        Anime(id="a2", title_en="Anime 2", year=2024, score=7.5),
+        Anime(id="a1", title_en="Anime 1", year=2023),
+        Anime(id="a2", title_en="Anime 2", year=2024),
     ]
     credits = [
         # 制作スタッフ

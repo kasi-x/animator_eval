@@ -8,7 +8,7 @@ def _make_test_data():
     """監督2人、アニメーター3人、作品5作のテストデータ."""
     anime_map = {
         f"a{i}": Anime(
-            id=f"a{i}", title_en=f"Anime {i}", year=2020 + i, score=7.0 + i * 0.2
+            id=f"a{i}", title_en=f"Anime {i}", year=2020 + i
         )
         for i in range(1, 6)
     }

@@ -17,6 +17,7 @@ def client():
 @pytest.fixture
 def scores_data(tmp_path, monkeypatch):
     """テスト用スコアデータをJSON_DIRに配置."""
+    import src.analysis.gold_writer
     import src.api
     import src.database
     import src.utils.json_io
@@ -24,6 +25,12 @@ def scores_data(tmp_path, monkeypatch):
     # Monkeypatch JSON_DIR in both api and json_io modules
     monkeypatch.setattr(src.api, "JSON_DIR", tmp_path)
     monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path)
+    # Disable DuckDB GOLD path so ranking falls back to SQLite
+    monkeypatch.setattr(
+        src.analysis.gold_writer,
+        "DEFAULT_GOLD_DB_PATH",
+        tmp_path / "nonexistent_gold.duckdb",
+    )
 
     # Set up a test database with schema and 3 test persons
     db_path = tmp_path / "test_scores.db"
@@ -44,15 +51,15 @@ def scores_data(tmp_path, monkeypatch):
     )
     # Insert scores
     conn.execute(
-        "INSERT INTO scores (person_id, iv_score, birank, patronage, person_fe, awcc, dormancy)"
+        "INSERT INTO person_scores (person_id, iv_score, birank, patronage, person_fe, awcc, dormancy)"
         " VALUES ('p1', 71.0, 80.0, 70.0, 60.0, 0.5, 1.0)"
     )
     conn.execute(
-        "INSERT INTO scores (person_id, iv_score, birank, patronage, person_fe, awcc, dormancy)"
+        "INSERT INTO person_scores (person_id, iv_score, birank, patronage, person_fe, awcc, dormancy)"
         " VALUES ('p2', 47.75, 50.0, 40.0, 55.0, 0.3, 0.9)"
     )
     conn.execute(
-        "INSERT INTO scores (person_id, iv_score, birank, patronage, person_fe, awcc, dormancy)"
+        "INSERT INTO person_scores (person_id, iv_score, birank, patronage, person_fe, awcc, dormancy)"
         " VALUES ('p3', 10.75, 10.0, 5.0, 20.0, 0.1, 0.8)"
     )
     # Insert anime and credits for join
@@ -803,10 +810,6 @@ class TestDataQuality:
         conn.execute(
             "INSERT INTO anime (id, title_en, year) VALUES ('a1', 'Test', 2024)"
         )
-        conn.execute(
-            "INSERT INTO anime_analysis (id, title_en, year) VALUES ('a1', 'Test', 2024)"
-        )
-        conn.execute("INSERT INTO anime_display (id, score) VALUES ('a1', 8.0)")
         conn.execute("INSERT INTO persons (id, name_en) VALUES ('p1', 'Person')")
         conn.execute(
             "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES ('p1', 'a1', 'director', 'test')"
@@ -893,8 +896,6 @@ class TestPredict:
         init_db(conn)
         conn.execute("INSERT INTO persons (id, name_en) VALUES ('p1', 'Director')")
         conn.execute("INSERT INTO anime (id, title_en) VALUES ('a1', 'Test')")
-        conn.execute("INSERT INTO anime_analysis (id, title_en) VALUES ('a1', 'Test')")
-        conn.execute("INSERT INTO anime_display (id, score) VALUES ('a1', 8.0)")
         conn.execute(
             "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES ('p1', 'a1', 'director', 'test')"
         )

@@ -1095,7 +1095,7 @@ class TestAnimeValueMetrics:
 
 class TestComputeCommercialValue:
     def test_with_score_and_staff(self):
-        anime = _anime("a1", score=80.0)
+        anime = _anime("a1")
         credits = [_credit(f"p{i}", "a1") for i in range(30)]
         result = compute_commercial_value(anime, credits)
         # staff_score=min(1, 30/50)=0.6, diversity_score=min(1, 1/20)=0.05
@@ -1110,7 +1110,7 @@ class TestComputeCommercialValue:
         assert result > 0  # Default external_score=0.5
 
     def test_zero_score_uses_default(self):
-        anime = _anime("a1", score=0.0)
+        anime = _anime("a1")
         credits = [_credit("p1", "a1")]
         result = compute_commercial_value(anime, credits)
         assert result > 0
@@ -1119,14 +1119,14 @@ class TestComputeCommercialValue:
 class TestComputeCriticalValue:
     def test_with_tags_and_score(self):
         anime = _anime(
-            "a1", score=90.0, tags=[{"name": f"tag{i}", "rank": i} for i in range(10)]
+            "a1", tags=[{"name": f"tag{i}", "rank": i} for i in range(10)]
         )
         credits = [_credit("p1", "a1")]
         result = compute_critical_value(anime, credits)
         assert 0 < result <= 1.0
 
     def test_no_tags(self):
-        anime = _anime("a1", score=70.0, tags=[])
+        anime = _anime("a1", tags=[])
         credits = [_credit("p1", "a1")]
         result = compute_critical_value(anime, credits)
         assert result > 0
@@ -1197,11 +1197,10 @@ class TestComputeAnimeValues:
             _anime(
                 "a1",
                 year=2020,
-                score=85.0,
                 studios=["StudioA"],
                 tags=[{"name": "action"}],
             ),
-            _anime("a2", year=2005, score=70.0, studios=["StudioB"]),
+            _anime("a2", year=2005, studios=["StudioB"]),
         ]
         credits = [
             _credit("p1", "a1", Role.DIRECTOR),
@@ -1397,7 +1396,7 @@ class TestIndividualContributionEdgeCases:
 
         features = {"p1": {"iv_score": 50}}
         anime_map = {
-            f"a{i}": Anime(id=f"a{i}", title_ja=f"a{i}", score=0.0) for i in range(6)
+            f"a{i}": Anime(id=f"a{i}", title_ja=f"a{i}") for i in range(6)
         }
         credits = [_credit("p1", f"a{i}") for i in range(6)]
         result = compute_consistency(features, credits, anime_map)

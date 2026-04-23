@@ -7,9 +7,9 @@ from src.models import BronzeAnime as Anime, Credit, Role
 def _make_test_data():
     """テストデータ: 監督1人、アニメーター2人、作品3作."""
     anime_map = {
-        "a1": Anime(id="a1", title_ja="作品A", title_en="Work A", year=2020, score=8.5),
-        "a2": Anime(id="a2", title_ja="作品B", title_en="Work B", year=2022, score=7.0),
-        "a3": Anime(id="a3", title_ja="作品C", title_en="Work C", year=2024, score=9.0),
+        "a1": Anime(id="a1", title_ja="作品A", title_en="Work A", year=2020),
+        "a2": Anime(id="a2", title_ja="作品B", title_en="Work B", year=2022),
+        "a3": Anime(id="a3", title_ja="作品C", title_en="Work C", year=2024),
     }
     credits = [
         # dir1 directs a1, a2, a3

@@ -1,0 +1,52 @@
+# forbidden_vocab_exceptions.yaml
+#
+# Documented exceptions to the vocabulary enforcement rules.
+# Each entry must state WHY the term is permitted in the specific context.
+#
+# Format:
+#   - file: relative path from repo root
+#     line_pattern: a substring that uniquely identifies the line
+#     term: the prohibited term
+#     reason: why this usage is permitted
+
+exceptions:
+  - file: scripts/report_generators/section_builder.py
+    line_pattern: "ability, skill, artistry, or professional worth"
+    term: ability
+    reason: >
+      Disclaimer text explicitly stating what the metrics do NOT measure.
+      Removing the terms weakens the legal/ethical disclaimer.
+      The sentence structure is "do not constitute assessments of individual ability..."
+      which is negation, not affirmation.
+
+  - file: scripts/report_generators/section_builder.py
+    line_pattern: "ability, skill, artistry, or professional worth"
+    term: skill
+    reason: >
+      Same disclaimer context as above (ability). Negation usage.
+
+  - file: scripts/report_generators/report_brief.py
+    line_pattern: "not individual competence or ability"
+    term: ability
+    reason: >
+      Negation in a method-gate explanation: "scores measure structural network
+      position, not individual competence or ability". Required for transparent
+      perspectivism — reader must understand what the score is NOT.
+
+  - file: scripts/report_generators/report_brief.py
+    line_pattern: "not individual competence or ability"
+    term: competence
+    reason: >
+      Same negation context as ability above. Required for disclosure.
+
+  - file: scripts/report_generators/lint_vocab.py
+    line_pattern: "r'\\bability\\b'"
+    term: ability
+    reason: >
+      The vocabulary linter's own pattern definitions. These are regex strings
+      for detection, not report content.
+
+  - file: scripts/report_generators/lint_vocab.py
+    line_pattern: "r'\\btalent\\b'"
+    term: talent
+    reason: Same linter-implementation context as ability.

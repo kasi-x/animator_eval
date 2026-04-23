@@ -13,11 +13,11 @@ def _make_test_data():
     """テスト用の人物・アニメ・クレジットデータ."""
     persons = [Person(id=f"p{i}", name_en=f"Person {i}") for i in range(1, 11)]
     anime_list = [
-        Anime(id="a1", title_en="Show A", year=2015, score=8.0),
-        Anime(id="a2", title_en="Show B", year=2016, score=7.5),
-        Anime(id="a3", title_en="Show C", year=2017, score=7.0),
-        Anime(id="a4", title_en="Show D", year=2018, score=8.5),
-        Anime(id="a5", title_en="Show E", year=2019, score=6.5),
+        Anime(id="a1", title_en="Show A", year=2015),
+        Anime(id="a2", title_en="Show B", year=2016),
+        Anime(id="a3", title_en="Show C", year=2017),
+        Anime(id="a4", title_en="Show D", year=2018),
+        Anime(id="a5", title_en="Show E", year=2019),
     ]
     credits = []
     # p1 is a prolific director

@@ -33,17 +33,6 @@ def populated_db(monkeypatch, tmp_path):
         ],
     )
     conn.executemany(
-        "INSERT INTO anime_analysis (id, title_ja, title_en, year) VALUES (?, ?, ?, ?)",
-        [
-            ("a1", "進撃の巨人", "Attack on Titan", 2013),
-            ("a2", "甲鉄城のカバネリ", "Kabaneri", 2016),
-        ],
-    )
-    conn.executemany(
-        "INSERT INTO anime_display (id, score) VALUES (?, ?)",
-        [("a1", 8.4), ("a2", 7.2)],
-    )
-    conn.executemany(
         "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES (?, ?, ?, ?)",
         [
             ("p1", "a1", "director", "anilist"),
@@ -54,7 +43,7 @@ def populated_db(monkeypatch, tmp_path):
         ],
     )
     conn.executemany(
-        "INSERT INTO scores (person_id, birank, patronage, person_fe, iv_score) VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO person_scores (person_id, birank, patronage, person_fe, iv_score) VALUES (?, ?, ?, ?, ?)",
         [
             ("p1", 85.0, 70.0, 60.0, 73.0),
             ("p2", 60.0, 80.0, 90.0, 74.5),
@@ -574,10 +563,6 @@ class TestDataQualityCommand:
         conn.execute(
             "INSERT INTO anime (id, title_en, year) VALUES ('a1', 'Test', 2024)"
         )
-        conn.execute(
-            "INSERT INTO anime_analysis (id, title_en, year) VALUES ('a1', 'Test', 2024)"
-        )
-        conn.execute("INSERT INTO anime_display (id, score) VALUES ('a1', 8.0)")
         conn.execute("INSERT INTO persons (id, name_en) VALUES ('p1', 'Person')")
         conn.execute(
             "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES ('p1', 'a1', 'director', 'test')"

@@ -92,7 +92,6 @@ class TestBuildSequelChains:
                 id=f"a{i}",
                 title_en=f"Other Series {i}",
                 year=2020 + i,
-                score=7.0,
                 relations_json=json.dumps(relations),
             )
         chains = _build_sequel_chains(anime_map)
@@ -101,7 +100,7 @@ class TestBuildSequelChains:
     def test_single_anime_no_chain(self):
         """Single anime with no relations → no chains."""
         anime_map = {
-            "a1": Anime(id="a1", title_en="Standalone", year=2020, score=8.0),
+            "a1": Anime(id="a1", title_en="Standalone", year=2020),
         }
         chains = _build_sequel_chains(anime_map)
         assert len(chains) == 0
@@ -113,7 +112,6 @@ class TestBuildSequelChains:
                 id="a1",
                 title_en="Original",
                 year=2020,
-                score=8.0,
                 relations_json=json.dumps(
                     [{"related_anime_id": "a2", "relation_type": "ALTERNATIVE"}]
                 ),
@@ -122,7 +120,6 @@ class TestBuildSequelChains:
                 id="a2",
                 title_en="Alt Version",
                 year=2021,
-                score=7.0,
                 relations_json=json.dumps(
                     [{"related_anime_id": "a1", "relation_type": "ALTERNATIVE"}]
                 ),
@@ -457,7 +454,7 @@ class TestComputeSynergyScores:
     def test_no_chains_returns_empty(self):
         """No sequel relations → empty result."""
         anime_map = {
-            "a1": Anime(id="a1", title_en="Standalone", year=2020, score=7.0),
+            "a1": Anime(id="a1", title_en="Standalone", year=2020),
         }
         credits = [_credit("p1", "a1", Role.DIRECTOR)]
         result = compute_synergy_scores(credits, anime_map)
@@ -515,7 +512,6 @@ class TestEdgeCases:
                 id="a1",
                 title_en="Main",
                 year=2020,
-                score=7.0,
                 relations_json=json.dumps(
                     [{"related_anime_id": "a2", "relation_type": "SIDE_STORY"}]
                 ),
@@ -524,7 +520,6 @@ class TestEdgeCases:
                 id="a2",
                 title_en="Side Story",
                 year=2021,
-                score=7.5,
                 relations_json=json.dumps(
                     [{"related_anime_id": "a1", "relation_type": "PARENT"}]
                 ),
@@ -540,7 +535,6 @@ class TestEdgeCases:
                 id="a1",
                 title_en="Parent",
                 year=2020,
-                score=8.0,
                 relations_json=json.dumps(
                     [{"related_anime_id": "a2", "relation_type": "PARENT"}]
                 ),
@@ -549,7 +543,6 @@ class TestEdgeCases:
                 id="a2",
                 title_en="Child",
                 year=2021,
-                score=7.0,
                 relations_json=json.dumps(
                     [{"related_anime_id": "a1", "relation_type": "PARENT"}]
                 ),

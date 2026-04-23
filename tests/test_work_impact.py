@@ -6,9 +6,9 @@ from src.models import BronzeAnime as Anime, Credit, Role
 
 def _make_data():
     anime_map = {
-        "a1": Anime(id="a1", title_en="Hit Show", year=2023, score=9.0),
-        "a2": Anime(id="a2", title_en="Old Show", year=2005, score=6.0),
-        "a3": Anime(id="a3", title_en="Mid Show", year=2015, score=7.5),
+        "a1": Anime(id="a1", title_en="Hit Show", year=2023),
+        "a2": Anime(id="a2", title_en="Old Show", year=2005),
+        "a3": Anime(id="a3", title_en="Mid Show", year=2015),
     }
     credits = [
         Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR),
@@ -67,7 +67,7 @@ class TestWorkImpact:
         credits = []
         for i in range(30):
             aid = f"a{i}"
-            anime_map[aid] = Anime(id=aid, title_en=f"Show {i}", year=2020, score=7.0)
+            anime_map[aid] = Anime(id=aid, title_en=f"Show {i}", year=2020)
             credits.append(Credit(person_id="p1", anime_id=aid, role=Role.KEY_ANIMATOR))
 
         result = compute_work_impact(credits, anime_map)

@@ -36,11 +36,13 @@ from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
 
 from src.analysis.explain import explain_individual_profile
+from src.analysis.gold_writer import GoldReader
 from src.analysis.similarity import find_similar_persons
 from src.api_validators import AnimeId, PersonId, validate_query_string
 from src.database import (
+    DEFAULT_DB_PATH,
     db_connection,
-    get_data_sources,
+    get_source_scrape_status,
     get_db_stats,
     get_score_history,
     search_persons,
@@ -236,7 +238,7 @@ _PERSON_SELECT_SQL = """
            (SELECT role FROM credits
             WHERE person_id = s.person_id
             GROUP BY role ORDER BY COUNT(*) DESC LIMIT 1) AS primary_role
-    FROM scores s
+    FROM person_scores s
     JOIN persons p ON s.person_id = p.id
     LEFT JOIN credits c ON s.person_id = c.person_id
     WHERE s.iv_score IS NOT NULL {extra_where}
@@ -304,7 +306,7 @@ def list_persons(
     with db_connection() as conn:
         conn.row_factory = _sqlite3.Row
         total = conn.execute(
-            "SELECT COUNT(DISTINCT s.person_id) FROM scores s WHERE s.iv_score IS NOT NULL"
+            "SELECT COUNT(DISTINCT s.person_id) FROM person_scores s WHERE s.iv_score IS NOT NULL"
         ).fetchone()[0]
         pages = (total + per_page - 1) // per_page
         offset = (page - 1) * per_page
@@ -362,7 +364,7 @@ def get_similar(
             "SELECT person_fe, birank, patronage, awcc, dormancy,"
             " (SELECT role FROM credits WHERE person_id=s.person_id"
             "  GROUP BY role ORDER BY COUNT(*) DESC LIMIT 1) AS primary_role"
-            " FROM scores s WHERE s.person_id = ?",
+            " FROM person_scores s WHERE s.person_id = ?",
             [person_id],
         ).fetchone()
         if target is None:
@@ -399,43 +401,86 @@ def ranking(
     sort: str = Query("iv_score", description="ソート軸"),
     limit: int = Query(50, ge=1, le=500, description="件数"),
 ):
-    """ランキング（フィルタ対応）— SQLiteから直接クエリ."""
+    """ランキング（フィルタ対応）— DuckDB GOLD優先、フォールバックはSQLite."""
     valid_sorts = {"iv_score", "person_fe", "birank", "patronage", "dormancy", "awcc"}
     if sort not in valid_sorts:
         raise HTTPException(status_code=400, detail=f"Invalid sort: {sort}")
 
+    def _build_conditions(pfx: str) -> tuple[list[str], list]:
+        conds: list[str] = []
+        p: list = []
+        if role:
+            conds.append(
+                f"EXISTS (SELECT 1 FROM {pfx}credits cr WHERE cr.person_id = s.person_id"
+                f" AND cr.role = ?)"
+            )
+            p.append(role)
+        if year_from is not None:
+            conds.append(
+                f"EXISTS (SELECT 1 FROM {pfx}credits cr WHERE cr.person_id = s.person_id"
+                f" AND cr.credit_year >= ?)"
+            )
+            p.append(year_from)
+        if year_to is not None:
+            conds.append(
+                f"EXISTS (SELECT 1 FROM {pfx}credits cr WHERE cr.person_id = s.person_id"
+                f" AND cr.credit_year <= ?)"
+            )
+            p.append(year_to)
+        return conds, p
+
+    # --- Try DuckDB GOLD path ---
+    gold = GoldReader()
+    if gold.available():
+        try:
+            ddb_conds, ddb_params = _build_conditions("sl.")
+            total, rows_raw = gold.ranking_query(
+                DEFAULT_DB_PATH,
+                conditions=ddb_conds,
+                params=ddb_params,
+                sort=sort,
+                limit=limit,
+            )
+            items = [
+                {
+                    "person_id": r["person_id"],
+                    "name": r["name_ja"] or r["name_en"],
+                    "name_ja": r["name_ja"],
+                    "name_en": r["name_en"],
+                    "iv_score": r["iv_score"],
+                    "birank": r["birank"],
+                    "patronage": r["patronage"],
+                    "person_fe": r["person_fe"],
+                    "awcc": r["awcc"],
+                    "dormancy": r["dormancy"],
+                    "primary_role": r["primary_role"],
+                    "career": {
+                        "first_year": r["first_year"],
+                        "latest_year": r["latest_year"],
+                    },
+                    "_source": "gold_duckdb",
+                }
+                for r in rows_raw
+            ]
+            return {
+                "items": items,
+                "total": total,
+                "sort": sort,
+                "filters": {"role": role, "year_from": year_from, "year_to": year_to},
+            }
+        except Exception as exc:
+            logger.warning("ranking_gold_duckdb_failed_fallback_sqlite", error=str(exc))
+
+    # --- SQLite fallback ---
+    sq_conds, sq_params = _build_conditions("")
+    where = " AND ".join(["s.iv_score IS NOT NULL"] + sq_conds)
+
     with db_connection() as conn:
         conn.row_factory = __import__("sqlite3").Row
-        conditions = ["s.iv_score IS NOT NULL"]
-        params: list = []
-
-        if role:
-            conditions.append(
-                "EXISTS (SELECT 1 FROM credits cr WHERE cr.person_id = s.person_id"
-                " AND cr.role = ? GROUP BY cr.role"
-                " HAVING COUNT(*) = (SELECT MAX(cnt) FROM"
-                " (SELECT COUNT(*) AS cnt FROM credits WHERE person_id = s.person_id GROUP BY role)))"
-            )
-            params.append(role)
-
-        if year_from is not None:
-            conditions.append(
-                "EXISTS (SELECT 1 FROM credits cr WHERE cr.person_id = s.person_id"
-                " AND cr.credit_year >= ?)"
-            )
-            params.append(year_from)
-
-        if year_to is not None:
-            conditions.append(
-                "EXISTS (SELECT 1 FROM credits cr WHERE cr.person_id = s.person_id"
-                " AND cr.credit_year <= ?)"
-            )
-            params.append(year_to)
-
-        where = " AND ".join(conditions)
-
-        count_sql = f"SELECT COUNT(DISTINCT s.person_id) FROM scores s WHERE {where}"
-        total = conn.execute(count_sql, params).fetchone()[0]
+        total = conn.execute(
+            f"SELECT COUNT(DISTINCT s.person_id) FROM person_scores s WHERE {where}",
+            sq_params,
+        ).fetchone()[0]
 
         sql = f"""
             SELECT s.person_id,
@@ -447,7 +492,7 @@ def ranking(
                    (SELECT role FROM credits
                     WHERE person_id = s.person_id
                     GROUP BY role ORDER BY COUNT(*) DESC LIMIT 1) AS primary_role
-            FROM scores s
+            FROM person_scores s
             JOIN persons p ON s.person_id = p.id
             LEFT JOIN credits c ON s.person_id = c.person_id
             WHERE {where}
@@ -455,7 +500,7 @@ def ranking(
             ORDER BY s.{sort} DESC
             LIMIT ?
         """
-        rows = conn.execute(sql, params + [limit]).fetchall()
+        rows = conn.execute(sql, sq_params + [limit]).fetchall()
 
     items = [
         {
@@ -471,6 +516,7 @@ def ranking(
             "dormancy": r["dormancy"],
             "primary_role": r["primary_role"],
             "career": {"first_year": r["first_year"], "latest_year": r["latest_year"]},
+            "_source": "sqlite_fallback",
         }
         for r in rows
     ]
@@ -755,7 +801,7 @@ def data_quality():
         )
 
         persons_with_score = (
-            conn.execute("SELECT COUNT(*) FROM scores").fetchone()[0]
+            conn.execute("SELECT COUNT(*) FROM person_scores").fetchone()[0]
             if total_persons
             else 0
         )
@@ -770,7 +816,7 @@ def data_quality():
 
         anime_with_score = (
             conn.execute(
-                "SELECT COUNT(*) FROM anime_display WHERE score IS NOT NULL"
+                "SELECT COUNT(*) FROM src_anilist_anime WHERE score IS NOT NULL"
             ).fetchone()[0]
             if total_anime
             else 0
@@ -1024,7 +1070,7 @@ def db_stats():
     """DB統計情報."""
     with db_connection() as conn:
         stats = get_db_stats(conn)
-        sources = get_data_sources(conn)
+        sources = get_source_scrape_status(conn)
     return {"stats": stats, "data_sources": sources}
 
 

@@ -36,9 +36,9 @@ def populated_conn(test_conn):
         Person(id="p3", name_en="", name_ja=""),  # 名前なし
     ]
     anime_list = [
-        Anime(id="a1", title_en="Anime One", title_ja="アニメ1", year=2023, score=8.0),
+        Anime(id="a1", title_en="Anime One", title_ja="アニメ1", year=2023),
         Anime(id="a2", title_en="Anime Two", title_ja="", year=None, score=None),
-        Anime(id="a3", title_en="", title_ja="", year=2024, score=7.0),  # タイトルなし
+        Anime(id="a3", title_en="", title_ja="", year=2024),  # タイトルなし
     ]
     credits_data = [
         Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="test"),

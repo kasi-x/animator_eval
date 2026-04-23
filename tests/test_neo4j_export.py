@@ -13,8 +13,8 @@ def _sample_data():
         Person(id="p3", name_en="Newbie C"),
     ]
     anime = [
-        Anime(id="a1", title_en="Show One", year=2022, score=8.0),
-        Anime(id="a2", title_en="Show Two", year=2023, score=7.5),
+        Anime(id="a1", title_en="Show One", year=2022),
+        Anime(id="a2", title_en="Show Two", year=2023),
     ]
     credits = [
         Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="test"),

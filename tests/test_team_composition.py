@@ -25,9 +25,9 @@ def _make_data():
     """Build test data where a1 (18 staff) and a2 (16 staff) pass min_staff=15,
     while a3 (2 staff) and a4 (1 staff) do not."""
     anime_map = {
-        "a1": Anime(id="a1", title_en="Hit Show", year=2020, score=8.5),
-        "a2": Anime(id="a2", title_en="Another Hit", year=2022, score=8.0),
-        "a3": Anime(id="a3", title_en="Average Show", year=2021, score=6.0),
+        "a1": Anime(id="a1", title_en="Hit Show", year=2020),
+        "a2": Anime(id="a2", title_en="Another Hit", year=2022),
+        "a3": Anime(id="a3", title_en="Average Show", year=2021),
         "a4": Anime(id="a4", title_en="No Score", year=2019),
     }
     credits = [

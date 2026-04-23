@@ -14,22 +14,22 @@ def anime_map():
     """6 anime works with scores — enough to create shared-work pairs."""
     return {
         "a1": Anime(
-            id="a1", title_en="Show A", year=2018, score=8.0, studios=["Studio1"]
+            id="a1", title_en="Show A", year=2018, studios=["Studio1"]
         ),
         "a2": Anime(
-            id="a2", title_en="Show B", year=2019, score=7.5, studios=["Studio1"]
+            id="a2", title_en="Show B", year=2019, studios=["Studio1"]
         ),
         "a3": Anime(
-            id="a3", title_en="Show C", year=2019, score=9.0, studios=["Studio2"]
+            id="a3", title_en="Show C", year=2019, studios=["Studio2"]
         ),
         "a4": Anime(
-            id="a4", title_en="Show D", year=2020, score=6.5, studios=["Studio2"]
+            id="a4", title_en="Show D", year=2020, studios=["Studio2"]
         ),
         "a5": Anime(
-            id="a5", title_en="Show E", year=2021, score=8.5, studios=["Studio1"]
+            id="a5", title_en="Show E", year=2021, studios=["Studio1"]
         ),
         "a6": Anime(
-            id="a6", title_en="Show F", year=2021, score=7.0, studios=["Studio3"]
+            id="a6", title_en="Show F", year=2021, studios=["Studio3"]
         ),
     }
 

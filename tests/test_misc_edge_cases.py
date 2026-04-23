@@ -20,7 +20,7 @@ class TestSinglePersonDataset:
     """1人だけのデータセットでの挙動."""
 
     def _make_single(self):
-        anime_map = {"a1": Anime(id="a1", title_en="Solo", year=2022, score=7.0)}
+        anime_map = {"a1": Anime(id="a1", title_en="Solo", year=2022)}
         credits = [Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR)]
         return credits, anime_map
 
@@ -145,7 +145,7 @@ class TestLargeTeam:
     """大人数チームのテスト."""
 
     def test_team_20_persons(self):
-        anime_map = {"a1": Anime(id="a1", title_en="Big Show", year=2022, score=8.0)}
+        anime_map = {"a1": Anime(id="a1", title_en="Big Show", year=2022)}
         credits = [
             Credit(person_id=f"p{i}", anime_id="a1", role=Role.KEY_ANIMATOR)
             for i in range(20)

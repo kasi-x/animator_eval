@@ -40,7 +40,6 @@ def populated_db(tmp_path, monkeypatch):
             title_en="Great Anime",
             title_ja="すごいアニメ",
             year=2022,
-            score=8.5,
             studios=["Studio A"],
         ),
         Anime(
@@ -48,7 +47,6 @@ def populated_db(tmp_path, monkeypatch):
             title_en="Good Anime",
             title_ja="いいアニメ",
             year=2023,
-            score=7.5,
             studios=["Studio B"],
         ),
         Anime(
@@ -56,7 +54,6 @@ def populated_db(tmp_path, monkeypatch):
             title_en="Average Anime",
             title_ja="普通のアニメ",
             year=2024,
-            score=6.0,
             studios=["Studio A"],
         ),
     ]

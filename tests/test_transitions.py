@@ -7,10 +7,10 @@ from src.models import BronzeAnime as Anime, Credit, Role
 def _make_credits_and_anime():
     """テスト用のクレジットとアニメデータ."""
     anime_map = {
-        "a1": Anime(id="a1", title_en="Show 2018", year=2018, score=7.0),
-        "a2": Anime(id="a2", title_en="Show 2020", year=2020, score=7.5),
-        "a3": Anime(id="a3", title_en="Show 2022", year=2022, score=8.0),
-        "a4": Anime(id="a4", title_en="Show 2024", year=2024, score=8.5),
+        "a1": Anime(id="a1", title_en="Show 2018", year=2018),
+        "a2": Anime(id="a2", title_en="Show 2020", year=2020),
+        "a3": Anime(id="a3", title_en="Show 2022", year=2022),
+        "a4": Anime(id="a4", title_en="Show 2024", year=2024),
     }
     credits = [
         # Person 1: in-between → key_animator → animation_director

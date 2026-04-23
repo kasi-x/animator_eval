@@ -12,23 +12,25 @@ from src.models import BronzeAnime as Anime, Credit, Role
 @pytest.fixture
 def anime_map():
     return {
+        # score= is display metadata (not used in scoring formulas);
+        # kept to test avg_anime_score display output.
         "a1": Anime(
-            id="a1", title_en="Show A", year=2020, score=8.0, studios=["Bones"]
+            id="a1", title_en="Show A", year=2020, studios=["Bones"], score=8.0
         ),
         "a2": Anime(
-            id="a2", title_en="Show B", year=2021, score=7.5, studios=["Bones"]
+            id="a2", title_en="Show B", year=2021, studios=["Bones"], score=7.5
         ),
         "a3": Anime(
-            id="a3", title_en="Show C", year=2022, score=9.0, studios=["Bones"]
+            id="a3", title_en="Show C", year=2022, studios=["Bones"], score=9.0
         ),
         "a4": Anime(
-            id="a4", title_en="Show D", year=2020, score=7.0, studios=["MAPPA"]
+            id="a4", title_en="Show D", year=2020, studios=["MAPPA"]
         ),
         "a5": Anime(
-            id="a5", title_en="Show E", year=2021, score=8.5, studios=["MAPPA"]
+            id="a5", title_en="Show E", year=2021, studios=["MAPPA"]
         ),
         "a6": Anime(
-            id="a6", title_en="Show F", year=2022, score=8.0, studios=["MAPPA"]
+            id="a6", title_en="Show F", year=2022, studios=["MAPPA"]
         ),
     }
 
@@ -175,10 +177,10 @@ class TestRetentionCalculation:
         """All same staff across years → retention=1.0."""
         anime_map = {
             "a1": Anime(
-                id="a1", title_en="X1", year=2020, score=7.0, studios=["StudioX"]
+                id="a1", title_en="X1", year=2020, studios=["StudioX"]
             ),
             "a2": Anime(
-                id="a2", title_en="X2", year=2021, score=7.5, studios=["StudioX"]
+                id="a2", title_en="X2", year=2021, studios=["StudioX"]
             ),
         }
         credits = [
@@ -205,10 +207,10 @@ class TestRetentionCalculation:
         """Completely different staff between years → retention=0."""
         anime_map = {
             "a1": Anime(
-                id="a1", title_en="Y1", year=2020, score=7.0, studios=["StudioY"]
+                id="a1", title_en="Y1", year=2020, studios=["StudioY"]
             ),
             "a2": Anime(
-                id="a2", title_en="Y2", year=2021, score=7.0, studios=["StudioY"]
+                id="a2", title_en="Y2", year=2021, studios=["StudioY"]
             ),
         }
         credits = [
@@ -261,9 +263,9 @@ class TestSingleStudio:
 
     def test_single_studio_metrics(self):
         anime_map = {
-            "a1": Anime(id="a1", title_en="S1", year=2020, score=7.0, studios=["Solo"]),
-            "a2": Anime(id="a2", title_en="S2", year=2021, score=8.0, studios=["Solo"]),
-            "a3": Anime(id="a3", title_en="S3", year=2022, score=9.0, studios=["Solo"]),
+            "a1": Anime(id="a1", title_en="S1", year=2020, studios=["Solo"], score=7.0),
+            "a2": Anime(id="a2", title_en="S2", year=2021, studios=["Solo"], score=8.0),
+            "a3": Anime(id="a3", title_en="S3", year=2022, studios=["Solo"], score=9.0),
         }
         credits = [
             Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="test"),

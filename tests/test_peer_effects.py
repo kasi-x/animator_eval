@@ -18,9 +18,9 @@ def peer_data():
     Each anime has multiple persons so leave-one-out peer means work.
     """
     anime_map = {
-        "a1": Anime(id="a1", title_en="Anime 1", year=2018, score=8.5, studios=["S1"]),
-        "a2": Anime(id="a2", title_en="Anime 2", year=2019, score=7.0, studios=["S1"]),
-        "a3": Anime(id="a3", title_en="Anime 3", year=2020, score=6.0, studios=["S2"]),
+        "a1": Anime(id="a1", title_en="Anime 1", year=2018, studios=["S1"]),
+        "a2": Anime(id="a2", title_en="Anime 2", year=2019, studios=["S1"]),
+        "a3": Anime(id="a3", title_en="Anime 3", year=2020, studios=["S2"]),
     }
 
     credits = []
@@ -71,7 +71,7 @@ def peer_data():
 def tiny_data():
     """Too few observations to estimate peer effects (< 20)."""
     anime_map = {
-        "a1": Anime(id="a1", title_en="Small", year=2020, score=7.0, studios=["S1"]),
+        "a1": Anime(id="a1", title_en="Small", year=2020, studios=["S1"]),
     }
     credits = [
         Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="test"),
@@ -138,7 +138,7 @@ class TestPeerEffects:
         for a_idx in range(5):
             aid = f"a{a_idx}"
             anime_map[aid] = Anime(
-                id=aid, title_en=f"Anime {a_idx}", year=2020, score=7.0, studios=["S1"]
+                id=aid, title_en=f"Anime {a_idx}", year=2020, studios=["S1"]
             )
             for p_idx in range(5):
                 pid = f"p{a_idx}_{p_idx}"

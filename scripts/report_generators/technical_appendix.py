@@ -405,7 +405,7 @@ def create_default_appendix(result_dir: str = "result/json") -> TechnicalAppendi
         briefs_referenced=["business"],
         sections_referenced={"business": ["market_whitespace", "emerging_teams"]},
         has_validation=True,
-        analyst_notes="Genre matters for niche expertise. Useful for identifying specialized talent pools.",
+        analyst_notes="Genre matters for niche expertise. Useful for identifying specialized professional pools.",
     ))
     
     # Studio Profiling
@@ -413,14 +413,14 @@ def create_default_appendix(result_dir: str = "result/json") -> TechnicalAppendi
         id="studio_network",
         title="Studio Collaboration Network & Ecosystem",
         category=ReportCategory.STUDIO_PROFILING,
-        description="Models studios as nodes with edges representing co-production, shared talent. Identifies studio clusters and competitive vs. cooperative dynamics.",
+        description="Models studios as nodes with edges representing co-production, shared staff. Identifies studio clusters and competitive vs. cooperative dynamics.",
         file_path=f"{result_dir}/studio_network.json",
         algorithm="Studio co-production graph + modularity-based clustering",
         data_source="studio participation in anime + shared person affiliations",
         briefs_referenced=["policy", "business"],
         sections_referenced={"policy": ["market_concentration"], "business": ["investment_action"]},
         has_validation=True,
-        analyst_notes="Studio concentration is primary policy concern. Shared talent indicates ecosystem openness.",
+        analyst_notes="Studio concentration is primary policy concern. Shared staff indicates ecosystem openness.",
     ))
     
     # Confidence Methods

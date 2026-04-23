@@ -30,7 +30,7 @@ class TestNormalizationEdgeCases:
 
 class TestCareerEdgeCases:
     def test_single_credit(self):
-        anime_map = {"a1": Anime(id="a1", title_en="X", year=2024, score=8.0)}
+        anime_map = {"a1": Anime(id="a1", title_en="X", year=2024)}
         credits = [Credit(person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR)]
         result = analyze_career("p1", credits, anime_map)
         assert result.total_credits == 1
@@ -48,7 +48,7 @@ class TestCareerEdgeCases:
 
     def test_same_year_many_credits(self):
         anime_map = {
-            f"a{i}": Anime(id=f"a{i}", title_en=f"X{i}", year=2024, score=7.0)
+            f"a{i}": Anime(id=f"a{i}", title_en=f"X{i}", year=2024)
             for i in range(20)
         }
         credits = [
@@ -63,7 +63,7 @@ class TestCareerEdgeCases:
 class TestCirclesEdgeCases:
     def test_director_only(self):
         """監督だけでアニメーターがいない場合."""
-        anime_map = {"a1": Anime(id="a1", year=2024, score=8.0)}
+        anime_map = {"a1": Anime(id="a1", year=2024)}
         credits = [Credit(person_id="dir1", anime_id="a1", role=Role.DIRECTOR)]
         circles = find_director_circles(
             credits, anime_map, min_shared_works=1, min_director_works=1
@@ -76,7 +76,7 @@ class TestCirclesEdgeCases:
 
     def test_one_work_director(self):
         """1作品しかない監督は min_director_works=2 で除外される."""
-        anime_map = {"a1": Anime(id="a1", year=2024, score=8.0)}
+        anime_map = {"a1": Anime(id="a1", year=2024)}
         credits = [
             Credit(person_id="dir1", anime_id="a1", role=Role.DIRECTOR),
             Credit(person_id="anim1", anime_id="a1", role=Role.KEY_ANIMATOR),
@@ -100,7 +100,7 @@ class TestAnimeStatsEdgeCases:
         assert stats == {}
 
     def test_many_persons_one_anime(self):
-        anime_map = {"a1": Anime(id="a1", title_en="Big Show", year=2024, score=9.0)}
+        anime_map = {"a1": Anime(id="a1", title_en="Big Show", year=2024)}
         credits = [
             Credit(person_id=f"p{i}", anime_id="a1", role=Role.KEY_ANIMATOR)
             for i in range(100)

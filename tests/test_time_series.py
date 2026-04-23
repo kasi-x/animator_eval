@@ -6,10 +6,10 @@ from src.models import BronzeAnime as Anime, Credit, Role
 
 def _make_data():
     anime_map = {
-        "a1": Anime(id="a1", title_en="Show 1", year=2018, score=7.0),
-        "a2": Anime(id="a2", title_en="Show 2", year=2019, score=7.5),
-        "a3": Anime(id="a3", title_en="Show 3", year=2020, score=8.0),
-        "a4": Anime(id="a4", title_en="Show 4", year=2020, score=7.0),
+        "a1": Anime(id="a1", title_en="Show 1", year=2018),
+        "a2": Anime(id="a2", title_en="Show 2", year=2019),
+        "a3": Anime(id="a3", title_en="Show 3", year=2020),
+        "a4": Anime(id="a4", title_en="Show 4", year=2020),
     }
     credits = [
         Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR),

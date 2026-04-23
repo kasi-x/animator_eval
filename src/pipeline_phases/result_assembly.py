@@ -9,6 +9,7 @@ import numpy as np
 import structlog
 
 from src.analysis.explain import explain_authority, explain_skill, explain_trust
+from src.analysis.gold_writer import GoldWriter
 from src.analysis.scoring.integrated_value import compute_studio_exposure
 from src.database import upsert_career_tracks
 from src.models import ScoreResult
@@ -116,7 +117,7 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
 
     # Batch upsert scores (single transaction instead of 125K individual INSERTs)
     conn.executemany(
-        """INSERT INTO scores
+        """INSERT INTO person_scores
                (person_id, person_fe, studio_fe_exposure, birank,
                 patronage, dormancy, awcc, iv_score)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -150,6 +151,15 @@ def assemble_result_entries(context: PipelineContext, conn: sqlite3.Connection) 
         year=run_year,
         quarter=run_quarter,
     )
+
+    # Phase B: dual-write GOLD tables to DuckDB (person_scores + score_history).
+    # Failures are non-fatal — SQLite remains the canonical store during transition.
+    try:
+        with GoldWriter() as gw:
+            gw.write_person_scores(score_rows)
+            gw.write_score_history(history_rows)
+    except Exception as exc:
+        logger.warning("gold_duckdb_write_failed", error=str(exc))
 
     # Persist career tracks to scores table (v28 migration)
     if context.career_tracks:

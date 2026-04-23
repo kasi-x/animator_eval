@@ -6,11 +6,11 @@ from src.models import BronzeAnime as Anime, Credit, Role
 
 def _make_data():
     anime_map = {
-        "a1": Anime(id="a1", title_en="Early", year=2015, score=6.0),
-        "a2": Anime(id="a2", title_en="Mid", year=2018, score=7.0),
-        "a3": Anime(id="a3", title_en="Recent 1", year=2023, score=8.0),
-        "a4": Anime(id="a4", title_en="Recent 2", year=2024, score=8.5),
-        "a5": Anime(id="a5", title_en="Recent 3", year=2024, score=7.5),
+        "a1": Anime(id="a1", title_en="Early", year=2015),
+        "a2": Anime(id="a2", title_en="Mid", year=2018),
+        "a3": Anime(id="a3", title_en="Recent 1", year=2023),
+        "a4": Anime(id="a4", title_en="Recent 2", year=2024),
+        "a5": Anime(id="a5", title_en="Recent 3", year=2024),
     }
     credits = [
         # p1: rising (few early, many recent)

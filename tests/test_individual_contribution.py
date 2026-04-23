@@ -19,13 +19,12 @@ from src.models import BronzeAnime as Anime, Credit, Role
 
 
 def _make_anime(
-    aid: str, score: float, year: int = 2020, studios: list[str] | None = None
+    aid: str, year: int = 2020, studios: list[str] | None = None
 ) -> Anime:
     return Anime(
         id=aid,
         title_ja=f"Anime {aid}",
         title_en=f"Anime {aid}",
-        score=score,
         year=year,
         studios=studios or ["StudioA"],
         source="test",
@@ -44,7 +43,6 @@ def anime_map():
     return {
         f"a{i}": _make_anime(
             f"a{i}",
-            score=60 + i * 3,
             year=2015 + i,
             studios=["StudioA"] if i < 5 else ["StudioB"],
         )
@@ -290,7 +288,7 @@ class TestConsistency:
     def test_consistent_person(self):
         """Person with stable AKM residuals should be consistent."""
         features = {"p1": {"iv_score": 60}}
-        anime_map = {f"a{i}": _make_anime(f"a{i}", score=75) for i in range(6)}
+        anime_map = {f"a{i}": _make_anime(f"a{i}") for i in range(6)}
         credits = [_make_credit("p1", f"a{i}") for i in range(6)]
         # All residuals identical → std=0 → consistency=1.0
         akm_residuals = {("p1", f"a{i}"): 0.5 for i in range(6)}
@@ -304,7 +302,7 @@ class TestConsistency:
     def test_inconsistent_person(self):
         """Person with widely varying AKM residuals should have lower consistency."""
         features = {"p1": {"iv_score": 60}}
-        anime_map = {f"a{i}": _make_anime(f"a{i}", score=70) for i in range(6)}
+        anime_map = {f"a{i}": _make_anime(f"a{i}") for i in range(6)}
         credits = [_make_credit("p1", f"a{i}") for i in range(6)]
         # Widely varying residuals → high std → low consistency
         akm_residuals = {("p1", f"a{i}"): -15 + i * 6 for i in range(6)}
@@ -319,7 +317,7 @@ class TestConsistency:
     def test_insufficient_works(self):
         """Person with fewer than MIN_WORKS_FOR_CONSISTENCY anime should get None."""
         features = {"p1": {"iv_score": 60}}
-        anime_map = {f"a{i}": _make_anime(f"a{i}", score=75) for i in range(3)}
+        anime_map = {f"a{i}": _make_anime(f"a{i}") for i in range(3)}
         credits = [_make_credit("p1", f"a{i}") for i in range(3)]
 
         result = compute_consistency(features, credits, anime_map)
@@ -329,7 +327,7 @@ class TestConsistency:
         """AKM residuals should improve consistency measurement."""
         features = {"p1": {"iv_score": 60}, "p2": {"iv_score": 55}}
         anime_map = {
-            f"a{i}": _make_anime(f"a{i}", score=60 + i * 5, year=2015 + i)
+            f"a{i}": _make_anime(f"a{i}", year=2015 + i)
             for i in range(12)
         }
         # p1: small residuals (close to 0 → consistent)
@@ -375,10 +373,10 @@ class TestIndependentValue:
             "high3": {"iv_score": 92},
         }
         anime_map = {
-            "withx": _make_anime("withx", score=80),
-            "nox1": _make_anime("nox1", score=70),
-            "nox2": _make_anime("nox2", score=70),
-            "nox3": _make_anime("nox3", score=70),
+            "withx": _make_anime("withx"),
+            "nox1": _make_anime("nox1"),
+            "nox2": _make_anime("nox2"),
+            "nox3": _make_anime("nox3"),
         }
         # "withx": p0 + p1,p2,p3 + low1,low2,low3 (low IV peers besides p0)
         credits = [
@@ -406,7 +404,7 @@ class TestIndependentValue:
     def test_too_few_collaborators(self):
         """Should return None if < MIN_COLLABORATORS."""
         features = {"p0": {"iv_score": 50}, "p1": {"iv_score": 40}}
-        anime_map = {"a1": _make_anime("a1", score=70)}
+        anime_map = {"a1": _make_anime("a1")}
         credits = [_make_credit("p0", "a1"), _make_credit("p1", "a1")]
 
         result = compute_independent_value(features, credits, anime_map)

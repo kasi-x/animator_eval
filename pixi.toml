@@ -16,8 +16,14 @@ pipeline-inc = "python -m src.pipeline --incremental"
 pipeline-resume = "python -m src.pipeline --resume"
 pipeline-llm = { cmd = "python -m src.pipeline", env = { ANIMETOR_LLM = "1" } }
 
-# Development tools
-test = "pytest tests/ -v"
+# Development tools — 4-tier test strategy
+# --dist loadscope: keeps class tests on one worker → class-scoped fixtures run once, not N×
+test = "pytest tests/ -n auto --dist loadscope"     # T4: full suite parallel (all 2161 tests)
+test-full = "pytest tests/ -v"                      # T4 (verbose, serial): flaky debug用
+test-scoped = "pytest -n auto --dist loadscope"     # T3: `pixi run test-scoped tests/test_foo.py -k "bar"`
+test-quick = "pytest -x --lf -n auto --dist loadscope"  # T2: 前回失敗のみ + 即停止 (iteration)
+test-impact = "pytest --testmon -n0"                # T1: 変更影響のみ (testmon, xdist併用不可)
+test-impact-reset = "rm -f .testmondata"            # testmon cache リセット (スキーマ変更時に実行)
 lint = "ruff check src/ tests/"
 format = "ruff format src/ tests/"
 
@@ -28,6 +34,8 @@ schema-lint = "atlas schema lint --env dev"
 
 # Benchmarks
 bench = "python benchmarks/bench_pipeline.py"
+bench-duckdb = "python benchmarks/bench_duckdb.py"
+bench-duckdb-synth = "python benchmarks/bench_duckdb.py --synth --repeat 5"
 
 # Reports & Explorer
 reports = "PYTHONNOUSERSITE=1 python scripts/generate_all_reports.py"
@@ -57,6 +65,7 @@ structlog = "*"
 rich = "*"
 typer = "*"
 httpx = "*"
+pyarrow = ">=23.0.1,<24"
 
 # ============================================================================
 # Feature: scrape — web scraping and data collection
@@ -76,6 +85,7 @@ python-dotenv = ">=1.0"
 networkx = "*"
 pandas = "*"
 numpy = ">=1.26,<2.3"
+duckdb = ">=1.1"
 numba = ">=0.60"
 matplotlib = "*"
 plotly = ">=6.5.2,<7"
@@ -115,6 +125,8 @@ jupyterlab = "*"
 ruff = ">=0.1"
 pytest = ">=7.0"
 pytest-cov = ">=4.0"
+pytest-xdist = ">=3.5"
+pytest-testmon = ">=2.1"
 
 # ============================================================================
 # Feature: rust — Rust extension (PyO3/maturin)

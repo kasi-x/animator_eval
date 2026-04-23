@@ -35,19 +35,19 @@ def studio_data():
     """
     anime_map = {
         "a1": Anime(
-            id="a1", title_en="Alpha", year=2018, score=9.0, studios=["StudioA"]
+            id="a1", title_en="Alpha", year=2018, studios=["StudioA"]
         ),
         "a2": Anime(
-            id="a2", title_en="Beta", year=2019, score=8.5, studios=["StudioA"]
+            id="a2", title_en="Beta", year=2019, studios=["StudioA"]
         ),
         "a3": Anime(
-            id="a3", title_en="Gamma", year=2019, score=7.0, studios=["StudioB"]
+            id="a3", title_en="Gamma", year=2019, studios=["StudioB"]
         ),
         "a4": Anime(
-            id="a4", title_en="Delta", year=2020, score=6.5, studios=["StudioB"]
+            id="a4", title_en="Delta", year=2020, studios=["StudioB"]
         ),
         "a5": Anime(
-            id="a5", title_en="Epsilon", year=2021, score=5.0, studios=["StudioC"]
+            id="a5", title_en="Epsilon", year=2021, studios=["StudioC"]
         ),
     }
 
@@ -112,7 +112,7 @@ class TestInferStudioAssignment:
     def test_anime_without_studio_skipped(self):
         """Credits for anime with no studio are ignored."""
         anime_map = {
-            "a1": Anime(id="a1", title_en="NoStudio", year=2020, score=7.0, studios=[])
+            "a1": Anime(id="a1", title_en="NoStudio", year=2020, studios=[])
         }
         credits = [
             Credit(person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR, source="test")
@@ -206,7 +206,6 @@ class TestEstimateAKM:
                 id="a1",
                 title_en="Alpha",
                 year=2018,
-                score=9.0,
                 studios=["StudioA"],
                 episodes=24,
             ),
@@ -214,7 +213,6 @@ class TestEstimateAKM:
                 id="a2",
                 title_en="Beta",
                 year=2019,
-                score=8.5,
                 studios=["StudioA"],
                 episodes=24,
             ),
@@ -222,7 +220,6 @@ class TestEstimateAKM:
                 id="a3",
                 title_en="Gamma",
                 year=2019,
-                score=7.0,
                 studios=["StudioB"],
                 episodes=12,
             ),
@@ -230,7 +227,6 @@ class TestEstimateAKM:
                 id="a4",
                 title_en="Delta",
                 year=2020,
-                score=6.5,
                 studios=["StudioB"],
                 episodes=12,
             ),
@@ -238,7 +234,6 @@ class TestEstimateAKM:
                 id="a5",
                 title_en="Epsilon",
                 year=2021,
-                score=5.0,
                 studios=["StudioC"],
                 episodes=1,
             ),
@@ -281,7 +276,7 @@ class TestEstimateAKM:
             studio = f"Studio{i}"
             aid = f"a{i}"
             anime_map[aid] = Anime(
-                id=aid, title_en=f"Anime {i}", year=2020, score=7.0, studios=[studio]
+                id=aid, title_en=f"Anime {i}", year=2020, studios=[studio]
             )
             credits.append(
                 Credit(
@@ -296,7 +291,7 @@ class TestEstimateAKM:
             aid2 = f"a{i}b"
             studio = f"Studio{i}"
             anime_map[aid2] = Anime(
-                id=aid2, title_en=f"Anime {i}b", year=2021, score=7.0, studios=[studio]
+                id=aid2, title_en=f"Anime {i}b", year=2021, studios=[studio]
             )
             credits.append(
                 Credit(
@@ -328,14 +323,12 @@ class TestEstimateAKM:
                 id="a1",
                 title_en="CoProduction",
                 year=2020,
-                score=8.0,
                 studios=["StudioA", "StudioB"],
             ),
             "a2": Anime(
                 id="a2",
                 title_en="Solo",
                 year=2021,
-                score=7.0,
                 studios=["StudioA"],
             ),
         }
@@ -474,7 +467,6 @@ class TestShrinkPersonFE:
             id="a_special",
             title_en="Special",
             year=2022,
-            score=9.5,
             studios=["StudioA"],
         )
         credits.append(
@@ -596,7 +588,6 @@ class TestWeightedObservations:
                 id="a1",
                 title_en="Alpha",
                 year=2018,
-                score=9.0,
                 studios=["StudioA"],
                 episodes=24,
             ),
@@ -604,7 +595,6 @@ class TestWeightedObservations:
                 id="a2",
                 title_en="Beta",
                 year=2020,
-                score=7.0,
                 studios=["StudioB"],
                 episodes=12,
             ),
@@ -626,7 +616,6 @@ class TestWeightedObservations:
             id="a1",
             title_en="A",
             year=2020,
-            score=8.0,
             studios=["StudioA"],
             episodes=24,
         )
@@ -664,7 +653,6 @@ class TestWeightedObservations:
                 id="a1",
                 title_en="A",
                 year=2020,
-                score=8.0,
                 studios=["StudioA"],
                 episodes=12,
             ),
@@ -672,7 +660,6 @@ class TestWeightedObservations:
                 id="a2",
                 title_en="B",
                 year=2021,
-                score=7.5,
                 studios=["StudioB"],
                 episodes=12,
             ),

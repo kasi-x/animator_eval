@@ -11,11 +11,11 @@ from src.models import BronzeAnime as Anime, Credit, Role
 def _make_test_data():
     """メンター・メンティー関係のあるテストデータ."""
     anime_map = {
-        "a1": Anime(id="a1", title_en="Show 2010", year=2010, score=8.0),
-        "a2": Anime(id="a2", title_en="Show 2012", year=2012, score=7.5),
-        "a3": Anime(id="a3", title_en="Show 2015", year=2015, score=8.5),
-        "a4": Anime(id="a4", title_en="Show 2018", year=2018, score=7.0),
-        "a5": Anime(id="a5", title_en="Show 2020", year=2020, score=9.0),
+        "a1": Anime(id="a1", title_en="Show 2010", year=2010),
+        "a2": Anime(id="a2", title_en="Show 2012", year=2012),
+        "a3": Anime(id="a3", title_en="Show 2015", year=2015),
+        "a4": Anime(id="a4", title_en="Show 2018", year=2018),
+        "a5": Anime(id="a5", title_en="Show 2020", year=2020),
     }
     credits = [
         # p1 is a director on a1, a2, a3

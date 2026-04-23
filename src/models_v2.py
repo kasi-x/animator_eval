@@ -327,7 +327,7 @@ class Analysis(SQLModel, table=True):
     )
 
 
-class DisplayLookup(SQLModel, table=True):
+class DisplayLookupRow(SQLModel, table=True):
     """Optional: Log of bronze access for display purposes."""
 
     __tablename__ = "display_lookup"
@@ -391,10 +391,10 @@ class MetaLineage(SQLModel, table=True):
     )
 
 
-class MetaPolicyScore(SQLModel, table=True):
+class OpsPolicyScore(SQLModel, table=True):
     """Scoring policy metadata: decision points, weights, thresholds."""
 
-    __tablename__ = "meta_policy_score"
+    __tablename__ = "ops_policy_score"
 
     id: Optional[int] = Field(primary_key=True, default=None)
     policy_version: str = Field(description="Scoring policy version (e.g., 'v1.0')")
@@ -414,10 +414,10 @@ class MetaPolicyScore(SQLModel, table=True):
     )
 
 
-class MetaHRObservation(SQLModel, table=True):
+class OpsHRObservation(SQLModel, table=True):
     """Human Resource observations for labor economics analysis."""
 
-    __tablename__ = "meta_hr_observation"
+    __tablename__ = "ops_hr_observation"
 
     id: Optional[int] = Field(primary_key=True, default=None)
     person_id: str = Field(foreign_key="persons.id")
@@ -571,7 +571,7 @@ class SchemaMeta(SQLModel, table=True):
 # These tables are appended to, never deleted from (audit trail).
 
 
-class SrcAnimelistAnime(SQLModel, table=True):
+class SrcAnilistAnime(SQLModel, table=True):
     """Raw AniList anime data (https://anilist.co)."""
 
     __tablename__ = "src_anilist_anime"
@@ -602,7 +602,7 @@ class SrcAnimelistAnime(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-class SrcAnimelistPersons(SQLModel, table=True):
+class SrcAnilistPersons(SQLModel, table=True):
     """Raw AniList person data."""
 
     __tablename__ = "src_anilist_persons"
@@ -617,7 +617,7 @@ class SrcAnimelistPersons(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 
-class SrcAnimelistCredits(SQLModel, table=True):
+class SrcAnilistCredits(SQLModel, table=True):
     """Raw AniList staff credits."""
 
     __tablename__ = "src_anilist_credits"

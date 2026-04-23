@@ -95,12 +95,13 @@ def validate_data_completeness(conn: sqlite3.Connection) -> ValidationResult:
     if no_year > 0:
         result.add_warning(f"no_year_anime: {no_year} anime have no year")
 
-    # スコアが不明のアニメ
+    # スコアが不明のアニメ (display metadata from bronze src_anilist_anime via anime_external_ids)
     no_score = conn.execute("""
         SELECT COUNT(*)
         FROM anime a
-        LEFT JOIN anime_display d ON d.id = a.id
-        WHERE d.score IS NULL
+        LEFT JOIN anime_external_ids ext ON ext.anime_id = a.id AND ext.source = 'anilist'
+        LEFT JOIN src_anilist_anime b ON b.anilist_id = CAST(ext.external_id AS INTEGER)
+        WHERE b.score IS NULL
     """).fetchone()[0]
 
     total_anime = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]

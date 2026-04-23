@@ -26,10 +26,10 @@ def career_data():
     p1's actual rate > expected -> friction(p1) < friction(p2)
     """
     anime_map = {
-        "a1": Anime(id="a1", title_en="Early", year=2015, score=7.0, studios=["S1"]),
-        "a2": Anime(id="a2", title_en="Mid", year=2017, score=7.5, studios=["S1"]),
-        "a3": Anime(id="a3", title_en="Late", year=2019, score=8.0, studios=["S1"]),
-        "a4": Anime(id="a4", title_en="Latest", year=2021, score=8.5, studios=["S1"]),
+        "a1": Anime(id="a1", title_en="Early", year=2015, studios=["S1"]),
+        "a2": Anime(id="a2", title_en="Mid", year=2017, studios=["S1"]),
+        "a3": Anime(id="a3", title_en="Late", year=2019, studios=["S1"]),
+        "a4": Anime(id="a4", title_en="Latest", year=2021, studios=["S1"]),
     }
 
     credits = [
