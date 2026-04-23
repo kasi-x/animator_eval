@@ -1,16 +1,16 @@
-"""FastAPI サーバー — スコア照会 API.
+"""FastAPI server — score query API.
 
-エンドポイント:
-  GET /api/persons          — 全人物スコア一覧 (ページネーション対応)
-  GET /api/persons/search   — 人物検索
-  GET /api/persons/{id}     — 人物プロフィール
-  GET /api/persons/{id}/profile — 個人貢献プロファイル（二層モデル）
-  GET /api/persons/{id}/similar — 類似人物
-  GET /api/ranking          — ランキング (フィルタ対応)
-  GET /api/anime            — アニメ統計一覧
-  GET /api/anime/{id}       — アニメ詳細
-  GET /api/summary          — パイプラインサマリー
-  GET /api/health           — ヘルスチェック
+Endpoints:
+  GET /api/persons          — all person scores (paginated)
+  GET /api/persons/search   — person search
+  GET /api/persons/{id}     — person profile
+  GET /api/persons/{id}/profile — individual contribution profile (two-layer model)
+  GET /api/persons/{id}/similar — similar persons
+  GET /api/ranking          — ranking (with filters)
+  GET /api/anime            — anime statistics list
+  GET /api/anime/{id}       — anime detail
+  GET /api/summary          — pipeline summary
+  GET /api/health           — health check
 """
 
 import os
@@ -79,7 +79,7 @@ logger = structlog.get_logger()
 
 app = FastAPI(
     title="Animetor Eval API",
-    description="アニメ業界人物評価 API — 個人の貢献を可視化し、適正な報酬と業界の健全化を支援する",
+    description="Anime industry personnel evaluation API — making individual contributions visible to support fair compensation and a healthier industry",
     version="0.1.0",
 )
 
@@ -178,7 +178,7 @@ class PaginatedResponse(BaseModel):
 
 @app.get("/api/health", response_model=HealthResponse)
 def health():
-    """ヘルスチェック."""
+    """Health check."""
     from src.utils.config import DB_PATH
 
     scores_path = JSON_DIR / "scores.json"
@@ -218,7 +218,7 @@ def get_translations(language: str):
 
 @app.get("/api/summary")
 def summary():
-    """パイプラインサマリー."""
+    """Pipeline summary."""
     data = load_pipeline_summary_from_json()
     if not data:
         raise HTTPException(
@@ -288,13 +288,13 @@ def _row_to_person(r) -> dict:
 
 @app.get("/api/persons")
 def list_persons(
-    page: int = Query(1, ge=1, description="ページ番号"),
-    per_page: int = Query(50, ge=1, le=200, description="1ページあたりの件数"),
+    page: int = Query(1, ge=1, description="Page number"),
+    per_page: int = Query(50, ge=1, le=200, description="Results per page"),
     sort: str = Query(
-        "iv_score", description="ソート軸 (iv_score, person_fe, birank, patronage)"
+        "iv_score", description="Sort axis (iv_score, person_fe, birank, patronage)"
     ),
 ):
-    """全人物スコア一覧（ページネーション対応）."""
+    """All person scores (paginated)."""
     valid_sorts = {"iv_score", "person_fe", "birank", "patronage", "dormancy", "awcc"}
     if sort not in valid_sorts:
         raise HTTPException(
@@ -324,10 +324,10 @@ def list_persons(
 
 @app.get("/api/persons/search")
 def search(
-    q: str = Query(..., min_length=1, max_length=500, description="検索クエリ"),
-    limit: int = Query(20, ge=1, le=100, description="最大件数"),
+    q: str = Query(..., min_length=1, max_length=500, description="Search query"),
+    limit: int = Query(20, ge=1, le=100, description="Maximum number of results"),
 ):
-    """人物検索（名前・IDの部分一致）."""
+    """Person search (partial name/ID match)."""
     # Validate query string for SQL injection patterns
     q = validate_query_string(q)
     with db_connection() as conn:
@@ -337,7 +337,7 @@ def search(
 
 @app.get("/api/persons/{person_id}")
 def get_person(person_id: PersonId):
-    """人物プロフィール（スコア + ブレークダウン）."""
+    """Person profile (scores + breakdown)."""
     import sqlite3 as _sqlite3
 
     with db_connection() as conn:
@@ -352,14 +352,14 @@ def get_person(person_id: PersonId):
 @app.get("/api/persons/{person_id}/similar")
 def get_similar(
     person_id: PersonId,
-    top_n: int = Query(10, ge=1, le=50, description="類似人物の数"),
+    top_n: int = Query(10, ge=1, le=50, description="Number of similar persons"),
 ):
-    """類似人物検索（コサイン類似度）."""
+    """Similar person search (cosine similarity)."""
     import sqlite3 as _sqlite3
 
     with db_connection() as conn:
         conn.row_factory = _sqlite3.Row
-        # 対象人物と同じ主役職のスコア上位2000人のみで類似計算
+        # similarity computed only against the top 2000 persons sharing the target's primary role
         target = conn.execute(
             "SELECT person_fe, birank, patronage, awcc, dormancy,"
             " (SELECT role FROM credits WHERE person_id=s.person_id"
@@ -381,9 +381,9 @@ def get_similar(
 @app.get("/api/persons/{person_id}/history")
 def get_person_history(
     person_id: PersonId,
-    limit: int = Query(50, ge=1, le=200, description="履歴件数"),
+    limit: int = Query(50, ge=1, le=200, description="Number of history entries"),
 ):
-    """人物のスコア履歴."""
+    """Person score history."""
     with db_connection() as conn:
         history = get_score_history(conn, person_id, limit=limit)
     if not history:
@@ -394,14 +394,14 @@ def get_person_history(
 @app.get("/api/ranking")
 def ranking(
     role: str | None = Query(
-        None, description="役職フィルタ (director, animator, etc.)"
+        None, description="Role filter (director, animator, etc.)"
     ),
-    year_from: int | None = Query(None, description="開始年"),
-    year_to: int | None = Query(None, description="終了年"),
-    sort: str = Query("iv_score", description="ソート軸"),
-    limit: int = Query(50, ge=1, le=500, description="件数"),
+    year_from: int | None = Query(None, description="Start year"),
+    year_to: int | None = Query(None, description="End year"),
+    sort: str = Query("iv_score", description="Sort axis"),
+    limit: int = Query(50, ge=1, le=500, description="Number of results"),
 ):
-    """ランキング（フィルタ対応）— DuckDB GOLD優先、フォールバックはSQLite."""
+    """Ranking (with filters) — DuckDB GOLD preferred, SQLite fallback."""
     valid_sorts = {"iv_score", "person_fe", "birank", "patronage", "dormancy", "awcc"}
     if sort not in valid_sorts:
         raise HTTPException(status_code=400, detail=f"Invalid sort: {sort}")
@@ -534,10 +534,10 @@ def list_anime(
     page: int = Query(1, ge=1),
     per_page: int = Query(50, ge=1, le=200),
     sort: str = Query(
-        "credit_count", description="ソート (credit_count, avg_person_score, year)"
+        "credit_count", description="Sort key (credit_count, avg_person_score, year)"
     ),
 ):
-    """アニメ統計一覧."""
+    """Anime statistics list."""
     stats = load_anime_statistics_from_json()
     if not stats:
         return PaginatedResponse(
@@ -569,7 +569,7 @@ def list_anime(
 
 @app.get("/api/anime/{anime_id}")
 def get_anime(anime_id: AnimeId):
-    """アニメ詳細統計."""
+    """Anime detail statistics."""
     stats = load_anime_statistics_from_json()
     if anime_id not in stats:
         raise HTTPException(status_code=404, detail=f"Anime {anime_id} not found")
@@ -578,7 +578,7 @@ def get_anime(anime_id: AnimeId):
 
 @app.get("/api/transitions")
 def transitions():
-    """役職遷移分析."""
+    """Role transition analysis."""
     data = load_role_transitions_from_json()
     if not data:
         raise HTTPException(
@@ -589,7 +589,7 @@ def transitions():
 
 @app.get("/api/crossval")
 def crossval():
-    """スコアクロスバリデーション結果."""
+    """Score cross-validation results."""
     data = load_cross_validation_results_from_json()
     if not data:
         raise HTTPException(
@@ -600,7 +600,7 @@ def crossval():
 
 @app.get("/api/influence")
 def influence():
-    """影響ツリー（メンター・メンティー関係）."""
+    """Influence tree (mentor-mentee relationships)."""
     data = load_influence_tree_from_json()
     if not data:
         raise HTTPException(
@@ -611,7 +611,7 @@ def influence():
 
 @app.get("/api/studios")
 def studios():
-    """スタジオ分析."""
+    """Studio analysis."""
     data = load_studio_analysis_from_json()
     if not data:
         raise HTTPException(
@@ -622,7 +622,7 @@ def studios():
 
 @app.get("/api/seasonal")
 def seasonal():
-    """シーズントレンド."""
+    """Seasonal trends."""
     data = load_seasonal_trends_from_json()
     if not data:
         raise HTTPException(
@@ -633,10 +633,10 @@ def seasonal():
 
 @app.get("/api/collaborations")
 def collaborations(
-    limit: int = Query(50, ge=1, le=500, description="件数"),
+    limit: int = Query(50, ge=1, le=500, description="Number of results"),
     person_id: str | None = Query(None, description="人物IDでフィルタ"),
 ):
-    """コラボレーション強度ペア."""
+    """Collaboration strength pairs."""
     data = load_collaboration_pairs_from_json()
     if not data:
         raise HTTPException(
@@ -653,7 +653,7 @@ def collaborations(
 
 @app.get("/api/outliers")
 def outliers():
-    """スコア外れ値検出結果."""
+    """Score outlier detection results."""
     data = load_outlier_analysis_from_json()
     if not data:
         raise HTTPException(
@@ -664,7 +664,7 @@ def outliers():
 
 @app.get("/api/teams")
 def teams():
-    """チーム構成分析."""
+    """Team composition analysis."""
     data = load_team_patterns_from_json()
     if not data:
         raise HTTPException(
@@ -680,7 +680,7 @@ def growth(
     ),
     limit: int = Query(50, ge=1, le=500),
 ):
-    """成長トレンド."""
+    """Growth trends."""
     data = load_growth_trends_from_json()
     if not data:
         raise HTTPException(
@@ -699,7 +699,7 @@ def growth(
 
 @app.get("/api/time-series")
 def time_series():
-    """年次時系列データ."""
+    """Annual time-series data."""
     data = load_time_series_from_json()
     if not data:
         raise HTTPException(
@@ -710,7 +710,7 @@ def time_series():
 
 @app.get("/api/decades")
 def decades():
-    """年代別分析."""
+    """Decade-level analysis."""
     data = load_decade_analysis_from_json()
     if not data:
         raise HTTPException(
@@ -723,7 +723,7 @@ def decades():
 def tags(
     tag: str | None = Query(None, description="タグでフィルタ"),
 ):
-    """人物タグ."""
+    """Person tags."""
     data = load_person_tags_from_json()
     if not data:
         raise HTTPException(
@@ -747,7 +747,7 @@ def tags(
 
 @app.get("/api/role-flow")
 def role_flow():
-    """役職遷移フロー（Sankey diagram data）."""
+    """Role transition flow (Sankey diagram data)."""
     data = load_role_flow_from_json()
     if not data:
         raise HTTPException(
@@ -760,7 +760,7 @@ def role_flow():
 def compare_persons(
     ids: str = Query(..., description="比較対象の人物ID (カンマ区切り)"),
 ):
-    """複数人物の比較マトリクス."""
+    """Multi-person comparison matrix."""
     from src.analysis.comparison_matrix import build_comparison_matrix
 
     person_ids = [pid.strip() for pid in ids.split(",") if pid.strip()]
@@ -782,7 +782,7 @@ def compare_persons(
 
 @app.get("/api/data-quality")
 def data_quality():
-    """データ品質スコア."""
+    """Data quality score."""
     from src.analysis.data_quality import compute_data_quality_score
 
     with db_connection() as conn:
@@ -853,7 +853,7 @@ def get_person_network(
     person_id: PersonId,
     hops: int = Query(1, ge=1, le=3, description="ネットワーク深度"),
 ):
-    """人物のエゴグラフ（ローカルネットワーク）."""
+    """Person ego graph (local network)."""
     from src.analysis.network.ego_graph import extract_ego_graph
     from src.database import load_all_anime, load_all_credits
 
@@ -882,7 +882,7 @@ def recommend(
     team: str = Query(..., description="既存チームの人物ID (カンマ区切り)"),
     top_n: int = Query(10, ge=1, le=50),
 ):
-    """チームへの人材推薦."""
+    """Personnel recommendation for a team."""
     from src.analysis.recommendation import recommend_for_team
     from src.database import load_all_credits
 
@@ -905,7 +905,7 @@ def recommend(
 def predict(
     team: str = Query(..., description="チームの人物ID (カンマ区切り)"),
 ):
-    """チーム構成からアニメスコアを予測."""
+    """Predict production scale from team composition."""
     from src.analysis.anime_prediction import predict_anime_score
     from src.database import load_all_anime, load_all_credits
 
@@ -931,7 +931,7 @@ def predict(
 
 @app.get("/api/bridges")
 def bridges():
-    """コミュニティ間ブリッジ人物."""
+    """Bridge persons between communities."""
     data = load_bridge_analysis_from_json()
     if not data:
         raise HTTPException(
@@ -942,7 +942,7 @@ def bridges():
 
 @app.get("/api/mentorships")
 def mentorships():
-    """推定メンターシップ関係."""
+    """Inferred mentorship relationships."""
     data = load_mentorship_relationships_from_json()
     if not data:
         raise HTTPException(
@@ -953,7 +953,7 @@ def mentorships():
 
 @app.get("/api/persons/{person_id}/milestones")
 def get_person_milestones(person_id: PersonId):
-    """人物のキャリアマイルストーン."""
+    """Person career milestones."""
     data = load_career_milestones_from_json()
     if not data:
         raise HTTPException(
@@ -966,7 +966,7 @@ def get_person_milestones(person_id: PersonId):
 
 @app.get("/api/persons/{person_id}/profile")
 def get_person_profile(person_id: PersonId):
-    """個人貢献プロファイル（二層モデル: ネットワーク + 個人貢献）."""
+    """Individual contribution profile (two-layer model: network + individual contribution)."""
     # Layer 1: Network Profile (scores.json)
     scores = load_person_scores_from_json()
     network_profile = None
@@ -1005,7 +1005,7 @@ def get_person_profile(person_id: PersonId):
 
 @app.get("/api/studio-disparity")
 def studio_disparity():
-    """スタジオ間待遇差分析 — 同Skill帯のスコア差を比較."""
+    """Cross-studio compensation gap analysis — compare score gaps within the same skill band."""
     data = load_studio_bias_from_json()
     if not data:
         raise HTTPException(
@@ -1022,7 +1022,7 @@ def studio_disparity():
 
 @app.get("/api/network-evolution")
 def network_evolution():
-    """ネットワーク進化の時系列データ."""
+    """Time-series data of network evolution."""
     data = load_network_evolution_from_json()
     if not data:
         raise HTTPException(
@@ -1036,7 +1036,7 @@ def network_evolution():
 def genre_affinity(
     person_id: str | None = Query(None, description="人物IDでフィルタ"),
 ):
-    """ジャンル親和性データ."""
+    """Genre affinity data."""
     data = load_genre_affinity_from_json()
     if not data:
         raise HTTPException(
@@ -1055,7 +1055,7 @@ def genre_affinity(
 def productivity(
     limit: int = Query(50, ge=1, le=500),
 ):
-    """生産性指標."""
+    """Productivity metrics."""
     data = load_productivity_metrics_from_json()
     if not data:
         raise HTTPException(
@@ -1067,7 +1067,7 @@ def productivity(
 
 @app.get("/api/stats")
 def db_stats():
-    """DB統計情報."""
+    """Database statistics."""
     with db_connection() as conn:
         stats = get_db_stats(conn)
         sources = get_source_scrape_status(conn)
@@ -1310,7 +1310,7 @@ async def run_pipeline_async(
 
 
 def main() -> None:
-    """API サーバーを起動する."""
+    """Start the API server."""
     from src.log import setup_logging
 
     setup_logging()

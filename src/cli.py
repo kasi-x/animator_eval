@@ -1,4 +1,4 @@
-"""CLI インターフェース (Rich + Typer)."""
+"""CLI interface (Rich + Typer)."""
 
 import json
 
@@ -9,7 +9,7 @@ from rich.table import Table
 from src.log import setup_logging
 from src.i18n import set_language, t
 
-app = typer.Typer(name="animetor-eval", help="アニメ業界人材ネットワーク評価ツール")
+app = typer.Typer(name="animetor-eval", help="Anime industry personnel network evaluation tool")
 console = Console()
 
 
@@ -32,7 +32,7 @@ lang_option = typer.Option(
 
 @app.command()
 def stats(lang: str = lang_option) -> None:
-    """DB の統計情報を表示する / Display database statistics."""
+    """Display database statistics."""
     setup_logging()
 
     from src.database import db_connection, get_source_scrape_status, init_db
@@ -45,12 +45,12 @@ def stats(lang: str = lang_option) -> None:
         n_credits = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
         n_scores = conn.execute("SELECT COUNT(*) FROM person_scores").fetchone()[0]
 
-        # 役職分布
+        # role distribution
         role_dist = conn.execute(
             "SELECT role, COUNT(*) as cnt FROM credits GROUP BY role ORDER BY cnt DESC"
         ).fetchall()
 
-        # ソース分布
+        # source distribution
         source_dist = conn.execute(
             """
             SELECT evidence_source AS source_code, COUNT(*) as cnt
@@ -61,7 +61,7 @@ def stats(lang: str = lang_option) -> None:
             """
         ).fetchall()
 
-        # 年代分布
+        # year distribution
         year_dist = conn.execute(
             "SELECT year, COUNT(*) as cnt FROM anime WHERE year IS NOT NULL GROUP BY year ORDER BY year DESC LIMIT 10"
         ).fetchall()
@@ -122,23 +122,23 @@ def stats(lang: str = lang_option) -> None:
 
 @app.command()
 def ranking(
-    top_n: int = typer.Option(30, "--top", "-n", help="表示件数"),
+    top_n: int = typer.Option(30, "--top", "-n", help="Number of results to show"),
     role: str = typer.Option(
         None,
         "--role",
         "-r",
-        help="役職カテゴリでフィルタ (director/animator/designer/technical)",
+        help="Filter by role category (director/animator/designer/technical)",
     ),
     sort_by: str = typer.Option(
         "iv_score",
         "--sort",
         "-s",
-        help="ソート軸 (iv_score/person_fe/birank/patronage)",
+        help="Sort axis (iv_score/person_fe/birank/patronage)",
     ),
-    year_from: int = typer.Option(None, "--year-from", help="キャリア開始年の下限"),
-    year_to: int = typer.Option(None, "--year-to", help="最新活動年の上限"),
+    year_from: int = typer.Option(None, "--year-from", help="Lower bound for career start year"),
+    year_to: int = typer.Option(None, "--year-to", help="Upper bound for latest activity year"),
 ) -> None:
-    """スコアランキングを表示する."""
+    """Display score ranking."""
     setup_logging()
 
     from src.database import db_connection, init_db
@@ -214,14 +214,14 @@ def ranking(
         )
         raise typer.Exit()
 
-    title = "Animetor Eval — ネットワーク評価ランキング"
+    title = "Animetor Eval — Network Evaluation Ranking"
     if role:
         title += f" [{role}]"
     if year_from or year_to:
         title += f" ({year_from or '...'}-{year_to or '...'})"
     console.print(f"\n[bold blue]{title}[/bold blue]")
     console.print(
-        "[dim]※ スコアはネットワーク位置・密度の指標であり、能力評価ではありません[/dim]\n"
+        "[dim]* Scores measure network position and collaboration density, not individual ability.[/dim]\n"
     )
 
     table = Table()
@@ -252,8 +252,8 @@ def ranking(
 
 
 @app.command()
-def profile(person_id: str = typer.Argument(help="人物ID (例: anilist:p100)")) -> None:
-    """特定人物のプロフィールを表示する."""
+def profile(person_id: str = typer.Argument(help="Person ID (e.g. anilist:p100)")) -> None:
+    """Display a specific person's profile."""
     setup_logging()
 
     from src.database import db_connection, init_db
@@ -290,7 +290,7 @@ def profile(person_id: str = typer.Argument(help="人物ID (例: anilist:p100)")
     console.print(f"\n[bold blue]Profile: {name}[/bold blue]")
     console.print(f"  ID: {person_id}")
     if person["name_ja"]:
-        console.print(f"  名前 (日): {person['name_ja']}")
+        console.print(f"  Name (JA): {person['name_ja']}")
     if person["name_en"]:
         console.print(f"  Name (EN): {person['name_en']}")
 
@@ -376,10 +376,10 @@ def profile(person_id: str = typer.Argument(help="人物ID (例: anilist:p100)")
 
 @app.command()
 def search(
-    query: str = typer.Argument(help="検索クエリ（名前の部分一致）"),
-    limit: int = typer.Option(20, "--limit", "-l", help="表示件数"),
+    query: str = typer.Argument(help="Search query (partial name match)"),
+    limit: int = typer.Option(20, "--limit", "-l", help="Number of results to show"),
 ) -> None:
-    """人物を名前で検索する."""
+    """Search for persons by name."""
     setup_logging()
 
     from src.database import db_connection, init_db, search_persons
@@ -418,10 +418,10 @@ def search(
 
 @app.command()
 def compare(
-    person_a: str = typer.Argument(help="人物ID A"),
-    person_b: str = typer.Argument(help="人物ID B"),
+    person_a: str = typer.Argument(help="Person ID A"),
+    person_b: str = typer.Argument(help="Person ID B"),
 ) -> None:
-    """2人の人物を比較する."""
+    """Compare two persons."""
     setup_logging()
 
     from src.database import db_connection, init_db
@@ -474,7 +474,7 @@ def compare(
 
     console.print(f"\n[bold blue]Compare: {name_a} vs {name_b}[/bold blue]")
     console.print(
-        "[dim]※ スコアはネットワーク位置・密度の指標であり、能力評価ではありません[/dim]\n"
+        "[dim]* Scores measure network position and collaboration density, not individual ability.[/dim]\n"
     )
 
     table = Table()
@@ -500,7 +500,7 @@ def compare(
     )
     console.print(table)
 
-    # 役職比較
+    # role comparison
     if data_a["roles"] or data_b["roles"]:
         console.print("\n[bold]Roles:[/bold]")
         roles_a = {r: c for r, c in data_a["roles"]}
@@ -518,10 +518,10 @@ def compare(
 
 @app.command()
 def similar(
-    person_id: str = typer.Argument(help="対象人物ID"),
-    top_n: int = typer.Option(10, "--top", "-n", help="表示件数"),
+    person_id: str = typer.Argument(help="Target person ID"),
+    top_n: int = typer.Option(10, "--top", "-n", help="Number of results to show"),
 ) -> None:
-    """類似プロファイルの人物を検索する."""
+    """Search for persons with similar profiles."""
     setup_logging()
     import json as json_mod
 
@@ -549,7 +549,7 @@ def similar(
     target_name = target.get("name") or person_id
 
     console.print(f"\n[bold blue]Similar to: {target_name}[/bold blue]")
-    console.print("[dim]※ コサイン類似度によるスコアプロファイル比較[/dim]\n")
+    console.print("[dim]* Score profile comparison using cosine similarity.[/dim]\n")
 
     table = Table()
     table.add_column("#", justify="right", style="dim")
@@ -577,11 +577,11 @@ def similar(
 @app.command()
 def export(
     fmt: str = typer.Option(
-        "json", "--format", "-f", help="出力形式 (json/text/csv/all)"
+        "json", "--format", "-f", help="Output format (json/text/csv/all)"
     ),
-    output_dir: str = typer.Option(None, "--output", "-o", help="出力ディレクトリ"),
+    output_dir: str = typer.Option(None, "--output", "-o", help="Output directory"),
 ) -> None:
-    """スコアデータをファイルにエクスポートする."""
+    """Export score data to files."""
     setup_logging()
     from pathlib import Path
 
@@ -596,7 +596,7 @@ def export(
     with db_connection() as conn:
         init_db(conn)
 
-        # scores + persons を結合して results 形式に変換
+        # join scores + persons into the results format expected by downstream functions
         rows = conn.execute(
             """SELECT s.person_id, p.name_ja, p.name_en,
                       s.iv_score, s.person_fe, s.studio_fe_exposure,
@@ -659,10 +659,10 @@ def export(
 
 @app.command()
 def timeline(
-    person_id: str = typer.Argument(help="人物ID (例: anilist:p100)"),
-    output: str = typer.Option(None, "--output", "-o", help="出力ファイルパス"),
+    person_id: str = typer.Argument(help="Person ID (e.g. anilist:p100)"),
+    output: str = typer.Option(None, "--output", "-o", help="Output file path"),
 ) -> None:
-    """人物のキャリアタイムラインを可視化する."""
+    """Visualise a person's career timeline."""
     setup_logging()
     from collections import defaultdict
     from pathlib import Path
@@ -734,10 +734,10 @@ def timeline(
 
 @app.command()
 def history(
-    person_id: str = typer.Argument(help="人物ID"),
-    limit: int = typer.Option(20, "--limit", "-l", help="表示件数"),
+    person_id: str = typer.Argument(help="Person ID"),
+    limit: int = typer.Option(20, "--limit", "-l", help="Number of results to show"),
 ) -> None:
-    """人物のスコア履歴を表示する."""
+    """Display a person's score history."""
     setup_logging()
 
     from src.database import db_connection, get_score_history, init_db
@@ -793,7 +793,7 @@ def history(
 
 @app.command()
 def crossval() -> None:
-    """クロスバリデーション結果を表示する."""
+    """Display cross-validation results."""
     import json as json_mod
 
     from src.utils.config import JSON_DIR
@@ -809,7 +809,7 @@ def crossval() -> None:
 
     console.print("\n[bold blue]Score Cross-Validation Results[/bold blue]")
     console.print(
-        "[dim]スコアの安定性を測定 — クレジットの一部を除外してランキング変動を検証[/dim]\n"
+        "[dim]Measures score stability — verifies ranking changes when removing a subset of credits.[/dim]\n"
     )
 
     summary = Table(title="Summary")
@@ -859,7 +859,7 @@ def crossval() -> None:
 
 @app.command()
 def influence() -> None:
-    """メンター・メンティー関係（影響ツリー）を表示する."""
+    """Display mentor-mentee relationships (influence tree)."""
     import json as json_mod
 
     from src.utils.config import JSON_DIR
@@ -876,7 +876,7 @@ def influence() -> None:
     console.print(
         "\n[bold blue]Influence Tree — Mentor-Mentee Relationships[/bold blue]"
     )
-    console.print("[dim]ディレクターの門下から成長した人材の追跡[/dim]\n")
+    console.print("[dim]Tracks talent developed under directors.[/dim]\n")
 
     summary = Table(title="Summary")
     summary.add_column("Metric", style="cyan")
@@ -920,7 +920,7 @@ def influence() -> None:
 
 @app.command()
 def validate() -> None:
-    """DBデータの品質チェックを実行する."""
+    """Run data quality checks on the DB."""
     setup_logging()
 
     from src.database import db_connection, init_db
@@ -956,7 +956,7 @@ def validate() -> None:
 
 @app.command()
 def studios() -> None:
-    """スタジオ分析結果を表示する."""
+    """Display studio analysis results."""
     import json as json_mod
 
     from src.utils.config import JSON_DIR
@@ -971,7 +971,7 @@ def studios() -> None:
     data = json_mod.loads(path.read_text())
 
     console.print("\n[bold blue]Studio Analysis[/bold blue]")
-    console.print("[dim]各スタジオの人材プール分析[/dim]\n")
+    console.print("[dim]Analysis of each studio's talent pool.[/dim]\n")
 
     table = Table()
     table.add_column("Studio", style="cyan", min_width=20)
@@ -999,9 +999,9 @@ def studios() -> None:
 
 @app.command()
 def versatility(
-    top_n: int = typer.Option(30, "--top", "-n", help="表示件数"),
+    top_n: int = typer.Option(30, "--top", "-n", help="Number of results to show"),
 ) -> None:
-    """役職多様性スコアを表示する."""
+    """Display role diversity scores."""
     import json as json_mod
 
     from src.utils.config import JSON_DIR
@@ -1024,7 +1024,7 @@ def versatility(
     with_v.sort(key=lambda x: x["versatility"]["score"], reverse=True)
 
     console.print("\n[bold blue]Role Versatility Ranking[/bold blue]")
-    console.print("[dim]複数カテゴリで活動する人材の多様性指標[/dim]\n")
+    console.print("[dim]Diversity metric for persons active across multiple role categories.[/dim]\n")
 
     table = Table()
     table.add_column("#", justify="right", style="dim")
@@ -1051,9 +1051,9 @@ def versatility(
 
 @app.command()
 def density(
-    top_n: int = typer.Option(30, "--top", "-n", help="表示件数"),
+    top_n: int = typer.Option(30, "--top", "-n", help="Number of results to show"),
 ) -> None:
-    """ネットワーク密度（コラボレーション指標）を表示する."""
+    """Display network density (collaboration metric)."""
     import json as json_mod
 
     from src.utils.config import JSON_DIR
@@ -1075,7 +1075,7 @@ def density(
     with_n.sort(key=lambda x: x["network"]["hub_score"], reverse=True)
 
     console.print("\n[bold blue]Network Density (Hub Score) Ranking[/bold blue]")
-    console.print("[dim]コラボレーション・ハブとしての重要度[/dim]\n")
+    console.print("[dim]Importance as a collaboration hub.[/dim]\n")
 
     table = Table()
     table.add_column("#", justify="right", style="dim")
@@ -1102,7 +1102,7 @@ def density(
 
 @app.command()
 def outliers() -> None:
-    """スコア外れ値を検出・表示する."""
+    """Detect and display score outliers."""
     import json as json_mod
 
     from src.analysis.outliers import detect_outliers
@@ -1119,7 +1119,7 @@ def outliers() -> None:
     out = detect_outliers(results)
 
     console.print("\n[bold blue]Score Outlier Detection[/bold blue]")
-    console.print(f"[dim]検出された外れ値: {out['total_outliers']} 名[/dim]\n")
+    console.print(f"[dim]Outliers detected: {out['total_outliers']} persons[/dim]\n")
 
     for axis, data in out.get("axis_outliers", {}).items():
         if data["high"] or data["low"]:
@@ -1156,11 +1156,11 @@ def growth(
         None,
         "--trend",
         "-t",
-        help="トレンドフィルタ (rising/stable/declining/inactive)",
+        help="Trend filter (rising/stable/declining/inactive)",
     ),
-    top_n: int = typer.Option(30, "--top", "-n", help="表示件数"),
+    top_n: int = typer.Option(30, "--top", "-n", help="Number of results to show"),
 ) -> None:
-    """成長トレンドを表示する."""
+    """Display growth trend analysis."""
     import json as json_mod
 
     from src.utils.config import JSON_DIR
@@ -1175,7 +1175,7 @@ def growth(
     data = json_mod.loads(path.read_text())
 
     console.print("\n[bold blue]Growth Trends[/bold blue]")
-    console.print("[dim]キャリアトレンドに基づく成長傾向分析[/dim]\n")
+    console.print("[dim]Growth tendency analysis based on career trends.[/dim]\n")
 
     # Summary
     summary = data.get("trend_summary", {})
@@ -1228,9 +1228,9 @@ def growth(
 
 @app.command()
 def teams(
-    top_n: int = typer.Option(20, "--top", "-n", help="表示件数"),
+    top_n: int = typer.Option(20, "--top", "-n", help="Number of results to show"),
 ) -> None:
-    """チーム構成分析（成功作品のスタッフパターン）を表示する."""
+    """Display team composition analysis (staff patterns in successful works)."""
     import json as json_mod
 
     from src.utils.config import JSON_DIR
@@ -1245,7 +1245,7 @@ def teams(
     data = json_mod.loads(path.read_text())
 
     console.print("\n[bold blue]Team Composition Analysis[/bold blue]")
-    console.print("[dim]高評価作品のチーム構成パターン[/dim]\n")
+    console.print("[dim]Team composition patterns in highly-rated works.[/dim]\n")
 
     # Team size stats
     stats = data.get("team_size_stats", {})
@@ -1293,7 +1293,7 @@ def teams(
 
 @app.command()
 def decades() -> None:
-    """年代別トレンド分析を表示する."""
+    """Display decade-level trend analysis."""
     import json as json_mod
 
     from src.utils.config import JSON_DIR
@@ -1308,7 +1308,7 @@ def decades() -> None:
     data = json_mod.loads(path.read_text())
 
     console.print("\n[bold blue]Decade Analysis[/bold blue]")
-    console.print("[dim]10年単位でのアニメ業界トレンド[/dim]\n")
+    console.print("[dim]Anime industry trends by decade.[/dim]\n")
 
     table = Table()
     table.add_column("Decade", style="cyan")
@@ -1333,10 +1333,10 @@ def decades() -> None:
 
 @app.command()
 def tags(
-    tag_filter: str = typer.Option(None, "--tag", "-t", help="タグでフィルタ"),
-    top_n: int = typer.Option(30, "--top", "-n", help="表示件数"),
+    tag_filter: str = typer.Option(None, "--tag", "-t", help="Filter by tag"),
+    top_n: int = typer.Option(30, "--top", "-n", help="Number of results to show"),
 ) -> None:
-    """人物タグを表示する."""
+    """Display person tags."""
     import json as json_mod
 
     from src.utils.config import JSON_DIR
@@ -1351,7 +1351,7 @@ def tags(
     data = json_mod.loads(path.read_text())
 
     console.print("\n[bold blue]Person Tags[/bold blue]")
-    console.print("[dim]スコア・キャリアデータに基づく自動タグ[/dim]\n")
+    console.print("[dim]Auto-generated tags based on score and career data.[/dim]\n")
 
     # Tag summary
     summary = data.get("tag_summary", {})
@@ -1378,9 +1378,9 @@ def tags(
 
 @app.command()
 def bridges(
-    top_n: int = typer.Option(30, "--top", "-n", help="表示件数"),
+    top_n: int = typer.Option(30, "--top", "-n", help="Number of results to show"),
 ) -> None:
-    """コミュニティ間ブリッジ人物を表示する."""
+    """Display persons who bridge between communities."""
     import json as json_mod
 
     from src.utils.config import JSON_DIR
@@ -1396,7 +1396,7 @@ def bridges(
 
     console.print("\n[bold blue]Community Bridge Persons[/bold blue]")
     console.print(
-        "[dim]異なるコラボレーション・コミュニティをつなぐキーパーソン[/dim]\n"
+        "[dim]Key persons connecting different collaboration communities.[/dim]\n"
     )
 
     stats = data.get("stats", {})
@@ -1432,9 +1432,9 @@ def bridges(
 
 @app.command()
 def mentorships(
-    top_n: int = typer.Option(30, "--top", "-n", help="表示件数"),
+    top_n: int = typer.Option(30, "--top", "-n", help="Number of results to show"),
 ) -> None:
-    """推定メンターシップ関係を表示する."""
+    """Display inferred mentorship relationships."""
     import json as json_mod
 
     from src.utils.config import JSON_DIR
@@ -1449,7 +1449,7 @@ def mentorships(
     data = json_mod.loads(path.read_text())
 
     console.print("\n[bold blue]Inferred Mentorships[/bold blue]")
-    console.print("[dim]共演パターンから推定された師弟関係[/dim]\n")
+    console.print("[dim]Mentor-apprentice relationships inferred from co-credit patterns.[/dim]\n")
 
     console.print(f"  Total mentorships: {data.get('total', 0)}")
 
@@ -1482,9 +1482,9 @@ def mentorships(
 
 @app.command()
 def milestones(
-    person_id: str = typer.Argument(help="人物ID"),
+    person_id: str = typer.Argument(help="Person ID"),
 ) -> None:
-    """人物のキャリアマイルストーンを表示する."""
+    """Display a person's career milestones."""
     import json as json_mod
 
     from src.utils.config import JSON_DIR
@@ -1519,7 +1519,7 @@ def milestones(
 
 @app.command(name="net-evolution")
 def net_evolution() -> None:
-    """ネットワーク進化（年ごとのネットワーク変化）を表示する."""
+    """Display network evolution (year-by-year network changes)."""
     import json as json_mod
 
     from src.utils.config import JSON_DIR
@@ -1534,7 +1534,7 @@ def net_evolution() -> None:
     data = json_mod.loads(path.read_text())
 
     console.print("\n[bold blue]Network Evolution[/bold blue]")
-    console.print("[dim]年ごとのコラボレーションネットワーク変化[/dim]\n")
+    console.print("[dim]Year-by-year changes in the collaboration network.[/dim]\n")
 
     table = Table()
     table.add_column("Year", style="cyan")
@@ -1569,9 +1569,9 @@ def net_evolution() -> None:
 
 @app.command(name="genre-affinity")
 def genre_affinity_cmd(
-    person_id: str = typer.Argument(help="人物ID"),
+    person_id: str = typer.Argument(help="Person ID"),
 ) -> None:
-    """人物のジャンル親和性を表示する."""
+    """Display a person's genre affinity."""
     import json as json_mod
 
     from src.utils.config import JSON_DIR
@@ -1616,9 +1616,9 @@ def genre_affinity_cmd(
 
 @app.command()
 def productivity(
-    top_n: int = typer.Option(30, "--top", "-n", help="表示件数"),
+    top_n: int = typer.Option(30, "--top", "-n", help="Number of results to show"),
 ) -> None:
-    """生産性指標ランキングを表示する."""
+    """Display productivity metric ranking."""
     import json as json_mod
 
     from src.utils.config import JSON_DIR
@@ -1633,7 +1633,7 @@ def productivity(
     data = json_mod.loads(path.read_text())
 
     console.print("\n[bold blue]Productivity Ranking[/bold blue]")
-    console.print("[dim]クレジット密度による生産性指標[/dim]\n")
+    console.print("[dim]Productivity metric based on credit density.[/dim]\n")
 
     items = sorted(data.items(), key=lambda x: x[1]["credits_per_year"], reverse=True)[
         :top_n
@@ -1662,7 +1662,7 @@ def productivity(
 
 @app.command(name="data-quality")
 def data_quality() -> None:
-    """データ品質スコアを表示する."""
+    """Display data quality scores."""
     setup_logging()
 
     from src.analysis.data_quality import compute_data_quality_score
