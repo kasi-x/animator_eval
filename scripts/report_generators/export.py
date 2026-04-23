@@ -211,16 +211,25 @@ class BriefHTMLRenderer:
     """
     
     def render(self, brief_data: dict) -> str:
-        """Render brief data to HTML string.
-        
-        Returns:
-            HTML string with complete document
-        """
+        """Render brief data to a complete HTML document string."""
         metadata = brief_data.get("metadata", {})
         sections = brief_data.get("sections", {})
         method_gates = brief_data.get("method_gates", [])
-        
-        html_parts = [
+        generated_at = brief_data.get("generated_at", "N/A")
+
+        html_parts = [*self._render_html_open(metadata)]
+        html_parts.append(self._render_header(metadata, sections, method_gates, generated_at))
+        if method_gates:
+            html_parts.extend(self._render_method_gates_block(method_gates))
+        html_parts.extend(self._render_sections_block(sections))
+        html_parts.append(self._render_disclaimer())
+        html_parts.append(self._render_footer())
+        html_parts.extend(["</body>", "</html>"])
+        return "\n".join(html_parts)
+
+    def _render_html_open(self, metadata: dict) -> list[str]:
+        """Opening boilerplate: doctype, head, body open tag."""
+        return [
             "<!DOCTYPE html>",
             "<html lang='en'>",
             "<head>",
@@ -230,13 +239,20 @@ class BriefHTMLRenderer:
             "</head>",
             "<body>",
         ]
-        
-        # Header
-        html_parts.append(f"""
+
+    def _render_header(
+        self,
+        metadata: dict,
+        sections: dict,
+        method_gates: list,
+        generated_at: str,
+    ) -> str:
+        """Title block + 4-cell metadata grid (audience / date / counts)."""
+        return f"""
         <header>
             <h1>{metadata.get('title', 'Report Brief')}</h1>
             <p class='subtitle'>{metadata.get('description', '')}</p>
-            
+
             <div class='metadata'>
                 <div class='metadata-item'>
                     <span class='metadata-label'>Audience:</span><br>
@@ -244,7 +260,7 @@ class BriefHTMLRenderer:
                 </div>
                 <div class='metadata-item'>
                     <span class='metadata-label'>Generated:</span><br>
-                    {brief_data.get('generated_at', 'N/A')}
+                    {generated_at}
                 </div>
                 <div class='metadata-item'>
                     <span class='metadata-label'>Sections:</span><br>
@@ -256,14 +272,18 @@ class BriefHTMLRenderer:
                 </div>
             </div>
         </header>
-        """)
-        
-        # Method Gates (summary)
-        if method_gates:
-            html_parts.append("<div class='method-gates'>")
-            html_parts.append("<h2>Methodology</h2>")
-            for gate in method_gates:
-                html_parts.append(f"""
+        """
+
+    def _render_method_gates_block(self, method_gates: list) -> list[str]:
+        """Methodology summary section listing each gate."""
+        parts = ["<div class='method-gates'>", "<h2>Methodology</h2>"]
+        parts.extend(self._render_one_method_gate(g) for g in method_gates)
+        parts.append("</div>")
+        return parts
+
+    def _render_one_method_gate(self, gate: dict) -> str:
+        """One method-gate card (algorithm / validation / null model)."""
+        return f"""
                 <div class='method-gate'>
                     <div class='gate-name'>{gate.get('name', 'Gate')}</div>
                     <div class='gate-details'>
@@ -281,53 +301,65 @@ class BriefHTMLRenderer:
                         </div>
                     </div>
                 </div>
-                """)
-            html_parts.append("</div>")
-        
-        # Sections
+                """
+
+    def _render_sections_block(self, sections: dict) -> list[str]:
+        """Concatenate every brief section in declaration order."""
+        parts: list[str] = []
         for section_id, section_data in sections.items():
-            html_parts.append(f"<section>")
-            html_parts.append(f"<h2>{section_id.replace('_', ' ').title()}</h2>")
-            
-            findings = section_data.get("findings", "")
-            interpretation = section_data.get("interpretation", "")
-            
-            if findings:
-                html_parts.append("<div class='section-content'>")
-                html_parts.append(f"<h3>Findings</h3>")
-                html_parts.append(f"<div class='findings'>{findings}</div>")
-                html_parts.append("</div>")
-            
-            if interpretation:
-                html_parts.append("<div class='section-content interpretation'>")
-                html_parts.append(f"<h3>Interpretation</h3>")
-                html_parts.append(f"<div class='interpretation'>{interpretation}</div>")
-                html_parts.append("</div>")
-            
-            html_parts.append("</section>")
-        
-        # Disclaimer
-        html_parts.append("""
+            parts.extend(self._render_one_section(section_id, section_data))
+        return parts
+
+    def _render_one_section(self, section_id: str, section_data: dict) -> list[str]:
+        """One <section> with optional Findings + Interpretation children."""
+        title = section_id.replace('_', ' ').title()
+        parts = ["<section>", f"<h2>{title}</h2>"]
+        findings = section_data.get("findings", "")
+        interpretation = section_data.get("interpretation", "")
+        if findings:
+            parts.append(self._render_findings_block(findings))
+        if interpretation:
+            parts.append(self._render_interpretation_block(interpretation))
+        parts.append("</section>")
+        return parts
+
+    def _render_findings_block(self, findings: str) -> str:
+        """Findings sub-block (neutral facts layer)."""
+        return (
+            "<div class='section-content'>"
+            "<h3>Findings</h3>"
+            f"<div class='findings'>{findings}</div>"
+            "</div>"
+        )
+
+    def _render_interpretation_block(self, interpretation: str) -> str:
+        """Interpretation sub-block (first-person, multi-hypothesis layer)."""
+        return (
+            "<div class='section-content interpretation'>"
+            "<h3>Interpretation</h3>"
+            f"<div class='interpretation'>{interpretation}</div>"
+            "</div>"
+        )
+
+    def _render_disclaimer(self) -> str:
+        """Mandatory legal/ethical disclaimer block (English)."""
+        return """
         <div class='disclaimer'>
             <div class='disclaimer-title'>Disclaimer</div>
-            <p>This report presents analysis of industry collaboration networks based on public credit data. 
-            Scores measure structural network position, not individual competence or ability. 
+            <p>This report presents analysis of industry collaboration networks based on public credit data.
+            Scores measure structural network position, not individual competence or ability.
             All estimates include confidence intervals. See methodology section for complete details.</p>
         </div>
-        """)
-        
-        # Footer
-        html_parts.append(f"""
+        """
+
+    def _render_footer(self) -> str:
+        """Footer with generation timestamp + product label."""
+        return f"""
         <footer>
             <p>Generated: {datetime.now().isoformat()}</p>
             <p>Animetor Eval v2 Report System</p>
         </footer>
-        """)
-        
-        html_parts.append("</body>")
-        html_parts.append("</html>")
-        
-        return "\n".join(html_parts)
+        """
     
     def render_to_file(self, brief_data: dict, output_path: str) -> bool:
         """Render brief to HTML file.
