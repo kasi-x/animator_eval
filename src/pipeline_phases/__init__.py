@@ -35,13 +35,46 @@ from src.pipeline_phases.result_assembly import assemble_result_entries
 from src.pipeline_phases.supplementary_metrics import (
     compute_supplementary_metrics_phase,
 )
-from src.analysis.va.pipeline import (
-    assemble_va_results,
-    build_va_graphs_phase,
-    compute_va_core_scores_phase,
-    compute_va_supplementary_metrics_phase,
-)
 from src.pipeline_phases.validation import run_validation_phase
+
+# VA pipeline phases are imported lazily to avoid circular imports
+# (VA pipeline imports PipelineContext which imports this module)
+_va_phases_loaded = False
+_va_phases_cache = {}
+
+
+def _ensure_va_phases_loaded():
+    """Lazy-load VA pipeline phases on first access."""
+    global _va_phases_loaded, _va_phases_cache
+    if not _va_phases_loaded:
+        from src.analysis.va.pipeline import (
+            assemble_va_results,
+            build_va_graphs_phase,
+            compute_va_core_scores_phase,
+            compute_va_supplementary_metrics_phase,
+        )
+
+        _va_phases_cache = {
+            "assemble_va_results": assemble_va_results,
+            "build_va_graphs_phase": build_va_graphs_phase,
+            "compute_va_core_scores_phase": compute_va_core_scores_phase,
+            "compute_va_supplementary_metrics_phase": compute_va_supplementary_metrics_phase,
+        }
+        _va_phases_loaded = True
+
+
+def __getattr__(name):
+    """Lazy-load VA phase functions on attribute access."""
+    if name in {
+        "assemble_va_results",
+        "build_va_graphs_phase",
+        "compute_va_core_scores_phase",
+        "compute_va_supplementary_metrics_phase",
+    }:
+        _ensure_va_phases_loaded()
+        return _va_phases_cache[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "PipelineCheckpoint",
@@ -56,7 +89,7 @@ __all__ = [
     "post_process_results",
     "run_analysis_modules_phase",
     "export_and_visualize_phase",
-    # VA pipeline phases
+    # VA pipeline phases (lazy-loaded)
     "build_va_graphs_phase",
     "compute_va_core_scores_phase",
     "compute_va_supplementary_metrics_phase",

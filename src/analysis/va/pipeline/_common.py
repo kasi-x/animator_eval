@@ -1,31 +1,39 @@
-"""Shared helpers for VA pipeline phases."""
+"""Shared helpers for VA pipeline phases.
 
-from contextlib import contextmanager
+Re-exports common helpers from src.utils.pipeline_common and provides
+VA-specific wrappers for convenience.
+"""
 
 import structlog
 
-from src.pipeline_phases.context import PipelineContext
+from src.utils.pipeline_common import phase_step, skip_if_no_credits
 
 logger = structlog.get_logger()
 
+# Re-export common helpers (prefer direct use of src.utils.pipeline_common)
+__all__ = ["va_step", "skip_if_no_va_credits"]
 
-@contextmanager
-def va_step(context: PipelineContext, name: str):
-    """Start-log + performance-measure wrapper for a VA pipeline step.
 
-    Replaces the repeated pair:
-        logger.info("step_start", step="va_foo")
-        with context.monitor.measure("va_foo"):
-            ...
+def va_step(context, name: str):
+    """Alias for phase_step — convenience wrapper for VA phases.
+
+    Args:
+        context: PipelineContext with monitor attribute
+        name: Step name for logging
+
+    Usage: with va_step(context, "va_foo"):
     """
-    logger.info("step_start", step=name)
-    with context.monitor.measure(name):
-        yield
+    return phase_step(context, name)
 
 
-def skip_if_no_va_credits(context: PipelineContext, phase_log_name: str) -> bool:
-    """Return True (and log skip) when no VA credits exist, so the phase should return early."""
-    if not context.va_credits:
-        logger.debug(phase_log_name, reason="no_va_credits")
-        return True
-    return False
+def skip_if_no_va_credits(context, phase_log_name: str) -> bool:
+    """Convenience wrapper: skip if context.va_credits is empty.
+
+    Args:
+        context: PipelineContext with va_credits attribute
+        phase_log_name: Phase identifier for logging
+
+    Returns:
+        True if context.va_credits is empty, False otherwise.
+    """
+    return skip_if_no_credits(context, context.va_credits, phase_log_name)
