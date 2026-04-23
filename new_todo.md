@@ -13,6 +13,8 @@
 | `811aa18` | dead code 削除: `AnimeDisplay` class + F401 27 件 + F841 9 件 (-67 行、15 files) |
 | `944e32d` | `scripts/report_generators/export.py:BriefHTMLRenderer.render` 分解 (118 → 15 + 11 helpers) |
 | `415aa3e` | `scripts/report_generators/section_builder.py:method_note_from_lineage` 分解 (103 → 18 + 7 helpers) |
+| `7e4081c` | scraper 強化 ANN focus: file logging (logging_utils), retry 拡張 (500/502/504 + httpx 例外 3 種), `_ANN_TYPE_MAP` case-insensitive 化 (OAV→OVA バグ修正), 4 フィクスチャ + 40 件のネット非依存テスト |
+| `107cbfe` | scraper retry 統一: `src/scrapers/http_client.py:RetryingHttpClient` 新設 → mal/jvmg/allcinema を移行 (60+ 行重複削減)。anilist/mal/allcinema のフィクスチャ + parse テスト追加。全 scraper の typer command に file_logging hook |
 
 ruff F401/F841/F811 は処理した安定領域で **0 件**。
 
@@ -132,6 +134,66 @@ rg 'anime_display' src/ tests/ | grep -v "src/database.py" | grep -v "_legacy\|_
 ```
 
 特筆: `src/utils/import_guard.py` の `install_display_lookup_boundary_guard` が **runtime レベルで** display_lookup の analysis/pipeline_phases からの import を遮断。grep + import 二重防御。
+
+---
+
+## 2026-04-23 スクレイパー強化セッション残務
+
+`7e4081c` + `107cbfe` で着手したが完了していない / 未着手の項目。
+
+### A. ブロック中 (依存待ち)
+
+#### A.1 差分更新 (incremental update) — TODO §17 対応
+- **状態**: 保存側 (`src/database.py` / schema) 更新中につきブロック
+- **やる必要があること**:
+  1. `src_*_anime` テーブルに `fetched_at` / `content_hash` カラム追加 (schema 変更)
+  2. upsert 時に hash 比較して変更時のみ update + `meta_scrape_changes` (source, entity_type, entity_id, change_type, before_hash, after_hash, changed_at) に差分記録
+  3. scraper 側に `--since YYYY-MM-DD` mode 実装
+     - ANN: masterlist の `lastModified` 利用 (現状 CDN endpoint 自体が壊れている問題あり)
+     - AniList: GraphQL `updatedAt` フィルタ
+     - MAL/Jikan: `updated_at` でフィルタ
+- **scraper 側で先行実装可能なもの**: `content_hash` 算出 (sha256 of canonical JSON of relevant fields)。受け取り API が決まれば配線するだけ
+- **担当**: 保存側 agent 完了後、scraper 担当が拾う
+
+### B. 部分実装 / 引き継ぎ可
+
+#### B.1 ANN Phase 3 を HTML スクレイプに書き換え — TODO §20 対応
+- **状態**: user 側で着手の形跡あり (`ann_scraper.py` に `PEOPLE_HTML_BASE`, `parse_person_html`, `_parse_dob_html` が追加済、`tests/test_ann_scraper_parse.py` に 9 件のテスト追加済)
+- **背景**: ANN の `?people=ID` API が `<warning>ignored</warning>` を返す状態 (2026-04-23 確認)。Phase 3 (scrape-persons) が完全に空振り
+- **残り**: typer `cmd_scrape_persons` 内の `_run_scrape_persons` を XML batch fetch から HTML page fetch に切り替え (1 person = 1 GET、レート制限注意)
+- **fixture**: `tests/fixtures/scrapers/ann/person_260.html` 取得済
+
+### C. 意図的に skip した refactor (拡張余地あり)
+
+#### C.1 anilist_scraper.query() の retry refactor
+- **理由**: 220 行のカスタム `X-RateLimit-*` 監視 + token refresh + probe query 実装あり、機能差なし
+- **やるなら**: 共通部分 (httpx 例外 catch + 指数 backoff) のみ `RetryingHttpClient` に委譲、X-RateLimit-* 専用 callback hook を追加。**価値**: 中 (重複削減 50 行程度)、**リスク**: 中 (rate-limit 動作が壊れると本番ペイン)
+
+#### C.2 keyframe_scraper / mediaarts_scraper の HTTP 統一
+- **理由**: HTTP layer が呼び出し側から `httpx.AsyncClient` を渡される構造で、client class なし。refactor は呼び出し階層全体を触る必要
+- **やるなら**: `RetryingHttpClient` をモジュール内 factory で生成して内部で使う形に統一。**価値**: 小 (現状動いてる)、**リスク**: 中 (caller 側の影響範囲)
+
+### D. テストカバレッジ未追加の scraper
+
+| source | parse 関数 | テスト | 注 |
+|---|---|---|---|
+| jvmg / wikidata | `parse_wikidata_results` | 未 | SPARQL JSON fixture 取得 → 1 ファイル + 3-5 件のテストで足りる |
+| keyframe | `extract_preload_data` 等 | 未 | HTML fixture 1 件で OK |
+| seesaawiki | `parse_*` (3864 行内) | 未 | 旧来から quality audit メモ済 (`seesaawiki_parser_quality.md`)、parse 関数の特定が要 |
+
+### E. 確認済の壊れた endpoint (要対応)
+
+| endpoint | 症状 | 対応 |
+|---|---|---|
+| ANN `cdn.animenewsnetwork.com/encyclopedia/reports.xml?tag=masterlist&nlist=all` | HTML を返す (URL 廃止 or block) | fallback `_probe_max_id` で動作中。本来 nlist の正規パラメータ調査要 |
+| ANN `?people=ID` API | `<warning>ignored</warning>` を返す | B.1 で対応中 |
+
+### F. lint debt (user territory)
+
+私が触らなかった lint 残:
+- `src/scrapers/anilist_scraper.py:2603` F841 `existing_person_ids` 未使用
+- `src/scrapers/ann_scraper.py:515` E402 mid-file `import dataclasses` (bronze writer 領域)
+- `src/scrapers/allcinema_scraper.py:403` E402 同上
 
 ---
 
