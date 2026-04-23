@@ -4,9 +4,12 @@ from pathlib import Path
 
 from src.analysis.calc_cache import (
     DEFAULT_CACHE_PATH,
+    get_all_llm_decisions_bulk,
     get_calc_execution_hashes,
+    get_llm_decision,
     record_calc_execution,
     record_calc_executions_batch,
+    upsert_llm_decision,
 )
 
 
@@ -76,3 +79,39 @@ def test_missing_hash_returns_empty(tmp_path: Path) -> None:
     db = tmp_path / "cache.duckdb"
     result = get_calc_execution_hashes("never_recorded", path=db)
     assert result == {}
+
+
+# --- LLM decision cache ---
+
+
+def test_llm_upsert_and_read(tmp_path: Path) -> None:
+    """Record one LLM decision and read it back."""
+    p = tmp_path / "cache.duckdb"
+    upsert_llm_decision("田中", "org_classification", {"type": "person"}, path=p)
+    result = get_llm_decision("田中", "org_classification", path=p)
+    assert result == {"type": "person"}
+
+
+def test_llm_upsert_overwrites(tmp_path: Path) -> None:
+    """Recording the same (name, task) twice keeps the newest result."""
+    p = tmp_path / "cache.duckdb"
+    upsert_llm_decision("A", "t", {"v": 1}, path=p)
+    upsert_llm_decision("A", "t", {"v": 2}, path=p)
+    assert get_llm_decision("A", "t", path=p) == {"v": 2}
+
+
+def test_llm_bulk_fetch(tmp_path: Path) -> None:
+    """Fetch all decisions for a given task."""
+    p = tmp_path / "cache.duckdb"
+    upsert_llm_decision("X", "org_classification", {"type": "org"}, path=p)
+    upsert_llm_decision("Y", "org_classification", {"type": "person"}, path=p)
+    upsert_llm_decision("Z", "name_normalization", {"names": ["Z"]}, path=p)
+    bulk = get_all_llm_decisions_bulk("org_classification", path=p)
+    assert set(bulk.keys()) == {"X", "Y"}
+    assert bulk["X"] == {"type": "org"}
+
+
+def test_llm_missing_returns_none(tmp_path: Path) -> None:
+    """get_llm_decision returns None for missing entry."""
+    p = tmp_path / "cache.duckdb"
+    assert get_llm_decision("nobody", "unknown_task", path=p) is None

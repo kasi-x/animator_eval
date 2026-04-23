@@ -20,7 +20,6 @@ import structlog
 
 from src.analysis.calc_cache import (
     get_all_llm_decisions_bulk,
-    get_llm_decision,
     upsert_llm_decision,
 )
 from src.models import Person
