@@ -172,29 +172,42 @@ def test_openapi_key_routes_exist():
 
 
 def test_api_person_response_contains_score_fields(tmp_path, monkeypatch):
-    """GET /api/persons/{id} のレスポンスが scores テーブルの主要フィールドを含むこと.
+    """GET /api/persons/{id} のレスポンスが score フィールドを含むこと.
 
-    scores テーブルのカラム名と API レスポンスのキー名が一致することを確認する。
-    カラム名リファクタリング時に API 側の更新漏れを検出する。
+    フィールド名変更時に API 側の更新漏れを検出する。
     """
-    import src.database as db_mod
-    from src.database import get_connection, init_db
+    import duckdb
+    import src.analysis.gold_writer
+    import src.analysis.silver_reader
+    import src.api
+    import src.utils.json_io
     from fastapi.testclient import TestClient
+    from src.analysis.gold_writer import _DDL
 
-    db_path = tmp_path / "test_api.db"
-    monkeypatch.setattr(db_mod, "DEFAULT_DB_PATH", db_path)
+    silver_path = tmp_path / "silver.duckdb"
+    gold_path = tmp_path / "gold.duckdb"
+    monkeypatch.setattr(src.analysis.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(src.analysis.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+    monkeypatch.setattr(src.api, "JSON_DIR", tmp_path)
+    monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path)
 
-    conn = get_connection(db_path)
-    init_db(conn)
-    conn.execute("INSERT INTO persons(id, name_ja) VALUES ('p1', 'テスト太郎')")
-    conn.execute(
+    sconn = duckdb.connect(str(silver_path))
+    sconn.execute("CREATE TABLE persons (id VARCHAR PRIMARY KEY, name_ja VARCHAR DEFAULT '', name_en VARCHAR DEFAULT '', name_ko VARCHAR DEFAULT '', name_zh VARCHAR DEFAULT '', aliases VARCHAR DEFAULT '[]', image_medium VARCHAR)")
+    sconn.execute("CREATE TABLE anime (id VARCHAR PRIMARY KEY, title_en VARCHAR, year INTEGER)")
+    sconn.execute("CREATE TABLE credits (person_id VARCHAR, anime_id VARCHAR, role VARCHAR, credit_year INTEGER, evidence_source VARCHAR)")
+    sconn.execute("INSERT INTO persons(id, name_ja) VALUES ('p1', 'テスト太郎')")
+    sconn.close()
+
+    gconn = duckdb.connect(str(gold_path))
+    gconn.execute(_DDL)
+    gconn.execute(
         "INSERT INTO person_scores(person_id, iv_score, birank, person_fe, "
         "studio_fe_exposure, patronage, dormancy, awcc) "
         "VALUES ('p1', 0.9, 0.8, 0.7, 0.6, 0.5, 0.95, 0.4)"
     )
-    conn.commit()
-    conn.close()
+    gconn.close()
 
+    src.utils.json_io.clear_json_cache()
     from src.api import app
 
     client = TestClient(app)
@@ -202,18 +215,8 @@ def test_api_person_response_contains_score_fields(tmp_path, monkeypatch):
     assert resp.status_code == 200, resp.text
 
     body = resp.json()
-    # scores テーブルの全カラム名が API レスポンスに存在すること
-    score_cols = {
-        "person_fe",
-        "studio_fe_exposure",
-        "birank",
-        "patronage",
-        "dormancy",
-        "awcc",
-        "iv_score",
-    }
+    score_cols = {"person_fe", "studio_fe_exposure", "birank", "patronage", "dormancy", "awcc", "iv_score"}
     missing = score_cols - set(body.keys())
     assert not missing, (
-        f"GET /api/persons/{{id}} レスポンスに scores カラムが存在しない: {missing}\n"
-        f"  → api.py の _row_to_person() でフィールドマッピングを確認してください。"
+        f"GET /api/persons/{{id}} レスポンスに score フィールドが存在しない: {missing}"
     )

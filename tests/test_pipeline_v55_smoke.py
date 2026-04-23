@@ -138,23 +138,12 @@ def test_pipeline_completes_on_fresh_schema(tmp_path, monkeypatch) -> None:
     monkeypatch.setattr(src.pipeline, "JSON_DIR", json_dir)
     monkeypatch.setattr(src.utils.config, "JSON_DIR", json_dir)
 
-    from src.database import get_connection, init_db, insert_credit, upsert_anime, upsert_person
     from src.synthetic import generate_synthetic_data
     from src.pipeline import run_scoring_pipeline
 
     persons, anime_list, credits = generate_synthetic_data(
         n_directors=5, n_animators=30, n_anime=15, seed=99
     )
-    conn = get_connection()
-    init_db(conn)
-    for p in persons:
-        upsert_person(conn, p)
-    for a in anime_list:
-        upsert_anime(conn, a)
-    for c in credits:
-        insert_credit(conn, c)
-    conn.commit()
-    conn.close()
 
     from tests.conftest import build_silver_duckdb
     import src.analysis.silver_reader

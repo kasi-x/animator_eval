@@ -100,23 +100,23 @@ _REPORT_TO_CATEGORY = {
 RECOMPUTABLE_FEATURES: dict[str, dict] = {
     "career_gaps": {
         "description": "Career gaps (exit/semi-exit/return statistics)",
-        "function": "compute_feat_career_gaps",
-        "module": "src.database",
+        "function": None,
+        "module": None,
     },
     "work_context": {
         "description": "Work context (scale_tier, production_scale)",
-        "function": "_migrate_v44_add_work_scale_tier",
-        "module": "src.database",
+        "function": None,
+        "module": None,
     },
     "studio_affiliation": {
         "description": "Person × studio × year affiliations",
-        "function": "compute_feat_studio_affiliation",
-        "module": "src.database",
+        "function": None,
+        "module": None,
     },
     "career_annual": {
         "description": "Career annual metrics (iv_score_year etc.)",
-        "function": "compute_feat_career_annual",
-        "module": "src.database",
+        "function": None,
+        "module": None,
     },
     "cluster_membership": {
         "description": "Person cluster memberships (community, career_track, studio_cluster)",

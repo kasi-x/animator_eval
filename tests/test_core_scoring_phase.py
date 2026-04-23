@@ -39,7 +39,6 @@ def _make_context(monkeypatch, tmp_path: Path) -> PipelineContext:
     monkeypatch.setattr(src.pipeline, "JSON_DIR", json_dir)
     monkeypatch.setattr(src.utils.config, "JSON_DIR", json_dir)
 
-    from src.database import get_connection, init_db, insert_credit, upsert_anime, upsert_person
     from src.pipeline_phases import (
         PipelineContext,
         build_graphs_phase,
@@ -51,16 +50,6 @@ def _make_context(monkeypatch, tmp_path: Path) -> PipelineContext:
     persons, anime_list, credits = generate_synthetic_data(
         n_directors=5, n_animators=30, n_anime=15, seed=42
     )
-    conn = get_connection()
-    init_db(conn)
-    for p in persons:
-        upsert_person(conn, p)
-    for a in anime_list:
-        upsert_anime(conn, a)
-    for c in credits:
-        insert_credit(conn, c)
-    conn.commit()
-    conn.close()
 
     from tests.conftest import build_silver_duckdb
     import src.analysis.silver_reader
