@@ -358,17 +358,34 @@ class SectionBuilder:
 
         手書き method_note は禁止。このメソッド経由でのみ生成すること。
 
-        Args:
-            table_name: meta_lineage に登録されたテーブル名 (例: 'meta_policy_attrition')
-            conn: SQLite 接続
-
-        Returns:
-            HTML 文字列
-
         Raises:
             ValueError: table_name が meta_lineage に未登録の場合
         """
-        import json as _json
+        data = self._load_lineage_row(table_name, conn)
+        silver_tables = self._parse_silver_tables(data)
+
+        parts: list[str] = ['<div style="font-size:0.82rem;line-height:1.6;color:#8a94a0;">']
+        if silver_tables:
+            parts.append(self._render_silver_sources_p(silver_tables))
+        parts.append(self._render_simple_p("指標の説明", data.get("description")))
+        if data.get("source_bronze_forbidden", 1):
+            parts.append(self._render_score_prohibition_p())
+        parts.append(self._render_simple_p("信頼区間", data.get("ci_method")))
+        parts.append(self._render_simple_p("Null モデル", data.get("null_model")))
+        parts.append(self._render_simple_p("検証手法", data.get("holdout_method")))
+        parts.append(self._render_meta_paragraph(data))
+        parts.append(self._render_row_count_p(data.get("row_count")))
+        parts.append(self._render_simple_p("備考", data.get("notes")))
+        parts.append("</div>")
+        return "\n".join(p for p in parts if p)
+
+    @staticmethod
+    def _load_lineage_row(table_name: str, conn: sqlite3.Connection) -> dict:
+        """Fetch the meta_lineage row for table_name as a column→value dict.
+
+        Falls back to a hard-coded column list when the cursor description
+        is unavailable (defensive — older sqlite3 versions / mock cursors).
+        """
         row = conn.execute(
             "SELECT * FROM meta_lineage WHERE table_name = ?", (table_name,)
         ).fetchone()
@@ -377,7 +394,6 @@ class SectionBuilder:
                 f"No lineage registered for '{table_name}'. "
                 "Call register_meta_lineage() before generating method notes."
             )
-
         col_names = [d[0] for d in conn.execute(
             "SELECT * FROM meta_lineage WHERE 0"
         ).description or []]
@@ -389,68 +405,60 @@ class SectionBuilder:
                 "ci_method", "null_model", "holdout_method",
                 "row_count", "notes",
             ]
-        data = dict(zip(col_names, row))
+        return dict(zip(col_names, row))
 
-        # Parse silver source tables
+    @staticmethod
+    def _parse_silver_tables(data: dict) -> list[str]:
+        """JSON-decode source_silver_tables, defaulting to [] on bad data."""
+        import json as _json
         try:
-            silver_tables: list[str] = _json.loads(data.get("source_silver_tables", "[]"))
+            return _json.loads(data.get("source_silver_tables", "[]"))
         except (ValueError, TypeError):
-            silver_tables = []
+            return []
 
-        parts: list[str] = ['<div style="font-size:0.82rem;line-height:1.6;color:#8a94a0;">']
+    @staticmethod
+    def _render_silver_sources_p(silver_tables: list[str]) -> str:
+        """データソース paragraph with <code>-wrapped table names."""
+        inner = ", ".join(f"<code>{t}</code>" for t in silver_tables)
+        return f"<p><strong>データソース (silver 層):</strong> {inner}</p>"
 
-        # Silver sources
-        if silver_tables:
-            tbl_html = ", ".join(f"<code>{t}</code>" for t in silver_tables)
-            parts.append(f"<p><strong>データソース (silver 層):</strong> {tbl_html}</p>")
+    @staticmethod
+    def _render_simple_p(label: str, value: str | None) -> str:
+        """`<p><strong>label:</strong> value</p>`; empty string when value is falsy."""
+        if not value:
+            return ""
+        return f"<p><strong>{label}:</strong> {value}</p>"
 
-        if data.get("description"):
-            parts.append(f"<p><strong>指標の説明:</strong> {data['description']}</p>")
+    @staticmethod
+    def _render_score_prohibition_p() -> str:
+        """Bilingual confirmation that anime.score was not used (H1 invariant)."""
+        return (
+            "<p><strong>スコア非使用確認:</strong> "
+            "このテーブルの算出に <code>anime.score</code>（視聴者評価）は使用していない。"
+            " / <em>anime.score (viewer ratings) was not used in this computation.</em></p>"
+        )
 
-        # Score prohibition confirmation
-        if data.get("source_bronze_forbidden", 1):
-            parts.append(
-                "<p><strong>スコア非使用確認:</strong> "
-                "このテーブルの算出に <code>anime.score</code>（視聴者評価）は使用していない。"
-                " / <em>anime.score (viewer ratings) was not used in this computation.</em></p>"
-            )
+    @staticmethod
+    def _render_meta_paragraph(data: dict) -> str:
+        """Comma-joined formula_version / computed_at / git_sha / rng_seed / inputs_hash."""
+        pieces: list[str] = []
+        if data.get("formula_version"):
+            pieces.append(f"formula_version={data['formula_version']}")
+        if data.get("computed_at"):
+            pieces.append(f"computed_at={data['computed_at']}")
+        if data.get("git_sha"):
+            pieces.append(f"git_sha={data['git_sha']}")
+        if data.get("rng_seed") is not None:
+            pieces.append(f"rng_seed={data['rng_seed']}")
+        if data.get("inputs_hash"):
+            pieces.append(f"inputs_hash={data['inputs_hash'][:12]}…")
+        if not pieces:
+            return ""
+        return f"<p><strong>メタ:</strong> {', '.join(pieces)}</p>"
 
-        # CI method
-        if data.get("ci_method"):
-            parts.append(f"<p><strong>信頼区間:</strong> {data['ci_method']}</p>")
-
-        # Null model
-        if data.get("null_model"):
-            parts.append(f"<p><strong>Null モデル:</strong> {data['null_model']}</p>")
-
-        # Holdout method
-        if data.get("holdout_method"):
-            parts.append(f"<p><strong>検証手法:</strong> {data['holdout_method']}</p>")
-
-        # Formula version + computed_at
-        fv = data.get("formula_version", "")
-        ca = data.get("computed_at", "")
-        if fv or ca:
-            meta_parts = []
-            if fv:
-                meta_parts.append(f"formula_version={fv}")
-            if ca:
-                meta_parts.append(f"computed_at={ca}")
-            if data.get("git_sha"):
-                meta_parts.append(f"git_sha={data['git_sha']}")
-            if data.get("rng_seed") is not None:
-                meta_parts.append(f"rng_seed={data['rng_seed']}")
-            if data.get("inputs_hash"):
-                meta_parts.append(f"inputs_hash={data['inputs_hash'][:12]}…")
-            parts.append(f"<p><strong>メタ:</strong> {', '.join(meta_parts)}</p>")
-
-        # Row count
-        if data.get("row_count") is not None:
-            parts.append(f"<p><strong>行数:</strong> {data['row_count']:,}</p>")
-
-        # Notes
-        if data.get("notes"):
-            parts.append(f"<p><strong>備考:</strong> {data['notes']}</p>")
-
-        parts.append("</div>")
-        return "\n".join(parts)
+    @staticmethod
+    def _render_row_count_p(row_count: int | None) -> str:
+        """`<p>行数: N,NNN</p>`; empty when row_count is None (0 is valid)."""
+        if row_count is None:
+            return ""
+        return f"<p><strong>行数:</strong> {row_count:,}</p>"
