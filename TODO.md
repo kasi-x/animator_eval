@@ -144,7 +144,13 @@ silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行
 
 ### 5.1 Phase H-1 ✅ DONE (2026-04-23)
 
-49 nodes、Hamilton 3.36s vs ThreadPoolExecutor 16.42s (-79.5%) 達成。
+**ベンチマーク結果** (2026-04-23 実施):
+- ThreadPoolExecutor: 15.30秒
+- Hamilton DAG: 3.41秒
+- **高速化: 4.5倍** (オーバーヘッド: -77.7%)
+- **判定: ✅ PASS** (閾値 20% 以下を大幅突破)
+
+49 nodes、可読性も維持。**→ H-2 進行決定**。
 
 ### 5.2 Phase H-2: Phase 5-8 を Hamilton 化
 
@@ -167,9 +173,11 @@ silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行
 
 ### 中止判定
 
-H-1 終了時に以下のいずれかなら H-2 以降中止:
-- Hamilton overhead で Phase 9 並列実行が 20% 以上遅くなる
-- 型ヒント + decorator の可読性が `PipelineContext` より悪い
+**H-1 決定ゲート: ✅ PASS (2026-04-23)**
+- ❌ Hamilton overhead 20% 以上 → 実績: -77.7% (不該当、高速化)
+- ❌ 可読性悪化 → 型ヒント + decorator でむしろ向上 (不該当)
+
+**結論**: H-2 以降を完全実施。Phase 5-8, Phase 1-4 の Hamilton 化、PipelineContext 削除へ進む。
 
 ---
 
