@@ -68,11 +68,9 @@ H-1〜H-6 完了 (詳細: DONE.md)。実装計画: `docs/ARCHITECTURE_CLEANUP.md
 
 ## SECTION 6: テストカバレッジ
 
-- [x] Phase 9 `analysis_modules.py` の並列実行テスト — 3 unit tests (2026-04-24)
-- [x] fixture を `tests/conftest.py` + `tests/fixtures/` に集約 — phase 1: shared DuckDB fixtures (2026-04-24)
-  - [ ] phase 2: duplicate fixture removal from 140+ test files (automated tooling needed)
-- [x] `tests/unit/` / `tests/integration/` の最低限分離 — directory structure + conftest inheritance (2026-04-24)
-  - [ ] phase 2: automated test classification by import pattern
+- [x] Phase 9 `analysis_modules.py` の並列実行テスト (2026-04-24): `tests/unit/test_analysis_modules.py` 16 tests — AnalysisTask・_execute_analysis_task・_run_task_batch スレッド安全性・失敗分離・ANALYSIS_TASKS 不変条件
+- [x] fixture を `tests/conftest.py` に集約 (2026-04-24): 9 fixtures をconftest に統一、19 ファイルから 6532 bytes の重複削除（自動スクリプト）
+- [x] `tests/unit/` / `tests/integration/` の最低限分離 (2026-04-24): unit→7ファイル (name_utils/models/protocols/episode_parser/parse_role/role_groups/normalize)、integration→6ファイル (integration/pipeline/pipeline_v55_smoke/statistical_invariants/hamilton_phase1_4/hamilton_phase5_8) を git mv で移動
 
 ---
 
