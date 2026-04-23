@@ -96,12 +96,19 @@ H-1〜H-7 完了 (詳細: DONE.md)。実装計画: `docs/ARCHITECTURE_CLEANUP.md
 
 ## SECTION 7: スクレイパー強化残務
 
-### 7.1 差分更新 — Parquet + DuckDB ベース
+### 7.1 差分更新 — Parquet + DuckDB ベース (進行中)
 
-- [ ] BronzeWriter に `fetched_at` / `content_hash` フィールド追加 (parquet に含める)
-- [ ] scraper 側で hash 計算 (anime dict) → BronzeWriter に渡す
-- [ ] integrate_duckdb.py で Parquet → SILVER DuckDB 統合時に hash 比較してからマージ
-- [ ] scraper CLI に `--since YYYY-MM-DD` mode: 前回 SILVER fetch 以降の差分のみ処理
+**実装済み (2026-04-24)**:
+- [x] `hash_utils.py` 作成: 安定 SHA256 hash
+- [x] anilist_scraper `save_anime_batch_to_bronze()`: fetched_at + content_hash 追加
+- [x] integrate_duckdb.py anime DDL: fetched_at, content_hash カラム追加
+- [x] integrate_duckdb.py INSERT → REPLACE (upsert) に変更
+- [x] anilist_scraper `--since YYYY-MM-DD` mode: SILVER fetch 以降の差分のみ処理
+
+**次：**
+- [ ] ann / allcinema / seesaawiki scraper に hash 計算追加
+- [ ] hash 比較フィルタリング（Python or DuckDB）で冗長 update 最適化
+- [ ] E2E テスト (--since mode で真の差分検出確認)
 
 ### 7.3 anilist_scraper retry refactor (任意)
 
