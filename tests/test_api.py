@@ -515,23 +515,19 @@ class TestSimilar:
 
 
 class TestRanking:
-    def test_ranking_default(self, client, scores_data):
+    def test_ranking_no_gold_returns_503(self, client, scores_data):
+        """Ranking requires gold.duckdb; returns 503 when it is unavailable."""
         resp = client.get("/api/ranking")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["total"] == 3
+        # scores_data fixture disables gold.duckdb — expect 503 (no SQLite fallback)
+        assert resp.status_code == 503
 
-    def test_ranking_role_filter(self, client, scores_data):
+    def test_ranking_role_filter_no_gold_returns_503(self, client, scores_data):
         resp = client.get("/api/ranking?role=director")
-        data = resp.json()
-        assert data["total"] == 1
-        assert data["items"][0]["person_id"] == "p1"
+        assert resp.status_code == 503
 
-    def test_ranking_sort(self, client, scores_data):
+    def test_ranking_sort_no_gold_returns_503(self, client, scores_data):
         resp = client.get("/api/ranking?sort=patronage")
-        data = resp.json()
-        values = [item["patronage"] for item in data["items"]]
-        assert values == sorted(values, reverse=True)
+        assert resp.status_code == 503
 
 
 class TestAnime:

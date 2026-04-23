@@ -179,3 +179,134 @@ def query_silver(
     """Run an arbitrary read-only query against silver.duckdb."""
     with silver_connect(path) as conn:
         return _rows_as_dicts(conn, sql, params)
+
+
+# ---------------------------------------------------------------------------
+# Convenience helpers used by api.py (Step C migration)
+# ---------------------------------------------------------------------------
+
+def silver_available(path: Path | str | None = None) -> bool:
+    """Return True if silver.duckdb exists and is readable."""
+    return Path(str(path or DEFAULT_SILVER_PATH)).exists()
+
+
+def load_all_credits(path: Path | str | None = None) -> list:
+    """Load credits from silver.duckdb as Credit objects. Returns [] if unavailable."""
+    from src.models import Credit, Role
+
+    if not silver_available(path):
+        return []
+    result: list = []
+    skipped = 0
+    with silver_connect(path) as conn:
+        rel = conn.execute("SELECT * FROM credits")
+        cols = [d[0] for d in rel.description]
+        for row in rel.fetchall():
+            r = dict(zip(cols, row))
+            try:
+                result.append(
+                    Credit(
+                        person_id=r["person_id"],
+                        anime_id=r["anime_id"],
+                        role=Role(r["role"]),
+                        raw_role=r.get("raw_role") or None,
+                        episode=r.get("episode"),
+                        source=r.get("evidence_source") or "",
+                        evidence_source=r.get("evidence_source"),
+                    )
+                )
+            except Exception:
+                skipped += 1
+    if skipped:
+        logger.warning("silver_credits_skipped", count=skipped)
+    return result
+
+
+def load_all_anime(path: Path | str | None = None) -> list:
+    """Load anime from silver.duckdb (base fields only). Returns [] if unavailable."""
+    from src.models import AnimeAnalysis
+
+    if not silver_available(path):
+        return []
+    result: list = []
+    with silver_connect(path) as conn:
+        rel = conn.execute("SELECT * FROM anime")
+        cols = [d[0] for d in rel.description]
+        for row in rel.fetchall():
+            r = dict(zip(cols, row))
+            try:
+                studios_raw = r.get("studios")
+                studios = list(studios_raw) if isinstance(studios_raw, (list, tuple)) else []
+                result.append(
+                    AnimeAnalysis(
+                        id=r["id"],
+                        title_ja=r.get("title_ja") or "",
+                        title_en=r.get("title_en") or "",
+                        year=r.get("year"),
+                        season=r.get("season"),
+                        quarter=r.get("quarter"),
+                        episodes=r.get("episodes"),
+                        format=r.get("format"),
+                        status=r.get("status"),
+                        start_date=r.get("start_date"),
+                        end_date=r.get("end_date"),
+                        duration=r.get("duration"),
+                        original_work_type=r.get("source_mat"),
+                        source=r.get("source_mat"),
+                        work_type=r.get("work_type"),
+                        scale_class=r.get("scale_class"),
+                        studios=studios,
+                    )
+                )
+            except Exception:
+                pass
+    return result
+
+
+def silver_db_stats(
+    silver_path: Path | str | None = None,
+    gold_path: Path | str | None = None,
+) -> dict:
+    """Return DB stats for the /api/stats endpoint. Returns {} if gold unavailable."""
+    from src.analysis.gold_writer import gold_connect_with_silver, DEFAULT_GOLD_DB_PATH
+
+    g_path = Path(str(gold_path or DEFAULT_GOLD_DB_PATH))
+    if not g_path.exists():
+        return {}
+    stats: dict = {}
+    try:
+        with gold_connect_with_silver(g_path, silver_path) as conn:
+            for table in ("persons", "anime", "credits", "person_scores"):
+                try:
+                    stats[f"{table}_count"] = conn.execute(
+                        f"SELECT COUNT(*) FROM {table}"
+                    ).fetchone()[0]
+                except Exception:
+                    stats[f"{table}_count"] = 0
+            try:
+                role_counts = conn.execute(
+                    "SELECT role, COUNT(*) AS cnt FROM credits GROUP BY role"
+                ).fetchall()
+                stats["distinct_roles"] = len(role_counts)
+            except Exception:
+                pass
+            try:
+                yr = conn.execute(
+                    "SELECT MIN(start_year), MAX(start_year) FROM anime"
+                    " WHERE start_year IS NOT NULL"
+                ).fetchone()
+                if yr and yr[0]:
+                    stats["year_min"], stats["year_max"] = yr[0], yr[1]
+            except Exception:
+                pass
+            try:
+                for source, cnt in conn.execute(
+                    "SELECT evidence_source, COUNT(*) AS cnt FROM credits"
+                    " WHERE evidence_source != '' GROUP BY evidence_source ORDER BY cnt DESC"
+                ).fetchall():
+                    stats[f"credits_source_{source or 'unknown'}"] = cnt
+            except Exception:
+                pass
+    except Exception as exc:
+        logger.warning("silver_db_stats_failed", error=str(exc))
+    return stats

@@ -112,6 +112,68 @@ CREATE TABLE IF NOT EXISTS feat_studio_affiliation (
     PRIMARY KEY (person_id, credit_year, studio_id)
 );
 
+CREATE TABLE IF NOT EXISTS feat_credit_activity (
+    person_id               TEXT PRIMARY KEY,
+    first_abs_quarter       INTEGER,
+    last_abs_quarter        INTEGER,
+    activity_span_quarters  INTEGER,
+    active_quarters         INTEGER,
+    density                 REAL,
+    n_gaps                  INTEGER,
+    mean_gap_quarters       REAL,
+    median_gap_quarters     REAL,
+    min_gap_quarters        INTEGER,
+    max_gap_quarters        INTEGER,
+    std_gap_quarters        REAL,
+    consecutive_quarters    INTEGER,
+    consecutive_rate        REAL,
+    n_hiatuses              INTEGER,
+    longest_hiatus_quarters INTEGER,
+    quarters_since_last_credit INTEGER,
+    active_years            INTEGER,
+    n_year_gaps             INTEGER,
+    mean_year_gap           REAL,
+    max_year_gap            INTEGER,
+    updated_at              TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS feat_career_annual (
+    person_id               TEXT NOT NULL,
+    career_year             INTEGER NOT NULL,
+    credit_year             INTEGER NOT NULL,
+    n_works                 INTEGER NOT NULL DEFAULT 0,
+    n_credits               INTEGER NOT NULL DEFAULT 0,
+    n_roles                 INTEGER NOT NULL DEFAULT 0,
+    works_direction         INTEGER NOT NULL DEFAULT 0,
+    works_animation_supervision INTEGER NOT NULL DEFAULT 0,
+    works_animation         INTEGER NOT NULL DEFAULT 0,
+    works_design            INTEGER NOT NULL DEFAULT 0,
+    works_technical         INTEGER NOT NULL DEFAULT 0,
+    works_art               INTEGER NOT NULL DEFAULT 0,
+    works_sound             INTEGER NOT NULL DEFAULT 0,
+    works_writing           INTEGER NOT NULL DEFAULT 0,
+    works_production        INTEGER NOT NULL DEFAULT 0,
+    works_production_management INTEGER NOT NULL DEFAULT 0,
+    works_finishing         INTEGER NOT NULL DEFAULT 0,
+    works_editing           INTEGER NOT NULL DEFAULT 0,
+    works_settings          INTEGER NOT NULL DEFAULT 0,
+    works_other             INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (person_id, career_year)
+);
+
+CREATE TABLE IF NOT EXISTS feat_person_role_progression (
+    person_id               TEXT NOT NULL,
+    role_category           TEXT NOT NULL,
+    first_year              INTEGER,
+    last_year               INTEGER,
+    peak_year               INTEGER,
+    n_works                 INTEGER,
+    n_credits               INTEGER,
+    career_year_first       INTEGER,
+    still_active            INTEGER,
+    PRIMARY KEY (person_id, role_category)
+);
+
 CREATE TABLE IF NOT EXISTS meta_lineage (
     table_name              TEXT PRIMARY KEY,
     audience                TEXT NOT NULL,
@@ -576,20 +638,20 @@ class GoldReader:
 
     def ranking_query(
         self,
-        sqlite_path: Path | str,
+        silver_path: Path | str,
         *,
         conditions: list[str] | None = None,
         params: list[Any] | None = None,
         sort: str = "iv_score",
         limit: int = 50,
     ) -> tuple[int, list[dict[str, Any]]]:
-        """Run the ranking query joining DuckDB person_scores with SQLite SILVER.
+        """Run the ranking query joining DuckDB person_scores with silver.duckdb.
 
-        Attaches the SQLite DB (persons, credits) read-only so the entire
+        Attaches silver.duckdb (persons, credits) read-only so the entire
         analytical query runs inside DuckDB's vectorized engine.
 
         Returns (total_count, rows).
-        Raises on error — caller should fall back to SQLite.
+        Raises on error — caller should handle the failure.
         """
         conds = ["s.iv_score IS NOT NULL"] + (conditions or [])
         where = " AND ".join(conds)
@@ -598,9 +660,9 @@ class GoldReader:
         conn = _open(self._path)
         try:
             conn.execute(_DDL)
-            conn.execute(
-                f"ATTACH '{sqlite_path}' AS sl (TYPE SQLITE, READ_ONLY TRUE)"
-            )
+            silver = str(silver_path)
+            if Path(silver).exists():
+                conn.execute(f"ATTACH '{silver}' AS sl (READ_ONLY TRUE)")
 
             total = conn.execute(
                 f"SELECT COUNT(DISTINCT s.person_id) FROM person_scores s WHERE {where}",

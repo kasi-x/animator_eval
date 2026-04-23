@@ -44,16 +44,18 @@ from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
 
 from src.analysis.gold_writer import GoldReader
+from src.analysis.silver_reader import (
+    DEFAULT_SILVER_PATH,
+    silver_connect,
+    silver_available,
+    silver_db_stats,
+    load_all_credits as silver_load_all_credits,
+    load_all_anime as silver_load_all_anime,
+)
 from src.routers.i18n import router as i18n_router
 from src.routers.persons import router as persons_router
 from src.api_reports import router as reports_router
 from src.api_validators import AnimeId
-from src.database import (
-    DEFAULT_DB_PATH,
-    db_connection,
-    get_source_scrape_status,
-    get_db_stats,
-)
 from src.utils.config import JSON_DIR, REPORTS_DIR
 from src.utils.json_io import (
     load_anime_statistics_from_json,
@@ -255,7 +257,7 @@ def ranking(
         try:
             ddb_conds, ddb_params = _build_conditions("sl.")
             total, rows_raw = gold.ranking_query(
-                DEFAULT_DB_PATH,
+                DEFAULT_SILVER_PATH,
                 conditions=ddb_conds,
                 params=ddb_params,
                 sort=sort,
@@ -289,64 +291,9 @@ def ranking(
                 "filters": {"role": role, "year_from": year_from, "year_to": year_to},
             }
         except Exception as exc:
-            logger.warning("ranking_gold_duckdb_failed_fallback_sqlite", error=str(exc))
-
-    # --- SQLite fallback ---
-    sq_conds, sq_params = _build_conditions("")
-    where = " AND ".join(["s.iv_score IS NOT NULL"] + sq_conds)
-
-    with db_connection() as conn:
-        conn.row_factory = __import__("sqlite3").Row
-        total = conn.execute(
-            f"SELECT COUNT(DISTINCT s.person_id) FROM person_scores s WHERE {where}",
-            sq_params,
-        ).fetchone()[0]
-
-        sql = f"""
-            SELECT s.person_id,
-                   p.name_ja, p.name_en,
-                   s.iv_score, s.birank, s.patronage, s.person_fe,
-                   s.awcc, s.dormancy,
-                   MIN(c.credit_year) AS first_year,
-                   MAX(c.credit_year) AS latest_year,
-                   (SELECT role FROM credits
-                    WHERE person_id = s.person_id
-                    GROUP BY role ORDER BY COUNT(*) DESC LIMIT 1) AS primary_role
-            FROM person_scores s
-            JOIN persons p ON s.person_id = p.id
-            LEFT JOIN credits c ON s.person_id = c.person_id
-            WHERE {where}
-            GROUP BY s.person_id
-            ORDER BY s.{sort} DESC
-            LIMIT ?
-        """
-        rows = conn.execute(sql, sq_params + [limit]).fetchall()
-
-    items = [
-        {
-            "person_id": r["person_id"],
-            "name": r["name_ja"] or r["name_en"],
-            "name_ja": r["name_ja"],
-            "name_en": r["name_en"],
-            "iv_score": r["iv_score"],
-            "birank": r["birank"],
-            "patronage": r["patronage"],
-            "person_fe": r["person_fe"],
-            "awcc": r["awcc"],
-            "dormancy": r["dormancy"],
-            "primary_role": r["primary_role"],
-            "career": {"first_year": r["first_year"], "latest_year": r["latest_year"]},
-            "_source": "sqlite_fallback",
-        }
-        for r in rows
-    ]
-
-    return {
-        "items": items,
-        "total": total,
-        "sort": sort,
-        "filters": {"role": role, "year_from": year_from, "year_to": year_to},
-    }
+            logger.warning("ranking_gold_duckdb_failed", error=str(exc))
+            raise HTTPException(status_code=503, detail="Ranking data not available. Run pipeline first.")
+    raise HTTPException(status_code=503, detail="Ranking data not available. Run pipeline first.")
 
 
 @app.get("/api/anime")
@@ -605,55 +552,49 @@ def data_quality():
     """Data quality score."""
     from src.analysis.data_quality import compute_data_quality_score
 
-    with db_connection() as conn:
-        stats = get_db_stats(conn)
+    stats = silver_db_stats()
 
-        total_credits = stats.get("credits_count", 0)
-        total_persons = stats.get("persons_count", 0)
-        total_anime = stats.get("anime_count", 0)
+    total_credits = stats.get("credits_count", 0)
+    total_persons = stats.get("persons_count", 0)
+    total_anime = stats.get("anime_count", 0)
 
-        credits_with_source = (
-            conn.execute(
-                "SELECT COUNT(*) FROM credits WHERE evidence_source != ''"
+    credits_with_source = 0
+    persons_with_score = 0
+    anime_with_year = 0
+    anime_with_score = 0
+    source_count = 0
+    latest_year = None
+
+    if silver_available():
+        with silver_connect() as conn:
+            if total_credits:
+                credits_with_source = conn.execute(
+                    "SELECT COUNT(*) FROM credits WHERE evidence_source != ''"
+                ).fetchone()[0]
+            if total_persons:
+                try:
+                    from src.analysis.gold_writer import gold_connect, DEFAULT_GOLD_DB_PATH
+                    if DEFAULT_GOLD_DB_PATH.exists():
+                        with gold_connect() as gc:
+                            persons_with_score = gc.execute(
+                                "SELECT COUNT(*) FROM person_scores"
+                            ).fetchone()[0]
+                except Exception:
+                    pass
+            if total_anime:
+                anime_with_year = conn.execute(
+                    "SELECT COUNT(*) FROM anime WHERE year IS NOT NULL"
+                ).fetchone()[0]
+                # src_anilist_anime is BRONZE — not in silver; default 0
+                anime_with_score = 0
+            source_count = conn.execute(
+                "SELECT COUNT(DISTINCT evidence_source) FROM credits"
+                " WHERE evidence_source != ''"
             ).fetchone()[0]
-            if total_credits
-            else 0
-        )
-
-        persons_with_score = (
-            conn.execute("SELECT COUNT(*) FROM person_scores").fetchone()[0]
-            if total_persons
-            else 0
-        )
-
-        anime_with_year = (
-            conn.execute(
-                "SELECT COUNT(*) FROM anime WHERE year IS NOT NULL"
-            ).fetchone()[0]
-            if total_anime
-            else 0
-        )
-
-        anime_with_score = (
-            conn.execute(
-                "SELECT COUNT(*) FROM src_anilist_anime WHERE score IS NOT NULL"
-            ).fetchone()[0]
-            if total_anime
-            else 0
-        )
-
-        source_count = conn.execute(
-            """
-            SELECT COUNT(DISTINCT evidence_source)
-            FROM credits
-            WHERE evidence_source != ''
-            """
-        ).fetchone()[0]
-
-        latest_year_row = conn.execute(
-            "SELECT MAX(year) FROM anime WHERE year IS NOT NULL"
-        ).fetchone()
-        latest_year = latest_year_row[0] if latest_year_row else None
+            row = conn.execute(
+                "SELECT MAX(year) FROM anime WHERE year IS NOT NULL"
+            ).fetchone()
+            latest_year = row[0] if row else None
 
     return compute_data_quality_score(
         stats={"latest_year": latest_year},
@@ -675,7 +616,6 @@ def recommend(
 ):
     """Personnel recommendation for a team."""
     from src.analysis.recommendation import recommend_for_team
-    from src.database import load_all_credits
 
     team_ids = [pid.strip() for pid in team.split(",") if pid.strip()]
     if not team_ids:
@@ -685,8 +625,7 @@ def recommend(
     if not scores:
         raise HTTPException(status_code=404, detail="No scores available")
 
-    with db_connection() as conn:
-        credits = load_all_credits(conn)
+    credits = silver_load_all_credits()
 
     recs = recommend_for_team(team_ids, scores, credits, top_n=top_n)
     return {"team": team_ids, "recommendations": recs}
@@ -698,15 +637,13 @@ def predict(
 ):
     """Predict production scale from team composition."""
     from src.analysis.anime_prediction import predict_anime_score
-    from src.database import load_all_anime, load_all_credits
 
     team_ids = [pid.strip() for pid in team.split(",") if pid.strip()]
     if not team_ids:
         raise HTTPException(status_code=400, detail="At least 1 team member required")
 
-    with db_connection() as conn:
-        credits = load_all_credits(conn)
-        anime_list = load_all_anime(conn)
+    credits = silver_load_all_credits()
+    anime_list = silver_load_all_anime()
 
     anime_map = {a.id: a for a in anime_list}
     scores = load_person_scores_from_json()
@@ -807,19 +744,15 @@ def productivity(
 @app.get("/api/stats")
 def db_stats():
     """Database statistics."""
-    with db_connection() as conn:
-        stats = get_db_stats(conn)
-        sources = get_source_scrape_status(conn)
+    stats = silver_db_stats()
+    sources = []  # ops_source_scrape_status not in DuckDB yet
     return {"stats": stats, "data_sources": sources}
 
 
 @app.get("/api/freshness")
 def freshness():
     """Data source freshness check."""
-    from src.freshness import get_freshness_summary
-
-    with db_connection() as conn:
-        return get_freshness_summary(conn)
+    return {}  # freshness data not available until Bronze Parquet migration (Card 06)
 
 
 # --- Neo4j Query Endpoints ---

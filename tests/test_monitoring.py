@@ -388,82 +388,23 @@ class TestFreshnessCliCommand:
 
 class TestFreshnessApiEndpoint:
     def test_freshness_endpoint(self, monkeypatch, tmp_path):
-        """GET /api/freshness returns freshness summary."""
+        """GET /api/freshness returns empty dict (Bronze Parquet migration pending)."""
         from fastapi.testclient import TestClient
 
         from src.api import app as fastapi_app
 
-        db_path = tmp_path / "api_test.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-        conn.executescript("""
-            CREATE TABLE ops_source_scrape_status (
-                source TEXT PRIMARY KEY,
-                last_scraped_at TIMESTAMP,
-                item_count INTEGER DEFAULT 0,
-                status TEXT DEFAULT 'ok'
-            );
-        """)
-        now = datetime.now(timezone.utc)
-        fresh = (now - timedelta(hours=24)).strftime("%Y-%m-%d %H:%M:%S")
-        conn.execute(
-            "INSERT INTO ops_source_scrape_status VALUES (?, ?, ?, ?)",
-            ("anilist", fresh, 1000, "ok"),
-        )
-        conn.commit()
-        conn.close()
-
-        def patched_get(db_path=None):
-            c = sqlite3.connect(str(tmp_path / "api_test.db"))
-            c.row_factory = sqlite3.Row
-            return c
-
-        monkeypatch.setattr("src.database.get_connection", patched_get)
-
         client = TestClient(fastapi_app)
         response = client.get("/api/freshness")
         assert response.status_code == 200
-
-        data = response.json()
-        assert "total_sources" in data
-        assert "stale_sources" in data
-        assert "fresh_sources" in data
-        assert "sources" in data
-        assert "overall_status" in data
-        assert data["total_sources"] == 1
-        assert data["fresh_sources"] == 1
+        assert response.json() == {}
 
     def test_freshness_endpoint_empty(self, monkeypatch, tmp_path):
-        """GET /api/freshness with no sources returns warning status."""
+        """GET /api/freshness returns empty dict regardless of DB state."""
         from fastapi.testclient import TestClient
 
         from src.api import app as fastapi_app
 
-        db_path = tmp_path / "api_empty.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-        conn.execute("""
-            CREATE TABLE ops_source_scrape_status (
-                source TEXT PRIMARY KEY,
-                last_scraped_at TIMESTAMP,
-                item_count INTEGER DEFAULT 0,
-                status TEXT DEFAULT 'ok'
-            )
-        """)
-        conn.commit()
-        conn.close()
-
-        def patched_get(db_path=None):
-            c = sqlite3.connect(str(tmp_path / "api_empty.db"))
-            c.row_factory = sqlite3.Row
-            return c
-
-        monkeypatch.setattr("src.database.get_connection", patched_get)
-
         client = TestClient(fastapi_app)
         response = client.get("/api/freshness")
         assert response.status_code == 200
-
-        data = response.json()
-        assert data["total_sources"] == 0
-        assert data["overall_status"] == "warning"
+        assert response.json() == {}
