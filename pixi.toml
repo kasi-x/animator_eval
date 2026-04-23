@@ -39,7 +39,8 @@ bench-duckdb = "python benchmarks/bench_duckdb.py"
 bench-duckdb-synth = "python benchmarks/bench_duckdb.py --synth --repeat 5"
 
 # Reports & Explorer
-reports = "PYTHONNOUSERSITE=1 python scripts/generate_all_reports.py"
+reports = "PYTHONNOUSERSITE=1 python scripts/generate_reports_v2.py"
+reports-viz = "PYTHONNOUSERSITE=1 python scripts/generate_all_reports.py"
 build-explorer = "cd cmd/explorer && go build -o ../../bin/explorer ."
 explorer = "bin/explorer -data ./result/json -static ./static/explorer -port 3000"
 

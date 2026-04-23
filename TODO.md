@@ -4,6 +4,8 @@
 
 本書はプロジェクト内のすべての未完了項目を一元管理するファイルです。完了済みサマリーは `DONE.md`、設計原則は `CLAUDE.md`。
 
+最終更新: 2026-04-23 (DuckDB 4.2/4.3 完了、4.4 残務整理)
+
 ## 実行指示書は `TASK_CARDS/`
 
 弱いモデル・初見エンジニアが実際に作業する際は `TASK_CARDS/` 配下の個別カードを読んでください。各カードは自己完結 (前提条件・制約・手順・検証・ロールバック) です。
@@ -27,7 +29,7 @@ TASK_CARDS/
 | 優先度 | カテゴリ | 内容 |
 |--------|---------|------|
 | 🟠 Major | コード一貫性 | scraper 統一、テスト AnimeAnalysis 移行 |
-| 🟠 Major | DuckDB 全面移行 | Phase A ✅。次: Card 06 GOLD DuckDB 化 (4.2) |
+| 🟠 Major | DuckDB 全面移行 | 4.1 ✅ 4.2 ✅ 4.3 ✅(display_lookup)。次: 4.4 SQLite 完全撤去 |
 | 🟠 Major | Hamilton 導入 | H-1〜H-5 全完了 ✅ (H-4: pipeline.py 430→210行, ctx ノード化) |
 | 🟠 Major | レポートシステム統廃合 | 3 系統 → 1 系統、v1 monolith 解体 |
 | 🟡 Minor | テストカバレッジ | analysis_modules、テストファイル分割 |
@@ -99,31 +101,51 @@ TASK_CARDS/
 
 silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行、ベンチマーク (5.4x 平均) 完了。
 
-**Card 05 で積み越し → Card 06**:
-- `pipeline_phases/{data_loading,validation,entity_resolution,result_assembly}.py` — GOLD 書き込みと conn 共用
-- `analysis/attrition/*.py`, `analysis/gender/bottleneck.py` — `feat_career`/`feat_career_gaps` GOLD テーブルを読む
-- `analysis/{method_notes,person_parameters,llm_pipeline}.py` — GOLD 書き込み or LLM キャッシュ
+### 4.2 Phase B: GOLD 層を DuckDB 化 ✅ DONE (2026-04-23)
 
-### 4.2 Phase B: GOLD 層を DuckDB 化 (= Card 06)
+**完了内容:**
+- [x] `gold_writer.py` に `GoldWriter` / `gold_connect` / `gold_connect_with_silver` 実装
+- [x] `pipeline_phases/{validation,entity_resolution,result_assembly}.py` → silver_reader/gold_connect に切替
+- [x] `analysis/attrition/{entry_cohort_attrition,attrition_risk_model}.py` → `duckdb.DuckDBPyConnection`
+- [x] `analysis/gender/bottleneck.py` → `duckdb.DuckDBPyConnection`
+- [x] `analysis/method_notes.py` → `duckdb.DuckDBPyConnection`
+- [x] `analysis/person_parameters.py` → gold.duckdb 直書き (conn パラメータ廃止)
+- [x] `export_and_viz.py` の `_persist_features_to_db` → gold.duckdb 書き込みに完全置換
+  - feat_career / feat_network / feat_genre_affinity / feat_contribution / feat_causal_estimates
+  - feat_cluster_membership / feat_birank_annual / agg_milestones / agg_director_circles / feat_mentorships
+- [x] `scoring.py`: `akm_estimation` に `graphs_built` 依存を追加 (Hamilton 実行順序バグ修正)
+- [x] models.py `AnimeAnalysis` に studios/genres/tags/studio フィールド追加
+- [x] テスト infrastructure: `build_silver_duckdb` + `DEFAULT_SILVER_PATH`/`DEFAULT_GOLD_DB_PATH` monkeypatch
 
-- [ ] GOLD テーブル (person_scores, score_history, meta_*, agg_*, feat_*) を gold.duckdb へ
-- [ ] パイプライン最終 Phase (`export_and_viz.py`) が gold.duckdb に書く
-- [ ] API 側の GOLD 読み取りを DuckDB に切替
-- [ ] attrition/gender/method_notes/person_parameters の conn を gold_connect() に切替
-- [ ] `pipeline_phases/` の読み取り経路を silver_reader に、書き込み経路を gold_connect() に切替
+**4.2 残務 → 4.4 で対応:**
+- [x] `analysis_modules.py` の `db_connection` / `record_calc_execution` / `get_calc_execution_hashes` (インクリメンタルキャッシュ) — `src/analysis/calc_cache.py` (cache.duckdb) に移植 (2026-04-23, commit 77d324f)
+- [ ] `pipeline.py` Phase 1.5: `compute_feat_credit_activity` / `compute_feat_career_annual` / `compute_feat_studio_affiliation` / `compute_feat_person_role_progression` — SQLite-only 計算
+- [ ] `export_and_viz.py` の `compute_feat_credit_contribution` / `compute_feat_work_context` / `compute_feat_work_scale_tier` — SQLite-only 計算 (best-effort、要 DuckDB 移植)
+- [ ] `analysis/llm_pipeline.py`: `import sqlite3` + `get_all_llm_decisions` / `upsert_llm_decision` (LLM キャッシュ)
+- [ ] API 側の GOLD 読み取りを `gold_connect()` に切替 (`src/api.py`)
 
 ### 4.3 Phase C: BRONZE を Parquet + DuckDB
 
-- [ ] Scraper 出力を `src_*` テーブル → Parquet ファイル (日付パーティション) に
-- [ ] `display_lookup.py` の読み取り先を Parquet に切替
+- [x] `display_lookup.py` の読み取りを DuckDB SQLite scanner に切替 (`ATTACH ... TYPE SQLITE`) — sqlite3 import 廃止
+- [ ] Scraper 出力を `src_*` テーブル → Parquet ファイル (日付パーティション) に変更
+  - 対象: AniList / ANN / allcinema / seesaawiki / keyframe の各 scraper
+  - `display_lookup.py` の `DEFAULT_BRONZE_PATH` を Parquet ディレクトリに切替
 
 ### 4.4 Phase D: SQLite 完全撤去
 
-- [ ] Entity resolution の書き込み経路を DuckDB に切替
-- [ ] `src/database.py` を廃止 (DAO 群を `src/db/` に移管)
-- [ ] `database_v2.py` / `models_v2.py` — DuckDB 移行で活かす計画がないなら削除
-- [ ] `migrate_to_v2.py` は使い捨て script。`01_schema_fix/01_one_shot_copy.md` 実行後に削除
+**ブロッカー: 4.3 の Parquet scraper 変換が完了するまで着手不可**
+
+- [x] `analysis_modules.py` の `db_connection` / `record_calc_execution` / `get_calc_execution_hashes` を cache.duckdb に移植 (Step A, 2026-04-23 commit 77d324f)
+- [ ] `pipeline.py` Phase 1.5 の `compute_feat_*` 関数群を gold.duckdb + silver.duckdb で再実装
+- [ ] `export_and_viz.py` の `compute_feat_credit_contribution` / `compute_feat_work_context` / `compute_feat_work_scale_tier` を DuckDB SQL に書き直し
+- [ ] `analysis/llm_pipeline.py` の SQLite LLM キャッシュを gold.duckdb に移植
+- [ ] `src/database.py` を廃止 (9000 行 → 残存 DAO を `src/db/` に移管)
+  - 残存利用箇所: `pipeline.py`, `cli.py`, `synthetic.py`, `api.py`, `scripts/`
+- [ ] `database_v2.py` / `models_v2.py` を廃止 (`init_db_v2` が `init_db` 経由で使用中)
+- [ ] `migrate_to_v2.py` 削除 (one-shot script、実行済み後に不要)
+- [ ] Entity resolution の書き込み経路 (`llm_pipeline.py` 経由) を DuckDB に切替
 - [ ] Atlas migration を DuckDB 環境で再生成
+- [ ] `CLAUDE.md` の testing patterns `monkeypatch DEFAULT_DB_PATH` 記述を DuckDB 版に更新
 
 ### 事前確認
 
