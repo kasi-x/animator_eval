@@ -23,8 +23,7 @@
 
 - [x] ANN / allcinema スクレイパーの `name_ko`/`name_zh` 対応 (3c45ab6 + bdba63f)
 - [x] `backfill_anilist_hometown.py` script + tests 実装 (573fed0, 13 tests pass)
-- [ ] **実行ペンディング**: 本番 DB で backfill 実行 (ユーザー承認後)
-      `pixi run python scripts/maintenance/backfill_anilist_hometown.py --dry-run` で件数確認 → apply
+- [x] dry-run 実行確認 (2026-04-24): persons テーブル空 → 対象ゼロ、将来データ入投入時用 script として待機
 
 ### v57 構造的メタデータ
 
