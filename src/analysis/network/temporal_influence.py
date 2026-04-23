@@ -356,29 +356,21 @@ def detect_industry_trends(
 
 def main():
     """Standalone entry point."""
-    from src.database import (
-        load_all_anime,
-        load_all_credits,
-        load_all_scores,
-        get_connection,
-        init_db,
-    )
+    from src.analysis.gold_writer import GoldReader
+    from src.analysis.silver_reader import load_anime_silver, load_credits_silver
 
-    conn = get_connection()
-    init_db(conn)
-
-    anime_list = load_all_anime(conn)
-    credits = load_all_credits(conn)
-    scores_list = load_all_scores(conn)
+    anime_list = load_anime_silver()
+    credits = load_credits_silver()
+    scores_list = GoldReader().person_scores()
 
     # build lookup maps
     anime_map = {a.id: a for a in anime_list}
     scores_map = {
-        s.person_id: {
-            "birank": s.birank,
-            "patronage": s.patronage,
-            "person_fe": s.person_fe,
-            "iv_score": s.iv_score,
+        s["person_id"]: {
+            "birank": s["birank"],
+            "patronage": s["patronage"],
+            "person_fe": s["person_fe"],
+            "iv_score": s["iv_score"],
         }
         for s in scores_list
     }
@@ -426,7 +418,6 @@ def main():
         f"  Declining: {trend_counts['declining']} ({100 * trend_counts['declining'] / len(trends):.1f}%)"
     )
 
-    conn.close()
 
 
 if __name__ == "__main__":

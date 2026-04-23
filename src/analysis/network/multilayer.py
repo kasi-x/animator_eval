@@ -465,21 +465,15 @@ def compute_multilayer_centrality(
 def main() -> None:
     """Standalone entry point."""
     from src.analysis.graph import create_person_collaboration_network  # noqa: F401
-    from src.database import (
-        get_connection,
-        init_db,
-        load_all_anime,
-        load_all_credits,
-        load_all_persons,
+    from src.analysis.silver_reader import (
+        load_anime_silver,
+        load_credits_silver,
+        load_persons_silver,
     )
 
-    conn = get_connection()
-    init_db(conn)
-
-    persons = load_all_persons(conn)
-    anime_list = load_all_anime(conn)
-    credits = load_all_credits(conn)
-    conn.close()
+    persons = load_persons_silver()
+    anime_list = load_anime_silver()
+    credits = load_credits_silver()
 
     anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}

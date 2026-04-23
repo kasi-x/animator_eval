@@ -701,28 +701,23 @@ def export_communities_for_visualization(
 
 def main():
     """Standalone entry point."""
+    from src.analysis.gold_writer import GoldReader
     from src.analysis.graph import create_person_collaboration_network
-    from src.database import (
-        load_all_anime,
-        load_all_credits,
-        load_all_persons,
-        load_all_scores,
-        get_connection,
-        init_db,
+    from src.analysis.silver_reader import (
+        load_anime_silver,
+        load_credits_silver,
+        load_persons_silver,
     )
 
-    conn = get_connection()
-    init_db(conn)
-
-    persons = load_all_persons(conn)
-    anime_list = load_all_anime(conn)
-    credits = load_all_credits(conn)
-    scores_list = load_all_scores(conn)
+    persons = load_persons_silver()
+    anime_list = load_anime_silver()
+    credits = load_credits_silver()
+    scores_list = GoldReader().person_scores()
 
     # build lookup maps
     anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
-    person_scores = {s.person_id: {"iv_score": s.iv_score} for s in scores_list}
+    person_scores = {s["person_id"]: {"iv_score": s["iv_score"]} for s in scores_list}
 
     # build collaboration graph
     logger.info("building_collaboration_graph")
@@ -772,8 +767,6 @@ def main():
             print(
                 f"  能力範囲: {comm.ability_range[0]:.1f} - {comm.ability_range[1]:.1f}"
             )
-
-    conn.close()
 
 
 if __name__ == "__main__":

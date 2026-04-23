@@ -118,41 +118,38 @@ def main() -> None:
     import json
 
     from src.analysis.graph import create_person_anime_network
-    from src.database import (
-        get_connection,
-        init_db,
-        load_all_anime,
-        load_all_credits,
-        load_all_persons,
-        upsert_score,
+    from src.analysis.silver_reader import (
+        load_anime_silver,
+        load_credits_silver,
+        load_persons_silver,
     )
+    from src.database import get_connection, init_db, upsert_score
     from src.log import setup_logging
     from src.models import ScoreResult
     from src.utils.config import JSON_DIR
 
     setup_logging()
 
-    conn = get_connection()
-    init_db(conn)
-
-    persons = load_all_persons(conn)
-    anime_list = load_all_anime(conn)
-    credits = load_all_credits(conn)
+    persons = load_persons_silver()
+    anime_list = load_anime_silver()
+    credits = load_credits_silver()
 
     if not credits:
-        logger.warning("No credits found in DB.")
-        conn.close()
+        logger.warning("No credits found in silver DB.")
         return
 
     graph = create_person_anime_network(persons, anime_list, credits)
     authority = compute_authority_scores(graph)
 
-    # save to DB
+    # write scores back to SQLite (legacy path — pipeline uses GoldWriter)
+    conn = get_connection()
+    init_db(conn)
     for person_id, score in authority.items():
         upsert_score(conn, ScoreResult(person_id=person_id, authority=score))
     conn.commit()
+    conn.close()
 
-    # JSON 出力
+    # JSON output
     JSON_DIR.mkdir(parents=True, exist_ok=True)
     results = []
     for person_id, score in sorted(authority.items(), key=lambda x: x[1], reverse=True):
@@ -172,7 +169,6 @@ def main() -> None:
         json.dump(results, f, indent=2, ensure_ascii=False)
 
     logger.info("authority_scores_saved", path=str(output_path), persons=len(results))
-    conn.close()
 
 
 if __name__ == "__main__":

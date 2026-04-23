@@ -413,20 +413,15 @@ def analyze_core_accessibility(
 def main():
     """Standalone entry point."""
     from src.analysis.graph import create_person_collaboration_network
-    from src.database import (
-        load_all_anime,
-        load_all_credits,
-        load_all_persons,
-        get_connection,
-        init_db,
+    from src.analysis.silver_reader import (
+        load_anime_silver,
+        load_credits_silver,
+        load_persons_silver,
     )
 
-    conn = get_connection()
-    init_db(conn)
-
-    persons = load_all_persons(conn)
-    anime_list = load_all_anime(conn)
-    credits = load_all_credits(conn)
+    persons = load_persons_silver()
+    anime_list = load_anime_silver()
+    credits = load_credits_silver()
 
     # build lookup maps
     anime_map = {a.id: a for a in anime_list}
@@ -492,7 +487,6 @@ def main():
         f"ペリフェリーのコア直接接続率: {accessibility['periphery_core_link_rate']:.1%}"
     )
 
-    conn.close()
 
 
 if __name__ == "__main__":
