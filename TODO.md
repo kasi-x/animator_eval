@@ -36,12 +36,12 @@
 - [ ] `title.native` を `country_of_origin` 分岐で `title_zh`/`title_ko` へ格納 (v58 予定)
 - [ ] `years_active` 活用: クレジットデータが薄い人物の活動期間推定クエリ
 
-### src/db/ 後続
+### src/db/ 後続 ✅ 完了
 
 - [x] ✅ `init_db_v2` 抽出: `database_v2.py` → `src/db/schema.py` (1291 行 DDL + helper)
-- [x] ✅ `database_v2.py` 廃止: 121 行の薄いラッパーに (create_sqlalchemy_engine 保持、generate_dbml.py 用)
-- [ ] `generate_dbml.py` 移行: DuckDB schema 検査に切り替え or Atlas 設定参照に変更
-- [ ] `models_v2.py` 廃止: generate_dbml.py の最後の依存を解決後
+- [x] ✅ `database_v2.py` 廃止: 121 行の薄いラッパーに (使用箇所なし)
+- [x] ✅ `generate_dbml.py` 移行: SQLAlchemy 除去、SQL 直接解析 (regex-based)
+- [x] ✅ `models_v2.py` 廃止: コード内での参照なし (完全に unused)
 
 ---
 
