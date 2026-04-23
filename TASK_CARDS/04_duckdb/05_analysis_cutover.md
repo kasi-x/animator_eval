@@ -309,3 +309,32 @@ pixi run test
 - [ ] Verification 全 pass
 - [ ] CLAUDE.md の "Critical Testing Patterns" を更新済み (silver_reader monkeypatch パターンに)
 - [ ] commit messages: モジュール群ごとに分けて 5-10 commits 程度
+
+---
+
+## Progress (2026-04-23)
+
+### 完了済み (committed)
+
+| Commit | 内容 |
+|--------|------|
+| `4714974` | silver_reader.py 新設、duckdb_io.py ATTACH パターン廃止 |
+| `cbc0548` | test_silver_reader.py + test_duckdb_io.py (17+15 tests) |
+| `3c02d3a` | network/{community_detection,path_finding,multilayer,core_periphery,structural_holes,temporal_bridge,temporal_influence}, scoring/{potential_value,pagerank} の main() 移行 (Step 3) |
+| `d19719f` | graph.py, anime_value.py, contribution_attribution.py, genre/specialization.py, growth_acceleration.py, studio/bias_correction.py の main() 移行 (Step 3b) |
+
+### 未完了 → Card 06 に積み越し
+
+| ファイル | 理由 |
+|---------|------|
+| `pipeline_phases/data_loading.py` | conn を GOLD 書き込み + LLM cache 両用。オーケストレータ変更が必要 |
+| `pipeline_phases/validation.py` | `validate_all(conn)` が silver READ 専用だが、分離のために src/validation.py の大幅書き換えが必要 |
+| `pipeline_phases/entity_resolution.py` | 同上 |
+| `pipeline_phases/result_assembly.py` | person_scores / score_history / career_tracks に INSERT → GOLD write path が残る |
+| `pipeline_phases/analysis_modules.py` | attrition/gender ラッパーが GOLD テーブルを使う (以下参照) |
+| `analysis/attrition/*.py` | `feat_career`, `feat_career_gaps` GOLD テーブルを読む → DuckDB に未移行 |
+| `analysis/gender/bottleneck.py` | 同上 |
+| `analysis/method_notes.py` | `meta_lineage` GOLD テーブルを読む |
+| `analysis/person_parameters.py` | person_fe を GOLD に書く |
+| `analysis/llm_pipeline.py` | LLM 決定キャッシュ (専用 sqlite テーブル) |
+| `analysis/scoring/pagerank.py` (write path) | `upsert_score` legacy write → pipeline は GoldWriter 使用で問題なし |
