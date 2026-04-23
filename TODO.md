@@ -127,13 +127,14 @@ silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行
 ### 4.3 Phase C: BRONZE を Parquet + DuckDB
 
 - [x] `display_lookup.py` の読み取りを DuckDB SQLite scanner に切替 (`ATTACH ... TYPE SQLITE`) — sqlite3 import 廃止
-- [ ] Scraper 出力を `src_*` テーブル → Parquet ファイル (日付パーティション) に変更
-  - 対象: AniList / ANN / allcinema / seesaawiki / keyframe の各 scraper
-  - `display_lookup.py` の `DEFAULT_BRONZE_PATH` を Parquet ディレクトリに切替
+- [x] Scraper 出力を `src_*` テーブル → Parquet ファイル (日付パーティション) に変更 (2026-04-24)
+  - 全 scraper (AniList/ANN/allcinema/seesaawiki/keyframe/mal/mediaarts/jvmg) が BronzeWriter 経由
+  - `display_lookup.py` の `DEFAULT_BRONZE_PATH` → SQLite ATTACH のまま (display-only、優先度低)
+- [x] `src/etl/integrate_duckdb.py` 実装済み (Parquet → silver.duckdb atomic swap)
 
 ### 4.4 Phase D: SQLite 完全撤去
 
-**ブロッカー: 4.3 の Parquet scraper 変換が完了するまで着手不可**
+**§4.3 完了につきブロッカー解除。4.4 着手可能。**
 
 - [x] `analysis_modules.py` の `db_connection` / `record_calc_execution` / `get_calc_execution_hashes` を cache.duckdb に移植 (Step A, 2026-04-23 commit 77d324f)
 - [x] `pipeline.py` Phase 1.5 の `compute_feat_*` 関数群を gold.duckdb + silver.duckdb で再実装 (2026-04-23 commit 256d350)

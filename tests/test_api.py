@@ -885,28 +885,7 @@ class TestDataQuality:
 
 
 class TestPersonNetwork:
-    def test_network(self, client, scores_data, monkeypatch, tmp_path):
-        import src.database
-
-        db_path = tmp_path / "net.db"
-        monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
-
-        from src.database import get_connection, init_db
-
-        conn = get_connection()
-        init_db(conn)
-        conn.execute("INSERT INTO persons (id, name_en) VALUES ('p1', 'Director')")
-        conn.execute("INSERT INTO persons (id, name_en) VALUES ('p2', 'Animator')")
-        conn.execute("INSERT INTO anime (id, title_en) VALUES ('a1', 'Test')")
-        conn.execute(
-            "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES ('p1', 'a1', 'director', 'test')"
-        )
-        conn.execute(
-            "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES ('p2', 'a1', 'key_animator', 'test')"
-        )
-        conn.commit()
-        conn.close()
-
+    def test_network(self, client, persons_duckdb_data):
         resp = client.get("/api/persons/p1/network")
         assert resp.status_code == 200
         data = resp.json()
