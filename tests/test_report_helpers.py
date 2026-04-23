@@ -1,7 +1,9 @@
 """Tests for report generator helper functions (§6.4).
 
 Covers fmt_num, name_clusters_by_rank, name_clusters_distinctive,
-adaptive_height, add_distribution_stats, insert_lineage.
+adaptive_height, add_distribution_stats, insert_lineage,
+subsample_for_scatter, capped_categories, safe_nested,
+data_driven_badges, badge_class.
 """
 
 from __future__ import annotations
@@ -195,3 +197,195 @@ class TestInsertLineage:
             "SELECT COUNT(*) FROM meta_lineage WHERE table_name='meta_test'"
         ).fetchone()[0]
         assert count == 1  # upsert, not append
+
+    def test_inputs_hash_auto_generated_when_none(self, conn):
+        from scripts.report_generators.helpers import insert_lineage
+        insert_lineage(
+            conn,
+            table_name="meta_autohash",
+            audience="hr",
+            source_silver_tables=["credits"],
+            formula_version="v1.0",
+            description="B" * 55,
+        )
+        row = conn.execute(
+            "SELECT inputs_hash FROM meta_lineage WHERE table_name='meta_autohash'"
+        ).fetchone()
+        assert row is not None
+        assert row[0] and len(row[0]) >= 16
+
+    def test_skips_gracefully_when_no_lineage_table(self, tmp_path):
+        conn = sqlite3.connect(str(tmp_path / "empty.db"))
+        from scripts.report_generators.helpers import insert_lineage
+        # Should not raise even when no lineage table exists
+        insert_lineage(
+            conn,
+            table_name="meta_x",
+            audience="policy",
+            source_silver_tables=[],
+            formula_version="v1.0",
+            description="C" * 55,
+        )
+
+
+# ---------------------------------------------------------------------------
+# subsample_for_scatter
+# ---------------------------------------------------------------------------
+
+class TestSubsampleForScatter:
+    def _sub(self, data, max_n, seed=42):
+        from scripts.report_generators.helpers import subsample_for_scatter
+        return subsample_for_scatter(data, max_n=max_n, seed=seed)
+
+    def test_returns_all_when_under_limit(self):
+        data = [{"x": i} for i in range(10)]
+        result = self._sub(data, 20)
+        assert len(result) == 10
+
+    def test_caps_at_max_n(self):
+        data = [{"x": i} for i in range(1000)]
+        result = self._sub(data, 50)
+        assert len(result) == 50
+
+    def test_deterministic_with_same_seed(self):
+        data = [{"x": i} for i in range(500)]
+        r1 = self._sub(data, 100, seed=7)
+        r2 = self._sub(data, 100, seed=7)
+        assert r1 == r2
+
+    def test_different_seeds_differ(self):
+        data = [{"x": i} for i in range(500)]
+        r1 = self._sub(data, 100, seed=1)
+        r2 = self._sub(data, 100, seed=2)
+        assert r1 != r2
+
+
+# ---------------------------------------------------------------------------
+# capped_categories
+# ---------------------------------------------------------------------------
+
+class TestCappedCategories:
+    def _cap(self, counter, max_cats):
+        from scripts.report_generators.helpers import capped_categories
+        return capped_categories(counter, max_cats=max_cats)
+
+    def test_returns_as_is_when_under_limit(self):
+        counter = {"a": 5, "b": 3}
+        assert self._cap(counter, 5) == {"a": 5, "b": 3}
+
+    def test_groups_overflow_into_other(self):
+        counter = {str(i): i for i in range(10, 0, -1)}
+        result = self._cap(counter, 3)
+        assert "その他" in result
+        assert len(result) == 4  # top 3 + その他
+
+    def test_top_categories_are_highest_count(self):
+        counter = {"a": 10, "b": 5, "c": 3, "d": 1}
+        result = self._cap(counter, 2)
+        assert "a" in result and "b" in result
+        assert "c" not in result and "d" not in result
+
+    def test_other_sum_is_correct(self):
+        counter = {"a": 10, "b": 5, "c": 3, "d": 2}
+        result = self._cap(counter, 2)
+        assert result["その他"] == 5  # c + d
+
+
+# ---------------------------------------------------------------------------
+# safe_nested
+# ---------------------------------------------------------------------------
+
+class TestSafeNested:
+    def _sn(self, d, *keys, default=0.0):
+        from scripts.report_generators.helpers import safe_nested
+        return safe_nested(d, *keys, default=default)
+
+    def test_simple_key_exists(self):
+        assert self._sn({"a": 3.0}, "a") == 3.0
+
+    def test_nested_key_exists(self):
+        assert self._sn({"a": {"b": 7.0}}, "a", "b") == 7.0
+
+    def test_missing_key_returns_default(self):
+        assert self._sn({}, "x") == 0.0
+
+    def test_partially_missing_returns_default(self):
+        assert self._sn({"a": {}}, "a", "b", default=99.0) == 99.0
+
+    def test_none_value_returns_default(self):
+        assert self._sn({"a": None}, "a", default=5.0) == 5.0
+
+    def test_non_dict_intermediate_returns_default(self):
+        assert self._sn({"a": "string"}, "a", "b") == 0.0
+
+
+# ---------------------------------------------------------------------------
+# data_driven_badges / badge_class
+# ---------------------------------------------------------------------------
+
+class TestDataDrivenBadges:
+    def _badges(self, values):
+        from scripts.report_generators.helpers import data_driven_badges
+        return data_driven_badges(values)
+
+    def test_returns_p25_p75(self):
+        values = list(range(100))
+        low, high = self._badges(values)
+        assert low == pytest.approx(np.percentile(values, 25))
+        assert high == pytest.approx(np.percentile(values, 75))
+
+    def test_empty_returns_zero_zero(self):
+        assert self._badges([]) == (0.0, 0.0)
+
+    def test_none_values_filtered(self):
+        values = [None, 1.0, 2.0, 3.0, None]
+        low, high = self._badges(values)
+        assert low > 0
+
+
+class TestBadgeClass:
+    def _bc(self, value, low, high):
+        from scripts.report_generators.helpers import badge_class
+        return badge_class(value, low, high)
+
+    def test_high_badge(self):
+        assert self._bc(10.0, 3.0, 7.0) == "badge-high"
+
+    def test_mid_badge(self):
+        assert self._bc(5.0, 3.0, 7.0) == "badge-mid"
+
+    def test_low_badge(self):
+        assert self._bc(1.0, 3.0, 7.0) == "badge-low"
+
+    def test_boundary_at_high(self):
+        assert self._bc(7.0, 3.0, 7.0) == "badge-high"
+
+    def test_boundary_at_low(self):
+        assert self._bc(3.0, 3.0, 7.0) == "badge-mid"
+
+
+# ---------------------------------------------------------------------------
+# add_distribution_stats
+# ---------------------------------------------------------------------------
+
+class TestAddDistributionStats:
+    def test_adds_vlines_to_figure(self):
+        import plotly.graph_objects as go
+        from scripts.report_generators.helpers import add_distribution_stats
+        fig = go.Figure(go.Histogram(x=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))
+        result = add_distribution_stats(fig, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+        assert result is fig  # returns same figure
+
+    def test_empty_values_returns_figure_unchanged(self):
+        import plotly.graph_objects as go
+        from scripts.report_generators.helpers import add_distribution_stats
+        fig = go.Figure()
+        result = add_distribution_stats(fig, [])
+        assert result is fig
+
+    def test_none_values_filtered_out(self):
+        import plotly.graph_objects as go
+        from scripts.report_generators.helpers import add_distribution_stats
+        fig = go.Figure()
+        # Should not raise on None-containing values
+        add_distribution_stats(fig, [1.0, None, 2.0, None, 3.0])
