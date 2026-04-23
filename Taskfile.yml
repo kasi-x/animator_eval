@@ -5,36 +5,30 @@ tasks:
     cmds:
       - task --list
 
-  # Data collection
+  # ==========================================================================
+  # Scraping — AniList
+  # ==========================================================================
+  # ORDER=normal (default) or reverse (old-first)
   scrape:
-    desc: Scrape AniList (default 50 anime)
+    desc: 'Scrape AniList (COUNT=50, ORDER=normal|reverse)'
+    vars:
+      ORDER_FLAG: '{{if eq .ORDER "reverse"}}--reverse{{end}}'
     cmds:
-      - pixi run python -m src.scrapers.anilist_scraper --count {{.COUNT | default "50"}}
-
-  scrape-old:
-    desc: Scrape AniList in old-first order
-    cmds:
-      - pixi run python -m src.scrapers.anilist_scraper --count {{.COUNT | default "50"}} --reverse
+      - pixi run python -m src.scrapers.anilist_scraper --count {{.COUNT | default "50"}} {{.ORDER_FLAG}}
 
   scrape-update:
-    desc: Update AniList cache (airing/new only)
+    desc: 'Update AniList cache, airing/new only (ORDER=normal|reverse)'
+    vars:
+      ORDER_FLAG: '{{if eq .ORDER "reverse"}}--reverse{{end}}'
     cmds:
-      - pixi run python -m src.scrapers.anilist_scraper --update
-
-  scrape-update-old:
-    desc: Update AniList cache in old-first order
-    cmds:
-      - pixi run python -m src.scrapers.anilist_scraper --update --reverse
+      - pixi run python -m src.scrapers.anilist_scraper --update {{.ORDER_FLAG}}
 
   scrape-all:
-    desc: Scrape all AniList anime (20400+, auto-resumes from checkpoint)
+    desc: 'Scrape all AniList anime 20400+ (ORDER=normal|reverse, auto-resumes)'
+    vars:
+      ORDER_FLAG: '{{if eq .ORDER "reverse"}}--reverse{{end}}'
     cmds:
-      - pixi run python -m src.scrapers.anilist_scraper --count 20400
-
-  scrape-all-old:
-    desc: Scrape all AniList anime in old-first order (auto-resumes)
-    cmds:
-      - pixi run python -m src.scrapers.anilist_scraper --count 20400 --reverse
+      - pixi run python -m src.scrapers.anilist_scraper --count 20400 {{.ORDER_FLAG}}
 
   scrape-restart:
     desc: Restart scrape from beginning (ignore checkpoint)
@@ -51,53 +45,14 @@ tasks:
     cmds:
       - pixi run python -m src.scrapers.anilist_scraper process-downloads
 
-  retry-failed:
-    desc: Retry failed anime from logs (auto-detect)
-    cmds:
-      - PYTHONPATH=. pixi run python scripts/retry_failed_anime.py
-
-  retry-failed-ids:
-    desc: Retry specific anime IDs (e.g., IDS="179970 186737 192378")
-    cmds:
-      - PYTHONPATH=. pixi run python scripts/retry_failed_anime.py {{.IDS}}
-
-  extract-failed:
-    desc: Extract failed anime IDs from log file
-    cmds:
-      - bash scripts/extract_failed_ids.sh {{.LOG | default "scraper.log"}}
-
-  fix-status:
-    desc: Show DB health status (missing data detection)
-    cmds:
-      - PYTHONPATH=. pixi run python scripts/fix_scraping_failures_impl.py status
-
-  fix-all:
-    desc: Fix all scraping failures (retry + backfill + cleanup)
-    cmds:
-      - bash scripts/fix_scraping_failures.sh all
-
-  fix-retry:
-    desc: "Step 1: Show missing credits breakdown (no AniList staff data)"
-    cmds:
-      - bash scripts/fix_scraping_failures.sh retry
-
-  fix-backfill:
-    desc: "Step 2: Backfill studios/characters/relations + metadata"
-    cmds:
-      - bash scripts/fix_scraping_failures.sh backfill
-
-  fix-cleanup:
-    desc: "Step 3: Detect deleted (404) anime on AniList"
-    cmds:
-      - bash scripts/fix_scraping_failures.sh cleanup
-
-  # MAL scraping
+  # ==========================================================================
+  # Scraping — other sources
+  # ==========================================================================
   scrape-mal:
     desc: Scrape MAL
     cmds:
       - pixi run python -m src.scrapers.mal_scraper --count {{.COUNT | default "50"}}
 
-  # Media Arts scraping
   scrape-mediaarts:
     desc: Fetch Media Arts DB dump from GitHub Releases
     cmds:
@@ -108,28 +63,147 @@ tasks:
     cmds:
       - pixi run python -m src.scrapers.jvmg_fetcher
 
+  # ==========================================================================
+  # Scraping failures — maintenance
+  # ==========================================================================
+  # STEP=status|retry|backfill|cleanup|all (default: status)
+  fix:
+    desc: 'Fix scraping failures (STEP=status|retry|backfill|cleanup|all)'
+    cmds:
+      - |
+        STEP="{{.STEP | default "status"}}"
+        if [ "$STEP" = "status" ]; then
+          PYTHONPATH=. pixi run python scripts/maintenance/fix_scraping_failures_impl.py status
+        else
+          bash scripts/maintenance/fix_scraping_failures.sh "$STEP"
+        fi
+
+  retry-failed:
+    desc: Retry failed anime from logs (IDS="id1 id2" for specific, otherwise auto-detect)
+    cmds:
+      - PYTHONPATH=. pixi run python scripts/maintenance/retry_failed_anime.py {{.IDS}}
+
+  extract-failed:
+    desc: Extract failed anime IDs from log file (LOG=scraper.log)
+    cmds:
+      - bash scripts/maintenance/extract_failed_ids.sh {{.LOG | default "scraper.log"}}
+
+  # ==========================================================================
   # Pipeline
+  # ==========================================================================
+  # MODE=default|viz|debug|profile
   pipeline:
-    desc: Run full pipeline
+    desc: 'Run pipeline (MODE=default|viz|debug|profile)'
     cmds:
-      - pixi run pipeline
+      - |
+        MODE="{{.MODE | default "default"}}"
+        case "$MODE" in
+          viz)     pixi run pipeline-viz ;;
+          debug)   pixi run python -m src.pipeline --dry-run ;;
+          profile) pixi run python -m src.pipeline --profile ;;
+          *)       pixi run pipeline ;;
+        esac
 
-  pipeline-viz:
-    desc: Run pipeline with visualizations
+  # ==========================================================================
+  # Testing & code quality
+  # ==========================================================================
+  test:
+    desc: 'Run tests (MODE=default|fast|cov)'
     cmds:
-      - pixi run pipeline-viz
+      - |
+        MODE="{{.MODE | default "default"}}"
+        case "$MODE" in
+          fast) pixi run pytest tests/ -x --tb=short ;;
+          cov)  pixi run pytest tests/ -v --cov=src --cov-report=term-missing ;;
+          *)    pixi run test ;;
+        esac
 
-  pipeline-debug:
-    desc: Dry-run pipeline (no changes)
+  lint:
+    desc: 'Lint code (FIX=1 to auto-fix)'
     cmds:
-      - pixi run python -m src.pipeline --dry-run
+      - |
+        if [ "{{.FIX | default ""}}" = "1" ]; then
+          pixi run ruff check --fix src/ tests/
+        else
+          pixi run lint
+        fi
 
-  pipeline-profile:
-    desc: Run pipeline with performance profiling
+  format:
+    desc: Format code
     cmds:
-      - pixi run python -m src.pipeline --profile
+      - pixi run format
 
-  # Report briefs
+  # ==========================================================================
+  # CLI shortcuts
+  # ==========================================================================
+  stats:
+    desc: Show stats
+    cmds:
+      - pixi run python -c 'from src.cli import app; app()' stats --lang {{.LANG | default "en"}}
+
+  ranking:
+    desc: Show ranking
+    cmds:
+      - pixi run python -c 'from src.cli import app; app()' ranking --limit {{.LIMIT | default "50"}}
+
+  export:
+    desc: Export data
+    cmds:
+      - pixi run python -c 'from src.cli import app; app()' export --format {{.FORMAT | default "json"}}
+
+  # ==========================================================================
+  # Utilities
+  # ==========================================================================
+  serve:
+    desc: Start API server
+    cmds:
+      - pixi run serve
+
+  lab:
+    desc: Start Jupyter Lab
+    cmds:
+      - pixi run lab
+
+  synthetic:
+    desc: Generate synthetic test data
+    cmds:
+      - pixi run synthetic
+
+  build-rust:
+    desc: Build Rust extensions
+    cmds:
+      - pixi run build-rust
+
+  # ==========================================================================
+  # Graphs & reports
+  # ==========================================================================
+  graphs:
+    desc: 'Generate graphs (MODE=static|interactive)'
+    cmds:
+      - mkdir -p result/graphs
+      - |
+        MODE="{{.MODE | default "static"}}"
+        if [ "$MODE" = "interactive" ]; then
+          pixi run python scripts/generate_interactive_graphs.py
+        else
+          pixi run python scripts/generate_graphs.py
+        fi
+
+  report-credit-stats:
+    desc: Generate credit statistics HTML report
+    cmds:
+      - mkdir -p result/reports
+      - pixi run python -c "from src.analysis.credit_stats_html import generate_credit_stats_html; generate_credit_stats_html()"
+
+  report-full:
+    desc: Generate comprehensive HTML report (all analyses)
+    cmds:
+      - mkdir -p result/reports
+      - task graphs
+      - task graphs MODE=interactive
+      - task report-credit-stats
+
+  # Report briefs (v2 audience-driven)
   report-briefs:
     desc: Generate all report briefs (policy, HR, business)
     cmds:
@@ -155,155 +229,65 @@ tasks:
     cmds:
       - pixi run python scripts/report_diff.py
 
-  report-export-html:
-    desc: Export all briefs to standalone HTML
+  report-export:
+    desc: 'Export all briefs (FORMAT=html|pdf)'
     cmds:
-      - pixi run python scripts/generate_exports.py --format html
+      - pixi run python scripts/generate_exports.py --format {{.FORMAT | default "html"}}
 
-  report-export-pdf:
-    desc: Export all briefs to PDF (requires wkhtmltopdf)
-    cmds:
-      - pixi run python scripts/generate_exports.py --format pdf
-
-  # Testing
-  test:
-    desc: Run all tests
-    cmds:
-      - pixi run test
-
-  test-fast:
-    desc: Run tests with fast fail (first failure stops)
-    cmds:
-      - pixi run pytest tests/ -x --tb=short
-
-  test-cov:
-    desc: Run tests with coverage report
-    cmds:
-      - pixi run pytest tests/ -v --cov=src --cov-report=term-missing
-
-  # Code quality
-  lint:
-    desc: Lint code
-    cmds:
-      - pixi run lint
-
-  format:
-    desc: Format code
-    cmds:
-      - pixi run format
-
-  lint-fix:
-    desc: Lint and auto-fix issues
-    cmds:
-      - pixi run ruff check --fix src/ tests/
-
-  # CLI shortcuts
-  stats:
-    desc: Show stats
-    cmds:
-      - pixi run python -c 'from src.cli import app; app()' stats --lang {{.LANG | default "en"}}
-
-  ranking:
-    desc: Show ranking
-    cmds:
-      - pixi run python -c 'from src.cli import app; app()' ranking --limit {{.LIMIT | default "50"}}
-
-  export:
-    desc: Export data
-    cmds:
-      - pixi run python -c 'from src.cli import app; app()' export --format {{.FORMAT | default "json"}}
-
-  # Utilities
-  serve:
-    desc: Start API server
-    cmds:
-      - pixi run serve
-
-  lab:
-    desc: Start Jupyter Lab
-    cmds:
-      - pixi run lab
-
-  synthetic:
-    desc: Generate synthetic test data
-    cmds:
-      - pixi run synthetic
-
-  build-rust:
-    desc: Build Rust extensions
-    cmds:
-      - pixi run build-rust
-
-  # Data Analysis & Reporting
-  graphs:
-    desc: Generate all static graphs (matplotlib)
-    cmds:
-      - echo "📊 Generating static graphs..."
-      - mkdir -p result/graphs
-      - pixi run python scripts/generate_graphs.py
-
-  graphs-interactive:
-    desc: Generate interactive graphs (Plotly HTML)
-    cmds:
-      - echo "📈 Generating interactive graphs..."
-      - mkdir -p result/graphs
-      - pixi run python scripts/generate_interactive_graphs.py
-
-  report-credit-stats:
-    desc: Generate credit statistics HTML report
+  # v2 audience reports
+  reports-v2:
+    desc: 'Generate v2 briefs (AUDIENCE=all|policy|hr|biz|technical_appendix, DRY=1 to preview)'
     cmds:
       - mkdir -p result/reports
-      - pixi run python -c "from src.analysis.credit_stats_html import generate_credit_stats_html; generate_credit_stats_html()"
+      - |
+        AUDIENCE="{{.AUDIENCE | default "all"}}"
+        DRY="{{.DRY | default ""}}"
+        ARGS=""
+        [ "$DRY" = "1" ] && ARGS="$ARGS --dry-run"
+        [ "$AUDIENCE" != "all" ] && ARGS="$ARGS --audience $AUDIENCE"
+        PYTHONNOUSERSITE=1 pixi run python scripts/generate_reports_v2.py $ARGS
 
-  report-full:
-    desc: Generate comprehensive HTML report (all analyses)
+  report-versions:
+    desc: Show version history of all briefs
     cmds:
-      - mkdir -p result/reports
-      - task graphs
-      - task graphs-interactive
-      - task report-credit-stats
-      - echo "✅ Full report generated in result/reports/"
+      - |
+        pixi run python -c '
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path.cwd()))
+        from scripts.report_generators.versioning import get_report_git_history
+        for brief_id in ["policy", "hr", "business"]:
+            history = get_report_git_history(brief_id, max_versions=10)
+            print(f"\n{brief_id.upper()} Brief Versions:")
+            print(f"  Total: {history.total_versions}")
+            if history.current_version:
+                print(f"  Latest: {history.current_version.version_sha} ({history.current_version.timestamp})")
+                print(f"         by {history.current_version.author}")
+        '
 
-  analyze-bridges:
-    desc: Run bridge analysis (key network positions)
-    cmds:
-      - pixi run python -c "from src.analysis.bridges import analyze_bridges; from src.database import get_connection, load_all_credits, load_all_anime; import json; from pathlib import Path; conn = get_connection(); credits = load_all_credits(conn); anime = load_all_anime(conn); conn.close(); result = analyze_bridges(credits, anime); Path('result/json/bridges.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))"
+  # Report API endpoints (briefs, versioning, appendix) are now served by the
+  # main FastAPI app — run `task serve` to start on port 8000.
 
-  analyze-mentorship:
-    desc: Run mentorship analysis (mentor-mentee relationships)
-    cmds:
-      - pixi run python -c "from src.analysis.mentorship import analyze_mentorship; from src.database import get_connection, load_all_credits, load_all_anime; import json; from pathlib import Path; conn = get_connection(); credits = load_all_credits(conn); anime = load_all_anime(conn); conn.close(); result = analyze_mentorship(credits, anime); Path('result/json/mentorships.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))"
-
-  analyze-genre:
-    desc: Run genre specialization analysis
-    cmds:
-      - pixi run python -c "from src.analysis.genre_affinity import analyze_genre_affinity; from src.database import get_connection, load_all_credits, load_all_anime; import json; from pathlib import Path; conn = get_connection(); credits = load_all_credits(conn); anime = load_all_anime(conn); conn.close(); result = analyze_genre_affinity(credits, anime); Path('result/json/genre_affinity.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))"
-
-  analyze-productivity:
-    desc: Run productivity analysis
-    cmds:
-      - pixi run python -c "from src.analysis.productivity import analyze_productivity; from src.database import get_connection, load_all_credits, load_all_anime; import json; from pathlib import Path; conn = get_connection(); credits = load_all_credits(conn); anime = load_all_anime(conn); conn.close(); result = analyze_productivity(credits, anime); Path('result/json/productivity.json').write_text(json.dumps(result, indent=2, ensure_ascii=False))"
-
-  # ============================================================================
-  # v2 Gate Automation (Phase 4)
-  # ============================================================================
+  # ==========================================================================
+  # v2 Gate Automation
+  # ==========================================================================
   lint-vocab:
-    desc: Lint reports for forbidden vocabulary (能力 / ability / evaluative framing)
+    desc: Lint reports for forbidden vocabulary
     cmds:
       - pixi run python scripts/report_generators/lint_vocab.py {{.CLI_ARGS | default "scripts/report_generators/reports/ result/reports/"}}
 
   lint-structure:
-    desc: Enforce v2 report section structure (概要/Findings/Method Note/Interpretation/Data Statement/Disclaimers)
+    desc: Enforce v2 report section structure
     cmds:
       - pixi run python scripts/report_generators/lint_structure.py {{.CLI_ARGS | default "scripts/report_generators/reports/"}}
 
   ci-check-lineage:
-    desc: Feature lineage check — bronze leaks + lineage quality (semver, hash, description, staleness)
+    desc: Feature lineage check (bronze leaks + lineage quality)
     cmds:
       - pixi run python scripts/report_generators/ci_check_lineage.py
 
   ci-check-method-notes:
-    desc: Validate Method Notes are backed by meta_lineage rows (5 required reports)
+    desc: Validate Method Notes are backed by meta_lineage rows
     cmds:
       - pixi run python scripts/report_generators/ci_check_method_notes.py
 
@@ -316,19 +300,16 @@ tasks:
       - task ci-check-method-notes
 
   data-dictionary:
-    desc: Regenerate docs/DATA_DICTIONARY.md from schema + meta_lineage
+    desc: 'Regenerate docs/DATA_DICTIONARY.md (CHECK=1 to verify up-to-date)'
     cmds:
       - pixi run python scripts/export_data_dictionary.py
-      - echo "✅ docs/DATA_DICTIONARY.md regenerated"
-
-  data-dictionary-check:
-    desc: Verify docs/DATA_DICTIONARY.md is up-to-date (CI gate)
-    cmds:
-      - pixi run python scripts/export_data_dictionary.py
-      - git diff --exit-code docs/DATA_DICTIONARY.md
+      - |
+        if [ "{{.CHECK | default ""}}" = "1" ]; then
+          git diff --exit-code docs/DATA_DICTIONARY.md
+        fi
 
   quality-snapshot:
-    desc: Compute meta_quality_snapshot (row counts, null rates, distinct cardinality)
+    desc: Compute meta_quality_snapshot
     cmds:
       - pixi run python scripts/monitoring/compute_quality_snapshot.py
 
@@ -337,41 +318,22 @@ tasks:
     cmds:
       - pixi run python scripts/ci_check_quality_drift.py
 
-  # ============================================================================
-  # Schema Migration
-  # ============================================================================
+  # ==========================================================================
+  # Schema migration
+  # ==========================================================================
   migrate:
-    desc: Apply pending DB migrations (idempotent)
+    desc: 'Apply migrations (STATUS=1 to show current version)'
     cmds:
-      - pixi run python -c "from src.database import init_db, get_connection; conn = get_connection(); init_db(conn); conn.close()"
+      - |
+        if [ "{{.STATUS | default ""}}" = "1" ]; then
+          pixi run python -c "from src.database import get_connection; c = get_connection().execute('PRAGMA user_version'); print('schema_version =', c.fetchone()[0])"
+        else
+          pixi run python -c "from src.database import init_db, get_connection; conn = get_connection(); init_db(conn); conn.close()"
+        fi
 
-  migrate-status:
-    desc: Show current schema version
-    cmds:
-      - pixi run python -c "from src.database import get_connection; c = get_connection().execute('PRAGMA user_version'); print('schema_version =', c.fetchone()[0])"
-
-  # ============================================================================
-  # v2 Reports (audience-driven)
-  # ============================================================================
-  reports-v2:
-    desc: Generate v2 audience briefs (policy / hr / biz + technical appendix)
-    cmds:
-      - mkdir -p result/reports
-      - PYTHONNOUSERSITE=1 pixi run python scripts/generate_reports_v2.py
-
-  reports-v2-dry:
-    desc: List reports that would be generated without writing output
-    cmds:
-      - PYTHONNOUSERSITE=1 pixi run python scripts/generate_reports_v2.py --dry-run
-
-  reports-v2-audience:
-    desc: 'Generate single audience brief (AUDIENCE=policy|hr|biz|technical_appendix)'
-    cmds:
-      - PYTHONNOUSERSITE=1 pixi run python scripts/generate_reports_v2.py --audience {{.AUDIENCE}}
-
-  # ============================================================================
-  # ETL (Bronze → Silver medallion)
-  # ============================================================================
+  # ==========================================================================
+  # ETL (Bronze → Silver)
+  # ==========================================================================
   etl:
     desc: Run bronze → silver ETL integration
     cmds:
@@ -382,106 +344,54 @@ tasks:
     cmds:
       - pixi run python scripts/maintenance/seed_medallion.py
 
-  # ============================================================================
-  # Pre-commit / CI full sweep
-  # ============================================================================
+  # ==========================================================================
+  # CI & cleanup
+  # ==========================================================================
   ci:
     desc: 'Run full CI locally: lint + test + gates + data-dictionary check'
     cmds:
       - task lint
       - task test
       - task gates
-      - task data-dictionary-check
+      - task data-dictionary CHECK=1
 
-  # Cleanup tasks
-  clean-graphs:
-    desc: Delete generated graphs
+  # WHAT=graphs|reports|json|db|all
+  clean:
+    desc: 'Delete generated files (WHAT=graphs|reports|json|db|all)'
+    prompt: Really delete?
     cmds:
-      - rm -rf result/graphs
-      - echo "🗑️  Graphs deleted"
+      - |
+        WHAT="{{.WHAT | default "graphs"}}"
+        case "$WHAT" in
+          graphs)  rm -rf result/graphs ;;
+          reports) rm -rf result/reports ;;
+          json)    rm -rf result/json/* ;;
+          db)      rm -f result/db/animetor_eval.db data/anilist_checkpoint.json ;;
+          all)     rm -rf result/graphs result/reports result/json/* ;;
+          *)       echo "Unknown WHAT=$WHAT (use graphs|reports|json|db|all)"; exit 1 ;;
+        esac
 
-  clean-reports:
-    desc: Delete generated reports
-    cmds:
-      - rm -rf result/reports
-      - echo "🗑️  Reports deleted"
-
-  clean-json:
-    desc: Delete JSON output files
-    prompt: Really delete all JSON outputs?
-    cmds:
-      - rm -rf result/json/*
-      - echo "🗑️  JSON outputs deleted"
-
-  clean-db:
-    desc: Delete database (complete reset)
-    prompt: Really delete database? This cannot be undone.
-    cmds:
-      - rm -f result/db/animetor_eval.db
-      - rm -f data/anilist_checkpoint.json
-      - echo "🗑️  Database and checkpoint deleted"
-
-  clean-all:
-    desc: Delete all generated files (graphs, reports, JSON)
-    prompt: Really delete all generated files?
-    cmds:
-      - rm -rf result/graphs result/reports result/json/*
-      - echo "🗑️  All generated files deleted"
-
-  # Common workflows
+  # ==========================================================================
+  # Workflows
+  # ==========================================================================
   refresh:
-    desc: "Refresh analysis: pipeline → graphs → reports"
+    desc: 'Refresh analysis: pipeline-viz → interactive graphs → report-full'
     cmds:
-      - task pipeline-viz
-      - task graphs-interactive
+      - task pipeline MODE=viz
+      - task graphs MODE=interactive
       - task report-full
-      - echo "✅ Full refresh complete"
 
   nightly:
-    desc: "Nightly: regenerate briefs + appendix + validate"
+    desc: 'Nightly: regenerate briefs + appendix + validate'
     cmds:
-      - echo "🌙 Running nightly report regeneration..."
       - task report-briefs
       - task appendix-generate
       - task report-validate
       - task appendix-validate
       - task report-diff
-      - echo "✅ Nightly complete"
 
   quick-stats:
     desc: Quick stats overview (DB stats + ranking)
     cmds:
       - task stats
-      - echo ""
       - task ranking
-
-  # Phase 2F: Report Versioning
-  report-versions:
-    desc: Show version history of all briefs
-    cmds:
-      - pixi run python -c "
-import sys
-from pathlib import Path
-sys.path.insert(0, str(Path.cwd()))
-from scripts.report_generators.versioning import get_report_git_history
-
-for brief_id in ['policy', 'hr', 'business']:
-    history = get_report_git_history(brief_id, max_versions=10)
-    print(f'\n📋 {brief_id.upper()} Brief Versions:')
-    print(f'  Total: {history.total_versions}')
-    if history.current_version:
-        print(f'  Latest: {history.current_version.version_sha} ({history.current_version.timestamp})')
-        print(f'         by {history.current_version.author}')
-      "
-
-  # Phase 2G: Report API
-  report-api:
-    desc: Start Report API server (FastAPI on port 8000)
-    cmds:
-      - pixi run uvicorn scripts.report_api:app --reload --host 0.0.0.0 --port 8000
-
-  report-api-docs:
-    desc: Show Report API documentation
-    cmds:
-      - pixi run python scripts/report_api.py | grep -A 50 "endpoints"
-      - echo "\n📖 Full docs: http://localhost:8000/docs (after running 'task report-api')"
