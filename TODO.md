@@ -1,6 +1,6 @@
 # TODO.md — 未完了作業の一元管理
 
-作成日: 2026-04-22 / 最終更新: 2026-04-23
+作成日: 2026-04-22 / 最終更新: 2026-04-23 (Card 05 step 3 完了)
 
 本書はプロジェクト内のすべての未完了項目を一元管理するファイルです。完了済みサマリーは `DONE.md`、設計原則は `CLAUDE.md`。
 
@@ -29,7 +29,7 @@ TASK_CARDS/
 | 🔴 Critical | スキーマ整合 | v55 migration 未登録、DDL 残存、`scores` 物理リネーム未実施 |
 | 🟠 Major | Phase 4 残務 | pipeline smoke test、method notes validation gate |
 | 🟠 Major | コード一貫性 | scraper 統一、episode sentinel、etl 公開 |
-| 🟠 Major | DuckDB 全面移行 | SQLite → DuckDB (BRONZE Parquet + SILVER/GOLD DuckDB + atomic swap) |
+| 🟠 Major | DuckDB 全面移行 | Phase A 完了 (silver_reader + 15 module 移行済)。次: Card 06 GOLD DuckDB 化 |
 | 🟠 Major | Hamilton 導入 | `PipelineContext` 解消、DAG 化 (H-1 ~ H-5) |
 | 🟠 Major | レポートシステム統廃合 | 3 系統 → 1 系統、v1 monolith 解体、FastAPI 2 系統 → 1 系統 |
 | 🟡 Minor | テストカバレッジ | pipeline_phases 未テスト、VA 7 モジュール、モノリスファイル分割 |
@@ -154,9 +154,9 @@ src/scrapers/mediaarts_scraper.py:475
 - [x] `insert_credit()` は NULL-aware dedup 済み (`episode IS NULL` チェック)
 - [x] コードレベルの `-1` チェックなし (grep で確認済み)
 
-### 3.5 `src/etl/__init__.py` が空
+### 3.5 `src/etl/__init__.py` が空 ✅ DONE
 
-- [ ] `integrate.py` の公開 API (`integrate_anilist`, `integrate_ann` 等) を export するか、private 設計を docstring で明示
+- [x] `__all__` に 7 関数を export (upsert_canonical_anime, integrate_*, run_integration)
 
 ### 3.6 テストの `Anime(score=..., studios=...)` 移行
 
@@ -164,6 +164,27 @@ src/scrapers/mediaarts_scraper.py:475
 
 - [ ] 短期: `BronzeAnime` シム維持 (破壊しない)
 - [ ] 中長期: `AnimeAnalysis(...)` に段階移行 (`rg 'Anime\(.*score=' tests/ --count` でスコープ確認)
+
+### 3.7 `jvmg_fetcher.py` の `WIKIDATA_ROLE_MAP` バグ修正
+
+**現状** (`src/scrapers/jvmg_fetcher.py:45-50`): プロパティ → role の対応が 3 件誤り。
+
+| Prop | 現在の map (誤) | Wikidata 実定義 (2026-04-23 確認) |
+|---|---|---|
+| P58 | `episode director` | `screenwriter` |
+| P1040 | `animation director` | `film editor` |
+| P3174 | `episode_director` | `art director` |
+| P57 | `director` | `director` (これは正しい) |
+
+**影響**: BRONZE `credits` テーブルに誤ったロールが混入している可能性。JVMG 由来 credits は既に投入済みなら遡って再分類が必要。
+
+- [ ] 正しい map に修正 (`P57→director, P58→screenwriter, P1040→editor, P3174→art_director`)
+- [ ] `parse_role()` 側が `screenwriter`/`editor`/`art_director` を 24 種の role_groups に正しく落とせるか検証
+- [ ] P10800 (animation director) の存在確認 — あれば追加
+- [ ] 既存 JVMG-source の credits を再スクレイプ or 再マップ (どちらが現実的か判断)
+- [ ] 新規 `wikidata_world_scraper.py` と map を共有 — `src/scrapers/wikidata_role_map.py` に定数を切り出して 2 scraper で import
+
+**関連**: 新規 `wikidata_world_scraper.py` (世界アニメ DB 拡張) の設計で発覚。新 scraper 側は正した map で実装するので追加バグは生まない。
 
 ---
 
@@ -195,28 +216,39 @@ scrapers ──→ bronze/source=X/date=Y/*.parquet   (per-source append-only、
 - WAL mode 相当なし → パイプライン走行中の API 読み取りは別ファイルに書いて atomic swap
 - OLTP は非推奨 (API 高頻度小クエリは SQLite より遅い可能性)
 
-### 4.1 Phase A: 読み取りだけ DuckDB (PoC)
+### 4.1 Phase A: 読み取りだけ DuckDB (PoC) ✅ DONE (2026-04-23)
 
-- [ ] `pixi add duckdb duckdb-engine`
-- [ ] `src/analysis/` の重いクエリ 2-3 箇所を DuckDB 経由 (SQLite を `ATTACH`) で書き直し
+- [x] `pixi add duckdb` — pixi.toml 済み
+- [x] `src/analysis/silver_reader.py` 新設 — `silver_connect()` + typed loaders (`load_persons/anime/credits_silver()`)
+- [x] `src/analysis/duckdb_io.py` ATTACH パターン廃止 → `silver_connect()` 直接接続に書き換え
+- [x] `src/analysis/` 15 モジュールの standalone `main()` を silver.duckdb 直読に移行 (Card 05 step 3)
+  - network: community_detection, path_finding, multilayer, core_periphery, structural_holes, temporal_bridge, temporal_influence
+  - scoring: potential_value, pagerank (write path のみ legacy get_connection 残存)
+  - graph, anime_value, contribution_attribution, genre/specialization, growth_acceleration, studio/bias_correction
 - [ ] ベンチマーク: Phase 5/6 の時間比較
 
-### 4.2 Phase B: GOLD 層を DuckDB 化
+**Card 05 で積み越し** (pipeline_phases + attrition/gender は GOLD テーブル依存のため Card 06 に):
+- `pipeline_phases/{data_loading,validation,entity_resolution,result_assembly}.py` — GOLD 書き込みと conn 共用
+- `analysis/attrition/*.py`, `analysis/gender/bottleneck.py` — `feat_career`/`feat_career_gaps` GOLD テーブルを読む
+- `analysis/{method_notes,person_parameters,llm_pipeline}.py` — GOLD 書き込み or LLM キャッシュ
 
-- [ ] GOLD テーブル (person_scores, score_history, meta_*, agg_*, feat_*) を DuckDB へ
-- [ ] パイプライン最終 Phase (`export_and_viz.py`) が DuckDB に書く
+### 4.2 Phase B: GOLD 層を DuckDB 化 (= Card 06)
+
+- [ ] GOLD テーブル (person_scores, score_history, meta_*, agg_*, feat_*) を gold.duckdb へ
+- [ ] パイプライン最終 Phase (`export_and_viz.py`) が gold.duckdb に書く
 - [ ] API 側の GOLD 読み取りを DuckDB に切替
+- [ ] attrition/gender/method_notes/person_parameters の conn を gold_connect() に切替
+- [ ] `pipeline_phases/` の読み取り経路を silver_reader に、書き込み経路を gold_connect() に切替
 
 ### 4.3 Phase C: BRONZE を Parquet + DuckDB
 
 - [ ] Scraper 出力を `src_*` テーブル → Parquet ファイル (日付パーティション) に
 - [ ] `display_lookup.py` の読み取り先を Parquet に切替
 
-### 4.4 Phase D: SILVER を DuckDB 化 + SQLite 完全撤去
+### 4.4 Phase D: SQLite 完全撤去
 
-- [ ] SILVER テーブル (anime, persons, credits, roles, etc.) を DuckDB へ
 - [ ] Entity resolution の書き込み経路を DuckDB に切替
-- [ ] SQLite 依存コードを削除、`src/database.py` を DuckDB ベースに書き換え
+- [ ] `src/database.py` を廃止 (DAO 群を `src/db/` に移管)
 - [ ] `database_v2.py` / `models_v2.py` — DuckDB 移行で活かす計画がないなら削除
 - [ ] `migrate_to_v2.py` は使い捨て script。`01_schema_fix/01_one_shot_copy.md` 実行後に削除
 - [ ] Atlas migration を DuckDB 環境で再生成
@@ -636,11 +668,11 @@ Phase β: Phase 4 残務 + DuckDB/Hamilton PoC (並行可)
   2.2, 2.3              (Phase 4 残務)
   3.1, 3.2, 3.4, 3.5   (コード一貫性)
   7.2                   (ANN HTML切替、ブロッカーなし)
-  4.1                   (DuckDB Phase A PoC)
-  5.1                   (Hamilton H-1 PoC)
+  4.1 ✅ DONE           (DuckDB Phase A PoC — silver_reader + 15 module 移行)
+  5.1 ✅ DONE           (Hamilton H-1 PoC)
 
 Phase γ: 移行本格化 (β 効果確認後)
-  4.2 DuckDB Phase B (GOLD)
+  4.2 DuckDB Phase B = Card 06 (GOLD DuckDB 化 + pipeline_phases/attrition 切替)
   5.2 Hamilton H-2 (Phase 5-8)
   6.1, 6.2, 6.3   (テストカバレッジ)
   8.1, 8.2, 8.3   (レポート統廃合 — S-1/S-2/S-4 完了で Taskfile も整理)
