@@ -1,3 +1,11 @@
+# SUPERSEDED by 04_duckdb/02_scraper_migration
+
+本カードは scraper を SQLite ラッパー (`upsert_canonical_anime`) 経由に
+統一する案だったが、scraper を Parquet 出力に切替える方針 (04_duckdb/02)
+に統合された。改修を 1 度で済ませるため。
+
+---
+
 # Task: 6 Scraper の書き込みパスを統一
 
 **ID**: `03_consistency/01_scraper_unification`
