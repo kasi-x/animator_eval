@@ -17,7 +17,7 @@ def client():
 @pytest.fixture
 def scores_data(tmp_path, monkeypatch):
     """テスト用スコアデータをJSON_DIRに配置."""
-    import src.analysis.gold_writer
+    import src.analysis.io.gold_writer
     import src.runtime.api
     import src.db.init
     import src.utils.json_io
@@ -27,7 +27,7 @@ def scores_data(tmp_path, monkeypatch):
     monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path)
     # Disable DuckDB GOLD path so ranking falls back to SQLite
     monkeypatch.setattr(
-        src.analysis.gold_writer,
+        src.analysis.io.gold_writer,
         "DEFAULT_GOLD_DB_PATH",
         tmp_path / "nonexistent_gold.duckdb",
     )
@@ -434,8 +434,8 @@ def scores_data(tmp_path, monkeypatch):
 def persons_duckdb_data(tmp_path, monkeypatch):
     """Fixture with actual silver.duckdb + gold.duckdb for persons endpoint tests."""
     import duckdb
-    import src.analysis.gold_writer
-    import src.analysis.silver_reader
+    import src.analysis.io.gold_writer
+    import src.analysis.io.silver_reader
     import src.runtime.api
     import src.utils.json_io
 
@@ -444,8 +444,8 @@ def persons_duckdb_data(tmp_path, monkeypatch):
 
     silver_path = tmp_path / "silver.duckdb"
     gold_path = tmp_path / "gold.duckdb"
-    monkeypatch.setattr(src.analysis.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
-    monkeypatch.setattr(src.analysis.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+    monkeypatch.setattr(src.analysis.io.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(src.analysis.io.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
 
     # Create silver.duckdb
     sconn = duckdb.connect(str(silver_path))
@@ -455,6 +455,7 @@ def persons_duckdb_data(tmp_path, monkeypatch):
         name_en VARCHAR DEFAULT '',
         name_ko VARCHAR DEFAULT '',
         name_zh VARCHAR DEFAULT '',
+        names_alt VARCHAR DEFAULT '{}',
         aliases VARCHAR DEFAULT '[]',
         image_medium VARCHAR
     )""")
@@ -475,7 +476,7 @@ def persons_duckdb_data(tmp_path, monkeypatch):
     sconn.close()
 
     # Create gold.duckdb using GoldWriter DDL
-    from src.analysis.gold_writer import _DDL
+    from src.analysis.io.gold_writer import _DDL
     gconn = duckdb.connect(str(gold_path))
     gconn.execute(_DDL)
     for pid, iv, bi, pa, fe, aw, do in [

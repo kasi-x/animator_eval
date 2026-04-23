@@ -177,22 +177,22 @@ def test_api_person_response_contains_score_fields(tmp_path, monkeypatch):
     フィールド名変更時に API 側の更新漏れを検出する。
     """
     import duckdb
-    import src.analysis.gold_writer
-    import src.analysis.silver_reader
+    import src.analysis.io.gold_writer
+    import src.analysis.io.silver_reader
     import src.runtime.api
     import src.utils.json_io
     from fastapi.testclient import TestClient
-    from src.analysis.gold_writer import _DDL
+    from src.analysis.io.gold_writer import _DDL
 
     silver_path = tmp_path / "silver.duckdb"
     gold_path = tmp_path / "gold.duckdb"
-    monkeypatch.setattr(src.analysis.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
-    monkeypatch.setattr(src.analysis.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+    monkeypatch.setattr(src.analysis.io.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(src.analysis.io.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
     monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path)
     monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path)
 
     sconn = duckdb.connect(str(silver_path))
-    sconn.execute("CREATE TABLE persons (id VARCHAR PRIMARY KEY, name_ja VARCHAR DEFAULT '', name_en VARCHAR DEFAULT '', name_ko VARCHAR DEFAULT '', name_zh VARCHAR DEFAULT '', aliases VARCHAR DEFAULT '[]', image_medium VARCHAR)")
+    sconn.execute("CREATE TABLE persons (id VARCHAR PRIMARY KEY, name_ja VARCHAR DEFAULT '', name_en VARCHAR DEFAULT '', name_ko VARCHAR DEFAULT '', name_zh VARCHAR DEFAULT '', names_alt VARCHAR DEFAULT '{}', aliases VARCHAR DEFAULT '[]', image_medium VARCHAR)")
     sconn.execute("CREATE TABLE anime (id VARCHAR PRIMARY KEY, title_en VARCHAR, year INTEGER)")
     sconn.execute("CREATE TABLE credits (person_id VARCHAR, anime_id VARCHAR, role VARCHAR, credit_year INTEGER, evidence_source VARCHAR)")
     sconn.execute("INSERT INTO persons(id, name_ja) VALUES ('p1', 'テスト太郎')")

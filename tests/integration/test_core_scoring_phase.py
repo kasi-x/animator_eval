@@ -52,14 +52,14 @@ def _make_context(monkeypatch, tmp_path: Path) -> PipelineContext:
     )
 
     from tests.conftest import build_silver_duckdb
-    import src.analysis.silver_reader
-    import src.analysis.gold_writer
+    import src.analysis.io.silver_reader
+    import src.analysis.io.gold_writer
 
     silver_path = tmp_path / "silver.duckdb"
     gold_path = tmp_path / "gold.duckdb"
     build_silver_duckdb(silver_path, persons, anime_list, credits)
-    monkeypatch.setattr(src.analysis.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
-    monkeypatch.setattr(src.analysis.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+    monkeypatch.setattr(src.analysis.io.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(src.analysis.io.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
 
     ctx = PipelineContext(visualize=False, dry_run=False)
     load_pipeline_data(ctx)
