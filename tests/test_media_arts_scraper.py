@@ -191,5 +191,3 @@ class TestMediaArtsDownload:
 
         result = _run(run())
         assert len(result) == len(ANIME_COLLECTION_FILES_PRIMARY)
-
-

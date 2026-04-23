@@ -54,17 +54,17 @@ def synthetic_db(tmp_path_factory):
     conn.close()
 
     from tests.conftest import build_silver_duckdb
-    import src.analysis.silver_reader
-    import src.analysis.gold_writer
+    import src.analysis.io.silver_reader
+    import src.analysis.io.gold_writer
 
     silver_path = tmp_path / "silver.duckdb"
     gold_path = tmp_path / "gold.duckdb"
     build_silver_duckdb(silver_path, persons, anime_list, credits)
 
-    orig_silver = src.analysis.silver_reader.DEFAULT_SILVER_PATH
-    orig_gold = src.analysis.gold_writer.DEFAULT_GOLD_DB_PATH
-    src.analysis.silver_reader.DEFAULT_SILVER_PATH = silver_path
-    src.analysis.gold_writer.DEFAULT_GOLD_DB_PATH = gold_path
+    orig_silver = src.analysis.io.silver_reader.DEFAULT_SILVER_PATH
+    orig_gold = src.analysis.io.gold_writer.DEFAULT_GOLD_DB_PATH
+    src.analysis.io.silver_reader.DEFAULT_SILVER_PATH = silver_path
+    src.analysis.io.gold_writer.DEFAULT_GOLD_DB_PATH = gold_path
 
     yield db_path
 
@@ -72,8 +72,8 @@ def synthetic_db(tmp_path_factory):
     src.runtime.pipeline.JSON_DIR = orig_pipeline
     src.utils.config.JSON_DIR = orig_config
     src.utils.json_io.JSON_DIR = orig_json_io
-    src.analysis.silver_reader.DEFAULT_SILVER_PATH = orig_silver
-    src.analysis.gold_writer.DEFAULT_GOLD_DB_PATH = orig_gold
+    src.analysis.io.silver_reader.DEFAULT_SILVER_PATH = orig_silver
+    src.analysis.io.gold_writer.DEFAULT_GOLD_DB_PATH = orig_gold
 
 
 @pytest.fixture(scope="class")
@@ -120,14 +120,14 @@ def synthetic_db_fresh(monkeypatch, tmp_path):
     conn.close()
 
     from tests.conftest import build_silver_duckdb
-    import src.analysis.silver_reader
-    import src.analysis.gold_writer
+    import src.analysis.io.silver_reader
+    import src.analysis.io.gold_writer
 
     silver_path = tmp_path / "silver.duckdb"
     gold_path = tmp_path / "gold.duckdb"
     build_silver_duckdb(silver_path, persons, anime_list, credits)
-    monkeypatch.setattr(src.analysis.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
-    monkeypatch.setattr(src.analysis.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+    monkeypatch.setattr(src.analysis.io.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(src.analysis.io.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
 
     return db_path
 
@@ -152,7 +152,7 @@ class TestFullPipeline:
 
     def test_scores_in_db(self, synthetic_db, pipeline_results):
         """スコアがgold.duckdbに保存される."""
-        from src.analysis.gold_writer import gold_connect
+        from src.analysis.io.gold_writer import gold_connect
 
         with gold_connect() as conn:
             scores = conn.execute("SELECT COUNT(*) FROM person_scores").fetchone()[0]

@@ -10,33 +10,6 @@ from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 @pytest.fixture
-def anime_map():
-    """8 anime works across different studios and years."""
-    return {
-        "a1": Anime(
-            id="a1", title_en="Work A", year=2018, studios=["Alpha"]
-        ),
-        "a2": Anime(
-            id="a2", title_en="Work B", year=2019, studios=["Alpha"]
-        ),
-        "a3": Anime(id="a3", title_en="Work C", year=2019, studios=["Beta"]),
-        "a4": Anime(id="a4", title_en="Work D", year=2020, studios=["Beta"]),
-        "a5": Anime(
-            id="a5", title_en="Work E", year=2020, studios=["Alpha"]
-        ),
-        "a6": Anime(
-            id="a6", title_en="Work F", year=2021, studios=["Gamma"]
-        ),
-        "a7": Anime(
-            id="a7", title_en="Work G", year=2021, studios=["Alpha"]
-        ),
-        "a8": Anime(
-            id="a8", title_en="Work H", year=2022, studios=["Gamma"]
-        ),
-    }
-
-
-@pytest.fixture
 def credits():
     """Credits for 12 persons across 8 anime — diverse roles and collaborations."""
     return [
@@ -82,25 +55,6 @@ def credits():
         Credit(person_id="p8", anime_id="a7", role=Role.KEY_ANIMATOR, source="test"),
         Credit(person_id="p8", anime_id="a8", role=Role.KEY_ANIMATOR, source="test"),
     ]
-
-
-@pytest.fixture
-def person_fe():
-    """Person fixed effects — varying talent levels."""
-    return {
-        "d1": 2.5,
-        "d2": 1.8,
-        "d3": 1.2,
-        "d4": 0.5,
-        "p1": 2.0,
-        "p2": 1.5,
-        "p3": 0.8,
-        "p4": 1.9,
-        "p5": 1.1,
-        "p6": 1.3,
-        "p7": 0.9,
-        "p8": 0.6,
-    }
 
 
 @pytest.fixture

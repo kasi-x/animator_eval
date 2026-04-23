@@ -414,5 +414,3 @@ class TestDownloadAnimeImages:
         assert results["anime:1"]["cover_large"] is None
         assert results["anime:1"]["banner"] is None
         mock_dl.assert_not_called()
-
-

@@ -38,19 +38,6 @@ def _make_credit(
 
 
 @pytest.fixture
-def anime_map():
-    """10 anime with varied scores."""
-    return {
-        f"a{i}": _make_anime(
-            f"a{i}",
-            year=2015 + i,
-            studios=["StudioA"] if i < 5 else ["StudioB"],
-        )
-        for i in range(10)
-    }
-
-
-@pytest.fixture
 def credits_list():
     """Credits for 15 persons across 10 anime."""
     credits = []

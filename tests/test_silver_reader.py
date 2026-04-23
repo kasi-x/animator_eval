@@ -48,61 +48,23 @@ CREATE TABLE IF NOT EXISTS credits (
 """
 
 
-@pytest.fixture()
-def silver_path(tmp_path):
-    path = tmp_path / "silver.duckdb"
-    conn = duckdb.connect(str(path))
-    for stmt in _DDL.split(";"):
-        s = stmt.strip()
-        if s:
-            conn.execute(s)
-    conn.executemany(
-        "INSERT INTO anime (id, title_ja, title_en, year, format, episodes, duration, source_mat, scale_class)"
-        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        [
-            ("a1", "アニメA", "Anime A", 2020, "TV", 12, 24, "MANGA", "medium"),
-            ("a2", "アニメB", "Anime B", 2021, "MOVIE", 1, 90, "ORIGINAL", "large"),
-        ],
-    )
-    conn.executemany(
-        "INSERT INTO persons (id, name_ja, name_en, birth_date, website_url)"
-        " VALUES (?, ?, ?, ?, ?)",
-        [
-            ("p1", "山田太郎", "Taro Yamada", "1985-03-15", "https://example.com"),
-            ("p2", "佐藤花子", "Hanako Sato", None, None),
-        ],
-    )
-    conn.executemany(
-        "INSERT INTO credits (person_id, anime_id, role, evidence_source)"
-        " VALUES (?, ?, ?, ?)",
-        [
-            ("p1", "a1", "director", "anilist"),
-            ("p1", "a2", "director", "anilist"),
-            ("p2", "a1", "key_animator", "anilist"),
-        ],
-    )
-    conn.commit()
-    conn.close()
-    return path
-
-
 class TestSilverConnect:
     def test_opens_and_closes(self, silver_path):
-        from src.analysis.silver_reader import silver_connect
+        from src.analysis.io.silver_reader import silver_connect
 
         with silver_connect(silver_path) as conn:
             count = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]
         assert count == 2
 
     def test_read_only_by_default(self, silver_path):
-        from src.analysis.silver_reader import silver_connect
+        from src.analysis.io.silver_reader import silver_connect
 
         with silver_connect(silver_path) as conn:
             with pytest.raises(Exception, match="read.only|Read-only"):
                 conn.execute("DELETE FROM anime")
 
     def test_memory_limit_applied(self, silver_path):
-        from src.analysis.silver_reader import silver_connect
+        from src.analysis.io.silver_reader import silver_connect
 
         with silver_connect(silver_path, memory_limit="256MB") as conn:
             limit = conn.execute(
@@ -111,7 +73,7 @@ class TestSilverConnect:
         assert limit and "M" in limit.upper()
 
     def test_unavailable_path_raises(self, tmp_path):
-        from src.analysis.silver_reader import silver_connect
+        from src.analysis.io.silver_reader import silver_connect
 
         missing = tmp_path / "nonexistent.duckdb"
         with pytest.raises(Exception):
@@ -121,7 +83,7 @@ class TestSilverConnect:
 
 class TestLoadPersonsSilver:
     def test_returns_person_models(self, silver_path):
-        from src.analysis.silver_reader import load_persons_silver
+        from src.analysis.io.silver_reader import load_persons_silver
         from src.runtime.models import Person
 
         persons = load_persons_silver(silver_path)
@@ -129,7 +91,7 @@ class TestLoadPersonsSilver:
         assert all(isinstance(p, Person) for p in persons)
 
     def test_birth_date_mapped(self, silver_path):
-        from src.analysis.silver_reader import load_persons_silver
+        from src.analysis.io.silver_reader import load_persons_silver
 
         persons = load_persons_silver(silver_path)
         by_id = {p.id: p for p in persons}
@@ -137,7 +99,7 @@ class TestLoadPersonsSilver:
         assert by_id["p2"].date_of_birth is None
 
     def test_website_url_mapped(self, silver_path):
-        from src.analysis.silver_reader import load_persons_silver
+        from src.analysis.io.silver_reader import load_persons_silver
 
         persons = load_persons_silver(silver_path)
         by_id = {p.id: p for p in persons}
@@ -145,7 +107,7 @@ class TestLoadPersonsSilver:
         assert by_id["p2"].site_url is None
 
     def test_names_preserved(self, silver_path):
-        from src.analysis.silver_reader import load_persons_silver
+        from src.analysis.io.silver_reader import load_persons_silver
 
         persons = load_persons_silver(silver_path)
         by_id = {p.id: p for p in persons}
@@ -155,7 +117,7 @@ class TestLoadPersonsSilver:
 
 class TestLoadAnimeSilver:
     def test_returns_anime_models(self, silver_path):
-        from src.analysis.silver_reader import load_anime_silver
+        from src.analysis.io.silver_reader import load_anime_silver
         from src.runtime.models import AnimeAnalysis
 
         anime_list = load_anime_silver(silver_path)
@@ -163,7 +125,7 @@ class TestLoadAnimeSilver:
         assert all(isinstance(a, AnimeAnalysis) for a in anime_list)
 
     def test_source_mat_mapped(self, silver_path):
-        from src.analysis.silver_reader import load_anime_silver
+        from src.analysis.io.silver_reader import load_anime_silver
 
         anime_list = load_anime_silver(silver_path)
         by_id = {a.id: a for a in anime_list}
@@ -171,7 +133,7 @@ class TestLoadAnimeSilver:
         assert by_id["a1"].source == "MANGA"
 
     def test_core_fields_present(self, silver_path):
-        from src.analysis.silver_reader import load_anime_silver
+        from src.analysis.io.silver_reader import load_anime_silver
 
         anime_list = load_anime_silver(silver_path)
         by_id = {a.id: a for a in anime_list}
@@ -185,7 +147,7 @@ class TestLoadAnimeSilver:
 
 class TestLoadCreditsSilver:
     def test_returns_credit_models(self, silver_path):
-        from src.analysis.silver_reader import load_credits_silver
+        from src.analysis.io.silver_reader import load_credits_silver
         from src.runtime.models import Credit
 
         credits = load_credits_silver(silver_path)
@@ -193,14 +155,14 @@ class TestLoadCreditsSilver:
         assert all(isinstance(c, Credit) for c in credits)
 
     def test_evidence_source_mapped(self, silver_path):
-        from src.analysis.silver_reader import load_credits_silver
+        from src.analysis.io.silver_reader import load_credits_silver
 
         credits = load_credits_silver(silver_path)
         assert all(c.source == "anilist" for c in credits)
         assert all(c.evidence_source == "anilist" for c in credits)
 
     def test_role_parsed(self, silver_path):
-        from src.analysis.silver_reader import load_credits_silver
+        from src.analysis.io.silver_reader import load_credits_silver
         from src.runtime.models import Role
 
         credits = load_credits_silver(silver_path)
@@ -209,7 +171,7 @@ class TestLoadCreditsSilver:
         assert Role.KEY_ANIMATOR in roles
 
     def test_unknown_role_skipped(self, tmp_path):
-        from src.analysis.silver_reader import load_credits_silver
+        from src.analysis.io.silver_reader import load_credits_silver
 
         path = tmp_path / "bad_role.duckdb"
         conn = duckdb.connect(str(path))
@@ -230,13 +192,13 @@ class TestLoadCreditsSilver:
 
 class TestQuerySilver:
     def test_arbitrary_query(self, silver_path):
-        from src.analysis.silver_reader import query_silver
+        from src.analysis.io.silver_reader import query_silver
 
         rows = query_silver("SELECT id FROM anime ORDER BY id", path=silver_path)
         assert [r["id"] for r in rows] == ["a1", "a2"]
 
     def test_parameterized_query(self, silver_path):
-        from src.analysis.silver_reader import query_silver
+        from src.analysis.io.silver_reader import query_silver
 
         rows = query_silver(
             "SELECT id FROM persons WHERE id = ?", params=["p1"], path=silver_path

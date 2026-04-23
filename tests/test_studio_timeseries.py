@@ -10,32 +10,6 @@ from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 
 @pytest.fixture
-def anime_map():
-    return {
-        # score= is display metadata (not used in scoring formulas);
-        # kept to test avg_anime_score display output.
-        "a1": Anime(
-            id="a1", title_en="Show A", year=2020, studios=["Bones"], score=8.0
-        ),
-        "a2": Anime(
-            id="a2", title_en="Show B", year=2021, studios=["Bones"], score=7.5
-        ),
-        "a3": Anime(
-            id="a3", title_en="Show C", year=2022, studios=["Bones"], score=9.0
-        ),
-        "a4": Anime(
-            id="a4", title_en="Show D", year=2020, studios=["MAPPA"]
-        ),
-        "a5": Anime(
-            id="a5", title_en="Show E", year=2021, studios=["MAPPA"]
-        ),
-        "a6": Anime(
-            id="a6", title_en="Show F", year=2022, studios=["MAPPA"]
-        ),
-    }
-
-
-@pytest.fixture
 def credits():
     return [
         # Bones staff 2020

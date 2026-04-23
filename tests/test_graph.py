@@ -1,6 +1,6 @@
 """graph モジュールのテスト."""
 
-from src.analysis.graph import (
+from src.analysis.graph.graph import (
     create_person_anime_network,
     create_person_collaboration_network,
     create_director_animator_network,

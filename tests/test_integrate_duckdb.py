@@ -235,3 +235,58 @@ def test_multi_source_merge(tmp_path: Path) -> None:
     conn.close()
 
     assert count == 2
+
+
+def test_studios_loaded_when_parquet_exists(tmp_path: Path) -> None:
+    """studios + anime_studios are populated when bronze parquet is present."""
+    root = tmp_path / "bronze"
+
+    with BronzeWriter("anilist", table="anime", root=root) as bw:
+        bw.append({"id": "a1", "title_ja": "A", "title_en": "", "year": 2024,
+                   "season": None, "quarter": None, "episodes": 12, "format": "TV",
+                   "duration": 24, "start_date": None, "end_date": None,
+                   "status": None, "original_work_type": None, "source": None,
+                   "work_type": None, "scale_class": None})
+    with BronzeWriter("anilist", table="persons", root=root) as bw:
+        bw.append({"id": "p1", "name_ja": "X", "name_en": ""})
+    with BronzeWriter("anilist", table="credits", root=root) as bw:
+        bw.append({"anime_id": "a1", "person_id": "p1", "role": "director",
+                   "raw_role": None, "episode": None, "evidence_source": "anilist"})
+    with BronzeWriter("anilist", table="studios", root=root) as bw:
+        bw.append({"id": "anilist:s1", "name": "スタジオA", "anilist_id": 1,
+                   "is_animation_studio": True, "country_of_origin": "JP",
+                   "favourites": 100, "site_url": None})
+    with BronzeWriter("anilist", table="anime_studios", root=root) as bw:
+        bw.append({"anime_id": "a1", "studio_id": "anilist:s1", "is_main": True})
+
+    silver = tmp_path / "silver.duckdb"
+    counts = integrate(bronze_root=root, silver_path=silver)
+
+    assert counts["studios"] == 1
+    assert counts["anime_studios"] == 1
+
+    conn = duckdb.connect(str(silver), read_only=True)
+    row = conn.execute("SELECT name, is_animation_studio FROM studios WHERE id='anilist:s1'").fetchone()
+    link = conn.execute("SELECT is_main FROM anime_studios WHERE anime_id='a1'").fetchone()
+    conn.close()
+
+    assert row is not None
+    assert row[0] == "スタジオA"
+    assert row[1] is True
+    assert link is not None
+    assert link[0] is True
+
+
+def test_studios_skipped_gracefully_when_no_parquet(bronze_dir: Path, tmp_path: Path) -> None:
+    """integrate() succeeds with no studio parquet — studios/anime_studios absent from counts."""
+    silver = tmp_path / "silver.duckdb"
+    counts = integrate(bronze_root=bronze_dir, silver_path=silver)
+
+    assert "studios" not in counts
+    assert "anime_studios" not in counts
+
+    # Tables still exist with zero rows
+    conn = duckdb.connect(str(silver), read_only=True)
+    n = conn.execute("SELECT COUNT(*) FROM studios").fetchone()[0]
+    conn.close()
+    assert n == 0

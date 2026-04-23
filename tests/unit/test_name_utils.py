@@ -140,27 +140,36 @@ class TestJsonLoading:
 
 class TestAssignNativeNameFields:
     def test_hiragana_goes_to_name_ja(self):
-        ja, ko, zh = assign_native_name_fields("みやざき", [])
+        ja, ko, zh, alt = assign_native_name_fields("みやざき", [])
         assert ja == "みやざき"
 
     def test_hangul_goes_to_name_ko(self):
-        ja, ko, zh = assign_native_name_fields("홍길동", [])
+        ja, ko, zh, alt = assign_native_name_fields("홍길동", [])
         assert ko == "홍길동"
         assert ja == ""
 
     def test_cjk_jp_nationality_goes_to_name_ja(self):
-        ja, ko, zh = assign_native_name_fields("宮崎駿", ["JP"])
+        ja, ko, zh, alt = assign_native_name_fields("宮崎駿", ["JP"])
         assert ja == "宮崎駿"
         assert zh == ""
 
     def test_cjk_cn_nationality_goes_to_name_zh(self):
-        ja, ko, zh = assign_native_name_fields("王明", ["CN"])
+        ja, ko, zh, alt = assign_native_name_fields("王明", ["CN"])
         assert zh == "王明"
         assert ja == ""
 
     def test_cjk_unknown_nationality_returns_empty(self):
-        ja, ko, zh = assign_native_name_fields("张三", [])
+        ja, ko, zh, alt = assign_native_name_fields("张三", [])
         assert ja == "" and ko == "" and zh == ""
 
+    def test_thai_goes_to_names_alt(self):
+        ja, ko, zh, alt = assign_native_name_fields("สมชาย วงศ์", [])
+        assert ja == "" and ko == "" and zh == ""
+        assert alt == {"th": "สมชาย วงศ์"}
+
+    def test_arabic_goes_to_names_alt(self):
+        ja, ko, zh, alt = assign_native_name_fields("محمد", [])
+        assert alt == {"ar": "محمد"}
+
     def test_empty_string_returns_empty(self):
-        assert assign_native_name_fields("", ["JP"]) == ("", "", "")
+        assert assign_native_name_fields("", ["JP"]) == ("", "", "", {})

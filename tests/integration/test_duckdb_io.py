@@ -43,34 +43,6 @@ CREATE TABLE IF NOT EXISTS credits (
 
 
 @pytest.fixture()
-def silver_path(tmp_path):
-    """Silver DuckDB with minimal dataset (no genre/studio tables)."""
-    path = tmp_path / "silver.duckdb"
-    conn = duckdb.connect(str(path))
-    for stmt in _SILVER_DDL.split(";"):
-        s = stmt.strip()
-        if s:
-            conn.execute(s)
-    conn.executemany(
-        "INSERT INTO anime (id, title_ja, title_en, year, episodes) VALUES (?,?,?,?,?)",
-        [("a1", "テストアニメ", "Test Anime", 2020, 12),
-         ("a2", "別アニメ", "Another Anime", 2021, 24)],
-    )
-    conn.executemany(
-        "INSERT INTO credits (person_id, anime_id, role, evidence_source)"
-        " VALUES (?,?,?,?)",
-        [
-            ("p0", "a1", "director", "test"),
-            ("p1", "a1", "key_animator", "test"),
-            ("p2", "a2", "director", "test"),
-        ],
-    )
-    conn.commit()
-    conn.close()
-    return path
-
-
-@pytest.fixture()
 def silver_path_with_related(tmp_path):
     """Silver DuckDB that includes anime_genres, anime_studios, studios tables."""
     path = tmp_path / "silver_full.duckdb"

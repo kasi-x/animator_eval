@@ -154,5 +154,3 @@ class TestRetryAsync:
 
         result = _run(retry_async(add, 1, 2, extra=10, max_attempts=1, source="test"))
         assert result == 13
-
-

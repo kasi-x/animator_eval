@@ -262,5 +262,3 @@ class TestJVMGFetchAnimeStaff:
             anime, persons, credits = _run(fetch_anime_staff(max_records=1000))
 
         assert len(credits) == 500
-
-

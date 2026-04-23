@@ -673,5 +673,3 @@ class TestAniListBatchSave:
         c1.model_dump.return_value = {"person_id": "anilist:p1", "anime_id": "anilist:1"}
         save_credits_batch_to_bronze(mock_bw, [c1])
         mock_bw.append.assert_called_once()
-
-

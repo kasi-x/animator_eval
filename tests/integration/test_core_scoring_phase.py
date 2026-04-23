@@ -39,14 +39,6 @@ def _make_context(monkeypatch, tmp_path: Path) -> PipelineContext:
     monkeypatch.setattr(src.runtime.pipeline, "JSON_DIR", json_dir)
     monkeypatch.setattr(src.utils.config, "JSON_DIR", json_dir)
 
-    from src.pipeline_phases import (
-        PipelineContext,
-        build_graphs_phase,
-        load_pipeline_data,
-        run_entity_resolution,
-        run_validation_phase,
-    )
-
     persons, anime_list, credits = generate_synthetic_data(
         n_directors=5, n_animators=30, n_anime=15, seed=42
     )
@@ -61,11 +53,23 @@ def _make_context(monkeypatch, tmp_path: Path) -> PipelineContext:
     monkeypatch.setattr(src.analysis.io.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
     monkeypatch.setattr(src.analysis.io.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
 
+    from src.pipeline_phases.data_loading import load_pipeline_data
+    from src.pipeline_phases.entity_resolution import run_entity_resolution
+    from src.pipeline_phases.graph_construction import build_graphs_phase
+
+    loaded = load_pipeline_data(visualize=False, dry_run=False)
+    resolved = run_entity_resolution(loaded)
+    graphs = build_graphs_phase(resolved)
+
     ctx = PipelineContext(visualize=False, dry_run=False)
-    load_pipeline_data(ctx)
-    run_validation_phase(ctx)
-    run_entity_resolution(ctx)
-    build_graphs_phase(ctx)
+    ctx.persons = resolved.persons
+    ctx.anime_list = resolved.anime_list
+    ctx.credits = resolved.resolved_credits
+    ctx.anime_map = resolved.anime_map
+    ctx.canonical_map = resolved.canonical_map
+    ctx.person_anime_graph = graphs.person_anime_graph
+    ctx.collaboration_graph = graphs.collaboration_graph
+    ctx.community_map = graphs.community_map
     return ctx
 
 

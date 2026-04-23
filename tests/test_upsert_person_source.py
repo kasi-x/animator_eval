@@ -24,7 +24,7 @@ def conn(tmp_path):
 
 def _row(conn, pid: str) -> dict:
     row = conn.execute(
-        "SELECT name_ja, name_en, name_ko, name_zh, aliases, name_priority "
+        "SELECT name_ja, name_en, name_ko, name_zh, names_alt, aliases, name_priority "
         "FROM persons WHERE id = ?",
         (pid,),
     ).fetchone()

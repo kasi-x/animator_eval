@@ -344,5 +344,3 @@ class TestFindUnderOverPerforming:
 # ============================================================
 # 6. additional individual_contribution edge cases
 # ============================================================
-
-
