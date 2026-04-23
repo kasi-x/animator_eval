@@ -451,6 +451,70 @@ def build_glossary(terms: dict[str, str]) -> str:
     )
 
 
+def _build_base_scripts_html() -> str:
+    """Copy-toast + plot-queue JS (shared by v1 and v2 wrappers)."""
+    return """function showCopyToast(txt) {
+    var t = document.getElementById('copy-toast');
+    t.textContent = 'Copied: ' + txt;
+    t.style.opacity = '1';
+    setTimeout(function() { t.style.opacity = '0'; }, 1500);
+}
+document.addEventListener('dblclick', function(e) {
+    var el = e.target;
+    if (el.tagName === 'text' || (el.tagName === 'tspan' && el.closest && el.closest('text'))) {
+        var textEl = el.tagName === 'tspan' ? el.closest('text') : el;
+        if (textEl && textEl.closest('.js-plotly-plot')) {
+            var txt = textEl.textContent.trim();
+            if (txt) {
+                navigator.clipboard.writeText(txt).then(function() {
+                    showCopyToast(txt);
+                });
+            }
+        }
+    }
+});
+var _plotQueue = [];
+var _plotBusy = false;
+function queuePlot(fn) {
+    _plotQueue.push(fn);
+    _drainPlotQueue();
+}
+function _drainPlotQueue() {
+    if (_plotBusy || _plotQueue.length === 0) return;
+    _plotBusy = true;
+    var fn = _plotQueue.shift();
+    fn().then(function() {
+        _plotBusy = false;
+        setTimeout(_drainPlotQueue, 50);
+    }).catch(function() {
+        _plotBusy = false;
+        setTimeout(_drainPlotQueue, 50);
+    });
+}"""
+
+
+def _build_v1_head_html(title: str) -> str:
+    return (
+        "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n"
+        "<meta charset=\"UTF-8\">\n"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
+        f"<title>{title}</title>\n"
+        "<script src=\"https://cdn.plot.ly/plotly-2.35.2.min.js\"></script>\n"
+        f"<style>{COMMON_CSS}</style>\n"
+        "</head>"
+    )
+
+
+def _build_v1_footer_html(footer_stats: str, methodology_html: str) -> str:
+    return (
+        "<footer>\n"
+        f"    <p>Animetor Eval パイプライン分析により自動生成</p>\n"
+        f"    <p>データ: {footer_stats}</p>\n"
+        f"    {methodology_html}\n"
+        "</footer>"
+    )
+
+
 def wrap_html(title: str, subtitle: str, body: str, *, intro_html: str = "",
               glossary_terms: dict[str, str] | None = None) -> str:
     """共通HTMLテンプレート."""
@@ -464,59 +528,14 @@ def wrap_html(title: str, subtitle: str, body: str, *, intro_html: str = "",
     )
     methodology_html = f'<div class="methodology"><p><strong>評価方法:</strong> {METHODOLOGY_SUMMARY}</p></div>'
     footer_stats = helpers.get_footer_stats()
-    return f"""<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{title}</title>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-<style>{COMMON_CSS}</style>
-</head>
+    head = _build_v1_head_html(title)
+    scripts = _build_base_scripts_html()
+    footer = _build_v1_footer_html(footer_stats, methodology_html)
+    return f"""{head}
 <body>
 <div id="copy-toast" class="copy-toast"></div>
 <script>
-function showCopyToast(txt) {{
-    var t = document.getElementById('copy-toast');
-    t.textContent = 'Copied: ' + txt;
-    t.style.opacity = '1';
-    setTimeout(function() {{ t.style.opacity = '0'; }}, 1500);
-}}
-/* Double-click any SVG text in a Plotly chart to copy its content */
-document.addEventListener('dblclick', function(e) {{
-    var el = e.target;
-    if (el.tagName === 'text' || (el.tagName === 'tspan' && el.closest && el.closest('text'))) {{
-        var textEl = el.tagName === 'tspan' ? el.closest('text') : el;
-        if (textEl && textEl.closest('.js-plotly-plot')) {{
-            var txt = textEl.textContent.trim();
-            if (txt) {{
-                navigator.clipboard.writeText(txt).then(function() {{
-                    showCopyToast(txt);
-                }});
-            }}
-        }}
-    }}
-}});
-/* Global rendering queue: serialize Plotly.newPlot calls to prevent main thread blocking */
-var _plotQueue = [];
-var _plotBusy = false;
-function queuePlot(fn) {{
-    _plotQueue.push(fn);
-    _drainPlotQueue();
-}}
-function _drainPlotQueue() {{
-    if (_plotBusy || _plotQueue.length === 0) return;
-    _plotBusy = true;
-    var fn = _plotQueue.shift();
-    fn().then(function() {{
-        _plotBusy = false;
-        /* small yield to keep UI responsive */
-        setTimeout(_drainPlotQueue, 50);
-    }}).catch(function() {{
-        _plotBusy = false;
-        setTimeout(_drainPlotQueue, 50);
-    }});
-}}
+{scripts}
 </script>
 <div class="page-bg">
 <div class="container">
@@ -529,11 +548,7 @@ function _drainPlotQueue() {{
 {body}
 {glossary_html}
 {disclaimer_html}
-<footer>
-    <p>Animetor Eval パイプライン分析により自動生成</p>
-    <p>データ: {footer_stats}</p>
-    {methodology_html}
-</footer>
+{footer}
 </div>
 </div>
 </body>
@@ -775,6 +790,47 @@ def null_findings_block(text: str) -> str:
     )
 
 
+_DOC_LABEL: dict[str, str] = {
+    "main": "",
+    "brief": " [Executive Brief]",
+    "appendix": " [Technical Appendix]",
+}
+
+
+def _resolve_v2_disclaimer(disclaimer_html: str) -> str:
+    if disclaimer_html:
+        return disclaimer_html
+    return (
+        '<div class="disclaimer-block">'
+        "<h3>免責事項 (Disclaimer)</h3>"
+        f"<p>{DISCLAIMER}</p>"
+        "</div>"
+    )
+
+
+def _build_v2_head_html(title: str, doc_type: str) -> str:
+    label = _DOC_LABEL.get(doc_type, "")
+    return (
+        "<!DOCTYPE html>\n<html lang=\"ja\">\n<head>\n"
+        "<meta charset=\"UTF-8\">\n"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n"
+        f"<title>{title}{label}</title>\n"
+        "<script src=\"https://cdn.plot.ly/plotly-2.35.2.min.js\"></script>\n"
+        f"<style>{COMMON_CSS}\n{V2_CSS}</style>\n"
+        "</head>"
+    )
+
+
+def _build_v2_header_block(title: str, subtitle: str, ts: str) -> str:
+    return (
+        "<header>\n"
+        f"    <h1>{title}</h1>\n"
+        f"    <p class=\"subtitle\">{subtitle}</p>\n"
+        f"    <p class=\"timestamp\">生成日時: {ts}</p>\n"
+        "</header>"
+    )
+
+
 def wrap_html_v2(
     title: str,
     subtitle: str,
@@ -795,84 +851,26 @@ def wrap_html_v2(
     """
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
     glossary_html = build_glossary(glossary_terms) if glossary_terms else ""
-
-    # Fallback to v1 disclaimer if v2 not provided
-    if not disclaimer_html:
-        disclaimer_html = (
-            '<div class="disclaimer-block">'
-            "<h3>免責事項 (Disclaimer)</h3>"
-            f"<p>{DISCLAIMER}</p>"
-            "</div>"
-        )
-
+    resolved_disclaimer = _resolve_v2_disclaimer(disclaimer_html)
     footer_stats = helpers.get_footer_stats()
-    doc_label = {"main": "", "brief": " [Executive Brief]", "appendix": " [Technical Appendix]"}
-
-    return f"""<!DOCTYPE html>
-<html lang="ja">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>{title}{doc_label.get(doc_type, '')}</title>
-<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
-<style>{COMMON_CSS}
-{V2_CSS}</style>
-</head>
+    head = _build_v2_head_html(title, doc_type)
+    scripts = _build_base_scripts_html()
+    header = _build_v2_header_block(title, subtitle, ts)
+    return f"""{head}
 <body>
 <div id="copy-toast" class="copy-toast"></div>
 <script>
-function showCopyToast(txt) {{
-    var t = document.getElementById('copy-toast');
-    t.textContent = 'Copied: ' + txt;
-    t.style.opacity = '1';
-    setTimeout(function() {{ t.style.opacity = '0'; }}, 1500);
-}}
-document.addEventListener('dblclick', function(e) {{
-    var el = e.target;
-    if (el.tagName === 'text' || (el.tagName === 'tspan' && el.closest && el.closest('text'))) {{
-        var textEl = el.tagName === 'tspan' ? el.closest('text') : el;
-        if (textEl && textEl.closest('.js-plotly-plot')) {{
-            var txt = textEl.textContent.trim();
-            if (txt) {{
-                navigator.clipboard.writeText(txt).then(function() {{
-                    showCopyToast(txt);
-                }});
-            }}
-        }}
-    }}
-}});
-var _plotQueue = [];
-var _plotBusy = false;
-function queuePlot(fn) {{
-    _plotQueue.push(fn);
-    _drainPlotQueue();
-}}
-function _drainPlotQueue() {{
-    if (_plotBusy || _plotQueue.length === 0) return;
-    _plotBusy = true;
-    var fn = _plotQueue.shift();
-    fn().then(function() {{
-        _plotBusy = false;
-        setTimeout(_drainPlotQueue, 50);
-    }}).catch(function() {{
-        _plotBusy = false;
-        setTimeout(_drainPlotQueue, 50);
-    }});
-}}
+{scripts}
 {_TAB_SWITCH_JS}
 </script>
 <div class="page-bg">
 <div class="container">
-<header>
-    <h1>{title}</h1>
-    <p class="subtitle">{subtitle}</p>
-    <p class="timestamp">生成日時: {ts}</p>
-</header>
+{header}
 {intro_html}
 {body}
 {glossary_html}
 {data_statement_html}
-{disclaimer_html}
+{resolved_disclaimer}
 <footer>
     <p>Animetor Eval — 自動生成レポート (v2)</p>
     <p>データ: {footer_stats}</p>
@@ -904,10 +902,7 @@ Plotly.newPlot("{div_id}", ...JSON.parse('{chart_json.replace(chr(39), chr(92)+c
 </div>"""
 
 
-def plotly_div_safe(fig: go.Figure, div_id: str, height: int = 500) -> str:
-    """Plotlyチャートを安全に埋め込み (JSON escaping)."""
-    import numpy as _np_pds
-
+def _apply_dark_theme(fig: go.Figure, height: int) -> None:
     fig.update_layout(
         template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
@@ -917,25 +912,35 @@ def plotly_div_safe(fig: go.Figure, div_id: str, height: int = 500) -> str:
         margin=dict(l=60, r=30, t=50, b=50),
     )
 
-    # Box/Violin traces: サブサンプルでデータ量を削減 (x/y 同時に)
-    for trace in fig.data:
-        trace_type = getattr(trace, "type", "")
-        if trace_type in ("box", "violin"):
-            y_vals = trace.y
-            if y_vals is not None and hasattr(y_vals, '__len__') and len(y_vals) > 200:
-                n = len(y_vals)
-                rng = _np_pds.random.default_rng(42)
-                sel = rng.choice(n, size=min(200, n), replace=False)
-                arr_y = _np_pds.asarray(y_vals)
-                trace.y = arr_y[sel].tolist()
-                # x も同じ長さなら同期してサブサンプル
-                x_vals = trace.x
-                if x_vals is not None and hasattr(x_vals, '__len__') and len(x_vals) == n:
-                    arr_x = _np_pds.asarray(x_vals)
-                    trace.x = arr_x[sel].tolist()
 
-    chart_json = fig.to_json()
-    encoded = base64.b64encode(chart_json.encode()).decode()
+def _subsample_box_violin_traces(fig: go.Figure) -> None:
+    """Reduce data volume for box/violin traces to ≤200 points (x/y in sync)."""
+    import numpy as _np_pds
+
+    for trace in fig.data:
+        if getattr(trace, "type", "") not in ("box", "violin"):
+            continue
+        y_vals = trace.y
+        if y_vals is None or not hasattr(y_vals, "__len__") or len(y_vals) <= 200:
+            continue
+        n = len(y_vals)
+        rng = _np_pds.random.default_rng(42)
+        sel = rng.choice(n, size=min(200, n), replace=False)
+        trace.y = _np_pds.asarray(y_vals)[sel].tolist()
+        x_vals = trace.x
+        if x_vals is not None and hasattr(x_vals, "__len__") and len(x_vals) == n:
+            trace.x = _np_pds.asarray(x_vals)[sel].tolist()
+
+
+def _encode_fig_base64(fig: go.Figure) -> str:
+    return base64.b64encode(fig.to_json().encode()).decode()
+
+
+def plotly_div_safe(fig: go.Figure, div_id: str, height: int = 500) -> str:
+    """Plotlyチャートを安全に埋め込み (JSON escaping)."""
+    _apply_dark_theme(fig, height)
+    _subsample_box_violin_traces(fig)
+    encoded = _encode_fig_base64(fig)
     return f"""<div class="chart-container">
 <div id="{div_id}" data-b64="{encoded}" style="min-height:{height}px;"></div>
 <script>

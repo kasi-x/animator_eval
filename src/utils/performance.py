@@ -205,36 +205,36 @@ class PerformanceMonitor:
             },
         }
 
+    def _collect_timing_stats(self) -> list:
+        return [
+            stats
+            for op in sorted(self.timings.keys())
+            if (stats := self.get_timing_stats(op)) is not None
+        ]
+
+    def _compute_memory_stats(self) -> tuple[float, float]:
+        peak = max((s.rss_mb for s in self.memory_snapshots_list), default=0.0)
+        delta = 0.0
+        if len(self.memory_snapshots_list) >= 2:
+            delta = self.memory_snapshots_list[-1].rss_mb - self.memory_snapshots_list[0].rss_mb
+        return peak, delta
+
+    def _compute_cache_stats(self) -> dict:
+        total = self.cache_hits + self.cache_misses
+        hit_rate = self.cache_hits / total if total > 0 else 0
+        return {
+            "hits": self.cache_hits,
+            "misses": self.cache_misses,
+            "total": total,
+            "hit_rate": round(hit_rate, 3),
+        }
+
     def generate_report(self) -> PerformanceReport:
         """詳細なパフォーマンスレポートを生成."""
         total_duration = time.monotonic() - self._start_time
-
-        # Generate timing stats for all operations
-        timing_stats = []
-        for operation in sorted(self.timings.keys()):
-            stats = self.get_timing_stats(operation)
-            if stats:
-                timing_stats.append(stats)
-
-        # Calculate peak memory and total delta
-        peak_memory = max((s.rss_mb for s in self.memory_snapshots_list), default=0.0)
-        total_delta = 0.0
-        if len(self.memory_snapshots_list) >= 2:
-            total_delta = (
-                self.memory_snapshots_list[-1].rss_mb
-                - self.memory_snapshots_list[0].rss_mb
-            )
-
-        # Cache stats
-        cache_total = self.cache_hits + self.cache_misses
-        cache_hit_rate = self.cache_hits / cache_total if cache_total > 0 else 0
-        cache_stats = {
-            "hits": self.cache_hits,
-            "misses": self.cache_misses,
-            "total": cache_total,
-            "hit_rate": round(cache_hit_rate, 3),
-        }
-
+        timing_stats = self._collect_timing_stats()
+        peak_memory, total_delta = self._compute_memory_stats()
+        cache_stats = self._compute_cache_stats()
         return PerformanceReport(
             timestamp=datetime.now().isoformat(),
             total_duration=round(total_duration, 3),
@@ -265,92 +265,68 @@ class PerformanceMonitor:
         summary = self.get_summary()
         logger.info("performance_summary", **summary)
 
+    def _print_summary_table(self, console: Any, report: "PerformanceReport") -> None:
+        from rich.table import Table
+        console.print("\n[bold blue]Performance Report[/bold blue]\n")
+        t = Table(title="Summary")
+        t.add_column("Metric", style="cyan")
+        t.add_column("Value", style="green")
+        t.add_row("Total Duration", f"{report.total_duration:.2f}s")
+        t.add_row("Peak Memory", f"{report.peak_memory_mb:.1f} MB")
+        t.add_row("Memory Delta", f"{report.total_memory_delta_mb:+.1f} MB")
+        t.add_row("Cache Hit Rate", f"{report.cache_stats['hit_rate']:.1%}")
+        console.print(t)
+
+    def _print_timing_table(self, console: Any, report: "PerformanceReport", show_percentiles: bool) -> None:
+        from rich.table import Table
+        if not report.timings:
+            return
+        t = Table(title="Operation Timings")
+        t.add_column("Operation", style="cyan")
+        t.add_column("Count", justify="right")
+        t.add_column("Total", justify="right", style="yellow")
+        t.add_column("Avg", justify="right", style="green")
+        if show_percentiles:
+            t.add_column("P50", justify="right", style="dim")
+            t.add_column("P95", justify="right", style="dim")
+            t.add_column("P99", justify="right", style="dim")
+        t.add_column("Min", justify="right", style="dim")
+        t.add_column("Max", justify="right", style="red")
+        for stats in sorted(report.timings, key=lambda x: x.total, reverse=True):
+            row = [stats.operation, str(stats.count), f"{stats.total:.3f}s", f"{stats.avg:.3f}s"]
+            if show_percentiles:
+                row.extend([f"{stats.median:.3f}s", f"{stats.p95:.3f}s", f"{stats.p99:.3f}s"])
+            row.extend([f"{stats.min:.3f}s", f"{stats.max:.3f}s"])
+            t.add_row(*row)
+        console.print(t)
+
+    def _print_memory_table(self, console: Any, report: "PerformanceReport") -> None:
+        from rich.table import Table
+        if not report.memory_snapshots:
+            return
+        t = Table(title="Memory Snapshots")
+        t.add_column("Checkpoint", style="cyan")
+        t.add_column("Time", justify="right", style="dim")
+        t.add_column("RSS (MB)", justify="right", style="green")
+        t.add_column("Delta", justify="right", style="yellow")
+        t.add_column("% Used", justify="right", style="magenta")
+        for snap in report.memory_snapshots:
+            delta_str = f"{snap.delta_mb:+.1f}" if snap.delta_mb is not None else "-"
+            t.add_row(snap.checkpoint, f"{snap.timestamp:.2f}s", f"{snap.rss_mb:.1f}", delta_str, f"{snap.percent:.1f}%")
+        console.print(t)
+
     def print_report(self, show_percentiles: bool = True) -> None:
         """Rich tableでレポートを表示（CLI用）."""
         try:
             from rich.console import Console
-            from rich.table import Table
         except ImportError:
             logger.warning("rich not installed, skipping visualization")
             return
-
         console = Console()
         report = self.generate_report()
-
-        # Summary table
-        console.print("\n[bold blue]Performance Report[/bold blue]\n")
-        summary = Table(title="Summary")
-        summary.add_column("Metric", style="cyan")
-        summary.add_column("Value", style="green")
-        summary.add_row("Total Duration", f"{report.total_duration:.2f}s")
-        summary.add_row("Peak Memory", f"{report.peak_memory_mb:.1f} MB")
-        summary.add_row("Memory Delta", f"{report.total_memory_delta_mb:+.1f} MB")
-        summary.add_row("Cache Hit Rate", f"{report.cache_stats['hit_rate']:.1%}")
-        console.print(summary)
-
-        # Timing table
-        if report.timings:
-            timing_table = Table(title="Operation Timings")
-            timing_table.add_column("Operation", style="cyan")
-            timing_table.add_column("Count", justify="right")
-            timing_table.add_column("Total", justify="right", style="yellow")
-            timing_table.add_column("Avg", justify="right", style="green")
-            if show_percentiles:
-                timing_table.add_column("P50", justify="right", style="dim")
-                timing_table.add_column("P95", justify="right", style="dim")
-                timing_table.add_column("P99", justify="right", style="dim")
-            timing_table.add_column("Min", justify="right", style="dim")
-            timing_table.add_column("Max", justify="right", style="red")
-
-            for stats in sorted(report.timings, key=lambda x: x.total, reverse=True):
-                row = [
-                    stats.operation,
-                    str(stats.count),
-                    f"{stats.total:.3f}s",
-                    f"{stats.avg:.3f}s",
-                ]
-                if show_percentiles:
-                    row.extend(
-                        [
-                            f"{stats.median:.3f}s",
-                            f"{stats.p95:.3f}s",
-                            f"{stats.p99:.3f}s",
-                        ]
-                    )
-                row.extend(
-                    [
-                        f"{stats.min:.3f}s",
-                        f"{stats.max:.3f}s",
-                    ]
-                )
-                timing_table.add_row(*row)
-
-            console.print(timing_table)
-
-        # Memory snapshots table
-        if report.memory_snapshots:
-            mem_table = Table(title="Memory Snapshots")
-            mem_table.add_column("Checkpoint", style="cyan")
-            mem_table.add_column("Time", justify="right", style="dim")
-            mem_table.add_column("RSS (MB)", justify="right", style="green")
-            mem_table.add_column("Delta", justify="right", style="yellow")
-            mem_table.add_column("% Used", justify="right", style="magenta")
-
-            for snapshot in report.memory_snapshots:
-                delta_str = (
-                    f"{snapshot.delta_mb:+.1f}"
-                    if snapshot.delta_mb is not None
-                    else "-"
-                )
-                mem_table.add_row(
-                    snapshot.checkpoint,
-                    f"{snapshot.timestamp:.2f}s",
-                    f"{snapshot.rss_mb:.1f}",
-                    delta_str,
-                    f"{snapshot.percent:.1f}%",
-                )
-
-            console.print(mem_table)
+        self._print_summary_table(console, report)
+        self._print_timing_table(console, report, show_percentiles)
+        self._print_memory_table(console, report)
 
 
 # Global monitor instance

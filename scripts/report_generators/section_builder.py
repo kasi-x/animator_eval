@@ -142,55 +142,38 @@ class SectionBuilder:
         "another interpretation",
     )
 
+    @staticmethod
+    def _check_prohibited_wordlist_en(text_lower: str, terms: list[str], category: str) -> list[str]:
+        return [
+            f"{category}: '{t}'"
+            for t in terms
+            if re.search(rf"\b{re.escape(t)}\b", text_lower)
+        ]
+
+    @staticmethod
+    def _check_prohibited_wordlist_ja(text: str, terms: list[str], category: str) -> list[str]:
+        return [f"{category}: '{t}'" for t in terms if t in text]
+
+    @staticmethod
+    def _check_prohibited_phrase_en(text_lower: str, terms: list[str], category: str) -> list[str]:
+        return [f"{category}: '{t}'" for t in terms if t.lower() in text_lower]
+
     def validate_findings(self, text: str) -> list[str]:
         """Check findings text for REPORT_PHILOSOPHY v2 violations.
 
         Returns list of violation descriptions. Empty list = compliant.
         """
-        violations: list[str] = []
-        text_lower = text.lower()
-
-        # Check prohibited adjectives (EN)
-        for adj in _PROHIBITED_ADJECTIVES_EN:
-            if re.search(rf"\b{re.escape(adj)}\b", text_lower):
-                violations.append(f"Evaluative adjective in findings: '{adj}'")
-
-        # Check prohibited adjectives (JA)
-        for adj in _PROHIBITED_ADJECTIVES_JA:
-            if adj in text:
-                violations.append(f"Evaluative adjective in findings (JA): '{adj}'")
-
-        # Check prohibited causal verbs (EN)
-        for verb in _PROHIBITED_CAUSAL_VERBS_EN:
-            if re.search(rf"\b{re.escape(verb)}\b", text_lower):
-                violations.append(f"Causal verb in findings: '{verb}'")
-
-        # Check prohibited causal verbs (JA)
-        for verb in _PROHIBITED_CAUSAL_JA:
-            if verb in text:
-                violations.append(f"Causal verb in findings (JA): '{verb}'")
-
-        # Check prohibited normative verbs (EN)
-        for norm in _PROHIBITED_NORMATIVE_EN:
-            if re.search(rf"\b{re.escape(norm)}\b", text_lower):
-                violations.append(f"Normative expression in findings: '{norm}'")
-
-        # Check prohibited normative verbs (JA)
-        for norm in _PROHIBITED_NORMATIVE_JA:
-            if norm in text:
-                violations.append(f"Normative expression in findings (JA): '{norm}'")
-
-        # Check prohibited selection rhetoric (EN)
-        for sel in _PROHIBITED_SELECTION_EN:
-            if sel.lower() in text_lower:
-                violations.append(f"Selection rhetoric in findings: '{sel}'")
-
-        # Check prohibited selection rhetoric (JA)
-        for sel in _PROHIBITED_SELECTION_JA:
-            if sel in text:
-                violations.append(f"Selection rhetoric in findings (JA): '{sel}'")
-
-        return violations
+        tl = text.lower()
+        return (
+            self._check_prohibited_wordlist_en(tl, _PROHIBITED_ADJECTIVES_EN, "Evaluative adjective in findings")
+            + self._check_prohibited_wordlist_ja(text, _PROHIBITED_ADJECTIVES_JA, "Evaluative adjective in findings (JA)")
+            + self._check_prohibited_wordlist_en(tl, _PROHIBITED_CAUSAL_VERBS_EN, "Causal verb in findings")
+            + self._check_prohibited_wordlist_ja(text, _PROHIBITED_CAUSAL_JA, "Causal verb in findings (JA)")
+            + self._check_prohibited_wordlist_en(tl, _PROHIBITED_NORMATIVE_EN, "Normative expression in findings")
+            + self._check_prohibited_wordlist_ja(text, _PROHIBITED_NORMATIVE_JA, "Normative expression in findings (JA)")
+            + self._check_prohibited_phrase_en(tl, _PROHIBITED_SELECTION_EN, "Selection rhetoric in findings")
+            + self._check_prohibited_wordlist_ja(text, _PROHIBITED_SELECTION_JA, "Selection rhetoric in findings (JA)")
+        )
 
     def validate(
         self,
@@ -236,48 +219,50 @@ class SectionBuilder:
                     "alternative interpretation"
                 )
 
+    @staticmethod
+    def _render_findings_block(section: "ReportSection") -> str:
+        return f'  <div class="findings">\n    {section.findings_html}\n  </div>'
+
+    @staticmethod
+    def _render_visualization_block(section: "ReportSection") -> str:
+        if not section.visualization_html:
+            return ""
+        return f'  <div class="chart-container">\n    {section.visualization_html}\n  </div>'
+
+    @staticmethod
+    def _render_method_note_block(section: "ReportSection") -> str:
+        if not section.method_note:
+            return ""
+        return (
+            '  <div class="method-note">\n    <details>\n'
+            '      <summary style="cursor:pointer;color:#7b8794;font-size:0.85rem;">Method Note</summary>\n'
+            f'      <div style="margin-top:0.5rem;font-size:0.82rem;color:#8a94a0;line-height:1.5;">{section.method_note}</div>\n'
+            "    </details>\n  </div>"
+        )
+
+    @staticmethod
+    def _render_interpretation_block(section: "ReportSection") -> str:
+        if not section.interpretation_html:
+            return ""
+        return (
+            '  <div class="interpretation" style="border-top:1px solid #3a3a5c;margin-top:1.5rem;padding-top:1rem;">\n'
+            '    <h3 style="color:#c0a0d0;font-size:1rem;">Interpretation / \u89e3\u91c8</h3>\n'
+            f"    {section.interpretation_html}\n  </div>"
+        )
+
     def build_section(self, section: ReportSection) -> str:
         """Render a ReportSection to v2-compliant HTML."""
         sid = section.section_id or section.title.lower().replace(" ", "-")[:40]
-
-        parts: list[str] = []
-        parts.append(f'<div class="card report-section" id="sec-{sid}">')
-        parts.append(f"  <h2>{section.title}</h2>")
-
-        # Findings
-        parts.append('  <div class="findings">')
-        parts.append(f"    {section.findings_html}")
-        parts.append("  </div>")
-
-        # Visualization
-        if section.visualization_html:
-            parts.append('  <div class="chart-container">')
-            parts.append(f"    {section.visualization_html}")
-            parts.append("  </div>")
-
-        # Method note
-        if section.method_note:
-            parts.append('  <div class="method-note">')
-            parts.append("    <details>")
-            parts.append('      <summary style="cursor:pointer;color:#7b8794;'
-                         'font-size:0.85rem;">Method Note</summary>')
-            parts.append(f'      <div style="margin-top:0.5rem;font-size:0.82rem;'
-                         f'color:#8a94a0;line-height:1.5;">{section.method_note}</div>')
-            parts.append("    </details>")
-            parts.append("  </div>")
-
-        # Interpretation (optional)
-        if section.interpretation_html:
-            parts.append('  <div class="interpretation"'
-                         ' style="border-top:1px solid #3a3a5c;'
-                         'margin-top:1.5rem;padding-top:1rem;">')
-            parts.append('    <h3 style="color:#c0a0d0;font-size:1rem;">'
-                         'Interpretation / \u89e3\u91c8</h3>')
-            parts.append(f"    {section.interpretation_html}")
-            parts.append("  </div>")
-
-        parts.append("</div>")
-        return "\n".join(parts)
+        blocks = [
+            f'<div class="card report-section" id="sec-{sid}">',
+            f"  <h2>{section.title}</h2>",
+            self._render_findings_block(section),
+            self._render_visualization_block(section),
+            self._render_method_note_block(section),
+            self._render_interpretation_block(section),
+            "</div>",
+        ]
+        return "\n".join(b for b in blocks if b)
 
     def build_data_statement(
         self, params: DataStatementParams | None = None,

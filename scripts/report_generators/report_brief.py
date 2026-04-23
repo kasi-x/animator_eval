@@ -184,77 +184,72 @@ class ReportBrief:
             has_interpretation=interpretation is not None,
         )
     
+    _PROHIBITED_VOCAB = {
+        r'\bability\b',
+        r'\bskill\b',
+        r'\btalent\b',
+        r'\bcompetence\b',
+        r'\bcapability\b',
+    }
+
+    def _check_sections_have_findings(self) -> list[str]:
+        errors: list[str] = []
+        if not self.sections:
+            errors.append("No sections defined")
+        for sid, section in self.sections.items():
+            if not section.get("findings"):
+                errors.append(f"Section '{sid}' has empty findings")
+        return errors
+
+    def _check_method_gates_present(self) -> list[str]:
+        if not self.method_gates:
+            return ["No method gates registered"]
+        return []
+
+    def _check_lineage_present(self) -> list[str]:
+        if not self.lineage:
+            return ["No lineage metadata provided"]
+        return []
+
+    def _check_vocabulary(self) -> list[str]:
+        import re
+        errors: list[str] = []
+        for sid, section in self.sections.items():
+            combined = (section.get("findings", "") + " " + section.get("interpretation", "")).lower()
+            for pattern in self._PROHIBITED_VOCAB:
+                m = re.search(pattern, combined)
+                if m:
+                    errors.append(f"Section '{sid}' contains prohibited term: '{m.group()}'")
+        return errors
+
+    def _log_validation_result(self, is_valid: bool, errors: list[str]) -> None:
+        if is_valid:
+            log.info("report_valid", report=self.metadata.title,
+                     sections=len(self.sections), gates=len(self.method_gates))
+        else:
+            log.warning("report_invalid", report=self.metadata.title,
+                        error_count=len(errors), errors=errors)
+
     def validate(self) -> tuple[bool, list[str]]:
         """Validate report readiness for publication.
-        
+
         Required gates:
         1. All sections have findings (non-empty)
         2. Method gates registered for all methods
         3. Lineage metadata present
         4. No prohibited vocabulary (see REPORT_PHILOSOPHY.md)
-        
+
         Returns:
             (is_valid, error_messages)
         """
-        errors = []
-        
-        # Check sections
-        if not self.sections:
-            errors.append("No sections defined")
-        
-        for section_id, section in self.sections.items():
-            if not section.get("findings"):
-                errors.append(f"Section '{section_id}' has empty findings")
-        
-        # Check method gates
-        if not self.method_gates:
-            errors.append("No method gates registered")
-        
-        # Check lineage
-        if not self.lineage:
-            errors.append("No lineage metadata provided")
-        
-        # Validate vocabulary (exact word match only)
-        prohibited = {
-            r'\bability\b',           # Not "capability", "probability", "availability"
-            r'\bskill\b',             # Not "skilled", "skillset"
-            r'\btalent\b',            # Not "talent pool" - exact word only
-            r'\bcompetence\b',        # Exact match
-            r'\bcapability\b',        # Exact match
-        }
-        import re
-        
-        for section_id, section in self.sections.items():
-            findings = section.get("findings", "")
-            interpretation = section.get("interpretation", "")
-            combined = (findings + " " + interpretation).lower()
-            
-            for pattern in prohibited:
-                if re.search(pattern, combined):
-                    # Extract the matched word
-                    match = re.search(pattern, combined)
-                    if match:
-                        errors.append(
-                            f"Section '{section_id}' contains prohibited term: '{match.group()}'"
-                        )
-        
+        errors = (
+            self._check_sections_have_findings()
+            + self._check_method_gates_present()
+            + self._check_lineage_present()
+            + self._check_vocabulary()
+        )
         is_valid = len(errors) == 0
-        
-        if is_valid:
-            log.info(
-                "report_valid",
-                report=self.metadata.title,
-                sections=len(self.sections),
-                gates=len(self.method_gates),
-            )
-        else:
-            log.warning(
-                "report_invalid",
-                report=self.metadata.title,
-                error_count=len(errors),
-                errors=errors,
-            )
-        
+        self._log_validation_result(is_valid, errors)
         return is_valid, errors
     
     def to_dict(self) -> dict:

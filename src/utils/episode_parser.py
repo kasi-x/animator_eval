@@ -17,6 +17,25 @@ _EP_SINGLE_RE = re.compile(r"(?<!\w)(\d+)(?!\w*[A-Za-z])")
 _SKIP_PREFIX_RE = re.compile(r"(?:OP|ED|SP|OVA)\s*\d+", re.IGNORECASE)
 
 
+def _extract_paren_content(raw_role: str) -> str | None:
+    m = _EP_PAREN_RE.search(raw_role)
+    return _SKIP_PREFIX_RE.sub("", m.group(1)) if m else None
+
+
+def _extract_range_episodes(content: str) -> tuple[set[int], str]:
+    """Return episodes from ranges and content with ranges stripped."""
+    episodes: set[int] = set()
+    for m in _EP_RANGE_RE.finditer(content):
+        start, end = int(m.group(1)), int(m.group(2))
+        if end >= start and (end - start) <= 500:
+            episodes.update(range(start, end + 1))
+    return episodes, _EP_RANGE_RE.sub("", content)
+
+
+def _extract_single_episodes(content_no_ranges: str) -> set[int]:
+    return {int(m.group(1)) for m in _EP_SINGLE_RE.finditer(content_no_ranges)}
+
+
 def parse_episodes(raw_role: str) -> set[int]:
     """Parse episode numbers from a raw_role string.
 
@@ -27,39 +46,11 @@ def parse_episodes(raw_role: str) -> set[int]:
     - Mixed: "(OP24, eps 903, 1000)" → {903, 1000} (skip OP/ED)
     - Dot format: "(ep. 2)" → {2}
     - No episodes: "Director" → set()
-
-    Args:
-        raw_role: Raw role string from credit data
-
-    Returns:
-        Set of episode numbers (empty if none found)
     """
     if not raw_role:
         return set()
-
-    match = _EP_PAREN_RE.search(raw_role)
-    if not match:
+    content = _extract_paren_content(raw_role)
+    if content is None:
         return set()
-
-    content = match.group(1)
-
-    # Remove OP/ED/SP tokens before parsing numbers
-    content = _SKIP_PREFIX_RE.sub("", content)
-
-    episodes: set[int] = set()
-
-    # Extract ranges first (e.g., "1-12")
-    for range_match in _EP_RANGE_RE.finditer(content):
-        start = int(range_match.group(1))
-        end = int(range_match.group(2))
-        if end >= start and (end - start) <= 500:  # sanity limit
-            episodes.update(range(start, end + 1))
-
-    # Remove ranges from content so we don't double-count
-    content_no_ranges = _EP_RANGE_RE.sub("", content)
-
-    # Extract individual numbers
-    for num_match in _EP_SINGLE_RE.finditer(content_no_ranges):
-        episodes.add(int(num_match.group(1)))
-
-    return episodes
+    range_eps, remainder = _extract_range_episodes(content)
+    return range_eps | _extract_single_episodes(remainder)

@@ -175,46 +175,38 @@ def get_display_favourites(conn: sqlite3.Connection, anime_id: str) -> Optional[
     return result
 
 
+def _query_primary_description(conn: sqlite3.Connection, anime_id: str, source: str) -> Optional[str]:
+    field = "synopsis" if source == "allcinema" else "description"
+    return _query_bronze(conn, anime_id, field)
+
+
+def _query_fallback_description(conn: sqlite3.Connection, anime_id: str) -> Optional[str]:
+    try:
+        row = conn.execute(
+            "SELECT external_id FROM anime_external_ids WHERE anime_id = ? AND source = 'allcinema'",
+            (anime_id,),
+        ).fetchone()
+        if row:
+            return _query_bronze(conn, f"allcinema:{row[0]}", "synopsis")
+    except sqlite3.OperationalError:
+        pass
+    return None
+
+
 def get_display_description(conn: sqlite3.Connection, anime_id: str) -> Optional[str]:
     """Get anime description/synopsis from source.
 
     **DISPLAY ONLY** — NOT for analysis. Returns None if unavailable.
-    
+
     Falls back: anilist → allcinema (if available)
-
-    Args:
-        conn: Database connection
-        anime_id: Anime ID
-
-    Returns:
-        Description text or None
     """
     cache_key = f"description:{anime_id}"
     if cache_key in _CACHE:
         return _CACHE[cache_key]
-    
     source, _, _, _ = _get_source_info(anime_id)
-    
-    # Try primary source
-    if source == "anilist":
-        result = _query_bronze(conn, anime_id, "description")
-    elif source == "allcinema":
-        result = _query_bronze(conn, anime_id, "synopsis")
-    else:
-        result = _query_bronze(conn, anime_id, "description")
-
-    # Cross-source fallback via anime_external_ids when primary is NULL
+    result = _query_primary_description(conn, anime_id, source)
     if result is None:
-        try:
-            ac_row = conn.execute(
-                "SELECT external_id FROM anime_external_ids WHERE anime_id = ? AND source = 'allcinema'",
-                (anime_id,),
-            ).fetchone()
-            if ac_row:
-                result = _query_bronze(conn, f"allcinema:{ac_row[0]}", "synopsis")
-        except sqlite3.OperationalError:
-            pass
-
+        result = _query_fallback_description(conn, anime_id)
     _CACHE[cache_key] = result
     return result
 

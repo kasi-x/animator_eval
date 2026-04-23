@@ -1,4 +1,4 @@
-"""データモデル定義 (Pydantic v2)."""
+"""Data model definitions (Pydantic v2)."""
 
 from __future__ import annotations
 
@@ -13,9 +13,9 @@ if TYPE_CHECKING:
 
 
 class Role(str, Enum):
-    """アニメ制作における役職 (23分類).
+    """Role classifications in anime production (23 categories).
 
-    統合済み (v27マイグレーション後):
+    Merged (after v27 migration):
       CHIEF_ANIMATION_DIRECTOR → ANIMATION_DIRECTOR
       STORYBOARD → EPISODE_DIRECTOR
       MECHANICAL_DESIGNER → CHARACTER_DESIGNER
@@ -26,38 +26,38 @@ class Role(str, Enum):
       SERIES_COMPOSITION → SCREENPLAY
       ADR → VOICE_ACTOR
 
-    OTHER と SPECIAL は別概念:
-      OTHER    = その他 — ロール特定不可・分類不能なクレジット
-      SPECIAL  = スペシャル — スペシャルサンクス・ゲスト参加・制作外特別枠
+    OTHER and SPECIAL are distinct concepts:
+      OTHER    = other — unidentifiable role / unclassifiable credit
+      SPECIAL  = special — special thanks, guest participation, non-production special credits
     """
 
     DIRECTOR = "director"
-    ANIMATION_DIRECTOR = "animation_director"  # +総作画監督
+    ANIMATION_DIRECTOR = "animation_director"  # + chief animation director
     KEY_ANIMATOR = "key_animator"
-    SECOND_KEY_ANIMATOR = "second_key_animator"  # 第二原画
+    SECOND_KEY_ANIMATOR = "second_key_animator"  # second key animation
     IN_BETWEEN = "in_between"
-    EPISODE_DIRECTOR = "episode_director"  # +絵コンテ, シリーズ構成 は SCREENPLAY へ
-    CHARACTER_DESIGNER = "character_designer"  # +メカデザイン
-    PHOTOGRAPHY_DIRECTOR = "photography_director"  # +エフェクト(撮影=コンポジット+特効)
+    EPISODE_DIRECTOR = "episode_director"  # + storyboard; series composition → SCREENPLAY
+    CHARACTER_DESIGNER = "character_designer"  # + mechanical design
+    PHOTOGRAPHY_DIRECTOR = "photography_director"  # + effects (compositing + special effects)
     PRODUCER = "producer"
-    PRODUCTION_MANAGER = "production_manager"  # 制作進行・制作デスク・各種進行
+    PRODUCTION_MANAGER = "production_manager"  # production coordinator, production desk, various production staff
     SOUND_DIRECTOR = "sound_director"
-    MUSIC = "music"  # +主題歌・挿入歌・演奏
-    SCREENPLAY = "screenplay"  # +シリーズ構成
+    MUSIC = "music"  # + theme songs, insert songs, performance
+    SCREENPLAY = "screenplay"  # + series composition
     ORIGINAL_CREATOR = "original_creator"
-    BACKGROUND_ART = "background_art"  # +美術監督
+    BACKGROUND_ART = "background_art"  # + art director
     CGI_DIRECTOR = "cgi_director"
     LAYOUT = "layout"
-    FINISHING = "finishing"  # +色彩設計・色指定・仕上げ・検査
-    EDITING = "editing"  # 編集・ポスプロ
-    SETTINGS = "settings"  # 設定系
-    VOICE_ACTOR = "voice_actor"  # +ADR
-    LOCALIZATION = "localization"  # 各国語版スタッフ（翻訳・吹替演出・各国版P等）
-    OTHER = "other"  # その他 — ロール特定不可・分類不能なクレジット
-    SPECIAL = "special"  # スペシャルサンクス・ゲスト参加・制作外特別枠
+    FINISHING = "finishing"  # + color design, color specification, finishing, inspection
+    EDITING = "editing"  # editing / post-production
+    SETTINGS = "settings"  # settings/design materials
+    VOICE_ACTOR = "voice_actor"  # + ADR
+    LOCALIZATION = "localization"  # localization staff (translation, dub direction, regional producers, etc.)
+    OTHER = "other"  # other — unidentifiable role / unclassifiable credit
+    SPECIAL = "special"  # special thanks, guest participation, non-production special credits
 
 
-# MAL/AniList の役職文字列 → Role へのマッピング
+# Mapping from MAL/AniList job title strings → Role
 ROLE_MAP: dict[str, Role] = {
     "director": Role.DIRECTOR,
     "chief animation director": Role.ANIMATION_DIRECTOR,
@@ -78,7 +78,7 @@ ROLE_MAP: dict[str, Role] = {
     "color design": Role.FINISHING,
     "director of photography": Role.PHOTOGRAPHY_DIRECTOR,
     "special effects": Role.PHOTOGRAPHY_DIRECTOR,
-    # 日本語
+    # Japanese
     "監督": Role.DIRECTOR,
     "総作画監督": Role.ANIMATION_DIRECTOR,
     "作画監督": Role.ANIMATION_DIRECTOR,
@@ -91,7 +91,7 @@ ROLE_MAP: dict[str, Role] = {
     "美術監督": Role.BACKGROUND_ART,
     "色彩設計": Role.FINISHING,
     "撮影監督": Role.PHOTOGRAPHY_DIRECTOR,
-    # 追加役職 (EN)
+    # Additional roles (EN)
     "producer": Role.PRODUCER,
     "assistant producer": Role.PRODUCER,
     "sound director": Role.SOUND_DIRECTOR,
@@ -115,7 +115,7 @@ ROLE_MAP: dict[str, Role] = {
     "chief director": Role.DIRECTOR,
     "assistant director": Role.EPISODE_DIRECTOR,
     "unit director": Role.EPISODE_DIRECTOR,
-    # 追加役職 (JA)
+    # Additional roles (JA)
     "プロデューサー": Role.PRODUCER,
     "音響監督": Role.SOUND_DIRECTOR,
     "音楽": Role.MUSIC,
@@ -126,9 +126,9 @@ ROLE_MAP: dict[str, Role] = {
     "CGI監督": Role.CGI_DIRECTOR,
     "レイアウト": Role.LAYOUT,
     "副監督": Role.EPISODE_DIRECTOR,
-    # MADB固有ロール (日本語)
-    "作画": Role.KEY_ANIMATOR,  # MADB固有（AniListは「原画」）
-    "文芸": Role.SCREENPLAY,  # 文芸部 → 脚本
+    # MADB-specific roles (Japanese)
+    "作画": Role.KEY_ANIMATOR,  # MADB-specific (AniList uses "genga" / key animation)
+    "文芸": Role.SCREENPLAY,  # literature dept → screenplay
     "総監督": Role.DIRECTOR,
     "撮影": Role.PHOTOGRAPHY_DIRECTOR,
     "制作進行": Role.PRODUCTION_MANAGER,
@@ -145,15 +145,15 @@ ROLE_MAP: dict[str, Role] = {
     "3dcg": Role.CGI_DIRECTOR,
     "cg": Role.CGI_DIRECTOR,
     "構成": Role.SCREENPLAY,
-    # SeesaaWiki固有ロール — 動画系
+    # SeesaaWiki source-specific roles — in-between animation
     "動仕": Role.IN_BETWEEN,  # 動画仕上げ
     "動画チェッカー": Role.IN_BETWEEN,
-    # SeesaaWiki — 作画系
+    # SeesaaWiki — key animation
     "作画監督補佐": Role.ANIMATION_DIRECTOR,
     "アクション作画監督": Role.ANIMATION_DIRECTOR,
     "アニメーター": Role.KEY_ANIMATOR,
     "原動画": Role.KEY_ANIMATOR,
-    # SeesaaWiki — 仕上・検査系
+    # SeesaaWiki — finishing and inspection
     "仕上": Role.FINISHING,
     "仕上げ": Role.FINISHING,
     "仕上検査": Role.FINISHING,
@@ -165,27 +165,27 @@ ROLE_MAP: dict[str, Role] = {
     "色指定検査": Role.FINISHING,
     "モデルチェック": Role.FINISHING,
     "ファイナルチェック": Role.FINISHING,
-    # SeesaaWiki — 演出・コンテ系
+    # SeesaaWiki — direction and storyboard
     "コンテ": Role.EPISODE_DIRECTOR,
     "演出助手": Role.EPISODE_DIRECTOR,
     "アシスタントディレクター": Role.EPISODE_DIRECTOR,
     "シリーズディレクター": Role.DIRECTOR,
-    # SeesaaWiki — 撮影系
+    # SeesaaWiki — photography/compositing
     "デジタル撮影": Role.PHOTOGRAPHY_DIRECTOR,
     "線撮影": Role.PHOTOGRAPHY_DIRECTOR,
     "撮影監督補佐": Role.PHOTOGRAPHY_DIRECTOR,
-    # SeesaaWiki — 美術系
+    # SeesaaWiki — art/backgrounds
     "美術補": Role.BACKGROUND_ART,
     "美術設定": Role.BACKGROUND_ART,
     "背景": Role.BACKGROUND_ART,
     "色彩設計補佐": Role.FINISHING,
-    # SeesaaWiki — デザイン系
+    # SeesaaWiki — design
     "サブキャラクターデザイン": Role.CHARACTER_DESIGNER,
     "ゲストキャラクターデザイン": Role.CHARACTER_DESIGNER,
     "ゲストキャラデザイン": Role.CHARACTER_DESIGNER,
     "デザインワークス": Role.CHARACTER_DESIGNER,
     "メカデザイン": Role.CHARACTER_DESIGNER,
-    # SeesaaWiki — 制作管理系
+    # SeesaaWiki — production management
     "制作": Role.PRODUCER,
     "制作協力": Role.PRODUCER,
     "制作担当": Role.PRODUCTION_MANAGER,
@@ -202,7 +202,7 @@ ROLE_MAP: dict[str, Role] = {
     "製作進行": Role.PRODUCTION_MANAGER,
     "背景進行": Role.PRODUCTION_MANAGER,
     "製作": Role.PRODUCER,
-    # SeesaaWiki — 音響系
+    # SeesaaWiki — audio/sound
     "音響効果": Role.SOUND_DIRECTOR,
     "音響制作": Role.SOUND_DIRECTOR,
     "音響制作担当": Role.SOUND_DIRECTOR,
@@ -211,19 +211,19 @@ ROLE_MAP: dict[str, Role] = {
     "音楽プロデューサー": Role.MUSIC,
     "音楽制作": Role.MUSIC,
     "音楽協力": Role.MUSIC,
-    # SeesaaWiki — 編集系
+    # SeesaaWiki — editing
     "ビデオ編集": Role.EDITING,
     "編集": Role.EDITING,
     # SeesaaWiki — CG
     "cgワークス": Role.CGI_DIRECTOR,
     "cgエフェクト": Role.PHOTOGRAPHY_DIRECTOR,
-    # SeesaaWiki — 音楽・主題歌
+    # SeesaaWiki — music and theme songs
     "作曲": Role.MUSIC,
     "作詞": Role.MUSIC,
     "編曲": Role.MUSIC,
     "主題歌": Role.MUSIC,
     "うた": Role.MUSIC,
-    # SeesaaWiki — 監督補助・管理拡張
+    # SeesaaWiki — assistant directing and management extended
     "メカ作画監督": Role.ANIMATION_DIRECTOR,
     "作画監督協力": Role.ANIMATION_DIRECTOR,
     "美術監督補": Role.BACKGROUND_ART,
@@ -399,7 +399,7 @@ ROLE_MAP: dict[str, Role] = {
     "モデラー": Role.CGI_DIRECTOR,
     "シニアデジタルアーティスト": Role.CGI_DIRECTOR,
     "デジタルアーティスト": Role.CGI_DIRECTOR,
-    # 作画 extended
+    # key animation extended
     "動画作監": Role.ANIMATION_DIRECTOR,
     "原画作監": Role.ANIMATION_DIRECTOR,
     "作監": Role.ANIMATION_DIRECTOR,
@@ -437,7 +437,7 @@ ROLE_MAP: dict[str, Role] = {
     "アニメーションストーリーボード": Role.EPISODE_DIRECTOR,
     "変身原画": Role.KEY_ANIMATOR,
     "アクション作画": Role.KEY_ANIMATOR,
-    # 仕上 extended
+    # finishing extended
     "仕上助手": Role.FINISHING,
     "仕上特効": Role.FINISHING,
     "仕上検査補佐": Role.FINISHING,
@@ -456,12 +456,12 @@ ROLE_MAP: dict[str, Role] = {
     "デジタル動画": Role.IN_BETWEEN,
     "動画チーフ": Role.IN_BETWEEN,
     "動仕制作": Role.PRODUCTION_MANAGER,
-    # 編集 extended
+    # editing extended
     "オンライン編集": Role.EDITING,
     "hd編集": Role.EDITING,
     "フォーマット編集": Role.EDITING,
     "デジタル編集": Role.EDITING,
-    # 撮影 extended
+    # photography/compositing extended
     "コンポジット撮影": Role.PHOTOGRAPHY_DIRECTOR,
     "撮影協力": Role.SPECIAL,
     "撮影チーフ": Role.PHOTOGRAPHY_DIRECTOR,
@@ -471,7 +471,7 @@ ROLE_MAP: dict[str, Role] = {
     "スキャン": Role.EDITING,
     "スキャニング": Role.EDITING,
     "フィルム": Role.EDITING,
-    # 美術 extended
+    # art/backgrounds extended
     "美術監督補佐": Role.BACKGROUND_ART,
     "美術協力": Role.SPECIAL,
     "美術背景": Role.BACKGROUND_ART,
@@ -479,7 +479,7 @@ ROLE_MAP: dict[str, Role] = {
     "背景協力": Role.SPECIAL,
     "背景管理": Role.PRODUCTION_MANAGER,
     "背景監修": Role.BACKGROUND_ART,
-    # 設定 extended
+    # settings/design materials extended
     "設定管理": Role.SETTINGS,
     "画面設計": Role.SETTINGS,
     "原図": Role.SETTINGS,
@@ -489,15 +489,15 @@ ROLE_MAP: dict[str, Role] = {
     "衣装協力": Role.SPECIAL,
     "服装設定": Role.SETTINGS,
     "キャラクター監修": Role.CHARACTER_DESIGNER,
-    # 音響 extended
+    # audio/sound extended
     "音楽制作協力": Role.SPECIAL,
     "音楽ディレクター": Role.MUSIC,
     "サウンドミキサー": Role.SOUND_DIRECTOR,
-    # 演出 extended
+    # direction extended
     "演出補": Role.EPISODE_DIRECTOR,
     "演出協力": Role.SPECIAL,
     "ディレクター": Role.DIRECTOR,
-    # 制作管理 extended
+    # production management extended
     "制作管理": Role.PRODUCTION_MANAGER,
     "制作プロデューサー": Role.PRODUCER,
     "宣伝プロデューサー": Role.SPECIAL,
@@ -506,7 +506,7 @@ ROLE_MAP: dict[str, Role] = {
     "モデル協力": Role.SPECIAL,
     "モデル進行管理": Role.PRODUCTION_MANAGER,
     "進行協力": Role.SPECIAL,
-    # デザイン extended
+    # design extended
     "デザイン協力": Role.SPECIAL,
     "ロゴデザイン": Role.SPECIAL,
     "タイトルデザイン": Role.SPECIAL,
@@ -539,7 +539,7 @@ ROLE_MAP: dict[str, Role] = {
     "コーディネーター": Role.SPECIAL,
     "フォント協力": Role.SPECIAL,
     "プロモーション協力": Role.SPECIAL,
-    # 音楽 extended
+    # music extended
     "挿入歌": Role.MUSIC,
     "ボーカル": Role.MUSIC,
     "lyrics": Role.MUSIC,
@@ -553,7 +553,7 @@ ROLE_MAP: dict[str, Role] = {
     "振り付け": Role.SPECIAL,
     "楽器監修": Role.SPECIAL,
     "主題歌協力": Role.SPECIAL,
-    # その他
+    # miscellaneous
     "補佐": Role.SPECIAL,
     "デジタル作画": Role.KEY_ANIMATOR,
     "原案協力": Role.ORIGINAL_CREATOR,
@@ -564,7 +564,7 @@ ROLE_MAP: dict[str, Role] = {
     "児童画": Role.SPECIAL,
     "webプロモーション": Role.SPECIAL,
     "作品提供": Role.SPECIAL,
-    # 声優・音楽関連（分析対象外だが明示的に区別）
+    # voice actors and music (excluded from analysis but explicitly categorized)
     "voice actor": Role.VOICE_ACTOR,
     "voice acting": Role.VOICE_ACTOR,
     "theme song performance": Role.MUSIC,
@@ -575,36 +575,36 @@ ROLE_MAP: dict[str, Role] = {
     "insert song lyrics": Role.MUSIC,
     "ending theme": Role.MUSIC,
     "opening theme": Role.MUSIC,
-    # 吹き替え関連
+    # dubbing-related
     "adr director": Role.VOICE_ACTOR,
     "adr script": Role.VOICE_ACTOR,
     "adr director assistant": Role.VOICE_ACTOR,
     # =================================================================
-    # SeesaaWiki round 2: 慎重に分類した残りの未分類ロール
-    # 原則: 時代/ツールの違い(デジタル vs アナログ)は区別しない
-    #        部門名+担当/助手 = その部門の職種
-    #        施設名/商品名 = SPECIAL (人ではない)
+    # SeesaaWiki round 2: remaining uncategorized roles classified carefully
+    # Principles: no distinction by era/tool (digital vs analog)
+    #             department name + staff/assistant = that department's role
+    #             facility/product names = SPECIAL (not a person)
     # =================================================================
-    # --- CG/3D: 伝統職のデジタル版は同じRole、CG固有職はCGI_DIRECTOR ---
-    # CGコンポジット = 撮影(コンポジット=撮影部門の仕事)
+    # --- CG/3D: digital versions of traditional roles keep same Role; CG-specific roles → CGI_DIRECTOR ---
+    # CG composite = photography (compositing is photography department's work)
     "cgコンポジター": Role.PHOTOGRAPHY_DIRECTOR,
     "cgカメラワーク": Role.PHOTOGRAPHY_DIRECTOR,
     "リードコンポジター": Role.PHOTOGRAPHY_DIRECTOR,
     "リードコンポジッター": Role.PHOTOGRAPHY_DIRECTOR,
     "コンポジター": Role.PHOTOGRAPHY_DIRECTOR,
     "コンポジッター": Role.PHOTOGRAPHY_DIRECTOR,
-    # CGレイアウト = レイアウト(道具が違うだけ)
+    # CG layout = layout (just a different tool)
     "cgレイアウト": Role.LAYOUT,
-    # CG背景 = 背景(道具が違うだけ)
+    # CG background = background (just a different tool)
     "cgバックグラウンド": Role.BACKGROUND_ART,
     "背景3d": Role.BACKGROUND_ART,
-    # CGアニメーション = 原画(ポーズ/タイミング/動きの設計は同じ仕事)
+    # CG animation = key animation (pose/timing/motion design is the same work)
     "cgアニメーション": Role.KEY_ANIMATOR,
     "3dcgアニメーション": Role.KEY_ANIMATOR,
     "3dアニメーション": Role.KEY_ANIMATOR,
-    # CGレタッチ = レタッチ(編集/ポスプロ工程)
+    # CG retouch = retouching (editing/post-production step)
     "cgレタッチ": Role.EDITING,
-    # CG固有職(モデリング, リギング等 — 伝統アニメに対応なし)
+    # CG-specific roles (modeling, rigging, etc. — no traditional anime equivalent)
     "3dモデラー": Role.CGI_DIRECTOR,
     "cgモデラー": Role.CGI_DIRECTOR,
     "cgモデリング・リーダー": Role.CGI_DIRECTOR,
@@ -624,7 +624,7 @@ ROLE_MAP: dict[str, Role] = {
     "モーションデザイナー": Role.CGI_DIRECTOR,
     "モーションキャプチャー": Role.CGI_DIRECTOR,
     "キャラモデラー": Role.CGI_DIRECTOR,
-    # CG部門の一般的な職名
+    # common CG department job titles
     "cgiアート": Role.CGI_DIRECTOR,
     "cgiチーフデザイナー": Role.CGI_DIRECTOR,
     "cgアセット": Role.CGI_DIRECTOR,
@@ -640,7 +640,7 @@ ROLE_MAP: dict[str, Role] = {
     "cg作成": Role.CGI_DIRECTOR,
     "cg監督補佐・cgデザイナー": Role.CGI_DIRECTOR,
     "アセットチーフ": Role.CGI_DIRECTOR,
-    # 3DCG表記揺れ
+    # 3DCG alternate spellings
     "2dcgチーフ": Role.CGI_DIRECTOR,
     "3cgi": Role.CGI_DIRECTOR,
     "3d-cgi": Role.CGI_DIRECTOR,
@@ -658,7 +658,7 @@ ROLE_MAP: dict[str, Role] = {
     "3dマネジメント": Role.CGI_DIRECTOR,
     "3dワーク": Role.CGI_DIRECTOR,
     "3dワークス": Role.CGI_DIRECTOR,
-    # --- エフェクト: デジタル特効=特効(時代の違い) ---
+    # --- effects: digital special effects = special effects (era difference only) ---
     "ae・特効": Role.PHOTOGRAPHY_DIRECTOR,
     "vfx": Role.PHOTOGRAPHY_DIRECTOR,
     "特効": Role.PHOTOGRAPHY_DIRECTOR,
@@ -669,7 +669,7 @@ ROLE_MAP: dict[str, Role] = {
     "エフェクトアーティスト": Role.PHOTOGRAPHY_DIRECTOR,
     "エフェクトデザイナー": Role.PHOTOGRAPHY_DIRECTOR,
     "エフェクト開発": Role.PHOTOGRAPHY_DIRECTOR,
-    # 2Dエフェクト/モニターワーク
+    # 2D effects / monitor work
     "2dcg": Role.PHOTOGRAPHY_DIRECTOR,
     "2dcgi": Role.PHOTOGRAPHY_DIRECTOR,
     "2dvfx": Role.PHOTOGRAPHY_DIRECTOR,
@@ -684,7 +684,7 @@ ROLE_MAP: dict[str, Role] = {
     "2dワーク": Role.PHOTOGRAPHY_DIRECTOR,
     "モーショングラフィック": Role.PHOTOGRAPHY_DIRECTOR,
     "モーショングラフィックス": Role.PHOTOGRAPHY_DIRECTOR,
-    # --- 撮影: コンポジット=撮影(同じ部門) ---
+    # --- photography: composite = photography (same department) ---
     "撮影助手": Role.PHOTOGRAPHY_DIRECTOR,
     "撮影管理": Role.PHOTOGRAPHY_DIRECTOR,
     "撮影チーム長": Role.PHOTOGRAPHY_DIRECTOR,
@@ -693,13 +693,13 @@ ROLE_MAP: dict[str, Role] = {
     "撮影 / 編集 / モーショングラフィックス": Role.PHOTOGRAPHY_DIRECTOR,
     "撮影担当": Role.PHOTOGRAPHY_DIRECTOR,
     "線撮": Role.PHOTOGRAPHY_DIRECTOR,
-    # スキャン = ポスプロ(編集)工程
+    # scanning = post-production (editing) step
     "bgスキャニング": Role.EDITING,
     "bgスキャン": Role.EDITING,
     "bg補正": Role.EDITING,
     "scan": Role.EDITING,
     "背景スキャニング": Role.EDITING,
-    # --- 色彩: 色彩設計/色指定(創造) vs 仕上げ(実行) ---
+    # --- color: color design/specification (creative) vs finishing (execution) ---
     "カラリスト": Role.FINISHING,
     "カラーコーディネイト": Role.FINISHING,
     "カラーマネジメント": Role.FINISHING,
@@ -712,7 +712,7 @@ ROLE_MAP: dict[str, Role] = {
     "色指定助手": Role.FINISHING,
     "色指定検査補佐": Role.FINISHING,
     "色指定補助": Role.FINISHING,
-    # --- 仕上げ: セル検査=デジタル検査(時代の違い) ---
+    # --- finishing: cel inspection = digital inspection (era difference only) ---
     "セル検": Role.FINISHING,
     "セル検査補佐": Role.FINISHING,
     "デジタル・ペイント": Role.FINISHING,
@@ -735,15 +735,15 @@ ROLE_MAP: dict[str, Role] = {
     "デジタル修正": Role.FINISHING,
     "デジタル処理": Role.FINISHING,
     "データチェック": Role.FINISHING,
-    # --- 動画 ---
+    # --- in-between animation ---
     "二原": Role.SECOND_KEY_ANIMATOR,
     "動検": Role.IN_BETWEEN,
     "動画チェック補佐": Role.IN_BETWEEN,
     "動画検査・デジタル修正": Role.IN_BETWEEN,
     "動画検査補佐": Role.IN_BETWEEN,
     "動画サポーター": Role.IN_BETWEEN,
-    "動画管理": Role.FINISHING,  # 動仕管理=仕上げ寄り
-    # --- 原画/レイアウト ---
+    "動画管理": Role.FINISHING,  # in-between management: closer to finishing department
+    # --- key animation / layout ---
     "メインレイアウト": Role.LAYOUT,
     "レイアウトチェッカー": Role.LAYOUT,
     "レイアウトチェック": Role.LAYOUT,
@@ -752,8 +752,8 @@ ROLE_MAP: dict[str, Role] = {
     "割絵": Role.KEY_ANIMATOR,
     "原絵師": Role.KEY_ANIMATOR,
     "第弐原絵師": Role.SECOND_KEY_ANIMATOR,
-    "タイミング": Role.KEY_ANIMATOR,  # アニメーションタイミング=原画の技術
-    # --- 作画監督 ---
+    "タイミング": Role.KEY_ANIMATOR,  # animation timing = key animation technique
+    # --- animation director ---
     "アクション作画監督補": Role.ANIMATION_DIRECTOR,
     "キャラクター作画監督補佐": Role.ANIMATION_DIRECTOR,
     "レイアウト作画監督補佐": Role.ANIMATION_DIRECTOR,
@@ -761,13 +761,13 @@ ROLE_MAP: dict[str, Role] = {
     "原画作画監督補佐": Role.ANIMATION_DIRECTOR,
     "原画作監補": Role.ANIMATION_DIRECTOR,
     "総作監補": Role.ANIMATION_DIRECTOR,
-    "絵師頭": Role.ANIMATION_DIRECTOR,  # 古い呼称の作画統括
-    # --- 演出 ---
+    "絵師頭": Role.ANIMATION_DIRECTOR,  # old term for chief animation supervisor
+    # --- episode direction ---
     "演出サポート": Role.EPISODE_DIRECTOR,
     "演出補佐": Role.EPISODE_DIRECTOR,
     "演助": Role.EPISODE_DIRECTOR,
-    "演出統括": Role.DIRECTOR,  # 統括=監督級
-    # --- 監督 ---
+    "演出統括": Role.DIRECTOR,  # overall direction: unified = director-level
+    # --- director ---
     "監督助手": Role.DIRECTOR,
     "監督補": Role.DIRECTOR,
     "監督補佐": Role.DIRECTOR,
@@ -776,7 +776,7 @@ ROLE_MAP: dict[str, Role] = {
     "アートディレクション": Role.BACKGROUND_ART,
     "背景監督補": Role.BACKGROUND_ART,
     "音響監督助手": Role.SOUND_DIRECTOR,
-    # --- 編集: フィルム/ビデオ/デジタル=同じ仕事(時代の違い) ---
+    # --- editing: film/video/digital = same work (era difference only) ---
     "dcpマスタリング": Role.EDITING,
     "digital.tp": Role.EDITING,
     "eed": Role.EDITING,
@@ -791,7 +791,7 @@ ROLE_MAP: dict[str, Role] = {
     "編集アシスタント": Role.EDITING,
     "編集デスク": Role.EDITING,
     "編集補佐": Role.EDITING,
-    # 部門名+助手/担当 = その部門の人(時代の接頭辞は無視)
+    # department + assistant/staff = department person (ignore era prefix)
     "hd編集制作担当": Role.EDITING,
     "hd編集助手": Role.EDITING,
     "hd編集担当": Role.EDITING,
@@ -808,7 +808,7 @@ ROLE_MAP: dict[str, Role] = {
     "ve": Role.EDITING,  # Video Engineer
     "vtrワーク": Role.EDITING,
     "調整助手": Role.EDITING,
-    # --- 音響: 録音技師=ミキサー=エンジニア(呼称の違い) ---
+    # --- audio: recording engineer = mixer = engineer (different names for same role) ---
     "ma": Role.SOUND_DIRECTOR,
     "フォーリー": Role.SOUND_DIRECTOR,
     "効果助手": Role.SOUND_DIRECTOR,
@@ -836,7 +836,7 @@ ROLE_MAP: dict[str, Role] = {
     "音響制作デスク": Role.SOUND_DIRECTOR,
     "音響担当": Role.SOUND_DIRECTOR,
     "アシスタントミキサー": Role.SOUND_DIRECTOR,
-    # --- 音楽: 演奏者=THEME_SONG、制作=MUSIC ---
+    # --- music: performers = THEME_SONG, production = MUSIC ---
     "bass": Role.MUSIC,
     "drums": Role.MUSIC,
     "guitar": Role.MUSIC,
@@ -862,8 +862,8 @@ ROLE_MAP: dict[str, Role] = {
     "作詩": Role.MUSIC,
     "音楽制作担当": Role.MUSIC,
     "音楽製作": Role.MUSIC,
-    "指揮": Role.MUSIC,  # 音楽指揮者
-    # --- 美術/背景 ---
+    "指揮": Role.MUSIC,  # musical conductor
+    # --- art/backgrounds ---
     "美監補佐": Role.BACKGROUND_ART,
     "美術監督捕": Role.BACKGROUND_ART,
     "美術デザイン補佐": Role.BACKGROUND_ART,
@@ -886,7 +886,7 @@ ROLE_MAP: dict[str, Role] = {
     "背景統括": Role.BACKGROUND_ART,
     "背景補正": Role.BACKGROUND_ART,
     "話数背景担当": Role.BACKGROUND_ART,
-    # --- 設定 ---
+    # --- settings/design materials ---
     "設定・資料": Role.SETTINGS,
     "設定考証": Role.SETTINGS,
     "設定補": Role.SETTINGS,
@@ -897,7 +897,7 @@ ROLE_MAP: dict[str, Role] = {
     "サブ・小物": Role.SETTINGS,
     "プロップデザイン補佐": Role.SETTINGS,
     "衣装コンセプトデザイン・アシスタント": Role.SETTINGS,
-    # --- 脚本 ---
+    # --- screenplay ---
     "文芸助手": Role.SCREENPLAY,
     "脚本事務": Role.SCREENPLAY,
     "脚本構成": Role.SCREENPLAY,
@@ -905,11 +905,11 @@ ROLE_MAP: dict[str, Role] = {
     "ストーリー": Role.SCREENPLAY,
     "ストーリーエディター": Role.SCREENPLAY,
     "チーフライター": Role.SCREENPLAY,
-    # --- 絵コンテ ---
+    # --- storyboard ---
     "絵コンテ・演出担当": Role.EPISODE_DIRECTOR,
     "絵コンテ清書": Role.EPISODE_DIRECTOR,
-    "アニマティックアーティスト": Role.EPISODE_DIRECTOR,  # アニマティクス=動くコンテ
-    # --- デザイン ---
+    "アニマティックアーティスト": Role.EPISODE_DIRECTOR,  # animatics = animated storyboard
+    # --- design ---
     "キャラクター": Role.CHARACTER_DESIGNER,
     "キャラクターデザイン補佐": Role.CHARACTER_DESIGNER,
     "サブキャラクター": Role.CHARACTER_DESIGNER,
@@ -922,7 +922,7 @@ ROLE_MAP: dict[str, Role] = {
     "メカニック": Role.CHARACTER_DESIGNER,
     "メカニックワーク": Role.CHARACTER_DESIGNER,
     "メカ修正": Role.CHARACTER_DESIGNER,
-    # --- 制作進行(真の現場管理職のみ) ---
+    # --- production coordinator (true floor management only) ---
     "制作アシスタント": Role.PRODUCTION_MANAGER,
     "制作サポート": Role.PRODUCTION_MANAGER,
     "制作チーフ": Role.PRODUCTION_MANAGER,
@@ -947,8 +947,8 @@ ROLE_MAP: dict[str, Role] = {
     "コンポジット制作担当": Role.PRODUCTION_MANAGER,
     "bank管理": Role.PRODUCTION_MANAGER,
     "デジタル管理": Role.PRODUCTION_MANAGER,
-    "背景進行補佐": Role.PRODUCTION_MANAGER,  # 進行=管理職
-    # --- プロデューサー(ビジネス側) ---
+    "背景進行補佐": Role.PRODUCTION_MANAGER,  # coordinator = management role
+    # --- producer (business side) ---
     "製作デスク": Role.PRODUCER,
     "製作管理": Role.PRODUCER,
     "製作統括": Role.PRODUCER,
@@ -961,12 +961,12 @@ ROLE_MAP: dict[str, Role] = {
     "アニメーションプロデュース": Role.PRODUCER,
     "アニメーション制作統括": Role.PRODUCER,
     "プランニングマネジャー": Role.PRODUCER,
-    # --- VOICE_ACTOR ---
+    # --- voice actor ---
     "ナレーション": Role.VOICE_ACTOR,
     "出演": Role.VOICE_ACTOR,
     "パーソナリティ": Role.VOICE_ACTOR,
-    # --- SPECIAL: 非制作部門/施設名/商品名 ---
-    # 施設名(人ではない)
+    # --- SPECIAL: non-production departments / facility names / product names ---
+    # facility names (not a person)
     "hdビデオ編集スタジオ": Role.SPECIAL,
     "hd編集スタジオ": Role.SPECIAL,
     "hd編集室": Role.SPECIAL,
@@ -981,11 +981,11 @@ ROLE_MAP: dict[str, Role] = {
     "音響スタジオ": Role.SPECIAL,
     "現像所": Role.SPECIAL,
     "レーベル": Role.SPECIAL,
-    "hd編集アシスタント": Role.SPECIAL,  # スタジオ付帯
-    # 商品名
+    "hd編集アシスタント": Role.SPECIAL,  # studio-affiliated
+    # product names
     "オリジナルサウンドトラック盤": Role.SPECIAL,
     "サウンドトラック盤": Role.SPECIAL,
-    # 営業/宣伝/ライツ/法務
+    # sales / publicity / rights / legal
     "企画営業": Role.SPECIAL,
     "企画担当": Role.SPECIAL,
     "営業": Role.SPECIAL,
@@ -1031,13 +1031,13 @@ ROLE_MAP: dict[str, Role] = {
     "mdライセンス担当": Role.SPECIAL,
     "セールスプランニング": Role.SPECIAL,
     "マーケティング": Role.SPECIAL,
-    # Web/HP
+    # web / homepage
     "web担当": Role.SPECIAL,
     "ホームページ": Role.SPECIAL,
     "公式ホームページ": Role.SPECIAL,
     "オフィシャルサイト": Role.SPECIAL,
     "携帯サイト": Role.SPECIAL,
-    # タイトルデザイン/テロップ
+    # title design / caption/telop
     "タイトルリスワーク": Role.SPECIAL,
     "タイトルロゴ": Role.SPECIAL,
     "タイトル・リスワーク": Role.SPECIAL,
@@ -1048,7 +1048,7 @@ ROLE_MAP: dict[str, Role] = {
     "リスワーク": Role.SPECIAL,
     "筆文字": Role.SPECIAL,
     "フォト・タイプ": Role.SPECIAL,
-    # 出演/パフォーマンス(非制作)
+    # performance / appearances (non-production)
     "ダンサー": Role.SPECIAL,
     "ダンス振付": Role.SPECIAL,
     "振付": Role.SPECIAL,
@@ -1057,26 +1057,26 @@ ROLE_MAP: dict[str, Role] = {
     "特殊演技": Role.SPECIAL,
     "狂言": Role.SPECIAL,
     "藝頭": Role.SPECIAL,
-    # 考証/指導
+    # historical research / supervision
     "方言指導": Role.SPECIAL,
     "時代考証": Role.SPECIAL,
     "テクニカルアドバイザー": Role.SPECIAL,
     "アドバイザー": Role.SPECIAL,
     "俳優担当": Role.SPECIAL,
     "原作担当": Role.SPECIAL,
-    # 翻訳/通訳
+    # translation / interpretation
     "翻訳": Role.SPECIAL,
     "通訳": Role.SPECIAL,
     "和訳": Role.SPECIAL,
     "韓国語通訳・翻訳": Role.SPECIAL,
-    # メディアミックス派生(アニメ→他媒体、原作者ではない)
+    # media mix derivatives (anime → other media; not the original creator)
     "コミカライズ": Role.SPECIAL,
     "コミック": Role.SPECIAL,
     "コミック連載": Role.SPECIAL,
     "ノベライズ": Role.SPECIAL,
     "漫画連載": Role.SPECIAL,
     "予告マンガ": Role.SPECIAL,
-    # その他
+    # other
     "アイキャッチ/オリジナルカード紹介": Role.SPECIAL,
     "アイキャッチデザイナー": Role.SPECIAL,
     "アイキャッチ・ラストカット": Role.SPECIAL,
@@ -1095,16 +1095,16 @@ ROLE_MAP: dict[str, Role] = {
     "トリック案": Role.SPECIAL,
     "掲載": Role.SPECIAL,
     "テクニカルサポート": Role.SPECIAL,
-    # IT系
+    # IT / systems
     "プログラマー": Role.SPECIAL,
     "システム": Role.SPECIAL,
     "システムエンジニア": Role.SPECIAL,
     "システム・マネージメント": Role.SPECIAL,
     "ラボ・マネージメント": Role.SPECIAL,
-    # 曲名(ロールではない)
+    # song titles (not a role)
     "曲名": Role.SPECIAL,
-    # === ANN固有ロール (英語表記) ===
-    # ANN Encyclopedia は英語ロール名を使用する
+    # === ANN source-specific roles (English notation) ===
+    # ANN Encyclopedia uses English role names
     "direction": Role.DIRECTOR,
     "chief direction": Role.DIRECTOR,
     "series direction": Role.DIRECTOR,
@@ -1190,24 +1190,24 @@ _ROLE_SUFFIX_CLASSIFY: list[tuple[str, Role]] = [
 
 
 def parse_role(raw: str) -> Role:
-    """役職文字列を Role enum にマッピングする.
+    """Map a job title string to a Role enum value.
 
-    エピソード特定の役職（括弧付き）を正しく処理：
+    Correctly handles episode-specific roles (with parentheses):
     - "Animation Director (ep 10)" → "animation director" → Role.ANIMATION_DIRECTOR
     - "Key Animation (eps 21, 25)" → "key animation" → Role.KEY_ANIMATOR
 
-    言語タグ付きローカライゼーション役職を検出：
+    Detects localization roles with language tags:
     - "Producer (English)" → Role.LOCALIZATION
-    - "ADR Script (Italian)" → Role.LOCALIZATION (ADR系はVOICE_ACTORだが言語タグ優先)
+    - "ADR Script (Italian)" → Role.LOCALIZATION (ADR roles would be VOICE_ACTOR, but language tag takes priority)
 
-    未知の日本語ロールはサフィックスマッチングで分類：
+    Unknown Japanese roles are classified by suffix matching:
     - "銃器作画監督" → *作画監督 → ANIMATION_DIRECTOR
     - "CG制作進行" → *進行 → PRODUCTION_MANAGER
     """
     import re
 
-    # 言語タグ検出: "(English)", "(Italian)", "(German)" 等
-    # エピソード番号 "(ep 10)" や "(OP)"/"(ED)" とは区別する
+    # Language tag detection: "(English)", "(Italian)", "(German)", etc.
+    # Distinguished from episode numbers "(ep 10)" or "(OP)"/"(ED)"
     _LANG_TAG_RE = re.compile(
         r"\("
         r"(?:English|Italian|German|French|Spanish|Portuguese"
@@ -1223,11 +1223,11 @@ def parse_role(raw: str) -> Role:
     if _LANG_TAG_RE.search(raw):
         return Role.LOCALIZATION
 
-    # 括弧とその中身を除去（エピソード番号など）
-    # 例: "Animation Director (ep 10)" → "Animation Director"
+    # Strip parentheses and their contents (episode numbers, etc.)
+    # e.g. "Animation Director (ep 10)" → "Animation Director"
     cleaned = re.sub(r"\s*\([^)]*\)", "", raw)
 
-    # 正規化: 小文字化、前後の空白削除
+    # Normalize: lowercase and strip surrounding whitespace
     normalized = cleaned.strip().lower()
 
     result = ROLE_MAP.get(normalized)
@@ -1243,7 +1243,7 @@ def parse_role(raw: str) -> Role:
 
 
 class Person(BaseModel):
-    """アニメ業界の人物."""
+    """A person in the anime industry."""
 
     id: str
     name_ja: str = ""
@@ -1251,29 +1251,29 @@ class Person(BaseModel):
     aliases: list[str] = Field(default_factory=list)
     mal_id: int | None = None
     anilist_id: int | None = None
-    madb_id: str | None = None  # メディア芸術DB URI
+    madb_id: str | None = None  # Media Arts DB URI
     ann_id: int | None = None  # Anime News Network Encyclopedia ID
     allcinema_id: int | None = None  # allcinema.net person ID
 
-    # 画像（AniList）
+    # Images (AniList)
     image_large: str | None = None
     image_medium: str | None = None
-    image_large_path: str | None = None  # ローカル保存パス
+    image_large_path: str | None = None  # local storage path
     image_medium_path: str | None = None
 
-    # プロフィール情報
-    date_of_birth: str | None = None  # YYYY-MM-DD形式
+    # Profile information
+    date_of_birth: str | None = None  # YYYY-MM-DD format
     age: int | None = None
     gender: str | None = None
     years_active: list[int] = Field(default_factory=list)
     hometown: str | None = None
     blood_type: str | None = None
-    description: str | None = None  # 経歴・説明
+    description: str | None = None  # biography / description
 
-    # 人気度指標
-    favourites: int | None = None  # お気に入り数
+    # Popularity metrics
+    favourites: int | None = None  # number of favourites
 
-    # 外部リンク
+    # External links
     site_url: str | None = None
 
     @computed_field  # type: ignore[prop-decorator]
@@ -1309,11 +1309,10 @@ class Person(BaseModel):
 
 
 class AnimeAnalysis(BaseModel):
-    """アニメ作品（分析層 — スコア・表示情報を含まない）.
+    """Anime title (analysis layer — does not include score or display metadata).
 
-    DEPRECATED: anime_analysis テーブルへの書き込みは v53 以降フリーズ済み。
-    新規分析コードは Anime モデルを使用すること。
-    このクラスは既存分析モジュール (skill.py 等) との後方互換のため残存。
+    canonical analysis type used by pipeline_phases and analysis modules.
+    aliased as `Anime` in context.py, entity_resolution.py, and time_utils.py.
     """
 
     id: str
@@ -1325,20 +1324,20 @@ class AnimeAnalysis(BaseModel):
     episodes: int | None = None
     mal_id: int | None = None
     anilist_id: int | None = None
-    madb_id: str | None = None  # メディア芸術DB URI
+    madb_id: str | None = None  # Media Arts DB URI
     ann_id: int | None = None  # Anime News Network Encyclopedia ID
     allcinema_id: int | None = None  # allcinema.net cinema ID
 
-    # 詳細情報（構造的メタデータ）
+    # Detailed information (structural metadata)
     format: str | None = None  # TV, MOVIE, OVA, ONA, SPECIAL, MUSIC
     status: str | None = None  # FINISHED, RELEASING, NOT_YET_RELEASED, CANCELLED
     start_date: str | None = None  # YYYY-MM-DD
     end_date: str | None = None
-    duration: int | None = None  # 分/話
+    duration: int | None = None  # minutes per episode
     original_work_type: str | None = None  # ORIGINAL, MANGA, LIGHT_NOVEL, etc.
     source: str | None = None  # legacy alias for original_work_type
 
-    # v26: K-means 規模分類
+    # v26: K-means scale classification
     work_type: str | None = None  # 'tv' | 'tanpatsu'
     scale_class: str | None = None  # 'large' | 'medium' | 'small'
 
@@ -1349,9 +1348,9 @@ class AnimeAnalysis(BaseModel):
 
 
 class BronzeAnime(BaseModel):
-    """アニメ作品（bronze/raw 用モデル）.
+    """Anime title (bronze/raw model).
 
-    表示・収集補助メタデータを含む。分析層は AnimeAnalysis を使うこと。
+    Includes display and collection auxiliary metadata. Use AnimeAnalysis for the analysis layer.
     """
 
     id: str
@@ -1477,7 +1476,7 @@ class BronzeAnime(BaseModel):
 
 
 class AnimeRelation(BaseModel):
-    """アニメ間の関連（続編・前日譚等）."""
+    """Relationship between anime titles (sequel, prequel, etc.)."""
 
     anime_id: str
     related_anime_id: str  # "anilist:{id}"
@@ -1487,7 +1486,7 @@ class AnimeRelation(BaseModel):
 
 
 class Character(BaseModel):
-    """アニメキャラクター."""
+    """Anime character."""
 
     id: str  # "anilist:c{anilist_id}"
     name_ja: str = ""
@@ -1495,15 +1494,15 @@ class Character(BaseModel):
     aliases: list[str] = Field(default_factory=list)
     anilist_id: int | None = None
 
-    # 画像
+    # Images
     image_large: str | None = None
     image_medium: str | None = None
 
-    # プロフィール
+    # Profile
     description: str | None = None
     gender: str | None = None
     date_of_birth: str | None = None  # YYYY-MM-DD
-    age: str | None = None  # 文字列 (AniList APIが文字列で返す)
+    age: str | None = None  # string (AniList API returns it as a string)
     blood_type: str | None = None
     favourites: int | None = None
     site_url: str | None = None
@@ -1515,7 +1514,7 @@ class Character(BaseModel):
 
 
 class Studio(BaseModel):
-    """アニメ制作スタジオ."""
+    """Anime production studio."""
 
     id: str  # "anilist:s{anilist_id}"
     name: str = ""
@@ -1526,7 +1525,7 @@ class Studio(BaseModel):
 
 
 class AnimeStudio(BaseModel):
-    """アニメ×スタジオの関係."""
+    """Relationship between an anime title and a studio."""
 
     anime_id: str
     studio_id: str
@@ -1534,7 +1533,7 @@ class AnimeStudio(BaseModel):
 
 
 class CharacterVoiceActor(BaseModel):
-    """キャラクター×声優×作品の関係."""
+    """Relationship between a character, voice actor, and anime title."""
 
     character_id: str
     person_id: str
@@ -1544,17 +1543,17 @@ class CharacterVoiceActor(BaseModel):
 
 
 class Credit(BaseModel):
-    """クレジット — 人物×作品×役職の関係."""
+    """Credit — relationship between a person, an anime title, and a role."""
 
     person_id: str
     anime_id: str
     role: Role
-    raw_role: str | None = None  # 元のロール文字列（API由来）を保存
+    raw_role: str | None = None  # original role string from the API
     episode: int | None = None
     source: str = ""
     evidence_source: str | None = None
-    credit_year: int | None = None  # 帰属年（長期作品は話数ごとに異なる）
-    credit_quarter: int | None = None  # 帰属四半期 (1-4)
+    credit_year: int | None = None  # attribution year (may differ per episode for long-running titles)
+    credit_quarter: int | None = None  # attribution quarter (1-4)
 
     @classmethod
     def from_db_row(cls, row: "CreditRow") -> "Credit":
@@ -1596,8 +1595,8 @@ class ScoreResult(BaseModel):
     ndi: float = 0.0
     iv_score: float = 0.0
     iv_score_historical: float = 0.0
-    #: 初期クレジットから推定したキャリア畑（加工データ、pipeline Phase 6 で計算）
-    #: 値: 'animator' / 'animator_director' / 'director' /
+    #: Career track estimated from early credits (derived data, computed in pipeline Phase 6).
+    #: Values: 'animator' / 'animator_director' / 'director' /
     #:     'production' / 'technical' / 'multi_track'
     career_track: str = "multi_track"
 
