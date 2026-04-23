@@ -24,6 +24,16 @@ jobs:
           pixi-version: latest
           environments: default
       
+      - name: Check Report Lineage References (Static)
+        run: |
+          echo "🔗 Checking that findings-bearing reports reference meta_lineage..."
+          pixi run python scripts/report_generators/ci_check_report_lineage_refs.py
+          if [ $? -ne 0 ]; then
+            echo "❌ meta_lineage reference gate FAILED (mandatory report regression)"
+            exit 1
+          fi
+          echo "✅ meta_lineage reference gate PASSED"
+
       - name: Validate Report Briefs
         run: |
           echo "🔍 Validating report briefs..."
