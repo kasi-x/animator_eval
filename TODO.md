@@ -121,7 +121,7 @@ silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行
 - [x] `analysis_modules.py` の `db_connection` / `record_calc_execution` / `get_calc_execution_hashes` (インクリメンタルキャッシュ) — `src/analysis/calc_cache.py` (cache.duckdb) に移植 (2026-04-23, commit 77d324f)
 - [ ] `pipeline.py` Phase 1.5: `compute_feat_credit_activity` / `compute_feat_career_annual` / `compute_feat_studio_affiliation` / `compute_feat_person_role_progression` — SQLite-only 計算
 - [ ] `export_and_viz.py` の `compute_feat_credit_contribution` / `compute_feat_work_context` / `compute_feat_work_scale_tier` — SQLite-only 計算 (best-effort、要 DuckDB 移植)
-- [ ] `analysis/llm_pipeline.py`: `import sqlite3` + `get_all_llm_decisions` / `upsert_llm_decision` (LLM キャッシュ)
+- [x] `analysis/llm_pipeline.py`: SQLite → `cache.duckdb` に移行済み (2026-04-23)
 - [ ] API 側の GOLD 読み取りを `gold_connect()` に切替 (`src/api.py`)
 
 ### 4.3 Phase C: BRONZE を Parquet + DuckDB
@@ -303,27 +303,27 @@ silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行
 
 ## SECTION 8: レポートシステム統廃合
 
-### 8.1 3 系統の統一
+### 8.1 3 系統の統一 ✅ DONE (2026-04-23)
 
 | 系統 | 入口 | 行数 | ステータス |
 |------|------|------|---------|
-| v1 monolith | `scripts/generate_all_reports.py` | 24,983 | `pixi run reports` の現行エントリ |
-| v2 orchestrator | `scripts/generate_reports_v2.py` + `report_generators/reports/*.py` | 413 + 多数 | 現行並行 |
-| v3 class-based | `src/reporting/` | 2,725 | 使われていない (`pixi run reports-new`) |
+| v1 monolith | `scripts/generate_all_reports.py` | 273 | `pixi run reports-viz`（補助用） |
+| v2 orchestrator | `scripts/generate_reports_v2.py` + `report_generators/reports/*.py` | 413 + 多数 | `pixi run reports`（現行エントリ） |
+| v3 class-based | 削除済み | — | — |
 
 - [x] v3 (src/reporting/) 削除済み (2026-04-23)
-- [ ] v1 と v2 を統合: v2 が新規追加先なので v1 を解体して v2 に吸収
+- [x] v1 と v2 を統合: v1 を 273 行のシム化、v2 が唯一の HTML レポート生成先 (2026-04-23)
 - [x] reports-new タスク削除済み (2026-04-23)
-- [ ] `pixi.toml` の `reports` を v2 エントリに切替
+- [x] `pixi.toml` の `reports` を v2 エントリに切替済み (2026-04-23)
 
-### 8.2 `generate_all_reports.py` の 24,983 行分解
+### 8.2 `generate_all_reports.py` の 24,983 行分解 ✅ DONE (2026-04-23)
 
-- [ ] 分離済みの関数を本体から削除 (v1/v2 でダブっている分を潰す)
-- [ ] 本体を「v2/v3 にない暫定的な関数のみ」の薄いファイルに縮める (目標 < 2,000 行)
+- [x] 分離済みの関数を本体から削除 (24,983 → 273 行, -99%)
+- [x] 本体を「explorer_data + matplotlib/Plotly のみ」の薄いファイルに縮小
 
-### 8.3 FastAPI 2 系統の統合
+### 8.3 FastAPI router 分割 ✅ DONE (2026-04-23)
 
-- [ ] `src/api.py` 自体を `src/api/{persons,reports,i18n}.py` の router 単位に分割 (1,322 行の分解)
+- [x] `src/api.py` → `src/routers/{persons,reports,i18n,validators}.py` (src/api/ は api.py と衝突するため src/routers/ を採用)
 
 ---
 
@@ -336,27 +336,23 @@ silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行
 残務:
 - [ ] `similarity.py` と `recommendation.py` の機能重複確認 (低優先度)
 
-### 9.2 VA パイプラインの平行配線
+### 9.2 VA パイプラインの平行配線 ✅ DONE (2026-04-23)
 
-`src/pipeline_phases/` に VA 専用 4 ファイル (340 行、本家と構造同一):
+- [x] 共通ロジックを `src/utils/pipeline_common.py` に抽出して DRY (phase_step, skip_if_no_credits)
+- [x] VA パイプラインは `src/analysis/va/pipeline/` に分離。`pipeline_phases/__init__.py` は lazy-load
 
-- [ ] 共通ロジックを `src/pipeline_phases/common/` に抽出して DRY
-- [ ] または VA パイプラインを `src/analysis/va/` の module 集合として扱い `pipeline_phases/` から分離
+### 9.3 Julia 視覚化層 ✅ DONE (2026-04-23)
 
-### 9.3 Julia 視覚化層の要否確認
-
-- [ ] `juliacall` は `scripts/setup_julia_env.py` のみ。Python 分析コードからは一切呼ばれていない (grep 確認済み 2026-04-23)。`julia_viz/` に Julia モジュール (JuliaViz.jl, chart_types.jl, renderers/) あり
-- [ ] 削除判定: `julia_viz/` と `feature.viz` (pixi.toml) の削除を検討 — matplotlib/Plotly と役割重複
+- [x] `julia_viz/` 削除済み。`feature.viz` / pixi.toml からも除去
 
 ### 9.5 `src/monitoring.py` → `src/freshness.py` リネーム ✅ DONE
 
 - [x] `src/freshness.py` として既に存在。`src/monitoring.py` は削除済み (2026-04-23)
 
-### 9.6 `scripts/` の subdir 整理
+### 9.6 `scripts/` の subdir 整理 ✅ DONE (2026-04-23)
 
-- [ ] `scripts/analysis/` に `analyze_*.py` を寄せる
-- [ ] `scripts/ci/` に `ci_check_*.py` を寄せる
-- [ ] Top-level は entry-point のみ
+- [x] `scripts/analysis/` に `analyze_*.py` を寄せる
+- [x] `scripts/ci/` に `ci_check_*.py` を寄せる
 
 ---
 
@@ -396,22 +392,9 @@ analysis/compat/  analysis/viz/      analysis/io/       analysis/quality/
 
 ## SECTION 12: ドキュメント整理
 
-### 12.1 完了済み戦略文書を `docs/archive/` に移動
+### 12.1 完了済み戦略文書を `docs/archive/` に移動 ✅ DONE (2026-04-23)
 
-```
-docs/REFACTORING_SUMMARY.md
-docs/PHASE1_DATA_LAYER_REFACTOR.md
-docs/BUG_FIXES_PHASE_B.md
-docs/REPORT_STRATEGY.md
-docs/TEST_OPTIMIZATION_STRATEGY.md
-docs/COMMUNITY_DETECTION_ENHANCEMENTS.md
-docs/COVERAGE_REPORT.md
-docs/SCHEMA_VERSIONING_STATUS.md
-docs/TEST_AND_AUDIT.md
-```
-
-- [ ] 上記を `docs/archive/` に移動
-- [ ] `docs/` 直下に残すのは: ARCHITECTURE, CALCULATION_COMPENDIUM, REPORT_PHILOSOPHY, DATA_DICTIONARY, REPORT_INVENTORY, schema.dbml のみ
+- [x] 全9ファイルを `docs/archive/` に移動済み
 
 ### 12.2 CLAUDE.md スリム化 (827 行 → ~300 行目標)
 
@@ -425,9 +408,9 @@ docs/TEST_AND_AUDIT.md
 
 ### 12.4 CLAUDE.md ドリフト修正 (随時)
 
-- [ ] 「1394 tests」→「2300+ tests」
+- [x] 「1394 tests」→「2450+ tests」更新済み
 - [ ] Testing patterns の `monkeypatch DEFAULT_DB_PATH` → DuckDB 切替後に更新 (Section 4 Phase D 完了時)
-- [ ] `src/models.py` の `AnimeAnalysis` に付いた DEPRECATED コメントを削除
+- [x] `src/models.py` の `AnimeAnalysis` DEPRECATED コメント: 既に削除済み
 
 ---
 
