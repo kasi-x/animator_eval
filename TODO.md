@@ -59,13 +59,14 @@
 
 ## SECTION 4: DuckDB 後続タスク
 
-§4.1〜§4.5 はすべて完了 (詳細: DONE.md)。残務のみ:
+§4.1〜§4.5 はすべて完了 (詳細: DONE.md)。残務:
 
-- [ ] `compute_feat_studio_affiliation` の DuckDB 移植 (anime_studios が silver に移ったとき)
-- [ ] Entity resolution の書き込み経路を DuckDB に切替
-- [ ] Atlas migration を DuckDB 環境で再生成
-- [ ] `scripts/` 報告書生成・メンテスクリプトの DuckDB 移行 (低優先度)
-- [ ] `CLAUDE.md` testing patterns: monkeypatch を `src.db.init.DEFAULT_DB_PATH` に更新
+- [x] ✅ `scripts/generate_reports_v2.py` DuckDB 移行: gold_connect (GOLD layer) に切替
+- [x] ✅ `scripts/report_generators/db_loaders.py` DuckDB 対応: conn: Any に統一
+- [x] ✅ `CLAUDE.md` testing patterns: monkeypatch パターン明確化
+- [ ] `compute_feat_studio_affiliation` DuckDB 移植 (現在コメント化、anime_studios silver 化時に検討)
+- [ ] Entity resolution 書き込み経路 DuckDB 化 (現在未使用、将来の entity resolution phase で検討)
+- [ ] Atlas migration DuckDB 環境再生成 (低優先度、schema.dbml 参照)
 
 ---
 
