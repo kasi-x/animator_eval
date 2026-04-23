@@ -1,10 +1,10 @@
 """Temporal Foresight report — v2 compliant.
 
-Predictive trajectory analysis with mandatory holdout validation (v2 Section 3.3):
-- Section 1: Holdout validation of IV score prediction
-- Section 2: Growth trajectory classification accuracy
-- Section 3: Early career indicators vs eventual tier attainment
-- Section 4: Prediction intervals and uncertainty
+Retrospective activity pattern analysis (v2 method gate compliance):
+- Section 1: Activity ratio retrospective comparison
+- Section 2: Growth trajectory classification patterns
+- Section 3: Early career indicators retrospective view
+- Section 4: Person FE estimation and confidence intervals
 """
 
 from __future__ import annotations
@@ -21,8 +21,8 @@ from ._base import BaseReportGenerator
 
 class TemporalForesightReport(BaseReportGenerator):
     name = "temporal_foresight"
-    title = "キャリア軌跡予測分析"
-    subtitle = "ホールドアウト検証付き予測モデル・不確実性定量化（v2 3.3）"
+    title = "キャリア軌跡記述分析"
+    subtitle = "活動パターンの回顧的記述・不確実性の定量化（v2 3.3）"
     filename = "temporal_foresight.html"
 
     def generate(self) -> Path | None:
@@ -54,12 +54,12 @@ class TemporalForesightReport(BaseReportGenerator):
 
         if not rows:
             return ReportSection(
-                title="ホールドアウト検証（v2 Section 3.3）",
+                title="活動比率の回顧的記述（v2 Section 3.3）",
                 findings_html=(
-                    "<p>ホールドアウト検証用データが取得できませんでした。"
-                    "v2 Section 3.3に基づき、すべての予測的主張にはホールドアウト検証が必要: "
-                    "モデルは過去のサブセットで訓練し、時間的に分離された保留期間で評価しなければならない。"
-                    "プロトコル例: career_year &le; T で訓練、career_year &gt; T で検証。"
+                    "<p>活動比率比較用データが取得できませんでした。"
+                    "v2 Section 3.3に基づき、個人のキャリア軌跡に関する前向き予測には "
+                    "時間的に分離された保留期間の検証が必須です。"
+                    "本セクションは、活動パターンの過去観測を記述するプレースホルダーとして機能します。"
                     "feat_career_annual に十分な時間的カバレッジが蓄積された時点で本セクションが有効になる。</p>"
                 ),
                 section_id="foresight_holdout",
@@ -70,11 +70,11 @@ class TemporalForesightReport(BaseReportGenerator):
         n = len(rows)
 
         findings = (
-            f"<p>ホールドアウト検証の代理指標: 直近2年間の年間クレジット数 vs activity_ratio "
+            f"<p>活動比率の回顧的比較: 直近2年間の年間クレジット数 vs activity_ratio "
             f"（n={n:,}人-年観測）。"
-            "activity_ratio は将来のクレジット数の直接的な予測器ではなく、"
-            "本セクションでは相関構造を示す（検証済み予測ではない）。"
-            "適切なホールドアウトには時系列の訓練/テスト分割が必要。</p>"
+            "activity_ratio は同一時間窓から算出されたため、この相関は記述的であり、"
+            "活動パターンの静的スナップショットを示すに過ぎない。"
+            "本セクションは前向きの予測ではなく、過去観測の相関構造を表示する。</p>"
         )
 
         fig = go.Figure(go.Scatter(
@@ -93,21 +93,23 @@ class TemporalForesightReport(BaseReportGenerator):
             findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
 
         return ReportSection(
-            title="ホールドアウト検証（v2 Section 3.3）",
+            title="活動比率の回顧的記述（v2 Section 3.3）",
             findings_html=findings,
             visualization_html=plotly_div_safe(fig, "chart_foresight_holdout", height=420),
             method_note=(
-                "v2 Section 3.3の要件: 期間Tで訓練したモデルを期間T+kで検証すること。"
-                "本レポートでは activity_ratio を予測軌跡の代理指標として使用。"
-                "適切な時系列ホールドアウトは現行パイプラインに未実装 — "
-                "本セクションはその要件のプレースホルダーとして機能する。"
+                "v2 Section 3.3の要件: 個人のキャリア軌跡に関する前向き予測には、"
+                "期間Tで訓練したモデルを期間T+kで検証すること。"
+                "本セクションでは、activity_ratio と実観測クレジット数の相関を記述的に表示。"
+                "適切な時系列検証は現行パイプラインに未実装のため、"
+                "本セクションは活動パターン記述のプレースホルダーとして機能する。"
             ),
             interpretation_html=(
-                "<p>v2 Section 3.3に基づき、ホールドアウト検証なしに個人のキャリア軌跡に関する"
-                "予測的主張を行うことは禁止されている。"
-                "ここに示す相関は記述的なものであり、activity_ratio は n_credits と"
-                "同じ時間窓から算出されているため、相関は部分的に循環的である。"
-                "前向きの検証には、直近2年間を activity_ratio の算出から除外する必要がある。</p>"
+                "<p>v2 Section 3.3に基づき、時間的分離のない個人のキャリア軌跡に関する"
+                "前向き予測的主張は禁止されている。"
+                "ここに示す相関は回顧的な記述であり、activity_ratio は n_credits と"
+                "同じ時間窓から算出されているため、循環的である。"
+                "真の前向き検証には、activity_ratio の算出時期と n_credits の観測時期を "
+                "時間的に分離する必要がある。</p>"
             ),
             section_id="foresight_holdout",
         )
@@ -125,7 +127,7 @@ class TemporalForesightReport(BaseReportGenerator):
 
         if not rows:
             return ReportSection(
-                title="軌跡タイプ分類",
+                title="成長傾向分類の集計",
                 findings_html="<p>軌跡分類データが取得できませんでした。</p>",
                 section_id="traj_class",
             )
@@ -134,7 +136,7 @@ class TemporalForesightReport(BaseReportGenerator):
         for r in rows:
             trend_track.setdefault(r["trend"], {})[r["career_track"] or "unknown"] = r["n"]
 
-        findings = "<p>成長傾向（growth_trend）別の人物数、キャリアトラック内訳:</p><ul>"
+        findings = "<p>成長傾向（growth_trend）別の人物数、キャリアトラック内訳（記述的集計）:</p><ul>"
         for t, tracks in sorted(trend_track.items()):
             total = sum(tracks.values())
             findings += f"<li><strong>{t}</strong> (n={total:,}): "
@@ -147,11 +149,11 @@ class TemporalForesightReport(BaseReportGenerator):
             findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
 
         return ReportSection(
-            title="軌跡タイプ分類",
+            title="成長傾向分類の集計",
             findings_html=findings,
             method_note=(
                 "growth_trend は feat_career のカラム（カテゴリカル軌跡タイプ）。"
-                "分類はホールドアウトの将来データに対して検証されていない。"
+                "本セクションは過去の軌跡分類パターンの記述的集計である。"
             ),
             section_id="traj_class",
         )
@@ -177,7 +179,7 @@ class TemporalForesightReport(BaseReportGenerator):
 
         if not rows:
             return ReportSection(
-                title="初期指標と最終Tier到達",
+                title="初期指標の回顧的記述",
                 findings_html="<p>初期指標データが取得できませんでした。</p>",
                 section_id="early_indicator",
             )
@@ -187,7 +189,7 @@ class TemporalForesightReport(BaseReportGenerator):
             if r["eventual_max_tier"] is not None:
                 tier_early.setdefault(r["eventual_max_tier"], []).append(r["early_credits"])
 
-        findings = "<p>初期キャリア年間クレジット数（career_year &le; 3）の最終到達最大Tier別分布:</p><ul>"
+        findings = "<p>初期キャリア年間クレジット数（career_year &le; 3）の最終到達最大Tier別分布（回顧的）:</p><ul>"
         for t in sorted(tier_early):
             ts = distribution_summary(tier_early[t], label=f"tier{t}")
             findings += (
@@ -195,7 +197,7 @@ class TemporalForesightReport(BaseReportGenerator):
                 f"{format_distribution_inline(ts)}</li>"
             )
         findings += (
-            "</ul><p>注: これは回顧的な相関であり、前向きの予測ではない。"
+            "</ul><p>注: これは回顧的な相関記述であり、個人の初期指標を用いた前向き予測ではない。"
             "選択バイアス: 高Tierに到達し、かつキャリア初期にクレジットされた人物が過剰代表されている。</p>"
         )
 
@@ -207,7 +209,7 @@ class TemporalForesightReport(BaseReportGenerator):
                 marker_color=tier_colors.get(t, "#a0a0c0"), boxpoints=False,
             ))
         fig.update_layout(
-            title="初期キャリアクレジット数 × 最終到達最大Tier",
+            title="初期キャリアクレジット数 × 最終到達最大Tier（回顧的）",
             xaxis_title="最終到達最大Tier", yaxis_title="初期クレジット数（career_year ≤ 3）",
         )
 
@@ -216,13 +218,13 @@ class TemporalForesightReport(BaseReportGenerator):
             findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
 
         return ReportSection(
-            title="初期指標と最終Tier到達",
+            title="初期指標の回顧的記述",
             findings_html=findings,
             visualization_html=plotly_div_safe(fig, "chart_early_ind", height=420),
             method_note=(
                 "初期キャリア指標 = career_year 0〜3 における年間クレジット数（n_credits）。"
                 "最終到達最大Tier = 全クレジットにおける MAX(scale_tier)。"
-                "回顧的分析であり、前向きの予測モデルではない。"
+                "本セクションは回顧的な相関記述であり、前向きの予測モデルではない。"
             ),
             section_id="early_indicator",
         )
@@ -241,16 +243,16 @@ class TemporalForesightReport(BaseReportGenerator):
 
         if not rows:
             return ReportSection(
-                title="予測区間と不確実性",
-                findings_html="<p>予測区間データが取得できませんでした。</p>",
+                title="Person FE推定と信頼区間",
+                findings_html="<p>推定CI データが取得できませんでした。</p>",
                 section_id="pred_interval",
             )
 
         findings = (
             "<p>200人のサンプルに対する個人固定効果と95% CI（FE順にソート）。"
-            "区間幅は推定の不確実性を反映: クレジット数が少ない、またはスタジオ移動が少ない人物は"
+            "区間幅は現在の推定の不確実性を反映: クレジット数が少ない、またはスタジオ移動が少ない人物は"
             "CIが広くなる。"
-            "v2 Section 3.1に基づき、個人レベルの推定にはCIの提示が必須。</p>"
+            "v2 Section 3.1に基づき、個人レベルの推定にはCI提示が必須。</p>"
         )
 
         rows_sorted = sorted(rows, key=lambda r: r["person_fe"])
@@ -281,13 +283,13 @@ class TemporalForesightReport(BaseReportGenerator):
             findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
 
         return ReportSection(
-            title="予測区間と不確実性",
+            title="Person FE推定と信頼区間",
             findings_html=findings,
             visualization_html=plotly_div_safe(fig, "chart_pred_interval", height=420),
             method_note=(
                 "95% CI = person_fe ± 1.96 × person_fe_se（OLSガウス型CI）。"
                 "可視化の明瞭化のため200人をサンプリング。"
-                "予測区間ではなく、現在のFE推定値に対する推定CIである。"
+                "これは現在のFE推定値に対する信頼区間であり、将来の予測区間ではない。"
             ),
             section_id="pred_interval",
         )

@@ -62,7 +62,7 @@ _CATALOG: list[dict] = [
     {"file": "derived_params_report.html", "title": "派生パラメータ分析",            "subtitle": "各種パラメータの透明性",              "desc": "Role weights, era deflator, WPS 分析。",        "category": "technical", "sources": "DB"},
     {"file": "cohort_animation.html",      "title": "コホート・エージェント軌跡",    "subtitle": "世代別キャリア成長アニメーション",    "desc": "Gapminder 型アニメーション、13 チャート。",     "category": "technical", "sources": "scores, growth, milestones"},
     {"file": "knowledge_network.html",     "title": "知識架橋分析",                  "subtitle": "AWCC・NDI に基づく知識スパナー",      "desc": "知識橋渡し人材の特定、10 チャート。",           "category": "technical", "sources": "scores"},
-    {"file": "temporal_foresight.html",    "title": "時系列 BiRank・先見スコア",      "subtitle": "BiRank 時系列と早期候補抽出",         "desc": "BiRank 推移、先見スコアによる候補抽出（holdout validation 未実装のため参考）。","category": "technical", "sources": "temporal_pagerank"},
+    {"file": "temporal_foresight.html",    "title": "時系列 BiRank・活動パターン記述",    "subtitle": "BiRank 時系列と活動パターン記述",       "desc": "BiRank 推移と活動比率の回顧的分析、初期指標・成長傾向の記述。","category": "technical", "sources": "temporal_pagerank"},
     {"file": "bridge_analysis.html",       "title": "ネットワークブリッジ詳細",      "subtitle": "概要は biz_trust_entry に統合",       "desc": "コミュニティ間接続人物の詳細（監査用）。",      "category": "technical", "sources": "bridges"},
 ]
 
