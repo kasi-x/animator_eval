@@ -22,7 +22,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
@@ -189,7 +188,6 @@ class ExitAnalysisReport(BaseReportGenerator):
         findings = "\n".join(findings_parts)
 
         # --- chart: 2-panel (pie + quarterly summary bar) ---
-        n_cols = 2 if q_stats else 2
         specs = [[{"type": "domain"}, {"type": "xy"}]]
         subtitles = ("ギャップ種別構成", "復帰率比較")
         if q_stats:

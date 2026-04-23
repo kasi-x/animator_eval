@@ -29,9 +29,8 @@ from __future__ import annotations
 
 import bisect
 import random
-import sqlite3
 import statistics
-from collections import Counter, defaultdict
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -39,12 +38,6 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from ..ci_utils import (
-    analytical_ci,
-    distribution_summary,
-    format_ci,
-    format_distribution_inline,
-)
 from ..html_templates import plotly_div_safe, stratification_tabs, strat_panel
 from ..section_builder import ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
@@ -779,10 +772,8 @@ class IndustryOverviewReport(BaseReportGenerator):
     ) -> ReportSection | None:
         pid_fy = data["pid_first_year"]
         pid_ly = data["pid_latest_year"]
-        pid_iv = data["pid_iv"]
         pid_gender = data["pid_gender"]
         stage_at_year = data["stage_at_year"]
-        high_iv = data["high_iv_threshold"]
 
         stage_groups = [d[0] for d in STAGE_GROUPS_DEF]
         sg_color = {d[0]: d[3] for d in STAGE_GROUPS_DEF}

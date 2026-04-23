@@ -19,7 +19,6 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import inspect
 from src.database_v2 import create_sqlalchemy_engine
-from src.models_v2 import SQLModel
 
 
 def generate_dbml(db_path: Path | None = None) -> str:

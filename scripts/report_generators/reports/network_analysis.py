@@ -240,8 +240,6 @@ class NetworkAnalysisReport(BaseReportGenerator):
 
         bc = np.array([r["betweenness_centrality"] or 0.0 for r in rows])
         dc = np.array([r["degree_centrality"] or 0.0 for r in rows])
-        iv = np.array([r["iv_score"] or 0.0 for r in rows])
-        nc = np.array([max(r["n_collaborators"] or 1, 1) for r in rows])
 
         # Structural bridges: high betweenness AND lower degree
         bc_75 = float(np.percentile(bc, 75))
@@ -256,7 +254,6 @@ class NetworkAnalysisReport(BaseReportGenerator):
         )
 
         tracks = sorted({r["career_track"] for r in rows})
-        color_map = {t: _TRACK_PALETTE[i % len(_TRACK_PALETTE)] for i, t in enumerate(tracks)}
 
         fig = go.Figure()
         for track in tracks:

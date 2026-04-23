@@ -11,11 +11,10 @@ Structure:
 """
 
 import json
-import logging
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 from datetime import datetime
 
 import structlog

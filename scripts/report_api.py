@@ -1,20 +1,20 @@
 """FastAPI REST endpoints for report generation and versioning."""
 
 from fastapi import FastAPI, HTTPException, WebSocket, BackgroundTasks
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
 from pathlib import Path
 import asyncio
 import structlog
-from typing import Optional, List
+from typing import List
 import sys
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from scripts.generate_briefs_v2 import generate_all_briefs, validate_briefs
+from scripts.generate_briefs_v2 import generate_all_briefs
 from scripts.generate_technical_appendix import generate_appendix
 from scripts.report_generators.versioning import (
     get_report_git_history, compare_versions, rollback_to_version

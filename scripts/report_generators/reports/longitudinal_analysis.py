@@ -19,7 +19,6 @@ Sections 6-11 (key charts included, simplified):
 
 from __future__ import annotations
 
-import json
 import math
 import random
 import statistics as _stats
@@ -31,10 +30,8 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-from ..ci_utils import analytical_ci, distribution_summary, format_ci
 from ..helpers import (
     get_agg_milestones,
-    get_feat_birank_annual,
     get_feat_career,
     get_feat_person_scores,
     load_json,
@@ -2122,7 +2119,6 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
         ts_years_all = time_series_data.get("years", [])
         demand_years = [y for y in ts_years_all if 1990 <= y <= 2025]
         credits_d = ts_series.get("credit_count", {})
-        active_d = ts_series.get("active_persons", {})
 
         if not demand_years or not credits_d:
             return ReportSection(
@@ -2136,7 +2132,6 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
 
         base_yrs = [y for y in demand_years if y <= 2010]
         actual_credits = [_ts(credits_d, y) for y in demand_years]
-        actual_active = [_ts(active_d, y) for y in demand_years]
 
         # OLS on base period
         def _ols(xs: list[int], ys: list[float], x_new: list[int]) -> list[float]:

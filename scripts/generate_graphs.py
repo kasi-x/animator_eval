@@ -25,7 +25,6 @@ from src.analysis.visualize import (
     plot_network_evolution,
     plot_outlier_summary,
     plot_performance_metrics,
-    plot_person_timeline,
     plot_productivity_distribution,
     plot_role_flow_sankey,
     plot_score_distribution,

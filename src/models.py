@@ -1348,38 +1348,6 @@ class AnimeAnalysis(BaseModel):
         return self.title_ja or self.title_en or self.id
 
 
-class AnimeDisplay(BaseModel):
-    """DEPRECATED: anime_display テーブルは v55 migration で削除済み.
-
-    display metadata は src.utils.display_lookup 経由で bronze から取得すること。
-    このクラスは後方互換のためのみ残存。新規コードでは使用しないこと。
-    """
-
-    id: str
-    score: float | None = None
-    popularity: int | None = None
-    popularity_rank: int | None = None
-    favourites: int | None = None
-    mean_score: int | None = None
-    description: str | None = None
-    cover_large: str | None = None
-    cover_extra_large: str | None = None
-    cover_medium: str | None = None
-    cover_large_path: str | None = None
-    banner: str | None = None
-    banner_path: str | None = None
-    site_url: str | None = None
-    genres: list[str] = Field(default_factory=list)
-    tags: list[dict] = Field(default_factory=list)
-    studios: list[str] = Field(default_factory=list)
-    synonyms: list[str] = Field(default_factory=list)
-    country_of_origin: str | None = None
-    is_adult: bool | None = None
-    relations_json: str | None = None
-    external_links_json: str | None = None
-    rankings_json: str | None = None
-
-
 class BronzeAnime(BaseModel):
     """アニメ作品（bronze/raw 用モデル）.
 

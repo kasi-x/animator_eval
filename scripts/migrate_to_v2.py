@@ -62,7 +62,6 @@ def copy_anime(src: sqlite3.Connection, dst: sqlite3.Connection) -> int:
              "relations_json", "external_links_json", "rankings_json",
              "ann_id", "allcinema_id"}
     dst_cols = _columns(dst, "anime")
-    dst_set = set(dst_cols)
 
     select_parts = []
     insert_cols = []

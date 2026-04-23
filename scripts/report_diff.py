@@ -10,11 +10,8 @@ Usage:
     python scripts/report_diff.py --format detailed
 """
 
-import sys
 import json
 import argparse
-import difflib
-from pathlib import Path
 from typing import Optional
 
 import structlog

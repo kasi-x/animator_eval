@@ -34,12 +34,10 @@ import math
 from collections import Counter
 from pathlib import Path
 
-import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from ..ci_utils import (
-    analytical_ci,
     distribution_summary,
     format_ci,
     format_distribution_inline,
@@ -418,9 +416,6 @@ class CohortAnimationReport(BaseReportGenerator):
             )
 
         init_yr = "1980"
-        init_frame = gapminder_frames.get(
-            init_yr, {"x": [], "y": [], "s": [], "c": [], "t": [], "h": []}
-        )
 
         major_works_json = _json.dumps(
             {
@@ -1533,7 +1528,6 @@ class CohortAnimationReport(BaseReportGenerator):
 
         for _aid, stats in major_works_list:
             yr = int(stats.get("year") or 0)
-            sc = float(stats.get("score") or 0)
             top_pids = [
                 tp["person_id"] for tp in stats.get("top_persons", [])
             ]
