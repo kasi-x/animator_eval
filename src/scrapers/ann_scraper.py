@@ -22,12 +22,14 @@ import re
 import time
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 import httpx
 import structlog
 import typer
+
+from src.scrapers.hash_utils import hash_anime_data
 
 from src.runtime.models import parse_role
 from src.scrapers.logging_utils import configure_file_logging
@@ -325,6 +327,9 @@ def save_ann_anime(anime_bw, credits_bw, rec: AnnAnimeRecord) -> int:
     """Write AnnAnimeRecord to BRONZE parquet and return the number of credits saved."""
     anime_row = dataclasses.asdict(rec)
     anime_row.pop("staff", None)
+    # Add hash tracking for diff detection
+    anime_row["fetched_at"] = datetime.now(timezone.utc).isoformat()
+    anime_row["content_hash"] = hash_anime_data(anime_row)
     anime_bw.append(anime_row)
     saved = 0
     for entry in rec.staff:

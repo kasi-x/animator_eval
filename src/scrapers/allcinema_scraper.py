@@ -22,7 +22,10 @@ import dataclasses
 import gzip
 import json
 import re
+from datetime import datetime, timezone
 from pathlib import Path
+
+from src.scrapers.hash_utils import hash_anime_data
 from xml.etree import ElementTree as ET
 
 import httpx
@@ -263,6 +266,9 @@ def save_anime_record(anime_bw, credits_bw, rec: AllcinemaAnimeRecord) -> int:
     all_credits = rec.staff + rec.cast
     anime_row.pop("staff", None)
     anime_row.pop("cast", None)
+    # Add hash tracking for diff detection
+    anime_row["fetched_at"] = datetime.now(timezone.utc).isoformat()
+    anime_row["content_hash"] = hash_anime_data(anime_row)
     anime_bw.append(anime_row)
     for credit_entry in all_credits:
         credit_row = dataclasses.asdict(credit_entry)

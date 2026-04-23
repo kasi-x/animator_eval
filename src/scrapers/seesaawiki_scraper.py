@@ -21,8 +21,11 @@ import json
 import re
 import sys
 import unicodedata
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote
+
+from src.scrapers.hash_utils import hash_anime_data
 
 import httpx
 import structlog
@@ -813,7 +816,11 @@ async def scrape_seesaawiki(
                 id=anime_id,
                 title_ja=page_title,
             )
-            anime_bw.append(anime.model_dump(mode="json"))
+            anime_dict = anime.model_dump(mode="json")
+            # Add hash tracking for diff detection
+            anime_dict["fetched_at"] = datetime.now(timezone.utc).isoformat()
+            anime_dict["content_hash"] = hash_anime_data(anime_dict)
+            anime_bw.append(anime_dict)
             stats["anime_created"] += 1
 
             # Derive total episode count from parsed data (for open-ended ranges)
@@ -1142,7 +1149,11 @@ def reparse_from_raw(
 
         # Write anime to bronze
         anime = BronzeAnime(id=anime_id, title_ja=title)
-        anime_bw.append(anime.model_dump(mode="json"))
+        anime_dict = anime.model_dump(mode="json")
+        # Add hash tracking for diff detection
+        anime_dict["fetched_at"] = datetime.now(timezone.utc).isoformat()
+        anime_dict["content_hash"] = hash_anime_data(anime_dict)
+        anime_bw.append(anime_dict)
         stats["anime_created"] += 1
 
         total_episodes = (
