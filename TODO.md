@@ -31,13 +31,13 @@
 
 ---
 
-## SECTION 3: データ修正 残務
+## SECTION 3: データ修正 残務 ✅
 
 - [x] WIKIDATA_ROLE_MAP 修正済 (813d684)
 - ~~既存 JVMG credits 再マップ~~: **不要** (JVMG データは SILVER 未統合 → 旧マッピング汚染なし)
-- [ ] **オプション**: JVMG 初回統合を実施する場合:
-      1. `pixi run python -m src.scrapers.jvmg_fetcher --max-records 10000`
-      2. `pixi run python -c "from src.etl.integrate_duckdb import main; main()"`
+- [x] **オプション**: JVMG 初回統合試行 → 見送り
+      - 理由: Wikidata SPARQL エンドポイント持続的 rate limit (429/504)
+      - 再試行: Wikidata API quota 解放時に `jvmg_fetcher` を再実行可能 (scraper_cache は整備済)
 
 ---
 
