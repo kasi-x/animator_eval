@@ -49,7 +49,7 @@ def network_evolution(ctx: PipelineContext) -> Any:
 def influence(ctx: PipelineContext) -> Any:
     """Compute influence propagation tree."""
     from src.analysis.influence import compute_influence_tree
-    return compute_influence_tree(ctx.results, ctx.credits)
+    return compute_influence_tree(ctx.credits, ctx.anime_map, person_scores=ctx.iv_scores)
 
 
 def productivity(ctx: PipelineContext) -> Any:
@@ -62,42 +62,45 @@ def individual_profiles(ctx: PipelineContext) -> Any:
     """Compute individual contribution profiles (two-layer model)."""
     from src.analysis.scoring.individual_contribution import compute_individual_profiles
     return compute_individual_profiles(
-        ctx.results, ctx.credits, ctx.anime_map,
-        ctx.collaboration_graph, ctx.anime_graphs
+        ctx.results, ctx.credits, ctx.anime_map, ctx.role_profiles,
+        ctx.career_data, collaboration_graph=ctx.collaboration_graph,
     )
 
 
 def person_tags(ctx: PipelineContext) -> Any:
     """Compute descriptive tags per person."""
     from src.analysis.person_tags import compute_person_tags
-    return compute_person_tags(ctx.results, ctx.credits, ctx.anime_map)
+    return compute_person_tags(ctx.results)
 
 
 def person_parameters(ctx: PipelineContext) -> Any:
     """Compute meta_common_person_parameters for Gold layer."""
     from src.analysis.person_parameters import compute_person_parameters
-    return compute_person_parameters(ctx.results, ctx.credits, ctx.anime_map)
+    return compute_person_parameters(ctx.results)
 
 
 def synergy_scores(ctx: PipelineContext) -> Any:
     """Compute team synergy scores."""
     from src.analysis.synergy_score import compute_synergy_scores
-    if ctx.collaboration_graph is None:
-        return {}
-    return compute_synergy_scores(
-        ctx.credits, ctx.anime_map, ctx.results, ctx.collaboration_graph
-    )
+    return compute_synergy_scores(ctx.credits, ctx.anime_map)
 
 
 def trust_entry(ctx: PipelineContext) -> Any:
-    """Compute trust-network entry analysis (policy brief input)."""
+    """Compute trust-network entry analysis (policy brief input).
+
+    bridges_result is not available in ctx for H-1; passes empty dict.
+    H-2 will wire bridges → trust_entry as an explicit DAG edge.
+    """
     from src.analysis.network.trust_entry import run_trust_entry_analysis
-    return run_trust_entry_analysis(ctx.credits, ctx.anime_map, ctx.results)
+    return run_trust_entry_analysis(
+        {}, ctx.person_fe, ctx.birank_person_scores,
+        collaboration_graph=ctx.collaboration_graph,
+    )
 
 
 def independent_units(ctx: PipelineContext) -> Any:
     """Detect independent production units in the collaboration graph."""
     from src.analysis.network.independent_unit import run_independent_units
-    if ctx.collaboration_graph is None:
-        return {}
-    return run_independent_units(ctx.collaboration_graph, ctx.results)
+    return run_independent_units(
+        ctx.community_map, ctx.credits, ctx.anime_map, ctx.person_fe
+    )

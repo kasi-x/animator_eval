@@ -32,9 +32,13 @@ def genre_ecosystem(ctx: PipelineContext) -> Any:
 
 
 def genre_network(ctx: PipelineContext) -> Any:
-    """Compute genre co-occurrence network."""
+    """Compute genre co-occurrence network.
+
+    Uses list(anime_map.values()) to avoid depending on anime_list,
+    which is cleared after Phase 9 batch 1.
+    """
     from src.analysis.genre.network import compute_genre_network
-    return compute_genre_network(ctx.credits, ctx.anime_map)
+    return compute_genre_network(list(ctx.anime_map.values()))
 
 
 def genre_quality(ctx: PipelineContext) -> Any:
@@ -44,6 +48,12 @@ def genre_quality(ctx: PipelineContext) -> Any:
 
 
 def genre_whitespace(ctx: PipelineContext) -> Any:
-    """Identify underserved genre whitespace (business brief input)."""
-    from src.analysis.genre.whitespace import run_genre_whitespace
-    return run_genre_whitespace(ctx.credits, ctx.anime_map, ctx.results)
+    """Identify underserved genre whitespace (business brief input).
+
+    H-1 stub: run_genre_whitespace expects dict[genre, {cagr_5y, penetration, ...}]
+    but compute_genre_ecosystem returns a GenreEcosystemResult dataclass with
+    different field names. Proper conversion will be wired in H-2.
+    """
+    import structlog
+    structlog.get_logger().debug("genre_whitespace_skipped", reason="h1_interface_mismatch")
+    return {}

@@ -78,13 +78,13 @@ def role_flow(ctx: PipelineContext) -> Any:
 def transitions(ctx: PipelineContext) -> Any:
     """Compute role transition matrix."""
     from src.analysis.transitions import compute_role_transitions
-    return compute_role_transitions(ctx.credits)
+    return compute_role_transitions(ctx.credits, ctx.anime_map)
 
 
 def time_series(ctx: PipelineContext) -> Any:
     """Compute time-series scores for trend analysis."""
     from src.analysis.time_series import compute_time_series
-    return compute_time_series(ctx.results, ctx.credits, ctx.anime_map)
+    return compute_time_series(ctx.credits, ctx.anime_map)
 
 
 def decade_analysis(ctx: PipelineContext) -> Any:
@@ -96,19 +96,17 @@ def decade_analysis(ctx: PipelineContext) -> Any:
 def bridges(ctx: PipelineContext) -> Any:
     """Detect bridge persons connecting communities."""
     from src.analysis.network.bridges import detect_bridges
-    if ctx.collaboration_graph is None:
-        return {}
-    return detect_bridges(ctx.collaboration_graph, ctx.results)
+    return detect_bridges(ctx.credits, collaboration_graph=ctx.collaboration_graph)
 
 
 def mentorships(ctx: PipelineContext) -> Any:
     """Infer and build mentorship tree."""
     from src.analysis.mentorship import build_mentorship_tree, infer_mentorships
-    inferred = infer_mentorships(ctx.credits, ctx.results)
+    inferred = infer_mentorships(ctx.credits, ctx.anime_map)
     return build_mentorship_tree(inferred)
 
 
 def milestones(ctx: PipelineContext) -> Any:
     """Compute career milestones for each person."""
     from src.analysis.milestones import compute_milestones
-    return compute_milestones(ctx.credits, ctx.results, ctx.anime_map)
+    return compute_milestones(ctx.credits, ctx.anime_map)

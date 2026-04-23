@@ -144,10 +144,12 @@ class TestCoreNodesMinimal:
         result = collaborations(minimal_context)
         assert result == []
 
-    def test_bridges_skips_without_graph(self, minimal_context):
+    def test_bridges_without_graph_returns_empty_result(self, minimal_context):
         from src.pipeline_phases.hamilton_modules.core import bridges
         result = bridges(minimal_context)
-        assert result == {}
+        # detect_bridges returns a valid empty structure even without a graph
+        assert isinstance(result, dict)
+        assert result.get("bridge_persons", []) == []
 
 
 # ---------------------------------------------------------------------------
