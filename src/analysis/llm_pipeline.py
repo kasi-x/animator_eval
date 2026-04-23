@@ -5,7 +5,7 @@ Uses local Ollama (Qwen3) for tasks that rule-based approaches cannot handle:
 2. Name normalization (parenthetical removal, multi-person splitting)
 3. Entity resolution candidates (similarity 0.85-0.95 range)
 
-All operations cache results in the SQLite database (llm_decisions table)
+All operations cache results in the DuckDB cache file (cache.duckdb)
 to avoid redundant LLM calls.
 Graceful degradation: returns empty results if Ollama unavailable.
 """
@@ -13,12 +13,16 @@ Graceful degradation: returns empty results if Ollama unavailable.
 import json
 import os
 import re
-import sqlite3
 from dataclasses import dataclass, field
 
 import httpx
 import structlog
 
+from src.analysis.calc_cache import (
+    get_all_llm_decisions_bulk,
+    get_llm_decision,
+    upsert_llm_decision,
+)
 from src.models import Person
 from src.utils.config import (
     LLM_BASE_URL,
@@ -119,24 +123,32 @@ def _extract_json_array(text: str) -> list[dict] | None:
 # ---------------------------------------------------------------------------
 
 
-def _load_db_cache(conn: sqlite3.Connection, task: str) -> dict[str, dict]:
-    """Load all cached decisions for a task from DB."""
-    from src.database import get_all_llm_decisions
+def _load_db_cache(conn, task: str) -> dict[str, dict]:
+    """Load all cached decisions for a task from DuckDB cache.
 
+    Args:
+        conn: Ignored (kept for API compatibility). Uses DEFAULT_CACHE_PATH.
+        task: Task identifier (e.g. 'org_classification', 'name_normalization').
+
+    Returns:
+        Dictionary {name: result_dict} or empty dict on error.
+    """
     try:
-        return get_all_llm_decisions(conn, task)
+        return get_all_llm_decisions_bulk(task)
     except Exception:
-        # Table may not exist yet (pre-migration)
         return {}
 
 
-def _save_db_decision(
-    conn: sqlite3.Connection, name: str, task: str, result: dict
-) -> None:
-    """Save a single decision to DB."""
-    from src.database import upsert_llm_decision
+def _save_db_decision(conn, name: str, task: str, result: dict) -> None:
+    """Save a single decision to DuckDB cache.
 
-    upsert_llm_decision(conn, name, task, result, model=LLM_MODEL_NAME)
+    Args:
+        conn: Ignored (kept for API compatibility). Uses DEFAULT_CACHE_PATH.
+        name: Entity name (e.g. person name, studio name).
+        task: Task identifier (e.g. 'org_classification', 'name_normalization').
+        result: Decision result as a dict.
+    """
+    upsert_llm_decision(name, task, result, model=LLM_MODEL_NAME)
 
 
 # ---------------------------------------------------------------------------
@@ -174,13 +186,13 @@ class OrgClassificationResult:
 def classify_person_or_org(
     persons: list[Person],
     studio_names: set[str] | None = None,
-    conn: sqlite3.Connection | None = None,
+    conn=None,
 ) -> OrgClassificationResult:
     """Classify ambiguous person entries as individual or organization.
 
     Strategy:
     1. Cross-reference with known studio names (instant, no LLM needed)
-    2. Check DB cache for previous decisions
+    2. Check DuckDB cache for previous decisions
     3. Send remaining ambiguous names to LLM in batches
 
     Only processes names that are ambiguous (no hiragana, potentially org-like).
@@ -188,15 +200,13 @@ def classify_person_or_org(
     Args:
         persons: All person entries to check
         studio_names: Known studio/company names from DB
-        conn: Database connection for caching (optional)
+        conn: Ignored (kept for API compatibility)
 
     Returns:
         OrgClassificationResult with org_ids and person_ids
     """
     result = OrgClassificationResult()
-    org_cache: dict[str, dict] = {}
-    if conn is not None:
-        org_cache = _load_db_cache(conn, _TASK_ORG)
+    org_cache = _load_db_cache(conn, _TASK_ORG)
 
     hiragana_re = re.compile(r"[\u3041-\u3096]")
 
@@ -295,9 +305,8 @@ def classify_person_or_org(
             name = item.get("name", "")
             classification = item.get("type", "person")
 
-            # Save to DB cache
-            if conn is not None:
-                _save_db_decision(conn, name, _TASK_ORG, {"type": classification})
+            # Save to DuckDB cache
+            _save_db_decision(conn, name, _TASK_ORG, {"type": classification})
 
             for p in name_to_persons.get(name, []):
                 if classification == "org":
@@ -318,10 +327,6 @@ def classify_person_or_org(
             batch=batch_start,
             classified=len(items),
         )
-
-    # Commit batch of decisions
-    if conn is not None:
-        conn.commit()
 
     result.total_classified = (
         result.from_cache + result.from_llm + result.from_studio_db
@@ -370,7 +375,7 @@ class NameNormResult:
 
 def normalize_names(
     persons: list[Person],
-    conn: sqlite3.Connection | None = None,
+    conn=None,
 ) -> list[NameNormResult]:
     """Normalize person names using LLM for ambiguous cases.
 
@@ -381,7 +386,7 @@ def normalize_names(
 
     Args:
         persons: Person entries to normalize
-        conn: Database connection for caching (optional)
+        conn: Ignored (kept for API compatibility)
 
     Returns:
         List of NameNormResult for entries that need changes
@@ -409,9 +414,7 @@ def normalize_names(
     if not is_llm_enabled():
         return []
 
-    norm_cache: dict[str, dict] = {}
-    if conn is not None:
-        norm_cache = _load_db_cache(conn, _TASK_NORM)
+    norm_cache = _load_db_cache(conn, _TASK_NORM)
 
     results: list[NameNormResult] = []
     uncached: list[Person] = []
@@ -478,8 +481,7 @@ def normalize_names(
                 "episode_info": episode_info,
                 "is_org": is_org,
             }
-            if conn is not None:
-                _save_db_decision(conn, original, _TASK_NORM, decision)
+            _save_db_decision(conn, original, _TASK_NORM, decision)
 
             results.append(
                 NameNormResult(
@@ -491,10 +493,6 @@ def normalize_names(
             )
 
         logger.debug("name_normalization_batch", batch=batch_start, results=len(items))
-
-    # Commit batch of decisions
-    if conn is not None:
-        conn.commit()
 
     logger.info(
         "name_normalization_complete",

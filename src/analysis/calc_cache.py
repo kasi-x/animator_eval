@@ -3,6 +3,9 @@
 Tracks (scope, calc_name) -> input_hash for Phase 9 analysis modules so
 tasks with unchanged inputs can be skipped on re-runs.
 
+Also caches LLM decisions (org_classification, name_normalization) to avoid
+redundant LLM calls.
+
 Stored in a dedicated cache.duckdb file so the pipeline's atomic swap of
 gold.duckdb (see src/analysis/gold_writer.py) does not wipe the cache.
 
@@ -11,6 +14,7 @@ file) and keeps us off any long-lived inode in case an admin rotates
 cache.duckdb out of band.
 """
 
+import json
 import os
 from contextlib import contextmanager
 from pathlib import Path
@@ -39,6 +43,17 @@ CREATE INDEX IF NOT EXISTS idx_calc_exec_scope_hash
     ON calc_execution_records(scope, input_hash);
 """
 
+_LLM_DDL = """
+CREATE TABLE IF NOT EXISTS llm_decisions (
+    name        VARCHAR NOT NULL,
+    task        VARCHAR NOT NULL,
+    result_json VARCHAR NOT NULL,
+    model       VARCHAR NOT NULL DEFAULT '',
+    updated_at  TIMESTAMP NOT NULL DEFAULT current_timestamp,
+    PRIMARY KEY (name, task)
+);
+"""
+
 _UPSERT_SQL = """
 INSERT INTO calc_execution_records
     (scope, calc_name, input_hash, status, output_path, computed_at)
@@ -60,6 +75,7 @@ def _connect(path: Path | str | None = None) -> Generator[duckdb.DuckDBPyConnect
     try:
         conn.execute("SET memory_limit='512MB'")
         conn.execute(_DDL)
+        conn.execute(_LLM_DDL)
         yield conn
     finally:
         conn.close()
@@ -114,3 +130,98 @@ def record_calc_executions_batch(
     with _connect(path) as conn:
         conn.executemany(_UPSERT_SQL, params)
     logger.debug("calc_cache_recorded", scope=scope, n_items=len(items))
+
+
+# ---------------------------------------------------------------------------
+# LLM decision cache
+# ---------------------------------------------------------------------------
+
+
+def get_all_llm_decisions_bulk(
+    task: str, *, path: Path | str | None = None
+) -> dict[str, dict]:
+    """Fetch all cached LLM decisions for a given task.
+
+    Args:
+        task: Task identifier (e.g. 'org_classification', 'name_normalization').
+        path: Override cache file path; defaults to DEFAULT_CACHE_PATH.
+
+    Returns:
+        Dictionary {name: result_dict} for all entries in the given task.
+        Silently skips rows where result_json cannot be parsed.
+    """
+    with _connect(path) as conn:
+        rows = conn.execute(
+            "SELECT name, result_json FROM llm_decisions WHERE task = ?",
+            [task],
+        ).fetchall()
+    result = {}
+    for name, result_json in rows:
+        try:
+            result[name] = json.loads(result_json)
+        except json.JSONDecodeError:
+            logger.warning("llm_cache_malformed_json", name=name, task=task)
+    return result
+
+
+def upsert_llm_decision(
+    name: str,
+    task: str,
+    result: dict,
+    model: str = "",
+    *,
+    path: Path | str | None = None,
+) -> None:
+    """Save or update an LLM decision.
+
+    Upserts on (name, task) primary key — overwrites if already present.
+
+    Args:
+        name: Entity name (e.g. person name, studio name).
+        task: Task identifier (e.g. 'org_classification', 'name_normalization').
+        result: Decision result as a dict, serialized to JSON.
+        model: Model name (optional, e.g. 'qwen-3').
+        path: Override cache file path; defaults to DEFAULT_CACHE_PATH.
+    """
+    result_json = json.dumps(result, ensure_ascii=False)
+    with _connect(path) as conn:
+        conn.execute(
+            """
+            INSERT INTO llm_decisions (name, task, result_json, model, updated_at)
+            VALUES (?, ?, ?, ?, current_timestamp)
+            ON CONFLICT (name, task) DO UPDATE SET
+                result_json = excluded.result_json,
+                model = excluded.model,
+                updated_at = excluded.updated_at
+            """,
+            [name, task, result_json, model],
+        )
+
+
+def get_llm_decision(
+    name: str,
+    task: str,
+    *,
+    path: Path | str | None = None,
+) -> dict | None:
+    """Fetch a single cached LLM decision.
+
+    Args:
+        name: Entity name (e.g. person name, studio name).
+        task: Task identifier (e.g. 'org_classification', 'name_normalization').
+        path: Override cache file path; defaults to DEFAULT_CACHE_PATH.
+
+    Returns:
+        Decision result dict, or None if not found or unparseable.
+    """
+    with _connect(path) as conn:
+        rows = conn.execute(
+            "SELECT result_json FROM llm_decisions WHERE name = ? AND task = ?",
+            [name, task],
+        ).fetchall()
+    if not rows:
+        return None
+    try:
+        return json.loads(rows[0][0])
+    except (json.JSONDecodeError, IndexError):
+        return None
