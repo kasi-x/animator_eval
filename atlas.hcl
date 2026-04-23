@@ -23,10 +23,27 @@ env "dev" {
   }
 }
 
+env "duckdb" {
+  src = "file://migrations/duckdb"
+  dev = "duckdb://result/silver.duckdb"
+
+  migration {
+    dir = "file://migrations/duckdb"
+  }
+
+  format {
+    migrate {
+      diff = <<-EOM
+        {{ sql . "  " }}
+      EOM
+    }
+  }
+}
+
 env "prod" {
   src = "src/models_v2.py"
   src = "sqlite://./data/animetor_prod.db"  # Production database (read-only inspection)
-  
+
   migration {
     dir = "migrations/atlas"
   }

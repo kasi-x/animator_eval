@@ -47,7 +47,7 @@
 
 - [x] `compute_feat_studio_affiliation` DuckDB 移植 — silver に studios/anime_studios ETL 追加、feat_precompute.py に compute_feat_studio_affiliation_ddb() 追加、pipeline Phase 1.5 組み込み (2026-04-24)
 - [x] Entity resolution 書き込み経路 DuckDB 化 — gold_writer.py に ops_entity_resolution_audit DDL + write_entity_resolution_audit_ddb() 追加 (2026-04-24)
-- [ ] Atlas migration DuckDB 環境再生成 (低優先度)
+- [x] Atlas migration DuckDB 環境再生成 — atlas.hcl に env "duckdb" 追加、migrations/legacy_sqlite/ へ旧 SQL 退避、migrations/duckdb/v1_initial.sql 生成 (2026-04-24)
 
 ---
 
@@ -59,9 +59,20 @@ H-1〜H-6 完了 (詳細: DONE.md)。実装計画: `docs/ARCHITECTURE_CLEANUP.md
 
 **ブロック要因**: VA pipeline が ctx を直接使用、export_and_viz.py に 71 箇所 ctx 参照。DuckDB §4 完了後が前提。
 
-- [ ] 全 Hamilton node を `ctx: PipelineContext` → 明示的 typed inputs に変換
+**進捗** (2026-04-24): Phase 1-4 pure function 化完了。`pipeline_types.py` + 3 phase ファイル変換済み。
+
+- [x] `pipeline_types.py` 作成 (LoadedData, EntityResolutionResult, GraphsResult, CoreScoresResult, SupplementaryMetricsResult, VAScoresResult)
+- [x] `data_loading.py` → pure function (→ LoadedData)
+- [x] `entity_resolution.py` → pure function (LoadedData → EntityResolutionResult)
+- [x] `graph_construction.py` → pure function (EntityResolutionResult → GraphsResult)
+- [x] Hamilton adapter 更新: loading.py, resolution.py
+- [x] metrics.py Phase 6 単純 8 nodes → typed inputs 変換 (engagement_decay, role_classification, career_analysis, director_circles, versatility_computed, network_density_computed, growth_trends_precomputed, career_tracks_inferred) (2026-04-24)
+- [ ] metrics.py centrality_metrics + betweenness_cache ノード分離
+- [ ] scoring.py Phase 5 の 8 nodes → typed inputs 変換
+- [ ] metrics.py 残り 8 nodes → typed inputs 変換
+- [ ] `assembly.py` Hamilton node + `result_assembly.py` / `post_processing.py` 変換
 - [ ] VA pipeline を Hamilton module 化 (or ctx を受け取らない形に refactor)
-- [ ] `export_and_viz.py` を ExportSpec registry 経由の pure function 群に分解
+- [ ] `export_and_viz.py` を ExportContext 置き換え + pure function 群に分解
 - [ ] `src/pipeline_phases/context.py` を削除
 
 ---

@@ -12,8 +12,6 @@ from typing import Any
 
 from hamilton.function_modifiers import tag
 
-from src.pipeline_phases.context import PipelineContext
-
 NODE_NAMES: list[str] = [
     "engagement_decay",
     "role_classification",
@@ -36,40 +34,41 @@ NODE_NAMES: list[str] = [
 
 
 @tag(stage="phase6", cost="moderate", domain="metrics")
-def engagement_decay(ctx: PipelineContext, integrated_value_computation: Any) -> Any:
+def engagement_decay(
+    integrated_value_computation: Any,
+    credits: list,
+    anime_map: dict,
+) -> Any:
     """Engagement decay detection: directors whose hiring rate for an animator dropped.
 
-    Writes: ctx.decay_results.
     Depends on integrated_value_computation to run after Phase 5 completes.
     """
     from src.analysis.network.trust import batch_detect_engagement_decay
 
-    ctx.decay_results = batch_detect_engagement_decay(ctx.credits, ctx.anime_map)
-    return ctx.decay_results
+    return batch_detect_engagement_decay(credits, anime_map)
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")
-def role_classification(ctx: PipelineContext, engagement_decay: Any) -> Any:
-    """Primary role classification per person (animator / director / etc.).
-
-    Writes: ctx.role_profiles.
-    """
+def role_classification(
+    engagement_decay: Any,
+    credits: list,
+) -> Any:
+    """Primary role classification per person (animator / director / etc.)."""
     from src.analysis.graph import determine_primary_role_for_each_person
 
-    ctx.role_profiles = determine_primary_role_for_each_person(ctx.credits)
-    return ctx.role_profiles
+    return determine_primary_role_for_each_person(credits)
 
 
 @tag(stage="phase6", cost="moderate", domain="metrics")
-def career_analysis(ctx: PipelineContext, role_classification: Any) -> Any:
-    """Career trajectory analysis: stage, peak, active years.
-
-    Writes: ctx.career_data.
-    """
+def career_analysis(
+    role_classification: Any,
+    credits: list,
+    anime_map: dict,
+) -> Any:
+    """Career trajectory analysis: stage, peak, active years."""
     from src.analysis.career import batch_career_analysis
 
-    ctx.career_data = batch_career_analysis(ctx.credits, ctx.anime_map)
-    return ctx.career_data
+    return batch_career_analysis(credits, anime_map)
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")
@@ -111,27 +110,26 @@ def career_aware_dormancy_recomputed(ctx: PipelineContext, career_analysis: Any)
 
 
 @tag(stage="phase6", cost="moderate", domain="metrics")
-def director_circles(ctx: PipelineContext, career_aware_dormancy_recomputed: Any) -> Any:
-    """Director circles: frequent collaborator groups around each director.
-
-    Writes: ctx.circles.
-    """
+def director_circles(
+    career_aware_dormancy_recomputed: Any,
+    credits: list,
+    anime_map: dict,
+) -> Any:
+    """Director circles: frequent collaborator groups around each director."""
     from src.analysis.network.circles import find_director_circles
 
-    ctx.circles = find_director_circles(ctx.credits, ctx.anime_map)
-    return ctx.circles
+    return find_director_circles(credits, anime_map)
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")
-def versatility_computed(ctx: PipelineContext, director_circles: Any) -> Any:
-    """Versatility: breadth of role categories and specific roles per person.
-
-    Writes: ctx.versatility.
-    """
+def versatility_computed(
+    director_circles: Any,
+    credits: list,
+) -> Any:
+    """Versatility: breadth of role categories and specific roles per person."""
     from src.analysis.versatility import compute_versatility
 
-    ctx.versatility = compute_versatility(ctx.credits)
-    return ctx.versatility
+    return compute_versatility(credits)
 
 
 @tag(stage="phase6", cost="expensive", domain="metrics")
@@ -156,27 +154,26 @@ def centrality_metrics(ctx: PipelineContext, versatility_computed: Any) -> Any:
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")
-def network_density_computed(ctx: PipelineContext, centrality_metrics: Any) -> Any:
-    """Network density: collaborator count, unique anime, hub score per person.
-
-    Writes: ctx.network_density.
-    """
+def network_density_computed(
+    centrality_metrics: Any,
+    credits: list,
+) -> Any:
+    """Network density: collaborator count, unique anime, hub score per person."""
     from src.analysis.network.network_density import compute_network_density
 
-    ctx.network_density = compute_network_density(ctx.credits)
-    return ctx.network_density
+    return compute_network_density(credits)
 
 
 @tag(stage="phase6", cost="moderate", domain="metrics")
-def growth_trends_precomputed(ctx: PipelineContext, network_density_computed: Any) -> Any:
-    """Growth trends: rising / stable / declining career trajectory.
-
-    Writes: ctx.growth_data.
-    """
+def growth_trends_precomputed(
+    network_density_computed: Any,
+    credits: list,
+    anime_map: dict,
+) -> Any:
+    """Growth trends: rising / stable / declining career trajectory."""
     from src.analysis.growth import compute_growth_trends
 
-    ctx.growth_data = compute_growth_trends(ctx.credits, ctx.anime_map)
-    return ctx.growth_data
+    return compute_growth_trends(credits, anime_map)
 
 
 @tag(stage="phase6", cost="moderate", domain="metrics")
@@ -362,12 +359,12 @@ def potential_value_computed(ctx: PipelineContext, contribution_attribution_comp
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")
-def career_tracks_inferred(ctx: PipelineContext, potential_value_computed: Any) -> Any:
-    """Career track inference: animator / director / animator_director / etc.
-
-    Writes: ctx.career_tracks.
-    """
+def career_tracks_inferred(
+    potential_value_computed: Any,
+    credits: list,
+    anime_map: dict,
+) -> Any:
+    """Career track inference: animator / director / animator_director / etc."""
     from src.analysis.network.multilayer import infer_all_career_tracks
 
-    ctx.career_tracks = infer_all_career_tracks(ctx.credits, ctx.anime_map)
-    return ctx.career_tracks
+    return infer_all_career_tracks(credits, anime_map)
