@@ -70,15 +70,15 @@ class _FakeCtx:
 
 
 class TestCheckpointHook:
-    def test_saves_after_results_post_processed(self, tmp_path):
+    def test_saves_after_ctx_results_populated(self, tmp_path):
         from src.pipeline_phases.lifecycle import CheckpointHook
 
         hook = CheckpointHook(checkpoint_dir=tmp_path)
         ctx = _FakeCtx()
 
-        hook.run_before_node_execution(node_name="results_post_processed", node_tags={})
+        hook.run_before_node_execution(node_name="ctx_results_populated", node_tags={})
         hook.run_after_node_execution(
-            node_name="results_post_processed",
+            node_name="ctx_results_populated",
             node_kwargs={"ctx": ctx, "results_assembled": []},
             success=True,
         )
@@ -95,9 +95,9 @@ class TestCheckpointHook:
         hook = CheckpointHook(checkpoint_dir=tmp_path)
         ctx = _FakeCtx()
 
-        hook.run_before_node_execution(node_name="results_post_processed", node_tags={})
+        hook.run_before_node_execution(node_name="ctx_results_populated", node_tags={})
         hook.run_after_node_execution(
-            node_name="results_post_processed",
+            node_name="ctx_results_populated",
             node_kwargs={"ctx": ctx},
             success=False,
         )
@@ -124,9 +124,9 @@ class TestCheckpointHook:
 
         hook = CheckpointHook(checkpoint_dir=tmp_path)
 
-        hook.run_before_node_execution(node_name="results_post_processed", node_tags={})
+        hook.run_before_node_execution(node_name="ctx_results_populated", node_tags={})
         hook.run_after_node_execution(
-            node_name="results_post_processed",
+            node_name="ctx_results_populated",
             node_kwargs={},  # no ctx
             success=True,
         )
@@ -139,9 +139,9 @@ class TestCheckpointHook:
         hook = CheckpointHook(checkpoint_dir=tmp_path)
         ctx = _FakeCtx()
 
-        hook.run_before_node_execution(node_name="results_post_processed", node_tags={})
+        hook.run_before_node_execution(node_name="ctx_results_populated", node_tags={})
         hook.run_after_node_execution(
-            node_name="results_post_processed",
+            node_name="ctx_results_populated",
             node_kwargs={"ctx": ctx},
             success=True,
         )

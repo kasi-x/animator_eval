@@ -1,7 +1,7 @@
 """Phase 5: Core Scoring nodes for Hamilton DAG (H-4).
 
 H-4 pattern: nodes take EntityResolutionResult / GraphsResult typed bags instead of
-ctx: PipelineContext.  ctx_core_populated bridges the results back to ctx for
+ctx: dict.  ctx_core_populated bridges the results back to ctx for
 Phase 9 (analysis_modules) and Phase 10 (export_and_viz) compatibility.
 """
 

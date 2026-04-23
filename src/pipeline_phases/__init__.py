@@ -24,7 +24,6 @@ from src.utils.import_guard import install_display_lookup_boundary_guard
 install_display_lookup_boundary_guard()
 
 from src.pipeline_phases.analysis_modules import run_analysis_modules_phase
-from src.pipeline_phases.context import PipelineCheckpoint, PipelineContext
 from src.pipeline_phases.core_scoring import compute_core_scores_phase
 from src.pipeline_phases.data_loading import load_pipeline_data
 from src.pipeline_phases.entity_resolution import run_entity_resolution
@@ -77,8 +76,6 @@ def __getattr__(name):
 
 
 __all__ = [
-    "PipelineCheckpoint",
-    "PipelineContext",
     "load_pipeline_data",
     "run_validation_phase",
     "run_entity_resolution",

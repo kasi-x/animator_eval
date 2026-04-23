@@ -2288,11 +2288,8 @@ def pipeline_node(
             console.print(f"Did you mean: {', '.join(close)}")
         raise typer.Exit(1)
 
-    from src.pipeline_phases.context import PipelineContext
-    ctx = PipelineContext(visualize=False, dry_run=False)
-
     try:
-        result = dr.execute([node_name], inputs={"ctx": ctx})
+        result = dr.execute([node_name])
         value = result.get(node_name)
         console.print(f"[green]✓[/green] {node_name}: ", end="")
         if isinstance(value, (dict, list)):

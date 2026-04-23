@@ -25,12 +25,11 @@ from src.analysis.anime_value import compute_anime_values
 from src.analysis.contribution_attribution import compute_contribution_attribution
 from src.analysis.network.multilayer import infer_all_career_tracks
 from src.analysis.scoring.potential_value import compute_potential_value_scores
-from src.pipeline_phases.context import PipelineContext
 
 logger = structlog.get_logger()
 
 
-def compute_supplementary_metrics_phase(context: PipelineContext) -> None:
+def compute_supplementary_metrics_phase(context: dict) -> None:
     """Compute supplementary metrics beyond the core scores.
 
     Metrics computed:

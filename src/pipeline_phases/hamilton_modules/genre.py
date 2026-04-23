@@ -9,7 +9,6 @@ from hamilton.function_modifiers import tag
 
 from typing import Any
 
-from src.pipeline_phases.context import PipelineContext
 
 
 NODE_NAMES: list[str] = [
@@ -22,21 +21,21 @@ NODE_NAMES: list[str] = [
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def genre_affinity(ctx: PipelineContext) -> Any:
+def genre_affinity(ctx: dict) -> Any:
     """Compute genre affinity scores per person."""
     from src.analysis.genre.affinity import compute_genre_affinity
     return compute_genre_affinity(ctx.credits, ctx.anime_map)
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def genre_ecosystem(ctx: PipelineContext) -> Any:
+def genre_ecosystem(ctx: dict) -> Any:
     """Compute genre ecosystem health metrics."""
     from src.analysis.genre.ecosystem import compute_genre_ecosystem
     return compute_genre_ecosystem(ctx.credits, ctx.anime_map, ctx.results)
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def genre_network(ctx: PipelineContext) -> Any:
+def genre_network(ctx: dict) -> Any:
     """Compute genre co-occurrence network.
 
     Uses list(anime_map.values()) to avoid depending on anime_list,
@@ -47,14 +46,14 @@ def genre_network(ctx: PipelineContext) -> Any:
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def genre_quality(ctx: PipelineContext) -> Any:
+def genre_quality(ctx: dict) -> Any:
     """Compute genre quality metrics."""
     from src.analysis.genre.quality import compute_genre_quality
     return compute_genre_quality(ctx.credits, ctx.anime_map, ctx.results)
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def genre_whitespace(ctx: PipelineContext) -> Any:
+def genre_whitespace(ctx: dict) -> Any:
     """Identify underserved genre whitespace (business brief input).
 
     H-1 stub: run_genre_whitespace expects dict[genre, {cagr_5y, penetration, ...}]

@@ -13,7 +13,6 @@ from typing import Any
 
 from hamilton.function_modifiers import tag
 
-from src.pipeline_phases.context import PipelineContext
 from src.pipeline_phases.pipeline_types import EntityResolutionResult, GraphsResult
 
 NODE_NAMES: list[str] = [
@@ -25,7 +24,7 @@ NODE_NAMES: list[str] = [
 
 
 @tag(stage="phase3", cost="moderate", domain="resolution")
-def entity_resolution_run(ctx: PipelineContext, data_validated: Any) -> Any:
+def entity_resolution_run(ctx: dict, data_validated: Any) -> Any:
     """5-step entity resolution: exact → cross-source → romaji → similarity → AI (Phase 3).
 
     Deduplicates person and anime entities across sources (AniList, MADB, etc.),
@@ -57,7 +56,7 @@ def entity_resolution_run(ctx: PipelineContext, data_validated: Any) -> Any:
 
 
 @tag(stage="phase4", cost="expensive", domain="resolution")
-def graphs_built(ctx: PipelineContext, entity_resolution_run: Any) -> Any:
+def graphs_built(ctx: dict, entity_resolution_run: Any) -> Any:
     """Build person-anime bipartite graph, collaboration graph, community map (Phase 4).
 
     Graph edges use structural weights only: role_weight × episode_coverage × duration_mult.
@@ -94,7 +93,7 @@ def graphs_built(ctx: PipelineContext, entity_resolution_run: Any) -> Any:
 
 
 @tag(stage="phase4", cost="cheap", domain="resolution")
-def entity_resolved(entity_resolution_run: Any, ctx: PipelineContext) -> EntityResolutionResult:
+def entity_resolved(entity_resolution_run: Any, ctx: dict) -> EntityResolutionResult:
     """H-4 bridge: expose post-resolution data as EntityResolutionResult for scoring nodes."""
     return EntityResolutionResult(
         resolved_credits=ctx.credits,
@@ -106,7 +105,7 @@ def entity_resolved(entity_resolution_run: Any, ctx: PipelineContext) -> EntityR
 
 
 @tag(stage="phase4", cost="cheap", domain="resolution")
-def graphs_result(graphs_built: Any, ctx: PipelineContext) -> GraphsResult:
+def graphs_result(graphs_built: Any, ctx: dict) -> GraphsResult:
     """H-4 bridge: expose post-graph-construction data as GraphsResult for scoring nodes."""
     return GraphsResult(
         person_anime_graph=ctx.person_anime_graph,

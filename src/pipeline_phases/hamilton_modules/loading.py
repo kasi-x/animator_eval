@@ -1,13 +1,12 @@
-"""Phase 1+2: Data Loading and Validation nodes for Hamilton DAG (H-3/H-4).
+"""Phase 1+2: Data Loading and Validation nodes for Hamilton DAG (H-5).
 
 Nodes:
-  - ctx: creates PipelineContext from primitive inputs (H-4 DAG entry point)
   - raw_data_loaded: loads persons, anime, credits from silver.duckdb (Phase 1)
   - data_validated: runs quality checks (Phase 2)
 
-H-4: pipeline.py passes {"visualize": bool, "dry_run": bool} as Driver inputs.
-     Hamilton computes ctx from those, then all downstream nodes receive ctx.
-     Tests can still override ctx directly: dr.execute(..., inputs={"ctx": ctx_fixture}).
+H-5: pipeline.py passes {"visualize": bool, "dry_run": bool} as Driver inputs.
+     Hamilton loads data and returns typed LoadedData.
+     Tests pass loaded_data directly: dr.execute(..., inputs={"loaded_data": fixture}).
 """
 
 from __future__ import annotations
@@ -16,48 +15,27 @@ from typing import Any
 
 from hamilton.function_modifiers import tag
 
-from src.pipeline_phases.context import PipelineContext
+from src.pipeline_phases.pipeline_types import LoadedData
 
 NODE_NAMES: list[str] = [
-    "ctx",
     "raw_data_loaded",
     "data_validated",
 ]
 
 
-@tag(stage="init", cost="cheap", domain="loading")
-def ctx(visualize: bool, dry_run: bool) -> PipelineContext:
-    """Create PipelineContext from primitive pipeline inputs (H-4 DAG entry point).
-
-    H-4: pipeline.py passes visualize/dry_run; all downstream nodes receive ctx
-    via this computed node rather than from external input.
-    Tests override with inputs={"ctx": fixture} which bypasses this node.
-    """
-    return PipelineContext(visualize=visualize, dry_run=dry_run)
-
-
 @tag(stage="phase1", cost="moderate", domain="loading")
-def raw_data_loaded(ctx: PipelineContext) -> Any:
+def raw_data_loaded(visualize: bool, dry_run: bool) -> LoadedData:
     """Load persons, anime, and credits from silver.duckdb (Phase 1).
 
-    Writes: ctx.persons, ctx.anime_list, ctx.credits, ctx.anime_map.
+    Returns: LoadedData with persons, anime_list, credits, anime_map.
     """
     from src.pipeline_phases.data_loading import load_pipeline_data
 
-    loaded = load_pipeline_data(ctx.visualize, ctx.dry_run)
-    ctx.persons = loaded.persons
-    ctx.anime_list = loaded.anime_list
-    ctx.credits = loaded.credits
-    ctx.anime_map = loaded.anime_map
-    return {
-        "person_count": len(ctx.persons),
-        "anime_count": len(ctx.anime_list),
-        "credit_count": len(ctx.credits),
-    }
+    return load_pipeline_data(visualize, dry_run)
 
 
 @tag(stage="phase2", cost="cheap", domain="loading")
-def data_validated(ctx: PipelineContext, raw_data_loaded: Any) -> Any:
+def data_validated(loaded_data: LoadedData, raw_data_loaded: LoadedData) -> Any:
     """Run data quality checks against silver.duckdb (Phase 2).
 
     Returns a ValidationResult (passed, errors, warnings).
@@ -65,4 +43,4 @@ def data_validated(ctx: PipelineContext, raw_data_loaded: Any) -> Any:
     """
     from src.pipeline_phases.validation import run_validation_phase
 
-    return run_validation_phase(ctx)
+    return run_validation_phase(loaded_data)

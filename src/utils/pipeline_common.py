@@ -20,7 +20,7 @@ def phase_step(context, name: str):
     """Start-log + performance-measure wrapper for any pipeline step.
 
     Args:
-        context: PipelineContext instance with monitor attribute
+        context: dict instance with monitor attribute
         name: Step name for logging
 
     Usage:
@@ -38,7 +38,7 @@ def skip_if_no_credits(context, credits: list, phase_log_name: str) -> bool:
     Generic version supporting both main and VA pipelines.
 
     Args:
-        context: PipelineContext instance (for type hint context)
+        context: dict instance (for type hint context)
         credits: Credit list to check
         phase_log_name: Phase identifier for logging
 

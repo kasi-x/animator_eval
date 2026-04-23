@@ -137,8 +137,7 @@ def run_scoring_pipeline(
 
     # ── Hamilton: Phases 1-9 ─────────────────────────────────────────────────
     from src.pipeline_phases.analysis_modules import run_analysis_modules_phase
-    from src.pipeline_phases.context import PipelineCheckpoint
-
+    
     if dry_run:
         dr = _build_driver()
         result = dr.execute(
@@ -188,7 +187,7 @@ def run_scoring_pipeline(
         # Full Phase 1-8 run with CheckpointHook enabled
         dr = _build_driver(with_checkpoint=True)
         result = dr.execute(
-            ["results_post_processed", "ctx"],
+            ["ctx_results_populated", "ctx"],
             inputs={"visualize": visualize, "dry_run": False},
         )
         ctx = result["ctx"]
@@ -223,8 +222,7 @@ def run_scoring_pipeline(
     export_and_visualize_phase(ctx, elapsed)
 
     # ── Checkpoint cleanup ────────────────────────────────────────────────────
-    from src.pipeline_phases.context import PipelineCheckpoint
-
+    
     PipelineCheckpoint(JSON_DIR).delete()
 
     # ── Performance report ────────────────────────────────────────────────────

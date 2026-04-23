@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
@@ -9,6 +10,8 @@ from datetime import datetime
 
 import structlog
 from bs4 import BeautifulSoup
+
+from src.utils.name_utils import assign_native_name_fields
 
 log = structlog.get_logger()
 
@@ -66,6 +69,9 @@ class AnnPersonDetail:
     ann_id: int
     name_en: str
     name_ja: str = ""
+    name_ko: str = ""
+    name_zh: str = ""
+    names_alt: str = "{}"
     date_of_birth: str | None = None  # YYYY-MM-DD
     hometown: str | None = None
     blood_type: str | None = None
@@ -347,10 +353,17 @@ def parse_person_html(html: str, ann_id: int) -> AnnPersonDetail | None:
         elif fname == "description":
             description = val[:2000]
 
+    # Route name_ja via script detection (ANN has no native script info, so fallback to empty nationality)
+    name_ja_routed, name_ko_routed, name_zh_routed, names_alt_dict = assign_native_name_fields(name_ja, [])
+    names_alt_json = json.dumps(names_alt_dict, ensure_ascii=False) if names_alt_dict else "{}"
+
     return AnnPersonDetail(
         ann_id=ann_id,
         name_en=name_en,
-        name_ja=name_ja,
+        name_ja=name_ja_routed,
+        name_ko=name_ko_routed,
+        name_zh=name_zh_routed,
+        names_alt=names_alt_json,
         date_of_birth=date_of_birth,
         hometown=hometown,
         blood_type=blood_type,

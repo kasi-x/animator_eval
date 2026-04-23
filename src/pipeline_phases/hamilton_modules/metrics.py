@@ -1,7 +1,7 @@
 """Phase 6: Supplementary Metrics nodes for Hamilton DAG (H-4).
 
 H-4 pattern: nodes take EntityResolutionResult / GraphsResult / CoreScoresResult typed
-bags instead of ctx: PipelineContext.  ctx_metrics_populated bridges the results back
+bags instead of ctx: dict.  ctx_metrics_populated bridges the results back
 to ctx for Phase 9/10 compatibility.
 """
 

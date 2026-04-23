@@ -88,7 +88,6 @@ from src.analysis.calc_cache import (
     get_calc_execution_hashes,
     record_calc_executions_batch,
 )
-from src.pipeline_phases.context import PipelineContext
 
 # New analysis modules (Phase 2A-2N)
 from src.analysis.attrition.entry_cohort_attrition import run_entry_cohort_attrition
@@ -126,33 +125,33 @@ class AnalysisTask:
     """
 
     name: str
-    function: Callable[[PipelineContext], Any]
+    function: Callable[[dict], Any]
     monitor_step: str | None = None
-    condition: Callable[[PipelineContext], bool] | None = None
+    condition: Callable[[dict], bool] | None = None
     needs_collab_graph: bool = False
     memory_heavy: bool = False  # Run sequentially in batch 2b to avoid OOM
 
 
-def _run_anime_stats(context: PipelineContext) -> Any:
+def _run_anime_stats(context: dict) -> Any:
     """Compute anime quality statistics."""
     return compute_anime_stats(context.credits, context.anime_map, context.iv_scores)
 
 
-def _run_studios(context: PipelineContext) -> Any:
+def _run_studios(context: dict) -> Any:
     """Compute studio performance analysis."""
     return compute_studio_analysis(
         context.credits, context.anime_map, context.iv_scores
     )
 
 
-def _run_seasonal(context: PipelineContext) -> Any:
+def _run_seasonal(context: dict) -> Any:
     """Compute seasonal activity patterns."""
     return compute_seasonal_trends(
         context.credits, context.anime_map, context.iv_scores
     )
 
 
-def _run_collaborations(context: PipelineContext) -> Any:
+def _run_collaborations(context: dict) -> Any:
     """Compute strongest collaboration pairs."""
     # Skip if no graph — the O(n²) fallback is impractical for 167K+ persons
     if context.collaboration_graph is None:
@@ -168,12 +167,12 @@ def _run_collaborations(context: PipelineContext) -> Any:
     return pairs[:500] if pairs else []
 
 
-def _run_outliers(context: PipelineContext) -> Any:
+def _run_outliers(context: dict) -> Any:
     """Detect statistical outliers."""
     return detect_outliers(context.results)
 
 
-def _run_teams(context: PipelineContext) -> Any:
+def _run_teams(context: dict) -> Any:
     """Analyze team composition patterns."""
     # use top 5% of iv_score as the threshold for high-profile persons
     iv_vals = [r["iv_score"] for r in context.results if r["iv_score"] > 0]
@@ -190,7 +189,7 @@ def _run_teams(context: PipelineContext) -> Any:
     )
 
 
-def _run_graphml(context: PipelineContext) -> Any:
+def _run_graphml(context: dict) -> Any:
     """Export graph to GraphML format."""
     scores_for_graphml = {
         r["person_id"]: {
@@ -215,19 +214,19 @@ def _run_graphml(context: PipelineContext) -> Any:
     return {"path": str(graphml_file)}
 
 
-def _run_time_series(context: PipelineContext) -> Any:
+def _run_time_series(context: dict) -> Any:
     """Compute time series analysis."""
     return compute_time_series(context.credits, context.anime_map)
 
 
-def _run_decades(context: PipelineContext) -> Any:
+def _run_decades(context: dict) -> Any:
     """Compute decade analysis."""
     return compute_decade_analysis(
         context.credits, context.anime_map, context.iv_scores
     )
 
 
-def _run_tags(context: PipelineContext) -> Any:
+def _run_tags(context: dict) -> Any:
     """Compute person tags (auto-labeling).
 
     Returns tag assignments only — does NOT mutate context.results.
@@ -237,7 +236,7 @@ def _run_tags(context: PipelineContext) -> Any:
     return compute_person_tags(context.results)
 
 
-def _run_transitions(context: PipelineContext) -> Any:
+def _run_transitions(context: dict) -> Any:
     """Compute role transitions."""
     transitions = compute_role_transitions(context.credits, context.anime_map)
     # Convert dataclass objects to dicts for JSON serialization
@@ -252,12 +251,12 @@ def _run_transitions(context: PipelineContext) -> Any:
     }
 
 
-def _run_role_flow(context: PipelineContext) -> Any:
+def _run_role_flow(context: dict) -> Any:
     """Compute role flow analysis."""
     return compute_role_flow(context.credits, context.anime_map)
 
 
-def _run_bridges(context: PipelineContext) -> Any:
+def _run_bridges(context: dict) -> Any:
     """Detect bridge nodes in network using community detection."""
     # Reuse pre-computed community_map from Phase 4 (avoids redundant community
     # detection and works with both NetworkX and SparseCollaborationGraph)
@@ -269,7 +268,7 @@ def _run_bridges(context: PipelineContext) -> Any:
     )
 
 
-def _run_mentorships(context: PipelineContext) -> Any:
+def _run_mentorships(context: dict) -> Any:
     """Infer mentor-mentee relationships."""
     mentorships = infer_mentorships(
         context.credits, context.anime_map, min_shared_works=3
@@ -279,12 +278,12 @@ def _run_mentorships(context: PipelineContext) -> Any:
     return {"mentorships": mentorships, "mentorship_tree": mentorship_tree_data}
 
 
-def _run_milestones(context: PipelineContext) -> Any:
+def _run_milestones(context: dict) -> Any:
     """Compute career milestones."""
     return compute_milestones(context.credits, context.anime_map)
 
 
-def _run_network_evolution(context: PipelineContext) -> Any:
+def _run_network_evolution(context: dict) -> Any:
     """Compute network evolution over time."""
     return compute_network_evolution(
         context.credits,
@@ -293,7 +292,7 @@ def _run_network_evolution(context: PipelineContext) -> Any:
     )
 
 
-def _run_genre_affinity(context: PipelineContext) -> Any:
+def _run_genre_affinity(context: dict) -> Any:
     """Compute genre affinity scores."""
     person_genre_specialization = compute_genre_affinity(
         context.credits, context.anime_map
@@ -310,12 +309,12 @@ def _run_genre_affinity(context: PipelineContext) -> Any:
     return {}
 
 
-def _run_productivity(context: PipelineContext) -> Any:
+def _run_productivity(context: dict) -> Any:
     """Compute productivity metrics."""
     return compute_productivity(context.credits, context.anime_map)
 
 
-def _run_influence(context: PipelineContext) -> Any:
+def _run_influence(context: dict) -> Any:
     """Compute influence tree."""
     return compute_influence_tree(
         context.credits,
@@ -324,7 +323,7 @@ def _run_influence(context: PipelineContext) -> Any:
     )
 
 
-def _run_crossval(context: PipelineContext) -> Any:
+def _run_crossval(context: dict) -> Any:
     """Cross-validation (conditional: skip if too many persons)."""
     if len(context.results) >= 200:
         logger.info(
@@ -343,7 +342,7 @@ def _run_crossval(context: PipelineContext) -> Any:
     )
 
 
-def _run_bias_detector(context: PipelineContext) -> Any:
+def _run_bias_detector(context: dict) -> Any:
     """Systematic bias detection across roles, studios, career stages."""
     person_scores = context._shared_person_scores
 
@@ -361,7 +360,7 @@ def _run_bias_detector(context: PipelineContext) -> Any:
     return generate_bias_report(bias_results)
 
 
-def _run_compensation_analyzer(context: PipelineContext) -> Any:
+def _run_compensation_analyzer(context: dict) -> Any:
     """Fair compensation analysis with anime type adjustments."""
     # Build person_names dict
     person_names = context._shared_person_names
@@ -395,7 +394,7 @@ def _run_compensation_analyzer(context: PipelineContext) -> Any:
     return export_compensation_report(analyses, person_names, anime_scores=anime_scores)
 
 
-def _run_insights_report(context: PipelineContext) -> Any:
+def _run_insights_report(context: dict) -> Any:
     """Generate comprehensive insights report from all analyses."""
     person_scores = context._shared_person_scores
     person_names = context._shared_person_names
@@ -419,7 +418,7 @@ def _run_insights_report(context: PipelineContext) -> Any:
     return export_insights_report(insights)
 
 
-def _run_causal_identification(context: PipelineContext) -> Any:
+def _run_causal_identification(context: dict) -> Any:
     """Causal identification of major studio effects (selection vs treatment vs brand)."""
     person_scores = context._shared_person_scores
 
@@ -436,7 +435,7 @@ def _run_causal_identification(context: PipelineContext) -> Any:
     return export_identification_report(result)
 
 
-def _run_structural_estimation(context: PipelineContext) -> Any:
+def _run_structural_estimation(context: dict) -> Any:
     """Structural estimation with fixed effects and DID (research-grade structural estimation)."""
     person_scores = context._shared_person_scores
 
@@ -470,7 +469,7 @@ def _run_structural_estimation(context: PipelineContext) -> Any:
     return export_structural_estimation(result)
 
 
-def _run_individual_contribution(context: PipelineContext) -> Any:
+def _run_individual_contribution(context: dict) -> Any:
     """Compute individual contribution profiles (Layer 2 metrics)."""
     akm_residuals = context.akm_result.residuals if context.akm_result else None
     return asdict(
@@ -537,7 +536,7 @@ def _find_earliest_changed_year(
     return None
 
 
-def _run_temporal_pagerank(context: PipelineContext) -> Any:
+def _run_temporal_pagerank(context: dict) -> Any:
     """Compute temporal PageRank (yearly authority, foresight, promotions).
 
     Change-detection skip / minimal-range recomputation logic:
@@ -606,7 +605,7 @@ def _run_temporal_pagerank(context: PipelineContext) -> Any:
     return result_dict
 
 
-def _run_akm_diagnostics(context: PipelineContext) -> Any:
+def _run_akm_diagnostics(context: dict) -> Any:
     """Export AKM model diagnostics (connected set, R², mover analysis)."""
     if context.akm_result is None:
         return {}
@@ -623,7 +622,7 @@ def _run_akm_diagnostics(context: PipelineContext) -> Any:
     }
 
 
-def _run_iv_weights(context: PipelineContext) -> Any:
+def _run_iv_weights(context: dict) -> Any:
     """Export IV weight optimization results with normalization diagnostics."""
     result: dict = {
         "lambda_weights": context.iv_lambda_weights,
@@ -639,7 +638,7 @@ def _run_iv_weights(context: PipelineContext) -> Any:
     return result
 
 
-def _run_derived_params_report(context: PipelineContext) -> Any:
+def _run_derived_params_report(context: dict) -> Any:
     """Build comprehensive report of all data-derived pipeline parameters."""
     import statistics
 
@@ -824,7 +823,7 @@ def _run_derived_params_report(context: PipelineContext) -> Any:
     return report
 
 
-def _run_dml_analysis(context: PipelineContext) -> Any:
+def _run_dml_analysis(context: dict) -> Any:
     """Run DML causal inference: OLS vs DML comparison for each parameter."""
     report = run_dml_analysis(
         context.credits,
@@ -835,7 +834,7 @@ def _run_dml_analysis(context: PipelineContext) -> Any:
     return report.to_dict()
 
 
-def _run_knowledge_spanners_report(context: PipelineContext) -> Any:
+def _run_knowledge_spanners_report(context: dict) -> Any:
     """Export knowledge spanner metrics (AWCC/NDI per person)."""
     if not context.knowledge_spanner_scores:
         return {}
@@ -852,7 +851,7 @@ def _run_knowledge_spanners_report(context: PipelineContext) -> Any:
     }
 
 
-def _run_career_friction_report(context: PipelineContext) -> Any:
+def _run_career_friction_report(context: dict) -> Any:
     """Export career friction analysis results."""
     if not context.career_friction:
         return {}
@@ -871,7 +870,7 @@ def _run_career_friction_report(context: PipelineContext) -> Any:
     }
 
 
-def _run_era_effects_report(context: PipelineContext) -> Any:
+def _run_era_effects_report(context: dict) -> Any:
     """Export era effects analysis results."""
     if context.era_effects is None:
         return {}
@@ -882,7 +881,7 @@ def _run_era_effects_report(context: PipelineContext) -> Any:
     }
 
 
-def _run_studio_timeseries(context: PipelineContext) -> Any:
+def _run_studio_timeseries(context: dict) -> Any:
     """Compute year-by-year studio evaluation metrics."""
     akm_residuals = context.akm_result.residuals if context.akm_result else None
     result = compute_studio_timeseries(
@@ -895,7 +894,7 @@ def _run_studio_timeseries(context: PipelineContext) -> Any:
     return asdict(result)
 
 
-def _run_expected_ability(context: PipelineContext) -> Any:
+def _run_expected_ability(context: dict) -> Any:
     """Compute expected vs actual ability scores."""
     result = compute_expected_ability(
         credits=context.credits,
@@ -909,7 +908,7 @@ def _run_expected_ability(context: PipelineContext) -> Any:
     return asdict(result)
 
 
-def _run_compatibility(context: PipelineContext) -> Any:
+def _run_compatibility(context: dict) -> Any:
     """Detect compatibility groups from co-occurrence patterns."""
     result = compute_compatibility_groups(
         credits=context.credits,
@@ -922,12 +921,12 @@ def _run_compatibility(context: PipelineContext) -> Any:
     return asdict(result)
 
 
-def _run_synergy_scores(context: PipelineContext) -> Any:
+def _run_synergy_scores(context: dict) -> Any:
     """Compute synergy scores for repeated senior staff pairings in sequel chains."""
     return compute_synergy_scores(context.credits, context.anime_map)
 
 
-def _run_cooccurrence_groups(context: PipelineContext) -> Any:
+def _run_cooccurrence_groups(context: dict) -> Any:
     """Detect recurring co-production groups (3+ core staff across 3+ works)."""
     return compute_cooccurrence_groups(
         context.credits,
@@ -938,7 +937,7 @@ def _run_cooccurrence_groups(context: PipelineContext) -> Any:
     )
 
 
-def _run_studio_talent_density(context: PipelineContext) -> Any:
+def _run_studio_talent_density(context: dict) -> Any:
     """Compute studio talent density metrics (Gini, tiers, FE distribution)."""
     result = compute_studio_talent_density(
         context.credits, context.anime_map, context.person_fe
@@ -946,7 +945,7 @@ def _run_studio_talent_density(context: PipelineContext) -> Any:
     return {sid: asdict(td) for sid, td in result.items()}
 
 
-def _run_studio_network(context: PipelineContext) -> Any:
+def _run_studio_network(context: dict) -> Any:
     """Compute studio network (talent sharing + co-production)."""
     result = compute_studio_network(context.credits, context.anime_map)
     # Convert to serializable format (drop graph objects)
@@ -963,7 +962,7 @@ def _run_studio_network(context: PipelineContext) -> Any:
     }
 
 
-def _run_talent_pipeline(context: PipelineContext) -> Any:
+def _run_talent_pipeline(context: dict) -> Any:
     """Compute talent pipeline (junior dev, flow matrix, brain drain, retention)."""
     result = compute_talent_pipeline(
         context.credits, context.anime_map, context.person_fe
@@ -976,7 +975,7 @@ def _run_talent_pipeline(context: PipelineContext) -> Any:
     }
 
 
-def _run_studio_clustering(context: PipelineContext) -> Any:
+def _run_studio_clustering(context: dict) -> Any:
     """Cluster studios by 12-dimensional feature vector."""
     # Reuse talent density from studio_talent_density task if available
     cached_td = context.analysis_results.get("studio_talent_density")
@@ -1015,7 +1014,7 @@ def _run_studio_clustering(context: PipelineContext) -> Any:
     }
 
 
-def _run_genre_ecosystem(context: PipelineContext) -> Any:
+def _run_genre_ecosystem(context: dict) -> Any:
     """Compute genre ecosystem (trends, staffing, seasonality, careers)."""
     result = compute_genre_ecosystem(context.credits, context.anime_map)
     return {
@@ -1026,7 +1025,7 @@ def _run_genre_ecosystem(context: PipelineContext) -> Any:
     }
 
 
-def _run_genre_network(context: PipelineContext) -> Any:
+def _run_genre_network(context: dict) -> Any:
     """Compute genre network (PMI, families, evolution)."""
     result = compute_genre_network(list(context.anime_map.values()))
     return {
@@ -1042,7 +1041,7 @@ def _run_genre_network(context: PipelineContext) -> Any:
     }
 
 
-def _run_genre_quality(context: PipelineContext) -> Any:
+def _run_genre_quality(context: dict) -> Any:
     """Compute genre quality (prestige, saturation, mobility)."""
     result = compute_genre_quality(
         context.credits,
@@ -1057,7 +1056,7 @@ def _run_genre_quality(context: PipelineContext) -> Any:
     }
 
 
-def _run_credit_stats(context: PipelineContext) -> Any:
+def _run_credit_stats(context: dict) -> Any:
     """Compute comprehensive credit statistics (person_id level)."""
     stats = compute_credit_statistics(context.credits, context.anime_map)
 
@@ -1078,53 +1077,53 @@ def _run_credit_stats(context: PipelineContext) -> Any:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
-def _run_entry_cohort_attrition(context: PipelineContext) -> Any:
+def _run_entry_cohort_attrition(context: dict) -> Any:
     from src.analysis.io.gold_writer import gold_connect
 
     with gold_connect() as conn:
         return run_entry_cohort_attrition(conn)
 
 
-def _run_generational_health(context: PipelineContext) -> Any:
+def _run_generational_health(context: dict) -> Any:
     from src.analysis.io.gold_writer import gold_connect
 
     with gold_connect() as conn:
         return run_generational_health(conn)
 
 
-def _run_attrition_risk_model(context: PipelineContext) -> Any:
+def _run_attrition_risk_model(context: dict) -> Any:
     from src.analysis.io.gold_writer import gold_connect
 
     with gold_connect() as conn:
         return run_attrition_risk_model(conn)
 
 
-def _run_monopsony_analysis(context: PipelineContext) -> Any:
+def _run_monopsony_analysis(context: dict) -> Any:
     return run_monopsony_analysis(context.studio_assignments, context.person_fe)
 
 
-def _run_gender_bottleneck(context: PipelineContext) -> Any:
+def _run_gender_bottleneck(context: dict) -> Any:
     from src.analysis.io.gold_writer import gold_connect_with_silver
 
     with gold_connect_with_silver() as conn:
         return run_gender_bottleneck(conn)
 
 
-def _run_succession_matrix(context: PipelineContext) -> Any:
+def _run_succession_matrix(context: dict) -> Any:
     return run_succession_matrix(
         context.person_fe, context.credits, context.studio_assignments
     )
 
 
-def _run_team_chemistry(context: PipelineContext) -> Any:
+def _run_team_chemistry(context: dict) -> Any:
     return run_team_chemistry(context.credits, context.anime_map, context.iv_scores)
 
 
-def _run_team_templates(context: PipelineContext) -> Any:
+def _run_team_templates(context: dict) -> Any:
     return cluster_team_patterns(context.credits, context.anime_map, context.iv_scores)
 
 
-def _run_independent_units(context: PipelineContext) -> Any:
+def _run_independent_units(context: dict) -> Any:
     if not context.community_map:
         return {"error": "no_community_map"}
     return run_independent_units(
@@ -1132,7 +1131,7 @@ def _run_independent_units(context: PipelineContext) -> Any:
     )
 
 
-def _run_studio_benchmark_cards(context: PipelineContext) -> Any:
+def _run_studio_benchmark_cards(context: dict) -> Any:
     from src.utils.config import JSON_DIR
     import json
 
@@ -1168,7 +1167,7 @@ def _run_studio_benchmark_cards(context: PipelineContext) -> Any:
     )
 
 
-def _run_director_value_add(context: PipelineContext) -> Any:
+def _run_director_value_add(context: dict) -> Any:
     from src.utils.config import JSON_DIR
     import json
 
@@ -1201,7 +1200,7 @@ def _run_director_value_add(context: PipelineContext) -> Any:
     )
 
 
-def _run_undervalued_talent(context: PipelineContext) -> Any:
+def _run_undervalued_talent(context: dict) -> Any:
     from src.utils.config import JSON_DIR
     import json
 
@@ -1246,7 +1245,7 @@ def _run_undervalued_talent(context: PipelineContext) -> Any:
     )
 
 
-def _run_genre_whitespace(context: PipelineContext) -> Any:
+def _run_genre_whitespace(context: dict) -> Any:
     from src.utils.config import JSON_DIR
     import json
 
@@ -1289,7 +1288,7 @@ def _run_genre_whitespace(context: PipelineContext) -> Any:
     return run_genre_whitespace(genre_ecosystem, genre_affinity_list, context.results)
 
 
-def _run_trust_entry(context: PipelineContext) -> Any:
+def _run_trust_entry(context: dict) -> Any:
     bridges_data = context.analysis_results.get("bridges")
     if not bridges_data:
         from src.utils.config import JSON_DIR
@@ -1307,7 +1306,7 @@ def _run_trust_entry(context: PipelineContext) -> Any:
     )
 
 
-def _run_person_parameters(context: PipelineContext) -> Any:
+def _run_person_parameters(context: dict) -> Any:
     """Batch 3: compute Person Parameter Card (depends on mentorships + genre_affinity)."""
     from src.utils.config import JSON_DIR
     import json
@@ -1656,7 +1655,7 @@ BATCH3_TASKS: list[AnalysisTask] = [
 
 def _execute_analysis_task(
     task: AnalysisTask,
-    context: PipelineContext,
+    context: dict,
     results_lock: threading.Lock,
 ) -> tuple[str, Any, float]:
     """Execute a single analysis task with monitoring and error handling.
@@ -1747,7 +1746,7 @@ _KEEP_IN_MEMORY = frozenset(
 )
 
 
-def _build_phase9_input_hash(context: PipelineContext) -> str:
+def _build_phase9_input_hash(context: dict) -> str:
     """Build deterministic hash for Phase 9 inputs."""
     digest = hashlib.sha256()
     digest.update(f"credits={len(context.credits)}".encode("utf-8"))
@@ -1782,7 +1781,7 @@ def _is_task_cache_eligible(task_name: str) -> bool:
 
 def _filter_cached_tasks(
     tasks: list[AnalysisTask],
-    context: PipelineContext,
+    context: dict,
     phase_input_hash: str,
     json_dir: Path,
 ) -> tuple[list[AnalysisTask], list[str]]:
@@ -1812,7 +1811,7 @@ def _filter_cached_tasks(
 
 def _run_task_batch(
     tasks: list[AnalysisTask],
-    context: PipelineContext,
+    context: dict,
     results_lock: threading.Lock,
     max_workers: int,
     batch_label: str,
@@ -1913,7 +1912,7 @@ def _record_batch_completion(
 
 
 def run_analysis_modules_phase(
-    context: PipelineContext,
+    context: dict,
     max_workers: int | None = None,
 ) -> None:
     """Run all independent analysis modules in parallel.
@@ -2159,7 +2158,7 @@ def run_analysis_modules_phase(
 #           graphml_export, AKM diagnostics (batch-only), insights_report.
 # ---------------------------------------------------------------------------
 
-def run_analysis_modules_hamilton(context: PipelineContext) -> dict:
+def run_analysis_modules_hamilton(context: dict) -> dict:
     """Execute analysis modules via Hamilton DAG driver (H-1 PoC).
 
     Returns dict of {node_name: result} for all executed nodes.

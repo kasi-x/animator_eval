@@ -177,7 +177,8 @@ class TestNodeNameLists:
 
     def test_assembly_node_names_nonempty(self):
         from src.pipeline_phases.hamilton_modules.assembly import NODE_NAMES
-        assert len(NODE_NAMES) == 2
+        # H-4: added ctx_results_populated bridge; was 2, now 3
+        assert len(NODE_NAMES) == 3
 
     def test_scoring_node_names_no_duplicates(self):
         from src.pipeline_phases.hamilton_modules.scoring import NODE_NAMES
@@ -288,24 +289,23 @@ class TestMetricsNodesMinimal:
 class TestAssemblyNodesMinimal:
     def test_results_assembled_on_empty_typed_bags(
         self, empty_entity_resolved, empty_graphs_result, empty_core_scores,
-        empty_supplementary_metrics, minimal_ctx
+        empty_supplementary_metrics
     ):
-        # H-4: takes typed bags + ctx (for ctx.results population)
+        # H-4: takes typed bags only (ctx.results written via ctx_results_populated bridge)
         from src.pipeline_phases.hamilton_modules.assembly import results_assembled
         result = results_assembled(
             empty_entity_resolved, empty_graphs_result,
-            empty_core_scores, empty_supplementary_metrics, minimal_ctx
+            empty_core_scores, empty_supplementary_metrics
         )
         assert isinstance(result, list)
 
     def test_results_post_processed_on_empty_results(
-        self, empty_entity_resolved, empty_core_scores, minimal_ctx
+        self, empty_entity_resolved, empty_core_scores
     ):
         from src.pipeline_phases.hamilton_modules.assembly import results_post_processed
         result = results_post_processed(
             results_assembled=[],
             entity_resolved=empty_entity_resolved,
             ctx_core_populated=empty_core_scores,
-            ctx=minimal_ctx,
         )
         assert isinstance(result, list)

@@ -10,7 +10,6 @@ from typing import Any, Callable
 
 import structlog
 
-from src.pipeline_phases.context import PipelineContext
 from src.pipeline_phases.pipeline_types import ExportContext
 from src.utils.json_io import save_json_to_file
 
@@ -31,19 +30,19 @@ class ExportSpec:
     """
 
     filename: str
-    data_getter: Callable[[PipelineContext], Any]
-    transformer: Callable[[Any, PipelineContext], dict | list] | None = None
+    data_getter: Callable[[dict], Any]
+    transformer: Callable[[Any, dict], dict | list] | None = None
     condition: Callable[[Any], bool] | None = None
     log_message: str = "export_saved"
     log_metrics: Callable[[Any], dict[str, Any]] | None = None
 
 
-def _build_pid_to_name(context: PipelineContext) -> dict[str, str]:
+def _build_pid_to_name(context: dict) -> dict[str, str]:
     """Build person_id → display name mapping from context results."""
     return {r["person_id"]: r["name"] or r["person_id"] for r in context.results}
 
 
-def _transform_collaborations(data: list, context: PipelineContext) -> list:
+def _transform_collaborations(data: list, context: dict) -> list:
     """Add person names to collaboration pairs."""
     if not data:
         return []
@@ -56,7 +55,7 @@ def _transform_collaborations(data: list, context: PipelineContext) -> list:
     return data
 
 
-def _transform_mentorships(data: list, context: PipelineContext) -> list:
+def _transform_mentorships(data: list, context: dict) -> list:
     """Add person names to mentorship pairs."""
     if not data:
         return []
@@ -69,7 +68,7 @@ def _transform_mentorships(data: list, context: PipelineContext) -> list:
     return data
 
 
-def _transform_bridges(data: dict, context: PipelineContext) -> dict:
+def _transform_bridges(data: dict, context: dict) -> dict:
     """Add person names to bridge analysis results."""
     if not data:
         return {}
@@ -87,7 +86,7 @@ def _transform_bridges(data: dict, context: PipelineContext) -> dict:
     return data
 
 
-def _transform_influence(data: dict, context: PipelineContext) -> dict:
+def _transform_influence(data: dict, context: dict) -> dict:
     """Add person names to influence tree."""
     if not data:
         return {}
@@ -103,7 +102,7 @@ def _transform_influence(data: dict, context: PipelineContext) -> dict:
     return data
 
 
-def _transform_teams(data: dict, context: PipelineContext) -> dict:
+def _transform_teams(data: dict, context: dict) -> dict:
     """Add person names to team analysis results."""
     if not data:
         return {}
@@ -125,7 +124,7 @@ def _transform_teams(data: dict, context: PipelineContext) -> dict:
     return data
 
 
-def _transform_mentorship_tree(data: dict, context: PipelineContext) -> dict:
+def _transform_mentorship_tree(data: dict, context: dict) -> dict:
     """Add person names to mentorship tree."""
     if not data:
         return {}
@@ -149,7 +148,7 @@ def _transform_mentorship_tree(data: dict, context: PipelineContext) -> dict:
     return data
 
 
-def _transform_cooccurrence_groups(data: dict, context: PipelineContext) -> dict:
+def _transform_cooccurrence_groups(data: dict, context: dict) -> dict:
     """Add member names and anime titles to cooccurrence groups."""
     if not data:
         return {}
@@ -171,7 +170,7 @@ def _transform_cooccurrence_groups(data: dict, context: PipelineContext) -> dict
     return data
 
 
-def _transform_temporal_pagerank(data: dict, context: PipelineContext) -> dict:
+def _transform_temporal_pagerank(data: dict, context: dict) -> dict:
     """Add person names to temporal pagerank timeline, foresight and promotion data."""
     if not data:
         return {}
@@ -188,7 +187,7 @@ def _transform_temporal_pagerank(data: dict, context: PipelineContext) -> dict:
     return data
 
 
-def _transform_circles(data: dict, context: PipelineContext) -> dict:
+def _transform_circles(data: dict, context: dict) -> dict:
     """Transform circles data with name lookups."""
     if not data:
         return {}
@@ -211,7 +210,7 @@ def _transform_circles(data: dict, context: PipelineContext) -> dict:
     return circles_output
 
 
-def _transform_growth(data: dict, context: PipelineContext) -> dict:
+def _transform_growth(data: dict, context: dict) -> dict:
     """Transform growth data with trend summary and names."""
     if not data:
         return {}
@@ -238,7 +237,7 @@ def _transform_growth(data: dict, context: PipelineContext) -> dict:
     }
 
 
-def _transform_tags(data: dict, context: PipelineContext) -> dict:
+def _transform_tags(data: dict, context: dict) -> dict:
     """Transform person tags with tag summary."""
     if not data:
         return {}
@@ -255,14 +254,14 @@ def _transform_tags(data: dict, context: PipelineContext) -> dict:
     }
 
 
-def _transform_productivity(data: dict, context: PipelineContext) -> dict:
+def _transform_productivity(data: dict, context: dict) -> dict:
     """Transform productivity dataclass instances to dicts."""
     if not data:
         return {}
     return {pid: asdict(metrics) for pid, metrics in data.items()}
 
 
-def _transform_transitions(data: dict, context: PipelineContext) -> dict:
+def _transform_transitions(data: dict, context: dict) -> dict:
     """Transform role transitions with dataclass to dict conversion."""
     if not data:
         return {}
@@ -272,7 +271,7 @@ def _transform_transitions(data: dict, context: PipelineContext) -> dict:
     return data
 
 
-def _transform_summary(data: None, context: PipelineContext) -> dict:
+def _transform_summary(data: None, context: dict) -> dict:
     """Build pipeline summary from context and elapsed time."""
     from datetime import datetime
     from src.analysis.graph import compute_graph_summary
@@ -922,7 +921,7 @@ EXPORT_REGISTRY: list[ExportSpec] = [
 
 def export_single_result_file(
     spec: ExportSpec,
-    context: PipelineContext,
+    context: dict,
     json_dir: Path,
 ) -> bool:
     """Export a single result file using its ExportSpec.
@@ -978,7 +977,7 @@ def export_single_result_file(
     return True
 
 
-def export_and_visualize_phase(context: ExportContext | PipelineContext, elapsed: float = 0.0) -> None:
+def export_and_visualize_phase(context: ExportContext | dict, elapsed: float = 0.0) -> None:
     """Export all results to JSON and generate visualizations.
 
     Uses declarative registry to export all 26 JSON files.
@@ -1031,7 +1030,7 @@ def export_and_visualize_phase(context: ExportContext | PipelineContext, elapsed
         _generate_visualizations(context)
 
 
-def _persist_features_to_db(context: PipelineContext) -> None:
+def _persist_features_to_db(context: dict) -> None:
     """Persist pipeline computation results to feat_* tables in gold.duckdb.
 
     Writes the same data as the JSON export to the GOLD layer so it can be
@@ -1393,7 +1392,7 @@ def _persist_director_circles_duckdb(conn: Any, circles_dict: dict, now: Any) ->
     )
 
 
-def _persist_causal_estimates_duckdb(conn: Any, context: PipelineContext, now: Any) -> None:
+def _persist_causal_estimates_duckdb(conn: Any, context: dict, now: Any) -> None:
     """Persist causal inference results to feat_causal_estimates in DuckDB.
 
     Collects per-person values from PipelineContext.peer_effect_result,
@@ -1452,7 +1451,7 @@ def _persist_causal_estimates_duckdb(conn: Any, context: PipelineContext, now: A
     logger.info("feat_causal_estimates_written_duckdb", count=len(rows))
 
 
-def _persist_cluster_membership_duckdb(conn: Any, context: PipelineContext, now: Any) -> None:
+def _persist_cluster_membership_duckdb(conn: Any, context: dict, now: Any) -> None:
     """Persist each clustering dimension to feat_cluster_membership in DuckDB.
 
     - community_map (Phase 4 graph communities)
@@ -1570,7 +1569,7 @@ def _persist_cluster_membership_duckdb(conn: Any, context: PipelineContext, now:
     logger.info("feat_cluster_membership_written_duckdb", count=len(rows_out))
 
 
-def _persist_birank_annual_duckdb(conn: Any, context: PipelineContext, now: Any) -> None:
+def _persist_birank_annual_duckdb(conn: Any, context: dict, now: Any) -> None:
     """Persist annual BiRank snapshots to feat_birank_annual in DuckDB.
 
     No-ops when temporal_pagerank returned None (skipped due to no data changes).
@@ -1625,7 +1624,7 @@ def _persist_birank_annual_duckdb(conn: Any, context: PipelineContext, now: Any)
     logger.info("feat_birank_annual_written_duckdb", count=len(rows), min_year=_BIRANK_ANNUAL_MIN_YEAR)
 
 
-def _get_analysis_result(context: PipelineContext, key: str, default: Any) -> Any:
+def _get_analysis_result(context: dict, key: str, default: Any) -> Any:
     """Get analysis result from context, loading from JSON if flushed to disk."""
     import json as _json
 
@@ -1645,7 +1644,7 @@ def _get_analysis_result(context: PipelineContext, key: str, default: Any) -> An
     return default
 
 
-def _generate_visualizations(context: PipelineContext) -> None:
+def _generate_visualizations(context: dict) -> None:
     """Generate visualizations using matplotlib and plotly.
 
     Args:

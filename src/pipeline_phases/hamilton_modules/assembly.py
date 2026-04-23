@@ -1,8 +1,7 @@
-"""Phase 7+8: Result Assembly and Post-Processing nodes for Hamilton DAG (H-4).
+"""Phase 7+8: Result Assembly and Post-Processing nodes for Hamilton DAG (H-5).
 
-H-4 pattern: nodes take typed bags (EntityResolutionResult, CoreScoresResult,
-SupplementaryMetricsResult) instead of ctx: PipelineContext.  ctx.results is still
-populated for Phase 9/10 compatibility.
+H-5 pattern: nodes take typed bags (EntityResolutionResult, CoreScoresResult,
+SupplementaryMetricsResult) instead of ctx: PipelineContext.
 """
 
 from __future__ import annotations
@@ -57,5 +56,7 @@ def results_post_processed(
     """
     from src.pipeline_phases.post_processing import post_process_results
 
-    post_process_results(results_assembled, entity_resolved.resolved_credits, ctx_core_populated.akm_result)
+    post_process_results(
+        results_assembled, entity_resolved.resolved_credits, ctx_core_populated.akm_result
+    )
     return results_assembled

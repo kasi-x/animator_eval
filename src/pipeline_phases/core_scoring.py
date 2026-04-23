@@ -25,12 +25,11 @@ from src.analysis.scoring.patronage_dormancy import (
     compute_dormancy_penalty,
     compute_patronage_premium,
 )
-from src.pipeline_phases.context import PipelineContext
 
 logger = structlog.get_logger()
 
 
-def compute_core_scores_phase(context: PipelineContext) -> None:
+def compute_core_scores_phase(context: dict) -> None:
     """Compute 8-component structural scores.
 
     Args:

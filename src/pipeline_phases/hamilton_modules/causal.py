@@ -18,7 +18,6 @@ from typing import Any
 
 import structlog
 
-from src.pipeline_phases.context import PipelineContext
 
 logger = structlog.get_logger()
 
@@ -43,7 +42,7 @@ NODE_NAMES: list[str] = [
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def causal_identification(ctx: PipelineContext) -> Any:
+def causal_identification(ctx: dict) -> Any:
     """Identify causal studio effects via DiD."""
     from src.analysis.causal.studio_identification import (
         identify_studio_effects,
@@ -60,7 +59,7 @@ def causal_identification(ctx: PipelineContext) -> Any:
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def structural_estimation(ctx: PipelineContext) -> Any:
+def structural_estimation(ctx: dict) -> Any:
     """Structural estimation with fixed effects and DiD (research-grade).
 
     Requires major_studios set derived from credits; computed inline for H-1.
@@ -83,14 +82,14 @@ def structural_estimation(ctx: PipelineContext) -> Any:
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def dml_analysis(ctx: PipelineContext) -> Any:
+def dml_analysis(ctx: dict) -> Any:
     """Double Machine Learning causal analysis."""
     from src.analysis.causal.dml import run_dml_analysis
     return run_dml_analysis(ctx.credits, ctx.anime_map, ctx.person_fe, ctx.studio_fe)
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def compensation(ctx: PipelineContext) -> Any:
+def compensation(ctx: dict) -> Any:
     """Batch compensation analysis.
 
     H-1 stub: batch_analyze_compensation requires a pre-computed
@@ -102,7 +101,7 @@ def compensation(ctx: PipelineContext) -> Any:
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def bias_detection(ctx: PipelineContext) -> Any:
+def bias_detection(ctx: dict) -> Any:
     """Detect systematic biases in score distribution."""
     from src.analysis.bias_detector import detect_systematic_biases, generate_bias_report
     person_scores = {r["person_id"]: r for r in ctx.results}
@@ -115,7 +114,7 @@ def bias_detection(ctx: PipelineContext) -> Any:
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def entry_cohort_attrition(ctx: PipelineContext) -> Any:
+def entry_cohort_attrition(ctx: dict) -> Any:
     """Entry cohort attrition analysis.
 
     H-1 stub: requires a DB connection for cohort survival computation.
@@ -126,7 +125,7 @@ def entry_cohort_attrition(ctx: PipelineContext) -> Any:
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def generational_health(ctx: PipelineContext) -> Any:
+def generational_health(ctx: dict) -> Any:
     """Generational health metrics.
 
     H-1 stub: requires a DB connection.
@@ -136,7 +135,7 @@ def generational_health(ctx: PipelineContext) -> Any:
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def attrition_risk(ctx: PipelineContext) -> Any:
+def attrition_risk(ctx: dict) -> Any:
     """Attrition risk model.
 
     H-1 stub: requires a DB connection.
@@ -146,14 +145,14 @@ def attrition_risk(ctx: PipelineContext) -> Any:
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def monopsony(ctx: PipelineContext) -> Any:
+def monopsony(ctx: dict) -> Any:
     """Monopsony market power analysis (policy brief input)."""
     from src.analysis.market.monopsony import run_monopsony_analysis
     return run_monopsony_analysis(ctx.studio_assignments, ctx.person_fe)
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def gender_bottleneck(ctx: PipelineContext) -> Any:
+def gender_bottleneck(ctx: dict) -> Any:
     """Gender bottleneck analysis.
 
     H-1 stub: requires a DB connection.
@@ -163,7 +162,7 @@ def gender_bottleneck(ctx: PipelineContext) -> Any:
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def undervalued_talent(ctx: PipelineContext) -> Any:
+def undervalued_talent(ctx: dict) -> Any:
     """Undervalued talent identification.
 
     H-1 stub: run_undervalued_talent requires expected_ability dict
@@ -174,7 +173,7 @@ def undervalued_talent(ctx: PipelineContext) -> Any:
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def succession_matrix(ctx: PipelineContext) -> Any:
+def succession_matrix(ctx: dict) -> Any:
     """Succession matrix — who can replace whom (HR brief input)."""
     if not ctx.studio_assignments or not ctx.person_fe:
         return {}
@@ -187,7 +186,7 @@ def succession_matrix(ctx: PipelineContext) -> Any:
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def director_value_add(ctx: PipelineContext) -> Any:
+def director_value_add(ctx: dict) -> Any:
     """Director value-add: mentor contribution to animator trajectories."""
     from src.analysis.mentor.director_value_add import run_director_value_add
     # mentorships list comes from the mentorships node; use empty list for H-1.
@@ -195,14 +194,14 @@ def director_value_add(ctx: PipelineContext) -> Any:
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def team_chemistry(ctx: PipelineContext) -> Any:
+def team_chemistry(ctx: dict) -> Any:
     """Team chemistry analysis — collaboration effectiveness."""
     from src.analysis.team.chemistry import run_team_chemistry
     return run_team_chemistry(ctx.credits, ctx.anime_map, ctx.iv_scores)
 
 
 @tag(stage="phase9", cost="moderate", domain="analysis")
-def team_templates(ctx: PipelineContext) -> Any:
+def team_templates(ctx: dict) -> Any:
     """Cluster team composition patterns into archetypes."""
     from src.analysis.team.templates import cluster_team_patterns
     return cluster_team_patterns(ctx.credits, ctx.anime_map, ctx.iv_scores)

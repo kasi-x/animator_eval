@@ -2,25 +2,68 @@
 
 import structlog
 
-from src.pipeline_phases.context import PipelineContext
+from src.pipeline_phases.pipeline_types import VAScoresResult
 
 logger = structlog.get_logger()
 
 
-def assemble_va_results(context: PipelineContext) -> None:
-    """Build comprehensive VA result dictionaries into context.va_results."""
-    if not context.va_person_ids:
-        logger.debug("va_result_assembly_skipped", reason="no_va_persons")
-        return
+def assemble_va_results(
+    va_person_ids: set,
+    persons: list,
+    va_person_fe: dict,
+    va_birank_scores: dict,
+    va_trust_scores: dict,
+    va_patronage_scores: dict,
+    va_dormancy_scores: dict,
+    va_awcc_scores: dict,
+    va_iv_scores: dict,
+    va_character_diversity: dict,
+    va_replacement_difficulty: dict,
+) -> VAScoresResult:
+    """Build comprehensive VA result dictionaries.
 
-    pid_to_name = _build_pid_to_name_map(context.persons)
+    Args:
+        va_person_ids: Set of VA person IDs
+        persons: Person records
+        va_person_fe: Person fixed effects
+        va_birank_scores: BiRank scores
+        va_trust_scores: Trust scores
+        va_patronage_scores: Patronage scores
+        va_dormancy_scores: Dormancy scores
+        va_awcc_scores: AWCC scores
+        va_iv_scores: Integrated Value scores
+        va_character_diversity: Character diversity metrics
+        va_replacement_difficulty: Replacement difficulty scores
+
+    Returns:
+        VAScoresResult with assembled VA results.
+    """
+    result = VAScoresResult()
+
+    if not va_person_ids:
+        logger.debug("va_result_assembly_skipped", reason="no_va_persons")
+        return result
+
+    pid_to_name = _build_pid_to_name_map(persons)
     results = []
-    for pid in sorted(context.va_person_ids):
-        record = _build_va_base_record(pid, context, pid_to_name)
-        _enrich_with_diversity(record, context.va_character_diversity.get(pid))
+    for pid in sorted(va_person_ids):
+        record = _build_va_base_record(
+            pid,
+            pid_to_name,
+            va_person_fe,
+            va_birank_scores,
+            va_trust_scores,
+            va_patronage_scores,
+            va_dormancy_scores,
+            va_awcc_scores,
+            va_iv_scores,
+            va_replacement_difficulty,
+        )
+        _enrich_with_diversity(record, va_character_diversity.get(pid))
         results.append(record)
-    context.va_results = _sort_results_by_iv(results)
+    result.va_results = _sort_results_by_iv(results)
     logger.info("va_results_assembled", persons=len(results))
+    return result
 
 
 def _build_pid_to_name_map(persons) -> dict[str, str]:
@@ -29,20 +72,29 @@ def _build_pid_to_name_map(persons) -> dict[str, str]:
 
 
 def _build_va_base_record(
-    pid: str, context: PipelineContext, pid_to_name: dict[str, str]
+    pid: str,
+    pid_to_name: dict[str, str],
+    va_person_fe: dict,
+    va_birank_scores: dict,
+    va_trust_scores: dict,
+    va_patronage_scores: dict,
+    va_dormancy_scores: dict,
+    va_awcc_scores: dict,
+    va_iv_scores: dict,
+    va_replacement_difficulty: dict,
 ) -> dict:
     """Build base record with 10 scoring fields for a VA person."""
     return {
         "person_id": pid,
         "name": pid_to_name.get(pid, pid),
-        "person_fe": context.va_person_fe.get(pid, 0.0),
-        "birank": context.va_birank_scores.get(pid, 0.0),
-        "trust": context.va_trust_scores.get(pid, 0.0),
-        "patronage": context.va_patronage_scores.get(pid, 0.0),
-        "dormancy": context.va_dormancy_scores.get(pid, 1.0),
-        "awcc": context.va_awcc_scores.get(pid, 0.0),
-        "va_iv_score": context.va_iv_scores.get(pid, 0.0),
-        "replacement_difficulty": context.va_replacement_difficulty.get(pid, 0.0),
+        "person_fe": va_person_fe.get(pid, 0.0),
+        "birank": va_birank_scores.get(pid, 0.0),
+        "trust": va_trust_scores.get(pid, 0.0),
+        "patronage": va_patronage_scores.get(pid, 0.0),
+        "dormancy": va_dormancy_scores.get(pid, 1.0),
+        "awcc": va_awcc_scores.get(pid, 0.0),
+        "va_iv_score": va_iv_scores.get(pid, 0.0),
+        "replacement_difficulty": va_replacement_difficulty.get(pid, 0.0),
     }
 
 
