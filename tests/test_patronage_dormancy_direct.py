@@ -177,3 +177,68 @@ class TestPatronageAndDormancy:
         assert hasattr(result, "patronage_premium")
         assert hasattr(result, "dormancy_penalty")
         assert "p1" in result.dormancy_penalty
+
+    def test_patronage_details_lineage_recorded(self):
+        """patronage_details should record director_id / anime_id / birank for downstream lineage."""
+        from src.analysis.scoring.patronage_dormancy import compute_patronage_and_dormancy
+        anime_map = {"a1": _anime("a1", year=2023)}
+        credits = [
+            _credit("dir1", "a1", "director"),
+            _credit("p1", "a1", "key_animator"),
+        ]
+        result = compute_patronage_and_dormancy(
+            credits, anime_map, director_birank_scores={"dir1": 0.8}, current_year=2025
+        )
+        assert "p1" in result.patronage_details
+        entry = result.patronage_details["p1"][0]
+        assert entry["director_id"] == "dir1"
+        assert entry["anime_id"] == "a1"
+        assert entry["director_birank"] == pytest.approx(0.8)
+
+
+# ---------------------------------------------------------------------------
+# compute_career_aware_dormancy tests
+# ---------------------------------------------------------------------------
+
+class TestCareerAwareDormancy:
+    def test_veteran_with_high_iv_protected_to_floor(self):
+        """High IV percentile + 30+ years + stage=6 → career_capital >= 0.7 → floor applied."""
+        from src.analysis.scoring.patronage_dormancy import compute_career_aware_dormancy
+        raw = {"vet1": 0.1}
+        iv_hist = {"vet1": 1.0, "junior1": 0.0}  # vet1 at 100th percentile
+        career = {"vet1": {"active_years": 30, "highest_stage": 6}}
+        result = compute_career_aware_dormancy(
+            raw, iv_hist, career, career_capital_threshold=0.7, dormancy_floor=0.5
+        )
+        assert result["vet1"] == pytest.approx(0.5)
+
+    def test_low_career_capital_unchanged(self):
+        """New person with high IV but few years → not protected."""
+        from src.analysis.scoring.patronage_dormancy import compute_career_aware_dormancy
+        raw = {"newcomer": 0.05}
+        iv_hist = {"newcomer": 1.0, "other": 0.0}
+        career = {"newcomer": {"active_years": 1, "highest_stage": 1}}
+        result = compute_career_aware_dormancy(raw, iv_hist, career)
+        assert result["newcomer"] == pytest.approx(0.05)
+
+    def test_empty_inputs_return_raw_dormancy(self):
+        from src.analysis.scoring.patronage_dormancy import compute_career_aware_dormancy
+        raw = {"p1": 0.3}
+        # Either iv_hist or career empty → return raw
+        assert compute_career_aware_dormancy(raw, {}, {"p1": {}}) == raw
+        assert compute_career_aware_dormancy(raw, {"p1": 0.5}, {}) == raw
+
+    def test_dataclass_career_data_supported(self):
+        """career_aware_dormancy supports dataclass-like career objects via getattr."""
+        from src.analysis.scoring.patronage_dormancy import compute_career_aware_dormancy
+
+        class _CareerSnap:
+            def __init__(self, active_years, highest_stage):
+                self.active_years = active_years
+                self.highest_stage = highest_stage
+
+        raw = {"vet": 0.1}
+        iv_hist = {"vet": 1.0, "other": 0.0}
+        career = {"vet": _CareerSnap(active_years=30, highest_stage=6)}
+        result = compute_career_aware_dormancy(raw, iv_hist, career)
+        assert result["vet"] == pytest.approx(0.5)
