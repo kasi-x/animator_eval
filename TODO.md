@@ -219,21 +219,16 @@ silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行
 
 **結論**: H-2 以降を完全実施。Phase 5-8, Phase 1-4 の Hamilton 化、PipelineContext 削除へ進む。
 
-### 5.6 H-4 残務: `--resume` (CheckpointHook)
+### 5.6 H-4 残務: `--resume` (CheckpointHook) ✅ DONE (2026-04-23)
 
-**背景**: H-4 では `--resume` フラグは full-run にフォールバック。
-Hamilton lifecycle hooks を使ったチェックポイント保存・復元が必要。
-
-- [ ] `CheckpointHook(NodeExecutionHook)` を `lifecycle.py` に追加
+- [x] `CheckpointHook(NodeExecutionHook)` を `lifecycle.py` に追加 (commit ce42e87)
   - `run_after_node_execution` で `node_name == "results_post_processed"` を検出
   - `node_kwargs["ctx"]` を取得して `PipelineCheckpoint(dir).save(8, ctx)` を呼ぶ
-- [ ] `pipeline.py` の resume パスを実装
-  - checkpoint load → `last_completed_phase >= 7` なら ctx restore + Phase 9 のみ実行
-  - `dr.execute(ANALYSIS_NODE_NAMES, inputs={"ctx": restored_ctx})` で Phase 9 を再実行
-  - Phase 5 (scoring) スキップは `overrides={"akm_estimation": …, …}` で対応予定
-- [ ] `PipelineCheckpoint.save(9, ctx)` を `dr.execute()` 完了後に呼ぶ (pipeline.py)
-  - Phase 5 チェックポイント: scoring node の side-effect ctx fields を保存する構造に変更が必要
-    → H-4 段階では Phase 7/9 のみ保存、Phase 5 スキップは別タスク
+- [x] `pipeline.py` の resume パスを実装
+  - checkpoint load → `last_completed_phase >= 7` なら Phase 1-4 再実行 + Phase 5-8 restore + Phase 9 実行
+  - `_build_phase14_driver()` で Phase 1-4 のみ実行する partial driver を追加
+  - Phase 5 チェックポイント省略: scoring side-effects は PipelineCheckpoint.save(8, ctx) に含まれる
+- [x] `TestResumePipeline` (4 tests) + `TestCheckpointHook` (5 unit tests)
 
 ### 5.7 H-4 残務: `PipelineContext` 完全削除
 
