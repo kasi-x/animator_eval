@@ -1541,13 +1541,53 @@ def _persist_director_circles_duckdb(conn: Any, circles_dict: dict, now: Any) ->
     )
 
 
+def _build_debut_year_map(credits: list) -> dict[str, int]:
+    """Build person_id → debut year from a list of Credit objects.
+
+    Uses the minimum credit_year across all credits for each person.
+    Credits with no credit_year are skipped.
+    """
+    debut: dict[str, int] = {}
+    for c in credits:
+        year = getattr(c, "credit_year", None)
+        pid = getattr(c, "person_id", None)
+        if pid is None or year is None:
+            continue
+        if pid not in debut or year < debut[pid]:
+            debut[pid] = year
+    return debut
+
+
+def _lookup_era_fe(debut_year: int | None, era_fe_map: dict[int, float]) -> float | None:
+    """Map a debut year to its era fixed effect.
+
+    Falls back to the nearest available year when the exact year is absent.
+    Returns None only when the map itself is empty.
+
+    Args:
+        debut_year: person's first credit year (may be None for persons with
+                    no credit_year data).
+        era_fe_map: year → γ_era from EraEffects.era_fe.
+    """
+    if not era_fe_map:
+        return None
+    if debut_year is None:
+        return None
+    if debut_year in era_fe_map:
+        return era_fe_map[debut_year]
+    # nearest-year fallback
+    nearest = min(era_fe_map.keys(), key=lambda y: abs(y - debut_year))
+    return era_fe_map[nearest]
+
+
 def _persist_causal_estimates_duckdb(conn: Any, context: dict, now: Any) -> None:
     """Persist causal inference results to feat_causal_estimates in DuckDB.
 
     Collects per-person values from PipelineContext.peer_effect_result,
-    career_friction, and era_effects. Skips the debut-year lookup that required
-    a SQLite-only credits.credit_year query (era_fe mapping is omitted here;
-    era_deflated_iv defaults to None).
+    career_friction, era_effects, and individual_profiles (opportunity_residual).
+
+    era_fe is resolved via context.credits (min credit_year per person) →
+    context.era_effects.era_fe dict (year → γ_era).
     """
     # peer effect: person_peer_boost (per-person)
     peer_boosts: dict[str, float] = {}
@@ -1556,6 +1596,26 @@ def _persist_causal_estimates_duckdb(conn: Any, context: dict, now: Any) -> None
 
     # career friction index (per-person)
     friction_index: dict[str, float] = context.career_friction or {}
+
+    # era fixed effects map: year → γ_era
+    era_fe_map: dict[int, float] = {}
+    if context.era_effects is not None:
+        era_fe_map = context.era_effects.era_fe or {}
+
+    # debut year per person from credits list
+    debut_year_map: dict[str, int] = _build_debut_year_map(context.credits or [])
+
+    # opportunity_residual from individual_profiles analysis result
+    individual_profiles = context.analysis_results.get("individual_profiles") or {}
+    opportunity_residuals: dict[str, float | None] = {}
+    if isinstance(individual_profiles, dict):
+        for pid, prof in individual_profiles.items():
+            if isinstance(prof, dict):
+                opportunity_residuals[pid] = prof.get("opportunity_residual")
+    elif isinstance(individual_profiles, list):
+        for prof in individual_profiles:
+            if isinstance(prof, dict) and "person_id" in prof:
+                opportunity_residuals[prof["person_id"]] = prof.get("opportunity_residual")
 
     all_pids = (
         set(peer_boosts)
@@ -1568,13 +1628,21 @@ def _persist_causal_estimates_duckdb(conn: Any, context: dict, now: Any) -> None
     rows: list[tuple] = []
     for pid in all_pids:
         iv = context.iv_scores.get(pid)
+        debut_year = debut_year_map.get(pid)
+        era_fe_val = _lookup_era_fe(debut_year, era_fe_map)
+        era_deflated = (
+            round(iv - era_fe_val, 6)
+            if iv is not None and era_fe_val is not None
+            else None
+        )
+        opp_res = opportunity_residuals.get(pid)
         rows.append((
             pid,
             round(peer_boosts.get(pid, 0.0), 6),
             round(friction_index.get(pid, 0.0), 6),
-            None,   # era_fe: requires debut-year lookup via SQLite credits — deferred to §4.4
-            None,   # era_deflated_iv: depends on era_fe
-            None,   # opportunity_residual: not available here
+            round(era_fe_val, 6) if era_fe_val is not None else None,
+            era_deflated,
+            round(opp_res, 6) if opp_res is not None else None,
             round(iv, 6) if iv is not None else None,
             now,
         ))
