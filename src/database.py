@@ -4763,21 +4763,18 @@ def upsert_person(
     existing_priority: int = existing["name_priority"] or 0
     old_aliases: list[str] = json.loads(existing["aliases"] or "[]")
 
-    # Collect displaced CJK names before deciding whether to update primaries.
-    displaced: list[str] = []
+    # Decide whether incoming source can update primary name fields.
+    update_primary = incoming_priority >= existing_priority
+
+    # Collect the loser's CJK names into aliases so no name history is lost.
+    # When incoming wins: existing names are displaced. When existing wins: incoming names are rejected.
     for field in _CJK_NAME_FIELDS:
         old_val: str = existing[field] or ""
         new_val: str = getattr(person, field, "") or ""
         if old_val and new_val and old_val != new_val:
-            displaced.append(old_val)
-
-    # Decide whether incoming source can update primary name fields.
-    update_primary = incoming_priority >= existing_priority
-
-    # Add displaced names to aliases (regardless of who wins primary).
-    for name in displaced:
-        if name not in old_aliases:
-            old_aliases.append(name)
+            loser = old_val if update_primary else new_val
+            if loser not in old_aliases:
+                old_aliases.append(loser)
 
     # Also absorb any aliases the incoming record carries.
     for alias in person.aliases:

@@ -1,7 +1,7 @@
-"""MyAnimeList クレジットデータ収集 (Jikan API v4 経由).
+"""MyAnimeList credit data collection (via Jikan API v4).
 
-httpx + structlog + typer で構成。
-レート制限: 3 requests/second, 60 requests/minute。
+Built with httpx + structlog + typer.
+Rate limit: 3 requests/second, 60 requests/minute.
 """
 
 import asyncio
@@ -28,7 +28,7 @@ CHECKPOINT_FILE = Path(__file__).parent.parent.parent / "data" / "mal_checkpoint
 
 
 def _load_checkpoint(path: Path) -> dict | None:
-    """チェックポイントファイルを読み込む."""
+    """Load a checkpoint file."""
     if path.exists():
         with open(path) as f:
             return json.load(f)
@@ -36,20 +36,20 @@ def _load_checkpoint(path: Path) -> dict | None:
 
 
 def _save_checkpoint(path: Path, data: dict) -> None:
-    """チェックポイントファイルを保存する."""
+    """Save a checkpoint file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
 
 def _delete_checkpoint(path: Path) -> None:
-    """チェックポイントファイルを削除する."""
+    """Delete a checkpoint file."""
     if path.exists():
         path.unlink()
 
 
 class JikanClient:
-    """Jikan API 非同期クライアント (RetryingHttpClient ラッパー)."""
+    """Async Jikan API client (wraps RetryingHttpClient)."""
 
     def __init__(self, transport=None) -> None:
         self._http = RetryingHttpClient(
@@ -89,7 +89,7 @@ class JikanClient:
         return await self.get("/top/anime", params=params)
 
     async def get_all_anime(self, page: int = 1, limit: int = 25) -> dict:
-        """全アニメをページネーション取得 (order_by=mal_id で安定順序)."""
+        """Fetch all anime via pagination (stable order by mal_id)."""
         params: dict = {
             "page": page,
             "limit": limit,
@@ -225,20 +225,20 @@ async def fetch_top_anime_credits(
 @app.command()
 def main(
     count: int = typer.Option(
-        50, "--count", "-n", help="取得するアニメ数 (0=全アニメ)"
+        50, "--count", "-n", help="number of anime to fetch (0=all)"
     ),
     type_filter: str = typer.Option(
-        "tv", "--type", help="アニメタイプ (空欄=全タイプ)"
+        "tv", "--type", help="anime type (blank=all types)"
     ),
     resume: bool = typer.Option(
-        True, "--resume/--no-resume", help="チェックポイントから再開する"
+        True, "--resume/--no-resume", help="resume from checkpoint"
     ),
     checkpoint_interval: int = typer.Option(
-        50, "--checkpoint-interval", help="チェックポイント保存間隔 (アニメ数)"
+        50, "--checkpoint-interval", help="checkpoint save interval (anime count)"
     ),
-    fetch_all: bool = typer.Option(False, "--all", help="全アニメを取得 (count=0相当)"),
+    fetch_all: bool = typer.Option(False, "--all", help="fetch all anime (equivalent to count=0)"),
 ) -> None:
-    """MAL (Jikan API) からクレジットデータを収集する."""
+    """Collect credit data from MAL (Jikan API)."""
     from src.log import setup_logging
     from src.scrapers.bronze_writer import BronzeWriter
 
@@ -246,7 +246,7 @@ def main(
     log_path = configure_file_logging("mal")
     log.info("mal_scrape_command_start", log_file=str(log_path), count=count)
 
-    # --all フラグで全アニメを取得
+    # --all flag: fetch all anime
     if fetch_all:
         count = 0
 
@@ -295,12 +295,12 @@ def main(
 
         try:
             while True:
-                # 全アニメ取得モード: /anime エンドポイント使用
+                # all-anime mode: use /anime endpoint
                 if is_fetching_all:
                     log.info("fetching_all_anime", source="mal", page=current_page)
                     resp = await client.get_all_anime(page=current_page, limit=25)
                 else:
-                    # 人気アニメTop N: /top/anime エンドポイント使用
+                    # top-N popular anime: use /top/anime endpoint
                     pages_needed = (count + 24) // 25
                     if current_page > pages_needed:
                         break

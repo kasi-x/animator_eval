@@ -1,7 +1,7 @@
-"""Japanese Visual Media Graph (JVMG) データ取得 via Wikidata SPARQL.
+"""Japanese Visual Media Graph (JVMG) data retrieval via Wikidata SPARQL.
 
-Wikidata は日本のアニメ作品とスタッフの情報を RDF で公開している。
-SPARQL エンドポイント: https://query.wikidata.org/sparql
+Wikidata publishes information about Japanese anime works and staff as RDF.
+SPARQL endpoint: https://query.wikidata.org/sparql
 """
 
 import asyncio
@@ -20,13 +20,13 @@ from src.scrapers.logging_utils import configure_file_logging
 log = structlog.get_logger()
 
 WIKIDATA_SPARQL = "https://query.wikidata.org/sparql"
-REQUEST_INTERVAL = 2.0  # Wikidata は厳しめ
+REQUEST_INTERVAL = 2.0  # Wikidata enforces strict rate limits
 
-# アニメ作品とスタッフを取得するクエリ
+# Query to retrieve anime works and their staff
 ANIME_STAFF_QUERY = """
 SELECT ?anime ?animeLabel ?year ?person ?personLabel ?personLabelJa ?roleLabel
 WHERE {{
-  ?anime wdt:P31/wdt:P279* wd:Q63952888 .  # アニメシリーズ
+  ?anime wdt:P31/wdt:P279* wd:Q63952888 .  # anime series
   ?anime wdt:P57|wdt:P1040|wdt:P3174|wdt:P58 ?person .
   OPTIONAL {{ ?anime wdt:P577 ?date . BIND(YEAR(?date) AS ?year) }}
   OPTIONAL {{
@@ -41,7 +41,7 @@ LIMIT {limit}
 OFFSET {offset}
 """
 
-# プロパティマッピング
+# Property mapping
 WIKIDATA_ROLE_MAP = {
     "P57": "director",
     "P1040": "animation director",
@@ -55,7 +55,7 @@ CHECKPOINT_FILE = Path(__file__).parent.parent.parent / "data" / "jvmg_checkpoin
 
 
 def _load_checkpoint(path: Path) -> dict | None:
-    """チェックポイントファイルを読み込む."""
+    """Load a checkpoint file."""
     if path.exists():
         with open(path) as f:
             return json.load(f)
@@ -63,20 +63,20 @@ def _load_checkpoint(path: Path) -> dict | None:
 
 
 def _save_checkpoint(path: Path, data: dict) -> None:
-    """チェックポイントファイルを保存する."""
+    """Save a checkpoint file."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
 
 def _delete_checkpoint(path: Path) -> None:
-    """チェックポイントファイルを削除する."""
+    """Delete a checkpoint file."""
     if path.exists():
         path.unlink()
 
 
 class WikidataClient:
-    """Wikidata SPARQL 非同期クライアント (RetryingHttpClient ラッパー)."""
+    """Async Wikidata SPARQL client (wraps RetryingHttpClient)."""
 
     def __init__(self, transport=None) -> None:
         self._http = RetryingHttpClient(
@@ -113,7 +113,7 @@ class WikidataClient:
 def parse_wikidata_results(
     bindings: list[dict],
 ) -> tuple[list[BronzeAnime], list[Person], list[Credit]]:
-    """Wikidata SPARQL 結果をパースする."""
+    """Parse Wikidata SPARQL results."""
     anime_map: dict[str, BronzeAnime] = {}
     person_map: dict[str, Person] = {}
     credits: list[Credit] = []
@@ -171,7 +171,7 @@ def parse_wikidata_results(
 async def fetch_anime_staff(
     max_records: int = 5000,
 ) -> tuple[list[BronzeAnime], list[Person], list[Credit]]:
-    """Wikidata からアニメスタッフデータを取得."""
+    """Fetch anime staff data from Wikidata."""
     client = WikidataClient()
     all_anime: list[BronzeAnime] = []
     all_persons: list[Person] = []
@@ -212,15 +212,15 @@ async def fetch_anime_staff(
 
 @app.command()
 def main(
-    max_records: int = typer.Option(5000, "--max-records", "-n", help="最大レコード数"),
+    max_records: int = typer.Option(5000, "--max-records", "-n", help="maximum number of records"),
     resume: bool = typer.Option(
-        True, "--resume/--no-resume", help="チェックポイントから再開する"
+        True, "--resume/--no-resume", help="resume from checkpoint"
     ),
     checkpoint_interval: int = typer.Option(
-        2, "--checkpoint-interval", help="チェックポイント保存間隔 (ページ数)"
+        2, "--checkpoint-interval", help="checkpoint save interval (pages)"
     ),
 ) -> None:
-    """Wikidata からアニメスタッフデータを収集する."""
+    """Collect anime staff data from Wikidata."""
     from src.log import setup_logging
     from src.scrapers.bronze_writer import BronzeWriter
 

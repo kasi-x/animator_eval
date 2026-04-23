@@ -1,4 +1,4 @@
-"""画像ダウンローダー - 人物・作品の画像を非同期でダウンロード."""
+"""Image downloader — asynchronously downloads person and work images."""
 
 import asyncio
 import hashlib
@@ -18,13 +18,13 @@ from rich.progress import (
 
 log = structlog.get_logger()
 
-# 画像保存先ディレクトリ
+# Image save directory
 IMAGES_DIR = Path(__file__).parent.parent.parent / "data" / "images"
 PERSON_IMAGES_DIR = IMAGES_DIR / "persons"
 ANIME_IMAGES_DIR = IMAGES_DIR / "anime"
 
-# レート制限（画像ダウンロードは緩め）
-DOWNLOAD_DELAY = 0.1  # 秒
+# Rate limiting (relaxed for image downloads)
+DOWNLOAD_DELAY = 0.1  # seconds
 
 
 MAX_RETRIES = 3
@@ -37,22 +37,22 @@ async def download_image(
     save_dir: Path,
     filename: Optional[str] = None,
 ) -> Optional[str]:
-    """画像をダウンロードして保存 (リトライ + コンテンツ検証付き).
+    """Download and save an image (with retry + content validation).
 
     Args:
         client: httpx AsyncClient
-        url: 画像URL
-        save_dir: 保存先ディレクトリ
-        filename: ファイル名（Noneの場合はURLからハッシュ生成）
+        url: image URL
+        save_dir: destination directory
+        filename: file name (if None, a hash is derived from the URL)
 
     Returns:
-        保存したファイルパス（相対パス）、失敗時はNone
+        saved file path (relative), or None on failure
     """
     if not url:
         return None
 
     try:
-        # URLからファイル名を生成（衝突回避のためハッシュ使用）
+        # Derive file name from URL (hash to avoid collisions)
         if filename is None:
             url_hash = hashlib.md5(url.encode()).hexdigest()
             ext = Path(url).suffix or ".jpg"
@@ -61,11 +61,11 @@ async def download_image(
         save_path = save_dir / filename
         save_dir.mkdir(parents=True, exist_ok=True)
 
-        # 既にダウンロード済みならスキップ
+        # Skip if already downloaded
         if save_path.exists():
             return str(save_path.relative_to(IMAGES_DIR.parent))
 
-        # ダウンロード (リトライ付き)
+        # Download (with retry)
         for attempt in range(1, MAX_RETRIES + 1):
             await asyncio.sleep(DOWNLOAD_DELAY)
             try:
@@ -138,14 +138,14 @@ async def download_person_images(
     persons: list[tuple[str, str, str]],  # [(person_id, image_large, image_medium)]
     show_progress: bool = True,
 ) -> dict[str, dict[str, Optional[str]]]:
-    """人物の画像を一括ダウンロード.
+    """Batch download person images.
 
     Args:
-        persons: [(person_id, image_large_url, image_medium_url)] のリスト
-        show_progress: プログレスバー表示
+        persons: list of (person_id, image_large_url, image_medium_url)
+        show_progress: whether to show a progress bar
 
     Returns:
-        {person_id: {"large": path, "medium": path}} の辞書
+        dict of {person_id: {"large": path, "medium": path}}
     """
     results = {}
 
@@ -165,7 +165,7 @@ async def download_person_images(
                 console=console,
             ) as progress:
                 task = progress.add_task(
-                    "[cyan]人物画像ダウンロード中...", total=len(persons)
+                    "[cyan]Downloading person images...", total=len(persons)
                 )
 
                 for person_id, img_large, img_medium in persons:
@@ -223,14 +223,14 @@ async def download_anime_images(
     ],  # [(anime_id, cover_large, cover_extra_large, banner)]
     show_progress: bool = True,
 ) -> dict[str, dict[str, Optional[str]]]:
-    """アニメ作品の画像を一括ダウンロード.
+    """Batch download anime work images.
 
     Args:
-        anime_list: [(anime_id, cover_large, cover_extra_large, banner)] のリスト
-        show_progress: プログレスバー表示
+        anime_list: list of (anime_id, cover_large, cover_extra_large, banner)
+        show_progress: whether to show a progress bar
 
     Returns:
-        {anime_id: {"cover_large": path, "banner": path}} の辞書
+        dict of {anime_id: {"cover_large": path, "banner": path}}
     """
     results = {}
 
@@ -250,7 +250,7 @@ async def download_anime_images(
                 console=console,
             ) as progress:
                 task = progress.add_task(
-                    "[green]作品画像ダウンロード中...", total=len(anime_list)
+                    "[green]Downloading work images...", total=len(anime_list)
                 )
 
                 for anime_id, cover_large, cover_xl, banner in anime_list:
@@ -259,7 +259,7 @@ async def download_anime_images(
                     cover_path = None
                     banner_path = None
 
-                    # 最高画質を優先
+                    # Prefer highest quality
                     best_cover = cover_xl or cover_large
                     if best_cover:
                         cover_path = await download_image(
