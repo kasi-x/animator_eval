@@ -318,10 +318,9 @@ def run_backfill(conn: sqlite3.Connection) -> None:
 
 
 if __name__ == "__main__":
-    from src.database import get_connection, init_db, _run_migrations
+    from src.database import get_connection, init_db
 
     conn = get_connection()
     init_db(conn)
-    _run_migrations(conn)
     run_backfill(conn)
     conn.close()

@@ -357,12 +357,11 @@ def report(conn: sqlite3.Connection) -> None:
 
 
 if __name__ == "__main__":
-    from src.database import get_connection, init_db, _run_migrations
+    from src.database import get_connection, init_db
     from src.etl.integrate import run_integration
 
     conn = get_connection()
     init_db(conn)
-    _run_migrations(conn)
 
     print("=== Step 1: Bronze テーブルにシードデータ投入 ===")
     seed(conn)
