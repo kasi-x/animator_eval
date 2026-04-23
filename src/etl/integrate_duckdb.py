@@ -103,8 +103,29 @@ CREATE TABLE IF NOT EXISTS credits (
 #           mal_id, anilist_id, ann_id, allcinema_id, madb_id (external IDs),
 #           genres, tags, studios (→ separate tables in full ETL).
 # Includes: content_hash, fetched_at for diff detection.
-# Strategy: REPLACE (upsert) on primary key (id), skipping rows with unchanged hash.
-_ANIME_SQL = """
+# Strategy: DELETE + INSERT (upsert) on primary key (id), skipping rows with unchanged hash.
+_ANIME_SQL_DELETE = """
+WITH bronze AS (
+    SELECT
+        id,
+        content_hash
+    FROM (
+        SELECT *,
+               ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
+        FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
+        WHERE  id IS NOT NULL
+    )
+    WHERE _rn = 1
+),
+to_delete AS (
+    SELECT bronze.id FROM bronze
+    LEFT JOIN anime old ON bronze.id = old.id
+    WHERE bronze.content_hash != old.content_hash OR old.id IS NULL
+)
+DELETE FROM anime WHERE id IN (SELECT id FROM to_delete)
+"""
+
+_ANIME_SQL_INSERT = """
 WITH bronze AS (
     SELECT
         id,
@@ -138,7 +159,7 @@ filtered AS (
     LEFT JOIN anime old ON bronze.id = old.id
     WHERE bronze.content_hash != old.content_hash OR old.id IS NULL
 )
-REPLACE INTO anime
+INSERT INTO anime
 SELECT * FROM filtered
 """
 
@@ -296,8 +317,9 @@ def integrate(
                 if stmt:
                     conn.execute(stmt)
 
-            # anime
-            conn.execute(_ANIME_SQL, [anime_glob])
+            # anime (delete stale, then insert new)
+            conn.execute(_ANIME_SQL_DELETE, [anime_glob])
+            conn.execute(_ANIME_SQL_INSERT, [anime_glob])
             counts["anime"] = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]
             logger.info("silver_anime", count=counts["anime"])
 

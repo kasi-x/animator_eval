@@ -1391,6 +1391,7 @@ class BronzeAnime(BaseModel):
     id: str
     title_ja: str = ""
     title_en: str = ""
+    titles_alt: str = "{}"  # JSON dict: {"ko": "...", "zh": "..."} for non-JA native titles
     year: int | None = None
     season: str | None = None
     quarter: int | None = None

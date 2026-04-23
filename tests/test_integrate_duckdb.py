@@ -35,6 +35,8 @@ def bronze_dir(tmp_path: Path) -> Path:
             "work_type": None,
             "scale_class": None,
             "score": 7.5,  # BRONZE keeps score; SILVER must exclude it
+            "fetched_at": "2024-04-24T12:00:00",
+            "content_hash": "abc123def456",
         })
 
     with BronzeWriter("anilist", table="persons", root=root) as bw:
@@ -42,6 +44,9 @@ def bronze_dir(tmp_path: Path) -> Path:
             "id": "anilist:p1",
             "name_ja": "山田太郎",
             "name_en": "Taro Yamada",
+            "name_ko": "",
+            "name_zh": "",
+            "names_alt": "{}",
             "date_of_birth": "1985-03-15",
             "site_url": "https://example.com",
         })
@@ -137,6 +142,7 @@ def test_dedup_keeps_latest_date(tmp_path: Path) -> None:
             "format": "TV", "duration": 24, "start_date": None, "end_date": None,
             "status": "FINISHED", "original_work_type": None, "source": None,
             "work_type": None, "scale_class": None,
+            "fetched_at": "2026-04-22T12:00:00", "content_hash": "old_hash",
         })
 
     with BronzeWriter("anilist", table="anime", root=root, date=_dt.date(2026, 4, 23)) as bw:
@@ -146,11 +152,12 @@ def test_dedup_keeps_latest_date(tmp_path: Path) -> None:
             "format": "TV", "duration": 24, "start_date": None, "end_date": None,
             "status": "FINISHED", "original_work_type": None, "source": None,
             "work_type": None, "scale_class": None,
+            "fetched_at": "2026-04-23T12:00:00", "content_hash": "new_hash",
         })
 
     # Need at least empty persons and credits globs (integrate skips missing)
     with BronzeWriter("anilist", table="persons", root=root) as bw:
-        bw.append({"id": "p1", "name_ja": "X", "name_en": ""})
+        bw.append({"id": "p1", "name_ja": "X", "name_en": "", "name_ko": "", "name_zh": "", "names_alt": "{}"})
     with BronzeWriter("anilist", table="credits", root=root) as bw:
         bw.append({
             "anime_id": "anilist:1", "person_id": "p1", "role": "director",
@@ -178,10 +185,11 @@ def test_credits_dedup_on_unique_key(tmp_path: Path) -> None:
                    "season": None, "quarter": None, "episodes": 1, "format": "TV",
                    "duration": 24, "start_date": None, "end_date": None,
                    "status": None, "original_work_type": None, "source": None,
-                   "work_type": None, "scale_class": None})
+                   "work_type": None, "scale_class": None,
+                   "fetched_at": "2026-04-24T12:00:00", "content_hash": "hash_a1"})
 
     with BronzeWriter("anilist", table="persons", root=root) as bw:
-        bw.append({"id": "p1", "name_ja": "A", "name_en": ""})
+        bw.append({"id": "p1", "name_ja": "A", "name_en": "", "name_ko": "", "name_zh": "", "names_alt": "{}"})
 
     # Two identical credit rows
     dup_credit = {
@@ -212,17 +220,19 @@ def test_multi_source_merge(tmp_path: Path) -> None:
                    "season": None, "quarter": None, "episodes": 12, "format": "TV",
                    "duration": 24, "start_date": None, "end_date": None,
                    "status": None, "original_work_type": None, "source": None,
-                   "work_type": None, "scale_class": None})
+                   "work_type": None, "scale_class": None,
+                   "fetched_at": "2026-04-24T12:00:00", "content_hash": "hash_anilist1"})
 
     with BronzeWriter("ann", table="anime", root=root) as bw:
         bw.append({"id": "ann:42", "title_ja": "B", "title_en": "", "year": 2023,
                    "season": None, "quarter": None, "episodes": 26, "format": None,
                    "duration": None, "start_date": None, "end_date": None,
                    "status": None, "original_work_type": None, "source": None,
-                   "work_type": None, "scale_class": None})
+                   "work_type": None, "scale_class": None,
+                   "fetched_at": "2026-04-24T12:00:00", "content_hash": "hash_ann42"})
 
     with BronzeWriter("anilist", table="persons", root=root) as bw:
-        bw.append({"id": "p1", "name_ja": "X", "name_en": ""})
+        bw.append({"id": "p1", "name_ja": "X", "name_en": "", "name_ko": "", "name_zh": "", "names_alt": "{}"})
     with BronzeWriter("anilist", table="credits", root=root) as bw:
         bw.append({"anime_id": "anilist:1", "person_id": "p1", "role": "director",
                    "raw_role": None, "episode": None, "evidence_source": "anilist"})
@@ -246,9 +256,10 @@ def test_studios_loaded_when_parquet_exists(tmp_path: Path) -> None:
                    "season": None, "quarter": None, "episodes": 12, "format": "TV",
                    "duration": 24, "start_date": None, "end_date": None,
                    "status": None, "original_work_type": None, "source": None,
-                   "work_type": None, "scale_class": None})
+                   "work_type": None, "scale_class": None,
+                   "fetched_at": "2026-04-24T12:00:00", "content_hash": "hash_a1_studios"})
     with BronzeWriter("anilist", table="persons", root=root) as bw:
-        bw.append({"id": "p1", "name_ja": "X", "name_en": ""})
+        bw.append({"id": "p1", "name_ja": "X", "name_en": "", "name_ko": "", "name_zh": "", "names_alt": "{}"})
     with BronzeWriter("anilist", table="credits", root=root) as bw:
         bw.append({"anime_id": "a1", "person_id": "p1", "role": "director",
                    "raw_role": None, "episode": None, "evidence_source": "anilist"})

@@ -152,12 +152,15 @@ def _parse_person_html(html: str, person_id: int) -> AllcinemaPersonRecord:
         if m_hometown:
             hometown = re.sub(r"<[^>]+>", "", m_hometown.group(1)).strip()
 
+    name_ja_r, name_ko_r, name_zh_r, names_alt_d = assign_native_name_fields(name_ja, [])
+    names_alt_json = json.dumps(names_alt_d, ensure_ascii=False) if names_alt_d else "{}"
+
     return AllcinemaPersonRecord(
         allcinema_id=person_id,
-        name_ja=name_ja,
+        name_ja=name_ja_r,
         yomigana=yomigana,
-        name_ko="",
-        name_zh="",
-        names_alt="{}",
+        name_ko=name_ko_r,
+        name_zh=name_zh_r,
+        names_alt=names_alt_json,
         hometown=hometown,
     )

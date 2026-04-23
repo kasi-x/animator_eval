@@ -198,9 +198,25 @@ def parse_anilist_anime(raw: dict) -> BronzeAnime:
         if rankings:
             rankings_json = _json.dumps(rankings, ensure_ascii=False)
 
+    native_title = title.get("native") or ""
+    country = raw.get("countryOfOrigin") or "JP"
+    if country == "JP" or not native_title:
+        title_ja = native_title
+        titles_alt_json = "{}"
+    elif country == "KR":
+        title_ja = ""
+        titles_alt_json = _json.dumps({"ko": native_title}, ensure_ascii=False)
+    elif country in ("CN", "TW", "HK"):
+        title_ja = ""
+        titles_alt_json = _json.dumps({"zh": native_title}, ensure_ascii=False)
+    else:
+        title_ja = ""
+        titles_alt_json = _json.dumps({"native": native_title}, ensure_ascii=False)
+
     return BronzeAnime(
         id=f"anilist:{anilist_id}",
-        title_ja=title.get("native") or "",
+        title_ja=title_ja,
+        titles_alt=titles_alt_json,
         title_en=title.get("english") or title.get("romaji") or "",
         year=raw.get("seasonYear"),
         season=season_map.get(raw.get("season", ""), None),

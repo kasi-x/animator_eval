@@ -270,14 +270,15 @@ def upsert_anime(conn: sqlite3.Connection, anime: BronzeAnime) -> None:
 
     conn.execute(
         """INSERT INTO anime (
-               id, title_ja, title_en, year, season, episodes, format, status,
+               id, title_ja, title_en, titles_alt, year, season, episodes, format, status,
                start_date, end_date, duration, original_work_type, quarter, work_type, scale_class,
                country_of_origin, synonyms, is_adult
            )
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
                 title_ja = COALESCE(NULLIF(excluded.title_ja, ''), anime.title_ja),
                 title_en = COALESCE(NULLIF(excluded.title_en, ''), anime.title_en),
+                titles_alt = CASE WHEN excluded.titles_alt != '{}' THEN excluded.titles_alt ELSE anime.titles_alt END,
                 year = COALESCE(excluded.year, anime.year),
                 season = COALESCE(excluded.season, anime.season),
                 episodes = COALESCE(excluded.episodes, anime.episodes),
@@ -299,6 +300,7 @@ def upsert_anime(conn: sqlite3.Connection, anime: BronzeAnime) -> None:
             anime.id,
             anime.title_ja,
             anime.title_en,
+            getattr(anime, "titles_alt", "{}") or "{}",
             anime.year,
             anime.season,
             anime.episodes,

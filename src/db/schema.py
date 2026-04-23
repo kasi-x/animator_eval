@@ -60,6 +60,7 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
             id                 TEXT PRIMARY KEY,
             title_ja           TEXT NOT NULL DEFAULT '',
             title_en           TEXT NOT NULL DEFAULT '',
+            titles_alt         TEXT NOT NULL DEFAULT '{}',
             year               INTEGER,
             season             TEXT,
             quarter            INTEGER,
@@ -1051,6 +1052,9 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
             ann_id        INTEGER PRIMARY KEY,
             name_en       TEXT NOT NULL DEFAULT '',
             name_ja       TEXT NOT NULL DEFAULT '',
+            name_ko       TEXT NOT NULL DEFAULT '',
+            name_zh       TEXT NOT NULL DEFAULT '',
+            names_alt     TEXT NOT NULL DEFAULT '{}',
             date_of_birth TEXT,
             hometown      TEXT,
             blood_type    TEXT,
@@ -1088,6 +1092,10 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
             name_ja      TEXT NOT NULL DEFAULT '',
             yomigana     TEXT NOT NULL DEFAULT '',
             name_en      TEXT NOT NULL DEFAULT '',
+            name_ko      TEXT NOT NULL DEFAULT '',
+            name_zh      TEXT NOT NULL DEFAULT '',
+            names_alt    TEXT NOT NULL DEFAULT '{}',
+            hometown     TEXT,
             scraped_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -1166,8 +1174,10 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
     _upgrade_v59_names_alt(conn)
     _upgrade_v60_feat_split(conn)
     _upgrade_v60_corrections(conn)
+    _upgrade_v61_src_multilang(conn)
+    _upgrade_v61_titles_alt(conn)
     conn.execute(
-        "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '60')"
+        "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '61')"
         " ON CONFLICT(key) DO UPDATE SET value = excluded.value"
     )
     conn.commit()
@@ -1416,3 +1426,28 @@ def _upgrade_v60_corrections(conn: sqlite3.Connection) -> None:
             conn.execute(s)
         except Exception:
             pass
+
+
+def _upgrade_v61_src_multilang(conn: sqlite3.Connection) -> None:
+    """Add name_ko/name_zh/names_alt/hometown to src_allcinema_persons and src_ann_persons."""
+    for table, col, defn in [
+        ("src_allcinema_persons", "name_ko",   "TEXT NOT NULL DEFAULT ''"),
+        ("src_allcinema_persons", "name_zh",   "TEXT NOT NULL DEFAULT ''"),
+        ("src_allcinema_persons", "names_alt", "TEXT NOT NULL DEFAULT '{}'"),
+        ("src_allcinema_persons", "hometown",  "TEXT"),
+        ("src_ann_persons",       "name_ko",   "TEXT NOT NULL DEFAULT ''"),
+        ("src_ann_persons",       "name_zh",   "TEXT NOT NULL DEFAULT ''"),
+        ("src_ann_persons",       "names_alt", "TEXT NOT NULL DEFAULT '{}'"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
+        except Exception:
+            pass  # column already exists
+
+
+def _upgrade_v61_titles_alt(conn: sqlite3.Connection) -> None:
+    """Add titles_alt JSON column to anime for non-JA native titles (KR/CN/TW etc.)."""
+    try:
+        conn.execute("ALTER TABLE anime ADD COLUMN titles_alt TEXT NOT NULL DEFAULT '{}'")
+    except Exception:
+        pass  # column already exists
