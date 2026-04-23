@@ -146,7 +146,7 @@ ROLE_MAP: dict[str, Role] = {
     "cg": Role.CGI_DIRECTOR,
     "構成": Role.SCREENPLAY,
     # SeesaaWiki source-specific roles — in-between animation
-    "動仕": Role.IN_BETWEEN,  # 動画仕上げ
+    "動仕": Role.IN_BETWEEN,  # in-between finishing (abbrev. of douga shiage)
     "動画チェッカー": Role.IN_BETWEEN,
     # SeesaaWiki — key animation
     "作画監督補佐": Role.ANIMATION_DIRECTOR,
@@ -1248,7 +1248,10 @@ class Person(BaseModel):
     id: str
     name_ja: str = ""
     name_en: str = ""
+    name_ko: str = ""
+    name_zh: str = ""
     aliases: list[str] = Field(default_factory=list)
+    nationality: list[str] = Field(default_factory=list)  # ISO 3166-1 alpha-2, e.g. ["JP", "KR"]
     mal_id: int | None = None
     anilist_id: int | None = None
     madb_id: str | None = None  # Media Arts DB URI
@@ -1279,7 +1282,7 @@ class Person(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def display_name(self) -> str:
-        return self.name_ja or self.name_en or self.id
+        return self.name_ja or self.name_ko or self.name_zh or self.name_en or self.id
 
     @classmethod
     def from_db_row(cls, row: "PersonRow") -> "Person":
@@ -1287,7 +1290,10 @@ class Person(BaseModel):
             id=row.id,
             name_ja=row.name_ja,
             name_en=row.name_en,
+            name_ko=getattr(row, "name_ko", "") or "",
+            name_zh=getattr(row, "name_zh", "") or "",
             aliases=json.loads(row.aliases),
+            nationality=json.loads(getattr(row, "nationality", "[]") or "[]"),
             mal_id=row.mal_id,
             anilist_id=row.anilist_id,
             madb_id=getattr(row, "madb_id", None),
@@ -1572,7 +1578,7 @@ class Credit(BaseModel):
 
 
 class ScoreResult(BaseModel):
-    """評価結果 — 8-component structural estimation framework.
+    """Evaluation result — 8-component structural estimation framework.
 
     Components:
         person_fe: AKM person fixed effect (θ_i) — individual talent isolated from studio
@@ -1616,7 +1622,7 @@ class ScoreResult(BaseModel):
 
 
 class VAScoreResult(BaseModel):
-    """声優評価結果 — Voice Actor scoring result.
+    """Voice actor evaluation result — Voice Actor scoring result.
 
     Components:
         person_fe: VA AKM person fixed effect

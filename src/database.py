@@ -1,4 +1,4 @@
-"""SQLite データベース管理."""
+"""SQLite database management."""
 
 import sqlite3
 from contextlib import contextmanager
@@ -63,7 +63,7 @@ _FUZZY_MATCH_RULES = {
     "みだらな青ちゃんは勉強ができない": ("淫らな青ちゃんは勉強ができない", 2019),
     "天地無用! 魎皇鬼 第三期": ("天地無用! 魎皇鬼 第1期", 1992),
     '"文学少女"メモワール': ("文学少女 メモワール", 2014),
-    # v24 追加 (85%+ confidence, 手動確認済)
+    # added v24 (85%+ confidence, manually verified)
     "ゾイドフューザーズ": ("ゾイド・フューザース", 2004),
     "ゆるゆり さん☆ハイ!": ("ゆるゆり さん☆はい！", 2015),
     "スラップアップパーティー -アラド戦記-": (
@@ -123,7 +123,7 @@ _FUZZY_MATCH_RULES = {
 
 
 def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
-    """SQLite 接続を取得する."""
+    """Return a SQLite connection."""
     if db_path is None:
         db_path = DEFAULT_DB_PATH
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -143,9 +143,9 @@ def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
 def db_connection(
     db_path: Path | None = None,
 ) -> Generator[sqlite3.Connection, None, None]:
-    """SQLite 接続のコンテキストマネージャ.
+    """Context manager for a SQLite connection.
 
-    正常終了時は自動コミット、例外時はロールバック、常にクローズする。
+    Auto-commits on success, rolls back on exception, always closes.
 
     Usage::
 
@@ -210,7 +210,7 @@ def _execute_sql_script(conn: sqlite3.Connection, script: str) -> None:
 
 
 def init_db(conn: sqlite3.Connection) -> None:
-    """テーブルを作成する (delegates to init_db_v2 target schema)."""
+    """Create tables (delegates to init_db_v2 target schema)."""
     from src.database_v2 import init_db_v2
     init_db_v2(conn)
 
@@ -227,7 +227,10 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             id TEXT PRIMARY KEY,
             name_ja TEXT NOT NULL DEFAULT '',
             name_en TEXT NOT NULL DEFAULT '',
+            name_ko TEXT NOT NULL DEFAULT '',
+            name_zh TEXT NOT NULL DEFAULT '',
             aliases TEXT NOT NULL DEFAULT '[]',
+            nationality TEXT NOT NULL DEFAULT '[]',
             mal_id INTEGER,
             anilist_id INTEGER,
             canonical_id TEXT,
@@ -309,6 +312,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             person_id   TEXT NOT NULL,
             alias       TEXT NOT NULL,
             source      TEXT NOT NULL REFERENCES sources(code),
+            lang        TEXT,
             confidence  REAL CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 1),
             added_at    TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (person_id, alias, source)
@@ -767,7 +771,10 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
             anilist_id INTEGER PRIMARY KEY,
             name_ja TEXT NOT NULL DEFAULT '',
             name_en TEXT NOT NULL DEFAULT '',
+            name_ko TEXT NOT NULL DEFAULT '',
+            name_zh TEXT NOT NULL DEFAULT '',
             aliases TEXT DEFAULT '[]',
+            nationality TEXT NOT NULL DEFAULT '[]',
             date_of_birth TEXT,
             age INTEGER,
             gender TEXT,
@@ -1256,7 +1263,7 @@ def _init_db_legacy(conn: sqlite3.Connection) -> None:
 
 
 def get_schema_version(conn: sqlite3.Connection) -> int:
-    """現在のスキーマバージョンを取得する."""
+    """Return the current schema version."""
     try:
         row = conn.execute(
             "SELECT value FROM schema_meta WHERE key = 'schema_version'"
@@ -1267,7 +1274,7 @@ def get_schema_version(conn: sqlite3.Connection) -> int:
 
 
 def _set_schema_version(conn: sqlite3.Connection, version: int) -> None:
-    """スキーマバージョンを設定する."""
+    """Set the schema version."""
     conn.execute(
         """INSERT INTO schema_meta (key, value) VALUES ('schema_version', ?)
            ON CONFLICT(key) DO UPDATE SET value = excluded.value""",
@@ -1340,6 +1347,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         53: _migrate_v53_slim_anime_table,
         54: _migrate_v54_drop_legacy_credit_source,
         55: _migrate_v54_to_v55,
+        56: _migrate_v56_multilang_names,
     }
 
     for version in range(current + 1, SCHEMA_VERSION + 1):
@@ -1354,7 +1362,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v1_add_score_history(conn: sqlite3.Connection) -> None:
-    """v1: score_history テーブルを追加."""
+    """v1: add score_history table."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS score_history (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1372,7 +1380,7 @@ def _migrate_v1_add_score_history(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v2_add_score_history_index(conn: sqlite3.Connection) -> None:
-    """v2: score_history にインデックスを追加."""
+    """v2: add indexes to score_history."""
     conn.executescript("""
         CREATE INDEX IF NOT EXISTS idx_score_history_person ON score_history(person_id);
         CREATE INDEX IF NOT EXISTS idx_score_history_run ON score_history(run_at);
@@ -1380,7 +1388,7 @@ def _migrate_v2_add_score_history_index(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v3_add_pipeline_meta(conn: sqlite3.Connection) -> None:
-    """v3: pipeline_runs テーブルを追加."""
+    """v3: add pipeline_runs table."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS pipeline_runs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1394,7 +1402,7 @@ def _migrate_v3_add_pipeline_meta(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v4_add_studio_column(conn: sqlite3.Connection) -> None:
-    """v4: anime テーブルに studio カラムを追加."""
+    """v4: add studio column to anime table."""
     try:
         conn.execute("ALTER TABLE anime ADD COLUMN studio TEXT DEFAULT ''")
     except sqlite3.OperationalError:
@@ -1402,7 +1410,7 @@ def _migrate_v4_add_studio_column(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v5_add_person_metadata(conn: sqlite3.Connection) -> None:
-    """v5: persons テーブルにメタデータカラムを追加."""
+    """v5: add metadata columns to persons table."""
     new_columns = [
         "image_large TEXT",
         "image_medium TEXT",
@@ -1426,7 +1434,7 @@ def _migrate_v5_add_person_metadata(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v6_add_anime_metadata(conn: sqlite3.Connection) -> None:
-    """v6: anime テーブルにメタデータカラムを追加."""
+    """v6: add metadata columns to anime table."""
     new_columns = [
         "cover_large TEXT",
         "cover_extra_large TEXT",
@@ -1455,11 +1463,11 @@ def _migrate_v6_add_anime_metadata(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v7_drop_credits_fk(conn: sqlite3.Connection) -> None:
-    """v7: credits テーブルの外部キー制約を削除.
+    """v7: drop foreign key constraints from credits table.
 
-    二段階パイプラインでは credits が persons より先に保存されるため、
-    FK 制約があると IntegrityError になる。
-    SQLite は ALTER TABLE で FK を削除できないため、テーブル再作成が必要。
+    In the two-phase pipeline credits are written before persons, so FK constraints
+    would cause IntegrityError. SQLite cannot drop FKs via ALTER TABLE, so the table
+    must be recreated.
     """
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS credits_new (
@@ -1480,13 +1488,13 @@ def _migrate_v7_drop_credits_fk(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v8_raw_role_unique_and_anime_extra(conn: sqlite3.Connection) -> None:
-    """v8: credits の UNIQUE を raw_role ベースに変更 + anime に追加カラム.
+    """v8: change credits UNIQUE to raw_role basis + add extra anime columns.
 
     - UNIQUE(person_id, anime_id, role, episode) → UNIQUE(person_id, anime_id, raw_role, episode)
-    - raw_role を NOT NULL DEFAULT '' に変更
-    - anime テーブルに追加メタデータカラム
+    - raw_role changed to NOT NULL DEFAULT ''
+    - additional metadata columns added to anime table
     """
-    # 1. credits テーブル再作成（raw_role ベース UNIQUE）
+    # 1. recreate credits table (raw_role-based UNIQUE)
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS credits_new (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1507,7 +1515,7 @@ def _migrate_v8_raw_role_unique_and_anime_extra(conn: sqlite3.Connection) -> Non
         CREATE INDEX IF NOT EXISTS idx_credits_role ON credits(role);
     """)
 
-    # 2. anime テーブルに追加カラム
+    # 2. add extra columns to anime table
     new_columns = [
         "synonyms TEXT DEFAULT '[]'",
         "mean_score INTEGER",
@@ -1530,7 +1538,7 @@ def _migrate_v8_raw_role_unique_and_anime_extra(conn: sqlite3.Connection) -> Non
 
 
 def _migrate_v9_add_studios_tables(conn: sqlite3.Connection) -> None:
-    """v9: studios + anime_studios テーブルを追加."""
+    """v9: add studios + anime_studios tables."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS studios (
             id TEXT PRIMARY KEY,
@@ -1556,15 +1564,15 @@ def _migrate_v9_add_studios_tables(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v10_schema_cleanup(conn: sqlite3.Connection) -> None:
-    """v10: スキーマ整理.
+    """v10: schema cleanup.
 
-    - anime.studio (単数) カラム削除
-    - credits.episode デフォルト -1 → NULL
-    - updated_at カラム追加 (persons, anime, credits, characters, character_voice_actors, studios)
-    - persons.canonical_id インデックス追加
-    - anime_relations テーブル追加
+    - drop anime.studio (singular) column
+    - change credits.episode default from -1 → NULL
+    - add updated_at column (persons, anime, credits, characters, character_voice_actors, studios)
+    - add persons.canonical_id index
+    - add anime_relations table
     """
-    # 1. credits テーブル再作成 (updated_at 追加)
+    # 1. recreate credits table (add updated_at)
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS credits_new (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1587,13 +1595,13 @@ def _migrate_v10_schema_cleanup(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_credits_role ON credits(role);
     """)
 
-    # 2. anime.studio (単数) カラム削除
+    # 2. drop anime.studio (singular) column
     try:
         conn.execute("ALTER TABLE anime DROP COLUMN studio")
     except sqlite3.OperationalError:
         pass  # Column doesn't exist or SQLite too old
 
-    # 3. updated_at カラム追加
+    # 3. add updated_at column
     for table in [
         "persons",
         "anime",
@@ -1608,12 +1616,12 @@ def _migrate_v10_schema_cleanup(conn: sqlite3.Connection) -> None:
         except sqlite3.OperationalError:
             pass
 
-    # 4. persons.canonical_id インデックス
+    # 4. persons.canonical_id index
     conn.execute(
         "CREATE INDEX IF NOT EXISTS idx_persons_canonical ON persons(canonical_id)"
     )
 
-    # 5. anime_relations テーブル
+    # 5. anime_relations table
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS anime_relations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1630,7 +1638,7 @@ def _migrate_v10_schema_cleanup(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v11_add_madb_ids(conn: sqlite3.Connection) -> None:
-    """v11: anime/persons テーブルに madb_id カラムを追加."""
+    """v11: add madb_id column to anime/persons tables."""
     for table in ["anime", "persons"]:
         try:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN madb_id TEXT")
@@ -1641,7 +1649,7 @@ def _migrate_v11_add_madb_ids(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v12_add_person_fetch_status(conn: sqlite3.Connection) -> None:
-    """v12: API取得失敗（404等）を記録するテーブルを追加."""
+    """v12: add table for recording API fetch failures (404, etc.)."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS person_fetch_status (
             anilist_id INTEGER PRIMARY KEY,
@@ -1730,7 +1738,7 @@ def _migrate_v15_add_va_scores(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v16_add_person_affiliations(conn: sqlite3.Connection) -> None:
-    """v16: person_affiliations テーブルを追加 (人物×作品×所属スタジオ)."""
+    """v16: add person_affiliations table (person × work × affiliated studio)."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS person_affiliations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1749,7 +1757,7 @@ def _migrate_v16_add_person_affiliations(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v17_add_llm_decisions(conn: sqlite3.Connection) -> None:
-    """v17: LLM判定結果テーブルを追加 (org分類・名前正規化・同一人物判定)."""
+    """v17: add LLM decision result table (org classification, name normalization, identity matching)."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS llm_decisions (
             name TEXT NOT NULL,
@@ -1765,7 +1773,7 @@ def _migrate_v17_add_llm_decisions(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v18_add_score_history_quarter(conn: sqlite3.Connection) -> None:
-    """v18: score_history に year/quarter カラムを追加（四半期集計用）."""
+    """v18: add year/quarter columns to score_history (for quarterly aggregation)."""
     for col in [
         "year INTEGER",
         "quarter INTEGER",
@@ -1784,13 +1792,13 @@ def _migrate_v18_add_score_history_quarter(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v19_add_anime_quarter(conn: sqlite3.Connection) -> None:
-    """v19: anime に quarter カラムを追加し、season / start_date から一括算出.
+    """v19: add quarter column to anime and compute it from season / start_date.
 
-    さらに SeesaaWiki/Keyframes 由来の year=NULL 作品を AniList タイトルマッチで補完。
+    Also backfills year=NULL entries from SeesaaWiki/Keyframes via AniList title matching.
 
-    優先順: season → start_date の月 → NULL（不明）。
+    Priority: season → month of start_date → NULL (unknown).
     season_to_quarter: winter=1, spring=2, summer=3, fall=4.
-    start_date (YYYY-MM-DD) の月: 1-3=Q1, 4-6=Q2, 7-9=Q3, 10-12=Q4.
+    start_date (YYYY-MM-DD) month: 1-3=Q1, 4-6=Q2, 7-9=Q3, 10-12=Q4.
     """
 
     try:
@@ -1798,7 +1806,7 @@ def _migrate_v19_add_anime_quarter(conn: sqlite3.Connection) -> None:
     except sqlite3.OperationalError:
         logger.debug("column_already_exists", table="anime", column="quarter")
 
-    # Phase 1: season / start_date から quarter を直接算出
+    # Phase 1: compute quarter directly from season / start_date
     conn.execute("""
         UPDATE anime SET quarter = CASE
             WHEN LOWER(season) = 'winter' THEN 1
@@ -1818,25 +1826,25 @@ def _migrate_v19_add_anime_quarter(conn: sqlite3.Connection) -> None:
     ).fetchone()[0]
     logger.info("anime_quarter_phase1", count=phase1)
 
-    # Phase 2: SeesaaWiki/Keyframes → AniList タイトルマッチで year/quarter/format 補完
+    # Phase 2: backfill year/quarter/format via AniList title matching for SeesaaWiki/Keyframes entries
     _backfill_from_anilist_titles(conn)
 
 
 def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
-    """year=NULL の非 AniList 作品を AniList タイトルマッチで補完.
+    """Backfill year=NULL non-AniList entries via AniList title matching.
 
-    マッチ戦略 (優先順):
-      1. title_ja 完全一致
-      2. NFKC正規化 + 記号/空白除去 後の一致
-      3. 括弧注釈除去 (「（TV第2作）」「(第3期)」等) 後の一致
-         → 同名シリーズが複数ある場合は年代注釈からヒント取得
+    Match strategy (in priority order):
+      1. title_ja exact match
+      2. NFKC-normalized + symbol/whitespace-stripped match
+      3. Bracket annotation stripped (e.g. "（TV第2作）", "(第3期)") match
+         → Use year hint from annotation when multiple series share the same name
 
-    補完対象カラム: year, quarter, format, season, start_date
+    Columns backfilled: year, quarter, format, season, start_date
     """
     import re
     import unicodedata
 
-    # --- ターゲット: year=NULL の非AniList作品 ---
+    # --- targets: non-AniList entries with year=NULL ---
     targets = conn.execute(
         "SELECT id, title_ja, title_en FROM anime "
         "WHERE year IS NULL AND id NOT LIKE 'anilist:%' AND title_ja != ''"
@@ -1844,20 +1852,20 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
     if not targets:
         return
 
-    # --- AniList 参照データ ---
+    # --- AniList reference data ---
     refs = conn.execute(
         "SELECT id, title_ja, title_en, year, quarter, season, start_date, format "
         "FROM anime WHERE id LIKE 'anilist:%' AND year IS NOT NULL AND title_ja != ''"
     ).fetchall()
 
     def _normalize(s: str) -> str:
-        """NFKC正規化 + 記号/空白除去 + 小文字."""
+        """NFKC normalization + symbol/whitespace removal + lowercase."""
         import html
 
-        # HTMLエンティティをデコード: &#9825; → ♡
+        # decode HTML entities: &#9825; → ♡
         s = html.unescape(s)
         s = unicodedata.normalize("NFKC", s).lower().strip()
-        # 〈〉を<>に統一してから除去対象に含める
+        # normalize 〈〉 to <> so they are stripped by the regex below
         s = s.replace("\u3008", "<").replace("\u3009", ">")
         s = re.sub(
             r"[\s\u3000・\-–—―~〜!！?？、。,.'\"()\（\）\[\]【】「」『』《》☆★♪♡♥♡−＝<>〈〉◆◇#\$%@&*]+",
@@ -1867,19 +1875,19 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
         return s
 
     def _strip_movie_prefix(s: str) -> str:
-        """「映画」「劇場版」等のメディア形式プレフィックスを除去."""
+        """Remove media-format prefixes like 「映画」 and 「劇場版」."""
         s = re.sub(r"^(?:映画|劇場版|劇場版映画|特別版|OVA|OAD)\s*", "", s)
         return s.strip()
 
     def _sorted_word_key(s: str) -> str:
-        """単語をソートしてキーを生成（順序不問マッチ用）.
-        例: 'SHADOW SKILL 影技' → '影技shadowskill' (sorted bigrams)"""
-        # スペース・記号で分割してソート
+        """Generate a key by sorting words (for word-order-agnostic matching).
+        Example: 'SHADOW SKILL 影技' → '影技shadowskill'"""
+        # split on spaces/symbols and sort
         words = re.split(r"[\s・\-_/]+", s)
         return "".join(sorted(w for w in words if w))
 
     def _normalize_roman_greek(s: str) -> str:
-        """ギリシャ文字・ローマ数字を ASCII に変換."""
+        """Convert Greek letters and Roman numerals to ASCII."""
         for old, new in [
             ("ΖΖ", "ZZ"),
             ("Ζ", "Z"),
@@ -1898,66 +1906,66 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
         return s
 
     def _kanji_hira_key(s: str) -> str:
-        """漢字+ひらがなのみ抽出（カタカナ・ASCII・記号を除去）.
+        """Extract only kanji and hiragana (removing katakana, ASCII, symbols).
 
-        英語部分(WEED)とカタカナ翻字(ウィード)を同時に除去して、
-        残る漢字+ひらがなが一致していれば同一作品と判定する。
+        Strips both the English form (WEED) and katakana transliteration (ウィード),
+        so titles that share only their kanji+hiragana portion are treated as identical.
         """
         s = unicodedata.normalize("NFKC", s)
         return "".join(
             c
             for c in s
-            if "\u4e00" <= c <= "\u9fff"  # CJK統合漢字
-            or "\u3400" <= c <= "\u4dbf"  # CJK拡張A
-            or "\u3040" <= c <= "\u309f"  # ひらがな
+            if "\u4e00" <= c <= "\u9fff"  # CJK unified ideographs
+            or "\u3400" <= c <= "\u4dbf"  # CJK extension A
+            or "\u3040" <= c <= "\u309f"  # hiragana
         )
 
     def _strip_reading_parens(s: str) -> str:
-        """カタカナ/英字の読み括弧を除去: GATE（ゲート）→ GATE."""
+        """Remove katakana/ASCII reading parentheses: GATE（ゲート）→ GATE."""
         return re.sub(r"[（(][ァ-ヾA-Za-zＡ-Ｚ　\s]+[）)]", "", s).strip()
 
     def _strip_furigana(s: str) -> str:
-        """AniList側のふりがな括弧を除去: 魔法騎士（マジックナイト）→ 魔法騎士."""
+        """Remove furigana parentheses on the AniList side: 魔法騎士（マジックナイト）→ 魔法騎士."""
         return re.sub(r"（[ぁ-ヾァ-ヾA-Za-zＡ-Ｚ\w]+）", "", s).strip()
 
     def _strip_english_prefix(s: str) -> str:
-        """日本語文字の前の英語プレフィックスを除去: MAJOR メジャー → メジャー."""
+        """Remove English prefix before Japanese characters: MAJOR メジャー → メジャー."""
         return re.sub(r"^[A-Za-z0-9\s.\-/!?&:'+]+(?=[ぁ-ヾァ-ヾ一-龥])", "", s).strip()
 
     def _strip_annotations(s: str) -> str:
-        """括弧注釈を除去: （TV第2作）、(第3期)、（2020年）等."""
+        """Remove bracket annotations: （TV第2作）, (第3期), （2020年）, etc."""
         s = re.sub(r"[（(][^）)]*(?:シリーズ|期|作|版|年)[^）)]*[）)]", "", s)
-        # 末尾の数字年号も除去: "ぼのぼの (2016)" → "ぼのぼの"
+        # also strip trailing year suffixes: "ぼのぼの (2016)" → "ぼのぼの"
         s = re.sub(r"\s*[（(]\d{4}[）)]$", "", s)
         return s.strip()
 
     def _extract_year_hint(title: str) -> int | None:
-        """タイトルから年代ヒントを抽出: （2020年）→2020."""
+        """Extract year hint from title: （2020年）→ 2020."""
         m = re.search(r"[（(](\d{4})年?[）)]", title)
         return int(m.group(1)) if m else None
 
     def _strip_tv_prefix(s: str) -> str:
-        """TVプレフィックスを除去: 'TVそれいけ!アンパンマン' → 'それいけ!アンパンマン'."""
+        """Remove TV prefix: 'TVそれいけ!アンパンマン' → 'それいけ!アンパンマン'."""
         return re.sub(r"^TV\s*", "", s)
 
-    # --- AniList インデックス構築 ---
+    # --- build AniList lookup indexes ---
     # exact title_ja → list of refs
     idx_exact: dict[str, list] = {}
     # normalized → list of refs
     idx_norm: dict[str, list] = {}
     # stripped + normalized → list of refs
     idx_stripped: dict[str, list] = {}
-    # normalized title_en → list of refs (英語タイトルクロスマッチ用)
+    # normalized title_en → list of refs (for English title cross-matching)
     idx_en: dict[str, list] = {}
     # (normalized_ja, entry) for containment lookups
     ref_entries_for_containment: list[tuple[str, tuple]] = []
     # furigana-stripped AniList title → list of refs
     idx_furigana: dict[str, list] = {}
-    # movie-prefix-stripped → list of refs (「映画」「劇場版」除去)
+    # movie-prefix-stripped → list of refs (strips 「映画」/「劇場版」)
     idx_movie: dict[str, list] = {}
-    # sorted-word key → list of refs (単語順序不問マッチ)
+    # sorted-word key → list of refs (word-order-agnostic matching)
     idx_sorted: dict[str, list] = {}
-    # 漢字+ひらがなキー → list of refs (英語/カタカナ部分が違っても漢字が一致する場合)
+    # kanji+hiragana key → list of refs (matches when only kanji part agrees, ignoring English/katakana)
     idx_khk: dict[str, list] = {}
 
     for row in refs:
@@ -1969,75 +1977,75 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
         nk = _normalize(ja)
         if nk:
             idx_norm.setdefault(nk, []).append(entry)
-            # 包含マッチ用にエントリを記録
+            # record entry for containment matching
             ref_entries_for_containment.append((nk, entry))
 
         sk = _normalize(_strip_annotations(ja))
         if sk and sk != nk:
             idx_stripped.setdefault(sk, []).append(entry)
-        # stripped も同じキーなら norm に含まれるので追加不要
+        # if stripped key equals norm key it is already in idx_norm; no need to duplicate
         if sk and sk not in idx_stripped:
             idx_stripped.setdefault(sk, []).append(entry)
 
-        # title_en インデックス (英語タイトルクロスマッチ)
+        # title_en index (English title cross-matching)
         if en:
             enk = _normalize(en)
             if enk:
                 idx_en.setdefault(enk, []).append(entry)
 
-        # ふりがな除去インデックス: 魔法騎士（マジックナイト）レイアース → 魔法騎士レイアース
+        # furigana-stripped index: 魔法騎士（マジックナイト）レイアース → 魔法騎士レイアース
         fk = _normalize(_strip_furigana(ja))
         if fk and fk != nk:
             idx_furigana.setdefault(fk, []).append(entry)
 
-        # 映画/劇場版 プレフィックス除去インデックス
+        # movie/film-prefix-stripped index
         mk = _normalize(_strip_movie_prefix(ja))
         if mk and mk != nk:
             idx_movie.setdefault(mk, []).append(entry)
 
-        # 単語ソートインデックス (SHADOW SKILL 影技 ↔ 影技 SHADOW SKILL)
-        # 5文字以上かつ複数単語の場合のみ
+        # word-sorted index (SHADOW SKILL 影技 ↔ 影技 SHADOW SKILL)
+        # only when 5+ normalized chars and 2+ words
         words = [w for w in re.split(r"[\s\u3000・\-_/]+", ja) if w]
         if len(words) >= 2 and len(nk) >= 5:
             swk = _normalize(_sorted_word_key(ja))
             if swk and swk != nk:
                 idx_sorted.setdefault(swk, []).append(entry)
 
-        # 漢字+ひらがなキーインデックス (英語WEED ↔ カタカナウィード)
+        # kanji+hiragana key index (e.g. English WEED ↔ katakana ウィード)
         khk = _kanji_hira_key(ja)
         if len(khk) >= 4:
             idx_khk.setdefault(khk, []).append(entry)
 
     def _pick_best(candidates: list, year_hint: int | None = None) -> tuple | None:
-        """複数候補から最適な1件を選択."""
+        """Select the best match from multiple candidates."""
         if not candidates:
             return None
         if len(candidates) == 1:
             return candidates[0]
-        # 年代ヒントがあれば最も近いものを選択
+        # if a year hint is available, pick the closest match
         if year_hint:
             return min(candidates, key=lambda c: abs((c[1] or 0) - year_hint))
-        # なければ最新のものを選択（長期シリーズの最新版が通常正しい）
+        # otherwise pick the most recent (usually the correct entry for long-running series)
         return max(candidates, key=lambda c: c[1] or 0)
 
-    # --- マッチング実行 ---
+    # --- run matching ---
     updates: list[tuple] = []  # (year, quarter, season, start_date, format, target_id)
 
     for sid, sja, sen in targets:
         match = None
         year_hint = _extract_year_hint(sja)
 
-        # 1. 完全一致
+        # 1. exact match
         if sja in idx_exact:
             match = _pick_best(idx_exact[sja], year_hint)
 
-        # 2. 正規化一致
+        # 2. normalized match
         if not match:
             nk = _normalize(sja)
             if nk in idx_norm:
                 match = _pick_best(idx_norm[nk], year_hint)
 
-        # 3. 括弧注釈除去 + 正規化一致
+        # 3. annotation-stripped + normalized match
         if not match:
             sk = _normalize(_strip_annotations(sja))
             if sk in idx_norm:
@@ -2045,15 +2053,14 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
             elif sk in idx_stripped:
                 match = _pick_best(idx_stripped[sk], year_hint)
 
-        # 4. ベースタイトルマッチ（スペース前の主タイトルのみ）
-        #    品質制御: ベースタイトル5文字以上、かつ候補が少数の場合のみ
+        # 4. base-title match (main title before first space only)
+        #    quality gate: base title 5+ chars, few candidates
         if not match:
             _base = re.sub(r"[（(][^）)]*[）)]", "", sja).strip()
             _parts = re.split(r"[\s　]+", _base)
             _base_title = _parts[0] if len(_parts) > 1 else _base
             _bk = _normalize(_base_title)
-            # 短すぎるベースタイトルは誤マッチの原因なのでスキップ
-            # カテゴリページ等もスキップ
+            # skip titles too short (false-match risk) and category pages
             _SKIP_PATTERNS = {"年代", "シリーズリスト", "アニバーサリー", "music"}
             if (
                 len(_bk) >= 5
@@ -2061,27 +2068,27 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
                 and _bk in idx_norm
             ):
                 candidates = idx_norm[_bk]
-                # 候補が多すぎる場合（汎用的なタイトル）はスキップ
+                # skip if too many candidates (generic title)
                 if len(candidates) <= 10:
                     match = _pick_best(candidates, year_hint)
 
-        # 5. title_en クロスマッチ (SeesaaWiki title_ja ↔ AniList title_en)
-        #    例: NANA, D.Gray-man, CLANNAD, MAJOR, BLACK CAT
+        # 5. title_en cross-match (SeesaaWiki title_ja ↔ AniList title_en)
+        #    e.g. NANA, D.Gray-man, CLANNAD, MAJOR, BLACK CAT
         if not match:
             nk = _normalize(sja)
             if nk in idx_en:
                 match = _pick_best(idx_en[nk], year_hint)
 
-        # 6. TVプレフィックス除去マッチ
-        #    例: TVそれいけ!アンパンマン → それいけ!アンパンマン
+        # 6. TV-prefix-stripped match
+        #    e.g. TVそれいけ!アンパンマン → それいけ!アンパンマン
         if not match and (sja.startswith("TV") or sja.startswith("ＴＶ")):
             tv_stripped = _normalize(_strip_tv_prefix(sja))
             if tv_stripped and tv_stripped in idx_norm:
                 match = _pick_best(idx_norm[tv_stripped], year_hint)
 
-        # 7. 逆包含マッチ (AniList title_ja が SeesaaWiki title_ja を含む)
-        #    例: "NANA" → "NANA-ナナ-", "D.Gray-man" → "D.Gray-man ディー・グレイマン"
-        #    品質制御: 正規化後5文字以上、候補10件以下
+        # 7. reverse-containment match (AniList title_ja contains SeesaaWiki title_ja)
+        #    e.g. "NANA" → "NANA-ナナ-", "D.Gray-man" → "D.Gray-man ディー・グレイマン"
+        #    quality gate: 5+ normalized chars, ≤10 candidates
         if not match:
             nk = _normalize(sja)
             if len(nk) >= 5:
@@ -2093,35 +2100,35 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
                 if 0 < len(rev_candidates) <= 10:
                     match = _pick_best(rev_candidates, year_hint)
 
-        # 8. target title_en → AniList idx_norm (target英語タイトル ↔ AniList title_ja正規化)
+        # 8. target title_en → AniList idx_norm (target English title ↔ normalized AniList title_ja)
         if not match and sen:
             senk = _normalize(sen)
             if senk and senk in idx_norm:
                 match = _pick_best(idx_norm[senk], year_hint)
 
-        # 9. ローマ/ギリシャ数字正規化 (Ζ→Z, Ⅲ→III)
-        #    例: 機動戦士ガンダムΖΖ → 機動戦士ガンダムZZ
+        # 9. Roman/Greek numeral normalization (Ζ→Z, Ⅲ→III)
+        #    e.g. 機動戦士ガンダムΖΖ → 機動戦士ガンダムZZ
         if not match:
             rk = _normalize(_normalize_roman_greek(sja))
             if rk != _normalize(sja) and rk in idx_norm:
                 match = _pick_best(idx_norm[rk], year_hint)
 
-        # 10. 読み括弧除去 (SeesaaWiki側)
-        #     例: GATE（ゲート）自衛隊 → GATE自衛隊
+        # 10. reading-paren removal (SeesaaWiki side)
+        #     e.g. GATE（ゲート）自衛隊 → GATE自衛隊
         if not match:
             rp = _normalize(_strip_reading_parens(sja))
             if rp != _normalize(sja) and rp in idx_norm:
                 match = _pick_best(idx_norm[rp], year_hint)
 
-        # 11. ふりがな除去 (AniList側) — SeesaaWiki title ↔ AniList stripped
-        #     例: 魔法騎士レイアース → 魔法騎士（マジックナイト）レイアース
+        # 11. furigana removal (AniList side) — SeesaaWiki title ↔ furigana-stripped AniList
+        #     e.g. 魔法騎士レイアース → 魔法騎士（マジックナイト）レイアース
         if not match:
             nk = _normalize(sja)
             if nk in idx_furigana:
                 match = _pick_best(idx_furigana[nk], year_hint)
 
-        # 12. 英語プレフィックス除去
-        #     例: MAJOR メジャー 第3シリーズ → メジャー第3シリーズ
+        # 12. English prefix removal
+        #     e.g. MAJOR メジャー 第3シリーズ → メジャー第3シリーズ
         if not match:
             ep = _strip_english_prefix(sja)
             if ep and ep != sja:
@@ -2129,8 +2136,8 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
                 if epk and epk in idx_norm:
                     match = _pick_best(idx_norm[epk], year_hint)
 
-        # 13. 逆包含 4文字閾値 (SeesaaWiki ⊂ AniList, 4文字以上)
-        #     例: 監獄学園 → 監獄学園〈プリズンスクール〉
+        # 13. reverse-containment with 4-char threshold (SeesaaWiki ⊂ AniList, 4+ chars)
+        #     e.g. 監獄学園 → 監獄学園〈プリズンスクール〉
         if not match:
             nk = _normalize(sja)
             if 4 <= len(nk) < 5:
@@ -2142,9 +2149,9 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
                 if 0 < len(rev_candidates) <= 10:
                     match = _pick_best(rev_candidates, year_hint)
 
-        # 14. 前方包含 (AniList ⊂ SeesaaWiki, ratio>50%)
-        #     例: それいけ!アンパンマン ⊂ TVそれいけ!アンパンマン（2009年）
-        #     品質制御: AniList正規化タイトルが SeesaaWiki の50%以上
+        # 14. forward containment (AniList ⊂ SeesaaWiki, ratio>50%)
+        #     e.g. それいけ!アンパンマン ⊂ TVそれいけ!アンパンマン（2009年）
+        #     quality gate: AniList normalized title covers ≥50% of SeesaaWiki title
         if not match:
             nk = _normalize(sja)
             if len(nk) >= 8:
@@ -2158,16 +2165,16 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
                     ):
                         fwd_candidates.append(entry)
                 if 0 < len(fwd_candidates) <= 10:
-                    # 最長一致を優先
+                    # prefer longest match
                     fwd_candidates.sort(
                         key=lambda e: len(_normalize(e[6])),
                         reverse=True,
                     )
                     match = _pick_best(fwd_candidates[:3], year_hint)
 
-        # 15. 漢字+ひらがなキーマッチ (英語/カタカナ部分が異なっても漢字が一致)
-        #     例: 銀牙伝説WEED ↔ 銀牙伝説ウィード (共通キー: 銀牙伝説)
-        #     品質制御: キー4文字以上、AniList候補が1件のみ
+        # 15. kanji+hiragana key match (English/katakana differs but kanji agrees)
+        #     e.g. 銀牙伝説WEED ↔ 銀牙伝説ウィード (shared key: 銀牙伝説)
+        #     quality gate: key 4+ chars, only 1 AniList candidate
         if not match:
             khk = _kanji_hira_key(sja)
             if len(khk) >= 4 and khk in idx_khk:
@@ -2175,7 +2182,7 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
                 if len(cands) == 1:
                     match = cands[0]
 
-        # 16. Fuzzy match ルール辞書 (90%+ confidence, 手動確認済)
+        # 16. fuzzy match rule dictionary (90%+ confidence, manually verified)
         if not match and sja in _FUZZY_MATCH_RULES:
             anilist_ja, rule_year = _FUZZY_MATCH_RULES[sja]
             for aid, ja, en, yr, q, sea, sd, fmt in refs:
@@ -2183,8 +2190,8 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
                     match = (aid, yr, q, sea, sd, fmt, ja)
                     break
 
-        # 16. 「映画」「劇場版」プレフィックス除去マッチ
-        #     例: 映画 聲の形 → 聲の形, 劇場版シティーハンター → シティーハンター
+        # 16. movie/film-prefix-stripped match
+        #     e.g. 映画 聲の形 → 聲の形, 劇場版シティーハンター → シティーハンター
         if not match:
             mk = _normalize(_strip_movie_prefix(sja))
             if mk and mk != _normalize(sja) and mk in idx_norm:
@@ -2192,8 +2199,8 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
             elif mk and mk in idx_movie:
                 match = _pick_best(idx_movie[mk], year_hint)
 
-        # 17. 単語順逆転マッチ (SHADOW SKILL -影技- ↔ 影技 SHADOW SKILL)
-        #     品質制御: 5文字以上、候補10件以下
+        # 17. word-order-reversed match (SHADOW SKILL -影技- ↔ 影技 SHADOW SKILL)
+        #     quality gate: 5+ chars, ≤10 candidates
         if not match:
             nk = _normalize(sja)
             if len(nk) >= 5:
@@ -2204,16 +2211,16 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
                         cands = idx_sorted[swk]
                         if 0 < len(cands) <= 10:
                             match = _pick_best(cands, year_hint)
-                    # また AniList側の sorted key との一致も確認
+                    # also check if the sorted key matches AniList idx_norm
                     if not match and swk in idx_norm:
                         match = _pick_best(idx_norm[swk], year_hint)
 
-        # 18. 映画/劇場版 prefix 除去 + AniList側の movie index
-        #     例: 映画 プリキュアオールスターズF → プリキュアオールスターズF
+        # 18. movie-prefix removal + AniList movie index
+        #     e.g. 映画 プリキュアオールスターズF → プリキュアオールスターズF
         if not match:
             mk = _normalize(_strip_movie_prefix(sja))
             if mk and mk != _normalize(sja):
-                # 前方包含も試みる (ratio>60%)
+                # also attempt forward containment (ratio>60%)
                 if len(mk) >= 6:
                     mv_cands = [
                         entry
@@ -2231,7 +2238,7 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
             _, yr, q, sea, sd, fmt, _ = match
             updates.append((yr, q, sea, sd, fmt, sid))
 
-    # --- DB 一括更新 ---
+    # --- bulk DB update ---
     if updates:
         conn.executemany(
             "UPDATE anime SET year=?, quarter=?, season=?, start_date=?, format=? "
@@ -2239,8 +2246,8 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
             updates,
         )
 
-    # 補完後に quarter が NULL のまま残っている作品の quarter を再計算
-    # (season/start_date が補完されたが quarter が未設定のケース)
+    # recompute quarter for entries that still have NULL after backfill
+    # (season/start_date was backfilled but quarter was not set)
     conn.execute("""
         UPDATE anime SET quarter = CASE
             WHEN LOWER(season) = 'winter' THEN 1
@@ -2266,12 +2273,13 @@ def _backfill_from_anilist_titles(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v20_add_credit_temporal(conn: sqlite3.Connection) -> None:
-    """v20: credits に credit_year / credit_quarter を追加.
+    """v20: add credit_year / credit_quarter to credits table.
 
-    短期作品 (≤12話 or episode=-1): anime の year/quarter をそのまま使用。
-    長期作品 (>12話, episode情報あり): start_date + 週1放送仮定で各話の放送時期を推定。
+    Short series (≤12 episodes or episode=-1): copy year/quarter from anime directly.
+    Long-running series (>12 episodes, with episode info): estimate airing date per episode
+        using start_date + one-episode-per-week assumption.
 
-    推定式: air_date = start_date + (episode - 1) * 7 days
+    Formula: air_date = start_date + (episode - 1) * 7 days
     """
     from datetime import date, timedelta
 
@@ -2281,7 +2289,7 @@ def _migrate_v20_add_credit_temporal(conn: sqlite3.Connection) -> None:
         except sqlite3.OperationalError:
             pass
 
-    # Phase 1: 全クレジットに anime の year/quarter をデフォルト設定
+    # Phase 1: default-set credit_year/quarter from anime for all credits
     conn.execute("""
         UPDATE credits SET credit_year = a.year, credit_quarter = a.quarter
         FROM anime a WHERE credits.anime_id = a.id AND a.year IS NOT NULL
@@ -2292,8 +2300,8 @@ def _migrate_v20_add_credit_temporal(conn: sqlite3.Connection) -> None:
     ).fetchone()[0]
     logger.info("credit_temporal_phase1", count=phase1)
 
-    # Phase 2: 長期作品のエピソード別時期推定
-    # 対象: start_date あり & 話数付きクレジットがある & 13話以上の作品
+    # Phase 2: per-episode airing date estimation for long-running series
+    #   target: series with start_date, episode-numbered credits, and 13+ episodes
     long_anime = conn.execute("""
         SELECT a.id, a.start_date, a.end_date, a.episodes,
                MAX(c.episode) as max_ep
@@ -2312,21 +2320,21 @@ def _migrate_v20_add_credit_temporal(conn: sqlite3.Connection) -> None:
         except (ValueError, TypeError):
             continue
 
-        # 放送間隔の推定
-        # end_date があれば (end - start) / max_ep で計算
-        # なければ週1 (7日) を仮定
+        # estimate broadcast interval
+        # if end_date exists: (end - start) / max_ep
+        # otherwise assume weekly (7 days)
         interval_days = 7
         if end_str and len(end_str) >= 10:
             try:
                 ed = date.fromisoformat(end_str[:10])
                 if max_ep > 1 and ed > sd:
                     interval_days = (ed - sd).days / (max_ep - 1)
-                    # 妥当性チェック: 3-14日の範囲（週1±α）
+                    # sanity check: clamp to 3-14 days (weekly ± tolerance)
                     interval_days = max(3, min(14, interval_days))
             except (ValueError, TypeError):
                 pass
 
-        # 各エピソードのクレジットを更新
+        # update credits for each episode
         ep_credits = conn.execute(
             "SELECT rowid, episode FROM credits WHERE anime_id = ? AND episode > 0",
             (anime_id,),
@@ -2362,11 +2370,11 @@ def _migrate_v20_add_credit_temporal(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v21_enhanced_title_matching(conn: sqlite3.Connection) -> None:
-    """v21: 拡張タイトルマッチング (title_en, TVプレフィックス, 逆包含) で再マッチ.
+    """v21: re-run enhanced title matching (title_en, TV prefix, reverse containment).
 
-    v19 で追加した _backfill_from_anilist_titles に新しいマッチ戦略を追加済み。
-    ここでは再実行して残りの未マッチ作品を補完し、
-    新規マッチした作品の credit_year/credit_quarter も設定する。
+    New match strategies have been added to _backfill_from_anilist_titles since v19.
+    This migration re-runs backfill to cover remaining unmatched entries and also
+    populates credit_year/credit_quarter for newly matched titles.
     """
     from datetime import date, timedelta
 
@@ -2381,8 +2389,8 @@ def _migrate_v21_enhanced_title_matching(conn: sqlite3.Connection) -> None:
     ).fetchone()[0]
     newly_matched = before - after
 
-    # 新規マッチした作品の credits にも credit_year/credit_quarter を設定
-    # (credit_year IS NULL = v20 migration 時にマッチしていなかった作品)
+    # set credit_year/credit_quarter for credits of newly matched titles
+    # (credit_year IS NULL means the title was unmatched at the time of v20)
     conn.execute("""
         UPDATE credits SET credit_year = a.year, credit_quarter = a.quarter
         FROM anime a
@@ -2391,7 +2399,7 @@ def _migrate_v21_enhanced_title_matching(conn: sqlite3.Connection) -> None:
           AND credits.credit_year IS NULL
     """)
 
-    # 新規マッチの長期作品もエピソード別時期推定
+    # also apply per-episode estimation for newly matched long-running series
     long_anime = conn.execute("""
         SELECT a.id, a.start_date, a.end_date, a.episodes,
                MAX(c.episode) as max_ep
@@ -2448,9 +2456,9 @@ def _migrate_v21_enhanced_title_matching(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v22_deep_title_matching(conn: sqlite3.Connection) -> None:
-    """v22: 深層タイトルマッチング (ローマ数字, ふりがな, 英語prefix, 前方包含).
+    """v22: deep title matching (Roman numerals, furigana, English prefix, forward containment).
 
-    v21 backfill に追加した戦略 9-14 で残りの未マッチ作品を補完。
+    Covers remaining unmatched entries using strategies 9-14 added to backfill since v21.
     """
     from datetime import date, timedelta
 
@@ -2465,7 +2473,7 @@ def _migrate_v22_deep_title_matching(conn: sqlite3.Connection) -> None:
     ).fetchone()[0]
     newly_matched = before - after
 
-    # 新規マッチした作品の credits にも credit_year/credit_quarter を設定
+    # Set credit_year/credit_quarter on credits for newly matched works
     conn.execute("""
         UPDATE credits SET credit_year = a.year, credit_quarter = a.quarter
         FROM anime a
@@ -2474,7 +2482,7 @@ def _migrate_v22_deep_title_matching(conn: sqlite3.Connection) -> None:
           AND credits.credit_year IS NULL
     """)
 
-    # 新規マッチの長期作品もエピソード別時期推定
+    # also apply per-episode estimation for newly matched long-running series
     long_anime = conn.execute("""
         SELECT a.id, a.start_date, a.end_date, a.episodes,
                MAX(c.episode) as max_ep
@@ -2531,10 +2539,10 @@ def _migrate_v22_deep_title_matching(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v23_fuzzy_match_rules(conn: sqlite3.Connection) -> None:
-    """v23: Fuzzy マッチングルール (90%+ confidence) を適用して残りを補完.
+    """v23: apply fuzzy match rules (90%+ confidence) to cover remaining entries.
 
-    v22 backfill に追加した phase 15 (fuzzy match rules) で
-    高精度なタイトル置換ペアをマッチ。
+    Uses phase 15 (fuzzy match rules) added to backfill since v22
+    to match high-confidence title substitution pairs.
     """
     from datetime import date, timedelta
 
@@ -2549,7 +2557,7 @@ def _migrate_v23_fuzzy_match_rules(conn: sqlite3.Connection) -> None:
     ).fetchone()[0]
     newly_matched = before - after
 
-    # 新規マッチした作品の credits にも credit_year/credit_quarter を設定
+    # Set credit_year/credit_quarter on credits for newly matched works
     conn.execute("""
         UPDATE credits SET credit_year = a.year, credit_quarter = a.quarter
         FROM anime a
@@ -2558,7 +2566,7 @@ def _migrate_v23_fuzzy_match_rules(conn: sqlite3.Connection) -> None:
           AND credits.credit_year IS NULL
     """)
 
-    # 新規マッチの長期作品もエピソード別時期推定
+    # also apply per-episode estimation for newly matched long-running series
     long_anime = conn.execute("""
         SELECT a.id, a.start_date, a.end_date, a.episodes,
                MAX(c.episode) as max_ep
@@ -2615,14 +2623,14 @@ def _migrate_v23_fuzzy_match_rules(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v24_improved_matching(conn: sqlite3.Connection) -> None:
-    """v24: 改良マッチング (映画prefix, 単語順逆転, normalize改善, 追加fuzzy rules).
+    """v24: improved matching (movie prefix, word-order reversal, normalize improvements, extra fuzzy rules).
 
-    改善内容:
-    - normalize(): 〈〉→<>統一, HTMLエンティティデコード, ◆◇等追加
-    - Phase 16: 「映画」「劇場版」プレフィックス除去マッチ
-    - Phase 17: 単語順逆転マッチ (SHADOW SKILL-影技- ↔ 影技 SHADOW SKILL)
-    - Phase 18: 映画prefix除去+前方包含
-    - _FUZZY_MATCH_RULES: v24で25件追加 (攻殻機動隊ARISE, 頭文字D等)
+    Changes:
+    - normalize(): unify 〈〉→<>, HTML entity decode, add ◆◇ etc.
+    - Phase 16: movie/film-prefix-stripped match
+    - Phase 17: word-order-reversed match (SHADOW SKILL-影技- ↔ 影技 SHADOW SKILL)
+    - Phase 18: movie prefix removal + forward containment
+    - _FUZZY_MATCH_RULES: 25 new entries in v24 (攻殻機動隊ARISE, 頭文字D, etc.)
     """
     from datetime import date, timedelta
 
@@ -2692,10 +2700,10 @@ def _migrate_v24_improved_matching(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v25_kanji_hira_matching(conn: sqlite3.Connection) -> None:
-    """v25: 漢字+ひらがなキーマッチ — 英語/カタカナ部分が異なっても漢字が一致すれば同定.
+    """v25: kanji+hiragana key match — identify titles that agree on kanji even when English/katakana differs.
 
-    例: 銀牙伝説WEED ↔ 銀牙伝説ウィード (キー: 銀牙伝説)
-    品質制御: キー4文字以上、AniList候補が1件のみ受理。
+    Example: 銀牙伝説WEED ↔ 銀牙伝説ウィード (key: 銀牙伝説)
+    Quality gate: key 4+ chars, only one AniList candidate accepted.
     """
     from datetime import date, timedelta
 
@@ -2761,12 +2769,12 @@ def _migrate_v25_kanji_hira_matching(conn: sqlite3.Connection) -> None:
 
 
 def compute_anime_scale_classes(conn: sqlite3.Connection) -> dict[str, int]:
-    """アニメを work_type (tv/tanpatsu) × scale_class (large/medium/small) に分類する.
+    """Classify anime by work_type (tv/tanpatsu) × scale_class (large/medium/small).
 
-    特徴量: log(total_animator_credits), log(unique_animators)
-    最小データ閾値: total_animator_credits >= 10
-    K-means K=3 を TV / 単発 それぞれ独立に適用。
-    centroids は total_animator_credits の中央値でソートし 小→中→大 に対応付ける。
+    Features: log(total_animator_credits), log(unique_animators)
+    Minimum data threshold: total_animator_credits >= 10
+    K-means K=3 applied independently to TV and tanpatsu subsets.
+    Centroids sorted by median total_animator_credits → mapped to small/medium/large.
 
     Returns:
         {'tv_classified': n, 'tanpatsu_classified': n, 'null_assigned': n}
@@ -2865,7 +2873,7 @@ def compute_anime_scale_classes(conn: sqlite3.Connection) -> dict[str, int]:
 
 
 def _migrate_v26_anime_scale_classification(conn: sqlite3.Connection) -> None:
-    """v26: anime テーブルに work_type / scale_class カラムを追加し K-means で分類."""
+    """v26: add work_type / scale_class columns to anime table and classify via K-means."""
     conn.executescript("""
         ALTER TABLE anime ADD COLUMN work_type  TEXT;
         ALTER TABLE anime ADD COLUMN scale_class TEXT;
@@ -2876,13 +2884,13 @@ def _migrate_v26_anime_scale_classification(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v27_normalize_legacy_roles(conn: sqlite3.Connection) -> None:
-    """v27: credits テーブルのレガシーロール値を現行 Role enum 値に正規化.
+    """v27: normalize legacy role values in credits table to current Role enum values.
 
-    かつてコード側の _LEGACY_ROLE_MAP で実行時に変換していた処理を
-    データとして一度だけ適用し、永続化する。
+    Applies the runtime conversion previously handled by _LEGACY_ROLE_MAP as a
+    one-time data migration and persists it.
 
-    注意: "other" は Role.OTHER として残す (分類不能クレジット用)。
-          "special" は別概念 (スペシャルサンクス等) なので混同しない。
+    Note: "other" stays as Role.OTHER (catch-all for unclassifiable credits).
+          "special" is a different concept (special thanks, etc.) and must not be conflated.
     """
     legacy_map = {
         "chief_animation_director": "animation_director",
@@ -2903,13 +2911,13 @@ def _migrate_v27_normalize_legacy_roles(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v28_add_career_track(conn: sqlite3.Connection) -> None:
-    """v28: scores テーブルに career_track カラムを追加.
+    """v28: add career_track column to scores table.
 
-    career_track は生データではなくパイプラインが推定した加工データ（派生属性）。
-    scores テーブルに置くことで生データ（credits）との分離を維持する。
+    career_track is derived/processed data estimated by the pipeline, not raw data.
+    Placed in the scores table to maintain separation from raw credits.
 
-    値: 'animator' / 'animator_director' / 'director' /
-        'production' / 'technical' / 'multi_track'
+    Values: 'animator' / 'animator_director' / 'director' /
+            'production' / 'technical' / 'multi_track'
     """
     conn.executescript("""
         ALTER TABLE scores ADD COLUMN career_track TEXT NOT NULL DEFAULT 'multi_track';
@@ -2918,11 +2926,11 @@ def _migrate_v28_add_career_track(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v29_add_feat_tables(conn: sqlite3.Connection) -> None:
-    """v29: feat_* 派生特徴量テーブル群を追加.
+    """v29: add feat_* derived-feature table group.
 
-    生データ (persons/anime/credits) とパイプライン計算結果を命名で明確に分離する。
-    feat_person_scores, feat_network, feat_career, feat_genre_affinity, feat_contribution
-    の 5 テーブルを追加し、JSON ファイルへの依存を段階的に削減する。
+    Naming clearly separates raw data (persons/anime/credits) from pipeline-computed results.
+    Adds 5 tables — feat_person_scores, feat_network, feat_career, feat_genre_affinity,
+    feat_contribution — to progressively reduce dependence on JSON files.
     """
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS feat_person_scores (
@@ -3013,7 +3021,7 @@ def _migrate_v29_add_feat_tables(conn: sqlite3.Connection) -> None:
 
 
 # ================================================================
-# feat_* DAO: 派生特徴量の一括書き込み / 読み込み
+# feat_* DAO: bulk write / read for derived feature tables
 # ================================================================
 
 
@@ -3022,13 +3030,13 @@ def upsert_feat_person_scores(
     rows: list[dict],
     run_id: int | None = None,
 ) -> None:
-    """feat_person_scores を一括 upsert する.
+    """Bulk upsert into feat_person_scores.
 
     Args:
-        conn: SQLite 接続
-        rows: scores.json の各エントリと同形式の dict リスト。
-              必須キー: person_id。残りは欠損時に None。
-        run_id: pipeline_runs.id (省略可)
+        conn: SQLite connection
+        rows: list of dicts in the same format as scores.json entries.
+              Required key: person_id. Missing fields default to None.
+        run_id: pipeline_runs.id (optional)
     """
 
     def _pct(d: dict, key: str) -> float | None:
@@ -3112,10 +3120,10 @@ def upsert_feat_network(
     rows: list[dict],
     run_id: int | None = None,
 ) -> None:
-    """feat_network を一括 upsert する.
+    """Bulk upsert into feat_network.
 
-    各 dict に person_id と centrality/hub_score/bridge 情報を含める。
-    scores.json の centrality サブ dict および bridges.json から構築する。
+    Each dict must contain person_id plus centrality/hub_score/bridge info.
+    Built from the centrality sub-dict in scores.json and from bridges.json.
     """
     batch = []
     for d in rows:
@@ -3168,9 +3176,9 @@ def upsert_feat_career(
     rows: list[dict],
     run_id: int | None = None,
 ) -> None:
-    """feat_career を一括 upsert する.
+    """Bulk upsert into feat_career.
 
-    scores.json の career/growth サブ dict および growth.json から構築する。
+    Built from the career/growth sub-dicts in scores.json and from growth.json.
     """
     batch = []
     for d in rows:
@@ -3226,10 +3234,10 @@ def upsert_feat_genre_affinity(
     rows: list[dict],
     run_id: int | None = None,
 ) -> None:
-    """feat_genre_affinity を一括 upsert する.
+    """Bulk upsert into feat_genre_affinity.
 
     Args:
-        rows: {"person_id", "genre", "affinity_score", "work_count"} の dict リスト
+        rows: list of dicts with keys {"person_id", "genre", "affinity_score", "work_count"}
     """
     batch = [
         (
@@ -3260,9 +3268,9 @@ def upsert_feat_contribution(
     rows: list[dict],
     run_id: int | None = None,
 ) -> None:
-    """feat_contribution を一括 upsert する.
+    """Bulk upsert into feat_contribution.
 
-    individual_profiles.json のエントリから構築する。
+    Built from entries in individual_profiles.json.
     """
     batch = [
         (
@@ -3300,7 +3308,7 @@ def upsert_agg_milestones(
     milestones_dict: dict,
     run_id: int | None = None,
 ) -> None:
-    """agg_milestones を一括 upsert する (L2: キャリアイベント).
+    """Bulk upsert into agg_milestones (L2: career events).
 
     Args:
         milestones_dict: {person_id: [{type, year, anime_id, anime_title, description}]}
@@ -3342,18 +3350,18 @@ def upsert_agg_director_circles(
     circles_dict: dict,
     run_id: int | None = None,
 ) -> None:
-    """agg_director_circles を一括 upsert する (L2: 共同クレジット集計).
+    """Bulk upsert into agg_director_circles (L2: co-credit aggregation).
 
     Args:
-        circles_dict: {director_id: obj} ここで obj は DirectorCircle dataclass
-                      または {members: [{person_id, shared_works, hit_rate, roles, latest_year}]} dict。
+        circles_dict: {director_id: obj} where obj is a DirectorCircle dataclass
+                      or a dict with {members: [{person_id, shared_works, hit_rate, roles, latest_year}]}.
     """
     import dataclasses
     import json as _json
 
     batch = []
     for director_id, circle in circles_dict.items():
-        # dataclass の場合は dict に変換
+        # convert dataclass to dict if needed
         if dataclasses.is_dataclass(circle) and not isinstance(circle, type):
             circle = dataclasses.asdict(circle)
         if not isinstance(circle, dict):
@@ -3402,7 +3410,7 @@ def upsert_feat_mentorships(
     mentorships_list: list,
     run_id: int | None = None,
 ) -> None:
-    """feat_mentorships を一括 upsert する (L3: メンター推定).
+    """Bulk upsert into feat_mentorships (L3: algorithmic mentor estimation).
 
     Args:
         mentorships_list: [{mentor_id, mentee_id, n_shared_works, hit_rate,
@@ -3444,28 +3452,28 @@ def upsert_feat_mentorships(
 
 
 def load_feat_person_scores(conn: sqlite3.Connection) -> dict[str, dict]:
-    """feat_person_scores を person_id → dict で返す."""
+    """Return feat_person_scores as person_id → dict mapping."""
     rows = conn.execute("SELECT * FROM feat_person_scores").fetchall()
     return {r["person_id"]: dict(r) for r in rows}
 
 
 def load_feat_network(conn: sqlite3.Connection) -> dict[str, dict]:
-    """feat_network を person_id → dict で返す."""
+    """Return feat_network as person_id → dict mapping."""
     rows = conn.execute("SELECT * FROM feat_network").fetchall()
     return {r["person_id"]: dict(r) for r in rows}
 
 
 def load_feat_career(conn: sqlite3.Connection) -> dict[str, dict]:
-    """feat_career を person_id → dict で返す."""
+    """Return feat_career as person_id → dict mapping."""
     rows = conn.execute("SELECT * FROM feat_career").fetchall()
     return {r["person_id"]: dict(r) for r in rows}
 
 
 def _migrate_v30_add_feat_credit_activity(conn: sqlite3.Connection) -> None:
-    """v30: feat_credit_activity テーブルを追加.
+    """v30: add feat_credit_activity table.
 
-    個人ごとの空白期間・活動密度・休止履歴を事前集計して格納する。
-    次回パイプライン起動時に compute_feat_credit_activity() で全件再計算する。
+    Pre-aggregates per-person gap periods, activity density, and hiatus history.
+    compute_feat_credit_activity() re-computes all rows on the next pipeline run.
     """
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS feat_credit_activity (
@@ -3505,26 +3513,26 @@ def compute_feat_credit_activity(
     current_quarter: int | None = None,
     batch_size: int = 5000,
 ) -> int:
-    """個人ごとのクレジット空白期間・活動パターンを計算して feat_credit_activity に保存する.
+    """Compute per-person credit gap periods and activity patterns and save to feat_credit_activity.
 
-    計算内容:
-    - 四半期精度ギャップ: mean/median/min/max/std の間隔 (quarters)
-    - 連続参加率: 間隔が1四半期の割合
-    - 休止 (n ≥ 4Q): 件数・最長期間
-    - 年レベルギャップ (quarter=NULL のクレジットも含む)
-    - 最終クレジットからの経過四半期
+    Computed metrics:
+    - Quarter-level gaps: mean/median/min/max/std interval (in quarters)
+    - Consecutive quarter rate: fraction of gaps equal to 1 quarter
+    - Hiatus (n ≥ 4Q): count and longest duration
+    - Year-level gaps (includes credits with quarter=NULL)
+    - Quarters elapsed since last credit
 
-    abs_quarter 表現: year * 4 + (quarter - 1)
-    例: 2020Q1 → 8080, 2020Q4 → 8083
+    abs_quarter representation: year * 4 + (quarter - 1)
+    Example: 2020Q1 → 8080, 2020Q4 → 8083
 
     Args:
-        conn: SQLite 接続
-        current_year: 基準年 (省略時: 現在年)
-        current_quarter: 基準四半期 (省略時: 現在四半期)
-        batch_size: 一括 INSERT のバッチサイズ
+        conn: SQLite connection
+        current_year: reference year (defaults to current year)
+        current_quarter: reference quarter (defaults to current quarter)
+        batch_size: batch size for bulk INSERT
 
     Returns:
-        書き込んだ行数
+        number of rows written
     """
     import datetime
     import math
@@ -3536,8 +3544,8 @@ def compute_feat_credit_activity(
         current_quarter = (datetime.datetime.now().month - 1) // 3 + 1
     current_abs_q = current_year * 4 + current_quarter - 1
 
-    # --- Step 1: 四半期精度データ (LAG で連続差分) ---
-    # CTE で per-person gap リストを取得 (SQLite window functions)
+    # --- Step 1: quarter-level data (consecutive diffs via LAG) ---
+    # use CTE to get per-person gap list (SQLite window functions)
     quarter_gaps_sql = """
         WITH distinct_quarters AS (
             SELECT
@@ -3562,7 +3570,7 @@ def compute_feat_credit_activity(
         ORDER BY person_id, gap
     """
 
-    # --- Step 2: 活動範囲 (四半期) ---
+    # --- Step 2: activity range (quarters) ---
     activity_sql = """
         SELECT
             person_id,
@@ -3574,7 +3582,7 @@ def compute_feat_credit_activity(
         GROUP BY person_id
     """
 
-    # --- Step 3: 年レベルギャップ (全クレジット対象) ---
+    # --- Step 3: year-level gaps (all credits) ---
     year_gaps_sql = """
         WITH distinct_years AS (
             SELECT person_id, credit_year
@@ -3609,7 +3617,7 @@ def compute_feat_credit_activity(
 
     logger.info("feat_credit_activity_compute_start")
 
-    # 活動範囲を読み込み
+    # load activity range
     activity_rows = conn.execute(activity_sql).fetchall()
     activity = {
         r["person_id"]: {
@@ -3620,7 +3628,7 @@ def compute_feat_credit_activity(
         for r in activity_rows
     }
 
-    # 年レベルギャップ
+    # year-level gaps
     year_gaps = {
         r["person_id"]: {
             "n_year_gaps": r["n_year_gaps"],
@@ -3634,7 +3642,7 @@ def compute_feat_credit_activity(
         for r in conn.execute(year_activity_sql).fetchall()
     }
 
-    # ギャップを person_id ごとに集計 (streaming で読み込み)
+    # aggregate gaps by person_id (streaming read)
     gaps_by_person: dict[str, list[int]] = {}
     cur = conn.execute(quarter_gaps_sql)
     for row in cur:
@@ -3649,7 +3657,7 @@ def compute_feat_credit_activity(
         persons_with_gaps=len(gaps_by_person),
     )
 
-    # 統計計算してバッチ挿入
+    # compute stats and batch insert
     batch: list[tuple] = []
     total_written = 0
 
@@ -3657,7 +3665,7 @@ def compute_feat_credit_activity(
         first_q = act["first_abs_quarter"]
         last_q = act["last_abs_quarter"]
         active_q = act["active_quarters"]
-        span = last_q - first_q  # 0 の場合は活動が1四半期のみ
+        span = last_q - first_q  # 0 means active in only one quarter
         density = active_q / (span + 1) if span >= 0 else 1.0
 
         gaps = gaps_by_person.get(pid, [])
@@ -3766,16 +3774,16 @@ def _insert_feat_credit_activity_batch(
 
 
 def load_feat_credit_activity(conn: sqlite3.Connection) -> dict[str, dict]:
-    """feat_credit_activity を person_id → dict で返す."""
+    """Return feat_credit_activity as person_id → dict mapping."""
     rows = conn.execute("SELECT * FROM feat_credit_activity").fetchall()
     return {r["person_id"]: dict(r) for r in rows}
 
 
 def _migrate_v31_add_feat_career_annual(conn: sqlite3.Connection) -> None:
-    """v31: feat_career_annual テーブルを追加.
+    """v31: add feat_career_annual table.
 
-    個人のキャリア年（デビューからの経過年数）× 職種カテゴリ別に
-    作品数・クレジット数を集計して格納する。
+    Pre-aggregates per-person work/credit counts by career year
+    (years since debut) and role category.
     """
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS feat_career_annual (
@@ -3812,23 +3820,23 @@ def compute_feat_career_annual(
     conn: sqlite3.Connection,
     batch_size: int = 2000,
 ) -> int:
-    """個人 × キャリア年 × 職種カテゴリ別の作品数・クレジット数を集計して feat_career_annual に保存.
+    """Aggregate work/credit counts by person × career year × role category into feat_career_annual.
 
-    career_year = credit_year - first_credit_year  (0 = デビュー年)
+    career_year = credit_year - first_credit_year  (0 = debut year)
 
-    職種カテゴリは src/utils/role_groups.py の ROLE_CATEGORY に従い 14 種に分類。
-    未知の役職は works_other にカウントする。
+    Role categories follow ROLE_CATEGORY in src/utils/role_groups.py (14 categories).
+    Unknown roles are counted under works_other.
 
     Args:
-        conn: SQLite 接続
-        batch_size: 一括 INSERT のバッチサイズ (person 単位)
+        conn: SQLite connection
+        batch_size: batch size for bulk INSERT (per person)
 
     Returns:
-        書き込んだ行数
+        number of rows written
     """
     from src.utils.role_groups import ROLE_CATEGORY
 
-    # role → column名 マッピング
+    # role → column name mapping
     CAT_COL = {
         "direction": "works_direction",
         "animation_supervision": "works_animation_supervision",
@@ -3846,7 +3854,7 @@ def compute_feat_career_annual(
     }
     logger.info("feat_career_annual_compute_start")
 
-    # デビュー年を取得 (credit_year の最小値)
+    # fetch debut year per person (minimum credit_year)
     debut_sql = """
         SELECT person_id, MIN(credit_year) AS debut_year
         FROM credits
@@ -3857,7 +3865,7 @@ def compute_feat_career_annual(
         r["person_id"]: r["debut_year"] for r in conn.execute(debut_sql).fetchall()
     }
 
-    # person × year × role の集計 (ユニーク作品数・クレジット数)
+    # aggregate person × year × role (unique work count and credit count)
     agg_sql = """
         SELECT
             person_id,
@@ -3871,7 +3879,7 @@ def compute_feat_career_annual(
         ORDER BY person_id, credit_year
     """
 
-    # person_id ごとにまとめて処理
+    # process by person_id
     current_pid: str | None = None
     current_years: dict[int, dict] = {}  # credit_year → row_accumulator
 
@@ -3994,13 +4002,13 @@ def load_feat_career_annual(
     conn: sqlite3.Connection,
     person_id: str | None = None,
 ) -> list[dict]:
-    """feat_career_annual を返す.
+    """Return feat_career_annual rows.
 
     Args:
-        person_id: 特定の人物に絞る場合に指定 (省略時は全件)
+        person_id: filter to a specific person (returns all if omitted)
 
     Returns:
-        {person_id, career_year, credit_year, n_works, ...} の list
+        list of dicts with keys {person_id, career_year, credit_year, n_works, ...}
     """
     if person_id is not None:
         rows = conn.execute(
@@ -4015,7 +4023,7 @@ def load_feat_career_annual(
 
 
 def _migrate_v33_add_feat_credit_contribution(conn: sqlite3.Connection) -> None:
-    """v33: feat_credit_contribution / feat_person_work_summary テーブルを追加."""
+    """v33: add feat_credit_contribution / feat_person_work_summary tables."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS feat_credit_contribution (
             person_id TEXT NOT NULL,
@@ -4054,7 +4062,7 @@ def _migrate_v33_add_feat_credit_contribution(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v34_add_agg_milestones(conn: sqlite3.Connection) -> None:
-    """v34: agg_milestones テーブルを追加 (L2: 生データから抽出したキャリアイベント)."""
+    """v34: add agg_milestones table (L2: career events extracted from raw data)."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS agg_milestones (
             person_id   TEXT NOT NULL,
@@ -4071,7 +4079,7 @@ def _migrate_v34_add_agg_milestones(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v35_add_agg_director_circles(conn: sqlite3.Connection) -> None:
-    """v35: agg_director_circles テーブルを追加 (L2: 共同クレジット数の集計)."""
+    """v35: add agg_director_circles table (L2: co-credit count aggregation)."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS agg_director_circles (
             person_id    TEXT NOT NULL,
@@ -4090,7 +4098,7 @@ def _migrate_v35_add_agg_director_circles(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v36_add_feat_mentorships(conn: sqlite3.Connection) -> None:
-    """v36: feat_mentorships テーブルを追加 (L3: アルゴリズムによるメンター推定)."""
+    """v36: add feat_mentorships table (L3: algorithmic mentor estimation)."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS feat_mentorships (
             mentor_id      TEXT NOT NULL,
@@ -4111,9 +4119,9 @@ def _migrate_v36_add_feat_mentorships(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v32_add_feat_studio_affiliation(conn: sqlite3.Connection) -> None:
-    """v32: feat_studio_affiliation テーブルを追加.
+    """v32: add feat_studio_affiliation table.
 
-    個人が年別にどのスタジオの作品に参加したかを事前集計する。
+    Pre-aggregates which studios each person participated in, by year.
     """
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS feat_studio_affiliation (
@@ -4137,18 +4145,18 @@ def compute_feat_studio_affiliation(
     conn: sqlite3.Connection,
     batch_size: int = 10000,
 ) -> int:
-    """個人 × 年 × スタジオ別の参加作品数を集計して feat_studio_affiliation に保存.
+    """Aggregate per-person × year × studio work participation into feat_studio_affiliation.
 
-    credits → anime_studios → studios を結合して、
-    「その年どのスタジオの作品に参加したか」を個人ごとに集計する。
-    主要スタジオ (is_main=1) のみを対象にすることで、制作委員会などを除外できる。
+    Joins credits → anime_studios → studios to determine which studio's works
+    each person participated in each year. Restricting to main studios (is_main=1)
+    excludes production committees.
 
     Args:
-        conn: SQLite 接続
-        batch_size: 一括 INSERT のバッチサイズ
+        conn: SQLite connection
+        batch_size: batch size for bulk INSERT
 
     Returns:
-        書き込んだ行数
+        number of rows written
     """
     logger.info("feat_studio_affiliation_compute_start")
 
@@ -4230,12 +4238,12 @@ def load_feat_studio_affiliation(
     studio_id: str | None = None,
     main_only: bool = False,
 ) -> list[dict]:
-    """feat_studio_affiliation を返す.
+    """Return feat_studio_affiliation rows.
 
     Args:
-        person_id: 特定人物に絞る (省略時は全件)
-        studio_id: 特定スタジオに絞る (省略時は全件)
-        main_only: True の場合 is_main_studio=1 のみ返す
+        person_id: filter to a specific person (returns all if omitted)
+        studio_id: filter to a specific studio (returns all if omitted)
+        main_only: if True, return only rows with is_main_studio=1
     """
     where_clauses = []
     params: list = []
@@ -4259,24 +4267,24 @@ def compute_feat_credit_contribution(
     conn: sqlite3.Connection,
     batch_size: int = 5000,
 ) -> tuple[int, int]:
-    """個人 × 作品 × 役職ごとのスコア貢献量を計算して保存する.
+    """Compute and save score contribution amounts per person × work × role.
 
-    計算内容:
-    - production_scale: AKM 目的変数 log1p(staff_count) × log1p(episodes) × dur_mult
-      → その作品がいかに「大規模な制作」かを表す。回帰の被説明変数そのもの。
-    - edge_weight: グラフ辺寄与 role_weight × episode_coverage × dur_mult
-      → その役職・参加規模がネットワーク上でどれだけの重みを持つか。
+    Computed metrics:
+    - production_scale: AKM outcome variable log1p(staff_count) × log1p(episodes) × dur_mult
+      → measures how large-scale the production is; the regression dependent variable itself.
+    - edge_weight: graph edge contribution role_weight × episode_coverage × dur_mult
+      → measures how much weight this role/participation scale carries in the network.
     - iv_contrib_est: edge_weight_share × iv_score
-      → IV スコアへの比例按分。真の LOO marginal の近似。
+      → proportional attribution of IV score. Approximation of the true LOO marginal.
 
-    注意: iv_contrib_est は近似値。正確な marginal はパイプライン再実行が必要。
+    Note: iv_contrib_est is an approximation. Exact marginals require a full pipeline re-run.
 
     Args:
-        conn: SQLite 接続
-        batch_size: INSERT バッチサイズ
+        conn: SQLite connection
+        batch_size: INSERT batch size
 
     Returns:
-        (feat_credit_contribution 行数, feat_person_work_summary 行数)
+        (feat_credit_contribution row count, feat_person_work_summary row count)
     """
     import math
 
@@ -4288,7 +4296,7 @@ def compute_feat_credit_contribution(
 
     logger.info("feat_credit_contribution_compute_start")
 
-    # --- アニメ staff_count を事前計算 ---
+    # --- pre-compute anime staff_count ---
     staff_sql = """
         SELECT anime_id, COUNT(DISTINCT person_id) AS staff_count
         FROM credits GROUP BY anime_id
@@ -4297,14 +4305,14 @@ def compute_feat_credit_contribution(
         r["anime_id"]: r["staff_count"] for r in conn.execute(staff_sql).fetchall()
     }
 
-    # --- アニメメタデータ ---
+    # --- anime metadata ---
     anime_sql = "SELECT id, episodes, duration, format FROM anime"
     anime_meta: dict[str, dict] = {
         r["id"]: {"eps": r["episodes"] or 1, "dur": r["duration"], "fmt": r["format"]}
         for r in conn.execute(anime_sql).fetchall()
     }
 
-    # format → dur_mult のフォールバック (duration=NULL 時)
+    # format → dur_mult fallback (used when duration=NULL)
     FORMAT_DUR: dict[str | None, float] = {
         "MOVIE": DURATION_MAX_MULTIPLIER,
         "TV_SHORT": 0.25,
@@ -4321,8 +4329,8 @@ def compute_feat_credit_contribution(
             return min(dur / DURATION_BASELINE_MINUTES, DURATION_MAX_MULTIPLIER)
         return FORMAT_DUR.get(fmt, 1.0)
 
-    # --- (person, anime, role) 集計クエリ ---
-    # episode_coverage: episode>0 の distinct episode 数 / anime.episodes
+    # --- (person, anime, role) aggregation query ---
+    # episode_coverage: distinct episode count where episode>0 / anime.episodes
     agg_sql = """
         SELECT
             c.person_id, c.anime_id, c.role,
@@ -4333,7 +4341,7 @@ def compute_feat_credit_contribution(
         ORDER BY c.person_id
     """
 
-    # --- person の iv_score をロード ---
+    # --- load per-person iv_score ---
     iv_by_pid: dict[str, float] = {}
     for r in conn.execute(
         "SELECT person_id, iv_score FROM feat_person_scores"
@@ -4341,9 +4349,9 @@ def compute_feat_credit_contribution(
         if r["iv_score"] is not None:
             iv_by_pid[r["person_id"]] = r["iv_score"]
 
-    # --- 計算・バッチ INSERT ---
+    # --- compute and batch INSERT ---
     current_pid: str | None = None
-    # person 内の (anime_id → edge_weight の max, production_scale の max) を追跡
+    # track (anime_id → max edge_weight, max production_scale) within each person
     person_anime_ew: dict[str, float] = {}  # anime_id → max edge_weight in this person
     person_anime_ps: dict[str, float] = {}  # anime_id → production_scale
     person_total_ew: float = 0.0
@@ -4385,10 +4393,9 @@ def compute_feat_credit_contribution(
         )
 
     def _finalize_person_ew(pid: str) -> None:
-        """person の全クレジット処理後に edge_weight_share と iv_contrib_est を確定."""
-        # rows_contrib の末尾から当 person 分を逆引きして更新するより
-        # 2パスが安全。ここでは person total_ew を context として残し、
-        # 2nd pass (UPDATE) で行う。
+        """Finalise edge_weight_share and iv_contrib_est after all credits for a person are processed."""
+        # A 2nd-pass UPDATE is safer than back-patching rows_contrib.
+        # Leave person total_ew in context here; actual UPDATE happens in the 2nd pass.
         pass
 
     for row in conn.execute(agg_sql):
@@ -4426,7 +4433,7 @@ def compute_feat_credit_contribution(
         # edge_weight
         ew = rw * ep_cov * dm
 
-        # 蓄積
+        # accumulate
         person_anime_ew[aid] = max(person_anime_ew.get(aid, 0.0), ew)
         person_anime_ps[aid] = max(person_anime_ps.get(aid, 0.0), ps)
         person_total_ew += ew
@@ -4443,7 +4450,7 @@ def compute_feat_credit_contribution(
                 round(dm, 4),
                 round(ew, 6),
                 None,
-                None,  # edge_weight_share / iv_contrib_est: 2nd pass で更新
+                None,  # edge_weight_share / iv_contrib_est: updated in 2nd pass
             )
         )
 
@@ -4475,11 +4482,11 @@ def compute_feat_credit_contribution(
             total_summary += len(rows_summary)
             rows_summary = []
 
-    # 最後の person
+    # last person
     if current_pid is not None:
         _flush_person(current_pid)
 
-    # 残りをフラッシュ
+    # flush remainder
     if rows_contrib:
         conn.executemany(
             """
@@ -4509,8 +4516,8 @@ def compute_feat_credit_contribution(
     conn.commit()
     logger.info("feat_credit_contribution_phase1_done", rows=total_contrib)
 
-    # --- 2nd pass: edge_weight_share と iv_contrib_est を UPDATE ---
-    # feat_person_work_summary の total_edge_weight を使って按分
+    # --- 2nd pass: UPDATE edge_weight_share and iv_contrib_est ---
+    # prorate using total_edge_weight from feat_person_work_summary
     logger.info("feat_credit_contribution_phase2_start")
     update_sql = """
         UPDATE feat_credit_contribution
@@ -4569,12 +4576,12 @@ def load_feat_credit_contribution(
     anime_id: str | None = None,
     min_edge_weight: float | None = None,
 ) -> list[dict]:
-    """feat_credit_contribution を返す.
+    """Return feat_credit_contribution rows.
 
     Args:
-        person_id: 特定人物に絞る
-        anime_id: 特定作品に絞る
-        min_edge_weight: この値以上の edge_weight に絞る
+        person_id: filter to a specific person
+        anime_id: filter to a specific anime
+        min_edge_weight: return only rows with edge_weight >= this value
     """
     where: list[str] = []
     params: list = []
@@ -4599,10 +4606,10 @@ def load_feat_person_work_summary(
     conn: sqlite3.Connection,
     person_id: str | None = None,
 ) -> dict | list[dict]:
-    """feat_person_work_summary を返す.
+    """Return feat_person_work_summary.
 
     Args:
-        person_id: 特定人物 → dict を返す。省略時 → list[dict] を返す。
+        person_id: specific person → returns dict. If omitted → returns list[dict].
     """
     if person_id is not None:
         row = conn.execute(
@@ -4617,14 +4624,14 @@ def upsert_career_tracks(
     conn: sqlite3.Connection,
     career_tracks: dict[str, str],
 ) -> None:
-    """person_id → career_track のマッピングを scores テーブルに一括書き込む.
+    """Bulk-write person_id → career_track mapping to the scores table.
 
-    scores 行が既に存在する person_id のみ更新する（INSERT しない）。
-    まだスコアが計算されていない人物（新規スクレイプ直後など）はスキップされる。
+    Only updates rows that already exist in scores (no INSERT).
+    Persons not yet scored (e.g. immediately after a fresh scrape) are skipped.
 
     Args:
-        conn: SQLite 接続
-        career_tracks: person_id → career_track の辞書
+        conn: SQLite connection
+        career_tracks: dict of person_id → career_track
     """
     rows = [(track, pid) for pid, track in career_tracks.items()]
     conn.executemany(
@@ -4641,7 +4648,7 @@ def insert_person_affiliation(
     studio_name: str,
     source: str = "",
 ) -> None:
-    """人物の所属スタジオ情報を記録する（重複は無視）."""
+    """Record a person's affiliated studio for a work (ignore duplicates)."""
     conn.execute(
         """INSERT OR IGNORE INTO person_affiliations
            (person_id, anime_id, studio_name, source)
@@ -4656,7 +4663,7 @@ def mark_person_unfetchable(
     status: str = "not_found",
     source: str = "anilist",
 ) -> None:
-    """APIで取得不可だった人物IDを記録する."""
+    """Record an AniList person ID that could not be fetched via API."""
     conn.execute(
         """INSERT INTO person_fetch_status (anilist_id, status, source, updated_at)
            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
@@ -4670,7 +4677,7 @@ def mark_person_unfetchable(
 def get_unfetchable_person_ids(
     conn: sqlite3.Connection, source: str = "anilist"
 ) -> set[int]:
-    """取得不可と記録された人物のanilist_idセットを返す."""
+    """Return the set of anilist_ids recorded as unfetchable."""
     rows = conn.execute(
         "SELECT anilist_id FROM person_fetch_status WHERE source = ?",
         (source,),
@@ -4679,22 +4686,27 @@ def get_unfetchable_person_ids(
 
 
 def upsert_person(conn: sqlite3.Connection, person: Person) -> None:
-    """人物を挿入または更新する."""
+    """Insert or update a person."""
     import json
 
     conn.execute(
         """INSERT INTO persons (
-               id, name_ja, name_en, aliases, mal_id, anilist_id,
-               date_of_birth, blood_type, description, favourites, site_url
+               id, name_ja, name_en, name_ko, name_zh, aliases, nationality,
+               mal_id, anilist_id,
+               date_of_birth, hometown, blood_type, description, favourites, site_url
            )
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
                name_ja = COALESCE(NULLIF(excluded.name_ja, ''), persons.name_ja),
                name_en = COALESCE(NULLIF(excluded.name_en, ''), persons.name_en),
+               name_ko = COALESCE(NULLIF(excluded.name_ko, ''), persons.name_ko),
+               name_zh = COALESCE(NULLIF(excluded.name_zh, ''), persons.name_zh),
                aliases = excluded.aliases,
+               nationality = COALESCE(NULLIF(excluded.nationality, '[]'), persons.nationality),
                mal_id = COALESCE(excluded.mal_id, persons.mal_id),
                anilist_id = COALESCE(excluded.anilist_id, persons.anilist_id),
                date_of_birth = COALESCE(excluded.date_of_birth, persons.date_of_birth),
+               hometown = COALESCE(excluded.hometown, persons.hometown),
                blood_type = COALESCE(excluded.blood_type, persons.blood_type),
                description = COALESCE(excluded.description, persons.description),
                favourites = COALESCE(excluded.favourites, persons.favourites),
@@ -4704,10 +4716,14 @@ def upsert_person(conn: sqlite3.Connection, person: Person) -> None:
             person.id,
             person.name_ja,
             person.name_en,
+            person.name_ko,
+            person.name_zh,
             json.dumps(person.aliases, ensure_ascii=False),
+            json.dumps(person.nationality, ensure_ascii=False),
             person.mal_id,
             person.anilist_id,
             person.date_of_birth,
+            person.hometown,
             person.blood_type,
             person.description,
             person.favourites,
@@ -4717,7 +4733,7 @@ def upsert_person(conn: sqlite3.Connection, person: Person) -> None:
 
 
 def upsert_anime(conn: sqlite3.Connection, anime: Anime) -> None:
-    """アニメを挿入または更新する（canonical silver: structural columns only）."""
+    """Insert or update an anime (canonical silver: structural columns only)."""
     import json
 
     conn.execute(
@@ -4948,7 +4964,7 @@ def register_meta_lineage(
     inputs_hash: str | None = None,
     notes: str | None = None,
 ) -> None:
-    """meta_lineage テーブルに Gold テーブルの系譜情報を登録."""
+    """Register Gold table lineage information into the meta_lineage table."""
     import json as _json
     import hashlib as _hashlib
     import subprocess as _subprocess
@@ -5041,7 +5057,7 @@ def upsert_meta_entity_resolution_audit(
     conn: sqlite3.Connection,
     rows: list[dict[str, Any]],
 ) -> int:
-    """名寄せ監査テーブルを upsert し、lineage も更新する."""
+    """Upsert the entity-resolution audit table and update lineage."""
     if not rows:
         return 0
 
@@ -5083,7 +5099,7 @@ def upsert_meta_entity_resolution_audit(
 
 
 def insert_credit(conn: sqlite3.Connection, credit: Credit) -> None:
-    """クレジットを挿入する（重複は無視）."""
+    """Insert a credit record (ignore duplicates)."""
     source = credit.evidence_source or credit.source
     raw_role = credit.raw_role or ""
     # SQLite UNIQUE treats NULL != NULL, so whole-series credits (episode=None)
@@ -5111,7 +5127,7 @@ def insert_credit(conn: sqlite3.Connection, credit: Credit) -> None:
 
 
 def upsert_character(conn: sqlite3.Connection, character: Character) -> None:
-    """キャラクターを挿入または更新する."""
+    """Insert or update a character."""
     import json
 
     conn.execute(
@@ -5158,7 +5174,7 @@ def upsert_character(conn: sqlite3.Connection, character: Character) -> None:
 def insert_character_voice_actor(
     conn: sqlite3.Connection, cva: CharacterVoiceActor
 ) -> None:
-    """キャラクター×声優×作品の関係を挿入する（重複は無視）."""
+    """Insert a character × voice actor × work relationship (ignore duplicates)."""
     conn.execute(
         """INSERT OR IGNORE INTO character_voice_actors
            (character_id, person_id, anime_id, character_role, source)
@@ -5168,7 +5184,7 @@ def insert_character_voice_actor(
 
 
 def upsert_studio(conn: sqlite3.Connection, studio: Studio) -> None:
-    """スタジオを挿入または更新する."""
+    """Insert or update a studio."""
     conn.execute(
         """INSERT INTO studios (id, name, anilist_id, is_animation_studio, favourites, site_url)
            VALUES (?, ?, ?, ?, ?, ?)
@@ -5193,7 +5209,7 @@ def upsert_studio(conn: sqlite3.Connection, studio: Studio) -> None:
 
 
 def insert_anime_studio(conn: sqlite3.Connection, anime_studio: AnimeStudio) -> None:
-    """アニメ×スタジオの関係を挿入する（重複は無視）."""
+    """Insert an anime × studio relationship (ignore duplicates)."""
     conn.execute(
         """INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main)
            VALUES (?, ?, ?)""",
@@ -5206,7 +5222,7 @@ def insert_anime_studio(conn: sqlite3.Connection, anime_studio: AnimeStudio) -> 
 
 
 def insert_anime_relation(conn: sqlite3.Connection, relation: AnimeRelation) -> None:
-    """アニメ間の関連を挿入する（重複は無視）."""
+    """Insert an anime-to-anime relation (ignore duplicates)."""
     conn.execute(
         """INSERT OR IGNORE INTO anime_relations
            (anime_id, related_anime_id, relation_type, related_title, related_format)
@@ -5222,7 +5238,7 @@ def insert_anime_relation(conn: sqlite3.Connection, relation: AnimeRelation) -> 
 
 
 def upsert_score(conn: sqlite3.Connection, score: ScoreResult) -> None:
-    """スコアを挿入または更新する."""
+    """Insert or update a score record."""
     conn.execute(
         """INSERT INTO person_scores
                (person_id, person_fe, studio_fe_exposure, birank,
@@ -5254,7 +5270,7 @@ def upsert_score(conn: sqlite3.Connection, score: ScoreResult) -> None:
 
 
 def load_all_persons(conn: sqlite3.Connection) -> list[Person]:
-    """全人物を読み込む."""
+    """Load all persons from the database."""
     from src.db_rows import PersonRow
 
     rows = conn.execute("SELECT * FROM persons").fetchall()
@@ -5262,7 +5278,7 @@ def load_all_persons(conn: sqlite3.Connection) -> list[Person]:
 
 
 def load_all_anime(conn: sqlite3.Connection) -> list[Anime]:
-    """全アニメを読み込む."""
+    """Load all anime from the database."""
     import json
 
     from src.db_rows import AnimeRow
@@ -5319,7 +5335,7 @@ def load_all_anime(conn: sqlite3.Connection) -> list[Anime]:
 
 
 def load_all_credits(conn: sqlite3.Connection) -> list[Credit]:
-    """全クレジットを読み込む."""
+    """Load all credits from the database."""
     from src.db_rows import CreditRow
 
     rows = conn.execute("SELECT * FROM credits").fetchall()
@@ -5336,7 +5352,7 @@ def load_all_credits(conn: sqlite3.Connection) -> list[Credit]:
 
 
 def get_db_stats(conn: sqlite3.Connection) -> dict[str, int | float]:
-    """DB統計情報を取得する."""
+    """Return database statistics."""
     stats: dict[str, int | float] = {}
 
     for table in ("persons", "anime", "credits", "person_scores"):
@@ -5344,14 +5360,14 @@ def get_db_stats(conn: sqlite3.Connection) -> dict[str, int | float]:
             f"SELECT COUNT(*) FROM {table}"
         ).fetchone()[0]  # noqa: S608
 
-    # 役職分布
+    # role distribution
     role_counts = conn.execute("""
         SELECT role, COUNT(*) as cnt FROM credits
         GROUP BY role ORDER BY cnt DESC
     """).fetchall()
     stats["distinct_roles"] = len(role_counts)
 
-    # 年代カバレッジ
+    # year coverage
     year_range = conn.execute("""
         SELECT MIN(year), MAX(year) FROM anime WHERE year IS NOT NULL
     """).fetchone()
@@ -5359,7 +5375,7 @@ def get_db_stats(conn: sqlite3.Connection) -> dict[str, int | float]:
         stats["year_min"] = year_range[0]
         stats["year_max"] = year_range[1]
 
-    # ソース別クレジット数
+    # credit count by source
     source_counts = conn.execute("""
         SELECT evidence_source AS source_code, COUNT(*) as cnt
         FROM credits
@@ -5370,7 +5386,7 @@ def get_db_stats(conn: sqlite3.Connection) -> dict[str, int | float]:
     for source, cnt in source_counts:
         stats[f"credits_source_{source or 'unknown'}"] = cnt
 
-    # 平均クレジット数/人
+    # average credits per person
     avg = conn.execute("""
         SELECT AVG(cnt) FROM (
             SELECT COUNT(*) as cnt FROM credits GROUP BY person_id
@@ -5387,12 +5403,12 @@ def search_persons(
     query: str,
     limit: int = 20,
 ) -> list[dict]:
-    """名前またはIDで人物を検索する.
+    """Search persons by name or ID.
 
     Args:
-        conn: DB接続
-        query: 検索文字列（部分一致）
-        limit: 最大件数
+        conn: DB connection
+        query: search string (partial match)
+        limit: maximum number of results
 
     Returns:
         [{id, name_ja, name_en, iv_score, credit_count}]
@@ -5418,7 +5434,7 @@ def update_data_source(
     item_count: int,
     status: str = "ok",
 ) -> None:
-    """データソースの最終取得日時を更新する."""
+    """Update the last-scraped timestamp for a data source."""
     conn.execute(
         """INSERT INTO ops_source_scrape_status (source, last_scraped_at, item_count, status)
            VALUES (?, CURRENT_TIMESTAMP, ?, ?)
@@ -5445,7 +5461,7 @@ def get_data_sources(conn: sqlite3.Connection) -> list[dict]:
 
 
 def load_all_scores(conn: sqlite3.Connection) -> list[ScoreResult]:
-    """全スコアを読み込む."""
+    """Load all scores from the database."""
     rows = conn.execute("SELECT * FROM person_scores").fetchall()
     return [
         ScoreResult(
@@ -5524,7 +5540,7 @@ def record_pipeline_run(
     elapsed: float,
     mode: str = "full",
 ) -> int:
-    """パイプライン実行を記録する."""
+    """Record a pipeline run."""
     cursor = conn.execute(
         """INSERT INTO pipeline_runs (credit_count, person_count, elapsed_seconds, mode)
            VALUES (?, ?, ?, ?)""",
@@ -5534,7 +5550,7 @@ def record_pipeline_run(
 
 
 def get_last_pipeline_run(conn: sqlite3.Connection) -> dict | None:
-    """最後のパイプライン実行情報を取得する."""
+    """Return information about the most recent pipeline run."""
     row = conn.execute(
         "SELECT * FROM pipeline_runs ORDER BY id DESC LIMIT 1"
     ).fetchone()
@@ -5542,14 +5558,14 @@ def get_last_pipeline_run(conn: sqlite3.Connection) -> dict | None:
 
 
 def has_credits_changed_since_last_run(conn: sqlite3.Connection) -> bool:
-    """最後のパイプライン実行以降にクレジットデータが変化したか判定する.
+    """Determine whether credit data has changed since the last pipeline run.
 
-    credit_count と person_count を比較して変化を検出する。
-    前回のパイプライン実行が存在しない場合は True を返す。
+    Detects changes by comparing credit_count and person_count.
+    Returns True if no previous pipeline run exists.
 
     Returns:
-        True: クレジットまたは人物数が変化した、またはパイプライン未実行
-        False: データに変化なし
+        True: credit count or person count has changed, or no prior run exists
+        False: no change detected
     """
     last_run = get_last_pipeline_run(conn)
     if last_run is None:
@@ -5572,9 +5588,9 @@ def get_persons_with_new_credits(
     conn: sqlite3.Connection,
     since_run_id: int,
 ) -> set[str]:
-    """指定パイプライン実行以降に新しいクレジットが追加された人物IDを返す.
+    """Return IDs of persons who have new credits since the specified pipeline run.
 
-    新クレジットは id > (last run の最大 credit id) で近似する。
+    Approximated as credits with id > (max credit id at the reference run).
     """
     # Get max credit ID at the time of the reference run
     max_credit = conn.execute(
@@ -5605,7 +5621,7 @@ def save_score_history(
     year: int | None = None,
     quarter: int | None = None,
 ) -> None:
-    """スコア履歴を保存する（年・四半期付き）."""
+    """Save score history with year and quarter."""
     conn.execute(
         """INSERT INTO score_history
                (person_id, person_fe, studio_fe_exposure, birank,
@@ -5631,7 +5647,7 @@ def get_score_history(
     person_id: str,
     limit: int = 50,
 ) -> list[dict]:
-    """人物のスコア履歴を取得する（新しい順）."""
+    """Return score history for a person (most recent first)."""
     rows = conn.execute(
         """SELECT person_fe, studio_fe_exposure, birank,
                   patronage, dormancy, awcc, iv_score,
@@ -5650,7 +5666,7 @@ def get_score_history_by_quarter(
     year: int | None = None,
     quarter: int | None = None,
 ) -> list[dict]:
-    """四半期ごとのスコア履歴を取得する."""
+    """Return score history grouped by quarter."""
     conditions = []
     params: list = []
     if year is not None:
@@ -5673,7 +5689,7 @@ def get_score_history_by_quarter(
 
 
 def get_all_person_ids(conn: sqlite3.Connection) -> set[str]:
-    """既存の全人物IDを高速取得する（スキップ判定用）."""
+    """Quickly fetch all existing person IDs (for skip-check purposes)."""
     rows = conn.execute("SELECT id FROM persons").fetchall()
     return {row["id"] for row in rows}
 
@@ -5684,14 +5700,14 @@ def get_all_person_ids(conn: sqlite3.Connection) -> set[str]:
 
 
 def get_llm_decision(conn: sqlite3.Connection, name: str, task: str) -> dict | None:
-    """LLM判定キャッシュを取得する.
+    """Retrieve a cached LLM decision.
 
     Args:
-        name: 対象の名前 (人物名・ペア名)
-        task: タスク種別 ("org_classification" | "name_normalization" | "entity_match")
+        name: target name (person name or name pair)
+        task: task type ("org_classification" | "name_normalization" | "entity_match")
 
     Returns:
-        result_json を dict にパースした結果、なければ None
+        result_json parsed as dict, or None if not found
     """
     import json
 
@@ -5714,7 +5730,7 @@ def upsert_llm_decision(
     result: dict,
     model: str = "",
 ) -> None:
-    """LLM判定結果を保存/更新する."""
+    """Save or update an LLM decision result."""
     import json
 
     conn.execute(
@@ -5729,10 +5745,10 @@ def upsert_llm_decision(
 
 
 def get_all_llm_decisions(conn: sqlite3.Connection, task: str) -> dict[str, dict]:
-    """指定タスクの全LLM判定キャッシュを一括取得する.
+    """Fetch all cached LLM decisions for a given task in bulk.
 
     Returns:
-        {name: result_dict} の辞書
+        {name: result_dict} mapping
     """
     import json
 
@@ -5750,15 +5766,15 @@ def get_all_llm_decisions(conn: sqlite3.Connection, task: str) -> dict[str, dict
 
 
 # =============================================================================
-# v37–v40 マイグレーション関数
+# v37–v40 migration functions
 # =============================================================================
 
 
 def _migrate_v37_credit_contribution_career_year(conn: sqlite3.Connection) -> None:
-    """v37: feat_credit_contribution にキャリア年次列を追加.
+    """v37: add career year columns to feat_credit_contribution.
 
-    debut_year, career_year_at_credit, is_debut_work の3列を追加し、
-    credits テーブルから個人のデビュー年を計算してバックフィルする。
+    Adds debut_year, career_year_at_credit, and is_debut_work; computes each
+    person's debut year from the credits table and backfills the new columns.
     """
     for col_def in [
         "debut_year INTEGER",
@@ -5770,7 +5786,7 @@ def _migrate_v37_credit_contribution_career_year(conn: sqlite3.Connection) -> No
         except Exception:
             pass  # already exists
 
-    # 各 person のデビュー年をメモリに読み込み
+    # load each person's debut year into memory
     debut_map: dict[str, int] = {
         r["person_id"]: r["debut_year"]
         for r in conn.execute("""
@@ -5814,7 +5830,7 @@ def _migrate_v37_credit_contribution_career_year(conn: sqlite3.Connection) -> No
 
 
 def _migrate_v38_add_feat_work_context(conn: sqlite3.Connection) -> None:
-    """v38: feat_work_context テーブルを追加."""
+    """v38: add feat_work_context table."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS feat_work_context (
             anime_id TEXT PRIMARY KEY,
@@ -5844,7 +5860,7 @@ def _migrate_v38_add_feat_work_context(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v39_add_feat_person_role_progression(conn: sqlite3.Connection) -> None:
-    """v39: feat_person_role_progression テーブルを追加."""
+    """v39: add feat_person_role_progression table."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS feat_person_role_progression (
             person_id TEXT NOT NULL,
@@ -5866,7 +5882,7 @@ def _migrate_v39_add_feat_person_role_progression(conn: sqlite3.Connection) -> N
 
 
 def _migrate_v40_add_feat_causal_estimates(conn: sqlite3.Connection) -> None:
-    """v40: feat_causal_estimates テーブルを追加."""
+    """v40: add feat_causal_estimates table."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS feat_causal_estimates (
             person_id TEXT PRIMARY KEY,
@@ -5881,15 +5897,15 @@ def _migrate_v40_add_feat_causal_estimates(conn: sqlite3.Connection) -> None:
 
 
 # =============================================================================
-# v37: feat_credit_contribution への career_year 付与を含む compute
+# v37: compute career_year columns for feat_credit_contribution
 # =============================================================================
 
 
 def _backfill_credit_contribution_career_year(conn: sqlite3.Connection) -> None:
-    """feat_credit_contribution の career_year 関連列を計算・更新する.
+    """Compute and update career year columns in feat_credit_contribution.
 
-    compute_feat_credit_contribution の INSERT 後に呼び出す。
-    既存行 (debut_year IS NULL) のみ更新する。
+    Call after compute_feat_credit_contribution INSERT.
+    Only updates rows where debut_year IS NULL.
     """
     debut_map: dict[str, int] = {
         r["person_id"]: r["debut_year"]
@@ -5934,7 +5950,7 @@ def _backfill_credit_contribution_career_year(conn: sqlite3.Connection) -> None:
 
 
 # =============================================================================
-# v38: feat_work_context の compute 関数
+# v38: compute function for feat_work_context
 # =============================================================================
 
 
@@ -5942,17 +5958,17 @@ def compute_feat_work_context(
     conn: sqlite3.Connection,
     current_year: int | None = None,
 ) -> int:
-    """作品ごとのチーム統計を集計して feat_work_context に保存.
+    """Aggregate per-work team statistics and save to feat_work_context.
 
-    feat_credit_contribution の career_year_at_credit を使うため、
-    _backfill_credit_contribution_career_year() 実行後に呼ぶこと。
+    Requires career_year_at_credit to be populated first; call
+    _backfill_credit_contribution_career_year() before this function.
 
     Args:
-        conn: SQLite 接続
-        current_year: 現在の年 (省略時は credits の最大年を使用)
+        conn: SQLite connection
+        current_year: reference year (defaults to max credit_year in credits)
 
     Returns:
-        書き込んだ行数
+        number of rows written
     """
     import math
     import statistics
@@ -5968,7 +5984,7 @@ def compute_feat_work_context(
         ).fetchone()
         current_year = row[0] if row and row[0] else 2024
 
-    # アニメメタデータ
+    # anime metadata
     FORMAT_DUR: dict[str | None, float] = {
         "MOVIE": DURATION_MAX_MULTIPLIER,
         "TV_SHORT": 0.25,
@@ -5993,7 +6009,7 @@ def compute_feat_work_context(
             "year": None,  # populated below
         }
 
-    # アニメの代表年（credits の最小 credit_year）
+    # representative year per anime (min credit_year from credits)
     for r in conn.execute(
         "SELECT anime_id, MIN(credit_year) AS yr FROM credits "
         "WHERE credit_year IS NOT NULL GROUP BY anime_id"
@@ -6009,8 +6025,8 @@ def compute_feat_work_context(
         )
     }
 
-    # feat_credit_contribution からロール・キャリア年次を取得
-    # (person_id, anime_id, role, career_year_at_credit) を集計
+    # fetch role and career year from feat_credit_contribution
+    # aggregate (person_id, anime_id, role, career_year_at_credit)
     CATEGORY_COLS = {
         "direction": "n_direction",
         "animation_supervision": "n_animation_supervision",
@@ -6097,7 +6113,7 @@ def compute_feat_work_context(
                 median_cy,
                 max_cy,
                 round(ps, 6),
-                None,  # difficulty_score: era_effects から別途更新
+                None,  # difficulty_score: updated separately from era_effects
             )
         )
 
@@ -6136,7 +6152,7 @@ def compute_feat_work_context(
 
 
 # =============================================================================
-# v39: feat_person_role_progression の compute 関数
+# v39: compute function for feat_person_role_progression
 # =============================================================================
 
 
@@ -6146,16 +6162,16 @@ def compute_feat_person_role_progression(
     active_threshold_years: int = 3,
     batch_size: int = 10000,
 ) -> int:
-    """個人×職種カテゴリの時系列進行を集計して feat_person_role_progression に保存.
+    """Aggregate per-person × role-category time-series progression into feat_person_role_progression.
 
     Args:
-        conn: SQLite 接続
-        current_year: 現在の年 (省略時は credits の最大年)
-        active_threshold_years: 最終クレジットからこの年数以内なら still_active=1
-        batch_size: INSERT バッチサイズ
+        conn: SQLite connection
+        current_year: reference year (defaults to max credit_year in credits)
+        active_threshold_years: set still_active=1 if last credit is within this many years
+        batch_size: INSERT batch size
 
     Returns:
-        書き込んだ行数
+        number of rows written
     """
     from collections import defaultdict
 
@@ -6169,7 +6185,7 @@ def compute_feat_person_role_progression(
         ).fetchone()
         current_year = row[0] if row and row[0] else 2024
 
-    # デビュー年 per person
+    # debut year per person
     debut_map: dict[str, int] = {
         r["person_id"]: r["debut_year"]
         for r in conn.execute("""
@@ -6181,7 +6197,7 @@ def compute_feat_person_role_progression(
     }
 
     # (person_id, role_category) → {year: n_works}
-    # credits から直接集計
+    # aggregate directly from credits
     pid_cat_years: dict[tuple[str, str], dict[int, int]] = defaultdict(
         lambda: defaultdict(int)
     )
@@ -6270,7 +6286,7 @@ def compute_feat_person_role_progression(
 
 
 # =============================================================================
-# v40: feat_causal_estimates の upsert 関数 (パイプラインから呼び出し)
+# v40: upsert function for feat_causal_estimates (called from the pipeline)
 # =============================================================================
 
 
@@ -6282,25 +6298,25 @@ def upsert_feat_causal_estimates(
     iv_scores: dict[str, float],
     opportunity_residuals: dict[str, float] | None = None,
 ) -> int:
-    """因果推論結果を feat_causal_estimates に保存する.
+    """Save causal inference results to feat_causal_estimates.
 
     Args:
-        conn: SQLite 接続
-        peer_boosts: person_id → ピア効果ブースト (PeerEffectResult.person_peer_boost)
-        friction_index: person_id → キャリア摩擦指数 (0=摩擦なし, 1=最大)
-        era_fe_by_person: person_id → 当人のデビュー年に対応する時代固定効果
-        iv_scores: person_id → IV スコア (era_deflated_iv 計算用)
-        opportunity_residuals: person_id → 機会補正残差 (省略可)
+        conn: SQLite connection
+        peer_boosts: person_id → peer effect boost (PeerEffectResult.person_peer_boost)
+        friction_index: person_id → career friction index (0=no friction, 1=max)
+        era_fe_by_person: person_id → era fixed effect corresponding to debut year
+        iv_scores: person_id → IV score (used to compute era_deflated_iv)
+        opportunity_residuals: person_id → opportunity-adjusted residual (optional)
 
     Returns:
-        書き込んだ行数
+        number of rows written
     """
     all_pids = set(peer_boosts) | set(friction_index) | set(era_fe_by_person)
     rows: list[tuple] = []
     for pid in all_pids:
         era = era_fe_by_person.get(pid)
         iv = iv_scores.get(pid)
-        # era_deflated_iv: iv_score を時代固定効果で補正 (era_fe > 0 の年は恵まれた時代)
+        # era_deflated_iv: iv_score adjusted for era fixed effect (era_fe > 0 = favourable era)
         era_deflated = (
             round(iv - era, 6) if (iv is not None and era is not None) else None
         )
@@ -6340,10 +6356,10 @@ def load_feat_causal_estimates(
     conn: sqlite3.Connection,
     person_id: str | None = None,
 ) -> dict[str, dict] | dict:
-    """feat_causal_estimates を返す.
+    """Return feat_causal_estimates rows.
 
     Args:
-        person_id: 特定人物 → dict を返す。省略時 → {person_id: dict} を返す。
+        person_id: specific person → returns dict. If omitted → returns {person_id: dict}.
     """
     if person_id is not None:
         row = conn.execute(
@@ -6358,10 +6374,10 @@ def load_feat_work_context(
     conn: sqlite3.Connection,
     anime_id: str | None = None,
 ) -> dict[str, dict] | dict:
-    """feat_work_context を返す.
+    """Return feat_work_context rows.
 
     Args:
-        anime_id: 特定作品 → dict を返す。省略時 → {anime_id: dict} を返す。
+        anime_id: specific anime → returns dict. If omitted → returns {anime_id: dict}.
     """
     if anime_id is not None:
         row = conn.execute(
@@ -6377,11 +6393,11 @@ def load_feat_person_role_progression(
     person_id: str | None = None,
     role_category: str | None = None,
 ) -> list[dict]:
-    """feat_person_role_progression を返す.
+    """Return feat_person_role_progression rows.
 
     Args:
-        person_id: 特定人物に絞る
-        role_category: 特定職種カテゴリに絞る
+        person_id: filter to a specific person
+        role_category: filter to a specific role category
     """
     where: list[str] = []
     params: list = []
@@ -6400,12 +6416,12 @@ def load_feat_person_role_progression(
 
 
 # =============================================================================
-# v41: feat_cluster_membership マイグレーション + upsert + load
+# v41: feat_cluster_membership migration + upsert + load
 # =============================================================================
 
 
 def _migrate_v41_add_feat_cluster_membership(conn: sqlite3.Connection) -> None:
-    """v41: feat_cluster_membership テーブルを追加."""
+    """v41: add feat_cluster_membership table."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS feat_cluster_membership (
             person_id TEXT PRIMARY KEY,
@@ -6437,19 +6453,19 @@ def upsert_feat_cluster_membership(
     cooccurrence_groups: dict,
     studio_affiliation: dict[str, str] | None = None,
 ) -> int:
-    """クラスタリング帰属を feat_cluster_membership に保存する.
+    """Save clustering membership to feat_cluster_membership.
 
     Args:
-        conn: SQLite 接続
-        community_map: person_id → community_id (Phase 4 グラフコミュニティ)
-        career_tracks: person_id → career_track 文字列 (Phase 6)
-        growth_data: growth.json 相当 {"persons": {pid: {"trend": ...}}} または list
-        studio_clustering: studio_clustering.json 相当 {"assignments": {studio: {...}}}
-        cooccurrence_groups: cooccurrence_groups.json 相当 {"groups": [{members: [...]}]}
-        studio_affiliation: person_id → main_studio_id (省略時は feat_studio_affiliation から取得)
+        conn: SQLite connection
+        community_map: person_id → community_id (Phase 4 graph community)
+        career_tracks: person_id → career_track string (Phase 6)
+        growth_data: equivalent to growth.json {"persons": {pid: {"trend": ...}}} or list
+        studio_clustering: equivalent to studio_clustering.json {"assignments": {studio: {...}}}
+        cooccurrence_groups: equivalent to cooccurrence_groups.json {"groups": [{members: [...]}]}
+        studio_affiliation: person_id → main_studio_id (if omitted, fetched from feat_studio_affiliation)
 
     Returns:
-        書き込んだ行数
+        number of rows written
     """
     # --- growth_trend per person ---
     growth_trend_map: dict[str, str] = {}
@@ -6503,7 +6519,7 @@ def upsert_feat_cluster_membership(
             for pid in group.get("members", []):
                 cooccurrence_map[pid] = idx
 
-    # --- 全 person_id の集合 ---
+    # --- full set of all person_ids ---
     all_pids: set[str] = (
         set(community_map)
         | set(career_tracks)
@@ -6555,13 +6571,13 @@ def load_feat_cluster_membership(
     career_track: str | None = None,
     growth_trend: str | None = None,
 ) -> dict[str, dict] | dict:
-    """feat_cluster_membership を返す.
+    """Return feat_cluster_membership rows.
 
     Args:
-        person_id: 特定人物 → dict を返す。省略時 → {person_id: dict} を返す。
-        community_id: コミュニティIDで絞る
-        career_track: キャリアトラックで絞る
-        growth_trend: 成長トレンドで絞る
+        person_id: specific person → returns dict. If omitted → returns {person_id: dict}.
+        community_id: filter by community ID
+        career_track: filter by career track
+        growth_trend: filter by growth trend
     """
     if person_id is not None:
         row = conn.execute(
@@ -6586,14 +6602,14 @@ def load_feat_cluster_membership(
 
 
 # =============================================================================
-# v42: feat_birank_annual — 年次BiRankスナップショット
+# v42: feat_birank_annual — annual BiRank snapshot
 # =============================================================================
 
-_BIRANK_ANNUAL_MIN_YEAR = 1980  # それ以前はグラフが極小でスコアが無意味
+_BIRANK_ANNUAL_MIN_YEAR = 1980  # graphs before this year are too sparse for meaningful scores
 
 
 def _migrate_v42_add_feat_birank_annual(conn: sqlite3.Connection) -> None:
-    """v42: feat_birank_annual テーブルを追加."""
+    """v42: add feat_birank_annual table."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS feat_birank_annual (
             person_id TEXT NOT NULL,
@@ -6615,17 +6631,17 @@ def upsert_feat_birank_annual(
     birank_timelines: dict[str, dict],
     min_year: int = _BIRANK_ANNUAL_MIN_YEAR,
 ) -> int:
-    """年次BiRankスナップショットを feat_birank_annual に保存する.
+    """Save annual BiRank snapshots to feat_birank_annual.
 
     Args:
-        conn: SQLite 接続
+        conn: SQLite connection
         birank_timelines: {person_id: {"snapshots": [{year, birank, raw_pagerank,
             graph_size, n_credits_cumulative}, ...], ...}}
-            compute_temporal_pagerank の戻り値を asdict() したもの。
-        min_year: この年以降のスナップショットのみ保存（デフォルト 1980）
+            i.e. the return value of compute_temporal_pagerank converted with asdict().
+        min_year: only save snapshots from this year onward (default 1980)
 
     Returns:
-        書き込んだ行数
+        number of rows written
     """
     rows: list[tuple] = []
     for pid, tl in birank_timelines.items():
@@ -6667,16 +6683,16 @@ def load_feat_birank_annual(
     year_from: int | None = None,
     year_to: int | None = None,
 ) -> list[dict] | dict[str, list[dict]]:
-    """feat_birank_annual を返す.
+    """Return feat_birank_annual rows.
 
     Args:
-        person_id: 特定人物 → list[dict] (年昇順)。省略時 → {person_id: list[dict]}。
-        year_from: この年以降（inclusive）
-        year_to: この年以前（inclusive）
+        person_id: specific person → list[dict] (ascending year). If omitted → {person_id: list[dict]}.
+        year_from: lower year bound (inclusive)
+        year_to: upper year bound (inclusive)
 
     Returns:
-        person_id 指定時: [{"year": ..., "birank": ..., ...}, ...]
-        全件時: {"person_id": [snapshots...], ...}
+        with person_id: [{"year": ..., "birank": ..., ...}, ...]
+        all records: {"person_id": [snapshots...], ...}
     """
     where: list[str] = []
     params: list = []
@@ -6706,12 +6722,12 @@ def load_feat_birank_annual(
 
 
 # =============================================================================
-# v43: birank_compute_state — BiRank 計算入力フィンガープリント（変更検出用）
+# v43: birank_compute_state — BiRank computation input fingerprint (for change detection)
 # =============================================================================
 
 
 def _migrate_v43_add_birank_compute_state(conn: sqlite3.Connection) -> None:
-    """v43: birank_compute_state テーブルを追加."""
+    """v43: add birank_compute_state table."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS birank_compute_state (
             year INTEGER PRIMARY KEY,
@@ -6728,12 +6744,12 @@ def upsert_birank_compute_state(
     conn: sqlite3.Connection,
     states: dict[int, dict],
 ) -> None:
-    """年別 BiRank 計算フィンガープリントを保存する.
+    """Save per-year BiRank computation fingerprints.
 
     Args:
-        conn: SQLite 接続
+        conn: SQLite connection
         states: {year: {"credit_count": int, "anime_count": int, "person_count": int}}
-                各年について、計算に使用したクレジット数・アニメ数・人物数を記録。
+                records the credit/anime/person counts used in the computation for each year.
     """
     import time as _time
 
@@ -6758,7 +6774,7 @@ def upsert_birank_compute_state(
 
 
 def load_birank_compute_state(conn: sqlite3.Connection) -> dict[int, dict]:
-    """保存済み BiRank 計算フィンガープリントを返す.
+    """Return saved BiRank computation fingerprints.
 
     Returns:
         {year: {"credit_count": int, "anime_count": int, "person_count": int}}
@@ -6778,11 +6794,11 @@ def load_birank_compute_state(conn: sqlite3.Connection) -> dict[int, dict]:
 
 
 # =============================================================================
-# v44: 作品規模ティア — format + episodes + duration のみで計算
-# スタッフ数はデータ品質が低い（中央値 2〜11）ため使用しない
+# v44: work scale tier — computed from format + episodes + duration only
+# staff count is not used because data quality is low (median 2-11)
 # =============================================================================
 
-# format_group: 類似フォーマットをグループ化
+# format_group: group similar formats
 _FORMAT_GROUP: dict[str | None, str] = {
     "MOVIE": "movie",
     "TV": "tv",
@@ -6796,35 +6812,35 @@ _FORMAT_GROUP: dict[str | None, str] = {
 
 
 # (format_group, episode_bracket) → base_score
-# episode_bracket: 話数で大まかに区分
+# episode_bracket: rough bucketing by episode count
 #   TV:      4-cour+(48+) → major, 2-cour(24-47) → large, 1-cour(12-23) → standard,
 #            half-cour(6-11) → small, <6 → micro
 #   ONA:     24+ → large, 12-23 → standard, 6-11 → small, <6 → micro
 #   OVA:     6+ → standard, 3-5 → small, 1-2 → micro
-#   MOVIE:   長尺(90min+) → major, 標準(45-89min) → large, 短編(<45min) → standard
+#   MOVIE:   feature(90min+) → major, standard(45-89min) → large, short(<45min) → standard
 #   SPECIAL: small
-#   TV_SHORT:話数で TV に準ずるが一段下
+#   TV_SHORT:follows TV by episode count but one step lower
 #   MUSIC:   micro
 def _compute_scale_raw(
     fmt: str | None,
     episodes: int | None,
     duration: int | None,  # minutes per episode
 ) -> float:
-    """format + episodes + duration から連続スコアを計算.
+    """Compute a continuous scale score from format + episodes + duration.
 
-    スタッフ数を使わないため、スクレイピング不完全な作品でも公平に評価できる。
+    Does not use staff count, so works fairly even for incompletely scraped titles.
 
     Returns:
-        scale_raw: 0.0〜5.0 の連続値
+        scale_raw: continuous value in the range 0.0–5.0
     """
     eps = episodes or 1
     dur = duration or 0  # minutes per episode
-    total_min = eps * dur  # 総時間 (分)
+    total_min = eps * dur  # total duration (minutes)
 
     group = _FORMAT_GROUP.get(fmt, "other")
 
     if group == "movie":
-        # 映画: 総時間で評価（話数は通常1なので意味がない）
+        # movie: evaluated by total duration (episode count is usually 1, so meaningless)
         if total_min >= 120:
             return 5.0
         elif total_min >= 90:
@@ -6834,23 +6850,23 @@ def _compute_scale_raw(
         elif total_min >= 30:
             return 3.0
         else:
-            return 2.5  # 短編映画
+            return 2.5  # short film
 
     elif group == "tv":
         if eps >= 48:
-            return 5.0  # 4-cour以上 (4クール+)
+            return 5.0  # 4-cour+ (4+ cours)
         elif eps >= 36:
             return 4.5  # 3-cour
         elif eps >= 24:
             return 4.0  # 2-cour
         elif eps >= 13:
-            return 3.0  # 1-cour (13話)
+            return 3.0  # 1-cour (13 episodes)
         elif eps >= 10:
-            return 2.5  # 12話近辺
+            return 2.5  # ~12 episodes
         elif eps >= 6:
-            return 2.0  # 半クール
+            return 2.0  # half-cour
         else:
-            return 1.5  # 単発〜5話
+            return 1.5  # 1-5 episodes
 
     elif group == "ona":
         if eps >= 24:
@@ -6873,7 +6889,7 @@ def _compute_scale_raw(
             return 1.5
 
     elif group == "tv_short":
-        # TV_SHORTは話数が多くても尺が短い → 一段下げ
+        # TV_SHORT: short runtime per episode even with many episodes → one step lower
         if eps >= 48:
             return 4.0
         elif eps >= 24:
@@ -6884,7 +6900,7 @@ def _compute_scale_raw(
             return 1.5
 
     elif group == "special":
-        # SPECIAL: 基本的に単発、総時間で微調整
+        # SPECIAL: essentially standalone; fine-tuned by total duration
         if total_min >= 60:
             return 2.5
         else:
@@ -6903,7 +6919,7 @@ _TIER_THRESHOLDS: list[tuple[float, int, str]] = [
     (3.5, 4, "large"),  # scale_raw >= 3.5 → tier 4
     (2.5, 3, "standard"),  # scale_raw >= 2.5 → tier 3
     (1.5, 2, "small"),  # scale_raw >= 1.5 → tier 2
-    (0.0, 1, "micro"),  # それ以下 → tier 1
+    (0.0, 1, "micro"),  # below all thresholds → tier 1
 ]
 
 
@@ -6915,10 +6931,10 @@ def _scale_raw_to_tier(raw: float) -> tuple[int, str]:
 
 
 def _migrate_v44_add_work_scale_tier(conn: sqlite3.Connection) -> None:
-    """v44: feat_work_context に作品規模ティア列を追加してバックフィル.
+    """v44: add work scale tier columns to feat_work_context and backfill.
 
-    スタッフ数を使わず format + episodes + duration だけで計算する。
-    これにより、スクレイピング不完全な作品でも正確に規模を把握できる。
+    Computed from format + episodes + duration only, without staff count.
+    This allows accurate scale assessment even for incompletely scraped titles.
     """
     for col_def in [
         "scale_tier INTEGER",
@@ -6945,20 +6961,20 @@ def compute_feat_work_scale_tier(
     conn: sqlite3.Connection,
     batch_size: int = 5000,
 ) -> int:
-    """全作品の scale_tier を計算して feat_work_context に書き込む.
+    """Compute scale_tier for all works and write to feat_work_context.
 
-    feat_work_context が存在しない作品 (ID が credits にあるが work_context に未登録) も
-    anime テーブルから直接処理して INSERT する。
+    Also processes works that appear in credits but are not yet in feat_work_context,
+    inserting them from the anime table directly.
 
     Returns:
-        更新した行数
+        number of rows updated
     """
     logger.info("work_scale_tier_compute_start")
 
     rows = conn.execute("SELECT id, format, episodes, duration FROM anime").fetchall()
 
     updates: list[tuple] = []
-    inserts: list[tuple] = []  # feat_work_context に未登録の作品
+    inserts: list[tuple] = []  # works not yet in feat_work_context
     existing = {
         r["anime_id"]
         for r in conn.execute("SELECT anime_id FROM feat_work_context").fetchall()
@@ -6973,7 +6989,7 @@ def compute_feat_work_scale_tier(
         if aid in existing:
             updates.append((tier, label, round(raw, 2), grp, aid))
         else:
-            # anime テーブルにあるが feat_work_context 未登録 → 最小限の行を INSERT
+            # in anime table but not in feat_work_context → INSERT minimal row
             inserts.append((aid, tier, label, round(raw, 2), grp))
 
         if len(updates) >= batch_size:
@@ -7020,14 +7036,14 @@ def compute_feat_work_scale_tier(
 
 
 def _migrate_v45_add_feat_career_gaps(conn: sqlite3.Connection) -> None:
-    """v45: feat_career_gaps — キャリアギャップ (退職/準退職/復職) 統計テーブル."""
+    """v45: feat_career_gaps — career gap (exit / semi-exit / return) statistics table."""
     conn.executescript("""
         CREATE TABLE IF NOT EXISTS feat_career_gaps (
             person_id TEXT NOT NULL,
-            gap_start_year INTEGER NOT NULL,  -- 最後のクレジット年
-            gap_end_year INTEGER,             -- 復帰年 (NULL = 未復帰)
-            gap_length INTEGER NOT NULL,      -- ギャップ年数
-            returned INTEGER NOT NULL DEFAULT 0,  -- 復帰したか (0/1)
+            gap_start_year INTEGER NOT NULL,  -- last credit year
+            gap_end_year INTEGER,             -- return year (NULL = not yet returned)
+            gap_length INTEGER NOT NULL,      -- gap length in years
+            returned INTEGER NOT NULL DEFAULT 0,  -- whether the person returned (0/1)
             gap_type TEXT NOT NULL,           -- 'semi_exit' (3-4yr) / 'exit' (5+yr)
             PRIMARY KEY (person_id, gap_start_year)
         );
@@ -7047,12 +7063,12 @@ def compute_feat_career_gaps(
     exit_years: int = 5,
     reliable_max_year: int = 2025,
 ) -> int:
-    """キャリアギャップを計算して feat_career_gaps に保存.
+    """Compute career gaps and save to feat_career_gaps.
 
-    各人のクレジット年リストから連続するギャップを検出:
-    - semi_exit: semi_exit_years <= gap < exit_years (準退職)
-    - exit: gap >= exit_years (退職)
-    - returned: ギャップ後にクレジットがあれば True
+    Detects consecutive gaps in each person's credit year list:
+    - semi_exit: semi_exit_years <= gap < exit_years
+    - exit: gap >= exit_years
+    - returned: True if credits exist after the gap
 
     Returns:
         Total rows written.
@@ -7150,7 +7166,7 @@ def compute_feat_career_gaps(
 
 
 def _migrate_v46_add_ann_ids(conn: sqlite3.Connection) -> None:
-    """v46: anime と persons に ann_id カラム + ユニーク索引を追加."""
+    """v46: add ann_id column + unique index to anime and persons."""
     for stmt in [
         "ALTER TABLE anime ADD COLUMN ann_id INTEGER",
         "ALTER TABLE persons ADD COLUMN ann_id INTEGER",
@@ -7167,7 +7183,7 @@ def _migrate_v46_add_ann_ids(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v47_add_allcinema_ids(conn: sqlite3.Connection) -> None:
-    """v47: anime と persons に allcinema_id カラム + ユニーク索引を追加."""
+    """v47: add allcinema_id column + unique index to anime and persons."""
     for stmt in [
         "ALTER TABLE anime ADD COLUMN allcinema_id INTEGER",
         "ALTER TABLE persons ADD COLUMN allcinema_id INTEGER",
@@ -7184,7 +7200,7 @@ def _migrate_v47_add_allcinema_ids(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v48_add_source_tables(conn: sqlite3.Connection) -> None:
-    """v48: Bronze 層ソーステーブルを追加する (既存 DB への適用)."""
+    """v48: add Bronze-layer source tables (applied to existing DBs)."""
     stmts = [
         # src_anilist_*
         """CREATE TABLE IF NOT EXISTS src_anilist_anime (
@@ -7287,15 +7303,15 @@ def _migrate_v48_add_source_tables(conn: sqlite3.Connection) -> None:
 
 
 def _migrate_v49_add_silver_layer(conn: sqlite3.Connection) -> None:
-    """v49: Silver 層・Gold 層テーブル群を追加.
+    """v49: add Silver-layer and Gold-layer table groups.
 
-    anime_analysis:  スコアカラムを持たない分析専用テーブル (silver.analysis)
-    anime_display:   score/popularity/description など表示専用テーブル (silver.display)
-    meta_lineage:    Gold テーブルのデータ系譜 (lineage) 管理
-    meta_common_*:   共通 Gold テーブル
-    meta_policy_*:   政策提言 Brief 用 Gold テーブル
-    meta_hr_*:       人材評価 Brief 用 Gold テーブル
-    meta_biz_*:      新たな試み Brief 用 Gold テーブル
+    anime_analysis:  analysis-only table with no score columns (silver.analysis)
+    anime_display:   display-only table for score/popularity/description (silver.display)
+    meta_lineage:    data lineage tracking for Gold tables
+    meta_common_*:   shared Gold tables
+    meta_policy_*:   Gold tables for the Policy Brief audience
+    meta_hr_*:       Gold tables for the HR Brief audience
+    meta_biz_*:      Gold tables for the Business Brief audience
     """
     stmts = [
         """CREATE TABLE IF NOT EXISTS anime_analysis (
@@ -7536,13 +7552,13 @@ def _migrate_v49_add_silver_layer(conn: sqlite3.Connection) -> None:
     )
 
 
-# ── src_* テーブルへの書き込み関数 ────────────────────────────────────────────
-# これらは Bronze 層 (生スクレイプデータ) への書き込み専用。
-# canonical テーブル (anime/persons/credits) には一切触れない。
+# ── src_* table write functions ────────────────────────────────────────────
+# Write-only path to the Bronze layer (raw scrape data).
+# These functions never touch canonical tables (anime/persons/credits).
 
 
 def upsert_src_anilist_anime(conn: sqlite3.Connection, anime: "Anime") -> None:
-    """AniList アニメ生データを src_anilist_anime に保存."""
+    """Save raw AniList anime data to src_anilist_anime."""
     import json as _json
 
     if anime.anilist_id is None:
@@ -7602,22 +7618,27 @@ def upsert_src_anilist_anime(conn: sqlite3.Connection, anime: "Anime") -> None:
 
 
 def upsert_src_anilist_person(conn: sqlite3.Connection, person: "Person") -> None:
-    """AniList 人物生データを src_anilist_persons に保存."""
+    """Save raw AniList person data to src_anilist_persons."""
     import json as _json
 
     if person.anilist_id is None:
         return
     conn.execute(
         """INSERT INTO src_anilist_persons (
-               anilist_id, name_ja, name_en, aliases, date_of_birth, age, gender,
+               anilist_id, name_ja, name_en, name_ko, name_zh, aliases, nationality,
+               date_of_birth, age, gender,
                years_active, hometown, blood_type, description,
                image_large, image_medium, favourites, site_url
-           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(anilist_id) DO UPDATE SET
                name_ja = COALESCE(NULLIF(excluded.name_ja, ''), src_anilist_persons.name_ja),
                name_en = COALESCE(NULLIF(excluded.name_en, ''), src_anilist_persons.name_en),
+               name_ko = COALESCE(NULLIF(excluded.name_ko, ''), src_anilist_persons.name_ko),
+               name_zh = COALESCE(NULLIF(excluded.name_zh, ''), src_anilist_persons.name_zh),
                aliases = excluded.aliases,
+               nationality = COALESCE(NULLIF(excluded.nationality, '[]'), src_anilist_persons.nationality),
                date_of_birth = COALESCE(excluded.date_of_birth, src_anilist_persons.date_of_birth),
+               hometown = COALESCE(excluded.hometown, src_anilist_persons.hometown),
                description = COALESCE(excluded.description, src_anilist_persons.description),
                image_large = COALESCE(excluded.image_large, src_anilist_persons.image_large),
                scraped_at = CURRENT_TIMESTAMP""",
@@ -7625,7 +7646,10 @@ def upsert_src_anilist_person(conn: sqlite3.Connection, person: "Person") -> Non
             person.anilist_id,
             person.name_ja,
             person.name_en,
+            person.name_ko,
+            person.name_zh,
             _json.dumps(person.aliases, ensure_ascii=False),
+            _json.dumps(person.nationality, ensure_ascii=False),
             person.date_of_birth,
             person.age,
             person.gender,
@@ -7648,7 +7672,7 @@ def insert_src_anilist_credit(
     role: str,
     role_raw: str,
 ) -> None:
-    """AniList クレジット生データを src_anilist_credits に保存."""
+    """Save raw AniList credit data to src_anilist_credits."""
     conn.execute(
         """INSERT OR IGNORE INTO src_anilist_credits
                (anilist_anime_id, anilist_person_id, role, role_raw)
@@ -7658,7 +7682,7 @@ def insert_src_anilist_credit(
 
 
 def upsert_src_ann_anime(conn: sqlite3.Connection, rec: object) -> None:
-    """ANN アニメ生データを src_ann_anime に保存 (AnnAnimeRecord 受け取り)."""
+    """Save raw ANN anime data to src_ann_anime (accepts AnnAnimeRecord)."""
     import json as _json
 
     conn.execute(
@@ -7690,7 +7714,7 @@ def upsert_src_ann_anime(conn: sqlite3.Connection, rec: object) -> None:
 
 
 def upsert_src_ann_person(conn: sqlite3.Connection, detail: object) -> None:
-    """ANN 人物生データを src_ann_persons に保存 (AnnPersonDetail 受け取り)."""
+    """Save raw ANN person data to src_ann_persons (accepts AnnPersonDetail)."""
     conn.execute(
         """INSERT INTO src_ann_persons
                (ann_id, name_en, name_ja, date_of_birth, hometown, blood_type, website, description)
@@ -7725,7 +7749,7 @@ def insert_src_ann_credit(
     role: str,
     role_raw: str,
 ) -> None:
-    """ANN クレジット生データを src_ann_credits に保存."""
+    """Save raw ANN credit data to src_ann_credits."""
     conn.execute(
         """INSERT OR IGNORE INTO src_ann_credits
                (ann_anime_id, ann_person_id, name_en, role, role_raw)
@@ -7735,7 +7759,7 @@ def insert_src_ann_credit(
 
 
 def upsert_src_allcinema_anime(conn: sqlite3.Connection, rec: object) -> None:
-    """allcinema アニメ生データを src_allcinema_anime に保存."""
+    """Save raw allcinema anime data to src_allcinema_anime."""
     conn.execute(
         """INSERT INTO src_allcinema_anime
                (allcinema_id, title_ja, year, start_date, synopsis)
@@ -7750,7 +7774,7 @@ def upsert_src_allcinema_anime(conn: sqlite3.Connection, rec: object) -> None:
 
 
 def upsert_src_allcinema_person(conn: sqlite3.Connection, rec: object) -> None:
-    """allcinema 人物生データを src_allcinema_persons に保存."""
+    """Save raw allcinema person data to src_allcinema_persons."""
     conn.execute(
         """INSERT INTO src_allcinema_persons
                (allcinema_id, name_ja, yomigana, name_en)
@@ -7767,7 +7791,7 @@ def upsert_src_allcinema_person(conn: sqlite3.Connection, rec: object) -> None:
 def insert_src_allcinema_credit(
     conn: sqlite3.Connection, allcinema_anime_id: int, credit: object
 ) -> None:
-    """allcinema クレジット生データを src_allcinema_credits に保存."""
+    """Save raw allcinema credit data to src_allcinema_credits."""
     conn.execute(
         """INSERT OR IGNORE INTO src_allcinema_credits
                (allcinema_anime_id, allcinema_person_id, name_ja, name_en, job_name, job_id)
@@ -7790,7 +7814,7 @@ def upsert_src_seesaawiki_anime(
     year: int | None,
     episodes: int | None,
 ) -> None:
-    """seesaawiki アニメ生データを src_seesaawiki_anime に保存."""
+    """Save raw SeesaaWiki anime data to src_seesaawiki_anime."""
     conn.execute(
         """INSERT INTO src_seesaawiki_anime (id, title_ja, year, episodes)
            VALUES (?, ?, ?, ?)
@@ -7813,7 +7837,7 @@ def insert_src_seesaawiki_credit(
     affiliation: str | None = None,
     is_company: bool = False,
 ) -> None:
-    """seesaawiki クレジット生データを src_seesaawiki_credits に保存."""
+    """Save raw SeesaaWiki credit data to src_seesaawiki_credits."""
     conn.execute(
         """INSERT OR IGNORE INTO src_seesaawiki_credits
                (anime_src_id, person_name, role, role_raw, episode, affiliation, is_company)
@@ -7837,7 +7861,7 @@ def upsert_src_keyframe_anime(
     title_en: str,
     anilist_id: int | None,
 ) -> None:
-    """KeyFrame アニメ生データを src_keyframe_anime に保存."""
+    """Save raw KeyFrame anime data to src_keyframe_anime."""
     conn.execute(
         """INSERT INTO src_keyframe_anime (slug, title_ja, title_en, anilist_id)
            VALUES (?, ?, ?, ?)
@@ -7860,7 +7884,7 @@ def insert_src_keyframe_credit(
     role_en: str,
     episode: int | None = None,
 ) -> None:
-    """KeyFrame クレジット生データを src_keyframe_credits に保存."""
+    """Save raw KeyFrame credit data to src_keyframe_credits."""
     conn.execute(
         """INSERT OR IGNORE INTO src_keyframe_credits
                (keyframe_slug, kf_person_id, name_ja, name_en, role_ja, role_en, episode)
@@ -8839,12 +8863,55 @@ def _migrate_v54_to_v55(conn: sqlite3.Connection) -> None:
 
 
 # ============================================================================
-# PHASE 1 SCHEMA MIGRATION: v55 → v56 (OPTIONAL — Genre Normalization)
+# SCHEMA MIGRATION: v55 → v56 — Multi-language names + nationality
 # ============================================================================
 
 
-def _migrate_v55_to_v56(conn: sqlite3.Connection) -> None:
+def _migrate_v56_multilang_names(conn: sqlite3.Connection) -> None:
     """Migrate schema from v55 to v56.
+
+    Adds separate name columns for Korean and Chinese names (previously
+    both collapsed into name_ja), plus nationality (ISO 3166-1 alpha-2 list)
+    and lang tag on person_aliases.
+
+    No breaking changes; all new columns have safe defaults.
+    """
+    cursor = conn.cursor()
+
+    new_person_cols = [
+        "name_ko TEXT NOT NULL DEFAULT ''",
+        "name_zh TEXT NOT NULL DEFAULT ''",
+        "nationality TEXT NOT NULL DEFAULT '[]'",
+    ]
+    for col in new_person_cols:
+        col_name = col.split()[0]
+        try:
+            cursor.execute(f"ALTER TABLE persons ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass  # already exists
+        try:
+            cursor.execute(f"ALTER TABLE src_anilist_persons ADD COLUMN {col}")
+        except sqlite3.OperationalError:
+            pass
+        logger.debug("multilang_col_added", column=col_name)
+
+    try:
+        cursor.execute("ALTER TABLE person_aliases ADD COLUMN lang TEXT")
+    except sqlite3.OperationalError:
+        pass  # already exists
+
+    conn.commit()
+    _set_schema_version(conn, 56)
+    logger.info("schema_migration_complete", to_version=56)
+
+
+# ============================================================================
+# PHASE 1 SCHEMA MIGRATION: v56 → v57 (OPTIONAL — Genre Normalization)
+# ============================================================================
+
+
+def _migrate_v56_to_v57_genre_normalization(conn: sqlite3.Connection) -> None:
+    """Migrate schema from v56 to v57.
 
     Normalizes anime.genres JSON into anime_genres N-M table.
     Optional but recommended for query efficiency.

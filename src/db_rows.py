@@ -1,23 +1,23 @@
-"""DB テーブルの行を表す typed dataclasses.
+"""Typed dataclasses representing one row per DB table.
 
-各 dataclass はテーブルの全カラムをフィールドとして持つ。
-SQLite から取得した raw 値をそのまま保持し、JSON 文字列のパースや
-型変換は行わない（それは Pydantic モデルの責務）。
+Each dataclass holds all columns as fields.
+Raw values from SQLite are stored as-is; JSON parsing and type conversion
+are the responsibility of Pydantic models.
 
-## 設計意図
+## Design rationale
 
-`sqlite3.Row` の `row["col_name"]` 文字列アクセスをなくし、
-`.col_name` 属性アクセスに変換することで:
-- IDE の補完が効く
-- カラム名リネーム時に型チェッカーが検出できる
-- `tests/test_db_schema.py` が PRAGMA と突き合わせてドリフトを検出する
+Replaces `sqlite3.Row`'s `row["col_name"]` string access with `.col_name`
+attribute access so that:
+- IDEs provide auto-completion
+- Type checkers catch column renames
+- `tests/test_db_schema.py` can diff against PRAGMA to detect schema drift
 
-## カラム変更時の手順
+## Steps when changing columns
 
-1. マイグレーションを追加 (`database.py`)
-2. 対応する dataclass フィールドを更新 (`db_rows.py`)
-3. Pydantic モデルの `from_db_row()` を更新 (`models.py`)
-4. テスト実行 — `test_db_schema.py` が不整合を検出する
+1. Add a migration (`database.py`)
+2. Update the corresponding dataclass field here (`db_rows.py`)
+3. Update `from_db_row()` in the Pydantic model (`models.py`)
+4. Run tests — `test_db_schema.py` will catch any mismatch
 """
 
 from __future__ import annotations
@@ -32,10 +32,10 @@ from dataclasses import dataclass
 
 
 def _from_sqlite_row(cls, row) -> object:
-    """sqlite3.Row または dict から dataclass インスタンスを生成する.
+    """Build a dataclass instance from a sqlite3.Row or dict.
 
-    テーブルに存在しないフィールドは dataclass のデフォルト値を使用する。
-    dataclass に存在しないカラムは無視する（前方互換）。
+    Fields absent from the table use the dataclass default.
+    Columns absent from the dataclass are ignored (forward-compatible).
     """
     field_names = {f.name for f in dataclasses.fields(cls)}
     if hasattr(row, "keys"):
@@ -46,18 +46,18 @@ def _from_sqlite_row(cls, row) -> object:
 
 
 # ---------------------------------------------------------------------------
-# persons テーブル
+# persons table
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class PersonRow:
-    """persons テーブルの 1 行."""
+    """One row of the persons table."""
 
     id: str
     name_ja: str = ""
     name_en: str = ""
-    aliases: str = "[]"  # JSON 文字列
+    aliases: str = "[]"  # JSON array string
     mal_id: int | None = None
     anilist_id: int | None = None
     canonical_id: str | None = None
@@ -75,13 +75,13 @@ class PersonRow:
 
 
 # ---------------------------------------------------------------------------
-# anime テーブル
+# anime table
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class AnimeRow:
-    """anime テーブルの 1 行."""
+    """One row of the anime table."""
 
     id: str
     title_ja: str = ""
@@ -106,13 +106,13 @@ class AnimeRow:
 
 
 # ---------------------------------------------------------------------------
-# credits テーブル
+# credits table
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class CreditRow:
-    """credits テーブルの 1 行."""
+    """One row of the credits table."""
 
     id: int
     person_id: str
@@ -131,13 +131,13 @@ class CreditRow:
 
 
 # ---------------------------------------------------------------------------
-# scores テーブル
+# scores table
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class ScoreRow:
-    """scores テーブルの 1 行."""
+    """One row of the scores table."""
 
     person_id: str
     person_fe: float = 0.0
@@ -156,13 +156,13 @@ class ScoreRow:
 
 
 # ---------------------------------------------------------------------------
-# score_history テーブル
+# score_history table
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class ScoreHistoryRow:
-    """score_history テーブルの 1 行."""
+    """One row of the score_history table."""
 
     id: int
     person_id: str
@@ -183,13 +183,13 @@ class ScoreHistoryRow:
 
 
 # ---------------------------------------------------------------------------
-# character_voice_actors テーブル
+# character_voice_actors table
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class VARow:
-    """character_voice_actors テーブルの 1 行."""
+    """One row of the character_voice_actors table."""
 
     id: int
     character_id: str
@@ -205,13 +205,13 @@ class VARow:
 
 
 # ---------------------------------------------------------------------------
-# feat_person_scores テーブル (L3: アルゴリズムスコア)
+# feat_person_scores table (L3: algorithm scores)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class FeatPersonScoresRow:
-    """feat_person_scores テーブルの 1 行."""
+    """One row of the feat_person_scores table."""
 
     person_id: str
     run_id: int | None = None
@@ -244,13 +244,13 @@ class FeatPersonScoresRow:
 
 
 # ---------------------------------------------------------------------------
-# feat_network テーブル (L3: ネットワーク指標)
+# feat_network table (L3: network metrics)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class FeatNetworkRow:
-    """feat_network テーブルの 1 行."""
+    """One row of the feat_network table."""
 
     person_id: str
     run_id: int | None = None
@@ -271,13 +271,13 @@ class FeatNetworkRow:
 
 
 # ---------------------------------------------------------------------------
-# feat_career テーブル (L2/L3 混在: 将来分離予定)
+# feat_career table (L2/L3 mixed; planned for future separation)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class FeatCareerRow:
-    """feat_career テーブルの 1 行."""
+    """One row of the feat_career table."""
 
     person_id: str
     run_id: int | None = None
@@ -302,13 +302,13 @@ class FeatCareerRow:
 
 
 # ---------------------------------------------------------------------------
-# feat_genre_affinity テーブル (L3: ジャンル親和性スコア)
+# feat_genre_affinity table (L3: genre affinity scores)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class FeatGenreAffinityRow:
-    """feat_genre_affinity テーブルの 1 行 (PK: person_id + genre)."""
+    """One row of the feat_genre_affinity table (PK: person_id + genre)."""
 
     person_id: str
     genre: str
@@ -322,13 +322,13 @@ class FeatGenreAffinityRow:
 
 
 # ---------------------------------------------------------------------------
-# feat_contribution テーブル (L3: 個人貢献プロファイル Layer 2)
+# feat_contribution table (L3: individual contribution profile, Layer 2)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class FeatContributionRow:
-    """feat_contribution テーブルの 1 行."""
+    """One row of the feat_contribution table."""
 
     person_id: str
     run_id: int | None = None
@@ -344,13 +344,13 @@ class FeatContributionRow:
 
 
 # ---------------------------------------------------------------------------
-# feat_credit_activity テーブル (L2: クレジット活動パターン)
+# feat_credit_activity table (L2: credit activity patterns)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class FeatCreditActivityRow:
-    """feat_credit_activity テーブルの 1 行."""
+    """One row of the feat_credit_activity table."""
 
     person_id: str
     first_abs_quarter: int | None = None
@@ -381,13 +381,13 @@ class FeatCreditActivityRow:
 
 
 # ---------------------------------------------------------------------------
-# feat_career_annual テーブル (L2: キャリア年×職種別集計)
+# feat_career_annual table (L2: per-year per-role career aggregation)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class FeatCareerAnnualRow:
-    """feat_career_annual テーブルの 1 行 (PK: person_id + career_year)."""
+    """One row of the feat_career_annual table (PK: person_id + career_year)."""
 
     person_id: str
     career_year: int = 0
@@ -416,13 +416,13 @@ class FeatCareerAnnualRow:
 
 
 # ---------------------------------------------------------------------------
-# feat_studio_affiliation テーブル (L2: スタジオ所属年別集計)
+# feat_studio_affiliation table (L2: studio membership aggregated by year)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class FeatStudioAffiliationRow:
-    """feat_studio_affiliation テーブルの 1 行 (PK: person_id + credit_year + studio_id)."""
+    """One row of the feat_studio_affiliation table (PK: person_id + credit_year + studio_id)."""
 
     person_id: str
     credit_year: int = 0
@@ -438,13 +438,13 @@ class FeatStudioAffiliationRow:
 
 
 # ---------------------------------------------------------------------------
-# feat_credit_contribution テーブル (L3: 作品×役職ごとのスコア貢献推定)
+# feat_credit_contribution table (L3: per-work per-role score contribution estimate)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class FeatCreditContributionRow:
-    """feat_credit_contribution テーブルの 1 行 (PK: person_id + anime_id + role)."""
+    """One row of the feat_credit_contribution table (PK: person_id + anime_id + role)."""
 
     person_id: str
     anime_id: str = ""
@@ -467,13 +467,13 @@ class FeatCreditContributionRow:
 
 
 # ---------------------------------------------------------------------------
-# feat_person_work_summary テーブル (L3: 作品貢献集計)
+# feat_person_work_summary table (L3: per-work contribution aggregation)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class FeatPersonWorkSummaryRow:
-    """feat_person_work_summary テーブルの 1 行."""
+    """One row of the feat_person_work_summary table."""
 
     person_id: str
     n_distinct_works: int | None = None
@@ -494,13 +494,13 @@ class FeatPersonWorkSummaryRow:
 
 
 # ---------------------------------------------------------------------------
-# agg_milestones テーブル (L2: キャリアイベント)
+# agg_milestones table (L2: career events)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class AggMilestoneRow:
-    """agg_milestones テーブルの 1 行 (PK: person_id + event_type + year + anime_id)."""
+    """One row of the agg_milestones table (PK: person_id + event_type + year + anime_id)."""
 
     person_id: str
     event_type: str = ""
@@ -515,19 +515,19 @@ class AggMilestoneRow:
 
 
 # ---------------------------------------------------------------------------
-# agg_director_circles テーブル (L2: 共同クレジット集計)
+# agg_director_circles table (L2: co-credit aggregation)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class AggDirectorCircleRow:
-    """agg_director_circles テーブルの 1 行 (PK: person_id + director_id)."""
+    """One row of the agg_director_circles table (PK: person_id + director_id)."""
 
     person_id: str
     director_id: str = ""
     shared_works: int = 0
     hit_rate: float | None = None
-    roles: str = "[]"  # JSON 文字列
+    roles: str = "[]"  # JSON array string
     latest_year: int | None = None
 
     @classmethod
@@ -536,13 +536,13 @@ class AggDirectorCircleRow:
 
 
 # ---------------------------------------------------------------------------
-# feat_mentorships テーブル (L3: メンター推定)
+# feat_mentorships table (L3: inferred mentor-mentee relationships)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class FeatMentorshipRow:
-    """feat_mentorships テーブルの 1 行 (PK: mentor_id + mentee_id)."""
+    """One row of the feat_mentorships table (PK: mentor_id + mentee_id)."""
 
     mentor_id: str
     mentee_id: str = ""
@@ -559,13 +559,13 @@ class FeatMentorshipRow:
 
 
 # ---------------------------------------------------------------------------
-# feat_cluster_membership テーブル (L3: クラスタリング帰属)
+# feat_cluster_membership table (L3: cluster assignments)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class FeatClusterMembershipRow:
-    """feat_cluster_membership テーブルの 1 行 (PK: person_id)."""
+    """One row of the feat_cluster_membership table (PK: person_id)."""
 
     person_id: str
     community_id: int | None = None
@@ -582,13 +582,13 @@ class FeatClusterMembershipRow:
 
 
 # ---------------------------------------------------------------------------
-# feat_causal_estimates テーブル (L3: 因果推論スコア)
+# feat_causal_estimates table (L3: causal inference scores)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class FeatCausalEstimatesRow:
-    """feat_causal_estimates テーブルの 1 行 (PK: person_id)."""
+    """One row of the feat_causal_estimates table (PK: person_id)."""
 
     person_id: str
     peer_effect_boost: float | None = None
@@ -604,13 +604,13 @@ class FeatCausalEstimatesRow:
 
 
 # ---------------------------------------------------------------------------
-# feat_work_context テーブル (L2: 作品コンテキスト)
+# feat_work_context table (L2: work context)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class FeatWorkContextRow:
-    """feat_work_context テーブルの 1 行 (PK: anime_id + credit_year)."""
+    """One row of the feat_work_context table (PK: anime_id + credit_year)."""
 
     anime_id: str
     credit_year: int | None = None
@@ -643,13 +643,13 @@ class FeatWorkContextRow:
 
 
 # ---------------------------------------------------------------------------
-# feat_person_role_progression テーブル (L2: ロール進行)
+# feat_person_role_progression table (L2: role progression)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class FeatPersonRoleProgressionRow:
-    """feat_person_role_progression テーブルの 1 行 (PK: person_id + role_category)."""
+    """One row of the feat_person_role_progression table (PK: person_id + role_category)."""
 
     person_id: str
     role_category: str = ""
@@ -667,13 +667,13 @@ class FeatPersonRoleProgressionRow:
 
 
 # ---------------------------------------------------------------------------
-# feat_birank_annual テーブル (L3: 年次BiRankスナップショット)
+# feat_birank_annual table (L3: annual BiRank snapshots)
 # ---------------------------------------------------------------------------
 
 
 @dataclass(slots=True)
 class FeatBirankAnnualRow:
-    """feat_birank_annual テーブルの 1 行 (PK: person_id + year)."""
+    """One row of the feat_birank_annual table (PK: person_id + year)."""
 
     person_id: str
     year: int = 0
@@ -688,24 +688,24 @@ class FeatBirankAnnualRow:
 
 
 # ---------------------------------------------------------------------------
-# テーブル名 → Row クラスの対応表 (スキーマテスト用)
+# mapping from table name → Row class (used by schema tests)
 # ---------------------------------------------------------------------------
 
 TABLE_ROW_MAP: dict[str, type] = {
-    # L1: 生データ
+    # L1: raw source data
     "persons": PersonRow,
     "anime": AnimeRow,
     "credits": CreditRow,
     "person_scores": ScoreRow,
     "score_history": ScoreHistoryRow,
     "character_voice_actors": VARow,
-    # L2: 集約数値 (agg_*)
+    # L2: aggregated numeric features (agg_*)
     "feat_credit_activity": FeatCreditActivityRow,
     "feat_career_annual": FeatCareerAnnualRow,
     "feat_studio_affiliation": FeatStudioAffiliationRow,
     "agg_milestones": AggMilestoneRow,
     "agg_director_circles": AggDirectorCircleRow,
-    # L3: 独自計算 (feat_*)
+    # L3: computed features (feat_*)
     "feat_person_scores": FeatPersonScoresRow,
     "feat_network": FeatNetworkRow,
     "feat_career": FeatCareerRow,
@@ -714,7 +714,7 @@ TABLE_ROW_MAP: dict[str, type] = {
     "feat_credit_contribution": FeatCreditContributionRow,
     "feat_person_work_summary": FeatPersonWorkSummaryRow,
     "feat_mentorships": FeatMentorshipRow,
-    # v38-v41 追加テーブル
+    # tables added in v38-v41
     "feat_work_context": FeatWorkContextRow,
     "feat_person_role_progression": FeatPersonRoleProgressionRow,
     "feat_causal_estimates": FeatCausalEstimatesRow,
