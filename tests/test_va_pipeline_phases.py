@@ -139,3 +139,30 @@ class TestVaResultAssemblyPhase:
         from src.pipeline_phases.va_result_assembly import assemble_va_results
         assemble_va_results(ctx)
         assert ctx.va_results == []
+
+    def test_results_sorted_by_va_iv_desc(self, minimal_va_context):
+        """VA results should be sorted by va_iv_score descending."""
+        from src.pipeline_phases.va_graph_construction import build_va_graphs_phase
+        from src.pipeline_phases.va_core_scoring import compute_va_core_scores_phase
+        from src.pipeline_phases.va_result_assembly import assemble_va_results
+        build_va_graphs_phase(minimal_va_context)
+        compute_va_core_scores_phase(minimal_va_context)
+        assemble_va_results(minimal_va_context)
+        scores = [r.get("va_iv_score", 0.0) for r in minimal_va_context.va_results]
+        assert scores == sorted(scores, reverse=True)
+
+    def test_result_contains_required_keys(self, minimal_va_context):
+        """Each result row must include the canonical VA scoring keys."""
+        from src.pipeline_phases.va_graph_construction import build_va_graphs_phase
+        from src.pipeline_phases.va_core_scoring import compute_va_core_scores_phase
+        from src.pipeline_phases.va_result_assembly import assemble_va_results
+        build_va_graphs_phase(minimal_va_context)
+        compute_va_core_scores_phase(minimal_va_context)
+        assemble_va_results(minimal_va_context)
+        required = {
+            "person_id", "name", "person_fe", "birank", "trust",
+            "patronage", "dormancy", "awcc", "va_iv_score",
+            "replacement_difficulty",
+        }
+        for row in minimal_va_context.va_results:
+            assert required.issubset(row.keys())
