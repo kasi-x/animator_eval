@@ -700,7 +700,7 @@ def export_communities_for_visualization(
 
 
 def main():
-    """スタンドアロン実行用エントリーポイント."""
+    """Standalone entry point."""
     from src.analysis.graph import create_person_collaboration_network
     from src.database import (
         load_all_anime,
@@ -719,12 +719,12 @@ def main():
     credits = load_all_credits(conn)
     scores_list = load_all_scores(conn)
 
-    # マップ作成
+    # build lookup maps
     anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
     person_scores = {s.person_id: {"iv_score": s.iv_score} for s in scores_list}
 
-    # コラボレーショングラフ構築
+    # build collaboration graph
     logger.info("building_collaboration_graph")
     collab_graph = create_person_collaboration_network(credits, anime_map)
 
@@ -742,7 +742,7 @@ def main():
     # エクスポート (function call kept for side effects, return value unused)
     _ = export_communities_for_visualization(communities, features, person_names)
 
-    # 結果表示
+    # display results
     print(f"\n検出されたコミュニティ数: {len(communities)}")
     print(f"ブリッジ人物数: {len(bridges)}")
 

@@ -33,7 +33,7 @@ class LLMError(Exception):
 
 @dataclass
 class NameMatchDecision:
-    """LLMによる名前マッチング判定結果."""
+    """Result of LLM-based name-matching decision."""
 
     is_match: bool
     confidence: float  # 0.0-1.0

@@ -22,21 +22,21 @@ logger = structlog.get_logger()
 
 @dataclass
 class AnimeValueMetrics:
-    """作品価値の指標.
+    """Work value metrics.
 
     Attributes:
         anime_id: anime_id
         title: タイトル
         year: 制作年
-        # 5つの価値次元
+        # five value dimensions
         commercial_value: 商業的価値（人気・評価）
         critical_value: 批評的価値（賞・業界評価）
         creative_value: 創造的価値（革新性・独創性）
         cultural_value: 文化的価値（長期的影響力）
         technical_value: 技術的価値（制作品質）
-        # 統合スコア
+        # integrated score
         composite_value: 総合作品価値（0-100）
-        # メタデータ
+        # metadata
         staff_quality: スタッフの平均スコア
         staff_count: スタッフ数
         key_contributors: キーコントリビューター（上位5人）
@@ -65,7 +65,7 @@ def compute_commercial_value(
     anime: Anime,
     credits: list[Credit],
 ) -> float:
-    """商業的価値を推定.
+    """Estimate commercial value.
 
     指標:
     - スタッフ数（大規模プロジェクト）
@@ -101,7 +101,7 @@ def compute_critical_value(
     anime: Anime,
     credits: list[Credit],
 ) -> float:
-    """批評的価値を推定.
+    """Estimate critical value.
 
     指標:
     - タグ/ジャンルの存在（メタデータの充実度）
@@ -135,7 +135,7 @@ def compute_creative_value(
     credits: list[Credit],
     person_scores: dict[str, dict],
 ) -> float:
-    """創造的価値を推定.
+    """Estimate creative value.
 
     指標:
     - キークリエイターのSkillスコア
@@ -188,7 +188,7 @@ def compute_cultural_value(
     credits: list[Credit],
     current_year: int = 2026,
 ) -> float:
-    """文化的価値を推定.
+    """Estimate cultural value.
 
     指標:
     - 経過年数（古いが残っている = 文化的意義）
@@ -227,7 +227,7 @@ def compute_technical_value(
     credits: list[Credit],
     person_scores: dict[str, dict],
 ) -> float:
-    """技術的価値を推定.
+    """Estimate technical value.
 
     指標:
     - アニメーターの平均スコア
@@ -277,7 +277,7 @@ def compute_anime_values(
     person_scores: dict[str, dict],
     current_year: int = 2026,
 ) -> dict[str, AnimeValueMetrics]:
-    """全作品の価値を計算.
+    """Compute value scores for all works.
 
     Args:
         anime_list: 全アニメ
@@ -371,7 +371,7 @@ def rank_anime_by_value(
     dimension: str = "composite",
     top_n: int = 50,
 ) -> list[tuple[str, str, float]]:
-    """作品価値でランキング.
+    """Rank works by value score.
 
     Args:
         anime_values: 作品価値指標
@@ -432,7 +432,7 @@ def find_undervalued_works(
     max_value: float = 50,
     top_n: int = 20,
 ) -> list[tuple[str, str, float, float]]:
-    """過小評価作品を発見.
+    """Discover undervalued works.
 
     高品質スタッフだが低価値 = 商業的に失敗 or 未評価
 
@@ -465,7 +465,7 @@ def find_overperforming_works(
     min_value: float = 60,
     top_n: int = 20,
 ) -> list[tuple[str, str, float, float]]:
-    """期待以上の作品を発見.
+    """Discover overperforming works.
 
     低品質スタッフだが高価値 = 予想外のヒット
 
@@ -493,7 +493,7 @@ def find_overperforming_works(
 
 
 def main():
-    """スタンドアロン実行用エントリーポイント."""
+    """Standalone entry point."""
     from src.database import (
         load_all_anime,
         load_all_credits,
@@ -519,11 +519,11 @@ def main():
         for s in scores_list
     }
 
-    # 作品価値計算
+    # compute work value
     logger.info("computing_anime_values")
     anime_values = compute_anime_values(anime_list, credits, person_scores)
 
-    # 総合ランキング
+    # overall ranking
     print("\n=== 作品価値ランキング（トップ20）===\n")
     top_anime = rank_anime_by_value(anime_values, dimension="overall", top_n=20)
 
@@ -539,7 +539,7 @@ def main():
         print(f"   スタッフ品質: {metrics.staff_quality:.2f} ({metrics.staff_count}人)")
         print()
 
-    # 次元別トップ5
+    # top 5 per dimension
     print("\n=== 次元別トップ5 ===\n")
 
     for dimension, name in [
@@ -553,7 +553,7 @@ def main():
             print(f"  - {title}: {value:.1f}")
         print()
 
-    # 過小評価作品
+    # undervalued works
     print("\n=== 過小評価作品（高品質スタッフ・低価値）===\n")
     undervalued = find_undervalued_works(
         anime_values, min_staff_quality=0.6, max_value=50, top_n=10

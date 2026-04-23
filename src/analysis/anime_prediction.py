@@ -1,4 +1,4 @@
-"""アニメ予測 — チーム構成から制作規模を推定する.
+"""Anime prediction — estimate production scale from team composition.
 
 過去の作品データを基に、特定のチーム構成での
 期待される制作規模を推定する。
@@ -22,7 +22,7 @@ def predict_anime_score(
     anime_map: dict[str, Anime],
     person_scores: dict[str, float] | None = None,
 ) -> dict:
-    """チーム構成から期待される制作規模を推定する.
+    """Estimate the expected production scale from team composition.
 
     予測手法: チームメンバーの過去作品の加重平均スタッフ数。
     メンバー全員が参加した作品はボーナス加重。

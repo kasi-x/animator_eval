@@ -1,4 +1,4 @@
-"""スコア信頼度 — クレジット数とデータ品質に基づく信頼区間.
+"""Score confidence — confidence intervals based on credit count and data quality.
 
 少数のクレジットしかない人物のスコアは信頼性が低い。
 信頼度は 0.0〜1.0 の値で、スコアの確信度を表す。
@@ -10,7 +10,7 @@ import structlog
 
 logger = structlog.get_logger()
 
-# 信頼度計算のパラメータ
+# parameters for confidence calculation
 MIN_CREDITS_FOR_FULL_CONFIDENCE = 20  # この数以上で信頼度 ~1.0
 SOURCE_DIVERSITY_BONUS = 0.1  # 複数ソースからのデータがある場合のボーナス
 YEAR_SPAN_BONUS_THRESHOLD = 3  # 3年以上の活動期間でボーナス
@@ -21,7 +21,7 @@ def compute_confidence(
     source_count: int = 1,
     year_span: int = 0,
 ) -> float:
-    """個人スコアの信頼度を計算する.
+    """Compute the confidence level for an individual score.
 
     Args:
         credit_count: クレジット数
@@ -56,7 +56,7 @@ def compute_score_range(
     confidence: float,
     scale: float = 100.0,
 ) -> tuple[float, float]:
-    """スコアの信頼区間を計算する.
+    """Compute confidence intervals for scores.
 
     信頼度が低いほど区間が広がる。
 
@@ -133,7 +133,7 @@ def batch_compute_confidence(
     sources_per_person: dict[str, int] | None = None,
     akm_residuals: dict[tuple[str, str], float] | None = None,
 ) -> list[dict]:
-    """結果リストに信頼度と信頼区間を付加する.
+    """Attach confidence levels and confidence intervals to a result list.
 
     Args:
         results: scores.json の形式

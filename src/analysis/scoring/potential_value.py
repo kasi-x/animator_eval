@@ -379,7 +379,7 @@ def export_potential_value_report(
 
 
 def main():
-    """スタンドアロン実行用エントリーポイント."""
+    """Standalone entry point."""
     from src.analysis.graph import create_person_collaboration_network
     from src.analysis.studio.bias_correction import (
         compute_studio_bias_metrics,
@@ -407,7 +407,7 @@ def main():
     credits = load_all_credits(conn)
     scores_list = load_all_scores(conn)
 
-    # マップ作成
+    # build lookup maps
     anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
     person_scores = {
@@ -420,7 +420,7 @@ def main():
         for s in scores_list
     }
 
-    # コラボレーショングラフ構築
+    # build collaboration graph
     logger.info("building_collaboration_graph")
     collab_graph = create_person_collaboration_network(credits, anime_map)
 
@@ -462,7 +462,7 @@ def main():
     logger.info("exporting_report")
     report = export_potential_value_report(potential_scores, person_names)
 
-    # 結果表示
+    # display results
     print("\n=== 潜在価値スコア総合ランキング（トップ20）===\n")
 
     for rank, entry in enumerate(report["overall_ranking"][:20], 1):

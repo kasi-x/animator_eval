@@ -1,4 +1,4 @@
-"""アニメ統計 — 作品ごとのスタッフ統計を算出する.
+"""Anime statistics — compute per-work staff statistics.
 
 各作品について:
 - クレジット数
@@ -22,7 +22,7 @@ def compute_anime_stats(
     anime_map: dict[str, Anime],
     person_scores: dict[str, float] | None = None,
 ) -> dict[str, dict]:
-    """作品ごとの統計情報を算出する.
+    """Compute statistics for each anime work.
 
     Args:
         credits: 全クレジット
@@ -39,7 +39,7 @@ def compute_anime_stats(
     if not credits:
         return {}
 
-    # クレジットをアニメIDでグループ化
+    # group credits by anime ID
     anime_credits: dict[str, list[Credit]] = defaultdict(list)
     for c in credits:
         anime_credits[c.anime_id].append(c)
@@ -94,7 +94,7 @@ def compute_person_anime_stats(
     credits: list[Credit],
     anime_map: dict[str, Anime],
 ) -> dict[str, dict]:
-    """人物ごとのアニメ参加統計を算出する.
+    """Compute per-person anime participation statistics.
 
     Args:
         credits: 全クレジット
@@ -114,7 +114,7 @@ def compute_person_anime_stats(
     if not credits:
         return {}
 
-    # クレジットを人物IDでグループ化
+    # group credits by person ID
     person_credits: dict[str, list[Credit]] = defaultdict(list)
     for c in credits:
         person_credits[c.person_id].append(c)
@@ -123,12 +123,12 @@ def compute_person_anime_stats(
     for person_id, pcredits in person_credits.items():
         anime_ids = {c.anime_id for c in pcredits}
 
-        # 役職分布
+        # role distribution
         role_dist: dict[str, int] = defaultdict(int)
         for c in pcredits:
             role_dist[c.role.value] += 1
 
-        # 作品規模（ユニーク参加者数）
+        # work scale (unique participant count)
         anime_staff_count = {
             aid: len({c.person_id for c in credits if c.anime_id == aid})
             for aid in anime_ids
@@ -138,7 +138,7 @@ def compute_person_anime_stats(
             round(sum(staff_counts) / len(staff_counts), 2) if staff_counts else None
         )
 
-        # 年範囲
+        # year range
         years = [
             anime_map[aid].year
             for aid in anime_ids
@@ -146,7 +146,7 @@ def compute_person_anime_stats(
         ]
         year_range = [min(years), max(years)] if years else []
 
-        # ユニークスタジオ
+        # unique studios
         studios = sorted(
             {
                 studio
@@ -170,7 +170,7 @@ def compute_person_anime_stats(
                         "role": c.role.value,
                     }
                 )
-        # 重複排除（同一作品で複数役職の場合は最初のものを採用）
+        # deduplicate (take first role when person has multiple roles on the same work)
         seen_anime: set[str] = set()
         unique_works = []
         for w in work_entries:

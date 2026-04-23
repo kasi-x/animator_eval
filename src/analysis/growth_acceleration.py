@@ -335,7 +335,7 @@ def compute_adjusted_person_fe_with_growth(
 
 
 def main():
-    """スタンドアロン実行用エントリーポイント."""
+    """Standalone entry point."""
     from src.database import (
         load_all_anime,
         load_all_credits,
@@ -353,7 +353,7 @@ def main():
     credits = load_all_credits(conn)
     scores_list = load_all_scores(conn)
 
-    # マップ作成
+    # build lookup maps
     anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
     person_scores = {

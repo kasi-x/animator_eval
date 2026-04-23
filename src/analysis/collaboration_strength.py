@@ -1,4 +1,4 @@
-"""コラボレーション強度分析 — 人物ペア間の協力関係の深さを定量化する.
+"""Collaboration strength analysis — quantify the depth of cooperation between person pairs.
 
 ペア単位で:
 - shared_works: 共同作品数
@@ -146,7 +146,7 @@ def compute_collaboration_strength(
     person_scores: dict[str, float] | None = None,
     collaboration_graph: "nx.Graph | None" = None,
 ) -> list[dict]:
-    """人物ペア間のコラボレーション強度を算出する.
+    """Compute collaboration strength between person pairs.
 
     Args:
         credits: 全クレジット

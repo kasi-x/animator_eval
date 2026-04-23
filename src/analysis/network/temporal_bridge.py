@@ -402,7 +402,7 @@ def get_era_top_bridges(
 
 
 def main() -> None:
-    """スタンドアロン実行用エントリーポイント."""
+    """Standalone entry point."""
     from src.database import (
         get_connection,
         init_db,

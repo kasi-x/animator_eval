@@ -1,4 +1,4 @@
-"""スコアクロスバリデーション — スコアの安定性を測定する.
+"""Score cross-validation — measure score stability.
 
 クレジットデータの一部を除外してスコアを再計算し、
 ランキングがどの程度安定しているかを評価する。
@@ -36,7 +36,7 @@ def cross_validate_scores(
     holdout_ratio: float = 0.2,
     seed: int = 42,
 ) -> dict:
-    """クロスバリデーションでスコア安定性を評価する.
+    """Evaluate score stability via cross-validation.
 
     BiRank スコアを使用してランキング安定性を測定する。
 

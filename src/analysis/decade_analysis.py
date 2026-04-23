@@ -1,4 +1,4 @@
-"""年代分析 — 10年単位でのアニメ業界トレンドを分析する.
+"""Decade analysis — analyse anime industry trends in 10-year units.
 
 各年代 (2000s, 2010s, 2020s 等) について:
 - クレジット数・人物数の推移
@@ -20,7 +20,7 @@ def compute_decade_analysis(
     anime_map: dict[str, Anime],
     person_scores: dict[str, float] | None = None,
 ) -> dict:
-    """年代別のトレンド分析を実行する.
+    """Run decade-level trend analysis.
 
     Returns:
         {

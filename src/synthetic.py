@@ -1,9 +1,9 @@
-"""合成データ生成 — APIなしでパイプラインをテストするためのダミーデータ.
+"""Synthetic data generation — dummy data for testing the pipeline without a real API.
 
-実際のアニメ業界の構造を模倣した合成データを生成する:
-- 少数の監督が多くの作品を手がける（べき乗則）
-- アニメーターは複数の監督と仕事する
-- 一部のアニメーターは特定の監督と強い結びつきを持つ
+Generates synthetic data that mimics the structure of the actual anime industry:
+- A small number of directors handle many works (power law)
+- Animators work with multiple directors
+- Some animators have strong ties to specific directors
 """
 
 import random
@@ -21,7 +21,7 @@ from src.models import BronzeAnime, Character, CharacterVoiceActor, Credit, Pers
 
 logger = structlog.get_logger()
 
-# 役職の分布（実際のアニメクレジットを模倣）
+# Role distribution (mimics real anime credits)
 ROLE_DISTRIBUTION = [
     (Role.DIRECTOR, 1),
     (Role.EPISODE_DIRECTOR, 2),
@@ -42,20 +42,20 @@ def generate_synthetic_data(
     n_anime: int = 50,
     seed: int = 42,
 ) -> tuple[list[Person], list[BronzeAnime], list[Credit]]:
-    """合成データを生成する.
+    """Generate synthetic data.
 
     Args:
-        n_directors: 監督の数
-        n_animators: アニメーターの数
-        n_anime: アニメ作品の数
-        seed: 乱数シード
+        n_directors: number of directors
+        n_animators: number of animators
+        n_anime: number of anime works
+        seed: random seed
 
     Returns:
         (persons, anime_list, credits)
     """
     rng = random.Random(seed)
 
-    # 監督を生成
+    # generate directors
     directors = []
     for i in range(n_directors):
         directors.append(
@@ -66,7 +66,7 @@ def generate_synthetic_data(
             )
         )
 
-    # アニメーターを生成
+    # generate animators
     animators = []
     for i in range(n_animators):
         animators.append(
@@ -79,7 +79,7 @@ def generate_synthetic_data(
 
     persons = directors + animators
 
-    # スタジオを生成（5スタジオ）
+    # generate studios (5 studios)
     studio_names = [
         "Studio Alpha",
         "Studio Beta",
@@ -88,7 +88,7 @@ def generate_synthetic_data(
         "Studio Epsilon",
     ]
 
-    # アニメ作品を生成
+    # generate anime works
     anime_list = []
     for i in range(n_anime):
         year = rng.randint(2000, 2025)
@@ -109,16 +109,16 @@ def generate_synthetic_data(
             )
         )
 
-    # クレジットを生成
+    # generate credits
     credits = []
 
-    # 監督の割り当て（べき乗則: 少数の監督が多くの作品を担当）
+    # assign directors (power law: few directors handle many works)
     director_weights = [1.0 / (i + 1) ** 0.8 for i in range(n_directors)]
     total_w = sum(director_weights)
     director_probs = [w / total_w for w in director_weights]
 
     for anime in anime_list:
-        # 監督を選択（1-2人）
+        # choose directors (1-2)
         n_dirs = rng.choices([1, 2], weights=[0.7, 0.3])[0]
         chosen_dirs = rng.choices(directors, weights=director_probs, k=n_dirs)
         chosen_dirs = list({d.id: d for d in chosen_dirs}.values())  # deduplicate
@@ -133,18 +133,17 @@ def generate_synthetic_data(
                 )
             )
 
-        # アニメーターを割り当て
-        # 各役職ごとに人数を決定
+        # assign animators by role (decide count per role)
         for role, base_count in ROLE_DISTRIBUTION:
             if role == Role.DIRECTOR:
-                continue  # 監督は上で処理済み
+                continue  # directors already handled above
 
             n_staff = max(1, rng.randint(base_count - 1, base_count + 2))
 
-            # 一部のアニメーターは特定の監督と強い結びつき
+            # some animators have strong ties to specific directors
             preferred_animators = []
             for d in chosen_dirs:
-                # 各監督には「お気に入り」のアニメーターがいる
+                # each director has favourite animators
                 dir_idx = int(d.id.split("d")[1])
                 for j in range(min(5, n_animators)):
                     preferred_idx = (dir_idx * 7 + j * 3) % n_animators
@@ -153,13 +152,13 @@ def generate_synthetic_data(
             chosen_staff = []
             for _ in range(n_staff):
                 if preferred_animators and rng.random() < 0.4:
-                    # 40%の確率で「お気に入り」アニメーターを選択
+                    # 40% chance to pick a favourite animator
                     chosen = rng.choice(preferred_animators)
                 else:
                     chosen = rng.choice(animators)
                 chosen_staff.append(chosen)
 
-            # 重複を除去
+            # deduplicate
             seen = set()
             for s in chosen_staff:
                 if s.id not in seen:
@@ -297,7 +296,7 @@ def populate_db_with_synthetic(
     n_anime: int = 50,
     seed: int = 42,
 ) -> None:
-    """合成データでDBを充填する."""
+    """Populate the DB with synthetic data."""
     persons, anime_list, credits = generate_synthetic_data(
         n_directors=n_directors,
         n_animators=n_animators,
@@ -322,7 +321,7 @@ def populate_db_with_synthetic(
 
 
 def main() -> None:
-    """エントリーポイント."""
+    """Entry point."""
     import argparse
 
     from src.log import setup_logging

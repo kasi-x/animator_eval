@@ -1,4 +1,4 @@
-"""バッチ比較 — グループ間のスコア比較.
+"""Batch comparison — score comparison across groups.
 
 2つの人物グループ (例: スタジオA vs スタジオB、ベテラン vs 新人) を
 統計的に比較する。
@@ -16,7 +16,7 @@ def compare_groups(
     group_b_label: str = "Group B",
     axes: list[str] | None = None,
 ) -> dict:
-    """2つのグループのスコアを比較する.
+    """Compare scores between two groups.
 
     Args:
         group_a: グループAの結果リスト

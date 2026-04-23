@@ -1,4 +1,4 @@
-"""共同制作集団分析 — コアスタッフの繰り返し共同制作パターン検出.
+"""Co-production group analysis — detect recurring co-production patterns among core staff.
 
 ペアワイズ（2人）の協業エッジでは見えない「事実上のチーム」を検出する。
 3人以上が複数作品で繰り返し共同制作するパターンから、非公式の固定チーム・
@@ -14,7 +14,7 @@ from src.models import AnimeAnalysis as Anime, Credit, Role
 
 logger = structlog.get_logger()
 
-# 分析対象ロール: コアスタッフのみ（変動の大きい役職は除外）
+# target roles: core staff only (highly variable roles excluded)
 COOCCURRENCE_ROLES: frozenset[Role] = frozenset(
     {
         Role.DIRECTOR,
@@ -49,7 +49,7 @@ def compute_cooccurrence_groups(
     min_shared_works: int = 3,
     max_group_size: int = 5,
 ) -> dict:
-    """コアスタッフの共同制作グループを検出する.
+    """Detect co-production groups among core staff.
 
     Args:
         credits: 全クレジットリスト
@@ -129,7 +129,7 @@ def compute_cooccurrence_groups(
     for group_set, anime_ids in filtered:
         member_list = sorted(group_set)
 
-        # 各メンバーの役割を集約（全共参加作品を通じた役割セット）
+        # aggregate each member's roles (role set across all shared works)
         roles: dict[str, list[str]] = {}
         for pid in member_list:
             member_roles: set[str] = set()
@@ -137,7 +137,7 @@ def compute_cooccurrence_groups(
                 member_roles.update(anime_to_staff[aid].get(pid, set()))
             roles[pid] = sorted(member_roles)
 
-        # 活動期間
+        # activity period
         years = [
             anime_map[aid].year
             for aid in anime_ids
@@ -147,11 +147,11 @@ def compute_cooccurrence_groups(
         last_year = max(years) if years else None
         is_active = last_year is not None and last_year >= _ACTIVE_THRESHOLD_YEAR
 
-        # 平均IVスコア
+        # average IV score
         scores = [iv_scores[pid] for pid in member_list if pid in iv_scores]
         avg_score = round(sum(scores) / len(scores), 1) if scores else 0.0
 
-        # タイトルリスト
+        # title list
         shared_anime_titles = [
             anime_map[aid].display_title for aid in anime_ids if aid in anime_map
         ]
@@ -199,7 +199,7 @@ def compute_cooccurrence_groups(
 
 
 def _build_temporal_slices(groups: list[dict]) -> list[dict]:
-    """5年区切りのピリオドごとにアクティブなグループ数をまとめる."""
+    """Count active groups per 5-year period."""
     slices = []
     for period_label, year_from, year_to in _PERIODS:
         active_in_period = []
@@ -208,7 +208,7 @@ def _build_temporal_slices(groups: list[dict]) -> list[dict]:
             ly = g["last_year"]
             if fy is None or ly is None:
                 continue
-            # ピリオド内に活動期間が重なるグループ
+            # groups whose activity overlaps the period
             period_start = year_from if year_from is not None else 0
             period_end = year_to if year_to is not None else 9999
             if fy <= period_end and ly >= period_start:
@@ -236,7 +236,7 @@ def _build_temporal_slices(groups: list[dict]) -> list[dict]:
 
 
 def _empty_result(min_shared_works: int, max_group_size: int) -> dict:
-    """空データ時のデフォルト戻り値."""
+    """Default return value for empty data."""
     return {
         "groups": [],
         "summary": {"total_groups": 0, "by_size": {}, "active_groups": 0},

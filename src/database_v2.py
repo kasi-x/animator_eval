@@ -121,13 +121,18 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
             id               TEXT PRIMARY KEY,
             name_ja          TEXT NOT NULL DEFAULT '',
             name_en          TEXT NOT NULL DEFAULT '',
+            name_ko          TEXT NOT NULL DEFAULT '',
+            name_zh          TEXT NOT NULL DEFAULT '',
             aliases          TEXT NOT NULL DEFAULT '[]',
+            nationality      TEXT NOT NULL DEFAULT '[]',
             mal_id           INTEGER,
             anilist_id       INTEGER,
             canonical_id     TEXT,
             date_of_birth    TEXT,
+            hometown         TEXT,
             blood_type       TEXT,
             description      TEXT,
+            gender           TEXT,
             favourites       INTEGER,
             site_url         TEXT,
             image_medium     TEXT,
@@ -224,6 +229,7 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
             person_id  TEXT NOT NULL,
             alias      TEXT NOT NULL,
             source     TEXT NOT NULL REFERENCES sources(code),
+            lang       TEXT,
             confidence REAL CHECK (confidence IS NULL OR confidence BETWEEN 0 AND 1),
             added_at   TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
             PRIMARY KEY (person_id, alias, source)
@@ -1070,7 +1076,10 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
             anilist_id    INTEGER PRIMARY KEY,
             name_ja       TEXT NOT NULL DEFAULT '',
             name_en       TEXT NOT NULL DEFAULT '',
+            name_ko       TEXT NOT NULL DEFAULT '',
+            name_zh       TEXT NOT NULL DEFAULT '',
             aliases       TEXT DEFAULT '[]',
+            nationality   TEXT NOT NULL DEFAULT '[]',
             date_of_birth TEXT,
             age           INTEGER,
             gender        TEXT,
@@ -1225,12 +1234,34 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
     # Seed lookup tables and set schema version
     _seed_sources(conn)
     _seed_roles(conn)
+    _upgrade_v56_multilang(conn)
     conn.execute(
-        "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '55')"
+        "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '56')"
         " ON CONFLICT(key) DO UPDATE SET value = excluded.value"
     )
     conn.commit()
     log.info("init_db_v2_complete")
+
+
+def _upgrade_v56_multilang(conn: sqlite3.Connection) -> None:
+    """Add multi-language name columns to existing v55 databases.
+
+    Safe to call on fresh DBs too — ALTER TABLE failures are caught.
+    """
+    for table, col, defn in [
+        ("persons",            "name_ko",    "TEXT NOT NULL DEFAULT ''"),
+        ("persons",            "name_zh",    "TEXT NOT NULL DEFAULT ''"),
+        ("persons",            "nationality", "TEXT NOT NULL DEFAULT '[]'"),
+        ("persons",            "hometown",   "TEXT"),
+        ("src_anilist_persons", "name_ko",   "TEXT NOT NULL DEFAULT ''"),
+        ("src_anilist_persons", "name_zh",   "TEXT NOT NULL DEFAULT ''"),
+        ("src_anilist_persons", "nationality", "TEXT NOT NULL DEFAULT '[]'"),
+        ("person_aliases",     "lang",       "TEXT"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
+        except Exception:
+            pass  # column already exists
 
 
 def _seed_sources(conn: sqlite3.Connection) -> None:

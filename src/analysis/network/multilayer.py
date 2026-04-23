@@ -463,7 +463,7 @@ def compute_multilayer_centrality(
 
 
 def main() -> None:
-    """スタンドアロン実行用エントリーポイント."""
+    """Standalone entry point."""
     from src.analysis.graph import create_person_collaboration_network  # noqa: F401
     from src.database import (
         get_connection,

@@ -1,4 +1,4 @@
-"""世代コホート分析 — デビュー時期ごとのキャリアパターン比較.
+"""Generational cohort analysis — compare career patterns by debut period.
 
 アニメーターをデビュー年代（2000s, 2010s, 2020s）でグループ化し、
 世代ごとの特徴を分析する:
@@ -18,7 +18,7 @@ logger = structlog.get_logger()
 
 
 def _get_decade(year: int) -> str:
-    """年を年代文字列に変換する."""
+    """Convert a year to a decade label string."""
     decade = (year // 10) * 10
     return f"{decade}s"
 
@@ -28,7 +28,7 @@ def compute_cohort_analysis(
     anime_map: dict[str, Anime],
     person_scores: dict[str, float] | None = None,
 ) -> dict:
-    """世代コホート分析を実行する.
+    """Run generational cohort analysis.
 
     Args:
         credits: クレジットリスト

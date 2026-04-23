@@ -1,7 +1,7 @@
-"""レポート生成 — JSON/テキスト形式の評価レポート出力.
+"""Report generation — JSON / text format evaluation report output.
 
-スコアは「ネットワーク位置と密度の指標」であり、
-「能力」の評価ではないことを明示する（法的要件）。
+Scores are indicators of network position and density, not assessments
+of individual ability (legal requirement).
 """
 
 import csv
@@ -33,7 +33,7 @@ def generate_json_report(
     results: list[dict],
     output_path: Path | None = None,
 ) -> Path:
-    """JSON形式のレポートを出力する."""
+    """Write a report in JSON format."""
     report = {
         "metadata": {
             "generated_at": datetime.now().isoformat(),
@@ -68,7 +68,7 @@ def generate_text_report(
     top_n: int = 50,
     output_path: Path | None = None,
 ) -> Path:
-    """テキスト形式のレポートを出力する."""
+    """Write a report in plain-text format."""
     lines = [
         "=" * 88,
         "Animetor Eval — 構造推定ネットワーク評価レポート",
@@ -151,7 +151,7 @@ def generate_csv_report(
     results: list[dict],
     output_path: Path | None = None,
 ) -> Path:
-    """CSV形式のレポートを出力する."""
+    """Write a report in CSV format."""
     if output_path is None:
         output_path = JSON_DIR.parent / "scores.csv"
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -226,9 +226,9 @@ def generate_html_report(
     top_n: int = 50,
     output_path: Path | None = None,
 ) -> Path:
-    """HTML形式の評価レポートを生成する.
+    """Generate an evaluation report as a standalone HTML file.
 
-    インライン SVG チャートを含むスタンドアロン HTML ファイル。
+    All PNG charts are base64-encoded and embedded inline.
     """
     if output_path is None:
         output_path = JSON_DIR.parent / "report.html"
@@ -370,15 +370,15 @@ def generate_visual_dashboard(
     png_dir: Path | None = None,
     output_path: Path | None = None,
 ) -> Path:
-    """PNG画像を埋め込んだビジュアルダッシュボードHTMLを生成する.
+    """Generate a visual dashboard HTML with embedded PNG images.
 
-    パイプライン実行後に生成された全PNGファイルをbase64エンコードして
-    1つのスタンドアロンHTMLにまとめる。
+    All PNGs produced after the pipeline run are base64-encoded and
+    bundled into a single standalone HTML file.
 
     Args:
-        results: スコア結果リスト
-        png_dir: PNG画像があるディレクトリ (default: JSON_DIR.parent)
-        output_path: 出力先
+        results: list of scoring results
+        png_dir: directory containing PNG images (default: JSON_DIR.parent)
+        output_path: output path
     """
     import base64
 
@@ -548,12 +548,12 @@ def _html_escape(text: str) -> str:
 
 
 def main() -> None:
-    """DBからスコアを読み込みレポートを生成."""
+    """Load scores from the DB and generate a report."""
     from src.log import setup_logging
 
     setup_logging()
 
-    # まず pipeline を実行してスコアを計算
+    # Run the pipeline first to compute scores
     from src.pipeline import run_scoring_pipeline
 
     results = run_scoring_pipeline()

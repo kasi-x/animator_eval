@@ -26,7 +26,7 @@ logger = structlog.get_logger()
 
 @dataclass
 class RoleWeightEstimation:
-    """OLS推定による役職重要度の結果.
+    """Role importance result from OLS estimation.
 
     Attributes:
         weights: role.value → normalized weight (sum=1.0)
@@ -45,7 +45,7 @@ class RoleWeightEstimation:
 
 @dataclass
 class ContributionMetrics:
-    """貢献度指標.
+    """Contribution metrics.
 
     Attributes:
         person_id: person_id
@@ -80,7 +80,7 @@ def estimate_role_weights(
     credits: list[Credit],
     anime_staff_counts: dict[str, int] | None = None,
 ) -> RoleWeightEstimation:
-    """OLS回帰でデータ駆動の役職重要度を推定.
+    """Estimate data-driven role importance via OLS regression.
 
     Model: log(staff_count_j) = Σ_k β_k × role_share_jk + ε_j
 
@@ -221,7 +221,7 @@ def set_role_weights(weights: dict[str, float] | None) -> None:
 
 
 def compute_role_importance(role: Role) -> float:
-    """役職の重要度を取得.
+    """Retrieve role importance.
 
     OLS推定済みなら推定値、未推定なら均一重みを返す。
 
@@ -245,7 +245,7 @@ def estimate_marginal_contribution(
     person_scores: dict[str, dict],
     staff_quality_avg: float,
 ) -> float:
-    """限界貢献度を推定.
+    """Estimate marginal contribution.
 
     「この人がいなかったら価値はどう変わるか？」
 
@@ -320,7 +320,7 @@ def compute_contribution_attribution(
     credits: list[Credit],
     person_scores: dict[str, dict],
 ) -> dict[str, ContributionMetrics]:
-    """作品への貢献度を各人に帰属.
+    """Attribute contribution to each person for a work.
 
     Args:
         anime_id: anime_id
@@ -417,7 +417,7 @@ def compute_contribution_attribution(
 def aggregate_contributions_by_person(
     all_contributions: dict[str, dict[str, ContributionMetrics]],
 ) -> dict[str, dict]:
-    """全作品の貢献度を人ごとに集約.
+    """Aggregate contribution across all works per person.
 
     Args:
         all_contributions: anime_id → {person_id → ContributionMetrics}
@@ -463,7 +463,7 @@ def find_undervalued_contributors(
     person_scores: dict[str, dict],
     top_n: int = 20,
 ) -> list[tuple[str, float, float]]:
-    """過小評価されている貢献者を発見.
+    """Discover undervalued contributors.
 
     高い貢献度（Shapley値）だが、低いスコア = 過小評価
 
@@ -504,7 +504,7 @@ def find_mvp_by_role(
     role: str,
     top_n: int = 10,
 ) -> list[tuple[str, float, int]]:
-    """役職別MVPを発見.
+    """Discover MVPs by role.
 
     Args:
         person_aggregates: 集約貢献度
@@ -530,7 +530,7 @@ def find_mvp_by_role(
 
 
 def main():
-    """スタンドアロン実行用エントリーポイント."""
+    """Standalone entry point."""
     from src.analysis.anime_value import compute_anime_values
     from src.database import (
         load_all_anime,

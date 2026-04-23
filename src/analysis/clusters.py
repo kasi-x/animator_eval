@@ -1,4 +1,4 @@
-"""クラスター分析 — 人物をコラボレーションパターンでグループ化する.
+"""Cluster analysis — group persons by collaboration patterns.
 
 制作現場はスタジオ単位ではなく、監督やプロデューサーを中心とした
 チーム単位で動くことが多い。グラフコミュニティ検出で自然なクラスターを特定する。
@@ -20,7 +20,7 @@ def detect_collaboration_clusters(
     min_shared_works: int = 2,
     resolution: float = 1.0,
 ) -> dict:
-    """コラボレーションベースのクラスターを検出する.
+    """Detect collaboration-based clusters.
 
     Louvain コミュニティ検出を使用して、頻繁に共同作業する人物グループを特定する。
 
@@ -113,7 +113,7 @@ def compute_cluster_stats(
     clusters: dict,
     person_scores: dict[str, float] | None = None,
 ) -> list[dict]:
-    """各クラスターの統計情報を計算する.
+    """Compute statistics for each cluster.
 
     Args:
         clusters: detect_collaboration_clusters の戻り値

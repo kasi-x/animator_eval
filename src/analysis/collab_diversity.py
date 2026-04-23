@@ -1,4 +1,4 @@
-"""コラボレーション多様性 — 協業相手の多様性を定量化.
+"""Collaboration diversity — quantify the diversity of a person's collaborators.
 
 同じ人とばかり仕事をしている人 vs 多種多様な人と仕事をしている人を区別する。
 Shannon entropy ベースの多様性指標を計算。
@@ -18,7 +18,7 @@ def compute_collab_diversity(
     credits: list[Credit],
     anime_map: dict[str, Anime],
 ) -> dict[str, dict]:
-    """人物ごとのコラボレーション多様性を計算する.
+    """Compute per-person collaboration diversity.
 
     Args:
         credits: クレジットリスト

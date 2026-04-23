@@ -950,7 +950,7 @@ def export_insights_report(
 
 
 def main():
-    """スタンドアロン実行用エントリーポイント."""
+    """Standalone entry point."""
     print("Insights Report Generator - Standalone Demo")
     print("(Requires actual pipeline data to run)")
 

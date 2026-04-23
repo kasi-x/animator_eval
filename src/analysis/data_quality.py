@@ -1,4 +1,4 @@
-"""データ品質スコア — データの完全性・信頼性を0-100で定量化する.
+"""Data quality score — quantify data completeness and reliability on a 0-100 scale.
 
 データベース内のデータの品質を多面的に評価し、
 改善すべきポイントを特定する。
@@ -20,7 +20,7 @@ def compute_data_quality_score(
     anime_with_score: int = 0,
     source_count: int = 0,
 ) -> dict:
-    """データ品質の総合スコアを算出する.
+    """Compute the overall data quality score.
 
     Args:
         stats: get_db_stats() の出力

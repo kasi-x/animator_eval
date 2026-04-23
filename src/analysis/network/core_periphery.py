@@ -411,7 +411,7 @@ def analyze_core_accessibility(
 
 
 def main():
-    """スタンドアロン実行用エントリーポイント."""
+    """Standalone entry point."""
     from src.analysis.graph import create_person_collaboration_network
     from src.database import (
         load_all_anime,
@@ -428,11 +428,11 @@ def main():
     anime_list = load_all_anime(conn)
     credits = load_all_credits(conn)
 
-    # マップ作成
+    # build lookup maps
     anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
 
-    # コラボレーショングラフ構築
+    # build collaboration graph
     logger.info("building_collaboration_graph")
     collab_graph = create_person_collaboration_network(credits, anime_map)
 
@@ -446,7 +446,7 @@ def main():
     logger.info("computing_coreness_metrics")
     metrics = compute_coreness_metrics(collab_graph, structure)
 
-    # 結果表示
+    # display results
     print("\n=== コア-ペリフェリー構造 ===\n")
     print(f"コア: {structure.core_size}人 (密度: {structure.core_density:.3f})")
     print(f"セミペリフェリー: {len(structure.semi_periphery_members)}人")

@@ -1,4 +1,4 @@
-"""キャリア分析 — 人物の経歴タイムラインと役職遷移を分析する.
+"""Career analysis — analyse the career timeline and role transitions of each person.
 
 個人のキャリアを時系列で追跡し、
 - 活動開始・最新年
@@ -21,7 +21,7 @@ logger = structlog.get_logger()
 
 
 class RoleProgressionRecord(NamedTuple):
-    """役職遷移の記録.
+    """Role transition record.
 
     Records a role held in a specific year with its career stage.
     """
@@ -33,7 +33,7 @@ class RoleProgressionRecord(NamedTuple):
 
 @dataclass(frozen=True)
 class CareerSnapshot:
-    """キャリア分析の結果.
+    """Career analysis result.
 
     Complete career analysis result for a person.
     """
@@ -51,12 +51,12 @@ class CareerSnapshot:
     peak_credits: int = 0
     first_quarter: str | None = None  # "2020-Q2"
     latest_quarter: str | None = None
-    # 作品タイプ×規模の分布 (例: {"tv_large": 5, "tv_medium": 12, "tanpatsu_small": 3})
+    # distribution by work-type × scale (e.g. {"tv_large": 5, "tv_medium": 12, "tanpatsu_small": 3})
     scale_profile: dict[str, int] = field(default_factory=dict)
 
     @property
     def career_span_years(self) -> int | None:
-        """キャリアの年数スパン (first → latest).
+        """Career span in years (first → latest).
 
         Years between first and latest activity.
         """
@@ -72,7 +72,7 @@ def analyze_career(
     *,
     _person_credits: list[Credit] | None = None,
 ) -> CareerSnapshot:
-    """特定人物のキャリアタイムラインを分析する.
+    """Analyse the career timeline of a specific person.
 
     Analyzes a person's career timeline including activity patterns and role progression.
 
@@ -130,7 +130,7 @@ def analyze_career(
     latest_year = max(years_with_activity) if years_with_activity else None
     active_years = len(years_with_activity)
 
-    # 役職遷移: 年ごとの最高ステージの役職を記録
+    # role transitions: record highest-stage role per year
     role_progression_records = []
     for year in sorted(roles_by_year):
         roles_in_year = roles_by_year[year]
@@ -144,7 +144,7 @@ def analyze_career(
         )
         role_progression_records.append(record)
 
-    # 最高到達ステージ
+    # peak stage reached
     all_career_stages = [
         CAREER_STAGE.get(credit.role, 0) for credit in person_credit_records
     ]
@@ -192,7 +192,7 @@ def batch_career_analysis(
     anime_map: dict[str, Anime],
     person_ids: set[str] | None = None,
 ) -> dict[str, CareerSnapshot]:
-    """複数人物のキャリア分析を一括実行する.
+    """Run career analysis for multiple persons in batch.
 
     Performs career analysis for multiple people in batch.
 
@@ -226,7 +226,7 @@ def batch_career_analysis(
 
 
 # ---------------------------------------------------------------------------
-# 規模別カテゴリキーの順序（表示・ソート用）
+# ordered scale-category keys (for display and sorting)
 # ---------------------------------------------------------------------------
 SCALE_KEYS_ORDERED = [
     "tv_large",
@@ -249,7 +249,7 @@ SCALE_KEY_LABELS: dict[str, str] = {
 
 @dataclass
 class DirectorScaleProfile:
-    """監督1人の作品タイプ×規模プロフィール."""
+    """Work-type × scale profile for a single director."""
 
     person_id: str
     name: str
@@ -270,7 +270,7 @@ def compute_director_scale_profiles(
     director_roles: set[str] | None = None,
     min_credits: int = 3,
 ) -> list[DirectorScaleProfile]:
-    """監督ロールを持つ人物の作品タイプ×規模プロフィールを算出する.
+    """Compute work-type × scale profiles for persons with director roles.
 
     Args:
         credits: 全クレジット
@@ -339,24 +339,24 @@ def compute_director_scale_profiles(
 
 
 # ---------------------------------------------------------------------------
-# 監督キャリア軌跡 + 規模間モビリティ
+# director career trajectory + cross-scale mobility
 # ---------------------------------------------------------------------------
 
 
 @dataclass
 class DirectorTrajectoryResult:
-    """監督キャリア軌跡と規模間推移の集計結果."""
+    """Aggregated result for director career trajectories and cross-scale transitions."""
 
-    # 規模カテゴリ別: 最初の全ロールクレジットから初監督クレジットまでの年数リスト
+    # years-to-first-director credit by scale category (from first any-role credit)
     years_to_first_dir_by_scale: dict[str, list[int]]
 
-    # 規模間推移行列: (from_scale, to_scale) -> count (3年以内の連続クレジット間)
+    # cross-scale transition matrix: (from_scale, to_scale) -> count (consecutive credits within 3 years)
     transition_counts: dict[tuple[str, str], int]
 
-    # 正規化推移確率: (from_scale, to_scale) -> 0.0-1.0
+    # normalised transition probability: (from_scale, to_scale) -> 0.0-1.0
     transition_probs: dict[tuple[str, str], float]
 
-    # 総監督人数
+    # total number of directors
     n_directors: int
 
 
@@ -368,7 +368,7 @@ def compute_director_trajectories(
     min_director_credits: int = 3,
     max_gap_years: int = 3,
 ) -> DirectorTrajectoryResult:
-    """監督のキャリア軌跡と規模間モビリティを集計する.
+    """Aggregate director career trajectories and cross-scale mobility.
 
     Args:
         credits: 全クレジット
@@ -395,7 +395,7 @@ def compute_director_trajectories(
         if c.role.value in director_roles:
             dir_credits_by_person[c.person_id].append(c)
 
-    # 最低クレジット数フィルタ
+    # minimum credit count filter
     director_ids = {
         pid
         for pid, crds in dir_credits_by_person.items()
@@ -417,7 +417,7 @@ def compute_director_trajectories(
 
         dir_recs = dir_credits_by_person[pid]
 
-        # 規模別: 初監督クレジットまでの年数
+        # years to first director credit by scale
         for scale_key in SCALE_KEYS_ORDERED:
             wt, sc = scale_key.split("_", 1)
             scale_dir = [
@@ -432,7 +432,7 @@ def compute_director_trajectories(
                 first_scale_yr = min(anime_map[c.anime_id].year for c in scale_dir)  # type: ignore[arg-type]
                 years_to_first[scale_key].append(first_scale_yr - first_any_year)
 
-        # 規模間モビリティ: 年ごとのドミナント規模 → 推移
+        # cross-scale mobility: dominant scale per year → transitions
         year_to_scales: dict[int, list[str]] = defaultdict(list)
         for c in dir_recs:
             anime = anime_map.get(c.anime_id)
@@ -455,7 +455,7 @@ def compute_director_trajectories(
             if yr_to - yr_from <= max_gap_years:
                 transition_counts[(sc_from, sc_to)] += 1
 
-    # 推移確率を行正規化で計算
+    # compute transition probabilities via row normalisation
     transition_probs: dict[tuple[str, str], float] = {}
     for sc_from in SCALE_KEYS_ORDERED:
         row_total = sum(

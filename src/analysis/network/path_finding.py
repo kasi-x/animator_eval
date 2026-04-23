@@ -406,7 +406,7 @@ def find_bottleneck_nodes(
 
 
 def main():
-    """スタンドアロン実行用エントリーポイント."""
+    """Standalone entry point."""
     from src.analysis.graph import create_person_collaboration_network
     from src.database import (
         load_all_anime,
@@ -423,11 +423,11 @@ def main():
     anime_list = load_all_anime(conn)
     credits = load_all_credits(conn)
 
-    # マップ作成
+    # build lookup maps
     anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
 
-    # コラボレーショングラフ構築
+    # build collaboration graph
     logger.info("building_collaboration_graph")
     collab_graph = create_person_collaboration_network(credits, anime_map)
 

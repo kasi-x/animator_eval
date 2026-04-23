@@ -150,7 +150,7 @@ class PipelineProgressBroadcaster:
         )
 
     def update_phase(self, phase: int, phase_name: str, status: str = "running"):
-        """フェーズ進捗を更新.
+        """Update phase progress.
 
         Args:
             phase: Phase number (1-indexed)
@@ -173,7 +173,7 @@ class PipelineProgressBroadcaster:
     def complete_phase(
         self, phase: int, phase_name: str, duration_ms: float | None = None
     ):
-        """フェーズ完了を通知.
+        """Notify phase completion.
 
         Args:
             phase: Phase number (1-indexed)
@@ -194,7 +194,7 @@ class PipelineProgressBroadcaster:
         self.manager.broadcast_sync(message)
 
     def error_phase(self, phase: int, phase_name: str, error: str):
-        """フェーズエラーを通知.
+        """Notify a phase error.
 
         Args:
             phase: Phase number (1-indexed)
@@ -228,7 +228,7 @@ class PipelineProgressBroadcaster:
         )
 
     def send_custom_message(self, message_type: str, data: dict[str, Any]):
-        """カスタムメッセージを配信.
+        """Broadcast a custom message.
 
         Args:
             message_type: Message type identifier

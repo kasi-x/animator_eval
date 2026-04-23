@@ -1,4 +1,4 @@
-"""集計統計 — パイプライン結果全体の統計サマリーを生成する.
+"""Aggregate statistics — generate a statistical summary over all pipeline results.
 
 各軸のスコア分布、パーセンタイル、業界全体の健全性指標を算出。
 """
@@ -9,7 +9,7 @@ logger = structlog.get_logger()
 
 
 def compute_aggregate_stats(results: list[dict]) -> dict:
-    """パイプライン結果から集計統計を算出する.
+    """Compute aggregate statistics from pipeline results.
 
     Args:
         results: スコア結果リスト

@@ -22,7 +22,7 @@ logger = structlog.get_logger()
 
 @dataclass
 class BiasDetectionResult:
-    """バイアス検出結果.
+    """Bias detection result.
 
     Attributes:
         group_name: グループ名（例: "key_animator", "newcomer"）
@@ -52,7 +52,7 @@ class BiasDetectionResult:
 
 
 def _compute_ttest_and_effect(gaps: list[float]) -> tuple[float, float]:
-    """t検定とCohen's dを計算.
+    """Compute a t-test and Cohen's d.
 
     Args:
         gaps: contribution - score のギャップリスト
@@ -75,8 +75,8 @@ def _compute_ttest_and_effect(gaps: list[float]) -> tuple[float, float]:
         n = len(gaps)
         t_stat = mean_gap / (std_gap / (n**0.5))
 
-        # 自由度 n-1 のt分布で近似的にp値計算（簡易版）
-        # 正確な計算にはscipyが必要
+        # approximate p-value via t-distribution with n-1 degrees of freedom (simplified)
+        # exact computation requires scipy
         p_value = 0.05 if abs(t_stat) > 2.0 else 0.5
 
     # Cohen's d（効果量）
@@ -92,7 +92,7 @@ def detect_role_bias(
     person_scores: dict[str, dict],
     role_profiles: dict[str, dict],
 ) -> list[BiasDetectionResult]:
-    """役職別のバイアスを検出.
+    """Detect bias by role.
 
     Args:
         contributions: anime_id → {person_id → contribution_dict}
@@ -102,7 +102,7 @@ def detect_role_bias(
     Returns:
         役職別バイアス検出結果リスト
     """
-    # 役職ごとに (contribution, score, person_id) を集計
+    # aggregate (contribution, score, person_id) per role
     role_data: dict[str, list[tuple[float, float, str]]] = defaultdict(list)
 
     for anime_id, anime_contribs in contributions.items():
@@ -111,7 +111,7 @@ def detect_role_bias(
             shapley = contrib_dict.get("shapley_value", 0)
             role_str = contrib_dict.get("role", "other")
 
-            # 現在スコアを取得
+            # get current score
             score = person_scores.get(person_id, {}).get("iv_score", 0)
 
             role_data[role_str].append((shapley, score, person_id))
@@ -125,14 +125,14 @@ def detect_role_bias(
         scores_list = [p[1] for p in data_points]
         person_ids = set(p[2] for p in data_points)
 
-        # ギャップ計算
+        # compute gap
         gaps = [c - s for c, s in zip(contributions_list, scores_list)]
         avg_gap = statistics.mean(gaps)
 
-        # 統計検定
+        # statistical test
         p_value, cohens_d = _compute_ttest_and_effect(gaps)
 
-        # 有意性判定（p < 0.05 かつ 中程度以上の効果量）
+        # significance check (p < 0.05 and at least medium effect size)
         is_significant = p_value < 0.05 and abs(cohens_d) > 0.3
 
         if is_significant:
@@ -163,7 +163,7 @@ def detect_studio_bias(
     person_scores: dict[str, dict],
     min_persons_per_studio: int = 5,
 ) -> list[BiasDetectionResult]:
-    """スタジオ別バイアスを検出.
+    """Detect bias by studio.
 
     Args:
         studio_bias_metrics: スタジオバイアスメトリクス
@@ -176,7 +176,7 @@ def detect_studio_bias(
     debiased_scores = studio_bias_metrics.get("debiased_scores", {})
     bias_metrics = studio_bias_metrics.get("bias_metrics", {})
 
-    # スタジオごとにデータ集計
+    # aggregate data by studio
     studio_data: dict[str, list[tuple[float, float, str]]] = defaultdict(list)
 
     for person_id, debiased_dict in debiased_scores.items():
@@ -202,9 +202,9 @@ def detect_studio_bias(
         original_list = [p[1] for p in data_points]
         person_ids = set(p[2] for p in data_points)
 
-        # ギャップ: debiased - original
-        # 正 = 補正で上昇（元々過小評価）
-        # 負 = 補正で下降（元々過大評価）
+        # gap: debiased - original
+        # positive = rose after correction (originally undervalued)
+        # negative = fell after correction (originally overvalued)
         gaps = [d - o for d, o in zip(debiased_list, original_list)]
         avg_gap = statistics.mean(gaps)
 
@@ -241,7 +241,7 @@ def detect_career_stage_bias(
     potential_value_scores: dict[str, dict],
     person_scores: dict[str, dict],
 ) -> list[BiasDetectionResult]:
-    """キャリアステージ別バイアスを検出.
+    """Detect bias by career stage.
 
     Args:
         growth_acceleration_data: 成長率データ
@@ -253,7 +253,7 @@ def detect_career_stage_bias(
     """
     growth_metrics = growth_acceleration_data.get("growth_metrics", {})
 
-    # キャリアステージごとにデータ集計
+    # aggregate data by career stage
     stage_groups: dict[str, list[tuple[float, float, str]]] = {
         "newcomer": [],  # <= 3年
         "mid_career": [],  # 4-10年
@@ -263,13 +263,13 @@ def detect_career_stage_bias(
     for person_id, growth_dict in growth_metrics.items():
         years = growth_dict.get("career_years", 0)
 
-        # 潜在価値を取得
+        # get potential value
         potential = potential_value_scores.get(person_id, {}).get("potential_value", 0)
 
-        # 現在スコアを取得
+        # get current score
         current = person_scores.get(person_id, {}).get("iv_score", 0)
 
-        # キャリアステージ分類
+        # classify career stage
         if years <= 3:
             stage_groups["newcomer"].append((potential, current, person_id))
         elif years <= 10:
@@ -286,8 +286,8 @@ def detect_career_stage_bias(
         current_list = [p[1] for p in data_points]
         person_ids = set(p[2] for p in data_points)
 
-        # ギャップ: potential - current
-        # 正 = 潜在価値が現在評価を上回る（過小評価）
+        # gap: potential - current
+        # positive = potential exceeds current evaluation (undervalued)
         gaps = [pot - cur for pot, cur in zip(potential_list, current_list)]
         avg_gap = statistics.mean(gaps)
 
@@ -327,7 +327,7 @@ def detect_systematic_biases(
     potential_value_scores: dict[str, dict],
     role_profiles: dict[str, dict],
 ) -> dict[str, list[BiasDetectionResult]]:
-    """全ての構造的バイアスを検出.
+    """Detect all structural biases.
 
     Args:
         contributions: anime_id → {person_id → contrib_dict}
@@ -359,7 +359,7 @@ def detect_systematic_biases(
 def generate_bias_report(
     bias_results: dict[str, list[BiasDetectionResult]],
 ) -> dict:
-    """バイアス検出レポートを生成.
+    """Generate a bias detection report.
 
     Args:
         bias_results: bias_type → [BiasDetectionResult, ...]
@@ -367,17 +367,17 @@ def generate_bias_report(
     Returns:
         包括的なレポート辞書
     """
-    # 全バイアスをフラット化
+    # flatten all biases
     all_biases = []
     for bias_type, biases in bias_results.items():
         all_biases.extend(biases)
 
-    # 深刻度で分類
+    # classify by severity
     severe_biases = [b for b in all_biases if abs(b.effect_size) > 0.8]
     moderate_biases = [b for b in all_biases if 0.5 < abs(b.effect_size) <= 0.8]
     mild_biases = [b for b in all_biases if 0.3 < abs(b.effect_size) <= 0.5]
 
-    # 推奨事項を生成
+    # generate recommendations
     recommendations = []
     for bias in sorted(all_biases, key=lambda b: abs(b.effect_size), reverse=True)[:5]:
         if bias.bias_direction == "undervalued":
@@ -442,8 +442,8 @@ def generate_bias_report(
 
 
 def main():
-    """スタンドアロン実行用エントリーポイント."""
-    # テスト用のダミーデータでデモ
+    """Standalone entry point."""
+    # demo with dummy data for testing
     print("Systematic Bias Detector - Standalone Demo")
     print("(Requires actual pipeline data to run)")
 

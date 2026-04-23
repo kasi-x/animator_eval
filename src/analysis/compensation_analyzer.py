@@ -22,7 +22,7 @@ logger = structlog.get_logger()
 
 
 class AnimeType(Enum):
-    """作品タイプ."""
+    """Work type."""
 
     MOVIE = "movie"  # 劇場版
     TV_1COUR = "tv_1cour"  # TV1クール（12-13話）
@@ -33,7 +33,7 @@ class AnimeType(Enum):
 
 
 def classify_anime_type(anime: Anime) -> AnimeType:
-    """作品タイプを分類.
+    """Classify the work type.
 
     Args:
         anime: Animeオブジェクト
@@ -56,9 +56,9 @@ def classify_anime_type(anime: Anime) -> AnimeType:
         return AnimeType.TV_LONG
 
 
-# 作品タイプ別の役職重要度調整係数
-# TVシリーズは話数が多いので作画監督・原画の重要度が上がる
-# 劇場版は監督・キャラデザの重要度が高い
+# role importance adjustment factor by work type
+# TV series: more episodes raise the importance of animation directors and key animators
+# theatrical: directors and character designers have higher importance
 ANIME_TYPE_ROLE_ADJUSTMENTS = {
     AnimeType.MOVIE: {
         Role.DIRECTOR: 1.3,  # 監督の重要度 +30%
@@ -93,7 +93,7 @@ ANIME_TYPE_ROLE_ADJUSTMENTS = {
 
 @dataclass
 class CompensationAnalysisRequest:
-    """報酬分析リクエスト.
+    """Compensation analysis request.
 
     Attributes:
         anime_id: 対象作品ID
@@ -114,7 +114,7 @@ class CompensationAnalysisRequest:
 
 @dataclass
 class FairnessMetrics:
-    """公正度メトリクス.
+    """Fairness metrics.
 
     Attributes:
         gini_coefficient: Gini係数（0=完全平等, 1=完全不平等）
@@ -133,7 +133,7 @@ class FairnessMetrics:
 
 @dataclass
 class CompensationAnalysis:
-    """報酬分析結果.
+    """Compensation analysis result.
 
     Attributes:
         anime_id: 作品ID
@@ -155,7 +155,7 @@ class CompensationAnalysis:
 
 
 def compute_gini_coefficient(values: list[float]) -> float:
-    """Gini係数を計算.
+    """Compute the Gini coefficient.
 
     Args:
         values: 数値のリスト
@@ -185,7 +185,7 @@ def compute_fairness_metrics(
     allocations: dict[str, float],
     contributions: dict[str, dict],
 ) -> FairnessMetrics:
-    """報酬配分の公正度を測定.
+    """Measure the fairness of compensation allocation.
 
     Args:
         allocations: person_id → 報酬額
@@ -203,7 +203,7 @@ def compute_fairness_metrics(
             compensation_ratio=0.0,
         )
 
-    # Gini係数
+    # Gini coefficient
     gini = compute_gini_coefficient(list(allocations.values()))
 
     # Shapley相関
@@ -235,7 +235,7 @@ def compute_fairness_metrics(
     else:
         shapley_corr = 1.0
 
-    # 報酬レンジ
+    # compensation range
     min_comp = min(allocations.values())
     max_comp = max(allocations.values())
     ratio = max_comp / min_comp if min_comp > 0 else 0
@@ -254,7 +254,7 @@ def analyze_fair_compensation(
     contributions: dict[str, dict],  # person_id → contrib_dict
     anime: Anime,
 ) -> CompensationAnalysis:
-    """公正報酬分析を実行.
+    """Run fair compensation analysis.
 
     Args:
         request: 分析リクエスト
@@ -282,7 +282,7 @@ def analyze_fair_compensation(
             ),
         )
 
-    # 作品タイプを判定
+    # determine work type
     anime_type = classify_anime_type(anime)
 
     # Shapley値を集計（作品タイプ調整を適用）
@@ -290,7 +290,7 @@ def analyze_fair_compensation(
     for person_id, contrib_dict in contributions.items():
         base_shapley = contrib_dict.get("shapley_value", 0)
 
-        # 作品タイプによる調整
+        # adjustment by work type
         if request.apply_anime_type_adjustment:
             role_str = contrib_dict.get("role", "other")
             try:
@@ -311,7 +311,7 @@ def analyze_fair_compensation(
         share = shapley / total_shapley if total_shapley > 0 else 0
         base_allocations[person_id] = request.total_budget * share
 
-    # 最低保証額を適用
+    # apply minimum guaranteed amount
     adjusted_allocations = {}
     total_guaranteed = 0
 
@@ -328,17 +328,17 @@ def analyze_fair_compensation(
         )
         total_guaranteed += adjusted_allocations[person_id]
 
-    # 予算超過の場合、比例配分で調整
+    # if budget exceeded, adjust by proportional allocation
     if total_guaranteed > request.total_budget:
         scale = request.total_budget / total_guaranteed
         adjusted_allocations = {
             pid: comp * scale for pid, comp in adjusted_allocations.items()
         }
 
-    # 最高/最低比制約を適用 (floor = max / max_ratio で下限を設定)
+    # apply max/min ratio constraint (set floor = max / max_ratio)
     # NOTE: cap = min * max_ratio は逆順を引き起こすため不使用。
-    # 代わりに floor = max / max_ratio で最低保証額を設定し、
-    # 予算超過分を Shapley 比率でスケールする。
+    # instead, set floor = max / max_ratio as minimum guarantee,
+    # then scale the budget excess by Shapley ratio.
     if len(adjusted_allocations) > 1:
         min_comp = min(adjusted_allocations.values())
         max_comp = max(adjusted_allocations.values())
@@ -346,11 +346,11 @@ def analyze_fair_compensation(
         if min_comp > 0 and max_comp / min_comp > request.max_ratio:
             floor = max_comp / request.max_ratio
 
-            # 下限を下回る配分を floor に引き上げる
+            # raise any allocation below floor to floor
             raised_allocations = {
                 pid: max(comp, floor) for pid, comp in adjusted_allocations.items()
             }
-            # 予算合計が変わるのでスケール調整
+            # rescale because total budget has changed
             total_raised = sum(raised_allocations.values())
             if total_raised > 0:
                 scale = request.total_budget / total_raised
@@ -358,7 +358,7 @@ def analyze_fair_compensation(
                     pid: comp * scale for pid, comp in raised_allocations.items()
                 }
 
-    # 公正度メトリクスを計算
+    # compute fairness metrics
     fairness = compute_fairness_metrics(adjusted_allocations, contributions)
 
     logger.info(
@@ -387,7 +387,7 @@ def batch_analyze_compensation(
     total_budget_per_anime: float = 100.0,
     min_compensation: dict[Role, float] | None = None,
 ) -> dict[str, CompensationAnalysis]:
-    """複数作品の報酬分析をバッチ実行.
+    """Run compensation analysis for multiple works in batch.
 
     Args:
         anime_list: Animeリスト
@@ -430,7 +430,7 @@ def export_compensation_report(
     person_names: dict[str, str],
     anime_scores: dict[str, float] | None = None,
 ) -> dict:
-    """報酬分析レポートをエクスポート.
+    """Export a compensation analysis report.
 
     Args:
         analyses: anime_id → CompensationAnalysis
@@ -481,7 +481,7 @@ def export_compensation_report(
             entry["anime_score"] = score
         anime_reports.append(entry)
 
-    # サマリー統計
+    # summary statistics
     all_gini = [a.fairness_metrics.gini_coefficient for a in analyses.values()]
     all_corr = [a.fairness_metrics.shapley_correlation for a in analyses.values()]
 
@@ -507,7 +507,7 @@ def export_compensation_report(
 
 
 def main():
-    """スタンドアロン実行用エントリーポイント."""
+    """Standalone entry point."""
     print("Fair Compensation Analyzer - Standalone Demo")
     print("(Requires actual pipeline data to run)")
 

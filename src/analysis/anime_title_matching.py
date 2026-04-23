@@ -1,4 +1,4 @@
-"""アニメタイトルマッチング — MADB ↔ AniList のタイトル照合.
+"""Anime title matching — MADB ↔ AniList title reconciliation.
 
 MADB (Media Arts Database) のアニメと AniList のアニメを
 タイトルの正規化一致・fuzzy マッチング・年検証で紐づける。
@@ -27,7 +27,7 @@ log = structlog.get_logger()
 
 @dataclass(frozen=True, slots=True)
 class AnimeMatch:
-    """マッチング結果."""
+    """Matching result."""
 
     madb_anime_id: str
     anilist_anime_id: str
@@ -75,7 +75,7 @@ _TRAILING_PUNCT = re.compile(r"[.。!！?？]+$")
 
 
 def normalize_anime_title(title: str) -> str:
-    """タイトルを正規化する.
+    """Normalise a title string.
 
     - NFKC正規化（全角→半角、互換文字統一）
     - (TV)/(OVA) 等のサフィックス除去
@@ -102,7 +102,7 @@ def _format_priority(anime: dict) -> int:
 
 
 def _pick_best_by_format(candidates: list[str], anime_by_id: dict[str, dict]) -> str:
-    """複数候補から format 優先度が最も高い1件を返す."""
+    """Return the single best candidate by format priority."""
     return min(candidates, key=lambda aid: _format_priority(anime_by_id[aid]))
 
 
@@ -111,7 +111,7 @@ def _disambiguate(
     madb_year: int | None,
     anime_by_id: dict[str, dict],
 ) -> list[str]:
-    """複数候補を year + format で絞り込む.
+    """Filter candidates by year + format.
 
     1. 年の完全一致で絞る
     2. まだ複数なら format 優先度で1件に絞る
@@ -178,7 +178,7 @@ def _year_compatible(
     anilist_year: int | None,
     tolerance: int,
 ) -> bool:
-    """年が互換性があるか確認する."""
+    """Check whether two years are compatible."""
     if madb_year is None or anilist_year is None:
         return True
     return abs(madb_year - anilist_year) <= tolerance
@@ -217,7 +217,7 @@ def match_anime_titles(
         score: float,
         strategy: str,
     ) -> bool:
-        """候補リストからマッチを試みる. 成功したら True."""
+        """Attempt to match from the candidate list; return True on success."""
         valid = [aid for aid in valid if aid not in used_anilist_ids]
         valid = list(dict.fromkeys(valid))  # dedup
         valid = _disambiguate(valid, madb_year, anime_by_id)

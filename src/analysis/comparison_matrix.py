@@ -1,4 +1,4 @@
-"""比較マトリクス — 複数人物のスコアを行列形式で比較する.
+"""Comparison matrix — compare multiple persons' scores in matrix form.
 
 N人の人物に対して、各軸のスコアを比較行列として出力。
 """
@@ -13,7 +13,7 @@ def build_comparison_matrix(
     results: list[dict],
     axes: tuple[str, ...] = ("iv_score", "person_fe", "birank", "patronage"),
 ) -> dict:
-    """複数人物の比較マトリクスを構築する.
+    """Build a comparison matrix for multiple persons.
 
     Args:
         person_ids: 比較対象の人物ID
