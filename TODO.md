@@ -246,15 +246,15 @@ scrapers ──→ bronze/source=X/date=Y/*.parquet   (per-source append-only、
 3. 部分再実行が面倒
 4. 観測性が弱い (どの phase が何秒か grep 頼み)
 
-### 5.1 Phase H-1: PoC (analysis_modules だけ)
+### 5.1 Phase H-1: PoC (analysis_modules だけ) ✅ DONE (2026-04-23)
 
-- [ ] `pixi add sf-hamilton`
-- [ ] `src/pipeline_phases/analysis_modules.py` の 20+ モジュール呼び出しを Hamilton module に変換
-  - 現状: 63 の `_run_*` wrapper (ほぼ `import+call+save to context` の 3 行) = 2,232 行
-  - `AnalysisTask(callable, result_key)` で declarative に置き換えれば 1,500 行削減可能
-- [ ] 既存テスト pass 確認、`PipelineContext` は残したまま
+- [x] `pixi add sf-hamilton`
+- [x] `src/pipeline_phases/hamilton_modules/` (core/studio/genre/network/causal) 5 モジュール、49 nodes
+- [x] node 署名修正完了 (commit 9ecfef8)、49/49 non-None
+- [x] Benchmark: Hamilton 3.36s vs ThreadPoolExecutor 16.42s (-79.5%) → **PASS**
+- [x] 既存テスト 18 件 pass
 
-**判断ポイント**: H-1 終了時に効果確認。効かなければ H-2 以降中止。
+**判断結果**: 20% 閾値を大きく下回った → H-2 進行。
 
 ### 5.2 Phase H-2: Phase 5-8 を Hamilton 化
 
@@ -294,12 +294,14 @@ H-1 終了時に以下のいずれかなら H-2 以降中止:
 
 ### 6.2 `patronage_dormancy.py` 直接テスト
 
-IV テストではモック使用。実際の dormancy penalty 計算ロジック (指数減衰、猶予期間) が未検証。
-- [ ] 直接テスト追加
+~~IV テストではモック使用。実際の dormancy penalty 計算ロジック (指数減衰、猶予期間) が未検証。~~
+- [x] 完了 (2026-04-23): `tests/test_patronage_dormancy_direct.py` 12 tests
 
 ### 6.3 VA パイプライン (7 モジュール全て未テスト)
 
-- [ ] `va_akm`, `va_integrated_value`, `va_graph` 等の 7 モジュール
+- [x] 完了 (2026-04-23): `tests/test_va_modules.py` 38 tests (va_akm, va_graph, ensemble_synergy)
+- [x] 完了 (2026-04-23): `tests/test_va_pipeline_phases.py` 10 smoke tests (graph_construction / core_scoring / supplementary_metrics / result_assembly)
+- [ ] `va_integrated_value`, `va_career_friction`, `va_character_diversity` 等残り 4 モジュール
 
 ### 6.4 テストファイル分割
 

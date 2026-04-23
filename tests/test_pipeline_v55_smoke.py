@@ -1,10 +1,13 @@
-"""Smoke test: fresh v55 schema init is consistent.
+"""Smoke test: fresh v55/v56 schema init is consistent and pipeline completes.
 
-Verifies that after init_db() on an empty SQLite file:
-- get_schema_version() returns SCHEMA_VERSION (55)
-- The v2 canonical tables (ops_lineage, person_scores as TABLE) exist
-- Deprecated legacy tables (meta_lineage, anime_display, scores) are absent
-- sources table contains the required seed codes
+Schema checks (fast):
+- get_schema_version() returns SCHEMA_VERSION
+- The v2 canonical tables exist; deprecated tables are absent
+- sources table is seeded
+
+Pipeline check (integration, uses synthetic data):
+- Full pipeline runs to completion on a fresh schema
+- person_scores TABLE is populated
 """
 from __future__ import annotations
 
@@ -115,3 +118,51 @@ def test_fresh_init_sources_seeded(tmp_path: Path) -> None:
     expected = {"anilist", "ann", "allcinema", "seesaawiki", "keyframe"}
     missing = expected - codes
     assert not missing, f"sources seeds missing after init_db: {sorted(missing)}"
+
+
+# ---------------------------------------------------------------------------
+# Pipeline completion test (integration)
+# ---------------------------------------------------------------------------
+
+def test_pipeline_completes_on_fresh_schema(tmp_path, monkeypatch) -> None:
+    """Full pipeline must complete on a fresh v56 schema and populate person_scores."""
+    import src.database
+    import src.pipeline
+    import src.utils.config
+
+    db_path = tmp_path / "smoke.db"
+    json_dir = tmp_path / "json"
+    json_dir.mkdir()
+
+    monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(src.pipeline, "JSON_DIR", json_dir)
+    monkeypatch.setattr(src.utils.config, "JSON_DIR", json_dir)
+
+    from src.database import get_connection, init_db, insert_credit, upsert_anime, upsert_person
+    from src.synthetic import generate_synthetic_data
+    from src.pipeline import run_scoring_pipeline
+
+    persons, anime_list, credits = generate_synthetic_data(
+        n_directors=5, n_animators=20, n_anime=10, seed=99
+    )
+    conn = get_connection()
+    init_db(conn)
+    for p in persons:
+        upsert_person(conn, p)
+    for a in anime_list:
+        upsert_anime(conn, a)
+    for c in credits:
+        insert_credit(conn, c)
+    conn.commit()
+    conn.close()
+
+    results = run_scoring_pipeline(enable_websocket=False)
+
+    assert len(results) > 0, "Pipeline produced no results"
+    assert all("person_id" in r for r in results), "Results missing person_id field"
+    assert all("iv_score" in r for r in results), "Results missing iv_score field"
+
+    conn2 = get_connection()
+    n_scores = conn2.execute("SELECT COUNT(*) FROM person_scores").fetchone()[0]
+    conn2.close()
+    assert n_scores > 0, "person_scores TABLE not populated after pipeline run"
