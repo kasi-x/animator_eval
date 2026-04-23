@@ -84,10 +84,9 @@ from src.analysis.production_analysis import (
 from src.analysis.studio.clustering import compute_studio_clustering
 from src.analysis.studio.network import compute_studio_network
 from src.analysis.talent_pipeline import compute_talent_pipeline
-from src.database import (
-    db_connection,
+from src.analysis.calc_cache import (
     get_calc_execution_hashes,
-    record_calc_execution,
+    record_calc_executions_batch,
 )
 from src.pipeline_phases.context import PipelineContext
 
@@ -1788,8 +1787,7 @@ def _filter_cached_tasks(
     json_dir: Path,
 ) -> tuple[list[AnalysisTask], list[str]]:
     """Split tasks into runnable and cached-by-hash."""
-    with db_connection() as conn:
-        recorded = get_calc_execution_hashes(conn, _CALC_RECORD_SCOPE)
+    recorded = get_calc_execution_hashes(_CALC_RECORD_SCOPE)
 
     runnable: list[AnalysisTask] = []
     skipped: list[str] = []
@@ -1895,6 +1893,25 @@ def _run_task_batch(
     return completed, failed, completed_tasks
 
 
+def _record_batch_completion(
+    done_names: list[str], phase_input_hash: str, json_dir: Path
+) -> None:
+    """Compute per-task hashes and write them to the DuckDB cache in one batch."""
+    if not done_names:
+        return
+    items = [
+        (
+            name,
+            hashlib.sha256(
+                f"{phase_input_hash}|{name}|v1".encode("utf-8")
+            ).hexdigest(),
+            str(json_dir / f"{name}.json"),
+        )
+        for name in done_names
+    ]
+    record_calc_executions_batch(_CALC_RECORD_SCOPE, items)
+
+
 def run_analysis_modules_phase(
     context: PipelineContext,
     max_workers: int | None = None,
@@ -1968,19 +1985,7 @@ def run_analysis_modules_phase(
         c, f, done_names = _run_task_batch(
             runnable_b1, context, results_lock, b1_workers, "batch1", json_dir=JSON_DIR
         )
-        if done_names:
-            with db_connection() as conn:
-                for task_name in done_names:
-                    task_hash = hashlib.sha256(
-                        f"{phase_input_hash}|{task_name}|v1".encode("utf-8")
-                    ).hexdigest()
-                    record_calc_execution(
-                        conn,
-                        _CALC_RECORD_SCOPE,
-                        task_name,
-                        task_hash,
-                        output_path=str(JSON_DIR / f"{task_name}.json"),
-                    )
+        _record_batch_completion(done_names, phase_input_hash, JSON_DIR)
         completed_count += c
         failed_count += f
 
@@ -2038,19 +2043,7 @@ def run_analysis_modules_phase(
                 "batch2",
                 json_dir=JSON_DIR,
             )
-            if done_names:
-                with db_connection() as conn:
-                    for task_name in done_names:
-                        task_hash = hashlib.sha256(
-                            f"{phase_input_hash}|{task_name}|v1".encode("utf-8")
-                        ).hexdigest()
-                        record_calc_execution(
-                            conn,
-                            _CALC_RECORD_SCOPE,
-                            task_name,
-                            task_hash,
-                            output_path=str(JSON_DIR / f"{task_name}.json"),
-                        )
+            _record_batch_completion(done_names, phase_input_hash, JSON_DIR)
             completed_count += c
             failed_count += f
 
@@ -2068,19 +2061,7 @@ def run_analysis_modules_phase(
             c, f, done_names = _run_task_batch(
                 runnable_b2_heavy, context, results_lock, 1, "batch2", json_dir=JSON_DIR
             )
-            if done_names:
-                with db_connection() as conn:
-                    for task_name in done_names:
-                        task_hash = hashlib.sha256(
-                            f"{phase_input_hash}|{task_name}|v1".encode("utf-8")
-                        ).hexdigest()
-                        record_calc_execution(
-                            conn,
-                            _CALC_RECORD_SCOPE,
-                            task_name,
-                            task_hash,
-                            output_path=str(JSON_DIR / f"{task_name}.json"),
-                        )
+            _record_batch_completion(done_names, phase_input_hash, JSON_DIR)
             completed_count += c
             failed_count += f
     else:
@@ -2107,19 +2088,7 @@ def run_analysis_modules_phase(
                 "all",
                 json_dir=JSON_DIR,
             )
-            if done_names:
-                with db_connection() as conn:
-                    for task_name in done_names:
-                        task_hash = hashlib.sha256(
-                            f"{phase_input_hash}|{task_name}|v1".encode("utf-8")
-                        ).hexdigest()
-                        record_calc_execution(
-                            conn,
-                            _CALC_RECORD_SCOPE,
-                            task_name,
-                            task_hash,
-                            output_path=str(JSON_DIR / f"{task_name}.json"),
-                        )
+            _record_batch_completion(done_names, phase_input_hash, JSON_DIR)
             completed_count += c
             failed_count += f
 
@@ -2136,19 +2105,7 @@ def run_analysis_modules_phase(
             c, f, done_names = _run_task_batch(
                 runnable_all_heavy, context, results_lock, 1, "all", json_dir=JSON_DIR
             )
-            if done_names:
-                with db_connection() as conn:
-                    for task_name in done_names:
-                        task_hash = hashlib.sha256(
-                            f"{phase_input_hash}|{task_name}|v1".encode("utf-8")
-                        ).hexdigest()
-                        record_calc_execution(
-                            conn,
-                            _CALC_RECORD_SCOPE,
-                            task_name,
-                            task_hash,
-                            output_path=str(JSON_DIR / f"{task_name}.json"),
-                        )
+            _record_batch_completion(done_names, phase_input_hash, JSON_DIR)
             completed_count += c
             failed_count += f
 
@@ -2162,19 +2119,7 @@ def run_analysis_modules_phase(
     c, f, done_names = _run_task_batch(
         runnable_b3, context, results_lock, 1, "batch3", json_dir=JSON_DIR
     )
-    if done_names:
-        with db_connection() as conn:
-            for task_name in done_names:
-                task_hash = hashlib.sha256(
-                    f"{phase_input_hash}|{task_name}|v1".encode("utf-8")
-                ).hexdigest()
-                record_calc_execution(
-                    conn,
-                    _CALC_RECORD_SCOPE,
-                    task_name,
-                    task_hash,
-                    output_path=str(JSON_DIR / f"{task_name}.json"),
-                )
+    _record_batch_completion(done_names, phase_input_hash, JSON_DIR)
     completed_count += c
     failed_count += f
 
