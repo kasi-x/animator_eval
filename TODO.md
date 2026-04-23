@@ -17,6 +17,7 @@
 | ✅ Done | Test coverage | scraper E2E: anilist_scraper / seesaawiki_scraper / ann_scraper integration tests (18 cases, 6 each) — 2026-04-24 |
 | ✅ Done | Test coverage | llm_pipeline.py (574 lines): 50 unit + integration tests (eb3837a) — 2026-04-24 |
 | ✅ Done | Test coverage | seesaawiki parser unit tests: 82 cases (_split_names_paren_aware, _is_company_name, _clean_name, parse_credit_line, _parse_episode_ranges, parse_series_staff, parse_episodes) — 2c77147 — 2026-04-24 |
+| ✅ Done | Test coverage | structural_estimation.py (AKM / causal): 19 unit tests (FE recovery, SE scaling, order invariance, DID contract, parallel trends, placebo, edge cases) — 2026-04-24 |
 
 **完了済み大項目** (→ `DONE.md`): anime.score 汚染除去、Phase 1-4 基盤、DuckDB §4 全フェーズ、Hamilton H-1〜H-7 (PipelineContext 完全削除)、レポート統廃合 §8、アーキテクチャ §9/11、ドキュメント §12、テストカバレッジ §6、feat_* 層別分離 §13、scraper queries/parsers 分離 §3、§7.1 差分更新 (hash比較フィルタ + E2E)、§7.3 retry refactor、§9 similarity/recommendation スタブ化
 
