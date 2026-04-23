@@ -85,6 +85,7 @@ def run_scoring_pipeline(
         compute_feat_career_annual_ddb,
         compute_feat_credit_activity_ddb,
         compute_feat_person_role_progression_ddb,
+        compute_feat_studio_affiliation_ddb,
     )
     from src.utils.performance import reset_monitor
 
@@ -116,6 +117,7 @@ def run_scoring_pipeline(
             lambda: compute_feat_person_role_progression_ddb(current_year=current_year),
             "role_progression",
         ),
+        (compute_feat_studio_affiliation_ddb, "studio_affiliation"),
     ]:
         try:
             fn()

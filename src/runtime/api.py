@@ -43,8 +43,8 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
 
-from src.analysis.gold_writer import GoldReader
-from src.analysis.silver_reader import (
+from src.analysis.io.gold_writer import GoldReader
+from src.analysis.io.silver_reader import (
     DEFAULT_SILVER_PATH,
     silver_connect,
     silver_available,
@@ -573,7 +573,7 @@ def data_quality():
                 ).fetchone()[0]
             if total_persons:
                 try:
-                    from src.analysis.gold_writer import gold_connect, DEFAULT_GOLD_DB_PATH
+                    from src.analysis.io.gold_writer import gold_connect, DEFAULT_GOLD_DB_PATH
                     if DEFAULT_GOLD_DB_PATH.exists():
                         with gold_connect() as gc:
                             persons_with_score = gc.execute(

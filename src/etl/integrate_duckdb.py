@@ -4,10 +4,10 @@ Reads bronze/source=*/table=*/date=*/*.parquet, dedups (latest date wins
 per primary key), and writes a new silver.duckdb. Atomic swap via os.replace()
 means analysis processes holding the old file inode are never blocked.
 
-Scope (Card 03): anime, persons, credits tables only.
-Other silver tables (studios, anime_studios, anime_genres, anime_tags, ...)
-are populated by the existing SQLite ETL (src/etl/integrate.py) until
-Card 06 removes SQLite entirely.
+Core tables (Card 03): anime, persons, credits.
+Studio tables (Card 06): studios, anime_studios — loaded when parquet exists,
+skipped gracefully otherwise.
+Other tables (anime_genres, anime_tags, ...) remain in SQLite ETL.
 """
 from __future__ import annotations
 
@@ -33,6 +33,24 @@ DEFAULT_BRONZE_ROOT = Path(
 # Additional SILVER tables (studios, anime_genres, anime_tags, …) are handled
 # by separate integration modules.
 _DDL = """
+CREATE TABLE IF NOT EXISTS studios (
+    id                  VARCHAR PRIMARY KEY,
+    name                VARCHAR NOT NULL DEFAULT '',
+    anilist_id          INTEGER,
+    is_animation_studio BOOLEAN,
+    country_of_origin   VARCHAR,
+    favourites          INTEGER,
+    site_url            VARCHAR,
+    updated_at          TIMESTAMP DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS anime_studios (
+    anime_id    VARCHAR NOT NULL,
+    studio_id   VARCHAR NOT NULL,
+    is_main     BOOLEAN NOT NULL DEFAULT FALSE,
+    PRIMARY KEY (anime_id, studio_id)
+);
+
 CREATE TABLE IF NOT EXISTS anime (
     id          VARCHAR PRIMARY KEY,
     title_ja    VARCHAR NOT NULL DEFAULT '',
@@ -189,6 +207,37 @@ def _build_credits_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
     )
 
 
+_STUDIOS_SQL = """
+INSERT INTO studios
+SELECT
+    id,
+    COALESCE(name, '')       AS name,
+    anilist_id,
+    is_animation_studio,
+    country_of_origin,
+    favourites,
+    site_url,
+    now()                    AS updated_at
+FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
+    FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE  id IS NOT NULL
+)
+WHERE _rn = 1
+"""
+
+_ANIME_STUDIOS_SQL = """
+INSERT INTO anime_studios
+SELECT DISTINCT
+    anime_id,
+    studio_id,
+    COALESCE(TRY_CAST(is_main AS BOOLEAN), FALSE) AS is_main
+FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+WHERE anime_id IS NOT NULL AND studio_id IS NOT NULL
+"""
+
+
 def integrate(
     bronze_root: Path | str | None = None,
     silver_path: Path | str | None = None,
@@ -197,8 +246,10 @@ def integrate(
 ) -> dict[str, int]:
     """Build a fresh SILVER duckdb from BRONZE parquet, then atomic swap.
 
-    Returns row counts: {"anime": N, "persons": N, "credits": N}.
-    Raises FileNotFoundError if no parquet files exist for a table.
+    Returns row counts for all loaded tables.
+    Core tables (anime, persons, credits) raise FileNotFoundError if missing.
+    Studio tables (studios, anime_studios) are loaded when parquet exists;
+    silently skipped otherwise (not all scrapers write them).
     """
     bronze_root = Path(bronze_root or DEFAULT_BRONZE_ROOT)
     silver_path = Path(silver_path or DEFAULT_SILVER_PATH)
@@ -209,6 +260,8 @@ def integrate(
     anime_glob = _glob("anime")
     persons_glob = _glob("persons")
     credits_glob = _glob("credits")
+    studios_glob = _glob("studios")
+    anime_studios_glob = _glob("anime_studios")
 
     counts: dict[str, int] = {}
 
@@ -236,6 +289,25 @@ def integrate(
             conn.execute(_build_credits_sql(conn, credits_glob), [credits_glob])
             counts["credits"] = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
             logger.info("silver_credits", count=counts["credits"])
+
+            # studios + anime_studios (optional — skip if no bronze parquet)
+            if _parquet_columns(conn, studios_glob):
+                try:
+                    conn.execute(_STUDIOS_SQL, [studios_glob])
+                    counts["studios"] = conn.execute("SELECT COUNT(*) FROM studios").fetchone()[0]
+                    logger.info("silver_studios", count=counts["studios"])
+                except Exception as exc:
+                    logger.warning("silver_studios_skip", error=str(exc))
+
+            if _parquet_columns(conn, anime_studios_glob):
+                try:
+                    conn.execute(_ANIME_STUDIOS_SQL, [anime_studios_glob])
+                    counts["anime_studios"] = conn.execute(
+                        "SELECT COUNT(*) FROM anime_studios"
+                    ).fetchone()[0]
+                    logger.info("silver_anime_studios", count=counts["anime_studios"])
+                except Exception as exc:
+                    logger.warning("silver_anime_studios_skip", error=str(exc))
 
         finally:
             conn.close()

@@ -44,7 +44,7 @@ def upsert_person(
     incoming_priority = _SOURCE_PRIORITY.get(source, 0)
 
     existing = conn.execute(
-        "SELECT name_ja, name_ko, name_zh, aliases, name_priority FROM persons WHERE id = ?",
+        "SELECT name_ja, name_ko, name_zh, names_alt, aliases, name_priority FROM persons WHERE id = ?",
         (person.id,),
     ).fetchone()
 
@@ -52,18 +52,19 @@ def upsert_person(
         # New record — straightforward insert
         conn.execute(
             """INSERT OR IGNORE INTO persons (
-                   id, name_ja, name_en, name_ko, name_zh, aliases, nationality,
+                   id, name_ja, name_en, name_ko, name_zh, names_alt, aliases, nationality,
                    mal_id, anilist_id,
                    date_of_birth, hometown, blood_type, description, years_active, favourites, site_url,
                    name_priority
                )
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 person.id,
                 person.name_ja,
                 person.name_en,
                 person.name_ko,
                 person.name_zh,
+                getattr(person, "names_alt", "{}") or "{}",
                 json.dumps(person.aliases, ensure_ascii=False),
                 json.dumps(person.nationality, ensure_ascii=False),
                 person.mal_id,
@@ -113,6 +114,7 @@ def upsert_person(
                    name_en   = COALESCE(NULLIF(?, ''), name_en),
                    name_ko   = COALESCE(NULLIF(?, ''), name_ko),
                    name_zh   = COALESCE(NULLIF(?, ''), name_zh),
+                   names_alt = COALESCE(NULLIF(?, '{}'), names_alt),
                    aliases   = ?,
                    nationality = COALESCE(NULLIF(?, '[]'), nationality),
                    mal_id    = COALESCE(?, mal_id),
@@ -128,6 +130,7 @@ def upsert_person(
                WHERE id = ?""",
             (
                 person.name_ja, person.name_en, person.name_ko, person.name_zh,
+                getattr(person, "names_alt", "{}") or "{}",
                 final_aliases,
                 json.dumps(person.nationality, ensure_ascii=False),
                 person.mal_id, person.anilist_id,

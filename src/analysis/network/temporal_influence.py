@@ -356,8 +356,8 @@ def detect_industry_trends(
 
 def main():
     """Standalone entry point."""
-    from src.analysis.gold_writer import GoldReader
-    from src.analysis.silver_reader import load_anime_silver, load_credits_silver
+    from src.analysis.io.gold_writer import GoldReader
+    from src.analysis.io.silver_reader import load_anime_silver, load_credits_silver
 
     anime_list = load_anime_silver()
     credits = load_credits_silver()

@@ -8,6 +8,7 @@ False negatives (missing a merge) are acceptable.
 """
 
 import functools
+import json
 import re
 import unicodedata
 from collections import defaultdict
@@ -111,6 +112,8 @@ def exact_match_cluster(
     ja_name_groups: dict[str, list[str]] = defaultdict(list)
     ko_name_groups: dict[str, list[str]] = defaultdict(list)
     zh_name_groups: dict[str, list[str]] = defaultdict(list)
+    # names_alt: per-lang groups (th, ar, hi, vi, ...)
+    alt_name_groups: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
     # group by English name (only persons without a native name)
     en_name_groups: dict[str, list[str]] = defaultdict(list)
     # group by alias
@@ -135,6 +138,15 @@ def exact_match_cluster(
             if normalized_zh:
                 zh_name_groups[normalized_zh].append(p.id)
                 has_native = True
+        try:
+            for lang, alt_name in (json.loads(getattr(p, "names_alt", "{}") or "{}") or {}).items():
+                if alt_name:
+                    n = normalize_name(alt_name)
+                    if n:
+                        alt_name_groups[lang][n].append(p.id)
+                        has_native = True
+        except (json.JSONDecodeError, TypeError):
+            pass
         # English name only for persons without a native name
         if not has_native and p.name_en:
             normalized_en = normalize_name(p.name_en)
@@ -205,6 +217,9 @@ def exact_match_cluster(
         _merge_group(ids, name_ko, "exact_match")
     for name_zh, ids in zh_name_groups.items():
         _merge_group(ids, name_zh, "exact_match")
+    for lang_groups in alt_name_groups.values():
+        for alt_name, ids in lang_groups.items():
+            _merge_group(ids, alt_name, "exact_match")
 
     # merge by English name (only persons without a native name)
     for name_en, ids in en_name_groups.items():
@@ -220,7 +235,8 @@ def exact_match_cluster(
             pid for pid in unique_ids
             if not (persons_by_id[pid].name_ja
                     or persons_by_id[pid].name_ko
-                    or persons_by_id[pid].name_zh)
+                    or persons_by_id[pid].name_zh
+                    or (getattr(persons_by_id[pid], "names_alt", "{}") or "{}") != "{}")
         ]
         _merge_group(valid_ids, alias, "exact_match_alias")
 
@@ -363,7 +379,11 @@ def cross_source_match(persons: list[Person]) -> dict[str, str]:
 
     # MAL → AniList matching
     for anilist_pid, p in anilist_persons.items():
-        for name in [p.name_ja, p.name_ko, p.name_zh, p.name_en] + p.aliases:
+        try:
+            alt_vals = list((json.loads(getattr(p, "names_alt", "{}") or "{}") or {}).values())
+        except (json.JSONDecodeError, TypeError):
+            alt_vals = []
+        for name in [p.name_ja, p.name_ko, p.name_zh, p.name_en] + p.aliases + alt_vals:
             n = normalize_name(name)
             if n and n in mal_name_index:
                 mal_ids = mal_name_index[n]
@@ -567,7 +587,11 @@ def similarity_based_cluster(
         name_to_ids: dict[str, list[str]] = defaultdict(list)
 
         for p in source_persons:
-            for name_field in [p.name_ja, p.name_ko, p.name_zh, p.name_en] + p.aliases:
+            try:
+                alt_values = list((json.loads(getattr(p, "names_alt", "{}") or "{}") or {}).values())
+            except (json.JSONDecodeError, TypeError):
+                alt_values = []
+            for name_field in [p.name_ja, p.name_ko, p.name_zh, p.name_en] + p.aliases + alt_values:
                 if not name_field:
                     continue
                 normalized = normalize_name(name_field)

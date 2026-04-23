@@ -59,6 +59,7 @@ class PersonRow:
     name_en: str = ""
     name_ko: str = ""
     name_zh: str = ""
+    names_alt: str = "{}"  # JSON dict: {"th": "...", "ar": "...", "vi": "..."} etc.
     aliases: str = "[]"  # JSON array string
     nationality: str = "[]"  # JSON array string
     mal_id: int | None = None

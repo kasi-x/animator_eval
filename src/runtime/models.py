@@ -1254,6 +1254,7 @@ class Person(BaseModel):
     name_en: str = ""
     name_ko: str = ""
     name_zh: str = ""
+    names_alt: str = "{}"  # JSON dict: {"th": "...", "ar": "..."} for non-JA/EN/KO/ZH scripts
     name_native_raw: str = ""  # raw AniList name.native before script routing (bronze use)
     aliases: list[str] = Field(default_factory=list)
     nationality: list[str] = Field(default_factory=list)  # ISO 3166-1 alpha-2, e.g. ["JP", "KR"]
@@ -1290,7 +1291,12 @@ class Person(BaseModel):
     @computed_field  # type: ignore[prop-decorator]
     @property
     def display_name(self) -> str:
-        return self.name_ja or self.name_ko or self.name_zh or self.name_en or self.id
+        try:
+            alt_names = json.loads(self.names_alt or "{}")
+            alt_first = next(iter(alt_names.values()), "") if alt_names else ""
+        except (json.JSONDecodeError, TypeError):
+            alt_first = ""
+        return self.name_ja or self.name_ko or self.name_zh or alt_first or self.name_en or self.id
 
     @classmethod
     def from_db_row(cls, row: "PersonRow") -> "Person":
@@ -1300,6 +1306,7 @@ class Person(BaseModel):
             name_en=row.name_en,
             name_ko=getattr(row, "name_ko", "") or "",
             name_zh=getattr(row, "name_zh", "") or "",
+            names_alt=getattr(row, "names_alt", "{}") or "{}",
             aliases=json.loads(row.aliases),
             nationality=json.loads(getattr(row, "nationality", "[]") or "[]"),
             mal_id=row.mal_id,

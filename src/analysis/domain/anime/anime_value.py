@@ -359,7 +359,8 @@ def compute_anime_values(
         "anime_values_computed",
         anime=len(values),
         avg_value=round(
-            sum(v.composite_value for v in values.values()) / len(values), 2
+            sum(v.composite_value for v in values.values()) / len(values) if values else 0.0,
+            2,
         ),
     )
 

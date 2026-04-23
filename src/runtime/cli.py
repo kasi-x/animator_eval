@@ -35,7 +35,7 @@ def stats(lang: str = lang_option) -> None:
     """Display database statistics."""
     setup_logging()
 
-    from src.analysis.gold_writer import gold_connect_with_silver
+    from src.analysis.io.gold_writer import gold_connect_with_silver
 
     n_persons = n_anime = n_credits = n_scores = 0
     role_dist: list = []
@@ -155,7 +155,7 @@ def ranking(
     """Display score ranking."""
     setup_logging()
 
-    from src.analysis.gold_writer import GoldReader
+    from src.analysis.io.gold_writer import GoldReader
 
     valid_sort = {"iv_score", "person_fe", "birank", "patronage", "dormancy", "awcc"}
     if sort_by not in valid_sort:
@@ -257,7 +257,7 @@ def profile(person_id: str = typer.Argument(help="Person ID (e.g. anilist:p100)"
     """Display a specific person's profile."""
     setup_logging()
 
-    from src.analysis.gold_writer import gold_connect_with_silver
+    from src.analysis.io.gold_writer import gold_connect_with_silver
     from src.utils.display_lookup import get_display_score
 
     try:
@@ -393,7 +393,7 @@ def search(
     """Search for persons by name."""
     setup_logging()
 
-    from src.analysis.gold_writer import gold_connect_with_silver
+    from src.analysis.io.gold_writer import gold_connect_with_silver
 
     pattern = f"%{query}%"
     try:
@@ -458,7 +458,7 @@ def compare(
     """Compare two persons."""
     setup_logging()
 
-    from src.analysis.gold_writer import gold_connect_with_silver
+    from src.analysis.io.gold_writer import gold_connect_with_silver
 
     with gold_connect_with_silver() as conn:
 
@@ -628,7 +628,7 @@ def export(
     setup_logging()
     from pathlib import Path
 
-    from src.analysis.gold_writer import gold_connect_with_silver
+    from src.analysis.io.gold_writer import gold_connect_with_silver
     from src.runtime.report import (
         generate_csv_report,
         generate_html_report,
@@ -713,7 +713,7 @@ def timeline(
     from pathlib import Path
 
     from src.analysis.career import CAREER_STAGE
-    from src.analysis.gold_writer import gold_connect_with_silver
+    from src.analysis.io.gold_writer import gold_connect_with_silver
     from src.analysis.visualize import plot_person_timeline
     from src.runtime.models import Role
     from src.utils.display_lookup import get_display_score
@@ -791,7 +791,7 @@ def history(
     """Display a person's score history."""
     setup_logging()
 
-    from src.analysis.gold_writer import GoldReader, gold_connect_with_silver
+    from src.analysis.io.gold_writer import GoldReader, gold_connect_with_silver
 
     # Get person info from silver
     person = None
@@ -981,7 +981,7 @@ def validate() -> None:
     """Run data quality checks on the DB."""
     setup_logging()
 
-    from src.analysis.gold_writer import gold_connect_with_silver
+    from src.analysis.io.gold_writer import gold_connect_with_silver
     from src.infra.validation import validate_all
 
     try:
@@ -1727,7 +1727,7 @@ def data_quality() -> None:
     setup_logging()
 
     from src.analysis.data_quality import compute_data_quality_score
-    from src.analysis.gold_writer import gold_connect_with_silver
+    from src.analysis.io.gold_writer import gold_connect_with_silver
 
     with gold_connect_with_silver() as conn:
         total_persons = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
@@ -1852,7 +1852,7 @@ def entity_resolution_check(
         format_resolution_report,
         generate_resolution_report,
     )
-    from src.analysis.silver_reader import load_persons_silver
+    from src.analysis.io.silver_reader import load_persons_silver
 
     persons = load_persons_silver()
 
@@ -1919,8 +1919,8 @@ def neo4j_export(
     """
     setup_logging()
 
-    from src.analysis.gold_writer import GoldReader
-    from src.analysis.silver_reader import load_anime_silver, load_credits_silver, load_persons_silver
+    from src.analysis.io.gold_writer import GoldReader
+    from src.analysis.io.silver_reader import load_anime_silver, load_credits_silver, load_persons_silver
 
     console.print("\n[bold blue]Neo4j Direct Export[/bold blue]\n")
 

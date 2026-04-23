@@ -40,12 +40,15 @@ def ctx(visualize: bool, dry_run: bool) -> PipelineContext:
 def raw_data_loaded(ctx: PipelineContext) -> Any:
     """Load persons, anime, and credits from silver.duckdb (Phase 1).
 
-    Writes: ctx.persons, ctx.anime_list, ctx.credits, ctx.anime_map,
-            ctx.va_credits, ctx.characters, ctx.character_map, ctx.va_person_ids.
+    Writes: ctx.persons, ctx.anime_list, ctx.credits, ctx.anime_map.
     """
     from src.pipeline_phases.data_loading import load_pipeline_data
 
-    load_pipeline_data(ctx)
+    loaded = load_pipeline_data(ctx.visualize, ctx.dry_run)
+    ctx.persons = loaded.persons
+    ctx.anime_list = loaded.anime_list
+    ctx.credits = loaded.credits
+    ctx.anime_map = loaded.anime_map
     return {
         "person_count": len(ctx.persons),
         "anime_count": len(ctx.anime_list),

@@ -1041,7 +1041,7 @@ def _persist_features_to_db(context: PipelineContext) -> None:
 
     import duckdb
 
-    from src.analysis.gold_writer import DEFAULT_GOLD_DB_PATH, _DDL
+    from src.analysis.io.gold_writer import DEFAULT_GOLD_DB_PATH, _DDL
 
     if not context.results:
         return

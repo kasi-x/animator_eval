@@ -5,10 +5,9 @@ from collections import defaultdict
 
 import structlog
 
-from src.analysis.silver_reader import load_anime_silver, load_credits_silver, load_persons_silver
-from src.runtime.models import Credit, Person
-from src.pipeline_phases.context import PipelineContext
-from src.runtime.models import Role
+from src.analysis.io.silver_reader import load_anime_silver, load_credits_silver, load_persons_silver
+from src.pipeline_phases.pipeline_types import LoadedData
+from src.runtime.models import Credit, Person, Role
 from src.utils.role_groups import NON_PRODUCTION_ROLES
 
 # Roles that definitively identify animation production staff.
@@ -286,19 +285,15 @@ def _llm_normalize_names(
     return updated, extra_credits
 
 
-def load_pipeline_data(context: PipelineContext) -> None:
-    """Load all data from silver.duckdb into context.
+def load_pipeline_data(visualize: bool = False, dry_run: bool = False) -> LoadedData:
+    """Load all data from silver.duckdb.
 
-    Updates context fields:
-        - persons: List of all Person objects
-        - anime_list: List of all Anime objects
-        - credits: List of all Credit objects
-        - anime_map: Dict mapping anime_id to Anime object
+    Returns:
+        LoadedData with persons, anime_list, credits, anime_map populated.
     """
-    with context.monitor.measure("data_loading"):
-        all_persons = load_persons_silver()
-        context.anime_list = load_anime_silver()
-        all_credits = load_credits_silver()
+    all_persons = load_persons_silver()
+    anime_list = load_anime_silver()
+    all_credits = load_credits_silver()
 
     # Filter out garbage/placeholder person entries
     garbage_ids: set[str] = set()
@@ -312,45 +307,44 @@ def load_pipeline_data(context: PipelineContext) -> None:
         logger.info("filtered_garbage_persons", count=len(garbage_ids))
 
     # Filter out persons with ONLY non-production credits (voice actors, singers, etc.)
-    # Persons with at least one production credit (dual-role staff) are preserved.
     filtered_persons, non_production_ids = _filter_non_production_persons(
         valid_persons, all_credits
     )
     if non_production_ids:
         logger.info("filtered_non_production_persons", count=len(non_production_ids))
 
-    # LLM-assisted organization detection (batch LLM, no DB caching during pipeline)
+    # LLM-assisted organization detection
     llm_org_ids = _llm_filter_organizations(filtered_persons)
     if llm_org_ids:
         filtered_persons = [p for p in filtered_persons if p.id not in llm_org_ids]
         logger.info("filtered_llm_orgs", count=len(llm_org_ids))
 
-    # LLM-assisted name normalization (parenthetical removal, multi-person split)
+    # LLM-assisted name normalization
     filtered_persons, extra_credits = _llm_normalize_names(filtered_persons, all_credits)
 
-    context.persons = filtered_persons
-
-    # Filter out orphan credits and credits for garbage/non-production persons
-    person_ids = {p.id for p in context.persons}
-    context.credits = [c for c in all_credits if c.person_id in person_ids]
+    # Filter out orphan credits
+    person_ids = {p.id for p in filtered_persons}
+    credits = [c for c in all_credits if c.person_id in person_ids]
     if extra_credits:
-        context.credits.extend(extra_credits)
-    na_count = len(all_credits) - len(context.credits) + len(extra_credits)
+        credits.extend(extra_credits)
+    na_count = len(all_credits) - len(credits) + len(extra_credits)
     if na_count > 0:
         logger.info("filtered_orphan_credits", count=na_count)
 
-    # Build anime_map for quick lookups
-    context.anime_map = {a.id: a for a in context.anime_list}
-
-    # Update monitoring counters
-    context.monitor.increment_counter("persons_loaded", len(context.persons))
-    context.monitor.increment_counter("anime_loaded", len(context.anime_list))
-    context.monitor.increment_counter("credits_loaded", len(context.credits))
-    context.monitor.record_memory("after_data_load")
+    anime_map = {a.id: a for a in anime_list}
 
     logger.info(
         "data_loaded",
-        persons=len(context.persons),
-        anime=len(context.anime_list),
-        credits=len(context.credits),
+        persons=len(filtered_persons),
+        anime=len(anime_list),
+        credits=len(credits),
+    )
+
+    return LoadedData(
+        persons=filtered_persons,
+        anime_list=anime_list,
+        credits=credits,
+        anime_map=anime_map,
+        visualize=visualize,
+        dry_run=dry_run,
     )

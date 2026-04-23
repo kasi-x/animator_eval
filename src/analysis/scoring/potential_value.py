@@ -390,8 +390,8 @@ def main():
         compute_growth_metrics,
         compute_adjusted_person_fe_with_growth,
     )
-    from src.analysis.gold_writer import GoldReader
-    from src.analysis.silver_reader import (
+    from src.analysis.io.gold_writer import GoldReader
+    from src.analysis.io.silver_reader import (
         load_anime_silver,
         load_credits_silver,
         load_persons_silver,

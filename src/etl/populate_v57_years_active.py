@@ -72,7 +72,7 @@ def populate_persons_years_active(conn: duckdb.DuckDBPyConnection) -> dict[str, 
 def main() -> None:
     import argparse
 
-    from src.analysis.gold_writer import gold_connect
+    from src.analysis.io.gold_writer import gold_connect
 
     parser = argparse.ArgumentParser(
         description="Populate persons.years_active from credit timeline"

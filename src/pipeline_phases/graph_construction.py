@@ -7,70 +7,63 @@ from src.analysis.graph import (
     create_person_anime_network,
     create_person_collaboration_network,
 )
-from src.pipeline_phases.context import PipelineContext
+from src.pipeline_phases.pipeline_types import EntityResolutionResult, GraphsResult
 
 logger = structlog.get_logger()
 
 
-def build_graphs_phase(context: PipelineContext) -> None:
+def build_graphs_phase(resolved: EntityResolutionResult) -> GraphsResult:
     """Build person-anime bipartite graph, collaboration graph, and communities.
 
     Args:
-        context: Pipeline context
+        resolved: Entity-resolved data (persons, resolved_credits, anime)
 
-    Updates context fields:
-        - person_anime_graph: NetworkX bipartite graph
-        - collaboration_graph: NetworkX graph of person-person collaborations
-        - community_map: person_id → community_id (Louvain)
+    Returns:
+        GraphsResult with person_anime_graph, collaboration_graph, community_map
     """
-    with context.monitor.measure("graph_construction"):
-        # Bipartite graph (person ↔ anime)
-        context.person_anime_graph = create_person_anime_network(
-            context.persons, context.anime_list, context.credits
-        )
+    person_anime_graph = create_person_anime_network(
+        resolved.persons, resolved.anime_list, resolved.resolved_credits
+    )
 
-        # Collaboration graph (person ↔ person)
-        context.collaboration_graph = create_person_collaboration_network(
-            context.persons, context.credits, anime_map=context.anime_map
-        )
+    collaboration_graph = create_person_collaboration_network(
+        resolved.persons, resolved.resolved_credits, anime_map=resolved.anime_map
+    )
 
-    # Community detection (needed for Knowledge Spanners in Phase 5)
-    if (
-        context.collaboration_graph is not None
-        and context.collaboration_graph.number_of_edges() > 0
-    ):
-        with context.monitor.measure("community_detection"):
-            try:
-                from src.analysis.sparse_graph import SparseCollaborationGraph
+    community_map: dict = {}
 
-                if isinstance(context.collaboration_graph, SparseCollaborationGraph):
-                    # Use built-in LPA for sparse graphs (no NetworkX conversion)
-                    context.community_map = (
-                        context.collaboration_graph.community_detection_lpa(seed=42)
+    if collaboration_graph is not None and collaboration_graph.number_of_edges() > 0:
+        try:
+            from src.analysis.sparse_graph import SparseCollaborationGraph
+
+            if isinstance(collaboration_graph, SparseCollaborationGraph):
+                community_map = collaboration_graph.community_detection_lpa(seed=42)
+                n_communities = len(set(community_map.values()))
+            else:
+                n_edges = collaboration_graph.number_of_edges()
+                if n_edges <= 1_000_000:
+                    communities = nx.community.louvain_communities(
+                        collaboration_graph, weight="weight", seed=42
                     )
-                    n_communities = len(set(context.community_map.values()))
                 else:
-                    n_edges = context.collaboration_graph.number_of_edges()
-                    if n_edges <= 1_000_000:
-                        communities = nx.community.louvain_communities(
-                            context.collaboration_graph, weight="weight", seed=42
-                        )
-                    else:
-                        communities = nx.community.asyn_lpa_communities(
-                            context.collaboration_graph, seed=42
-                        )
-                    context.community_map = {
-                        member: cid
-                        for cid, members in enumerate(communities)
-                        for member in members
-                    }
-                    n_communities = len(communities)
-                logger.info(
-                    "community_detection_complete",
-                    communities=n_communities,
-                    persons_mapped=len(context.community_map),
-                )
-            except Exception as e:
-                logger.warning("community_detection_failed", error=str(e))
+                    communities = nx.community.asyn_lpa_communities(
+                        collaboration_graph, seed=42
+                    )
+                community_map = {
+                    member: cid
+                    for cid, members in enumerate(communities)
+                    for member in members
+                }
+                n_communities = len(communities)
+            logger.info(
+                "community_detection_complete",
+                communities=n_communities,
+                persons_mapped=len(community_map),
+            )
+        except Exception as e:
+            logger.warning("community_detection_failed", error=str(e))
 
-    context.monitor.record_memory("after_graph_build")
+    return GraphsResult(
+        person_anime_graph=person_anime_graph,
+        collaboration_graph=collaboration_graph,
+        community_map=community_map,
+    )

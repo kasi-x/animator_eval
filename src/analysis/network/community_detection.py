@@ -701,9 +701,9 @@ def export_communities_for_visualization(
 
 def main():
     """Standalone entry point."""
-    from src.analysis.gold_writer import GoldReader
+    from src.analysis.io.gold_writer import GoldReader
     from src.analysis.graph import create_person_collaboration_network
-    from src.analysis.silver_reader import (
+    from src.analysis.io.silver_reader import (
         load_anime_silver,
         load_credits_silver,
         load_persons_silver,

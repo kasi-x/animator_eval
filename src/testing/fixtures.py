@@ -301,7 +301,7 @@ def populate_silver_duckdb(
         n_anime: number of anime works
         seed: random seed
     """
-    from src.analysis.silver_reader import DEFAULT_SILVER_PATH
+    from src.analysis.io.silver_reader import DEFAULT_SILVER_PATH
 
     if silver_path is None:
         silver_path = DEFAULT_SILVER_PATH
@@ -323,6 +323,7 @@ def populate_silver_duckdb(
             name_en VARCHAR DEFAULT '',
             name_ko VARCHAR DEFAULT '',
             name_zh VARCHAR DEFAULT '',
+            names_alt VARCHAR DEFAULT '{}',
             aliases VARCHAR DEFAULT '[]',
             image_medium VARCHAR,
             date_of_birth DATE,

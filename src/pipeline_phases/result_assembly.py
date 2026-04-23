@@ -8,16 +8,26 @@ import numpy as np
 import structlog
 
 from src.analysis.explain import explain_authority, explain_skill, explain_trust
-from src.analysis.gold_writer import GoldWriter
+from src.analysis.io.gold_writer import GoldWriter
 from src.analysis.scoring.integrated_value import compute_studio_exposure
 from src.runtime.models import ScoreResult
-from src.pipeline_phases.context import PipelineContext
+from src.pipeline_phases.pipeline_types import (
+    CoreScoresResult,
+    EntityResolutionResult,
+    GraphsResult,
+    SupplementaryMetricsResult,
+)
 from src.utils.role_groups import DIRECTOR_ROLES
 
 logger = structlog.get_logger()
 
 
-def assemble_result_entries(context: PipelineContext) -> None:
+def assemble_result_entries(
+    resolved: EntityResolutionResult,
+    graphs: GraphsResult,
+    core: CoreScoresResult,
+    supp: SupplementaryMetricsResult,
+) -> list[dict]:
     """Build comprehensive result dictionaries for each person.
 
     This phase:
@@ -26,47 +36,41 @@ def assemble_result_entries(context: PipelineContext) -> None:
     3. Adds score breakdowns (top contributing factors)
     4. Sorts results by iv_score descending
 
-    Updates context fields:
-        - results: List[dict] with all person results
+    Returns list[dict] with all person results.
     """
     logger.info("step_start", step="result_assembly")
 
-    # Collect all person IDs from any scoring component
-    all_person_ids = (
-        set(context.person_fe)
-        | set(context.birank_person_scores)
-        | set(context.iv_scores)
-    )
+    credits = resolved.resolved_credits
+    anime_map = resolved.anime_map
 
-    context.results = []
+    # Use career-aware iv/dormancy from supp (overrides Phase 5 values)
+    iv_scores = supp.iv_scores
+    dormancy_scores = supp.dormancy_scores
 
-    # Pre-group credits by person_id: O(m) instead of O(n*m) per explain call
+    all_person_ids = set(core.person_fe) | set(core.birank_person_scores) | set(iv_scores)
+
+    results: list[dict] = []
+
     credits_by_person: dict[str, list] = defaultdict(list)
-    for credit in context.credits:
+    for credit in credits:
         credits_by_person[credit.person_id].append(credit)
 
-    # Pre-build anime_directors index for explain_trust
     anime_directors: dict[str, set[str]] = defaultdict(set)
-    for credit in context.credits:
+    for credit in credits:
         if credit.role in DIRECTOR_ROLES:
             anime_directors[credit.anime_id].add(credit.person_id)
 
-    # Pre-compute studio exposure once (time-weighted average, consistent with IV)
     studio_exposure = compute_studio_exposure(
-        context.person_fe,
-        context.studio_fe,
-        studio_assignments=context.studio_assignments,
+        core.person_fe,
+        core.studio_fe,
+        studio_assignments=core.studio_assignments,
     )
 
-    # Pre-compute person_fe SE from AKM residuals (per-person clustered SE)
-    # Uses per-person residual std instead of global sigma to handle
-    # heteroscedasticity (episode-level vs through-role credits have
-    # different residual variance).
     person_fe_se: dict[str, float] = {}
     person_n_obs: dict[str, int] = {}
-    if context.akm_result and context.akm_result.residuals:
+    if core.akm_result and core.akm_result.residuals:
         person_resids: dict[str, list[float]] = defaultdict(list)
-        for (pid, _aid), resid in context.akm_result.residuals.items():
+        for (pid, _aid), resid in core.akm_result.residuals.items():
             person_resids[pid].append(resid)
         for pid, resids in person_resids.items():
             n = len(resids)
@@ -74,26 +78,23 @@ def assemble_result_entries(context: PipelineContext) -> None:
             if n >= 2:
                 sigma_i = float(np.std(resids, ddof=1))
                 person_fe_se[pid] = sigma_i / math.sqrt(n)
-            # n=1: no SE estimable
 
-    # Pre-compute all scores and batch DB writes
     scores_by_pid: dict[str, ScoreResult] = {}
     score_rows = []
     for pid in all_person_ids:
-        # Knowledge spanner metrics
-        ks = context.knowledge_spanner_scores.get(pid)
+        ks = core.knowledge_spanner_scores.get(pid)
 
         score = ScoreResult(
             person_id=pid,
-            person_fe=context.person_fe.get(pid, 0.0),
+            person_fe=core.person_fe.get(pid, 0.0),
             studio_fe_exposure=studio_exposure.get(pid, 0.0),
-            birank=context.birank_person_scores.get(pid, 0.0),
-            patronage=context.patronage_scores.get(pid, 0.0),
-            dormancy=context.dormancy_scores.get(pid, 1.0),
+            birank=core.birank_person_scores.get(pid, 0.0),
+            patronage=core.patronage_scores.get(pid, 0.0),
+            dormancy=dormancy_scores.get(pid, 1.0),
             awcc=ks.awcc if ks else 0.0,
             ndi=ks.ndi if ks else 0.0,
-            iv_score=context.iv_scores.get(pid, 0.0),
-            iv_score_historical=context.iv_scores_historical.get(pid, 0.0),
+            iv_score=iv_scores.get(pid, 0.0),
+            iv_score_historical=core.iv_scores_historical.get(pid, 0.0),
         )
         scores_by_pid[pid] = score
         score_rows.append(
@@ -109,7 +110,6 @@ def assemble_result_entries(context: PipelineContext) -> None:
             )
         )
 
-    # Write scores to gold.duckdb (atomic swap — DuckDB is now canonical GOLD store)
     now = datetime.datetime.now()
     run_year = now.year
     run_quarter = (now.month - 1) // 3 + 1
@@ -124,25 +124,20 @@ def assemble_result_entries(context: PipelineContext) -> None:
         quarter=run_quarter,
     )
 
-    if context.career_tracks:
-        logger.info("career_tracks_computed", count=len(context.career_tracks))
+    if supp.career_tracks:
+        logger.info("career_tracks_computed", count=len(supp.career_tracks))
 
     for pid in all_person_ids:
         score = scores_by_pid[pid]
 
-        # Build result entry
         node_data = (
-            context.person_anime_graph.nodes.get(pid, {})
-            if context.person_anime_graph
-            else {}
+            graphs.person_anime_graph.nodes.get(pid, {}) if graphs.person_anime_graph else {}
         )
 
-        # Peer boost
         peer_boost = 0.0
-        if context.peer_effect_result and context.peer_effect_result.person_peer_boost:
-            peer_boost = context.peer_effect_result.person_peer_boost.get(pid, 0.0)
+        if supp.peer_effect_result and supp.peer_effect_result.person_peer_boost:
+            peer_boost = supp.peer_effect_result.person_peer_boost.get(pid, 0.0)
 
-        # person_fe standard error (analytical CI for compensation basis)
         n_obs = person_n_obs.get(pid, 0)
         se = person_fe_se.get(pid)
 
@@ -151,8 +146,7 @@ def assemble_result_entries(context: PipelineContext) -> None:
             "name": node_data.get("name", ""),
             "name_ja": node_data.get("name_ja", ""),
             "name_en": node_data.get("name_en", ""),
-            "career_track": context.career_tracks.get(pid, "multi_track"),
-            # 8-component structural scores
+            "career_track": supp.career_tracks.get(pid, "multi_track"),
             "iv_score": round(score.iv_score, 4),
             "person_fe": round(score.person_fe, 4),
             "studio_fe_exposure": round(score.studio_fe_exposure, 4),
@@ -161,14 +155,13 @@ def assemble_result_entries(context: PipelineContext) -> None:
             "dormancy": round(score.dormancy, 4),
             "awcc": round(score.awcc, 4),
             "ndi": round(score.ndi, 4),
-            "career_friction": round(context.career_friction.get(pid, 0), 4),
+            "career_friction": round(supp.career_friction.get(pid, 0), 4),
             "peer_boost": round(peer_boost, 4),
             "iv_score_historical": round(score.iv_score_historical, 4),
             "person_fe_se": round(se, 4) if se is not None else None,
             "person_fe_n_obs": n_obs,
         }
 
-        # 3-layer score structure + combined IV
         result_entry["score_layers"] = {
             "causal": {
                 "person_fe": round(score.person_fe, 4),
@@ -196,31 +189,25 @@ def assemble_result_entries(context: PipelineContext) -> None:
             "combined": {
                 "iv_score": round(score.iv_score, 4),
                 "method": "PCA_PC1",
-                "variance_explained": context.pca_variance_explained,
+                "variance_explained": core.pca_variance_explained,
                 "interpretation": "総合便利指標（OPS的）: PCA第1主成分による重み付き合算",
             },
         }
 
-        # Add centrality metrics (if available)
-        if pid in context.centrality:
+        if pid in supp.centrality:
             result_entry["centrality"] = {
-                k: round(v, 4) for k, v in context.centrality[pid].items()
+                k: round(v, 4) for k, v in supp.centrality[pid].items()
             }
 
-        # Add engagement decay (if detected)
-        if pid in context.decay_results:
-            result_entry["engagement_decay"] = context.decay_results[pid]
+        if pid in supp.decay_results:
+            result_entry["engagement_decay"] = supp.decay_results[pid]
 
-        # Add role profile
-        if pid in context.role_profiles:
-            result_entry["primary_role"] = context.role_profiles[pid][
-                "primary_category"
-            ]
-            result_entry["total_credits"] = context.role_profiles[pid]["total_credits"]
+        if pid in supp.role_profiles:
+            result_entry["primary_role"] = supp.role_profiles[pid]["primary_category"]
+            result_entry["total_credits"] = supp.role_profiles[pid]["total_credits"]
 
-        # Add career data
-        if pid in context.career_data:
-            career_snapshot = context.career_data[pid]
+        if pid in supp.career_data:
+            career_snapshot = supp.career_data[pid]
             if career_snapshot.total_credits > 0:
                 result_entry["career"] = {
                     "first_year": career_snapshot.first_year,
@@ -232,50 +219,41 @@ def assemble_result_entries(context: PipelineContext) -> None:
                     "peak_credits": career_snapshot.peak_credits,
                 }
 
-        # Add network density (dataclass instance -> dict fields)
-        if pid in context.network_density:
-            nd = context.network_density[pid]
+        if pid in supp.network_density:
+            nd = supp.network_density[pid]
             result_entry["network"] = {
                 "collaborators": nd.collaborator_count,
                 "unique_anime": nd.unique_anime,
                 "hub_score": nd.hub_score,
             }
 
-        # Add growth trend (dataclass instance -> dict fields)
-        if context.growth_data and pid in context.growth_data:
-            gd = context.growth_data[pid]
+        if supp.growth_data and pid in supp.growth_data:
+            gd = supp.growth_data[pid]
             result_entry["growth"] = {
                 "trend": gd.trend,
                 "activity_ratio": gd.activity_ratio,
                 "recent_credits": gd.recent_credits,
             }
 
-        # Add versatility (dataclass instance -> dict fields)
-        if pid in context.versatility:
-            v = context.versatility[pid]
+        if pid in supp.versatility:
+            v = supp.versatility[pid]
             result_entry["versatility"] = {
                 "score": v.versatility_score,
                 "categories": v.category_count,
                 "roles": v.role_count,
             }
 
-        # Add score breakdown (top contributing factors)
         person_credits = credits_by_person.get(pid, [])
-        # birank explanation: top works contributing to network centrality
-        birank_factors = explain_authority(
-            pid, context.credits, context.anime_map, _person_credits=person_credits
-        )
-        # patronage explanation: director backing relationships
+        birank_factors = explain_authority(pid, credits, anime_map, _person_credits=person_credits)
         patronage_factors = explain_trust(
             pid,
-            context.credits,
-            context.anime_map,
+            credits,
+            anime_map,
             _person_credits=person_credits,
             _anime_directors=anime_directors,
         )
-        # person_fe explanation: recent high-quality works
         person_fe_factors = explain_skill(
-            pid, context.credits, context.anime_map, _person_credits=person_credits
+            pid, credits, anime_map, _person_credits=person_credits
         )
         if birank_factors or patronage_factors or person_fe_factors:
             result_entry["breakdown"] = {}
@@ -286,7 +264,7 @@ def assemble_result_entries(context: PipelineContext) -> None:
             if person_fe_factors:
                 result_entry["breakdown"]["person_fe"] = person_fe_factors[:5]
 
-        context.results.append(result_entry)
+        results.append(result_entry)
 
-    # Sort by iv_score descending
-    context.results.sort(key=lambda x: x["iv_score"], reverse=True)
+    results.sort(key=lambda x: x["iv_score"], reverse=True)
+    return results

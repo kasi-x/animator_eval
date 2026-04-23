@@ -34,6 +34,7 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
             name_en          TEXT NOT NULL DEFAULT '',
             name_ko          TEXT NOT NULL DEFAULT '',
             name_zh          TEXT NOT NULL DEFAULT '',
+            names_alt        TEXT NOT NULL DEFAULT '{}',
             aliases          TEXT NOT NULL DEFAULT '[]',
             nationality      TEXT NOT NULL DEFAULT '[]',
             mal_id           INTEGER,
@@ -1002,6 +1003,7 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
             name_en       TEXT NOT NULL DEFAULT '',
             name_ko       TEXT NOT NULL DEFAULT '',
             name_zh       TEXT NOT NULL DEFAULT '',
+            names_alt     TEXT NOT NULL DEFAULT '{}',
             aliases       TEXT DEFAULT '[]',
             nationality   TEXT NOT NULL DEFAULT '[]',
             date_of_birth TEXT,
@@ -1161,8 +1163,9 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
     _upgrade_v56_multilang(conn)
     _upgrade_v57_structural_metadata(conn)
     _upgrade_v58_credits_metadata(conn)
+    _upgrade_v59_names_alt(conn)
     conn.execute(
-        "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '58')"
+        "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '59')"
         " ON CONFLICT(key) DO UPDATE SET value = excluded.value"
     )
     conn.commit()
@@ -1284,6 +1287,21 @@ def _upgrade_v58_credits_metadata(conn: sqlite3.Connection) -> None:
     for table, col, defn in [
         ("credits", "affiliation",    "TEXT"),
         ("credits", "position",       "INTEGER"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
+        except Exception:
+            pass  # column already exists
+
+
+def _upgrade_v59_names_alt(conn: sqlite3.Connection) -> None:
+    """Add names_alt JSON column for non-JA/EN/KO/ZH native names (th, ar, hi, vi, etc.).
+
+    Safe to call on fresh DBs too — ALTER TABLE failures are caught.
+    """
+    for table, col, defn in [
+        ("persons",             "names_alt", "TEXT NOT NULL DEFAULT '{}'"),
+        ("src_anilist_persons", "names_alt", "TEXT NOT NULL DEFAULT '{}'"),
     ]:
         try:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")

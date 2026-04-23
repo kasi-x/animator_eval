@@ -1345,7 +1345,7 @@ def main() -> None:
     """Entry point: load data from DB, build the graph, and save."""
     import json
 
-    from src.analysis.silver_reader import (
+    from src.analysis.io.silver_reader import (
         load_anime_silver,
         load_credits_silver,
         load_persons_silver,

@@ -2,7 +2,7 @@
 
 import structlog
 
-from src.analysis.silver_reader import silver_connect
+from src.analysis.io.silver_reader import silver_connect
 from src.pipeline_phases.context import PipelineContext
 from src.infra.validation import ValidationResult, validate_all
 

@@ -1,10 +1,8 @@
-"""Phase 7+8: Result Assembly and Post-Processing nodes for Hamilton DAG (H-2).
+"""Phase 7+8: Result Assembly and Post-Processing nodes for Hamilton DAG (H-4).
 
-Two nodes:
-  - results_assembled: builds comprehensive per-person result dicts (Phase 7)
-  - results_post_processed: adds percentiles, confidence intervals (Phase 8)
-
-Both use ctx: PipelineContext (H-2 pattern); H-4 decomposes to explicit inputs.
+H-4 pattern: nodes take typed bags (EntityResolutionResult, CoreScoresResult,
+SupplementaryMetricsResult) instead of ctx: PipelineContext.  ctx.results is still
+populated for Phase 9/10 compatibility.
 """
 
 from __future__ import annotations
@@ -13,7 +11,12 @@ from typing import Any
 
 from hamilton.function_modifiers import tag
 
-from src.pipeline_phases.context import PipelineContext
+from src.pipeline_phases.pipeline_types import (
+    CoreScoresResult,
+    EntityResolutionResult,
+    GraphsResult,
+    SupplementaryMetricsResult,
+)
 
 NODE_NAMES: list[str] = [
     "results_assembled",
@@ -22,32 +25,47 @@ NODE_NAMES: list[str] = [
 
 
 @tag(stage="phase7", cost="moderate", domain="assembly")
-def results_assembled(ctx: PipelineContext, career_tracks_inferred: Any) -> list[dict]:
+def results_assembled(
+    entity_resolved: EntityResolutionResult,
+    graphs_result: GraphsResult,
+    ctx_core_populated: CoreScoresResult,
+    ctx_metrics_populated: SupplementaryMetricsResult,
+    ctx: Any,
+) -> list[dict]:
     """Assemble comprehensive result dict for each scored person (Phase 7).
 
     Includes: score components, score_layers, centrality, career, network,
     growth, versatility, breakdown (top contributing factors).
     Also writes score rows to gold.duckdb.
 
-    Writes: ctx.results.
-    Depends on career_tracks_inferred (last Phase 6 node).
+    Populates ctx.results for Phase 9/10 compatibility.
+    Depends on ctx_metrics_populated (last Phase 6 bridge node).
     """
     from src.pipeline_phases.result_assembly import assemble_result_entries
 
-    assemble_result_entries(ctx)
-    return ctx.results
+    entries = assemble_result_entries(
+        entity_resolved, graphs_result, ctx_core_populated, ctx_metrics_populated
+    )
+    ctx.results = entries
+    return entries
 
 
 @tag(stage="phase8", cost="cheap", domain="assembly")
-def results_post_processed(ctx: PipelineContext, results_assembled: Any) -> list[dict]:
+def results_post_processed(
+    results_assembled: list[dict],
+    entity_resolved: EntityResolutionResult,
+    ctx_core_populated: CoreScoresResult,
+    ctx: Any,
+) -> list[dict]:
     """Post-process results: percentile ranks, confidence intervals (Phase 8).
 
     Adds *_pct fields (iv_score_pct, person_fe_pct, etc.) and confidence field.
+    Mutates results_assembled in-place.
 
-    Writes: ctx.results (updated in-place).
-    Depends on results_assembled.
+    Updates ctx.results with percentile-enriched entries.
     """
     from src.pipeline_phases.post_processing import post_process_results
 
-    post_process_results(ctx)
-    return ctx.results
+    post_process_results(results_assembled, entity_resolved.resolved_credits, ctx_core_populated.akm_result)
+    ctx.results = results_assembled
+    return results_assembled

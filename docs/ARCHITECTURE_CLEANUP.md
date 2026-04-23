@@ -286,9 +286,15 @@ Phase C (PipelineContext 削除)
 - [ ] Phase B-6: reports/ 新設 + 10 ファイル移動
 - [ ] Phase B-7: 既存 subpackage へ追加 (scoring +2, network +7, talent +8, team +1)
 - [ ] Phase B-8: similarity/recommendation 重複精査 (§9)
+- [x] Phase C-0: `pipeline_types.py` 作成 (LoadedData, EntityResolutionResult, GraphsResult, CoreScoresResult, SupplementaryMetricsResult, VAScoresResult)
+- [x] Phase C-0: `data_loading.py` → pure function `load_pipeline_data(visualize, dry_run) -> LoadedData`
+- [x] Phase C-0: `entity_resolution.py` → pure function `run_entity_resolution(loaded) -> EntityResolutionResult`
+- [x] Phase C-0: `graph_construction.py` → pure function `build_graphs_phase(resolved) -> GraphsResult`
+- [x] Phase C-0: Hamilton adapter 更新 (loading.py, resolution.py)
+- [x] Phase C-0: テスト更新 (test_core_scoring_phase.py)
 - [ ] Phase C-1: VA pipeline ctx 残存参照除去
 - [ ] Phase C-2: export_and_viz.py pure function 化
-- [ ] Phase C-3: Hamilton node 全 typed inputs 変換
+- [ ] Phase C-3: Hamilton node 全 typed inputs 変換 (scoring.py 8 nodes, metrics.py 17 nodes, assembly.py 2 nodes)
 - [ ] Phase C-4: context.py 削除 + フルテスト緑
 
 ## 関連ドキュメント

@@ -1,9 +1,9 @@
 """Native name script detection and nationality inference.
 
 Handles Japanese, Korean, Chinese, and other scripts from AniList and other
-sources. Name columns (name_ja / name_ko / name_zh) are JA/KO/ZH only;
-other scripts stay in name_en (romanised form) and are distinguished via
-person_aliases.lang.
+sources. Name columns (name_ja / name_ko / name_zh / names_alt) store native
+scripts; name_en holds the romanised form. names_alt is a JSON dict for all
+scripts not covered by the four dedicated columns (th, ar, hi, vi, ru, el, ...).
 """
 
 from __future__ import annotations
@@ -293,50 +293,52 @@ def infer_nationalities(
 
 def assign_native_name_fields(
     name_native: str, nationalities: list[str]
-) -> tuple[str, str, str]:
-    """Map a native-script name to (name_ja, name_ko, name_zh).
+) -> tuple[str, str, str, dict[str, str]]:
+    """Map a native-script name to (name_ja, name_ko, name_zh, names_alt).
 
-    Non-CJK/KO scripts are not stored in these three columns (caller should
-    keep the romanised form in name_en). Script detection takes precedence
-    over the nationality list.
+    names_alt is a dict for scripts without a dedicated column (th, ar, hi, vi,
+    ru, el, etc.): e.g. {"th": "สมชาย วงศ์"}.
 
-    For zh_or_ja with nationality=[] (unknown), returns ("","","") so that
-    ambiguous CJK names (could be Chinese or Japanese) are not silently filed
-    under name_ja. The raw value is preserved in Person.name_native_raw.
+    Script detection takes precedence over the nationality list.
+    For zh_or_ja with nationality=[] (unknown), all fields are empty so that
+    ambiguous CJK names are not silently filed. Raw value is in name_native_raw.
     """
     if not name_native:
-        return ("", "", "")
+        return ("", "", "", {})
     script = detect_name_script(name_native)
     if script == "ko":
-        return ("", name_native, "")
+        return ("", name_native, "", {})
     if script == "ja":
-        return (name_native, "", "")
+        return (name_native, "", "", {})
     if script == "zh_or_ja":
         primary = nationalities[0] if nationalities else ""
         if primary in ("CN", "TW", "HK"):
-            return ("", "", name_native)
+            return ("", "", name_native, {})
         if primary == "JP":
-            return (name_native, "", "")
+            return (name_native, "", "", {})
         if primary == "KR":
-            return ("", name_native, "")
+            return ("", name_native, "", {})
         # nationality=[] — cannot determine; preserve via name_native_raw instead
-        return ("", "", "")
-    # ar / th / hi / ru / el / en — no dedicated column
-    return ("", "", "")
+        return ("", "", "", {})
+    # ar / th / hi / ru / el / vi / en — goes into names_alt
+    lang = _SCRIPT_TO_LANG.get(script, "")
+    if lang and lang not in ("ja", "ko"):
+        return ("", "", "", {lang: name_native})
+    return ("", "", "", {})
 
 
 def parse_anilist_native_name(
     name_dict: dict, hometown: str | None
-) -> tuple[str, str, str, str, list[str]]:
+) -> tuple[str, str, str, str, str, list[str]]:
     """Parse an AniList name dict into resolved name fields + raw native.
 
-    Returns (name_ja, name_ko, name_zh, name_native_raw, nationality).
-    One-liner replacement for the repeated 4-line pattern in the scraper.
+    Returns (name_ja, name_ko, name_zh, names_alt_json, name_native_raw, nationality).
     """
     native = name_dict.get("native") or ""
     nationality = infer_nationalities(native, hometown)
-    name_ja, name_ko, name_zh = assign_native_name_fields(native, nationality)
-    return name_ja, name_ko, name_zh, native, nationality
+    name_ja, name_ko, name_zh, names_alt_dict = assign_native_name_fields(native, nationality)
+    names_alt_json = json.dumps(names_alt_dict, ensure_ascii=False) if names_alt_dict else "{}"
+    return name_ja, name_ko, name_zh, names_alt_json, native, nationality
 
 
 def format_person_name(person: object, report_lang: str = "ja") -> str:
@@ -350,12 +352,22 @@ def format_person_name(person: object, report_lang: str = "ja") -> str:
 
     name_ko is omitted from 'ja' priority: Hangul is not easily readable
     for Japanese readers, so romaji (name_en) is preferred.
+    For other langs (th, ar, hi, vi, ...), names_alt JSON is checked first.
     """
     ja  = getattr(person, "name_ja",  "") or ""
     ko  = getattr(person, "name_ko",  "") or ""
     zh  = getattr(person, "name_zh",  "") or ""
     en  = getattr(person, "name_en",  "") or ""
     pid = getattr(person, "id",       "") or ""
+
+    if report_lang not in ("ja", "en", "ko"):
+        try:
+            alt = json.loads(getattr(person, "names_alt", "{}") or "{}")
+            native = alt.get(report_lang, "")
+            if native:
+                return native
+        except (json.JSONDecodeError, TypeError):
+            pass
 
     if report_lang == "ja":
         return ja or zh or en or pid

@@ -10,8 +10,8 @@ from collections import defaultdict
 import structlog
 
 from src.analysis.entity_resolution import resolve_all
+from src.pipeline_phases.pipeline_types import EntityResolutionResult, LoadedData
 from src.runtime.models import AnimeAnalysis as Anime, Credit
-from src.pipeline_phases.context import PipelineContext
 
 logger = structlog.get_logger()
 
@@ -225,189 +225,177 @@ def _resolve_anime_entities(
     return canonical_map, anomalies
 
 
-def run_entity_resolution(context: PipelineContext) -> None:
+def run_entity_resolution(loaded: LoadedData) -> EntityResolutionResult:
     """Perform entity resolution for both persons and anime.
 
     Person resolution: Deduplicate person identities across sources.
     Anime resolution: Merge anime across sources by title_ja, preferring wiki.
 
-    Updates context fields:
-        - canonical_map: Dict mapping duplicate person_id to canonical person_id
-        - credits: List of credits with resolved person_ids and anime_ids
-        - anime_list / anime_map: Deduplicated anime (non-canonical removed)
+    Returns:
+        EntityResolutionResult with resolved credits, canonical_map,
+        updated persons, anime_list, and anime_map.
     """
-    with context.monitor.measure("entity_resolution"):
-        # === Person entity resolution ===
-        # pass credits and anime metadata to enable ML homonym splitting
-        credits_by_person: dict[str, list] = defaultdict(list)
-        for c in context.credits:
-            credits_by_person[c.person_id].append(c)
+    persons = list(loaded.persons)
+    credits: list[Credit] = list(loaded.credits)
+    anime_list: list[Anime] = list(loaded.anime_list)
 
-        from src.analysis.ml_homonym_split import build_anime_meta
+    # === Person entity resolution ===
+    credits_by_person: dict[str, list] = defaultdict(list)
+    for c in credits:
+        credits_by_person[c.person_id].append(c)
 
-        anime_meta = build_anime_meta(context.anime_list)
+    from src.analysis.ml_homonym_split import build_anime_meta
 
-        context.canonical_map = resolve_all(
-            context.persons,
-            credits_by_person=credits_by_person,
-            anime_meta=anime_meta,
+    anime_meta = build_anime_meta(anime_list)
+
+    canonical_map: dict[str, str] = resolve_all(
+        persons,
+        credits_by_person=credits_by_person,
+        anime_meta=anime_meta,
+    )
+
+    if canonical_map:
+        resolved_credits = []
+        for c in credits:
+            new_pid = canonical_map.get(c.person_id, c.person_id)
+            resolved_credits.append(
+                Credit(
+                    person_id=new_pid,
+                    anime_id=c.anime_id,
+                    role=c.role,
+                    raw_role=c.raw_role,
+                    episode=c.episode,
+                    source=c.source,
+                )
+            )
+        credits = resolved_credits
+        logger.info("person_ids_resolved", count=len(canonical_map))
+
+        # Propagate numeric IDs to the canonical person record.
+        # e.g. when an ANN person is merged into an AniList person,
+        # the AniList person's ann_id is set from the ANN person's ann_id.
+        persons_by_id = {p.id: p for p in persons}
+        for dup_id, canonical_id in canonical_map.items():
+            dup = persons_by_id.get(dup_id)
+            canon = persons_by_id.get(canonical_id)
+            if not dup or not canon:
+                continue
+            if dup.ann_id and not canon.ann_id:
+                canon.ann_id = dup.ann_id
+            if dup.anilist_id and not canon.anilist_id:
+                canon.anilist_id = dup.anilist_id
+            if dup.mal_id and not canon.mal_id:
+                canon.mal_id = dup.mal_id
+            if dup.madb_id and not canon.madb_id:
+                canon.madb_id = dup.madb_id
+            if dup.name_ja and not canon.name_ja:
+                canon.name_ja = dup.name_ja
+
+    # === Anime entity resolution (cross-source, wiki-preferred) ===
+    anime_canonical_map, anomalies = _resolve_anime_entities(anime_list, credits)
+
+    if anime_canonical_map:
+        remapped = []
+        for c in credits:
+            new_aid = anime_canonical_map.get(c.anime_id, c.anime_id)
+            remapped.append(
+                Credit(
+                    person_id=c.person_id,
+                    anime_id=new_aid,
+                    role=c.role,
+                    raw_role=c.raw_role,
+                    episode=c.episode,
+                    source=c.source,
+                )
+            )
+        credits = remapped
+
+        canonical_anime: dict[str, Anime] = {}
+        non_canonical: dict[str, list[Anime]] = defaultdict(list)
+        for a in anime_list:
+            cid = anime_canonical_map.get(a.id)
+            if cid is None:
+                canonical_anime[a.id] = a
+            else:
+                non_canonical[cid].append(a)
+
+        for cid, others in non_canonical.items():
+            canon = canonical_anime.get(cid)
+            if not canon:
+                continue
+            for other in others:
+                if not canon.year and other.year:
+                    canon.year = other.year
+                if not canon.episodes and other.episodes:
+                    canon.episodes = other.episodes
+                if not canon.format and other.format:
+                    canon.format = other.format
+                if not canon.duration and other.duration:
+                    canon.duration = other.duration
+                if not canon.score and other.score:
+                    canon.score = other.score
+                if not canon.genres and other.genres:
+                    canon.genres = other.genres
+                if not canon.studios and other.studios:
+                    canon.studios = other.studios
+                if not canon.description and other.description:
+                    canon.description = other.description
+                if not canon.cover_large and other.cover_large:
+                    canon.cover_large = other.cover_large
+                if not canon.anilist_id and other.anilist_id:
+                    canon.anilist_id = other.anilist_id
+                if not canon.mal_id and other.mal_id:
+                    canon.mal_id = other.mal_id
+                if not canon.madb_id and other.madb_id:
+                    canon.madb_id = other.madb_id
+                if not canon.ann_id and other.ann_id:
+                    canon.ann_id = other.ann_id
+
+        anime_list = list(canonical_anime.values())
+        logger.info(
+            "anime_ids_resolved",
+            merged=len(anime_canonical_map),
+            anime_after=len(anime_list),
         )
 
-        # Replace person_id in credits with canonical IDs
-        if context.canonical_map:
-            resolved_credits = []
-            for c in context.credits:
-                new_pid = context.canonical_map.get(c.person_id, c.person_id)
-                resolved_credits.append(
-                    Credit(
-                        person_id=new_pid,
-                        anime_id=c.anime_id,
-                        role=c.role,
-                        raw_role=c.raw_role,
-                        episode=c.episode,
-                        source=c.source,
-                    )
-                )
-            context.credits = resolved_credits
-            logger.info("person_ids_resolved", count=len(context.canonical_map))
-            context.monitor.increment_counter(
-                "persons_resolved", len(context.canonical_map)
-            )
+    if anomalies:
+        anomalies.sort(key=lambda x: -x["deficit"])
+        from src.utils.config import JSON_DIR
 
-            # propagate numeric IDs to the canonical person record.
-            # e.g. when an ANN person is merged into an AniList person,
-            # the AniList person's ann_id is set from the ANN person's ann_id.
-            persons_by_id = {p.id: p for p in context.persons}
-            for dup_id, canonical_id in context.canonical_map.items():
-                dup = persons_by_id.get(dup_id)
-                canon = persons_by_id.get(canonical_id)
-                if not dup or not canon:
-                    continue
-                if dup.ann_id and not canon.ann_id:
-                    canon.ann_id = dup.ann_id
-                if dup.anilist_id and not canon.anilist_id:
-                    canon.anilist_id = dup.anilist_id
-                if dup.mal_id and not canon.mal_id:
-                    canon.mal_id = dup.mal_id
-                if dup.madb_id and not canon.madb_id:
-                    canon.madb_id = dup.madb_id
-                if dup.name_ja and not canon.name_ja:
-                    canon.name_ja = dup.name_ja
-
-        # === Anime entity resolution (cross-source, wiki-preferred) ===
-        anime_canonical_map, anomalies = _resolve_anime_entities(
-            context.anime_list,
-            context.credits,
+        anomaly_path = JSON_DIR / "anime_merge_anomalies.json"
+        anomaly_path.parent.mkdir(parents=True, exist_ok=True)
+        anomaly_path.write_text(
+            json.dumps(anomalies, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        logger.warning(
+            "anime_merge_anomalies",
+            count=len(anomalies),
+            top_deficit=anomalies[0]["title_ja"] if anomalies else None,
+            output=str(anomaly_path),
         )
 
-        if anime_canonical_map:
-            # Remap anime_id in credits
-            remapped = []
-            for c in context.credits:
-                new_aid = anime_canonical_map.get(c.anime_id, c.anime_id)
-                remapped.append(
-                    Credit(
-                        person_id=c.person_id,
-                        anime_id=new_aid,
-                        role=c.role,
-                        raw_role=c.raw_role,
-                        episode=c.episode,
-                        source=c.source,
-                    )
-                )
-            context.credits = remapped
+    credits = _merge_duplicate_credits(credits)
 
-            # Merge anime metadata: keep canonical, absorb useful fields from others
-            canonical_anime: dict[str, Anime] = {}
-            non_canonical: dict[str, list[Anime]] = defaultdict(list)
-            for a in context.anime_list:
-                cid = anime_canonical_map.get(a.id)
-                if cid is None:
-                    canonical_anime[a.id] = a
-                else:
-                    non_canonical[cid].append(a)
+    # Remove non-canonical person entries.
+    # After resolution, their credits have been remapped to canonical IDs,
+    # so these entries would appear as 0-credit ghosts in the graph and scores.
+    all_non_canonical = set(canonical_map.keys())
+    persons_before = len(persons)
+    persons = [p for p in persons if p.id not in all_non_canonical]
+    removed = persons_before - len(persons)
+    if removed > 0:
+        logger.info(
+            "non_canonical_persons_removed",
+            removed=removed,
+            persons_after=len(persons),
+        )
 
-            # Enrich canonical anime with metadata from non-canonical sources
-            for cid, others in non_canonical.items():
-                canon = canonical_anime.get(cid)
-                if not canon:
-                    continue
-                for other in others:
-                    # Fill in missing metadata from richer sources
-                    if not canon.year and other.year:
-                        canon.year = other.year
-                    if not canon.episodes and other.episodes:
-                        canon.episodes = other.episodes
-                    if not canon.format and other.format:
-                        canon.format = other.format
-                    if not canon.duration and other.duration:
-                        canon.duration = other.duration
-                    if not canon.score and other.score:
-                        canon.score = other.score
-                    if not canon.genres and other.genres:
-                        canon.genres = other.genres
-                    if not canon.studios and other.studios:
-                        canon.studios = other.studios
-                    if not canon.description and other.description:
-                        canon.description = other.description
-                    if not canon.cover_large and other.cover_large:
-                        canon.cover_large = other.cover_large
-                    if not canon.anilist_id and other.anilist_id:
-                        canon.anilist_id = other.anilist_id
-                    if not canon.mal_id and other.mal_id:
-                        canon.mal_id = other.mal_id
-                    if not canon.madb_id and other.madb_id:
-                        canon.madb_id = other.madb_id
-                    if not canon.ann_id and other.ann_id:
-                        canon.ann_id = other.ann_id
-
-            context.anime_list = list(canonical_anime.values())
-            context.anime_map = {a.id: a for a in context.anime_list}
-
-            logger.info(
-                "anime_ids_resolved",
-                merged=len(anime_canonical_map),
-                anime_after=len(context.anime_list),
-            )
-            context.monitor.increment_counter(
-                "anime_resolved", len(anime_canonical_map)
-            )
-
-        # Log anomalies (wiki canonical has fewer credits) as JSON
-        if anomalies:
-            anomalies.sort(key=lambda x: -x["deficit"])
-            from src.utils.config import JSON_DIR
-
-            anomaly_path = JSON_DIR / "anime_merge_anomalies.json"
-            anomaly_path.parent.mkdir(parents=True, exist_ok=True)
-            anomaly_path.write_text(
-                json.dumps(anomalies, ensure_ascii=False, indent=2),
-                encoding="utf-8",
-            )
-            logger.warning(
-                "anime_merge_anomalies",
-                count=len(anomalies),
-                top_deficit=anomalies[0]["title_ja"] if anomalies else None,
-                output=str(anomaly_path),
-            )
-
-        # Merge duplicate credits (same person+anime+role from different sources)
-        context.credits = _merge_duplicate_credits(context.credits)
-
-        # Remove non-canonical person entries from context.persons.
-        # After resolution, their credits have been remapped to canonical IDs,
-        # so these entries would appear as 0-credit ghosts in the graph and scores.
-        all_non_canonical = set(context.canonical_map.keys())
-        if anime_canonical_map:
-            # anime canonical_map keys are non-canonical anime_ids, not person_ids
-            pass
-        persons_before = len(context.persons)
-        context.persons = [p for p in context.persons if p.id not in all_non_canonical]
-        removed = persons_before - len(context.persons)
-        if removed > 0:
-            logger.info(
-                "non_canonical_persons_removed",
-                removed=removed,
-                persons_after=len(context.persons),
-            )
+    return EntityResolutionResult(
+        resolved_credits=credits,
+        canonical_map=canonical_map,
+        persons=persons,
+        anime_list=anime_list,
+        anime_map={a.id: a for a in anime_list},
+    )
 

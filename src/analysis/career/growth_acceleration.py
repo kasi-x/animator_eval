@@ -326,7 +326,9 @@ def compute_adjusted_person_fe_with_growth(
                 for pid in adjusted_skills
                 if person_scores[pid].get("person_fe", 0) > 0
             )
-            / len(adjusted_skills),
+            / len(adjusted_skills)
+            if adjusted_skills
+            else 0.0,
             3,
         ),
     )
@@ -336,8 +338,8 @@ def compute_adjusted_person_fe_with_growth(
 
 def main():
     """Standalone entry point."""
-    from src.analysis.gold_writer import GoldReader
-    from src.analysis.silver_reader import (
+    from src.analysis.io.gold_writer import GoldReader
+    from src.analysis.io.silver_reader import (
         load_anime_silver,
         load_credits_silver,
         load_persons_silver,

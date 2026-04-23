@@ -1,9 +1,8 @@
-"""Phase 6: Supplementary Metrics nodes for Hamilton DAG (H-2).
+"""Phase 6: Supplementary Metrics nodes for Hamilton DAG (H-4).
 
-Each function is a Hamilton node for one sub-step of supplementary_metrics.py.
-All nodes use ctx: PipelineContext (H-2 pattern); H-4 decomposes to explicit inputs.
-
-Execution order is enforced via chained parameters.
+H-4 pattern: nodes take EntityResolutionResult / GraphsResult / CoreScoresResult typed
+bags instead of ctx: PipelineContext.  ctx_metrics_populated bridges the results back
+to ctx for Phase 9/10 compatibility.
 """
 
 from __future__ import annotations
@@ -11,6 +10,13 @@ from __future__ import annotations
 from typing import Any
 
 from hamilton.function_modifiers import tag
+
+from src.pipeline_phases.pipeline_types import (
+    CoreScoresResult,
+    EntityResolutionResult,
+    GraphsResult,
+    SupplementaryMetricsResult,
+)
 
 NODE_NAMES: list[str] = [
     "engagement_decay",
@@ -30,279 +36,289 @@ NODE_NAMES: list[str] = [
     "contribution_attribution_computed",
     "potential_value_computed",
     "career_tracks_inferred",
+    "supplementary_metrics",
+    "ctx_metrics_populated",
 ]
+
+
+def _build_person_scores(core: CoreScoresResult, updated_iv: dict) -> dict:
+    """Build per-person score dict used by growth / anime_value / contribution nodes."""
+    all_pids = set(core.person_fe) | set(core.birank_person_scores) | set(updated_iv)
+    return {
+        pid: {
+            "person_fe": core.person_fe.get(pid, 0),
+            "birank": core.birank_person_scores.get(pid, 0),
+            "patronage": core.patronage_scores.get(pid, 0),
+            "iv_score": updated_iv.get(pid, 0),
+        }
+        for pid in all_pids
+    }
 
 
 @tag(stage="phase6", cost="moderate", domain="metrics")
 def engagement_decay(
-    integrated_value_computation: Any,
-    credits: list,
-    anime_map: dict,
-) -> Any:
+    entity_resolved: EntityResolutionResult, integrated_value_computation: dict
+) -> dict:
     """Engagement decay detection: directors whose hiring rate for an animator dropped.
 
-    Depends on integrated_value_computation to run after Phase 5 completes.
+    Takes integrated_value_computation to run after Phase 5 completes.
     """
     from src.analysis.network.trust import batch_detect_engagement_decay
 
-    return batch_detect_engagement_decay(credits, anime_map)
+    return batch_detect_engagement_decay(
+        entity_resolved.resolved_credits, entity_resolved.anime_map
+    )
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")
-def role_classification(
-    engagement_decay: Any,
-    credits: list,
-) -> Any:
+def role_classification(entity_resolved: EntityResolutionResult, engagement_decay: dict) -> dict:
     """Primary role classification per person (animator / director / etc.)."""
     from src.analysis.graph import determine_primary_role_for_each_person
 
-    return determine_primary_role_for_each_person(credits)
+    return determine_primary_role_for_each_person(entity_resolved.resolved_credits)
 
 
 @tag(stage="phase6", cost="moderate", domain="metrics")
-def career_analysis(
-    role_classification: Any,
-    credits: list,
-    anime_map: dict,
-) -> Any:
+def career_analysis(entity_resolved: EntityResolutionResult, role_classification: dict) -> dict:
     """Career trajectory analysis: stage, peak, active years."""
     from src.analysis.career import batch_career_analysis
 
-    return batch_career_analysis(credits, anime_map)
+    return batch_career_analysis(entity_resolved.resolved_credits, entity_resolved.anime_map)
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")
-def career_aware_dormancy_recomputed(ctx: PipelineContext, career_analysis: Any) -> Any:
+def career_aware_dormancy_recomputed(
+    ctx_core_populated: CoreScoresResult, career_analysis: dict
+) -> dict:
     """Re-compute dormancy and IV with career-aware dormancy (protects veterans).
 
     Veterans with long track records get softer dormancy penalties than newcomers.
 
-    Writes: ctx.dormancy_scores (updated), ctx.iv_scores (updated).
+    Returns dict: dormancy_scores (updated), iv_scores (updated).
     """
-    from src.analysis.scoring.patronage_dormancy import compute_career_aware_dormancy
     from src.analysis.scoring.integrated_value import compute_integrated_value, compute_studio_exposure
+    from src.analysis.scoring.patronage_dormancy import compute_career_aware_dormancy
 
     career_dormancy = compute_career_aware_dormancy(
-        raw_dormancy=ctx.dormancy_scores,
-        iv_scores_historical=ctx.iv_scores_historical,
-        career_data=ctx.career_data,
+        raw_dormancy=ctx_core_populated.dormancy_scores,
+        iv_scores_historical=ctx_core_populated.iv_scores_historical,
+        career_data=career_analysis,
     )
-    ctx.dormancy_scores = career_dormancy
-
     studio_exposure = compute_studio_exposure(
-        ctx.person_fe,
-        ctx.studio_fe,
-        studio_assignments=ctx.studio_assignments,
+        ctx_core_populated.person_fe,
+        ctx_core_populated.studio_fe,
+        studio_assignments=ctx_core_populated.studio_assignments,
     )
-    awcc_scores = {pid: m.awcc for pid, m in ctx.knowledge_spanner_scores.items()}
-    ctx.iv_scores = compute_integrated_value(
-        ctx.person_fe,
-        ctx.birank_person_scores,
+    awcc_scores = {pid: m.awcc for pid, m in ctx_core_populated.knowledge_spanner_scores.items()}
+    iv_scores = compute_integrated_value(
+        ctx_core_populated.person_fe,
+        ctx_core_populated.birank_person_scores,
         studio_exposure,
         awcc_scores,
-        ctx.patronage_scores,
+        ctx_core_populated.patronage_scores,
         career_dormancy,
-        ctx.iv_lambda_weights,
-        component_std=ctx.iv_component_std,
-        component_mean=ctx.iv_component_mean,
+        ctx_core_populated.iv_lambda_weights,
+        component_std=ctx_core_populated.iv_component_std,
+        component_mean=ctx_core_populated.iv_component_mean,
     )
-    return ctx.dormancy_scores
+    return {"dormancy_scores": career_dormancy, "iv_scores": iv_scores}
 
 
 @tag(stage="phase6", cost="moderate", domain="metrics")
 def director_circles(
-    career_aware_dormancy_recomputed: Any,
-    credits: list,
-    anime_map: dict,
-) -> Any:
+    entity_resolved: EntityResolutionResult, career_aware_dormancy_recomputed: dict
+) -> dict:
     """Director circles: frequent collaborator groups around each director."""
     from src.analysis.network.circles import find_director_circles
 
-    return find_director_circles(credits, anime_map)
+    return find_director_circles(entity_resolved.resolved_credits, entity_resolved.anime_map)
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")
-def versatility_computed(
-    director_circles: Any,
-    credits: list,
-) -> Any:
+def versatility_computed(entity_resolved: EntityResolutionResult, director_circles: dict) -> dict:
     """Versatility: breadth of role categories and specific roles per person."""
     from src.analysis.versatility import compute_versatility
 
-    return compute_versatility(credits)
+    return compute_versatility(entity_resolved.resolved_credits)
 
 
 @tag(stage="phase6", cost="expensive", domain="metrics")
-def centrality_metrics(ctx: PipelineContext, versatility_computed: Any) -> Any:
+def centrality_metrics(
+    graphs_result: GraphsResult,
+    entity_resolved: EntityResolutionResult,
+    versatility_computed: dict,
+) -> dict:
     """Network centrality: betweenness, closeness, degree in collaboration graph.
 
-    Writes: ctx.centrality, ctx.betweenness_cache.
+    Returns dict: centrality ({pid: metrics}), betweenness_cache ({pid: float}).
     """
     from src.analysis.graph import calculate_network_centrality_scores
 
-    if ctx.collaboration_graph is not None:
-        person_ids = {p.id for p in ctx.persons}
-        ctx.centrality = calculate_network_centrality_scores(
-            ctx.collaboration_graph, person_ids
+    centrality: dict = {}
+    if graphs_result.collaboration_graph is not None:
+        person_ids = {p.id for p in entity_resolved.persons}
+        centrality = calculate_network_centrality_scores(
+            graphs_result.collaboration_graph, person_ids
         )
-    ctx.betweenness_cache = {
+    betweenness_cache = {
         pid: metrics["betweenness"]
-        for pid, metrics in ctx.centrality.items()
+        for pid, metrics in centrality.items()
         if "betweenness" in metrics
     }
-    return ctx.centrality
+    return {"centrality": centrality, "betweenness_cache": betweenness_cache}
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")
 def network_density_computed(
-    centrality_metrics: Any,
-    credits: list,
-) -> Any:
+    entity_resolved: EntityResolutionResult, centrality_metrics: dict
+) -> dict:
     """Network density: collaborator count, unique anime, hub score per person."""
     from src.analysis.network.network_density import compute_network_density
 
-    return compute_network_density(credits)
+    return compute_network_density(entity_resolved.resolved_credits)
 
 
 @tag(stage="phase6", cost="moderate", domain="metrics")
 def growth_trends_precomputed(
-    network_density_computed: Any,
-    credits: list,
-    anime_map: dict,
-) -> Any:
+    entity_resolved: EntityResolutionResult, network_density_computed: dict
+) -> dict:
     """Growth trends: rising / stable / declining career trajectory."""
     from src.analysis.growth import compute_growth_trends
 
-    return compute_growth_trends(credits, anime_map)
+    return compute_growth_trends(entity_resolved.resolved_credits, entity_resolved.anime_map)
 
 
 @tag(stage="phase6", cost="moderate", domain="metrics")
-def peer_effects_estimated(ctx: PipelineContext, growth_trends_precomputed: Any) -> Any:
+def peer_effects_estimated(
+    entity_resolved: EntityResolutionResult,
+    graphs_result: GraphsResult,
+    career_aware_dormancy_recomputed: dict,
+    growth_trends_precomputed: dict,
+) -> Any:
     """Peer effects (2SLS): spillover from collaborating with high-IV persons.
 
-    Writes: ctx.peer_effect_result.
+    Uses updated iv_scores from career_aware_dormancy_recomputed.
     """
     from src.analysis.network.peer_effects import estimate_peer_effects_2sls
 
-    if ctx.collaboration_graph is not None:
-        ctx.peer_effect_result = estimate_peer_effects_2sls(
-            ctx.credits,
-            ctx.anime_map,
-            ctx.iv_scores,
-            ctx.collaboration_graph,
+    if graphs_result.collaboration_graph is not None:
+        return estimate_peer_effects_2sls(
+            entity_resolved.resolved_credits,
+            entity_resolved.anime_map,
+            career_aware_dormancy_recomputed["iv_scores"],
+            graphs_result.collaboration_graph,
         )
-    return ctx.peer_effect_result
+    return None
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")
-def career_friction_estimated(ctx: PipelineContext, peer_effects_estimated: Any) -> Any:
-    """Career friction: observed vs expected career stage transitions.
-
-    Writes: ctx.career_friction.
-    """
+def career_friction_estimated(
+    entity_resolved: EntityResolutionResult,
+    ctx_core_populated: CoreScoresResult,
+    career_aware_dormancy_recomputed: dict,
+    peer_effects_estimated: Any,
+) -> dict:
+    """Career friction: observed vs expected career stage transitions."""
     from src.analysis.career_friction import estimate_career_friction
 
     friction_result = estimate_career_friction(
-        ctx.credits,
-        ctx.anime_map,
-        person_scores=ctx.iv_scores,
-        studio_fe=ctx.studio_fe,
+        entity_resolved.resolved_credits,
+        entity_resolved.anime_map,
+        person_scores=career_aware_dormancy_recomputed["iv_scores"],
+        studio_fe=ctx_core_populated.studio_fe,
     )
-    ctx.career_friction = friction_result.friction_index
-    return ctx.career_friction
+    return friction_result.friction_index
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")
-def era_effects_computed(ctx: PipelineContext, career_friction_estimated: Any) -> Any:
-    """Era fixed effects: year-level difficulty proxy (crowding / production volume).
-
-    Writes: ctx.era_effects.
-    """
+def era_effects_computed(
+    entity_resolved: EntityResolutionResult,
+    career_aware_dormancy_recomputed: dict,
+    career_friction_estimated: dict,
+) -> Any:
+    """Era fixed effects: year-level difficulty proxy (crowding / production volume)."""
     from src.analysis.causal.era_effects import compute_era_and_difficulty
 
-    ctx.era_effects = compute_era_and_difficulty(ctx.credits, ctx.anime_map, ctx.iv_scores)
-    return ctx.era_effects
+    return compute_era_and_difficulty(
+        entity_resolved.resolved_credits,
+        entity_resolved.anime_map,
+        career_aware_dormancy_recomputed["iv_scores"],
+    )
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")
-def growth_acceleration_computed(ctx: PipelineContext, era_effects_computed: Any) -> Any:
-    """Growth acceleration: velocity and momentum of career IV trajectory.
-
-    Writes: ctx.growth_acceleration_data.
-    """
+def growth_acceleration_computed(
+    entity_resolved: EntityResolutionResult,
+    ctx_core_populated: CoreScoresResult,
+    career_aware_dormancy_recomputed: dict,
+    era_effects_computed: Any,
+) -> dict:
+    """Growth acceleration: velocity and momentum of career IV trajectory."""
     from src.analysis.growth_acceleration import (
-        compute_growth_metrics,
         compute_adjusted_person_fe_with_growth,
+        compute_growth_metrics,
     )
 
-    person_scores = {
-        pid: {
-            "person_fe": ctx.person_fe.get(pid, 0),
-            "birank": ctx.birank_person_scores.get(pid, 0),
-            "patronage": ctx.patronage_scores.get(pid, 0),
-            "iv_score": ctx.iv_scores.get(pid, 0),
-        }
-        for pid in set(ctx.person_fe) | set(ctx.birank_person_scores) | set(ctx.iv_scores)
-    }
-    growth_metrics = compute_growth_metrics(ctx.credits, ctx.anime_map)
+    person_scores = _build_person_scores(
+        ctx_core_populated, career_aware_dormancy_recomputed["iv_scores"]
+    )
+    growth_metrics = compute_growth_metrics(entity_resolved.resolved_credits, entity_resolved.anime_map)
     adjusted_skills = compute_adjusted_person_fe_with_growth(
         person_scores, growth_metrics, growth_weight=0.3
     )
-    ctx.growth_acceleration_data = {
+    return {
         "growth_metrics": {pid: vars(m) for pid, m in growth_metrics.items()},
         "adjusted_skills": adjusted_skills,
     }
-    return ctx.growth_acceleration_data
 
 
 @tag(stage="phase6", cost="moderate", domain="metrics")
-def anime_values_computed(ctx: PipelineContext, growth_acceleration_computed: Any) -> Any:
-    """Anime value assessment: composite structural value per anime title.
-
-    Writes: ctx.anime_values.
-    """
+def anime_values_computed(
+    entity_resolved: EntityResolutionResult,
+    ctx_core_populated: CoreScoresResult,
+    career_aware_dormancy_recomputed: dict,
+    growth_acceleration_computed: dict,
+) -> dict:
+    """Anime value assessment: composite structural value per anime title."""
     from src.analysis.anime_value import compute_anime_values
 
-    person_scores = {
-        pid: {
-            "person_fe": ctx.person_fe.get(pid, 0),
-            "birank": ctx.birank_person_scores.get(pid, 0),
-            "patronage": ctx.patronage_scores.get(pid, 0),
-            "iv_score": ctx.iv_scores.get(pid, 0),
-        }
-        for pid in set(ctx.person_fe) | set(ctx.birank_person_scores) | set(ctx.iv_scores)
-    }
-    anime_values_raw = compute_anime_values(ctx.anime_list, ctx.credits, person_scores)
-    ctx.anime_values = {aid: vars(v) for aid, v in anime_values_raw.items()}
-    return ctx.anime_values
+    person_scores = _build_person_scores(
+        ctx_core_populated, career_aware_dormancy_recomputed["iv_scores"]
+    )
+    anime_values_raw = compute_anime_values(
+        entity_resolved.anime_list, entity_resolved.resolved_credits, person_scores
+    )
+    return {aid: vars(v) for aid, v in anime_values_raw.items()}
 
 
 @tag(stage="phase6", cost="moderate", domain="metrics")
-def contribution_attribution_computed(ctx: PipelineContext, anime_values_computed: Any) -> Any:
+def contribution_attribution_computed(
+    entity_resolved: EntityResolutionResult,
+    ctx_core_populated: CoreScoresResult,
+    career_aware_dormancy_recomputed: dict,
+    anime_values_computed: dict,
+) -> dict:
     """Contribution attribution: per-person share of each anime's structural value.
 
     Samples top 100 anime by composite value for performance.
-
-    Writes: ctx.contribution_data.
     """
     from collections import defaultdict
+
     from src.analysis.anime_value import compute_anime_values
     from src.analysis.contribution_attribution import compute_contribution_attribution
 
-    person_scores = {
-        pid: {
-            "person_fe": ctx.person_fe.get(pid, 0),
-            "birank": ctx.birank_person_scores.get(pid, 0),
-            "patronage": ctx.patronage_scores.get(pid, 0),
-            "iv_score": ctx.iv_scores.get(pid, 0),
-        }
-        for pid in set(ctx.person_fe) | set(ctx.birank_person_scores) | set(ctx.iv_scores)
-    }
-    anime_values_raw = compute_anime_values(ctx.anime_list, ctx.credits, person_scores)
-    top_anime = sorted(anime_values_raw.items(), key=lambda x: x[1].composite_value, reverse=True)[:100]
+    person_scores = _build_person_scores(
+        ctx_core_populated, career_aware_dormancy_recomputed["iv_scores"]
+    )
+    anime_values_raw = compute_anime_values(
+        entity_resolved.anime_list, entity_resolved.resolved_credits, person_scores
+    )
+    top_anime = sorted(
+        anime_values_raw.items(), key=lambda x: x[1].composite_value, reverse=True
+    )[:100]
 
     anime_credits_index: dict[str, list] = defaultdict(list)
-    for c in ctx.credits:
+    for c in entity_resolved.resolved_credits:
         anime_credits_index[c.anime_id].append(c)
 
     all_contributions: dict = {}
@@ -315,56 +331,140 @@ def contribution_attribution_computed(ctx: PipelineContext, anime_values_compute
             all_contributions[anime_id] = {
                 pid: {**vars(c), "role": c.role.value} for pid, c in contribs.items()
             }
-    ctx.contribution_data = all_contributions
-    return ctx.contribution_data
+    return all_contributions
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")
-def potential_value_computed(ctx: PipelineContext, contribution_attribution_computed: Any) -> Any:
-    """Potential value: forward-looking score integrating growth, network position, and trajectory.
-
-    Writes: ctx.potential_value_scores.
-    """
+def potential_value_computed(
+    graphs_result: GraphsResult,
+    ctx_core_populated: CoreScoresResult,
+    career_aware_dormancy_recomputed: dict,
+    growth_acceleration_computed: dict,
+    contribution_attribution_computed: dict,
+    centrality_metrics: dict,
+) -> dict:
+    """Potential value: forward-looking score integrating growth, network position, and trajectory."""
     from src.analysis.scoring.potential_value import compute_potential_value_scores
 
-    person_scores = {
-        pid: {
-            "person_fe": ctx.person_fe.get(pid, 0),
-            "birank": ctx.birank_person_scores.get(pid, 0),
-            "patronage": ctx.patronage_scores.get(pid, 0),
-            "iv_score": ctx.iv_scores.get(pid, 0),
-        }
-        for pid in set(ctx.person_fe) | set(ctx.birank_person_scores) | set(ctx.iv_scores)
-    }
-    growth_data = ctx.growth_acceleration_data.get("growth_metrics", {})
+    person_scores = _build_person_scores(
+        ctx_core_populated, career_aware_dormancy_recomputed["iv_scores"]
+    )
+    growth_data = growth_acceleration_computed.get("growth_metrics", {})
     growth_dict = {
-        pid: {k: v for k, v in m.items() if k in ("growth_velocity", "momentum_score", "career_years")}
+        pid: {
+            k: v
+            for k, v in m.items()
+            if k in ("growth_velocity", "momentum_score", "career_years")
+        }
         for pid, m in growth_data.items()
     }
-    adjusted_skills = ctx.growth_acceleration_data.get("adjusted_skills", {})
+    adjusted_skills = growth_acceleration_computed.get("adjusted_skills", {})
+    betweenness_cache = centrality_metrics.get("betweenness_cache", {})
 
-    if ctx.collaboration_graph is not None:
+    if graphs_result.collaboration_graph is not None:
         potential_scores = compute_potential_value_scores(
             person_scores,
             {},
             growth_dict,
             adjusted_skills,
-            ctx.collaboration_graph,
-            betweenness_cache=ctx.betweenness_cache,
+            graphs_result.collaboration_graph,
+            betweenness_cache=betweenness_cache,
         )
-        ctx.potential_value_scores = {
+        return {
             pid: {**vars(p), "category": p.category.value} for pid, p in potential_scores.items()
         }
-    return ctx.potential_value_scores
+    return {}
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")
 def career_tracks_inferred(
-    potential_value_computed: Any,
-    credits: list,
-    anime_map: dict,
-) -> Any:
+    entity_resolved: EntityResolutionResult, potential_value_computed: dict
+) -> dict:
     """Career track inference: animator / director / animator_director / etc."""
     from src.analysis.network.multilayer import infer_all_career_tracks
 
-    return infer_all_career_tracks(credits, anime_map)
+    return infer_all_career_tracks(entity_resolved.resolved_credits, entity_resolved.anime_map)
+
+
+@tag(stage="phase6", cost="cheap", domain="metrics")
+def supplementary_metrics(
+    engagement_decay: dict,
+    role_classification: dict,
+    career_analysis: dict,
+    career_aware_dormancy_recomputed: dict,
+    director_circles: dict,
+    versatility_computed: dict,
+    centrality_metrics: dict,
+    network_density_computed: dict,
+    growth_trends_precomputed: dict,
+    peer_effects_estimated: Any,
+    career_friction_estimated: dict,
+    era_effects_computed: Any,
+    growth_acceleration_computed: dict,
+    anime_values_computed: dict,
+    contribution_attribution_computed: dict,
+    potential_value_computed: dict,
+    career_tracks_inferred: dict,
+    ctx_core_populated: CoreScoresResult,
+) -> SupplementaryMetricsResult:
+    """Aggregate all Phase 6 outputs into a SupplementaryMetricsResult typed bag."""
+    return SupplementaryMetricsResult(
+        decay_results=engagement_decay,
+        role_profiles=role_classification,
+        career_data=career_analysis,
+        career_tracks=career_tracks_inferred,
+        career_friction=career_friction_estimated,
+        circles=director_circles,
+        centrality=centrality_metrics["centrality"],
+        network_density=network_density_computed,
+        betweenness_cache=centrality_metrics["betweenness_cache"],
+        versatility=versatility_computed,
+        growth_data=growth_trends_precomputed,
+        growth_acceleration_data=growth_acceleration_computed,
+        anime_values=anime_values_computed,
+        contribution_data=contribution_attribution_computed,
+        potential_value_scores=potential_value_computed,
+        studio_bias_metrics={},
+        era_effects=era_effects_computed,
+        peer_effect_result=peer_effects_estimated,
+        dormancy_scores=career_aware_dormancy_recomputed["dormancy_scores"],
+        iv_scores=career_aware_dormancy_recomputed["iv_scores"],
+        knowledge_spanner_scores=ctx_core_populated.knowledge_spanner_scores,
+    )
+
+
+@tag(stage="phase6", cost="cheap", domain="metrics")
+def ctx_metrics_populated(
+    supplementary_metrics: SupplementaryMetricsResult,
+    ctx_core_populated: CoreScoresResult,
+    ctx: Any,
+) -> SupplementaryMetricsResult:
+    """H-4 bridge: copy SupplementaryMetricsResult fields to ctx for Phase 9/10 compatibility.
+
+    Also updates ctx.dormancy_scores and ctx.iv_scores with career-aware values,
+    overwriting the Phase 5 values written by ctx_core_populated.
+
+    Returns the same SupplementaryMetricsResult for typed downstream access.
+    """
+    ctx.decay_results = supplementary_metrics.decay_results
+    ctx.role_profiles = supplementary_metrics.role_profiles
+    ctx.career_data = supplementary_metrics.career_data
+    ctx.career_tracks = supplementary_metrics.career_tracks
+    ctx.career_friction = supplementary_metrics.career_friction
+    ctx.circles = supplementary_metrics.circles
+    ctx.centrality = supplementary_metrics.centrality
+    ctx.network_density = supplementary_metrics.network_density
+    ctx.betweenness_cache = supplementary_metrics.betweenness_cache
+    ctx.versatility = supplementary_metrics.versatility
+    ctx.growth_data = supplementary_metrics.growth_data
+    ctx.growth_acceleration_data = supplementary_metrics.growth_acceleration_data
+    ctx.anime_values = supplementary_metrics.anime_values
+    ctx.contribution_data = supplementary_metrics.contribution_data
+    ctx.potential_value_scores = supplementary_metrics.potential_value_scores
+    ctx.era_effects = supplementary_metrics.era_effects
+    ctx.peer_effect_result = supplementary_metrics.peer_effect_result
+    # Override Phase 5 values with career-aware updates
+    ctx.dormancy_scores = supplementary_metrics.dormancy_scores
+    ctx.iv_scores = supplementary_metrics.iv_scores
+    ctx.knowledge_spanner_scores = supplementary_metrics.knowledge_spanner_scores
+    return supplementary_metrics

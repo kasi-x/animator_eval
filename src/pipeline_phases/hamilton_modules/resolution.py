@@ -1,11 +1,10 @@
-"""Phase 3+4: Entity Resolution and Graph Construction nodes for Hamilton DAG (H-3).
+"""Phase 3+4: Entity Resolution and Graph Construction nodes for Hamilton DAG (H-4).
 
-Two nodes:
+Four nodes:
   - entity_resolution_run: 5-step person/anime deduplication (Phase 3)
   - graphs_built: bipartite + collaboration graph + community detection (Phase 4)
-
-Both use ctx: PipelineContext (H-3 pattern).
-H-4 will expose entity_resolution's 5 steps as separate nodes for independent testing.
+  - entity_resolved: H-4 bridge — exposes EntityResolutionResult for scoring nodes
+  - graphs_result: H-4 bridge — exposes GraphsResult for scoring nodes
 """
 
 from __future__ import annotations
@@ -19,6 +18,8 @@ from src.pipeline_phases.context import PipelineContext
 NODE_NAMES: list[str] = [
     "entity_resolution_run",
     "graphs_built",
+    "entity_resolved",
+    "graphs_result",
 ]
 
 
@@ -33,11 +34,24 @@ def entity_resolution_run(ctx: PipelineContext, data_validated: Any) -> Any:
     Depends on data_validated to run after Phase 2.
     """
     from src.pipeline_phases.entity_resolution import run_entity_resolution
+    from src.pipeline_phases.pipeline_types import LoadedData
 
-    run_entity_resolution(ctx)
+    loaded = LoadedData(
+        persons=list(ctx.persons),
+        credits=list(ctx.credits),
+        anime_list=list(ctx.anime_list),
+    )
+    result = run_entity_resolution(loaded)
+
+    ctx.canonical_map = result.canonical_map
+    ctx.credits = result.resolved_credits
+    ctx.persons = result.persons
+    ctx.anime_list = result.anime_list
+    ctx.anime_map = result.anime_map
+
     return {
-        "canonical_persons": len(ctx.canonical_map),
-        "resolved_credits": len(ctx.credits),
+        "canonical_persons": len(result.canonical_map),
+        "resolved_credits": len(result.resolved_credits),
     }
 
 
@@ -52,8 +66,21 @@ def graphs_built(ctx: PipelineContext, entity_resolution_run: Any) -> Any:
     Depends on entity_resolution_run to use resolved person IDs.
     """
     from src.pipeline_phases.graph_construction import build_graphs_phase
+    from src.pipeline_phases.pipeline_types import EntityResolutionResult
 
-    build_graphs_phase(ctx)
+    resolved = EntityResolutionResult(
+        resolved_credits=list(ctx.credits),
+        canonical_map=ctx.canonical_map,
+        persons=list(ctx.persons),
+        anime_list=list(ctx.anime_list),
+        anime_map=dict(ctx.anime_map),
+    )
+    result = build_graphs_phase(resolved)
+
+    ctx.person_anime_graph = result.person_anime_graph
+    ctx.collaboration_graph = result.collaboration_graph
+    ctx.community_map = result.community_map
+
     return {
         "graph_nodes": ctx.person_anime_graph.number_of_nodes() if ctx.person_anime_graph else 0,
         "collab_edges": (
@@ -63,3 +90,29 @@ def graphs_built(ctx: PipelineContext, entity_resolution_run: Any) -> Any:
         ),
         "communities": len(set(ctx.community_map.values())) if ctx.community_map else 0,
     }
+
+
+@tag(stage="phase4", cost="cheap", domain="resolution")
+def entity_resolved(entity_resolution_run: Any, ctx: PipelineContext) -> "EntityResolutionResult":
+    """H-4 bridge: expose post-resolution data as EntityResolutionResult for scoring nodes."""
+    from src.pipeline_phases.pipeline_types import EntityResolutionResult
+
+    return EntityResolutionResult(
+        resolved_credits=ctx.credits,
+        canonical_map=ctx.canonical_map,
+        persons=ctx.persons,
+        anime_list=ctx.anime_list,
+        anime_map=ctx.anime_map,
+    )
+
+
+@tag(stage="phase4", cost="cheap", domain="resolution")
+def graphs_result(graphs_built: Any, ctx: PipelineContext) -> "GraphsResult":
+    """H-4 bridge: expose post-graph-construction data as GraphsResult for scoring nodes."""
+    from src.pipeline_phases.pipeline_types import GraphsResult
+
+    return GraphsResult(
+        person_anime_graph=ctx.person_anime_graph,
+        collaboration_graph=ctx.collaboration_graph,
+        community_map=ctx.community_map,
+    )
