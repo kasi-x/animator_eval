@@ -35,38 +35,52 @@ def stats(lang: str = lang_option) -> None:
     """Display database statistics."""
     setup_logging()
 
-    from src.database import db_connection, get_source_scrape_status, init_db
+    from src.analysis.gold_writer import gold_connect_with_silver
 
-    with db_connection() as conn:
-        init_db(conn)
+    n_persons = n_anime = n_credits = n_scores = 0
+    role_dist: list = []
+    source_dist: list = []
+    year_dist: list = []
+    data_sources: list = []
 
-        n_persons = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
-        n_anime = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]
-        n_credits = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
-        n_scores = conn.execute("SELECT COUNT(*) FROM person_scores").fetchone()[0]
+    try:
+        with gold_connect_with_silver() as conn:
+            n_persons = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
+            n_anime = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]
+            n_credits = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
+            n_scores = conn.execute(
+                "SELECT COUNT(*) FROM person_scores"
+            ).fetchone()[0]
 
-        # role distribution
-        role_dist = conn.execute(
-            "SELECT role, COUNT(*) as cnt FROM credits GROUP BY role ORDER BY cnt DESC"
-        ).fetchall()
+            # role distribution
+            rel = conn.execute(
+                "SELECT role, COUNT(*) AS cnt FROM credits GROUP BY role ORDER BY cnt DESC"
+            )
+            cols = [d[0] for d in rel.description]
+            role_dist = [dict(zip(cols, r)) for r in rel.fetchall()]
 
-        # source distribution
-        source_dist = conn.execute(
-            """
-            SELECT evidence_source AS source_code, COUNT(*) as cnt
-            FROM credits
-            WHERE evidence_source != ''
-            GROUP BY source_code
-            ORDER BY cnt DESC
-            """
-        ).fetchall()
+            # source distribution
+            rel = conn.execute(
+                """SELECT evidence_source AS source_code, COUNT(*) AS cnt
+                   FROM credits
+                   WHERE evidence_source != ''
+                   GROUP BY source_code
+                   ORDER BY cnt DESC"""
+            )
+            cols = [d[0] for d in rel.description]
+            source_dist = [dict(zip(cols, r)) for r in rel.fetchall()]
 
-        # year distribution
-        year_dist = conn.execute(
-            "SELECT year, COUNT(*) as cnt FROM anime WHERE year IS NOT NULL GROUP BY year ORDER BY year DESC LIMIT 10"
-        ).fetchall()
-
-        data_sources = get_source_scrape_status(conn)
+            # year distribution
+            rel = conn.execute(
+                "SELECT year, COUNT(*) AS cnt FROM anime WHERE year IS NOT NULL"
+                " GROUP BY year ORDER BY year DESC LIMIT 10"
+            )
+            cols = [d[0] for d in rel.description]
+            year_dist = [dict(zip(cols, r)) for r in rel.fetchall()]
+    except Exception:
+        console.print(
+            "[yellow]Warning: DuckDB unavailable — run 'pixi run pipeline' first.[/yellow]"
+        )
 
     # Use i18n for output
     console.print(f"\n[bold blue]{t('cli.stats.title')}[/bold blue]\n")
@@ -141,7 +155,7 @@ def ranking(
     """Display score ranking."""
     setup_logging()
 
-    from src.database import db_connection, init_db
+    from src.analysis.gold_writer import GoldReader
 
     valid_sort = {"iv_score", "person_fe", "birank", "patronage", "dormancy", "awcc"}
     if sort_by not in valid_sort:
@@ -193,20 +207,7 @@ def ranking(
             console.print(f"[yellow]{msg}[/yellow]")
             raise typer.Exit()
     else:
-        with db_connection() as conn:
-            init_db(conn)
-            order_col = f"s.{sort_by}"
-            rows = conn.execute(
-                f"""SELECT s.person_id, p.name_ja, p.name_en,
-                          s.iv_score, s.person_fe, s.birank, s.patronage,
-                          s.dormancy, s.awcc
-                   FROM person_scores s
-                   JOIN persons p ON s.person_id = p.id
-                   ORDER BY {order_col} DESC
-                   LIMIT ?""",  # noqa: S608
-                (top_n,),
-            ).fetchall()
-            rows = [dict(r) for r in rows]
+        rows = GoldReader().top_n(top_n)
 
     if not rows:
         console.print(
@@ -382,11 +383,34 @@ def search(
     """Search for persons by name."""
     setup_logging()
 
-    from src.database import db_connection, init_db, search_persons
+    from src.analysis.gold_writer import gold_connect_with_silver
 
-    with db_connection() as conn:
-        init_db(conn)
-        rows = search_persons(conn, query, limit)
+    pattern = f"%{query}%"
+    try:
+        with gold_connect_with_silver() as conn:
+            rel = conn.execute(
+                """SELECT p.id, p.name_ja, p.name_en, p.name_ko, p.name_zh,
+                          s.iv_score, s.person_fe, s.birank, s.patronage,
+                          COUNT(c.anime_id) AS credit_count
+                   FROM persons p
+                   LEFT JOIN person_scores s ON s.person_id = p.id
+                   LEFT JOIN credits c ON c.person_id = p.id
+                   WHERE p.name_ja ILIKE ?
+                      OR p.name_en ILIKE ?
+                      OR p.name_ko ILIKE ?
+                      OR p.name_zh ILIKE ?
+                      OR p.aliases ILIKE ?
+                      OR p.id ILIKE ?
+                   GROUP BY p.id, p.name_ja, p.name_en, p.name_ko, p.name_zh,
+                            s.iv_score, s.person_fe, s.birank, s.patronage
+                   ORDER BY s.iv_score DESC NULLS LAST
+                   LIMIT ?""",
+                [pattern] * 6 + [limit],
+            )
+            cols = [d[0] for d in rel.description]
+            rows = [dict(zip(cols, r)) for r in rel.fetchall()]
+    except Exception:
+        rows = []
 
     if not rows:
         console.print(f"[yellow]No results for: {query}[/yellow]")
@@ -424,37 +448,46 @@ def compare(
     """Compare two persons."""
     setup_logging()
 
-    from src.database import db_connection, init_db
+    from src.analysis.gold_writer import gold_connect_with_silver
 
-    with db_connection() as conn:
-        init_db(conn)
+    with gold_connect_with_silver() as conn:
 
         def _load_person_data(pid: str) -> dict | None:
-            person = conn.execute(
-                "SELECT * FROM persons WHERE id = ?", (pid,)
-            ).fetchone()
-            if not person:
+            rel = conn.execute("SELECT * FROM persons WHERE id = ?", [pid])
+            cols = [d[0] for d in rel.description]
+            row = rel.fetchone()
+            if not row:
                 return None
-            score = conn.execute(
-                "SELECT * FROM person_scores WHERE person_id = ?", (pid,)
-            ).fetchone()
+            person = dict(zip(cols, row))
+
+            rel = conn.execute(
+                "SELECT * FROM person_scores WHERE person_id = ?", [pid]
+            )
+            cols = [d[0] for d in rel.description]
+            score_row = rel.fetchone()
+            score = dict(zip(cols, score_row)) if score_row else None
+
             credit_count = conn.execute(
-                "SELECT COUNT(*) FROM credits WHERE person_id = ?", (pid,)
+                "SELECT COUNT(*) FROM credits WHERE person_id = ?", [pid]
             ).fetchone()[0]
-            roles = conn.execute(
-                """SELECT role, COUNT(*) as cnt FROM credits
-                   WHERE person_id = ? GROUP BY role ORDER BY cnt DESC""",
-                (pid,),
-            ).fetchall()
+
+            rel = conn.execute(
+                "SELECT role, COUNT(*) AS cnt FROM credits"
+                " WHERE person_id = ? GROUP BY role ORDER BY cnt DESC",
+                [pid],
+            )
+            cols = [d[0] for d in rel.description]
+            roles = [dict(zip(cols, r)) for r in rel.fetchall()]
+
             return {
                 "id": pid,
-                "name_ja": person["name_ja"],
-                "name_en": person["name_en"],
-                "iv_score": score["iv_score"] if score else 0.0,
-                "person_fe": score["person_fe"] if score else 0.0,
-                "birank": score["birank"] if score else 0.0,
-                "patronage": score["patronage"] if score else 0.0,
-                "dormancy": score["dormancy"] if score else 1.0,
+                "name_ja": person.get("name_ja"),
+                "name_en": person.get("name_en"),
+                "iv_score": (score.get("iv_score") or 0.0) if score else 0.0,
+                "person_fe": (score.get("person_fe") or 0.0) if score else 0.0,
+                "birank": (score.get("birank") or 0.0) if score else 0.0,
+                "patronage": (score.get("patronage") or 0.0) if score else 0.0,
+                "dormancy": (score.get("dormancy") or 1.0) if score else 1.0,
                 "credit_count": credit_count,
                 "roles": [(r["role"], r["cnt"]) for r in roles],
             }
@@ -740,29 +773,36 @@ def history(
     """Display a person's score history."""
     setup_logging()
 
-    from src.database import db_connection, get_score_history, init_db
+    from src.analysis.gold_writer import GoldReader, gold_connect_with_silver
 
-    with db_connection() as conn:
-        init_db(conn)
+    # Get person info from silver
+    person = None
+    try:
+        with gold_connect_with_silver() as conn:
+            rel = conn.execute("SELECT * FROM persons WHERE id = ?", [person_id])
+            cols = [d[0] for d in rel.description]
+            row = rel.fetchone()
+            person = dict(zip(cols, row)) if row else None
+    except Exception:
+        pass
 
-        person = conn.execute(
-            "SELECT * FROM persons WHERE id = ?", (person_id,)
-        ).fetchone()
-        if not person:
-            console.print(f"[red]Person not found: {person_id}[/red]")
-            raise typer.Exit(1)
+    if not person:
+        console.print(f"[red]Person not found: {person_id}[/red]")
+        raise typer.Exit(1)
 
-        hist = get_score_history(conn, person_id, limit=limit)
+    # Get score history from gold (returns all rows, slice to limit)
+    gold = GoldReader()
+    hist = gold.score_history_for(person_id)[:limit]
 
     if not hist:
         console.print(f"[yellow]No score history for {person_id}[/yellow]")
         raise typer.Exit()
 
-    name = person["name_ja"] or person["name_en"] or person_id
+    name = person.get("name_ja") or person.get("name_en") or person_id
     console.print(f"\n[bold blue]Score History: {name}[/bold blue]\n")
 
     table = Table()
-    table.add_column("Run Date", style="dim")
+    table.add_column("Period", style="dim")
     table.add_column("BiRank", justify="right", style="blue")
     table.add_column("Patronage", justify="right", style="green")
     table.add_column("Person FE", justify="right", style="yellow")
@@ -776,12 +816,12 @@ def history(
             delta = f" ({diff:+.1f})" if abs(diff) > 0.01 else ""
         prev_iv = h["iv_score"]
 
-        run_at = h["run_at"] or ""
-        if len(run_at) > 19:
-            run_at = run_at[:19]
+        year = h.get("year") or ""
+        quarter = h.get("quarter") or ""
+        period = f"{year} Q{quarter}" if year and quarter else str(year or "")
 
         table.add_row(
-            run_at,
+            period,
             f"{h['birank']:.1f}",
             f"{h['patronage']:.1f}",
             f"{h['person_fe']:.1f}",

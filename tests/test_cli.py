@@ -9,6 +9,141 @@ runner = CliRunner()
 
 
 @pytest.fixture()
+def populated_duckdb(monkeypatch, tmp_path):
+    """DuckDB test data for migrated CLI commands (stats/ranking/search/compare)."""
+    import duckdb
+
+    import src.analysis.gold_writer
+    import src.analysis.silver_reader
+    from src.analysis.gold_writer import _DDL
+
+    silver_path = tmp_path / "silver.duckdb"
+    gold_path = tmp_path / "gold.duckdb"
+
+    monkeypatch.setattr(src.analysis.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(src.analysis.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+
+    # Create silver.duckdb
+    sconn = duckdb.connect(str(silver_path))
+    sconn.execute(
+        """CREATE TABLE persons (
+            id VARCHAR PRIMARY KEY, name_ja VARCHAR DEFAULT '', name_en VARCHAR DEFAULT '',
+            name_ko VARCHAR DEFAULT '', name_zh VARCHAR DEFAULT '',
+            aliases VARCHAR DEFAULT '[]', image_medium VARCHAR
+        )"""
+    )
+    sconn.execute(
+        "CREATE TABLE anime (id VARCHAR PRIMARY KEY, title_ja VARCHAR DEFAULT '',"
+        " title_en VARCHAR DEFAULT '', year INTEGER)"
+    )
+    sconn.execute(
+        "CREATE TABLE credits (person_id VARCHAR, anime_id VARCHAR, role VARCHAR,"
+        " credit_year INTEGER DEFAULT 0, evidence_source VARCHAR DEFAULT '')"
+    )
+    sconn.executemany(
+        "INSERT INTO persons(id, name_ja, name_en) VALUES (?, ?, ?)",
+        [
+            ("p1", "荒木哲郎", "Tetsuro Araki"),
+            ("p2", "今井有文", "Arifumi Imai"),
+            ("p3", "浅野恭司", "Kyoji Asano"),
+        ],
+    )
+    sconn.executemany(
+        "INSERT INTO anime(id, title_ja, title_en, year) VALUES (?, ?, ?, ?)",
+        [
+            ("a1", "進撃の巨人", "Attack on Titan", 2013),
+            ("a2", "甲鉄城のカバネリ", "Kabaneri", 2016),
+        ],
+    )
+    sconn.executemany(
+        "INSERT INTO credits(person_id, anime_id, role, credit_year, evidence_source)"
+        " VALUES (?, ?, ?, ?, ?)",
+        [
+            ("p1", "a1", "director", 2013, "anilist"),
+            ("p2", "a1", "key_animator", 2013, "anilist"),
+            ("p3", "a1", "character_designer", 2013, "anilist"),
+            ("p1", "a2", "director", 2016, "anilist"),
+            ("p2", "a2", "key_animator", 2016, "anilist"),
+        ],
+    )
+    sconn.close()
+
+    # Create gold.duckdb
+    gconn = duckdb.connect(str(gold_path))
+    gconn.execute(_DDL)
+    gconn.executemany(
+        "INSERT INTO person_scores(person_id, birank, patronage, person_fe, iv_score)"
+        " VALUES (?, ?, ?, ?, ?)",
+        [
+            ("p1", 85.0, 70.0, 60.0, 73.0),
+            ("p2", 60.0, 80.0, 90.0, 74.5),
+            ("p3", 40.0, 50.0, 55.0, 47.75),
+        ],
+    )
+    gconn.close()
+
+    return tmp_path
+
+
+@pytest.fixture()
+def populated_duckdb_with_history(monkeypatch, tmp_path):
+    """DuckDB test data including score_history rows (for TestHistoryCommand)."""
+    import duckdb
+
+    import src.analysis.gold_writer
+    import src.analysis.silver_reader
+    from src.analysis.gold_writer import _DDL
+
+    silver_path = tmp_path / "silver.duckdb"
+    gold_path = tmp_path / "gold.duckdb"
+
+    monkeypatch.setattr(src.analysis.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(src.analysis.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+
+    # Create silver.duckdb (minimal: persons only needed for history)
+    sconn = duckdb.connect(str(silver_path))
+    sconn.execute(
+        """CREATE TABLE persons (
+            id VARCHAR PRIMARY KEY, name_ja VARCHAR DEFAULT '', name_en VARCHAR DEFAULT '',
+            name_ko VARCHAR DEFAULT '', name_zh VARCHAR DEFAULT '',
+            aliases VARCHAR DEFAULT '[]', image_medium VARCHAR
+        )"""
+    )
+    sconn.execute(
+        "CREATE TABLE anime (id VARCHAR PRIMARY KEY, title_ja VARCHAR DEFAULT '',"
+        " title_en VARCHAR DEFAULT '', year INTEGER)"
+    )
+    sconn.execute(
+        "CREATE TABLE credits (person_id VARCHAR, anime_id VARCHAR, role VARCHAR,"
+        " credit_year INTEGER DEFAULT 0, evidence_source VARCHAR DEFAULT '')"
+    )
+    sconn.execute(
+        "INSERT INTO persons(id, name_ja, name_en) VALUES ('p1', 'テスト', 'Test Person')"
+    )
+    sconn.close()
+
+    # Create gold.duckdb with score_history
+    gconn = duckdb.connect(str(gold_path))
+    gconn.execute(_DDL)
+    gconn.executemany(
+        "INSERT INTO person_scores(person_id, birank, patronage, person_fe, iv_score)"
+        " VALUES (?, ?, ?, ?, ?)",
+        [("p1", 80.0, 70.0, 60.0, 73.0)],
+    )
+    gconn.executemany(
+        "INSERT INTO score_history(person_id, year, quarter, iv_score, person_fe,"
+        " birank, patronage, dormancy, awcc) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+            ("p1", 2025, 1, 73.0, 60.0, 80.0, 70.0, 1.0, 0.5),
+            ("p1", 2024, 4, 70.0, 58.0, 78.0, 68.0, 1.0, 0.5),
+        ],
+    )
+    gconn.close()
+
+    return tmp_path
+
+
+@pytest.fixture()
 def populated_db(monkeypatch, tmp_path):
     """テスト用のDBを作成しmonkeypatchでCLIに注入する."""
     import src.database as db_mod
@@ -58,19 +193,19 @@ def populated_db(monkeypatch, tmp_path):
 
 
 class TestStatsCommand:
-    def test_stats_displays_tables(self, populated_db):
+    def test_stats_displays_tables(self, populated_duckdb):
         result = runner.invoke(app, ["stats"])
         assert result.exit_code == 0
         assert "Persons" in result.output or "人物" in result.output
         assert "Anime" in result.output or "アニメ" in result.output
         assert "Credits" in result.output or "クレジット" in result.output
 
-    def test_stats_shows_counts(self, populated_db):
+    def test_stats_shows_counts(self, populated_duckdb):
         result = runner.invoke(app, ["stats"])
         assert "3" in result.output  # 3 persons
         assert "2" in result.output  # 2 anime
 
-    def test_stats_lang_english(self, populated_db):
+    def test_stats_lang_english(self, populated_duckdb):
         """Stats command with --lang en shows English text."""
         result = runner.invoke(app, ["stats", "--lang", "en"])
         assert result.exit_code == 0
@@ -79,7 +214,7 @@ class TestStatsCommand:
         assert "Anime" in result.output
         assert "Credits" in result.output
 
-    def test_stats_lang_japanese(self, populated_db):
+    def test_stats_lang_japanese(self, populated_duckdb):
         """Stats command with --lang ja shows Japanese text."""
         result = runner.invoke(app, ["stats", "--lang", "ja"])
         assert result.exit_code == 0
@@ -90,37 +225,31 @@ class TestStatsCommand:
 
 
 class TestRankingCommand:
-    def test_ranking_shows_scores(self, populated_db):
+    def test_ranking_shows_scores(self, populated_duckdb):
         result = runner.invoke(app, ["ranking"])
         assert result.exit_code == 0
         assert "BiRank" in result.output
         assert "Patronage" in result.output
         assert "IV Score" in result.output
 
-    def test_ranking_top_option(self, populated_db):
+    def test_ranking_top_option(self, populated_duckdb):
         result = runner.invoke(app, ["ranking", "--top", "2"])
         assert result.exit_code == 0
 
-    def test_ranking_sort_by_birank(self, populated_db):
+    def test_ranking_sort_by_birank(self, populated_duckdb):
         result = runner.invoke(app, ["ranking", "--sort", "birank"])
         assert result.exit_code == 0
         assert "BiRank" in result.output
 
-    def test_ranking_invalid_sort(self, populated_db):
+    def test_ranking_invalid_sort(self, populated_duckdb):
         result = runner.invoke(app, ["ranking", "--sort", "invalid"])
         assert result.exit_code == 1
 
     def test_ranking_empty_db(self, monkeypatch, tmp_path):
-        import src.database as db_mod
-        from src.database import get_connection, init_db
+        import src.analysis.gold_writer
 
-        db_path = tmp_path / "empty.db"
-        conn = get_connection(db_path)
-        init_db(conn)
-        conn.commit()
-        conn.close()
-
-        monkeypatch.setattr(db_mod, "DEFAULT_DB_PATH", db_path)
+        gold_path = tmp_path / "nonexistent_gold.duckdb"
+        monkeypatch.setattr(src.analysis.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
         result = runner.invoke(app, ["ranking"])
         assert "No scores found" in result.output
 
@@ -144,112 +273,105 @@ class TestProfileCommand:
 
 
 class TestSearchCommand:
-    def test_search_by_japanese_name(self, populated_db):
+    def test_search_by_japanese_name(self, populated_duckdb):
         result = runner.invoke(app, ["search", "荒木"])
         assert result.exit_code == 0
         assert "荒木哲郎" in result.output
 
-    def test_search_by_english_name(self, populated_db):
+    def test_search_by_english_name(self, populated_duckdb):
         result = runner.invoke(app, ["search", "Araki"])
         assert result.exit_code == 0
         assert "Tetsuro Araki" in result.output
 
-    def test_search_by_id(self, populated_db):
+    def test_search_by_id(self, populated_duckdb):
         result = runner.invoke(app, ["search", "p2"])
         assert result.exit_code == 0
         assert "今井有文" in result.output
 
-    def test_search_no_results(self, populated_db):
+    def test_search_no_results(self, populated_duckdb):
         result = runner.invoke(app, ["search", "xyz_nobody"])
         assert "No results" in result.output
 
-    def test_search_shows_iv_score(self, populated_db):
+    def test_search_shows_iv_score(self, populated_duckdb):
         result = runner.invoke(app, ["search", "荒木"])
         assert "73.0" in result.output
 
 
 class TestCompareCommand:
-    def test_compare_two_persons(self, populated_db):
+    def test_compare_two_persons(self, populated_duckdb):
         result = runner.invoke(app, ["compare", "p1", "p2"])
         assert result.exit_code == 0
         assert "BiRank" in result.output or "birank" in result.output.lower()
         assert "荒木哲郎" in result.output
         assert "今井有文" in result.output
 
-    def test_compare_shows_diff(self, populated_db):
+    def test_compare_shows_diff(self, populated_duckdb):
         result = runner.invoke(app, ["compare", "p1", "p2"])
         assert result.exit_code == 0
         # Should show score differences
         assert "+" in result.output or "-" in result.output
 
-    def test_compare_shows_roles(self, populated_db):
+    def test_compare_shows_roles(self, populated_duckdb):
         result = runner.invoke(app, ["compare", "p1", "p2"])
         assert result.exit_code == 0
         assert "director" in result.output or "key_animator" in result.output
 
-    def test_compare_person_not_found(self, populated_db):
+    def test_compare_person_not_found(self, populated_duckdb):
         result = runner.invoke(app, ["compare", "p1", "nonexistent"])
         assert result.exit_code == 1
         assert "not found" in result.output
 
 
 class TestHistoryCommand:
-    @pytest.fixture()
-    def db_with_history(self, monkeypatch, tmp_path):
-        """Score history入りDB."""
-        import src.database
-
-        db_path = tmp_path / "history.db"
-        monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
-
-        from src.database import (
-            get_connection,
-            init_db,
-            save_score_history,
-            upsert_person,
-            upsert_score,
-        )
-        from src.models import Person, ScoreResult
-
-        conn = get_connection()
-        init_db(conn)
-        upsert_person(conn, Person(id="p1", name_en="Test Person", name_ja="テスト"))
-        score = ScoreResult(person_id="p1", birank=80.0, patronage=70.0, person_fe=60.0)
-        upsert_score(conn, score)
-        save_score_history(conn, score)
-        save_score_history(
-            conn,
-            ScoreResult(person_id="p1", birank=85.0, patronage=72.0, person_fe=62.0),
-        )
-        conn.commit()
-        conn.close()
-        return db_path
-
-    def test_history_shows_scores(self, db_with_history):
+    def test_history_shows_scores(self, populated_duckdb_with_history):
         result = runner.invoke(app, ["history", "p1"])
         assert result.exit_code == 0
-        assert "80.0" in result.output or "85.0" in result.output
+        assert "73.0" in result.output or "70.0" in result.output
         assert "Score History" in result.output
 
-    def test_history_person_not_found(self, db_with_history):
+    def test_history_person_not_found(self, populated_duckdb_with_history):
         result = runner.invoke(app, ["history", "nonexistent"])
         assert result.exit_code == 1
         assert "not found" in result.output
 
-    def test_history_no_history(self, db_with_history, monkeypatch, tmp_path):
-        """Person exists but has no history."""
-        import src.database
+    def test_history_no_history(self, monkeypatch, tmp_path):
+        """Person exists in silver but has no score_history in gold."""
+        import duckdb
 
-        from src.database import get_connection, init_db, upsert_person
-        from src.models import Person
+        import src.analysis.gold_writer
+        import src.analysis.silver_reader
+        from src.analysis.gold_writer import _DDL
 
-        db_path = tmp_path / "nohist.db"
-        monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
-        conn = get_connection()
-        init_db(conn)
-        upsert_person(conn, Person(id="p99", name_en="No History"))
-        conn.commit()
-        conn.close()
+        silver_path = tmp_path / "silver_nohist.duckdb"
+        gold_path = tmp_path / "gold_nohist.duckdb"
+
+        monkeypatch.setattr(src.analysis.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
+        monkeypatch.setattr(src.analysis.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+
+        sconn = duckdb.connect(str(silver_path))
+        sconn.execute(
+            """CREATE TABLE persons (
+                id VARCHAR PRIMARY KEY, name_ja VARCHAR DEFAULT '', name_en VARCHAR DEFAULT '',
+                name_ko VARCHAR DEFAULT '', name_zh VARCHAR DEFAULT '',
+                aliases VARCHAR DEFAULT '[]', image_medium VARCHAR
+            )"""
+        )
+        sconn.execute(
+            "CREATE TABLE anime (id VARCHAR PRIMARY KEY, title_ja VARCHAR DEFAULT '',"
+            " title_en VARCHAR DEFAULT '', year INTEGER)"
+        )
+        sconn.execute(
+            "CREATE TABLE credits (person_id VARCHAR, anime_id VARCHAR, role VARCHAR,"
+            " credit_year INTEGER DEFAULT 0, evidence_source VARCHAR DEFAULT '')"
+        )
+        sconn.execute(
+            "INSERT INTO persons(id, name_en) VALUES ('p99', 'No History')"
+        )
+        sconn.close()
+
+        gconn = duckdb.connect(str(gold_path))
+        gconn.execute(_DDL)
+        gconn.close()
 
         result = runner.invoke(app, ["history", "p99"])
         assert result.exit_code == 0
