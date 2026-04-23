@@ -5,6 +5,7 @@ import json
 
 from src.utils.name_utils import (
     assign_native_name_fields,
+    assign_native_title_fields,
     detect_name_script,
     infer_nationalities,
     _HOMETOWN_CACHE,
@@ -173,3 +174,57 @@ class TestAssignNativeNameFields:
 
     def test_empty_string_returns_empty(self):
         assert assign_native_name_fields("", ["JP"]) == ("", "", "", {})
+
+
+class TestAssignNativeTitleFields:
+    def test_jp_country_goes_to_title_ja(self):
+        ja, ko, zh, alt = assign_native_title_fields("風の谷のナウシカ", "JP")
+        assert ja == "風の谷のナウシカ"
+        assert ko == "" and zh == ""
+        assert alt == {}
+
+    def test_kr_country_goes_to_title_ko(self):
+        ja, ko, zh, alt = assign_native_title_fields("극장판 짱구는 못말려", "KR")
+        assert ko == "극장판 짱구는 못말려"
+        assert ja == "" and zh == ""
+        assert alt == {}
+
+    def test_cn_country_goes_to_title_zh(self):
+        ja, ko, zh, alt = assign_native_title_fields("白蛇", "CN")
+        assert zh == "白蛇"
+        assert ja == "" and ko == ""
+        assert alt == {}
+
+    def test_tw_country_goes_to_title_zh(self):
+        ja, ko, zh, alt = assign_native_title_fields("幽遊白書", "TW")
+        assert zh == "幽遊白書"
+        assert ja == "" and ko == ""
+        assert alt == {}
+
+    def test_hk_country_goes_to_title_zh(self):
+        ja, ko, zh, alt = assign_native_title_fields("頭文字D", "HK")
+        assert zh == "頭文字D"
+        assert ja == "" and ko == ""
+        assert alt == {}
+
+    def test_other_country_goes_to_titles_alt(self):
+        ja, ko, zh, alt = assign_native_title_fields("Wakfu", "FR")
+        assert ja == "" and ko == "" and zh == ""
+        assert alt == {"native": "Wakfu"}
+
+    def test_none_country_defaults_to_jp(self):
+        ja, ko, zh, alt = assign_native_title_fields("Dr.STONE", None)
+        assert ja == "Dr.STONE"
+        assert ko == "" and zh == ""
+        assert alt == {}
+
+    def test_empty_string_returns_empty(self):
+        ja, ko, zh, alt = assign_native_title_fields("", "JP")
+        assert ja == "" and ko == "" and zh == ""
+        assert alt == {}
+
+    def test_empty_country_defaults_to_jp(self):
+        ja, ko, zh, alt = assign_native_title_fields("進撃の巨人", "")
+        assert ja == "進撃の巨人"
+        assert ko == "" and zh == ""
+        assert alt == {}

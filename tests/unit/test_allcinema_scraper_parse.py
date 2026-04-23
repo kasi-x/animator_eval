@@ -63,6 +63,14 @@ def test_cinema_returns_none_when_no_pagesetting():
     assert _parse_cinema_html("<html></html>", 1) is None
 
 
+def test_allcinema_anime_record_has_titles_alt_field():
+    """AllcinemaAnimeRecord should have titles_alt field (default empty dict)."""
+    from src.scrapers.parsers.allcinema import AllcinemaAnimeRecord
+    rec = AllcinemaAnimeRecord(cinema_id=1, title_ja="テスト")
+    assert hasattr(rec, 'titles_alt')
+    assert rec.titles_alt == "{}"
+
+
 # ---------------------------------------------------------------------------
 # Person page
 # ---------------------------------------------------------------------------

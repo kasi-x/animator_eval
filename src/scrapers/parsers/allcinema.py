@@ -30,6 +30,7 @@ class AllcinemaAnimeRecord:
     year: int | None = None
     start_date: str | None = None
     synopsis: str = ""
+    titles_alt: str = "{}"
     staff: list[AllcinemaCredit] = field(default_factory=list)
     cast: list[AllcinemaCredit] = field(default_factory=list)
 

@@ -61,6 +61,7 @@ class AnnAnimeRecord:
     genres: list[str] = field(default_factory=list)
     start_date: str | None = None
     end_date: str | None = None
+    titles_alt: str = "{}"
     staff: list[AnnStaffEntry] = field(default_factory=list)
 
 

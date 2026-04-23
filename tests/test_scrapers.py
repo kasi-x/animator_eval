@@ -3,6 +3,8 @@
 from src.runtime.models import Role
 from src.scrapers.anilist_scraper import parse_anilist_anime, parse_anilist_staff
 from src.scrapers.mal_scraper import parse_anime_data, parse_staff_data
+from src.scrapers.parsers.ann import AnnAnimeRecord
+from src.scrapers.parsers.allcinema import AllcinemaAnimeRecord
 
 
 class TestAniListParser:
@@ -97,6 +99,22 @@ class TestMALParser:
         assert persons[0].name_en == "Yasuhiro Irie"
         assert credits[0].role == Role.DIRECTOR
         assert credits[1].role == Role.EPISODE_DIRECTOR
+
+
+class TestANNParser:
+    def test_ann_anime_record_has_titles_alt_field(self):
+        """AnnAnimeRecord should have titles_alt field (default empty dict)."""
+        rec = AnnAnimeRecord(ann_id=1, title_en="Test Anime")
+        assert hasattr(rec, 'titles_alt')
+        assert rec.titles_alt == "{}"
+
+
+class TestAllcinemaParser:
+    def test_allcinema_anime_record_has_titles_alt_field(self):
+        """AllcinemaAnimeRecord should have titles_alt field (default empty dict)."""
+        rec = AllcinemaAnimeRecord(cinema_id=1, title_ja="テスト")
+        assert hasattr(rec, 'titles_alt')
+        assert rec.titles_alt == "{}"
 
     def test_parse_staff_missing_mal_id(self):
         staff_list = [{"person": {}, "positions": ["Director"]}]

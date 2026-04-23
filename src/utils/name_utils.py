@@ -341,6 +341,36 @@ def parse_anilist_native_name(
     return name_ja, name_ko, name_zh, names_alt_json, native, nationality
 
 
+def assign_native_title_fields(
+    title_native: str, country_of_origin: str | None
+) -> tuple[str, str, str, dict[str, str]]:
+    """Map a native-script title to (title_ja, title_ko, title_zh, titles_alt).
+
+    titles_alt is a dict for non-JP/KO/ZH origins: e.g. {"native": "Wakfu"}.
+
+    Args:
+        title_native: Native-script title from AniList or other source.
+        country_of_origin: ISO 3166-1 alpha-2 code (JP, KR, CN, TW, HK, etc.)
+                           or None (defaults to JP).
+
+    Returns:
+        (title_ja, title_ko, title_zh, titles_alt_dict)
+    """
+    if not title_native:
+        return ("", "", "", {})
+
+    country = (country_of_origin or "").upper() if country_of_origin else ""
+
+    if country in ("JP", "") or not country:
+        return (title_native, "", "", {})
+    if country == "KR":
+        return ("", title_native, "", {})
+    if country in ("CN", "TW", "HK"):
+        return ("", "", title_native, {})
+    # Other countries: store in titles_alt
+    return ("", "", "", {"native": title_native})
+
+
 def format_person_name(person: object, report_lang: str = "ja") -> str:
     """Return the best display name for a person given the report language.
 
