@@ -19,18 +19,38 @@ from src.utils.config import JSON_DIR  # noqa: F401 — imported for test monkey
 logger = structlog.get_logger()
 
 
-def _build_driver():
+def _build_driver(*, with_checkpoint: bool = False):
+    from pathlib import Path
+
     from hamilton import driver
     from src.pipeline_phases.hamilton_modules import (
         assembly, causal, core, genre, loading, metrics,
         network, resolution, scoring, studio,
     )
-    from src.pipeline_phases.lifecycle import TimingHook
+    from src.pipeline_phases.lifecycle import CheckpointHook, TimingHook
+
+    adapters: list = [TimingHook()]
+    if with_checkpoint:
+        adapters.append(CheckpointHook(Path(JSON_DIR)))
 
     return (
         driver.Builder()
         .with_modules(loading, resolution, scoring, metrics, assembly,
                       core, studio, genre, network, causal)
+        .with_adapters(*adapters)
+        .build()
+    )
+
+
+def _build_phase14_driver():
+    """Driver for Phases 1-4 only (loading + resolution).  Used on resume."""
+    from hamilton import driver
+    from src.pipeline_phases.hamilton_modules import loading, resolution
+    from src.pipeline_phases.lifecycle import TimingHook
+
+    return (
+        driver.Builder()
+        .with_modules(loading, resolution)
         .with_adapters(TimingHook())
         .build()
     )
@@ -52,8 +72,9 @@ def run_scoring_pipeline(
         dry_run: data validation only, no scoring
         enable_websocket: broadcast progress to connected WS clients
         incremental: skip pipeline when no credit changes since last run
-        resume: ignored in H-4; full execution always occurs
-                (CheckpointHook integration is a future TODO)
+        resume: attempt to resume from last checkpoint; re-runs Phases 1-4,
+                restores Phase 5-8 scores/results from checkpoint, then runs
+                Phase 9 analysis.  Falls back to full run if no valid checkpoint.
 
     Returns:
         list[dict] scoring results
@@ -76,12 +97,6 @@ def run_scoring_pipeline(
 
     t_start = time.monotonic()
     reset_monitor()
-
-    if resume:
-        logger.warning(
-            "resume_not_supported",
-            reason="H-4: CheckpointHook not yet implemented; running full pipeline",
-        )
 
     # ── DB setup ─────────────────────────────────────────────────────────────
     conn = get_connection()
@@ -141,9 +156,11 @@ def run_scoring_pipeline(
             pass
 
     # ── Hamilton: Phases 1-9 ─────────────────────────────────────────────────
-    dr = _build_driver()
+    from src.pipeline_phases.analysis_modules import run_analysis_modules_phase
+    from src.pipeline_phases.context import PipelineCheckpoint
 
     if dry_run:
+        dr = _build_driver()
         result = dr.execute(
             ["data_validated"],
             inputs={"visualize": visualize, "dry_run": True},
@@ -161,16 +178,41 @@ def run_scoring_pipeline(
             ws_broadcaster.complete_pipeline(0, elapsed)
         return []
 
-    result = dr.execute(
-        ["results_post_processed", "ctx"],
-        inputs={"visualize": visualize, "dry_run": False},
-    )
-    ctx = result["ctx"]
+    # ── Resume path ───────────────────────────────────────────────────────────
+    checkpoint_store = PipelineCheckpoint(JSON_DIR)
+    checkpoint = checkpoint_store.load() if resume else None
+    resumed = False
 
-    # ── Phase 9: Analysis modules ─────────────────────────────────────────────
-    from src.pipeline_phases.analysis_modules import run_analysis_modules_phase
+    if checkpoint is not None and checkpoint.get("last_completed_phase", 0) >= 7:
+        # Phases 1-4: re-run to reconstruct raw data / graphs
+        dr14 = _build_phase14_driver()
+        result14 = dr14.execute(
+            ["graphs_built", "ctx"],
+            inputs={"visualize": visualize, "dry_run": False},
+        )
+        ctx = result14["ctx"]
 
-    run_analysis_modules_phase(ctx)
+        if checkpoint_store.is_compatible(checkpoint, ctx):
+            checkpoint_store.restore_to_context(checkpoint, ctx)
+            logger.info(
+                "resume_from_checkpoint",
+                phase=checkpoint["last_completed_phase"],
+                persons=len(ctx.results),
+            )
+            run_analysis_modules_phase(ctx)
+            resumed = True
+        else:
+            logger.warning("resume_checkpoint_incompatible", falling_back="full_run")
+
+    if not resumed:
+        # Full Phase 1-8 run with CheckpointHook enabled
+        dr = _build_driver(with_checkpoint=True)
+        result = dr.execute(
+            ["results_post_processed", "ctx"],
+            inputs={"visualize": visualize, "dry_run": False},
+        )
+        ctx = result["ctx"]
+        run_analysis_modules_phase(ctx)
 
     elapsed = time.monotonic() - t_start
 
