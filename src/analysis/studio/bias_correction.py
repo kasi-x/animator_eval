@@ -1,4 +1,4 @@
-"""Studio Bias Correction — スタジオバイアスの補正.
+"""Studio Bias Correction — correction for studio bias.
 
 PageRankは「有名スタジオの人」に偏りやすい問題を解決。
 クロススタジオでの実績を重視し、真の実力を評価。
@@ -232,7 +232,7 @@ def debias_birank_scores(
     studio_prestige: dict[str, float],
     debias_strength: float = 0.3,
 ) -> dict[str, DebiasedScore]:
-    """BiRankスコアからスタジオバイアスを除去.
+    """Remove studio bias from BiRank scores.
 
     Args:
         person_scores: person_id → scores dict（birankを含む）
@@ -499,28 +499,24 @@ def compute_studio_disparity(
 
 def main():
     """Standalone entry point."""
-    from src.database import (
-        load_all_anime,
-        load_all_credits,
-        load_all_persons,
-        load_all_scores,
-        get_connection,
-        init_db,
+    from src.analysis.gold_writer import GoldReader
+    from src.analysis.silver_reader import (
+        load_anime_silver,
+        load_credits_silver,
+        load_persons_silver,
     )
 
-    conn = get_connection()
-    init_db(conn)
-
-    persons = load_all_persons(conn)
-    anime_list = load_all_anime(conn)
-    credits = load_all_credits(conn)
-    scores_list = load_all_scores(conn)
+    persons = load_persons_silver()
+    anime_list = load_anime_silver()
+    credits = load_credits_silver()
+    scores_list = GoldReader().person_scores()
 
     # build lookup maps
     anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
     person_scores = {
-        s.person_id: {"birank": s.birank, "iv_score": s.iv_score} for s in scores_list
+        s["person_id"]: {"birank": s["birank"], "iv_score": s["iv_score"]}
+        for s in scores_list
     }
 
     # studio bias analysis
@@ -576,8 +572,6 @@ def main():
         if primary:
             print(f"  スタジオ集中度: {primary.studio_concentration:.2f}")
         print()
-
-    conn.close()
 
 
 if __name__ == "__main__":

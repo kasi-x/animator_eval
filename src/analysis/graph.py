@@ -147,7 +147,7 @@ def create_person_anime_network(
                 prod_scale=w_prod,
                 roles=[c.role.value],
             )
-        # anime → person (逆方向)
+        # anime → person (reverse direction)
         if g.has_edge(c.anime_id, c.person_id):
             g[c.anime_id][c.person_id]["weight"] += weight
         else:
@@ -1345,25 +1345,19 @@ def main() -> None:
     """Entry point: load data from DB, build the graph, and save."""
     import json
 
-    from src.database import (
-        get_connection,
-        init_db,
-        load_all_anime,
-        load_all_credits,
-        load_all_persons,
+    from src.analysis.silver_reader import (
+        load_anime_silver,
+        load_credits_silver,
+        load_persons_silver,
     )
     from src.log import setup_logging
     from src.utils.config import JSON_DIR
 
     setup_logging()
 
-    conn = get_connection()
-    init_db(conn)
-
-    persons = load_all_persons(conn)
-    anime_list = load_all_anime(conn)
-    credits = load_all_credits(conn)
-    conn.close()
+    persons = load_persons_silver()
+    anime_list = load_anime_silver()
+    credits = load_credits_silver()
 
     if not credits:
         logger.warning("No credits found in DB. Run scraper first.")

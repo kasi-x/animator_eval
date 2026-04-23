@@ -1,4 +1,4 @@
-"""Growth Acceleration Analysis — 成長率・加速度分析.
+"""Growth Acceleration Analysis — growth rate and acceleration analysis.
 
 「今は無名だが急成長中」のクリエイターを発見。
 時系列データから成長トレンド、加速度、early career potentialを推定。
@@ -336,28 +336,23 @@ def compute_adjusted_person_fe_with_growth(
 
 def main():
     """Standalone entry point."""
-    from src.database import (
-        load_all_anime,
-        load_all_credits,
-        load_all_persons,
-        load_all_scores,
-        get_connection,
-        init_db,
+    from src.analysis.gold_writer import GoldReader
+    from src.analysis.silver_reader import (
+        load_anime_silver,
+        load_credits_silver,
+        load_persons_silver,
     )
 
-    conn = get_connection()
-    init_db(conn)
-
-    persons = load_all_persons(conn)
-    anime_list = load_all_anime(conn)
-    credits = load_all_credits(conn)
-    scores_list = load_all_scores(conn)
+    persons = load_persons_silver()
+    anime_list = load_anime_silver()
+    credits = load_credits_silver()
+    scores_list = GoldReader().person_scores()
 
     # build lookup maps
     anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
     person_scores = {
-        s.person_id: {"person_fe": s.person_fe, "iv_score": s.iv_score}
+        s["person_id"]: {"person_fe": s["person_fe"], "iv_score": s["iv_score"]}
         for s in scores_list
     }
 
@@ -423,8 +418,6 @@ def main():
         print(f"  元Skill: {original:.3f}")
         print(f"  調整後: {adjusted:.3f} (+{improvement:.3f})")
         print()
-
-    conn.close()
 
 
 if __name__ == "__main__":

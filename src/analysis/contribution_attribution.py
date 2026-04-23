@@ -1,4 +1,4 @@
-"""Contribution Attribution — 貢献度の帰属分析.
+"""Contribution Attribution — attribution analysis of individual contributions.
 
 作品の価値を各クリエイターにどう分配すべきかをShapley値で計算。
 「この人がいなかったら作品価値はどう変わったか？」を定量化。
@@ -532,30 +532,25 @@ def find_mvp_by_role(
 def main():
     """Standalone entry point."""
     from src.analysis.anime_value import compute_anime_values
-    from src.database import (
-        load_all_anime,
-        load_all_credits,
-        load_all_persons,
-        load_all_scores,
-        get_connection,
-        init_db,
+    from src.analysis.gold_writer import GoldReader
+    from src.analysis.silver_reader import (
+        load_anime_silver,
+        load_credits_silver,
+        load_persons_silver,
     )
 
-    conn = get_connection()
-    init_db(conn)
-
-    persons = load_all_persons(conn)
-    anime_list = load_all_anime(conn)
-    credits = load_all_credits(conn)
-    scores_list = load_all_scores(conn)
+    persons = load_persons_silver()
+    anime_list = load_anime_silver()
+    credits = load_credits_silver()
+    scores_list = GoldReader().person_scores()
 
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
     person_scores = {
-        s.person_id: {
-            "person_fe": s.person_fe,
-            "birank": s.birank,
-            "patronage": s.patronage,
-            "iv_score": s.iv_score,
+        s["person_id"]: {
+            "person_fe": s["person_fe"],
+            "birank": s["birank"],
+            "patronage": s["patronage"],
+            "iv_score": s["iv_score"],
         }
         for s in scores_list
     }
@@ -643,8 +638,6 @@ def main():
                 name = person_names.get(person_id, person_id)
                 print(f"  - {name}: Shapley={shapley:.1f} ({works}作品)")
             print()
-
-    conn.close()
 
 
 if __name__ == "__main__":

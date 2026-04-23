@@ -1,4 +1,4 @@
-"""Genre Specialization Analysis — ジャンル特化度分析.
+"""Genre Specialization Analysis — genre specialization degree analysis.
 
 クリエイターがどのジャンルに特化しているかを定量的に分析。
 ジャンルごとのスコア、多様性指標、ニッチ度などを計算し、
@@ -99,7 +99,7 @@ def compute_genre_profiles(
     Returns:
         person_id → GenreProfile
     """
-    # person_id → genre → [credits] のマッピング
+    # person_id → genre → [credits] mapping
     person_genre_credits: dict[str, dict[str, list[Credit]]] = defaultdict(
         lambda: defaultdict(list)
     )
@@ -158,7 +158,7 @@ def compute_genre_profiles(
         # primary genres
         primary_genre = max(genre_distribution.items(), key=lambda x: x[1])[0]
 
-        # Shannon entropy（多様性）
+        # Shannon entropy (diversity)
         entropy = 0.0
         for count in genre_distribution.values():
             p = count / total_anime
@@ -372,27 +372,22 @@ def find_similar_creators_by_genre(
 
 def main():
     """Standalone entry point."""
-    from src.database import (
-        load_all_anime,
-        load_all_credits,
-        load_all_persons,
-        load_all_scores,
-        get_connection,
-        init_db,
+    from src.analysis.gold_writer import GoldReader
+    from src.analysis.silver_reader import (
+        load_anime_silver,
+        load_credits_silver,
+        load_persons_silver,
     )
 
-    conn = get_connection()
-    init_db(conn)
-
-    persons = load_all_persons(conn)
-    anime_list = load_all_anime(conn)
-    credits = load_all_credits(conn)
-    scores_list = load_all_scores(conn)
+    persons = load_persons_silver()
+    anime_list = load_anime_silver()
+    credits = load_credits_silver()
+    scores_list = GoldReader().person_scores()
 
     # build lookup maps
     anime_map = {a.id: a for a in anime_list}
     person_names = {p.id: p.name_ja or p.name_en or p.id for p in persons}
-    scores_map = {s.person_id: {"iv_score": s.iv_score} for s in scores_list}
+    scores_map = {s["person_id"]: {"iv_score": s["iv_score"]} for s in scores_list}
 
     # compute genre profiles
     profiles = compute_genre_profiles(credits, anime_map, scores_map)
@@ -435,8 +430,6 @@ def main():
         for person_id, works, spec_score in specialists:
             name = person_names.get(person_id, person_id)
             print(f"  - {name}: {works}作品, 特化度{spec_score:.1f}")
-
-    conn.close()
 
 
 if __name__ == "__main__":

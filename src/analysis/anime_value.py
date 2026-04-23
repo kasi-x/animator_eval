@@ -1,4 +1,4 @@
-"""Anime Value Assessment — 作品価値の多次元評価.
+"""Anime Value Assessment — multi-dimensional work value evaluation.
 
 作品自体の価値を複数の次元で定量化:
 1. 商業的価値（人気・評価）
@@ -494,27 +494,19 @@ def find_overperforming_works(
 
 def main():
     """Standalone entry point."""
-    from src.database import (
-        load_all_anime,
-        load_all_credits,
-        load_all_scores,
-        get_connection,
-        init_db,
-    )
+    from src.analysis.gold_writer import GoldReader
+    from src.analysis.silver_reader import load_anime_silver, load_credits_silver
 
-    conn = get_connection()
-    init_db(conn)
-
-    anime_list = load_all_anime(conn)
-    credits = load_all_credits(conn)
-    scores_list = load_all_scores(conn)
+    anime_list = load_anime_silver()
+    credits = load_credits_silver()
+    scores_list = GoldReader().person_scores()
 
     person_scores = {
-        s.person_id: {
-            "person_fe": s.person_fe,
-            "birank": s.birank,
-            "patronage": s.patronage,
-            "iv_score": s.iv_score,
+        s["person_id"]: {
+            "person_fe": s["person_fe"],
+            "birank": s["birank"],
+            "patronage": s["patronage"],
+            "iv_score": s["iv_score"],
         }
         for s in scores_list
     }
@@ -565,7 +557,6 @@ def main():
         print(f"  作品価値: {value:.1f}")
         print()
 
-    conn.close()
 
 
 if __name__ == "__main__":
