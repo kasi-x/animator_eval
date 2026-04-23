@@ -26,6 +26,7 @@ from src.models import (
 from src.scrapers.cache_store import load_cached_json, save_cached_json
 from src.utils.episode_parser import parse_episodes
 from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL
+from src.utils.name_utils import assign_native_name_fields, infer_nationalities
 
 _env = dotenv_values(find_dotenv())
 
@@ -717,11 +718,19 @@ def parse_anilist_person(staff: dict) -> Person:
     years_active_raw = staff.get("yearsActive", [])
     years_active = [y for y in years_active_raw if y] if years_active_raw else []
 
+    native = name.get("native") or ""
+    hometown_val = staff.get("homeTown")
+    nationality = infer_nationalities(native, hometown_val)
+    name_ja, name_ko, name_zh = assign_native_name_fields(native, nationality)
+
     return Person(
         id=person_id,
-        name_ja=name.get("native") or "",
+        name_ja=name_ja,
+        name_ko=name_ko,
+        name_zh=name_zh,
         name_en=name.get("full") or "",
         aliases=aliases,
+        nationality=nationality,
         anilist_id=anilist_person_id,
         # Images
         image_large=image_large,
@@ -731,7 +740,7 @@ def parse_anilist_person(staff: dict) -> Person:
         age=staff.get("age"),
         gender=staff.get("gender"),
         years_active=years_active,
-        hometown=staff.get("homeTown"),
+        hometown=hometown_val,
         blood_type=staff.get("bloodType"),
         description=staff.get("description"),
         # Popularity
@@ -955,12 +964,20 @@ def parse_anilist_staff(
         years_active_raw = node.get("yearsActive", [])
         years_active = [y for y in years_active_raw if y] if years_active_raw else []
 
+        native = name.get("native") or ""
+        hometown_val = node.get("homeTown")
+        nationality = infer_nationalities(native, hometown_val)
+        name_ja, name_ko, name_zh = assign_native_name_fields(native, nationality)
+
         persons.append(
             Person(
                 id=person_id,
-                name_ja=name.get("native") or "",
+                name_ja=name_ja,
+                name_ko=name_ko,
+                name_zh=name_zh,
                 name_en=name.get("full") or "",
                 aliases=aliases,
+                nationality=nationality,
                 anilist_id=anilist_person_id,
                 # Images
                 image_large=image_large,
@@ -970,7 +987,7 @@ def parse_anilist_staff(
                 age=node.get("age"),
                 gender=node.get("gender"),
                 years_active=years_active,
-                hometown=node.get("homeTown"),
+                hometown=hometown_val,
                 blood_type=node.get("bloodType"),
                 description=node.get("description"),
                 # Popularity
@@ -1059,12 +1076,20 @@ def parse_anilist_voice_actors(
                 [y for y in years_active_raw if y] if years_active_raw else []
             )
 
+            native = name.get("native") or ""
+            hometown_val = va.get("homeTown")
+            nationality = infer_nationalities(native, hometown_val)
+            name_ja, name_ko, name_zh = assign_native_name_fields(native, nationality)
+
             persons.append(
                 Person(
                     id=person_id,
-                    name_ja=name.get("native") or "",
+                    name_ja=name_ja,
+                    name_ko=name_ko,
+                    name_zh=name_zh,
                     name_en=name.get("full") or "",
                     aliases=aliases,
+                    nationality=nationality,
                     anilist_id=anilist_person_id,
                     # Images
                     image_large=image_large,
@@ -1074,7 +1099,7 @@ def parse_anilist_voice_actors(
                     age=va.get("age"),
                     gender=va.get("gender"),
                     years_active=years_active,
-                    hometown=va.get("homeTown"),
+                    hometown=hometown_val,
                     blood_type=va.get("bloodType"),
                     description=va.get("description"),
                     # Popularity

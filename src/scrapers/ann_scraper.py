@@ -1,16 +1,16 @@
-"""Anime News Network Encyclopedia スクレイパー.
+"""Anime News Network Encyclopedia scraper.
 
-3フェーズ構成:
-  Phase 1 (masterlist): CDN から全アニメID一覧を取得
-  Phase 2 (anime):      XML API で各アニメのスタッフクレジットを取得
-  Phase 3 (persons):    XML API で人物メタデータを補完 (?people=ID)
+3-phase pipeline:
+  Phase 1 (masterlist): fetch all anime IDs from CDN
+  Phase 2 (anime):      fetch staff credits via XML API per anime ID
+  Phase 3 (persons):    fetch person metadata via HTML pages (people.php?id=N)
 
-データソース:
+Data sources:
   Masterlist : https://cdn.animenewsnetwork.com/encyclopedia/reports.xml?tag=masterlist&nlist=all
   Anime XML  : https://www.animenewsnetwork.com/encyclopedia/api.xml?anime=<id>
   People XML : https://www.animenewsnetwork.com/encyclopedia/api.xml?people=<id>
 
-レート制限: ANN は公式制限未公表。1 req/sec を基準とし、429/503 で指数バックオフ。
+Rate limit: ANN has no published limit. Default 1 req/sec with exponential backoff on 429/503.
 """
 
 from __future__ import annotations
@@ -40,13 +40,13 @@ MASTERLIST_URL = (
     "https://cdn.animenewsnetwork.com/encyclopedia/reports.xml?tag=masterlist&nlist=all"
 )
 ANIME_API_URL = "https://www.animenewsnetwork.com/encyclopedia/api.xml"
-PEOPLE_API_URL = ANIME_API_URL  # 人物も同じ XML エンドポイント: ?people=ID (現在は ignored を返す)
+PEOPLE_API_URL = ANIME_API_URL  # same XML endpoint as anime: ?people=ID (currently returns "ignored")
 PEOPLE_HTML_BASE = "https://www.animenewsnetwork.com/encyclopedia/people.php"
 
-# XML API では最大50IDをスラッシュ区切りでバッチ取得できる
+# XML API supports up to 50 IDs per request, slash-delimited
 BATCH_SIZE = 50
 
-DEFAULT_DELAY = max(SCRAPE_DELAY_SECONDS, 1.5)  # ANN は最低1.5秒間隔
+DEFAULT_DELAY = max(SCRAPE_DELAY_SECONDS, 1.5)  # ANN minimum 1.5s between requests
 
 HEADERS = {
     "User-Agent": (
@@ -59,14 +59,14 @@ HEADERS = {
 
 DEFAULT_DATA_DIR = Path("data/ann")
 
-# ANN の type 属性 (大文字小文字無視) → 内部 format 文字列
-# キーは小文字に正規化済み。lookup 側で .lower() してから引く。
+# Maps ANN type attribute (case-insensitive) → internal format string.
+# Keys are pre-normalized to lowercase; callers must call .lower() before lookup.
 _ANN_TYPE_MAP: dict[str, str] = {
     "tv": "TV",
     "tv special": "SPECIAL",
     "movie": "MOVIE",
     "ova": "OVA",
-    "oav": "OVA",  # ANN は OAV のほうが多い
+    "oav": "OVA",  # ANN uses "OAV" more often than "OVA"
     "ona": "ONA",
     "web": "ONA",
     "special": "SPECIAL",
@@ -75,20 +75,20 @@ _ANN_TYPE_MAP: dict[str, str] = {
 
 
 def _normalize_format(ann_type: str) -> str | None:
-    """ANN の type 属性を内部 format に正規化 (case-insensitive)."""
+    """Normalize ANN type attribute to internal format string (case-insensitive)."""
     return _ANN_TYPE_MAP.get(ann_type.strip().lower())
 
 app = typer.Typer()
 
 
-# ─── データクラス ─────────────────────────────────────────────────────────────
+# ─── Dataclasses ─────────────────────────────────────────────────────────────
 
 
 @dataclass
 class AnnStaffEntry:
     ann_person_id: int
     name_en: str
-    task: str  # 生のロール文字列
+    task: str  # raw role string as returned by ANN
 
 
 @dataclass
@@ -117,11 +117,11 @@ class AnnPersonDetail:
     description: str | None = None
 
 
-# ─── HTTP クライアント ────────────────────────────────────────────────────────
+# ─── HTTP client ────────────────────────────────────────────────────────────
 
 
 class AnnClient:
-    """ANN 非同期 HTTP クライアント (指数バックオフ付き)."""
+    """Async HTTP client for ANN with exponential backoff retry."""
 
     def __init__(self, delay: float = DEFAULT_DELAY) -> None:
         self._delay = delay
@@ -142,11 +142,11 @@ class AnnClient:
             await asyncio.sleep(wait)
         self._last_request = time.monotonic()
 
-    # 指数バックオフでリトライする HTTP ステータス
-    # 429: rate limit / 500-504: 一時的サーバエラー / 522,524: Cloudflare timeout
+    # HTTP status codes that trigger exponential backoff retry.
+    # 429: rate limit / 500-504: transient server errors / 522,524: Cloudflare timeout
     _RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504, 522, 524})
 
-    # ネットワーク層の一時障害として扱う httpx 例外
+    # httpx exceptions treated as transient network failures
     _RETRYABLE_EXC = (
         httpx.TimeoutException,
         httpx.ConnectError,
@@ -162,12 +162,12 @@ class AnnClient:
         *,
         max_attempts: int = 8,
     ) -> httpx.Response:
-        """GET リクエスト. 一時障害は指数バックオフでリトライ.
+        """GET with exponential backoff retry on transient failures.
 
-        リトライ対象:
+        Retries on:
           - HTTP 429, 500-504, 522, 524
-          - httpx の Timeout/Connect/Read/RemoteProtocol/PoolTimeout 例外
-        max_attempts 到達時は最後の例外 (またはレスポンス) を上位に伝播.
+          - httpx Timeout/Connect/Read/RemoteProtocol/PoolTimeout exceptions
+        Propagates the last exception (or response) after max_attempts.
         """
         backoff = 4.0
         attempt = 0
@@ -231,14 +231,14 @@ class AnnClient:
             return resp
 
 
-# ─── フェーズ 1: マスターリスト取得 ─────────────────────────────────────────
+# ─── Phase 1: masterlist fetch ───────────────────────────────────────────────
 
 
 async def fetch_masterlist(client: AnnClient) -> list[int]:
-    """CDN マスターリスト XML から全アニメ ID を取得する.
+    """Fetch all anime IDs from the CDN masterlist XML.
 
-    CDN エンドポイントが HTML を返す場合（URL 変更 / ブロック）は
-    ANN API への probe バッチで最大 ID を推定して連番リストにフォールバックする。
+    Falls back to _probe_max_id sequential list if the CDN endpoint returns HTML
+    (URL changed or blocked).
     """
     log.info("ann_masterlist_fetch_start", url=MASTERLIST_URL)
     try:
@@ -266,12 +266,12 @@ async def fetch_masterlist(client: AnnClient) -> list[int]:
 
 
 async def _probe_max_id(client: AnnClient) -> list[int]:
-    """API に probe バッチを投げて現在の最大 anime ID を推定し、連番リストを返す.
+    """Probe the API to estimate the current maximum anime ID and return a sequential list.
 
-    ANN の anime ID は概ね連番 (欠番あり)。実際の取得時に欠番は無視される。
-    2026年時点の上限は ~27000 程度。
+    ANN anime IDs are roughly sequential with gaps; gaps are silently skipped during fetching.
+    Upper bound as of 2026 is ~27000.
     """
-    # 既知の高 ID から二分探索で上限を探す
+    # probe near the known high watermark to find the current ceiling
     known_high = 27000
     probe_ids = list(range(known_high - 49, known_high + 1))
     try:
@@ -282,8 +282,7 @@ async def _probe_max_id(client: AnnClient) -> list[int]:
         found_ids = [int(el.get("id")) for el in root.findall("anime") if el.get("id")]
         if found_ids:
             max_found = max(found_ids)
-            # 上限に余裕を持たせる
-            max_id = max_found + 500
+            max_id = max_found + 500  # add buffer above highest found ID
         else:
             max_id = known_high
     except Exception:
@@ -294,21 +293,22 @@ async def _probe_max_id(client: AnnClient) -> list[int]:
     return ids
 
 
-# ─── フェーズ 2: アニメ XML 解析 ────────────────────────────────────────────
+# ─── Phase 2: anime XML parsing ─────────────────────────────────────────────
 
 
 def _parse_vintage(vintage: str) -> tuple[int | None, str | None, str | None]:
-    """Vintage 文字列から (year, start_date, end_date) を解析する.
+    """Parse a vintage string into (year, start_date, end_date).
 
-    例: "Apr 3, 1998 to Apr 24, 1999" → (1998, "1998-04-03", "1999-04-24")
-    例: "2001" → (2001, None, None)
+    Examples:
+      "Apr 3, 1998 to Apr 24, 1999" → (1998, "1998-04-03", "1999-04-24")
+      "2001" → (2001, None, None)
     """
     vintage = vintage.strip()
     year: int | None = None
     start_date: str | None = None
     end_date: str | None = None
 
-    # "MMM D?, YYYY [to MMM D?, YYYY]" パターン
+    # "MMM D?, YYYY [to MMM D?, YYYY]" pattern
     date_re = re.compile(
         r"(\w{3})\s+(\d{1,2}),\s+(\d{4})"
         r"(?:\s+to\s+(\w{3})\s+(\d{1,2}),\s+(\d{4}))?"
@@ -337,7 +337,7 @@ def _parse_vintage(vintage: str) -> tuple[int | None, str | None, str | None]:
             end_date = f"{ey}-{months.get(em, 1):02d}-{ed:02d}"
         return year, start_date, end_date
 
-    # "YYYY" のみ
+    # year-only fallback: "YYYY"
     m2 = re.search(r"\b(\d{4})\b", vintage)
     if m2:
         year = int(m2.group(1))
@@ -346,7 +346,7 @@ def _parse_vintage(vintage: str) -> tuple[int | None, str | None, str | None]:
 
 
 def parse_anime_xml(root: ET.Element) -> list[AnnAnimeRecord]:
-    """<ann> ルート要素から AnnAnimeRecord のリストを返す."""
+    """Parse an <ann> root element and return a list of AnnAnimeRecord."""
     records: list[AnnAnimeRecord] = []
 
     for anime_el in root.findall("anime"):
@@ -411,7 +411,7 @@ async def fetch_anime_batch(
     client: AnnClient,
     ann_ids: list[int],
 ) -> list[AnnAnimeRecord]:
-    """最大 BATCH_SIZE 個の ANN アニメ ID を XML API から一括取得する."""
+    """Fetch up to BATCH_SIZE anime IDs from the XML API in one request."""
     ids_str = "/".join(str(i) for i in ann_ids)
     resp = await client.get(f"{ANIME_API_URL}?anime={ids_str}")
     text = resp.text.lstrip()
@@ -426,11 +426,11 @@ async def fetch_anime_batch(
     return parse_anime_xml(root)
 
 
-# ─── フェーズ 3: 人物 XML 解析 ─────────────────────────────────────────────
+# ─── Phase 3: person XML parsing ─────────────────────────────────────────────
 
 
 def parse_person_xml(root: ET.Element) -> list[AnnPersonDetail]:
-    """ANN XML API レスポンス (<ann>) から AnnPersonDetail リストを返す."""
+    """Parse an ANN XML API response (<ann>) and return a list of AnnPersonDetail."""
     results: list[AnnPersonDetail] = []
     for person_el in root.findall("person"):
         ann_id_str = person_el.get("id")
@@ -458,7 +458,7 @@ def parse_person_xml(root: ET.Element) -> list[AnnPersonDetail]:
             if itype == "Japanese name":
                 name_ja = text
             elif itype == "birth date" and text:
-                # ISO 形式 or "Jan 5, 1941" 形式
+                # ISO format or "Jan 5, 1941" abbreviated-month format
                 if re.match(r"\d{4}-\d{2}-\d{2}", text):
                     date_of_birth = text
                 else:
@@ -497,10 +497,10 @@ async def fetch_person_batch(
     client: AnnClient,
     ann_ids: list[int],
 ) -> list[AnnPersonDetail]:
-    """ANN XML API から最大 BATCH_SIZE 人の詳細を一括取得する.
+    """Fetch up to BATCH_SIZE person details from the ANN XML API.
 
-    注意: 2026-04-23 時点で ?people=ID は <warning>ignored</warning> を返す。
-    Phase 3 では fetch_person_html() を使うこと。
+    NOTE: As of 2026-04-23, ?people=ID returns <warning>ignored</warning>.
+    Phase 3 uses fetch_person_html() instead.
     """
     ids_str = "/".join(str(i) for i in ann_ids)
     resp = await client.get(f"{PEOPLE_API_URL}?people={ids_str}")
@@ -516,9 +516,9 @@ async def fetch_person_batch(
     return parse_person_xml(root)
 
 
-# ─── フェーズ 3 (HTML): 人物 HTML スクレイピング ───────────────────────────────
+# ─── Phase 3 (HTML): person HTML scraping ────────────────────────────────────
 
-# HTML ページの <strong> ラベルテキスト (小文字, コロン除去) → フィールド名
+# Maps <strong> label text (lowercased, colon stripped) → AnnPersonDetail field name
 _HTML_LABEL_MAP: dict[str, str] = {
     "birthdate": "date_of_birth",
     "birth date": "date_of_birth",
@@ -533,13 +533,13 @@ _HTML_LABEL_MAP: dict[str, str] = {
 
 
 def _parse_dob_html(text: str) -> str | None:
-    """生年月日テキストを YYYY-MM-DD または YYYY に変換する.
+    """Normalise a date-of-birth string to YYYY-MM-DD or YYYY.
 
-    対応フォーマット:
-      "1941-01-05"            → "1941-01-05"  (ISO: そのまま)
-      "Jan 5, 1941"           → "1941-01-05"  (略月名)
-      "January 5, 1941"       → "1941-01-05"  (完全月名)
-      "1941"                  → "1941"         (年のみ)
+    Supported formats:
+      "1941-01-05"       → "1941-01-05"  (ISO, returned as-is)
+      "Jan 5, 1941"      → "1941-01-05"  (abbreviated month name)
+      "January 5, 1941"  → "1941-01-05"  (full month name)
+      "1941"             → "1941"         (year only)
     """
     text = text.strip()
     if re.match(r"\d{4}-\d{2}-\d{2}", text):
@@ -554,29 +554,29 @@ def _parse_dob_html(text: str) -> str | None:
 
 
 def parse_person_html(html: str, ann_id: int) -> AnnPersonDetail | None:
-    """ANN 人物ページ HTML (people.php?id=N) から AnnPersonDetail を抽出する.
+    """Extract AnnPersonDetail from an ANN person page (people.php?id=N).
 
-    ページ構造 (2026年4月時点):
+    Page structure (as of April 2026):
       <div id="page-title">
-        <h1 id="page_header">英語名</h1>
-        日本語名テキストノード (例: "山口 祐司")
+        <h1 id="page_header">English name</h1>
+        Japanese name text node (e.g. "山口 祐司")
       </div>
       <div id="infotype-N" class="encyc-info-type ...">
-        <strong>ラベル:</strong> <span>値</span>
+        <strong>Label:</strong> <span>value</span>
       </div>
     """
     from bs4 import BeautifulSoup
 
     soup = BeautifulSoup(html, "html.parser")
 
-    # Cloudflare チャレンジ / エラーページ検出
+    # detect Cloudflare challenge / error pages
     title_tag = soup.find("title")
     title_text = title_tag.get_text(" ", strip=True) if title_tag else ""
     if "just a moment" in title_text.lower():
         log.debug("ann_person_html_cf_block", ann_id=ann_id)
         return None
 
-    # 英語名: <h1 id="page_header"> が最も信頼性高い
+    # English name: <h1 id="page_header"> is the most reliable source
     h1 = soup.find("h1", id="page_header")
     if h1:
         name_en = h1.get_text(" ", strip=True)
@@ -587,7 +587,7 @@ def parse_person_html(html: str, ann_id: int) -> AnnPersonDetail | None:
     if not name_en:
         return None
 
-    # 日本語名: h1 の直後テキストノード (日本語文字を含む場合)
+    # Japanese name: text node immediately after h1 that contains CJK characters
     name_ja = ""
     if h1:
         for sib in h1.next_siblings:
@@ -596,7 +596,7 @@ def parse_person_html(html: str, ann_id: int) -> AnnPersonDetail | None:
                 name_ja = raw
                 break
 
-    # 日本語名フォールバック: infotype-13 (姓) + infotype-12 (名) を結合
+    # Japanese name fallback: concatenate infotype-13 (family) + infotype-12 (given)
     if not name_ja:
         family, given = "", ""
         for div in soup.find_all("div", id=re.compile(r"^infotype-(?:12|13)$")):
@@ -612,7 +612,7 @@ def parse_person_html(html: str, ann_id: int) -> AnnPersonDetail | None:
         if family or given:
             name_ja = f"{family} {given}".strip()
 
-    # その他フィールド: <div id="infotype-N"> から <strong> ラベルで分類
+    # other fields: classify from <div id="infotype-N"> via <strong> label text
     fields: dict[str, str] = {}
     for div in soup.find_all("div", id=re.compile(r"^infotype-")):
         strong = div.find("strong")
@@ -665,10 +665,10 @@ async def fetch_person_html(
     client: AnnClient,
     ann_id: int,
 ) -> AnnPersonDetail | None:
-    """ANN 人物 HTML ページ (people.php?id=NUM) から 1 人分の詳細を取得する.
+    """Fetch one person's detail from the ANN HTML page (people.php?id=NUM).
 
-    XML API (?people=ID) が <warning>ignored</warning> を返す問題の代替実装。
-    バッチ取得不可のため 1 リクエスト = 1 人物。
+    Replacement for the XML API (?people=ID) which returns <warning>ignored</warning>.
+    One request per person — batch fetching is not available via HTML.
     """
     try:
         resp = await client.get(PEOPLE_HTML_BASE, params={"id": ann_id})
@@ -684,11 +684,11 @@ async def fetch_person_html(
     return result
 
 
-# ─── Bronze 書き込みヘルパー ─────────────────────────────────────────────────
+# ─── Bronze write helpers ────────────────────────────────────────────────────
 
 
 def save_ann_anime(anime_bw, credits_bw, rec: AnnAnimeRecord) -> int:
-    """AnnAnimeRecord を BRONZE parquet に書き出してクレジット数を返す."""
+    """Write AnnAnimeRecord to BRONZE parquet and return the number of credits saved."""
     anime_row = dataclasses.asdict(rec)
     anime_row.pop("staff", None)
     anime_bw.append(anime_row)
@@ -703,11 +703,11 @@ def save_ann_anime(anime_bw, credits_bw, rec: AnnAnimeRecord) -> int:
 
 
 def save_person_detail(persons_bw, detail: AnnPersonDetail) -> None:
-    """AnnPersonDetail を BRONZE parquet に書き出す."""
+    """Write AnnPersonDetail to BRONZE parquet."""
     persons_bw.append(dataclasses.asdict(detail))
 
 
-# ─── チェックポイント ────────────────────────────────────────────────────────
+# ─── Checkpoint helpers ──────────────────────────────────────────────────────
 
 
 def _load_checkpoint(path: Path) -> dict:
@@ -723,21 +723,21 @@ def _save_checkpoint(path: Path, data: dict) -> None:
         json.dump(data, f, indent=2)
 
 
-# ─── typer コマンド ──────────────────────────────────────────────────────────
+# ─── typer commands ──────────────────────────────────────────────────────────
 
 
 @app.command("scrape-anime")
 def cmd_scrape_anime(
-    limit: int = typer.Option(0, help="取得するアニメ数の上限 (0=全件)"),
-    batch_size: int = typer.Option(BATCH_SIZE, help="XML API バッチサイズ"),
-    delay: float = typer.Option(DEFAULT_DELAY, help="リクエスト間隔(秒)"),
+    limit: int = typer.Option(0, help="Max anime to fetch (0=all)"),
+    batch_size: int = typer.Option(BATCH_SIZE, help="XML API batch size"),
+    delay: float = typer.Option(DEFAULT_DELAY, help="Delay between requests (seconds)"),
     checkpoint_interval: int = typer.Option(
-        SCRAPE_CHECKPOINT_INTERVAL, help="チェックポイント保存間隔"
+        SCRAPE_CHECKPOINT_INTERVAL, help="Checkpoint save interval"
     ),
-    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, help="チェックポイント保存先"),
-    resume: bool = typer.Option(True, help="チェックポイントから再開"),
+    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, help="Checkpoint directory"),
+    resume: bool = typer.Option(True, help="Resume from checkpoint"),
 ) -> None:
-    """Phase 1+2: マスターリスト取得 → アニメ XML スクレイピング."""
+    """Phase 1+2: fetch masterlist → scrape anime XML."""
     log_path = configure_file_logging("ann")
     log.info("ann_scrape_anime_command_start", log_file=str(log_path), limit=limit)
     asyncio.run(
@@ -770,7 +770,7 @@ async def _run_scrape_anime(
 
     client = AnnClient(delay=delay)
     try:
-        # Phase 1: マスターリスト
+        # Phase 1: masterlist
         if "all_ids" in cp:
             all_ids: list[int] = cp["all_ids"]
             log.info("ann_masterlist_from_checkpoint", count=len(all_ids))
@@ -806,7 +806,7 @@ async def _run_scrape_anime(
                 saved = save_ann_anime(anime_bw, credits_bw, rec)
                 total_anime += 1
                 total_credits += saved
-            # 空レスポンス (ID が存在しない等) も含め、バッチ全IDを完了扱いにする
+            # mark all IDs in the batch as done, including empty responses (non-existent IDs)
             for ann_id in batch:
                 completed.add(ann_id)
             done_this_run += len(batch)
@@ -840,20 +840,19 @@ async def _run_scrape_anime(
 
 @app.command("scrape-persons")
 def cmd_scrape_persons(
-    limit: int = typer.Option(0, help="取得する人物数の上限 (0=全件)"),
-    batch_size: int = typer.Option(BATCH_SIZE, help="(未使用; HTML は per-ID)"),
-    delay: float = typer.Option(DEFAULT_DELAY, help="リクエスト間隔(秒)"),
+    limit: int = typer.Option(0, help="Max persons to fetch (0=all)"),
+    batch_size: int = typer.Option(BATCH_SIZE, help="(unused; HTML is per-ID)"),
+    delay: float = typer.Option(DEFAULT_DELAY, help="Delay between requests (seconds)"),
     checkpoint_interval: int = typer.Option(
-        SCRAPE_CHECKPOINT_INTERVAL, help="チェックポイント保存間隔"
+        SCRAPE_CHECKPOINT_INTERVAL, help="Checkpoint save interval"
     ),
-    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, help="チェックポイント保存先"),
-    resume: bool = typer.Option(True, help="チェックポイントから再開"),
+    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, help="Checkpoint directory"),
+    resume: bool = typer.Option(True, help="Resume from checkpoint"),
 ) -> None:
-    """Phase 3: DB 内の ann_id を持つ全人物の HTML ページをスクレイプしてメタデータを補完する.
+    """Phase 3: scrape HTML pages for all persons with ann_id in the DB.
 
-    XML API (?people=ID) が <warning>ignored</warning> を返す問題のため、
-    people.php?id=NUM の HTML ページを 1 件ずつスクレイプする実装に切り替え済み。
-    バッチ取得不可のためスループットは約 40 件/分 (1.5s 間隔)。
+    Uses people.php?id=NUM HTML scraping because the XML API (?people=ID)
+    returns <warning>ignored</warning>. One request per person; throughput ~40/min at 1.5s intervals.
     """
     configure_file_logging("ann")
     asyncio.run(
@@ -870,7 +869,7 @@ def cmd_scrape_persons(
 
 async def _run_scrape_persons(
     limit: int,
-    batch_size: int,  # noqa: ARG001 — HTML は per-ID のためバッチ不使用
+    batch_size: int,  # noqa: ARG001 — unused; HTML scraping is per-ID, no batching
     delay: float,
     checkpoint_interval: int,
     data_dir: Path,
