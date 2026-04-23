@@ -13,7 +13,7 @@
 | 🟡 Maintenance | スキーマ後続 | v56 既存データ再スクレイプ (name_ja 誤入り修正)、v57 title.native |
 | 🟢 Future | データ修正 | WIKIDATA_ROLE_MAP 修正後の JVMG credits 再マップ |
 | ✅ Done | DuckDB | Card 05 era_fe / era_deflated_iv / opportunity_residual 実装 — era_fe + era_deflated_iv 完了 (export_and_viz.py)、opportunity_residual も individual_profiles から読み込み済み (2026-04-24) |
-| 🔴 High | Report methodology | Temporal foresight Section 3.3 holdout validation 実装 (temporal_foresight.py:102) |
+| 🟡 Medium | Report methodology | Temporal foresight Section 3.3 holdout validation 実装 (Option A、feat_career_annual / feat_person_scores データ投入後)。Option B (記述的分析rename) 完了 2026-04-24 |
 | ✅ Done | Test coverage | scraper E2E: anilist_scraper / seesaawiki_scraper / ann_scraper integration tests (18 cases, 6 each) — 2026-04-24 |
 | 🟡 Medium | Test coverage | llm_pipeline.py (574 lines) unit + integration test |
 
