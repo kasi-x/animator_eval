@@ -2600,8 +2600,6 @@ def main(
             # ===== PHASE 2A: スタッフリスト収集 (クレジットとID) =====
             from src.scrapers.bronze_writer import BronzeWriter
 
-            existing_person_ids = load_existing_person_ids_from_database()
-
             anime_bw = BronzeWriter("anilist", table="anime")
             credits_bw = BronzeWriter("anilist", table="credits")
             studios_bw = BronzeWriter("anilist", table="studios")

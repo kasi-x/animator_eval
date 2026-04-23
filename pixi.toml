@@ -49,6 +49,9 @@ scrape-allcinema-cinema = "python -m src.scrapers.allcinema_scraper cinema"
 scrape-allcinema-persons = "python -m src.scrapers.allcinema_scraper persons"
 scrape-keyframe = "python -m src.scrapers.keyframe_scraper"
 
+# ETL
+integrate = "python -m src.etl.integrate_duckdb"
+
 # Utilities
 synthetic = "python -m src.synthetic"
 build-rust = "maturin develop --release --manifest-path rust_ext/Cargo.toml --uv"

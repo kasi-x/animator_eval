@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import io
 import json
-import sqlite3
 import zipfile
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import httpx
-import pytest
 
 from src.models import Role, parse_role
 from src.scrapers.mediaarts_scraper import (
