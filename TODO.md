@@ -518,25 +518,18 @@ scripts/maintenance/
 
 ---
 
-## 🟡 SECTION 10: 関数分解候補
+## 🟡 SECTION 10: 関数分解候補 (2026-04-23 再計測後)
 
-セッション `944e32d` + `415aa3e` の続き。`ast` 抽出済みの 40 行以上の関数 (agent territory 除外)。
+セッション `944e32d` + `415aa3e` + 今セッションで大半が完了。`ast` 再計測 (2026-04-23) で残っている 40 行以上の関数:
 
 | 行数 | 場所 | 関数 | 注 |
 |---:|---|---|---|
-| 106 | `scripts/report_generators/html_templates.py:778` | `wrap_html_v2` | report 系の最頻 caller、効果大 |
-| 87 | `scripts/report_generators/html_templates.py:454` | `wrap_html` | 旧版だがまだ使用中 |
-| 86 | `src/utils/performance.py:268` | `print_report` | utils stable、テストもある |
-| 72 | `scripts/report_generators/report_brief.py:187` | `ReportBrief.validate` | vocab 検査含む validation chain |
-| 65 | `scripts/report_generators/html_templates.py:907` | `plotly_div_safe` | Plotly HTML 埋め込み |
-| 50 | `src/utils/json_io.py:500` | `save_pipeline_json_if_data_present` | 保存判定+書き込み混在 |
-| 49 | `scripts/report_generators/section_builder.py:145` | `validate_findings` | regex 検査 chain |
-| 46 | `src/utils/episode_parser.py:20` | `parse_episodes` | 文字列パース、case 分岐多 |
-| 42 | `src/utils/display_lookup.py:178` | `get_display_description` | bronze 経由の説明取得 |
-| 42 | `scripts/report_generators/section_builder.py:239` | `build_section` | section 組立 |
-| 40 | `src/utils/performance.py:208` | `generate_report` | レポート生成 |
+| 50 | `src/utils/json_io.py:500` | `save_pipeline_json_if_data_present` | ロジックは既に単純、分解より文書化が有効 |
+| 48 | `scripts/report_generators/html_templates.py:834` | `wrap_html_v2` | helpers 抽出済み、残りは f-string テンプレートのみ |
+| 43 | `scripts/report_generators/section_builder.py:178` | `SectionValidator.validate` | ✅ DONE (2026-04-23): 3 sub-method に分解 |
+| 40 | `scripts/report_generators/html_templates.py:454` | `_build_base_scripts_html` | JS 文字列を返すだけ、分解余地なし |
 
-**進め方**: Read → 概念の塊を identify → `_verb_noun` 名で extract → 元関数を recipe に → `pixi run pytest`
+**追加対象なし**: 上記以外は全て 40 行未満に収まった。
 
 **避けるべき** (agent が触る可能性): `src/validation.py:222 validate_data_freshness`, `src/monitoring.py:36 check_data_freshness` (DuckDB agent が触る)
 

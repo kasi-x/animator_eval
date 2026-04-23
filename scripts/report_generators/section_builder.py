@@ -175,6 +175,43 @@ class SectionBuilder:
             + self._check_prohibited_wordlist_ja(text, _PROHIBITED_SELECTION_JA, "Selection rhetoric in findings (JA)")
         )
 
+    def _check_required_sections(
+        self,
+        has_overview: bool,
+        has_findings: bool,
+        has_method_note: bool,
+        has_data_statement: bool,
+        has_disclaimers: bool,
+    ) -> None:
+        missing = []
+        if not has_overview:
+            missing.append("概要 / Overview")
+        if not has_findings:
+            missing.append("Findings")
+        if not has_method_note:
+            missing.append("Method Note")
+        if not has_data_statement:
+            missing.append("Data Statement")
+        if not has_disclaimers:
+            missing.append("Disclaimers")
+        if missing:
+            raise ValueError(f"Missing required sections: {', '.join(missing)}")
+
+    @staticmethod
+    def _check_method_note_source(has_method_note: bool, method_note_auto_generated: bool) -> None:
+        if has_method_note and not method_note_auto_generated:
+            raise ValueError("Method Note must be auto-generated from meta_lineage")
+
+    def _check_interpretation_has_alt(self, interpretation_html: str | None) -> None:
+        if not interpretation_html:
+            return
+        interp_lower = interpretation_html.lower()
+        has_alt = any(t.lower() in interp_lower for t in self._ALT_INTERPRETATION_TOKENS)
+        if not has_alt:
+            raise ValueError(
+                "Interpretation section must contain at least one alternative interpretation"
+            )
+
     def validate(
         self,
         *,
@@ -191,33 +228,11 @@ class SectionBuilder:
         Raises:
             ValueError: if required sections are missing or constraints are violated.
         """
-        missing: list[str] = []
-        if not has_overview:
-            missing.append("概要 / Overview")
-        if not has_findings:
-            missing.append("Findings")
-        if not has_method_note:
-            missing.append("Method Note")
-        if not has_data_statement:
-            missing.append("Data Statement")
-        if not has_disclaimers:
-            missing.append("Disclaimers")
-        if missing:
-            raise ValueError(f"Missing required sections: {', '.join(missing)}")
-
-        if has_method_note and not method_note_auto_generated:
-            raise ValueError("Method Note must be auto-generated from meta_lineage")
-
-        if interpretation_html:
-            interp_lower = interpretation_html.lower()
-            has_alt = any(
-                token.lower() in interp_lower for token in self._ALT_INTERPRETATION_TOKENS
-            )
-            if not has_alt:
-                raise ValueError(
-                    "Interpretation section must contain at least one "
-                    "alternative interpretation"
-                )
+        self._check_required_sections(
+            has_overview, has_findings, has_method_note, has_data_statement, has_disclaimers
+        )
+        self._check_method_note_source(has_method_note, method_note_auto_generated)
+        self._check_interpretation_has_alt(interpretation_html)
 
     @staticmethod
     def _render_findings_block(section: "ReportSection") -> str:
