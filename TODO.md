@@ -21,8 +21,10 @@
 
 ### v56 多言語名対応
 
-- [ ] 既存データ再スクレイプ: `hometown` 取得後に韓国・中国名の `name_ja` 誤入りを修正
-- [ ] ANN / allcinema スクレイパーの `name_ko`/`name_zh` 対応 (+ タイ/ベトナム等は `names_alt` へ)
+- [x] ANN / allcinema スクレイパーの `name_ko`/`name_zh` 対応 (3c45ab6 + bdba63f)
+- [x] `backfill_anilist_hometown.py` script + tests 実装 (573fed0, 13 tests pass)
+- [ ] **実行ペンディング**: 本番 DB で backfill 実行 (ユーザー承認後)
+      `pixi run python scripts/maintenance/backfill_anilist_hometown.py --dry-run` で件数確認 → apply
 
 ### v57 構造的メタデータ
 
@@ -32,7 +34,11 @@
 
 ## SECTION 3: データ修正 残務
 
-- [ ] 既存 JVMG-source の credits を再スクレイプ or 再マップ (WIKIDATA_ROLE_MAP 修正後)
+- [x] WIKIDATA_ROLE_MAP 修正済 (813d684)
+- ~~既存 JVMG credits 再マップ~~: **不要** (JVMG データは SILVER 未統合 → 旧マッピング汚染なし)
+- [ ] **オプション**: JVMG 初回統合を実施する場合:
+      1. `pixi run python -m src.scrapers.jvmg_fetcher --max-records 10000`
+      2. `pixi run python -c "from src.etl.integrate_duckdb import main; main()"`
 
 ---
 
