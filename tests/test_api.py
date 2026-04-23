@@ -428,6 +428,70 @@ def scores_data(tmp_path, monkeypatch):
     return tmp_path
 
 
+@pytest.fixture
+def persons_duckdb_data(tmp_path, monkeypatch):
+    """Fixture with actual silver.duckdb + gold.duckdb for persons endpoint tests."""
+    import duckdb
+    import src.analysis.gold_writer
+    import src.analysis.silver_reader
+    import src.api
+    import src.utils.json_io
+
+    monkeypatch.setattr(src.api, "JSON_DIR", tmp_path)
+    monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path)
+
+    silver_path = tmp_path / "silver.duckdb"
+    gold_path = tmp_path / "gold.duckdb"
+    monkeypatch.setattr(src.analysis.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(src.analysis.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+
+    # Create silver.duckdb
+    sconn = duckdb.connect(str(silver_path))
+    sconn.execute("""CREATE TABLE persons (
+        id VARCHAR PRIMARY KEY,
+        name_ja VARCHAR DEFAULT '',
+        name_en VARCHAR DEFAULT '',
+        name_ko VARCHAR DEFAULT '',
+        name_zh VARCHAR DEFAULT '',
+        aliases VARCHAR DEFAULT '[]',
+        image_medium VARCHAR
+    )""")
+    sconn.execute("CREATE TABLE anime (id VARCHAR PRIMARY KEY, title_en VARCHAR, year INTEGER)")
+    sconn.execute("""CREATE TABLE credits (
+        person_id VARCHAR,
+        anime_id VARCHAR,
+        role VARCHAR,
+        credit_year INTEGER,
+        evidence_source VARCHAR
+    )""")
+    for pid, ja, en in [("p1", "監督A", "Director A"), ("p2", "", "Animator B"), ("p3", "", "Newbie C")]:
+        sconn.execute("INSERT INTO persons(id,name_ja,name_en) VALUES (?,?,?)", [pid, ja, en])
+    sconn.execute("INSERT INTO anime VALUES ('a1','Anime 1',2023)")
+    sconn.execute("INSERT INTO credits VALUES ('p1','a1','director',2023,'test')")
+    sconn.execute("INSERT INTO credits VALUES ('p2','a1','key_animator',2023,'test')")
+    sconn.execute("INSERT INTO credits VALUES ('p3','a1','key_animator',2023,'test')")
+    sconn.close()
+
+    # Create gold.duckdb using GoldWriter DDL
+    from src.analysis.gold_writer import _DDL
+    gconn = duckdb.connect(str(gold_path))
+    gconn.execute(_DDL)
+    for pid, iv, bi, pa, fe, aw, do in [
+        ("p1", 71.0, 80.0, 70.0, 60.0, 0.5, 1.0),
+        ("p2", 47.75, 50.0, 40.0, 55.0, 0.3, 0.9),
+        ("p3", 10.75, 10.0, 5.0, 20.0, 0.1, 0.8),
+    ]:
+        gconn.execute(
+            "INSERT INTO person_scores(person_id,iv_score,birank,patronage,person_fe,awcc,dormancy)"
+            " VALUES (?,?,?,?,?,?,?)",
+            [pid, iv, bi, pa, fe, aw, do],
+        )
+    gconn.close()
+
+    src.utils.json_io.clear_json_cache()
+    return tmp_path
+
+
 class TestHealth:
     def test_health_endpoint(self, client):
         resp = client.get("/api/health")
@@ -459,14 +523,14 @@ class TestSummary:
 
 
 class TestListPersons:
-    def test_list_all(self, client, scores_data):
+    def test_list_all(self, client, persons_duckdb_data):
         resp = client.get("/api/persons")
         assert resp.status_code == 200
         data = resp.json()
         assert data["total"] == 3
         assert len(data["items"]) == 3
 
-    def test_pagination(self, client, scores_data):
+    def test_pagination(self, client, persons_duckdb_data):
         resp = client.get("/api/persons?page=1&per_page=2")
         data = resp.json()
         assert len(data["items"]) == 2
@@ -476,19 +540,19 @@ class TestListPersons:
         data2 = resp2.json()
         assert len(data2["items"]) == 1
 
-    def test_sort_by_birank(self, client, scores_data):
+    def test_sort_by_birank(self, client, persons_duckdb_data):
         resp = client.get("/api/persons?sort=birank")
         data = resp.json()
         values = [item["birank"] for item in data["items"]]
         assert values == sorted(values, reverse=True)
 
-    def test_invalid_sort(self, client, scores_data):
+    def test_invalid_sort(self, client, persons_duckdb_data):
         resp = client.get("/api/persons?sort=invalid")
         assert resp.status_code == 400
 
 
 class TestGetPerson:
-    def test_found(self, client, scores_data):
+    def test_found(self, client, persons_duckdb_data):
         resp = client.get("/api/persons/p1")
         assert resp.status_code == 200
         data = resp.json()
@@ -496,20 +560,20 @@ class TestGetPerson:
         assert data["birank"] == 80.0
         assert "career" in data
 
-    def test_not_found(self, client, scores_data):
+    def test_not_found(self, client, persons_duckdb_data):
         resp = client.get("/api/persons/nonexistent")
         assert resp.status_code == 404
 
 
 class TestSimilar:
-    def test_similar_persons(self, client, scores_data):
+    def test_similar_persons(self, client, persons_duckdb_data):
         resp = client.get("/api/persons/p1/similar?top_n=2")
         assert resp.status_code == 200
         data = resp.json()
         assert data["person_id"] == "p1"
         assert len(data["similar"]) <= 2
 
-    def test_similar_not_found(self, client, scores_data):
+    def test_similar_not_found(self, client, persons_duckdb_data):
         resp = client.get("/api/persons/nonexistent/similar")
         assert resp.status_code == 404
 

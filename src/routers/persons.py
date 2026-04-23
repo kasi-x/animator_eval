@@ -18,13 +18,13 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from src.analysis.explain import explain_individual_profile
+from src.analysis.gold_writer import GoldReader, gold_connect_with_silver
 from src.analysis.similarity import find_similar_persons
-from src.api_validators import PersonId, validate_query_string
-from src.database import (
-    db_connection,
-    get_score_history,
-    search_persons,
+from src.analysis.silver_reader import (
+    load_all_anime as silver_load_anime,
+    load_all_credits as silver_load_credits,
 )
+from src.api_validators import PersonId, validate_query_string
 from src.utils.json_io import (
     load_career_milestones_from_json,
     load_individual_profiles_from_json,
@@ -44,45 +44,55 @@ class PaginatedResponse(BaseModel):
     pages: int
 
 
-_PERSON_SELECT_SQL = """
-    SELECT s.person_id,
-           p.name_ja, p.name_en, p.image_medium,
-           s.iv_score, s.birank, s.patronage, s.person_fe,
-           s.awcc, s.dormancy, s.studio_fe_exposure,
-           MIN(c.credit_year) AS first_year,
-           MAX(c.credit_year) AS latest_year,
-           COUNT(DISTINCT c.anime_id) AS total_works,
-           (SELECT role FROM credits
-            WHERE person_id = s.person_id
-            GROUP BY role ORDER BY COUNT(*) DESC LIMIT 1) AS primary_role
-    FROM person_scores s
-    JOIN persons p ON s.person_id = p.id
-    LEFT JOIN credits c ON s.person_id = c.person_id
-    WHERE s.iv_score IS NOT NULL {extra_where}
-    GROUP BY s.person_id
+_PERSON_LIST_SQL = """
+WITH primary_roles AS (
+    SELECT person_id, arg_max(role, cnt) AS primary_role
+    FROM (SELECT person_id, role, COUNT(*) AS cnt FROM credits GROUP BY person_id, role)
+    GROUP BY person_id
+)
+SELECT
+    s.person_id,
+    p.name_ja, p.name_en, p.image_medium,
+    s.iv_score, s.birank, s.patronage, s.person_fe,
+    s.awcc, s.dormancy, s.studio_fe_exposure,
+    MIN(c.credit_year) AS first_year,
+    MAX(c.credit_year) AS latest_year,
+    COUNT(DISTINCT c.anime_id) AS total_works,
+    pr.primary_role
+FROM person_scores s
+JOIN persons p ON p.id = s.person_id
+LEFT JOIN credits c ON c.person_id = s.person_id
+LEFT JOIN primary_roles pr ON pr.person_id = s.person_id
+WHERE s.iv_score IS NOT NULL {extra_where}
+GROUP BY
+    s.person_id, p.name_ja, p.name_en, p.image_medium,
+    s.iv_score, s.birank, s.patronage, s.person_fe,
+    s.awcc, s.dormancy, s.studio_fe_exposure, pr.primary_role
+ORDER BY s.{sort} DESC NULLS LAST
+{limit_offset}
 """
 
 
-def _row_to_person(r) -> dict:
-    """Convert database row to person response dict with metadata disclaimer."""
+def _row_to_person(r: dict) -> dict:
+    """Convert database row dict to person response dict with metadata disclaimer."""
     return {
         "person_id": r["person_id"],
-        "name": r["name_ja"] or r["name_en"],
-        "name_ja": r["name_ja"],
-        "name_en": r["name_en"],
-        "image_medium": r["image_medium"],
-        "iv_score": r["iv_score"],
-        "birank": r["birank"],
-        "patronage": r["patronage"],
-        "person_fe": r["person_fe"],
-        "awcc": r["awcc"],
-        "dormancy": r["dormancy"],
-        "studio_fe_exposure": r["studio_fe_exposure"],
-        "primary_role": r["primary_role"],
+        "name": r.get("name_ja") or r.get("name_en"),
+        "name_ja": r.get("name_ja"),
+        "name_en": r.get("name_en"),
+        "image_medium": r.get("image_medium"),
+        "iv_score": r.get("iv_score"),
+        "birank": r.get("birank"),
+        "patronage": r.get("patronage"),
+        "person_fe": r.get("person_fe"),
+        "awcc": r.get("awcc"),
+        "dormancy": r.get("dormancy"),
+        "studio_fe_exposure": r.get("studio_fe_exposure"),
+        "primary_role": r.get("primary_role"),
         "career": {
-            "first_year": r["first_year"],
-            "latest_year": r["latest_year"],
-            "total_works": r["total_works"],
+            "first_year": r.get("first_year"),
+            "latest_year": r.get("latest_year"),
+            "total_works": r.get("total_works") or 0,
         },
         "metadata": {
             "disclaimer": (
@@ -118,20 +128,25 @@ def list_persons(
             status_code=400, detail=f"Invalid sort: {sort}. Use: {valid_sorts}"
         )
 
-    import sqlite3 as _sqlite3
-
-    with db_connection() as conn:
-        conn.row_factory = _sqlite3.Row
-        total = conn.execute(
-            "SELECT COUNT(DISTINCT s.person_id) FROM person_scores s WHERE s.iv_score IS NOT NULL"
-        ).fetchone()[0]
-        pages = (total + per_page - 1) // per_page
-        offset = (page - 1) * per_page
-        sql = _PERSON_SELECT_SQL.format(extra_where="")
-        rows = conn.execute(
-            f"{sql} ORDER BY s.{sort} DESC LIMIT ? OFFSET ?",
-            [per_page, offset],
-        ).fetchall()
+    offset = (page - 1) * per_page
+    try:
+        with gold_connect_with_silver() as conn:
+            total = conn.execute(
+                "SELECT COUNT(DISTINCT s.person_id) FROM person_scores s"
+                " WHERE s.iv_score IS NOT NULL"
+            ).fetchone()[0]
+            pages = (total + per_page - 1) // per_page
+            sql = _PERSON_LIST_SQL.format(
+                extra_where="",
+                sort=sort,
+                limit_offset=f"LIMIT {per_page} OFFSET {offset}",
+            )
+            rel = conn.execute(sql)
+            cols = [d[0] for d in rel.description]
+            rows = [dict(zip(cols, row)) for row in rel.fetchall()]
+    except Exception:
+        logger.warning("list_persons_gold_unavailable")
+        return PaginatedResponse(items=[], total=0, page=page, per_page=per_page, pages=0)
 
     items = [_row_to_person(r) for r in rows]
     return PaginatedResponse(
@@ -146,23 +161,54 @@ def search(
 ):
     """Person search (partial name/ID match)."""
     q = validate_query_string(q)
-    with db_connection() as conn:
-        results = search_persons(conn, q, limit=limit)
+    pattern = f"%{q}%"
+    sql = """
+        SELECT p.id, p.name_ja, p.name_en, p.name_ko, p.name_zh,
+               s.iv_score, s.person_fe, s.birank, s.patronage,
+               COUNT(c.anime_id) AS credit_count
+        FROM persons p
+        LEFT JOIN person_scores s ON s.person_id = p.id
+        LEFT JOIN credits c ON c.person_id = p.id
+        WHERE p.name_ja ILIKE ?
+           OR p.name_en ILIKE ?
+           OR p.name_ko ILIKE ?
+           OR p.name_zh ILIKE ?
+           OR p.aliases ILIKE ?
+           OR p.id ILIKE ?
+        GROUP BY p.id, p.name_ja, p.name_en, p.name_ko, p.name_zh,
+                 s.iv_score, s.person_fe, s.birank, s.patronage
+        ORDER BY s.iv_score DESC NULLS LAST
+        LIMIT ?
+    """
+    try:
+        with gold_connect_with_silver() as conn:
+            rel = conn.execute(sql, [pattern] * 6 + [limit])
+            cols = [d[0] for d in rel.description]
+            results = [dict(zip(cols, row)) for row in rel.fetchall()]
+    except Exception:
+        logger.warning("search_gold_unavailable")
+        results = []
     return {"query": q, "count": len(results), "results": results}
 
 
 @router.get("/api/persons/{person_id}")
 def get_person(person_id: PersonId):
     """Person profile (scores + breakdown)."""
-    import sqlite3 as _sqlite3
-
-    with db_connection() as conn:
-        conn.row_factory = _sqlite3.Row
-        sql = _PERSON_SELECT_SQL.format(extra_where="AND s.person_id = ?")
-        row = conn.execute(sql, [person_id]).fetchone()
+    try:
+        with gold_connect_with_silver() as conn:
+            sql = _PERSON_LIST_SQL.format(
+                extra_where="AND s.person_id = ?",
+                sort="iv_score",
+                limit_offset="",
+            )
+            rel = conn.execute(sql, [person_id])
+            cols = [d[0] for d in rel.description]
+            row = rel.fetchone()
+    except Exception:
+        raise HTTPException(status_code=404, detail=f"Person {person_id} not found")
     if row is None:
         raise HTTPException(status_code=404, detail=f"Person {person_id} not found")
-    return _row_to_person(row)
+    return _row_to_person(dict(zip(cols, row)))
 
 
 @router.get("/api/persons/{person_id}/similar")
@@ -171,22 +217,41 @@ def get_similar(
     top_n: int = Query(10, ge=1, le=50, description="Number of similar persons"),
 ):
     """Similar person search (cosine similarity)."""
-    import sqlite3 as _sqlite3
+    try:
+        with gold_connect_with_silver() as conn:
+            rel = conn.execute(
+                """
+                WITH primary_roles AS (
+                    SELECT person_id, arg_max(role, cnt) AS primary_role
+                    FROM (SELECT person_id, role, COUNT(*) AS cnt FROM credits GROUP BY person_id, role)
+                    GROUP BY person_id
+                )
+                SELECT s.person_fe, s.birank, s.patronage, s.awcc, s.dormancy,
+                       pr.primary_role
+                FROM person_scores s
+                LEFT JOIN primary_roles pr ON pr.person_id = s.person_id
+                WHERE s.person_id = ?
+                """,
+                [person_id],
+            )
+            target_row = rel.fetchone()
+            if target_row is None:
+                raise HTTPException(
+                    status_code=404, detail=f"Person {person_id} not found"
+                )
 
-    with db_connection() as conn:
-        conn.row_factory = _sqlite3.Row
-        target = conn.execute(
-            "SELECT person_fe, birank, patronage, awcc, dormancy,"
-            " (SELECT role FROM credits WHERE person_id=s.person_id"
-            "  GROUP BY role ORDER BY COUNT(*) DESC LIMIT 1) AS primary_role"
-            " FROM person_scores s WHERE s.person_id = ?",
-            [person_id],
-        ).fetchone()
-        if target is None:
-            raise HTTPException(status_code=404, detail=f"Person {person_id} not found")
-
-        sql = _PERSON_SELECT_SQL.format(extra_where="")
-        rows = conn.execute(f"{sql} ORDER BY s.iv_score DESC LIMIT 2000").fetchall()
+            sql = _PERSON_LIST_SQL.format(
+                extra_where="",
+                sort="iv_score",
+                limit_offset="LIMIT 2000",
+            )
+            rel2 = conn.execute(sql)
+            cols = [d[0] for d in rel2.description]
+            rows = [dict(zip(cols, row)) for row in rel2.fetchall()]
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="Score data unavailable")
 
     scores = [_row_to_person(r) for r in rows]
     similar = find_similar_persons(person_id, scores, top_n=top_n)
@@ -199,8 +264,8 @@ def get_person_history(
     limit: int = Query(50, ge=1, le=200, description="Number of history entries"),
 ):
     """Person score history."""
-    with db_connection() as conn:
-        history = get_score_history(conn, person_id, limit=limit)
+    gold = GoldReader()
+    history = gold.score_history_for(person_id)
     if not history:
         raise HTTPException(status_code=404, detail=f"No history for {person_id}")
     return {"person_id": person_id, "history": history}
@@ -213,11 +278,9 @@ def get_person_network(
 ):
     """Person ego graph (local network)."""
     from src.analysis.network.ego_graph import extract_ego_graph
-    from src.database import load_all_anime, load_all_credits
 
-    with db_connection() as conn:
-        credits = load_all_credits(conn)
-        anime_list = load_all_anime(conn)
+    credits = silver_load_credits()
+    anime_list = silver_load_anime()
 
     anime_map = {a.id: a for a in anime_list}
     scores = load_person_scores_from_json()
