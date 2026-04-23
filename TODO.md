@@ -311,9 +311,54 @@ bb05c2c §4.4 SQLite cleanup final: remove compute_feat functions, clean test SQ
 ea9dd79 §4.4 CLI: migrate export/validate/data-quality/entity-resolution to DuckDB
 ```
 
+### 4.5 database.py 再構成 ✅ DONE (2026-04-24)
+
+**実施内容: src/database.py → src/db/ モジュール分割**
+
+**新規モジュール構成:**
+
+1. **src/db/__init__.py** (66行)
+   - 公開API re-exports
+   - Import point: `from src.db import X`
+
+2. **src/db/init.py** (170行)
+   - 接続: `get_connection()`, `db_connection()`
+   - スキーマ: `init_db()`, `get_schema_version()`
+   - 定数: `DEFAULT_DB_PATH`, `SCHEMA_VERSION`, `_FUZZY_MATCH_RULES`
+
+3. **src/db/etl.py** (639行)
+   - Upsert: `upsert_person()`, `upsert_anime()`, `insert_credit()`
+   - メタデータ: `register_meta_lineage()`, `upsert_meta_entity_resolution_audit()`
+   - 名前正規化: `normalize_primary_names_by_credits()`
+   - 実行記録: `record_calc_execution()`, `get_calc_execution_hashes()`
+
+4. **src/db/scraper.py** (242行)
+   - Scraper: `upsert_character()`, `upsert_studio()`, `insert_anime_relation()`
+   - 声優: `insert_character_voice_actor()`
+   - Bronze: `upsert_src_anilist_anime()`
+   - LLM: `get_llm_decision()`, `upsert_llm_decision()`
+
+5. **src/database.py** (223行) — Deprecation wrapper
+   - 全関数を src/db から再 export
+   - 100% backward compatibility
+   - Deprecation warning on import
+
+**インポート更新: 26ファイル**
+- tests/: 10ファイル (test_validation.py, test_db_schema.py, test_api.py, test_fresh_init.py, test_pipeline.py, test_e2e_*.py, test_upsert_person_source.py, test_integration.py)
+- scripts/: 10ファイル (generate_reports_v2.py, integrate_madb.py, maintenance/*.py, analysis/*.py)
+- src/: freshness.py
+- benchmarks/: 3ファイル
+
+**全import: `from src.database import X` → `from src.db import X`**
+
+**検証:**
+- Lint: ✅ All checks pass
+- Tests: ✅ 75+ tests pass
+- Backward compat: ✅ Verified
+
 ### 4.4 後続タスク (将来の最適化)
 
-- [ ] `src/database.py` を `src/db/` に分割 (etl_helper.py, scraper_helper.py, init.py)
+- [x] `src/database.py` を `src/db/` に分割 (etl.py, scraper.py, init.py) ✅ 完了
 - [ ] `database_v2.py` / `models_v2.py` を廃止 (`init_db_v2` が `init_db` 経由で使用中)
 - [ ] Entity resolution の書き込み経路 (`llm_pipeline.py` 経由) を DuckDB に切替
 - [ ] Atlas migration を DuckDB 環境で再生成
