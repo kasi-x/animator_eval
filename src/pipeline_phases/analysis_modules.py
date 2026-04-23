@@ -176,7 +176,7 @@ def _run_outliers(context: PipelineContext) -> Any:
 
 def _run_teams(context: PipelineContext) -> Any:
     """Analyze team composition patterns."""
-    # iv_score で上位5%を閾値にする
+    # use top 5% of iv_score as the threshold for high-profile persons
     iv_vals = [r["iv_score"] for r in context.results if r["iv_score"] > 0]
     person_threshold = float(np.percentile(iv_vals, 95)) if iv_vals else 0.0
     top_persons = {
@@ -438,7 +438,7 @@ def _run_causal_identification(context: PipelineContext) -> Any:
 
 
 def _run_structural_estimation(context: PipelineContext) -> Any:
-    """Structural estimation with fixed effects and DID (研究レベルの構造推定)."""
+    """Structural estimation with fixed effects and DID (research-grade structural estimation)."""
     person_scores = context._shared_person_scores
 
     # Identify major studios
@@ -489,10 +489,10 @@ def _run_individual_contribution(context: PipelineContext) -> Any:
 
 
 def _compute_year_fingerprint(credits: list, anime_map: dict) -> dict[int, dict]:
-    """クレジットデータから年別フィンガープリントを計算する.
+    """Compute a per-year fingerprint of the credit data.
 
-    各年について (credit_count, anime_count, person_count) を集計。
-    BiRank 計算の入力が変化したかどうかを検出するために使用する。
+    Aggregates (credit_count, anime_count, person_count) per year.
+    Used to detect whether the BiRank computation inputs have changed.
     """
     from collections import defaultdict
 
@@ -520,14 +520,14 @@ def _find_earliest_changed_year(
     current_fp: dict[int, dict],
     stored_fp: dict[int, dict],
 ) -> int | None:
-    """入力データが変化した最初の年を返す。変化がなければ None。
+    """Return the earliest year where input data changed, or None if unchanged.
 
-    current_fp: 現在のクレジットデータから計算したフィンガープリント
-    stored_fp:  前回 BiRank を計算したときのフィンガープリント (DB から取得)
+    current_fp: fingerprint computed from the current credit data
+    stored_fp:  fingerprint from the last BiRank computation (loaded from DB)
 
-    年昇順で走査し、最初の不一致年を返す。
-    stored_fp にない年 (新年) も「変化あり」と判定する。
-    current_fp にない年が stored_fp にある (データ削除) も「変化あり」と判定する。
+    Scans years in ascending order and returns the first mismatch.
+    Years present in current_fp but not stored_fp (new data) count as changed.
+    Years present in stored_fp but not current_fp (deleted data) also count as changed.
     """
     all_years = sorted(set(current_fp) | set(stored_fp))
     for year in all_years:
@@ -541,14 +541,14 @@ def _find_earliest_changed_year(
 def _run_temporal_pagerank(context: PipelineContext) -> Any:
     """Compute temporal PageRank (yearly authority, foresight, promotions).
 
-    変更検出によるスキップ / 最小範囲再計算ロジック:
-    1. 年別フィンガープリント (credit_count / anime_count / person_count) を計算し、
-       前回計算時の値 (birank_compute_state) と比較する。
-    2. 変化がなければ計算をスキップする（return None）。
-    3. 変化が検出された場合、最初に変化した年 (resume_from) を特定する。
-    4. resume_from > checkpoint.last_year なら StreamingCheckpoint を使って差分計算。
-    5. resume_from <= checkpoint.last_year なら、チェックポイントが古い入力を含むため
-       チェックポイントを破棄してフルスクラッチ計算する。
+    Change-detection skip / minimal-range recomputation logic:
+    1. Compute per-year fingerprint (credit_count / anime_count / person_count)
+       and compare against the previous run's values (birank_compute_state).
+    2. If unchanged, skip computation (return None).
+    3. If a change is detected, find the earliest changed year (resume_from).
+    4. If resume_from > checkpoint.last_year, use StreamingCheckpoint for incremental computation.
+    5. If resume_from <= checkpoint.last_year, the checkpoint contains stale inputs;
+       discard it and recompute from scratch.
     """
     import sqlite3
 
@@ -557,10 +557,10 @@ def _run_temporal_pagerank(context: PipelineContext) -> Any:
 
     checkpoint_path = JSON_DIR / "birank_graph_checkpoint.pkl"
 
-    # --- 現在データのフィンガープリントを計算 ---
+    # --- compute fingerprint of current data ---
     current_fp = _compute_year_fingerprint(context.credits, context.anime_map)
 
-    # --- 保存済みフィンガープリントを DB から取得 ---
+    # --- load stored fingerprint from DB ---
     stored_fp: dict[int, dict] = {}
     try:
         conn_check = sqlite3.connect(DEFAULT_DB_PATH)
@@ -568,25 +568,25 @@ def _run_temporal_pagerank(context: PipelineContext) -> Any:
         stored_fp = load_birank_compute_state(conn_check)
         conn_check.close()
     except Exception:
-        pass  # テーブル未作成 → フルスクラッチで続行
+        pass  # table not yet created → run from scratch
 
-    # --- 変更検出: 最初に変化した年を特定 ---
+    # --- change detection: find the earliest year that changed ---
     resume_from = _find_earliest_changed_year(current_fp, stored_fp)
     if resume_from is None:
         logger.info("temporal_pagerank_skipped_no_changes")
-        return None  # _persist_birank_annual がこの None を検知してスキップ
+        return None  # _persist_birank_annual detects this None and skips persistence
 
     logger.info("temporal_pagerank_change_detected", resume_from=resume_from)
 
-    # --- チェックポイント読み込み ---
-    # チェックポイントは resume_from より前の状態を持っている場合のみ有効。
-    # resume_from <= checkpoint.last_year の場合、チェックポイントは
-    # 変更のあった年以降のデータを含んでいるため使用できない。
+    # --- load checkpoint ---
+    # A checkpoint is only usable when it precedes the earliest changed year.
+    # If resume_from <= checkpoint.last_year the checkpoint already contains data
+    # from the changed years and cannot be trusted.
     checkpoint: StreamingCheckpoint | None = None
     candidate = load_streaming_checkpoint(checkpoint_path)
     if candidate is not None:
         if candidate.last_year < resume_from:
-            checkpoint = candidate  # チェックポイント年 < 変更年 → 有効
+            checkpoint = candidate  # checkpoint year < change year → valid
             logger.info(
                 "birank_checkpoint_valid",
                 checkpoint_year=candidate.last_year,
@@ -599,7 +599,7 @@ def _run_temporal_pagerank(context: PipelineContext) -> Any:
                 resume_from=resume_from,
             )
 
-    # --- 計算実行 ---
+    # --- run computation ---
     result, final_checkpoint = compute_temporal_pagerank(
         credits=context.credits,
         anime_map=context.anime_map,
@@ -607,11 +607,11 @@ def _run_temporal_pagerank(context: PipelineContext) -> Any:
         resume_checkpoint=checkpoint,
     )
 
-    # --- チェックポイント保存 ---
+    # --- save checkpoint ---
     if final_checkpoint is not None:
         save_streaming_checkpoint(checkpoint_path, final_checkpoint)
 
-    # フィンガープリントを結果に含めてエクスポート側で保存できるようにする
+    # include fingerprint in result so the export phase can persist it
     result_dict = asdict(result)
     result_dict["_input_fingerprint"] = current_fp
     return result_dict
@@ -655,32 +655,32 @@ def _run_derived_params_report(context: PipelineContext) -> Any:
     import statistics
 
     report: dict = {
-        "description": "パイプライン計算過程で動的に導出された全パラメータ",
+        "description": "All parameters dynamically derived during pipeline computation",
         "sections": {},
     }
 
     # --- 1. BiRank Quality Calibration ---
     cal = context.quality_calibration or {}
     report["sections"]["birank_quality_calibration"] = {
-        "title": "BiRank品質キャリブレーション",
-        "description": "enhance_bipartite_quality()で推定されたパラメータ",
+        "title": "BiRank Quality Calibration",
+        "description": "Parameters estimated by enhance_bipartite_quality()",
         "parameters": {
             "role_damping": {
                 "value": cal.get("role_damping"),
                 "method": "1 - |Spearman ρ(role_weight, person_fe)|",
-                "interpretation": "役職階層の圧縮度。低い=役職を重視、高い=内容を重視",
+                "interpretation": "Role hierarchy compression. Low=emphasise role weight, high=emphasise content",
                 "range": "[0.1, 0.9]",
             },
             "blend": {
                 "value": cal.get("blend"),
-                "method": "チーム内person_fe変動係数(CV)中央値から導出",
-                "interpretation": "加重平均vs上澄みのバランス。高い=加重平均重視、低い=上澄み重視",
+                "method": "Derived from median coefficient of variation (CV) of person_fe within teams",
+                "interpretation": "Balance of weighted-average vs top-fraction. High=weighted-average, low=top-fraction",
                 "range": "[0.2, 0.8]",
             },
             "top_fraction": {
                 "value": cal.get("top_fraction"),
-                "method": "person_fe分布の歪度(skewness)から導出",
-                "interpretation": "上位何%をエリート層とみなすか",
+                "method": "Derived from skewness of the person_fe distribution",
+                "interpretation": "What top-X% is treated as the elite tier",
                 "range": "[0.10, 0.40]",
             },
         },
@@ -696,8 +696,8 @@ def _run_derived_params_report(context: PipelineContext) -> Any:
 
     # --- 2. IV PCA Weights ---
     report["sections"]["iv_pca_weights"] = {
-        "title": "Integrated Value PCA重み",
-        "description": "PCA第1主成分の負荷量から導出されたλ重み",
+        "title": "Integrated Value PCA weights",
+        "description": "Lambda weights derived from loadings of the first PCA component",
         "parameters": {
             name: {
                 "lambda_weight": round(w, 4),
@@ -726,12 +726,12 @@ def _run_derived_params_report(context: PipelineContext) -> Any:
     if staff_counts:
         median_staff = statistics.median(staff_counts)
         report["sections"]["staff_scale"] = {
-            "title": "スタッフ規模ベースライン",
-            "description": "アニメ毎のスタッフ数中央値をベースラインとして使用",
+            "title": "Staff scale baseline",
+            "description": "Median staff count per anime used as the scale=1.0 baseline",
             "parameters": {
                 "median_staff_count": round(median_staff, 1),
-                "method": "全アニメのスタッフ数中央値",
-                "interpretation": f"スタッフ{round(median_staff)}人の作品がscale=1.0",
+                "method": "Median staff count across all anime",
+                "interpretation": f"Works with {round(median_staff)} staff members have scale=1.0",
             },
             "diagnostics": {
                 "n_anime": len(staff_counts),
@@ -748,12 +748,12 @@ def _run_derived_params_report(context: PipelineContext) -> Any:
     if n_birank > 0:
         br_vals = list(context.birank_person_scores.values())
         report["sections"]["birank_rescaling"] = {
-            "title": "BiRankリスケーリング",
-            "description": "確率空間(sum=1)から期待値空間(mean=1)への変換",
+            "title": "BiRank rescaling",
+            "description": "Rescaling from probability space (sum=1) to expectation space (mean=1)",
             "parameters": {
                 "rescale_factor": n_birank,
-                "method": "×N (人数倍)",
-                "interpretation": "他のIV成分と同スケールにするための正規化",
+                "method": "×N (multiply by person count)",
+                "interpretation": "Normalisation to bring BiRank onto the same scale as other IV components",
             },
             "diagnostics": {
                 "n_persons": n_birank,
@@ -768,8 +768,8 @@ def _run_derived_params_report(context: PipelineContext) -> Any:
     if context.person_fe:
         pfe_vals = list(context.person_fe.values())
         report["sections"]["akm_person_fe"] = {
-            "title": "AKM個人固定効果の分布",
-            "description": "log(production_scale) = θ_i + ψ_j + ε — θ_iの分布",
+            "title": "AKM person fixed-effect distribution",
+            "description": "log(production_scale) = θ_i + ψ_j + ε — distribution of θ_i",
             "diagnostics": {
                 "n_persons": len(pfe_vals),
                 "mean": round(statistics.mean(pfe_vals), 4),
@@ -782,8 +782,8 @@ def _run_derived_params_report(context: PipelineContext) -> Any:
     if context.studio_fe:
         sfe_vals = list(context.studio_fe.values())
         report["sections"]["akm_studio_fe"] = {
-            "title": "AKMスタジオ固定効果の分布",
-            "description": "log(production_scale) = θ_i + ψ_j + ε — ψ_jの分布",
+            "title": "AKM studio fixed-effect distribution",
+            "description": "log(production_scale) = θ_i + ψ_j + ε — distribution of ψ_j",
             "diagnostics": {
                 "n_studios": len(sfe_vals),
                 "mean": round(statistics.mean(sfe_vals), 4),
@@ -799,7 +799,7 @@ def _run_derived_params_report(context: PipelineContext) -> Any:
         d_vals = list(context.dormancy_scores.values())
         active = sum(1 for v in d_vals if v >= 0.99)
         report["sections"]["dormancy"] = {
-            "title": "休眠ペナルティの分布",
+            "title": "Dormancy penalty distribution",
             "description": "D_i = exp(-λ × max(0, gap - grace))",
             "parameters": {
                 "decay_rate": 0.5,
@@ -819,7 +819,7 @@ def _run_derived_params_report(context: PipelineContext) -> Any:
         pat_vals = list(context.patronage_scores.values())
         nonzero = sum(1 for v in pat_vals if v > 0)
         report["sections"]["patronage"] = {
-            "title": "パトロネージプレミアムの分布",
+            "title": "Patronage premium distribution",
             "description": "Π_i = Σ PR_d × log(1 + N_shared)",
             "diagnostics": {
                 "n_persons": len(pat_vals),

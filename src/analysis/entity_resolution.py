@@ -107,9 +107,11 @@ def exact_match_cluster(
 
     Returns: {person_id: canonical_id}
     """
-    # 日本語名でのグループ化
+    # スクリプト別名前グループ
     ja_name_groups: dict[str, list[str]] = defaultdict(list)
-    # 英語名でのグループ化（日本語名を持たない人物のみ）
+    ko_name_groups: dict[str, list[str]] = defaultdict(list)
+    zh_name_groups: dict[str, list[str]] = defaultdict(list)
+    # 英語名でのグループ化（ネイティブ名を持たない人物のみ）
     en_name_groups: dict[str, list[str]] = defaultdict(list)
     # エイリアスでのグループ化
     alias_groups: dict[str, list[str]] = defaultdict(list)
@@ -117,13 +119,24 @@ def exact_match_cluster(
     persons_by_id = {p.id: p for p in persons}
 
     for p in persons:
-        # 日本語名がある場合は優先的に使用
+        has_native = False
         if p.name_ja:
             normalized_ja = normalize_name(p.name_ja)
             if normalized_ja:
                 ja_name_groups[normalized_ja].append(p.id)
-        # 日本語名がない場合のみ英語名でグループ化
-        elif p.name_en:
+                has_native = True
+        if p.name_ko:
+            normalized_ko = normalize_name(p.name_ko)
+            if normalized_ko:
+                ko_name_groups[normalized_ko].append(p.id)
+                has_native = True
+        if p.name_zh:
+            normalized_zh = normalize_name(p.name_zh)
+            if normalized_zh:
+                zh_name_groups[normalized_zh].append(p.id)
+                has_native = True
+        # 英語名はネイティブ名を持たない人物のみ
+        if not has_native and p.name_en:
             normalized_en = normalize_name(p.name_en)
             if normalized_en:
                 en_name_groups[normalized_en].append(p.id)
@@ -185,11 +198,15 @@ def exact_match_cluster(
                         name=name,
                     )
 
-    # 日本語名での統合（最優先）
+    # スクリプト別名前での統合（ネイティブ名は互いに独立）
     for name_ja, ids in ja_name_groups.items():
         _merge_group(ids, name_ja, "exact_match")
+    for name_ko, ids in ko_name_groups.items():
+        _merge_group(ids, name_ko, "exact_match")
+    for name_zh, ids in zh_name_groups.items():
+        _merge_group(ids, name_zh, "exact_match")
 
-    # 英語名での統合（日本語名を持たない人物のみ）
+    # 英語名での統合（ネイティブ名を持たない人物のみ）
     for name_en, ids in en_name_groups.items():
         _merge_group(ids, name_en, "exact_match")
 
@@ -198,8 +215,13 @@ def exact_match_cluster(
         if len(ids) < 2:
             continue
         unique_ids = list(dict.fromkeys(ids))
-        # エイリアスマッチは両方が日本語名を持たない場合のみ許可
-        valid_ids = [pid for pid in unique_ids if not persons_by_id[pid].name_ja]
+        # エイリアスマッチはネイティブ名を持たない場合のみ許可
+        valid_ids = [
+            pid for pid in unique_ids
+            if not (persons_by_id[pid].name_ja
+                    or persons_by_id[pid].name_ko
+                    or persons_by_id[pid].name_zh)
+        ]
         _merge_group(valid_ids, alias, "exact_match_alias")
 
     return canonical_map
@@ -306,14 +328,24 @@ def cross_source_match(persons: list[Person]) -> dict[str, str]:
         elif p.id.startswith("allcinema:"):
             allcinema_persons[p.id] = p
 
-    # AniList の正規化名インデックス（ja/en）
+    # AniList の正規化名インデックス（ja/ko/zh/en）
     anilist_ja_index: dict[str, list[str]] = defaultdict(list)
+    anilist_ko_index: dict[str, list[str]] = defaultdict(list)
+    anilist_zh_index: dict[str, list[str]] = defaultdict(list)
     anilist_en_index: dict[str, list[str]] = defaultdict(list)
     for pid, p in anilist_persons.items():
         if p.name_ja:
             n = normalize_name(p.name_ja)
             if n and len(n) >= 3:
                 anilist_ja_index[n].append(pid)
+        if p.name_ko:
+            n = normalize_name(p.name_ko)
+            if n and len(n) >= 2:
+                anilist_ko_index[n].append(pid)
+        if p.name_zh:
+            n = normalize_name(p.name_zh)
+            if n and len(n) >= 2:
+                anilist_zh_index[n].append(pid)
         if p.name_en:
             n = normalize_name(p.name_en)
             if n and len(n) >= 5:
@@ -331,7 +363,7 @@ def cross_source_match(persons: list[Person]) -> dict[str, str]:
 
     # MAL → AniList マッチング
     for anilist_pid, p in anilist_persons.items():
-        for name in [p.name_ja, p.name_en] + p.aliases:
+        for name in [p.name_ja, p.name_ko, p.name_zh, p.name_en] + p.aliases:
             n = normalize_name(name)
             if n and n in mal_name_index:
                 mal_ids = mal_name_index[n]
@@ -534,7 +566,7 @@ def similarity_based_cluster(
         name_to_ids: dict[str, list[str]] = defaultdict(list)
 
         for p in source_persons:
-            for name_field in [p.name_ja, p.name_en] + p.aliases:
+            for name_field in [p.name_ja, p.name_ko, p.name_zh, p.name_en] + p.aliases:
                 if not name_field:
                     continue
                 normalized = normalize_name(name_field)

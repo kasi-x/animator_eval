@@ -32,8 +32,8 @@ _ANCHOR_PRODUCTION_ROLES: frozenset[Role] = frozenset(
 
 logger = structlog.get_logger()
 
-# プレースホルダー・ゴミデータとして除外する人物名パターン
-# これらは実在の個人ではなく、クレジットデータの集合名やメタデータ
+# Person name patterns to exclude as placeholder / garbage data.
+# These are collective names or metadata in credit records, not real individuals.
 GARBAGE_PERSON_NAMES: frozenset[str] = frozenset(
     {
         "アニメ",
@@ -45,19 +45,19 @@ GARBAGE_PERSON_NAMES: frozenset[str] = frozenset(
     }
 )
 
-# 組織名として認識するためのパターン
-# 実在の個人ではなく、放送局・スタジオ・制作会社がクレジット行に記載されたケース
+# Patterns to identify organization names.
+# Broadcasters, studios, and production companies sometimes appear as credit entries.
 _ORG_SUFFIX_RE = re.compile(
     r"(?:"
     r"テレビ$|テレビジョン$|テレビ動画$|テレビ東京$|テレビ朝日$|テレビ大阪$|"
     r"放送$|放送局$|フジテレビ|NHK$|TBS$|日本テレビ$|"
     r"アニメーション$|スタジオ$|プロダクション$|プロダクツ$|エンタプライズ$|"
     r"エンタープライズ$|エンタテインメント$|エンターテインメント$|"
-    r"エンタテイメント$|"  # contracted spelling (ベガエンタテイメント etc.)
+    r"エンタテイメント$|"  # contracted spelling variant (e.g. ベガエンタテイメント)
     r"ホールディングス$|コミュニケーションズ$|エージェンシー$|"
     r"製作委員会$|制作委員会$|実行委員会$|"  # production committees
-    r"現像所$|撮影所$|"  # labs and studios (東京現像所 etc.)
-    r"動画$|"  # 東映動画, テレビ動画 etc.
+    r"現像所$|撮影所$|"  # film labs and studios (e.g. 東京現像所)
+    r"動画$|"  # animation studios (e.g. 東映動画, テレビ動画)
     # English company suffixes (case-insensitive)
     r"Pictures$|Studio$|Studios$|Animation$|Entertainment$|Productions$|"
     r"Filmworks$|Arts$"
@@ -65,7 +65,7 @@ _ORG_SUFFIX_RE = re.compile(
     re.IGNORECASE,
 )
 
-# 先頭が記号類 → ゴミデータ (例: "○フジテレビ[ロゴ]", "※以下…", "★")
+# Leading special symbol → garbage data (e.g. "○フジテレビ[ロゴ]", "※以下…", "★")
 _ORG_SYMBOL_RE = re.compile(r"^[○◎★☆●■□\[【※〔◆▼▶]")
 
 
@@ -333,7 +333,7 @@ def load_pipeline_data(context: PipelineContext, conn: sqlite3.Connection) -> No
         logger.info("filtered_garbage_persons", count=len(garbage_ids))
 
     # Filter out persons with ONLY non-production credits (voice actors, singers, etc.)
-    # Persons with at least one production credit (兼任者) are preserved.
+    # Persons with at least one production credit (dual-role staff) are preserved.
     filtered_persons, non_production_ids = _filter_non_production_persons(
         valid_persons, all_credits
     )

@@ -246,7 +246,7 @@ def run_entity_resolution(
     """
     with context.monitor.measure("entity_resolution"):
         # === Person entity resolution ===
-        # クレジット・アニメメタを渡して ML ホモニム分割を有効化
+        # pass credits and anime metadata to enable ML homonym splitting
         credits_by_person: dict[str, list] = defaultdict(list)
         for c in context.credits:
             credits_by_person[c.person_id].append(c)
@@ -282,9 +282,9 @@ def run_entity_resolution(
                 "persons_resolved", len(context.canonical_map)
             )
 
-            # 数値IDを canonical person に伝播する
-            # 例: ANN person が AniList person にマージされたとき、
-            # AniList person の ann_id に ANN person の ann_id をセットする
+            # propagate numeric IDs to the canonical person record.
+            # e.g. when an ANN person is merged into an AniList person,
+            # the AniList person's ann_id is set from the ANN person's ann_id.
             persons_by_id = {p.id: p for p in context.persons}
             for dup_id, canonical_id in context.canonical_map.items():
                 dup = persons_by_id.get(dup_id)

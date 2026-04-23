@@ -1,7 +1,7 @@
-"""データ品質バリデーション — パイプライン実行前のデータ整合性チェック.
+"""Data quality validation — integrity checks run before pipeline execution.
 
-孤立クレジット、欠損データ、異常値などを検出し、
-スコアリングの信頼性を担保する。
+Detects orphan credits, missing data, and outliers to ensure
+scoring reliability.
 """
 
 import sqlite3
@@ -14,7 +14,7 @@ logger = structlog.get_logger()
 
 @dataclass
 class ValidationResult:
-    """バリデーション結果."""
+    """Validation result container."""
 
     passed: bool = True
     errors: list[str] = field(default_factory=list)
@@ -30,10 +30,10 @@ class ValidationResult:
 
 
 def validate_referential_integrity(conn: sqlite3.Connection) -> ValidationResult:
-    """参照整合性チェック — 孤立クレジットの検出."""
+    """Referential integrity check — detect orphan credits."""
     result = ValidationResult()
 
-    # 存在しない person_id を参照するクレジット
+    # credits referencing non-existent person_id
     orphan_person = conn.execute("""
         SELECT COUNT(*) FROM credits c
         LEFT JOIN persons p ON c.person_id = p.id
@@ -45,7 +45,7 @@ def validate_referential_integrity(conn: sqlite3.Connection) -> ValidationResult
             f"orphan_credits_person: {orphan_person} credits reference non-existent persons"
         )
 
-    # 存在しない anime_id を参照するクレジット
+    # credits referencing non-existent anime_id
     orphan_anime = conn.execute("""
         SELECT COUNT(*) FROM credits c
         LEFT JOIN anime a ON c.anime_id = a.id
@@ -64,10 +64,10 @@ def validate_referential_integrity(conn: sqlite3.Connection) -> ValidationResult
 
 
 def validate_data_completeness(conn: sqlite3.Connection) -> ValidationResult:
-    """データ完全性チェック — 名前・タイトル欠損の検出."""
+    """Data completeness check — detect missing names and titles."""
     result = ValidationResult()
 
-    # 名前が両方空の人物
+    # persons with both name_ja and name_en empty
     nameless = conn.execute("""
         SELECT COUNT(*) FROM persons
         WHERE name_ja = '' AND name_en = ''
@@ -78,7 +78,7 @@ def validate_data_completeness(conn: sqlite3.Connection) -> ValidationResult:
             f"nameless_persons: {nameless} persons have no name (ja or en)"
         )
 
-    # タイトルが両方空のアニメ
+    # anime with both title_ja and title_en empty
     titleless = conn.execute("""
         SELECT COUNT(*) FROM anime
         WHERE title_ja = '' AND title_en = ''
@@ -87,7 +87,7 @@ def validate_data_completeness(conn: sqlite3.Connection) -> ValidationResult:
     if titleless > 0:
         result.add_warning(f"titleless_anime: {titleless} anime have no title")
 
-    # 年が不明のアニメ
+    # anime with no year
     no_year = conn.execute("""
         SELECT COUNT(*) FROM anime WHERE year IS NULL
     """).fetchone()[0]
@@ -95,7 +95,7 @@ def validate_data_completeness(conn: sqlite3.Connection) -> ValidationResult:
     if no_year > 0:
         result.add_warning(f"no_year_anime: {no_year} anime have no year")
 
-    # スコアが不明のアニメ (display metadata from bronze src_anilist_anime via anime_external_ids)
+    # anime with no score (display metadata from bronze src_anilist_anime via anime_external_ids)
     no_score = conn.execute("""
         SELECT COUNT(*)
         FROM anime a
@@ -124,10 +124,10 @@ def validate_data_completeness(conn: sqlite3.Connection) -> ValidationResult:
 
 
 def validate_credit_distribution(conn: sqlite3.Connection) -> ValidationResult:
-    """クレジット分布チェック — 異常な偏りの検出."""
+    """Credit distribution check — detect unusual skew."""
     result = ValidationResult()
 
-    # クレジットなしの人物
+    # persons with no credits
     no_credits = conn.execute("""
         SELECT COUNT(*) FROM persons p
         LEFT JOIN credits c ON p.id = c.person_id
@@ -139,7 +139,7 @@ def validate_credit_distribution(conn: sqlite3.Connection) -> ValidationResult:
             f"persons_without_credits: {no_credits} persons have no credits"
         )
 
-    # クレジットなしのアニメ
+    # anime with no credits
     no_anime_credits = conn.execute("""
         SELECT COUNT(*) FROM anime a
         LEFT JOIN credits c ON a.id = c.anime_id
@@ -151,7 +151,7 @@ def validate_credit_distribution(conn: sqlite3.Connection) -> ValidationResult:
             f"anime_without_credits: {no_anime_credits} anime have no credits"
         )
 
-    # 極端にクレジットが多い人物（上位1%が異常値でないか）
+    # persons with extreme credit counts (check if top 1% are outliers)
     top_credits = conn.execute("""
         SELECT person_id, COUNT(*) as cnt FROM credits
         GROUP BY person_id ORDER BY cnt DESC LIMIT 5
@@ -182,10 +182,10 @@ def validate_credit_distribution(conn: sqlite3.Connection) -> ValidationResult:
 
 
 def validate_credit_quality(conn: sqlite3.Connection) -> ValidationResult:
-    """クレジット品質チェック — 重複・異常パターンの検出."""
+    """Credit quality check — detect duplicates and abnormal patterns."""
     result = ValidationResult()
 
-    # 同一人物×同一作品で多数の役職（5以上は異常の可能性）
+    # same person × same anime with many distinct roles (5+ may indicate an anomaly)
     multi_role = conn.execute("""
         SELECT person_id, anime_id, COUNT(DISTINCT role) as role_count
         FROM credits
@@ -198,7 +198,7 @@ def validate_credit_quality(conn: sqlite3.Connection) -> ValidationResult:
             f"multi_role_credits: {len(multi_role)} person-anime pairs have 5+ distinct roles"
         )
 
-    # 同一ソースからの重複（同じ person×anime×role が複数エピソードで）
+    # same-source duplicates (same person × anime × role across multiple episodes)
     source_dupes = conn.execute("""
         SELECT evidence_source AS source_code, COUNT(*) as total,
                COUNT(DISTINCT person_id || '|' || anime_id || '|' || role) as unique_count
@@ -223,11 +223,11 @@ def validate_data_freshness(
     conn: sqlite3.Connection,
     stale_years: int = 5,
 ) -> ValidationResult:
-    """データ鮮度チェック — 古いデータの検出.
+    """Data freshness check — detect stale data.
 
     Args:
-        conn: DB接続
-        stale_years: これ以上前のデータを「古い」とみなす年数
+        conn: DB connection
+        stale_years: threshold in years; data older than this is considered stale
     """
     from datetime import datetime
 
@@ -235,7 +235,7 @@ def validate_data_freshness(
     current_year = datetime.now().year
     cutoff_year = current_year - stale_years
 
-    # 最新のアニメ年
+    # most recent anime year in DB
     latest = conn.execute(
         "SELECT MAX(year) FROM anime WHERE year IS NOT NULL"
     ).fetchone()[0]
@@ -245,7 +245,7 @@ def validate_data_freshness(
             f"no data from last {stale_years} years"
         )
 
-    # データソースごとの最新クレジット年
+    # most recent credit year per data source
     source_freshness = conn.execute("""
         SELECT c.evidence_source AS source_code, MAX(a.year) as latest_year, COUNT(*) as credit_count
         FROM credits c
@@ -264,7 +264,7 @@ def validate_data_freshness(
             f"stale_sources: {', '.join(stale_sources)} have no data from last {stale_years} years"
         )
 
-    # 直近でクレジットのない人物の割合（活動停止検出）
+    # fraction of persons with no recent credits (inactivity detection)
     inactive = conn.execute(
         """
         SELECT COUNT(DISTINCT c.person_id) FROM credits c
@@ -285,7 +285,7 @@ def validate_data_freshness(
             f"({inactive_count / total_persons:.0%}) have no credits since {cutoff_year}"
         )
 
-    # 単一ソースのみのクレジット割合
+    # fraction of persons credited by only a single source
     single_source = conn.execute("""
         SELECT COUNT(*) FROM (
             SELECT person_id FROM credits
@@ -319,7 +319,7 @@ def validate_data_freshness(
 
 
 def validate_all(conn: sqlite3.Connection) -> ValidationResult:
-    """全バリデーションを実行する."""
+    """Run all validation checks and return a combined result."""
     combined = ValidationResult()
 
     checks = [

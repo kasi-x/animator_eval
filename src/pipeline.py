@@ -1,6 +1,6 @@
-"""統合パイプライン — データ収集→名寄せ→グラフ構築→スコアリング→出力.
+"""Integrated pipeline — data collection → entity resolution → graph construction → scoring → export.
 
-全フェーズを順次実行するオーケストレーター。
+Orchestrator that runs all phases sequentially.
 
 This refactored version decomposes the monolithic pipeline into 10 modular
 phases in src/pipeline_phases/, reducing this file from 930→150 lines while
@@ -53,19 +53,19 @@ def run_scoring_pipeline(
     incremental: bool = False,
     resume: bool = False,
 ) -> list[dict]:
-    """スコアリングパイプラインを実行する.
+    """Run the scoring pipeline.
 
-    前提: DBにクレジットデータが既に存在すること。
+    Precondition: credit data must already exist in the database.
 
     Args:
-        visualize: 可視化を生成するか
-        dry_run: True の場合、データ検証のみ行いスコア計算は行わない
-        enable_websocket: WebSocket進捗配信を有効にするか (default: True)
-        incremental: True の場合、前回実行からデータ変化がなければキャッシュ結果を返す
-        resume: True の場合、前回クラッシュした地点から再開する
+        visualize: whether to generate visualizations
+        dry_run: if True, perform data validation only without computing scores
+        enable_websocket: enable WebSocket progress broadcasting (default: True)
+        incremental: if True, return cached results when no data has changed since last run
+        resume: if True, resume from the last crash checkpoint
 
     Returns:
-        list[dict]: スコア計算結果 (person_id, composite, authority, trust, skill, etc.)
+        list[dict]: scoring results (person_id, composite, authority, trust, skill, etc.)
 
     Pipeline Phases:
         1. data_loading: Load persons, anime, credits from database
@@ -146,8 +146,8 @@ def run_scoring_pipeline(
             ws_broadcaster.error_phase(1, "Data Loading", "No credits in database")
         return []
 
-    # Phase 1.5: 派生特徴量の事前集計 (best-effort, non-blocking)
-    # クレジット生データから計算し、次フェーズ以降・レポート生成で再利用可能にする
+    # Phase 1.5: pre-aggregate derived features (best-effort, non-blocking)
+    # Computed from raw credit data; reusable by subsequent phases and report generators
     try:
         compute_feat_credit_activity(
             conn,
@@ -168,8 +168,8 @@ def run_scoring_pipeline(
         compute_feat_person_role_progression(conn, current_year=context.current_year)
     except Exception:
         logger.exception("feat_person_role_progression_skipped")
-    # NOTE: compute_feat_credit_contribution / feat_work_context / feat_causal_estimates は
-    # feat_person_scores 依存のため export_and_visualize_phase (Phase 10) で呼び出す
+    # NOTE: compute_feat_credit_contribution / feat_work_context / feat_causal_estimates depend on
+    # feat_person_scores, so they are called in export_and_visualize_phase (Phase 10)
 
     # Phase 2: Validation
     logger.info("step_start", step="validation")
@@ -376,10 +376,13 @@ def run_scoring_pipeline(
     context.monitor.record_memory("pipeline_end")
     context.monitor.log_summary()
 
-    # Export performance report to JSON
+    # Export performance report to JSON (keep only the last 10)
     perf_report_path = JSON_DIR / f"performance_{time.strftime('%Y%m%d_%H%M%S')}.json"
     context.monitor.export_report(perf_report_path)
     logger.info("performance_report_saved", path=str(perf_report_path))
+    old_perf = sorted(JSON_DIR.glob("performance_*.json"))[:-10]
+    for p in old_perf:
+        p.unlink(missing_ok=True)
 
     logger.info(
         "pipeline_complete", elapsed=round(elapsed, 2), persons=len(context.results)
@@ -393,7 +396,7 @@ def run_scoring_pipeline(
 
 
 def main() -> None:
-    """エントリーポイント."""
+    """Entry point."""
     import argparse
 
     from src.log import setup_logging

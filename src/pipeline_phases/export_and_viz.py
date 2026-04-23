@@ -1064,7 +1064,7 @@ def _persist_features_to_db(context: PipelineContext) -> None:
             upsert_feat_network(conn, context.results)
             upsert_feat_career(conn, context.results)
 
-            # --- feat_network: bridge_score / n_bridge_communities (bridges 分析結果) ---
+            # --- feat_network: bridge_score / n_bridge_communities (from bridges analysis) ---
             bridges_analysis = context.analysis_results.get("bridges") or {}
             bridge_persons = bridges_analysis.get("bridge_persons") or []
             if bridge_persons:
@@ -1145,19 +1145,19 @@ def _persist_features_to_db(context: PipelineContext) -> None:
                 contrib_rows=len(contrib_rows),
             )
 
-            # feat_credit_contribution は feat_person_scores が確定した後に計算
+            # feat_credit_contribution must run after feat_person_scores is finalized
             compute_feat_credit_contribution(conn)
 
-            # feat_work_context: credit_contribution の career_year を使うため後続
+            # feat_work_context: runs after credit_contribution (needs its career_year)
             try:
                 compute_feat_work_context(conn, current_year=context.current_year)
                 compute_feat_work_scale_tier(
                     conn
-                )  # format+episodes+durationで規模ティア付与
+                )  # assigns scale tier from format + episodes + duration
             except Exception:
                 logger.exception("feat_work_context_skipped")
 
-            # feat_person_role_progression: Phase 1.5 でも動くが scores 後に更新
+            # feat_person_role_progression: can run at Phase 1.5 but updated after scores
             try:
                 compute_feat_person_role_progression(
                     conn, current_year=context.current_year
@@ -1165,19 +1165,19 @@ def _persist_features_to_db(context: PipelineContext) -> None:
             except Exception:
                 logger.exception("feat_person_role_progression_skipped")
 
-            # feat_causal_estimates: パイプライン context から因果推論結果を保存
+            # feat_causal_estimates: persist causal inference results from pipeline context
             try:
                 _persist_causal_estimates(conn, context)
             except Exception:
                 logger.exception("feat_causal_estimates_skipped")
 
-            # feat_cluster_membership: 複数クラスタリング次元を1行に集約
+            # feat_cluster_membership: aggregate multiple clustering dimensions into one row
             try:
                 _persist_cluster_membership(conn, context)
             except Exception:
                 logger.exception("feat_cluster_membership_skipped")
 
-            # feat_birank_annual: 年次BiRankスナップショット (1980年以降)
+            # feat_birank_annual: annual BiRank snapshots (1980 onwards)
             try:
                 _persist_birank_annual(conn, context)
             except Exception:
@@ -1189,27 +1189,27 @@ def _persist_features_to_db(context: PipelineContext) -> None:
 
 
 def _persist_causal_estimates(conn: Any, context: PipelineContext) -> None:
-    """因果推論結果を feat_causal_estimates に保存する.
+    """Persist causal inference results to feat_causal_estimates.
 
-    PipelineContext の peer_effect_result, career_friction, era_effects から
-    per-person の値を収集して upsert する。
+    Collects per-person values from PipelineContext.peer_effect_result,
+    career_friction, and era_effects, then upserts them.
     """
     from src.database import upsert_feat_causal_estimates
 
-    # ピア効果: person_peer_boost (per-person)
+    # peer effect: person_peer_boost (per-person)
     peer_boosts: dict[str, float] = {}
     if context.peer_effect_result is not None and context.peer_effect_result.identified:
         peer_boosts = context.peer_effect_result.person_peer_boost or {}
 
-    # キャリア摩擦指数 (per-person)
+    # career friction index (per-person)
     friction_index: dict[str, float] = context.career_friction or {}
 
-    # 時代固定効果: era_fe は年→値のマップ。各人のデビュー年に対応する値を割り当てる
+    # era fixed effect: era_fe is a year→value map; assign value for each person's debut year
     era_fe_by_person: dict[str, float] = {}
     if context.era_effects is not None:
         era_fe: dict[int, float] = getattr(context.era_effects, "era_fe", {}) or {}
         if era_fe:
-            # 各 person のデビュー年を credits から取得
+            # fetch debut year for each person from credits
             debut_rows = conn.execute("""
                 SELECT person_id, MIN(credit_year) AS debut_year
                 FROM credits
@@ -1217,12 +1217,12 @@ def _persist_causal_estimates(conn: Any, context: PipelineContext) -> None:
                 GROUP BY person_id
             """).fetchall()
             for row in debut_rows:
-                # デビュー年の era_fe（なければ最近傍年で補完）
+                # use era_fe at debut year; fall back to nearest year if missing
                 dy = row["debut_year"]
                 if dy in era_fe:
                     era_fe_by_person[row["person_id"]] = era_fe[dy]
                 else:
-                    # 最近傍年で補完
+                    # interpolate from nearest available year
                     nearest = min(era_fe.keys(), key=lambda y: abs(y - dy))
                     era_fe_by_person[row["person_id"]] = era_fe[nearest]
 
@@ -1245,9 +1245,9 @@ def _persist_causal_estimates(conn: Any, context: PipelineContext) -> None:
 
 
 def _persist_cluster_membership(conn: Any, context: PipelineContext) -> None:
-    """各クラスタリング次元を feat_cluster_membership に保存する.
+    """Persist each clustering dimension to feat_cluster_membership.
 
-    - community_map (Phase 4 グラフコミュニティ)
+    - community_map (Phase 4 graph communities)
     - career_tracks (Phase 6)
     - growth_trend (Phase 9 analysis: growth)
     - studio_cluster (Phase 9 analysis: studio_clustering + feat_studio_affiliation)
@@ -1279,11 +1279,11 @@ def _persist_cluster_membership(conn: Any, context: PipelineContext) -> None:
 
 
 def _persist_birank_annual(conn: Any, context: PipelineContext) -> None:
-    """年次BiRankスナップショットを feat_birank_annual に保存し、フィンガープリントを記録する.
+    """Persist annual BiRank snapshots to feat_birank_annual and record the input fingerprint.
 
-    temporal_pagerank が None を返した場合（変更なし判定でスキップ）は何もしない。
-    計算が実行された場合は全年のスナップショットをアップサートし（ON CONFLICT DO UPDATE）、
-    次回の変更検出に使うフィンガープリントを birank_compute_state に書き込む。
+    No-ops when temporal_pagerank returned None (skipped due to no data changes).
+    When computation ran: upserts all year snapshots (ON CONFLICT DO UPDATE) and
+    writes the input fingerprint to birank_compute_state for next-run change detection.
     """
     from src.database import (
         _BIRANK_ANNUAL_MIN_YEAR,
@@ -1293,19 +1293,19 @@ def _persist_birank_annual(conn: Any, context: PipelineContext) -> None:
 
     temporal_pr = _get_analysis_result(context, "temporal_pagerank", None)
     if not temporal_pr:
-        return  # None (スキップ) or empty dict
+        return  # None (skipped) or empty dict
 
     birank_timelines = temporal_pr.get("birank_timelines", {})
     if not birank_timelines:
         return
 
-    # 変更のあった年を含む全年分をアップサート（ON CONFLICT DO UPDATE で上書き可）
+    # upsert all years including changed ones (ON CONFLICT DO UPDATE overwrites)
     upsert_feat_birank_annual(conn, birank_timelines, min_year=_BIRANK_ANNUAL_MIN_YEAR)
 
-    # 今回の計算に使った入力フィンガープリントを記録（次回変更検出に使用）
+    # record the input fingerprint used in this run (for next-run change detection)
     input_fp: dict[int, dict] = temporal_pr.get("_input_fingerprint", {})
     if input_fp:
-        # int キーは JSON ラウンドトリップで str に変換されることがあるため正規化
+        # int keys may be stringified through a JSON round-trip; normalize back to int
         normalized: dict[int, dict] = {int(y): v for y, v in input_fp.items()}
         upsert_birank_compute_state(conn, normalized)
 

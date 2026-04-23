@@ -8,6 +8,7 @@ Also provides PipelineCheckpoint for crash resume support.
 """
 
 import datetime
+import gzip
 import json
 import time
 from dataclasses import dataclass, field
@@ -189,7 +190,7 @@ class PipelineCheckpoint:
     - Phase 10 (export): Delete checkpoint on success
     """
 
-    CHECKPOINT_FILENAME = "pipeline_checkpoint.json"
+    CHECKPOINT_FILENAME = "pipeline_checkpoint.json.gz"
 
     def __init__(self, checkpoint_dir: Path):
         self.checkpoint_dir = checkpoint_dir
@@ -233,7 +234,7 @@ class PipelineCheckpoint:
             data["analysis_results"] = serializable
 
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        with open(self.checkpoint_path, "w") as f:
+        with gzip.open(self.checkpoint_path, "wt", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False)
 
         checkpoint_logger.debug(
@@ -245,7 +246,7 @@ class PipelineCheckpoint:
         if not self.checkpoint_path.exists():
             return None
         try:
-            with open(self.checkpoint_path) as f:
+            with gzip.open(self.checkpoint_path, "rt", encoding="utf-8") as f:
                 data = json.load(f)
             checkpoint_logger.info(
                 "checkpoint_loaded",
