@@ -15,7 +15,7 @@
 | ✅ Done | DuckDB | Card 05 era_fe / era_deflated_iv / opportunity_residual 実装 — era_fe + era_deflated_iv 完了 (export_and_viz.py)、opportunity_residual も individual_profiles から読み込み済み (2026-04-24) |
 | 🟡 Medium | Report methodology | Temporal foresight Section 3.3 holdout validation 実装 (Option A、feat_career_annual / feat_person_scores データ投入後)。Option B (記述的分析rename) 完了 2026-04-24 |
 | ✅ Done | Test coverage | scraper E2E: anilist_scraper / seesaawiki_scraper / ann_scraper integration tests (18 cases, 6 each) — 2026-04-24 |
-| 🟡 Medium | Test coverage | llm_pipeline.py (574 lines) unit + integration test |
+| ✅ Done | Test coverage | llm_pipeline.py (574 lines): 50 unit + integration tests (eb3837a) — 2026-04-24 |
 
 **完了済み大項目** (→ `DONE.md`): anime.score 汚染除去、Phase 1-4 基盤、DuckDB §4 全フェーズ、Hamilton H-1〜H-7 (PipelineContext 完全削除)、レポート統廃合 §8、アーキテクチャ §9/11、ドキュメント §12、テストカバレッジ §6、feat_* 層別分離 §13、scraper queries/parsers 分離 §3、§7.1 差分更新 (hash比較フィルタ + E2E)、§7.3 retry refactor、§9 similarity/recommendation スタブ化
 
