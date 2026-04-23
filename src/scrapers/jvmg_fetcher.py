@@ -256,15 +256,8 @@ def main(
     ),
 ) -> None:
     """Wikidata からアニメスタッフデータを収集する."""
-    from src.database import (
-        db_connection,
-        init_db,
-        insert_credit,
-        update_data_source,
-        upsert_person,
-    )
-    from src.etl.integrate import upsert_canonical_anime
     from src.log import setup_logging
+    from src.scrapers.bronze_writer import BronzeWriter
 
     setup_logging()
 
@@ -294,60 +287,64 @@ def main(
         offset = start_offset
         pages_since_checkpoint = 0
 
+        anime_bw = BronzeWriter("jvmg", table="anime")
+        persons_bw = BronzeWriter("jvmg", table="persons")
+        credits_bw = BronzeWriter("jvmg", table="credits")
+
         try:
-            with db_connection() as conn:
-                init_db(conn)
+            while offset < max_records:
+                log.info("fetching_wikidata", source="wikidata", offset=offset)
+                query = ANIME_STAFF_QUERY.format(limit=page_size, offset=offset)
+                bindings = await client.query(query)
+                if not bindings:
+                    break
 
-                while offset < max_records:
-                    log.info("fetching_wikidata", source="wikidata", offset=offset)
-                    query = ANIME_STAFF_QUERY.format(limit=page_size, offset=offset)
-                    bindings = await client.query(query)
-                    if not bindings:
-                        break
+                anime_list, persons, credits = parse_wikidata_results(bindings)
+                for anime in anime_list:
+                    anime_bw.append(anime.model_dump(mode="json"))
+                    total_anime += 1
+                for person in persons:
+                    persons_bw.append(person.model_dump(mode="json"))
+                    total_persons += 1
+                for credit in credits:
+                    credits_bw.append(credit.model_dump(mode="json"))
+                    total_credits += 1
 
-                    anime_list, persons, credits = parse_wikidata_results(bindings)
-                    for anime in anime_list:
-                        upsert_canonical_anime(conn, anime, evidence_source="wikidata")
-                        total_anime += 1
-                    for person in persons:
-                        upsert_person(conn, person)
-                        total_persons += 1
-                    for credit in credits:
-                        insert_credit(conn, credit)
-                        total_credits += 1
+                pages_since_checkpoint += 1
+                offset += page_size
 
-                    pages_since_checkpoint += 1
-                    offset += page_size
+                # Flush checkpoint every N pages
+                if pages_since_checkpoint >= checkpoint_interval:
+                    anime_bw.flush()
+                    persons_bw.flush()
+                    credits_bw.flush()
+                    _save_checkpoint(
+                        CHECKPOINT_FILE,
+                        {
+                            "last_offset": offset,
+                            "total_anime": total_anime,
+                            "total_persons": total_persons,
+                            "total_credits": total_credits,
+                            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+                        },
+                    )
+                    log.info("checkpoint_saved", last_offset=offset)
+                    pages_since_checkpoint = 0
 
-                    # Save checkpoint every N pages
-                    if pages_since_checkpoint >= checkpoint_interval:
-                        conn.commit()
-                        _save_checkpoint(
-                            CHECKPOINT_FILE,
-                            {
-                                "last_offset": offset,
-                                "total_anime": total_anime,
-                                "total_persons": total_persons,
-                                "total_credits": total_credits,
-                                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-                            },
-                        )
-                        log.info("checkpoint_saved", last_offset=offset)
-                        pages_since_checkpoint = 0
-
-                    if len(bindings) < page_size:
-                        break
-
-                update_data_source(conn, "jvmg", total_credits)
+                if len(bindings) < page_size:
+                    break
 
         finally:
             await client.close()
+            anime_bw.flush()
+            persons_bw.flush()
+            credits_bw.flush()
 
         # Delete checkpoint on successful completion
         _delete_checkpoint(CHECKPOINT_FILE)
         log.info(
-            "saved_to_db",
-            source="wikidata",
+            "bronze_parquet_written",
+            source="jvmg",
             anime=total_anime,
             persons=total_persons,
             credits=total_credits,

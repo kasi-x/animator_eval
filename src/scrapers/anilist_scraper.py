@@ -227,46 +227,30 @@ app = typer.Typer()
 
 
 # Batch save helper functions (must be defined before main())
-def save_anime_batch_to_database(conn, anime_batch):
-    """Save a batch of anime to src_anilist_anime."""
-    from src.database import upsert_src_anilist_anime
-    from src.etl.integrate import upsert_canonical_anime
-
+def save_anime_batch_to_bronze(anime_bw, anime_batch):
+    """Save a batch of anime to BRONZE parquet."""
     for anime in anime_batch:
-        # Backward compatibility for tests/callers that still pass generic objects.
-        if hasattr(anime, "anilist_id"):
-            upsert_src_anilist_anime(conn, anime)
-        else:
-            upsert_canonical_anime(conn, anime, evidence_source="anilist")
+        anime_bw.append(anime.model_dump(mode="json"))
 
 
-def save_studios_to_database(conn, studios, anime_studios):
-    """Save studios and anime-studio relationships to database."""
-    from src.database import upsert_studio, insert_anime_studio
-
+def save_studios_to_bronze(studios_bw, anime_studios_bw, studios, anime_studios):
+    """Save studios and anime-studio relationships to BRONZE parquet."""
     for studio in studios:
-        upsert_studio(conn, studio)
+        studios_bw.append(studio.model_dump(mode="json"))
     for anime_studio in anime_studios:
-        insert_anime_studio(conn, anime_studio)
+        anime_studios_bw.append(anime_studio.model_dump(mode="json"))
 
 
-def save_relations_to_database(conn, relations):
-    """Save anime relations to database."""
-    from src.database import insert_anime_relation
-
+def save_relations_to_bronze(relations_bw, relations):
+    """Save anime relations to BRONZE parquet."""
     for relation in relations:
-        insert_anime_relation(conn, relation)
+        relations_bw.append(relation.model_dump(mode="json"))
 
 
-def save_persons_batch_to_database(conn, persons_batch):
-    """Save a batch of persons to src_anilist_persons."""
-    from src.database import upsert_person, upsert_src_anilist_person
-
+def save_persons_batch_to_bronze(persons_bw, persons_batch):
+    """Save a batch of persons to BRONZE parquet."""
     for person in persons_batch:
-        if hasattr(person, "anilist_id"):
-            upsert_src_anilist_person(conn, person)
-        else:
-            upsert_person(conn, person)
+        persons_bw.append(person.model_dump(mode="json"))
 
 
 def _make_rate_limit_text(cl):
@@ -294,27 +278,10 @@ def _make_rate_limit_text(cl):
     return Text(f"🔋 API: [{bar_str}] {used}/{header_limit} (burst)", style=color)
 
 
-def save_credits_batch_to_database(conn, credits_batch):
-    """Save a batch of credits to src_anilist_credits."""
-    from src.database import insert_credit, insert_src_anilist_credit
-
+def save_credits_batch_to_bronze(credits_bw, credits_batch):
+    """Save a batch of credits to BRONZE parquet."""
     for credit in credits_batch:
-        if not (hasattr(credit, "anime_id") and hasattr(credit, "person_id")):
-            insert_credit(conn, credit)
-            continue
-        try:
-            anilist_anime_id = int(credit.anime_id.split(":")[-1])
-            anilist_person_id = int(credit.person_id.removeprefix("anilist:p"))
-        except (ValueError, AttributeError):
-            insert_credit(conn, credit)
-            continue
-        insert_src_anilist_credit(
-            conn,
-            anilist_anime_id,
-            anilist_person_id,
-            str(credit.role),
-            credit.raw_role or "",
-        )
+        credits_bw.append(credit.model_dump(mode="json"))
 
 
 class AniListClient:
@@ -1624,7 +1591,11 @@ async def _load_anime_ids(
 
 async def _fetch_staff_phase(
     client,
-    conn,
+    anime_bw,
+    credits_bw,
+    studios_bw,
+    anime_studios_bw,
+    relations_bw,
     anime_ids,
     totals,
     fetched_ids,
@@ -1720,14 +1691,13 @@ async def _fetch_staff_phase(
             if had_error:
                 totals["errors"] += 1
 
-            save_anime_batch_to_database(conn, [anime])
+            save_anime_batch_to_bronze(anime_bw, [anime])
             if studios_pending and anime_id in studios_pending:
                 studios, anime_studio_edges = studios_pending.pop(anime_id)
-                save_studios_to_database(conn, studios, anime_studio_edges)
+                save_studios_to_bronze(studios_bw, anime_studios_bw, studios, anime_studio_edges)
             if relations_pending and anime_id in relations_pending:
-                save_relations_to_database(conn, relations_pending.pop(anime_id))
-            save_credits_batch_to_database(conn, credits)
-            conn.commit()
+                save_relations_to_bronze(relations_bw, relations_pending.pop(anime_id))
+            save_credits_batch_to_bronze(credits_bw, credits)
 
             if anime.cover_large or anime.cover_extra_large or anime.banner:
                 download_queue.add_anime(
@@ -1742,6 +1712,11 @@ async def _fetch_staff_phase(
             bar2a.update(task2a, advance=1)
 
             if (loop_idx + 1) % checkpoint_interval == 0:
+                anime_bw.flush()
+                credits_bw.flush()
+                studios_bw.flush()
+                anime_studios_bw.flush()
+                relations_bw.flush()
                 save_checkpoint(
                     checkpoint_file,
                     create_checkpoint_data(
@@ -1749,6 +1724,11 @@ async def _fetch_staff_phase(
                     ),
                 )
 
+        anime_bw.flush()
+        credits_bw.flush()
+        studios_bw.flush()
+        anime_studios_bw.flush()
+        relations_bw.flush()
         save_checkpoint(
             checkpoint_file,
             create_checkpoint_data(
@@ -1761,7 +1741,7 @@ async def _fetch_staff_phase(
 
 async def _fetch_person_details_phase(
     client,
-    conn,
+    persons_bw,
     ids_to_fetch,
     totals,
     console,
@@ -1786,7 +1766,6 @@ async def _fetch_person_details_phase(
     from rich.live import Live
     from rich.console import Group
     from rich.text import Text
-    from src.database import mark_person_unfetchable
 
     console.print()
     console.print(
@@ -1845,10 +1824,8 @@ async def _fetch_person_details_phase(
             try:
                 resp = await client.get_person_details(person_id)
                 if resp is None:
-                    # 404等でアクセス不可 → DBに記録してスキップ
+                    # 404等でアクセス不可 → スキップ
                     skipped_count += 1
-                    mark_person_unfetchable(conn, person_id, status="not_found")
-                    conn.commit()
                     log.info(
                         "person_skipped_not_found",
                         source="anilist",
@@ -1877,8 +1854,7 @@ async def _fetch_person_details_phase(
                 )
 
             if len(person_batch) >= 3:
-                save_persons_batch_to_database(conn, person_batch)
-                conn.commit()
+                save_persons_batch_to_bronze(persons_bw, person_batch)
                 person_batch.clear()
 
             bar2b.update(task2b, advance=1)
@@ -1890,8 +1866,8 @@ async def _fetch_person_details_phase(
             live.update(_make_2b_group())
 
         if person_batch:
-            save_persons_batch_to_database(conn, person_batch)
-            conn.commit()
+            save_persons_batch_to_bronze(persons_bw, person_batch)
+        persons_bw.flush()
 
     if skipped_count:
         console.print(
@@ -1932,12 +1908,6 @@ def main(
     """AniList からクレジットデータを収集する (チェックポイント機能付き)."""
     import json
     from pathlib import Path
-    from src.database import (
-        get_connection,
-        init_db,
-        update_data_source,
-        get_all_person_ids,
-    )
     from src.log import setup_logging
     from rich.console import Console
 
@@ -1998,23 +1968,8 @@ def main(
     from rich.panel import Panel
     from rich.table import Table
 
-    # DB に既存のアニメIDを取得（中断後の再開でも重複スキップ）
+    # Fetched IDs are tracked via checkpoint JSON only
     fetched_ids = set()
-    if not force_restart:
-        try:
-            from src.database import get_connection as _gc, init_db as _idb
-
-            _conn = _gc()
-            _idb(_conn)
-            rows = _conn.execute("SELECT id FROM anime").fetchall()
-            fetched_ids = {row["id"] for row in rows}
-            _conn.close()
-            if fetched_ids:
-                console.print(
-                    f"[dim]💾 DB内の既存アニメ: {len(fetched_ids):,}件（スキップ対象）[/dim]"
-                )
-        except Exception:
-            pass
 
     # Load checkpoint - auto-resume if exists (unless --force-restart is specified)
     start_index = 0
@@ -2080,23 +2035,9 @@ def main(
 
         # === Helper Functions (Nested for Clarity) ===
 
-        def load_existing_person_ids_from_database(conn):
-            """Load existing person IDs to skip re-fetching."""
-            if not skip_existing_persons:
-                return set()
-
-            existing_ids = get_all_person_ids(conn)
-            if existing_ids:
-                console.print()
-                console.print(
-                    Panel(
-                        f"[bold bright_blue]💾 既存データベースから {len(existing_ids):,}件の人物を読み込みました[/bold bright_blue]\n[dim]重複を避けるためスキップします[/dim]",
-                        border_style="bright_blue",
-                        padding=(1, 2),
-                    )
-                )
-                console.print()
-            return existing_ids
+        def load_existing_person_ids_from_database():
+            """No-op: ETL handles deduplication; return empty set."""
+            return set()
 
         def should_skip_person(person_id, existing_ids, seen_ids):
             """Determine if person should be skipped."""
@@ -2654,13 +2595,23 @@ def main(
             )
 
             # ===== PHASE 2A: スタッフリスト収集 (クレジットとID) =====
-            conn = get_connection()
-            init_db(conn)
-            existing_person_ids = load_existing_person_ids_from_database(conn)
+            from src.scrapers.bronze_writer import BronzeWriter
+
+            existing_person_ids = load_existing_person_ids_from_database()
+
+            anime_bw = BronzeWriter("anilist", table="anime")
+            credits_bw = BronzeWriter("anilist", table="credits")
+            studios_bw = BronzeWriter("anilist", table="studios")
+            anime_studios_bw = BronzeWriter("anilist", table="anime_studios")
+            relations_bw = BronzeWriter("anilist", table="relations")
 
             all_person_ids_to_fetch = await _fetch_staff_phase(
                 client,
-                conn,
+                anime_bw,
+                credits_bw,
+                studios_bw,
+                anime_studios_bw,
+                relations_bw,
                 anime_ids,
                 totals,
                 fetched_ids,
@@ -2684,45 +2635,21 @@ def main(
             )
 
             # Phase 2A サマリ
-            # DB にある person と取得不可IDを除外して、本当に取得が必要な ID だけにする
-            from src.database import get_unfetchable_person_ids
-
-            unfetchable_ids = get_unfetchable_person_ids(conn)
-            ids_to_fetch = sorted(
-                all_person_ids_to_fetch
-                - {
-                    int(pid.removeprefix("anilist:p"))
-                    for pid in existing_person_ids
-                    if pid.startswith("anilist:p")
-                }
-                - unfetchable_ids
-            )
+            ids_to_fetch = sorted(all_person_ids_to_fetch)
             total_unique = len(all_person_ids_to_fetch)
-            skipped_existing = (
-                total_unique
-                - len(ids_to_fetch)
-                - len(unfetchable_ids & all_person_ids_to_fetch)
-            )
-            skipped_unfetchable = len(unfetchable_ids & all_person_ids_to_fetch)
 
             console.print()
-            skip_parts = []
-            if skipped_existing:
-                skip_parts.append(f"{skipped_existing:,}人は取得済み")
-            if skipped_unfetchable:
-                skip_parts.append(f"{skipped_unfetchable:,}人はN/A")
-            skip_text = ", ".join(skip_parts)
             console.print(
                 f"[cyan]✅ フェーズ2A完了: {totals['anime']}件のアニメ → "
                 f"{totals['credits']:,}クレジット, "
-                f"{total_unique:,}人 (うち{skip_text} → "
-                f"[bold]{len(ids_to_fetch):,}人を取得[/bold])[/cyan]"
+                f"{total_unique:,}人 (フェーズ2Bで取得)[/cyan]"
             )
 
             # ===== PHASE 2B: 個人情報詳細取得 =====
+            persons_bw = BronzeWriter("anilist", table="persons")
             await _fetch_person_details_phase(
                 client,
-                conn,
+                persons_bw,
                 ids_to_fetch,
                 totals,
                 console,
@@ -2735,13 +2662,6 @@ def main(
                 TimeElapsedColumn,
                 TimeRemainingColumn,
             )
-
-            totals["skipped"] = skipped_existing
-
-            # Finalize database
-            update_data_source(conn, "anilist", totals["credits"])
-            conn.commit()
-            conn.close()
 
             # Delete checkpoint file on completion
             delete_checkpoint_file_if_exists(checkpoint_file)
@@ -2786,10 +2706,9 @@ def fetch_persons(
         "error", "--log-level", help="ログレベル (debug/info/warning/error)"
     ),
 ) -> None:
-    """DBのクレジットに含まれる未取得の個人情報を取得する."""
+    """Bronze クレジットに含まれる未取得の個人情報を取得する."""
     import asyncio
     import time as time_module
-    from src.database import get_connection, init_db, get_all_person_ids
     from src.log import setup_logging
 
     setup_logging(log_level)
@@ -2810,30 +2729,40 @@ def fetch_persons(
             TimeRemainingColumn,
         )
 
+        import pyarrow.dataset as ds
+
+        from src.scrapers.bronze_writer import DEFAULT_BRONZE_ROOT, BronzeWriter
+
         console = Console()
-        conn = get_connection()
-        init_db(conn)
 
-        # credits テーブルから全 person_id を取得
-        rows = conn.execute("SELECT DISTINCT person_id FROM credits").fetchall()
-        all_credit_person_ids = {row["person_id"] for row in rows}
+        # Read anilist person IDs from bronze credits parquet
+        credits_path = DEFAULT_BRONZE_ROOT / "source=anilist" / "table=credits"
+        if not credits_path.exists():
+            console.print("[yellow]Bronze credits not found — run 'main' first.[/yellow]")
+            return
 
-        # 既に persons テーブルに存在する ID
-        existing_ids = get_all_person_ids(conn)
+        credits_ds = ds.dataset(credits_path, format="parquet")
+        tbl = credits_ds.to_table(columns=["person_id"])
+        all_credit_person_ids = set(
+            pid for pid in tbl.column("person_id").to_pylist() if pid is not None
+        )
 
-        # 取得不可と記録済みの ID
-        from src.database import get_unfetchable_person_ids
+        # Also read already-fetched persons from bronze
+        persons_path = DEFAULT_BRONZE_ROOT / "source=anilist" / "table=persons"
+        existing_ids: set[str] = set()
+        if persons_path.exists():
+            p_ds = ds.dataset(persons_path, format="parquet")
+            p_tbl = p_ds.to_table(columns=["id"])
+            existing_ids = set(
+                pid for pid in p_tbl.column("id").to_pylist() if pid is not None
+            )
 
-        unfetchable_ids = get_unfetchable_person_ids(conn)
-
-        # 未取得の AniList person ID を抽出（取得不可を除外）
+        # Collect missing AniList person IDs
         missing_ids = set()
         for pid in all_credit_person_ids:
             if pid not in existing_ids and pid.startswith("anilist:p"):
                 try:
-                    anilist_id = int(pid.removeprefix("anilist:p"))
-                    if anilist_id not in unfetchable_ids:
-                        missing_ids.add(anilist_id)
+                    missing_ids.add(int(pid.removeprefix("anilist:p")))
                 except ValueError:
                     pass
 
@@ -2842,7 +2771,7 @@ def fetch_persons(
         console.print()
         console.print(
             Rule(
-                "[bold magenta]個人情報取得 (DBのクレジットから)[/bold magenta]",
+                "[bold magenta]個人情報取得 (Bronze クレジットから)[/bold magenta]",
                 style="magenta",
             )
         )
@@ -2850,10 +2779,6 @@ def fetch_persons(
             f"  クレジット内の人物: [bold]{len(all_credit_person_ids):,}[/bold]人"
         )
         console.print(f"  取得済み:           [dim]{len(existing_ids):,}[/dim]人")
-        if unfetchable_ids:
-            console.print(
-                f"  N/A (取得不可):     [dim]{len(unfetchable_ids):,}[/dim]人"
-            )
         console.print(
             f"  未取得:             [bold yellow]{len(ids_to_fetch):,}[/bold yellow]人"
         )
@@ -2861,7 +2786,6 @@ def fetch_persons(
 
         if not ids_to_fetch:
             console.print("[green]全員取得済みです。[/green]")
-            conn.close()
             return
 
         console.print(
@@ -2873,6 +2797,7 @@ def fetch_persons(
         client = AniListClient()
         await client.verify_auth()
         download_queue = DownloadQueue()
+        persons_bw = BronzeWriter("anilist", table="persons")
         person_batch = []
         fetched = 0
         errors = 0
@@ -2930,10 +2855,6 @@ def fetch_persons(
                         resp = await client.get_person_details(person_id)
                         if resp is None:
                             skipped_count += 1
-                            from src.database import mark_person_unfetchable
-
-                            mark_person_unfetchable(conn, person_id, status="not_found")
-                            conn.commit()
                             log.info(
                                 "person_skipped_not_found",
                                 source="anilist",
@@ -2963,8 +2884,7 @@ def fetch_persons(
                         errors += 1
 
                     if len(person_batch) >= 3:
-                        save_persons_batch_to_database(conn, person_batch)
-                        conn.commit()
+                        save_persons_batch_to_bronze(persons_bw, person_batch)
                         person_batch.clear()
 
                     bar.update(task, advance=1)
@@ -2976,8 +2896,8 @@ def fetch_persons(
                     live.update(_make_group())
 
                 if person_batch:
-                    save_persons_batch_to_database(conn, person_batch)
-                    conn.commit()
+                    save_persons_batch_to_bronze(persons_bw, person_batch)
+                persons_bw.flush()
 
             if skipped_count:
                 console.print(
@@ -2986,7 +2906,6 @@ def fetch_persons(
 
         finally:
             await client.close()
-            conn.close()
 
         elapsed = time_module.time() - start_time
         console.print()
@@ -3013,7 +2932,6 @@ def process_downloads(
     import asyncio
     from src.log import setup_logging
     from src.utils.download_queue import DownloadQueue
-    from src.database import get_connection
     from src.scrapers.image_downloader import (
         download_person_images,
         download_anime_images,
@@ -3039,9 +2957,6 @@ def process_downloads(
         Rule("[bold cyan]画像ダウンロードキュー処理[/bold cyan]", style="cyan")
     )
     console.print()
-
-    # Get database connection
-    conn = get_connection()
 
     async def process_queue():
         """Process all queued downloads."""
@@ -3116,7 +3031,6 @@ def process_downloads(
 
     # Run async processing
     asyncio.run(process_queue())
-    conn.close()
 
 
 if __name__ == "__main__":

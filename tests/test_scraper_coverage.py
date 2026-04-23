@@ -780,29 +780,32 @@ class TestAniListParsers:
 
 
 class TestAniListBatchSave:
-    def test_save_anime_batch_to_database(self):
-        from src.scrapers.anilist_scraper import save_anime_batch_to_database
+    def test_save_anime_batch_to_bronze(self):
+        from src.scrapers.anilist_scraper import save_anime_batch_to_bronze
 
-        mock_conn = MagicMock()
-        with patch("src.database.upsert_anime") as mock_upsert_db:
-            save_anime_batch_to_database(mock_conn, ["anime1", "anime2"])
-            assert mock_upsert_db.call_count == 2
+        mock_bw = MagicMock()
+        anime1 = MagicMock()
+        anime1.model_dump.return_value = {"id": "anilist:1", "title_en": "Test"}
+        save_anime_batch_to_bronze(mock_bw, [anime1])
+        mock_bw.append.assert_called_once()
 
-    def test_save_persons_batch_to_database(self):
-        from src.scrapers.anilist_scraper import save_persons_batch_to_database
+    def test_save_persons_batch_to_bronze(self):
+        from src.scrapers.anilist_scraper import save_persons_batch_to_bronze
 
-        mock_conn = MagicMock()
-        with patch("src.database.upsert_person") as mock_upsert:
-            save_persons_batch_to_database(mock_conn, ["p1", "p2", "p3"])
-            assert mock_upsert.call_count == 3
+        mock_bw = MagicMock()
+        p1 = MagicMock()
+        p1.model_dump.return_value = {"id": "anilist:p1"}
+        save_persons_batch_to_bronze(mock_bw, [p1, p1])
+        assert mock_bw.append.call_count == 2
 
-    def test_save_credits_batch_to_database(self):
-        from src.scrapers.anilist_scraper import save_credits_batch_to_database
+    def test_save_credits_batch_to_bronze(self):
+        from src.scrapers.anilist_scraper import save_credits_batch_to_bronze
 
-        mock_conn = MagicMock()
-        with patch("src.database.insert_credit") as mock_insert:
-            save_credits_batch_to_database(mock_conn, ["c1"])
-            mock_insert.assert_called_once_with(mock_conn, "c1")
+        mock_bw = MagicMock()
+        c1 = MagicMock()
+        c1.model_dump.return_value = {"person_id": "anilist:p1", "anime_id": "anilist:1"}
+        save_credits_batch_to_bronze(mock_bw, [c1])
+        mock_bw.append.assert_called_once()
 
 
 # ---------------------------------------------------------------------------

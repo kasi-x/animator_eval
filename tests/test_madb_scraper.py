@@ -518,118 +518,91 @@ class TestDownloadMADBDataset:
 class TestMADBIntegration:
     """MADB integration E2E tests (mock JSON-LD files)."""
 
-    @pytest.fixture
-    def db_conn(self, tmp_path):
-        """Test DB connection."""
-        from src.database import init_db
-
-        db_path = tmp_path / "test.db"
-        conn = sqlite3.connect(str(db_path))
-        conn.row_factory = sqlite3.Row
-        init_db(conn)
-        return conn
-
-    def test_scrape_with_mock_dump(self, db_conn, tmp_path):
+    def test_scrape_with_mock_dump(self, tmp_path):
         """Basic scrape flow from mock JSON-LD file."""
         import asyncio
 
+        import src.scrapers.bronze_writer as bw_mod
         from src.scrapers.mediaarts_scraper import scrape_madb
 
-        # Create test JSON-LD file
-        data_dir = tmp_path / "madb"
-        data_dir.mkdir()
-        json_data = {
-            "@graph": [
-                {
-                    "schema:identifier": "A001",
-                    "schema:name": "テストアニメ",
-                    "schema:datePublished": "2000-01-01",
-                    "schema:contributor": "[監督]テスト太郎 ／ [脚本]テスト花子",
-                    "schema:productionCompany": "[アニメーション制作]テストスタジオ",
-                }
-            ]
-        }
-        json_path = data_dir / "metadata207.json"
-        json_path.write_text(
-            json.dumps(json_data, ensure_ascii=False), encoding="utf-8"
-        )
-
-        # Mock download_madb_dataset to return local file
-        async def mock_download(data_dir, version="latest", **kwargs):
-            return {"AnimationTVRegularSeries": json_path}
-
-        with patch(
-            "src.scrapers.mediaarts_scraper.download_madb_dataset",
-            side_effect=mock_download,
-        ):
-            stats = asyncio.run(
-                scrape_madb(
-                    db_conn,
-                    data_dir=data_dir,
-                    max_anime=10,
-                    checkpoint_interval=5,
-                )
+        # Redirect bronze writes to tmp_path
+        bronze_root = tmp_path / "bronze"
+        with patch.object(bw_mod, "DEFAULT_BRONZE_ROOT", bronze_root):
+            # Create test JSON-LD file
+            data_dir = tmp_path / "madb"
+            data_dir.mkdir()
+            json_data = {
+                "@graph": [
+                    {
+                        "schema:identifier": "A001",
+                        "schema:name": "テストアニメ",
+                        "schema:datePublished": "2000-01-01",
+                        "schema:contributor": "[監督]テスト太郎 ／ [脚本]テスト花子",
+                        "schema:productionCompany": "[アニメーション制作]テストスタジオ",
+                    }
+                ]
+            }
+            json_path = data_dir / "metadata207.json"
+            json_path.write_text(
+                json.dumps(json_data, ensure_ascii=False), encoding="utf-8"
             )
+
+            async def mock_download(data_dir, version="latest", **kwargs):
+                return {"AnimationTVRegularSeries": json_path}
+
+            with patch(
+                "src.scrapers.mediaarts_scraper.download_madb_dataset",
+                side_effect=mock_download,
+            ):
+                stats = asyncio.run(
+                    scrape_madb(
+                        data_dir=data_dir,
+                        max_anime=10,
+                        checkpoint_interval=5,
+                    )
+                )
 
         assert stats["anime_fetched"] == 1
         assert stats["anime_with_contributors"] == 1
         assert stats["credits_created"] == 2
         assert stats["persons_created"] == 2
 
-        # All saved with madb: IDs
-        credits = db_conn.execute(
-            "SELECT * FROM credits WHERE evidence_source='mediaarts'"
-        ).fetchall()
-        assert len(credits) == 2
-
-        persons = db_conn.execute(
-            "SELECT * FROM persons WHERE id LIKE 'madb:%'"
-        ).fetchall()
-        assert len(persons) == 2
-
-        anime = db_conn.execute("SELECT * FROM anime WHERE id LIKE 'madb:%'").fetchall()
-        assert len(anime) == 1
-        ext = db_conn.execute(
-            "SELECT external_id FROM anime_external_ids "
-            "WHERE anime_id = ? AND source = 'madb'",
-            (anime[0]["id"],),
-        ).fetchone()
-        assert ext is not None
-        assert ext["external_id"] == "A001"
-
-    def test_scrape_multiple_contributor_fields(self, db_conn, tmp_path):
+    def test_scrape_multiple_contributor_fields(self, tmp_path):
         """creator + contributor + originalWorkCreator are merged."""
         import asyncio
 
+        import src.scrapers.bronze_writer as bw_mod
         from src.scrapers.mediaarts_scraper import scrape_madb
 
-        data_dir = tmp_path / "madb"
-        data_dir.mkdir()
-        json_data = {
-            "@graph": [
-                {
-                    "schema:identifier": "B001",
-                    "schema:name": "テスト作品2",
-                    "schema:datePublished": "2010",
-                    "schema:creator": "[総監督]クリエイター太郎",
-                    "schema:contributor": "[脚本]脚本家花子",
-                    "ma:originalWorkCreator": "[原作]原作者次郎",
-                }
-            ]
-        }
-        json_path = data_dir / "metadata207.json"
-        json_path.write_text(
-            json.dumps(json_data, ensure_ascii=False), encoding="utf-8"
-        )
+        bronze_root = tmp_path / "bronze"
+        with patch.object(bw_mod, "DEFAULT_BRONZE_ROOT", bronze_root):
+            data_dir = tmp_path / "madb"
+            data_dir.mkdir()
+            json_data = {
+                "@graph": [
+                    {
+                        "schema:identifier": "B001",
+                        "schema:name": "テスト作品2",
+                        "schema:datePublished": "2010",
+                        "schema:creator": "[総監督]クリエイター太郎",
+                        "schema:contributor": "[脚本]脚本家花子",
+                        "ma:originalWorkCreator": "[原作]原作者次郎",
+                    }
+                ]
+            }
+            json_path = data_dir / "metadata207.json"
+            json_path.write_text(
+                json.dumps(json_data, ensure_ascii=False), encoding="utf-8"
+            )
 
-        async def mock_download(data_dir, version="latest", **kwargs):
-            return {"AnimationTVRegularSeries": json_path}
+            async def mock_download(data_dir, version="latest", **kwargs):
+                return {"AnimationTVRegularSeries": json_path}
 
-        with patch(
-            "src.scrapers.mediaarts_scraper.download_madb_dataset",
-            side_effect=mock_download,
-        ):
-            stats = asyncio.run(scrape_madb(db_conn, data_dir=data_dir, max_anime=10))
+            with patch(
+                "src.scrapers.mediaarts_scraper.download_madb_dataset",
+                side_effect=mock_download,
+            ):
+                stats = asyncio.run(scrape_madb(data_dir=data_dir, max_anime=10))
 
         assert stats["credits_created"] == 3
         assert stats["persons_created"] == 3
@@ -642,7 +615,7 @@ class TestMADBIntegration:
         assert len(result) == 1
         assert result[0] == ("監督", "A")
 
-    def test_no_files_returns_empty_stats(self, db_conn, tmp_path):
+    def test_no_files_returns_empty_stats(self, tmp_path):
         """No downloaded files returns empty stats."""
         import asyncio
 
@@ -655,7 +628,7 @@ class TestMADBIntegration:
             "src.scrapers.mediaarts_scraper.download_madb_dataset",
             side_effect=mock_download,
         ):
-            stats = asyncio.run(scrape_madb(db_conn, data_dir=tmp_path, max_anime=10))
+            stats = asyncio.run(scrape_madb(data_dir=tmp_path, max_anime=10))
 
         assert stats["anime_fetched"] == 0
         assert stats["credits_created"] == 0

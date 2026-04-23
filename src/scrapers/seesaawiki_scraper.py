@@ -3078,7 +3078,6 @@ def load_checkpoint(data_dir: Path) -> tuple[set[str], dict]:
 
 
 async def scrape_seesaawiki(
-    conn,
     data_dir: Path | None = None,
     max_pages: int = 0,
     checkpoint_interval: int = SCRAPE_CHECKPOINT_INTERVAL,
@@ -3092,10 +3091,9 @@ async def scrape_seesaawiki(
 
     1. Enumerate all wiki pages
     2. Fetch each page and parse credits (regex + optional LLM fallback)
-    3. Save to DB
+    3. Write to BRONZE parquet
 
     Args:
-        conn: SQLite connection
         data_dir: Data directory for caches/checkpoints
         max_pages: Maximum pages to process (0 = all)
         checkpoint_interval: How often to save checkpoint (pages)
@@ -3107,13 +3105,7 @@ async def scrape_seesaawiki(
     Returns:
         Statistics dict
     """
-    from src.database import (
-        insert_credit,
-        update_data_source,
-        upsert_person,
-        upsert_src_seesaawiki_anime,
-    )
-    from src.etl.integrate import upsert_canonical_anime
+    from src.scrapers.bronze_writer import BronzeWriter
 
     if data_dir is None:
         data_dir = DEFAULT_DATA_DIR
@@ -3127,6 +3119,12 @@ async def scrape_seesaawiki(
         "persons_created": 0,
         "llm_fallbacks": 0,
     }
+
+    anime_bw = BronzeWriter("seesaawiki", table="anime")
+    persons_bw = BronzeWriter("seesaawiki", table="persons")
+    credits_bw = BronzeWriter("seesaawiki", table="credits")
+    studios_bw = BronzeWriter("seesaawiki", table="studios")
+    anime_studios_bw = BronzeWriter("seesaawiki", table="anime_studios")
 
     async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
         # Phase 1: Enumerate pages
@@ -3239,8 +3237,12 @@ async def scrape_seesaawiki(
                                 f"{c.role}:{c.name}" for c in unknown_credits[:5]
                             ],
                         )
-                        # Save what we have so far
-                        conn.commit()
+                        # Flush what we have so far
+                        anime_bw.flush()
+                        persons_bw.flush()
+                        credits_bw.flush()
+                        studios_bw.flush()
+                        anime_studios_bw.flush()
                         save_checkpoint(data_dir, processed_list, stats)
                         log.error(
                             "seesaa_halted",
@@ -3274,13 +3276,12 @@ async def scrape_seesaawiki(
                 llm_validation=llm_validation,
             )
 
-            # Upsert anime
+            # Write anime to bronze
             anime = BronzeAnime(
                 id=anime_id,
                 title_ja=page_title,
             )
-            upsert_canonical_anime(conn, anime, evidence_source="seesaawiki")
-            upsert_src_seesaawiki_anime(conn, anime_id, page_title, None, None)
+            anime_bw.append(anime.model_dump(mode="json"))
             stats["anime_created"] += 1
 
             # Derive total episode count from parsed data (for open-ended ranges)
@@ -3294,28 +3295,30 @@ async def scrape_seesaawiki(
                 episode_num = ep_data["episode"]
                 for credit in ep_data["credits"]:
                     _save_credit(
-                        conn,
+                        persons_bw,
+                        credits_bw,
+                        studios_bw,
+                        anime_studios_bw,
                         person_cache,
                         stats,
                         anime_id,
                         credit,
                         episode=episode_num,
-                        upsert_person=upsert_person,
-                        insert_credit=insert_credit,
                         total_episodes=total_episodes,
                     )
 
             # Save series-level staff
             for credit in series_staff:
                 _save_credit(
-                    conn,
+                    persons_bw,
+                    credits_bw,
+                    studios_bw,
+                    anime_studios_bw,
                     person_cache,
                     stats,
                     anime_id,
                     credit,
                     episode=None,
-                    upsert_person=upsert_person,
-                    insert_credit=insert_credit,
                     total_episodes=total_episodes,
                 )
 
@@ -3329,14 +3332,15 @@ async def scrape_seesaawiki(
                         is_known_role=record["role"] in KNOWN_ROLES_JA,
                     )
                     _save_credit(
-                        conn,
+                        persons_bw,
+                        credits_bw,
+                        studios_bw,
+                        anime_studios_bw,
                         person_cache,
                         stats,
                         anime_id,
                         pc,
                         episode=record.get("episode"),
-                        upsert_person=upsert_person,
-                        insert_credit=insert_credit,
                         total_episodes=total_episodes,
                     )
 
@@ -3346,7 +3350,11 @@ async def scrape_seesaawiki(
 
             # Checkpoint
             if stats["pages_processed"] % checkpoint_interval == 0:
-                conn.commit()
+                anime_bw.flush()
+                persons_bw.flush()
+                credits_bw.flush()
+                studios_bw.flush()
+                anime_studios_bw.flush()
                 save_checkpoint(data_dir, processed_list, stats)
                 log.info(
                     "seesaa_checkpoint",
@@ -3356,10 +3364,12 @@ async def scrape_seesaawiki(
 
             await asyncio.sleep(delay)
 
-    # Final commit
-    conn.commit()
-    update_data_source(conn, "seesaawiki", stats["credits_created"])
-    conn.commit()
+    # Final flush
+    anime_bw.flush()
+    persons_bw.flush()
+    credits_bw.flush()
+    studios_bw.flush()
+    anime_studios_bw.flush()
 
     # Final checkpoint
     save_checkpoint(data_dir, processed_list, stats)
@@ -3369,40 +3379,30 @@ async def scrape_seesaawiki(
 
 
 def _save_credit(
-    conn,
+    persons_bw,
+    credits_bw,
+    studios_bw,
+    anime_studios_bw,
     person_cache: dict[str, Person],
     stats: dict,
     anime_id: str,
     parsed: ParsedCredit,
     episode: int | None,
-    upsert_person,
-    insert_credit,
     total_episodes: int | None = None,
 ) -> None:
-    """Save a single credit record to the database.
+    """Write a single credit record to BRONZE parquet.
 
     Handles three cases:
-    - Person credit → upsert person + insert credit
-    - Company/studio credit (is_company=True) → record as anime_studio relationship
-    - Person with affiliation → insert credit + record affiliation
+    - Person credit → write to persons + credits bronze
+    - Company/studio credit (is_company=True) → write to studios/anime_studios bronze
+    - Person with affiliation → write credit (affiliation stored in raw_role)
 
     When parsed.episode_from is set (open-ended range like "4話〜"),
     expands to episode_from..total_episodes using the anime's episode count.
     """
-    from src.database import insert_person_affiliation, insert_src_seesaawiki_credit
-
     if parsed.is_company:
         # Store as studio involvement, not person credit
-        _save_studio_credit(conn, anime_id, parsed.name, parsed.role, stats)
-        insert_src_seesaawiki_credit(
-            conn,
-            anime_id,
-            parsed.name,
-            parsed.role,
-            parsed.role,
-            affiliation=None,
-            is_company=True,
-        )
+        _save_studio_credit(studios_bw, anime_studios_bw, anime_id, parsed.name, parsed.role, stats)
         return
 
     if parsed.name not in person_cache:
@@ -3411,7 +3411,7 @@ def _save_credit(
             id=person_id,
             name_ja=parsed.name,
         )
-        upsert_person(conn, person)
+        persons_bw.append(person.model_dump(mode="json"))
         person_cache[parsed.name] = person
         stats["persons_created"] += 1
     else:
@@ -3438,16 +3438,7 @@ def _save_credit(
                 episode=ep,
                 source="seesaawiki",
             )
-            insert_credit(conn, credit)
-            insert_src_seesaawiki_credit(
-                conn,
-                anime_id,
-                parsed.name,
-                str(role),
-                parsed.role,
-                episode=ep,
-                affiliation=parsed.affiliation,
-            )
+            credits_bw.append(credit.model_dump(mode="json"))
             stats["credits_created"] += 1
     else:
         credit = Credit(
@@ -3458,31 +3449,8 @@ def _save_credit(
             episode=episode,
             source="seesaawiki",
         )
-        insert_credit(conn, credit)
-        insert_src_seesaawiki_credit(
-            conn,
-            anime_id,
-            parsed.name,
-            str(role),
-            parsed.role,
-            episode=episode,
-            affiliation=parsed.affiliation,
-        )
+        credits_bw.append(credit.model_dump(mode="json"))
         stats["credits_created"] += 1
-
-    # Record studio affiliation if present (e.g. "太郎(Xスタジオ)")
-    if parsed.affiliation:
-        aff_key = (person.id, anime_id, parsed.affiliation)
-        if aff_key not in _affiliation_cache:
-            insert_person_affiliation(
-                conn,
-                person.id,
-                anime_id,
-                parsed.affiliation,
-                source="seesaawiki",
-            )
-            _affiliation_cache.add(aff_key)
-            stats["affiliations_recorded"] = stats.get("affiliations_recorded", 0) + 1
 
 
 # In-memory caches to avoid redundant DB writes for studios/affiliations
@@ -3503,29 +3471,27 @@ def _reset_save_caches() -> None:
 
 
 def _save_studio_credit(
-    conn,
+    studios_bw,
+    anime_studios_bw,
     anime_id: str,
     studio_name: str,
     role: str,
     stats: dict,
 ) -> None:
-    """Record a studio/company found in credit lines as an anime_studio relationship."""
-    from src.database import insert_anime_studio, upsert_studio
+    """Write studio/company credit to BRONZE parquet."""
     from src.models import AnimeStudio, Studio
 
     studio_id = f"seesaa:s_{hashlib.sha256(unicodedata.normalize('NFKC', studio_name).encode()).hexdigest()[:12]}"
 
-    # Only upsert studio once per session
     if studio_id not in _studio_id_cache:
         studio = Studio(
             id=studio_id,
             name=studio_name,
             is_animation_studio=True,
         )
-        upsert_studio(conn, studio)
+        studios_bw.append(studio.model_dump(mode="json"))
         _studio_id_cache.add(studio_id)
 
-    # Only insert anime-studio link once per (anime, studio) pair
     pair = (anime_id, studio_id)
     if pair not in _anime_studio_cache:
         is_main = role in ("アニメーション制作", "制作", "アニメーション")
@@ -3534,7 +3500,7 @@ def _save_studio_credit(
             studio_id=studio_id,
             is_main=is_main,
         )
-        insert_anime_studio(conn, anime_studio)
+        anime_studios_bw.append(anime_studio.model_dump(mode="json"))
         _anime_studio_cache.add(pair)
         stats["studios_recorded"] = stats.get("studios_recorded", 0) + 1
 
@@ -3545,23 +3511,16 @@ def _save_studio_credit(
 
 
 def reparse_from_raw(
-    conn,
     data_dir: Path | None = None,
     use_llm: bool = False,
     checkpoint_interval: int = SCRAPE_CHECKPOINT_INTERVAL,
 ) -> dict:
-    """Re-parse all saved raw HTML files and update DB.
+    """Re-parse all saved raw HTML files and write to BRONZE parquet.
 
     This allows re-running the parser on previously fetched pages
     without making any HTTP requests.
     """
-    from src.database import (
-        insert_credit,
-        update_data_source,
-        upsert_person,
-        upsert_src_seesaawiki_anime,
-    )
-    from src.etl.integrate import upsert_canonical_anime
+    from src.scrapers.bronze_writer import BronzeWriter
 
     if data_dir is None:
         data_dir = DEFAULT_DATA_DIR
@@ -3583,19 +3542,6 @@ def reparse_from_raw(
     # Reset in-memory caches
     _reset_save_caches()
 
-    # Clear existing seesaa data from DB
-    conn.execute("DELETE FROM credits WHERE evidence_source='seesaawiki'")
-    conn.execute("DELETE FROM persons WHERE id LIKE 'seesaa:%'")
-    conn.execute("DELETE FROM anime WHERE id LIKE 'seesaa:%'")
-    try:
-        conn.execute("DELETE FROM person_affiliations WHERE source='seesaawiki'")
-    except Exception:
-        pass  # Table may not exist pre-migration
-    conn.execute("DELETE FROM studios WHERE id LIKE 'seesaa:%'")
-    conn.execute("DELETE FROM anime_studios WHERE studio_id LIKE 'seesaa:%'")
-    conn.commit()
-    log.info("reparse_cleared_db")
-
     stats = {
         "pages_processed": 0,
         "pages_failed": 0,
@@ -3604,6 +3550,12 @@ def reparse_from_raw(
         "persons_created": 0,
         "llm_fallbacks": 0,
     }
+
+    anime_bw = BronzeWriter("seesaawiki", table="anime")
+    persons_bw = BronzeWriter("seesaawiki", table="persons")
+    credits_bw = BronzeWriter("seesaawiki", table="credits")
+    studios_bw = BronzeWriter("seesaawiki", table="studios")
+    anime_studios_bw = BronzeWriter("seesaawiki", table="anime_studios")
 
     llm_available = use_llm and check_llm_available()
     person_cache: dict[str, Person] = {}
@@ -3652,10 +3604,9 @@ def reparse_from_raw(
             parser_used,
         )
 
-        # DB upsert
+        # Write anime to bronze
         anime = BronzeAnime(id=anime_id, title_ja=title)
-        upsert_canonical_anime(conn, anime, evidence_source="seesaawiki")
-        upsert_src_seesaawiki_anime(conn, anime_id, title, None, None)
+        anime_bw.append(anime.model_dump(mode="json"))
         stats["anime_created"] += 1
 
         total_episodes = (
@@ -3665,27 +3616,29 @@ def reparse_from_raw(
         for ep_data in episodes:
             for credit in ep_data["credits"]:
                 _save_credit(
-                    conn,
+                    persons_bw,
+                    credits_bw,
+                    studios_bw,
+                    anime_studios_bw,
                     person_cache,
                     stats,
                     anime_id,
                     credit,
                     episode=ep_data["episode"],
-                    upsert_person=upsert_person,
-                    insert_credit=insert_credit,
                     total_episodes=total_episodes,
                 )
 
         for credit in series_staff:
             _save_credit(
-                conn,
+                persons_bw,
+                credits_bw,
+                studios_bw,
+                anime_studios_bw,
                 person_cache,
                 stats,
                 anime_id,
                 credit,
                 episode=None,
-                upsert_person=upsert_person,
-                insert_credit=insert_credit,
                 total_episodes=total_episodes,
             )
 
@@ -3698,30 +3651,37 @@ def reparse_from_raw(
                     is_known_role=record["role"] in KNOWN_ROLES_JA,
                 )
                 _save_credit(
-                    conn,
+                    persons_bw,
+                    credits_bw,
+                    studios_bw,
+                    anime_studios_bw,
                     person_cache,
                     stats,
                     anime_id,
                     pc,
                     episode=record.get("episode"),
-                    upsert_person=upsert_person,
-                    insert_credit=insert_credit,
                     total_episodes=total_episodes,
                 )
 
         stats["pages_processed"] += 1
 
         if stats["pages_processed"] % checkpoint_interval == 0:
-            conn.commit()
+            anime_bw.flush()
+            persons_bw.flush()
+            credits_bw.flush()
+            studios_bw.flush()
+            anime_studios_bw.flush()
             log.info(
                 "reparse_checkpoint",
                 progress=f"{idx + 1}/{len(html_files)}",
                 **stats,
             )
 
-    conn.commit()
-    update_data_source(conn, "seesaawiki", stats["credits_created"])
-    conn.commit()
+    anime_bw.flush()
+    persons_bw.flush()
+    credits_bw.flush()
+    studios_bw.flush()
+    anime_studios_bw.flush()
 
     log.info("reparse_complete", **stats)
     return stats
@@ -3753,26 +3713,22 @@ def scrape(
     ),
 ) -> None:
     """Fetch and parse credit data from SeesaaWiki."""
-    from src.database import db_connection, init_db
     from src.log import setup_logging
 
     setup_logging()
 
-    with db_connection() as conn:
-        init_db(conn)
-        stats = asyncio.run(
-            scrape_seesaawiki(
-                conn,
-                data_dir=data_dir,
-                max_pages=max_pages,
-                checkpoint_interval=checkpoint,
-                delay=delay,
-                use_llm=use_llm,
-                fresh=fresh,
-                list_only=list_only,
-                fetch_only=fetch_only,
-            )
+    stats = asyncio.run(
+        scrape_seesaawiki(
+            data_dir=data_dir,
+            max_pages=max_pages,
+            checkpoint_interval=checkpoint,
+            delay=delay,
+            use_llm=use_llm,
+            fresh=fresh,
+            list_only=list_only,
+            fetch_only=fetch_only,
         )
+    )
 
     log.info("seesaa_scrape_saved", **stats)
 
@@ -3791,22 +3747,18 @@ def reparse(
 ) -> None:
     """Re-parse saved raw HTML files (no HTTP requests).
 
-    Clears existing seesaawiki data from DB, re-parses all raw/*.html files,
-    and saves results. Use this after updating the parser.
+    Re-parses all raw/*.html files and writes to BRONZE parquet.
+    Use this after updating the parser.
     """
-    from src.database import db_connection, init_db
     from src.log import setup_logging
 
     setup_logging()
 
-    with db_connection() as conn:
-        init_db(conn)
-        stats = reparse_from_raw(
-            conn,
-            data_dir=data_dir,
-            use_llm=use_llm,
-            checkpoint_interval=checkpoint,
-        )
+    stats = reparse_from_raw(
+        data_dir=data_dir,
+        use_llm=use_llm,
+        checkpoint_interval=checkpoint,
+    )
 
     log.info("seesaa_reparse_saved", **stats)
 

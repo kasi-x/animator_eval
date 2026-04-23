@@ -30,14 +30,6 @@ import httpx
 import structlog
 import typer
 
-from src.database import (
-    _run_migrations,
-    db_connection,
-    init_db,
-    insert_src_allcinema_credit,
-    upsert_src_allcinema_anime,
-    upsert_src_allcinema_person,
-)
 from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL, SCRAPE_DELAY_SECONDS
 
 log = structlog.get_logger()
@@ -440,22 +432,29 @@ async def scrape_person(
     return _parse_person_html(resp.text, person_id)
 
 
-# ─── DB 書き込み ──────────────────────────────────────────────────────────────
+# ─── Bronze 書き込み ──────────────────────────────────────────────────────────
+
+import dataclasses
 
 
-def save_anime_record(conn, rec: AllcinemaAnimeRecord) -> int:
-    """AllcinemaAnimeRecord を src_allcinema_* テーブルに保存してクレジット数を返す。"""
-    upsert_src_allcinema_anime(conn, rec)
-    credit_count = 0
-    for credit_entry in rec.staff + rec.cast:
-        insert_src_allcinema_credit(conn, rec.cinema_id, credit_entry)
-        credit_count += 1
-    return credit_count
+def save_anime_record(anime_bw, credits_bw, rec: AllcinemaAnimeRecord) -> int:
+    """AllcinemaAnimeRecord を BRONZE parquet に書き出してクレジット数を返す。"""
+    anime_row = dataclasses.asdict(rec)
+    # credits are in staff/cast lists — write credits separately
+    all_credits = rec.staff + rec.cast
+    anime_row.pop("staff", None)
+    anime_row.pop("cast", None)
+    anime_bw.append(anime_row)
+    for credit_entry in all_credits:
+        credit_row = dataclasses.asdict(credit_entry)
+        credit_row["cinema_id"] = rec.cinema_id
+        credits_bw.append(credit_row)
+    return len(all_credits)
 
 
-def save_person_record(conn, rec: AllcinemaPersonRecord) -> None:
-    """AllcinemaPersonRecord を src_allcinema_persons に保存する."""
-    upsert_src_allcinema_person(conn, rec)
+def save_person_record(persons_bw, rec: AllcinemaPersonRecord) -> None:
+    """AllcinemaPersonRecord を BRONZE parquet に書き出す."""
+    persons_bw.append(dataclasses.asdict(rec))
 
 
 # ─── チェックポイント ─────────────────────────────────────────────────────────
@@ -483,72 +482,73 @@ async def _run_scrape_cinema(
     batch_save: int,
     delay: float,
     data_dir: Path,
-    db_path: str | None,
 ) -> None:
+    from src.scrapers.bronze_writer import BronzeWriter
+
     ckpt_path = data_dir / "checkpoint_cinema.json"
     ckpt = _load_checkpoint(ckpt_path)
 
     completed: set[int] = set(ckpt.get("completed", []))
     cinema_ids: list[int] = ckpt.get("cinema_ids", [])
 
-    conn_ctx = db_connection(db_path) if db_path else db_connection()
-    with conn_ctx as conn:
-        init_db(conn)
-        _run_migrations(conn)
+    anime_bw = BronzeWriter("allcinema", table="anime")
+    credits_bw = BronzeWriter("allcinema", table="credits")
 
-        client = AllcinemaClient(delay=delay)
-        try:
-            if not cinema_ids:
-                log.info("allcinema_cinema_sitemap_start")
-                cinema_ids = await fetch_sitemap_ids(
-                    client, SITEMAP_CINEMA_PATTERN, SITEMAP_CINEMA_COUNT
-                )
-                ckpt["cinema_ids"] = cinema_ids
-                _save_checkpoint(ckpt_path, ckpt)
-                log.info("allcinema_cinema_ids_total", total=len(cinema_ids))
-
-            pending = [cid for cid in cinema_ids if cid not in completed]
-            if limit > 0:
-                pending = pending[:limit]
-
-            total = len(pending)
-            done_this_run = 0
-            anime_count = 0
-            credit_count = 0
-
-            log.info(
-                "allcinema_cinema_scrape_start", pending=total, completed=len(completed)
+    client = AllcinemaClient(delay=delay)
+    done_this_run = 0
+    anime_count = 0
+    credit_count = 0
+    try:
+        if not cinema_ids:
+            log.info("allcinema_cinema_sitemap_start")
+            cinema_ids = await fetch_sitemap_ids(
+                client, SITEMAP_CINEMA_PATTERN, SITEMAP_CINEMA_COUNT
             )
-
-            for cinema_id in pending:
-                rec = await scrape_cinema(client, cinema_id)
-                completed.add(cinema_id)
-                done_this_run += 1
-
-                if rec is not None:
-                    n_credits = save_anime_record(conn, rec)
-                    anime_count += 1
-                    credit_count += n_credits
-
-                if done_this_run % batch_save == 0:
-                    conn.commit()
-                    ckpt["completed"] = list(completed)
-                    _save_checkpoint(ckpt_path, ckpt)
-                    remaining = total - done_this_run
-                    log.info(
-                        "allcinema_cinema_progress",
-                        done=done_this_run,
-                        remaining=remaining,
-                        anime=anime_count,
-                        credits=credit_count,
-                    )
-
-            conn.commit()
-            ckpt["completed"] = list(completed)
+            ckpt["cinema_ids"] = cinema_ids
             _save_checkpoint(ckpt_path, ckpt)
+            log.info("allcinema_cinema_ids_total", total=len(cinema_ids))
 
-        finally:
-            await client.close()
+        pending = [cid for cid in cinema_ids if cid not in completed]
+        if limit > 0:
+            pending = pending[:limit]
+
+        total = len(pending)
+
+        log.info(
+            "allcinema_cinema_scrape_start", pending=total, completed=len(completed)
+        )
+
+        for cinema_id in pending:
+            rec = await scrape_cinema(client, cinema_id)
+            completed.add(cinema_id)
+            done_this_run += 1
+
+            if rec is not None:
+                n_credits = save_anime_record(anime_bw, credits_bw, rec)
+                anime_count += 1
+                credit_count += n_credits
+
+            if done_this_run % batch_save == 0:
+                anime_bw.flush()
+                credits_bw.flush()
+                ckpt["completed"] = list(completed)
+                _save_checkpoint(ckpt_path, ckpt)
+                remaining = total - done_this_run
+                log.info(
+                    "allcinema_cinema_progress",
+                    done=done_this_run,
+                    remaining=remaining,
+                    anime=anime_count,
+                    credits=credit_count,
+                )
+
+        anime_bw.flush()
+        credits_bw.flush()
+        ckpt["completed"] = list(completed)
+        _save_checkpoint(ckpt_path, ckpt)
+
+    finally:
+        await client.close()
 
     log.info(
         "allcinema_cinema_done",
@@ -566,20 +566,29 @@ async def _run_scrape_persons(
     batch_save: int,
     delay: float,
     data_dir: Path,
-    db_path: str | None,
 ) -> None:
+    import pyarrow.dataset as ds
+
+    from src.scrapers.bronze_writer import DEFAULT_BRONZE_ROOT, BronzeWriter
+
     ckpt_person_path = data_dir / "checkpoint_persons.json"
     ckpt_person = _load_checkpoint(ckpt_person_path)
 
     completed_persons: set[int] = set(ckpt_person.get("completed", []))
 
-    # src_allcinema_credits から person ID 一覧を取得
-    conn_ctx = db_connection(db_path) if db_path else db_connection()
-    with conn_ctx as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT allcinema_person_id FROM src_allcinema_credits"
-        ).fetchall()
-    all_person_ids = [row[0] for row in rows]
+    # Read person IDs from bronze parquet (written by cinema phase)
+    credits_path = DEFAULT_BRONZE_ROOT / "source=allcinema" / "table=credits"
+    if not credits_path.exists():
+        log.warning(
+            "allcinema_persons_no_credits",
+            msg="Run cinema phase first to populate credits",
+        )
+        return
+
+    credits_ds = ds.dataset(credits_path, format="parquet")
+    tbl = credits_ds.to_table(columns=["allcinema_person_id"])
+    all_person_ids: list[int] = tbl.column("allcinema_person_id").to_pylist()
+    all_person_ids = list(dict.fromkeys(pid for pid in all_person_ids if pid is not None))
 
     if not all_person_ids:
         log.warning(
@@ -595,38 +604,34 @@ async def _run_scrape_persons(
     total = len(pending)
     log.info("allcinema_persons_start", pending=total, completed=len(completed_persons))
 
-    conn_ctx2 = db_connection(db_path) if db_path else db_connection()
-    with conn_ctx2 as conn:
-        init_db(conn)
-        _run_migrations(conn)
+    persons_bw = BronzeWriter("allcinema", table="persons")
+    client = AllcinemaClient(delay=delay)
+    done_this_run = 0
+    try:
+        for allcinema_pid in pending:
+            rec = await scrape_person(client, allcinema_pid)
+            completed_persons.add(allcinema_pid)
+            done_this_run += 1
 
-        client = AllcinemaClient(delay=delay)
-        done_this_run = 0
-        try:
-            for allcinema_pid in pending:
-                rec = await scrape_person(client, allcinema_pid)
-                completed_persons.add(allcinema_pid)
-                done_this_run += 1
+            if rec is not None:
+                save_person_record(persons_bw, rec)
 
-                if rec is not None:
-                    save_person_record(conn, rec)
+            if done_this_run % batch_save == 0:
+                persons_bw.flush()
+                ckpt_person["completed"] = list(completed_persons)
+                _save_checkpoint(ckpt_person_path, ckpt_person)
+                log.info(
+                    "allcinema_persons_progress",
+                    done=done_this_run,
+                    remaining=total - done_this_run,
+                )
 
-                if done_this_run % batch_save == 0:
-                    conn.commit()
-                    ckpt_person["completed"] = list(completed_persons)
-                    _save_checkpoint(ckpt_person_path, ckpt_person)
-                    log.info(
-                        "allcinema_persons_progress",
-                        done=done_this_run,
-                        remaining=total - done_this_run,
-                    )
+        persons_bw.flush()
+        ckpt_person["completed"] = list(completed_persons)
+        _save_checkpoint(ckpt_person_path, ckpt_person)
 
-            conn.commit()
-            ckpt_person["completed"] = list(completed_persons)
-            _save_checkpoint(ckpt_person_path, ckpt_person)
-
-        finally:
-            await client.close()
+    finally:
+        await client.close()
 
     log.info("allcinema_persons_done", total_scraped=done_this_run)
 
@@ -666,16 +671,14 @@ def cmd_cinema(
     batch_save: int = typer.Option(SCRAPE_CHECKPOINT_INTERVAL, help="コミット間隔"),
     delay: float = typer.Option(DEFAULT_DELAY, help="リクエスト間隔(秒)"),
     data_dir: Path = typer.Option(DEFAULT_DATA_DIR),
-    db_path: str = typer.Option("", help="DB パス (空=デフォルト)"),
 ) -> None:
-    """Phase 2: cinema ページをスクレイプしてアニメとクレジットを DB に保存."""
+    """Phase 2: cinema ページをスクレイプしてアニメとクレジットを BRONZE に保存."""
     asyncio.run(
         _run_scrape_cinema(
             limit=limit,
             batch_save=batch_save,
             delay=delay,
             data_dir=data_dir,
-            db_path=db_path or None,
         )
     )
 
@@ -686,16 +689,14 @@ def cmd_persons(
     batch_save: int = typer.Option(SCRAPE_CHECKPOINT_INTERVAL, help="コミット間隔"),
     delay: float = typer.Option(DEFAULT_DELAY, help="リクエスト間隔(秒)"),
     data_dir: Path = typer.Option(DEFAULT_DATA_DIR),
-    db_path: str = typer.Option("", help="DB パス (空=デフォルト)"),
 ) -> None:
-    """Phase 3: person ページをスクレイプして名前・よみがなを DB に補完."""
+    """Phase 3: person ページをスクレイプして名前・よみがなを BRONZE に保存."""
     asyncio.run(
         _run_scrape_persons(
             limit=limit,
             batch_save=batch_save,
             delay=delay,
             data_dir=data_dir,
-            db_path=db_path or None,
         )
     )
 
@@ -705,7 +706,6 @@ def cmd_run(
     limit: int = typer.Option(0, help="各フェーズの処理件数上限 (0=全件)"),
     delay: float = typer.Option(DEFAULT_DELAY),
     data_dir: Path = typer.Option(DEFAULT_DATA_DIR),
-    db_path: str = typer.Option(""),
     skip_persons: bool = typer.Option(False, help="Phase 3 をスキップ"),
 ) -> None:
     """Phase 2 → Phase 3 を続けて実行."""
@@ -715,7 +715,6 @@ def cmd_run(
             batch_save=SCRAPE_CHECKPOINT_INTERVAL,
             delay=delay,
             data_dir=data_dir,
-            db_path=db_path or None,
         )
     )
     if not skip_persons:
@@ -725,7 +724,6 @@ def cmd_run(
                 batch_save=SCRAPE_CHECKPOINT_INTERVAL,
                 delay=delay,
                 data_dir=data_dir,
-                db_path=db_path or None,
             )
         )
 

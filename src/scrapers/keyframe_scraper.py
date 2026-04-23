@@ -285,7 +285,6 @@ def load_checkpoint(data_dir: Path) -> tuple[set[str], dict]:
 
 
 async def scrape_keyframe(
-    conn,
     data_dir: Path | None = None,
     max_anime: int = 0,
     checkpoint_interval: int = 10,
@@ -296,18 +295,11 @@ async def scrape_keyframe(
 
     1. Fetch sitemap.xml → discover all anime slugs
     2. Fetch each anime page → extract preloadData JSON
-    3. Parse credits → save to DB
+    3. Write to BRONZE parquet (ETL handles dedup and ID resolution)
 
     Returns: Statistics dict
     """
-    from src.database import (
-        insert_credit,
-        insert_src_keyframe_credit,
-        update_data_source,
-        upsert_person,
-        upsert_src_keyframe_anime,
-    )
-    from src.etl.integrate import upsert_canonical_anime
+    from src.scrapers.bronze_writer import BronzeWriter
 
     if data_dir is None:
         data_dir = DEFAULT_DATA_DIR
@@ -316,7 +308,6 @@ async def scrape_keyframe(
     stats = {
         "anime_fetched": 0,
         "anime_with_credits": 0,
-        "anime_matched_existing": 0,
         "credits_created": 0,
         "persons_created": 0,
         "pages_skipped": 0,
@@ -334,23 +325,11 @@ async def scrape_keyframe(
                 processed=len(processed_slugs),
             )
 
-    person_cache: set[str] = set()  # Track already-upserted person IDs
+    person_cache: set[str] = set()
 
-    def _resolve_anime_id(slug: str, anilist_id: int | None) -> str:
-        """Resolve anime ID: use existing DB entry if anilist_id matches."""
-        if anilist_id is not None:
-            row = conn.execute(
-                """
-                SELECT anime_id AS id
-                FROM anime_external_ids
-                WHERE source = 'anilist' AND external_id = ?
-                """,
-                (str(anilist_id),),
-            ).fetchone()
-            if row:
-                stats["anime_matched_existing"] += 1
-                return row["id"]
-        return make_keyframe_anime_id(slug)
+    anime_bw = BronzeWriter("keyframe", table="anime")
+    persons_bw = BronzeWriter("keyframe", table="persons")
+    credits_bw = BronzeWriter("keyframe", table="credits")
 
     async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
         # Phase 1: Discover anime slugs from sitemap
@@ -371,7 +350,7 @@ async def scrape_keyframe(
             already_processed=len(processed_slugs),
         )
 
-        # Phase 2-3: Fetch, parse, save
+        # Phase 2-3: Fetch, parse, write to parquet
         for i, slug in enumerate(remaining):
             try:
                 await asyncio.sleep(delay)
@@ -395,27 +374,14 @@ async def scrape_keyframe(
                     except (ValueError, TypeError):
                         pass
 
-                # Resolve: use existing DB entry if anilist_id matches
-                anime_id = _resolve_anime_id(slug, anilist_id)
-
-                # Only create new anime entry if it doesn't already exist
-                if not anime_id.startswith("keyframe:"):
-                    # Existing anime — just update title_en if missing
-                    conn.execute(
-                        "UPDATE anime SET title_en = COALESCE(NULLIF(?, ''), title_en) WHERE id = ?",
-                        (title, anime_id),
-                    )
-                else:
-                    anime = BronzeAnime(
-                        id=anime_id,
-                        title_en=title,
-                        year=season_year,
-                    )
-                    if anilist_id is not None:
-                        anime.anilist_id = anilist_id
-                    upsert_canonical_anime(conn, anime, evidence_source="keyframe")
-                upsert_src_keyframe_anime(conn, slug, "", title, anilist_id)
-
+                anime_id = make_keyframe_anime_id(slug)
+                anime = BronzeAnime(
+                    id=anime_id,
+                    title_en=title,
+                    year=season_year,
+                    anilist_id=anilist_id,
+                )
+                anime_bw.append({**anime.model_dump(mode="json"), "slug": slug})
                 stats["anime_fetched"] += 1
 
                 # Parse credits
@@ -428,21 +394,18 @@ async def scrape_keyframe(
                     pid = credit_data["person_id"]
                     person_id = make_keyframe_person_id(pid)
 
-                    # Upsert person (only once per person)
                     if person_id not in person_cache:
                         person = Person(
                             id=person_id,
                             name_ja=credit_data["name_ja"],
                             name_en=credit_data["name_en"],
                         )
-                        upsert_person(conn, person)
+                        persons_bw.append(person.model_dump(mode="json"))
                         person_cache.add(person_id)
                         stats["persons_created"] += 1
 
-                    # Map role
                     role_ja = credit_data["role_ja"]
                     role_en = credit_data["role_en"]
-                    # Try Japanese first, then English
                     role = parse_role(role_ja) if role_ja else parse_role(role_en)
                     raw_role = role_ja or role_en
 
@@ -454,24 +417,16 @@ async def scrape_keyframe(
                         episode=credit_data["episode"],
                         source="keyframe",
                     )
-                    insert_credit(conn, credit)
-                    insert_src_keyframe_credit(
-                        conn,
-                        slug,
-                        credit_data["person_id"],
-                        credit_data["name_ja"],
-                        credit_data["name_en"],
-                        credit_data["role_ja"] or "",
-                        credit_data["role_en"] or "",
-                        episode=credit_data["episode"],
-                    )
+                    credits_bw.append(credit.model_dump(mode="json"))
                     stats["credits_created"] += 1
 
                 processed_slugs.add(slug)
 
-                # Checkpoint
+                # Checkpoint flush
                 if (i + 1) % checkpoint_interval == 0:
-                    conn.commit()
+                    anime_bw.flush()
+                    persons_bw.flush()
+                    credits_bw.flush()
                     save_checkpoint(data_dir, processed_slugs, stats)
                     log.info(
                         "keyframe_checkpoint",
@@ -496,11 +451,11 @@ async def scrape_keyframe(
                 )
                 stats["pages_failed"] += 1
 
-    # Final commit
-    conn.commit()
+    # Final flush
+    anime_bw.flush()
+    persons_bw.flush()
+    credits_bw.flush()
     save_checkpoint(data_dir, processed_slugs, stats)
-    update_data_source(conn, "keyframe", stats["credits_created"])
-    conn.commit()
 
     log.info("keyframe_scrape_complete", source="keyframe", **stats)
     return stats
@@ -528,25 +483,21 @@ def main(
     ),
 ) -> None:
     """Fetch credit data from KeyFrame Staff List."""
-    from src.database import db_connection, init_db
     from src.log import setup_logging
 
     setup_logging()
 
-    with db_connection() as conn:
-        init_db(conn)
-        stats = asyncio.run(
-            scrape_keyframe(
-                conn,
-                data_dir=data_dir,
-                max_anime=max_anime,
-                checkpoint_interval=checkpoint,
-                delay=delay,
-                fresh=fresh,
-            )
+    stats = asyncio.run(
+        scrape_keyframe(
+            data_dir=data_dir,
+            max_anime=max_anime,
+            checkpoint_interval=checkpoint,
+            delay=delay,
+            fresh=fresh,
         )
+    )
 
-    log.info("keyframe_scrape_saved", **stats)
+    log.info("keyframe_scrape_complete", **stats)
 
 
 if __name__ == "__main__":

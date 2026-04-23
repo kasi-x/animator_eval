@@ -384,7 +384,6 @@ async def download_madb_dataset(
 
 
 async def scrape_madb(
-    conn,
     data_dir: Path | None = None,
     version: str = "latest",
     max_anime: int = 0,
@@ -395,25 +394,12 @@ async def scrape_madb(
 
     1. Download dump from GitHub Releases (with caching)
     2. Parse JSON-LD
-    3. Save to DB (using existing upsert_anime/upsert_person/insert_credit)
-
-    Args:
-        conn: SQLite connection
-        data_dir: Download destination directory
-        version: Dataset version ("latest" or tag name)
-        max_anime: Maximum number of anime to process per collection (0 = unlimited)
-        checkpoint_interval: DB commit interval
-        extended: If True, also download extended metadata sets (201-205, 301-317, etc.)
+    3. Write to BRONZE parquet (ETL handles dedup/normalization)
 
     Returns:
         Statistics dict
     """
-    from src.database import (
-        insert_credit,
-        update_data_source,
-        upsert_person,
-    )
-    from src.etl.integrate import upsert_canonical_anime
+    from src.scrapers.bronze_writer import BronzeWriter
 
     if data_dir is None:
         data_dir = DEFAULT_DATA_DIR
@@ -425,7 +411,7 @@ async def scrape_madb(
         "credits_created": 0,
         "persons_created": 0,
     }
-    person_cache: dict[str, Person] = {}  # name -> Person (dedup)
+    person_cache: dict[str, Person] = {}
 
     # Phase A: Download dump
     dataset_files = await download_madb_dataset(
@@ -435,14 +421,17 @@ async def scrape_madb(
         log.warning("madb_no_files_downloaded")
         return stats
 
-    # Build format lookup: collection_type -> format_code
+    # Build format lookup
     all_collections = ANIME_COLLECTION_FILES_PRIMARY.copy()
     if extended:
         all_collections.update(ANIME_COLLECTION_FILES_EXTENDED)
     format_by_type = {label: fmt for _zip, (label, fmt) in all_collections.items()}
 
-    # Phase B: Parse JSON-LD per collection and save to DB immediately
-    # (avoids loading all 69K records into memory at once)
+    anime_bw = BronzeWriter("mediaarts", table="anime")
+    persons_bw = BronzeWriter("mediaarts", table="persons")
+    credits_bw = BronzeWriter("mediaarts", table="credits")
+
+    # Phase B: Parse JSON-LD per collection and write to parquet
     total_processed = 0
     for anime_type, json_path in dataset_files.items():
         format_code = format_by_type.get(anime_type, "")
@@ -454,7 +443,6 @@ async def scrape_madb(
             records = records[:max_anime]
         log.info("madb_parsed", file=json_path.name, records=len(records))
 
-        # Phase C: Save to DB
         for i, record in enumerate(records):
             madb_id = record["id"]
             title = record["title"]
@@ -472,17 +460,15 @@ async def scrape_madb(
                 madb_id=madb_id,
                 studios=studios,
             )
-            upsert_canonical_anime(conn, anime, evidence_source="madb")
+            anime_bw.append(anime.model_dump(mode="json"))
             stats["anime_fetched"] += 1
 
             if not contributors:
-                # Save anime metadata even without staff credits
                 stats["anime_metadata_only"] += 1
             else:
                 stats["anime_with_contributors"] += 1
-                # Register credits
                 for role_ja, name_ja in contributors:
-                    if len(name_ja) < 2:  # Skip too-short names (legal risk)
+                    if len(name_ja) < 2:
                         continue
 
                     if name_ja not in person_cache:
@@ -492,7 +478,7 @@ async def scrape_madb(
                             name_ja=name_ja,
                             madb_id=person_id,
                         )
-                        upsert_person(conn, person)
+                        persons_bw.append(person.model_dump(mode="json"))
                         person_cache[name_ja] = person
                         stats["persons_created"] += 1
                     else:
@@ -506,13 +492,14 @@ async def scrape_madb(
                         raw_role=role_ja,
                         source="mediaarts",
                     )
-                    insert_credit(conn, credit)
+                    credits_bw.append(credit.model_dump(mode="json"))
                     stats["credits_created"] += 1
 
-            # Checkpoint
             total_processed += 1
             if total_processed % checkpoint_interval == 0:
-                conn.commit()
+                anime_bw.flush()
+                persons_bw.flush()
+                credits_bw.flush()
                 log.info(
                     "madb_checkpoint",
                     collection=anime_type,
@@ -522,10 +509,10 @@ async def scrape_madb(
                     persons=stats["persons_created"],
                 )
 
-    # Final commit
-    conn.commit()
-    update_data_source(conn, "mediaarts", stats["credits_created"])
-    conn.commit()
+    # Final flush
+    anime_bw.flush()
+    persons_bw.flush()
+    credits_bw.flush()
 
     log.info(
         "madb_scrape_complete",
@@ -557,25 +544,21 @@ def main(
     ),
 ) -> None:
     """Fetch credit data from Media Arts DB dump."""
-    from src.database import db_connection, init_db
     from src.log import setup_logging
 
     setup_logging()
 
-    with db_connection() as conn:
-        init_db(conn)
-        stats = asyncio.run(
-            scrape_madb(
-                conn,
-                data_dir=data_dir,
-                version=version,
-                max_anime=max_records,
-                checkpoint_interval=checkpoint,
-                extended=extended,
-            )
+    stats = asyncio.run(
+        scrape_madb(
+            data_dir=data_dir,
+            version=version,
+            max_anime=max_records,
+            checkpoint_interval=checkpoint,
+            extended=extended,
         )
+    )
 
-    log.info("madb_scrape_saved", **stats)
+    log.info("madb_scrape_complete", **stats)
 
 
 if __name__ == "__main__":

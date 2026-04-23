@@ -28,16 +28,8 @@ import httpx
 import structlog
 import typer
 
-from src.database import (
-    _run_migrations,
-    db_connection,
-    get_connection,
-    init_db,
-    insert_src_ann_credit,
-    upsert_src_ann_anime,
-    upsert_src_ann_person,
-)
 from src.models import parse_role
+from src.scrapers.logging_utils import configure_file_logging
 from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL, SCRAPE_DELAY_SECONDS
 
 log = structlog.get_logger()
@@ -47,7 +39,8 @@ MASTERLIST_URL = (
     "https://cdn.animenewsnetwork.com/encyclopedia/reports.xml?tag=masterlist&nlist=all"
 )
 ANIME_API_URL = "https://www.animenewsnetwork.com/encyclopedia/api.xml"
-PEOPLE_API_URL = ANIME_API_URL  # 人物も同じ XML エンドポイント: ?people=ID
+PEOPLE_API_URL = ANIME_API_URL  # 人物も同じ XML エンドポイント: ?people=ID (現在は ignored を返す)
+PEOPLE_HTML_BASE = "https://www.animenewsnetwork.com/encyclopedia/people.php"
 
 # XML API では最大50IDをスラッシュ区切りでバッチ取得できる
 BATCH_SIZE = 50
@@ -65,16 +58,24 @@ HEADERS = {
 
 DEFAULT_DATA_DIR = Path("data/ann")
 
-# ANN の type 属性 → 内部 format 文字列
+# ANN の type 属性 (大文字小文字無視) → 内部 format 文字列
+# キーは小文字に正規化済み。lookup 側で .lower() してから引く。
 _ANN_TYPE_MAP: dict[str, str] = {
-    "TV": "TV",
+    "tv": "TV",
+    "tv special": "SPECIAL",
     "movie": "MOVIE",
-    "OVA": "OVA",
-    "ONA": "ONA",
+    "ova": "OVA",
+    "oav": "OVA",  # ANN は OAV のほうが多い
+    "ona": "ONA",
+    "web": "ONA",
     "special": "SPECIAL",
-    "TV Special": "SPECIAL",
-    "Web": "ONA",
+    "music video": "MUSIC_VIDEO",
 }
+
+
+def _normalize_format(ann_type: str) -> str | None:
+    """ANN の type 属性を内部 format に正規化 (case-insensitive)."""
+    return _ANN_TYPE_MAP.get(ann_type.strip().lower())
 
 app = typer.Typer()
 
@@ -140,40 +141,89 @@ class AnnClient:
             await asyncio.sleep(wait)
         self._last_request = time.monotonic()
 
-    async def get(self, url: str, params: dict | None = None) -> httpx.Response:
-        """GET リクエスト。429/503/522/524 は上限なく指数バックオフでリトライ。"""
+    # 指数バックオフでリトライする HTTP ステータス
+    # 429: rate limit / 500-504: 一時的サーバエラー / 522,524: Cloudflare timeout
+    _RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504, 522, 524})
+
+    # ネットワーク層の一時障害として扱う httpx 例外
+    _RETRYABLE_EXC = (
+        httpx.TimeoutException,
+        httpx.ConnectError,
+        httpx.ReadError,
+        httpx.RemoteProtocolError,
+        httpx.PoolTimeout,
+    )
+
+    async def get(
+        self,
+        url: str,
+        params: dict | None = None,
+        *,
+        max_attempts: int = 8,
+    ) -> httpx.Response:
+        """GET リクエスト. 一時障害は指数バックオフでリトライ.
+
+        リトライ対象:
+          - HTTP 429, 500-504, 522, 524
+          - httpx の Timeout/Connect/Read/RemoteProtocol/PoolTimeout 例外
+        max_attempts 到達時は最後の例外 (またはレスポンス) を上位に伝播.
+        """
         backoff = 4.0
         attempt = 0
         while True:
+            attempt += 1
             await self._throttle()
             try:
                 resp = await self._client.get(url, params=params)
-            except (httpx.TimeoutException, httpx.ConnectError) as exc:
-                if attempt >= 5:
+            except self._RETRYABLE_EXC as exc:
+                if attempt >= max_attempts:
+                    log.error(
+                        "ann_request_giveup",
+                        url=url,
+                        error_type=type(exc).__name__,
+                        error=str(exc),
+                        attempts=attempt,
+                    )
                     raise
+                wait = min(backoff, 120)
                 log.warning(
-                    "ann_request_error", url=url, error=str(exc), retry=attempt + 1
+                    "ann_request_error",
+                    url=url,
+                    error_type=type(exc).__name__,
+                    error=str(exc),
+                    attempt=attempt,
+                    max_attempts=max_attempts,
+                    wait_s=wait,
                 )
-                await asyncio.sleep(min(backoff, 120))
+                await asyncio.sleep(wait)
                 backoff *= 2
-                attempt += 1
                 continue
 
-            if resp.status_code in (429, 503, 522, 524):
+            if resp.status_code in self._RETRYABLE_STATUS:
                 raw_ra = resp.headers.get("Retry-After", "")
                 try:
                     retry_after = max(int(raw_ra), 5)
                 except (ValueError, TypeError):
                     retry_after = int(min(backoff * 2, 300))
+                if attempt >= max_attempts:
+                    log.error(
+                        "ann_rate_giveup",
+                        url=url,
+                        status=resp.status_code,
+                        attempts=attempt,
+                    )
+                    resp.raise_for_status()
+                    return resp
                 log.warning(
                     "ann_rate_limited",
+                    url=url,
                     status=resp.status_code,
-                    wait=retry_after,
+                    wait_s=retry_after,
                     attempt=attempt,
+                    max_attempts=max_attempts,
                 )
                 await asyncio.sleep(retry_after)
                 backoff = min(max(backoff * 2, retry_after), 300)
-                attempt += 1
                 continue
 
             resp.raise_for_status()
@@ -308,7 +358,7 @@ def parse_anime_xml(root: ET.Element) -> list[AnnAnimeRecord]:
             continue
 
         title_en = anime_el.get("name", "")
-        fmt = _ANN_TYPE_MAP.get(anime_el.get("type", ""), None)
+        fmt = _normalize_format(anime_el.get("type", ""))
 
         rec = AnnAnimeRecord(ann_id=ann_id, title_en=title_en, format=fmt)
 
@@ -461,38 +511,29 @@ async def fetch_person_batch(
     return parse_person_xml(root)
 
 
-# ─── DB 保存ヘルパー ─────────────────────────────────────────────────────────
+# ─── Bronze 書き込みヘルパー ─────────────────────────────────────────────────
+
+import dataclasses
 
 
-def save_ann_anime(conn, rec: AnnAnimeRecord) -> None:
-    """AnnAnimeRecord を src_ann_anime に保存する."""
-    upsert_src_ann_anime(conn, rec)
-
-
-def save_ann_credits(
-    conn,
-    ann_anime_id: int,
-    staff: list[AnnStaffEntry],
-) -> int:
-    """スタッフエントリを src_ann_credits に保存し、保存件数を返す."""
+def save_ann_anime(anime_bw, credits_bw, rec: AnnAnimeRecord) -> int:
+    """AnnAnimeRecord を BRONZE parquet に書き出してクレジット数を返す."""
+    anime_row = dataclasses.asdict(rec)
+    anime_row.pop("staff", None)
+    anime_bw.append(anime_row)
     saved = 0
-    for entry in staff:
-        role = parse_role(entry.task)
-        insert_src_ann_credit(
-            conn,
-            ann_anime_id,
-            entry.ann_person_id,
-            entry.name_en,
-            role,
-            entry.task,
-        )
+    for entry in rec.staff:
+        credit_row = dataclasses.asdict(entry)
+        credit_row["ann_anime_id"] = rec.ann_id
+        credit_row["role"] = parse_role(entry.task)
+        credits_bw.append(credit_row)
         saved += 1
     return saved
 
 
-def save_person_detail(conn, detail: AnnPersonDetail) -> None:
-    """AnnPersonDetail を src_ann_persons に保存する."""
-    upsert_src_ann_person(conn, detail)
+def save_person_detail(persons_bw, detail: AnnPersonDetail) -> None:
+    """AnnPersonDetail を BRONZE parquet に書き出す."""
+    persons_bw.append(dataclasses.asdict(detail))
 
 
 # ─── チェックポイント ────────────────────────────────────────────────────────
@@ -526,6 +567,8 @@ def cmd_scrape_anime(
     resume: bool = typer.Option(True, help="チェックポイントから再開"),
 ) -> None:
     """Phase 1+2: マスターリスト取得 → アニメ XML スクレイピング."""
+    log_path = configure_file_logging("ann")
+    log.info("ann_scrape_anime_command_start", log_file=str(log_path), limit=limit)
     asyncio.run(
         _run_scrape_anime(
             limit=limit,
@@ -546,15 +589,13 @@ async def _run_scrape_anime(
     data_dir: Path,
     resume: bool,
 ) -> None:
-    # DB スキーマが古い場合に備えてマイグレーションを実行する
-    conn = get_connection()
-    init_db(conn)
-    _run_migrations(conn)
-    conn.commit()
-    conn.close()
+    from src.scrapers.bronze_writer import BronzeWriter
 
     cp_path = data_dir / "anime_checkpoint.json"
     cp = _load_checkpoint(cp_path) if resume else {}
+
+    anime_bw = BronzeWriter("ann", table="anime")
+    credits_bw = BronzeWriter("ann", table="credits")
 
     client = AnnClient(delay=delay)
     try:
@@ -590,18 +631,18 @@ async def _run_scrape_anime(
         for batch_idx, batch in enumerate(batches):
             records = await fetch_anime_batch(client, batch)
 
-            with db_connection() as conn:
-                for rec in records:
-                    save_ann_anime(conn, rec)
-                    saved = save_ann_credits(conn, rec.ann_id, rec.staff)
-                    total_anime += 1
-                    total_credits += saved
+            for rec in records:
+                saved = save_ann_anime(anime_bw, credits_bw, rec)
+                total_anime += 1
+                total_credits += saved
             # 空レスポンス (ID が存在しない等) も含め、バッチ全IDを完了扱いにする
             for ann_id in batch:
                 completed.add(ann_id)
             done_this_run += len(batch)
 
             if (batch_idx + 1) % max(1, checkpoint_interval // batch_size) == 0:
+                anime_bw.flush()
+                credits_bw.flush()
                 cp["completed_ids"] = list(completed)
                 _save_checkpoint(cp_path, cp)
                 log.info(
@@ -612,6 +653,8 @@ async def _run_scrape_anime(
                     total_credits=total_credits,
                 )
 
+        anime_bw.flush()
+        credits_bw.flush()
         cp["completed_ids"] = list(completed)
         _save_checkpoint(cp_path, cp)
         log.info(
@@ -635,7 +678,19 @@ def cmd_scrape_persons(
     data_dir: Path = typer.Option(DEFAULT_DATA_DIR, help="チェックポイント保存先"),
     resume: bool = typer.Option(True, help="チェックポイントから再開"),
 ) -> None:
-    """Phase 3: DB 内の ann_id を持つ全人物の XML データを取得してメタデータを補完する."""
+    """Phase 3: DB 内の ann_id を持つ全人物の XML データを取得してメタデータを補完する.
+
+    注意 (2026-04-23): ANN の ?people=ID API は現在 <warning>ignored</warning>
+    を返す状態が確認されており、Phase 3 は空振りする。HTML ページ
+    (https://www.animenewsnetwork.com/encyclopedia/people.php?id=NUM) を
+    スクレイプする実装に置き換える必要あり (TODO §scraper-broken-endpoints)。
+    """
+    log_path = configure_file_logging("ann")
+    log.info("ann_scrape_persons_command_start", log_file=str(log_path), limit=limit)
+    log.warning(
+        "ann_people_api_known_broken",
+        note="?people=ID returns <warning>ignored</warning>; Phase 3 will not collect data",
+    )
     asyncio.run(
         _run_scrape_persons(
             limit=limit,
@@ -656,16 +711,25 @@ async def _run_scrape_persons(
     data_dir: Path,
     resume: bool,
 ) -> None:
+    import pyarrow.dataset as ds
+
+    from src.scrapers.bronze_writer import DEFAULT_BRONZE_ROOT, BronzeWriter
+
     cp_path = data_dir / "persons_checkpoint.json"
     cp = _load_checkpoint(cp_path) if resume else {}
     completed: set[int] = set(cp.get("completed_ids", []))
 
-    # src_ann_credits から ann_person_id 一覧を取得
-    with db_connection() as conn:
-        rows = conn.execute(
-            "SELECT DISTINCT ann_person_id FROM src_ann_credits"
-        ).fetchall()
-    all_ann_ids = [row[0] for row in rows]
+    # Read ann_person_id list from bronze parquet (written by anime phase)
+    credits_path = DEFAULT_BRONZE_ROOT / "source=ann" / "table=credits"
+    if not credits_path.exists():
+        log.warning("ann_persons_no_credits", msg="Run scrape-anime phase first")
+        return
+
+    credits_ds = ds.dataset(credits_path, format="parquet")
+    tbl = credits_ds.to_table(columns=["ann_person_id"])
+    all_ann_ids: list[int] = list(
+        dict.fromkeys(pid for pid in tbl.column("ann_person_id").to_pylist() if pid is not None)
+    )
 
     pending = [i for i in all_ann_ids if i not in completed]
     if limit:
@@ -681,19 +745,20 @@ async def _run_scrape_persons(
     batches = [pending[i : i + batch_size] for i in range(0, len(pending), batch_size)]
     done_this_run = 0
 
+    persons_bw = BronzeWriter("ann", table="persons")
     client = AnnClient(delay=delay)
     try:
         for batch_idx, batch in enumerate(batches):
             details = await fetch_person_batch(client, batch)
-            with db_connection() as conn:
-                for detail in details:
-                    save_person_detail(conn, detail)
+            for detail in details:
+                save_person_detail(persons_bw, detail)
             # 取得できなかった ID も完了扱いにする（存在しない or 非公開）
             for ann_id in batch:
                 completed.add(ann_id)
             done_this_run += len(batch)
 
             if (batch_idx + 1) % max(1, checkpoint_interval // batch_size) == 0:
+                persons_bw.flush()
                 cp["completed_ids"] = list(completed)
                 _save_checkpoint(cp_path, cp)
                 log.info(
@@ -702,6 +767,7 @@ async def _run_scrape_persons(
                     remaining=len(pending) - done_this_run,
                 )
 
+        persons_bw.flush()
         cp["completed_ids"] = list(completed)
         _save_checkpoint(cp_path, cp)
         log.info("ann_persons_scrape_done", total=done_this_run)
@@ -717,6 +783,8 @@ def cmd_scrape_all(
     data_dir: Path = typer.Option(DEFAULT_DATA_DIR, help="チェックポイント保存先"),
 ) -> None:
     """Phase 1-3 を順番に実行する."""
+    log_path = configure_file_logging("ann")
+    log.info("ann_scrape_all_command_start", log_file=str(log_path), limit=limit)
     asyncio.run(
         _run_scrape_anime(
             limit=limit,
