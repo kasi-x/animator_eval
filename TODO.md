@@ -14,10 +14,9 @@
 | 🟡 Minor | スクレイパー強化 | 差分更新、retry refactor |
 | 🟡 Maintenance | スキーマ後続 | v56 多言語・v57 構造的メタデータのフォローアップ |
 | 🟢 Future | DuckDB 残務 | studio_affiliation 移植、entity resolution 書き込み経路 |
-| 🟢 Future | Hamilton H-7 | PipelineContext 完全削除 (ctx → typed inputs) |
 | 🟢 Future | feat_* 層別分離 | L2/L3 分割 |
 
-**完了済み大項目**: DuckDB §4 全フェーズ ✅、Hamilton H-1〜H-6 ✅、レポート統廃合 §8 ✅、アーキテクチャ §9/11 ✅、ドキュメント §12 ✅
+**完了済み大項目**: DuckDB §4 全フェーズ ✅、Hamilton H-1〜H-7 ✅、レポート統廃合 §8 ✅、アーキテクチャ §9/11 ✅、ドキュメント §12 ✅
 
 ---
 
@@ -53,13 +52,13 @@
 
 ## SECTION 5: Hamilton 残務
 
-H-1〜H-6 完了 (詳細: DONE.md)。実装計画: `docs/ARCHITECTURE_CLEANUP.md` Phase C
+H-1〜H-7 完了 (詳細: DONE.md)。実装計画: `docs/ARCHITECTURE_CLEANUP.md` Phase C
 
-### H-7: PipelineContext 完全削除
+### H-7: PipelineContext 完全削除 ✅ 完了 (2026-04-24)
 
-**ブロック要因**: VA pipeline が ctx を直接使用、export_and_viz.py に 71 箇所 ctx 参照。DuckDB §4 完了後が前提。
+**完了内容**: VA pipeline → typed inputs 化 + context.py 削除
 
-**進捗** (2026-04-24): Phase 1-4 pure function 化完了。`pipeline_types.py` + 3 phase ファイル変換済み。
+**進捗** (2026-04-24): Phase 1-8 + VA pure function 化完了。context.py 削除、195→0 参照。
 
 - [x] `pipeline_types.py` 作成 (LoadedData, EntityResolutionResult, GraphsResult, CoreScoresResult, SupplementaryMetricsResult, VAScoresResult)
 - [x] `data_loading.py` → pure function (→ LoadedData)
@@ -67,13 +66,23 @@ H-1〜H-6 完了 (詳細: DONE.md)。実装計画: `docs/ARCHITECTURE_CLEANUP.md
 - [x] `graph_construction.py` → pure function (EntityResolutionResult → GraphsResult)
 - [x] Hamilton adapter 更新: loading.py, resolution.py
 - [x] metrics.py Phase 6 単純 8 nodes → typed inputs 変換 (engagement_decay, role_classification, career_analysis, director_circles, versatility_computed, network_density_computed, growth_trends_precomputed, career_tracks_inferred) (2026-04-24)
-- [ ] metrics.py centrality_metrics + betweenness_cache ノード分離
-- [ ] scoring.py Phase 5 の 8 nodes → typed inputs 変換
-- [ ] metrics.py 残り 8 nodes → typed inputs 変換
-- [ ] `assembly.py` Hamilton node + `result_assembly.py` / `post_processing.py` 変換
-- [ ] VA pipeline を Hamilton module 化 (or ctx を受け取らない形に refactor)
-- [ ] `export_and_viz.py` を ExportContext 置き換え + pure function 群に分解
-- [ ] `src/pipeline_phases/context.py` を削除
+- [x] metrics.py centrality_metrics + betweenness_cache ノード分離 (context 参照削除)
+- [x] scoring.py Phase 5 の 8 nodes → typed inputs 変換 (context 参照削除)
+- [x] metrics.py 残り 8 nodes → typed inputs 変換 (context 参照削除)
+- [x] `assembly.py` Hamilton node + `result_assembly.py` / `post_processing.py` 変換 (context 参照削除)
+- [x] VA pipeline を ctx を受け取らない形に refactor: core_scoring.py / graph_construction.py / supplementary_metrics.py / result_assembly.py → VAScoresResult 戻り値化 (2026-04-24)
+- [x] `export_and_viz.py` ctx 参照削除 (ExportContext 型 + dict パラメータ化)
+- [x] `src/pipeline_phases/context.py` を削除 (2026-04-24)
+- [x] PipelineCheckpoint 削除、lifecycle.py 簡略化 (2026-04-24)
+- [x] loading.py ctx ノード削除 → raw_data_loaded が LoadedData 直接返却 (2026-04-24)
+
+**影響度**:
+- context.py 削除 (315 行)
+- va/pipeline/_common.py 削除 (40 行)
+- 27 ファイル修正 (import / type hint / 関数シグニチャ)
+- 56 Hamilton node → typed inputs 対応完了
+- 195 PipelineContext 参照 → 0
+- commit 6da958d
 
 ---
 
