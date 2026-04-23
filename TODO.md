@@ -12,6 +12,10 @@
 |--------|---------|------|
 | 🟡 Maintenance | スキーマ後続 | v56 既存データ再スクレイプ (name_ja 誤入り修正)、v57 title.native |
 | 🟢 Future | データ修正 | WIKIDATA_ROLE_MAP 修正後の JVMG credits 再マップ |
+| 🔴 High | DuckDB | Card 05 era_fe / era_deflated_iv / opportunity_residual 実装 (export_and_viz.py:1575 deferred) |
+| 🔴 High | Report methodology | Temporal foresight Section 3.3 holdout validation 実装 (temporal_foresight.py:102) |
+| 🟡 Medium | Test coverage | scraper E2E: anilist_scraper (2265 lines) / seesaawiki_scraper (1411 lines) / ann_scraper (614 lines) integration tests |
+| 🟡 Medium | Test coverage | llm_pipeline.py (574 lines) unit + integration test |
 
 **完了済み大項目** (→ `DONE.md`): anime.score 汚染除去、Phase 1-4 基盤、DuckDB §4 全フェーズ、Hamilton H-1〜H-7 (PipelineContext 完全削除)、レポート統廃合 §8、アーキテクチャ §9/11、ドキュメント §12、テストカバレッジ §6、feat_* 層別分離 §13、scraper queries/parsers 分離 §3、§7.1 差分更新 (hash比較フィルタ + E2E)、§7.3 retry refactor、§9 similarity/recommendation スタブ化
 
