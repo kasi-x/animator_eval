@@ -78,8 +78,8 @@ TASK_CARDS/
 `upsert_anime()` 直接呼び出しはゼロ。
 
 残務 (任意):
-- [ ] GraphQL クエリ文字列を `src/scrapers/queries/` に分離 (`PERSON_DETAILS_QUERY` 等)
-- [ ] パース関数を `src/scrapers/parsers/` に分離 (`_parse_anime_staff` 等)
+- [x] AniList GraphQL クエリを `src/scrapers/queries/anilist.py` に分離済み (2026-04-24)
+- [ ] 他 scraper クエリ・パース関数を `src/scrapers/queries/` / `src/scrapers/parsers/` に分離
 
 ### 3.6 テストの `Anime(score=..., studios=...)` 移行
 
@@ -118,10 +118,11 @@ silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行
 
 **4.2 残務 → 4.4 で対応:**
 - [x] `analysis_modules.py` の `db_connection` / `record_calc_execution` / `get_calc_execution_hashes` (インクリメンタルキャッシュ) — `src/analysis/calc_cache.py` (cache.duckdb) に移植 (2026-04-23, commit 77d324f)
-- [ ] `pipeline.py` Phase 1.5: `compute_feat_credit_activity` / `compute_feat_career_annual` / `compute_feat_studio_affiliation` / `compute_feat_person_role_progression` — SQLite-only 計算
+- [x] `pipeline.py` Phase 1.5: `compute_feat_{credit_activity,career_annual,person_role_progression}` → `feat_precompute.py` (gold/silver DuckDB) (2026-04-24)
+- [ ] `compute_feat_studio_affiliation` — anime_studios が silver に移るまで SQLite 残留
 - [ ] `export_and_viz.py` の `compute_feat_credit_contribution` / `compute_feat_work_context` / `compute_feat_work_scale_tier` — SQLite-only 計算 (best-effort、要 DuckDB 移植)
 - [x] `analysis/llm_pipeline.py`: SQLite → `cache.duckdb` に移行済み (2026-04-23)
-- [ ] API 側の GOLD 読み取りを `gold_connect()` に切替 (`src/api.py`)
+- [x] API 側の GOLD 読み取りを `gold_connect()` / `silver_connect()` に切替済み (2026-04-24)
 
 ### 4.3 Phase C: BRONZE を Parquet + DuckDB
 
@@ -135,9 +136,9 @@ silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行
 **ブロッカー: 4.3 の Parquet scraper 変換が完了するまで着手不可**
 
 - [x] `analysis_modules.py` の `db_connection` / `record_calc_execution` / `get_calc_execution_hashes` を cache.duckdb に移植 (Step A, 2026-04-23 commit 77d324f)
-- [ ] `pipeline.py` Phase 1.5 の `compute_feat_*` 関数群を gold.duckdb + silver.duckdb で再実装
-- [ ] `export_and_viz.py` の `compute_feat_credit_contribution` / `compute_feat_work_context` / `compute_feat_work_scale_tier` を DuckDB SQL に書き直し
-- [ ] `analysis/llm_pipeline.py` の SQLite LLM キャッシュを gold.duckdb に移植
+- [x] `pipeline.py` Phase 1.5 の `compute_feat_*` 関数群を gold.duckdb + silver.duckdb で再実装 (2026-04-23 commit 256d350)
+- [x] `export_and_viz.py` の `compute_feat_credit_contribution` / `compute_feat_work_context` / `compute_feat_work_scale_tier` — 現行 main では未呼び出し (worktree artifact)、対象なし
+- [x] `analysis/llm_pipeline.py` の SQLite LLM キャッシュを gold.duckdb に移植 — 既に `calc_cache` DuckDB 経由
 - [ ] `src/database.py` を廃止 (9000 行 → 残存 DAO を `src/db/` に移管)
   - 残存利用箇所: `pipeline.py`, `cli.py`, `synthetic.py`, `api.py`, `scripts/`
 - [ ] `database_v2.py` / `models_v2.py` を廃止 (`init_db_v2` が `init_db` 経由で使用中)
