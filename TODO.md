@@ -109,23 +109,14 @@ TASK_CARDS/
   rg -l 'FROM scores\b|INTO scores\b|TABLE scores\b' src/ tests/ | xargs sed -i 's/FROM scores/FROM person_scores/g; s/INTO scores/INTO person_scores/g'
   ```
 
-### 1.4 `anime_display` 廃止 (段階的)
+### 1.4 `anime_display` 廃止 ✅ 完了 (2026-04-23 確認)
 
-**現状**: `init_db()` で作成され続ける (`src/database.py:444, 7472`)。以下が依然参照:
-- `src/validation.py:102`: `LEFT JOIN anime_display d`
-- `src/cli.py:281, 687`: `LEFT JOIN anime_display d`
-- `src/api.py:773`: `COUNT(*) FROM anime_display WHERE score IS NOT NULL`
+監査結果:
+- ✅ Step 1: `init_db()` の DDL → コメントアウト済 (`src/database.py:416-421`)
+- ✅ Step 2: `validation.py` / `cli.py` / `api.py` の参照 → **0 件** (既にクリーン)
+- ✅ Step 3: v54→v55 migration に `DROP TABLE IF EXISTS anime_display` あり (`src/database.py:8802`)、`16cffa0` で migration 登録済
 
-**修正**:
-- [ ] Step 1: `init_db()` の `anime_display` DDL (line 444) をコメントアウト
-- [ ] Step 2: 参照を `display_lookup` 経由 or bronze 直接参照に移行
-  | ファイル | 行 | 置換先 |
-  |---|---|---|
-  | `src/validation.py:102` | `LEFT JOIN anime_display d` | `display_lookup.get_display_score()` |
-  | `src/cli.py:281` | 同上 | 同上 |
-  | `src/cli.py:687` | 同上 | 同上 |
-  | `src/api.py:773` | `COUNT(*) FROM anime_display WHERE score IS NOT NULL` | `SELECT COUNT(*) FROM src_anilist_anime WHERE score IS NOT NULL` |
-- [ ] Step 3: v55 migration に `DROP TABLE IF EXISTS anime_display` を追加
+残存する `anime_display` 参照は legacy migration 関数 (v49 等) と「v55 後に anime_display が消えていることを検証する test」のみ。問題なし。
 
 ### 1.5 `anime_analysis` DDL 除去
 
@@ -217,21 +208,15 @@ src/scrapers/mediaarts_scraper.py:475
 - [ ] display は `src/utils/display_lookup.py` 経由で bronze から読む設計に統一
 - [ ] 1.4 Step 1 と連動
 
-### 3.3 `meta_entity_resolution_audit` への書き込み追加
+### 3.3 `meta_entity_resolution_audit` への書き込み追加 ✅ 完了 (2026-04-23 確認)
 
-**現状**: テーブル DDL は存在するが書き込みコードがない。defamation 防御のための監査ログが常に空。
-
-- [ ] `src/analysis/entity_resolution.py` の `merge_clusters()` か最終統合ステップに追加:
-  ```python
-  conn.execute("""
-      INSERT OR REPLACE INTO meta_entity_resolution_audit
-          (person_id, canonical_name, merge_method, merge_confidence,
-           merged_from_keys, merge_evidence, merged_at)
-      VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
-  """, (person_id, canonical_name, method, confidence,
-        json.dumps(source_keys), evidence_text))
-  ```
-- [ ] **制約**: entity resolution ロジック自体は変更しない。**記録の追加のみ** (false positive 増リスクを避けるため)
+監査結果 (TODO 文面はテーブル名 rename 前のもの):
+- 現在のテーブル名は `ops_entity_resolution_audit` (init_db_v2 で作成、`12_meta_prefix_split` の方針通り)
+- 書き込み関数 `upsert_meta_entity_resolution_audit` 実装済 (`src/database.py:5040`)
+- `pipeline_phases/entity_resolution.py:422-471` で audit_rows を生成・upsert
+- `pipeline.py:210` で `conn` を渡しているため本番 pipeline で書き込まれる
+- merge_method は `cross_source` / `exact_match` (ML resolver の挙動を変えず、生成済み canonical_map を分類記録するのみ — H3 違反なし)
+- `tests/test_database.py::TestMetaLineageAndAudit` (2 tests) pass
 
 ### 3.4 `credits.episode` sentinel 除去
 
