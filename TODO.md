@@ -27,7 +27,7 @@
 
 ### v57 構造的メタデータ
 
-- [ ] `title.native` を `country_of_origin` 分岐で `titles_alt` JSON へ格納 (v58 予定、names_alt 同パターン)
+- [x] `title.native` を `country_of_origin` 分岐で `titles_alt` JSON へ格納 (4ec1003 実装完了、assign_native_title_fields + parser フィールド追加)
 
 ---
 
