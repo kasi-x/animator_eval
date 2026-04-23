@@ -81,10 +81,9 @@ TASK_CARDS/
 - [x] AniList GraphQL クエリを `src/scrapers/queries/anilist.py` に分離済み (2026-04-24)
 - [ ] 他 scraper クエリ・パース関数を `src/scrapers/queries/` / `src/scrapers/parsers/` に分離
 
-### 3.6 テストの `Anime(score=..., studios=...)` 移行
+### 3.6 テストの `Anime(score=..., studios=...)` 移行 ✅ N/A
 
-- [ ] 短期: `BronzeAnime` シム維持 (破壊しない)
-- [ ] 中長期: `AnimeAnalysis(...)` に段階移行 (`rg 'Anime\(.*score=' tests/ --count` でスコープ確認)
+全テストは既に `BronzeAnime as Anime` エイリアスを使用。`score` を使うのは display-only logic (genre affinity tier 等) で BRONZE 層として正しい。`AnimeAnalysis` への移行は不要。
 
 ### 3.7 JVMG 再スクレイプ
 
@@ -139,10 +138,11 @@ silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行
 - [x] `pipeline.py` Phase 1.5 の `compute_feat_*` 関数群を gold.duckdb + silver.duckdb で再実装 (2026-04-23 commit 256d350)
 - [x] `export_and_viz.py` の `compute_feat_credit_contribution` / `compute_feat_work_context` / `compute_feat_work_scale_tier` — 現行 main では未呼び出し (worktree artifact)、対象なし
 - [x] `analysis/llm_pipeline.py` の SQLite LLM キャッシュを gold.duckdb に移植 — 既に `calc_cache` DuckDB 経由
+- [x] `migrate_to_v2.py` 削除 (commit c26fadd)
+- [x] `src/routers/persons.py` の `db_connection` → `gold_connect_with_silver()` に移行 (commit 818bb09)
 - [ ] `src/database.py` を廃止 (9000 行 → 残存 DAO を `src/db/` に移管)
-  - 残存利用箇所: `pipeline.py`, `cli.py`, `synthetic.py`, `api.py`, `scripts/`
+  - 残存利用箇所: `pipeline.py`, `cli.py`, `synthetic.py`, `scripts/`
 - [ ] `database_v2.py` / `models_v2.py` を廃止 (`init_db_v2` が `init_db` 経由で使用中)
-- [ ] `migrate_to_v2.py` 削除 (one-shot script、実行済み後に不要)
 - [ ] Entity resolution の書き込み経路 (`llm_pipeline.py` 経由) を DuckDB に切替
 - [ ] Atlas migration を DuckDB 環境で再生成
 - [ ] `CLAUDE.md` の testing patterns `monkeypatch DEFAULT_DB_PATH` 記述を DuckDB 版に更新
