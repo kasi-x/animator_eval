@@ -155,7 +155,7 @@ def db_connection(
 
 def init_db(conn: sqlite3.Connection) -> None:
     """Create tables (delegates to init_db_v2 target schema)."""
-    from src.database_v2 import init_db_v2
+    from src.db.schema import init_db_v2
     init_db_v2(conn)
 
 

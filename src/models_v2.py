@@ -1,8 +1,10 @@
-"""SQLModel schema definitions for database (v2 - Atlas-compatible).
+"""DEPRECATED: SQLModel schema definitions (kept for generate_dbml.py only).
 
-This module defines all 84 tables using SQLModel, making the schema the
-single source of truth. All constraints, relationships, and indexes are
-declared here in Python.
+This module defines all 84 tables using SQLModel. It is maintained solely for
+scripts/generate_dbml.py which uses src.database_v2.create_sqlalchemy_engine().
+
+For new code: schema management has moved to src.db.schema (init_db_v2)
+and duckdb integration (src/etl/integrate_duckdb.py).
 
 3-layer architecture:
   - SILVER (12 tables): canonical, score-free, normalized

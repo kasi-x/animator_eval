@@ -33,8 +33,10 @@ def scores_data(tmp_path, monkeypatch):
     )
 
     # Set up a test database with schema and 3 test persons
+    import src.db.init
     db_path = tmp_path / "test_scores.db"
     monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
+    monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
     from src.db import get_connection, init_db
 
     conn = get_connection()
@@ -859,9 +861,11 @@ class TestCompare:
 class TestDataQuality:
     def test_data_quality(self, client, tmp_path, monkeypatch):
         import src.database
+        import src.db.init
 
         db_path = tmp_path / "quality.db"
         monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
+        monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
 
         from src.db import get_connection, init_db
 
@@ -896,9 +900,11 @@ class TestPersonNetwork:
 class TestRecommend:
     def test_recommend(self, client, scores_data, monkeypatch, tmp_path):
         import src.database
+        import src.db.init
 
         db_path = tmp_path / "rec.db"
         monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
+        monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
 
         from src.db import get_connection, init_db
 
@@ -925,9 +931,11 @@ class TestRecommend:
 class TestPredict:
     def test_predict(self, client, scores_data, monkeypatch, tmp_path):
         import src.database
+        import src.db.init
 
         db_path = tmp_path / "pred.db"
         monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
+        monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
 
         from src.db import get_connection, init_db
 
@@ -951,9 +959,11 @@ class TestDbStats:
     def test_stats(self, client, tmp_path, monkeypatch):
         """DB統計は実際のDBが必要なので基本的な接続テスト."""
         import src.database
+        import src.db.init
 
         db_path = tmp_path / "test_api.db"
         monkeypatch.setattr(src.database, "DEFAULT_DB_PATH", db_path)
+        monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
 
         from src.db import get_connection, init_db
 
