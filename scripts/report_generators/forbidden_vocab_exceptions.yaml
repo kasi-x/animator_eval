@@ -50,3 +50,89 @@ exceptions:
     line_pattern: "r'\\btalent\\b'"
     term: talent
     reason: Same linter-implementation context as ability.
+
+  - file: scripts/report_generators/lint_vocab.py
+    line_pattern: "not frame structural metrics as individual"
+    term: ability
+    reason: >
+      Module docstring explaining the linter's purpose: "not frame structural metrics
+      as individual 'ability'". Negation usage describing what the linter prohibits,
+      not a finding violation.
+
+  # section_builder.py — Japanese disclaimer (negation)
+  - file: scripts/report_generators/section_builder.py
+    line_pattern: "個人の能力"
+    term: 能力
+    reason: >
+      Negation in the mandatory bilingual disclaimer: "これらは個人の能力、技量、芸術性を
+      評価・測定・示唆するものではありません" (These do not constitute assessments of individual
+      ability). Required for legal/ethical transparency disclosure.
+
+  # export.py — English negation disclaimer
+  - file: scripts/report_generators/export.py
+    line_pattern: "not individual competence or ability"
+    term: ability
+    reason: >
+      Negation in HTML disclaimer: "Scores measure structural network position, not
+      individual competence or ability." Required for transparent perspectivism per
+      REPORT_PHILOSOPHY v2.
+
+  - file: scripts/report_generators/export.py
+    line_pattern: "not individual competence or ability"
+    term: competence
+    reason: >
+      Same negation disclaimer context as ability above.
+
+  # html_templates.py — Japanese disclaimers and AWCC technical term
+  - file: scripts/report_generators/html_templates.py
+    line_pattern: "個人の能力"
+    term: 能力
+    reason: >
+      Negation in DISCLAIMER constant: "個人の能力・技量・芸術性を評価・測定・示唆するものではありません"
+      (does not constitute assessments of individual ability). Mandatory legal disclaimer.
+
+  - file: scripts/report_generators/html_templates.py
+    line_pattern: "実力の不足を意味するものではありません"
+    term: 実力
+    reason: >
+      Negation in DISCLAIMER constant: "実力の不足を意味するものではありません"
+      (does not imply insufficient ability). Mandatory legal disclaimer.
+
+  - file: scripts/report_generators/html_templates.py
+    line_pattern: "能力加重協業中心性"
+    term: 能力
+    reason: >
+      Established technical abbreviation: AWCC (Ability-Weighted Co-Credit Centrality)
+      → 能力加重協業中心性. The metric is computed from collaborators' IV Score (network
+      position), not individual ability. The "能力加重" label refers to the weighting
+      formula input (IV Score), not an individual ability judgment.
+
+  - file: scripts/report_generators/html_templates.py
+    line_pattern: "個人の実力ではなく環境要因"
+    term: 実力
+    reason: >
+      Negation in Studio Exposure glossary entry: "個人の実力ではなく環境要因の指標"
+      (indicator of environmental factors, not individual ability). Negation usage.
+
+  # analyze_credit_intervals.py — DISCLAIMER constant (negation)
+  - file: scripts/analyze_credit_intervals.py
+    line_pattern: "個人の能力や技量を評価するものではありません"
+    term: 能力
+    reason: >
+      Negation in DISCLAIMER constant: "個人の能力や技量を評価するものではありません。数値の低さは
+      「能力不足」を意味しません。" (Scores do not assess individual ability or skill.
+      A low score does not imply lack of ability.) Mandatory legal disclaimer.
+
+  - file: scripts/analyze_credit_intervals.py
+    line_pattern: "does not imply lack of skill"
+    term: ability
+    reason: >
+      Negation in English DISCLAIMER: "do not assess individual ability".
+      Required for bilingual legal transparency disclosure.
+
+  - file: scripts/analyze_credit_intervals.py
+    line_pattern: "does not imply lack of skill"
+    term: skill
+    reason: >
+      Negation in English DISCLAIMER: "A low score does not imply lack of skill."
+      Required for bilingual legal transparency disclosure.

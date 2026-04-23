@@ -69,12 +69,6 @@ from .policy_brief_index import PolicyBriefIndexReport
 from .hr_brief_index import HrBriefIndexReport
 from .biz_brief_index import BizBriefIndexReport
 
-# Archived modules are available on demand as
-# ``scripts.report_generators.reports.archived.<module>`` for audit /
-# regeneration, but they are NOT eagerly imported here because their
-# relative imports (e.g. ``from ..ci_utils``) were written for the live
-# location and would need rewriting for a one-off archive regen.
-
 #: All v2 report classes, in generation order
 #:
 #: Audience brief body count (policy + hr + biz) = 16, total active = 37.

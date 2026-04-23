@@ -50,6 +50,7 @@ log = structlog.get_logger(__name__)
 SCRIPT_DIR = Path(__file__).resolve().parent
 VOCAB_PATH = SCRIPT_DIR / "forbidden_vocab.yaml"
 REPLACEMENT_PATH = SCRIPT_DIR / "vocab_replacements.yaml"
+EXCEPTIONS_PATH = SCRIPT_DIR / "forbidden_vocab_exceptions.yaml"
 
 # Categories whose terms are actual violations. `interpretation_markers`
 # is informational-only and is not enforced by this gate.
@@ -147,6 +148,36 @@ def load_vocab(path: Path = VOCAB_PATH) -> list[BannedTerm]:
     # Longer terms first so multi-word matches win over prefixes.
     terms.sort(key=lambda t: (-len(t.term), t.term))
     return terms
+
+
+def load_exceptions(path: Path = EXCEPTIONS_PATH) -> list[dict]:
+    """Load documented exceptions from forbidden_vocab_exceptions.yaml."""
+    if not path.exists():
+        return []
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    return raw.get("exceptions", [])
+
+
+def _is_definitional(finding: "Finding") -> bool:
+    """True if the entire context string IS the matched term (forbidden-term set definition)."""
+    return finding.context.strip() == finding.term.term
+
+
+def _is_excepted(finding: "Finding", exceptions: list[dict]) -> bool:
+    """True if a documented exception matches this finding."""
+    for exc in exceptions:
+        exc_file = exc.get("file", "")
+        if not exc_file:
+            continue
+        if not str(finding.path).endswith(exc_file):
+            continue
+        if exc.get("term", "").lower() != finding.term.term.lower():
+            continue
+        line_pattern = exc.get("line_pattern", "")
+        if line_pattern and line_pattern not in finding.context:
+            continue
+        return True
+    return False
 
 
 def load_replacements(path: Path = REPLACEMENT_PATH) -> dict[str, str]:
@@ -354,6 +385,7 @@ def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     terms = load_vocab()
     replacements = load_replacements()
+    exceptions = load_exceptions()
     patterns = _compile_patterns(terms)
 
     all_findings: list[Finding] = []
@@ -363,6 +395,11 @@ def main(argv: list[str] | None = None) -> int:
     for file_path in iter_target_files(args.paths):
         files_scanned += 1
         file_findings = lint_file(file_path, patterns, replacements)
+        # Filter: skip definitional usages and documented exceptions
+        file_findings = [
+            f for f in file_findings
+            if not _is_definitional(f) and not _is_excepted(f, exceptions)
+        ]
         if not file_findings:
             continue
         files_flagged[file_path] = len(file_findings)
