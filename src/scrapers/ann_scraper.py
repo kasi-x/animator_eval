@@ -496,7 +496,11 @@ async def fetch_person_batch(
     client: AnnClient,
     ann_ids: list[int],
 ) -> list[AnnPersonDetail]:
-    """ANN XML API から最大 BATCH_SIZE 人の詳細を一括取得する."""
+    """ANN XML API から最大 BATCH_SIZE 人の詳細を一括取得する.
+
+    注意: 2026-04-23 時点で ?people=ID は <warning>ignored</warning> を返す。
+    Phase 3 では fetch_person_html() を使うこと。
+    """
     ids_str = "/".join(str(i) for i in ann_ids)
     resp = await client.get(f"{PEOPLE_API_URL}?people={ids_str}")
     text = resp.text.strip()
@@ -509,6 +513,174 @@ async def fetch_person_batch(
         log.error("ann_people_xml_parse_error", ids=ann_ids[:5], error=str(exc))
         return []
     return parse_person_xml(root)
+
+
+# ─── フェーズ 3 (HTML): 人物 HTML スクレイピング ───────────────────────────────
+
+# HTML ページの <strong> ラベルテキスト (小文字, コロン除去) → フィールド名
+_HTML_LABEL_MAP: dict[str, str] = {
+    "birthdate": "date_of_birth",
+    "birth date": "date_of_birth",
+    "born": "date_of_birth",
+    "date of birth": "date_of_birth",
+    "hometown": "hometown",
+    "blood type": "blood_type",
+    "website": "website",
+    "home page": "website",
+    "biography": "description",
+}
+
+
+def _parse_dob_html(text: str) -> str | None:
+    """生年月日テキストを YYYY-MM-DD または YYYY に変換する.
+
+    対応フォーマット:
+      "1941-01-05"            → "1941-01-05"  (ISO: そのまま)
+      "Jan 5, 1941"           → "1941-01-05"  (略月名)
+      "January 5, 1941"       → "1941-01-05"  (完全月名)
+      "1941"                  → "1941"         (年のみ)
+    """
+    text = text.strip()
+    if re.match(r"\d{4}-\d{2}-\d{2}", text):
+        return text
+    for fmt in ("%B %d, %Y", "%b %d, %Y"):
+        try:
+            return datetime.strptime(text, fmt).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+    m = re.search(r"\b(\d{4})\b", text)
+    return m.group(1) if m else None
+
+
+def parse_person_html(html: str, ann_id: int) -> AnnPersonDetail | None:
+    """ANN 人物ページ HTML (people.php?id=N) から AnnPersonDetail を抽出する.
+
+    ページ構造 (2026年4月時点):
+      <div id="page-title">
+        <h1 id="page_header">英語名</h1>
+        日本語名テキストノード (例: "山口 祐司")
+      </div>
+      <div id="infotype-N" class="encyc-info-type ...">
+        <strong>ラベル:</strong> <span>値</span>
+      </div>
+    """
+    from bs4 import BeautifulSoup
+
+    soup = BeautifulSoup(html, "html.parser")
+
+    # Cloudflare チャレンジ / エラーページ検出
+    title_tag = soup.find("title")
+    title_text = title_tag.get_text(" ", strip=True) if title_tag else ""
+    if "just a moment" in title_text.lower():
+        log.debug("ann_person_html_cf_block", ann_id=ann_id)
+        return None
+
+    # 英語名: <h1 id="page_header"> が最も信頼性高い
+    h1 = soup.find("h1", id="page_header")
+    if h1:
+        name_en = h1.get_text(" ", strip=True)
+    elif " - " in title_text:
+        name_en = title_text.split(" - ")[0].strip()
+    else:
+        name_en = title_text.strip()
+    if not name_en:
+        return None
+
+    # 日本語名: h1 の直後テキストノード (日本語文字を含む場合)
+    name_ja = ""
+    if h1:
+        for sib in h1.next_siblings:
+            raw = str(sib).strip()
+            if raw and re.search(r"[　-鿿＀-￯]", raw):
+                name_ja = raw
+                break
+
+    # 日本語名フォールバック: infotype-13 (姓) + infotype-12 (名) を結合
+    if not name_ja:
+        family, given = "", ""
+        for div in soup.find_all("div", id=re.compile(r"^infotype-(?:12|13)$")):
+            strong = div.find("strong")
+            span = div.find("span")
+            if strong and span:
+                label = strong.get_text(strip=True).lower()
+                val = span.get_text(strip=True)
+                if "family" in label:
+                    family = val
+                elif "given" in label:
+                    given = val
+        if family or given:
+            name_ja = f"{family} {given}".strip()
+
+    # その他フィールド: <div id="infotype-N"> から <strong> ラベルで分類
+    fields: dict[str, str] = {}
+    for div in soup.find_all("div", id=re.compile(r"^infotype-")):
+        strong = div.find("strong")
+        if not strong:
+            continue
+        label = strong.get_text(strip=True).rstrip(":").lower().strip()
+        if label not in _HTML_LABEL_MAP:
+            continue
+        value_el = div.find("span") or div.find("div", class_="tab")
+        if value_el:
+            val = value_el.get_text(" ", strip=True)
+        else:
+            val = div.get_text(" ", strip=True)
+            val = val.replace(strong.get_text(strip=True), "").lstrip(":").strip()
+        if val and label not in fields:
+            fields[label] = val
+
+    date_of_birth: str | None = None
+    hometown: str | None = None
+    blood_type: str | None = None
+    website: str | None = None
+    description: str | None = None
+
+    for label, val in fields.items():
+        fname = _HTML_LABEL_MAP.get(label)
+        if fname == "date_of_birth":
+            date_of_birth = _parse_dob_html(val)
+        elif fname == "hometown":
+            hometown = val
+        elif fname == "blood_type":
+            blood_type = val.upper()
+        elif fname == "website":
+            website = val
+        elif fname == "description":
+            description = val[:2000]
+
+    return AnnPersonDetail(
+        ann_id=ann_id,
+        name_en=name_en,
+        name_ja=name_ja,
+        date_of_birth=date_of_birth,
+        hometown=hometown,
+        blood_type=blood_type,
+        website=website,
+        description=description,
+    )
+
+
+async def fetch_person_html(
+    client: AnnClient,
+    ann_id: int,
+) -> AnnPersonDetail | None:
+    """ANN 人物 HTML ページ (people.php?id=NUM) から 1 人分の詳細を取得する.
+
+    XML API (?people=ID) が <warning>ignored</warning> を返す問題の代替実装。
+    バッチ取得不可のため 1 リクエスト = 1 人物。
+    """
+    try:
+        resp = await client.get(PEOPLE_HTML_BASE, params={"id": ann_id})
+    except Exception as exc:
+        log.warning("ann_person_html_fetch_error", ann_id=ann_id, error=str(exc))
+        return None
+    if resp.status_code in (403, 404):
+        log.debug("ann_person_not_found", ann_id=ann_id, status=resp.status_code)
+        return None
+    result = parse_person_html(resp.text, ann_id)
+    if result is None:
+        log.debug("ann_person_html_parse_failed", ann_id=ann_id)
+    return result
 
 
 # ─── Bronze 書き込みヘルパー ─────────────────────────────────────────────────
@@ -670,7 +842,7 @@ async def _run_scrape_anime(
 @app.command("scrape-persons")
 def cmd_scrape_persons(
     limit: int = typer.Option(0, help="取得する人物数の上限 (0=全件)"),
-    batch_size: int = typer.Option(BATCH_SIZE, help="XML API バッチサイズ"),
+    batch_size: int = typer.Option(BATCH_SIZE, help="(未使用; HTML は per-ID)"),
     delay: float = typer.Option(DEFAULT_DELAY, help="リクエスト間隔(秒)"),
     checkpoint_interval: int = typer.Option(
         SCRAPE_CHECKPOINT_INTERVAL, help="チェックポイント保存間隔"
@@ -678,19 +850,13 @@ def cmd_scrape_persons(
     data_dir: Path = typer.Option(DEFAULT_DATA_DIR, help="チェックポイント保存先"),
     resume: bool = typer.Option(True, help="チェックポイントから再開"),
 ) -> None:
-    """Phase 3: DB 内の ann_id を持つ全人物の XML データを取得してメタデータを補完する.
+    """Phase 3: DB 内の ann_id を持つ全人物の HTML ページをスクレイプしてメタデータを補完する.
 
-    注意 (2026-04-23): ANN の ?people=ID API は現在 <warning>ignored</warning>
-    を返す状態が確認されており、Phase 3 は空振りする。HTML ページ
-    (https://www.animenewsnetwork.com/encyclopedia/people.php?id=NUM) を
-    スクレイプする実装に置き換える必要あり (TODO §scraper-broken-endpoints)。
+    XML API (?people=ID) が <warning>ignored</warning> を返す問題のため、
+    people.php?id=NUM の HTML ページを 1 件ずつスクレイプする実装に切り替え済み。
+    バッチ取得不可のためスループットは約 40 件/分 (1.5s 間隔)。
     """
     log_path = configure_file_logging("ann")
-    log.info("ann_scrape_persons_command_start", log_file=str(log_path), limit=limit)
-    log.warning(
-        "ann_people_api_known_broken",
-        note="?people=ID returns <warning>ignored</warning>; Phase 3 will not collect data",
-    )
     asyncio.run(
         _run_scrape_persons(
             limit=limit,
@@ -705,7 +871,7 @@ def cmd_scrape_persons(
 
 async def _run_scrape_persons(
     limit: int,
-    batch_size: int,
+    batch_size: int,  # noqa: ARG001 — HTML は per-ID のためバッチ不使用
     delay: float,
     checkpoint_interval: int,
     data_dir: Path,
@@ -740,37 +906,37 @@ async def _run_scrape_persons(
         total=len(all_ann_ids),
         completed=len(completed),
         pending=len(pending),
+        method="html",
     )
 
-    batches = [pending[i : i + batch_size] for i in range(0, len(pending), batch_size)]
     done_this_run = 0
-
+    collected = 0
     persons_bw = BronzeWriter("ann", table="persons")
     client = AnnClient(delay=delay)
     try:
-        for batch_idx, batch in enumerate(batches):
-            details = await fetch_person_batch(client, batch)
-            for detail in details:
+        for ann_id in pending:
+            detail = await fetch_person_html(client, ann_id)
+            if detail is not None:
                 save_person_detail(persons_bw, detail)
-            # 取得できなかった ID も完了扱いにする（存在しない or 非公開）
-            for ann_id in batch:
-                completed.add(ann_id)
-            done_this_run += len(batch)
+                collected += 1
+            completed.add(ann_id)
+            done_this_run += 1
 
-            if (batch_idx + 1) % max(1, checkpoint_interval // batch_size) == 0:
+            if done_this_run % checkpoint_interval == 0:
                 persons_bw.flush()
                 cp["completed_ids"] = list(completed)
                 _save_checkpoint(cp_path, cp)
                 log.info(
                     "ann_persons_progress",
                     done=done_this_run,
+                    collected=collected,
                     remaining=len(pending) - done_this_run,
                 )
 
         persons_bw.flush()
         cp["completed_ids"] = list(completed)
         _save_checkpoint(cp_path, cp)
-        log.info("ann_persons_scrape_done", total=done_this_run)
+        log.info("ann_persons_scrape_done", total_requested=done_this_run, collected=collected)
 
     finally:
         await client.close()
