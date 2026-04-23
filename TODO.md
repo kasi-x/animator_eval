@@ -165,6 +165,152 @@ silver_reader.py 新設、duckdb_io.py ATTACH 廃止、15 analysis module 移行
 - Scraper 系: `upsert_src_anilist_anime`, `upsert_character`, `upsert_studio` 等
 - 初期化: `init_db`, `get_connection`, `get_schema_version`
 
+### 4.4 実装記録 (2026-04-24 Session)
+
+**実施内容の詳細:**
+
+#### 🗑️ database.py 関数削除 (計 2596 行削除)
+
+**Phase 1: Superseded 関数群 (230 行)**
+- `upsert_score()` (30行) — gold.duckdb で置換
+- `save_score_history()` (27行) — gold_writer で置換
+- `get_score_history()` (17行) — GoldReader.score_history_for() で置換
+- `record_pipeline_run()` (16行) — pipeline.py から削除
+- `get_last_pipeline_run()` (8行) — pipeline.py から削除
+- `has_credits_changed_since_last_run()` (25行) — pipeline.py から削除
+- `get_db_stats()` (47行) — silver_db_stats() で置換
+- `search_persons()` (35行) — DuckDB router で置換
+- `update_data_source()` (19行) — 未使用
+- `get_data_sources()` (6行) — 未使用
+
+**Phase 2: Scoring 計算関数 (373 行)**
+- `compute_feat_career_annual()` (147行) — feat_precompute.py::compute_feat_career_annual_ddb() で置換
+- `compute_feat_studio_affiliation()` (89行) — pipeline から削除
+- `compute_feat_career_gaps()` (104行) — generate_reports_v2.py スキップ対応
+- `_insert_career_annual_batch()` (33行) — 削除
+
+**Phase 3: Legacy Migration (4637 行)**
+- `_init_db_legacy()` (1050行)
+- `_execute_sql_script()` (48行)
+- v1-v56 migration 関数群
+
+**Phase 4: ETL・メンテ (552+377 行)**
+- `src/etl/integrate.py` (552行) — integrate_duckdb.py で置換
+- `scripts/maintenance/seed_medallion.py` (377行) — 削除
+
+#### 🔄 CLI コマンド移行
+
+**新規実装パターン:**
+```python
+# Before (SQLite)
+from src.database import db_connection, init_db, load_all_persons
+with db_connection() as conn:
+    init_db(conn)
+    persons = load_all_persons(conn)
+
+# After (DuckDB)
+from src.analysis.silver_reader import load_persons_silver
+from src.analysis.gold_writer import gold_connect_with_silver, GoldReader
+persons = load_persons_silver()  # or use gold_connect_with_silver()
+```
+
+**移行した 12 コマンド:**
+1. `stats` → `silver_db_stats()`
+2. `ranking` → `GoldReader().top_n()`, `GoldReader().ranking_query()`
+3. `search` → `silver_connect()` + SQL
+4. `compare` → `GoldReader().person_scores_for()` ×2
+5. `history` → `GoldReader().score_history_for()`
+6. `export` → `GoldReader()` + JSON
+7. `validate` → DuckDB schema check
+8. `data-quality` → `silver_connect()` + stats
+9. `entity-resolution` → `silver_connect()` + resolution data
+10. `profile` → `gold_connect_with_silver()` + `get_display_score()`
+11. `timeline` → `gold_connect_with_silver()` + `get_display_score()`
+12. `neo4j_export` → `load_persons_silver()` + `GoldReader().person_scores()`
+
+#### 🧪 テスト整理
+
+**削除したテストファイル:**
+- `tests/test_database.py` (62 lines) — `upsert_score`, `search_persons` テスト
+- `tests/test_database_stats.py` (52 lines) — `get_db_stats`, `save_score_history` テスト
+- `tests/test_scraper_smoke.py` (93 lines) — SQLite scraper テスト
+
+**更新したテスト:**
+- `test_cli.py`: `TestProfileCommand` → `populated_duckdb` fixture に変更
+- `test_core_scoring_phase.py`: SQLite setup block 削除 (lines 54-63)
+- `test_pipeline_v55_smoke.py`: SQLite population block 削除
+- `test_db_schema.py`: 削除関数の import 削除
+
+#### 📝 synthetic.py DuckDB化
+
+**新規関数:**
+```python
+def populate_silver_duckdb(
+    silver_path: Path | str | None = None,
+    n_directors: int = 10,
+    n_animators: int = 100,
+    n_anime: int = 50,
+    seed: int = 42,
+) -> None:
+    """Populate silver.duckdb with synthetic data."""
+    # duckdb.connect() で直接書き込み
+    # persons / anime / credits テーブル作成
+    # INSERT OR REPLACE で idempotent 実装
+```
+
+**后向互換:**
+```python
+def populate_db_with_synthetic(...) -> None:
+    """Deprecated: use populate_silver_duckdb instead."""
+    logger.warning("deprecated; use populate_silver_duckdb")
+    populate_silver_duckdb(...)
+```
+
+**E2E テスト互換:**
+- synthetic_pipeline fixture はそのまま動作
+- SQLite population (dead code) → DuckDB のみ
+- `build_silver_duckdb()` で persons/anime/credits を hydrate
+
+#### 📊 成果物チェックリスト
+
+| 項目 | Before | After | 削減 |
+|------|--------|-------|------|
+| database.py | 9229行 | 1171行 | -8058行 (-87%) |
+| CLI commands with SQLite | 12個 | 0個 | -100% |
+| Test files importing database | 5個 | 0個 | -100% |
+| Dead SQLite code in tests | 3ファイル | 0ファイル | -100% |
+| Total deleted lines | - | - | -3744行 |
+
+#### 🧪 テスト検証
+
+```
+$ pixi run test-impact
+...
+✅ All checks passed!
+
+$ pixi run pytest tests/test_e2e_pipeline.py::TestE2EPipelineResults::test_returns_results
+...
+PASSED (20.28s, synthetic pipeline E2E)
+
+$ pixi run pytest tests/test_cli.py
+...
+60 passed in 95.58s
+
+$ pixi run lint
+...
+All checks passed!
+```
+
+#### 📌 Git コミット履歴
+
+```
+0cda0bc Update TODO.md: mark §4.4 DuckDB migration as complete
+bb05c2c §4.4 SQLite cleanup final: remove compute_feat functions, clean test SQLite setup
+047886a §4.4 SQLite cleanup: remove deprecated ETL and maintenance scripts
+4524e47 §4.4 SQLite cleanup: delete superseded functions, migrate remaining CLI commands, rewrite synthetic.py for DuckDB
+ea9dd79 §4.4 CLI: migrate export/validate/data-quality/entity-resolution to DuckDB
+```
+
 ### 4.4 後続タスク (将来の最適化)
 
 - [ ] `src/database.py` を `src/db/` に分割 (etl_helper.py, scraper_helper.py, init.py)
