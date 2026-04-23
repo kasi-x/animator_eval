@@ -1,4 +1,4 @@
-"""Bronze → Silver ETL: src_* テーブルから正規化された anime/persons/credits テーブルへ統合."""
+"""Bronze → Silver ETL: integrate src_* tables into canonical anime/persons/credits tables."""
 
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ log = structlog.get_logger()
 
 
 def _anime_to_analysis(anime: BronzeAnime) -> dict:
-    """BronzeAnime から anime_analysis 用の dict を生成 (score カラムは含まない)."""
+    """Build an anime_analysis dict from BronzeAnime (excludes score column)."""
     return {
         k: v
         for k, v in {
@@ -111,7 +111,7 @@ def upsert_canonical_anime(
 
 
 def integrate_anilist(conn: sqlite3.Connection) -> dict[str, int]:
-    """src_anilist_* → canonical anime / persons / credits."""
+    """Integrate src_anilist_* → canonical anime / persons / credits."""
     from src.database import (
         insert_credit,
         upsert_anime,
@@ -182,7 +182,7 @@ def integrate_anilist(conn: sqlite3.Connection) -> dict[str, int]:
             site_url=row["site_url"],
             anilist_id=row["anilist_id"],
         )
-        upsert_person(conn, person)
+        upsert_person(conn, person, source="anilist")
         stats["persons"] += 1
 
     # Credits
@@ -204,7 +204,7 @@ def integrate_anilist(conn: sqlite3.Connection) -> dict[str, int]:
 
 
 def integrate_ann(conn: sqlite3.Connection) -> dict[str, int]:
-    """src_ann_* → canonical anime / persons / credits."""
+    """Integrate src_ann_* → canonical anime / persons / credits."""
     from src.database import (
         insert_credit,
         upsert_anime,
@@ -252,7 +252,7 @@ def integrate_ann(conn: sqlite3.Connection) -> dict[str, int]:
             description=row["description"],
             ann_id=row["ann_id"],
         )
-        upsert_person(conn, person)
+        upsert_person(conn, person, source="ann")
         stats["persons"] += 1
 
     # Credits — only insert if both anime and person already exist in canonical tables
@@ -283,7 +283,7 @@ def integrate_ann(conn: sqlite3.Connection) -> dict[str, int]:
 
 
 def integrate_allcinema(conn: sqlite3.Connection) -> dict[str, int]:
-    """src_allcinema_* → canonical anime / persons / credits."""
+    """Integrate src_allcinema_* → canonical anime / persons / credits."""
     from src.database import (
         insert_credit,
         upsert_anime,
@@ -317,7 +317,7 @@ def integrate_allcinema(conn: sqlite3.Connection) -> dict[str, int]:
             name_en=row["name_en"] or "",
             allcinema_id=row["allcinema_id"],
         )
-        upsert_person(conn, person)
+        upsert_person(conn, person, source="allcinema")
         conn.execute(
             "UPDATE persons SET allcinema_id = ? WHERE id = ?",
             (row["allcinema_id"], f"{prefix}{row['allcinema_id']}"),
@@ -349,9 +349,9 @@ def integrate_allcinema(conn: sqlite3.Connection) -> dict[str, int]:
 
 
 def integrate_seesaawiki(conn: sqlite3.Connection) -> dict[str, int]:
-    """src_seesaawiki_* → canonical anime / persons / credits.
+    """Integrate src_seesaawiki_* → canonical anime / persons / credits.
 
-    seesaawiki には グローバル人物 ID がないため、person は名前ベースで作成する。
+    SeesaaWiki has no global person ID, so persons are created by name.
     """
     from src.database import (
         insert_credit,
@@ -384,7 +384,7 @@ def integrate_seesaawiki(conn: sqlite3.Connection) -> dict[str, int]:
         if name not in person_cache:
             pid = make_seesaa_person_id(name)
             person = Person(id=pid, name_ja=name)
-            upsert_person(conn, person)
+            upsert_person(conn, person, source="seesaawiki")
             person_cache[name] = pid
             stats["persons"] += 1
         person_id = person_cache[name]
@@ -404,7 +404,7 @@ def integrate_seesaawiki(conn: sqlite3.Connection) -> dict[str, int]:
 
 
 def integrate_keyframe(conn: sqlite3.Connection) -> dict[str, int]:
-    """src_keyframe_* → canonical anime / persons / credits."""
+    """Integrate src_keyframe_* → canonical anime / persons / credits."""
     from src.database import (
         insert_credit,
         upsert_anime,
@@ -468,7 +468,7 @@ def integrate_keyframe(conn: sqlite3.Connection) -> dict[str, int]:
                 name_ja=row["name_ja"] or "",
                 name_en=row["name_en"] or "",
             )
-            upsert_person(conn, person)
+            upsert_person(conn, person, source="keyframe")
             person_cache.add(person_id)
             stats["persons"] += 1
 
@@ -509,7 +509,7 @@ def integrate_keyframe(conn: sqlite3.Connection) -> dict[str, int]:
 
 
 def run_integration(conn: sqlite3.Connection) -> dict[str, dict[str, int]]:
-    """全ソーステーブルを正規化テーブルに統合する."""
+    """Integrate all source tables into the canonical tables."""
     results: dict[str, dict[str, int]] = {}
     
     # Get available sources from database (or use defaults)

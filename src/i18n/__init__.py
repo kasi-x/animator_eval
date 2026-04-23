@@ -1,4 +1,4 @@
-"""国際化 (i18n) モジュール — 多言語対応.
+"""Internationalization (i18n) module — multi-language support.
 
 Provides internationalization support for CLI, API, and frontend.
 
@@ -33,7 +33,7 @@ logger = structlog.get_logger()
 
 
 class I18n:
-    """国際化マネージャー.
+    """Internationalization manager.
 
     Manages translation dictionaries and provides API for localized messages.
     """

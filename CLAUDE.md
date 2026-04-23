@@ -195,7 +195,7 @@ animetor_eval/
 
 ## Tech Stack
 
-Python 3.12, pixi (conda-forge + pypi), NetworkX, Pydantic v2, httpx, structlog, typer + Rich, FastAPI + uvicorn + WebSocket, matplotlib + Plotly, Rust/PyO3/maturin, SQLite WAL (→ DuckDB 移行予定 `TODO.md §4`), ruff, pytest。
+Python 3.12, pixi (conda-forge + pypi), NetworkX, Pydantic v2, httpx, structlog, typer + Rich, FastAPI + uvicorn + WebSocket, matplotlib + Plotly, Rust/PyO3/maturin, **sf-hamilton** (Phase 9 DAG PoC, H-1), SQLite WAL (→ DuckDB silver/gold 移行中 `TODO.md §4`; Cards 03/04 完了、Card 05 進行中), ruff, pytest (2450+ tests)。
 
 ## Known Issues
 

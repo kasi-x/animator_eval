@@ -48,10 +48,10 @@ def get_year_quarter(anime: AnimeAnalysis) -> tuple[int, int] | None:
     """
     if anime.year is None:
         return None
-    # DB で算出済みの quarter を最優先
+    # Prefer the pre-computed quarter from the DB column
     if anime.quarter is not None and 1 <= anime.quarter <= 4:
         return (anime.year, anime.quarter)
-    # フォールバック: season → start_date → Q2
+    # Fallback chain: season → start_date month → Q2
     q = season_to_quarter(anime.season)
     if q is None:
         q = _quarter_from_start_date(anime.start_date)

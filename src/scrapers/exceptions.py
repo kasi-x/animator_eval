@@ -1,13 +1,13 @@
-"""スクレイパー共通の例外階層."""
+"""Common scraper exception hierarchy."""
 
 
 class ScraperError(Exception):
-    """スクレイパーの基底例外.
+    """Base exception for scrapers.
 
     Attributes:
-        source: データソース名 (e.g. "anilist", "mal", "mediaarts", "wikidata")
-        url: リクエスト先URL
-        metadata: 追加情報の辞書
+        source: data source name (e.g. "anilist", "mal", "mediaarts", "wikidata")
+        url: request target URL
+        metadata: dict of additional information
     """
 
     def __init__(
@@ -25,10 +25,10 @@ class ScraperError(Exception):
 
 
 class RateLimitError(ScraperError):
-    """レート制限に到達した場合の例外.
+    """Exception raised when a rate limit is hit.
 
     Attributes:
-        retry_after: リトライまでの秒数 (Retry-After ヘッダー由来)
+        retry_after: seconds to wait before retrying (from Retry-After header)
     """
 
     def __init__(
@@ -45,16 +45,16 @@ class RateLimitError(ScraperError):
 
 
 class AuthenticationError(ScraperError):
-    """認証失敗の例外 (無効なトークン等)."""
+    """Authentication failure (invalid token, etc.)."""
 
 
 class DataParseError(ScraperError):
-    """レスポンスのパース失敗."""
+    """Failed to parse the response."""
 
 
 class EndpointUnreachableError(ScraperError):
-    """エンドポイントに到達不能 (リトライ上限超過)."""
+    """Endpoint unreachable (retry limit exceeded)."""
 
 
 class ContentValidationError(ScraperError):
-    """ダウンロードしたコンテンツの検証失敗 (不正なContent-Type, サイズ不足等)."""
+    """Downloaded content failed validation (wrong Content-Type, insufficient size, etc.)."""

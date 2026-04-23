@@ -1,7 +1,7 @@
-"""パフォーマンス計測・モニタリング.
+"""Performance measurement and monitoring.
 
-パイプライン実行時の各ステージの実行時間、メモリ使用量、
-キャッシュヒット率を追跡する。
+Tracks execution time, memory usage, and cache hit rates
+for each stage of the pipeline.
 
 Enhanced version with:
 - Percentile tracking (p50, p95, p99)
@@ -71,7 +71,7 @@ class PerformanceReport:
 
 
 class PerformanceMonitor:
-    """パフォーマンスメトリクス収集."""
+    """Performance metrics collection."""
 
     def __init__(self) -> None:
         self.timings: dict[str, list[float]] = defaultdict(list)
@@ -84,14 +84,14 @@ class PerformanceMonitor:
         self._tags: dict[str, str] = {}  # Operation tags for grouping
 
     def record_timing(self, operation: str, duration: float) -> None:
-        """実行時間を記録."""
+        """Record elapsed time for an operation."""
         self.timings[operation].append(duration)
         logger.debug(
             "timing_recorded", operation=operation, duration=round(duration, 3)
         )
 
     def record_memory(self, checkpoint: str) -> None:
-        """メモリ使用量を記録（RSS, VMS, percent）."""
+        """Record memory usage (RSS, VMS, percent)."""
         mem_info = self._process.memory_info()
         mem_percent = self._process.memory_percent()
 
@@ -122,23 +122,23 @@ class PerformanceMonitor:
         )
 
     def increment_counter(self, name: str, amount: int = 1) -> None:
-        """カウンタをインクリメント."""
+        """Increment a named counter."""
         self.counters[name] += amount
 
     def record_cache_hit(self) -> None:
-        """キャッシュヒットを記録."""
+        """Record a cache hit."""
         self.cache_hits += 1
 
     def record_cache_miss(self) -> None:
-        """キャッシュミスを記録."""
+        """Record a cache miss."""
         self.cache_misses += 1
 
     def tag_operation(self, operation: str, tag: str) -> None:
-        """オペレーションにタグを付ける（グルーピング用）."""
+        """Attach a tag to an operation for grouping."""
         self._tags[operation] = tag
 
     def get_timing_stats(self, operation: str) -> TimingStats | None:
-        """特定のオペレーションの詳細統計を取得."""
+        """Get detailed timing statistics for a specific operation."""
         durations = self.timings.get(operation, [])
         if not durations:
             return None
@@ -165,7 +165,7 @@ class PerformanceMonitor:
 
     @contextmanager
     def measure(self, operation: str):
-        """コンテキストマネージャで実行時間を計測."""
+        """Measure elapsed time via context manager."""
         start = time.monotonic()
         try:
             yield
@@ -174,7 +174,7 @@ class PerformanceMonitor:
             self.record_timing(operation, duration)
 
     def get_summary(self) -> dict[str, Any]:
-        """メトリクスサマリーを取得（後方互換性のため保持）."""
+        """Get a metrics summary (retained for backwards compatibility)."""
         timing_summary = {}
         for op, durations in self.timings.items():
             if durations:
@@ -230,7 +230,7 @@ class PerformanceMonitor:
         }
 
     def generate_report(self) -> PerformanceReport:
-        """詳細なパフォーマンスレポートを生成."""
+        """Generate a detailed performance report."""
         total_duration = time.monotonic() - self._start_time
         timing_stats = self._collect_timing_stats()
         peak_memory, total_delta = self._compute_memory_stats()
@@ -247,7 +247,7 @@ class PerformanceMonitor:
         )
 
     def export_report(self, output_path: Path | str) -> None:
-        """レポートをJSON形式で出力."""
+        """Export the report to JSON."""
         report = self.generate_report()
         output_path = Path(output_path)
 
@@ -261,7 +261,7 @@ class PerformanceMonitor:
         logger.info("performance_report_exported", path=str(output_path))
 
     def log_summary(self) -> None:
-        """サマリーをログ出力."""
+        """Log a performance summary."""
         summary = self.get_summary()
         logger.info("performance_summary", **summary)
 
@@ -316,7 +316,7 @@ class PerformanceMonitor:
         console.print(t)
 
     def print_report(self, show_percentiles: bool = True) -> None:
-        """Rich tableでレポートを表示（CLI用）."""
+        """Print the report as a Rich table (CLI use)."""
         try:
             from rich.console import Console
         except ImportError:
@@ -334,18 +334,18 @@ _monitor = PerformanceMonitor()
 
 
 def get_monitor() -> PerformanceMonitor:
-    """グローバルモニターインスタンスを取得."""
+    """Return the global monitor instance."""
     return _monitor
 
 
 def reset_monitor() -> None:
-    """モニターをリセット（テスト用）."""
+    """Reset the monitor (for tests)."""
     global _monitor
     _monitor = PerformanceMonitor()
 
 
 def timed(operation: str | None = None):
-    """関数の実行時間を自動計測するデコレータ."""
+    """Decorator that automatically measures function execution time."""
 
     def decorator(func: Callable) -> Callable:
         op_name = operation or f"{func.__module__}.{func.__name__}"

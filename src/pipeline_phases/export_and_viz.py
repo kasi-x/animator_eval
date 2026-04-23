@@ -1031,10 +1031,10 @@ def export_and_visualize_phase(context: PipelineContext, elapsed: float = 0.0) -
 
 
 def _persist_features_to_db(context: PipelineContext) -> None:
-    """パイプライン計算結果を feat_* テーブルに永続化する.
+    """Persist pipeline computation results to feat_* tables.
 
-    JSON エクスポートと同じデータを DB にも書き込み、次回パイプラインで再利用できるようにする。
-    DB 書き込みは best-effort — 失敗してもパイプライン全体は継続する。
+    Writes the same data as the JSON export to the DB so it can be reused in the next pipeline run.
+    DB writes are best-effort — failures do not abort the overall pipeline.
     """
     from src.database import (
         compute_feat_credit_contribution,

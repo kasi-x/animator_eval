@@ -125,7 +125,7 @@ class PipelineContext:
     contribution_data: dict[str, Any] = field(default_factory=dict)
     potential_value_scores: dict[str, Any] = field(default_factory=dict)
     # career_track per person_id (Phase 6 supplementary_metrics)
-    # 値: 'animator' / 'animator_director' / 'director' / 'production' / 'technical' / 'multi_track'
+    # values: 'animator' / 'animator_director' / 'director' / 'production' / 'technical' / 'multi_track'
     career_tracks: dict[str, str] = field(default_factory=dict)
 
     # =========================================================================

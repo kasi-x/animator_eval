@@ -1,4 +1,4 @@
-"""スクレイパー共通の非同期リトライユーティリティ."""
+"""Shared async retry utility for scrapers."""
 
 import asyncio
 from collections.abc import Awaitable, Callable
@@ -25,24 +25,24 @@ async def retry_async(
     source: str = "",
     **kwargs: object,
 ) -> T:
-    """非同期関数を指数バックオフ付きでリトライする.
+    """Retry an async function with exponential backoff.
 
-    RateLimitError の retry_after を尊重する。
-    全リトライ失敗時は EndpointUnreachableError を送出する。
+    Respects RateLimitError.retry_after. Raises EndpointUnreachableError
+    when all attempts are exhausted.
 
     Args:
-        fn: リトライ対象の非同期関数
-        *args: fn に渡す位置引数
-        max_attempts: 最大試行回数
-        base_delay: 初回バックオフ秒数 (指数的に増加)
-        source: ログ用のデータソース名
-        **kwargs: fn に渡すキーワード引数
+        fn: async function to retry
+        *args: positional arguments passed to fn
+        max_attempts: maximum number of attempts
+        base_delay: initial backoff seconds (grows exponentially)
+        source: data source name for logging
+        **kwargs: keyword arguments passed to fn
 
     Returns:
-        fn の戻り値
+        return value of fn
 
     Raises:
-        EndpointUnreachableError: 全リトライ失敗時
+        EndpointUnreachableError: when all retries fail
     """
     last_error: Exception | None = None
 

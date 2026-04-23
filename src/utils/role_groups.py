@@ -41,7 +41,7 @@ ANIMATOR_ROLES: frozenset[Role] = frozenset(
         Role.IN_BETWEEN,
         Role.CHARACTER_DESIGNER,
         Role.LAYOUT,
-        Role.PHOTOGRAPHY_DIRECTOR,  # 撮影+エフェクト統合
+        Role.PHOTOGRAPHY_DIRECTOR,  # photography + effects combined
     }
 )
 
@@ -116,11 +116,11 @@ EPISODIC_ROLES: frozenset[Role] = frozenset(
 NON_PRODUCTION_ROLES: frozenset[Role] = frozenset(
     {
         Role.VOICE_ACTOR,
-        Role.ORIGINAL_CREATOR,  # 原作者 — 制作スタッフではない
-        Role.MUSIC,  # 作曲家・演奏者 — アニメーション制作スタッフではない
-        Role.LOCALIZATION,  # 各国語版スタッフ — 日本の制作工程外
-        Role.OTHER,  # ロール特定不可のクレジット — スコア計算対象外
-        Role.SPECIAL,  # スペシャルサンクス・ゲスト — 制作外特別枠
+        Role.ORIGINAL_CREATOR,  # original creator — not a production staff member
+        Role.MUSIC,  # composer / performer — not animation production staff
+        Role.LOCALIZATION,  # localization staff — outside the Japanese production process
+        Role.OTHER,  # credits with unidentifiable role — excluded from scoring
+        Role.SPECIAL,  # special thanks / guests — outside normal production
     }
 )
 
@@ -143,10 +143,10 @@ ROLE_CATEGORY: dict[Role, str] = {
     Role.LAYOUT: "animation",
     # Design
     Role.CHARACTER_DESIGNER: "design",
-    # Technical (撮影+エフェクト+CG)
+    # Technical (photography + effects + CG)
     Role.PHOTOGRAPHY_DIRECTOR: "technical",
     Role.CGI_DIRECTOR: "technical",
-    # Art (美術+背景)
+    # Art (background art)
     Role.BACKGROUND_ART: "art",
     # Sound
     Role.SOUND_DIRECTOR: "sound",
@@ -157,7 +157,7 @@ ROLE_CATEGORY: dict[Role, str] = {
     # Production
     Role.PRODUCER: "production",
     Role.PRODUCTION_MANAGER: "production_management",
-    # Finishing (仕上+色彩+検査)
+    # Finishing (paint + color design + QC)
     Role.FINISHING: "finishing",
     # Editing
     Role.EDITING: "editing",
@@ -166,57 +166,57 @@ ROLE_CATEGORY: dict[Role, str] = {
     # Non-production
     Role.VOICE_ACTOR: "non_production",
     Role.LOCALIZATION: "non_production",
-    Role.OTHER: "non_production",  # ロール特定不可
-    Role.SPECIAL: "non_production",  # スペシャルサンクス等
+    Role.OTHER: "non_production",  # unidentifiable role
+    Role.SPECIAL: "non_production",  # special thanks etc.
 }
 
 # =============================================================================
 # Career Stage Hierarchy (single source of truth)
 # =============================================================================
-# アニメーション制作のキャリアパスを数値化。低→高。
+# Numeric career path for animation production. Low → high.
 #
-# アニメーター系: 動画(1) → 第二原画(2) → 原画/レイアウト(3) → キャラデ(4) → 作監(5) → 監督(6)
-# 演出系:        演出(5) → 監督(6)
-# 技術系:        撮影/CG(3) → 撮影監督/CG監督(5=部門監督、作監相当)
-# 制作系:        制作進行(2) → プロデューサー(5)
+# Animation track:  in_between(1) → 2nd_key(2) → key/layout(3) → char_design(4) → anim_dir(5) → director(6)
+# Direction track:  episode_director(5) → director(6)
+# Technical track:  photography/CG(3) → photo_dir/CGI_dir(5=dept director, equivalent to anim_dir)
+# Production track: prod_manager(2) → producer(5)
 #
-# レイアウトは原画工程の一部（レイアウト作業 → 原画清書）であり、
-# 第二原画とは異なるキャリアステップではない。Stage 3 = 原画と同格。
+# Layout is part of the key animation process (layout pass → key animation clean-up),
+# not a distinct career step from second key animation. Stage 3 = same as key animator.
 #
-# 撮影監督・CGI監督・音響監督は部門監督（作画監督と同格 = Stage 5）。
-# 全体統括の監督（Stage 6）とは区別する。
+# Photography director, CGI director, and sound director are department-level supervisors
+# (equivalent to animation director = Stage 5). Distinct from the overall director (Stage 6).
 #
-# 非制作職 (ORIGINAL_CREATOR, MUSIC, VOICE_ACTOR, SPECIAL) は
-# NON_PRODUCTION_ROLES でパイプラインから除外されるため Stage 0。
+# Non-production roles (ORIGINAL_CREATOR, MUSIC, VOICE_ACTOR, SPECIAL) are excluded
+# from the pipeline via NON_PRODUCTION_ROLES, so Stage 0.
 
 CAREER_STAGE: dict[Role, int] = {
     # Animation track
-    Role.IN_BETWEEN: 1,  # 動画
-    Role.SECOND_KEY_ANIMATOR: 2,  # 第二原画
-    Role.KEY_ANIMATOR: 3,  # 原画
-    Role.LAYOUT: 3,  # レイアウト（原画工程の一部）
-    Role.CHARACTER_DESIGNER: 4,  # キャラクターデザイン
-    Role.ANIMATION_DIRECTOR: 5,  # 作画監督・総作画監督（部門監督）
-    Role.EPISODE_DIRECTOR: 5,  # 演出・絵コンテ
-    Role.DIRECTOR: 6,  # 監督（全体統括）
-    # Technical track — 部門監督 = 作画監督相当
-    Role.PHOTOGRAPHY_DIRECTOR: 5,  # 撮影監督
-    Role.CGI_DIRECTOR: 5,  # CGI監督
+    Role.IN_BETWEEN: 1,  # in-between animation
+    Role.SECOND_KEY_ANIMATOR: 2,  # second key animation
+    Role.KEY_ANIMATOR: 3,  # key animation
+    Role.LAYOUT: 3,  # layout (part of the key animation process)
+    Role.CHARACTER_DESIGNER: 4,  # character design
+    Role.ANIMATION_DIRECTOR: 5,  # animation director / chief animation director (dept supervisor)
+    Role.EPISODE_DIRECTOR: 5,  # episode director / storyboard
+    Role.DIRECTOR: 6,  # overall director
+    # Technical track — dept supervisor = equivalent to animation director
+    Role.PHOTOGRAPHY_DIRECTOR: 5,  # photography director
+    Role.CGI_DIRECTOR: 5,  # CGI director
     # Art / Sound / Writing
-    Role.BACKGROUND_ART: 3,  # 美術・背景
-    Role.SOUND_DIRECTOR: 5,  # 音響監督（部門監督）
-    Role.SCREENPLAY: 4,  # 脚本・シリーズ構成
+    Role.BACKGROUND_ART: 3,  # background art
+    Role.SOUND_DIRECTOR: 5,  # sound director (dept supervisor)
+    Role.SCREENPLAY: 4,  # screenplay / series composition
     # Production management
-    Role.PRODUCTION_MANAGER: 2,  # 制作進行・制作デスク
-    Role.PRODUCER: 5,  # プロデューサー
+    Role.PRODUCTION_MANAGER: 2,  # production manager / desk
+    Role.PRODUCER: 5,  # producer
     # Finishing / Editing / Settings
-    Role.FINISHING: 3,  # 仕上げ・色彩設計
-    Role.EDITING: 3,  # 編集
-    Role.SETTINGS: 3,  # 設定
-    # Non-production — パイプラインで除外されるため Stage 0
-    Role.ORIGINAL_CREATOR: 0,  # 原作（非制作）
-    Role.MUSIC: 0,  # 音楽（非制作）
-    Role.VOICE_ACTOR: 0,  # 声優（非制作）
+    Role.FINISHING: 3,  # finishing / color design
+    Role.EDITING: 3,  # editing
+    Role.SETTINGS: 3,  # settings / prop sheets
+    # Non-production — excluded from pipeline, Stage 0
+    Role.ORIGINAL_CREATOR: 0,  # original creator (non-production)
+    Role.MUSIC: 0,  # music (non-production)
+    Role.VOICE_ACTOR: 0,  # voice actor (non-production)
     Role.LOCALIZATION: 0,  # 各国語版スタッフ（非制作）
     Role.OTHER: 0,  # ロール特定不可（非制作）
     Role.SPECIAL: 0,  # スペシャルサンクス等（非制作）

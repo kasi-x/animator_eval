@@ -1,6 +1,5 @@
 """Tests for Voice Actor analysis modules (§6.3)."""
 
-import math
 import pytest
 
 # VA modules import AnimeAnalysis but duck-type genres; use BronzeAnime so

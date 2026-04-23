@@ -1,10 +1,10 @@
-"""プロジェクト共通のパス定義・定数.
+"""Shared path definitions and constants for the project.
 
-すべての設定は環境変数でオーバーライド可能。
-優先順位: 環境変数 > .env ファイル > コード内デフォルト値
+All settings can be overridden by environment variables.
+Priority: env vars > .env file > in-code defaults
 
-.env ファイルはプロジェクトルートに置くか、ANIMETOR_ENV_FILE 環境変数で指定する。
-モジュールインポート時に自動ロードされるため、明示的な呼び出しは不要。
+Place the .env file at the project root or point to it with ANIMETOR_ENV_FILE.
+It is loaded automatically on module import — no explicit call needed.
 """
 
 from __future__ import annotations
@@ -20,10 +20,10 @@ from src.utils.role_groups import ROLE_CATEGORY
 log = structlog.get_logger()
 
 # =============================================================================
-# .env の自動ロード (import 時に実行)
+# Auto-load .env (runs at import time)
 # =============================================================================
-# 環境変数はコード内デフォルト値より優先されるが、
-# シェルで既にセットされた変数は上書きしない (override=False)。
+# Env vars take priority over in-code defaults,
+# but variables already set in the shell are not overwritten (override=False).
 _ROOT_DIR = Path(__file__).resolve().parent.parent.parent
 _env_file = Path(os.environ.get("ANIMETOR_ENV_FILE", str(_ROOT_DIR / ".env")))
 if _env_file.exists():
@@ -31,7 +31,7 @@ if _env_file.exists():
     log.debug("dotenv_loaded", path=str(_env_file))
 
 # =============================================================================
-# パス定義  (ANIMETOR_*_DIR / ANIMETOR_DB_PATH でオーバーライド可)
+# Path definitions  (overridable via ANIMETOR_*_DIR / ANIMETOR_DB_PATH)
 # =============================================================================
 ROOT_DIR: Path = _ROOT_DIR
 
@@ -49,7 +49,7 @@ REPORTS_DIR: Path = Path(
 HTML_DIR: Path = Path(os.environ.get("ANIMETOR_HTML_DIR", str(RESULT_DIR / "html")))
 NOTEBOOKS_DIR: Path = RESULT_DIR / "notebooks"
 
-# DB ファイルパス (database.py はここを参照する)
+# DB file path (referenced by database.py)
 DB_PATH: Path = Path(
     os.environ.get("ANIMETOR_DB_PATH", str(DB_DIR / "animetor_eval.db"))
 )
@@ -61,14 +61,14 @@ GOLD_DB_PATH: Path = Path(
 )
 
 # =============================================================================
-# PageRank パラメータ
+# PageRank parameters
 # =============================================================================
 DAMPING_FACTOR: float = float(os.environ.get("ANIMETOR_PAGERANK_DAMPING", "0.85"))
 MAX_ITERATIONS: int = int(os.environ.get("ANIMETOR_PAGERANK_MAX_ITER", "100"))
 CONVERGENCE_THRESHOLD: float = float(os.environ.get("ANIMETOR_PAGERANK_TOL", "1e-6"))
 
 # =============================================================================
-# Commitment Multipliers — カテゴリ別の責任/関与度 (tunable)
+# Commitment Multipliers — responsibility/involvement weight per category (tunable)
 # =============================================================================
 # D01 rationale: These weights reflect role-level responsibility in anime production.
 # The hierarchy (direction 3.0 > supervision 2.8 > animation 2.0 > ...) follows
@@ -78,24 +78,24 @@ CONVERGENCE_THRESHOLD: float = float(os.environ.get("ANIMETOR_PAGERANK_TOL", "1e
 # multipliers only affect graph edge weights (one of many IV inputs).
 # If better calibration data becomes available (e.g., salary surveys), update here.
 COMMITMENT_MULTIPLIERS: dict[str, float] = {
-    "direction": 3.0,  # 監督・演出系 — 作品全体の責任
-    "animation_supervision": 2.8,  # 作画監督系 — 作画品質の責任
-    "animation": 2.0,  # アニメーター系 — 作画実務
-    "design": 2.3,  # デザイン系 — ビジュアル設計
-    "technical": 2.0,  # 技術系 — 撮影・CG・エフェクト
-    "art": 1.3,  # 美術系 — 背景美術
-    "sound": 1.8,  # 音響系 — 音響・音楽
-    "writing": 1.8,  # 脚本系 — 脚本・原作
-    "production": 1.5,  # 制作系 — プロデューサー
-    "production_management": 1.2,  # 制作進行・デスク系 — 現場管理
-    "finishing": 1.2,  # 仕上げ系 — 仕上・検査
-    "editing": 1.5,  # 編集系 — 編集・ポスプロ
-    "settings": 1.5,  # 設定系 — 設定・プロップ
-    "non_production": 0.5,  # 非制作部門
+    "direction": 3.0,  # direction / storyboard — full-work responsibility
+    "animation_supervision": 2.8,  # animation supervision — drawing quality responsibility
+    "animation": 2.0,  # animators — drawing production
+    "design": 2.3,  # design — visual design
+    "technical": 2.0,  # technical — photography, CG, effects
+    "art": 1.3,  # art — background art
+    "sound": 1.8,  # sound — audio and music
+    "writing": 1.8,  # writing — screenplay and original story
+    "production": 1.5,  # production — producers
+    "production_management": 1.2,  # production management — on-site coordination
+    "finishing": 1.2,  # finishing — paint and QC
+    "editing": 1.5,  # editing — edit and post-production
+    "settings": 1.5,  # settings — prop and model sheets
+    "non_production": 0.5,  # non-production
 }
 
 # =============================================================================
-# Role Rank — カテゴリ内での相対的な重要度 (0.0–1.0)
+# Role Rank — relative importance within category (0.0–1.0)
 # =============================================================================
 ROLE_RANK: dict[str, float] = {
     "director": 1.0,
@@ -139,7 +139,7 @@ def _compute_role_weights() -> dict[str, float]:
     return weights
 
 
-# 役職の重み（エッジ重み係数） — COMMITMENT_MULTIPLIERS × ROLE_RANK から動的に計算
+# Role weights (edge weight coefficients) — computed dynamically from COMMITMENT_MULTIPLIERS × ROLE_RANK
 ROLE_WEIGHTS: dict[str, float] = _compute_role_weights()
 
 # =============================================================================
@@ -186,7 +186,7 @@ IV_CV_SEED: int = int(os.environ.get("ANIMETOR_IV_CV_SEED", "42"))
 # =============================================================================
 # Duration-based work importance weighting
 # =============================================================================
-# 30分アニメを基準 (1.0x), ミニアニメは減衰, 映画は増幅
+# 30-minute anime as baseline (1.0x); mini-anime decay, films amplify
 DURATION_BASELINE_MINUTES: int = int(
     os.environ.get("ANIMETOR_DURATION_BASELINE_MINUTES", "30")
 )
