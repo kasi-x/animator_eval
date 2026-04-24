@@ -73,7 +73,7 @@ IV_i = (λ1·theta_i + λ2·birank_i + λ3·studio_exp_i + λ4·awcc_i + λ5·pa
 
 ### 10-Phase Pipeline
 
-`src/pipeline_phases/` に 1 phase 1 ファイル (data_loading → validation → entity_resolution → graph_construction → core_scoring → supplementary_metrics → result_assembly → post_processing → analysis_modules → export_and_viz)。共有は `PipelineContext` (将来 Hamilton に置換予定、`TODO.md §5`)。
+`src/pipeline_phases/` に 1 phase 1 ファイル (data_loading → validation → entity_resolution → graph_construction → core_scoring → supplementary_metrics → result_assembly → post_processing → analysis_modules → export_and_viz)。DAG は sf-hamilton (`hamilton_modules/*.py`)、phase 間共有は `pipeline_types.py` の typed dataclass (旧 `PipelineContext` 完全削除)。
 
 ### Graph
 
@@ -87,7 +87,7 @@ IV_i = (λ1·theta_i + λ2·birank_i + λ3·studio_exp_i + λ4·awcc_i + λ5·pa
 
 ## Schema (SQLModel + Atlas)
 
-- **Single source of truth**: `src/models_v2.py` (37 tables、全制約/FK/index を Python で宣言)
+- **Single source of truth**: `src/db/schema.py` (SQLModel 全 table、全制約/FK/index を Python で宣言)
 - **Atlas config**: `atlas.hcl`
 - **Auto-generated**: `docs/schema.dbml` (ER図), `docs/DATA_DICTIONARY.md` (列単位)
 
@@ -159,12 +159,10 @@ animetor_eval/
 │   ├── viz/               # v2 report architecture (chart_spec, renderers)
 │   ├── i18n/              # EN/JA translations
 │   ├── etl/               # integrate.py (integrate_anilist 等)
-│   ├── models.py          # Pydantic v2 モデル
-│   ├── models_v2.py       # SQLModel schema (single source of truth)
-│   ├── database.py        # SQLite DAO (55 migration、`TODO.md §1 Maintenance` で分割予定)
-│   ├── pipeline.py        # オーケストレーター
-│   ├── api.py             # FastAPI (42+ endpoint)
-│   └── cli.py             # typer + Rich (33 commands)
+│   ├── db/                # DB 層 (schema=SQLModel single source, init, etl, rows, scraper)
+│   ├── routers/           # FastAPI ルーター (i18n / persons / reports / validators)
+│   ├── runtime/           # エントリポイント (models.py Pydantic v2, pipeline.py オーケストレーター, api.py FastAPI, cli.py typer+Rich, report.py)
+│   └── infra/             # インフラ (websocket, logging 等)
 ├── scripts/
 │   ├── generate_briefs_v2.py       # brief orchestrator
 │   ├── generate_reports.py         # v2 class dispatcher (v1 shim 統合済み)
@@ -206,12 +204,12 @@ animetor_eval/
 
 ## Tech Stack
 
-Python 3.12, pixi (conda-forge + pypi), NetworkX, Pydantic v2, httpx, structlog, typer + Rich, FastAPI + uvicorn + WebSocket, matplotlib + Plotly, Rust/PyO3/maturin, **sf-hamilton** (Phase 9 DAG PoC, H-1), SQLite WAL (BRONZE/SILVER/GOLD 現在も SQLite; DuckDB 移行中 `TODO.md §4` — Phase A ✅ Cards 03/04/05 完了、次: Card 06 GOLD DuckDB 化), ruff, pytest (2450+ tests)。
+Python 3.12, pixi (conda-forge + pypi), NetworkX, Pydantic v2, httpx, structlog, typer + Rich, FastAPI + uvicorn + WebSocket, matplotlib + Plotly, Rust/PyO3/maturin, **sf-hamilton** (H-1〜H-7 完了、`PipelineContext` 完全削除・Phase 1-10 DAG 化済), DuckDB (BRONZE/SILVER/GOLD 全層移行完了、`TODO.md §4` Phase A 全 Card 完了), ruff, pytest (2450+ tests)。
 
 ## Known Issues
 
-- 現行タスク: `TODO.md` (schema 修復 / DuckDB / Hamilton / レポート統廃合 / アーキテクチャ整理 / ドキュメント整理 — すべてを一元管理)
-- 完了済み: `DONE.md` (anime.score 除去 16 pathway、計算ロジック監査、Phase 1-4 基盤)
+- 現行タスク: `TODO.md` (v56 backfill 待機 / v57 title.native / §7.4 ANN 再 scrape — 全て待機系タスクのみ)
+- 完了済み: `DONE.md` (anime.score 除去 16 pathway、Phase 1-4 基盤、DuckDB 全層移行、Hamilton H-1〜H-7、レポート統廃合、scraper queries/parsers 分離、差分更新、feat_* 層別分離)
 
 ## 禁止事項 (再提案しない)
 
