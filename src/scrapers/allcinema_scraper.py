@@ -2,12 +2,14 @@
 
 3-phase structure:
   Phase 1 (sitemap):  retrieve all cinema/person IDs from sitemap XML.gz files
+  Phase 1-alt (sitemap-anime): retrieve anime-only cinema IDs via /ajax/search
   Phase 2 (cinema):   extract anime staff info from CreditJson embedded in each cinema page
   Phase 3 (persons):  fetch name and yomigana for each person ID collected in Phase 2
 
 Data sources:
   Sitemap (cinema) : https://www.allcinema.net/sitemap_c{N}.xml.gz  (3 files)
   Sitemap (person) : https://www.allcinema.net/sitemap_p{N}.xml.gz  (12 files)
+  Ajax search      : https://www.allcinema.net/ajax/search  (POST, search_cinema_media=anime)
   Cinema page      : https://www.allcinema.net/cinema/{id}   (HTML, CreditJson embedded)
   Person page      : https://www.allcinema.net/person/{id}   (HTML, name + yomigana)
 
@@ -53,6 +55,7 @@ SITE_BASE = "https://www.allcinema.net"
 CINEMA_BASE = f"{SITE_BASE}/cinema/"
 PERSON_BASE = f"{SITE_BASE}/person/"
 AJAX_PERSON = f"{SITE_BASE}/ajax/person"
+AJAX_SEARCH = f"{SITE_BASE}/ajax/search"
 
 SITEMAP_CINEMA_PATTERN = f"{SITE_BASE}/sitemap_c{{n}}.xml.gz"
 SITEMAP_PERSON_PATTERN = f"{SITE_BASE}/sitemap_p{{n}}.xml.gz"
@@ -60,6 +63,29 @@ SITEMAP_PERSON_PATTERN = f"{SITE_BASE}/sitemap_p{{n}}.xml.gz"
 # allcinema の cinema サイトマップは 3 ファイル、person は 12 ファイル (2026/04 時点)
 SITEMAP_CINEMA_COUNT = 3
 SITEMAP_PERSON_COUNT = 12
+
+# /ajax/search の search_cinema_media=anime に対して使うシード文字集合。
+# 1 文字では >1000 件を超えるものがあるため、超えた場合は 2 文字目を付加して再帰探索する。
+# ひらがな + カタカナ + 主要アルファベット (大/小) + 数字。
+# 日本語アニメタイトルはほぼ必ずこれらのいずれかを含む。
+_SEARCH_SEEDS: tuple[str, ...] = tuple(
+    "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん"
+    "がぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽぁぃぅぇぉっゃゅょ"
+    "アイウエオカキクケコサシスセソタチツテトナニヌネノハヒフヘホマミムメモヤユヨラリルレロワヲン"
+    "ガギグゲゴザジズゼゾダヂヅデドバビブベボパピプペポァィゥェォッャュョ"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    "0123456789"
+)
+
+# 再帰展開の際に付加する文字 (ひらがな + 数字のみで十分深い分割が得られる)
+_EXPAND_CHARS: tuple[str, ...] = tuple(
+    "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわをん"
+    "がぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽ"
+    "0123456789"
+)
+
+# search 結果が >1000 件の場合の再帰展開の最大深度
+_MAX_PREFIX_DEPTH = 4
 
 DEFAULT_DELAY = max(SCRAPE_DELAY_SECONDS, 2.0)
 DEFAULT_DATA_DIR = Path("data/allcinema")
@@ -229,6 +255,126 @@ async def fetch_sitemap_ids(
             log.info("allcinema_sitemap_done", n=n, found=len(ids))
         except Exception as exc:
             log.error("allcinema_sitemap_error", n=n, error=str(exc))
+    return ids
+
+
+async def _search_anime_one_page(
+    client: AllcinemaClient,
+    word: str,
+    page: int,
+    page_limit: int = 100,
+) -> tuple[list[int], int]:
+    """POST to /ajax/search for one page.
+
+    Returns (cinema_id_list, max_page).
+    Returns ([], 0) when results exceed the server limit (>1000) or on error.
+    """
+    headers = {
+        "X-CSRF-TOKEN": client._csrf_token,
+        "X-Requested-With": "XMLHttpRequest",
+        "Referer": f"{SITE_BASE}/search/",
+    }
+    data = {
+        "search_target": "cinema",
+        "search_word": word,
+        "search_cinema_media": "anime",
+        "page": str(page),
+        "page_limit": str(page_limit),
+        "sort": "2",  # 製作年 昇順
+    }
+    try:
+        resp = await client._client.post(AJAX_SEARCH, data=data, headers=headers)
+        resp.raise_for_status()
+        body = resp.json()
+    except Exception as exc:
+        log.warning("allcinema_search_error", word=word, page=page, error=str(exc))
+        return [], 0
+
+    sm = body.get("search", {}).get("searchmovies", {})
+    movies = sm.get("movies", [])
+    if not movies:
+        # Over-limit case: server returns empty movies with a warning message
+        return [], 0
+
+    ids = [m["movie"]["cinemaid"] for m in movies if "movie" in m]
+    max_page = sm.get("page", {}).get("maxpage", 1)
+    return ids, max_page
+
+
+async def _fetch_anime_ids_for_word(
+    client: AllcinemaClient,
+    word: str,
+    collected: set[int],
+    depth: int = 0,
+) -> None:
+    """Collect anime cinema IDs for all pages of the given search word.
+
+    When the server returns no movies (results > 1000), recursively expands
+    the prefix by appending each character in _EXPAND_CHARS — up to
+    _MAX_PREFIX_DEPTH levels deep.
+
+    Results are accumulated into *collected* (mutated in place).
+    """
+    if not client._csrf_token:
+        # Ensure CSRF token is available before first POST
+        await client.get(f"{SITE_BASE}/search/")
+
+    ids_page1, max_page = await _search_anime_one_page(client, word, page=1)
+
+    if not ids_page1:
+        # Server returned nothing → results > 1000 OR genuinely empty.
+        if depth >= _MAX_PREFIX_DEPTH:
+            log.warning("allcinema_search_depth_limit", word=word, depth=depth)
+            return
+        # Recurse: extend prefix with each expansion character.
+        for ch in _EXPAND_CHARS:
+            extended = word + ch
+            # Skip if the extension is redundant (same prefix already visited).
+            await _fetch_anime_ids_for_word(client, extended, collected, depth + 1)
+        return
+
+    # Collect page 1 results
+    collected.update(ids_page1)
+
+    # Paginate through remaining pages
+    for pg in range(2, max_page + 1):
+        ids_pg, _ = await _search_anime_one_page(client, word, page=pg)
+        if not ids_pg:
+            break
+        collected.update(ids_pg)
+
+    log.debug(
+        "allcinema_search_word_done",
+        word=word,
+        depth=depth,
+        pages=max_page,
+        new_ids=len(ids_page1),
+    )
+
+
+async def fetch_anime_ids_from_search(client: AllcinemaClient) -> list[int]:
+    """Collect all anime cinema IDs via /ajax/search (Scenario β).
+
+    Uses a systematic prefix search over _SEARCH_SEEDS.  For any seed that
+    returns >1000 results (empty movies list), the prefix is recursively
+    extended with _EXPAND_CHARS until results fit within the server limit.
+
+    Returns a deduplicated, sorted list of cinema IDs.
+    """
+    collected: set[int] = set()
+    total_seeds = len(_SEARCH_SEEDS)
+
+    for i, seed in enumerate(_SEARCH_SEEDS):
+        log.info(
+            "allcinema_search_seed",
+            seed=seed,
+            progress=f"{i + 1}/{total_seeds}",
+            collected=len(collected),
+        )
+        await _fetch_anime_ids_for_word(client, seed, collected, depth=0)
+
+    ids = sorted(collected)
+    log.info("allcinema_search_complete", total=len(ids))
     return ids
 
 
@@ -461,6 +607,62 @@ async def _run_scrape_persons(
     log.info("allcinema_persons_done", total_scraped=done_this_run)
 
 
+# ─── Phase 1-alt: anime ID list via search ───────────────────────────────────
+
+
+async def _run_sitemap_anime(
+    delay: float,
+    data_dir: Path,
+) -> None:
+    """Collect anime-only cinema IDs via /ajax/search and update checkpoint.
+
+    Backs up existing checkpoint before overwriting cinema_ids.
+    The `completed` set is preserved so already-scraped IDs are not re-fetched.
+    """
+    effective_delay = max(delay, 1.0)  # Hard lower bound per task card
+    ckpt_path = data_dir / "checkpoint_cinema.json"
+    bak_path = data_dir / "checkpoint_cinema.json.bak"
+
+    ckpt = _load_checkpoint(ckpt_path)
+    old_count = len(ckpt.get("cinema_ids", []))
+
+    # Safety: ensure backup exists before touching cinema_ids
+    if not bak_path.exists():
+        bak_path.write_text(json.dumps(ckpt))
+        log.info("allcinema_sitemap_anime_backup_created", path=str(bak_path))
+    else:
+        log.info("allcinema_sitemap_anime_backup_exists", path=str(bak_path))
+
+    client = AllcinemaClient(delay=effective_delay)
+    try:
+        anime_ids = await fetch_anime_ids_from_search(client)
+    finally:
+        await client.close()
+
+    new_count = len(anime_ids)
+    if new_count < 100:
+        log.error(
+            "allcinema_sitemap_anime_too_few",
+            count=new_count,
+            msg="Fewer than 100 IDs collected — aborting checkpoint update",
+        )
+        raise RuntimeError(
+            f"fetch_anime_ids_from_search returned only {new_count} IDs; "
+            "expected at least 1000. Not updating checkpoint."
+        )
+
+    ckpt["cinema_ids"] = anime_ids
+    # Preserve completed entries (do not reset already-scraped IDs)
+    _save_checkpoint(ckpt_path, ckpt)
+
+    log.info(
+        "allcinema_sitemap_anime_done",
+        before=old_count,
+        after=new_count,
+        completed=len(ckpt.get("completed", [])),
+    )
+
+
 # ─── CLI ─────────────────────────────────────────────────────────────────────
 
 
@@ -490,6 +692,22 @@ def cmd_sitemap(
         typer.echo(f"cinema: {len(cinema_ids)}, persons: {len(person_ids)}")
 
     asyncio.run(_run())
+
+
+@app.command("sitemap-anime")
+def cmd_sitemap_anime(
+    delay: float = typer.Option(DEFAULT_DELAY, help="request interval (seconds); minimum 1.0"),
+    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, help="checkpoint save directory"),
+) -> None:
+    """Phase 1-alt: アニメ作品のみの cinema_ids を構築し checkpoint に上書き。
+
+    /ajax/search に search_cinema_media=anime を POST し、体系的なプレフィックス探索で
+    全アニメ ID を収集する (シナリオ β)。
+    既存の completed リストは保持し、checkpoint_cinema.json.bak は touch しない。
+    """
+    log_path = configure_file_logging("allcinema")
+    log.info("allcinema_sitemap_anime_command_start", log_file=str(log_path))
+    asyncio.run(_run_sitemap_anime(delay=delay, data_dir=data_dir))
 
 
 @app.command("cinema")
