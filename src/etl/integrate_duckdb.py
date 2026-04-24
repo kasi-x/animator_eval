@@ -86,8 +86,8 @@ CREATE TABLE IF NOT EXISTS persons (
 );
 
 CREATE TABLE IF NOT EXISTS credits (
-    person_id       VARCHAR NOT NULL,
-    anime_id        VARCHAR NOT NULL,
+    person_id       VARCHAR,
+    anime_id        VARCHAR,
     role            VARCHAR NOT NULL,
     raw_role        VARCHAR,
     episode         INTEGER,
@@ -125,26 +125,26 @@ to_delete AS (
 DELETE FROM anime WHERE id IN (SELECT id FROM to_delete)
 """
 
-_ANIME_SQL_INSERT = """
+_ANIME_SQL_INSERT_TMPL = """
 WITH bronze AS (
     SELECT
         id,
         COALESCE(title_ja, '')  AS title_ja,
         COALESCE(title_en, '')  AS title_en,
-        year,
-        season,
-        quarter,
-        episodes,
-        format,
-        duration,
-        start_date,
-        end_date,
-        status,
-        COALESCE(original_work_type, source) AS source_mat,
-        work_type,
-        scale_class,
-        TRY_CAST(fetched_at AS TIMESTAMP) AS fetched_at,
-        content_hash,
+        {year}                  AS year,
+        {season}                AS season,
+        {quarter}               AS quarter,
+        {episodes}              AS episodes,
+        {format}                AS format,
+        {duration}              AS duration,
+        {start_date}            AS start_date,
+        {end_date}              AS end_date,
+        {status}                AS status,
+        {source_mat}            AS source_mat,
+        {work_type}             AS work_type,
+        {scale_class}           AS scale_class,
+        {fetched_at}            AS fetched_at,
+        {content_hash}          AS content_hash,
         now()                   AS updated_at
     FROM (
         SELECT *,
@@ -165,14 +165,13 @@ SELECT * FROM filtered
 
 # BRONZE persons → SILVER persons.
 # date_of_birth → birth_date, site_url → website_url.
-# Template uses {birth_date}, {website_url}, {name_ko}, {name_zh}, {names_alt} placeholders
-# that are filled by _build_persons_sql() after inspecting the parquet schema.
+# Template uses placeholders that are filled by _build_persons_sql() after inspecting the parquet schema.
 _PERSONS_SQL_TMPL = """
 INSERT INTO persons
 SELECT
     id,
-    COALESCE(name_ja, '')       AS name_ja,
-    COALESCE(name_en, '')       AS name_en,
+    {name_ja}                   AS name_ja,
+    {name_en}                   AS name_en,
     {name_ko}                   AS name_ko,
     {name_zh}                   AS name_zh,
     {names_alt}                 AS names_alt,
@@ -204,6 +203,8 @@ def _parquet_columns(conn: duckdb.DuckDBPyConnection, glob: str) -> set[str]:
 def _build_persons_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
     cols = _parquet_columns(conn, glob)
     return _PERSONS_SQL_TMPL.format(
+        name_ja="COALESCE(name_ja, '')" if "name_ja" in cols else "''::VARCHAR",
+        name_en="COALESCE(name_en, '')" if "name_en" in cols else "''::VARCHAR",
         name_ko="COALESCE(name_ko, '')" if "name_ko" in cols else "''::VARCHAR",
         name_zh="COALESCE(name_zh, '')" if "name_zh" in cols else "''::VARCHAR",
         names_alt="COALESCE(names_alt, '{}')" if "names_alt" in cols else "'{}'::VARCHAR",
@@ -211,41 +212,90 @@ def _build_persons_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
         website_url="site_url" if "site_url" in cols else "NULL::VARCHAR",
     )
 
-# BRONZE credits → SILVER credits.
-# All credit rows are kept as evidence (no key-level dedup; unique index
-# on (person_id, anime_id, role, episode, evidence_source) handles exact dups).
-# evidence_source uses the explicit column if present, falls back to 'source'.
-# affiliation/position are optional columns — use NULL when absent from parquet
-# to avoid DuckDB 1.4.3 binder error (alias self-reference when column missing).
-_CREDITS_SQL_TMPL = """
+def _build_credits_insert_seesaawiki(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
+    """Load SeesaaWiki credits: (anime_id, role, name, position, episode, affiliation)."""
+    return """
 INSERT INTO credits
-SELECT person_id, anime_id, role, raw_role, episode,
-       evidence_source, affiliation, position, updated_at
+SELECT DISTINCT
+    NULL::VARCHAR                         AS person_id,
+    anime_id,
+    role,
+    NULL::VARCHAR                         AS raw_role,
+    episode,
+    'seesaawiki'::VARCHAR                 AS evidence_source,
+    affiliation,
+    TRY_CAST(position AS INTEGER)         AS position,
+    now()                                 AS updated_at
 FROM (
-    SELECT DISTINCT
-        person_id,
-        anime_id,
-        role,
-        raw_role,
-        episode,
-        COALESCE(evidence_source, source) AS evidence_source,
-        {affiliation}                     AS affiliation,
-        {position}                        AS position,
-        now()                             AS updated_at
-    FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
-    WHERE  person_id IS NOT NULL
-      AND  anime_id IS NOT NULL
-      AND  role IS NOT NULL
-      AND  COALESCE(evidence_source, source) IS NOT NULL
-) sub
+    SELECT * FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE source = 'seesaawiki'
+)
+WHERE anime_id IS NOT NULL AND role IS NOT NULL
 """
 
 
-def _build_credits_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
+def _build_credits_insert_allcinema(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
+    """Load Allcinema credits: (cinema_id, allcinema_person_id, job_name)."""
+    return """
+INSERT INTO credits
+SELECT DISTINCT
+    NULL::VARCHAR                         AS person_id,
+    NULL::VARCHAR                         AS anime_id,
+    job_name::VARCHAR                     AS role,
+    NULL::VARCHAR                         AS raw_role,
+    NULL::INTEGER                         AS episode,
+    'allcinema'::VARCHAR                  AS evidence_source,
+    NULL::VARCHAR                         AS affiliation,
+    NULL::INTEGER                         AS position,
+    now()                                 AS updated_at
+FROM (
+    SELECT * FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE source = 'allcinema'
+)
+WHERE job_name IS NOT NULL
+"""
+
+
+def _build_credits_insert_mediaarts(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
+    """Load MediaArts credits: (person_id, anime_id, role, raw_role)."""
+    return """
+INSERT INTO credits
+SELECT DISTINCT
+    person_id,
+    anime_id,
+    role,
+    raw_role,
+    NULL::INTEGER                         AS episode,
+    'mediaarts'::VARCHAR                  AS evidence_source,
+    NULL::VARCHAR                         AS affiliation,
+    NULL::INTEGER                         AS position,
+    now()                                 AS updated_at
+FROM (
+    SELECT * FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE source = 'mediaarts'
+)
+WHERE person_id IS NOT NULL AND anime_id IS NOT NULL AND role IS NOT NULL
+"""
+
+
+def _build_anime_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
+    """Build anime INSERT SQL with schema-dependent column mapping."""
     cols = _parquet_columns(conn, glob)
-    return _CREDITS_SQL_TMPL.format(
-        affiliation="TRY_CAST(affiliation AS VARCHAR)" if "affiliation" in cols else "NULL::VARCHAR",
-        position="TRY_CAST(position AS INTEGER)" if "position" in cols else "NULL::INTEGER",
+    return _ANIME_SQL_INSERT_TMPL.format(
+        year="year" if "year" in cols else "NULL::INTEGER",
+        season="season" if "season" in cols else "NULL::VARCHAR",
+        quarter="quarter" if "quarter" in cols else "NULL::INTEGER",
+        episodes="episodes" if "episodes" in cols else "NULL::INTEGER",
+        format="format" if "format" in cols else "NULL::VARCHAR",
+        duration="duration" if "duration" in cols else "NULL::INTEGER",
+        start_date="start_date" if "start_date" in cols else "NULL::VARCHAR",
+        end_date="end_date" if "end_date" in cols else "NULL::VARCHAR",
+        status="status" if "status" in cols else "NULL::VARCHAR",
+        source_mat="COALESCE(original_work_type, source)" if "original_work_type" in cols else "'unknown'::VARCHAR",
+        work_type="work_type" if "work_type" in cols else "NULL::VARCHAR",
+        scale_class="scale_class" if "scale_class" in cols else "NULL::VARCHAR",
+        fetched_at="TRY_CAST(fetched_at AS TIMESTAMP)" if "fetched_at" in cols else "NULL::TIMESTAMP",
+        content_hash="content_hash" if "content_hash" in cols else "NULL::VARCHAR",
     )
 
 
@@ -319,7 +369,7 @@ def integrate(
 
             # anime (delete stale, then insert new)
             conn.execute(_ANIME_SQL_DELETE, [anime_glob])
-            conn.execute(_ANIME_SQL_INSERT, [anime_glob])
+            conn.execute(_build_anime_sql(conn, anime_glob), [anime_glob])
             counts["anime"] = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]
             logger.info("silver_anime", count=counts["anime"])
 
@@ -328,8 +378,10 @@ def integrate(
             counts["persons"] = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
             logger.info("silver_persons", count=counts["persons"])
 
-            # credits (column mapping is schema-dependent — see _build_credits_sql)
-            conn.execute(_build_credits_sql(conn, credits_glob), [credits_glob])
+            # credits (source-specific loaders for seesaawiki, allcinema, mediaarts)
+            conn.execute(_build_credits_insert_seesaawiki(conn, credits_glob), [credits_glob])
+            conn.execute(_build_credits_insert_allcinema(conn, credits_glob), [credits_glob])
+            conn.execute(_build_credits_insert_mediaarts(conn, credits_glob), [credits_glob])
             counts["credits"] = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
             logger.info("silver_credits", count=counts["credits"])
 

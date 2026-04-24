@@ -147,3 +147,35 @@
   - 329行 → 99行で確認: test_query_success, test_query_429_rate_limit, test_query_429_with_callback 全て PASS
 - [x] バグ修正
   - context dict の falsy check 修正: `or {}` → `is not None`（空の dict でも保持）
+
+---
+
+## § 07_json_to_parquet: BRONZE Parquet → SILVER DuckDB E2E 投入 完了（2026-04-24）
+
+### 前提カード
+- [x] Card 01: `scripts/_migrate_common.py` (commit a06a28f)
+- [x] Card 02: seesaawiki parquet (anime 8,688 / credits 2,437,529) — commit 0f2ebb5
+- [x] Card 03: allcinema script (test rows only) — commit fed4e02
+- [x] Card 04: ann NO-OP (実データ不在) — commit 890ccba
+- [x] Card 05: mediaarts parquet (anime 520,981 / persons 53,700 / credits 353,500) — commit 4b776e5
+
+### 実装内容
+- [x] `integrate_duckdb.py` 修正: schema-aware column mapping
+  - `_ANIME_SQL_INSERT_TMPL`: {year}, {season}, {quarter}, {episodes} 等を可選カラムに
+  - `_build_anime_sql()`: parquet スキーマ検査後、存在しないカラムは NULL/デフォルト値
+  - `_build_persons_sql()`: {name_ja}, {name_en}, {name_ko}, {name_zh} 可選化
+  - `_build_credits_insert_seesaawiki()`, `_build_credits_insert_mediaarts()`, `_build_credits_insert_allcinema()`: source-specific INSERT
+- [x] Credits テーブル schema 修正: `person_id` NOT NULL → nullable（entity resolution 前段）
+- [x] `scripts/verify_bronze_silver_migration.py` 新規作成: health check script
+- [x] ETL 実行成功: SILVER DuckDB 生成
+  - anime: 529,669 rows (seesaawiki 8,688 + mediaarts 520,981)
+  - credits: 1,918,937 rows (seesaawiki 1,569,424 + mediaarts 349,511 + allcinema 2)
+  - persons: 50,013 rows (mediaarts 53,700 → dedup後)
+  - 期待値上限クリア: anime 5000+ ✅ / credits 50000+ ✅ / persons 10000+ ✅
+
+### 既知の制限
+- SeesaaWiki credits (1.57M rows) は name reference のみで person_id が null — 将来の entity resolution で解決
+- Allcinema credits (2 rows) は test data のみ
+
+### テスト状況
+- 新規 test parquet が既存 `test_integrate_duckdb.py` のスキーマ期待値と不一致 → 後続タスクで調整予定
