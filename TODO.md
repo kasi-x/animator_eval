@@ -47,7 +47,7 @@
 
 ---
 
-## SECTION 7: スクレイパー強化残務 (すべて完了 2026-04-24)
+## SECTION 7: スクレイパー強化残務
 
 ### 7.1 差分更新 — Parquet + DuckDB ベース ✅
 - [x] `hash_utils.py`, anilist/ann/allcinema/seesaawiki hash 計算
@@ -56,6 +56,12 @@
 - [x] E2E テスト (hash差分検出) — 1a8dfcd
 
 ### 7.3 anilist_scraper retry refactor ✅ (3cf8ad1)
+
+### 7.4 ANN scraper 再実行 (NO-OP: 07_json_to_parquet/04)
+- [ ] ANN scraper 再実行: `data/ann/anime_checkpoint.json` の `all_ids` を使い、新 bronze_writer 経路で parquet 出力
+  - **理由**: 既存 `data/ann/` には checkpoint (`{all_ids, completed_ids}` dict) のみで、実データ JSON がない
+  - **実施方法**: 既存 HTTP skip は effective、未完了 ID のみ fetch (差分更新)
+  - **期限**: スクレイプ安定化後 (allcinema 統合完了時点で優先度上昇)
 
 ---
 
