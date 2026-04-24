@@ -5,10 +5,13 @@ Reads anime subject IDs from Card 02 parquet, then for each subject fetches:
     GET /v0/subjects/{id}/characters → src_bangumi_subject_characters
                                        + src_bangumi_person_characters (actors nest)
 
-Outputs three partitioned parquet tables:
-    result/bronze/source=bangumi/table=subject_persons/date=YYYYMMDD/part-0.parquet
-    result/bronze/source=bangumi/table=subject_characters/date=YYYYMMDD/part-0.parquet
-    result/bronze/source=bangumi/table=person_characters/date=YYYYMMDD/part-0.parquet
+Outputs three partitioned parquet tables (UUID filenames, append-safe on resume):
+    result/bronze/source=bangumi/table=subject_persons/date=YYYYMMDD/{uuid}.parquet
+    result/bronze/source=bangumi/table=subject_characters/date=YYYYMMDD/{uuid}.parquet
+    result/bronze/source=bangumi/table=person_characters/date=YYYYMMDD/{uuid}.parquet
+
+Each run (including resumed runs) produces new UUID files; old files are preserved.
+DuckDB reads all files via glob: read_parquet('.../**/*.parquet').
 
 Checkpoint: data/bangumi/checkpoint_relations.json
     {"completed_ids": [...], "failed_ids": [{"id": 42, "status": 404}], "last_run_at": "..."}
@@ -35,14 +38,13 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import duckdb
-import pyarrow as pa
-import pyarrow.parquet as pq
 import structlog
 import typer
 from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeRemainingColumn
 
 from src.scrapers.bangumi_scraper import BangumiClient
+from src.scrapers.bronze_writer import BronzeWriter
 from src.scrapers.exceptions import ScraperError
 
 log = structlog.get_logger()
@@ -57,53 +59,7 @@ _CHECKPOINT_PATH = Path("data/bangumi/checkpoint_relations.json")
 _SUBJECTS_PARQUET_GLOB = "result/bronze/source=bangumi/table=subjects/**/*.parquet"
 
 _CHECKPOINT_FLUSH_EVERY = 100  # completed subjects per flush
-_ROW_GROUP_SIZE = 10_000
 
-# ---------------------------------------------------------------------------
-# PyArrow schemas (verified against live API responses 2026-04-25)
-# ---------------------------------------------------------------------------
-
-_SCHEMA_SUBJECT_PERSONS = pa.schema(
-    [
-        pa.field("subject_id", pa.int64()),
-        pa.field("person_id", pa.int64()),
-        # raw Chinese relation string e.g. "导演", "原画", "出版社"
-        pa.field("position", pa.string()),
-        # person type from API (1=individual, 2=corporation)
-        pa.field("person_type", pa.int32()),
-        # career list serialised as JSON string e.g. '["producer","director"]'
-        pa.field("career", pa.string()),
-        # episode range string, empty string if not present
-        pa.field("eps", pa.string()),
-        pa.field("name_raw", pa.string()),
-        pa.field("fetched_at", pa.timestamp("us", tz="UTC")),
-    ]
-)
-
-_SCHEMA_SUBJECT_CHARACTERS = pa.schema(
-    [
-        pa.field("subject_id", pa.int64()),
-        pa.field("character_id", pa.int64()),
-        # raw relation string e.g. "主角", "配角", "客串"
-        pa.field("relation", pa.string()),
-        # character type from API (1=个人, 2=机体/舰艇/组织, 3=音乐作品, 4=其他)
-        pa.field("type", pa.int32()),
-        pa.field("name_raw", pa.string()),
-        pa.field("fetched_at", pa.timestamp("us", tz="UTC")),
-    ]
-)
-
-_SCHEMA_PERSON_CHARACTERS = pa.schema(
-    [
-        pa.field("subject_id", pa.int64()),
-        pa.field("character_id", pa.int64()),
-        # voice actor / seiyuu person_id
-        pa.field("person_id", pa.int64()),
-        # actor type (1=individual, 2=corporation)
-        pa.field("actor_type", pa.int32()),
-        pa.field("fetched_at", pa.timestamp("us", tz="UTC")),
-    ]
-)
 
 # ---------------------------------------------------------------------------
 # Checkpoint helpers
@@ -221,42 +177,6 @@ def _build_character_and_actor_rows(
 
 
 # ---------------------------------------------------------------------------
-# Parquet writer helpers
-# ---------------------------------------------------------------------------
-
-
-def _rows_to_table(
-    rows: list[dict[str, Any]], schema: pa.Schema
-) -> pa.Table:
-    """Convert a list of dicts to a pyarrow Table with the given schema."""
-    if not rows:
-        return pa.table({f.name: pa.array([], type=f.type) for f in schema}, schema=schema)
-    columns: dict[str, list[Any]] = {f.name: [] for f in schema}
-    for row in rows:
-        for f in schema:
-            columns[f.name].append(row.get(f.name))
-    arrays = {
-        f.name: pa.array(columns[f.name], type=f.type) for f in schema
-    }
-    return pa.table(arrays, schema=schema)
-
-
-def _open_writer(
-    table_name: str, date_str: str, schema: pa.Schema
-) -> pq.ParquetWriter:
-    """Create parquet output directory and open ParquetWriter."""
-    out_dir = _BRONZE_ROOT / f"table={table_name}" / f"date={date_str}"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "part-0.parquet"
-    return pq.ParquetWriter(
-        str(out_path),
-        schema=schema,
-        compression="zstd",
-        write_batch_size=_ROW_GROUP_SIZE,
-    )
-
-
-# ---------------------------------------------------------------------------
 # Core async scrape loop
 # ---------------------------------------------------------------------------
 
@@ -267,7 +187,11 @@ async def _scrape(
     date_str: str,
     dry_run: bool,
 ) -> dict[str, Any]:
-    """Scrape persons + characters for each subject_id; write parquet + checkpoint."""
+    """Scrape persons + characters for each subject_id; write parquet + checkpoint.
+
+    Each flush writes a new UUID parquet file so resumed runs never overwrite
+    previously written data — old files are preserved and DuckDB reads all via glob.
+    """
     completed_set: set[int] = set(checkpoint.get("completed_ids") or [])
     failed_ids: list[dict[str, Any]] = list(checkpoint.get("failed_ids") or [])
     failed_set: set[int] = {f["id"] for f in failed_ids}
@@ -290,35 +214,17 @@ async def _scrape(
         console.print("[green]All subjects already completed — nothing to do.[/green]")
         return checkpoint
 
-    writers = {
-        "subject_persons": _open_writer("subject_persons", date_str, _SCHEMA_SUBJECT_PERSONS),
-        "subject_characters": _open_writer("subject_characters", date_str, _SCHEMA_SUBJECT_CHARACTERS),
-        "person_characters": _open_writer("person_characters", date_str, _SCHEMA_PERSON_CHARACTERS),
-    }
+    # Use BronzeWriter for each table: each flush writes a new UUID file, so
+    # resuming a scrape appends new files without overwriting previous data.
+    date = dt.date.fromisoformat(date_str)
+    bw_persons = BronzeWriter("bangumi", table="subject_persons", date=date)
+    bw_chars = BronzeWriter("bangumi", table="subject_characters", date=date)
+    bw_actors = BronzeWriter("bangumi", table="person_characters", date=date)
 
-    person_buf: list[dict[str, Any]] = []
-    char_buf: list[dict[str, Any]] = []
-    actor_buf: list[dict[str, Any]] = []
-
-    def _flush_buffers() -> None:
-        if person_buf:
-            writers["subject_persons"].write_table(
-                _rows_to_table(person_buf, _SCHEMA_SUBJECT_PERSONS),
-                row_group_size=_ROW_GROUP_SIZE,
-            )
-            person_buf.clear()
-        if char_buf:
-            writers["subject_characters"].write_table(
-                _rows_to_table(char_buf, _SCHEMA_SUBJECT_CHARACTERS),
-                row_group_size=_ROW_GROUP_SIZE,
-            )
-            char_buf.clear()
-        if actor_buf:
-            writers["person_characters"].write_table(
-                _rows_to_table(actor_buf, _SCHEMA_PERSON_CHARACTERS),
-                row_group_size=_ROW_GROUP_SIZE,
-            )
-            actor_buf.clear()
+    def _flush_writers() -> None:
+        bw_persons.flush()
+        bw_chars.flush()
+        bw_actors.flush()
 
     try:
         async with BangumiClient() as client:
@@ -355,9 +261,8 @@ async def _scrape(
                         failed_set.add(subject_id)
                         persons = []
 
-                    person_buf.extend(
-                        _build_person_rows(subject_id, persons, fetched_at)
-                    )
+                    for row in _build_person_rows(subject_id, persons, fetched_at):
+                        bw_persons.append(row)
 
                     # Fetch characters
                     try:
@@ -376,16 +281,19 @@ async def _scrape(
                     c_rows, a_rows = _build_character_and_actor_rows(
                         subject_id, characters, fetched_at
                     )
-                    char_buf.extend(c_rows)
-                    actor_buf.extend(a_rows)
+                    for row in c_rows:
+                        bw_chars.append(row)
+                    for row in a_rows:
+                        bw_actors.append(row)
 
                     completed_set.add(subject_id)
                     checkpoint["completed_ids"] = sorted(completed_set)
                     checkpoint["failed_ids"] = failed_ids
 
-                    # Flush every CHECKPOINT_FLUSH_EVERY subjects
+                    # Flush every CHECKPOINT_FLUSH_EVERY subjects — each flush
+                    # writes a new UUID file; old files are preserved on resume.
                     if (i + 1) % _CHECKPOINT_FLUSH_EVERY == 0:
-                        _flush_buffers()
+                        _flush_writers()
                         _save_checkpoint(checkpoint)
                         log.info(
                             "bangumi_checkpoint_flushed",
@@ -396,10 +304,8 @@ async def _scrape(
                     progress.advance(task)
 
     finally:
-        # Flush any remaining buffered rows
-        _flush_buffers()
-        for w in writers.values():
-            w.close()
+        # Always flush remaining rows so partial progress is persisted on Ctrl+C
+        _flush_writers()
 
     # Final checkpoint save
     checkpoint["completed_ids"] = sorted(completed_set)
@@ -531,18 +437,19 @@ async def _main(
     if not dry_run:
         console.print(
             f"[green]Done.[/green] "
-            f"Output: result/bronze/source=bangumi/table={{subject_persons,subject_characters,person_characters}}/date={date_str}/"
+            f"Output: result/bronze/source=bangumi/table={{subject_persons,subject_characters,person_characters}}/date={date_str}/ "
+            f"(UUID parquet files; read via glob)"
         )
 
 
 def _check_idempotent_exit(all_ids: list[int], date_str: str) -> None:
-    """If all parquet files exist for today AND checkpoint is complete, log + exit."""
+    """If parquet files exist for today AND checkpoint is complete, log + exit."""
     tables = ["subject_persons", "subject_characters", "person_characters"]
-    all_exist = all(
-        (_BRONZE_ROOT / f"table={t}" / f"date={date_str}" / "part-0.parquet").exists()
+    all_have_data = all(
+        any((_BRONZE_ROOT / f"table={t}" / f"date={date_str}").glob("*.parquet"))
         for t in tables
     )
-    if not all_exist:
+    if not all_have_data:
         return
 
     checkpoint = _load_checkpoint()

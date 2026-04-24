@@ -31,6 +31,7 @@ DEFAULT_BRONZE_ROOT: Path = Path(
 
 ALLOWED_SOURCES = {
     "anilist", "ann", "allcinema", "seesaawiki", "keyframe", "mal", "mediaarts", "jvmg",
+    "bangumi",
 }
 
 
