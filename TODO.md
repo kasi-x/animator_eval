@@ -71,6 +71,21 @@ similarity.py / recommendation.py はスタブ化済 (2行)、重複整理完了
 
 ---
 
+## SECTION 13: bangumi.tv BRONZE 統合 (Card 08)
+
+TASK_CARDS/08_bangumi_scraper/ 参照。方針: 公式 `bangumi/Archive` dump (週次 jsonlines) を一次ソース、日次差分のみ `/v0` API。
+
+- 13.1 Card 01: Archive dump DL + 展開 (`src/scrapers/bangumi_dump.py`, `scripts/fetch_bangumi_dump.py`) ✅ 実装完了
+- 13.2 Card 02: subject.jsonlines → `src_bangumi_subjects` parquet (type=2 anime filter)
+- 13.3 Card 03: subject × persons/characters/person-characters 関係 → 3 parquet (position code は raw 保存)
+- 13.4 Card 04: person.jsonlines → `src_bangumi_persons` (relation 参照 id のみ filter)
+- 13.5 Card 05: character.jsonlines → `src_bangumi_characters` (最後回し、優先度🟢)
+- 13.6 Card 06: 日次差分 API cron (`src/scrapers/bangumi_scraper.py`, 1req/s 厳守、dump 運用安定後)
+
+role label (中文「导演」等) の正規化 mapping は SILVER 移行タスクで別起票。
+
+---
+
 ## 実施順序
 
 ```
@@ -81,6 +96,7 @@ similarity.py / recommendation.py はスタブ化済 (2行)、重複整理完了
   §3    JVMG credits 再マップ (WIKIDATA_ROLE_MAP 確定後)
 
 長期:
+  §13   bangumi.tv BRONZE 統合 (Card 08、dump 方式)
   §1 v57 title.native → titles_alt (v58 実施時)
 ```
 
