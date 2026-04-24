@@ -1,42 +1,44 @@
-# Task: bangumi persons jsonlines → BRONZE parquet (relation 参照 id のみ)
+# Task: bangumi persons (API scrape) → BRONZE parquet
 
 **ID**: `08_bangumi_scraper/04_person_detail`
 **Priority**: 🟠
-**Estimated changes**: 約 +120 lines, 1 file 新規
+**Estimated changes**: 約 +180 lines, 1 file 新規
 **Requires senior judgment**: no
 **Blocks**: (なし)
 **Blocked by**: `03_subject_relations`
 
 ---
 
-## Goal
+## Goal (2026-04-25 改訂: API 方式)
 
-`data/bangumi/dump/latest/person.jsonlines` → `src_bangumi_persons` parquet。ただし anime subject に一切登場しない person は除外 (`subject_persons.person_id` + `person_characters.person_id` の和集合で filter)。
+dump に person.jsonlines が含まれていないため `/v0/persons/{id}` で API scrape。対象は Card 03 で収集した person_id 集合 (subject_persons + person_characters の和集合)。
 
 ---
 
 ## Hard constraints
 
-- H3 entity resolution 不変 (AniList/MAL/ANN 側への統合は別タスク)
-- infobox (list-of-dict with 中文 key) は **raw JSON 文字列** で保存、展開しない
-- 死亡/誕生日等の PII 相当 column も raw 保存 (bangumi 公開情報なので法的問題なし、ただし report 層で露出は `REPORT_PHILOSOPHY.md` 従う)
+- H3 entity resolution 不変 (bangumi → 既存 AniList/MAL/ANN との統合は SILVER 化タスクで別起票)
+- rate limit **1 req/sec** (Card 03 クライアント流用)
+- infobox (wiki template string) は raw 保存、展開しない
+- fetch 失敗 (404) は skip + checkpoint に記録
 
 ---
 
 ## Pre-conditions
 
-- [ ] `03_subject_relations` 完了
-- [ ] `result/bronze/source=bangumi/table=subject_persons/**/*.parquet` 存在
-- [ ] `result/bronze/source=bangumi/table=person_characters/**/*.parquet` 存在
+- [ ] `03_subject_relations` 完了 → relation parquet 存在
+- [ ] person_id 集合 ~10-20k 推定
 
 ---
 
-## Step 0: person jsonlines 構造確認
+## Step 0: API レスポンス確認
 
 ```bash
-head -1 data/bangumi/dump/latest/person.jsonlines | python -m json.tool
-# 期待 key: id, name, type (1=個人,2=公司,3=組合), career, infobox, summary, img, last_modified, ...
+curl -sH 'User-Agent: animetor_eval/0.1 (https://github.com/kashi-x)' \
+  https://api.bgm.tv/v0/persons/1 | python -m json.tool | head -40
 ```
+
+期待 key: `id, name, type, career, images, summary, locked, last_modified, stat{comments, collects}, img, infobox, gender, blood_type, birth_year, birth_mon, birth_day`
 
 ---
 
@@ -44,7 +46,7 @@ head -1 data/bangumi/dump/latest/person.jsonlines | python -m json.tool
 
 | File | 内容 |
 |------|------|
-| `scripts/migrate_bangumi_persons_to_parquet.py` | filter + parquet 変換 |
+| `scripts/scrape_bangumi_persons.py` | orchestrator CLI (client は Card 03 で作った `BangumiClient` 流用) |
 
 ---
 
@@ -55,71 +57,82 @@ head -1 data/bangumi/dump/latest/person.jsonlines | python -m json.tool
 ```python
 import duckdb
 con = duckdb.connect()
-referenced_ids = {r[0] for r in con.execute("""
+referenced = {r[0] for r in con.execute("""
     SELECT DISTINCT person_id FROM read_parquet('result/bronze/source=bangumi/table=subject_persons/**/*.parquet')
     UNION
     SELECT DISTINCT person_id FROM read_parquet('result/bronze/source=bangumi/table=person_characters/**/*.parquet')
 """).fetchall()}
 ```
 
-### Step 2: jsonlines stream filter → parquet
+### Step 2: `BangumiClient.fetch_person(person_id)` で逐次取得
 
-- infobox / career は json.dumps して string column に
-- type=2/3 (会社/組合) も保存 OK。filter は referenced_ids のみ
-- img URL はそのまま保存 (DL はしない、後タスク)
+- rate limit 1 req/sec (Card 03 と共有の limiter)
+- checkpoint `data/bangumi/checkpoint_persons.json` で resume
+- 各 100 件ごと parquet append
+- 404 は skip + failed_ids に記録
 
-### Step 3: 出力
+### Step 3: 出力 parquet schema
 
 ```
-result/bronze/source=bangumi/table=persons/date=<release>/part-0.parquet
+id: int64
+name: string
+type: int32              # 1=個人, 2=公司, 3=組合
+career: string           # json.dumps(list)
+summary: string | null
+infobox: string          # raw wiki template
+gender: string | null
+blood_type: int32 | null
+birth_year: int32 | null
+birth_mon: int32 | null
+birth_day: int32 | null
+images: string           # json.dumps(dict with small/medium/large)
+stat_comments: int32
+stat_collects: int32
+last_modified: timestamp
+fetched_at: timestamp
 ```
+
+出力: `result/bronze/source=bangumi/table=persons/date=YYYYMMDD/part-N.parquet`
 
 ---
 
 ## Verification
 
 ```bash
-pixi run python scripts/migrate_bangumi_persons_to_parquet.py
-
+pixi run python scripts/scrape_bangumi_persons.py --limit 10
 pixi run python -c "
 import duckdb
-con = duckdb.connect()
-n_all = con.execute(\"SELECT count(*) FROM read_parquet('data/bangumi/dump/latest/person.jsonlines')\").fetchone()[0] if False else None
-# jsonlines 直読は不可、wc -l で代替
+n = duckdb.connect().execute(\"SELECT count(*) FROM read_parquet('result/bronze/source=bangumi/table=persons/**/*.parquet')\").fetchone()[0]
+print('persons:', n)
 "
-wc -l data/bangumi/dump/latest/person.jsonlines
-pixi run python -c "
-import duckdb
-con = duckdb.connect()
-n = con.execute(\"SELECT count(*) FROM read_parquet('result/bronze/source=bangumi/table=persons/**/*.parquet')\").fetchone()[0]
-print('filtered persons:', n)
-# referenced_ids 集合サイズと一致すること
-"
-
 pixi run lint
 ```
+
+full run は user 承認後 (~10-20k req → ~3-6 時間)。
 
 ---
 
 ## Stop-if conditions
 
-- [ ] filtered 行数が referenced_ids 集合サイズより大きい → filter 誤作動
-- [ ] filtered 行数が 5000 未満 → 集合取得 SQL 誤り
-- [ ] infobox 保存で parquet schema エラー → json.dumps 漏れ
+- [ ] 429 連続 → sleep 2sec に増やして再起動
+- [ ] schema 不一致 (想定 key 欠落) → parser 修正
+- [ ] referenced 集合サイズ > 50k → anime filter 漏れ、Card 03 見直し
 
 ---
 
 ## Rollback
 
 ```bash
-git checkout scripts/
+git checkout scripts/scrape_bangumi_persons.py
 rm -rf result/bronze/source=bangumi/table=persons/date=<今回>/
+rm -f data/bangumi/checkpoint_persons.json
 ```
 
 ---
 
 ## Completion signal
 
-- [ ] referenced_ids = parquet row count
-- [ ] DuckDB から read_parquet 可能
+- [ ] 10 件 dry-run + 実 run 成功
+- [ ] resume 動作確認
+- [ ] full run 完走 (user 承認後、別実行)
 - [ ] DONE 記録

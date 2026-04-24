@@ -2,14 +2,21 @@
 
 bangumi.tv (https://bgm.tv) を新規 BRONZE ソースとして統合。
 
-## 方針
+## 方針 (2026-04-25 修正: hybrid)
 
-**Archive dump 方式**。公式 `bangumi/Archive` リポジトリが subject / person / character / relation を週次 jsonlines dump として配布している。
+当初 **Archive dump 一括方式** で設計したが、**実環境検証で dump は subject.jsonlines のみ含む** と判明 (README は 9 種類記載だが weekly zip は subject のみ、local file header scan で 1 member 確認済)。
 
-- https://github.com/bangumi/Archive
-- release zip を DL → 展開 → jsonlines → BRONZE parquet
+→ 新方針: **subject は dump、relation/person/character は `/v0` API scrape**。
 
-API sequential scrape は rate limit が kitsui (5xx/公序良俗で疎な spec)。dump で一撃取得 → 差分のみ `/v0` API で cron 更新する hybrid が最小コスト。
+| データ | 取得方法 | 根拠 |
+|---|---|---|
+| subject (anime メタ) | Archive dump (週次) | weekly zip 内 `subject.jsonlines` 218,994 行 (全 type)、type=2 anime ~3-5k |
+| subject × persons 関係 | `/v0/subjects/{id}/persons` | anime subject のみ ~3-5k req |
+| subject × characters 関係 (+ 声優 actors ネスト) | `/v0/subjects/{id}/characters` | 同上 |
+| person detail | `/v0/persons/{id}` | relation 参照 id のみ |
+| character detail | `/v0/characters/{id}` | relation 参照 id のみ |
+
+rate limit: **1 req/sec** 厳守 (bangumi ガイド曖昧 → 安全側)。anime 限定なので初回 backfill ~5-8 時間で完走想定。
 
 ## BRONZE 出力
 
@@ -19,14 +26,14 @@ result/bronze/source=bangumi/table={subjects,subject_persons,subject_characters,
 
 ## Phase 構成
 
-| Card | Phase | 優先 | 内容 |
+| Card | 方式 | 優先 | 内容 |
 |---|---|---|---|
-| `01_archive_dl.md` | 1 | 🔴 | dump zip DL + 展開 + manifest 書き出し |
-| `02_subjects_parquet.md` | 2 | 🔴 | subject.jsonlines → `src_bangumi_subjects` (type=2 anime のみ) |
-| `03_subject_relations.md` | 3+4 | 🔴 | `subject-persons.jsonlines` / `subject-characters.jsonlines` → relation parquet |
-| `04_person_detail.md` | 5 | 🟠 | person.jsonlines → `src_bangumi_persons` (relation 参照 id のみ filter) |
-| `05_character_detail.md` | 6 | 🟢 | character.jsonlines → `src_bangumi_characters` (最後回し) |
-| `06_incremental_update.md` | 7 | 🟢 | 差分更新 API (日次 cron、任意) |
+| `01_archive_dl.md` ✅ | dump | 🔴 | dump zip DL + 展開 + manifest 書き出し (commit 9d3578e) |
+| `02_subjects_parquet.md` ✅ | dump | 🔴 | subject.jsonlines → `src_bangumi_subjects` (type=2 anime のみ、commit 84dda39) |
+| `03_subject_relations.md` | **API** | 🔴 | `/v0/subjects/{id}/persons` + `/characters` → subject_persons / subject_characters / person_characters 3 parquet |
+| `04_person_detail.md` | **API** | 🟠 | `/v0/persons/{id}` → `src_bangumi_persons` (relation 参照 id 集合のみ) |
+| `05_character_detail.md` | **API** | 🟢 | `/v0/characters/{id}` → `src_bangumi_characters` (最後回し) |
+| `06_incremental_update.md` | **API** | 🟢 | 差分更新 (週次 dump diff + 関係 re-scrape、cron) |
 
 ## Hard constraints
 
