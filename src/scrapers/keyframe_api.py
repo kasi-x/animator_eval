@@ -1,9 +1,5 @@
 """KeyFrame Staff List — non-public API client.
 
-Wraps the discovered JSON endpoints with retry, rate-limit, and Retry-After
-handling. All requests are serialised through _get_with_retry which enforces
-a minimum inter-request delay to protect the server.
-
 Endpoints covered:
   GET /api/data/roles.php                              — role master (1924 items)
   GET /api/data/translate.v4.php?ja=<name>&uuid=      — name→AniList ID (ja or en param)
@@ -16,18 +12,17 @@ Endpoints covered:
 
 from __future__ import annotations
 
-import asyncio
-import time
 from urllib.parse import quote
 
-import httpx
 import structlog
+
+from src.scrapers.http_client import RetryingHttpClient
 
 log = structlog.get_logger()
 
 BASE = "https://keyframe-staff-list.com"
 
-HEADERS = {
+_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -38,34 +33,32 @@ HEADERS = {
     "Accept-Language": "ja,en;q=0.9",
 }
 
-HTML_HEADERS = {
-    "User-Agent": HEADERS["User-Agent"],
+_HTML_HEADERS = {
+    **_HEADERS,
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "ja,en;q=0.9",
 }
 
 DEFAULT_DELAY = 5.0
-MAX_RETRIES = 5
 
 
 class KeyframeApiClient:
     """Async HTTP client for keyframe-staff-list.com API endpoints.
 
-    Enforces a minimum inter-request delay and handles 429 Retry-After
-    responses. All methods return parsed JSON or None on permanent failure.
+    Thin wrapper around RetryingHttpClient: adds JSON parsing, 404→None
+    conversion, and named endpoint methods. Retry/throttle/Retry-After
+    handling is delegated to RetryingHttpClient.
     """
 
     def __init__(self, delay: float = DEFAULT_DELAY) -> None:
-        self.delay = delay
-        self._client = httpx.AsyncClient(
+        self._client = RetryingHttpClient(
+            source="keyframe",
+            delay=delay,
             timeout=60.0,
-            follow_redirects=True,
-            headers=HEADERS,
+            headers=_HEADERS,
+            base_url=BASE,
         )
-        self._last_request_at: float = 0.0
 
     async def close(self) -> None:
-        """Close the underlying httpx client."""
         await self._client.aclose()
 
     async def __aenter__(self) -> "KeyframeApiClient":
@@ -78,139 +71,23 @@ class KeyframeApiClient:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _throttle(self) -> None:
-        """Sleep if the last request was too recent."""
-        now = time.monotonic()
-        wait = self.delay - (now - self._last_request_at)
-        if wait > 0:
-            await asyncio.sleep(wait)
-        self._last_request_at = time.monotonic()
-
-    async def _get_with_retry(self, url: str) -> dict | list | None:
-        """GET url with retry, rate-limit, and server-error handling.
-
-        Returns: parsed JSON (dict or list) or None on permanent failure.
-        """
-        await self._throttle()
-
-        for attempt in range(1, MAX_RETRIES + 1):
-            try:
-                resp = await self._client.get(url)
-            except httpx.RequestError as exc:
-                wait_s = max(self.delay * 2, 10 * attempt)
-                log.warning(
-                    "keyframe_api_request_error",
-                    url=url,
-                    attempt=attempt,
-                    wait_s=wait_s,
-                    err=str(exc)[:120],
-                )
-                await asyncio.sleep(wait_s)
-                continue
-
-            if resp.status_code == 200:
-                return resp.json()
-
-            if resp.status_code == 404:
-                log.debug("keyframe_api_not_found", url=url)
-                return None
-
-            if resp.status_code == 429:
-                retry_after = int(resp.headers.get("Retry-After", 30))
-                wait_s = max(retry_after, 30, 10 * attempt)
-                log.warning(
-                    "keyframe_api_rate_limited",
-                    url=url,
-                    attempt=attempt,
-                    wait_s=wait_s,
-                )
-                await asyncio.sleep(wait_s)
-                continue
-
-            if resp.status_code in (500, 502, 503, 504):
-                wait_s = max(self.delay * 2, 15 * attempt)
-                log.warning(
-                    "keyframe_api_server_error",
-                    status=resp.status_code,
-                    url=url,
-                    attempt=attempt,
-                    wait_s=wait_s,
-                )
-                await asyncio.sleep(wait_s)
-                continue
-
-            log.warning(
-                "keyframe_api_unhandled_status",
-                status=resp.status_code,
-                url=url,
-            )
+    async def _get_json(self, url: str) -> dict | list | None:
+        """GET url and return parsed JSON, or None on 404."""
+        resp = await self._client.request("GET", url)
+        if resp.status_code == 404:
+            log.debug("keyframe_api_not_found", url=url)
             return None
+        resp.raise_for_status()
+        return resp.json()
 
-        log.warning("keyframe_api_max_retries", url=url)
-        return None
-
-    async def _get_html_with_retry(self, url: str) -> str | None:
-        """GET url expecting HTML response with retry handling.
-
-        Returns: response text or None on permanent failure.
-        """
-        await self._throttle()
-
-        for attempt in range(1, MAX_RETRIES + 1):
-            try:
-                resp = await self._client.get(url, headers=HTML_HEADERS)
-            except httpx.RequestError as exc:
-                wait_s = max(self.delay * 2, 10 * attempt)
-                log.warning(
-                    "keyframe_html_request_error",
-                    url=url,
-                    attempt=attempt,
-                    wait_s=wait_s,
-                    err=str(exc)[:120],
-                )
-                await asyncio.sleep(wait_s)
-                continue
-
-            if resp.status_code == 200:
-                return resp.text
-
-            if resp.status_code == 404:
-                log.debug("keyframe_html_not_found", url=url)
-                return None
-
-            if resp.status_code == 429:
-                retry_after = int(resp.headers.get("Retry-After", 30))
-                wait_s = max(retry_after, 30, 10 * attempt)
-                log.warning(
-                    "keyframe_html_rate_limited",
-                    url=url,
-                    attempt=attempt,
-                    wait_s=wait_s,
-                )
-                await asyncio.sleep(wait_s)
-                continue
-
-            if resp.status_code in (500, 502, 503, 504):
-                wait_s = max(self.delay * 2, 15 * attempt)
-                log.warning(
-                    "keyframe_html_server_error",
-                    status=resp.status_code,
-                    url=url,
-                    attempt=attempt,
-                    wait_s=wait_s,
-                )
-                await asyncio.sleep(wait_s)
-                continue
-
-            log.warning(
-                "keyframe_html_unhandled_status",
-                status=resp.status_code,
-                url=url,
-            )
+    async def _get_html(self, url: str) -> str | None:
+        """GET url with HTML Accept header and return text, or None on 404."""
+        resp = await self._client.request("GET", url, headers=_HTML_HEADERS)
+        if resp.status_code == 404:
+            log.debug("keyframe_html_not_found", url=url)
             return None
-
-        log.warning("keyframe_html_max_retries", url=url)
-        return None
+        resp.raise_for_status()
+        return resp.text
 
     # ------------------------------------------------------------------
     # Public endpoint methods
@@ -218,30 +95,23 @@ class KeyframeApiClient:
 
     async def get_roles_master(self) -> list[dict] | None:
         """Fetch /api/data/roles.php — complete role master list (~1924 items)."""
-        return await self._get_with_retry(f"{BASE}/api/data/roles.php")  # type: ignore[return-value]
+        return await self._get_json(f"{BASE}/api/data/roles.php")  # type: ignore[return-value]
 
     async def get_person_show(self, person_id: int) -> dict | None:
         """Fetch /api/person/show.php?id=<id>&type=person — person detail + all credits."""
-        url = f"{BASE}/api/person/show.php?id={person_id}&type=person"
-        return await self._get_with_retry(url)  # type: ignore[return-value]
+        return await self._get_json(f"{BASE}/api/person/show.php?id={person_id}&type=person")  # type: ignore[return-value]
 
     async def get_preview(self) -> dict | None:
         """Fetch /api/stafflists/preview.php — recent/airing/data top-page snapshot."""
-        return await self._get_with_retry(f"{BASE}/api/stafflists/preview.php")  # type: ignore[return-value]
+        return await self._get_json(f"{BASE}/api/stafflists/preview.php")  # type: ignore[return-value]
 
     async def search_staff(self, query: str, offset: int = 0) -> dict | None:
         """Fetch /api/search/?q=<q>&type=staff — staff search results (50/page)."""
-        url = f"{BASE}/api/search/?q={quote(query)}&type=staff&offset={offset}"
-        return await self._get_with_retry(url)  # type: ignore[return-value]
+        return await self._get_json(f"{BASE}/api/search/?q={quote(query)}&type=staff&offset={offset}")  # type: ignore[return-value]
 
     async def search_all(self, query: str, offset: int = 0) -> dict | None:
-        """Fetch /api/search/?q=<q>&type=all — staff + stafflists search (50/page).
-
-        Returns dict with 'staff' and 'stafflists' lists. Staff entries include
-        anilist_id, jobs, studios, avatar fields.
-        """
-        url = f"{BASE}/api/search/?q={quote(query)}&type=all&offset={offset}"
-        return await self._get_with_retry(url)  # type: ignore[return-value]
+        """Fetch /api/search/?q=<q>&type=all — staff + stafflists search (50/page)."""
+        return await self._get_json(f"{BASE}/api/search/?q={quote(query)}&type=all&offset={offset}")  # type: ignore[return-value]
 
     async def translate_name(
         self,
@@ -254,29 +124,26 @@ class KeyframeApiClient:
         Args:
             name: Person name to look up.
             lang: 'ja' or 'en' — which param name to use.
-            category: Optional category filter (passed as &category=<cat>).
+            category: Optional category filter.
 
         Returns:
-            List of match dicts (may be empty — no match, or multiple — ambiguous).
+            List of match dicts (empty = no match, multiple = ambiguous).
             None on network/server error.
         """
         cat_param = f"&category={quote(category)}" if category else ""
         url = f"{BASE}/api/data/translate.v4.php?{lang}={quote(name)}&uuid={cat_param}"
-        return await self._get_with_retry(url)  # type: ignore[return-value]
+        return await self._get_json(url)  # type: ignore[return-value]
 
     async def get_person_by_id(self, person_id: int | str, is_studio: bool = False) -> dict | None:
-        """Fetch /api/person/get_by_id.php — lightweight name lookup by keyframe ID.
-
-        Returns dict with 'ja' and 'en' name fields, or None if not found.
-        """
+        """Fetch /api/person/get_by_id.php — lightweight name lookup by keyframe ID."""
         studio_flag = 1 if is_studio else 0
         url = f"{BASE}/api/person/get_by_id.php?id={quote(str(person_id))}&studio={studio_flag}"
-        return await self._get_with_retry(url)  # type: ignore[return-value]
+        return await self._get_json(url)  # type: ignore[return-value]
 
     async def get_sitemap(self) -> str | None:
         """Fetch /sitemap.xml — returns raw XML text."""
-        return await self._get_html_with_retry(f"{BASE}/sitemap.xml")
+        return await self._get_html(f"{BASE}/sitemap.xml")
 
     async def get_anime_page(self, slug: str) -> str | None:
         """Fetch /staff/<slug> — returns raw HTML text containing preloadData."""
-        return await self._get_html_with_retry(f"{BASE}/staff/{slug}")
+        return await self._get_html(f"{BASE}/staff/{slug}")
