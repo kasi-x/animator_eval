@@ -155,6 +155,18 @@ def save_credits_batch_to_bronze(credits_bw, credits_batch):
         credits_bw.append(credit.model_dump(mode="json"))
 
 
+def save_characters_to_bronze(characters_bw, characters):
+    """Save characters to BRONZE parquet."""
+    for char in characters:
+        characters_bw.append(char.model_dump(mode="json"))
+
+
+def save_cva_to_bronze(cva_bw, cva_list):
+    """Save character-voice-actor mappings to BRONZE parquet."""
+    for cva in cva_list:
+        cva_bw.append(cva.model_dump(mode="json"))
+
+
 class AniListClient:
     """Async AniList GraphQL client (with authentication support)."""
 
@@ -795,6 +807,8 @@ async def _fetch_staff_phase(
     studios_bw,
     anime_studios_bw,
     relations_bw,
+    characters_bw,
+    cva_bw,
     anime_ids,
     totals,
     fetched_ids,
@@ -835,7 +849,7 @@ async def _fetch_staff_phase(
             if anime_id in since_ids:
                 continue
 
-            credits, person_ids, va_count, had_error = await fetch_staff_ids_for_anime(
+            credits, person_ids, va_count, characters, cva_list, had_error = await fetch_staff_ids_for_anime(
                 client, anilist_id, anime_id
             )
 
@@ -850,6 +864,8 @@ async def _fetch_staff_phase(
             if relations_pending and anime_id in relations_pending:
                 save_relations_to_bronze(relations_bw, relations_pending.pop(anime_id))
             save_credits_batch_to_bronze(credits_bw, credits)
+            save_characters_to_bronze(characters_bw, characters)
+            save_cva_to_bronze(cva_bw, cva_list)
 
             if anime.cover_large or anime.cover_extra_large or anime.banner:
                 download_queue.add_anime(
@@ -861,6 +877,7 @@ async def _fetch_staff_phase(
             totals["anime"] += 1
             totals["credits"] += len(credits)
             totals["voice_actors"] += va_count
+            totals["characters"] += len(characters)
             p.advance()
 
             if (loop_idx + 1) % checkpoint_interval == 0:
@@ -869,6 +886,8 @@ async def _fetch_staff_phase(
                 studios_bw.flush()
                 anime_studios_bw.flush()
                 relations_bw.flush()
+                characters_bw.flush()
+                cva_bw.flush()
                 save_checkpoint(
                     checkpoint_file,
                     create_checkpoint_data(
@@ -1221,6 +1240,9 @@ def main(
             final_table.add_row(
                 "  └ 🎤 声優", f"[bright_blue]{totals['voice_actors']:,}[/bright_blue]"
             )
+            final_table.add_row(
+                "🎭 キャラクター", f"[bright_blue]{totals.get('characters', 0):,}[/bright_blue]"
+            )
 
             if totals.get("skipped", 0) > 0:
                 final_table.add_row(
@@ -1294,6 +1316,7 @@ def main(
                 "total_credits": totals["credits"],
                 "total_images": totals["images"],
                 "total_voice_actors": totals["voice_actors"],
+                "total_characters": totals.get("characters", 0),
                 "total_errors": totals["errors"],
                 "timestamp": timestamp,
             }
@@ -1580,11 +1603,14 @@ def main(
         async def fetch_staff_ids_for_anime(client, anilist_id, anime_id):
             """Phase 2A: アニメ1件のスタッフID・ロール一覧を取得（最小クエリ）.
 
-            Returns: (credits, person_ids, va_count, had_error)
+            Returns: (credits, person_ids, va_count, characters, cva_list, had_error)
             """
             credits = []
             person_ids = set()
             va_count = 0
+            all_characters = []
+            all_cva_list = []
+            seen_char_ids: set = set()
 
             try:
                 staff_page = 1
@@ -1625,8 +1651,15 @@ def main(
                             staff_page += 1
 
                     if has_more_chars:
-                        characters = media.get("characters", {})
-                        for char_edge in characters.get("edges", []):
+                        characters_obj = media.get("characters", {})
+                        char_edges = characters_obj.get("edges", [])
+                        page_chars, page_cvas = parse_anilist_characters(char_edges, anime_id)
+                        for char in page_chars:
+                            if char.anilist_id not in seen_char_ids:
+                                seen_char_ids.add(char.anilist_id)
+                                all_characters.append(char)
+                        all_cva_list.extend(page_cvas)
+                        for char_edge in char_edges:
                             for va in char_edge.get("voiceActors") or []:
                                 va_id = va.get("id")
                                 if va_id:
@@ -1637,11 +1670,11 @@ def main(
                                             person_id=f"anilist:p{va_id}",
                                             anime_id=anime_id,
                                             role=parse_role("Voice Actor"),
-                                            raw_role="Voice Actor",  # original role string
+                                            raw_role="Voice Actor",
                                             source="anilist",
                                         )
                                     )
-                        has_more_chars = characters.get("pageInfo", {}).get(
+                        has_more_chars = characters_obj.get("pageInfo", {}).get(
                             "hasNextPage", False
                         )
                         if has_more_chars:
@@ -1655,9 +1688,9 @@ def main(
                     error_type=type(e).__name__,
                     error_message=str(e),
                 )
-                return credits, person_ids, va_count, True
+                return credits, person_ids, va_count, all_characters, all_cva_list, True
 
-            return credits, person_ids, va_count, False
+            return credits, person_ids, va_count, all_characters, all_cva_list, False
 
         # === Main Execution ===
 
@@ -1673,6 +1706,7 @@ def main(
             "credits": 0,
             "images": 0,
             "voice_actors": 0,
+            "characters": 0,
             "errors": 0,
             "skipped": 0,
         }
@@ -1698,13 +1732,15 @@ def main(
 
             with BronzeWriterGroup(
                 "anilist",
-                tables=["anime", "credits", "studios", "anime_studios", "relations"],
+                tables=["anime", "credits", "studios", "anime_studios", "relations", "characters", "character_voice_actors"],
             ) as g:
                 anime_bw = g["anime"]
                 credits_bw = g["credits"]
                 studios_bw = g["studios"]
                 anime_studios_bw = g["anime_studios"]
                 relations_bw = g["relations"]
+                characters_bw = g["characters"]
+                cva_bw = g["character_voice_actors"]
 
                 all_person_ids_to_fetch = await _fetch_staff_phase(
                     client,
@@ -1713,6 +1749,8 @@ def main(
                     studios_bw,
                     anime_studios_bw,
                     relations_bw,
+                    characters_bw,
+                    cva_bw,
                     anime_ids,
                     totals,
                     fetched_ids,

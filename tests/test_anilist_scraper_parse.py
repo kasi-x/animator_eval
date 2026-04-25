@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 from src.scrapers.anilist_scraper import parse_anilist_anime
-from src.scrapers.parsers.anilist import parse_anilist_person, parse_anilist_staff
+from src.scrapers.parsers.anilist import parse_anilist_characters, parse_anilist_person, parse_anilist_staff
 
 FIXTURES = Path(__file__).parent / "fixtures" / "scrapers" / "anilist"
 
@@ -124,3 +124,72 @@ def test_parse_anilist_staff_primary_occupations():
     assert len(persons) == 1
     assert persons[0].primary_occupations == ["Key Animator"]
     assert len(credits) >= 1
+
+
+_CHAR_EDGES = [
+    {
+        "role": "MAIN",
+        "node": {
+            "id": 101,
+            "name": {"full": "Spike Spiegel", "native": "スパイク・スピーゲル", "alternative": []},
+            "image": {"large": "https://example.com/spike.jpg", "medium": None},
+            "description": "A bounty hunter.",
+            "gender": "Male",
+            "dateOfBirth": {"year": None, "month": None, "day": None},
+            "age": "27",
+            "bloodType": "O",
+            "favourites": 5000,
+            "siteUrl": "https://anilist.co/character/101",
+        },
+        "voiceActors": [{"id": 201}],
+    },
+    {
+        "role": "SUPPORTING",
+        "node": {
+            "id": 102,
+            "name": {"full": "Jet Black", "native": "ジェット・ブラック", "alternative": []},
+            "image": {"large": None, "medium": None},
+            "description": None,
+            "gender": "Male",
+            "dateOfBirth": {},
+            "age": None,
+            "bloodType": None,
+            "favourites": 0,
+            "siteUrl": None,
+        },
+        "voiceActors": [],
+    },
+]
+
+
+def test_parse_anilist_characters_basic():
+    characters, cva_list = parse_anilist_characters(_CHAR_EDGES, "anilist:1")
+    assert len(characters) == 2
+    assert characters[0].id == "anilist:c101"
+    assert characters[0].name_ja == "スパイク・スピーゲル"
+    assert characters[0].name_en == "Spike Spiegel"
+    assert characters[0].gender == "Male"
+    assert characters[0].blood_type == "O"
+    assert characters[0].favourites == 5000
+    assert characters[1].id == "anilist:c102"
+
+
+def test_parse_anilist_characters_cva_mapping():
+    _, cva_list = parse_anilist_characters(_CHAR_EDGES, "anilist:1")
+    assert len(cva_list) == 1
+    assert cva_list[0].character_id == "anilist:c101"
+    assert cva_list[0].person_id == "anilist:p201"
+    assert cva_list[0].anime_id == "anilist:1"
+    assert cva_list[0].character_role == "MAIN"
+
+
+def test_parse_anilist_characters_dedup():
+    duplicate_edges = _CHAR_EDGES + [_CHAR_EDGES[0]]
+    characters, _ = parse_anilist_characters(duplicate_edges, "anilist:1")
+    assert len(characters) == 2  # same id deduplicated
+
+
+def test_parse_anilist_characters_empty():
+    characters, cva_list = parse_anilist_characters([], "anilist:1")
+    assert characters == []
+    assert cva_list == []
