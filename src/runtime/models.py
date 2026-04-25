@@ -1263,7 +1263,6 @@ class Person(BaseModel):
     anilist_id: int | None = None
     madb_id: str | None = None  # Media Arts DB URI
     ann_id: int | None = None  # Anime News Network Encyclopedia ID
-    allcinema_id: int | None = None  # allcinema.net person ID
 
     # Images (AniList)
     image_large: str | None = None
@@ -1350,7 +1349,6 @@ class AnimeAnalysis(BaseModel):
     anilist_id: int | None = None
     madb_id: str | None = None  # Media Arts DB URI
     ann_id: int | None = None  # Anime News Network Encyclopedia ID
-    allcinema_id: int | None = None  # allcinema.net cinema ID
 
     # Detailed information (structural metadata)
     format: str | None = None  # TV, MOVIE, OVA, ONA, SPECIAL, MUSIC
@@ -1402,7 +1400,6 @@ class BronzeAnime(BaseModel):
     anilist_id: int | None = None
     madb_id: str | None = None
     ann_id: int | None = None
-    allcinema_id: int | None = None
     format: str | None = None
     status: str | None = None
     start_date: str | None = None
@@ -1468,7 +1465,6 @@ class BronzeAnime(BaseModel):
             anilist_id=getattr(row, "anilist_id", None),
             madb_id=getattr(row, "madb_id", None),
             ann_id=getattr(row, "ann_id", None),
-            allcinema_id=getattr(row, "allcinema_id", None),
             score=getattr(row, "score", None),
             cover_large=getattr(row, "cover_large", None),
             cover_extra_large=getattr(row, "cover_extra_large", None),

@@ -124,10 +124,10 @@ similarity.py / recommendation.py はスタブ化済 (2行)、重複整理完了
 - SILVER 移行設計は後続で再検討
 
 **カード**:
-- `10/01_schema_design` — BRONZE 8 テーブル dataclass 確定
-- `10/02_parser_extend` — `parsers/ann.py` 拡張 (XML + HTML 全フィールド)
-- `10/03_scraper_integration` — `ann_scraper.py` 多 BronzeWriter 対応
-- `10/04_rescrape` — checkpoint リセット + 全件再 scrape
+- `10/01_schema_design` ✅ DONE — BRONZE 8 テーブル dataclass 確定
+- `10/02_parser_extend` ✅ DONE — `parsers/ann.py` 拡張 (XML + HTML 全フィールド)
+- `10/03_scraper_integration` ✅ DONE — `ann_scraper.py` BronzeWriterGroup 8 テーブル書き分け
+- `10/04_rescrape` 🔄 PARTIAL — anime 27,000/27,000 完了, persons 507/36,350 (残 ~14h)
 
 旧 §7.4 「ANN 再 scrape」は本カード 04 に統合済。
 
