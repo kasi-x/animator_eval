@@ -22,6 +22,12 @@ import structlog
 import typer
 
 from src.runtime.models import BronzeAnime, Credit, Person, parse_role
+from src.scrapers.cli_common import (
+    CheckpointIntervalOpt,
+    ProgressOpt,
+    QuietOpt,
+    resolve_progress_enabled,
+)
 from src.scrapers.parsers.mediaarts import (  # noqa: F401
     parse_contributor_text,
     parse_jsonld_dump,
@@ -187,6 +193,7 @@ async def scrape_madb(
     max_anime: int = 0,
     checkpoint_interval: int = SCRAPE_CHECKPOINT_INTERVAL,
     extended: bool = False,
+    progress_override: bool | None = None,
 ) -> dict:
     """Fetch credit data from MADB dump.
 
@@ -197,7 +204,8 @@ async def scrape_madb(
     Returns:
         Statistics dict
     """
-    from src.scrapers.bronze_writer import BronzeWriter
+    from src.scrapers.bronze_writer import BronzeWriterGroup
+    from src.scrapers.progress import scrape_progress
 
     if data_dir is None:
         data_dir = DEFAULT_DATA_DIR
@@ -225,9 +233,10 @@ async def scrape_madb(
         all_collections.update(ANIME_COLLECTION_FILES_EXTENDED)
     format_by_type = {label: fmt for _zip, (label, fmt) in all_collections.items()}
 
-    anime_bw = BronzeWriter("mediaarts", table="anime")
-    persons_bw = BronzeWriter("mediaarts", table="persons")
-    credits_bw = BronzeWriter("mediaarts", table="credits")
+    group = BronzeWriterGroup("mediaarts", tables=["anime", "persons", "credits"])
+    anime_bw = group["anime"]
+    persons_bw = group["persons"]
+    credits_bw = group["credits"]
 
     # Phase B: Parse JSON-LD per collection and write to parquet
     total_processed = 0
@@ -241,76 +250,79 @@ async def scrape_madb(
             records = records[:max_anime]
         log.info("madb_parsed", file=json_path.name, records=len(records))
 
-        for i, record in enumerate(records):
-            madb_id = record["id"]
-            title = record["title"]
-            year = record["year"]
-            fmt = record["format"]
-            contributors = record["contributors"]
-            studios = record["studios"]
+        with scrape_progress(
+            total=len(records),
+            description=f"madb {anime_type}",
+            enabled=progress_override,
+        ) as p:
+            for i, record in enumerate(records):
+                madb_id = record["id"]
+                title = record["title"]
+                year = record["year"]
+                fmt = record["format"]
+                contributors = record["contributors"]
+                studios = record["studios"]
 
-            anime_id = f"madb:{madb_id}"
-            anime = BronzeAnime(
-                id=anime_id,
-                title_ja=title,
-                year=year,
-                format=fmt or None,
-                madb_id=madb_id,
-                studios=studios,
-            )
-            anime_bw.append(anime.model_dump(mode="json"))
-            stats["anime_fetched"] += 1
-
-            if not contributors:
-                stats["anime_metadata_only"] += 1
-            else:
-                stats["anime_with_contributors"] += 1
-                for role_ja, name_ja in contributors:
-                    if len(name_ja) < 2:
-                        continue
-
-                    if name_ja not in person_cache:
-                        person_id = make_madb_person_id(name_ja)
-                        person = Person(
-                            id=person_id,
-                            name_ja=name_ja,
-                            madb_id=person_id,
-                        )
-                        persons_bw.append(person.model_dump(mode="json"))
-                        person_cache[name_ja] = person
-                        stats["persons_created"] += 1
-                    else:
-                        person = person_cache[name_ja]
-
-                    role = parse_role(role_ja)
-                    credit = Credit(
-                        person_id=person.id,
-                        anime_id=anime_id,
-                        role=role,
-                        raw_role=role_ja,
-                        source="mediaarts",
-                    )
-                    credits_bw.append(credit.model_dump(mode="json"))
-                    stats["credits_created"] += 1
-
-            total_processed += 1
-            if total_processed % checkpoint_interval == 0:
-                anime_bw.flush()
-                persons_bw.flush()
-                credits_bw.flush()
-                log.info(
-                    "madb_checkpoint",
-                    collection=anime_type,
-                    collection_progress=f"{i + 1}/{len(records)}",
-                    total=total_processed,
-                    credits=stats["credits_created"],
-                    persons=stats["persons_created"],
+                anime_id = f"madb:{madb_id}"
+                anime = BronzeAnime(
+                    id=anime_id,
+                    title_ja=title,
+                    year=year,
+                    format=fmt or None,
+                    madb_id=madb_id,
+                    studios=studios,
                 )
+                anime_bw.append(anime.model_dump(mode="json"))
+                stats["anime_fetched"] += 1
 
-    # Final flush
-    anime_bw.flush()
-    persons_bw.flush()
-    credits_bw.flush()
+                if not contributors:
+                    stats["anime_metadata_only"] += 1
+                else:
+                    stats["anime_with_contributors"] += 1
+                    for role_ja, name_ja in contributors:
+                        if len(name_ja) < 2:
+                            continue
+
+                        if name_ja not in person_cache:
+                            person_id = make_madb_person_id(name_ja)
+                            person = Person(
+                                id=person_id,
+                                name_ja=name_ja,
+                                madb_id=person_id,
+                            )
+                            persons_bw.append(person.model_dump(mode="json"))
+                            person_cache[name_ja] = person
+                            stats["persons_created"] += 1
+                        else:
+                            person = person_cache[name_ja]
+
+                        role = parse_role(role_ja)
+                        credit = Credit(
+                            person_id=person.id,
+                            anime_id=anime_id,
+                            role=role,
+                            raw_role=role_ja,
+                            source="mediaarts",
+                        )
+                        credits_bw.append(credit.model_dump(mode="json"))
+                        stats["credits_created"] += 1
+
+                total_processed += 1
+                p.advance()
+                if total_processed % checkpoint_interval == 0:
+                    group.flush_all()
+                    p.log(
+                        "madb_checkpoint",
+                        collection=anime_type,
+                        collection_progress=f"{i + 1}/{len(records)}",
+                        total=total_processed,
+                        credits=stats["credits_created"],
+                        persons=stats["persons_created"],
+                    )
+
+    # Final flush + compact
+    group.flush_all()
+    group.compact_all()
 
     log.info(
         "madb_scrape_complete",
@@ -325,12 +337,11 @@ def main(
     max_records: int = typer.Option(
         0,
         "--max-records",
+        "--limit",
         "-n",
-        help="Maximum number of anime per collection (0 = unlimited)",
+        help="Maximum number of anime per collection (0 = unlimited). Alias: --limit",
     ),
-    checkpoint: int = typer.Option(
-        50, "--checkpoint", "-c", help="Checkpoint interval"
-    ),
+    checkpoint: CheckpointIntervalOpt = 50,
     version: str = typer.Option("latest", "--version", "-v", help="Dataset version"),
     data_dir: Path = typer.Option(
         DEFAULT_DATA_DIR, "--data-dir", "-d", help="Download directory"
@@ -340,6 +351,8 @@ def main(
         "--extended",
         help="Download extended metadata sets (201-205, 301-317, etc.)",
     ),
+    quiet: QuietOpt = False,
+    progress: ProgressOpt = False,
 ) -> None:
     """Fetch credit data from Media Arts DB dump."""
     from src.infra.logging import setup_logging
@@ -356,6 +369,7 @@ def main(
             max_anime=max_records,
             checkpoint_interval=checkpoint,
             extended=extended,
+            progress_override=resolve_progress_enabled(quiet, progress),
         )
     )
 

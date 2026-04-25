@@ -45,6 +45,7 @@ build-explorer = "cd cmd/explorer && go build -o ../../bin/explorer ."
 explorer = "bin/explorer -data ./result/json -static ./static/explorer -port 3000"
 
 # Scrapers
+install-playwright = "playwright install chromium"
 scrape-allcinema = "python -m src.scrapers.allcinema_scraper run"
 scrape-allcinema-cinema = "python -m src.scrapers.allcinema_scraper cinema"
 scrape-allcinema-persons = "python -m src.scrapers.allcinema_scraper persons"
@@ -82,6 +83,8 @@ lxml = "*"
 [feature.scrape.pypi-dependencies]
 sparqlwrapper = "*"
 python-dotenv = ">=1.0"
+playwright = ">=1.44"
+playwright-stealth = ">=1.0"
 
 # ============================================================================
 # Feature: analysis — graph analysis, scoring, visualization

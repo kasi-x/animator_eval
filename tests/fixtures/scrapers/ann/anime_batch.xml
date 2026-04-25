@@ -1,4 +1,4 @@
-<ann><anime id="1" gid="3662984164" type="TV" name="Angel Links" precision="TV" generated-on="2026-04-23T04:24:26Z">
+<ann><anime id="1" gid="3662984164" type="TV" name="Angel Links" precision="TV" generated-on="2026-04-24T14:30:41Z">
 <related-prev rel="spinoff of" id="423"/>
 <info gid="2980532540" type="Picture" src="https://cdn.animenewsnetwork.com/thumbnails/fit200x200/encyc/A1-51.jpg" width="200" height="200"><img src="https://cdn.animenewsnetwork.com/thumbnails/fit200x200/encyc/A1-51.jpg" width="200" height="200"/></info>
 <info gid="3079246477" type="Main title" lang="EN">Angel Links</info>
@@ -19,7 +19,7 @@
 <info gid="1986155597" type="Ending Theme">&quot;True Moon&quot; by Riwako Miyawara</info>
 <info gid="1756835630" type="Insert song">&quot;DA・LI・A&quot; by Riwako Miyawara</info>
 <info gid="1057787272" type="Official website" lang="JA" href="http://www.sunrise-inc.co.jp/seihou/ANGEL-LINKS/story.html">星方シリーズWeb [星方天使エンジェルリンクス：作品紹介]</info>
-<ratings nb_votes="352" weighted_score="5.8026" bayesian_score="5.8576"/>
+<ratings nb_votes="352" weighted_score="5.8027" bayesian_score="5.8577"/>
 <episode num="1">
 <title gid="2627384648" lang="EN">Guardian Angel</title></episode>
 <episode num="2">
@@ -129,7 +129,7 @@
 <cast gid="2791722307" lang="JA"><role>Nikola Neri</role><person id="51073">Kōji Yusa</person></cast>
 <credit gid="1422644176"><task>Animation Production</task><company id="34">Sunrise</company></credit>
 <credit gid="1888922717"><task>Production</task><company id="18">Bandai Visual</company></credit>
-<credit gid="1738147296"><task>Production</task><company id="34">Sunrise</company></credit></anime><anime id="5" gid="547578341" type="OAV" name="Battle Skipper" precision="OAV" generated-on="2026-04-23T04:24:26Z">
+<credit gid="1738147296"><task>Production</task><company id="34">Sunrise</company></credit></anime><anime id="5" gid="547578341" type="OAV" name="Battle Skipper" precision="OAV" generated-on="2026-04-24T14:36:53Z">
 <info gid="2015135356" type="Picture" src="https://cdn.animenewsnetwork.com/thumbnails/fit200x200/encyc/A5-16.jpg" width="200" height="188"><img src="https://cdn.animenewsnetwork.com/thumbnails/fit200x200/encyc/A5-16.jpg" width="200" height="188"/></info>
 <info gid="446443881" type="Main title" lang="EN">Battle Skipper</info>
 <info gid="3078563587" type="Alternative title" lang="JA">Bishōjo Yūgekitai Battle Skipper</info>
@@ -199,7 +199,7 @@
 <cast gid="3335760314" lang="PT"><role>Kanami Izaki</role><person id="48900">Ursula Bezerra</person></cast>
 <cast gid="3604587090" lang="PT"><role>Shihoko Sakaki</role><person id="52950">Elisa Villon</person></cast>
 <credit gid="3966449170"><task>Production</task><company id="258">Victor Entertainment</company></credit>
-<credit gid="2763715361"><task>Production</task><company id="818">ARTMIC</company></credit></anime><anime id="100" gid="3940154476" type="OAV" name="Adventures of Kotetsu" precision="OAV" generated-on="2026-04-23T04:24:26Z">
+<credit gid="2763715361"><task>Production</task><company id="818">ARTMIC</company></credit></anime><anime id="100" gid="3940154476" type="OAV" name="Adventures of Kotetsu" precision="OAV" generated-on="2026-04-24T14:36:53Z">
 <related-prev rel="adapted from" id="4451"/>
 <info gid="1409399557" type="Picture" src="https://cdn.animenewsnetwork.com/thumbnails/fit200x200/encyc/A100-23.jpg" width="200" height="200"><img src="https://cdn.animenewsnetwork.com/thumbnails/fit200x200/encyc/A100-23.jpg" width="200" height="200"/><img src="https://cdn.animenewsnetwork.com/thumbnails/max500x600/encyc/A100-23.jpg" width="290" height="290"/></info>
 <info gid="1677150410" type="Main title" lang="EN">The Adventures of Kotetsu</info>
@@ -243,7 +243,7 @@
 <credit gid="2518278421"><task>Production</task><company id="77">Daiei Co. Ltd.</company></credit>
 <credit gid="3168457881"><task>Production</task><company id="2186">Palm Tree</company></credit>
 <credit gid="237932670"><task>Production</task><company id="2651">Wani Books</company></credit>
-<credit gid="897922317"><task>Production</task><company id="2944">Project Team Sarah</company></credit></anime><anime id="4658" gid="1097470093" type="TV" name="Jinki:Extend" precision="TV" generated-on="2026-04-23T04:03:33Z">
+<credit gid="897922317"><task>Production</task><company id="2944">Project Team Sarah</company></credit></anime><anime id="4658" gid="1097470093" type="TV" name="Jinki:Extend" precision="TV" generated-on="2026-04-24T14:36:54Z">
 <related-prev rel="adapted from" id="4199"/>
 <info gid="1693214504" type="Picture" src="https://cdn.animenewsnetwork.com/thumbnails/fit200x200/encyc/A4658-7.jpg" width="178" height="200"><img src="https://cdn.animenewsnetwork.com/thumbnails/fit200x200/encyc/A4658-7.jpg" width="178" height="200"/></info>
 <info gid="2849059477" type="Main title" lang="JA">Jinki:Extend</info>

@@ -31,7 +31,7 @@ DEFAULT_BRONZE_ROOT: Path = Path(
 
 ALLOWED_SOURCES = {
     "anilist", "ann", "allcinema", "seesaawiki", "keyframe", "mal", "mediaarts", "jvmg",
-    "bangumi",
+    "sakuga_atwiki", "bangumi",
 }
 
 
@@ -42,7 +42,8 @@ class BronzeWriter:
         with BronzeWriter("anilist", table="anime") as bw:
             for row in scraped_rows:
                 bw.append(row)
-        # parquet file flushed on exit
+        # parquet flushed on exit, then small files in this partition are
+        # auto-compacted into one file (compact_on_exit=True default).
 
     Multiple scrapers can run in parallel — each writes its own file
     under its own partition, no contention.
@@ -55,6 +56,7 @@ class BronzeWriter:
         table: str,
         root: Path | str | None = None,
         date: _dt.date | None = None,
+        compact_on_exit: bool = True,
     ) -> None:
         if source not in ALLOWED_SOURCES:
             raise ValueError(f"Unknown source: {source!r} (allowed: {ALLOWED_SOURCES})")
@@ -69,6 +71,15 @@ class BronzeWriter:
             / f"table={table}"
             / f"date={self._date.isoformat()}"
         )
+        self._compact_on_exit = compact_on_exit
+
+    @property
+    def date(self) -> _dt.date:
+        return self._date
+
+    @property
+    def root(self) -> Path:
+        return self._root
 
     def __enter__(self) -> "BronzeWriter":
         return self
@@ -76,6 +87,8 @@ class BronzeWriter:
     def __exit__(self, exc_type, *_: object) -> None:
         if exc_type is None:
             self.flush()
+            if self._compact_on_exit:
+                self.compact()
         # On exception, drop buffer — caller will retry the whole scrape
 
     def append(self, row: dict[str, Any]) -> None:
@@ -101,3 +114,175 @@ class BronzeWriter:
         )
         self._buffer.clear()
         return path
+
+    def compact(self) -> Path | None:
+        """Merge small parquet files in this writer's partition into one.
+
+        Best-effort: compaction failure is logged but not raised.
+        """
+        # Local import to avoid circular import (bronze_compaction → bronze_writer).
+        from src.scrapers.bronze_compaction import compact_partition
+        try:
+            return compact_partition(
+                self.source, self.table, self._date.isoformat(), root=self._root
+            )
+        except Exception as exc:  # noqa: BLE001 — compaction must not crash scrapes
+            logger.warning(
+                "bronze_compaction_failed",
+                source=self.source,
+                table=self.table,
+                date=self._date.isoformat(),
+                error=str(exc),
+            )
+            return None
+
+
+class BronzeWriterGroup:
+    """Manage multiple BronzeWriter instances as one lifecycle unit.
+
+    Usage:
+        with BronzeWriterGroup("ann", tables=["anime", "credits", "cast"]) as g:
+            g["anime"].append(...)
+            g["credits"].append(...)
+        # All writers flushed and their partitions compacted on exit.
+
+    Sub-writers have compact_on_exit=False — the group performs one
+    compaction pass at the end so that mid-scrape sub-writer .flush()
+    calls don't trigger redundant compactions.
+    """
+
+    def __init__(
+        self,
+        source: str,
+        *,
+        tables: list[str],
+        root: Path | str | None = None,
+        date: _dt.date | None = None,
+    ) -> None:
+        self.source = source
+        self._writers: dict[str, BronzeWriter] = {
+            t: BronzeWriter(
+                source, table=t, root=root, date=date, compact_on_exit=False
+            )
+            for t in tables
+        }
+
+    def __enter__(self) -> "BronzeWriterGroup":
+        return self
+
+    def __exit__(self, exc_type, *_: object) -> None:
+        if exc_type is None:
+            self.flush_all()
+            self.compact_all()
+
+    def __getitem__(self, table: str) -> BronzeWriter:
+        return self._writers[table]
+
+    def __iter__(self):
+        return iter(self._writers.values())
+
+    def writers(self) -> dict[str, BronzeWriter]:
+        return self._writers
+
+    def flush_all(self) -> None:
+        for bw in self._writers.values():
+            bw.flush()
+
+    def compact_all(self) -> None:
+        for bw in self._writers.values():
+            bw.compact()
+
+
+# ---------------------------------------------------------------------------
+# 作画@wiki — 3-table BRONZE export
+# ---------------------------------------------------------------------------
+
+def write_sakuga_atwiki_bronze(
+    persons: list,                        # list[ParsedSakugaPerson]
+    pages_metadata: list[dict],
+    output_dir: "Path | str",
+    date_partition: str,
+    raw_texts: "dict[int, str] | None" = None,
+) -> dict[str, Path]:
+    """Write src_sakuga_atwiki_{pages,persons,credits} parquet.
+
+    pages_metadata: list of dicts from discovered_pages.json.
+    persons:        ParsedSakugaPerson instances parsed from HTML cache.
+    raw_texts:      {page_id: wikibody_plaintext} — stored in persons table so
+                    rows where parse failed can be re-parsed without the gz cache.
+                    Pass None to omit (raw HTML remains only in the gz cache).
+    """
+    import json as _json
+
+    output_dir = Path(output_dir)
+    raw_texts = raw_texts or {}
+
+    page_rows: list[dict] = []
+    person_rows: list[dict] = []
+    credit_rows: list[dict] = []
+
+    person_map: dict[int, object] = {p.page_id: p for p in persons}  # type: ignore[union-attr]
+
+    for meta in pages_metadata:
+        pid = meta["id"]
+        parsed = person_map.get(pid)
+        parse_ok = parsed is not None and len(parsed.credits) > 0  # type: ignore[union-attr]
+
+        page_rows.append({
+            "page_id": pid,
+            "url": meta.get("url", ""),
+            "title": meta.get("title", ""),
+            "page_kind": meta.get("page_kind", "unknown"),
+            "last_fetched_at": meta.get("discovered_at", ""),
+            "html_sha256": meta.get("last_hash", ""),
+            "parse_ok": parse_ok,
+            "date_partition": date_partition,
+        })
+
+        if parsed is None:
+            continue
+
+        person_rows.append({
+            "page_id": pid,
+            "name": parsed.name,  # type: ignore[union-attr]
+            "aliases_json": _json.dumps(parsed.aliases, ensure_ascii=False),  # type: ignore[union-attr]
+            "active_since_year": parsed.active_since_year,  # type: ignore[union-attr]
+            "html_sha256": parsed.source_html_sha256,  # type: ignore[union-attr]
+            # raw_wikibody_text: always stored for all pages (parse_ok or not)
+            "raw_wikibody_text": raw_texts.get(pid, ""),
+            "parse_ok": parse_ok,
+            "date_partition": date_partition,
+        })
+
+        for credit in parsed.credits:  # type: ignore[union-attr]
+            credit_rows.append({
+                "person_page_id": pid,
+                "work_title": credit.work_title,
+                "work_year": credit.work_year,
+                "work_format": credit.work_format,
+                "role_raw": credit.role_raw,
+                "episode_raw": credit.episode_raw,
+                "episode_num": credit.episode_num,
+                "evidence_source": "sakuga_atwiki",
+                "date_partition": date_partition,
+            })
+
+    written: dict[str, Path] = {}
+    for table, rows in [("pages", page_rows), ("persons", person_rows), ("credits", credit_rows)]:
+        with BronzeWriter("sakuga_atwiki", table=table, root=output_dir, date=None) as bw:
+            # Override the partition path manually to use date_partition string
+            bw._partition = (
+                output_dir
+                / "source=sakuga_atwiki"
+                / f"table={table}"
+                / f"date={date_partition}"
+            )
+            bw.extend(rows)
+            p = bw.flush()
+            if p:
+                written[table] = p
+                logger.info("sakuga_bronze_written", table=table, rows=len(rows), path=str(p))
+            else:
+                logger.warning("sakuga_bronze_empty", table=table)
+
+    return written

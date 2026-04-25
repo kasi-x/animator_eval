@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from enum import Enum
 from typing import TYPE_CHECKING
 
@@ -1866,3 +1867,27 @@ class BronzeKeyframePreview(BaseModel):
     season_year: int | None = None
     studios_str: list[str] = Field(default_factory=list)
     contributors_json: list[dict] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# BRONZE: 作画@wiki raw parse results (source-faithful, no normalization)
+# ---------------------------------------------------------------------------
+
+@dataclass(frozen=True, slots=True)
+class ParsedSakugaCredit:
+    work_title: str
+    work_year: int | None
+    work_format: str | None       # "劇場" / "TV" / "OVA" / "TVSP" / None
+    role_raw: str
+    episode_raw: str | None       # raw episode spec e.g. "3話", "#5,7,9", "OP"
+    episode_num: int | None       # first resolved episode number; range detail in episode_raw
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedSakugaPerson:
+    page_id: int
+    name: str
+    aliases: list[str]
+    active_since_year: int | None
+    credits: list[ParsedSakugaCredit]
+    source_html_sha256: str
