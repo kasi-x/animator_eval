@@ -301,10 +301,3 @@ class TestRunScraper:
             content = fh.read()
         assert "preloadData" in content
 
-    def test_raw_json_gzip_saved(self, bronze_root, data_dir, mock_client):
-        _scrape(mock_client, data_dir, skip_persons=False)
-        gz_files = list((data_dir / "person_raw").glob("*.json.gz"))
-        assert len(gz_files) >= 1
-        with gzip.open(gz_files[0], "rt", encoding="utf-8") as fh:
-            raw = json.load(fh)
-        assert "staff" in raw

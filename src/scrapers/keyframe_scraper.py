@@ -47,11 +47,14 @@ import typer
 import structlog
 
 from src.scrapers.bronze_writer import BronzeWriter, BronzeWriterGroup
+from src.scrapers.cache_store import load_cached_json, save_cached_json
 from src.scrapers.checkpoint import Checkpoint, resolve_checkpoint
 from src.scrapers.cli_common import DataDirOpt, DelayOpt, ForceOpt, LimitOpt
 from src.scrapers.keyframe_api import KeyframeApiClient
 from src.scrapers.parsers import keyframe as html_parser
 from src.scrapers.parsers import keyframe_api as api_parser
+from src.scrapers.runner import ScrapeRunner
+from src.scrapers.sinks import BronzeSink
 
 log = structlog.get_logger()
 
@@ -125,10 +128,9 @@ async def run_scraper(
     Returns final stats dict.
     """
     raw_html_dir = data_dir / "raw"
-    raw_json_dir = data_dir / "person_raw"
     api_dir = data_dir / "api"
 
-    for d in (raw_html_dir, raw_json_dir, api_dir):
+    for d in (raw_html_dir, api_dir):
         d.mkdir(parents=True, exist_ok=True)
 
     cp_anime = resolve_checkpoint(data_dir / "checkpoint_anime.json", force=fresh)
@@ -164,7 +166,7 @@ async def run_scraper(
         cp_person.save()
 
         if not skip_persons:
-            await _phase3_persons(client, cp_person, raw_json_dir, stats)
+            await _phase3_persons(client, cp_person, stats)
 
         await _phase4_preview(client, api_dir, cp_anime, stats)
         cp_anime["stats"] = stats
@@ -377,77 +379,68 @@ async def _phase2_anime_html(
 # =============================================================================
 
 
+def _person_sink_mapper(parsed: dict) -> dict[str, list[dict]]:
+    """Map parse_person_show output to 4 Bronze table rows."""
+    profile = parsed["profile"]
+    pid = profile["id"]
+    return {
+        "person_profile": [{
+            "person_id": pid,
+            "is_studio": profile["is_studio"],
+            "name_ja": profile["name_ja"],
+            "name_en": profile["name_en"],
+            "aliases_json": json.dumps(profile["aliases_json"], ensure_ascii=False),
+            "avatar": profile["avatar"],
+            "bio": profile["bio"],
+        }],
+        "person_jobs": [
+            {"person_id": pid, "job": job} for job in parsed["jobs"]
+        ],
+        "person_studios": [
+            {
+                "person_id": pid,
+                "studio_name": s["studio_name"],
+                "alt_names": json.dumps(s["alt_names"], ensure_ascii=False),
+            }
+            for s in parsed["studios"]
+        ],
+        "person_credits": [{"person_id": pid, **cred} for cred in parsed["credits"]],
+    }
+
+
 async def _phase3_persons(
     client: KeyframeApiClient,
     cp_person: Checkpoint,
-    raw_json_dir: Path,
     stats: dict,
 ) -> None:
     """Fetch person show.php for each unique person id collected in Phase 2."""
     all_ids = cp_person.get("all_ids") or []
-    remaining_ids = cp_person.pending(all_ids)
 
-    log.info(
-        "keyframe_phase3_start",
-        total=len(all_ids),
-        done=len(cp_person.completed_set),
-        remaining=len(remaining_ids),
-    )
+    async def _fetch(pid: int) -> dict | None:
+        cached = load_cached_json("keyframe/persons", {"person_id": pid})
+        if cached is not None:
+            return cached
+        data = await client.get_person_show(pid)
+        if data is not None:
+            save_cached_json("keyframe/persons", {"person_id": pid}, data)
+        return data
 
     _PHASE3_TABLES = ("person_profile", "person_jobs", "person_studios", "person_credits")
     with BronzeWriterGroup("keyframe", tables=list(_PHASE3_TABLES)) as group:
-        for i, pid in enumerate(remaining_ids):
-            raw_data = await client.get_person_show(pid)
+        runner = ScrapeRunner(
+            fetcher=_fetch,
+            parser=lambda raw, _pid: api_parser.parse_person_show(raw),
+            sink=BronzeSink(group, _person_sink_mapper, add_hash=False),
+            checkpoint=cp_person,
+            label="keyframe_person",
+            flush=group.flush_all,
+            flush_every=CHECKPOINT_INTERVAL,
+        )
+        result = await runner.run(all_ids)
 
-            if raw_data is None:
-                log.debug("keyframe_phase3_skip", person_id=pid)
-                cp_person.mark_completed(pid)
-                stats["person_skipped"] = stats.get("person_skipped", 0) + 1
-                continue
-
-            gz_path = raw_json_dir / f"{pid}.json.gz"
-            with gzip.open(gz_path, "wt", encoding="utf-8") as fh:
-                json.dump(raw_data, fh, ensure_ascii=False)
-
-            parsed = api_parser.parse_person_show(raw_data)
-            profile = parsed["profile"]
-
-            group["person_profile"].append({
-                "person_id": profile["id"],
-                "is_studio": profile["is_studio"],
-                "name_ja": profile["name_ja"],
-                "name_en": profile["name_en"],
-                "aliases_json": json.dumps(profile["aliases_json"], ensure_ascii=False),
-                "avatar": profile["avatar"],
-                "bio": profile["bio"],
-            })
-
-            for job in parsed["jobs"]:
-                group["person_jobs"].append({"person_id": pid, "job": job})
-
-            for studio in parsed["studios"]:
-                group["person_studios"].append({
-                    "person_id": pid,
-                    "studio_name": studio["studio_name"],
-                    "alt_names": json.dumps(studio["alt_names"], ensure_ascii=False),
-                })
-
-            for cred in parsed["credits"]:
-                group["person_credits"].append({"person_id": pid, **cred})
-
-            cp_person.mark_completed(pid)
-            stats["person_fetched"] = stats.get("person_fetched", 0) + 1
-
-            if (i + 1) % CHECKPOINT_INTERVAL == 0:
-                group.flush_all()
-                cp_person.save()
-                log.info(
-                    "keyframe_phase3_checkpoint",
-                    progress=f"{i + 1}/{len(remaining_ids)}",
-                    persons=stats["person_fetched"],
-                )
-
-    log.info("keyframe_phase3_done", fetched=stats["person_fetched"])
+    stats["person_fetched"] = result.processed
+    stats["person_skipped"] = result.skipped
+    log.info("keyframe_phase3_done", **stats)
 
 
 # =============================================================================
