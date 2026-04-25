@@ -145,6 +145,7 @@ def _build_person_row(person: dict[str, Any], fetched_at: dt.datetime) -> dict[s
         "birth_mon": _to_int32(person.get("birth_mon")),
         "birth_day": _to_int32(person.get("birth_day")),
         "images": json.dumps(images, ensure_ascii=False),
+        "locked": bool(person.get("locked", False)),
         "stat_comments": _to_int32(stat.get("comments")),
         "stat_collects": _to_int32(stat.get("collects")),
         "last_modified": str(person.get("last_modified") or ""),
@@ -199,66 +200,66 @@ async def _scrape(
         return checkpoint
 
     # BronzeWriter: each flush writes a new UUID file; old files are preserved on resume.
+    # with block auto-flushes + compacts the partition on exit.
     date = dt.date.fromisoformat(date_str)
-    bw = BronzeWriter("bangumi", table="persons", date=date)
+    with BronzeWriter("bangumi", table="persons", date=date) as bw:
+        try:
+            async with BangumiClient() as client:
+                with Progress(
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    MofNCompleteColumn(),
+                    TimeRemainingColumn(),
+                    console=console,
+                    transient=False,
+                ) as progress:
+                    task = progress.add_task("scraping persons", total=len(pending))
 
-    try:
-        async with BangumiClient() as client:
-            with Progress(
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                MofNCompleteColumn(),
-                TimeRemainingColumn(),
-                console=console,
-                transient=False,
-            ) as progress:
-                task = progress.add_task("scraping persons", total=len(pending))
+                    for i, person_id in enumerate(pending):
+                        fetched_at = dt.datetime.now(dt.timezone.utc)
 
-                for i, person_id in enumerate(pending):
-                    fetched_at = dt.datetime.now(dt.timezone.utc)
+                        try:
+                            person = await client.fetch_person(person_id)
+                        except ScraperError as exc:
+                            log.error(
+                                "bangumi_person_fetch_failed",
+                                person_id=person_id,
+                                error=str(exc),
+                            )
+                            failed_ids.append(
+                                {"id": person_id, "status": "error", "detail": str(exc)}
+                            )
+                            failed_set.add(person_id)
+                            progress.advance(task)
+                            continue
 
-                    try:
-                        person = await client.fetch_person(person_id)
-                    except ScraperError as exc:
-                        log.error(
-                            "bangumi_person_fetch_failed",
-                            person_id=person_id,
-                            error=str(exc),
-                        )
-                        failed_ids.append(
-                            {"id": person_id, "status": "error", "detail": str(exc)}
-                        )
-                        failed_set.add(person_id)
+                        if person is None:
+                            # 404 — skip + record
+                            failed_ids.append({"id": person_id, "status": 404})
+                            failed_set.add(person_id)
+                            log.info("bangumi_person_not_found", person_id=person_id)
+                            progress.advance(task)
+                            continue
+
+                        bw.append(_build_person_row(person, fetched_at))
+                        completed_set.add(person_id)
+                        checkpoint["completed_ids"] = sorted(completed_set)
+                        checkpoint["failed_ids"] = failed_ids
+
+                        if (i + 1) % _CHECKPOINT_FLUSH_EVERY == 0:
+                            bw.flush()
+                            _save_checkpoint(checkpoint)
+                            log.info(
+                                "bangumi_persons_checkpoint_flushed",
+                                completed=len(completed_set),
+                                pending_remaining=len(pending) - (i + 1),
+                            )
+
                         progress.advance(task)
-                        continue
 
-                    if person is None:
-                        # 404 — skip + record
-                        failed_ids.append({"id": person_id, "status": 404})
-                        failed_set.add(person_id)
-                        log.info("bangumi_person_not_found", person_id=person_id)
-                        progress.advance(task)
-                        continue
-
-                    bw.append(_build_person_row(person, fetched_at))
-                    completed_set.add(person_id)
-                    checkpoint["completed_ids"] = sorted(completed_set)
-                    checkpoint["failed_ids"] = failed_ids
-
-                    if (i + 1) % _CHECKPOINT_FLUSH_EVERY == 0:
-                        bw.flush()
-                        _save_checkpoint(checkpoint)
-                        log.info(
-                            "bangumi_persons_checkpoint_flushed",
-                            completed=len(completed_set),
-                            pending_remaining=len(pending) - (i + 1),
-                        )
-
-                    progress.advance(task)
-
-    finally:
-        # Always flush remaining rows so partial progress is persisted on Ctrl+C
-        bw.flush()
+        finally:
+            # Always flush remaining rows so partial progress is persisted on Ctrl+C
+            bw.flush()
 
     checkpoint["completed_ids"] = sorted(completed_set)
     checkpoint["failed_ids"] = failed_ids

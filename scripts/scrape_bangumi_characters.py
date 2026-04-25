@@ -71,13 +71,14 @@ _CHECKPOINT_FLUSH_EVERY = 100  # completed characters per flush
 #   id, name, type, gender, birth_day, birth_mon, birth_year, blood_type,
 #   images (dict: small/grid/large/medium), summary,
 #   infobox (list[dict] with nested value lists — same surprise as /v0/persons),
-#   stat (dict: {comments, collects}), locked (bool)
+#   stat (dict: {comments, collects}), locked (bool), nsfw (bool)
 #
 # ABSENT (unlike /v0/persons): last_modified, career
 # type (not role) is the character category integer (1=角色, 2=機体, 3=組織)
 #
 # Row schema (BronzeWriter infers from first flush):
-#   id: int64 | name: string | type: int32 | summary: string | locked: bool
+#   id: int64 | name: string | type: int32 | summary: string
+#   locked: bool | nsfw: bool
 #   infobox: string (json.dumps of list)
 #   gender: string | null | blood_type: int32 | null
 #   birth_year: int32 | null | birth_mon: int32 | null | birth_day: int32 | null
@@ -160,6 +161,7 @@ def _build_character_row(character: dict[str, Any], fetched_at: dt.datetime) -> 
         # type: character category (1=角色, 2=機体, 3=組織) — API field name is "type" not "role"
         "type": _to_int32(character.get("type")),
         "locked": bool(character.get("locked") or False),
+        "nsfw": bool(character.get("nsfw", False)),
         "summary": str(character.get("summary") or ""),
         # infobox is list[dict] with nested values — raw serialised as JSON string
         "infobox": json.dumps(character.get("infobox") or [], ensure_ascii=False),
@@ -222,66 +224,66 @@ async def _scrape(
         return checkpoint
 
     # BronzeWriter: each flush writes a new UUID file; old files are preserved on resume.
+    # with block auto-flushes + compacts the partition on exit.
     date = dt.date.fromisoformat(date_str)
-    bw = BronzeWriter("bangumi", table="characters", date=date)
+    with BronzeWriter("bangumi", table="characters", date=date) as bw:
+        try:
+            async with BangumiClient() as client:
+                with Progress(
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    MofNCompleteColumn(),
+                    TimeRemainingColumn(),
+                    console=console,
+                    transient=False,
+                ) as progress:
+                    task = progress.add_task("scraping characters", total=len(pending))
 
-    try:
-        async with BangumiClient() as client:
-            with Progress(
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                MofNCompleteColumn(),
-                TimeRemainingColumn(),
-                console=console,
-                transient=False,
-            ) as progress:
-                task = progress.add_task("scraping characters", total=len(pending))
+                    for i, character_id in enumerate(pending):
+                        fetched_at = dt.datetime.now(dt.timezone.utc)
 
-                for i, character_id in enumerate(pending):
-                    fetched_at = dt.datetime.now(dt.timezone.utc)
+                        try:
+                            character = await client.fetch_character(character_id)
+                        except ScraperError as exc:
+                            log.error(
+                                "bangumi_character_fetch_failed",
+                                character_id=character_id,
+                                error=str(exc),
+                            )
+                            failed_ids.append(
+                                {"id": character_id, "status": "error", "detail": str(exc)}
+                            )
+                            failed_set.add(character_id)
+                            progress.advance(task)
+                            continue
 
-                    try:
-                        character = await client.fetch_character(character_id)
-                    except ScraperError as exc:
-                        log.error(
-                            "bangumi_character_fetch_failed",
-                            character_id=character_id,
-                            error=str(exc),
-                        )
-                        failed_ids.append(
-                            {"id": character_id, "status": "error", "detail": str(exc)}
-                        )
-                        failed_set.add(character_id)
+                        if character is None:
+                            # 404 — skip + record
+                            failed_ids.append({"id": character_id, "status": 404})
+                            failed_set.add(character_id)
+                            log.info("bangumi_character_not_found", character_id=character_id)
+                            progress.advance(task)
+                            continue
+
+                        bw.append(_build_character_row(character, fetched_at))
+                        completed_set.add(character_id)
+                        checkpoint["completed_ids"] = sorted(completed_set)
+                        checkpoint["failed_ids"] = failed_ids
+
+                        if (i + 1) % _CHECKPOINT_FLUSH_EVERY == 0:
+                            bw.flush()
+                            _save_checkpoint(checkpoint)
+                            log.info(
+                                "bangumi_characters_checkpoint_flushed",
+                                completed=len(completed_set),
+                                pending_remaining=len(pending) - (i + 1),
+                            )
+
                         progress.advance(task)
-                        continue
 
-                    if character is None:
-                        # 404 — skip + record
-                        failed_ids.append({"id": character_id, "status": 404})
-                        failed_set.add(character_id)
-                        log.info("bangumi_character_not_found", character_id=character_id)
-                        progress.advance(task)
-                        continue
-
-                    bw.append(_build_character_row(character, fetched_at))
-                    completed_set.add(character_id)
-                    checkpoint["completed_ids"] = sorted(completed_set)
-                    checkpoint["failed_ids"] = failed_ids
-
-                    if (i + 1) % _CHECKPOINT_FLUSH_EVERY == 0:
-                        bw.flush()
-                        _save_checkpoint(checkpoint)
-                        log.info(
-                            "bangumi_characters_checkpoint_flushed",
-                            completed=len(completed_set),
-                            pending_remaining=len(pending) - (i + 1),
-                        )
-
-                    progress.advance(task)
-
-    finally:
-        # Always flush remaining rows so partial progress is persisted on Ctrl+C
-        bw.flush()
+        finally:
+            # Always flush remaining rows so partial progress is persisted on Ctrl+C
+            bw.flush()
 
     checkpoint["completed_ids"] = sorted(completed_set)
     checkpoint["failed_ids"] = failed_ids

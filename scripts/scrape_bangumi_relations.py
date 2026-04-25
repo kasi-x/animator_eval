@@ -44,7 +44,7 @@ from rich.console import Console
 from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeRemainingColumn
 
 from src.scrapers.bangumi_scraper import BangumiClient
-from src.scrapers.bronze_writer import BronzeWriter
+from src.scrapers.bronze_writer import BronzeWriterGroup
 from src.scrapers.exceptions import ScraperError
 
 log = structlog.get_logger()
@@ -134,6 +134,7 @@ def _build_person_rows(
                 "career": json.dumps(p.get("career") or [], ensure_ascii=False),
                 "eps": str(p.get("eps") or ""),
                 "name_raw": str(p.get("name") or ""),
+                "images": json.dumps(p.get("images") or {}, ensure_ascii=False),
                 "fetched_at": fetched_at,
             }
         )
@@ -158,6 +159,8 @@ def _build_character_and_actor_rows(
                 "relation": str(c.get("relation") or ""),
                 "type": int(c.get("type") or 0),
                 "name_raw": str(c.get("name") or ""),
+                "images": json.dumps(c.get("images") or {}, ensure_ascii=False),
+                "summary": c.get("summary"),
                 "fetched_at": fetched_at,
             }
         )
@@ -169,6 +172,7 @@ def _build_character_and_actor_rows(
                     "character_id": char_id,
                     "person_id": int(actor.get("id", 0)),
                     "actor_type": int(actor.get("type") or 0),
+                    "actor_career": json.dumps(actor.get("career") or [], ensure_ascii=False),
                     "fetched_at": fetched_at,
                 }
             )
@@ -214,98 +218,107 @@ async def _scrape(
         console.print("[green]All subjects already completed — nothing to do.[/green]")
         return checkpoint
 
-    # Use BronzeWriter for each table: each flush writes a new UUID file, so
-    # resuming a scrape appends new files without overwriting previous data.
+    # BronzeWriterGroup auto-flushes all writers + compacts partitions on exit.
     date = dt.date.fromisoformat(date_str)
-    bw_persons = BronzeWriter("bangumi", table="subject_persons", date=date)
-    bw_chars = BronzeWriter("bangumi", table="subject_characters", date=date)
-    bw_actors = BronzeWriter("bangumi", table="person_characters", date=date)
+    with BronzeWriterGroup(
+        "bangumi",
+        tables=["subject_persons", "subject_characters", "person_characters"],
+        date=date,
+    ) as group:
+        bw_persons = group["subject_persons"]
+        bw_chars = group["subject_characters"]
+        bw_actors = group["person_characters"]
 
-    def _flush_writers() -> None:
-        bw_persons.flush()
-        bw_chars.flush()
-        bw_actors.flush()
+        try:
+            async with BangumiClient() as client:
+                with Progress(
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    MofNCompleteColumn(),
+                    TimeRemainingColumn(),
+                    console=console,
+                    transient=False,
+                ) as progress:
+                    task = progress.add_task("scraping", total=len(pending))
 
-    try:
-        async with BangumiClient() as client:
-            with Progress(
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(),
-                MofNCompleteColumn(),
-                TimeRemainingColumn(),
-                console=console,
-                transient=False,
-            ) as progress:
-                task = progress.add_task("scraping", total=len(pending))
+                    for i, subject_id in enumerate(pending):
+                        fetched_at = dt.datetime.now(dt.timezone.utc)
 
-                for i, subject_id in enumerate(pending):
-                    fetched_at = dt.datetime.now(dt.timezone.utc)
+                        # NOTE: persons and characters are fetched serially (not via
+                        # asyncio.gather) intentionally.  BangumiClient enforces a
+                        # >= 1 req/sec floor through a single asyncio.Lock + sleep in
+                        # _throttle().  With gather, both coroutines would race to
+                        # acquire the lock; the second one would sleep ~1 s anyway
+                        # before its HTTP call fires.  Total wall-time per subject is
+                        # identical to the serial case (≈ 2 s minimum), so gather
+                        # buys no throughput improvement and adds task-management
+                        # complexity with no compensating benefit.
 
-                    # Fetch persons
-                    try:
-                        persons = await client.fetch_subject_persons(subject_id)
-                    except ScraperError as exc:
-                        log.error(
-                            "bangumi_persons_fetch_failed",
-                            subject_id=subject_id,
-                            error=str(exc),
+                        # Fetch persons
+                        try:
+                            persons = await client.fetch_subject_persons(subject_id)
+                        except ScraperError as exc:
+                            log.error(
+                                "bangumi_persons_fetch_failed",
+                                subject_id=subject_id,
+                                error=str(exc),
+                            )
+                            failed_ids.append({"id": subject_id, "status": "error", "detail": str(exc)})
+                            failed_set.add(subject_id)
+                            progress.advance(task)
+                            continue
+
+                        if persons is None:
+                            # 404 — record in failed_ids with status 404
+                            failed_ids.append({"id": subject_id, "status": 404})
+                            failed_set.add(subject_id)
+                            persons = []
+
+                        for row in _build_person_rows(subject_id, persons, fetched_at):
+                            bw_persons.append(row)
+
+                        # Fetch characters
+                        try:
+                            characters = await client.fetch_subject_characters(subject_id)
+                        except ScraperError as exc:
+                            log.error(
+                                "bangumi_characters_fetch_failed",
+                                subject_id=subject_id,
+                                error=str(exc),
+                            )
+                            characters = []
+
+                        if characters is None:
+                            characters = []
+
+                        c_rows, a_rows = _build_character_and_actor_rows(
+                            subject_id, characters, fetched_at
                         )
-                        failed_ids.append({"id": subject_id, "status": "error", "detail": str(exc)})
-                        failed_set.add(subject_id)
+                        for row in c_rows:
+                            bw_chars.append(row)
+                        for row in a_rows:
+                            bw_actors.append(row)
+
+                        completed_set.add(subject_id)
+                        checkpoint["completed_ids"] = sorted(completed_set)
+                        checkpoint["failed_ids"] = failed_ids
+
+                        # Flush every CHECKPOINT_FLUSH_EVERY subjects — each flush
+                        # writes a new UUID file; old files are preserved on resume.
+                        if (i + 1) % _CHECKPOINT_FLUSH_EVERY == 0:
+                            group.flush_all()
+                            _save_checkpoint(checkpoint)
+                            log.info(
+                                "bangumi_checkpoint_flushed",
+                                completed=len(completed_set),
+                                pending_remaining=len(pending) - (i + 1),
+                            )
+
                         progress.advance(task)
-                        continue
 
-                    if persons is None:
-                        # 404 — record in failed_ids with status 404
-                        failed_ids.append({"id": subject_id, "status": 404})
-                        failed_set.add(subject_id)
-                        persons = []
-
-                    for row in _build_person_rows(subject_id, persons, fetched_at):
-                        bw_persons.append(row)
-
-                    # Fetch characters
-                    try:
-                        characters = await client.fetch_subject_characters(subject_id)
-                    except ScraperError as exc:
-                        log.error(
-                            "bangumi_characters_fetch_failed",
-                            subject_id=subject_id,
-                            error=str(exc),
-                        )
-                        characters = []
-
-                    if characters is None:
-                        characters = []
-
-                    c_rows, a_rows = _build_character_and_actor_rows(
-                        subject_id, characters, fetched_at
-                    )
-                    for row in c_rows:
-                        bw_chars.append(row)
-                    for row in a_rows:
-                        bw_actors.append(row)
-
-                    completed_set.add(subject_id)
-                    checkpoint["completed_ids"] = sorted(completed_set)
-                    checkpoint["failed_ids"] = failed_ids
-
-                    # Flush every CHECKPOINT_FLUSH_EVERY subjects — each flush
-                    # writes a new UUID file; old files are preserved on resume.
-                    if (i + 1) % _CHECKPOINT_FLUSH_EVERY == 0:
-                        _flush_writers()
-                        _save_checkpoint(checkpoint)
-                        log.info(
-                            "bangumi_checkpoint_flushed",
-                            completed=len(completed_set),
-                            pending_remaining=len(pending) - (i + 1),
-                        )
-
-                    progress.advance(task)
-
-    finally:
-        # Always flush remaining rows so partial progress is persisted on Ctrl+C
-        _flush_writers()
+        finally:
+            # Always flush remaining rows so partial progress is persisted on Ctrl+C
+            group.flush_all()
 
     # Final checkpoint save
     checkpoint["completed_ids"] = sorted(completed_set)
