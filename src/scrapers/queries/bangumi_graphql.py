@@ -91,6 +91,43 @@ ANIME_POSITION_LABELS: dict[int, str] = {
 }
 
 # ---------------------------------------------------------------------------
+# Platform code → label mapping (Subject.platform)
+# ---------------------------------------------------------------------------
+# Source: bangumi/server pkg/vars/platform.go.json (type=2 anime), 2026-04-25.
+
+ANIME_PLATFORM_LABELS: dict[int, str] = {
+    0: "其他",
+    1: "TV",
+    2: "OVA",
+    3: "剧场版",
+    5: "WEB",
+    2006: "动态漫画",
+}
+
+# ---------------------------------------------------------------------------
+# Subject relation code → label mapping (SubjectRelation.relation)
+# ---------------------------------------------------------------------------
+# Source: bangumi/server pkg/vars/relations.go.json (type=2 anime), 2026-04-25.
+# Used when subject-to-subject relations are scraped (SUBJECT_FULL_QUERY.relations).
+
+ANIME_RELATION_LABELS: dict[int, str] = {
+    1: "改编",
+    2: "前传",
+    3: "续集",
+    4: "总集篇",
+    5: "全集",
+    6: "番外篇",
+    7: "角色出演",
+    8: "相同世界观",
+    9: "不同世界观",
+    10: "不同演绎",
+    11: "衍生",
+    12: "主线故事",
+    14: "联动",
+    99: "其他",
+}
+
+# ---------------------------------------------------------------------------
 # Health-check query (minimal introspection)
 # ---------------------------------------------------------------------------
 
