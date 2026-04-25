@@ -50,6 +50,13 @@ scrape-allcinema = "python -m src.scrapers.allcinema_scraper run"
 scrape-allcinema-cinema = "python -m src.scrapers.allcinema_scraper cinema"
 scrape-allcinema-persons = "python -m src.scrapers.allcinema_scraper persons"
 scrape-keyframe = "python -m src.scrapers.keyframe_scraper"
+scrape-bangumi = "python -m src.scrapers.bangumi_main"
+scrape-bangumi-dump = "python -m src.scrapers.bangumi_main fetch-dump"
+scrape-bangumi-subjects = "python -m src.scrapers.bangumi_main subjects"
+scrape-bangumi-relations = "python -m src.scrapers.bangumi_main relations"
+scrape-bangumi-persons = "python -m src.scrapers.bangumi_main persons"
+scrape-bangumi-characters = "python -m src.scrapers.bangumi_main characters"
+scrape-bangumi-run = "python -m src.scrapers.bangumi_main run"
 
 # ETL
 integrate = "python -m src.etl.integrate_duckdb"
