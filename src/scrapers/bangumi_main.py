@@ -339,11 +339,13 @@ async def _run_relations(
 
     if dry_run:
         batches = (len(pending) + _GRAPHQL_BATCH - 1) // _GRAPHQL_BATCH
+        # 1 GraphQL POST + 1 REST GET per subject = (_GRAPHQL_BATCH + 1) req/batch at 1 req/sec
+        secs = batches * (_GRAPHQL_BATCH + 1)
         console.print(
             f"[bold cyan]dry-run[/bold cyan]  "
             f"total={len(all_ids):,}  completed={len(completed_set):,}  "
             f"pending={len(pending):,}  batches={batches:,}  "
-            f"ETA≈{batches // 60}m {batches % 60}s"
+            f"ETA≈{secs // 3600}h {(secs % 3600) // 60}m"
         )
         return
 
