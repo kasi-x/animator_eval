@@ -12,6 +12,7 @@
 |--------|---------|------|
 | 🟠 High | ローカル再 parse | seesaawiki raw HTML (8688) / madb raw JSON (603MB) の parser 拡張 — 再 scrape 不要でオプション情報回収 (§10) |
 | 🟠 High | ANN scraper 改修 | XML info/cast/company/release/news/related/episode titles + persons HTML 拡張、raw 近い形式で BRONZE parquet 保存 → `TASK_CARDS/10_ann_scraper_extend/` (§11 は本カードへ全面移管) |
+| 🟠 High | MAL/Jikan scraper | Jikan v4 全 endpoint 網羅 (anime/persons/characters/producers/manga + news/schedules/magazines)、28 BRONZE テーブル、3 Phase → `TASK_CARDS/12_mal_scraper_jikan/` (§12.3 から起票) |
 | 🟡 Maintenance | スキーマ後続 | v56 既存データ再スクレイプ (name_ja 誤入り修正)、v57 title.native |
 | 🟢 Future | データ修正 | WIKIDATA_ROLE_MAP 修正後の JVMG credits 再マップ |
 | ✅ Done | DuckDB | Card 05 era_fe / era_deflated_iv / opportunity_residual 実装 — era_fe + era_deflated_iv 完了 (export_and_viz.py)、opportunity_residual も individual_profiles から読み込み済み (2026-04-24) |
@@ -141,8 +142,19 @@ similarity.py / recommendation.py はスタブ化済 (2行)、重複整理完了
 ### 12.2 allcinema parser 拡張 (Card 07 と同時)
 - 公開劇場数 / 興行収入 / スクリーン数 / 上映週数 / 映倫 / 配給会社 / 公開形態
 
-### 12.3 MAL / Jikan 本格実装
-- characters + VA 関係が主目的 (AniList 補完)
+### 12.3 MAL / Jikan 本格実装 → TASK_CARDS/12_mal_scraper_jikan/
+
+🟠 **Cards 01-04 実装完了 (2026-04-25)** / Card 05 (全件 scrape) のみ未実行
+
+| Card | 状態 | 内容 |
+|------|------|------|
+| 01_schema_design | ✅ done | 30 dataclass 実装 (MalAnimeRecord + 29)、display_* prefix 全列 |
+| 02_parser_extend | ✅ done | 22 parser 関数 + 50 unit test (tests/unit/test_mal_parsers_extended.py) |
+| 03_scraper_phases | ✅ done | mal_scraper.py 全置換 — 3 Phase + 30 BronzeWriter + checkpoint |
+| 04_rate_limit_strict | ✅ done | DualWindowRateLimiter (http_base.py) + 8 unit test (tests/scrapers/test_http_rate_limit.py) |
+| 05_rescrape | 🟠 pending | 全件 ~9.4 日完走 — `pixi run python -m src.scrapers.mal_scraper` で開始可 |
+
+旧予定 (characters + VA AniList 補完) は Card 02-03 に内包。
 
 ### 12.4 新ソース (優先度低)
 - LiveChart.me (放送スケジュール精密化)
