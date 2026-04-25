@@ -47,9 +47,7 @@ from src.scrapers.bangumi_dump import (
 )
 from src.scrapers.bangumi_graphql_scraper import (
     BangumiGraphQLClient,
-    adapt_character_gql_to_v0,
-    adapt_person_gql_to_v0,
-    adapt_subject_characters_gql,
+    adapt_subject_characters_rest,
     adapt_subject_persons_gql,
 )
 from src.scrapers.bronze_writer import BronzeWriter, BronzeWriterGroup
@@ -391,7 +389,20 @@ async def _run_relations(
                             persons = adapt_subject_persons_gql(subject_id, subject_data)
                             for row in _build_person_rows(subject_id, persons, fetched_at):
                                 bw_persons.append(row)
-                            characters = adapt_subject_characters_gql(subject_id, subject_data)
+                            try:
+                                rest_chars = await client.fetch_subject_characters_rest(subject_id)
+                            except Exception as exc:
+                                # Soft fault: persons row already written; chars/actors stored empty.
+                                # Logged at error so it surfaces in monitoring. Subject is still
+                                # marked completed so persons aren't re-fetched on resume — use
+                                # --force to backfill chars for failed subjects.
+                                log.error(
+                                    "bangumi_subject_chars_rest_failed",
+                                    subject_id=subject_id,
+                                    error=str(exc),
+                                )
+                                rest_chars = []
+                            characters = adapt_subject_characters_rest(rest_chars)
                             c_rows, a_rows = _build_character_and_actor_rows(
                                 subject_id, characters, fetched_at
                             )
@@ -402,7 +413,7 @@ async def _run_relations(
                             completed_set.add(subject_id)
 
                         cp.sync_completed(completed_set)
-                        if (idx + 1) * _GRAPHQL_BATCH % _CHECKPOINT_FLUSH < _GRAPHQL_BATCH:
+                        if (idx + 1) % (_CHECKPOINT_FLUSH // _GRAPHQL_BATCH) == 0:
                             group.flush_all()
                             cp.save()
                             p.log(
@@ -506,7 +517,7 @@ async def _run_persons(
                     for i, person_id in enumerate(pending):
                         fetched_at = dt.datetime.now(dt.timezone.utc)
                         try:
-                            person_raw = await client.fetch_person(person_id)
+                            person_raw = await client.fetch_person_rest(person_id)
                         except ScraperError as exc:
                             log.error("bangumi_person_fetch_failed", person_id=person_id, error=str(exc))
                             cp.mark_failed(person_id, status="error", detail=str(exc))
@@ -516,7 +527,7 @@ async def _run_persons(
                             cp.mark_failed(person_id, status=404)
                             p.advance()
                             continue
-                        bw.append(_build_person_row(adapt_person_gql_to_v0(person_raw), fetched_at))
+                        bw.append(_build_person_row(person_raw, fetched_at))
                         completed_set.add(person_id)
                         cp.sync_completed(completed_set)
                         if (i + 1) % _CHECKPOINT_FLUSH == 0:
@@ -618,7 +629,7 @@ async def _run_characters(
                     for i, character_id in enumerate(pending):
                         fetched_at = dt.datetime.now(dt.timezone.utc)
                         try:
-                            char_raw = await client.fetch_character(character_id)
+                            char_raw = await client.fetch_character_rest(character_id)
                         except ScraperError as exc:
                             log.error("bangumi_character_fetch_failed", character_id=character_id, error=str(exc))
                             cp.mark_failed(character_id, status="error", detail=str(exc))
@@ -628,7 +639,7 @@ async def _run_characters(
                             cp.mark_failed(character_id, status=404)
                             p.advance()
                             continue
-                        bw.append(_build_character_row(adapt_character_gql_to_v0(char_raw), fetched_at))
+                        bw.append(_build_character_row(char_raw, fetched_at))
                         completed_set.add(character_id)
                         cp.sync_completed(completed_set)
                         if (i + 1) % _CHECKPOINT_FLUSH == 0:

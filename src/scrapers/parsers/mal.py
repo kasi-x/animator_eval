@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from src.runtime.models import BronzeAnime, Credit, Person, parse_role
+from src.scrapers.hash_utils import hash_anime_data
 
 
 # ── string constants ──────────────────────────────────────────────────────────
@@ -415,16 +415,6 @@ class MalMasterMagazine:
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
-def _now_iso() -> str:
-    return datetime.now(tz=timezone.utc).isoformat()
-
-
-def _content_hash(raw: dict) -> str:
-    return hashlib.sha1(
-        json.dumps(raw, sort_keys=True, ensure_ascii=False).encode()
-    ).hexdigest()
-
-
 def _extract_image_url(images: dict) -> str | None:
     jpg = (images or {}).get("jpg") or {}
     return jpg.get("image_url")
@@ -523,8 +513,8 @@ def parse_anime_full(raw: dict) -> tuple[
         image_url=_extract_image_url(images),
         image_url_large=_extract_image_url_large(images),
         trailer_youtube_id=trailer.get("youtube_id"),
-        fetched_at=_now_iso(),
-        content_hash=_content_hash(data),
+        fetched_at=datetime.now(tz=timezone.utc).isoformat(),
+        content_hash=hash_anime_data(data),
     )
 
     genres: list[MalAnimeGenre] = []
@@ -824,8 +814,8 @@ def parse_person_full(raw: dict) -> MalPerson:
         display_favorites=data.get("favorites") or 0,
         about=data.get("about"),
         image_url=_extract_image_url(images),
-        fetched_at=_now_iso(),
-        content_hash=_content_hash(data),
+        fetched_at=datetime.now(tz=timezone.utc).isoformat(),
+        content_hash=hash_anime_data(data),
     )
 
 
@@ -858,8 +848,8 @@ def parse_character_full(raw: dict) -> MalCharacter:
         display_favorites=data.get("favorites") or 0,
         about=data.get("about"),
         image_url=_extract_image_url(images),
-        fetched_at=_now_iso(),
-        content_hash=_content_hash(data),
+        fetched_at=datetime.now(tz=timezone.utc).isoformat(),
+        content_hash=hash_anime_data(data),
     )
 
 
@@ -908,8 +898,8 @@ def parse_producer_full(
         count=data.get("count") or 0,
         display_favorites=data.get("favorites") or 0,
         image_url=_extract_image_url(images),
-        fetched_at=_now_iso(),
-        content_hash=_content_hash(data),
+        fetched_at=datetime.now(tz=timezone.utc).isoformat(),
+        content_hash=hash_anime_data(data),
     )
     externals = parse_producer_external(producer_id, raw)
     return producer, externals
@@ -976,8 +966,8 @@ def parse_manga_full(raw: dict) -> tuple[
         display_members=data.get("members"),
         display_favorites=data.get("favorites"),
         image_url=_extract_image_url(images),
-        fetched_at=_now_iso(),
-        content_hash=_content_hash(data),
+        fetched_at=datetime.now(tz=timezone.utc).isoformat(),
+        content_hash=hash_anime_data(data),
     )
 
     authors: list[MalMangaAuthor] = []

@@ -51,7 +51,7 @@ tasks:
   scrape-mal:
     desc: Scrape MAL
     cmds:
-      - pixi run python -m src.scrapers.mal_scraper --count {{.COUNT | default "50"}}
+      - pixi run python -m src.scrapers.mal_scraper
 
   scrape-mediaarts:
     desc: Fetch Media Arts DB dump from GitHub Releases

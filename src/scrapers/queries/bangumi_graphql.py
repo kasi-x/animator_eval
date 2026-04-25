@@ -27,6 +27,40 @@ BANGUMI_GRAPHQL_URL = "https://api.bgm.tv/v0/graphql"
 DEFAULT_USER_AGENT = "animetor_eval/0.1 (https://github.com/kashi-x)"
 
 # ---------------------------------------------------------------------------
+# Position code → label mapping (SubjectRelatedPerson.position)
+# ---------------------------------------------------------------------------
+# GraphQL returns integer codes; REST v0 returned strings like "导演", "脚本".
+# This table maps the known integer codes to their Chinese/Japanese labels.
+# Source: bangumi REST /v0/subjects/{id}/persons responses cross-referenced with
+# GraphQL introspection (2026-04-25).  Codes are 1-indexed; unmapped codes
+# should be stored as-is (str(code)) — do not drop unknown values.
+#
+# Note: a single code may correspond to multiple role labels in different
+# subject contexts (e.g. code 4 = "分镜" AND "演出" on different subjects).
+# This mapping stores the most common label for each code as reference only.
+ANIME_POSITION_LABELS: dict[int, str] = {
+    1: "原作",
+    2: "导演",
+    3: "脚本",
+    4: "分镜",
+    5: "演出",
+    6: "音乐",
+    7: "OP・ED分镜",
+    8: "人物设定",
+    9: "总作画监督",
+    10: "系列构成",
+    11: "美术监督",
+    13: "色彩设计",
+    14: "总作画监督",
+    15: "作画监督",
+    20: "演出",
+    42: "制作",
+    44: "音响监督",
+    51: "原画",
+    54: "制片人",
+}
+
+# ---------------------------------------------------------------------------
 # Health-check query (minimal introspection)
 # ---------------------------------------------------------------------------
 
@@ -201,100 +235,7 @@ def SUBJECT_BATCH_QUERY(subject_ids: list[int]) -> str:  # noqa: N802
       }}
       position
     }}
-    characters(limit: 50, offset: 0) {{
-      character {{
-        {_SLIM_CHARACTER_FIELDS}
-      }}
-      type
-      order
-    }}
   }}""")
 
     body = "\n".join(aliases)
     return f"{{\n{body}\n}}"
-
-
-# ---------------------------------------------------------------------------
-# Person query (single person)
-# ---------------------------------------------------------------------------
-
-
-def PERSON_QUERY(person_id: int) -> str:  # noqa: N802
-    """Return a GraphQL document for fetching a single person's full detail.
-
-    Fields mirror the /v0/persons/{id} REST response shape used by the
-    existing BRONZE row builder (``_build_person_row`` in bangumi_main.py).
-
-    Args:
-        person_id: bangumi person integer ID.
-
-    Returns:
-        GraphQL query string.
-    """
-    return f"""{{
-  person(id: {person_id}) {{
-    id
-    name
-    type
-    career
-    summary
-    infobox {{
-      key
-      values {{
-        k
-        v
-      }}
-    }}
-    images {{
-      large
-      medium
-      small
-      grid
-    }}
-    locked: lock
-  }}
-}}"""
-
-
-# ---------------------------------------------------------------------------
-# Character query (single character)
-# ---------------------------------------------------------------------------
-
-
-def CHARACTER_QUERY(character_id: int) -> str:  # noqa: N802
-    """Return a GraphQL document for fetching a single character's full detail.
-
-    Fields mirror the /v0/characters/{id} REST response shape used by the
-    existing BRONZE row builder (``_build_character_row`` in bangumi_main.py).
-
-    Note: ``last_modified`` is absent from character responses in the v0 REST
-    API and may also be absent from the GraphQL schema.  The adapter normalises
-    this gracefully.
-
-    Args:
-        character_id: bangumi character integer ID.
-
-    Returns:
-        GraphQL query string.
-    """
-    return f"""{{
-  character(id: {character_id}) {{
-    id
-    name
-    summary
-    infobox {{
-      key
-      values {{
-        k
-        v
-      }}
-    }}
-    images {{
-      large
-      medium
-      small
-      grid
-    }}
-    locked: lock
-  }}
-}}"""

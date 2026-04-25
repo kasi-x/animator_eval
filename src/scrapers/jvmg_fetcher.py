@@ -20,7 +20,6 @@ from src.scrapers.cli_common import (
     ResumeOpt,
     resolve_progress_enabled,
 )
-from src.scrapers.http_base import RateLimitedHttpClient
 from src.scrapers.http_client import RetryingHttpClient
 from src.scrapers.logging_utils import configure_file_logging
 from src.scrapers.progress import scrape_progress
@@ -66,11 +65,10 @@ CHECKPOINT_FILE = Path(__file__).parent.parent.parent / "data" / "jvmg_checkpoin
 
 
 
-class WikidataClient(RateLimitedHttpClient):
+class WikidataClient:
     """Async Wikidata SPARQL client (wraps RetryingHttpClient)."""
 
     def __init__(self, transport=None) -> None:
-        super().__init__(delay=REQUEST_INTERVAL)
         self._http = RetryingHttpClient(
             source="wikidata",
             delay=REQUEST_INTERVAL,

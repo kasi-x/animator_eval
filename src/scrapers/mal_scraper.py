@@ -28,8 +28,7 @@ from src.scrapers.cli_common import (
     ResumeOpt,
     resolve_progress_enabled,
 )
-from src.scrapers.http_base import DualWindowRateLimiter, RateLimitedHttpClient
-from src.scrapers.http_client import RetryingHttpClient
+from src.scrapers.http_client import DualWindowRateLimiter, RetryingHttpClient
 from src.scrapers.logging_utils import configure_file_logging
 from src.scrapers.parsers.mal import (
     parse_anime_characters_va,
@@ -108,11 +107,11 @@ def _save_ckpt(ckpt: dict) -> None:
     atomic_write_json(CHECKPOINT_FILE, ckpt, indent=2)
 
 
-class JikanClient(RateLimitedHttpClient):
+class JikanClient:
     """Async Jikan v4 client — all endpoints cached + rate limited."""
 
     def __init__(self, transport=None) -> None:
-        super().__init__(limiter=JIKAN_LIMITER)
+        self._limiter = JIKAN_LIMITER
         self._http = RetryingHttpClient(
             source="mal",
             base_url=BASE_URL,
@@ -130,7 +129,7 @@ class JikanClient(RateLimitedHttpClient):
         cached = load_cached_json("mal/rest", cache_key)
         if cached is not None:
             return cached
-        await self._gate()
+        await self._limiter.acquire()
         resp = await self._http.get(endpoint, params=params)
         resp.raise_for_status()
         data = resp.json()

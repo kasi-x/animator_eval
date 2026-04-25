@@ -14,26 +14,27 @@ import pyarrow.parquet as pq
 import dataclasses
 
 from src.scrapers.ann_scraper import (
-    _AnimeBronzeWriters,
+    _ANIME_BRONZE_TABLES,
     save_anime_parse_result,
 )
+from src.scrapers.bronze_writer import BronzeWriterGroup
 from src.scrapers.parsers.ann import parse_anime_xml, parse_person_html
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "scrapers" / "ann"
 TABLES_8 = ("anime", "credits", "cast", "company", "episodes", "releases", "news", "related")
 
 
-def _make_writers(tmp_path: Path) -> _AnimeBronzeWriters:
-    return _AnimeBronzeWriters(root=tmp_path)
+def _make_group(tmp_path: Path) -> BronzeWriterGroup:
+    return BronzeWriterGroup("ann", tables=list(_ANIME_BRONZE_TABLES), root=tmp_path)
 
 
 def test_save_anime_parse_result_produces_8_tables(tmp_path):
     root = ET.fromstring((FIXTURES / "anime_batch.xml").read_text())
     result = parse_anime_xml(root)
 
-    writers = _make_writers(tmp_path)
-    n_anime, n_credits = save_anime_parse_result(writers, result)
-    writers.flush_all()
+    group = _make_group(tmp_path)
+    n_anime, n_credits = save_anime_parse_result(group, result)
+    group.flush_all()
 
     assert n_anime == 4
     assert n_credits > 0
@@ -45,9 +46,9 @@ def test_save_anime_parse_result_produces_8_tables(tmp_path):
 
 def test_anime_table_has_expected_columns(tmp_path):
     root = ET.fromstring((FIXTURES / "anime_batch.xml").read_text())
-    writers = _make_writers(tmp_path)
-    save_anime_parse_result(writers, parse_anime_xml(root))
-    writers.flush_all()
+    group = _make_group(tmp_path)
+    save_anime_parse_result(group, parse_anime_xml(root))
+    group.flush_all()
 
     files = list((tmp_path / "source=ann" / "table=anime").rglob("*.parquet"))
     schema = pq.read_schema(files[0])
@@ -58,9 +59,9 @@ def test_anime_table_has_expected_columns(tmp_path):
 
 def test_credits_table_has_role_column(tmp_path):
     root = ET.fromstring((FIXTURES / "anime_batch.xml").read_text())
-    writers = _make_writers(tmp_path)
-    save_anime_parse_result(writers, parse_anime_xml(root))
-    writers.flush_all()
+    group = _make_group(tmp_path)
+    save_anime_parse_result(group, parse_anime_xml(root))
+    group.flush_all()
 
     files = list((tmp_path / "source=ann" / "table=credits").rglob("*.parquet"))
     schema = pq.read_schema(files[0])
@@ -71,9 +72,9 @@ def test_credits_table_has_role_column(tmp_path):
 
 def test_cast_table_rows(tmp_path):
     root = ET.fromstring((FIXTURES / "anime_batch.xml").read_text())
-    writers = _make_writers(tmp_path)
-    save_anime_parse_result(writers, parse_anime_xml(root))
-    writers.flush_all()
+    group = _make_group(tmp_path)
+    save_anime_parse_result(group, parse_anime_xml(root))
+    group.flush_all()
 
     files = list((tmp_path / "source=ann" / "table=cast").rglob("*.parquet"))
     tbl = pq.read_table(files[0])

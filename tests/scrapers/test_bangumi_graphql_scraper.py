@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import pathlib
 import time
 import unittest.mock as mock
 from typing import Any
@@ -28,9 +29,7 @@ import pytest
 
 from src.scrapers.bangumi_graphql_scraper import (
     BangumiGraphQLClient,
-    adapt_character_gql_to_v0,
-    adapt_person_gql_to_v0,
-    adapt_subject_characters_gql,
+    adapt_subject_characters_rest,
     adapt_subject_persons_gql,
 )
 from src.scrapers.bangumi_graphql_scraper import _HOST_RATE_LIMITER
@@ -132,12 +131,12 @@ _SAMPLE_SUBJECT = {
     "infobox": [{"key": "放送开始", "values": [{"k": None, "v": "2011"}]}],
     "images": {"large": "/l/328.jpg", "medium": "/m/328.jpg", "small": "/s/328.jpg", "grid": "/g/328.jpg"},
     "airtime": {"date": "2011-01-07", "month": 1, "weekday": 5, "year": 2011},
-    "rating": {"score": 9.0, "rank": 1, "total": 50000, "count": {}},
+    "rating": {"score": 9.0, "rank": 1, "total": 50000},
     "tags": [{"name": "魔法少女", "count": 100}],
     "persons": [
         {
             "person": {"id": 9527, "name": "新房昭之", "type": 1, "career": ["animator"], "images": None},
-            "position": "导演",
+            "position": 2,
         }
     ],
     "characters": [
@@ -149,43 +148,44 @@ _SAMPLE_SUBJECT = {
                 "summary": "",
             },
             "type": 1,
-            "order": "主角",
+            "order": 0,
         }
     ],
 }
 
-_SAMPLE_PERSON_GQL = {
+_SAMPLE_PERSON_REST = {
     "id": 9527,
     "name": "新房昭之",
     "type": 1,
     "career": ["animator", "director"],
     "summary": "Veteran anime director.",
-    "infobox": [{"key": "生日", "values": [{"k": None, "v": "1961"}]}],
+    "infobox": [{"key": "生日", "value": "1961年"}],
     "gender": "male",
-    "bloodType": 2,
-    "birthYear": 1961,
-    "birthMon": 9,
-    "birthDay": 27,
+    "blood_type": 2,
+    "birth_year": 1961,
+    "birth_mon": 9,
+    "birth_day": 27,
     "images": {"large": "/pl.jpg", "medium": "/pm.jpg", "small": "/ps.jpg", "grid": "/pg.jpg"},
     "stat": {"comments": 42, "collects": 3000},
     "locked": False,
-    "lastModified": "2024-01-01T00:00:00Z",
+    "last_modified": "2024-01-01T00:00:00Z",
 }
 
-_SAMPLE_CHARACTER_GQL = {
+_SAMPLE_CHARACTER_REST = {
     "id": 4321,
     "name": "鹿目まどか",
-    "type": 1,
+    "type": 2,
     "summary": "The protagonist.",
-    "infobox": [],
+    "infobox": [{"key": "性别", "value": "女"}],
     "gender": "female",
-    "bloodType": 0,
-    "birthYear": None,
-    "birthMon": None,
-    "birthDay": None,
+    "blood_type": None,
+    "birth_year": None,
+    "birth_mon": None,
+    "birth_day": None,
     "images": {"large": "/cl.jpg", "medium": "/cm.jpg", "small": "/cs.jpg", "grid": "/cg.jpg"},
     "stat": {"comments": 5, "collects": 1500},
     "locked": False,
+    "nsfw": False,
 }
 
 
@@ -356,80 +356,66 @@ def test_user_agent_header_sent():
 
 
 # ---------------------------------------------------------------------------
-# Test 8: person fetch + adapt_person_gql_to_v0 normalisation
+# Test 8: person REST fetch
 # ---------------------------------------------------------------------------
 
 
-def test_fetch_person_returns_gql_dict():
-    """fetch_person returns the raw GraphQL person dict (camelCase)."""
-    transport = _StaticTransport(_gql_response({"person": _SAMPLE_PERSON_GQL}))
+def test_fetch_person_rest_returns_dict():
+    """fetch_person_rest returns the REST person dict with all demographic fields."""
+    transport = _StaticTransport(httpx.Response(200, json=_SAMPLE_PERSON_REST))
 
     async def run(client: BangumiGraphQLClient):
-        return await client.fetch_person(9527)
+        return await client.fetch_person_rest(9527)
 
     result = asyncio.run(_run_with_transport(run, transport))
     assert result is not None
     assert result["id"] == 9527
-    # Raw response has camelCase keys
-    assert "bloodType" in result
+    assert result["name"] == "新房昭之"
+    assert result["gender"] == "male"
+    assert result["blood_type"] == 2
+    assert result["birth_year"] == 1961
 
 
-def test_adapt_person_gql_to_v0_converts_camel_to_snake():
-    """adapt_person_gql_to_v0 renames camelCase fields to v0 snake_case."""
-    adapted = adapt_person_gql_to_v0(_SAMPLE_PERSON_GQL.copy())
-
-    assert "blood_type" in adapted
-    assert adapted["blood_type"] == 2
-    assert "birth_year" in adapted
-    assert adapted["birth_year"] == 1961
-    assert "birth_mon" in adapted
-    assert adapted["birth_mon"] == 9
-    assert "birth_day" in adapted
-    assert adapted["birth_day"] == 27
-    assert "last_modified" in adapted
-    assert adapted["last_modified"] == "2024-01-01T00:00:00Z"
-    # Original camelCase keys should be gone
-    assert "bloodType" not in adapted
-    assert "birthYear" not in adapted
-
-
-def test_adapt_person_gql_infobox_values_renamed_to_value():
-    """adapt_person_gql_to_v0 renames infobox 'values' key to 'value'."""
-    adapted = adapt_person_gql_to_v0(_SAMPLE_PERSON_GQL.copy())
-    # infobox entry had "values" from GQL schema → must become "value"
-    assert "value" in adapted["infobox"][0]
-    assert "values" not in adapted["infobox"][0]
-
-
-# ---------------------------------------------------------------------------
-# Test 9: character fetch + adapt_character_gql_to_v0 normalisation
-# ---------------------------------------------------------------------------
-
-
-def test_fetch_character_returns_gql_dict():
-    """fetch_character returns the raw GraphQL character dict."""
-    transport = _StaticTransport(_gql_response({"character": _SAMPLE_CHARACTER_GQL}))
+def test_fetch_person_rest_404_returns_none():
+    """fetch_person_rest returns None on 404."""
+    transport = _StaticTransport(httpx.Response(404, content=b'{"title":"Not Found"}'))
 
     async def run(client: BangumiGraphQLClient):
-        return await client.fetch_character(4321)
+        return await client.fetch_person_rest(99999)
+
+    result = asyncio.run(_run_with_transport(run, transport))
+    assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Test 9: character REST fetch
+# ---------------------------------------------------------------------------
+
+
+def test_fetch_character_rest_returns_dict():
+    """fetch_character_rest returns the REST character dict with demographic fields."""
+    transport = _StaticTransport(httpx.Response(200, json=_SAMPLE_CHARACTER_REST))
+
+    async def run(client: BangumiGraphQLClient):
+        return await client.fetch_character_rest(4321)
 
     result = asyncio.run(_run_with_transport(run, transport))
     assert result is not None
     assert result["id"] == 4321
     assert result["name"] == "鹿目まどか"
+    assert result["gender"] == "female"
+    assert result["nsfw"] is False
 
 
-def test_adapt_character_gql_to_v0_converts_camel_to_snake():
-    """adapt_character_gql_to_v0 renames camelCase fields to v0 snake_case."""
-    adapted = adapt_character_gql_to_v0(_SAMPLE_CHARACTER_GQL.copy())
+def test_fetch_character_rest_404_returns_none():
+    """fetch_character_rest returns None on 404."""
+    transport = _StaticTransport(httpx.Response(404, content=b'{"title":"Not Found"}'))
 
-    assert "blood_type" in adapted
-    assert adapted["blood_type"] == 0
-    assert "birth_year" in adapted
-    assert adapted["birth_year"] is None
-    # Original camelCase keys gone
-    assert "bloodType" not in adapted
-    assert "birthYear" not in adapted
+    async def run(client: BangumiGraphQLClient):
+        return await client.fetch_character_rest(99999)
+
+    result = asyncio.run(_run_with_transport(run, transport))
+    assert result is None
 
 
 # ---------------------------------------------------------------------------
@@ -444,24 +430,40 @@ def test_adapt_subject_persons_gql_extracts_persons():
     p = persons[0]
     assert p["id"] == 9527
     assert p["name"] == "新房昭之"
-    assert p["relation"] == "导演"
+    assert p["relation"] == "2"  # position is int code from GraphQL; stored as str
     assert isinstance(p["career"], list)
     assert isinstance(p["images"], dict)
 
 
 # ---------------------------------------------------------------------------
-# Test 11: adapt_subject_characters_gql extracts characters + actors
+# Test 11: adapt_subject_characters_rest extracts characters + actors
 # ---------------------------------------------------------------------------
 
+_SAMPLE_SUBJECT_CHARS_REST = [
+    {
+        "id": 4321,
+        "name": "鹿目まどか",
+        "relation": "主角",
+        "type": 1,
+        "images": {"large": "/cl.jpg", "medium": "/cm.jpg", "small": "/cs.jpg", "grid": "/cg.jpg"},
+        "actors": [
+            {"id": 9527, "name": "悠木碧", "type": 1, "career": ["seiyu"], "images": None}
+        ],
+    }
+]
 
-def test_adapt_subject_characters_gql_extracts_characters_and_actors():
-    """adapt_subject_characters_gql returns characters."""
-    chars = adapt_subject_characters_gql(328, _SAMPLE_SUBJECT)
+
+def test_adapt_subject_characters_rest_extracts_characters_and_actors():
+    """adapt_subject_characters_rest returns characters with actors list."""
+    chars = adapt_subject_characters_rest(_SAMPLE_SUBJECT_CHARS_REST)
     assert len(chars) == 1
     c = chars[0]
     assert c["id"] == 4321
     assert c["name"] == "鹿目まどか"
     assert c["relation"] == "主角"
+    assert c["type"] == 1
+    assert len(c["actors"]) == 1
+    assert c["actors"][0]["id"] == 9527
 
 
 # ---------------------------------------------------------------------------
@@ -512,22 +514,30 @@ def test_fetch_subject_retries_on_500_then_succeeds():
 
 
 # ---------------------------------------------------------------------------
-# Test 14: person NOT_FOUND → returns None
+# Test 14: person REST 500 retry
 # ---------------------------------------------------------------------------
 
 
-def test_fetch_person_not_found_returns_none():
-    """GraphQL NOT_FOUND for person → fetch_person returns None."""
-    error_resp = _gql_error_response(
-        [{"message": "not found", "extensions": {"code": "NOT_FOUND"}}]
-    )
-    transport = _StaticTransport(error_resp)
+def test_fetch_person_rest_500_retries_then_succeeds():
+    """A 500 response followed by 200 should yield the successful result."""
+    responses = [
+        httpx.Response(500, content=b'{"message":"error"}'),
+        httpx.Response(200, json=_SAMPLE_PERSON_REST),
+    ]
+    transport = _SequenceTransport(responses)
 
     async def run(client: BangumiGraphQLClient):
-        return await client.fetch_person(99999)
+        return await client.fetch_person_rest(9527)
 
-    result = asyncio.run(_run_with_transport(run, transport))
-    assert result is None
+    async def fast_sleep(_n):
+        pass
+
+    with mock.patch("asyncio.sleep", side_effect=fast_sleep):
+        result = asyncio.run(_run_with_transport(run, transport))
+
+    assert result is not None
+    assert result["gender"] == "male"
+    assert transport.call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -544,3 +554,113 @@ def test_fetch_subjects_batched_empty_list_raises():
     transport = _StaticTransport(_gql_response({}))
     with pytest.raises(ValueError, match="non-empty"):
         asyncio.run(_run_with_transport(run, transport))
+
+
+# ---------------------------------------------------------------------------
+# Fixture-based tests (real API responses saved to tests/fixtures/scrapers/bangumi/)
+# ---------------------------------------------------------------------------
+
+_FIXTURES_DIR = pathlib.Path(__file__).parent.parent / "fixtures" / "scrapers" / "bangumi"
+
+
+def _load_fixture(name: str) -> dict:
+    return json.loads((_FIXTURES_DIR / name).read_text(encoding="utf-8"))
+
+
+# Test 19: fixture subject — adapt_subject_persons_gql on real shape (50 persons)
+def test_fixture_adapt_subject_persons_real_shape():
+    """adapt_subject_persons_gql handles a real 50-person subject (subject 8)."""
+    fixture = _load_fixture("subject_8.json")
+    subject_node = fixture["data"]["subject"]
+
+    persons = adapt_subject_persons_gql(8, subject_node)
+    assert len(persons) == 50
+    # First person is 谷口悟朗 (director, position=2)
+    p0 = persons[0]
+    assert p0["id"] == 185
+    assert p0["name"] == "谷口悟朗"
+    assert p0["relation"] == "2"  # position int → str
+    assert isinstance(p0["career"], list)
+    assert isinstance(p0["images"], dict)
+    assert p0["eps"] == ""
+
+
+# Test 20: adapt_subject_characters_rest with empty actors list
+def test_adapt_subject_characters_rest_no_actors():
+    """adapt_subject_characters_rest handles characters with no actors."""
+    rest_chars = [
+        {"id": 1, "name": "ルルーシュ", "relation": "主角", "type": 1, "images": None, "actors": []}
+    ]
+    chars = adapt_subject_characters_rest(rest_chars)
+    assert len(chars) == 1
+    c0 = chars[0]
+    assert c0["id"] == 1
+    assert c0["relation"] == "主角"
+    assert c0["actors"] == []
+    assert isinstance(c0["images"], dict)
+
+
+# ---------------------------------------------------------------------------
+# Test 21-23: fetch_subject_characters_rest (REST /v0/subjects/{id}/characters)
+# ---------------------------------------------------------------------------
+
+
+_SAMPLE_SUBJECT_CHARS_REST_API = [
+    {
+        "id": 1,
+        "name": "ルルーシュ・ランペルージ",
+        "relation": "主角",
+        "type": 1,
+        "images": {"large": "/l/1.jpg", "medium": "/m/1.jpg", "small": "/s/1.jpg", "grid": "/g/1.jpg"},
+        "actors": [
+            {"id": 3818, "name": "福山潤", "type": 1, "career": ["seiyu"], "images": None}
+        ],
+    }
+]
+
+
+def test_fetch_subject_characters_rest_returns_list():
+    """fetch_subject_characters_rest returns a list with nested actors."""
+    transport = _StaticTransport(httpx.Response(200, json=_SAMPLE_SUBJECT_CHARS_REST_API))
+
+    async def run(client: BangumiGraphQLClient):
+        return await client.fetch_subject_characters_rest(8)
+
+    result = asyncio.run(_run_with_transport(run, transport))
+    assert isinstance(result, list)
+    assert len(result) == 1
+    assert result[0]["id"] == 1
+    assert result[0]["relation"] == "主角"
+    assert result[0]["actors"][0]["id"] == 3818
+
+
+def test_fetch_subject_characters_rest_404_returns_empty_list():
+    """fetch_subject_characters_rest returns [] on 404."""
+    transport = _StaticTransport(httpx.Response(404, content=b'{"title":"Not Found"}'))
+
+    async def run(client: BangumiGraphQLClient):
+        return await client.fetch_subject_characters_rest(99999)
+
+    result = asyncio.run(_run_with_transport(run, transport))
+    assert result == []
+
+
+def test_fetch_subject_characters_rest_500_retries_then_succeeds():
+    """A 500 followed by 200 should yield the successful result."""
+    responses = [
+        httpx.Response(500, content=b'{"message":"error"}'),
+        httpx.Response(200, json=_SAMPLE_SUBJECT_CHARS_REST_API),
+    ]
+    transport = _SequenceTransport(responses)
+
+    async def run(client: BangumiGraphQLClient):
+        return await client.fetch_subject_characters_rest(8)
+
+    async def fast_sleep(_n):
+        pass
+
+    with mock.patch("asyncio.sleep", side_effect=fast_sleep):
+        result = asyncio.run(_run_with_transport(run, transport))
+
+    assert len(result) == 1
+    assert transport.call_count == 2

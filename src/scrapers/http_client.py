@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from collections import deque
 from typing import ClassVar
 
 import httpx
@@ -260,3 +261,37 @@ class RetryingHttpClient:
             rate_limit_context=rate_limit_context,
             on_rate_limit=on_rate_limit,
         )
+
+
+class DualWindowRateLimiter:
+    """Sliding-window rate limiter with independent per-second and per-minute budgets.
+
+    Jikan v4 official limits: per_second=3, per_minute=60.
+    Cache hits bypass acquire() — call acquire() only directly before HTTP requests.
+    """
+
+    def __init__(self, per_second: int, per_minute: int) -> None:
+        self.per_second = per_second
+        self.per_minute = per_minute
+        self._sec_window: deque[float] = deque()
+        self._min_window: deque[float] = deque()
+        self._lock = asyncio.Lock()
+
+    async def acquire(self) -> None:
+        async with self._lock:
+            while True:
+                now = time.monotonic()
+                while self._sec_window and now - self._sec_window[0] >= 1.0:
+                    self._sec_window.popleft()
+                while self._min_window and now - self._min_window[0] >= 60.0:
+                    self._min_window.popleft()
+                wait = 0.0
+                if len(self._sec_window) >= self.per_second:
+                    wait = max(wait, 1.0 - (now - self._sec_window[0]))
+                if len(self._min_window) >= self.per_minute:
+                    wait = max(wait, 60.0 - (now - self._min_window[0]))
+                if wait <= 0:
+                    self._sec_window.append(now)
+                    self._min_window.append(now)
+                    return
+                await asyncio.sleep(wait + 0.01)

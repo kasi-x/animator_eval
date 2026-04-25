@@ -25,6 +25,7 @@ import httpx
 import structlog
 import typer
 
+from src.scrapers.bronze_writer import DEFAULT_BRONZE_ROOT, BronzeWriterGroup
 from src.scrapers.hash_utils import hash_anime_data
 
 from src.runtime.models import parse_role
@@ -42,7 +43,6 @@ from src.scrapers.cli_common import (
     ResumeOpt,
     resolve_progress_enabled,
 )
-from src.scrapers.http_base import RateLimitedHttpClient
 from src.scrapers.logging_utils import configure_file_logging
 from src.scrapers.progress import scrape_progress
 from src.scrapers.runner import ScrapeRunner
@@ -95,11 +95,10 @@ app = typer.Typer()
 # ─── HTTP client ────────────────────────────────────────────────────────────
 
 
-class AnnClient(RateLimitedHttpClient):
+class AnnClient:
     """Async HTTP client for ANN."""
 
     def __init__(self, delay: float = DEFAULT_DELAY) -> None:
-        super().__init__(delay=delay)
         self._http = RetryingHttpClient(
             source="ann",
             delay=delay,
@@ -255,28 +254,8 @@ _ANIME_BRONZE_TABLES = (
 )
 
 
-class _AnimeBronzeWriters:
-    """Attribute-style facade over BronzeWriterGroup for the 8 anime tables.
-
-    Preserves `writers.anime.append(...)` callsites while delegating
-    flush/compact to the shared group lifecycle.
-    """
-
-    def __init__(self, root: "Path | str | None" = None) -> None:
-        from src.scrapers.bronze_writer import BronzeWriterGroup
-        self._group = BronzeWriterGroup("ann", tables=list(_ANIME_BRONZE_TABLES), root=root)
-        for tbl in _ANIME_BRONZE_TABLES:
-            setattr(self, tbl, self._group[tbl])
-
-    def flush_all(self) -> None:
-        self._group.flush_all()
-
-    def compact_all(self) -> None:
-        self._group.compact_all()
-
-
 def save_anime_parse_result(
-    writers: _AnimeBronzeWriters,
+    group: BronzeWriterGroup,
     result: AnimeXmlParseResult,
 ) -> tuple[int, int]:
     """Write all tables from one XML parse result to BRONZE parquet.
@@ -290,26 +269,26 @@ def save_anime_parse_result(
         anime_row.pop("staff", None)
         anime_row["fetched_at"] = datetime.now(timezone.utc).isoformat()
         anime_row["content_hash"] = hash_anime_data(anime_row)
-        writers.anime.append(anime_row)
+        group["anime"].append(anime_row)
         n_anime += 1
         for entry in rec.staff:
             credit_row = dataclasses.asdict(entry)
             credit_row["ann_anime_id"] = rec.ann_id
             credit_row["role"] = parse_role(entry.task)
-            writers.credits.append(credit_row)
+            group["credits"].append(credit_row)
             n_credits += 1
     for cast in result.cast:
-        writers.cast.append(dataclasses.asdict(cast))
+        group["cast"].append(dataclasses.asdict(cast))
     for comp in result.company:
-        writers.company.append(dataclasses.asdict(comp))
+        group["company"].append(dataclasses.asdict(comp))
     for ep in result.episodes:
-        writers.episodes.append(dataclasses.asdict(ep))
+        group["episodes"].append(dataclasses.asdict(ep))
     for rel in result.releases:
-        writers.releases.append(dataclasses.asdict(rel))
+        group["releases"].append(dataclasses.asdict(rel))
     for news in result.news:
-        writers.news.append(dataclasses.asdict(news))
+        group["news"].append(dataclasses.asdict(news))
     for r in result.related:
-        writers.related.append(dataclasses.asdict(r))
+        group["related"].append(dataclasses.asdict(r))
     return n_anime, n_credits
 
 
@@ -359,9 +338,6 @@ async def _run_scrape_anime(
     progress_override: bool | None = None,
 ) -> None:
     cp = resolve_checkpoint(data_dir / "anime_checkpoint.json", force=force, resume=resume)
-
-    writers = _AnimeBronzeWriters()
-
     client = AnnClient(delay=delay)
     try:
         if "all_ids" in cp:
@@ -397,34 +373,34 @@ async def _run_scrape_anime(
         flush_every = max(1, checkpoint_interval // batch_size)
         batches = [pending[i : i + batch_size] for i in range(0, len(pending), batch_size)]
 
-        with scrape_progress(
-            total=len(pending),
-            description="scraping ANN anime",
-            enabled=progress_override,
-        ) as p:
-            for batch_idx, batch in enumerate(batches):
-                result = await fetch_anime_batch(client, batch)
-                n_a, n_c = save_anime_parse_result(writers, result)
-                total_anime += n_a
-                total_credits += n_c
-                for ann_id in batch:
-                    completed.add(ann_id)
-                done_this_run += len(batch)
-                p.advance(len(batch))
+        with BronzeWriterGroup("ann", tables=list(_ANIME_BRONZE_TABLES)) as group:
+            with scrape_progress(
+                total=len(pending),
+                description="scraping ANN anime",
+                enabled=progress_override,
+            ) as p:
+                for batch_idx, batch in enumerate(batches):
+                    result = await fetch_anime_batch(client, batch)
+                    n_a, n_c = save_anime_parse_result(group, result)
+                    total_anime += n_a
+                    total_credits += n_c
+                    for ann_id in batch:
+                        completed.add(ann_id)
+                    done_this_run += len(batch)
+                    p.advance(len(batch))
 
-                if (batch_idx + 1) % flush_every == 0:
-                    writers.flush_all()
-                    cp.sync_completed(completed)
-                    cp.save()
-                    p.log(
-                        "ann_anime_progress",
-                        done=done_this_run,
-                        remaining=len(pending) - done_this_run,
-                        total_anime=total_anime,
-                        total_credits=total_credits,
-                    )
+                    if (batch_idx + 1) % flush_every == 0:
+                        group.flush_all()
+                        cp.sync_completed(completed)
+                        cp.save()
+                        p.log(
+                            "ann_anime_progress",
+                            done=done_this_run,
+                            remaining=len(pending) - done_this_run,
+                            total_anime=total_anime,
+                            total_credits=total_credits,
+                        )
 
-        writers.flush_all()
         cp.sync_completed(completed)
         cp.save()
         log.info(
@@ -432,7 +408,6 @@ async def _run_scrape_anime(
             total_anime=total_anime,
             total_credits=total_credits,
         )
-        writers.compact_all()
 
     finally:
         await client.close()
@@ -484,8 +459,6 @@ async def _run_scrape_persons(
     progress_override: bool | None = None,
 ) -> None:
     import pyarrow.dataset as ds
-
-    from src.scrapers.bronze_writer import DEFAULT_BRONZE_ROOT, BronzeWriterGroup
 
     cp = resolve_checkpoint(data_dir / "persons_checkpoint.json", force=force, resume=resume)
 

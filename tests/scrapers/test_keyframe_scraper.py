@@ -14,9 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from src.scrapers.keyframe_scraper import (
-    _blank_checkpoint,
     _collect_person_ids_from_preload,
-    _load_checkpoint,
     _parse_sitemap_xml,
     run_scraper,
 )
@@ -111,40 +109,6 @@ class TestCollectPersonIds:
     def test_empty_menus(self):
         ids = _collect_person_ids_from_preload({"menus": []})
         assert ids == set()
-
-
-# ---------------------------------------------------------------------------
-# _load_checkpoint
-# ---------------------------------------------------------------------------
-
-
-class TestLoadCheckpoint:
-    def test_returns_blank_if_fresh(self, tmp_path):
-        cp_path = tmp_path / "checkpoint.json"
-        cp_path.write_text(
-            json.dumps(
-                {
-                    "anime_phase": {
-                        "completed_slugs": ["x"],
-                        "all_slugs": ["x"],
-                    }
-                }
-            )
-        )
-        cp = _load_checkpoint(cp_path, fresh=True)
-        assert cp == _blank_checkpoint()
-
-    def test_loads_existing(self, tmp_path):
-        cp_path = tmp_path / "checkpoint.json"
-        data = _blank_checkpoint()
-        data["anime_phase"]["completed_slugs"] = ["slug-a"]
-        cp_path.write_text(json.dumps(data))
-        cp = _load_checkpoint(cp_path, fresh=False)
-        assert "slug-a" in cp["anime_phase"]["completed_slugs"]
-
-    def test_returns_blank_if_missing(self, tmp_path):
-        cp = _load_checkpoint(tmp_path / "nonexistent.json", fresh=False)
-        assert cp == _blank_checkpoint()
 
 
 # ---------------------------------------------------------------------------
@@ -291,11 +255,11 @@ class TestRunScraper:
 
     def test_checkpoint_written(self, bronze_root, data_dir, mock_client):
         _scrape(mock_client, data_dir)
-        cp_path = data_dir / "checkpoint.json"
+        cp_path = data_dir / "checkpoint_anime.json"
         assert cp_path.exists()
         cp = json.loads(cp_path.read_text())
         assert cp["roles_master_fetched_at"] is not None
-        assert cp["anime_phase"]["completed_slugs"]
+        assert cp["completed_ids"]  # contains completed slugs
 
     def test_checkpoint_resume_skips_completed(self, bronze_root, data_dir, mock_client):
         """Running twice with fresh=False does not re-fetch roles_master."""

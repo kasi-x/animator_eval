@@ -31,9 +31,7 @@ import structlog
 from src.scrapers.exceptions import RateLimitError, ScraperError
 from src.scrapers.queries.bangumi_graphql import (
     BANGUMI_GRAPHQL_URL,
-    CHARACTER_QUERY,
     DEFAULT_USER_AGENT,
-    PERSON_QUERY,
     SUBJECT_BATCH_QUERY,
     SUBJECT_FULL_QUERY,
 )
@@ -116,8 +114,8 @@ class BangumiGraphQLClient:
             batch = await client.fetch_subjects_batched([100, 200, 300])
             # batch == {100: {...}, 200: {...}, 300: {...}}
 
-            person = await client.fetch_person(9527)
-            char   = await client.fetch_character(4321)
+            person = await client.fetch_person_rest(9527)
+            char   = await client.fetch_character_rest(4321)
     """
 
     def __init__(
@@ -235,68 +233,152 @@ class BangumiGraphQLClient:
         )
         return result
 
-    async def fetch_person(self, person_id: int) -> dict[str, Any] | None:
-        """Fetch one person's full detail.
+    async def fetch_person_rest(self, person_id: int) -> dict[str, Any] | None:
+        """Fetch person via REST GET /v0/persons/{id}.
 
-        Returns the parsed ``data.person`` dict, or None if not found.
-
-        The returned dict uses camelCase field names from the GraphQL schema
-        (e.g. ``bloodType``, ``birthYear``).  Use ``adapt_person_gql_to_v0()``
-        to normalise to the v0-compatible shape expected by ``_build_person_row``.
+        Returns snake_case dict compatible with ``_build_person_row()`` directly —
+        no adaptation step needed.  Fields include: gender, blood_type, birth_year,
+        birth_mon, birth_day, last_modified, career, stat, images, infobox.
 
         Args:
             person_id: bangumi person integer ID.
 
         Returns:
-            Parsed person dict, or None on NOT_FOUND.
+            Person dict or None on 404.
+
+        Raises:
+            ScraperError: on non-404 HTTP errors after max retries.
         """
-        t0 = time.monotonic()
-        query = PERSON_QUERY(person_id)
-        raw = await self._post_with_retry(query, context=f"person id={person_id}")
-        if raw is None:
-            return None
-        result: dict[str, Any] | None = raw.get("data", {}).get("person")
-        log.info(
-            "bangumi_graphql_fetch_done",
-            query="person",
-            batch_size=1,
-            person_id=person_id,
-            duration_ms=round((time.monotonic() - t0) * 1000),
+        from src.scrapers.queries.bangumi import person_url
+
+        return await self._get_dict_with_retry(
+            person_url(person_id), context=f"person_rest id={person_id}"
         )
-        return result
 
-    async def fetch_character(self, character_id: int) -> dict[str, Any] | None:
-        """Fetch one character's full detail.
+    async def fetch_character_rest(self, character_id: int) -> dict[str, Any] | None:
+        """Fetch character via REST GET /v0/characters/{id}.
 
-        Returns the parsed ``data.character`` dict, or None if not found.
-
-        The returned dict uses camelCase field names.  Use
-        ``adapt_character_gql_to_v0()`` to normalise to the v0-compatible shape.
+        Returns snake_case dict compatible with ``_build_character_row()`` directly —
+        no adaptation step needed.  Fields include: gender, blood_type, birth_year,
+        birth_mon, birth_day, stat, nsfw, images, infobox.
 
         Args:
             character_id: bangumi character integer ID.
 
         Returns:
-            Parsed character dict, or None on NOT_FOUND.
+            Character dict or None on 404.
+
+        Raises:
+            ScraperError: on non-404 HTTP errors after max retries.
         """
-        t0 = time.monotonic()
-        query = CHARACTER_QUERY(character_id)
-        raw = await self._post_with_retry(query, context=f"character id={character_id}")
-        if raw is None:
-            return None
-        result: dict[str, Any] | None = raw.get("data", {}).get("character")
-        log.info(
-            "bangumi_graphql_fetch_done",
-            query="character",
-            batch_size=1,
-            character_id=character_id,
-            duration_ms=round((time.monotonic() - t0) * 1000),
+        from src.scrapers.queries.bangumi import character_url
+
+        return await self._get_dict_with_retry(
+            character_url(character_id), context=f"character_rest id={character_id}"
         )
-        return result
+
+    async def fetch_subject_characters_rest(self, subject_id: int) -> list[dict[str, Any]]:
+        """Fetch subject characters via REST GET /v0/subjects/{id}/characters.
+
+        Returns the full character list with nested ``actors`` array per character.
+        Returns [] on 404.
+
+        Each character entry contains: id, name, relation (str label e.g. "主角"),
+        type, images, actors[{id, name, type, career, images}].
+
+        Args:
+            subject_id: bangumi subject integer ID.
+
+        Returns:
+            List of character dicts, each with a nested actors list.
+
+        Raises:
+            ScraperError: on non-404 HTTP errors after max retries.
+        """
+        from src.scrapers.queries.bangumi import subject_characters_url
+
+        url = subject_characters_url(subject_id)
+        return await self._get_list_with_retry(url, context=f"subject_characters_rest id={subject_id}")
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    async def _get_dict_with_retry(self, url: str, *, context: str = "") -> dict[str, Any] | None:
+        """GET a REST endpoint that returns a JSON object. None on 404."""
+        return await self._get_rest_retry(url, context=context, not_found=None)
+
+    async def _get_list_with_retry(self, url: str, *, context: str = "") -> list[dict[str, Any]]:
+        """GET a REST endpoint that returns a JSON array. [] on 404."""
+        result = await self._get_rest_retry(url, context=context, not_found=[])
+        return result if isinstance(result, list) else []
+
+    async def _get_rest_retry(self, url: str, *, context: str = "", not_found: Any) -> Any:
+        """GET with rate-limiting + exponential backoff retry.
+
+        Args:
+            url: target URL.
+            context: label for log/error messages.
+            not_found: value returned on HTTP 404.
+
+        Returns:
+            Parsed JSON body, or ``not_found`` on 404.
+
+        Raises:
+            RateLimitError: on 429 after max retries.
+            ScraperError: on other permanent failures.
+        """
+        assert self._client is not None, (
+            "BangumiGraphQLClient must be used as an async context manager"
+        )
+        for attempt in range(1, _MAX_ATTEMPTS + 1):
+            await self._limiter.throttle()
+            try:
+                resp = await self._client.get(url)
+            except httpx.TransportError as exc:
+                if attempt >= _MAX_ATTEMPTS:
+                    raise ScraperError(
+                        f"Transport error after {_MAX_ATTEMPTS} attempts: {exc}",
+                        source=_SOURCE,
+                        url=url,
+                    ) from exc
+                await asyncio.sleep(_compute_backoff_sleep(attempt, 0, None))
+                continue
+            if resp.status_code == 404:
+                return not_found
+            if resp.status_code == 429:
+                wait = _compute_backoff_sleep(attempt, 429, resp.headers.get("Retry-After"))
+                if attempt >= _MAX_ATTEMPTS:
+                    raise RateLimitError(
+                        "bangumi REST rate limit exceeded after max attempts",
+                        source=_SOURCE,
+                        url=url,
+                        retry_after=wait,
+                    )
+                await asyncio.sleep(wait)
+                continue
+            if resp.status_code >= 500:
+                wait = _compute_backoff_sleep(attempt, resp.status_code, resp.headers.get("Retry-After"))
+                if attempt >= _MAX_ATTEMPTS:
+                    raise ScraperError(
+                        f"REST server error {resp.status_code} after {_MAX_ATTEMPTS} attempts",
+                        source=_SOURCE,
+                        url=url,
+                    )
+                await asyncio.sleep(wait)
+                continue
+            if not (200 <= resp.status_code < 300):
+                raise ScraperError(
+                    f"Unexpected HTTP {resp.status_code}",
+                    source=_SOURCE,
+                    url=url,
+                )
+            return resp.json()
+        raise ScraperError(
+            f"Failed REST GET after {_MAX_ATTEMPTS} attempts ({context})",
+            source=_SOURCE,
+            url=url,
+        )
 
     async def _post_with_retry(
         self,
@@ -436,89 +518,6 @@ class BangumiGraphQLClient:
         )
 
 
-# ---------------------------------------------------------------------------
-# Response adapters
-# ---------------------------------------------------------------------------
-# These functions convert the GraphQL camelCase response shape to the
-# snake_case / nested shape that the v0-based BRONZE row builders expect.
-# They are intentionally thin — the row builders are NOT rewritten.
-#
-# GraphQL field → v0 REST field mapping (person):
-#   bloodType   → blood_type
-#   birthYear   → birth_year
-#   birthMon    → birth_mon
-#   birthDay    → birth_day
-#   lastModified → last_modified
-#   stat.comments / stat.collects → stat.comments / stat.collects  (unchanged)
-#   infobox[].values[].k / .v → infobox[].key / .value  (re-mapped; see note)
-#
-# GraphQL infobox shape:
-#   { key: "...", values: [{ k: "...", v: "..." }] }
-# v0 REST infobox shape (same, just nested differently):
-#   { key: "...", value: [{ k: "...", v: "..." }] }  ← "value" not "values"
-# → adapter renames "values" → "value" for compatibility.
-
-
-def adapt_person_gql_to_v0(gql: dict[str, Any]) -> dict[str, Any]:
-    """Convert a GraphQL ``person`` node to the v0 REST response shape.
-
-    The output dict is compatible with ``_build_person_row()``.
-
-    GraphQL → v0 field mapping:
-        bloodType    → blood_type
-        birthYear    → birth_year
-        birthMon     → birth_mon
-        birthDay     → birth_day
-        lastModified → last_modified
-        infobox[].values → infobox[].value
-
-    Args:
-        gql: raw ``data.person`` dict from the GraphQL response.
-
-    Returns:
-        Dict compatible with ``_build_person_row``.
-    """
-    out = dict(gql)
-    out["blood_type"] = out.pop("bloodType", None)
-    out["birth_year"] = out.pop("birthYear", None)
-    out["birth_mon"] = out.pop("birthMon", None)
-    out["birth_day"] = out.pop("birthDay", None)
-    out["last_modified"] = out.pop("lastModified", None) or ""
-    out["infobox"] = _adapt_infobox(out.get("infobox") or [])
-    # images: GraphQL returns a flat dict {large, medium, small, grid} — same shape as v0.
-    return out
-
-
-def adapt_character_gql_to_v0(gql: dict[str, Any]) -> dict[str, Any]:
-    """Convert a GraphQL ``character`` node to the v0 REST response shape.
-
-    The output dict is compatible with ``_build_character_row()``.
-
-    Note: ``last_modified`` is absent from character responses in both v0 REST
-    and GraphQL — the adapter does not add it.
-
-    GraphQL → v0 field mapping:
-        bloodType → blood_type
-        birthYear → birth_year
-        birthMon  → birth_mon
-        birthDay  → birth_day
-        infobox[].values → infobox[].value
-
-    Args:
-        gql: raw ``data.character`` dict from the GraphQL response.
-
-    Returns:
-        Dict compatible with ``_build_character_row``.
-    """
-    out = dict(gql)
-    out["blood_type"] = out.pop("bloodType", None)
-    out["birth_year"] = out.pop("birthYear", None)
-    out["birth_mon"] = out.pop("birthMon", None)
-    out["birth_day"] = out.pop("birthDay", None)
-    out["infobox"] = _adapt_infobox(out.get("infobox") or [])
-    return out
-
-
 def adapt_subject_persons_gql(
     subject_id: int,
     subject_gql: dict[str, Any],
@@ -550,7 +549,7 @@ def adapt_subject_persons_gql(
                 "id": p.get("id"),
                 "name": p.get("name"),
                 "type": p.get("type"),
-                "relation": str(entry.get("position") or ""),
+                "relation": "" if entry.get("position") is None else str(entry["position"]),
                 "career": p.get("career") or [],
                 "eps": "",
                 "images": _flatten_images(p.get("images")),
@@ -559,42 +558,31 @@ def adapt_subject_persons_gql(
     return result
 
 
-def adapt_subject_characters_gql(
-    subject_id: int,
-    subject_gql: dict[str, Any],
+def adapt_subject_characters_rest(
+    rest_chars: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
-    """Extract the characters list from a GraphQL subject node into v0 REST shape.
+    """Normalize REST GET /v0/subjects/{id}/characters response for _build_character_and_actor_rows.
 
-    Converts the GraphQL ``characters`` sub-list (including nested ``actors``)
-    to the same shape returned by ``GET /v0/subjects/{id}/characters``, so that
-    compatible with ``_build_character_and_actor_rows()``.
-
-    GraphQL character node (in subject context):
-        id, name, type, relation, images, actors[{id, name, type, career, images}]
-
-    v0 REST shape (expected by ``_build_character_and_actor_rows``):
-        id, name, type, relation, images, summary, actors[{id, name, type, career}]
+    REST format per entry: {id, name, relation (str e.g. "主角"), type, images,
+    actors[{id, name, type, career, images}]}.
 
     Args:
-        subject_id: bangumi subject ID (unused; present for API symmetry).
-        subject_gql: raw ``data.s{id}`` or ``data.subject`` dict.
+        rest_chars: raw list from REST GET /v0/subjects/{id}/characters.
 
     Returns:
-        List of character dicts in v0-compatible shape (actors list nested inside).
+        List of character dicts compatible with ``_build_character_and_actor_rows()``.
     """
-    characters = subject_gql.get("characters") or []
     result = []
-    for entry in characters:
-        c = entry.get("character") or {}
+    for c in rest_chars:
         result.append(
             {
                 "id": c.get("id"),
                 "name": c.get("name"),
-                "type": entry.get("type"),
-                "relation": str(entry.get("order") or ""),
+                "type": c.get("type"),
+                "relation": str(c.get("relation") or ""),
                 "images": _flatten_images(c.get("images")),
                 "summary": c.get("summary") or "",
-                "actors": [],
+                "actors": c.get("actors") or [],
             }
         )
     return result
@@ -603,28 +591,6 @@ def adapt_subject_characters_gql(
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
-
-
-def _adapt_infobox(infobox: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Rename ``values`` → ``value`` in each infobox entry for v0 compatibility.
-
-    GraphQL schema uses ``values`` (plural); the v0 REST API uses ``value``
-    (singular) for the nested list.  Row builders call ``json.dumps(infobox)``
-    directly, so the field name must match what they expect.
-
-    Args:
-        infobox: raw GraphQL infobox list.
-
-    Returns:
-        Infobox list with each entry's ``values`` key renamed to ``value``.
-    """
-    result = []
-    for entry in infobox:
-        adapted = dict(entry)
-        if "values" in adapted:
-            adapted["value"] = adapted.pop("values")
-        result.append(adapted)
-    return result
 
 
 def _flatten_images(images: dict[str, Any] | None) -> dict[str, Any]:

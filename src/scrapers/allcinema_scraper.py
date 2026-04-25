@@ -46,7 +46,6 @@ import httpx
 import structlog
 import typer
 
-from src.scrapers.http_base import RateLimitedHttpClient
 from src.scrapers.http_client import RetryingHttpClient
 from src.scrapers.logging_utils import configure_file_logging
 from src.scrapers.parsers.allcinema import (  # noqa: F401
@@ -160,7 +159,7 @@ _JOB_ROLE_MAP: dict[str, str] = {
 # ─── HTTP client ─────────────────────────────────────────────────────────────
 
 
-class AllcinemaClient(RateLimitedHttpClient):
+class AllcinemaClient:
     """Async HTTP client for allcinema.
 
     GET requests are delegated to the shared RetryingHttpClient (http_client.py).
@@ -168,7 +167,6 @@ class AllcinemaClient(RateLimitedHttpClient):
     """
 
     def __init__(self, delay: float = DEFAULT_DELAY, transport=None) -> None:
-        super().__init__(delay=delay)
         self._csrf_token: str = ""
         self._http = RetryingHttpClient(
             source="allcinema",
@@ -204,7 +202,7 @@ class AllcinemaClient(RateLimitedHttpClient):
         backoff = 4.0
         attempt = 0
         while True:
-            await self._throttle()
+            await self._http._throttle()
             try:
                 resp = await self._client.post(
                     AJAX_PERSON,
