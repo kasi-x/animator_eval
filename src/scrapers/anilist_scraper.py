@@ -395,7 +395,7 @@ class AniListClient:
         except httpx.HTTPError as e:
             from src.scrapers.exceptions import EndpointUnreachableError
             raise EndpointUnreachableError(
-                "Failed to query AniList",
+                f"Failed to query AniList: {e}",
                 source="anilist",
                 url=ANILIST_URL,
             ) from e

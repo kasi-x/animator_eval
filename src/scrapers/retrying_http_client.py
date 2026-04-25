@@ -97,13 +97,13 @@ class RetryingHttpClient:
 
                 return resp
 
-            except httpx.HTTPError:
+            except httpx.HTTPError as e:
                 if attempt < 4:
                     await asyncio.sleep(2 ** (attempt + 1))
                 else:
-                    raise
+                    raise httpx.RequestError(f"All 5 attempts failed: {e}") from e
 
-        raise httpx.RequestError("Failed after 5 retries")
+        raise httpx.RequestError("All 5 attempts returned 429")
 
     async def _handle_rate_limit(
         self, resp: httpx.Response, callback: callable, context: dict, attempt: int

@@ -27,12 +27,15 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+from src.scrapers.checkpoint import resolve_checkpoint
 from src.scrapers.cli_common import (
     DataDirOpt,
     DelayOpt,
+    ForceOpt,
     LimitOpt,
     ProgressOpt,
     QuietOpt,
+    ResumeOpt,
     resolve_progress_enabled,
 )
 from src.scrapers.hash_utils import hash_anime_data
@@ -442,14 +445,6 @@ def save_person_record(persons_bw, rec: AllcinemaPersonRecord) -> None:
 # ─── Checkpoint ──────────────────────────────────────────────────────────────
 
 
-def _load_checkpoint(path: Path) -> dict:
-    from src.scrapers.checkpoint import load_json_or
-    return load_json_or(path, {})
-
-
-def _save_checkpoint(path: Path, data: dict) -> None:
-    from src.scrapers.checkpoint import atomic_write_json
-    atomic_write_json(path, data)
 
 
 # ─── Phase 2 execution ───────────────────────────────────────────────────────

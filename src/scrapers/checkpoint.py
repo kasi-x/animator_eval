@@ -133,18 +133,41 @@ class Checkpoint:
     def failed_set(self) -> set[Hashable]:
         return {f["id"] for f in self.failed_ids if "id" in f}
 
-    def pending(self, all_ids: Iterable[Hashable]) -> list[Hashable]:
-        """Return ids not yet completed and not in the failed list."""
+    def pending(self, all_ids: Iterable[Hashable], limit: int = 0) -> list[Hashable]:
+        """Return ids not yet completed and not in the failed list.
+
+        Args:
+            all_ids: Full candidate set to filter.
+            limit:   Cap result to first N items (0 = no cap).
+        """
         completed = self.completed_set
         failed = self.failed_set
-        return [i for i in all_ids if i not in completed and i not in failed]
+        result = [i for i in all_ids if i not in completed and i not in failed]
+        return result[:limit] if limit > 0 else result
 
     def sync_completed(self, completed: Iterable[Hashable]) -> None:
         """Replace completed_ids with sorted list of given iterable."""
         self.data["completed_ids"] = sorted(completed)  # type: ignore[type-var]
+
+    def mark_completed(self, item_id: Hashable) -> None:
+        """Add item_id to completed_ids (no-op if already present)."""
+        ids: list = self.data.setdefault("completed_ids", [])
+        if item_id not in ids:
+            ids.append(item_id)
 
     def mark_failed(self, item_id: Hashable, *, status: str | int, detail: str | None = None) -> None:
         entry: dict[str, Any] = {"id": item_id, "status": status}
         if detail is not None:
             entry["detail"] = detail
         self.failed_ids.append(entry)
+
+
+def resolve_checkpoint(path: Path | str, *, force: bool = False, resume: bool = True) -> Checkpoint:
+    """Return a Checkpoint for `path` according to force/resume flags.
+
+    - ``resume=True, force=False`` (default): load existing checkpoint.
+    - ``force=True`` or ``resume=False``: start fresh (ignore any existing file).
+    """
+    if resume and not force:
+        return Checkpoint.load(path)
+    return Checkpoint(path)

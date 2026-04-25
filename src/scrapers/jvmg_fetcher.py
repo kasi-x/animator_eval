@@ -5,8 +5,6 @@ SPARQL endpoint: https://query.wikidata.org/sparql
 """
 
 import asyncio
-import json
-from datetime import datetime, timezone
 from pathlib import Path
 
 import structlog
@@ -14,6 +12,7 @@ import typer
 
 from src.runtime.models import BronzeAnime, Credit, Person, parse_role
 from src.scrapers.cache_store import load_cached_json, save_cached_json
+from src.scrapers.checkpoint import resolve_checkpoint
 from src.scrapers.cli_common import (
     CheckpointIntervalOpt,
     ProgressOpt,
@@ -65,23 +64,6 @@ app = typer.Typer()
 
 CHECKPOINT_FILE = Path(__file__).parent.parent.parent / "data" / "jvmg_checkpoint.json"
 
-
-def _load_checkpoint(path: Path) -> dict | None:
-    """Load a checkpoint file (atomic-safe; returns None if missing)."""
-    from src.scrapers.checkpoint import load_json_or
-    return load_json_or(path, None)
-
-
-def _save_checkpoint(path: Path, data: dict) -> None:
-    """Save a checkpoint file atomically (tmp → rename)."""
-    from src.scrapers.checkpoint import atomic_write_json
-    atomic_write_json(path, data, indent=2)
-
-
-def _delete_checkpoint(path: Path) -> None:
-    """Delete a checkpoint file."""
-    if path.exists():
-        path.unlink()
 
 
 class WikidataClient(RateLimitedHttpClient):
@@ -239,20 +221,17 @@ def main(
     log_path = configure_file_logging("wikidata")
     log.info("wikidata_fetch_command_start", log_file=str(log_path))
 
-    # Load checkpoint if resuming
-    start_offset = 0
-    if resume:
-        checkpoint = _load_checkpoint(CHECKPOINT_FILE)
-        if checkpoint:
-            start_offset = checkpoint.get("last_offset", 0)
-            log.info(
-                "checkpoint_loaded",
-                last_offset=start_offset,
-                total_anime=checkpoint.get("total_anime", 0),
-                total_persons=checkpoint.get("total_persons", 0),
-                total_credits=checkpoint.get("total_credits", 0),
-                timestamp=checkpoint.get("timestamp"),
-            )
+    cp = resolve_checkpoint(CHECKPOINT_FILE, resume=resume)
+    start_offset = cp.get("last_offset", 0)
+    if resume and start_offset > 0:
+        log.info(
+            "checkpoint_loaded",
+            last_offset=start_offset,
+            total_anime=cp.get("total_anime", 0),
+            total_persons=cp.get("total_persons", 0),
+            total_credits=cp.get("total_credits", 0),
+            timestamp=cp.get("last_run_at"),
+        )
 
     async def _fetch_and_save() -> None:
         """Fetch Wikidata records incrementally with checkpoint support."""
@@ -300,16 +279,11 @@ def main(
                     # Flush checkpoint every N pages
                     if pages_since_checkpoint >= checkpoint_interval:
                         group.flush_all()
-                        _save_checkpoint(
-                            CHECKPOINT_FILE,
-                            {
-                                "last_offset": offset,
-                                "total_anime": total_anime,
-                                "total_persons": total_persons,
-                                "total_credits": total_credits,
-                                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-                            },
-                        )
+                        cp["last_offset"] = offset
+                        cp["total_anime"] = total_anime
+                        cp["total_persons"] = total_persons
+                        cp["total_credits"] = total_credits
+                        cp.save()
                         p.log("checkpoint_saved", last_offset=offset)
                         pages_since_checkpoint = 0
 
@@ -322,7 +296,7 @@ def main(
             group.compact_all()
 
         # Delete checkpoint on successful completion
-        _delete_checkpoint(CHECKPOINT_FILE)
+        cp.delete()
         log.info(
             "bronze_parquet_written",
             source="jvmg",

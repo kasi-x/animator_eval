@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-import json
 import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
@@ -30,10 +29,12 @@ import typer
 from src.scrapers.hash_utils import hash_anime_data
 
 from src.runtime.models import parse_role
+from src.scrapers.checkpoint import resolve_checkpoint
 from src.scrapers.cli_common import (
     CheckpointIntervalOpt,
     DataDirOpt,
     DelayOpt,
+    ForceOpt,
     LimitOpt,
     ProgressOpt,
     QuietOpt,
@@ -348,7 +349,6 @@ class _AnimeBronzeWriters:
     """
 
     def __init__(self, root: "Path | str | None" = None) -> None:
-        from pathlib import Path as _Path
         from src.scrapers.bronze_writer import BronzeWriterGroup
         self._group = BronzeWriterGroup("ann", tables=list(_ANIME_BRONZE_TABLES), root=root)
         for tbl in _ANIME_BRONZE_TABLES:
@@ -404,19 +404,6 @@ def save_person_detail(persons_bw, detail: AnnPersonDetail) -> None:
     persons_bw.append(dataclasses.asdict(detail))
 
 
-# ─── Checkpoint helpers ──────────────────────────────────────────────────────
-
-
-def _load_checkpoint(path: Path) -> dict:
-    from src.scrapers.checkpoint import load_json_or
-    return load_json_or(path, {})
-
-
-def _save_checkpoint(path: Path, data: dict) -> None:
-    from src.scrapers.checkpoint import atomic_write_json
-    atomic_write_json(path, data, indent=2)
-
-
 # ─── typer commands ──────────────────────────────────────────────────────────
 
 
@@ -428,6 +415,7 @@ def cmd_scrape_anime(
     checkpoint_interval: CheckpointIntervalOpt = SCRAPE_CHECKPOINT_INTERVAL,
     data_dir: DataDirOpt = DEFAULT_DATA_DIR,
     resume: ResumeOpt = True,
+    force: ForceOpt = False,
     quiet: QuietOpt = False,
     progress: ProgressOpt = False,
 ) -> None:
@@ -442,6 +430,7 @@ def cmd_scrape_anime(
             checkpoint_interval=checkpoint_interval,
             data_dir=data_dir,
             resume=resume,
+            force=force,
             progress_override=resolve_progress_enabled(quiet, progress),
         )
     )
@@ -454,10 +443,10 @@ async def _run_scrape_anime(
     checkpoint_interval: int,
     data_dir: Path,
     resume: bool,
+    force: bool = False,
     progress_override: bool | None = None,
 ) -> None:
-    cp_path = data_dir / "anime_checkpoint.json"
-    cp = _load_checkpoint(cp_path) if resume else {}
+    cp = resolve_checkpoint(data_dir / "anime_checkpoint.json", force=force, resume=resume)
 
     writers = _AnimeBronzeWriters()
 
@@ -469,12 +458,10 @@ async def _run_scrape_anime(
         else:
             all_ids = await fetch_masterlist(client)
             cp["all_ids"] = all_ids
-            _save_checkpoint(cp_path, cp)
+            cp.save()
 
-        completed: set[int] = set(cp.get("completed_ids", []))
-        pending = [i for i in all_ids if i not in completed]
-        if limit:
-            pending = pending[:limit]
+        completed: set[int] = cp.completed_set
+        pending = cp.pending(all_ids, limit=limit)
 
         log.info(
             "ann_anime_scrape_start",
@@ -506,8 +493,8 @@ async def _run_scrape_anime(
 
                 if (batch_idx + 1) % flush_every == 0:
                     writers.flush_all()
-                    cp["completed_ids"] = list(completed)
-                    _save_checkpoint(cp_path, cp)
+                    cp.sync_completed(completed)
+                    cp.save()
                     p.log(
                         "ann_anime_progress",
                         done=done_this_run,
@@ -517,8 +504,8 @@ async def _run_scrape_anime(
                     )
 
         writers.flush_all()
-        cp["completed_ids"] = list(completed)
-        _save_checkpoint(cp_path, cp)
+        cp.sync_completed(completed)
+        cp.save()
         log.info(
             "ann_anime_scrape_done",
             total_anime=total_anime,
@@ -538,6 +525,7 @@ def cmd_scrape_persons(
     checkpoint_interval: CheckpointIntervalOpt = SCRAPE_CHECKPOINT_INTERVAL,
     data_dir: DataDirOpt = DEFAULT_DATA_DIR,
     resume: ResumeOpt = True,
+    force: ForceOpt = False,
     quiet: QuietOpt = False,
     progress: ProgressOpt = False,
 ) -> None:
@@ -555,6 +543,7 @@ def cmd_scrape_persons(
             checkpoint_interval=checkpoint_interval,
             data_dir=data_dir,
             resume=resume,
+            force=force,
             progress_override=resolve_progress_enabled(quiet, progress),
         )
     )
@@ -567,15 +556,15 @@ async def _run_scrape_persons(
     checkpoint_interval: int,
     data_dir: Path,
     resume: bool,
+    force: bool = False,
     progress_override: bool | None = None,
 ) -> None:
     import pyarrow.dataset as ds
 
     from src.scrapers.bronze_writer import DEFAULT_BRONZE_ROOT, BronzeWriter
 
-    cp_path = data_dir / "persons_checkpoint.json"
-    cp = _load_checkpoint(cp_path) if resume else {}
-    completed: set[int] = set(cp.get("completed_ids", []))
+    cp = resolve_checkpoint(data_dir / "persons_checkpoint.json", force=force, resume=resume)
+    completed: set[int] = cp.completed_set
 
     # Read ann_person_id list from bronze parquet (written by anime phase)
     credits_path = DEFAULT_BRONZE_ROOT / "source=ann" / "table=credits"
@@ -589,9 +578,7 @@ async def _run_scrape_persons(
         dict.fromkeys(pid for pid in tbl.column("ann_person_id").to_pylist() if pid is not None)
     )
 
-    pending = [i for i in all_ann_ids if i not in completed]
-    if limit:
-        pending = pending[:limit]
+    pending = cp.pending(all_ann_ids, limit=limit)
 
     log.info(
         "ann_persons_scrape_start",
@@ -622,8 +609,8 @@ async def _run_scrape_persons(
 
                 if done_this_run % checkpoint_interval == 0:
                     persons_bw.flush()
-                    cp["completed_ids"] = list(completed)
-                    _save_checkpoint(cp_path, cp)
+                    cp.sync_completed(completed)
+                    cp.save()
                     p.log(
                         "ann_persons_progress",
                         done=done_this_run,
@@ -633,8 +620,8 @@ async def _run_scrape_persons(
 
         persons_bw.flush()
         persons_bw.compact()
-        cp["completed_ids"] = list(completed)
-        _save_checkpoint(cp_path, cp)
+        cp.sync_completed(completed)
+        cp.save()
         log.info("ann_persons_scrape_done", total_requested=done_this_run, collected=collected)
 
     finally:

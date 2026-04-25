@@ -23,18 +23,13 @@ if str(REPO_ROOT) not in sys.path:
 SCRAPERS = [
     ("ann", "src.scrapers.ann_scraper", ["scrape-anime", "scrape-persons", "scrape-all"]),
     ("allcinema", "src.scrapers.allcinema_scraper", ["cinema", "persons", "run"]),
+    ("bangumi", "src.scrapers.bangumi_main", ["relations", "persons", "characters", "run"]),
     ("mal", "src.scrapers.mal_scraper", []),
     ("mediaarts", "src.scrapers.mediaarts_scraper", []),
     ("seesaawiki", "src.scrapers.seesaawiki_scraper", ["scrape", "reparse"]),
     ("keyframe", "src.scrapers.keyframe_scraper", []),
     ("jvmg", "src.scrapers.jvmg_fetcher", []),
     ("anilist", "src.scrapers.anilist_scraper", []),
-]
-
-BANGUMI_SCRIPTS = [
-    REPO_ROOT / "scripts/scrape_bangumi_persons.py",
-    REPO_ROOT / "scripts/scrape_bangumi_characters.py",
-    REPO_ROOT / "scripts/scrape_bangumi_relations.py",
 ]
 
 REQUIRED_FLAGS = ["--limit", "--quiet", "--progress"]
@@ -65,11 +60,10 @@ def check_common_bases() -> list[str]:
 
     try:
         from src.scrapers.http_base import RateLimitedHttpClient
-        from src.scrapers.bangumi_scraper import BangumiClient
         from src.scrapers.ann_scraper import AnnClient
         from src.scrapers.allcinema_scraper import AllcinemaClient
         from src.scrapers.mal_scraper import JikanClient
-        for cls in (BangumiClient, AnnClient, AllcinemaClient, JikanClient):
+        for cls in (AnnClient, AllcinemaClient, JikanClient):
             if not issubclass(cls, RateLimitedHttpClient):
                 failures.append(f"{cls.__name__} not subclass of RateLimitedHttpClient")
     except ImportError as exc:
@@ -113,14 +107,6 @@ def check_cli_flags() -> list[str]:
             if missing:
                 failures.append(f"{name}: missing {missing}")
 
-    for script in BANGUMI_SCRIPTS:
-        if not script.exists():
-            failures.append(f"{script.name}: script not found")
-            continue
-        help_text = _run_help([sys.executable, str(script), "--help"])
-        missing = [f for f in REQUIRED_FLAGS if f not in help_text]
-        if missing:
-            failures.append(f"{script.name}: missing {missing}")
     return failures
 
 
