@@ -1,0 +1,80 @@
+{
+  "0": {
+    "en": "other",
+    "zh": "其他",
+    "jp": "",
+    "alias": "misc",
+    "wiki_tpl": "Anime",
+    "sort_keys": [
+      "放送开始",
+      "发售日",
+      "发售日期",
+      "上映年度",
+      "上映日"
+    ]
+  },
+  "1": {
+    "en": "TV",
+    "zh": "TV",
+    "jp": "",
+    "alias": "tv",
+    "wiki_tpl": "TVAnime",
+    "sort_keys": [
+      "放送开始",
+      "发售日",
+      "发售日期",
+      "上映年度",
+      "上映日"
+    ]
+  },
+  "2": {
+    "en": "OVA",
+    "zh": "OVA",
+    "jp": "",
+    "alias": "ova",
+    "wiki_tpl": "OVA",
+    "sort_keys": [
+      "放送开始",
+      "发售日",
+      "发售日期",
+      "上映年度",
+      "上映日"
+    ]
+  },
+  "3": {
+    "en": "movie",
+    "zh": "剧场版",
+    "jp": "",
+    "alias": "movie",
+    "wiki_tpl": "Movie",
+    "sort_keys": [
+      "放送开始",
+      "发售日",
+      "发售日期",
+      "上映年度",
+      "上映日"
+    ]
+  },
+  "5": {
+    "en": "web",
+    "zh": "WEB",
+    "jp": "",
+    "alias": "web",
+    "wiki_tpl": "TVAnime",
+    "sort_keys": [
+      "放送开始",
+      "发售日",
+      "发售日期",
+      "上映年度",
+      "上映日"
+    ]
+  },
+  "2006": {
+    "en": "anime_comic",
+    "zh": "动态漫画",
+    "jp": "",
+    "alias": "anime_comic",
+    "wiki_tpl": "TVAnime",
+    "sort_keys": []
+  }
+}
