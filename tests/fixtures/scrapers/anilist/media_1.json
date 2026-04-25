@@ -1,1 +1,1 @@
-{"data":{"Media":{"id":1,"title":{"romaji":"Cowboy Bebop","english":"Cowboy Bebop","native":"\u30ab\u30a6\u30dc\u30fc\u30a4\u30d3\u30d0\u30c3\u30d7"},"startDate":{"year":1998,"month":4,"day":3},"episodes":26,"format":"TV","duration":24,"averageScore":86}}}
+{"data":{"Media":{"id":1,"title":{"romaji":"Cowboy Bebop","english":"Cowboy Bebop","native":"カウボーイビバップ"},"startDate":{"year":1998,"month":4,"day":3},"episodes":26,"format":"TV","duration":24,"averageScore":86,"airingSchedule":{"nodes":[{"airingAt":891648000,"episode":1},{"airingAt":892252800,"episode":2}]}}}}

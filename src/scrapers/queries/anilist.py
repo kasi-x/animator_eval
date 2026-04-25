@@ -35,6 +35,7 @@ query ($id: Int, $staffPage: Int, $staffPerPage: Int, $charPage: Int, $charPerPa
     relations { edges { relationType node { id title { romaji } format } } }
     externalLinks { url site type }
     rankings { rank type format year season allTime context }
+    airingSchedule { nodes { airingAt episode } }
     staff(page: $staffPage, perPage: $staffPerPage) {
       pageInfo { hasNextPage }
       edges {
@@ -46,6 +47,7 @@ query ($id: Int, $staffPage: Int, $staffPerPage: Int, $charPage: Int, $charPerPa
           dateOfBirth { year month day }
           age
           gender
+          primaryOccupations
           yearsActive
           homeTown
           bloodType
@@ -78,6 +80,7 @@ query ($id: Int, $staffPage: Int, $staffPerPage: Int, $charPage: Int, $charPerPa
           dateOfBirth { year month day }
           age
           gender
+          primaryOccupations
           yearsActive
           homeTown
           bloodType
@@ -134,6 +137,7 @@ query ($id: Int) {
     dateOfBirth { year month day }
     age
     gender
+    primaryOccupations
     yearsActive
     homeTown
     bloodType
@@ -181,6 +185,7 @@ query ($page: Int, $perPage: Int, $sort: [MediaSort]) {
       relations { edges { relationType node { id title { romaji } format } } }
       externalLinks { url site type }
       rankings { rank type format year season allTime context }
+      airingSchedule { nodes { airingAt episode } }
     }
   }
 }

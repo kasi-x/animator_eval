@@ -1275,6 +1275,7 @@ class Person(BaseModel):
     date_of_birth: str | None = None  # YYYY-MM-DD format
     age: int | None = None
     gender: str | None = None
+    primary_occupations: list[str] = Field(default_factory=list)
     years_active: list[int] = Field(default_factory=list)
     hometown: str | None = None
     blood_type: str | None = None
@@ -1437,6 +1438,7 @@ class BronzeAnime(BaseModel):
     relations_json: str | None = None
     external_links_json: str | None = None
     rankings_json: str | None = None
+    airing_schedule_json: str | None = None
 
     @computed_field  # type: ignore[prop-decorator]
     @property

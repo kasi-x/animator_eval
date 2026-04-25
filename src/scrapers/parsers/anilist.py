@@ -52,6 +52,9 @@ def parse_anilist_person(staff: dict) -> Person:
     years_active_raw = staff.get("yearsActive", [])
     years_active = [y for y in years_active_raw if y] if years_active_raw else []
 
+    primary_occupations_raw = staff.get("primaryOccupations") or []
+    primary_occupations = [o for o in primary_occupations_raw if o]
+
     hometown_val = staff.get("homeTown")
     name_ja, name_ko, name_zh, names_alt, native, nationality = parse_anilist_native_name(name, hometown_val)
 
@@ -71,6 +74,7 @@ def parse_anilist_person(staff: dict) -> Person:
         date_of_birth=date_of_birth,
         age=staff.get("age"),
         gender=staff.get("gender"),
+        primary_occupations=primary_occupations,
         years_active=years_active,
         hometown=hometown_val,
         blood_type=staff.get("bloodType"),
@@ -198,6 +202,17 @@ def parse_anilist_anime(raw: dict) -> BronzeAnime:
         if rankings:
             rankings_json = _json.dumps(rankings, ensure_ascii=False)
 
+    airing_schedule_json = None
+    airing_nodes = (raw.get("airingSchedule") or {}).get("nodes") or []
+    if airing_nodes:
+        schedule = [
+            {"airingAt": n.get("airingAt"), "episode": n.get("episode")}
+            for n in airing_nodes
+            if n.get("airingAt") and n.get("episode")
+        ]
+        if schedule:
+            airing_schedule_json = _json.dumps(schedule, ensure_ascii=False)
+
     native_title = title.get("native") or ""
     country = raw.get("countryOfOrigin") or "JP"
     if country == "JP" or not native_title:
@@ -252,6 +267,7 @@ def parse_anilist_anime(raw: dict) -> BronzeAnime:
         relations_json=relations_json,
         external_links_json=external_links_json,
         rankings_json=rankings_json,
+        airing_schedule_json=airing_schedule_json,
     )
 
 
@@ -289,6 +305,9 @@ def parse_anilist_staff(
         years_active_raw = node.get("yearsActive", [])
         years_active = [y for y in years_active_raw if y] if years_active_raw else []
 
+        primary_occupations_raw = node.get("primaryOccupations") or []
+        primary_occupations = [o for o in primary_occupations_raw if o]
+
         hometown_val = node.get("homeTown")
         name_ja, name_ko, name_zh, names_alt, native, nationality = parse_anilist_native_name(name, hometown_val)
 
@@ -309,6 +328,7 @@ def parse_anilist_staff(
                 date_of_birth=date_of_birth,
                 age=node.get("age"),
                 gender=node.get("gender"),
+                primary_occupations=primary_occupations,
                 years_active=years_active,
                 hometown=hometown_val,
                 blood_type=node.get("bloodType"),
@@ -392,6 +412,9 @@ def parse_anilist_voice_actors(
                 [y for y in years_active_raw if y] if years_active_raw else []
             )
 
+            primary_occupations_raw = va.get("primaryOccupations") or []
+            primary_occupations = [o for o in primary_occupations_raw if o]
+
             hometown_val = va.get("homeTown")
             name_ja, name_ko, name_zh, names_alt, native, nationality = parse_anilist_native_name(name, hometown_val)
 
@@ -412,6 +435,7 @@ def parse_anilist_voice_actors(
                     date_of_birth=date_of_birth,
                     age=va.get("age"),
                     gender=va.get("gender"),
+                    primary_occupations=primary_occupations,
                     years_active=years_active,
                     hometown=hometown_val,
                     blood_type=va.get("bloodType"),

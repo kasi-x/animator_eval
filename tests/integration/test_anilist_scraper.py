@@ -182,7 +182,7 @@ class TestAniListClient:
         _run(client.close())
 
     def test_query_auth_error_fallback(self):
-        """Test that 401 with token-related error disables auth and retries."""
+        """Test that 401 with token-related error disables auth and retries without token."""
         from src.scrapers.anilist_scraper import AniListClient
 
         auth_error_response = httpx.Response(
@@ -198,18 +198,20 @@ class TestAniListClient:
 
         client = AniListClient()
         client._access_token = "bad-token"
-        client._client = AsyncMock()
-        client._client.post = AsyncMock(
+        client._last_request_time = 0.0
+        # Mock at httpx level; RetryingHttpClient returns 401 immediately (no retry)
+        client._client._client.post = AsyncMock(
             side_effect=[auth_error_response, success_response]
         )
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                return await client.query("query {}", {})
+                with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+                    return await client.query("query {}", {})
 
         result = _run(run())
         assert result == {"ok": True}
-        assert client._access_token is None  # Token was disabled
+        assert client._access_token is None  # Token disabled on auth error
         _run(client.close())
 
     def test_query_graphql_errors_logged(self):
@@ -226,30 +228,37 @@ class TestAniListClient:
         )
 
         client = AniListClient()
-        client._client = AsyncMock()
-        client._client.post = AsyncMock(return_value=response)
+        client._last_request_time = 0.0
+        client._client._client.post = AsyncMock(return_value=response)
 
-        result = _run(client.query("query {}", {}))
+        with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+            result = _run(client.query("query {}", {}))
         assert result == {"partial": True}
         _run(client.close())
 
     def test_query_all_attempts_fail_raises(self):
-        """Test EndpointUnreachableError after all 5 attempts fail."""
+        """Test EndpointUnreachableError after all 5 attempts fail, with retry count."""
         from src.scrapers.anilist_scraper import AniListClient
 
         client = AniListClient()
-        client._client = AsyncMock()
-        client._client.post = AsyncMock(
+        # Mock at httpx level so RetryingHttpClient retry loop actually runs
+        client._client._client.post = AsyncMock(
             side_effect=httpx.ConnectError("connection refused")
         )
+        client._last_request_time = 0.0
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                return await client.query("query {}", {})
+                with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+                    return await client.query("query {}", {})
 
         with pytest.raises(EndpointUnreachableError) as exc_info:
             _run(run())
-        assert "5 attempts" in str(exc_info.value)
+        # Verify all 5 attempts were actually made
+        assert client._client._client.post.call_count == 5
+        # Verify error message contains retry count and original error
+        assert "All 5 attempts failed" in str(exc_info.value)
+        assert "connection refused" in str(exc_info.value)
         _run(client.close())
 
     def test_get_top_anime(self):
@@ -318,24 +327,24 @@ class TestAniListClient:
         )
 
         client = AniListClient()
-        client._client = AsyncMock()
-        client._client.post = AsyncMock(return_value=response)
+        client._last_request_time = 0.0
+        client._client._client.post = AsyncMock(return_value=response)
 
-        result = _run(client.query("query {}", {}))
+        with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+            result = _run(client.query("query {}", {}))
         assert result == {"ok": True}
         assert client.requests_remaining is None
         _run(client.close())
 
     def test_query_auth_error_non_token_related(self):
-        """Test 400 error without token keywords does NOT disable auth.
+        """Test 400 without auth keywords: token stays, EndpointUnreachableError raised.
 
-        The 400 response's raise_for_status() raises HTTPStatusError, which is
-        caught by the generic except httpx.HTTPError handler. After all 5 retries
-        are exhausted, EndpointUnreachableError is raised.
+        RetryingHttpClient returns 400 immediately (no retry). query() tries to
+        parse errors, finds no auth keywords, falls through to raise_for_status()
+        → HTTPStatusError → EndpointUnreachableError. Only 1 HTTP attempt.
         """
         from src.scrapers.anilist_scraper import AniListClient
 
-        # 400 but error message does not contain "token"/"auth"/"invalid"
         error_response = httpx.Response(
             400,
             json={"errors": [{"message": "Syntax error in query"}]},
@@ -344,17 +353,20 @@ class TestAniListClient:
 
         client = AniListClient()
         client._access_token = "some-token"
-        client._client = AsyncMock()
-        client._client.post = AsyncMock(return_value=error_response)
+        client._last_request_time = 0.0
+        # Mock at httpx level; RetryingHttpClient returns 400 immediately (no retry)
+        client._client._client.post = AsyncMock(return_value=error_response)
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                return await client.query("query {}", {})
+                with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+                    return await client.query("query {}", {})
 
-        # After 5 retries with the same 400 error, EndpointUnreachableError is raised
         with pytest.raises(EndpointUnreachableError):
             _run(run())
-        # Token should NOT be disabled (error was not auth-related)
+        # 400 is returned immediately by RetryingHttpClient — exactly 1 attempt
+        assert client._client._client.post.call_count == 1
+        # Token NOT disabled (error was not auth-related)
         assert client._access_token == "some-token"
         _run(client.close())
 
