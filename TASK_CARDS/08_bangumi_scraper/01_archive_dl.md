@@ -26,9 +26,9 @@
 
 ## Pre-conditions
 
-- [ ] `git status` clean
-- [ ] `data/bangumi/` 書込み可
-- [ ] `pixi run lint` baseline pass
+- [x] `git status` clean
+- [x] `data/bangumi/` 書込み可
+- [x] `pixi run lint` baseline pass
 
 ---
 
@@ -133,7 +133,9 @@ pixi run lint
 
 ## Completion signal
 
-- [ ] latest release 展開済 → manifest.json 正常生成
-- [ ] idempotent 動作確認
-- [ ] `data/bangumi/dump/latest` symlink 存在
-- [ ] DONE 記録
+- [x] latest release 展開済 → manifest.json 正常生成
+- [x] idempotent 動作確認
+- [x] `data/bangumi/dump/latest` symlink 存在
+- [x] DONE 記録
+
+**DONE: 2026-04-25 — commit 9d3578e**

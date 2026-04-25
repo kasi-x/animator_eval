@@ -26,8 +26,8 @@ dump に person.jsonlines が含まれていないため `/v0/persons/{id}` で 
 
 ## Pre-conditions
 
-- [ ] `03_subject_relations` 完了 → relation parquet 存在
-- [ ] person_id 集合 ~10-20k 推定
+- [x] `03_subject_relations` 完了 → relation parquet 存在
+- [x] person_id 集合 ~10-20k 推定
 
 ---
 
@@ -132,7 +132,9 @@ rm -f data/bangumi/checkpoint_persons.json
 
 ## Completion signal
 
-- [ ] 10 件 dry-run + 実 run 成功
-- [ ] resume 動作確認
-- [ ] full run 完走 (user 承認後、別実行)
-- [ ] DONE 記録
+- [x] 10 件 dry-run + 実 run 成功
+- [x] resume 動作確認
+- [x] full run 完走 (user 承認後、別実行)
+- [x] DONE 記録
+
+**DONE: 2026-04-25 — commit 960323d**

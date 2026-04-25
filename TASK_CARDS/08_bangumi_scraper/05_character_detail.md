@@ -25,8 +25,8 @@
 
 ## Pre-conditions
 
-- [ ] `03_subject_relations` 完了
-- [ ] `04_person_detail` 完了 (運用順)
+- [x] `03_subject_relations` 完了
+- [x] `04_person_detail` 完了 (運用順)
 
 ---
 
@@ -120,6 +120,8 @@ rm -f data/bangumi/checkpoint_characters.json
 
 ## Completion signal
 
-- [ ] 10 件 dry-run + 実 run 成功
-- [ ] full run 完走 (user 承認後)
-- [ ] DONE 記録
+- [x] 10 件 dry-run + 実 run 成功
+- [x] full run 完走 (user 承認後)
+- [x] DONE 記録
+
+**DONE: 2026-04-25 — commit 0d121b6**

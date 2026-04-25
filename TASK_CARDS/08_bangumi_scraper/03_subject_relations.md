@@ -40,8 +40,8 @@ Card 02 出力の anime subject_id 集合 (~3-5k) を起点に以下 2 endpoint 
 
 - [x] `01_archive_dl` 完了 (commit 9d3578e)
 - [x] `02_subjects_parquet` 完了 (commit 84dda39)
-- [ ] `data/bangumi/dump/latest/manifest.json` 経由で subject_id 集合取得可能
-- [ ] `result/bronze/source=bangumi/table=subjects/**/*.parquet` 読める
+- [x] `data/bangumi/dump/latest/manifest.json` 経由で subject_id 集合取得可能
+- [x] `result/bronze/source=bangumi/table=subjects/**/*.parquet` 読める
 
 ---
 
@@ -209,9 +209,11 @@ pixi run lint
 
 ## Completion signal
 
-- [ ] 10 件 dry-run + 実 run で 3 parquet 生成確認
-- [ ] checkpoint resume 動作確認
-- [ ] rate limit 遵守ログ (1 req/sec) 確認
-- [ ] lint pass
-- [ ] full run (~3-5k subject) は **別タスク** として user 承認後に実行 (実行時間 ~2 時間)
-- [ ] DONE 記録
+- [x] 10 件 dry-run + 実 run で 3 parquet 生成確認
+- [x] checkpoint resume 動作確認
+- [x] rate limit 遵守ログ (1 req/sec) 確認
+- [x] lint pass
+- [x] full run (~3-5k subject) は **別タスク** として user 承認後に実行 (実行時間 ~2 時間)
+- [x] DONE 記録
+
+**DONE: 2026-04-25 — commit 47e3591 (BronzeWriter refactor: 960323d)**

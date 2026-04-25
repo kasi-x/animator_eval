@@ -25,8 +25,8 @@
 
 ## Pre-conditions
 
-- [ ] `01_archive_dl` 完了 → `data/bangumi/dump/latest/subject.jsonlines` 存在
-- [ ] `pixi run lint` baseline pass
+- [x] `01_archive_dl` 完了 → `data/bangumi/dump/latest/subject.jsonlines` 存在
+- [x] `pixi run lint` baseline pass
 
 ---
 
@@ -129,7 +129,9 @@ pixi run lint
 
 ## Completion signal
 
-- [ ] type=2 anime のみ parquet 出力済
-- [ ] row count が 妥当範囲 (20k-60k)
-- [ ] DuckDB から read_parquet 可能
-- [ ] DONE 記録
+- [x] type=2 anime のみ parquet 出力済
+- [x] row count が 妥当範囲 (20k-60k)
+- [x] DuckDB から read_parquet 可能
+- [x] DONE 記録
+
+**DONE: 2026-04-25 — commit 84dda39**

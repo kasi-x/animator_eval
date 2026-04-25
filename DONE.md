@@ -179,3 +179,22 @@
 
 ### テスト状況
 - 新規 test parquet が既存 `test_integrate_duckdb.py` のスキーマ期待値と不一致 → 後続タスクで調整予定
+
+---
+
+## bangumi.tv BRONZE 統合 (Card 08-01..05) ✅ 2026-04-25
+
+- 01 Archive dump DL + 展開 (commit 9d3578e) — bangumi/Archive 週次 zip 取得 + streaming extractor (EOCD なし dump 対応) + manifest 生成
+- 02 subjects.jsonlines → BRONZE parquet (commit 84dda39) — type=2 anime のみ、3,715 行、score/rank raw 保存 (H1 scoring 流入禁止)
+- 03 /v0/subjects/{id}/{persons,characters} API scrape (commit 47e3591) — 1 req/s rate limit、actors ネスト分解で person_characters table 派生、3 BRONZE parquet
+- BronzeWriter refactor (commit 960323d) — 固定 part-0 上書きバグ修正、UUID file pattern に統一
+- 04 /v0/persons/{id} API scrape (commit 960323d) — relation 参照 id のみ、infobox は list[dict] を json.dumps で raw 保存
+- 05 /v0/characters/{id} API scrape (commit 0d121b6) — type=character category、last_modified 不在、locked bool 追加
+
+設計判断:
+- dump 当初想定 9 jsonlines のうち実環境では subject のみ → relations/persons/characters は API hybrid に転換
+- role label (中文 "导演" 等) は raw 保持、SILVER 化時に bangumi/common yaml で正規化予定
+- infobox wiki template は wiki-parser-py で SILVER 移行時に展開
+- last_modified の "0001-01-01T00:00:00Z" sentinel は SILVER で NULL 化
+
+Card 06 (差分 cron) は初回 backfill 完走後に着手 → TODO.md §13.6 に残置。
