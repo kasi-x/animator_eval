@@ -1,7 +1,7 @@
 """Tests for keyframe_scraper parse functions (no network calls)."""
 from __future__ import annotations
 
-from src.scrapers.keyframe_scraper import (
+from src.scrapers.parsers.keyframe import (
     _extract_episode_num,
     extract_preload_data,
     parse_credits_from_data,
@@ -137,28 +137,43 @@ class TestParseCreditsFromData:
         result = parse_credits_from_data(_make_preload([menu]), "anime-x")
         assert result[0]["episode"] == -1
 
-    def test_studio_entry_skipped(self):
+    def test_studio_entry_kept_with_flag(self):
+        # isStudio=true entries are kept (not skipped), flagged via is_studio_role
         studio = _make_staff(999, name_en="Cool Studio", is_studio=True)
         person = _make_staff(200, name_en="Real Person")
         menu = _make_menu("#01", [studio, person])
         result = parse_credits_from_data(_make_preload([menu]), "anime-x")
-        assert all(c["person_id"] != 999 for c in result)
+        studio_entries = [c for c in result if c["person_id"] == 999]
+        assert studio_entries, "studio entry must be present"
+        assert studio_entries[0]["is_studio_role"] is True
         assert any(c["person_id"] == 200 for c in result)
 
-    def test_no_id_skipped(self):
-        bad_staff = {"ja": "誰か", "en": "Someone"}  # no 'id' key
+    def test_no_id_with_name_kept(self):
+        # no 'id' but has name → kept with person_id=None
+        no_id_staff = {"ja": "誰か", "en": "Someone"}
         good_staff = _make_staff(201, name_en="Good Person")
-        menu = _make_menu("#01", [bad_staff, good_staff])
+        menu = _make_menu("#01", [no_id_staff, good_staff])
+        result = parse_credits_from_data(_make_preload([menu]), "anime-x")
+        assert any(c["person_id"] is None for c in result)
+        assert any(c["person_id"] == 201 for c in result)
+
+    def test_both_id_and_name_missing_skipped(self):
+        # no id AND no name → only entry that should be skipped
+        void_staff = {"ja": "", "en": ""}  # no id, no name
+        good_staff = _make_staff(202, name_en="Good Person")
+        menu = _make_menu("#01", [void_staff, good_staff])
         result = parse_credits_from_data(_make_preload([menu]), "anime-x")
         assert len(result) == 1
-        assert result[0]["person_id"] == 201
+        assert result[0]["person_id"] == 202
 
-    def test_no_name_skipped(self):
+    def test_has_id_no_name_kept(self):
+        # has id but empty names → kept (only id=None + empty name is skipped)
         nameless = _make_staff(300, name_ja="", name_en="")
         named = _make_staff(301, name_en="Named Person")
         menu = _make_menu("#01", [nameless, named])
         result = parse_credits_from_data(_make_preload([menu]), "anime-x")
-        assert all(c["person_id"] != 300 for c in result)
+        assert any(c["person_id"] == 300 for c in result)
+        assert any(c["person_id"] == 301 for c in result)
 
     def test_role_fields_captured(self):
         staff = [_make_staff(400, name_en="Director Person")]

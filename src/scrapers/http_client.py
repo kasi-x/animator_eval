@@ -186,8 +186,15 @@ class RetryingHttpClient:
         _max = max_attempts or self._max_attempts
         _retryable_status = self._retryable_status
 
+        async def _once() -> httpx.Response:
+            await self._throttle()
+            resp = await self._client.request(method, url, params=params, json=json, headers=headers)
+            if rate_limit_context is not None:
+                self._update_rate_limit_context(resp, rate_limit_context)
+            return resp
+
         try:
-            async for attempt in AsyncRetrying(
+            return await AsyncRetrying(
                 retry=retry_any(
                     retry_if_exception_type(self.DEFAULT_RETRYABLE_EXC),
                     retry_if_result(lambda r: r.status_code in _retryable_status),
@@ -196,19 +203,9 @@ class RetryingHttpClient:
                 stop=stop_after_attempt(_max),
                 before_sleep=_before_sleep_log(self.source, on_rate_limit),
                 retry_error_callback=_retry_error_callback,
-            ):
-                with attempt:
-                    await self._throttle()
-                    resp = await self._client.request(
-                        method, url, params=params, json=json, headers=headers
-                    )
-                    if rate_limit_context is not None:
-                        self._update_rate_limit_context(resp, rate_limit_context)
+            )(_once)
         except RetryError:
-            # retry_error_callback already raises; this branch is unreachable
             raise  # pragma: no cover
-
-        return resp  # type: ignore[return-value]
 
     @staticmethod
     def _update_rate_limit_context(resp: httpx.Response, ctx: dict) -> None:

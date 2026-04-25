@@ -13,7 +13,6 @@ All async tests use asyncio.run() wrappers since pytest-asyncio is not available
 """
 
 import asyncio
-import json
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -94,40 +93,30 @@ class TestJikanClient:
         from src.scrapers.mal_scraper import JikanClient
 
         client = JikanClient()
-        client.get = AsyncMock(return_value={"data": [{"name": "staff1"}]})
+        payload = {"data": [{"name": "staff1"}]}
+        client.get = AsyncMock(return_value=payload)
 
         result = _run(client.get_anime_staff(5114))
-        assert result == [{"name": "staff1"}]
+        assert result == payload
         _run(client.close())
 
-    def test_get_top_anime(self):
+    def test_get_all_anime(self):
         from src.scrapers.mal_scraper import JikanClient
 
         client = JikanClient()
         client.get = AsyncMock(return_value={"data": [], "pagination": {}})
 
-        result = _run(client.get_top_anime(page=2, limit=10, type_filter="movie"))
+        result = _run(client.get_all_anime(page=2))
         assert result == {"data": [], "pagination": {}}
         client.get.assert_called_once_with(
-            "/top/anime", params={"page": 2, "limit": 10, "type": "movie"}
+            "/anime", params={"page": 2, "limit": 25, "order_by": "mal_id", "sort": "asc"}
         )
-        _run(client.close())
-
-    def test_get_top_anime_no_type_filter(self):
-        from src.scrapers.mal_scraper import JikanClient
-
-        client = JikanClient()
-        client.get = AsyncMock(return_value={"data": []})
-
-        _run(client.get_top_anime(type_filter=""))
-        call_args = client.get.call_args
-        assert "type" not in call_args[1]["params"]
         _run(client.close())
 
 
 class TestMALParsers:
     def test_parse_anime_data_year_from_aired_prop(self):
-        from src.scrapers.mal_scraper import parse_anime_data
+        from src.scrapers.parsers.mal import parse_anime_data
 
         raw = {
             "mal_id": 1,
@@ -140,7 +129,7 @@ class TestMALParsers:
         assert anime.year == 2005
 
     def test_parse_anime_data_english_fallback(self):
-        from src.scrapers.mal_scraper import parse_anime_data
+        from src.scrapers.parsers.mal import parse_anime_data
 
         raw = {
             "mal_id": 1,
@@ -151,21 +140,21 @@ class TestMALParsers:
         assert anime.title_en == "English Title"
 
     def test_parse_anime_data_no_titles(self):
-        from src.scrapers.mal_scraper import parse_anime_data
+        from src.scrapers.parsers.mal import parse_anime_data
 
         raw = {"mal_id": 1, "titles": [], "title": "Fallback"}
         anime = parse_anime_data(raw)
         assert anime.title_en == "Fallback"
 
     def test_parse_anime_data_null_aired(self):
-        from src.scrapers.mal_scraper import parse_anime_data
+        from src.scrapers.parsers.mal import parse_anime_data
 
         raw = {"mal_id": 1, "titles": [], "title": "Test", "aired": None}
         anime = parse_anime_data(raw)
         assert anime.year is None
 
     def test_parse_anime_data_null_prop(self):
-        from src.scrapers.mal_scraper import parse_anime_data
+        from src.scrapers.parsers.mal import parse_anime_data
 
         raw = {
             "mal_id": 1,
@@ -179,7 +168,7 @@ class TestMALParsers:
 
     def test_parse_staff_data_single_name(self):
         """Test name without comma (no split needed)."""
-        from src.scrapers.mal_scraper import parse_staff_data
+        from src.scrapers.parsers.mal import parse_staff_data
 
         staff_list = [
             {
@@ -191,7 +180,7 @@ class TestMALParsers:
         assert persons[0].name_en == "CLAMP"
 
     def test_parse_staff_data_multiple_positions(self):
-        from src.scrapers.mal_scraper import parse_staff_data
+        from src.scrapers.parsers.mal import parse_staff_data
 
         staff_list = [
             {
@@ -204,7 +193,7 @@ class TestMALParsers:
         assert len(credits) == 3
 
     def test_parse_staff_data_empty_positions(self):
-        from src.scrapers.mal_scraper import parse_staff_data
+        from src.scrapers.parsers.mal import parse_staff_data
 
         staff_list = [{"person": {"mal_id": 1, "name": "Doe, John"}, "positions": []}]
         persons, credits = parse_staff_data(staff_list, "mal:1")
@@ -212,78 +201,6 @@ class TestMALParsers:
         assert len(credits) == 0
 
 
-class TestMALCheckpoint:
-    def test_load_checkpoint_nonexistent(self, tmp_path):
-        from src.scrapers.mal_scraper import _load_checkpoint
-
-        result = _load_checkpoint(tmp_path / "nonexistent.json")
-        assert result is None
-
-    def test_load_checkpoint_existing(self, tmp_path):
-        from src.scrapers.mal_scraper import _load_checkpoint
-
-        cp_file = tmp_path / "checkpoint.json"
-        cp_file.write_text(json.dumps({"last_fetched_index": 10}))
-        result = _load_checkpoint(cp_file)
-        assert result["last_fetched_index"] == 10
-
-    def test_save_checkpoint(self, tmp_path):
-        from src.scrapers.mal_scraper import _save_checkpoint
-
-        cp_file = tmp_path / "subdir" / "checkpoint.json"
-        _save_checkpoint(cp_file, {"last_fetched_index": 5, "total_anime": 5})
-        loaded = json.loads(cp_file.read_text())
-        assert loaded["last_fetched_index"] == 5
-
-    def test_delete_checkpoint(self, tmp_path):
-        from src.scrapers.mal_scraper import _delete_checkpoint
-
-        cp_file = tmp_path / "checkpoint.json"
-        cp_file.write_text("{}")
-        _delete_checkpoint(cp_file)
-        assert not cp_file.exists()
-
-    def test_delete_checkpoint_nonexistent(self, tmp_path):
-        from src.scrapers.mal_scraper import _delete_checkpoint
-
-        # Should not raise
-        _delete_checkpoint(tmp_path / "nonexistent.json")
-
-
 # ---------------------------------------------------------------------------
 # MediaArts scraper tests
 # ---------------------------------------------------------------------------
-
-
-class TestMALFetchTopAnimeCredits:
-    def test_fetch_top_anime_credits(self):
-        from src.scrapers.mal_scraper import fetch_top_anime_credits
-
-        top_anime_response = {
-            "data": [
-                {
-                    "mal_id": 1,
-                    "titles": [{"type": "Default", "title": "Test Anime"}],
-                    "title": "Test Anime",
-                    "year": 2020,
-                }
-            ]
-        }
-        staff_response = [
-            {
-                "person": {"mal_id": 10, "name": "Doe, John"},
-                "positions": ["Director"],
-            }
-        ]
-
-        with patch("src.scrapers.mal_scraper.JikanClient") as MockClient:
-            instance = MockClient.return_value
-            instance.get_top_anime = AsyncMock(return_value=top_anime_response)
-            instance.get_anime_staff = AsyncMock(return_value=staff_response)
-            instance.close = AsyncMock()
-
-            anime, persons, credits = _run(fetch_top_anime_credits(n_anime=1))
-
-        assert len(anime) == 1
-        assert len(persons) == 1
-        assert len(credits) == 1
