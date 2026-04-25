@@ -14,8 +14,17 @@ import typer
 
 from src.runtime.models import BronzeAnime, Credit, Person, parse_role
 from src.scrapers.cache_store import load_cached_json, save_cached_json
+from src.scrapers.cli_common import (
+    CheckpointIntervalOpt,
+    ProgressOpt,
+    QuietOpt,
+    ResumeOpt,
+    resolve_progress_enabled,
+)
+from src.scrapers.http_base import RateLimitedHttpClient
 from src.scrapers.http_client import RetryingHttpClient
 from src.scrapers.logging_utils import configure_file_logging
+from src.scrapers.progress import scrape_progress
 from src.scrapers.wikidata_role_map import WIKIDATA_ROLE_MAP  # noqa: F401  re-exported
 
 log = structlog.get_logger()
@@ -58,18 +67,15 @@ CHECKPOINT_FILE = Path(__file__).parent.parent.parent / "data" / "jvmg_checkpoin
 
 
 def _load_checkpoint(path: Path) -> dict | None:
-    """Load a checkpoint file."""
-    if path.exists():
-        with open(path) as f:
-            return json.load(f)
-    return None
+    """Load a checkpoint file (atomic-safe; returns None if missing)."""
+    from src.scrapers.checkpoint import load_json_or
+    return load_json_or(path, None)
 
 
 def _save_checkpoint(path: Path, data: dict) -> None:
-    """Save a checkpoint file."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
+    """Save a checkpoint file atomically (tmp → rename)."""
+    from src.scrapers.checkpoint import atomic_write_json
+    atomic_write_json(path, data, indent=2)
 
 
 def _delete_checkpoint(path: Path) -> None:
@@ -78,10 +84,11 @@ def _delete_checkpoint(path: Path) -> None:
         path.unlink()
 
 
-class WikidataClient:
+class WikidataClient(RateLimitedHttpClient):
     """Async Wikidata SPARQL client (wraps RetryingHttpClient)."""
 
     def __init__(self, transport=None) -> None:
+        super().__init__(delay=REQUEST_INTERVAL)
         self._http = RetryingHttpClient(
             source="wikidata",
             delay=REQUEST_INTERVAL,
@@ -215,17 +222,18 @@ async def fetch_anime_staff(
 
 @app.command()
 def main(
-    max_records: int = typer.Option(5000, "--max-records", "-n", help="maximum number of records"),
-    resume: bool = typer.Option(
-        True, "--resume/--no-resume", help="resume from checkpoint"
+    max_records: int = typer.Option(
+        5000, "--max-records", "--limit", "-n",
+        help="Maximum number of records. Alias: --limit",
     ),
-    checkpoint_interval: int = typer.Option(
-        2, "--checkpoint-interval", help="checkpoint save interval (pages)"
-    ),
+    resume: ResumeOpt = True,
+    checkpoint_interval: CheckpointIntervalOpt = 2,
+    quiet: QuietOpt = False,
+    progress: ProgressOpt = False,
 ) -> None:
     """Collect anime staff data from Wikidata."""
     from src.infra.logging import setup_logging
-    from src.scrapers.bronze_writer import BronzeWriter
+    from src.scrapers.bronze_writer import BronzeWriterGroup
 
     setup_logging()
     log_path = configure_file_logging("wikidata")
@@ -257,58 +265,61 @@ def main(
         offset = start_offset
         pages_since_checkpoint = 0
 
-        anime_bw = BronzeWriter("jvmg", table="anime")
-        persons_bw = BronzeWriter("jvmg", table="persons")
-        credits_bw = BronzeWriter("jvmg", table="credits")
+        group = BronzeWriterGroup("jvmg", tables=["anime", "persons", "credits"])
+        anime_bw = group["anime"]
+        persons_bw = group["persons"]
+        credits_bw = group["credits"]
 
         try:
-            while offset < max_records:
-                log.info("fetching_wikidata", source="wikidata", offset=offset)
-                query = ANIME_STAFF_QUERY.format(limit=page_size, offset=offset)
-                bindings = await client.query(query)
-                if not bindings:
-                    break
+            with scrape_progress(
+                total=max_records,
+                description="scraping wikidata",
+                enabled=progress_override,
+            ) as p:
+                while offset < max_records:
+                    query = ANIME_STAFF_QUERY.format(limit=page_size, offset=offset)
+                    bindings = await client.query(query)
+                    if not bindings:
+                        break
 
-                anime_list, persons, credits = parse_wikidata_results(bindings)
-                for anime in anime_list:
-                    anime_bw.append(anime.model_dump(mode="json"))
-                    total_anime += 1
-                for person in persons:
-                    persons_bw.append(person.model_dump(mode="json"))
-                    total_persons += 1
-                for credit in credits:
-                    credits_bw.append(credit.model_dump(mode="json"))
-                    total_credits += 1
+                    anime_list, persons, credits = parse_wikidata_results(bindings)
+                    for anime in anime_list:
+                        anime_bw.append(anime.model_dump(mode="json"))
+                        total_anime += 1
+                    for person in persons:
+                        persons_bw.append(person.model_dump(mode="json"))
+                        total_persons += 1
+                    for credit in credits:
+                        credits_bw.append(credit.model_dump(mode="json"))
+                        total_credits += 1
 
-                pages_since_checkpoint += 1
-                offset += page_size
+                    pages_since_checkpoint += 1
+                    offset += page_size
+                    p.advance(min(page_size, max(0, max_records - (offset - page_size))))
 
-                # Flush checkpoint every N pages
-                if pages_since_checkpoint >= checkpoint_interval:
-                    anime_bw.flush()
-                    persons_bw.flush()
-                    credits_bw.flush()
-                    _save_checkpoint(
-                        CHECKPOINT_FILE,
-                        {
-                            "last_offset": offset,
-                            "total_anime": total_anime,
-                            "total_persons": total_persons,
-                            "total_credits": total_credits,
-                            "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-                        },
-                    )
-                    log.info("checkpoint_saved", last_offset=offset)
-                    pages_since_checkpoint = 0
+                    # Flush checkpoint every N pages
+                    if pages_since_checkpoint >= checkpoint_interval:
+                        group.flush_all()
+                        _save_checkpoint(
+                            CHECKPOINT_FILE,
+                            {
+                                "last_offset": offset,
+                                "total_anime": total_anime,
+                                "total_persons": total_persons,
+                                "total_credits": total_credits,
+                                "timestamp": datetime.now(tz=timezone.utc).isoformat(),
+                            },
+                        )
+                        p.log("checkpoint_saved", last_offset=offset)
+                        pages_since_checkpoint = 0
 
-                if len(bindings) < page_size:
-                    break
+                    if len(bindings) < page_size:
+                        break
 
         finally:
             await client.close()
-            anime_bw.flush()
-            persons_bw.flush()
-            credits_bw.flush()
+            group.flush_all()
+            group.compact_all()
 
         # Delete checkpoint on successful completion
         _delete_checkpoint(CHECKPOINT_FILE)
@@ -320,6 +331,7 @@ def main(
             credits=total_credits,
         )
 
+    progress_override = resolve_progress_enabled(quiet, progress)
     asyncio.run(_fetch_and_save())
 
 

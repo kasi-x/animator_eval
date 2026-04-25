@@ -30,7 +30,19 @@ import typer
 from src.scrapers.hash_utils import hash_anime_data
 
 from src.runtime.models import parse_role
+from src.scrapers.cli_common import (
+    CheckpointIntervalOpt,
+    DataDirOpt,
+    DelayOpt,
+    LimitOpt,
+    ProgressOpt,
+    QuietOpt,
+    ResumeOpt,
+    resolve_progress_enabled,
+)
+from src.scrapers.http_base import RateLimitedHttpClient
 from src.scrapers.logging_utils import configure_file_logging
+from src.scrapers.progress import scrape_progress
 from src.scrapers.parsers.ann import (  # noqa: F401
     _ANN_TYPE_MAP,
     _HTML_LABEL_MAP,
@@ -40,6 +52,7 @@ from src.scrapers.parsers.ann import (  # noqa: F401
     AnnStaffEntry,
     AnnAnimeRecord,
     AnnPersonDetail,
+    AnimeXmlParseResult,
     parse_anime_xml,
     parse_person_xml,
     parse_person_html,
@@ -78,11 +91,11 @@ app = typer.Typer()
 # ─── HTTP client ────────────────────────────────────────────────────────────
 
 
-class AnnClient:
+class AnnClient(RateLimitedHttpClient):
     """Async HTTP client for ANN with exponential backoff retry."""
 
     def __init__(self, delay: float = DEFAULT_DELAY) -> None:
-        self._delay = delay
+        super().__init__(delay=delay)
         self._last_request = 0.0
         self._client = httpx.AsyncClient(
             timeout=30.0,
@@ -254,19 +267,19 @@ async def _probe_max_id(client: AnnClient) -> list[int]:
 async def fetch_anime_batch(
     client: AnnClient,
     ann_ids: list[int],
-) -> list[AnnAnimeRecord]:
+) -> AnimeXmlParseResult:
     """Fetch up to BATCH_SIZE anime IDs from the XML API in one request."""
     ids_str = "/".join(str(i) for i in ann_ids)
     resp = await client.get(f"{ANIME_API_URL}?anime={ids_str}")
     text = resp.text.lstrip()
     if not text.startswith("<") or text.lstrip("<").startswith("!DOCTYPE"):
         log.warning("ann_anime_html_response", ids_sample=ann_ids[:3])
-        return []
+        return AnimeXmlParseResult()
     try:
         root = ET.fromstring(text)
     except ET.ParseError as exc:
         log.error("ann_xml_parse_error", ids=ann_ids[:5], error=str(exc))
-        return []
+        return AnimeXmlParseResult()
     return parse_anime_xml(root)
 
 
@@ -321,22 +334,69 @@ async def fetch_person_html(
 # ─── Bronze write helpers ────────────────────────────────────────────────────
 
 
-def save_ann_anime(anime_bw, credits_bw, rec: AnnAnimeRecord) -> int:
-    """Write AnnAnimeRecord to BRONZE parquet and return the number of credits saved."""
-    anime_row = dataclasses.asdict(rec)
-    anime_row.pop("staff", None)
-    # Add hash tracking for diff detection
-    anime_row["fetched_at"] = datetime.now(timezone.utc).isoformat()
-    anime_row["content_hash"] = hash_anime_data(anime_row)
-    anime_bw.append(anime_row)
-    saved = 0
-    for entry in rec.staff:
-        credit_row = dataclasses.asdict(entry)
-        credit_row["ann_anime_id"] = rec.ann_id
-        credit_row["role"] = parse_role(entry.task)
-        credits_bw.append(credit_row)
-        saved += 1
-    return saved
+_ANIME_BRONZE_TABLES = (
+    "anime", "credits", "cast", "company",
+    "episodes", "releases", "news", "related",
+)
+
+
+class _AnimeBronzeWriters:
+    """Attribute-style facade over BronzeWriterGroup for the 8 anime tables.
+
+    Preserves `writers.anime.append(...)` callsites while delegating
+    flush/compact to the shared group lifecycle.
+    """
+
+    def __init__(self, root: "Path | str | None" = None) -> None:
+        from pathlib import Path as _Path
+        from src.scrapers.bronze_writer import BronzeWriterGroup
+        self._group = BronzeWriterGroup("ann", tables=list(_ANIME_BRONZE_TABLES), root=root)
+        for tbl in _ANIME_BRONZE_TABLES:
+            setattr(self, tbl, self._group[tbl])
+
+    def flush_all(self) -> None:
+        self._group.flush_all()
+
+    def compact_all(self) -> None:
+        self._group.compact_all()
+
+
+def save_anime_parse_result(
+    writers: _AnimeBronzeWriters,
+    result: AnimeXmlParseResult,
+) -> tuple[int, int]:
+    """Write all tables from one XML parse result to BRONZE parquet.
+
+    Returns (n_anime, n_credits) for progress logging.
+    """
+    n_anime = 0
+    n_credits = 0
+    for rec in result.anime:
+        anime_row = dataclasses.asdict(rec)
+        anime_row.pop("staff", None)
+        anime_row["fetched_at"] = datetime.now(timezone.utc).isoformat()
+        anime_row["content_hash"] = hash_anime_data(anime_row)
+        writers.anime.append(anime_row)
+        n_anime += 1
+        for entry in rec.staff:
+            credit_row = dataclasses.asdict(entry)
+            credit_row["ann_anime_id"] = rec.ann_id
+            credit_row["role"] = parse_role(entry.task)
+            writers.credits.append(credit_row)
+            n_credits += 1
+    for cast in result.cast:
+        writers.cast.append(dataclasses.asdict(cast))
+    for comp in result.company:
+        writers.company.append(dataclasses.asdict(comp))
+    for ep in result.episodes:
+        writers.episodes.append(dataclasses.asdict(ep))
+    for rel in result.releases:
+        writers.releases.append(dataclasses.asdict(rel))
+    for news in result.news:
+        writers.news.append(dataclasses.asdict(news))
+    for r in result.related:
+        writers.related.append(dataclasses.asdict(r))
+    return n_anime, n_credits
 
 
 def save_person_detail(persons_bw, detail: AnnPersonDetail) -> None:
@@ -348,16 +408,13 @@ def save_person_detail(persons_bw, detail: AnnPersonDetail) -> None:
 
 
 def _load_checkpoint(path: Path) -> dict:
-    if path.exists():
-        with open(path) as f:
-            return json.load(f)
-    return {}
+    from src.scrapers.checkpoint import load_json_or
+    return load_json_or(path, {})
 
 
 def _save_checkpoint(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
+    from src.scrapers.checkpoint import atomic_write_json
+    atomic_write_json(path, data, indent=2)
 
 
 # ─── typer commands ──────────────────────────────────────────────────────────
@@ -365,14 +422,14 @@ def _save_checkpoint(path: Path, data: dict) -> None:
 
 @app.command("scrape-anime")
 def cmd_scrape_anime(
-    limit: int = typer.Option(0, help="Max anime to fetch (0=all)"),
-    batch_size: int = typer.Option(BATCH_SIZE, help="XML API batch size"),
-    delay: float = typer.Option(DEFAULT_DELAY, help="Delay between requests (seconds)"),
-    checkpoint_interval: int = typer.Option(
-        SCRAPE_CHECKPOINT_INTERVAL, help="Checkpoint save interval"
-    ),
-    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, help="Checkpoint directory"),
-    resume: bool = typer.Option(True, help="Resume from checkpoint"),
+    limit: LimitOpt = 0,
+    batch_size: int = typer.Option(BATCH_SIZE, "--batch-size", help="XML API batch size"),
+    delay: DelayOpt = DEFAULT_DELAY,
+    checkpoint_interval: CheckpointIntervalOpt = SCRAPE_CHECKPOINT_INTERVAL,
+    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
+    resume: ResumeOpt = True,
+    quiet: QuietOpt = False,
+    progress: ProgressOpt = False,
 ) -> None:
     """Phase 1+2: fetch masterlist → scrape anime XML."""
     log_path = configure_file_logging("ann")
@@ -385,6 +442,7 @@ def cmd_scrape_anime(
             checkpoint_interval=checkpoint_interval,
             data_dir=data_dir,
             resume=resume,
+            progress_override=resolve_progress_enabled(quiet, progress),
         )
     )
 
@@ -396,18 +454,15 @@ async def _run_scrape_anime(
     checkpoint_interval: int,
     data_dir: Path,
     resume: bool,
+    progress_override: bool | None = None,
 ) -> None:
-    from src.scrapers.bronze_writer import BronzeWriter
-
     cp_path = data_dir / "anime_checkpoint.json"
     cp = _load_checkpoint(cp_path) if resume else {}
 
-    anime_bw = BronzeWriter("ann", table="anime")
-    credits_bw = BronzeWriter("ann", table="credits")
+    writers = _AnimeBronzeWriters()
 
     client = AnnClient(delay=delay)
     try:
-        # Phase 1: masterlist
         if "all_ids" in cp:
             all_ids: list[int] = cp["all_ids"]
             log.info("ann_masterlist_from_checkpoint", count=len(all_ids))
@@ -430,39 +485,38 @@ async def _run_scrape_anime(
 
         total_anime = 0
         total_credits = 0
-
-        batches = [
-            pending[i : i + batch_size] for i in range(0, len(pending), batch_size)
-        ]
-
         done_this_run = 0
-        for batch_idx, batch in enumerate(batches):
-            records = await fetch_anime_batch(client, batch)
+        flush_every = max(1, checkpoint_interval // batch_size)
+        batches = [pending[i : i + batch_size] for i in range(0, len(pending), batch_size)]
 
-            for rec in records:
-                saved = save_ann_anime(anime_bw, credits_bw, rec)
-                total_anime += 1
-                total_credits += saved
-            # mark all IDs in the batch as done, including empty responses (non-existent IDs)
-            for ann_id in batch:
-                completed.add(ann_id)
-            done_this_run += len(batch)
+        with scrape_progress(
+            total=len(pending),
+            description="scraping ANN anime",
+            enabled=progress_override,
+        ) as p:
+            for batch_idx, batch in enumerate(batches):
+                result = await fetch_anime_batch(client, batch)
+                n_a, n_c = save_anime_parse_result(writers, result)
+                total_anime += n_a
+                total_credits += n_c
+                for ann_id in batch:
+                    completed.add(ann_id)
+                done_this_run += len(batch)
+                p.advance(len(batch))
 
-            if (batch_idx + 1) % max(1, checkpoint_interval // batch_size) == 0:
-                anime_bw.flush()
-                credits_bw.flush()
-                cp["completed_ids"] = list(completed)
-                _save_checkpoint(cp_path, cp)
-                log.info(
-                    "ann_anime_progress",
-                    done=done_this_run,
-                    remaining=len(pending) - done_this_run,
-                    total_anime=total_anime,
-                    total_credits=total_credits,
-                )
+                if (batch_idx + 1) % flush_every == 0:
+                    writers.flush_all()
+                    cp["completed_ids"] = list(completed)
+                    _save_checkpoint(cp_path, cp)
+                    p.log(
+                        "ann_anime_progress",
+                        done=done_this_run,
+                        remaining=len(pending) - done_this_run,
+                        total_anime=total_anime,
+                        total_credits=total_credits,
+                    )
 
-        anime_bw.flush()
-        credits_bw.flush()
+        writers.flush_all()
         cp["completed_ids"] = list(completed)
         _save_checkpoint(cp_path, cp)
         log.info(
@@ -470,6 +524,7 @@ async def _run_scrape_anime(
             total_anime=total_anime,
             total_credits=total_credits,
         )
+        writers.compact_all()
 
     finally:
         await client.close()
@@ -477,14 +532,14 @@ async def _run_scrape_anime(
 
 @app.command("scrape-persons")
 def cmd_scrape_persons(
-    limit: int = typer.Option(0, help="Max persons to fetch (0=all)"),
-    batch_size: int = typer.Option(BATCH_SIZE, help="(unused; HTML is per-ID)"),
-    delay: float = typer.Option(DEFAULT_DELAY, help="Delay between requests (seconds)"),
-    checkpoint_interval: int = typer.Option(
-        SCRAPE_CHECKPOINT_INTERVAL, help="Checkpoint save interval"
-    ),
-    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, help="Checkpoint directory"),
-    resume: bool = typer.Option(True, help="Resume from checkpoint"),
+    limit: LimitOpt = 0,
+    batch_size: int = typer.Option(BATCH_SIZE, "--batch-size", help="(unused; HTML is per-ID)"),
+    delay: DelayOpt = DEFAULT_DELAY,
+    checkpoint_interval: CheckpointIntervalOpt = SCRAPE_CHECKPOINT_INTERVAL,
+    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
+    resume: ResumeOpt = True,
+    quiet: QuietOpt = False,
+    progress: ProgressOpt = False,
 ) -> None:
     """Phase 3: scrape HTML pages for all persons with ann_id in the DB.
 
@@ -500,6 +555,7 @@ def cmd_scrape_persons(
             checkpoint_interval=checkpoint_interval,
             data_dir=data_dir,
             resume=resume,
+            progress_override=resolve_progress_enabled(quiet, progress),
         )
     )
 
@@ -511,6 +567,7 @@ async def _run_scrape_persons(
     checkpoint_interval: int,
     data_dir: Path,
     resume: bool,
+    progress_override: bool | None = None,
 ) -> None:
     import pyarrow.dataset as ds
 
@@ -549,26 +606,33 @@ async def _run_scrape_persons(
     persons_bw = BronzeWriter("ann", table="persons")
     client = AnnClient(delay=delay)
     try:
-        for ann_id in pending:
-            detail = await fetch_person_html(client, ann_id)
-            if detail is not None:
-                save_person_detail(persons_bw, detail)
-                collected += 1
-            completed.add(ann_id)
-            done_this_run += 1
+        with scrape_progress(
+            total=len(pending),
+            description="scraping ANN persons",
+            enabled=progress_override,
+        ) as p:
+            for ann_id in pending:
+                detail = await fetch_person_html(client, ann_id)
+                if detail is not None:
+                    save_person_detail(persons_bw, detail)
+                    collected += 1
+                completed.add(ann_id)
+                done_this_run += 1
+                p.advance()
 
-            if done_this_run % checkpoint_interval == 0:
-                persons_bw.flush()
-                cp["completed_ids"] = list(completed)
-                _save_checkpoint(cp_path, cp)
-                log.info(
-                    "ann_persons_progress",
-                    done=done_this_run,
-                    collected=collected,
-                    remaining=len(pending) - done_this_run,
-                )
+                if done_this_run % checkpoint_interval == 0:
+                    persons_bw.flush()
+                    cp["completed_ids"] = list(completed)
+                    _save_checkpoint(cp_path, cp)
+                    p.log(
+                        "ann_persons_progress",
+                        done=done_this_run,
+                        collected=collected,
+                        remaining=len(pending) - done_this_run,
+                    )
 
         persons_bw.flush()
+        persons_bw.compact()
         cp["completed_ids"] = list(completed)
         _save_checkpoint(cp_path, cp)
         log.info("ann_persons_scrape_done", total_requested=done_this_run, collected=collected)
@@ -579,13 +643,16 @@ async def _run_scrape_persons(
 
 @app.command("scrape-all")
 def cmd_scrape_all(
-    limit: int = typer.Option(0, help="アニメ取得上限 (0=全件)"),
-    delay: float = typer.Option(DEFAULT_DELAY, help="リクエスト間隔(秒)"),
-    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, help="チェックポイント保存先"),
+    limit: LimitOpt = 0,
+    delay: DelayOpt = DEFAULT_DELAY,
+    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
+    quiet: QuietOpt = False,
+    progress: ProgressOpt = False,
 ) -> None:
     """Phase 1-3 を順番に実行する."""
     log_path = configure_file_logging("ann")
     log.info("ann_scrape_all_command_start", log_file=str(log_path), limit=limit)
+    progress_override = resolve_progress_enabled(quiet, progress)
     asyncio.run(
         _run_scrape_anime(
             limit=limit,
@@ -594,6 +661,7 @@ def cmd_scrape_all(
             checkpoint_interval=SCRAPE_CHECKPOINT_INTERVAL,
             data_dir=data_dir,
             resume=True,
+            progress_override=progress_override,
         )
     )
     asyncio.run(
@@ -604,6 +672,7 @@ def cmd_scrape_all(
             checkpoint_interval=SCRAPE_CHECKPOINT_INTERVAL,
             data_dir=data_dir,
             resume=True,
+            progress_override=progress_override,
         )
     )
 

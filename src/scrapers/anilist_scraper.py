@@ -33,6 +33,12 @@ from src.scrapers.parsers.anilist import (  # noqa: F401
     parse_anilist_studios,
     parse_anilist_relations,
 )
+from src.scrapers.cli_common import (
+    ProgressOpt,
+    QuietOpt,
+    resolve_progress_enabled,
+)
+from src.scrapers.progress import progress_enabled as _progress_enabled
 from src.scrapers.retrying_http_client import RetryingHttpClient
 from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL
 
@@ -792,24 +798,17 @@ async def _fetch_staff_phase(
     anime_ids,
     totals,
     fetched_ids,
-    console,
     download_queue,
     checkpoint_interval,
     checkpoint_file,
     fetch_staff_ids_for_anime,
     create_checkpoint_data,
     save_checkpoint,
-    Progress,
-    SpinnerColumn,
-    BarColumn,
-    MofNCompleteColumn,
-    TextColumn,
-    TimeElapsedColumn,
-    TimeRemainingColumn,
     time_module,
     studios_pending=None,
     relations_pending=None,
     since_ids=None,
+    show_progress: bool = True,
 ):
     """Phase 2A: Fetch staff lists (credits and person IDs) for each anime.
 
@@ -822,68 +821,19 @@ async def _fetch_staff_phase(
     Returns:
         set of all person IDs that need to be fetched in Phase 2B.
     """
-    from rich.rule import Rule
-    from rich.live import Live
-    from rich.console import Group
-    from rich.text import Text
+    from src.scrapers.progress import scrape_progress as _scrape_progress
 
     since_ids = since_ids or set()
-    console.print()
-    console.print(
-        Rule("[bold cyan]フェーズ2A: スタッフリスト収集[/bold cyan]", style="cyan")
-    )
-    console.print()
-
     all_person_ids_to_fetch = set()
 
-    bar2a = Progress(
-        SpinnerColumn(style="cyan"),
-        BarColumn(
-            bar_width=50,
-            complete_style="bright_cyan",
-            finished_style="bold bright_cyan",
-        ),
-        MofNCompleteColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TimeElapsedColumn(),
-        TimeRemainingColumn(),
-    )
-    task2a = bar2a.add_task("", total=len(anime_ids))
-    title_line = Text("📋 ...", style="bold cyan")
-    wait_line_2a = Text("")
-
-    def _make_2a_group():
-        parts = [title_line, bar2a]
-        rl = _make_rate_limit_text(client)
-        if str(rl):
-            parts.append(rl)
-        if str(wait_line_2a):
-            parts.append(wait_line_2a)
-        return Group(*parts)
-
-    live_2a = None  # Live への参照（コールバックから更新用）
-
-    def _on_rate_limit_2a(secs):
-        nonlocal wait_line_2a
-        if secs is None:
-            wait_line_2a = Text("")
-        else:
-            wait_line_2a = Text(f"⏳ 現在、待機中（あと{secs}秒）", style="bold red")
-        if live_2a:
-            live_2a.update(_make_2a_group())
-
-    client.on_rate_limit = _on_rate_limit_2a
-
-    with Live(_make_2a_group(), console=console, refresh_per_second=4) as live:
-        live_2a = live
+    with _scrape_progress(
+        total=len(anime_ids),
+        description="anilist staff phase",
+        enabled=show_progress,
+    ) as p:
         for loop_idx, (anime, anilist_id, anime_id) in enumerate(anime_ids):
-            # Skip if already fetched (--since mode)
             if anime_id in since_ids:
                 continue
-
-            title = anime.title_ja or anime.title_en or anime_id
-            title_line = Text(f"📋 {title}", style="bold cyan")
-            live.update(_make_2a_group())
 
             credits, person_ids, va_count, had_error = await fetch_staff_ids_for_anime(
                 client, anilist_id, anime_id
@@ -911,7 +861,7 @@ async def _fetch_staff_phase(
             totals["anime"] += 1
             totals["credits"] += len(credits)
             totals["voice_actors"] += va_count
-            bar2a.update(task2a, advance=1)
+            p.advance()
 
             if (loop_idx + 1) % checkpoint_interval == 0:
                 anime_bw.flush()
@@ -925,12 +875,8 @@ async def _fetch_staff_phase(
                         loop_idx + 1, fetched_ids, totals, time_module.time()
                     ),
                 )
+                p.log("anilist_staff_checkpoint", done=loop_idx + 1, total=len(anime_ids))
 
-        anime_bw.flush()
-        credits_bw.flush()
-        studios_bw.flush()
-        anime_studios_bw.flush()
-        relations_bw.flush()
         save_checkpoint(
             checkpoint_file,
             create_checkpoint_data(
@@ -946,15 +892,8 @@ async def _fetch_person_details_phase(
     persons_bw,
     ids_to_fetch,
     totals,
-    console,
     download_queue,
-    Progress,
-    SpinnerColumn,
-    BarColumn,
-    MofNCompleteColumn,
-    TextColumn,
-    TimeElapsedColumn,
-    TimeRemainingColumn,
+    show_progress: bool = True,
 ):
     """Phase 2B: Fetch detailed person information for each person ID.
 
@@ -964,69 +903,20 @@ async def _fetch_person_details_phase(
     if not ids_to_fetch:
         return
 
-    from rich.rule import Rule
-    from rich.live import Live
-    from rich.console import Group
-    from rich.text import Text
-
-    console.print()
-    console.print(
-        Rule(
-            "[bold magenta]フェーズ2B: 個人情報詳細取得[/bold magenta]", style="magenta"
-        )
-    )
-    console.print()
+    from src.scrapers.progress import scrape_progress as _scrape_progress
 
     person_batch = []
-
-    bar2b = Progress(
-        SpinnerColumn(style="magenta"),
-        BarColumn(
-            bar_width=50,
-            complete_style="bright_magenta",
-            finished_style="bold bright_magenta",
-        ),
-        MofNCompleteColumn(),
-        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-        TimeElapsedColumn(),
-        TimeRemainingColumn(),
-    )
-    task2b = bar2b.add_task("", total=len(ids_to_fetch))
-    status_line = Text(
-        f"👤 個人情報取得中 (0/{len(ids_to_fetch):,})", style="bold magenta"
-    )
-    wait_line_2b = Text("")
-
-    def _make_2b_group():
-        parts = [status_line, bar2b]
-        rl = _make_rate_limit_text(client)
-        if str(rl):
-            parts.append(rl)
-        if str(wait_line_2b):
-            parts.append(wait_line_2b)
-        return Group(*parts)
-
-    live_2b = None
-
-    def _on_rate_limit_2b(secs):
-        nonlocal wait_line_2b
-        if secs is None:
-            wait_line_2b = Text("")
-        else:
-            wait_line_2b = Text(f"⏳ 現在、待機中（あと{secs}秒）", style="bold red")
-        if live_2b:
-            live_2b.update(_make_2b_group())
-
-    client.on_rate_limit = _on_rate_limit_2b
     skipped_count = 0
 
-    with Live(_make_2b_group(), console=console, refresh_per_second=4) as live:
-        live_2b = live
+    with _scrape_progress(
+        total=len(ids_to_fetch),
+        description="anilist person phase",
+        enabled=show_progress,
+    ) as p:
         for idx, person_id in enumerate(ids_to_fetch, 1):
             try:
                 resp = await client.get_person_details(person_id)
                 if resp is None:
-                    # 404等でアクセス不可 → スキップ
                     skipped_count += 1
                     log.info(
                         "person_skipped_not_found",
@@ -1059,27 +949,19 @@ async def _fetch_person_details_phase(
                 save_persons_batch_to_bronze(persons_bw, person_batch)
                 person_batch.clear()
 
-            bar2b.update(task2b, advance=1)
-            skip_info = f" [N/A: {skipped_count}]" if skipped_count else ""
-            status_line = Text(
-                f"👤 個人情報取得中 ({idx:,}/{len(ids_to_fetch):,}){skip_info}",
-                style="bold magenta",
-            )
-            live.update(_make_2b_group())
+            p.advance()
 
         if person_batch:
             save_persons_batch_to_bronze(persons_bw, person_batch)
         persons_bw.flush()
 
     if skipped_count:
-        console.print(
-            f"[yellow]⚠️ {skipped_count}人がAPI上で見つかりませんでした（削除済み等）[/yellow]"
-        )
+        log.info("anilist_persons_skipped", count=skipped_count)
 
 
 @app.command()
 def main(
-    count: int = typer.Option(50, "--count", "-n", help="取得するアニメ数"),
+    count: int = typer.Option(50, "--count", "--limit", "-n", help="取得するアニメ数; alias --limit"),
     checkpoint_interval: int = typer.Option(
         SCRAPE_CHECKPOINT_INTERVAL, "--checkpoint", help="チェックポイント間隔"
     ),
@@ -1111,6 +993,8 @@ def main(
         "--since",
         help="ISO形式の日時以降のみ差分更新 (YYYY-MM-DDTHH:MM:SS、SILVER.anime のfetched_at基準)",
     ),
+    quiet: QuietOpt = False,
+    progress: ProgressOpt = False,
 ) -> None:
     """AniList からクレジットデータを収集する (チェックポイント機能付き)."""
     import json
@@ -1157,6 +1041,7 @@ def main(
         ]
     )
     console = Console()
+    show_progress = _progress_enabled(resolve_progress_enabled(quiet, progress))
 
     # Cache files
     checkpoint_file = (
@@ -1238,7 +1123,6 @@ def main(
             SpinnerColumn,
             BarColumn,
             TextColumn,
-            TimeRemainingColumn,
             TimeElapsedColumn,
             MofNCompleteColumn,
         )
@@ -1415,9 +1299,9 @@ def main(
             }
 
         def save_checkpoint(file_path, data):
-            """Save checkpoint data to JSON file."""
-            with open(file_path, "w") as f:
-                json.dump(data, f, indent=2)
+            """Save checkpoint data to JSON file atomically (tmp → rename)."""
+            from src.scrapers.checkpoint import atomic_write_json
+            atomic_write_json(file_path, data, indent=2)
 
         def delete_checkpoint_file_if_exists(file_path):
             """Delete checkpoint file upon successful completion."""
@@ -1810,43 +1694,40 @@ def main(
             )
 
             # ===== PHASE 2A: スタッフリスト収集 (クレジットとID) =====
-            from src.scrapers.bronze_writer import BronzeWriter
+            from src.scrapers.bronze_writer import BronzeWriter, BronzeWriterGroup
 
-            anime_bw = BronzeWriter("anilist", table="anime")
-            credits_bw = BronzeWriter("anilist", table="credits")
-            studios_bw = BronzeWriter("anilist", table="studios")
-            anime_studios_bw = BronzeWriter("anilist", table="anime_studios")
-            relations_bw = BronzeWriter("anilist", table="relations")
+            with BronzeWriterGroup(
+                "anilist",
+                tables=["anime", "credits", "studios", "anime_studios", "relations"],
+            ) as g:
+                anime_bw = g["anime"]
+                credits_bw = g["credits"]
+                studios_bw = g["studios"]
+                anime_studios_bw = g["anime_studios"]
+                relations_bw = g["relations"]
 
-            all_person_ids_to_fetch = await _fetch_staff_phase(
-                client,
-                anime_bw,
-                credits_bw,
-                studios_bw,
-                anime_studios_bw,
-                relations_bw,
-                anime_ids,
-                totals,
-                fetched_ids,
-                console,
-                download_queue,
-                checkpoint_interval,
-                checkpoint_file,
-                fetch_staff_ids_for_anime,
-                create_checkpoint_data,
-                save_checkpoint,
-                Progress,
-                SpinnerColumn,
-                BarColumn,
-                MofNCompleteColumn,
-                TextColumn,
-                TimeElapsedColumn,
-                TimeRemainingColumn,
-                time_module,
-                studios_pending=studios_pending,
-                relations_pending=relations_pending,
-                since_ids=since_ids,
-            )
+                all_person_ids_to_fetch = await _fetch_staff_phase(
+                    client,
+                    anime_bw,
+                    credits_bw,
+                    studios_bw,
+                    anime_studios_bw,
+                    relations_bw,
+                    anime_ids,
+                    totals,
+                    fetched_ids,
+                    download_queue,
+                    checkpoint_interval,
+                    checkpoint_file,
+                    fetch_staff_ids_for_anime,
+                    create_checkpoint_data,
+                    save_checkpoint,
+                    time_module,
+                    studios_pending=studios_pending,
+                    relations_pending=relations_pending,
+                    since_ids=since_ids,
+                    show_progress=show_progress,
+                )
 
             # Phase 2A サマリ
             ids_to_fetch = sorted(all_person_ids_to_fetch)
@@ -1860,22 +1741,15 @@ def main(
             )
 
             # ===== PHASE 2B: 個人情報詳細取得 =====
-            persons_bw = BronzeWriter("anilist", table="persons")
-            await _fetch_person_details_phase(
-                client,
-                persons_bw,
-                ids_to_fetch,
-                totals,
-                console,
-                download_queue,
-                Progress,
-                SpinnerColumn,
-                BarColumn,
-                MofNCompleteColumn,
-                TextColumn,
-                TimeElapsedColumn,
-                TimeRemainingColumn,
-            )
+            with BronzeWriter("anilist", table="persons") as persons_bw:
+                await _fetch_person_details_phase(
+                    client,
+                    persons_bw,
+                    ids_to_fetch,
+                    totals,
+                    download_queue,
+                    show_progress=show_progress,
+                )
 
             # Delete checkpoint file on completion
             delete_checkpoint_file_if_exists(checkpoint_file)
@@ -1941,18 +1815,6 @@ def fetch_persons(
     async def _run():
         from rich.console import Console
         from rich.rule import Rule
-        from rich.live import Live
-        from rich.console import Group
-        from rich.text import Text
-        from rich.progress import (
-            Progress,
-            SpinnerColumn,
-            BarColumn,
-            MofNCompleteColumn,
-            TextColumn,
-            TimeElapsedColumn,
-            TimeRemainingColumn,
-        )
 
         import pyarrow.dataset as ds
 
@@ -2028,53 +1890,15 @@ def fetch_persons(
         errors = 0
         start_time = time_module.time()
 
+        skipped_count = 0
+
         try:
-            bar = Progress(
-                SpinnerColumn(style="magenta"),
-                BarColumn(
-                    bar_width=50,
-                    complete_style="bright_magenta",
-                    finished_style="bold bright_magenta",
-                ),
-                MofNCompleteColumn(),
-                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-                TimeElapsedColumn(),
-                TimeRemainingColumn(),
-            )
-            task = bar.add_task("", total=len(ids_to_fetch))
-            status_line = Text(
-                f"👤 個人情報取得中 (0/{len(ids_to_fetch):,})", style="bold magenta"
-            )
-            wait_line = Text("")
+            from src.scrapers.progress import scrape_progress as _scrape_progress
 
-            skipped_count = 0
-
-            def _make_group():
-                parts = [status_line, bar]
-                rl = _make_rate_limit_text(client)
-                if str(rl):
-                    parts.append(rl)
-                if str(wait_line):
-                    parts.append(wait_line)
-                return Group(*parts)
-
-            live_ref = None
-
-            def _on_rate_limit(secs):
-                nonlocal wait_line
-                if secs is None:
-                    wait_line = Text("")
-                else:
-                    wait_line = Text(
-                        f"⏳ 現在、待機中（あと{secs}秒）", style="bold red"
-                    )
-                if live_ref:
-                    live_ref.update(_make_group())
-
-            client.on_rate_limit = _on_rate_limit
-
-            with Live(_make_group(), console=console, refresh_per_second=4) as live:
-                live_ref = live
+            with _scrape_progress(
+                total=len(ids_to_fetch),
+                description="anilist fetch-persons",
+            ) as p:
                 for idx, person_id in enumerate(ids_to_fetch, 1):
                     try:
                         resp = await client.get_person_details(person_id)
@@ -2112,25 +1936,19 @@ def fetch_persons(
                         save_persons_batch_to_bronze(persons_bw, person_batch)
                         person_batch.clear()
 
-                    bar.update(task, advance=1)
-                    skip_info = f" [N/A: {skipped_count}]" if skipped_count else ""
-                    status_line = Text(
-                        f"👤 個人情報取得中 ({idx:,}/{len(ids_to_fetch):,}){skip_info}",
-                        style="bold magenta",
-                    )
-                    live.update(_make_group())
+                    p.advance()
 
                 if person_batch:
                     save_persons_batch_to_bronze(persons_bw, person_batch)
                 persons_bw.flush()
 
             if skipped_count:
-                console.print(
-                    f"[yellow]⚠️ {skipped_count}人がAPI上で見つかりませんでした（削除済み等）[/yellow]"
-                )
+                log.info("anilist_persons_skipped", count=skipped_count)
 
         finally:
             await client.close()
+            persons_bw.flush()
+            persons_bw.compact()
 
         elapsed = time_module.time() - start_time
         console.print()

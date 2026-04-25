@@ -13,8 +13,17 @@ import structlog
 import typer
 
 from src.scrapers.cache_store import load_cached_json, save_cached_json
+from src.scrapers.cli_common import (
+    CheckpointIntervalOpt,
+    ProgressOpt,
+    QuietOpt,
+    ResumeOpt,
+    resolve_progress_enabled,
+)
+from src.scrapers.progress import scrape_progress
 from src.runtime.models import BronzeAnime, Credit, Person
 from src.scrapers.parsers.mal import parse_anime_data, parse_staff_data  # noqa: F401
+from src.scrapers.http_base import RateLimitedHttpClient
 from src.scrapers.http_client import RetryingHttpClient
 from src.scrapers.logging_utils import configure_file_logging
 
@@ -29,18 +38,15 @@ CHECKPOINT_FILE = Path(__file__).parent.parent.parent / "data" / "mal_checkpoint
 
 
 def _load_checkpoint(path: Path) -> dict | None:
-    """Load a checkpoint file."""
-    if path.exists():
-        with open(path) as f:
-            return json.load(f)
-    return None
+    """Load a checkpoint file (atomic-safe; returns None if missing)."""
+    from src.scrapers.checkpoint import load_json_or
+    return load_json_or(path, None)
 
 
 def _save_checkpoint(path: Path, data: dict) -> None:
-    """Save a checkpoint file."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
+    """Save a checkpoint file atomically (tmp → rename)."""
+    from src.scrapers.checkpoint import atomic_write_json
+    atomic_write_json(path, data, indent=2)
 
 
 def _delete_checkpoint(path: Path) -> None:
@@ -49,10 +55,11 @@ def _delete_checkpoint(path: Path) -> None:
         path.unlink()
 
 
-class JikanClient:
+class JikanClient(RateLimitedHttpClient):
     """Async Jikan API client (wraps RetryingHttpClient)."""
 
     def __init__(self, transport=None) -> None:
+        super().__init__(delay=REQUEST_INTERVAL)
         self._http = RetryingHttpClient(
             source="mal",
             base_url=BASE_URL,
@@ -169,22 +176,21 @@ async def fetch_top_anime_credits(
 @app.command()
 def main(
     count: int = typer.Option(
-        50, "--count", "-n", help="number of anime to fetch (0=all)"
+        50, "--count", "--limit", "-n",
+        help="number of anime to fetch (0=all). Alias: --limit",
     ),
     type_filter: str = typer.Option(
         "tv", "--type", help="anime type (blank=all types)"
     ),
-    resume: bool = typer.Option(
-        True, "--resume/--no-resume", help="resume from checkpoint"
-    ),
-    checkpoint_interval: int = typer.Option(
-        50, "--checkpoint-interval", help="checkpoint save interval (anime count)"
-    ),
+    resume: ResumeOpt = True,
+    checkpoint_interval: CheckpointIntervalOpt = 50,
     fetch_all: bool = typer.Option(False, "--all", help="fetch all anime (equivalent to count=0)"),
+    quiet: QuietOpt = False,
+    progress: ProgressOpt = False,
 ) -> None:
     """Collect credit data from MAL (Jikan API)."""
     from src.infra.logging import setup_logging
-    from src.scrapers.bronze_writer import BronzeWriter
+    from src.scrapers.bronze_writer import BronzeWriterGroup
 
     setup_logging()
     log_path = configure_file_logging("mal")
@@ -222,9 +228,10 @@ def main(
         fetched = 0
         current_page = start_page
 
-        anime_bw = BronzeWriter("mal", table="anime")
-        persons_bw = BronzeWriter("mal", table="persons")
-        credits_bw = BronzeWriter("mal", table="credits")
+        group = BronzeWriterGroup("mal", tables=["anime", "persons", "credits"])
+        anime_bw = group["anime"]
+        persons_bw = group["persons"]
+        credits_bw = group["credits"]
 
         # existing_mal_ids dedup check is omitted; ETL (integrate) handles dedup
         existing_mal_ids: set[int] = set()
@@ -237,111 +244,107 @@ def main(
             start_page=current_page,
         )
 
+        bar_total = None if is_fetching_all else count
         try:
-            while True:
-                # all-anime mode: use /anime endpoint
-                if is_fetching_all:
-                    log.info("fetching_all_anime", source="mal", page=current_page)
-                    resp = await client.get_all_anime(page=current_page, limit=25)
-                else:
-                    # top-N popular anime: use /top/anime endpoint
-                    pages_needed = (count + 24) // 25
-                    if current_page > pages_needed:
+            with scrape_progress(
+                total=bar_total,
+                description="scraping MAL anime",
+                enabled=progress_override,
+            ) as p:
+                while True:
+                    # all-anime mode: use /anime endpoint
+                    if is_fetching_all:
+                        log.info("fetching_all_anime", source="mal", page=current_page)
+                        resp = await client.get_all_anime(page=current_page, limit=25)
+                    else:
+                        # top-N popular anime: use /top/anime endpoint
+                        pages_needed = (count + 24) // 25
+                        if current_page > pages_needed:
+                            break
+                        log.info("fetching_top_anime", source="mal", page=current_page)
+                        resp = await client.get_top_anime(
+                            page=current_page,
+                            limit=25,
+                            type_filter=type_filter,
+                        )
+
+                    anime_data = resp.get("data", [])
+                    if not anime_data:
+                        log.info("mal_no_more_data", page=current_page)
                         break
-                    log.info("fetching_top_anime", source="mal", page=current_page)
-                    resp = await client.get_top_anime(
-                        page=current_page,
-                        limit=25,
-                        type_filter=type_filter,
-                    )
 
-                anime_data = resp.get("data", [])
-                if not anime_data:
-                    log.info("mal_no_more_data", page=current_page)
-                    break
+                    for raw_anime in anime_data:
+                        if not is_fetching_all and fetched >= count:
+                            break
 
-                for raw_anime in anime_data:
+                        anime = parse_anime_data(raw_anime)
+                        fetched += 1
+
+                        # Skip already-processed anime on resume
+                        if fetched <= start_index:
+                            continue
+
+                        if anime.mal_id and anime.mal_id in existing_mal_ids:
+                            continue
+
+                        anime_bw.append(anime.model_dump(mode="json"))
+                        total_anime += 1
+
+                        try:
+                            staff = await client.get_anime_staff(anime.mal_id)
+                            persons, credits = parse_staff_data(staff, anime.id)
+                            for ps in persons:
+                                if ps.id not in seen:
+                                    persons_bw.append(ps.model_dump(mode="json"))
+                                    seen.add(ps.id)
+                                    total_persons += 1
+                            for c in credits:
+                                credits_bw.append(c.model_dump(mode="json"))
+                                total_credits += 1
+                        except Exception as e:
+                            log.error(
+                                "staff_fetch_failed",
+                                source="mal",
+                                anime_id=anime.id,
+                                error=str(e),
+                            )
+
+                        p.advance()
+
+                        # Flush checkpoint every N anime
+                        if fetched % checkpoint_interval == 0:
+                            group.flush_all()
+                            _save_checkpoint(
+                                CHECKPOINT_FILE,
+                                {
+                                    "last_fetched_page": current_page,
+                                    "last_fetched_index": fetched,
+                                    "total_anime": total_anime,
+                                    "total_persons": total_persons,
+                                    "total_credits": total_credits,
+                                    "timestamp": datetime.now(
+                                        tz=timezone.utc
+                                    ).isoformat(),
+                                },
+                            )
+                            p.log(
+                                "checkpoint_saved",
+                                page=current_page,
+                                fetched=fetched,
+                                anime=total_anime,
+                                persons=total_persons,
+                                credits=total_credits,
+                            )
+
                     if not is_fetching_all and fetched >= count:
                         break
 
-                    anime = parse_anime_data(raw_anime)
-                    fetched += 1
-
-                    # Skip already-processed anime on resume
-                    if fetched <= start_index:
-                        continue
-
-                    if anime.mal_id and anime.mal_id in existing_mal_ids:
-                        continue
-
-                    log.info(
-                        "fetching_staff",
-                        source="mal",
-                        progress=f"{fetched}"
-                        if is_fetching_all
-                        else f"{fetched}/{count}",
-                        title=anime.display_title,
-                    )
-                    anime_bw.append(anime.model_dump(mode="json"))
-                    total_anime += 1
-
-                    try:
-                        staff = await client.get_anime_staff(anime.mal_id)
-                        persons, credits = parse_staff_data(staff, anime.id)
-                        for p in persons:
-                            if p.id not in seen:
-                                persons_bw.append(p.model_dump(mode="json"))
-                                seen.add(p.id)
-                                total_persons += 1
-                        for c in credits:
-                            credits_bw.append(c.model_dump(mode="json"))
-                            total_credits += 1
-                        log.info(
-                            "staff_fetched",
-                            source="mal",
-                            staff=len(persons),
-                            credits=len(credits),
-                        )
-                    except Exception as e:
-                        log.error(
-                            "staff_fetch_failed",
-                            source="mal",
-                            anime_id=anime.id,
-                            error=str(e),
-                        )
-
-                    # Flush checkpoint every N anime
-                    if fetched % checkpoint_interval == 0:
-                        anime_bw.flush()
-                        persons_bw.flush()
-                        credits_bw.flush()
-                        _save_checkpoint(
-                            CHECKPOINT_FILE,
-                            {
-                                "last_fetched_page": current_page,
-                                "last_fetched_index": fetched,
-                                "total_anime": total_anime,
-                                "total_persons": total_persons,
-                                "total_credits": total_credits,
-                                "timestamp": datetime.now(
-                                    tz=timezone.utc
-                                ).isoformat(),
-                            },
-                        )
-                        log.info(
-                            "checkpoint_saved", page=current_page, fetched=fetched
-                        )
-
-                if not is_fetching_all and fetched >= count:
-                    break
-
-                current_page += 1
+                    current_page += 1
 
         finally:
             await client.close()
-            anime_bw.flush()
-            persons_bw.flush()
-            credits_bw.flush()
+            group.flush_all()
+            group.compact_all()
 
         # Delete checkpoint on successful completion
         _delete_checkpoint(CHECKPOINT_FILE)
@@ -353,6 +356,7 @@ def main(
             credits=total_credits,
         )
 
+    progress_override = resolve_progress_enabled(quiet, progress)
     asyncio.run(_fetch_and_save())
 
 

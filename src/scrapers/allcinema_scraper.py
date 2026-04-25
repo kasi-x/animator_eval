@@ -27,13 +27,23 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
+from src.scrapers.cli_common import (
+    DataDirOpt,
+    DelayOpt,
+    LimitOpt,
+    ProgressOpt,
+    QuietOpt,
+    resolve_progress_enabled,
+)
 from src.scrapers.hash_utils import hash_anime_data
+from src.scrapers.progress import scrape_progress
 from xml.etree import ElementTree as ET
 
 import httpx
 import structlog
 import typer
 
+from src.scrapers.http_base import RateLimitedHttpClient
 from src.scrapers.http_client import RetryingHttpClient
 from src.scrapers.logging_utils import configure_file_logging
 from src.scrapers.parsers.allcinema import (  # noqa: F401
@@ -147,7 +157,7 @@ _JOB_ROLE_MAP: dict[str, str] = {
 # ─── HTTP client ─────────────────────────────────────────────────────────────
 
 
-class AllcinemaClient:
+class AllcinemaClient(RateLimitedHttpClient):
     """Async HTTP client for allcinema.
 
     GET requests are delegated to the shared RetryingHttpClient (http_client.py).
@@ -155,6 +165,7 @@ class AllcinemaClient:
     """
 
     def __init__(self, delay: float = DEFAULT_DELAY, transport=None) -> None:
+        super().__init__(delay=delay)
         self._csrf_token: str = ""
         self._http = RetryingHttpClient(
             source="allcinema",
@@ -432,17 +443,13 @@ def save_person_record(persons_bw, rec: AllcinemaPersonRecord) -> None:
 
 
 def _load_checkpoint(path: Path) -> dict:
-    if path.exists():
-        try:
-            return json.loads(path.read_text())
-        except Exception:
-            pass
-    return {}
+    from src.scrapers.checkpoint import load_json_or
+    return load_json_or(path, {})
 
 
 def _save_checkpoint(path: Path, data: dict) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data))
+    from src.scrapers.checkpoint import atomic_write_json
+    atomic_write_json(path, data)
 
 
 # ─── Phase 2 execution ───────────────────────────────────────────────────────
@@ -453,8 +460,9 @@ async def _run_scrape_cinema(
     batch_save: int,
     delay: float,
     data_dir: Path,
+    progress_override: bool | None = None,
 ) -> None:
-    from src.scrapers.bronze_writer import BronzeWriter
+    from src.scrapers.bronze_writer import BronzeWriterGroup
 
     ckpt_path = data_dir / "checkpoint_cinema.json"
     ckpt = _load_checkpoint(ckpt_path)
@@ -462,61 +470,65 @@ async def _run_scrape_cinema(
     completed: set[int] = set(ckpt.get("completed", []))
     cinema_ids: list[int] = ckpt.get("cinema_ids", [])
 
-    anime_bw = BronzeWriter("allcinema", table="anime")
-    credits_bw = BronzeWriter("allcinema", table="credits")
-
     client = AllcinemaClient(delay=delay)
     done_this_run = 0
     anime_count = 0
     credit_count = 0
     try:
-        if not cinema_ids:
-            log.info("allcinema_cinema_sitemap_start")
-            cinema_ids = await fetch_sitemap_ids(
-                client, SITEMAP_CINEMA_PATTERN, SITEMAP_CINEMA_COUNT
-            )
-            ckpt["cinema_ids"] = cinema_ids
-            _save_checkpoint(ckpt_path, ckpt)
-            log.info("allcinema_cinema_ids_total", total=len(cinema_ids))
+        with BronzeWriterGroup("allcinema", tables=["anime", "credits"]) as g:
+            anime_bw = g["anime"]
+            credits_bw = g["credits"]
 
-        pending = [cid for cid in cinema_ids if cid not in completed]
-        if limit > 0:
-            pending = pending[:limit]
-
-        total = len(pending)
-
-        log.info(
-            "allcinema_cinema_scrape_start", pending=total, completed=len(completed)
-        )
-
-        for cinema_id in pending:
-            rec = await scrape_cinema(client, cinema_id)
-            completed.add(cinema_id)
-            done_this_run += 1
-
-            if rec is not None:
-                n_credits = save_anime_record(anime_bw, credits_bw, rec)
-                anime_count += 1
-                credit_count += n_credits
-
-            if done_this_run % batch_save == 0:
-                anime_bw.flush()
-                credits_bw.flush()
-                ckpt["completed"] = list(completed)
-                _save_checkpoint(ckpt_path, ckpt)
-                remaining = total - done_this_run
-                log.info(
-                    "allcinema_cinema_progress",
-                    done=done_this_run,
-                    remaining=remaining,
-                    anime=anime_count,
-                    credits=credit_count,
+            if not cinema_ids:
+                log.info("allcinema_cinema_sitemap_start")
+                cinema_ids = await fetch_sitemap_ids(
+                    client, SITEMAP_CINEMA_PATTERN, SITEMAP_CINEMA_COUNT
                 )
+                ckpt["cinema_ids"] = cinema_ids
+                _save_checkpoint(ckpt_path, ckpt)
+                log.info("allcinema_cinema_ids_total", total=len(cinema_ids))
 
-        anime_bw.flush()
-        credits_bw.flush()
-        ckpt["completed"] = list(completed)
-        _save_checkpoint(ckpt_path, ckpt)
+            pending = [cid for cid in cinema_ids if cid not in completed]
+            if limit > 0:
+                pending = pending[:limit]
+
+            total = len(pending)
+
+            log.info(
+                "allcinema_cinema_scrape_start", pending=total, completed=len(completed)
+            )
+
+            with scrape_progress(
+                total=total,
+                description="scraping allcinema cinema",
+                enabled=progress_override,
+            ) as p:
+                for cinema_id in pending:
+                    rec = await scrape_cinema(client, cinema_id)
+                    completed.add(cinema_id)
+                    done_this_run += 1
+                    p.advance()
+
+                    if rec is not None:
+                        n_credits = save_anime_record(anime_bw, credits_bw, rec)
+                        anime_count += 1
+                        credit_count += n_credits
+
+                    if done_this_run % batch_save == 0:
+                        g.flush_all()
+                        ckpt["completed"] = list(completed)
+                        _save_checkpoint(ckpt_path, ckpt)
+                        remaining = total - done_this_run
+                        p.log(
+                            "allcinema_cinema_progress",
+                            done=done_this_run,
+                            remaining=remaining,
+                            anime=anime_count,
+                            credits=credit_count,
+                        )
+
+            ckpt["completed"] = list(completed)
+            _save_checkpoint(ckpt_path, ckpt)
 
     finally:
         await client.close()
@@ -537,6 +549,7 @@ async def _run_scrape_persons(
     batch_save: int,
     delay: float,
     data_dir: Path,
+    progress_override: bool | None = None,
 ) -> None:
     import pyarrow.dataset as ds
 
@@ -575,31 +588,35 @@ async def _run_scrape_persons(
     total = len(pending)
     log.info("allcinema_persons_start", pending=total, completed=len(completed_persons))
 
-    persons_bw = BronzeWriter("allcinema", table="persons")
     client = AllcinemaClient(delay=delay)
     done_this_run = 0
     try:
-        for allcinema_pid in pending:
-            rec = await scrape_person(client, allcinema_pid)
-            completed_persons.add(allcinema_pid)
-            done_this_run += 1
+        with BronzeWriter("allcinema", table="persons") as persons_bw, scrape_progress(
+            total=total,
+            description="scraping allcinema persons",
+            enabled=progress_override,
+        ) as p:
+            for allcinema_pid in pending:
+                rec = await scrape_person(client, allcinema_pid)
+                completed_persons.add(allcinema_pid)
+                done_this_run += 1
+                p.advance()
 
-            if rec is not None:
-                save_person_record(persons_bw, rec)
+                if rec is not None:
+                    save_person_record(persons_bw, rec)
 
-            if done_this_run % batch_save == 0:
-                persons_bw.flush()
-                ckpt_person["completed"] = list(completed_persons)
-                _save_checkpoint(ckpt_person_path, ckpt_person)
-                log.info(
-                    "allcinema_persons_progress",
-                    done=done_this_run,
-                    remaining=total - done_this_run,
-                )
+                if done_this_run % batch_save == 0:
+                    persons_bw.flush()
+                    ckpt_person["completed"] = list(completed_persons)
+                    _save_checkpoint(ckpt_person_path, ckpt_person)
+                    p.log(
+                        "allcinema_persons_progress",
+                        done=done_this_run,
+                        remaining=total - done_this_run,
+                    )
 
-        persons_bw.flush()
-        ckpt_person["completed"] = list(completed_persons)
-        _save_checkpoint(ckpt_person_path, ckpt_person)
+            ckpt_person["completed"] = list(completed_persons)
+            _save_checkpoint(ckpt_person_path, ckpt_person)
 
     finally:
         await client.close()
@@ -712,10 +729,12 @@ def cmd_sitemap_anime(
 
 @app.command("cinema")
 def cmd_cinema(
-    limit: int = typer.Option(0, help="0=all"),
-    batch_save: int = typer.Option(SCRAPE_CHECKPOINT_INTERVAL, help="commit interval"),
-    delay: float = typer.Option(DEFAULT_DELAY, help="request interval (seconds)"),
-    data_dir: Path = typer.Option(DEFAULT_DATA_DIR),
+    limit: LimitOpt = 0,
+    batch_save: int = typer.Option(SCRAPE_CHECKPOINT_INTERVAL, "--batch-save", help="commit interval"),
+    delay: DelayOpt = DEFAULT_DELAY,
+    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
+    quiet: QuietOpt = False,
+    progress: ProgressOpt = False,
 ) -> None:
     """Phase 2: scrape cinema pages and save anime and credits to BRONZE."""
     log_path = configure_file_logging("allcinema")
@@ -726,16 +745,19 @@ def cmd_cinema(
             batch_save=batch_save,
             delay=delay,
             data_dir=data_dir,
+            progress_override=resolve_progress_enabled(quiet, progress),
         )
     )
 
 
 @app.command("persons")
 def cmd_persons(
-    limit: int = typer.Option(0, help="0=all"),
-    batch_save: int = typer.Option(SCRAPE_CHECKPOINT_INTERVAL, help="commit interval"),
-    delay: float = typer.Option(DEFAULT_DELAY, help="request interval (seconds)"),
-    data_dir: Path = typer.Option(DEFAULT_DATA_DIR),
+    limit: LimitOpt = 0,
+    batch_save: int = typer.Option(SCRAPE_CHECKPOINT_INTERVAL, "--batch-save", help="commit interval"),
+    delay: DelayOpt = DEFAULT_DELAY,
+    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
+    quiet: QuietOpt = False,
+    progress: ProgressOpt = False,
 ) -> None:
     """Phase 3: scrape person pages and save names and yomigana to BRONZE."""
     log_path = configure_file_logging("allcinema")
@@ -746,26 +768,31 @@ def cmd_persons(
             batch_save=batch_save,
             delay=delay,
             data_dir=data_dir,
+            progress_override=resolve_progress_enabled(quiet, progress),
         )
     )
 
 
 @app.command("run")
 def cmd_run(
-    limit: int = typer.Option(0, help="max items per phase (0=all)"),
-    delay: float = typer.Option(DEFAULT_DELAY),
-    data_dir: Path = typer.Option(DEFAULT_DATA_DIR),
-    skip_persons: bool = typer.Option(False, help="skip Phase 3"),
+    limit: LimitOpt = 0,
+    delay: DelayOpt = DEFAULT_DELAY,
+    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
+    skip_persons: bool = typer.Option(False, "--skip-persons", help="skip Phase 3"),
+    quiet: QuietOpt = False,
+    progress: ProgressOpt = False,
 ) -> None:
     """Run Phase 2 then Phase 3 in sequence."""
     log_path = configure_file_logging("allcinema")
     log.info("allcinema_run_command_start", log_file=str(log_path), limit=limit)
+    progress_override = resolve_progress_enabled(quiet, progress)
     asyncio.run(
         _run_scrape_cinema(
             limit=limit,
             batch_save=SCRAPE_CHECKPOINT_INTERVAL,
             delay=delay,
             data_dir=data_dir,
+            progress_override=progress_override,
         )
     )
     if not skip_persons:
@@ -775,6 +802,7 @@ def cmd_run(
                 batch_save=SCRAPE_CHECKPOINT_INTERVAL,
                 delay=delay,
                 data_dir=data_dir,
+                progress_override=progress_override,
             )
         )
 

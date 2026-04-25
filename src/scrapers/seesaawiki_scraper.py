@@ -25,7 +25,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import unquote
 
+from src.scrapers.cli_common import (
+    CheckpointIntervalOpt,
+    DataDirOpt,
+    DelayOpt,
+    ProgressOpt,
+    QuietOpt,
+    resolve_progress_enabled,
+)
 from src.scrapers.hash_utils import hash_anime_data
+from src.scrapers.progress import scrape_progress
 
 import httpx
 import structlog
@@ -582,16 +591,12 @@ def save_checkpoint(
     processed_urls: list[str],
     stats: dict,
 ) -> None:
-    """Save scraping progress to checkpoint file."""
-    data_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint_path = data_dir / "checkpoint.json"
-    checkpoint_path.write_text(
-        json.dumps(
-            {"processed_urls": processed_urls, "stats": stats},
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
+    """Save scraping progress to checkpoint file (atomic tmp → rename)."""
+    from src.scrapers.checkpoint import atomic_write_json
+    atomic_write_json(
+        data_dir / "checkpoint.json",
+        {"processed_urls": processed_urls, "stats": stats},
+        indent=2,
     )
 
 
@@ -621,6 +626,7 @@ async def scrape_seesaawiki(
     fresh: bool = False,
     list_only: bool = False,
     fetch_only: bool = False,
+    progress_override: bool | None = None,
 ) -> dict:
     """Scrape credit data from SeesaaWiki.
 
@@ -640,7 +646,7 @@ async def scrape_seesaawiki(
     Returns:
         Statistics dict
     """
-    from src.scrapers.bronze_writer import BronzeWriter
+    from src.scrapers.bronze_writer import BronzeWriterGroup
 
     if data_dir is None:
         data_dir = DEFAULT_DATA_DIR
@@ -655,11 +661,15 @@ async def scrape_seesaawiki(
         "llm_fallbacks": 0,
     }
 
-    anime_bw = BronzeWriter("seesaawiki", table="anime")
-    persons_bw = BronzeWriter("seesaawiki", table="persons")
-    credits_bw = BronzeWriter("seesaawiki", table="credits")
-    studios_bw = BronzeWriter("seesaawiki", table="studios")
-    anime_studios_bw = BronzeWriter("seesaawiki", table="anime_studios")
+    group = BronzeWriterGroup(
+        "seesaawiki",
+        tables=["anime", "persons", "credits", "studios", "anime_studios"],
+    )
+    anime_bw = group["anime"]
+    persons_bw = group["persons"]
+    credits_bw = group["credits"]
+    studios_bw = group["studios"]
+    anime_studios_bw = group["anime_studios"]
 
     async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
         # Phase 1: Enumerate pages
@@ -692,147 +702,164 @@ async def scrape_seesaawiki(
         processed_list: list[str] = list(processed_urls)
 
         # Phase 2 & 3: Fetch, parse, and save
-        for idx, page_info in enumerate(all_pages):
-            page_url = page_info["url"]
-            page_title = page_info["title"]
+        with scrape_progress(
+            total=len(all_pages),
+            description="seesaawiki scrape",
+            enabled=progress_override,
+        ) as p:
+            for idx, page_info in enumerate(all_pages):
+                page_url = page_info["url"]
+                page_title = page_info["title"]
 
-            if page_url in processed_urls:
-                stats["pages_skipped"] += 1
-                continue
+                if page_url in processed_urls:
+                    stats["pages_skipped"] += 1
+                    continue
 
-            try:
-                resp = await client.get(page_url, headers=HEADERS)
-                resp.raise_for_status()
-                html = resp.content.decode("euc-jp", errors="replace")
-            except (httpx.HTTPError, httpx.TimeoutException) as e:
-                log.warning("seesaa_fetch_error", url=page_url, error=str(e))
-                stats["pages_failed"] += 1
-                await asyncio.sleep(delay)
-                continue
+                try:
+                    resp = await client.get(page_url, headers=HEADERS)
+                    resp.raise_for_status()
+                    html = resp.content.decode("euc-jp", errors="replace")
+                except (httpx.HTTPError, httpx.TimeoutException) as e:
+                    log.warning("seesaa_fetch_error", url=page_url, error=str(e))
+                    stats["pages_failed"] += 1
+                    await asyncio.sleep(delay)
+                    continue
 
-            # Save raw HTML locally (always — for later reparse)
-            save_raw_html(data_dir, page_title, html)
+                # Save raw HTML locally (always — for later reparse)
+                save_raw_html(data_dir, page_title, html)
 
-            if fetch_only:
-                processed_urls.add(page_url)
-                processed_list.append(page_url)
-                stats["pages_processed"] += 1
-                if stats["pages_processed"] % checkpoint_interval == 0:
-                    save_checkpoint(data_dir, processed_list, stats)
-                    log.info(
-                        "seesaa_fetch_checkpoint",
-                        progress=f"{idx + 1}/{len(all_pages)}",
-                        pages=stats["pages_processed"],
-                    )
-                await asyncio.sleep(delay)
-                continue
-
-            body_text = extract_wiki_body(html)
-
-            # Parse with regex (Tier 1)
-            episodes = parse_episodes(body_text)
-            series_staff = parse_series_staff(body_text)
-
-            # Count total regex credits
-            all_credits: list[ParsedCredit] = []
-            for ep in episodes:
-                all_credits.extend(ep["credits"])
-            all_credits.extend(series_staff)
-            regex_credits = len(all_credits)
-
-            # Count unknown-role credits for LLM validation
-            unknown_credits = [c for c in all_credits if not c.is_known_role]
-
-            # LLM fallback (Tier 2): if regex yields <3 credits and text is substantial
-            llm_records: list[dict] = []
-            if llm_available and regex_credits < 3 and len(body_text) > 500:
-                llm_records = parse_with_llm(body_text)
-                if llm_records:
-                    stats["llm_fallbacks"] += 1
-
-            # LLM validation (Tier 1.5): validate unknown-role regex results
-            # If many credits have unknown roles, ask LLM to verify the parse
-            llm_validation: dict | None = None
-            if llm_available and unknown_credits and regex_credits >= 3:
-                unknown_ratio = len(unknown_credits) / regex_credits
-                if unknown_ratio > 0.5:
-                    llm_validation = validate_parse_with_llm(
-                        body_text,
-                        all_credits,
-                    )
-                    if llm_validation and llm_validation.get("should_halt"):
-                        # LLM says the parse looks wrong — halt
-                        log.error(
-                            "seesaa_parse_validation_failed",
-                            url=page_url,
-                            title=page_title,
-                            unknown_ratio=f"{unknown_ratio:.0%}",
-                            llm_reason=llm_validation.get("reason", ""),
-                            sample_unknowns=[
-                                f"{c.role}:{c.name}" for c in unknown_credits[:5]
-                            ],
-                        )
-                        # Flush what we have so far
-                        anime_bw.flush()
-                        persons_bw.flush()
-                        credits_bw.flush()
-                        studios_bw.flush()
-                        anime_studios_bw.flush()
+                if fetch_only:
+                    processed_urls.add(page_url)
+                    processed_list.append(page_url)
+                    stats["pages_processed"] += 1
+                    p.advance()
+                    if stats["pages_processed"] % checkpoint_interval == 0:
                         save_checkpoint(data_dir, processed_list, stats)
-                        log.error(
-                            "seesaa_halted",
-                            message=(
-                                "Parse validation failed — regex produced mostly "
-                                "unknown roles and LLM flagged the result as incorrect. "
-                                "Check the page manually and update the parser."
-                            ),
-                            page_url=page_url,
+                        p.log(
+                            "seesaa_fetch_checkpoint",
+                            progress=f"{idx + 1}/{len(all_pages)}",
+                            pages=stats["pages_processed"],
                         )
-                        sys.exit(1)
+                    await asyncio.sleep(delay)
+                    continue
 
-            # Generate anime ID
-            anime_id = make_seesaa_anime_id(page_title)
+                body_text = extract_wiki_body(html)
 
-            # Determine which parser was used
-            parser_used = "regex"
-            if llm_records and regex_credits < 3:
-                parser_used = "llm" if regex_credits == 0 else "regex+llm"
+                # Parse with regex (Tier 1)
+                episodes = parse_episodes(body_text)
+                series_staff = parse_series_staff(body_text)
 
-            # Save parsed intermediate data for verification
-            save_parsed_intermediate(
-                data_dir,
-                page_title,
-                anime_id,
-                body_text,
-                episodes,
-                series_staff,
-                llm_records,
-                parser_used,
-                llm_validation=llm_validation,
-            )
+                # Count total regex credits
+                all_credits: list[ParsedCredit] = []
+                for ep in episodes:
+                    all_credits.extend(ep["credits"])
+                all_credits.extend(series_staff)
+                regex_credits = len(all_credits)
 
-            # Write anime to bronze
-            anime = BronzeAnime(
-                id=anime_id,
-                title_ja=page_title,
-            )
-            anime_dict = anime.model_dump(mode="json")
-            # Add hash tracking for diff detection
-            anime_dict["fetched_at"] = datetime.now(timezone.utc).isoformat()
-            anime_dict["content_hash"] = hash_anime_data(anime_dict)
-            anime_bw.append(anime_dict)
-            stats["anime_created"] += 1
+                # Count unknown-role credits for LLM validation
+                unknown_credits = [c for c in all_credits if not c.is_known_role]
 
-            # Derive total episode count from parsed data (for open-ended ranges)
-            total_episodes = (
-                max((ep_data["episode"] or 0 for ep_data in episodes), default=0)
-                or None
-            )
+                # LLM fallback (Tier 2): if regex yields <3 credits and text is substantial
+                llm_records: list[dict] = []
+                if llm_available and regex_credits < 3 and len(body_text) > 500:
+                    llm_records = parse_with_llm(body_text)
+                    if llm_records:
+                        stats["llm_fallbacks"] += 1
 
-            # Save regex-parsed credits
-            for ep_data in episodes:
-                episode_num = ep_data["episode"]
-                for credit in ep_data["credits"]:
+                # LLM validation (Tier 1.5): validate unknown-role regex results
+                # If many credits have unknown roles, ask LLM to verify the parse
+                llm_validation: dict | None = None
+                if llm_available and unknown_credits and regex_credits >= 3:
+                    unknown_ratio = len(unknown_credits) / regex_credits
+                    if unknown_ratio > 0.5:
+                        llm_validation = validate_parse_with_llm(
+                            body_text,
+                            all_credits,
+                        )
+                        if llm_validation and llm_validation.get("should_halt"):
+                            # LLM says the parse looks wrong — halt
+                            log.error(
+                                "seesaa_parse_validation_failed",
+                                url=page_url,
+                                title=page_title,
+                                unknown_ratio=f"{unknown_ratio:.0%}",
+                                llm_reason=llm_validation.get("reason", ""),
+                                sample_unknowns=[
+                                    f"{c.role}:{c.name}" for c in unknown_credits[:5]
+                                ],
+                            )
+                            # Flush what we have so far
+                            group.flush_all()
+                            save_checkpoint(data_dir, processed_list, stats)
+                            log.error(
+                                "seesaa_halted",
+                                message=(
+                                    "Parse validation failed — regex produced mostly "
+                                    "unknown roles and LLM flagged the result as incorrect. "
+                                    "Check the page manually and update the parser."
+                                ),
+                                page_url=page_url,
+                            )
+                            sys.exit(1)
+
+                # Generate anime ID
+                anime_id = make_seesaa_anime_id(page_title)
+
+                # Determine which parser was used
+                parser_used = "regex"
+                if llm_records and regex_credits < 3:
+                    parser_used = "llm" if regex_credits == 0 else "regex+llm"
+
+                # Save parsed intermediate data for verification
+                save_parsed_intermediate(
+                    data_dir,
+                    page_title,
+                    anime_id,
+                    body_text,
+                    episodes,
+                    series_staff,
+                    llm_records,
+                    parser_used,
+                    llm_validation=llm_validation,
+                )
+
+                # Write anime to bronze
+                anime = BronzeAnime(
+                    id=anime_id,
+                    title_ja=page_title,
+                )
+                anime_dict = anime.model_dump(mode="json")
+                # Add hash tracking for diff detection
+                anime_dict["fetched_at"] = datetime.now(timezone.utc).isoformat()
+                anime_dict["content_hash"] = hash_anime_data(anime_dict)
+                anime_bw.append(anime_dict)
+                stats["anime_created"] += 1
+
+                # Derive total episode count from parsed data (for open-ended ranges)
+                total_episodes = (
+                    max((ep_data["episode"] or 0 for ep_data in episodes), default=0)
+                    or None
+                )
+
+                # Save regex-parsed credits
+                for ep_data in episodes:
+                    episode_num = ep_data["episode"]
+                    for credit in ep_data["credits"]:
+                        _save_credit(
+                            persons_bw,
+                            credits_bw,
+                            studios_bw,
+                            anime_studios_bw,
+                            person_cache,
+                            stats,
+                            anime_id,
+                            credit,
+                            episode=episode_num,
+                            total_episodes=total_episodes,
+                        )
+
+                # Save series-level staff
+                for credit in series_staff:
                     _save_credit(
                         persons_bw,
                         credits_bw,
@@ -842,73 +869,52 @@ async def scrape_seesaawiki(
                         stats,
                         anime_id,
                         credit,
-                        episode=episode_num,
+                        episode=None,
                         total_episodes=total_episodes,
                     )
 
-            # Save series-level staff
-            for credit in series_staff:
-                _save_credit(
-                    persons_bw,
-                    credits_bw,
-                    studios_bw,
-                    anime_studios_bw,
-                    person_cache,
-                    stats,
-                    anime_id,
-                    credit,
-                    episode=None,
-                    total_episodes=total_episodes,
-                )
+                # Save LLM-parsed credits (only if regex didn't find much)
+                if llm_records and regex_credits < 3:
+                    for record in llm_records:
+                        pc = ParsedCredit(
+                            role=record["role"],
+                            name=record["name"],
+                            position=0,  # LLM doesn't preserve ordering
+                            is_known_role=record["role"] in KNOWN_ROLES_JA,
+                        )
+                        _save_credit(
+                            persons_bw,
+                            credits_bw,
+                            studios_bw,
+                            anime_studios_bw,
+                            person_cache,
+                            stats,
+                            anime_id,
+                            pc,
+                            episode=record.get("episode"),
+                            total_episodes=total_episodes,
+                        )
 
-            # Save LLM-parsed credits (only if regex didn't find much)
-            if llm_records and regex_credits < 3:
-                for record in llm_records:
-                    pc = ParsedCredit(
-                        role=record["role"],
-                        name=record["name"],
-                        position=0,  # LLM doesn't preserve ordering
-                        is_known_role=record["role"] in KNOWN_ROLES_JA,
+                processed_urls.add(page_url)
+                processed_list.append(page_url)
+                stats["pages_processed"] += 1
+                p.advance()
+
+                # Checkpoint
+                if stats["pages_processed"] % checkpoint_interval == 0:
+                    group.flush_all()
+                    save_checkpoint(data_dir, processed_list, stats)
+                    p.log(
+                        "seesaa_checkpoint",
+                        progress=f"{idx + 1}/{len(all_pages)}",
+                        **stats,
                     )
-                    _save_credit(
-                        persons_bw,
-                        credits_bw,
-                        studios_bw,
-                        anime_studios_bw,
-                        person_cache,
-                        stats,
-                        anime_id,
-                        pc,
-                        episode=record.get("episode"),
-                        total_episodes=total_episodes,
-                    )
 
-            processed_urls.add(page_url)
-            processed_list.append(page_url)
-            stats["pages_processed"] += 1
+                await asyncio.sleep(delay)
 
-            # Checkpoint
-            if stats["pages_processed"] % checkpoint_interval == 0:
-                anime_bw.flush()
-                persons_bw.flush()
-                credits_bw.flush()
-                studios_bw.flush()
-                anime_studios_bw.flush()
-                save_checkpoint(data_dir, processed_list, stats)
-                log.info(
-                    "seesaa_checkpoint",
-                    progress=f"{idx + 1}/{len(all_pages)}",
-                    **stats,
-                )
-
-            await asyncio.sleep(delay)
-
-    # Final flush
-    anime_bw.flush()
-    persons_bw.flush()
-    credits_bw.flush()
-    studios_bw.flush()
-    anime_studios_bw.flush()
+    # Final flush + compact
+    group.flush_all()
+    group.compact_all()
 
     # Final checkpoint
     save_checkpoint(data_dir, processed_list, stats)
@@ -1057,13 +1063,15 @@ def reparse_from_raw(
     data_dir: Path | None = None,
     use_llm: bool = False,
     checkpoint_interval: int = SCRAPE_CHECKPOINT_INTERVAL,
+    progress_override: bool | None = None,
+    limit: int = 0,
 ) -> dict:
     """Re-parse all saved raw HTML files and write to BRONZE parquet.
 
     This allows re-running the parser on previously fetched pages
     without making any HTTP requests.
     """
-    from src.scrapers.bronze_writer import BronzeWriter
+    from src.scrapers.bronze_writer import BronzeWriterGroup
 
     if data_dir is None:
         data_dir = DEFAULT_DATA_DIR
@@ -1094,74 +1102,99 @@ def reparse_from_raw(
         "llm_fallbacks": 0,
     }
 
-    anime_bw = BronzeWriter("seesaawiki", table="anime")
-    persons_bw = BronzeWriter("seesaawiki", table="persons")
-    credits_bw = BronzeWriter("seesaawiki", table="credits")
-    studios_bw = BronzeWriter("seesaawiki", table="studios")
-    anime_studios_bw = BronzeWriter("seesaawiki", table="anime_studios")
+    group = BronzeWriterGroup(
+        "seesaawiki",
+        tables=["anime", "persons", "credits", "studios", "anime_studios"],
+    )
+    anime_bw = group["anime"]
+    persons_bw = group["persons"]
+    credits_bw = group["credits"]
+    studios_bw = group["studios"]
+    anime_studios_bw = group["anime_studios"]
 
     llm_available = use_llm and check_llm_available()
     person_cache: dict[str, Person] = {}
     html_files = sorted(raw_dir.glob("*.html"))
+    if limit > 0:
+        html_files = html_files[:limit]
     log.info("reparse_start", total_files=len(html_files))
 
-    for idx, html_path in enumerate(html_files):
-        stem = html_path.stem
-        title = title_by_filename.get(stem, stem)
+    with scrape_progress(
+        total=len(html_files),
+        description="seesaawiki reparse",
+        enabled=progress_override,
+    ) as p:
+        for idx, html_path in enumerate(html_files):
+            stem = html_path.stem
+            title = title_by_filename.get(stem, stem)
 
-        try:
-            html = html_path.read_text(encoding="utf-8")
-        except Exception as e:
-            log.warning("reparse_read_error", file=str(html_path), error=str(e))
-            stats["pages_failed"] += 1
-            continue
+            try:
+                html = html_path.read_text(encoding="utf-8")
+            except Exception as e:
+                log.warning("reparse_read_error", file=str(html_path), error=str(e))
+                stats["pages_failed"] += 1
+                continue
 
-        body_text = extract_wiki_body(html)
+            body_text = extract_wiki_body(html)
 
-        # Parse
-        episodes = parse_episodes(body_text)
-        series_staff = parse_series_staff(body_text)
-        regex_credits = sum(len(ep["credits"]) for ep in episodes) + len(series_staff)
+            # Parse
+            episodes = parse_episodes(body_text)
+            series_staff = parse_series_staff(body_text)
+            regex_credits = sum(len(ep["credits"]) for ep in episodes) + len(series_staff)
 
-        llm_records: list[dict] = []
-        if llm_available and regex_credits < 3 and len(body_text) > 500:
-            llm_records = parse_with_llm(body_text)
-            if llm_records:
-                stats["llm_fallbacks"] += 1
+            llm_records: list[dict] = []
+            if llm_available and regex_credits < 3 and len(body_text) > 500:
+                llm_records = parse_with_llm(body_text)
+                if llm_records:
+                    stats["llm_fallbacks"] += 1
 
-        anime_id = make_seesaa_anime_id(title)
+            anime_id = make_seesaa_anime_id(title)
 
-        parser_used = "regex"
-        if llm_records and regex_credits < 3:
-            parser_used = "llm" if regex_credits == 0 else "regex+llm"
+            parser_used = "regex"
+            if llm_records and regex_credits < 3:
+                parser_used = "llm" if regex_credits == 0 else "regex+llm"
 
-        # Save parsed intermediate
-        save_parsed_intermediate(
-            data_dir,
-            title,
-            anime_id,
-            body_text,
-            episodes,
-            series_staff,
-            llm_records,
-            parser_used,
-        )
+            # Save parsed intermediate
+            save_parsed_intermediate(
+                data_dir,
+                title,
+                anime_id,
+                body_text,
+                episodes,
+                series_staff,
+                llm_records,
+                parser_used,
+            )
 
-        # Write anime to bronze
-        anime = BronzeAnime(id=anime_id, title_ja=title)
-        anime_dict = anime.model_dump(mode="json")
-        # Add hash tracking for diff detection
-        anime_dict["fetched_at"] = datetime.now(timezone.utc).isoformat()
-        anime_dict["content_hash"] = hash_anime_data(anime_dict)
-        anime_bw.append(anime_dict)
-        stats["anime_created"] += 1
+            # Write anime to bronze
+            anime = BronzeAnime(id=anime_id, title_ja=title)
+            anime_dict = anime.model_dump(mode="json")
+            # Add hash tracking for diff detection
+            anime_dict["fetched_at"] = datetime.now(timezone.utc).isoformat()
+            anime_dict["content_hash"] = hash_anime_data(anime_dict)
+            anime_bw.append(anime_dict)
+            stats["anime_created"] += 1
 
-        total_episodes = (
-            max((ep_data["episode"] or 0 for ep_data in episodes), default=0) or None
-        )
+            total_episodes = (
+                max((ep_data["episode"] or 0 for ep_data in episodes), default=0) or None
+            )
 
-        for ep_data in episodes:
-            for credit in ep_data["credits"]:
+            for ep_data in episodes:
+                for credit in ep_data["credits"]:
+                    _save_credit(
+                        persons_bw,
+                        credits_bw,
+                        studios_bw,
+                        anime_studios_bw,
+                        person_cache,
+                        stats,
+                        anime_id,
+                        credit,
+                        episode=ep_data["episode"],
+                        total_episodes=total_episodes,
+                    )
+
+            for credit in series_staff:
                 _save_credit(
                     persons_bw,
                     credits_bw,
@@ -1171,64 +1204,44 @@ def reparse_from_raw(
                     stats,
                     anime_id,
                     credit,
-                    episode=ep_data["episode"],
+                    episode=None,
                     total_episodes=total_episodes,
                 )
 
-        for credit in series_staff:
-            _save_credit(
-                persons_bw,
-                credits_bw,
-                studios_bw,
-                anime_studios_bw,
-                person_cache,
-                stats,
-                anime_id,
-                credit,
-                episode=None,
-                total_episodes=total_episodes,
-            )
+            if llm_records and regex_credits < 3:
+                for record in llm_records:
+                    pc = ParsedCredit(
+                        role=record["role"],
+                        name=record["name"],
+                        position=0,
+                        is_known_role=record["role"] in KNOWN_ROLES_JA,
+                    )
+                    _save_credit(
+                        persons_bw,
+                        credits_bw,
+                        studios_bw,
+                        anime_studios_bw,
+                        person_cache,
+                        stats,
+                        anime_id,
+                        pc,
+                        episode=record.get("episode"),
+                        total_episodes=total_episodes,
+                    )
 
-        if llm_records and regex_credits < 3:
-            for record in llm_records:
-                pc = ParsedCredit(
-                    role=record["role"],
-                    name=record["name"],
-                    position=0,
-                    is_known_role=record["role"] in KNOWN_ROLES_JA,
-                )
-                _save_credit(
-                    persons_bw,
-                    credits_bw,
-                    studios_bw,
-                    anime_studios_bw,
-                    person_cache,
-                    stats,
-                    anime_id,
-                    pc,
-                    episode=record.get("episode"),
-                    total_episodes=total_episodes,
+            stats["pages_processed"] += 1
+            p.advance()
+
+            if stats["pages_processed"] % checkpoint_interval == 0:
+                group.flush_all()
+                p.log(
+                    "reparse_checkpoint",
+                    progress=f"{idx + 1}/{len(html_files)}",
+                    **stats,
                 )
 
-        stats["pages_processed"] += 1
-
-        if stats["pages_processed"] % checkpoint_interval == 0:
-            anime_bw.flush()
-            persons_bw.flush()
-            credits_bw.flush()
-            studios_bw.flush()
-            anime_studios_bw.flush()
-            log.info(
-                "reparse_checkpoint",
-                progress=f"{idx + 1}/{len(html_files)}",
-                **stats,
-            )
-
-    anime_bw.flush()
-    persons_bw.flush()
-    credits_bw.flush()
-    studios_bw.flush()
-    anime_studios_bw.flush()
+    group.flush_all()
+    group.compact_all()
 
     log.info("reparse_complete", **stats)
     return stats
@@ -1237,27 +1250,24 @@ def reparse_from_raw(
 @app.command()
 def scrape(
     max_pages: int = typer.Option(
-        0, "--max-pages", "-n", help="Maximum pages to process (0 = all)"
+        0, "--max-pages", "--limit", "-n",
+        help="Maximum pages to process (0 = all). Alias: --limit",
     ),
-    checkpoint: int = typer.Option(
-        10, "--checkpoint", "-c", help="Checkpoint interval (pages)"
-    ),
-    delay: float = typer.Option(
-        DEFAULT_DELAY, "--delay", "-d", help="Delay between requests (seconds)"
-    ),
+    checkpoint: CheckpointIntervalOpt = 10,
+    delay: DelayOpt = DEFAULT_DELAY,
     use_llm: bool = typer.Option(
         True, "--llm/--no-llm", help="Use LLM fallback for unparseable pages"
     ),
     fresh: bool = typer.Option(False, "--fresh", help="Ignore existing checkpoint"),
-    data_dir: Path = typer.Option(
-        DEFAULT_DATA_DIR, "--data-dir", help="Data directory"
-    ),
+    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
     list_only: bool = typer.Option(
         False, "--list-only", help="Only enumerate pages, don't scrape"
     ),
     fetch_only: bool = typer.Option(
         False, "--fetch-only", help="Only fetch raw HTML, don't parse or save to DB"
     ),
+    quiet: QuietOpt = False,
+    progress: ProgressOpt = False,
 ) -> None:
     """Fetch and parse credit data from SeesaaWiki."""
     from src.infra.logging import setup_logging
@@ -1274,6 +1284,7 @@ def scrape(
             fresh=fresh,
             list_only=list_only,
             fetch_only=fetch_only,
+            progress_override=resolve_progress_enabled(quiet, progress),
         )
     )
 
@@ -1282,8 +1293,9 @@ def scrape(
 
 @app.command()
 def reparse(
-    data_dir: Path = typer.Option(
-        DEFAULT_DATA_DIR, "--data-dir", help="Data directory with raw/ HTML files"
+    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
+    limit: int = typer.Option(
+        0, "--limit", "-n", help="Max HTML files to reparse (0=all)"
     ),
     use_llm: bool = typer.Option(
         False, "--llm/--no-llm", help="Use LLM fallback for unparseable pages"
@@ -1291,6 +1303,8 @@ def reparse(
     checkpoint: int = typer.Option(
         50, "--checkpoint", "-c", help="Checkpoint interval"
     ),
+    quiet: QuietOpt = False,
+    progress: ProgressOpt = False,
 ) -> None:
     """Re-parse saved raw HTML files (no HTTP requests).
 
@@ -1305,6 +1319,8 @@ def reparse(
         data_dir=data_dir,
         use_llm=use_llm,
         checkpoint_interval=checkpoint,
+        progress_override=resolve_progress_enabled(quiet, progress),
+        limit=limit,
     )
 
     log.info("seesaa_reparse_saved", **stats)
@@ -1312,9 +1328,7 @@ def reparse(
 
 @app.command("validate-samples")
 def validate_samples(
-    data_dir: Path = typer.Option(
-        DEFAULT_DATA_DIR, "--data-dir", help="Data directory with raw/ HTML files"
-    ),
+    data_dir: DataDirOpt = DEFAULT_DATA_DIR,
     num_samples: int = typer.Option(
         10, "--num-samples", "-n", help="Number of random pages to validate"
     ),
