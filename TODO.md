@@ -210,6 +210,9 @@ scraper 内部設計 (リファクタ):
     keyframe phase2/3            ✅ BronzeWriter ×5/4 → BronzeWriterGroup 統合 + dict checkpoint → Checkpoint クラス移行
     http_base.py 削除            ✅ DualWindowRateLimiter → http_client.py、RateLimitedHttpClient 継承除去
     retry_if_result バグ修正     ✅ context manager → callable パターン (AsyncRetrying(...)(_once))
+    keyframe cli_common 統一     ✅ DelayOpt/LimitOpt/ForceOpt/DataDirOpt 適用
+    keyframe RetryingHttpClient  ✅ KeyframeApiClient 独自 retry → RetryingHttpClient 委譲
+    keyframe Phase3 ScrapeRunner ✅ person ループ → ScrapeRunner + cache_store (gzip 廃止)
 ```
 
 ---
