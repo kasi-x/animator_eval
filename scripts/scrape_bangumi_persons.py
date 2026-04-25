@@ -1,4 +1,4 @@
-"""Scrape bangumi person details via /v0/persons/{id} API → BRONZE parquet.
+"""Scrape bangumi person details → BRONZE parquet.
 
 Reads the referenced person_id set from Card 03 parquet outputs
 (subject_persons ∪ person_characters), then fetches each person via
@@ -13,11 +13,16 @@ DuckDB reads all files via glob: read_parquet('.../**/*.parquet').
 Checkpoint: data/bangumi/checkpoint_persons.json
     {"completed_ids": [...], "failed_ids": [{"id": 42, "status": 404}], "last_run_at": "..."}
 
+Client selection (--client flag, default: graphql):
+    graphql  Uses BangumiGraphQLClient.fetch_person() (single-subject GraphQL POST).
+    v0       Uses BangumiClient.fetch_person() (legacy REST).
+
 Usage:
     pixi run python scripts/scrape_bangumi_persons.py --dry-run --limit 10
     pixi run python scripts/scrape_bangumi_persons.py --limit 10
     pixi run python scripts/scrape_bangumi_persons.py --resume
     pixi run python scripts/scrape_bangumi_persons.py --force
+    pixi run python scripts/scrape_bangumi_persons.py --client v0   # legacy fallback
 """
 
 from __future__ import annotations
@@ -25,11 +30,10 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
-import os
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any
+from typing_extensions import Annotated
 
 # Project root on sys.path when executed directly
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -38,11 +42,22 @@ import duckdb
 import structlog
 import typer
 from rich.console import Console
-from rich.progress import BarColumn, MofNCompleteColumn, Progress, TextColumn, TimeRemainingColumn
 
+from src.scrapers.bangumi_graphql_scraper import BangumiGraphQLClient, adapt_person_gql_to_v0
 from src.scrapers.bangumi_scraper import BangumiClient
 from src.scrapers.bronze_writer import BronzeWriter
+from src.scrapers.checkpoint import Checkpoint
+from src.scrapers.cli_common import (
+    DryRunOpt,
+    ForceOpt,
+    LimitOpt,
+    ProgressOpt,
+    QuietOpt,
+    ResumeOpt,
+    resolve_progress_enabled,
+)
 from src.scrapers.exceptions import ScraperError
+from src.scrapers.progress import scrape_progress
 
 log = structlog.get_logger()
 console = Console()
@@ -69,38 +84,6 @@ _CHECKPOINT_FLUSH_EVERY = 100  # completed persons per flush
 # images serialised as json.dumps(dict) — all 4 keys preserved.
 # Optional numeric fields (blood_type, birth_*) default to None.
 # ---------------------------------------------------------------------------
-
-
-# ---------------------------------------------------------------------------
-# Checkpoint helpers
-# ---------------------------------------------------------------------------
-
-
-def _load_checkpoint() -> dict[str, Any]:
-    """Load persons checkpoint from disk; return empty structure if missing."""
-    if _CHECKPOINT_PATH.exists():
-        try:
-            return json.loads(_CHECKPOINT_PATH.read_text(encoding="utf-8"))
-        except Exception as exc:
-            log.warning("checkpoint_persons_load_error", error=str(exc))
-    return {"completed_ids": [], "failed_ids": [], "last_run_at": None}
-
-
-def _save_checkpoint(checkpoint: dict[str, Any]) -> None:
-    """Atomically write checkpoint (tmp → rename)."""
-    checkpoint["last_run_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
-    _CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp_str = tempfile.mkstemp(
-        dir=_CHECKPOINT_PATH.parent, prefix=".checkpoint_persons_tmp_"
-    )
-    try:
-        os.write(fd, json.dumps(checkpoint, ensure_ascii=False).encode("utf-8"))
-        os.close(fd)
-        Path(tmp_str).rename(_CHECKPOINT_PATH)
-    except Exception:
-        os.close(fd)
-        Path(tmp_str).unlink(missing_ok=True)
-        raise
 
 
 # ---------------------------------------------------------------------------
@@ -170,106 +153,116 @@ def _to_int32(value: Any) -> int | None:
 
 async def _scrape(
     person_ids: list[int],
-    checkpoint: dict[str, Any],
+    cp: Checkpoint,
     date_str: str,
     dry_run: bool,
-) -> dict[str, Any]:
+    use_graphql: bool = True,
+    progress_override: bool | None = None,
+) -> Checkpoint:
     """Fetch person detail for each person_id; write parquet + checkpoint.
 
     Each flush writes a new UUID parquet file so resumed runs never overwrite
     previously written data — old files are preserved and DuckDB reads all via glob.
-    """
-    completed_set: set[int] = set(checkpoint.get("completed_ids") or [])
-    failed_ids: list[dict[str, Any]] = list(checkpoint.get("failed_ids") or [])
-    failed_set: set[int] = {f["id"] for f in failed_ids}
 
-    pending = [pid for pid in person_ids if pid not in completed_set and pid not in failed_set]
+    Args:
+        person_ids: list of person IDs to process.
+        cp: Checkpoint instance.
+        date_str: YYYYMMDD string for output partitioning.
+        dry_run: if True, only print stats and return.
+        use_graphql: if True, use BangumiGraphQLClient; if False, use BangumiClient (v0).
+        progress_override: rich progress bar override (None = auto).
+    """
+    completed_set: set[int] = set(cp.completed_set)  # type: ignore[arg-type]
+    pending = cp.pending(person_ids)
+
+    client_label = "graphql" if use_graphql else "v0"
 
     if dry_run:
         eta_secs = len(pending)  # 1 req/sec
         console.print(
-            f"[bold cyan]dry-run[/bold cyan]  "
+            f"[bold cyan]dry-run[/bold cyan] [client={client_label}]  "
             f"total={len(person_ids):,}  completed={len(completed_set):,}  "
-            f"failed={len(failed_set):,}  pending={len(pending):,}  "
+            f"failed={len(cp.failed_set):,}  pending={len(pending):,}  "
             f"ETA≈{eta_secs // 60}m {eta_secs % 60}s"
         )
-        return checkpoint
+        return cp
 
     if not pending:
         console.print("[green]All persons already completed — nothing to do.[/green]")
-        return checkpoint
+        return cp
 
     # BronzeWriter: each flush writes a new UUID file; old files are preserved on resume.
     # with block auto-flushes + compacts the partition on exit.
     date = dt.date.fromisoformat(date_str)
     with BronzeWriter("bangumi", table="persons", date=date) as bw:
         try:
-            async with BangumiClient() as client:
-                with Progress(
-                    TextColumn("[progress.description]{task.description}"),
-                    BarColumn(),
-                    MofNCompleteColumn(),
-                    TimeRemainingColumn(),
-                    console=console,
-                    transient=False,
-                ) as progress:
-                    task = progress.add_task("scraping persons", total=len(pending))
+            # Open either the GraphQL client or the legacy v0 client.
+            if use_graphql:
+                active_client = BangumiGraphQLClient()
+            else:
+                active_client = BangumiClient()  # type: ignore[assignment]
 
-                    for i, person_id in enumerate(pending):
-                        fetched_at = dt.datetime.now(dt.timezone.utc)
+            async with active_client, scrape_progress(
+                total=len(pending),
+                description=f"scraping persons [{client_label}]",
+                enabled=progress_override,
+            ) as p:
+                for i, person_id in enumerate(pending):
+                    fetched_at = dt.datetime.now(dt.timezone.utc)
 
-                        try:
-                            person = await client.fetch_person(person_id)
-                        except ScraperError as exc:
-                            log.error(
-                                "bangumi_person_fetch_failed",
-                                person_id=person_id,
-                                error=str(exc),
-                            )
-                            failed_ids.append(
-                                {"id": person_id, "status": "error", "detail": str(exc)}
-                            )
-                            failed_set.add(person_id)
-                            progress.advance(task)
-                            continue
+                    try:
+                        person_raw = await active_client.fetch_person(person_id)
+                    except ScraperError as exc:
+                        log.error(
+                            "bangumi_person_fetch_failed",
+                            person_id=person_id,
+                            client=client_label,
+                            error=str(exc),
+                        )
+                        cp.mark_failed(person_id, status="error", detail=str(exc))
+                        p.advance()
+                        continue
 
-                        if person is None:
-                            # 404 — skip + record
-                            failed_ids.append({"id": person_id, "status": 404})
-                            failed_set.add(person_id)
-                            log.info("bangumi_person_not_found", person_id=person_id)
-                            progress.advance(task)
-                            continue
+                    if person_raw is None:
+                        # 404 / NOT_FOUND — skip + record
+                        cp.mark_failed(person_id, status=404)
+                        log.info("bangumi_person_not_found", person_id=person_id)
+                        p.advance()
+                        continue
 
-                        bw.append(_build_person_row(person, fetched_at))
-                        completed_set.add(person_id)
-                        checkpoint["completed_ids"] = sorted(completed_set)
-                        checkpoint["failed_ids"] = failed_ids
+                    # Normalise GraphQL camelCase response to v0 snake_case shape.
+                    if use_graphql:
+                        person = adapt_person_gql_to_v0(person_raw)
+                    else:
+                        person = person_raw
 
-                        if (i + 1) % _CHECKPOINT_FLUSH_EVERY == 0:
-                            bw.flush()
-                            _save_checkpoint(checkpoint)
-                            log.info(
-                                "bangumi_persons_checkpoint_flushed",
-                                completed=len(completed_set),
-                                pending_remaining=len(pending) - (i + 1),
-                            )
+                    bw.append(_build_person_row(person, fetched_at))
+                    completed_set.add(person_id)
+                    cp.sync_completed(completed_set)
 
-                        progress.advance(task)
+                    if (i + 1) % _CHECKPOINT_FLUSH_EVERY == 0:
+                        bw.flush()
+                        cp.save()
+                        p.log(
+                            "bangumi_persons_checkpoint_flushed",
+                            completed=len(completed_set),
+                            pending_remaining=len(pending) - (i + 1),
+                        )
+
+                    p.advance()
 
         finally:
             # Always flush remaining rows so partial progress is persisted on Ctrl+C
             bw.flush()
 
-    checkpoint["completed_ids"] = sorted(completed_set)
-    checkpoint["failed_ids"] = failed_ids
-    _save_checkpoint(checkpoint)
+    cp.sync_completed(completed_set)
+    cp.save()
     log.info(
         "bangumi_persons_scrape_done",
         completed=len(completed_set),
-        failed=len(failed_ids),
+        failed=len(cp.failed_ids),
     )
-    return checkpoint
+    return cp
 
 
 # ---------------------------------------------------------------------------
@@ -278,36 +271,32 @@ async def _scrape(
 
 app = typer.Typer(
     name="scrape-bangumi-persons",
-    help="Fetch bangumi person details via /v0/persons/{id} API → BRONZE parquet.",
+    help="Fetch bangumi person details → BRONZE parquet.",
     add_completion=False,
 )
+
+_ClientOpt = Annotated[
+    str,
+    typer.Option(
+        "--client",
+        help="API client to use: 'graphql' (default) or 'v0' (legacy REST).",
+    ),
+]
 
 
 @app.command()
 def main(
-    limit: int = typer.Option(
-        0,
-        "--limit",
-        "-n",
-        help="Process at most N not-yet-completed persons (0 = all).",
-    ),
-    dry_run: bool = typer.Option(
-        False,
-        "--dry-run",
-        help="Show pending count and ETA; do not write anything.",
-    ),
-    resume: bool = typer.Option(
-        True,
-        "--resume/--no-resume",
-        help="Honor existing checkpoint (default: yes).",
-    ),
-    force: bool = typer.Option(
-        False,
-        "--force",
-        help="Ignore checkpoint; reprocess all persons.",
-    ),
+    limit: LimitOpt = 0,
+    dry_run: DryRunOpt = False,
+    resume: ResumeOpt = True,
+    force: ForceOpt = False,
+    quiet: QuietOpt = False,
+    progress: ProgressOpt = False,
+    client: _ClientOpt = "graphql",
 ) -> None:
-    """Scrape bangumi person details (Card 04) via /v0/persons/{id} API."""
+    """Scrape bangumi person details (Card 04) via GraphQL (default) or v0 API."""
+    if client not in ("graphql", "v0"):
+        raise typer.BadParameter(f"--client must be 'graphql' or 'v0', got: {client!r}")
     structlog.configure(processors=[structlog.dev.ConsoleRenderer()])
     asyncio.run(
         _main(
@@ -315,6 +304,8 @@ def main(
             dry_run=dry_run,
             resume=resume,
             force=force,
+            client=client,
+            progress_override=resolve_progress_enabled(quiet, progress),
         )
     )
 
@@ -325,6 +316,8 @@ async def _main(
     dry_run: bool,
     resume: bool,
     force: bool,
+    client: str = "graphql",
+    progress_override: bool | None = None,
 ) -> None:
     date_str = dt.date.today().strftime("%Y%m%d")
 
@@ -339,22 +332,19 @@ async def _main(
 
     # 2. Load checkpoint
     if force:
-        checkpoint: dict[str, Any] = {"completed_ids": [], "failed_ids": [], "last_run_at": None}
+        cp = Checkpoint(_CHECKPOINT_PATH)
         log.info("bangumi_persons_checkpoint_cleared_force")
     elif resume:
-        checkpoint = _load_checkpoint()
-        completed_count = len(checkpoint.get("completed_ids") or [])
-        failed_count = len(checkpoint.get("failed_ids") or [])
+        cp = Checkpoint.load(_CHECKPOINT_PATH)
         console.print(
-            f"[cyan]Checkpoint:[/cyan] completed={completed_count:,}  failed={failed_count:,}"
+            f"[cyan]Checkpoint:[/cyan] "
+            f"completed={len(cp.completed_set):,}  failed={len(cp.failed_set):,}"
         )
     else:
-        checkpoint = {"completed_ids": [], "failed_ids": [], "last_run_at": None}
+        cp = Checkpoint(_CHECKPOINT_PATH)
 
     # 3. Apply --limit: slice the pending list only
-    completed_set = set(checkpoint.get("completed_ids") or [])
-    failed_set = {f["id"] for f in (checkpoint.get("failed_ids") or [])}
-    pending = [pid for pid in all_ids if pid not in completed_set and pid not in failed_set]
+    pending = cp.pending(all_ids)
 
     if limit > 0:
         pending = pending[:limit]
@@ -367,9 +357,11 @@ async def _main(
     # Pass only the pending slice (not all_ids) so --limit is honoured exactly
     await _scrape(
         person_ids=pending if limit > 0 else all_ids,
-        checkpoint=checkpoint,
+        cp=cp,
         date_str=date_str,
         dry_run=dry_run,
+        use_graphql=(client == "graphql"),
+        progress_override=progress_override,
     )
 
     if not dry_run:

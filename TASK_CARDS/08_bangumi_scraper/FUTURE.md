@@ -235,14 +235,27 @@ Card 08 (`08_image_download.md`) で実装予定。スコープ:
 - コスト: 既存 v0 + dump で代替可能なので追加価値は低
 - 判断: **DEFER** (公式 v0 で困った時のみ)
 
-### 5-B. GraphQL p1 (`https://next.bgm.tv/p1/...`)
+### 5-B. GraphQL (`https://api.bgm.tv/v0/graphql`) — DISCOVERED — Card 09 で実装中
 
-- 状態: 試験的、公式ドキュメント未整備
-- 取得方法: schema introspection (`{__schema{...}}`) で endpoint 構造を発掘可
-- 価値: search / collection / 関係 を **複合 query** で 1 req に圧縮、`/v0` の N+1 問題を回避
-- リスク: API stability 保証なし、 endpoint URL が変動可能
-- 用途: 大規模 batch 取得 (現用途では subject 単位 sequential で十分なので不要)
-- 判断: **DEFER** (将来 batch query 必要時のみ)
+- **状態**: **DISCOVERED — Card 09 として実装中** (2026-04-25)
+- **確認済み endpoint**: `https://api.bgm.tv/v0/graphql` (POST, Content-Type: application/json)
+  - サーバー: `bangumi/server-private` (Fastify + mercurius)
+  - Altair UI: `/v0/altair/` (ブラウザで動作確認済み)
+  - Introspection: **ENABLED**
+- **スキーマサマリ** (introspection 確認済み):
+  - Top-level Query: `me`, `character(id: Int!)`, `person(id: Int!)`, `subject(id: Int!)`
+  - 主要型: `Subject`, `Person`, `Character`, `Episode`, `SlimPerson`, `SlimSubject`
+  - Subject の paginated sub-resolvers: `persons(limit, offset)`, `characters(limit, offset)`, `relations(limit, offset, includeTypes, excludeTypes)`
+  - `SubjectRating` フィールド: `score`, `rank`, `total` — **H1 により scoring path 流入禁止、BRONZE display のみ**
+- **バッチクエリ確認済み**: `allowBatchedQueries: true` — N 件を alias (`s100: subject(id:100) {...}`) で 1 POST に束ねられる
+- **実装内容** (Card 09):
+  - `src/scrapers/queries/bangumi_graphql.py` — クエリ文字列定数
+  - `src/scrapers/bangumi_graphql_scraper.py` — `BangumiGraphQLClient` (主経路)
+  - orchestrator scripts に `--client graphql|v0` フラグ追加 (default: graphql)
+  - レート予算共有: `_HOST_RATE_LIMITER` を v0 client と共用
+- **スループット**: batch_size=25 で ~25x (relations backfill)、persons/characters は 1:1 だが latency 削減
+- **rollback**: `--client v0` フラグで即座にフォールバック可能
+- 詳細は `09_graphql_migration.md` 参照
 
 ### 5-C. HTML scrape (`https://bgm.tv/subject/{id}` 系)
 
@@ -286,7 +299,7 @@ Card 08 (`08_image_download.md`) で実装予定。スコープ:
 | Wiki 改定履歴 | 高 | なし | **NEVER** |
 | ユーザーコレクション | 中 | なし (PII) | **NEVER** |
 | レガシー API responseGroup=large (5-A) | 低 | LOW (v0+dump で代替) | **DEFER** |
-| GraphQL p1 (5-B) | 低 (探索コスト) | LOW (現用途) | **DEFER** |
+| GraphQL (5-B) | 低 (実装済み) | HIGH (batch ~25x) | **NOW** (Card 09 実装中) |
 | HTML 編集履歴 (5-C) | 中-高 (HTML parser) | MEDIUM (将来 wiki 研究) | **DEFER** |
 | HTML 評価分布 (5-C) | 低 | なし (H1 違反) | **NEVER** |
 | Search API (5-D) | 低 | MEDIUM (ER 補強) | **DEFER** (ER 改修時) |

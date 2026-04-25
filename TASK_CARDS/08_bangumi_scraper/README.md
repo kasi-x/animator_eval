@@ -35,6 +35,7 @@ result/bronze/source=bangumi/table={subjects,subject_persons,subject_characters,
 | `05_character_detail.md` | **API** | 🟢 | `/v0/characters/{id}` → `src_bangumi_characters` (最後回し) |
 | `06_incremental_update.md` | **API** | 🟢 | 差分更新 (週次 dump diff + 関係 re-scrape、cron) |
 | `08_image_download.md` | **CDN DL** | 🟢 | BRONZE 画像 URL → local files + image_manifest BRONZE parquet |
+| `09_graphql_migration.md` | **GraphQL** | 🟢 | GraphQL クライアント実装 (主経路化) + v0 fallback |
 
 ## Hard constraints
 
@@ -45,6 +46,7 @@ result/bronze/source=bangumi/table={subjects,subject_persons,subject_characters,
 ## 関連ドキュメント
 
 - [`08_image_download.md`](08_image_download.md) — 画像 DL フェーズ (Card 01-05 全完了後に着手)
+- [`09_graphql_migration.md`](09_graphql_migration.md) — GraphQL クライアント実装 (主経路化・v0 フォールバック設計)
 - [`FUTURE.md`](FUTURE.md) — 未取得 bangumi 公開情報の整理 (エンドポイント / コスト / 判断マトリックス)
 
 ## 生データ保全方針
