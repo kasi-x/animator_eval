@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>映画アニメ テスト劇場アニメ(2019) - allcinema</title>
+</head>
+<body id="page-movie-index">
+
+<div class="movie-area-title">
+    <h1 class="movie-title">テスト劇場アニメ<span class="movie-productYear">2019</span></h1>
+</div>
+
+<div class="movie-area-spec">
+    <!--ジャンル-->
+    <div class='label label-default'>映画</div><div class='label label-default'>アニメ</div>
+    <!--/ジャンル-->
+</div>
+<!--/movie-area-media-->
+
+<div class="movie-area-spec">
+    <span class="movie-country">日本</span>
+</div>
+
+<div class="movie-area-spec movie-area-spec-theater">
+    <!-- 公開日 -->
+    <span class="movie-published" itemprop="datePublished" content="2019-07-19">2019年07月19日</span>
+    <!-- /公開日 -->
+
+    <!-- 配給 -->
+    <span class="movie-distributer"><a href="/company/12/">東宝</a></span>
+    <!--/配給-->
+
+    <!--映倫-->
+    <span class="movie-eirin">G</span>
+    <!--/映倫-->
+</div>
+
+<div class="movie-area-spec movie-area-spec-theater-detail">
+    <span class="movie-theater">450館</span>
+    <span class="spec-sep">|</span>
+    <span class="movie-box-office">40.5億円</span>
+    <span class="spec-sep">|</span>
+    <span class="movie-screen">2スクリーン</span>
+    <span class="spec-sep">|</span>
+    <span class="movie-week">6週間</span>
+</div>
+
+<script>
+        var PageSetting = function(){
+            this.key                 = 99999;
+            this.contentsTabId       = 'tabContents';
+            this.synopsis            = "テスト用あらすじです。";
+            this.animeFlag           = "アニメ";
+            this.japaneserelease     = "邦画";
+        };
+        var oPs = new PageSetting();
+
+        var CreditJson = function(){
+            this.data = {"staff":{"jobs":[{"job":{"jobid":2,"jobname":"監督","jobsort":10},"persons":[{"person":{"personid":100001,"personnamemain":{"personname":"テスト監督","yomigana":"てすと・かんとく","englishname":"Test Director","personnamereference":""},"person_order":0,"imagesidlinksid":0,"mainimage":[]},"search":{"distance":0},"creditreference":""}]}]},"cast":{"jobs":[],"castNameExist":false}};
+        };
+
+        MovieCompanyJson = function(){
+            this.data = {"moviecompanyjobs":[]};
+        };
+
+        //youtube用
+        function getYoutubeSearch(){
+            var sep     = ",";
+            var result  = "";
+            var title   = "テスト劇場アニメ";
+            var media   = "映画";
+            var anime   = "アニメ";
+            var engTitle = ""
+            result = title;
+            return result;
+        };
+</script>
+</body>
+</html>

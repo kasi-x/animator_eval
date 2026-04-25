@@ -31,6 +31,15 @@ class AllcinemaAnimeRecord:
     start_date: str | None = None
     synopsis: str = ""
     titles_alt: str = "{}"
+    # media type: TV / 映画 / OVA / TVM / etc.
+    media: str = ""
+    # theatrical release metadata (empty for TV/OVA)
+    distributor: str = ""
+    eirin: str = ""
+    theater_count: int | None = None
+    box_office: str = ""
+    screen_count: int | None = None
+    screening_weeks: int | None = None
     staff: list[AllcinemaCredit] = field(default_factory=list)
     cast: list[AllcinemaCredit] = field(default_factory=list)
 
@@ -45,6 +54,15 @@ class AllcinemaPersonRecord:
     name_zh: str = ""
     names_alt: str = "{}"  # JSON dict for non-JA/EN/KO/ZH scripts (not typically populated from allcinema)
     hometown: str = ""
+
+
+def _extract_between_comments(html: str, open_comment: str, close_comment: str) -> str:
+    """Extract text between two HTML comment markers, stripping inner tags."""
+    pattern = re.escape(open_comment) + r"(.*?)" + re.escape(close_comment)
+    m = re.search(pattern, html, re.DOTALL)
+    if not m:
+        return ""
+    return re.sub(r"<[^>]+>", "", m.group(1)).strip()
 
 
 def _parse_cinema_html(html: str, cinema_id: int) -> AllcinemaAnimeRecord | None:
@@ -119,11 +137,53 @@ def _parse_cinema_html(html: str, cinema_id: int) -> AllcinemaAnimeRecord | None
                 "allcinema_credit_parse_error", cinema_id=cinema_id, error=str(exc)
             )
 
+    # media type — extracted from inline JS `var media = "...";`
+    media = ""
+    m_media = re.search(r'var\s+media\s*=\s*"([^"]*)"', html)
+    if m_media:
+        media = m_media.group(1)
+
+    distributor = _extract_between_comments(html, "<!-- 配給 -->", "<!--/配給-->")
+    eirin = _extract_between_comments(html, "<!--映倫-->", "<!--/映倫-->")
+
+    theater_count: int | None = None
+    m_theater = re.search(r'<span[^>]*class\s*=\s*"[^"]*movie-theater[^"]*"[^>]*>([^<]*)</span>', html)
+    if m_theater:
+        m_num = re.search(r'(\d+)', m_theater.group(1))
+        if m_num:
+            theater_count = int(m_num.group(1))
+
+    box_office = ""
+    m_box = re.search(r'<span[^>]*class\s*=\s*"[^"]*movie-box-office[^"]*"[^>]*>(.*?)</span>', html, re.DOTALL)
+    if m_box:
+        box_office = re.sub(r"<[^>]+>", "", m_box.group(1)).strip()
+
+    screen_count: int | None = None
+    m_screen = re.search(r'<span[^>]*class\s*=\s*"[^"]*movie-screen[^"]*"[^>]*>([^<]*)</span>', html)
+    if m_screen:
+        m_num = re.search(r'(\d+)', m_screen.group(1))
+        if m_num:
+            screen_count = int(m_num.group(1))
+
+    screening_weeks: int | None = None
+    m_weeks = re.search(r'<span[^>]*class\s*=\s*"[^"]*movie-week[^"]*"[^>]*>([^<]*)</span>', html)
+    if m_weeks:
+        m_num = re.search(r'(\d+)', m_weeks.group(1))
+        if m_num:
+            screening_weeks = int(m_num.group(1))
+
     return AllcinemaAnimeRecord(
         cinema_id=cinema_id,
         title_ja=title_ja,
         year=year,
         synopsis=synopsis,
+        media=media,
+        distributor=distributor,
+        eirin=eirin,
+        theater_count=theater_count,
+        box_office=box_office,
+        screen_count=screen_count,
+        screening_weeks=screening_weeks,
         staff=staff_list,
         cast=cast_list,
     )
@@ -132,7 +192,7 @@ def _parse_cinema_html(html: str, cinema_id: int) -> AllcinemaAnimeRecord | None
 def _parse_person_html(html: str, person_id: int) -> AllcinemaPersonRecord:
     """Parse a person page HTML and return an AllcinemaPersonRecord."""
     name_ja = ""
-    m_h1 = re.search(r'<div\s+class\s*=\s*"person-area-name"\s*>(.*?)</div>', html)
+    m_h1 = re.search(r'<div\s+class\s*=\s*"person-area-name"\s*>(.*?)</div>', html, re.DOTALL)
     if m_h1:
         name_ja = re.sub(r"<[^>]+>", "", m_h1.group(1)).strip()
     if not name_ja:
@@ -155,7 +215,8 @@ def _parse_person_html(html: str, person_id: int) -> AllcinemaPersonRecord:
         if m_hometown:
             hometown = re.sub(r"<[^>]+>", "", m_hometown.group(1)).strip()
 
-    name_ja_r, name_ko_r, name_zh_r, names_alt_d = assign_native_name_fields(name_ja, [])
+    # allcinema is a Japanese database — default nationality JP for kanji disambiguation
+    name_ja_r, name_ko_r, name_zh_r, names_alt_d = assign_native_name_fields(name_ja, ["JP"])
     names_alt_json = json.dumps(names_alt_d, ensure_ascii=False) if names_alt_d else "{}"
 
     return AllcinemaPersonRecord(

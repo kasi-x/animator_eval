@@ -1079,12 +1079,19 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
             ON src_ann_credits(ann_person_id);
 
         CREATE TABLE IF NOT EXISTS src_allcinema_anime (
-            allcinema_id INTEGER PRIMARY KEY,
-            title_ja     TEXT NOT NULL DEFAULT '',
-            year         INTEGER,
-            start_date   TEXT,
-            synopsis     TEXT,
-            scraped_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            allcinema_id      INTEGER PRIMARY KEY,
+            title_ja          TEXT NOT NULL DEFAULT '',
+            year              INTEGER,
+            start_date        TEXT,
+            synopsis          TEXT,
+            media             TEXT NOT NULL DEFAULT '',
+            distributor       TEXT NOT NULL DEFAULT '',
+            eirin             TEXT NOT NULL DEFAULT '',
+            theater_count     INTEGER,
+            box_office        TEXT NOT NULL DEFAULT '',
+            screen_count      INTEGER,
+            screening_weeks   INTEGER,
+            scraped_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
 
         CREATE TABLE IF NOT EXISTS src_allcinema_persons (
