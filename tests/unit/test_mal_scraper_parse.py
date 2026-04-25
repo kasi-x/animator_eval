@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from src.scrapers.mal_scraper import parse_anime_data, parse_staff_data
+from src.scrapers.parsers.mal import parse_anime_data, parse_staff_data
 
-FIXTURES = Path(__file__).parent / "fixtures" / "scrapers" / "mal"
+FIXTURES = Path(__file__).parent.parent / "fixtures" / "scrapers" / "mal"
 
 
 def _load(name: str) -> dict:
