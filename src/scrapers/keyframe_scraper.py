@@ -1,362 +1,554 @@
-"""KeyFrame Staff List scraper.
+"""KeyFrame Staff List scraper — API + HTML hybrid 4-phase orchestrator.
 
-Scrapes structured anime staff credit data from keyframe-staff-list.com.
-Data is embedded as JSON (preloadData) in each page's HTML — no LLM needed.
+Phase 0: roles master  — GET /api/data/roles.php (once)
+Phase 1: sitemap       — GET /sitemap.xml (once)
+Phase 2: anime HTML    — GET /staff/<slug> × 5512 slugs (raw HTML gzip)
+Phase 3: person API    — GET /api/person/show.php × N persons (raw JSON gzip)
+Phase 4: preview       — GET /api/stafflists/preview.php (cron snapshot)
 
-Features:
-- Bilingual names (ja + en)
-- Stable numeric person IDs
-- Episode-level credits
-- Sitemap-based page discovery (~800+ anime)
+BRONZE layout:
+  result/bronze/source=keyframe/table=roles_master/
+  result/bronze/source=keyframe/table=anime/
+  result/bronze/source=keyframe/table=anime_studios/
+  result/bronze/source=keyframe/table=settings_categories/
+  result/bronze/source=keyframe/table=credits/
+  result/bronze/source=keyframe/table=studios_master/
+  result/bronze/source=keyframe/table=person_profile/
+  result/bronze/source=keyframe/table=person_jobs/
+  result/bronze/source=keyframe/table=person_studios/
+  result/bronze/source=keyframe/table=person_credits/
+  result/bronze/source=keyframe/table=preview/
 
-This scraper only fetches and stores data. Matching with AniList is handled
-separately in the pipeline's Entity Resolution phase.
+Raw storage:
+  data/keyframe/raw/<slug>.html.gz
+  data/keyframe/person_raw/<id>.json.gz
+  data/keyframe/api/roles.json
+  data/keyframe/api/preview.json
+  data/keyframe/checkpoint.json
 """
 
 from __future__ import annotations
 
 import asyncio
+import gzip
 import json
 import re
+import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-import httpx
-import structlog
 import typer
+import structlog
 
-from src.runtime.models import BronzeAnime, Credit, Person, parse_role
-from src.scrapers.parsers.keyframe import (  # noqa: F401
-    extract_preload_data,
-    _extract_episode_num,
-    parse_credits_from_data,
-)
+from src.scrapers.bronze_writer import BronzeWriter
+from src.scrapers.keyframe_api import KeyframeApiClient
+from src.scrapers.parsers import keyframe as html_parser
+from src.scrapers.parsers import keyframe_api as api_parser
 
 log = structlog.get_logger()
 
-# =============================================================================
-# Constants
-# =============================================================================
-
-BASE_URL = "https://keyframe-staff-list.com"
-SITEMAP_URL = f"{BASE_URL}/sitemap.xml"
-
-HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/125.0.0.0 Safari/537.36"
-    ),
-    "Accept-Language": "ja,en;q=0.9",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-}
-
-DEFAULT_DELAY = 3.0  # seconds between requests (conservative for rate limits)
-DEFAULT_DATA_DIR = Path("data/keyframe")
-
 app = typer.Typer()
 
-
-# =============================================================================
-# ID generation
-# =============================================================================
-
-
-def make_keyframe_person_id(person_id: int | str) -> str:
-    """Generate person ID from KeyFrame's stable numeric ID."""
-    return f"keyframe:p_{person_id}"
-
-
-def make_keyframe_anime_id(slug: str) -> str:
-    """Generate anime ID from KeyFrame's URL slug."""
-    return f"keyframe:{slug}"
+DEFAULT_DATA_DIR = Path("data/keyframe")
+DEFAULT_DELAY = 5.0
+CHECKPOINT_INTERVAL = 10  # flush checkpoint every N items
 
 
 # =============================================================================
-# Sitemap parsing — discover all anime page slugs
+# Checkpoint helpers
 # =============================================================================
 
 
-async def fetch_sitemap(client: httpx.AsyncClient) -> list[str]:
-    """Fetch sitemap.xml and extract all /staff/ slugs.
+def _load_checkpoint(cp_path: Path, fresh: bool) -> dict:
+    """Load checkpoint from disk or return blank structure."""
+    if fresh or not cp_path.exists():
+        return _blank_checkpoint()
+    try:
+        data = json.loads(cp_path.read_text(encoding="utf-8"))
+        # Back-fill missing keys for robustness
+        blank = _blank_checkpoint()
+        for k, v in blank.items():
+            data.setdefault(k, v)
+        return data
+    except (json.JSONDecodeError, OSError) as exc:
+        log.warning("keyframe_checkpoint_load_error", err=str(exc)[:120])
+        return _blank_checkpoint()
 
-    Returns: list of slug strings (e.g., ["one-piece", "hyouka", ...])
-    """
-    resp = await client.get(SITEMAP_URL, headers=HEADERS)
-    resp.raise_for_status()
 
-    root = ET.fromstring(resp.text)
-    # Namespace: sitemaps use {http://www.sitemaps.org/schemas/sitemap/0.9}
+def _blank_checkpoint() -> dict:
+    return {
+        "anime_phase": {"completed_slugs": [], "all_slugs": []},
+        "person_phase": {"completed_ids": [], "all_ids": []},
+        "roles_master_fetched_at": None,
+        "preview_fetched_at": None,
+        "stats": {},
+    }
+
+
+def _save_checkpoint(cp_path: Path, cp: dict) -> None:
+    """Atomically write checkpoint JSON."""
+    tmp = cp_path.with_suffix(".tmp")
+    tmp.write_text(json.dumps(cp, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(cp_path)
+
+
+# =============================================================================
+# Phase 1 helper: sitemap
+# =============================================================================
+
+
+def _parse_sitemap_xml(xml_text: str) -> list[str]:
+    """Parse sitemap XML and extract /staff/<slug> paths."""
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as exc:
+        log.warning("keyframe_sitemap_parse_error", err=str(exc)[:120])
+        return []
+
     ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
-
     slugs: list[str] = []
     for url_elem in root.findall("s:url/s:loc", ns):
         url = url_elem.text or ""
-        # Extract /staff/{slug} paths
-        match = re.search(r"/staff/([^/]+)$", url)
-        if match:
-            slugs.append(match.group(1))
-
+        m = re.search(r"/staff/([^/]+)$", url)
+        if m:
+            slugs.append(m.group(1))
     log.info("keyframe_sitemap_parsed", total_slugs=len(slugs))
     return slugs
 
 
 # =============================================================================
-# Page fetching & JSON extraction
+# Phase 2 helper: extract person ids from preloadData
 # =============================================================================
 
 
-async def fetch_anime_page(
-    client: httpx.AsyncClient, slug: str, max_retries: int = 3
-) -> dict | None:
-    """Fetch a single anime page and extract preloadData.
-
-    Retries on 429 with exponential backoff.
-    """
-    url = f"{BASE_URL}/staff/{slug}"
-
-    for attempt in range(1, max_retries + 1):
-        resp = await client.get(url, headers=HEADERS)
-
-        if resp.status_code == 404:
-            log.debug("keyframe_page_not_found", slug=slug)
-            return None
-
-        if resp.status_code == 429:
-            retry_after = int(resp.headers.get("Retry-After", 30))
-            wait = max(retry_after, 10 * attempt)
-            log.warning(
-                "keyframe_rate_limited",
-                slug=slug,
-                attempt=attempt,
-                wait_seconds=wait,
-            )
-            await asyncio.sleep(wait)
-            continue
-
-        resp.raise_for_status()
-        return extract_preload_data(resp.text)
-
-    log.warning("keyframe_max_retries", slug=slug)
-    return None
+def _collect_person_ids_from_preload(data: dict) -> set[int]:
+    """Extract all numeric person IDs from menus credits (non-studio entries)."""
+    ids: set[int] = set()
+    for menu in data.get("menus") or []:
+        for section in menu.get("credits") or []:
+            for role_entry in section.get("roles") or []:
+                for staff in role_entry.get("staff") or []:
+                    pid = staff.get("id")
+                    if pid is not None and not staff.get("isStudio"):
+                        try:
+                            ids.add(int(pid))
+                        except (TypeError, ValueError):
+                            pass
+    return ids
 
 
 # =============================================================================
-# Checkpoint
+# Main async runner
 # =============================================================================
 
 
-def save_checkpoint(
+async def run_scraper(
+    *,
     data_dir: Path,
-    processed_slugs: set[str],
-    stats: dict,
-) -> None:
-    """Save checkpoint to disk."""
-    data_dir.mkdir(parents=True, exist_ok=True)
-    checkpoint_path = data_dir / "checkpoint.json"
-    checkpoint_path.write_text(
-        json.dumps(
-            {"processed_slugs": sorted(processed_slugs), "stats": stats},
-            ensure_ascii=False,
-            indent=2,
-        ),
-        encoding="utf-8",
-    )
-
-
-def load_checkpoint(data_dir: Path) -> tuple[set[str], dict]:
-    """Load checkpoint from disk.
-
-    Returns: (processed_slugs, stats)
-    """
-    checkpoint_path = data_dir / "checkpoint.json"
-    if not checkpoint_path.exists():
-        return set(), {}
-
-    data = json.loads(checkpoint_path.read_text(encoding="utf-8"))
-    return set(data.get("processed_slugs", [])), data.get("stats", {})
-
-
-# =============================================================================
-# Main orchestrator
-# =============================================================================
-
-
-async def scrape_keyframe(
-    data_dir: Path | None = None,
-    max_anime: int = 0,
-    checkpoint_interval: int = 10,
-    delay: float = DEFAULT_DELAY,
-    fresh: bool = False,
+    delay: float,
+    skip_persons: bool,
+    max_anime: int,
+    fresh: bool,
 ) -> dict:
-    """Fetch credit data from KeyFrame Staff List.
+    """Execute Phase 0-4 sequentially.
 
-    1. Fetch sitemap.xml → discover all anime slugs
-    2. Fetch each anime page → extract preloadData JSON
-    3. Write to BRONZE parquet (ETL handles dedup and ID resolution)
-
-    Returns: Statistics dict
+    Returns final stats dict.
     """
-    from src.scrapers.bronze_writer import BronzeWriter
+    raw_html_dir = data_dir / "raw"
+    raw_json_dir = data_dir / "person_raw"
+    api_dir = data_dir / "api"
+    cp_path = data_dir / "checkpoint.json"
 
-    if data_dir is None:
-        data_dir = DEFAULT_DATA_DIR
-    data_dir.mkdir(parents=True, exist_ok=True)
+    for d in (raw_html_dir, raw_json_dir, api_dir):
+        d.mkdir(parents=True, exist_ok=True)
 
-    stats = {
-        "anime_fetched": 0,
-        "anime_with_credits": 0,
-        "credits_created": 0,
-        "persons_created": 0,
-        "pages_skipped": 0,
-        "pages_failed": 0,
-    }
+    cp = _load_checkpoint(cp_path, fresh)
+    stats: dict = cp.get("stats") or {}
+    stats.setdefault("roles_fetched", 0)
+    stats.setdefault("anime_fetched", 0)
+    stats.setdefault("anime_skipped", 0)
+    stats.setdefault("person_fetched", 0)
+    stats.setdefault("person_skipped", 0)
 
-    # Load checkpoint
-    if fresh:
-        processed_slugs: set[str] = set()
-    else:
-        processed_slugs, prev_stats = load_checkpoint(data_dir)
-        if processed_slugs:
-            log.info(
-                "keyframe_checkpoint_loaded",
-                processed=len(processed_slugs),
-            )
+    client = KeyframeApiClient(delay=delay)
+    try:
+        await _phase0_roles(client, api_dir, cp, stats)
+        _save_checkpoint(cp_path, {**cp, "stats": stats})
 
-    person_cache: set[str] = set()
+        slugs = await _phase1_sitemap(client, cp, stats)
+        _save_checkpoint(cp_path, {**cp, "stats": stats})
 
-    anime_bw = BronzeWriter("keyframe", table="anime")
-    persons_bw = BronzeWriter("keyframe", table="persons")
-    credits_bw = BronzeWriter("keyframe", table="credits")
-
-    async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
-        # Phase 1: Discover anime slugs from sitemap
-        slugs = await fetch_sitemap(client)
         if not slugs:
             log.warning("keyframe_no_slugs_found")
             return stats
 
-        # Filter already-processed
-        remaining = [s for s in slugs if s not in processed_slugs]
-        if max_anime > 0:
-            remaining = remaining[:max_anime]
-
-        log.info(
-            "keyframe_scrape_start",
-            total_slugs=len(slugs),
-            remaining=len(remaining),
-            already_processed=len(processed_slugs),
+        remaining = _filter_remaining_slugs(slugs, cp, max_anime)
+        person_ids = await _phase2_anime_html(
+            client, remaining, raw_html_dir, cp, cp_path, stats
         )
 
-        # Phase 2-3: Fetch, parse, write to parquet
-        for i, slug in enumerate(remaining):
-            try:
-                await asyncio.sleep(delay)
-                data = await fetch_anime_page(client, slug)
+        cp["person_phase"]["all_ids"] = sorted(person_ids)
+        _save_checkpoint(cp_path, {**cp, "stats": stats})
 
-                if data is None:
-                    stats["pages_skipped"] += 1
-                    processed_slugs.add(slug)
-                    continue
+        if not skip_persons:
+            await _phase3_persons(
+                client, cp, cp_path, raw_json_dir, stats
+            )
 
-                # Extract anime metadata
-                title = data.get("title", slug)
-                anilist_id_str = data.get("anilistId")
-                season_year = data.get("seasonYear")
+        await _phase4_preview(client, api_dir, cp, stats)
+        _save_checkpoint(cp_path, {**cp, "stats": stats})
 
-                # Parse anilist_id
-                anilist_id: int | None = None
-                if anilist_id_str:
-                    try:
-                        anilist_id = int(anilist_id_str)
-                    except (ValueError, TypeError):
-                        pass
+    finally:
+        _save_checkpoint(cp_path, {**cp, "stats": stats})
+        await client.close()
 
-                anime_id = make_keyframe_anime_id(slug)
-                anime = BronzeAnime(
-                    id=anime_id,
-                    title_en=title,
-                    year=season_year,
-                    anilist_id=anilist_id,
-                )
-                anime_bw.append({**anime.model_dump(mode="json"), "slug": slug})
-                stats["anime_fetched"] += 1
+    log.info("keyframe_scrape_complete", **stats)
+    return stats
 
-                # Parse credits
-                page_credits = parse_credits_from_data(data, slug)
 
-                if page_credits:
-                    stats["anime_with_credits"] += 1
+# =============================================================================
+# Phase 0: roles master
+# =============================================================================
 
-                for credit_data in page_credits:
-                    pid = credit_data["person_id"]
-                    person_id = make_keyframe_person_id(pid)
 
-                    if person_id not in person_cache:
-                        person = Person(
-                            id=person_id,
-                            name_ja=credit_data["name_ja"],
-                            name_en=credit_data["name_en"],
-                        )
-                        persons_bw.append(person.model_dump(mode="json"))
-                        person_cache.add(person_id)
-                        stats["persons_created"] += 1
+async def _phase0_roles(
+    client: KeyframeApiClient,
+    api_dir: Path,
+    cp: dict,
+    stats: dict,
+) -> None:
+    """Fetch /api/data/roles.php and write to BRONZE roles_master table."""
+    if cp.get("roles_master_fetched_at"):
+        log.info("keyframe_phase0_skip", reason="already_fetched")
+        return
 
-                    role_ja = credit_data["role_ja"]
-                    role_en = credit_data["role_en"]
-                    role = parse_role(role_ja) if role_ja else parse_role(role_en)
-                    raw_role = role_ja or role_en
+    log.info("keyframe_phase0_start")
+    roles = await client.get_roles_master()
+    if not roles:
+        log.warning("keyframe_phase0_failed")
+        return
 
-                    credit = Credit(
-                        person_id=person_id,
-                        anime_id=anime_id,
-                        role=role,
-                        raw_role=raw_role,
-                        episode=credit_data["episode"],
-                        source="keyframe",
-                    )
-                    credits_bw.append(credit.model_dump(mode="json"))
-                    stats["credits_created"] += 1
+    (api_dir / "roles.json").write_text(
+        json.dumps(roles, ensure_ascii=False), encoding="utf-8"
+    )
 
-                processed_slugs.add(slug)
+    parsed = api_parser.parse_roles_master(roles)
+    with BronzeWriter("keyframe", table="roles_master") as bw:
+        bw.extend(parsed)
 
-                # Checkpoint flush
-                if (i + 1) % checkpoint_interval == 0:
-                    anime_bw.flush()
-                    persons_bw.flush()
-                    credits_bw.flush()
-                    save_checkpoint(data_dir, processed_slugs, stats)
-                    log.info(
-                        "keyframe_checkpoint",
-                        progress=f"{i + 1}/{len(remaining)}",
-                        anime=stats["anime_fetched"],
-                        credits=stats["credits_created"],
-                        persons=stats["persons_created"],
-                    )
+    cp["roles_master_fetched_at"] = int(time.time())
+    stats["roles_fetched"] = len(roles)
+    log.info("keyframe_phase0_done", count=len(roles))
 
-            except httpx.HTTPStatusError as e:
-                log.warning(
-                    "keyframe_page_error",
-                    slug=slug,
-                    status=e.response.status_code,
-                )
-                stats["pages_failed"] += 1
-            except Exception as e:
-                log.warning(
-                    "keyframe_page_error",
-                    slug=slug,
-                    error=str(e)[:200],
-                )
-                stats["pages_failed"] += 1
+
+# =============================================================================
+# Phase 1: sitemap
+# =============================================================================
+
+
+async def _phase1_sitemap(
+    client: KeyframeApiClient,
+    cp: dict,
+    stats: dict,
+) -> list[str]:
+    """Fetch sitemap.xml and return full slug list (cache in checkpoint)."""
+    if cp["anime_phase"]["all_slugs"]:
+        log.info("keyframe_phase1_skip", reason="already_in_checkpoint")
+        return cp["anime_phase"]["all_slugs"]
+
+    log.info("keyframe_phase1_start")
+    xml_text = await client.get_sitemap()
+    if not xml_text:
+        log.warning("keyframe_phase1_failed")
+        return []
+
+    slugs = _parse_sitemap_xml(xml_text)
+    cp["anime_phase"]["all_slugs"] = slugs
+    stats["sitemap_slugs"] = len(slugs)
+    log.info("keyframe_phase1_done", slugs=len(slugs))
+    return slugs
+
+
+def _filter_remaining_slugs(
+    all_slugs: list[str], cp: dict, max_anime: int
+) -> list[str]:
+    """Return slugs not yet in completed_slugs, capped at max_anime."""
+    done = set(cp["anime_phase"]["completed_slugs"])
+    remaining = [s for s in all_slugs if s not in done]
+    if max_anime > 0:
+        remaining = remaining[:max_anime]
+    log.info(
+        "keyframe_phase2_plan",
+        total=len(all_slugs),
+        done=len(done),
+        remaining=len(remaining),
+        cap=max_anime,
+    )
+    return remaining
+
+
+# =============================================================================
+# Phase 2: anime HTML
+# =============================================================================
+
+
+async def _phase2_anime_html(
+    client: KeyframeApiClient,
+    remaining: list[str],
+    raw_html_dir: Path,
+    cp: dict,
+    cp_path: Path,
+    stats: dict,
+) -> set[int]:
+    """Fetch and parse anime HTML pages. Returns accumulated person id set."""
+    log.info("keyframe_phase2_start", count=len(remaining))
+
+    person_ids: set[int] = set(cp["person_phase"].get("all_ids") or [])
+
+    anime_bw = BronzeWriter("keyframe", table="anime")
+    studios_bw = BronzeWriter("keyframe", table="anime_studios")
+    categories_bw = BronzeWriter("keyframe", table="settings_categories")
+    credits_bw = BronzeWriter("keyframe", table="credits")
+    studios_master_bw = BronzeWriter("keyframe", table="studios_master")
+
+    for i, slug in enumerate(remaining):
+        html_text = await client.get_anime_page(slug)
+
+        if html_text is None:
+            log.debug("keyframe_phase2_skip", slug=slug)
+            cp["anime_phase"]["completed_slugs"].append(slug)
+            stats["anime_skipped"] = stats.get("anime_skipped", 0) + 1
+            continue
+
+        # Save raw HTML (gzip)
+        gz_path = raw_html_dir / f"{slug}.html.gz"
+        with gzip.open(gz_path, "wt", encoding="utf-8") as fh:
+            fh.write(html_text)
+
+        data = html_parser.extract_preload_data(html_text)
+        if data is None:
+            log.warning("keyframe_phase2_no_preload", slug=slug)
+            cp["anime_phase"]["completed_slugs"].append(slug)
+            continue
+
+        anime_id = f"keyframe:{slug}"
+
+        # anime metadata
+        anime_meta = html_parser.parse_anime_meta(data, slug)
+        # Serialize nested dicts to JSON strings for Parquet compatibility
+        anime_row = {
+            "id": anime_id,
+            **anime_meta,
+            "start_date": json.dumps(anime_meta.get("start_date") or {}, ensure_ascii=False),
+            "end_date": json.dumps(anime_meta.get("end_date") or {}, ensure_ascii=False),
+            "synonyms": json.dumps(anime_meta.get("synonyms") or [], ensure_ascii=False),
+            "delimiters": json.dumps(anime_meta.get("delimiters"), ensure_ascii=False)
+            if anime_meta.get("delimiters") is not None
+            else None,
+            "episode_delimiters": json.dumps(anime_meta.get("episode_delimiters"), ensure_ascii=False)
+            if anime_meta.get("episode_delimiters") is not None
+            else None,
+            "role_delimiters": json.dumps(anime_meta.get("role_delimiters"), ensure_ascii=False)
+            if anime_meta.get("role_delimiters") is not None
+            else None,
+            "staff_delimiters": json.dumps(anime_meta.get("staff_delimiters"), ensure_ascii=False)
+            if anime_meta.get("staff_delimiters") is not None
+            else None,
+        }
+        anime_bw.append(anime_row)
+
+        # studios
+        for studio_row in html_parser.parse_anime_studios(data):
+            studios_bw.append({"anime_id": anime_id, **studio_row})
+
+        # settings categories
+        for cat_row in html_parser.parse_settings_categories(data):
+            categories_bw.append({"anime_id": anime_id, **cat_row})
+
+        # credits
+        credit_rows = html_parser.parse_credits_from_data(data, slug)
+        for c in credit_rows:
+            # Normalize person_id and studio_id to str for stable parquet schema
+            row = {"anime_id": anime_id, **c}
+            if row.get("person_id") is not None:
+                row["person_id"] = str(row["person_id"])
+            if row.get("studio_id") is not None:
+                try:
+                    row["studio_id"] = int(row["studio_id"])
+                except (TypeError, ValueError):
+                    row["studio_id"] = None
+            credits_bw.append(row)
+
+        # studios master (dedup in memory across pages)
+        for studio_row in html_parser.collect_studio_master(credit_rows):
+            studios_master_bw.append(studio_row)
+
+        # collect person ids
+        person_ids.update(_collect_person_ids_from_preload(data))
+
+        cp["anime_phase"]["completed_slugs"].append(slug)
+        stats["anime_fetched"] = stats.get("anime_fetched", 0) + 1
+
+        # Periodic checkpoint flush
+        if (i + 1) % CHECKPOINT_INTERVAL == 0:
+            for bw in (anime_bw, studios_bw, categories_bw, credits_bw, studios_master_bw):
+                bw.flush()
+            _save_checkpoint(cp_path, cp)
+            log.info(
+                "keyframe_phase2_checkpoint",
+                progress=f"{i + 1}/{len(remaining)}",
+                anime=stats["anime_fetched"],
+                persons_seen=len(person_ids),
+            )
 
     # Final flush
-    anime_bw.flush()
-    persons_bw.flush()
-    credits_bw.flush()
-    save_checkpoint(data_dir, processed_slugs, stats)
+    for bw in (anime_bw, studios_bw, categories_bw, credits_bw, studios_master_bw):
+        bw.flush()
 
-    log.info("keyframe_scrape_complete", source="keyframe", **stats)
-    return stats
+    log.info(
+        "keyframe_phase2_done",
+        fetched=stats["anime_fetched"],
+        person_ids_seen=len(person_ids),
+    )
+    return person_ids
+
+
+# =============================================================================
+# Phase 3: person API
+# =============================================================================
+
+
+async def _phase3_persons(
+    client: KeyframeApiClient,
+    cp: dict,
+    cp_path: Path,
+    raw_json_dir: Path,
+    stats: dict,
+) -> None:
+    """Fetch person show.php for each unique person id collected in Phase 2."""
+    done = set(cp["person_phase"]["completed_ids"])
+    all_ids = cp["person_phase"]["all_ids"]
+    remaining_ids = [i for i in all_ids if i not in done]
+
+    log.info(
+        "keyframe_phase3_start",
+        total=len(all_ids),
+        done=len(done),
+        remaining=len(remaining_ids),
+    )
+
+    profile_bw = BronzeWriter("keyframe", table="person_profile")
+    jobs_bw = BronzeWriter("keyframe", table="person_jobs")
+    studios_bw = BronzeWriter("keyframe", table="person_studios")
+    credits_bw = BronzeWriter("keyframe", table="person_credits")
+
+    for i, pid in enumerate(remaining_ids):
+        raw_data = await client.get_person_show(pid)
+
+        if raw_data is None:
+            log.debug("keyframe_phase3_skip", person_id=pid)
+            cp["person_phase"]["completed_ids"].append(pid)
+            stats["person_skipped"] = stats.get("person_skipped", 0) + 1
+            continue
+
+        # Save raw JSON (gzip)
+        gz_path = raw_json_dir / f"{pid}.json.gz"
+        with gzip.open(gz_path, "wt", encoding="utf-8") as fh:
+            json.dump(raw_data, fh, ensure_ascii=False)
+
+        parsed = api_parser.parse_person_show(raw_data)
+        profile = parsed["profile"]
+
+        # person_profile
+        profile_bw.append({
+            "person_id": profile["id"],
+            "is_studio": profile["is_studio"],
+            "name_ja": profile["name_ja"],
+            "name_en": profile["name_en"],
+            "aliases_json": json.dumps(profile["aliases_json"], ensure_ascii=False),
+            "avatar": profile["avatar"],
+            "bio": profile["bio"],
+        })
+
+        # person_jobs
+        for job in parsed["jobs"]:
+            jobs_bw.append({"person_id": pid, "job": job})
+
+        # person_studios
+        for studio in parsed["studios"]:
+            studios_bw.append({
+                "person_id": pid,
+                "studio_name": studio["studio_name"],
+                "alt_names": json.dumps(studio["alt_names"], ensure_ascii=False),
+            })
+
+        # person_credits
+        for cred in parsed["credits"]:
+            credits_bw.append({"person_id": pid, **cred})
+
+        cp["person_phase"]["completed_ids"].append(pid)
+        stats["person_fetched"] = stats.get("person_fetched", 0) + 1
+
+        # Periodic flush
+        if (i + 1) % CHECKPOINT_INTERVAL == 0:
+            for bw in (profile_bw, jobs_bw, studios_bw, credits_bw):
+                bw.flush()
+            _save_checkpoint(cp_path, cp)
+            log.info(
+                "keyframe_phase3_checkpoint",
+                progress=f"{i + 1}/{len(remaining_ids)}",
+                persons=stats["person_fetched"],
+            )
+
+    for bw in (profile_bw, jobs_bw, studios_bw, credits_bw):
+        bw.flush()
+
+    log.info("keyframe_phase3_done", fetched=stats["person_fetched"])
+
+
+# =============================================================================
+# Phase 4: preview snapshot
+# =============================================================================
+
+
+async def _phase4_preview(
+    client: KeyframeApiClient,
+    api_dir: Path,
+    cp: dict,
+    stats: dict,
+) -> None:
+    """Fetch /api/stafflists/preview.php and write to BRONZE preview table."""
+    log.info("keyframe_phase4_start")
+    raw_data = await client.get_preview()
+    if not raw_data:
+        log.warning("keyframe_phase4_failed")
+        return
+
+    (api_dir / "preview.json").write_text(
+        json.dumps(raw_data, ensure_ascii=False), encoding="utf-8"
+    )
+
+    normalized = api_parser.parse_preview(raw_data)
+    fetched_at = int(time.time())
+
+    with BronzeWriter("keyframe", table="preview") as bw:
+        for section in ("recent", "airing", "data"):
+            for entry in normalized[section]:
+                bw.append({
+                    "fetched_at": fetched_at,
+                    "section": section,
+                    **entry,
+                    "studios_str": json.dumps(
+                        entry.get("studios_str", []), ensure_ascii=False
+                    ),
+                    "contributors_json": json.dumps(
+                        entry.get("contributors_json", []), ensure_ascii=False
+                    ),
+                })
+
+    cp["preview_fetched_at"] = fetched_at
+    stats["preview_total"] = normalized["total"]
+    log.info("keyframe_phase4_done", total=normalized["total"])
 
 
 # =============================================================================
@@ -365,22 +557,14 @@ async def scrape_keyframe(
 
 
 @app.command()
-def main(
-    max_anime: int = typer.Option(
-        0, "--max-anime", "-n", help="Maximum anime pages to scrape (0 = all)"
-    ),
-    checkpoint: int = typer.Option(
-        10, "--checkpoint", "-c", help="Checkpoint interval (pages)"
-    ),
-    delay: float = typer.Option(
-        DEFAULT_DELAY, "--delay", "-d", help="Delay between requests (seconds)"
-    ),
-    fresh: bool = typer.Option(False, "--fresh", help="Ignore existing checkpoint"),
-    data_dir: Path = typer.Option(
-        DEFAULT_DATA_DIR, "--data-dir", help="Data directory"
-    ),
+def cmd_scrape_all(
+    delay: float = typer.Option(DEFAULT_DELAY, help="Minimum seconds between requests"),
+    skip_persons: bool = typer.Option(False, help="Skip Phase 3 (person API)"),
+    max_anime: int = typer.Option(0, help="Cap Phase 2 to N anime (0 = all)"),
+    fresh: bool = typer.Option(False, help="Ignore existing checkpoint"),
+    data_dir: Path = typer.Option(DEFAULT_DATA_DIR, help="Data directory"),
 ) -> None:
-    """Fetch credit data from KeyFrame Staff List."""
+    """Phase 0-4: roles → sitemap → anime HTML → person API → preview."""
     from src.infra.logging import setup_logging
     from src.scrapers.logging_utils import configure_file_logging
 
@@ -389,16 +573,15 @@ def main(
     log.info("keyframe_command_start", log_file=str(log_path))
 
     stats = asyncio.run(
-        scrape_keyframe(
+        run_scraper(
             data_dir=data_dir,
-            max_anime=max_anime,
-            checkpoint_interval=checkpoint,
             delay=delay,
+            skip_persons=skip_persons,
+            max_anime=max_anime,
             fresh=fresh,
         )
     )
-
-    log.info("keyframe_scrape_complete", **stats)
+    log.info("keyframe_done", **stats)
 
 
 if __name__ == "__main__":

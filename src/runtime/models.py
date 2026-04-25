@@ -1686,3 +1686,183 @@ class VAScoreResult(BaseModel):
     total_characters: int = 0
     casting_tier: str = "newcomer"
     replacement_difficulty: float = 0.0
+
+
+# =============================================================================
+# KeyFrame Staff List — BRONZE dataclass definitions
+# 11 classes: 5 from HTML preloadData (Phase 2) + 6 from API (Phase 0/3/4)
+# =============================================================================
+
+
+class BronzeKeyframeAnime(BaseModel):
+    """Anime-level metadata scraped from keyframe-staff-list.com HTML preloadData.
+
+    Independent of the common BronzeAnime model; carries keyframe-specific
+    fields (kf_uuid, kf_saving_id, delimiter settings, etc.) that have no
+    equivalent in other sources. SILVER integration normalizes into common
+    anime/studios tables.
+    """
+
+    id: str  # "keyframe:{slug}"
+    slug: str
+    kf_uuid: str | None = None
+    kf_saving_id: int | None = None
+    kf_author: str | None = None
+    kf_status: str | None = None
+    kf_comment: str | None = None
+    title_ja: str | None = None
+    title_en: str | None = None
+    title_romaji: str | None = None
+    synonyms: list[str] = Field(default_factory=list)
+    format: str | None = None  # TV/MOVIE/OVA/SPECIAL
+    episodes: int | None = None
+    season: str | None = None  # FALL/WINTER/SPRING/SUMMER
+    season_year: int | None = None
+    start_date: dict | None = None  # {year, month, day}
+    end_date: dict | None = None
+    cover_image_url: str | None = None
+    is_adult: bool | None = None
+    anilist_status: str | None = None  # RELEASING/FINISHED
+    anilist_id: int | None = None
+    delimiters: object = None  # raw delimiter config (list or str)
+    episode_delimiters: object = None
+    role_delimiters: object = None
+    staff_delimiters: object = None
+
+
+class BronzeKeyframeCredit(BaseModel):
+    """Per-credit row from keyframe-staff-list.com HTML preloadData menus.
+
+    Includes all extended fields vs. the original 6-column schema:
+    section_name, episode_title, menu_note, studio affiliation, is_studio_role.
+    """
+
+    person_id: int | str | None = None  # keyframe numeric id or None
+    anime_id: str  # "keyframe:{slug}"
+    episode: int = -1  # -1 for series-level (Overview/OP/ED)
+    episode_title: str | None = None
+    menu_note: str | None = None
+    section_name: str | None = None
+    role_ja: str | None = None
+    role_en: str | None = None
+    name_ja: str | None = None
+    name_en: str | None = None
+    is_studio_role: bool = False
+    studio_ja: str | None = None
+    studio_en: str | None = None
+    studio_id: int | None = None
+    studio_is_studio: bool | None = None
+    source: str = "keyframe"
+
+
+class BronzeKeyframeAnimeStudio(BaseModel):
+    """Anime-to-studio relationship from anilist.studios.edges[] in HTML preloadData."""
+
+    anime_id: str  # "keyframe:{slug}"
+    studio_name: str
+    is_main: bool = False
+
+
+class BronzeKeyframeStudio(BaseModel):
+    """Studio master record derived from isStudio=True credit entries in HTML preloadData."""
+
+    studio_id: int
+    name_ja: str | None = None
+    name_en: str | None = None
+
+
+class BronzeKeyframeSettingsCategory(BaseModel):
+    """Settings category classification for one anime (settings.categories[] in HTML preloadData)."""
+
+    anime_id: str  # "keyframe:{slug}"
+    category_name: str
+    category_order: int  # 0-based insertion index
+
+
+# --- API-sourced dataclasses (Phase 0 / Phase 3 / Phase 4) ---
+
+
+class BronzeKeyframeRolesMaster(BaseModel):
+    """Role master record from /api/data/roles.php (~1924 entries)."""
+
+    role_id: int
+    name_en: str | None = None
+    name_ja: str | None = None
+    category: str | None = None
+    episode_category: str | None = None
+    description: str | None = None
+
+
+class BronzeKeyframePersonProfile(BaseModel):
+    """Person profile from /api/person/show.php?type=person — identity + bio."""
+
+    person_id: int
+    is_studio: bool = False
+    name_ja: str | None = None
+    name_en: str | None = None
+    aliases_json: list[dict] = Field(default_factory=list)
+    avatar: str | None = None
+    bio: str | None = None
+
+
+class BronzeKeyframePersonJob(BaseModel):
+    """Career job (role category) from show.php jobs list."""
+
+    person_id: int
+    job: str
+
+
+class BronzeKeyframePersonStudio(BaseModel):
+    """Studio affiliation from show.php studios dict {name: [alt_names]}."""
+
+    person_id: int
+    studio_name: str
+    alt_names: list[str] = Field(default_factory=list)
+
+
+class BronzeKeyframePersonCredit(BaseModel):
+    """Flat per-episode credit row from show.php credits tree.
+
+    Carries is_nc (Not Credited), comment, and is_primary_alias — fields
+    absent from the HTML preloadData path.
+    """
+
+    person_id: int
+    anime_uuid: str
+    anime_slug: str | None = None
+    anime_episodes: int | None = None
+    anime_status: str | None = None
+    anime_name_en: str | None = None
+    anime_name_ja: str | None = None
+    anime_studios_str: str | None = None
+    anime_kv: str | None = None
+    anime_is_adult: bool | None = None
+    anime_season_year: int | None = None
+    name_used_ja: str | None = None
+    name_used_en: str | None = None
+    category: str | None = None
+    role_ja: str | None = None
+    role_en: str | None = None
+    episode: str | None = None  # e.g. "#01", "#01-#04", "Overview"
+    studio_at_credit: str | None = None
+    is_nc: bool = False
+    comment: str | None = None
+    is_primary_alias: bool = False
+
+
+class BronzeKeyframePreview(BaseModel):
+    """Single entry row from /api/stafflists/preview.php (recent/airing/data sections)."""
+
+    fetched_at: int  # unix seconds
+    section: str  # "recent" | "airing" | "data"
+    anilist_id: int | None = None
+    uuid: str
+    slug: str | None = None
+    title: str | None = None
+    title_native: str | None = None
+    status: str | None = None
+    last_modified: int | None = None
+    season: str | None = None
+    season_year: int | None = None
+    studios_str: list[str] = Field(default_factory=list)
+    contributors_json: list[dict] = Field(default_factory=list)
