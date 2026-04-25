@@ -39,7 +39,7 @@ from src.scrapers.cli_common import (
     resolve_progress_enabled,
 )
 from src.scrapers.progress import progress_enabled as _progress_enabled
-from src.scrapers.retrying_http_client import RetryingHttpClient
+from src.scrapers.http_client import RetryingHttpClient
 from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL
 
 _env = dotenv_values(find_dotenv())
@@ -167,7 +167,7 @@ class AniListClient:
         else:
             log.info("anilist_no_token", will_use_unauthenticated=True)
         # Create RetryingHttpClient (handles retries + rate limit backoff)
-        self._client = RetryingHttpClient(timeout=60.0)
+        self._client = RetryingHttpClient(source="anilist", delay=REQUEST_INTERVAL, timeout=60.0)
 
         # Rate limit tracking
         self.requests_remaining = None

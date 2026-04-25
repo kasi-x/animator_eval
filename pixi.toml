@@ -86,6 +86,7 @@ sf-hamilton = ">=1.88.0,<2"
 [feature.scrape.dependencies]
 beautifulsoup4 = "*"
 lxml = "*"
+tenacity = "*"
 
 [feature.scrape.pypi-dependencies]
 sparqlwrapper = "*"

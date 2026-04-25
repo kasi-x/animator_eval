@@ -30,8 +30,75 @@ from typing import ClassVar
 
 import httpx
 import structlog
+from tenacity import (
+    AsyncRetrying,
+    RetryCallState,
+    RetryError,
+    retry_any,
+    retry_if_exception_type,
+    retry_if_result,
+    stop_after_attempt,
+)
 
 log = structlog.get_logger()
+
+
+def _wait_from_state(initial_backoff: float):
+    """Return a tenacity wait callable that respects Retry-After / X-RateLimit-Reset."""
+
+    def _wait(retry_state: RetryCallState) -> float:
+        n = retry_state.attempt_number
+        if retry_state.outcome.failed:
+            # network / transient exception → exponential backoff
+            return min(initial_backoff * (2 ** (n - 1)), 120.0)
+        # bad HTTP status — try Retry-After header first
+        resp: httpx.Response = retry_state.outcome.result()
+        raw = resp.headers.get("Retry-After", "")
+        try:
+            return float(max(int(raw), 5))
+        except (ValueError, TypeError):
+            return float(min(initial_backoff * 2 * (2 ** (n - 1)), 300.0))
+
+    return _wait
+
+
+def _before_sleep_log(source: str, on_rate_limit=None):
+    """Return a tenacity before_sleep callable with structlog + optional callback."""
+
+    def _before_sleep(retry_state: RetryCallState) -> None:
+        wait = retry_state.next_action.sleep  # type: ignore[union-attr]
+        if retry_state.outcome.failed:
+            exc = retry_state.outcome.exception()
+            log.warning(
+                "http_request_error",
+                source=source,
+                error_type=type(exc).__name__,
+                error=str(exc),
+                attempt=retry_state.attempt_number,
+                wait_s=wait,
+            )
+        else:
+            resp: httpx.Response = retry_state.outcome.result()
+            log.warning(
+                "http_rate_limited",
+                source=source,
+                status=resp.status_code,
+                wait_s=wait,
+                attempt=retry_state.attempt_number,
+            )
+            if on_rate_limit is not None:
+                on_rate_limit(int(wait))
+
+    return _before_sleep
+
+
+def _retry_error_callback(retry_state: RetryCallState):
+    """Called when tenacity exhausts retries; raise_for_status on bad responses."""
+    outcome = retry_state.outcome
+    if outcome.failed:
+        raise outcome.exception()
+    # outcome is a bad-status response — raise it
+    outcome.result().raise_for_status()
 
 
 class RetryingHttpClient:
@@ -111,69 +178,44 @@ class RetryingHttpClient:
         json: object | None = None,
         headers: dict | None = None,
         max_attempts: int | None = None,
+        # AniList-specific: rate limit header capture + callback
+        rate_limit_context: dict | None = None,
+        on_rate_limit: object | None = None,
     ) -> httpx.Response:
-        max_attempts = max_attempts or self._max_attempts
-        backoff = self._initial_backoff
-        attempt = 0
-        while True:
-            attempt += 1
-            await self._throttle()
-            try:
-                resp = await self._client.request(
-                    method, url, params=params, json=json, headers=headers
-                )
-            except self.DEFAULT_RETRYABLE_EXC as exc:
-                if attempt >= max_attempts:
-                    log.error(
-                        "http_request_giveup",
-                        source=self.source,
-                        url=url,
-                        error_type=type(exc).__name__,
-                        error=str(exc),
-                        attempts=attempt,
-                    )
-                    raise
-                wait = min(backoff, 120)
-                log.warning(
-                    "http_request_error",
-                    source=self.source,
-                    url=url,
-                    error_type=type(exc).__name__,
-                    error=str(exc),
-                    attempt=attempt,
-                    max_attempts=max_attempts,
-                    wait_s=wait,
-                )
-                await asyncio.sleep(wait)
-                backoff *= 2
-                continue
+        _max = max_attempts or self._max_attempts
+        _retryable_status = self._retryable_status
 
-            if resp.status_code in self._retryable_status:
-                retry_after = self._parse_retry_after(resp, backoff)
-                if attempt >= max_attempts:
-                    log.error(
-                        "http_rate_giveup",
-                        source=self.source,
-                        url=url,
-                        status=resp.status_code,
-                        attempts=attempt,
+        try:
+            async for attempt in AsyncRetrying(
+                retry=retry_any(
+                    retry_if_exception_type(self.DEFAULT_RETRYABLE_EXC),
+                    retry_if_result(lambda r: r.status_code in _retryable_status),
+                ),
+                wait=_wait_from_state(self._initial_backoff),
+                stop=stop_after_attempt(_max),
+                before_sleep=_before_sleep_log(self.source, on_rate_limit),
+                retry_error_callback=_retry_error_callback,
+            ):
+                with attempt:
+                    await self._throttle()
+                    resp = await self._client.request(
+                        method, url, params=params, json=json, headers=headers
                     )
-                    resp.raise_for_status()
-                    return resp
-                log.warning(
-                    "http_rate_limited",
-                    source=self.source,
-                    url=url,
-                    status=resp.status_code,
-                    wait_s=retry_after,
-                    attempt=attempt,
-                    max_attempts=max_attempts,
-                )
-                await asyncio.sleep(retry_after)
-                backoff = min(max(backoff * 2, retry_after), 300)
-                continue
+                    if rate_limit_context is not None:
+                        self._update_rate_limit_context(resp, rate_limit_context)
+        except RetryError:
+            # retry_error_callback already raises; this branch is unreachable
+            raise  # pragma: no cover
 
-            return resp
+        return resp  # type: ignore[return-value]
+
+    @staticmethod
+    def _update_rate_limit_context(resp: httpx.Response, ctx: dict) -> None:
+        """Extract X-RateLimit-* headers into ctx (AniList-specific)."""
+        if "X-RateLimit-Remaining" in resp.headers:
+            ctx["remaining"] = int(resp.headers["X-RateLimit-Remaining"])
+            ctx["reset_at"] = int(resp.headers.get("X-RateLimit-Reset", 0))
+            ctx["limit"] = int(resp.headers.get("X-RateLimit-Limit", 0))
 
     async def get(
         self,
@@ -194,15 +236,27 @@ class RetryingHttpClient:
         json: object | None = None,
         headers: dict | None = None,
         max_attempts: int | None = None,
+        # AniList-specific options: rate limit header capture + callback
+        rate_limit_context: dict | None = None,
+        on_rate_limit: object | None = None,
     ) -> httpx.Response:
-        return await self.request(
-            "POST", url, json=json, headers=headers, max_attempts=max_attempts
-        )
+        """POST request with retries.
 
-    @staticmethod
-    def _parse_retry_after(resp: httpx.Response, backoff: float) -> int:
-        raw = resp.headers.get("Retry-After", "")
-        try:
-            return max(int(raw), 5)
-        except (ValueError, TypeError):
-            return int(min(backoff * 2, 300))
+        Args:
+            rate_limit_context: Optional dict; if provided and the response carries
+                                X-RateLimit-* headers, they are stored under keys
+                                ``remaining``, ``reset_at``, ``limit``.
+                                This feature exists for AniList which exposes these
+                                headers — other sources ignore it.
+            on_rate_limit:      Optional callable(remaining_secs: int | None) called
+                                during rate-limit waits (AniList-specific).
+        """
+        return await self.request(
+            "POST",
+            url,
+            json=json,
+            headers=headers,
+            max_attempts=max_attempts,
+            rate_limit_context=rate_limit_context,
+            on_rate_limit=on_rate_limit,
+        )
