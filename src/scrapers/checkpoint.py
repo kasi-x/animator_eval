@@ -171,3 +171,24 @@ def resolve_checkpoint(path: Path | str, *, force: bool = False, resume: bool = 
     if resume and not force:
         return Checkpoint.load(path)
     return Checkpoint(path)
+
+
+def prepare_checkpoint_run(
+    all_ids: Iterable[Hashable],
+    path: Path | str,
+    *,
+    limit: int = 0,
+    force: bool = False,
+    resume: bool = True,
+) -> tuple[Checkpoint, list[Hashable], set[Hashable]]:
+    """Resolve checkpoint and compute pending IDs in one call.
+
+    Combines ``resolve_checkpoint`` + ``cp.pending(limit)`` + completed snapshot.
+
+    Returns:
+        (cp, pending_ids, completed_set)
+    """
+    cp = resolve_checkpoint(path, force=force, resume=resume)
+    completed = set(cp.completed_set)
+    pending = cp.pending(all_ids, limit=limit)
+    return cp, pending, completed

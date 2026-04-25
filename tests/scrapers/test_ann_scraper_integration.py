@@ -11,10 +11,11 @@ from pathlib import Path
 
 import pyarrow.parquet as pq
 
+import dataclasses
+
 from src.scrapers.ann_scraper import (
     _AnimeBronzeWriters,
     save_anime_parse_result,
-    save_person_detail,
 )
 from src.scrapers.parsers.ann import parse_anime_xml, parse_person_html
 
@@ -89,7 +90,7 @@ def test_person_detail_new_columns(tmp_path):
     assert detail is not None
 
     persons_bw = BronzeWriter("ann", table="persons", root=tmp_path)
-    save_person_detail(persons_bw, detail)
+    persons_bw.append(dataclasses.asdict(detail))
     persons_bw.flush()
 
     files = list((tmp_path / "source=ann" / "table=persons").rglob("*.parquet"))

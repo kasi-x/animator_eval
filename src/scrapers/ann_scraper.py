@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import asyncio
 import dataclasses
-import time
 import xml.etree.ElementTree as ET
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,10 +29,12 @@ from src.scrapers.hash_utils import hash_anime_data
 
 from src.runtime.models import parse_role
 from src.scrapers.checkpoint import resolve_checkpoint
+from src.scrapers.http_client import RetryingHttpClient
 from src.scrapers.cli_common import (
     CheckpointIntervalOpt,
     DataDirOpt,
     DelayOpt,
+    DryRunOpt,
     ForceOpt,
     LimitOpt,
     ProgressOpt,
@@ -44,6 +45,8 @@ from src.scrapers.cli_common import (
 from src.scrapers.http_base import RateLimitedHttpClient
 from src.scrapers.logging_utils import configure_file_logging
 from src.scrapers.progress import scrape_progress
+from src.scrapers.runner import ScrapeRunner
+from src.scrapers.sinks import BronzeSink
 from src.scrapers.parsers.ann import (  # noqa: F401
     _ANN_TYPE_MAP,
     _HTML_LABEL_MAP,
@@ -93,114 +96,25 @@ app = typer.Typer()
 
 
 class AnnClient(RateLimitedHttpClient):
-    """Async HTTP client for ANN with exponential backoff retry."""
+    """Async HTTP client for ANN."""
 
     def __init__(self, delay: float = DEFAULT_DELAY) -> None:
         super().__init__(delay=delay)
-        self._last_request = 0.0
-        self._client = httpx.AsyncClient(
+        self._http = RetryingHttpClient(
+            source="ann",
+            delay=delay,
             timeout=30.0,
             headers=HEADERS,
-            follow_redirects=True,
+            max_attempts=8,
         )
 
     async def close(self) -> None:
-        await self._client.aclose()
+        await self._http.aclose()
 
-    async def _throttle(self) -> None:
-        elapsed = time.monotonic() - self._last_request
-        wait = self._delay - elapsed
-        if wait > 0:
-            await asyncio.sleep(wait)
-        self._last_request = time.monotonic()
-
-    # HTTP status codes that trigger exponential backoff retry.
-    # 429: rate limit / 500-504: transient server errors / 522,524: Cloudflare timeout
-    _RETRYABLE_STATUS = frozenset({429, 500, 502, 503, 504, 522, 524})
-
-    # httpx exceptions treated as transient network failures
-    _RETRYABLE_EXC = (
-        httpx.TimeoutException,
-        httpx.ConnectError,
-        httpx.ReadError,
-        httpx.RemoteProtocolError,
-        httpx.PoolTimeout,
-    )
-
-    async def get(
-        self,
-        url: str,
-        params: dict | None = None,
-        *,
-        max_attempts: int = 8,
-    ) -> httpx.Response:
-        """GET with exponential backoff retry on transient failures.
-
-        Retries on:
-          - HTTP 429, 500-504, 522, 524
-          - httpx Timeout/Connect/Read/RemoteProtocol/PoolTimeout exceptions
-        Propagates the last exception (or response) after max_attempts.
-        """
-        backoff = 4.0
-        attempt = 0
-        while True:
-            attempt += 1
-            await self._throttle()
-            try:
-                resp = await self._client.get(url, params=params)
-            except self._RETRYABLE_EXC as exc:
-                if attempt >= max_attempts:
-                    log.error(
-                        "ann_request_giveup",
-                        url=url,
-                        error_type=type(exc).__name__,
-                        error=str(exc),
-                        attempts=attempt,
-                    )
-                    raise
-                wait = min(backoff, 120)
-                log.warning(
-                    "ann_request_error",
-                    url=url,
-                    error_type=type(exc).__name__,
-                    error=str(exc),
-                    attempt=attempt,
-                    max_attempts=max_attempts,
-                    wait_s=wait,
-                )
-                await asyncio.sleep(wait)
-                backoff *= 2
-                continue
-
-            if resp.status_code in self._RETRYABLE_STATUS:
-                raw_ra = resp.headers.get("Retry-After", "")
-                try:
-                    retry_after = max(int(raw_ra), 5)
-                except (ValueError, TypeError):
-                    retry_after = int(min(backoff * 2, 300))
-                if attempt >= max_attempts:
-                    log.error(
-                        "ann_rate_giveup",
-                        url=url,
-                        status=resp.status_code,
-                        attempts=attempt,
-                    )
-                    resp.raise_for_status()
-                    return resp
-                log.warning(
-                    "ann_rate_limited",
-                    url=url,
-                    status=resp.status_code,
-                    wait_s=retry_after,
-                    attempt=attempt,
-                    max_attempts=max_attempts,
-                )
-                await asyncio.sleep(retry_after)
-                backoff = min(max(backoff * 2, retry_after), 300)
-                continue
-
-            resp.raise_for_status()
-            return resp
+    async def get(self, url: str, params: dict | None = None, *, max_attempts: int = 8) -> httpx.Response:
+        resp = await self._http.get(url, params=params, max_attempts=max_attempts)
+        resp.raise_for_status()
+        return resp
 
 
 # ─── Phase 1: masterlist fetch ───────────────────────────────────────────────
@@ -399,11 +313,6 @@ def save_anime_parse_result(
     return n_anime, n_credits
 
 
-def save_person_detail(persons_bw, detail: AnnPersonDetail) -> None:
-    """Write AnnPersonDetail to BRONZE parquet."""
-    persons_bw.append(dataclasses.asdict(detail))
-
-
 # ─── typer commands ──────────────────────────────────────────────────────────
 
 
@@ -416,6 +325,7 @@ def cmd_scrape_anime(
     data_dir: DataDirOpt = DEFAULT_DATA_DIR,
     resume: ResumeOpt = True,
     force: ForceOpt = False,
+    dry_run: DryRunOpt = False,
     quiet: QuietOpt = False,
     progress: ProgressOpt = False,
 ) -> None:
@@ -431,6 +341,7 @@ def cmd_scrape_anime(
             data_dir=data_dir,
             resume=resume,
             force=force,
+            dry_run=dry_run,
             progress_override=resolve_progress_enabled(quiet, progress),
         )
     )
@@ -444,6 +355,7 @@ async def _run_scrape_anime(
     data_dir: Path,
     resume: bool,
     force: bool = False,
+    dry_run: bool = False,
     progress_override: bool | None = None,
 ) -> None:
     cp = resolve_checkpoint(data_dir / "anime_checkpoint.json", force=force, resume=resume)
@@ -462,6 +374,15 @@ async def _run_scrape_anime(
 
         completed: set[int] = cp.completed_set
         pending = cp.pending(all_ids, limit=limit)
+
+        if dry_run:
+            log.info(
+                "ann_scrape_anime_dry_run",
+                total=len(all_ids),
+                completed=len(completed),
+                pending=len(pending),
+            )
+            return
 
         log.info(
             "ann_anime_scrape_start",
@@ -526,6 +447,7 @@ def cmd_scrape_persons(
     data_dir: DataDirOpt = DEFAULT_DATA_DIR,
     resume: ResumeOpt = True,
     force: ForceOpt = False,
+    dry_run: DryRunOpt = False,
     quiet: QuietOpt = False,
     progress: ProgressOpt = False,
 ) -> None:
@@ -544,6 +466,7 @@ def cmd_scrape_persons(
             data_dir=data_dir,
             resume=resume,
             force=force,
+            dry_run=dry_run,
             progress_override=resolve_progress_enabled(quiet, progress),
         )
     )
@@ -557,16 +480,15 @@ async def _run_scrape_persons(
     data_dir: Path,
     resume: bool,
     force: bool = False,
+    dry_run: bool = False,
     progress_override: bool | None = None,
 ) -> None:
     import pyarrow.dataset as ds
 
-    from src.scrapers.bronze_writer import DEFAULT_BRONZE_ROOT, BronzeWriter
+    from src.scrapers.bronze_writer import DEFAULT_BRONZE_ROOT, BronzeWriterGroup
 
     cp = resolve_checkpoint(data_dir / "persons_checkpoint.json", force=force, resume=resume)
-    completed: set[int] = cp.completed_set
 
-    # Read ann_person_id list from bronze parquet (written by anime phase)
     credits_path = DEFAULT_BRONZE_ROOT / "source=ann" / "table=credits"
     if not credits_path.exists():
         log.warning("ann_persons_no_credits", msg="Run scrape-anime phase first")
@@ -578,52 +500,40 @@ async def _run_scrape_persons(
         dict.fromkeys(pid for pid in tbl.column("ann_person_id").to_pylist() if pid is not None)
     )
 
-    pending = cp.pending(all_ann_ids, limit=limit)
+    if dry_run:
+        log.info(
+            "ann_scrape_persons_dry_run",
+            total=len(all_ann_ids),
+            completed=len(cp.completed_set),
+        )
+        return
 
-    log.info(
-        "ann_persons_scrape_start",
-        total=len(all_ann_ids),
-        completed=len(completed),
-        pending=len(pending),
-        method="html",
-    )
-
-    done_this_run = 0
-    collected = 0
-    persons_bw = BronzeWriter("ann", table="persons")
     client = AnnClient(delay=delay)
+
+    async def _fetch_person_html(ann_id: int) -> str | None:
+        try:
+            resp = await client.get(PEOPLE_HTML_BASE, params={"id": ann_id})
+        except Exception as exc:
+            log.warning("ann_person_html_fetch_error", ann_id=ann_id, error=str(exc))
+            return None
+        if resp.status_code in (403, 404):
+            return None
+        resp.raise_for_status()
+        return resp.text
+
     try:
-        with scrape_progress(
-            total=len(pending),
-            description="scraping ANN persons",
-            enabled=progress_override,
-        ) as p:
-            for ann_id in pending:
-                detail = await fetch_person_html(client, ann_id)
-                if detail is not None:
-                    save_person_detail(persons_bw, detail)
-                    collected += 1
-                completed.add(ann_id)
-                done_this_run += 1
-                p.advance()
-
-                if done_this_run % checkpoint_interval == 0:
-                    persons_bw.flush()
-                    cp.sync_completed(completed)
-                    cp.save()
-                    p.log(
-                        "ann_persons_progress",
-                        done=done_this_run,
-                        collected=collected,
-                        remaining=len(pending) - done_this_run,
-                    )
-
-        persons_bw.flush()
-        persons_bw.compact()
-        cp.sync_completed(completed)
-        cp.save()
-        log.info("ann_persons_scrape_done", total_requested=done_this_run, collected=collected)
-
+        with BronzeWriterGroup("ann", tables=["persons"]) as g:
+            runner = ScrapeRunner(
+                fetcher=_fetch_person_html,
+                parser=lambda raw, id_: parse_person_html(raw, id_),
+                sink=BronzeSink(g, lambda rec: {"persons": [dataclasses.asdict(rec)]}, add_hash=False),
+                checkpoint=cp,
+                label="ann_persons",
+                flush=g.flush_all,
+                flush_every=checkpoint_interval,
+            )
+            stats = await runner.run(all_ann_ids, limit=limit, progress_override=progress_override)
+        log.info("ann_persons_done", **dataclasses.asdict(stats))
     finally:
         await client.close()
 

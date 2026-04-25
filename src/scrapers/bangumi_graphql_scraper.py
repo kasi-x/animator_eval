@@ -543,15 +543,16 @@ def adapt_subject_persons_gql(
     """
     persons = subject_gql.get("persons") or []
     result = []
-    for p in persons:
+    for entry in persons:
+        p = entry.get("person") or {}
         result.append(
             {
                 "id": p.get("id"),
                 "name": p.get("name"),
                 "type": p.get("type"),
-                "relation": p.get("relation"),
+                "relation": str(entry.get("position") or ""),
                 "career": p.get("career") or [],
-                "eps": p.get("eps") or "",
+                "eps": "",
                 "images": _flatten_images(p.get("images")),
             }
         )
@@ -583,26 +584,17 @@ def adapt_subject_characters_gql(
     """
     characters = subject_gql.get("characters") or []
     result = []
-    for c in characters:
-        actors = []
-        for a in c.get("actors") or []:
-            actors.append(
-                {
-                    "id": a.get("id"),
-                    "name": a.get("name"),
-                    "type": a.get("type"),
-                    "career": a.get("career") or [],
-                }
-            )
+    for entry in characters:
+        c = entry.get("character") or {}
         result.append(
             {
                 "id": c.get("id"),
                 "name": c.get("name"),
-                "type": c.get("type"),
-                "relation": c.get("relation"),
+                "type": entry.get("type"),
+                "relation": str(entry.get("order") or ""),
                 "images": _flatten_images(c.get("images")),
                 "summary": c.get("summary") or "",
-                "actors": actors,
+                "actors": [],
             }
         )
     return result

@@ -592,24 +592,18 @@ def save_checkpoint(
     stats: dict,
 ) -> None:
     """Save scraping progress to checkpoint file (atomic tmp → rename)."""
-    from src.scrapers.checkpoint import atomic_write_json
-    atomic_write_json(
-        data_dir / "checkpoint.json",
-        {"processed_urls": processed_urls, "stats": stats},
-        indent=2,
-    )
+    from src.scrapers.checkpoint import Checkpoint
+    cp = Checkpoint(data_dir / "checkpoint.json")
+    cp["processed_urls"] = processed_urls
+    cp["stats"] = stats
+    cp.save(stamp_time=False)
 
 
 def load_checkpoint(data_dir: Path) -> tuple[set[str], dict]:
     """Load checkpoint, returning (processed_urls_set, stats)."""
-    checkpoint_path = data_dir / "checkpoint.json"
-    if not checkpoint_path.exists():
-        return set(), {}
-    try:
-        data = json.loads(checkpoint_path.read_text(encoding="utf-8"))
-        return set(data.get("processed_urls", [])), data.get("stats", {})
-    except (json.JSONDecodeError, KeyError):
-        return set(), {}
+    from src.scrapers.checkpoint import Checkpoint
+    cp = Checkpoint.load(data_dir / "checkpoint.json")
+    return set(cp.get("processed_urls", [])), cp.get("stats", {})
 
 
 # =============================================================================

@@ -53,7 +53,7 @@ from src.scrapers.bangumi_graphql_scraper import (
     adapt_subject_persons_gql,
 )
 from src.scrapers.bronze_writer import BronzeWriter, BronzeWriterGroup
-from src.scrapers.checkpoint import Checkpoint, resolve_checkpoint
+from src.scrapers.checkpoint import Checkpoint, prepare_checkpoint_run
 from src.scrapers.cli_common import (
     DryRunOpt,
     ForceOpt,
@@ -332,12 +332,11 @@ async def _run_relations(
     if not force and not dry_run:
         _check_relations_idempotent(all_ids, date_str)
 
-    cp = resolve_checkpoint(_CP_RELATIONS, force=force, resume=resume)
+    cp, pending, completed_set = prepare_checkpoint_run(  # type: ignore[assignment]
+        all_ids, _CP_RELATIONS, limit=limit, force=force, resume=resume
+    )
     if resume and not force:
-        console.print(f"[cyan]Checkpoint:[/cyan] completed={len(cp.completed_set):,}  failed={len(cp.failed_set):,}")
-
-    completed_set: set[int] = set(cp.completed_set)  # type: ignore[arg-type]
-    pending = cp.pending(all_ids, limit=limit)
+        console.print(f"[cyan]Checkpoint:[/cyan] completed={len(completed_set):,}  failed={len(cp.failed_set):,}")
     console.print(f"[cyan]Pending:[/cyan] {len(pending):,}")
 
     if dry_run:
@@ -367,50 +366,51 @@ async def _run_relations(
         bw_actors = group["person_characters"]
 
         try:
-            async with BangumiGraphQLClient() as client, scrape_progress(
+            with scrape_progress(
                 total=len(chunks),
                 description="relations",
                 enabled=progress_override,
             ) as p:
-                for idx, chunk in enumerate(chunks):
-                    fetched_at = dt.datetime.now(dt.timezone.utc)
-                    try:
-                        batch_result = await client.fetch_subjects_batched(chunk)
-                    except ScraperError as exc:
-                        log.error("bangumi_graphql_batch_failed", chunk=chunk, error=str(exc))
-                        for sid in chunk:
-                            cp.mark_failed(sid, status="error", detail=str(exc))
-                        p.advance()
-                        continue
-
-                    for subject_id in chunk:
-                        subject_data = batch_result.get(subject_id)
-                        if subject_data is None:
-                            cp.mark_failed(subject_id, status=404)
+                async with BangumiGraphQLClient() as client:
+                    for idx, chunk in enumerate(chunks):
+                        fetched_at = dt.datetime.now(dt.timezone.utc)
+                        try:
+                            batch_result = await client.fetch_subjects_batched(chunk)
+                        except ScraperError as exc:
+                            log.error("bangumi_graphql_batch_failed", chunk=chunk, error=str(exc))
+                            for sid in chunk:
+                                cp.mark_failed(sid, status="error", detail=str(exc))
+                            p.advance()
                             continue
-                        persons = adapt_subject_persons_gql(subject_id, subject_data)
-                        for row in _build_person_rows(subject_id, persons, fetched_at):
-                            bw_persons.append(row)
-                        characters = adapt_subject_characters_gql(subject_id, subject_data)
-                        c_rows, a_rows = _build_character_and_actor_rows(
-                            subject_id, characters, fetched_at
-                        )
-                        for row in c_rows:
-                            bw_chars.append(row)
-                        for row in a_rows:
-                            bw_actors.append(row)
-                        completed_set.add(subject_id)
 
-                    cp.sync_completed(completed_set)
-                    if (idx + 1) * _GRAPHQL_BATCH % _CHECKPOINT_FLUSH < _GRAPHQL_BATCH:
-                        group.flush_all()
-                        cp.save()
-                        p.log(
-                            "bangumi_relations_checkpoint",
-                            completed=len(completed_set),
-                            remaining=len(chunks) - idx - 1,
-                        )
-                    p.advance()
+                        for subject_id in chunk:
+                            subject_data = batch_result.get(subject_id)
+                            if subject_data is None:
+                                cp.mark_failed(subject_id, status=404)
+                                continue
+                            persons = adapt_subject_persons_gql(subject_id, subject_data)
+                            for row in _build_person_rows(subject_id, persons, fetched_at):
+                                bw_persons.append(row)
+                            characters = adapt_subject_characters_gql(subject_id, subject_data)
+                            c_rows, a_rows = _build_character_and_actor_rows(
+                                subject_id, characters, fetched_at
+                            )
+                            for row in c_rows:
+                                bw_chars.append(row)
+                            for row in a_rows:
+                                bw_actors.append(row)
+                            completed_set.add(subject_id)
+
+                        cp.sync_completed(completed_set)
+                        if (idx + 1) * _GRAPHQL_BATCH % _CHECKPOINT_FLUSH < _GRAPHQL_BATCH:
+                            group.flush_all()
+                            cp.save()
+                            p.log(
+                                "bangumi_relations_checkpoint",
+                                completed=len(completed_set),
+                                remaining=len(chunks) - idx - 1,
+                            )
+                        p.advance()
         finally:
             group.flush_all()
 
@@ -475,12 +475,11 @@ async def _run_persons(
 
     console.print(f"[cyan]Person IDs:[/cyan] {len(all_ids):,}")
 
-    cp = resolve_checkpoint(_CP_PERSONS, force=force, resume=resume)
+    cp, pending, completed_set = prepare_checkpoint_run(  # type: ignore[assignment]
+        all_ids, _CP_PERSONS, limit=limit, force=force, resume=resume
+    )
     if resume and not force:
-        console.print(f"[cyan]Checkpoint:[/cyan] completed={len(cp.completed_set):,}  failed={len(cp.failed_set):,}")
-
-    completed_set: set[int] = set(cp.completed_set)  # type: ignore[arg-type]
-    pending = cp.pending(all_ids, limit=limit)
+        console.print(f"[cyan]Checkpoint:[/cyan] completed={len(completed_set):,}  failed={len(cp.failed_set):,}")
     console.print(f"[cyan]Pending:[/cyan] {len(pending):,}")
 
     if dry_run:
@@ -498,32 +497,33 @@ async def _run_persons(
     date = dt.date.fromisoformat(date_str)
     with BronzeWriter("bangumi", table="persons", date=date) as bw:
         try:
-            async with BangumiGraphQLClient() as client, scrape_progress(
+            with scrape_progress(
                 total=len(pending),
                 description="persons",
                 enabled=progress_override,
             ) as p:
-                for i, person_id in enumerate(pending):
-                    fetched_at = dt.datetime.now(dt.timezone.utc)
-                    try:
-                        person_raw = await client.fetch_person(person_id)
-                    except ScraperError as exc:
-                        log.error("bangumi_person_fetch_failed", person_id=person_id, error=str(exc))
-                        cp.mark_failed(person_id, status="error", detail=str(exc))
+                async with BangumiGraphQLClient() as client:
+                    for i, person_id in enumerate(pending):
+                        fetched_at = dt.datetime.now(dt.timezone.utc)
+                        try:
+                            person_raw = await client.fetch_person(person_id)
+                        except ScraperError as exc:
+                            log.error("bangumi_person_fetch_failed", person_id=person_id, error=str(exc))
+                            cp.mark_failed(person_id, status="error", detail=str(exc))
+                            p.advance()
+                            continue
+                        if person_raw is None:
+                            cp.mark_failed(person_id, status=404)
+                            p.advance()
+                            continue
+                        bw.append(_build_person_row(adapt_person_gql_to_v0(person_raw), fetched_at))
+                        completed_set.add(person_id)
+                        cp.sync_completed(completed_set)
+                        if (i + 1) % _CHECKPOINT_FLUSH == 0:
+                            bw.flush()
+                            cp.save()
+                            p.log("bangumi_persons_checkpoint", completed=len(completed_set))
                         p.advance()
-                        continue
-                    if person_raw is None:
-                        cp.mark_failed(person_id, status=404)
-                        p.advance()
-                        continue
-                    bw.append(_build_person_row(adapt_person_gql_to_v0(person_raw), fetched_at))
-                    completed_set.add(person_id)
-                    cp.sync_completed(completed_set)
-                    if (i + 1) % _CHECKPOINT_FLUSH == 0:
-                        bw.flush()
-                        cp.save()
-                        p.log("bangumi_persons_checkpoint", completed=len(completed_set))
-                    p.advance()
         finally:
             bw.flush()
 
@@ -587,12 +587,11 @@ async def _run_characters(
 
     console.print(f"[cyan]Character IDs:[/cyan] {len(all_ids):,}")
 
-    cp = resolve_checkpoint(_CP_CHARACTERS, force=force, resume=resume)
+    cp, pending, completed_set = prepare_checkpoint_run(  # type: ignore[assignment]
+        all_ids, _CP_CHARACTERS, limit=limit, force=force, resume=resume
+    )
     if resume and not force:
-        console.print(f"[cyan]Checkpoint:[/cyan] completed={len(cp.completed_set):,}  failed={len(cp.failed_set):,}")
-
-    completed_set: set[int] = set(cp.completed_set)  # type: ignore[arg-type]
-    pending = cp.pending(all_ids, limit=limit)
+        console.print(f"[cyan]Checkpoint:[/cyan] completed={len(completed_set):,}  failed={len(cp.failed_set):,}")
     console.print(f"[cyan]Pending:[/cyan] {len(pending):,}")
 
     if dry_run:
@@ -610,32 +609,33 @@ async def _run_characters(
     date = dt.date.fromisoformat(date_str)
     with BronzeWriter("bangumi", table="characters", date=date) as bw:
         try:
-            async with BangumiGraphQLClient() as client, scrape_progress(
+            with scrape_progress(
                 total=len(pending),
                 description="characters",
                 enabled=progress_override,
             ) as p:
-                for i, character_id in enumerate(pending):
-                    fetched_at = dt.datetime.now(dt.timezone.utc)
-                    try:
-                        char_raw = await client.fetch_character(character_id)
-                    except ScraperError as exc:
-                        log.error("bangumi_character_fetch_failed", character_id=character_id, error=str(exc))
-                        cp.mark_failed(character_id, status="error", detail=str(exc))
+                async with BangumiGraphQLClient() as client:
+                    for i, character_id in enumerate(pending):
+                        fetched_at = dt.datetime.now(dt.timezone.utc)
+                        try:
+                            char_raw = await client.fetch_character(character_id)
+                        except ScraperError as exc:
+                            log.error("bangumi_character_fetch_failed", character_id=character_id, error=str(exc))
+                            cp.mark_failed(character_id, status="error", detail=str(exc))
+                            p.advance()
+                            continue
+                        if char_raw is None:
+                            cp.mark_failed(character_id, status=404)
+                            p.advance()
+                            continue
+                        bw.append(_build_character_row(adapt_character_gql_to_v0(char_raw), fetched_at))
+                        completed_set.add(character_id)
+                        cp.sync_completed(completed_set)
+                        if (i + 1) % _CHECKPOINT_FLUSH == 0:
+                            bw.flush()
+                            cp.save()
+                            p.log("bangumi_characters_checkpoint", completed=len(completed_set))
                         p.advance()
-                        continue
-                    if char_raw is None:
-                        cp.mark_failed(character_id, status=404)
-                        p.advance()
-                        continue
-                    bw.append(_build_character_row(adapt_character_gql_to_v0(char_raw), fetched_at))
-                    completed_set.add(character_id)
-                    cp.sync_completed(completed_set)
-                    if (i + 1) % _CHECKPOINT_FLUSH == 0:
-                        bw.flush()
-                        cp.save()
-                        p.log("bangumi_characters_checkpoint", completed=len(completed_set))
-                    p.advance()
         finally:
             bw.flush()
 

@@ -77,18 +77,6 @@ _SUBJECT_FIELDS = """
     score
     rank
     total
-    count {
-      _1
-      _2
-      _3
-      _4
-      _5
-      _6
-      _7
-      _8
-      _9
-      _10
-    }
   }
   tags {
     name
@@ -96,7 +84,8 @@ _SUBJECT_FIELDS = """
   }
 """
 
-_PERSON_BRIEF_FIELDS = """
+# Fields for SlimPerson (nested under SubjectRelatedPerson.person)
+_SLIM_PERSON_FIELDS = """
   id
   name
   type
@@ -109,10 +98,10 @@ _PERSON_BRIEF_FIELDS = """
   }
 """
 
-_CHARACTER_BRIEF_FIELDS = """
+# Fields for SlimCharacter (nested under SubjectRelatedCharacter.character)
+_SLIM_CHARACTER_FIELDS = """
   id
   name
-  type
   images {
     large
     medium
@@ -145,22 +134,26 @@ def SUBJECT_FULL_QUERY(subject_id: int) -> str:  # noqa: N802
   subject(id: {subject_id}) {{
     {_SUBJECT_FIELDS}
     persons(limit: 50, offset: 0) {{
-      {_PERSON_BRIEF_FIELDS}
-      eps
-      relation
+      person {{
+        {_SLIM_PERSON_FIELDS}
+      }}
+      position
     }}
     characters(limit: 50, offset: 0) {{
-      {_CHARACTER_BRIEF_FIELDS}
-      relation
-      actors {{
-        {_PERSON_BRIEF_FIELDS}
+      character {{
+        {_SLIM_CHARACTER_FIELDS}
       }}
+      type
+      order
     }}
     relations(limit: 50, offset: 0) {{
-      id
-      name
+      subject {{
+        id
+        name
+        type
+      }}
       relation
-      type
+      order
     }}
   }}
 }}"""
@@ -203,16 +196,17 @@ def SUBJECT_BATCH_QUERY(subject_ids: list[int]) -> str:  # noqa: N802
         aliases.append(f"""  s{sid}: subject(id: {sid}) {{
     {_SUBJECT_FIELDS}
     persons(limit: 50, offset: 0) {{
-      {_PERSON_BRIEF_FIELDS}
-      eps
-      relation
+      person {{
+        {_SLIM_PERSON_FIELDS}
+      }}
+      position
     }}
     characters(limit: 50, offset: 0) {{
-      {_CHARACTER_BRIEF_FIELDS}
-      relation
-      actors {{
-        {_PERSON_BRIEF_FIELDS}
+      character {{
+        {_SLIM_CHARACTER_FIELDS}
       }}
+      type
+      order
     }}
   }}""")
 
@@ -251,23 +245,13 @@ def PERSON_QUERY(person_id: int) -> str:  # noqa: N802
         v
       }}
     }}
-    gender
-    bloodType: blood_type
-    birthYear: birth_year
-    birthMon: birth_mon
-    birthDay: birth_day
     images {{
       large
       medium
       small
       grid
     }}
-    stat {{
-      comments
-      collects
-    }}
-    locked
-    lastModified: last_modified
+    locked: lock
   }}
 }}"""
 
@@ -297,7 +281,6 @@ def CHARACTER_QUERY(character_id: int) -> str:  # noqa: N802
   character(id: {character_id}) {{
     id
     name
-    type
     summary
     infobox {{
       key
@@ -306,21 +289,12 @@ def CHARACTER_QUERY(character_id: int) -> str:  # noqa: N802
         v
       }}
     }}
-    gender
-    bloodType: blood_type
-    birthYear: birth_year
-    birthMon: birth_mon
-    birthDay: birth_day
     images {{
       large
       medium
       small
       grid
     }}
-    stat {{
-      comments
-      collects
-    }}
-    locked
+    locked: lock
   }}
 }}"""

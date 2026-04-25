@@ -135,16 +135,21 @@ _SAMPLE_SUBJECT = {
     "rating": {"score": 9.0, "rank": 1, "total": 50000, "count": {}},
     "tags": [{"name": "魔法少女", "count": 100}],
     "persons": [
-        {"id": 9527, "name": "新房昭之", "type": 1, "career": ["animator"], "images": None, "eps": "", "relation": "导演"},
+        {
+            "person": {"id": 9527, "name": "新房昭之", "type": 1, "career": ["animator"], "images": None},
+            "position": "导演",
+        }
     ],
     "characters": [
         {
-            "id": 4321,
-            "name": "鹿目まどか",
+            "character": {
+                "id": 4321,
+                "name": "鹿目まどか",
+                "images": {"large": "/cl.jpg", "medium": "/cm.jpg", "small": "/cs.jpg", "grid": "/cg.jpg"},
+                "summary": "",
+            },
             "type": 1,
-            "relation": "主角",
-            "images": {"large": "/cl.jpg", "medium": "/cm.jpg", "small": "/cs.jpg", "grid": "/cg.jpg"},
-            "actors": [{"id": 777, "name": "悠木碧", "type": 1, "career": ["voice_actor"], "images": None}],
+            "order": "主角",
         }
     ],
 }
@@ -450,17 +455,13 @@ def test_adapt_subject_persons_gql_extracts_persons():
 
 
 def test_adapt_subject_characters_gql_extracts_characters_and_actors():
-    """adapt_subject_characters_gql returns characters with nested actors."""
+    """adapt_subject_characters_gql returns characters."""
     chars = adapt_subject_characters_gql(328, _SAMPLE_SUBJECT)
     assert len(chars) == 1
     c = chars[0]
     assert c["id"] == 4321
     assert c["name"] == "鹿目まどか"
     assert c["relation"] == "主角"
-    # actors nested inside
-    assert len(c["actors"]) == 1
-    assert c["actors"][0]["id"] == 777
-    assert c["actors"][0]["name"] == "悠木碧"
 
 
 # ---------------------------------------------------------------------------

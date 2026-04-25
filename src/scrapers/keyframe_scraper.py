@@ -41,6 +41,7 @@ import typer
 import structlog
 
 from src.scrapers.bronze_writer import BronzeWriter
+from src.scrapers.checkpoint import atomic_write_json, load_json_or
 from src.scrapers.keyframe_api import KeyframeApiClient
 from src.scrapers.parsers import keyframe as html_parser
 from src.scrapers.parsers import keyframe_api as api_parser
@@ -59,22 +60,6 @@ CHECKPOINT_INTERVAL = 10  # flush checkpoint every N items
 # =============================================================================
 
 
-def _load_checkpoint(cp_path: Path, fresh: bool) -> dict:
-    """Load checkpoint from disk or return blank structure."""
-    if fresh or not cp_path.exists():
-        return _blank_checkpoint()
-    try:
-        data = json.loads(cp_path.read_text(encoding="utf-8"))
-        # Back-fill missing keys for robustness
-        blank = _blank_checkpoint()
-        for k, v in blank.items():
-            data.setdefault(k, v)
-        return data
-    except (json.JSONDecodeError, OSError) as exc:
-        log.warning("keyframe_checkpoint_load_error", err=str(exc)[:120])
-        return _blank_checkpoint()
-
-
 def _blank_checkpoint() -> dict:
     return {
         "anime_phase": {"completed_slugs": [], "all_slugs": []},
@@ -85,11 +70,22 @@ def _blank_checkpoint() -> dict:
     }
 
 
+def _load_checkpoint(cp_path: Path, fresh: bool) -> dict:
+    """Load checkpoint or return blank structure."""
+    if fresh:
+        return _blank_checkpoint()
+    data = load_json_or(cp_path, None)
+    if not isinstance(data, dict):
+        return _blank_checkpoint()
+    blank = _blank_checkpoint()
+    for k, v in blank.items():
+        data.setdefault(k, v)
+    return data
+
+
 def _save_checkpoint(cp_path: Path, cp: dict) -> None:
     """Atomically write checkpoint JSON."""
-    tmp = cp_path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(cp, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(cp_path)
+    atomic_write_json(cp_path, cp, ensure_ascii=False, indent=2)
 
 
 # =============================================================================
