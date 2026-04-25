@@ -3,6 +3,8 @@
 Provides ``BangumiClient`` — an async context manager wrapping httpx with:
 - 1 req/sec floor rate limiter (shared across all fetch methods)
 - Exponential backoff retry (429 / 5xx, max 5 attempts)
+- Retry-After header support: honors RFC 7231 integer-seconds or HTTP-date,
+  capped at _RETRY_AFTER_CAP to prevent runaway stalls
 - 404 → returns None without retry (logged and checkpointed by caller)
 
 Endpoints implemented:
@@ -15,6 +17,7 @@ Endpoints implemented:
 from __future__ import annotations
 
 import asyncio
+import email.utils
 import time
 from typing import Any
 
@@ -35,6 +38,54 @@ log = structlog.get_logger()
 _SOURCE = "bangumi"
 _MAX_ATTEMPTS = 5
 _BASE_DELAY = 2.0  # seconds; doubles each retry
+_RETRY_AFTER_CAP = 120.0  # seconds; upper bound for any Retry-After value
+
+
+def _compute_backoff_sleep(
+    attempt: int,
+    status: int,  # noqa: ARG001  (kept for test-friendly seam / future use)
+    retry_after: str | None,
+) -> float:
+    """Return how many seconds to sleep before the next retry attempt.
+
+    Exponential backoff: ``_BASE_DELAY * 2^(attempt-1)`` (attempt is 1-based).
+    If ``retry_after`` is present (RFC 7231: integer seconds or HTTP-date),
+    the sleep is ``max(parsed_retry_after, exp_backoff)`` capped at
+    ``_RETRY_AFTER_CAP``.
+
+    Args:
+        attempt: current attempt number (1 = first try).
+        status: HTTP status code that triggered the retry (for future use).
+        retry_after: raw value of the Retry-After response header, or None.
+
+    Returns:
+        Sleep duration in seconds (float, > 0).
+    """
+    exp_backoff = _BASE_DELAY * (2 ** (attempt - 1))
+
+    if retry_after is None:
+        return exp_backoff
+
+    # RFC 7231 §7.1.3: Retry-After is either an integer (delay-seconds)
+    # or an HTTP-date string.
+    parsed: float | None = None
+    stripped = retry_after.strip()
+    if stripped.isdigit():
+        parsed = float(stripped)
+    else:
+        try:
+            # email.utils.parsedate_to_datetime handles RFC 5322 / HTTP-date.
+            ts = email.utils.parsedate_to_datetime(stripped)
+            parsed = max(0.0, ts.timestamp() - time.time())
+        except Exception:
+            parsed = None
+
+    if parsed is not None and parsed > 0:
+        chosen = min(max(parsed, exp_backoff), _RETRY_AFTER_CAP)
+    else:
+        chosen = min(exp_backoff, _RETRY_AFTER_CAP)
+
+    return chosen
 
 
 class BangumiClient:
@@ -195,7 +246,7 @@ class BangumiClient:
                         source=_SOURCE,
                         url=url,
                     ) from exc
-                wait = _BASE_DELAY * (2 ** (attempt - 1))
+                wait = _compute_backoff_sleep(attempt, 0, None)
                 log.warning(
                     "bangumi_transport_error",
                     url=url,
@@ -212,22 +263,30 @@ class BangumiClient:
                 return None
 
             if resp.status_code == 429:
-                retry_after = float(resp.headers.get("Retry-After", 60))
+                raw_retry_after = resp.headers.get("Retry-After")
+                wait = _compute_backoff_sleep(attempt, 429, raw_retry_after)
                 log.warning(
                     "bangumi_rate_limited",
                     url=url,
                     context=context,
                     attempt=attempt,
-                    retry_after=retry_after,
+                    retry_after_header=raw_retry_after,
+                    wait_seconds=wait,
                 )
+                if raw_retry_after is not None:
+                    log.info(
+                        "bangumi_retry_after_honored",
+                        attempt=attempt,
+                        seconds=wait,
+                    )
                 if attempt >= _MAX_ATTEMPTS:
                     raise RateLimitError(
                         "bangumi rate limit exceeded after max attempts",
                         source=_SOURCE,
                         url=url,
-                        retry_after=retry_after,
+                        retry_after=wait,
                     )
-                await asyncio.sleep(retry_after)
+                await asyncio.sleep(wait)
                 continue
 
             if resp.status_code >= 500:
@@ -237,15 +296,23 @@ class BangumiClient:
                         source=_SOURCE,
                         url=url,
                     )
-                wait = _BASE_DELAY * (2 ** (attempt - 1))
+                raw_retry_after = resp.headers.get("Retry-After")
+                wait = _compute_backoff_sleep(attempt, resp.status_code, raw_retry_after)
                 log.warning(
                     "bangumi_server_error",
                     url=url,
                     context=context,
                     status=resp.status_code,
                     attempt=attempt,
+                    retry_after_header=raw_retry_after,
                     wait_seconds=wait,
                 )
+                if raw_retry_after is not None:
+                    log.info(
+                        "bangumi_retry_after_honored",
+                        attempt=attempt,
+                        seconds=wait,
+                    )
                 await asyncio.sleep(wait)
                 continue
 
