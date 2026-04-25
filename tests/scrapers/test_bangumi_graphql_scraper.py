@@ -33,7 +33,7 @@ from src.scrapers.bangumi_graphql_scraper import (
     adapt_subject_characters_gql,
     adapt_subject_persons_gql,
 )
-from src.scrapers.bangumi_scraper import _HOST_RATE_LIMITER
+from src.scrapers.bangumi_graphql_scraper import _HOST_RATE_LIMITER
 from src.scrapers.exceptions import ScraperError
 from src.scrapers.queries.bangumi_graphql import DEFAULT_USER_AGENT
 

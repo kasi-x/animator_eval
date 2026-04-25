@@ -229,7 +229,7 @@ def PERSON_QUERY(person_id: int) -> str:  # noqa: N802
     """Return a GraphQL document for fetching a single person's full detail.
 
     Fields mirror the /v0/persons/{id} REST response shape used by the
-    existing BRONZE row builder (``_build_person_row`` in scrape_bangumi_persons.py).
+    existing BRONZE row builder (``_build_person_row`` in bangumi_main.py).
 
     Args:
         person_id: bangumi person integer ID.
@@ -281,7 +281,7 @@ def CHARACTER_QUERY(character_id: int) -> str:  # noqa: N802
     """Return a GraphQL document for fetching a single character's full detail.
 
     Fields mirror the /v0/characters/{id} REST response shape used by the
-    existing BRONZE row builder (``_build_character_row`` in scrape_bangumi_characters.py).
+    existing BRONZE row builder (``_build_character_row`` in bangumi_main.py).
 
     Note: ``last_modified`` is absent from character responses in the v0 REST
     API and may also be absent from the GraphQL schema.  The adapter normalises

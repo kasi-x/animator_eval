@@ -5,7 +5,7 @@ Follows the same structure as ann_scraper.py / allcinema_scraper.py.
 Commands:
   fetch-dump  : download bangumi/Archive dump from GitHub
   subjects    : migrate dump jsonlines → BRONZE parquet (type=2 anime)
-  relations   : scrape subject×persons/characters via GraphQL (default) or v0
+  relations   : scrape subject×persons/characters via GraphQL
   persons     : scrape person details
   characters  : scrape character details
   run         : relations → persons → characters in sequence
@@ -16,14 +16,9 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import json
-import os
 import re
-import struct
-import tempfile
-import zlib
 from pathlib import Path
 from typing import Any
-from typing_extensions import Annotated
 
 import duckdb
 import pyarrow as pa
@@ -42,10 +37,13 @@ from rich.progress import (
 )
 
 from src.scrapers.bangumi_dump import (
+    build_asset_url,
     build_manifest,
     download_zip,
     extract_zip,
     fetch_latest_release_meta,
+    fmt_bytes,
+    update_latest_symlink,
 )
 from src.scrapers.bangumi_graphql_scraper import (
     BangumiGraphQLClient,
@@ -54,9 +52,8 @@ from src.scrapers.bangumi_graphql_scraper import (
     adapt_subject_characters_gql,
     adapt_subject_persons_gql,
 )
-from src.scrapers.bangumi_scraper import BangumiClient
 from src.scrapers.bronze_writer import BronzeWriter, BronzeWriterGroup
-from src.scrapers.checkpoint import Checkpoint
+from src.scrapers.checkpoint import Checkpoint, resolve_checkpoint
 from src.scrapers.cli_common import (
     DryRunOpt,
     ForceOpt,
@@ -95,18 +92,10 @@ _SUBJECT_PERSONS_GLOB = "result/bronze/source=bangumi/table=subject_persons/**/*
 _SUBJECT_CHARS_GLOB = "result/bronze/source=bangumi/table=subject_characters/**/*.parquet"
 _PERSON_CHARS_GLOB = "result/bronze/source=bangumi/table=person_characters/**/*.parquet"
 
-_GRAPHQL_BATCH = 25  # subjects per GraphQL POST
+_GRAPHQL_BATCH = 25   # subjects per GraphQL POST
 _CHECKPOINT_FLUSH = 100  # items between parquet flush + checkpoint save
 
-_ClientOpt = Annotated[
-    str,
-    typer.Option(
-        "--client",
-        help="API client: 'graphql' (default, batched) or 'v0' (legacy REST).",
-    ),
-]
-
-# ─── subjects schema (migrate phase) ─────────────────────────────────────────
+# ─── subjects schema ──────────────────────────────────────────────────────────
 
 _SUBJECTS_JSON_FIELDS = frozenset({"tags", "meta_tags", "score_details", "favorite"})
 _SUBJECTS_SCHEMA = pa.schema(
@@ -129,7 +118,6 @@ _SUBJECTS_SCHEMA = pa.schema(
         pa.field("series", pa.bool_()),
     ]
 )
-
 
 # ─── shared helpers ───────────────────────────────────────────────────────────
 
@@ -259,22 +247,20 @@ def _build_person_rows(
     persons: list[dict[str, Any]],
     fetched_at: dt.datetime,
 ) -> list[dict[str, Any]]:
-    rows = []
-    for p in persons:
-        rows.append(
-            {
-                "subject_id": subject_id,
-                "person_id": int(p.get("id", 0)),
-                "position": str(p.get("relation") or ""),
-                "person_type": int(p.get("type") or 0),
-                "career": json.dumps(p.get("career") or [], ensure_ascii=False),
-                "eps": str(p.get("eps") or ""),
-                "name_raw": str(p.get("name") or ""),
-                "images": json.dumps(p.get("images") or {}, ensure_ascii=False),
-                "fetched_at": fetched_at,
-            }
-        )
-    return rows
+    return [
+        {
+            "subject_id": subject_id,
+            "person_id": int(p.get("id", 0)),
+            "position": str(p.get("relation") or ""),
+            "person_type": int(p.get("type") or 0),
+            "career": json.dumps(p.get("career") or [], ensure_ascii=False),
+            "eps": str(p.get("eps") or ""),
+            "name_raw": str(p.get("name") or ""),
+            "images": json.dumps(p.get("images") or {}, ensure_ascii=False),
+            "fetched_at": fetched_at,
+        }
+        for p in persons
+    ]
 
 
 def _build_character_and_actor_rows(
@@ -322,27 +308,43 @@ def _check_relations_idempotent(all_ids: list[int], date_str: str) -> None:
         return
     cp = Checkpoint.load(_CP_RELATIONS)
     if set(all_ids).issubset(cp.completed_set):
-        console.print(
-            "[green]All subjects completed + parquet exists. Use --force to re-run.[/green]"
-        )
+        console.print("[green]All subjects completed + parquet exists. Use --force to re-run.[/green]")
         raise typer.Exit(0)
 
 
-async def _run_relations_graphql(
-    subject_ids: list[int],
-    cp: Checkpoint,
-    date_str: str,
+async def _run_relations(
+    *,
+    limit: int,
     dry_run: bool,
+    resume: bool,
+    force: bool,
     progress_override: bool | None = None,
 ) -> None:
+    date_str = _today()
+    try:
+        all_ids = _load_subject_ids()
+    except Exception as exc:
+        console.print(f"[red]Failed to load subject IDs:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    console.print(f"[cyan]Subject IDs:[/cyan] {len(all_ids):,}")
+
+    if not force and not dry_run:
+        _check_relations_idempotent(all_ids, date_str)
+
+    cp = resolve_checkpoint(_CP_RELATIONS, force=force, resume=resume)
+    if resume and not force:
+        console.print(f"[cyan]Checkpoint:[/cyan] completed={len(cp.completed_set):,}  failed={len(cp.failed_set):,}")
+
     completed_set: set[int] = set(cp.completed_set)  # type: ignore[arg-type]
-    pending = cp.pending(subject_ids)
+    pending = cp.pending(all_ids, limit=limit)
+    console.print(f"[cyan]Pending:[/cyan] {len(pending):,}")
 
     if dry_run:
         batches = (len(pending) + _GRAPHQL_BATCH - 1) // _GRAPHQL_BATCH
         console.print(
-            f"[bold cyan]dry-run[/bold cyan] [client=graphql]  "
-            f"total={len(subject_ids):,}  completed={len(completed_set):,}  "
+            f"[bold cyan]dry-run[/bold cyan]  "
+            f"total={len(all_ids):,}  completed={len(completed_set):,}  "
             f"pending={len(pending):,}  batches={batches:,}  "
             f"ETA≈{batches // 60}m {batches % 60}s"
         )
@@ -367,7 +369,7 @@ async def _run_relations_graphql(
         try:
             async with BangumiGraphQLClient() as client, scrape_progress(
                 total=len(chunks),
-                description="relations [graphql]",
+                description="relations",
                 enabled=progress_override,
             ) as p:
                 for idx, chunk in enumerate(chunks):
@@ -400,7 +402,6 @@ async def _run_relations_graphql(
                         completed_set.add(subject_id)
 
                     cp.sync_completed(completed_set)
-
                     if (idx + 1) * _GRAPHQL_BATCH % _CHECKPOINT_FLUSH < _GRAPHQL_BATCH:
                         group.flush_all()
                         cp.save()
@@ -408,92 +409,6 @@ async def _run_relations_graphql(
                             "bangumi_relations_checkpoint",
                             completed=len(completed_set),
                             remaining=len(chunks) - idx - 1,
-                        )
-                    p.advance()
-        finally:
-            group.flush_all()
-
-    cp.sync_completed(completed_set)
-    cp.save()
-    log.info("bangumi_relations_done", completed=len(completed_set), failed=len(cp.failed_ids))
-
-
-async def _run_relations_v0(
-    subject_ids: list[int],
-    cp: Checkpoint,
-    date_str: str,
-    dry_run: bool,
-    progress_override: bool | None = None,
-) -> None:
-    completed_set: set[int] = set(cp.completed_set)  # type: ignore[arg-type]
-    pending = cp.pending(subject_ids)
-
-    if dry_run:
-        console.print(
-            f"[bold cyan]dry-run[/bold cyan] [client=v0]  "
-            f"total={len(subject_ids):,}  completed={len(completed_set):,}  "
-            f"pending={len(pending):,}  ETA≈{len(pending) * 2 // 60}m"
-        )
-        return
-
-    if not pending:
-        console.print("[green]relations: all subjects completed.[/green]")
-        return
-
-    date = dt.date.fromisoformat(date_str)
-    with BronzeWriterGroup(
-        "bangumi",
-        tables=["subject_persons", "subject_characters", "person_characters"],
-        date=date,
-    ) as group:
-        bw_persons = group["subject_persons"]
-        bw_chars = group["subject_characters"]
-        bw_actors = group["person_characters"]
-
-        try:
-            async with BangumiClient() as client, scrape_progress(
-                total=len(pending),
-                description="relations [v0]",
-                enabled=progress_override,
-            ) as p:
-                for i, subject_id in enumerate(pending):
-                    fetched_at = dt.datetime.now(dt.timezone.utc)
-                    try:
-                        persons = await client.fetch_subject_persons(subject_id)
-                    except ScraperError as exc:
-                        log.error("bangumi_persons_fetch_failed", subject_id=subject_id, error=str(exc))
-                        cp.mark_failed(subject_id, status="error", detail=str(exc))
-                        p.advance()
-                        continue
-                    if persons is None:
-                        cp.mark_failed(subject_id, status=404)
-                        persons = []
-                    for row in _build_person_rows(subject_id, persons, fetched_at):
-                        bw_persons.append(row)
-
-                    try:
-                        characters = await client.fetch_subject_characters(subject_id) or []
-                    except ScraperError as exc:
-                        log.error("bangumi_characters_fetch_failed", subject_id=subject_id, error=str(exc))
-                        characters = []
-                    c_rows, a_rows = _build_character_and_actor_rows(
-                        subject_id, characters, fetched_at
-                    )
-                    for row in c_rows:
-                        bw_chars.append(row)
-                    for row in a_rows:
-                        bw_actors.append(row)
-
-                    completed_set.add(subject_id)
-                    cp.sync_completed(completed_set)
-
-                    if (i + 1) % _CHECKPOINT_FLUSH == 0:
-                        group.flush_all()
-                        cp.save()
-                        p.log(
-                            "bangumi_relations_checkpoint",
-                            completed=len(completed_set),
-                            remaining=len(pending) - i - 1,
                         )
                     p.advance()
         finally:
@@ -544,21 +459,34 @@ def _build_person_row(person: dict[str, Any], fetched_at: dt.datetime) -> dict[s
 
 
 async def _run_persons(
-    person_ids: list[int],
-    cp: Checkpoint,
-    date_str: str,
+    *,
+    limit: int,
     dry_run: bool,
-    use_graphql: bool = True,
+    resume: bool,
+    force: bool,
     progress_override: bool | None = None,
 ) -> None:
+    date_str = _today()
+    try:
+        all_ids = _load_person_ids()
+    except Exception as exc:
+        console.print(f"[red]Failed to load person IDs:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    console.print(f"[cyan]Person IDs:[/cyan] {len(all_ids):,}")
+
+    cp = resolve_checkpoint(_CP_PERSONS, force=force, resume=resume)
+    if resume and not force:
+        console.print(f"[cyan]Checkpoint:[/cyan] completed={len(cp.completed_set):,}  failed={len(cp.failed_set):,}")
+
     completed_set: set[int] = set(cp.completed_set)  # type: ignore[arg-type]
-    pending = cp.pending(person_ids)
-    label = "graphql" if use_graphql else "v0"
+    pending = cp.pending(all_ids, limit=limit)
+    console.print(f"[cyan]Pending:[/cyan] {len(pending):,}")
 
     if dry_run:
         console.print(
-            f"[bold cyan]dry-run[/bold cyan] [client={label}]  "
-            f"total={len(person_ids):,}  completed={len(completed_set):,}  "
+            f"[bold cyan]dry-run[/bold cyan]  "
+            f"total={len(all_ids):,}  completed={len(completed_set):,}  "
             f"pending={len(pending):,}  ETA≈{len(pending) // 60}m"
         )
         return
@@ -570,18 +498,15 @@ async def _run_persons(
     date = dt.date.fromisoformat(date_str)
     with BronzeWriter("bangumi", table="persons", date=date) as bw:
         try:
-            active_client: BangumiGraphQLClient | BangumiClient = (
-                BangumiGraphQLClient() if use_graphql else BangumiClient()  # type: ignore[assignment]
-            )
-            async with active_client, scrape_progress(
+            async with BangumiGraphQLClient() as client, scrape_progress(
                 total=len(pending),
-                description=f"persons [{label}]",
+                description="persons",
                 enabled=progress_override,
             ) as p:
                 for i, person_id in enumerate(pending):
                     fetched_at = dt.datetime.now(dt.timezone.utc)
                     try:
-                        person_raw = await active_client.fetch_person(person_id)
+                        person_raw = await client.fetch_person(person_id)
                     except ScraperError as exc:
                         log.error("bangumi_person_fetch_failed", person_id=person_id, error=str(exc))
                         cp.mark_failed(person_id, status="error", detail=str(exc))
@@ -591,8 +516,7 @@ async def _run_persons(
                         cp.mark_failed(person_id, status=404)
                         p.advance()
                         continue
-                    person = adapt_person_gql_to_v0(person_raw) if use_graphql else person_raw
-                    bw.append(_build_person_row(person, fetched_at))
+                    bw.append(_build_person_row(adapt_person_gql_to_v0(person_raw), fetched_at))
                     completed_set.add(person_id)
                     cp.sync_completed(completed_set)
                     if (i + 1) % _CHECKPOINT_FLUSH == 0:
@@ -647,21 +571,34 @@ def _build_character_row(character: dict[str, Any], fetched_at: dt.datetime) -> 
 
 
 async def _run_characters(
-    character_ids: list[int],
-    cp: Checkpoint,
-    date_str: str,
+    *,
+    limit: int,
     dry_run: bool,
-    use_graphql: bool = True,
+    resume: bool,
+    force: bool,
     progress_override: bool | None = None,
 ) -> None:
+    date_str = _today()
+    try:
+        all_ids = _load_character_ids()
+    except Exception as exc:
+        console.print(f"[red]Failed to load character IDs:[/red] {exc}")
+        raise typer.Exit(1) from exc
+
+    console.print(f"[cyan]Character IDs:[/cyan] {len(all_ids):,}")
+
+    cp = resolve_checkpoint(_CP_CHARACTERS, force=force, resume=resume)
+    if resume and not force:
+        console.print(f"[cyan]Checkpoint:[/cyan] completed={len(cp.completed_set):,}  failed={len(cp.failed_set):,}")
+
     completed_set: set[int] = set(cp.completed_set)  # type: ignore[arg-type]
-    pending = cp.pending(character_ids)
-    label = "graphql" if use_graphql else "v0"
+    pending = cp.pending(all_ids, limit=limit)
+    console.print(f"[cyan]Pending:[/cyan] {len(pending):,}")
 
     if dry_run:
         console.print(
-            f"[bold cyan]dry-run[/bold cyan] [client={label}]  "
-            f"total={len(character_ids):,}  completed={len(completed_set):,}  "
+            f"[bold cyan]dry-run[/bold cyan]  "
+            f"total={len(all_ids):,}  completed={len(completed_set):,}  "
             f"pending={len(pending):,}  ETA≈{len(pending) // 60}m"
         )
         return
@@ -673,18 +610,15 @@ async def _run_characters(
     date = dt.date.fromisoformat(date_str)
     with BronzeWriter("bangumi", table="characters", date=date) as bw:
         try:
-            active_client: BangumiGraphQLClient | BangumiClient = (
-                BangumiGraphQLClient() if use_graphql else BangumiClient()  # type: ignore[assignment]
-            )
-            async with active_client, scrape_progress(
+            async with BangumiGraphQLClient() as client, scrape_progress(
                 total=len(pending),
-                description=f"characters [{label}]",
+                description="characters",
                 enabled=progress_override,
             ) as p:
                 for i, character_id in enumerate(pending):
                     fetched_at = dt.datetime.now(dt.timezone.utc)
                     try:
-                        char_raw = await active_client.fetch_character(character_id)
+                        char_raw = await client.fetch_character(character_id)
                     except ScraperError as exc:
                         log.error("bangumi_character_fetch_failed", character_id=character_id, error=str(exc))
                         cp.mark_failed(character_id, status="error", detail=str(exc))
@@ -694,8 +628,7 @@ async def _run_characters(
                         cp.mark_failed(character_id, status=404)
                         p.advance()
                         continue
-                    character = adapt_character_gql_to_v0(char_raw) if use_graphql else char_raw
-                    bw.append(_build_character_row(character, fetched_at))
+                    bw.append(_build_character_row(adapt_character_gql_to_v0(char_raw), fetched_at))
                     completed_set.add(character_id)
                     cp.sync_completed(completed_set)
                     if (i + 1) % _CHECKPOINT_FLUSH == 0:
@@ -709,33 +642,6 @@ async def _run_characters(
     cp.sync_completed(completed_set)
     cp.save()
     log.info("bangumi_characters_done", completed=len(completed_set), failed=len(cp.failed_ids))
-
-
-# ─── fetch-dump helpers ───────────────────────────────────────────────────────
-
-
-def _build_dump_asset_url(tag: str) -> str:
-    return f"https://github.com/bangumi/Archive/releases/download/archive/{tag}.zip"
-
-
-def _update_latest_symlink(tag: str) -> None:
-    link_parent = _DUMP_ROOT
-    fd, tmp_path_str = tempfile.mkstemp(dir=link_parent, prefix=".latest_tmp_")
-    os.close(fd)
-    tmp_path = Path(tmp_path_str)
-    tmp_path.unlink()
-    tmp_path.symlink_to(tag)
-    tmp_path.rename(_DUMP_LATEST)
-
-
-def _fmt_bytes(n: int | None) -> str:
-    if n is None:
-        return "unknown"
-    for unit in ("B", "KB", "MB", "GB"):
-        if n < 1024:
-            return f"{n:.1f} {unit}"
-        n /= 1024  # type: ignore[assignment]
-    return f"{n:.1f} TB"
 
 
 # ─── CLI commands ─────────────────────────────────────────────────────────────
@@ -755,7 +661,7 @@ def cmd_fetch_dump(
 async def _run_fetch_dump(*, tag: str, force: bool) -> None:
     meta = await fetch_latest_release_meta()
     if tag and meta["tag"] != tag:
-        meta = {"tag": tag, "url": _build_dump_asset_url(tag), "size": None, "sha256": None}
+        meta = {"tag": tag, "url": build_asset_url(tag), "size": None, "sha256": None}
     elif not tag:
         tag = meta["tag"]
 
@@ -768,8 +674,8 @@ async def _run_fetch_dump(*, tag: str, force: bool) -> None:
 
     _DUMP_ROOT.mkdir(parents=True, exist_ok=True)
     zip_path = _DUMP_ROOT / f"{tag}.zip"
+    console.print(f"[cyan]↓[/cyan] Downloading {tag}  (~{fmt_bytes(meta['size'])})")
 
-    console.print(f"[cyan]↓[/cyan] Downloading {tag}  (~{_fmt_bytes(meta['size'])})")
     with Progress(
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
@@ -793,10 +699,10 @@ async def _run_fetch_dump(*, tag: str, force: bool) -> None:
     manifest = build_manifest(tag_dir, tag)
     manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
     zip_path.unlink(missing_ok=True)
-    _update_latest_symlink(tag)
+    update_latest_symlink(_DUMP_ROOT, tag)
     console.print(f"[green]✓[/green] Done: {tag}")
     for f in manifest["files"]:
-        console.print(f"  {f['name']:40s}  {_fmt_bytes(f['size']):>10s}  {f['line_count']:>10,} lines")
+        console.print(f"  {f['name']:40s}  {fmt_bytes(f['size']):>10s}  {f['line_count']:>10,} lines")
 
 
 @app.command("subjects")
@@ -821,15 +727,10 @@ def cmd_subjects(
         log.error("bangumi_subjects_manifest_missing", path=str(manifest_path))
         raise typer.Exit(1)
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    release_tag = manifest["release_tag"]
-    date_str = _release_date_from_tag(release_tag)
+    date_str = _release_date_from_tag(manifest["release_tag"])
 
     out_path = (
-        bronze_root
-        / "source=bangumi"
-        / "table=subjects"
-        / f"date={date_str}"
-        / "part-0.parquet"
+        bronze_root / "source=bangumi" / "table=subjects" / f"date={date_str}" / "part-0.parquet"
     )
     if out_path.exists() and not force and not dry_run:
         console.print(f"[yellow]⚠[/yellow] Already exists: {out_path} — use --force to overwrite.")
@@ -855,78 +756,19 @@ def cmd_relations(
     force: ForceOpt = False,
     quiet: QuietOpt = False,
     progress: ProgressOpt = False,
-    client: _ClientOpt = "graphql",
 ) -> None:
     """Scrape subject×persons/characters → BRONZE parquet."""
-    if client not in ("graphql", "v0"):
-        raise typer.BadParameter(f"--client must be 'graphql' or 'v0', got: {client!r}")
     log_path = configure_file_logging("bangumi")
-    log.info("bangumi_relations_command_start", log_file=str(log_path), client=client, limit=limit)
+    log.info("bangumi_relations_command_start", log_file=str(log_path), limit=limit)
     asyncio.run(
-        _run_cmd_relations(
+        _run_relations(
             limit=limit,
             dry_run=dry_run,
             resume=resume,
             force=force,
-            client=client,
             progress_override=resolve_progress_enabled(quiet, progress),
         )
     )
-
-
-async def _run_cmd_relations(
-    *,
-    limit: int,
-    dry_run: bool,
-    resume: bool,
-    force: bool,
-    client: str,
-    progress_override: bool | None,
-) -> None:
-    date_str = _today()
-    try:
-        all_ids = _load_subject_ids()
-    except Exception as exc:
-        console.print(f"[red]Failed to load subject IDs:[/red] {exc}")
-        raise typer.Exit(1) from exc
-
-    console.print(f"[cyan]Subject IDs:[/cyan] {len(all_ids):,}")
-
-    if not force and not dry_run:
-        _check_relations_idempotent(all_ids, date_str)
-
-    if force:
-        cp = Checkpoint(_CP_RELATIONS)
-    elif resume:
-        cp = Checkpoint.load(_CP_RELATIONS)
-    else:
-        cp = Checkpoint(_CP_RELATIONS)
-
-    pending = cp.pending(all_ids)
-    if limit > 0:
-        pending = pending[:limit]
-        run_ids = pending
-    else:
-        run_ids = all_ids
-
-    console.print(f"[cyan]Pending:[/cyan] {len(pending):,}  [client={client}]")
-
-    if client == "graphql":
-        await _run_relations_graphql(
-            subject_ids=run_ids,
-            cp=cp,
-            date_str=date_str,
-            dry_run=dry_run,
-            progress_override=progress_override,
-        )
-    else:
-        await _run_relations_v0(
-            subject_ids=run_ids,
-            cp=cp,
-            date_str=date_str,
-            dry_run=dry_run,
-            progress_override=progress_override,
-        )
 
 
 @app.command("persons")
@@ -937,64 +779,18 @@ def cmd_persons(
     force: ForceOpt = False,
     quiet: QuietOpt = False,
     progress: ProgressOpt = False,
-    client: _ClientOpt = "graphql",
 ) -> None:
     """Scrape person details → BRONZE parquet."""
-    if client not in ("graphql", "v0"):
-        raise typer.BadParameter(f"--client must be 'graphql' or 'v0', got: {client!r}")
     log_path = configure_file_logging("bangumi")
-    log.info("bangumi_persons_command_start", log_file=str(log_path), client=client, limit=limit)
+    log.info("bangumi_persons_command_start", log_file=str(log_path), limit=limit)
     asyncio.run(
-        _run_cmd_persons(
+        _run_persons(
             limit=limit,
             dry_run=dry_run,
             resume=resume,
             force=force,
-            client=client,
             progress_override=resolve_progress_enabled(quiet, progress),
         )
-    )
-
-
-async def _run_cmd_persons(
-    *,
-    limit: int,
-    dry_run: bool,
-    resume: bool,
-    force: bool,
-    client: str,
-    progress_override: bool | None,
-) -> None:
-    date_str = _today()
-    try:
-        all_ids = _load_person_ids()
-    except Exception as exc:
-        console.print(f"[red]Failed to load person IDs:[/red] {exc}")
-        raise typer.Exit(1) from exc
-
-    console.print(f"[cyan]Person IDs:[/cyan] {len(all_ids):,}")
-
-    if force:
-        cp = Checkpoint(_CP_PERSONS)
-    elif resume:
-        cp = Checkpoint.load(_CP_PERSONS)
-        console.print(f"[cyan]Checkpoint:[/cyan] completed={len(cp.completed_set):,}  failed={len(cp.failed_set):,}")
-    else:
-        cp = Checkpoint(_CP_PERSONS)
-
-    pending = cp.pending(all_ids)
-    if limit > 0:
-        pending = pending[:limit]
-
-    console.print(f"[cyan]Pending:[/cyan] {len(pending):,}  [client={client}]")
-
-    await _run_persons(
-        person_ids=pending if limit > 0 else all_ids,
-        cp=cp,
-        date_str=date_str,
-        dry_run=dry_run,
-        use_graphql=(client == "graphql"),
-        progress_override=progress_override,
     )
 
 
@@ -1006,64 +802,18 @@ def cmd_characters(
     force: ForceOpt = False,
     quiet: QuietOpt = False,
     progress: ProgressOpt = False,
-    client: _ClientOpt = "graphql",
 ) -> None:
     """Scrape character details → BRONZE parquet."""
-    if client not in ("graphql", "v0"):
-        raise typer.BadParameter(f"--client must be 'graphql' or 'v0', got: {client!r}")
     log_path = configure_file_logging("bangumi")
-    log.info("bangumi_characters_command_start", log_file=str(log_path), client=client, limit=limit)
+    log.info("bangumi_characters_command_start", log_file=str(log_path), limit=limit)
     asyncio.run(
-        _run_cmd_characters(
+        _run_characters(
             limit=limit,
             dry_run=dry_run,
             resume=resume,
             force=force,
-            client=client,
             progress_override=resolve_progress_enabled(quiet, progress),
         )
-    )
-
-
-async def _run_cmd_characters(
-    *,
-    limit: int,
-    dry_run: bool,
-    resume: bool,
-    force: bool,
-    client: str,
-    progress_override: bool | None,
-) -> None:
-    date_str = _today()
-    try:
-        all_ids = _load_character_ids()
-    except Exception as exc:
-        console.print(f"[red]Failed to load character IDs:[/red] {exc}")
-        raise typer.Exit(1) from exc
-
-    console.print(f"[cyan]Character IDs:[/cyan] {len(all_ids):,}")
-
-    if force:
-        cp = Checkpoint(_CP_CHARACTERS)
-    elif resume:
-        cp = Checkpoint.load(_CP_CHARACTERS)
-        console.print(f"[cyan]Checkpoint:[/cyan] completed={len(cp.completed_set):,}  failed={len(cp.failed_set):,}")
-    else:
-        cp = Checkpoint(_CP_CHARACTERS)
-
-    pending = cp.pending(all_ids)
-    if limit > 0:
-        pending = pending[:limit]
-
-    console.print(f"[cyan]Pending:[/cyan] {len(pending):,}  [client={client}]")
-
-    await _run_characters(
-        character_ids=pending,
-        cp=cp,
-        date_str=date_str,
-        dry_run=dry_run,
-        use_graphql=(client == "graphql"),
-        progress_override=progress_override,
     )
 
 
@@ -1073,48 +823,40 @@ def cmd_run(
     dry_run: DryRunOpt = False,
     quiet: QuietOpt = False,
     progress: ProgressOpt = False,
-    client: _ClientOpt = "graphql",
     skip_persons: bool = typer.Option(False, "--skip-persons", help="Skip persons phase"),
     skip_characters: bool = typer.Option(False, "--skip-characters", help="Skip characters phase"),
 ) -> None:
     """Run relations → persons → characters in sequence."""
-    if client not in ("graphql", "v0"):
-        raise typer.BadParameter(f"--client must be 'graphql' or 'v0', got: {client!r}")
     log_path = configure_file_logging("bangumi")
-    log.info("bangumi_run_start", log_file=str(log_path), client=client)
+    log.info("bangumi_run_start", log_file=str(log_path))
     progress_override = resolve_progress_enabled(quiet, progress)
 
     asyncio.run(
-        _run_cmd_relations(
+        _run_relations(
             limit=limit,
             dry_run=dry_run,
             resume=True,
             force=False,
-            client=client,
             progress_override=progress_override,
         )
     )
-
     if not skip_persons:
         asyncio.run(
-            _run_cmd_persons(
+            _run_persons(
                 limit=0,
                 dry_run=dry_run,
                 resume=True,
                 force=False,
-                client=client,
                 progress_override=progress_override,
             )
         )
-
     if not skip_characters:
         asyncio.run(
-            _run_cmd_characters(
+            _run_characters(
                 limit=0,
                 dry_run=dry_run,
                 resume=True,
                 force=False,
-                client=client,
                 progress_override=progress_override,
             )
         )

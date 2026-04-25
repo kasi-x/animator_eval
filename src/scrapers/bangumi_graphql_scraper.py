@@ -1,21 +1,16 @@
 """bangumi GraphQL API async client.
 
-This is the MAIN PATH for new bangumi scraping.  The v0 REST client
-(``bangumi_scraper.BangumiClient``) is retained as a --client v0 fallback.
-
 Endpoint: https://api.bgm.tv/v0/graphql (POST, Content-Type: application/json)
 Server: bangumi/server-private (Fastify + mercurius).  Altair UI: /v0/altair/
 Confirmed: 2026-04-25.
 
-Rate limit:
-    Shares ``_HOST_RATE_LIMITER`` from ``bangumi_scraper`` so that GraphQL and
-    v0 REST requests never collectively exceed 1 req/sec on api.bgm.tv.
+Rate limit: 1 req/sec via ``_HOST_RATE_LIMITER`` (module-level asyncio.Lock + timestamp).
 
 Error semantics:
     - GraphQL ``errors[0].extensions.code == "NOT_FOUND"``  → returns None (like 404).
     - Any other non-empty ``errors`` array → raises ``ScraperError``.
     - HTTP 4xx (non-429) → raises ``ScraperError``.
-    - HTTP 429 / 5xx     → exponential backoff retry (same as v0 client).
+    - HTTP 429 / 5xx     → exponential backoff retry.
     - Transport error    → same retry logic.
 
 Logging (structlog):
@@ -25,6 +20,7 @@ Logging (structlog):
 from __future__ import annotations
 
 import asyncio
+import email.utils
 import json
 import time
 from typing import Any
@@ -32,12 +28,6 @@ from typing import Any
 import httpx
 import structlog
 
-from src.scrapers.bangumi_scraper import (
-    _HOST_RATE_LIMITER,
-    _MAX_ATTEMPTS,
-    _SOURCE,
-    _compute_backoff_sleep,
-)
 from src.scrapers.exceptions import RateLimitError, ScraperError
 from src.scrapers.queries.bangumi_graphql import (
     BANGUMI_GRAPHQL_URL,
@@ -47,6 +37,60 @@ from src.scrapers.queries.bangumi_graphql import (
     SUBJECT_BATCH_QUERY,
     SUBJECT_FULL_QUERY,
 )
+
+_SOURCE = "bangumi"
+_MAX_ATTEMPTS = 5
+_BASE_DELAY = 2.0
+_RETRY_AFTER_CAP = 120.0
+
+
+class _HostRateLimiter:
+    """Async rate limiter for api.bgm.tv (1 req/sec floor)."""
+
+    def __init__(self, min_interval_sec: float = 1.0) -> None:
+        self._min_interval = min_interval_sec
+        self._lock: asyncio.Lock | None = None
+        self._last_request_at: float = 0.0
+
+    def _get_lock(self) -> asyncio.Lock:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        return self._lock
+
+    async def throttle(self) -> None:
+        async with self._get_lock():
+            now = time.monotonic()
+            gap = self._min_interval - (now - self._last_request_at)
+            if gap > 0:
+                await asyncio.sleep(gap)
+            self._last_request_at = time.monotonic()
+
+    def reset_for_test(self) -> None:
+        self._lock = None
+        self._last_request_at = 0.0
+
+
+_HOST_RATE_LIMITER = _HostRateLimiter(min_interval_sec=1.0)
+
+
+def _compute_backoff_sleep(attempt: int, status: int, retry_after: str | None) -> float:  # noqa: ARG001
+    exp_backoff = _BASE_DELAY * (2 ** (attempt - 1))
+    if retry_after is None:
+        return exp_backoff
+    parsed: float | None = None
+    stripped = retry_after.strip()
+    if stripped.isdigit():
+        parsed = float(stripped)
+    else:
+        try:
+            ts = email.utils.parsedate_to_datetime(stripped)
+            parsed = max(0.0, ts.timestamp() - time.time())
+        except Exception:
+            parsed = None
+    if parsed is not None and parsed > 0:
+        return min(max(parsed, exp_backoff), _RETRY_AFTER_CAP)
+    return min(exp_backoff, _RETRY_AFTER_CAP)
+
 
 log = structlog.get_logger()
 
@@ -58,8 +102,7 @@ DEFAULT_BATCH_SIZE = 25
 class BangumiGraphQLClient:
     """Async httpx client for the bangumi GraphQL API.
 
-    Implements the same retry / rate-limit discipline as ``BangumiClient``
-    (v0 REST) but uses a single POST to the GraphQL endpoint.  The main
+    Uses a single POST to the GraphQL endpoint.  The main
     throughput win is ``fetch_subjects_batched`` which sends N aliased queries
     in one request, amortising the 1-req/sec floor across N subjects.
 
@@ -419,8 +462,7 @@ class BangumiGraphQLClient:
 def adapt_person_gql_to_v0(gql: dict[str, Any]) -> dict[str, Any]:
     """Convert a GraphQL ``person`` node to the v0 REST response shape.
 
-    The output dict is compatible with ``_build_person_row()`` in
-    ``scrape_bangumi_persons.py`` without any changes to that function.
+    The output dict is compatible with ``_build_person_row()``.
 
     GraphQL → v0 field mapping:
         bloodType    → blood_type
@@ -450,8 +492,7 @@ def adapt_person_gql_to_v0(gql: dict[str, Any]) -> dict[str, Any]:
 def adapt_character_gql_to_v0(gql: dict[str, Any]) -> dict[str, Any]:
     """Convert a GraphQL ``character`` node to the v0 REST response shape.
 
-    The output dict is compatible with ``_build_character_row()`` in
-    ``scrape_bangumi_characters.py`` without any changes to that function.
+    The output dict is compatible with ``_build_character_row()``.
 
     Note: ``last_modified`` is absent from character responses in both v0 REST
     and GraphQL — the adapter does not add it.
@@ -485,8 +526,7 @@ def adapt_subject_persons_gql(
     """Extract the persons list from a GraphQL subject node into v0 REST shape.
 
     Converts the GraphQL ``persons`` sub-list to the same shape returned by
-    ``GET /v0/subjects/{id}/persons``, so that ``_build_person_rows()`` in
-    ``scrape_bangumi_relations.py`` can consume it unchanged.
+    ``GET /v0/subjects/{id}/persons``, compatible with ``_build_person_rows()``.
 
     GraphQL person node (in subject context):
         id, name, type, career, images, eps, relation
@@ -526,8 +566,7 @@ def adapt_subject_characters_gql(
 
     Converts the GraphQL ``characters`` sub-list (including nested ``actors``)
     to the same shape returned by ``GET /v0/subjects/{id}/characters``, so that
-    ``_build_character_and_actor_rows()`` in ``scrape_bangumi_relations.py`` can
-    consume it unchanged.
+    compatible with ``_build_character_and_actor_rows()``.
 
     GraphQL character node (in subject context):
         id, name, type, relation, images, actors[{id, name, type, career, images}]

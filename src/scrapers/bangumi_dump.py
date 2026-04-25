@@ -23,7 +23,9 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
+import os
 import struct
+import tempfile
 import zlib
 from collections.abc import Callable
 from pathlib import Path
@@ -298,6 +300,38 @@ def build_manifest(
         file_count=len(files),
     )
     return manifest
+
+
+# ---------------------------------------------------------------------------
+# CLI helpers (shared by bangumi_main)
+# ---------------------------------------------------------------------------
+
+
+def build_asset_url(tag: str) -> str:
+    """Construct a GitHub release download URL from a dump tag."""
+    return f"https://github.com/bangumi/Archive/releases/download/archive/{tag}.zip"
+
+
+def update_latest_symlink(dump_root: Path, tag: str) -> None:
+    """Atomically update ``<dump_root>/latest`` → ``<tag>``."""
+    latest = dump_root / "latest"
+    fd, tmp_path_str = tempfile.mkstemp(dir=dump_root, prefix=".latest_tmp_")
+    os.close(fd)
+    tmp_path = Path(tmp_path_str)
+    tmp_path.unlink()
+    tmp_path.symlink_to(tag)
+    tmp_path.rename(latest)
+
+
+def fmt_bytes(n: int | None) -> str:
+    """Human-readable byte count."""
+    if n is None:
+        return "unknown"
+    for unit in ("B", "KB", "MB", "GB"):
+        if n < 1024:
+            return f"{n:.1f} {unit}"
+        n /= 1024  # type: ignore[assignment]
+    return f"{n:.1f} TB"
 
 
 # ---------------------------------------------------------------------------
