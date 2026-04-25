@@ -5,10 +5,13 @@ handling. All requests are serialised through _get_with_retry which enforces
 a minimum inter-request delay to protect the server.
 
 Endpoints covered:
-  GET /api/data/roles.php                        — role master (1924 items)
-  GET /api/person/show.php?id=<id>&type=person   — person detail + credits
-  GET /api/stafflists/preview.php                — top-page snapshot
-  GET /api/search/?q=<q>&type=staff&offset=<N>   — staff search
+  GET /api/data/roles.php                              — role master (1924 items)
+  GET /api/data/translate.v4.php?ja=<name>&uuid=      — name→AniList ID (ja or en param)
+  GET /api/person/show.php?id=<id>&type=person         — person detail + credits
+  GET /api/person/get_by_id.php?id=<id>&studio=<0|1>  — lightweight name lookup
+  GET /api/stafflists/preview.php                      — top-page snapshot
+  GET /api/search/?q=<q>&type=staff&offset=<N>         — staff search
+  GET /api/search/?q=<q>&type=all&offset=<N>           — staff + stafflists search
 """
 
 from __future__ import annotations
@@ -229,6 +232,45 @@ class KeyframeApiClient:
     async def search_staff(self, query: str, offset: int = 0) -> dict | None:
         """Fetch /api/search/?q=<q>&type=staff — staff search results (50/page)."""
         url = f"{BASE}/api/search/?q={quote(query)}&type=staff&offset={offset}"
+        return await self._get_with_retry(url)  # type: ignore[return-value]
+
+    async def search_all(self, query: str, offset: int = 0) -> dict | None:
+        """Fetch /api/search/?q=<q>&type=all — staff + stafflists search (50/page).
+
+        Returns dict with 'staff' and 'stafflists' lists. Staff entries include
+        anilist_id, jobs, studios, avatar fields.
+        """
+        url = f"{BASE}/api/search/?q={quote(query)}&type=all&offset={offset}"
+        return await self._get_with_retry(url)  # type: ignore[return-value]
+
+    async def translate_name(
+        self,
+        name: str,
+        lang: str = "ja",
+        category: str | None = None,
+    ) -> list[dict] | None:
+        """Fetch /api/data/translate.v4.php — name→AniList ID mapping.
+
+        Args:
+            name: Person name to look up.
+            lang: 'ja' or 'en' — which param name to use.
+            category: Optional category filter (passed as &category=<cat>).
+
+        Returns:
+            List of match dicts (may be empty — no match, or multiple — ambiguous).
+            None on network/server error.
+        """
+        cat_param = f"&category={quote(category)}" if category else ""
+        url = f"{BASE}/api/data/translate.v4.php?{lang}={quote(name)}&uuid={cat_param}"
+        return await self._get_with_retry(url)  # type: ignore[return-value]
+
+    async def get_person_by_id(self, person_id: int | str, is_studio: bool = False) -> dict | None:
+        """Fetch /api/person/get_by_id.php — lightweight name lookup by keyframe ID.
+
+        Returns dict with 'ja' and 'en' name fields, or None if not found.
+        """
+        studio_flag = 1 if is_studio else 0
+        url = f"{BASE}/api/person/get_by_id.php?id={quote(str(person_id))}&studio={studio_flag}"
         return await self._get_with_retry(url)  # type: ignore[return-value]
 
     async def get_sitemap(self) -> str | None:

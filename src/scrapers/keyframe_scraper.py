@@ -6,6 +6,10 @@ Phase 2: anime HTML    — GET /staff/<slug> × 5512 slugs (raw HTML gzip)
 Phase 3: person API    — GET /api/person/show.php × N persons (raw JSON gzip)
 Phase 4: preview       — GET /api/stafflists/preview.php (cron snapshot)
 
+Post-scrape enrichment (separate command):
+  enrich-translate     — GET /api/data/translate.v4.php per person (name→anilist_id)
+                         Run after entity resolution to fill gaps. Writes to person_translate.
+
 BRONZE layout:
   result/bronze/source=keyframe/table=roles_master/
   result/bronze/source=keyframe/table=anime/
@@ -17,6 +21,7 @@ BRONZE layout:
   result/bronze/source=keyframe/table=person_jobs/
   result/bronze/source=keyframe/table=person_studios/
   result/bronze/source=keyframe/table=person_credits/
+  result/bronze/source=keyframe/table=person_translate/
   result/bronze/source=keyframe/table=preview/
 
 Raw storage:
@@ -40,7 +45,7 @@ from pathlib import Path
 import typer
 import structlog
 
-from src.scrapers.bronze_writer import BronzeWriter
+from src.scrapers.bronze_writer import BronzeWriter, BronzeWriterGroup
 from src.scrapers.checkpoint import atomic_write_json, load_json_or
 from src.scrapers.keyframe_api import KeyframeApiClient
 from src.scrapers.parsers import keyframe as html_parser
@@ -187,9 +192,7 @@ async def run_scraper(
         _save_checkpoint(cp_path, {**cp, "stats": stats})
 
         if not skip_persons:
-            await _phase3_persons(
-                client, cp, cp_path, raw_json_dir, stats
-            )
+            await _phase3_persons(client, cp, cp_path, raw_json_dir, stats)
 
         await _phase4_preview(client, api_dir, cp, stats)
         _save_checkpoint(cp_path, {**cp, "stats": stats})
@@ -288,6 +291,38 @@ def _filter_remaining_slugs(
 # =============================================================================
 
 
+def _json_or_none(v: object) -> str | None:
+    return json.dumps(v, ensure_ascii=False) if v is not None else None
+
+
+def _build_anime_row(anime_meta: dict, anime_id: str) -> dict:
+    """Serialize anime_meta nested fields to JSON strings for Parquet compatibility."""
+    return {
+        "id": anime_id,
+        **anime_meta,
+        "start_date": _json_or_none(anime_meta.get("start_date") or {}),
+        "end_date": _json_or_none(anime_meta.get("end_date") or {}),
+        "synonyms": _json_or_none(anime_meta.get("synonyms") or []),
+        "delimiters": _json_or_none(anime_meta.get("delimiters")),
+        "episode_delimiters": _json_or_none(anime_meta.get("episode_delimiters")),
+        "role_delimiters": _json_or_none(anime_meta.get("role_delimiters")),
+        "staff_delimiters": _json_or_none(anime_meta.get("staff_delimiters")),
+    }
+
+
+def _normalize_credit_row(c: dict, anime_id: str) -> dict:
+    """Normalize person_id/studio_id types for stable Parquet schema."""
+    row = {"anime_id": anime_id, **c}
+    if row.get("person_id") is not None:
+        row["person_id"] = str(row["person_id"])
+    if row.get("studio_id") is not None:
+        try:
+            row["studio_id"] = int(row["studio_id"])
+        except (TypeError, ValueError):
+            row["studio_id"] = None
+    return row
+
+
 async def _phase2_anime_html(
     client: KeyframeApiClient,
     remaining: list[str],
@@ -301,105 +336,58 @@ async def _phase2_anime_html(
 
     person_ids: set[int] = set(cp["person_phase"].get("all_ids") or [])
 
-    anime_bw = BronzeWriter("keyframe", table="anime")
-    studios_bw = BronzeWriter("keyframe", table="anime_studios")
-    categories_bw = BronzeWriter("keyframe", table="settings_categories")
-    credits_bw = BronzeWriter("keyframe", table="credits")
-    studios_master_bw = BronzeWriter("keyframe", table="studios_master")
+    _PHASE2_TABLES = ("anime", "anime_studios", "settings_categories", "credits", "studios_master")
+    with BronzeWriterGroup("keyframe", tables=list(_PHASE2_TABLES)) as group:
+        for i, slug in enumerate(remaining):
+            html_text = await client.get_anime_page(slug)
 
-    for i, slug in enumerate(remaining):
-        html_text = await client.get_anime_page(slug)
+            if html_text is None:
+                log.debug("keyframe_phase2_skip", slug=slug)
+                cp["anime_phase"]["completed_slugs"].append(slug)
+                stats["anime_skipped"] = stats.get("anime_skipped", 0) + 1
+                continue
 
-        if html_text is None:
-            log.debug("keyframe_phase2_skip", slug=slug)
+            gz_path = raw_html_dir / f"{slug}.html.gz"
+            with gzip.open(gz_path, "wt", encoding="utf-8") as fh:
+                fh.write(html_text)
+
+            data = html_parser.extract_preload_data(html_text)
+            if data is None:
+                log.warning("keyframe_phase2_no_preload", slug=slug)
+                cp["anime_phase"]["completed_slugs"].append(slug)
+                continue
+
+            anime_id = f"keyframe:{slug}"
+            anime_meta = html_parser.parse_anime_meta(data, slug)
+            group["anime"].append(_build_anime_row(anime_meta, anime_id))
+
+            for studio_row in html_parser.parse_anime_studios(data):
+                group["anime_studios"].append({"anime_id": anime_id, **studio_row})
+
+            for cat_row in html_parser.parse_settings_categories(data):
+                group["settings_categories"].append({"anime_id": anime_id, **cat_row})
+
+            credit_rows = html_parser.parse_credits_from_data(data, slug)
+            for c in credit_rows:
+                group["credits"].append(_normalize_credit_row(c, anime_id))
+
+            for studio_row in html_parser.collect_studio_master(credit_rows):
+                group["studios_master"].append(studio_row)
+
+            person_ids.update(_collect_person_ids_from_preload(data))
+
             cp["anime_phase"]["completed_slugs"].append(slug)
-            stats["anime_skipped"] = stats.get("anime_skipped", 0) + 1
-            continue
+            stats["anime_fetched"] = stats.get("anime_fetched", 0) + 1
 
-        # Save raw HTML (gzip)
-        gz_path = raw_html_dir / f"{slug}.html.gz"
-        with gzip.open(gz_path, "wt", encoding="utf-8") as fh:
-            fh.write(html_text)
-
-        data = html_parser.extract_preload_data(html_text)
-        if data is None:
-            log.warning("keyframe_phase2_no_preload", slug=slug)
-            cp["anime_phase"]["completed_slugs"].append(slug)
-            continue
-
-        anime_id = f"keyframe:{slug}"
-
-        # anime metadata
-        anime_meta = html_parser.parse_anime_meta(data, slug)
-        # Serialize nested dicts to JSON strings for Parquet compatibility
-        anime_row = {
-            "id": anime_id,
-            **anime_meta,
-            "start_date": json.dumps(anime_meta.get("start_date") or {}, ensure_ascii=False),
-            "end_date": json.dumps(anime_meta.get("end_date") or {}, ensure_ascii=False),
-            "synonyms": json.dumps(anime_meta.get("synonyms") or [], ensure_ascii=False),
-            "delimiters": json.dumps(anime_meta.get("delimiters"), ensure_ascii=False)
-            if anime_meta.get("delimiters") is not None
-            else None,
-            "episode_delimiters": json.dumps(anime_meta.get("episode_delimiters"), ensure_ascii=False)
-            if anime_meta.get("episode_delimiters") is not None
-            else None,
-            "role_delimiters": json.dumps(anime_meta.get("role_delimiters"), ensure_ascii=False)
-            if anime_meta.get("role_delimiters") is not None
-            else None,
-            "staff_delimiters": json.dumps(anime_meta.get("staff_delimiters"), ensure_ascii=False)
-            if anime_meta.get("staff_delimiters") is not None
-            else None,
-        }
-        anime_bw.append(anime_row)
-
-        # studios
-        for studio_row in html_parser.parse_anime_studios(data):
-            studios_bw.append({"anime_id": anime_id, **studio_row})
-
-        # settings categories
-        for cat_row in html_parser.parse_settings_categories(data):
-            categories_bw.append({"anime_id": anime_id, **cat_row})
-
-        # credits
-        credit_rows = html_parser.parse_credits_from_data(data, slug)
-        for c in credit_rows:
-            # Normalize person_id and studio_id to str for stable parquet schema
-            row = {"anime_id": anime_id, **c}
-            if row.get("person_id") is not None:
-                row["person_id"] = str(row["person_id"])
-            if row.get("studio_id") is not None:
-                try:
-                    row["studio_id"] = int(row["studio_id"])
-                except (TypeError, ValueError):
-                    row["studio_id"] = None
-            credits_bw.append(row)
-
-        # studios master (dedup in memory across pages)
-        for studio_row in html_parser.collect_studio_master(credit_rows):
-            studios_master_bw.append(studio_row)
-
-        # collect person ids
-        person_ids.update(_collect_person_ids_from_preload(data))
-
-        cp["anime_phase"]["completed_slugs"].append(slug)
-        stats["anime_fetched"] = stats.get("anime_fetched", 0) + 1
-
-        # Periodic checkpoint flush
-        if (i + 1) % CHECKPOINT_INTERVAL == 0:
-            for bw in (anime_bw, studios_bw, categories_bw, credits_bw, studios_master_bw):
-                bw.flush()
-            _save_checkpoint(cp_path, cp)
-            log.info(
-                "keyframe_phase2_checkpoint",
-                progress=f"{i + 1}/{len(remaining)}",
-                anime=stats["anime_fetched"],
-                persons_seen=len(person_ids),
-            )
-
-    # Final flush
-    for bw in (anime_bw, studios_bw, categories_bw, credits_bw, studios_master_bw):
-        bw.flush()
+            if (i + 1) % CHECKPOINT_INTERVAL == 0:
+                group.flush_all()
+                _save_checkpoint(cp_path, cp)
+                log.info(
+                    "keyframe_phase2_checkpoint",
+                    progress=f"{i + 1}/{len(remaining)}",
+                    anime=stats["anime_fetched"],
+                    persons_seen=len(person_ids),
+                )
 
     log.info(
         "keyframe_phase2_done",
@@ -433,71 +421,59 @@ async def _phase3_persons(
         remaining=len(remaining_ids),
     )
 
-    profile_bw = BronzeWriter("keyframe", table="person_profile")
-    jobs_bw = BronzeWriter("keyframe", table="person_jobs")
-    studios_bw = BronzeWriter("keyframe", table="person_studios")
-    credits_bw = BronzeWriter("keyframe", table="person_credits")
+    _PHASE3_TABLES = ("person_profile", "person_jobs", "person_studios", "person_credits")
+    with BronzeWriterGroup("keyframe", tables=list(_PHASE3_TABLES)) as group:
+        for i, pid in enumerate(remaining_ids):
+            raw_data = await client.get_person_show(pid)
 
-    for i, pid in enumerate(remaining_ids):
-        raw_data = await client.get_person_show(pid)
+            if raw_data is None:
+                log.debug("keyframe_phase3_skip", person_id=pid)
+                cp["person_phase"]["completed_ids"].append(pid)
+                stats["person_skipped"] = stats.get("person_skipped", 0) + 1
+                continue
 
-        if raw_data is None:
-            log.debug("keyframe_phase3_skip", person_id=pid)
-            cp["person_phase"]["completed_ids"].append(pid)
-            stats["person_skipped"] = stats.get("person_skipped", 0) + 1
-            continue
+            # Save raw JSON (gzip)
+            gz_path = raw_json_dir / f"{pid}.json.gz"
+            with gzip.open(gz_path, "wt", encoding="utf-8") as fh:
+                json.dump(raw_data, fh, ensure_ascii=False)
 
-        # Save raw JSON (gzip)
-        gz_path = raw_json_dir / f"{pid}.json.gz"
-        with gzip.open(gz_path, "wt", encoding="utf-8") as fh:
-            json.dump(raw_data, fh, ensure_ascii=False)
+            parsed = api_parser.parse_person_show(raw_data)
+            profile = parsed["profile"]
 
-        parsed = api_parser.parse_person_show(raw_data)
-        profile = parsed["profile"]
-
-        # person_profile
-        profile_bw.append({
-            "person_id": profile["id"],
-            "is_studio": profile["is_studio"],
-            "name_ja": profile["name_ja"],
-            "name_en": profile["name_en"],
-            "aliases_json": json.dumps(profile["aliases_json"], ensure_ascii=False),
-            "avatar": profile["avatar"],
-            "bio": profile["bio"],
-        })
-
-        # person_jobs
-        for job in parsed["jobs"]:
-            jobs_bw.append({"person_id": pid, "job": job})
-
-        # person_studios
-        for studio in parsed["studios"]:
-            studios_bw.append({
-                "person_id": pid,
-                "studio_name": studio["studio_name"],
-                "alt_names": json.dumps(studio["alt_names"], ensure_ascii=False),
+            group["person_profile"].append({
+                "person_id": profile["id"],
+                "is_studio": profile["is_studio"],
+                "name_ja": profile["name_ja"],
+                "name_en": profile["name_en"],
+                "aliases_json": json.dumps(profile["aliases_json"], ensure_ascii=False),
+                "avatar": profile["avatar"],
+                "bio": profile["bio"],
             })
 
-        # person_credits
-        for cred in parsed["credits"]:
-            credits_bw.append({"person_id": pid, **cred})
+            for job in parsed["jobs"]:
+                group["person_jobs"].append({"person_id": pid, "job": job})
 
-        cp["person_phase"]["completed_ids"].append(pid)
-        stats["person_fetched"] = stats.get("person_fetched", 0) + 1
+            for studio in parsed["studios"]:
+                group["person_studios"].append({
+                    "person_id": pid,
+                    "studio_name": studio["studio_name"],
+                    "alt_names": json.dumps(studio["alt_names"], ensure_ascii=False),
+                })
 
-        # Periodic flush
-        if (i + 1) % CHECKPOINT_INTERVAL == 0:
-            for bw in (profile_bw, jobs_bw, studios_bw, credits_bw):
-                bw.flush()
-            _save_checkpoint(cp_path, cp)
-            log.info(
-                "keyframe_phase3_checkpoint",
-                progress=f"{i + 1}/{len(remaining_ids)}",
-                persons=stats["person_fetched"],
-            )
+            for cred in parsed["credits"]:
+                group["person_credits"].append({"person_id": pid, **cred})
 
-    for bw in (profile_bw, jobs_bw, studios_bw, credits_bw):
-        bw.flush()
+            cp["person_phase"]["completed_ids"].append(pid)
+            stats["person_fetched"] = stats.get("person_fetched", 0) + 1
+
+            if (i + 1) % CHECKPOINT_INTERVAL == 0:
+                group.flush_all()
+                _save_checkpoint(cp_path, cp)
+                log.info(
+                    "keyframe_phase3_checkpoint",
+                    progress=f"{i + 1}/{len(remaining_ids)}",
+                    persons=stats["person_fetched"],
+                )
 
     log.info("keyframe_phase3_done", fetched=stats["person_fetched"])
 
@@ -578,6 +554,182 @@ def cmd_scrape_all(
         )
     )
     log.info("keyframe_done", **stats)
+
+
+# =============================================================================
+# enrich-translate command helpers
+# =============================================================================
+
+
+def _pending_translate_targets(
+    bronze_root: Path,
+    ids: list[int] | None,
+) -> dict[int, tuple[str | None, str | None]]:
+    """Return person_id → (name_ja, name_en) for persons that still need translate.
+
+    If ids is given, restrict to those IDs (re-translate allowed).
+    Otherwise, exclude persons already present in person_translate Bronze.
+    """
+    import pyarrow.parquet as pq
+
+    def _read_parquet_ids(table_name: str, columns: list[str]) -> list[dict]:
+        path = bronze_root / "source=keyframe" / f"table={table_name}"
+        rows: list[dict] = []
+        if not path.exists():
+            return rows
+        for f in path.rglob("*.parquet"):
+            try:
+                rows.append(pq.read_table(f, columns=columns).to_pydict())
+            except Exception as exc:
+                log.warning("keyframe_bronze_read_error", file=str(f), err=str(exc)[:80])
+        return rows
+
+    persons: dict[int, tuple[str | None, str | None]] = {}
+    for d in _read_parquet_ids("person_profile", ["person_id", "name_ja", "name_en"]):
+        for pid, ja, en in zip(d["person_id"], d["name_ja"], d["name_en"]):
+            try:
+                persons[int(pid)] = (ja or None, en or None)
+            except (TypeError, ValueError):
+                pass
+
+    if ids is not None:
+        return {pid: persons[pid] for pid in ids if pid in persons}
+
+    already_done: set[int] = set()
+    for d in _read_parquet_ids("person_translate", ["person_id"]):
+        for pid in d["person_id"]:
+            try:
+                already_done.add(int(pid))
+            except (TypeError, ValueError):
+                pass
+
+    return {pid: names for pid, names in persons.items() if pid not in already_done}
+
+
+async def _translate_one(
+    client: KeyframeApiClient,
+    pid: int,
+    name_ja: str | None,
+    name_en: str | None,
+    bw: BronzeWriter,
+    stats: dict,
+) -> None:
+    """Call translate.v4.php for one person and append all candidates to Bronze."""
+    name = name_ja or name_en
+    lang = "ja" if name_ja else "en"
+    if not name:
+        return
+
+    raw_matches = await client.translate_name(name, lang=lang)
+    if raw_matches is None:
+        return
+
+    matches = api_parser.parse_translate_result(raw_matches)
+    match_count = len(matches)
+
+    for m in matches:
+        bw.append({
+            "person_id": pid,
+            "query_lang": lang,
+            "query_name": name,
+            "match_count": match_count,
+            **{k: json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v
+               for k, v in m.items()},
+        })
+
+    if match_count == 1:
+        stats["translate_matched"] += 1
+    elif match_count == 0:
+        stats["translate_no_match"] += 1
+    else:
+        stats["translate_ambiguous"] += 1
+
+
+async def run_enrich_translate(
+    *,
+    bronze_root: Path,
+    delay: float,
+    ids: list[int] | None,
+) -> dict:
+    """Fetch translate.v4.php for keyframe persons not yet in person_translate Bronze."""
+    targets = _pending_translate_targets(bronze_root, ids)
+    stats = {
+        "total": len(targets),
+        "translate_matched": 0,
+        "translate_ambiguous": 0,
+        "translate_no_match": 0,
+    }
+
+    if not targets:
+        log.info("keyframe_enrich_translate_nothing_to_do", **stats)
+        return stats
+
+    log.info("keyframe_enrich_translate_start", **stats)
+    target_list = list(targets.items())
+
+    client = KeyframeApiClient(delay=delay)
+    try:
+        with BronzeWriter("keyframe", table="person_translate") as bw:
+            for i, (pid, (name_ja, name_en)) in enumerate(target_list):
+                await _translate_one(client, pid, name_ja, name_en, bw, stats)
+                if (i + 1) % CHECKPOINT_INTERVAL == 0:
+                    log.info(
+                        "keyframe_enrich_translate_progress",
+                        progress=f"{i + 1}/{len(target_list)}",
+                        matched=stats["translate_matched"],
+                    )
+    finally:
+        await client.close()
+
+    log.info("keyframe_enrich_translate_done", **stats)
+    return stats
+
+
+@app.command()
+def cmd_enrich_translate(
+    ids: str = typer.Option(
+        "",
+        help="Comma-separated keyframe person_ids to enrich (empty = all unmatched)",
+    ),
+    delay: float = typer.Option(DEFAULT_DELAY, help="Minimum seconds between requests"),
+    bronze_root: Path = typer.Option(
+        Path("result/bronze"),
+        help="Bronze root directory",
+    ),
+) -> None:
+    """Enrich keyframe persons with AniList IDs via translate.v4.php.
+
+    Run after entity resolution to fill in anilist_id for persons that
+    failed to match other sources by name. Results written to Bronze
+    person_translate table; re-run ETL + entity resolution to apply.
+
+    By default enriches all persons not yet in person_translate.
+    Pass --ids to restrict to specific person_ids (e.g. after identifying
+    unmatched persons from entity resolution output).
+    """
+    from src.infra.logging import setup_logging
+    from src.scrapers.logging_utils import configure_file_logging
+
+    setup_logging()
+    log_path = configure_file_logging("keyframe_enrich")
+    log.info("keyframe_enrich_command_start", log_file=str(log_path))
+
+    parsed_ids: list[int] | None = None
+    if ids.strip():
+        try:
+            parsed_ids = [int(x.strip()) for x in ids.split(",") if x.strip()]
+        except ValueError as exc:
+            log.error("keyframe_enrich_invalid_ids", err=str(exc))
+            raise typer.Exit(1)
+
+    stats = asyncio.run(
+        run_enrich_translate(
+            bronze_root=bronze_root,
+            delay=delay,
+            ids=parsed_ids,
+        )
+    )
+    log.info("keyframe_enrich_done", **stats)
 
 
 if __name__ == "__main__":

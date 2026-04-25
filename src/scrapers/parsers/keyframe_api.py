@@ -240,3 +240,44 @@ def _normalize_preview_entry(entry: dict) -> dict:
 def _normalize_preview_entries(entries: list[dict]) -> list[dict]:
     """Normalize a list of preview entries."""
     return [_normalize_preview_entry(e) for e in entries]
+
+
+def parse_translate_result(data: list[dict]) -> list[dict]:
+    """Normalize translate.v4.php response.
+
+    Args:
+        data: Raw list from translate.v4.php (may be empty).
+
+    Returns:
+        List of dicts with keys: anilist_id, name_ja, name_en, pn_ja, pn_en,
+        is_studio, source, jobs_json, studios_json, avatar, credits.
+    """
+    rows = []
+    for entry in data:
+        try:
+            anilist_id_raw = entry.get("anilist_id")
+            anilist_id = int(anilist_id_raw) if anilist_id_raw is not None else None
+        except (TypeError, ValueError):
+            anilist_id = None
+
+        jobs = entry.get("jobs") or []
+        studios = entry.get("studios") or {}
+
+        rows.append(
+            {
+                "anilist_id": anilist_id,
+                "name_ja": entry.get("ja"),
+                "name_en": entry.get("en"),
+                "pn_ja": entry.get("pn_ja"),
+                "pn_en": entry.get("pn_en"),
+                "is_studio": bool(entry.get("is_studio")),
+                "source": entry.get("source"),
+                "jobs_json": jobs if isinstance(jobs, list) else [],
+                "studios_json": studios if isinstance(studios, dict) else {},
+                "avatar": entry.get("avatar"),
+                "credits": entry.get("credits"),
+            }
+        )
+    return rows
+
+
