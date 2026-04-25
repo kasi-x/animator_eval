@@ -34,12 +34,18 @@ result/bronze/source=bangumi/table={subjects,subject_persons,subject_characters,
 | `04_person_detail.md` | **API** | 🟠 | `/v0/persons/{id}` → `src_bangumi_persons` (relation 参照 id 集合のみ) |
 | `05_character_detail.md` | **API** | 🟢 | `/v0/characters/{id}` → `src_bangumi_characters` (最後回し) |
 | `06_incremental_update.md` | **API** | 🟢 | 差分更新 (週次 dump diff + 関係 re-scrape、cron) |
+| `08_image_download.md` | **CDN DL** | 🟢 | BRONZE 画像 URL → local files + image_manifest BRONZE parquet |
 
 ## Hard constraints
 
 - **H1**: `score`, `rank`, `rating` 等 viewer-facing 指標は parquet に raw で保存してよいが scoring path 流入禁止
 - **H3**: entity resolution 不変 (既存 AniList/MAL/ANN の五段階に bangumi は一次ソースとして後続で追加、この card では触らない)
 - **破壊的操作禁止**: 既存 BRONZE parquet 上書きしない (`date=YYYYMMDD` パーティション分離で共存)
+
+## 関連ドキュメント
+
+- [`08_image_download.md`](08_image_download.md) — 画像 DL フェーズ (Card 01-05 全完了後に着手)
+- [`FUTURE.md`](FUTURE.md) — 未取得 bangumi 公開情報の整理 (エンドポイント / コスト / 判断マトリックス)
 
 ## 生データ保全方針
 
