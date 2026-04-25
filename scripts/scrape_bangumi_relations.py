@@ -585,7 +585,7 @@ def _check_idempotent_exit(all_ids: list[int], date_str: str) -> None:
     if not all_have_data:
         return
 
-    checkpoint = _load_checkpoint()
+    checkpoint = Checkpoint.load(_CHECKPOINT_PATH)
     completed_set = set(checkpoint.get("completed_ids") or [])
     if set(all_ids).issubset(completed_set):
         console.print(
