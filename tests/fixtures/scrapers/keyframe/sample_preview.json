@@ -1,0 +1,236 @@
+{
+  "total": 5512,
+  "totalContributors": 98,
+  "totalUpdated": 362,
+  "recent": [
+    {
+      "slug": null,
+      "uuid": "ffac448bc33b8715d0d5510e92829cc8e8c6947eeddcbe96",
+      "native": "劇場版ポケットモンスター みんなの物語",
+      "title": "Pokémon the Movie: The Power of Us",
+      "status": "COMPLETED",
+      "lastModified": 1777086579,
+      "author": "zetis",
+      "anilistId": 100744,
+      "synonyms": [
+        "Pokémon the Movie: The Power of Us",
+        "劇場版ポケットモンスター みんなの物語",
+        "Pocket Monsters: Minna no Monogatari",
+        "Pokemon the Movie: The Power of Us",
+        "Pokémonfilmen: Kraften av oss",
+        "Pokémon: Siła jest w nas",
+        "Pokemon the Movie The Power of Us",
+        "Pokemon The Power of Us"
+      ],
+      "coverImage": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/small/bx100744-Ys3JTKSHg3Gv.png",
+      "episodes": 1,
+      "format": "MOVIE",
+      "airing_status": "FINISHED",
+      "season": "SUMMER",
+      "seasonYear": 2018,
+      "startYear": 2018,
+      "studios": [
+        "OLM",
+        "WIT STUDIO"
+      ],
+      "contributors": [
+        {
+          "id": 84,
+          "screen_name": "zetis",
+          "anonymous": false,
+          "level": 0
+        }
+      ],
+      "release": "SUMMER 2018"
+    },
+    {
+      "slug": null,
+      "uuid": "d96930508a9270cb934d468ac9ccc13c6f625f0a4aac7852",
+      "native": "北斗の拳",
+      "title": "Fist of the North Star",
+      "status": "PARTIAL",
+      "lastModified": 1777086269,
+      "author": "",
+      "anilistId": 967,
+      "synonyms": [
+        "Fist of the North Star",
+        "北斗の拳",
+        "Hokuto no Ken",
+        "Ken il Guerriero",
+        "Seikimatsu Kyuseishu Densetsu: Hokuto no Ken",
+        "Ken - Rättvisans Kämpe",
+        "Ken: The Great Bearfist"
+      ],
+      "coverImage": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/small/n967-84jNBaInec98.png",
+      "episodes": 109,
+      "format": "TV",
+      "airing_status": "FINISHED",
+      "season": "FALL",
+      "seasonYear": 1984,
+      "startYear": 1984,
+      "studios": [
+        "Toei Animation"
+      ],
+      "contributors": [
+        {
+          "id": 62,
+          "screen_name": "KOBO-H",
+          "anonymous": false,
+          "level": 0
+        }
+      ],
+      "release": "FALL 1984"
+    }
+  ],
+  "airing": [
+    {
+      "slug": null,
+      "uuid": "b569c3bb351965fa5ab68250cc558a5bf325c785035c1a15",
+      "native": "転生したらスライムだった件 第4期",
+      "title": "Tensei Shitara Slime Datta Ken 4th Season",
+      "status": "IN_PROGRESS",
+      "lastModified": 1777077186,
+      "author": "",
+      "anilistId": 182205,
+      "synonyms": [
+        "Tensei Shitara Slime Datta Ken 4th Season",
+        "That Time I Got Reincarnated as a Slime Season 4",
+        "転生したらスライムだった件 第4期",
+        "Tensura 4",
+        "転スラ 4"
+      ],
+      "coverImage": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/small/bx182205-q2AeO1owuQbO.jpg",
+      "episodes": 4,
+      "format": "TV",
+      "airing_status": "RELEASING",
+      "season": "SPRING",
+      "seasonYear": 2026,
+      "startYear": 2026,
+      "studios": [
+        "8-bit"
+      ],
+      "contributors": [
+        {
+          "id": 226,
+          "screen_name": "GoldenUvU",
+          "anonymous": false,
+          "level": 0
+        }
+      ],
+      "release": "SPRING 2026"
+    },
+    {
+      "slug": "the-classroom-of-a-black-cat-and-a-witch",
+      "uuid": "77b1e8c3887eff0e13477e2211e8a441d1184a2ac0e9ca9e",
+      "native": "黒猫と魔女の教室",
+      "title": "The Classroom of a Black Cat and a Witch",
+      "status": "IN_PROGRESS",
+      "lastModified": 1777071604,
+      "author": "",
+      "anilistId": 196974,
+      "synonyms": [
+        "黒猫と魔女の教室",
+        "Kuroneko to Majo no Kyoushitsu"
+      ],
+      "coverImage": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/small/bx196974-mZk1uyrx0XNx.png",
+      "episodes": 2,
+      "format": "TV",
+      "airing_status": "RELEASING",
+      "season": "SPRING",
+      "seasonYear": 2026,
+      "startYear": null,
+      "studios": [
+        "LIDENFILMS"
+      ],
+      "contributors": [
+        {
+          "id": 299,
+          "screen_name": "lenny",
+          "anonymous": false,
+          "level": 0
+        }
+      ],
+      "release": "SPRING 2026"
+    }
+  ],
+  "data": [
+    {
+      "slug": null,
+      "uuid": "ffac448bc33b8715d0d5510e92829cc8e8c6947eeddcbe96",
+      "native": "劇場版ポケットモンスター みんなの物語",
+      "title": "Pokémon the Movie: The Power of Us",
+      "status": "COMPLETED",
+      "lastModified": 1777086579,
+      "author": "zetis",
+      "anilistId": 100744,
+      "synonyms": [
+        "Pokémon the Movie: The Power of Us",
+        "劇場版ポケットモンスター みんなの物語",
+        "Pocket Monsters: Minna no Monogatari",
+        "Pokemon the Movie: The Power of Us",
+        "Pokémonfilmen: Kraften av oss",
+        "Pokémon: Siła jest w nas",
+        "Pokemon the Movie The Power of Us",
+        "Pokemon The Power of Us"
+      ],
+      "coverImage": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/small/bx100744-Ys3JTKSHg3Gv.png",
+      "episodes": 1,
+      "format": "MOVIE",
+      "airing_status": "FINISHED",
+      "season": "SUMMER",
+      "seasonYear": 2018,
+      "startYear": 2018,
+      "studios": [
+        "OLM",
+        "WIT STUDIO"
+      ],
+      "contributors": [
+        {
+          "id": 84,
+          "screen_name": "zetis",
+          "anonymous": false,
+          "level": 0
+        }
+      ],
+      "release": "SUMMER 2018"
+    },
+    {
+      "slug": null,
+      "uuid": "d96930508a9270cb934d468ac9ccc13c6f625f0a4aac7852",
+      "native": "北斗の拳",
+      "title": "Fist of the North Star",
+      "status": "PARTIAL",
+      "lastModified": 1777086269,
+      "author": "",
+      "anilistId": 967,
+      "synonyms": [
+        "Fist of the North Star",
+        "北斗の拳",
+        "Hokuto no Ken",
+        "Ken il Guerriero",
+        "Seikimatsu Kyuseishu Densetsu: Hokuto no Ken",
+        "Ken - Rättvisans Kämpe",
+        "Ken: The Great Bearfist"
+      ],
+      "coverImage": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/small/n967-84jNBaInec98.png",
+      "episodes": 109,
+      "format": "TV",
+      "airing_status": "FINISHED",
+      "season": "FALL",
+      "seasonYear": 1984,
+      "startYear": 1984,
+      "studios": [
+        "Toei Animation"
+      ],
+      "contributors": [
+        {
+          "id": 62,
+          "screen_name": "KOBO-H",
+          "anonymous": false,
+          "level": 0
+        }
+      ],
+      "release": "FALL 1984"
+    }
+  ]
+}

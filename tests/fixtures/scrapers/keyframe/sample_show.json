@@ -1,0 +1,154 @@
+{
+  "staff": {
+    "id": 133359,
+    "isStudio": false,
+    "ja": "宮崎康子",
+    "en": "Yasuko Miyazaki",
+    "aliases": [
+      {
+        "en": "Yasuko Miyazaki",
+        "jaAliases": [
+          {
+            "ja": "宮崎康子",
+            "count": 560
+          }
+        ],
+        "count": 560
+      }
+    ],
+    "avatar": null,
+    "bio": ""
+  },
+  "jobs": [
+    "Key Animator",
+    "Animation Director",
+    "In-Betweener"
+  ],
+  "studios": {
+    "Juumonji": [
+      "株式会社 十文字"
+    ],
+    "Meruhensya": [
+      "メルヘン社"
+    ],
+    "Studio Subaru": [
+      "スタジオ昴"
+    ]
+  },
+  "credits": [
+    {
+      "uuid": "a18f28585310c40c4542686c966c7bb3955fcecf79ffcb3b",
+      "slug": "a18f28585310c40c4542686c966c7bb3955fcecf79ffcb3b",
+      "episodes": 2,
+      "status": "IN_PROGRESS",
+      "stafflist_name": "Aishiteru Game wo Owarasetai",
+      "stafflist_name_ja": "愛してるゲームを終わらせたい",
+      "stafflist_studios": "Felix Film",
+      "stafflist_kv": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx194393-0H9yYABu6y0i.jpg",
+      "stafflist_is_adult": false,
+      "seasonYear": 2026,
+      "names": [
+        {
+          "ja": "宮崎康子",
+          "en": "Yasuko Miyazaki",
+          "categories": [
+            {
+              "category": "Key Animation",
+              "roles": [
+                {
+                  "role_ja": "原画",
+                  "role_en": "Key Animation",
+                  "credits": [
+                    {
+                      "studio": null,
+                      "episode": "#01",
+                      "is_nc": 0,
+                      "comment": null,
+                      "is_primary_alias": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "faa470a4efc0ad3dc96316d9f0a33701649abc9320d689ea",
+      "slug": "kill-blue",
+      "episodes": 2,
+      "status": "IN_PROGRESS",
+      "stafflist_name": "Kill Blue",
+      "stafflist_name_ja": "キルアオ",
+      "stafflist_studios": "CUE",
+      "stafflist_kv": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx198113-NRa47idWSlnx.jpg",
+      "stafflist_is_adult": false,
+      "seasonYear": 2026,
+      "names": [
+        {
+          "ja": "宮崎康子",
+          "en": "Yasuko Miyazaki",
+          "categories": [
+            {
+              "category": "Key Animation",
+              "roles": [
+                {
+                  "role_ja": "原画",
+                  "role_en": "Key Animation",
+                  "credits": [
+                    {
+                      "studio": null,
+                      "episode": "#02",
+                      "is_nc": 0,
+                      "comment": null,
+                      "is_primary_alias": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "uuid": "28119a5cd3beb81fad31504d540dbadcfba329d0d5c4c685",
+      "slug": "28119a5cd3beb81fad31504d540dbadcfba329d0d5c4c685",
+      "episodes": 3,
+      "status": "IN_PROGRESS",
+      "stafflist_name": "The Drops of God",
+      "stafflist_name_ja": "神の雫",
+      "stafflist_studios": "Satelight",
+      "stafflist_kv": "https://s4.anilist.co/file/anilistcdn/media/anime/cover/medium/bx202508-dk6LEyevJYUY.jpg",
+      "stafflist_is_adult": false,
+      "seasonYear": 2026,
+      "names": [
+        {
+          "ja": "宮崎康子",
+          "en": "Yasuko Miyazaki",
+          "categories": [
+            {
+              "category": "Key Animation",
+              "roles": [
+                {
+                  "role_ja": "原画",
+                  "role_en": "Key Animation",
+                  "credits": [
+                    {
+                      "studio": null,
+                      "episode": "#01",
+                      "is_nc": 0,
+                      "comment": null,
+                      "is_primary_alias": true
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

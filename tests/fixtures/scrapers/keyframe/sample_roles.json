@@ -1,0 +1,42 @@
+[
+  {
+    "id": 1302,
+    "name_en": "5.1 Surround Studio",
+    "name_ja": "5.1サラウンドスタジオ",
+    "category": "Music",
+    "episode_category": null,
+    "description": null
+  },
+  {
+    "id": 266,
+    "name_en": "Advertising",
+    "name_ja": "宣伝",
+    "category": "Commercial",
+    "episode_category": null,
+    "description": ""
+  },
+  {
+    "id": 266,
+    "name_en": "Advertising",
+    "name_ja": "番宣",
+    "category": "Commercial",
+    "episode_category": null,
+    "description": ""
+  },
+  {
+    "id": 1180,
+    "name_en": "Advertising Art Design",
+    "name_ja": "宣伝アートデザイン",
+    "category": "Commercial",
+    "episode_category": null,
+    "description": null
+  },
+  {
+    "id": 268,
+    "name_en": "Advertising Cooperation",
+    "name_ja": "宣伝協力",
+    "category": "Commercial",
+    "episode_category": null,
+    "description": ""
+  }
+]
