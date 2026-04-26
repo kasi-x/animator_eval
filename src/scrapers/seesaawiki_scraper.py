@@ -50,6 +50,9 @@ from src.scrapers.parsers.seesaawiki import (  # noqa: F401
     parse_credit_line,
     parse_episodes,
     parse_series_staff,
+    parse_inline_sections,
+    collapse_inline_sections,
+    _has_inline_sections,
     _RE_EPISODE,
     _is_cast_section_header,
     _is_staff_section_header,
@@ -76,6 +79,9 @@ HEADERS = {
 
 DEFAULT_DELAY = SCRAPE_DELAY_SECONDS  # overridable via ANIMETOR_SCRAPE_DELAY
 DEFAULT_DATA_DIR = Path("data/seesaawiki")
+PAGE_LIST_CACHE_TTL_HOURS = 24
+
+_DATE_RE = re.compile(r"(\d{4}[/-]\d{2}[/-]\d{2}(?:\s+\d{2}:\d{2})?)")
 
 
 app = typer.Typer()
@@ -143,7 +149,13 @@ async def fetch_page_list(
                 full_url = (
                     f"https://seesaawiki.jp{href}" if href.startswith("/") else href
                 )
-                pages.append({"url": full_url, "title": title})
+                # Search parent (and grandparent for table layouts) for update date
+                container = a_tag.parent
+                gp = container.parent if container else None
+                search_text = (gp or container).get_text(" ", strip=True) if (gp or container) else ""
+                date_match = _DATE_RE.search(search_text)
+                last_updated = date_match.group(1) if date_match else None
+                pages.append({"url": full_url, "title": title, "last_updated": last_updated})
 
     return pages
 
@@ -159,9 +171,12 @@ async def fetch_all_page_urls(
     """
     cache_path = data_dir / "page_urls.json"
     if cache_path.exists():
-        cached = json.loads(cache_path.read_text(encoding="utf-8"))
-        log.info("seesaa_page_list_cached", count=len(cached))
-        return cached
+        age_hours = (datetime.now(timezone.utc).timestamp() - cache_path.stat().st_mtime) / 3600
+        if age_hours < PAGE_LIST_CACHE_TTL_HOURS:
+            cached = json.loads(cache_path.read_text(encoding="utf-8"))
+            log.info("seesaa_page_list_cached", count=len(cached))
+            return cached
+        log.info("seesaa_page_list_cache_stale", age_hours=f"{age_hours:.1f}h")
 
     all_pages: list[dict[str, str]] = []
     seen_urls: set[str] = set()
@@ -281,6 +296,41 @@ def extract_wiki_body(html: str) -> str:
 
 
 # =============================================================================
+# BRONZE partition utilities
+# =============================================================================
+
+
+def _clear_bronze_partitions(
+    source: str,
+    tables: list[str],
+    *,
+    date: str | None = None,
+    root: "Path | None" = None,
+) -> int:
+    """Delete all parquet files in the given (source, tables, date) partitions.
+
+    Used by reparse_from_raw to make reruns idempotent.
+    Returns number of files deleted.
+    """
+    from src.scrapers.bronze_writer import DEFAULT_BRONZE_ROOT
+
+    bronze_root = Path(root or DEFAULT_BRONZE_ROOT)
+    import datetime as _dt
+
+    date_str = date or _dt.date.today().isoformat()
+    deleted = 0
+    for table in tables:
+        partition = bronze_root / f"source={source}" / f"table={table}" / f"date={date_str}"
+        if partition.exists():
+            for f in partition.glob("*.parquet"):
+                f.unlink()
+                deleted += 1
+    if deleted:
+        log.info("bronze_partitions_cleared", source=source, date=date_str, files=deleted)
+    return deleted
+
+
+# =============================================================================
 # LLM parser (Tier 2 — fallback)
 # =============================================================================
 
@@ -314,6 +364,74 @@ def build_extraction_prompt(body_text: str) -> str:
 {truncated}
 
 JSON配列のみを出力してください:"""
+
+
+def build_inline_extraction_prompt(body_text: str) -> str:
+    """Prompt for pages with numbered date-range sections (OP/ED制作 format).
+
+    These pages have numbered sections like:
+        1. 1月10日-3月27日 宮崎県版
+          演出：森田浩光
+          美術：佐藤博
+    """
+    truncated = body_text[:5000]
+    return f"""アニメスタッフ情報のテキストです。番号付き日付セクション（例: "1. 1月10日-3月27日"）で区切られています。
+
+各スタッフ情報をJSON配列で抽出してください。
+フォーマット: {{"section": セクション番号(整数), "role": "役職名", "name": "人名"}}
+
+- section: そのスタッフが属する番号付きセクションの番号（1, 2, 3...）
+- role: 役職（演出、美術、作画監督、原画、etc.）
+- name: 人名のみ（会社名は除く）
+- 同じ人が複数セクションに登場する場合、それぞれ別のエントリとして出力
+- 人名に含まれる脚注マーカー（*1, ※など）は除去
+
+テキスト:
+{truncated}
+
+JSON配列のみを出力してください:"""
+
+
+def _log_inline_experiment(
+    title: str,
+    regex_sections: list[dict],
+    llm_records: list[dict],
+    data_dir: "Path",
+) -> None:
+    """Save side-by-side comparison of regex vs LLM inline parsing to disk."""
+    from collections import Counter
+
+    regex_credits = [c for sec in regex_sections for c in sec["credits"]]
+    regex_pairs = Counter((c.name, c.role) for c in regex_credits)
+    llm_pairs = Counter((r.get("name", ""), r.get("role", "")) for r in llm_records)
+
+    comparison = {
+        "title": title,
+        "regex": {
+            "sections": len(regex_sections),
+            "total_credits": len(regex_credits),
+            "unique_name_role": len(regex_pairs),
+            "top10": [{"name": n, "role": r, "count": c} for (n, r), c in regex_pairs.most_common(10)],
+        },
+        "llm": {
+            "total_credits": len(llm_records),
+            "unique_name_role": len(llm_pairs),
+            "top10": [{"name": n, "role": r, "count": c} for (n, r), c in llm_pairs.most_common(10)],
+        },
+    }
+
+    out_dir = data_dir / "inline_experiment"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    safe = re.sub(r"[^\w\-]", "_", title)[:60]
+    out_path = out_dir / f"{safe}.json"
+    out_path.write_text(json.dumps(comparison, ensure_ascii=False, indent=2), encoding="utf-8")
+    log.info(
+        "inline_experiment_saved",
+        title=title,
+        regex_credits=len(regex_credits),
+        llm_credits=len(llm_records),
+        path=str(out_path),
+    )
 
 
 def parse_with_llm(body_text: str) -> list[dict]:
@@ -383,7 +501,7 @@ def parse_with_llm(body_text: str) -> list[dict]:
                     {
                         "episode": r.get("episode"),
                         "role": str(role),
-                        "name": _clean_name(str(name)),
+                        "name": _clean_name(str(name))[0],
                     }
                 )
 
@@ -395,6 +513,71 @@ def parse_with_llm(body_text: str) -> list[dict]:
         return []
     except (json.JSONDecodeError, ValueError) as e:
         log.warning("llm_json_parse_error", error=str(e))
+        return []
+
+
+def parse_inline_with_llm(body_text: str) -> list[dict]:
+    """LLM extraction specialized for inline date-section format.
+
+    Returns list of {"section": int|None, "role": str, "name": str}.
+    """
+    from src.utils.config import (
+        LLM_BASE_URL,
+        LLM_MAX_TOKENS,
+        LLM_MODEL_NAME,
+        LLM_TEMPERATURE,
+        LLM_TIMEOUT,
+    )
+
+    prompt = build_inline_extraction_prompt(body_text)
+    ollama_base = LLM_BASE_URL.replace("/v1", "")
+
+    try:
+        response = httpx.post(
+            f"{ollama_base}/api/generate",
+            json={
+                "model": LLM_MODEL_NAME,
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": LLM_TEMPERATURE, "num_predict": LLM_MAX_TOKENS},
+            },
+            timeout=LLM_TIMEOUT * 4,
+        )
+        response.raise_for_status()
+        answer = response.json().get("response", "").strip()
+
+        fence_m = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", answer, re.DOTALL)
+        if fence_m:
+            answer = fence_m.group(1)
+        bracket_m = re.search(r"\[.*\]", answer, re.DOTALL)
+        if bracket_m:
+            answer = bracket_m.group(0)
+
+        records = json.loads(answer)
+        if not isinstance(records, list):
+            return []
+
+        valid: list[dict] = []
+        for r in records:
+            if not isinstance(r, dict):
+                continue
+            role = r.get("role", "")
+            name = r.get("name", "")
+            if role and name and len(name) >= 2:
+                valid.append({
+                    "section": r.get("section"),
+                    "role": str(role),
+                    "name": _clean_name(str(name)),
+                })
+
+        log.info("inline_llm_extraction", raw=len(records), valid=len(valid))
+        return valid
+
+    except (httpx.HTTPError, httpx.TimeoutException) as e:
+        log.warning("inline_llm_error", error=str(e))
+        return []
+    except (json.JSONDecodeError, ValueError) as e:
+        log.warning("inline_llm_json_error", error=str(e))
         return []
 
 
@@ -582,28 +765,65 @@ def save_parsed_intermediate(
 
 
 # =============================================================================
+# Helpers
+# =============================================================================
+
+
+def _is_newer(wiki_date: str, scraped_at: str) -> bool:
+    """Return True if wiki_date is strictly newer than scraped_at ISO timestamp."""
+    try:
+        wiki_dt: datetime | None = None
+        for fmt in ("%Y/%m/%d %H:%M", "%Y-%m-%d %H:%M", "%Y/%m/%d", "%Y-%m-%d"):
+            try:
+                wiki_dt = datetime.strptime(wiki_date.strip(), fmt).replace(tzinfo=timezone.utc)
+                break
+            except ValueError:
+                continue
+        if wiki_dt is None:
+            return True  # unparseable → re-scrape (safe)
+
+        scraped_dt = datetime.fromisoformat(scraped_at)
+        if scraped_dt.tzinfo is None:
+            scraped_dt = scraped_dt.replace(tzinfo=timezone.utc)
+        return wiki_dt > scraped_dt
+    except Exception:
+        return True  # error → re-scrape
+
+
+# =============================================================================
 # Checkpoint
 # =============================================================================
 
 
 def save_checkpoint(
     data_dir: Path,
-    processed_urls: list[str],
+    scraped_times: dict[str, str],
     stats: dict,
 ) -> None:
     """Save scraping progress to checkpoint file (atomic tmp → rename)."""
     from src.scrapers.checkpoint import Checkpoint
     cp = Checkpoint(data_dir / "checkpoint.json")
-    cp["processed_urls"] = processed_urls
+    cp["scraped"] = scraped_times
     cp["stats"] = stats
     cp.save(stamp_time=False)
 
 
-def load_checkpoint(data_dir: Path) -> tuple[set[str], dict]:
-    """Load checkpoint, returning (processed_urls_set, stats)."""
+def load_checkpoint(data_dir: Path) -> tuple[dict[str, str], dict]:
+    """Load checkpoint, returning (scraped_times {url→ISO}, stats).
+
+    Migrates old list-based format: assigns current time so existing
+    pages are treated as up-to-date (won't re-scrape unless wiki reports newer).
+    """
     from src.scrapers.checkpoint import Checkpoint
     cp = Checkpoint.load(data_dir / "checkpoint.json")
-    return set(cp.get("processed_urls", [])), cp.get("stats", {})
+
+    if "processed_urls" in cp and "scraped" not in cp:
+        now_iso = datetime.now(timezone.utc).isoformat()
+        scraped_times = {url: now_iso for url in cp.get("processed_urls", [])}
+        log.info("seesaa_checkpoint_migrated", count=len(scraped_times))
+        return scraped_times, cp.get("stats", {})
+
+    return cp.get("scraped", {}), cp.get("stats", {})
 
 
 # =============================================================================
@@ -648,6 +868,7 @@ async def scrape_seesaawiki(
     stats = {
         "pages_processed": 0,
         "pages_skipped": 0,
+        "pages_updated": 0,
         "pages_failed": 0,
         "anime_created": 0,
         "credits_created": 0,
@@ -679,13 +900,13 @@ async def scrape_seesaawiki(
 
         # Load checkpoint
         if fresh:
-            processed_urls: set[str] = set()
+            scraped_times: dict[str, str] = {}
         else:
-            processed_urls, saved_stats = load_checkpoint(data_dir)
+            scraped_times, saved_stats = load_checkpoint(data_dir)
             if saved_stats:
                 stats.update(saved_stats)
-            if processed_urls:
-                log.info("seesaa_checkpoint_loaded", processed=len(processed_urls))
+            if scraped_times:
+                log.info("seesaa_checkpoint_loaded", processed=len(scraped_times))
 
         # Check LLM availability once
         llm_available = use_llm and check_llm_available()
@@ -693,7 +914,6 @@ async def scrape_seesaawiki(
             log.warning("seesaa_llm_unavailable", mode="regex_only")
 
         person_cache: dict[str, Person] = {}  # name -> Person (dedup)
-        processed_list: list[str] = list(processed_urls)
 
         # Phase 2 & 3: Fetch, parse, and save
         with scrape_progress(
@@ -705,9 +925,14 @@ async def scrape_seesaawiki(
                 page_url = page_info["url"]
                 page_title = page_info["title"]
 
-                if page_url in processed_urls:
-                    stats["pages_skipped"] += 1
-                    continue
+                if page_url in scraped_times:
+                    page_last_updated = page_info.get("last_updated")
+                    if page_last_updated and _is_newer(page_last_updated, scraped_times[page_url]):
+                        stats["pages_updated"] += 1
+                        log.debug("seesaa_update_detected", url=page_url, last_updated=page_last_updated)
+                    else:
+                        stats["pages_skipped"] += 1
+                        continue
 
                 try:
                     resp = await client.get(page_url, headers=HEADERS)
@@ -723,12 +948,11 @@ async def scrape_seesaawiki(
                 save_raw_html(data_dir, page_title, html)
 
                 if fetch_only:
-                    processed_urls.add(page_url)
-                    processed_list.append(page_url)
+                    scraped_times[page_url] = datetime.now(timezone.utc).isoformat()
                     stats["pages_processed"] += 1
                     p.advance()
                     if stats["pages_processed"] % checkpoint_interval == 0:
-                        save_checkpoint(data_dir, processed_list, stats)
+                        save_checkpoint(data_dir, scraped_times, stats)
                         p.log(
                             "seesaa_fetch_checkpoint",
                             progress=f"{idx + 1}/{len(all_pages)}",
@@ -784,7 +1008,7 @@ async def scrape_seesaawiki(
                             )
                             # Flush what we have so far
                             group.flush_all()
-                            save_checkpoint(data_dir, processed_list, stats)
+                            save_checkpoint(data_dir, scraped_times, stats)
                             log.error(
                                 "seesaa_halted",
                                 message=(
@@ -889,15 +1113,14 @@ async def scrape_seesaawiki(
                             total_episodes=total_episodes,
                         )
 
-                processed_urls.add(page_url)
-                processed_list.append(page_url)
+                scraped_times[page_url] = datetime.now(timezone.utc).isoformat()
                 stats["pages_processed"] += 1
                 p.advance()
 
                 # Checkpoint
                 if stats["pages_processed"] % checkpoint_interval == 0:
                     group.flush_all()
-                    save_checkpoint(data_dir, processed_list, stats)
+                    save_checkpoint(data_dir, scraped_times, stats)
                     p.log(
                         "seesaa_checkpoint",
                         progress=f"{idx + 1}/{len(all_pages)}",
@@ -911,7 +1134,7 @@ async def scrape_seesaawiki(
     group.compact_all()
 
     # Final checkpoint
-    save_checkpoint(data_dir, processed_list, stats)
+    save_checkpoint(data_dir, scraped_times, stats)
 
     log.info("seesaa_scrape_complete", source="seesaawiki", **stats)
     return stats
@@ -1059,11 +1282,15 @@ def reparse_from_raw(
     checkpoint_interval: int = SCRAPE_CHECKPOINT_INTERVAL,
     progress_override: bool | None = None,
     limit: int = 0,
+    clear_first: bool = True,
+    experiment_inline: bool = False,
 ) -> dict:
     """Re-parse all saved raw HTML files and write to BRONZE parquet.
 
-    This allows re-running the parser on previously fetched pages
-    without making any HTTP requests.
+    Args:
+        clear_first: Delete today's partition files before writing (makes reparse idempotent).
+        experiment_inline: For inline-section pages, run both regex and LLM, save comparison
+            to data_dir/inline_experiment/. Requires LLM to be available.
     """
     from src.scrapers.bronze_writer import BronzeWriterGroup
 
@@ -1084,6 +1311,11 @@ def reparse_from_raw(
             fname = _safe_filename(p["title"])
             title_by_filename[fname] = p["title"]
 
+    # Clear today's partitions before writing (idempotent reparse)
+    _reparse_tables = ["anime", "persons", "credits", "studios", "anime_studios"]
+    if clear_first:
+        _clear_bronze_partitions("seesaawiki", _reparse_tables)
+
     # Reset in-memory caches
     _reset_save_caches()
 
@@ -1094,11 +1326,12 @@ def reparse_from_raw(
         "credits_created": 0,
         "persons_created": 0,
         "llm_fallbacks": 0,
+        "inline_pages": 0,
     }
 
     group = BronzeWriterGroup(
         "seesaawiki",
-        tables=["anime", "persons", "credits", "studios", "anime_studios"],
+        tables=_reparse_tables,
     )
     anime_bw = group["anime"]
     persons_bw = group["persons"]
@@ -1131,13 +1364,26 @@ def reparse_from_raw(
 
             body_text = extract_wiki_body(html)
 
+            # Detect inline-section format (numbered date-range blocks, no 第N話 headers)
+            is_inline = _has_inline_sections(body_text)
+
             # Parse
             episodes = parse_episodes(body_text)
-            series_staff = parse_series_staff(body_text)
+            if is_inline:
+                # Inline pages: use collapsed inline sections as series staff
+                inline_sections = parse_inline_sections(body_text)
+                series_staff = collapse_inline_sections(inline_sections)
+                stats["inline_pages"] += 1
+            else:
+                series_staff = parse_series_staff(body_text)
             regex_credits = sum(len(ep["credits"]) for ep in episodes) + len(series_staff)
 
             llm_records: list[dict] = []
-            if llm_available and regex_credits < 3 and len(body_text) > 500:
+            if is_inline and experiment_inline and llm_available:
+                # Run LLM in parallel for comparison only — don't use for actual write
+                inline_llm = parse_inline_with_llm(body_text)
+                _log_inline_experiment(title, inline_sections if is_inline else [], inline_llm, data_dir)
+            elif llm_available and regex_credits < 3 and len(body_text) > 500:
                 llm_records = parse_with_llm(body_text)
                 if llm_records:
                     stats["llm_fallbacks"] += 1
@@ -1145,7 +1391,9 @@ def reparse_from_raw(
             anime_id = make_seesaa_anime_id(title)
 
             parser_used = "regex"
-            if llm_records and regex_credits < 3:
+            if is_inline:
+                parser_used = "regex+inline"
+            elif llm_records and regex_credits < 3:
                 parser_used = "llm" if regex_credits == 0 else "regex+llm"
 
             # Save parsed intermediate
@@ -1242,7 +1490,7 @@ def reparse_from_raw(
 
 
 @app.command()
-def scrape(
+def run(
     max_pages: int = typer.Option(
         0, "--max-pages", "--limit", "-n",
         help="Maximum pages to process (0 = all). Alias: --limit",
@@ -1297,6 +1545,14 @@ def reparse(
     checkpoint: int = typer.Option(
         50, "--checkpoint", "-c", help="Checkpoint interval"
     ),
+    clear_first: bool = typer.Option(
+        True, "--clear/--no-clear",
+        help="Clear today's partitions before writing (default: on, makes reparse idempotent)"
+    ),
+    experiment_inline: bool = typer.Option(
+        False, "--experiment-inline",
+        help="For inline-section pages: run LLM in parallel and save comparison to inline_experiment/"
+    ),
     quiet: QuietOpt = False,
     progress: ProgressOpt = False,
 ) -> None:
@@ -1315,6 +1571,8 @@ def reparse(
         checkpoint_interval=checkpoint,
         progress_override=resolve_progress_enabled(quiet, progress),
         limit=limit,
+        clear_first=clear_first,
+        experiment_inline=experiment_inline,
     )
 
     log.info("seesaa_reparse_saved", **stats)

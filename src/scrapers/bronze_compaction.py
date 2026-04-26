@@ -142,6 +142,92 @@ def compact_partition(
     return final_path
 
 
+def dedup_partition(
+    source: str,
+    table: str,
+    date: str,
+    *,
+    root: Path | None = None,
+    compression: str = "zstd",
+) -> tuple[Path | None, int, int]:
+    """Overwrite partition with DISTINCT rows, eliminating exact duplicates.
+
+    Returns (path, before_count, after_count).
+    """
+    root = Path(root or DEFAULT_BRONZE_ROOT)
+    partition = root / f"source={source}" / f"table={table}" / f"date={date}"
+
+    if not partition.exists():
+        return None, 0, 0
+
+    files = sorted(p for p in partition.glob("*.parquet") if not p.name.startswith("."))
+    if not files:
+        return None, 0, 0
+
+    glob = str(partition / "*.parquet")
+    tmp_path = partition / f".dedup-{uuid.uuid4().hex}.parquet.tmp"
+
+    con = duckdb.connect(":memory:")
+    try:
+        src_count = con.execute(
+            f"SELECT COUNT(*) FROM read_parquet('{glob}', union_by_name=true)"
+        ).fetchone()[0]
+
+        con.execute(
+            f"""
+            COPY (SELECT DISTINCT * FROM read_parquet('{glob}', union_by_name=true))
+            TO '{tmp_path}'
+            (FORMAT PARQUET, COMPRESSION {compression})
+            """
+        )
+
+        dedup_count = con.execute(
+            f"SELECT COUNT(*) FROM read_parquet('{tmp_path}')"
+        ).fetchone()[0]
+    finally:
+        con.close()
+
+    for f in files:
+        f.unlink()
+    final_path = partition / f"{uuid.uuid4().hex}.parquet"
+    tmp_path.rename(final_path)
+
+    logger.info(
+        "bronze_deduped",
+        source=source,
+        table=table,
+        date=date,
+        before=src_count,
+        after=dedup_count,
+        removed=src_count - dedup_count,
+    )
+    return final_path, src_count, dedup_count
+
+
+def dedup_source(
+    source: str,
+    *,
+    date: str | None = None,
+    table: str | None = None,
+    root: Path | None = None,
+) -> dict[tuple[str, str], tuple[int, int]]:
+    """Dedup all partitions for one source. Returns {(table, date): (before, after)}."""
+    if source not in ALLOWED_SOURCES:
+        raise ValueError(f"Unknown source: {source!r}")
+
+    root = Path(root or DEFAULT_BRONZE_ROOT)
+    tables = [table] if table else _list_tables(source, root)
+
+    results: dict[tuple[str, str], tuple[int, int]] = {}
+    for tbl in tables:
+        dates = [date] if date else _list_dates(source, tbl, root)
+        for d in dates:
+            _, before, after = dedup_partition(source, tbl, d, root=root)
+            if before > 0:
+                results[(tbl, d)] = (before, after)
+    return results
+
+
 def compact_source(
     source: str,
     *,
@@ -233,6 +319,9 @@ def _cli(
     all_sources: bool = typer.Option(
         False, "--all", help="Compact every source under bronze root"
     ),
+    dedup: bool = typer.Option(
+        False, "--dedup", help="Dedup (DISTINCT) instead of plain merge"
+    ),
     dry_run: bool = typer.Option(False, "--dry-run", help="List candidates without merging"),
     root: Path | None = typer.Option(None, help="Bronze root override"),
 ) -> None:
@@ -250,6 +339,15 @@ def _cli(
         for src, tbl, d, n in plan:
             typer.echo(f"{src}/{tbl}/{d}: {n} files")
         typer.echo(f"--- total partitions: {len(plan)}")
+        return
+
+    if dedup:
+        if all_sources:
+            raise typer.BadParameter("--dedup requires --source (not --all)")
+        assert source is not None
+        results3 = dedup_source(source, date=date, table=table, root=root)
+        for (tbl, d), (before, after) in results3.items():
+            typer.echo(f"{tbl}/{d}: {before} → {after} rows (removed {before - after})")
         return
 
     if all_sources:

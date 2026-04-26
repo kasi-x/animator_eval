@@ -2475,3 +2475,96 @@ def parse_series_staff(body_text: str) -> list[ParsedCredit]:
             series_credits.extend(credits)
 
     return series_credits
+
+
+# =============================================================================
+# Inline section parsing (date-range grouped format)
+# =============================================================================
+
+# Numbered date-range section: "1. 4月3日-6月26日 ..." or "2．10月2日..."
+_RE_INLINE_SECTION = re.compile(
+    r"^\s*(\d+)[.．]\s+(\d+月\d+日)",
+    re.MULTILINE,
+)
+
+
+def _has_inline_sections(body_text: str) -> bool:
+    """True if page uses numbered date-range sections instead of episode headers.
+
+    Heuristic: has >=2 numbered date sections (N. M月D日) but no standard
+    episode headers (第N話 / #N).
+    """
+    section_hits = _RE_INLINE_SECTION.findall(body_text)
+    episode_hits = _RE_EPISODE.findall(body_text)
+    return len(section_hits) >= 2 and len(episode_hits) == 0
+
+
+def parse_inline_sections(body_text: str) -> list[dict]:
+    """Parse pages with numbered date-range sub-sections.
+
+    Used for pages like OP/ED制作 blocks in サザエさん yearly pages,
+    where sections look like:
+        1. 1月10日-3月27日 宮崎県版
+          演出：森田浩光
+          美術：佐藤博
+
+    Returns [{"episode": section_number, "credits": [...]}].
+    Each section number is synthetic (1, 2, 3…) — not a broadcast episode.
+    To avoid collision with real episode numbers these are stored as-is and
+    downstream can choose to collapse them (set episode=None after dedup).
+    """
+    lines = body_text.split("\n")
+    sections: list[dict] = []
+    current_section: int | None = None
+    current_credits: list[ParsedCredit] = []
+    in_cast = False
+
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+
+        if _is_cast_section_header(stripped):
+            in_cast = True
+            continue
+        if _is_staff_section_header(stripped):
+            in_cast = False
+            continue
+
+        m = _RE_INLINE_SECTION.match(stripped)
+        if m:
+            if current_credits:
+                sections.append({"episode": current_section, "credits": current_credits})
+            current_section = int(m.group(1))
+            current_credits = []
+            in_cast = False
+            continue
+
+        if in_cast:
+            continue
+
+        credits = parse_credit_line(raw_line)
+        if credits:
+            current_credits.extend(credits)
+
+    if current_credits:
+        sections.append({"episode": current_section, "credits": current_credits})
+
+    return sections
+
+
+def collapse_inline_sections(sections: list[dict]) -> list[ParsedCredit]:
+    """Merge inline sections into series-level credits, deduplicating by (name, role).
+
+    Use this when section numbers are not meaningful broadcast episodes
+    (e.g. OP/ED version blocks) — preserves unique (name, role) pairs only.
+    """
+    seen: set[tuple[str, str]] = set()
+    merged: list[ParsedCredit] = []
+    for sec in sections:
+        for credit in sec["credits"]:
+            key = (credit.name, credit.role)
+            if key not in seen:
+                seen.add(key)
+                merged.append(credit)
+    return merged
