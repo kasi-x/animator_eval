@@ -21,13 +21,12 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from ..ci_utils import distribution_summary, format_ci, format_distribution_inline
-from ..color_utils import hex_to_rgba
+from ..color_utils import TIER_PALETTE as _TIER_COLORS, hex_to_rgba
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
 from ..sql_fragments import person_display_name_sql
 from ._base import BaseReportGenerator, append_validation_warnings
 
-_TIER_COLORS = {1: "#667eea", 2: "#a0d2db", 3: "#06D6A0", 4: "#FFD166", 5: "#f5576c"}
 _TRACK_COLORS = {
     "rising": "#06D6A0",
     "stable": "#667eea",
