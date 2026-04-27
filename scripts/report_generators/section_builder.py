@@ -96,7 +96,9 @@ _DATA_STATEMENT_TEMPLATE = """
     <tr>
       <td style="padding:0.5rem;color:#9a9ab0;vertical-align:top;width:25%;">
         <strong>Data Source</strong></td>
-      <td style="padding:0.5rem;">{data_source}{snapshot}{schema}</td>
+      <td style="padding:0.5rem;">{data_source}
+        {snapshot}
+        {schema}</td>
     </tr>
     <tr>
       <td style="padding:0.5rem;color:#9a9ab0;vertical-align:top;">
@@ -354,69 +356,20 @@ class SectionBuilder:
         Reports without data statements are NOT published.
         """
         p = params or DataStatementParams()
-        return f"""
-<div class="card" id="data-statement"
-     style="border-left:3px solid #5a5a8a;margin-top:2rem;">
-  <h2>Data Statement / \u30c7\u30fc\u30bf\u58f0\u660e</h2>
-  <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
-    <tr>
-      <td style="padding:0.5rem;color:#9a9ab0;vertical-align:top;width:25%;">
-        <strong>Data Source</strong></td>
-      <td style="padding:0.5rem;">{p.data_source}
-        {f'<br>Snapshot: {p.snapshot_date}' if p.snapshot_date else ''}
-        {f'<br>Schema: v{p.schema_version}' if p.schema_version else ''}</td>
-    </tr>
-    <tr>
-      <td style="padding:0.5rem;color:#9a9ab0;vertical-align:top;">
-        <strong>Coverage &amp; Known Biases</strong></td>
-      <td style="padding:0.5rem;">{p.coverage_notes}</td>
-    </tr>
-    <tr>
-      <td style="padding:0.5rem;color:#9a9ab0;vertical-align:top;">
-        <strong>Name Resolution</strong></td>
-      <td style="padding:0.5rem;">{p.name_resolution_notes}</td>
-    </tr>
-    <tr>
-      <td style="padding:0.5rem;color:#9a9ab0;vertical-align:top;">
-        <strong>Missing Value Handling</strong></td>
-      <td style="padding:0.5rem;">{p.missing_value_handling}</td>
-    </tr>
-  </table>
-</div>
-"""
+        snapshot = f"<br>Snapshot: {p.snapshot_date}" if p.snapshot_date else ""
+        schema = f"<br>Schema: v{p.schema_version}" if p.schema_version else ""
+        return _DATA_STATEMENT_TEMPLATE.format(
+            data_source=p.data_source,
+            snapshot=snapshot,
+            schema=schema,
+            coverage_notes=p.coverage_notes,
+            name_resolution_notes=p.name_resolution_notes,
+            missing_value_handling=p.missing_value_handling,
+        )
 
     def build_disclaimer(self) -> str:
         """Render the mandatory bilingual disclaimer (v2 Section 9)."""
-        return """
-<div class="card" id="disclaimer"
-     style="border-left:3px solid #e05080;margin-top:1rem;">
-  <h2>Disclaimer / \u6ce8\u610f\u4e8b\u9805</h2>
-  <div style="font-size:0.82rem;line-height:1.7;color:#b0b0c0;">
-    <p><strong>\u3010\u6ce8\u610f\u4e8b\u9805\u3011</strong><br>
-    \u672c\u30ec\u30dd\u30fc\u30c8\u306b\u542b\u307e\u308c\u308b\u6570\u5024\u306f\u3001\u516c\u958b\u30af\u30ec\u30b8\u30c3\u30c8\u30c7\u30fc\u30bf\u306b\u57fa\u3065\u304f\u30cd\u30c3\u30c8\u30ef\u30fc\u30af\u69cb\u9020
-    \u304a\u3088\u3073\u5354\u696d\u5bc6\u5ea6\u306e\u8a18\u8ff0\u7684\u6307\u6a19\u3067\u3042\u308b\u3002\u3053\u308c\u3089\u306f\u500b\u4eba\u306e\u80fd\u529b\u3001\u6280\u91cf\u3001\u82b8\u8853\u6027\u3001\u307e\u305f\u306f
-    \u8077\u696d\u7684\u4fa1\u5024\u306e\u8a55\u4fa1\u3067\u306f\u306a\u304f\u3001\u305d\u306e\u3088\u3046\u306a\u8a55\u4fa1\u3068\u3057\u3066\u89e3\u91c8\u3055\u308c\u308b\u3079\u304d\u3067\u306f\u306a\u3044\u3002</p>
-    <p>\u672c\u6307\u6a19\u306f\u6e2c\u5b9a\u8005\u304c\u9078\u629e\u3057\u305f\u5b9a\u7fa9\u30fb\u96c6\u8a08\u5358\u4f4d\u30fb\u6642\u4ee3\u7a93\u306b\u4f9d\u5b58\u3057\u3066\u304a\u308a\u3001\u5225\u306e\u9078\u629e\u304b\u3089\u306f
-    \u5225\u306e\u6570\u5024\u304c\u5f97\u3089\u308c\u308b\u3002\u672c\u30ec\u30dd\u30fc\u30c8\u306f\u300c\u5ba2\u89b3\u7684\u771f\u5b9f\u306e\u958b\u793a\u300d\u3067\u306f\u306a\u304f\u300c\u660e\u793a\u3055\u308c\u305f
-    \u9078\u629e\u306b\u57fa\u3065\u304f\u8a18\u8ff0\u300d\u3067\u3042\u308b\u3002</p>
-    <p>\u672c\u6307\u6a19\u3092\u63a1\u7528\u30fb\u5831\u916c\u30fb\u5951\u7d04\u30fb\u4eba\u4e8b\u8a55\u4fa1\u306e\u5358\u4e00\u307e\u305f\u306f\u4e3b\u8981\u306a\u6839\u62e0\u3068\u3057\u3066\u4f7f\u7528\u3059\u308b\u3053\u3068\u3092
-    \u904b\u55b6\u8005\u306f\u63a8\u5968\u305b\u305a\u3001\u305d\u306e\u3088\u3046\u306a\u4f7f\u7528\u306e\u7d50\u679c\u306b\u3064\u3044\u3066\u8cac\u4efb\u3092\u8ca0\u308f\u306a\u3044\u3002</p>
-
-    <p style="margin-top:1rem;"><strong>Note:</strong><br>
-    All figures in this report are descriptive metrics of network structure and
-    collaboration density, derived from publicly available credit data. They do
-    not constitute and should not be interpreted as assessments of individual
-    ability, skill, artistry, or professional worth.</p>
-    <p>These metrics depend on definitional, aggregational, and temporal choices
-    made by the analyst; alternative choices would yield different figures. This
-    report is not an "objective disclosure of truth" but a "description under
-    stated choices."</p>
-    <p>The operators do not endorse the use of these metrics as the sole or primary
-    basis for hiring, compensation, contract, or personnel decisions, and
-    disclaim responsibility for outcomes of such use.</p>
-  </div>
-</div>
-"""
+        return _DISCLAIMER_HTML
 
     def method_note_from_lineage(
         self, table_name: str, conn: sqlite3.Connection
