@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from src.scrapers.checkpoint import Checkpoint
 from src.scrapers.sakuga_atwiki_scraper import (
     PageRecord,
     _html_hash,
@@ -88,7 +89,8 @@ def setup(cache_dir: Path):
         101: _make_record(101, "山田花子", html_101),
         102: _make_record(102, "佐藤次郎", html_102),
     }
-    _save_discovered(cache_dir / "discovered_pages.json", records)
+    cp = Checkpoint(cache_dir / "checkpoint.json")
+    _save_discovered(cp, records)
     _write_html_cache(cache_dir, 101, html_101)
     _write_html_cache(cache_dir, 102, html_102)
     return records, html_101, html_102
@@ -179,7 +181,7 @@ def test_hash_updated(cache_dir, setup, tmp_path):
             headless=True,
         ))
 
-    updated = _load_discovered(cache_dir / "discovered_pages.json")
+    _, updated = _load_discovered(cache_dir)
     assert updated[101]["last_hash"] != old_hash
     assert updated[101]["last_hash"] == _html_hash(changed_html)
     assert updated[102]["last_hash"] == records[102]["last_hash"]
@@ -209,7 +211,7 @@ def test_new_page_discovered(cache_dir, setup, tmp_path):
         ))
 
     assert stats["new_pages"] == 1
-    updated = _load_discovered(cache_dir / "discovered_pages.json")
+    _, updated = _load_discovered(cache_dir)
     assert 999 in updated
 
 

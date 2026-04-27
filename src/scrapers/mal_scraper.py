@@ -20,7 +20,7 @@ import typer
 
 from src.scrapers.bronze_writer import BronzeWriterGroup
 from src.scrapers.cache_store import load_cached_json, save_cached_json
-from src.scrapers.checkpoint import atomic_write_json, load_json_or
+from src.scrapers.checkpoint import Checkpoint
 from src.scrapers.cli_common import (
     CheckpointIntervalOpt,
     ProgressOpt,
@@ -99,12 +99,6 @@ def _empty_checkpoint() -> dict:
         "last_page_anime_list": 0,
         "timestamp": None,
     }
-
-
-def _save_ckpt(ckpt: dict) -> None:
-    ckpt["timestamp"] = datetime.now(tz=timezone.utc).isoformat()
-    CHECKPOINT_FILE.parent.mkdir(parents=True, exist_ok=True)
-    atomic_write_json(CHECKPOINT_FILE, ckpt, indent=2)
 
 
 class JikanClient:
@@ -227,11 +221,12 @@ class JikanClient:
 async def _phase_a_anime(
     client: JikanClient,
     group: BronzeWriterGroup,
-    ckpt: dict,
+    cp: Checkpoint,
     p,
     checkpoint_interval: int,
 ) -> None:
     """Enumerate all anime IDs, then fetch 13 sub-endpoints each."""
+    ckpt = cp.data
     completed: set[int] = set(ckpt["completed_anime_ids"])
     discovered_persons: set[int] = set(ckpt["discovered_person_ids"])
     discovered_chars: set[int] = set(ckpt["discovered_character_ids"])
@@ -261,7 +256,7 @@ async def _phase_a_anime(
                 break
             page += 1
         ckpt["all_anime_ids"] = all_ids
-        _save_ckpt(ckpt)
+        cp.save(stamp_time=False)
         log.info("phase_a_enumerate_done", total=len(all_ids))
     else:
         all_ids = ckpt["all_anime_ids"]
@@ -290,7 +285,7 @@ async def _phase_a_anime(
             ckpt["discovered_producer_ids"] = list(discovered_producers)
             ckpt["discovered_manga_ids"] = list(discovered_manga)
             group.flush_all()
-            _save_ckpt(ckpt)
+            cp.save(stamp_time=False)
             p.log("phase_a_checkpoint", done=len(completed), total=len(all_ids))
 
     ckpt["completed_anime_ids"] = list(completed)
@@ -440,11 +435,12 @@ async def _fetch_one_anime(
 async def _phase_b_persons_characters(
     client: JikanClient,
     group: BronzeWriterGroup,
-    ckpt: dict,
+    cp: Checkpoint,
     p,
     checkpoint_interval: int,
 ) -> None:
     """Fetch person and character detail pages."""
+    ckpt = cp.data
     completed_persons: set[int] = set(ckpt["completed_person_ids"])
     completed_chars: set[int] = set(ckpt["completed_character_ids"])
     discovered_persons: list[int] = ckpt["discovered_person_ids"]
@@ -471,7 +467,7 @@ async def _phase_b_persons_characters(
         if done % checkpoint_interval == 0:
             ckpt["completed_person_ids"] = list(completed_persons)
             group.flush_all()
-            _save_ckpt(ckpt)
+            cp.save(stamp_time=False)
 
     for cid in pending_chars:
         try:
@@ -487,7 +483,7 @@ async def _phase_b_persons_characters(
         if done % checkpoint_interval == 0:
             ckpt["completed_character_ids"] = list(completed_chars)
             group.flush_all()
-            _save_ckpt(ckpt)
+            cp.save(stamp_time=False)
 
     ckpt["completed_person_ids"] = list(completed_persons)
     ckpt["completed_character_ids"] = list(completed_chars)
@@ -498,11 +494,12 @@ async def _phase_b_persons_characters(
 async def _phase_c_producers_manga_masters(
     client: JikanClient,
     group: BronzeWriterGroup,
-    ckpt: dict,
+    cp: Checkpoint,
     p,
     checkpoint_interval: int,
 ) -> None:
     """Fetch producers, manga, and master tables."""
+    ckpt = cp.data
     completed_producers: set[int] = set(ckpt["completed_producer_ids"])
     completed_manga: set[int] = set(ckpt["completed_manga_ids"])
     discovered_producers: set[int] = set(ckpt["discovered_producer_ids"])
@@ -558,7 +555,7 @@ async def _phase_c_producers_manga_masters(
         if done % checkpoint_interval == 0:
             ckpt["completed_producer_ids"] = list(completed_producers)
             group.flush_all()
-            _save_ckpt(ckpt)
+            cp.save(stamp_time=False)
 
     for mid in pending_manga:
         try:
@@ -577,7 +574,7 @@ async def _phase_c_producers_manga_masters(
         if done % checkpoint_interval == 0:
             ckpt["completed_manga_ids"] = list(completed_manga)
             group.flush_all()
-            _save_ckpt(ckpt)
+            cp.save(stamp_time=False)
 
     # Masters (one-shot)
     if not ckpt.get("completed_phase_c_masters"):
@@ -636,11 +633,12 @@ def run(
     log.info("mal_scrape_start", phase=phase, log_file=str(log_path))
     CHECKPOINT_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-    ckpt = (
-        load_json_or(CHECKPOINT_FILE, _empty_checkpoint())
-        if resume
-        else _empty_checkpoint()
-    )
+    cp_data = _empty_checkpoint()
+    if resume:
+        loaded = Checkpoint.load(CHECKPOINT_FILE)
+        cp_data.update(loaded.data)
+    cp = Checkpoint(CHECKPOINT_FILE, cp_data)
+    ckpt = cp.data
 
     progress_enabled = resolve_progress_enabled(quiet, progress)
 
@@ -654,21 +652,21 @@ def run(
                     enabled=progress_enabled,
                 ) as p:
                     if phase in ("A", "all"):
-                        await _phase_a_anime(client, group, ckpt, p, checkpoint_interval)
+                        await _phase_a_anime(client, group, cp, p, checkpoint_interval)
                         ckpt["phase"] = "B"
-                        _save_ckpt(ckpt)
+                        cp.save(stamp_time=False)
 
                     if phase in ("B", "all"):
-                        await _phase_b_persons_characters(client, group, ckpt, p, checkpoint_interval)
+                        await _phase_b_persons_characters(client, group, cp, p, checkpoint_interval)
                         ckpt["phase"] = "C"
-                        _save_ckpt(ckpt)
+                        cp.save(stamp_time=False)
 
                     if phase in ("C", "all"):
                         await _phase_c_producers_manga_masters(
-                            client, group, ckpt, p, checkpoint_interval
+                            client, group, cp, p, checkpoint_interval
                         )
                         ckpt["phase"] = "DONE"
-                        _save_ckpt(ckpt)
+                        cp.save(stamp_time=False)
         finally:
             await client.close()
 

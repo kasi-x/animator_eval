@@ -26,6 +26,7 @@ import typer
 from bs4 import BeautifulSoup
 
 from src.scrapers.bronze_writer import write_sakuga_atwiki_bronze
+from src.scrapers.checkpoint import Checkpoint
 from src.scrapers.http_playwright import PlaywrightFetcher
 from src.scrapers.parsers.sakuga_atwiki import classify_page_kind, extract_page_ids, parse_person_page, parse_work_page
 from src.scrapers.parsers.sakuga_atwiki_robots import fetch_disallow_patterns, is_allowed
@@ -61,19 +62,29 @@ def _html_hash(html: str) -> str:
     return hashlib.sha256(html.encode()).hexdigest()
 
 
-def _load_discovered(path: Path) -> dict[int, PageRecord]:
-    if not path.exists():
-        return {}
-    records: list[PageRecord] = json.loads(path.read_text(encoding="utf-8"))
-    return {r["id"]: r for r in records}
+def _load_discovered(data_dir: Path) -> tuple[Checkpoint, dict[int, PageRecord]]:
+    """Load discovered pages from checkpoint, with migration from legacy discovered_pages.json.
+
+    Returns (checkpoint, discovered_dict).
+    """
+    cp = Checkpoint.load(data_dir / "checkpoint.json")
+
+    # One-time migration: if legacy file exists, seed checkpoint
+    legacy_path = data_dir / "discovered_pages.json"
+    if legacy_path.exists() and "pages" not in cp.data:
+        legacy_records: list[PageRecord] = json.loads(legacy_path.read_text(encoding="utf-8"))
+        cp["pages"] = legacy_records
+        cp.save(stamp_time=False)
+        log.info("sakuga_checkpoint_migrated", count=len(legacy_records))
+
+    records: list[PageRecord] = cp.get("pages", [])
+    return cp, {r["id"]: r for r in records}
 
 
-def _save_discovered(path: Path, records: dict[int, PageRecord]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(list(records.values()), ensure_ascii=False, indent=2),
-        encoding="utf-8",
-    )
+def _save_discovered(cp: Checkpoint, records: dict[int, PageRecord]) -> None:
+    """Save discovered pages to checkpoint."""
+    cp["pages"] = list(records.values())
+    cp.save(stamp_time=False)
 
 
 def _write_html_cache(data_dir: Path, page_id: int, html: str) -> None:
@@ -108,7 +119,7 @@ async def _discover(
     headless: bool,
     cdp_url: str | None = None,
 ) -> None:
-    discovered = _load_discovered(data_dir / "discovered_pages.json")
+    cp, discovered = _load_discovered(data_dir)
     log.info("discover_start", already_known=len(discovered))
 
     disallow = await fetch_disallow_patterns()
@@ -183,11 +194,11 @@ async def _discover(
             )
 
             if len(discovered) % 50 == 0:
-                _save_discovered(data_dir / "discovered_pages.json", discovered)
+                _save_discovered(cp, discovered)
 
             await asyncio.sleep(delay)
 
-    _save_discovered(data_dir / "discovered_pages.json", discovered)
+    _save_discovered(cp, discovered)
     kinds = {}
     for r in discovered.values():
         kinds[r["page_kind"]] = kinds.get(r["page_kind"], 0) + 1
@@ -201,13 +212,12 @@ _DEFAULT_BRONZE_ROOT = Path("result/bronze")
 def reclassify(
     data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, "--data-dir"),
 ) -> None:
-    """Re-run page classification on all cached pages and update discovered_pages.json."""
-    discovered_path = data_dir / "discovered_pages.json"
-    if not discovered_path.exists():
-        log.error("discovered_pages_missing", path=str(discovered_path))
+    """Re-run page classification on all cached pages and update checkpoint."""
+    cp, discovered = _load_discovered(data_dir)
+    if not discovered:
+        log.error("discovered_pages_empty")
         raise typer.Exit(1)
 
-    discovered = _load_discovered(discovered_path)
     changed = 0
     for pid, rec in discovered.items():
         if pid == 1:
@@ -222,7 +232,7 @@ def reclassify(
             rec["page_kind"] = new_kind
             changed += 1
 
-    _save_discovered(discovered_path, discovered)
+    _save_discovered(cp, discovered)
     kinds: dict[str, int] = {}
     for r in discovered.values():
         kinds[r["page_kind"]] = kinds.get(r["page_kind"], 0) + 1
@@ -357,12 +367,10 @@ async def _incremental(
 
     date_partition = date or _date.today().strftime("%Y%m%d")
 
-    discovered_path = cache_dir / "discovered_pages.json"
-    if not discovered_path.exists():
-        log.error("discovered_pages_missing", path=str(discovered_path))
+    cp, discovered = _load_discovered(cache_dir)
+    if not discovered:
+        log.error("discovered_pages_empty")
         return {}
-
-    discovered = _load_discovered(discovered_path)
     disallow = await fetch_disallow_patterns()
 
     stats = {"fetched": 0, "unchanged": 0, "changed": 0, "new_pages": 0, "errors": 0}
@@ -498,7 +506,7 @@ async def _incremental(
         )
 
     # Persist updated discovered state
-    _save_discovered(discovered_path, discovered)
+    _save_discovered(cp, discovered)
 
     log.info(
         "incremental_done",

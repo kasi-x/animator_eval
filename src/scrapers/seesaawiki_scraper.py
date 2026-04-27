@@ -42,6 +42,7 @@ import typer
 from bs4 import BeautifulSoup
 
 from src.runtime.models import BronzeAnime, Credit, Person, parse_role
+from src.scrapers.checkpoint import Checkpoint
 from src.scrapers.http_client import RetryingHttpClient
 from src.scrapers.parsers.seesaawiki import (  # noqa: F401
     KNOWN_ROLES_JA,
@@ -802,35 +803,6 @@ def _is_newer(wiki_date: str, scraped_at: str) -> bool:
 # =============================================================================
 
 
-def save_checkpoint(
-    data_dir: Path,
-    scraped_times: dict[str, str],
-    stats: dict,
-) -> None:
-    """Save scraping progress to checkpoint file (atomic tmp → rename)."""
-    from src.scrapers.checkpoint import Checkpoint
-    cp = Checkpoint(data_dir / "checkpoint.json")
-    cp["scraped"] = scraped_times
-    cp["stats"] = stats
-    cp.save(stamp_time=False)
-
-
-def load_checkpoint(data_dir: Path) -> tuple[dict[str, str], dict]:
-    """Load checkpoint, returning (scraped_times {url→ISO}, stats).
-
-    Migrates old list-based format: assigns current time so existing
-    pages are treated as up-to-date (won't re-scrape unless wiki reports newer).
-    """
-    from src.scrapers.checkpoint import Checkpoint
-    cp = Checkpoint.load(data_dir / "checkpoint.json")
-
-    if "processed_urls" in cp and "scraped" not in cp:
-        now_iso = datetime.now(timezone.utc).isoformat()
-        scraped_times = {url: now_iso for url in cp.get("processed_urls", [])}
-        log.info("seesaa_checkpoint_migrated", count=len(scraped_times))
-        return scraped_times, cp.get("stats", {})
-
-    return cp.get("scraped", {}), cp.get("stats", {})
 
 
 # =============================================================================
@@ -918,14 +890,22 @@ async def scrape_seesaawiki(
                 all_pages = all_pages[:max_pages]
 
             # Load checkpoint
-            if fresh:
-                scraped_times: dict[str, str] = {}
+            from src.scrapers.checkpoint import resolve_checkpoint
+            cp = resolve_checkpoint(data_dir / "checkpoint.json", force=fresh, resume=not fresh)
+
+            # Handle legacy migration: old "processed_urls" list format
+            if "processed_urls" in cp.data and "scraped" not in cp.data:
+                now_iso = datetime.now(timezone.utc).isoformat()
+                scraped_times = {url: now_iso for url in cp.get("processed_urls", [])}
+                log.info("seesaa_checkpoint_migrated", count=len(scraped_times))
             else:
-                scraped_times, saved_stats = load_checkpoint(data_dir)
-                if saved_stats:
-                    stats.update(saved_stats)
-                if scraped_times:
-                    log.info("seesaa_checkpoint_loaded", processed=len(scraped_times))
+                scraped_times = cp.get("scraped", {})
+
+            saved_stats = cp.get("stats", {})
+            if saved_stats:
+                stats.update(saved_stats)
+            if scraped_times:
+                log.info("seesaa_checkpoint_loaded", processed=len(scraped_times))
 
             # Check LLM availability once
             llm_available = use_llm and check_llm_available()
@@ -970,7 +950,9 @@ async def scrape_seesaawiki(
                         stats["pages_processed"] += 1
                         p.advance()
                         if stats["pages_processed"] % checkpoint_interval == 0:
-                            save_checkpoint(data_dir, scraped_times, stats)
+                            cp["scraped"] = scraped_times
+                            cp["stats"] = stats
+                            cp.save(stamp_time=False)
                             p.log(
                                 "seesaa_fetch_checkpoint",
                                 progress=f"{idx + 1}/{len(all_pages)}",
@@ -1026,7 +1008,9 @@ async def scrape_seesaawiki(
                                 )
                                 # Flush what we have so far
                                 group.flush_all()
-                                save_checkpoint(data_dir, scraped_times, stats)
+                                cp["scraped"] = scraped_times
+                                cp["stats"] = stats
+                                cp.save(stamp_time=False)
                                 log.error(
                                     "seesaa_halted",
                                     message=(
@@ -1138,7 +1122,9 @@ async def scrape_seesaawiki(
                     # Checkpoint
                     if stats["pages_processed"] % checkpoint_interval == 0:
                         group.flush_all()
-                        save_checkpoint(data_dir, scraped_times, stats)
+                        cp["scraped"] = scraped_times
+                        cp["stats"] = stats
+                        cp.save(stamp_time=False)
                         p.log(
                             "seesaa_checkpoint",
                             progress=f"{idx + 1}/{len(all_pages)}",
@@ -1150,10 +1136,9 @@ async def scrape_seesaawiki(
             await client.aclose()
 
     # Final checkpoint (context manager handles flush + compact)
-    save_checkpoint(data_dir, scraped_times, stats)
-
-    # Final checkpoint
-    save_checkpoint(data_dir, scraped_times, stats)
+    cp["scraped"] = scraped_times
+    cp["stats"] = stats
+    cp.save(stamp_time=False)
 
     log.info("seesaa_scrape_complete", source="seesaawiki", **stats)
     return stats
