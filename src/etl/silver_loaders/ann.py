@@ -34,10 +34,10 @@ _DDL_ANIME_EPISODES = """
 CREATE TABLE IF NOT EXISTS anime_episodes (
     id          INTEGER,
     anime_id    VARCHAR NOT NULL,
-    episode_num INTEGER,
-    lang        VARCHAR,
+    episode_num VARCHAR NOT NULL DEFAULT '',
+    lang        VARCHAR NOT NULL DEFAULT '',
     title       VARCHAR,
-    aired_date  VARCHAR,
+    aired_date  INTEGER,
     PRIMARY KEY (anime_id, episode_num, lang)
 );
 CREATE INDEX IF NOT EXISTS idx_anime_episodes_anime
@@ -211,10 +211,10 @@ _EPISODES_SQL = """
 INSERT OR IGNORE INTO anime_episodes (anime_id, episode_num, lang, title, aired_date)
 SELECT DISTINCT
     'ann:a' || CAST(ann_anime_id AS VARCHAR),
-    TRY_CAST(episode_num AS INTEGER),
-    lang,
+    COALESCE(CAST(episode_num AS VARCHAR), ''),
+    COALESCE(lang, ''),
     title,
-    TRY_CAST(aired_date AS VARCHAR)
+    TRY_CAST(aired_date AS INTEGER)
 FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
 WHERE ann_anime_id IS NOT NULL
 """
