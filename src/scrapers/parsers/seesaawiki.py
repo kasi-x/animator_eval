@@ -2568,3 +2568,586 @@ def collapse_inline_sections(sections: list[dict]) -> list[ParsedCredit]:
                 seen.add(key)
                 merged.append(credit)
     return merged
+
+
+# =============================================================================
+# §10.1 Extended extractors: episode titles, gross studios, theme songs,
+# production committee, original work info, and credit listing positions.
+# =============================================================================
+
+# --- Episode title extraction ---
+
+# Episode header with optional title in 「」 / 『』
+# Matches: 第1話「title」 / 第1回「title」 / #1「title」
+_RE_EPISODE_TITLE = re.compile(
+    r"(?:第|#)\s*(\d+)\s*(?:話|回)?\s*[「『]([^」』]+)[」』]"
+)
+
+
+@dataclass
+class EpisodeTitle:
+    """A single episode number ↔ title mapping."""
+
+    episode: int
+    title: str
+
+
+def _extract_first_quoted_title(line: str) -> str | None:
+    """Extract the first 「…」 / 『…』 fragment from a line.
+
+    Returns the inner text, or None if no quoted fragment is found.
+    """
+    m = re.search(r"[「『]([^」』]+)[」』]", line)
+    return m.group(1) if m else None
+
+
+def _is_episode_header_line(line: str) -> bool:
+    """True when the line is a standalone episode section header."""
+    return bool(_RE_EPISODE.search(line))
+
+
+def parse_episode_titles(body_text: str) -> list[EpisodeTitle]:
+    """Extract episode number → title pairs from wiki body text.
+
+    Handles two common patterns:
+    - Inline: 「第1話「タイトル」」 (title on the same line as episode number)
+    - Adjacent: episode number on its own line, title on the next non-empty line
+
+    Returns list of EpisodeTitle sorted by episode number.
+    """
+    titles: list[EpisodeTitle] = []
+    seen_episodes: set[int] = set()
+    lines = body_text.split("\n")
+
+    for i, raw_line in enumerate(lines):
+        normalized = unicodedata.normalize("NFKC", raw_line.strip())
+        if not normalized:
+            continue
+
+        ep_match = _RE_EPISODE.search(normalized)
+        if not ep_match:
+            continue
+
+        ep_num = int(ep_match.group(1))
+        if ep_num in seen_episodes:
+            continue
+
+        # Try inline title (same line as episode number)
+        title_match = _RE_EPISODE_TITLE.search(normalized)
+        if title_match:
+            raw_title = title_match.group(2).strip()
+            if raw_title:
+                titles.append(EpisodeTitle(episode=ep_num, title=raw_title))
+                seen_episodes.add(ep_num)
+                continue
+
+        # Try adjacent title: look ahead for the first non-empty quoted line
+        for j in range(i + 1, min(i + 4, len(lines))):
+            next_line = unicodedata.normalize("NFKC", lines[j].strip())
+            if not next_line:
+                continue
+            # Stop if we've hit another episode header
+            if _is_episode_header_line(next_line):
+                break
+            fragment = _extract_first_quoted_title(next_line)
+            if fragment:
+                titles.append(EpisodeTitle(episode=ep_num, title=fragment.strip()))
+                seen_episodes.add(ep_num)
+            break
+
+    return sorted(titles, key=lambda t: t.episode)
+
+
+# --- Gross studio extraction ---
+
+# "制作協力：StudioName" or "制作協力　StudioName"
+_RE_GROSS_STUDIO = re.compile(
+    r"制作協力\s*[：:]\s*(.+)|制作協力\s{1,4}(.+)"
+)
+
+# Episode header regex (reused from above)
+_RE_EPISODE_FOR_GROSS = _RE_EPISODE
+
+
+@dataclass
+class GrossStudio:
+    """A studio credited as 制作協力 (subcontractor / gross-contract studio)."""
+
+    studio_name: str
+    episode: int | None  # None = series-level credit
+
+
+def parse_gross_studios(body_text: str) -> list[GrossStudio]:
+    """Extract 制作協力 (gross-contract studio) records from wiki body text.
+
+    Returns one record per (studio, episode) pair, deduplicating identical
+    (studio_name, episode) entries.  Series-level 制作協力 lines are stored
+    with episode=None.
+    """
+    results: list[GrossStudio] = []
+    seen: set[tuple[str, int | None]] = set()
+    current_episode: int | None = None
+
+    for raw_line in body_text.split("\n"):
+        normalized = unicodedata.normalize("NFKC", raw_line.strip())
+        if not normalized:
+            continue
+
+        ep_match = _RE_EPISODE_FOR_GROSS.search(normalized)
+        if ep_match:
+            current_episode = int(ep_match.group(1))
+            continue
+
+        m = _RE_GROSS_STUDIO.match(normalized)
+        if not m:
+            continue
+
+        raw_names = (m.group(1) or m.group(2) or "").strip()
+        if not raw_names:
+            continue
+
+        # Split on common list separators (、, ・) but keep each studio as-is
+        studios = re.split(r"[、・,，]", raw_names)
+        for studio in studios:
+            studio = studio.strip()
+            if not studio:
+                continue
+            key = (studio, current_episode)
+            if key not in seen:
+                seen.add(key)
+                results.append(GrossStudio(studio_name=studio, episode=current_episode))
+
+    return results
+
+
+# --- Theme song extraction ---
+
+# Section markers that indicate a new OP / ED / 挿入歌 block
+_THEME_SECTION_PATTERNS: tuple[tuple[str, str], ...] = (
+    # (pattern, song_type)
+    ("主題歌", "main"),
+    ("オープニングテーマ", "OP"),
+    ("エンディングテーマ", "ED"),
+    ("挿入歌", "insert"),
+    ("OP曲", "OP"),
+    ("ED曲", "ED"),
+    ("オープニング曲", "OP"),
+    ("エンディング曲", "ED"),
+    ("OP　", "OP"),
+    ("ED　", "ED"),
+)
+
+# Title quoted in 「」 standing alone on a line (not a credit line)
+_RE_SONG_TITLE = re.compile(r"^[「『]([^」』]+)[」』]$")
+
+# Credit roles for theme song entries
+_THEME_CREDIT_ROLES: dict[str, str] = {
+    "作詞": "lyrics",
+    "作詩": "lyrics",
+    "Lyrics": "lyrics",
+    "lyrics": "lyrics",
+    "words": "lyrics",
+    "作曲": "music",
+    "作曲・編曲": "music_arrangement",
+    "作編曲": "music_arrangement",
+    "編曲": "arrangement",
+    "Arrangement": "arrangement",
+    "歌": "artist",
+    "唄": "artist",
+    "ボーカル": "artist",
+    "Vocal": "artist",
+    "Artist": "artist",
+    "アーティスト": "artist",
+    "歌唱": "artist",
+    "うた": "artist",
+    "歌手": "artist",
+}
+
+
+@dataclass
+class ThemeSong:
+    """A theme song entry with optional credits."""
+
+    song_type: str  # "OP" / "ED" / "insert" / "main"
+    song_title: str | None  # 「SongTitle」 extracted from body, or None
+    role: str  # "lyrics" / "music" / "arrangement" / "artist"
+    name: str  # Person or group name
+
+
+def _classify_theme_section(line: str) -> str | None:
+    """Return song_type if line is a theme section header, else None."""
+    for marker, song_type in _THEME_SECTION_PATTERNS:
+        if marker in line:
+            return song_type
+    return None
+
+
+def _extract_inline_song_title(line: str) -> str | None:
+    """Extract a song title quoted inline on the same line as a section header.
+
+    e.g. 主題歌「SongTitle」 → "SongTitle"
+    """
+    m = re.search(r"[「『]([^」』]+)[」』]", line)
+    return m.group(1) if m else None
+
+
+def _try_parse_theme_credit(line: str) -> tuple[str, str] | None:
+    """Try to parse a theme credit line (e.g. 作詞：PersonName).
+
+    Returns (role_key, name) or None.
+    """
+    normalized = unicodedata.normalize("NFKC", line.strip())
+    # Try colon separator
+    m_colon = re.match(r"([^\s：:]{1,20})\s*[：:]\s*(.+)", normalized)
+    if m_colon:
+        role_raw = m_colon.group(1).strip()
+        name = m_colon.group(2).strip()
+        if role_raw in _THEME_CREDIT_ROLES:
+            return (_THEME_CREDIT_ROLES[role_raw], name)
+    # Try space separator (fullwidth-space-normalized by NFKC)
+    m_space = re.match(r"([^\s]{1,10})\s+(.+)", normalized)
+    if m_space:
+        role_raw = m_space.group(1).strip()
+        name = m_space.group(2).strip()
+        if role_raw in _THEME_CREDIT_ROLES:
+            return (_THEME_CREDIT_ROLES[role_raw], name)
+    return None
+
+
+def parse_theme_songs(body_text: str) -> list[ThemeSong]:
+    """Extract OP/ED/insert-song credits from wiki body text.
+
+    Recognises section headers like 「主題歌」/「オープニングテーマ」 and
+    collects the credits (作詞/作曲/編曲/歌) that follow until the next
+    non-theme-related section starts.
+
+    Returns list of ThemeSong records.
+    """
+    results: list[ThemeSong] = []
+    lines = body_text.split("\n")
+    in_theme_section = False
+    current_type: str = "main"
+    current_title: str | None = None
+
+    i = 0
+    while i < len(lines):
+        normalized = unicodedata.normalize("NFKC", lines[i].strip())
+        i += 1
+
+        if not normalized:
+            continue
+
+        # Check for theme section header
+        song_type = _classify_theme_section(normalized)
+        if song_type is not None:
+            in_theme_section = True
+            current_type = song_type
+            # May have inline title
+            current_title = _extract_inline_song_title(normalized)
+            continue
+
+        if not in_theme_section:
+            continue
+
+        # Standalone quoted title line (song name)
+        title_match = _RE_SONG_TITLE.match(normalized)
+        if title_match:
+            current_title = title_match.group(1)
+            continue
+
+        # Credit line within theme section
+        parsed = _try_parse_theme_credit(normalized)
+        if parsed:
+            role_key, name = parsed
+            # Split multiple names separated by 、or ・
+            for part in re.split(r"[、・,，]", name):
+                part = part.strip()
+                if part:
+                    results.append(
+                        ThemeSong(
+                            song_type=current_type,
+                            song_title=current_title,
+                            role=role_key,
+                            name=part,
+                        )
+                    )
+            continue
+
+        # Any other non-empty, non-credit line breaks the theme section
+        # (unless it's still a section divider "-")
+        if normalized not in ("-", "—", "―", "─"):
+            in_theme_section = False
+            current_title = None
+
+    return results
+
+
+# --- Production committee extraction ---
+
+# Lines that introduce the production committee
+_RE_COMMITTEE_LINE = re.compile(
+    r"^(?:製作|制作)\s*[：:\s]\s*(.+)"
+)
+
+# Common separators used to list committee members
+_RE_COMMITTEE_SEP = re.compile(r"[・、,，／/]")
+
+
+@dataclass
+class CommitteeMember:
+    """A single production committee member entity."""
+
+    member_name: str
+
+
+def _split_committee_members(raw_value: str) -> list[str]:
+    """Split a 製作 field value into individual member names.
+
+    Handles:
+    - "ひだまり荘管理組合、TBS" → ["ひだまり荘管理組合", "TBS"]
+    - "Studio A・Studio B" → ["Studio A", "Studio B"]
+    - "CommitteeNameXX製作委員会" → ["CommitteeNameXX製作委員会"]
+    """
+    parts = _RE_COMMITTEE_SEP.split(raw_value)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def parse_production_committee(body_text: str) -> list[CommitteeMember]:
+    """Extract production committee members from the 製作 field.
+
+    Finds lines matching 「製作：X・Y・Z」 and splits on separators.
+    Returns one CommitteeMember per unique name (deduped).
+    """
+    seen: set[str] = set()
+    results: list[CommitteeMember] = []
+
+    for raw_line in body_text.split("\n"):
+        normalized = unicodedata.normalize("NFKC", raw_line.strip())
+        if not normalized:
+            continue
+
+        m = _RE_COMMITTEE_LINE.match(normalized)
+        if not m:
+            continue
+
+        raw_value = m.group(1).strip()
+        # Skip if this looks like a person name (no separators and very short)
+        members = _split_committee_members(raw_value)
+        for member in members:
+            if member and member not in seen:
+                seen.add(member)
+                results.append(CommitteeMember(member_name=member))
+
+    return results
+
+
+# --- Original work info extraction ---
+
+# Pattern: 原作：AuthorName (possibly on next line: publisher info in parentheses)
+_RE_ORIGINAL_WORK = re.compile(
+    r"^原作\s*[：:\s]\s*(.+)"
+)
+
+# Publisher/label parenthetical: (集英社「マガジン」連載) or (講談社「KC」刊)
+_RE_PUBLISHER_PAREN = re.compile(
+    r"\(([^)]+(?:社|館|社|書房|出版|レーベル|刊|掲載|連載|誌|コミックス|文庫)[^)]*)\)"
+    r"|（([^）]+(?:社|館|社|書房|出版|レーベル|刊|掲載|連載|誌|コミックス|文庫)[^）]*)）"
+)
+
+# Magazine/journal name: 「マガジン名」inside the publisher paren
+_RE_MAGAZINE = re.compile(r"[「『]([^」』]+)[」』]")
+
+# Keywords that indicate "連載" (serialization) vs "刊" (published)
+_SERIALIZATION_KEYWORDS = ("連載", "掲載", "号", "誌")
+
+
+@dataclass
+class OriginalWorkInfo:
+    """Original work (原作) metadata extracted from a seesaawiki page."""
+
+    author: str | None  # Author name
+    publisher: str | None  # Publisher name (e.g. "集英社", "講談社")
+    label: str | None  # Label / imprint (e.g. "KCデザート", "マーガレットコミックス")
+    magazine: str | None  # Serialization magazine (e.g. "週刊少年ジャンプ", "デザート")
+    serialization_type: str | None  # "serialized" | "published" | None
+
+
+def _extract_publisher_from_paren(paren_text: str) -> tuple[str | None, str | None, str | None]:
+    """Extract (publisher, label, magazine) from a parenthetical publisher string.
+
+    e.g. "集英社「週刊少年ジャンプ」連載" → ("集英社", None, "週刊少年ジャンプ")
+    e.g. "講談社「KCデザート」刊" → ("講談社", "KCデザート", None)
+    """
+    publisher: str | None = None
+    label: str | None = None
+    magazine: str | None = None
+
+    # Known publishers
+    _publishers = (
+        "集英社", "講談社", "小学館", "角川書店", "KADOKAWA", "芳文社", "白泉社",
+        "秋田書店", "少年画報社", "双葉社", "新書館", "ワニブックス", "マッグガーデン",
+        "一迅社", "スクウェア・エニックス", "スクエニ", "メディアワークス",
+        "アスキー・メディアワークス", "竹書房", "日本文芸社", "リブレ出版",
+        "フロンティアワークス", "ぶんか社", "宙出版",
+    )
+
+    for pub in _publishers:
+        if pub in paren_text:
+            publisher = pub
+            break
+
+    # Magazine name in 「」
+    mag_match = _RE_MAGAZINE.search(paren_text)
+    if mag_match:
+        inner = mag_match.group(1)
+        # Decide: is it a serialization magazine or a label/imprint?
+        if any(kw in paren_text for kw in _SERIALIZATION_KEYWORDS):
+            magazine = inner
+        else:
+            label = inner
+
+    return publisher, label, magazine
+
+
+def parse_original_work_info(body_text: str) -> OriginalWorkInfo | None:
+    """Extract original work info (原作) from wiki body text.
+
+    Looks for:
+    - 「原作：AuthorName」 lines (colon or space separated)
+    - Publisher/label/magazine in parentheses on the following indented line
+
+    Returns OriginalWorkInfo on success, None if no 原作 line is found.
+    """
+    lines = body_text.split("\n")
+    author: str | None = None
+    publisher: str | None = None
+    label: str | None = None
+    magazine: str | None = None
+    serialization_type: str | None = None
+
+    for i, raw_line in enumerate(lines):
+        normalized = unicodedata.normalize("NFKC", raw_line.strip())
+        if not normalized:
+            continue
+
+        m = _RE_ORIGINAL_WORK.match(normalized)
+        if not m:
+            continue
+
+        raw_author = m.group(1).strip()
+        # Strip trailing footnote markers like *1, *2
+        raw_author = re.sub(r"\*\d+\s*$", "", raw_author).strip()
+
+        # Check if publisher info is inline in the same line (parenthetical)
+        paren_match = _RE_PUBLISHER_PAREN.search(normalized)
+        if paren_match:
+            paren_text = paren_match.group(1) or paren_match.group(2) or ""
+            publisher, label, magazine = _extract_publisher_from_paren(paren_text)
+            if any(kw in paren_text for kw in _SERIALIZATION_KEYWORDS):
+                serialization_type = "serialized"
+            else:
+                serialization_type = "published"
+            # Remove the parenthetical from author
+            raw_author = _RE_PUBLISHER_PAREN.sub("", raw_author).strip()
+        else:
+            # Look at next 3 lines for indented publisher parenthetical
+            for j in range(i + 1, min(i + 4, len(lines))):
+                next_norm = unicodedata.normalize("NFKC", lines[j].strip())
+                if not next_norm:
+                    continue
+                # Stop if a new credit line starts
+                if _RE_ORIGINAL_WORK.match(next_norm) or _RE_CREDIT_COLON.match(next_norm):
+                    break
+                paren_match2 = _RE_PUBLISHER_PAREN.search(next_norm)
+                if paren_match2:
+                    paren_text = paren_match2.group(1) or paren_match2.group(2) or ""
+                    publisher, label, magazine = _extract_publisher_from_paren(paren_text)
+                    if any(kw in paren_text for kw in _SERIALIZATION_KEYWORDS):
+                        serialization_type = "serialized"
+                    else:
+                        serialization_type = "published"
+                    break
+                # Only look at the first non-empty continuation line
+                break
+
+        # Strip trailing whitespace/punctuation from author
+        raw_author = raw_author.rstrip("　 \t/／・").strip()
+        if raw_author:
+            author = raw_author
+
+        # Only use the first 原作 line
+        break
+
+    if author is None:
+        return None
+
+    return OriginalWorkInfo(
+        author=author,
+        publisher=publisher,
+        label=label,
+        magazine=magazine,
+        serialization_type=serialization_type,
+    )
+
+
+# --- Credit listing position (source_listing_position) ---
+
+@dataclass
+class CreditWithPosition:
+    """A ParsedCredit with a global source_listing_position index."""
+
+    credit: ParsedCredit
+    episode: int | None  # None = series-level
+    source_listing_position: int  # 0-based ordinal across the entire page
+
+
+def parse_credit_listing_positions(body_text: str) -> list[CreditWithPosition]:
+    """Parse all credits from body text and attach global listing position indices.
+
+    Processes series staff and per-episode credits in order, assigning a
+    0-based source_listing_position that reflects the order credits appear
+    on the page.  This proxy can serve as an ED-order approximation when
+    the page lists credits in broadcast order.
+
+    Returns list of CreditWithPosition in page order.
+    """
+    results: list[CreditWithPosition] = []
+    position_counter = 0
+
+    lines = body_text.split("\n")
+    current_episode: int | None = None
+    in_cast_section = False
+
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        if not stripped:
+            continue
+
+        if _is_cast_section_header(stripped):
+            in_cast_section = True
+            continue
+        if _is_staff_section_header(stripped):
+            in_cast_section = False
+            continue
+
+        ep_match = _RE_EPISODE.search(unicodedata.normalize("NFKC", stripped))
+        if ep_match:
+            current_episode = int(ep_match.group(1))
+            in_cast_section = False
+            continue
+
+        if in_cast_section:
+            continue
+
+        credits = parse_credit_line(raw_line)
+        for credit in credits:
+            results.append(
+                CreditWithPosition(
+                    credit=credit,
+                    episode=current_episode,
+                    source_listing_position=position_counter,
+                )
+            )
+            position_counter += 1
+
+    return results

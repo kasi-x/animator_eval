@@ -56,6 +56,13 @@ from src.scrapers.parsers.seesaawiki import (  # noqa: F401
     _RE_EPISODE,
     _is_cast_section_header,
     _is_staff_section_header,
+    # §10.1 extended extractors
+    parse_episode_titles,
+    parse_gross_studios,
+    parse_theme_songs,
+    parse_production_committee,
+    parse_original_work_info,
+    parse_credit_listing_positions,
 )
 from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL, SCRAPE_DELAY_SECONDS
 
@@ -1151,6 +1158,7 @@ def _save_credit(
     parsed: ParsedCredit,
     episode: int | None,
     total_episodes: int | None = None,
+    source_listing_position: int | None = None,
 ) -> None:
     """Write a single credit record to BRONZE parquet.
 
@@ -1161,6 +1169,8 @@ def _save_credit(
 
     When parsed.episode_from is set (open-ended range like "4話〜"),
     expands to episode_from..total_episodes using the anime's episode count.
+
+    source_listing_position: 0-based global listing position on the page (ED-order proxy).
     """
     if parsed.is_company:
         # Store as studio involvement, not person credit
@@ -1201,6 +1211,7 @@ def _save_credit(
                 source="seesaawiki",
                 affiliation=parsed.affiliation,
                 position=parsed.position,
+                source_listing_position=source_listing_position,
             )
             credits_bw.append(credit.model_dump(mode="json"))
             stats["credits_created"] += 1
@@ -1214,6 +1225,7 @@ def _save_credit(
             source="seesaawiki",
             affiliation=parsed.affiliation,
             position=parsed.position,
+            source_listing_position=source_listing_position,
         )
         credits_bw.append(credit.model_dump(mode="json"))
         stats["credits_created"] += 1
@@ -1312,7 +1324,12 @@ def reparse_from_raw(
             title_by_filename[fname] = p["title"]
 
     # Clear today's partitions before writing (idempotent reparse)
-    _reparse_tables = ["anime", "persons", "credits", "studios", "anime_studios"]
+    _reparse_tables = [
+        "anime", "persons", "credits", "studios", "anime_studios",
+        # §10.1 extended tables
+        "episode_titles", "gross_studios", "theme_songs",
+        "production_committee", "original_work_info",
+    ]
     if clear_first:
         _clear_bronze_partitions("seesaawiki", _reparse_tables)
 
@@ -1327,6 +1344,11 @@ def reparse_from_raw(
         "persons_created": 0,
         "llm_fallbacks": 0,
         "inline_pages": 0,
+        "episode_titles_created": 0,
+        "gross_studios_created": 0,
+        "theme_songs_created": 0,
+        "committee_members_created": 0,
+        "original_work_created": 0,
     }
 
     group = BronzeWriterGroup(
@@ -1338,6 +1360,11 @@ def reparse_from_raw(
     credits_bw = group["credits"]
     studios_bw = group["studios"]
     anime_studios_bw = group["anime_studios"]
+    episode_titles_bw = group["episode_titles"]
+    gross_studios_bw = group["gross_studios"]
+    theme_songs_bw = group["theme_songs"]
+    production_committee_bw = group["production_committee"]
+    original_work_info_bw = group["original_work_info"]
 
     llm_available = use_llm and check_llm_available()
     person_cache: dict[str, Person] = {}
@@ -1421,8 +1448,18 @@ def reparse_from_raw(
                 max((ep_data["episode"] or 0 for ep_data in episodes), default=0) or None
             )
 
+            # Build source_listing_position index for this page
+            listing_positions: dict[tuple[str, str, int | None], int] = {}
+            for cwp in parse_credit_listing_positions(body_text):
+                key = (cwp.credit.role, cwp.credit.name, cwp.episode)
+                if key not in listing_positions:
+                    listing_positions[key] = cwp.source_listing_position
+
             for ep_data in episodes:
                 for credit in ep_data["credits"]:
+                    lp = listing_positions.get(
+                        (credit.role, credit.name, ep_data["episode"])
+                    )
                     _save_credit(
                         persons_bw,
                         credits_bw,
@@ -1434,9 +1471,11 @@ def reparse_from_raw(
                         credit,
                         episode=ep_data["episode"],
                         total_episodes=total_episodes,
+                        source_listing_position=lp,
                     )
 
             for credit in series_staff:
+                lp = listing_positions.get((credit.role, credit.name, None))
                 _save_credit(
                     persons_bw,
                     credits_bw,
@@ -1448,6 +1487,7 @@ def reparse_from_raw(
                     credit,
                     episode=None,
                     total_episodes=total_episodes,
+                    source_listing_position=lp,
                 )
 
             if llm_records and regex_credits < 3:
@@ -1469,7 +1509,60 @@ def reparse_from_raw(
                         pc,
                         episode=record.get("episode"),
                         total_episodes=total_episodes,
+                        source_listing_position=None,
                     )
+
+            # --- §10.1 extended table writes ---
+
+            # episode_titles
+            for et in parse_episode_titles(body_text):
+                episode_titles_bw.append({
+                    "anime_id": anime_id,
+                    "episode": et.episode,
+                    "title": et.title,
+                })
+                stats["episode_titles_created"] += 1
+
+            # gross_studios
+            for gs in parse_gross_studios(body_text):
+                gross_studios_bw.append({
+                    "anime_id": anime_id,
+                    "studio_name": gs.studio_name,
+                    "episode": gs.episode,
+                })
+                stats["gross_studios_created"] += 1
+
+            # theme_songs
+            for ts in parse_theme_songs(body_text):
+                theme_songs_bw.append({
+                    "anime_id": anime_id,
+                    "song_type": ts.song_type,
+                    "song_title": ts.song_title,
+                    "role": ts.role,
+                    "name": ts.name,
+                })
+                stats["theme_songs_created"] += 1
+
+            # production_committee
+            for cm in parse_production_committee(body_text):
+                production_committee_bw.append({
+                    "anime_id": anime_id,
+                    "member_name": cm.member_name,
+                })
+                stats["committee_members_created"] += 1
+
+            # original_work_info
+            owi = parse_original_work_info(body_text)
+            if owi is not None:
+                original_work_info_bw.append({
+                    "anime_id": anime_id,
+                    "author": owi.author,
+                    "publisher": owi.publisher,
+                    "label": owi.label,
+                    "magazine": owi.magazine,
+                    "serialization_type": owi.serialization_type,
+                })
+                stats["original_work_created"] += 1
 
             stats["pages_processed"] += 1
             p.advance()
