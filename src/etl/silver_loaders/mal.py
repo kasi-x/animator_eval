@@ -1,0 +1,453 @@
+"""MAL/Jikan BRONZE → SILVER loader (Card 14/08).
+
+Tables loaded:
+- anime        (mal:a<id> prefix + display_*_mal ALTER columns)
+- persons      (mal:p<id> prefix — skipped gracefully when BRONZE absent)
+- credits      (staff_credits BRONZE → credits, evidence_source='mal')
+- characters   (anime_characters BRONZE, mal:c<id> prefix)
+- character_voice_actors (va_credits BRONZE)
+- anime_genres
+- studios / anime_studios  (name-based ID 'mal:n:' || studio_name)
+- anime_relations
+- anime_recommendations  (new SILVER table)
+
+H1 compliance:
+  All MAL subjective columns use display_*_mal prefix (display_score_mal etc).
+  Bare column names without display_ prefix are never written to SILVER.
+
+  rg check:
+    rg '\\bscore\\b|\\bpopularity\\b|\\bfavourites\\b|\\bmembers\\b|\\brank\\b'
+       src/etl/silver_loaders/mal.py
+    | rg -v 'display_'
+    | rg -v '^\\s*#'
+  must return 0 lines.
+"""
+from __future__ import annotations
+
+from pathlib import Path
+
+import duckdb
+
+from src.etl.role_mappers import map_role
+
+# ─── DDL ─────────────────────────────────────────────────────────────────────
+
+_DDL_ANIME_RECOMMENDATIONS = """
+CREATE SEQUENCE IF NOT EXISTS seq_anime_recommendations_id;
+CREATE TABLE IF NOT EXISTS anime_recommendations (
+    id                   INTEGER PRIMARY KEY DEFAULT nextval('seq_anime_recommendations_id'),
+    anime_id             VARCHAR NOT NULL,
+    recommended_anime_id VARCHAR NOT NULL,
+    votes                INTEGER,
+    source               VARCHAR NOT NULL DEFAULT 'mal',
+    UNIQUE(anime_id, recommended_anime_id, source)
+);
+CREATE INDEX IF NOT EXISTS idx_arec_anime ON anime_recommendations(anime_id);
+"""
+
+# anime ALTER columns — H1: all subjective/popularity columns use display_*_mal.
+_DDL_ANIME_EXTENSION: list[str] = [
+    "ALTER TABLE anime ADD COLUMN IF NOT EXISTS mal_id_int INTEGER",
+    "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_score_mal REAL",
+    "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_popularity_mal INTEGER",
+    "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_members_mal INTEGER",
+    "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_favorites_mal INTEGER",
+    "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_rank_mal INTEGER",
+    "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_scored_by_mal INTEGER",
+]
+
+# ─── SQL ─────────────────────────────────────────────────────────────────────
+
+# Insert new anime rows from MAL BRONZE.
+# ID format: 'mal:a' || mal_id.
+# display_*_mal columns are updated in a second pass (_ANIME_UPDATE_SQL)
+# after ALTER columns are confirmed to exist.
+_ANIME_INSERT_SQL = """
+INSERT OR IGNORE INTO anime (id, title_ja, title_en, year, season, episodes,
+                              format, duration, start_date, end_date, status,
+                              updated_at)
+SELECT
+    'mal:a' || CAST(b.mal_id AS VARCHAR)            AS id,
+    COALESCE(b.title_japanese, b.title, '')          AS title_ja,
+    COALESCE(b.title_english, b.title, '')           AS title_en,
+    b.anime_year,
+    b.season,
+    b.ep_count                                       AS episodes,
+    b.type                                           AS format,
+    NULL                                             AS duration,
+    CASE
+        WHEN b.aired_from IS NOT NULL AND LENGTH(TRIM(b.aired_from)) >= 10
+        THEN SUBSTRING(b.aired_from, 1, 10)
+        ELSE NULL
+    END                                              AS start_date,
+    CASE
+        WHEN b.aired_to IS NOT NULL AND LENGTH(TRIM(b.aired_to)) >= 10
+        THEN SUBSTRING(b.aired_to, 1, 10)
+        ELSE NULL
+    END                                              AS end_date,
+    b.status,
+    now()                                            AS updated_at
+FROM (
+    SELECT *,
+           TRY_CAST(year AS INTEGER)      AS anime_year,
+           TRY_CAST(episodes AS INTEGER)  AS ep_count,
+           ROW_NUMBER() OVER (PARTITION BY mal_id ORDER BY date DESC) AS _rn
+    FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE  mal_id IS NOT NULL
+) AS b
+WHERE b._rn = 1
+"""
+
+# Update display_*_mal columns on existing anime rows (both newly inserted and
+# already present from other sources).  Uses H1-compliant column names.
+_ANIME_UPDATE_SQL = """
+UPDATE anime
+SET
+    mal_id_int             = TRY_CAST(b.mal_id AS INTEGER),
+    display_score_mal      = TRY_CAST(b.display_score AS REAL),
+    display_popularity_mal = TRY_CAST(b.display_popularity AS INTEGER),
+    display_members_mal    = TRY_CAST(b.display_members AS INTEGER),
+    display_favorites_mal  = TRY_CAST(b.display_favorites AS INTEGER),
+    display_rank_mal       = TRY_CAST(b.display_rank AS INTEGER),
+    display_scored_by_mal  = TRY_CAST(b.display_scored_by AS INTEGER)
+FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (PARTITION BY mal_id ORDER BY date DESC) AS _rn
+    FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE  mal_id IS NOT NULL
+) AS b
+WHERE anime.id = 'mal:a' || CAST(b.mal_id AS VARCHAR)
+  AND b._rn = 1
+"""
+
+# persons — insert from MAL BRONZE persons table (absent → 0 rows, no error).
+_PERSONS_INSERT_SQL = """
+INSERT OR IGNORE INTO persons (id, name_en, name_ja, mal_id, updated_at)
+SELECT
+    'mal:p' || CAST(mal_id AS VARCHAR)    AS id,
+    COALESCE(name, '')                    AS name_en,
+    ''                                    AS name_ja,
+    TRY_CAST(mal_id AS INTEGER)           AS mal_id,
+    now()                                 AS updated_at
+FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (PARTITION BY mal_id ORDER BY date DESC) AS _rn
+    FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE  mal_id IS NOT NULL
+)
+WHERE _rn = 1
+"""
+
+# staff_credits → credits.  role mapping via map_role("mal", position).
+# DuckDB does not support Python UDFs inline in SQL, so we use a two-step
+# approach: pull the raw rows into Python, apply map_role(), re-insert.
+_STAFF_RAW_SQL = """
+SELECT DISTINCT
+    'mal:p' || CAST(mal_person_id AS VARCHAR)  AS person_id,
+    'mal:a' || CAST(mal_id AS VARCHAR)         AS anime_id,
+    COALESCE(position, '')                     AS raw_role
+FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+WHERE mal_id IS NOT NULL
+  AND mal_person_id IS NOT NULL
+"""
+
+# anime_characters → characters (mal:c prefix) + character_voice_actors.
+_CHARACTERS_RAW_SQL = """
+SELECT DISTINCT
+    'mal:c' || CAST(mal_character_id AS VARCHAR)  AS id,
+    COALESCE(character_name, '')                  AS name_ja,
+    COALESCE(character_url, '')                   AS site_url,
+    role                                          AS character_role,
+    'mal:a' || CAST(mal_id AS VARCHAR)            AS anime_id
+FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY mal_id, mal_character_id ORDER BY date DESC
+           ) AS _rn
+    FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE  mal_character_id IS NOT NULL
+)
+WHERE _rn = 1
+"""
+
+_VA_RAW_SQL = """
+SELECT DISTINCT
+    'mal:c' || CAST(mal_character_id AS VARCHAR)  AS character_id,
+    'mal:p' || CAST(mal_person_id AS VARCHAR)     AS person_id,
+    'mal:a' || CAST(mal_id AS VARCHAR)            AS anime_id,
+    COALESCE(language, '')                        AS language
+FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+WHERE mal_id IS NOT NULL
+  AND mal_character_id IS NOT NULL
+  AND mal_person_id IS NOT NULL
+"""
+
+_ANIME_GENRES_SQL = """
+INSERT OR IGNORE INTO anime_genres (anime_id, genre_name)
+SELECT DISTINCT
+    'mal:a' || CAST(mal_id AS VARCHAR)  AS anime_id,
+    COALESCE(name, '')                  AS genre_name
+FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+WHERE mal_id IS NOT NULL
+  AND name IS NOT NULL
+"""
+
+_STUDIOS_INSERT_SQL = """
+INSERT OR IGNORE INTO studios (id, name, updated_at)
+SELECT DISTINCT
+    'mal:n:' || name  AS id,
+    name,
+    now()             AS updated_at
+FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+WHERE name IS NOT NULL
+"""
+
+_ANIME_STUDIOS_SQL = """
+INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main)
+SELECT DISTINCT
+    'mal:a' || CAST(mal_id AS VARCHAR)  AS anime_id,
+    'mal:n:' || name                    AS studio_id,
+    CASE WHEN kind = 'Studios' THEN 1 ELSE 0 END AS is_main
+FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+WHERE mal_id IS NOT NULL
+  AND name IS NOT NULL
+"""
+
+_ANIME_RELATIONS_SQL = """
+INSERT OR IGNORE INTO anime_relations
+    (anime_id, related_anime_id, relation_type, related_title)
+SELECT DISTINCT
+    'mal:a' || CAST(mal_id AS VARCHAR)         AS anime_id,
+    'mal:a' || CAST(target_mal_id AS VARCHAR)  AS related_anime_id,
+    COALESCE(relation_type, '')                AS relation_type,
+    COALESCE(target_name, '')                  AS related_title
+FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+WHERE mal_id IS NOT NULL
+  AND target_mal_id IS NOT NULL
+  AND target_type = 'anime'
+"""
+
+_ANIME_RECOMMENDATIONS_SQL = """
+INSERT OR IGNORE INTO anime_recommendations
+    (anime_id, recommended_anime_id, votes, source)
+SELECT DISTINCT
+    'mal:a' || CAST(mal_id AS VARCHAR)              AS anime_id,
+    'mal:a' || CAST(recommended_mal_id AS VARCHAR)  AS recommended_anime_id,
+    TRY_CAST(votes AS INTEGER)                      AS votes,
+    'mal'                                           AS source
+FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+WHERE mal_id IS NOT NULL
+  AND recommended_mal_id IS NOT NULL
+"""
+
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
+
+def _glob(bronze_root: Path, table: str) -> str:
+    """Return glob pattern for a MAL BRONZE table partition."""
+    return str(
+        bronze_root / "source=mal" / f"table={table}" / "date=*" / "*.parquet"
+    )
+
+
+def _parquet_exists(bronze_root: Path, table: str) -> bool:
+    """Return True if at least one parquet file exists for this table."""
+    import glob as _glob_mod
+    return bool(_glob_mod.glob(_glob(bronze_root, table)))
+
+
+def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
+    """Create new SILVER tables and add anime extension columns."""
+    for stmt in _DDL_ANIME_RECOMMENDATIONS.split(";"):
+        stmt = stmt.strip()
+        if stmt:
+            conn.execute(stmt)
+    for stmt in _DDL_ANIME_EXTENSION:
+        conn.execute(stmt)
+
+
+def _load_staff_credits(
+    conn: duckdb.DuckDBPyConnection, bronze_root: Path
+) -> int:
+    """Pull staff_credits rows from BRONZE, apply role mapping, insert into credits.
+
+    Returns total credits rows with evidence_source='mal' after insert.
+    """
+    if not _parquet_exists(bronze_root, "staff_credits"):
+        return 0
+
+    raw_rows = conn.execute(
+        _STAFF_RAW_SQL, [_glob(bronze_root, "staff_credits")]
+    ).fetchall()
+
+    if not raw_rows:
+        return 0
+
+    mapped = [
+        (person_id, anime_id, raw_role, map_role("mal", raw_role))
+        for person_id, anime_id, raw_role in raw_rows
+    ]
+
+    # INSERT OR IGNORE cannot deduplicate when episode IS NULL because DuckDB
+    # treats NULL as distinct in UNIQUE constraints.  Use explicit NOT EXISTS.
+    conn.executemany(
+        """
+        INSERT INTO credits
+            (person_id, anime_id, raw_role, role, evidence_source, updated_at)
+        SELECT ?, ?, ?, ?, 'mal', now()
+        WHERE NOT EXISTS (
+            SELECT 1 FROM credits c
+            WHERE c.person_id = ?
+              AND c.anime_id  = ?
+              AND c.raw_role  = ?
+              AND c.episode IS NULL
+        )
+        """,
+        [(p, a, rr, r, p, a, rr) for p, a, rr, r in mapped],
+    )
+    return conn.execute(
+        "SELECT COUNT(*) FROM credits WHERE evidence_source = 'mal'"
+    ).fetchone()[0]
+
+
+def _load_characters_and_cva(
+    conn: duckdb.DuckDBPyConnection, bronze_root: Path
+) -> tuple[int, int]:
+    """Insert characters and character_voice_actors from MAL BRONZE.
+
+    Returns (characters_count, cva_count).
+    """
+    chars_inserted = 0
+    cva_inserted = 0
+
+    # --- characters ---
+    if _parquet_exists(bronze_root, "anime_characters"):
+        char_rows = conn.execute(
+            _CHARACTERS_RAW_SQL, [_glob(bronze_root, "anime_characters")]
+        ).fetchall()
+        if char_rows:
+            conn.executemany(
+                """
+                INSERT OR IGNORE INTO characters
+                    (id, name_ja, name_en, site_url, updated_at)
+                VALUES (?, ?, '', ?, now())
+                """,
+                [(r[0], r[1], r[2]) for r in char_rows],
+            )
+
+    # --- CVA ---
+    if _parquet_exists(bronze_root, "va_credits"):
+        va_rows = conn.execute(
+            _VA_RAW_SQL, [_glob(bronze_root, "va_credits")]
+        ).fetchall()
+        if va_rows:
+            conn.executemany(
+                """
+                INSERT OR IGNORE INTO character_voice_actors
+                    (character_id, person_id, anime_id, character_role, source, updated_at)
+                VALUES (?, ?, ?, ?, 'mal', now())
+                """,
+                [(r[0], r[1], r[2], r[3]) for r in va_rows],
+            )
+
+    chars_inserted = conn.execute(
+        "SELECT COUNT(*) FROM characters WHERE id LIKE 'mal:c%'"
+    ).fetchone()[0]
+    cva_inserted = conn.execute(
+        "SELECT COUNT(*) FROM character_voice_actors WHERE source = 'mal'"
+    ).fetchone()[0]
+
+    return chars_inserted, cva_inserted
+
+
+# ─── Public API ──────────────────────────────────────────────────────────────
+
+
+def integrate(
+    conn: duckdb.DuckDBPyConnection, bronze_root: Path | str
+) -> dict[str, int]:
+    """Load MAL BRONZE data into SILVER.
+
+    Args:
+        conn: Open DuckDB connection pointing at the SILVER database.
+              Must already contain the ``anime`` table (created by integrate_duckdb).
+        bronze_root: Root directory of BRONZE parquet partitions.
+
+    Returns:
+        Dict with row counts for each loaded table/operation:
+        ``anime_inserted``, ``anime_updated``, ``persons_inserted``,
+        ``credits_inserted``, ``characters_inserted``,
+        ``character_voice_actors_inserted``, ``anime_genres_inserted``,
+        ``studios_inserted``, ``anime_studios_inserted``,
+        ``anime_relations_inserted``, ``anime_recommendations_inserted``.
+    """
+    bronze_root = Path(bronze_root)
+    _apply_ddl(conn)
+
+    counts: dict[str, int] = {}
+
+    # --- anime ---
+    if _parquet_exists(bronze_root, "anime"):
+        anime_glob = _glob(bronze_root, "anime")
+        conn.execute(_ANIME_INSERT_SQL, [anime_glob])
+        conn.execute(_ANIME_UPDATE_SQL, [anime_glob])
+
+    counts["anime_inserted"] = conn.execute(
+        "SELECT COUNT(*) FROM anime WHERE id LIKE 'mal:a%'"
+    ).fetchone()[0]
+    counts["anime_updated"] = conn.execute(
+        "SELECT COUNT(*) FROM anime WHERE display_score_mal IS NOT NULL"
+    ).fetchone()[0]
+
+    # --- persons (gracefully skip when BRONZE absent) ---
+    if _parquet_exists(bronze_root, "persons"):
+        conn.execute(_PERSONS_INSERT_SQL, [_glob(bronze_root, "persons")])
+    counts["persons_inserted"] = conn.execute(
+        "SELECT COUNT(*) FROM persons WHERE id LIKE 'mal:p%'"
+    ).fetchone()[0]
+
+    # --- staff_credits → credits ---
+    counts["credits_inserted"] = _load_staff_credits(conn, bronze_root)
+
+    # --- characters + CVA ---
+    chars, cva = _load_characters_and_cva(conn, bronze_root)
+    counts["characters_inserted"] = chars
+    counts["character_voice_actors_inserted"] = cva
+
+    # --- anime_genres ---
+    if _parquet_exists(bronze_root, "anime_genres"):
+        conn.execute(_ANIME_GENRES_SQL, [_glob(bronze_root, "anime_genres")])
+    counts["anime_genres_inserted"] = conn.execute(
+        "SELECT COUNT(*) FROM anime_genres"
+    ).fetchone()[0]
+
+    # --- studios + anime_studios ---
+    if _parquet_exists(bronze_root, "anime_studios"):
+        studios_glob = _glob(bronze_root, "anime_studios")
+        conn.execute(_STUDIOS_INSERT_SQL, [studios_glob])
+        conn.execute(_ANIME_STUDIOS_SQL, [studios_glob])
+    counts["studios_inserted"] = conn.execute(
+        "SELECT COUNT(*) FROM studios WHERE id LIKE 'mal:n:%'"
+    ).fetchone()[0]
+    counts["anime_studios_inserted"] = conn.execute(
+        "SELECT COUNT(*) FROM anime_studios"
+    ).fetchone()[0]
+
+    # --- anime_relations ---
+    if _parquet_exists(bronze_root, "anime_relations"):
+        conn.execute(_ANIME_RELATIONS_SQL, [_glob(bronze_root, "anime_relations")])
+    counts["anime_relations_inserted"] = conn.execute(
+        "SELECT COUNT(*) FROM anime_relations"
+    ).fetchone()[0]
+
+    # --- anime_recommendations ---
+    if _parquet_exists(bronze_root, "anime_recommendations"):
+        conn.execute(
+            _ANIME_RECOMMENDATIONS_SQL,
+            [_glob(bronze_root, "anime_recommendations")],
+        )
+    counts["anime_recommendations_inserted"] = conn.execute(
+        "SELECT COUNT(*) FROM anime_recommendations"
+    ).fetchone()[0]
+
+    return counts

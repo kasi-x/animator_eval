@@ -1409,3 +1409,372 @@ def _upgrade_v61_titles_alt(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE anime ADD COLUMN titles_alt TEXT NOT NULL DEFAULT '{}'")
     except Exception:
         pass  # column already exists
+
+
+# ===== ann extension =====
+# DuckDB SILVER schema additions for ANN BRONZE → SILVER integration.
+# Applied by src/etl/silver_loaders/ann.py via _apply_ddl().
+#
+# H1 compliance: ANN rating columns are prefixed display_rating_* to exclude
+# them from all scoring paths. Only display_rating_votes /
+# display_rating_weighted / display_rating_bayesian are permitted.
+#
+# ALTER TABLE (anime):
+#   themes TEXT, plot_summary TEXT, running_time_raw TEXT,
+#   objectionable_content TEXT, opening_themes_json TEXT,
+#   ending_themes_json TEXT, insert_songs_json TEXT,
+#   official_websites_json TEXT, vintage_raw TEXT, image_url TEXT,
+#   display_rating_votes INTEGER, display_rating_weighted REAL,
+#   display_rating_bayesian REAL
+#
+# ALTER TABLE (persons):
+#   gender TEXT, height_raw TEXT, family_name_ja TEXT,
+#   given_name_ja TEXT, hometown TEXT, image_url_ann TEXT
+#   Note: hometown / gender may already exist in some SQLite DBs
+#   (from _upgrade_v56_multilang / base DDL). DuckDB ADD COLUMN IF NOT EXISTS
+#   handles this safely.
+#
+# New tables:
+#   anime_episodes  (anime_id, episode_num, lang, title, aired_date)
+#   anime_companies (anime_id, company_name, task, company_id, source)
+#   anime_releases  (anime_id, product_title, release_date, href, region, source)
+#   anime_news      (anime_id, datetime, title, href, source)
+#
+# Existing tables extended (INSERT only, no DDL change needed):
+#   anime_relations        — ANN related data (relation_type = rel value)
+#   character_voice_actors — ANN cast (character_id='ann:c<id>',
+#                            person_id='ann:p<id>', anime_id='ann:a<id>')
+
+
+# ===== anilist extension (Card 14/01) =====
+# anime 拡張列 (display 系は display_* prefix で H1 隔離)
+_ANILIST_EXTENSION_COLUMNS: list[tuple[str, str]] = [
+    ("synonyms",               "TEXT"),
+    ("country_of_origin",      "TEXT"),
+    ("is_licensed",            "INTEGER"),
+    ("is_adult",               "INTEGER"),
+    ("hashtag",                "TEXT"),
+    ("site_url",               "TEXT"),
+    ("trailer_url",            "TEXT"),
+    ("trailer_site",           "TEXT"),
+    ("description",            "TEXT"),
+    ("cover_large",            "TEXT"),
+    ("cover_extra_large",      "TEXT"),
+    ("cover_medium",           "TEXT"),
+    ("banner",                 "TEXT"),
+    ("external_links_json",    "TEXT"),
+    ("airing_schedule_json",   "TEXT"),
+    ("relations_json",         "TEXT"),
+    ("display_score",          "REAL"),
+    ("display_mean_score",     "REAL"),
+    ("display_favourites",     "INTEGER"),
+    ("display_popularity_rank","INTEGER"),
+    ("display_rankings_json",  "TEXT"),
+]
+
+
+def _upgrade_anilist_anime_extension(conn: sqlite3.Connection) -> None:
+    """Add AniList-sourced display/structural columns to anime (Card 14/01).
+
+    All subjective/popularity columns are prefixed display_* (H1 compliance).
+    Safe to run multiple times — ignores 'duplicate column' errors.
+    """
+    for col, col_type in _ANILIST_EXTENSION_COLUMNS:
+        try:
+            conn.execute(f"ALTER TABLE anime ADD COLUMN {col} {col_type}")
+        except Exception:
+            pass  # column already exists
+
+
+# ===== keyframe extension (Card 14/06) =====
+
+# anime 拡張列 — keyframe 固有メタデータ (slug / status / delimiter設定)。
+# display 系なし: 全列が構造的メタデータ (H1 対象外)。
+_KEYFRAME_ANIME_EXTENSION_COLUMNS: list[tuple[str, str]] = [
+    ("kf_uuid",                "TEXT"),
+    ("kf_status",              "TEXT"),
+    ("kf_slug",                "TEXT"),
+    ("kf_delimiters",          "TEXT"),  # JSON
+    ("kf_episode_delimiters",  "TEXT"),
+    ("kf_role_delimiters",     "TEXT"),
+    ("kf_staff_delimiters",    "TEXT"),
+]
+
+# persons 拡張列 — Card 04 (seesaawiki) との共有。image_large が未追加の場合のみ追加。
+_KEYFRAME_PERSONS_EXTENSION_COLUMNS: list[tuple[str, str]] = [
+    ("image_large", "TEXT"),
+]
+
+
+def _upgrade_keyframe_extension(conn: sqlite3.Connection) -> None:
+    """Add keyframe-sourced columns to anime and persons (Card 14/06).
+
+    New SILVER tables (person_jobs, person_studio_affiliations,
+    anime_settings_categories) are created by the DuckDB loader
+    (src/etl/silver_loaders/keyframe.py) at runtime.
+
+    Safe to run multiple times — ignores 'duplicate column' errors.
+    """
+    for col, col_type in _KEYFRAME_ANIME_EXTENSION_COLUMNS:
+        try:
+            conn.execute(f"ALTER TABLE anime ADD COLUMN {col} {col_type}")
+        except Exception:
+            pass  # column already exists
+
+    for col, col_type in _KEYFRAME_PERSONS_EXTENSION_COLUMNS:
+        try:
+            conn.execute(f"ALTER TABLE persons ADD COLUMN {col} {col_type}")
+        except Exception:
+            pass  # column already exists
+
+
+# ===== sakuga_atwiki extension (Card 14/07) =====
+# work_title → silver anime_id title-matching result cache.
+# Conservative 2-stage matcher: exact_title / normalized / unresolved.
+# resolved_anime_id is NULL for unresolved rows (future downstream resolution).
+_SAKUGA_ATWIKI_EXTENSION_DDL = [
+    """CREATE TABLE IF NOT EXISTS sakuga_work_title_resolution (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_title        TEXT NOT NULL,
+        work_year         INTEGER,
+        work_format       TEXT,
+        resolved_anime_id TEXT,
+        match_method      TEXT,
+        match_score       REAL,
+        UNIQUE(work_title, work_year, work_format)
+    )""",
+    """CREATE INDEX IF NOT EXISTS idx_swtr_anime
+       ON sakuga_work_title_resolution(resolved_anime_id)""",
+]
+
+
+def _upgrade_sakuga_atwiki_extension(conn: sqlite3.Connection) -> None:
+    """Create sakuga_work_title_resolution table (Card 14/07).
+
+    Safe to run multiple times — CREATE TABLE IF NOT EXISTS + CREATE INDEX IF NOT EXISTS.
+    """
+    for stmt in _SAKUGA_ATWIKI_EXTENSION_DDL:
+        try:
+            conn.execute(stmt)
+        except Exception:
+            pass  # table / index already exists
+
+
+# ===== madb extension (Card 14/02) =====
+# DuckDB SILVER テーブル 6 本。SQLite 非対象。
+# 実行は src/etl/silver_loaders/madb.py の create_tables() で行う。
+# このブロックは single source of truth としての DDL 参照定義。
+_MADB_SILVER_DDL = """
+-- ===== madb extension =====
+
+CREATE SEQUENCE IF NOT EXISTS seq_anime_broadcasters_id;
+CREATE TABLE IF NOT EXISTS anime_broadcasters (
+    id                  INTEGER PRIMARY KEY DEFAULT nextval('seq_anime_broadcasters_id'),
+    anime_id            VARCHAR NOT NULL,
+    broadcaster_name    VARCHAR NOT NULL,
+    is_network_station  INTEGER,
+    UNIQUE (anime_id, broadcaster_name)
+);
+CREATE INDEX IF NOT EXISTS idx_anime_broadcasters_anime ON anime_broadcasters(anime_id);
+
+CREATE TABLE IF NOT EXISTS anime_broadcast_schedule (
+    anime_id  VARCHAR PRIMARY KEY,
+    raw_text  VARCHAR NOT NULL
+);
+
+CREATE SEQUENCE IF NOT EXISTS seq_anime_production_committee_id;
+CREATE TABLE IF NOT EXISTS anime_production_committee (
+    id            INTEGER PRIMARY KEY DEFAULT nextval('seq_anime_production_committee_id'),
+    anime_id      VARCHAR NOT NULL,
+    company_name  VARCHAR NOT NULL,
+    role_label    VARCHAR NOT NULL DEFAULT '',
+    UNIQUE (anime_id, company_name, role_label)
+);
+CREATE INDEX IF NOT EXISTS idx_apc_anime ON anime_production_committee(anime_id);
+
+CREATE SEQUENCE IF NOT EXISTS seq_anime_production_companies_id;
+CREATE TABLE IF NOT EXISTS anime_production_companies (
+    id            INTEGER PRIMARY KEY DEFAULT nextval('seq_anime_production_companies_id'),
+    anime_id      VARCHAR NOT NULL,
+    company_name  VARCHAR NOT NULL,
+    role_label    VARCHAR NOT NULL DEFAULT '',
+    is_main       INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (anime_id, company_name, role_label)
+);
+CREATE INDEX IF NOT EXISTS idx_apco_anime ON anime_production_companies(anime_id);
+
+CREATE SEQUENCE IF NOT EXISTS seq_anime_video_releases_id;
+CREATE TABLE IF NOT EXISTS anime_video_releases (
+    id              INTEGER PRIMARY KEY DEFAULT nextval('seq_anime_video_releases_id'),
+    release_madb_id VARCHAR NOT NULL UNIQUE,
+    anime_id        VARCHAR,
+    media_format    VARCHAR,
+    date_published  VARCHAR,
+    publisher       VARCHAR,
+    product_id      VARCHAR,
+    gtin            VARCHAR,
+    runtime_min     INTEGER,
+    volume_number   VARCHAR,
+    release_title   VARCHAR
+);
+CREATE INDEX IF NOT EXISTS idx_avr_anime ON anime_video_releases(anime_id);
+
+CREATE SEQUENCE IF NOT EXISTS seq_anime_original_work_links_id;
+CREATE TABLE IF NOT EXISTS anime_original_work_links (
+    id              INTEGER PRIMARY KEY DEFAULT nextval('seq_anime_original_work_links_id'),
+    anime_id        VARCHAR NOT NULL,
+    work_name       VARCHAR,
+    creator_text    VARCHAR,
+    series_link_id  VARCHAR,
+    UNIQUE (anime_id, work_name)
+);
+CREATE INDEX IF NOT EXISTS idx_aow_anime ON anime_original_work_links(anime_id);
+"""
+
+# ===== mal extension (Card 14/08) =====
+# DuckDB SILVER テーブル 1 本 + anime ALTER 列群。
+# 実行は src/etl/silver_loaders/mal.py の integrate() で行う。
+
+# anime ALTER 列 — H1: display 系は display_*_mal suffix で隔離。
+# mal_id_int は構造的 ID (integer 形式、既存 TEXT id とは別)。
+_MAL_EXTENSION_COLUMNS: list[tuple[str, str]] = [
+    ("mal_id_int",               "INTEGER"),
+    ("display_score_mal",        "REAL"),
+    ("display_popularity_mal",   "INTEGER"),
+    ("display_members_mal",      "INTEGER"),
+    ("display_favorites_mal",    "INTEGER"),
+    ("display_rank_mal",         "INTEGER"),
+    ("display_scored_by_mal",    "INTEGER"),
+]
+
+# DDL for anime_recommendations (new SILVER table).
+_MAL_SILVER_DDL = """
+-- ===== mal extension =====
+
+CREATE SEQUENCE IF NOT EXISTS seq_anime_recommendations_id;
+CREATE TABLE IF NOT EXISTS anime_recommendations (
+    id                   INTEGER PRIMARY KEY DEFAULT nextval('seq_anime_recommendations_id'),
+    anime_id             VARCHAR NOT NULL,
+    recommended_anime_id VARCHAR NOT NULL,
+    votes                INTEGER,
+    source               VARCHAR NOT NULL DEFAULT 'mal',
+    UNIQUE(anime_id, recommended_anime_id, source)
+);
+CREATE INDEX IF NOT EXISTS idx_arec_anime ON anime_recommendations(anime_id);
+"""
+
+
+# ===== seesaawiki extension (Card 14/04) =====
+# DuckDB SILVER テーブル 4 本 + shared table + persons 拡張列。
+# SQLite 用 DDL は _upgrade_seesaawiki_extension() に記述。
+# DuckDB 用 DDL は src/etl/silver_loaders/seesaawiki.py の _DDL_* constants。
+
+
+def _upgrade_seesaawiki_extension(conn: sqlite3.Connection) -> None:
+    """Create SeesaaWiki-specific SILVER tables for SQLite (Card 14/04).
+
+    anime_production_committee は Card 14/02 (madb) と共有 — CREATE TABLE IF NOT EXISTS
+    で重複定義を吸収する。どちらが先に走っても安全。
+
+    Safe to run multiple times — all stmts use CREATE TABLE IF NOT EXISTS.
+    """
+    stmts = [
+        # Shared with Card 14/02 (madb) — IF NOT EXISTS handles parallel card execution.
+        """CREATE TABLE IF NOT EXISTS anime_production_committee (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            anime_id     TEXT NOT NULL,
+            company_name TEXT NOT NULL,
+            role_label   TEXT,
+            UNIQUE (anime_id, company_name, role_label)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_apc_anime ON anime_production_committee(anime_id)",
+        """CREATE TABLE IF NOT EXISTS anime_theme_songs (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            anime_id   TEXT NOT NULL,
+            song_type  TEXT,
+            song_title TEXT,
+            role       TEXT,
+            name       TEXT,
+            UNIQUE (anime_id, song_type, song_title, role, name)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_ats_anime ON anime_theme_songs(anime_id)",
+        """CREATE TABLE IF NOT EXISTS anime_episode_titles (
+            id       INTEGER PRIMARY KEY AUTOINCREMENT,
+            anime_id TEXT NOT NULL,
+            episode  INTEGER,
+            title    TEXT,
+            source   TEXT NOT NULL DEFAULT 'seesaawiki',
+            UNIQUE (anime_id, episode, source)
+        )""",
+        """CREATE TABLE IF NOT EXISTS anime_gross_studios (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            anime_id    TEXT NOT NULL,
+            studio_name TEXT NOT NULL,
+            episode     INTEGER,
+            UNIQUE (anime_id, studio_name, episode)
+        )""",
+        "CREATE INDEX IF NOT EXISTS idx_ags_anime ON anime_gross_studios(anime_id)",
+        """CREATE TABLE IF NOT EXISTS anime_original_work_info (
+            anime_id           TEXT PRIMARY KEY,
+            author             TEXT,
+            publisher          TEXT,
+            label              TEXT,
+            magazine           TEXT,
+            serialization_type TEXT
+        )""",
+    ]
+    for s in stmts:
+        try:
+            conn.execute(s)
+        except Exception:
+            pass  # table / index already exists
+
+    # persons 拡張列 (DuckDB loader と対称)
+    for col, defn in [
+        ("name_native_raw",     "TEXT"),
+        ("aliases",             "TEXT"),
+        ("nationality",         "TEXT"),
+        ("primary_occupations", "TEXT"),
+        ("years_active",        "TEXT"),
+        ("description",         "TEXT"),
+        ("image_large",         "TEXT"),
+        ("image_medium",        "TEXT"),
+        ("hometown",            "TEXT"),
+    ]:
+        try:
+            conn.execute(f"ALTER TABLE persons ADD COLUMN {col} {defn}")
+        except Exception:
+            pass  # column already exists
+
+
+# ===== bangumi extension (Card 14/05) =====
+# bangumi.tv BRONZE → SILVER 統合。6 BRONZE テーブルから 5 SILVER ターゲット。
+# DuckDB SILVER 対象。SQLite 非対象。
+# DDL は src/etl/silver_loaders/bangumi.py の _apply_ddl() で実行。
+# このブロックは single source of truth としての列定義参照。
+#
+# H1 compliance: score / rank / favorite 系は display_* prefix で scoring 経路から隔離。
+#
+# anime 拡張列:
+#   infobox_json                TEXT    — bangumi infobox raw JSON
+#   platform                   TEXT    — bangumi platform code (TV/OVA/Movie 等)
+#   meta_tags_json             TEXT    — bangumi meta tags JSON
+#   series_flag                INTEGER — 0/1 シリーズ所属フラグ
+#   display_score_bgm          REAL    — H1: display only
+#   display_score_details_json TEXT    — H1: display only
+#   display_rank_bgm           INTEGER — H1: display only
+#   display_favorite_bgm       INTEGER — H1: display only
+#
+# persons 拡張列 (Card 03 との衝突注意: gender/blood_type は Card 03 ALTER 済):
+#   career_json  TEXT    — bangumi career array JSON
+#   infobox_json TEXT    — bangumi person infobox JSON
+#   summary_bgm  TEXT    — bangumi person summary text
+#   bgm_id       INTEGER — bangumi person integer ID
+#   person_type  INTEGER — 1=individual, 2=company, etc.
+#
+# characters 拡張列:
+#   infobox_json   TEXT    — bangumi character infobox JSON
+#   summary_bgm    TEXT    — bangumi character summary text
+#   bgm_id         INTEGER — bangumi character integer ID
+#   character_type INTEGER — character type code
+#   images_json    TEXT    — bangumi character images JSON

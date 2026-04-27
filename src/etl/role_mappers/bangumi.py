@@ -226,16 +226,52 @@ def _build_code_map() -> dict[int, str]:
     return code_map
 
 
+@lru_cache(maxsize=1)
+def _build_zh_map() -> dict[str, str]:
+    """Load staffs.json and build zh string → Role.value mapping.
+
+    Used when subject_persons.position is a Chinese string rather than an
+    integer code.  Priority: _CODE_OVERRIDES wins (looked up via code first),
+    then ROLE_MAP via the English label.
+    """
+    try:
+        raw_data: dict[str, dict] = json.loads(_STAFFS_JSON.read_text(encoding="utf-8"))
+    except Exception as exc:
+        logger.warning("bangumi_staffs_json_load_failed", error=str(exc))
+        raw_data = {}
+
+    code_map = _build_code_map()
+    zh_map: dict[str, str] = {}
+
+    for code_str, entry in raw_data.items():
+        zh_label = entry.get("zh", "").strip()
+        if not zh_label:
+            continue
+        code = int(code_str)
+        # Reuse the already-resolved Role.value from code_map if available.
+        role_value = code_map.get(code, Role.OTHER.value)
+        zh_map[zh_label] = role_value
+
+    return zh_map
+
+
 def _resolve_code(raw: str) -> str:
-    """Convert a Bangumi staff code string to a normalized Role.value."""
+    """Convert a Bangumi staff position string to a normalized Role.value.
+
+    Handles both integer code strings (e.g. "2") and Chinese label strings
+    (e.g. "原画") that appear in subject_persons.position.
+    """
     try:
         code = int(raw)
+        return _build_code_map().get(code, Role.OTHER.value)
     except (ValueError, TypeError):
-        return Role.OTHER.value
-    return _build_code_map().get(code, Role.OTHER.value)
+        pass
+    # Fallback: look up by Chinese label.
+    zh_map = _build_zh_map()
+    return zh_map.get(raw.strip(), Role.OTHER.value)
 
 
 @register("bangumi")
 def map_bangumi_role(raw: str) -> str:
-    """Map a Bangumi staff code (as string) to a normalized Role.value."""
+    """Map a Bangumi staff position (integer code string or Chinese label) to Role.value."""
     return _resolve_code(raw)
