@@ -1602,8 +1602,10 @@ def run(
 ) -> None:
     """Fetch and parse credit data from SeesaaWiki."""
     from src.infra.logging import setup_logging
+    from src.scrapers.logging_utils import configure_file_logging
 
     setup_logging()
+    configure_file_logging("seesaawiki")
 
     stats = asyncio.run(
         scrape_seesaawiki(
