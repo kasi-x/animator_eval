@@ -21,7 +21,7 @@ PageKind = Literal["person", "work", "index", "meta", "unknown"]
 # ---------------------------------------------------------------------------
 
 _PAGE_LINK_RE = re.compile(
-    r'href="(?:(?:https:)?//w\.atwiki\.jp)?/sakuga/pages/(\d+)\.html"'
+    r'href="(?:(?:https:)?//[^/]*\.atwiki\.jp)?/sakuga/pages/(\d+)\.html"'
 )
 _META_TITLE_KW = re.compile(r"メニュー|サイトマップ")
 _INDEX_TITLE_KW = re.compile(r"一覧|索引")
