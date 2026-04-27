@@ -886,20 +886,18 @@ async def _fetch_staff_phase(
                 relations_bw.flush()
                 characters_bw.flush()
                 cva_bw.flush()
-                save_checkpoint(
-                    checkpoint_file,
-                    create_checkpoint_data(
-                        loop_idx + 1, fetched_ids, totals, time_module.time()
-                    ),
-                )
+                cp = Checkpoint(checkpoint_file)
+                cp.data.update(create_checkpoint_data(
+                    loop_idx + 1, fetched_ids, totals, time_module.time()
+                ))
+                cp.save(stamp_time=False)
                 p.log("anilist_staff_checkpoint", done=loop_idx + 1, total=len(anime_ids))
 
-        save_checkpoint(
-            checkpoint_file,
-            create_checkpoint_data(
-                len(anime_ids), fetched_ids, totals, time_module.time()
-            ),
-        )
+        cp = Checkpoint(checkpoint_file)
+        cp.data.update(create_checkpoint_data(
+            len(anime_ids), fetched_ids, totals, time_module.time()
+        ))
+        cp.save(stamp_time=False)
 
     return all_person_ids_to_fetch
 
@@ -1089,42 +1087,42 @@ def run(
     # デフォルト: チェックポイント存在時は自動で続きから始める
     # --force-restart フラグで最初から始められる
     if checkpoint_exists and not force_restart:
-        with open(checkpoint_file) as f:
-            checkpoint = json.load(f)
-            start_index = checkpoint.get("last_index", 0)
-            fetched_ids.update(checkpoint.get("fetched_ids", []))
+        from src.scrapers.checkpoint import Checkpoint
+        cp = Checkpoint(checkpoint_file)
+        start_index = cp.get("last_index", 0)
+        fetched_ids.update(cp.get("fetched_ids", []))
 
-            # Display checkpoint recovery message
-            console.print()
-            console.print(
-                Rule(
-                    "[bold bright_yellow]チェックポイント復旧[/bold bright_yellow]",
-                    style="bright_yellow",
-                )
+        # Display checkpoint recovery message
+        console.print()
+        console.print(
+            Rule(
+                "[bold bright_yellow]チェックポイント復旧[/bold bright_yellow]",
+                style="bright_yellow",
             )
-            checkpoint_table = Table(show_header=False, box=None, padding=(0, 2))
-            checkpoint_table.add_row(
-                "[bright_yellow]前回の進捗[/bright_yellow]",
-                f"[bold bright_green]{start_index:,}[/bold bright_green]件処理済み",
-            )
-            checkpoint_table.add_row(
-                "[bright_yellow]今回の開始位置[/bright_yellow]",
-                f"[bold bright_cyan]{start_index + 1:,}[/bold bright_cyan]件目から",
-            )
-            checkpoint_table.add_row(
-                "[bright_yellow]タイムスタンプ[/bright_yellow]",
-                f"[dim]{checkpoint.get('timestamp', 'N/A')}[/dim]",
-            )
-            console.print(
-                Panel(checkpoint_table, border_style="bright_yellow", padding=(1, 2))
-            )
-            console.print()
+        )
+        checkpoint_table = Table(show_header=False, box=None, padding=(0, 2))
+        checkpoint_table.add_row(
+            "[bright_yellow]前回の進捗[/bright_yellow]",
+            f"[bold bright_green]{start_index:,}[/bold bright_green]件処理済み",
+        )
+        checkpoint_table.add_row(
+            "[bright_yellow]今回の開始位置[/bright_yellow]",
+            f"[bold bright_cyan]{start_index + 1:,}[/bold bright_cyan]件目から",
+        )
+        checkpoint_table.add_row(
+            "[bright_yellow]タイムスタンプ[/bright_yellow]",
+            f"[dim]{cp.get('timestamp', 'N/A')}[/dim]",
+        )
+        console.print(
+            Panel(checkpoint_table, border_style="bright_yellow", padding=(1, 2))
+        )
+        console.print()
 
-            log.info(
-                "checkpoint_loaded",
-                start_index=start_index,
-                fetched_count=len(fetched_ids),
-            )
+        log.info(
+            "checkpoint_loaded",
+            start_index=start_index,
+            fetched_count=len(fetched_ids),
+        )
 
     # Fetch with incremental saving
     async def fetch_with_checkpoints(since_ids: set[str] | None = None):
@@ -1147,6 +1145,7 @@ def run(
         from rich.rule import Rule
         from rich.align import Align
         import time as time_module
+        from src.scrapers.checkpoint import Checkpoint
 
         # === Helper Functions (Nested for Clarity) ===
 
@@ -1318,15 +1317,6 @@ def run(
                 "timestamp": timestamp,
             }
 
-        def save_checkpoint(file_path, data):
-            """Save checkpoint data to JSON file atomically (tmp → rename)."""
-            from src.scrapers.checkpoint import atomic_write_json
-            atomic_write_json(file_path, data, indent=2)
-
-        def delete_checkpoint_file_if_exists(file_path):
-            """Delete checkpoint file upon successful completion."""
-            if file_path.exists():
-                file_path.unlink()
 
         def display_checkpoint_panel(checkpoint_num, stats_table):
             """Display checkpoint save panel."""
@@ -1777,7 +1767,8 @@ def run(
                 )
 
             # Delete checkpoint file on completion
-            delete_checkpoint_file_if_exists(checkpoint_file)
+            cp = Checkpoint(checkpoint_file)
+            cp.delete()
 
             # Display final summary
             elapsed = time_module.time() - start_time
