@@ -511,7 +511,7 @@ async def _run_scrape_persons(
         await client.close()
 
 
-@app.command("scrape-all")
+@app.command("run")
 def cmd_scrape_all(
     limit: LimitOpt = 0,
     delay: DelayOpt = DEFAULT_DELAY,

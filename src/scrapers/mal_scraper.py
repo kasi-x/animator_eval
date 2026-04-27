@@ -77,7 +77,7 @@ ALL_TABLES = [
     "master_genres", "master_magazines",
 ]
 
-JIKAN_LIMITER = DualWindowRateLimiter(per_second=3, per_minute=60)
+JIKAN_LIMITER = DualWindowRateLimiter(per_second=2, per_minute=45)
 
 app = typer.Typer()
 
@@ -621,7 +621,7 @@ async def _phase_c_producers_manga_masters(
 # ── CLI entry point ───────────────────────────────────────────────────────────
 
 @app.command()
-def main(
+def run(
     phase: str = typer.Option("all", "--phase", help="A / B / C / all"),
     resume: ResumeOpt = True,
     checkpoint_interval: CheckpointIntervalOpt = 10,

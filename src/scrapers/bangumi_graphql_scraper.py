@@ -137,6 +137,7 @@ class BangumiGraphQLClient:
     async def __aenter__(self) -> BangumiGraphQLClient:
         self._client = httpx.AsyncClient(
             timeout=self._timeout,
+            follow_redirects=True,
             headers={
                 "User-Agent": self._user_agent,
                 "Accept": "application/json",

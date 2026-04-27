@@ -81,7 +81,7 @@ def parse_anime_meta(data: dict, slug: str) -> dict:
     settings = data.get("settings") or {}
     return {
         "kf_uuid": data.get("uuid"),
-        "kf_saving_id": data.get("savingId"),
+        "kf_saving_id": _parse_int(data.get("savingId")),
         "kf_author": data.get("author"),
         "kf_status": data.get("status"),
         "kf_comment": data.get("comment"),
@@ -90,15 +90,15 @@ def parse_anime_meta(data: dict, slug: str) -> dict:
         "title_romaji": title.get("romaji"),
         "synonyms": a.get("synonyms") or [],
         "format": a.get("format"),
-        "episodes": a.get("episodes"),
+        "episodes": _parse_int(a.get("episodes")),
         "season": a.get("season"),
-        "season_year": a.get("seasonYear"),
+        "season_year": _parse_int(a.get("seasonYear")),
         "start_date": a.get("startDate") or {},
         "end_date": a.get("endDate") or {},
         "cover_image_url": (a.get("coverImage") or {}).get("extraLarge"),
-        "is_adult": a.get("isAdult"),
+        "is_adult": bool(a.get("isAdult")) if a.get("isAdult") is not None else None,
         "anilist_status": a.get("status"),
-        "anilist_id": a.get("id") or _parse_int(data.get("anilistId")),
+        "anilist_id": _parse_int(a.get("id")) or _parse_int(data.get("anilistId")),
         "slug": slug,
         "delimiters": settings.get("delimiters"),
         "episode_delimiters": settings.get("episodeDelimiters"),
@@ -177,7 +177,13 @@ def parse_credits_from_data(data: dict, slug: str) -> list[dict]:
 
                 for staff in role_entry.get("staff", []):
                     is_studio_role = bool(staff.get("isStudio"))
-                    studio_obj = staff.get("studio") or {}
+                    _studio_raw = staff.get("studio")
+                    if isinstance(_studio_raw, dict):
+                        studio_obj: dict = _studio_raw
+                    elif isinstance(_studio_raw, str) and _studio_raw:
+                        studio_obj = {"ja": _studio_raw}
+                    else:
+                        studio_obj = {}
                     person_id = staff.get("id")
                     name_ja = staff.get("ja", "")
                     name_en = staff.get("en", "")

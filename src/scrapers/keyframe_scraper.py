@@ -104,7 +104,9 @@ def _collect_person_ids_from_preload(data: dict) -> set[int]:
                     pid = staff.get("id")
                     if pid is not None and not staff.get("isStudio"):
                         try:
-                            ids.add(int(pid))
+                            v = int(pid)
+                            if v > 0:
+                                ids.add(v)
                         except (TypeError, ValueError):
                             pass
     return ids
@@ -494,7 +496,7 @@ async def _phase4_preview(
 
 
 @app.command()
-def cmd_scrape_all(
+def run(
     delay: DelayOpt = DEFAULT_DELAY,
     skip_persons: bool = typer.Option(False, help="Skip Phase 3 (person API)"),
     max_anime: LimitOpt = 0,
@@ -650,7 +652,7 @@ async def run_enrich_translate(
     return stats
 
 
-@app.command()
+@app.command("enrich-translate")
 def cmd_enrich_translate(
     ids: str = typer.Option(
         "",

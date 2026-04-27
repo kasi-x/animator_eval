@@ -25,6 +25,7 @@ Usage:
 from __future__ import annotations
 
 import asyncio
+import random
 import time
 from collections import deque
 from typing import ClassVar
@@ -291,4 +292,4 @@ class DualWindowRateLimiter:
                     self._sec_window.append(now)
                     self._min_window.append(now)
                     return
-                await asyncio.sleep(wait + 0.01)
+                await asyncio.sleep(wait + 0.01 + random.uniform(0, 0.2))

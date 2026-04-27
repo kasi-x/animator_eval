@@ -759,7 +759,6 @@ async def fetch_top_anime_credits(
 
 async def _load_anime_ids(
     client,
-    count,
     fetched_ids,
     console,
     update,
@@ -779,7 +778,6 @@ async def _load_anime_ids(
     """
     anime_ids = await fetch_anime_list_from_api(
         client,
-        count,
         fetched_ids,
         use_cache=True,
         anime_list_cache_file=anime_list_cache_file,
@@ -979,8 +977,7 @@ async def _fetch_person_details_phase(
 
 
 @app.command()
-def main(
-    count: int = typer.Option(50, "--count", "--limit", "-n", help="取得するアニメ数; alias --limit"),
+def run(
     checkpoint_interval: int = typer.Option(
         SCRAPE_CHECKPOINT_INTERVAL, "--checkpoint", help="チェックポイント間隔"
     ),
@@ -1351,7 +1348,7 @@ def main(
             console.print()
 
         async def fetch_anime_list_from_api(
-            client, count, fetched_ids, use_cache=True, anime_list_cache_file=None
+            client, fetched_ids, use_cache=True, anime_list_cache_file=None
         ):
             """Fetch anime list from API with optional caching and smart updates."""
             # Try to load from cache if not updating
@@ -1454,7 +1451,6 @@ def main(
 
             console.print()
 
-            pages_needed = (count + 49) // 50
             anime_ids = []
             all_anime_for_cache = []
 
@@ -1465,14 +1461,12 @@ def main(
                     anime_id = item["anime"]["id"]
                     prev_anime_status[anime_id] = item.get("status")
 
-            # Sort order: by default newest/most relevant first
-            # Can be reversed with --reverse flag
             if recent:
-                sort_order = ["START_DATE_DESC"]  # New first (for adding recent anime)
+                sort_order = ["START_DATE_DESC"]
             elif reverse:
-                sort_order = ["START_DATE_ASC"]  # Old first
+                sort_order = ["START_DATE_ASC"]
             else:
-                sort_order = ["POPULARITY_DESC"]  # New/popular first
+                sort_order = ["POPULARITY_DESC"]
 
             from rich.live import Live
             from rich.console import Group
@@ -1480,16 +1474,10 @@ def main(
 
             bar1 = Progress(
                 SpinnerColumn(style="cyan"),
-                BarColumn(
-                    bar_width=40,
-                    complete_style="bright_cyan",
-                    finished_style="bold bright_cyan",
-                ),
-                MofNCompleteColumn(),
-                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TextColumn("[cyan]{task.description}[/cyan]"),
                 TimeElapsedColumn(),
             )
-            task1 = bar1.add_task("", total=pages_needed)
+            task1 = bar1.add_task("📋 アニメリスト取得中...", total=None)
             status_line_1 = Text("📋 アニメリスト取得中...", style="bold cyan")
 
             def _make_1_group():
@@ -1499,16 +1487,17 @@ def main(
                     parts.append(rl)
                 return Group(*parts)
 
+            page = 1
+            has_next_page = True
             with Live(_make_1_group(), console=console, refresh_per_second=4) as live1:
-                for page in range(1, pages_needed + 1):
+                while has_next_page:
                     resp = await client.get_top_anime(
                         page=page, per_page=50, sort=sort_order
                     )
                     page_data = resp.get("Page", {})
+                    has_next_page = page_data.get("pageInfo", {}).get("hasNextPage", False)
 
                     for raw in page_data.get("media", []):
-                        if len(all_anime_for_cache) >= count:
-                            break
                         anime = parse_anilist_anime(raw)
                         current_status = raw.get("status")
 
@@ -1553,12 +1542,11 @@ def main(
                             if anime.id not in fetched_ids:
                                 anime_ids.append((anime, anime.anilist_id, anime.id))
 
-                    bar1.update(task1, advance=1)
-                    status_line_1 = Text(
-                        f"📋 アニメリスト取得中 ({page}/{pages_needed})",
-                        style="bold cyan",
-                    )
+                    desc = f"📋 アニメリスト取得中 ({page}ページ, {len(all_anime_for_cache)}件)"
+                    bar1.update(task1, description=desc)
+                    status_line_1 = Text(desc, style="bold cyan")
                     live1.update(_make_1_group())
+                    page += 1
 
             # Display update mode info
             if update and prev_cache and len(all_anime_for_cache) > 0:
@@ -1716,7 +1704,6 @@ def main(
             # ===== PHASE 1: Fetch Anime List =====
             anime_ids = await _load_anime_ids(
                 client,
-                count,
                 fetched_ids,
                 console,
                 update,
@@ -1863,7 +1850,7 @@ def fetch_persons(
         # Read anilist person IDs from bronze credits parquet
         credits_path = DEFAULT_BRONZE_ROOT / "source=anilist" / "table=credits"
         if not credits_path.exists():
-            console.print("[yellow]Bronze credits not found — run 'main' first.[/yellow]")
+            console.print("[yellow]Bronze credits not found — run 'run' first.[/yellow]")
             return
 
         credits_ds = ds.dataset(credits_path, format="parquet")
@@ -2118,10 +2105,8 @@ def process_downloads(
 
 
 if __name__ == "__main__":
-    # When called directly without a command, default to 'main'
     import sys
 
     if len(sys.argv) == 1 or (len(sys.argv) > 1 and sys.argv[1].startswith("--")):
-        # No command specified, or starts with --option, so prepend 'main'
-        sys.argv.insert(1, "main")
+        sys.argv.insert(1, "run")
     app()

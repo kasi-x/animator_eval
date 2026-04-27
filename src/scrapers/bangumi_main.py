@@ -529,6 +529,16 @@ async def _run_persons(
                             cp.mark_failed(person_id, status=404)
                             p.advance()
                             continue
+                        canonical_id = int(person_raw.get("id") or 0)
+                        if canonical_id != person_id:
+                            # Bangumi redirected this alias to a canonical person.
+                            # Store under the requested ID so joins on subject_persons work.
+                            log.info(
+                                "bangumi_person_alias_redirect",
+                                person_id=person_id,
+                                canonical_id=canonical_id,
+                            )
+                            person_raw = {**person_raw, "id": person_id}
                         bw.append(_build_person_row(person_raw, fetched_at))
                         completed_set.add(person_id)
                         cp.sync_completed(completed_set)

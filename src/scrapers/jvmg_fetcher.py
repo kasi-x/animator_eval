@@ -41,7 +41,8 @@ REQUEST_INTERVAL = 2.0  # Wikidata enforces strict rate limits
 ANIME_STAFF_QUERY = """
 SELECT ?anime ?animeLabel ?year ?person ?personLabel ?personLabelJa ?role
 WHERE {{
-  ?anime wdt:P31/wdt:P279* wd:Q63952888 .  # anime series
+  VALUES ?animeType {{ wd:Q63952888 wd:Q220898 }}  # anime series, anime film
+  ?anime wdt:P31 ?animeType .
   OPTIONAL {{ ?anime wdt:P577 ?date . BIND(YEAR(?date) AS ?year) }}
   OPTIONAL {{ ?person rdfs:label ?personLabelJa . FILTER(LANG(?personLabelJa) = "ja") }}
   {{
@@ -201,7 +202,7 @@ async def fetch_anime_staff(
 
 
 @app.command()
-def main(
+def run(
     max_records: int = typer.Option(
         5000, "--max-records", "--limit", "-n",
         help="Maximum number of records. Alias: --limit",
