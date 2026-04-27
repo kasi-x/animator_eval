@@ -659,7 +659,10 @@ def main() -> None:
         memory_limit=args.memory_limit,
     )
     for table, n in counts.items():
-        print(f"  {table}: {n:,} rows")
+        if isinstance(n, int):
+            print(f"  {table}: {n:,} rows")
+        else:
+            print(f"  {table}: {n}")  # error string 等
 
 
 if __name__ == "__main__":
