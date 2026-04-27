@@ -53,4 +53,4 @@ bench_rust.py
 logs/
 
 # Claude Code local settings (session-specific permissions)
-.claude/settings.local.json
+.claude/
