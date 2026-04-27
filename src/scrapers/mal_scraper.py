@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import asdict
-from datetime import date, datetime, timezone
+from datetime import date
 from pathlib import Path
 
 import structlog
