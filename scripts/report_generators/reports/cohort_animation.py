@@ -42,6 +42,7 @@ from ..ci_utils import (
     format_ci,
     format_distribution_inline,
 )
+from ..color_utils import hex_to_rgba as _hex_to_rgba
 from ..helpers import (
     get_agg_milestones,
     get_feat_career,
@@ -177,12 +178,6 @@ def _build_major_works_by_year(anime_stats: dict, min_score: float = 7.5) -> dic
         yr: sorted(works, key=lambda w: -w["score"])[:3]
         for yr, works in year_works.items()
     }
-
-
-def _hex_to_rgba(hex_col: str, alpha: float = 0.4) -> str:
-    h = hex_col.lstrip("#")
-    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-    return f"rgba({r},{g},{b},{alpha})"
 
 
 def _add_milestone_vlines(fig: go.Figure) -> None:

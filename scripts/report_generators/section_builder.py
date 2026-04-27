@@ -79,6 +79,76 @@ _PROHIBITED_SELECTION_EN = {
 }
 
 
+# =========================================================================
+# Module-level HTML templates (unescaped Japanese for readability)
+# =========================================================================
+
+_INTERPRETATION_HEADER_HTML = (
+    '  <div class="interpretation" style="border-top:1px solid #3a3a5c;margin-top:1.5rem;padding-top:1rem;">\n'
+    '    <h3 style="color:#c0a0d0;font-size:1rem;">Interpretation / 解釈</h3>\n'
+)
+
+_DATA_STATEMENT_TEMPLATE = """
+<div class="card" id="data-statement"
+     style="border-left:3px solid #5a5a8a;margin-top:2rem;">
+  <h2>Data Statement / データ声明</h2>
+  <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+    <tr>
+      <td style="padding:0.5rem;color:#9a9ab0;vertical-align:top;width:25%;">
+        <strong>Data Source</strong></td>
+      <td style="padding:0.5rem;">{data_source}{snapshot}{schema}</td>
+    </tr>
+    <tr>
+      <td style="padding:0.5rem;color:#9a9ab0;vertical-align:top;">
+        <strong>Coverage &amp; Known Biases</strong></td>
+      <td style="padding:0.5rem;">{coverage_notes}</td>
+    </tr>
+    <tr>
+      <td style="padding:0.5rem;color:#9a9ab0;vertical-align:top;">
+        <strong>Name Resolution</strong></td>
+      <td style="padding:0.5rem;">{name_resolution_notes}</td>
+    </tr>
+    <tr>
+      <td style="padding:0.5rem;color:#9a9ab0;vertical-align:top;">
+        <strong>Missing Value Handling</strong></td>
+      <td style="padding:0.5rem;">{missing_value_handling}</td>
+    </tr>
+  </table>
+</div>
+"""
+
+_DISCLAIMER_HTML = """
+<div class="card" id="disclaimer"
+     style="border-left:3px solid #e05080;margin-top:1rem;">
+  <h2>Disclaimer / 注意事項</h2>
+  <div style="font-size:0.82rem;line-height:1.7;color:#b0b0c0;">
+    <p><strong>【注意事項】</strong><br>
+    本レポートに含まれる数値は、公開クレジットデータに基づくネットワーク構造
+    および協業密度の記述的指標である。これらは個人の能力、技量、芸術性、または
+    職業的価値の評価ではなく、そのような評価として解釈されるべきではない。</p>
+    <p>本指標は測定者が選択した定義・集計単位・時代窓に依存しており、別の選択からは
+    別の数値が得られる。本レポートは「客観的真実の開示」ではなく「明示された
+    選択に基づく記述」である。</p>
+    <p>本指標を採用・報酬・契約・人事評価の単一または主要な根拠として使用することを
+    運営者は推奨せず、そのような使用の結果について責任を負わない。</p>
+
+    <p style="margin-top:1rem;"><strong>Note:</strong><br>
+    All figures in this report are descriptive metrics of network structure and
+    collaboration density, derived from publicly available credit data. They do
+    not constitute and should not be interpreted as assessments of individual
+    ability, skill, artistry, or professional worth.</p>
+    <p>These metrics depend on definitional, aggregational, and temporal choices
+    made by the analyst; alternative choices would yield different figures. This
+    report is not an "objective disclosure of truth" but a "description under
+    stated choices."</p>
+    <p>The operators do not endorse the use of these metrics as the sole or primary
+    basis for hiring, compensation, contract, or personnel decisions, and
+    disclaim responsibility for outcomes of such use.</p>
+  </div>
+</div>
+"""
+
+
 @dataclass
 class ReportSection:
     """A single section of a v2-compliant report.
@@ -260,11 +330,7 @@ class SectionBuilder:
     def _render_interpretation_block(section: "ReportSection") -> str:
         if not section.interpretation_html:
             return ""
-        return (
-            '  <div class="interpretation" style="border-top:1px solid #3a3a5c;margin-top:1.5rem;padding-top:1rem;">\n'
-            '    <h3 style="color:#c0a0d0;font-size:1rem;">Interpretation / \u89e3\u91c8</h3>\n'
-            f"    {section.interpretation_html}\n  </div>"
-        )
+        return f"{_INTERPRETATION_HEADER_HTML}    {section.interpretation_html}\n  </div>"
 
     def build_section(self, section: ReportSection) -> str:
         """Render a ReportSection to v2-compliant HTML."""

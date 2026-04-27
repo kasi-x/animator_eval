@@ -13,11 +13,10 @@ from pathlib import Path
 
 import plotly.graph_objects as go
 
+from ..color_utils import TIER_PALETTE as _TIER_COLORS
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
-
-_TIER_COLORS = {1: "#667eea", 2: "#a0d2db", 3: "#06D6A0", 4: "#FFD166", 5: "#f5576c"}
 
 
 class MADBCoverageReport(BaseReportGenerator):

@@ -14,3 +14,12 @@ def hex_to_rgba(hex_color: str, alpha: float = 0.3) -> str:
     h = hex_color.lstrip("#")
     r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
     return f"rgba({r},{g},{b},{alpha})"
+
+
+TIER_PALETTE: dict[int, str] = {
+    1: "#667eea",
+    2: "#a0d2db",
+    3: "#06D6A0",
+    4: "#FFD166",
+    5: "#f5576c",
+}

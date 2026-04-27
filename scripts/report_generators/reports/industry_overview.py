@@ -38,6 +38,7 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from ..color_utils import hex_to_rgba as _hex_rgba
 from ..html_templates import plotly_div_safe, stratification_tabs, strat_panel
 from ..section_builder import ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
@@ -129,12 +130,6 @@ def _exp_group(years_since_debut: int) -> str:
 
 def _role_type(primary_role: str | None) -> str:
     return primary_role if primary_role in ROLE_TYPE_DEF else "other"
-
-
-def _hex_rgba(hex_color: str, alpha: float = 0.6) -> str:
-    h = hex_color.lstrip("#")
-    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-    return f"rgba({r},{g},{b},{alpha})"
 
 
 def _fmt_num(n: int | float) -> str:

@@ -30,6 +30,7 @@ import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from ..color_utils import hex_to_rgba as _hex_to_rgba
 from ..helpers import (
     get_agg_milestones,
     get_feat_career,
@@ -149,14 +150,6 @@ def _hex_alpha(hex_color: str, alpha_hex: str) -> str:
     b = int(h[4:6], 16)
     a = round(int(alpha_hex, 16) / 255, 2)
     return f"rgba({r},{g},{b},{a})"
-
-
-def _hex_to_rgba(hex_color: str, alpha: float = 1.0) -> str:
-    h = hex_color.lstrip("#")
-    if len(h) == 3:
-        h = h[0] * 2 + h[1] * 2 + h[2] * 2
-    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
-    return f"rgba({r},{g},{b},{alpha})"
 
 
 def _build_stage_sequence(
