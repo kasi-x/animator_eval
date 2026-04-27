@@ -23,6 +23,7 @@ from src.runtime.models import (
     parse_role,
 )
 from src.scrapers.cache_store import load_cached_json, save_cached_json
+from src.scrapers.checkpoint import Checkpoint
 from src.scrapers.hash_utils import hash_anime_data
 from src.scrapers.parsers.anilist import (  # noqa: F401
     parse_anilist_person,
@@ -1091,7 +1092,6 @@ def run(
     # デフォルト: チェックポイント存在時は自動で続きから始める
     # --force フラグで最初から始められる
     if checkpoint_exists and not force:
-        from src.scrapers.checkpoint import Checkpoint
         cp = Checkpoint(checkpoint_file)
         start_index = cp.get("last_index", 0)
         fetched_ids.update(cp.get("fetched_ids", []))
@@ -1149,7 +1149,6 @@ def run(
         from rich.rule import Rule
         from rich.align import Align
         import time as time_module
-        from src.scrapers.checkpoint import Checkpoint
 
         # === Helper Functions (Nested for Clarity) ===
 
