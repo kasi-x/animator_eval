@@ -14,7 +14,6 @@ from pathlib import Path
 import plotly.graph_objects as go
 
 from ..ci_utils import distribution_summary, format_ci, format_distribution_inline
-from ..color_utils import TIER_PALETTE as _TIER_COLORS
 from ..html_templates import plotly_div_safe, stratification_tabs, strat_panel
 from ..section_builder import ReportSection, SectionBuilder
 from ._base import BaseReportGenerator

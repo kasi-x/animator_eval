@@ -13,7 +13,6 @@ from pathlib import Path
 
 import plotly.graph_objects as go
 
-from ..color_utils import TIER_PALETTE as _TIER_COLORS
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
 from ._base import BaseReportGenerator

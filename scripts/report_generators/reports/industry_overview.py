@@ -94,13 +94,6 @@ LOSS_TYPE_COLORS = {
     "初級ランク早期離脱": "#a0d2db",
 }
 
-_TIER_COLORS = {
-    1: "#667eea",
-    2: "#a0d2db",
-    3: "#06D6A0",
-    4: "#FFD166",
-    5: "#f5576c",
-}
 _TIER_NAMES = {
     1: "Micro (T1)",
     2: "Small (T2)",

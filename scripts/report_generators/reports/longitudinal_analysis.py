@@ -96,8 +96,6 @@ _ROLE_JA: dict[str, str] = {
     "cgi_director": "CGI監督",
 }
 
-_TIER_COLORS = {1: "#667eea", 2: "#a0d2db", 3: "#06D6A0", 4: "#FFD166", 5: "#f5576c"}
-
 _GENDER_COLORS = {"Male": "#4CC9F0", "Female": "#F72585", None: "#a0a0c0"}
 _GENDER_LABELS = {"Male": "男性", "Female": "女性", None: "不明"}
 

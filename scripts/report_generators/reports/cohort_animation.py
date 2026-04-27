@@ -42,7 +42,7 @@ from ..ci_utils import (
     format_ci,
     format_distribution_inline,
 )
-from ..color_utils import hex_to_rgba as _hex_to_rgba
+from ..color_utils import TIER_PALETTE as _TIER_COLORS, hex_to_rgba as _hex_to_rgba
 from ..helpers import (
     get_agg_milestones,
     get_feat_career,
@@ -83,7 +83,6 @@ STAGE_LABELS: dict[int, str] = {
     6: "監督",
 }
 
-_TIER_COLORS = {1: "#667eea", 2: "#a0d2db", 3: "#06D6A0", 4: "#FFD166", 5: "#f5576c"}
 _GENDER_COLORS = {"Male": "#667eea", "Female": "#f5576c", "unknown": "#a0a0c0"}
 _MILESTONE_YEARS = [2000, 2015, 2020]
 _DECADE_COLORS = [
