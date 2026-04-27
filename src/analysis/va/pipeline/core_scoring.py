@@ -47,12 +47,41 @@ def compute_va_core_scores_phase(
         logger.info("va_core_scoring_skipped", reason="no_va_credits")
         return result
 
-    # AKM
+    _run_va_akm(result, va_credits, credits, anime_map)
+    _run_va_birank(result, va_anime_graph, va_person_ids)
+    _run_va_trust(result, va_credits, credits, anime_map, current_year)
+    _run_va_patronage(result, va_credits, credits, anime_map, birank_person_scores)
+    _run_va_dormancy(result, va_credits, anime_map, current_year)
+    _run_va_awcc_placeholder(result, va_person_ids)
+    _run_va_iv(result, va_credits, credits, anime_map)
+
+    logger.info(
+        "va_core_scoring_complete",
+        va_person_fe=len(result.va_person_fe),
+        va_birank=len(result.va_birank_scores),
+        va_iv=len(result.va_iv_scores),
+    )
+    return result
+
+
+def _run_va_akm(
+    result: VAScoresResult,
+    va_credits: list,
+    credits: list,
+    anime_map: dict,
+) -> None:
+    """Estimate VA AKM (person/sound-director fixed effects)."""
     akm_result = estimate_va_akm(va_credits, credits, anime_map)
     result.va_person_fe = akm_result.person_fe
     result.va_sd_fe = akm_result.sd_fe
 
-    # BiRank
+
+def _run_va_birank(
+    result: VAScoresResult,
+    va_anime_graph,
+    va_person_ids: set,
+) -> None:
+    """Compute weighted BiRank on the VA-anime bipartite graph."""
     if va_anime_graph and va_anime_graph.number_of_edges() > 0:
         birank_result = compute_birank(va_anime_graph)
         result.va_birank_scores = {
@@ -63,12 +92,28 @@ def compute_va_core_scores_phase(
     else:
         result.va_birank_scores = {}
 
-    # Trust
+
+def _run_va_trust(
+    result: VAScoresResult,
+    va_credits: list,
+    credits: list,
+    anime_map: dict,
+    current_year: int,
+) -> None:
+    """Compute VA trust scores from co-credit history."""
     result.va_trust_scores = compute_va_trust(
         va_credits, credits, anime_map, current_year=current_year
     )
 
-    # Patronage
+
+def _run_va_patronage(
+    result: VAScoresResult,
+    va_credits: list,
+    credits: list,
+    anime_map: dict,
+    birank_person_scores: dict,
+) -> None:
+    """Compute VA patronage scores from sound-director affinity."""
     sd_birank = {
         pid: birank_person_scores.get(pid, 0.0) for pid in result.va_sd_fe
     }
@@ -76,17 +121,36 @@ def compute_va_core_scores_phase(
         va_credits, credits, anime_map, sd_birank
     )
 
-    # Dormancy
+
+def _run_va_dormancy(
+    result: VAScoresResult,
+    va_credits: list,
+    anime_map: dict,
+    current_year: int,
+) -> None:
+    """Compute dormancy penalty from VA credit timeline."""
     result.va_dormancy_scores = compute_dormancy_penalty(
         _va_credits_to_pseudo_credits(va_credits),
         anime_map,
         current_year=current_year,
     )
 
-    # AWCC (always 0.0 for VA)
+
+def _run_va_awcc_placeholder(
+    result: VAScoresResult,
+    va_person_ids: set,
+) -> None:
+    """VA AWCC is not yet implemented; set to 0.0 for all persons."""
     result.va_awcc_scores = {pid: 0.0 for pid in va_person_ids}
 
-    # Integrated Value
+
+def _run_va_iv(
+    result: VAScoresResult,
+    va_credits: list,
+    credits: list,
+    anime_map: dict,
+) -> None:
+    """Combine score components into the VA integrated value."""
     sd_exposure = compute_va_sd_exposure(
         result.va_sd_fe,
         _build_sd_assignments(va_credits, credits, anime_map),
@@ -99,14 +163,6 @@ def compute_va_core_scores_phase(
         patronage=result.va_patronage_scores,
         dormancy=result.va_dormancy_scores,
     )
-
-    logger.info(
-        "va_core_scoring_complete",
-        va_person_fe=len(result.va_person_fe),
-        va_birank=len(result.va_birank_scores),
-        va_iv=len(result.va_iv_scores),
-    )
-    return result
 
 
 def _va_credits_to_pseudo_credits(va_credits) -> list[Credit]:
