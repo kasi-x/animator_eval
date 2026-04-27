@@ -27,14 +27,14 @@ from bs4 import BeautifulSoup
 
 from src.scrapers.bronze_writer import write_sakuga_atwiki_bronze
 from src.scrapers.http_playwright import PlaywrightFetcher
-from src.scrapers.parsers.sakuga_atwiki import classify_page_kind, extract_page_ids, parse_person_page
+from src.scrapers.parsers.sakuga_atwiki import classify_page_kind, extract_page_ids, parse_person_page, parse_work_page
 from src.scrapers.parsers.sakuga_atwiki_robots import fetch_disallow_patterns, is_allowed
 from src.utils.config import SCRAPE_DELAY_SECONDS
 
 log = structlog.get_logger()
 app = typer.Typer()
 
-_SITE = "https://www18.atwiki.jp/sakuga"
+_SITE = "https://w.atwiki.jp/sakuga"
 _SEED_IDS = [1, 2, 100]
 _DEFAULT_DELAY = max(SCRAPE_DELAY_SECONDS, 3.0)
 _DEFAULT_DATA_DIR = Path("data/sakuga")
@@ -94,9 +94,10 @@ def discover(
     delay: float = typer.Option(_DEFAULT_DELAY, "--delay", help="Seconds between requests"),
     data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, "--data-dir"),
     headless: bool = typer.Option(True, "--headless/--headful"),
+    cdp_url: str = typer.Option("", "--chrome", help="CDP URL of running Chrome (e.g. http://localhost:9222)"),
 ) -> None:
     """BFS crawl 作画@wiki to discover and classify all pages."""
-    asyncio.run(_discover(max_pages=max_pages, delay=delay, data_dir=data_dir, headless=headless))
+    asyncio.run(_discover(max_pages=max_pages, delay=delay, data_dir=data_dir, headless=headless, cdp_url=cdp_url or None))
 
 
 async def _discover(
@@ -105,15 +106,33 @@ async def _discover(
     delay: float,
     data_dir: Path,
     headless: bool,
+    cdp_url: str | None = None,
 ) -> None:
     discovered = _load_discovered(data_dir / "discovered_pages.json")
     log.info("discover_start", already_known=len(discovered))
 
     disallow = await fetch_disallow_patterns()
 
-    async with PlaywrightFetcher(headless=headless) as fetcher:
-        queue: list[int] = [i for i in _SEED_IDS if i not in discovered]
+    async with PlaywrightFetcher(headless=headless, cdp_url=cdp_url) as fetcher:
         visited: set[int] = set(discovered.keys())
+
+        # Rebuild queue from cached pages' outgoing links (handles resume after partial crawl)
+        queue_set: set[int] = set()
+        for pid in list(discovered.keys()):
+            cache = _cache_path(data_dir, pid)
+            if cache.exists():
+                try:
+                    cached_html = gzip.decompress(cache.read_bytes()).decode()
+                    for link_id in extract_page_ids(cached_html):
+                        if link_id not in visited:
+                            queue_set.add(link_id)
+                except Exception:
+                    pass
+        for seed in _SEED_IDS:
+            if seed not in visited:
+                queue_set.add(seed)
+        queue: list[int] = sorted(queue_set)
+        log.info("discover_queue_rebuilt", queue_size=len(queue))
 
         while queue and len(discovered) < max_pages:
             page_id = queue.pop(0)
@@ -178,6 +197,38 @@ async def _discover(
 _DEFAULT_BRONZE_ROOT = Path("result/bronze")
 
 
+@app.command("reclassify")
+def reclassify(
+    data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, "--data-dir"),
+) -> None:
+    """Re-run page classification on all cached pages and update discovered_pages.json."""
+    discovered_path = data_dir / "discovered_pages.json"
+    if not discovered_path.exists():
+        log.error("discovered_pages_missing", path=str(discovered_path))
+        raise typer.Exit(1)
+
+    discovered = _load_discovered(discovered_path)
+    changed = 0
+    for pid, rec in discovered.items():
+        if pid == 1:
+            continue  # always meta
+        cache = _cache_path(data_dir, pid)
+        if not cache.exists():
+            continue
+        html = gzip.decompress(cache.read_bytes()).decode()
+        title = rec.get("title", "")
+        new_kind = classify_page_kind(title, html)
+        if new_kind != rec.get("page_kind"):
+            rec["page_kind"] = new_kind
+            changed += 1
+
+    _save_discovered(discovered_path, discovered)
+    kinds: dict[str, int] = {}
+    for r in discovered.values():
+        kinds[r["page_kind"]] = kinds.get(r["page_kind"], 0) + 1
+    log.info("reclassify_done", changed=changed, total=len(discovered), by_kind=kinds)
+
+
 @app.command("export-bronze")
 def export_bronze(
     input_dir: Path = typer.Option(_DEFAULT_DATA_DIR, "--input"),
@@ -196,11 +247,19 @@ def export_bronze(
 
     all_pages: list[PageRecord] = json.loads(discovered_path.read_text(encoding="utf-8"))
     person_pages = [p for p in all_pages if p.get("page_kind") == "person"]
-    log.info("export_bronze_start", person_pages=len(person_pages), total_pages=len(all_pages))
+    work_pages = [p for p in all_pages if p.get("page_kind") == "work"]
+    log.info(
+        "export_bronze_start",
+        person_pages=len(person_pages),
+        work_pages=len(work_pages),
+        total_pages=len(all_pages),
+    )
 
     persons = []
+    works = []
     raw_texts: dict[int, str] = {}
     parse_ok_count = 0
+
     for meta in person_pages:
         pid = meta["id"]
         cache = _cache_path(input_dir, pid)
@@ -208,7 +267,6 @@ def export_bronze(
             log.warning("cache_missing", page_id=pid)
             continue
         html = gzip.decompress(cache.read_bytes()).decode()
-        # Extract wikibody plaintext for raw storage (re-parse safety net)
         try:
             from bs4 import BeautifulSoup as _BS
             _soup = _BS(html, "lxml")
@@ -224,11 +282,29 @@ def export_bronze(
         except Exception as exc:
             log.warning("parse_error", page_id=pid, error=str(exc))
 
+    work_ok_count = 0
+    for meta in work_pages:
+        pid = meta["id"]
+        cache = _cache_path(input_dir, pid)
+        if not cache.exists():
+            log.warning("cache_missing", page_id=pid)
+            continue
+        html = gzip.decompress(cache.read_bytes()).decode()
+        try:
+            parsed_work = parse_work_page(html, page_id=pid)
+            works.append(parsed_work)
+            if parsed_work.staff:
+                work_ok_count += 1
+        except Exception as exc:
+            log.warning("work_parse_error", page_id=pid, error=str(exc))
+
     log.info(
         "export_parse_summary",
-        parsed=len(persons),
-        regex_ok=parse_ok_count,
-        regex_ok_rate=f"{parse_ok_count/max(len(persons),1):.1%}",
+        persons_parsed=len(persons),
+        person_regex_ok=parse_ok_count,
+        person_ok_rate=f"{parse_ok_count/max(len(persons),1):.1%}",
+        works_parsed=len(works),
+        work_ok=work_ok_count,
     )
 
     written = write_sakuga_atwiki_bronze(
@@ -237,18 +313,20 @@ def export_bronze(
         output_dir=output_dir,
         date_partition=date_partition,
         raw_texts=raw_texts,
+        works=works,
     )
     log.info("export_bronze_done", written={k: str(v) for k, v in written.items()})
 
 
 @app.command()
-def incremental(
+def run(
     cache_dir: Path = typer.Option(_DEFAULT_DATA_DIR, "--cache-dir"),
     output: Path = typer.Option(_DEFAULT_BRONZE_ROOT, "--output"),
     date: str = typer.Option("", "--date", help="YYYYMMDD; defaults to today"),
     delay: float = typer.Option(_DEFAULT_DELAY, "--delay"),
     max_pages: int = typer.Option(3000, "--max-pages", help="Safety cap for new-page BFS"),
     headless: bool = typer.Option(True, "--headless/--headful"),
+    cdp_url: str = typer.Option("", "--chrome", help="CDP URL of running Chrome (e.g. http://localhost:9222)"),
 ) -> None:
     """Diff-update: re-fetch changed pages, append new date partition to BRONZE."""
     asyncio.run(
@@ -259,6 +337,7 @@ def incremental(
             delay=delay,
             max_pages=max_pages,
             headless=headless,
+            cdp_url=cdp_url or None,
         )
     )
 
@@ -271,6 +350,7 @@ async def _incremental(
     delay: float,
     max_pages: int,
     headless: bool,
+    cdp_url: str | None = None,
 ) -> dict[str, int]:
     """Core incremental logic. Returns stats dict (also usable in tests)."""
     from datetime import date as _date
@@ -288,14 +368,18 @@ async def _incremental(
     stats = {"fetched": 0, "unchanged": 0, "changed": 0, "new_pages": 0, "errors": 0}
 
     changed_persons = []
+    changed_works = []
     changed_raw_texts: dict[int, str] = {}
     changed_meta: list[PageRecord] = []
 
-    person_ids = [pid for pid, r in discovered.items() if r.get("page_kind") == "person"]
+    # Check person + index + unknown pages. index pages link to new person pages,
+    # so skipping them means newly added persons are never discovered.
+    crawlable_kinds = {"person", "index", "work", "unknown"}
+    crawl_ids = [pid for pid, r in discovered.items() if r.get("page_kind") in crawlable_kinds]
 
-    async with PlaywrightFetcher(headless=headless) as fetcher:
-        # ── Phase 1: diff-check existing person pages ──────────────────────
-        for pid in person_ids:
+    async with PlaywrightFetcher(headless=headless, cdp_url=cdp_url) as fetcher:
+        # ── Phase 1: diff-check existing crawlable pages ───────────────────
+        for pid in crawl_ids:
             url_path = f"/sakuga/pages/{pid}.html"
             if not is_allowed(url_path, disallow):
                 log.warning("robots_disallow", page_id=pid)
@@ -337,17 +421,26 @@ async def _incremental(
                     parsed = parse_person_page(html, page_id=pid)
                     changed_persons.append(parsed)
                     changed_meta.append(discovered[pid])
-
                     soup_wb = BeautifulSoup(html, "lxml")
                     wb = soup_wb.find("div", id="wikibody") or soup_wb.find("body") or soup_wb
                     changed_raw_texts[pid] = wb.get_text(separator="\n")[:8000]
                 except Exception as exc:
                     log.warning("parse_error", page_id=pid, error=str(exc))
                     stats["errors"] += 1
+            elif kind == "work":
+                try:
+                    parsed_work = parse_work_page(html, page_id=pid)
+                    changed_works.append(parsed_work)
+                    changed_meta.append(discovered[pid])
+                except Exception as exc:
+                    log.warning("work_parse_error", page_id=pid, error=str(exc))
+                    stats["errors"] += 1
 
             # BFS: discover new page IDs from changed pages
             new_ids = [i for i in extract_page_ids(html) if i not in discovered]
-            for new_id in new_ids[:max_pages]:
+            for new_id in new_ids:
+                if stats["new_pages"] >= max_pages:
+                    break
                 new_url = _page_url(new_id)
                 new_url_path = f"/sakuga/pages/{new_id}.html"
                 if not is_allowed(new_url_path, disallow):
@@ -383,17 +476,25 @@ async def _incremental(
                         changed_raw_texts[new_id] = wb2.get_text(separator="\n")[:8000]
                     except Exception as exc:
                         log.warning("new_page_parse_error", page_id=new_id, error=str(exc))
+                elif new_kind == "work":
+                    try:
+                        parsed_work = parse_work_page(new_html, page_id=new_id)
+                        changed_works.append(parsed_work)
+                        changed_meta.append(rec)
+                    except Exception as exc:
+                        log.warning("new_work_parse_error", page_id=new_id, error=str(exc))
 
             await asyncio.sleep(delay)
 
     # ── Write changed pages to new date partition ───────────────────────────
-    if changed_persons or stats["new_pages"]:
+    if changed_persons or changed_works or stats["new_pages"]:
         write_sakuga_atwiki_bronze(
             persons=changed_persons,
             pages_metadata=changed_meta,
             output_dir=output,
             date_partition=date_partition,
             raw_texts=changed_raw_texts,
+            works=changed_works,
         )
 
     # Persist updated discovered state

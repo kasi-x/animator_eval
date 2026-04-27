@@ -10,7 +10,7 @@ from typing import Literal
 import structlog
 from bs4 import BeautifulSoup, Tag
 
-from src.runtime.models import ParsedSakugaCredit, ParsedSakugaPerson
+from src.runtime.models import ParsedSakugaCredit, ParsedSakugaPerson, ParsedSakugaWork, ParsedSakugaWorkStaff
 
 log = structlog.get_logger()
 
@@ -21,7 +21,7 @@ PageKind = Literal["person", "work", "index", "meta", "unknown"]
 # ---------------------------------------------------------------------------
 
 _PAGE_LINK_RE = re.compile(
-    r'href="(?:https://www18\.atwiki\.jp)?/sakuga/pages/(\d+)\.html"'
+    r'href="(?:(?:https:)?//w\.atwiki\.jp)?/sakuga/pages/(\d+)\.html"'
 )
 _META_TITLE_KW = re.compile(r"メニュー|サイトマップ")
 _INDEX_TITLE_KW = re.compile(r"一覧|索引")
@@ -30,6 +30,9 @@ _INDEX_H_KW = re.compile(
 )
 _PERSON_H_KW = re.compile(r"フィルモグラフィ|参加作品|代表作|出演作")
 _WORK_H_KW = re.compile(r"スタッフ|キャスト|話数|制作スタッフ|エピソード")
+_BULLET_CREDIT_RE = re.compile(r"■.{1,50}(?:TV|OVA|OAD|劇場|映画|TVSP|配信)")
+_BULLET_STAFF_RE = re.compile(r"■スタッフ")
+_EP_BLOCK_RE = re.compile(r"(?:^|\n)\s*\d+話")
 
 
 def classify_page_kind(title: str, html: str) -> PageKind:
@@ -51,6 +54,30 @@ def classify_page_kind(title: str, html: str) -> PageKind:
         return "person"
     if has_work:
         return "work"
+
+    wikibody = soup.find("div", id="wikibody") or soup.find("body")
+    if wikibody:
+        body_text = wikibody.get_text(separator="\n")
+        body_nfkc = unicodedata.normalize("NFKC", body_text)
+        # ■スタッフ or N話 episode blocks → work page
+        if _BULLET_STAFF_RE.search(body_text) or _EP_BLOCK_RE.search(body_text):
+            return "work"
+        # role:name patterns (colon or slash separator) → work page
+        if _WORK_COLON_ROLE_RE.search(body_nfkc):
+            return "work"
+        # ■作品名（TV/...）style credit bullets → person page (check before standalone labels)
+        if _BULLET_CREDIT_RE.search(body_text):
+            return "person"
+        # Standalone / bullet / dot / bracket role formats → work page
+        nfkc_lines = [l.strip() for l in body_nfkc.splitlines() if l.strip()]
+        if any(_GENGA_LABEL_RE.match(l) for l in nfkc_lines):
+            return "work"
+        if any(l.startswith("■") and _ROLE_INLINE_RE.search(l[1:].strip()) for l in nfkc_lines):
+            return "work"
+        if any(_WORK_DOT_ROLE_RE.match(l) for l in nfkc_lines):
+            return "work"
+        if any(_BRACKET_ROLE_RE.match(l) and _ROLE_INLINE_RE.search(_BRACKET_ROLE_RE.match(l).group(1)) for l in nfkc_lines):
+            return "work"
 
     return "unknown"
 
@@ -85,6 +112,11 @@ _ROLE_INLINE_RE = re.compile(
 
 # Subjective evaluation words to strip (not store)
 _SUBJECTIVE_RE = re.compile(r"神作画|作画崩壊|作監暴走|sakuga|[Ss]akuga")
+
+# Inline credit format: 「作品名」(役職) embedded in narrative text
+_BRACKET_CREDIT_RE = re.compile(
+    r"「([^」]{1,60})」[（(]([^)）]{1,50})[)）]"
+)
 
 
 def parse_person_page(html: str, page_id: int = 0) -> ParsedSakugaPerson:
@@ -148,9 +180,36 @@ def _extract_credits(wikibody: Tag) -> list[ParsedSakugaCredit]:
             block_elements.append(sib)  # type: ignore[arg-type]
         credits = _parse_block(block_elements)
     else:
-        # No filmography heading — try whole body
+        # No filmography heading — try whole body (div recursion handles nested wrappers)
         credits = _parse_block(list(wikibody.children))
 
+    # Fallback: extract 「作品名」(役職) inline credits from full body text
+    if not credits:
+        full_text = unicodedata.normalize("NFKC", wikibody.get_text())
+        credits = _extract_bracket_credits(full_text)
+
+    return credits
+
+
+def _extract_bracket_credits(text: str) -> list[ParsedSakugaCredit]:
+    """Extract 「作品名」(役職...) patterns from narrative text."""
+    credits: list[ParsedSakugaCredit] = []
+    for m in _BRACKET_CREDIT_RE.finditer(text):
+        title = m.group(1).strip()
+        roles_raw = m.group(2).strip()
+        if not title or not _ROLE_INLINE_RE.search(roles_raw):
+            continue
+        year = _extract_year(roles_raw) or _extract_year(text[max(0, m.start()-30):m.start()])
+        fmt = _extract_format(roles_raw) or _extract_format(title)
+        for role_m in _ROLE_INLINE_RE.finditer(roles_raw):
+            credits.append(ParsedSakugaCredit(
+                work_title=_clean_title(title),
+                work_year=year,
+                work_format=fmt,
+                role_raw=role_m.group(0),
+                episode_raw=None,
+                episode_num=None,
+            ))
     return credits
 
 
@@ -185,11 +244,23 @@ def _parse_block(elements: list) -> list[ParsedSakugaCredit]:
         elif el.name == "table":
             credits.extend(_parse_table(el))
 
-        elif el.name == "p":
+        elif el.name in ("p", "font"):
             p_text = unicodedata.normalize("NFKC", el.get_text(strip=True))
-            c = _parse_inline_line(p_text)
-            if c is not None:
-                credits.append(c)
+            if "■" in p_text:
+                for segment in p_text.split("■"):
+                    segment = segment.strip()
+                    if segment:
+                        credits.extend(_parse_bullet_segment(segment))
+            else:
+                c = _parse_inline_line(p_text)
+                if c is not None:
+                    credits.append(c)
+
+        elif el.name == "div":
+            # Recurse into content wrappers; skip UI/navigation divs
+            inner = unicodedata.normalize("NFKC", el.get_text())
+            if "■" in inner or _ROLE_INLINE_RE.search(inner):
+                credits.extend(_parse_block(list(el.children)))
 
     return credits
 
@@ -249,6 +320,71 @@ def _parse_inline_line(text: str) -> ParsedSakugaCredit | None:
     )
 
 
+def _parse_bullet_segment(segment: str) -> list[ParsedSakugaCredit]:
+    """Parse one ■-delimited credit segment.
+
+    Format: 作品名（フォーマット/年〜年）　役職　話数　話数　役職2　話数...
+    segment arrives NFKC-normalized (fullwidth parens → halfwidth).
+    """
+    if not segment or _SUBJECTIVE_RE.search(segment):
+        return []
+
+    # Title = everything up to the first paren (both fullwidth and halfwidth survive NFKC edge cases)
+    # Greedy [^(（]+ stops at the first opening paren
+    paren_m = re.match(r"^([^(（]+)(?:[（(]([^)）]*)[)）])?\s*(.*)", segment, re.DOTALL)
+    if not paren_m:
+        return []
+
+    raw_title = paren_m.group(1).strip()
+    paren_content = paren_m.group(2) or ""
+    rest = (paren_m.group(3) or "").strip()
+
+    # Fallback: no paren → split on first role keyword
+    if not rest:
+        role_m = _ROLE_INLINE_RE.search(segment)
+        if not role_m:
+            return []
+        raw_title = segment[: role_m.start()].strip()
+        rest = segment[role_m.start() :]
+        paren_content = ""
+
+    work_title = _clean_title(raw_title)
+    if not work_title:
+        return []
+
+    year = _extract_year(paren_content) if paren_content else _extract_year(raw_title)
+    fmt = _extract_format(paren_content) if paren_content else _extract_format(raw_title)
+
+    role_matches = list(_ROLE_INLINE_RE.finditer(rest))
+    if not role_matches:
+        return []
+
+    credits: list[ParsedSakugaCredit] = []
+    for i, rm in enumerate(role_matches):
+        role_raw = rm.group(0)
+        ep_text_start = rm.end()
+        ep_text_end = role_matches[i + 1].start() if i + 1 < len(role_matches) else len(rest)
+        ep_text = rest[ep_text_start:ep_text_end]
+
+        ep_nums = [int(m) for m in re.findall(r"(\d+)\s*話", ep_text)]
+        if ep_nums:
+            ep_raw = " ".join(f"{n}話" for n in ep_nums)
+            ep_num = ep_nums[0]
+        else:
+            ep_raw, ep_num = _parse_episode(ep_text)
+
+        credits.append(ParsedSakugaCredit(
+            work_title=work_title,
+            work_year=year,
+            work_format=fmt,
+            role_raw=role_raw,
+            episode_raw=ep_raw,
+            episode_num=ep_num,
+        ))
+
+    return credits
+
+
 def _parse_table(table: Tag) -> list[ParsedSakugaCredit]:
     credits: list[ParsedSakugaCredit] = []
     rows = table.find_all("tr")
@@ -299,15 +435,15 @@ _LLM_FEW_SHOT = """\
 以下は作画@wikiの人物ページ本文です。参加作品・役職・話数の情報をJSON配列で抽出してください。
 
 フォーマット:
-[{"work_title": "作品名", "work_year": 年(数字またはnull), "role_raw": "役職", "episode_raw": "話数文字列またはnull", "episode_num": 話数数字またはnull}]
+[{{"work_title": "作品名", "work_year": 年(数字またはnull), "role_raw": "役職", "episode_raw": "話数文字列またはnull", "episode_num": 話数数字またはnull}}]
 
 例1:
 本文: 「ある作品 (2020) 第3話 原画」
-出力: [{"work_title": "ある作品", "work_year": 2020, "role_raw": "原画", "episode_raw": "第3話", "episode_num": 3}]
+出力: [{{"work_title": "ある作品", "work_year": 2020, "role_raw": "原画", "episode_raw": "第3話", "episode_num": 3}}]
 
 例2:
 本文: 「別の作品\\n第7話、第9話 作画監督」
-出力: [{"work_title": "別の作品", "work_year": null, "role_raw": "作画監督", "episode_raw": "第7話、第9話", "episode_num": 7}]
+出力: [{{"work_title": "別の作品", "work_year": null, "role_raw": "作画監督", "episode_raw": "第7話、第9話", "episode_num": 7}}]
 
 本文:
 {body}
@@ -436,3 +572,442 @@ def _find_col(headers: list[str], candidates: list[str]) -> int | None:
         if any(c in h for c in candidates):
             return i
     return None
+
+
+# ---------------------------------------------------------------------------
+# Work page parser
+# ---------------------------------------------------------------------------
+
+# Roles that appear in `役職:名前` format on work pages
+_WORK_COLON_ROLE_RE = re.compile(
+    r"(監督補佐|副監督|助監督|監督|脚本|シリーズ構成|シリーズディレクター|ストーリーエディター|"
+    r"キャラクターデザイン|キャラデザ|メカニック?デザイン?|プロダクションデザイン|"
+    r"総作画監督|作画監督(?:補佐)?|作監補佐|"
+    r"絵コンテ|コンテ|演出(?:助手)?|"
+    r"美術監督?|美術デザイン?|背景|色彩設計?|撮影監督?|音楽|音響監督?|"
+    r"プロデューサー|制作進行?|アニメーション制作|"
+    r"原画|第?二?原画|動画(?:検査|チェック)?|"
+    r"CG(?:ディレクター|監督)?|エフェクト)"
+    r"\s*[：:/]\s*"
+)
+_EP_NUM_RE = re.compile(r"^(\d+)話")
+_DATE_EP_RE = re.compile(r"^\d{4}[./]\d{1,2}[./]\d{1,2}$")
+# Standalone role label that introduces a name list on following lines (expanded for all roles)
+_GENGA_LABEL_RE = re.compile(
+    r"^(監督補佐|副監督|助監督|監督|脚本|シリーズ構成|シリーズディレクター|ストーリーエディター|"
+    r"キャラクターデザイン|キャラデザ|メカニック?デザイン?|プロダクションデザイン|"
+    r"総作画監督|作画監督(?:補佐)?|作監補佐|"
+    r"絵コンテ|コンテ|演出(?:助手)?|"
+    r"美術監督?|美術デザイン?|背景|色彩設計?|撮影監督?|音楽|音響監督?|"
+    r"プロデューサー|制作進行?|アニメーション制作|"
+    r"原画|第?二?原画|動画(?:検査|チェック)?|"
+    r"CG(?:ディレクター|監督)?|エフェクト)$"
+)
+# Name separator: spaces/　between Japanese names
+_NAME_SPLIT_RE = re.compile(r"[\s　]+")
+
+# `役職・名前` dot format: role followed by ・ then a non-role name (e.g. 監督・アミノテツロー)
+_WORK_DOT_ROLE_RE = re.compile(
+    r"^(監督補佐|副監督|助監督|監督|脚本|シリーズ構成|シリーズディレクター|ストーリーエディター|"
+    r"キャラクターデザイン|キャラデザ|メカニック?デザイン?|プロダクションデザイン|"
+    r"総作画監督|作画監督(?:補佐)?|作監補佐|"
+    r"絵コンテ|コンテ|演出(?:助手)?|"
+    r"美術監督?|美術デザイン?|背景|色彩設計?|撮影監督?|音楽|音響監督?|"
+    r"プロデューサー|制作進行?|アニメーション制作|"
+    r"原画|第?二?原画|動画(?:検査|チェック)?|"
+    r"CG(?:ディレクター|監督)?|エフェクト)"
+    r"[・&＆]"
+)
+# `[役職]` bracket format
+_BRACKET_ROLE_RE = re.compile(r"^\[([^\]]{1,30})\]$")
+
+
+def parse_work_page(html: str, page_id: int = 0) -> ParsedSakugaWork:
+    soup = BeautifulSoup(html, "lxml")
+
+    title_tag = soup.find("title")
+    raw_title = title_tag.get_text(strip=True) if title_tag else ""
+    title = _TITLE_SITE_SUFFIX.sub("", raw_title).strip()
+    year = _extract_year(title)
+    fmt = _extract_format(title)
+
+    wikibody: Tag = soup.find("div", id="wikibody") or soup.find("body") or soup  # type: ignore[assignment]
+    staff = _extract_work_staff(wikibody)
+
+    return ParsedSakugaWork(
+        page_id=page_id,
+        title=title,
+        year=year,
+        work_format=fmt,
+        staff=staff,
+        source_html_sha256=hashlib.sha256(html.encode()).hexdigest(),
+    )
+
+
+def _extract_work_staff(wikibody: Tag) -> list[ParsedSakugaWorkStaff]:
+    staff: list[ParsedSakugaWorkStaff] = []
+    current_ep: int | None = None
+    current_ep_raw: str | None = None
+    is_main = True        # True until we hit the first episode block
+    genga_role: str | None = None   # set when we see standalone role label or pending colon-role
+    seen_main_staff = False  # True once ■スタッフ block is processed
+
+    staff_blocks_seen = 0  # count of blocks with role:name content
+
+    for block in wikibody.find_all(["font", "p", "div", "table"], recursive=False):
+        if block.name in ("div", "table"):
+            continue
+        block_text = unicodedata.normalize("NFKC", block.get_text(separator="\n"))
+        lines = [ln.strip() for ln in block_text.splitlines() if ln.strip()]
+        if not lines:
+            continue
+
+        has_role_content = (
+            bool(_WORK_COLON_ROLE_RE.search(block_text))
+            or any(_BRACKET_ROLE_RE.match(l) for l in [ln.strip() for ln in block_text.splitlines() if ln.strip()])
+            or any(_WORK_DOT_ROLE_RE.match(l) for l in [ln.strip() for ln in block_text.splitlines() if ln.strip()])
+        )
+        if not has_role_content:
+            continue  # description / navigation block
+
+        # Detect block type from first line
+        first = lines[0]
+        block_is_date_ep = _DATE_EP_RE.match(first) is not None
+        block_has_staff_marker = "■スタッフ" in block_text
+
+        if block_has_staff_marker:
+            seen_main_staff = True
+
+        staff_blocks_seen += 1
+        # After the first staff block: subsequent blocks without episode markers
+        # are episode-level (e.g. エウレカセブン where each <p> = one episode)
+        if staff_blocks_seen > 1 and not block_has_staff_marker and not block_is_date_ep:
+            is_main = False
+            current_ep = None
+            current_ep_raw = None
+
+        # If block starts with a date, it's an episode block (date-indexed series)
+        if block_is_date_ep:
+            is_main = False
+            current_ep = None
+            current_ep_raw = first  # e.g. "2007.5.12"
+            genga_role = None
+            ep_lines = lines[1:]  # skip the date line itself
+        else:
+            ep_lines = lines
+
+        for line in ep_lines:
+            if line.startswith("■"):
+                stripped = line[1:].strip()
+                if "スタッフ" in stripped:
+                    seen_main_staff = True
+                    genga_role = None
+                    continue
+                colon_pos = stripped.find(":")
+                if colon_pos != -1:
+                    # ■シーン説明:人名
+                    names_raw = stripped[colon_pos + 1:].strip()
+                    for name in _split_names(names_raw):
+                        staff.append(ParsedSakugaWorkStaff(
+                            person_name=name,
+                            role_raw="原画",
+                            episode_num=current_ep,
+                            episode_raw=current_ep_raw,
+                            is_main_staff=False,
+                        ))
+                    genga_role = None
+                elif _GENGA_LABEL_RE.match(stripped) or _ROLE_INLINE_RE.search(stripped):
+                    # ■役職名 → next lines are names
+                    genga_role = stripped
+                else:
+                    genga_role = None
+                continue
+
+            # Episode start marker: "N話 ..."
+            ep_m = _EP_NUM_RE.match(line)
+            if ep_m:
+                current_ep = int(ep_m.group(1))
+                current_ep_raw = f"{current_ep}話"
+                is_main = False
+                genga_role = None
+                rest = line[ep_m.end():].strip()
+                staff.extend(_parse_colon_staff_line(rest, current_ep, current_ep_raw, is_main_staff=False))
+                continue
+
+            # `[役職]` bracket format
+            bm = _BRACKET_ROLE_RE.match(line)
+            if bm:
+                genga_role = bm.group(1)
+                continue
+
+            # Standalone role label (no colon)
+            if _GENGA_LABEL_RE.match(line):
+                genga_role = line
+                continue
+
+            # Name list after standalone role label OR pending colon-role
+            if genga_role is not None:
+                # If this line is itself a role marker, reset and fall through
+                is_role_line = (
+                    _WORK_COLON_ROLE_RE.search(line)
+                    or _BRACKET_ROLE_RE.match(line)
+                    or _GENGA_LABEL_RE.match(line)
+                    or _WORK_DOT_ROLE_RE.match(line)
+                )
+                if not is_role_line:
+                    ep_here = None if (is_main and not block_is_date_ep) else current_ep
+                    ep_raw_here = None if (is_main and not block_is_date_ep) else current_ep_raw
+                    for name in _split_names(line):
+                        staff.append(ParsedSakugaWorkStaff(
+                            person_name=name,
+                            role_raw=genga_role,
+                            episode_num=ep_here,
+                            episode_raw=ep_raw_here,
+                            is_main_staff=(is_main and not block_is_date_ep),
+                        ))
+                    continue
+                genga_role = None  # reset, fall through to role processing below
+
+            # role:name line
+            if _WORK_COLON_ROLE_RE.search(line):
+                block_main = is_main and not block_is_date_ep
+                new_staff = _parse_colon_staff_line(
+                    line,
+                    current_ep if not block_main else None,
+                    current_ep_raw if not block_main else None,
+                    is_main_staff=block_main,
+                )
+                if new_staff:
+                    genga_role = None
+                    staff.extend(new_staff)
+                else:
+                    # Colon-role with no names on same line → names are on the next line
+                    m = _WORK_COLON_ROLE_RE.search(line)
+                    if m:
+                        genga_role = m.group(1)
+                continue
+
+            # `役職・名前` dot format (e.g. 監督・アミノテツロー)
+            block_main = is_main and not block_is_date_ep
+            dot_staff = _parse_dot_staff_line(
+                line,
+                current_ep if not block_main else None,
+                current_ep_raw if not block_main else None,
+                is_main_staff=block_main,
+            )
+            if dot_staff:
+                genga_role = None
+                staff.extend(dot_staff)
+            elif _WORK_DOT_ROLE_RE.match(line):
+                # All-role composite label → next line is names
+                genga_role = line
+
+    # Fallback: NavigableString content between <br> tags at wikibody level
+    # (pages like ラーゼフォン, 住めば都, Halo Legends where content isn't in block elements)
+    if not staff:
+        staff = _extract_work_staff_ns(wikibody)
+
+    return staff
+
+
+def _extract_work_staff_ns(wikibody: Tag) -> list[ParsedSakugaWorkStaff]:
+    """Extract staff from NavigableString text at wikibody level (fallback for <br>-delimited pages)."""
+    from bs4 import NavigableString as _NS
+
+    raw_lines: list[str] = []
+    for child in wikibody.children:
+        if isinstance(child, _NS):
+            t = unicodedata.normalize("NFKC", str(child)).strip()
+            if t:
+                raw_lines.append(t)
+        elif isinstance(child, Tag) and child.name not in ("br", "hr"):
+            # Include text from non-br/hr children (e.g. <h3>, <p>, <font>)
+            block_text = unicodedata.normalize("NFKC", child.get_text(separator="\n"))
+            for ln in block_text.splitlines():
+                ln = ln.strip()
+                if ln:
+                    raw_lines.append(ln)
+
+    staff: list[ParsedSakugaWorkStaff] = []
+    genga_role: str | None = None
+    current_ep: int | None = None
+    current_ep_raw: str | None = None
+    is_main = True
+
+    for line in raw_lines:
+        if not line or _SUBJECTIVE_RE.search(line):
+            continue
+
+        if line.startswith("▼"):
+            genga_role = None
+            continue
+
+        if line.startswith("■"):
+            stripped = line[1:].strip()
+            if "スタッフ" in stripped:
+                genga_role = None
+            elif _GENGA_LABEL_RE.match(stripped) or _ROLE_INLINE_RE.search(stripped):
+                genga_role = stripped  # ■役職名 → next lines are names
+            else:
+                genga_role = None
+            continue
+
+        ep_m = _EP_NUM_RE.match(line)
+        if ep_m:
+            current_ep = int(ep_m.group(1))
+            current_ep_raw = f"{current_ep}話"
+            is_main = False
+            genga_role = None
+            rest = line[ep_m.end():].strip()
+            if rest:
+                staff.extend(_parse_colon_staff_line(rest, current_ep, current_ep_raw, is_main_staff=False))
+            continue
+
+        # `[役職]` bracket format
+        bm = _BRACKET_ROLE_RE.match(line)
+        if bm:
+            genga_role = bm.group(1)
+            continue
+
+        if _GENGA_LABEL_RE.match(line):
+            genga_role = line
+            continue
+
+        if genga_role is not None:
+            is_role_marker = (
+                _WORK_COLON_ROLE_RE.search(line)
+                or _BRACKET_ROLE_RE.match(line)
+                or _GENGA_LABEL_RE.match(line)
+                or _WORK_DOT_ROLE_RE.match(line)
+            )
+            if not is_role_marker:
+                ep_here = current_ep if not is_main else None
+                ep_raw_here = current_ep_raw if not is_main else None
+                for name in _split_names(line):
+                    staff.append(ParsedSakugaWorkStaff(
+                        person_name=name,
+                        role_raw=genga_role,
+                        episode_num=ep_here,
+                        episode_raw=ep_raw_here,
+                        is_main_staff=is_main,
+                    ))
+                continue
+            genga_role = None  # reset, fall through
+
+        if _WORK_COLON_ROLE_RE.search(line):
+            ep_n = current_ep if not is_main else None
+            ep_r = current_ep_raw if not is_main else None
+            new_staff = _parse_colon_staff_line(line, ep_n, ep_r, is_main_staff=is_main)
+            if new_staff:
+                genga_role = None
+                staff.extend(new_staff)
+            else:
+                m = _WORK_COLON_ROLE_RE.search(line)
+                if m:
+                    genga_role = m.group(1)
+            continue
+
+        # `役職・名前` dot format (e.g. 監督・アミノテツロー)
+        dot_staff = _parse_dot_staff_line(line, current_ep, current_ep_raw, is_main_staff=is_main)
+        if dot_staff:
+            genga_role = None
+            staff.extend(dot_staff)
+        elif _WORK_DOT_ROLE_RE.match(line):
+            # All-role composite label (e.g. キャラクターデザイン・作画監督) → next line is names
+            genga_role = line
+
+    return staff
+
+
+def _parse_dot_staff_line(
+    line: str,
+    episode_num: int | None,
+    episode_raw: str | None,
+    *,
+    is_main_staff: bool,
+) -> list[ParsedSakugaWorkStaff]:
+    """Parse `役職・名前` dot-separated format (e.g. 監督・アミノテツロー, 脚本・伊藤恒久、会川昇).
+
+    Splits on ・, finds the boundary where tokens stop being role names.
+    """
+    if not _WORK_DOT_ROLE_RE.match(line):
+        return []
+    # Normalise & and ＆ → split separator for composite roles
+    parts = re.split(r"[・]", line)
+    role_parts: list[str] = []
+    name_raw = ""
+    for i, part in enumerate(parts):
+        # A part is a role if it matches _ROLE_INLINE_RE exactly (whole part is a role word)
+        # or if it's a role combined with & (キャラクターデザイン&作画監督)
+        clean = re.sub(r"[&＆]", "・", part).strip()
+        # Check each &-separated sub-part
+        sub_parts = [s.strip() for s in clean.split("・") if s.strip()]
+        all_roles = all(_ROLE_INLINE_RE.fullmatch(s) or _GENGA_LABEL_RE.match(s) for s in sub_parts) if sub_parts else False
+        if all_roles:
+            role_parts.append(part.strip())
+        else:
+            # This part contains a name — everything from here on is names
+            name_raw = "・".join(parts[i:])
+            break
+    if not role_parts or not name_raw:
+        return []
+    role_raw = "・".join(role_parts)
+    result = []
+    for name in _split_names(name_raw):
+        result.append(ParsedSakugaWorkStaff(
+            person_name=name,
+            role_raw=role_raw,
+            episode_num=episode_num,
+            episode_raw=episode_raw,
+            is_main_staff=is_main_staff,
+        ))
+    return result
+
+
+def _parse_colon_staff_line(
+    line: str,
+    episode_num: int | None,
+    episode_raw: str | None,
+    *,
+    is_main_staff: bool,
+) -> list[ParsedSakugaWorkStaff]:
+    """Parse 'role:name1 name2 role2:name3' inline format."""
+    result: list[ParsedSakugaWorkStaff] = []
+    matches = list(_WORK_COLON_ROLE_RE.finditer(line))
+    if not matches:
+        return result
+
+    for i, m in enumerate(matches):
+        role_raw = m.group(1)
+        name_start = m.end()
+        name_end = matches[i + 1].start() if i + 1 < len(matches) else len(line)
+        names_raw = line[name_start:name_end].strip()
+        # Multiple names for same role separated by spaces (e.g. "伊藤嘉之 稲留和美")
+        for name in _split_names(names_raw):
+            result.append(ParsedSakugaWorkStaff(
+                person_name=name,
+                role_raw=role_raw,
+                episode_num=episode_num,
+                episode_raw=episode_raw,
+                is_main_staff=is_main_staff,
+            ))
+
+    return result
+
+
+def _split_names(raw: str) -> list[str]:
+    """Split a name list (space/comma/ideographic-comma separated), filtering noise tokens."""
+    # Strip bracketed annotations like [各担当作画パート]
+    raw = re.sub(r"[（(【\[（][^)）】\]）]*[)）】\]）]", "", raw)
+    # Split on spaces, ideographic spaces, commas, ideographic commas
+    parts = re.split(r"[\s　、,，]+", raw.strip())
+    result = []
+    for p in parts:
+        p = p.strip("→")
+        # Skip obvious non-names: empty, pure ASCII/number noise, colon-terminated role labels
+        if not p or len(p) < 2 or re.match(r"^[A-Za-z0-9\-・]+$", p):
+            continue
+        if p.endswith(":") or p.endswith("："):
+            continue
+        result.append(p)
+    return result

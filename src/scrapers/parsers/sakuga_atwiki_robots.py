@@ -1,4 +1,4 @@
-"""robots.txt disallow checker for www18.atwiki.jp."""
+"""robots.txt disallow checker for w.atwiki.jp."""
 from __future__ import annotations
 
 from fnmatch import fnmatch
@@ -8,7 +8,7 @@ import structlog
 
 log = structlog.get_logger()
 
-_ROBOTS_URL = "https://www18.atwiki.jp/robots.txt"
+_ROBOTS_URL = "https://w.atwiki.jp/robots.txt"
 
 
 async def fetch_disallow_patterns() -> list[str]:

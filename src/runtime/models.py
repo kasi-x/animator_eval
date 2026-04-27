@@ -1592,6 +1592,7 @@ class Credit(BaseModel):
     credit_quarter: int | None = None  # attribution quarter (1-4)
     affiliation: str | None = None  # subcontractor studio/company (SeesaaWiki)
     position: int | None = None  # 0-based order within role; Bronze preservation only, not for analysis
+    source_listing_position: int | None = None  # 0-based global listing position on the page (ED-order proxy)
 
     @classmethod
     def from_db_row(cls, row: "CreditRow") -> "Credit":
@@ -1888,4 +1889,23 @@ class ParsedSakugaPerson:
     aliases: list[str]
     active_since_year: int | None
     credits: list[ParsedSakugaCredit]
+    source_html_sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedSakugaWorkStaff:
+    person_name: str
+    role_raw: str
+    episode_num: int | None
+    episode_raw: str | None
+    is_main_staff: bool   # True = series-level, False = episode/scene-level
+
+
+@dataclass(frozen=True, slots=True)
+class ParsedSakugaWork:
+    page_id: int
+    title: str
+    year: int | None
+    work_format: str | None
+    staff: list[ParsedSakugaWorkStaff]
     source_html_sha256: str

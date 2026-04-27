@@ -203,74 +203,101 @@ def write_sakuga_atwiki_bronze(
     output_dir: "Path | str",
     date_partition: str,
     raw_texts: "dict[int, str] | None" = None,
+    works: "list | None" = None,          # list[ParsedSakugaWork]
 ) -> dict[str, Path]:
-    """Write src_sakuga_atwiki_{pages,persons,credits} parquet.
+    """Write src_sakuga_atwiki_{pages,persons,credits,work_staff} parquet.
 
     pages_metadata: list of dicts from discovered_pages.json.
     persons:        ParsedSakugaPerson instances parsed from HTML cache.
     raw_texts:      {page_id: wikibody_plaintext} — stored in persons table so
                     rows where parse failed can be re-parsed without the gz cache.
                     Pass None to omit (raw HTML remains only in the gz cache).
+    works:          ParsedSakugaWork instances parsed from work pages.
     """
     import json as _json
 
     output_dir = Path(output_dir)
     raw_texts = raw_texts or {}
+    works = works or []
 
     page_rows: list[dict] = []
     person_rows: list[dict] = []
     credit_rows: list[dict] = []
+    work_staff_rows: list[dict] = []
 
     person_map: dict[int, object] = {p.page_id: p for p in persons}  # type: ignore[union-attr]
+    work_map: dict[int, object] = {w.page_id: w for w in works}  # type: ignore[union-attr]
 
     for meta in pages_metadata:
         pid = meta["id"]
-        parsed = person_map.get(pid)
-        parse_ok = parsed is not None and len(parsed.credits) > 0  # type: ignore[union-attr]
+        kind = meta.get("page_kind", "unknown")
+        parsed_person = person_map.get(pid)
+        parsed_work = work_map.get(pid)
+        parse_ok = (
+            (parsed_person is not None and len(parsed_person.credits) > 0)  # type: ignore[union-attr]
+            or (parsed_work is not None and len(parsed_work.staff) > 0)  # type: ignore[union-attr]
+        )
 
         page_rows.append({
             "page_id": pid,
             "url": meta.get("url", ""),
             "title": meta.get("title", ""),
-            "page_kind": meta.get("page_kind", "unknown"),
+            "page_kind": kind,
             "last_fetched_at": meta.get("discovered_at", ""),
             "html_sha256": meta.get("last_hash", ""),
             "parse_ok": parse_ok,
             "date_partition": date_partition,
         })
 
-        if parsed is None:
-            continue
-
-        person_rows.append({
-            "page_id": pid,
-            "name": parsed.name,  # type: ignore[union-attr]
-            "aliases_json": _json.dumps(parsed.aliases, ensure_ascii=False),  # type: ignore[union-attr]
-            "active_since_year": parsed.active_since_year,  # type: ignore[union-attr]
-            "html_sha256": parsed.source_html_sha256,  # type: ignore[union-attr]
-            # raw_wikibody_text: always stored for all pages (parse_ok or not)
-            "raw_wikibody_text": raw_texts.get(pid, ""),
-            "parse_ok": parse_ok,
-            "date_partition": date_partition,
-        })
-
-        for credit in parsed.credits:  # type: ignore[union-attr]
-            credit_rows.append({
-                "person_page_id": pid,
-                "work_title": credit.work_title,
-                "work_year": credit.work_year,
-                "work_format": credit.work_format,
-                "role_raw": credit.role_raw,
-                "episode_raw": credit.episode_raw,
-                "episode_num": credit.episode_num,
-                "evidence_source": "sakuga_atwiki",
+        if parsed_person is not None:
+            person_rows.append({
+                "page_id": pid,
+                "name": parsed_person.name,  # type: ignore[union-attr]
+                "aliases_json": _json.dumps(parsed_person.aliases, ensure_ascii=False),  # type: ignore[union-attr]
+                "active_since_year": parsed_person.active_since_year,  # type: ignore[union-attr]
+                "html_sha256": parsed_person.source_html_sha256,  # type: ignore[union-attr]
+                "raw_wikibody_text": raw_texts.get(pid, ""),
+                "parse_ok": len(parsed_person.credits) > 0,  # type: ignore[union-attr]
                 "date_partition": date_partition,
             })
+            for credit in parsed_person.credits:  # type: ignore[union-attr]
+                credit_rows.append({
+                    "person_page_id": pid,
+                    "work_title": credit.work_title,
+                    "work_year": credit.work_year,
+                    "work_format": credit.work_format,
+                    "role_raw": credit.role_raw,
+                    "episode_raw": credit.episode_raw,
+                    "episode_num": credit.episode_num,
+                    "evidence_source": "sakuga_atwiki",
+                    "date_partition": date_partition,
+                })
+
+        if parsed_work is not None:
+            for s in parsed_work.staff:  # type: ignore[union-attr]
+                work_staff_rows.append({
+                    "work_page_id": pid,
+                    "work_title": parsed_work.title,  # type: ignore[union-attr]
+                    "work_year": parsed_work.year,  # type: ignore[union-attr]
+                    "work_format": parsed_work.work_format,  # type: ignore[union-attr]
+                    "person_name": s.person_name,
+                    "role_raw": s.role_raw,
+                    "episode_num": s.episode_num,
+                    "episode_raw": s.episode_raw,
+                    "is_main_staff": s.is_main_staff,
+                    "evidence_source": "sakuga_atwiki",
+                    "date_partition": date_partition,
+                })
 
     written: dict[str, Path] = {}
-    for table, rows in [("pages", page_rows), ("persons", person_rows), ("credits", credit_rows)]:
+    tables = [
+        ("pages", page_rows),
+        ("persons", person_rows),
+        ("credits", credit_rows),
+        ("work_staff", work_staff_rows),
+    ]
+    for table, rows in tables:
         with BronzeWriter("sakuga_atwiki", table=table, root=output_dir, date=None) as bw:
-            # Override the partition path manually to use date_partition string
             bw._partition = (
                 output_dir
                 / "source=sakuga_atwiki"
