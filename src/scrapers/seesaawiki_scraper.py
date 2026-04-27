@@ -42,6 +42,7 @@ import typer
 from bs4 import BeautifulSoup
 
 from src.runtime.models import BronzeAnime, Credit, Person, parse_role
+from src.scrapers.http_client import RetryingHttpClient
 from src.scrapers.parsers.seesaawiki import (  # noqa: F401
     KNOWN_ROLES_JA,
     ParsedCredit,
@@ -132,7 +133,7 @@ def make_seesaa_anime_id(title: str) -> str:
 
 
 async def fetch_page_list(
-    client: httpx.AsyncClient,
+    client: RetryingHttpClient,
     page_num: int,
 ) -> list[dict[str, str]]:
     """Fetch one page of the wiki page index.
@@ -141,7 +142,6 @@ async def fetch_page_list(
     """
     url = f"{BASE_URL}/l/?p={page_num}&order=lastupdate&on_desc=1"
     resp = await client.get(url, headers=HEADERS)
-    resp.raise_for_status()
     html = resp.content.decode("euc-jp", errors="replace")
     soup = BeautifulSoup(html, "html.parser")
 
@@ -168,7 +168,7 @@ async def fetch_page_list(
 
 
 async def fetch_all_page_urls(
-    client: httpx.AsyncClient,
+    client: RetryingHttpClient,
     delay: float = DEFAULT_DELAY,
     data_dir: Path = DEFAULT_DATA_DIR,
 ) -> list[dict[str, str]]:
@@ -893,7 +893,15 @@ async def scrape_seesaawiki(
     studios_bw = group["studios"]
     anime_studios_bw = group["anime_studios"]
 
-    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+    client = RetryingHttpClient(
+        source="seesaawiki",
+        delay=delay,
+        timeout=30.0,
+        headers=HEADERS,
+        max_attempts=5,
+        initial_backoff=2.0,
+    )
+    try:
         # Phase 1: Enumerate pages
         all_pages = await fetch_all_page_urls(client, delay=delay, data_dir=data_dir)
 
@@ -943,7 +951,6 @@ async def scrape_seesaawiki(
 
                 try:
                     resp = await client.get(page_url, headers=HEADERS)
-                    resp.raise_for_status()
                     html = resp.content.decode("euc-jp", errors="replace")
                 except (httpx.HTTPError, httpx.TimeoutException) as e:
                     log.warning("seesaa_fetch_error", url=page_url, error=str(e))
@@ -1135,6 +1142,8 @@ async def scrape_seesaawiki(
                     )
 
                 await asyncio.sleep(delay)
+    finally:
+        await client.aclose()
 
     # Final flush + compact
     group.flush_all()

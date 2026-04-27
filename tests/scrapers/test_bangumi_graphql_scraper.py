@@ -103,19 +103,12 @@ class _StaticTransport(httpx.AsyncBaseTransport):
 
 
 async def _run_with_transport(coro_fn, transport: httpx.AsyncBaseTransport):
-    """Instantiate BangumiGraphQLClient, swap transport, then call coro_fn."""
+    """Instantiate BangumiGraphQLClient with mock transport, then call coro_fn."""
     # Reset rate limiter so tests don't interfere with each other.
     _HOST_RATE_LIMITER.reset_for_test()
     client = BangumiGraphQLClient()
+    client._test_transport = transport
     async with client:
-        client._client = httpx.AsyncClient(
-            transport=transport,
-            headers={
-                "User-Agent": DEFAULT_USER_AGENT,
-                "Accept": "application/json",
-                "Content-Type": "application/json",
-            },
-        )
         return await coro_fn(client)
 
 

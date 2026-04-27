@@ -20,15 +20,16 @@ Logging (structlog):
 from __future__ import annotations
 
 import asyncio
-import email.utils
-import json
 import time
 from typing import Any
 
 import httpx
 import structlog
 
+import httpx as httpx_module
+
 from src.scrapers.exceptions import RateLimitError, ScraperError
+from src.scrapers.http_client import RetryingHttpClient
 from src.scrapers.queries.bangumi_graphql import (
     BANGUMI_GRAPHQL_URL,
     DEFAULT_USER_AGENT,
@@ -39,7 +40,6 @@ from src.scrapers.queries.bangumi_graphql import (
 _SOURCE = "bangumi"
 _MAX_ATTEMPTS = 5
 _BASE_DELAY = 2.0
-_RETRY_AFTER_CAP = 120.0
 
 
 class _HostRateLimiter:
@@ -69,25 +69,6 @@ class _HostRateLimiter:
 
 
 _HOST_RATE_LIMITER = _HostRateLimiter(min_interval_sec=1.0)
-
-
-def _compute_backoff_sleep(attempt: int, status: int, retry_after: str | None) -> float:  # noqa: ARG001
-    exp_backoff = _BASE_DELAY * (2 ** (attempt - 1))
-    if retry_after is None:
-        return exp_backoff
-    parsed: float | None = None
-    stripped = retry_after.strip()
-    if stripped.isdigit():
-        parsed = float(stripped)
-    else:
-        try:
-            ts = email.utils.parsedate_to_datetime(stripped)
-            parsed = max(0.0, ts.timestamp() - time.time())
-        except Exception:
-            parsed = None
-    if parsed is not None and parsed > 0:
-        return min(max(parsed, exp_backoff), _RETRY_AFTER_CAP)
-    return min(exp_backoff, _RETRY_AFTER_CAP)
 
 
 log = structlog.get_logger()
@@ -125,7 +106,8 @@ class BangumiGraphQLClient:
     ) -> None:
         self._user_agent = user_agent
         self._timeout = timeout
-        self._client: httpx.AsyncClient | None = None
+        self._retrying_client: RetryingHttpClient | None = None
+        self._test_transport: httpx.AsyncBaseTransport | None = None
         # Always use the shared limiter — GraphQL client is never called
         # from tests with a custom rate, so no local-override branch needed.
         self._limiter = _HOST_RATE_LIMITER
@@ -135,21 +117,25 @@ class BangumiGraphQLClient:
     # ------------------------------------------------------------------
 
     async def __aenter__(self) -> BangumiGraphQLClient:
-        self._client = httpx.AsyncClient(
+        self._retrying_client = RetryingHttpClient(
+            source="bangumi",
+            delay=0.0,  # Rate limiting handled by _HostRateLimiter
             timeout=self._timeout,
-            follow_redirects=True,
             headers={
                 "User-Agent": self._user_agent,
                 "Accept": "application/json",
                 "Content-Type": "application/json",
             },
+            max_attempts=_MAX_ATTEMPTS,  # 5
+            initial_backoff=_BASE_DELAY,  # 2.0
+            transport=self._test_transport,
         )
         return self
 
     async def __aexit__(self, *_: object) -> None:
-        if self._client is not None:
-            await self._client.aclose()
-            self._client = None
+        if self._retrying_client is not None:
+            await self._retrying_client.aclose()
+            self._retrying_client = None
 
     # ------------------------------------------------------------------
     # Public fetch methods
@@ -329,57 +315,42 @@ class BangumiGraphQLClient:
             RateLimitError: on 429 after max retries.
             ScraperError: on other permanent failures.
         """
-        assert self._client is not None, (
+        assert self._retrying_client is not None, (
             "BangumiGraphQLClient must be used as an async context manager"
         )
-        for attempt in range(1, _MAX_ATTEMPTS + 1):
+        try:
             await self._limiter.throttle()
-            try:
-                resp = await self._client.get(url)
-            except httpx.TransportError as exc:
-                if attempt >= _MAX_ATTEMPTS:
-                    raise ScraperError(
-                        f"Transport error after {_MAX_ATTEMPTS} attempts: {exc}",
-                        source=_SOURCE,
-                        url=url,
-                    ) from exc
-                await asyncio.sleep(_compute_backoff_sleep(attempt, 0, None))
-                continue
-            if resp.status_code == 404:
-                return not_found
-            if resp.status_code == 429:
-                wait = _compute_backoff_sleep(attempt, 429, resp.headers.get("Retry-After"))
-                if attempt >= _MAX_ATTEMPTS:
-                    raise RateLimitError(
-                        "bangumi REST rate limit exceeded after max attempts",
-                        source=_SOURCE,
-                        url=url,
-                        retry_after=wait,
-                    )
-                await asyncio.sleep(wait)
-                continue
-            if resp.status_code >= 500:
-                wait = _compute_backoff_sleep(attempt, resp.status_code, resp.headers.get("Retry-After"))
-                if attempt >= _MAX_ATTEMPTS:
-                    raise ScraperError(
-                        f"REST server error {resp.status_code} after {_MAX_ATTEMPTS} attempts",
-                        source=_SOURCE,
-                        url=url,
-                    )
-                await asyncio.sleep(wait)
-                continue
-            if not (200 <= resp.status_code < 300):
-                raise ScraperError(
-                    f"Unexpected HTTP {resp.status_code}",
+            resp = await self._retrying_client.get(url)
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            if status == 429:
+                raise RateLimitError(
+                    "bangumi REST rate limit exceeded after max attempts",
                     source=_SOURCE,
                     url=url,
-                )
-            return resp.json()
-        raise ScraperError(
-            f"Failed REST GET after {_MAX_ATTEMPTS} attempts ({context})",
-            source=_SOURCE,
-            url=url,
-        )
+                    retry_after=None,
+                ) from exc
+            raise ScraperError(
+                f"REST HTTP {status} after retries",
+                source=_SOURCE,
+                url=url,
+            ) from exc
+        except httpx_module.TransportError as exc:
+            raise ScraperError(
+                f"Transport error after {_MAX_ATTEMPTS} attempts: {exc}",
+                source=_SOURCE,
+                url=url,
+            ) from exc
+
+        if resp.status_code == 404:
+            return not_found
+        if not (200 <= resp.status_code < 300):
+            raise ScraperError(
+                f"Unexpected HTTP {resp.status_code}",
+                source=_SOURCE,
+                url=url,
+            )
+        return resp.json()
 
     async def _post_with_retry(
         self,
@@ -399,124 +370,71 @@ class BangumiGraphQLClient:
         Raises:
             ScraperError: when retries are exhausted or a non-recoverable error occurs.
         """
-        assert self._client is not None, (
+        assert self._retrying_client is not None, (
             "BangumiGraphQLClient must be used as an async context manager"
         )
 
-        body = json.dumps({"query": query}).encode()
-
-        for attempt in range(1, _MAX_ATTEMPTS + 1):
+        try:
             await self._limiter.throttle()
-
-            try:
-                resp = await self._client.post(
-                    BANGUMI_GRAPHQL_URL,
-                    content=body,
-                )
-            except httpx.TransportError as exc:
-                if attempt >= _MAX_ATTEMPTS:
-                    raise ScraperError(
-                        f"Transport error after {_MAX_ATTEMPTS} attempts: {exc}",
-                        source=_SOURCE,
-                        url=BANGUMI_GRAPHQL_URL,
-                    ) from exc
-                wait = _compute_backoff_sleep(attempt, 0, None)
-                log.warning(
-                    "bangumi_graphql_transport_error",
-                    context=context,
-                    attempt=attempt,
-                    wait_seconds=wait,
-                    error=str(exc),
-                )
-                await asyncio.sleep(wait)
-                continue
-
-            if resp.status_code == 429:
-                raw_retry_after = resp.headers.get("Retry-After")
-                wait = _compute_backoff_sleep(attempt, 429, raw_retry_after)
-                log.warning(
-                    "bangumi_graphql_rate_limited",
-                    context=context,
-                    attempt=attempt,
-                    retry_after_header=raw_retry_after,
-                    wait_seconds=wait,
-                )
-                if raw_retry_after is not None:
-                    log.info(
-                        "bangumi_graphql_retry_after_honored",
-                        attempt=attempt,
-                        seconds=wait,
-                    )
-                if attempt >= _MAX_ATTEMPTS:
-                    raise RateLimitError(
-                        "bangumi GraphQL rate limit exceeded after max attempts",
-                        source=_SOURCE,
-                        url=BANGUMI_GRAPHQL_URL,
-                        retry_after=wait,
-                    )
-                await asyncio.sleep(wait)
-                continue
-
-            if resp.status_code >= 500:
-                raw_retry_after = resp.headers.get("Retry-After")
-                wait = _compute_backoff_sleep(attempt, resp.status_code, raw_retry_after)
-                log.warning(
-                    "bangumi_graphql_server_error",
-                    context=context,
-                    status=resp.status_code,
-                    attempt=attempt,
-                    wait_seconds=wait,
-                )
-                if attempt >= _MAX_ATTEMPTS:
-                    raise ScraperError(
-                        f"GraphQL server error {resp.status_code} after {_MAX_ATTEMPTS} attempts",
-                        source=_SOURCE,
-                        url=BANGUMI_GRAPHQL_URL,
-                    )
-                await asyncio.sleep(wait)
-                continue
-
-            if not (200 <= resp.status_code < 300):
-                raise ScraperError(
-                    f"Unexpected HTTP {resp.status_code}",
+            resp = await self._retrying_client.post(
+                BANGUMI_GRAPHQL_URL,
+                json={"query": query},
+            )
+        except httpx.HTTPStatusError as exc:
+            status = exc.response.status_code
+            if status == 429:
+                raise RateLimitError(
+                    "bangumi GraphQL rate limit exceeded after max attempts",
                     source=_SOURCE,
                     url=BANGUMI_GRAPHQL_URL,
-                )
+                    retry_after=None,
+                ) from exc
+            raise ScraperError(
+                f"GraphQL HTTP {status} after retries",
+                source=_SOURCE,
+                url=BANGUMI_GRAPHQL_URL,
+            ) from exc
+        except httpx_module.TransportError as exc:
+            raise ScraperError(
+                f"Transport error after {_MAX_ATTEMPTS} attempts: {exc}",
+                source=_SOURCE,
+                url=BANGUMI_GRAPHQL_URL,
+            ) from exc
 
-            # Parse the GraphQL envelope.
-            parsed: dict[str, Any] = resp.json()
+        if not (200 <= resp.status_code < 300):
+            raise ScraperError(
+                f"Unexpected HTTP {resp.status_code}",
+                source=_SOURCE,
+                url=BANGUMI_GRAPHQL_URL,
+            )
 
-            # GraphQL errors array handling:
-            #   NOT_FOUND → return None (same contract as v0 404)
-            #   other     → raise ScraperError
-            errors = parsed.get("errors")
-            if errors:
-                first = errors[0] if isinstance(errors, list) and errors else {}
-                code = (first.get("extensions") or {}).get("code", "")
-                if code == "NOT_FOUND":
-                    log.info(
-                        "bangumi_graphql_not_found",
-                        context=context,
-                    )
-                    return None
-                log.error(
-                    "bangumi_graphql_error",
+        parsed: dict[str, Any] = resp.json()
+
+        # GraphQL errors array handling:
+        #   NOT_FOUND → return None (same contract as v0 404)
+        #   other     → raise ScraperError
+        errors = parsed.get("errors")
+        if errors:
+            first = errors[0] if isinstance(errors, list) and errors else {}
+            code = (first.get("extensions") or {}).get("code", "")
+            if code == "NOT_FOUND":
+                log.info(
+                    "bangumi_graphql_not_found",
                     context=context,
-                    errors=errors,
                 )
-                raise ScraperError(
-                    f"GraphQL errors: {errors}",
-                    source=_SOURCE,
-                    url=BANGUMI_GRAPHQL_URL,
-                )
+                return None
+            log.error(
+                "bangumi_graphql_error",
+                context=context,
+                errors=errors,
+            )
+            raise ScraperError(
+                f"GraphQL errors: {errors}",
+                source=_SOURCE,
+                url=BANGUMI_GRAPHQL_URL,
+            )
 
-            return parsed
-
-        raise ScraperError(
-            f"Failed GraphQL POST after {_MAX_ATTEMPTS} attempts ({context})",
-            source=_SOURCE,
-            url=BANGUMI_GRAPHQL_URL,
-        )
+        return parsed
 
 
 def adapt_subject_persons_gql(
