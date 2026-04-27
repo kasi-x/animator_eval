@@ -32,6 +32,31 @@ from src.etl.role_mappers import map_role
 
 # ─── DDL ─────────────────────────────────────────────────────────────────────
 
+_DDL_ANIME_GENRES = """
+CREATE TABLE IF NOT EXISTS anime_genres (
+    anime_id   VARCHAR NOT NULL,
+    genre_name VARCHAR NOT NULL,
+    PRIMARY KEY (anime_id, genre_name)
+);
+CREATE INDEX IF NOT EXISTS idx_anime_genres_anime ON anime_genres(anime_id);
+"""
+
+_DDL_ANIME_RELATIONS = """
+CREATE TABLE IF NOT EXISTS anime_relations (
+    id               INTEGER,
+    anime_id         VARCHAR NOT NULL,
+    related_anime_id VARCHAR NOT NULL,
+    relation_type    VARCHAR NOT NULL DEFAULT '',
+    related_title    VARCHAR NOT NULL DEFAULT '',
+    related_format   VARCHAR,
+    PRIMARY KEY (anime_id, related_anime_id, relation_type)
+);
+CREATE INDEX IF NOT EXISTS idx_anime_relations_anime
+    ON anime_relations(anime_id);
+CREATE INDEX IF NOT EXISTS idx_anime_relations_related
+    ON anime_relations(related_anime_id);
+"""
+
 _DDL_ANIME_RECOMMENDATIONS = """
 CREATE SEQUENCE IF NOT EXISTS seq_anime_recommendations_id;
 CREATE TABLE IF NOT EXISTS anime_recommendations (
@@ -243,11 +268,22 @@ def _parquet_exists(bronze_root: Path, table: str) -> bool:
 
 
 def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
-    """Create new SILVER tables and add anime extension columns."""
-    for stmt in _DDL_ANIME_RECOMMENDATIONS.split(";"):
-        stmt = stmt.strip()
-        if stmt:
-            conn.execute(stmt)
+    """Create new SILVER tables and add anime extension columns.
+
+    Idempotent — all CREATE TABLE / CREATE INDEX / CREATE SEQUENCE statements
+    use IF NOT EXISTS.  ALTER TABLE … ADD COLUMN IF NOT EXISTS is safe to
+    re-run on an existing schema.
+
+    Tables created here (owned by this loader):
+        anime_genres, anime_relations, anime_recommendations
+    Extension columns added to existing tables:
+        anime.mal_id_int, anime.display_*_mal (7 columns)
+    """
+    for ddl_block in (_DDL_ANIME_GENRES, _DDL_ANIME_RELATIONS, _DDL_ANIME_RECOMMENDATIONS):
+        for stmt in ddl_block.split(";"):
+            stmt = stmt.strip()
+            if stmt:
+                conn.execute(stmt)
     for stmt in _DDL_ANIME_EXTENSION:
         conn.execute(stmt)
 
