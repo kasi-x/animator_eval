@@ -191,21 +191,37 @@ WHERE _rn = 1
 
 # NULL-safe fill: seesaawiki data fills SILVER only if the column is currently NULL.
 # hometown は ALTER 不要 (Card 03 が事前に ADD する) — COALESCE で NULL-safe に更新。
+#
+# BRONZE parquet の aliases / nationality / primary_occupations / years_active は
+# スクレーパーが空リストを書いた場合 "NULL"[] 型になる。
+# image_large / image_medium / hometown / description も NULL 値が "NULL" 型で現れる。
+# SILVER 側は TEXT (VARCHAR) なので、COALESCE 前に TRY_CAST で VARCHAR に揃える。
 _PERSONS_EXTRAS_SQL = """
 UPDATE persons
 SET
     name_native_raw     = COALESCE(persons.name_native_raw,     bronze.name_native_raw),
-    aliases             = COALESCE(persons.aliases,             bronze.aliases),
-    nationality         = COALESCE(persons.nationality,         bronze.nationality),
-    primary_occupations = COALESCE(persons.primary_occupations, bronze.primary_occupations),
-    years_active        = COALESCE(persons.years_active,        bronze.years_active),
-    hometown            = COALESCE(persons.hometown,            bronze.hometown),
-    description         = COALESCE(persons.description,         bronze.description),
-    image_large         = COALESCE(persons.image_large,         bronze.image_large),
-    image_medium        = COALESCE(persons.image_medium,        bronze.image_medium)
+    aliases             = COALESCE(persons.aliases,             bronze.aliases_v),
+    nationality         = COALESCE(persons.nationality,         bronze.nationality_v),
+    primary_occupations = COALESCE(persons.primary_occupations, bronze.primary_occupations_v),
+    years_active        = COALESCE(persons.years_active,        bronze.years_active_v),
+    hometown            = COALESCE(persons.hometown,            bronze.hometown_v),
+    description         = COALESCE(persons.description,         bronze.description_v),
+    image_large         = COALESCE(persons.image_large,         bronze.image_large_v),
+    image_medium        = COALESCE(persons.image_medium,        bronze.image_medium_v)
 FROM (
-    SELECT *,
-           ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
+    SELECT
+        id,
+        date,
+        name_native_raw,
+        TRY_CAST(aliases             AS VARCHAR) AS aliases_v,
+        TRY_CAST(nationality         AS VARCHAR) AS nationality_v,
+        TRY_CAST(primary_occupations AS VARCHAR) AS primary_occupations_v,
+        TRY_CAST(years_active        AS VARCHAR) AS years_active_v,
+        TRY_CAST(hometown            AS VARCHAR) AS hometown_v,
+        TRY_CAST(description         AS VARCHAR) AS description_v,
+        TRY_CAST(image_large         AS VARCHAR) AS image_large_v,
+        TRY_CAST(image_medium        AS VARCHAR) AS image_medium_v,
+        ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
     FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
     WHERE id IS NOT NULL
 ) AS bronze
