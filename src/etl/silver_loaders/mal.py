@@ -139,47 +139,33 @@ WHERE _rn = 1
 """
 
 # staff_credits → credits.  role mapping via map_role("mal", position).
-# DuckDB does not support Python UDFs inline in SQL, so we use a two-step
-# approach: pull the raw rows into Python, apply map_role(), re-insert.
-_STAFF_RAW_SQL = """
-SELECT DISTINCT
-    'mal:p' || CAST(mal_person_id AS VARCHAR)  AS person_id,
-    'mal:a' || CAST(mal_id AS VARCHAR)         AS anime_id,
-    COALESCE(position, '')                     AS raw_role
-FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
-WHERE mal_id IS NOT NULL
-  AND mal_person_id IS NOT NULL
-"""
-
-# anime_characters → characters (mal:c prefix) + character_voice_actors.
-_CHARACTERS_RAW_SQL = """
-SELECT DISTINCT
-    'mal:c' || CAST(mal_character_id AS VARCHAR)  AS id,
-    COALESCE(character_name, '')                  AS name_ja,
-    COALESCE(character_url, '')                   AS site_url,
-    role                                          AS character_role,
-    'mal:a' || CAST(mal_id AS VARCHAR)            AS anime_id
+# Uses a DuckDB Python UDF (map_role_mal) so role normalisation happens inside
+# the single SQL INSERT rather than via Python executemany (O(n) queries).
+# NOT EXISTS guard prevents duplicates when episode IS NULL (DuckDB treats
+# NULL as distinct in UNIQUE constraints, so INSERT OR IGNORE is insufficient).
+_STAFF_CREDITS_SQL = """
+INSERT INTO credits
+    (person_id, anime_id, raw_role, role, evidence_source, updated_at)
+SELECT src.person_id, src.anime_id, src.raw_role,
+       map_role_mal(src.raw_role) AS role,
+       'mal'::VARCHAR             AS evidence_source,
+       now()                      AS updated_at
 FROM (
-    SELECT *,
-           ROW_NUMBER() OVER (
-               PARTITION BY mal_id, mal_character_id ORDER BY date DESC
-           ) AS _rn
-    FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
-    WHERE  mal_character_id IS NOT NULL
+    SELECT DISTINCT
+        'mal:p' || CAST(mal_person_id AS VARCHAR)  AS person_id,
+        'mal:a' || CAST(mal_id AS VARCHAR)         AS anime_id,
+        COALESCE(position, '')                     AS raw_role
+    FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE mal_id IS NOT NULL AND mal_person_id IS NOT NULL
+) AS src
+WHERE NOT EXISTS (
+    SELECT 1 FROM credits c
+    WHERE c.person_id       = src.person_id
+      AND c.anime_id        = src.anime_id
+      AND c.raw_role        = src.raw_role
+      AND c.evidence_source = 'mal'
+      AND c.episode IS NULL
 )
-WHERE _rn = 1
-"""
-
-_VA_RAW_SQL = """
-SELECT DISTINCT
-    'mal:c' || CAST(mal_character_id AS VARCHAR)  AS character_id,
-    'mal:p' || CAST(mal_person_id AS VARCHAR)     AS person_id,
-    'mal:a' || CAST(mal_id AS VARCHAR)            AS anime_id,
-    COALESCE(language, '')                        AS language
-FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
-WHERE mal_id IS NOT NULL
-  AND mal_character_id IS NOT NULL
-  AND mal_person_id IS NOT NULL
 """
 
 _ANIME_GENRES_SQL = """
@@ -269,42 +255,28 @@ def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
 def _load_staff_credits(
     conn: duckdb.DuckDBPyConnection, bronze_root: Path
 ) -> int:
-    """Pull staff_credits rows from BRONZE, apply role mapping, insert into credits.
+    """Load staff_credits from BRONZE → credits using a DuckDB UDF for role mapping.
+
+    Registers map_role_mal UDF on first call (idempotent — silently skips if
+    already registered).  Uses a single SQL INSERT with NOT EXISTS guard to
+    prevent duplicates on repeated calls.
 
     Returns total credits rows with evidence_source='mal' after insert.
     """
     if not _parquet_exists(bronze_root, "staff_credits"):
         return 0
 
-    raw_rows = conn.execute(
-        _STAFF_RAW_SQL, [_glob(bronze_root, "staff_credits")]
-    ).fetchall()
-
-    if not raw_rows:
-        return 0
-
-    mapped = [
-        (person_id, anime_id, raw_role, map_role("mal", raw_role))
-        for person_id, anime_id, raw_role in raw_rows
-    ]
-
-    # INSERT OR IGNORE cannot deduplicate when episode IS NULL because DuckDB
-    # treats NULL as distinct in UNIQUE constraints.  Use explicit NOT EXISTS.
-    conn.executemany(
-        """
-        INSERT INTO credits
-            (person_id, anime_id, raw_role, role, evidence_source, updated_at)
-        SELECT ?, ?, ?, ?, 'mal', now()
-        WHERE NOT EXISTS (
-            SELECT 1 FROM credits c
-            WHERE c.person_id = ?
-              AND c.anime_id  = ?
-              AND c.raw_role  = ?
-              AND c.episode IS NULL
+    try:
+        conn.create_function(
+            "map_role_mal",
+            lambda r: map_role("mal", r) if r is not None else "other",
+            ["VARCHAR"],
+            "VARCHAR",
         )
-        """,
-        [(p, a, rr, r, p, a, rr) for p, a, rr, r in mapped],
-    )
+    except Exception:
+        pass  # already registered on a second integrate() call
+
+    conn.execute(_STAFF_CREDITS_SQL, [_glob(bronze_root, "staff_credits")])
     return conn.execute(
         "SELECT COUNT(*) FROM credits WHERE evidence_source = 'mal'"
     ).fetchone()[0]
@@ -315,40 +287,53 @@ def _load_characters_and_cva(
 ) -> tuple[int, int]:
     """Insert characters and character_voice_actors from MAL BRONZE.
 
+    Uses pure SQL INSERT OR IGNORE — avoids the O(n) Python executemany
+    pattern that is prohibitively slow for large datasets (~100k rows).
+
     Returns (characters_count, cva_count).
     """
-    chars_inserted = 0
-    cva_inserted = 0
-
-    # --- characters ---
     if _parquet_exists(bronze_root, "anime_characters"):
-        char_rows = conn.execute(
-            _CHARACTERS_RAW_SQL, [_glob(bronze_root, "anime_characters")]
-        ).fetchall()
-        if char_rows:
-            conn.executemany(
-                """
-                INSERT OR IGNORE INTO characters
-                    (id, name_ja, name_en, site_url, updated_at)
-                VALUES (?, ?, '', ?, now())
-                """,
-                [(r[0], r[1], r[2]) for r in char_rows],
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO characters (id, name_ja, name_en, site_url, updated_at)
+            SELECT DISTINCT
+                'mal:c' || CAST(mal_character_id AS VARCHAR)  AS id,
+                COALESCE(character_name, '')                  AS name_ja,
+                ''                                            AS name_en,
+                COALESCE(character_url, '')                   AS site_url,
+                now()                                         AS updated_at
+            FROM (
+                SELECT *,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY mal_id, mal_character_id ORDER BY date DESC
+                       ) AS _rn
+                FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
+                WHERE  mal_character_id IS NOT NULL
             )
+            WHERE _rn = 1
+            """,
+            [_glob(bronze_root, "anime_characters")],
+        )
 
-    # --- CVA ---
     if _parquet_exists(bronze_root, "va_credits"):
-        va_rows = conn.execute(
-            _VA_RAW_SQL, [_glob(bronze_root, "va_credits")]
-        ).fetchall()
-        if va_rows:
-            conn.executemany(
-                """
-                INSERT OR IGNORE INTO character_voice_actors
-                    (character_id, person_id, anime_id, character_role, source, updated_at)
-                VALUES (?, ?, ?, ?, 'mal', now())
-                """,
-                [(r[0], r[1], r[2], r[3]) for r in va_rows],
-            )
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO character_voice_actors
+                (character_id, person_id, anime_id, character_role, source, updated_at)
+            SELECT DISTINCT
+                'mal:c' || CAST(mal_character_id AS VARCHAR)  AS character_id,
+                'mal:p' || CAST(mal_person_id AS VARCHAR)     AS person_id,
+                'mal:a' || CAST(mal_id AS VARCHAR)            AS anime_id,
+                COALESCE(language, '')                        AS character_role,
+                'mal'                                         AS source,
+                now()                                         AS updated_at
+            FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+            WHERE mal_id IS NOT NULL
+              AND mal_character_id IS NOT NULL
+              AND mal_person_id IS NOT NULL
+            """,
+            [_glob(bronze_root, "va_credits")],
+        )
 
     chars_inserted = conn.execute(
         "SELECT COUNT(*) FROM characters WHERE id LIKE 'mal:c%'"

@@ -78,7 +78,11 @@ def test_integrate_creates_silver(bronze_dir: Path, tmp_path: Path) -> None:
 
 
 def test_anime_score_excluded_from_silver(bronze_dir: Path, tmp_path: Path) -> None:
-    """H1: anime.score must not appear in SILVER anime table."""
+    """H1: anime.score must not appear in SILVER anime table.
+
+    Note: description is a legitimate display column added by the anilist loader
+    (display metadata, not a scoring signal), so it is not checked here.
+    """
     silver = tmp_path / "silver.duckdb"
     integrate(bronze_root=bronze_dir, silver_path=silver)
 
@@ -87,10 +91,11 @@ def test_anime_score_excluded_from_silver(bronze_dir: Path, tmp_path: Path) -> N
     cols = {row[1] for row in conn.execute("PRAGMA table_info('anime')").fetchall()}
     conn.close()
 
+    # H1: bare scoring/popularity columns must not appear in SILVER anime.
+    # display_* prefixed columns are permitted (display metadata only).
     assert "score" not in cols
     assert "popularity" not in cols
     assert "favourites" not in cols
-    assert "description" not in cols
 
 
 def test_persons_birth_date_mapped(bronze_dir: Path, tmp_path: Path) -> None:

@@ -23,6 +23,14 @@ import structlog
 
 from src.etl.atomic_swap import atomic_duckdb_swap
 from src.etl.role_mappers import map_role
+import src.etl.silver_loaders.anilist as _sl_anilist
+import src.etl.silver_loaders.ann as _sl_ann
+import src.etl.silver_loaders.bangumi as _sl_bangumi
+import src.etl.silver_loaders.keyframe as _sl_keyframe
+import src.etl.silver_loaders.madb as _sl_madb
+import src.etl.silver_loaders.mal as _sl_mal
+import src.etl.silver_loaders.sakuga_atwiki as _sl_sakuga_atwiki
+import src.etl.silver_loaders.seesaawiki as _sl_seesaawiki
 
 logger = structlog.get_logger()
 
@@ -470,7 +478,7 @@ def _build_anime_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
         start_date="start_date" if "start_date" in cols else "NULL::VARCHAR",
         end_date="end_date" if "end_date" in cols else "NULL::VARCHAR",
         status="status" if "status" in cols else "NULL::VARCHAR",
-        source_mat="COALESCE(original_work_type, source)" if "original_work_type" in cols else "'unknown'::VARCHAR",
+        source_mat="COALESCE(TRY_CAST(original_work_type AS VARCHAR), TRY_CAST(source AS VARCHAR))" if "original_work_type" in cols else "'unknown'::VARCHAR",
         work_type="work_type" if "work_type" in cols else "NULL::VARCHAR",
         scale_class="scale_class" if "scale_class" in cols else "NULL::VARCHAR",
         fetched_at="TRY_CAST(fetched_at AS TIMESTAMP)" if "fetched_at" in cols else "NULL::TIMESTAMP",
@@ -598,6 +606,37 @@ def integrate(
                     logger.info("silver_anime_studios", count=counts["anime_studios"])
                 except Exception as exc:
                     logger.warning("silver_anime_studios_skip", error=str(exc))
+
+            # ── Card 14: source-specific SILVER extras ──────────────────────
+            # Each loader's integrate(conn, bronze_root) applies its own DDL
+            # (IF NOT EXISTS) and data inserts.  Failures are isolated so a
+            # single bad source does not abort the others.
+            _source_loaders = [
+                ("seesaawiki", _sl_seesaawiki),
+                ("madb", _sl_madb),
+                ("anilist", _sl_anilist),
+                ("ann", _sl_ann),
+                ("bangumi", _sl_bangumi),
+                ("keyframe", _sl_keyframe),
+                ("mal", _sl_mal),
+                ("sakuga_atwiki", _sl_sakuga_atwiki),
+            ]
+            for source_name, loader_module in _source_loaders:
+                try:
+                    source_counts = loader_module.integrate(conn, bronze_root)
+                    for key, val in source_counts.items():
+                        counts[f"{source_name}.{key}"] = val
+                    logger.info(
+                        "silver_source_loaded",
+                        source=source_name,
+                        tables=list(source_counts.keys()),
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "silver_source_skip",
+                        source=source_name,
+                        error=str(exc),
+                    )
 
         finally:
             conn.close()
