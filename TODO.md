@@ -1,6 +1,6 @@
 # TODO.md — 未完了作業の一元管理
 
-作成日: 2026-04-22 / 最終更新: 2026-04-25
+作成日: 2026-04-22 / 最終更新: 2026-04-27 (allcinema 削除反映)
 
 本書はプロジェクト内のすべての**未完了**項目を一元管理するファイルです。完了済みは `DONE.md`、設計原則は `CLAUDE.md`。
 
@@ -11,7 +11,7 @@
 | 優先度 | カテゴリ | 内容 |
 |--------|---------|------|
 | 🟠 High | ローカル再 parse | seesaawiki raw HTML (8688) / madb raw JSON (603MB) の parser 拡張 — 再 scrape 不要でオプション情報回収 (§10) |
-| 🟠 High | ANN scraper 改修 | XML info/cast/company/release/news/related/episode titles + persons HTML 拡張、raw 近い形式で BRONZE parquet 保存 → `TASK_CARDS/10_ann_scraper_extend/` (§11 は本カードへ全面移管) |
+| ✅ Done | ANN scraper 改修 | Card 01-04 全完了 (2026-04-26) — anime 27,000 / persons 36,350 / 9 BRONZE テーブル生成済 → `TASK_CARDS/10_ann_scraper_extend/` |
 | 🟠 High | MAL/Jikan scraper | Jikan v4 全 endpoint 網羅 (anime/persons/characters/producers/manga + news/schedules/magazines)、28 BRONZE テーブル、3 Phase → `TASK_CARDS/12_mal_scraper_jikan/` (§12.3 から起票) |
 | 🟡 Maintenance | スキーマ後続 | v56 既存データ再スクレイプ (name_ja 誤入り修正)、v57 title.native |
 | 🟢 Future | データ修正 | WIKIDATA_ROLE_MAP 修正後の JVMG credits 再マップ |
@@ -60,11 +60,8 @@
 
 ### 7.3 anilist_scraper retry refactor ✅ (3cf8ad1)
 
-### 7.4 ANN scraper 再実行 (NO-OP: 07_json_to_parquet/04)
-- [ ] ANN scraper 再実行: `data/ann/anime_checkpoint.json` の `all_ids` を使い、新 bronze_writer 経路で parquet 出力
-  - **理由**: 既存 `data/ann/` には checkpoint (`{all_ids, completed_ids}` dict) のみで、実データ JSON がない
-  - **実施方法**: 既存 HTTP skip は effective、未完了 ID のみ fetch (差分更新)
-  - **期限**: スクレイプ安定化後 (allcinema 統合完了時点で優先度上昇)
+### 7.4 ANN scraper 再実行 ✅ DONE
+- [x] Card 10/04 にて完遂 — anime 27,000 / persons 36,350、9 BRONZE parquet 生成完了 (2026-04-26)
 
 ---
 
@@ -96,21 +93,22 @@ similarity.py / recommendation.py はスタブ化済 (2行)、重複整理完了
   - [ ] 全 HTML 再 parse → BRONZE parquet 書き直し
   - [ ] SILVER 再統合
 
-### 10.2 madb raw JSON 再 parse
+### 10.2 madb raw JSON 再 parse ✅ BRONZE 完了 (2026-04-27)
 
 - **対象**: `data/madb/metadata*.json` (603MB、SPARQL 結果生データ)
 - **parser**: madb integrate 経路を拡張
 - **追加抽出候補**:
-  - [ ] broadcaster (放送局リスト、ネット局数)
-  - [ ] 放送時間帯 / 放送枠
-  - [ ] 製作委員会メンバー (`producedBy` 複数)
-  - [ ] 製作会社群 (main + 協力分離)
-  - [ ] 映像ソフト (DVD/BD) 発売情報
-  - [ ] 原作情報 (manga/LN マスタへの link)
+  - [x] broadcaster (放送局リスト、ネット局数) → BRONZE `broadcasters` 332,492 行
+  - [x] 放送時間帯 / 放送枠 → BRONZE `broadcast_schedule` 4,626 行
+  - [x] 製作委員会メンバー (`producedBy` 複数) → BRONZE `production_committee` 15,352 行
+  - [x] 製作会社群 (main + 協力分離) → BRONZE `production_companies` 29,434 行
+  - [x] 映像ソフト (DVD/BD) 発売情報 → BRONZE `video_releases` 292,148 行
+  - [x] 原作情報 (manga/LN マスタへの link) → BRONZE `original_work_links` 3,576 行
 - **手順**:
-  - [ ] SPARQL レスポンスに含まれるプロパティの網羅調査 (metadata*.json の JSON schema 確認)
-  - [ ] 追加フィールド extraction 関数 + test
-  - [ ] BRONZE 書き直し → SILVER 再統合
+  - [x] SPARQL レスポンスに含まれるプロパティの網羅調査 (metadata*.json の JSON schema 確認)
+  - [x] 追加フィールド extraction 関数 + test (96 tests PASS)
+  - [x] BRONZE 書き直し (`result/bronze/source=mediaarts/table=*/date=2026-04-27/`)
+  - [ ] SILVER 再統合 (別タスク)
 
 ---
 
@@ -127,7 +125,7 @@ similarity.py / recommendation.py はスタブ化済 (2行)、重複整理完了
 - `10/01_schema_design` ✅ DONE — BRONZE 8 テーブル dataclass 確定
 - `10/02_parser_extend` ✅ DONE — `parsers/ann.py` 拡張 (XML + HTML 全フィールド)
 - `10/03_scraper_integration` ✅ DONE — `ann_scraper.py` BronzeWriterGroup 8 テーブル書き分け
-- `10/04_rescrape` 🔄 PARTIAL — anime 27,000/27,000 完了, persons 507/36,350 (残 ~14h)
+- `10/04_rescrape` ✅ DONE — anime 27,000/27,000 (2026-04-25), persons 36,350/36,350 (2026-04-26)、9 BRONZE parquet 生成完 (anime 11,009 / credits 305,174 / persons 36,235 / cast 250,048 / company 33,857 / episodes 169,115 / releases 22,603 / news 90,234 / related 15,198)
 
 旧 §7.4 「ANN 再 scrape」は本カード 04 に統合済。
 
@@ -135,12 +133,21 @@ similarity.py / recommendation.py はスタブ化済 (2行)、重複整理完了
 
 ## SECTION 12: 他ソース拡張 (将来)
 
-### 12.1 AniList GraphQL query 拡張
-- `source` / `season` / `seasonYear` / `relations` / `characters` / `externalLinks` / `airingSchedule` / `studios` (main+協力) / `tags` (rank 付き) / `trailer` / `rankings`
-- staff: `homeTown` (v56 待機) / `yearsActive` / `primaryOccupations` / `dateOfBirth`
+### 12.1 AniList GraphQL query 拡張 🟡 部分実装
 
-### 12.2 allcinema parser 拡張 (Card 07 と同時)
-- 公開劇場数 / 興行収入 / スクリーン数 / 上映週数 / 映倫 / 配給会社 / 公開形態
+**Query 本体 + BRONZE 完了** (`src/scrapers/queries/anilist.py` 全フィールド実装、BronzeAnime/Person/Character/CVA model 対応済)
+
+**残務 — SILVER 統合側**:
+- [ ] `characters` / `character_voice_actors` SILVER ローダー実装 (`integrate_duckdb.py:integrate()` — DDL は `:213,232` に存在、parquet ロード SQL 未接続)
+- [ ] anime 拡張列を SILVER `_ANIME_SQL_INSERT_TMPL` にマップ: `external_links_json` / `airing_schedule_json` / `trailer_url` / `trailer_site` / `rankings_json`
+- [ ] staff `homeTown` v56 backfill 起動 (persons データ投入時、§1 参照)
+
+**完了済**:
+- anime: `source` / `season` / `seasonYear` / `relations` / `studios` (main+協力) / `tags` (rank 付き) ✅ SILVER 統合済
+- staff: `yearsActive` / `primaryOccupations` / `dateOfBirth` ✅ 全層実装済
+
+### 12.2 ~~allcinema parser 拡張~~ ❌ 廃止
+allcinema scraper 削除済 (commit 300345e)。再導入予定なし (規制強・情報量少でコスパ悪い)。
 
 ### 12.3 MAL / Jikan 本格実装 → TASK_CARDS/12_mal_scraper_jikan/
 
@@ -185,12 +192,11 @@ similarity.py / recommendation.py はスタブ化済 (2行)、重複整理完了
   §10.2  madb raw JSON 再 parse
 
 短期 (parser 拡張 + 再 scrape):
-  TASK_CARDS/10  ANN scraper/parser 改修 + 再 scrape (旧 §11)
-  §12.2           allcinema parser 拡張 (Card 07 と同時)
+  TASK_CARDS/10  ANN scraper/parser 改修 + 再 scrape (旧 §11) ✅ 2026-04-26
+  §12.1           AniList SILVER 統合残務 (characters loader / 拡張列 INSERT)
 
 中期:
-  §12.1  AniList query 拡張 + 再 scrape (現 0件 → full)
-  §12.3  MAL/Jikan 本格実装
+  §12.3  MAL/Jikan 本格実装 (Card 05 全件 scrape ~9.4 日)
   §1     v56 既存データ再スクレイプ (backfill_anilist_hometown.py)
   §3     JVMG credits 再マップ (WIKIDATA_ROLE_MAP 確定後)
 

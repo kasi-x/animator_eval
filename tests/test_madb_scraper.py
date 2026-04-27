@@ -20,6 +20,20 @@ from src.scrapers.mediaarts_scraper import (
     parse_contributor_text,
     parse_jsonld_dump,
 )
+from src.scrapers.parsers.mediaarts import (
+    Broadcaster,
+    BroadcastSchedule,
+    CommitteeMember,
+    OriginalWorkLink,
+    ProductionCompany,
+    VideoRelease,
+    parse_broadcast_schedule,
+    parse_broadcasters,
+    parse_original_work_link,
+    parse_production_committee,
+    parse_production_companies,
+    parse_video_releases,
+)
 
 
 # ============================================================
@@ -689,3 +703,517 @@ class TestEntityResolutionMADB:
         ]
         result = cross_source_match(persons)
         assert "madb:p_abc123def456" not in result
+
+
+# ============================================================
+# §10.2 TestParseBroadcasters
+# ============================================================
+
+
+class TestParseBroadcasters:
+    """Tests for parse_broadcasters (schema:publisher)."""
+
+    def _item(self, pub: str | None) -> dict:
+        base = {"schema:identifier": "C10001"}
+        if pub is not None:
+            base["schema:publisher"] = pub
+        return base
+
+    def test_single_broadcaster(self):
+        result = parse_broadcasters(self._item("CX"))
+        assert len(result) == 1
+        assert result[0].name == "CX"
+        assert result[0].madb_id == "C10001"
+        assert result[0].is_network_station is False
+
+    def test_multi_station_comma(self):
+        """Comma-separated stations -> is_network_station=True."""
+        result = parse_broadcasters(self._item("ABC、TOKYO MX、BS11"))
+        assert len(result) == 3
+        names = {r.name for r in result}
+        assert "ABC" in names
+        assert "TOKYO MX" in names
+        assert all(r.is_network_station for r in result)
+
+    def test_multi_station_hoka(self):
+        """ほか suffix -> is_network_station=True, ほか token dropped."""
+        result = parse_broadcasters(self._item("TX、ほか"))
+        assert len(result) == 1
+        assert result[0].name == "TX"
+        assert result[0].is_network_station is True
+
+    def test_empty_field(self):
+        assert parse_broadcasters(self._item(None)) == []
+        assert parse_broadcasters(self._item("")) == []
+
+    def test_broadcaster_dataclass_type(self):
+        result = parse_broadcasters(self._item("NHK"))
+        assert isinstance(result[0], Broadcaster)
+
+    def test_parse_jsonld_dump_includes_broadcasters(self, tmp_path):
+        """parse_jsonld_dump result has broadcasters key."""
+        import json as _json
+
+        graph = [
+            {
+                "schema:identifier": "C99999",
+                "schema:name": "テスト",
+                "schema:datePublished": "2020",
+                "schema:publisher": "CX",
+            }
+        ]
+        p = tmp_path / "t.json"
+        p.write_text(_json.dumps({"@graph": graph}), encoding="utf-8")
+        records = parse_jsonld_dump(p)
+        assert len(records[0]["broadcasters"]) == 1
+        assert records[0]["broadcasters"][0].name == "CX"
+
+
+# ============================================================
+# §10.2 TestParseBroadcastSchedule
+# ============================================================
+
+
+class TestParseBroadcastSchedule:
+    """Tests for parse_broadcast_schedule (ma:periodDisplayed)."""
+
+    def _item(self, text: str | None) -> dict:
+        base = {"schema:identifier": "C10001"}
+        if text is not None:
+            base["ma:periodDisplayed"] = text
+        return base
+
+    def test_basic(self):
+        # NFKC normalization turns fullwidth parens （）-> () and ～ -> ~
+        text = "「プチプチ・アニメ」（木曜8:30～8:35/NHK教育）枠内で放送。"
+        result = parse_broadcast_schedule(self._item(text))
+        assert isinstance(result, BroadcastSchedule)
+        assert result.madb_id == "C10001"
+        # After NFKC: fullwidth parens/tilde normalised
+        assert "プチプチ・アニメ" in result.raw_text
+        assert "NHK教育" in result.raw_text
+
+    def test_none_when_missing(self):
+        assert parse_broadcast_schedule(self._item(None)) is None
+        assert parse_broadcast_schedule(self._item("")) is None
+        assert parse_broadcast_schedule({"schema:identifier": "X"}) is None
+
+    def test_nfkc_normalization(self):
+        """Fullwidth chars are normalized."""
+        result = parse_broadcast_schedule(self._item("ＮＨＫ"))
+        assert result is not None
+        assert result.raw_text == "NHK"
+
+    def test_parse_jsonld_dump_includes_schedule(self, tmp_path):
+        import json as _json
+
+        graph = [
+            {
+                "schema:identifier": "C88888",
+                "schema:name": "作品",
+                "schema:datePublished": "2021",
+                "ma:periodDisplayed": "金曜24:00放送",
+            }
+        ]
+        p = tmp_path / "t.json"
+        p.write_text(_json.dumps({"@graph": graph}), encoding="utf-8")
+        records = parse_jsonld_dump(p)
+        assert records[0]["broadcast_schedule"] is not None
+        assert "24:00" in records[0]["broadcast_schedule"].raw_text
+
+
+# ============================================================
+# §10.2 TestParseProductionCommittee
+# ============================================================
+
+
+class TestParseProductionCommittee:
+    """Tests for parse_production_committee."""
+
+    def _item(self, pc: str | None) -> dict:
+        base = {"schema:identifier": "C10001"}
+        if pc is not None:
+            base["schema:productionCompany"] = pc
+        return base
+
+    def test_single_committee_member(self):
+        result = parse_production_committee(
+            self._item("[アニメーション制作]マッドハウス ／ [製作]ブロッコリー")
+        )
+        assert len(result) == 1
+        assert result[0].company_name == "ブロッコリー"
+        assert result[0].role_label == "製作"
+
+    def test_multiple_committee_members(self):
+        pc = "[アニメーション制作]スタジオA ／ [製作]会社A ／ [製作]会社B ／ [著作]会社C"
+        result = parse_production_committee(self._item(pc))
+        assert len(result) == 3
+        names = {m.company_name for m in result}
+        assert "会社A" in names
+        assert "会社B" in names
+        assert "会社C" in names
+
+    def test_seisaku_iinkai_label(self):
+        result = parse_production_committee(
+            self._item("[製作委員会]DTB製作委員会")
+        )
+        assert len(result) == 1
+        assert result[0].role_label == "製作委員会"
+
+    def test_empty_when_no_committee(self):
+        result = parse_production_committee(
+            self._item("[アニメーション制作]スタジオ単体")
+        )
+        assert result == []
+
+    def test_empty_field(self):
+        assert parse_production_committee(self._item(None)) == []
+
+    def test_dataclass_type(self):
+        result = parse_production_committee(self._item("[製作]会社X"))
+        assert isinstance(result[0], CommitteeMember)
+
+
+# ============================================================
+# §10.2 TestParseProductionCompanies
+# ============================================================
+
+
+class TestParseProductionCompanies:
+    """Tests for parse_production_companies."""
+
+    def _item(self, pc: str | None) -> dict:
+        base = {"schema:identifier": "C10001"}
+        if pc is not None:
+            base["schema:productionCompany"] = pc
+        return base
+
+    def test_main_studio_flagged(self):
+        result = parse_production_companies(
+            self._item("[アニメーション制作]マッドハウス")
+        )
+        assert len(result) == 1
+        assert result[0].is_main is True
+        assert result[0].company_name == "マッドハウス"
+
+    def test_committee_not_main(self):
+        result = parse_production_companies(
+            self._item("[アニメーション制作]スタジオ ／ [製作]委員会")
+        )
+        main_companies = [c for c in result if c.is_main]
+        non_main = [c for c in result if not c.is_main]
+        assert len(main_companies) == 1
+        assert len(non_main) == 1
+
+    def test_bare_entry_not_main(self):
+        """Entry with no bracket label is included with is_main=False."""
+        result = parse_production_companies(self._item("サンライズ"))
+        assert len(result) == 1
+        assert result[0].is_main is False
+        assert result[0].role_label == ""
+
+    def test_animation_production_en_label(self):
+        """English label 'animation production' also matches is_main."""
+        result = parse_production_companies(
+            self._item("[Animation Production]MADHOUSE")
+        )
+        assert len(result) == 1
+        assert result[0].is_main is True
+
+    def test_empty_field(self):
+        assert parse_production_companies(self._item(None)) == []
+
+    def test_dataclass_type(self):
+        result = parse_production_companies(self._item("[アニメーション制作]X"))
+        assert isinstance(result[0], ProductionCompany)
+
+
+# ============================================================
+# §10.2 TestParseVideoReleases
+# ============================================================
+
+
+class TestParseVideoReleases:
+    """Tests for parse_video_releases."""
+
+    def _item(self, **kwargs) -> dict:
+        base = {"schema:identifier": "M1000001"}
+        base.update(kwargs)
+        return base
+
+    def test_basic_dvd(self):
+        result = parse_video_releases(
+            self._item(
+                **{
+                    "ma:mediaFormat": "DVD",
+                    "schema:datePublished": "2010-04-21",
+                    "schema:publisher": "バンダイビジュアル",
+                    "schema:productID": "BCBA-3791",
+                    "schema:isPartOf": {
+                        "@id": "https://mediaarts-db.artmuseums.go.jp/id/C12345"
+                    },
+                }
+            )
+        )
+        assert len(result) == 1
+        vr = result[0]
+        assert isinstance(vr, VideoRelease)
+        assert vr.media_format == "DVD"
+        assert vr.date_published == "2010-04-21"
+        assert vr.publisher == "バンダイビジュアル"
+        assert vr.product_id == "BCBA-3791"
+        assert vr.series_madb_id == "C12345"
+
+    def test_bluray(self):
+        result = parse_video_releases(
+            self._item(**{"ma:mediaFormat": "Blu-ray", "schema:datePublished": "2015"})
+        )
+        assert result[0].media_format == "Blu-ray"
+
+    def test_series_id_extracted(self):
+        item = self._item(
+            **{
+                "ma:mediaFormat": "DVD",
+                "schema:datePublished": "2010",
+                "schema:isPartOf": {
+                    "@id": "https://mediaarts-db.artmuseums.go.jp/id/C99001"
+                },
+            }
+        )
+        result = parse_video_releases(item)
+        assert result[0].series_madb_id == "C99001"
+
+    def test_empty_when_no_format_no_date(self):
+        result = parse_video_releases(self._item())
+        assert result == []
+
+    def test_runtime_parsed(self):
+        result = parse_video_releases(
+            self._item(**{"ma:mediaFormat": "DVD", "schema:datePublished": "2010", "schema:duration": 25})
+        )
+        assert result[0].runtime_min == 25
+
+    def test_missing_identifier_empty(self):
+        item = {"ma:mediaFormat": "DVD", "schema:datePublished": "2010"}
+        assert parse_video_releases(item) == []
+
+
+# ============================================================
+# §10.2 TestParseOriginalWorkLink
+# ============================================================
+
+
+class TestParseOriginalWorkLink:
+    """Tests for parse_original_work_link."""
+
+    def _item(self, **kwargs) -> dict:
+        base = {"schema:identifier": "C10001"}
+        base.update(kwargs)
+        return base
+
+    def test_basic_with_name_and_creator(self):
+        result = parse_original_work_link(
+            self._item(
+                **{
+                    "ma:originalWorkName": "［原作］「こちら葛飾区亀有公園前派出所」",
+                    "ma:originalWorkCreator": "［原作］秋本治",
+                    "schema:isPartOf": {
+                        "@id": "https://mediaarts-db.artmuseums.go.jp/id/C2515"
+                    },
+                }
+            )
+        )
+        assert isinstance(result, OriginalWorkLink)
+        assert result.madb_id == "C10001"
+        # Brackets and quotes stripped
+        assert "こちら葛飾区亀有公園前派出所" in result.work_name
+        # NFKC normalizes ［ ］ fullwidth brackets to [ ]
+        assert result.creator_text == "[原作]秋本治"
+        assert result.series_link_id == "C2515"
+
+    def test_none_when_no_fields(self):
+        assert parse_original_work_link(self._item()) is None
+
+    def test_only_creator_is_sufficient(self):
+        result = parse_original_work_link(
+            self._item(**{"ma:originalWorkCreator": "[原作]村上春樹"})
+        )
+        assert result is not None
+        assert result.work_name == ""
+        assert result.creator_text == "[原作]村上春樹"
+
+    def test_bracket_cleaning(self):
+        """Leading bracket label stripped from work_name."""
+        result = parse_original_work_link(
+            self._item(**{"ma:originalWorkName": "［原作］「タイトル名」"})
+        )
+        assert result is not None
+        assert result.work_name == "タイトル名"
+
+    def test_no_series_link(self):
+        """Works without schema:isPartOf have empty series_link_id."""
+        result = parse_original_work_link(
+            self._item(**{"ma:originalWorkName": "作品名"})
+        )
+        assert result is not None
+        assert result.series_link_id == ""
+
+    def test_missing_identifier_is_none(self):
+        item = {"ma:originalWorkName": "作品名"}
+        assert parse_original_work_link(item) is None
+
+
+# ============================================================
+# §10.2 TestScrapeMADBNewTables — integration test for new BRONZE tables
+# ============================================================
+
+
+class TestScrapeMADBNewTables:
+    """Integration tests verifying new BRONZE tables are written during scrape_madb."""
+
+    def test_scrape_writes_broadcasters(self, tmp_path):
+        """Broadcaster rows written to BRONZE when publisher field present."""
+        import asyncio
+
+        import src.scrapers.bronze_writer as bw_mod
+        from src.scrapers.mediaarts_scraper import scrape_madb
+
+        bronze_root = tmp_path / "bronze"
+        with patch.object(bw_mod, "DEFAULT_BRONZE_ROOT", bronze_root):
+            data_dir = tmp_path / "madb"
+            data_dir.mkdir()
+            json_data = {
+                "@graph": [
+                    {
+                        "schema:identifier": "C77001",
+                        "schema:name": "放送テスト",
+                        "schema:datePublished": "2020",
+                        "schema:publisher": "NHK",
+                    }
+                ]
+            }
+            json_path = data_dir / "metadata207.json"
+            json_path.write_text(
+                json.dumps(json_data, ensure_ascii=False), encoding="utf-8"
+            )
+
+            async def mock_download(data_dir, version="latest", **kwargs):
+                return {"AnimationTVRegularSeries": json_path}
+
+            with patch(
+                "src.scrapers.mediaarts_scraper.download_madb_dataset",
+                side_effect=mock_download,
+            ):
+                stats = asyncio.run(scrape_madb(data_dir=data_dir, max_anime=10))
+
+        assert stats["broadcasters_created"] == 1
+        assert stats["anime_fetched"] == 1
+
+    def test_scrape_writes_production_committee(self, tmp_path):
+        """Committee rows written when productionCompany has 製作 entries."""
+        import asyncio
+
+        import src.scrapers.bronze_writer as bw_mod
+        from src.scrapers.mediaarts_scraper import scrape_madb
+
+        bronze_root = tmp_path / "bronze"
+        with patch.object(bw_mod, "DEFAULT_BRONZE_ROOT", bronze_root):
+            data_dir = tmp_path / "madb"
+            data_dir.mkdir()
+            json_data = {
+                "@graph": [
+                    {
+                        "schema:identifier": "C77002",
+                        "schema:name": "委員会テスト",
+                        "schema:datePublished": "2021",
+                        "schema:productionCompany": (
+                            "[アニメーション制作]スタジオA ／ [製作]委員会A ／ [製作]委員会B"
+                        ),
+                    }
+                ]
+            }
+            json_path = data_dir / "metadata207.json"
+            json_path.write_text(
+                json.dumps(json_data, ensure_ascii=False), encoding="utf-8"
+            )
+
+            async def mock_download(data_dir, version="latest", **kwargs):
+                return {"AnimationTVRegularSeries": json_path}
+
+            with patch(
+                "src.scrapers.mediaarts_scraper.download_madb_dataset",
+                side_effect=mock_download,
+            ):
+                stats = asyncio.run(scrape_madb(data_dir=data_dir, max_anime=10))
+
+        assert stats["committee_members_created"] == 2
+        assert stats["production_companies_created"] == 3  # all 3 entries
+
+    def test_scrape_writes_original_work_link(self, tmp_path):
+        """Original work link row written when ma:originalWorkName present."""
+        import asyncio
+
+        import src.scrapers.bronze_writer as bw_mod
+        from src.scrapers.mediaarts_scraper import scrape_madb
+
+        bronze_root = tmp_path / "bronze"
+        with patch.object(bw_mod, "DEFAULT_BRONZE_ROOT", bronze_root):
+            data_dir = tmp_path / "madb"
+            data_dir.mkdir()
+            json_data = {
+                "@graph": [
+                    {
+                        "schema:identifier": "C77003",
+                        "schema:name": "原作テスト",
+                        "schema:datePublished": "2022",
+                        "ma:originalWorkName": "［原作］「漫画タイトル」",
+                        "ma:originalWorkCreator": "［原作］作者名",
+                    }
+                ]
+            }
+            json_path = data_dir / "metadata207.json"
+            json_path.write_text(
+                json.dumps(json_data, ensure_ascii=False), encoding="utf-8"
+            )
+
+            async def mock_download(data_dir, version="latest", **kwargs):
+                return {"AnimationTVRegularSeries": json_path}
+
+            with patch(
+                "src.scrapers.mediaarts_scraper.download_madb_dataset",
+                side_effect=mock_download,
+            ):
+                stats = asyncio.run(scrape_madb(data_dir=data_dir, max_anime=10))
+
+        assert stats["original_work_links_created"] == 1
+
+    def test_scrape_stats_keys_present(self, tmp_path):
+        """All §10.2 stat keys present in stats dict."""
+        import asyncio
+
+        import src.scrapers.bronze_writer as bw_mod
+        from src.scrapers.mediaarts_scraper import scrape_madb
+
+        bronze_root = tmp_path / "bronze"
+        with patch.object(bw_mod, "DEFAULT_BRONZE_ROOT", bronze_root):
+            data_dir = tmp_path / "madb"
+            data_dir.mkdir()
+
+            async def mock_download(data_dir, version="latest", **kwargs):
+                return {}
+
+            with patch(
+                "src.scrapers.mediaarts_scraper.download_madb_dataset",
+                side_effect=mock_download,
+            ):
+                stats = asyncio.run(scrape_madb(data_dir=data_dir, max_anime=10))
+
+        for key in [
+            "broadcasters_created",
+            "broadcast_schedules_created",
+            "committee_members_created",
+            "production_companies_created",
+            "video_releases_created",
+            "original_work_links_created",
+        ]:
+            assert key in stats

@@ -36,6 +36,19 @@ from src.scrapers.parsers.mediaarts import (  # noqa: F401
     _extract_name_from_schema,
     _extract_year,
     _extract_studios,
+    # §10.2 additions
+    parse_broadcasters,
+    parse_broadcast_schedule,
+    parse_production_committee,
+    parse_production_companies,
+    parse_video_releases,
+    parse_original_work_link,
+    Broadcaster,
+    BroadcastSchedule,
+    CommitteeMember,
+    ProductionCompany,
+    VideoRelease,
+    OriginalWorkLink,
 )
 from src.utils.config import SCRAPE_CHECKPOINT_INTERVAL
 
@@ -187,6 +200,94 @@ async def download_madb_dataset(
         return downloaded
 
 
+# ---------------------------------------------------------------------------
+# §10.2 — per-record writers for new BRONZE tables
+# ---------------------------------------------------------------------------
+
+
+def _write_broadcasters(bw: object, record: dict, stats: dict) -> None:
+    """Append broadcaster rows from parsed record."""
+    for b in record.get("broadcasters", []):
+        bw.append(  # type: ignore[union-attr]
+            {
+                "madb_id": b.madb_id,
+                "name": b.name,
+                "is_network_station": b.is_network_station,
+            }
+        )
+        stats["broadcasters_created"] += 1
+
+
+def _write_broadcast_schedule(bw: object, record: dict, stats: dict) -> None:
+    """Append broadcast schedule row from parsed record."""
+    sched = record.get("broadcast_schedule")
+    if sched is not None:
+        bw.append({"madb_id": sched.madb_id, "raw_text": sched.raw_text})  # type: ignore[union-attr]
+        stats["broadcast_schedules_created"] += 1
+
+
+def _write_production_committee(bw: object, record: dict, stats: dict) -> None:
+    """Append production committee rows from parsed record."""
+    for m in record.get("production_committee", []):
+        bw.append(  # type: ignore[union-attr]
+            {
+                "madb_id": m.madb_id,
+                "company_name": m.company_name,
+                "role_label": m.role_label,
+            }
+        )
+        stats["committee_members_created"] += 1
+
+
+def _write_production_companies(bw: object, record: dict, stats: dict) -> None:
+    """Append production company rows from parsed record."""
+    for c in record.get("production_companies", []):
+        bw.append(  # type: ignore[union-attr]
+            {
+                "madb_id": c.madb_id,
+                "company_name": c.company_name,
+                "role_label": c.role_label,
+                "is_main": c.is_main,
+            }
+        )
+        stats["production_companies_created"] += 1
+
+
+def _write_video_releases(bw: object, record: dict, stats: dict) -> None:
+    """Append video release rows from parsed record."""
+    for vr in record.get("video_releases", []):
+        bw.append(  # type: ignore[union-attr]
+            {
+                "madb_id": vr.madb_id,
+                "series_madb_id": vr.series_madb_id,
+                "media_format": vr.media_format,
+                "date_published": vr.date_published,
+                "publisher": vr.publisher,
+                "product_id": vr.product_id,
+                "gtin": vr.gtin,
+                "runtime_min": vr.runtime_min,
+                "volume_number": vr.volume_number,
+                "release_title": vr.release_title,
+            }
+        )
+        stats["video_releases_created"] += 1
+
+
+def _write_original_work_link(bw: object, record: dict, stats: dict) -> None:
+    """Append original work link row from parsed record."""
+    link = record.get("original_work_link")
+    if link is not None:
+        bw.append(  # type: ignore[union-attr]
+            {
+                "madb_id": link.madb_id,
+                "work_name": link.work_name,
+                "creator_text": link.creator_text,
+                "series_link_id": link.series_link_id,
+            }
+        )
+        stats["original_work_links_created"] += 1
+
+
 async def scrape_madb(
     data_dir: Path | None = None,
     version: str = "latest",
@@ -216,6 +317,13 @@ async def scrape_madb(
         "anime_metadata_only": 0,
         "credits_created": 0,
         "persons_created": 0,
+        # §10.2 additions
+        "broadcasters_created": 0,
+        "broadcast_schedules_created": 0,
+        "committee_members_created": 0,
+        "production_companies_created": 0,
+        "video_releases_created": 0,
+        "original_work_links_created": 0,
     }
     person_cache: dict[str, Person] = {}
 
@@ -233,10 +341,30 @@ async def scrape_madb(
         all_collections.update(ANIME_COLLECTION_FILES_EXTENDED)
     format_by_type = {label: fmt for _zip, (label, fmt) in all_collections.items()}
 
-    group = BronzeWriterGroup("mediaarts", tables=["anime", "persons", "credits"])
+    group = BronzeWriterGroup(
+        "mediaarts",
+        tables=[
+            "anime",
+            "persons",
+            "credits",
+            # §10.2 additions
+            "broadcasters",
+            "broadcast_schedule",
+            "production_committee",
+            "production_companies",
+            "video_releases",
+            "original_work_links",
+        ],
+    )
     anime_bw = group["anime"]
     persons_bw = group["persons"]
     credits_bw = group["credits"]
+    broadcasters_bw = group["broadcasters"]
+    broadcast_schedule_bw = group["broadcast_schedule"]
+    production_committee_bw = group["production_committee"]
+    production_companies_bw = group["production_companies"]
+    video_releases_bw = group["video_releases"]
+    original_work_links_bw = group["original_work_links"]
 
     # Phase B: Parse JSON-LD per collection and write to parquet
     total_processed = 0
@@ -307,6 +435,14 @@ async def scrape_madb(
                         credits_bw.append(credit.model_dump(mode="json"))
                         stats["credits_created"] += 1
 
+                # §10.2 — write new BRONZE tables
+                _write_broadcasters(broadcasters_bw, record, stats)
+                _write_broadcast_schedule(broadcast_schedule_bw, record, stats)
+                _write_production_committee(production_committee_bw, record, stats)
+                _write_production_companies(production_companies_bw, record, stats)
+                _write_video_releases(video_releases_bw, record, stats)
+                _write_original_work_link(original_work_links_bw, record, stats)
+
                 total_processed += 1
                 p.advance()
                 if total_processed % checkpoint_interval == 0:
@@ -333,7 +469,7 @@ async def scrape_madb(
 
 
 @app.command()
-def main(
+def run(
     max_records: int = typer.Option(
         0,
         "--max-records",
