@@ -243,56 +243,55 @@ def run(
         offset = start_offset
         pages_since_checkpoint = 0
 
-        group = BronzeWriterGroup("jvmg", tables=["anime", "persons", "credits"])
-        anime_bw = group["anime"]
-        persons_bw = group["persons"]
-        credits_bw = group["credits"]
-
         try:
-            with scrape_progress(
-                total=max_records,
-                description="scraping wikidata",
-                enabled=progress_override,
-            ) as p:
-                while offset < max_records:
-                    query = ANIME_STAFF_QUERY.format(limit=page_size, offset=offset)
-                    bindings = await client.query(query)
-                    if not bindings:
-                        break
+            with BronzeWriterGroup(
+                "jvmg", tables=["anime", "persons", "credits"]
+            ) as group:
+                anime_bw = group["anime"]
+                persons_bw = group["persons"]
+                credits_bw = group["credits"]
 
-                    anime_list, persons, credits = parse_wikidata_results(bindings)
-                    for anime in anime_list:
-                        anime_bw.append(anime.model_dump(mode="json"))
-                        total_anime += 1
-                    for person in persons:
-                        persons_bw.append(person.model_dump(mode="json"))
-                        total_persons += 1
-                    for credit in credits:
-                        credits_bw.append(credit.model_dump(mode="json"))
-                        total_credits += 1
+                with scrape_progress(
+                    total=max_records,
+                    description="scraping wikidata",
+                    enabled=progress_override,
+                ) as p:
+                    while offset < max_records:
+                        query = ANIME_STAFF_QUERY.format(limit=page_size, offset=offset)
+                        bindings = await client.query(query)
+                        if not bindings:
+                            break
 
-                    pages_since_checkpoint += 1
-                    offset += page_size
-                    p.advance(min(page_size, max(0, max_records - (offset - page_size))))
+                        anime_list, persons, credits = parse_wikidata_results(bindings)
+                        for anime in anime_list:
+                            anime_bw.append(anime.model_dump(mode="json"))
+                            total_anime += 1
+                        for person in persons:
+                            persons_bw.append(person.model_dump(mode="json"))
+                            total_persons += 1
+                        for credit in credits:
+                            credits_bw.append(credit.model_dump(mode="json"))
+                            total_credits += 1
 
-                    # Flush checkpoint every N pages
-                    if pages_since_checkpoint >= checkpoint_interval:
-                        group.flush_all()
-                        cp["last_offset"] = offset
-                        cp["total_anime"] = total_anime
-                        cp["total_persons"] = total_persons
-                        cp["total_credits"] = total_credits
-                        cp.save()
-                        p.log("checkpoint_saved", last_offset=offset)
-                        pages_since_checkpoint = 0
+                        pages_since_checkpoint += 1
+                        offset += page_size
+                        p.advance(min(page_size, max(0, max_records - (offset - page_size))))
 
-                    if len(bindings) < page_size:
-                        break
+                        # Flush checkpoint every N pages
+                        if pages_since_checkpoint >= checkpoint_interval:
+                            group.flush_all()
+                            cp["last_offset"] = offset
+                            cp["total_anime"] = total_anime
+                            cp["total_persons"] = total_persons
+                            cp["total_credits"] = total_credits
+                            cp.save()
+                            p.log("checkpoint_saved", last_offset=offset)
+                            pages_since_checkpoint = 0
 
+                        if len(bindings) < page_size:
+                            break
         finally:
             await client.close()
-            group.flush_all()
-            group.compact_all()
 
         # Delete checkpoint on successful completion
         cp.delete()

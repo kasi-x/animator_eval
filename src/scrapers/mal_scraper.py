@@ -11,6 +11,7 @@ Rate limit: 3 req/s + 60 req/min (DualWindowRateLimiter).
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -298,6 +299,37 @@ async def _phase_a_anime(
     ckpt["discovered_manga_ids"] = list(discovered_manga)
 
 
+async def _safe_call(endpoint: str, mal_id: int, coro):
+    """Run a Jikan call, log + swallow exceptions, return result or None."""
+    try:
+        return await coro
+    except Exception as e:
+        log.error(f"fetch_{endpoint}_failed", mal_id=mal_id, error=str(e))
+        return None
+
+
+def _emit_list(group: BronzeWriterGroup, table: str, records) -> None:
+    for r in records:
+        group[table].append(asdict(r))
+
+
+# Simple endpoints: result_or_None → list-of-records → single bronze table.
+# (Complex endpoints with tuple unpacking / side effects stay inline below.)
+_SIMPLE_LIST_ENDPOINTS = (
+    ("anime_external", "anime_external", "get_anime_external", parse_anime_external),
+    ("anime_streaming", "anime_streaming", "get_anime_streaming", parse_anime_streaming),
+    ("anime_pictures", "anime_pictures", "get_anime_pictures", parse_anime_pictures),
+    ("anime_recommendations", "anime_recommendations", "get_anime_recommendations", parse_anime_recommendations),
+    ("anime_news", "anime_news", "get_anime_news", parse_anime_news),
+)
+
+# Single-record endpoints: result → one record → append to one table.
+_SINGLE_RECORD_ENDPOINTS = (
+    ("anime_statistics", "anime_statistics", "get_anime_statistics", parse_anime_statistics),
+    ("anime_moreinfo", "anime_moreinfo", "get_anime_moreinfo", parse_anime_moreinfo),
+)
+
+
 async def _fetch_one_anime(
     client: JikanClient,
     group: BronzeWriterGroup,
@@ -308,129 +340,125 @@ async def _fetch_one_anime(
     discovered_manga: set[int],
 ) -> None:
     """Fetch 13 sub-endpoints for one anime and write to BronzeWriters."""
-    # /anime/{id}/full → 7 dataclass types
-    try:
-        raw = await client.get_anime_full(mal_id)
+    # /anime/{id}/full → 7 dataclass types, with manga & producer discovery
+    raw = await _safe_call("anime_full", mal_id, client.get_anime_full(mal_id))
+    if raw is not None:
         record, genres, relations, themes, externals, streamings, studios = parse_anime_full(raw)
         group["anime"].append(asdict(record))
-        for g in genres:
-            group["anime_genres"].append(asdict(g))
-        for r in relations:
-            group["anime_relations"].append(asdict(r))
-            if r.target_type == "manga":
-                discovered_manga.add(r.target_mal_id)
-        for t in themes:
-            group["anime_themes"].append(asdict(t))
-        for e in externals:
-            group["anime_external"].append(asdict(e))
-        for s in streamings:
-            group["anime_streaming"].append(asdict(s))
-        for s in studios:
-            group["anime_studios"].append(asdict(s))
-            discovered_producers.add(s.mal_producer_id)
-    except Exception as e:
-        log.error("fetch_anime_full_failed", mal_id=mal_id, error=str(e))
+        _emit_list(group, "anime_genres", genres)
+        for relation in relations:
+            group["anime_relations"].append(asdict(relation))
+            if relation.target_type == "manga":
+                discovered_manga.add(relation.target_mal_id)
+        _emit_list(group, "anime_themes", themes)
+        _emit_list(group, "anime_external", externals)
+        _emit_list(group, "anime_streaming", streamings)
+        for studio in studios:
+            group["anime_studios"].append(asdict(studio))
+            discovered_producers.add(studio.mal_producer_id)
 
-    # /anime/{id}/staff
-    try:
-        raw = await client.get_anime_staff(mal_id)
-        for c in parse_anime_staff_full(mal_id, raw):
-            group["staff_credits"].append(asdict(c))
-            discovered_persons.add(c.mal_person_id)
-    except Exception as e:
-        log.error("fetch_anime_staff_failed", mal_id=mal_id, error=str(e))
+    # /anime/{id}/staff → person discovery
+    raw = await _safe_call("anime_staff", mal_id, client.get_anime_staff(mal_id))
+    if raw is not None:
+        for credit in parse_anime_staff_full(mal_id, raw):
+            group["staff_credits"].append(asdict(credit))
+            discovered_persons.add(credit.mal_person_id)
 
-    # /anime/{id}/characters
-    try:
-        raw = await client.get_anime_characters(mal_id)
+    # /anime/{id}/characters → character + VA-person discovery
+    raw = await _safe_call("anime_characters", mal_id, client.get_anime_characters(mal_id))
+    if raw is not None:
         chars, vas = parse_anime_characters_va(mal_id, raw)
-        for c in chars:
-            group["anime_characters"].append(asdict(c))
-            discovered_chars.add(c.mal_character_id)
-        for v in vas:
-            group["va_credits"].append(asdict(v))
-            discovered_persons.add(v.mal_person_id)
-    except Exception as e:
-        log.error("fetch_anime_characters_failed", mal_id=mal_id, error=str(e))
+        for char in chars:
+            group["anime_characters"].append(asdict(char))
+            discovered_chars.add(char.mal_character_id)
+        for va in vas:
+            group["va_credits"].append(asdict(va))
+            discovered_persons.add(va.mal_person_id)
 
-    # /anime/{id}/episodes (paginated)
-    try:
-        page = 1
-        while True:
-            raw = await client.get_anime_episodes(mal_id, page=page)
-            for ep in parse_anime_episodes(mal_id, raw):
-                group["anime_episodes"].append(asdict(ep))
-            pagination = raw.get("pagination") or {}
-            if not pagination.get("has_next_page"):
-                break
-            page += 1
-    except Exception as e:
-        log.error("fetch_anime_episodes_failed", mal_id=mal_id, error=str(e))
+    # /anime/{id}/episodes (paginated, no side effects)
+    page = 1
+    while True:
+        raw = await _safe_call(
+            "anime_episodes", mal_id, client.get_anime_episodes(mal_id, page=page)
+        )
+        if raw is None:
+            break
+        _emit_list(group, "anime_episodes", parse_anime_episodes(mal_id, raw))
+        if not (raw.get("pagination") or {}).get("has_next_page"):
+            break
+        page += 1
 
-    # /anime/{id}/external (completeness supplement)
-    try:
-        raw = await client.get_anime_external(mal_id)
-        for e in parse_anime_external(mal_id, raw):
-            group["anime_external"].append(asdict(e))
-    except Exception as e:
-        log.error("fetch_anime_external_failed", mal_id=mal_id, error=str(e))
-
-    # /anime/{id}/streaming
-    try:
-        raw = await client.get_anime_streaming(mal_id)
-        for s in parse_anime_streaming(mal_id, raw):
-            group["anime_streaming"].append(asdict(s))
-    except Exception as e:
-        log.error("fetch_anime_streaming_failed", mal_id=mal_id, error=str(e))
-
-    # /anime/{id}/videos
-    try:
-        raw = await client.get_anime_videos(mal_id)
+    # /anime/{id}/videos → 2 lists, no side effects
+    raw = await _safe_call("anime_videos", mal_id, client.get_anime_videos(mal_id))
+    if raw is not None:
         promos, ep_vids = parse_anime_videos(mal_id, raw)
-        for p in promos:
-            group["anime_videos_promo"].append(asdict(p))
-        for v in ep_vids:
-            group["anime_videos_ep"].append(asdict(v))
-    except Exception as e:
-        log.error("fetch_anime_videos_failed", mal_id=mal_id, error=str(e))
+        _emit_list(group, "anime_videos_promo", promos)
+        _emit_list(group, "anime_videos_ep", ep_vids)
 
-    # /anime/{id}/pictures
-    try:
-        raw = await client.get_anime_pictures(mal_id)
-        for pic in parse_anime_pictures(mal_id, raw):
-            group["anime_pictures"].append(asdict(pic))
-    except Exception as e:
-        log.error("fetch_anime_pictures_failed", mal_id=mal_id, error=str(e))
+    for endpoint_name, table, getter_name, parser in _SIMPLE_LIST_ENDPOINTS:
+        raw = await _safe_call(endpoint_name, mal_id, getattr(client, getter_name)(mal_id))
+        if raw is not None:
+            _emit_list(group, table, parser(mal_id, raw))
 
-    # /anime/{id}/statistics
-    try:
-        raw = await client.get_anime_statistics(mal_id)
-        group["anime_statistics"].append(asdict(parse_anime_statistics(mal_id, raw)))
-    except Exception as e:
-        log.error("fetch_anime_statistics_failed", mal_id=mal_id, error=str(e))
+    for endpoint_name, table, getter_name, parser in _SINGLE_RECORD_ENDPOINTS:
+        raw = await _safe_call(endpoint_name, mal_id, getattr(client, getter_name)(mal_id))
+        if raw is not None:
+            group[table].append(asdict(parser(mal_id, raw)))
 
-    # /anime/{id}/moreinfo
-    try:
-        raw = await client.get_anime_moreinfo(mal_id)
-        group["anime_moreinfo"].append(asdict(parse_anime_moreinfo(mal_id, raw)))
-    except Exception as e:
-        log.error("fetch_anime_moreinfo_failed", mal_id=mal_id, error=str(e))
 
-    # /anime/{id}/recommendations
-    try:
-        raw = await client.get_anime_recommendations(mal_id)
-        for r in parse_anime_recommendations(mal_id, raw):
-            group["anime_recommendations"].append(asdict(r))
-    except Exception as e:
-        log.error("fetch_anime_recommendations_failed", mal_id=mal_id, error=str(e))
+# ── shared loop helper ────────────────────────────────────────────────────────
 
-    # /anime/{id}/news
-    try:
-        raw = await client.get_anime_news(mal_id)
-        for n in parse_anime_news(mal_id, raw):
-            group["anime_news"].append(asdict(n))
-    except Exception as e:
-        log.error("fetch_anime_news_failed", mal_id=mal_id, error=str(e))
+async def _iterate_with_checkpoints(
+    items: list[int],
+    completed: set[int],
+    processor: Callable[[int], Awaitable[None]],
+    *,
+    cp: Checkpoint,
+    ckpt_key: str,
+    group: BronzeWriterGroup,
+    progress,
+    checkpoint_interval: int,
+    error_event: str,
+    done_start: int = 0,
+) -> int:
+    """Iterate ``items``, calling ``processor(id)`` for each, with periodic checkpoints.
+
+    Wraps each ``processor`` call in try/except so a failure on one ID does not
+    abort the whole loop; the failed ID is still added to ``completed`` to avoid
+    re-fetching on resume (matches existing per-phase behaviour).
+
+    Args:
+        items:               IDs to process (pre-filtered, completed already excluded).
+        completed:           Set tracking completed IDs; mutated in place.
+        processor:           Async callback that fetches/parses/appends rows for one ID.
+        cp:                  Checkpoint to flush mid-loop.
+        ckpt_key:            Key under ``cp.data`` to write ``list(completed)`` to.
+        group:               BronzeWriterGroup whose ``flush_all`` is called every checkpoint.
+        progress:            Object exposing ``.advance()`` per processed item.
+        checkpoint_interval: Number of items between flush+checkpoint saves.
+        error_event:         structlog event name used when ``processor`` raises.
+        done_start:          Initial value of the running counter (lets phases share
+                             a single counter across two sub-loops).
+
+    Returns:
+        Total ``done`` count after the loop (callers can pass this as ``done_start``
+        of a subsequent call to keep checkpoint cadence consistent).
+    """
+    ckpt = cp.data
+    done = done_start
+    for item_id in items:
+        try:
+            await processor(item_id)
+        except Exception as e:
+            log.error(error_event, id=item_id, error=str(e))
+        completed.add(item_id)
+        done += 1
+        progress.advance()
+        if done % checkpoint_interval == 0:
+            ckpt[ckpt_key] = list(completed)
+            group.flush_all()
+            cp.save(stamp_time=False)
+    return done
 
 
 # ── Phase B ───────────────────────────────────────────────────────────────────
@@ -455,38 +483,29 @@ async def _phase_b_persons_characters(
     log.info("phase_b_start", pending_persons=len(pending_persons),
              pending_chars=len(pending_chars))
 
-    done = 0
-    for pid in pending_persons:
-        try:
-            raw = await client.get_person_full(pid)
-            group["persons"].append(asdict(parse_person_full(raw)))
-            for pic in parse_person_pictures(pid, await client.get_person_pictures(pid)):
-                group["person_pictures"].append(asdict(pic))
-        except Exception as e:
-            log.error("phase_b_person_failed", pid=pid, error=str(e))
-        completed_persons.add(pid)
-        done += 1
-        p.advance()
-        if done % checkpoint_interval == 0:
-            ckpt["completed_person_ids"] = list(completed_persons)
-            group.flush_all()
-            cp.save(stamp_time=False)
+    async def _process_person(pid: int) -> None:
+        raw = await client.get_person_full(pid)
+        group["persons"].append(asdict(parse_person_full(raw)))
+        for pic in parse_person_pictures(pid, await client.get_person_pictures(pid)):
+            group["person_pictures"].append(asdict(pic))
 
-    for cid in pending_chars:
-        try:
-            raw = await client.get_character_full(cid)
-            group["characters"].append(asdict(parse_character_full(raw)))
-            for pic in parse_character_pictures(cid, await client.get_character_pictures(cid)):
-                group["character_pictures"].append(asdict(pic))
-        except Exception as e:
-            log.error("phase_b_character_failed", cid=cid, error=str(e))
-        completed_chars.add(cid)
-        done += 1
-        p.advance()
-        if done % checkpoint_interval == 0:
-            ckpt["completed_character_ids"] = list(completed_chars)
-            group.flush_all()
-            cp.save(stamp_time=False)
+    async def _process_character(cid: int) -> None:
+        raw = await client.get_character_full(cid)
+        group["characters"].append(asdict(parse_character_full(raw)))
+        for pic in parse_character_pictures(cid, await client.get_character_pictures(cid)):
+            group["character_pictures"].append(asdict(pic))
+
+    done = await _iterate_with_checkpoints(
+        pending_persons, completed_persons, _process_person,
+        cp=cp, ckpt_key="completed_person_ids", group=group, progress=p,
+        checkpoint_interval=checkpoint_interval, error_event="phase_b_person_failed",
+    )
+    await _iterate_with_checkpoints(
+        pending_chars, completed_chars, _process_character,
+        cp=cp, ckpt_key="completed_character_ids", group=group, progress=p,
+        checkpoint_interval=checkpoint_interval, error_event="phase_b_character_failed",
+        done_start=done,
+    )
 
     ckpt["completed_person_ids"] = list(completed_persons)
     ckpt["completed_character_ids"] = list(completed_chars)
@@ -535,49 +554,40 @@ async def _phase_c_producers_manga_masters(
     log.info("phase_c_start", pending_producers=len(pending_producers),
              pending_manga=len(pending_manga))
 
-    done = 0
-    for pid in pending_producers:
-        try:
-            raw = await client.get_producer_full(pid)
-            prod, externals = parse_producer_full(raw)
-            group["producers"].append(asdict(prod))
-            # Completeness: also hit /external endpoint
-            ext_raw = await client.get_producer_external(pid)
-            for e in parse_producer_external(pid, ext_raw):
-                externals.append(e)
-            seen_urls: set[str] = set()
-            for e in externals:
-                if e.url not in seen_urls:
-                    group["producer_external"].append(asdict(e))
-                    seen_urls.add(e.url)
-        except Exception as e:
-            log.error("phase_c_producer_failed", pid=pid, error=str(e))
-        completed_producers.add(pid)
-        done += 1
-        p.advance()
-        if done % checkpoint_interval == 0:
-            ckpt["completed_producer_ids"] = list(completed_producers)
-            group.flush_all()
-            cp.save(stamp_time=False)
+    async def _process_producer(pid: int) -> None:
+        raw = await client.get_producer_full(pid)
+        prod, externals = parse_producer_full(raw)
+        group["producers"].append(asdict(prod))
+        # Completeness: also hit /external endpoint
+        ext_raw = await client.get_producer_external(pid)
+        for e in parse_producer_external(pid, ext_raw):
+            externals.append(e)
+        seen_urls: set[str] = set()
+        for e in externals:
+            if e.url not in seen_urls:
+                group["producer_external"].append(asdict(e))
+                seen_urls.add(e.url)
 
-    for mid in pending_manga:
-        try:
-            raw = await client.get_manga_full(mid)
-            manga, authors, serials, rels = parse_manga_full(raw)
-            group["manga"].append(asdict(manga))
-            for a in authors:
-                group["manga_authors"].append(asdict(a))
-            for s in serials:
-                group["manga_serializations"].append(asdict(s))
-        except Exception as e:
-            log.error("phase_c_manga_failed", mid=mid, error=str(e))
-        completed_manga.add(mid)
-        done += 1
-        p.advance()
-        if done % checkpoint_interval == 0:
-            ckpt["completed_manga_ids"] = list(completed_manga)
-            group.flush_all()
-            cp.save(stamp_time=False)
+    async def _process_manga(mid: int) -> None:
+        raw = await client.get_manga_full(mid)
+        manga, authors, serials, rels = parse_manga_full(raw)
+        group["manga"].append(asdict(manga))
+        for a in authors:
+            group["manga_authors"].append(asdict(a))
+        for s in serials:
+            group["manga_serializations"].append(asdict(s))
+
+    done = await _iterate_with_checkpoints(
+        pending_producers, completed_producers, _process_producer,
+        cp=cp, ckpt_key="completed_producer_ids", group=group, progress=p,
+        checkpoint_interval=checkpoint_interval, error_event="phase_c_producer_failed",
+    )
+    await _iterate_with_checkpoints(
+        pending_manga, completed_manga, _process_manga,
+        cp=cp, ckpt_key="completed_manga_ids", group=group, progress=p,
+        checkpoint_interval=checkpoint_interval, error_event="phase_c_manga_failed",
+        done_start=done,
+    )
 
     # Masters (one-shot)
     if not ckpt.get("completed_phase_c_masters"):

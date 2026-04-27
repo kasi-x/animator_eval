@@ -99,7 +99,7 @@ def get_anime_ids_to_skip_since(since_str: str) -> set[str]:
 
 def save_anime_batch_to_bronze(anime_bw, anime_batch):
     """Save a batch of anime to BRONZE parquet with hash tracking."""
-    now = dt.datetime.utcnow().isoformat()
+    now = dt.datetime.now(dt.timezone.utc).isoformat()
     for anime in anime_batch:
         anime_dict = anime.model_dump(mode="json")
         # Add fetched_at and content_hash for diff detection
