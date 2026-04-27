@@ -29,6 +29,8 @@ from src.scrapers.cli_common import (
     CheckpointIntervalOpt,
     DataDirOpt,
     DelayOpt,
+    ForceOpt,
+    LimitOpt,
     ProgressOpt,
     QuietOpt,
     resolve_progress_enabled,
@@ -1581,16 +1583,13 @@ def reparse_from_raw(
 
 @app.command()
 def run(
-    max_pages: int = typer.Option(
-        0, "--max-pages", "--limit", "-n",
-        help="Maximum pages to process (0 = all). Alias: --limit",
-    ),
+    limit: LimitOpt = 0,
     checkpoint: CheckpointIntervalOpt = 10,
     delay: DelayOpt = DEFAULT_DELAY,
     use_llm: bool = typer.Option(
         True, "--llm/--no-llm", help="Use LLM fallback for unparseable pages"
     ),
-    fresh: bool = typer.Option(False, "--fresh", help="Ignore existing checkpoint"),
+    force: ForceOpt = False,
     data_dir: DataDirOpt = DEFAULT_DATA_DIR,
     list_only: bool = typer.Option(
         False, "--list-only", help="Only enumerate pages, don't scrape"
@@ -1609,11 +1608,11 @@ def run(
     stats = asyncio.run(
         scrape_seesaawiki(
             data_dir=data_dir,
-            max_pages=max_pages,
+            max_pages=limit,
             checkpoint_interval=checkpoint,
             delay=delay,
             use_llm=use_llm,
-            fresh=fresh,
+            fresh=force,
             list_only=list_only,
             fetch_only=fetch_only,
             progress_override=resolve_progress_enabled(quiet, progress),

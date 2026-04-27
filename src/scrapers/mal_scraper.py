@@ -23,6 +23,9 @@ from src.scrapers.cache_store import load_cached_json, save_cached_json
 from src.scrapers.checkpoint import Checkpoint
 from src.scrapers.cli_common import (
     CheckpointIntervalOpt,
+    DelayOpt,
+    ForceOpt,
+    LimitOpt,
     ProgressOpt,
     QuietOpt,
     ResumeOpt,
@@ -620,7 +623,10 @@ async def _phase_c_producers_manga_masters(
 @app.command()
 def run(
     phase: str = typer.Option("all", "--phase", help="A / B / C / all"),
+    force: ForceOpt = False,
     resume: ResumeOpt = True,
+    limit: LimitOpt = 0,
+    delay: DelayOpt = 0.0,
     checkpoint_interval: CheckpointIntervalOpt = 10,
     quiet: QuietOpt = False,
     progress: ProgressOpt = False,
@@ -634,7 +640,7 @@ def run(
     CHECKPOINT_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     cp_data = _empty_checkpoint()
-    if resume:
+    if resume and not force:
         loaded = Checkpoint.load(CHECKPOINT_FILE)
         cp_data.update(loaded.data)
     cp = Checkpoint(CHECKPOINT_FILE, cp_data)

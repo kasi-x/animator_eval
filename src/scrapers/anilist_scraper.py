@@ -34,8 +34,12 @@ from src.scrapers.parsers.anilist import (  # noqa: F401
     parse_anilist_relations,
 )
 from src.scrapers.cli_common import (
+    DelayOpt,
+    ForceOpt,
+    LimitOpt,
     ProgressOpt,
     QuietOpt,
+    ResumeOpt,
     resolve_progress_enabled,
 )
 from src.scrapers.progress import progress_enabled as _progress_enabled
@@ -979,9 +983,10 @@ def run(
     checkpoint_interval: int = typer.Option(
         SCRAPE_CHECKPOINT_INTERVAL, "--checkpoint", help="チェックポイント間隔"
     ),
-    force_restart: bool = typer.Option(
-        False, "--force-restart", help="チェックポイントを無視して最初から始める"
-    ),
+    force: ForceOpt = False,
+    resume: ResumeOpt = True,
+    limit: LimitOpt = 0,
+    delay: DelayOpt = 0.0,
     log_level: str = typer.Option(
         "error", "--log-level", help="ログレベル (debug/info/warning/error)"
     ),
@@ -1080,13 +1085,13 @@ def run(
     # Fetched IDs are tracked via checkpoint JSON only
     fetched_ids = set()
 
-    # Load checkpoint - auto-resume if exists (unless --force-restart is specified)
+    # Load checkpoint - auto-resume if exists (unless --force is specified)
     start_index = 0
     checkpoint_exists = checkpoint_file.exists()
 
     # デフォルト: チェックポイント存在時は自動で続きから始める
-    # --force-restart フラグで最初から始められる
-    if checkpoint_exists and not force_restart:
+    # --force フラグで最初から始められる
+    if checkpoint_exists and not force:
         from src.scrapers.checkpoint import Checkpoint
         cp = Checkpoint(checkpoint_file)
         start_index = cp.get("last_index", 0)

@@ -27,6 +27,7 @@ from bs4 import BeautifulSoup
 
 from src.scrapers.bronze_writer import write_sakuga_atwiki_bronze
 from src.scrapers.checkpoint import Checkpoint
+from src.scrapers.cli_common import ForceOpt, LimitOpt, ResumeOpt
 from src.scrapers.http_playwright import PlaywrightFetcher
 from src.scrapers.parsers.sakuga_atwiki import classify_page_kind, extract_page_ids, parse_person_page, parse_work_page
 from src.scrapers.parsers.sakuga_atwiki_robots import fetch_disallow_patterns, is_allowed
@@ -101,14 +102,14 @@ def _extract_title(html: str) -> str:
 
 @app.command()
 def discover(
-    max_pages: int = typer.Option(3000, "--max-pages", help="Safety page cap"),
+    limit: LimitOpt = 3000,
     delay: float = typer.Option(_DEFAULT_DELAY, "--delay", help="Seconds between requests"),
     data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, "--data-dir"),
     headless: bool = typer.Option(True, "--headless/--headful"),
     cdp_url: str = typer.Option("", "--chrome", help="CDP URL of running Chrome (e.g. http://localhost:9222)"),
 ) -> None:
     """BFS crawl 作画@wiki to discover and classify all pages."""
-    asyncio.run(_discover(max_pages=max_pages, delay=delay, data_dir=data_dir, headless=headless, cdp_url=cdp_url or None))
+    asyncio.run(_discover(max_pages=limit, delay=delay, data_dir=data_dir, headless=headless, cdp_url=cdp_url or None))
 
 
 async def _discover(
@@ -334,7 +335,9 @@ def run(
     output: Path = typer.Option(_DEFAULT_BRONZE_ROOT, "--output"),
     date: str = typer.Option("", "--date", help="YYYYMMDD; defaults to today"),
     delay: float = typer.Option(_DEFAULT_DELAY, "--delay"),
-    max_pages: int = typer.Option(3000, "--max-pages", help="Safety cap for new-page BFS"),
+    limit: LimitOpt = 3000,
+    force: ForceOpt = False,
+    resume: ResumeOpt = True,
     headless: bool = typer.Option(True, "--headless/--headful"),
     cdp_url: str = typer.Option("", "--chrome", help="CDP URL of running Chrome (e.g. http://localhost:9222)"),
 ) -> None:
@@ -345,7 +348,7 @@ def run(
             output=output,
             date=date,
             delay=delay,
-            max_pages=max_pages,
+            max_pages=limit,
             headless=headless,
             cdp_url=cdp_url or None,
         )
