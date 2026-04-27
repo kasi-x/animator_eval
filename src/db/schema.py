@@ -1078,50 +1078,6 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_src_ann_credits_person
             ON src_ann_credits(ann_person_id);
 
-        CREATE TABLE IF NOT EXISTS src_allcinema_anime (
-            allcinema_id      INTEGER PRIMARY KEY,
-            title_ja          TEXT NOT NULL DEFAULT '',
-            year              INTEGER,
-            start_date        TEXT,
-            synopsis          TEXT,
-            media             TEXT NOT NULL DEFAULT '',
-            distributor       TEXT NOT NULL DEFAULT '',
-            eirin             TEXT NOT NULL DEFAULT '',
-            theater_count     INTEGER,
-            box_office        TEXT NOT NULL DEFAULT '',
-            screen_count      INTEGER,
-            screening_weeks   INTEGER,
-            scraped_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS src_allcinema_persons (
-            allcinema_id INTEGER PRIMARY KEY,
-            name_ja      TEXT NOT NULL DEFAULT '',
-            yomigana     TEXT NOT NULL DEFAULT '',
-            name_en      TEXT NOT NULL DEFAULT '',
-            name_ko      TEXT NOT NULL DEFAULT '',
-            name_zh      TEXT NOT NULL DEFAULT '',
-            names_alt    TEXT NOT NULL DEFAULT '{}',
-            hometown     TEXT,
-            scraped_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
-        CREATE TABLE IF NOT EXISTS src_allcinema_credits (
-            id                   INTEGER PRIMARY KEY AUTOINCREMENT,
-            allcinema_anime_id   INTEGER NOT NULL,
-            allcinema_person_id  INTEGER NOT NULL,
-            name_ja              TEXT NOT NULL DEFAULT '',
-            name_en              TEXT NOT NULL DEFAULT '',
-            job_name             TEXT NOT NULL,
-            job_id               INTEGER,
-            scraped_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(allcinema_anime_id, allcinema_person_id, job_name)
-        );
-        CREATE INDEX IF NOT EXISTS idx_src_allcinema_credits_anime
-            ON src_allcinema_credits(allcinema_anime_id);
-        CREATE INDEX IF NOT EXISTS idx_src_allcinema_credits_person
-            ON src_allcinema_credits(allcinema_person_id);
-
         CREATE TABLE IF NOT EXISTS src_seesaawiki_anime (
             id         TEXT PRIMARY KEY,
             title_ja   TEXT NOT NULL DEFAULT '',
@@ -1199,7 +1155,6 @@ def _seed_sources(conn: sqlite3.Connection) -> None:
         ("anilist",    "AniList",             "https://anilist.co",                "proprietary", "GraphQL で structured staff 情報が最も豊富"),
         ("mal",        "MyAnimeList",          "https://myanimelist.net",           "proprietary", "viewer ratings の参照源 (表示のみ、分析不使用)"),
         ("ann",        "Anime News Network",   "https://www.animenewsnetwork.com",  "proprietary", "historical depth と職種粒度"),
-        ("allcinema",  "allcinema",            "https://www.allcinema.net",         "proprietary", "邦画・OVA の網羅性"),
         ("seesaawiki", "SeesaaWiki",           "https://seesaawiki.jp",             "CC-BY-SA",    "fan-curated 詳細エピソード情報"),
         ("keyframe",   "Sakugabooru/Keyframe", "https://www.sakugabooru.com",       "CC",          "sakuga コミュニティ別名情報"),
         ("madb",       "メディア芸術DB",         "https://mediaarts-db.bunka.go.jp",  "public",      "文化庁 メディア芸術データベース (日本政府公開)"),
@@ -1436,12 +1391,8 @@ def _upgrade_v60_corrections(conn: sqlite3.Connection) -> None:
 
 
 def _upgrade_v61_src_multilang(conn: sqlite3.Connection) -> None:
-    """Add name_ko/name_zh/names_alt/hometown to src_allcinema_persons and src_ann_persons."""
+    """Add name_ko/name_zh/names_alt to src_ann_persons."""
     for table, col, defn in [
-        ("src_allcinema_persons", "name_ko",   "TEXT NOT NULL DEFAULT ''"),
-        ("src_allcinema_persons", "name_zh",   "TEXT NOT NULL DEFAULT ''"),
-        ("src_allcinema_persons", "names_alt", "TEXT NOT NULL DEFAULT '{}'"),
-        ("src_allcinema_persons", "hometown",  "TEXT"),
         ("src_ann_persons",       "name_ko",   "TEXT NOT NULL DEFAULT ''"),
         ("src_ann_persons",       "name_zh",   "TEXT NOT NULL DEFAULT ''"),
         ("src_ann_persons",       "names_alt", "TEXT NOT NULL DEFAULT '{}'"),

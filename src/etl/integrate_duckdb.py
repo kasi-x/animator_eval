@@ -8,6 +8,10 @@ Core tables (Card 03): anime, persons, credits.
 Studio tables (Card 06): studios, anime_studios — loaded when parquet exists,
 skipped gracefully otherwise.
 Other tables (anime_genres, anime_tags, ...) remain in SQLite ETL.
+
+Role normalization is performed via src.etl.role_mappers at ETL time:
+  credits.role     = normalized Role.value  (e.g. "animation_director")
+  credits.raw_role = original string from bronze  (NOT NULL)
 """
 from __future__ import annotations
 
@@ -18,6 +22,7 @@ import duckdb
 import structlog
 
 from src.etl.atomic_swap import atomic_duckdb_swap
+from src.etl.role_mappers import map_role
 
 logger = structlog.get_logger()
 
@@ -89,7 +94,7 @@ CREATE TABLE IF NOT EXISTS credits (
     person_id       VARCHAR,
     anime_id        VARCHAR,
     role            VARCHAR NOT NULL,
-    raw_role        VARCHAR,
+    raw_role        VARCHAR NOT NULL,
     episode         INTEGER,
     evidence_source VARCHAR NOT NULL,
     affiliation     VARCHAR,
@@ -100,7 +105,7 @@ CREATE TABLE IF NOT EXISTS credits (
 
 # BRONZE anime parquet → SILVER anime table with hash-based diff detection.
 # Excludes: score, popularity, favourites, description, cover_*, banner,
-#           mal_id, anilist_id, ann_id, allcinema_id, madb_id (external IDs),
+#           mal_id, anilist_id, ann_id, madb_id (external IDs),
 #           genres, tags, studios (→ separate tables in full ETL).
 # Includes: content_hash, fetched_at for diff detection.
 # Strategy: DELETE + INSERT (upsert) on primary key (id), skipping rows with unchanged hash.
@@ -213,68 +218,242 @@ def _build_persons_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
     )
 
 def _build_credits_insert_seesaawiki(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
-    """Load SeesaaWiki credits: (anime_id, role, name, position, episode, affiliation)."""
-    return """
+    """Load SeesaaWiki credits: (anime_id, role, name, position, episode, affiliation).
+
+    Registers a DuckDB UDF that delegates to map_role("seesaawiki", raw).
+    raw_role is set to the original role string from bronze; role is the
+    normalized Role.value after mapper application.
+
+    affiliation is optional in bronze (older parquets may not have it);
+    checked via schema introspection and substituted with NULL if absent.
+    """
+    cols = _parquet_columns(conn, glob)
+    affiliation_expr = "src.affiliation" if "affiliation" in cols else "NULL::VARCHAR"
+
+    conn.create_function(
+        "map_role_seesaawiki",
+        lambda r: map_role("seesaawiki", r) if r is not None else "other",
+        ["VARCHAR"],
+        "VARCHAR",
+    )
+
+    return f"""
 INSERT INTO credits
-SELECT DISTINCT
-    NULL::VARCHAR                         AS person_id,
-    anime_id,
-    role,
-    NULL::VARCHAR                         AS raw_role,
-    episode,
-    'seesaawiki'::VARCHAR                 AS evidence_source,
-    affiliation,
-    TRY_CAST(position AS INTEGER)         AS position,
-    now()                                 AS updated_at
-FROM (
+WITH src AS (
     SELECT * FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
     WHERE source = 'seesaawiki'
 )
-WHERE anime_id IS NOT NULL AND role IS NOT NULL
+SELECT DISTINCT
+    NULL::VARCHAR                                AS person_id,
+    src.anime_id,
+    map_role_seesaawiki(src.role)                AS role,
+    COALESCE(src.role, '')                       AS raw_role,
+    src.episode,
+    'seesaawiki'::VARCHAR                        AS evidence_source,
+    {affiliation_expr}                           AS affiliation,
+    TRY_CAST(src.position AS INTEGER)            AS position,
+    now()                                        AS updated_at
+FROM src
+WHERE src.anime_id IS NOT NULL AND src.role IS NOT NULL
 """
 
 
-def _build_credits_insert_allcinema(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
-    """Load Allcinema credits: (cinema_id, allcinema_person_id, job_name)."""
+def _build_credits_insert_anilist(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
+    """Load AniList credits: (person_id, anime_id, role, raw_role, episode, affiliation, position).
+
+    AniList bronze writes a normalized Role.value in the `role` column and the
+    original English string in `raw_role`.  The mapper re-validates the value so
+    any stale non-canonical strings are corrected at ETL time.
+
+    affiliation and position are INTEGER in the AniList parquet schema but NULL
+    in all known data; cast to VARCHAR / INTEGER defensively.
+    """
+    conn.create_function(
+        "map_role_anilist",
+        lambda r: map_role("anilist", r) if r is not None else "other",
+        ["VARCHAR"],
+        "VARCHAR",
+    )
+
     return """
 INSERT INTO credits
-SELECT DISTINCT
-    NULL::VARCHAR                         AS person_id,
-    NULL::VARCHAR                         AS anime_id,
-    job_name::VARCHAR                     AS role,
-    NULL::VARCHAR                         AS raw_role,
-    NULL::INTEGER                         AS episode,
-    'allcinema'::VARCHAR                  AS evidence_source,
-    NULL::VARCHAR                         AS affiliation,
-    NULL::INTEGER                         AS position,
-    now()                                 AS updated_at
-FROM (
+WITH src AS (
     SELECT * FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
-    WHERE source = 'allcinema'
+    WHERE source = 'anilist'
 )
-WHERE job_name IS NOT NULL
+SELECT DISTINCT
+    src.person_id,
+    src.anime_id,
+    map_role_anilist(src.role)                              AS role,
+    COALESCE(TRY_CAST(src.raw_role AS VARCHAR), src.role, '') AS raw_role,
+    src.episode,
+    'anilist'::VARCHAR                                      AS evidence_source,
+    TRY_CAST(src.affiliation AS VARCHAR)                    AS affiliation,
+    TRY_CAST(src.position AS INTEGER)                       AS position,
+    now()                                                   AS updated_at
+FROM src
+WHERE src.person_id IS NOT NULL AND src.anime_id IS NOT NULL AND src.role IS NOT NULL
+"""
+
+
+def _build_credits_insert_ann(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
+    """Load ANN credits: (ann_person_id, ann_anime_id, role, task_raw, gid).
+
+    ANN uses integer IDs for persons and anime.  Silver uses VARCHAR IDs
+    throughout, so we prefix them: 'ann:p<id>' and 'ann:a<id>'.
+
+    The `role` column already contains a normalized Role.value string (mapped
+    at scrape time).  `task_raw` holds the original English task label and is
+    used as raw_role to satisfy the NOT NULL constraint.
+
+    episode, affiliation, and position are not available in ANN bronze.
+    """
+    conn.create_function(
+        "map_role_ann",
+        lambda r: map_role("ann", r) if r is not None else "other",
+        ["VARCHAR"],
+        "VARCHAR",
+    )
+
+    return """
+INSERT INTO credits
+WITH src AS (
+    SELECT * FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE source = 'ann'
+)
+SELECT DISTINCT
+    'ann:p' || CAST(src.ann_person_id AS VARCHAR) AS person_id,
+    'ann:a' || CAST(src.ann_anime_id  AS VARCHAR) AS anime_id,
+    map_role_ann(src.role)                        AS role,
+    COALESCE(src.task_raw, src.role, '')          AS raw_role,
+    NULL::INTEGER                                 AS episode,
+    'ann'::VARCHAR                                AS evidence_source,
+    NULL::VARCHAR                                 AS affiliation,
+    NULL::INTEGER                                 AS position,
+    now()                                         AS updated_at
+FROM src
+WHERE src.ann_person_id IS NOT NULL AND src.ann_anime_id IS NOT NULL AND src.role IS NOT NULL
+"""
+
+
+def _build_credits_insert_keyframe(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
+    """Load Keyframe credits: person credits only (is_studio_role = FALSE or NULL).
+
+    Keyframe bronze writes a normalized Role.value in the `role` column and the
+    original Japanese string in `raw_role`.  The mapper re-validates via the
+    shared ROLE_MAP.
+
+    is_studio_role = TRUE rows are excluded: studio credits are tracked separately
+    and should not pollute the person-level credits table.
+
+    episode = -1 in bronze means 'unknown episode'; converted to NULL here.
+    affiliation and position are INTEGER in the Keyframe schema but unused.
+    """
+    conn.create_function(
+        "map_role_keyframe",
+        lambda r: map_role("keyframe", r) if r is not None else "other",
+        ["VARCHAR"],
+        "VARCHAR",
+    )
+
+    return """
+INSERT INTO credits
+WITH src AS (
+    SELECT * FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE source = 'keyframe'
+      AND (is_studio_role IS NULL OR is_studio_role = FALSE)
+)
+SELECT DISTINCT
+    src.person_id,
+    src.anime_id,
+    map_role_keyframe(src.role)                                    AS role,
+    COALESCE(src.raw_role, src.role, '')                           AS raw_role,
+    CASE WHEN src.episode = -1 THEN NULL ELSE src.episode END      AS episode,
+    'keyframe'::VARCHAR                                            AS evidence_source,
+    NULL::VARCHAR                                                  AS affiliation,
+    NULL::INTEGER                                                  AS position,
+    now()                                                          AS updated_at
+FROM src
+WHERE src.person_id IS NOT NULL AND src.anime_id IS NOT NULL AND src.role IS NOT NULL
+"""
+
+
+def _build_credits_insert_sakuga_atwiki(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
+    """Load Sakuga@wiki credits: person_id prefixed, anime_id intentionally NULL.
+
+    Sakuga@wiki bronze does not carry an anime_id — only a work_title string.
+    Silver.credits has no NOT NULL constraint on anime_id in the DuckDB DDL,
+    so these rows are inserted with anime_id = NULL.
+
+    TODO: resolve work_title → silver anime_id via title-matching ETL step
+    (entity resolution §5) so that sakuga_atwiki credits can be linked to anime.
+
+    person_id is formed from person_page_id: 'sakuga:p<id>'.
+    episode_num is used for episode; role_raw is both the mapper input and raw_role.
+    """
+    conn.create_function(
+        "map_role_sakuga_atwiki",
+        lambda r: map_role("sakuga_atwiki", r) if r is not None else "other",
+        ["VARCHAR"],
+        "VARCHAR",
+    )
+
+    return """
+INSERT INTO credits
+WITH src AS (
+    SELECT * FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE source = 'sakuga_atwiki'
+)
+SELECT DISTINCT
+    'sakuga:p' || CAST(src.person_page_id AS VARCHAR) AS person_id,
+    NULL::VARCHAR                                      AS anime_id,
+    map_role_sakuga_atwiki(src.role_raw)               AS role,
+    COALESCE(src.role_raw, '')                         AS raw_role,
+    TRY_CAST(src.episode_num AS INTEGER)               AS episode,
+    'sakuga_atwiki'::VARCHAR                           AS evidence_source,
+    NULL::VARCHAR                                      AS affiliation,
+    NULL::INTEGER                                      AS position,
+    now()                                              AS updated_at
+FROM src
+WHERE src.person_page_id IS NOT NULL AND src.role_raw IS NOT NULL
 """
 
 
 def _build_credits_insert_mediaarts(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
-    """Load MediaArts credits: (person_id, anime_id, role, raw_role)."""
-    return """
+    """Load MediaArts credits: (person_id, anime_id, role, raw_role).
+
+    Registers a DuckDB UDF that delegates to map_role("mediaarts", raw).
+    MediaArts bronze already provides raw_role; if missing, role is used
+    as the fallback to satisfy the NOT NULL constraint.
+    """
+    cols = _parquet_columns(conn, glob)
+    raw_role_expr = "COALESCE(src.raw_role, src.role)" if "raw_role" in cols else "src.role"
+
+    conn.create_function(
+        "map_role_mediaarts",
+        lambda r: map_role("mediaarts", r) if r is not None else "other",
+        ["VARCHAR"],
+        "VARCHAR",
+    )
+
+    return f"""
 INSERT INTO credits
+WITH src AS (
+    SELECT * FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE source = 'mediaarts'
+)
 SELECT DISTINCT
-    person_id,
-    anime_id,
-    role,
-    raw_role,
+    src.person_id,
+    src.anime_id,
+    map_role_mediaarts(src.role)          AS role,
+    {raw_role_expr}                       AS raw_role,
     NULL::INTEGER                         AS episode,
     'mediaarts'::VARCHAR                  AS evidence_source,
     NULL::VARCHAR                         AS affiliation,
     NULL::INTEGER                         AS position,
     now()                                 AS updated_at
-FROM (
-    SELECT * FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
-    WHERE source = 'mediaarts'
-)
-WHERE person_id IS NOT NULL AND anime_id IS NOT NULL AND role IS NOT NULL
+FROM src
+WHERE src.person_id IS NOT NULL AND src.anime_id IS NOT NULL AND src.role IS NOT NULL
 """
 
 
@@ -378,10 +557,26 @@ def integrate(
             counts["persons"] = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
             logger.info("silver_persons", count=counts["persons"])
 
-            # credits (source-specific loaders for seesaawiki, allcinema, mediaarts)
-            conn.execute(_build_credits_insert_seesaawiki(conn, credits_glob), [credits_glob])
-            conn.execute(_build_credits_insert_allcinema(conn, credits_glob), [credits_glob])
-            conn.execute(_build_credits_insert_mediaarts(conn, credits_glob), [credits_glob])
+            # credits — one loader per source; failures are isolated so a bad
+            # source does not prevent other sources from loading.
+            _credits_loaders = [
+                ("seesaawiki", _build_credits_insert_seesaawiki),
+                ("mediaarts", _build_credits_insert_mediaarts),
+                ("anilist", _build_credits_insert_anilist),
+                ("ann", _build_credits_insert_ann),
+                ("keyframe", _build_credits_insert_keyframe),
+                ("sakuga_atwiki", _build_credits_insert_sakuga_atwiki),
+            ]
+            for source_name, builder in _credits_loaders:
+                try:
+                    sql = builder(conn, credits_glob)
+                    conn.execute(sql, [credits_glob])
+                except Exception as exc:
+                    logger.warning(
+                        "silver_credits_source_skip",
+                        source=source_name,
+                        error=str(exc),
+                    )
             counts["credits"] = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
             logger.info("silver_credits", count=counts["credits"])
 

@@ -12,7 +12,6 @@ log = structlog.get_logger()
 _DEFAULT_SOURCES = {
     "anilist": {"name": "ANILIST", "prefix": "anilist:"},
     "ann": {"name": "ANN", "prefix": "ann-"},
-    "allcinema": {"name": "ALLCINEMA", "prefix": "allcinema:"},
     "seesaawiki": {"name": "SEESAAWIKI", "prefix": "seesaawiki:"},
     "keyframe": {"name": "KEYFRAME", "prefix": "keyframe:"},
     "mal": {"name": "MAL", "prefix": "mal:"},
