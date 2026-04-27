@@ -507,7 +507,7 @@ WHERE _rn = 1
 """
 
 _ANIME_STUDIOS_SQL = """
-INSERT INTO anime_studios
+INSERT OR IGNORE INTO anime_studios
 SELECT DISTINCT
     anime_id,
     studio_id,

@@ -646,33 +646,31 @@ def run(
 
     async def _run() -> None:
         client = JikanClient()
-        group = BronzeWriterGroup("mal", tables=ALL_TABLES)
         try:
-            with scrape_progress(
-                total=None,
-                description=f"MAL phase={phase}",
-                enabled=progress_enabled,
-            ) as p:
-                if phase in ("A", "all"):
-                    await _phase_a_anime(client, group, ckpt, p, checkpoint_interval)
-                    ckpt["phase"] = "B"
-                    _save_ckpt(ckpt)
+            with BronzeWriterGroup("mal", tables=ALL_TABLES) as group:
+                with scrape_progress(
+                    total=None,
+                    description=f"MAL phase={phase}",
+                    enabled=progress_enabled,
+                ) as p:
+                    if phase in ("A", "all"):
+                        await _phase_a_anime(client, group, ckpt, p, checkpoint_interval)
+                        ckpt["phase"] = "B"
+                        _save_ckpt(ckpt)
 
-                if phase in ("B", "all"):
-                    await _phase_b_persons_characters(client, group, ckpt, p, checkpoint_interval)
-                    ckpt["phase"] = "C"
-                    _save_ckpt(ckpt)
+                    if phase in ("B", "all"):
+                        await _phase_b_persons_characters(client, group, ckpt, p, checkpoint_interval)
+                        ckpt["phase"] = "C"
+                        _save_ckpt(ckpt)
 
-                if phase in ("C", "all"):
-                    await _phase_c_producers_manga_masters(
-                        client, group, ckpt, p, checkpoint_interval
-                    )
-                    ckpt["phase"] = "DONE"
-                    _save_ckpt(ckpt)
+                    if phase in ("C", "all"):
+                        await _phase_c_producers_manga_masters(
+                            client, group, ckpt, p, checkpoint_interval
+                        )
+                        ckpt["phase"] = "DONE"
+                        _save_ckpt(ckpt)
         finally:
             await client.close()
-            group.flush_all()
-            group.compact_all()
 
         log.info(
             "mal_scrape_complete",
