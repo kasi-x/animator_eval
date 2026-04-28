@@ -125,7 +125,10 @@ def test_pipeline_with_limit(tmp_path: Path) -> None:
 
     assert stats.fetched == 2
     assert stats.parsed == 2
-    assert stats.skipped == 1
+    assert stats.written == 2
+    # limit cutoff simply stops the loop; the un-attempted ID is not counted as
+    # skipped (skipped = fetcher→None or parser→None, not limit-truncated)
+    assert stats.skipped == 0
 
 
 def test_pipeline_parse_failures(tmp_path: Path) -> None:
@@ -158,9 +161,12 @@ def test_pipeline_parse_failures(tmp_path: Path) -> None:
     )
 
     assert stats.fetched == 3
-    assert stats.parsed == 3  # parsed = processed (includes failed parses)
+    # parsed = records where parser returned non-None (successful parses only)
+    assert stats.parsed == 2
     assert stats.written == 2
     assert stats.failed == 0  # parse failures are not counted as runner errors
+    # parser→None increments skipped, not failed
+    assert stats.skipped == 1
 
 
 def test_pipeline_stats_dataclass() -> None:
