@@ -49,14 +49,20 @@ RecT = TypeVar("RecT")
 
 @runtime_checkable
 class Fetcher(Protocol[RawT]):
-    """Async ID → raw payload. Return ``None`` to skip (404, parse-guard, …)."""
+    """Async ID → raw payload. Return ``None`` to skip (404, parse-guard, …).
+
+    Exceptions raised here are caught by ``ScrapeRunner`` and counted as errors.
+    """
 
     async def fetch(self, id: str) -> RawT | None: ...
 
 
 @runtime_checkable
 class Parser(Protocol[RawT, RecT]):
-    """Pure (raw, id) → Record. Return ``None`` to skip (not-anime, missing data)."""
+    """Pure (raw, id) → Record. Return ``None`` to skip (not-anime, missing data).
+
+    Exceptions raised here are caught by ``ScrapeRunner`` and counted as errors.
+    """
 
     def parse(self, raw: RawT, id: str) -> RecT | None: ...
 
@@ -66,6 +72,7 @@ class Normalizer(Protocol[RecT]):
     """Record → ``{table_name: [row_dict, ...]}`` for BRONZE writer group.
 
     Returned keys must match the tables registered on the ``BronzeWriterGroup``.
+    Return ``{}`` to write no rows for this record.
     """
 
     def normalize(self, rec: RecT) -> dict[str, list[dict]]: ...
