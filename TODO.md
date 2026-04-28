@@ -76,23 +76,23 @@ similarity.py / recommendation.py はスタブ化済 (2行)、重複整理完了
 
 再 scrape 不要、ローカル HTML/JSON を parser 拡張で再抽出。
 
-### 10.1 seesaawiki raw HTML 再 parse
+### 10.1 seesaawiki raw HTML 再 parse ✅ BRONZE 完了 (2026-04-28)
 
-- **対象**: `data/seesaawiki/raw/*.html` (8,688 ファイル / 1.5GB)
+- **対象**: `data/seesaawiki/raw/*.html` (8,736 ファイル / 1.5GB)
 - **parser**: `src/scrapers/parsers/seesaawiki.py` 拡張
 - **追加抽出候補**:
-  - [ ] 各話クレジット詳細 (作画監督/原画/動画/背景/撮影/編集)
-  - [ ] グロス請けスタジオ (「制作協力」表記)
-  - [ ] 主題歌アーティスト情報 (作詞/作曲/編曲/歌手、OP/ED/挿入歌)
-  - [ ] 製作委員会構成
-  - [ ] 各話タイトル
-  - [ ] 原作情報 (出版社/レーベル/連載誌)
-  - [ ] credit 記載順を `source_listing_position` で保持 (ED 順 proxy)
+  - [x] 各話クレジット詳細 (作画監督/原画/動画/背景/撮影/編集) → credits 2,386,009 行 / source_listing_position 付
+  - [x] グロス請けスタジオ (「制作協力」表記) → BRONZE `gross_studios` 18,968 行
+  - [x] 主題歌アーティスト情報 (作詞/作曲/編曲/歌手、OP/ED/挿入歌) → BRONZE `theme_songs` 17,368 行
+  - [x] 製作委員会構成 → BRONZE `production_committee` 13,417 行
+  - [x] 各話タイトル → BRONZE `episode_titles` 71,674 行
+  - [x] 原作情報 (出版社/レーベル/連載誌) → BRONZE `original_work_info` 4,876 行
+  - [x] credit 記載順を `source_listing_position` で保持 (ED 順 proxy)
 - **手順**:
-  - [ ] 追加フィールドを拾う parser 関数追加 + unit test
-  - [ ] `BronzeWriter` 用 dataclass に列追加 (schema v58)
-  - [ ] 全 HTML 再 parse → BRONZE parquet 書き直し
-  - [ ] SILVER 再統合
+  - [x] 追加フィールドを拾う parser 関数追加 + unit test (138 tests PASS)
+  - [x] `BronzeWriter` 用 dataclass に列追加 (schema v58)
+  - [x] 全 HTML 再 parse → BRONZE parquet 書き直し (8,736/8,736、失敗 0)
+  - [ ] SILVER 再統合 (別タスク)
 
 ### 10.2 madb raw JSON 再 parse ✅ BRONZE 完了 (2026-04-27)
 

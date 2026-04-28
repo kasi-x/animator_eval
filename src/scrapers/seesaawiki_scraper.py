@@ -44,7 +44,6 @@ import typer
 from bs4 import BeautifulSoup
 
 from src.runtime.models import BronzeAnime, Credit, Person, parse_role
-from src.scrapers.checkpoint import Checkpoint
 from src.scrapers.http_client import RetryingHttpClient
 from src.scrapers.parsers.seesaawiki import (  # noqa: F401
     KNOWN_ROLES_JA,

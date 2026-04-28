@@ -8,8 +8,6 @@ All tests are pure unit tests — no network calls, no file I/O.
 """
 from __future__ import annotations
 
-import pytest
-
 from src.scrapers.parsers.seesaawiki import (
     CommitteeMember,
     CreditWithPosition,
