@@ -40,13 +40,24 @@ _HTML_HEADERS = {
 
 DEFAULT_DELAY = 5.0
 
+# keyframe-staff-list.com enforces a hard daily quota (~300 req/day per IP).
+# Once exhausted, 429 persists until UTC rollover — retrying within the same
+# day burns time without recovery, so we exclude 429 from the retry set and
+# raise KeyframeQuotaExceeded for callers to detect and gracefully halt.
+_RETRYABLE_STATUS_NO_429 = frozenset({500, 502, 503, 504, 522, 524})
+
+
+class KeyframeQuotaExceeded(Exception):
+    """Daily request quota (~300/day) exhausted. Resume after UTC rollover."""
+
 
 class KeyframeApiClient:
     """Async HTTP client for keyframe-staff-list.com API endpoints.
 
     Thin wrapper around RetryingHttpClient: adds JSON parsing, 404→None
     conversion, and named endpoint methods. Retry/throttle/Retry-After
-    handling is delegated to RetryingHttpClient.
+    handling is delegated to RetryingHttpClient (429 excluded — see
+    KeyframeQuotaExceeded).
     """
 
     def __init__(self, delay: float = DEFAULT_DELAY) -> None:
@@ -56,6 +67,7 @@ class KeyframeApiClient:
             timeout=60.0,
             headers=_HEADERS,
             base_url=BASE,
+            retryable_status=_RETRYABLE_STATUS_NO_429,
         )
 
     async def close(self) -> None:
@@ -71,23 +83,33 @@ class KeyframeApiClient:
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _get_json(self, url: str) -> dict | list | None:
-        """GET url and return parsed JSON, or None on 404."""
-        resp = await self._client.request("GET", url)
+    async def _get(
+        self, url: str, *, headers: dict[str, str] | None = None
+    ) -> "object | None":
+        """GET url with shared 404→None / 429→KeyframeQuotaExceeded handling.
+
+        Returns the raw httpx.Response when the call succeeded (caller decides
+        whether to read .json() or .text), or None on 404.
+        """
+        resp = await self._client.request("GET", url, headers=headers)
         if resp.status_code == 404:
-            log.debug("keyframe_api_not_found", url=url)
+            log.debug("keyframe_not_found", url=url)
             return None
+        if resp.status_code == 429:
+            log.warning("keyframe_quota_exceeded", url=url)
+            raise KeyframeQuotaExceeded(f"429 from {url}")
         resp.raise_for_status()
-        return resp.json()
+        return resp
+
+    async def _get_json(self, url: str) -> dict | list | None:
+        """GET url and return parsed JSON. 404→None. 429→KeyframeQuotaExceeded."""
+        resp = await self._get(url)
+        return resp.json() if resp is not None else None
 
     async def _get_html(self, url: str) -> str | None:
-        """GET url with HTML Accept header and return text, or None on 404."""
-        resp = await self._client.request("GET", url, headers=_HTML_HEADERS)
-        if resp.status_code == 404:
-            log.debug("keyframe_html_not_found", url=url)
-            return None
-        resp.raise_for_status()
-        return resp.text
+        """GET url with HTML Accept header. 404→None. 429→KeyframeQuotaExceeded."""
+        resp = await self._get(url, headers=_HTML_HEADERS)
+        return resp.text if resp is not None else None
 
     # ------------------------------------------------------------------
     # Public endpoint methods

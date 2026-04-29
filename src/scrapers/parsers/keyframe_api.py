@@ -1,16 +1,77 @@
 """KeyFrame Staff List — API response parsers.
 
 Covers:
-  parse_roles_master  — /api/data/roles.php
-  parse_person_show   — /api/person/show.php?type=person
-  parse_preview       — /api/stafflists/preview.php
+  parse_roles_master      — /api/data/roles.php
+  parse_person_show       — /api/person/show.php?type=person
+  parse_preview           — /api/stafflists/preview.php
+  parse_translate_result  — /api/data/translate.v4.php
+  parse_sitemap_xml       — /sitemap.xml (XML, not JSON)
+  build_person_show_rows  — parse_person_show output → Bronze multi-table rows
 """
 
 from __future__ import annotations
 
+import json
+import re
+import xml.etree.ElementTree as ET
+
 import structlog
 
 log = structlog.get_logger()
+
+
+def parse_sitemap_xml(xml_text: str) -> list[str]:
+    """Parse sitemap XML and return /staff/<slug> path slugs.
+
+    Logs a warning and returns [] on XML parse errors so callers can skip cleanly.
+    """
+    try:
+        root = ET.fromstring(xml_text)
+    except ET.ParseError as exc:
+        log.warning("keyframe_sitemap_parse_error", err=str(exc)[:120])
+        return []
+
+    ns = {"s": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+    slugs: list[str] = []
+    for url_elem in root.findall("s:url/s:loc", ns):
+        url = url_elem.text or ""
+        m = re.search(r"/staff/([^/]+)$", url)
+        if m:
+            slugs.append(m.group(1))
+    log.info("keyframe_sitemap_parsed", total_slugs=len(slugs))
+    return slugs
+
+
+def build_person_show_rows(parsed: dict) -> dict[str, list[dict]]:
+    """Map parse_person_show output to 4 Bronze table row sets.
+
+    Used as the BronzeSink mapper for Phase 3 person ingestion.
+    """
+    profile = parsed["profile"]
+    pid = profile["id"]
+    return {
+        "person_profile": [{
+            "person_id": pid,
+            "is_studio": profile["is_studio"],
+            "name_ja": profile["name_ja"],
+            "name_en": profile["name_en"],
+            "aliases_json": json.dumps(profile["aliases_json"], ensure_ascii=False),
+            "avatar": profile["avatar"],
+            "bio": profile["bio"],
+        }],
+        "person_jobs": [
+            {"person_id": pid, "job": job} for job in parsed["jobs"]
+        ],
+        "person_studios": [
+            {
+                "person_id": pid,
+                "studio_name": s["studio_name"],
+                "alt_names": json.dumps(s["alt_names"], ensure_ascii=False),
+            }
+            for s in parsed["studios"]
+        ],
+        "person_credits": [{"person_id": pid, **cred} for cred in parsed["credits"]],
+    }
 
 
 def parse_roles_master(data: list[dict]) -> list[dict]:

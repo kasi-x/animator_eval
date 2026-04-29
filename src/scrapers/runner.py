@@ -68,6 +68,10 @@ class ScrapeRunner(Generic[ID, Raw, Rec]):
         label:         short name for log and progress events.
         flush:         called every flush_every items and at end.
         flush_every:   items between checkpoint+flush; default 100.
+        fatal_exceptions:
+                       exception types that should propagate out of the loop
+                       instead of being absorbed into stats.errors. Use for
+                       hard-stop conditions (quota exhausted, auth revoked).
     """
 
     fetcher: Callable[[ID], Awaitable[Raw | None]]
@@ -77,6 +81,7 @@ class ScrapeRunner(Generic[ID, Raw, Rec]):
     label: str
     flush: Callable[[], None]
     flush_every: int = 100
+    fatal_exceptions: tuple[type[BaseException], ...] = ()
 
     async def run(
         self,
@@ -140,10 +145,17 @@ class ScrapeRunner(Generic[ID, Raw, Rec]):
     # ── internal step helpers ──────────────────────────────────────────────
 
     async def _fetch_one(self, item_id: ID, stats: Stats) -> Raw | None:
-        """Fetch raw payload; log and count errors; return None to skip."""
+        """Fetch raw payload; log and count errors; return None to skip.
+
+        Fatal exceptions (configured via fatal_exceptions) propagate out
+        instead of being counted as errors — used for hard-stop signals
+        like quota exhaustion.
+        """
         try:
             return await self.fetcher(item_id)
         except Exception as exc:
+            if self.fatal_exceptions and isinstance(exc, self.fatal_exceptions):
+                raise
             log.error(
                 f"{self.label}_fetch_error",
                 item_id=item_id,

@@ -10,6 +10,58 @@ import structlog
 log = structlog.get_logger()
 
 
+def _json_or_none(v: object) -> str | None:
+    """Serialize nested field to JSON string for Parquet compatibility, or None."""
+    return json.dumps(v, ensure_ascii=False) if v is not None else None
+
+
+def collect_person_ids_from_preload(data: dict) -> set[int]:
+    """Extract all numeric person IDs from preloadData menus credits (excludes studios)."""
+    ids: set[int] = set()
+    for menu in data.get("menus") or []:
+        for section in menu.get("credits") or []:
+            for role_entry in section.get("roles") or []:
+                for staff in role_entry.get("staff") or []:
+                    pid = staff.get("id")
+                    if pid is None or staff.get("isStudio"):
+                        continue
+                    try:
+                        v = int(pid)
+                    except (TypeError, ValueError):
+                        continue
+                    if v > 0:
+                        ids.add(v)
+    return ids
+
+
+def build_anime_row(anime_meta: dict, anime_id: str) -> dict:
+    """Serialize anime_meta nested fields to JSON strings for stable Parquet schema."""
+    return {
+        "id": anime_id,
+        **anime_meta,
+        "start_date": _json_or_none(anime_meta.get("start_date") or {}),
+        "end_date": _json_or_none(anime_meta.get("end_date") or {}),
+        "synonyms": _json_or_none(anime_meta.get("synonyms") or []),
+        "delimiters": _json_or_none(anime_meta.get("delimiters")),
+        "episode_delimiters": _json_or_none(anime_meta.get("episode_delimiters")),
+        "role_delimiters": _json_or_none(anime_meta.get("role_delimiters")),
+        "staff_delimiters": _json_or_none(anime_meta.get("staff_delimiters")),
+    }
+
+
+def normalize_credit_row(credit: dict, anime_id: str) -> dict:
+    """Normalize person_id/studio_id types for stable Parquet schema."""
+    row = {"anime_id": anime_id, **credit}
+    if row.get("person_id") is not None:
+        row["person_id"] = str(row["person_id"])
+    if row.get("studio_id") is not None:
+        try:
+            row["studio_id"] = int(row["studio_id"])
+        except (TypeError, ValueError):
+            row["studio_id"] = None
+    return row
+
+
 def extract_preload_data(html: str) -> dict | None:
     """Extract preloadData JSON object from page HTML.
 

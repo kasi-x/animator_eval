@@ -13,11 +13,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from src.scrapers.keyframe_scraper import (
-    _collect_person_ids_from_preload,
-    _parse_sitemap_xml,
-    run_scraper,
-)
+from src.scrapers.keyframe_scraper import run_scraper
+from src.scrapers.parsers.keyframe import collect_person_ids_from_preload
+from src.scrapers.parsers.keyframe_api import parse_sitemap_xml
 
 
 def _run(coro):
@@ -59,24 +57,24 @@ _PREVIEW_DATA = json.loads((FIXTURE_DIR / "sample_preview.json").read_text())
 
 
 # ---------------------------------------------------------------------------
-# _parse_sitemap_xml
+# parse_sitemap_xml
 # ---------------------------------------------------------------------------
 
 
 class TestParseSitemapXml:
     def test_extracts_staff_slugs(self):
-        slugs = _parse_sitemap_xml(_SITEMAP_XML)
+        slugs = parse_sitemap_xml(_SITEMAP_XML)
         assert "test-anime-1" in slugs
         assert "test-anime-2" in slugs
         assert "" not in slugs
 
     def test_returns_empty_on_bad_xml(self):
-        slugs = _parse_sitemap_xml("<not-xml>")
+        slugs = parse_sitemap_xml("<not-xml>")
         assert slugs == []
 
 
 # ---------------------------------------------------------------------------
-# _collect_person_ids_from_preload
+# collect_person_ids_from_preload
 # ---------------------------------------------------------------------------
 
 
@@ -86,7 +84,7 @@ class TestCollectPersonIds:
 
         data = extract_preload_data(_PRELOAD_HTML)
         assert data is not None
-        ids = _collect_person_ids_from_preload(data)
+        ids = collect_person_ids_from_preload(data)
         assert 100 in ids
 
     def test_skips_studio_entries(self):
@@ -103,11 +101,11 @@ class TestCollectPersonIds:
                 }
             ]
         }
-        ids = _collect_person_ids_from_preload(data)
+        ids = collect_person_ids_from_preload(data)
         assert 999 not in ids
 
     def test_empty_menus(self):
-        ids = _collect_person_ids_from_preload({"menus": []})
+        ids = collect_person_ids_from_preload({"menus": []})
         assert ids == set()
 
 
