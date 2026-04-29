@@ -69,14 +69,18 @@ def classify_page_kind(title: str, html: str) -> PageKind:
         if _BULLET_CREDIT_RE.search(body_text):
             return "person"
         # Standalone / bullet / dot / bracket role formats → work page
-        nfkc_lines = [l.strip() for l in body_nfkc.splitlines() if l.strip()]
-        if any(_GENGA_LABEL_RE.match(l) for l in nfkc_lines):
+        nfkc_lines = [ln.strip() for ln in body_nfkc.splitlines() if ln.strip()]
+        if any(_GENGA_LABEL_RE.match(ln) for ln in nfkc_lines):
             return "work"
-        if any(l.startswith("■") and _ROLE_INLINE_RE.search(l[1:].strip()) for l in nfkc_lines):
+        if any(ln.startswith("■") and _ROLE_INLINE_RE.search(ln[1:].strip()) for ln in nfkc_lines):
             return "work"
-        if any(_WORK_DOT_ROLE_RE.match(l) for l in nfkc_lines):
+        if any(_WORK_DOT_ROLE_RE.match(ln) for ln in nfkc_lines):
             return "work"
-        if any(_BRACKET_ROLE_RE.match(l) and _ROLE_INLINE_RE.search(_BRACKET_ROLE_RE.match(l).group(1)) for l in nfkc_lines):
+        if any(
+            _BRACKET_ROLE_RE.match(ln)
+            and _ROLE_INLINE_RE.search(_BRACKET_ROLE_RE.match(ln).group(1))
+            for ln in nfkc_lines
+        ):
             return "work"
 
     return "unknown"
@@ -650,7 +654,6 @@ def _extract_work_staff(wikibody: Tag) -> list[ParsedSakugaWorkStaff]:
     current_ep_raw: str | None = None
     is_main = True        # True until we hit the first episode block
     genga_role: str | None = None   # set when we see standalone role label or pending colon-role
-    seen_main_staff = False  # True once ■スタッフ block is processed
 
     staff_blocks_seen = 0  # count of blocks with role:name content
 
@@ -664,8 +667,8 @@ def _extract_work_staff(wikibody: Tag) -> list[ParsedSakugaWorkStaff]:
 
         has_role_content = (
             bool(_WORK_COLON_ROLE_RE.search(block_text))
-            or any(_BRACKET_ROLE_RE.match(l) for l in [ln.strip() for ln in block_text.splitlines() if ln.strip()])
-            or any(_WORK_DOT_ROLE_RE.match(l) for l in [ln.strip() for ln in block_text.splitlines() if ln.strip()])
+            or any(_BRACKET_ROLE_RE.match(ln) for ln in lines)
+            or any(_WORK_DOT_ROLE_RE.match(ln) for ln in lines)
         )
         if not has_role_content:
             continue  # description / navigation block
@@ -674,9 +677,6 @@ def _extract_work_staff(wikibody: Tag) -> list[ParsedSakugaWorkStaff]:
         first = lines[0]
         block_is_date_ep = _DATE_EP_RE.match(first) is not None
         block_has_staff_marker = "■スタッフ" in block_text
-
-        if block_has_staff_marker:
-            seen_main_staff = True
 
         staff_blocks_seen += 1
         # After the first staff block: subsequent blocks without episode markers
@@ -700,7 +700,6 @@ def _extract_work_staff(wikibody: Tag) -> list[ParsedSakugaWorkStaff]:
             if line.startswith("■"):
                 stripped = line[1:].strip()
                 if "スタッフ" in stripped:
-                    seen_main_staff = True
                     genga_role = None
                     continue
                 colon_pos = stripped.find(":")

@@ -1139,10 +1139,8 @@ def run(
         from rich.progress import (
             Progress,
             SpinnerColumn,
-            BarColumn,
             TextColumn,
             TimeElapsedColumn,
-            MofNCompleteColumn,
         )
         from rich.panel import Panel
         from rich.table import Table

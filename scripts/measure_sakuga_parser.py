@@ -77,7 +77,7 @@ def main(data_dir: Path) -> None:
     print(f"Regex OK     :  {regex_ok}  ({regex_ok/total:.1%})")
     print(f"LLM fallback :  {llm_ok}   ({llm_ok/total:.1%})")
     print(f"Failed (0)   :  {failed}   ({failed/total:.1%})")
-    print(f"\nCredit count distribution:")
+    print("\nCredit count distribution:")
     dist = Counter(credit_counts)
     for k in sorted(dist):
         bar = "█" * min(dist[k], 40)

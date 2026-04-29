@@ -5,10 +5,9 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-import pytest
 
 from src.scrapers.bronze_writer import BronzeWriter, BronzeWriterGroup
-from src.scrapers.pipeline import Fetcher, Parser, Normalizer, PipelineStats, run_pipeline
+from src.scrapers.pipeline import PipelineStats, run_pipeline
 from src.scrapers.checkpoint import Checkpoint
 
 
