@@ -6,6 +6,67 @@ import duckdb
 import pytest
 
 
+@pytest.fixture
+def silver_gold_dbs(tmp_path, monkeypatch):
+    """Minimal silver.duckdb + gold.duckdb with synthetic credits.
+
+    Overrides the path-only `silver_gold_dbs` fixture in tests/conftest.py.
+    feat_precompute tests need actual rows under specific PK shapes; the
+    shared fixture only allocates the file paths and was unsuitable.
+    """
+    import src.analysis.io.silver_reader as sr
+    import src.analysis.io.gold_writer as gw
+
+    silver_path = tmp_path / "silver.duckdb"
+    gold_path = tmp_path / "gold.duckdb"
+
+    with duckdb.connect(str(silver_path)) as c:
+        c.execute("""
+            CREATE TABLE persons (
+                id TEXT PRIMARY KEY, name_ja TEXT, name_en TEXT
+            )
+        """)
+        c.execute("""
+            CREATE TABLE anime (
+                id TEXT PRIMARY KEY, title TEXT
+            )
+        """)
+        c.execute("""
+            CREATE TABLE credits (
+                person_id TEXT, anime_id TEXT, role TEXT,
+                credit_year INTEGER, credit_quarter INTEGER,
+                source TEXT
+            )
+        """)
+        c.executemany(
+            "INSERT INTO persons VALUES (?,?,?)",
+            [("p1", "A", "A"), ("p2", "B", "B")],
+        )
+        c.executemany(
+            "INSERT INTO anime VALUES (?,?)",
+            [("a1", "Anime1"), ("a2", "Anime2"), ("a3", "Anime3")],
+        )
+        c.executemany(
+            "INSERT INTO credits VALUES (?,?,?,?,?,?)",
+            [
+                ("p1", "a1", "director", 2015, 1, "test"),
+                ("p1", "a2", "director", 2016, 2, "test"),
+                ("p1", "a3", "key_animator", 2018, 1, "test"),
+                ("p2", "a1", "key_animator", 2010, 1, "test"),
+                ("p2", "a2", "key_animator", 2010, 3, "test"),
+                ("p2", "a3", "key_animator", 2015, 2, "test"),
+            ],
+        )
+
+    with duckdb.connect(str(gold_path)) as c:
+        from src.analysis.io.gold_writer import _DDL
+        c.execute(_DDL)
+
+    monkeypatch.setattr(sr, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(gw, "DEFAULT_GOLD_DB_PATH", gold_path)
+    return gold_path
+
+
 class TestComputeFeatCreditActivity:
     def test_returns_row_count(self, silver_gold_dbs):
         from src.analysis.feat_precompute import compute_feat_credit_activity_ddb

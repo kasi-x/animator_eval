@@ -48,6 +48,51 @@ CREATE TABLE IF NOT EXISTS credits (
 """
 
 
+@pytest.fixture()
+def silver_path(tmp_path):
+    """Override the path-only `silver_path` from conftest.py with a populated DB.
+
+    All tests in this module exercise the SILVER reader against a known fixture
+    of 2 anime / 2 persons / 3 credits — the conftest fixture only returns the
+    file path and leaves DB creation to the caller (most other consumers run
+    `integrate()` which writes the file). silver_reader tests need actual rows.
+    """
+    path = tmp_path / "silver.duckdb"
+    conn = duckdb.connect(str(path))
+    for stmt in _DDL.split(";"):
+        s = stmt.strip()
+        if s:
+            conn.execute(s)
+    conn.executemany(
+        "INSERT INTO anime (id, title_ja, title_en, year, format, episodes, duration, source_mat, scale_class)"
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+            ("a1", "アニメA", "Anime A", 2020, "TV", 12, 24, "MANGA", "medium"),
+            ("a2", "アニメB", "Anime B", 2021, "MOVIE", 1, 90, "ORIGINAL", "large"),
+        ],
+    )
+    conn.executemany(
+        "INSERT INTO persons (id, name_ja, name_en, birth_date, website_url)"
+        " VALUES (?, ?, ?, ?, ?)",
+        [
+            ("p1", "山田太郎", "Taro Yamada", "1985-03-15", "https://example.com"),
+            ("p2", "佐藤花子", "Hanako Sato", None, None),
+        ],
+    )
+    conn.executemany(
+        "INSERT INTO credits (person_id, anime_id, role, evidence_source)"
+        " VALUES (?, ?, ?, ?)",
+        [
+            ("p1", "a1", "director", "anilist"),
+            ("p1", "a2", "director", "anilist"),
+            ("p2", "a1", "key_animator", "anilist"),
+        ],
+    )
+    conn.commit()
+    conn.close()
+    return path
+
+
 class TestSilverConnect:
     def test_opens_and_closes(self, silver_path):
         from src.analysis.io.silver_reader import silver_connect
