@@ -38,6 +38,25 @@ def _make_credit(
 
 
 @pytest.fixture
+def anime_map():
+    """10 anime spanning 2015-2024 — overrides the conftest fixture (a1..a5).
+
+    individual_contribution tests reference a0..a9 explicitly via credits_list
+    and assertions like `assert features["ka0"]["avg_staff_count"] == 11`
+    (requires a0 with all 11 staff present); the shared conftest anime_map only
+    has a1..a5 which broke ka9.career_years and ka0.avg_staff_count.
+    """
+    return {
+        f"a{i}": _make_anime(
+            f"a{i}",
+            year=2015 + i,
+            studios=["StudioA"] if i < 5 else ["StudioB"],
+        )
+        for i in range(10)
+    }
+
+
+@pytest.fixture
 def credits_list():
     """Credits for 15 persons across 10 anime."""
     credits = []
