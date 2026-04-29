@@ -332,16 +332,10 @@ def run_entity_resolution(loaded: LoadedData) -> EntityResolutionResult:
                     canon.format = other.format
                 if not canon.duration and other.duration:
                     canon.duration = other.duration
-                if not canon.score and other.score:
-                    canon.score = other.score
                 if not canon.genres and other.genres:
                     canon.genres = other.genres
                 if not canon.studios and other.studios:
                     canon.studios = other.studios
-                if not canon.description and other.description:
-                    canon.description = other.description
-                if not canon.cover_large and other.cover_large:
-                    canon.cover_large = other.cover_large
                 if not canon.anilist_id and other.anilist_id:
                     canon.anilist_id = other.anilist_id
                 if not canon.mal_id and other.mal_id:
