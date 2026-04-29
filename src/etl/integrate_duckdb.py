@@ -105,6 +105,8 @@ CREATE TABLE IF NOT EXISTS credits (
     raw_role        VARCHAR NOT NULL,
     episode         INTEGER,
     evidence_source VARCHAR NOT NULL,
+    credit_year     INTEGER,
+    credit_quarter  INTEGER,
     affiliation     VARCHAR,
     position        INTEGER,
     updated_at      TIMESTAMP DEFAULT now()
@@ -258,6 +260,8 @@ SELECT DISTINCT
     COALESCE(src.role, '')                       AS raw_role,
     src.episode,
     'seesaawiki'::VARCHAR                        AS evidence_source,
+    NULL::INTEGER                                AS credit_year,
+    NULL::INTEGER                                AS credit_quarter,
     {affiliation_expr}                           AS affiliation,
     TRY_CAST(src.position AS INTEGER)            AS position,
     now()                                        AS updated_at
@@ -296,6 +300,8 @@ SELECT DISTINCT
     COALESCE(TRY_CAST(src.raw_role AS VARCHAR), src.role, '') AS raw_role,
     src.episode,
     'anilist'::VARCHAR                                      AS evidence_source,
+    NULL::INTEGER                                           AS credit_year,
+    NULL::INTEGER                                           AS credit_quarter,
     TRY_CAST(src.affiliation AS VARCHAR)                    AS affiliation,
     TRY_CAST(src.position AS INTEGER)                       AS position,
     now()                                                   AS updated_at
@@ -336,6 +342,8 @@ SELECT DISTINCT
     COALESCE(src.task_raw, src.role, '')          AS raw_role,
     NULL::INTEGER                                 AS episode,
     'ann'::VARCHAR                                AS evidence_source,
+    NULL::INTEGER                                 AS credit_year,
+    NULL::INTEGER                                 AS credit_quarter,
     NULL::VARCHAR                                 AS affiliation,
     NULL::INTEGER                                 AS position,
     now()                                         AS updated_at
@@ -378,6 +386,8 @@ SELECT DISTINCT
     COALESCE(src.raw_role, src.role, '')                           AS raw_role,
     CASE WHEN src.episode = -1 THEN NULL ELSE src.episode END      AS episode,
     'keyframe'::VARCHAR                                            AS evidence_source,
+    NULL::INTEGER                                                  AS credit_year,
+    NULL::INTEGER                                                  AS credit_quarter,
     NULL::VARCHAR                                                  AS affiliation,
     NULL::INTEGER                                                  AS position,
     now()                                                          AS updated_at
@@ -419,6 +429,8 @@ SELECT DISTINCT
     COALESCE(src.role_raw, '')                         AS raw_role,
     TRY_CAST(src.episode_num AS INTEGER)               AS episode,
     'sakuga_atwiki'::VARCHAR                           AS evidence_source,
+    NULL::INTEGER                                      AS credit_year,
+    NULL::INTEGER                                      AS credit_quarter,
     NULL::VARCHAR                                      AS affiliation,
     NULL::INTEGER                                      AS position,
     now()                                              AS updated_at
@@ -457,6 +469,8 @@ SELECT DISTINCT
     {raw_role_expr}                       AS raw_role,
     NULL::INTEGER                         AS episode,
     'mediaarts'::VARCHAR                  AS evidence_source,
+    NULL::INTEGER                         AS credit_year,
+    NULL::INTEGER                         AS credit_quarter,
     NULL::VARCHAR                         AS affiliation,
     NULL::INTEGER                         AS position,
     now()                                 AS updated_at
