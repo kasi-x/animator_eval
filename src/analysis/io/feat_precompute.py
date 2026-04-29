@@ -427,15 +427,15 @@ def compute_feat_studio_affiliation_ddb() -> int:
                 c.person_id,
                 c.credit_year,
                 ast.studio_id,
-                COALESCE(s.name, '') AS studio_name,
+                MAX(COALESCE(s.name, '')) AS studio_name,
                 COUNT(DISTINCT c.anime_id) AS n_works,
                 COUNT(*)               AS n_credits,
-                CAST(ast.is_main AS INTEGER) AS is_main_studio
+                MAX(CAST(ast.is_main AS INTEGER)) AS is_main_studio
             FROM credits c
             INNER JOIN anime_studios ast ON ast.anime_id = c.anime_id
             LEFT JOIN studios s ON s.id = ast.studio_id
             WHERE c.credit_year IS NOT NULL
-            GROUP BY c.person_id, c.credit_year, ast.studio_id, s.name, ast.is_main
+            GROUP BY c.person_id, c.credit_year, ast.studio_id
             ORDER BY c.person_id, c.credit_year
         """).fetchall()
 
