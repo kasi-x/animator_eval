@@ -32,7 +32,7 @@ DEFAULT_SILVER_PATH: Path = Path(
 def silver_connect(
     path: Path | str | None = None,
     *,
-    memory_limit: str = "2GB",
+    memory_limit: str = "16GB",
     read_only: bool = True,
 ) -> Iterator[duckdb.DuckDBPyConnection]:
     """Open silver.duckdb for the duration of one query block, then close.

@@ -422,7 +422,7 @@ def _open(db_path: Path | str | None = None) -> duckdb.DuckDBPyConnection:
 def gold_connect(
     path: Path | str | None = None,
     *,
-    memory_limit: str = "2GB",
+    memory_limit: str = "16GB",
 ) -> Iterator[duckdb.DuckDBPyConnection]:
     """Open gold.duckdb read-only for the duration of one query block.
 
@@ -443,7 +443,7 @@ def gold_connect(
 def gold_connect_write(
     path: Path | str | None = None,
     *,
-    memory_limit: str = "2GB",
+    memory_limit: str = "16GB",
 ) -> Iterator[duckdb.DuckDBPyConnection]:
     """Open gold.duckdb read-write for incremental feature table updates."""
     p = str(path or DEFAULT_GOLD_DB_PATH)
@@ -461,7 +461,7 @@ def gold_connect_with_silver(
     gold_path: Path | str | None = None,
     silver_path: Path | str | None = None,
     *,
-    memory_limit: str = "2GB",
+    memory_limit: str = "16GB",
 ) -> Iterator[duckdb.DuckDBPyConnection]:
     """Open gold.duckdb + ATTACH silver.duckdb as views.
 
@@ -519,7 +519,7 @@ def sync_feat_from_sqlite(
     copied: dict[str, int] = {}
     try:
         conn = duckdb.connect(g_path)
-        conn.execute("SET memory_limit='2GB'")
+        conn.execute("SET memory_limit='16GB'")
         conn.execute(f"ATTACH '{s_path}' AS sl (TYPE SQLITE, READ_ONLY TRUE)")
         conn.execute(_DDL)
 
