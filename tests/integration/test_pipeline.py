@@ -23,6 +23,7 @@ def populated_db(tmp_path, monkeypatch):
     """テスト用のデータが入ったDB."""
     db_path = tmp_path / "test_pipeline.db"
     json_dir = tmp_path / "json"
+    json_dir.mkdir(parents=True, exist_ok=True)
 
     conn = get_connection(db_path)
     init_db(conn)
@@ -254,26 +255,21 @@ class TestResumePipeline:
         assert len(results) > 0
 
     def test_resume_creates_checkpoint(self, populated_db, monkeypatch):
-        """CheckpointHook がパイプライン実行中に checkpoint を書き込む."""
-        saved: list = []
+        """CheckpointHook がパイプライン実行中に Phase 8 checkpoint を書き込む."""
+        from src.pipeline_phases.lifecycle import CheckpointHook
 
-        orig_save = __import__(
-            "src.pipeline_phases.context", fromlist=["PipelineCheckpoint"]
-        ).PipelineCheckpoint.save
+        seen_nodes: list[str] = []
+        orig = CheckpointHook.run_after_node_execution
 
-        def _spy(self, phase, ctx):
-            orig_save(self, phase, ctx)
-            saved.append(phase)
+        def _spy(self, *, node_name, success, **kwargs):
+            orig(self, node_name=node_name, success=success, **kwargs)
+            if success and node_name == "ctx_results_populated":
+                seen_nodes.append(node_name)
 
-        monkeypatch.setattr(
-            __import__("src.pipeline_phases.context", fromlist=["PipelineCheckpoint"])
-            .PipelineCheckpoint,
-            "save",
-            _spy,
-        )
+        monkeypatch.setattr(CheckpointHook, "run_after_node_execution", _spy)
 
         run_scoring_pipeline(resume=False)
-        assert 8 in saved, "CheckpointHook must save phase-8 checkpoint during run"
+        assert seen_nodes, "CheckpointHook must fire on ctx_results_populated (Phase 8)"
 
     def test_resume_restores_same_result_count(self, populated_db):
         """チェックポイントから再開しても結果件数が同じ."""
