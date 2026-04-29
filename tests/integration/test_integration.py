@@ -22,6 +22,7 @@ def synthetic_db(tmp_path_factory):
     tmp_path = tmp_path_factory.mktemp("integration")
     db_path = tmp_path / "integration.db"
     json_dir = tmp_path / "json"
+    json_dir.mkdir(parents=True, exist_ok=True)
 
     import src.db.init
     import src.runtime.pipeline
@@ -93,6 +94,7 @@ def synthetic_db_fresh(monkeypatch, tmp_path):
     """合成データ入りのテストDB (function-scoped)。パイプライン未実行の状態が必要なテスト用."""
     db_path = tmp_path / "integration.db"
     json_dir = tmp_path / "json"
+    json_dir.mkdir(parents=True, exist_ok=True)
 
     import src.db.init
     import src.runtime.pipeline
