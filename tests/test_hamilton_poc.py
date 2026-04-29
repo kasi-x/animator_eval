@@ -220,15 +220,19 @@ class TestRunAnalysisModulesPhase:
     def test_runs_without_exception(self, minimal_context, tmp_path, monkeypatch):
         from src.pipeline_phases.analysis_modules import run_analysis_modules_phase
         import src.utils.config as cfg
+        import src.analysis.io.calc_cache as calc_cache
 
         monkeypatch.setattr(cfg, "JSON_DIR", tmp_path)
+        monkeypatch.setattr(calc_cache, "DEFAULT_CACHE_PATH", tmp_path / "cache.duckdb")
         run_analysis_modules_phase(minimal_context, max_workers=2)
 
     def test_populates_analysis_results(self, minimal_context, tmp_path, monkeypatch):
         from src.pipeline_phases.analysis_modules import run_analysis_modules_phase
         import src.utils.config as cfg
+        import src.analysis.io.calc_cache as calc_cache
 
         monkeypatch.setattr(cfg, "JSON_DIR", tmp_path)
+        monkeypatch.setattr(calc_cache, "DEFAULT_CACHE_PATH", tmp_path / "cache.duckdb")
         run_analysis_modules_phase(minimal_context, max_workers=2)
         assert isinstance(minimal_context.analysis_results, dict)
 
