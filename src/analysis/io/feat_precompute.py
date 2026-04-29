@@ -172,20 +172,21 @@ def compute_feat_credit_activity_ddb(
 
     with gold_connect_write() as gold:
         gold.execute("DELETE FROM feat_credit_activity")
-        gold.executemany(
-            """
-            INSERT INTO feat_credit_activity (
-                person_id, first_abs_quarter, last_abs_quarter,
-                activity_span_quarters, active_quarters, density,
-                n_gaps, mean_gap_quarters, median_gap_quarters,
-                min_gap_quarters, max_gap_quarters, std_gap_quarters,
-                consecutive_quarters, consecutive_rate,
-                n_hiatuses, longest_hiatus_quarters, quarters_since_last_credit,
-                active_years, n_year_gaps, mean_year_gap, max_year_gap
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """,
-            rows,
-        )
+        if rows:
+            gold.executemany(
+                """
+                INSERT INTO feat_credit_activity (
+                    person_id, first_abs_quarter, last_abs_quarter,
+                    activity_span_quarters, active_quarters, density,
+                    n_gaps, mean_gap_quarters, median_gap_quarters,
+                    min_gap_quarters, max_gap_quarters, std_gap_quarters,
+                    consecutive_quarters, consecutive_rate,
+                    n_hiatuses, longest_hiatus_quarters, quarters_since_last_credit,
+                    active_years, n_year_gaps, mean_year_gap, max_year_gap
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                rows,
+            )
 
     log.info("feat_credit_activity_computed", rows=len(rows))
     return len(rows)
@@ -267,19 +268,20 @@ def compute_feat_career_annual_ddb() -> int:
 
     with gold_connect_write() as gold:
         gold.execute("DELETE FROM feat_career_annual")
-        gold.executemany(
-            """
-            INSERT INTO feat_career_annual (
-                person_id, career_year, credit_year,
-                n_works, n_credits, n_roles,
-                works_direction, works_animation_supervision, works_animation,
-                works_design, works_technical, works_art, works_sound,
-                works_writing, works_production, works_production_management,
-                works_finishing, works_editing, works_settings, works_other
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-            """,
-            rows,
-        )
+        if rows:
+            gold.executemany(
+                """
+                INSERT INTO feat_career_annual (
+                    person_id, career_year, credit_year,
+                    n_works, n_credits, n_roles,
+                    works_direction, works_animation_supervision, works_animation,
+                    works_design, works_technical, works_art, works_sound,
+                    works_writing, works_production, works_production_management,
+                    works_finishing, works_editing, works_settings, works_other
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                rows,
+            )
 
     log.info("feat_career_annual_computed", rows=len(rows))
     return len(rows)
@@ -380,15 +382,16 @@ def compute_feat_person_role_progression_ddb(
 
     with gold_connect_write() as gold:
         gold.execute("DELETE FROM feat_person_role_progression")
-        gold.executemany(
-            """
-            INSERT INTO feat_person_role_progression (
-                person_id, role_category, first_year, last_year,
-                peak_year, n_works, n_credits, career_year_first, still_active
-            ) VALUES (?,?,?,?,?,?,?,?,?)
-            """,
-            rows_raw,
-        )
+        if rows_raw:
+            gold.executemany(
+                """
+                INSERT INTO feat_person_role_progression (
+                    person_id, role_category, first_year, last_year,
+                    peak_year, n_works, n_credits, career_year_first, still_active
+                ) VALUES (?,?,?,?,?,?,?,?,?)
+                """,
+                rows_raw,
+            )
 
     log.info("feat_person_role_progression_computed", rows=len(rows_raw))
     return len(rows_raw)
@@ -438,15 +441,16 @@ def compute_feat_studio_affiliation_ddb() -> int:
 
     with gold_connect_write() as gold:
         gold.execute("DELETE FROM feat_studio_affiliation")
-        gold.executemany(
-            """
-            INSERT INTO feat_studio_affiliation
-                (person_id, credit_year, studio_id, studio_name,
-                 n_works, n_credits, is_main_studio)
-            VALUES (?,?,?,?,?,?,?)
-            """,
-            rows,
-        )
+        if rows:
+            gold.executemany(
+                """
+                INSERT INTO feat_studio_affiliation
+                    (person_id, credit_year, studio_id, studio_name,
+                     n_works, n_credits, is_main_studio)
+                VALUES (?,?,?,?,?,?,?)
+                """,
+                rows,
+            )
 
     log.info("feat_studio_affiliation_computed", rows=len(rows))
     return len(rows)
