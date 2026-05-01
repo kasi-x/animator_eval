@@ -64,6 +64,7 @@ from .biz_team_template import BizTeamTemplateReport
 from .biz_trust_entry import BizTrustEntryReport
 from .biz_independent_unit import BizIndependentUnitReport
 # Extension reports (15_extension_reports card group)
+from .o2_mid_management import O2MidManagementReport
 from .o3_ip_dependency import O3IpDependencyReport
 # Phase 10: Person parameter card + 3 audience brief indices
 from .person_parameter_card import PersonParameterCardReport
@@ -104,6 +105,7 @@ V2_REPORT_CLASSES = [
     BizTrustEntryReport,
     BizTeamTemplateReport,
     BizIndependentUnitReport,
+    O2MidManagementReport,
     O3IpDependencyReport,
     # technical appendix
     AKMDiagnosticsReport,
@@ -164,6 +166,7 @@ __all__ = [
     "PolicyBriefIndexReport",
     "HrBriefIndexReport",
     "BizBriefIndexReport",
+    "O2MidManagementReport",
     "O3IpDependencyReport",
     "V2_REPORT_CLASSES",
 ]

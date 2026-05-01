@@ -296,9 +296,59 @@ Each recommendation includes alternative policy designs in the technical appendi
         """,
     )
     
+    brief.add_section(
+        section_id="mid_career_attrition",
+        title="Mid-Career Credit Visibility Loss in the Animation Pipeline (O2)",
+        findings="""
+Kaplan-Meier analysis of role progression across the four-stage animation pipeline
+(in_between → key_animator → animation_director → director) reveals cohort-level
+differences in time-to-next-role.
+
+Cohort stratification (5-year debut windows) shows whether persons who entered the
+industry in different periods experience different progression timelines, measured as
+years between first credit at role_from and first credit at role_to.
+
+Censored observations (persons not reaching the next role within the observation window)
+are handled via right-censoring at 25 years. Log-rank tests compare cohort curves.
+
+Studio blockage scores quantify which production studios are associated with longer-than-
+industry-median progression times for their primarily-affiliated personnel.
+        """,
+        interpretation="""
+**Interpretation (Policy perspective — mid-career pipeline):**
+
+I observe that the animation workforce shows a funnel structure: substantially fewer
+individuals appear in credit records at director level than at in-between animator level.
+Two mechanisms are consistent with this observation:
+
+1. *Career transition*: In-between animators move into adjacent roles (compositing,
+   production management, etc.) not captured by the four-stage pipeline definition.
+
+2. *Credit visibility loss*: Some personnel cease appearing in publicly-available
+   credit records without equivalent labor market exit — they may work on uncredited
+   projects, transition to in-house roles, or work for studios with lower data coverage.
+
+**Policy considerations:**
+- If credit visibility loss is concentrated in specific cohorts or studio types, targeted
+  support for workforce continuity could be evaluated.
+- Progression time disparities across cohorts may reflect changes in industry structure
+  (e.g., shifts in series length, outsourcing patterns) rather than individual characteristics.
+- Studio blockage scores provide a structural (not individual-level) indicator that may
+  inform industry-level monitoring of workforce advancement patterns.
+
+**Alternative interpretation:**
+Longer progression times in some cohorts may reflect increased selectivity for higher-level
+roles, consistent with quality-focused hiring rather than structural barriers. Distinguishing
+these mechanisms requires longitudinal survey data complementing credit records.
+
+See O2 report (o2_mid_management.html) for full KM curves and studio-level blockage scores
+with 95% CI.
+        """,
+    )
+
     # 4. Validate and export
     is_valid, errors = brief.validate()
-    
+
     if not is_valid:
         log.error("policy_brief_invalid", errors=errors)
         return {}

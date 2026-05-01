@@ -348,9 +348,57 @@ this studio?" to differentiate push vs. pull factors before investing heavily in
         """,
     )
     
+    brief.add_section(
+        section_id="pipeline_blockage",
+        title="Mid-Career Pipeline Blockage (O2)",
+        findings="""
+Analysis of role progression from in-between animator (動画) through key animator (原画),
+animation director (作監), to director (監督) using Kaplan-Meier survival estimation
+stratified by 5-year debut cohort.
+
+Studio-level blockage scores (studio_median_progression_years - industry_median) indicate
+which studios show slower-than-industry advancement for their primarily-affiliated personnel.
+
+Positive blockage_score = studio personnel progress through role transitions more slowly
+than the industry median. Negative = faster-than-median progression.
+
+Industry median progression time (in_between → key_animator): see O2 report for cohort-
+stratified estimates with 95% CI (Greenwood formula).
+
+Studio blockage CI computed via bootstrap (n=1,000 resamples, seed=42, percentile method).
+        """,
+        interpretation="""
+**Interpretation (HR/Operations — pipeline blockage):**
+
+Pipeline blockage data identifies studios where role advancement is slower than the
+industry norm. Two plausible structural mechanisms:
+
+1. *Role saturation*: When a studio has many key animators, in-between animators face
+   longer waits for key animator openings. Observed as positive blockage score.
+
+2. *Project mix*: Studios producing predominantly short-form or outsourced work may
+   offer fewer opportunities for animators to advance.
+
+**Operational considerations:**
+- Studios with high positive blockage scores may experience higher departure rates
+  among in-between animators seeking faster advancement elsewhere.
+- Cross-studio collaboration or apprenticeship arrangements may reduce blockage
+  for studios where role saturation is the primary factor.
+
+**Alternative interpretation:**
+Slower progression may reflect deliberate quality-gate policies rather than structural
+blockage. Studios with high standards may require more years of demonstrated work
+before crediting someone in a senior role. Credit-visible advancement is not identical
+to internal promotion or compensation change.
+
+See O2 report (o2_mid_management.html) for full KM curves, cohort comparisons,
+and studio-level blockage heatmap.
+        """,
+    )
+
     # 4. Validate and export
     is_valid, errors = brief.validate()
-    
+
     if not is_valid:
         log.error("hr_brief_invalid", errors=errors)
         return {}
