@@ -1500,6 +1500,12 @@ def _upgrade_v61_titles_alt(conn: sqlite3.Connection) -> None:
 #   display_rating_votes INTEGER, display_rating_weighted REAL,
 #   display_rating_bayesian REAL
 #
+# Card 20/03: _ann suffix aliases (cross-source disambiguation, H1):
+#   display_rating_count_ann    INTEGER — alias of display_rating_votes
+#   display_rating_avg_ann      REAL    — alias of display_rating_weighted (best proxy for avg)
+#   display_rating_weighted_ann REAL    — alias of display_rating_weighted
+#   display_rating_bayesian_ann REAL    — alias of display_rating_bayesian
+#
 # ALTER TABLE (persons):
 #   gender TEXT, height_raw TEXT, family_name_ja TEXT,
 #   given_name_ja TEXT, hometown TEXT, image_url_ann TEXT
@@ -1836,7 +1842,11 @@ def _upgrade_seesaawiki_extension(conn: sqlite3.Connection) -> None:
 #   display_score_bgm          REAL    — H1: display only
 #   display_score_details_json TEXT    — H1: display only
 #   display_rank_bgm           INTEGER — H1: display only
-#   display_favorite_bgm       INTEGER — H1: display only
+#   display_favorite_bgm       INTEGER — H1: display only (TRY_CAST of JSON; may be NULL)
+#
+# Card 20/03: additional display columns:
+#   display_collect_count_bgm  INTEGER — H1: sum of wish+done+doing+on_hold+dropped
+#                                        from favorite JSON (collection total)
 #
 # persons 拡張列 (Card 03 との衝突注意: gender/blood_type は Card 03 ALTER 済):
 #   career_json  TEXT    — bangumi career array JSON

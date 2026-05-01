@@ -150,6 +150,15 @@ _DDL_ANIME_EXTENSION = [
     "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_rating_votes INTEGER",
     "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_rating_weighted REAL",
     "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_rating_bayesian REAL",
+    # Card 20/03: _ann suffix aliases for cross-source disambiguation (H1).
+    # display_rating_count_ann  ← display_rating_votes  (vote count)
+    # display_rating_avg_ann    ← display_rating_weighted (weighted mean, best proxy for avg)
+    # display_rating_weighted_ann ← display_rating_weighted
+    # display_rating_bayesian_ann ← display_rating_bayesian
+    "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_rating_count_ann INTEGER",
+    "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_rating_avg_ann REAL",
+    "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_rating_weighted_ann REAL",
+    "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_rating_bayesian_ann REAL",
 ]
 
 # persons 拡張列
@@ -175,19 +184,24 @@ WITH bronze AS (
     WHERE ann_id IS NOT NULL
 )
 UPDATE anime SET
-    themes                  = bronze.themes,
-    plot_summary            = bronze.plot_summary,
-    running_time_raw        = bronze.running_time_raw,
-    objectionable_content   = bronze.objectionable_content,
-    opening_themes_json     = bronze.opening_themes_json,
-    ending_themes_json      = bronze.ending_themes_json,
-    insert_songs_json       = bronze.insert_songs_json,
-    official_websites_json  = bronze.official_websites_json,
-    vintage_raw             = bronze.vintage_raw,
-    image_url               = bronze.image_url,
-    display_rating_votes    = TRY_CAST(bronze.display_rating_votes AS INTEGER),
-    display_rating_weighted = TRY_CAST(bronze.display_rating_weighted AS REAL),
-    display_rating_bayesian = TRY_CAST(bronze.display_rating_bayesian AS REAL)
+    themes                      = bronze.themes,
+    plot_summary                = bronze.plot_summary,
+    running_time_raw            = bronze.running_time_raw,
+    objectionable_content       = bronze.objectionable_content,
+    opening_themes_json         = bronze.opening_themes_json,
+    ending_themes_json          = bronze.ending_themes_json,
+    insert_songs_json           = bronze.insert_songs_json,
+    official_websites_json      = bronze.official_websites_json,
+    vintage_raw                 = bronze.vintage_raw,
+    image_url                   = bronze.image_url,
+    display_rating_votes        = TRY_CAST(bronze.display_rating_votes AS INTEGER),
+    display_rating_weighted     = TRY_CAST(bronze.display_rating_weighted AS REAL),
+    display_rating_bayesian     = TRY_CAST(bronze.display_rating_bayesian AS REAL),
+    -- Card 20/03: _ann suffix aliases (cross-source disambiguation, H1).
+    display_rating_count_ann    = TRY_CAST(bronze.display_rating_votes AS INTEGER),
+    display_rating_avg_ann      = TRY_CAST(bronze.display_rating_weighted AS REAL),
+    display_rating_weighted_ann = TRY_CAST(bronze.display_rating_weighted AS REAL),
+    display_rating_bayesian_ann = TRY_CAST(bronze.display_rating_bayesian AS REAL)
 FROM bronze
 WHERE anime.id = ('ann:a' || CAST(bronze.ann_id AS VARCHAR))
   AND bronze._rn = 1

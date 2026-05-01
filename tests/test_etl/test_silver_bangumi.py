@@ -688,3 +688,78 @@ class TestBangumiRoleMapperExtension:
     def test_unknown_zh_returns_other(self) -> None:
         from src.etl.role_mappers import map_role
         assert map_role("bangumi", "完全に未知の役職XYZ") == Role.OTHER.value
+
+
+class TestCollectCount:
+    """Card 20/03: display_collect_count_bgm = sum of wish+done+doing+on_hold+dropped."""
+
+    def test_collect_count_computed_from_json_favorite(self, tmp_path: Path) -> None:
+        """favorite JSON with collection categories → display_collect_count_bgm = their sum."""
+        root = tmp_path / "bronze"
+        _write_subjects(root, rows=[
+            {
+                "id": 7001,
+                "type": 2,
+                "name": "CollectAnime",
+                "name_cn": "",
+                "infobox": None,
+                "platform": 1,
+                "summary": None,
+                "nsfw": False,
+                "tags": None,
+                "meta_tags": None,
+                "score": 7.0,
+                "score_details": None,
+                "rank": 100,
+                "release_date": "2024",
+                # favorite as JSON collection dict (bangumi API format)
+                "favorite": '{"wish": 100, "done": 500, "doing": 50, "on_hold": 20, "dropped": 10}',
+                "series": False,
+            }
+        ])
+        _write_persons(root, rows=[])
+        _write_characters(root, rows=[])
+        _write_subject_persons(root, rows=[])
+        _write_person_characters(root, rows=[])
+        _write_subject_characters(root, rows=[])
+
+        conn = _make_silver_conn()
+        bangumi_loader.integrate(conn, root)
+        row = conn.execute(
+            "SELECT display_collect_count_bgm FROM anime WHERE id = 'bgm:s7001'"
+        ).fetchone()
+        conn.close()
+
+        assert row is not None
+        # 100 + 500 + 50 + 20 + 10 = 680
+        assert row[0] == 680
+
+    def test_collect_count_column_exists(self, bronze_dir: Path) -> None:
+        """display_collect_count_bgm column is created by the loader DDL."""
+        conn = _make_silver_conn()
+        bangumi_loader.integrate(conn, bronze_dir)
+        cols = {row[0] for row in conn.execute("DESCRIBE anime").fetchall()}
+        conn.close()
+        assert "display_collect_count_bgm" in cols
+
+    def test_collect_count_null_safe_for_non_json_favorite(self, tmp_path: Path) -> None:
+        """favorite='123' (plain integer string) → display_collect_count_bgm = 0 (JSON misses)."""
+        root = tmp_path / "bronze"
+        # The standard fixture has favorite="123" (plain integer string, not JSON dict)
+        _write_subjects(root)  # uses default fixture with favorite="123"
+        _write_persons(root, rows=[])
+        _write_characters(root, rows=[])
+        _write_subject_persons(root, rows=[])
+        _write_person_characters(root, rows=[])
+        _write_subject_characters(root, rows=[])
+
+        conn = _make_silver_conn()
+        bangumi_loader.integrate(conn, root)
+        row = conn.execute(
+            "SELECT display_collect_count_bgm FROM anime WHERE id = 'bgm:s1001'"
+        ).fetchone()
+        conn.close()
+
+        assert row is not None
+        # json_extract_string on non-JSON returns NULL → COALESCE to 0 → sum = 0
+        assert row[0] == 0

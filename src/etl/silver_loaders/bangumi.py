@@ -34,6 +34,9 @@ _DDL_ANIME_EXTENSION = [
     "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_score_details_json TEXT",
     "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_rank_bgm INTEGER",
     "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_favorite_bgm INTEGER",
+    # Card 20/03: display_collect_count_bgm — sum of wish+done+doing+on_hold+dropped
+    # from the bangumi collection JSON (stored as favorite in BRONZE).
+    "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_collect_count_bgm INTEGER",
 ]
 
 _DDL_PERSONS_EXTENSION = [
@@ -75,7 +78,8 @@ INSERT INTO anime (
     display_score_bgm,
     display_score_details_json,
     display_rank_bgm,
-    display_favorite_bgm
+    display_favorite_bgm,
+    display_collect_count_bgm
 )
 SELECT
     'bgm:s' || CAST(id AS VARCHAR)                       AS id,
@@ -88,7 +92,16 @@ SELECT
     TRY_CAST(score    AS REAL)                           AS display_score_bgm,
     score_details                                        AS display_score_details_json,
     TRY_CAST(rank     AS INTEGER)                        AS display_rank_bgm,
-    TRY_CAST(favorite AS INTEGER)                        AS display_favorite_bgm
+    TRY_CAST(favorite AS INTEGER)                        AS display_favorite_bgm,
+    -- Card 20/03: sum all collection categories (wish+done+doing+on_hold+dropped).
+    -- favorite column is a JSON dict; TRY_CAST guards against non-JSON rows.
+    (
+        COALESCE(TRY_CAST(json_extract_string(favorite, '$.wish')    AS INTEGER), 0)
+      + COALESCE(TRY_CAST(json_extract_string(favorite, '$.done')    AS INTEGER), 0)
+      + COALESCE(TRY_CAST(json_extract_string(favorite, '$.doing')   AS INTEGER), 0)
+      + COALESCE(TRY_CAST(json_extract_string(favorite, '$.on_hold') AS INTEGER), 0)
+      + COALESCE(TRY_CAST(json_extract_string(favorite, '$.dropped') AS INTEGER), 0)
+    )                                                    AS display_collect_count_bgm
 FROM (
     SELECT *,
            ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn

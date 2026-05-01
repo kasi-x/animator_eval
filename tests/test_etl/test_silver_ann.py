@@ -465,3 +465,99 @@ class TestIntegrateReturnValue:
 
         for key in ("anime_episodes", "anime_companies", "anime_releases", "anime_news"):
             assert key in counts, f"Missing key in counts: {key}"
+
+
+# ─── Card 20/03: _ann suffix columns ────────────────────────────────────────
+
+class TestAnnSuffixColumns:
+    """Card 20/03: display_rating_*_ann columns for cross-source disambiguation (H1)."""
+
+    def test_ann_suffix_columns_created_by_ddl(self, tmp_path: Path) -> None:
+        """_apply_ddl creates the four _ann suffix display columns."""
+        conn = _silver_conn(tmp_path)
+        _apply_ddl(conn)
+        cols = {r[1] for r in conn.execute("PRAGMA table_info('anime')").fetchall()}
+        for col in (
+            "display_rating_count_ann",
+            "display_rating_avg_ann",
+            "display_rating_weighted_ann",
+            "display_rating_bayesian_ann",
+        ):
+            assert col in cols, f"Missing _ann suffix column: {col}"
+
+    def test_ann_suffix_columns_populated_on_update(self, tmp_path: Path) -> None:
+        """integrate() propagates BRONZE rating values to _ann suffix columns."""
+        conn = _silver_conn(tmp_path)
+        conn.execute("INSERT INTO anime (id, title_en) VALUES ('ann:a10', 'Suffix Test')")
+
+        _write_bronze(tmp_path, "ann", "anime", [{
+            "ann_id": 10,
+            "title_en": "Suffix Test",
+            "title_ja": "サフィックステスト",
+            "themes": None,
+            "plot_summary": None,
+            "running_time_raw": None,
+            "objectionable_content": None,
+            "opening_themes_json": None,
+            "ending_themes_json": None,
+            "insert_songs_json": None,
+            "official_websites_json": None,
+            "vintage_raw": None,
+            "image_url": None,
+            "display_rating_votes": 250,
+            "display_rating_weighted": 8.2,
+            "display_rating_bayesian": 8.1,
+        }])
+
+        integrate(conn, tmp_path)
+        row = conn.execute(
+            "SELECT display_rating_count_ann, display_rating_avg_ann, "
+            "       display_rating_weighted_ann, display_rating_bayesian_ann "
+            "FROM anime WHERE id = 'ann:a10'"
+        ).fetchone()
+        assert row is not None
+        assert row[0] == 250       # display_rating_count_ann ← display_rating_votes
+        assert abs(row[1] - 8.2) < 0.001   # display_rating_avg_ann ← display_rating_weighted
+        assert abs(row[2] - 8.2) < 0.001   # display_rating_weighted_ann
+        assert abs(row[3] - 8.1) < 0.001   # display_rating_bayesian_ann
+
+    def test_ann_suffix_columns_null_safe(self, tmp_path: Path) -> None:
+        """NULL BRONZE rating values produce NULL _ann suffix columns (no crash)."""
+        conn = _silver_conn(tmp_path)
+        conn.execute("INSERT INTO anime (id, title_en) VALUES ('ann:a20', 'NullRating')")
+
+        _write_bronze(tmp_path, "ann", "anime", [{
+            "ann_id": 20,
+            "themes": None,
+            "plot_summary": None,
+            "running_time_raw": None,
+            "objectionable_content": None,
+            "opening_themes_json": None,
+            "ending_themes_json": None,
+            "insert_songs_json": None,
+            "official_websites_json": None,
+            "vintage_raw": None,
+            "image_url": None,
+            "display_rating_votes": None,
+            "display_rating_weighted": None,
+            "display_rating_bayesian": None,
+        }])
+
+        integrate(conn, tmp_path)
+        row = conn.execute(
+            "SELECT display_rating_count_ann, display_rating_avg_ann "
+            "FROM anime WHERE id = 'ann:a20'"
+        ).fetchone()
+        assert row is not None
+        assert row[0] is None
+        assert row[1] is None
+
+    def test_h1_no_bare_ann_suffix(self, tmp_path: Path) -> None:
+        """H1: _ann columns must not exist without display_ prefix."""
+        conn = _silver_conn(tmp_path)
+        _apply_ddl(conn)
+        cols = {r[1] for r in conn.execute("PRAGMA table_info('anime')").fetchall()}
+        assert "rating_count_ann" not in cols
+        assert "rating_avg_ann" not in cols
+        assert "rating_weighted_ann" not in cols
+        assert "rating_bayesian_ann" not in cols
