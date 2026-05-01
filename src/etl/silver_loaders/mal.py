@@ -223,11 +223,13 @@ WHERE name IS NOT NULL
 """
 
 _ANIME_STUDIOS_SQL = """
-INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main)
+INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main, role, source)
 SELECT DISTINCT
-    'mal:a' || CAST(mal_id AS VARCHAR)  AS anime_id,
-    'mal:n:' || name                    AS studio_id,
-    CASE WHEN kind = 'Studios' THEN 1 ELSE 0 END AS is_main
+    'mal:a' || CAST(mal_id AS VARCHAR)   AS anime_id,
+    'mal:n:' || name                     AS studio_id,
+    CASE WHEN kind = 'Studios' THEN 1 ELSE 0 END AS is_main,
+    ''                                   AS role,
+    'mal'                                AS source
 FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
 WHERE mal_id IS NOT NULL
   AND name IS NOT NULL

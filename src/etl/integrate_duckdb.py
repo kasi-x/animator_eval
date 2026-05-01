@@ -61,7 +61,9 @@ CREATE TABLE IF NOT EXISTS anime_studios (
     anime_id    VARCHAR NOT NULL,
     studio_id   VARCHAR NOT NULL,
     is_main     BOOLEAN NOT NULL DEFAULT FALSE,
-    PRIMARY KEY (anime_id, studio_id)
+    role        VARCHAR NOT NULL DEFAULT '',
+    source      VARCHAR NOT NULL DEFAULT '',
+    PRIMARY KEY (anime_id, studio_id, role, source)
 );
 
 CREATE TABLE IF NOT EXISTS anime (
@@ -521,11 +523,13 @@ WHERE _rn = 1
 """
 
 _ANIME_STUDIOS_SQL = """
-INSERT OR IGNORE INTO anime_studios
+INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main, role, source)
 SELECT DISTINCT
     anime_id,
     studio_id,
-    COALESCE(TRY_CAST(is_main AS BOOLEAN), FALSE) AS is_main
+    COALESCE(TRY_CAST(is_main AS BOOLEAN), FALSE) AS is_main,
+    ''                                             AS role,
+    COALESCE(source, '')                           AS source
 FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
 WHERE anime_id IS NOT NULL AND studio_id IS NOT NULL
 """

@@ -38,7 +38,9 @@ def _make_conn() -> duckdb.DuckDBPyConnection:
             anime_id  VARCHAR NOT NULL,
             studio_id VARCHAR NOT NULL,
             is_main   BOOLEAN NOT NULL DEFAULT FALSE,
-            PRIMARY KEY (anime_id, studio_id)
+            role      VARCHAR NOT NULL DEFAULT '',
+            source    VARCHAR NOT NULL DEFAULT '',
+            PRIMARY KEY (anime_id, studio_id, role, source)
         )
     """)
     conn.execute("""
@@ -198,6 +200,31 @@ class TestIntegrateAnimeStudios:
         integrate(conn, tmp_path)
         integrate(conn, tmp_path)
         assert conn.execute("SELECT COUNT(*) FROM anime_studios").fetchone()[0] == 1
+
+    def test_anime_studios_source_column_populated(self, tmp_path: Path) -> None:
+        """Inserted anime_studios rows carry source='seesaawiki'."""
+        conn = _make_conn()
+        _write_parquet(tmp_path, "anime_studios", [
+            {"anime_id": "seesaa:a1", "studio_id": "sw:s1", "is_main": 1},
+        ])
+        integrate(conn, tmp_path)
+        row = conn.execute(
+            "SELECT source FROM anime_studios WHERE anime_id = 'seesaa:a1'"
+        ).fetchone()
+        assert row is not None
+        assert row[0] == "seesaawiki"
+
+    def test_anime_studios_no_pk_collision_on_repeated_insert(self, tmp_path: Path) -> None:
+        """Re-running integrate on same parquet does not raise PK violation."""
+        conn = _make_conn()
+        _write_parquet(tmp_path, "anime_studios", [
+            {"anime_id": "seesaa:a1", "studio_id": "sw:s1", "is_main": 1},
+            {"anime_id": "seesaa:a1", "studio_id": "sw:s2", "is_main": 0},
+        ])
+        integrate(conn, tmp_path)
+        # Second run must not raise and must not duplicate rows
+        integrate(conn, tmp_path)
+        assert conn.execute("SELECT COUNT(*) FROM anime_studios").fetchone()[0] == 2
 
 
 class TestIntegrateThemeSongs:

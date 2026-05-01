@@ -118,11 +118,13 @@ WHERE _rn = 1
 """
 
 _ANIME_STUDIOS_SQL = """
-INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main)
+INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main, role, source)
 SELECT DISTINCT
     anime_id,
     studio_id,
-    COALESCE(TRY_CAST(is_main AS BOOLEAN), FALSE) AS is_main
+    COALESCE(TRY_CAST(is_main AS BOOLEAN), FALSE) AS is_main,
+    ''            AS role,
+    'seesaawiki'  AS source
 FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
 WHERE anime_id IS NOT NULL AND studio_id IS NOT NULL
 """

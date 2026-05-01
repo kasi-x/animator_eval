@@ -116,13 +116,13 @@ CREATE TABLE IF NOT EXISTS studios (
     updated_at          TIMESTAMP DEFAULT now()
 );
 
-CREATE SEQUENCE IF NOT EXISTS seq_anime_studios_id;
 CREATE TABLE IF NOT EXISTS anime_studios (
-    id        INTEGER PRIMARY KEY DEFAULT nextval('seq_anime_studios_id'),
     anime_id  VARCHAR NOT NULL,
     studio_id VARCHAR NOT NULL,
     is_main   INTEGER NOT NULL DEFAULT 0,
-    UNIQUE(anime_id, studio_id)
+    role      VARCHAR NOT NULL DEFAULT '',
+    source    VARCHAR NOT NULL DEFAULT '',
+    PRIMARY KEY (anime_id, studio_id, role, source)
 );
 
 CREATE SEQUENCE IF NOT EXISTS seq_anime_relations_id;
@@ -618,6 +618,27 @@ class TestStudios:
         ).fetchone()[0]
         conn.close()
         assert c1 == c2
+
+    def test_anime_studios_source_column_populated(self, bronze_dir: Path) -> None:
+        """anime_studios rows inserted by MAL loader carry source='mal'."""
+        conn = _make_silver_conn()
+        mal_loader.integrate(conn, bronze_dir)
+        rows = conn.execute(
+            "SELECT source FROM anime_studios WHERE anime_id = 'mal:a1'"
+        ).fetchall()
+        conn.close()
+        assert len(rows) > 0
+        assert all(r[0] == "mal" for r in rows)
+
+    def test_anime_studios_no_pk_collision_on_repeated_insert(self, bronze_dir: Path) -> None:
+        """Running integrate twice must not raise PK violation in anime_studios."""
+        conn = _make_silver_conn()
+        mal_loader.integrate(conn, bronze_dir)
+        count1 = conn.execute("SELECT COUNT(*) FROM anime_studios").fetchone()[0]
+        mal_loader.integrate(conn, bronze_dir)
+        count2 = conn.execute("SELECT COUNT(*) FROM anime_studios").fetchone()[0]
+        conn.close()
+        assert count1 == count2  # idempotent
 
 
 class TestRelations:

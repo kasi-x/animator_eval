@@ -69,7 +69,9 @@ def _make_silver_conn(tmp_path: Path) -> duckdb.DuckDBPyConnection:
             anime_id  VARCHAR NOT NULL,
             studio_id VARCHAR NOT NULL,
             is_main   BOOLEAN NOT NULL DEFAULT FALSE,
-            PRIMARY KEY (anime_id, studio_id)
+            role      VARCHAR NOT NULL DEFAULT '',
+            source    VARCHAR NOT NULL DEFAULT '',
+            PRIMARY KEY (anime_id, studio_id, role, source)
         )
     """)
     return conn
@@ -202,6 +204,25 @@ def test_anime_studios_no_anilist_collision(silver_conn, bronze_dir):
     # kf:n: prefixed rows are separate
     kf_ids = {i for i in all_ids if i.startswith("kf:")}
     assert len(kf_ids) > 0
+
+
+def test_anime_studios_source_column_populated(silver_conn, bronze_dir):
+    """anime_studios rows inserted by keyframe loader carry source='keyframe'."""
+    integrate(silver_conn, bronze_dir)
+    rows = silver_conn.execute(
+        "SELECT source FROM anime_studios WHERE studio_id LIKE 'kf:n:%'"
+    ).fetchall()
+    assert len(rows) > 0
+    assert all(r[0] == "keyframe" for r in rows)
+
+
+def test_anime_studios_no_pk_collision_on_repeated_insert(silver_conn, bronze_dir):
+    """Running integrate twice must not raise PK violation in anime_studios."""
+    integrate(silver_conn, bronze_dir)
+    count1 = silver_conn.execute("SELECT COUNT(*) FROM anime_studios").fetchone()[0]
+    integrate(silver_conn, bronze_dir)
+    count2 = silver_conn.execute("SELECT COUNT(*) FROM anime_studios").fetchone()[0]
+    assert count1 == count2  # idempotent
 
 
 def test_settings_categories_loaded(silver_conn, bronze_dir):

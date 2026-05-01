@@ -122,11 +122,13 @@ WHERE studio_name IS NOT NULL
 """
 
 _ANIME_STUDIOS_LINK_SQL = """
-INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main)
+INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main, role, source)
 SELECT DISTINCT
     anime_id,
     'kf:n:' || studio_name,
-    COALESCE(TRY_CAST(is_main AS BOOLEAN), FALSE)
+    COALESCE(TRY_CAST(is_main AS BOOLEAN), FALSE),
+    ''          AS role,
+    'keyframe'  AS source
 FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
 WHERE anime_id    IS NOT NULL
   AND studio_name IS NOT NULL
