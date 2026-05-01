@@ -49,20 +49,29 @@ def test_discover_url_invalid_media() -> None:
 
 def test_detail_url_tv_appends_aggregate_credits() -> None:
     url = detail_url("tv", 1535)
-    assert url.endswith("aggregate_credits")
+    assert "aggregate_credits" in url
+    assert "content_ratings" in url
+    assert "external_ids" in url
+    assert "keywords" in url
+    assert "watch/providers" in url
     assert "/tv/1535" in url
+    assert "include_image_language=null,en,ja" in url
 
 
 def test_detail_url_movie_appends_credits() -> None:
     url = detail_url("movie", 4935)
-    assert url.endswith("external_ids,credits")
+    assert "credits" in url
+    assert "release_dates" in url
+    assert "external_ids" in url
+    assert "alternative_titles" in url
     assert "/movie/4935" in url
 
 
 def test_person_url() -> None:
-    assert person_url(200) == (
-        "https://api.themoviedb.org/3/person/200?append_to_response=external_ids"
-    )
+    url = person_url(200)
+    assert "/person/200" in url
+    assert "external_ids" in url
+    assert "images" in url
 
 
 def test_find_by_external_id_imdb() -> None:
@@ -294,6 +303,206 @@ def test_discover_results_empty() -> None:
     ids, total = discover_results({"results": [], "total_pages": 0})
     assert ids == []
     assert total == 0
+
+
+# ─── Extended fields (keywords, videos, images, etc.) ────────────────────
+
+
+@pytest.fixture
+def rich_tv_payload() -> dict:
+    return {
+        "id": 1,
+        "name": "X",
+        "first_air_date": "2020-01-01",
+        "type": "Scripted",
+        "in_production": False,
+        "adult": False,
+        "tagline": "tag",
+        "homepage": "http://x",
+        "spoken_languages": [{"iso_639_1": "ja"}, {"iso_639_1": "en"}],
+        "networks": [{"id": 11, "name": "NTV", "origin_country": "JP"}],
+        "created_by": [{"id": 200, "name": "Director", "credit_id": "c1"}],
+        "keywords": {"results": [{"id": 7, "name": "shounen"}]},
+        "alternative_titles": {
+            "results": [{"iso_3166_1": "US", "title": "X-EN", "type": ""}]
+        },
+        "translations": {
+            "translations": [
+                {
+                    "iso_3166_1": "JP",
+                    "iso_639_1": "ja",
+                    "name": "",
+                    "english_name": "Japanese",
+                    "data": {"name": "X-JA", "overview": "概要", "tagline": "t"},
+                }
+            ]
+        },
+        "content_ratings": {"results": [{"iso_3166_1": "US", "rating": "TV-14"}]},
+        "videos": {
+            "results": [
+                {
+                    "id": "v1",
+                    "site": "YouTube",
+                    "key": "abc",
+                    "name": "OP",
+                    "type": "Opening Credits",
+                    "iso_639_1": "ja",
+                    "iso_3166_1": "JP",
+                    "official": True,
+                    "published_at": "2020-01-01",
+                }
+            ]
+        },
+        "images": {
+            "posters": [
+                {
+                    "file_path": "/p.jpg",
+                    "iso_639_1": "en",
+                    "width": 1000,
+                    "height": 1500,
+                    "vote_average": 5.0,
+                    "vote_count": 10,
+                }
+            ],
+            "backdrops": [],
+            "logos": [],
+        },
+        "watch/providers": {
+            "results": {
+                "JP": {
+                    "link": "https://x",
+                    "flatrate": [
+                        {
+                            "provider_id": 8,
+                            "provider_name": "Netflix",
+                            "logo_path": "/n.png",
+                            "display_priority": 1,
+                        }
+                    ],
+                }
+            }
+        },
+        "recommendations": {"results": [{"id": 999}, {"id": 1000}]},
+        "external_ids": {
+            "imdb_id": "tt1",
+            "facebook_id": "fb",
+            "twitter_id": "tw",
+            "instagram_id": "ig",
+        },
+    }
+
+
+def test_parse_tv_extended_fields(rich_tv_payload: dict) -> None:
+    rec = parse_tmdb_anime(rich_tv_payload, "tv")
+    assert rec.type == "Scripted"
+    assert rec.in_production == 0
+    assert rec.adult == 0
+    assert json.loads(rec.spoken_languages) == ["ja", "en"]
+    assert json.loads(rec.networks)[0]["name"] == "NTV"
+    assert json.loads(rec.created_by)[0]["id"] == 200
+    assert json.loads(rec.keywords) == [{"id": 7, "name": "shounen"}]
+    assert json.loads(rec.alternative_titles)[0]["title"] == "X-EN"
+    tr = json.loads(rec.translations)
+    assert tr[0]["data"]["name"] == "X-JA"
+    assert tr[0]["data"]["overview"] == "概要"
+    assert json.loads(rec.content_ratings)[0]["rating"] == "TV-14"
+    vids = json.loads(rec.videos)
+    assert vids[0]["site"] == "YouTube"
+    assert vids[0]["key"] == "abc"
+    imgs = json.loads(rec.images)
+    assert imgs["posters"][0]["file_path"] == "/p.jpg"
+    assert imgs["backdrops"] == []
+    wp = json.loads(rec.watch_providers)
+    assert wp["JP"]["flatrate"][0]["provider_name"] == "Netflix"
+    assert json.loads(rec.recommendation_ids) == [999, 1000]
+    assert rec.facebook_id == "fb"
+    assert rec.twitter_id == "tw"
+    assert rec.instagram_id == "ig"
+    assert rec.tagline == "tag"
+    assert rec.homepage == "http://x"
+
+
+def test_parse_movie_release_dates_and_collection() -> None:
+    raw = {
+        "id": 4935,
+        "title": "Howl",
+        "release_date": "2004-11-19",
+        "runtime": 119,
+        "budget": 24000000,
+        "revenue": 236000000,
+        "production_countries": [{"iso_3166_1": "JP", "name": "Japan"}],
+        "spoken_languages": [{"iso_639_1": "ja"}],
+        "belongs_to_collection": {
+            "id": 99,
+            "name": "Ghibli",
+            "poster_path": None,
+            "backdrop_path": None,
+        },
+        "release_dates": {
+            "results": [
+                {
+                    "iso_3166_1": "JP",
+                    "release_dates": [
+                        {
+                            "type": 3,
+                            "release_date": "2004-11-20T00:00:00.000Z",
+                            "certification": "G",
+                            "note": "",
+                        }
+                    ],
+                }
+            ]
+        },
+        "alternative_titles": {
+            "titles": [{"iso_3166_1": "US", "title": "Howls Moving Castle"}]
+        },
+    }
+    rec = parse_tmdb_anime(raw, "movie")
+    assert rec.display_budget == 24000000
+    assert rec.display_revenue == 236000000
+    assert rec.belongs_to_collection is not None
+    coll = json.loads(rec.belongs_to_collection)
+    assert coll["name"] == "Ghibli"
+    rd = json.loads(rec.release_dates)
+    assert rd[0]["iso_3166_1"] == "JP"
+    assert rd[0]["releases"][0]["certification"] == "G"
+    alt = json.loads(rec.alternative_titles)
+    assert alt[0]["title"] == "Howls Moving Castle"
+
+
+def test_parse_person_extended_fields() -> None:
+    raw = {
+        "id": 200,
+        "name": "X",
+        "homepage": "http://x",
+        "adult": False,
+        "external_ids": {
+            "imdb_id": "nm1",
+            "facebook_id": "fb",
+            "twitter_id": "tw",
+            "wikidata_id": "Q1",
+            "instagram_id": "ig",
+            "tiktok_id": None,
+            "youtube_id": None,
+        },
+        "images": {
+            "profiles": [
+                {
+                    "file_path": "/x.jpg",
+                    "width": 100,
+                    "height": 100,
+                    "iso_639_1": None,
+                }
+            ]
+        },
+    }
+    rec = parse_tmdb_person(raw)
+    assert rec.homepage == "http://x"
+    assert rec.wikidata_id == "Q1"
+    assert rec.facebook_id == "fb"
+    assert rec.adult == 0
+    imgs = json.loads(rec.images)
+    assert imgs[0]["file_path"] == "/x.jpg"
 
 
 def test_parse_credits_helper_directly_on_movie() -> None:

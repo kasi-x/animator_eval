@@ -48,21 +48,40 @@ def discover_url(
     return f"{TMDB_BASE}/discover/{media}?{urlencode(params)}"
 
 
+_COMMON_APPEND = (
+    "external_ids,keywords,alternative_titles,translations,videos,images,"
+    "watch/providers,recommendations"
+)
+# TV-specific: aggregate_credits (per-episode roll-up), content_ratings.
+# Movie-specific: credits (flat), release_dates (per-country theatrical/digital/physical).
+_TV_APPEND = f"aggregate_credits,content_ratings,{_COMMON_APPEND}"
+_MOVIE_APPEND = f"credits,release_dates,{_COMMON_APPEND}"
+
+
 def detail_url(media: str, tmdb_id: int) -> str:
-    """Detail + external_ids + credits in one request via append_to_response."""
+    """Detail + ALL append_to_response sub-resources in a single request.
+
+    TMDB allows up to 20 appended sub-resources per call; the lists below
+    stay under that cap. include_image_language=null,en,ja keeps the
+    image set tractable (TMDB returns one row per language per file).
+    """
     if media == "tv":
-        append = "external_ids,aggregate_credits"
+        append = _TV_APPEND
     elif media == "movie":
-        append = "external_ids,credits"
+        append = _MOVIE_APPEND
     else:
         raise ValueError(f"media must be 'tv' or 'movie', got {media!r}")
-    return f"{TMDB_BASE}/{media}/{tmdb_id}?append_to_response={append}"
+    return (
+        f"{TMDB_BASE}/{media}/{tmdb_id}"
+        f"?append_to_response={append}"
+        "&include_image_language=null,en,ja"
+    )
 
 
 def person_url(tmdb_person_id: int) -> str:
     return (
         f"{TMDB_BASE}/person/{tmdb_person_id}"
-        "?append_to_response=external_ids"
+        "?append_to_response=external_ids,images"
     )
 
 
