@@ -28,15 +28,13 @@ from typing import Any, Iterator
 import duckdb
 import structlog
 
-from src.etl.atomic_swap import atomic_duckdb_swap
-
 logger = structlog.get_logger()
 
 # Can be overridden in tests via monkeypatch
 DEFAULT_GOLD_DB_PATH: Path = Path(
     os.environ.get(
         "ANIMETOR_GOLD_DB_PATH",
-        str(Path(__file__).resolve().parent.parent.parent / "result" / "gold.duckdb"),
+        str(Path(__file__).resolve().parent.parent.parent.parent / "result" / "gold.duckdb"),
     )
 )
 
@@ -605,23 +603,21 @@ class GoldWriter:
         self._swap_ctx = None
 
     def __enter__(self) -> "GoldWriter":
-        self._swap_ctx = atomic_duckdb_swap(self._path)
-        tmp_path = self._swap_ctx.__enter__()
-        self._conn = duckdb.connect(str(tmp_path))
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._conn = duckdb.connect(str(self._path))
         self._conn.execute(f"SET memory_limit='{self._memory_limit}'")
         self._conn.execute("SET temp_directory='/tmp/duckdb_spill'")
         self._conn.execute(_DDL)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
-        try:
-            if self._conn:
-                self._conn.close()
-                self._conn = None
-        finally:
-            if self._swap_ctx is not None:
-                self._swap_ctx.__exit__(exc_type, exc_val, exc_tb)
-                self._swap_ctx = None
+        if self._conn:
+            try:
+                self._conn.execute("CHECKPOINT")
+            except Exception:
+                pass
+            self._conn.close()
+            self._conn = None
 
     def write_person_scores(
         self, rows: list[tuple[Any, ...]]
