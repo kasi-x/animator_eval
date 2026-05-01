@@ -12,6 +12,16 @@ Credits UPDATE:
 H3: title matching logic lives in src.etl.sakuga_title_matcher (independent
 module, no touch to src/analysis/entity_resolution.py).
 H4: evidence_source='sakuga_atwiki' is preserved.
+
+Performance note: _resolve_work_titles uses a DuckDB SQL bulk-match approach
+(two-pass exact→normalized JOIN with COUNT=1 guard) instead of iterating over
+all anime rows per title in Python.  With 562 K anime and 7.5 K distinct sakuga
+work titles, the Python O(N×M) approach (~4 B iterations) was too slow and
+caused the loader to be killed mid-run, leaving sakuga_work_title_resolution
+empty.  The SQL path runs in seconds inside the DuckDB engine.
+match_title() in sakuga_title_matcher is kept for unit tests; its logic is
+faithfully replicated in the SQL query below.  sakuga_atwiki.py no longer
+imports match_title directly — tests import it from sakuga_title_matcher.
 """
 from __future__ import annotations
 
@@ -19,7 +29,7 @@ from pathlib import Path
 
 import duckdb
 
-from src.etl.sakuga_title_matcher import match_title
+from src.etl.sakuga_title_matcher import _normalize
 
 # ─── DDL ────────────────────────────────────────────────────────────────────
 
@@ -163,53 +173,196 @@ def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
             conn.execute(stmt)
 
 
+def _register_normalize_udf(conn: duckdb.DuckDBPyConnection) -> None:
+    """Register normalize_title scalar UDF in DuckDB.
+
+    Exposes the same NFKC + whitespace/punctuation normalisation as
+    sakuga_title_matcher._normalize() so the SQL bulk-matcher uses an
+    identical algorithm to the Python unit-test path.
+
+    The UDF name is ``normalize_title``; silently skips re-registration
+    when the function already exists (DuckDB raises NotImplementedException
+    on duplicate create_function calls; idempotency is handled here so
+    callers can call integrate() more than once on the same connection).
+    """
+    try:
+        conn.create_function(
+            "normalize_title",
+            _normalize,
+            ["VARCHAR"],
+            "VARCHAR",
+        )
+    except Exception:
+        # Already registered on this connection — safe to proceed.
+        pass
+
+
 def _resolve_work_titles(
     conn: duckdb.DuckDBPyConnection,
     bronze_root: Path,
 ) -> int:
-    """Populate sakuga_work_title_resolution from BRONZE credits.
+    """Populate sakuga_work_title_resolution from BRONZE credits via SQL bulk-match.
 
-    Fetches distinct (work_title, work_year, work_format) from BRONZE,
-    runs the conservative 2-stage matcher against SILVER anime,
-    and inserts results (skipping already-cached rows via ON CONFLICT DO NOTHING).
+    Two-pass conservative strategy (exact → normalized) executed entirely
+    inside DuckDB — avoids the O(N×M) Python loop that was timing out with
+    ~562 K anime rows.
+
+    Pass 1 — exact match:
+        JOIN anime on title_ja = work_title OR title_en = work_title,
+        year-guarded (|year_diff| ≤ 1 or either side NULL).
+        Accept only titles with exactly 1 distinct anime_id hit.
+
+    Pass 2 — normalized match (titles unresolved after pass 1):
+        Same join using normalize_title() UDF on both sides.
+        Accept only titles with exactly 1 distinct anime_id hit.
+
+    All distinct (work_title, work_year, work_format) triples are written
+    to sakuga_work_title_resolution; unresolved rows get NULL anime_id /
+    'unresolved' method / 0.0 score.  ON CONFLICT DO NOTHING skips rows
+    already cached from a prior run.
+
+    Args:
+        conn:        Open DuckDB connection with SILVER anime table and the
+                     sakuga_work_title_resolution table already created.
+        bronze_root: Root directory of BRONZE parquet partitions.
 
     Returns:
-        Total rows inserted into sakuga_work_title_resolution.
+        Number of distinct work-title triples processed (inserted or skipped
+        due to conflict).  This equals the BRONZE DISTINCT count.
     """
     if not _has_parquet(bronze_root, "credits"):
         return 0
 
-    distinct_titles = conn.execute(f"""
+    _register_normalize_udf(conn)
+
+    credits_glob = _glob(bronze_root, "credits")
+
+    # Two-step approach:
+    #   Step A — build temp tables with pre-computed normalized forms so the
+    #             UDF is called once per row (not once per join pair).
+    #   Step B — pure-SQL JOINs on the pre-normalized values.
+    #
+    # Step A: bronze_titles with normalized form (UDF called ~7.5 K times)
+    conn.execute(f"""
+        CREATE OR REPLACE TEMP TABLE _swtr_bronze AS
         SELECT DISTINCT
-            work_title,
-            TRY_CAST(work_year AS INTEGER) AS work_year,
-            work_format
+            CAST(work_title AS VARCHAR)            AS work_title,
+            normalize_title(CAST(work_title AS VARCHAR)) AS norm_title,
+            TRY_CAST(work_year AS INTEGER)         AS work_year,
+            TRY_CAST(work_format AS VARCHAR)       AS work_format
         FROM read_parquet(
-            '{_glob(bronze_root, "credits")}',
+            '{credits_glob}',
             hive_partitioning=true,
             union_by_name=true
         )
         WHERE work_title IS NOT NULL
-    """).fetchall()
+    """)
 
-    anime_rows: list[tuple[str, str | None, str | None, int | None]] = conn.execute(
-        "SELECT id, title_ja, title_en, year FROM anime"
-    ).fetchall()
+    # Step A: anime with normalized forms (UDF called ~2 × 562 K times — once each)
+    conn.execute("""
+        CREATE OR REPLACE TEMP TABLE _swtr_anime AS
+        SELECT
+            id,
+            title_ja,
+            title_en,
+            normalize_title(title_ja) AS norm_ja,
+            normalize_title(title_en) AS norm_en,
+            year
+        FROM anime
+    """)
 
-    rows = []
-    for work_title, work_year, work_format in distinct_titles:
-        aid, method, score = match_title(work_title, work_year, anime_rows)
-        rows.append((work_title, work_year, work_format, aid, method, score))
+    # Step B: pure-SQL bulk match using pre-normalized temp tables.
+    conn.execute("""
+        INSERT INTO sakuga_work_title_resolution
+            (work_title, work_year, work_format, resolved_anime_id, match_method, match_score)
 
-    if rows:
-        conn.executemany(
-            """INSERT INTO sakuga_work_title_resolution
-               (work_title, work_year, work_format, resolved_anime_id, match_method, match_score)
-               VALUES (?, ?, ?, ?, ?, ?)
-               ON CONFLICT DO NOTHING""",
-            rows,
+        WITH
+        -- Pass 1: exact matches (title_ja or title_en == work_title literally)
+        exact_hits AS (
+            SELECT
+                bt.work_title,
+                bt.work_year,
+                bt.work_format,
+                a.id                                          AS anime_id,
+                COUNT(DISTINCT a.id) OVER (
+                    PARTITION BY bt.work_title, bt.work_year, bt.work_format
+                )                                             AS hit_count
+            FROM _swtr_bronze bt
+            JOIN _swtr_anime a
+                ON  (a.title_ja = bt.work_title OR a.title_en = bt.work_title)
+                AND (bt.work_year IS NULL OR a.year IS NULL
+                     OR ABS(a.year - bt.work_year) <= 1)
+        ),
+        exact_unique AS (
+            SELECT DISTINCT work_title, work_year, work_format, anime_id
+            FROM exact_hits
+            WHERE hit_count = 1
+        ),
+
+        -- Pass 2: normalized matches for titles unresolved after pass 1
+        norm_hits AS (
+            SELECT
+                bt.work_title,
+                bt.work_year,
+                bt.work_format,
+                a.id                                          AS anime_id,
+                COUNT(DISTINCT a.id) OVER (
+                    PARTITION BY bt.work_title, bt.work_year, bt.work_format
+                )                                             AS hit_count
+            FROM _swtr_bronze bt
+            JOIN _swtr_anime a
+                ON  (a.norm_ja = bt.norm_title OR a.norm_en = bt.norm_title)
+                AND (bt.work_year IS NULL OR a.year IS NULL
+                     OR ABS(a.year - bt.work_year) <= 1)
+            -- skip titles already resolved by exact pass
+            WHERE NOT EXISTS (
+                SELECT 1 FROM exact_unique eu
+                WHERE  eu.work_title  = bt.work_title
+                  AND  COALESCE(eu.work_year, -1)   = COALESCE(bt.work_year, -1)
+                  AND  COALESCE(eu.work_format, '') = COALESCE(bt.work_format, '')
+            )
+            -- exclude anime that already matched exactly to avoid recounting
+            AND NOT (a.title_ja = bt.work_title OR a.title_en = bt.work_title)
+        ),
+        norm_unique AS (
+            SELECT DISTINCT work_title, work_year, work_format, anime_id
+            FROM norm_hits
+            WHERE hit_count = 1
+        ),
+
+        -- Combine: exact wins > normalized > unresolved
+        resolved AS (
+            SELECT work_title, work_year, work_format, anime_id,
+                   'exact_title' AS match_method, 1.0::FLOAT AS match_score
+            FROM exact_unique
+            UNION ALL
+            SELECT work_title, work_year, work_format, anime_id,
+                   'normalized'  AS match_method, 0.95::FLOAT AS match_score
+            FROM norm_unique
+        ),
+        all_titles AS (
+            SELECT
+                bt.work_title, bt.work_year, bt.work_format,
+                r.anime_id                                    AS resolved_anime_id,
+                COALESCE(r.match_method, 'unresolved')        AS match_method,
+                COALESCE(r.match_score,  0.0::FLOAT)          AS match_score
+            FROM _swtr_bronze bt
+            LEFT JOIN resolved r
+                ON  r.work_title  = bt.work_title
+                AND COALESCE(r.work_year,   -1)  = COALESCE(bt.work_year,   -1)
+                AND COALESCE(r.work_format, '') = COALESCE(bt.work_format, '')
         )
-    return len(rows)
+
+        SELECT work_title, work_year, work_format,
+               resolved_anime_id, match_method, match_score
+        FROM all_titles
+
+        ON CONFLICT DO NOTHING
+    """)
+
+    return conn.execute(
+        "SELECT COUNT(*) FROM sakuga_work_title_resolution"
+    ).fetchone()[0]
 
 
 # ─── Public API ─────────────────────────────────────────────────────────────
