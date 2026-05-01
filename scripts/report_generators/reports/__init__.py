@@ -63,6 +63,8 @@ from .biz_genre_whitespace import BizGenreWhitespaceReport
 from .biz_team_template import BizTeamTemplateReport
 from .biz_trust_entry import BizTrustEntryReport
 from .biz_independent_unit import BizIndependentUnitReport
+# Extension reports (15_extension_reports card group)
+from .o3_ip_dependency import O3IpDependencyReport
 # Phase 10: Person parameter card + 3 audience brief indices
 from .person_parameter_card import PersonParameterCardReport
 from .policy_brief_index import PolicyBriefIndexReport
@@ -96,12 +98,13 @@ V2_REPORT_CLASSES = [
     MgmtSuccessionReport,
     MgmtTeamChemistryReport,
     GrowthScoresReport,
-    # biz brief (5)
+    # biz brief (5 + O3 extension)
     BizGenreWhitespaceReport,
     BizUndervaluedTalentReport,
     BizTrustEntryReport,
     BizTeamTemplateReport,
     BizIndependentUnitReport,
+    O3IpDependencyReport,
     # technical appendix
     AKMDiagnosticsReport,
     DMLCausalInferenceReport,
@@ -161,5 +164,6 @@ __all__ = [
     "PolicyBriefIndexReport",
     "HrBriefIndexReport",
     "BizBriefIndexReport",
+    "O3IpDependencyReport",
     "V2_REPORT_CLASSES",
 ]

@@ -364,6 +364,98 @@ I recommend a staged investment approach:
         """,
     )
     
+    # O3: Key person concentration risk (15_extension_reports/01_o3_ip_dependency)
+    brief.add_method_gate(
+        MethodGate(
+            method_name="Key Person Concentration Risk (O3)",
+            algorithm=(
+                "contribution_share[i, series s] = "
+                "Σ(role_weight × production_scale_credit) for person i in s "
+                "/ Σ(role_weight × production_scale_credit) for all credits in s. "
+                "production_scale = staff_count × episodes × duration_mult. "
+                "Viewer ratings excluded."
+            ),
+            confidence_interval_method="Bootstrap CI (n=1000) on contribution_share",
+            null_model=(
+                "Random person removal within same series: "
+                "1000 iterations of random person exclusion to build null distribution "
+                "of counterfactual_drop_pct; observed drop reported as null_percentile."
+            ),
+            validation_method=(
+                "Series clustering: Union-Find on SEQUEL/PREQUEL/PARENT/SIDE_STORY "
+                "relations_json; single-anime works treated as own series."
+            ),
+            limitations=[
+                "additive decomposition assumes person contributions are separable "
+                "(no interaction effects between key persons)",
+                "null model uses simple random removal (not role-matched), "
+                "so director-heavy series may show inflated null_percentile",
+                "AKM person_fe not applied at report layer; "
+                "counterfactual does not account for studio fixed effects",
+                "relations_json coverage depends on AniList scraper completeness",
+            ],
+        )
+    )
+
+    brief.add_section(
+        section_id="key_person_concentration_risk",
+        title="Key Person Concentration Risk: IP Dependency by Series",
+        findings="""
+Series-level analysis of staff contribution concentration identifies IP productions
+with high dependence on a single key person.
+
+Metric: contribution_share = weighted credit contribution of person i
+/ total weighted credits in series s, where weights = role_weight × production_scale.
+production_scale = staff_count × episodes × duration_mult (viewer ratings excluded).
+
+Concentration patterns (from available SILVER credit data):
+- Series with multi-season structures (2+ anime linked by SEQUEL/PREQUEL/PARENT/SIDE_STORY)
+  show higher key person contribution_share for director-role holders,
+  reflecting the through-line nature of series direction.
+- counterfactual_drop_pct (additive decomposition) measures the production_scale
+  fraction attributable to the key person.
+- null_percentile reports where observed concentration falls within a
+  1000-iteration random-removal baseline: values ≥ 95 indicate concentration
+  that exceeds the random expectation at the 5% level.
+- bootstrap 95% CI on contribution_share quantifies estimation uncertainty
+  (n=1000 resamples of the key person's credit pool).
+
+See full O3 report: o3_ip_dependency.html for series-by-series breakdown
+and counterfactual forest plot.
+        """,
+        interpretation="""
+**Interpretation (IP investment risk framing):**
+
+I observe that series with single-director continuity across multiple seasons
+show structurally elevated key person concentration_share. This is consistent
+with how anime production assigns through-line creative authority.
+
+**Investment implication:**
+- High contribution_share (> 0.30) for a single key person in a multi-season IP
+  indicates that departure of that person would be associated with a structural
+  change in the production configuration (counterfactual_drop_pct > 0.30).
+- This does not imply the IP becomes non-viable; remaining staff may reorganize,
+  and new key persons may emerge. The metric captures structural change, not
+  quality outcome.
+
+**Risk tiers (illustrative thresholds — fixed prior, not data-optimized):**
+- High concentration: contribution_share > 0.40, null_percentile ≥ 95
+- Medium concentration: contribution_share 0.20–0.40 or null_percentile 80–94
+- Low concentration: contribution_share < 0.20
+
+**Alternative interpretation:**
+High concentration_share may reflect efficient specialization (one director
+handles all artistic decisions, reducing coordination cost) rather than fragility.
+Whether concentration is "risk" depends on whether the key person is replaceable
+within the production network — a question this metric alone cannot answer.
+
+**Recommended follow-up:**
+Cross-reference with Network Profile (birank, trust) of the key person to
+assess replaceability: a key person with few network bridges and no apparent
+successor within the series staff pool presents higher departure risk.
+        """,
+    )
+
     # 4. Validate and export
     is_valid, errors = brief.validate()
     

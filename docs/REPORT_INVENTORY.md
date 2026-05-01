@@ -209,3 +209,74 @@
 5. **archived 追加候補**: `temporal_foresight`, `cohort_animation`
 
 Task 3-5 (archive/consolidation 実施) は本インベントリ承認後に着手。
+
+---
+
+## 拡張目的レポート (TASK_CARDS/15_extension_reports)
+
+| ID | report_file | class_name | filename | title | audience | meta_lineage_table |
+|----|---|---|---|---|---|---|
+| O2 | o2_mid_management.py | O2MidManagementReport | o2_mid_management.html | 中堅枯渇パイプライン分析 | hr + policy | meta_o2_mid_management |
+
+### O2 meta_lineage_table 詳細
+
+- **table_name**: `meta_o2_mid_management`
+- **audience**: hr (primary), policy (via brief section)
+- **source_silver_tables**: credits, persons, anime
+- **formula_version**: v1.0
+- **ci_method**: Greenwood formula (KM 95% CI) + bootstrap percentile (studio blockage, n=1000, seed=42)
+- **null_model**: industry median reference (blockage score) + multivariate log-rank test (cohort comparison)
+- **sections**: KM survival curves (cohort-stratified) / studio blockage heatmap / promotion funnel
+- **brief_integration**: HR brief `pipeline_blockage` section, Policy brief `mid_career_attrition` section
+
+---
+
+## 拡張目的レポート群 (O1–O8) brief マッピング確定表
+### X1 — TASK_CARDS/15_extension_reports/x_cross_cutting 実施結果 (2026-05-02)
+
+| O | レポートスラグ | 第一 brief | セカンダリ | 状態 |
+|---|--------------|-----------|----------|------|
+| O1 | gender_ceiling | policy | hr | カード実施待ち |
+| O2 | mid_management | hr | policy | カード実施待ち |
+| O3 | ip_dependency | biz | policy | カード実施待ち |
+| O4 | foreign_talent | policy | biz | カード実施待ち |
+| O5 | education_outcome | policy | technical_appendix | 新 audience 見送り (→ X2 参照) |
+| O6 | cross_border | biz | policy | カード実施待ち |
+| O7 | historical_restoration | technical_appendix | policy | 新 audience 見送り (→ X2 参照) |
+| O8 | soft_power | biz | policy | 新 audience 見送り (→ X2 参照) |
+
+### マッピング根拠
+
+- **O1 (gender_ceiling)**: ジェンダー格差・ボトルネックは政策立案者の優先議題。HR では
+  後継・チーム構成への応用が second use case。
+- **O2 (mid_management)**: 中堅枯渇は現場ワークフロー・後継計画への直接影響が大きく HR
+  が主。産業構造問題として policy にも交差。
+- **O3 (ip_dependency)**: IP 人的依存リスクは投資判断・新規企画に直結するため biz が主。
+  市場集中指標として policy にも交差。
+- **O4 (foreign_talent)**: 海外人材の参加分布・経路分析は労働政策の直接素材。biz では
+  チーム組成・ホワイトスペースとして参照。
+- **O5 (education_outcome)**: キャリア追跡データは policy (教育制度評価) に帰属。
+  新 audience (教育機関 brief) は当面見送り (→ X2)。
+- **O6 (cross_border)**: 国際共同制作は新規企画・提携先評価として biz が主。
+  産業外交・文化輸出として policy にも交差。
+- **O7 (historical_restoration)**: 失われたクレジット復元はデータ信頼性・研究基盤として
+  technical_appendix が主。policy では文化財保護議論に交差。
+  新 audience (文化財 brief) は当面見送り (→ X2)。
+- **O8 (soft_power)**: ソフトパワー指標は海外展開・配信戦略として biz が主。
+  政策では文化外交議論と交差。新 audience (クールジャパン brief) は当面見送り (→ X2)。
+
+---
+
+## 15_extension_reports — 拡張目的レポート群 (TASK_CARDS/15_extension_reports)
+
+| ID | report_file | class_name | filename | title | audience | status |
+|----|-------------|------------|----------|-------|----------|--------|
+| O3 | o3_ip_dependency.py | O3IpDependencyReport | o3_ip_dependency.html | IP 人的依存リスク分析 | biz | ✅ 実装済 (2026-05-02) |
+
+### O3 — IP 人的依存リスク分析
+
+- **Method**: contribution_share (role_weight × production_scale 加重比率) + counterfactual_drop + null model (random removal 1000 iter) + bootstrap 95% CI
+- **Series ID strategy**: relations_json の SEQUEL/PREQUEL/PARENT/SIDE_STORY 関係を Union-Find でクラスタリング。単発作品は単独シリーズ。
+- **Brief 組込み**: `scripts/report_generators/briefs/business_brief.py` section `key_person_concentration_risk`
+- **Hard constraints**: H1 遵守 (外部視聴者評価を寄与計算から完全除外)、H2 遵守 (lint_vocab clean)
+- **Tests**: `tests/reports/test_o3_ip_dependency.py` (38 tests: series clustering / contribution share / counterfactual / null model / smoke / lint / method gate)
