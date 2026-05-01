@@ -1211,6 +1211,7 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
     _upgrade_v60_corrections(conn)
     _upgrade_v61_src_multilang(conn)
     _upgrade_v61_titles_alt(conn)
+    _upgrade_v62_canonical_name_ja(conn)
     conn.execute(
         "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '62')"
         " ON CONFLICT(key) DO UPDATE SET value = excluded.value"
@@ -1482,6 +1483,31 @@ def _upgrade_v61_titles_alt(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE anime ADD COLUMN titles_alt TEXT NOT NULL DEFAULT '{}'")
     except Exception:
         pass  # column already exists
+
+
+# ===== 21_silver_enrichment/03: persons.canonical_name_ja (Card 21/03) =====
+# NFKC + 旧字体→新字体変換 + 全角/半角統一で正規化した名前を保持。
+# Scoring 経路には使用しない (検索/dedup 補助のみ)。H1 対象外 (主観値なし)。
+# DuckDB 側は backfill スクリプトで ADD COLUMN IF NOT EXISTS + UPDATE を実行。
+
+
+def _upgrade_v62_canonical_name_ja(conn: sqlite3.Connection) -> None:
+    """Add canonical_name_ja column to persons (Card 21/03).
+
+    Holds NFKC-normalized + 旧字体→新字体 converted name for search/dedup.
+    Safe to call on fresh DBs — ALTER TABLE failure is silently caught.
+    """
+    try:
+        conn.execute("ALTER TABLE persons ADD COLUMN canonical_name_ja TEXT")
+    except Exception:
+        pass  # column already exists
+    try:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_persons_canonical_name_ja"
+            " ON persons(canonical_name_ja)"
+        )
+    except Exception:
+        pass  # index already exists
 
 
 # ===== ann extension =====
@@ -1877,3 +1903,15 @@ def _upgrade_seesaawiki_extension(conn: sqlite3.Connection) -> None:
 #
 # anime_recommendations は Card 14/08 で source='mal' 実装済。
 # AniList / bangumi recommendations は BRONZE 未取得のため対象外 (Stop-if 済確認)。
+
+# ===== 21_silver_enrichment/04: anime series_cluster_id (Card 21/04) =====
+# anime 拡張列 — Union-Find シリーズクラスタ ID (post-hoc ETL):
+#   series_cluster_id VARCHAR
+#           — SEQUEL/PREQUEL/PARENT/SIDE_STORY/SUMMARY/ALTERNATIVE/FULL_STORY
+#             関係を Union-Find でクラスタリングし、連結成分内の lex-min anime_id を格納。
+#           — 孤立 anime (連結関係なし) は自身の id を格納 → 全行 non-NULL。
+#           — H1 compliance: scoring 経路に流入しない (cluster 識別子のみ)。
+#           — 実装: src/etl/cluster/series_cluster.py の backfill() が書込む。
+#           — DDL (DuckDB):
+#               ALTER TABLE anime ADD COLUMN IF NOT EXISTS series_cluster_id VARCHAR;
+#               CREATE INDEX IF NOT EXISTS idx_anime_series_cluster ON anime(series_cluster_id);
