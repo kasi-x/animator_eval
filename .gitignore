@@ -54,3 +54,7 @@ logs/
 
 # Claude Code local settings (session-specific permissions)
 .claude/
+
+# Grant applications — contains personal information
+grants/
+grants.zip
