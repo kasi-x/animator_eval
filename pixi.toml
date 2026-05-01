@@ -68,6 +68,7 @@ scrape-sakuga = "python -m src.scrapers.sakuga_atwiki_scraper run"
 scrape-sakuga-discover = "python -m src.scrapers.sakuga_atwiki_scraper discover"
 scrape-sakuga-export = "python -m src.scrapers.sakuga_atwiki_scraper export-bronze"
 scrape-sakuga-reclassify = "python -m src.scrapers.sakuga_atwiki_scraper reclassify"
+scrape-tmdb = "python -m src.scrapers.tmdb_scraper run"
 
 # ETL
 integrate = "python -m src.etl.integrate_duckdb"

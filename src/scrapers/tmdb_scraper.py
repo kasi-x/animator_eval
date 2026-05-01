@@ -45,6 +45,7 @@ from src.scrapers.cli_common import (
     make_scraper_app,
     resolve_progress_enabled,
 )
+from src.scrapers.fetchers import JsonFetcher
 from src.scrapers.http_client import RetryingHttpClient
 from src.scrapers.parsers.tmdb import (
     TmdbAnimeRecord,
@@ -74,67 +75,79 @@ PHASE3_CHECKPOINT = f"{CHECKPOINT_DIR}/tmdb_person.json"
 _env = dotenv_values(find_dotenv())
 
 
+def _bearer() -> str | None:
+    return os.environ.get("TMDB_BEARER") or _env.get("TMDB_BEARER")
+
+
+def _api_key() -> str | None:
+    return os.environ.get("TMDB_API_KEY") or _env.get("TMDB_API_KEY")
+
+
 def _auth_headers() -> dict[str, str]:
-    """Return Authorization header (Bearer) if TMDB_BEARER set; else empty."""
-    token = os.environ.get("TMDB_BEARER") or _env.get("TMDB_BEARER")
+    """Authorization header for v4 Bearer; empty when only v3 key available."""
+    token = _bearer()
     if token:
         return {"Authorization": f"Bearer {token}", "Accept": "application/json"}
     return {"Accept": "application/json"}
 
 
-def _api_key_param() -> dict[str, str]:
-    """Return ``api_key`` query param dict if v4 Bearer absent."""
-    if os.environ.get("TMDB_BEARER") or _env.get("TMDB_BEARER"):
-        return {}
-    key = os.environ.get("TMDB_API_KEY") or _env.get("TMDB_API_KEY")
-    return {"api_key": key} if key else {}
+def _with_api_key(url: str) -> str:
+    """Append ?api_key=… (or &api_key=…) when v4 Bearer is absent.
+
+    The shared RetryingHttpClient does not take query params, so we encode the
+    fallback v3 key directly in the URL. With Bearer set, this is a no-op.
+    """
+    if _bearer():
+        return url
+    key = _api_key()
+    if not key:
+        return url
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}api_key={key}"
 
 
-class TmdbClient:
-    """Thin wrapper around RetryingHttpClient with TMDB auth + JSON helper."""
-
-    def __init__(self, *, delay: float = REQUEST_INTERVAL) -> None:
-        self._client = RetryingHttpClient(
-            source="tmdb",
-            delay=delay,
-            timeout=30.0,
-            headers=_auth_headers(),
+def make_tmdb_client(*, delay: float = REQUEST_INTERVAL) -> RetryingHttpClient:
+    """Factory: shared RetryingHttpClient with TMDB auth headers."""
+    if not (_bearer() or _api_key()):
+        raise RuntimeError(
+            "TMDB credentials missing: set TMDB_BEARER (preferred) or TMDB_API_KEY"
         )
-        self._api_key = _api_key_param()
-        if not (_auth_headers().get("Authorization") or self._api_key):
-            raise RuntimeError(
-                "TMDB credentials missing: set TMDB_BEARER (preferred) or TMDB_API_KEY"
-            )
+    return RetryingHttpClient(
+        source="tmdb",
+        delay=delay,
+        timeout=30.0,
+        headers=_auth_headers(),
+    )
 
-    async def aclose(self) -> None:
-        await self._client.aclose()
 
-    async def get_json(self, url: str) -> dict | None:
-        """GET url, return parsed JSON or None on 404."""
-        params = self._api_key or None
-        try:
-            resp = await self._client.get(url, params=params)
-        except httpx.HTTPStatusError as exc:
-            if exc.response is not None and exc.response.status_code == 404:
-                return None
-            raise
-        if resp.status_code == 404:
+async def tmdb_get_json(client: RetryingHttpClient, url: str) -> dict | None:
+    """GET helper used by the discover loop (fetchers handle detail/person).
+
+    Returns parsed JSON, or None on 404. Other errors propagate.
+    """
+    try:
+        resp = await client.get(_with_api_key(url))
+    except httpx.HTTPStatusError as exc:
+        if exc.response is not None and exc.response.status_code == 404:
             return None
-        resp.raise_for_status()
-        return resp.json()
+        raise
+    if resp.status_code == 404:
+        return None
+    resp.raise_for_status()
+    return resp.json()
 
 
 # ─── Phase 1: discover ────────────────────────────────────────────────────
 
 
 async def _discover_one_year(
-    client: TmdbClient, media: str, year: int | None
+    client: RetryingHttpClient, media: str, year: int | None
 ) -> list[int]:
     """Page through /discover for one (media, year) combo. Honors 500-page cap."""
     out: list[int] = []
     page = 1
     while True:
-        data = await client.get_json(discover_url(media, page=page, year=year))
+        data = await tmdb_get_json(client, discover_url(media, page=page, year=year))
         if data is None:
             break
         ids, total_pages = discover_results(data)
@@ -153,8 +166,12 @@ async def _discover_one_year(
 
 
 async def discover_all_ids(
-    client: TmdbClient, media: str, *, year_from: int = 1900, year_to: int | None = None
-) -> list[tuple[str, int]]:
+    client: RetryingHttpClient,
+    media: str,
+    *,
+    year_from: int = 1900,
+    year_to: int | None = None,
+) -> list[str]:
     """Enumerate all TMDB ids for the given media with genre=Animation.
 
     Strategy:
@@ -163,13 +180,14 @@ async def discover_all_ids(
       2. Year split spans year_from..year_to inclusive (year_to defaults to
          current year).
 
-    Returns: list of (media_type, tmdb_id).
+    Returns: list of "{media_type}:{tmdb_id}" strings (JSON-safe and hashable
+    for Checkpoint resume).
     """
     if year_to is None:
         year_to = _dt.date.today().year
 
     # Probe page 1 to see total_pages
-    probe = await client.get_json(discover_url(media, page=1))
+    probe = await tmdb_get_json(client, discover_url(media, page=1))
     if probe is None:
         return []
     _, total_pages = discover_results(probe)
@@ -191,16 +209,10 @@ async def discover_all_ids(
                     seen.add(i)
                     ids.append(i)
 
-    return [(media, i) for i in ids]
+    return [f"{media}:{i}" for i in ids]
 
 
-# ─── Phase 2: detail + credits ────────────────────────────────────────────
-
-
-async def fetch_detail(
-    client: TmdbClient, media_type: str, tmdb_id: int
-) -> dict | None:
-    return await client.get_json(detail_url(media_type, tmdb_id))
+# ─── Phase 2 / 3: BRONZE row builders ─────────────────────────────────────
 
 
 def _anime_row(rec: TmdbAnimeRecord) -> dict:
@@ -218,15 +230,18 @@ def _credit_row(c: TmdbCreditEntry) -> dict:
     return d
 
 
-# ─── Phase 3: person ──────────────────────────────────────────────────────
-
-
-async def fetch_person(client: TmdbClient, tmdb_person_id: int) -> dict | None:
-    return await client.get_json(person_url(tmdb_person_id))
-
-
 def _person_row(rec: TmdbPersonRecord) -> dict:
     return dataclasses.asdict(rec)
+
+
+def _detail_endpoint(item: str) -> str:
+    """ID 'media:tmdb_id' → detail URL with v3 api_key fallback when needed."""
+    media, _, tid = item.partition(":")
+    return _with_api_key(detail_url(media, int(tid)))
+
+
+def _person_endpoint(pid: int) -> str:
+    return _with_api_key(person_url(pid))
 
 
 # ─── CLI ──────────────────────────────────────────────────────────────────
@@ -293,16 +308,20 @@ async def _main(
     progress_override: bool | None,
 ) -> None:
     os.makedirs(CHECKPOINT_DIR, exist_ok=True)
-    client = TmdbClient(delay=delay)
+    client = make_tmdb_client(delay=delay)
     try:
         # Phase 1: discover
-        all_anime_ids: list[tuple[str, int]] = []
+        all_anime_ids: list[str] = []
         cp1 = Checkpoint.load(PHASE1_CHECKPOINT)
         if force:
             cp1.delete()
             cp1 = Checkpoint.load(PHASE1_CHECKPOINT)
         if resume and cp1.get("ids"):
-            all_anime_ids = [tuple(x) for x in cp1["ids"]]
+            raw_ids = cp1["ids"]
+            # Backwards compat: legacy checkpoints stored [[media, id], ...]
+            all_anime_ids = [
+                f"{x[0]}:{x[1]}" if isinstance(x, list) else x for x in raw_ids
+            ]
             log.info("tmdb_discover_resume", n=len(all_anime_ids))
         else:
             for m in media_list:
@@ -310,7 +329,7 @@ async def _main(
                     client, m, year_from=year_from, year_to=year_to
                 )
                 all_anime_ids.extend(ids)
-            cp1["ids"] = [list(t) for t in all_anime_ids]
+            cp1["ids"] = all_anime_ids
             cp1.save()
             log.info("tmdb_discover_done", total=len(all_anime_ids))
 
@@ -333,16 +352,10 @@ async def _main(
                 },
             )
 
-            async def fetcher2(item: tuple[str, int]) -> dict | None:
-                m, tid = item
-                raw = await fetch_detail(client, m, tid)
-                if raw is None:
-                    return None
-                raw["__media_type__"] = m
-                return raw
+            fetcher2 = JsonFetcher(client, _detail_endpoint, source="tmdb_detail")
 
-            def parser2(raw: dict, item: tuple[str, int]) -> TmdbAnimeRecord | None:
-                m = raw.pop("__media_type__", item[0])
+            def parser2(raw: dict, item: str) -> TmdbAnimeRecord | None:
+                m = item.split(":", 1)[0]
                 rec = parse_tmdb_anime(raw, m)
                 for c in rec.credits:
                     person_ids_seen.add(c.tmdb_person_id)
@@ -380,8 +393,7 @@ async def _main(
                 add_hash=False,
             )
 
-            async def fetcher3(pid: int) -> dict | None:
-                return await fetch_person(client, pid)
+            fetcher3 = JsonFetcher(client, _person_endpoint, source="tmdb_person")
 
             def parser3(raw: dict, _pid: int) -> TmdbPersonRecord | None:
                 return parse_tmdb_person(raw)
