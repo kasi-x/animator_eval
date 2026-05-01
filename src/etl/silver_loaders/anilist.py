@@ -8,8 +8,8 @@ Tables loaded:
 DDL for the anime extension columns is declared in src/db/schema.py
 "anilist extension" section (_ANILIST_EXTENSION_COLUMNS).
 
-H1 compliance: score / popularity / favourites / mean_score / popularity_rank
-are mapped to display_* prefixed columns only. They do not appear bare in SILVER.
+H1 compliance: bare BRONZE columns are mapped exclusively to display_* prefixed
+SILVER columns (display_score, display_mean_score, display_favourites, etc.).
 """
 from __future__ import annotations
 
