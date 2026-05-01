@@ -342,6 +342,7 @@ async def _main(
         if force:
             cp2.delete()
             cp2 = Checkpoint.load(PHASE2_CHECKPOINT)
+        _normalize_legacy_ids(cp2)
 
         with BronzeWriterGroup("tmdb", tables=["anime", "credits"]) as g2:
             sink2 = BronzeSink(
@@ -413,6 +414,34 @@ async def _main(
             log.info("tmdb_person_stats", **dataclasses.asdict(stats3))
     finally:
         await client.aclose()
+
+
+def _normalize_legacy_ids(cp: Checkpoint) -> None:
+    """Convert legacy ``[media, tmdb_id]`` list IDs to ``"media:tmdb_id"`` strings.
+
+    Older runs serialised Phase-2 IDs as ``(media, id)`` tuples; JSON turned
+    them into lists, which are unhashable and crash ``set(completed_ids)``.
+    Run this once on load to migrate in-place.
+    """
+
+    def _conv(x):
+        if isinstance(x, list) and len(x) == 2:
+            return f"{x[0]}:{x[1]}"
+        return x
+
+    completed = cp.data.get("completed_ids") or []
+    if completed and isinstance(completed[0], list):
+        cp.data["completed_ids"] = [_conv(i) for i in completed]
+        log.info("tmdb_checkpoint_legacy_migrated", path=str(cp.path), n=len(completed))
+
+    failed = cp.data.get("failed_ids") or []
+    changed = False
+    for entry in failed:
+        if isinstance(entry, dict) and isinstance(entry.get("id"), list):
+            entry["id"] = _conv(entry["id"])
+            changed = True
+    if changed:
+        log.info("tmdb_checkpoint_failed_migrated", path=str(cp.path), n=len(failed))
 
 
 def _load_person_ids_from_bronze() -> set[int]:
