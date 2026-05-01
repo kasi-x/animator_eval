@@ -136,3 +136,12 @@ exceptions:
     reason: >
       Negation in English DISCLAIMER: "A low score does not imply lack of skill."
       Required for bilingual legal transparency disclosure.
+
+  # o3_ip_dependency.py — Japanese negation disclaimer
+  - file: scripts/report_generators/reports/o3_ip_dependency.py
+    line_pattern: "能力判断を意味しない"
+    term: 能力
+    reason: >
+      Negation in report intro disclaimer: "スコアは個人の主観的評価・能力判断を意味しない。"
+      (Scores do not imply individual subjective evaluation or ability judgment.)
+      Required for legal/ethical transparency per REPORT_PHILOSOPHY v2 §9.
