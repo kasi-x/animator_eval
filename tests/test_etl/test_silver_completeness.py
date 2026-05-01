@@ -6,6 +6,7 @@ parquet files are required.
 """
 from __future__ import annotations
 
+import datetime as _dt
 from pathlib import Path
 
 import duckdb
@@ -450,3 +451,153 @@ def test_sample_missing_rows_returns_list(bronze_root: Path, silver_db: Path) ->
     assert isinstance(result, list)
     for row in result:
         assert isinstance(row, dict)
+
+
+# ---------------------------------------------------------------------------
+# Partition-aware coverage regression tests
+#
+# These tests validate that COUNT(DISTINCT <distinct_expr>) is used for
+# tables with multiple date-partition snapshots, so that coverage is measured
+# against unique entities (not snapshot row-copies).
+# ---------------------------------------------------------------------------
+
+
+def _write_parquet_on_date(
+    bronze_root: Path,
+    source: str,
+    table: str,
+    rows: list[dict],
+    date: _dt.date,
+) -> None:
+    """Write rows to a BRONZE parquet under bronze_root for a specific date."""
+    with BronzeWriter(source, table=table, root=bronze_root, compact_on_exit=False, date=date) as bw:
+        for row in rows:
+            bw.append(row)
+
+
+@pytest.fixture
+def snapshot_bronze_root(tmp_path: Path) -> Path:
+    """Bronze root with TWO snapshot partitions for the same 3 anilist/anime rows.
+
+    date=2026-04-01 and date=2026-04-02 each contain the exact same 3 rows.
+    The raw COUNT(*) would return 6, but COUNT(DISTINCT id) must return 3.
+    """
+    root = tmp_path / "snapshot_bronze"
+    anime_rows = [
+        {"id": "anilist:1", "title_ja": "アニメA", "title_en": "Anime A"},
+        {"id": "anilist:2", "title_ja": "アニメB", "title_en": "Anime B"},
+        {"id": "anilist:3", "title_ja": "アニメC", "title_en": "Anime C"},
+    ]
+    _write_parquet_on_date(root, "anilist", "anime", anime_rows, _dt.date(2026, 4, 1))
+    _write_parquet_on_date(root, "anilist", "anime", anime_rows, _dt.date(2026, 4, 2))
+    return root
+
+
+@pytest.fixture
+def snapshot_silver_db(tmp_path: Path, snapshot_bronze_root: Path) -> Path:
+    """SILVER DuckDB with all 3 anilist anime loaded (from the de-duplicated set)."""
+    db_path = _make_silver_db(tmp_path)
+    conn = duckdb.connect(str(db_path))
+    conn.execute("INSERT INTO anime VALUES ('anilist:1', 'アニメA', 'Anime A')")
+    conn.execute("INSERT INTO anime VALUES ('anilist:2', 'アニメB', 'Anime B')")
+    conn.execute("INSERT INTO anime VALUES ('anilist:3', 'アニメC', 'Anime C')")
+    conn.close()
+    return db_path
+
+
+def test_partition_aware_coverage_ok(
+    snapshot_bronze_root: Path, snapshot_silver_db: Path
+) -> None:
+    """Snapshot-duplicate BRONZE rows must not inflate the bronze_rows denominator.
+
+    Two partitions × 3 rows = 6 raw rows.  After dedup by id, bronze_rows=3.
+    All 3 are in SILVER → coverage should be 1.0 (OK), not 3/6=0.5 (PARTIAL).
+    """
+    rows = check(snapshot_bronze_root, str(snapshot_silver_db))
+    row = next(r for r in rows if r.source == "anilist" and r.bronze_table == "anime")
+    # Partition-aware: COUNT(DISTINCT id) = 3, not COUNT(*) = 6
+    assert row.bronze_rows == 3, (
+        f"Expected bronze_rows=3 (deduped), got {row.bronze_rows}. "
+        "Partition snapshot duplicates must be excluded from the denominator."
+    )
+    assert row.silver_rows == 3
+    assert row.coverage == pytest.approx(1.0)
+    assert row.status == "OK"
+
+
+def test_partition_aware_bronze_rows_deduped(snapshot_bronze_root: Path) -> None:
+    """_count_bronze_rows with distinct_expr must count distinct entities only."""
+    from src.etl.audit.silver_completeness import _count_bronze_rows
+    import duckdb as _duckdb
+    bronze_conn = _duckdb.connect(":memory:")
+    try:
+        # Without dedup → 6 rows (2 partitions × 3 rows each)
+        count_raw, err = _count_bronze_rows(bronze_conn, snapshot_bronze_root, "anilist", "anime")
+        assert err is None
+        assert count_raw == 6
+
+        # With dedup → 3 distinct ids
+        count_deduped, err2 = _count_bronze_rows(
+            bronze_conn, snapshot_bronze_root, "anilist", "anime", distinct_expr="id"
+        )
+        assert err2 is None
+        assert count_deduped == 3
+    finally:
+        bronze_conn.close()
+
+
+def test_partition_aware_coverage_partial(tmp_path: Path) -> None:
+    """Partial SILVER load with 2 snapshot partitions: dedup gives correct partial coverage.
+
+    2 partitions × 3 rows each = 6 raw rows.
+    Distinct id = 3.  SILVER has 2.  Expected coverage = 2/3 (PARTIAL), not 2/6 (LOW).
+    """
+    root = tmp_path / "bronze"
+    anime_rows = [
+        {"id": "anilist:1", "title_ja": "A", "title_en": "A"},
+        {"id": "anilist:2", "title_ja": "B", "title_en": "B"},
+        {"id": "anilist:3", "title_ja": "C", "title_en": "C"},
+    ]
+    _write_parquet_on_date(root, "anilist", "anime", anime_rows, _dt.date(2026, 4, 1))
+    _write_parquet_on_date(root, "anilist", "anime", anime_rows, _dt.date(2026, 4, 2))
+
+    db_path = _make_silver_db(tmp_path)
+    conn = duckdb.connect(str(db_path))
+    conn.execute("INSERT INTO anime VALUES ('anilist:1', 'A', 'A')")
+    conn.execute("INSERT INTO anime VALUES ('anilist:2', 'B', 'B')")
+    conn.close()
+
+    rows = check(root, str(db_path))
+    row = next(r for r in rows if r.source == "anilist" and r.bronze_table == "anime")
+    assert row.bronze_rows == 3
+    assert row.silver_rows == 2
+    assert row.coverage == pytest.approx(2 / 3, abs=0.01)
+    assert row.status == "PARTIAL"
+
+
+def test_no_distinct_expr_uses_count_star(tmp_path: Path) -> None:
+    """Tables without a distinct_expr use COUNT(*) (existing behaviour is preserved)."""
+    from src.etl.audit.silver_completeness import _count_bronze_rows
+    import duckdb as _duckdb
+
+    root = tmp_path / "bronze"
+    # Write ann/credits (no distinct_expr in mapping)
+    _write_parquet_on_date(
+        root, "ann", "credits",
+        [{"person_id": "p1", "anime_id": "a1", "role": "director"}],
+        _dt.date(2026, 4, 1),
+    )
+    _write_parquet_on_date(
+        root, "ann", "credits",
+        [{"person_id": "p1", "anime_id": "a1", "role": "director"}],
+        _dt.date(2026, 4, 2),
+    )
+
+    bronze_conn = _duckdb.connect(":memory:")
+    try:
+        # No distinct_expr → COUNT(*) → 2 (both snapshot rows counted)
+        count, err = _count_bronze_rows(bronze_conn, root, "ann", "credits")
+        assert err is None
+        assert count == 2
+    finally:
+        bronze_conn.close()
