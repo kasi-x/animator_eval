@@ -51,17 +51,17 @@ tasks:
   scrape-mal:
     desc: Scrape MAL
     cmds:
-      - pixi run python -m src.scrapers.mal_scraper
+      - pixi run python -m src.scrapers.mal_scraper run
 
   scrape-mediaarts:
     desc: Fetch Media Arts DB dump from GitHub Releases
     cmds:
-      - pixi run python -m src.scrapers.mediaarts_scraper --max-records {{.RECORDS | default "10000"}} --data-dir data/madb
+      - pixi run python -m src.scrapers.mediaarts_scraper run --max-records {{.RECORDS | default "10000"}} --data-dir data/madb
 
   scrape-jvmg:
     desc: Fetch JVMG data
     cmds:
-      - pixi run python -m src.scrapers.jvmg_fetcher
+      - pixi run python -m src.scrapers.jvmg_fetcher run
 
   # ==========================================================================
   # Scraping failures — maintenance

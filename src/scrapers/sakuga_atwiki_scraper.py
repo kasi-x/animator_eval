@@ -27,14 +27,14 @@ from bs4 import BeautifulSoup
 
 from src.scrapers.bronze_writer import write_sakuga_atwiki_bronze
 from src.scrapers.checkpoint import Checkpoint
-from src.scrapers.cli_common import ForceOpt, LimitOpt, ResumeOpt
+from src.scrapers.cli_common import ForceOpt, LimitOpt, ResumeOpt, make_scraper_app
 from src.scrapers.http_playwright import PlaywrightFetcher
 from src.scrapers.parsers.sakuga_atwiki import classify_page_kind, extract_page_ids, parse_person_page, parse_work_page
 from src.scrapers.parsers.sakuga_atwiki_robots import fetch_disallow_patterns, is_allowed
 from src.utils.config import SCRAPE_DELAY_SECONDS
 
 log = structlog.get_logger()
-app = typer.Typer()
+app = make_scraper_app("sakuga_atwiki")
 
 _SITE = "https://w.atwiki.jp/sakuga"
 _SEED_IDS = [1, 2, 100]
@@ -109,8 +109,6 @@ def discover(
     cdp_url: str = typer.Option("", "--chrome", help="CDP URL of running Chrome (e.g. http://localhost:9222)"),
 ) -> None:
     """BFS crawl 作画@wiki to discover and classify all pages."""
-    from src.scrapers.logging_utils import configure_file_logging
-    configure_file_logging("sakuga_atwiki")
     asyncio.run(_discover(max_pages=limit, delay=delay, data_dir=data_dir, headless=headless, cdp_url=cdp_url or None))
 
 
@@ -250,8 +248,6 @@ def export_bronze(
 ) -> None:
     """Parse cached HTML and write BRONZE parquet (3 tables)."""
     from datetime import date as _date
-    from src.scrapers.logging_utils import configure_file_logging
-    configure_file_logging("sakuga_atwiki")
 
     date_partition = date or _date.today().strftime("%Y%m%d")
 
@@ -346,8 +342,6 @@ def run(
     cdp_url: str = typer.Option("", "--chrome", help="CDP URL of running Chrome (e.g. http://localhost:9222)"),
 ) -> None:
     """Diff-update: re-fetch changed pages, append new date partition to BRONZE."""
-    from src.scrapers.logging_utils import configure_file_logging
-    configure_file_logging("sakuga_atwiki")
     asyncio.run(
         _incremental(
             cache_dir=cache_dir,

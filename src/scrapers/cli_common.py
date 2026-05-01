@@ -121,6 +121,41 @@ ProgressOpt = Annotated[
 ]
 
 
+def make_scraper_app(
+    log_name: str,
+    *,
+    name: str | None = None,
+    help: str | None = None,
+    add_completion: bool = True,
+    no_args_is_help: bool = False,
+) -> typer.Typer:
+    """Build a Typer app with shared scraper-logging setup callback.
+
+    The callback runs before any subcommand:
+      - structlog `setup_logging()` (stdout sink)
+      - `configure_file_logging(log_name)` (JSONL file sink under logs/scrapers/)
+
+    Side effect: forces typer multi-command mode (subcommand name required),
+    so even single-command scrapers (e.g. keyframe) keep the `<app> run` form.
+    """
+    kwargs: dict = {"add_completion": add_completion, "no_args_is_help": no_args_is_help}
+    if name is not None:
+        kwargs["name"] = name
+    if help is not None:
+        kwargs["help"] = help
+    app = typer.Typer(**kwargs)
+
+    @app.callback()
+    def _setup_logging() -> None:
+        from src.infra.logging import setup_logging
+        from src.scrapers.logging_utils import configure_file_logging
+
+        setup_logging()
+        configure_file_logging(log_name)
+
+    return app
+
+
 def resolve_progress_enabled(quiet: bool, progress: bool) -> bool | None:
     """Combine `--quiet` and `--progress` flags into a `progress_enabled` override.
 

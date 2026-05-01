@@ -41,6 +41,7 @@ from src.scrapers.cli_common import (
     ProgressOpt,
     QuietOpt,
     ResumeOpt,
+    make_scraper_app,
     resolve_progress_enabled,
 )
 from src.scrapers.progress import progress_enabled as _progress_enabled
@@ -64,7 +65,7 @@ from src.scrapers.queries.anilist import (  # noqa: E402
     TOP_ANIME_QUERY,
 )
 
-app = typer.Typer()
+app = make_scraper_app("anilist")
 
 
 # Batch save helper functions (must be defined before main())
@@ -1017,47 +1018,17 @@ def run(
 ) -> None:
     """AniList からクレジットデータを収集する (チェックポイント機能付き)."""
     import json
+    import logging
     from pathlib import Path
-    from src.infra.logging import setup_logging
     from rich.console import Console
-    from src.scrapers.logging_utils import configure_file_logging
-
-    # Setup logging with specified level
-    setup_logging()
-    log_path = configure_file_logging("anilist")
-    log.info("anilist_command_start", log_file=str(log_path))
-
-    # Configure structlog level filter
     import structlog
 
-    level_map = {
-        "debug": 10,
-        "info": 20,
-        "warning": 30,
-        "error": 40,
-    }
-    min_level = level_map.get(log_level.lower(), 40)
-
-    # Add level filter to structlog processors
-    def level_filter(logger, method_name, event_dict):
-        level_value = {
-            "debug": 10,
-            "info": 20,
-            "warning": 30,
-            "error": 40,
-        }.get(method_name, 20)
-        if level_value < min_level:
-            raise structlog.DropEvent
-        return event_dict
-
+    # Override callback's default level with --log-level. Re-wrap only — do not
+    # call structlog.configure() here, which would drop the file sink processor
+    # installed by configure_file_logging() in the callback.
+    level_map = {"debug": logging.DEBUG, "info": logging.INFO, "warning": logging.WARNING, "error": logging.ERROR}
     structlog.configure(
-        processors=[
-            level_filter,
-            structlog.stdlib.add_log_level,
-            structlog.processors.TimeStamper(fmt="iso"),
-            structlog.processors.StackInfoRenderer(),
-            structlog.dev.ConsoleRenderer(),
-        ]
+        wrapper_class=structlog.make_filtering_bound_logger(level_map.get(log_level.lower(), logging.ERROR)),
     )
     console = Console()
     show_progress = _progress_enabled(resolve_progress_enabled(quiet, progress))
@@ -1822,11 +1793,8 @@ def fetch_persons(
     import asyncio
     import time as time_module
     from src.infra.logging import setup_logging
-    from src.scrapers.logging_utils import configure_file_logging
 
-    setup_logging(log_level)
-    log_path = configure_file_logging("anilist")
-    log.info("anilist_fetch_persons_command_start", log_file=str(log_path))
+    setup_logging(log_level)  # override callback default to apply --log-level
 
     async def _run():
         from rich.console import Console
@@ -1990,7 +1958,6 @@ def process_downloads(
     """Process pending image downloads from queue."""
     import asyncio
     from src.infra.logging import setup_logging
-    from src.scrapers.logging_utils import configure_file_logging
     from src.utils.download_queue import DownloadQueue
     from src.scrapers.image_downloader import (
         download_person_images,
@@ -2002,10 +1969,7 @@ def process_downloads(
     from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn
     from rich.rule import Rule
 
-    # Setup
-    setup_logging()
-    log_path = configure_file_logging("anilist")
-    log.info("anilist_process_downloads_command_start", log_file=str(log_path))
+    setup_logging(log_level)  # override callback default to apply --log-level
     console = Console()
 
     # Load queue

@@ -18,7 +18,7 @@ import structlog
 import typer
 
 from src.scrapers.bronze_writer import BronzeWriter
-from src.scrapers.cli_common import DataDirOpt, DelayOpt
+from src.scrapers.cli_common import DataDirOpt, DelayOpt, make_scraper_app
 from src.scrapers.keyframe_api import (
     DEFAULT_DELAY,
     KeyframeApiClient,
@@ -28,7 +28,7 @@ from src.scrapers.parsers import keyframe_api as api_parser
 
 log = structlog.get_logger()
 
-app = typer.Typer()
+app = make_scraper_app("keyframe_enrich")
 
 CHECKPOINT_INTERVAL = 10  # progress log every N items
 
@@ -188,13 +188,6 @@ def cmd_enrich_translate(
     Pass --ids to restrict to specific person_ids (e.g. after identifying
     unmatched persons from entity resolution output).
     """
-    from src.infra.logging import setup_logging
-    from src.scrapers.logging_utils import configure_file_logging
-
-    setup_logging()
-    log_path = configure_file_logging("keyframe_enrich")
-    log.info("keyframe_enrich_command_start", log_file=str(log_path))
-
     parsed_ids: list[int] | None = None
     if ids.strip():
         try:

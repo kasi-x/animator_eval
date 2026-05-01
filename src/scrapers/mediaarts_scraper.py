@@ -26,6 +26,7 @@ from src.scrapers.cli_common import (
     CheckpointIntervalOpt,
     ProgressOpt,
     QuietOpt,
+    make_scraper_app,
     resolve_progress_enabled,
 )
 from src.scrapers.parsers.mediaarts import (  # noqa: F401
@@ -88,7 +89,7 @@ ANIME_COLLECTION_FILES_EXTENDED: dict[str, tuple[str, str]] = {
 
 DEFAULT_DATA_DIR = Path("data/madb")
 
-app = typer.Typer()
+app = make_scraper_app("mediaarts")
 
 
 async def download_madb_dataset(
@@ -491,13 +492,6 @@ def run(
     progress: ProgressOpt = False,
 ) -> None:
     """Fetch credit data from Media Arts DB dump."""
-    from src.infra.logging import setup_logging
-    from src.scrapers.logging_utils import configure_file_logging
-
-    setup_logging()
-    log_path = configure_file_logging("mediaarts")
-    log.info("mediaarts_command_start", log_file=str(log_path))
-
     stats = asyncio.run(
         scrape_madb(
             data_dir=data_dir,

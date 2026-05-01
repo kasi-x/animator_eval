@@ -62,13 +62,14 @@ from src.scrapers.cli_common import (
     resolve_progress_enabled,
 )
 from src.scrapers.exceptions import ScraperError
-from src.scrapers.logging_utils import configure_file_logging
+from src.scrapers.cli_common import make_scraper_app
 from src.scrapers.progress import scrape_progress
 
 log = structlog.get_logger()
 console = Console()
 
-app = typer.Typer(
+app = make_scraper_app(
+    "bangumi",
     name="bangumi",
     help="bangumi scraper: fetch-dump → subjects → relations → persons → characters",
     add_completion=False,
@@ -676,8 +677,7 @@ def cmd_fetch_dump(
     force: ForceOpt = False,
 ) -> None:
     """Download and extract a bangumi/Archive dump from GitHub."""
-    log_path = configure_file_logging("bangumi")
-    log.info("bangumi_fetch_dump_start", log_file=str(log_path), tag=tag or "latest")
+    log.info("bangumi_fetch_dump_start", tag=tag or "latest")
     asyncio.run(_run_fetch_dump(tag=tag, force=force))
 
 
@@ -736,8 +736,7 @@ def cmd_subjects(
     force: ForceOpt = False,
 ) -> None:
     """Migrate dump jsonlines → BRONZE parquet (type=2 anime only)."""
-    log_path = configure_file_logging("bangumi")
-    log.info("bangumi_subjects_command_start", log_file=str(log_path))
+    log.info("bangumi_subjects_command_start")
 
     resolved_dump = dump_dir.resolve() if not dump_dir.is_symlink() else dump_dir
     jsonlines_path = resolved_dump / "subject.jsonlines"
@@ -781,8 +780,7 @@ def cmd_relations(
     progress: ProgressOpt = False,
 ) -> None:
     """Scrape subject×persons/characters → BRONZE parquet."""
-    log_path = configure_file_logging("bangumi")
-    log.info("bangumi_relations_command_start", log_file=str(log_path), limit=limit)
+    log.info("bangumi_relations_command_start", limit=limit)
     asyncio.run(
         _run_relations(
             limit=limit,
@@ -804,8 +802,7 @@ def cmd_persons(
     progress: ProgressOpt = False,
 ) -> None:
     """Scrape person details → BRONZE parquet."""
-    log_path = configure_file_logging("bangumi")
-    log.info("bangumi_persons_command_start", log_file=str(log_path), limit=limit)
+    log.info("bangumi_persons_command_start", limit=limit)
     asyncio.run(
         _run_persons(
             limit=limit,
@@ -827,8 +824,7 @@ def cmd_characters(
     progress: ProgressOpt = False,
 ) -> None:
     """Scrape character details → BRONZE parquet."""
-    log_path = configure_file_logging("bangumi")
-    log.info("bangumi_characters_command_start", log_file=str(log_path), limit=limit)
+    log.info("bangumi_characters_command_start", limit=limit)
     asyncio.run(
         _run_characters(
             limit=limit,
@@ -850,8 +846,7 @@ def cmd_run(
     skip_characters: bool = typer.Option(False, "--skip-characters", help="Skip characters phase"),
 ) -> None:
     """Run relations → persons → characters in sequence."""
-    log_path = configure_file_logging("bangumi")
-    log.info("bangumi_run_start", log_file=str(log_path))
+    log.info("bangumi_run_start")
     progress_override = resolve_progress_enabled(quiet, progress)
 
     asyncio.run(

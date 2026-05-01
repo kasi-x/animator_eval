@@ -30,10 +30,10 @@ from src.scrapers.cli_common import (
     ProgressOpt,
     QuietOpt,
     ResumeOpt,
+    make_scraper_app,
     resolve_progress_enabled,
 )
 from src.scrapers.http_client import DualWindowRateLimiter, RetryingHttpClient
-from src.scrapers.logging_utils import configure_file_logging
 from src.scrapers.parsers.mal import (
     parse_anime_characters_va,
     parse_anime_episodes,
@@ -83,7 +83,7 @@ ALL_TABLES = [
 
 JIKAN_LIMITER = DualWindowRateLimiter(per_second=2, per_minute=45)
 
-app = typer.Typer()
+app = make_scraper_app("mal")
 
 
 def _empty_checkpoint() -> dict:
@@ -642,11 +642,7 @@ def run(
     progress: ProgressOpt = False,
 ) -> None:
     """Jikan v4 全 endpoint scrape (3 Phase: A=anime, B=persons+chars, C=producers+manga+masters)."""
-    from src.infra.logging import setup_logging
-
-    setup_logging()
-    log_path = configure_file_logging("mal")
-    log.info("mal_scrape_start", phase=phase, log_file=str(log_path))
+    log.info("mal_scrape_start", phase=phase)
     CHECKPOINT_FILE.parent.mkdir(parents=True, exist_ok=True)
 
     cp_data = _empty_checkpoint()

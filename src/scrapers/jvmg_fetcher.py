@@ -18,10 +18,10 @@ from src.scrapers.cli_common import (
     ProgressOpt,
     QuietOpt,
     ResumeOpt,
+    make_scraper_app,
     resolve_progress_enabled,
 )
 from src.scrapers.http_client import RetryingHttpClient
-from src.scrapers.logging_utils import configure_file_logging
 from src.scrapers.progress import scrape_progress
 from src.scrapers.wikidata_role_map import WIKIDATA_ROLE_MAP  # noqa: F401  re-exported
 
@@ -60,7 +60,7 @@ LIMIT {limit}
 OFFSET {offset}
 """
 
-app = typer.Typer()
+app = make_scraper_app("wikidata")
 
 CHECKPOINT_FILE = Path(__file__).parent.parent.parent / "data" / "jvmg_checkpoint.json"
 
@@ -213,12 +213,7 @@ def run(
     progress: ProgressOpt = False,
 ) -> None:
     """Collect anime staff data from Wikidata."""
-    from src.infra.logging import setup_logging
     from src.scrapers.bronze_writer import BronzeWriterGroup
-
-    setup_logging()
-    log_path = configure_file_logging("wikidata")
-    log.info("wikidata_fetch_command_start", log_file=str(log_path))
 
     cp = resolve_checkpoint(CHECKPOINT_FILE, resume=resume)
     start_offset = cp.get("last_offset", 0)

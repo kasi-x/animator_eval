@@ -44,7 +44,13 @@ import typer
 from src.scrapers.bronze_writer import BronzeWriter, BronzeWriterGroup
 from src.scrapers.cache_store import load_cached_json, save_cached_json
 from src.scrapers.checkpoint import Checkpoint, resolve_checkpoint
-from src.scrapers.cli_common import DataDirOpt, DelayOpt, ForceOpt, LimitOpt
+from src.scrapers.cli_common import (
+    DataDirOpt,
+    DelayOpt,
+    ForceOpt,
+    LimitOpt,
+    make_scraper_app,
+)
 from src.scrapers.keyframe_api import (
     DEFAULT_DELAY,
     KeyframeApiClient,
@@ -57,7 +63,7 @@ from src.scrapers.sinks import BronzeSink
 
 log = structlog.get_logger()
 
-app = typer.Typer()
+app = make_scraper_app("keyframe")
 
 DEFAULT_DATA_DIR = Path("data/keyframe")
 CHECKPOINT_INTERVAL = 10  # flush checkpoint every N items
@@ -445,13 +451,6 @@ def run(
     data_dir: DataDirOpt = DEFAULT_DATA_DIR,
 ) -> None:
     """Phase 0-4: roles → sitemap → anime HTML → person API → preview."""
-    from src.infra.logging import setup_logging
-    from src.scrapers.logging_utils import configure_file_logging
-
-    setup_logging()
-    log_path = configure_file_logging("keyframe")
-    log.info("keyframe_command_start", log_file=str(log_path))
-
     stats = asyncio.run(
         run_scraper(
             data_dir=data_dir,

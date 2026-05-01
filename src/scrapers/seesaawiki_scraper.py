@@ -33,6 +33,7 @@ from src.scrapers.cli_common import (
     LimitOpt,
     ProgressOpt,
     QuietOpt,
+    make_scraper_app,
     resolve_progress_enabled,
 )
 from src.scrapers.hash_utils import hash_anime_data
@@ -94,7 +95,7 @@ PAGE_LIST_CACHE_TTL_HOURS = 24
 _DATE_RE = re.compile(r"(\d{4}[/-]\d{2}[/-]\d{2}(?:\s+\d{2}:\d{2})?)")
 
 
-app = typer.Typer()
+app = make_scraper_app("seesaawiki")
 
 
 # =============================================================================
@@ -1600,12 +1601,6 @@ def run(
     progress: ProgressOpt = False,
 ) -> None:
     """Fetch and parse credit data from SeesaaWiki."""
-    from src.infra.logging import setup_logging
-    from src.scrapers.logging_utils import configure_file_logging
-
-    setup_logging()
-    configure_file_logging("seesaawiki")
-
     stats = asyncio.run(
         scrape_seesaawiki(
             data_dir=data_dir,
@@ -1651,10 +1646,6 @@ def reparse(
     Re-parses all raw/*.html files and writes to BRONZE parquet.
     Use this after updating the parser.
     """
-    from src.infra.logging import setup_logging
-
-    setup_logging()
-
     stats = reparse_from_raw(
         data_dir=data_dir,
         use_llm=use_llm,
@@ -1682,9 +1673,6 @@ def validate_samples(
     and asks the local LLM to check for systemic issues.
     """
     import random
-    from src.infra.logging import setup_logging
-
-    setup_logging()
 
     if not check_llm_available():
         log.error("llm_not_available", hint="Start Ollama: ollama serve")

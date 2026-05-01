@@ -41,9 +41,9 @@ from src.scrapers.cli_common import (
     ProgressOpt,
     QuietOpt,
     ResumeOpt,
+    make_scraper_app,
     resolve_progress_enabled,
 )
-from src.scrapers.logging_utils import configure_file_logging
 from src.scrapers.progress import scrape_progress
 from src.scrapers.runner import ScrapeRunner
 from src.scrapers.sinks import BronzeSink
@@ -89,7 +89,7 @@ HEADERS = {
 
 DEFAULT_DATA_DIR = Path("data/ann")
 
-app = typer.Typer()
+app = make_scraper_app("ann")
 
 
 # ─── HTTP client ────────────────────────────────────────────────────────────
@@ -309,8 +309,7 @@ def cmd_scrape_anime(
     progress: ProgressOpt = False,
 ) -> None:
     """Phase 1+2: fetch masterlist → scrape anime XML."""
-    log_path = configure_file_logging("ann")
-    log.info("ann_scrape_anime_command_start", log_file=str(log_path), limit=limit)
+    log.info("ann_scrape_anime_command_start", limit=limit)
     asyncio.run(
         _run_scrape_anime(
             limit=limit,
@@ -431,7 +430,6 @@ def cmd_scrape_persons(
     Uses people.php?id=NUM HTML scraping because the XML API (?people=ID)
     returns <warning>ignored</warning>. One request per person; throughput ~40/min at 1.5s intervals.
     """
-    configure_file_logging("ann")
     asyncio.run(
         _run_scrape_persons(
             limit=limit,
@@ -520,8 +518,7 @@ def cmd_scrape_all(
     progress: ProgressOpt = False,
 ) -> None:
     """Phase 1-3 を順番に実行する."""
-    log_path = configure_file_logging("ann")
-    log.info("ann_scrape_all_command_start", log_file=str(log_path), limit=limit)
+    log.info("ann_scrape_all_command_start", limit=limit)
     progress_override = resolve_progress_enabled(quiet, progress)
     asyncio.run(
         _run_scrape_anime(
