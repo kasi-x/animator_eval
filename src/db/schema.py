@@ -1123,6 +1123,78 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
         );
         CREATE INDEX IF NOT EXISTS idx_src_keyframe_credits_slug
             ON src_keyframe_credits(keyframe_slug);
+
+        CREATE TABLE IF NOT EXISTS src_tmdb_anime (
+            tmdb_id              INTEGER NOT NULL,
+            media_type           TEXT NOT NULL,
+            title                TEXT NOT NULL DEFAULT '',
+            original_title       TEXT NOT NULL DEFAULT '',
+            original_lang        TEXT,
+            origin_countries     TEXT NOT NULL DEFAULT '[]',
+            year                 INTEGER,
+            first_air_date       TEXT,
+            last_air_date        TEXT,
+            release_date         TEXT,
+            episodes             INTEGER,
+            seasons              INTEGER,
+            runtime              INTEGER,
+            status               TEXT,
+            genres               TEXT NOT NULL DEFAULT '[]',
+            production_companies TEXT NOT NULL DEFAULT '[]',
+            overview             TEXT,
+            poster_path          TEXT,
+            backdrop_path        TEXT,
+            imdb_id              TEXT,
+            tvdb_id              INTEGER,
+            wikidata_id          TEXT,
+            display_vote_avg     REAL,
+            display_vote_count   INTEGER,
+            display_popularity   REAL,
+            scraped_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY (media_type, tmdb_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_src_tmdb_anime_year
+            ON src_tmdb_anime(year);
+        CREATE INDEX IF NOT EXISTS idx_src_tmdb_anime_imdb
+            ON src_tmdb_anime(imdb_id);
+
+        CREATE TABLE IF NOT EXISTS src_tmdb_persons (
+            tmdb_id            INTEGER PRIMARY KEY,
+            name               TEXT NOT NULL DEFAULT '',
+            also_known_as      TEXT NOT NULL DEFAULT '[]',
+            gender             INTEGER,
+            birthday           TEXT,
+            deathday           TEXT,
+            place_of_birth     TEXT,
+            biography          TEXT,
+            known_for_dept     TEXT,
+            profile_path       TEXT,
+            imdb_id            TEXT,
+            display_popularity REAL,
+            scraped_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE INDEX IF NOT EXISTS idx_src_tmdb_persons_imdb
+            ON src_tmdb_persons(imdb_id);
+
+        CREATE TABLE IF NOT EXISTS src_tmdb_credits (
+            id             INTEGER PRIMARY KEY AUTOINCREMENT,
+            tmdb_anime_id  INTEGER NOT NULL,
+            media_type     TEXT NOT NULL,
+            tmdb_person_id INTEGER NOT NULL,
+            credit_type    TEXT NOT NULL,
+            character      TEXT,
+            department     TEXT,
+            job            TEXT,
+            role           TEXT NOT NULL,
+            role_raw       TEXT NOT NULL DEFAULT '',
+            episode_count  INTEGER,
+            scraped_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (media_type, tmdb_anime_id, tmdb_person_id, credit_type, role_raw)
+        );
+        CREATE INDEX IF NOT EXISTS idx_src_tmdb_credits_anime
+            ON src_tmdb_credits(media_type, tmdb_anime_id);
+        CREATE INDEX IF NOT EXISTS idx_src_tmdb_credits_person
+            ON src_tmdb_credits(tmdb_person_id);
         """)
     finally:
         conn.isolation_level = old_isolation
@@ -1140,7 +1212,7 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
     _upgrade_v61_src_multilang(conn)
     _upgrade_v61_titles_alt(conn)
     conn.execute(
-        "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '61')"
+        "INSERT INTO schema_meta (key, value) VALUES ('schema_version', '62')"
         " ON CONFLICT(key) DO UPDATE SET value = excluded.value"
     )
     conn.commit()
@@ -1158,6 +1230,7 @@ def _seed_sources(conn: sqlite3.Connection) -> None:
         ("seesaawiki", "SeesaaWiki",           "https://seesaawiki.jp",             "CC-BY-SA",    "fan-curated 詳細エピソード情報"),
         ("keyframe",   "Sakugabooru/Keyframe", "https://www.sakugabooru.com",       "CC",          "sakuga コミュニティ別名情報"),
         ("madb",       "メディア芸術DB",         "https://mediaarts-db.bunka.go.jp",  "public",      "文化庁 メディア芸術データベース (日本政府公開)"),
+        ("tmdb",       "The Movie Database",   "https://www.themoviedb.org",        "CC-BY-NC",    "海外配信メタ + 越境アニメ作品のクレジット"),
     ]
     for code, name_ja, base_url, license_, desc in SOURCE_SEEDS:
         conn.execute(
