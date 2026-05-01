@@ -259,7 +259,58 @@ disclaim responsibility for outcomes of such use.
 
 ---
 
+## 11. 新 audience brief 採否判断 (2026-05-02 記録)
+
+### 11.1 検討背景
+
+TASK_CARDS/15_extension_reports (O1–O8) の実装に際し、以下 3 候補の新 audience brief
+新設が検討された：
+
+| 候補 | 対象 audience | 関連レポート |
+|------|-------------|------------|
+| 教育機関 brief | 大学・専門学校関係者 | O5 (education_outcome) |
+| 文化財 brief | 文化庁・アーカイブ機関 | O7 (historical_restoration) |
+| クールジャパン brief | 経産省・外務省・観光庁 | O8 (soft_power) |
+
+### 11.2 採否判断：当面見送り
+
+**結論**: 3 候補すべて、当面は Technical Appendix および既存 brief (policy / hr / biz) への
+セクション追加で運用する。新 audience brief は **12 ヶ月後 review** まで新設しない。
+
+**判断根拠**:
+
+1. **構造的差異の未確認**: 教育機関・文化財・クールジャパンの各読者層は、既存 policy brief
+   の読者層（政府・業界団体）と重複する範囲が大きい。別 brief が必要な固有の表現様式・
+   語彙・指標セットが現時点では確定していない。
+
+2. **最低レポート数未達**: 本プロジェクトの慣行として、新 audience brief の新設は
+   対象読者に向けた最低 3 本の独立レポート群が確定してから行う。現時点で各候補は
+   1 本（O5 / O7 / O8）にとどまる。
+
+3. **維持コストとリスク**: audience が増えると lint_vocabulary の個別管理、
+   disclaimer の言語バリエーション、読者固有の vocabulary gate が増加する。
+   既存 3 brief の品質を先に安定させることを優先する。
+
+4. **代替案の十分性**: policy brief の "International Dimensions" セクション (O8)、
+   "Labor Pipeline" セクション (O5)、Technical Appendix の "Historical Coverage"
+   セクション (O7) として収容できる。
+
+### 11.3 12 ヶ月後 Review 条件
+
+以下のいずれかが満たされた場合、audience brief 新設を再検討する：
+
+- 対象 audience 向けレポートが 3 本以上確定した
+- 既存 brief に収まらない読者固有の表現規範・指標セットが 2 件以上特定された
+- 実際の外部ステークホルダーから audience-specific brief の需要が確認された
+
+Review は `docs/REPORT_PHILOSOPHY.md` への追記で記録する。
+
+---
+
 ## 改訂履歴
 
+- **v2.1 (2026-05-02)**：§11 追加。O1-O8 拡張レポート群に伴う新 audience brief 採否を
+  記録。教育機関・文化財・クールジャパン brief を 12 ヶ月後 review まで保留。
+  brief マッピング確定は `docs/REPORT_INVENTORY.md` §X1 を参照。
 - **v2（本文書）**：v1 の「客観的記述」立場を放棄し、透明な perspectivism と Findings/Interpretation 分離（C + E 立場）を採用。"Implied Business Value" 節を削除。方法論要件を強制事項として再定義。データステートメント、再現性、Goodhart リスクの節を追加。研究倫理を次の課題として明示。
 - **v1**：初版。「Reports are factual disclosures, not arguments」の立場と3層読者モデル。

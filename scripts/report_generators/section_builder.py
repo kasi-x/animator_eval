@@ -151,6 +151,150 @@ _DISCLAIMER_HTML = """
 """
 
 
+# =========================================================================
+# Method Note Templates (X4 — x_cross_cutting, 2026-05-02)
+# =========================================================================
+# Standardized HTML blocks for statistical methods used across O1-O8
+# reports. Referenced via SectionBuilder.method_note_from_lineage(method_keys=…).
+#
+# Authoring rules (v2 REPORT_PHILOSOPHY):
+#   - No causal verbs in assumption descriptions.
+#   - No evaluative adjectives.
+#   - No normative "should" constructions.
+#   - Interpretation guidance is phrased associationally ("is associated with",
+#     "co-occurs with"), not causally.
+# =========================================================================
+
+METHOD_NOTE_TEMPLATES: dict[str, str] = {
+    # ------------------------------------------------------------------
+    # Cox proportional hazards regression
+    # ------------------------------------------------------------------
+    "cox": (
+        '<div class="method-template" style="margin:0.5rem 0;">'
+        "<p><strong>Cox 比例ハザード回帰 (Cox Proportional Hazards):</strong><br>"
+        "<em>前提:</em> ハザード比は観測期間を通じて一定 (比例ハザード仮定)。"
+        "Schoenfeld 残差検定で仮定の充足を確認する。"
+        "<br><em>結果変数:</em> クレジット可視性喪失までの時間 (打ち切り含む)。"
+        "<br><em>係数の読み方:</em> ハザード比 HR が 1 を超える場合、共変量が高い群では"
+        "クレジット可視性喪失イベントの発生率が高い期間と共起する。"
+        "HR は因果効果ではなく観察上の関連を示す。"
+        "<br><em>既知の限界:</em> 比例ハザード仮定の違反は係数を歪める。"
+        "観測されない交絡 (unobserved confounding) を制御しない。</p>"
+        "</div>"
+    ),
+    # ------------------------------------------------------------------
+    # Mann-Whitney U test
+    # ------------------------------------------------------------------
+    "mwu": (
+        '<div class="method-template" style="margin:0.5rem 0;">'
+        "<p><strong>Mann-Whitney U 検定 (Mann-Whitney U Test):</strong><br>"
+        "<em>前提:</em> 2 群が独立。分布の形状は比較群間で類似。"
+        "<br><em>用途:</em> 中央値・分布の位置を比較する非パラメトリック検定。"
+        "サンプルサイズが小さい場合、または分布が非正規の場合に適用。"
+        "<br><em>結果の読み方:</em> 有意な U 統計量は 2 群の分布位置の差と共起する。"
+        "効果量として rank-biserial correlation r を併記する。"
+        "<br><em>既知の限界:</em> 同順位 (ties) が多い場合は補正が必要。"
+        "効果の方向性は示すが因果関係の根拠にはならない。</p>"
+        "</div>"
+    ),
+    # ------------------------------------------------------------------
+    # Kaplan-Meier estimator
+    # ------------------------------------------------------------------
+    "km": (
+        '<div class="method-template" style="margin:0.5rem 0;">'
+        "<p><strong>Kaplan-Meier 推定量 (Kaplan-Meier Estimator):</strong><br>"
+        "<em>前提:</em> 打ち切り (censoring) は生存時間と独立。"
+        "<br><em>用途:</em> クレジット可視性の維持率 (生存関数) を時系列で推定する。"
+        "群間比較には log-rank 検定を補完する。"
+        "<br><em>結果の読み方:</em> KM 曲線は各時点での「まだクレジットが可視の割合」を示す。"
+        "95% CI は Greenwood の式またはブートストラップで算出する。"
+        "<br><em>既知の限界:</em> 共変量を調整しない記述統計。"
+        "群間差の因果的解釈には追加の識別戦略が必要。</p>"
+        "</div>"
+    ),
+    # ------------------------------------------------------------------
+    # Counterfactual estimation with bootstrap CI
+    # ------------------------------------------------------------------
+    "counterfactual": (
+        '<div class="method-template" style="margin:0.5rem 0;">'
+        "<p><strong>反事実推定 + Bootstrap CI (Counterfactual + Bootstrap CI):</strong><br>"
+        "<em>前提:</em> 反事実シナリオ (key person 不在) を観測データから近似する。"
+        "モデルの定式化を明示し、CI で推定の不確実性を表現する。"
+        "<br><em>用途:</em> 特定個人が関与しなかった場合の production_scale 変化を推定する。"
+        "Bootstrap 回数 B=1,000 (デフォルト)、seed は meta_lineage.rng_seed 参照。"
+        "<br><em>結果の読み方:</em> 推定値と 95% CI は「モデルが想定する反事実との差」を示す。"
+        "CI の幅が大きい場合、推定の信頼性は低い。"
+        "<br><em>既知の限界:</em> 反事実は仮定に依存し観察不可能。"
+        "モデルの誤定式化がバイアスを生じる。交絡を完全には除去しない。</p>"
+        "</div>"
+    ),
+    # ------------------------------------------------------------------
+    # Louvain community detection
+    # ------------------------------------------------------------------
+    "louvain": (
+        '<div class="method-template" style="margin:0.5rem 0;">'
+        "<p><strong>Louvain コミュニティ検出 (Louvain Community Detection):</strong><br>"
+        "<em>前提:</em> グラフのモジュラリティ最適化。解は確率的に変動する (乱数シード依存)。"
+        "<br><em>用途:</em> 共クレジットグラフから密結合な制作集団を抽出する。"
+        "コミュニティ境界は resolution パラメータに依存する (default=1.0)。"
+        "<br><em>結果の読み方:</em> 同一コミュニティ内のノードは互いに高密度な共クレジット関係にある。"
+        "コミュニティ ID は実行ごとに変わる可能性があり、番号に意味はない。"
+        "<br><em>既知の限界:</em> resolution limit (大規模グラフでの小コミュニティ融合)。"
+        "結果の安定性を複数 seed で確認することを推奨する。</p>"
+        "</div>"
+    ),
+    # ------------------------------------------------------------------
+    # Propensity score matching / IPW
+    # ------------------------------------------------------------------
+    "propensity": (
+        '<div class="method-template" style="margin:0.5rem 0;">'
+        "<p><strong>傾向スコアマッチング / IPW (Propensity Score Matching / IPW):</strong><br>"
+        "<em>前提:</em> 強い無視可能性 (strong ignorability): 処置割り当ては観測済み共変量で"
+        "条件付けると独立。観測されない交絡がないことを仮定。"
+        "<br><em>用途:</em> 観測研究で「処置群」と「対照群」の共変量分布を均衡させ、"
+        "ATT (処置群への平均処置効果) を推定する。"
+        "<br><em>結果の読み方:</em> マッチング後の推定値は観察上の関連を調整したもの。"
+        "標準化差 (SMD) でバランス診断を行い、SMD &lt; 0.1 を良好の目安とする。"
+        "<br><em>既知の限界:</em> 観測されない交絡には対処しない。"
+        "傾向スコアモデルの誤定式化がバランス不良を生じる。</p>"
+        "</div>"
+    ),
+    # ------------------------------------------------------------------
+    # Difference-in-Differences (DID)
+    # ------------------------------------------------------------------
+    "did": (
+        '<div class="method-template" style="margin:0.5rem 0;">'
+        "<p><strong>差分の差分法 (Difference-in-Differences, DID):</strong><br>"
+        "<em>前提:</em> 平行トレンド仮定: 処置前の処置群・対照群のトレンドが平行。"
+        "介入前期間のプロット・統計検定で仮定の妥当性を示す。"
+        "<br><em>用途:</em> 自然実験的な介入 (政策変更、スタジオ閉鎖等) が"
+        "クレジット可視性・ネットワーク指標に与えた変化と共起する差を推定する。"
+        "<br><em>結果の読み方:</em> DID 推定量は「介入による差の差」を表す。"
+        "強い平行トレンド仮定のもとで介入効果の推定値として解釈できる。"
+        "<br><em>既知の限界:</em> 平行トレンド仮定の違反は推定量を歪める。"
+        "処置タイミングの不均一性がある場合は staggered DID (Callaway-Sant'Anna 等) を検討する。</p>"
+        "</div>"
+    ),
+    # ------------------------------------------------------------------
+    # Weighted PageRank
+    # ------------------------------------------------------------------
+    "weighted_pagerank": (
+        '<div class="method-template" style="margin:0.5rem 0;">'
+        "<p><strong>重み付き PageRank (Weighted PageRank):</strong><br>"
+        "<em>前提:</em> 共クレジットグラフはエッジ重み付き有向グラフ。"
+        "エッジ重み = role_weight × episode_coverage × duration_mult (構造的のみ)。"
+        "<br><em>用途:</em> 人物ノードのネットワーク内での位置的重要度を算出する。"
+        "収束条件: tol=1e-6, max_iter=100 (デフォルト)。"
+        "<br><em>結果の読み方:</em> PageRank 値が高いノードは、"
+        "エッジ重みと接続パターンから見てネットワーク内で中心的な位置を占める。"
+        "この値は個人の評価ではなく、観測グラフにおける構造的位置の記述である。"
+        "<br><em>既知の限界:</em> dangling nodes (孤立ノード) は personalization vector で処理。"
+        "グラフ密度・時代窓の選択によって結果は変動する。</p>"
+        "</div>"
+    ),
+}
+
+
 @dataclass
 class ReportSection:
     """A single section of a v2-compliant report.
@@ -372,14 +516,26 @@ class SectionBuilder:
         return _DISCLAIMER_HTML
 
     def method_note_from_lineage(
-        self, table_name: str, conn: sqlite3.Connection
+        self,
+        table_name: str,
+        conn: sqlite3.Connection,
+        method_keys: list[str] | None = None,
     ) -> str:
         """meta_lineage を読んで Method Note HTML を自動生成する.
 
         手書き method_note は禁止。このメソッド経由でのみ生成すること。
 
+        Args:
+            table_name: meta_lineage テーブルの table_name 値。
+            conn: SQLite 接続。
+            method_keys: 追加で挿入する手法テンプレートのキーリスト。
+                使用可能なキー: "cox", "mwu", "km", "counterfactual",
+                "louvain", "propensity", "did", "weighted_pagerank"。
+                None の場合はテンプレートを挿入しない (後方互換)。
+
         Raises:
-            ValueError: table_name が meta_lineage に未登録の場合
+            ValueError: table_name が meta_lineage に未登録の場合、または
+                        method_keys に未知のキーが含まれる場合。
         """
         data = self._load_lineage_row(table_name, conn)
         silver_tables = self._parse_silver_tables(data)
@@ -393,11 +549,40 @@ class SectionBuilder:
         parts.append(self._render_simple_p("信頼区間", data.get("ci_method")))
         parts.append(self._render_simple_p("Null モデル", data.get("null_model")))
         parts.append(self._render_simple_p("検証手法", data.get("holdout_method")))
+        if method_keys:
+            parts.append(self._render_method_templates(method_keys))
         parts.append(self._render_meta_paragraph(data))
         parts.append(self._render_row_count_p(data.get("row_count")))
         parts.append(self._render_simple_p("備考", data.get("notes")))
         parts.append("</div>")
         return "\n".join(p for p in parts if p)
+
+    @staticmethod
+    def _render_method_templates(method_keys: list[str]) -> str:
+        """Render standardized method-note blocks for the given method keys.
+
+        Each method key maps to an HTML block describing the statistical
+        method's assumptions, interpretation guidance, and known limitations.
+        Blocks are v2-philosophy compliant: no causal verbs, no normative
+        claims, no evaluative adjectives in Findings context.
+
+        Raises:
+            ValueError: if any key in method_keys is not in METHOD_NOTE_TEMPLATES.
+        """
+        unknown = [k for k in method_keys if k not in METHOD_NOTE_TEMPLATES]
+        if unknown:
+            raise ValueError(
+                f"Unknown method_key(s): {unknown}. "
+                f"Valid keys: {sorted(METHOD_NOTE_TEMPLATES)}"
+            )
+        blocks = [METHOD_NOTE_TEMPLATES[k] for k in method_keys]
+        inner = "\n".join(blocks)
+        return (
+            '<div class="method-templates" '
+            'style="border-top:1px solid #2a2a4a;margin-top:0.8rem;padding-top:0.8rem;">'
+            "\n<p><strong>手法詳細 / Method Details:</strong></p>"
+            f"\n{inner}\n</div>"
+        )
 
     @staticmethod
     def _load_lineage_row(table_name: str, conn: sqlite3.Connection) -> dict:
