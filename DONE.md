@@ -198,3 +198,16 @@
 - last_modified の "0001-01-01T00:00:00Z" sentinel は SILVER で NULL 化
 
 Card 06 (差分 cron) は初回 backfill 完走後に着手 → TODO.md §13.6 に残置。
+
+## TASK_CARDS/14_silver_extend/08_mal_silver ✅ 2026-05-02
+
+- `src/etl/silver_loaders/mal.py`: MAL BRONZE 9 表 → SILVER loader (integrate() 関数)
+- `src/etl/role_mappers/mal.py`: MAL role string → canonical Role mapping
+- `src/db/schema.py`: `-- ===== mal extension =====` セクション追加 (anime_recommendations DDL + _MAL_EXTENSION_COLUMNS)
+- `tests/test_etl/test_silver_mal.py`: 37 テスト (全 pass)
+
+統合表: anime / persons / staff_credits→credits / anime_characters→characters / va_credits→character_voice_actors / anime_genres / anime_studios+studios / anime_relations / anime_recommendations (9/28 必須)
+
+割愛 (Optional): anime_themes / anime_episodes / anime_news / anime_external / anime_streaming / anime_pictures / anime_videos_promo / anime_videos_ep / anime_statistics / anime_moreinfo (専用カードか display-only のため)
+
+H1: display_score_mal / display_popularity_mal / display_members_mal / display_favorites_mal / display_rank_mal / display_scored_by_mal として完全隔離。bare 列なし (rg 0 件確認)。
