@@ -97,13 +97,21 @@ CREATE TABLE IF NOT EXISTS anime_relations (
     relation_type    VARCHAR NOT NULL DEFAULT '',
     related_title    VARCHAR NOT NULL DEFAULT '',
     related_format   VARCHAR,
-    PRIMARY KEY (anime_id, related_anime_id, relation_type)
+    source           VARCHAR NOT NULL DEFAULT '',
+    PRIMARY KEY (anime_id, related_anime_id, relation_type, source)
 );
 CREATE INDEX IF NOT EXISTS idx_anime_relations_anime
     ON anime_relations(anime_id);
 CREATE INDEX IF NOT EXISTS idx_anime_relations_related
     ON anime_relations(related_anime_id);
 """
+
+# ALTER for tables that predate the source column (idempotent via IF NOT EXISTS).
+# DuckDB does not allow NOT NULL in ALTER TABLE ADD COLUMN — DEFAULT '' suffices
+# because all loaders supply an explicit source value.
+_DDL_ANIME_RELATIONS_SOURCE_COL = (
+    "ALTER TABLE anime_relations ADD COLUMN IF NOT EXISTS source VARCHAR DEFAULT ''"
+)
 
 # character_voice_actors — ensure table exists (may already exist if anilist
 # loader ran first).
@@ -259,12 +267,13 @@ WHERE ann_anime_id IS NOT NULL
 """
 
 _RELATED_SQL = """
-INSERT OR IGNORE INTO anime_relations (anime_id, related_anime_id, relation_type, related_title)
+INSERT OR IGNORE INTO anime_relations (anime_id, related_anime_id, relation_type, related_title, source)
 SELECT DISTINCT
     'ann:a' || CAST(ann_anime_id AS VARCHAR),
     'ann:a' || CAST(target_ann_id AS VARCHAR),
     COALESCE(rel, ''),
-    ''
+    '',
+    'ann'
 FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
 WHERE ann_anime_id IS NOT NULL
   AND target_ann_id IS NOT NULL
@@ -307,6 +316,9 @@ def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
             stmt = stmt.strip()
             if stmt:
                 conn.execute(stmt)
+
+    # Backfill source column on tables created before this column existed (H4).
+    conn.execute(_DDL_ANIME_RELATIONS_SOURCE_COL)
 
     for stmt in _DDL_ANIME_EXTENSION:
         conn.execute(stmt)

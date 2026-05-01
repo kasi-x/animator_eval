@@ -337,6 +337,24 @@ class TestRelated:
         row = conn.execute("SELECT relation_type FROM anime_relations LIMIT 1").fetchone()
         assert row[0] == "alternative version"
 
+    def test_relation_source_is_ann(self, tmp_path: Path) -> None:
+        """H4: anime_relations rows from ANN loader have source='ann'."""
+        conn = _silver_conn(tmp_path)
+        _write_bronze(tmp_path, "ann", "related", [
+            {"ann_anime_id": 5, "target_ann_id": 6, "rel": "sequel", "direction": "forward"},
+        ])
+        integrate(conn, tmp_path)
+        row = conn.execute("SELECT source FROM anime_relations LIMIT 1").fetchone()
+        assert row is not None
+        assert row[0] == "ann"
+
+    def test_anime_relations_has_source_column(self, tmp_path: Path) -> None:
+        """anime_relations table must have a source column after DDL."""
+        conn = _silver_conn(tmp_path)
+        _apply_ddl(conn)
+        cols = {r[1] for r in conn.execute("PRAGMA table_info('anime_relations')").fetchall()}
+        assert "source" in cols
+
 
 # ─── cast ───────────────────────────────────────────────────────────────────
 

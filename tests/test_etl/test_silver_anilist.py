@@ -351,3 +351,129 @@ def test_extras_display_rankings_json_populated(bronze_dir: Path) -> None:
     assert row is not None
     assert row[0] is not None, "display_rankings_json must not be NULL after extras update"
     assert "rankings_json" not in cols, "bare rankings_json must not exist in SILVER (H1)"
+
+
+def test_anime_relations_table_created(bronze_dir: Path) -> None:
+    """integrate() creates the anime_relations table with source column (H4)."""
+    conn = _make_silver_conn()
+    anilist_loader.integrate(conn, bronze_dir)
+
+    tables = {r[0] for r in conn.execute("SHOW TABLES").fetchall()}
+    cols = {r[1] for r in conn.execute("PRAGMA table_info('anime_relations')").fetchall()}
+    conn.close()
+
+    assert "anime_relations" in tables
+    assert "source" in cols
+
+
+def test_anime_relations_from_relations_json(tmp_path: Path) -> None:
+    """Rows are inserted into anime_relations from anime.relations_json with source='anilist'."""
+    root = tmp_path / "bronze"
+
+    with BronzeWriter("anilist", table="anime", root=root) as bw:
+        bw.append({
+            "id": "anilist:10",
+            "title_ja": "シーズン1",
+            "title_en": "Season 1",
+            "year": 2023,
+            "season": "WINTER",
+            "quarter": 1,
+            "episodes": 12,
+            "format": "TV",
+            "duration": 24,
+            "start_date": "2023-01-01",
+            "end_date": "2023-03-25",
+            "status": "FINISHED",
+            "original_work_type": "ORIGINAL",
+            "source": "ORIGINAL",
+            "work_type": None,
+            "scale_class": None,
+            "score": 8.0,
+            "mean_score": 80.0,
+            "favourites": 500,
+            "popularity_rank": 100,
+            "rankings_json": "[]",
+            "synonyms": "[]",
+            "country_of_origin": "JP",
+            "is_licensed": 1,
+            "is_adult": 0,
+            "hashtag": None,
+            "site_url": "https://anilist.co/anime/10",
+            "trailer_url": None,
+            "trailer_site": None,
+            "description": "Season 1",
+            "cover_large": None,
+            "cover_extra_large": None,
+            "cover_medium": None,
+            "banner": None,
+            "external_links_json": "[]",
+            "airing_schedule_json": "[]",
+            "relations_json": '[{"id": 20, "type": "SEQUEL", "title": "Season 2", "format": "TV"}]',
+            "fetched_at": "2024-04-24T12:00:00",
+            "content_hash": "xyz789",
+        })
+
+    with BronzeWriter("anilist", table="characters", root=root) as bw:
+        pass
+    with BronzeWriter("anilist", table="character_voice_actors", root=root) as bw:
+        pass
+
+    conn = _make_silver_conn()
+    conn.execute("INSERT INTO anime (id, title_ja, title_en) VALUES ('anilist:10', 'シーズン1', 'Season 1')")
+    counts = anilist_loader.integrate(conn, root)
+
+    row = conn.execute(
+        "SELECT anime_id, related_anime_id, relation_type, source "
+        "FROM anime_relations WHERE anime_id = 'anilist:10'"
+    ).fetchone()
+    conn.close()
+
+    assert row is not None
+    assert row[0] == "anilist:10"
+    assert row[1] == "anilist:20"
+    assert row[2] == "SEQUEL"
+    assert row[3] == "anilist"
+    assert counts["anime_relations_anilist"] >= 1
+
+
+def test_anime_relations_idempotent(tmp_path: Path) -> None:
+    """Calling integrate() twice does not duplicate anime_relations rows."""
+    root = tmp_path / "bronze"
+
+    with BronzeWriter("anilist", table="anime", root=root) as bw:
+        bw.append({
+            "id": "anilist:11",
+            "title_ja": "Test", "title_en": "Test",
+            "year": 2024, "season": "SPRING", "quarter": 2,
+            "episodes": 12, "format": "TV", "duration": 24,
+            "start_date": "2024-04-01", "end_date": None, "status": "RELEASING",
+            "original_work_type": "MANGA", "source": "MANGA",
+            "work_type": None, "scale_class": None,
+            "score": None, "mean_score": None, "favourites": 0,
+            "popularity_rank": None, "rankings_json": "[]",
+            "synonyms": "[]", "country_of_origin": "JP",
+            "is_licensed": 0, "is_adult": 0, "hashtag": None,
+            "site_url": None, "trailer_url": None, "trailer_site": None,
+            "description": "A test.", "cover_large": None,
+            "cover_extra_large": None, "cover_medium": None, "banner": None,
+            "external_links_json": "[]", "airing_schedule_json": "[]",
+            "relations_json": '[{"id": 30, "type": "PREQUEL", "title": "Before", "format": "TV"}]',
+            "fetched_at": "2024-04-24T12:00:00",
+            "content_hash": "dup123",
+        })
+
+    with BronzeWriter("anilist", table="characters", root=root) as bw:
+        pass
+    with BronzeWriter("anilist", table="character_voice_actors", root=root) as bw:
+        pass
+
+    conn = _make_silver_conn()
+    conn.execute("INSERT INTO anime (id, title_ja, title_en) VALUES ('anilist:11', 'Test', 'Test')")
+    anilist_loader.integrate(conn, root)
+    anilist_loader.integrate(conn, root)
+    count = conn.execute(
+        "SELECT COUNT(*) FROM anime_relations WHERE source = 'anilist'"
+    ).fetchone()[0]
+    conn.close()
+
+    assert count == 1

@@ -652,6 +652,25 @@ class TestRelations:
         conn.close()
         assert c1 == c2
 
+    def test_relations_source_is_mal(self, bronze_dir: Path) -> None:
+        """H4: anime_relations rows from MAL loader have source='mal'."""
+        conn = _make_silver_conn()
+        mal_loader.integrate(conn, bronze_dir)
+        src = conn.execute(
+            "SELECT DISTINCT source FROM anime_relations WHERE anime_id = 'mal:a1'"
+        ).fetchone()
+        conn.close()
+        assert src is not None
+        assert src[0] == "mal"
+
+    def test_anime_relations_has_source_column(self, bronze_dir: Path) -> None:
+        """anime_relations table must have a source column after DDL (H4)."""
+        conn = _make_silver_conn()
+        mal_loader.integrate(conn, bronze_dir)
+        cols = {r[1] for r in conn.execute("PRAGMA table_info('anime_relations')").fetchall()}
+        conn.close()
+        assert "source" in cols
+
 
 class TestRecommendations:
     def test_recommendations_inserted(self, bronze_dir: Path) -> None:

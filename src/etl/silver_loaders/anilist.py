@@ -59,6 +59,32 @@ CREATE INDEX IF NOT EXISTS idx_cva_anime
     ON character_voice_actors(anime_id);
 """
 
+# anime_relations table — owned here only when not created by a prior loader.
+# Includes source column (H4) for cross-source tracking.
+_DDL_ANIME_RELATIONS = """
+CREATE TABLE IF NOT EXISTS anime_relations (
+    id               INTEGER,
+    anime_id         VARCHAR NOT NULL,
+    related_anime_id VARCHAR NOT NULL,
+    relation_type    VARCHAR NOT NULL DEFAULT '',
+    related_title    VARCHAR NOT NULL DEFAULT '',
+    related_format   VARCHAR,
+    source           VARCHAR NOT NULL DEFAULT '',
+    PRIMARY KEY (anime_id, related_anime_id, relation_type, source)
+);
+CREATE INDEX IF NOT EXISTS idx_anime_relations_anime
+    ON anime_relations(anime_id);
+CREATE INDEX IF NOT EXISTS idx_anime_relations_related
+    ON anime_relations(related_anime_id);
+"""
+
+# ALTER for tables created by an earlier loader without the source column.
+# DuckDB does not allow NOT NULL in ALTER TABLE ADD COLUMN — DEFAULT '' suffices
+# because all loaders supply an explicit source value.
+_DDL_ANIME_RELATIONS_SOURCE_COL = (
+    "ALTER TABLE anime_relations ADD COLUMN IF NOT EXISTS source VARCHAR DEFAULT ''"
+)
+
 # anime 拡張列 — H1: display_* prefix for all subjective columns.
 # DuckDB supports ADD COLUMN IF NOT EXISTS.
 _DDL_ANIME_EXTENSION = [
@@ -164,6 +190,45 @@ WHERE anime.id = bronze.id
   AND bronze._rn = 1
 """
 
+# Parse relations_json from the SILVER anime table and insert normalized rows
+# into anime_relations with source='anilist'.
+#
+# relations_json is a JSON array of objects:
+#   [{"id": <anilist_id>, "type": "SEQUEL", "title": "...", "format": "TV"}, ...]
+#
+# Only rows where the related id is an integer are inserted (nulls excluded).
+# The PK (anime_id, related_anime_id, relation_type, source) prevents duplicates.
+_ANIME_RELATIONS_FROM_JSON_SQL = """
+INSERT OR IGNORE INTO anime_relations
+    (anime_id, related_anime_id, relation_type, related_title, related_format, source)
+WITH expanded AS (
+    SELECT
+        a.id AS anime_id,
+        elem AS rel
+    FROM anime a,
+    LATERAL (
+        SELECT unnest(
+            from_json(
+                a.relations_json::JSON,
+                '[{"id": "BIGINT", "type": "VARCHAR", "title": "VARCHAR", "format": "VARCHAR"}]'
+            )
+        ) AS elem
+    ) t
+    WHERE a.relations_json IS NOT NULL
+      AND a.relations_json NOT IN ('[]', 'null', '')
+      AND a.id LIKE 'anilist:%'
+)
+SELECT DISTINCT
+    anime_id,
+    'anilist:' || CAST((rel).id AS VARCHAR) AS related_anime_id,
+    COALESCE((rel).type, '')               AS relation_type,
+    COALESCE((rel).title, '')              AS related_title,
+    (rel).format                           AS related_format,
+    'anilist'                              AS source
+FROM expanded
+WHERE (rel).id IS NOT NULL
+"""
+
 
 def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
     """Create characters / CVA tables and add anime extension columns."""
@@ -176,6 +241,14 @@ def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
         stmt = stmt.strip()
         if stmt:
             conn.execute(stmt)
+
+    for stmt in _DDL_ANIME_RELATIONS.split(";"):
+        stmt = stmt.strip()
+        if stmt:
+            conn.execute(stmt)
+
+    # Backfill source column on tables created by a prior loader (H4).
+    conn.execute(_DDL_ANIME_RELATIONS_SOURCE_COL)
 
     for stmt in _DDL_ANIME_EXTENSION:
         conn.execute(stmt)
@@ -197,7 +270,7 @@ def _has_parquet(conn: duckdb.DuckDBPyConnection, glob: str) -> bool:
 
 
 def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[str, int]:
-    """Load AniList characters / CVA / anime extras into SILVER.
+    """Load AniList characters / CVA / anime extras / anime_relations into SILVER.
 
     Args:
         conn: Open DuckDB connection pointing at the SILVER database.
@@ -206,7 +279,8 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
 
     Returns:
         Dict with row counts: ``characters``, ``character_voice_actors``,
-        ``anime_extras_updated`` (anime rows that now have description).
+        ``anime_extras_updated`` (anime rows that now have description),
+        ``anime_relations_anilist`` (rows inserted with source='anilist').
         Tables skipped when no BRONZE parquet exists will be absent from the dict.
     """
     bronze_root = Path(bronze_root)
@@ -226,6 +300,12 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
     if _has_parquet(conn, anime_glob):
         conn.execute(_ANIME_EXTRAS_SQL, [anime_glob])
 
+    # Parse relations_json from the (now updated) anime table and insert into
+    # anime_relations with source='anilist'.  This runs after _ANIME_EXTRAS_SQL
+    # so relations_json is available even when the anime row was created by a
+    # different loader and only enriched here.
+    conn.execute(_ANIME_RELATIONS_FROM_JSON_SQL)
+
     counts: dict[str, int] = {
         "characters": conn.execute("SELECT COUNT(*) FROM characters").fetchone()[0],
         "character_voice_actors": conn.execute(
@@ -233,6 +313,9 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
         ).fetchone()[0],
         "anime_extras_updated": conn.execute(
             "SELECT COUNT(*) FROM anime WHERE description IS NOT NULL"
+        ).fetchone()[0],
+        "anime_relations_anilist": conn.execute(
+            "SELECT COUNT(*) FROM anime_relations WHERE source = 'anilist'"
         ).fetchone()[0],
     }
     return counts

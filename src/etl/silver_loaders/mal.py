@@ -49,13 +49,22 @@ CREATE TABLE IF NOT EXISTS anime_relations (
     relation_type    VARCHAR NOT NULL DEFAULT '',
     related_title    VARCHAR NOT NULL DEFAULT '',
     related_format   VARCHAR,
-    PRIMARY KEY (anime_id, related_anime_id, relation_type)
+    source           VARCHAR NOT NULL DEFAULT '',
+    PRIMARY KEY (anime_id, related_anime_id, relation_type, source)
 );
 CREATE INDEX IF NOT EXISTS idx_anime_relations_anime
     ON anime_relations(anime_id);
 CREATE INDEX IF NOT EXISTS idx_anime_relations_related
     ON anime_relations(related_anime_id);
 """
+
+# ALTER for existing tables that predate the source column.
+# DuckDB ADD COLUMN IF NOT EXISTS is idempotent; NOT NULL constraints are not
+# allowed in ALTER TABLE ADD COLUMN (DuckDB limitation) so we use DEFAULT ''
+# only — loaders always supply an explicit value so NULL never occurs in practice.
+_DDL_ANIME_RELATIONS_SOURCE_COL = (
+    "ALTER TABLE anime_relations ADD COLUMN IF NOT EXISTS source VARCHAR DEFAULT ''"
+)
 
 _DDL_ANIME_RECOMMENDATIONS = """
 CREATE SEQUENCE IF NOT EXISTS seq_anime_recommendations_id;
@@ -226,12 +235,13 @@ WHERE mal_id IS NOT NULL
 
 _ANIME_RELATIONS_SQL = """
 INSERT OR IGNORE INTO anime_relations
-    (anime_id, related_anime_id, relation_type, related_title)
+    (anime_id, related_anime_id, relation_type, related_title, source)
 SELECT DISTINCT
     'mal:a' || CAST(mal_id AS VARCHAR)         AS anime_id,
     'mal:a' || CAST(target_mal_id AS VARCHAR)  AS related_anime_id,
     COALESCE(relation_type, '')                AS relation_type,
-    COALESCE(target_name, '')                  AS related_title
+    COALESCE(target_name, '')                  AS related_title,
+    'mal'                                      AS source
 FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
 WHERE mal_id IS NOT NULL
   AND target_mal_id IS NOT NULL
@@ -278,12 +288,15 @@ def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
         anime_genres, anime_relations, anime_recommendations
     Extension columns added to existing tables:
         anime.mal_id_int, anime.display_*_mal (7 columns)
+        anime_relations.source (cross-source tracking, H4)
     """
     for ddl_block in (_DDL_ANIME_GENRES, _DDL_ANIME_RELATIONS, _DDL_ANIME_RECOMMENDATIONS):
         for stmt in ddl_block.split(";"):
             stmt = stmt.strip()
             if stmt:
                 conn.execute(stmt)
+    # Backfill source column on tables created before this column existed.
+    conn.execute(_DDL_ANIME_RELATIONS_SOURCE_COL)
     for stmt in _DDL_ANIME_EXTENSION:
         conn.execute(stmt)
 

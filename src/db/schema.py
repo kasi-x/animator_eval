@@ -1851,3 +1851,19 @@ def _upgrade_seesaawiki_extension(conn: sqlite3.Connection) -> None:
 #   bgm_id         INTEGER — bangumi character integer ID
 #   character_type INTEGER — character type code
 #   images_json    TEXT    — bangumi character images JSON
+
+# ===== 19_silver_postprocess/03: anime_relations source column (Card 19/03) =====
+# anime_relations 拡張 — cross-source 行管理 (H4):
+#   source  VARCHAR  DEFAULT ''
+#           — 行の出所: 'anilist' | 'mal' | 'ann'
+#           — PK を (anime_id, related_anime_id, relation_type, source) に拡張
+#           — 同一 relation が複数 source に存在する場合、各行を保持可能
+#
+# DuckDB DDL 側変更箇所:
+#   src/etl/silver_loaders/mal.py    — _DDL_ANIME_RELATIONS + _DDL_ANIME_RELATIONS_SOURCE_COL
+#   src/etl/silver_loaders/ann.py    — _DDL_ANIME_RELATIONS + _DDL_ANIME_RELATIONS_SOURCE_COL
+#   src/etl/silver_loaders/anilist.py — _DDL_ANIME_RELATIONS + _DDL_ANIME_RELATIONS_SOURCE_COL
+#                                       + _ANIME_RELATIONS_FROM_JSON_SQL (relations_json パース)
+#
+# anime_recommendations は Card 14/08 で source='mal' 実装済。
+# AniList / bangumi recommendations は BRONZE 未取得のため対象外 (Stop-if 済確認)。
