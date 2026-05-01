@@ -92,10 +92,73 @@ class CounterfactualResult:
 
 
 def _build_series_clusters(conn: Any) -> list[SeriesCluster]:
-    """Cluster anime into series using SEQUEL/PREQUEL/PARENT/SIDE_STORY relations.
+    """Cluster anime into series using the SILVER series_cluster_id column.
 
-    Reads relations_json from SILVER anime table. Single-anime series are
-    treated as their own series cluster (cluster_id == anime_id).
+    Reads pre-computed ``series_cluster_id`` from the SILVER anime table
+    (backfilled by ``src.etl.cluster.series_cluster.backfill``).  Falls back
+    to on-the-fly Union-Find via ``relations_json`` when the column is absent
+    (e.g. before the post-hoc ETL has been run).
+
+    Single-anime series are treated as their own cluster (cluster_id == anime_id).
+
+    Returns:
+        List of SeriesCluster sorted by cluster_id.
+    """
+    # Prefer the pre-computed SILVER column (fast path)
+    try:
+        rows = conn.execute(
+            "SELECT id, title_romaji, series_cluster_id FROM anime"
+        ).fetchall()
+        if rows and rows[0][2] is not None:
+            return _clusters_from_precomputed(rows)
+    except Exception:
+        pass  # column absent — fall through to on-the-fly computation
+
+    # Fallback: on-the-fly Union-Find from relations_json
+    log.info("series_cluster_fallback_to_relations_json")
+    return _clusters_from_relations_json(conn)
+
+
+def _clusters_from_precomputed(
+    rows: list[tuple[Any, Any, Any]],
+) -> list[SeriesCluster]:
+    """Build SeriesCluster list from pre-computed series_cluster_id column.
+
+    Args:
+        rows: Rows of (id, title_romaji, series_cluster_id) from anime table.
+
+    Returns:
+        List of SeriesCluster sorted by cluster_id.
+    """
+    components: dict[str, list[str]] = defaultdict(list)
+    titles: dict[str, str] = {}
+
+    for row in rows:
+        aid = str(row[0])
+        title = str(row[1] or "")
+        cluster_id = str(row[2]) if row[2] is not None else aid
+        components[cluster_id].append(aid)
+        titles[aid] = title
+
+    clusters: list[SeriesCluster] = []
+    for cluster_id, members in sorted(components.items()):
+        title = titles.get(sorted(members)[0], "")
+        clusters.append(SeriesCluster(
+            cluster_id=cluster_id,
+            anime_ids=sorted(members),
+            title=title,
+        ))
+    return clusters
+
+
+def _clusters_from_relations_json(conn: Any) -> list[SeriesCluster]:
+    """On-the-fly Union-Find fallback using relations_json column.
+
+    Used only when series_cluster_id has not yet been backfilled.
+    Preserved from the original implementation for graceful degradation.
+
+    Args:
+        conn: DB connection.
 
     Returns:
         List of SeriesCluster sorted by cluster_id.
@@ -145,21 +208,18 @@ def _build_series_clusters(conn: Any) -> list[SeriesCluster]:
             if rel_type in _CHAIN_RELATIONS and related_id in parent:
                 _union(aid, related_id)
 
-    # Group by root
     components: dict[str, list[str]] = defaultdict(list)
     for aid in parent:
         components[_find(aid)].append(aid)
 
     clusters: list[SeriesCluster] = []
     for root, members in sorted(components.items()):
-        # Choose title from the earliest-ID (proxy for "parent") member
         title = titles.get(sorted(members)[0], "")
         clusters.append(SeriesCluster(
             cluster_id=root,
             anime_ids=sorted(members),
             title=title,
         ))
-
     return clusters
 
 
