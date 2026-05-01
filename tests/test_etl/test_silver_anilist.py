@@ -287,3 +287,67 @@ def test_structural_columns_populated(bronze_dir: Path) -> None:
     assert row[2] == 0         # is_adult
     assert row[3] == "#TestAnime"  # hashtag
     assert "anilist.co" in row[4]  # site_url
+
+
+def test_extras_external_links_json_populated(bronze_dir: Path) -> None:
+    """external_links_json is copied from BRONZE to SILVER."""
+    conn = _make_silver_conn()
+    _insert_anime(conn, "anilist:1")
+    anilist_loader.integrate(conn, bronze_dir)
+
+    row = conn.execute(
+        "SELECT external_links_json FROM anime WHERE id='anilist:1'"
+    ).fetchone()
+    conn.close()
+
+    assert row is not None
+    assert row[0] is not None, "external_links_json must not be NULL after extras update"
+
+
+def test_extras_airing_schedule_json_populated(bronze_dir: Path) -> None:
+    """airing_schedule_json is copied from BRONZE to SILVER."""
+    conn = _make_silver_conn()
+    _insert_anime(conn, "anilist:1")
+    anilist_loader.integrate(conn, bronze_dir)
+
+    row = conn.execute(
+        "SELECT airing_schedule_json FROM anime WHERE id='anilist:1'"
+    ).fetchone()
+    conn.close()
+
+    assert row is not None
+    assert row[0] is not None, "airing_schedule_json must not be NULL after extras update"
+
+
+def test_extras_trailer_columns_populated(bronze_dir: Path) -> None:
+    """trailer_url and trailer_site are copied from BRONZE to SILVER."""
+    conn = _make_silver_conn()
+    _insert_anime(conn, "anilist:1")
+    anilist_loader.integrate(conn, bronze_dir)
+
+    row = conn.execute(
+        "SELECT trailer_url, trailer_site FROM anime WHERE id='anilist:1'"
+    ).fetchone()
+    conn.close()
+
+    assert row is not None
+    assert row[0] == "https://youtube.com/v/abc"  # trailer_url
+    assert row[1] == "youtube"                    # trailer_site
+
+
+def test_extras_display_rankings_json_populated(bronze_dir: Path) -> None:
+    """H1: display_rankings_json (not bare rankings_json) is set from BRONZE rankings_json."""
+    conn = _make_silver_conn()
+    _insert_anime(conn, "anilist:1")
+    anilist_loader.integrate(conn, bronze_dir)
+
+    row = conn.execute(
+        "SELECT display_rankings_json FROM anime WHERE id='anilist:1'"
+    ).fetchone()
+    # Verify bare rankings_json column does not exist in SILVER
+    cols = {r[1] for r in conn.execute("PRAGMA table_info('anime')").fetchall()}
+    conn.close()
+
+    assert row is not None
+    assert row[0] is not None, "display_rankings_json must not be NULL after extras update"
+    assert "rankings_json" not in cols, "bare rankings_json must not exist in SILVER (H1)"
