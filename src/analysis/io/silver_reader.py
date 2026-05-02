@@ -95,22 +95,37 @@ def load_anime_silver(path: Path | str | None = None) -> list:
 
     Silver column mapping:
       source_mat → original_work_type / source
-    Related tables (anime_genres, anime_tags, anime_studios, anime_external_ids)
-    are not yet in silver; genres/tags/studios default to empty lists.
+    Joins anime_studios + studios to populate the `studios` list per anime
+    (required by AKM `infer_studio_assignment`).
     """
     from src.runtime.models import AnimeAnalysis
 
     with silver_connect(path) as conn:
         rows = _rows_as_dicts(conn, "SELECT * FROM anime")
+        studios_map: dict[str, list[str]] = {}
+        try:
+            for anime_id, name in conn.execute(
+                """
+                SELECT a.anime_id, s.name
+                FROM anime_studios a
+                JOIN studios s ON s.id = a.studio_id
+                WHERE s.name IS NOT NULL AND s.name != ''
+                """
+            ).fetchall():
+                studios_map.setdefault(anime_id, []).append(name)
+        except Exception as e:
+            logger.warning("silver_anime_studios_join_failed", error=str(e))
 
     anime_list = []
+    no_studios = 0
+    no_year = 0
     for r in rows:
         try:
-            studios_raw = r.get("studios")
-            if isinstance(studios_raw, (list, tuple)):
-                studios = list(studios_raw)
-            else:
-                studios = []
+            studios = studios_map.get(r["id"], [])
+            if not studios:
+                no_studios += 1
+            if not r.get("year"):
+                no_year += 1
             anime_list.append(AnimeAnalysis(
                 id=r["id"],
                 title_ja=r.get("title_ja") or "",
@@ -132,6 +147,14 @@ def load_anime_silver(path: Path | str | None = None) -> list:
             ))
         except Exception:
             logger.debug("silver_anime_skip", id=r.get("id"))
+    logger.info(
+        "silver_anime_loaded",
+        total=len(anime_list),
+        with_studios=len(anime_list) - no_studios,
+        no_studios=no_studios,
+        no_year=no_year,
+        studios_map_size=len(studios_map),
+    )
     return anime_list
 
 

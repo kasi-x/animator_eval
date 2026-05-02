@@ -189,6 +189,60 @@ class TestLoadAnimeSilver:
         assert a1.duration == 24
         assert a1.scale_class == "medium"
 
+    def test_studios_join_when_tables_present(self, tmp_path):
+        """anime_studios + studios 表が SILVER にある時、anime.studios に populate される。
+
+        AKM `infer_studio_assignment` は anime.studios が空なら skip するため、
+        この join は scoring pipeline の生死を分ける。
+        """
+        from src.analysis.io.silver_reader import load_anime_silver
+
+        path = tmp_path / "silver_with_studios.duckdb"
+        conn = duckdb.connect(str(path))
+        for stmt in _DDL.split(";"):
+            s = stmt.strip()
+            if s:
+                conn.execute(s)
+        # anime_studios + studios 表追加
+        conn.execute(
+            "CREATE TABLE studios (id VARCHAR PRIMARY KEY, name VARCHAR)"
+        )
+        conn.execute(
+            "CREATE TABLE anime_studios (anime_id VARCHAR, studio_id VARCHAR, "
+            "role VARCHAR DEFAULT '', source VARCHAR DEFAULT '', "
+            "PRIMARY KEY (anime_id, studio_id, role, source))"
+        )
+        conn.execute(
+            "INSERT INTO anime VALUES ('a1','作品1','Anime1',2020,'spring',2,12,'TV',24,NULL,NULL,'FINISHED','MANGA','TV','medium',NOW())"
+        )
+        conn.executemany(
+            "INSERT INTO studios VALUES (?, ?)",
+            [("s1", "Studio Ghibli"), ("s2", "MAPPA")],
+        )
+        conn.executemany(
+            "INSERT INTO anime_studios (anime_id, studio_id, role, source) VALUES (?, ?, ?, ?)",
+            [("a1", "s1", "main", "anilist"), ("a1", "s2", "support", "mal")],
+        )
+        conn.commit()
+        conn.close()
+
+        anime_list = load_anime_silver(path)
+        by_id = {a.id: a for a in anime_list}
+        assert "a1" in by_id
+        # 2 studios joined, names populated
+        assert sorted(by_id["a1"].studios) == ["MAPPA", "Studio Ghibli"]
+
+    def test_studios_empty_when_tables_absent(self, silver_path):
+        """anime_studios 表がない silver では studios=[] (regression-safe)。
+
+        既存 fixture (anime_studios 不在) で graceful degradation。
+        """
+        from src.analysis.io.silver_reader import load_anime_silver
+
+        anime_list = load_anime_silver(silver_path)
+        for a in anime_list:
+            assert a.studios == []
+
 
 class TestLoadCreditsSilver:
     def test_returns_credit_models(self, silver_path):

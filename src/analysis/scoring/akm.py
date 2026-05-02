@@ -135,10 +135,18 @@ def infer_studio_assignment(
     """
     # Accumulate role weights per (person, year, studio)
     weight_accum: dict[tuple[str, int, str], float] = defaultdict(float)
+    no_anime = no_year = no_studios = 0
 
     for c in credits:
         anime = anime_map.get(c.anime_id)
-        if not anime or not anime.year or not anime.studios:
+        if not anime:
+            no_anime += 1
+            continue
+        if not anime.year:
+            no_year += 1
+            continue
+        if not anime.studios:
+            no_studios += 1
             continue
         w = ROLE_WEIGHTS.get(c.role.value, 1.0)
         # Distribute credit weight equally across co-production studios
@@ -158,6 +166,16 @@ def infer_studio_assignment(
     for (pid, year), (studio, _) in person_year_best.items():
         result[pid][year] = studio
 
+    logger.info(
+        "infer_studio_assignment_done",
+        n_credits=len(credits),
+        n_anime_in_map=len(anime_map),
+        skipped_no_anime=no_anime,
+        skipped_no_year=no_year,
+        skipped_no_studios=no_studios,
+        n_persons=len(result),
+        n_assignments=sum(len(years) for years in result.values()),
+    )
     return dict(result)
 
 
