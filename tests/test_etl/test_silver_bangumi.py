@@ -58,6 +58,12 @@ CREATE TABLE IF NOT EXISTS persons (
     birth_date  VARCHAR,
     death_date  VARCHAR,
     website_url VARCHAR,
+    gender      VARCHAR,
+    description TEXT,
+    image_large VARCHAR,
+    image_medium VARCHAR,
+    hometown    VARCHAR,
+    blood_type  VARCHAR,
     updated_at  TIMESTAMP DEFAULT now()
 );
 
@@ -911,6 +917,83 @@ class TestAnimeStudiosFromInfobox:
 
         assert len(rows) == 1
         assert rows[0][0] == "bangumi"
+
+
+# ─── 22/04: persons.description UPDATE path ──────────────────────────────────
+
+class TestPersonsDescriptionUpdate:
+    """22/04: bangumi summary → persons.description via COALESCE UPDATE."""
+
+    def test_description_filled_from_bangumi_summary(self, bronze_dir: Path) -> None:
+        """persons.description is set from bangumi.summary when previously NULL."""
+        conn = _make_silver_conn()
+        bangumi_loader.integrate(conn, bronze_dir)
+        row = conn.execute(
+            "SELECT description FROM persons WHERE id = 'bgm:p2001'"
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == "A test animator."
+
+    def test_existing_description_not_overwritten(self, tmp_path: Path) -> None:
+        """COALESCE: pre-existing persons.description is preserved over bangumi summary."""
+        root = tmp_path / "bronze"
+        _write_subjects(root)
+        _write_persons(root)
+        _write_characters(root)
+        _write_subject_persons(root)
+        _write_person_characters(root)
+        _write_subject_characters(root)
+
+        conn = _make_silver_conn()
+        conn.execute(
+            "INSERT INTO persons (id, name_ja, description) VALUES ('bgm:p2001', '山田', 'existing_desc')"
+        )
+        bangumi_loader.integrate(conn, root)
+        row = conn.execute(
+            "SELECT description FROM persons WHERE id = 'bgm:p2001'"
+        ).fetchone()
+        conn.close()
+        assert row[0] == "existing_desc"
+
+    def test_null_summary_leaves_description_null(self, tmp_path: Path) -> None:
+        """If bangumi summary is NULL, persons.description stays NULL (no overwrite)."""
+        root = tmp_path / "bronze"
+        _write_subjects(root)
+        _write_persons(root, rows=[
+            {
+                "id": 2002,
+                "name": "要約なし",
+                "type": 1,
+                "career": None,
+                "summary": None,   # no summary
+                "infobox": None,
+                "gender": "male",
+                "blood_type": None,
+                "birth_year": None,
+                "birth_mon": None,
+                "birth_day": None,
+                "images": None,
+                "locked": False,
+                "stat_comments": 0,
+                "stat_collects": 0,
+                "last_modified": None,
+                "fetched_at": None,
+            }
+        ])
+        _write_characters(root, rows=[])
+        _write_subject_persons(root, rows=[])
+        _write_person_characters(root, rows=[])
+        _write_subject_characters(root, rows=[])
+
+        conn = _make_silver_conn()
+        bangumi_loader.integrate(conn, root)
+        row = conn.execute(
+            "SELECT description FROM persons WHERE id = 'bgm:p2002'"
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] is None
 
 
 # ─── 22/04: characters.date_of_birth UPDATE path ─────────────────────────────
