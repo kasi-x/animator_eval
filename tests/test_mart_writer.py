@@ -235,6 +235,72 @@ class TestRankingQuery:
         assert by_pid["p1"]["latest_year"] == 2022
 
 
+class TestMartPkBackfill:
+    """_ensure_mart_pks() backfills PKs when CTAS has dropped them."""
+
+    def test_pk_constraints_present_after_gold_writer_enter(self, gold_path):
+        """GoldWriter.__enter__ must leave all mart tables with their PKs intact."""
+        import duckdb
+        from src.analysis.io.mart_writer import GoldWriter, _MART_PK_MAP
+
+        with GoldWriter(gold_path):
+            pass  # just open/close — DDL + _ensure_mart_pks run on enter
+
+        conn = duckdb.connect(str(gold_path), read_only=True)
+        try:
+            existing_pks = {
+                row[0]
+                for row in conn.execute(
+                    "SELECT table_name FROM information_schema.table_constraints "
+                    "WHERE table_schema='mart' AND constraint_type='PRIMARY KEY'"
+                ).fetchall()
+            }
+        finally:
+            conn.close()
+
+        missing = set(_MART_PK_MAP.keys()) - existing_pks
+        assert not missing, f"Missing PKs after GoldWriter enter: {missing}"
+
+    def test_pk_healed_after_ctas_drops_constraints(self, gold_path):
+        """When a CTAS re-creates mart tables without PKs, the next GoldWriter
+        open self-heals them.
+        """
+        import duckdb
+        from src.analysis.io.mart_writer import GoldWriter
+
+        # Seed the DB first
+        with GoldWriter(gold_path) as gw:
+            gw.write_person_scores([("p1", 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7)])
+
+        # Simulate CTAS dropping the PK by removing the constraint manually
+        conn = duckdb.connect(str(gold_path))
+        try:
+            conn.execute("DROP TABLE IF EXISTS mart.person_scores")
+            conn.execute(
+                "CREATE TABLE mart.person_scores "
+                "(person_id TEXT, iv_score DOUBLE)"  # no PK
+            )
+            conn.close()
+        except Exception:
+            conn.close()
+
+        # Opening GoldWriter again must restore the PK
+        with GoldWriter(gold_path):
+            pass
+
+        conn2 = duckdb.connect(str(gold_path), read_only=True)
+        try:
+            pk_count = conn2.execute(
+                "SELECT COUNT(*) FROM information_schema.table_constraints "
+                "WHERE table_schema='mart' AND table_name='person_scores' "
+                "AND constraint_type='PRIMARY KEY'"
+            ).fetchone()[0]
+        finally:
+            conn2.close()
+
+        assert pk_count == 1, "person_scores PK not restored after CTAS drop"
+
+
 class TestGoldWriterAtomicSwap:
     def test_atomic_swap_replaces_stale_file(self, tmp_path):
         from src.analysis.io.mart_writer import GoldWriter, GoldReader

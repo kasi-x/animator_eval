@@ -46,6 +46,77 @@ def _get_default_silver_path() -> Path:
     return DEFAULT_DB_PATH
 
 # DDL — GOLD tables in DuckDB (columnar; no sqlite_master, no WAL)
+# PK map: table -> ordered PK columns.
+# Used by _ensure_mart_pks() to backfill PRIMARY KEY constraints that CTAS drops.
+# Source of truth: _DDL below.  Kept in sync manually — update both if schema changes.
+_MART_PK_MAP: dict[str, tuple[str, ...]] = {
+    "agg_director_circles": ("person_id", "director_id"),
+    "agg_milestones": ("person_id", "event_type", "year", "anime_id"),
+    "agg_person_career": ("person_id",),
+    "agg_person_network": ("person_id",),
+    "corrections_credit_year": ("id",),
+    "corrections_role": ("id",),
+    "feat_birank_annual": ("person_id", "year"),
+    "feat_career": ("person_id",),
+    "feat_career_annual": ("person_id", "career_year"),
+    "feat_career_gaps": ("person_id", "gap_start_year"),
+    "feat_career_scores": ("person_id",),
+    "feat_causal_estimates": ("person_id",),
+    "feat_cluster_membership": ("person_id",),
+    "feat_contribution": ("person_id",),
+    "feat_credit_activity": ("person_id",),
+    "feat_genre_affinity": ("person_id", "genre"),
+    "feat_mentorships": ("mentor_id", "mentee_id"),
+    "feat_network": ("person_id",),
+    "feat_network_scores": ("person_id",),
+    "feat_person_role_progression": ("person_id", "role_category"),
+    "feat_studio_affiliation": ("person_id", "credit_year", "studio_id"),
+    "meta_common_person_parameters": ("person_id",),
+    "meta_lineage": ("table_name",),
+    "ops_entity_resolution_audit": ("person_id",),
+    "person_scores": ("person_id",),
+    # score_history intentionally has no PK (append-only history log)
+}
+
+
+def _ensure_mart_pks(conn: duckdb.DuckDBPyConnection) -> None:
+    """Backfill PRIMARY KEY constraints on mart tables that lack them.
+
+    DuckDB's CTAS (CREATE TABLE AS SELECT) silently drops all PK/UNIQUE
+    constraints.  This function is idempotent — it only adds constraints
+    that are missing, so it is safe to call after every _DDL execution.
+
+    Called from GoldWriter.__enter__ so every pipeline run self-heals.
+    """
+    try:
+        existing_pks: set[str] = {
+            row[0]
+            for row in conn.execute(
+                "SELECT table_name FROM information_schema.table_constraints "
+                "WHERE table_schema='mart' AND constraint_type='PRIMARY KEY'"
+            ).fetchall()
+        }
+        for table, pk_cols in _MART_PK_MAP.items():
+            if table in existing_pks:
+                continue
+            # Verify the table itself exists in mart before attempting ALTER
+            tbl_exists = conn.execute(
+                "SELECT COUNT(*) FROM information_schema.tables "
+                "WHERE table_schema='mart' AND table_name=?",
+                (table,),
+            ).fetchone()[0]
+            if not tbl_exists:
+                continue
+            cols_str = ", ".join(pk_cols)
+            try:
+                conn.execute(f"ALTER TABLE mart.{table} ADD PRIMARY KEY ({cols_str})")
+                logger.debug("mart_pk_backfilled", table=table, cols=pk_cols)
+            except Exception as exc:
+                logger.warning("mart_pk_backfill_failed", table=table, error=str(exc))
+    except Exception as exc:
+        logger.warning("mart_pk_ensure_skipped", error=str(exc))
+
+
 _DDL = """
 CREATE TABLE IF NOT EXISTS person_scores (
     person_id           TEXT PRIMARY KEY,
@@ -630,6 +701,8 @@ class GoldWriter:
         except Exception:
             pass
         self._conn.execute(_DDL)
+        # Backfill PK constraints dropped by any prior CTAS migration (idempotent)
+        _ensure_mart_pks(self._conn)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb) -> None:
