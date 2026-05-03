@@ -120,10 +120,10 @@ def ctx(visualize: bool, dry_run: bool) -> Any:
 
 @tag(stage="phase1", cost="moderate", domain="loading")
 def raw_data_loaded(visualize: bool, dry_run: bool) -> LoadedData:
-    """Load persons, anime, and credits from silver.duckdb (Phase 1)."""
-    from src.pipeline_phases.data_loading import load_pipeline_data
+    """Load persons, anime, credits — Phase 3: Resolved 層優先 + Conformed fallback."""
+    from src.pipeline_phases.data_loading import load_pipeline_data_resolved
 
-    return load_pipeline_data(visualize, dry_run)
+    return load_pipeline_data_resolved(visualize, dry_run)
 
 
 @tag(stage="phase1", cost="cheap", domain="loading")
