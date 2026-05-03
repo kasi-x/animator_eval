@@ -23,9 +23,12 @@ import structlog
 
 logger = structlog.get_logger()
 
-DEFAULT_SILVER_PATH: Path = Path(
-    os.environ.get("ANIMETOR_SILVER_PATH", "result/silver.duckdb")
+# 5層 architecture Phase 1c: animetor.duckdb 統合 file (conformed + mart schemas)
+DEFAULT_DB_PATH: Path = Path(
+    os.environ.get("ANIMETOR_DB_PATH", "result/animetor.duckdb")
 )
+# Backward-compat alias (test monkeypatch sites still reference DEFAULT_SILVER_PATH)
+DEFAULT_SILVER_PATH: Path = DEFAULT_DB_PATH
 
 
 @contextmanager
@@ -35,16 +38,21 @@ def conformed_connect(
     memory_limit: str = "16GB",
     read_only: bool = True,
 ) -> Iterator[duckdb.DuckDBPyConnection]:
-    """Open silver.duckdb for the duration of one query block, then close.
+    """Open animetor.duckdb (Conformed schema) for the duration of one query block.
 
-    Always opens per-query so analysis modules never pin to a stale inode
-    after the pipeline atomically swaps silver.duckdb.
+    Sets `search_path = conformed, main` so unqualified table names resolve
+    against the Conformed schema first. Phase 1c: silver.duckdb 統合済。
     """
-    p = str(path or DEFAULT_SILVER_PATH)
+    p = str(path or DEFAULT_DB_PATH)
     conn = duckdb.connect(p, read_only=read_only)
     try:
         conn.execute(f"SET memory_limit='{memory_limit}'")
         conn.execute("SET temp_directory='/tmp/duckdb_spill'")
+        # Phase 1c: default schema を conformed に (DuckDB syntax: SET schema=...)
+        try:
+            conn.execute("SET schema='conformed'")
+        except Exception:
+            pass  # 旧 file (schema 無し) との互換
         yield conn
     finally:
         conn.close()

@@ -30,19 +30,20 @@ import structlog
 
 logger = structlog.get_logger()
 
+# 5層 architecture Phase 1c: animetor.duckdb 統合 (mart schema)
 # Can be overridden in tests via monkeypatch
 DEFAULT_GOLD_DB_PATH: Path = Path(
     os.environ.get(
-        "ANIMETOR_GOLD_DB_PATH",
-        str(Path(__file__).resolve().parent.parent.parent.parent / "result" / "gold.duckdb"),
+        "ANIMETOR_DB_PATH",
+        str(Path(__file__).resolve().parent.parent.parent.parent / "result" / "animetor.duckdb"),
     )
 )
 
 def _get_default_silver_path() -> Path:
-    """Return the current silver.duckdb path (reads from conformed_reader so monkeypatches propagate)."""
-    from src.analysis.io.conformed_reader import DEFAULT_SILVER_PATH
+    """Return the current animetor.duckdb path (reads from conformed_reader so monkeypatches propagate)."""
+    from src.analysis.io.conformed_reader import DEFAULT_DB_PATH
 
-    return DEFAULT_SILVER_PATH
+    return DEFAULT_DB_PATH
 
 # DDL — GOLD tables in DuckDB (columnar; no sqlite_master, no WAL)
 _DDL = """
@@ -409,7 +410,13 @@ CREATE TABLE IF NOT EXISTS corrections_role (
 def _open(db_path: Path | str | None = None) -> duckdb.DuckDBPyConnection:
     path = str(db_path or DEFAULT_GOLD_DB_PATH)
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    return duckdb.connect(path)
+    conn = duckdb.connect(path)
+    try:
+        conn.execute("CREATE SCHEMA IF NOT EXISTS mart")
+        conn.execute("SET schema='mart'")
+    except Exception:
+        pass
+    return conn
 
 
 # ---------------------------------------------------------------------------
@@ -432,6 +439,10 @@ def gold_connect(
     try:
         conn.execute(f"SET memory_limit='{memory_limit}'")
         conn.execute("SET temp_directory='/tmp/duckdb_spill'")
+        try:
+            conn.execute("SET schema='mart'")
+        except Exception:
+            pass
         yield conn
     finally:
         conn.close()
@@ -449,6 +460,11 @@ def gold_connect_write(
     try:
         conn.execute(f"SET memory_limit='{memory_limit}'")
         conn.execute("SET temp_directory='/tmp/duckdb_spill'")
+        try:
+            conn.execute("CREATE SCHEMA IF NOT EXISTS mart")
+            conn.execute("SET schema='mart'")
+        except Exception:
+            pass
         yield conn
     finally:
         conn.close()
@@ -607,6 +623,12 @@ class GoldWriter:
         self._conn = duckdb.connect(str(self._path))
         self._conn.execute(f"SET memory_limit='{self._memory_limit}'")
         self._conn.execute("SET temp_directory='/tmp/duckdb_spill'")
+        # Phase 1c: Mart 専用 schema を default に
+        try:
+            self._conn.execute("CREATE SCHEMA IF NOT EXISTS mart")
+            self._conn.execute("SET schema='mart'")
+        except Exception:
+            pass
         self._conn.execute(_DDL)
         return self
 
