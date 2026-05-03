@@ -22,7 +22,6 @@ import duckdb
 import structlog
 
 from src.etl.atomic_swap import atomic_duckdb_swap
-from src.etl.cross_source_copy.anime_extras import copy_from_anilist as _cross_source_copy_anime
 from src.etl.role_mappers import map_role
 import src.etl.silver_loaders.anilist as _sl_anilist
 import src.etl.silver_loaders.ann as _sl_ann
@@ -676,20 +675,6 @@ def integrate(
                         source=source_name,
                         error=str(exc),
                     )
-
-            # ── Card 22/05: cross-source copy (Resolved-layer preview) ────────
-            # Propagate anilist extra columns (country_of_origin, synonyms,
-            # description, external_links_json) to non-anilist rows that share
-            # the same real-world anime, using anilist_id_int as the join key.
-            # Failures are isolated — a copy error must not abort the ETL.
-            # NOTE: remove this block when the Resolved layer (Phase 2) is live.
-            try:
-                copy_counts = _cross_source_copy_anime(conn, bronze_root)
-                for key, val in copy_counts.items():
-                    counts[f"cross_source.{key}"] = val
-                logger.info("silver_cross_source_copy_done", **copy_counts)
-            except Exception as exc:
-                logger.warning("silver_cross_source_copy_skip", error=str(exc))
 
         finally:
             conn.close()

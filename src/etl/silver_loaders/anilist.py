@@ -113,6 +113,18 @@ CREATE INDEX IF NOT EXISTS idx_anime_studios_anime  ON anime_studios(anime_id);
 CREATE INDEX IF NOT EXISTS idx_anime_studios_studio ON anime_studios(studio_id);
 """
 
+# persons 拡張列 — 22/04: ensure extra columns exist before anilist UPDATE path runs.
+# These are also added by bangumi loader, but anilist may run first in integration order.
+# DuckDB supports ADD COLUMN IF NOT EXISTS (idempotent).
+_DDL_PERSONS_EXTENSION = [
+    "ALTER TABLE persons ADD COLUMN IF NOT EXISTS gender VARCHAR",
+    "ALTER TABLE persons ADD COLUMN IF NOT EXISTS description TEXT",
+    "ALTER TABLE persons ADD COLUMN IF NOT EXISTS image_large VARCHAR",
+    "ALTER TABLE persons ADD COLUMN IF NOT EXISTS image_medium VARCHAR",
+    "ALTER TABLE persons ADD COLUMN IF NOT EXISTS hometown VARCHAR",
+    "ALTER TABLE persons ADD COLUMN IF NOT EXISTS blood_type VARCHAR",
+]
+
 # anime 拡張列 — H1: display_* prefix for all subjective columns.
 # DuckDB supports ADD COLUMN IF NOT EXISTS.
 _DDL_ANIME_EXTENSION = [
@@ -365,7 +377,7 @@ def _anime_glob_has_studios_column(
 
 
 def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
-    """Create characters / CVA / studios / anime_studios tables and add anime extension columns."""
+    """Create characters / CVA / studios / anime_studios tables and add anime/persons extension columns."""
     for ddl_block in (_DDL_CHARACTERS, _DDL_CVA, _DDL_ANIME_RELATIONS,
                       _DDL_STUDIOS, _DDL_ANIME_STUDIOS):
         for stmt in ddl_block.split(";"):
@@ -378,6 +390,16 @@ def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
 
     for stmt in _DDL_ANIME_EXTENSION:
         conn.execute(stmt)
+
+    # 22/04: ensure persons extra columns exist (idempotent — IF NOT EXISTS).
+    # Silently skip if the persons table doesn't exist yet (e.g. in isolated test setups
+    # that only create the anime table).  When integrate_duckdb runs first it creates
+    # persons before calling this loader, so the ALTER never fails in production.
+    for stmt in _DDL_PERSONS_EXTENSION:
+        try:
+            conn.execute(stmt)
+        except Exception:
+            pass  # persons table absent in isolated test environments
 
 
 def _glob_path(bronze_root: Path, table: str) -> str:
