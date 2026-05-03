@@ -119,17 +119,79 @@
 
 ---
 
-## オープンクエスチョン
+## 確定事項 (2026-05-03)
 
-- **物理 file 名**: `silver.duckdb` / `gold.duckdb` のまま vs `conformed.duckdb` / `mart.duckdb` に rename
-  - 推奨: 移行コスト避けて current 維持、ドキュメント用語のみ刷新
-- **Resolved 層の location**: 新規 `resolved.duckdb` vs `silver.duckdb` 内 `r_*` schema
-  - 推奨: 新規 `resolved.duckdb` (lock 競合分離、責務明示)
-- **代表値選抜の優先順位**: source ranking の決定方法
-  - 候補: AniList > MAL > ANN > MADB > Bangumi > seesaawiki > Keyframe (英語コミュニティ + 構造化度順)
-  - or: data quality stats (完全度 / 検証経由) で動的決定
-- **Resolved 層の更新頻度**: Conformed 全更新後にバッチ vs インクリメンタル
-  - 推奨: バッチ (entity_resolution の整合性優先)
+### 物理 file 設計 (Conformed + Mart 同居)
+- **既存 `silver.duckdb` / `gold.duckdb` 削除** (clean slate)
+- **`result/animetor.duckdb` 新規** — schema 分離で Conformed + Mart 同居
+  - `conformed.*` schema: anime / persons / credits / studios 等 (現 silver)
+  - `mart.*` schema: scores / feat_* / agg_* / score_history (現 gold)
+- **`result/resolved.duckdb` 新規** — entity_resolved 1 row 層 (別 file で分離)
+- 同居の利点: cross-schema join に ATTACH 不要、conformed → mart view 定義可、file 管理楽
+- Resolved 別 file の利点: AKM/scoring 走行中に conformed ETL を並行できる経路確保
+
+### Resolved 層 location
+- **別 duckdb (`result/resolved.duckdb`)** で完全分離
+- 理由: 21/01 で発覚した lock 競合の分離、責務明示、backup/rebuild 独立
+
+### 代表値選抜 (E: 列別 ranking + majority vote tie-break)
+- 各属性に **source 優先順位リスト** を定義 (例: `title_ja: [seesaawiki, anilist, mal, mediaarts]`)
+- 上位 source の値が NULL なら次の source へ fallback
+- 同優先順位で複数 source あれば **majority vote** (3+ 一致採用、tie 時は最上位 source)
+- ranking テーブル: `src/etl/resolved/source_ranking.py` で宣言的に定義、後で調整可能
+
+### 更新頻度 (A: バッチ完全再生成)
+- Conformed 全更新後に Resolved を **全削除 → 全行再生成**
+- entity_resolution の整合性優先 (人物名寄せ等の bug fix も即反映)
+- インクリメンタル更新は将来検討 (Phase 6+)
+
+---
+
+## 改訂版 移行ロードマップ
+
+### Phase 0 ✅ 完了 (2026-05-03)
+- 命名確定 / オープンクエスチョン 4 件確定
+- 本ドキュメント commit
+
+### Phase 1: Conformed + Mart 統合 file への移行 (22/01 完了後着手)
+- 新 file `result/animetor.duckdb` に schema `conformed` + `mart` 作成
+- `src/etl/silver_loaders/` → `src/etl/conformed_loaders/` rename + INSERT 先を `conformed.*` に
+- `src/analysis/io/silver_reader.py` → `conformed_reader.py` (target: `animetor.duckdb` の `conformed` schema)
+- `src/analysis/io/gold_writer.py` → `mart_writer.py` (target: `animetor.duckdb` の `mart` schema)
+- 旧 `silver.duckdb` / `gold.duckdb` 削除
+- 全 import path 更新 (200+ 箇所予測)
+- pixi.toml / Taskfile.yml の path 修正
+- tests/ 全更新 + green 維持
+- 既存 docs (ARCHITECTURE.md / CLAUDE.md) の SILVER/GOLD 言及を Conformed/Mart に書換
+
+### Phase 2: Resolved 層 設計 + 実装
+- `src/etl/resolved/` パッケージ
+- `src/etl/resolved/source_ranking.py`: 列別 source ranking 宣言
+- `src/etl/resolved/resolve_anime.py`: anime 代表値選抜 + 欠損補填
+- `src/etl/resolved/resolve_persons.py`: persons (canonical_name_ja 活用)
+- `src/etl/resolved/resolve_studios.py`: studios
+- `src/etl/resolved/resolve_credits.py`: credits の person_id / anime_id を canonical 化
+- `result/resolved.duckdb` 新規 schema
+- entity_resolution 結果の audit (`meta_resolution_audit`) 充実
+
+### Phase 3: scoring 切替
+- `conformed_reader` の使用箇所を `resolved_reader` に置換 (AKM / scoring 全体)
+- AKM 結果の質改善確認 (現 r²=0.60、entity-resolved 後の改善期待)
+
+### Phase 4: Mart 再生成
+- Resolved 入力で mart pipeline 全 phase 再実行
+- `mart.feat_*` / `mart.person_scores` / `mart.scores` 全更新
+- レポート再生成
+
+### Phase 5: ドキュメント整備
+- `docs/ARCHITECTURE.md` 全面改訂 (3 層 → 5 層)
+- `CLAUDE.md` の 3 層モデル記述差替
+- 図の更新
+
+### Phase 6 (将来)
+- 段階的更新 (インクリメンタル化)
+- Resolved 層への直接 query API (`mart_reader` 経由不要のレポート)
+- conformed → mart のリアルタイム view 定義 (集計の precompute 削減)
 
 ---
 
