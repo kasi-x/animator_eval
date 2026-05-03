@@ -385,11 +385,51 @@ def run_entity_resolution(loaded: LoadedData) -> EntityResolutionResult:
             persons_after=len(persons),
         )
 
+    # Build primary anime_map from resolved canonical IDs.
+    primary_anime_map: dict[str, object] = {a.id: a for a in anime_list}
+
+    # Re-inject conformed-ID aliases from the input LoadedData anime_map so
+    # that downstream scoring (AKM, BiRank, etc.) can look up anime by their
+    # original conformed IDs (anilist:*, madb:*, mal:*, etc.) as carried in
+    # credit records.  Without this, every anime_map.get(credit.anime_id) in
+    # AKM returns None → n_observations=0, r²=0.
+    #
+    # Strategy: for each conformed_id in loaded.anime_map that is NOT already
+    # a canonical resolved:anime:* key, find the post-resolution canonical anime
+    # object and add it.  We go through two hops:
+    #   1. anime_canonical_map: conformed_id → different_conformed_canonical
+    #   2. primary_anime_map: resolved:anime:* → anime object
+    # A conformed_id alias points to the same object as its canonical if:
+    #   - It maps via loaded.anime_map to a resolved:anime:* canonical, OR
+    #   - It was remapped by anime_canonical_map to another conformed ID, which
+    #     then has a resolved:anime:* canonical via loaded.anime_map.
+    resolved_anime_map: dict[str, object] = dict(primary_anime_map)
+    for conformed_id, anime_obj in loaded.anime_map.items():
+        if conformed_id in resolved_anime_map:
+            # Already present (e.g. resolved:anime:* canonical IDs)
+            continue
+        # Find the canonical anime object after entity resolution
+        # (anime_canonical_map may have remapped this conformed ID)
+        final_id = anime_canonical_map.get(conformed_id, conformed_id)
+        # Look up via the input anime_map in case it was remapped to another conformed ID
+        canonical_obj = primary_anime_map.get(final_id) or loaded.anime_map.get(final_id)
+        if canonical_obj is not None:
+            resolved_anime_map[conformed_id] = canonical_obj
+
+    alias_count = len(resolved_anime_map) - len(primary_anime_map)
+    if alias_count > 0:
+        logger.info(
+            "entity_resolution_anime_map_aliases",
+            canonical_count=len(primary_anime_map),
+            alias_count=alias_count,
+            total_map_size=len(resolved_anime_map),
+        )
+
     return EntityResolutionResult(
         resolved_credits=credits,
         canonical_map=canonical_map,
         persons=persons,
         anime_list=anime_list,
-        anime_map={a.id: a for a in anime_list},
+        anime_map=resolved_anime_map,
     )
 
