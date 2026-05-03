@@ -763,3 +763,249 @@ class TestCollectCount:
         assert row is not None
         # json_extract_string on non-JSON returns NULL → COALESCE to 0 → sum = 0
         assert row[0] == 0
+
+
+# ─── 22/02: anime_studios from infobox ───────────────────────────────────────
+
+class TestAnimeStudiosFromInfobox:
+    """22/02: bangumi infobox 动画制作 field → anime_studios + studios."""
+
+    def _make_bronze_with_studio(self, root: Path, subject_id: int, infobox: str) -> None:
+        """Write a minimal bangumi subjects parquet with a given infobox."""
+        _write_subjects(root, rows=[
+            {
+                "id": subject_id,
+                "type": 2,
+                "name": f"テスト {subject_id}",
+                "name_cn": "",
+                "infobox": infobox,
+                "platform": 1,
+                "summary": None,
+                "nsfw": False,
+                "tags": None,
+                "meta_tags": None,
+                "score": 7.0,
+                "score_details": None,
+                "rank": 1,
+                "release_date": "2024",
+                "favorite": "0",
+                "series": False,
+            }
+        ])
+        _write_persons(root, rows=[])
+        _write_characters(root, rows=[])
+        _write_subject_persons(root, rows=[])
+        _write_person_characters(root, rows=[])
+        _write_subject_characters(root, rows=[])
+
+    def test_studio_inserted_from_infobox(self, tmp_path: Path) -> None:
+        """A subject with |动画制作= J.C.STAFF gets an anime_studios row."""
+        root = tmp_path / "bronze"
+        infobox = "{{Infobox animanga/TVAnime\n|动画制作= J.C.STAFF\n}}"
+        self._make_bronze_with_studio(root, 8001, infobox)
+
+        conn = _make_silver_conn()
+        bangumi_loader.integrate(conn, root)
+
+        rows = conn.execute(
+            "SELECT anime_id, studio_id, source FROM anime_studios WHERE source = 'bangumi'"
+        ).fetchall()
+        conn.close()
+
+        assert len(rows) == 1
+        assert rows[0][0] == "bgm:s8001"
+        assert rows[0][1] == "bgm:n:J.C.STAFF"
+        assert rows[0][2] == "bangumi"
+
+    def test_studio_row_registered_in_studios_table(self, tmp_path: Path) -> None:
+        """The studio extracted from infobox must appear in the studios table."""
+        root = tmp_path / "bronze"
+        infobox = "{{Infobox animanga\n|动画制作= 京都アニメーション\n}}"
+        self._make_bronze_with_studio(root, 8002, infobox)
+
+        conn = _make_silver_conn()
+        bangumi_loader.integrate(conn, root)
+
+        row = conn.execute(
+            "SELECT id, name FROM studios WHERE id = 'bgm:n:京都アニメーション'"
+        ).fetchone()
+        conn.close()
+
+        assert row is not None
+        assert row[1] == "京都アニメーション"
+
+    def test_no_studio_field_produces_no_row(self, tmp_path: Path) -> None:
+        """A subject with no 动画制作 field must not produce an anime_studios row."""
+        root = tmp_path / "bronze"
+        infobox = "{{Infobox animanga\n|导演= 山田太郎\n}}"
+        self._make_bronze_with_studio(root, 8003, infobox)
+
+        conn = _make_silver_conn()
+        bangumi_loader.integrate(conn, root)
+
+        count = conn.execute(
+            "SELECT COUNT(*) FROM anime_studios WHERE source = 'bangumi'"
+        ).fetchone()[0]
+        conn.close()
+
+        assert count == 0
+
+    def test_null_infobox_produces_no_row(self, tmp_path: Path) -> None:
+        """A subject with NULL infobox must not produce an anime_studios row."""
+        root = tmp_path / "bronze"
+        self._make_bronze_with_studio(root, 8004, None)  # type: ignore[arg-type]
+
+        conn = _make_silver_conn()
+        bangumi_loader.integrate(conn, root)
+
+        count = conn.execute(
+            "SELECT COUNT(*) FROM anime_studios WHERE source = 'bangumi'"
+        ).fetchone()[0]
+        conn.close()
+
+        assert count == 0
+
+    def test_bgm_anime_studios_count_in_return_value(self, tmp_path: Path) -> None:
+        """integrate() return dict must contain bgm_anime_studios key."""
+        root = tmp_path / "bronze"
+        infobox = "{{Infobox\n|动画制作= SHAFT\n}}"
+        self._make_bronze_with_studio(root, 8005, infobox)
+
+        conn = _make_silver_conn()
+        counts = bangumi_loader.integrate(conn, root)
+        conn.close()
+
+        assert "bgm_anime_studios" in counts
+        assert counts["bgm_anime_studios"] == 1
+
+    def test_idempotent_studio_insertion(self, tmp_path: Path) -> None:
+        """Calling integrate() twice must not duplicate anime_studios rows."""
+        root = tmp_path / "bronze"
+        infobox = "{{Infobox\n|动画制作= MADHOUSE\n}}"
+        self._make_bronze_with_studio(root, 8006, infobox)
+
+        conn = _make_silver_conn()
+        bangumi_loader.integrate(conn, root)
+        bangumi_loader.integrate(conn, root)
+
+        count = conn.execute(
+            "SELECT COUNT(*) FROM anime_studios WHERE source = 'bangumi'"
+        ).fetchone()[0]
+        conn.close()
+
+        assert count == 1
+
+    def test_h4_source_column_set(self, tmp_path: Path) -> None:
+        """H4: anime_studios.source must be 'bangumi' (evidence_source column invariant)."""
+        root = tmp_path / "bronze"
+        infobox = "{{Infobox\n|动画制作= Production I.G\n}}"
+        self._make_bronze_with_studio(root, 8007, infobox)
+
+        conn = _make_silver_conn()
+        bangumi_loader.integrate(conn, root)
+
+        rows = conn.execute(
+            "SELECT source FROM anime_studios WHERE anime_id = 'bgm:s8007'"
+        ).fetchall()
+        conn.close()
+
+        assert len(rows) == 1
+        assert rows[0][0] == "bangumi"
+
+
+# ─── 22/04: characters.date_of_birth UPDATE path ─────────────────────────────
+
+class TestCharactersDateOfBirthUpdate:
+    """22/04: bangumi birth_year/birth_mon/birth_day → characters.date_of_birth."""
+
+    def test_dob_assembled_from_parts(self, bronze_dir: Path) -> None:
+        """characters.date_of_birth stays NULL when bangumi has no birth data."""
+        # Default fixture has birth_year=None for characters → date_of_birth stays NULL
+        conn = _make_silver_conn()
+        bangumi_loader.integrate(conn, bronze_dir)
+        row = conn.execute(
+            "SELECT date_of_birth FROM characters WHERE id = 'bgm:c3001'"
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        # Default fixture has birth_year=None → NULL
+        assert row[0] is None
+
+    def test_dob_filled_when_birth_year_present(self, tmp_path: Path) -> None:
+        """birth_year/birth_mon/birth_day → YYYY-MM-DD in characters.date_of_birth."""
+        root = tmp_path / "bronze"
+        _write_subjects(root)
+        _write_persons(root, rows=[])
+        _write_characters(root, rows=[
+            {
+                "id": 4001,
+                "name": "誕生日キャラ",
+                "type": 1,
+                "locked": False,
+                "nsfw": False,
+                "summary": "Test",
+                "infobox": None,
+                "gender": "female",
+                "blood_type": 1,
+                "birth_year": 2000,
+                "birth_mon": 7,
+                "birth_day": 15,
+                "images": None,
+                "stat_comments": 0,
+                "stat_collects": 0,
+                "fetched_at": None,
+            }
+        ])
+        _write_subject_persons(root, rows=[])
+        _write_person_characters(root, rows=[])
+        _write_subject_characters(root, rows=[])
+
+        conn = _make_silver_conn()
+        bangumi_loader.integrate(conn, root)
+        row = conn.execute(
+            "SELECT date_of_birth FROM characters WHERE id = 'bgm:c4001'"
+        ).fetchone()
+        conn.close()
+        assert row is not None
+        assert row[0] == "2000-07-15"
+
+    def test_existing_dob_not_overwritten(self, tmp_path: Path) -> None:
+        """COALESCE: pre-existing date_of_birth from anilist is preserved."""
+        root = tmp_path / "bronze"
+        _write_subjects(root)
+        _write_persons(root, rows=[])
+        _write_characters(root, rows=[
+            {
+                "id": 4002,
+                "name": "既存DOBキャラ",
+                "type": 1,
+                "locked": False,
+                "nsfw": False,
+                "summary": None,
+                "infobox": None,
+                "gender": None,
+                "blood_type": None,
+                "birth_year": 1999,
+                "birth_mon": 1,
+                "birth_day": 1,
+                "images": None,
+                "stat_comments": 0,
+                "stat_collects": 0,
+                "fetched_at": None,
+            }
+        ])
+        _write_subject_persons(root, rows=[])
+        _write_person_characters(root, rows=[])
+        _write_subject_characters(root, rows=[])
+
+        conn = _make_silver_conn()
+        # Pre-insert character with existing date_of_birth (as if loaded from anilist)
+        conn.execute(
+            "INSERT INTO characters (id, name_ja, date_of_birth) VALUES ('bgm:c4002', '既存', '2005-03-10')"
+        )
+        bangumi_loader.integrate(conn, root)
+        row = conn.execute(
+            "SELECT date_of_birth FROM characters WHERE id = 'bgm:c4002'"
+        ).fetchone()
+        conn.close()
+        assert row[0] == "2005-03-10"

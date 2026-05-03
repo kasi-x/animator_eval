@@ -152,6 +152,22 @@ def bronze_root(tmp_path: Path) -> Path:
         },
     )
 
+    # anime (for anime.studios[] array path — 22/02)
+    # C001 has Studio A (also in production_companies), C002 has Studio C (only in array)
+    _write(
+        "anime",
+        pa.schema([
+            pa.field("madb_id", pa.string()),
+            pa.field("title_ja", pa.string()),
+            pa.field("studios", pa.list_(pa.string())),
+        ]),
+        {
+            "madb_id":   ["C001", "C002"],
+            "title_ja":  ["テスト1", "テスト2"],
+            "studios":   [["Studio A"], ["Studio C"]],
+        },
+    )
+
     return root
 
 
@@ -324,3 +340,85 @@ class TestIntegrate:
         c = duckdb.connect(":memory:")
         counts = madb.integrate(c, root)
         assert counts["anime_broadcasters"] == 1
+
+    # -- 22/02 tests: anime_studios coverage improvement --
+
+    def test_is_main_false_gets_support_role(
+        self, conn: duckdb.DuckDBPyConnection, bronze_root: Path
+    ) -> None:
+        """22/02: production_companies rows with is_main=False get role='support'."""
+        madb.integrate(conn, bronze_root)
+        rows = conn.execute(
+            "SELECT role FROM anime_studios WHERE studio_id = 'madb:n:Studio B'"
+        ).fetchall()
+        assert len(rows) == 1
+        assert rows[0][0] == "support"
+
+    def test_is_main_true_preserves_role_label(
+        self, conn: duckdb.DuckDBPyConnection, bronze_root: Path
+    ) -> None:
+        """22/02: production_companies rows with is_main=True retain role_label."""
+        madb.integrate(conn, bronze_root)
+        rows = conn.execute(
+            "SELECT role FROM anime_studios WHERE studio_id = 'madb:n:Studio A' AND source = 'mediaarts'"
+        ).fetchall()
+        # Studio A has is_main=True + role_label='制作' from production_companies
+        assert len(rows) >= 1
+        role_labels = {r[0] for r in rows}
+        assert "制作" in role_labels
+
+    def test_anime_studios_array_path_adds_new_anime(
+        self, conn: duckdb.DuckDBPyConnection, bronze_root: Path
+    ) -> None:
+        """22/02: anime.studios[] array inserts anime_studios for anime not in production_companies."""
+        madb.integrate(conn, bronze_root)
+        # C002 has no production_companies entry but IS in anime.studios[] (Studio C)
+        rows = conn.execute(
+            "SELECT anime_id, studio_id, source FROM anime_studios WHERE anime_id = 'madb:C002'"
+        ).fetchall()
+        assert len(rows) == 1
+        assert rows[0][0] == "madb:C002"
+        assert rows[0][1] == "madb:n:Studio C"
+        assert rows[0][2] == "mediaarts"
+
+    def test_anime_studios_array_studio_registered(
+        self, conn: duckdb.DuckDBPyConnection, bronze_root: Path
+    ) -> None:
+        """22/02: studios inserted from anime.studios[] appear in the studios table."""
+        madb.integrate(conn, bronze_root)
+        rows = conn.execute(
+            "SELECT id, name FROM studios WHERE id = 'madb:n:Studio C'"
+        ).fetchall()
+        assert len(rows) == 1
+        assert rows[0][1] == "Studio C"
+
+    def test_anime_studios_idempotent_with_array_path(
+        self, conn: duckdb.DuckDBPyConnection, bronze_root: Path
+    ) -> None:
+        """22/02: running integrate twice does not duplicate anime_studios rows."""
+        counts1 = madb.integrate(conn, bronze_root)
+        counts2 = madb.integrate(conn, bronze_root)
+        assert counts1["anime_studios_mediaarts"] == counts2["anime_studios_mediaarts"]
+
+    def test_anime_studios_missing_anime_parquet_no_error(
+        self, conn: duckdb.DuckDBPyConnection, tmp_path: Path
+    ) -> None:
+        """22/02: missing anime parquet for the array path does not add _error keys."""
+        # Only write production_companies, not anime table
+        date_dir = tmp_path / "source=mediaarts" / "table=production_companies" / "date=2026-04-27"
+        date_dir.mkdir(parents=True, exist_ok=True)
+        schema = pa.schema([
+            pa.field("madb_id", pa.string()),
+            pa.field("company_name", pa.string()),
+            pa.field("role_label", pa.string()),
+            pa.field("is_main", pa.bool_()),
+        ])
+        tbl = pa.Table.from_arrays(
+            [pa.array(["C001"]), pa.array(["Studio A"]), pa.array(["アニメーション制作"]), pa.array([True])],
+            schema=schema,
+        )
+        pq.write_table(tbl, date_dir / "data.parquet")
+
+        counts = madb.integrate(conn, tmp_path)
+        array_errors = [k for k in counts if "array_error" in k]
+        assert array_errors == [], f"Unexpected array errors: {array_errors}"

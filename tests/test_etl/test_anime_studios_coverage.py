@@ -750,20 +750,22 @@ class TestMadbAnimationStudios:
         conn.close()
         assert row is not None
 
-    def test_non_main_production_excluded(
+    def test_non_main_production_included_as_support(
         self, bronze_root: Path
     ) -> None:
-        """is_main=False + role='製作' rows are excluded from anime_studios."""
+        """22/02: is_main=False rows are now included in anime_studios with role='support'."""
         conn = _make_silver_conn()
         conn.execute(
             "INSERT INTO anime (id, title_ja, title_en) VALUES ('madb:C3001', 'テスト', 'Test')"
         )
         madb_loader.integrate(conn, bronze_root)
         row = conn.execute(
-            "SELECT 1 FROM anime_studios WHERE studio_id = 'madb:n:KlockWorx'"
+            "SELECT role FROM anime_studios WHERE studio_id = 'madb:n:KlockWorx'"
         ).fetchone()
         conn.close()
-        assert row is None
+        # 22/02: is_main=False rows get role='support' instead of being excluded
+        assert row is not None
+        assert row[0] == "support"
 
     def test_source_is_mediaarts(self, bronze_root: Path) -> None:
         """H4: source column is 'mediaarts' for all madb anime_studios rows."""

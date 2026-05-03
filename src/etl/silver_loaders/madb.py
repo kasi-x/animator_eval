@@ -147,8 +147,10 @@ WHERE madb_id IS NOT NULL
 ON CONFLICT (anime_id, work_name) DO NOTHING
 """
 
-# Insert animation studios into the shared studios table.
+# Insert animation studios from production_companies into the shared studios table.
 # ID format: 'madb:n:' || company_name  (name-based).
+# No role filter: all production companies are included; is_main=False rows are
+# recorded as 'support' role in anime_studios (added in Card 22/02).
 _STUDIOS_FROM_PROD_COMPANIES_SQL = """
 INSERT OR IGNORE INTO studios (id, name, updated_at)
 SELECT DISTINCT
@@ -157,24 +159,73 @@ SELECT DISTINCT
     now()                      AS updated_at
 FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
 WHERE company_name IS NOT NULL
-  AND (role_label = 'アニメーション制作' OR is_main = true)
 """
 
-# Link anime → animation studio via anime_studios.
+# Link anime → studio via anime_studios from production_companies.
 # anime_id uses 'madb:' || madb_id (e.g. 'madb:C14591').
-# All rows here are from production_companies where is_main=true or role='アニメーション制作'.
+# is_main=True rows get role from role_label; is_main=False rows get role='support'.
+# 22/02: filter relaxed from (is_main=True OR role='アニメーション制作') to ALL rows.
 _ANIME_STUDIOS_FROM_PROD_COMPANIES_SQL = """
 INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main, role, source)
 SELECT DISTINCT
-    'madb:' || madb_id             AS anime_id,
-    'madb:n:' || company_name      AS studio_id,
+    'madb:' || madb_id                        AS anime_id,
+    'madb:n:' || company_name                 AS studio_id,
     COALESCE(TRY_CAST(is_main AS INTEGER), 0) AS is_main,
-    COALESCE(role_label, '')       AS role,
-    'mediaarts'                    AS source
+    CASE
+        WHEN COALESCE(TRY_CAST(is_main AS INTEGER), 0) = 0 THEN 'support'
+        ELSE COALESCE(role_label, '')
+    END                                        AS role,
+    'mediaarts'                                AS source
 FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
 WHERE madb_id IS NOT NULL
   AND company_name IS NOT NULL
-  AND (role_label = 'アニメーション制作' OR is_main = true)
+"""
+
+# Insert studios referenced in the anime.studios[] text array into the studios table.
+# ID format: 'madb:n:' || studio_name  (name-based, same as production_companies).
+# This covers anime where no production_companies row exists but studios[] is populated.
+# 22/02: new path to cover the 1,798 C-prefix anime reachable only via this array.
+_STUDIOS_FROM_ANIME_ARRAY_SQL = """
+INSERT OR IGNORE INTO studios (id, name, updated_at)
+SELECT DISTINCT
+    'madb:n:' || studio_name  AS id,
+    studio_name,
+    now()                     AS updated_at
+FROM (
+    SELECT madb_id,
+           UNNEST(studios) AS studio_name
+    FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE madb_id IS NOT NULL
+      AND studios IS NOT NULL
+      AND ARRAY_LENGTH(studios) > 0
+)
+WHERE studio_name IS NOT NULL
+  AND studio_name != ''
+"""
+
+# Link anime → studio via the anime.studios[] text array.
+# Only inserts rows for anime_id values NOT already present in anime_studios
+# from the production_companies path (ON CONFLICT DO NOTHING handles duplicates).
+# role='' because the array carries no role information; is_main defaults to 0.
+# 22/02: new path.
+_ANIME_STUDIOS_FROM_ANIME_ARRAY_SQL = """
+INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main, role, source)
+SELECT DISTINCT
+    'madb:' || madb_id        AS anime_id,
+    'madb:n:' || studio_name  AS studio_id,
+    0                         AS is_main,
+    ''                        AS role,
+    'mediaarts'               AS source
+FROM (
+    SELECT madb_id,
+           UNNEST(studios) AS studio_name
+    FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE madb_id IS NOT NULL
+      AND studios IS NOT NULL
+      AND ARRAY_LENGTH(studios) > 0
+)
+WHERE studio_name IS NOT NULL
+  AND studio_name != ''
 """
 
 # anime_studios DDL — ensure table exists (may already exist from integrate_duckdb
@@ -242,6 +293,17 @@ def _bronze_glob(bronze_root: Path, table: str) -> str:
     return str(bronze_root / "source=mediaarts" / f"table={table}" / "date=*" / "*.parquet")
 
 
+def _has_parquet(conn: duckdb.DuckDBPyConnection, glob: str) -> bool:
+    """Return True if at least one parquet file matches the glob pattern."""
+    try:
+        conn.execute(
+            f"DESCRIBE SELECT * FROM read_parquet('{glob}', union_by_name=true) LIMIT 0"
+        )
+        return True
+    except Exception:
+        return False
+
+
 def integrate(
     conn: duckdb.DuckDBPyConnection,
     bronze_root: Path | str,
@@ -274,8 +336,7 @@ def integrate(
             f"SELECT COUNT(*) FROM {silver_table}"
         ).fetchone()[0]
 
-    # anime_studios: insert studios + anime_studios from production_companies
-    # (アニメーション制作 and is_main rows only).
+    # anime_studios: production_companies (all rows, is_main=False gets role='support').
     pc_glob = _bronze_glob(bronze_root, "production_companies")
     try:
         conn.execute(_STUDIOS_FROM_PROD_COMPANIES_SQL, [pc_glob])
@@ -286,6 +347,21 @@ def integrate(
         conn.execute(_ANIME_STUDIOS_FROM_PROD_COMPANIES_SQL, [pc_glob])
     except Exception as exc:
         counts["anime_studios_mediaarts_error"] = str(exc)
+
+    # anime_studios: anime.studios[] array — covers anime with no production_companies entry.
+    # 22/02: new path to close the gap between production_companies (4,455) and
+    # anime.studios[] coverage (6,253).
+    anime_glob = _bronze_glob(bronze_root, "anime")
+    if _has_parquet(conn, anime_glob):
+        try:
+            conn.execute(_STUDIOS_FROM_ANIME_ARRAY_SQL, [anime_glob])
+        except Exception as exc:
+            counts["studios_mediaarts_array_error"] = str(exc)
+
+        try:
+            conn.execute(_ANIME_STUDIOS_FROM_ANIME_ARRAY_SQL, [anime_glob])
+        except Exception as exc:
+            counts["anime_studios_mediaarts_array_error"] = str(exc)
 
     counts["anime_studios_mediaarts"] = conn.execute(
         "SELECT COUNT(DISTINCT anime_id) FROM anime_studios WHERE source = 'mediaarts'"

@@ -173,6 +173,32 @@ WHERE persons.id = ('bgm:p' || CAST(bronze.id AS VARCHAR))
   AND bronze._rn = 1
 """
 
+# characters → UPDATE date_of_birth (assembled from bangumi birth_year/month/day).
+# Bangumi stores these as separate integer columns; we assemble YYYY-MM-DD here.
+# Uses COALESCE to preserve existing non-NULL values from anilist (which is loaded first).
+_CHARACTERS_UPDATE_DOB_SQL = """
+UPDATE characters
+SET
+    date_of_birth = COALESCE(
+        characters.date_of_birth,
+        CASE
+            WHEN bronze.birth_year IS NOT NULL
+            THEN CAST(bronze.birth_year AS VARCHAR) || '-'
+                 || LPAD(COALESCE(CAST(bronze.birth_mon AS VARCHAR), '01'), 2, '0') || '-'
+                 || LPAD(COALESCE(CAST(bronze.birth_day AS VARCHAR), '01'), 2, '0')
+        END
+    )
+FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
+    FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE id IS NOT NULL
+      AND birth_year IS NOT NULL
+) AS bronze
+WHERE characters.id = ('bgm:c' || CAST(bronze.id AS VARCHAR))
+  AND bronze._rn = 1
+"""
+
 # characters → INSERT.
 # Characters have birth_year/birth_mon/birth_day (same as persons).
 _CHARACTERS_SQL = """
@@ -287,6 +313,89 @@ ON CONFLICT (character_id, person_id, anime_id) DO NOTHING
 """
 
 
+# ─── anime_studios SQL ──────────────────────────────────────────────────────
+# Bangumi subjects store animation studio in the Infobox wiki-text field
+# under the key '动画制作' (simplified-Chinese label used across most entries).
+# The field value is a plain studio name string (occasionally multi-studio,
+# separated by 、or ；).  We store the raw value as-is to avoid splitting noise.
+# studio_id uses 'bgm:n:' || name (name-based, consistent with keyframe/mediaarts).
+# 22/02: new path — no dedicated company table exists in bangumi BRONZE.
+
+_BGM_STUDIOS_FROM_INFOBOX_SQL = """
+INSERT OR IGNORE INTO studios (id, name, updated_at)
+SELECT DISTINCT
+    'bgm:n:' || studio_name  AS id,
+    studio_name,
+    now()                    AS updated_at
+FROM (
+    SELECT
+        TRIM(REGEXP_EXTRACT(infobox, '\\|动画制作= *([^\\r\\n|{}]+)', 1)) AS studio_name
+    FROM (
+        SELECT *,
+               ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
+        FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+        WHERE id IS NOT NULL AND type = 2
+    )
+    WHERE _rn = 1
+)
+WHERE studio_name IS NOT NULL
+  AND studio_name != ''
+"""
+
+_BGM_ANIME_STUDIOS_FROM_INFOBOX_SQL = """
+INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main, role, source)
+SELECT DISTINCT
+    'bgm:s' || CAST(id AS VARCHAR) AS anime_id,
+    'bgm:n:' || studio_name        AS studio_id,
+    1                              AS is_main,
+    ''                             AS role,
+    'bangumi'                      AS source
+FROM (
+    SELECT
+        id,
+        TRIM(REGEXP_EXTRACT(infobox, '\\|动画制作= *([^\\r\\n|{}]+)', 1)) AS studio_name
+    FROM (
+        SELECT *,
+               ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
+        FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+        WHERE id IS NOT NULL AND type = 2
+    )
+    WHERE _rn = 1
+)
+WHERE studio_name IS NOT NULL
+  AND studio_name != ''
+"""
+
+# ─── DDL for anime_studios / studios (shared tables) ────────────────────────
+# These tables are created by integrate_duckdb.py before loaders run.
+# We ensure they exist here too (idempotent) to support isolated unit tests.
+_DDL_ANIME_STUDIOS = """
+CREATE TABLE IF NOT EXISTS anime_studios (
+    anime_id  VARCHAR NOT NULL,
+    studio_id VARCHAR NOT NULL,
+    is_main   INTEGER NOT NULL DEFAULT 0,
+    role      VARCHAR NOT NULL DEFAULT '',
+    source    VARCHAR NOT NULL DEFAULT '',
+    PRIMARY KEY (anime_id, studio_id, role, source)
+);
+CREATE INDEX IF NOT EXISTS idx_bgm_anime_studios_anime  ON anime_studios(anime_id);
+CREATE INDEX IF NOT EXISTS idx_bgm_anime_studios_studio ON anime_studios(studio_id);
+"""
+
+_DDL_STUDIOS = """
+CREATE TABLE IF NOT EXISTS studios (
+    id                  VARCHAR PRIMARY KEY,
+    name                VARCHAR NOT NULL DEFAULT '',
+    anilist_id          INTEGER,
+    is_animation_studio INTEGER,
+    country_of_origin   VARCHAR,
+    favourites          INTEGER,
+    site_url            VARCHAR,
+    updated_at          TIMESTAMP DEFAULT now()
+);
+"""
+
+
 def _glob(bronze_root: Path, table: str) -> str:
     """Return a glob pattern for a bangumi BRONZE table partition."""
     return str(bronze_root / "source=bangumi" / f"table={table}" / "date=*" / "*.parquet")
@@ -307,6 +416,7 @@ def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
     """Add bangumi extension columns to anime / persons / characters.
 
     All ALTER TABLE statements use IF NOT EXISTS — safe to run multiple times.
+    Also ensures studios / anime_studios tables exist for isolated test runs.
     """
     for stmt in _DDL_ANIME_EXTENSION:
         conn.execute(stmt)
@@ -314,6 +424,12 @@ def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
         conn.execute(stmt)
     for stmt in _DDL_CHARACTERS_EXTENSION:
         conn.execute(stmt)
+
+    for ddl_block in (_DDL_STUDIOS, _DDL_ANIME_STUDIOS):
+        for stmt in ddl_block.split(";"):
+            stmt = stmt.strip()
+            if stmt:
+                conn.execute(stmt)
 
 
 def _register_udf(conn: duckdb.DuckDBPyConnection) -> None:
@@ -371,6 +487,7 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
 
     if _has_parquet(conn, characters_glob):
         conn.execute(_CHARACTERS_SQL, [characters_glob])
+        conn.execute(_CHARACTERS_UPDATE_DOB_SQL, [characters_glob])
 
     if _has_parquet(conn, sp_glob):
         conn.execute("DELETE FROM credits WHERE evidence_source = 'bangumi'")
@@ -382,6 +499,12 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
             conn.execute(_CVA_SQL, [pc_glob, sc_glob])
         else:
             conn.execute(_CVA_NO_SC_SQL, [pc_glob])
+
+    # anime_studios: extract animation studio from subjects infobox (动画制作 field).
+    # 22/02: new path — bangumi has no dedicated company/studio table in BRONZE.
+    if _has_parquet(conn, subjects_glob):
+        conn.execute(_BGM_STUDIOS_FROM_INFOBOX_SQL, [subjects_glob])
+        conn.execute(_BGM_ANIME_STUDIOS_FROM_INFOBOX_SQL, [subjects_glob])
 
     return {
         "bgm_anime": conn.execute(
@@ -398,5 +521,8 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
         ).fetchone()[0],
         "bgm_cva": conn.execute(
             "SELECT COUNT(*) FROM character_voice_actors WHERE source = 'bangumi'"
+        ).fetchone()[0],
+        "bgm_anime_studios": conn.execute(
+            "SELECT COUNT(DISTINCT anime_id) FROM anime_studios WHERE source = 'bangumi'"
         ).fetchone()[0],
     }

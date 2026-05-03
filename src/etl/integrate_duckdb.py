@@ -22,6 +22,7 @@ import duckdb
 import structlog
 
 from src.etl.atomic_swap import atomic_duckdb_swap
+from src.etl.cross_source_copy.anime_extras import copy_from_anilist as _cross_source_copy_anime
 from src.etl.role_mappers import map_role
 import src.etl.silver_loaders.anilist as _sl_anilist
 import src.etl.silver_loaders.ann as _sl_ann
@@ -88,16 +89,22 @@ CREATE TABLE IF NOT EXISTS anime (
 );
 
 CREATE TABLE IF NOT EXISTS persons (
-    id          VARCHAR PRIMARY KEY,
-    name_ja     VARCHAR NOT NULL DEFAULT '',
-    name_en     VARCHAR NOT NULL DEFAULT '',
-    name_ko     VARCHAR NOT NULL DEFAULT '',
-    name_zh     VARCHAR NOT NULL DEFAULT '',
-    names_alt   VARCHAR NOT NULL DEFAULT '{}',
-    birth_date  VARCHAR,
-    death_date  VARCHAR,
-    website_url VARCHAR,
-    updated_at  TIMESTAMP DEFAULT now()
+    id                  VARCHAR PRIMARY KEY,
+    name_ja             VARCHAR NOT NULL DEFAULT '',
+    name_en             VARCHAR NOT NULL DEFAULT '',
+    name_ko             VARCHAR NOT NULL DEFAULT '',
+    name_zh             VARCHAR NOT NULL DEFAULT '',
+    names_alt           VARCHAR NOT NULL DEFAULT '{}',
+    birth_date          VARCHAR,
+    death_date          VARCHAR,
+    website_url         VARCHAR,
+    gender              VARCHAR,
+    description         TEXT,
+    image_large         VARCHAR,
+    image_medium        VARCHAR,
+    hometown            VARCHAR,
+    blood_type          VARCHAR,
+    updated_at          TIMESTAMP DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS credits (
@@ -183,6 +190,8 @@ SELECT * FROM filtered
 # BRONZE persons → SILVER persons.
 # date_of_birth → birth_date, site_url → website_url.
 # Template uses placeholders that are filled by _build_persons_sql() after inspecting the parquet schema.
+# Extra columns (gender, description, image_large, image_medium, hometown, blood_type) are included
+# when present in the BRONZE parquet (anilist supplies all of them).
 _PERSONS_SQL_TMPL = """
 INSERT INTO persons
 SELECT
@@ -195,6 +204,12 @@ SELECT
     {birth_date}                AS birth_date,
     NULL                        AS death_date,
     {website_url}               AS website_url,
+    {gender}                    AS gender,
+    {description}               AS description,
+    {image_large}               AS image_large,
+    {image_medium}              AS image_medium,
+    {hometown}                  AS hometown,
+    {blood_type}                AS blood_type,
     now()                       AS updated_at
 FROM (
     SELECT *,
@@ -227,6 +242,12 @@ def _build_persons_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
         names_alt="COALESCE(names_alt, '{}')" if "names_alt" in cols else "'{}'::VARCHAR",
         birth_date="date_of_birth" if "date_of_birth" in cols else "NULL::VARCHAR",
         website_url="site_url" if "site_url" in cols else "NULL::VARCHAR",
+        gender="gender" if "gender" in cols else "NULL::VARCHAR",
+        description="description" if "description" in cols else "NULL::VARCHAR",
+        image_large="image_large" if "image_large" in cols else "NULL::VARCHAR",
+        image_medium="image_medium" if "image_medium" in cols else "NULL::VARCHAR",
+        hometown="hometown" if "hometown" in cols else "NULL::VARCHAR",
+        blood_type="blood_type" if "blood_type" in cols else "NULL::VARCHAR",
     )
 
 def _build_credits_insert_seesaawiki(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
@@ -655,6 +676,20 @@ def integrate(
                         source=source_name,
                         error=str(exc),
                     )
+
+            # ── Card 22/05: cross-source copy (Resolved-layer preview) ────────
+            # Propagate anilist extra columns (country_of_origin, synonyms,
+            # description, external_links_json) to non-anilist rows that share
+            # the same real-world anime, using anilist_id_int as the join key.
+            # Failures are isolated — a copy error must not abort the ETL.
+            # NOTE: remove this block when the Resolved layer (Phase 2) is live.
+            try:
+                copy_counts = _cross_source_copy_anime(conn, bronze_root)
+                for key, val in copy_counts.items():
+                    counts[f"cross_source.{key}"] = val
+                logger.info("silver_cross_source_copy_done", **copy_counts)
+            except Exception as exc:
+                logger.warning("silver_cross_source_copy_skip", error=str(exc))
 
         finally:
             conn.close()

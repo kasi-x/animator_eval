@@ -38,6 +38,19 @@ CREATE TABLE IF NOT EXISTS anime (
     content_hash VARCHAR,
     updated_at   TIMESTAMP DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS persons (
+    id          VARCHAR PRIMARY KEY,
+    name_ja     VARCHAR NOT NULL DEFAULT '',
+    name_en     VARCHAR NOT NULL DEFAULT '',
+    name_ko     VARCHAR NOT NULL DEFAULT '',
+    name_zh     VARCHAR NOT NULL DEFAULT '',
+    names_alt   VARCHAR NOT NULL DEFAULT '{}',
+    birth_date  VARCHAR,
+    death_date  VARCHAR,
+    website_url VARCHAR,
+    updated_at  TIMESTAMP DEFAULT now()
+);
 """
 
 
@@ -477,3 +490,181 @@ def test_anime_relations_idempotent(tmp_path: Path) -> None:
     conn.close()
 
     assert count == 1
+
+
+# ─── 22/04: persons extension columns via _build_persons_sql ─────────────────
+
+def _write_anilist_persons(root: Path, rows: list[dict] | None = None) -> None:
+    """Write minimal anilist persons BRONZE parquet with extra columns."""
+    if rows is None:
+        rows = [
+            {
+                "id": "anilist:p100",
+                "name_ja": "テスト太郎",
+                "name_en": "Test Taro",
+                "name_ko": "",
+                "name_zh": "",
+                "names_alt": "{}",
+                "date_of_birth": "1985-04-01",
+                "gender": "Male",
+                "description": "A test animator.",
+                "image_large": "https://example.com/large.png",
+                "image_medium": "https://example.com/medium.png",
+                "hometown": "Tokyo",
+                "blood_type": "A",
+                "site_url": "https://anilist.co/staff/100",
+                "nationality": ["Japanese"],
+                "primary_occupations": ["Animator"],
+                "years_active": [2005, 2024],
+                "favourites": 100,
+            }
+        ]
+    with BronzeWriter("anilist", table="persons", root=root) as bw:
+        for r in rows:
+            bw.append(r)
+
+
+def _make_silver_conn_with_persons() -> duckdb.DuckDBPyConnection:
+    """Return an in-memory DuckDB with persons table including extra columns (22/04)."""
+    conn = duckdb.connect(":memory:")
+    conn.execute(_SILVER_DDL)
+    # Add 22/04 persons extra columns (mirrors integrate_duckdb._DDL update)
+    for stmt in [
+        "ALTER TABLE anime ADD COLUMN IF NOT EXISTS gender VARCHAR",
+        "ALTER TABLE anime ADD COLUMN IF NOT EXISTS description TEXT",
+    ]:
+        pass  # anime doesn't need these
+    # Ensure persons extra columns exist
+    for stmt in [
+        "ALTER TABLE persons ADD COLUMN IF NOT EXISTS gender VARCHAR",
+        "ALTER TABLE persons ADD COLUMN IF NOT EXISTS description TEXT",
+        "ALTER TABLE persons ADD COLUMN IF NOT EXISTS image_large VARCHAR",
+        "ALTER TABLE persons ADD COLUMN IF NOT EXISTS image_medium VARCHAR",
+        "ALTER TABLE persons ADD COLUMN IF NOT EXISTS hometown VARCHAR",
+        "ALTER TABLE persons ADD COLUMN IF NOT EXISTS blood_type VARCHAR",
+    ]:
+        conn.execute(stmt)
+    return conn
+
+
+_SILVER_DDL_WITH_PERSONS = """
+CREATE TABLE IF NOT EXISTS persons (
+    id          VARCHAR PRIMARY KEY,
+    name_ja     VARCHAR NOT NULL DEFAULT '',
+    name_en     VARCHAR NOT NULL DEFAULT '',
+    name_ko     VARCHAR NOT NULL DEFAULT '',
+    name_zh     VARCHAR NOT NULL DEFAULT '',
+    names_alt   VARCHAR NOT NULL DEFAULT '{}',
+    birth_date  VARCHAR,
+    death_date  VARCHAR,
+    website_url VARCHAR,
+    gender      VARCHAR,
+    description TEXT,
+    image_large VARCHAR,
+    image_medium VARCHAR,
+    hometown    VARCHAR,
+    blood_type  VARCHAR,
+    updated_at  TIMESTAMP DEFAULT now()
+);
+"""
+
+
+def test_persons_extra_columns_loaded_from_anilist_bronze(tmp_path: Path) -> None:
+    """22/04: gender/description/image_large/image_medium/hometown/blood_type are
+    loaded from anilist BRONZE when _build_persons_sql processes the parquet."""
+    from src.etl.integrate_duckdb import _build_persons_sql
+
+    root = tmp_path / "bronze"
+    _write_anilist_persons(root)
+
+    persons_glob = str(root / "source=*" / "table=persons" / "date=*" / "*.parquet")
+
+    conn = duckdb.connect(":memory:")
+    conn.execute(_SILVER_DDL_WITH_PERSONS)
+
+    sql = _build_persons_sql(conn, persons_glob)
+    conn.execute(sql, [persons_glob])
+
+    row = conn.execute(
+        "SELECT gender, description, image_large, image_medium, hometown, blood_type, birth_date, website_url "
+        "FROM persons WHERE id = 'anilist:p100'"
+    ).fetchone()
+    conn.close()
+
+    assert row is not None
+    assert row[0] == "Male"
+    assert row[1] == "A test animator."
+    assert row[2] == "https://example.com/large.png"
+    assert row[3] == "https://example.com/medium.png"
+    assert row[4] == "Tokyo"
+    assert row[5] == "A"
+    assert row[6] == "1985-04-01"   # date_of_birth → birth_date
+    assert "anilist.co" in row[7]   # site_url → website_url
+
+
+def test_persons_extra_columns_null_when_absent_in_bronze(tmp_path: Path) -> None:
+    """22/04: columns absent from BRONZE parquet schema → NULL in SILVER (no crash)."""
+    from src.etl.integrate_duckdb import _build_persons_sql
+
+    root = tmp_path / "bronze"
+    # Write persons with only minimal columns (no gender/description/etc.)
+    with BronzeWriter("anilist", table="persons", root=root) as bw:
+        bw.append({
+            "id": "anilist:p200",
+            "name_ja": "最小テスト",
+            "name_en": "Minimal Test",
+        })
+
+    persons_glob = str(root / "source=*" / "table=persons" / "date=*" / "*.parquet")
+
+    conn = duckdb.connect(":memory:")
+    conn.execute(_SILVER_DDL_WITH_PERSONS)
+
+    sql = _build_persons_sql(conn, persons_glob)
+    conn.execute(sql, [persons_glob])
+
+    row = conn.execute(
+        "SELECT gender, description, image_large, hometown FROM persons WHERE id = 'anilist:p200'"
+    ).fetchone()
+    conn.close()
+
+    assert row is not None
+    assert row[0] is None
+    assert row[1] is None
+    assert row[2] is None
+    assert row[3] is None
+
+
+def test_anilist_loader_adds_persons_ddl_extension(tmp_path: Path) -> None:
+    """22/04: anilist.integrate() adds persons extension columns via DDL (IF NOT EXISTS)."""
+    root = tmp_path / "bronze"
+    # Provide empty parquets so the loader doesn't error
+    with BronzeWriter("anilist", table="characters", root=root):
+        pass
+    with BronzeWriter("anilist", table="character_voice_actors", root=root):
+        pass
+    with BronzeWriter("anilist", table="anime", root=root):
+        pass
+
+    conn = duckdb.connect(":memory:")
+    conn.execute(_SILVER_DDL)
+    # Minimal persons table without extra columns (simulates pre-22/04 state)
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS persons (
+            id          VARCHAR PRIMARY KEY,
+            name_ja     VARCHAR NOT NULL DEFAULT '',
+            name_en     VARCHAR NOT NULL DEFAULT '',
+            updated_at  TIMESTAMP DEFAULT now()
+        )
+    """)
+    anilist_loader.integrate(conn, root)
+
+    persons_cols = {r[0] for r in conn.execute("DESCRIBE persons").fetchall()}
+    conn.close()
+
+    assert "gender" in persons_cols
+    assert "description" in persons_cols
+    assert "image_large" in persons_cols
+    assert "image_medium" in persons_cols
+    assert "hometown" in persons_cols
+    assert "blood_type" in persons_cols
