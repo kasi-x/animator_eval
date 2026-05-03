@@ -12,6 +12,7 @@ import structlog
 
 from src.analysis.io.conformed_reader import load_anime_silver, load_credits_silver, load_persons_silver
 from src.analysis.io.resolved_reader import (
+    load_anime_conformed_id_map,
     load_anime_resolved,
     load_persons_resolved,
     resolved_available,
@@ -327,18 +328,27 @@ def _load_persons_from_resolved_or_conformed(
 def _load_anime_from_resolved_or_conformed(
     resolved_path=None,
     conformed_path=None,
-) -> list:
+) -> tuple[list, dict[str, str]]:
     """Load anime from Resolved layer if available, else fall back to Conformed.
 
     When loading from Resolved, cross-references conformed anime_studios to
     populate anime.studios (required by AKM infer_studio_assignment).
+
+    Also returns a conformed_id → canonical_id alias map so that the pipeline
+    anime_map can be extended to cover credits that carry conformed IDs
+    (anilist:*, madb:*, mal:*, etc.).  Credits always use conformed IDs, so
+    without this alias map, anime_map.get(credit.anime_id) would return None
+    for every credit when the resolved layer is active.
 
     Args:
         resolved_path: Path to resolved.duckdb (None → DEFAULT_RESOLVED_PATH).
         conformed_path: Path to animetor.duckdb (None → DEFAULT_SILVER_PATH).
 
     Returns:
-        List of AnimeAnalysis model instances (with studios populated).
+        Tuple of:
+          - List of AnimeAnalysis model instances (with studios populated).
+          - Dict[conformed_id, canonical_id] alias map (empty when falling
+            back to conformed layer — conformed IDs are already the keys).
     """
     if resolved_available(resolved_path):
         anime_list = load_anime_resolved(resolved_path, conformed_path=conformed_path)
@@ -350,12 +360,15 @@ def _load_anime_from_resolved_or_conformed(
                 total=len(anime_list),
                 with_studios=with_studios,
             )
-            return anime_list
+            # Build conformed-ID alias map so credits (which carry conformed IDs)
+            # can look up resolved canonical anime objects.
+            conformed_alias_map = load_anime_conformed_id_map(resolved_path)
+            return anime_list, conformed_alias_map
         logger.warning(
             "resolved_anime_empty_falling_back_to_conformed",
         )
     logger.info("data_loading_anime_source", source="conformed")
-    return load_anime_silver(conformed_path)
+    return load_anime_silver(conformed_path), {}
 
 
 def load_pipeline_data_resolved(
@@ -383,12 +396,19 @@ def load_pipeline_data_resolved(
         LoadedData populated from Resolved (or Conformed as fallback).
     """
     all_persons = _load_persons_from_resolved_or_conformed(resolved_path, conformed_path)
-    anime_list = _load_anime_from_resolved_or_conformed(resolved_path, conformed_path)
+    anime_list, conformed_alias_map = _load_anime_from_resolved_or_conformed(
+        resolved_path, conformed_path
+    )
     # Credits remain from Conformed layer (Phase 2b: resolved credits not yet built)
     all_credits = load_credits_silver(conformed_path)
 
     return _build_loaded_data(
-        all_persons, anime_list, all_credits, visualize=visualize, dry_run=dry_run
+        all_persons,
+        anime_list,
+        all_credits,
+        conformed_alias_map=conformed_alias_map,
+        visualize=visualize,
+        dry_run=dry_run,
     )
 
 
@@ -397,6 +417,7 @@ def _build_loaded_data(
     anime_list: list,
     all_credits: list[Credit],
     *,
+    conformed_alias_map: dict[str, str] | None = None,
     visualize: bool = False,
     dry_run: bool = False,
 ) -> LoadedData:
@@ -404,6 +425,14 @@ def _build_loaded_data(
 
     Extracted from load_pipeline_data() to allow reuse by both loading paths
     (conformed-only and resolved-with-fallback).
+
+    Args:
+        conformed_alias_map: conformed_id → canonical_id mapping built from
+            resolved anime source_ids_json.  When provided, the anime_map is
+            extended with conformed-ID aliases so that credits (which always
+            carry conformed IDs like anilist:*, madb:*, mal:*) can look up
+            resolved canonical AnimeAnalysis objects.  This is the bridge that
+            makes AKM/studio scoring work when the resolved layer is active.
     """
     # Filter out garbage/placeholder person entries
     garbage_ids: set[str] = set()
@@ -441,7 +470,26 @@ def _build_loaded_data(
     if na_count > 0:
         logger.info("filtered_orphan_credits", count=na_count)
 
-    anime_map = {a.id: a for a in anime_list}
+    # Primary anime_map: canonical_id → AnimeAnalysis
+    anime_map: dict[str, object] = {a.id: a for a in anime_list}
+
+    # Extend with conformed-ID aliases when loading from the Resolved layer.
+    # Credits carry conformed IDs (anilist:*, madb:*, mal:*, etc.) while
+    # resolved anime objects use canonical resolved:anime:* IDs.
+    # Without these aliases, anime_map.get(credit.anime_id) returns None for
+    # every credit, causing AKM to get n_observations=0 (the Phase 4b bug).
+    if conformed_alias_map:
+        conformed_alias_hits = 0
+        for conformed_id, canonical_id in conformed_alias_map.items():
+            anime_obj = anime_map.get(canonical_id)
+            if anime_obj is not None and conformed_id not in anime_map:
+                anime_map[conformed_id] = anime_obj
+                conformed_alias_hits += 1
+        logger.info(
+            "anime_map_conformed_aliases_added",
+            alias_count=conformed_alias_hits,
+            total_map_size=len(anime_map),
+        )
 
     logger.info(
         "data_loaded",

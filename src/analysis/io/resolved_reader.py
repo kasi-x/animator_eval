@@ -256,6 +256,50 @@ def load_persons_resolved(path: Path | str | None = None) -> list:
     return result
 
 
+def load_anime_conformed_id_map(
+    path: Path | str | None = None,
+) -> dict[str, str]:
+    """Return conformed_id → canonical_id mapping for all resolved anime.
+
+    Reads source_ids_json for every resolved anime row and inverts the mapping.
+    Used by the pipeline data loader to extend the anime_map so that credits
+    (which carry conformed IDs like anilist:*, mal:*, madb:*) can resolve against
+    the canonical resolved anime objects.
+
+    Returns:
+        Dict of {conformed_id: canonical_id} (empty if resolved.duckdb absent).
+    """
+    if not resolved_available(path):
+        return {}
+
+    import json as _json
+
+    with resolved_connect(path) as conn:
+        try:
+            rows = conn.execute(
+                "SELECT canonical_id, source_ids_json FROM anime"
+            ).fetchall()
+        except Exception as exc:
+            logger.warning("resolved_anime_conformed_id_map_failed", error=str(exc))
+            return {}
+
+    result: dict[str, str] = {}
+    for canonical_id, source_ids_json in rows:
+        try:
+            source_ids = _json.loads(source_ids_json or "[]")
+        except Exception:
+            source_ids = []
+        for sid in source_ids:
+            result[sid] = canonical_id
+
+    logger.info(
+        "resolved_anime_conformed_id_map_loaded",
+        canonical_count=len(rows),
+        conformed_id_count=len(result),
+    )
+    return result
+
+
 def load_studios_resolved(path: Path | str | None = None) -> list[dict[str, Any]]:
     """Load canonical studio rows from resolved.duckdb as dicts.
 
