@@ -24,7 +24,7 @@ Claude Code 向けのプロジェクト指針。詳細は `docs/` と `TODO.md` 
 | **Permitted** (構造的事実) | credit records, roles (24 種), 作品メタ (話数/尺/形式), 制作スタジオ, 制作規模 (クレジット数), タイムライン, 共クレジット関係, ネットワーク位置 |
 | **Prohibited** (主観) | anime.score / anime.popularity / external reviews |
 
-例外: `anime.score` は BRONZE に保持し display metadata として表示してよいが、scoring path には一切入れない。
+例外: `anime.score` は Source 層 (旧 BRONZE) に保持し display metadata として表示してよいが、scoring path には一切入れない。Conformed 層では `display_*_<source>` prefix で隔離。
 
 ## Report Writing Philosophy
 
@@ -39,13 +39,53 @@ Claude Code 向けのプロジェクト指針。詳細は `docs/` と `TODO.md` 
 
 ## Architecture
 
-### Three-Layer Database Model
+### Five-Tier Database Model
+
+Animetor Eval は **5 層データアーキテクチャ** を採用。各層の責務を分離し、特に entity_resolution 前後の混在 (旧 SILVER の silent fail 原因) を解消する。
+
+| 層 | 役割 | 物理形式 | 用語 |
+|----|------|---------|------|
+| **Raw** | scrape 直後の生 cache (HTML / JSON) | filesystem `data/<source>/raw/` | Raw |
+| **Source** | source 別 parsed parquet | `result/bronze/source=*/` | Source (旧 BRONZE) |
+| **Conformed** | source 横断 schema 統一、source 並存 | `animetor.duckdb` `conformed` schema | Conformed (旧 SILVER) |
+| **Resolved** | entity_resolution 済 canonical 1 row | `result/resolved.duckdb` | Resolved (新規) |
+| **Mart** | scoring / feature / 統計 | `animetor.duckdb` `mart` schema | Mart (旧 GOLD) |
+
+#### Raw (生データ層)
+- scraper の生 cache (HTML / JSON)。不可変、scrape の証拠。
+- 既存運用継続、変更なし。
+
+#### Source (source 別構造化層)
+- 各 source ごとに独立 schema で parsed。集約・統合は行わない。
+- `anime.score` 等 display 系列も含む (source の生情報)。
+- 旧呼称: BRONZE。物理 path `result/bronze/` は当面維持。
+
+#### Conformed (横断統一層)
+- 各 source の同種データを **schema 統一**。ID は `<source>:<id>` prefix で source 並存 (`anilist:a123`)。
+- entity_resolution はまだ行わない。score 系列は `display_*_<source>` prefix で隔離 (H1)。
+- 旧呼称: SILVER。物理 file `silver.duckdb` は当面維持、ドキュメント上は Conformed。
+
+#### Resolved (代表値選抜層)
+- entity_resolution の最終結果。1 canonical anime / person / studio = 1 row。
+- 代表値選抜: source 優先順位リスト + majority vote tie-break。
+- AKM / 全 scoring は **この層を読む**。`meta_resolution_audit` でトレース可能。
+- 旧 SILVER の anime_studios silent fail (21/01) の根本対策。
+
+#### Mart (分析・統計層)
+- AKM 結果 (`theta_i` / `psi_j`)、派生 feature (`feat_*`)、scores、レポート集計。
+- 旧呼称: GOLD。物理 file `gold.duckdb` は当面維持、ドキュメント上は Mart。
+
+**重要**: Resolved 層への唯一の経路は `src/etl/resolved/` ETL パッケージ。Source / Conformed への display アクセスは `src/utils/display_lookup.py` 経由のみ (UI 用)。`src/analysis/` / `src/pipeline_phases/` は **Resolved 層のみを読む**。
+
+### Legacy: Three-Layer Database Model (v53-v54 まで)
+
+旧 3 層モデルの記述。過去仕様の参照・git history との照合用として保存。
 
 - **BRONZE** (`src_*` テーブル): scraper 生データ。`anime.score` 含む。immutable。
-- **SILVER** (`anime`, `persons`, `credits`, `roles`, ...): 正規化済み score-free データ。全 scoring が読む唯一の層。
-- **GOLD** (`scores`, `score_history`, `meta_*`): 計算結果と lineage (`meta_lineage`)。
+- **SILVER** (`anime`, `persons`, `credits`, `roles`, ...): 正規化済み score-free データ。
+- **GOLD** (`scores`, `score_history`, `meta_*`): 計算結果と lineage。
 
-Bronze への唯一の経路は `src/utils/display_lookup.py` (UI 用のみ)。`src/analysis/` / `src/pipeline_phases/` は SILVER のみを読む。
+Bronze への唯一の経路は `src/utils/display_lookup.py` (UI 用のみ)。5 層移行後は Conformed / Resolved / Mart 用語を使用。
 
 ### Two-Layer Evaluation
 
@@ -91,7 +131,7 @@ IV_i = (λ1·theta_i + λ2·birank_i + λ3·studio_exp_i + λ4·awcc_i + λ5·pa
 - **Atlas config**: `atlas.hcl`
 - **Auto-generated**: `docs/schema.dbml` (ER図), `docs/DATA_DICTIONARY.md` (列単位)
 
-BRONZE/SILVER/GOLD 3 層の詳細は `docs/ARCHITECTURE.md`。
+5 層アーキテクチャ (Raw / Source / Conformed / Resolved / Mart) の詳細は `docs/ARCHITECTURE.md`。
 
 ## Report System
 
@@ -182,7 +222,7 @@ animetor_eval/
 
 ### Testing
 
-- **Monkeypatch `DEFAULT_DB_PATH`** (関数 `get_connection` ではなく): pipeline が module load 時に import するため、関数を差し替えても効かない。正確には `src.db.init.DEFAULT_DB_PATH` を patch。DuckDB 層も同様: `DEFAULT_SILVER_PATH` (silver_reader) と `DEFAULT_GOLD_DB_PATH` (gold_writer) を monkeypatch する。
+- **Monkeypatch `DEFAULT_DB_PATH`** (関数 `get_connection` ではなく): pipeline が module load 時に import するため、関数を差し替えても効かない。正確には `src.db.init.DEFAULT_DB_PATH` を patch。DuckDB 層も同様: `DEFAULT_SILVER_PATH` (conformed_reader / silver_reader) と `DEFAULT_GOLD_DB_PATH` (mart_writer / gold_writer) を monkeypatch する。
 - **JSON_DIR の patch**: `src.pipeline.JSON_DIR`, `src.analysis.visualize.JSON_DIR`, `src.utils.config.JSON_DIR` の 3 箇所
 - **structlog + pytest**: `cache_logger_on_first_use=False` + `PrintLoggerFactory()` で "I/O operation on closed file" を回避 (`tests/conftest.py`)
 - **Dataclass 戻り値**: analysis 関数は dataclass を返す。attr access (`result.field`)、dict 化は `asdict()`
@@ -204,7 +244,7 @@ animetor_eval/
 
 ## Tech Stack
 
-Python 3.12, pixi (conda-forge + pypi), NetworkX, Pydantic v2, httpx, structlog, typer + Rich, FastAPI + uvicorn + WebSocket, matplotlib + Plotly, Rust/PyO3/maturin, **sf-hamilton** (H-1〜H-7 完了、`PipelineContext` 完全削除・Phase 1-10 DAG 化済), DuckDB (BRONZE/SILVER/GOLD 全層移行完了、`TODO.md §4` Phase A 全 Card 完了), ruff, pytest (2450+ tests)。
+Python 3.12, pixi (conda-forge + pypi), NetworkX, Pydantic v2, httpx, structlog, typer + Rich, FastAPI + uvicorn + WebSocket, matplotlib + Plotly, Rust/PyO3/maturin, **sf-hamilton** (H-1〜H-7 完了、`PipelineContext` 完全削除・Phase 1-10 DAG 化済), DuckDB (Source/Conformed/Mart 全層移行完了、`TODO.md §4` Phase A 全 Card 完了、Resolved 層実装中), ruff, pytest (2450+ tests)。
 
 ## Known Issues
 

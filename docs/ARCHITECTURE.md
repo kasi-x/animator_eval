@@ -28,35 +28,82 @@ Animetor Evalはアニメ業界の制作者を**ネットワーク科学**の手
 4. **保守性**: 小さな関数（<100行）、明確な責務分離
 5. **法的配慮**: 信用毀損リスクを考慮した保守的な名寄せ
 
-### データベース3層モデル (v53-v54)
+### データベース5層モデル (v62+)
 
-Animetor Evalは**3層データベースアーキテクチャ**を採用しており、データの源泉から分析出力まで、各層で異なるデータ品質・スコープを保証します：
+Animetor Evalは**5層データアーキテクチャ**を採用しており、データの源泉から分析出力まで各層で責務を厳密に分離します。旧 3 層 (BRONZE/SILVER/GOLD) では SILVER に「集約」と「entity_resolution 後の代表値選抜」が混在し、AKM silent fail (21/01) の原因となりました。5 層化でこれを解消します。
 
-#### BRONZE層（生データ、未加工）
-- **テーブル**: `src_anilist_anime`, `src_mal_anime`, `src_jvmg_*`
-- **特性**: 外部ソースから直接スクレイプしたデータ
+| 層 | 役割 | 物理形式 | 旧呼称 |
+|----|------|---------|--------|
+| **Raw** | scrape 直後の生 cache | filesystem `data/<source>/raw/` | — |
+| **Source** | source 別 parsed parquet | `result/bronze/source=*/` | BRONZE |
+| **Conformed** | source 横断 schema 統一、source 並存 | `animetor.duckdb` `conformed` schema | SILVER |
+| **Resolved** | entity_resolution 済 canonical 1 row | `result/resolved.duckdb` | (新規) |
+| **Mart** | scoring / feature / 統計 | `animetor.duckdb` `mart` schema | GOLD |
+
+#### Raw層（生データ層）
+- **形式**: HTML / JSON / XML filesystem cache
+- **場所**: `data/<source>/raw/`
+- **特性**: scraper の生 cache。不可変・scrape の証拠
+- **用途**: 監査、再 parse の source、scrape 証拠保存
+- **変更**: scrapers のみ書込。分析コードから完全隔離
+
+#### Source層（source 別構造化層）
+- **テーブル**: `src_anilist_anime`, `src_mal_anime`, `src_jvmg_*` 等
+- **特性**: 各 source ごとに独立 schema で parsed。集約・統合は行わない (source の**完全性**を保つ)
 - **anime.scoreを含む**: 視聴者評価スコアが保持される
 - **用途**: 監査、歴史的比較、外部検証のみ
-- **読取**: Display lookupヘルパー経由のみ（UIメタデータ用）
-- **変更**: スクレイパー更新; 分析コードから完全隔離
+- **読取**: Display lookup ヘルパー経由のみ（UI メタデータ用）
+- **制約**: 分析コードから完全隔離
+- 旧呼称: BRONZE。物理 path `result/bronze/` は当面維持
 
-#### SILVER層（正規化データ、スコア無し）
-- **テーブル**: `anime`, `anime_external_ids`, `anime_display`, `anime_genres`, `anime_tags`, `credits`, `persons`, `roles`
-- **特性**: 構造的データのみ、スコアリングに必要なメタデータ
-- **anime.scoreを除外**: v53マイグレーション（スコア/人気度/説明/ジャンル/スタジオ列削除）
-- **credits.sourceを削除**: v54マイグレーション（「evidence_source」のみ保持）
-- **用途**: **すべての分析・スコアリング計算**
-- **読取**: `src/analysis/*`, `src/pipeline_phases/*` により専有使用
-- **制約**: `display_lookup`インポート禁止（分析コードから厳密に隔離）
+#### Conformed層（横断統一層）
+- **テーブル**: `conformed.anime`, `conformed.persons`, `conformed.credits`, `conformed.studios` 等
+- **特性**: 各 source の同種データを**schema 統一**。ID は `<source>:<id>` prefix で source 並存 (`anilist:a123`)
+- **entity_resolution 前**: source 並存のまま。代表値選抜はまだ行わない
+- **anime.scoreを除外**: `display_*_<source>` prefix で隔離 (H1)
+- **用途**: Source → Resolved の中間層。Conformed の補強タスク (22/01 等)
+- **制約**: 分析・スコアリングコードは直接読まない
+- 旧呼称: SILVER。物理 file `silver.duckdb` は当面維持、ドキュメント上は Conformed
 
-#### GOLD層（分析出力、オーディエンス別）
-- **テーブル**: `scores`, `score_history`, `meta_*` テーブル群
-- **特性**: 計算結果とメタデータ系譜
+#### Resolved層（代表値選抜層、新規）
+- **テーブル**: `resolved.anime`, `resolved.persons`, `resolved.credits`, `resolved.studios`
+- **特性**: entity_resolution 済 canonical 1 row。1 canonical anime / person / studio = 1 row
+- **代表値選抜**: source 優先順位リスト + majority vote tie-break
+  - 例: `title_ja` = seesaawiki > anilist > mal > mediaarts
+- **欠損補填**: source A で空、B にある値を採用
+- **meta_resolution_audit**: 各 canonical_id がどの source row 由来かトレース可能
+- **用途**: **AKM / 全 scoring の唯一の入力層**
+- **アクセス**: `src/analysis/*`, `src/pipeline_phases/*` → Resolved のみを読む
+- **ETL**: `src/etl/resolved/` パッケージ経由のみ書込
+- 旧 SILVER の anime_studios silent fail (21/01) の根本対策
+
+#### Mart層（分析・統計層）
+- **テーブル**: `mart.scores`, `mart.score_history`, `mart.meta_*`, `mart.feat_*`
+- **特性**: AKM 結果 (`theta_i` / `psi_j`)、派生 feature、スコア、レポート集計
 - **meta_lineageテーブル**: formula_version, ci_method, null_model, holdout_method, inputs_hash, row_count を記録
-- **用途**: レポート生成、API応答、監査証拠
-- **アクセス**: レポートジェネレータ、API層、フロントエンド
+- **用途**: レポート生成、API 応答、監査証拠
+- **アクセス**: レポートジェネレータ、API 層、フロントエンド
+- 旧呼称: GOLD。物理 file `gold.duckdb` は当面維持、ドキュメント上は Mart
 
-**重要**: 分析コードは**SILVER層のみ読取**。BRONZE層へのアクセスは`src/utils/display_lookup.py`ヘルパー経由のみ（UI表示用）。これにより、viewer ratings（anime.score）に依存しないスコアリング完全性を保証。
+**重要**: 分析コードは **Resolved 層のみ読取**。Source 層へのアクセスは `src/utils/display_lookup.py` ヘルパー経由のみ（UI 表示用）。これにより、viewer ratings（anime.score）に依存しないスコアリング完全性を保証。
+
+---
+
+### Legacy: データベース3層モデル (v53-v54 まで)
+
+旧 3 層モデルの記述。過去仕様の参照・git history との照合用として保存。
+
+#### BRONZE層（旧 Source 層相当）
+- **テーブル**: `src_anilist_anime`, `src_mal_anime`, `src_jvmg_*`
+- **用途**: 監査、歴史的比較。Display lookup 経由のみ
+
+#### SILVER層（旧 Conformed + Resolved 合算）
+- **テーブル**: `anime`, `anime_external_ids`, `anime_display`, `anime_genres`, `anime_tags`, `credits`, `persons`, `roles`
+- **問題**: entity_resolution 前後の行が混在し AKM silent fail (21/01) の原因となった
+
+#### GOLD層（旧 Mart 層相当）
+- **テーブル**: `scores`, `score_history`, `meta_*`
+- **用途**: レポート生成、API 応答、監査証拠
 
 ---
 
@@ -770,7 +817,7 @@ GraphMLエクスポート機能実装済み（`src/analysis/neo4j_export.py`）
 
 DBML形式により、以下を可視化できます：
 - テーブル関係図（Entity Relationship Diagram）
-- 3層アーキテクチャ（BRONZE/SILVER/GOLD）
+- 5層アーキテクチャ（Raw / Source / Conformed / Resolved / Mart）
 - データ型と制約
 - 外部キー関係
 
@@ -778,24 +825,28 @@ DBML形式により、以下を可視化できます：
 
 ### テーブル分類
 
-#### SILVER Layer (84 tables, 3 categories)
-**コア (5 tables)**: `anime`, `persons`, `credits`, `roles`, `sources`
-**拡張 (5 tables)**: `anime_external_ids`, `anime_genres`, `anime_tags`, `person_aliases`, `person_ext_ids`
-**分析 (2 tables)**: `anime_analysis`, `anime_display`
+#### Conformed層 (旧 SILVER、84 tables, 3 categories)
+**コア (5 tables)**: `conformed.anime`, `conformed.persons`, `conformed.credits`, `conformed.roles`, `conformed.sources`
+**拡張 (5 tables)**: `conformed.anime_external_ids`, `conformed.anime_genres`, `conformed.anime_tags`, `conformed.person_aliases`, `conformed.person_ext_ids`
+**分析 (2 tables)**: `conformed.anime_analysis`, `conformed.anime_display`
 
-#### BRONZE Layer (13 tables)
+#### Source層 (旧 BRONZE、13 tables)
 **データソース**: `src_anilist_*`, `src_mal_*`, `src_seesaawiki_*`, `src_ann_*`, `src_allcinema_*`, `src_madb_*`
 ⚠️ Contains anime.score, popularity - NEVER used in scoring formulas
 
-#### GOLD Layer (17+ tables)
-**スコア (3 tables)**: `scores`, `score_history`, `va_scores`
-**メタ (17 tables)**: `meta_*` (formula lineage, policy analysis outputs)
-**特徴 (17 tables)**: `feat_*` (clustering features for Phase 9)
+#### Resolved層 (新規)
+**canonical (4 tables)**: `resolved.anime`, `resolved.persons`, `resolved.credits`, `resolved.studios`
+**監査 (1 table)**: `resolved.meta_resolution_audit` (canonical_id → source row トレース)
+
+#### Mart層 (旧 GOLD、17+ tables)
+**スコア (3 tables)**: `mart.scores`, `mart.score_history`, `mart.va_scores`
+**メタ (17 tables)**: `mart.meta_*` (formula lineage, policy analysis outputs)
+**特徴 (17 tables)**: `mart.feat_*` (clustering features for Phase 9)
 
 ### 重要な設計決定
 
-1. **SILVER-onlyスコアリング**: `src/analysis/*` は SILVER層のみを読取
-   - Exception: `src/utils/display_lookup.py` (UI表示用のBRONZEアクセス)
+1. **Resolved-onlyスコアリング**: `src/analysis/*` は Resolved 層のみを読取
+   - Exception: `src/utils/display_lookup.py` (UI表示用の Source アクセス)
    
 2. **Audit Trail**: `meta_lineage` テーブル記録
    - formula_version, ci_method, null_model, holdout_method
@@ -812,6 +863,6 @@ DBML形式により、以下を可視化できます：
 
 ---
 
-**Last Updated**: 2026-04-21
-**Version**: 1.1.0
-**Schema**: v54
+**Last Updated**: 2026-05-02
+**Version**: 1.2.0
+**Schema**: v62+ (5層アーキテクチャ)

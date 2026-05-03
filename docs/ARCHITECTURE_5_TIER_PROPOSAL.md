@@ -85,13 +85,13 @@
 
 ### Phase 0 (現在): 設計合意
 - [x] 命名確定 (`Raw → Source → Conformed → Resolved → Mart`)
-- [ ] 本ドキュメント commit
-- [ ] CLAUDE.md / docs/ARCHITECTURE.md に概念追記 (実装前)
+- [x] 本ドキュメント commit
+- [x] CLAUDE.md / docs/ARCHITECTURE.md に概念追記 (実装前)
 
 ### Phase 1: 既存層の責務再定義
-- [ ] `silver_loaders/` を概念上 **Conformed loaders** と認識 (rename しない)
-- [ ] AKM 含む scoring は **Resolved 層が無い前提で動作中** であることをドキュメント明示
-- [ ] 22/01 (anime_studios coverage) は **Conformed 層の補強** タスクとして扱う
+- [x] 1a: `silver_loaders/` を概念上 **Conformed loaders** と認識 (rename しない)
+- ~~1b: AKM 含む scoring は **Resolved 層が無い前提で動作中** であることをドキュメント明示~~ — 不要 (改訂版 Phase 3 で直接 Resolved 切替を行うため、中間状態の記述は省略)
+- [x] 1c: 22/01 (anime_studios coverage) は **Conformed 層の補強** タスクとして扱う
 
 ### Phase 2: Resolved 層 設計
 - [ ] `src/etl/resolved/` 新規パッケージ
@@ -112,10 +112,10 @@
 - [ ] feat_* / person_scores / scores 全更新
 - [ ] レポート再生成 (`scripts/generate_reports.py --all`)
 
-### Phase 5: ドキュメント更新
-- [ ] `docs/ARCHITECTURE.md` 全面改訂
-- [ ] `CLAUDE.md` の 3 層モデル記述を 5 層に
-- [ ] 図の更新
+### Phase 5: ドキュメント更新 ✅ 完了 (2026-05-02)
+- [x] `docs/ARCHITECTURE.md` 全面改訂
+- [x] `CLAUDE.md` の 3 層モデル記述を 5 層に
+- [ ] 図の更新 (別 PR)
 
 ---
 
@@ -183,10 +183,10 @@
 - `mart.feat_*` / `mart.person_scores` / `mart.scores` 全更新
 - レポート再生成
 
-### Phase 5: ドキュメント整備
-- `docs/ARCHITECTURE.md` 全面改訂 (3 層 → 5 層)
-- `CLAUDE.md` の 3 層モデル記述差替
-- 図の更新
+### Phase 5: ドキュメント整備 ✅ 完了 (2026-05-02)
+- [x] `docs/ARCHITECTURE.md` 全面改訂 (3 層 → 5 層)
+- [x] `CLAUDE.md` の 3 層モデル記述差替
+- [ ] 図の更新 (別 PR)
 
 ### Phase 6 (将来)
 - 段階的更新 (インクリメンタル化)
@@ -197,7 +197,7 @@
 
 ## 関連
 
-- `docs/ARCHITECTURE.md`: 現 3 層モデル (実装中)
+- `docs/ARCHITECTURE.md`: 5 層モデル記述済 (Phase 5 ✅)
 - `docs/ARCHITECTURE_CLEANUP.md`: 過去のクリーンアップ記録
 - `CLAUDE.md`: 設計原則 + Hard Rules
 - `result/audit/akm_refresh_summary.md`: 21/01 で発覚した silent fail (本提案の起源)
