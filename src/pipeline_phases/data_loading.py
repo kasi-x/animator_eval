@@ -351,7 +351,14 @@ def _load_anime_from_resolved_or_conformed(
             back to conformed layer — conformed IDs are already the keys).
     """
     if resolved_available(resolved_path):
-        anime_list = load_anime_resolved(resolved_path, conformed_path=conformed_path)
+        # Resolve the conformed_path default here so it is passed explicitly to
+        # load_anime_resolved.  That function only populates studios when
+        # conformed_path is not None — passing None would silently omit all
+        # studio data needed by AKM.
+        from src.analysis.io.conformed_reader import DEFAULT_DB_PATH as _DEFAULT_CONFORMED_PATH
+
+        effective_conformed_path = conformed_path if conformed_path is not None else _DEFAULT_CONFORMED_PATH
+        anime_list = load_anime_resolved(resolved_path, conformed_path=effective_conformed_path)
         if anime_list:
             with_studios = sum(1 for a in anime_list if a.studios)
             logger.info(
