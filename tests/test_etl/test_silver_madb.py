@@ -1,4 +1,4 @@
-"""Unit tests for src/etl/silver_loaders/madb.py
+"""Unit tests for src/etl/conformed_loaders/madb.py
 
 Verifies BRONZE parquet → SILVER DuckDB integration for all 6 mediaarts tables:
   - anime_broadcasters
@@ -19,7 +19,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from src.etl.silver_loaders import madb
+from src.etl.conformed_loaders import madb
 
 
 # ---------------------------------------------------------------------------

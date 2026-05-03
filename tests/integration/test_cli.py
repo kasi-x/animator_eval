@@ -13,15 +13,15 @@ def populated_duckdb(monkeypatch, tmp_path):
     """DuckDB test data for migrated CLI commands (stats/ranking/search/compare)."""
     import duckdb
 
-    import src.analysis.io.gold_writer
-    import src.analysis.io.silver_reader
-    from src.analysis.io.gold_writer import _DDL
+    import src.analysis.io.mart_writer
+    import src.analysis.io.conformed_reader
+    from src.analysis.io.mart_writer import _DDL
 
     silver_path = tmp_path / "silver.duckdb"
     gold_path = tmp_path / "gold.duckdb"
 
-    monkeypatch.setattr(src.analysis.io.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
-    monkeypatch.setattr(src.analysis.io.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+    monkeypatch.setattr(src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(src.analysis.io.mart_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
 
     # Create silver.duckdb
     sconn = duckdb.connect(str(silver_path))
@@ -91,15 +91,15 @@ def populated_duckdb_with_history(monkeypatch, tmp_path):
     """DuckDB test data including score_history rows (for TestHistoryCommand)."""
     import duckdb
 
-    import src.analysis.io.gold_writer
-    import src.analysis.io.silver_reader
-    from src.analysis.io.gold_writer import _DDL
+    import src.analysis.io.mart_writer
+    import src.analysis.io.conformed_reader
+    from src.analysis.io.mart_writer import _DDL
 
     silver_path = tmp_path / "silver.duckdb"
     gold_path = tmp_path / "gold.duckdb"
 
-    monkeypatch.setattr(src.analysis.io.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
-    monkeypatch.setattr(src.analysis.io.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+    monkeypatch.setattr(src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(src.analysis.io.mart_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
 
     # Create silver.duckdb (minimal: persons only needed for history)
     sconn = duckdb.connect(str(silver_path))
@@ -200,10 +200,10 @@ class TestRankingCommand:
         assert result.exit_code == 1
 
     def test_ranking_empty_db(self, monkeypatch, tmp_path):
-        import src.analysis.io.gold_writer
+        import src.analysis.io.mart_writer
 
         gold_path = tmp_path / "nonexistent_gold.duckdb"
-        monkeypatch.setattr(src.analysis.io.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+        monkeypatch.setattr(src.analysis.io.mart_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
         result = runner.invoke(app, ["ranking"])
         assert "No scores found" in result.output
 
@@ -292,15 +292,15 @@ class TestHistoryCommand:
         """Person exists in silver but has no score_history in gold."""
         import duckdb
 
-        import src.analysis.io.gold_writer
-        import src.analysis.io.silver_reader
-        from src.analysis.io.gold_writer import _DDL
+        import src.analysis.io.mart_writer
+        import src.analysis.io.conformed_reader
+        from src.analysis.io.mart_writer import _DDL
 
         silver_path = tmp_path / "silver_nohist.duckdb"
         gold_path = tmp_path / "gold_nohist.duckdb"
 
-        monkeypatch.setattr(src.analysis.io.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
-        monkeypatch.setattr(src.analysis.io.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+        monkeypatch.setattr(src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path)
+        monkeypatch.setattr(src.analysis.io.mart_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
 
         sconn = duckdb.connect(str(silver_path))
         sconn.execute(

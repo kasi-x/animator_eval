@@ -1,4 +1,4 @@
-"""Tests for src/etl/silver_loaders/bangumi.py.
+"""Tests for src/etl/conformed_loaders/bangumi.py.
 
 Creates minimal synthetic BRONZE parquet in a temp dir, builds an
 in-memory SILVER duckdb (mirroring integrate_duckdb._DDL), then calls
@@ -19,12 +19,12 @@ import duckdb
 import pytest
 
 from src.scrapers.bronze_writer import BronzeWriter
-from src.etl.silver_loaders import bangumi as bangumi_loader
+from src.etl.conformed_loaders import bangumi as bangumi_loader
 from src.runtime.models import Role
 
 # ─── Minimal SILVER DDL ──────────────────────────────────────────────────────
 # Mirrors the core tables from integrate_duckdb._DDL plus character tables
-# from silver_loaders/anilist.py.
+# from conformed_loaders/anilist.py.
 
 _SILVER_DDL = """
 CREATE TABLE IF NOT EXISTS anime (

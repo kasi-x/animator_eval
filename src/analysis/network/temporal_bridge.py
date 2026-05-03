@@ -403,7 +403,7 @@ def get_era_top_bridges(
 
 def main() -> None:
     """Standalone entry point."""
-    from src.analysis.io.silver_reader import (
+    from src.analysis.io.conformed_reader import (
         load_anime_silver,
         load_credits_silver,
         load_persons_silver,

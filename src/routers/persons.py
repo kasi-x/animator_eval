@@ -18,9 +18,9 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel
 
 from src.analysis.explain import explain_individual_profile
-from src.analysis.io.gold_writer import GoldReader, gold_connect_with_silver
+from src.analysis.io.mart_writer import GoldReader, gold_connect_with_silver
 from src.analysis.similarity import find_similar_persons
-from src.analysis.io.silver_reader import (
+from src.analysis.io.conformed_reader import (
     load_all_anime as silver_load_anime,
     load_all_credits as silver_load_credits,
 )

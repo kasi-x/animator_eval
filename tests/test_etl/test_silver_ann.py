@@ -1,4 +1,4 @@
-"""Tests for src/etl/silver_loaders/ann.py.
+"""Tests for src/etl/conformed_loaders/ann.py.
 
 Synthetic ANN BRONZE parquet fixtures → in-memory DuckDB → verify SILVER rows.
 
@@ -15,7 +15,7 @@ from pathlib import Path
 import duckdb
 
 from src.scrapers.bronze_writer import BronzeWriter
-from src.etl.silver_loaders.ann import integrate, _apply_ddl
+from src.etl.conformed_loaders.ann import integrate, _apply_ddl
 
 
 # ─── fixtures ───────────────────────────────────────────────────────────────

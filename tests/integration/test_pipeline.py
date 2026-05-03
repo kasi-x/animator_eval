@@ -90,14 +90,14 @@ def populated_db(tmp_path, monkeypatch):
     build_silver_duckdb(silver_path, persons, anime_list, credits_data)
 
     # Build empty gold.duckdb for GoldWriter
-    import src.analysis.io.gold_writer
+    import src.analysis.io.mart_writer
 
     gold_path = tmp_path / "gold.duckdb"
-    monkeypatch.setattr(src.analysis.io.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+    monkeypatch.setattr(src.analysis.io.mart_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
 
-    import src.analysis.io.silver_reader
+    import src.analysis.io.conformed_reader
 
-    monkeypatch.setattr(src.analysis.io.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path)
 
     import src.db.init
 

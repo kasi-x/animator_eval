@@ -14,8 +14,8 @@ def silver_gold_dbs(tmp_path, monkeypatch):
     feat_precompute tests need actual rows under specific PK shapes; the
     shared fixture only allocates the file paths and was unsuitable.
     """
-    import src.analysis.io.silver_reader as sr
-    import src.analysis.io.gold_writer as gw
+    import src.analysis.io.conformed_reader as sr
+    import src.analysis.io.mart_writer as gw
 
     silver_path = tmp_path / "silver.duckdb"
     gold_path = tmp_path / "gold.duckdb"
@@ -59,7 +59,7 @@ def silver_gold_dbs(tmp_path, monkeypatch):
         )
 
     with duckdb.connect(str(gold_path)) as c:
-        from src.analysis.io.gold_writer import _DDL
+        from src.analysis.io.mart_writer import _DDL
         c.execute(_DDL)
 
     monkeypatch.setattr(sr, "DEFAULT_SILVER_PATH", silver_path)
@@ -180,8 +180,8 @@ class TestComputeFeatPersonRoleProgression:
 @pytest.fixture
 def silver_gold_with_studios(tmp_path, monkeypatch):
     """silver.duckdb + gold.duckdb including studios + anime_studios tables."""
-    import src.analysis.io.silver_reader as sr
-    import src.analysis.io.gold_writer as gw
+    import src.analysis.io.conformed_reader as sr
+    import src.analysis.io.mart_writer as gw
 
     silver_path = tmp_path / "silver.duckdb"
     gold_path = tmp_path / "gold.duckdb"
@@ -231,7 +231,7 @@ def silver_gold_with_studios(tmp_path, monkeypatch):
         ])
 
     with duckdb.connect(str(gold_path)) as c:
-        from src.analysis.io.gold_writer import _DDL
+        from src.analysis.io.mart_writer import _DDL
         c.execute(_DDL)
 
     monkeypatch.setattr(sr, "DEFAULT_SILVER_PATH", silver_path)
@@ -278,10 +278,10 @@ class TestComputeFeatStudioAffiliation:
         assert row[0] == 1
 
     def test_skips_when_anime_studios_absent(self, tmp_path, monkeypatch):
-        import src.analysis.io.silver_reader as sr
-        import src.analysis.io.gold_writer as gw
+        import src.analysis.io.conformed_reader as sr
+        import src.analysis.io.mart_writer as gw
         from src.analysis.feat_precompute import compute_feat_studio_affiliation_ddb
-        from src.analysis.io.gold_writer import _DDL
+        from src.analysis.io.mart_writer import _DDL
 
         silver_path = tmp_path / "silver_no_studios.duckdb"
         gold_path = tmp_path / "gold_no_studios.duckdb"

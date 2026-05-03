@@ -43,10 +43,10 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from starlette.responses import JSONResponse
 
-from src.analysis.io.gold_writer import GoldReader
-from src.analysis.io.silver_reader import (
+from src.analysis.io.mart_writer import GoldReader
+from src.analysis.io.conformed_reader import (
     DEFAULT_SILVER_PATH,
-    silver_connect,
+    conformed_connect,
     silver_available,
     silver_db_stats,
     load_all_credits as silver_load_all_credits,
@@ -566,14 +566,14 @@ def data_quality():
     latest_year = None
 
     if silver_available():
-        with silver_connect() as conn:
+        with conformed_connect() as conn:
             if total_credits:
                 credits_with_source = conn.execute(
                     "SELECT COUNT(*) FROM credits WHERE evidence_source != ''"
                 ).fetchone()[0]
             if total_persons:
                 try:
-                    from src.analysis.io.gold_writer import gold_connect, DEFAULT_GOLD_DB_PATH
+                    from src.analysis.io.mart_writer import gold_connect, DEFAULT_GOLD_DB_PATH
                     if DEFAULT_GOLD_DB_PATH.exists():
                         with gold_connect() as gc:
                             persons_with_score = gc.execute(

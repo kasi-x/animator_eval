@@ -313,8 +313,8 @@ def silver_gold_dbs(tmp_path: Path, monkeypatch):
     gold = tmp_path / "gold.duckdb"
 
     # Monkeypatch paths for pipeline
-    monkeypatch.setattr("src.analysis.io.silver_reader.DEFAULT_SILVER_PATH", silver)
-    monkeypatch.setattr("src.analysis.io.gold_writer.DEFAULT_GOLD_DB_PATH", gold)
+    monkeypatch.setattr("src.analysis.io.conformed_reader.DEFAULT_SILVER_PATH", silver)
+    monkeypatch.setattr("src.analysis.io.mart_writer.DEFAULT_GOLD_DB_PATH", gold)
 
     return {"silver": silver, "gold": gold}
 

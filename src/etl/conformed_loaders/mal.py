@@ -17,7 +17,7 @@ H1 compliance:
 
   rg check:
     rg '\\bscore\\b|\\bpopularity\\b|\\bfavourites\\b|\\bmembers\\b|\\brank\\b'
-       src/etl/silver_loaders/mal.py
+       src/etl/conformed_loaders/mal.py
     | rg -v 'display_'
     | rg -v '^\\s*#'
   must return 0 lines.

@@ -1,4 +1,4 @@
-"""Tests for src/etl/silver_loaders/keyframe.py (Card 14/06)."""
+"""Tests for src/etl/conformed_loaders/keyframe.py (Card 14/06)."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -7,7 +7,7 @@ import duckdb
 import pytest
 
 from src.scrapers.bronze_writer import BronzeWriter
-from src.etl.silver_loaders.keyframe import integrate
+from src.etl.conformed_loaders.keyframe import integrate
 
 
 # ─── helpers ─────────────────────────────────────────────────────────────────

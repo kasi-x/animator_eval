@@ -51,7 +51,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 sys.path.insert(0, str(Path(__file__).parent))
 
-from src.analysis.io.gold_writer import gold_connect
+from src.analysis.io.mart_writer import gold_connect
 from scripts.report_generators.reports import V2_REPORT_CLASSES
 
 # Import for visualization functions

@@ -13,28 +13,28 @@ HISTORY_ROWS = [(*r, 2025, 2) for r in SCORE_ROWS]
 
 class TestGoldWriter:
     def test_write_person_scores_returns_count(self, gold_path):
-        from src.analysis.io.gold_writer import GoldWriter
+        from src.analysis.io.mart_writer import GoldWriter
 
         with GoldWriter(gold_path) as gw:
             n = gw.write_person_scores(SCORE_ROWS)
         assert n == 3
 
     def test_write_score_history_returns_count(self, gold_path):
-        from src.analysis.io.gold_writer import GoldWriter
+        from src.analysis.io.mart_writer import GoldWriter
 
         with GoldWriter(gold_path) as gw:
             n = gw.write_score_history(HISTORY_ROWS)
         assert n == 3
 
     def test_write_empty_is_noop(self, gold_path):
-        from src.analysis.io.gold_writer import GoldWriter
+        from src.analysis.io.mart_writer import GoldWriter
 
         with GoldWriter(gold_path) as gw:
             assert gw.write_person_scores([]) == 0
             assert gw.write_score_history([]) == 0
 
     def test_upsert_updates_existing(self, gold_path):
-        from src.analysis.io.gold_writer import GoldWriter, GoldReader
+        from src.analysis.io.mart_writer import GoldWriter, GoldReader
 
         with GoldWriter(gold_path) as gw:
             gw.write_person_scores(SCORE_ROWS)
@@ -47,7 +47,7 @@ class TestGoldWriter:
         assert abs(row["iv_score"] - 0.99) < 1e-9
 
     def test_no_duplicate_on_upsert(self, gold_path):
-        from src.analysis.io.gold_writer import GoldWriter, GoldReader
+        from src.analysis.io.mart_writer import GoldWriter, GoldReader
 
         with GoldWriter(gold_path) as gw:
             gw.write_person_scores(SCORE_ROWS)
@@ -59,20 +59,20 @@ class TestGoldWriter:
 
 class TestGoldReader:
     def _setup(self, gold_path):
-        from src.analysis.io.gold_writer import GoldWriter
+        from src.analysis.io.mart_writer import GoldWriter
 
         with GoldWriter(gold_path) as gw:
             gw.write_person_scores(SCORE_ROWS)
             gw.write_score_history(HISTORY_ROWS)
 
     def test_available_false_when_missing(self, tmp_path):
-        from src.analysis.io.gold_writer import GoldReader
+        from src.analysis.io.mart_writer import GoldReader
 
         reader = GoldReader(tmp_path / "nonexistent.duckdb")
         assert not reader.available()
 
     def test_available_true_after_write(self, gold_path):
-        from src.analysis.io.gold_writer import GoldWriter, GoldReader
+        from src.analysis.io.mart_writer import GoldWriter, GoldReader
 
         with GoldWriter(gold_path) as gw:
             gw.write_person_scores(SCORE_ROWS)
@@ -80,7 +80,7 @@ class TestGoldReader:
         assert GoldReader(gold_path).available()
 
     def test_person_scores_ordered_by_iv_desc(self, gold_path):
-        from src.analysis.io.gold_writer import GoldReader
+        from src.analysis.io.mart_writer import GoldReader
 
         self._setup(gold_path)
         rows = GoldReader(gold_path).person_scores()
@@ -88,7 +88,7 @@ class TestGoldReader:
         assert iv_scores == sorted(iv_scores, reverse=True)
 
     def test_person_scores_for_found(self, gold_path):
-        from src.analysis.io.gold_writer import GoldReader
+        from src.analysis.io.mart_writer import GoldReader
 
         self._setup(gold_path)
         row = GoldReader(gold_path).person_scores_for("p2")
@@ -96,19 +96,19 @@ class TestGoldReader:
         assert row["person_id"] == "p2"
 
     def test_person_scores_for_missing_returns_none(self, gold_path):
-        from src.analysis.io.gold_writer import GoldReader
+        from src.analysis.io.mart_writer import GoldReader
 
         self._setup(gold_path)
         assert GoldReader(gold_path).person_scores_for("nonexistent") is None
 
     def test_person_scores_returns_empty_when_unavailable(self, tmp_path):
-        from src.analysis.io.gold_writer import GoldReader
+        from src.analysis.io.mart_writer import GoldReader
 
         reader = GoldReader(tmp_path / "nonexistent.duckdb")
         assert reader.person_scores() == []
 
     def test_score_history_for_returns_rows(self, gold_path):
-        from src.analysis.io.gold_writer import GoldReader
+        from src.analysis.io.mart_writer import GoldReader
 
         self._setup(gold_path)
         hist = GoldReader(gold_path).score_history_for("p1")
@@ -117,21 +117,21 @@ class TestGoldReader:
         assert hist[0]["quarter"] == 2
 
     def test_top_n_limits_results(self, gold_path):
-        from src.analysis.io.gold_writer import GoldReader
+        from src.analysis.io.mart_writer import GoldReader
 
         self._setup(gold_path)
         top2 = GoldReader(gold_path).top_n(2)
         assert len(top2) == 2
 
     def test_top_n_ordered_by_iv(self, gold_path):
-        from src.analysis.io.gold_writer import GoldReader
+        from src.analysis.io.mart_writer import GoldReader
 
         self._setup(gold_path)
         top2 = GoldReader(gold_path).top_n(2)
         assert top2[0]["iv_score"] >= top2[1]["iv_score"]
 
     def test_all_score_fields_present(self, gold_path):
-        from src.analysis.io.gold_writer import GoldReader
+        from src.analysis.io.mart_writer import GoldReader
 
         self._setup(gold_path)
         row = GoldReader(gold_path).person_scores_for("p1")
@@ -172,26 +172,26 @@ class TestRankingQuery:
         return path
 
     def _setup_gold(self, gold_path):
-        from src.analysis.io.gold_writer import GoldWriter
+        from src.analysis.io.mart_writer import GoldWriter
         with GoldWriter(gold_path) as gw:
             gw.write_person_scores(SCORE_ROWS)
 
     def test_returns_total_and_rows(self, gold_path, sqlite_path):
-        from src.analysis.io.gold_writer import GoldReader
+        from src.analysis.io.mart_writer import GoldReader
         self._setup_gold(gold_path)
         total, rows = GoldReader(gold_path).ranking_query(sqlite_path, limit=10)
         assert total == 3
         assert len(rows) == 3
 
     def test_rows_ordered_by_iv_desc(self, gold_path, sqlite_path):
-        from src.analysis.io.gold_writer import GoldReader
+        from src.analysis.io.mart_writer import GoldReader
         self._setup_gold(gold_path)
         _, rows = GoldReader(gold_path).ranking_query(sqlite_path, limit=10)
         scores = [r["iv_score"] for r in rows]
         assert scores == sorted(scores, reverse=True)
 
     def test_row_has_expected_fields(self, gold_path, sqlite_path):
-        from src.analysis.io.gold_writer import GoldReader
+        from src.analysis.io.mart_writer import GoldReader
         self._setup_gold(gold_path)
         _, rows = GoldReader(gold_path).ranking_query(sqlite_path, limit=10)
         row = rows[0]
@@ -201,14 +201,14 @@ class TestRankingQuery:
             assert field in row, f"missing field: {field}"
 
     def test_limit_applied(self, gold_path, sqlite_path):
-        from src.analysis.io.gold_writer import GoldReader
+        from src.analysis.io.mart_writer import GoldReader
         self._setup_gold(gold_path)
         total, rows = GoldReader(gold_path).ranking_query(sqlite_path, limit=2)
         assert total == 3      # total is unaffected by limit
         assert len(rows) == 2
 
     def test_condition_filter(self, gold_path, sqlite_path):
-        from src.analysis.io.gold_writer import GoldReader
+        from src.analysis.io.mart_writer import GoldReader
         self._setup_gold(gold_path)
         # Filter to persons who have a director credit in sl.credits
         conds = ["EXISTS (SELECT 1 FROM sl.credits cr WHERE cr.person_id = s.person_id"
@@ -220,14 +220,14 @@ class TestRankingQuery:
         assert rows[0]["person_id"] == "p1"
 
     def test_primary_role_populated(self, gold_path, sqlite_path):
-        from src.analysis.io.gold_writer import GoldReader
+        from src.analysis.io.mart_writer import GoldReader
         self._setup_gold(gold_path)
         _, rows = GoldReader(gold_path).ranking_query(sqlite_path, limit=10)
         by_pid = {r["person_id"]: r for r in rows}
         assert by_pid["p1"]["primary_role"] == "director"
 
     def test_first_latest_year(self, gold_path, sqlite_path):
-        from src.analysis.io.gold_writer import GoldReader
+        from src.analysis.io.mart_writer import GoldReader
         self._setup_gold(gold_path)
         _, rows = GoldReader(gold_path).ranking_query(sqlite_path, limit=10)
         by_pid = {r["person_id"]: r for r in rows}
@@ -237,7 +237,7 @@ class TestRankingQuery:
 
 class TestGoldWriterAtomicSwap:
     def test_atomic_swap_replaces_stale_file(self, tmp_path):
-        from src.analysis.io.gold_writer import GoldWriter, GoldReader
+        from src.analysis.io.mart_writer import GoldWriter, GoldReader
 
         # GoldWriter writes in-place (no atomic-swap temp file).
         # Start from a fresh path (no pre-existing garbage) and verify the
@@ -252,7 +252,7 @@ class TestGoldWriterAtomicSwap:
         assert len(rows) == 3
 
     def test_exception_preserves_old_file(self, tmp_path):
-        from src.analysis.io.gold_writer import GoldWriter, GoldReader
+        from src.analysis.io.mart_writer import GoldWriter, GoldReader
 
         # GoldWriter writes in-place; there is no atomic-swap rollback.
         # An exception raised inside the context propagates, but any rows
@@ -273,7 +273,7 @@ class TestGoldWriterAtomicSwap:
         assert not (tmp_path / "gold.duckdb.new").exists()
 
     def test_no_stale_tmp_after_success(self, tmp_path):
-        from src.analysis.io.gold_writer import GoldWriter
+        from src.analysis.io.mart_writer import GoldWriter
 
         target = tmp_path / "gold.duckdb"
         with GoldWriter(target) as gw:
@@ -282,7 +282,7 @@ class TestGoldWriterAtomicSwap:
         assert not (tmp_path / "gold.duckdb.new").exists()
 
     def test_memory_limit_set(self, tmp_path):
-        from src.analysis.io.gold_writer import GoldWriter
+        from src.analysis.io.mart_writer import GoldWriter
 
         target = tmp_path / "gold.duckdb"
         with GoldWriter(target, memory_limit="512MB") as gw:

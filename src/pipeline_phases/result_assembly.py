@@ -8,7 +8,7 @@ import numpy as np
 import structlog
 
 from src.analysis.explain import explain_authority, explain_skill, explain_trust
-from src.analysis.io.gold_writer import GoldWriter
+from src.analysis.io.mart_writer import GoldWriter
 from src.analysis.scoring.integrated_value import compute_studio_exposure
 from src.runtime.models import ScoreResult
 from src.pipeline_phases.pipeline_types import (

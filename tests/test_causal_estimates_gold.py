@@ -165,7 +165,7 @@ def gold_with_ddl(tmp_path):
     """gold.duckdb with DDL applied (no silver needed for this test)."""
     gold_path = tmp_path / "gold.duckdb"
     with duckdb.connect(str(gold_path)) as conn:
-        from src.analysis.io.gold_writer import _DDL
+        from src.analysis.io.mart_writer import _DDL
         conn.execute(_DDL)
     return gold_path
 

@@ -1512,7 +1512,7 @@ def _upgrade_v62_canonical_name_ja(conn: sqlite3.Connection) -> None:
 
 # ===== ann extension =====
 # DuckDB SILVER schema additions for ANN BRONZE → SILVER integration.
-# Applied by src/etl/silver_loaders/ann.py via _apply_ddl().
+# Applied by src/etl/conformed_loaders/ann.py via _apply_ddl().
 #
 # H1 compliance: ANN rating columns are prefixed display_rating_* to exclude
 # them from all scoring paths. Only display_rating_votes /
@@ -1616,7 +1616,7 @@ def _upgrade_keyframe_extension(conn: sqlite3.Connection) -> None:
 
     New SILVER tables (person_jobs, person_studio_affiliations,
     anime_settings_categories) are created by the DuckDB loader
-    (src/etl/silver_loaders/keyframe.py) at runtime.
+    (src/etl/conformed_loaders/keyframe.py) at runtime.
 
     Safe to run multiple times — ignores 'duplicate column' errors.
     """
@@ -1667,7 +1667,7 @@ def _upgrade_sakuga_atwiki_extension(conn: sqlite3.Connection) -> None:
 
 # ===== madb extension (Card 14/02) =====
 # DuckDB SILVER テーブル 6 本。SQLite 非対象。
-# 実行は src/etl/silver_loaders/madb.py の create_tables() で行う。
+# 実行は src/etl/conformed_loaders/madb.py の create_tables() で行う。
 # このブロックは single source of truth としての DDL 参照定義。
 _MADB_SILVER_DDL = """
 -- ===== madb extension =====
@@ -1738,7 +1738,7 @@ CREATE INDEX IF NOT EXISTS idx_aow_anime ON anime_original_work_links(anime_id);
 
 # ===== mal extension (Card 14/08) =====
 # DuckDB SILVER テーブル 1 本 + anime ALTER 列群。
-# 実行は src/etl/silver_loaders/mal.py の integrate() で行う。
+# 実行は src/etl/conformed_loaders/mal.py の integrate() で行う。
 
 # anime ALTER 列 — H1: display 系は display_*_mal suffix で隔離。
 # mal_id_int は構造的 ID (integer 形式、既存 TEXT id とは別)。
@@ -1772,7 +1772,7 @@ CREATE INDEX IF NOT EXISTS idx_arec_anime ON anime_recommendations(anime_id);
 # ===== seesaawiki extension (Card 14/04) =====
 # DuckDB SILVER テーブル 4 本 + shared table + persons 拡張列。
 # SQLite 用 DDL は _upgrade_seesaawiki_extension() に記述。
-# DuckDB 用 DDL は src/etl/silver_loaders/seesaawiki.py の _DDL_* constants。
+# DuckDB 用 DDL は src/etl/conformed_loaders/seesaawiki.py の _DDL_* constants。
 
 
 def _upgrade_seesaawiki_extension(conn: sqlite3.Connection) -> None:
@@ -1855,7 +1855,7 @@ def _upgrade_seesaawiki_extension(conn: sqlite3.Connection) -> None:
 # ===== bangumi extension (Card 14/05) =====
 # bangumi.tv BRONZE → SILVER 統合。6 BRONZE テーブルから 5 SILVER ターゲット。
 # DuckDB SILVER 対象。SQLite 非対象。
-# DDL は src/etl/silver_loaders/bangumi.py の _apply_ddl() で実行。
+# DDL は src/etl/conformed_loaders/bangumi.py の _apply_ddl() で実行。
 # このブロックは single source of truth としての列定義参照。
 #
 # H1 compliance: score / rank / favorite 系は display_* prefix で scoring 経路から隔離。
@@ -1896,9 +1896,9 @@ def _upgrade_seesaawiki_extension(conn: sqlite3.Connection) -> None:
 #           — 同一 relation が複数 source に存在する場合、各行を保持可能
 #
 # DuckDB DDL 側変更箇所:
-#   src/etl/silver_loaders/mal.py    — _DDL_ANIME_RELATIONS + _DDL_ANIME_RELATIONS_SOURCE_COL
-#   src/etl/silver_loaders/ann.py    — _DDL_ANIME_RELATIONS + _DDL_ANIME_RELATIONS_SOURCE_COL
-#   src/etl/silver_loaders/anilist.py — _DDL_ANIME_RELATIONS + _DDL_ANIME_RELATIONS_SOURCE_COL
+#   src/etl/conformed_loaders/mal.py    — _DDL_ANIME_RELATIONS + _DDL_ANIME_RELATIONS_SOURCE_COL
+#   src/etl/conformed_loaders/ann.py    — _DDL_ANIME_RELATIONS + _DDL_ANIME_RELATIONS_SOURCE_COL
+#   src/etl/conformed_loaders/anilist.py — _DDL_ANIME_RELATIONS + _DDL_ANIME_RELATIONS_SOURCE_COL
 #                                       + _ANIME_RELATIONS_FROM_JSON_SQL (relations_json パース)
 #
 # anime_recommendations は Card 14/08 で source='mal' 実装済。

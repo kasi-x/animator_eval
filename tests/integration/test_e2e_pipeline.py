@@ -59,14 +59,14 @@ def synthetic_pipeline(monkeypatch, tmp_path):
     # Build silver.duckdb and gold.duckdb for DuckDB pipeline phases
     from tests.conftest import build_silver_duckdb
 
-    import src.analysis.io.silver_reader
-    import src.analysis.io.gold_writer
+    import src.analysis.io.conformed_reader
+    import src.analysis.io.mart_writer
 
     silver_path = tmp_path / "silver.duckdb"
     gold_path = tmp_path / "gold.duckdb"
     build_silver_duckdb(silver_path, persons, anime_list, credits)
-    monkeypatch.setattr(src.analysis.io.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
-    monkeypatch.setattr(src.analysis.io.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+    monkeypatch.setattr(src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(src.analysis.io.mart_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
 
     # パイプライン実行
     from src.runtime.pipeline import run_scoring_pipeline

@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS anime (
     fetched_at           TIMESTAMP,
     content_hash         VARCHAR,
     updated_at           TIMESTAMP DEFAULT now(),
-    -- anilist extension columns (added by silver_loaders.anilist)
+    -- anilist extension columns (added by conformed_loaders.anilist)
     synonyms             TEXT,
     country_of_origin    TEXT,
     is_licensed          INTEGER,

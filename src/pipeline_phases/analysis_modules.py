@@ -1078,21 +1078,21 @@ def _run_credit_stats(context: dict) -> Any:
 
 
 def _run_entry_cohort_attrition(context: dict) -> Any:
-    from src.analysis.io.gold_writer import gold_connect
+    from src.analysis.io.mart_writer import gold_connect
 
     with gold_connect() as conn:
         return run_entry_cohort_attrition(conn)
 
 
 def _run_generational_health(context: dict) -> Any:
-    from src.analysis.io.gold_writer import gold_connect
+    from src.analysis.io.mart_writer import gold_connect
 
     with gold_connect() as conn:
         return run_generational_health(conn)
 
 
 def _run_attrition_risk_model(context: dict) -> Any:
-    from src.analysis.io.gold_writer import gold_connect
+    from src.analysis.io.mart_writer import gold_connect
 
     with gold_connect() as conn:
         return run_attrition_risk_model(conn)
@@ -1103,7 +1103,7 @@ def _run_monopsony_analysis(context: dict) -> Any:
 
 
 def _run_gender_bottleneck(context: dict) -> Any:
-    from src.analysis.io.gold_writer import gold_connect_with_silver
+    from src.analysis.io.mart_writer import gold_connect_with_silver
 
     with gold_connect_with_silver() as conn:
         return run_gender_bottleneck(conn)

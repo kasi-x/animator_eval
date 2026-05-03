@@ -19,10 +19,10 @@ import pyarrow.parquet as pq
 import pytest
 
 from src.etl.audit.anime_studios_coverage import CoverageRow, generate_report, measure
-from src.etl.silver_loaders import anilist as anilist_loader
-from src.etl.silver_loaders import ann as ann_loader
-from src.etl.silver_loaders import madb as madb_loader
-from src.etl.silver_loaders import mal as mal_loader
+from src.etl.conformed_loaders import anilist as anilist_loader
+from src.etl.conformed_loaders import ann as ann_loader
+from src.etl.conformed_loaders import madb as madb_loader
+from src.etl.conformed_loaders import mal as mal_loader
 from src.scrapers.bronze_writer import BronzeWriter
 
 

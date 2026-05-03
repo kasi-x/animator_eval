@@ -229,7 +229,7 @@ def copy_from_anilist(
     Args:
         conn: Open DuckDB connection pointing at the SILVER database.
               Must already contain the anime table with extension columns
-              (applied by silver_loaders.anilist.integrate).
+              (applied by conformed_loaders.anilist.integrate).
         bronze_root: Root directory of BRONZE parquet partitions.
                      Required for keyframe and MAL cross-reference population.
                      When None, only anilist-row self-population is performed.

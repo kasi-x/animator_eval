@@ -1,4 +1,4 @@
-"""Unit tests for src/etl/silver_loaders/seesaawiki.py (Card 14/04).
+"""Unit tests for src/etl/conformed_loaders/seesaawiki.py (Card 14/04).
 
 Creates a minimal in-memory DuckDB with the core SILVER tables (anime,
 persons, studios, anime_studios) pre-populated from synthetic parquet,
@@ -13,7 +13,7 @@ from pathlib import Path
 
 import duckdb
 
-from src.etl.silver_loaders.seesaawiki import _apply_ddl, integrate
+from src.etl.conformed_loaders.seesaawiki import _apply_ddl, integrate
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 

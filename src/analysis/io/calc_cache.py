@@ -7,7 +7,7 @@ Also caches LLM decisions (org_classification, name_normalization) to avoid
 redundant LLM calls.
 
 Stored in a dedicated cache.duckdb file so the pipeline's atomic swap of
-gold.duckdb (see src/analysis/gold_writer.py) does not wipe the cache.
+gold.duckdb (see src/analysis/mart_writer.py) does not wipe the cache.
 
 Per-call open/close lifecycle: cheap (DuckDB opens in <5ms on a small
 file) and keeps us off any long-lived inode in case an admin rotates

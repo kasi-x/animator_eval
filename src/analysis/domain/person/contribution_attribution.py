@@ -532,8 +532,8 @@ def find_mvp_by_role(
 def main():
     """Standalone entry point."""
     from src.analysis.anime_value import compute_anime_values
-    from src.analysis.io.gold_writer import GoldReader
-    from src.analysis.io.silver_reader import (
+    from src.analysis.io.mart_writer import GoldReader
+    from src.analysis.io.conformed_reader import (
         load_anime_silver,
         load_credits_silver,
         load_persons_silver,

@@ -1,4 +1,4 @@
-"""Tests for src/etl/silver_loaders/mal.py.
+"""Tests for src/etl/conformed_loaders/mal.py.
 
 Creates minimal synthetic BRONZE parquet in a temp dir, builds a minimal
 SILVER duckdb, then calls integrate() and checks row counts and H1 invariants.
@@ -14,7 +14,7 @@ import duckdb
 import pytest
 
 from src.scrapers.bronze_writer import BronzeWriter
-from src.etl.silver_loaders import mal as mal_loader
+from src.etl.conformed_loaders import mal as mal_loader
 
 # ─── Minimal SILVER DDL ───────────────────────────────────────────────────────
 

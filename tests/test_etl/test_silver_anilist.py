@@ -1,4 +1,4 @@
-"""Tests for src/etl/silver_loaders/anilist.py.
+"""Tests for src/etl/conformed_loaders/anilist.py.
 
 Creates minimal synthetic BRONZE parquet in a temp dir, builds a minimal
 SILVER duckdb (mirroring the DDL from integrate_duckdb._DDL), then calls
@@ -13,7 +13,7 @@ import duckdb
 import pytest
 
 from src.scrapers.bronze_writer import BronzeWriter
-from src.etl.silver_loaders import anilist as anilist_loader
+from src.etl.conformed_loaders import anilist as anilist_loader
 
 # ─── Minimal SILVER DDL (subset of integrate_duckdb._DDL) ─────────────────
 

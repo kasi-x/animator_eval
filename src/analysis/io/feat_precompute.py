@@ -16,8 +16,8 @@ from typing import Any
 
 import structlog
 
-from src.analysis.io.gold_writer import gold_connect_write
-from src.analysis.io.silver_reader import silver_connect
+from src.analysis.io.mart_writer import gold_connect_write
+from src.analysis.io.conformed_reader import conformed_connect
 
 log = structlog.get_logger()
 
@@ -44,7 +44,7 @@ def compute_feat_credit_activity_ddb(
 
     log.info("feat_credit_activity_compute_start")
 
-    with silver_connect() as silver:
+    with conformed_connect() as silver:
         # quarter-level gaps per person
         gap_rows: list[dict] = silver.execute("""
             WITH distinct_quarters AS (
@@ -213,7 +213,7 @@ def compute_feat_career_annual_ddb() -> int:
         for role, cat in ROLE_CATEGORY.items()
     )
 
-    with silver_connect() as silver:
+    with conformed_connect() as silver:
         rows: list[tuple] = silver.execute(f"""
             WITH role_cats AS (
                 SELECT * FROM (VALUES
@@ -306,7 +306,7 @@ def compute_feat_person_role_progression_ddb(
     log.info("feat_person_role_progression_compute_start")
 
     if current_year is None:
-        with silver_connect() as s:
+        with conformed_connect() as s:
             row = s.execute(
                 "SELECT MAX(credit_year) FROM credits WHERE credit_year IS NOT NULL"
             ).fetchone()
@@ -317,7 +317,7 @@ def compute_feat_person_role_progression_ddb(
         for role, cat in ROLE_CATEGORY.items()
     )
 
-    with silver_connect() as silver:
+    with conformed_connect() as silver:
         rows_raw: list[Any] = silver.execute(f"""
             WITH role_cats AS (
                 SELECT * FROM (VALUES
@@ -410,7 +410,7 @@ def compute_feat_studio_affiliation_ddb() -> int:
     """
     log.info("feat_studio_affiliation_compute_start")
 
-    with silver_connect() as silver:
+    with conformed_connect() as silver:
         # Graceful check: skip if anime_studios not yet in silver
         tables = {
             r[0]

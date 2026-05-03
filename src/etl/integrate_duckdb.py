@@ -23,14 +23,14 @@ import structlog
 
 from src.etl.atomic_swap import atomic_duckdb_swap
 from src.etl.role_mappers import map_role
-import src.etl.silver_loaders.anilist as _sl_anilist
-import src.etl.silver_loaders.ann as _sl_ann
-import src.etl.silver_loaders.bangumi as _sl_bangumi
-import src.etl.silver_loaders.keyframe as _sl_keyframe
-import src.etl.silver_loaders.madb as _sl_madb
-import src.etl.silver_loaders.mal as _sl_mal
-import src.etl.silver_loaders.sakuga_atwiki as _sl_sakuga_atwiki
-import src.etl.silver_loaders.seesaawiki as _sl_seesaawiki
+import src.etl.conformed_loaders.anilist as _sl_anilist
+import src.etl.conformed_loaders.ann as _sl_ann
+import src.etl.conformed_loaders.bangumi as _sl_bangumi
+import src.etl.conformed_loaders.keyframe as _sl_keyframe
+import src.etl.conformed_loaders.madb as _sl_madb
+import src.etl.conformed_loaders.mal as _sl_mal
+import src.etl.conformed_loaders.sakuga_atwiki as _sl_sakuga_atwiki
+import src.etl.conformed_loaders.seesaawiki as _sl_seesaawiki
 
 logger = structlog.get_logger()
 

@@ -6,13 +6,13 @@ pipeline run (no concurrent writer risk). Reads serve the API and report
 generators with vectorized columnar access.
 
 Usage (write):
-    from src.analysis.io.gold_writer import GoldWriter
+    from src.analysis.io.mart_writer import GoldWriter
     with GoldWriter() as gw:
         gw.write_person_scores(score_rows)
         gw.write_score_history(history_rows)
 
 Usage (read):
-    from src.analysis.io.gold_writer import GoldReader
+    from src.analysis.io.mart_writer import GoldReader
     rows = GoldReader().person_scores()
     row = GoldReader().person_scores_for(person_id)
 """
@@ -39,8 +39,8 @@ DEFAULT_GOLD_DB_PATH: Path = Path(
 )
 
 def _get_default_silver_path() -> Path:
-    """Return the current silver.duckdb path (reads from silver_reader so monkeypatches propagate)."""
-    from src.analysis.io.silver_reader import DEFAULT_SILVER_PATH
+    """Return the current silver.duckdb path (reads from conformed_reader so monkeypatches propagate)."""
+    from src.analysis.io.conformed_reader import DEFAULT_SILVER_PATH
 
     return DEFAULT_SILVER_PATH
 

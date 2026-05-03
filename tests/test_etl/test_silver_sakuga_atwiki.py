@@ -1,4 +1,4 @@
-"""Tests for src/etl/sakuga_title_matcher and src/etl/silver_loaders/sakuga_atwiki.
+"""Tests for src/etl/sakuga_title_matcher and src/etl/conformed_loaders/sakuga_atwiki.
 
 Test structure:
     TestTitleMatcher    — unit tests for _normalize and match_title
@@ -12,7 +12,7 @@ import duckdb
 import pandas as pd
 
 from src.etl.sakuga_title_matcher import _normalize, match_title
-from src.etl.silver_loaders.sakuga_atwiki import integrate, _apply_ddl
+from src.etl.conformed_loaders.sakuga_atwiki import integrate, _apply_ddl
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────────

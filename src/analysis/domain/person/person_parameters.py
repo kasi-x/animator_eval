@@ -419,7 +419,7 @@ def populate_meta_common_person_parameters(person_params: list[dict]) -> int:
     """
     import duckdb
 
-    from src.analysis.io.gold_writer import DEFAULT_GOLD_DB_PATH
+    from src.analysis.io.mart_writer import DEFAULT_GOLD_DB_PATH
 
     if not person_params:
         return 0

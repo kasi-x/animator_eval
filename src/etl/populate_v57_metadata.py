@@ -87,7 +87,7 @@ def populate_studios_country_of_origin(conn: duckdb.DuckDBPyConnection) -> dict[
 def main() -> None:
     import argparse
 
-    from src.analysis.io.gold_writer import gold_connect
+    from src.analysis.io.mart_writer import gold_connect
 
     parser = argparse.ArgumentParser(
         description="Populate studios.country_of_origin via majority vote from anime"

@@ -29,7 +29,7 @@ DEFAULT_SILVER_PATH: Path = Path(
 
 
 @contextmanager
-def silver_connect(
+def conformed_connect(
     path: Path | str | None = None,
     *,
     memory_limit: str = "16GB",
@@ -72,7 +72,7 @@ def load_persons_silver(path: Path | str | None = None) -> list:
     """
     from src.runtime.models import Person
 
-    with silver_connect(path) as conn:
+    with conformed_connect(path) as conn:
         rows = _rows_as_dicts(conn, "SELECT * FROM persons")
 
     persons = []
@@ -100,7 +100,7 @@ def load_anime_silver(path: Path | str | None = None) -> list:
     """
     from src.runtime.models import AnimeAnalysis
 
-    with silver_connect(path) as conn:
+    with conformed_connect(path) as conn:
         rows = _rows_as_dicts(conn, "SELECT * FROM anime")
         studios_map: dict[str, list[str]] = {}
         try:
@@ -167,7 +167,7 @@ def load_credits_silver(path: Path | str | None = None) -> list:
     """
     from src.runtime.models import Credit, Role
 
-    with silver_connect(path) as conn:
+    with conformed_connect(path) as conn:
         rows = _rows_as_dicts(conn, "SELECT * FROM credits")
 
     credits: list[Credit] = []
@@ -200,7 +200,7 @@ def query_silver(
     path: Path | str | None = None,
 ) -> list[dict[str, Any]]:
     """Run an arbitrary read-only query against silver.duckdb."""
-    with silver_connect(path) as conn:
+    with conformed_connect(path) as conn:
         return _rows_as_dicts(conn, sql, params)
 
 
@@ -221,7 +221,7 @@ def load_all_credits(path: Path | str | None = None) -> list:
         return []
     result: list = []
     skipped = 0
-    with silver_connect(path) as conn:
+    with conformed_connect(path) as conn:
         rel = conn.execute("SELECT * FROM credits")
         cols = [d[0] for d in rel.description]
         for row in rel.fetchall():
@@ -252,7 +252,7 @@ def load_all_anime(path: Path | str | None = None) -> list:
     if not silver_available(path):
         return []
     result: list = []
-    with silver_connect(path) as conn:
+    with conformed_connect(path) as conn:
         rel = conn.execute("SELECT * FROM anime")
         cols = [d[0] for d in rel.description]
         for row in rel.fetchall():
@@ -291,7 +291,7 @@ def silver_db_stats(
     gold_path: Path | str | None = None,
 ) -> dict:
     """Return DB stats for the /api/stats endpoint. Returns {} if gold unavailable."""
-    from src.analysis.io.gold_writer import gold_connect_with_silver, DEFAULT_GOLD_DB_PATH
+    from src.analysis.io.mart_writer import gold_connect_with_silver, DEFAULT_GOLD_DB_PATH
 
     g_path = Path(str(gold_path or DEFAULT_GOLD_DB_PATH))
     if not g_path.exists():

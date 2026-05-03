@@ -177,17 +177,17 @@ def test_api_person_response_contains_score_fields(tmp_path, monkeypatch):
     フィールド名変更時に API 側の更新漏れを検出する。
     """
     import duckdb
-    import src.analysis.io.gold_writer
-    import src.analysis.io.silver_reader
+    import src.analysis.io.mart_writer
+    import src.analysis.io.conformed_reader
     import src.runtime.api
     import src.utils.json_io
     from fastapi.testclient import TestClient
-    from src.analysis.io.gold_writer import _DDL
+    from src.analysis.io.mart_writer import _DDL
 
     silver_path = tmp_path / "silver.duckdb"
     gold_path = tmp_path / "gold.duckdb"
-    monkeypatch.setattr(src.analysis.io.silver_reader, "DEFAULT_SILVER_PATH", silver_path)
-    monkeypatch.setattr(src.analysis.io.gold_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
+    monkeypatch.setattr(src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(src.analysis.io.mart_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
     monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path)
     monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path)
 

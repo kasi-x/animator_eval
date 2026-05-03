@@ -3,7 +3,7 @@
 Replaces the old ATTACH-SQLite-from-DuckDB pattern with direct DuckDB
 native access to silver.duckdb (Card 05 cutover).
 
-All functions use per-query open/close via silver_connect() so the analysis
+All functions use per-query open/close via conformed_connect() so the analysis
 process never pins to a stale inode after an atomic swap of silver.duckdb.
 """
 
@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from src.analysis.io.silver_reader import silver_connect
+from src.analysis.io.conformed_reader import conformed_connect
 
 
 # ---------------------------------------------------------------------------
@@ -25,7 +25,7 @@ def load_credits_ddb(silver_path: Path | str | None = None) -> list[dict[str, An
     Returns list of dicts with columns from the silver credits table.
     Drop-in data-level replacement for the old SQLite credits scan.
     """
-    with silver_connect(silver_path) as conn:
+    with conformed_connect(silver_path) as conn:
         rel = conn.execute("SELECT * FROM credits")
         cols = [d[0] for d in rel.description]
         return [dict(zip(cols, row)) for row in rel.fetchall()]
@@ -46,7 +46,7 @@ def load_anime_joined_ddb(silver_path: Path | str | None = None) -> list[dict[st
     If the related tables (anime_genres, anime_tags, anime_studios, studios)
     are not yet present in silver, those fields default to empty lists.
     """
-    with silver_connect(silver_path) as conn:
+    with conformed_connect(silver_path) as conn:
         # Check which related tables exist
         existing = {
             row[0]
@@ -117,7 +117,7 @@ def agg_credits_per_person_ddb(
     If credit_year is absent from silver, returns an empty list so callers
     can fall back to the SQLite path.
     """
-    with silver_connect(silver_path) as conn:
+    with conformed_connect(silver_path) as conn:
         cols_info = conn.execute(
             "SELECT column_name FROM information_schema.columns"
             " WHERE table_name = 'credits' AND table_schema = 'main'"
@@ -178,7 +178,7 @@ def agg_collaborator_counts_ddb(
     GROUP BY pid
     ORDER BY pid
     """
-    with silver_connect(silver_path) as conn:
+    with conformed_connect(silver_path) as conn:
         rel = conn.execute(sql)
         cols = [d[0] for d in rel.description]
         return [dict(zip(cols, row)) for row in rel.fetchall()]
@@ -230,7 +230,7 @@ def agg_patronage_collabs_ddb(
     WHERE c.person_id <> d.director_id
     GROUP BY c.person_id, d.director_id
     """
-    with silver_connect(silver_path) as conn:
+    with conformed_connect(silver_path) as conn:
         rel = conn.execute(sql, list(director_roles))
         cols = [d[0] for d in rel.description]
         return [dict(zip(cols, row)) for row in rel.fetchall()]

@@ -5,7 +5,7 @@ from collections import defaultdict
 
 import structlog
 
-from src.analysis.io.silver_reader import load_anime_silver, load_credits_silver, load_persons_silver
+from src.analysis.io.conformed_reader import load_anime_silver, load_credits_silver, load_persons_silver
 from src.pipeline_phases.pipeline_types import LoadedData
 from src.runtime.models import Credit, Person, Role
 from src.utils.role_groups import NON_PRODUCTION_ROLES

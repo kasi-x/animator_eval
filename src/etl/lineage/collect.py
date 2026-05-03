@@ -9,7 +9,7 @@ Entry point::
 
     pixi run python -m src.etl.lineage.collect
 
-Does NOT touch ``src/etl/silver_loaders/*`` — purely post-hoc aggregation.
+Does NOT touch ``src/etl/conformed_loaders/*`` — purely post-hoc aggregation.
 """
 
 from __future__ import annotations

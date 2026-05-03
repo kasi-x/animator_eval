@@ -2,7 +2,7 @@
 
 import structlog
 
-from src.analysis.io.silver_reader import silver_connect
+from src.analysis.io.conformed_reader import conformed_connect
 from src.infra.validation import ValidationResult, validate_all
 
 logger = structlog.get_logger()
@@ -17,7 +17,7 @@ def run_validation_phase(loaded_data) -> ValidationResult:
     Returns:
         ValidationResult with passed flag, errors, and warnings
     """
-    with silver_connect() as conn:
+    with conformed_connect() as conn:
         validation = validate_all(conn)
 
     if not validation.passed:
