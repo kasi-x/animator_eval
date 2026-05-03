@@ -164,15 +164,19 @@
 - tests/ 全更新 + green 維持
 - 既存 docs (ARCHITECTURE.md / CLAUDE.md) の SILVER/GOLD 言及を Conformed/Mart に書換
 
-### Phase 2: Resolved 層 設計 + 実装
-- `src/etl/resolved/` パッケージ
-- `src/etl/resolved/source_ranking.py`: 列別 source ranking 宣言
-- `src/etl/resolved/resolve_anime.py`: anime 代表値選抜 + 欠損補填
-- `src/etl/resolved/resolve_persons.py`: persons (canonical_name_ja 活用)
-- `src/etl/resolved/resolve_studios.py`: studios
-- `src/etl/resolved/resolve_credits.py`: credits の person_id / anime_id を canonical 化
-- `result/resolved.duckdb` 新規 schema
-- entity_resolution 結果の audit (`meta_resolution_audit`) 充実
+### Phase 2: Resolved 層 設計 + 実装 (Phase 2a ✅ 完了 2026-05-03)
+- [x] `src/etl/resolved/` パッケージ (`__init__.py`)
+- [x] `src/etl/resolved/source_ranking.py`: 列別 source ranking 宣言 (anime/persons/studios)
+- [x] `src/etl/resolved/_select.py`: 代表値選抜アルゴリズム (priority-fallback + majority-vote)
+- [x] `src/etl/resolved/_ddl.py`: resolved.duckdb DDL (anime/persons/studios/meta_resolution_audit)
+- [x] `src/etl/resolved/resolve_anime.py`: anime 代表値選抜 + クラスタリング (title_ja+year key)
+- [x] `src/etl/resolved/resolve_persons.py`: persons (canonical_id grouping 対応)
+- [x] `src/etl/resolved/resolve_studios.py`: studios (Phase 2a: per-source canonical)
+- [x] `src/analysis/io/resolved_reader.py`: resolved_connect() + load_anime/persons/studios_resolved()
+- [x] `result/resolved.duckdb` 新規 (main schema、anime/persons/studios/meta_resolution_audit)
+- [x] `tests/test_etl/test_resolved_loader.py`: smoke + 代表値選抜検証 (33 tests, all pass)
+- [ ] `src/etl/resolved/resolve_credits.py`: credits の person_id / anime_id を canonical 化 (Phase 2b)
+- [ ] entity_resolution 結果の audit 充実 (Phase 2b)
 
 ### Phase 3: scoring 切替
 - `conformed_reader` の使用箇所を `resolved_reader` に置換 (AKM / scoring 全体)
