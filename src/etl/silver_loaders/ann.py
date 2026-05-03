@@ -134,6 +134,34 @@ CREATE INDEX IF NOT EXISTS idx_cva_anime
     ON character_voice_actors(anime_id);
 """
 
+# studios + anime_studios — ensure tables exist (may already exist from integrate_duckdb
+# or an earlier loader).  CREATE TABLE IF NOT EXISTS is idempotent.
+_DDL_STUDIOS = """
+CREATE TABLE IF NOT EXISTS studios (
+    id                  VARCHAR PRIMARY KEY,
+    name                VARCHAR NOT NULL DEFAULT '',
+    anilist_id          INTEGER,
+    is_animation_studio INTEGER,
+    country_of_origin   VARCHAR,
+    favourites          INTEGER,
+    site_url            VARCHAR,
+    updated_at          TIMESTAMP DEFAULT now()
+);
+"""
+
+_DDL_ANIME_STUDIOS = """
+CREATE TABLE IF NOT EXISTS anime_studios (
+    anime_id  VARCHAR NOT NULL,
+    studio_id VARCHAR NOT NULL,
+    is_main   INTEGER NOT NULL DEFAULT 0,
+    role      VARCHAR NOT NULL DEFAULT '',
+    source    VARCHAR NOT NULL DEFAULT '',
+    PRIMARY KEY (anime_id, studio_id, role, source)
+);
+CREATE INDEX IF NOT EXISTS idx_anime_studios_anime  ON anime_studios(anime_id);
+CREATE INDEX IF NOT EXISTS idx_anime_studios_studio ON anime_studios(studio_id);
+"""
+
 # anime 拡張列 — H1: display_rating_* prefix for all ANN rating columns.
 # DuckDB supports ADD COLUMN IF NOT EXISTS.
 _DDL_ANIME_EXTENSION = [
@@ -308,6 +336,37 @@ WHERE ann_person_id  IS NOT NULL
   AND character_id   IS NOT NULL
 """
 
+# Insert animation-studio names into the shared studios table.
+# ID format: 'ann:n:' || company_name  (name-based, same pattern as MAL/Keyframe).
+_STUDIOS_FROM_COMPANY_SQL = """
+INSERT OR IGNORE INTO studios (id, name, updated_at)
+SELECT DISTINCT
+    'ann:n:' || company_name  AS id,
+    company_name,
+    now()                     AS updated_at
+FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+WHERE company_name IS NOT NULL
+  AND task = 'Animation Production'
+"""
+
+# Link anime to their animation studios via anime_studios.
+# Only task='Animation Production' rows are treated as primary studio credits;
+# all such rows are marked is_main=1 (ANN does not distinguish main vs. co-studio
+# within this task).
+_ANIME_STUDIOS_FROM_COMPANY_SQL = """
+INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main, role, source)
+SELECT DISTINCT
+    'ann:a' || CAST(ann_anime_id AS VARCHAR)  AS anime_id,
+    'ann:n:' || company_name                  AS studio_id,
+    1                                         AS is_main,
+    'Animation Production'                    AS role,
+    'ann'                                     AS source
+FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+WHERE ann_anime_id   IS NOT NULL
+  AND company_name   IS NOT NULL
+  AND task = 'Animation Production'
+"""
+
 
 # ─── helpers ────────────────────────────────────────────────────────────────
 
@@ -325,6 +384,8 @@ def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
         _DDL_ANIME_NEWS,
         _DDL_ANIME_RELATIONS,
         _DDL_CVA,
+        _DDL_STUDIOS,
+        _DDL_ANIME_STUDIOS,
     ):
         for stmt in ddl_block.split(";"):
             stmt = stmt.strip()
@@ -349,9 +410,9 @@ def integrate(
 ) -> dict[str, int | str]:
     """Load ANN BRONZE extras into SILVER DuckDB.
 
-    Applies DDL (idempotent), then runs 8 data operations:
+    Applies DDL (idempotent), then runs 10 data operations:
     anime_extras, persons_extras, episodes, companies, releases, news,
-    related, cast.
+    related, cast, studios (from company Animation Production), anime_studios.
 
     Args:
         conn: Open DuckDB connection pointing at the SILVER database.
@@ -386,10 +447,26 @@ def integrate(
         except Exception as exc:  # noqa: BLE001
             counts[f"{table}_error"] = str(exc)
 
+    # studios + anime_studios from company table (Animation Production rows only)
+    company_glob = _g(bronze_root, "company")
+    try:
+        conn.execute(_STUDIOS_FROM_COMPANY_SQL, [company_glob])
+    except Exception as exc:  # noqa: BLE001
+        counts["studios_ann_error"] = str(exc)
+
+    try:
+        conn.execute(_ANIME_STUDIOS_FROM_COMPANY_SQL, [company_glob])
+    except Exception as exc:  # noqa: BLE001
+        counts["anime_studios_ann_error"] = str(exc)
+
     for silver_table in ("anime_episodes", "anime_companies",
                          "anime_releases", "anime_news"):
         counts[silver_table] = conn.execute(
             f"SELECT COUNT(*) FROM {silver_table}"  # noqa: S608
         ).fetchone()[0]
+
+    counts["anime_studios_ann"] = conn.execute(
+        "SELECT COUNT(DISTINCT anime_id) FROM anime_studios WHERE source = 'ann'"
+    ).fetchone()[0]
 
     return counts

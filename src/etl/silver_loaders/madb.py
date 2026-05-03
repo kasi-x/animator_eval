@@ -147,6 +147,64 @@ WHERE madb_id IS NOT NULL
 ON CONFLICT (anime_id, work_name) DO NOTHING
 """
 
+# Insert animation studios into the shared studios table.
+# ID format: 'madb:n:' || company_name  (name-based).
+_STUDIOS_FROM_PROD_COMPANIES_SQL = """
+INSERT OR IGNORE INTO studios (id, name, updated_at)
+SELECT DISTINCT
+    'madb:n:' || company_name  AS id,
+    company_name,
+    now()                      AS updated_at
+FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+WHERE company_name IS NOT NULL
+  AND (role_label = 'アニメーション制作' OR is_main = true)
+"""
+
+# Link anime → animation studio via anime_studios.
+# anime_id uses 'madb:' || madb_id (e.g. 'madb:C14591').
+# All rows here are from production_companies where is_main=true or role='アニメーション制作'.
+_ANIME_STUDIOS_FROM_PROD_COMPANIES_SQL = """
+INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main, role, source)
+SELECT DISTINCT
+    'madb:' || madb_id             AS anime_id,
+    'madb:n:' || company_name      AS studio_id,
+    COALESCE(TRY_CAST(is_main AS INTEGER), 0) AS is_main,
+    COALESCE(role_label, '')       AS role,
+    'mediaarts'                    AS source
+FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+WHERE madb_id IS NOT NULL
+  AND company_name IS NOT NULL
+  AND (role_label = 'アニメーション制作' OR is_main = true)
+"""
+
+# anime_studios DDL — ensure table exists (may already exist from integrate_duckdb
+# or earlier loader).  CREATE TABLE IF NOT EXISTS is idempotent.
+_DDL_ANIME_STUDIOS = """
+CREATE TABLE IF NOT EXISTS anime_studios (
+    anime_id  VARCHAR NOT NULL,
+    studio_id VARCHAR NOT NULL,
+    is_main   INTEGER NOT NULL DEFAULT 0,
+    role      VARCHAR NOT NULL DEFAULT '',
+    source    VARCHAR NOT NULL DEFAULT '',
+    PRIMARY KEY (anime_id, studio_id, role, source)
+);
+CREATE INDEX IF NOT EXISTS idx_anime_studios_anime  ON anime_studios(anime_id);
+CREATE INDEX IF NOT EXISTS idx_anime_studios_studio ON anime_studios(studio_id);
+"""
+
+_DDL_STUDIOS = """
+CREATE TABLE IF NOT EXISTS studios (
+    id                  VARCHAR PRIMARY KEY,
+    name                VARCHAR NOT NULL DEFAULT '',
+    anilist_id          INTEGER,
+    is_animation_studio INTEGER,
+    country_of_origin   VARCHAR,
+    favourites          INTEGER,
+    site_url            VARCHAR,
+    updated_at          TIMESTAMP DEFAULT now()
+);
+"""
+
 # (label, insert_sql, bronze_table_name, silver_table_name)
 _LOAD_PLAN: list[tuple[str, str, str, str]] = [
     ("broadcasters",         _BROADCASTERS_SQL,     "broadcasters",         "anime_broadcasters"),
@@ -163,12 +221,20 @@ _LOAD_PLAN: list[tuple[str, str, str, str]] = [
 
 
 def create_tables(conn: duckdb.DuckDBPyConnection) -> None:
-    """Create all 6 madb SILVER tables (idempotent).
+    """Create all madb SILVER tables (idempotent).
 
+    Creates the 6 madb-specific tables plus ensures studios / anime_studios
+    exist for the animation-studio linkage added in Card 22/01.
     Safe to call multiple times — all statements use IF NOT EXISTS.
     """
     for stmt in _DDL_STATEMENTS:
         conn.execute(stmt)
+
+    for ddl_block in (_DDL_STUDIOS, _DDL_ANIME_STUDIOS):
+        for stmt in ddl_block.split(";"):
+            stmt = stmt.strip()
+            if stmt:
+                conn.execute(stmt)
 
 
 def _bronze_glob(bronze_root: Path, table: str) -> str:
@@ -180,7 +246,7 @@ def integrate(
     conn: duckdb.DuckDBPyConnection,
     bronze_root: Path | str,
 ) -> dict[str, int]:
-    """Load mediaarts BRONZE parquet → 6 SILVER tables.
+    """Load mediaarts BRONZE parquet → 6 SILVER tables + anime_studios.
 
     Args:
         conn: Open DuckDB connection with SILVER tables already created
@@ -207,5 +273,22 @@ def integrate(
         counts[silver_table] = conn.execute(
             f"SELECT COUNT(*) FROM {silver_table}"
         ).fetchone()[0]
+
+    # anime_studios: insert studios + anime_studios from production_companies
+    # (アニメーション制作 and is_main rows only).
+    pc_glob = _bronze_glob(bronze_root, "production_companies")
+    try:
+        conn.execute(_STUDIOS_FROM_PROD_COMPANIES_SQL, [pc_glob])
+    except Exception as exc:
+        counts["studios_mediaarts_error"] = str(exc)
+
+    try:
+        conn.execute(_ANIME_STUDIOS_FROM_PROD_COMPANIES_SQL, [pc_glob])
+    except Exception as exc:
+        counts["anime_studios_mediaarts_error"] = str(exc)
+
+    counts["anime_studios_mediaarts"] = conn.execute(
+        "SELECT COUNT(DISTINCT anime_id) FROM anime_studios WHERE source = 'mediaarts'"
+    ).fetchone()[0]
 
     return counts

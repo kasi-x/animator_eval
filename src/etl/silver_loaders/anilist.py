@@ -85,6 +85,34 @@ _DDL_ANIME_RELATIONS_SOURCE_COL = (
     "ALTER TABLE anime_relations ADD COLUMN IF NOT EXISTS source VARCHAR DEFAULT ''"
 )
 
+# studios + anime_studios — ensure tables exist (may already exist from integrate_duckdb
+# or a prior loader).  All statements use IF NOT EXISTS so they are idempotent.
+_DDL_STUDIOS = """
+CREATE TABLE IF NOT EXISTS studios (
+    id                  VARCHAR PRIMARY KEY,
+    name                VARCHAR NOT NULL DEFAULT '',
+    anilist_id          INTEGER,
+    is_animation_studio INTEGER,
+    country_of_origin   VARCHAR,
+    favourites          INTEGER,
+    site_url            VARCHAR,
+    updated_at          TIMESTAMP DEFAULT now()
+);
+"""
+
+_DDL_ANIME_STUDIOS = """
+CREATE TABLE IF NOT EXISTS anime_studios (
+    anime_id  VARCHAR NOT NULL,
+    studio_id VARCHAR NOT NULL,
+    is_main   INTEGER NOT NULL DEFAULT 0,
+    role      VARCHAR NOT NULL DEFAULT '',
+    source    VARCHAR NOT NULL DEFAULT '',
+    PRIMARY KEY (anime_id, studio_id, role, source)
+);
+CREATE INDEX IF NOT EXISTS idx_anime_studios_anime  ON anime_studios(anime_id);
+CREATE INDEX IF NOT EXISTS idx_anime_studios_studio ON anime_studios(studio_id);
+"""
+
 # anime 拡張列 — H1: display_* prefix for all subjective columns.
 # DuckDB supports ADD COLUMN IF NOT EXISTS.
 _DDL_ANIME_EXTENSION = [
@@ -110,6 +138,99 @@ _DDL_ANIME_EXTENSION = [
     "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_popularity_rank INTEGER",
     "ALTER TABLE anime ADD COLUMN IF NOT EXISTS display_rankings_json TEXT",
 ]
+
+# ─── SQL: studios + anime_studios ────────────────────────────────────────────
+
+# Load AniList studios from BRONZE studios table.
+# These have proper IDs (e.g. 'anilist:s7') already set by the scraper.
+_STUDIOS_SQL = """
+INSERT OR IGNORE INTO studios (id, name, anilist_id, is_animation_studio,
+                                country_of_origin, favourites, site_url, updated_at)
+SELECT DISTINCT
+    id,
+    COALESCE(name, '')                        AS name,
+    TRY_CAST(anilist_id AS INTEGER)           AS anilist_id,
+    TRY_CAST(is_animation_studio AS BOOLEAN)  AS is_animation_studio,
+    country_of_origin,
+    TRY_CAST(favourites AS INTEGER)           AS favourites,
+    site_url,
+    now()                                     AS updated_at
+FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
+    FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE  id IS NOT NULL
+)
+WHERE _rn = 1
+"""
+
+# Load anime_studios from the dedicated BRONZE anime_studios table.
+# This is a supplement to what integrate_duckdb.py already loads via the
+# cross-source glob; calling it here ensures the loader is self-contained.
+_ANIME_STUDIOS_FROM_TABLE_SQL = """
+INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main, role, source)
+SELECT DISTINCT
+    anime_id,
+    studio_id,
+    COALESCE(TRY_CAST(is_main AS BOOLEAN), FALSE) AS is_main,
+    ''        AS role,
+    'anilist' AS source
+FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+WHERE anime_id IS NOT NULL AND studio_id IS NOT NULL
+"""
+
+# Extract anime_studios from the anime.studios[] array column.
+# The 'studio' column holds the primary (main) studio name; every element of
+# the studios[] array is treated as a collaborating studio.
+# Studio IDs are name-based ('anilist:n:' || name) because the array contains
+# names only (no IDs).  The main studio (anime.studio) gets is_main=1.
+_ANIME_STUDIOS_FROM_ARRAY_SQL = """
+INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main, role, source)
+SELECT DISTINCT
+    a.id                                             AS anime_id,
+    'anilist:n:' || studio_name                      AS studio_id,
+    CASE WHEN studio_name = a.studio THEN 1 ELSE 0 END AS is_main,
+    ''                                               AS role,
+    'anilist'                                        AS source
+FROM (
+    SELECT id, studio, unnest(studios) AS studio_name
+    FROM (
+        SELECT *,
+               ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
+        FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
+        WHERE  id IS NOT NULL
+          AND  studios IS NOT NULL
+          AND  len(studios) > 0
+    )
+    WHERE _rn = 1
+) a
+WHERE studio_name IS NOT NULL
+  AND studio_name <> ''
+"""
+
+# Insert name-based studio stubs for studios that only appear in the array
+# (not in the dedicated BRONZE studios table with proper anilist:s<id> IDs).
+_STUDIOS_FROM_ARRAY_SQL = """
+INSERT OR IGNORE INTO studios (id, name, updated_at)
+SELECT DISTINCT
+    'anilist:n:' || studio_name  AS id,
+    studio_name,
+    now()                        AS updated_at
+FROM (
+    SELECT unnest(studios) AS studio_name
+    FROM (
+        SELECT studios,
+               ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
+        FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
+        WHERE  id IS NOT NULL
+          AND  studios IS NOT NULL
+          AND  len(studios) > 0
+    )
+    WHERE _rn = 1
+) t
+WHERE studio_name IS NOT NULL
+  AND studio_name <> ''
+"""
 
 # ─── SQL templates ───────────────────────────────────────────────────────────
 
@@ -230,22 +351,27 @@ WHERE (rel).id IS NOT NULL
 """
 
 
+def _anime_glob_has_studios_column(
+    conn: duckdb.DuckDBPyConnection, glob: str
+) -> bool:
+    """Return True if the anime BRONZE parquet has a 'studios' array column."""
+    try:
+        cols = conn.execute(
+            f"DESCRIBE SELECT * FROM read_parquet('{glob}', union_by_name=true) LIMIT 0"
+        ).fetchall()
+        return any(c[0] == "studios" for c in cols)
+    except Exception:
+        return False
+
+
 def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
-    """Create characters / CVA tables and add anime extension columns."""
-    for stmt in _DDL_CHARACTERS.split(";"):
-        stmt = stmt.strip()
-        if stmt:
-            conn.execute(stmt)
-
-    for stmt in _DDL_CVA.split(";"):
-        stmt = stmt.strip()
-        if stmt:
-            conn.execute(stmt)
-
-    for stmt in _DDL_ANIME_RELATIONS.split(";"):
-        stmt = stmt.strip()
-        if stmt:
-            conn.execute(stmt)
+    """Create characters / CVA / studios / anime_studios tables and add anime extension columns."""
+    for ddl_block in (_DDL_CHARACTERS, _DDL_CVA, _DDL_ANIME_RELATIONS,
+                      _DDL_STUDIOS, _DDL_ANIME_STUDIOS):
+        for stmt in ddl_block.split(";"):
+            stmt = stmt.strip()
+            if stmt:
+                conn.execute(stmt)
 
     # Backfill source column on tables created by a prior loader (H4).
     conn.execute(_DDL_ANIME_RELATIONS_SOURCE_COL)
@@ -287,9 +413,11 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
 
     _apply_ddl(conn)
 
-    chars_glob = _glob_path(bronze_root, "characters")
-    cva_glob   = _glob_path(bronze_root, "character_voice_actors")
-    anime_glob = _glob_path(bronze_root, "anime")
+    chars_glob     = _glob_path(bronze_root, "characters")
+    cva_glob       = _glob_path(bronze_root, "character_voice_actors")
+    anime_glob     = _glob_path(bronze_root, "anime")
+    studios_glob   = _glob_path(bronze_root, "studios")
+    as_table_glob  = _glob_path(bronze_root, "anime_studios")
 
     if _has_parquet(conn, chars_glob):
         conn.execute(_CHARACTERS_SQL, [chars_glob])
@@ -306,6 +434,23 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
     # different loader and only enriched here.
     conn.execute(_ANIME_RELATIONS_FROM_JSON_SQL)
 
+    # Load studios from the dedicated BRONZE studios table (proper anilist:s<id> IDs).
+    if _has_parquet(conn, studios_glob):
+        conn.execute(_STUDIOS_SQL, [studios_glob])
+
+    # Load anime_studios from the dedicated BRONZE anime_studios table.
+    if _has_parquet(conn, as_table_glob):
+        conn.execute(_ANIME_STUDIOS_FROM_TABLE_SQL, [as_table_glob])
+
+    # Extract studios and anime_studios from anime.studios[] array.
+    # This covers the majority of anilist anime (15K+) that have studio info
+    # embedded in the anime table rather than the anime_studios table.
+    # Guard: only run when the BRONZE parquet actually has a 'studios' column
+    # (older or synthetic fixtures may lack it).
+    if _has_parquet(conn, anime_glob) and _anime_glob_has_studios_column(conn, anime_glob):
+        conn.execute(_STUDIOS_FROM_ARRAY_SQL, [anime_glob])
+        conn.execute(_ANIME_STUDIOS_FROM_ARRAY_SQL, [anime_glob])
+
     counts: dict[str, int] = {
         "characters": conn.execute("SELECT COUNT(*) FROM characters").fetchone()[0],
         "character_voice_actors": conn.execute(
@@ -316,6 +461,9 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
         ).fetchone()[0],
         "anime_relations_anilist": conn.execute(
             "SELECT COUNT(*) FROM anime_relations WHERE source = 'anilist'"
+        ).fetchone()[0],
+        "anime_studios_anilist": conn.execute(
+            "SELECT COUNT(DISTINCT anime_id) FROM anime_studios WHERE source = 'anilist'"
         ).fetchone()[0],
     }
     return counts
