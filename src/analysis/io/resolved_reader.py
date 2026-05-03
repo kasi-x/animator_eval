@@ -76,10 +76,72 @@ def _rows_as_dicts(
 # ---------------------------------------------------------------------------
 
 
-def load_anime_resolved(path: Path | str | None = None) -> list:
+def _build_studios_map_from_conformed(
+    source_ids_by_canonical: dict[str, list[str]],
+    conformed_path: Path | str,
+) -> dict[str, list[str]]:
+    """Build canonical_id → studio_names list by cross-referencing conformed anime_studios.
+
+    For each canonical anime, unions studio names from all contributing conformed IDs.
+
+    Args:
+        source_ids_by_canonical: canonical_id → list of conformed IDs (from source_ids_json)
+        conformed_path: path to animetor.duckdb (Conformed layer)
+
+    Returns:
+        canonical_id → sorted list of studio names (deduplicated)
+    """
+    # Flatten conformed ID → canonical_id lookup
+    conformed_to_canonical: dict[str, str] = {}
+    for cid, source_ids in source_ids_by_canonical.items():
+        for sid in source_ids:
+            conformed_to_canonical[sid] = cid
+
+    if not conformed_to_canonical:
+        return {}
+
+    try:
+        from src.analysis.io.conformed_reader import conformed_connect
+
+        with conformed_connect(conformed_path) as conn:
+            rows = conn.execute(
+                """
+                SELECT a.anime_id, s.name
+                FROM anime_studios a
+                JOIN studios s ON s.id = a.studio_id
+                WHERE s.name IS NOT NULL AND s.name != ''
+                """
+            ).fetchall()
+    except Exception as exc:
+        logger.warning("resolved_anime_studios_conformed_failed", error=str(exc))
+        return {}
+
+    result: dict[str, set[str]] = {}
+    for conformed_anime_id, studio_name in rows:
+        canonical_id = conformed_to_canonical.get(conformed_anime_id)
+        if canonical_id:
+            result.setdefault(canonical_id, set()).add(studio_name)
+
+    return {cid: sorted(names) for cid, names in result.items()}
+
+
+def load_anime_resolved(
+    path: Path | str | None = None,
+    *,
+    conformed_path: Path | str | None = None,
+) -> list:
     """Load canonical anime rows from resolved.duckdb as AnimeAnalysis instances.
 
+    Populates anime.studios by cross-referencing conformed anime_studios when
+    conformed_path is provided. Without conformed_path, studios defaults to [].
+
     Returns [] if resolved.duckdb does not yet exist (graceful degradation).
+
+    Args:
+        path: Path to resolved.duckdb (defaults to DEFAULT_RESOLVED_PATH).
+        conformed_path: Optional path to animetor.duckdb for studio lookup.
+            When provided, unions studio names across all source IDs per canonical anime.
+            Required for AKM / scoring which rely on anime.studios.
     """
     from src.runtime.models import AnimeAnalysis
 
@@ -94,13 +156,37 @@ def load_anime_resolved(path: Path | str | None = None) -> list:
             logger.warning("resolved_anime_load_failed", error=str(exc))
             return []
 
+    # Build studios map if conformed_path given (for AKM / scoring)
+    studios_map: dict[str, list[str]] = {}
+    if conformed_path is not None:
+        import json as _json
+
+        source_ids_by_canonical: dict[str, list[str]] = {}
+        for r in rows:
+            try:
+                source_ids = _json.loads(r.get("source_ids_json") or "[]")
+            except Exception:
+                source_ids = []
+            source_ids_by_canonical[r["canonical_id"]] = source_ids
+
+        studios_map = _build_studios_map_from_conformed(
+            source_ids_by_canonical, conformed_path
+        )
+        no_studios = sum(1 for cid in source_ids_by_canonical if cid not in studios_map)
+        logger.info(
+            "resolved_anime_studios_loaded",
+            canonical_with_studios=len(studios_map),
+            canonical_without_studios=no_studios,
+        )
+
     result: list = []
     skipped = 0
     for r in rows:
         try:
+            canonical_id = r["canonical_id"]
             result.append(
                 AnimeAnalysis(
-                    id=r["canonical_id"],
+                    id=canonical_id,
                     title_ja=r.get("title_ja") or "",
                     title_en=r.get("title_en") or "",
                     year=r.get("year"),
@@ -116,7 +202,7 @@ def load_anime_resolved(path: Path | str | None = None) -> list:
                     source=r.get("source_mat"),
                     work_type=r.get("work_type"),
                     scale_class=r.get("scale_class"),
-                    studios=[],
+                    studios=studios_map.get(canonical_id, []),
                 )
             )
         except Exception:

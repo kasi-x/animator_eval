@@ -1100,3 +1100,279 @@ class TestRedistributeStudioFE:
         assert isinstance(result, AKMResult)
         assert hasattr(result, "redistribution_alpha")
         assert result.redistribution_alpha >= 0.0
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Resolved-layer loading path tests
+# ---------------------------------------------------------------------------
+
+_CONFORMED_DDL_AKM = """
+CREATE SCHEMA IF NOT EXISTS conformed;
+
+CREATE TABLE IF NOT EXISTS conformed.anime (
+    id VARCHAR PRIMARY KEY,
+    title_ja VARCHAR NOT NULL DEFAULT '',
+    title_en VARCHAR NOT NULL DEFAULT '',
+    year INTEGER,
+    season VARCHAR,
+    quarter INTEGER,
+    episodes INTEGER,
+    format VARCHAR,
+    duration INTEGER,
+    start_date VARCHAR,
+    end_date VARCHAR,
+    status VARCHAR,
+    source_mat VARCHAR,
+    work_type VARCHAR,
+    scale_class VARCHAR,
+    country_of_origin VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS conformed.persons (
+    id VARCHAR PRIMARY KEY,
+    name_ja VARCHAR NOT NULL DEFAULT '',
+    name_en VARCHAR NOT NULL DEFAULT '',
+    name_ko VARCHAR NOT NULL DEFAULT '',
+    name_zh VARCHAR NOT NULL DEFAULT '',
+    birth_date VARCHAR,
+    death_date VARCHAR,
+    gender VARCHAR,
+    nationality VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS conformed.studios (
+    id VARCHAR PRIMARY KEY,
+    name VARCHAR NOT NULL DEFAULT '',
+    is_animation_studio BOOLEAN,
+    country_of_origin VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS conformed.anime_studios (
+    anime_id VARCHAR NOT NULL,
+    studio_id VARCHAR NOT NULL,
+    is_main BOOLEAN
+);
+
+CREATE TABLE IF NOT EXISTS conformed.credits (
+    person_id VARCHAR NOT NULL,
+    anime_id VARCHAR NOT NULL,
+    role VARCHAR NOT NULL,
+    raw_role VARCHAR,
+    episode VARCHAR,
+    evidence_source VARCHAR
+);
+"""
+
+
+@pytest.fixture()
+def akm_conformed_path(tmp_path):
+    """Synthetic animetor.duckdb with 2 anime, 1 studio, 4 persons, and credits."""
+    import duckdb
+
+    path = tmp_path / "animetor.duckdb"
+    conn = duckdb.connect(str(path))
+    for stmt in _CONFORMED_DDL_AKM.split(";"):
+        s = stmt.strip()
+        if s:
+            conn.execute(s)
+
+    # 2 anime (same studio)
+    conn.executemany(
+        "INSERT INTO conformed.anime (id, title_ja, year, episodes, format, duration) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        [
+            ("anilist:a0", "テストA", 2020, 12, "TV", 24),
+            ("anilist:a1", "テストB", 2021, 12, "TV", 24),
+        ],
+    )
+    # 1 studio
+    conn.executemany(
+        "INSERT INTO conformed.studios (id, name, is_animation_studio) VALUES (?, ?, ?)",
+        [("anilist:s0", "TestStudio", True)],
+    )
+    # anime_studios join
+    conn.executemany(
+        "INSERT INTO conformed.anime_studios (anime_id, studio_id, is_main) "
+        "VALUES (?, ?, ?)",
+        [
+            ("anilist:a0", "anilist:s0", True),
+            ("anilist:a1", "anilist:s0", True),
+        ],
+    )
+    # 4 persons
+    conn.executemany(
+        "INSERT INTO conformed.persons (id, name_ja) VALUES (?, ?)",
+        [
+            ("anilist:p0", "テスト0"),
+            ("anilist:p1", "テスト1"),
+            ("anilist:p2", "テスト2"),
+            ("anilist:p3", "テスト3"),
+        ],
+    )
+    # credits: each person on both anime
+    rows = []
+    for pid in ("anilist:p0", "anilist:p1", "anilist:p2", "anilist:p3"):
+        for aid in ("anilist:a0", "anilist:a1"):
+            rows.append((pid, aid, "key_animator", None, None, "anilist"))
+    conn.executemany(
+        "INSERT INTO conformed.credits "
+        "(person_id, anime_id, role, raw_role, episode, evidence_source) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        rows,
+    )
+    conn.commit()
+    conn.close()
+    return path
+
+
+@pytest.fixture()
+def akm_resolved_path(tmp_path, akm_conformed_path):
+    """Build resolved.duckdb from the synthetic conformed fixture."""
+    from src.etl.resolved.resolve_anime import build_resolved_anime
+    from src.etl.resolved.resolve_persons import build_resolved_persons
+
+    resolved_path = tmp_path / "resolved.duckdb"
+    build_resolved_anime(akm_conformed_path, resolved_path)
+    build_resolved_persons(akm_conformed_path, resolved_path)
+    return resolved_path
+
+
+class TestResolvedLayerLoading:
+    """Phase 3: AKM input loading via resolved_reader with conformed studio cross-ref."""
+
+    def test_load_anime_resolved_with_studios(
+        self, akm_resolved_path, akm_conformed_path
+    ):
+        """load_anime_resolved with conformed_path populates studios from anime_studios."""
+        from src.analysis.io.resolved_reader import load_anime_resolved
+
+        anime_list = load_anime_resolved(
+            akm_resolved_path, conformed_path=akm_conformed_path
+        )
+        assert len(anime_list) >= 1
+        # All resolved anime should have studios populated
+        with_studios = [a for a in anime_list if a.studios]
+        assert len(with_studios) > 0, "Expected at least one anime with studios"
+        assert any("TestStudio" in a.studios for a in anime_list)
+
+    def test_load_anime_resolved_without_conformed_has_empty_studios(
+        self, akm_resolved_path
+    ):
+        """load_anime_resolved without conformed_path yields studios=[]."""
+        from src.analysis.io.resolved_reader import load_anime_resolved
+
+        anime_list = load_anime_resolved(akm_resolved_path)
+        assert all(a.studios == [] for a in anime_list)
+
+    def test_load_persons_resolved_returns_correct_count(
+        self, akm_resolved_path
+    ):
+        """load_persons_resolved returns the 4 synthetic persons."""
+        from src.analysis.io.resolved_reader import load_persons_resolved
+
+        persons = load_persons_resolved(akm_resolved_path)
+        assert len(persons) == 4
+
+    def test_load_anime_resolved_fallback_when_absent(self, tmp_path):
+        """load_anime_resolved returns [] when resolved.duckdb is absent."""
+        from src.analysis.io.resolved_reader import load_anime_resolved
+
+        result = load_anime_resolved(tmp_path / "nonexistent.duckdb")
+        assert result == []
+
+    def test_load_pipeline_data_resolved_fallback_to_conformed(
+        self, monkeypatch, akm_conformed_path, tmp_path
+    ):
+        """load_pipeline_data_resolved falls back to conformed when resolved absent."""
+        from src.pipeline_phases.data_loading import load_pipeline_data_resolved
+
+        # resolved_path points to a nonexistent file → should fall back to conformed
+        absent_resolved = tmp_path / "no_resolved.duckdb"
+        result = load_pipeline_data_resolved(
+            resolved_path=absent_resolved,
+            conformed_path=akm_conformed_path,
+        )
+        # conformed has 4 persons and 2 anime
+        assert len(result.persons) == 4
+        assert len(result.anime_list) == 2
+        assert len(result.credits) > 0
+
+    def test_load_pipeline_data_resolved_prefers_resolved(
+        self, akm_resolved_path, akm_conformed_path
+    ):
+        """load_pipeline_data_resolved uses resolved layer when available."""
+        from src.pipeline_phases.data_loading import load_pipeline_data_resolved
+
+        result = load_pipeline_data_resolved(
+            resolved_path=akm_resolved_path,
+            conformed_path=akm_conformed_path,
+        )
+        # resolved has same 2 canonical anime (clustered from 2 conformed)
+        assert len(result.anime_list) >= 1
+        # All canonical IDs should use resolved:anime: prefix
+        assert all(
+            a.id.startswith("resolved:anime:") for a in result.anime_list
+        )
+
+    def test_akm_runs_on_resolved_data(
+        self, akm_resolved_path, akm_conformed_path
+    ):
+        """AKM estimate_akm runs successfully on data loaded via resolved layer.
+
+        End-to-end smoke: resolved anime have studios, so AKM can assign
+        studio per person-year and produce person_fe / studio_fe.
+        """
+        from src.analysis.io.resolved_reader import load_anime_resolved
+        from src.analysis.io.conformed_reader import load_credits_silver
+
+        anime_list = load_anime_resolved(
+            akm_resolved_path, conformed_path=akm_conformed_path
+        )
+        credits = load_credits_silver(akm_conformed_path)
+
+        # Build anime_map with resolved canonical IDs, then remap credits
+        # (credits still reference conformed anime IDs; we need to remap via source_ids_json)
+        import json
+        import duckdb
+
+        conn = duckdb.connect(str(akm_resolved_path), read_only=True)
+        mapping_rows = conn.execute(
+            "SELECT canonical_id, source_ids_json FROM anime"
+        ).fetchall()
+        conn.close()
+
+        conformed_to_canonical: dict[str, str] = {}
+        for canonical_id, source_ids_json in mapping_rows:
+            try:
+                source_ids = json.loads(source_ids_json or "[]")
+            except Exception:
+                source_ids = []
+            for sid in source_ids:
+                conformed_to_canonical[sid] = canonical_id
+
+        # Remap credit anime_ids
+        from src.runtime.models import Credit
+
+        remapped_credits = []
+        for c in credits:
+            cid = conformed_to_canonical.get(c.anime_id)
+            if cid:
+                remapped_credits.append(
+                    Credit(
+                        person_id=c.person_id,
+                        anime_id=cid,
+                        role=c.role,
+                        raw_role=c.raw_role,
+                        episode=c.episode,
+                        source=c.source,
+                        evidence_source=c.evidence_source,
+                    )
+                )
+
+        anime_map = {a.id: a for a in anime_list}
+        result = estimate_akm(remapped_credits, anime_map)
+
+        assert isinstance(result, AKMResult)
+        # With studios populated, AKM should produce person_fe entries
+        assert result.n_observations > 0
+        assert len(result.person_fe) > 0

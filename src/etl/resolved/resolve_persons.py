@@ -1,26 +1,31 @@
-"""Person canonical row builder for the Resolved layer (Phase 2a).
+"""Person canonical row builder for the Resolved layer (Phase 2b).
 
-Reads conformed.persons rows, builds one canonical row per unique identity.
+Reads conformed.persons rows, applies entity_resolution (H3-compliant),
+and writes one canonical row per resolved identity.
 
-Entity clustering strategy:
-- Each conformed persons row already carries a unique `id` (source-prefixed).
-- Cross-source entity resolution for persons is handled by the existing
-  src/analysis/entity/entity_resolution.py pipeline (H3: do not modify).
-- Phase 2a: conservative approach — each unique conformed id becomes its own
-  canonical person unless a future entity_resolution pass has populated a
-  `canonical_id` field in conformed.persons.
-- When conformed.persons has a populated `canonical_id`, rows sharing the same
-  canonical_id are grouped and representative values are selected.
+Entity clustering strategy (Phase 2b):
+- Calls entity_resolution.exact_match_cluster + cross_source_match on
+  all conformed.persons rows to produce {person_id → canonical_id} mapping.
+- Rows not merged by entity_resolution become singleton canonical rows
+  (their conformed id IS their canonical_id).
+- fast_only=True by default: only exact + cross_source steps run during ETL
+  to keep runtime feasible for 270K+ persons.
+
+H3 compliance:
+  - entity_resolution logic is invoked unmodified.
+  - No algorithm changes, threshold changes, or new merge conditions.
+  - This module only reads the output and builds canonical rows.
 
 canonical_id format:
-- If conformed row has canonical_id: use that directly.
-- Otherwise: use the conformed id itself (single-source canonical).
+  - Merged rows: canonical_id = the "representative" person_id chosen by
+    entity_resolution (the first alphabetically in the cluster, per the
+    resolve_all logic).
+  - Singletons: canonical_id = conformed person id.
 """
 
 from __future__ import annotations
 
 import json
-from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +33,10 @@ import duckdb
 import structlog
 
 from src.etl.resolved._ddl import ALL_DDL
+from src.etl.resolved._persons_cluster import (
+    build_persons_canonical_map,
+    group_persons_by_canonical,
+)
 from src.etl.resolved._select import build_audit_entries, select_representative_value
 from src.etl.resolved.source_ranking import PERSONS_RANKING
 
@@ -42,26 +51,27 @@ _PERSONS_NOT_NULL_STR = frozenset(
 
 
 def _load_conformed_persons(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
-    """Load conformed persons rows. Include canonical_id if present."""
-    # Select only known fields to avoid surprises from extra columns
+    """Load conformed persons rows as dicts.
+
+    bgm_id is selected gracefully: falls back to NULL when the column
+    does not yet exist (e.g. in test fixtures).
+    """
+    table_cols = {
+        c[0]
+        for c in conn.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema='conformed' AND table_name='persons'"
+        ).fetchall()
+    }
+    bgm_id_expr = "bgm_id" if "bgm_id" in table_cols else "NULL AS bgm_id"
+
     rel = conn.execute(
-        "SELECT id, name_ja, name_en, name_ko, name_zh, "
-        "birth_date, death_date, gender, nationality "
+        f"SELECT id, name_ja, name_en, name_ko, name_zh, "
+        f"birth_date, death_date, gender, nationality, {bgm_id_expr} "
         "FROM conformed.persons"
     )
     cols = [d[0] for d in rel.description]
     return [dict(zip(cols, row)) for row in rel.fetchall()]
-
-
-def _group_persons_by_canonical(
-    rows: list[dict[str, Any]],
-) -> dict[str, list[dict[str, Any]]]:
-    """Group conformed persons by canonical_id (or their own id if none)."""
-    groups: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in rows:
-        cid = row.get("canonical_id") or row["id"]
-        groups[cid].append(row)
-    return dict(groups)
 
 
 def _resolve_persons_cluster(
@@ -106,16 +116,30 @@ def build_resolved_persons(
     conformed_path: Path | str,
     resolved_path: Path | str,
     *,
+    fast_only: bool = True,
     batch_size: int = 10_000,
 ) -> int:
     """Full-rebuild of resolved persons from conformed.persons.
 
-    Returns number of canonical person rows written.
+    Applies entity_resolution (exact + cross_source by default) to cluster
+    conformed persons, then writes one canonical row per resolved identity.
+
+    Args:
+        conformed_path: Path to animetor.duckdb (Conformed layer).
+        resolved_path: Path to resolved.duckdb (Resolved layer).
+        fast_only: When True (default), only run exact_match_cluster +
+                   cross_source_match (fast). When False, also run romaji
+                   and similarity steps (slow, for overnight runs).
+        batch_size: INSERT batch size.
+
+    Returns:
+        Number of canonical person rows written.
     """
     logger.info(
         "resolve_persons_start",
         conformed=str(conformed_path),
         resolved=str(resolved_path),
+        fast_only=fast_only,
     )
 
     resolved_conn = duckdb.connect(str(resolved_path))
@@ -135,7 +159,12 @@ def build_resolved_persons(
 
     logger.info("resolve_persons_conformed_loaded", count=len(rows))
 
-    groups = _group_persons_by_canonical(rows)
+    # Build cross-source canonical map via entity_resolution
+    canonical_map = build_persons_canonical_map(rows, fast_only=fast_only)
+    logger.info("resolve_persons_canonical_map", merges=len(canonical_map))
+
+    # Group rows by canonical_id
+    groups = group_persons_by_canonical(rows, canonical_map)
     logger.info("resolve_persons_groups", count=len(groups))
 
     resolved_rows: list[dict[str, Any]] = []
@@ -158,39 +187,73 @@ def build_resolved_persons(
     return count
 
 
+_PERSONS_INSERT_FIELDS: list[str] = [
+    "canonical_id", "name_ja", "name_en", "name_ko", "name_zh",
+    "birth_date", "death_date", "gender", "nationality",
+    "source_ids_json",
+    "name_ja_source", "name_en_source", "gender_source", "birth_date_source",
+]
+
+
+def _rows_to_arrow_persons(
+    rows: list[dict[str, Any]],
+    fields: list[str],
+    not_null_str: frozenset[str],
+) -> "Any":
+    """Convert persons row dicts to a PyArrow table for bulk insert."""
+    import pyarrow as pa
+
+    columns: dict[str, list] = {f: [] for f in fields}
+    for r in rows:
+        for f in fields:
+            v = r.get(f)
+            if f in not_null_str and v is None:
+                v = ""
+            columns[f].append(v)
+
+    return pa.table(
+        [pa.array(columns[f], type=pa.string()) for f in fields],
+        names=fields,
+    )
+
+
 def _insert_resolved_persons(
     resolved_path: Path | str,
     rows: list[dict[str, Any]],
     batch_size: int,
 ) -> None:
-    """Insert resolved persons rows in batches."""
+    """Insert resolved persons rows using PyArrow bulk insert for performance."""
     if not rows:
         return
 
-    insert_fields = [
-        "canonical_id", "name_ja", "name_en", "name_ko", "name_zh",
-        "birth_date", "death_date", "gender", "nationality",
-        "source_ids_json",
-        "name_ja_source", "name_en_source", "gender_source", "birth_date_source",
-    ]
-    placeholders = ", ".join("?" * len(insert_fields))
-    sql = (
-        f"INSERT OR REPLACE INTO persons "
-        f"({', '.join(insert_fields)}) VALUES ({placeholders})"
-    )
-
-    def _row_values(r: dict[str, Any]) -> tuple:
-        return tuple(
-            (r.get(f) or "") if f in _PERSONS_NOT_NULL_STR else r.get(f)
-            for f in insert_fields
-        )
+    fields = _PERSONS_INSERT_FIELDS
 
     conn = duckdb.connect(str(resolved_path))
     try:
-        for i in range(0, len(rows), batch_size):
-            batch = rows[i : i + batch_size]
-            values = [_row_values(r) for r in batch]
-            conn.executemany(sql, values)
+        try:
+            tbl = _rows_to_arrow_persons(rows, fields, _PERSONS_NOT_NULL_STR)
+            conn.register("_persons_staging", tbl)
+            conn.execute(
+                f"INSERT OR REPLACE INTO persons ({', '.join(fields)}) "
+                f"SELECT {', '.join(fields)} FROM _persons_staging"
+            )
+            conn.unregister("_persons_staging")
+        except ImportError:
+            placeholders = ", ".join("?" * len(fields))
+            sql = (
+                f"INSERT OR REPLACE INTO persons ({', '.join(fields)}) "
+                f"VALUES ({placeholders})"
+            )
+            for i in range(0, len(rows), batch_size):
+                batch = rows[i : i + batch_size]
+                values = [
+                    tuple(
+                        (r.get(f) or "") if f in _PERSONS_NOT_NULL_STR else r.get(f)
+                        for f in fields
+                    )
+                    for r in batch
+                ]
+                conn.executemany(sql, values)
         conn.commit()
     finally:
         conn.close()
@@ -205,27 +268,43 @@ def _insert_audit_persons(
     if not rows:
         return
 
-    sql = (
-        "INSERT INTO meta_resolution_audit "
-        "(canonical_id, entity_type, field_name, field_value, source_name, selection_reason) "
-        "VALUES (?, ?, ?, ?, ?, ?)"
-    )
+    _AUDIT_FIELDS_P = [
+        "canonical_id", "entity_type", "field_name",
+        "field_value", "source_name", "selection_reason",
+    ]
+
     conn = duckdb.connect(str(resolved_path))
     try:
-        for i in range(0, len(rows), batch_size):
-            batch = rows[i : i + batch_size]
-            values = [
-                (
-                    r["canonical_id"],
-                    r["entity_type"],
-                    r["field_name"],
-                    r.get("field_value"),
-                    r["source_name"],
-                    r["selection_reason"],
-                )
-                for r in batch
-            ]
-            conn.executemany(sql, values)
+        try:
+            tbl = _rows_to_arrow_persons(rows, _AUDIT_FIELDS_P, frozenset())
+            conn.register("_persons_audit_staging", tbl)
+            conn.execute(
+                "INSERT INTO meta_resolution_audit "
+                "(canonical_id, entity_type, field_name, field_value, source_name, selection_reason) "
+                "SELECT canonical_id, entity_type, field_name, field_value, source_name, selection_reason "
+                "FROM _persons_audit_staging"
+            )
+            conn.unregister("_persons_audit_staging")
+        except ImportError:
+            sql = (
+                "INSERT INTO meta_resolution_audit "
+                "(canonical_id, entity_type, field_name, field_value, source_name, selection_reason) "
+                "VALUES (?, ?, ?, ?, ?, ?)"
+            )
+            for i in range(0, len(rows), batch_size):
+                batch = rows[i : i + batch_size]
+                values = [
+                    (
+                        r["canonical_id"],
+                        r["entity_type"],
+                        r["field_name"],
+                        r.get("field_value"),
+                        r["source_name"],
+                        r["selection_reason"],
+                    )
+                    for r in batch
+                ]
+                conn.executemany(sql, values)
         conn.commit()
     finally:
         conn.close()

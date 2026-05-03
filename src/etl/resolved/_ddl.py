@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS anime (
     scale_class          VARCHAR,
     country_of_origin    VARCHAR,
     source_ids_json      VARCHAR NOT NULL DEFAULT '[]',
+    source_count         INTEGER,
     title_ja_source      VARCHAR,
     title_en_source      VARCHAR,
     year_source          VARCHAR,
