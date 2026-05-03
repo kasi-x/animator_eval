@@ -91,6 +91,7 @@ def _build_studios_map_from_conformed(
     Returns:
         canonical_id → sorted list of studio names (deduplicated)
     """
+
     # Flatten conformed ID → canonical_id lookup
     conformed_to_canonical: dict[str, str] = {}
     for cid, source_ids in source_ids_by_canonical.items():

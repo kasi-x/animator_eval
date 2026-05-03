@@ -1,4 +1,9 @@
-"""Phase 1: Data Loading — load persons, anime, and credits from silver.duckdb."""
+"""Phase 1: Data Loading — load persons, anime, and credits from silver.duckdb.
+
+Phase 3 migration: scoring prefers the Resolved layer (resolved.duckdb) when
+available.  The conformed (silver) loaders remain as a backward-compatible
+fallback and are still used for credits (Phase 2b handles resolved credits).
+"""
 
 import re
 from collections import defaultdict
@@ -6,6 +11,11 @@ from collections import defaultdict
 import structlog
 
 from src.analysis.io.conformed_reader import load_anime_silver, load_credits_silver, load_persons_silver
+from src.analysis.io.resolved_reader import (
+    load_anime_resolved,
+    load_persons_resolved,
+    resolved_available,
+)
 from src.pipeline_phases.pipeline_types import LoadedData
 from src.runtime.models import Credit, Person, Role
 from src.utils.role_groups import NON_PRODUCTION_ROLES
@@ -285,16 +295,116 @@ def _llm_normalize_names(
     return updated, extra_credits
 
 
-def load_pipeline_data(visualize: bool = False, dry_run: bool = False) -> LoadedData:
-    """Load all data from silver.duckdb.
+def _load_persons_from_resolved_or_conformed(
+    resolved_path=None,
+    conformed_path=None,
+) -> list[Person]:
+    """Load persons from Resolved layer if available, else fall back to Conformed.
+
+    Args:
+        resolved_path: Path to resolved.duckdb (None → DEFAULT_RESOLVED_PATH).
+        conformed_path: Path to animetor.duckdb (None → DEFAULT_SILVER_PATH).
 
     Returns:
-        LoadedData with persons, anime_list, credits, anime_map populated.
+        List of Person model instances.
     """
-    all_persons = load_persons_silver()
-    anime_list = load_anime_silver()
-    all_credits = load_credits_silver()
+    if resolved_available(resolved_path):
+        persons = load_persons_resolved(resolved_path)
+        if persons:
+            logger.info(
+                "data_loading_persons_source",
+                source="resolved",
+                count=len(persons),
+            )
+            return persons
+        logger.warning(
+            "resolved_persons_empty_falling_back_to_conformed",
+        )
+    logger.info("data_loading_persons_source", source="conformed")
+    return load_persons_silver(conformed_path)
 
+
+def _load_anime_from_resolved_or_conformed(
+    resolved_path=None,
+    conformed_path=None,
+) -> list:
+    """Load anime from Resolved layer if available, else fall back to Conformed.
+
+    When loading from Resolved, cross-references conformed anime_studios to
+    populate anime.studios (required by AKM infer_studio_assignment).
+
+    Args:
+        resolved_path: Path to resolved.duckdb (None → DEFAULT_RESOLVED_PATH).
+        conformed_path: Path to animetor.duckdb (None → DEFAULT_SILVER_PATH).
+
+    Returns:
+        List of AnimeAnalysis model instances (with studios populated).
+    """
+    if resolved_available(resolved_path):
+        anime_list = load_anime_resolved(resolved_path, conformed_path=conformed_path)
+        if anime_list:
+            with_studios = sum(1 for a in anime_list if a.studios)
+            logger.info(
+                "data_loading_anime_source",
+                source="resolved",
+                total=len(anime_list),
+                with_studios=with_studios,
+            )
+            return anime_list
+        logger.warning(
+            "resolved_anime_empty_falling_back_to_conformed",
+        )
+    logger.info("data_loading_anime_source", source="conformed")
+    return load_anime_silver(conformed_path)
+
+
+def load_pipeline_data_resolved(
+    visualize: bool = False,
+    dry_run: bool = False,
+    resolved_path=None,
+    conformed_path=None,
+) -> LoadedData:
+    """Load pipeline data preferring the Resolved layer when available.
+
+    Phase 3 entry point: AKM and all scoring modules should call this instead
+    of load_pipeline_data() to benefit from entity-resolved canonical rows.
+
+    Graceful fallback: if resolved.duckdb is absent or empty, automatically
+    falls back to conformed (silver) loaders.  Credits always come from the
+    conformed layer (Phase 2b handles resolved credits).
+
+    Args:
+        visualize: passed through to LoadedData.
+        dry_run: passed through to LoadedData.
+        resolved_path: override for resolved.duckdb path (tests / CI).
+        conformed_path: override for animetor.duckdb path (tests / CI).
+
+    Returns:
+        LoadedData populated from Resolved (or Conformed as fallback).
+    """
+    all_persons = _load_persons_from_resolved_or_conformed(resolved_path, conformed_path)
+    anime_list = _load_anime_from_resolved_or_conformed(resolved_path, conformed_path)
+    # Credits remain from Conformed layer (Phase 2b: resolved credits not yet built)
+    all_credits = load_credits_silver(conformed_path)
+
+    return _build_loaded_data(
+        all_persons, anime_list, all_credits, visualize=visualize, dry_run=dry_run
+    )
+
+
+def _build_loaded_data(
+    all_persons: list[Person],
+    anime_list: list,
+    all_credits: list[Credit],
+    *,
+    visualize: bool = False,
+    dry_run: bool = False,
+) -> LoadedData:
+    """Apply filtering, LLM enrichment, and build LoadedData from raw lists.
+
+    Extracted from load_pipeline_data() to allow reuse by both loading paths
+    (conformed-only and resolved-with-fallback).
+    """
     # Filter out garbage/placeholder person entries
     garbage_ids: set[str] = set()
     valid_persons: list[Person] = []
@@ -347,4 +457,22 @@ def load_pipeline_data(visualize: bool = False, dry_run: bool = False) -> Loaded
         anime_map=anime_map,
         visualize=visualize,
         dry_run=dry_run,
+    )
+
+
+def load_pipeline_data(visualize: bool = False, dry_run: bool = False) -> LoadedData:
+    """Load all data from silver.duckdb.
+
+    Backward-compatible conformed-only loader.  New code should prefer
+    load_pipeline_data_resolved() which automatically uses the Resolved layer
+    when resolved.duckdb is present.
+
+    Returns:
+        LoadedData with persons, anime_list, credits, anime_map populated.
+    """
+    all_persons = load_persons_silver()
+    anime_list = load_anime_silver()
+    all_credits = load_credits_silver()
+    return _build_loaded_data(
+        all_persons, anime_list, all_credits, visualize=visualize, dry_run=dry_run
     )
