@@ -618,10 +618,18 @@ def insert_lineage(
 
     Gracefully skips if meta_lineage does not exist (fresh v2 schema uses
     ops_lineage instead; CI checks against whichever table the environment has).
+    Also skips silently when the connection is a DuckDB connection (read-only
+    gold layer) since lineage writes go through the pipeline, not reports.
 
     INSERT OR REPLACE ensures re-running a report overwrites rather than
     duplicates the row.
     """
+    # DuckDB connections are not sqlite3.Connection — skip silently.
+    # Lineage writes for reports executed against the read-only gold layer
+    # are a no-op; lineage is registered by the pipeline phase instead.
+    if not isinstance(conn, sqlite3.Connection):
+        return
+
     # Check which lineage table is available
     available = {
         r[0]
