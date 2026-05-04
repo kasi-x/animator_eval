@@ -172,6 +172,35 @@ FROM (
 WHERE _rn = 1
 """
 
+# persons fallback — when BRONZE persons table is absent, build person rows
+# from staff_credits + va_credits. Both expose mal_person_id + person_name.
+# Card 14/13 fix: orphan credits (305K rows) had no parent person row because
+# Card 12 scrape did not produce a persons parquet. Extract distinct person
+# rows from credits tables instead.
+_PERSONS_FROM_CREDITS_SQL_TMPL = """
+INSERT OR IGNORE INTO persons (id, name_en, name_ja, mal_id, updated_at)
+WITH src AS (
+    {union_blocks}
+)
+SELECT
+    'mal:p' || CAST(mal_person_id AS VARCHAR) AS id,
+    COALESCE(person_name, '')                 AS name_en,
+    ''                                        AS name_ja,
+    TRY_CAST(mal_person_id AS INTEGER)        AS mal_id,
+    now()                                     AS updated_at
+FROM (
+    SELECT mal_person_id,
+           person_name,
+           ROW_NUMBER() OVER (PARTITION BY mal_person_id
+                              ORDER BY person_name IS NULL,
+                                       LENGTH(COALESCE(person_name, ''))
+                                         DESC) AS _rn
+    FROM src
+    WHERE mal_person_id IS NOT NULL
+)
+WHERE _rn = 1
+"""
+
 # staff_credits → credits.  role mapping via map_role("mal", position).
 # Uses a DuckDB Python UDF (map_role_mal) so role normalisation happens inside
 # the single SQL INSERT rather than via Python executemany (O(n) queries).
@@ -303,6 +332,35 @@ def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
     conn.execute(_DDL_ANIME_RELATIONS_SOURCE_COL)
     for stmt in _DDL_ANIME_EXTENSION:
         conn.execute(stmt)
+
+
+def _load_persons_from_credits(
+    conn: duckdb.DuckDBPyConnection, bronze_root: Path
+) -> None:
+    """Backfill persons rows from staff_credits + va_credits.
+
+    Card 14/13: Card 12 (jikan) scrape does not write a persons BRONZE table,
+    so the 305K mal credits had no parent person row. Extract distinct
+    (mal_person_id, person_name) tuples from any available credits parquet —
+    longest non-null name wins per person_id.
+    """
+    union_parts: list[str] = []
+    if _parquet_exists(bronze_root, "staff_credits"):
+        glob = _glob(bronze_root, "staff_credits").replace("'", "''")
+        union_parts.append(
+            f"SELECT mal_person_id, person_name "
+            f"FROM read_parquet('{glob}', hive_partitioning=true, union_by_name=true)"
+        )
+    if _parquet_exists(bronze_root, "va_credits"):
+        glob = _glob(bronze_root, "va_credits").replace("'", "''")
+        union_parts.append(
+            f"SELECT mal_person_id, person_name "
+            f"FROM read_parquet('{glob}', hive_partitioning=true, union_by_name=true)"
+        )
+    if not union_parts:
+        return
+    union_sql = "\nUNION ALL\n".join(union_parts)
+    conn.execute(_PERSONS_FROM_CREDITS_SQL_TMPL.format(union_blocks=union_sql))
 
 
 def _load_staff_credits(
@@ -437,9 +495,13 @@ def integrate(
         "SELECT COUNT(*) FROM anime WHERE display_score_mal IS NOT NULL"
     ).fetchone()[0]
 
-    # --- persons (gracefully skip when BRONZE absent) ---
+    # --- persons ---
+    # Primary: BRONZE persons table (Card 12 scrape currently does not write one).
+    # Fallback: extract distinct mal_person_id from staff_credits + va_credits so
+    # the 305K orphan credits gain a parent row (Card 14/13).
     if _parquet_exists(bronze_root, "persons"):
         conn.execute(_PERSONS_INSERT_SQL, [_glob(bronze_root, "persons")])
+    _load_persons_from_credits(conn, bronze_root)
     counts["persons_inserted"] = conn.execute(
         "SELECT COUNT(*) FROM persons WHERE id LIKE 'mal:p%'"
     ).fetchone()[0]

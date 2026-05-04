@@ -417,6 +417,27 @@ def _has_parquet(conn: duckdb.DuckDBPyConnection, glob: str) -> bool:
         return False
 
 
+# persons fallback — when BRONZE persons coverage is incomplete (anilist scraper
+# only fetches detailed Staff queries for a subset), credits reference 13× more
+# distinct person_ids than persons table has rows. Card 14/13 follow-up: insert
+# orphan id-only rows so credits.person_id → persons.id FK invariant holds.
+# Name columns left empty until a richer Staff fetch fills them in.
+_PERSONS_FROM_CREDITS_SQL = """
+INSERT INTO persons (id, name_ja, name_en)
+SELECT DISTINCT
+    cr.person_id           AS id,
+    ''                     AS name_ja,
+    ''                     AS name_en
+FROM read_parquet(?, hive_partitioning=true, union_by_name=true) AS cr
+LEFT JOIN persons p ON p.id = cr.person_id
+WHERE cr.source       = 'anilist'
+  AND cr.person_id   IS NOT NULL
+  AND cr.person_id   LIKE 'anilist:p%'
+  AND p.id IS NULL
+ON CONFLICT (id) DO NOTHING
+"""
+
+
 def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[str, int]:
     """Load AniList characters / CVA / anime extras / anime_relations into SILVER.
 
@@ -440,6 +461,14 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
     anime_glob     = _glob_path(bronze_root, "anime")
     studios_glob   = _glob_path(bronze_root, "studios")
     as_table_glob  = _glob_path(bronze_root, "anime_studios")
+    credits_glob   = _glob_path(bronze_root, "credits")
+
+    # Backfill orphan persons from credits before any UPDATE-style enrichment runs.
+    if _has_parquet(conn, credits_glob):
+        try:
+            conn.execute(_PERSONS_FROM_CREDITS_SQL, [credits_glob])
+        except Exception:
+            pass
 
     if _has_parquet(conn, chars_glob):
         conn.execute(_CHARACTERS_SQL, [chars_glob])

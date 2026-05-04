@@ -199,6 +199,51 @@
 
 Card 06 (差分 cron) は初回 backfill 完走後に着手 → TODO.md §13.6 に残置。
 
+## TASK_CARDS/14_silver_extend/12_orphan_fix_batch ✅ 2026-05-05 (14/13 と同時)
+
+5 source orphan 一括修正の真 fix (14/12 起票 → 14/13 で path 修正と並行)。
+
+| source | anime | persons (before→after) | orphan_p (before→after) |
+|--------|------:|----------------------:|------------------------:|
+| mal | 19,194 | 0 → **40,551** | — → 0 |
+| keyframe | 2,400 | 35,395 (既) | — → 0 |
+| seesaawiki | 8,778 | 137,014 (既) | — → 0 |
+| sakuga_atwiki | 367 (新) | 130 | — → 0 |
+| bangumi | 3,715 | 21,125 (上限確認) | — → 0 |
+| ann | 11,009 | 36,235 → **36,350** | 631 → 0 |
+| anilist | 19,915 | 7,528 → **97,596** | 481,586 → 0 |
+| tmdb | 79,658 | 293,115 | — → 5 |
+
+**TOTAL orphan persons: 482,222 → 5** (99.999% reduction)
+
+- 14/12-A mal persons fallback: `_load_persons_from_credits()` で staff_credits + va_credits の mal_person_id UNION → 40,551 row backfill
+- 14/12-B keyframe: BRONZE が `id="keyframe:..."` 直接書込のため既存 global loader で動作 (調査時に発覚、code 不要)
+- 14/12-C seesaawiki credits: 既統合済 (2.75M row、別 commit)
+- 14/12-D sakuga anime: pages WHERE `page_kind='work'` から `sakuga:a<page_id>` 367 row INSERT
+- 14/12-E bangumi: BRONZE subjects type=2 = 3,715 が真の上限。card 推測 (filter で絞り過ぎ) は誤り
+- 追加: anilist persons fallback (`_PERSONS_FROM_CREDITS_SQL`) で credits の person_id orphan 481K を id-only INSERT で解消
+- 追加: ann persons fallback (credits の name_en + ann_person_id) で 631 orphan 解消
+
+## TASK_CARDS/10_seesaawiki_madb_reparse SILVER 再統合 ✅ 2026-05-05
+
+§10.1/§10.2 BRONZE 再 parse 後の SILVER 再統合確認。
+
+- seesaawiki: anime_theme_songs 14,795 / anime_episode_titles 71,674 / anime_gross_studios 18,968 / anime_production_committee 13,417 / anime_original_work_info 4,876 / persons 137,014 — 全 Conformed 統合済
+- madb: anime_broadcasters 166,196 / anime_broadcast_schedule 2,313 / anime_production_committee 21,068 / anime_production_companies 14,666 / anime_video_releases 146,074 / anime_original_work_links 1,788 / anime_studios_mediaarts 6,253 — 全 Conformed 統合済
+- madb count 差異 (BRONZE 332K vs loaded 166K) 調査: BRONZE re-scrape append による parquet 重複 (broadcasters table=42,943 files / 1 date partition)。UNIQUE (madb_id, name) dedup の正常動作で、bug ではない。
+
+## TASK_CARDS/14_silver_extend/13_phase1c_path_fix ✅ 2026-05-05
+
+`integrate_duckdb` の path 統一 + 4 source の orphan v2 真 fix。
+
+- **Issue 1 path**: `DEFAULT_SILVER_PATH` → `result/animetor.duckdb` (`DEFAULT_DB_PATH` rename + alias)。`atomic_duckdb_swap` 廃止 (mart schema 共存のため不可)。`DROP SCHEMA conformed CASCADE` + `CREATE SCHEMA conformed` + `SET schema='conformed'` の full rebuild に置換。corrupt file 自動削除で旧 swap 互換維持。
+- **Issue 2 mal persons**: BRONZE persons table 不在のため `_load_persons_from_credits()` 追加 — staff_credits + va_credits の `mal_person_id` UNION から person row backfill (40,551 row)。orphan credits = 0 達成 (305K 全カバー)。
+- **Issue 3 keyframe**: BRONZE が `id="keyframe:..."` 直接書込のため global anime/persons loader 経由でロード済 (anime 2,400 / persons 35,395)。code 変更不要、card 起票時の調査漏れ。
+- **Issue 4 sakuga anime**: BRONZE pages WHERE `page_kind='work'` から `sakuga:a<page_id>` で INSERT 追加 (367 row)。
+- **手動コピー不要**: integrate が直接 `animetor.duckdb` の `conformed` schema に書込。mart schema (27 tables) 維持。
+- **Tests**: `test_integrate_duckdb.py` 全 connect に `SET schema='conformed'` 注入。`test_persons_idempotent` (mal) を新仕様 (3 person) に更新。99/99 pass。
+- 関連 commit: 14/13 fix (本コミット)。前段 14/11 (`0fcdaef`) / 14/12 (`116299d`) は部分対応、本カードで真 fix。
+
 ## TASK_CARDS/14_silver_extend/08_mal_silver ✅ 2026-05-02
 
 - `src/etl/silver_loaders/mal.py`: MAL BRONZE 9 表 → SILVER loader (integrate() 関数)

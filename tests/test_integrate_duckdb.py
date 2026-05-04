@@ -86,7 +86,7 @@ def test_anime_score_excluded_from_silver(bronze_dir: Path, tmp_path: Path) -> N
     silver = tmp_path / "silver.duckdb"
     integrate(bronze_root=bronze_dir, silver_path=silver)
 
-    conn = duckdb.connect(str(silver), read_only=True)
+    conn = duckdb.connect(str(silver), read_only=True); conn.execute("SET schema='conformed'")
     # DuckDB PRAGMA table_info: (cid, name, type, notnull, dflt_value, pk)
     cols = {row[1] for row in conn.execute("PRAGMA table_info('anime')").fetchall()}
     conn.close()
@@ -103,7 +103,7 @@ def test_persons_birth_date_mapped(bronze_dir: Path, tmp_path: Path) -> None:
     silver = tmp_path / "silver.duckdb"
     integrate(bronze_root=bronze_dir, silver_path=silver)
 
-    conn = duckdb.connect(str(silver), read_only=True)
+    conn = duckdb.connect(str(silver), read_only=True); conn.execute("SET schema='conformed'")
     row = conn.execute("SELECT birth_date, website_url FROM persons WHERE id='anilist:p1'").fetchone()
     conn.close()
 
@@ -117,7 +117,7 @@ def test_credits_evidence_source_preserved(bronze_dir: Path, tmp_path: Path) -> 
     silver = tmp_path / "silver.duckdb"
     integrate(bronze_root=bronze_dir, silver_path=silver)
 
-    conn = duckdb.connect(str(silver), read_only=True)
+    conn = duckdb.connect(str(silver), read_only=True); conn.execute("SET schema='conformed'")
     row = conn.execute("SELECT evidence_source FROM credits").fetchone()
     conn.close()
 
@@ -132,7 +132,7 @@ def test_integrate_atomic_replaces_stale_file(bronze_dir: Path, tmp_path: Path) 
 
     integrate(bronze_root=bronze_dir, silver_path=silver)
 
-    conn = duckdb.connect(str(silver), read_only=True)
+    conn = duckdb.connect(str(silver), read_only=True); conn.execute("SET schema='conformed'")
     assert conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0] == 1
     conn.close()
 
@@ -174,7 +174,7 @@ def test_dedup_keeps_latest_date(tmp_path: Path) -> None:
     silver = tmp_path / "silver.duckdb"
     integrate(bronze_root=root, silver_path=silver)
 
-    conn = duckdb.connect(str(silver), read_only=True)
+    conn = duckdb.connect(str(silver), read_only=True); conn.execute("SET schema='conformed'")
     row = conn.execute("SELECT title_ja, episodes FROM anime WHERE id='anilist:1'").fetchone()
     conn.close()
 
@@ -212,7 +212,7 @@ def test_credits_dedup_on_unique_key(tmp_path: Path) -> None:
     silver = tmp_path / "silver.duckdb"
     integrate(bronze_root=root, silver_path=silver)
 
-    conn = duckdb.connect(str(silver), read_only=True)
+    conn = duckdb.connect(str(silver), read_only=True); conn.execute("SET schema='conformed'")
     count = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
     conn.close()
 
@@ -249,7 +249,7 @@ def test_multi_source_merge(tmp_path: Path) -> None:
     silver = tmp_path / "silver.duckdb"
     integrate(bronze_root=root, silver_path=silver)
 
-    conn = duckdb.connect(str(silver), read_only=True)
+    conn = duckdb.connect(str(silver), read_only=True); conn.execute("SET schema='conformed'")
     count = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]
     conn.close()
 
@@ -286,7 +286,7 @@ def test_studios_loaded_when_parquet_exists(tmp_path: Path) -> None:
     assert counts["studios"] == 1
     assert counts["anime_studios"] == 1
 
-    conn = duckdb.connect(str(silver), read_only=True)
+    conn = duckdb.connect(str(silver), read_only=True); conn.execute("SET schema='conformed'")
     row = conn.execute("SELECT name, is_animation_studio FROM studios WHERE id='anilist:s1'").fetchone()
     link = conn.execute("SELECT is_main FROM anime_studios WHERE anime_id='a1'").fetchone()
     conn.close()
@@ -307,7 +307,7 @@ def test_studios_skipped_gracefully_when_no_parquet(bronze_dir: Path, tmp_path: 
     assert "anime_studios" not in counts
 
     # Tables still exist with zero rows
-    conn = duckdb.connect(str(silver), read_only=True)
+    conn = duckdb.connect(str(silver), read_only=True); conn.execute("SET schema='conformed'")
     n = conn.execute("SELECT COUNT(*) FROM studios").fetchone()[0]
     conn.close()
     assert n == 0
@@ -355,7 +355,7 @@ def test_anilist_credits_loaded(tmp_path: Path) -> None:
     silver = tmp_path / "silver.duckdb"
     integrate(bronze_root=root, silver_path=silver)
 
-    conn = duckdb.connect(str(silver), read_only=True)
+    conn = duckdb.connect(str(silver), read_only=True); conn.execute("SET schema='conformed'")
     row = conn.execute(
         "SELECT role, raw_role, evidence_source FROM credits WHERE evidence_source = 'anilist'"
     ).fetchone()
@@ -388,7 +388,7 @@ def test_anilist_credits_raw_role_not_null(tmp_path: Path) -> None:
     silver = tmp_path / "silver.duckdb"
     integrate(bronze_root=root, silver_path=silver)
 
-    conn = duckdb.connect(str(silver), read_only=True)
+    conn = duckdb.connect(str(silver), read_only=True); conn.execute("SET schema='conformed'")
     row = conn.execute(
         "SELECT raw_role FROM credits WHERE evidence_source = 'anilist'"
     ).fetchone()
@@ -417,7 +417,7 @@ def test_ann_credits_loaded_with_prefixed_ids(tmp_path: Path) -> None:
     silver = tmp_path / "silver.duckdb"
     integrate(bronze_root=root, silver_path=silver)
 
-    conn = duckdb.connect(str(silver), read_only=True)
+    conn = duckdb.connect(str(silver), read_only=True); conn.execute("SET schema='conformed'")
     row = conn.execute(
         "SELECT person_id, anime_id, role, raw_role, evidence_source "
         "FROM credits WHERE evidence_source = 'ann'"
@@ -462,7 +462,7 @@ def test_keyframe_credits_loaded_studio_roles_excluded(tmp_path: Path) -> None:
     silver = tmp_path / "silver.duckdb"
     integrate(bronze_root=root, silver_path=silver)
 
-    conn = duckdb.connect(str(silver), read_only=True)
+    conn = duckdb.connect(str(silver), read_only=True); conn.execute("SET schema='conformed'")
     rows = conn.execute(
         "SELECT person_id, role, raw_role FROM credits WHERE evidence_source = 'keyframe'"
     ).fetchall()
@@ -493,7 +493,7 @@ def test_keyframe_episode_minus_one_becomes_null(tmp_path: Path) -> None:
     silver = tmp_path / "silver.duckdb"
     integrate(bronze_root=root, silver_path=silver)
 
-    conn = duckdb.connect(str(silver), read_only=True)
+    conn = duckdb.connect(str(silver), read_only=True); conn.execute("SET schema='conformed'")
     row = conn.execute(
         "SELECT episode FROM credits WHERE evidence_source = 'keyframe' AND person_id = 'keyframe:p2'"
     ).fetchone()
@@ -529,7 +529,7 @@ def test_sakuga_atwiki_credits_loaded_with_null_anime_id(tmp_path: Path) -> None
     silver = tmp_path / "silver.duckdb"
     integrate(bronze_root=root, silver_path=silver)
 
-    conn = duckdb.connect(str(silver), read_only=True)
+    conn = duckdb.connect(str(silver), read_only=True); conn.execute("SET schema='conformed'")
     row = conn.execute(
         "SELECT person_id, anime_id, role, raw_role, evidence_source "
         "FROM credits WHERE evidence_source = 'sakuga_atwiki'"

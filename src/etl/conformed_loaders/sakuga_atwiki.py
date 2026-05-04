@@ -58,6 +58,30 @@ _DDL = [
 
 # ─── SQL ────────────────────────────────────────────────────────────────────
 
+# Insert sakuga anime rows from BRONZE pages WHERE page_kind='work'.
+# Card 14/13: sakuga has no BRONZE 'anime' table — work pages are the anime list.
+# - id:       'sakuga:a' || page_id
+# - title_ja: title from BRONZE pages
+# Latest date partition wins via ROW_NUMBER.
+# ON CONFLICT DO NOTHING so reruns are idempotent and other sources keep
+# precedence when the same anime exists in both.
+_ANIME_INSERT_SQL = """
+INSERT INTO anime (id, title_ja, title_en)
+SELECT
+    'sakuga:a' || CAST(page_id AS VARCHAR) AS id,
+    COALESCE(title, '')                    AS title_ja,
+    ''                                     AS title_en
+FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (PARTITION BY page_id ORDER BY date DESC) AS _rn
+    FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE page_kind = 'work'
+      AND page_id IS NOT NULL
+)
+WHERE _rn = 1
+ON CONFLICT (id) DO NOTHING
+"""
+
 # Insert sakuga persons that do not yet exist in SILVER.
 # - id:          'sakuga:p' || page_id
 # - name_ja:     name from BRONZE
@@ -396,6 +420,13 @@ def integrate(
     counts: dict[str, int] = {}
 
     _apply_ddl(conn)
+
+    # anime: sakuga BRONZE has no 'anime' table; work pages are the anime list.
+    if _has_parquet(bronze_root, "pages"):
+        conn.execute(_ANIME_INSERT_SQL, [_glob(bronze_root, "pages")])
+    counts["sakuga_anime"] = conn.execute(
+        "SELECT COUNT(*) FROM anime WHERE id LIKE 'sakuga:a%'"
+    ).fetchone()[0]
 
     if _has_parquet(bronze_root, "persons"):
         persons_glob = _glob(bronze_root, "persons")

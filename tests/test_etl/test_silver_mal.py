@@ -424,15 +424,24 @@ class TestPersons:
         assert counts["persons_inserted"] == 0
 
     def test_persons_idempotent(self, bronze_dir: Path) -> None:
-        """Calling integrate() twice does not duplicate person rows."""
+        """Calling integrate() twice does not duplicate person rows.
+
+        Fixture: BRONZE persons has mal_id=101; staff_credits adds 101,102;
+        va_credits adds 301. Card 14/13 fallback unions all three → 3 unique
+        person rows after one or two integrate() runs.
+        """
         conn = _make_silver_conn()
         mal_loader.integrate(conn, bronze_dir)
+        first = conn.execute(
+            "SELECT COUNT(*) FROM persons WHERE id LIKE 'mal:p%'"
+        ).fetchone()[0]
         mal_loader.integrate(conn, bronze_dir)
-        count = conn.execute(
+        second = conn.execute(
             "SELECT COUNT(*) FROM persons WHERE id LIKE 'mal:p%'"
         ).fetchone()[0]
         conn.close()
-        assert count == 1
+        assert first == 3
+        assert second == first  # idempotent — no duplicates on rerun
 
 
 class TestCredits:

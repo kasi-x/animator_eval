@@ -1,13 +1,15 @@
-"""ETL: BRONZE parquet → SILVER duckdb (with atomic swap).
+"""ETL: BRONZE parquet → Conformed schema in animetor.duckdb.
 
 Reads bronze/source=*/table=*/date=*/*.parquet, dedups (latest date wins
-per primary key), and writes a new silver.duckdb. Atomic swap via os.replace()
-means analysis processes holding the old file inode are never blocked.
+per primary key), and rebuilds the `conformed` schema inside animetor.duckdb.
+
+Phase 1c: writes go directly to animetor.duckdb (conformed schema). The
+mart schema is left untouched. The legacy silver.duckdb file is no longer
+written by this module — readers must use animetor.duckdb / conformed.
 
 Core tables (Card 03): anime, persons, credits.
 Studio tables (Card 06): studios, anime_studios — loaded when parquet exists,
 skipped gracefully otherwise.
-Other tables (anime_genres, anime_tags, ...) remain in SQLite ETL.
 
 Role normalization is performed via src.etl.role_mappers at ETL time:
   credits.role     = normalized Role.value  (e.g. "animation_director")
@@ -21,7 +23,6 @@ from pathlib import Path
 import duckdb
 import structlog
 
-from src.etl.atomic_swap import atomic_duckdb_swap
 from src.etl.role_mappers import map_role
 import src.etl.conformed_loaders.anilist as _sl_anilist
 import src.etl.conformed_loaders.ann as _sl_ann
@@ -35,9 +36,13 @@ import src.etl.conformed_loaders.tmdb as _sl_tmdb
 
 logger = structlog.get_logger()
 
-DEFAULT_SILVER_PATH = Path(
-    os.environ.get("ANIMETOR_SILVER_PATH", "result/silver.duckdb")
+# Phase 1c: integrate writes to animetor.duckdb (conformed schema).
+# DEFAULT_SILVER_PATH kept as alias for backward-compat (tests / CLI).
+DEFAULT_DB_PATH = Path(
+    os.environ.get("ANIMETOR_DB_PATH", "result/animetor.duckdb")
 )
+DEFAULT_SILVER_PATH = DEFAULT_DB_PATH
+CONFORMED_SCHEMA = "conformed"
 DEFAULT_BRONZE_ROOT = Path(
     os.environ.get("ANIMETOR_BRONZE_ROOT", "result/bronze")
 )
@@ -562,7 +567,13 @@ def integrate(
     *,
     memory_limit: str = "2GB",
 ) -> dict[str, int]:
-    """Build a fresh SILVER duckdb from BRONZE parquet, then atomic swap.
+    """Rebuild conformed schema in animetor.duckdb from BRONZE parquet.
+
+    Phase 1c: writes go directly to animetor.duckdb (conformed schema). The
+    mart schema is preserved across rebuilds. Atomic file swap is no longer
+    used because animetor.duckdb hosts both conformed and mart schemas.
+
+    The conformed schema is dropped and recreated each run (full rebuild).
 
     Returns row counts for all loaded tables.
     Core tables (anime, persons, credits) raise FileNotFoundError if missing.
@@ -570,7 +581,17 @@ def integrate(
     silently skipped otherwise (not all scrapers write them).
     """
     bronze_root = Path(bronze_root or DEFAULT_BRONZE_ROOT)
-    silver_path = Path(silver_path or DEFAULT_SILVER_PATH)
+    db_path = Path(silver_path or DEFAULT_DB_PATH)
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Replace stale/corrupt files (old atomic_swap behaviour preserved):
+    # if the file exists but is not a readable duckdb, drop and recreate.
+    if db_path.exists():
+        try:
+            _probe = duckdb.connect(str(db_path), read_only=True)
+            _probe.close()
+        except Exception:
+            db_path.unlink()
 
     def _glob(table: str) -> str:
         return str(bronze_root / "source=*" / f"table={table}" / "date=*" / "*.parquet")
@@ -583,103 +604,106 @@ def integrate(
 
     counts: dict[str, int] = {}
 
-    with atomic_duckdb_swap(silver_path) as new_path:
-        conn = duckdb.connect(str(new_path))
-        try:
-            conn.execute(f"SET memory_limit='{memory_limit}'")
-            conn.execute("SET temp_directory='/tmp/duckdb_spill'")
-            for stmt in _DDL.split(";"):
-                stmt = stmt.strip()
-                if stmt:
-                    conn.execute(stmt)
+    conn = duckdb.connect(str(db_path))
+    try:
+        conn.execute(f"SET memory_limit='{memory_limit}'")
+        conn.execute("SET temp_directory='/tmp/duckdb_spill'")
+        # Phase 1c: full rebuild of conformed schema. mart/main untouched.
+        conn.execute(f"DROP SCHEMA IF EXISTS {CONFORMED_SCHEMA} CASCADE")
+        conn.execute(f"CREATE SCHEMA {CONFORMED_SCHEMA}")
+        conn.execute(f"SET schema='{CONFORMED_SCHEMA}'")
 
-            # anime (delete stale, then insert new)
-            conn.execute(_ANIME_SQL_DELETE, [anime_glob])
-            conn.execute(_build_anime_sql(conn, anime_glob), [anime_glob])
-            counts["anime"] = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]
-            logger.info("silver_anime", count=counts["anime"])
+        for stmt in _DDL.split(";"):
+            stmt = stmt.strip()
+            if stmt:
+                conn.execute(stmt)
 
-            # persons (column mapping is schema-dependent — see _build_persons_sql)
-            conn.execute(_build_persons_sql(conn, persons_glob), [persons_glob])
-            counts["persons"] = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
-            logger.info("silver_persons", count=counts["persons"])
+        # anime (delete stale, then insert new)
+        conn.execute(_ANIME_SQL_DELETE, [anime_glob])
+        conn.execute(_build_anime_sql(conn, anime_glob), [anime_glob])
+        counts["anime"] = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]
+        logger.info("silver_anime", count=counts["anime"])
 
-            # credits — one loader per source; failures are isolated so a bad
-            # source does not prevent other sources from loading.
-            _credits_loaders = [
-                ("seesaawiki", _build_credits_insert_seesaawiki),
-                ("mediaarts", _build_credits_insert_mediaarts),
-                ("anilist", _build_credits_insert_anilist),
-                ("ann", _build_credits_insert_ann),
-                ("keyframe", _build_credits_insert_keyframe),
-                ("sakuga_atwiki", _build_credits_insert_sakuga_atwiki),
-            ]
-            for source_name, builder in _credits_loaders:
-                try:
-                    sql = builder(conn, credits_glob)
-                    conn.execute(sql, [credits_glob])
-                except Exception as exc:
-                    logger.warning(
-                        "silver_credits_source_skip",
-                        source=source_name,
-                        error=str(exc),
-                    )
-            counts["credits"] = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
-            logger.info("silver_credits", count=counts["credits"])
+        # persons (column mapping is schema-dependent — see _build_persons_sql)
+        conn.execute(_build_persons_sql(conn, persons_glob), [persons_glob])
+        counts["persons"] = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
+        logger.info("silver_persons", count=counts["persons"])
 
-            # studios + anime_studios (optional — skip if no bronze parquet)
-            if _parquet_columns(conn, studios_glob):
-                try:
-                    conn.execute(_STUDIOS_SQL, [studios_glob])
-                    counts["studios"] = conn.execute("SELECT COUNT(*) FROM studios").fetchone()[0]
-                    logger.info("silver_studios", count=counts["studios"])
-                except Exception as exc:
-                    logger.warning("silver_studios_skip", error=str(exc))
+        # credits — one loader per source; failures are isolated so a bad
+        # source does not prevent other sources from loading.
+        _credits_loaders = [
+            ("seesaawiki", _build_credits_insert_seesaawiki),
+            ("mediaarts", _build_credits_insert_mediaarts),
+            ("anilist", _build_credits_insert_anilist),
+            ("ann", _build_credits_insert_ann),
+            ("keyframe", _build_credits_insert_keyframe),
+            ("sakuga_atwiki", _build_credits_insert_sakuga_atwiki),
+        ]
+        for source_name, builder in _credits_loaders:
+            try:
+                sql = builder(conn, credits_glob)
+                conn.execute(sql, [credits_glob])
+            except Exception as exc:
+                logger.warning(
+                    "silver_credits_source_skip",
+                    source=source_name,
+                    error=str(exc),
+                )
+        counts["credits"] = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
+        logger.info("silver_credits", count=counts["credits"])
 
-            if _parquet_columns(conn, anime_studios_glob):
-                try:
-                    conn.execute(_ANIME_STUDIOS_SQL, [anime_studios_glob])
-                    counts["anime_studios"] = conn.execute(
-                        "SELECT COUNT(*) FROM anime_studios"
-                    ).fetchone()[0]
-                    logger.info("silver_anime_studios", count=counts["anime_studios"])
-                except Exception as exc:
-                    logger.warning("silver_anime_studios_skip", error=str(exc))
+        # studios + anime_studios (optional — skip if no bronze parquet)
+        if _parquet_columns(conn, studios_glob):
+            try:
+                conn.execute(_STUDIOS_SQL, [studios_glob])
+                counts["studios"] = conn.execute("SELECT COUNT(*) FROM studios").fetchone()[0]
+                logger.info("silver_studios", count=counts["studios"])
+            except Exception as exc:
+                logger.warning("silver_studios_skip", error=str(exc))
 
-            # ── Card 14: source-specific SILVER extras ──────────────────────
-            # Each loader's integrate(conn, bronze_root) applies its own DDL
-            # (IF NOT EXISTS) and data inserts.  Failures are isolated so a
-            # single bad source does not abort the others.
-            _source_loaders = [
-                ("seesaawiki", _sl_seesaawiki),
-                ("madb", _sl_madb),
-                ("anilist", _sl_anilist),
-                ("ann", _sl_ann),
-                ("bangumi", _sl_bangumi),
-                ("keyframe", _sl_keyframe),
-                ("mal", _sl_mal),
-                ("sakuga_atwiki", _sl_sakuga_atwiki),
-                ("tmdb", _sl_tmdb),
-            ]
-            for source_name, loader_module in _source_loaders:
-                try:
-                    source_counts = loader_module.integrate(conn, bronze_root)
-                    for key, val in source_counts.items():
-                        counts[f"{source_name}.{key}"] = val
-                    logger.info(
-                        "silver_source_loaded",
-                        source=source_name,
-                        tables=list(source_counts.keys()),
-                    )
-                except Exception as exc:
-                    logger.warning(
-                        "silver_source_skip",
-                        source=source_name,
-                        error=str(exc),
-                    )
+        if _parquet_columns(conn, anime_studios_glob):
+            try:
+                conn.execute(_ANIME_STUDIOS_SQL, [anime_studios_glob])
+                counts["anime_studios"] = conn.execute(
+                    "SELECT COUNT(*) FROM anime_studios"
+                ).fetchone()[0]
+                logger.info("silver_anime_studios", count=counts["anime_studios"])
+            except Exception as exc:
+                logger.warning("silver_anime_studios_skip", error=str(exc))
 
-        finally:
-            conn.close()
+        # ── Card 14: source-specific SILVER extras ──────────────────────
+        # Each loader's integrate(conn, bronze_root) applies its own DDL
+        # (IF NOT EXISTS) and data inserts.  Failures are isolated so a
+        # single bad source does not abort the others.
+        _source_loaders = [
+            ("seesaawiki", _sl_seesaawiki),
+            ("madb", _sl_madb),
+            ("anilist", _sl_anilist),
+            ("ann", _sl_ann),
+            ("bangumi", _sl_bangumi),
+            ("keyframe", _sl_keyframe),
+            ("mal", _sl_mal),
+            ("sakuga_atwiki", _sl_sakuga_atwiki),
+            ("tmdb", _sl_tmdb),
+        ]
+        for source_name, loader_module in _source_loaders:
+            try:
+                source_counts = loader_module.integrate(conn, bronze_root)
+                for key, val in source_counts.items():
+                    counts[f"{source_name}.{key}"] = val
+                logger.info(
+                    "silver_source_loaded",
+                    source=source_name,
+                    tables=list(source_counts.keys()),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "silver_source_skip",
+                    source=source_name,
+                    error=str(exc),
+                )
+    finally:
+        conn.close()
 
     return counts
 

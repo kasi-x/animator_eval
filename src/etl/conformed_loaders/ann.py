@@ -624,6 +624,26 @@ def integrate(
     except Exception as exc:  # noqa: BLE001
         counts["persons_insert_error"] = str(exc)
 
+    # Phase 1b: backfill orphan persons from credits when BRONZE persons rows
+    # are missing for some ann_person_id values referenced in credits.
+    # Card 14/13 follow-up: 631 orphan credit person_ids fixed by id-only insert.
+    credits_glob = _g(bronze_root, "credits")
+    try:
+        conn.execute(
+            """
+            INSERT OR IGNORE INTO persons (id, name_en, name_ja)
+            SELECT DISTINCT
+                'ann:p' || CAST(ann_person_id AS VARCHAR) AS id,
+                COALESCE(name_en, '')                     AS name_en,
+                ''                                        AS name_ja
+            FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+            WHERE ann_person_id IS NOT NULL
+            """,
+            [credits_glob],
+        )
+    except Exception as exc:  # noqa: BLE001
+        counts["persons_from_credits_error"] = str(exc)
+
     # Phase 2: UPDATE ANN extra columns onto now-existing anime + persons rows.
     pairs = [
         ("anime",    _ANIME_EXTRAS_SQL),
