@@ -85,18 +85,20 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_anime_quarter ON anime(year, quarter);
 
         CREATE TABLE IF NOT EXISTS credits (
-            id              INTEGER PRIMARY KEY AUTOINCREMENT,
-            person_id       TEXT NOT NULL,
-            anime_id        TEXT NOT NULL,
-            role            TEXT NOT NULL,
-            raw_role        TEXT NOT NULL DEFAULT '',
-            episode         INTEGER,
-            evidence_source TEXT NOT NULL DEFAULT '',
-            credit_year     INTEGER,
-            credit_quarter  INTEGER,
-            affiliation     TEXT,
-            position        INTEGER,
-            updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            person_id        TEXT NOT NULL,
+            anime_id         TEXT NOT NULL,
+            role             TEXT NOT NULL,
+            raw_role         TEXT NOT NULL DEFAULT '',
+            episode          INTEGER,
+            evidence_source  TEXT NOT NULL DEFAULT '',
+            confidence_tier  TEXT NOT NULL DEFAULT 'HIGH'
+                                 CHECK (confidence_tier IN ('HIGH','MEDIUM','LOW','RESTORED')),
+            credit_year      INTEGER,
+            credit_quarter   INTEGER,
+            affiliation      TEXT,
+            position         INTEGER,
+            updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             UNIQUE(person_id, anime_id, raw_role, episode)
         );
         CREATE INDEX IF NOT EXISTS idx_credits_person ON credits(person_id);
@@ -259,6 +261,35 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
             ON person_affiliations(person_id);
         CREATE INDEX IF NOT EXISTS idx_person_affiliations_anime
             ON person_affiliations(anime_id);
+
+        -- ============================================================
+        -- Credit restoration / claim tables
+        -- ============================================================
+
+        CREATE TABLE IF NOT EXISTS meta_credit_corrections (
+            claim_id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            anime_id         TEXT NOT NULL,
+            person_id        TEXT,
+            corrected_field  TEXT NOT NULL,
+            old_value        TEXT,
+            new_value        TEXT NOT NULL,
+            claimer_role     TEXT NOT NULL DEFAULT 'unknown'
+                                 CHECK (claimer_role IN
+                                     ('individual','family','researcher','institution','unknown')),
+            evidence_url     TEXT,
+            status           TEXT NOT NULL DEFAULT 'pending'
+                                 CHECK (status IN ('pending','approved','rejected','superseded')),
+            reviewer_note    TEXT,
+            submitted_at     TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            reviewed_at      TIMESTAMP,
+            source_credit_id INTEGER
+        );
+        CREATE INDEX IF NOT EXISTS idx_meta_cc_anime
+            ON meta_credit_corrections(anime_id);
+        CREATE INDEX IF NOT EXISTS idx_meta_cc_person
+            ON meta_credit_corrections(person_id);
+        CREATE INDEX IF NOT EXISTS idx_meta_cc_status
+            ON meta_credit_corrections(status);
 
         -- ============================================================
         -- Score tables

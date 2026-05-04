@@ -68,6 +68,7 @@ from .o1_gender_ceiling import O1GenderCeilingReport
 from .o2_mid_management import O2MidManagementReport
 from .o3_ip_dependency import O3IpDependencyReport
 from .o4_foreign_talent import O4ForeignTalentReport
+from .o7_historical import O7HistoricalRestorationReport
 from .o8_soft_power import O8SoftPowerReport
 # Phase 10: Person parameter card + 3 audience brief indices
 from .person_parameter_card import PersonParameterCardReport
@@ -113,6 +114,7 @@ V2_REPORT_CLASSES = [
     O2MidManagementReport,
     O3IpDependencyReport,
     O4ForeignTalentReport,
+    O7HistoricalRestorationReport,
     O8SoftPowerReport,
     # technical appendix
     AKMDiagnosticsReport,
@@ -177,6 +179,7 @@ __all__ = [
     "O2MidManagementReport",
     "O3IpDependencyReport",
     "O4ForeignTalentReport",
+    "O7HistoricalRestorationReport",
     "O8SoftPowerReport",
     "V2_REPORT_CLASSES",
 ]

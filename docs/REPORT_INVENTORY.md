@@ -123,6 +123,19 @@
 
 ---
 
+## extension — 15_extension_reports (O-series)
+
+| report_file | class_name | title | audience | status |
+|---|---|---|---|---|
+| o1_gender_ceiling.py | O1GenderCeilingReport | ジェンダー天井分析 | policy | active |
+| o2_mid_management.py | O2MidManagementReport | 中間管理層構造分析 | hr | active |
+| o3_ip_dependency.py | O3IpDependencyReport | IP 人的依存リスク分析 | biz | active |
+| o4_foreign_talent.py | O4ForeignTalentReport | 外国籍クレジット分析 | policy | active |
+| o7_historical.py | O7HistoricalRestorationReport | 歴史的クレジット記録復元分析 | technical_appendix | active (2026-05-02) |
+| o8_soft_power.py | O8SoftPowerReport | ソフトパワー輸出分析 | biz | active |
+
+---
+
 ## archived
 
 | report_file | title | rationale |
