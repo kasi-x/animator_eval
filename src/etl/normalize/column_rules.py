@@ -27,6 +27,7 @@ import re
 import unicodedata
 
 from src.etl.normalize.canonical_name import KYU_SHIN_MAP
+from src.etl.normalize.date_parser import normalize_date
 
 # ---------------------------------------------------------------------------
 # Type alias
@@ -128,6 +129,25 @@ def _title_case_media(value: str) -> str:
     return stripped.title()
 
 
+def _date_iso8601_with_subset(value: str) -> str:
+    """Normalize a date string to ISO 8601 with 'XX' placeholders.
+
+    Parses multi-format date strings (ISO, slash, dot, English, JSON struct)
+    and returns the canonical "YYYY-MM-DD" / "YYYY-MM-XX" / "YYYY-XX-XX" form.
+
+    Falls back to the stripped original value if the date is unparseable,
+    so consensus comparison can still detect literal equality.
+
+    This is the normalization function for the 'date_iso8601_with_subset' rule
+    type used by date columns.  Subset-compatible detection
+    (e.g. "2020" vs "2020-04-15" → same) is handled in classify_consensus_date.
+    """
+    normalized = normalize_date(value)
+    if normalized is None:
+        return value.strip()
+    return normalized
+
+
 # ---------------------------------------------------------------------------
 # Column-rule dispatch table
 # ---------------------------------------------------------------------------
@@ -163,6 +183,45 @@ _COLUMN_RULES: dict[str, tuple[object, str]] = {
     "name": (
         _info_richest_punct_clean,
         "info_richest_punct_clean",
+    ),
+    # Date columns: multi-format → ISO 8601 with XX placeholders
+    # Subset-compatible detection ("2020" ⊆ "2020-04-15") is handled downstream
+    # in classify_consensus_date; this normalizer enables literal-equality matches.
+    "start_date": (
+        _date_iso8601_with_subset,
+        "date_iso8601_with_subset",
+    ),
+    "end_date": (
+        _date_iso8601_with_subset,
+        "date_iso8601_with_subset",
+    ),
+    "aired_from": (
+        _date_iso8601_with_subset,
+        "date_iso8601_with_subset",
+    ),
+    "aired_to": (
+        _date_iso8601_with_subset,
+        "date_iso8601_with_subset",
+    ),
+    "release_date": (
+        _date_iso8601_with_subset,
+        "date_iso8601_with_subset",
+    ),
+    "first_air_date": (
+        _date_iso8601_with_subset,
+        "date_iso8601_with_subset",
+    ),
+    "last_air_date": (
+        _date_iso8601_with_subset,
+        "date_iso8601_with_subset",
+    ),
+    "birth_date": (
+        _date_iso8601_with_subset,
+        "date_iso8601_with_subset",
+    ),
+    "death_date": (
+        _date_iso8601_with_subset,
+        "date_iso8601_with_subset",
     ),
 }
 

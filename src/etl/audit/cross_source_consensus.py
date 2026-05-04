@@ -46,6 +46,10 @@ import structlog
 
 from src.etl.normalize.canonical_name import KYU_SHIN_MAP
 from src.etl.normalize.column_rules import normalize_for_consensus
+from src.etl.normalize.date_parser import (
+    is_date_subset_compatible,
+    pick_most_precise_date,
+)
 
 logger = structlog.get_logger()
 
@@ -99,20 +103,26 @@ _PUNCT_RE = re.compile(r"[・．。、，,.\-\s　]+")
 
 
 # ---------------------------------------------------------------------------
-# Normalization
+# Date column registry
 # ---------------------------------------------------------------------------
 
-def _normalize_value(value: str) -> str:
-    """Return NFKC + 旧字体→新字体 + lowercase + punct-strip normalized string."""
-    s = unicodedata.normalize("NFKC", value)
-    s = "".join(KYU_SHIN_MAP.get(ch, ch) for ch in s)
-    s = s.lower()
-    s = _PUNCT_RE.sub("", s)
-    return s
+# Columns that use the date_iso8601_with_subset normalization rule.
+# Subset-compatible detection runs as a second pass for these columns.
+_DATE_COLUMNS: frozenset[str] = frozenset({
+    "start_date",
+    "end_date",
+    "aired_from",
+    "aired_to",
+    "release_date",
+    "first_air_date",
+    "last_air_date",
+    "birth_date",
+    "death_date",
+})
 
 
 # ---------------------------------------------------------------------------
-# Core classification
+# Core result type (defined early so date functions can reference it)
 # ---------------------------------------------------------------------------
 
 @dataclass(frozen=True)
@@ -126,6 +136,182 @@ class ConsensusResult:
     outlier_sources: list[str]
     outlier_values: list[str]
 
+
+# ---------------------------------------------------------------------------
+# Normalization
+# ---------------------------------------------------------------------------
+
+def _normalize_value(value: str) -> str:
+    """Return NFKC + 旧字体→新字体 + lowercase + punct-strip normalized string."""
+    s = unicodedata.normalize("NFKC", value)
+    s = "".join(KYU_SHIN_MAP.get(ch, ch) for ch in s)
+    s = s.lower()
+    s = _PUNCT_RE.sub("", s)
+    return s
+
+
+# ---------------------------------------------------------------------------
+# Date-specific consensus: subset-compatible grouping
+# ---------------------------------------------------------------------------
+
+def classify_consensus_date(
+    source_value_map: dict[str, str | None],
+) -> ConsensusResult:
+    """Classify consensus for a date attribute using subset-compatible grouping.
+
+    Two date values are treated as equivalent if they are subset-compatible
+    (e.g. "2020" vs "2020-04-15" — year matches, extra precision is ok).
+
+    When all sources are subset-compatible with each other the result is
+    "unanimous", and the most precise ISO 8601 date is used as majority_value.
+
+    When a strict majority (>50%) of sources are mutually subset-compatible,
+    the result follows the same majority / unique_outlier / plurality / tie
+    rules as classify_consensus, but the majority_value is the most precise
+    date in the compatible group.
+
+    Args:
+        source_value_map: Mapping of source_name → raw date value.
+
+    Returns:
+        ConsensusResult with date-aware majority_value.
+    """
+    present: dict[str, str] = {
+        src: val
+        for src, val in source_value_map.items()
+        if val is not None and val != ""
+    }
+
+    n_sources = len(present)
+
+    if n_sources == 0:
+        return ConsensusResult(
+            majority_value=None,
+            majority_count=0,
+            majority_share=0.0,
+            consensus_flag="unanimous",
+            outlier_sources=[],
+            outlier_values=[],
+        )
+
+    sources = list(present.keys())
+    values = list(present.values())
+
+    # Build subset-compatibility clusters using Union-Find.
+    # Each source belongs to exactly one cluster; two sources are in the same
+    # cluster iff their values are subset-compatible.
+    parent: dict[str, str] = {s: s for s in sources}
+
+    def _find(x: str) -> str:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def _union(a: str, b: str) -> None:
+        ra, rb = _find(a), _find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    for i in range(len(sources)):
+        for j in range(i + 1, len(sources)):
+            if is_date_subset_compatible(values[i], values[j]):
+                _union(sources[i], sources[j])
+
+    # Group sources by cluster root.
+    clusters: dict[str, list[str]] = {}
+    for src in sources:
+        root = _find(src)
+        clusters.setdefault(root, []).append(src)
+
+    # Count cluster sizes and identify the largest.
+    cluster_sizes = {root: len(members) for root, members in clusters.items()}
+    ranked = sorted(cluster_sizes.items(), key=lambda kv: -kv[1])
+    top_root, top_count = ranked[0]
+    top_members = clusters[top_root]
+    majority_share = top_count / n_sources
+
+    # Pick the most precise date from the winning cluster (source-priority order).
+    _SOURCE_PRIORITY = ["anilist", "mal", "bgm", "ann", "madb", "keyframe", "seesaawiki"]
+    ordered_values = _priority_ordered_values(top_members, present, _SOURCE_PRIORITY)
+    most_precise_iso = pick_most_precise_date(ordered_values)
+    majority_value = most_precise_iso or (ordered_values[0] if ordered_values else None)
+
+    # Identify minority (outlier) sources and values.
+    minority_sources = [src for src in sources if _find(src) != top_root]
+    minority_values = list({present[src] for src in minority_sources})
+
+    # ── unanimous (only one cluster, all compatible) ────────────────────────
+    if len(clusters) == 1:
+        return ConsensusResult(
+            majority_value=majority_value,
+            majority_count=top_count,
+            majority_share=1.0,
+            consensus_flag="unanimous",
+            outlier_sources=[],
+            outlier_values=[],
+        )
+
+    second_count = ranked[1][1] if len(ranked) > 1 else 0
+
+    # ── tie ──────────────────────────────────────────────────────────────────
+    if top_count == second_count:
+        return ConsensusResult(
+            majority_value=majority_value,
+            majority_count=top_count,
+            majority_share=majority_share,
+            consensus_flag="tie",
+            outlier_sources=minority_sources,
+            outlier_values=minority_values,
+        )
+
+    # ── strict majority (>50%) ────────────────────────────────────────────────
+    if majority_share > 0.5:
+        flag: ConsensusFlag = "unique_outlier" if len(minority_sources) == 1 else "majority"
+        return ConsensusResult(
+            majority_value=majority_value,
+            majority_count=top_count,
+            majority_share=majority_share,
+            consensus_flag=flag,
+            outlier_sources=minority_sources,
+            outlier_values=minority_values,
+        )
+
+    # ── plurality ─────────────────────────────────────────────────────────────
+    return ConsensusResult(
+        majority_value=majority_value,
+        majority_count=top_count,
+        majority_share=majority_share,
+        consensus_flag="plurality",
+        outlier_sources=minority_sources,
+        outlier_values=minority_values,
+    )
+
+
+def _priority_ordered_values(
+    sources: list[str],
+    present: dict[str, str],
+    priority: list[str],
+) -> list[str | None]:
+    """Return values for given sources ordered by source priority list."""
+    ordered: list[str | None] = []
+    seen = set()
+    for preferred in priority:
+        for src in sources:
+            if src == preferred and src not in seen:
+                ordered.append(present[src])
+                seen.add(src)
+    # Append any remaining sources alphabetically
+    for src in sorted(sources):
+        if src not in seen:
+            ordered.append(present[src])
+            seen.add(src)
+    return ordered
+
+
+# ---------------------------------------------------------------------------
+# Core classification
+# ---------------------------------------------------------------------------
 
 def _resolve_tie_by_source_priority(
     top_values: list[str],
@@ -324,8 +510,15 @@ def _build_consensus_record(
 
     Computes both raw consensus and column-rule-normalized consensus flags.
     The normalized view applies column-specific normalization (alias maps,
-    kyu→shin, ISO-3166, info_richest, etc.) before re-running classify_consensus.
+    kyu→shin, ISO-3166, info_richest, date_iso8601_with_subset, etc.) before
+    re-running classify_consensus.
+
+    For date columns, the normalized view uses classify_consensus_date which
+    applies subset-compatible grouping ("2020" ⊆ "2020-04-15" → unanimous).
     """
+    is_date = attribute in _DATE_COLUMNS
+
+    # Raw classification always uses exact-match consensus.
     result = classify_consensus(source_value_map)
 
     # Column-rule-normalized view: apply per-attribute normalization rules.
@@ -333,7 +526,12 @@ def _build_consensus_record(
         src: normalize_for_consensus(attribute, val)
         for src, val in source_value_map.items()
     }
-    norm_result = classify_consensus(col_normalized_source_map)
+
+    # For date columns, use subset-compatible grouping on the normalized values.
+    if is_date:
+        norm_result = classify_consensus_date(col_normalized_source_map)
+    else:
+        norm_result = classify_consensus(col_normalized_source_map)
 
     n_sources = sum(1 for v in source_value_map.values() if v is not None and v != "")
     n_distinct = len({v for v in source_value_map.values() if v is not None and v != ""})

@@ -2,8 +2,10 @@
 
 Covers:
 - classify_consensus: all 5 consensus_flag categories
+- classify_consensus_date: subset-compatible date grouping
 - collect_consensus: integration with in-memory DuckDB fixtures
 - export_consensus: CSV output with header + correct filename suffix
+- date_parser: parse_date, is_date_subset_compatible, normalize_date
 """
 
 from __future__ import annotations
@@ -18,8 +20,17 @@ import pytest
 from src.etl.audit.cross_source_consensus import (
     ConsensusResult,
     classify_consensus,
+    classify_consensus_date,
     collect_consensus,
     export_consensus,
+)
+from src.etl.normalize.date_parser import (
+    is_date_subset_compatible,
+    normalize_date,
+    parse_date,
+    pick_most_precise_date,
+    precision_score,
+    to_iso8601,
 )
 
 
@@ -704,3 +715,384 @@ class TestExportConsensus:
         assert len(unanimous_rows) == 1
         assert json.loads(unanimous_rows[0]["outlier_sources"]) == []
         assert json.loads(unanimous_rows[0]["outlier_values"]) == []
+
+
+# ---------------------------------------------------------------------------
+# date_parser unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestParseDate:
+    """parse_date: multi-format input → (year, month, day) tuple."""
+
+    def test_iso_full(self) -> None:
+        assert parse_date("2020-04-15") == (2020, 4, 15)
+
+    def test_iso_year_month(self) -> None:
+        assert parse_date("2020-04") == (2020, 4, None)
+
+    def test_iso_year_only(self) -> None:
+        assert parse_date("2020") == (2020, None, None)
+
+    def test_slash_full(self) -> None:
+        assert parse_date("2020/04/15") == (2020, 4, 15)
+
+    def test_dot_full(self) -> None:
+        assert parse_date("2020.04.15") == (2020, 4, 15)
+
+    def test_english_month_day_year(self) -> None:
+        assert parse_date("April 15, 2020") == (2020, 4, 15)
+
+    def test_english_abbreviated_month(self) -> None:
+        assert parse_date("Apr 15 2020") == (2020, 4, 15)
+
+    def test_english_year_month_day(self) -> None:
+        assert parse_date("2020 Apr 15") == (2020, 4, 15)
+
+    def test_json_struct(self) -> None:
+        assert parse_date('{"year": 2025, "month": 4, "day": 8}') == (2025, 4, 8)
+
+    def test_json_struct_partial(self) -> None:
+        parsed = parse_date('{"year": 2025, "month": 4}')
+        assert parsed is not None
+        assert parsed[0] == 2025
+        assert parsed[1] == 4
+        assert parsed[2] is None
+
+    def test_none_returns_none(self) -> None:
+        assert parse_date(None) is None
+
+    def test_empty_string_returns_none(self) -> None:
+        assert parse_date("") is None
+
+    def test_unparseable_returns_none(self) -> None:
+        assert parse_date("not-a-date") is None
+
+    def test_unparseable_partial_returns_none(self) -> None:
+        assert parse_date("abc-04-15") is None
+
+
+class TestToIso8601:
+    """to_iso8601: DateTuple → ISO string with XX placeholders."""
+
+    def test_full_date(self) -> None:
+        assert to_iso8601((2020, 4, 15)) == "2020-04-15"
+
+    def test_year_month(self) -> None:
+        assert to_iso8601((2020, 4, None)) == "2020-04-XX"
+
+    def test_year_only(self) -> None:
+        assert to_iso8601((2020, None, None)) == "2020-XX-XX"
+
+    def test_no_year(self) -> None:
+        assert to_iso8601((None, None, None)) == "XXXX-XX-XX"
+
+    def test_single_digit_month_padded(self) -> None:
+        assert to_iso8601((2020, 1, 5)) == "2020-01-05"
+
+
+class TestNormalizeDate:
+    """normalize_date: convenience parse+serialize wrapper."""
+
+    def test_slash_to_iso(self) -> None:
+        assert normalize_date("2020/04/15") == "2020-04-15"
+
+    def test_year_only_to_iso(self) -> None:
+        assert normalize_date("2020") == "2020-XX-XX"
+
+    def test_english_to_iso(self) -> None:
+        assert normalize_date("April 15, 2020") == "2020-04-15"
+
+    def test_none_returns_none(self) -> None:
+        assert normalize_date(None) is None
+
+    def test_unparseable_returns_none(self) -> None:
+        assert normalize_date("garbage") is None
+
+
+class TestPrecisionScore:
+    """precision_score: 0 (no data) → 3 (full date)."""
+
+    def test_no_data(self) -> None:
+        assert precision_score((None, None, None)) == 0
+
+    def test_year_only(self) -> None:
+        assert precision_score((2020, None, None)) == 1
+
+    def test_year_month(self) -> None:
+        assert precision_score((2020, 4, None)) == 2
+
+    def test_full(self) -> None:
+        assert precision_score((2020, 4, 15)) == 3
+
+
+class TestIsDateSubsetCompatible:
+    """is_date_subset_compatible: subset hierarchy detection."""
+
+    def test_year_vs_full_date_compatible(self) -> None:
+        """Core requirement: "2020" vs "2020-04-15" must be subset_compatible."""
+        assert is_date_subset_compatible("2020", "2020-04-15") is True
+
+    def test_full_date_vs_year_compatible(self) -> None:
+        assert is_date_subset_compatible("2020-04-15", "2020") is True
+
+    def test_year_month_vs_full_date_compatible(self) -> None:
+        assert is_date_subset_compatible("2020-04", "2020-04-15") is True
+
+    def test_identical_full_dates_compatible(self) -> None:
+        assert is_date_subset_compatible("2020-04-15", "2020-04-15") is True
+
+    def test_different_years_incompatible(self) -> None:
+        assert is_date_subset_compatible("2020", "2021") is False
+
+    def test_different_full_dates_incompatible(self) -> None:
+        assert is_date_subset_compatible("2020-04-15", "2020-04-16") is False
+
+    def test_different_month_incompatible(self) -> None:
+        assert is_date_subset_compatible("2020-04", "2020-05-15") is False
+
+    def test_slash_vs_iso_compatible(self) -> None:
+        """2020/04/15 vs 2020-04-15 — same date, different separator."""
+        assert is_date_subset_compatible("2020/04/15", "2020-04-15") is True
+
+    def test_english_vs_iso_compatible(self) -> None:
+        assert is_date_subset_compatible("April 15, 2020", "2020-04-15") is True
+
+    def test_none_none_compatible(self) -> None:
+        assert is_date_subset_compatible(None, None) is True
+
+    def test_none_value_incompatible(self) -> None:
+        assert is_date_subset_compatible(None, "2020-04-15") is False
+
+    def test_both_unparseable_same_string(self) -> None:
+        assert is_date_subset_compatible("garbage", "garbage") is True
+
+    def test_both_unparseable_different_strings(self) -> None:
+        assert is_date_subset_compatible("foo", "bar") is False
+
+
+class TestPickMostPreciseDate:
+    """pick_most_precise_date: select highest-precision date from list."""
+
+    def test_prefers_full_date_over_year(self) -> None:
+        result = pick_most_precise_date(["2020", "2020-04-15"])
+        assert result == "2020-04-15"
+
+    def test_prefers_year_month_over_year(self) -> None:
+        result = pick_most_precise_date(["2020", "2020-04"])
+        assert result == "2020-04-XX"
+
+    def test_all_year_only(self) -> None:
+        result = pick_most_precise_date(["2020", "2020"])
+        assert result == "2020-XX-XX"
+
+    def test_empty_list_returns_none(self) -> None:
+        assert pick_most_precise_date([]) is None
+
+    def test_all_none_returns_none(self) -> None:
+        assert pick_most_precise_date([None, None]) is None
+
+
+# ---------------------------------------------------------------------------
+# classify_consensus_date unit tests
+# ---------------------------------------------------------------------------
+
+
+class TestClassifyConsensusDate:
+    """classify_consensus_date: subset-compatible date grouping."""
+
+    def test_year_only_vs_full_date_unanimous(self) -> None:
+        """Core requirement: "2020" vs "2020-04-15" → unanimous + precise value."""
+        result = classify_consensus_date({
+            "anilist": "2020",
+            "mal": "2020-04-15",
+        })
+        assert result.consensus_flag == "unanimous"
+        assert result.majority_value == "2020-04-15"
+        assert result.majority_count == 2
+
+    def test_three_sources_year_vs_full_unanimous(self) -> None:
+        """3 sources: 2 × "2020", 1 × "2020-04-15" → unanimous (most precise)."""
+        result = classify_consensus_date({
+            "anilist": "2020",
+            "mal": "2020",
+            "bgm": "2020-04-15",
+        })
+        assert result.consensus_flag == "unanimous"
+        assert result.majority_value == "2020-04-15"
+        assert result.outlier_sources == []
+
+    def test_all_same_unanimous(self) -> None:
+        result = classify_consensus_date({
+            "anilist": "2020-04-15",
+            "mal": "2020-04-15",
+            "bgm": "2020-04-15",
+        })
+        assert result.consensus_flag == "unanimous"
+        assert result.majority_value == "2020-04-15"
+
+    def test_different_years_not_unanimous(self) -> None:
+        result = classify_consensus_date({
+            "anilist": "2020",
+            "mal": "2021",
+        })
+        assert result.consensus_flag == "tie"
+
+    def test_majority_over_outlier(self) -> None:
+        """2020 compatible cluster (anilist+mal) vs 2021 (bgm) → unique_outlier."""
+        result = classify_consensus_date({
+            "anilist": "2020",
+            "mal": "2020-04-15",
+            "bgm": "2021",
+        })
+        assert result.consensus_flag == "unique_outlier"
+        assert result.outlier_sources == ["bgm"]
+
+    def test_slash_format_compatible(self) -> None:
+        result = classify_consensus_date({
+            "anilist": "2020/04/15",
+            "mal": "2020-04-15",
+        })
+        assert result.consensus_flag == "unanimous"
+
+    def test_english_format_compatible(self) -> None:
+        result = classify_consensus_date({
+            "anilist": "April 15, 2020",
+            "mal": "2020-04-15",
+        })
+        assert result.consensus_flag == "unanimous"
+
+    def test_empty_sources_unanimous(self) -> None:
+        result = classify_consensus_date({})
+        assert result.consensus_flag == "unanimous"
+        assert result.majority_value is None
+
+    def test_all_null_unanimous(self) -> None:
+        result = classify_consensus_date({"anilist": None, "mal": None})
+        assert result.consensus_flag == "unanimous"
+
+    def test_null_excluded_from_count(self) -> None:
+        result = classify_consensus_date({
+            "anilist": "2020",
+            "mal": "2020-04-15",
+            "bgm": None,
+        })
+        assert result.consensus_flag == "unanimous"
+        assert result.majority_count == 2
+
+    def test_majority_value_is_most_precise(self) -> None:
+        """When 3 sources all subset-compatible, pick the most precise."""
+        result = classify_consensus_date({
+            "anilist": "2020",
+            "mal": "2020-04",
+            "bgm": "2020-04-15",
+        })
+        assert result.consensus_flag == "unanimous"
+        assert result.majority_value == "2020-04-15"
+
+
+# ---------------------------------------------------------------------------
+# Integration: date columns produce subset-compatible normalized consensus
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def resolved_conn_with_dates() -> duckdb.DuckDBPyConnection:
+    """Resolved DB with a 3-source anime entity for date testing."""
+    conn = duckdb.connect(":memory:")
+    conn.execute(
+        """
+        CREATE TABLE anime (
+            canonical_id    VARCHAR PRIMARY KEY,
+            source_ids_json VARCHAR NOT NULL DEFAULT '[]'
+        )
+        """
+    )
+    conn.executemany(
+        "INSERT INTO anime VALUES (?, ?)",
+        [
+            (
+                "resolved:anime:date_test",
+                json.dumps(["anilist:d10", "mal:d10", "bgm:d10"]),
+            ),
+        ],
+    )
+    yield conn
+    conn.close()
+
+
+@pytest.fixture()
+def silver_conn_with_dates() -> duckdb.DuckDBPyConnection:
+    """Silver DB with start_date values: year-only vs full date."""
+    conn = duckdb.connect(":memory:")
+    conn.execute(
+        """
+        CREATE TABLE anime (
+            id          VARCHAR PRIMARY KEY,
+            title_ja    VARCHAR,
+            title_en    VARCHAR,
+            year        VARCHAR,
+            start_date  VARCHAR,
+            end_date    VARCHAR,
+            episodes    VARCHAR,
+            format      VARCHAR,
+            duration    VARCHAR
+        )
+        """
+    )
+    # anilist and mal give year-only; bgm gives full date — all subset-compatible
+    conn.executemany(
+        "INSERT INTO anime VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        [
+            ("anilist:d10", "テストアニメ", "Test Anime", "2020", "2020", None, "12", "TV", "24"),
+            ("mal:d10",     "テストアニメ", "Test Anime", "2020", "2020", None, "12", "TV", "24"),
+            ("bgm:d10",     "テストアニメ", "Test Anime", "2020", "2020-04-15", None, "12", "TV", "24"),
+        ],
+    )
+    yield conn
+    conn.close()
+
+
+class TestDateColumnIntegration:
+    """Integration tests: date column subset detection in collect_consensus."""
+
+    def test_start_date_year_vs_full_normalized_unanimous(
+        self,
+        resolved_conn_with_dates: duckdb.DuckDBPyConnection,
+        silver_conn_with_dates: duckdb.DuckDBPyConnection,
+    ) -> None:
+        """start_date: "2020" (×2) vs "2020-04-15" (×1) → normalized=unanimous."""
+        records = collect_consensus(
+            resolved_conn_with_dates, "anime", silver_conn_with_dates
+        )
+        rec = next(
+            r for r in records
+            if r["canonical_id"] == "resolved:anime:date_test"
+            and r["attribute"] == "start_date"
+        )
+        # Raw flag: 2 distinct values → not raw-unanimous
+        assert rec["consensus_flag"] in {"unique_outlier", "majority", "unanimous"}
+        # Normalized flag: all subset-compatible → unanimous
+        assert rec["normalized_consensus_flag"] == "unanimous", (
+            f"Expected normalized=unanimous, got {rec['normalized_consensus_flag']!r}; "
+            f"values={rec['values_json']!r}"
+        )
+
+    def test_start_date_normalized_majority_value_is_most_precise(
+        self,
+        resolved_conn_with_dates: duckdb.DuckDBPyConnection,
+        silver_conn_with_dates: duckdb.DuckDBPyConnection,
+    ) -> None:
+        """normalized_majority_value should be the ISO 8601 full date."""
+        records = collect_consensus(
+            resolved_conn_with_dates, "anime", silver_conn_with_dates
+        )
+        rec = next(
+            r for r in records
+            if r["canonical_id"] == "resolved:anime:date_test"
+            and r["attribute"] == "start_date"
+        )
+        # The most precise available date is 2020-04-15
+        assert rec["normalized_majority_value"] == "2020-04-15", (
+            f"Expected '2020-04-15', got {rec['normalized_majority_value']!r}"
+        )
