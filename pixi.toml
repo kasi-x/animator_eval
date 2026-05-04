@@ -78,6 +78,7 @@ synthetic = "python -m src.synthetic"
 build-rust = "maturin develop --release --manifest-path rust_ext/Cargo.toml --uv"
 serve = "python -m src.api"
 lab = "jupyter lab --notebook-dir=result/notebooks"
+marimo = "marimo run"
 
 # ============================================================================
 # Shared Dependencies (included in ALL environments)
@@ -155,6 +156,7 @@ pytest = ">=7.0"
 pytest-cov = ">=4.0"
 pytest-xdist = ">=3.5"
 pytest-testmon = ">=2.1"
+marimo = ">=0.7"
 
 # ============================================================================
 # Feature: rust — Rust extension (PyO3/maturin)
