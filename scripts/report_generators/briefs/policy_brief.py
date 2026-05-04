@@ -346,6 +346,109 @@ with 95% CI.
         """,
     )
 
+    brief.add_method_gate(
+        MethodGate(
+            method_name="Gender Progression Disparity (O1)",
+            algorithm=(
+                "Cox proportional hazards regression with gender_f covariate "
+                "(F=1, M=0) and cohort_5y adjustment; "
+                "Mann-Whitney U within debut cohorts (non-parametric); "
+                "ego-network same_gender_share vs. permutation null model"
+            ),
+            confidence_interval_method=(
+                "CoxPHFitter 95% CI on gender hazard ratio (lifelines); "
+                "Mann-Whitney effect size r = |Z| / sqrt(n)"
+            ),
+            null_model=(
+                "Ego-network: permutation null model (1000 iterations, seed=42) "
+                "preserving gender ratio of collaborator pool; "
+                "Mann-Whitney: rank-based two-sided test per debut cohort"
+            ),
+            validation_method=(
+                "Log-rank test (F vs M) for each pipeline pair; "
+                "cohort_5y stratification for historical trend comparison"
+            ),
+            limitations=[
+                "Gender coverage ~11.5% of persons (null rate 88.5%); "
+                "results may not represent full population",
+                "Gender field inferred from external sources; misclassification possible",
+                "Non-binary identities excluded due to small sample size",
+                "Structural role advancement ≠ subjective opportunity assessment",
+            ],
+        )
+    )
+
+    brief.add_section(
+        section_id="gender_progression_disparity",
+        title="Role Advancement Hazard Rate Disparity by Gender (O1)",
+        findings="""
+Cox proportional hazards regression estimates the role-advancement hazard rate
+for female (F) vs. male (M) persons across three pipeline transitions:
+in_between → key_animator, key_animator → animation_director,
+animation_director → director.
+
+Hazard Ratio (HR) represents the advancement hazard rate ratio of F relative to M.
+HR > 1 means higher advancement hazard (faster progression) for F;
+HR < 1 means lower advancement hazard (slower progression) for F.
+HR = 1 means no difference in advancement timing.
+
+The model includes cohort_5y as a covariate to control for historical cohort effects.
+Event = first credit at role_to. Censoring = no credit at role_to within 25 years.
+
+Mann-Whitney U tests within each 5-year debut cohort quantify timing differences
+using observed (non-censored) progressors. Effect size r = |Z| / sqrt(n).
+
+Ego-network analysis examines whether persons collaborate predominantly with
+same-gender peers relative to a permutation null model (1000 iterations).
+null_percentile >= 95 indicates statistically significant same-gender clustering
+(5% threshold against null distribution).
+
+Gender coverage: approximately 11.5% of persons in the database have known gender.
+All results are conditional on this subset and should be interpreted accordingly.
+        """,
+        interpretation="""
+**Interpretation (Policy perspective — gender progression disparity):**
+
+I observe structural differences in role-advancement hazard rates between F and M
+persons across animation production pipeline stages. These differences describe
+network position and advancement timing patterns in credit records; they do not
+reflect ability assessments or individual performance evaluations.
+
+Two plausible structural mechanisms:
+
+1. *Differential access hypothesis*: If HR(F) < 1 for key transitions (especially
+   animation_director → director), credit records document fewer F persons reaching
+   senior roles per unit time. This is consistent with reduced opportunities at
+   higher stages, but does not identify the causal mechanism.
+
+2. *Compositional / selection hypothesis*: Gender differences in role entry rates,
+   studio affiliation patterns, or project type preferences may produce observed
+   hazard differences without differential treatment at equivalent career stages.
+   Cohort controls partially address this but do not fully resolve it.
+
+Ego-network homophily (if observed) documents that F and M persons collaborate
+within gender-similar networks. This is a structural fact about network topology,
+not a judgment about its causes.
+
+**Policy considerations:**
+- If HR(F) < 1 for the animation_director → director transition, industry bodies
+  may consider monitoring advancement rate patterns and disaggregated pipeline data.
+- Ego-network clustering may indicate structural separation in collaboration
+  opportunities, which could be addressed through mixed-team project design.
+- High gender null rates (88.5%) limit representativeness; investment in comprehensive
+  gender-inclusive credit data collection would improve future estimates.
+
+**Alternative interpretation:**
+HR differences could reflect different career trajectories (genre specialisation,
+studio size preferences, part-time participation patterns) that are structurally
+distinct but not attributable to differential treatment. Distinguishing these
+mechanisms requires individual-level longitudinal survey data.
+
+See O1 report (o1_gender_ceiling.html) for full Cox HR forest plot, cohort-level
+Mann-Whitney results, and ego-network null percentile distributions with 95% CI.
+        """,
+    )
+
     # 4. Validate and export
     is_valid, errors = brief.validate()
 

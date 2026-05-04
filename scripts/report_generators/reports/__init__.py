@@ -64,6 +64,7 @@ from .biz_team_template import BizTeamTemplateReport
 from .biz_trust_entry import BizTrustEntryReport
 from .biz_independent_unit import BizIndependentUnitReport
 # Extension reports (15_extension_reports card group)
+from .o1_gender_ceiling import O1GenderCeilingReport
 from .o2_mid_management import O2MidManagementReport
 from .o3_ip_dependency import O3IpDependencyReport
 # Phase 10: Person parameter card + 3 audience brief indices
@@ -86,12 +87,13 @@ V2_REPORT_CLASSES = [
     PolicyBriefIndexReport,
     HrBriefIndexReport,
     BizBriefIndexReport,
-    # policy brief (5)
+    # policy brief (5 + O1 extension)
     PolicyAttritionReport,
     PolicyMonopsonyReport,
     PolicyGenderBottleneckReport,
     PolicyGenerationalHealthReport,
     CompensationFairnessReport,
+    O1GenderCeilingReport,
     # hr brief (6)
     MgmtStudioBenchmarkReport,
     MgmtDirectorMentorReport,
@@ -105,6 +107,7 @@ V2_REPORT_CLASSES = [
     BizTrustEntryReport,
     BizTeamTemplateReport,
     BizIndependentUnitReport,
+    O1GenderCeilingReport,
     O2MidManagementReport,
     O3IpDependencyReport,
     # technical appendix
@@ -166,6 +169,7 @@ __all__ = [
     "PolicyBriefIndexReport",
     "HrBriefIndexReport",
     "BizBriefIndexReport",
+    "O1GenderCeilingReport",
     "O2MidManagementReport",
     "O3IpDependencyReport",
     "V2_REPORT_CLASSES",
