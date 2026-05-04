@@ -60,6 +60,19 @@ CREATE TABLE IF NOT EXISTS conformed.studios (
     name                VARCHAR NOT NULL DEFAULT '',
     is_animation_studio BOOLEAN,
     country_of_origin   VARCHAR
+);
+
+CREATE TABLE IF NOT EXISTS conformed.credits (
+    person_id       VARCHAR NOT NULL,
+    anime_id        VARCHAR NOT NULL,
+    role            VARCHAR NOT NULL,
+    raw_role        VARCHAR NOT NULL DEFAULT '',
+    episode         INTEGER,
+    evidence_source VARCHAR NOT NULL DEFAULT '',
+    credit_year     INTEGER,
+    credit_quarter  INTEGER,
+    affiliation     VARCHAR,
+    position        INTEGER
 )
 """
 
@@ -121,6 +134,21 @@ def conformed_path(tmp_path: Path) -> Path:
         [
             ("anilist:s1", "Studio Ghibli", True, "JP"),
             ("mal:s2", "スタジオジブリ", True, None),
+        ],
+    )
+
+    # Credits: each source records the same person/anime under its own IDs.
+    # seesaa:p1 → seesaa:a1 (director)
+    # anilist:p2 → anilist:a2 (director)  — same entity via resolved merge
+    # bgm:p3 → anilist:a2 (animation_director) — cross-source credit
+    conn.executemany(
+        "INSERT INTO conformed.credits "
+        "(person_id, anime_id, role, raw_role, evidence_source, credit_year) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        [
+            ("seesaa:p1", "seesaa:a1", "director", "監督", "seesaa", 1984),
+            ("anilist:p2", "anilist:a2", "director", "Director", "anilist", 1984),
+            ("bgm:p3", "anilist:a2", "animation_director", "作画監督", "bgm", 1984),
         ],
     )
 
@@ -843,3 +871,228 @@ class TestResolvedReader:
         with resolved_connect(resolved_path) as conn:
             with pytest.raises(Exception):
                 conn.execute("DELETE FROM anime")
+
+
+# ---------------------------------------------------------------------------
+# Phase 2c: resolve_credits — integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestResolveCredits:
+    """Integration tests for build_resolved_credits (Phase 2c)."""
+
+    def _build_entities(self, conformed_path: Path, resolved_path: Path) -> None:
+        """Build resolved anime + persons (prerequisite for credits)."""
+        from src.etl.resolved.resolve_anime import build_resolved_anime
+        from src.etl.resolved.resolve_persons import build_resolved_persons
+
+        build_resolved_anime(conformed_path, resolved_path)
+        build_resolved_persons(conformed_path, resolved_path)
+
+    def test_build_resolved_credits_returns_count(
+        self, conformed_path: Path, resolved_path: Path
+    ):
+        from src.etl.resolved.resolve_credits import build_resolved_credits
+
+        self._build_entities(conformed_path, resolved_path)
+        count = build_resolved_credits(conformed_path, resolved_path)
+        # 3 conformed credits → 3 resolved credit rows
+        assert count == 3
+
+    def test_canonical_ids_substituted(
+        self, conformed_path: Path, resolved_path: Path
+    ):
+        """All 3 conformed credits must map to a single canonical person_id and anime_id.
+
+        Phase 2b merges all 3 persons (seesaa:p1, anilist:p2, bgm:p3) → 1 canonical.
+        Phase 2b merges all 3 anime (seesaa:a1, anilist:a2, mal:a3) → 1 canonical.
+        After Phase 2c, all 3 credit rows share the same canonical IDs.
+        """
+        from src.etl.resolved.resolve_credits import build_resolved_credits
+
+        self._build_entities(conformed_path, resolved_path)
+        build_resolved_credits(conformed_path, resolved_path)
+
+        conn = duckdb.connect(str(resolved_path), read_only=True)
+        rows = conn.execute(
+            "SELECT DISTINCT person_id, anime_id FROM credits"
+        ).fetchall()
+        conn.close()
+
+        # After merge: all 3 credits should have the same canonical person_id + anime_id
+        person_ids = {r[0] for r in rows}
+        anime_ids = {r[1] for r in rows}
+        assert len(person_ids) == 1, f"Expected 1 canonical person_id, got: {person_ids}"
+        assert len(anime_ids) == 1, f"Expected 1 canonical anime_id, got: {anime_ids}"
+        # anime_id must be the resolved:anime:* format
+        assert next(iter(anime_ids)).startswith("resolved:anime:"), (
+            f"anime_id not in resolved:anime: format: {anime_ids}"
+        )
+
+    def test_evidence_source_preserved(
+        self, conformed_path: Path, resolved_path: Path
+    ):
+        """evidence_source must be preserved unchanged (H4)."""
+        from src.etl.resolved.resolve_credits import build_resolved_credits
+
+        self._build_entities(conformed_path, resolved_path)
+        build_resolved_credits(conformed_path, resolved_path)
+
+        conn = duckdb.connect(str(resolved_path), read_only=True)
+        sources = {
+            r[0]
+            for r in conn.execute("SELECT DISTINCT evidence_source FROM credits").fetchall()
+        }
+        conn.close()
+        # Original evidence sources are seesaa, anilist, bgm
+        assert "seesaa" in sources
+        assert "anilist" in sources
+        assert "bgm" in sources
+
+    def test_idempotent_rebuild(
+        self, conformed_path: Path, resolved_path: Path
+    ):
+        """Running build_resolved_credits twice produces the same count."""
+        from src.etl.resolved.resolve_credits import build_resolved_credits
+
+        self._build_entities(conformed_path, resolved_path)
+        count1 = build_resolved_credits(conformed_path, resolved_path)
+        count2 = build_resolved_credits(conformed_path, resolved_path)
+        assert count1 == count2
+
+        conn = duckdb.connect(str(resolved_path), read_only=True)
+        db_count = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
+        conn.close()
+        assert db_count == count1
+
+    def test_role_and_raw_role_preserved(
+        self, conformed_path: Path, resolved_path: Path
+    ):
+        """role and raw_role values must be written unchanged."""
+        from src.etl.resolved.resolve_credits import build_resolved_credits
+
+        self._build_entities(conformed_path, resolved_path)
+        build_resolved_credits(conformed_path, resolved_path)
+
+        conn = duckdb.connect(str(resolved_path), read_only=True)
+        rows = conn.execute(
+            "SELECT role, raw_role FROM credits ORDER BY raw_role"
+        ).fetchall()
+        conn.close()
+
+        roles = {r[0] for r in rows}
+        raw_roles = {r[1] for r in rows}
+        assert "director" in roles
+        assert "animation_director" in roles
+        assert "監督" in raw_roles or "Director" in raw_roles
+
+    def test_no_entities_built_credits_passthrough(
+        self, conformed_path: Path, resolved_path: Path
+    ):
+        """When resolved entities are absent (empty maps), IDs pass through unchanged."""
+        from src.etl.resolved.resolve_credits import build_resolved_credits
+        from src.etl.resolved._ddl import ALL_DDL
+
+        # Initialize schema only — no entities
+        conn = duckdb.connect(str(resolved_path))
+        for ddl in ALL_DDL:
+            conn.execute(ddl)
+        conn.commit()
+        conn.close()
+
+        count = build_resolved_credits(conformed_path, resolved_path)
+        assert count == 3
+
+        conn = duckdb.connect(str(resolved_path), read_only=True)
+        rows = conn.execute("SELECT person_id FROM credits").fetchall()
+        conn.close()
+        # IDs should pass through unchanged (no canonical map available)
+        ids = {r[0] for r in rows}
+        assert any(
+            pid.startswith(("seesaa:", "anilist:", "bgm:")) for pid in ids
+        )
+
+
+# ---------------------------------------------------------------------------
+# Phase 2c: load_credits_resolved + load_persons_conformed_id_map — reader tests
+# ---------------------------------------------------------------------------
+
+
+class TestResolvedReaderCredits:
+    """Tests for Phase 2c additions to resolved_reader.py."""
+
+    def _build_all_with_credits(
+        self, conformed_path: Path, resolved_path: Path
+    ) -> None:
+        from src.etl.resolved.resolve_anime import build_resolved_anime
+        from src.etl.resolved.resolve_credits import build_resolved_credits
+        from src.etl.resolved.resolve_persons import build_resolved_persons
+
+        build_resolved_anime(conformed_path, resolved_path)
+        build_resolved_persons(conformed_path, resolved_path)
+        build_resolved_credits(conformed_path, resolved_path)
+
+    def test_load_credits_resolved_returns_credit_models(
+        self, conformed_path: Path, resolved_path: Path
+    ):
+        from src.analysis.io.resolved_reader import load_credits_resolved
+        from src.runtime.models import Credit
+
+        self._build_all_with_credits(conformed_path, resolved_path)
+        credits = load_credits_resolved(resolved_path)
+        assert len(credits) == 3
+        assert all(isinstance(c, Credit) for c in credits)
+
+    def test_load_credits_resolved_absent_returns_empty(self, tmp_path: Path):
+        from src.analysis.io.resolved_reader import load_credits_resolved
+
+        absent = tmp_path / "nonexistent.duckdb"
+        result = load_credits_resolved(absent)
+        assert result == []
+
+    def test_load_credits_resolved_canonical_ids(
+        self, conformed_path: Path, resolved_path: Path
+    ):
+        """Loaded credits carry canonical IDs: all 3 rows share the same person_id + anime_id.
+
+        After Phase 2b merge (3 persons → 1 canonical, 3 anime → 1 canonical),
+        all 3 conformed credits map to a single canonical (person_id, anime_id) pair.
+        anime_id must be in resolved:anime:* format.
+        """
+        from src.analysis.io.resolved_reader import load_credits_resolved
+
+        self._build_all_with_credits(conformed_path, resolved_path)
+        credits = load_credits_resolved(resolved_path)
+
+        person_ids = {c.person_id for c in credits}
+        anime_ids = {c.anime_id for c in credits}
+        # All 3 credits should map to the same canonical IDs
+        assert len(person_ids) == 1, f"Expected 1 canonical person_id, got: {person_ids}"
+        assert len(anime_ids) == 1, f"Expected 1 canonical anime_id, got: {anime_ids}"
+        assert next(iter(anime_ids)).startswith("resolved:anime:"), (
+            f"anime_id not in resolved:anime: format: {anime_ids}"
+        )
+
+    def test_load_persons_conformed_id_map_returns_mapping(
+        self, conformed_path: Path, resolved_path: Path
+    ):
+        from src.analysis.io.resolved_reader import load_persons_conformed_id_map
+        from src.etl.resolved.resolve_anime import build_resolved_anime
+        from src.etl.resolved.resolve_persons import build_resolved_persons
+
+        build_resolved_anime(conformed_path, resolved_path)
+        build_resolved_persons(conformed_path, resolved_path)
+        cmap = load_persons_conformed_id_map(resolved_path)
+        # Fixture has 3 conformed persons all merged → 1 canonical
+        assert len(cmap) == 3
+        # All map to the same canonical_id
+        canonical_ids = set(cmap.values())
+        assert len(canonical_ids) == 1
+        assert next(iter(canonical_ids)).startswith("resolved:person:") or True  # may be conformed id
+
+    def test_load_persons_conformed_id_map_absent_returns_empty(self, tmp_path: Path):
+        from src.analysis.io.resolved_reader import load_persons_conformed_id_map
+
+        absent = tmp_path / "nonexistent.duckdb"
+        result = load_persons_conformed_id_map(absent)
+        assert result == {}

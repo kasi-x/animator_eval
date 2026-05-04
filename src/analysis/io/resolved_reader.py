@@ -317,6 +317,95 @@ def load_studios_resolved(path: Path | str | None = None) -> list[dict[str, Any]
             return []
 
 
+def load_persons_conformed_id_map(
+    path: Path | str | None = None,
+) -> dict[str, str]:
+    """Return conformed_id → canonical_id mapping for all resolved persons.
+
+    Reads source_ids_json for every resolved persons row and inverts the mapping.
+    Used by the pipeline data loader so that credits (which carry conformed IDs
+    like anilist:p*, mal:p*, seesaa:p*) can resolve against canonical person objects.
+
+    Returns:
+        Dict of {conformed_id: canonical_id} (empty if resolved.duckdb absent).
+    """
+    if not resolved_available(path):
+        return {}
+
+    import json as _json
+
+    with resolved_connect(path) as conn:
+        try:
+            rows = conn.execute(
+                "SELECT canonical_id, source_ids_json FROM persons"
+            ).fetchall()
+        except Exception as exc:
+            logger.warning("resolved_persons_conformed_id_map_failed", error=str(exc))
+            return {}
+
+    result: dict[str, str] = {}
+    for canonical_id, source_ids_json in rows:
+        try:
+            source_ids = _json.loads(source_ids_json or "[]")
+        except Exception:
+            source_ids = []
+        for sid in source_ids:
+            result[sid] = canonical_id
+
+    logger.info(
+        "resolved_persons_conformed_id_map_loaded",
+        canonical_count=len(rows),
+        conformed_id_count=len(result),
+    )
+    return result
+
+
+def load_credits_resolved(path: Path | str | None = None) -> list:
+    """Load canonical credits from resolved.duckdb as Credit model instances.
+
+    Returns [] if resolved.duckdb does not yet exist or has no credits table.
+
+    Credits in resolved.duckdb have person_id and anime_id replaced with
+    canonical resolved IDs (e.g. resolved:person:* / resolved:anime:*).
+    evidence_source is preserved as-is (H4).
+    """
+    from src.runtime.models import Credit, Role
+
+    if not resolved_available(path):
+        logger.warning("resolved_db_absent", path=str(path or DEFAULT_RESOLVED_PATH))
+        return []
+
+    with resolved_connect(path) as conn:
+        try:
+            rows = _rows_as_dicts(conn, "SELECT * FROM credits")
+        except Exception as exc:
+            logger.warning("resolved_credits_load_failed", error=str(exc))
+            return []
+
+    result: list[Credit] = []
+    skipped = 0
+    for r in rows:
+        try:
+            result.append(
+                Credit(
+                    person_id=r["person_id"],
+                    anime_id=r["anime_id"],
+                    role=Role(r["role"]),
+                    raw_role=r.get("raw_role") or None,
+                    episode=r.get("episode"),
+                    source=r.get("evidence_source") or "",
+                    evidence_source=r.get("evidence_source"),
+                )
+            )
+        except (ValueError, KeyError):
+            skipped += 1
+
+    if skipped:
+        logger.warning("resolved_credits_skipped_unknown_role", count=skipped)
+    logger.info("resolved_credits_loaded", total=len(result))
+    return result
+
+
 def query_resolved(
     sql: str,
     params: list[Any] | None = None,

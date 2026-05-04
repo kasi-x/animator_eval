@@ -14,6 +14,7 @@ from src.analysis.io.conformed_reader import load_anime_silver, load_credits_sil
 from src.analysis.io.resolved_reader import (
     load_anime_conformed_id_map,
     load_anime_resolved,
+    load_credits_resolved,
     load_persons_resolved,
     resolved_available,
 )
@@ -378,6 +379,38 @@ def _load_anime_from_resolved_or_conformed(
     return load_anime_silver(conformed_path), {}
 
 
+def _load_credits_from_resolved_or_conformed(
+    resolved_path=None,
+    conformed_path=None,
+) -> list[Credit]:
+    """Load credits from Resolved layer if available, else fall back to Conformed.
+
+    Resolved credits have canonical person_id and anime_id (resolved:person:*
+    / resolved:anime:*), enabling AKM to aggregate cross-source credits for the
+    same entity.  When the credits table is absent or empty in resolved.duckdb,
+    falls back to conformed credits (which carry per-source IDs).
+
+    Args:
+        resolved_path: Path to resolved.duckdb (None → DEFAULT_RESOLVED_PATH).
+        conformed_path: Path to animetor.duckdb (None → DEFAULT_SILVER_PATH).
+
+    Returns:
+        List of Credit model instances.
+    """
+    if resolved_available(resolved_path):
+        credits = load_credits_resolved(resolved_path)
+        if credits:
+            logger.info(
+                "data_loading_credits_source",
+                source="resolved",
+                count=len(credits),
+            )
+            return credits
+        logger.warning("resolved_credits_empty_falling_back_to_conformed")
+    logger.info("data_loading_credits_source", source="conformed")
+    return load_credits_silver(conformed_path)
+
+
 def load_pipeline_data_resolved(
     visualize: bool = False,
     dry_run: bool = False,
@@ -390,8 +423,8 @@ def load_pipeline_data_resolved(
     of load_pipeline_data() to benefit from entity-resolved canonical rows.
 
     Graceful fallback: if resolved.duckdb is absent or empty, automatically
-    falls back to conformed (silver) loaders.  Credits always come from the
-    conformed layer (Phase 2b handles resolved credits).
+    falls back to conformed (silver) loaders.  Credits use the resolved layer
+    when available (Phase 2c), falling back to conformed when not yet built.
 
     Args:
         visualize: passed through to LoadedData.
@@ -406,9 +439,12 @@ def load_pipeline_data_resolved(
     anime_list, conformed_alias_map = _load_anime_from_resolved_or_conformed(
         resolved_path, conformed_path
     )
-    # Credits remain from Conformed layer (Phase 2b: resolved credits not yet built)
-    all_credits = load_credits_silver(conformed_path)
+    all_credits = _load_credits_from_resolved_or_conformed(resolved_path, conformed_path)
 
+    # When credits use resolved canonical IDs, build a persons alias map
+    # so that person_id filtering in _build_loaded_data works correctly.
+    # (Resolved persons carry canonical IDs; credits also carry canonical IDs
+    # after Phase 2c — no extra alias map needed for persons.)
     return _build_loaded_data(
         all_persons,
         anime_list,

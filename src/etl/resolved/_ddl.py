@@ -100,6 +100,36 @@ CREATE INDEX IF NOT EXISTS idx_audit_canonical
     ON meta_resolution_audit(canonical_id)
 """
 
+CREATE_CREDITS = """
+CREATE TABLE IF NOT EXISTS credits (
+    person_id        VARCHAR NOT NULL,
+    anime_id         VARCHAR NOT NULL,
+    role             VARCHAR NOT NULL,
+    raw_role         VARCHAR NOT NULL DEFAULT '',
+    episode          INTEGER,
+    evidence_source  VARCHAR NOT NULL DEFAULT '',
+    credit_year      INTEGER,
+    credit_quarter   INTEGER,
+    affiliation      VARCHAR,
+    position         INTEGER
+)
+"""
+
+CREATE_IDX_CREDITS_PERSON = """
+CREATE INDEX IF NOT EXISTS idx_credits_person
+    ON credits(person_id)
+"""
+
+CREATE_IDX_CREDITS_ANIME = """
+CREATE INDEX IF NOT EXISTS idx_credits_anime
+    ON credits(anime_id)
+"""
+
+CREATE_IDX_CREDITS_ROLE = """
+CREATE INDEX IF NOT EXISTS idx_credits_role
+    ON credits(role)
+"""
+
 ALL_DDL: list[str] = [
     CREATE_ANIME,
     CREATE_PERSONS,
@@ -107,4 +137,8 @@ ALL_DDL: list[str] = [
     _CREATE_AUDIT_SEQ,
     CREATE_META_RESOLUTION_AUDIT,
     CREATE_IDX_AUDIT_CANONICAL,
+    CREATE_CREDITS,
+    CREATE_IDX_CREDITS_PERSON,
+    CREATE_IDX_CREDITS_ANIME,
+    CREATE_IDX_CREDITS_ROLE,
 ]
