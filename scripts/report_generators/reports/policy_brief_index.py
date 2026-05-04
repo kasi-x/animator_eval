@@ -33,6 +33,9 @@ class PolicyBriefIndexReport(BaseReportGenerator):
          "旧 career_transitions のキャリア段階遷移章を統合。"),
         ("compensation_fairness.html", "報酬格差記述統計",
          "役割 × スタジオ × 年代別の生産スケール分布。"),
+        ("o4_foreign_talent.html", "海外人材ポジション分析",
+         "国籍別 person FE 分布・役職進行 KM curve・studio FE 帰属パターン。"
+         "Limited mobility bias (Andrews et al. 2008) 注記付き。"),
     ]
 
     _EXEC_SUMMARY = """

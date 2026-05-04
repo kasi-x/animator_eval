@@ -32,6 +32,12 @@ class BizBriefIndexReport(BaseReportGenerator):
          "cluster × tier 別テンプレートと silhouette スコア。"),
         ("biz_independent_unit.html", "独立制作ユニット分析",
          "community 別 coverage × density × V_G スコア。"),
+        ("o8_soft_power.html", "ソフトパワー指標 (Tier1)",
+         "配信プラットフォーム別 anime 分布 × 関与人材 theta_proxy 分布比較。"
+         "soft_power_index = anime_count × mean_theta_proxy (anime.score 不使用)。"),
+        ("o4_foreign_talent.html", "海外人材ポジション分析",
+         "海外人材起用率上位スタジオ・国籍別 person FE 分布。"
+         "チーム組成・ホワイトスペース検討の参照情報。"),
     ]
 
     _EXEC_SUMMARY = """
