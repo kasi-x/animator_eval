@@ -125,7 +125,7 @@
 3. **Disparate impact リスク**: 米 EEOC の Uniform Guidelines (1978) は facially neutral でも統計的に偏った帰結を生む指標を雇用判定で禁ずる。視聴者人気はジャンル偏向 (異性愛男性向け作品の人気優位) を内蔵しており、女性監督・少女向け作品クリエイターを系統的に低評価する。
 4. **Categorical mistake**: 個人の労働価値と作品の市場受容は別概念。混在は範疇錯誤。
 
-これは技術的にもコードで強制されている (SILVER 層に anime.score 不存在、scoring path から構造的に切断)。
+これは技術的にもコードで強制されている (Conformed 層では `display_*_<source>` prefix で隔離、Resolved / Mart 層に anime.score 不存在、scoring path から構造的に切断)。
 
 ### 3.4 採用しない手法 (棄却理由)
 
@@ -585,7 +585,7 @@
 
 ### 9.1 構造設計
 
-**A. Architectural firewall**: BRONZE/SILVER/GOLD 3 層 + vocabulary lint で主観混入を CI でブロック。ポリシーでなくコードで防ぐ。
+**A. Architectural firewall**: Raw / Source / Conformed / Resolved / Mart の 5 層アーキテクチャ + vocabulary lint で主観混入を CI でブロック。entity_resolution 前後を層として分離し、scoring は Resolved 層のみ読む設計。ポリシーでなくコードで防ぐ。
 
 **B. Two-layer evaluation**: 参照系 (Network Profile) と補償系 (Individual Contribution) を別レイヤで分離。法的・倫理的整合性が取りやすい。
 
@@ -603,7 +603,7 @@
 
 ### 9.3 データ
 
-**H. 6 ソース canonicalize**: AniList + Jikan + ANN + SeesaaWiki + allcinema + MADB を統合した SILVER 層は **最も模倣困難な資産**。
+**H. 6 ソース canonicalize**: AniList + Jikan + ANN + SeesaaWiki + allcinema + MADB を統合した Conformed / Resolved 層 (anime 302,754 / persons 215,257 / studios 25,512 canonical entity) は **最も模倣困難な資産**。
 
 **I. 多言語対応**: name_ja / name_en / name_zh / name_ko / name_ar のフィールド設計で世界対応。
 
@@ -687,7 +687,7 @@ mission integrity を最優先するなら:
 | R4 | 「視聴者人気を入れないと嗜好が反映されない」 | §3.3 参照: 嗜好は需要側変数、供給側評価への混入は経済学的に identification を破壊 |
 | R5 | 「AKM は frictionless model 仮定」 | outcome を wage でなく production_scale にして wage 直接モデル化を回避。Card-Heining-Kline (2013) の限界も引き継ぐが、それでも近似として有用 |
 | R6 | 「entity resolution が間違ったら名誉毀損」 | 5 段階保守的解決 + AI 信頼度 0.8 閾値 + claim フローで工学的に最小化 |
-| R7 | 「主観が混じる余地は必ずある」 | 主観混入を完全には防げないが、SILVER 層 + lint + CI ゲートで構造的に最小化 |
+| R7 | 「主観が混じる余地は必ずある」 | 主観混入を完全には防げないが、5 層アーキテクチャ (Resolved 層で entity_resolution 後の 1 entity 1 row) + lint + CI ゲートで構造的に最小化 |
 | R8 | 「業界政治で妨害される」 | 中立性 (観客分離) + 学術連携 + 組合連携で対抗。スタジオ単独の妨害は組合と政府で吸収 |
 | R9 | 「複製可能な技術なので堀がない」 | 堀はデータカバレッジ × 名寄せ精度 × 業界標準ステータス。技術ではない |
 | R10 | 「指標が悪用される (人事差別)」 | 利用規約で雇用判定単独使用を禁止、観客別 brief で文脈固定。米 EEOC の disparate impact 基準遵守 |

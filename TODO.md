@@ -1,6 +1,6 @@
 # TODO.md — 未完了作業の一元管理
 
-作成日: 2026-04-22 / 最終更新: 2026-05-02 (§14 拡張目的レポート / §12.4 新ソース / §13.6 bangumi cron をカード化)
+作成日: 2026-04-22 / 最終更新: 2026-05-02 (§14 拡張目的レポート / §12.4 新ソース / §13.6 bangumi cron をカード化 / 5層 architecture 全フェーズ + 22系 silver coverage 完了反映)
 
 本書はプロジェクト内のすべての**未完了**項目を一元管理するファイルです。完了済みは `DONE.md`、設計原則は `CLAUDE.md`。
 
@@ -10,6 +10,8 @@
 
 | 優先度 | カテゴリ | 内容 |
 |--------|---------|------|
+| ✅ Done | 5層 architecture | TASK_CARDS/23_5tier_migration 全フェーズ完了 (Phase 1a/1c/2a/2b/3/4/4b/5) — animetor.duckdb 統合 + Resolved 層実装 + AKM 復活 (2026-05-02) |
+| ✅ Done | 22系 silver coverage | TASK_CARDS/22_silver_coverage 全カード完了 (22/01〜22/06) — anime_studios 2.5%→8.6%、persons gender/description 改善 (2026-05-02) |
 | 🟠 High | ローカル再 parse | seesaawiki raw HTML (8688) / madb raw JSON (603MB) の parser 拡張 — 再 scrape 不要でオプション情報回収 (§10) |
 | 🟠 High | SILVER 統合拡張 | BRONZE 9 source の SILVER 未統合属性を回収 → `TASK_CARDS/14_silver_extend/` (8 カード並列) |
 | ✅ Done | ANN scraper 改修 | Card 01-04 全完了 (2026-04-26) — anime 27,000 / persons 36,350 / 9 BRONZE テーブル生成済 → `TASK_CARDS/10_ann_scraper_extend/` |
@@ -24,7 +26,7 @@
 | ✅ Done | Test coverage | seesaawiki parser unit tests: 82 cases (_split_names_paren_aware, _is_company_name, _clean_name, parse_credit_line, _parse_episode_ranges, parse_series_staff, parse_episodes) — 2c77147 — 2026-04-24 |
 | ✅ Done | Test coverage | structural_estimation.py (AKM / causal): 19 unit tests (FE recovery, SE scaling, order invariance, DID contract, parallel trends, placebo, edge cases) — 2026-04-24 |
 
-**完了済み大項目** (→ `DONE.md`): anime.score 汚染除去、Phase 1-4 基盤、DuckDB §4 全フェーズ、Hamilton H-1〜H-7 (PipelineContext 完全削除)、レポート統廃合 §8、アーキテクチャ §9/11、ドキュメント §12、テストカバレッジ §6、feat_* 層別分離 §13、scraper queries/parsers 分離 §3、§7.1 差分更新 (hash比較フィルタ + E2E)、§7.3 retry refactor、§9 similarity/recommendation スタブ化
+**完了済み大項目** (→ `DONE.md`): anime.score 汚染除去、Phase 1-4 基盤、DuckDB §4 全フェーズ、Hamilton H-1〜H-7 (PipelineContext 完全削除)、レポート統廃合 §8、アーキテクチャ §9/11、ドキュメント §12、テストカバレッジ §6、feat_* 層別分離 §13、scraper queries/parsers 分離 §3、§7.1 差分更新 (hash比較フィルタ + E2E)、§7.3 retry refactor、§9 similarity/recommendation スタブ化、**5層 architecture TASK_CARDS/23 全フェーズ** (2026-05-02)、**22系 silver coverage TASK_CARDS/22 全カード** (2026-05-02)
 
 ---
 
