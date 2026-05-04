@@ -2,9 +2,10 @@
 
 Synthetic ANN BRONZE parquet fixtures → in-memory DuckDB → verify SILVER rows.
 
-Each test covers one of the 8 data operations:
+Data operations tested:
+  anime_insert, persons_insert (Phase 1 — new INSERT paths)
   anime_extras, persons_extras, episodes, companies, releases, news,
-  related, cast.
+  related, cast (Phase 2 — existing UPDATE/INSERT paths)
 
 All tests use :memory: DuckDB — no file I/O beyond tmp_path parquet writes.
 """
@@ -120,6 +121,212 @@ class TestApplyDdl:
         assert "rating_votes" not in cols
         assert "rating_weighted" not in cols
         assert "rating_bayesian" not in cols
+
+
+# ─── anime INSERT (Phase 1) ─────────────────────────────────────────────────
+
+class TestAnimeInsert:
+    """Phase 1: ANN BRONZE anime rows → SILVER anime INSERT."""
+
+    def test_inserts_anime_row(self, tmp_path: Path) -> None:
+        """integrate() inserts 'ann:a<id>' rows into anime."""
+        conn = _silver_conn(tmp_path)
+        _write_bronze(tmp_path, "ann", "anime", [{
+            "ann_id": 1,
+            "title_en": "Test Anime",
+            "title_ja": "テストアニメ",
+            "year": 2009,
+            "episodes": 26,
+            "format": "TV",
+            "start_date": None,
+            "end_date": None,
+            "content_hash": "abc123",
+            "fetched_at": "2026-04-24T21:49:17.785364+00:00",
+        }])
+        integrate(conn, tmp_path)
+
+        row = conn.execute(
+            "SELECT id, title_en, title_ja, year, episodes, format "
+            "FROM anime WHERE id = 'ann:a1'"
+        ).fetchone()
+        assert row is not None, "anime row 'ann:a1' was not inserted"
+        assert row[0] == "ann:a1"
+        assert row[1] == "Test Anime"
+        assert row[2] == "テストアニメ"
+        assert row[3] == 2009
+        assert row[4] == 26
+        assert row[5] == "TV"
+
+    def test_inserts_multiple_anime_rows(self, tmp_path: Path) -> None:
+        conn = _silver_conn(tmp_path)
+        _write_bronze(tmp_path, "ann", "anime", [
+            {"ann_id": 10, "title_en": "Anime A", "title_ja": "", "year": 2020,
+             "episodes": 12, "format": "TV"},
+            {"ann_id": 20, "title_en": "Anime B", "title_ja": "", "year": 2021,
+             "episodes": None, "format": "MOVIE"},
+        ])
+        counts = integrate(conn, tmp_path)
+
+        assert counts.get("anime_ann") == 2, f"Expected 2 ANN anime, got: {counts}"
+        n = conn.execute("SELECT COUNT(*) FROM anime WHERE id LIKE 'ann:%'").fetchone()[0]
+        assert n == 2
+
+    def test_deduplicates_on_pk_conflict(self, tmp_path: Path) -> None:
+        """OR IGNORE: inserting same ann_id twice does not raise."""
+        conn = _silver_conn(tmp_path)
+        row = {"ann_id": 5, "title_en": "Dup", "title_ja": ""}
+        _write_bronze(tmp_path, "ann", "anime", [row, row])
+        integrate(conn, tmp_path)
+        n = conn.execute("SELECT COUNT(*) FROM anime WHERE id = 'ann:a5'").fetchone()[0]
+        assert n == 1
+
+    def test_id_prefix_is_ann_a(self, tmp_path: Path) -> None:
+        conn = _silver_conn(tmp_path)
+        _write_bronze(tmp_path, "ann", "anime", [{"ann_id": 99, "title_en": "X", "title_ja": ""}])
+        integrate(conn, tmp_path)
+        row = conn.execute("SELECT id FROM anime WHERE id = 'ann:a99'").fetchone()
+        assert row is not None
+
+    def test_counts_key_anime_ann_returned(self, tmp_path: Path) -> None:
+        conn = _silver_conn(tmp_path)
+        _write_bronze(tmp_path, "ann", "anime", [{"ann_id": 7, "title_en": "Z", "title_ja": ""}])
+        counts = integrate(conn, tmp_path)
+        assert "anime_ann" in counts
+        assert counts["anime_ann"] >= 1
+
+    def test_no_anime_insert_error_key(self, tmp_path: Path) -> None:
+        """Phase 1 INSERT must not produce an anime_insert_error key on clean data."""
+        conn = _silver_conn(tmp_path)
+        _write_bronze(tmp_path, "ann", "anime", [{"ann_id": 3, "title_en": "Clean", "title_ja": ""}])
+        counts = integrate(conn, tmp_path)
+        assert "anime_insert_error" not in counts, counts.get("anime_insert_error")
+
+    def test_existing_row_not_overwritten(self, tmp_path: Path) -> None:
+        """OR IGNORE: a pre-existing 'ann:a<id>' row is not replaced by the INSERT."""
+        conn = _silver_conn(tmp_path)
+        conn.execute("INSERT INTO anime (id, title_en, title_ja) VALUES ('ann:a1', 'Pre-existing', '')")
+        _write_bronze(tmp_path, "ann", "anime", [
+            {"ann_id": 1, "title_en": "From Bronze", "title_ja": ""},
+        ])
+        integrate(conn, tmp_path)
+        row = conn.execute("SELECT title_en FROM anime WHERE id = 'ann:a1'").fetchone()
+        assert row[0] == "Pre-existing"
+
+
+# ─── persons INSERT (Phase 1) ────────────────────────────────────────────────
+
+class TestPersonsInsert:
+    """Phase 1: ANN BRONZE persons rows → SILVER persons INSERT."""
+
+    def test_inserts_person_row(self, tmp_path: Path) -> None:
+        conn = _silver_conn(tmp_path)
+        _write_bronze(tmp_path, "ann", "persons", [{
+            "ann_id": 42,
+            "name_en": "Jane Doe",
+            "name_ja": "ジェーン",
+            "name_ko": "",
+            "name_zh": "",
+            "names_alt": "{}",
+            "date_of_birth": None,
+            "hometown": "Tokyo",
+            "blood_type": "A",
+            "website": None,
+            "description": None,
+            "gender": None,
+            "nickname": None,
+            "family_name_ja": "ドゥ",
+            "given_name_ja": "ジェーン",
+            "height_raw": "165cm",
+            "image_url": None,
+            "description_raw": None,
+            "credits_json": None,
+            "alt_names_json": None,
+        }])
+        integrate(conn, tmp_path)
+
+        row = conn.execute(
+            "SELECT id, name_en, name_ja FROM persons WHERE id = 'ann:p42'"
+        ).fetchone()
+        assert row is not None, "persons row 'ann:p42' was not inserted"
+        assert row[0] == "ann:p42"
+        assert row[1] == "Jane Doe"
+        assert row[2] == "ジェーン"
+
+    def test_inserts_multiple_persons(self, tmp_path: Path) -> None:
+        conn = _silver_conn(tmp_path)
+        _write_bronze(tmp_path, "ann", "persons", [
+            {"ann_id": 1, "name_en": "Alice", "name_ja": "", "name_ko": "",
+             "name_zh": "", "names_alt": "{}", "date_of_birth": None,
+             "hometown": None, "blood_type": None, "website": None,
+             "description": None, "gender": None, "nickname": None,
+             "family_name_ja": None, "given_name_ja": None, "height_raw": None,
+             "image_url": None, "description_raw": None, "credits_json": None,
+             "alt_names_json": None},
+            {"ann_id": 2, "name_en": "Bob", "name_ja": "", "name_ko": "",
+             "name_zh": "", "names_alt": "{}", "date_of_birth": None,
+             "hometown": None, "blood_type": None, "website": None,
+             "description": None, "gender": None, "nickname": None,
+             "family_name_ja": None, "given_name_ja": None, "height_raw": None,
+             "image_url": None, "description_raw": None, "credits_json": None,
+             "alt_names_json": None},
+        ])
+        counts = integrate(conn, tmp_path)
+        assert counts.get("persons_ann") == 2, f"Expected 2, got: {counts}"
+
+    def test_id_prefix_is_ann_p(self, tmp_path: Path) -> None:
+        conn = _silver_conn(tmp_path)
+        _write_bronze(tmp_path, "ann", "persons", [
+            {"ann_id": 99, "name_en": "P99", "name_ja": "", "name_ko": "",
+             "name_zh": "", "names_alt": "{}", "date_of_birth": None,
+             "hometown": None, "blood_type": None, "website": None,
+             "description": None, "gender": None, "nickname": None,
+             "family_name_ja": None, "given_name_ja": None, "height_raw": None,
+             "image_url": None, "description_raw": None, "credits_json": None,
+             "alt_names_json": None},
+        ])
+        integrate(conn, tmp_path)
+        row = conn.execute("SELECT id FROM persons WHERE id = 'ann:p99'").fetchone()
+        assert row is not None
+
+    def test_no_persons_insert_error_key(self, tmp_path: Path) -> None:
+        conn = _silver_conn(tmp_path)
+        _write_bronze(tmp_path, "ann", "persons", [
+            {"ann_id": 10, "name_en": "Clean", "name_ja": "", "name_ko": "",
+             "name_zh": "", "names_alt": "{}", "date_of_birth": None,
+             "hometown": None, "blood_type": None, "website": None,
+             "description": None, "gender": None, "nickname": None,
+             "family_name_ja": None, "given_name_ja": None, "height_raw": None,
+             "image_url": None, "description_raw": None, "credits_json": None,
+             "alt_names_json": None},
+        ])
+        counts = integrate(conn, tmp_path)
+        assert "persons_insert_error" not in counts, counts.get("persons_insert_error")
+
+    def test_orphan_credits_resolved(self, tmp_path: Path) -> None:
+        """Core bug regression: after insert, credits.anime_id has a parent in anime."""
+        conn = _silver_conn(tmp_path)
+        # Simulate a credits table with an ANN credit
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS credits (
+                person_id VARCHAR, anime_id VARCHAR, role VARCHAR NOT NULL,
+                raw_role VARCHAR NOT NULL, evidence_source VARCHAR NOT NULL,
+                updated_at TIMESTAMP DEFAULT now()
+            )
+        """)
+        conn.execute(
+            "INSERT INTO credits VALUES ('ann:p1', 'ann:a1', 'key_animation', 'Key Animation', 'ann', now())"
+        )
+        _write_bronze(tmp_path, "ann", "anime", [
+            {"ann_id": 1, "title_en": "Test", "title_ja": ""},
+        ])
+        integrate(conn, tmp_path)
+        # After integrate, the credit's anime_id should have a parent
+        hit = conn.execute(
+            "SELECT COUNT(*) FROM credits c "
+            "JOIN anime a ON c.anime_id = a.id "
+            "WHERE c.evidence_source = 'ann'"
+        ).fetchone()[0]
+        assert hit == 1, "Credit is still orphaned after integrate()"
 
 
 # ─── anime extras ───────────────────────────────────────────────────────────

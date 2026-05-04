@@ -1,8 +1,8 @@
 """ANN BRONZE → SILVER extras.
 
 Tables loaded:
-- anime           (UPDATE: ANN extra columns)
-- persons         (UPDATE: ANN extra columns)
+- anime           (INSERT: ANN rows; UPDATE: ANN extra columns)
+- persons         (INSERT: ANN rows; UPDATE: ANN extra columns)
 - anime_episodes  (INSERT from BRONZE episodes)
 - anime_companies (INSERT from BRONZE company)
 - anime_releases  (INSERT from BRONZE releases)
@@ -201,6 +201,24 @@ _DDL_PERSONS_EXTENSION = [
 
 # ─── SQL: data operations ───────────────────────────────────────────────────
 
+# INSERT ANN anime rows / persons rows are built dynamically by
+# _build_anime_insert_sql() and _build_persons_insert_sql() (see helpers section).
+#
+# Key design constraints that drive dynamic construction:
+# 1. DuckDB binder quirk: an explicit INSERT column list clashes with SELECT
+#    aliases that share the same identifier (e.g. 'year', 'format', 'start_date').
+#    Solution: use `INSERT OR IGNORE ... BY NAME`.
+# 2. `BY NAME` requires every alias in the SELECT to exist in the target table.
+#    Solution: only emit aliases for columns present in the SILVER table
+#    (introspected via PRAGMA table_info).
+# 3. Test fixtures only write a subset of BRONZE columns.
+#    Solution: only reference BRONZE columns that exist in the parquet
+#    (introspected via DESCRIBE).
+# 4. _apply_ddl extends the SILVER anime/persons tables with extra ANN columns
+#    (themes, plot_summary, gender, height_raw, …).  These are NOT aliased in
+#    the INSERT; their defaults (NULL) apply and they are filled later by the
+#    UPDATE paths (_ANIME_EXTRAS_SQL / _PERSONS_EXTRAS_SQL).
+
 _ANIME_EXTRAS_SQL = """
 WITH bronze AS (
     SELECT *,
@@ -375,6 +393,146 @@ def _g(bronze_root: Path, table: str) -> str:
     return str(bronze_root / "source=ann" / f"table={table}" / "date=*" / "*.parquet")
 
 
+def _parquet_cols(conn: duckdb.DuckDBPyConnection, glob: str) -> set[str]:
+    """Return column names present in the ANN BRONZE parquet at *glob*."""
+    try:
+        rows = conn.execute(
+            f"DESCRIBE SELECT * FROM read_parquet('{glob}', "
+            f"hive_partitioning=true, union_by_name=true) LIMIT 0"
+        ).fetchall()
+        return {row[0] for row in rows}
+    except Exception:  # noqa: BLE001
+        return set()
+
+
+def _silver_table_cols(conn: duckdb.DuckDBPyConnection, table: str) -> set[str]:
+    """Return column names present in the given SILVER table."""
+    try:
+        rows = conn.execute(f"PRAGMA table_info('{table}')").fetchall()  # noqa: S608
+        return {row[1] for row in rows}
+    except Exception:  # noqa: BLE001
+        return set()
+
+
+def _build_anime_insert_sql(
+    bronze_cols: set[str],
+    silver_cols: set[str],
+) -> str:
+    """Return an `INSERT OR IGNORE INTO anime BY NAME` SQL string.
+
+    Dynamically constructs the SELECT alias list so that:
+    - Every alias emitted exists in the SILVER anime table (BY NAME requirement).
+    - Every BRONZE column reference exists in the parquet (avoids column-not-found).
+    - Optional SILVER columns (fetched_at, content_hash) are only aliased when
+      they exist in both the BRONZE parquet and the SILVER table.
+
+    ANN extra columns added by _apply_ddl (themes, plot_summary, …) are NOT
+    included; their NULL defaults apply at INSERT and they are then populated by
+    the UPDATE path (_ANIME_EXTRAS_SQL).
+    """
+
+    def _col(silver_name: str, bronze_name: str, expr: str, fallback: str) -> str | None:
+        """Return 'expr AS silver_name' when both sides exist; None to skip entirely."""
+        if silver_name not in silver_cols:
+            return None  # column absent from silver → omit alias (BY NAME strict)
+        value = expr if bronze_name in bronze_cols else fallback
+        return f"    {value:<50} AS {silver_name}"
+
+    core_lines = [
+        f"    'ann:a' || CAST(t.ann_id AS VARCHAR){'':18} AS id",
+        _col("title_ja",    "title_ja",    "COALESCE(t.title_ja, '')",        "''::VARCHAR"),
+        _col("title_en",    "title_en",    "COALESCE(t.title_en, '')",        "''::VARCHAR"),
+        _col("year",        "year",        "TRY_CAST(t.year AS INTEGER)",     "NULL::INTEGER"),
+        "    NULL::VARCHAR                                           AS season",
+        "    NULL::INTEGER                                           AS quarter",
+        _col("episodes",   "episodes",    "TRY_CAST(t.episodes AS INTEGER)", "NULL::INTEGER"),
+        _col("format",     "format",      "t.format",                        "NULL::VARCHAR"),
+        "    NULL::INTEGER                                           AS duration",
+        _col("start_date", "start_date",  "TRY_CAST(t.start_date AS VARCHAR)", "NULL::VARCHAR"),
+        _col("end_date",   "end_date",    "TRY_CAST(t.end_date AS VARCHAR)",   "NULL::VARCHAR"),
+        "    NULL::VARCHAR                                           AS status",
+        "    NULL::VARCHAR                                           AS source_mat",
+        "    NULL::VARCHAR                                           AS work_type",
+        "    NULL::VARCHAR                                           AS scale_class",
+        _col("fetched_at",    "fetched_at",    "TRY_CAST(t.fetched_at AS TIMESTAMP)", "NULL::TIMESTAMP"),
+        _col("content_hash",  "content_hash",  "t.content_hash",                      "NULL::VARCHAR"),
+        "    now()                                                   AS updated_at",
+    ]
+
+    select_body = ",\n".join(line for line in core_lines if line is not None)
+
+    return f"""
+INSERT OR IGNORE INTO anime BY NAME
+SELECT
+{select_body}
+FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY ann_id
+               ORDER BY date DESC
+           ) AS _rn
+    FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE ann_id IS NOT NULL
+) t
+WHERE t._rn = 1
+"""
+
+
+def _build_persons_insert_sql(
+    bronze_cols: set[str],
+    silver_cols: set[str],
+) -> str:
+    """Return an `INSERT OR IGNORE INTO persons BY NAME` SQL string.
+
+    Same dynamic construction strategy as _build_anime_insert_sql.
+    Note: BRONZE column 'date_of_birth' maps to SILVER column 'birth_date',
+    and BRONZE 'website' maps to SILVER 'website_url'.
+    """
+
+    def _col(silver_name: str, bronze_name: str, expr: str, fallback: str) -> str | None:
+        if silver_name not in silver_cols:
+            return None
+        value = expr if bronze_name in bronze_cols else fallback
+        return f"    {value:<50} AS {silver_name}"
+
+    def _static(silver_name: str, expr: str) -> str | None:
+        """Return 'expr AS silver_name' only when silver_name exists in silver table."""
+        if silver_name not in silver_cols:
+            return None
+        return f"    {expr:<50} AS {silver_name}"
+
+    core_lines = [
+        f"    'ann:p' || CAST(t.ann_id AS VARCHAR){'':18} AS id",
+        _col("name_ja",     "name_ja",      "COALESCE(t.name_ja, '')",        "''::VARCHAR"),
+        _col("name_en",     "name_en",      "COALESCE(t.name_en, '')",        "''::VARCHAR"),
+        _col("name_ko",     "name_ko",      "COALESCE(t.name_ko, '')",        "''::VARCHAR"),
+        _col("name_zh",     "name_zh",      "COALESCE(t.name_zh, '')",        "''::VARCHAR"),
+        _col("names_alt",   "names_alt",    "COALESCE(t.names_alt, '{}')",    "'{}'::VARCHAR"),
+        _col("birth_date",  "date_of_birth", "t.date_of_birth",               "NULL::VARCHAR"),
+        _static("death_date",   "NULL::VARCHAR"),
+        _col("website_url", "website",      "t.website",                      "NULL::VARCHAR"),
+        "    now()                                                   AS updated_at",
+    ]
+
+    select_body = ",\n".join(line for line in core_lines if line is not None)
+
+    return f"""
+INSERT OR IGNORE INTO persons BY NAME
+SELECT
+{select_body}
+FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (
+               PARTITION BY ann_id
+               ORDER BY date DESC
+           ) AS _rn
+    FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE ann_id IS NOT NULL
+) t
+WHERE t._rn = 1
+"""
+
+
 def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
     """Create/extend SILVER tables for ANN data."""
     for ddl_block in (
@@ -408,11 +566,22 @@ def integrate(
     conn: duckdb.DuckDBPyConnection,
     bronze_root: Path | str,
 ) -> dict[str, int | str]:
-    """Load ANN BRONZE extras into SILVER DuckDB.
+    """Load ANN BRONZE into SILVER DuckDB.
 
-    Applies DDL (idempotent), then runs 10 data operations:
-    anime_extras, persons_extras, episodes, companies, releases, news,
-    related, cast, studios (from company Animation Production), anime_studios.
+    Applies DDL (idempotent), then runs data operations in two phases:
+
+    Phase 1 — INSERT base rows (required to resolve orphan credits):
+      anime_insert: INSERT 'ann:a<id>' rows into anime
+      persons_insert: INSERT 'ann:p<id>' rows into persons
+
+    Phase 2 — UPDATE extras + INSERT child tables:
+      anime_extras, persons_extras, episodes, companies, releases, news,
+      related, cast, studios (from company Animation Production), anime_studios.
+
+    Background: ANN BRONZE uses ann_id (INTEGER) rather than an 'id' column,
+    so the generic integrate_duckdb anime/persons loaders (which glob source=*
+    and require an 'id' column) skip ANN entirely.  Without Phase 1, the
+    305K+ ANN credits are orphaned: credits.anime_id has no parent in anime.
 
     Args:
         conn: Open DuckDB connection pointing at the SILVER database.
@@ -428,6 +597,34 @@ def integrate(
 
     _apply_ddl(conn)
 
+    counts: dict[str, int | str] = {}
+
+    # Phase 1: INSERT ANN anime + persons rows.
+    # These are invisible to the generic integrate_duckdb loaders because ANN
+    # BRONZE uses ann_id (INTEGER) rather than an 'id' (VARCHAR) column.
+    # Credits were already INSERTed with 'ann:a<id>' / 'ann:p<id>' keys;
+    # without these INSERTs those credits are orphaned in the FK graph.
+    anime_glob   = _g(bronze_root, "anime")
+    persons_glob = _g(bronze_root, "persons")
+
+    silver_anime_cols   = _silver_table_cols(conn, "anime")
+    silver_persons_cols = _silver_table_cols(conn, "persons")
+
+    try:
+        bronze_anime_cols = _parquet_cols(conn, anime_glob)
+        sql = _build_anime_insert_sql(bronze_anime_cols, silver_anime_cols)
+        conn.execute(sql, [anime_glob])
+    except Exception as exc:  # noqa: BLE001
+        counts["anime_insert_error"] = str(exc)
+
+    try:
+        bronze_persons_cols = _parquet_cols(conn, persons_glob)
+        sql = _build_persons_insert_sql(bronze_persons_cols, silver_persons_cols)
+        conn.execute(sql, [persons_glob])
+    except Exception as exc:  # noqa: BLE001
+        counts["persons_insert_error"] = str(exc)
+
+    # Phase 2: UPDATE ANN extra columns onto now-existing anime + persons rows.
     pairs = [
         ("anime",    _ANIME_EXTRAS_SQL),
         ("persons",  _PERSONS_EXTRAS_SQL),
@@ -438,8 +635,6 @@ def integrate(
         ("related",  _RELATED_SQL),
         ("cast",     _CAST_SQL),
     ]
-
-    counts: dict[str, int | str] = {}
 
     for table, sql in pairs:
         try:
@@ -467,6 +662,14 @@ def integrate(
 
     counts["anime_studios_ann"] = conn.execute(
         "SELECT COUNT(DISTINCT anime_id) FROM anime_studios WHERE source = 'ann'"
+    ).fetchone()[0]
+
+    counts["anime_ann"] = conn.execute(
+        "SELECT COUNT(*) FROM anime WHERE id LIKE 'ann:%'"
+    ).fetchone()[0]
+
+    counts["persons_ann"] = conn.execute(
+        "SELECT COUNT(*) FROM persons WHERE id LIKE 'ann:%'"
     ).fetchone()[0]
 
     return counts
