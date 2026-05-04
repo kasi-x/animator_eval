@@ -429,5 +429,260 @@ def _disclaimer(mo):
     _disc
 
 
+# ---------------------------------------------------------------------------
+# Consensus tab (24/03) — N-source majority / outlier aggregation
+# ---------------------------------------------------------------------------
+
+
+@app.cell
+def _load_consensus_csvs(mo, pd, Path):
+    """Load the three consensus CSVs produced by export_consensus() (24/03).
+
+    These files live alongside the pairwise diff CSVs with a *_consensus.csv suffix.
+    Graceful fallback: callout + stop when files are absent.
+    """
+    _audit_dir = Path("result/audit/cross_source_diff")
+
+    _missing_consensus = [
+        str(_audit_dir / f"{e}_consensus.csv")
+        for e in ("anime", "persons", "studios")
+        if not (_audit_dir / f"{e}_consensus.csv").exists()
+    ]
+
+    if _missing_consensus:
+        mo.stop(
+            False,  # don't stop the whole notebook — pairwise section still works
+            mo.callout(
+                mo.md(
+                    f"**Consensus CSVs not found**: {', '.join(_missing_consensus)}\n\n"
+                    "Run the ETL first:\n"
+                    "```\npixi run python -m src.etl.audit.cross_source_consensus\n```"
+                ),
+                kind="warn",
+            ),
+        )
+
+    df_anime_con = pd.read_csv(_audit_dir / "anime_consensus.csv", dtype=str).fillna("")
+    df_persons_con = pd.read_csv(_audit_dir / "persons_consensus.csv", dtype=str).fillna("")
+    df_studios_con = pd.read_csv(_audit_dir / "studios_consensus.csv", dtype=str).fillna("")
+
+    _con_counts = {
+        "anime": len(df_anime_con),
+        "persons": len(df_persons_con),
+        "studios": len(df_studios_con),
+    }
+
+    return df_anime_con, df_persons_con, df_studios_con, _con_counts
+
+
+@app.cell
+def _consensus_summary(mo, _con_counts):
+    """Summary callout for consensus rows."""
+    _total = sum(_con_counts.values())
+    mo.callout(
+        mo.md(
+            "## Cross-source Consensus (24/03)\n\n"
+            f"**Loaded**: {_con_counts['anime']:,} anime · "
+            f"{_con_counts['persons']:,} persons · "
+            f"{_con_counts['studios']:,} studios · "
+            f"**{_total:,} total** consensus records"
+        ),
+        kind="info",
+    )
+
+
+@app.cell
+def _consensus_controls(mo):
+    """Entity and flag filter controls for the consensus tab."""
+    con_entity_select = mo.ui.dropdown(
+        options=["anime", "persons", "studios"],
+        value="anime",
+        label="Entity (Consensus)",
+    )
+    con_flag_select = mo.ui.dropdown(
+        options=["all", "unanimous", "majority", "unique_outlier", "plurality", "tie"],
+        value="all",
+        label="consensus_flag",
+    )
+    con_sample_n = mo.ui.slider(
+        start=10,
+        stop=500,
+        step=10,
+        value=50,
+        label="Sample rows",
+    )
+    _row = mo.hstack([con_entity_select, con_flag_select, con_sample_n], gap=2)
+    _row
+    return con_entity_select, con_flag_select, con_sample_n
+
+
+@app.cell
+def _active_consensus_df(
+    con_entity_select,
+    con_flag_select,
+    df_anime_con,
+    df_persons_con,
+    df_studios_con,
+    mo,
+):
+    """Select and filter the active consensus dataframe."""
+    _con_map = {
+        "anime": df_anime_con,
+        "persons": df_persons_con,
+        "studios": df_studios_con,
+    }
+    _df_con = _con_map[con_entity_select.value].copy()
+
+    if con_flag_select.value != "all":
+        _df_con = _df_con[_df_con["consensus_flag"] == con_flag_select.value].copy()
+
+    if _df_con.empty:
+        mo.stop(
+            False,
+            mo.callout(mo.md("No consensus rows match the current filters."), kind="warn"),
+        )
+
+    df_consensus_active = _df_con
+    return (df_consensus_active,)
+
+
+@app.cell
+def _consensus_flag_breakdown(mo, df_consensus_active):
+    """consensus_flag distribution table."""
+    if df_consensus_active.empty:
+        _out = mo.md("")
+    else:
+        _breakdown = (
+            df_consensus_active.groupby("consensus_flag")
+            .size()
+            .reset_index(name="count")
+            .sort_values("count", ascending=False)
+        )
+        _breakdown["pct"] = (
+            (_breakdown["count"] / _breakdown["count"].sum() * 100)
+            .round(1)
+            .astype(str)
+            + "%"
+        )
+        _out = mo.vstack([
+            mo.md("### consensus_flag Breakdown"),
+            mo.ui.table(_breakdown.reset_index(drop=True)),
+        ])
+    _out
+
+
+@app.cell
+def _consensus_attribute_breakdown(mo, df_consensus_active):
+    """Per-attribute consensus_flag counts."""
+    if df_consensus_active.empty:
+        _out = mo.md("")
+    else:
+        _attr = (
+            df_consensus_active.groupby(["attribute", "consensus_flag"])
+            .size()
+            .reset_index(name="count")
+            .sort_values(["attribute", "count"], ascending=[True, False])
+        )
+        _out = mo.vstack([
+            mo.md("### Consensus by Attribute"),
+            mo.ui.table(_attr.reset_index(drop=True)),
+        ])
+    _out
+
+
+@app.cell
+def _normalized_flag_delta(mo, df_consensus_active):
+    """Rows where normalized_consensus_flag differs from consensus_flag.
+
+    These are cases where column-level normalization (kyu→shin, alias maps,
+    punct-clean, etc.) changes the classification — typically unanimous after
+    normalization even when raw values differed.
+    """
+    if df_consensus_active.empty or "normalized_consensus_flag" not in df_consensus_active.columns:
+        _out = mo.md("")
+    else:
+        _delta = df_consensus_active[
+            df_consensus_active["consensus_flag"]
+            != df_consensus_active["normalized_consensus_flag"]
+        ].copy()
+        _count = len(_delta)
+        if _count == 0:
+            _out = mo.callout(
+                mo.md("No rows where normalization changes the consensus_flag."), kind="success"
+            )
+        else:
+            _out = mo.vstack([
+                mo.md(
+                    f"### Normalization Changes consensus_flag ({_count:,} rows)\n\n"
+                    "These rows are unanimous (or higher consensus) after column-level "
+                    "normalization — superficial differences only."
+                ),
+                mo.ui.table(
+                    _delta[
+                        [
+                            "canonical_id", "attribute",
+                            "consensus_flag", "normalized_consensus_flag",
+                            "normalized_majority_value", "values_json",
+                        ]
+                    ].head(200).reset_index(drop=True)
+                ),
+            ])
+    _out
+
+
+@app.cell
+def _unique_outlier_table(mo, df_consensus_active, con_sample_n):
+    """Unique-outlier rows — LLM 判定対象 (24/02 統合)."""
+    if df_consensus_active.empty:
+        _out = mo.md("")
+    else:
+        _outliers = df_consensus_active[
+            df_consensus_active["consensus_flag"] == "unique_outlier"
+        ].copy()
+        _n_outliers = len(_outliers)
+        if _n_outliers == 0:
+            _out = mo.md("*No unique_outlier rows in current filter.*")
+        else:
+            _sample_n = min(con_sample_n.value, _n_outliers)
+            _sample = _outliers.sample(n=_sample_n, random_state=42).reset_index(drop=True)
+            _display_cols = [
+                "canonical_id", "attribute",
+                "majority_value", "majority_count", "majority_share",
+                "outlier_sources", "outlier_values",
+                "normalized_consensus_flag",
+            ]
+            _out = mo.vstack([
+                mo.md(
+                    f"### Unique Outlier Rows ({_n_outliers:,} total, showing {_sample_n})\n\n"
+                    "These rows are candidates for LLM judgment (24/02 pipeline). "
+                    "One source deviates from the majority — likely a typo or encoding variant."
+                ),
+                mo.ui.table(_sample[_display_cols]),
+            ])
+    _out
+
+
+@app.cell
+def _consensus_sample_table(mo, df_consensus_active, con_sample_n):
+    """Full sample of active consensus rows."""
+    if df_consensus_active.empty:
+        _out = mo.md("")
+    else:
+        _n = min(con_sample_n.value, len(df_consensus_active))
+        _sample = df_consensus_active.sample(n=_n, random_state=42).reset_index(drop=True)
+        _display_cols = [
+            "canonical_id", "attribute", "n_sources", "n_distinct_values",
+            "majority_value", "majority_count", "majority_share",
+            "consensus_flag", "outlier_sources", "outlier_values",
+            "normalized_consensus_flag", "normalized_majority_value",
+        ]
+        _available = [c for c in _display_cols if c in _sample.columns]
+        _out = mo.vstack([
+            mo.md(f"### Consensus Sample Rows ({_n} of {len(df_consensus_active):,})"),
+            mo.ui.table(_sample[_available]),
+        ])
+    _out
+
+
 if __name__ == "__main__":
     app.run()
