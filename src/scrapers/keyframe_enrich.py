@@ -24,6 +24,7 @@ from src.scrapers.keyframe_api import (
     KeyframeApiClient,
     KeyframeQuotaExceeded,
 )
+from src.scrapers.keyframe_scraper import SKIP_ENV_VAR, keyframe_skip_requested
 from src.scrapers.parsers import keyframe_api as api_parser
 
 log = structlog.get_logger()
@@ -177,6 +178,11 @@ def cmd_enrich_translate(
     ),
     delay: DelayOpt = DEFAULT_DELAY,
     bronze_root: DataDirOpt = Path("result/bronze"),
+    skip: bool = typer.Option(
+        False,
+        "--skip",
+        help=f"Skip enrich (also via env {SKIP_ENV_VAR}=1). 日次 ~300 req クォータ回避用",
+    ),
 ) -> None:
     """Enrich keyframe persons with AniList IDs via translate.v4.php.
 
@@ -188,6 +194,14 @@ def cmd_enrich_translate(
     Pass --ids to restrict to specific person_ids (e.g. after identifying
     unmatched persons from entity resolution output).
     """
+    if skip or keyframe_skip_requested():
+        log.warning(
+            "keyframe_enrich_skipped",
+            reason=f"--skip or {SKIP_ENV_VAR} set",
+            note="daily ~300 req quota — reset time unknown",
+        )
+        return
+
     parsed_ids: list[int] | None = None
     if ids.strip():
         try:

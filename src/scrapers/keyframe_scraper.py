@@ -35,6 +35,7 @@ from __future__ import annotations
 import asyncio
 import gzip
 import json
+import os
 import time
 from pathlib import Path
 
@@ -67,6 +68,14 @@ app = make_scraper_app("keyframe")
 
 DEFAULT_DATA_DIR = Path("data/keyframe")
 CHECKPOINT_INTERVAL = 10  # flush checkpoint every N items
+
+# 日次クォータ ~300 req、リセット時刻 不明 → 環境変数で全スキップ可能。
+# `ANIMETOR_SKIP_KEYFRAME=1` で scrape-keyframe / scrape-keyframe-enrich 共に no-op。
+SKIP_ENV_VAR = "ANIMETOR_SKIP_KEYFRAME"
+
+
+def keyframe_skip_requested() -> bool:
+    return os.environ.get(SKIP_ENV_VAR, "").strip().lower() in {"1", "true", "yes", "on"}
 
 PHASE2_TABLES = (
     "anime",
@@ -449,8 +458,20 @@ def run(
     max_anime: LimitOpt = 0,
     fresh: ForceOpt = False,
     data_dir: DataDirOpt = DEFAULT_DATA_DIR,
+    skip: bool = typer.Option(
+        False,
+        "--skip",
+        help=f"Skip entire scrape (also via env {SKIP_ENV_VAR}=1). 日次 ~300 req クォータのリセット時刻 不明回避用",
+    ),
 ) -> None:
     """Phase 0-4: roles → sitemap → anime HTML → person API → preview."""
+    if skip or keyframe_skip_requested():
+        log.warning(
+            "keyframe_scrape_skipped",
+            reason=f"--skip or {SKIP_ENV_VAR} set",
+            note="daily ~300 req quota — reset time unknown",
+        )
+        return
     stats = asyncio.run(
         run_scraper(
             data_dir=data_dir,
