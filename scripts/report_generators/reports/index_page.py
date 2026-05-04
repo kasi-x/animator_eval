@@ -333,7 +333,7 @@ class IndexPageReport(BaseReportGenerator):
         stats: dict = {}
         try:
             row = self.conn.execute(
-                "SELECT COUNT(*) AS n FROM persons"
+                "SELECT COUNT(*) AS n FROM conformed.persons"
             ).fetchone()
             stats["persons"] = row["n"] if row else 0
         except Exception:
@@ -341,7 +341,7 @@ class IndexPageReport(BaseReportGenerator):
 
         try:
             row = self.conn.execute(
-                "SELECT COUNT(*) AS n FROM anime"
+                "SELECT COUNT(*) AS n FROM conformed.anime"
             ).fetchone()
             stats["anime"] = row["n"] if row else 0
         except Exception:
@@ -349,7 +349,7 @@ class IndexPageReport(BaseReportGenerator):
 
         try:
             row = self.conn.execute(
-                "SELECT COUNT(*) AS n FROM credits"
+                "SELECT COUNT(*) AS n FROM conformed.credits"
             ).fetchone()
             stats["credits"] = row["n"] if row else 0
         except Exception:

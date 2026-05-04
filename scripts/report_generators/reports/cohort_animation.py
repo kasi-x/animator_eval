@@ -922,7 +922,7 @@ class CohortAnimationReport(BaseReportGenerator):
                     p.gender,
                     COUNT(*) AS n
                 FROM feat_career fc
-                JOIN persons p ON fc.person_id = p.id
+                JOIN conformed.persons p ON fc.person_id = p.id
                 WHERE fc.first_year BETWEEN 1960 AND 2025
                 GROUP BY debut_decade, p.gender
                 ORDER BY debut_decade, p.gender
@@ -1098,7 +1098,7 @@ class CohortAnimationReport(BaseReportGenerator):
                     fc.highest_stage,
                     COUNT(*) AS n
                 FROM feat_career fc
-                JOIN persons p ON fc.person_id = p.id
+                JOIN conformed.persons p ON fc.person_id = p.id
                 WHERE fc.first_year BETWEEN 1960 AND 2019
                   AND fc.highest_stage IS NOT NULL
                 GROUP BY debut_decade, p.gender, fc.highest_stage
@@ -1717,7 +1717,7 @@ class CohortAnimationReport(BaseReportGenerator):
                     p.gender,
                     fps.iv_score
                 FROM feat_person_scores fps
-                JOIN persons p ON fps.person_id = p.id
+                JOIN conformed.persons p ON fps.person_id = p.id
                 JOIN feat_career fc ON fps.person_id = fc.person_id
                 WHERE fps.iv_score IS NOT NULL
                   AND fc.first_year BETWEEN 1960 AND 2025

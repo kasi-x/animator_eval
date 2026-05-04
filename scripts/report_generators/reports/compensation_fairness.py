@@ -54,7 +54,7 @@ class CompensationFairnessReport(BaseReportGenerator):
                        (fc.first_year / 10) * 10 AS debut_decade,
                        modal_tier.scale_tier AS tier
                 FROM feat_person_scores fps
-                JOIN persons p ON fps.person_id = p.id
+                JOIN conformed.persons p ON fps.person_id = p.id
                 LEFT JOIN feat_career fc ON fps.person_id = fc.person_id
                 LEFT JOIN (
                     SELECT fcc.person_id, fwc.scale_tier,
@@ -333,7 +333,7 @@ class CompensationFairnessReport(BaseReportGenerator):
                 SELECT fps.person_fe_pct AS peer_pct, p.gender,
                        modal_tier.scale_tier AS tier
                 FROM feat_person_scores fps
-                JOIN persons p ON fps.person_id = p.id
+                JOIN conformed.persons p ON fps.person_id = p.id
                 LEFT JOIN (
                     SELECT fcc.person_id, fwc.scale_tier,
                            ROW_NUMBER() OVER (

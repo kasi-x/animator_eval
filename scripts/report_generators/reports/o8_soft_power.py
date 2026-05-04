@@ -155,7 +155,7 @@ def extract_anime_distribution_profiles(
     """
     try:
         rows = conn.execute(
-            "SELECT id, title_romaji, external_links_json FROM anime"
+            "SELECT id, title_romaji, external_links_json FROM conformed.anime"
         ).fetchall()
     except Exception as exc:
         log.warning("anime_query_failed", error=str(exc))
@@ -246,7 +246,7 @@ def fetch_person_network_rows(
     # Fetch credits per person + which anime they worked on
     try:
         credit_rows = conn.execute(
-            "SELECT person_id, anime_id FROM credits"
+            "SELECT person_id, anime_id FROM conformed.credits"
         ).fetchall()
     except Exception as exc:
         log.warning("credits_query_failed", error=str(exc))
@@ -255,7 +255,7 @@ def fetch_person_network_rows(
     # Fetch person names
     name_map: dict[str, str] = {}
     try:
-        person_rows = conn.execute("SELECT id, name_romaji FROM persons").fetchall()
+        person_rows = conn.execute("SELECT id, name_romaji FROM conformed.persons").fetchall()
         for r in person_rows:
             name_map[str(r[0])] = str(r[1] or "")
     except Exception:

@@ -128,7 +128,7 @@ class ScoreLayersAnalysisReport(BaseReportGenerator):
                     fps.birank_pct, fps.patronage_pct, fps.awcc_pct,
                     fc.primary_role, fc.highest_stage, fc.first_year
                 FROM feat_person_scores fps
-                JOIN persons p ON fps.person_id = p.id
+                JOIN conformed.persons p ON fps.person_id = p.id
                 LEFT JOIN feat_career fc ON fps.person_id = fc.person_id
                 WHERE fps.person_fe IS NOT NULL
                   AND fps.birank IS NOT NULL
@@ -1252,7 +1252,7 @@ class ScoreLayersAnalysisReport(BaseReportGenerator):
                     p.name_ja, p.name_zh, p.name_en, fps.person_id,
                     fps.person_fe, fps.person_fe_se, fps.person_fe_n_obs
                 FROM feat_person_scores fps
-                JOIN persons p ON fps.person_id = p.id
+                JOIN conformed.persons p ON fps.person_id = p.id
                 WHERE fps.person_fe IS NOT NULL
                   AND fps.person_fe_se IS NOT NULL
                   AND fps.person_fe_se > 0

@@ -282,7 +282,7 @@ def _gender_lookup(conn: Any) -> dict[str, str | None]:
     """Build {person_id: gender} from DB."""
     try:
         rows = conn.execute(
-            "SELECT id, gender FROM persons WHERE gender IS NOT NULL"
+            "SELECT id, gender FROM conformed.persons WHERE gender IS NOT NULL"
         ).fetchall()
         return {str(r["id"]): r["gender"] for r in rows}
     except Exception:
@@ -2401,8 +2401,8 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
             SELECT a.format, a.duration, a.episodes,
                 COUNT(c.id) AS total_credits,
                 COUNT(DISTINCT c.person_id) AS unique_persons
-            FROM credits c
-            JOIN anime a ON c.anime_id = a.id
+            FROM conformed.credits c
+            JOIN conformed.anime a ON c.anime_id = a.id
             WHERE a.format IN ('TV','MOVIE','ONA','OVA','SPECIAL','TV_SHORT')
                 AND a.duration > 0 AND a.episodes > 0
                 AND a.year BETWEEN 1985 AND 2025
@@ -2500,8 +2500,8 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
         rows = self.conn.execute("""
             SELECT a.id, a.episodes, c.role,
                    COUNT(DISTINCT c.person_id) AS persons
-            FROM credits c
-            JOIN anime a ON c.anime_id = a.id
+            FROM conformed.credits c
+            JOIN conformed.anime a ON c.anime_id = a.id
             WHERE a.format IN ('TV', 'ONA')
               AND a.episodes >= 4
               AND a.year BETWEEN 1985 AND 2025
@@ -2615,8 +2615,8 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
         rows = self.conn.execute("""
             SELECT c.person_id, a.year, s.favourites,
                    COUNT(DISTINCT c.anime_id) AS works
-            FROM credits c
-            JOIN anime a ON c.anime_id = a.id
+            FROM conformed.credits c
+            JOIN conformed.anime a ON c.anime_id = a.id
             JOIN anime_studios ast ON a.id = ast.anime_id AND ast.is_main = 1
             JOIN studios s ON ast.studio_id = s.id
             WHERE a.year BETWEEN 1990 AND 2024 AND s.favourites IS NOT NULL

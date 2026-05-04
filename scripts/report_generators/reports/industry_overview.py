@@ -263,17 +263,17 @@ class IndustryOverviewReport(BaseReportGenerator):
 
         # --- Summary stats ---
         try:
-            r = self.conn.execute("SELECT COUNT(*) AS n FROM persons").fetchone()
+            r = self.conn.execute("SELECT COUNT(*) AS n FROM conformed.persons").fetchone()
             data["n_persons"] = r["n"] if r else 0
         except Exception:
             data["n_persons"] = 0
         try:
-            r = self.conn.execute("SELECT COUNT(*) AS n FROM anime").fetchone()
+            r = self.conn.execute("SELECT COUNT(*) AS n FROM conformed.anime").fetchone()
             data["n_anime"] = r["n"] if r else 0
         except Exception:
             data["n_anime"] = 0
         try:
-            r = self.conn.execute("SELECT COUNT(*) AS n FROM credits").fetchone()
+            r = self.conn.execute("SELECT COUNT(*) AS n FROM conformed.credits").fetchone()
             data["n_credits"] = r["n"] if r else 0
         except Exception:
             data["n_credits"] = 0
@@ -298,7 +298,7 @@ class IndustryOverviewReport(BaseReportGenerator):
                        p.gender
                 FROM feat_person_scores fps
                 LEFT JOIN feat_career fc ON fps.person_id = fc.person_id
-                LEFT JOIN persons p ON fps.person_id = p.id
+                LEFT JOIN conformed.persons p ON fps.person_id = p.id
             """).fetchall()
             for r in rows:
                 pid = r["person_id"]
@@ -388,8 +388,8 @@ class IndustryOverviewReport(BaseReportGenerator):
                        COUNT(DISTINCT a.id) AS n_anime,
                        COUNT(c.id) AS n_credits,
                        COUNT(DISTINCT c.person_id) AS n_persons_active
-                FROM anime a
-                LEFT JOIN credits c ON c.anime_id = a.id AND c.credit_year = a.year
+                FROM conformed.anime a
+                LEFT JOIN conformed.credits c ON c.anime_id = a.id AND c.credit_year = a.year
                 WHERE a.year >= 1963 AND a.year <= 2025
                 GROUP BY a.year ORDER BY a.year
             """).fetchall()
@@ -1040,8 +1040,8 @@ class IndustryOverviewReport(BaseReportGenerator):
                            WHEN a.episodes <= 28 THEN 'multi_cour'
                            ELSE 'long_cour'
                        END AS cour_type
-                FROM anime a
-                JOIN credits c ON c.anime_id = a.id
+                FROM conformed.anime a
+                JOIN conformed.credits c ON c.anime_id = a.id
                 WHERE a.year BETWEEN 1990 AND ?
                   AND a.season IN ('winter','spring','summer','fall')
             """, (RELIABLE_MAX_YEAR,)).fetchall()
@@ -1166,7 +1166,7 @@ class IndustryOverviewReport(BaseReportGenerator):
         try:
             raw_rows = self.conn.execute("""
                 SELECT c.anime_id, c.person_id
-                FROM credits c JOIN anime a ON c.anime_id = a.id
+                FROM conformed.credits c JOIN conformed.anime a ON c.anime_id = a.id
                 WHERE a.year BETWEEN 1980 AND 2025
             """).fetchall()
 
@@ -1617,8 +1617,8 @@ class IndustryOverviewReport(BaseReportGenerator):
         try:
             rows = self.conn.execute("""
                 SELECT je.value AS studio, a.year, c.person_id
-                FROM anime a
-                JOIN credits c ON c.anime_id = a.id,
+                FROM conformed.anime a
+                JOIN conformed.credits c ON c.anime_id = a.id,
                      json_each(
                          CASE WHEN json_valid(a.studios) THEN a.studios
                               ELSE '[]' END
@@ -1704,7 +1704,7 @@ class IndustryOverviewReport(BaseReportGenerator):
             rows = self.conn.execute("""
                 SELECT COALESCE(a.country_of_origin,'Unknown') AS country,
                        a.year, COUNT(DISTINCT c.person_id) AS up
-                FROM anime a JOIN credits c ON c.anime_id = a.id
+                FROM conformed.anime a JOIN conformed.credits c ON c.anime_id = a.id
                 WHERE a.year BETWEEN ? AND ?
                 GROUP BY country, a.year
             """, (FLOW_START_YEAR, RELIABLE_MAX_YEAR)).fetchall()
@@ -1798,8 +1798,8 @@ class IndustryOverviewReport(BaseReportGenerator):
         try:
             rows = self.conn.execute("""
                 SELECT c.person_id, a.year
-                FROM credits c
-                JOIN anime a ON c.anime_id = a.id
+                FROM conformed.credits c
+                JOIN conformed.anime a ON c.anime_id = a.id
                 WHERE a.year BETWEEN 1980 AND ?
                   AND a.year IS NOT NULL
             """, (EXIT_CUTOFF_YEAR,)).fetchall()
@@ -2151,8 +2151,8 @@ class IndustryOverviewReport(BaseReportGenerator):
                 SELECT a.year, a.format,
                     COUNT(DISTINCT a.id) AS anime_count,
                     COUNT(DISTINCT c.person_id) AS person_count
-                FROM anime a
-                LEFT JOIN credits c ON c.anime_id = a.id
+                FROM conformed.anime a
+                LEFT JOIN conformed.credits c ON c.anime_id = a.id
                 WHERE a.year BETWEEN 1980 AND ?
                   AND a.format IN ('TV','MOVIE','OVA','ONA','TV_SHORT')
                 GROUP BY a.year, a.format
@@ -2251,8 +2251,8 @@ class IndustryOverviewReport(BaseReportGenerator):
                        END AS cour_type,
                        COUNT(DISTINCT a.id) AS works,
                        COUNT(DISTINCT c.person_id) AS persons
-                FROM anime a
-                LEFT JOIN credits c ON c.anime_id = a.id
+                FROM conformed.anime a
+                LEFT JOIN conformed.credits c ON c.anime_id = a.id
                 WHERE a.year BETWEEN 1990 AND ?
                   AND a.season IN ('winter','spring','summer','fall')
                 GROUP BY a.season, cour_type

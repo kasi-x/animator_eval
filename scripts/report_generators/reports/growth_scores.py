@@ -59,7 +59,7 @@ class GrowthScoresReport(BaseReportGenerator):
                        fps.iv_score,
                        modal_tier.scale_tier AS tier
                 FROM feat_career fc
-                JOIN persons p ON fc.person_id = p.id
+                JOIN conformed.persons p ON fc.person_id = p.id
                 LEFT JOIN feat_person_scores fps ON fc.person_id = fps.person_id
                 LEFT JOIN (
                     SELECT fcc.person_id, fwc.scale_tier,
@@ -243,7 +243,7 @@ class GrowthScoresReport(BaseReportGenerator):
             rows = self.conn.execute("""
                 SELECT fc.growth_trend AS trend, p.gender, COUNT(*) AS n
                 FROM feat_career fc
-                JOIN persons p ON fc.person_id = p.id
+                JOIN conformed.persons p ON fc.person_id = p.id
                 WHERE fc.growth_trend IS NOT NULL
                 GROUP BY fc.growth_trend, p.gender
                 ORDER BY fc.growth_trend, p.gender

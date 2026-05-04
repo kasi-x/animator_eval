@@ -443,7 +443,7 @@ class CooccurrenceGroupsReport(BaseReportGenerator):
         try:
             for pid in all_pids:
                 prow = self.conn.execute(
-                    "SELECT name_ja, name_zh, name_en FROM persons WHERE id = ?",
+                    "SELECT name_ja, name_zh, name_en FROM conformed.persons WHERE id = ?",
                     (pid,),
                 ).fetchone()
                 if prow:
@@ -473,7 +473,7 @@ class CooccurrenceGroupsReport(BaseReportGenerator):
         try:
             for pid in all_pids:
                 crows = self.conn.execute(
-                    f"""SELECT anime_id, role FROM credits
+                    f"""SELECT anime_id, role FROM conformed.credits
                         WHERE person_id = ? AND role IN ({placeholders})""",
                     (pid, *_COOCCURRENCE_ROLE_VALUES),
                 ).fetchall()
@@ -490,7 +490,7 @@ class CooccurrenceGroupsReport(BaseReportGenerator):
         try:
             for aid in all_anime_ids:
                 arow = self.conn.execute(
-                    "SELECT year FROM anime WHERE id = ?",
+                    "SELECT year FROM conformed.anime WHERE id = ?",
                     (aid,),
                 ).fetchone()
                 if arow:

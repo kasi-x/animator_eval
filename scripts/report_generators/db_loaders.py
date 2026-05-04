@@ -6,7 +6,7 @@
 性別・ロール等の軸別集計はレポート側で conn.execute(SQL) を直接使うこと。
 例: conn.execute(
     "SELECT p.gender, AVG(fps.iv_score), COUNT(*)"
-    " FROM feat_person_scores fps JOIN persons p ON fps.person_id=p.id"
+    " FROM feat_person_scores fps JOIN conformed.persons p ON fps.person_id=p.id"
     " WHERE p.gender IS NOT NULL GROUP BY p.gender"
 ).fetchall()
 """
@@ -24,7 +24,7 @@ from .sql_fragments import person_display_name_sql
 # ---------------------------------------------------------------------------
 
 def load_feat_person_scores(conn: Any) -> list[dict]:
-    """feat_person_scores JOIN feat_career JOIN feat_network JOIN persons から
+    """feat_person_scores JOIN feat_career JOIN feat_network JOIN conformed.persons から
     scores.json 互換のリストを全件返す。
 
     返却フィールド:
@@ -64,7 +64,7 @@ def load_feat_person_scores(conn: Any) -> list[dict]:
             fn.hub_score, fn.n_collaborators, fn.n_unique_anime,
             fn.bridge_score
         FROM feat_person_scores fps
-        JOIN persons p ON fps.person_id = p.id
+        JOIN conformed.persons p ON fps.person_id = p.id
         LEFT JOIN feat_career fc ON fps.person_id = fc.person_id
         LEFT JOIN feat_network fn ON fps.person_id = fn.person_id
         ORDER BY fps.iv_score DESC
@@ -179,7 +179,7 @@ def load_agg_director_circles(conn: Any) -> dict[str, dict]:
             dc.shared_works, dc.hit_rate, dc.roles, dc.latest_year,
             {person_display_name_sql('dc.person_id', 'member_name')}
         FROM agg_director_circles dc
-        LEFT JOIN persons p ON dc.person_id = p.id
+        LEFT JOIN conformed.persons p ON dc.person_id = p.id
         ORDER BY dc.director_id, dc.shared_works DESC
     """
     rows = conn.execute(sql).fetchall()
@@ -234,7 +234,7 @@ def load_feat_career(conn: Any) -> dict:
                {person_display_name_sql('fc.person_id')},
                fc.growth_trend, fc.activity_ratio, fc.recent_credits, fc.total_credits
         FROM feat_career fc
-        LEFT JOIN persons p ON fc.person_id = p.id
+        LEFT JOIN conformed.persons p ON fc.person_id = p.id
     """).fetchall()
 
     persons: dict[str, dict] = {}
@@ -293,7 +293,7 @@ def load_feat_network(conn: Any) -> dict:
             fn.bridge_score,
             fn.n_bridge_communities AS communities_connected
         FROM feat_network fn
-        JOIN persons p ON fn.person_id = p.id
+        JOIN conformed.persons p ON fn.person_id = p.id
         WHERE fn.bridge_score IS NOT NULL
         ORDER BY fn.bridge_score DESC
     """).fetchall()

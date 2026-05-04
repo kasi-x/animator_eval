@@ -107,7 +107,7 @@ def _build_series_clusters(conn: Any) -> list[SeriesCluster]:
     # Prefer the pre-computed SILVER column (fast path)
     try:
         rows = conn.execute(
-            "SELECT id, title_romaji, series_cluster_id FROM anime"
+            "SELECT id, title_romaji, series_cluster_id FROM conformed.anime"
         ).fetchall()
         if rows and rows[0][2] is not None:
             return _clusters_from_precomputed(rows)
@@ -165,7 +165,7 @@ def _clusters_from_relations_json(conn: Any) -> list[SeriesCluster]:
     """
     try:
         rows = conn.execute(
-            "SELECT id, title_romaji, relations_json FROM anime"
+            "SELECT id, title_romaji, relations_json FROM conformed.anime"
         ).fetchall()
     except Exception as exc:
         log.warning("series_cluster_query_failed", error=str(exc))
@@ -233,8 +233,8 @@ SELECT
     a.episodes,
     a.duration,
     COUNT(DISTINCT c.id) AS staff_count
-FROM credits c
-JOIN anime a ON c.anime_id = a.id
+FROM conformed.credits c
+JOIN conformed.anime a ON c.anime_id = a.id
 WHERE c.anime_id IN ({placeholders})
 GROUP BY c.anime_id, a.episodes, a.duration
 """
@@ -284,8 +284,8 @@ SELECT
     p.name_romaji,
     c.anime_id,
     c.role
-FROM credits c
-JOIN persons p ON c.person_id = p.id
+FROM conformed.credits c
+JOIN conformed.persons p ON c.person_id = p.id
 WHERE c.anime_id IN ({placeholders})
 """
 

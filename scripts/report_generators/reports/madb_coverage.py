@@ -36,15 +36,15 @@ class MADBCoverageReport(BaseReportGenerator):
 
     def _build_coverage_section(self, sb: SectionBuilder) -> ReportSection:
         try:
-            total_anime = self.conn.execute("SELECT COUNT(*) AS n FROM anime").fetchone()["n"]
-            total_persons = self.conn.execute("SELECT COUNT(*) AS n FROM persons").fetchone()["n"]
-            total_credits = self.conn.execute("SELECT COUNT(*) AS n FROM credits").fetchone()["n"]
+            total_anime = self.conn.execute("SELECT COUNT(*) AS n FROM conformed.anime").fetchone()["n"]
+            total_persons = self.conn.execute("SELECT COUNT(*) AS n FROM conformed.persons").fetchone()["n"]
+            total_credits = self.conn.execute("SELECT COUNT(*) AS n FROM conformed.credits").fetchone()["n"]
 
             tier_rows = self.conn.execute("""
                 SELECT fwc.scale_tier, COUNT(DISTINCT fwc.anime_id) AS n_works,
                        (a.year / 10) * 10 AS decade
                 FROM feat_work_context fwc
-                JOIN anime a ON a.id = fwc.anime_id
+                JOIN conformed.anime a ON a.id = fwc.anime_id
                 WHERE fwc.scale_tier IS NOT NULL AND a.year IS NOT NULL
                 GROUP BY fwc.scale_tier, decade
                 ORDER BY decade, fwc.scale_tier
@@ -117,7 +117,7 @@ class MADBCoverageReport(BaseReportGenerator):
                 GROUP BY resolution_method
                 ORDER BY n DESC
             """).fetchall()
-            total_persons = self.conn.execute("SELECT COUNT(*) AS n FROM persons").fetchone()["n"]
+            total_persons = self.conn.execute("SELECT COUNT(*) AS n FROM conformed.persons").fetchone()["n"]
         except Exception:
             rows = []
             total_persons = 0
@@ -166,16 +166,16 @@ class MADBCoverageReport(BaseReportGenerator):
     def _build_missing_data_section(self, sb: SectionBuilder) -> ReportSection:
         try:
             checks = [
-                ("persons.gender", "SELECT COUNT(*) AS n FROM persons WHERE gender IS NULL"),
-                ("anime.year", "SELECT COUNT(*) AS n FROM anime WHERE year IS NULL"),
-                ("anime.format", "SELECT COUNT(*) AS n FROM anime WHERE format IS NULL"),
+                ("persons.gender", "SELECT COUNT(*) AS n FROM conformed.persons WHERE gender IS NULL"),
+                ("anime.year", "SELECT COUNT(*) AS n FROM conformed.anime WHERE year IS NULL"),
+                ("anime.format", "SELECT COUNT(*) AS n FROM conformed.anime WHERE format IS NULL"),
                 ("feat_career.first_year", "SELECT COUNT(*) AS n FROM feat_career WHERE first_year IS NULL"),
                 ("feat_person_scores.person_fe", "SELECT COUNT(*) AS n FROM feat_person_scores WHERE person_fe IS NULL"),
                 ("feat_network.degree_centrality", "SELECT COUNT(*) AS n FROM feat_network WHERE degree_centrality IS NULL"),
             ]
             totals = {
-                "persons": self.conn.execute("SELECT COUNT(*) AS n FROM persons").fetchone()["n"],
-                "anime": self.conn.execute("SELECT COUNT(*) AS n FROM anime").fetchone()["n"],
+                "persons": self.conn.execute("SELECT COUNT(*) AS n FROM conformed.persons").fetchone()["n"],
+                "anime": self.conn.execute("SELECT COUNT(*) AS n FROM conformed.anime").fetchone()["n"],
                 "feat_career": self.conn.execute("SELECT COUNT(*) AS n FROM feat_career").fetchone()["n"],
                 "feat_person_scores": self.conn.execute("SELECT COUNT(*) AS n FROM feat_person_scores").fetchone()["n"],
                 "feat_network": self.conn.execute("SELECT COUNT(*) AS n FROM feat_network").fetchone()["n"],
@@ -228,7 +228,7 @@ class MADBCoverageReport(BaseReportGenerator):
         try:
             rows = self.conn.execute("""
                 SELECT evidence_source AS source, COUNT(DISTINCT anime_id) AS n_anime, COUNT(*) AS n_credits
-                FROM credits
+                FROM conformed.credits
                 WHERE evidence_source IS NOT NULL
                 GROUP BY source
                 ORDER BY n_credits DESC

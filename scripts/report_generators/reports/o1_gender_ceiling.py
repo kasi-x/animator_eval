@@ -203,7 +203,7 @@ class O1GenderCeilingReport(BaseReportGenerator):
         """Return gender coverage statistics from persons table."""
         try:
             rows = self.conn.execute(
-                "SELECT gender, COUNT(*) as cnt FROM persons GROUP BY gender"
+                "SELECT gender, COUNT(*) as cnt FROM conformed.persons GROUP BY gender"
             ).fetchall()
         except Exception:
             return {"total": 0, "n_known": 0, "coverage_pct": 0.0}

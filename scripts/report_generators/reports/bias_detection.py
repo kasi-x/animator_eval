@@ -41,7 +41,7 @@ class BiasDetectionReport(BaseReportGenerator):
             rows = self.conn.execute("""
                 SELECT fps.iv_score, fps.person_fe, p.gender
                 FROM feat_person_scores fps
-                JOIN persons p ON fps.person_id = p.id
+                JOIN conformed.persons p ON fps.person_id = p.id
                 WHERE fps.iv_score IS NOT NULL
                   AND p.gender IN ('Male', 'Female')
             """).fetchall()
@@ -140,7 +140,7 @@ class BiasDetectionReport(BaseReportGenerator):
             rows = self.conn.execute("""
                 SELECT fps.iv_score, p.gender, fwc.scale_tier
                 FROM feat_person_scores fps
-                JOIN persons p ON fps.person_id = p.id
+                JOIN conformed.persons p ON fps.person_id = p.id
                 JOIN feat_credit_contribution fcc ON fps.person_id = fcc.person_id
                 JOIN feat_work_context fwc ON fcc.anime_id = fwc.anime_id
                 WHERE fps.iv_score IS NOT NULL
@@ -227,7 +227,7 @@ class BiasDetectionReport(BaseReportGenerator):
                     (fc.first_year / 10) * 10 AS debut_decade,
                     COUNT(*) AS n
                 FROM feat_credit_contribution fcc
-                JOIN persons p ON fcc.person_id = p.id
+                JOIN conformed.persons p ON fcc.person_id = p.id
                 LEFT JOIN feat_career fc ON fcc.person_id = fc.person_id
                 WHERE fcc.role IS NOT NULL
                   AND p.gender IN ('Male', 'Female')
@@ -306,7 +306,7 @@ class BiasDetectionReport(BaseReportGenerator):
             rows = self.conn.execute("""
                 SELECT fps.studio_fe_exposure, p.gender
                 FROM feat_person_scores fps
-                JOIN persons p ON fps.person_id = p.id
+                JOIN conformed.persons p ON fps.person_id = p.id
                 WHERE fps.studio_fe_exposure IS NOT NULL AND p.gender IS NOT NULL
             """).fetchall()
         except Exception:

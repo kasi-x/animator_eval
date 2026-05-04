@@ -39,7 +39,7 @@ class AKMDiagnosticsReport(BaseReportGenerator):
     def _build_connected_set_section(self, sb: SectionBuilder) -> ReportSection:
         try:
             total_persons = self.conn.execute(
-                "SELECT COUNT(*) AS n FROM persons"
+                "SELECT COUNT(*) AS n FROM conformed.persons"
             ).fetchone()["n"]
             total_studios = self.conn.execute(
                 "SELECT COUNT(DISTINCT studio_id) AS n FROM feat_studio_affiliation"

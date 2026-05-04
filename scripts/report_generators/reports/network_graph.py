@@ -54,7 +54,7 @@ class NetworkGraphReport(BaseReportGenerator):
                     fps.awcc,
                     modal_tier.scale_tier AS tier
                 FROM feat_network fn
-                JOIN persons p ON fn.person_id = p.id
+                JOIN conformed.persons p ON fn.person_id = p.id
                 LEFT JOIN feat_person_scores fps ON fn.person_id = fps.person_id
                 LEFT JOIN (
                     SELECT fcc.person_id, fwc.scale_tier,
@@ -159,7 +159,7 @@ class NetworkGraphReport(BaseReportGenerator):
                     fn.bridge_score,
                     fcm.community_id
                 FROM feat_network fn
-                JOIN persons p ON fn.person_id = p.id
+                JOIN conformed.persons p ON fn.person_id = p.id
                 LEFT JOIN feat_cluster_membership fcm ON fn.person_id = fcm.person_id
                 WHERE fn.degree_centrality IS NOT NULL
                 ORDER BY fn.degree_centrality DESC
@@ -260,7 +260,7 @@ class NetworkGraphReport(BaseReportGenerator):
                     fn.betweenness_centrality,
                     COUNT(*) OVER (PARTITION BY p.gender) AS gender_n
                 FROM feat_network fn
-                JOIN persons p ON fn.person_id = p.id
+                JOIN conformed.persons p ON fn.person_id = p.id
                 WHERE fn.degree_centrality IS NOT NULL
                   AND p.gender IS NOT NULL
             """).fetchall()
@@ -349,7 +349,7 @@ class NetworkGraphReport(BaseReportGenerator):
                     fc.active_years,
                     fc.highest_stage
                 FROM feat_network fn
-                JOIN persons p ON fn.person_id = p.id
+                JOIN conformed.persons p ON fn.person_id = p.id
                 LEFT JOIN feat_person_scores fps ON fn.person_id = fps.person_id
                 LEFT JOIN feat_career fc ON fn.person_id = fc.person_id
                 WHERE fn.degree_centrality IS NOT NULL

@@ -229,7 +229,7 @@ class NetworkAnalysisReport(BaseReportGenerator):
             FROM feat_network fn
             LEFT JOIN feat_person_scores fps ON fn.person_id = fps.person_id
             LEFT JOIN feat_cluster_membership fcm ON fn.person_id = fcm.person_id
-            LEFT JOIN persons p ON fn.person_id = p.id
+            LEFT JOIN conformed.persons p ON fn.person_id = p.id
             WHERE fn.degree_centrality > 0
             ORDER BY RANDOM()
             LIMIT 5000
@@ -356,7 +356,7 @@ class NetworkAnalysisReport(BaseReportGenerator):
                    {person_display_name_sql('fn.person_id')},
                    COALESCE(fcm.career_track, 'unknown') AS career_track
             FROM feat_network fn
-            LEFT JOIN persons p ON fn.person_id = p.id
+            LEFT JOIN conformed.persons p ON fn.person_id = p.id
             LEFT JOIN feat_cluster_membership fcm ON fn.person_id = fcm.person_id
             WHERE fn.betweenness_centrality IS NOT NULL
               AND fn.betweenness_centrality > 0
@@ -460,7 +460,7 @@ class NetworkAnalysisReport(BaseReportGenerator):
                    {person_display_name_sql('fn.person_id')},
                    COALESCE(fcm.career_track, 'unknown') AS career_track
             FROM feat_network fn
-            LEFT JOIN persons p ON fn.person_id = p.id
+            LEFT JOIN conformed.persons p ON fn.person_id = p.id
             LEFT JOIN feat_cluster_membership fcm ON fn.person_id = fcm.person_id
             WHERE fn.betweenness_centrality IS NOT NULL
               AND fn.hub_score IS NOT NULL

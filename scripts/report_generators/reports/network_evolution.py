@@ -49,8 +49,8 @@ class NetworkEvolutionReport(BaseReportGenerator):
                     COUNT(DISTINCT c.person_id) AS active_persons,
                     COUNT(c.id) AS total_credits,
                     COUNT(DISTINCT a.id) AS n_works
-                FROM anime a
-                JOIN credits c ON c.anime_id = a.id
+                FROM conformed.anime a
+                JOIN conformed.credits c ON c.anime_id = a.id
                 WHERE a.year BETWEEN 1970 AND 2024
                   AND a.year IS NOT NULL
                 GROUP BY a.year
@@ -100,7 +100,7 @@ class NetworkEvolutionReport(BaseReportGenerator):
             findings_html=findings,
             visualization_html=plotly_div_safe(fig, "chart_size_growth", height=420),
             method_note=(
-                "アクティブ人数 = 当該年の credits JOIN anime におけるユニーク person_id 数。"
+                "アクティブ人数 = 当該年の credits JOIN conformed.anime におけるユニーク person_id 数。"
                 "クレジット数 = 当該年の credits 行数の合計。"
                 "2023–2025年の値はクレジットが遡って追加されることで増加する可能性がある。"
             ),
@@ -116,7 +116,7 @@ class NetworkEvolutionReport(BaseReportGenerator):
                     (a.year / 10) * 10 AS decade,
                     fwc.scale_tier,
                     COUNT(DISTINCT a.id) AS n_works
-                FROM anime a
+                FROM conformed.anime a
                 JOIN feat_work_context fwc ON fwc.anime_id = a.id
                 WHERE a.year BETWEEN 1970 AND 2024
                   AND fwc.scale_tier IS NOT NULL

@@ -142,7 +142,7 @@ class StratifiedDataProvider:
         sql = f"""
             SELECT {axis_expr} AS group_key, fps.{metric} AS val
             FROM feat_person_scores fps
-            JOIN persons p ON fps.person_id = p.id
+            JOIN conformed.persons p ON fps.person_id = p.id
             {joins}
             WHERE fps.{metric} IS NOT NULL
                   AND {axis_expr} IS NOT NULL
@@ -425,7 +425,7 @@ class StratifiedDataProvider:
             sql = f"""
                 SELECT {axis_expr} AS group_key, frp.career_year_first AS val
                 FROM feat_person_role_progression frp
-                JOIN persons p ON frp.person_id = p.id
+                JOIN conformed.persons p ON frp.person_id = p.id
                 {joins}
                 WHERE frp.role_category = ?
                   AND frp.career_year_first IS NOT NULL
@@ -467,7 +467,7 @@ class StratifiedDataProvider:
         sql = f"""
             SELECT {axis_expr} AS group_key, fce.{metric} AS val
             FROM feat_causal_estimates fce
-            JOIN persons p ON fce.person_id = p.id
+            JOIN conformed.persons p ON fce.person_id = p.id
             {joins}
             WHERE fce.{metric} IS NOT NULL
               AND {axis_expr} IS NOT NULL

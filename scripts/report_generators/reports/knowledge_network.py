@@ -43,7 +43,7 @@ class KnowledgeNetworkReport(BaseReportGenerator):
                 SELECT fps.awcc, fps.ndi, p.gender,
                        modal_tier.scale_tier AS tier
                 FROM feat_person_scores fps
-                JOIN persons p ON fps.person_id = p.id
+                JOIN conformed.persons p ON fps.person_id = p.id
                 LEFT JOIN (
                     SELECT fcc.person_id, fwc.scale_tier,
                            ROW_NUMBER() OVER (

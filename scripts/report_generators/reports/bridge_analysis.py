@@ -67,7 +67,7 @@ class BridgeAnalysisReport(BaseReportGenerator):
                        {person_display_name_sql('fn.person_id')},
                        fc.first_year, p.gender
                 FROM feat_network fn
-                JOIN persons p ON fn.person_id = p.id
+                JOIN conformed.persons p ON fn.person_id = p.id
                 LEFT JOIN feat_career fc ON fn.person_id = fc.person_id
                 WHERE fn.betweenness_centrality IS NOT NULL
                   AND fn.betweenness_centrality > 0
@@ -185,7 +185,7 @@ class BridgeAnalysisReport(BaseReportGenerator):
                        {person_display_name_sql('fn.person_id')},
                        fps.iv_score
                 FROM feat_network fn
-                JOIN persons p ON fn.person_id = p.id
+                JOIN conformed.persons p ON fn.person_id = p.id
                 LEFT JOIN feat_person_scores fps ON fn.person_id = fps.person_id
                 WHERE fn.betweenness_centrality IS NOT NULL
                   AND fn.degree_centrality IS NOT NULL
@@ -364,7 +364,7 @@ class BridgeAnalysisReport(BaseReportGenerator):
                     fn.n_collaborators,
                     fps.iv_score
                 FROM feat_studio_affiliation fsa
-                JOIN persons p ON fsa.person_id = p.id
+                JOIN conformed.persons p ON fsa.person_id = p.id
                 LEFT JOIN feat_cluster_membership fcm_studio
                     ON fsa.person_id = fcm_studio.person_id
                 LEFT JOIN feat_network fn ON fsa.person_id = fn.person_id
@@ -476,7 +476,7 @@ class BridgeAnalysisReport(BaseReportGenerator):
                     fn.betweenness_centrality,
                     fps.iv_score
                 FROM feat_studio_affiliation fsa
-                JOIN persons p ON fsa.person_id = p.id
+                JOIN conformed.persons p ON fsa.person_id = p.id
                 LEFT JOIN feat_cluster_membership fcm_studio
                     ON fsa.person_id = fcm_studio.person_id
                 LEFT JOIN feat_network fn ON fsa.person_id = fn.person_id
