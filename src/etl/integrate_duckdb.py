@@ -31,6 +31,7 @@ import src.etl.conformed_loaders.madb as _sl_madb
 import src.etl.conformed_loaders.mal as _sl_mal
 import src.etl.conformed_loaders.sakuga_atwiki as _sl_sakuga_atwiki
 import src.etl.conformed_loaders.seesaawiki as _sl_seesaawiki
+import src.etl.conformed_loaders.tmdb as _sl_tmdb
 
 logger = structlog.get_logger()
 
@@ -658,6 +659,7 @@ def integrate(
                 ("keyframe", _sl_keyframe),
                 ("mal", _sl_mal),
                 ("sakuga_atwiki", _sl_sakuga_atwiki),
+                ("tmdb", _sl_tmdb),
             ]
             for source_name, loader_module in _source_loaders:
                 try:
