@@ -45,7 +45,7 @@ import duckdb
 import structlog
 
 from src.etl.normalize.canonical_name import KYU_SHIN_MAP
-from src.etl.normalize.column_rules import normalize_for_consensus
+from src.etl.normalize.column_rules import normalize_for_consensus, to_broad_format
 from src.etl.normalize.date_parser import (
     is_date_subset_compatible,
     pick_most_precise_date,
@@ -501,6 +501,21 @@ def _load_silver_rows(
 # Internal: build one consensus record
 # ---------------------------------------------------------------------------
 
+def _build_broad_format_consensus(
+    source_value_map: dict[str, str | None],
+) -> ConsensusResult:
+    """Classify broad_format consensus by mapping each source value via to_broad_format().
+
+    All superficially different labels that map to the same broad category
+    (e.g. "OVA" and "OAV" both → "ova_special") are treated as identical.
+    """
+    broad_source_map: dict[str, str | None] = {
+        src: to_broad_format(val)
+        for src, val in source_value_map.items()
+    }
+    return classify_consensus(broad_source_map)
+
+
 def _build_consensus_record(
     canonical_id: str,
     attribute: str,
@@ -515,8 +530,15 @@ def _build_consensus_record(
 
     For date columns, the normalized view uses classify_consensus_date which
     applies subset-compatible grouping ("2020" ⊆ "2020-04-15" → unanimous).
+
+    For the "format" attribute, also computes a broad_format consensus using
+    the 8-category taxonomy (ova_special / tv / movie / ona / short / music /
+    cm / other).  Fields broad_format_consensus_flag, broad_format_majority_value
+    and format_taxonomy_diff are always present in the output; for non-format
+    attributes they carry None / False placeholders.
     """
     is_date = attribute in _DATE_COLUMNS
+    is_format = attribute == "format"
 
     # Raw classification always uses exact-match consensus.
     result = classify_consensus(source_value_map)
@@ -532,6 +554,22 @@ def _build_consensus_record(
         norm_result = classify_consensus_date(col_normalized_source_map)
     else:
         norm_result = classify_consensus(col_normalized_source_map)
+
+    # broad_format parallel classification (format attribute only).
+    if is_format:
+        broad_result = _build_broad_format_consensus(source_value_map)
+        broad_format_consensus_flag: str | None = broad_result.consensus_flag
+        broad_format_majority_value: str | None = broad_result.majority_value
+        # format_taxonomy_diff: True when fine-level (normalized) flag differs from
+        # broad-level flag, meaning sources disagree on format even after 8-category
+        # normalization — these cases warrant LLM judgment (24/02 pipeline).
+        format_taxonomy_diff: bool = broad_result.consensus_flag not in (
+            "unanimous", "unique_outlier"
+        )
+    else:
+        broad_format_consensus_flag = None
+        broad_format_majority_value = None
+        format_taxonomy_diff = False
 
     n_sources = sum(1 for v in source_value_map.values() if v is not None and v != "")
     n_distinct = len({v for v in source_value_map.values() if v is not None and v != ""})
@@ -553,6 +591,9 @@ def _build_consensus_record(
         "outlier_values": json.dumps(result.outlier_values, ensure_ascii=False),
         "normalized_consensus_flag": norm_result.consensus_flag,
         "normalized_majority_value": norm_result.majority_value,
+        "broad_format_consensus_flag": broad_format_consensus_flag,
+        "broad_format_majority_value": broad_format_majority_value,
+        "format_taxonomy_diff": format_taxonomy_diff,
     }
 
 
@@ -681,6 +722,11 @@ _CSV_FIELDNAMES: list[str] = [
     "outlier_values",
     "normalized_consensus_flag",
     "normalized_majority_value",
+    # format 3-layer taxonomy (24/05) — populated for attribute=="format" only;
+    # None for all other attributes.
+    "broad_format_consensus_flag",
+    "broad_format_majority_value",
+    "format_taxonomy_diff",
 ]
 
 

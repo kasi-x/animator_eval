@@ -684,5 +684,118 @@ def _consensus_sample_table(mo, df_consensus_active, con_sample_n):
     _out
 
 
+# ---------------------------------------------------------------------------
+# format 3-layer taxonomy (24/05) — fine vs broad display
+# ---------------------------------------------------------------------------
+
+
+@app.cell
+def _format_taxonomy_section(mo, df_anime_con):
+    """Format taxonomy: fine_format vs broad_format (8 categories) comparison.
+
+    Shows the distribution of broad_format categories across all anime consensus
+    records where attribute == "format", and highlights rows where
+    format_taxonomy_diff is True (candidates for LLM judgment via 24/02).
+
+    Broad categories: tv / movie / ova_special / ona / short / music / cm / other.
+    """
+    _FORMAT_COLS = [
+        "broad_format_consensus_flag",
+        "broad_format_majority_value",
+        "format_taxonomy_diff",
+    ]
+    _has_broad = all(c in df_anime_con.columns for c in _FORMAT_COLS)
+
+    if not _has_broad:
+        _out = mo.callout(
+            mo.md(
+                "**broad_format columns not found** in anime_consensus.csv.\n\n"
+                "Re-generate consensus CSVs after upgrading to 24/05:\n"
+                "```\npixi run python -m src.etl.audit.cross_source_consensus\n```"
+            ),
+            kind="warn",
+        )
+    else:
+        _df_fmt = df_anime_con[df_anime_con["attribute"] == "format"].copy()
+
+        if _df_fmt.empty:
+            _out = mo.md("*No format rows in anime consensus.*")
+        else:
+            # broad_format category distribution
+            _broad_dist = (
+                _df_fmt.groupby("broad_format_majority_value")
+                .size()
+                .reset_index(name="count")
+                .sort_values("count", ascending=False)
+            )
+            _broad_dist["pct"] = (
+                (_broad_dist["count"] / _broad_dist["count"].sum() * 100)
+                .round(1)
+                .astype(str)
+                + "%"
+            )
+
+            # broad_format consensus flag distribution
+            _broad_flag_dist = (
+                _df_fmt.groupby("broad_format_consensus_flag")
+                .size()
+                .reset_index(name="count")
+                .sort_values("count", ascending=False)
+            )
+            _broad_flag_dist["pct"] = (
+                (_broad_flag_dist["count"] / _broad_flag_dist["count"].sum() * 100)
+                .round(1)
+                .astype(str)
+                + "%"
+            )
+
+            # format_taxonomy_diff rows (LLM judgment candidates)
+            _diff_rows = _df_fmt[_df_fmt["format_taxonomy_diff"].astype(str) == "True"].copy()
+            _n_diff = len(_diff_rows)
+
+            _diff_section = (
+                mo.callout(
+                    mo.md(f"**{_n_diff} rows** flagged `format_taxonomy_diff=True` "
+                          "— candidate for LLM judgment (24/02 pipeline)."),
+                    kind="warn",
+                )
+                if _n_diff > 0
+                else mo.callout(
+                    mo.md("No `format_taxonomy_diff` rows — broad_format consensus is clean."),
+                    kind="success",
+                )
+            )
+
+            _display_diff_cols = [
+                "canonical_id", "majority_value", "consensus_flag",
+                "broad_format_majority_value", "broad_format_consensus_flag",
+                "outlier_sources", "outlier_values",
+            ]
+            _available_diff_cols = [c for c in _display_diff_cols if c in _diff_rows.columns]
+
+            _out = mo.vstack([
+                mo.md(
+                    "## Format Taxonomy: fine vs broad (24/05)\n\n"
+                    f"Showing {len(_df_fmt):,} `format` attribute records.\n\n"
+                    "**fine_format** = source-level label (e.g. OVA, Special, TV_SHORT).  \n"
+                    "**broad_format** = 8-category taxonomy (ova_special / tv / short / …)."
+                ),
+                mo.md("### broad_format Category Distribution"),
+                mo.ui.table(_broad_dist.reset_index(drop=True)),
+                mo.md("### broad_format consensus_flag Distribution"),
+                mo.ui.table(_broad_flag_dist.reset_index(drop=True)),
+                _diff_section,
+                *(
+                    [
+                        mo.md(f"### format_taxonomy_diff Rows ({_n_diff})"),
+                        mo.ui.table(_diff_rows[_available_diff_cols].head(100).reset_index(drop=True)),
+                    ]
+                    if _n_diff > 0
+                    else []
+                ),
+            ])
+    _out
+
+
 if __name__ == "__main__":
     app.run()

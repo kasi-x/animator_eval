@@ -129,6 +129,61 @@ def _title_case_media(value: str) -> str:
     return stripped.title()
 
 
+# ---------------------------------------------------------------------------
+# Format 8-category taxonomy (fine_format → broad_format)
+# ---------------------------------------------------------------------------
+
+# Maps source-level format labels (case-insensitive key) → broad_format category.
+# Lookup is performed after stripping + uppercasing the raw value.
+# Unmapped values fall through to "other".
+_FORMAT_8_CATEGORY_MAP: dict[str, str] = {
+    # tv
+    "TV": "tv",
+    "TV_SHORT": "short",  # TV_SHORT goes to short (< 15 min label)
+    "TV SPECIAL": "tv",   # TV special → tv (放送経路優先)
+    "TV_SPECIAL": "tv",
+    # movie
+    "MOVIE": "movie",
+    # ova_special
+    "OVA": "ova_special",
+    "OAV": "ova_special",
+    "SPECIAL": "ova_special",
+    # ona
+    "ONA": "ona",
+    # short
+    "SHORT": "short",
+    # music
+    "MUSIC": "music",
+    "MUSIC_VIDEO": "music",
+    "PV": "music",
+    "PV_CM": "music",
+    # cm
+    "CM": "cm",
+    # other
+    "OTHER": "other",
+    "GAME": "other",
+}
+
+
+def _to_broad_format(value: str) -> str:
+    """Map a source-level format label to one of the 8 broad_format categories.
+
+    Mapping is case-insensitive. Unmapped values fall back to "other".
+
+    Categories:
+        tv          – TV / TV_SPECIAL / TV special
+        movie       – Movie / MOVIE
+        ova_special – OVA / OAV / Special / SPECIAL
+        ona         – ONA
+        short       – TV_SHORT / SHORT
+        music       – Music / MUSIC / PV / PV_CM
+        cm          – CM
+        other       – OTHER / GAME / unmapped
+    """
+    key = value.strip().upper()
+    return _FORMAT_8_CATEGORY_MAP.get(key, "other")
+
+
 def _date_iso8601_with_subset(value: str) -> str:
     """Normalize a date string to ISO 8601 with 'XX' placeholders.
 
@@ -166,6 +221,13 @@ _COLUMN_RULES: dict[str, tuple[object, str]] = {
     "format": (
         _title_case_media,
         "title_case",
+    ),
+    # broad_format: map fine-grained source label → 8-category taxonomy.
+    # Used by cross_source_consensus to compute a separate broad-format consensus
+    # that collapses OVA/OAV/Special and other superficial label differences.
+    "format_8_category": (
+        _to_broad_format,
+        "format_8_category",
     ),
     "name_en": (
         _info_richest,
@@ -228,6 +290,26 @@ _COLUMN_RULES: dict[str, tuple[object, str]] = {
 # ---------------------------------------------------------------------------
 # Public: normalize_for_consensus
 # ---------------------------------------------------------------------------
+
+
+def to_broad_format(value: str | None) -> str | None:
+    """Public wrapper: map a raw format label to one of the 8 broad_format categories.
+
+    Returns None when value is None or empty; never raises.
+
+    Args:
+        value: Raw source format string (e.g. "OVA", "TV", "Special").
+
+    Returns:
+        One of: "tv", "movie", "ova_special", "ona", "short", "music", "cm", "other".
+        None when input is None or empty.
+    """
+    if value is None or value == "":
+        return value
+    try:
+        return _to_broad_format(value)
+    except Exception:
+        return "other"
 
 
 def normalize_for_consensus(attribute: str, value: str | None) -> str | None:

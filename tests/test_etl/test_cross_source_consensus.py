@@ -24,6 +24,7 @@ from src.etl.audit.cross_source_consensus import (
     collect_consensus,
     export_consensus,
 )
+from src.etl.normalize.column_rules import to_broad_format
 from src.etl.normalize.date_parser import (
     is_date_subset_compatible,
     normalize_date,
@@ -405,6 +406,8 @@ class TestCollectConsensus:
             "values_json", "majority_value", "majority_count", "majority_share",
             "consensus_flag", "outlier_sources", "outlier_values",
             "normalized_consensus_flag", "normalized_majority_value",
+            "broad_format_consensus_flag", "broad_format_majority_value",
+            "format_taxonomy_diff",
         }
         for rec in records:
             assert required_keys.issubset(rec.keys()), f"Missing keys in: {rec}"
@@ -666,6 +669,8 @@ class TestExportConsensus:
             "values_json", "majority_value", "majority_count", "majority_share",
             "consensus_flag", "outlier_sources", "outlier_values",
             "normalized_consensus_flag", "normalized_majority_value",
+            "broad_format_consensus_flag", "broad_format_majority_value",
+            "format_taxonomy_diff",
         }
         assert expected == fieldnames
 
@@ -715,6 +720,180 @@ class TestExportConsensus:
         assert len(unanimous_rows) == 1
         assert json.loads(unanimous_rows[0]["outlier_sources"]) == []
         assert json.loads(unanimous_rows[0]["outlier_values"]) == []
+
+    def test_csv_has_broad_format_columns(
+        self,
+        tmp_path: Path,
+        tmp_resolved_db: Path,
+        tmp_silver_db: Path,
+    ) -> None:
+        """Exported CSV must contain the three broad_format columns (24/05)."""
+        out_dir = tmp_path / "audit_broad"
+        export_consensus(tmp_resolved_db, tmp_silver_db, out_dir)
+        with open(out_dir / "anime_consensus.csv", newline="", encoding="utf-8") as fh:
+            reader = csv.DictReader(fh)
+            fieldnames = set(reader.fieldnames or [])
+        assert "broad_format_consensus_flag" in fieldnames
+        assert "broad_format_majority_value" in fieldnames
+        assert "format_taxonomy_diff" in fieldnames
+
+    def test_format_csv_rows_have_non_empty_broad_format(
+        self,
+        tmp_path: Path,
+        tmp_resolved_db: Path,
+        tmp_silver_db: Path,
+    ) -> None:
+        """format attribute rows in exported CSV must have broad_format_consensus_flag."""
+        out_dir = tmp_path / "audit_broad2"
+        export_consensus(tmp_resolved_db, tmp_silver_db, out_dir)
+        with open(out_dir / "anime_consensus.csv", newline="", encoding="utf-8") as fh:
+            rows = list(csv.DictReader(fh))
+        format_rows = [r for r in rows if r["attribute"] == "format"]
+        assert format_rows, "No format rows in exported CSV"
+        for row in format_rows:
+            assert row["broad_format_consensus_flag"] != "", (
+                f"Expected non-empty broad_format_consensus_flag for row: {row}"
+            )
+
+
+# ---------------------------------------------------------------------------
+# to_broad_format unit tests (column_rules)
+# ---------------------------------------------------------------------------
+
+
+class TestToBroadFormat:
+    """to_broad_format: source label → 8-category taxonomy."""
+
+    def test_tv_maps_to_tv(self) -> None:
+        assert to_broad_format("TV") == "tv"
+
+    def test_tv_case_insensitive(self) -> None:
+        assert to_broad_format("tv") == "tv"
+
+    def test_movie_maps(self) -> None:
+        assert to_broad_format("MOVIE") == "movie"
+        assert to_broad_format("Movie") == "movie"
+
+    def test_ova_maps_to_ova_special(self) -> None:
+        assert to_broad_format("OVA") == "ova_special"
+
+    def test_oav_maps_to_ova_special(self) -> None:
+        assert to_broad_format("OAV") == "ova_special"
+
+    def test_special_maps_to_ova_special(self) -> None:
+        assert to_broad_format("Special") == "ova_special"
+        assert to_broad_format("SPECIAL") == "ova_special"
+
+    def test_ona_maps(self) -> None:
+        assert to_broad_format("ONA") == "ona"
+
+    def test_tv_short_maps_to_short(self) -> None:
+        assert to_broad_format("TV_SHORT") == "short"
+
+    def test_short_maps(self) -> None:
+        assert to_broad_format("SHORT") == "short"
+
+    def test_music_maps(self) -> None:
+        assert to_broad_format("MUSIC") == "music"
+        assert to_broad_format("Music") == "music"
+
+    def test_pv_maps_to_music(self) -> None:
+        assert to_broad_format("PV") == "music"
+
+    def test_pv_cm_maps_to_music(self) -> None:
+        assert to_broad_format("PV_CM") == "music"
+
+    def test_cm_maps(self) -> None:
+        assert to_broad_format("CM") == "cm"
+
+    def test_game_maps_to_other(self) -> None:
+        assert to_broad_format("GAME") == "other"
+
+    def test_other_maps(self) -> None:
+        assert to_broad_format("OTHER") == "other"
+
+    def test_unmapped_falls_to_other(self) -> None:
+        assert to_broad_format("unknown_format") == "other"
+
+    def test_tv_special_maps_to_tv(self) -> None:
+        # TV special → tv (放送経路優先, per task card)
+        assert to_broad_format("TV SPECIAL") == "tv"
+        assert to_broad_format("TV_SPECIAL") == "tv"
+
+    def test_none_returns_none(self) -> None:
+        assert to_broad_format(None) is None
+
+    def test_empty_returns_empty(self) -> None:
+        assert to_broad_format("") == ""
+
+
+# ---------------------------------------------------------------------------
+# broad_format consensus integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestBroadFormatConsensus:
+    """Tests for broad_format parallel consensus in collect_consensus."""
+
+    def test_format_record_has_broad_format_fields(
+        self,
+        resolved_conn: duckdb.DuckDBPyConnection,
+        silver_conn: duckdb.DuckDBPyConnection,
+    ) -> None:
+        """format attribute records must carry broad_format_* fields."""
+        records = collect_consensus(resolved_conn, "anime", silver_conn)
+        format_recs = [r for r in records if r["attribute"] == "format"]
+        assert format_recs, "No format records found"
+        for rec in format_recs:
+            assert "broad_format_consensus_flag" in rec
+            assert "broad_format_majority_value" in rec
+            assert "format_taxonomy_diff" in rec
+
+    def test_non_format_records_have_none_broad_format_fields(
+        self,
+        resolved_conn: duckdb.DuckDBPyConnection,
+        silver_conn: duckdb.DuckDBPyConnection,
+    ) -> None:
+        """Non-format attribute records must have None for broad_format_* fields."""
+        records = collect_consensus(resolved_conn, "anime", silver_conn)
+        non_format = [r for r in records if r["attribute"] != "format"]
+        for rec in non_format:
+            assert rec["broad_format_consensus_flag"] is None, (
+                f"Expected None for {rec['attribute']}, got {rec['broad_format_consensus_flag']!r}"
+            )
+            assert rec["broad_format_majority_value"] is None
+            assert rec["format_taxonomy_diff"] is False
+
+    def test_tv_format_broad_unanimous(
+        self,
+        resolved_conn: duckdb.DuckDBPyConnection,
+        silver_conn: duckdb.DuckDBPyConnection,
+    ) -> None:
+        """3src anime all have format=TV → broad_format unanimous=tv."""
+        records = collect_consensus(resolved_conn, "anime", silver_conn)
+        rec = next(
+            r for r in records
+            if r["canonical_id"] == "resolved:anime:3src" and r["attribute"] == "format"
+        )
+        assert rec["broad_format_consensus_flag"] == "unanimous"
+        assert rec["broad_format_majority_value"] == "tv"
+        assert rec["format_taxonomy_diff"] is False
+
+    def test_format_taxonomy_diff_false_when_broad_unanimous(
+        self,
+        resolved_conn: duckdb.DuckDBPyConnection,
+        silver_conn: duckdb.DuckDBPyConnection,
+    ) -> None:
+        """format_taxonomy_diff is False when broad_format is unanimous or unique_outlier."""
+        records = collect_consensus(resolved_conn, "anime", silver_conn)
+        format_recs = [r for r in records if r["attribute"] == "format"]
+        # All test fixture format values are TV — all should be broad unanimous, no diff
+        for rec in format_recs:
+            if rec["broad_format_consensus_flag"] in ("unanimous", "unique_outlier"):
+                assert rec["format_taxonomy_diff"] is False
+
+
+
 
 
 # ---------------------------------------------------------------------------
