@@ -47,6 +47,34 @@ CSV: `result/audit/cross_source_diff/{entity}_consensus.csv`
 | `tie` | 同票が 2 種以上 |
 | `unique_outlier` | majority + 1 つだけ違う (例 5/6 一致、1 だけ違う = outlier) |
 
+## 正規化ポリシー (今回スコープ)
+
+**大小文字差は情報量多い方を優先**:
+- 全部大文字 (`STUDIO GHIBLI`) vs 適切な大小文字 (`Studio Ghibli`) → **Capitalize 側** (Studio Ghibli) を採用
+- 全部小文字 vs 適切な大小文字 → 適切な側を採用
+- ロジック: `s != s.upper() and s != s.lower()` (= mixed case) を「情報量多い」として優先
+- tie 時 (両方 mixed case で値違う) は通常の majority/source ranking で
+
+**NULL 埋めは今回スキップ**:
+- "片方 NULL もう片方 値" の case は consensus 集計対象外 (n_sources 算出時 NULL を除外、majority も非 NULL のみで判定)
+- `consensus_flag` には `null_filled` 等の専用 flag を作らない
+- `outlier_sources` にも NULL source を含めない
+
+## 列別正規化ルール (`src/etl/normalize/column_rules.py` 新規/拡張)
+
+辞書宣言で各 column の正規化を定義:
+
+| 列 | rule | 例 |
+|----|------|-----|
+| `gender` | alias_map (m/M/Male/MALE → male、f/F/Female/FEMALE → female) | "Male" → "male" |
+| `country_of_origin` | upper (ISO-3166-1 alpha-2) | "jp" → "JP" |
+| `format` | upper (TV/MOVIE/OVA は大文字) | "tv" → "TV" |
+| `name_en` | info_richest (大小文字情報量多い側) | "MIYAZAKI HAYAO" vs "Hayao Miyazaki" → 後者 |
+| `name_ja` | kyu_to_shin (canonical_name.py 既存) | "渡邊" → "渡辺" |
+| `studio.name` | info_richest_punct_clean | "J.C.STAFF" vs "JC STAFF" → 前者 |
+
+CSV 列追加: `normalized_majority_value` (raw majority と並走)。
+
 ---
 
 ## LLM enrichment (24/02 と統合可能)
