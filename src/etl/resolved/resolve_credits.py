@@ -146,11 +146,16 @@ def _apply_canonical_ids(
     unmapped_anime: set[str] = set()
     result: list[dict[str, Any]] = []
 
+    skipped_null = 0
     for r in rows:
-        new_row = dict(r)
         pid = r["person_id"]
         aid = r["anime_id"]
+        # NOT NULL 制約のある列が None の行は skip (resolved.credits は person_id/anime_id NOT NULL)
+        if pid is None or aid is None:
+            skipped_null += 1
+            continue
 
+        new_row = dict(r)
         new_row["person_id"] = person_map.get(pid, pid)
         new_row["anime_id"] = anime_map.get(aid, aid)
 
@@ -161,16 +166,19 @@ def _apply_canonical_ids(
 
         result.append(new_row)
 
+    if skipped_null:
+        logger.info("resolve_credits_skipped_null_ids", count=skipped_null)
+
     if unmapped_persons:
         logger.debug(
             "resolve_credits_unmapped_persons",
-            sample=sorted(unmapped_persons)[:5],
+            sample=sorted(s for s in unmapped_persons if s is not None)[:5],
             total=len(unmapped_persons),
         )
     if unmapped_anime:
         logger.debug(
             "resolve_credits_unmapped_anime",
-            sample=sorted(unmapped_anime)[:5],
+            sample=sorted(s for s in unmapped_anime if s is not None)[:5],
             total=len(unmapped_anime),
         )
 
