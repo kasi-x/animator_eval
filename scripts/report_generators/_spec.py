@@ -1,0 +1,223 @@
+"""Report v3 specification dataclasses.
+
+Implements the 5-tuple declaration from ``docs/REPORT_DESIGN_v3.md`` §4.
+A ``ReportSpec`` packages a report's claim, identifying assumption, null
+model, method gate, sensitivity grid, and interpretation guard so the
+runtime can validate them against the philosophy gates declared in
+``docs/REPORT_PHILOSOPHY.md`` v2.1.
+
+Validation is opt-in (``STRICT_REPORT_SPEC=1``) until Phase 5 completes
+the migration of all 49 reports.
+"""
+
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass, field
+from typing import Literal
+
+
+# =========================================================================
+# Null model catalogue (REPORT_DESIGN_v3.md §3)
+# =========================================================================
+
+NullModelId = Literal["N1", "N2", "N3", "N4", "N5", "N6", "N7"]
+
+NULL_MODEL_CATALOGUE: dict[str, str] = {
+    "N1": "configuration model (Newman 2003) — degree-preserving randomization",
+    "N2": "degree-preserving rewiring (double edge swap, 1000 iter)",
+    "N3": "cohort-matched permutation",
+    "N4": "role-matched bootstrap",
+    "N5": "era-window matched resample",
+    "N6": "uniform random (information-zero baseline)",
+    "N7": "naive activity baseline (count-only, no structure)",
+}
+
+
+# =========================================================================
+# Method-gate components
+# =========================================================================
+
+
+@dataclass(frozen=True)
+class CIMethod:
+    estimator: Literal["greenwood", "bootstrap", "delta", "analytical_se",
+                       "clopper_pearson", "wald", "wilson"]
+    n_resamples: int | None = None  # required for bootstrap
+    parametric_assumption: str | None = None
+
+
+@dataclass(frozen=True)
+class HoldoutSpec:
+    method: Literal["leave-one-year-out", "rolling-window", "k-fold",
+                    "time-split"]
+    holdout_size: str           # e.g. "last 3 years (2022-2024)"
+    metric: str                 # e.g. "precision@k=20", "AUC"
+    naive_baseline: str         # e.g. "activity count alone"
+
+
+@dataclass(frozen=True)
+class ShrinkageSpec:
+    method: Literal["james_stein", "empirical_bayes_beta",
+                    "empirical_bayes_normal", "ridge"]
+    n_threshold: int            # apply only when n < threshold
+    prior: str                  # description of prior assumption
+
+
+@dataclass(frozen=True)
+class SensitivityAxis:
+    name: str                   # e.g. "exit definition window"
+    values: list[str | int | float]
+
+
+@dataclass(frozen=True)
+class MethodGate:
+    name: str
+    estimator: str
+    ci: CIMethod
+    rng_seed: int               # required for reproducibility
+    null: list[str] = field(default_factory=list)        # null model IDs
+    holdout: HoldoutSpec | None = None                   # required for predictions
+    shrinkage: ShrinkageSpec | None = None               # required for individual rankings
+    sensitivity_grid: list[SensitivityAxis] = field(default_factory=list)
+    limitations: list[str] = field(default_factory=list)  # ≥ 3 entries
+
+    def validate(self) -> list[str]:
+        violations: list[str] = []
+        if not self.estimator:
+            violations.append("estimator missing")
+        if self.ci.estimator == "bootstrap" and not self.ci.n_resamples:
+            violations.append("bootstrap CI requires n_resamples")
+        if len(self.limitations) < 3:
+            violations.append(
+                f"≥3 limitations required (got {len(self.limitations)})"
+            )
+        for nid in self.null:
+            if nid not in NULL_MODEL_CATALOGUE:
+                violations.append(f"unknown null model id: {nid}")
+        return violations
+
+
+# =========================================================================
+# Interpretation guard
+# =========================================================================
+
+
+@dataclass(frozen=True)
+class InterpretationGuard:
+    forbidden_framing: list[str]    # phrases that, if appearing in
+                                    # the rendered report, are violations
+    required_alternatives: int = 1  # min number of alt interpretations
+
+    def validate(self) -> list[str]:
+        violations: list[str] = []
+        if self.required_alternatives < 1:
+            violations.append("required_alternatives must be ≥ 1")
+        return violations
+
+
+# =========================================================================
+# Data lineage
+# =========================================================================
+
+
+@dataclass(frozen=True)
+class DataLineage:
+    sources: list[str]              # SILVER / Conformed table names
+    meta_table: str                 # ops_lineage / meta_<name> entry
+    snapshot_date: str              # YYYY-MM-DD
+    pipeline_version: str           # e.g. "v55"
+
+
+# =========================================================================
+# Top-level ReportSpec
+# =========================================================================
+
+
+@dataclass(frozen=True)
+class ReportSpec:
+    name: str
+    audience: Literal["common", "policy", "hr", "biz", "technical_appendix"]
+    claim: str
+    identifying_assumption: str
+    null_model: list[str]
+    method_gate: MethodGate
+    sensitivity_grid: list[SensitivityAxis]
+    interpretation_guard: InterpretationGuard
+    data_lineage: DataLineage
+
+    def validate(self) -> list[str]:
+        out: list[str] = []
+        if not self.claim:
+            out.append("claim missing")
+        if not self.identifying_assumption:
+            out.append("identifying_assumption missing")
+        if not self.null_model:
+            out.append(
+                "null_model required — declare e.g. ['N3'] or ['N7'] "
+                "from NULL_MODEL_CATALOGUE"
+            )
+        out.extend(self.method_gate.validate())
+        out.extend(self.interpretation_guard.validate())
+        return out
+
+
+# =========================================================================
+# Brief narrative arc (REPORT_DESIGN_v3.md §5)
+# =========================================================================
+
+
+@dataclass(frozen=True)
+class NullContrast:
+    section_id: str
+    observed: float
+    null_lo: float
+    null_hi: float
+    note: str = ""
+
+
+@dataclass(frozen=True)
+class LimitationBlock:
+    identifying_assumption_validity: str
+    sensitivity_caveats: list[str]
+    shrinkage_order_changes: str = ""
+
+
+@dataclass(frozen=True)
+class Interpretation:
+    primary_claim: str
+    primary_subject: str        # e.g. "本レポートの著者は…"
+    alternatives: list[str]     # ≥ 1
+    recommendation: str | None = None
+    recommendation_alt_value: str | None = None  # different value perspective
+
+
+@dataclass(frozen=True)
+class BriefArc:
+    audience: Literal["policy", "hr", "biz"]
+    presenting_phenomena: list[str]    # report ids
+    null_contrast: list[NullContrast]
+    limitation_block: LimitationBlock
+    interpretation: Interpretation
+
+
+# =========================================================================
+# Strict mode toggle (CI gate)
+# =========================================================================
+
+
+def is_strict_mode() -> bool:
+    """Return True when CI must enforce ReportSpec validity."""
+    return os.environ.get("STRICT_REPORT_SPEC") in {"1", "true", "yes"}
+
+
+def assert_valid(spec: ReportSpec) -> None:
+    """Raise if ``spec`` violates v3 declarations and strict mode is on.
+
+    In non-strict mode (default until Phase 5) the violations are
+    returned via ``ReportSpec.validate()`` for the caller to log.
+    """
+    violations = spec.validate()
+    if violations and is_strict_mode():
+        joined = "; ".join(violations)
+        raise ValueError(f"ReportSpec[{spec.name}] violations: {joined}")

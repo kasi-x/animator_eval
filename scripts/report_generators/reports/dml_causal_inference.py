@@ -69,29 +69,35 @@ class DMLCausalInferenceReport(BaseReportGenerator):
             )
         findings += "</ul>"
 
-        # Error bar plot
-        treatments = [f"{r['treatment']}→{r['outcome']}" for r in rows]
-        ates = [r["ate"] for r in rows]
-        ci_los = [r["ate"] - 1.96 * r["ate_se"] for r in rows]
-        ci_his = [r["ate"] + 1.96 * r["ate_se"] for r in rows]
+        # v3: CIScatter primitive — null reference (ATE=0) / null vs sig
+        # 識別 / sort 入力順
+        from src.viz import embed as viz_embed
+        from src.viz.primitives import CIPoint, CIScatterSpec, render_ci_scatter
 
-        fig = go.Figure(go.Scatter(
-            x=treatments, y=ates,
-            mode="markers",
-            error_y=dict(
-                type="data",
-                symmetric=False,
-                array=[h - a for h, a in zip(ci_his, ates)],
-                arrayminus=[a - lo for a, lo in zip(ates, ci_los)],
-            ),
-            marker=dict(color="#667eea", size=10),
-            hovertemplate="%{x}: ATE=%{y:.4f}<extra></extra>",
-        ))
-        fig.add_hline(y=0, line_dash="dash", line_color="#a0a0a0")
-        fig.update_layout(
+        ci_points = [
+            CIPoint(
+                label=f"{r['treatment']}→{r['outcome']}",
+                x=r["ate"],
+                ci_lo=r["ate"] - 1.96 * r["ate_se"],
+                ci_hi=r["ate"] + 1.96 * r["ate_se"],
+                # 95% CI が 0 を含めば非有意 (Wald 近似 p ≥ 0.05)
+                p_value=0.04 if (
+                    (r["ate"] - 1.96 * r["ate_se"]) > 0
+                    or (r["ate"] + 1.96 * r["ate_se"]) < 0
+                ) else 0.20,
+                n=r["n_obs"],
+            )
+            for r in rows
+        ]
+        spec = CIScatterSpec(
+            points=ci_points,
+            x_label="ATE (95% CI, Wald)",
             title="DML ATE推定値と95%信頼区間",
-            xaxis_title="処置 → アウトカム", yaxis_title="ATE",
+            reference=0.0,
+            reference_label="ATE",
+            sort_by="input",
         )
+        fig = render_ci_scatter(spec, theme="dark")
 
         violations = sb.validate_findings(findings)
         if violations:
@@ -100,7 +106,7 @@ class DMLCausalInferenceReport(BaseReportGenerator):
         return ReportSection(
             title="DML処置効果推定値",
             findings_html=findings,
-            visualization_html=plotly_div_safe(fig, "chart_dml_overview", height=420),
+            visualization_html=viz_embed(fig, "chart_dml_overview"),
             method_note=(
                 "DML推定値はfeat_causal_estimates（Phase 9因果モジュール）由来。"
                 "ATE = 交差適合法で推定された平均処置効果。"

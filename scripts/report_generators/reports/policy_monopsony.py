@@ -4,6 +4,10 @@
 - Section 1: スタジオ集中度 HHI 時系列
 - Section 2: 転職率・時代比較
 - Section 3: キャリア固定化回帰 (Lock-in)
+
+v3 visualization:
+- Section 3 (lock-in OR) を CIScatter primitive 経由
+- Section 1/2 は theme + palette のみ統一 (line/grouped-bar 用 primitive 未整備)
 """
 
 from __future__ import annotations
@@ -14,8 +18,13 @@ from pathlib import Path
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from src.viz import embed as viz_embed
+from src.viz.palettes import OKABE_ITO_DARK
+from src.viz.primitives import CIPoint, CIScatterSpec, render_ci_scatter
+from src.viz.theme import apply_theme
+
 from ..helpers import insert_lineage
-from ..html_templates import plotly_div_safe
+from ..html_templates import plotly_div_safe  # noqa: F401  (legacy callers elsewhere)
 from ..section_builder import ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
 
@@ -32,16 +41,18 @@ def _load(name: str) -> dict | list:
         return {}
 
 
+# v3: career-stage mapping は src.viz.palettes に集約。era の固定色も
+# Okabe-Ito + viridis ベースに切替 (CB-safe / report 横断一貫性)。
 _STAGE_COLORS = {
-    "新人": "#a0d2db",
-    "中堅": "#667eea",
-    "ベテラン": "#f093fb",
-    "シニア": "#fda085",
+    "新人": OKABE_ITO_DARK[2],   # sky blue
+    "中堅": OKABE_ITO_DARK[3],   # bluish green
+    "ベテラン": OKABE_ITO_DARK[7],  # reddish purple
+    "シニア": OKABE_ITO_DARK[1],    # orange
 }
 
 _ERA_COLORS = [
-    "#667eea", "#a0d2db", "#06D6A0", "#FFD166",
-    "#f5576c", "#fda085", "#f093fb", "#43e97b",
+    OKABE_ITO_DARK[2], OKABE_ITO_DARK[3], OKABE_ITO_DARK[1], OKABE_ITO_DARK[7],
+    OKABE_ITO_DARK[5], OKABE_ITO_DARK[6], OKABE_ITO_DARK[4], OKABE_ITO_DARK[0],
 ]
 
 
@@ -134,7 +145,7 @@ class PolicyMonopsonyReport(BaseReportGenerator):
                 x=years, y=hhi_raw,
                 mode="lines+markers",
                 name="HHI (生値)",
-                line=dict(color="#f093fb", width=2),
+                line=dict(color=OKABE_ITO_DARK[7], width=2),
                 marker=dict(size=5),
                 hovertemplate="年=%{x}: HHI=%{y:.1f}<extra></extra>",
             ),
@@ -145,10 +156,17 @@ class PolicyMonopsonyReport(BaseReportGenerator):
                 x=years, y=hhi_norm,
                 mode="lines",
                 name="HHI (正規化)",
-                line=dict(color="#a0d2db", width=2, dash="dot"),
+                line=dict(color=OKABE_ITO_DARK[2], width=2, dash="dot"),
                 hovertemplate="年=%{x}: HHI正規化=%{y:.4f}<extra></extra>",
             ),
             secondary_y=True,
+        )
+
+        # v3: 米国 DOJ 基準を null reference として明示
+        fig.add_hline(
+            y=1500, line_dash="dot", line_color="#a0a0a0",
+            annotation_text="競争的市場上限 (DOJ 1500)",
+            annotation_position="bottom right",
         )
 
         fig.update_layout(
@@ -158,6 +176,7 @@ class PolicyMonopsonyReport(BaseReportGenerator):
         )
         fig.update_yaxes(title_text="HHI（生値、左軸）", secondary_y=False)
         fig.update_yaxes(title_text="HHI（正規化、右軸）", secondary_y=True)
+        apply_theme(fig, theme="dark", height=420)
 
         violations = sb.validate_findings(findings_html)
         if violations:
@@ -166,7 +185,7 @@ class PolicyMonopsonyReport(BaseReportGenerator):
         return ReportSection(
             title="スタジオ集中度（HHI）時系列",
             findings_html=findings_html,
-            visualization_html=plotly_div_safe(fig, "chart_hhi_trends", height=420),
+            visualization_html=viz_embed(fig, "chart_hhi_trends", height=420),
             method_note=(
                 "HHI_y = Σ_s (share_{s,y})² × 10000。"
                 "share_{s,y} = スタジオsの年yにおける総クレジット数 / 全スタジオ合計クレジット数。"
@@ -219,12 +238,11 @@ class PolicyMonopsonyReport(BaseReportGenerator):
                 xref="paper", yref="paper", x=0.5, y=0.5,
                 showarrow=False, font=dict(color="#8a94a0"),
             )
-            viz_html = plotly_div_safe(fig, "chart_mobility", height=340)
+            apply_theme(fig, theme="dark", height=340)
+            viz_html = viz_embed(fig, "chart_mobility", height=340)
         else:
             fig = go.Figure()
-            _ERA_COLORS[:len(eras)]
             for i, stage in enumerate(stages):
-                stage_rate = by_stage.get(stage)
                 era_rates = [by_era.get(era, 0) for era in eras]
 
                 # Grouped bar: each stage group by era
@@ -256,7 +274,8 @@ class PolicyMonopsonyReport(BaseReportGenerator):
                 barmode="group",
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
             )
-            viz_html = plotly_div_safe(fig, "chart_mobility", height=420)
+            apply_theme(fig, theme="dark", height=420)
+            viz_html = viz_embed(fig, "chart_mobility", height=420)
 
         violations = sb.validate_findings(findings_html)
         if violations:
@@ -320,40 +339,27 @@ class PolicyMonopsonyReport(BaseReportGenerator):
         if interpretation:
             findings_html += f"<p>{interpretation}</p>"
 
-        # Single-point forest plot with CI error bars
+        # v3: CIScatter primitive 経由で 1 点 forest plot
         if or_val is not None:
-            or_display = [or_val]
-            err_hi = [ci_hi - or_val if ci_hi is not None else 0.0]
-            err_lo = [or_val - ci_lo if ci_lo is not None else 0.0]
-            x_labels = ["log(person_fe_rank) OR"]
-
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=or_display,
-                y=x_labels,
-                mode="markers",
-                marker=dict(color="#fda085", size=14, symbol="diamond"),
-                error_x=dict(
-                    type="data",
-                    symmetric=False,
-                    array=err_hi,
-                    arrayminus=err_lo,
-                    color="rgba(255,255,255,0.5)",
-                    thickness=2,
-                    width=10,
-                ),
-                hovertemplate="OR=%{x:.3f}<extra></extra>",
-            ))
-            fig.add_vline(x=1.0, line_dash="dash", line_color="#a0a0a0",
-                          annotation_text="OR=1 (無効果)", annotation_position="top right")
-            fig.update_layout(
+            spec = CIScatterSpec(
+                points=[CIPoint(
+                    label="log(person_fe_rank) OR",
+                    x=or_val,
+                    ci_lo=ci_lo if ci_lo is not None else or_val,
+                    ci_hi=ci_hi if ci_hi is not None else or_val,
+                    p_value=None,
+                    n=n,
+                )],
+                x_label="オッズ比 (OR, log scale)",
                 title="キャリア固定化 オッズ比（95% CI）",
-                xaxis_title="オッズ比 (OR)",
-                xaxis_type="log",
-                height=280,
-                margin=dict(l=220, t=60, b=60),
+                log_x=True,
+                reference=1.0,
+                reference_label="OR",
+                sort_by="input",
             )
-            viz_html = plotly_div_safe(fig, "chart_lockin", height=280)
+            viz_html = viz_embed(
+                render_ci_scatter(spec, theme="dark"), "chart_lockin",
+            )
         else:
             viz_html = '<p style="color:#8a94a0">オッズ比データが利用できません。</p>'
 

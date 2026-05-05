@@ -117,29 +117,29 @@ class MgmtTeamChemistryReport(BaseReportGenerator):
             mean_res_vals.append(_safe_float(pdata.get("mean_res")))
             se_vals.append(_safe_float(pdata.get("se")))
 
-        fig = go.Figure(
-            go.Bar(
-                x=mean_res_vals,
-                y=pair_labels,
-                orientation="h",
-                marker_color="#06D6A0",
-                error_x=dict(
-                    type="data",
-                    array=se_vals,
-                    symmetric=True,
-                ),
-                hovertemplate="ペア %{y}: 残差=%{x:.4f}<extra></extra>",
+        # v3: CIScatter primitive — SE → 95% CI に変換 (±1.96·SE) して
+        # forest 描画 / null reference (mean_res=0) / sort 入力順
+        from src.viz import embed as viz_embed
+        from src.viz.primitives import CIPoint, CIScatterSpec, render_ci_scatter
+
+        ci_points = [
+            CIPoint(
+                label=pair_labels[i],
+                x=mean_res_vals[i],
+                ci_lo=mean_res_vals[i] - 1.96 * se_vals[i],
+                ci_hi=mean_res_vals[i] + 1.96 * se_vals[i],
             )
-        )
-        fig.add_vline(x=0, line_dash="dash", line_color="#a0a0a0")
-        fig.update_layout(
+            for i in range(len(pair_labels))
+        ]
+        spec = CIScatterSpec(
+            points=ci_points,
+            x_label="平均ペア残差（mean_res, 95% CI）",
             title="ポジティブ化学反応ペア Top20（平均ペア残差）",
-            xaxis_title="平均ペア残差（mean_res）",
-            yaxis_title="",
-            height=560,
-            margin=dict(l=180),
+            reference=0.0,
+            reference_label="null",
+            sort_by="input",
         )
-        fig.update_yaxes(autorange="reversed")
+        fig = render_ci_scatter(spec, theme="dark")
 
         findings = (
             f"<p>分析ペア数: {n_analyzed:,}件。"
@@ -158,9 +158,7 @@ class MgmtTeamChemistryReport(BaseReportGenerator):
         return ReportSection(
             title="ポジティブ化学反応ペア（Top20）",
             findings_html=findings,
-            visualization_html=plotly_div_safe(
-                fig, "chart_chemistry_top_pairs", height=560
-            ),
+            visualization_html=viz_embed(fig, "chart_chemistry_top_pairs"),
             method_note=(
                 "mean_res: 共同クレジット作品における"
                 "ペアの実績値と線形予測値の差の平均（ペア残差）。"

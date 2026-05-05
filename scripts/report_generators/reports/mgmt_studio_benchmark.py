@@ -285,45 +285,33 @@ class MgmtStudioBenchmarkReport(BaseReportGenerator):
         r5s = [_safe_float(e.get("r5_shrunk")) for e in combined]
         cis = [e.get("r5_ci") for e in combined]
 
-        err_plus = []
-        err_minus = []
+        # v3: CIScatter primitive 経由 — EB shrinkage badge / CB-safe palette /
+        # null reference (r5=0) / 並びは入力順 (上位 → 下位)
+        from src.viz import embed as viz_embed
+        from src.viz.primitives import (
+            CIPoint, CIScatterSpec, ShrinkageInfo, render_ci_scatter,
+        )
+
+        ci_points: list[CIPoint] = []
         for i, ci in enumerate(cis):
             if isinstance(ci, (list, tuple)) and len(ci) == 2:
                 lo = _safe_float(ci[0])
                 hi = _safe_float(ci[1])
-                err_plus.append(max(0.0, hi - r5s[i]))
-                err_minus.append(max(0.0, r5s[i] - lo))
             else:
-                err_plus.append(0.0)
-                err_minus.append(0.0)
-
-        colors = [
-            "#667eea" if v >= 0 else "#f5576c" for v in r5s
-        ]
-
-        fig = go.Figure(
-            go.Bar(
-                x=r5s,
-                y=names,
-                orientation="h",
-                marker_color=colors,
-                error_x=dict(
-                    type="data",
-                    symmetric=False,
-                    array=err_plus,
-                    arrayminus=err_minus,
-                ),
-                hovertemplate="%{y}: R5=%{x:.3f}<extra></extra>",
+                lo = hi = r5s[i]
+            ci_points.append(
+                CIPoint(label=names[i], x=r5s[i], ci_lo=lo, ci_hi=hi)
             )
-        )
-        fig.update_layout(
+        spec = CIScatterSpec(
+            points=ci_points,
+            x_label="R5定着率（EB縮小推定値）",
             title="R5定着率 — 上位10 / 下位10スタジオ（EB縮小推定値）",
-            xaxis_title="R5定着率（縮小推定値）",
-            yaxis_title="",
-            height=560,
-            margin=dict(l=200),
+            reference=0.0,
+            reference_label="null",
+            sort_by="input",
+            shrinkage=ShrinkageInfo(method="Empirical Bayes"),
         )
-        fig.update_yaxes(autorange="reversed")
+        fig = render_ci_scatter(spec, theme="dark")
 
         r5_vals = [_safe_float(e.get("r5_shrunk")) for e in entries]
         r5_min = min(r5_vals) if r5_vals else 0.0
@@ -355,9 +343,7 @@ class MgmtStudioBenchmarkReport(BaseReportGenerator):
         return ReportSection(
             title="R5定着率（Top10 / Bottom10）",
             findings_html=findings,
-            visualization_html=plotly_div_safe(
-                fig, "chart_studio_retention", height=560
-            ),
+            visualization_html=viz_embed(fig, "chart_studio_retention"),
             method_note=(
                 "R5定着率: デビューから5年後に同スタジオでクレジットが"
                 "確認される人物の割合。"

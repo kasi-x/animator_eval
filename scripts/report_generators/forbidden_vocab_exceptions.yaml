@@ -10,6 +10,23 @@
 #     reason: why this usage is permitted
 
 exceptions:
+  - file: docs/REPORT_DESIGN_v3.md
+    line_pattern: "「育成力」は能力評価"
+    term: 能力
+    reason: >
+      Meta-discussion: this row in the rename table explains *why* the legacy
+      title 「育成力ランキング」 violates the ability-framing rule and must be
+      renamed. Discussing the prohibited framing is required to document the
+      rename rationale.
+
+  - file: docs/REPORT_DESIGN_v3.md
+    line_pattern: "「離職」「能力」「実績」は禁止語"
+    term: 能力
+    reason: >
+      Meta-discussion: lists the prohibited terms that the v3 glossary
+      replaces. Naming the prohibited terms is required to specify what the
+      glossary blocks.
+
   - file: scripts/report_generators/section_builder.py
     line_pattern: "ability, skill, artistry, or professional worth"
     term: ability

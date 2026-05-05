@@ -4,6 +4,9 @@
 - Section 1: デビューコホート別生存曲線 (KM)
 - Section 2: 処置効果推定 (Cox HR + DML ATE)
 - Section 3: exit定義別感度分析
+
+v3 visualization: Section 2 forest plot を src.viz.primitives.CIScatter
+経由で描画 (palette / CI / null reference 統一)。
 """
 
 from __future__ import annotations
@@ -11,10 +14,20 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import plotly.graph_objects as go
+import plotly.graph_objects as go  # noqa: F401  (kept for backward-compat shims)
+
+from src.viz import embed as viz_embed
+from src.viz.primitives import (
+    CIPoint,
+    CIScatterSpec,
+    KMCurveSpec,
+    KMStratum,
+    render_ci_scatter,
+    render_km_curve,
+)
 
 from ..helpers import insert_lineage
-from ..html_templates import plotly_div_safe
+from ..html_templates import plotly_div_safe  # noqa: F401  (legacy shim still used elsewhere)
 from ..section_builder import ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
 
@@ -36,6 +49,66 @@ _COHORT_COLORS = [
     "#667eea", "#f093fb", "#06D6A0", "#FFD166",
     "#f5576c", "#a0d2db", "#fda085", "#43e97b",
 ]
+
+
+# v3 ReportSpec — see docs/REPORT_DESIGN_v3.md §7 (example A)
+from .._spec import (  # noqa: E402
+    CIMethod, DataLineage, HoldoutSpec, InterpretationGuard,
+    MethodGate, ReportSpec, SensitivityAxis,
+)
+
+SPEC = ReportSpec(
+    name="policy_attrition",
+    audience="policy",
+    claim=(
+        "デビューコホート別の翌年クレジット可視性喪失率が "
+        "5 年窓で単調に減少する"
+    ),
+    identifying_assumption=(
+        "クレジット可視性喪失 = 雇用離脱 を仮定しない。"
+        "クレジット可視性のみを観察対象とする。"
+    ),
+    null_model=["N3", "N5"],
+    method_gate=MethodGate(
+        name="Cox PH + Kaplan-Meier",
+        estimator="cox_ph + km (Breslow baseline)",
+        ci=CIMethod(estimator="greenwood", parametric_assumption="proportional hazards"),
+        rng_seed=42,
+        null=["N3", "N5"],
+        holdout=HoldoutSpec(
+            method="leave-one-year-out",
+            holdout_size="last 3 years (2022-2024)",
+            metric="C-index",
+            naive_baseline="role-cohort marginal hazard",
+        ),
+        shrinkage=None,
+        sensitivity_grid=[
+            SensitivityAxis(name="exit definition window",
+                            values=["1y", "3y", "5y"]),
+            SensitivityAxis(name="cohort cut", values=["5y", "10y"]),
+        ],
+        limitations=[
+            "右打切り (観測末年)",
+            "可視性喪失は海外下請け / 無名義参加 / 産休 / 療養 を吸収",
+            "クレジット粒度の時代差 (1980s vs 2010s) が hazard 推定に bias",
+        ],
+    ),
+    sensitivity_grid=[
+        SensitivityAxis(name="exit definition window",
+                        values=["1y", "3y", "5y"]),
+        SensitivityAxis(name="cohort cut", values=["5y", "10y"]),
+    ],
+    interpretation_guard=InterpretationGuard(
+        forbidden_framing=["離職率の悪化", "若手定着の課題", "業界の危機"],
+        required_alternatives=2,
+    ),
+    data_lineage=DataLineage(
+        sources=["credits", "persons", "anime"],
+        meta_table="meta_policy_attrition",
+        snapshot_date="2026-04-30",
+        pipeline_version="v55",
+    ),
+)
 
 
 class PolicyAttritionReport(BaseReportGenerator):
@@ -96,7 +169,8 @@ class PolicyAttritionReport(BaseReportGenerator):
                 section_id="km_curves",
             )
 
-        fig = go.Figure()
+        # v3: KMCurve primitive 経由で描画 (Greenwood band + risk table + median marker)
+        strata: list[KMStratum] = []
         findings_parts: list[str] = []
 
         for idx, (decade_label, decade_data) in enumerate(sorted(km_by_cohort.items())):
@@ -108,40 +182,33 @@ class PolicyAttritionReport(BaseReportGenerator):
             ci_upper = decade_data.get("ci_upper", [])
             n = decade_data.get("n")
             median_survival = decade_data.get("median_survival")
+            n_at_risk = decade_data.get("n_at_risk")
 
             if not timeline or not survival:
                 continue
 
-            color = _COHORT_COLORS[idx % len(_COHORT_COLORS)]
+            strata.append(
+                KMStratum(
+                    label=f"{decade_label}年代デビュー",
+                    timeline=timeline,
+                    survival=survival,
+                    ci_lo=ci_lower if (ci_lower and len(ci_lower) == len(timeline)) else None,
+                    ci_hi=ci_upper if (ci_upper and len(ci_upper) == len(timeline)) else None,
+                    n_at_risk=n_at_risk,
+                    median_survival=median_survival,
+                    n=n,
+                    color=_COHORT_COLORS[idx % len(_COHORT_COLORS)],
+                )
+            )
 
-            # CI shading
-            if ci_upper and ci_lower and len(ci_upper) == len(timeline):
-                x_fill = list(timeline) + list(reversed(timeline))
-                y_fill = list(ci_upper) + list(reversed(ci_lower))
-                fig.add_trace(go.Scatter(
-                    x=x_fill, y=y_fill,
-                    fill="toself",
-                    fillcolor=f"rgba({_hex_to_rgb(color)},0.12)",
-                    line=dict(width=0),
-                    showlegend=False,
-                    hoverinfo="skip",
-                ))
-
-            fig.add_trace(go.Scatter(
-                x=timeline, y=survival,
-                mode="lines",
-                name=f"{decade_label}年代デビュー",
-                line=dict(color=color, width=2),
-                hovertemplate=f"{decade_label}: t=%{{x}}年, S(t)=%{{y:.3f}}<extra></extra>",
-            ))
-
-            # Findings text per decade
             n_str = f"n={n:,}" if n is not None else "n=不明"
             med_str = (
                 f"中央生存時間={median_survival:.1f}年" if median_survival is not None
                 else "中央生存時間=算出不能（打切）"
             )
-            findings_parts.append(f"<li><strong>{decade_label}年代デビュー</strong>: {n_str}, {med_str}</li>")
+            findings_parts.append(
+                f"<li><strong>{decade_label}年代デビュー</strong>: {n_str}, {med_str}</li>"
+            )
 
         findings_html = (
             f"<p>デビューコホート別のカプラン–マイヤー生存曲線"
@@ -151,13 +218,18 @@ class PolicyAttritionReport(BaseReportGenerator):
             else "<p>有効なコホートデータが見つかりませんでした。</p>"
         )
 
-        fig.update_layout(
-            title="デビューコホート別 KM生存曲線（95% CI）",
-            xaxis_title="デビューからの経過年数",
-            yaxis_title="生存率 S(t)",
-            yaxis=dict(range=[0, 1.05]),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        )
+        if strata:
+            km_spec = KMCurveSpec(
+                strata=strata,
+                title="デビューコホート別 KM生存曲線（Greenwood 95% CI）",
+                x_label="デビューからの経過年数",
+                y_label="生存率 S(t)",
+                risk_table=True,
+                median_marker=True,
+            )
+            viz_html = viz_embed(render_km_curve(km_spec, theme="dark"), "chart_km_curves")
+        else:
+            viz_html = '<p style="color:#8a94a0">KM 描画用データが利用できません。</p>'
 
         violations = sb.validate_findings(findings_html)
         if violations:
@@ -166,7 +238,7 @@ class PolicyAttritionReport(BaseReportGenerator):
         return ReportSection(
             title="デビューコホート別生存曲線",
             findings_html=findings_html,
-            visualization_html=plotly_div_safe(fig, "chart_km_curves", height=480),
+            visualization_html=viz_html,
             method_note=(
                 "KM推定量（Kaplan–Meier）。"
                 "イベント定義: gap_type == 'exit' かつ returned == 0。"
@@ -256,36 +328,30 @@ class PolicyAttritionReport(BaseReportGenerator):
         if not findings_html:
             findings_html = "<p>有効な処置効果推定値が見つかりませんでした。</p>"
 
-        # Forest plot
+        # Forest plot — v3: CIScatter primitive 経由で描画
         if covariates:
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=hr_vals,
-                y=covariates,
-                mode="markers",
-                marker=dict(color="#f093fb", size=10, symbol="square"),
-                error_x=dict(
-                    type="data",
-                    symmetric=False,
-                    array=[h - v for h, v in zip(hr_hi, hr_vals)],
-                    arrayminus=[v - lo for v, lo in zip(hr_vals, hr_lo)],
-                    color="rgba(255,255,255,0.5)",
-                    thickness=2,
-                    width=6,
-                ),
-                hovertemplate="<b>%{y}</b><br>HR=%{x:.3f}<extra></extra>",
-            ))
-            fig.add_vline(x=1.0, line_dash="dash", line_color="#a0a0a0",
-                          annotation_text="HR=1 (無効果)", annotation_position="top right")
-            fig.update_layout(
+            ci_points = [
+                CIPoint(
+                    label=cov,
+                    x=hr_vals[i],
+                    ci_lo=hr_lo[i],
+                    ci_hi=hr_hi[i],
+                    p_value=p_vals[i],
+                )
+                for i, cov in enumerate(covariates)
+            ]
+            spec = CIScatterSpec(
+                points=ci_points,
+                x_label="ハザード比 (HR, log scale)",
                 title="CoxPH ハザード比 フォレストプロット",
-                xaxis_title="ハザード比 (HR)",
-                yaxis_title="",
-                xaxis_type="log",
-                margin=dict(l=180),
+                log_x=True,
+                reference=1.0,
+                reference_label="HR",
+                sort_by="input",
+                significance_threshold=0.05,
             )
-            fig.update_yaxes(autorange="reversed")
-            viz_html = plotly_div_safe(fig, "chart_cox_forest", height=max(360, len(covariates) * 32 + 100))
+            fig = render_ci_scatter(spec, theme="dark")
+            viz_html = viz_embed(fig, "chart_cox_forest")
         else:
             viz_html = '<p style="color:#8a94a0">CoxPHフォレストプロットのデータが利用できません。</p>'
 
@@ -371,19 +437,28 @@ class PolicyAttritionReport(BaseReportGenerator):
             f"<ul>{''.join(findings_items)}</ul>"
         )
 
+        # v3: bar chart は palette の Okabe-Ito から取り、apply_theme で
+        # dark theme を統一適用 (sensitivity は単発バーなので primitive 化せず
+        # raw plotly のまま、theme/palette のみ統一)。
+        from src.viz.palettes import OKABE_ITO_DARK
+        from src.viz.theme import apply_theme
+
+        bar_palette = OKABE_ITO_DARK[2:5]  # blue / green / yellow (CB-safe triplet)
         fig = go.Figure()
         fig.add_trace(go.Bar(
             x=labels,
             y=thetas,
-            marker_color=["#667eea", "#f093fb", "#06D6A0"][:len(labels)],
+            marker_color=bar_palette[:len(labels)],
             hovertemplate="%{x}: θ=%{y:.4f}<extra></extra>",
         ))
-        fig.add_hline(y=0, line_dash="dash", line_color="#a0a0a0")
+        fig.add_hline(y=0, line_dash="dash", line_color="#a0a0a0",
+                      annotation_text="θ = 0", annotation_position="top right")
         fig.update_layout(
             title="exit定義別 DML ATE（感度分析）",
             xaxis_title="exit閾値定義",
             yaxis_title="DML ATE (θ)",
         )
+        apply_theme(fig, theme="dark", height=380)
 
         violations = sb.validate_findings(findings_html)
         if violations:
@@ -392,7 +467,7 @@ class PolicyAttritionReport(BaseReportGenerator):
         return ReportSection(
             title="exit定義別感度分析",
             findings_html=findings_html,
-            visualization_html=plotly_div_safe(fig, "chart_sensitivity", height=380),
+            visualization_html=viz_embed(fig, "chart_sensitivity", height=380),
             method_note=(
                 "感度分析: exitの定義閾値を3年・5年・7年に変えて、"
                 "DML ATE推定値の安定性を検証。"

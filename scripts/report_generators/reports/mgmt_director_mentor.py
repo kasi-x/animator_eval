@@ -113,40 +113,34 @@ class MgmtDirectorMentorReport(BaseReportGenerator):
             _safe_float(r.get("null_p_value"), 1.0) for r in top20
         ]
 
-        colors = [
-            "#f5a623" if p < 0.05 else "#8a94a0" for p in p_vals
-        ]
+        # v3: CIScatter (forest) primitive 経由 — 有意差 marker / null reference /
+        # EB shrinkage badge / Okabe-Ito CB-safe palette を強制
+        from src.viz import embed as viz_embed
+        from src.viz.primitives import (
+            CIPoint, CIScatterSpec, ShrinkageInfo, render_ci_scatter,
+        )
 
-        fig = go.Figure(
-            go.Bar(
-                x=m_vals,
-                y=names,
-                orientation="h",
-                marker_color=colors,
-                error_x=dict(
-                    type="data",
-                    symmetric=False,
-                    array=[
-                        max(0.0, hi - m)
-                        for hi, m in zip(ci_his, m_vals)
-                    ],
-                    arrayminus=[
-                        max(0.0, m - lo)
-                        for m, lo in zip(m_vals, ci_los)
-                    ],
-                ),
-                hovertemplate="%{y}: M̂=%{x:.3f}<extra></extra>",
+        ci_points = [
+            CIPoint(
+                label=names[i],
+                x=m_vals[i],
+                ci_lo=ci_los[i],
+                ci_hi=ci_his[i],
+                p_value=p_vals[i],
             )
-        )
-        fig.add_vline(x=0, line_dash="dash", line_color="#a0a0a0")
-        fig.update_layout(
+            for i in range(len(top20))
+        ]
+        spec = CIScatterSpec(
+            points=ci_points,
+            x_label="M̂_d（メンティー固定効果平均変化量）",
             title="監督育成実績プロファイル（M̂_d、EB縮小推定値、上位20）",
-            xaxis_title="M̂_d（メンティー固定効果平均変化量）",
-            yaxis_title="",
-            height=560,
-            margin=dict(l=180),
+            reference=0.0,
+            reference_label="null",
+            sort_by="x",
+            significance_threshold=0.05,
+            shrinkage=ShrinkageInfo(method="Empirical Bayes"),
         )
-        fig.update_yaxes(autorange="reversed")
+        fig = render_ci_scatter(spec, theme="dark")
 
         findings = (
             f"<p>育成実績推定値（M̂_d）が算出された監督数: {n_total:,}人。"
@@ -165,9 +159,7 @@ class MgmtDirectorMentorReport(BaseReportGenerator):
         return ReportSection(
             title="監督育成実績プロファイル（M̂_d）",
             findings_html=findings,
-            visualization_html=plotly_div_safe(
-                fig, "chart_director_ranking", height=560
-            ),
+            visualization_html=viz_embed(fig, "chart_director_ranking"),
             method_note=(
                 "M̂_d: 監督の指導下でメンティーが経験した"
                 "個人固定効果（AKM θ_i）の平均変化量。"
