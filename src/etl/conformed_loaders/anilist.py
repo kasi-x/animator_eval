@@ -379,7 +379,9 @@ def _anime_glob_has_studios_column(
 def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
     """Create characters / CVA / studios / anime_studios tables and add anime/persons extension columns."""
     for ddl_block in (_DDL_CHARACTERS, _DDL_CVA, _DDL_ANIME_RELATIONS,
-                      _DDL_STUDIOS, _DDL_ANIME_STUDIOS):
+                      _DDL_STUDIOS, _DDL_ANIME_STUDIOS,
+                      _DDL_GENRES_MASTER, _DDL_MEDIA_TAGS_MASTER,
+                      _DDL_MEDIA_TRENDS, _DDL_AIRING_SCHEDULES):
         for stmt in ddl_block.split(";"):
             stmt = stmt.strip()
             if stmt:
@@ -415,6 +417,131 @@ def _has_parquet(conn: duckdb.DuckDBPyConnection, glob: str) -> bool:
         return True
     except Exception:
         return False
+
+
+# Master taxonomies — small, single-row-per-entity catalogs.
+# AniList scraper bootstraps these via _fetch_genre_and_tag_master() (one
+# request each). Conformed exposes them as canonical tables for cross-anime
+# tag analysis (category, isAdult flag, description).
+_DDL_GENRES_MASTER = """
+CREATE TABLE IF NOT EXISTS genres_master (
+    name VARCHAR PRIMARY KEY
+);
+"""
+
+_DDL_MEDIA_TAGS_MASTER = """
+CREATE TABLE IF NOT EXISTS media_tags_master (
+    id                 INTEGER PRIMARY KEY,
+    name               VARCHAR NOT NULL,
+    description        TEXT,
+    category           VARCHAR,
+    is_adult           BOOLEAN,
+    is_general_spoiler BOOLEAN,
+    is_media_spoiler   BOOLEAN,
+    updated_at         TIMESTAMP DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_media_tags_category ON media_tags_master(category);
+"""
+
+_GENRES_MASTER_SQL = """
+INSERT OR IGNORE INTO genres_master (name)
+SELECT DISTINCT name
+FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+WHERE name IS NOT NULL AND TRIM(name) != ''
+"""
+
+# MediaTrend: per-anime time-series of trending / popularity / averageScore.
+# H1: trending / popularity / averageScore are display-only and MUST NOT enter
+# scoring paths. PK = (media_id, date). Display-only.
+_DDL_MEDIA_TRENDS = """
+CREATE TABLE IF NOT EXISTS media_trends (
+    media_id      INTEGER NOT NULL,
+    trend_date    INTEGER NOT NULL,
+    trending      INTEGER,
+    average_score INTEGER,
+    popularity    INTEGER,
+    in_progress   INTEGER,
+    releasing     BOOLEAN,
+    episode       INTEGER,
+    PRIMARY KEY (media_id, trend_date)
+);
+CREATE INDEX IF NOT EXISTS idx_media_trends_date  ON media_trends(trend_date);
+CREATE INDEX IF NOT EXISTS idx_media_trends_media ON media_trends(media_id);
+"""
+
+# Global airing schedule (chronological, cross-anime).
+# Complements anime.airing_schedule_json by providing a flat time-keyed view.
+_DDL_AIRING_SCHEDULES = """
+CREATE TABLE IF NOT EXISTS airing_schedules (
+    id                  INTEGER PRIMARY KEY,
+    media_id            INTEGER NOT NULL,
+    airing_at           INTEGER NOT NULL,
+    time_until_airing   INTEGER,
+    episode             INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_airing_media ON airing_schedules(media_id);
+CREATE INDEX IF NOT EXISTS idx_airing_at    ON airing_schedules(airing_at);
+"""
+
+_MEDIA_TRENDS_SQL = """
+INSERT OR REPLACE INTO media_trends
+    (media_id, trend_date, trending, average_score, popularity, in_progress, releasing, episode)
+SELECT
+    TRY_CAST(media_id AS INTEGER),
+    TRY_CAST(trend_date AS INTEGER),
+    TRY_CAST(trending AS INTEGER),
+    TRY_CAST(average_score AS INTEGER),
+    TRY_CAST(popularity AS INTEGER),
+    TRY_CAST(in_progress AS INTEGER),
+    TRY_CAST(releasing AS BOOLEAN),
+    TRY_CAST(episode AS INTEGER)
+FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (PARTITION BY media_id, trend_date ORDER BY trend_date DESC) AS _rn
+    FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE media_id IS NOT NULL AND trend_date IS NOT NULL
+)
+WHERE _rn = 1
+"""
+
+_AIRING_SCHEDULES_SQL = """
+INSERT OR REPLACE INTO airing_schedules
+    (id, media_id, airing_at, time_until_airing, episode)
+SELECT
+    TRY_CAST(id AS INTEGER),
+    TRY_CAST(media_id AS INTEGER),
+    TRY_CAST(airing_at AS INTEGER),
+    TRY_CAST(time_until_airing AS INTEGER),
+    TRY_CAST(episode AS INTEGER)
+FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (PARTITION BY id ORDER BY airing_at DESC) AS _rn
+    FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE id IS NOT NULL
+)
+WHERE _rn = 1
+"""
+
+_MEDIA_TAGS_MASTER_SQL = """
+INSERT OR REPLACE INTO media_tags_master
+    (id, name, description, category, is_adult, is_general_spoiler, is_media_spoiler, updated_at)
+SELECT
+    TRY_CAST(id AS INTEGER),
+    COALESCE(name, ''),
+    description,
+    category,
+    is_adult,
+    is_general_spoiler,
+    is_media_spoiler,
+    now()
+FROM (
+    SELECT *,
+           ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
+    FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
+    WHERE id IS NOT NULL
+)
+WHERE _rn = 1
+"""
 
 
 # persons fallback — when BRONZE persons coverage is incomplete (anilist scraper
@@ -502,6 +629,22 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
         conn.execute(_STUDIOS_FROM_ARRAY_SQL, [anime_glob])
         conn.execute(_ANIME_STUDIOS_FROM_ARRAY_SQL, [anime_glob])
 
+    # Master taxonomies (genres + media tags). Tiny tables, single-shot fetch.
+    genres_master_glob = _glob_path(bronze_root, "genres_master")
+    media_tags_master_glob = _glob_path(bronze_root, "media_tags_master")
+    if _has_parquet(conn, genres_master_glob):
+        conn.execute(_GENRES_MASTER_SQL, [genres_master_glob])
+    if _has_parquet(conn, media_tags_master_glob):
+        conn.execute(_MEDIA_TAGS_MASTER_SQL, [media_tags_master_glob])
+
+    # Time-series + global airing tables (populated by maintenance scripts).
+    media_trends_glob = _glob_path(bronze_root, "media_trends")
+    airing_schedules_glob = _glob_path(bronze_root, "airing_schedules")
+    if _has_parquet(conn, media_trends_glob):
+        conn.execute(_MEDIA_TRENDS_SQL, [media_trends_glob])
+    if _has_parquet(conn, airing_schedules_glob):
+        conn.execute(_AIRING_SCHEDULES_SQL, [airing_schedules_glob])
+
     counts: dict[str, int] = {
         "characters": conn.execute("SELECT COUNT(*) FROM characters").fetchone()[0],
         "character_voice_actors": conn.execute(
@@ -516,5 +659,9 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
         "anime_studios_anilist": conn.execute(
             "SELECT COUNT(DISTINCT anime_id) FROM anime_studios WHERE source = 'anilist'"
         ).fetchone()[0],
+        "genres_master": conn.execute("SELECT COUNT(*) FROM genres_master").fetchone()[0],
+        "media_tags_master": conn.execute("SELECT COUNT(*) FROM media_tags_master").fetchone()[0],
+        "media_trends": conn.execute("SELECT COUNT(*) FROM media_trends").fetchone()[0],
+        "airing_schedules": conn.execute("SELECT COUNT(*) FROM airing_schedules").fetchone()[0],
     }
     return counts

@@ -132,6 +132,72 @@ query ($id: Int, $staffPage: Int, $staffPerPage: Int, $charPage: Int, $charPerPa
 }
 """
 
+# Master taxonomies. Both return the full collection in a single request — no
+# pagination needed. Run once per scrape session as a bootstrap step.
+GENRE_COLLECTION_QUERY = """
+query {
+  GenreCollection
+}
+"""
+
+MEDIA_TAG_COLLECTION_QUERY = """
+query {
+  MediaTagCollection {
+    id
+    name
+    description
+    category
+    isAdult
+    isGeneralSpoiler
+    isMediaSpoiler
+  }
+}
+"""
+
+# MediaTrend: per-Media historical popularity / trending / averageScore over time.
+# Paginated. AniList returns one row per (mediaId, date) point; older anime have
+# years of history. Display-only (H1: trending/popularity/averageScore must not
+# enter scoring). Used for temporal popularity / soft-power analysis.
+MEDIA_TREND_QUERY = """
+query ($mediaId: Int, $page: Int, $perPage: Int) {
+  Page(page: $page, perPage: $perPage) {
+    pageInfo { hasNextPage total }
+    mediaTrends(mediaId: $mediaId, sort: DATE_DESC) {
+      mediaId
+      date
+      trending
+      averageScore
+      popularity
+      inProgress
+      releasing
+      episode
+    }
+  }
+}
+"""
+
+# Page.airingSchedules: chronological global airing schedule. Paginated.
+# Complements per-anime airingSchedule (already captured in ANIME_STAFF_QUERY)
+# by providing a global timeline view (e.g. "what aired in 2018 Q3").
+GLOBAL_AIRING_SCHEDULE_QUERY = """
+query ($page: Int, $perPage: Int, $airingAt_greater: Int, $airingAt_lesser: Int) {
+  Page(page: $page, perPage: $perPage) {
+    pageInfo { hasNextPage total }
+    airingSchedules(
+      airingAt_greater: $airingAt_greater,
+      airingAt_lesser:  $airingAt_lesser,
+      sort: TIME
+    ) {
+      id
+      mediaId
+      airingAt
+      timeUntilAiring
+      episode
+    }
+  }
+}
+"""
+
 PERSON_DETAILS_QUERY = """
 query ($id: Int) {
   Staff(id: $id) {

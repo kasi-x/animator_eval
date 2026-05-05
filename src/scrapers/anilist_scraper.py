@@ -1,7 +1,7 @@
 """AniList GraphQL API staff credit collection.
 
 Built with httpx (async) + structlog + typer.
-Rate limit: 90 requests/minute (unauthenticated) / higher (authenticated).
+Rate limit: 30 requests/minute (token 有無に関わらず現行値、2026 時点)。
 """
 
 import asyncio
@@ -23,7 +23,7 @@ from src.runtime.models import (
     parse_role,
 )
 from src.scrapers.cache_store import load_cached_json, save_cached_json
-from src.scrapers.checkpoint import Checkpoint
+from src.scrapers.checkpoint import Checkpoint, resolve_checkpoint
 from src.scrapers.hash_utils import hash_anime_data
 from src.scrapers.parsers.anilist import (  # noqa: F401
     parse_anilist_person,
@@ -53,8 +53,7 @@ _env = dotenv_values(find_dotenv())
 log = structlog.get_logger()
 
 ANILIST_URL = "https://graphql.anilist.co"
-# AniList official: 90 req/min (per header), but in degraded state as of 2026-02
-# Effective ~18-19 req/window → burst mode: hit rapidly then back off on 429
+# AniList: 30 req/min (token 有無問わず、2026 時点)
 # Reference: https://docs.anilist.co/guide/rate-limiting
 REQUEST_INTERVAL = 0.1  # burst mode: minimum interval, auto-backoff on 429
 
@@ -99,6 +98,35 @@ def get_anime_ids_to_skip_since(since_str: str) -> set[str]:
         return set()
 
 
+def get_anime_ids_in_bronze() -> set[str]:
+    """Read anime IDs already present in BRONZE anime parquet.
+
+    Used to seed `fetched_ids` so re-runs skip already-scraped anime
+    even if the JSON checkpoint has been lost or only contains the
+    most recent batch. Returns empty set if BRONZE not yet populated.
+    """
+    import duckdb
+    from pathlib import Path
+
+    bronze_glob = "result/bronze/source=anilist/table=anime/**/*.parquet"
+    bronze_dir = Path("result/bronze/source=anilist/table=anime")
+    if not bronze_dir.exists() or not any(bronze_dir.rglob("*.parquet")):
+        return set()
+
+    try:
+        conn = duckdb.connect()
+        rows = conn.execute(
+            f"SELECT DISTINCT id FROM read_parquet('{bronze_glob}')"
+        ).fetchall()
+        conn.close()
+        ids = {row[0] for row in rows}
+        log.info("bronze_seed_loaded", count=len(ids))
+        return ids
+    except Exception as e:
+        log.warning("bronze_seed_failed", error=str(e))
+        return set()
+
+
 def save_anime_batch_to_bronze(anime_bw, anime_batch):
     """Save a batch of anime to BRONZE parquet with hash tracking."""
     now = dt.datetime.now(dt.timezone.utc).isoformat()
@@ -130,14 +158,51 @@ def save_persons_batch_to_bronze(persons_bw, persons_batch):
         persons_bw.append(person.model_dump(mode="json"))
 
 
+async def _fetch_genre_and_tag_master(client) -> None:
+    """Fetch AniList master genre + media tag catalogs to BRONZE.
+
+    Two GraphQL requests, total ~25 genres + ~150 tags. Idempotent (re-runs
+    overwrite same date partition). Failure is non-fatal — logged and continued
+    so the main scrape still proceeds.
+    """
+    from src.scrapers.bronze_writer import BronzeWriter
+    try:
+        genres = await client.get_genre_collection()
+        with BronzeWriter("anilist", table="genres_master") as gw:
+            for name in genres:
+                if name:
+                    gw.append({"name": name})
+        log.info("anilist_genre_master_fetched", count=len(genres))
+    except Exception as exc:
+        log.warning("anilist_genre_master_failed", error=str(exc))
+
+    try:
+        tags = await client.get_media_tag_collection()
+        with BronzeWriter("anilist", table="media_tags_master") as tw:
+            for t in tags:
+                if not t.get("id"):
+                    continue
+                tw.append({
+                    "id": t.get("id"),
+                    "name": t.get("name") or "",
+                    "description": t.get("description"),
+                    "category": t.get("category"),
+                    "is_adult": t.get("isAdult"),
+                    "is_general_spoiler": t.get("isGeneralSpoiler"),
+                    "is_media_spoiler": t.get("isMediaSpoiler"),
+                })
+        log.info("anilist_media_tag_master_fetched", count=len(tags))
+    except Exception as exc:
+        log.warning("anilist_media_tag_master_failed", error=str(exc))
+
+
 def _make_rate_limit_text(cl):
     """Generate an API consumption bar (used/max)."""
     from rich.text import Text
 
     if cl.rate_limit_max is None and cl.requests_remaining is None:
         return Text("")
-    # Header says 90 but effective is ~20 (degraded + burst limiter)
-    header_limit = cl.rate_limit_max or 90
+    header_limit = cl.rate_limit_max or 30
     remaining = (
         cl.requests_remaining if cl.requests_remaining is not None else header_limit
     )
@@ -180,6 +245,7 @@ class AniListClient:
         self._last_request_time = 0.0
         # Load authentication token from .env
         self._access_token = _env.get("ANILIST_ACCESS_TOKEN")
+        self.is_authenticated = False  # set True by verify_auth() on success
         if self._access_token:
             log.info("anilist_token_loaded", will_attempt_auth=True)
         else:
@@ -190,7 +256,7 @@ class AniListClient:
         # Rate limit tracking
         self.requests_remaining = None
         self.rate_limit_reset_at = None
-        self.rate_limit_max = None  # X-RateLimit-Limit (90=authenticated, 30=unauthenticated)
+        self.rate_limit_max = None  # X-RateLimit-Limit (現行 AniList は 30 req/min)
         self._auth_reported = False
         self._requests_since_reset = 0  # request count since last reset
         self._requests_total = 0  # total request count since process start
@@ -206,10 +272,10 @@ class AniListClient:
         """Verify token validity and sync the remaining rate-limit window quota.
 
         Returns:
-            True if authenticated (rate_limit >= 90), False otherwise.
+            True if Viewer query succeeds (token valid), False otherwise.
         """
         try:
-            test_query = "query { Viewer { id } }"
+            test_query = "query { Viewer { id name } }"
             await self._rate_limit()
             headers = {"Content-Type": "application/json", "Accept": "application/json"}
             if self._access_token:
@@ -260,12 +326,13 @@ class AniListClient:
             data = resp.json()
             viewer = data.get("data", {}).get("Viewer")
             if viewer:
+                self.is_authenticated = True
                 log.info(
                     "auth_verified",
                     source="anilist",
                     user_id=viewer.get("id"),
+                    user_name=viewer.get("name"),
                     rate_limit_header=self.rate_limit_max,
-                    mode="burst (~18 req + 60s wait)",
                     requests_remaining=self.requests_remaining,
                 )
                 return True
@@ -327,21 +394,12 @@ class AniListClient:
                 limit_val = rate_limit_context.get("limit")
                 if limit_val and self.rate_limit_max is None:
                     self.rate_limit_max = limit_val
-                    if self.rate_limit_max >= 90:
-                        log.info(
-                            "auth_confirmed",
-                            source="anilist",
-                            rate_limit=self.rate_limit_max,
-                            status="authenticated",
-                        )
-                    elif self._access_token:
-                        log.warning(
-                            "auth_token_ineffective",
-                            source="anilist",
-                            rate_limit=self.rate_limit_max,
-                            expected=90,
-                            hint="Token may be invalid or expired. Reissue at https://anilist.co/settings/developer",
-                        )
+                    log.info(
+                        "rate_limit_observed",
+                        source="anilist",
+                        rate_limit=self.rate_limit_max,
+                        authenticated=self.is_authenticated,
+                    )
 
             # Handle invalid token: fall back to unauthenticated
             if resp.status_code in (400, 401) and self._access_token:
@@ -472,6 +530,18 @@ class AniListClient:
             PERSON_DETAILS_QUERY,
             {"id": staff_id},
         )
+
+    async def get_genre_collection(self) -> list[str]:
+        """Fetch master list of all AniList genres (single request, ~25 names)."""
+        from src.scrapers.queries.anilist import GENRE_COLLECTION_QUERY
+        resp = await self.query(GENRE_COLLECTION_QUERY, {})
+        return list((resp or {}).get("GenreCollection") or [])
+
+    async def get_media_tag_collection(self) -> list[dict]:
+        """Fetch master list of all AniList media tags (single request, ~150 entries)."""
+        from src.scrapers.queries.anilist import MEDIA_TAG_COLLECTION_QUERY
+        resp = await self.query(MEDIA_TAG_COLLECTION_QUERY, {})
+        return list((resp or {}).get("MediaTagCollection") or [])
 
 async def fetch_top_anime_credits(
     n_anime: int = 50,
@@ -792,13 +862,13 @@ async def _load_anime_ids(
     summary_table = create_phase1_summary_table(len(anime_ids), len(fetched_ids))
     display_phase1_summary(summary_table)
 
-    # 認証状況を表示
-    if client.rate_limit_max is not None and client.rate_limit_max >= 90:
+    # 認証状況を表示 (AniList は token 有無に関わらず 30 req/min が現行値)
+    limit = client.rate_limit_max or 30
+    if client.is_authenticated:
         console.print(
-            f"[green]🔑 認証済み (rate limit: {client.rate_limit_max} req/min)[/green]"
+            f"[green]🔑 認証済み (rate limit: {limit} req/min)[/green]"
         )
     else:
-        limit = client.rate_limit_max or 30
         console.print(f"[yellow]⚠️ 未認証 (rate limit: {limit} req/min)[/yellow]")
 
     return anime_ids
@@ -1058,16 +1128,12 @@ def run(
 
     # Load checkpoint - auto-resume if exists (unless --force is specified)
     start_index = 0
-    checkpoint_exists = checkpoint_file.exists()
+    cp = resolve_checkpoint(checkpoint_file, force=force, resume=resume)
+    start_index = cp.get("last_index", 0)
+    fetched_ids.update(cp.get("fetched_ids", []))
+    checkpoint_loaded = bool(cp.get("fetched_ids") or cp.get("last_index"))
 
-    # デフォルト: チェックポイント存在時は自動で続きから始める
-    # --force フラグで最初から始められる
-    if checkpoint_exists and not force:
-        cp = Checkpoint(checkpoint_file)
-        start_index = cp.get("last_index", 0)
-        fetched_ids.update(cp.get("fetched_ids", []))
-
-        # Display checkpoint recovery message
+    if checkpoint_loaded:
         console.print()
         console.print(
             Rule(
@@ -1098,6 +1164,23 @@ def run(
             start_index=start_index,
             fetched_count=len(fetched_ids),
         )
+
+    # Seed fetched_ids from BRONZE (skip already-scraped anime)
+    # Bypass with --force or --update for full re-fetch.
+    if not force and not update:
+        bronze_ids = get_anime_ids_in_bronze()
+        new_seed = bronze_ids - fetched_ids
+        if new_seed:
+            fetched_ids.update(bronze_ids)
+            console.print()
+            console.print(
+                f"[cyan]✓ BRONZE 既存 anime: {len(new_seed):,} 件 skip "
+                f"(checkpoint {start_index:,} 件と合算 → 計 {len(fetched_ids):,} 件)[/cyan]"
+            )
+            console.print(
+                "[dim]  全件再取得は --update または --force[/dim]"
+            )
+            console.print()
 
     # Fetch with incremental saving
     async def fetch_with_checkpoints(since_ids: set[str] | None = None):
@@ -1663,6 +1746,11 @@ def run(
         start_time = time_module.time()
 
         try:
+            # ===== PHASE 0: Bootstrap master taxonomies (genres + media tags) =====
+            # Single GraphQL request each. Cheap. Provides the canonical tag
+            # catalog (id / category / description) for cross-anime tag analysis.
+            await _fetch_genre_and_tag_master(client)
+
             # ===== PHASE 1: Fetch Anime List =====
             anime_ids = await _load_anime_ids(
                 client,
