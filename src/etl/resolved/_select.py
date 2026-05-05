@@ -19,6 +19,7 @@ from __future__ import annotations
 from collections import Counter
 from typing import Any
 
+from src.etl.resolved._value_validators import is_invalid_for_field
 from src.etl.resolved.source_ranking import source_prefix
 from src.etl.resolved.strategy_loader import majority_threshold
 
@@ -33,6 +34,11 @@ def _is_empty(value: Any) -> bool:
     if isinstance(value, str) and value.strip() == "":
         return True
     return False
+
+
+def _is_unusable(field: str, value: Any) -> bool:
+    """空 or field 別 invalid (機関名 / 数字のみ / 役職 suffix 等)。"""
+    return _is_empty(value) or is_invalid_for_field(field, value)
 
 
 def select_representative_value(
@@ -61,12 +67,12 @@ def select_representative_value(
     vk = value_key or field
     threshold = majority_threshold_value if majority_threshold_value is not None else majority_threshold()
 
-    # Group non-empty values by source prefix, preserving insertion order
+    # Group non-empty + valid values by source prefix, preserving insertion order
     by_source: dict[str, list[Any]] = {}
     for row in candidates:
         src = source_prefix(str(row.get(id_key, "")))
         val = row.get(vk)
-        if not _is_empty(val):
+        if not _is_unusable(field, val):
             by_source.setdefault(src, []).append(val)
 
     # Walk priority list
