@@ -115,9 +115,22 @@ WHERE anime.id = 'tmdb:' || b.media_type || ':' || CAST(b.tmdb_id AS VARCHAR)
 # Insert persons from TMDb BRONZE.
 # H1: display_popularity_tmdb is the only popularity column written here.
 # tmdb_id INTEGER extension column stores the integer ID for cross-source join.
+# Card 14/13 follow-up: gender / hometown / birth_date / death_date / description
+# / website_url / image_large were left in BRONZE despite being available.
+# Mapping:
+#   gender BIGINT (TMDb 0=unknown / 1=female / 2=male / 3=non-binary)
+#       → VARCHAR ('female'/'male'/'non-binary'), 0/NULL → NULL
+#   place_of_birth → hometown
+#   birthday       → birth_date
+#   deathday       → death_date
+#   biography      → description
+#   homepage       → website_url
+#   profile_path   → image_large (relative path, full URL prefix elsewhere)
 _PERSONS_INSERT_SQL = """
 INSERT OR IGNORE INTO persons (
-    id, name_en, name_ja, tmdb_id, display_popularity_tmdb, updated_at
+    id, name_en, name_ja, tmdb_id, display_popularity_tmdb,
+    gender, hometown, birth_date, death_date, description,
+    website_url, image_large, updated_at
 )
 SELECT
     'tmdb:p' || CAST(b.tmdb_id AS VARCHAR)   AS id,
@@ -125,6 +138,18 @@ SELECT
     ''                                        AS name_ja,
     TRY_CAST(b.tmdb_id AS INTEGER)            AS tmdb_id,
     TRY_CAST(b.display_popularity AS REAL)    AS display_popularity_tmdb,
+    CASE TRY_CAST(b.gender AS INTEGER)
+         WHEN 1 THEN 'female'
+         WHEN 2 THEN 'male'
+         WHEN 3 THEN 'non-binary'
+         ELSE NULL
+    END                                       AS gender,
+    NULLIF(TRIM(b.place_of_birth), '')        AS hometown,
+    NULLIF(TRIM(b.birthday), '')              AS birth_date,
+    NULLIF(TRIM(b.deathday), '')              AS death_date,
+    NULLIF(TRIM(b.biography), '')             AS description,
+    NULLIF(TRIM(b.homepage), '')              AS website_url,
+    NULLIF(TRIM(b.profile_path), '')          AS image_large,
     now()                                     AS updated_at
 FROM (
     SELECT *,

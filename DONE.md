@@ -199,6 +199,49 @@
 
 Card 06 (差分 cron) は初回 backfill 完走後に着手 → TODO.md §13.6 に残置。
 
+## TMDb persons extras Conformed 統合 ✅ 2026-05-05
+
+`tmdb.py` loader の `_PERSONS_INSERT_SQL` 拡張 — BRONZE 持ってたが Conformed 未接続だった 7 列を追加:
+
+- `gender` (TMDb BIGINT 0/1/2/3 → 'female'/'male'/'non-binary'/NULL)
+- `hometown` ← `place_of_birth`
+- `birth_date` ← `birthday`
+- `death_date` ← `deathday`
+- `description` ← `biography`
+- `website_url` ← `homepage`
+- `image_large` ← `profile_path`
+
+**効果**: Conformed `persons` 全体 gender 充足率
+- 18,540 → **140,226** (+121,686)
+- null率 **95.4% → 80.9%** (-14.5pt)
+
+**判明した制約** (修正不可、データソース側に gender/hometown 無し):
+- ANN: HTML person ページに gender label 存在せず (parser bug ではなく data source 制約)
+- keyframe: API/HTML に gender field 無し (取得設計外)
+- seesaawiki: staff gender データ持たず
+
+**残ボトルネック** (要 scrape):
+- mal: BRONZE persons 不在、Card 05 全件 scrape 完了で gender 大幅追加見込み
+- anilist orphan persons 90K: credits 由来 id-only、Staff GraphQL batch backfill で gender + hometown 追加可
+
+## TASK_CARDS/14_silver_extend 全カード完了サマリ ✅ 2026-05-05
+
+| Card | 完了 commit | 内容 |
+|------|------------|------|
+| 14/01 anilist_extend | `d9a435c` | characters / CVA / anime 拡張列 SILVER 統合 |
+| 14/02 madb_silver | `93edd3d` | mediaarts 6 BRONZE → Conformed (broadcasters / production_committee 等) |
+| 14/03 ann_extend | `93edd3d` | ANN 9 BRONZE → Conformed (cast / company / episodes / releases / news / related) |
+| 14/04 seesaawiki_extend | `93edd3d` | seesaawiki 9 BRONZE → Conformed (theme_songs / episode_titles / gross_studios 等) |
+| 14/05 bangumi_silver | `93edd3d` | bangumi 6 BRONZE → Conformed (bgm:s/p/c prefix) |
+| 14/06 keyframe_extend | `93edd3d` | keyframe 10 BRONZE → Conformed (person_jobs / studios / settings 等) |
+| 14/07 sakuga_atwiki_resolution | `93edd3d` | work_title → anime_id resolution + persons |
+| 14/08 mal_silver | (2026-05-02) | MAL/Jikan 28 BRONZE → Conformed |
+| 14/09 tmdb_conformed | `d49591a` | TMDb anime 79K + persons 293K + imdb_id mapping |
+| 14/10 extra_tables_audit | `bb952b6` | BRONZE → Conformed table-level coverage 監査 |
+| 14/11 ann_insert_restore | `0fcdaef` | ANN anime/persons INSERT 復元 (orphan credits 305K 親 row) |
+| 14/12 orphan_fix_batch | `db25344` | 5 source orphan 一括修正 (orphan persons 482,222 → 5) |
+| 14/13 phase1c_path_fix | `db25344` | integrate_duckdb path 統一 (animetor.duckdb conformed schema 直接書込) |
+
 ## TASK_CARDS/14_silver_extend/12_orphan_fix_batch ✅ 2026-05-05 (14/13 と同時)
 
 5 source orphan 一括修正の真 fix (14/12 起票 → 14/13 で path 修正と並行)。
