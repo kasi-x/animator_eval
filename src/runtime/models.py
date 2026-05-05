@@ -1272,8 +1272,10 @@ class Person(BaseModel):
 
     # Profile information
     date_of_birth: str | None = None  # YYYY-MM-DD format
+    date_of_death: str | None = None  # YYYY-MM-DD format (AniList Staff.dateOfDeath)
     age: int | None = None
     gender: str | None = None
+    language: str | None = None  # AniList Staff.languageV2 (native language)
     primary_occupations: list[str] = Field(default_factory=list)
     years_active: list[int] = Field(default_factory=list)
     hometown: str | None = None

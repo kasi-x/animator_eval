@@ -559,6 +559,7 @@ CREATE TABLE IF NOT EXISTS persons (
     death_date  VARCHAR,
     website_url VARCHAR,
     gender      VARCHAR,
+    language    VARCHAR,
     description TEXT,
     image_large VARCHAR,
     image_medium VARCHAR,

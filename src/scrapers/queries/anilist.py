@@ -27,7 +27,7 @@ query ($id: Int, $staffPage: Int, $staffPerPage: Int, $charPage: Int, $charPerPa
     siteUrl
     genres
     synonyms
-    tags { name rank }
+    tags { id name rank description category isAdult }
     popularity
     favourites
     trailer { id site thumbnail }
@@ -45,8 +45,10 @@ query ($id: Int, $staffPage: Int, $staffPerPage: Int, $charPage: Int, $charPerPa
           name { full native alternative }
           image { large medium }
           dateOfBirth { year month day }
+          dateOfDeath { year month day }
           age
           gender
+          languageV2
           primaryOccupations
           yearsActive
           homeTown
@@ -73,13 +75,15 @@ query ($id: Int, $staffPage: Int, $staffPerPage: Int, $charPage: Int, $charPerPa
           favourites
           siteUrl
         }
-        voiceActors(language: JAPANESE) {
+        voiceActors {
           id
           name { full native alternative }
           image { large medium }
           dateOfBirth { year month day }
+          dateOfDeath { year month day }
           age
           gender
+          languageV2
           primaryOccupations
           yearsActive
           homeTown
@@ -135,8 +139,10 @@ query ($id: Int) {
     name { full native alternative }
     image { large medium }
     dateOfBirth { year month day }
+    dateOfDeath { year month day }
     age
     gender
+    languageV2
     primaryOccupations
     yearsActive
     homeTown
@@ -177,7 +183,7 @@ query ($page: Int, $perPage: Int, $sort: [MediaSort]) {
       siteUrl
       genres
       synonyms
-      tags { name rank }
+      tags { id name rank description category isAdult }
       popularity
       favourites
       trailer { id site thumbnail }

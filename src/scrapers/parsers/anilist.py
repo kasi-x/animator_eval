@@ -41,13 +41,16 @@ def parse_anilist_person(staff: dict) -> Person:
     image_large = image.get("large")
     image_medium = image.get("medium")
 
-    dob_obj = staff.get("dateOfBirth", {})
-    date_of_birth = None
-    if dob_obj and dob_obj.get("year"):
-        year = dob_obj.get("year")
-        month = dob_obj.get("month") or 1
-        day = dob_obj.get("day") or 1
-        date_of_birth = f"{year}-{month:02d}-{day:02d}"
+    def _ymd(obj: dict | None) -> str | None:
+        if not obj or not obj.get("year"):
+            return None
+        year = obj.get("year")
+        month = obj.get("month") or 1
+        day = obj.get("day") or 1
+        return f"{year}-{month:02d}-{day:02d}"
+
+    date_of_birth = _ymd(staff.get("dateOfBirth"))
+    date_of_death = _ymd(staff.get("dateOfDeath"))
 
     years_active_raw = staff.get("yearsActive", [])
     years_active = [y for y in years_active_raw if y] if years_active_raw else []
@@ -72,8 +75,10 @@ def parse_anilist_person(staff: dict) -> Person:
         image_large=image_large,
         image_medium=image_medium,
         date_of_birth=date_of_birth,
+        date_of_death=date_of_death,
         age=staff.get("age"),
         gender=staff.get("gender"),
+        language=staff.get("languageV2"),
         primary_occupations=primary_occupations,
         years_active=years_active,
         hometown=hometown_val,
@@ -131,7 +136,14 @@ def parse_anilist_anime(raw: dict) -> BronzeAnime:
 
     tags_data = raw.get("tags", [])
     tags = [
-        {"name": t.get("name"), "rank": t.get("rank")}
+        {
+            "id": t.get("id"),
+            "name": t.get("name"),
+            "rank": t.get("rank"),
+            "description": t.get("description"),
+            "category": t.get("category"),
+            "is_adult": t.get("isAdult"),
+        }
         for t in tags_data
         if t.get("name")
     ]
@@ -294,13 +306,16 @@ def parse_anilist_staff(
         image_large = image.get("large")
         image_medium = image.get("medium")
 
-        dob_obj = node.get("dateOfBirth", {})
-        date_of_birth = None
-        if dob_obj and dob_obj.get("year"):
-            year = dob_obj.get("year")
-            month = dob_obj.get("month") or 1
-            day = dob_obj.get("day") or 1
-            date_of_birth = f"{year}-{month:02d}-{day:02d}"
+        def _ymd(obj: dict | None) -> str | None:
+            if not obj or not obj.get("year"):
+                return None
+            year = obj.get("year")
+            month = obj.get("month") or 1
+            day = obj.get("day") or 1
+            return f"{year}-{month:02d}-{day:02d}"
+
+        date_of_birth = _ymd(node.get("dateOfBirth"))
+        date_of_death = _ymd(node.get("dateOfDeath"))
 
         years_active_raw = node.get("yearsActive", [])
         years_active = [y for y in years_active_raw if y] if years_active_raw else []
@@ -326,8 +341,10 @@ def parse_anilist_staff(
                 image_large=image_large,
                 image_medium=image_medium,
                 date_of_birth=date_of_birth,
+                date_of_death=date_of_death,
                 age=node.get("age"),
                 gender=node.get("gender"),
+                language=node.get("languageV2"),
                 primary_occupations=primary_occupations,
                 years_active=years_active,
                 hometown=hometown_val,
@@ -399,13 +416,16 @@ def parse_anilist_voice_actors(
             image_large = image.get("large")
             image_medium = image.get("medium")
 
-            dob_obj = va.get("dateOfBirth", {})
-            date_of_birth = None
-            if dob_obj and dob_obj.get("year"):
-                year = dob_obj.get("year")
-                month = dob_obj.get("month") or 1
-                day = dob_obj.get("day") or 1
-                date_of_birth = f"{year}-{month:02d}-{day:02d}"
+            def _ymd(obj: dict | None) -> str | None:
+                if not obj or not obj.get("year"):
+                    return None
+                year = obj.get("year")
+                month = obj.get("month") or 1
+                day = obj.get("day") or 1
+                return f"{year}-{month:02d}-{day:02d}"
+
+            date_of_birth = _ymd(va.get("dateOfBirth"))
+            date_of_death = _ymd(va.get("dateOfDeath"))
 
             years_active_raw = va.get("yearsActive", [])
             years_active = (
@@ -433,8 +453,10 @@ def parse_anilist_voice_actors(
                     image_large=image_large,
                     image_medium=image_medium,
                     date_of_birth=date_of_birth,
+                    date_of_death=date_of_death,
                     age=va.get("age"),
                     gender=va.get("gender"),
+                    language=va.get("languageV2"),
                     primary_occupations=primary_occupations,
                     years_active=years_active,
                     hometown=hometown_val,
