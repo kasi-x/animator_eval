@@ -255,12 +255,20 @@ def build_cross_source_anime_clusters(
     # Title+year secondary clustering:
     # Group rows that share the same (norm title_ja, year) key
     # and union them together (even across source prefixes)
+    #
+    # year IS NULL の場合は cluster 形成を抑止 (over-merge 防止):
+    # madb の長寿シリーズ (サザエさん 1,919 件等) や年不明 row が year=None を共有
+    # するため、title 一致だけで全部 1 cluster に潰される問題を緩和。
+    # year 不明 row は ID-link 経由でしか cluster されない (singleton fallback)。
     title_year_index: dict[str, str] = {}  # key → first row_id seen
     for row in conformed_rows:
         title_ja = (row.get("title_ja") or "").strip()
         if not title_ja:
             continue
-        ty_key = f"{_norm(title_ja)}|{row.get('year') or ''}"
+        year = row.get("year")
+        if year is None or year == "":
+            continue  # year 不明 row は title fallback の対象外
+        ty_key = f"{_norm(title_ja)}|{year}"
         if ty_key in title_year_index:
             uf.union(title_year_index[ty_key], row["id"])
         else:

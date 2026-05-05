@@ -1263,6 +1263,8 @@ class Person(BaseModel):
     anilist_id: int | None = None
     madb_id: str | None = None  # Media Arts DB URI
     ann_id: int | None = None  # Anime News Network Encyclopedia ID
+    tmdb_id: int | None = None  # The Movie Database person ID (homonym guard)
+    bgm_id: int | None = None  # Bangumi person ID (homonym guard)
 
     # Images (AniList)
     image_large: str | None = None

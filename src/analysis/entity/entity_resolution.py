@@ -71,14 +71,19 @@ def _is_japanese_name(name: str) -> bool:
 def _definitely_different(p1: Person, p2: Person) -> bool:
     """Return True when numeric IDs are both set and differ — guaranteed different persons.
 
-    Sources such as ANN/AniList/MAL assign distinct numeric IDs to different persons
-    who share the same name, so a numeric-ID mismatch is conclusive evidence of different persons.
+    Sources such as ANN/AniList/MAL/TMDb/Bangumi assign distinct numeric IDs to different
+    persons who share the same name, so a numeric-ID mismatch is conclusive evidence of
+    different persons.
     """
     if p1.ann_id and p2.ann_id and p1.ann_id != p2.ann_id:
         return True
     if p1.anilist_id and p2.anilist_id and p1.anilist_id != p2.anilist_id:
         return True
     if p1.mal_id and p2.mal_id and p1.mal_id != p2.mal_id:
+        return True
+    if p1.tmdb_id and p2.tmdb_id and p1.tmdb_id != p2.tmdb_id:
+        return True
+    if p1.bgm_id and p2.bgm_id and p1.bgm_id != p2.bgm_id:
         return True
     return False
 
@@ -89,7 +94,7 @@ def _numeric_id_key(p: Person) -> tuple:
     Uses numeric IDs when available; falls back to the person_id itself when absent.
     This separates persons who share a name but have different numeric IDs into distinct clusters.
     """
-    return (p.ann_id, p.anilist_id, p.mal_id)
+    return (p.ann_id, p.anilist_id, p.mal_id, p.tmdb_id, p.bgm_id)
 
 
 def exact_match_cluster(

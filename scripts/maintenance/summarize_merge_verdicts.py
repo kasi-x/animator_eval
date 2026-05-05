@@ -68,24 +68,24 @@ def main() -> None:
                     "reason": review.get("reason", ""),
                 })
 
-    print(f"=== 全体 ===")
+    print("=== 全体 ===")
     print(f"  total records:    {total:,}")
     print(f"  with llm_review:  {total - skipped_no_review:,}")
     print(f"  no llm_review:    {skipped_no_review:,}")
 
-    print(f"\n=== verdict 分布 ===")
+    print("\n=== verdict 分布 ===")
     for v, n in by_verdict.most_common():
         pct = 100 * n / max(1, total - skipped_no_review)
         print(f"  {v:18s}: {n:>6,} ({pct:.1f}%)")
 
-    print(f"\n=== entity × verdict ===")
+    print("\n=== entity × verdict ===")
     for entity, c in by_entity_verdict.items():
         n_e = sum(c.values())
         print(f"  [{entity}] (n={n_e:,})")
         for v, n in c.most_common():
             print(f"    {v:18s}: {n:>6,} ({100*n/n_e:.1f}%)")
 
-    print(f"\n=== entity × field の 'split'/'wrong_value' 上位 (戦略修正候補) ===")
+    print("\n=== entity × field の 'split'/'wrong_value' 上位 (戦略修正候補) ===")
     bad: list[tuple[tuple[str, str], int, int, int]] = []
     for (entity, field), c in by_entity_field_verdict.items():
         bad_n = c.get("split", 0) + c.get("wrong_value", 0)
@@ -95,7 +95,7 @@ def main() -> None:
     for (entity, field), bad_n, sp, wv in bad[:args.top]:
         print(f"  {entity}.{field}: bad={bad_n} (split={sp}, wrong_value={wv})")
 
-    print(f"\n=== winning_source × verdict (上位) ===")
+    print("\n=== winning_source × verdict (上位) ===")
     src_bad: list[tuple[str, int]] = []
     for src, c in by_winner_verdict.items():
         bad_n = c.get("split", 0) + c.get("wrong_value", 0)
@@ -109,12 +109,12 @@ def main() -> None:
         print(f"  {src}: bad={bad_n}/{n_total_src} ({100*bad_n/n_total_src:.1f}%)")
 
     if split_clusters:
-        print(f"\n=== 'split' 件数上位 cluster (cluster ロジック弱点) ===")
+        print("\n=== 'split' 件数上位 cluster (cluster ロジック弱点) ===")
         for cid, n in split_clusters.most_common(args.top):
             print(f"  {cid}: {n} fields flagged split")
 
     if wrong_value_examples:
-        print(f"\n=== 'wrong_value' 例 (priority list 並替候補) ===")
+        print("\n=== 'wrong_value' 例 (priority list 並替候補) ===")
         for ex in wrong_value_examples[:args.top]:
             print(f"  - {ex['canonical_id']}.{ex['field']}: selected={ex['selected']['src']}={ex['selected']['value']!r}")
             print(f"    candidates: {[(c['src'], c['value']) for c in ex['candidates']]}")

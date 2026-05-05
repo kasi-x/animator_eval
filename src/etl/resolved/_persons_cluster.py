@@ -37,7 +37,11 @@ def _conformed_row_to_person(row: dict[str, Any]) -> "Any":
     """Convert a conformed.persons dict to a runtime.models.Person.
 
     Only populates fields used by entity_resolution:
-      id, name_ja, name_en, mal_id, anilist_id, madb_id, ann_id.
+      id, name_ja, name_en, mal_id, anilist_id, madb_id, ann_id, tmdb_id, bgm_id.
+
+    Source-specific numeric ID 抽出は homonym guard (entity_resolution._definitely_different)
+    で必須。tmdb_id 不在で TMDb 同名異人 (Jonas 47 件等) が 1 cluster に over-merge する
+    bug が判明したため tmdb_id / bgm_id も抽出する。
     """
     from src.runtime.models import Person
 
@@ -47,6 +51,8 @@ def _conformed_row_to_person(row: dict[str, Any]) -> "Any":
     anilist_id: int | None = None
     mal_id: int | None = None
     madb_id: str | None = None
+    tmdb_id: int | None = None
+    bgm_id: int | None = None
 
     if pid.startswith("anilist:"):
         try:
@@ -60,8 +66,25 @@ def _conformed_row_to_person(row: dict[str, Any]) -> "Any":
             pass
     elif pid.startswith("madb:"):
         madb_id = pid
-    # BGM persons: bgm_id is self-referential (their own integer ID).
-    # No cross-source numeric link available at this stage.
+    elif pid.startswith("tmdb:"):
+        try:
+            # 'tmdb:p123' → 123
+            tmdb_id = int(pid.replace("tmdb:", "").replace("p", ""))
+        except ValueError:
+            pass
+    elif pid.startswith("bgm:"):
+        # 'bgm:p1004' → 1004 (bronze の bgm_id 列があれば優先、無きゃ id から抽出)
+        bid = row.get("bgm_id")
+        if bid is not None:
+            try:
+                bgm_id = int(bid)
+            except (ValueError, TypeError):
+                pass
+        if bgm_id is None:
+            try:
+                bgm_id = int(pid.replace("bgm:", "").replace("p", ""))
+            except ValueError:
+                pass
 
     return Person(
         id=pid,
@@ -72,6 +95,8 @@ def _conformed_row_to_person(row: dict[str, Any]) -> "Any":
         mal_id=mal_id,
         anilist_id=anilist_id,
         madb_id=madb_id,
+        tmdb_id=tmdb_id,
+        bgm_id=bgm_id,
         gender=row.get("gender"),
         date_of_birth=row.get("birth_date"),
     )
