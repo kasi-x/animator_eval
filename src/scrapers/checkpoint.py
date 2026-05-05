@@ -60,6 +60,13 @@ def load_json_or(path: Path, default: Any) -> Any:
         return default
 
 
+_DEFAULT_SCHEMA: dict[str, Any] = {
+    "completed_ids": [],
+    "failed_ids": [],
+    "last_run_at": None,
+}
+
+
 class Checkpoint:
     """Atomic JSON checkpoint with completed/failed-id helpers.
 
@@ -70,26 +77,37 @@ class Checkpoint:
             "last_run_at":   "2026-04-25T11:30:00+00:00",
             ... any other fields the caller stores ...
         }
+
+    `Checkpoint(path)` auto-loads from disk if file exists.
+    Pass `data=` to override (e.g. start fresh, or use `force_empty=True`).
     """
 
-    def __init__(self, path: Path | str, data: dict[str, Any] | None = None) -> None:
+    def __init__(
+        self,
+        path: Path | str,
+        data: dict[str, Any] | None = None,
+        *,
+        force_empty: bool = False,
+    ) -> None:
         self.path = Path(path)
-        self.data: dict[str, Any] = data if data is not None else {
-            "completed_ids": [],
-            "failed_ids": [],
-            "last_run_at": None,
-        }
+        if data is not None:
+            self.data: dict[str, Any] = data
+        elif force_empty or not self.path.exists():
+            self.data = dict(_DEFAULT_SCHEMA)
+        else:
+            loaded = load_json_or(self.path, dict(_DEFAULT_SCHEMA))
+            self.data = loaded if isinstance(loaded, dict) else dict(_DEFAULT_SCHEMA)
 
     # ── Construction / persistence ─────────────────────────────────────────
 
     @classmethod
     def load(cls, path: Path | str) -> "Checkpoint":
-        """Load checkpoint or return an empty one if missing/unparsable."""
-        path = Path(path)
-        data = load_json_or(path, {"completed_ids": [], "failed_ids": [], "last_run_at": None})
-        if not isinstance(data, dict):
-            data = {"completed_ids": [], "failed_ids": [], "last_run_at": None}
-        return cls(path, data)
+        """Load checkpoint or return an empty one if missing/unparsable.
+
+        Equivalent to `Checkpoint(path)` since the constructor now auto-loads.
+        Retained for explicit-intent call sites.
+        """
+        return cls(path)
 
     def save(self, *, stamp_time: bool = True) -> None:
         """Atomic write. Stamps `last_run_at` (UTC ISO) by default."""
@@ -169,8 +187,8 @@ def resolve_checkpoint(path: Path | str, *, force: bool = False, resume: bool = 
     - ``force=True`` or ``resume=False``: start fresh (ignore any existing file).
     """
     if resume and not force:
-        return Checkpoint.load(path)
-    return Checkpoint(path)
+        return Checkpoint(path)
+    return Checkpoint(path, force_empty=True)
 
 
 def prepare_checkpoint_run(

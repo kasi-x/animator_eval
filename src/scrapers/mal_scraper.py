@@ -21,7 +21,7 @@ import typer
 
 from src.scrapers.bronze_writer import BronzeWriterGroup
 from src.scrapers.cache_store import load_cached_json, save_cached_json
-from src.scrapers.checkpoint import Checkpoint
+from src.scrapers.checkpoint import Checkpoint, resolve_checkpoint
 from src.scrapers.cli_common import (
     CheckpointIntervalOpt,
     DelayOpt,
@@ -645,11 +645,9 @@ def run(
     log.info("mal_scrape_start", phase=phase)
     CHECKPOINT_FILE.parent.mkdir(parents=True, exist_ok=True)
 
-    cp_data = _empty_checkpoint()
-    if resume and not force:
-        loaded = Checkpoint.load(CHECKPOINT_FILE)
-        cp_data.update(loaded.data)
-    cp = Checkpoint(CHECKPOINT_FILE, cp_data)
+    cp = resolve_checkpoint(CHECKPOINT_FILE, force=force, resume=resume)
+    for k, v in _empty_checkpoint().items():
+        cp.data.setdefault(k, v)
     ckpt = cp.data
 
     progress_enabled = resolve_progress_enabled(quiet, progress)
