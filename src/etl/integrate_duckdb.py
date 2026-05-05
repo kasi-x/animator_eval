@@ -143,7 +143,7 @@ WITH bronze AS (
         SELECT *,
                ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
         FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
-        WHERE  id IS NOT NULL
+        WHERE  id IS NOT NULL AND id LIKE '%:%'
     )
     WHERE _rn = 1
 ),
@@ -180,7 +180,7 @@ WITH bronze AS (
         SELECT *,
                ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
         FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
-        WHERE  id IS NOT NULL
+        WHERE  id IS NOT NULL AND id LIKE '%:%'
     )
     WHERE _rn = 1
 ),
@@ -222,7 +222,7 @@ FROM (
     SELECT *,
            ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
     FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
-    WHERE  id IS NOT NULL
+    WHERE  id IS NOT NULL AND id LIKE '%:%'
 )
 WHERE _rn = 1
 """
@@ -547,7 +547,7 @@ FROM (
     SELECT *,
            ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
     FROM   read_parquet(?, hive_partitioning=true, union_by_name=true)
-    WHERE  id IS NOT NULL
+    WHERE  id IS NOT NULL AND id LIKE '%:%'
 )
 WHERE _rn = 1
 """
