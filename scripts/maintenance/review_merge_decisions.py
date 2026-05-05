@@ -21,6 +21,8 @@ import sys
 from pathlib import Path
 from typing import Any
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+
 PROMPT_TEMPLATE = """You are auditing a merge decision in an anime credit database.
 
 Each anime/person/studio has been clustered across multiple sources (anilist,
@@ -43,36 +45,116 @@ No prose, no markdown.
 """
 
 
-def call_llm(record: dict[str, Any], *, base_url: str, model: str, api_key: str, timeout: float = 60.0) -> dict[str, Any]:
-    """OpenAI 互換 chat completions endpoint を呼ぶ。失敗時 low_confidence 返却。"""
+_VALID_VERDICTS = {"ok", "split", "merge", "wrong_value", "low_confidence"}
+
+
+def _extract_json(text: str) -> dict[str, Any] | None:
+    """text から最初の {...} JSON を抽出。失敗時 None。"""
+    if not text:
+        return None
+    # ```json ... ``` を剥がす
+    t = text.strip()
+    if t.startswith("```"):
+        t = t.strip("`")
+        if t.startswith("json"):
+            t = t[4:]
+        t = t.strip()
+    # 直接 parse
+    try:
+        return json.loads(t)
+    except Exception:
+        pass
+    # 最初の { から最後の } までを抽出
+    i = t.find("{")
+    j = t.rfind("}")
+    if i >= 0 and j > i:
+        try:
+            return json.loads(t[i : j + 1])
+        except Exception:
+            return None
+    return None
+
+
+def call_llm(
+    record: dict[str, Any],
+    *,
+    base_url: str,
+    model: str,
+    api_key: str,
+    timeout: float = 120.0,
+    max_tokens: int = 1024,
+) -> dict[str, Any]:
+    """LLM を呼んで verdict + reason を取得。
+
+    Ollama (`/api/chat`) と OpenAI 互換 (`/chat/completions`) を base_url で
+    自動判定。Ollama native は `think:false` で Qwen3 系の thinking 完全抑止可能。
+
+    base_url 末尾規約:
+      - `http://host:port`            → ollama native (/api/chat)
+      - `http://host:port/v1`         → OpenAI 互換 (/chat/completions)
+      - その他                          → OpenAI 互換 (suffix /chat/completions)
+    """
     import httpx
 
-    payload = {
-        "model": model,
-        "messages": [
-            {"role": "system", "content": "You output strict JSON only."},
-            {"role": "user", "content": PROMPT_TEMPLATE.format(record_json=json.dumps(record, ensure_ascii=False))},
-        ],
-        "temperature": 0.0,
-        "max_tokens": 200,
-    }
+    bu = base_url.rstrip("/")
+    is_ollama_native = (
+        bu.endswith(":11434")
+        or bu.endswith("/api")
+        or "/v1" not in bu
+    )
+
+    sys_msg = "You output strict JSON only. No reasoning, no prose."
+    user_msg = PROMPT_TEMPLATE.format(record_json=json.dumps(record, ensure_ascii=False))
+
+    if is_ollama_native:
+        url = f"{bu.removesuffix('/api')}/api/chat"
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": sys_msg},
+                {"role": "user", "content": user_msg},
+            ],
+            "think": False,
+            "stream": False,
+            "format": "json",
+            "options": {"temperature": 0.0, "num_predict": max_tokens},
+        }
+    else:
+        url = f"{bu}/chat/completions"
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": sys_msg + " /no_think"},
+                {"role": "user", "content": user_msg},
+            ],
+            "temperature": 0.0,
+            "max_tokens": max_tokens,
+            "response_format": {"type": "json_object"},
+        }
+
     headers = {"Content-Type": "application/json"}
     if api_key:
         headers["Authorization"] = f"Bearer {api_key}"
+
     try:
         with httpx.Client(timeout=timeout) as client:
-            r = client.post(f"{base_url.rstrip('/')}/chat/completions", json=payload, headers=headers)
+            r = client.post(url, json=payload, headers=headers)
             r.raise_for_status()
             data = r.json()
-        text = data["choices"][0]["message"]["content"].strip()
-        # 軽い JSON 抽出 (LLM が ```json ``` を被せる場合)
-        if text.startswith("```"):
-            text = text.strip("`").lstrip("json\n").strip()
-        verdict = json.loads(text)
-        v = verdict.get("verdict", "low_confidence")
-        if v not in {"ok", "split", "merge", "wrong_value", "low_confidence"}:
+        if is_ollama_native:
+            text = (data.get("message", {}).get("content") or "").strip()
+        else:
+            msg = data["choices"][0]["message"]
+            text = (msg.get("content") or "").strip()
+            if not text:
+                text = (msg.get("reasoning") or "").strip()
+        parsed = _extract_json(text)
+        if parsed is None:
+            return {"verdict": "low_confidence", "reason": "json_parse_failed", "raw": text[:500]}
+        v = parsed.get("verdict", "low_confidence")
+        if v not in _VALID_VERDICTS:
             v = "low_confidence"
-        return {"verdict": v, "reason": verdict.get("reason", ""), "raw": text}
+        return {"verdict": v, "reason": parsed.get("reason", ""), "raw": text[:500]}
     except Exception as exc:
         return {"verdict": "low_confidence", "reason": f"llm_call_failed: {exc}", "raw": None}
 
@@ -82,8 +164,8 @@ def main() -> None:
     p.add_argument("--in", dest="inp", required=True)
     p.add_argument("--out", dest="out", required=True)
     p.add_argument("--max", type=int, default=0, help="0 = 全件")
-    p.add_argument("--base-url", default=os.environ.get("LLM_BASE_URL", "http://localhost:11434/v1"))
-    p.add_argument("--model", default=os.environ.get("LLM_MODEL", "qwen2.5:7b"))
+    p.add_argument("--base-url", default=os.environ.get("LLM_BASE_URL", "http://localhost:11434"))
+    p.add_argument("--model", default=os.environ.get("LLM_MODEL", "qwen3.6:35b-a3b"))
     p.add_argument("--api-key", default=os.environ.get("LLM_API_KEY", ""))
     p.add_argument("--dry-run", action="store_true", help="LLM 呼出せず record をそのまま転記")
     args = p.parse_args()

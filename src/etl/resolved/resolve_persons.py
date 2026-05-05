@@ -191,7 +191,6 @@ def build_resolved_persons(
     use_log = decisions_path is not None and decisions_sample_rate > 0.0
     if use_log:
         log_ctx = DecisionsLogger(decisions_path, sample_rate=decisions_sample_rate)
-        log_ctx.truncate()
         log_ctx.__enter__()
     else:
         log_ctx = None

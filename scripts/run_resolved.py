@@ -14,11 +14,14 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
-from src.etl.resolved.resolve_anime import build_resolved_anime
-from src.etl.resolved.resolve_persons import build_resolved_persons
-from src.etl.resolved.resolve_studios import build_resolved_studios
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from src.etl.resolved.resolve_anime import build_resolved_anime  # noqa: E402
+from src.etl.resolved.resolve_persons import build_resolved_persons  # noqa: E402
+from src.etl.resolved.resolve_studios import build_resolved_studios  # noqa: E402
 
 
 def main() -> None:
@@ -39,6 +42,10 @@ def main() -> None:
     run_all = not (args.anime or args.persons or args.studios)
     sample = float(args.decisions_sample_rate)
     decisions_path = Path(args.decisions) if sample > 0.0 else None
+
+    # 全 entity の decisions を 1 つの jsonl に append するため、最初に truncate
+    if decisions_path is not None and decisions_path.exists():
+        decisions_path.unlink()
 
     if run_all or args.anime:
         n = build_resolved_anime(
