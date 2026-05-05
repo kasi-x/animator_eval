@@ -44,11 +44,10 @@ def _load(name: str) -> dict | list:
         return {}
 
 
-# Decade colour palette
-_COHORT_COLORS = [
-    "#667eea", "#f093fb", "#06D6A0", "#FFD166",
-    "#f5576c", "#a0d2db", "#fda085", "#43e97b",
-]
+# Decade colour palette — v3: Okabe-Ito CB-safe + cohort_decade fixed mapping
+from src.viz.palettes import OKABE_ITO_DARK  # noqa: E402
+
+_COHORT_COLORS = list(OKABE_ITO_DARK)
 
 
 # v3 ReportSpec — see docs/REPORT_DESIGN_v3.md §7 (example A)

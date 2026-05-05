@@ -99,7 +99,7 @@ REPORT_CATEGORIES: dict[str, list[str]] = {
         "growth_scores",
     ],
     "biz": [
-        "biz_genre_whitespace", "biz_undervalued_talent", "biz_trust_entry",
+        "biz_genre_whitespace", "biz_exposure_gap", "biz_trust_entry",
         "biz_team_template", "biz_independent_unit",
     ],
     "technical": [

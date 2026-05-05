@@ -208,6 +208,36 @@ def test_is_strict_mode_truthy_values(monkeypatch):
 # ---- BriefArc -----------------------------------------------------------
 
 
+def test_brief_arc_to_html_emits_4_sections():
+    arc = BriefArc(
+        audience="policy",
+        presenting_phenomena=["policy_attrition"],
+        null_contrast=[
+            NullContrast(
+                section_id="hhi_trends", observed=0.38,
+                null_lo=0.001, null_hi=0.001,
+            )
+        ],
+        limitation_block=LimitationBlock(
+            identifying_assumption_validity="visibility ≈ employment は未検証",
+            sensitivity_caveats=["window-width 感度: ±15%"],
+        ),
+        interpretation=Interpretation(
+            primary_claim="moderate concentration",
+            primary_subject="本レポートの著者は",
+            alternatives=["measurement artifact"],
+        ),
+    )
+    html = arc.to_html()
+    assert "段 1" in html
+    assert "段 2" in html
+    assert "段 3" in html
+    assert "段 4" in html
+    assert "policy_attrition" in html
+    # null contrast judgement: observed=0.38 is outside null [0.001, 0.001]
+    assert "外側" in html
+
+
 def test_brief_arc_round_trip():
     arc = BriefArc(
         audience="policy",

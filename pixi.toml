@@ -28,6 +28,10 @@ test-impact-reset = "rm -f .testmondata"            # testmon cache リセット
 lint = "ruff check src/ tests/"
 format = "ruff format src/ tests/"
 
+# v3 ReportSpec gate (REPORT_DESIGN_v3.md Phase 5)
+check-report-spec = "python scripts/report_generators/ci_check_report_spec.py"
+check-report-spec-strict = { cmd = "python scripts/report_generators/ci_check_report_spec.py", env = { STRICT_REPORT_SPEC = "1" } }
+
 # Database schema management
 schema-inspect = "atlas schema inspect sqlite://./data/animetor.db --format hcl"
 schema-diff = "atlas schema diff --env dev"

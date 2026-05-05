@@ -200,6 +200,102 @@ class BriefArc:
     limitation_block: LimitationBlock
     interpretation: Interpretation
 
+    def to_html(self) -> str:
+        """Render the 4-段 narrative arc as HTML.
+
+        Section order (REPORT_DESIGN_v3.md §5):
+          段 1: 現象提示 (presenting_phenomena)
+          段 2: null model との対比 (null_contrast)
+          段 3: 解釈の限界 (limitation_block)
+          段 4: 代替視点 (interpretation, ≥1 alternatives)
+        """
+        # 段 1
+        ph_items = "\n".join(
+            f"<li><a href=\"{rid}.html\">{rid}</a></li>"
+            for rid in self.presenting_phenomena
+        )
+        s1 = (
+            '<div class="card report-section" id="arc-phenomena">'
+            "<h2>段 1: 現象提示 (Findings)</h2>"
+            "<p>本ブリーフが扱う構造的現象を、評価語抜きで列挙する:</p>"
+            f"<ul>{ph_items}</ul>"
+            "</div>"
+        )
+
+        # 段 2
+        nc_rows = "\n".join(
+            "<tr>"
+            f"<td>{nc.section_id}</td>"
+            f"<td>{nc.observed:.4f}</td>"
+            f"<td>[{nc.null_lo:.4f}, {nc.null_hi:.4f}]</td>"
+            f"<td>{'外側' if (nc.observed < nc.null_lo or nc.observed > nc.null_hi) else '内側'}</td>"
+            f"<td>{nc.note}</td>"
+            "</tr>"
+            for nc in self.null_contrast
+        )
+        s2 = (
+            '<div class="card report-section" id="arc-null-contrast">'
+            "<h2>段 2: null model との対比</h2>"
+            "<p>各主張を null model の 95% 区間と比較する。"
+            "「外側」= 観測値が帰無分布の P2.5–P97.5 の外、"
+            "「内側」= null と区別不能。</p>"
+            "<table style=\"width:100%;border-collapse:collapse;font-size:0.85rem;\">"
+            "<thead><tr>"
+            "<th>section</th><th>observed</th>"
+            "<th>null 95% [P2.5, P97.5]</th>"
+            "<th>判定</th><th>備考</th>"
+            "</tr></thead>"
+            f"<tbody>{nc_rows}</tbody></table>"
+            "</div>"
+        )
+
+        # 段 3
+        sens = "".join(
+            f"<li>{c}</li>" for c in self.limitation_block.sensitivity_caveats
+        )
+        shrink_part = (
+            f"<p><strong>縮約後の順序変化</strong>: "
+            f"{self.limitation_block.shrinkage_order_changes}</p>"
+            if self.limitation_block.shrinkage_order_changes else ""
+        )
+        s3 = (
+            '<div class="card report-section" id="arc-limitations">'
+            "<h2>段 3: 解釈の限界</h2>"
+            "<p><strong>identifying assumption の妥当性</strong>: "
+            f"{self.limitation_block.identifying_assumption_validity}</p>"
+            "<p><strong>感度分析での結論揺れ</strong>:</p>"
+            f"<ul>{sens}</ul>"
+            f"{shrink_part}"
+            "</div>"
+        )
+
+        # 段 4
+        alts = "".join(f"<li>{a}</li>" for a in self.interpretation.alternatives)
+        rec = ""
+        if self.interpretation.recommendation:
+            rec = (
+                "<p><strong>推奨</strong>: "
+                f"{self.interpretation.recommendation}</p>"
+            )
+            if self.interpretation.recommendation_alt_value:
+                rec += (
+                    "<p><em>異なる価値観からの代替推奨</em>: "
+                    f"{self.interpretation.recommendation_alt_value}</p>"
+                )
+        s4 = (
+            '<div class="card report-section interpretation" id="arc-interpretation"'
+            ' style="border-left:3px solid #c0a0d0;">'
+            "<h2>段 4: 代替視点 (Interpretation)</h2>"
+            f"<p><strong>主張</strong>: {self.interpretation.primary_subject} — "
+            f"{self.interpretation.primary_claim}</p>"
+            "<p><strong>代替解釈</strong>:</p>"
+            f"<ul>{alts}</ul>"
+            f"{rec}"
+            "</div>"
+        )
+
+        return "\n".join([s1, s2, s3, s4])
+
 
 # =========================================================================
 # Strict mode toggle (CI gate)

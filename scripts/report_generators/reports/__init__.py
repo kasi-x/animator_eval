@@ -58,7 +58,7 @@ from .mgmt_attrition_risk import MgmtAttritionRiskReport
 from .mgmt_succession import MgmtSuccessionReport
 from .mgmt_team_chemistry import MgmtTeamChemistryReport
 # Phase 9: Biz briefs
-from .biz_undervalued_talent import BizUndervaluedTalentReport
+from .biz_exposure_gap import BizExposureGapReport, BizUndervaluedTalentReport
 from .biz_genre_whitespace import BizGenreWhitespaceReport
 from .biz_team_template import BizTeamTemplateReport
 from .biz_trust_entry import BizTrustEntryReport
@@ -106,7 +106,7 @@ V2_REPORT_CLASSES = [
     GrowthScoresReport,
     # biz brief (5 + O3 extension)
     BizGenreWhitespaceReport,
-    BizUndervaluedTalentReport,
+    BizExposureGapReport,
     BizTrustEntryReport,
     BizTeamTemplateReport,
     BizIndependentUnitReport,
@@ -166,7 +166,8 @@ __all__ = [
     "MgmtAttritionRiskReport",
     "MgmtSuccessionReport",
     "MgmtTeamChemistryReport",
-    "BizUndervaluedTalentReport",
+    "BizExposureGapReport",
+    "BizUndervaluedTalentReport",  # deprecated alias, removed after next major release
     "BizGenreWhitespaceReport",
     "BizTeamTemplateReport",
     "BizTrustEntryReport",
