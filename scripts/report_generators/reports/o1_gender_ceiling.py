@@ -42,9 +42,9 @@ _N_NULL_ITER = 1000
 # Ego-network sample cap
 _EGO_SAMPLE_CAP = 3000
 
-_COLOR_F = "#f093fb"   # female line color
-_COLOR_M = "#a0d2db"   # male line color
-_COLOR_NB = "#FFD166"  # non-binary line color
+_COLOR_F = "#E09BC2"   # female line color
+_COLOR_M = "#7CC8F2"   # male line color
+_COLOR_NB = "#F8EC6A"  # non-binary line color
 
 _PIPELINE_PAIRS: list[tuple[str, str, str]] = [
     ("in_between", "key_animator", "動画→原画"),
@@ -365,7 +365,7 @@ class O1GenderCeilingReport(BaseReportGenerator):
         fig = go.Figure()
 
         pairs_seen = list({r.pair_label for r in mw_results})
-        palette = ["#f093fb", "#a0d2db", "#06D6A0", "#FFD166"]
+        palette = ["#E09BC2", "#7CC8F2", "#3BC494", "#F8EC6A"]
 
         for idx, pair_label in enumerate(pairs_seen):
             pair_rows = [r for r in mw_results if r.pair_label == pair_label]
@@ -525,13 +525,13 @@ class O1GenderCeilingReport(BaseReportGenerator):
         fig.add_vline(
             x=95,
             line_dash="dash",
-            line_color="#f5576c",
+            line_color="#E07532",
             annotation_text="95th percentile (p=0.05)",
         )
         fig.add_vline(
             x=5,
             line_dash="dash",
-            line_color="#06D6A0",
+            line_color="#3BC494",
             annotation_text="5th percentile",
         )
         fig.update_layout(

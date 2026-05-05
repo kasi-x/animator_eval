@@ -88,7 +88,7 @@ class BiasDetectionReport(BaseReportGenerator):
         )
 
         fig = go.Figure()
-        gender_colors = {"Male": "#667eea", "Female": "#f5576c", "unknown": "#a0a0c0"}
+        gender_colors = {"Male": "#3593D2", "Female": "#E07532", "unknown": "#a0a0c0"}
         for g, gv in sorted(gender_iv.items()):
             fig.add_trace(go.Violin(
                 y=gv[:2000] if len(gv) > 2000 else gv,
@@ -179,7 +179,7 @@ class BiasDetectionReport(BaseReportGenerator):
         findings += "</ul>"
 
         fig = go.Figure()
-        gender_colors = {"Male": "#667eea", "Female": "#f5576c", "unknown": "#a0a0c0"}
+        gender_colors = {"Male": "#3593D2", "Female": "#E07532", "unknown": "#a0a0c0"}
         for g in genders:
             medians = []
             tier_lbls = []
@@ -267,7 +267,7 @@ class BiasDetectionReport(BaseReportGenerator):
         findings += "</ul>"
 
         fig = go.Figure()
-        gender_colors_list = ["#667eea", "#f5576c", "#a0a0c0"]
+        gender_colors_list = ["#3593D2", "#E07532", "#a0a0c0"]
         for i, g in enumerate(genders):
             totals = {rc: sum(role_gender[rc].values()) for rc in roles}
             fig.add_trace(go.Bar(
@@ -338,7 +338,7 @@ class BiasDetectionReport(BaseReportGenerator):
         )
 
         fig = go.Figure()
-        gender_colors = {"Male": "#667eea", "Female": "#f5576c", "unknown": "#a0a0c0"}
+        gender_colors = {"Male": "#3593D2", "Female": "#E07532", "unknown": "#a0a0c0"}
         for g, gv in sorted(gender_se.items()):
             fig.add_trace(go.Violin(
                 y=gv[:2000] if len(gv) > 2000 else gv,

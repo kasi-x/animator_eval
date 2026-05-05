@@ -62,6 +62,22 @@ exceptions:
     term: 才能
     reason: Appears in the biz-audience blocklist literal.
 
+  - file: scripts/report_generators/reports/biz_exposure_gap.py
+    line_pattern: 隠れた才能
+    term: 才能
+    reason: >
+      Curated SPEC declares forbidden_framing list including 「隠れた才能」.
+      Naming the prohibited phrase in the blocklist is required for the
+      InterpretationGuard to filter it out of interpretation text.
+
+  - file: scripts/report_generators/reports/mgmt_director_mentor.py
+    line_pattern: 優秀な指導者
+    term: 優秀
+    reason: >
+      Curated SPEC declares forbidden_framing list including 「優秀な指導者」.
+      Naming the prohibited phrase in the blocklist is required for the
+      InterpretationGuard to filter it out of interpretation text.
+
   - file: scripts/report_generators/section_builder.py
     line_pattern: "ability, skill, artistry, or professional worth"
     term: ability

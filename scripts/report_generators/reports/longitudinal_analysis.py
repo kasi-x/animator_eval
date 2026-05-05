@@ -58,10 +58,10 @@ STAGE_COLORS_HEX: dict[int, str] = {
     0: "#404050",
     1: "#a0a0c0",
     2: "#7EB8D4",
-    3: "#4CC9F0",
-    4: "#FFD166",
-    5: "#FF6B35",
-    6: "#F72585",
+    3: "#7CC8F2",
+    4: "#F8EC6A",
+    5: "#E07532",
+    6: "#E09BC2",
 }
 
 COHORT_LABELS: dict[int, str] = {
@@ -75,12 +75,12 @@ COHORT_LABELS: dict[int, str] = {
 }
 
 COHORT_COLORS: dict[int, str] = {
-    1960: "#4CC9F0",
-    1970: "#7209B7",
-    1980: "#F72585",
-    1990: "#FF6B35",
-    2000: "#06D6A0",
-    2010: "#FFD166",
+    1960: "#7CC8F2",
+    1970: "#E09BC2",
+    1980: "#E09BC2",
+    1990: "#E07532",
+    2000: "#3BC494",
+    2010: "#F8EC6A",
     2020: "#aaaaaa",
 }
 
@@ -921,7 +921,7 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
             vertical_spacing=0.15,
             horizontal_spacing=0.08,
         )
-        palette = ["#4CC9F0", "#F72585", "#06D6A0", "#FFD166", "#FF6B35"]
+        palette = ["#7CC8F2", "#E09BC2", "#3BC494", "#F8EC6A", "#E07532"]
 
         for cl in range(n_clusters):
             r = cl // 3 + 1
@@ -1562,7 +1562,7 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
                 mode="markers",
                 marker=dict(
                     size=ps_vals,
-                    color="#4CC9F0",
+                    color="#7CC8F2",
                     symbol="circle",
                     line=dict(color="rgba(255,255,255,0.3)", width=0.5),
                 ),
@@ -1595,7 +1595,7 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
                 mode="markers+text",
                 marker=dict(
                     size=rs_vals,
-                    color="#FF6B35",
+                    color="#E07532",
                     symbol="square",
                     line=dict(color="rgba(255,255,255,0.3)", width=0.5),
                 ),
@@ -1698,8 +1698,8 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
             )
 
         stream_colors = [
-            "#a0a0c0", "#7EB8D4", "#4CC9F0", "#FFD166",
-            "#FF6B35", "#F72585", "#06D6A0", "#7209B7",
+            "#a0a0c0", "#7EB8D4", "#7CC8F2", "#F8EC6A",
+            "#E07532", "#E09BC2", "#3BC494", "#E09BC2",
         ]
         role_names = list(stream_data.keys())
 
@@ -2015,7 +2015,7 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
                 x=stock_years,
                 y=total_flow,
                 name="昇進数",
-                marker_color="#06D6A0",
+                marker_color="#3BC494",
                 opacity=0.7,
             ),
             row=2,
@@ -2154,12 +2154,12 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
         fig.add_trace(go.Scatter(
             x=demand_years, y=expected_all,
             name="期待値（1990-2010年トレンド）", mode="lines",
-            line=dict(color="#FFD166", width=2, dash="dash"),
+            line=dict(color="#F8EC6A", width=2, dash="dash"),
         ))
         fig.add_trace(go.Scatter(
             x=demand_years, y=actual_credits,
             name="実績クレジット数", mode="lines",
-            line=dict(color="#4CC9F0", width=2.5),
+            line=dict(color="#7CC8F2", width=2.5),
         ))
         _add_milestone_vlines(fig)
         fig.update_layout(
@@ -2245,13 +2245,13 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
         fig.add_trace(go.Scatter(
             x=demand_years, y=prod_per_person,
             name="1人あたりクレジット数", mode="lines+markers",
-            line=dict(color="#4CC9F0", width=2),
+            line=dict(color="#7CC8F2", width=2),
             marker=dict(size=4),
         ))
         fig.add_trace(go.Scatter(
             x=demand_years, y=prod_trend,
             name="5年移動平均", mode="lines",
-            line=dict(color="#FFD166", width=2.5, dash="dash"),
+            line=dict(color="#F8EC6A", width=2.5, dash="dash"),
         ))
         _add_milestone_vlines(fig)
         fig.update_layout(
@@ -2336,18 +2336,18 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
         )
         fig.add_trace(go.Scatter(
             x=demand_years, y=active_vals, name="現役",
-            mode="lines", line=dict(color="#4CC9F0", width=2.5),
+            mode="lines", line=dict(color="#7CC8F2", width=2.5),
             fill="tozeroy", fillcolor="rgba(76,201,240,0.08)",
         ), row=1, col=1)
         fig.add_trace(go.Bar(
             x=demand_years, y=new_vals, name="新規参入",
-            marker_color="#06D6A0", opacity=0.8,
+            marker_color="#3BC494", opacity=0.8,
         ), row=1, col=1)
         fig.add_trace(go.Bar(
             x=demand_years, y=[-v for v in retired_vals], name="引退",
-            marker_color="#FF6B35", opacity=0.8,
+            marker_color="#E07532", opacity=0.8,
         ), row=1, col=1)
-        net_colors = ["#06D6A0" if v >= 0 else "#FF6B35" for v in net_change]
+        net_colors = ["#3BC494" if v >= 0 else "#E07532" for v in net_change]
         fig.add_trace(go.Bar(
             x=demand_years, y=net_change, name="純増減",
             marker_color=net_colors,
@@ -2440,7 +2440,7 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
 
         formats = ["MOVIE", "TV", "ONA", "OVA"]
         labels = {"MOVIE": "映画", "TV": "TV", "ONA": "ONA", "OVA": "OVA"}
-        colors = {"MOVIE": "#F72585", "TV": "#4CC9F0", "ONA": "#06D6A0", "OVA": "#FFD166"}
+        colors = {"MOVIE": "#E09BC2", "TV": "#7CC8F2", "ONA": "#3BC494", "OVA": "#F8EC6A"}
 
         present = [f for f in formats if fmt_metrics[f]["pers_per_hr"]]
         fig = go.Figure()
@@ -2551,7 +2551,7 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
                 cour_bins["3cour+"].append(s)
 
         fig = go.Figure()
-        bin_colors = {"1cour": "#4CC9F0", "2cour": "#FFD166", "3cour+": "#FF6B35"}
+        bin_colors = {"1cour": "#7CC8F2", "2cour": "#F8EC6A", "3cour+": "#E07532"}
         for bn, vals in cour_bins.items():
             if vals:
                 fig.add_trace(go.Box(
@@ -2689,8 +2689,8 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
 
         t_rels = list(range(-4, 5))
         line_specs = [
-            ("up", "小/中規模 → 大手", "#F72585"),
-            ("down", "大手 → 小/中規模", "#FF6B35"),
+            ("up", "小/中規模 → 大手", "#E09BC2"),
+            ("down", "大手 → 小/中規模", "#E07532"),
         ]
 
         fig = go.Figure()

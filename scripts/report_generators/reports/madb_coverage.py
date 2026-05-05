@@ -260,7 +260,7 @@ class MADBCoverageReport(BaseReportGenerator):
         sources = [r["source"] for r in rows]
         fig = go.Figure(go.Bar(
             x=sources, y=[r["n_credits"] for r in rows],
-            marker_color="#667eea",
+            marker_color="#3593D2",
             hovertemplate="%{x}: %{y:,} クレジット<extra></extra>",
         ))
         fig.update_layout(title="ソース別クレジット数", xaxis_title="ソース", yaxis_title="クレジット数")

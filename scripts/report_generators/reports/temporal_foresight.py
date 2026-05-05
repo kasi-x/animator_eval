@@ -80,7 +80,7 @@ class TemporalForesightReport(BaseReportGenerator):
         fig = go.Figure(go.Scatter(
             x=proxies, y=actuals,
             mode="markers",
-            marker=dict(color="#667eea", size=4, opacity=0.5),
+            marker=dict(color="#3593D2", size=4, opacity=0.5),
             hovertemplate="活動比率=%{x:.2f}、クレジット数=%{y:,}<extra></extra>",
         ))
         fig.update_layout(
@@ -202,7 +202,7 @@ class TemporalForesightReport(BaseReportGenerator):
         )
 
         fig = go.Figure()
-        tier_colors = {1: "#667eea", 2: "#a0d2db", 3: "#06D6A0", 4: "#FFD166", 5: "#f5576c"}
+        tier_colors = {1: "#3593D2", 2: "#7CC8F2", 3: "#3BC494", 4: "#F8EC6A", 5: "#E07532"}
         for t in sorted(tier_early):
             fig.add_trace(go.Box(
                 y=tier_early[t], name=f"最大T{t}",
@@ -264,7 +264,7 @@ class TemporalForesightReport(BaseReportGenerator):
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=indices, y=fes, name="Person FE",
-            mode="lines", line=dict(color="#667eea"),
+            mode="lines", line=dict(color="#3593D2"),
         ))
         fig.add_trace(go.Scatter(
             x=indices + list(reversed(indices)),

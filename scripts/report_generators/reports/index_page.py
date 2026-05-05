@@ -67,12 +67,12 @@ _CATALOG: list[dict] = [
 ]
 
 _CATEGORY_LABELS = {
-    "overview": ("業界概要", "#a0d2db"),
-    "brief": ("audience brief", "#f093fb"),
-    "policy": ("政策提言", "#FFD166"),
-    "hr": ("現場 Workflow", "#06D6A0"),
-    "biz": ("新たな試み", "#fda085"),
-    "fairness": ("差異検出", "#FFD166"),
+    "overview": ("業界概要", "#7CC8F2"),
+    "brief": ("audience brief", "#E09BC2"),
+    "policy": ("政策提言", "#F8EC6A"),
+    "hr": ("現場 Workflow", "#3BC494"),
+    "biz": ("新たな試み", "#FFB444"),
+    "fairness": ("差異検出", "#F8EC6A"),
     "technical": ("技術・診断", "#8a9ab0"),
 }
 
@@ -205,7 +205,7 @@ class IndexPageReport(BaseReportGenerator):
         ready_count = sum(1 for v in existing.values() if v)
 
         # ── Filter buttons ─────────────────────────────────────────────
-        categories = {"all": ("全て", "#f093fb")}
+        categories = {"all": ("全て", "#E09BC2")}
         categories.update({k: (v, c) for k, (v, c) in _CATEGORY_LABELS.items()})
 
         filter_btns = "".join(

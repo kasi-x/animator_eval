@@ -66,12 +66,12 @@ COHORT_LABELS: dict[int, str] = {
     2020: "2020s",
 }
 COHORT_COLORS: dict[int, str] = {
-    1960: "#4CC9F0",
-    1970: "#7209B7",
-    1980: "#F72585",
-    1990: "#FF6B35",
-    2000: "#06D6A0",
-    2010: "#FFD166",
+    1960: "#7CC8F2",
+    1970: "#E09BC2",
+    1980: "#E09BC2",
+    1990: "#E07532",
+    2000: "#3BC494",
+    2010: "#F8EC6A",
     2020: "#aaaaaa",
 }
 STAGE_LABELS: dict[int, str] = {
@@ -181,8 +181,8 @@ def _build_major_works_by_year(anime_stats: dict, min_score: float = 7.5) -> dic
 def _add_milestone_vlines(fig: go.Figure) -> None:
     """Add vertical dashed lines for milestone years (2000, 2015, 2020)."""
     annotations = {
-        2000: ("2000年代", "rgba(255,100,100,0.3)", "#FF6B35"),
-        2015: ("配信時代", "rgba(255,255,100,0.4)", "#FFD166"),
+        2000: ("2000年代", "rgba(255,100,100,0.3)", "#E07532"),
+        2015: ("配信時代", "rgba(255,255,100,0.4)", "#F8EC6A"),
         2020: ("2020年代", "rgba(170,170,170,0.3)", "#aaaaaa"),
     }
     for yr, (text, line_clr, font_clr) in annotations.items():
@@ -603,8 +603,8 @@ class CohortAnimationReport(BaseReportGenerator):
             set(p.get("cluster_name", "?") for p in pca_sample)
         )
         cluster_colors_auto = [
-            "#f093fb", "#f5576c", "#fda085", "#4facfe", "#06D6A0",
-            "#FFD166", "#a0d2db", "#7209B7", "#FF6B35", "#4CC9F0",
+            "#E09BC2", "#E07532", "#FFB444", "#3593D2", "#3BC494",
+            "#F8EC6A", "#7CC8F2", "#E09BC2", "#E07532", "#7CC8F2",
         ]
         cn_color = {
             cn: cluster_colors_auto[i % len(cluster_colors_auto)]
@@ -736,7 +736,7 @@ class CohortAnimationReport(BaseReportGenerator):
                 y=sup_persons,
                 mode="lines",
                 name="アクティブ人数（担い手）",
-                line=dict(color="#06D6A0", width=2),
+                line=dict(color="#3BC494", width=2),
                 hovertemplate="%{x}年: %{y}人<extra></extra>",
             ),
             secondary_y=False,
@@ -747,7 +747,7 @@ class CohortAnimationReport(BaseReportGenerator):
                 y=sup_new,
                 mode="lines",
                 name="新規参入者数",
-                line=dict(color="#FFD166", width=1.5, dash="dot"),
+                line=dict(color="#F8EC6A", width=1.5, dash="dot"),
                 hovertemplate="%{x}年: %{y}人<extra></extra>",
             ),
             secondary_y=False,
@@ -1644,8 +1644,8 @@ class CohortAnimationReport(BaseReportGenerator):
 
         fig = go.Figure()
         for label, data, color in [
-            (f"大作関与 (n={len(major_iv):,})", major_iv, "#f5576c"),
-            (f"通常作品 (n={len(normal_iv):,})", normal_iv, "#a0d2db"),
+            (f"大作関与 (n={len(major_iv):,})", major_iv, "#E07532"),
+            (f"通常作品 (n={len(normal_iv):,})", normal_iv, "#7CC8F2"),
         ]:
             if data:
                 fig.add_trace(

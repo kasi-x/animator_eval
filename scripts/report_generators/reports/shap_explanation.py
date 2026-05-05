@@ -70,7 +70,7 @@ class SHAPExplanationReport(BaseReportGenerator):
             x=[r["mean_abs_shap"] for r in reversed(rows)],
             y=[r["feature_name"] for r in reversed(rows)],
             orientation="h",
-            marker_color="#667eea",
+            marker_color="#3593D2",
             hovertemplate="%{y}: %{x:.4f}<extra></extra>",
         ))
         fig.update_layout(
@@ -137,8 +137,8 @@ class SHAPExplanationReport(BaseReportGenerator):
         findings += "</ul>"
 
         fig = go.Figure()
-        colors = ["#f093fb", "#a0d2db", "#06D6A0", "#FFD166",
-                  "#667eea", "#f5576c", "#fda085", "#8a94a0"]
+        colors = ["#E09BC2", "#7CC8F2", "#3BC494", "#F8EC6A",
+                  "#3593D2", "#E07532", "#FFB444", "#8a94a0"]
         for i, f in enumerate(top_features):
             fig.add_trace(go.Violin(
                 y=feature_shap[f][:500] if len(feature_shap[f]) > 500 else feature_shap[f],
@@ -239,7 +239,7 @@ class SHAPExplanationReport(BaseReportGenerator):
         findings = "<p>上位特徴量の部分依存プロット: 他の特徴量の周辺分布で平均化した、各特徴量の関数としての予測iv_score。</p>"
 
         fig = go.Figure()
-        colors = ["#667eea", "#06D6A0", "#FFD166", "#f5576c"]
+        colors = ["#3593D2", "#3BC494", "#F8EC6A", "#E07532"]
         for i, f in enumerate(top4):
             pts = sorted(feature_pdp[f], key=lambda x: x[0])
             fig.add_trace(go.Scatter(

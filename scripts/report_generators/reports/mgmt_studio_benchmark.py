@@ -426,7 +426,7 @@ class MgmtStudioBenchmarkReport(BaseReportGenerator):
                 x=va_vals,
                 nbinsx=30,
                 name="観測VA分布",
-                marker_color="#f093fb",
+                marker_color="#E09BC2",
                 opacity=0.75,
                 hovertemplate="VA=%{x:.3f}: %{y:,}スタジオ<extra></extra>",
             )
@@ -437,14 +437,14 @@ class MgmtStudioBenchmarkReport(BaseReportGenerator):
                 y=null_y,
                 name="ヌルモデル（一様分布）",
                 mode="lines",
-                line=dict(color="#a0d2db", dash="dash", width=2),
+                line=dict(color="#7CC8F2", dash="dash", width=2),
                 hovertemplate="VA=%{x:.3f}: 期待値=%{y:.1f}<extra></extra>",
             )
         )
         fig.add_vline(
             x=mean_va,
             line_dash="dot",
-            line_color="#fda085",
+            line_color="#FFB444",
             annotation_text=f"平均={mean_va:.3f}",
         )
         fig.update_layout(
@@ -492,10 +492,43 @@ class MgmtStudioBenchmarkReport(BaseReportGenerator):
 # report-specific values when curating this module.
 from .._spec import make_default_spec  # noqa: E402
 
+from .._spec import (  # noqa: E402
+    SensitivityAxis, ShrinkageSpec,
+)
+
 SPEC = make_default_spec(
     name='mgmt_studio_benchmark',
     audience='hr',
-    claim='スタジオ・ベンチマーク・カード に関する記述的指標 (subtitle: R5定着率 / 人材価値付加 / ロール多様性（EB縮小推定）)',
-    sources=["credits", "persons", "anime"],
-    meta_table='meta_mgmt_studio_benchmark',
+    claim=(
+        'スタジオ s の R5 定着率 (デビュー後 5 年同一スタジオ可視継続率) と '
+        '人材価値付加 (VA_s = 個人 FE 補正後の studio premium) が '
+        '業界 EB-prior と区別可能な順序を持つ'
+    ),
+    identifying_assumption=(
+        'R5 = 同一スタジオ可視継続 を仮定。海外移籍 / フリーランス化 / '
+        '無名義参加は離脱として計上される。VA_s は個人選抜効果と '
+        'スタジオ環境効果を完全には分離しない (AKM 連結集合内のみ可比較)。'
+    ),
+    null_model=['N3', 'N6'],  # cohort-matched + uniform random
+    sources=['credits', 'persons', 'anime', 'studios', 'anime_studios'],
+    meta_table='meta_hr_studio_benchmark',
+    estimator='R5 = Wilson CI; VA_s = AKM studio FE; H_s = role entropy',
+    ci_estimator='bootstrap',
+    n_resamples=2000,
+    shrinkage=ShrinkageSpec(
+        method='empirical_bayes_beta',
+        n_threshold=20,
+        prior='industry-wide R5 / VA_s posterior',
+    ),
+    sensitivity_grid=[
+        SensitivityAxis(name='retention window', values=['3y', '5y', '7y']),
+        SensitivityAxis(name='primary studio rule',
+                        values=['most-credit', 'first-credit']),
+        SensitivityAxis(name='AKM connected set', values=['default', 'extended']),
+    ],
+    extra_limitations=[
+        'R5 の同一スタジオ判定は anime_studios join 精度に依存',
+        'VA_s は AKM 連結集合外のスタジオを比較不可',
+        'EB shrinkage 強度で上位 / 下位 10 の構成が ~25% 入替り',
+    ],
 )

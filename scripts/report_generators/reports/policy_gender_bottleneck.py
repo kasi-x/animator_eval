@@ -32,8 +32,8 @@ def _load(name: str) -> dict | list:
         return {}
 
 
-_COLOR_F = "#f093fb"  # female line color
-_COLOR_M = "#a0d2db"  # male line color
+_COLOR_F = "#E09BC2"  # female line color
+_COLOR_M = "#7CC8F2"  # male line color
 
 _STAGE_LABELS = {
     "stage_0_to_2": "ステージ0→2",
@@ -275,14 +275,14 @@ class PolicyGenderBottleneckReport(BaseReportGenerator):
                     name="正方向寄与（説明済み）",
                     x=comp_names,
                     y=pos_vals,
-                    marker_color="#06D6A0",
+                    marker_color="#3BC494",
                     hovertemplate="%{x}: %{y:.4f}<extra></extra>",
                 ))
                 fig.add_trace(go.Bar(
                     name="負方向寄与（未説明）",
                     x=comp_names,
                     y=neg_vals,
-                    marker_color="#f5576c",
+                    marker_color="#E07532",
                     hovertemplate="%{x}: %{y:.4f}<extra></extra>",
                 ))
                 fig.update_layout(
@@ -300,7 +300,7 @@ class PolicyGenderBottleneckReport(BaseReportGenerator):
                 fig.add_trace(go.Bar(
                     x=["説明済み", "未説明"],
                     y=[explained_v, unexplained_v],
-                    marker_color=["#06D6A0", "#f5576c"],
+                    marker_color=["#3BC494", "#E07532"],
                     hovertemplate="%{x}: %{y:.4f}<extra></extra>",
                 ))
                 fig.add_hline(y=0, line_dash="dash", line_color="#a0a0a0")
@@ -383,7 +383,7 @@ class PolicyGenderBottleneckReport(BaseReportGenerator):
         )
 
         if deduped:
-            bar_colors = ["#f093fb" if v >= 0 else "#a0d2db" for v in gamma_vals]
+            bar_colors = ["#E09BC2" if v >= 0 else "#7CC8F2" for v in gamma_vals]
             fig = go.Figure()
             fig.add_trace(go.Bar(
                 x=gamma_vals,

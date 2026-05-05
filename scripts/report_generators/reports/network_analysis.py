@@ -25,13 +25,13 @@ from ..section_builder import ReportSection, SectionBuilder
 from ..sql_fragments import person_display_name_sql
 from ._base import BaseReportGenerator, append_validation_warnings
 
-_TRACK_PALETTE = ["#667eea", "#f093fb", "#FFD166", "#06D6A0", "#f5576c", "#aaaaaa"]
+_TRACK_PALETTE = ["#3593D2", "#E09BC2", "#F8EC6A", "#3BC494", "#E07532", "#aaaaaa"]
 
 _TIER_COLORS = {
-    "large": "#667eea",
-    "medium": "#06D6A0",
-    "small": "#FFD166",
-    "micro": "#f5576c",
+    "large": "#3593D2",
+    "medium": "#3BC494",
+    "small": "#F8EC6A",
+    "micro": "#E07532",
     "unknown": "#aaaaaa",
 }
 
@@ -285,9 +285,9 @@ class NetworkAnalysisReport(BaseReportGenerator):
             ))
 
         fig.add_shape(type="line", x0=bc_75, x1=bc_75, y0=0, y1=1,
-                      xref="x", yref="paper", line=dict(color="#f5576c", dash="dot", width=1))
+                      xref="x", yref="paper", line=dict(color="#E07532", dash="dot", width=1))
         fig.add_shape(type="line", x0=0, x1=1, y0=dc_50, y1=dc_50,
-                      xref="paper", yref="y", line=dict(color="#667eea", dash="dot", width=1))
+                      xref="paper", yref="y", line=dict(color="#3593D2", dash="dot", width=1))
         fig.update_layout(
             title="媒介中心性 vs 次数中心性（iv_scoreで色付け）",
             xaxis_title="媒介中心性",
@@ -517,11 +517,11 @@ class NetworkAnalysisReport(BaseReportGenerator):
             ))
 
         fig.add_shape(type="line", x0=bc_75, x1=bc_75, y0=0, y1=1,
-                      xref="x", yref="paper", line=dict(color="#f5576c", dash="dot", width=1))
+                      xref="x", yref="paper", line=dict(color="#E07532", dash="dot", width=1))
         fig.add_shape(type="line", x0=0, x1=1, y0=hs_50, y1=hs_50,
-                      xref="paper", yref="y", line=dict(color="#667eea", dash="dot", width=1))
+                      xref="paper", yref="y", line=dict(color="#3593D2", dash="dot", width=1))
         fig.add_annotation(x=bc_75, y=float(hs_arr.max()), text="Betweenness 75th",
-                           showarrow=False, font=dict(color="#f5576c", size=10))
+                           showarrow=False, font=dict(color="#E07532", size=10))
         fig.update_layout(
             title="媒介中心性 vs Hub Score（キャリアトラック別）",
             xaxis_title="媒介中心性",
@@ -948,11 +948,11 @@ class NetworkAnalysisReport(BaseReportGenerator):
         fig = go.Figure(go.Bar(
             x=list(range(cap + 1)),
             y=[capped.count(i) for i in range(cap + 1)],
-            marker_color="#667eea",
+            marker_color="#3593D2",
             opacity=0.75,
             hovertemplate="n_obs=%{x}<br>count=%{y}<extra></extra>",
         ))
-        for threshold, label, color in [(5, "n=5", "#f5576c"), (20, "n=20", "#FFD166")]:
+        for threshold, label, color in [(5, "n=5", "#E07532"), (20, "n=20", "#F8EC6A")]:
             fig.add_shape(type="line", x0=threshold, x1=threshold, y0=0, y1=1,
                           xref="x", yref="paper", line=dict(color=color, dash="dash", width=1.5))
             fig.add_annotation(x=threshold, y=1, yref="paper",

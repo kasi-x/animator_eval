@@ -23,15 +23,15 @@ from ..section_builder import ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
 
 _TREND_COLORS = {
-    "accelerating": "#06D6A0",
-    "stable": "#667eea",
-    "decelerating": "#f5576c",
-    "volatile": "#FFD166",
+    "accelerating": "#3BC494",
+    "stable": "#3593D2",
+    "decelerating": "#E07532",
+    "volatile": "#F8EC6A",
 }
 
 _TRACK_COLORS = [
-    "#f093fb", "#a0d2db", "#06D6A0", "#FFD166", "#667eea",
-    "#f5576c", "#fda085", "#8a94a0",
+    "#E09BC2", "#7CC8F2", "#3BC494", "#F8EC6A", "#3593D2",
+    "#E07532", "#FFB444", "#8a94a0",
 ]
 
 
@@ -131,7 +131,7 @@ class GrowthScoresReport(BaseReportGenerator):
 
         # Main histogram
         fig = go.Figure(go.Histogram(
-            x=vals, nbinsx=40, marker_color="#06D6A0",
+            x=vals, nbinsx=40, marker_color="#3BC494",
             hovertemplate="score=%{x:.3f}: %{y:,}<extra></extra>",
         ))
         fig.update_layout(
@@ -304,7 +304,7 @@ class GrowthScoresReport(BaseReportGenerator):
                 d = r["debut_decade"]
                 decade_groups.setdefault(d, []).append(r["growth_score"])
 
-            decade_colors = ["#667eea", "#a0d2db", "#06D6A0", "#FFD166", "#f093fb", "#f5576c"]
+            decade_colors = ["#3593D2", "#7CC8F2", "#3BC494", "#F8EC6A", "#E09BC2", "#E07532"]
             for i, d in enumerate(sorted(decade_groups)):
                 vals = decade_groups[d]
                 fig_decade.add_trace(go.Box(
@@ -381,7 +381,7 @@ class GrowthScoresReport(BaseReportGenerator):
 
         # Main violin by decade
         fig = go.Figure()
-        decade_colors = ["#667eea", "#a0d2db", "#06D6A0", "#FFD166", "#f093fb", "#f5576c"]
+        decade_colors = ["#3593D2", "#7CC8F2", "#3BC494", "#F8EC6A", "#E09BC2", "#E07532"]
         for i, d in enumerate(sorted(decade_vals)):
             vals = decade_vals[d]
             fig.add_trace(go.Violin(

@@ -270,7 +270,7 @@ class MgmtTeamChemistryReport(BaseReportGenerator):
             if pa not in node_x or pb not in node_x:
                 continue
             opacity = 0.3 + 0.6 * abs(res) / res_max
-            color = "#06D6A0" if res >= 0 else "#f5576c"
+            color = "#3BC494" if res >= 0 else "#E07532"
             fig.add_trace(
                 go.Scatter(
                     x=[node_x[pa], node_x[pb], None],
@@ -295,7 +295,7 @@ class MgmtTeamChemistryReport(BaseReportGenerator):
                 mode="markers",
                 marker=dict(
                     size=8,
-                    color="#f093fb",
+                    color="#E09BC2",
                     line=dict(color="#ffffff", width=1),
                 ),
                 text=node_labels,
@@ -395,7 +395,7 @@ class MgmtTeamChemistryReport(BaseReportGenerator):
             p_bh_disp = p_bh_list
 
         colors = [
-            "#f5a623" if pb < sig_threshold else "#8a94a0"
+            "#FFB444" if pb < sig_threshold else "#8a94a0"
             for pb in p_bh_disp
         ]
 
@@ -432,7 +432,7 @@ class MgmtTeamChemistryReport(BaseReportGenerator):
         fig.add_hline(
             y=sig_threshold,
             line_dash="dot",
-            line_color="#f5576c",
+            line_color="#E07532",
             annotation_text=f"BH閾値={sig_threshold}",
         )
         fig.update_layout(
@@ -480,10 +480,34 @@ class MgmtTeamChemistryReport(BaseReportGenerator):
 # report-specific values when curating this module.
 from .._spec import make_default_spec  # noqa: E402
 
+from .._spec import SensitivityAxis  # noqa: E402
+
 SPEC = make_default_spec(
     name='mgmt_team_chemistry',
     audience='hr',
-    claim='チーム化学反応分析 に関する記述的指標 (subtitle: ペア残差 / BH補正検定 / Top20ポジティブペア)',
-    sources=["credits", "persons", "anime"],
-    meta_table='meta_mgmt_team_chemistry',
+    claim=(
+        '共同制作ペアの mean_res (実績値 - 線形予測値の平均) が '
+        'BH 補正後 q<0.05 で 0 を有意に超えるペアが存在する'
+    ),
+    identifying_assumption=(
+        'ペア残差は線形予測モデル (個人 FE + スタジオ FE + 年効果) からの'
+        '差分として定義。残差が正なら「予測を上回る」観察上の関連を示すが、'
+        '因果的「相性」効果ではない。共演 2 作以上の制限により'
+        '新規ペアの予測には使用不可。'
+    ),
+    null_model=['N4', 'N5'],  # role-matched + era-window resample
+    sources=['credits', 'persons', 'anime'],
+    meta_table='meta_hr_team_chemistry',
+    estimator='mean_res ± SE; BH-corrected q-value',
+    ci_estimator='analytical_se',
+    sensitivity_grid=[
+        SensitivityAxis(name='共演下限', values=['2作', '3作', '5作']),
+        SensitivityAxis(name='線形予測モデル',
+                        values=['FE only', 'FE + role-pair']),
+    ],
+    extra_limitations=[
+        '共演 2 作以上のペアに限定 — 新規組合せは out-of-sample',
+        '線形予測モデルが仮定する additive structure からの残差 — 非線形相互作用は捕捉外',
+        'BH 補正は family-wise 制御ではなく FDR 制御 — 個別ペアの偽陽性可能性は残る',
+    ],
 )

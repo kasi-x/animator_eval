@@ -117,7 +117,7 @@ class BizTeamTemplateReport(BaseReportGenerator):
         }
 
         fig = go.Figure()
-        colors = ["#667eea", "#764ba2", "#f093fb", "#f5576c", "#fda085"]
+        colors = ["#3593D2", "#E09BC2", "#E09BC2", "#E07532", "#FFB444"]
         for i, (arc_name, _) in enumerate(archetypes.items()):
             r_vals = [norm[ax][i] for ax in axes]
             # Close the polygon
@@ -210,7 +210,7 @@ class BizTeamTemplateReport(BaseReportGenerator):
         rates = [_sf(kv[1].get("success_rate", 0.0)) for kv in sorted_arcs]
         n_teams_list = [int(kv[1].get("n_teams", 0)) for kv in sorted_arcs]
 
-        colors = ["#fda085", "#f5576c", "#f093fb", "#764ba2", "#667eea"]
+        colors = ["#FFB444", "#E07532", "#E09BC2", "#E09BC2", "#3593D2"]
 
         fig = go.Figure(
             go.Bar(

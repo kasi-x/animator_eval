@@ -57,11 +57,11 @@ _GROUP_LABELS: dict[str, str] = {
 
 # Color palette per group
 _GROUP_COLORS: dict[str, str] = {
-    "JP": "#a0d2db",
-    "CN": "#f093fb",
-    "KR": "#06D6A0",
-    "SE_ASIA": "#FFD166",
-    "OTHER": "#fda085",
+    "JP": "#7CC8F2",
+    "CN": "#E09BC2",
+    "KR": "#3BC494",
+    "SE_ASIA": "#F8EC6A",
+    "OTHER": "#FFB444",
     "UNKNOWN": "#808090",
 }
 
@@ -751,7 +751,7 @@ class O4ForeignTalentReport(BaseReportGenerator):
                     fig.add_trace(go.Scatter(
                         x=x_line.tolist(), y=y_line.tolist(),
                         mode="lines",
-                        line=dict(color="#FFD166", dash="dash", width=2),
+                        line=dict(color="#F8EC6A", dash="dash", width=2),
                         name="OLS 回帰線",
                         showlegend=False,
                     ))
@@ -760,9 +760,9 @@ class O4ForeignTalentReport(BaseReportGenerator):
                         x=0.02, y=0.98, xref="paper", yref="paper",
                         text=f"Pearson r={r_val:.3f} (95% CI {ci_str}), {p_str}, n={len(x_c):,}",
                         showarrow=False,
-                        font=dict(size=11, color="#FFD166"),
+                        font=dict(size=11, color="#F8EC6A"),
                         bgcolor="rgba(0,0,0,0.5)",
-                        bordercolor="#FFD166",
+                        bordercolor="#F8EC6A",
                         borderwidth=1,
                         borderpad=4,
                     )
@@ -777,7 +777,7 @@ class O4ForeignTalentReport(BaseReportGenerator):
                 x=shares,
                 y=studio_ids,
                 orientation="h",
-                marker_color="#f093fb",
+                marker_color="#E09BC2",
                 customdata=n_credits,
                 hovertemplate=(
                     "<b>%{y}</b><br>"

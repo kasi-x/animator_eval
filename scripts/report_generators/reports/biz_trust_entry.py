@@ -118,7 +118,7 @@ class BizTrustEntryReport(BaseReportGenerator):
             go.Bar(
                 x=centers,
                 y=counts,
-                marker_color="#667eea",
+                marker_color="#3593D2",
                 name="ゲートキーパースコア",
                 hovertemplate="スコア≈%{x:.2f}: 人数=%{y}<extra></extra>",
             )
@@ -126,14 +126,14 @@ class BizTrustEntryReport(BaseReportGenerator):
         if dist.get("p50") is not None:
             fig.add_vline(
                 x=p50,
-                line_color="#f093fb",
+                line_color="#E09BC2",
                 line_dash="dash",
                 annotation_text=f"p50={p50:.2f}",
             )
         if dist.get("p75") is not None:
             fig.add_vline(
                 x=p75,
-                line_color="#fda085",
+                line_color="#FFB444",
                 line_dash="dot",
                 annotation_text=f"p75={p75:.2f}",
             )
@@ -286,7 +286,7 @@ class BizTrustEntryReport(BaseReportGenerator):
             "BiRank_z",
             "ブリッジ_z",
         ]
-        colors = ["#667eea", "#f093fb", "#fda085", "#a0d2db"]
+        colors = ["#3593D2", "#E09BC2", "#FFB444", "#7CC8F2"]
 
         if not top100:
             findings = (

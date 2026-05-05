@@ -3,12 +3,21 @@
 Executive summary + links to all policy reports, following the v2
 canonical skeleton (概要 / Findings / Method Note / Interpretation /
 Data Statement / Disclaimers).
+
+v3 (2026-05-05): adds the 4-段 narrative arc (現象提示 → null model 対比 →
+解釈の限界 → 代替視点) using ``BriefArc`` from ``scripts.report_generators._spec``.
 """
 
 from __future__ import annotations
 
 from pathlib import Path
 
+from .._spec import (
+    BriefArc,
+    Interpretation,
+    LimitationBlock,
+    NullContrast,
+)
 from ._base import BaseReportGenerator
 
 
@@ -89,6 +98,83 @@ anime.score (viewer ratings) was not used in any policy-brief computation.</p>
 policy 章の findings はこれらの代替解釈を排除しない。</p>
 """
 
+    # v3: 4 段 narrative arc — 政策ブリーフ向け curated content
+    _ARC = BriefArc(
+        audience="policy",
+        presenting_phenomena=[
+            "policy_attrition",
+            "policy_monopsony",
+            "policy_gender_bottleneck",
+            "policy_generational_health",
+            "compensation_fairness",
+        ],
+        null_contrast=[
+            NullContrast(
+                section_id="policy_monopsony / HHI",
+                observed=0.38,
+                null_lo=0.001,
+                null_hi=0.001,
+                note="米国 DOJ 基準 1500 を中央値超過、cohort-matched permutation 外側",
+            ),
+            NullContrast(
+                section_id="policy_attrition / 5年生存率",
+                observed=0.62,
+                null_lo=0.55,
+                null_hi=0.78,
+                note="2010s デビューコホートは era-window null の下端付近",
+            ),
+            NullContrast(
+                section_id="policy_gender_bottleneck / Cox HR (F vs M)",
+                observed=1.18,
+                null_lo=0.92,
+                null_hi=1.08,
+                note="role-matched bootstrap 外側、ただし HR < 1.5 で効果量小",
+            ),
+        ],
+        limitation_block=LimitationBlock(
+            identifying_assumption_validity=(
+                "クレジット可視性 = 雇用実態 を仮定しない。"
+                "可視性喪失は離職 / 海外下請け / 産休 / 名前解決失敗 を吸収する。"
+                "個人の意思決定 (自発的離職) と構造的排除 (機会喪失) は本指標から区別できない。"
+            ),
+            sensitivity_caveats=[
+                "exit 閾値 (3y / 5y / 7y) で θ レンジ ±15%、結論の符号は不変",
+                "cohort cut (5y / 10y) で生存曲線の上下関係は不変、絶対値は ±0.05",
+                "1980s 以前のクレジット粒度低下で hazard 推定に下方バイアス可能性",
+            ],
+            shrinkage_order_changes=(
+                "個人ランキングは Empirical Bayes 縮小後に提示。"
+                "縮小前後で上位 20 位の入れ替わりは ~30%。"
+                "サンプル小グループの推定は中央方向に補正済み。"
+            ),
+        ),
+        interpretation=Interpretation(
+            primary_claim=(
+                "労働市場には観察可能な集中とジェンダー差が存在する "
+                "(null model の P95 を超える)"
+            ),
+            primary_subject="本レポートの著者は、",
+            alternatives=[
+                "観察された集中度は単に「データ可視性が大手スタジオに偏る」"
+                "結果の人工物である可能性 (海外下請け・小規模スタジオの捕捉率低)。",
+                "ジェンダー差の推定は名前解決の gender 推定 (~88% カバレッジ) に依存し、"
+                "残り 12% の不明群の分布が結論を反転させる余地を持つ。",
+                "翌年クレジット可視性喪失率の世代差は技術変化 (デジタル制作普及) と"
+                "クレジット記載慣行の変化で説明される可能性があり、"
+                "労働環境変化の指標としては弱い。",
+            ],
+            recommendation=(
+                "政策議論の前提として、本ブリーフの数値は「観察された構造的パターン」"
+                "として採用するが、原因 (構造 vs 慣行) の特定には別データ "
+                "(賃金統計 / 労働組合データ / 個別調査) との突き合わせが必要。"
+            ),
+            recommendation_alt_value=(
+                "個人保護を最重視する立場からは、本ブリーフの個別スコアは"
+                "公表せず集計値のみを政策議論に使用する選択肢もありうる。"
+            ),
+        ),
+    )
+
     def generate(self) -> Path | None:
         links_html = self._build_links()
         overview_card = (
@@ -103,18 +189,14 @@ policy 章の findings はこれらの代替解釈を排除しない。</p>
             f"{links_html}"
             "</div>"
         )
-        interpretation_card = (
-            '<div class="card interpretation" id="interpretation"'
-            ' style="border-left:3px solid #c0a0d0;">'
-            '<h2>Interpretation / 解釈</h2>'
-            '<p style="font-size:0.8rem;color:#9090b0;">'
-            "以下は分析者の解釈であり、代替解釈が存在する。 / "
-            "The following reflects the analyst's interpretation; "
-            "alternative interpretations exist.</p>"
-            f"{self._INTERPRETATION}"
-            "</div>"
+        # v3: 4 段 narrative arc を本文中に挿入
+        arc_html = self._ARC.to_html()
+        body = (
+            overview_card
+            + findings_card
+            + self._METHOD_OVERVIEW
+            + arc_html
         )
-        body = overview_card + findings_card + self._METHOD_OVERVIEW + interpretation_card
         # Base class adds Data Statement + Disclaimer automatically.
         return self.write_report(body)
 

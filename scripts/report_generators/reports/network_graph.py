@@ -20,9 +20,9 @@ from ..section_builder import ReportSection, SectionBuilder
 from ..sql_fragments import person_display_name_sql
 from ._base import BaseReportGenerator, append_validation_warnings
 _COMMUNITY_PALETTE = [
-    "#f093fb", "#a0d2db", "#06D6A0", "#FFD166", "#667eea",
-    "#f5576c", "#fda085", "#8a94a0", "#c0c0e0", "#a0b0a0",
-    "#F72585", "#7209B7", "#3A0CA3", "#4CC9F0", "#4361EE",
+    "#E09BC2", "#7CC8F2", "#3BC494", "#F8EC6A", "#3593D2",
+    "#E07532", "#FFB444", "#8a94a0", "#c0c0e0", "#a0b0a0",
+    "#E09BC2", "#E09BC2", "#3A0CA3", "#7CC8F2", "#4361EE",
 ]
 
 
@@ -280,7 +280,7 @@ class NetworkGraphReport(BaseReportGenerator):
         return findings
 
     def _make_gender_distribution_figure(self, gender_deg: dict[str, list[float]]) -> go.Figure:
-        gender_colors = {"Male": "#667eea", "Female": "#f5576c", "unknown": "#a0a0c0"}
+        gender_colors = {"Male": "#3593D2", "Female": "#E07532", "unknown": "#a0a0c0"}
         fig = go.Figure()
         for g, vals in sorted(gender_deg.items()):
             fig.add_trace(go.Violin(

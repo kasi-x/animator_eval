@@ -266,7 +266,7 @@ class MLClusteringReport(BaseReportGenerator):
       y:m.map(function(p){{return p.y;}}),
       text:m.map(function(p){{return p.name+' / C'+(p.cl+1);}}),
       hovertemplate:'%{{text}}<extra>検索</extra>',
-      marker:{{size:14,color:'#FFD166',symbol:'star',line:{{width:2,color:'#fff'}}}},
+      marker:{{size:14,color:'#F8EC6A',symbol:'star',line:{{width:2,color:'#fff'}}}},
       name:'検索結果',showlegend:true
     }});
     blinkCount=0;
@@ -284,7 +284,7 @@ class MLClusteringReport(BaseReportGenerator):
       if(i>0)res.appendChild(document.createTextNode(', '));
       var a=document.createElement('a');
       a.href=EXPLORER+'/#person/'+encodeURIComponent(p.pid);
-      a.target='_blank';a.style.color='#a0d2db';
+      a.target='_blank';a.style.color='#7CC8F2';
       a.textContent=p.name;res.appendChild(a);
     }});
     if(m.length>5)res.appendChild(document.createTextNode(' ...'));
@@ -494,14 +494,14 @@ class MLClusteringReport(BaseReportGenerator):
         fig.add_trace(
             go.Bar(
                 x=pc_labels, y=ev.tolist(), name="寄与率",
-                marker_color="#f093fb",
+                marker_color="#E09BC2",
             ),
             secondary_y=False,
         )
         fig.add_trace(
             go.Scatter(
                 x=pc_labels, y=cumulative, name="累積寄与率",
-                line=dict(color="#06D6A0", width=3), mode="lines+markers",
+                line=dict(color="#3BC494", width=3), mode="lines+markers",
             ),
             secondary_y=True,
         )

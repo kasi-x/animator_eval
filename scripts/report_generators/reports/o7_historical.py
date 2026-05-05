@@ -375,7 +375,7 @@ class O7HistoricalRestorationReport(BaseReportGenerator):
         fig = go.Figure(
             data=[
                 go.Bar(name="HIGH",     x=decades, y=highs,   marker_color="#4a9eff"),
-                go.Bar(name="MEDIUM",   x=decades, y=mediums, marker_color="#f5a623"),
+                go.Bar(name="MEDIUM",   x=decades, y=mediums, marker_color="#FFB444"),
                 go.Bar(name="LOW",      x=decades, y=lows,    marker_color="#e8e030"),
                 go.Bar(name="RESTORED", x=decades, y=restores, marker_color="#e05080"),
             ]

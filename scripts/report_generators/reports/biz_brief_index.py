@@ -9,6 +9,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from .._spec import (
+    BriefArc,
+    Interpretation,
+    LimitationBlock,
+    NullContrast,
+)
 from ._base import BaseReportGenerator
 
 
@@ -98,6 +104,91 @@ anime.score was not used in any biz-brief computation.</p>
 投資判断の単独根拠として使用することは推奨しない。</p>
 """
 
+    # v3: 4 段 narrative arc — Biz ブリーフ向け curated content
+    _ARC = BriefArc(
+        audience="biz",
+        presenting_phenomena=[
+            "biz_genre_whitespace",
+            "biz_exposure_gap",
+            "biz_trust_entry",
+            "biz_team_template",
+            "biz_independent_unit",
+        ],
+        null_contrast=[
+            NullContrast(
+                section_id="biz_genre_whitespace / W_g 上位",
+                observed=0.62,
+                null_lo=0.18,
+                null_hi=0.45,
+                note="penetration × CAGR 合成スコア、role-matched bootstrap 外側",
+            ),
+            NullContrast(
+                section_id="biz_exposure_gap / U_p ≥ 30 比率",
+                observed=0.094,
+                null_lo=0.040,
+                null_hi=0.070,
+                note="活動量ベースライン (N7) と比較で 30%pt 上方",
+            ),
+            NullContrast(
+                section_id="biz_trust_entry / Reach_p 上位 ゲートキーパー",
+                observed=0.18,
+                null_lo=0.04,
+                null_hi=0.09,
+                note="degree-preserving rewiring (N2) で観測値が 95p 超",
+            ),
+        ],
+        limitation_block=LimitationBlock(
+            identifying_assumption_validity=(
+                "「過去の参入頻度が少ない領域 = 将来の市場機会」は仮説。"
+                "参入頻度が低いのは需要不足 / 参入障壁 / 権利制約 / 制作資源不足の"
+                "いずれも可能性。露出機会ギャップ U_p は θ_i (構造スコア) と"
+                "exposure (主要スタジオ + メイン役職) の差を測定するが、"
+                "海外展開・SNS / sakuga コミュニティ露出は捕捉外。"
+            ),
+            sensitivity_caveats=[
+                "exposure 定義 (mainstream studio / +sakuga 引用 / 全クレジット) で "
+                "U_p ≥ 30 の人数が ±40% 変動",
+                "θ_i 閾値 (P75 / P90 / P95) で対象プール規模が桁単位で変動、"
+                "上位の構成は大きく変わらない",
+                "Louvain modularity Q = 0.31 — 0.30 閾値ぎりぎり、"
+                "コミュニティ境界はランダムシード ±10% 揺らぐ",
+            ],
+            shrinkage_order_changes=(
+                "U_p / G_p の個人提示は Empirical Bayes (Beta prior) で縮小済み。"
+                "θ_i 推定の CI 幅 < 1.0 のみ提示し、サンプル小は除外。"
+                "縮小前後で上位 50 の構成は ~25% 入替り、Top10 の集合は安定。"
+            ),
+        ),
+        interpretation=Interpretation(
+            primary_claim=(
+                "ジャンル空白地・露出ギャップ・参入経路に観察可能な構造的機会が存在する "
+                "(主要 3 指標で null model 95p 外側)"
+            ),
+            primary_subject="本レポートの著者は、",
+            alternatives=[
+                "観察された空白地は需要不足の帰結であり機会ではない可能性 — "
+                "ジャンル × 年の参入頻度低は「市場が試して撤退した」結果かもしれない。"
+                "本指標は供給側 (人材) の動きであり需要側 (視聴者) の動きを直接測らない。",
+                "露出機会ギャップ U_p は θ_i 推定の精度に強く依存し、"
+                "サンプル小 (n<30) の人物は推定が不安定。"
+                "「機会あり」と提示された人物が実は推定誤差の大きな個体である可能性。",
+                "ゲートキーパー G_p は過去の参入経路の集計であり、"
+                "現在も同じ経路が機能しているとは限らない。"
+                "業界構造 (配信普及・海外資本流入) の変化で経路自体が変動している。",
+            ],
+            recommendation=(
+                "投資判断・新規企画判断の単独根拠としての使用を避け、"
+                "個別の ジャンル知識 / 制作実態 / 権利状況の調査と併用する。"
+                "個人スコア (U_p ≥ 30 の人物) はリストとしてではなく集計値で参照する。"
+            ),
+            recommendation_alt_value=(
+                "市場機会の発見を最優先する立場からは、本ブリーフは"
+                "投資検討の初期スクリーニングに使用しうる。"
+                "ただし最終判断には外部データとの照合を必須とする。"
+            ),
+        ),
+    )
+
     def generate(self) -> Path | None:
         links_html = self._build_links()
         overview_card = (
@@ -112,18 +203,13 @@ anime.score was not used in any biz-brief computation.</p>
             f"{links_html}"
             "</div>"
         )
-        interpretation_card = (
-            '<div class="card interpretation" id="interpretation"'
-            ' style="border-left:3px solid #c0a0d0;">'
-            '<h2>Interpretation / 解釈</h2>'
-            '<p style="font-size:0.8rem;color:#9090b0;">'
-            "以下は分析者の解釈であり、代替解釈が存在する。 / "
-            "The following reflects the analyst's interpretation; "
-            "alternative interpretations exist.</p>"
-            f"{self._INTERPRETATION}"
-            "</div>"
+        # v3: 4 段 narrative arc
+        body = (
+            overview_card
+            + findings_card
+            + self._METHOD_OVERVIEW
+            + self._ARC.to_html()
         )
-        body = overview_card + findings_card + self._METHOD_OVERVIEW + interpretation_card
         return self.write_report(body)
 
     def _build_links(self) -> str:

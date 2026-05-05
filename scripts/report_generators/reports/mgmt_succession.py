@@ -130,7 +130,7 @@ class MgmtSuccessionReport(BaseReportGenerator):
             go.Histogram(
                 x=risk_vals,
                 nbinsx=25,
-                marker_color="#f093fb",
+                marker_color="#E09BC2",
                 opacity=0.8,
                 xbins=dict(start=0.0, end=1.0, size=0.04),
                 hovertemplate="リスク=%{x:.2f}: %{y:,}人<extra></extra>",
@@ -139,13 +139,13 @@ class MgmtSuccessionReport(BaseReportGenerator):
         fig.add_vline(
             x=0.5,
             line_dash="dash",
-            line_color="#f5576c",
+            line_color="#E07532",
             annotation_text="リスク閾値=0.5",
         )
         fig.add_vline(
             x=mean_risk,
             line_dash="dot",
-            line_color="#fda085",
+            line_color="#FFB444",
             annotation_text=f"平均={mean_risk:.3f}",
         )
         fig.update_layout(
@@ -246,7 +246,7 @@ class MgmtSuccessionReport(BaseReportGenerator):
             go.Pie(
                 labels=["カバー済み", "カバー未整備"],
                 values=[covered, uncovered],
-                marker=dict(colors=["#06D6A0", "#f5576c"]),
+                marker=dict(colors=["#3BC494", "#E07532"]),
                 textinfo="label+percent",
                 hovertemplate=(
                     "%{label}: %{value:,}人 (%{percent})<extra></extra>"

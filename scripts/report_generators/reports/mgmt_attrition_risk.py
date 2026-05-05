@@ -111,7 +111,7 @@ class MgmtAttritionRiskReport(BaseReportGenerator):
         tiers = sorted(agg.keys())
         horizons = ["mean_risk_1y", "mean_risk_3y", "mean_risk_5y"]
         horizon_labels = ["1年", "3年", "5年"]
-        colors_h = ["#667eea", "#f093fb", "#fda085"]
+        colors_h = ["#3593D2", "#E09BC2", "#FFB444"]
 
         fig = go.Figure()
         for h, label, color in zip(horizons, horizon_labels, colors_h):
@@ -221,7 +221,7 @@ class MgmtAttritionRiskReport(BaseReportGenerator):
                 x=feat_imps,
                 y=feat_names,
                 orientation="h",
-                marker_color="#a0d2db",
+                marker_color="#7CC8F2",
                 hovertemplate="%{y}: 重要度=%{x:.4f}<extra></extra>",
             )
         )

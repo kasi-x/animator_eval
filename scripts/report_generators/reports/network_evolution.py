@@ -78,12 +78,12 @@ class NetworkEvolutionReport(BaseReportGenerator):
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=years, y=persons, name="年間アクティブ人数",
-            line=dict(color="#a0d2db", width=2),
+            line=dict(color="#7CC8F2", width=2),
             hovertemplate="%{x}: %{y:,} 人<extra></extra>",
         ))
         fig.add_trace(go.Scatter(
             x=years, y=credits_, name="年間クレジット数",
-            line=dict(color="#f093fb", width=1.5, dash="dot"),
+            line=dict(color="#E09BC2", width=1.5, dash="dot"),
             yaxis="y2",
             hovertemplate="%{x}: %{y:,} 件<extra></extra>",
         ))
@@ -223,8 +223,8 @@ class NetworkEvolutionReport(BaseReportGenerator):
         )
 
         fig = go.Figure()
-        decade_colors = ["#667eea", "#a0d2db", "#06D6A0", "#FFD166", "#f093fb",
-                         "#f5576c", "#fda085", "#8a94a0"]
+        decade_colors = ["#3593D2", "#7CC8F2", "#3BC494", "#F8EC6A", "#E09BC2",
+                         "#E07532", "#FFB444", "#8a94a0"]
         for i, d in enumerate(decades):
             fig.add_trace(go.Bar(
                 x=list(comm_decade.keys()),
@@ -293,8 +293,8 @@ class NetworkEvolutionReport(BaseReportGenerator):
         )
 
         fig = go.Figure()
-        decade_colors = ["#667eea", "#a0d2db", "#06D6A0", "#FFD166", "#f093fb",
-                         "#f5576c"]
+        decade_colors = ["#3593D2", "#7CC8F2", "#3BC494", "#F8EC6A", "#E09BC2",
+                         "#E07532"]
         for i, d in enumerate(sorted(decade_vals)):
             vals = decade_vals[d]
             fig.add_trace(go.Violin(
@@ -454,18 +454,18 @@ class NetworkEvolutionReport(BaseReportGenerator):
         fig.add_trace(go.Scatter(
             x=years, y=entrants, name="新規参入者",
             fill="tozeroy",
-            line=dict(color="#06D6A0", width=1.5),
+            line=dict(color="#3BC494", width=1.5),
             fillcolor="rgba(6,214,160,0.3)",
         ))
         fig.add_trace(go.Scatter(
             x=years, y=[-e for e in exits], name="退出者",
             fill="tozeroy",
-            line=dict(color="#f5576c", width=1.5),
+            line=dict(color="#E07532", width=1.5),
             fillcolor="rgba(245,87,108,0.3)",
         ))
         fig.add_trace(go.Scatter(
             x=years, y=net, name="ネットフロー",
-            line=dict(color="#FFD166", width=2, dash="dash"),
+            line=dict(color="#F8EC6A", width=2, dash="dash"),
         ))
         fig.update_layout(
             title="人材参入・退出の推移",

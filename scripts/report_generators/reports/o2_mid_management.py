@@ -302,7 +302,7 @@ class O2MidManagementReport(BaseReportGenerator):
         ci_hi_err = [r.ci_high - r.blockage_score for r in dedup_rows]
         n_list = [r.n_persons for r in dedup_rows]
         colors = [
-            "#f5576c" if s > 0 else "#06D6A0" for s in scores
+            "#E07532" if s > 0 else "#3BC494" for s in scores
         ]
 
         industry_median = rows[0].industry_median if rows else 0.0
@@ -386,7 +386,7 @@ class O2MidManagementReport(BaseReportGenerator):
             y=labels,
             x=values,
             textinfo="value+percent initial",
-            marker=dict(color=["#667eea", "#f093fb", "#06D6A0", "#FFD166"]),
+            marker=dict(color=["#3593D2", "#E09BC2", "#3BC494", "#F8EC6A"]),
             connector=dict(line=dict(color="#a0a0a0", width=1)),
             hovertemplate="%{label}: %{value:,}人<extra></extra>",
         ))

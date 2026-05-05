@@ -32,16 +32,16 @@ def _load(name: str) -> dict | list:
 
 
 _BIN_COLORS = {
-    "bin_0_5": "#a0d2db",    # 0-5年: 新人
-    "bin_5_15": "#667eea",   # 5-15年: 中堅
-    "bin_15_plus": "#f093fb", # 15年+: ベテラン/シニア
+    "bin_0_5": "#7CC8F2",    # 0-5年: 新人
+    "bin_5_15": "#3593D2",   # 5-15年: 中堅
+    "bin_15_plus": "#E09BC2", # 15年+: ベテラン/シニア
 }
 
 _SURVIVAL_COLORS = {
-    "S5": "#06D6A0",
-    "S10": "#FFD166",
-    "S15": "#f5576c",
-    "S20": "#fda085",
+    "S5": "#3BC494",
+    "S10": "#F8EC6A",
+    "S15": "#E07532",
+    "S20": "#FFB444",
 }
 
 
@@ -346,7 +346,7 @@ class PolicyGenerationalHealthReport(BaseReportGenerator):
             x=years, y=net_flows,
             mode="lines+markers",
             name="net flow",
-            line=dict(color="#FFD166", width=2),
+            line=dict(color="#F8EC6A", width=2),
             marker=dict(size=5),
             hovertemplate="年=%{x}: net=%{y:,}<extra></extra>",
         ), secondary_y=False)
@@ -359,7 +359,7 @@ class PolicyGenerationalHealthReport(BaseReportGenerator):
                 x=valid_dep_years, y=valid_dep_vals,
                 mode="lines",
                 name="dependency ratio（右軸）",
-                line=dict(color="#f093fb", width=1.5, dash="dot"),
+                line=dict(color="#E09BC2", width=1.5, dash="dot"),
                 hovertemplate="年=%{x}: dep_ratio=%{y:.2f}<extra></extra>",
             ), secondary_y=True)
 

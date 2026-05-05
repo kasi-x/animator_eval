@@ -606,7 +606,7 @@ class O8SoftPowerReport(BaseReportGenerator):
             go.Bar(
                 x=labels,
                 y=counts,
-                marker_color="#667eea",
+                marker_color="#3593D2",
                 text=[f"{c:,}" for c in counts],
                 textposition="outside",
                 hovertemplate="%{x}<br>anime 数=%{y:,}<extra></extra>",
@@ -687,7 +687,7 @@ class O8SoftPowerReport(BaseReportGenerator):
             y=intl_theta,
             name="国際展開",
             side="negative",
-            line_color="#06D6A0",
+            line_color="#3BC494",
             fillcolor="rgba(6,214,160,0.3)",
             meanline_visible=True,
             scalemode="width",
@@ -698,7 +698,7 @@ class O8SoftPowerReport(BaseReportGenerator):
             y=dom_theta,
             name="国内専",
             side="positive",
-            line_color="#667eea",
+            line_color="#3593D2",
             fillcolor="rgba(102,126,234,0.3)",
             meanline_visible=True,
             scalemode="width",
@@ -796,7 +796,7 @@ class O8SoftPowerReport(BaseReportGenerator):
             go.Bar(
                 x=labels,
                 y=values,
-                marker_color="#f5576c",
+                marker_color="#E07532",
                 customdata=list(zip(counts, theta_means)),
                 hovertemplate=(
                     "<b>%{x}</b><br>"

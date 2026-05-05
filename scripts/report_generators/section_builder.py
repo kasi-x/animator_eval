@@ -309,6 +309,47 @@ class KPICard:
     hint: str = ""
 
 
+# v3 helpers — used by reports without a curated KPI list to extract
+# headline numbers from their findings text.
+
+_NUMBER_PATTERN = re.compile(
+    r"(?P<num>[\d,]+(?:\.\d+)?)\s*(?P<unit>%|名|人|件|回|年|スタジオ|社|ペア|本|作)?"
+)
+
+
+def auto_kpis_from_findings(
+    findings_html: str, *, max_cards: int = 4
+) -> list[KPICard]:
+    """Heuristic: extract up to ``max_cards`` KPI cards from a findings string.
+
+    Looks for ``<strong>...</strong>`` blocks and pulls the first numeric
+    token + unit out of each. Returns an empty list when nothing matches.
+    The order preserves the document order. Use this only when a report
+    has no curated KPI list — curated KPIs always win.
+    """
+    if not findings_html:
+        return []
+    cards: list[KPICard] = []
+    seen_values: set[str] = set()
+    for m in re.finditer(r"<strong[^>]*>([^<]+)</strong>", findings_html):
+        block = m.group(1)
+        nm = _NUMBER_PATTERN.search(block)
+        if not nm:
+            continue
+        value = nm.group("num") + (nm.group("unit") or "")
+        if value in seen_values:
+            continue
+        seen_values.add(value)
+        # Label = the non-numeric prefix of the strong block, trimmed.
+        label = _NUMBER_PATTERN.sub("", block).strip(":：. 　")
+        if not label:
+            label = "値"
+        cards.append(KPICard(label=label[:32], value=value))
+        if len(cards) >= max_cards:
+            break
+    return cards
+
+
 @dataclass
 class ReportSection:
     """A single section of a v2/v3-compliant report.
@@ -480,11 +521,18 @@ class SectionBuilder:
 
     @staticmethod
     def _render_kpi_strip_block(section: "ReportSection") -> str:
-        """v3: KPI 要点先出しストリップ (industry_overview.html 風)。"""
-        if not section.kpi_cards:
+        """v3: KPI 要点先出しストリップ (industry_overview.html 風).
+
+        Curated ``section.kpi_cards`` 優先。空のときは findings から
+        ``auto_kpis_from_findings`` で抽出して表示する。
+        """
+        cards_data = section.kpi_cards
+        if not cards_data:
+            cards_data = auto_kpis_from_findings(section.findings_html)
+        if not cards_data:
             return ""
         cards: list[str] = []
-        for kpi in section.kpi_cards:
+        for kpi in cards_data:
             hint = (
                 f'<div class="hint" style="font-size:0.72rem;color:#7a7a92;'
                 f'margin-top:0.25rem;">{kpi.hint}</div>'

@@ -325,10 +325,36 @@ class DMLCausalInferenceReport(BaseReportGenerator):
 # report-specific values when curating this module.
 from .._spec import make_default_spec  # noqa: E402
 
+from .._spec import SensitivityAxis  # noqa: E402
+
 SPEC = make_default_spec(
     name='dml_causal_inference',
     audience='technical_appendix',
-    claim='DML因果推定レポート に関する記述的指標 (subtitle: 二重機械学習による処置効果推定（Tier別・感度分析付き）)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        'DML (Double Machine Learning) で推定した ATE が GBM 5-fold cross-fit '
+        '残差 OLS の Wald 95% CI で 0 を跨がない処置 → 結果ペアが存在する'
+    ),
+    identifying_assumption=(
+        '非交絡性 (strong ignorability): 観測共変量で条件付けると処置が'
+        '潜在アウトカムと独立。観測されない交絡 (motivation / 環境) には対処しない。'
+        '推定値は「観測交絡因子を制御した後の関連」として解釈する。'
+    ),
+    null_model=['N3', 'N6'],
+    sources=['feat_causal_estimates', 'credits', 'persons'],
     meta_table='meta_dml_causal_inference',
+    estimator='DML partial linear: GBM nuisance, K=5 cross-fit, OLS residual',
+    ci_estimator='wald',  # asymptotic gaussian
+    sensitivity_grid=[
+        SensitivityAxis(name='K-fold', values=[3, 5, 10]),
+        SensitivityAxis(name='nuisance learner',
+                        values=['GBM', 'random forest', 'lasso']),
+        SensitivityAxis(name='Rosenbaum bound Γ', values=[1.0, 1.5, 2.0]),
+    ],
+    extra_limitations=[
+        'GBM nuisance の hyperparameter (depth / lr) で ATE が ±20% 変動',
+        'Wald CI は漸近正規近似 — 小サンプル (n<200) では bootstrap 推奨',
+        'Rosenbaum bound Γ=1.5 で多くのペアの結論が反転 — robust とは言えない',
+    ],
+    forbidden_framing=['因果効果', '原因', '結果として', 'のせいで'],
+    required_alternatives=2,
 )

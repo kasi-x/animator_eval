@@ -909,7 +909,7 @@ class O3IpDependencyReport(BaseReportGenerator):
         fig.add_hline(
             y=95,
             line_dash="dash",
-            line_color="#f5576c",
+            line_color="#E07532",
             annotation_text="p=0.05 threshold (null 95th)",
         )
 

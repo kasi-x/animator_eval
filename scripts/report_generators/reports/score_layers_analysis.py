@@ -37,29 +37,29 @@ from ..section_builder import ReportSection, SectionBuilder
 from ._base import BaseReportGenerator, append_validation_warnings
 
 _LAYER_COLORS = {
-    "causal": "#f093fb",
-    "structural": "#06D6A0",
-    "collab": "#667eea",
+    "causal": "#E09BC2",
+    "structural": "#3BC494",
+    "collab": "#3593D2",
 }
 
 _COMP_COLORS = {
-    "person_fe": "#f093fb",
-    "birank": "#06D6A0",
-    "patronage": "#667eea",
-    "awcc": "#FFD166",
-    "ndi": "#a0d2db",
-    "studio_fe_exposure": "#f5576c",
-    "iv_score": "#fda085",
+    "person_fe": "#E09BC2",
+    "birank": "#3BC494",
+    "patronage": "#3593D2",
+    "awcc": "#F8EC6A",
+    "ndi": "#7CC8F2",
+    "studio_fe_exposure": "#E07532",
+    "iv_score": "#FFB444",
     "dormancy": "#c0c0d0",
 }
 
 _RADAR_ROLES = [
-    ("animator", "#f093fb"),
-    ("director", "#06D6A0"),
-    ("designer", "#667eea"),
-    ("production", "#FFD166"),
-    ("writing", "#f5576c"),
-    ("technical", "#a0d2db"),
+    ("animator", "#E09BC2"),
+    ("director", "#3BC494"),
+    ("designer", "#3593D2"),
+    ("production", "#F8EC6A"),
+    ("writing", "#E07532"),
+    ("technical", "#7CC8F2"),
 ]
 
 
@@ -397,8 +397,8 @@ class ScoreLayersAnalysisReport(BaseReportGenerator):
     ]
     _COMP_ARRAY_KEYS = ["pfe", "br", "pat", "awcc", "ndi", "st_exp", "iv", "dorm"]
     _COMP_HIST_COLORS = [
-        "#f093fb", "#06D6A0", "#667eea", "#FFD166",
-        "#a0d2db", "#f5576c", "#fda085", "#c0c0d0",
+        "#E09BC2", "#3BC494", "#3593D2", "#F8EC6A",
+        "#7CC8F2", "#E07532", "#FFB444", "#c0c0d0",
     ]
 
     def _findings_component_distributions(
@@ -585,7 +585,7 @@ class ScoreLayersAnalysisReport(BaseReportGenerator):
 
     # ── Section 4 helpers ─────────────────────────────────────────
 
-    _IV_WEIGHT_COLORS = ["#f093fb", "#a0d2db", "#06D6A0", "#FFD166", "#f5576c"]
+    _IV_WEIGHT_COLORS = ["#E09BC2", "#7CC8F2", "#3BC494", "#F8EC6A", "#E07532"]
 
     def _compute_iv_weight_method_label(
         self, weight_method: str, var_expl: float
@@ -944,9 +944,9 @@ class ScoreLayersAnalysisReport(BaseReportGenerator):
         fig.add_annotation(
             x=0.02, y=0.98, xref="paper", yref="paper",
             text=f"r={r_pb:.3f}, n={n:,}",
-            showarrow=False, font=dict(size=11, color="#FFD166"),
+            showarrow=False, font=dict(size=11, color="#F8EC6A"),
             bgcolor="rgba(0,0,0,0.5)",
-            bordercolor="#FFD166", borderwidth=1, borderpad=4,
+            bordercolor="#F8EC6A", borderwidth=1, borderpad=4,
         )
         return fig
 
@@ -967,9 +967,9 @@ class ScoreLayersAnalysisReport(BaseReportGenerator):
         fig.add_annotation(
             x=0.02, y=0.98, xref="paper", yref="paper",
             text=f"r={r_pp:.3f}, n={n:,}",
-            showarrow=False, font=dict(size=11, color="#FFD166"),
+            showarrow=False, font=dict(size=11, color="#F8EC6A"),
             bgcolor="rgba(0,0,0,0.5)",
-            bordercolor="#FFD166", borderwidth=1, borderpad=4,
+            bordercolor="#F8EC6A", borderwidth=1, borderpad=4,
         )
         return fig
 
@@ -1289,29 +1289,31 @@ class ScoreLayersAnalysisReport(BaseReportGenerator):
     def _make_pfe_ci_forest_figure(
         self, ci_persons: list[dict], h: int
     ) -> go.Figure:
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=[c["pfe"] for c in ci_persons],
-            y=[c["name"] for c in ci_persons],
-            mode="markers",
-            marker=dict(size=8, color="#f093fb"),
-            error_x=dict(
-                type="data",
-                array=[c["upper"] - c["pfe"] for c in ci_persons],
-                arrayminus=[c["pfe"] - c["lower"] for c in ci_persons],
-                color="#f093fb", thickness=1.5,
-            ),
-            hovertemplate=(
-                "%{y}<br>theta=%{x:.3f} +/- %{error_x.array:.3f}"
-                "<extra></extra>"
-            ),
-        ))
-        fig.update_layout(
-            xaxis_title="Person FE (θ) ± 95% CI",
-            height=h,
-            yaxis=dict(autorange="reversed"),
+        # v3: CIScatter primitive — null reference (θ=0 = 業界平均) /
+        # sort 入力順 / shrinkage badge 不要 (生 OLS)
+        from src.viz.primitives import (
+            CIPoint, CIScatterSpec, render_ci_scatter,
         )
-        return fig
+
+        ci_points = [
+            CIPoint(
+                label=c["name"],
+                x=c["pfe"],
+                ci_lo=c["lower"],
+                ci_hi=c["upper"],
+            )
+            for c in ci_persons
+        ]
+        spec = CIScatterSpec(
+            points=ci_points,
+            x_label="Person FE (θ_i) ± 95% CI",
+            title="Person FE 上位 — θ_i と 95% CI",
+            reference=0.0,
+            reference_label="業界平均",
+            sort_by="input",
+            height_min=h,
+        )
+        return render_ci_scatter(spec, theme="dark")
 
     # ── Section 11: Person FE CI forest plot ─────────────────────
 
@@ -1390,7 +1392,7 @@ class ScoreLayersAnalysisReport(BaseReportGenerator):
             x=[v for _, v in sorted_gini],
             orientation="h",
             marker_color=[
-                "#06D6A0" if v < 0.4 else "#FFD166" if v < 0.6 else "#f5576c"
+                "#3BC494" if v < 0.4 else "#F8EC6A" if v < 0.6 else "#E07532"
                 for _, v in sorted_gini
             ],
             text=[f"{v:.3f}" for _, v in sorted_gini],
@@ -1483,7 +1485,7 @@ class ScoreLayersAnalysisReport(BaseReportGenerator):
         fig.add_annotation(
             x=0.95, y=0.95, xref="paper", yref="paper",
             text=f"フルR²={r2_full:.4f}",
-            showarrow=False, font=dict(size=13, color="#FFD166"),
+            showarrow=False, font=dict(size=13, color="#F8EC6A"),
             bgcolor="rgba(0,0,0,0.5)",
         )
         fig.update_layout(yaxis_title="Partial R²", height=400)
@@ -1566,7 +1568,7 @@ class ScoreLayersAnalysisReport(BaseReportGenerator):
         wf_names = [p["name"][:15] for p in waterfall_persons]
         wf_impact = [p["impact"] for p in waterfall_persons]
         wf_dormancy = [p["dormancy"] for p in waterfall_persons]
-        bar_colors = ["#f5576c" if imp < 0 else "#06D6A0" for imp in wf_impact]
+        bar_colors = ["#E07532" if imp < 0 else "#3BC494" for imp in wf_impact]
         fig = go.Figure()
         fig.add_trace(go.Bar(
             x=wf_names, y=wf_impact, name="Dormancyの影響",

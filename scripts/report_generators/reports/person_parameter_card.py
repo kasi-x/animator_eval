@@ -140,8 +140,8 @@ class PersonParameterCardReport(BaseReportGenerator):
         norm_by_param = _normalize_across(raw_by_param)
 
         colors = [
-            "#667eea", "#764ba2", "#f093fb",
-            "#f5576c", "#fda085", "#a0d2db",
+            "#3593D2", "#E09BC2", "#E09BC2",
+            "#E07532", "#FFB444", "#7CC8F2",
         ]
 
         fig = go.Figure()
@@ -283,8 +283,8 @@ class PersonParameterCardReport(BaseReportGenerator):
         top_params = [pv[0] for pv in param_variances[:_TOP_VARIANCE_PARAMS]]
 
         colors = [
-            "#667eea", "#764ba2", "#f093fb",
-            "#f5576c", "#fda085",
+            "#3593D2", "#E09BC2", "#E09BC2",
+            "#E07532", "#FFB444",
         ]
 
         fig = go.Figure()
@@ -385,8 +385,8 @@ class PersonParameterCardReport(BaseReportGenerator):
         )
 
         colors = [
-            "#667eea", "#764ba2", "#f093fb", "#f5576c", "#fda085",
-            "#a0d2db", "#4ecdc4", "#45b7d1", "#96ceb4", "#ffeaa7",
+            "#3593D2", "#E09BC2", "#E09BC2", "#E07532", "#FFB444",
+            "#7CC8F2", "#4ecdc4", "#45b7d1", "#96ceb4", "#ffeaa7",
         ]
 
         for i, p in enumerate(param_names):

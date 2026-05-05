@@ -403,10 +403,41 @@ class PolicyMonopsonyReport(BaseReportGenerator):
 # report-specific values when curating this module.
 from .._spec import make_default_spec  # noqa: E402
 
+from .._spec import (  # noqa: E402
+    HoldoutSpec, SensitivityAxis,
+)
+
 SPEC = make_default_spec(
     name='policy_monopsony',
     audience='policy',
-    claim='人材市場流動性・独占度分析 に関する記述的指標 (subtitle: HHI時系列 + 転職率 + Lock-in回帰)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        'スタジオ別クレジットシェアの HHI が年次で 1500 (米国 DOJ 競争的市場上限) '
+        'を超えて推移し、同一スタジオ翌年残留の対数オッズが上昇傾向を示す'
+    ),
+    identifying_assumption=(
+        'HHI はクレジット記録から計算するため、海外下請け / 無名義参加 / '
+        '小規模スタジオの捕捉率低下が集中度の上方バイアスを生む。'
+        'Lock-in OR は person FE と studio 残留の相関を測るが、'
+        '個人選好と機会割当を区別しない。'
+    ),
+    null_model=['N3', 'N6'],  # cohort-matched permutation + uniform random
+    sources=['credits', 'persons', 'anime', 'studios', 'anime_studios'],
     meta_table='meta_policy_monopsony',
+    estimator='HHI (Σ share^2 × 10000) + Logit (FE: person / year)',
+    ci_estimator='bootstrap',
+    n_resamples=1000,
+    holdout=HoldoutSpec(
+        method='time-split',
+        holdout_size='last 3 years (2022-2024)',
+        metric='AUC for stay-prediction',
+        naive_baseline='person-level marginal stay rate',
+    ),
+    sensitivity_grid=[
+        SensitivityAxis(name='HHI denominator', values=['全クレジット', 'メイン役職のみ']),
+        SensitivityAxis(name='studio size threshold', values=['n>=5', 'n>=20']),
+    ],
+    extra_limitations=[
+        'HHI denominator のクレジット粒度差で時代間比較に上方バイアス',
+        'Lock-in 推定は self-selection と機会割当を区別しない',
+    ],
 )

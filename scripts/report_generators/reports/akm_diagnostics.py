@@ -131,7 +131,7 @@ class AKMDiagnosticsReport(BaseReportGenerator):
         fig.add_trace(go.Scatter(
             x=fe_vals[:3000], y=se_vals[:3000],
             mode="markers",
-            marker=dict(color="#667eea", size=3, opacity=0.5),
+            marker=dict(color="#3593D2", size=3, opacity=0.5),
             hovertemplate="FE=%{x:.3f}, SE=%{y:.4f}<extra></extra>",
         ))
         fig.update_layout(
@@ -202,7 +202,7 @@ class AKMDiagnosticsReport(BaseReportGenerator):
         )
 
         fig = go.Figure(go.Histogram(
-            x=fe_vals, nbinsx=40, marker_color="#a0d2db",
+            x=fe_vals, nbinsx=40, marker_color="#7CC8F2",
             hovertemplate="studio_fe=%{x:.3f}: %{y:,}<extra></extra>",
         ))
         fig.update_layout(title="スタジオFE分布", xaxis_title="スタジオFE（平均）", yaxis_title="スタジオ数")
@@ -296,7 +296,7 @@ class AKMDiagnosticsReport(BaseReportGenerator):
         )
 
         fig = go.Figure(go.Histogram(
-            x=vals, nbinsx=50, marker_color="#06D6A0",
+            x=vals, nbinsx=50, marker_color="#3BC494",
             hovertemplate="残差=%{x:.3f}: %{y:,}<extra></extra>",
         ))
         fig.update_layout(title="AKM残差の近似分布", xaxis_title="残差", yaxis_title="人数")
@@ -348,10 +348,37 @@ class AKMDiagnosticsReport(BaseReportGenerator):
 # report-specific values when curating this module.
 from .._spec import make_default_spec  # noqa: E402
 
+from .._spec import SensitivityAxis  # noqa: E402
+
 SPEC = make_default_spec(
     name='akm_diagnostics',
     audience='technical_appendix',
-    claim='AKM固定効果診断 に関する記述的指標 (subtitle: 連結集合・個人FE SE分布・スタジオFE分布・残差分析)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        'AKM (個人 FE × スタジオ FE) 推定の連結集合内で個人 FE 推定値の '
+        '95% CI 幅が中央値 < 0.50 を満たすが、サンプル小個体 (n<10) で'
+        ' CI 幅が広く可比較性が低下する'
+    ),
+    identifying_assumption=(
+        'AKM の identification は連結集合内の労働移動 (mobility) に依存。'
+        '同一スタジオに常駐する個人は studio FE と分離不可 — 連結集合外は推定対象外。'
+        'limited mobility bias (Andrews et al. 2008) を report で明示。'
+    ),
+    null_model=['N1', 'N2'],  # configuration model + degree-preserving rewiring
+    sources=['credits', 'persons', 'anime', 'studios'],
     meta_table='meta_akm_diagnostics',
+    estimator='OLS with two-way FE (person + studio); cluster-robust SE',
+    ci_estimator='analytical_se',
+    sensitivity_grid=[
+        SensitivityAxis(name='連結集合定義',
+                        values=['default', 'extended', 'leave-one-out']),
+        SensitivityAxis(name='cluster level',
+                        values=['person', 'studio', 'pair']),
+        SensitivityAxis(name='outcome scale',
+                        values=['log production_scale', 'rank-normalized']),
+    ],
+    extra_limitations=[
+        'limited mobility bias: 移動の少ない個人 / スタジオで推定不安定',
+        '連結集合外 (~5-10% の個人) は推定対象外 — サンプル選択バイアス',
+        'two-way FE は線形モデル仮定、非線形相互作用は捕捉外',
+    ],
 )

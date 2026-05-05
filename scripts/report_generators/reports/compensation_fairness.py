@@ -139,7 +139,7 @@ class CompensationFairnessReport(BaseReportGenerator):
 
         # Overall histogram
         fig = go.Figure(go.Histogram(
-            x=all_vals, nbinsx=50, marker_color="#667eea",
+            x=all_vals, nbinsx=50, marker_color="#3593D2",
             hovertemplate="IV=%{x:.3f}: %{y:,}<extra></extra>",
         ))
         fig.update_layout(title="IVスコア分布", xaxis_title="IVスコア", yaxis_title="人数")
@@ -215,12 +215,12 @@ class CompensationFairnessReport(BaseReportGenerator):
         fig = go.Figure()
         fig.add_trace(go.Scatter(
             x=periods, y=ginis, name="Gini係数",
-            line=dict(color="#f5576c", width=2),
+            line=dict(color="#E07532", width=2),
             hovertemplate="%{x}〜%{x}+4: Gini=%{y:.4f}<extra></extra>",
         ))
         fig.add_trace(go.Scatter(
             x=periods, y=stds, name="標準偏差",
-            line=dict(color="#a0d2db", width=1.5, dash="dot"),
+            line=dict(color="#7CC8F2", width=1.5, dash="dot"),
             yaxis="y2",
             hovertemplate="%{x}〜%{x}+4: SD=%{y:.3f}<extra></extra>",
         ))
@@ -292,7 +292,7 @@ class CompensationFairnessReport(BaseReportGenerator):
             x=[r[0] for r in gini_results],
             y=[r[2] for r in gini_results],
             mode="lines+markers",
-            line=dict(color="#667eea"),
+            line=dict(color="#3593D2"),
             marker=dict(size=8),
             hovertemplate="下位%{x}%除外: Gini=%{y:.4f}<extra></extra>",
         ))
@@ -399,7 +399,7 @@ class CompensationFairnessReport(BaseReportGenerator):
         tier_html += "</ul>"
 
         fig = go.Figure(go.Histogram(
-            x=all_pp, nbinsx=50, marker_color="#06D6A0",
+            x=all_pp, nbinsx=50, marker_color="#3BC494",
             hovertemplate="pct=%{x:.1f}: %{y:,}<extra></extra>",
         ))
         fig.update_layout(title="個人固定効果パーセンタイル分布", xaxis_title="個人固定効果パーセンタイル", yaxis_title="人数")

@@ -116,7 +116,7 @@ class KnowledgeNetworkReport(BaseReportGenerator):
 
         # Figures
         fig = go.Figure(go.Histogram(
-            x=awcc_vals, nbinsx=40, marker_color="#06D6A0",
+            x=awcc_vals, nbinsx=40, marker_color="#3BC494",
             hovertemplate="AWCC=%{x:.3f}: %{y:,}<extra></extra>",
         ))
         fig.update_layout(title="AWCC 分布", xaxis_title="AWCC", yaxis_title="人数")
@@ -293,7 +293,7 @@ class KnowledgeNetworkReport(BaseReportGenerator):
                 f"{format_ci((ds['ci_lower'], ds['ci_upper']))}。</p>"
             )
             fig = go.Figure(go.Histogram(
-                x=n_mentees, nbinsx=20, marker_color="#fda085",
+                x=n_mentees, nbinsx=20, marker_color="#FFB444",
                 hovertemplate="メンティ%{x}人: メンター%{y:,}人<extra></extra>",
             ))
             fig.update_layout(
@@ -372,7 +372,7 @@ class KnowledgeNetworkReport(BaseReportGenerator):
         findings += "</ul>"
 
         fig = go.Figure()
-        stage_colors = ["#8a94a0", "#a0a0c0", "#a0d2db", "#06D6A0", "#FFD166", "#f5576c", "#F72585"]
+        stage_colors = ["#8a94a0", "#a0a0c0", "#7CC8F2", "#3BC494", "#F8EC6A", "#E07532", "#E09BC2"]
         for i, s in enumerate(sorted(stage_deg)):
             fig.add_trace(go.Box(
                 y=stage_deg[s][:500] if len(stage_deg[s]) > 500 else stage_deg[s],

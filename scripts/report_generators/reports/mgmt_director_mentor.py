@@ -246,7 +246,7 @@ class MgmtDirectorMentorReport(BaseReportGenerator):
                 x=null_floats,
                 nbinsx=40,
                 name="ヌル分布（置換）",
-                marker_color="#a0d2db",
+                marker_color="#7CC8F2",
                 opacity=0.7,
                 hovertemplate="M=%{x:.3f}: %{y:,}<extra></extra>",
             )
@@ -254,14 +254,14 @@ class MgmtDirectorMentorReport(BaseReportGenerator):
         for i, obs in enumerate(top5_obs):
             fig.add_vline(
                 x=obs,
-                line_color="#f5a623",
+                line_color="#FFB444",
                 line_dash="dot",
                 annotation_text=f"観測値#{i+1} ({obs:.3f})",
                 annotation_font_size=10,
             )
         fig.add_vline(
             x=null_p95,
-            line_color="#f5576c",
+            line_color="#E07532",
             line_dash="dash",
             annotation_text=f"95th({null_p95:.3f})",
         )
@@ -376,8 +376,8 @@ class MgmtDirectorMentorReport(BaseReportGenerator):
         v_max = max(all_vals)
 
         color_scale = [
-            "#667eea", "#f093fb", "#f5576c", "#fda085",
-            "#06D6A0", "#FFD166", "#a0d2db", "#4ecdc4",
+            "#3593D2", "#E09BC2", "#E07532", "#FFB444",
+            "#3BC494", "#F8EC6A", "#7CC8F2", "#4ecdc4",
             "#ff6b6b", "#c7f464",
         ]
         colors = [color_scale[g % len(color_scale)] for g in group_all]
@@ -456,10 +456,43 @@ class MgmtDirectorMentorReport(BaseReportGenerator):
 # report-specific values when curating this module.
 from .._spec import make_default_spec  # noqa: E402
 
+from .._spec import (  # noqa: E402
+    ShrinkageSpec, SensitivityAxis,
+)
+
 SPEC = make_default_spec(
     name='mgmt_director_mentor',
     audience='hr',
-    claim='監督共起後 5 年メンティー M̂ プロファイル に関する記述的指標 (subtitle: M̂_d EB縮小推定 + 置換ヌルモデル)',
-    sources=["credits", "persons", "anime"],
-    meta_table='meta_mgmt_director_mentor',
+    claim=(
+        '監督ノード A の下流 5 年メンティー集団の theta_i 平均変化量 M̂_d が '
+        '全監督下デビュー者の null 分布 (置換 1000 iter) を超える監督が存在する'
+    ),
+    identifying_assumption=(
+        '監督下デビュー = 監督による機会割り当て を仮定しない。'
+        '共起は機会割当の必要条件ではあるが十分条件ではない。'
+        'メンティーの後続成長は監督効果と self-selection 効果の混合。'
+    ),
+    null_model=['N4', 'N5'],  # role-matched bootstrap + era-window resample
+    sources=['credits', 'persons', 'anime'],
+    meta_table='meta_hr_mentor_card',
+    estimator='M̂_d = mean(Δθ for mentees within 5y of co-credit)',
+    ci_estimator='bootstrap',
+    n_resamples=1000,
+    shrinkage=ShrinkageSpec(
+        method='empirical_bayes_normal',
+        n_threshold=30,
+        prior='global mean of M̂_d distribution',
+    ),
+    sensitivity_grid=[
+        SensitivityAxis(name='デビュー定義', values=['初クレジット', '初メイン役職']),
+        SensitivityAxis(name='追跡窓', values=['5y', '10y']),
+        SensitivityAxis(name='M ≥ 閾値', values=[3, 5, 10]),
+    ],
+    extra_limitations=[
+        '「監督下デビュー」は初クレジット作品の監督との共起 — 別経路の指導関係は捕捉外',
+        '監督個人の選好と機会割当の混在 — 因果効果としての解釈不可',
+        'EB 縮小強度は global prior 強度に依存、上位 20 順位が ~25-40% 入れ替わる',
+    ],
+    forbidden_framing=['育成力', '弟子の質', '師匠の格', '優秀な指導者'],
+    required_alternatives=2,
 )

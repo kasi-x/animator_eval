@@ -28,15 +28,15 @@ from ..sql_fragments import person_display_name_sql
 from ._base import BaseReportGenerator, append_validation_warnings
 
 _TRACK_COLORS = {
-    "rising": "#06D6A0",
-    "stable": "#667eea",
-    "declining": "#f5576c",
-    "late_bloomer": "#FFD166",
-    "one_shot": "#a0d2db",
-    "veteran": "#f093fb",
+    "rising": "#3BC494",
+    "stable": "#3593D2",
+    "declining": "#E07532",
+    "late_bloomer": "#F8EC6A",
+    "one_shot": "#7CC8F2",
+    "veteran": "#E09BC2",
 }
-_CLUSTER_COLORS = ["#f093fb", "#06D6A0", "#fda085", "#a0d2db", "#FFD166",
-                   "#667eea", "#f5576c", "#b8c0ff"]
+_CLUSTER_COLORS = ["#E09BC2", "#3BC494", "#FFB444", "#7CC8F2", "#F8EC6A",
+                   "#3593D2", "#E07532", "#b8c0ff"]
 
 
 class BridgeAnalysisReport(BaseReportGenerator):
@@ -116,7 +116,7 @@ class BridgeAnalysisReport(BaseReportGenerator):
         fig.add_trace(go.Violin(
             y=vals, name="媒介中心性",
             box_visible=True, meanline_visible=True,
-            line_color="#f093fb", fillcolor="rgba(240,147,251,0.3)",
+            line_color="#E09BC2", fillcolor="rgba(240,147,251,0.3)",
             points="outliers",
         ))
         fig.update_layout(
@@ -127,7 +127,7 @@ class BridgeAnalysisReport(BaseReportGenerator):
             x=0, y=summ["median"],
             text=f"median={summ['median']:.6f}",
             showarrow=True, arrowhead=2, ax=60, ay=0,
-            font=dict(color="#f093fb", size=11),
+            font=dict(color="#E09BC2", size=11),
         )
         return fig
 
@@ -275,7 +275,7 @@ class BridgeAnalysisReport(BaseReportGenerator):
                     y=[r["betweenness_centrality"] for r in sb_display],
                     mode="markers",
                     marker=dict(size=10, color="rgba(245,87,108,0.0)",
-                                line=dict(width=2, color="#f5576c")),
+                                line=dict(width=2, color="#E07532")),
                     name="構造的ブリッジ",
                     hoverinfo="skip",
                 ))
@@ -408,7 +408,7 @@ class BridgeAnalysisReport(BaseReportGenerator):
         fig = go.Figure(go.Bar(
             x=[str(nc) for nc in sorted(cluster_dist)],
             y=[cluster_dist[nc] for nc in sorted(cluster_dist)],
-            marker_color="#f093fb",
+            marker_color="#E09BC2",
             hovertemplate="%{x}クラスタ: %{y:,}名<extra></extra>",
         ))
         fig.update_layout(
@@ -820,7 +820,7 @@ class BridgeAnalysisReport(BaseReportGenerator):
             y=[r["avg_collaborators"] for r in rows],
             name="平均協業者数",
             mode="lines+markers",
-            line=dict(color="#FFD166", dash="dash"),
+            line=dict(color="#F8EC6A", dash="dash"),
             marker=dict(size=8),
             hovertemplate="%{x}: %{y:.0f}名<extra></extra>",
         ), secondary_y=True)

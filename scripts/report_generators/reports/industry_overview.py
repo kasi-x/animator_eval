@@ -55,43 +55,43 @@ FLOW_START_YEAR = 1970
 _EXP_HIGH_PCTILE = 70.0
 
 STAGE_GROUPS_DEF = [
-    ("初級ランク", 0, 2, "#a0d2db"),
-    ("中級ランク", 3, 4, "#06D6A0"),
-    ("上級ランク", 5, 99, "#f093fb"),
+    ("初級ランク", 0, 2, "#7CC8F2"),
+    ("中級ランク", 3, 4, "#3BC494"),
+    ("上級ランク", 5, 99, "#E09BC2"),
 ]
 
 EXP_GROUPS_DEF = [
-    ("1年目", 0, 0, "#FF6B6B"),
-    ("2年目", 1, 1, "#FFA94D"),
-    ("3年目", 2, 2, "#FFD43B"),
-    ("若手 (4~9年)", 3, 9, "#69DB7C"),
-    ("中堅 (10~19年)", 10, 19, "#4DABF7"),
-    ("ベテラン (20年+)", 20, 999, "#DA77F2"),
+    ("1年目", 0, 0, "#E07532"),
+    ("2年目", 1, 1, "#FFB444"),
+    ("3年目", 2, 2, "#F8EC6A"),
+    ("若手 (4~9年)", 3, 9, "#3BC494"),
+    ("中堅 (10~19年)", 10, 19, "#3593D2"),
+    ("ベテラン (20年+)", 20, 999, "#E09BC2"),
 ]
 
 ROLE_TYPE_DEF: dict[str, tuple[str, str]] = {
-    "animator": ("動画/原画", "#a0d2db"),
-    "director": ("演出/監督", "#f093fb"),
-    "designer": ("デザイナー", "#FFD166"),
-    "production": ("制作", "#fda085"),
-    "writing": ("脚本/構成", "#06D6A0"),
-    "technical": ("技術/CG", "#667eea"),
+    "animator": ("動画/原画", "#7CC8F2"),
+    "director": ("演出/監督", "#E09BC2"),
+    "designer": ("デザイナー", "#F8EC6A"),
+    "production": ("制作", "#FFB444"),
+    "writing": ("脚本/構成", "#3BC494"),
+    "technical": ("技術/CG", "#3593D2"),
     "other": ("その他", "#606070"),
 }
 
 _EXP_TIER_DEFS = [
-    ("高期待・高実績群", "#F72585"),
-    ("高期待・低実績群", "#FFD166"),
-    ("低期待・高実績群", "#06D6A0"),
+    ("高期待・高実績群", "#E09BC2"),
+    ("高期待・低実績群", "#F8EC6A"),
+    ("低期待・高実績群", "#3BC494"),
     ("低期待・低実績群", "#a0a0c0"),
 ]
 
 LOSS_TYPES = ["エース離脱", "上級ランク引退", "中級ランク離脱", "初級ランク早期離脱"]
 LOSS_TYPE_COLORS = {
-    "エース離脱": "#FFD166",
-    "上級ランク引退": "#f093fb",
-    "中級ランク離脱": "#06D6A0",
-    "初級ランク早期離脱": "#a0d2db",
+    "エース離脱": "#F8EC6A",
+    "上級ランク引退": "#E09BC2",
+    "中級ランク離脱": "#3BC494",
+    "初級ランク早期離脱": "#7CC8F2",
 }
 
 _TIER_NAMES = {
@@ -473,7 +473,7 @@ class IndustryOverviewReport(BaseReportGenerator):
             fig = go.Figure()
             fig.add_trace(go.Scatter(
                 x=years, y=n_anime_by_year,
-                name="年間作品数", line=dict(color="#f093fb", width=2),
+                name="年間作品数", line=dict(color="#E09BC2", width=2),
                 hovertemplate="%{x}: %{y:,} works<extra></extra>",
             ))
             fig.add_trace(go.Bar(
@@ -634,12 +634,12 @@ class IndustryOverviewReport(BaseReportGenerator):
         ))
         fig_combined.add_trace(go.Scatter(
             x=flow_years, y=totals_f, name="女性",
-            mode="lines", line=dict(color="#f5576c", width=2),
+            mode="lines", line=dict(color="#E07532", width=2),
             hovertemplate="女性: %{y:,}<extra></extra>",
         ))
         fig_combined.add_trace(go.Scatter(
             x=flow_years, y=totals_m, name="男性",
-            mode="lines", line=dict(color="#667eea", width=2),
+            mode="lines", line=dict(color="#3593D2", width=2),
             hovertemplate="男性: %{y:,}<extra></extra>",
         ))
         fig_combined.update_layout(
@@ -681,13 +681,13 @@ class IndustryOverviewReport(BaseReportGenerator):
         fig_pct.add_trace(go.Scatter(
             x=flow_years, y=f_ratio, name="女性比率",
             mode="lines", yaxis="y2",
-            line=dict(color="#f5576c", width=2, dash="dash"),
+            line=dict(color="#E07532", width=2, dash="dash"),
             hovertemplate="女性比率: %{y:.1f}%<extra></extra>",
         ))
         fig_pct.add_trace(go.Scatter(
             x=flow_years, y=m_ratio, name="男性比率",
             mode="lines", yaxis="y2",
-            line=dict(color="#667eea", width=2, dash="dash"),
+            line=dict(color="#3593D2", width=2, dash="dash"),
             hovertemplate="男性比率: %{y:.1f}%<extra></extra>",
         ))
         fig_pct.update_layout(
@@ -828,7 +828,7 @@ class IndustryOverviewReport(BaseReportGenerator):
                 y=[semi_total_by_yr[yr] for yr in semi_exit_xs],
                 name="準退職（3–4年ギャップ）",
                 mode="lines+markers",
-                line=dict(color="#FFD166", width=2.5, dash="dash"),
+                line=dict(color="#F8EC6A", width=2.5, dash="dash"),
                 marker=dict(size=7, symbol="diamond"),
                 hovertemplate="Semi-exit %{x}: %{y:,} (may return)<extra></extra>",
             ))
@@ -880,7 +880,7 @@ class IndustryOverviewReport(BaseReportGenerator):
                 x=valid_years,
                 y=[entry_by_gender[g_label].get(yr, 0) for yr in valid_years],
                 name=f"参入（{g_name}）", mode="lines",
-                line=dict(color="#06D6A0", width=2),
+                line=dict(color="#3BC494", width=2),
                 hovertemplate="Entry %{x}: %{y:,}<extra></extra>",
             ))
             fig_g.add_trace(go.Scatter(
@@ -1060,10 +1060,10 @@ class IndustryOverviewReport(BaseReportGenerator):
             "movie_or_special": "Movie/special (<=1ep)",
         }
         cour_colors = {
-            "single_cour": "#a0d2db",
-            "multi_cour": "#06D6A0",
-            "long_cour": "#f093fb",
-            "movie_or_special": "#fda085",
+            "single_cour": "#7CC8F2",
+            "multi_cour": "#3BC494",
+            "long_cour": "#E09BC2",
+            "movie_or_special": "#FFB444",
         }
 
         decades = [1990, 2000, 2010, 2020]
@@ -1505,9 +1505,9 @@ class IndustryOverviewReport(BaseReportGenerator):
         fig_f1 = go.Figure()
         for vals, name, color, fill in [
             (lost_val, "Lost value (exits)", "#EF476F", "rgba(239,71,111,0.25)"),
-            (growth_val, "Growth value (rising trend)", "#06D6A0",
+            (growth_val, "Growth value (rising trend)", "#3BC494",
              "rgba(6,214,160,0.25)"),
-            (entry_val, "Entry value (new entrants)", "#a0d2db",
+            (entry_val, "Entry value (new entrants)", "#7CC8F2",
              "rgba(160,210,219,0.25)"),
         ]:
             fig_f1.add_trace(go.Scatter(
@@ -1650,8 +1650,8 @@ class IndustryOverviewReport(BaseReportGenerator):
             return None
 
         palette = [
-            "#f093fb", "#a0d2db", "#06D6A0", "#FFD166",
-            "#fda085", "#667eea", "#EF476F", "#90BE6D",
+            "#E09BC2", "#7CC8F2", "#3BC494", "#F8EC6A",
+            "#FFB444", "#3593D2", "#EF476F", "#90BE6D",
         ]
         studio_yrs = sorted({
             yr for s in top_studios for yr in studio_person_years.get(s, {})
@@ -1723,7 +1723,7 @@ class IndustryOverviewReport(BaseReportGenerator):
         if not top_countries:
             return None
 
-        palette = ["#f093fb", "#a0d2db", "#06D6A0", "#FFD166", "#fda085"]
+        palette = ["#E09BC2", "#7CC8F2", "#3BC494", "#F8EC6A", "#FFB444"]
         ctry_yrs = sorted({
             yr for c in top_countries for yr in country_persons.get(c, {})
             if FLOW_START_YEAR <= yr <= RELIABLE_MAX_YEAR
@@ -1862,7 +1862,7 @@ class IndustryOverviewReport(BaseReportGenerator):
                 })
 
         stage_labels_i = ["原画以下（<=3）", "作画監督（4）", "監督以上（>=5）"]
-        stage_colors_i = ["#a0d2db", "#06D6A0", "#f093fb"]
+        stage_colors_i = ["#7CC8F2", "#3BC494", "#E09BC2"]
 
         fig_i = go.Figure()
         for sl, sc in zip(stage_labels_i, stage_colors_i):
@@ -1896,7 +1896,7 @@ class IndustryOverviewReport(BaseReportGenerator):
             vals = [gender_returnees[g_label].get(c, 0) for c in cats]
             fig_ig.add_trace(go.Bar(
                 x=cats, y=vals,
-                name=g_name, marker_color="#f093fb" if g_label == "F" else "#a0d2db",
+                name=g_name, marker_color="#E09BC2" if g_label == "F" else "#7CC8F2",
                 hovertemplate=f"{g_name}: %{{y:,}}<extra></extra>",
             ))
             fig_ig.update_layout(
@@ -2055,7 +2055,7 @@ class IndustryOverviewReport(BaseReportGenerator):
                     if fy <= yr <= ly:
                         stock_cl[k][yr] += 1
 
-        cl_pal = ["#a0d2db", "#06D6A0", "#FFD166", "#f093fb", "#EF476F"]
+        cl_pal = ["#7CC8F2", "#3BC494", "#F8EC6A", "#E09BC2", "#EF476F"]
 
         fig_j = make_subplots(
             rows=2, cols=1,
@@ -2162,8 +2162,8 @@ class IndustryOverviewReport(BaseReportGenerator):
 
         dec_formats = ["TV", "MOVIE", "OVA", "ONA", "TV_SHORT"]
         fmt_colors = {
-            "TV": "#f093fb", "MOVIE": "#fda085",
-            "OVA": "#a0d2db", "ONA": "#06D6A0", "TV_SHORT": "#FFD166",
+            "TV": "#E09BC2", "MOVIE": "#FFB444",
+            "OVA": "#7CC8F2", "ONA": "#3BC494", "TV_SHORT": "#F8EC6A",
         }
         anime_by_fmt: dict[str, dict[int, int]] = {f: {} for f in dec_formats}
         person_by_fmt: dict[str, dict[int, int]] = {f: {} for f in dec_formats}
@@ -2272,10 +2272,10 @@ class IndustryOverviewReport(BaseReportGenerator):
             "movie_or_special": "映画/特番",
         }
         cour_colors = {
-            "single_cour": "#a0d2db",
-            "multi_cour": "#06D6A0",
-            "long_cour": "#f093fb",
-            "movie_or_special": "#fda085",
+            "single_cour": "#7CC8F2",
+            "multi_cour": "#3BC494",
+            "long_cour": "#E09BC2",
+            "movie_or_special": "#FFB444",
         }
 
         counts: dict[str, dict[str, int]] = {
@@ -2344,10 +2344,10 @@ class IndustryOverviewReport(BaseReportGenerator):
             "inactive": "非稼働",
         }
         trend_colors = {
-            "rising": "#06D6A0",
-            "stable": "#a0d2db",
-            "new": "#667eea",
-            "declining": "#fda085",
+            "rising": "#3BC494",
+            "stable": "#7CC8F2",
+            "new": "#3593D2",
+            "declining": "#FFB444",
             "inactive": "#606070",
         }
 

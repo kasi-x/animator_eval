@@ -39,9 +39,9 @@ from ._base import BaseReportGenerator
 # Constants
 # ---------------------------------------------------------------------------
 
-_GRP_COLORS = ["#f093fb", "#f5576c", "#fda085", "#a0d2db", "#06D6A0"]
+_GRP_COLORS = ["#E09BC2", "#E07532", "#FFB444", "#7CC8F2", "#3BC494"]
 _SIZE_LABELS = {"3": "3人組", "4": "4人組", "5": "5人組"}
-_SIZE_COLORS = {"3": "#f093fb", "4": "#f5576c", "5": "#fda085"}
+_SIZE_COLORS = {"3": "#E09BC2", "4": "#E07532", "5": "#FFB444"}
 
 _ERA_WEIGHTS: dict[int, float] = {
     1960: 3.0,
@@ -55,14 +55,14 @@ _ERA_WEIGHTS: dict[int, float] = {
 
 _REASON_COLORS: dict[str, str] = {
     "レガシー長期確立チーム": "#a3e635",
-    "長期確立チーム": "#06D6A0",
-    "集中型シリーズ": "#f093fb",
-    "新興高品質チーム": "#FFD166",
-    "現代新興チーム": "#fda085",
-    "レガシーチーム": "#667eea",
-    "シリーズ継続型": "#f5576c",
+    "長期確立チーム": "#3BC494",
+    "集中型シリーズ": "#E09BC2",
+    "新興高品質チーム": "#F8EC6A",
+    "現代新興チーム": "#FFB444",
+    "レガシーチーム": "#3593D2",
+    "シリーズ継続型": "#E07532",
     "高評価チーム": "#EF476F",
-    "標準コラボ": "#a0d2db",
+    "標準コラボ": "#7CC8F2",
 }
 
 _ROLE_LABELS_JA: dict[str, str] = {
@@ -104,13 +104,13 @@ _PERIODS = [
 ]
 
 _ROLE_PALETTE = [
-    "#f093fb",
-    "#f5576c",
-    "#fda085",
-    "#a0d2db",
-    "#06D6A0",
-    "#FFD166",
-    "#667eea",
+    "#E09BC2",
+    "#E07532",
+    "#FFB444",
+    "#7CC8F2",
+    "#3BC494",
+    "#F8EC6A",
+    "#3593D2",
     "#EF476F",
 ]
 
@@ -818,7 +818,7 @@ class CooccurrenceGroupsReport(BaseReportGenerator):
                 f"[v2: {'; '.join(violations)}]</p>"
             )
 
-        colors = [_SIZE_COLORS.get(k, "#a0d2db") for k in size_keys]
+        colors = [_SIZE_COLORS.get(k, "#7CC8F2") for k in size_keys]
         fig = go.Figure(
             go.Bar(
                 x=[f"{k}人組" for k in size_keys],
@@ -890,7 +890,7 @@ class CooccurrenceGroupsReport(BaseReportGenerator):
                 _violin_raincloud(
                     [float(v) for v in violin_data[sz]],
                     f"{sz}人組",
-                    _SIZE_COLORS.get(sz, "#a0d2db"),
+                    _SIZE_COLORS.get(sz, "#7CC8F2"),
                 )
             )
         fig.update_layout(
@@ -1053,7 +1053,7 @@ class CooccurrenceGroupsReport(BaseReportGenerator):
                 x=sorted_years,
                 y=cumulative,
                 name="累積グループ数",
-                line=dict(color="#06D6A0", width=2),
+                line=dict(color="#3BC494", width=2),
                 mode="lines",
                 hovertemplate="%{x} cumulative: %{y}<extra></extra>",
             ),
@@ -1132,7 +1132,7 @@ class CooccurrenceGroupsReport(BaseReportGenerator):
                 _violin_raincloud(
                     [float(v) for v in active_sw],
                     "現役",
-                    "#06D6A0",
+                    "#3BC494",
                 )
             )
         if inactive_sw:
@@ -1298,7 +1298,7 @@ class CooccurrenceGroupsReport(BaseReportGenerator):
                 f"[v2: {'; '.join(violations)}]</p>"
             )
 
-        colors = ["#06D6A0" if g["is_active"] else "#EF476F" for g in scatter_groups]
+        colors = ["#3BC494" if g["is_active"] else "#EF476F" for g in scatter_groups]
         sizes = [
             max(4, min(20, g.get("shared_works", 3) * 1.5)) for g in scatter_groups
         ]
@@ -1541,7 +1541,7 @@ class CooccurrenceGroupsReport(BaseReportGenerator):
                 ],
                 y=[g.get("collab_power", 0) for g in top_power],
                 marker_color=[
-                    "#06D6A0" if g.get("is_active") else "#EF476F" for g in top_power
+                    "#3BC494" if g.get("is_active") else "#EF476F" for g in top_power
                 ],
                 text=[f"{g.get('shared_works', 0)}作品" for g in top_power],
                 hovertemplate=(
@@ -1719,7 +1719,7 @@ class CooccurrenceGroupsReport(BaseReportGenerator):
                     )
                     for r in reasons_sorted
                 ],
-                marker_color="#06D6A0",
+                marker_color="#3BC494",
             )
         )
         fig_stacked.add_trace(
