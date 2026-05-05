@@ -269,31 +269,67 @@ def build_cross_source_anime_clusters(
     # Collect groups
     raw_groups = uf.groups()
 
-    # Build canonical_id for each group and return dict
+    # Build canonical_id for each group and return dict.
+    # Sub-cluster split by `format` (TV/MOVIE/OVA/SPECIAL/PV/ONA/MUSIC):
+    # 同 title+year で format 不一致 → 別作品 (本編 vs 特典 PV 等) として分離。
+    # LLM 検証で 26 cluster が format split 候補として検出された (anime.format split=26)。
+    # `format` 空 (None/'') の row は any-format サブクラスタに同居 (情報不足の保守的扱い)。
     result: dict[str, list[dict[str, Any]]] = {}
     row_by_id = {r["id"]: r for r in conformed_rows}
+    format_split_count = 0
 
     for root, members in raw_groups.items():
         member_rows = [row_by_id[m] for m in members if m in row_by_id]
         if not member_rows:
             continue
 
-        # Canonical_id: if group has exactly one row and it's untitled, use nontitle key
-        # Otherwise derive from title+year of a representative row
-        rep = member_rows[0]
-        title_ja = (rep.get("title_ja") or "").strip()
-        if not title_ja:
-            cluster_key = f"__nontitle__|{root}"
-        else:
-            cluster_key = f"{_norm(title_ja)}|{rep.get('year') or ''}"
+        # format 別 subcluster
+        by_format: dict[str, list[dict[str, Any]]] = {}
+        unknown_format: list[dict[str, Any]] = []
+        for r in member_rows:
+            f = (r.get("format") or "").strip().upper()
+            if not f:
+                unknown_format.append(r)
+            else:
+                by_format.setdefault(f, []).append(r)
 
-        digest = hashlib.sha256(cluster_key.encode()).hexdigest()[:12]
-        canonical_id = f"resolved:anime:{digest}"
-        result[canonical_id] = member_rows
+        if not by_format:
+            # 全 format 不明 → 1 cluster (元挙動)
+            subclusters = [member_rows]
+        elif len(by_format) == 1:
+            # 1 format のみ → unknown_format をそこに合流
+            (only_fmt, fmt_rows), = by_format.items()
+            subclusters = [fmt_rows + unknown_format]
+        else:
+            # 複数 format 検出 → format ごとに subcluster、unknown_format は最大の subcluster に合流
+            format_split_count += 1
+            largest_fmt = max(by_format, key=lambda k: len(by_format[k]))
+            by_format[largest_fmt] += unknown_format
+            subclusters = list(by_format.values())
+
+        for sc_idx, sc_rows in enumerate(subclusters):
+            rep = sc_rows[0]
+            title_ja = (rep.get("title_ja") or "").strip()
+            fmt_suffix = (rep.get("format") or "").strip().upper() or "UNK"
+            if not title_ja:
+                cluster_key = f"__nontitle__|{root}|{fmt_suffix}"
+            else:
+                cluster_key = f"{_norm(title_ja)}|{rep.get('year') or ''}|{fmt_suffix}"
+            # subcluster 数 ≥2 のときのみ key に format を含める (canonical_id 安定性のため)
+            if len(subclusters) == 1:
+                cluster_key = (
+                    f"__nontitle__|{root}" if not title_ja
+                    else f"{_norm(title_ja)}|{rep.get('year') or ''}"
+                )
+
+            digest = hashlib.sha256(cluster_key.encode()).hexdigest()[:12]
+            canonical_id = f"resolved:anime:{digest}"
+            result[canonical_id] = sc_rows
 
     logger.info(
         "cross_source_anime_clusters_built",
         total_conformed=len(conformed_rows),
         total_clusters=len(result),
+        format_splits=format_split_count,
     )
     return result

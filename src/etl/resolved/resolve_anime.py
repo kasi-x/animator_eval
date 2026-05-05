@@ -120,10 +120,14 @@ def _load_conformed_anime(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any
     }
     mal_id_expr = "mal_id_int" if "mal_id_int" in table_cols else "NULL AS mal_id_int"
 
+    # madb:C* (Contents/個別商品: DVD巻号/CD/声優名/出版社名等) は anime ではない。
+    # 516K 件混在で title_ja 汚染源 (LLM 検証で 22 件の wrong_value 全部この系)。
+    # madb:M* (Media/作品) のみ anime cluster の入力として採用。
     rel = conn.execute(
         f"SELECT id, title_ja, title_en, year, season, quarter, episodes, format, "
         f"duration, start_date, end_date, status, source_mat, work_type, scale_class, "
-        f"country_of_origin, {mal_id_expr} FROM conformed.anime"
+        f"country_of_origin, {mal_id_expr} FROM conformed.anime "
+        "WHERE id NOT LIKE 'madb:C%'"
     )
     cols = [d[0] for d in rel.description]
     return [dict(zip(cols, row)) for row in rel.fetchall()]

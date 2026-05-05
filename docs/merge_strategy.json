@@ -64,13 +64,13 @@
       },
       "fields": {
         "title_ja": {
-          "priority": ["seesaa", "anilist", "madb", "mal", "ann", "bgm", "keyframe"],
-          "rationale": "SeesaaWiki が JA title 最も権威 (邦題正規表記)",
+          "priority": ["seesaa", "anilist", "madb", "tmdb", "mal", "ann", "bgm", "keyframe"],
+          "rationale": "SeesaaWiki が JA title 最も権威 (邦題正規表記)。tmdb 中位、madb は単独 cluster で人名/英文混入のリスク (LLM 検証で 22 件 wrong_value)",
           "selection_rule": "priority_fallback"
         },
         "title_en": {
-          "priority": ["anilist", "mal", "ann", "bgm", "seesaa", "madb", "keyframe"],
-          "rationale": "AniList/MAL が EN/romaji 第一",
+          "priority": ["anilist", "mal", "tmdb", "ann", "bgm", "seesaa", "madb", "keyframe"],
+          "rationale": "AniList/MAL が EN/romaji 第一、tmdb は海外作品の英題保持",
           "selection_rule": "priority_fallback"
         },
         "year": {
@@ -171,43 +171,43 @@
       },
       "fields": {
         "name_ja": {
-          "priority": ["seesaa", "anilist", "madb", "mal", "bgm", "ann", "keyframe"],
-          "rationale": "SeesaaWiki が日本語人名最も詳細",
+          "priority": ["seesaa", "anilist", "madb", "tmdb", "mal", "bgm", "ann", "keyframe"],
+          "rationale": "SeesaaWiki が日本語人名最も詳細。tmdb は中位 (293K rows、海外人物の漢字名も保持)",
           "selection_rule": "priority_fallback"
         },
         "name_en": {
-          "priority": ["anilist", "mal", "ann", "bgm", "seesaa", "madb", "keyframe"],
-          "rationale": "AniList/MAL/ANN が romaji/EN 整備",
+          "priority": ["anilist", "mal", "tmdb", "ann", "bgm", "seesaa", "madb", "keyframe"],
+          "rationale": "AniList/MAL が romaji/EN 整備。tmdb は海外人物の英名豊富 (LLM 検証で 99 件取りこぼし発見)",
           "selection_rule": "priority_fallback"
         },
         "name_ko": {
           "priority": ["bgm", "anilist", "mal", "ann"],
-          "rationale": "Bangumi が韓国人名収録",
+          "rationale": "Bangumi が韓国人名収録 (tmdb は ko name 保持しない見込み、保留)",
           "selection_rule": "priority_fallback"
         },
         "name_zh": {
           "priority": ["bgm", "anilist", "mal", "ann"],
-          "rationale": "Bangumi 中文 native",
+          "rationale": "Bangumi 中文 native (tmdb 同上)",
           "selection_rule": "priority_fallback"
         },
         "gender": {
-          "priority": ["bgm", "anilist", "ann", "mal", "seesaa", "madb", "keyframe"],
-          "rationale": "Bangumi が性別明示記録",
+          "priority": ["bgm", "anilist", "tmdb", "ann", "mal", "seesaa", "madb", "keyframe"],
+          "rationale": "Bangumi が性別明示記録、tmdb は gender +109K の量で第3位優先",
           "selection_rule": "priority_fallback"
         },
         "birth_date": {
-          "priority": ["anilist", "ann", "mal", "bgm", "seesaa", "madb", "keyframe"],
-          "rationale": "AniList/ANN が ISO 構造化日付",
+          "priority": ["anilist", "ann", "tmdb", "mal", "bgm", "seesaa", "madb", "keyframe"],
+          "rationale": "AniList/ANN が ISO 構造化日付、tmdb birthday 大量",
           "selection_rule": "priority_fallback"
         },
         "death_date": {
-          "priority": ["anilist", "ann", "mal", "bgm", "seesaa", "madb", "keyframe"],
-          "rationale": "birth_date 同源",
+          "priority": ["anilist", "ann", "tmdb", "mal", "bgm", "seesaa", "madb", "keyframe"],
+          "rationale": "birth_date 同源 (tmdb deathday 経由で 12,641 件死亡日が即時充足、commit 25ff879)",
           "selection_rule": "priority_fallback"
         },
         "nationality": {
-          "priority": ["anilist", "ann", "mal", "bgm", "seesaa", "madb", "keyframe"],
-          "rationale": "AniList Staff.languageV2 (国籍補強)",
+          "priority": ["anilist", "ann", "tmdb", "mal", "bgm", "seesaa", "madb", "keyframe"],
+          "rationale": "AniList Staff.languageV2 (国籍補強)、tmdb place_of_birth/origin 経由の補完",
           "selection_rule": "priority_fallback"
         }
       }
