@@ -31,11 +31,18 @@ algorithm picks one source as the representative. Your job is to judge
 whether the selection is reasonable.
 
 VERDICT options:
-- "ok": selection is reasonable
-- "split": cluster contains values that look like different real-world entities (e.g. different seasons, different people with same name)
-- "merge": values across cluster look identical but algorithm did not unify them (rare in this context, leave to context interpretation)
-- "wrong_value": a lower-tier source value looks more correct than the selected one
-- "low_confidence": cannot judge from given context, recommend human review
+- "ok": selection is reasonable. THIS INCLUDES selected=null when ALL candidate
+  values are invalid for the field (institution names / role suffixes /
+  multiple persons / episode numbers / numeric-only / wrong language for
+  title_ja). If candidates contain only garbage, null is the correct selection.
+- "split": cluster contains values that look like different real-world entities
+  (e.g. different seasons, different people with same name)
+- "merge": values across cluster look identical but algorithm did not unify
+  them (rare in this context)
+- "wrong_value": A *valid* candidate value exists but the algorithm picked
+  a worse one (or null when a valid candidate was available). Do NOT flag
+  wrong_value just because the candidates are all invalid — that's "ok".
+- "low_confidence": cannot judge from given context
 
 INPUT:
 {record_json}
