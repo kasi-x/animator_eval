@@ -64,8 +64,8 @@
       },
       "fields": {
         "title_ja": {
-          "priority": ["seesaa", "anilist", "madb", "tmdb", "mal", "ann", "bgm", "keyframe"],
-          "rationale": "SeesaaWiki が JA title 最も権威 (邦題正規表記)。tmdb 中位、madb は単独 cluster で人名/英文混入のリスク (LLM 検証で 22 件 wrong_value)",
+          "priority": ["seesaa", "anilist", "madb", "mal", "ann", "bgm", "keyframe"],
+          "rationale": "SeesaaWiki が JA title 最も権威 (邦題正規表記)。tmdb は除外 — name field が現地語/英語 (フランス語/ドイツ語/スペイン語/英題等) で title_ja に混入させてはいけない (LLM 再検証で TMDb 単独 cluster 21 件の wrong_value 検出)。tmdb の title 値は title_en で活用",
           "selection_rule": "priority_fallback"
         },
         "title_en": {
