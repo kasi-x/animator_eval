@@ -400,10 +400,32 @@ class PolicyGenerationalHealthReport(BaseReportGenerator):
 # report-specific values when curating this module.
 from .._spec import make_default_spec  # noqa: E402
 
+from .._spec import SensitivityAxis  # noqa: E402
+
 SPEC = make_default_spec(
     name='policy_generational_health',
     audience='policy',
-    claim='世代交代健全性指標 に関する記述的指標 (subtitle: コホート生存率 / 人材ピラミッド / フロー会計)',
-    sources=["credits", "persons", "anime"],
-    meta_table='meta_policy_generational_health',
+    claim=(
+        'デビュー decade × career year bin の S(k) 曲線 (KM 生存率) と '
+        '年次フロー (新規参入 / 退出) が世代間で異なるパターンを示す'
+    ),
+    identifying_assumption=(
+        '世代 = デビュー decade を仮定。career_year_bin の打切りは観察窓末年。'
+        '退出 = 翌年クレジット可視性喪失 と定義し、雇用実態とは区別する。'
+        'フロー会計は credit-record の denominator が時代別に変動する点を考慮。'
+    ),
+    null_model=['N5'],
+    sources=['credits', 'persons', 'anime'],
+    meta_table='meta_policy_generation',
+    estimator='Kaplan-Meier (Greenwood CI) + 年次新規参入 / 退出フロー集計',
+    ci_estimator='greenwood',
+    sensitivity_grid=[
+        SensitivityAxis(name='decade cut', values=['10y', '5y']),
+        SensitivityAxis(name='退出 gap 閾値', values=['1y', '3y', '5y']),
+    ],
+    extra_limitations=[
+        'クレジット記録密度の世代間差 (1970s vs 2010s) で生存率推定に下方バイアス',
+        '名前解決失敗 (~1-3%) を退出として誤計上する可能性',
+        'フォーマット変化 (TV → 配信) の影響は別軸で分解必要',
+    ],
 )

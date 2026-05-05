@@ -274,10 +274,33 @@ class BizTeamTemplateReport(BaseReportGenerator):
 # report-specific values when curating this module.
 from .._spec import make_default_spec  # noqa: E402
 
+from .._spec import SensitivityAxis  # noqa: E402
+
 SPEC = make_default_spec(
     name='biz_team_template',
     audience='biz',
-    claim='チーム組成テンプレート に関する記述的指標 (subtitle: K=5クラスタ プロファイル / 成功率比較)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        '作品単位スタッフ集合に対する K-means (K=5) クラスタの silhouette が '
+        '全業界 baseline (random partition) を超え、cluster × tier 別の '
+        '構成パターンが識別可能'
+    ),
+    identifying_assumption=(
+        'K=5 は事前固定値であり、最適 K は data-driven に決まらない。'
+        'クラスタ間の差異は構造的特徴 (役職構成 / 規模 / ジャンル) に由来し、'
+        '成果との相関 (cluster vs 作品評価) は本指標では測らない。'
+    ),
+    null_model=['N1', 'N6'],  # configuration model + uniform random
+    sources=['credits', 'persons', 'anime', 'studios'],
     meta_table='meta_biz_team_template',
+    estimator='K-means (K=5) on (role_composition, scale_tier, genre_mix)',
+    ci_estimator='bootstrap', n_resamples=1000,
+    sensitivity_grid=[
+        SensitivityAxis(name='K (cluster 数)', values=[3, 5, 7, 10]),
+        SensitivityAxis(name='feature set', values=['role only', '+scale', '+scale+genre']),
+    ],
+    extra_limitations=[
+        'K=5 は事前固定 — silhouette 最適 K と乖離する可能性',
+        'K-means は球形 cluster 仮定 — 非凸 cluster には不適',
+        'cluster ID は実行ごとに変化 (label switching) — ラベルに意味なし',
+    ],
 )

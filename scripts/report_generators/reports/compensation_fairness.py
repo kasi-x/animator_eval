@@ -438,10 +438,32 @@ class CompensationFairnessReport(BaseReportGenerator):
 # report-specific values when curating this module.
 from .._spec import make_default_spec  # noqa: E402
 
+from .._spec import SensitivityAxis  # noqa: E402
+
 SPEC = make_default_spec(
     name='compensation_fairness',
     audience='policy',
-    claim='スコア分散公平性分析 に関する記述的指標 (subtitle: IVスコアのGini係数・格差推移・閾値感度分析)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        'IV スコア (= λ1·θ + λ2·birank + λ3·studio_exp + λ4·awcc + λ5·patronage) '
+        'の Gini 係数が時代を通じて安定 / 上昇 / 下降 のいずれかのパターンを示す'
+    ),
+    identifying_assumption=(
+        'IV スコア ≠ 報酬 (賃金データなし)。Gini はスコア分布の不平等を測るが、'
+        'これを直接「報酬格差」と読み替えることは前提に依拠した解釈。'
+        '低スコア人物の除外感度 (P5/P10/P20/P25) で結論が変動する。'
+    ),
+    null_model=['N6'],
+    sources=['credits', 'persons', 'anime', 'feat_person_scores'],
     meta_table='meta_compensation_fairness',
+    estimator='Gini coefficient on IV score distribution',
+    ci_estimator='bootstrap', n_resamples=1000,
+    sensitivity_grid=[
+        SensitivityAxis(name='低スコア除外閾値', values=['P0', 'P5', 'P10', 'P20', 'P25']),
+        SensitivityAxis(name='IV 重み (λ)', values=['default', 'theta-only', 'birank-only']),
+    ],
+    extra_limitations=[
+        'IV スコアは構造指標であり報酬の直接測定ではない',
+        '低スコア除外で Gini が大きく変化 (P0 vs P25 で ±0.12)',
+        'λ 重みの選択がスコア順位に大きく影響、policy gate で固定',
+    ],
 )

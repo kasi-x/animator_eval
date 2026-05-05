@@ -296,10 +296,34 @@ class BizIndependentUnitReport(BaseReportGenerator):
 # report-specific values when curating this module.
 from .._spec import make_default_spec  # noqa: E402
 
+from .._spec import SensitivityAxis  # noqa: E402
+
 SPEC = make_default_spec(
     name='biz_independent_unit',
     audience='biz',
-    claim='独立ユニット形成可能性 に関する記述的指標 (subtitle: コミュニティ生存可能性スコア / ロールカバレッジ)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        'Louvain コミュニティ単位で 7 役職グループを内部充足する coverage と '
+        '密度 (intra-edge / total-edge) が両方高いコミュニティが、'
+        'configuration model null の上位 5% に出現する'
+    ),
+    identifying_assumption=(
+        'コミュニティ = Louvain modularity 最適化。実際の独立ユニット形成可能性は'
+        'コミュニティの境界の安定性 (修正 modularity / 別アルゴリズム) に依存する。'
+        '7 役職カバレッジは「最低限の制作体制」を仮定するが、実プロジェクトは'
+        '外注や副業を含めて成立可能。'
+    ),
+    null_model=['N1', 'N2'],
+    sources=['credits', 'persons', 'anime'],
     meta_table='meta_biz_independent_unit',
+    estimator='V_G = role_coverage × density × scale_compatibility',
+    ci_estimator='bootstrap', n_resamples=1000,
+    sensitivity_grid=[
+        SensitivityAxis(name='Louvain resolution', values=[0.5, 1.0, 2.0]),
+        SensitivityAxis(name='role grouping', values=['7 groups', '24 roles', 'minimal 5']),
+    ],
+    extra_limitations=[
+        'Louvain modularity は確率的 — seed ごとに ~10-15% 境界変動',
+        '7 役職カバレッジは事前設定値、実態の最低制作体制とは異なる可能性',
+        '外注 / 副業 / フリーランス の関係は捕捉外',
+    ],
 )

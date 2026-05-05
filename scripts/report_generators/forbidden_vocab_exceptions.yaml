@@ -78,6 +78,139 @@ exceptions:
       Naming the prohibited phrase in the blocklist is required for the
       InterpretationGuard to filter it out of interpretation text.
 
+  # docs/GLOSSARY_v3.md は禁止語 → 代替語マッピング表を含む。
+  # 禁止語を表のセルに書かないと glossary 機能を果たさない。
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "能力 framing → 構造的記述"
+    term: 能力
+    reason: Glossary heading naming the prohibited framing category.
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "一流 / top-tier"
+    term: 一流
+    reason: Glossary mapping table — forbidden term → suggested replacement.
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "のせいで / due to"
+    term: のせいで
+    reason: Glossary mapping table — forbidden causal phrase → replacement.
+
+  # Glossary 表の英語側の禁止語も documented mapping
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "能力 / ability"
+    term: ability
+    reason: Glossary mapping (English side).
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "実力 / skill"
+    term: skill
+    reason: Glossary mapping (English side).
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "才能 / talent"
+    term: talent
+    reason: Glossary mapping (English side).
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "凡庸 / mediocre"
+    term: mediocre
+    reason: Glossary mapping (English side).
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "優秀 / excellent"
+    term: excellent
+    reason: Glossary mapping (English side, evaluative adjective).
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "低水準 / weak"
+    term: weak
+    reason: Glossary mapping (English side).
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "の原因 / cause"
+    term: cause
+    reason: Glossary mapping (English side, causal verb).
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "の結果として / result in"
+    term: result in
+    reason: Glossary mapping (English side, causal verb).
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "のせいで / due to"
+    term: due to
+    reason: Glossary mapping (English side, causal verb).
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "を引き起こす / trigger"
+    term: 引き起こす
+    reason: Glossary mapping (JA causal verb).
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "を引き起こす / trigger"
+    term: trigger
+    reason: Glossary mapping (English side, causal verb).
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "能力 / ability"
+    term: 能力
+    reason: Glossary mapping table — forbidden term → suggested replacement.
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "実力 / skill"
+    term: 実力
+    reason: Glossary mapping table — forbidden term → suggested replacement.
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "才能 / talent"
+    term: 才能
+    reason: Glossary mapping table — forbidden term → suggested replacement.
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "優秀 / excellent"
+    term: 優秀
+    reason: Glossary mapping table — forbidden term → suggested replacement.
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "凡庸 / mediocre"
+    term: 凡庸
+    reason: Glossary mapping table — forbidden term → suggested replacement.
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "低水準 / weak"
+    term: 低水準
+    reason: Glossary mapping table — forbidden term → suggested replacement.
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "低スコア人物の除外"
+    term: 能力
+    reason: rationale text referencing the prohibited framing meta-discussion.
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "個人の能力 / 性格"
+    term: 能力
+    reason: explicit list of dimensions excluded from the report scope.
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "育成力 / 育成実績"
+    term: 育成力
+    reason: rename history table entry — naming the deprecated phrase.
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "失敗"
+    term: 失敗
+    reason: rename history table entry — naming the deprecated phrase.
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "成功率"
+    term: 成功
+    reason: rename history table entry — naming the deprecated phrase.
+
+  - file: docs/GLOSSARY_v3.md
+    line_pattern: "業界平均より上"
+    term: 業界平均より上
+    reason: rename history table entry — naming the deprecated phrase.
+
   - file: scripts/report_generators/section_builder.py
     line_pattern: "ability, skill, artistry, or professional worth"
     term: ability

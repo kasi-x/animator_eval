@@ -437,10 +437,34 @@ def _hex_to_rgb_tuple(hex_color: str) -> tuple[int, int, int]:
 # report-specific values when curating this module.
 from .._spec import make_default_spec  # noqa: E402
 
+from .._spec import SensitivityAxis  # noqa: E402
+
 SPEC = make_default_spec(
     name='policy_gender_bottleneck',
     audience='policy',
-    claim='ジェンダー・ボトルネック分析 に関する記述的指標 (subtitle: 昇進KM / Oaxaca-Blinder分解 / スタジオFE)',
-    sources=["credits", "persons", "anime"],
-    meta_table='meta_policy_gender_bottleneck',
+    claim=(
+        '推定ジェンダー間で 役職進行ハザード率 (動画 → 原画 → 作監 → 監督) に '
+        'Cox PH 推定値の Wald 95% CI で 0 を跨がない差が観察される'
+    ),
+    identifying_assumption=(
+        'ジェンダーは名前 + 業界 DB から推定 (~88% カバレッジ、~5% 誤分類)。'
+        'Cox PH の比例ハザード仮定は Schoenfeld 残差検定で確認する必要あり。'
+        'role_to 未到達者は右打切り — 観察窓 25 年で打切り率 ~30%。'
+        'non-binary identities は本データでは捕捉外。'
+    ),
+    null_model=['N4', 'N5'],
+    sources=['credits', 'persons', 'anime'],
+    meta_table='meta_policy_gender',
+    estimator='Cox PH (lifelines) + log-rank test + ego-network permutation',
+    ci_estimator='delta',
+    sensitivity_grid=[
+        SensitivityAxis(name='gender 推定方法', values=['name + DB', 'name only', 'DB only']),
+        SensitivityAxis(name='cohort cut', values=['5y', '10y']),
+        SensitivityAxis(name='打切り上限', values=['15y', '25y', '35y']),
+    ],
+    extra_limitations=[
+        'gender 推定誤分類 ~5% — 結論の符号を反転させない範囲',
+        '比例ハザード仮定の違反は cohort × time 相互作用で検証',
+        'unobserved confounding (採用機会 / 教育背景) には対処しない',
+    ],
 )

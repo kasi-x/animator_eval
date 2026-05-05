@@ -514,10 +514,33 @@ class GrowthScoresReport(BaseReportGenerator):
 # report-specific values when curating this module.
 from .._spec import make_default_spec  # noqa: E402
 
+from .._spec import SensitivityAxis  # noqa: E402
+
 SPEC = make_default_spec(
     name='growth_scores',
     audience='hr',
-    claim='成長スコア分析 に関する記述的指標 (subtitle: IV成長軌跡・トレンドタイプ・コホート別・Tier到達との関連)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        '個人 IV スコアの 5 年窓 trajectory が「上昇 / 停滞 / 下降 / 急成長 / 急減」'
+        '5 種の典型パターン (K-means K=5) に分類でき、デビュー decade 別の '
+        '分布がコホート間で異なる'
+    ),
+    identifying_assumption=(
+        'trajectory pattern は K-means クラスタの解釈ラベルであり、'
+        '個人の真の成長過程を表すとは限らない。Tier 到達はサンプル selection '
+        '効果 (高活動者のみが評価対象) を含む。'
+    ),
+    null_model=['N3', 'N6'],
+    sources=['credits', 'persons', 'anime', 'feat_person_scores'],
     meta_table='meta_growth_scores',
+    estimator='K-means (K=5) on 5y rolling-window IV slope + level',
+    ci_estimator='bootstrap', n_resamples=1000,
+    sensitivity_grid=[
+        SensitivityAxis(name='trajectory window', values=['3y', '5y', '7y']),
+        SensitivityAxis(name='K (cluster 数)', values=[3, 5, 7]),
+    ],
+    extra_limitations=[
+        'cluster ID は実行ごとに変化 (label switching)',
+        'sample selection: 高活動者のみが trajectory 算出対象',
+        'IV スコアは構造指標であり個人の能力指標ではない',
+    ],
 )

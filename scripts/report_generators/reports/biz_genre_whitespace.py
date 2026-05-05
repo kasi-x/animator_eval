@@ -380,10 +380,34 @@ class BizGenreWhitespaceReport(BaseReportGenerator):
 # report-specific values when curating this module.
 from .._spec import make_default_spec  # noqa: E402
 
+from .._spec import SensitivityAxis  # noqa: E402
+
 SPEC = make_default_spec(
     name='biz_genre_whitespace',
     audience='biz',
-    claim='ジャンル空白地分析 に関する記述的指標 (subtitle: W_gスコア / 専門家密度 / ジャンル遷移マトリクス)',
-    sources=["credits", "persons", "anime"],
-    meta_table='meta_biz_genre_whitespace',
+    claim=(
+        'ジャンル × 年パネルで CAGR (年複合成長率) と penetration (作品数 / 総作品数) '
+        'が高い反面、専門家密度 (ジャンル経験者 / 全アクティブ) が低い領域 (W_g 上位) '
+        'が role-matched bootstrap 95% 区間外に存在する'
+    ),
+    identifying_assumption=(
+        '「過去の参入頻度低 = 将来の市場機会」を前提する仮説。'
+        '参入頻度低は需要不足 / 権利障壁 / 制作コストの結果かもしれず、'
+        '機会の存在の十分条件ではない。ジャンル分類は AniList tag 依存で '
+        '~5-10% の作品で missing。'
+    ),
+    null_model=['N3', 'N4'],
+    sources=['credits', 'persons', 'anime', 'anime_genres'],
+    meta_table='meta_biz_whitespace',
+    estimator='W_g = (1 - penetration) × CAGR × specialist_supply',
+    ci_estimator='bootstrap', n_resamples=1000,
+    sensitivity_grid=[
+        SensitivityAxis(name='CAGR window', values=['3y', '5y', '10y']),
+        SensitivityAxis(name='penetration cutoff', values=['P25', 'P50', 'P75']),
+    ],
+    extra_limitations=[
+        'AniList tag missing ~5-10% でジャンル別カウント下方バイアス',
+        'CAGR は短期窓で boom 効果に過敏 — 5y 推奨',
+        'Whitespace ≠ opportunity — 制作コスト / 権利状況の検証必須',
+    ],
 )

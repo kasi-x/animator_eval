@@ -269,10 +269,41 @@ class MgmtAttritionRiskReport(BaseReportGenerator):
 # report-specific values when curating this module.
 from .._spec import make_default_spec  # noqa: E402
 
+from .._spec import HoldoutSpec, SensitivityAxis  # noqa: E402
+
 SPEC = make_default_spec(
     name='mgmt_attrition_risk',
     audience='hr',
-    claim='離職リスクスコア分析 に関する記述的指標 (subtitle: 生存モデル C-index / キャリブレーション / 特徴量重要度)',
-    sources=["credits", "persons", "anime"],
-    meta_table='meta_mgmt_attrition_risk',
+    claim=(
+        'Random Survival Forest による翌年クレジット可視性喪失リスクの '
+        'C-index が 0.70 以上であれば個別スコア + Tier 別リスクを公開し、'
+        '0.70 未満なら個別スコアを非公開化する gate を持つ'
+    ),
+    identifying_assumption=(
+        'リスクスコア = 生存モデル予測値、雇用継続意思の予測ではない。'
+        'C-index は識別性能であり calibration とは独立 — 高 C-index でも '
+        '絶対確率は信頼できない可能性。SHAP は MDI の代替で説明性提供だが '
+        '木ベースモデル固有のバイアス (高 cardinality bias) を含む。'
+    ),
+    null_model=['N3'],
+    sources=['credits', 'persons', 'anime'],
+    meta_table='meta_hr_attrition_risk',
+    estimator='Random Survival Forest (lifelines + scikit-survival)',
+    ci_estimator='bootstrap', n_resamples=200,
+    holdout=HoldoutSpec(
+        method='time-split',
+        holdout_size='last 3 years (2022-2024)',
+        metric='C-index (Harrell)',
+        naive_baseline='Cox PH baseline',
+    ),
+    sensitivity_grid=[
+        SensitivityAxis(name='C-index gate', values=[0.65, 0.70, 0.75]),
+        SensitivityAxis(name='RSF n_estimators', values=[100, 500, 1000]),
+        SensitivityAxis(name='cohort filter', values=['all', 'rookie only']),
+    ],
+    extra_limitations=[
+        'C-index < 0.70 のモデルは個別スコアを非公開 — gate により公開対象縮小',
+        'RSF MDI は高 cardinality (役職 ID 等) で過大評価バイアス',
+        '校正は別途 calibration plot で確認、本指標では捕捉不足',
+    ],
 )

@@ -373,10 +373,33 @@ class BizTrustEntryReport(BaseReportGenerator):
 # report-specific values when curating this module.
 from .._spec import make_default_spec  # noqa: E402
 
+from .._spec import SensitivityAxis  # noqa: E402
+
 SPEC = make_default_spec(
     name='biz_trust_entry',
     audience='biz',
-    claim='信頼ネット参入経路 に関する記述的指標 (subtitle: ゲートキーパースコア / リーチ・フロンティア)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        '新規参入者の初期協業者にゲートキーパー G_p (PageRank top-K への shortest path 長 ≤ 2) '
+        'が占める比率が、degree-preserving rewiring null 95% 区間を超える'
+    ),
+    identifying_assumption=(
+        'ゲートキーパー = 高 PageRank ノード を仮定。'
+        '実際の業界キャリア成立にとってのゲートキーパー機能は'
+        'ネットワーク中心性以外 (個人的紹介 / 学校・寮の縁 / SNS 経由) も含むが本指標は捕捉しない。'
+        'Reach_p (到達範囲) はネットワーク密度に依存し、時代差で比較不可能。'
+    ),
+    null_model=['N2', 'N4'],  # degree-preserving + role-matched
+    sources=['credits', 'persons', 'anime'],
     meta_table='meta_biz_trust_entry',
+    estimator='G_p = sum(deg_centrality of first-degree neighbors); Reach_p = BFS depth-3 size',
+    ci_estimator='bootstrap', n_resamples=1000,
+    sensitivity_grid=[
+        SensitivityAxis(name='ゲートキーパー閾値', values=['top 100', 'top 500', 'top 1000']),
+        SensitivityAxis(name='参入定義', values=['初クレジット', '初メイン役職']),
+    ],
+    extra_limitations=[
+        '個人的紹介 / 学校・寮経由の参入経路は捕捉不可',
+        'PageRank は時代別エッジ重みに依存、年代間比較に注意',
+        'Reach_p の絶対値は graph 密度に依存、相対順位で参照',
+    ],
 )

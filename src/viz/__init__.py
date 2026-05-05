@@ -15,17 +15,26 @@ Public API
 
 from __future__ import annotations
 
-from . import ci, null_overlay, palettes, primitives, shrinkage_badge, theme
+from . import (
+    ci, export, interactivity, null_overlay, palettes, primitives,
+    shrinkage_badge, theme,
+)
 from .embed import embed
+from .interactivity import CrossFilterFacet, cross_filter_panel, link_brushing
 from .theme import apply_theme
 
 __all__ = [
     "apply_theme",
     "embed",
+    "export",
     "ci",
+    "interactivity",
     "null_overlay",
     "palettes",
     "primitives",
     "shrinkage_badge",
     "theme",
+    "link_brushing",
+    "cross_filter_panel",
+    "CrossFilterFacet",
 ]

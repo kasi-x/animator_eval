@@ -294,10 +294,34 @@ class MgmtSuccessionReport(BaseReportGenerator):
 # report-specific values when curating this module.
 from .._spec import make_default_spec  # noqa: E402
 
+from .._spec import SensitivityAxis  # noqa: E402
+
 SPEC = make_default_spec(
     name='mgmt_succession',
     audience='hr',
-    claim='後継計画マトリクス に関する記述的指標 (subtitle: 退職リスクスコア + 後継候補カバレッジ)',
-    sources=["credits", "persons", "anime"],
-    meta_table='meta_mgmt_succession',
+    claim=(
+        'ベテラン (高 person FE θ_i, 5+ 年経験) × 候補者 (低-中 θ_i, 3+ 年経験) '
+        'のペアの succession_score (cosine similarity of role/genre vector × '
+        'co-credit history) が role-matched bootstrap null 95% 区間外'
+    ),
+    identifying_assumption=(
+        '後継 = 役職 / ジャンル類似性 + 共同作業履歴を仮定。'
+        '実際の後継選択は個人的関係 / 経営判断 / 本人意向に依存し本指標は近似のみ。'
+        'aggregate 公開のみで個人特定はしない (legal risk 軽減)。'
+    ),
+    null_model=['N4', 'N5'],
+    sources=['credits', 'persons', 'anime'],
+    meta_table='meta_hr_succession',
+    estimator='cosine_sim(role_vec_A, role_vec_B) × co_credit_count',
+    ci_estimator='bootstrap', n_resamples=1000,
+    sensitivity_grid=[
+        SensitivityAxis(name='ベテラン経験閾値', values=['3y', '5y', '10y']),
+        SensitivityAxis(name='類似性 metric',
+                        values=['cosine', 'jaccard', 'weighted overlap']),
+    ],
+    extra_limitations=[
+        '後継 ≠ 類似性 — 本指標は近似的表現',
+        '個人的関係 / 経営判断 は捕捉外',
+        'aggregate 公開のみ — 個別ペア提示はしない',
+    ],
 )

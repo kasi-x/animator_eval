@@ -345,6 +345,56 @@ COMMON_GLOSSARY_TERMS: dict[str, str] = {
         "キャリア進行の障壁を定量化した指標。ステージ停滞期間、"
         "ブランク期間、昇進速度の偏差を反映。"
     ),
+    # ── v3 追加 (docs/GLOSSARY_v3.md §1) ──
+    "HHI（ハーフィンダール指数）": (
+        "市場集中度指標。Σ share_s² × 10000 で算出。"
+        "1500 未満 = 競争的、2500 以上 = 高度集中 (米国 DOJ 基準)。"
+    ),
+    "R5 retention（5年定着率）": (
+        "デビュー後 5 年同一スタジオ可視継続率。Empirical Bayes 縮小推定で"
+        "サンプル小スタジオは業界平均方向に補正。"
+    ),
+    "U_p（露出機会ギャップ）": (
+        "pct(θ_i) - pct(total_credits) のパーセンタイル差。30pt 以上で"
+        "「ネットワーク到達範囲に対し露出が少ない」候補。"
+    ),
+    "G_p（ゲートキーパースコア）": (
+        "新規参入者の初期協業者に高 PageRank ノードが占める比率。"
+        "信頼ネットワーク参入経路の構造的指標。"
+    ),
+    "W_g（whitespace スコア）": (
+        "(1-penetration) × CAGR × specialist_supply。"
+        "ジャンル × 年で機会余地を測る記述的指標。"
+    ),
+    "M̂_d（メンティー M̂ シフト）": (
+        "監督ノード A の下流 5 年メンティー集団の θ_i 平均変化量。"
+        "EB 縮小推定 + 置換ヌルモデルで提示。「育成力」とは読み替えない。"
+    ),
+    "Greenwood CI": (
+        "Kaplan-Meier 生存関数の解析的 95% 信頼区間 (Greenwood の式)。"
+        "小サンプルで保守的、step plot 上に半透明 band として描画。"
+    ),
+    "EB shrinkage（Empirical Bayes 縮小）": (
+        "推定値を事前分布の平均方向に縮小。"
+        "サンプル小グループの過大評価を抑制。本指標では James-Stein / "
+        "Beta-Binomial 等を用途別に適用。"
+    ),
+    "permutation null（置換帰無モデル）": (
+        "観察エッジ / クレジット / 共起をランダム化して再計算した分布。"
+        "観測値が permutation 95% 区間外にあることで構造的有意性を判定。"
+    ),
+    "Cox PH 比例ハザード": (
+        "生存解析の標準モデル。共変量で hazard 比 (HR) を推定。"
+        "比例ハザード仮定 (Schoenfeld 残差検定で確認) が必要。"
+    ),
+    "DML（Double Machine Learning）": (
+        "GBM 等で nuisance 関数 (treatment / outcome) を K-fold 交差適合し、"
+        "残差 OLS で ATE を推定。非交絡性仮定下の関連推定。"
+    ),
+    "AKM（Abowd-Kramarz-Margolis）": (
+        "二要素固定効果モデル: log(production_scale_ij) = θ_i + ψ_j + ε_ij。"
+        "個人 FE × スタジオ FE を分解。連結集合内の労働移動に依存して識別。"
+    ),
 }
 
 
