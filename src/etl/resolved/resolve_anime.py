@@ -27,6 +27,7 @@ import structlog
 
 from src.etl.resolved._cross_source_ids import build_cross_source_anime_clusters
 from src.etl.resolved._ddl import ALL_DDL
+from src.etl.resolved._decisions_log import DecisionsLogger, build_decision_record
 from src.etl.resolved._select import build_audit_entries, select_representative_value
 from src.etl.resolved.source_ranking import ANIME_RANKING
 
@@ -42,6 +43,8 @@ _ANIME_NOT_NULL_STR = frozenset({"title_ja", "title_en", "source_ids_json"})
 def _resolve_cluster(
     canonical_id: str,
     cluster_rows: list[dict[str, Any]],
+    *,
+    decisions_logger: DecisionsLogger | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Resolve a cluster of conformed rows into one canonical anime row.
 
@@ -49,6 +52,7 @@ def _resolve_cluster(
         canonical_id: Pre-computed canonical_id for this cluster
                       (from build_cross_source_anime_clusters).
         cluster_rows: All conformed rows belonging to this cluster.
+        decisions_logger: Optional JSONL writer for LLM-reviewable trace.
 
     Returns:
         Tuple of (resolved_row_dict, audit_entries_list).
@@ -81,6 +85,19 @@ def _resolve_cluster(
                     selected_value=value,
                     winning_source=winning_source,
                     reason=reason,
+                )
+            )
+        if decisions_logger is not None:
+            decisions_logger.write(
+                build_decision_record(
+                    canonical_id=canonical_id,
+                    entity_type="anime",
+                    field=field,
+                    candidates=cluster_rows,
+                    selected_value=value,
+                    winning_source=winning_source,
+                    selection_rule=reason,
+                    priority=priority,
                 )
             )
 
@@ -118,6 +135,8 @@ def build_resolved_anime(
     *,
     bronze_root: Path | str | None = None,
     batch_size: int = 10_000,
+    decisions_path: Path | str | None = None,
+    decisions_sample_rate: float = 0.0,
 ) -> int:
     """Full-rebuild of resolved anime from conformed.anime.
 
@@ -171,10 +190,30 @@ def build_resolved_anime(
     resolved_rows: list[dict[str, Any]] = []
     audit_rows: list[dict[str, Any]] = []
 
-    for cluster_key, cluster_rows in clusters.items():
-        resolved_row, cluster_audit = _resolve_cluster(cluster_key, cluster_rows)
-        resolved_rows.append(resolved_row)
-        audit_rows.extend(cluster_audit)
+    use_log = decisions_path is not None and decisions_sample_rate > 0.0
+    if use_log:
+        log_ctx = DecisionsLogger(decisions_path, sample_rate=decisions_sample_rate)
+        log_ctx.truncate()
+        log_ctx.__enter__()
+    else:
+        log_ctx = None
+
+    try:
+        for cluster_key, cluster_rows in clusters.items():
+            resolved_row, cluster_audit = _resolve_cluster(
+                cluster_key, cluster_rows, decisions_logger=log_ctx
+            )
+            resolved_rows.append(resolved_row)
+            audit_rows.extend(cluster_audit)
+    finally:
+        if log_ctx is not None:
+            log_ctx.__exit__(None, None, None)
+            logger.info(
+                "resolve_anime_decisions_logged",
+                written=log_ctx.written,
+                skipped=log_ctx.skipped,
+                path=str(decisions_path),
+            )
 
     _insert_resolved_anime(resolved_path, resolved_rows, batch_size)
     _insert_audit(resolved_path, audit_rows, batch_size)

@@ -20,6 +20,7 @@ from collections import Counter
 from typing import Any
 
 from src.etl.resolved.source_ranking import source_prefix
+from src.etl.resolved.strategy_loader import majority_threshold
 
 
 AuditEntry = dict[str, Any]
@@ -40,6 +41,8 @@ def select_representative_value(
     priority: list[str],
     id_key: str = "id",
     value_key: str | None = None,
+    *,
+    majority_threshold_value: int | None = None,
 ) -> tuple[Any, str, str]:
     """Select the best representative value for `field` from a list of candidate rows.
 
@@ -56,6 +59,7 @@ def select_representative_value(
         - reason: one of 'priority_fallback' | 'majority_vote' | 'tie_break' | 'no_value'.
     """
     vk = value_key or field
+    threshold = majority_threshold_value if majority_threshold_value is not None else majority_threshold()
 
     # Group non-empty values by source prefix, preserving insertion order
     by_source: dict[str, list[Any]] = {}
@@ -75,7 +79,7 @@ def select_representative_value(
         # Multiple rows for this source — majority vote
         counter = Counter(values)
         top_val, top_count = counter.most_common(1)[0]
-        if top_count >= 3:
+        if top_count >= threshold:
             return (top_val, src, "majority_vote")
         # Tie-break: first value (order of candidates list)
         return (values[0], src, "tie_break")

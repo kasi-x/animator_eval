@@ -19,6 +19,7 @@ import duckdb
 import structlog
 
 from src.etl.resolved._ddl import ALL_DDL
+from src.etl.resolved._decisions_log import DecisionsLogger, build_decision_record
 from src.etl.resolved._select import build_audit_entries, select_representative_value
 from src.etl.resolved.source_ranking import STUDIOS_RANKING
 
@@ -40,7 +41,11 @@ def _load_conformed_studios(conn: duckdb.DuckDBPyConnection) -> list[dict[str, A
     return [dict(zip(cols, row)) for row in rel.fetchall()]
 
 
-def _resolve_studio_row(row: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+def _resolve_studio_row(
+    row: dict[str, Any],
+    *,
+    decisions_logger: DecisionsLogger | None = None,
+) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Resolve a single conformed studio into a canonical row.
 
     Phase 2a: single-source, so no multi-row selection needed.
@@ -75,6 +80,19 @@ def _resolve_studio_row(row: dict[str, Any]) -> tuple[dict[str, Any], list[dict[
                     reason=reason,
                 )
             )
+        if decisions_logger is not None:
+            decisions_logger.write(
+                build_decision_record(
+                    canonical_id=canonical_id,
+                    entity_type="studio",
+                    field=field,
+                    candidates=[row],
+                    selected_value=value,
+                    winning_source=winning_source,
+                    selection_rule=reason,
+                    priority=priority,
+                )
+            )
 
     return resolved, audit_entries
 
@@ -84,6 +102,8 @@ def build_resolved_studios(
     resolved_path: Path | str,
     *,
     batch_size: int = 10_000,
+    decisions_path: Path | str | None = None,
+    decisions_sample_rate: float = 0.0,
 ) -> int:
     """Full-rebuild of resolved studios from conformed.studios.
 
@@ -115,10 +135,28 @@ def build_resolved_studios(
     resolved_rows: list[dict[str, Any]] = []
     audit_rows: list[dict[str, Any]] = []
 
-    for row in rows:
-        resolved_row, row_audit = _resolve_studio_row(row)
-        resolved_rows.append(resolved_row)
-        audit_rows.extend(row_audit)
+    use_log = decisions_path is not None and decisions_sample_rate > 0.0
+    if use_log:
+        log_ctx = DecisionsLogger(decisions_path, sample_rate=decisions_sample_rate)
+        log_ctx.truncate()
+        log_ctx.__enter__()
+    else:
+        log_ctx = None
+
+    try:
+        for row in rows:
+            resolved_row, row_audit = _resolve_studio_row(row, decisions_logger=log_ctx)
+            resolved_rows.append(resolved_row)
+            audit_rows.extend(row_audit)
+    finally:
+        if log_ctx is not None:
+            log_ctx.__exit__(None, None, None)
+            logger.info(
+                "resolve_studios_decisions_logged",
+                written=log_ctx.written,
+                skipped=log_ctx.skipped,
+                path=str(decisions_path),
+            )
 
     _insert_resolved_studios(resolved_path, resolved_rows, batch_size)
     _insert_audit_studios(resolved_path, audit_rows, batch_size)

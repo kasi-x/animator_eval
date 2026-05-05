@@ -33,6 +33,7 @@ import duckdb
 import structlog
 
 from src.etl.resolved._ddl import ALL_DDL
+from src.etl.resolved._decisions_log import DecisionsLogger, build_decision_record
 from src.etl.resolved._persons_cluster import (
     build_persons_canonical_map,
     group_persons_by_canonical,
@@ -77,6 +78,8 @@ def _load_conformed_persons(conn: duckdb.DuckDBPyConnection) -> list[dict[str, A
 def _resolve_persons_cluster(
     canonical_id: str,
     cluster_rows: list[dict[str, Any]],
+    *,
+    decisions_logger: DecisionsLogger | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Resolve a cluster of conformed persons into one canonical row."""
     source_ids = [r["id"] for r in cluster_rows]
@@ -108,6 +111,19 @@ def _resolve_persons_cluster(
                     reason=reason,
                 )
             )
+        if decisions_logger is not None:
+            decisions_logger.write(
+                build_decision_record(
+                    canonical_id=canonical_id,
+                    entity_type="person",
+                    field=field,
+                    candidates=cluster_rows,
+                    selected_value=value,
+                    winning_source=winning_source,
+                    selection_rule=reason,
+                    priority=priority,
+                )
+            )
 
     return resolved, audit_entries
 
@@ -118,6 +134,8 @@ def build_resolved_persons(
     *,
     fast_only: bool = True,
     batch_size: int = 10_000,
+    decisions_path: Path | str | None = None,
+    decisions_sample_rate: float = 0.0,
 ) -> int:
     """Full-rebuild of resolved persons from conformed.persons.
 
@@ -170,10 +188,30 @@ def build_resolved_persons(
     resolved_rows: list[dict[str, Any]] = []
     audit_rows: list[dict[str, Any]] = []
 
-    for canonical_id, cluster_rows in groups.items():
-        resolved_row, cluster_audit = _resolve_persons_cluster(canonical_id, cluster_rows)
-        resolved_rows.append(resolved_row)
-        audit_rows.extend(cluster_audit)
+    use_log = decisions_path is not None and decisions_sample_rate > 0.0
+    if use_log:
+        log_ctx = DecisionsLogger(decisions_path, sample_rate=decisions_sample_rate)
+        log_ctx.truncate()
+        log_ctx.__enter__()
+    else:
+        log_ctx = None
+
+    try:
+        for canonical_id, cluster_rows in groups.items():
+            resolved_row, cluster_audit = _resolve_persons_cluster(
+                canonical_id, cluster_rows, decisions_logger=log_ctx
+            )
+            resolved_rows.append(resolved_row)
+            audit_rows.extend(cluster_audit)
+    finally:
+        if log_ctx is not None:
+            log_ctx.__exit__(None, None, None)
+            logger.info(
+                "resolve_persons_decisions_logged",
+                written=log_ctx.written,
+                skipped=log_ctx.skipped,
+                path=str(decisions_path),
+            )
 
     _insert_resolved_persons(resolved_path, resolved_rows, batch_size)
     _insert_audit_persons(resolved_path, audit_rows, batch_size)

@@ -1,0 +1,255 @@
+{
+  "version": "1.0",
+  "generated_at": "2026-05-05",
+  "approved_by": null,
+  "approved_at": null,
+  "description": "Resolved 層 代表値選抜戦略 (cluster + field priority + selection rules)。LLM レビュー後 approved_by/at を埋める。実装は src/etl/resolved/strategy_loader.py 経由。",
+
+  "selection_rules": {
+    "priority_fallback": {
+      "when": "tier 内 non-empty value が 1 個",
+      "action": "そのまま採用",
+      "rationale": "高優先 source に値があれば下位確認不要"
+    },
+    "majority_vote": {
+      "when": "tier 内 non-empty value が threshold 件以上で同値多数",
+      "threshold": 3,
+      "action": "最頻値採用",
+      "rationale": "同 source 内 cluster 重複時のノイズ吸収",
+      "open_question": "閾値 3 は実態 dead path (cluster 内 1 source 1 row が普通)。閾値 2 への引き下げ要検討"
+    },
+    "tie_break": {
+      "when": "tier 内 non-empty value 複数だが majority threshold 未達",
+      "action": "insertion 順第1値採用",
+      "rationale": "決定論的かつ最高優先 source 維持"
+    },
+    "no_value": {
+      "when": "全 tier 空",
+      "action": "NULL 採用",
+      "rationale": "値なきゃ捏造しない"
+    }
+  },
+
+  "entities": {
+    "anime": {
+      "cluster": {
+        "id_links": [
+          {
+            "from": "anilist", "to": "mal",
+            "via": "bronze:anilist:anime:mal_id",
+            "rationale": "AniList が MAL ID を保持 (構造的 link)"
+          },
+          {
+            "from": "keyframe", "to": "anilist",
+            "via": "bronze:keyframe:anime:anilist_id",
+            "rationale": "Keyframe wiki が anilist_id を記載"
+          }
+        ],
+        "fallback": {
+          "method": "title_year",
+          "normalize": "unicodedata.NFKC + lower",
+          "key": "norm(title_ja) + '|' + str(year)",
+          "rationale": "ID link なしの ann/bgm/seesaa/madb は title+year で probabilistic match",
+          "known_issues": [
+            "長音違い (アリーテ姫 vs アリーテひめ)",
+            "中黒違い (スター・ウォーズ vs スターウォーズ)",
+            "別年再放送で title 同一 → 異 cluster",
+            "同年同題複数作品 (極稀)"
+          ],
+          "open_questions": [
+            "ann/bgm/seesaa/madb ↔ 他 の ID link 追加可能性 (各 source DB の cross-ref column 調査)"
+          ]
+        },
+        "canonical_id_format": "resolved:anime:<sha256(cluster_key)[:12]>"
+      },
+      "fields": {
+        "title_ja": {
+          "priority": ["seesaa", "anilist", "madb", "mal", "ann", "bgm", "keyframe"],
+          "rationale": "SeesaaWiki が JA title 最も権威 (邦題正規表記)",
+          "selection_rule": "priority_fallback"
+        },
+        "title_en": {
+          "priority": ["anilist", "mal", "ann", "bgm", "seesaa", "madb", "keyframe"],
+          "rationale": "AniList/MAL が EN/romaji 第一",
+          "selection_rule": "priority_fallback"
+        },
+        "year": {
+          "priority": ["madb", "anilist", "mal", "ann", "bgm", "seesaa", "keyframe"],
+          "rationale": "MediaArts DB が JP 放送年の権威",
+          "selection_rule": "priority_fallback"
+        },
+        "season": {
+          "priority": ["madb", "anilist", "mal", "ann", "bgm", "seesaa", "keyframe"],
+          "rationale": "year 整合のため madb 優先",
+          "selection_rule": "priority_fallback"
+        },
+        "quarter": {
+          "priority": ["madb", "anilist", "mal", "ann", "bgm", "seesaa", "keyframe"],
+          "rationale": "year/season 整合",
+          "selection_rule": "priority_fallback"
+        },
+        "episodes": {
+          "priority": ["anilist", "madb", "mal", "ann", "bgm", "seesaa", "keyframe"],
+          "rationale": "AniList が話数完備",
+          "selection_rule": "priority_fallback"
+        },
+        "format": {
+          "priority": ["anilist", "mal", "madb", "ann", "bgm", "seesaa", "keyframe"],
+          "rationale": "AniList enum (TV/MOVIE/OVA) 最も clean",
+          "selection_rule": "priority_fallback"
+        },
+        "duration": {
+          "priority": ["anilist", "mal", "madb", "ann", "bgm", "seesaa", "keyframe"],
+          "rationale": "AniList/MAL が分単位記録",
+          "selection_rule": "priority_fallback"
+        },
+        "start_date": {
+          "priority": ["anilist", "madb", "mal", "ann", "bgm", "seesaa", "keyframe"],
+          "rationale": "AniList の startDate が ISO 形式整備",
+          "selection_rule": "priority_fallback"
+        },
+        "end_date": {
+          "priority": ["anilist", "madb", "mal", "ann", "bgm", "seesaa", "keyframe"],
+          "rationale": "start_date と同じ",
+          "selection_rule": "priority_fallback"
+        },
+        "status": {
+          "priority": ["anilist", "mal", "madb", "ann", "bgm", "seesaa", "keyframe"],
+          "rationale": "AniList が放映状況最新",
+          "selection_rule": "priority_fallback"
+        },
+        "source_mat": {
+          "priority": ["anilist", "mal", "madb", "ann", "bgm", "seesaa", "keyframe"],
+          "rationale": "原作 (manga/light_novel/original) AniList enum",
+          "selection_rule": "priority_fallback"
+        },
+        "work_type": {
+          "priority": ["madb", "anilist", "mal", "ann", "bgm", "seesaa", "keyframe"],
+          "rationale": "JP production 区分は madb が正確",
+          "selection_rule": "priority_fallback"
+        },
+        "scale_class": {
+          "priority": ["madb", "anilist", "mal", "ann", "bgm", "seesaa", "keyframe"],
+          "rationale": "規模区分 madb 由来",
+          "selection_rule": "priority_fallback"
+        },
+        "country_of_origin": {
+          "priority": ["anilist", "mal", "madb", "ann", "bgm", "seesaa", "keyframe"],
+          "rationale": "AniList countryOfOrigin",
+          "selection_rule": "priority_fallback"
+        }
+      }
+    },
+
+    "person": {
+      "cluster": {
+        "strategy": "entity_resolution.resolve_all (5-stage cascade)",
+        "stages": [
+          {"stage": 1, "name": "exact_match", "complexity": "O(n)",
+           "fast_only": true,
+           "rationale": "name_ja 完全一致 + 年齢/性別 不矛盾"},
+          {"stage": 2, "name": "cross_source_match", "complexity": "O(n)",
+           "fast_only": true,
+           "rationale": "anilist_id/mal_id/madb_id 等 numeric FK 経由"},
+          {"stage": 3, "name": "romaji_match", "complexity": "O(n log n)",
+           "fast_only": false,
+           "rationale": "romaji 正規化マッチ (Pinyin/Hepburn 統一後)"},
+          {"stage": 4, "name": "similarity_based", "complexity": "O(n^2)",
+           "fast_only": false, "threshold": 0.95,
+           "rationale": "Jaro-Winkler 類似度、threshold ≥0.95"},
+          {"stage": 5, "name": "ai_assisted", "complexity": "varies",
+           "fast_only": false, "threshold": 0.8,
+           "rationale": "LLM judge (low-confidence pair の adjudication)"}
+        ],
+        "etl_default": "fast_only=True (stage 1+2 のみ、O(n) を 270K rows で feasible 化)",
+        "open_questions": [
+          "fast_only=True で本番運用 → stage 3-5 漏れ評価必要",
+          "stage 5 の AI 採用基準/コスト",
+          "transitive_closure 後の cycle/over-merge 検出"
+        ],
+        "canonical_id_format": "merged: cluster の alphabetically-first member id / singleton: conformed id"
+      },
+      "fields": {
+        "name_ja": {
+          "priority": ["seesaa", "anilist", "madb", "mal", "bgm", "ann", "keyframe"],
+          "rationale": "SeesaaWiki が日本語人名最も詳細",
+          "selection_rule": "priority_fallback"
+        },
+        "name_en": {
+          "priority": ["anilist", "mal", "ann", "bgm", "seesaa", "madb", "keyframe"],
+          "rationale": "AniList/MAL/ANN が romaji/EN 整備",
+          "selection_rule": "priority_fallback"
+        },
+        "name_ko": {
+          "priority": ["bgm", "anilist", "mal", "ann"],
+          "rationale": "Bangumi が韓国人名収録",
+          "selection_rule": "priority_fallback"
+        },
+        "name_zh": {
+          "priority": ["bgm", "anilist", "mal", "ann"],
+          "rationale": "Bangumi 中文 native",
+          "selection_rule": "priority_fallback"
+        },
+        "gender": {
+          "priority": ["bgm", "anilist", "ann", "mal", "seesaa", "madb", "keyframe"],
+          "rationale": "Bangumi が性別明示記録",
+          "selection_rule": "priority_fallback"
+        },
+        "birth_date": {
+          "priority": ["anilist", "ann", "mal", "bgm", "seesaa", "madb", "keyframe"],
+          "rationale": "AniList/ANN が ISO 構造化日付",
+          "selection_rule": "priority_fallback"
+        },
+        "death_date": {
+          "priority": ["anilist", "ann", "mal", "bgm", "seesaa", "madb", "keyframe"],
+          "rationale": "birth_date 同源",
+          "selection_rule": "priority_fallback"
+        },
+        "nationality": {
+          "priority": ["anilist", "ann", "mal", "bgm", "seesaa", "madb", "keyframe"],
+          "rationale": "AniList Staff.languageV2 (国籍補強)",
+          "selection_rule": "priority_fallback"
+        }
+      }
+    },
+
+    "studio": {
+      "cluster": {
+        "strategy": "1 conformed = 1 canonical (Phase 2a 保守的)",
+        "rationale": "cross-source studio name matching 未実装",
+        "open_questions": [
+          "Phase 2b: 'シャフト'/'Shaft'/'SHAFT' の name normalization + cluster",
+          "country_of_origin/anilist_id 等の cross-ref",
+          "親会社 (Aniplex/A-1 Pictures 等) の階層構造"
+        ],
+        "canonical_id_format": "conformed id をそのまま使用"
+      },
+      "fields": {
+        "name": {
+          "priority": ["anilist", "mal", "seesaa", "madb", "bgm", "ann", "keyframe"],
+          "rationale": "AniList が studio set 最大 cross-ref",
+          "selection_rule": "priority_fallback"
+        },
+        "country_of_origin": {
+          "priority": ["anilist", "mal", "madb", "bgm", "ann", "seesaa", "keyframe"],
+          "rationale": "AniList countryOfOrigin",
+          "selection_rule": "priority_fallback"
+        },
+        "is_animation_studio": {
+          "priority": ["anilist", "mal", "madb", "bgm", "ann", "seesaa", "keyframe"],
+          "rationale": "AniList isAnimationStudio flag",
+          "selection_rule": "priority_fallback"
+        }
+      }
+    }
+  },
+
+  "open_questions_global": [
+    "majority_vote 閾値 3 → 2 への引き下げ妥当性",
+    "ann/bgm/seesaa/madb の anime ID-link 追加 (現状 title+year fallback のみ)",
+    "studio cluster (Phase 2b) 着手優先度",
+    "fast_only=True で本番運用、stage 3-5 のオフライン補完戦略",
+    "LLM verdict 'split' 多発 field の cluster ロジック改修",
+    "decisions.jsonl の sampling rate (全件 vs ランダム 0.1%)"
+  ]
+}

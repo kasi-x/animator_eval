@@ -1,95 +1,30 @@
-"""Column-level source priority declarations for the Resolved layer (Phase 2a).
+"""Source priority rankings — strategy_loader 経由で JSON 駆動。
 
-Each entry in ANIME_RANKING / PERSONS_RANKING / STUDIOS_RANKING maps a
-canonical field name → ordered list of source prefixes from highest to lowest
-priority.
+旧 API (`ANIME_RANKING` 等) は `docs/merge_strategy.json` から動的生成。
+新規コードは `strategy_loader.priority_for()` を使う。
 
-Selection algorithm (implemented in resolve_*.py):
-1. Walk the priority list in order.
+Selection algorithm (実装は `_select.py`):
+1. Walk priority list in order.
 2. Use the first non-NULL, non-empty value found.
 3. If multiple conformed rows from the same priority tier exist,
-   apply majority vote: pick the value agreed upon by 3+ rows.
-   Tie-break: fall back to the value from the first (highest-priority) row.
-
-Source prefix conventions match conformed.anime / conformed.persons `id` prefixes:
-  anilist  → `id LIKE 'anilist:%'`
-  mal      → `id LIKE 'mal:%'`
-  mediaarts / madb → `id LIKE 'madb:%'`
-  ann      → `id LIKE 'ann:%'`
-  bgm      → `id LIKE 'bgm:%'`
-  seesaa   → `id LIKE 'seesaa:%'`  (seesaawiki)
-  keyframe → `id LIKE 'keyframe:%'`
-  sakuga   → `id LIKE 'sakuga:%'`
+   apply majority vote: pick the value agreed upon by N+ rows
+   (N = strategy.selection_rules.majority_vote.threshold).
+4. Tie-break: fall back to the value from the first (highest-priority) row.
 """
 
 from __future__ import annotations
 
-# ---------------------------------------------------------------------------
-# anime field → ordered source list
-# ---------------------------------------------------------------------------
-ANIME_RANKING: dict[str, list[str]] = {
-    # Japanese title: SeesaaWiki has the most authoritative JA titles
-    "title_ja": ["seesaa", "anilist", "madb", "mal", "ann", "bgm", "keyframe"],
-    # English title: AniList / MAL are best for EN
-    "title_en": ["anilist", "mal", "ann", "bgm", "seesaa", "madb", "keyframe"],
-    # Year: MediaArts DB (madb) has authoritative JP broadcast dates
-    "year": ["madb", "anilist", "mal", "ann", "bgm", "seesaa", "keyframe"],
-    # Season/quarter: aligned with year source
-    "season": ["madb", "anilist", "mal", "ann", "bgm", "seesaa", "keyframe"],
-    "quarter": ["madb", "anilist", "mal", "ann", "bgm", "seesaa", "keyframe"],
-    # Episodes: AniList tends to be complete; madb is also strong
-    "episodes": ["anilist", "madb", "mal", "ann", "bgm", "seesaa", "keyframe"],
-    # Format (TV / MOVIE / OVA etc.): AniList has the cleanest enum
-    "format": ["anilist", "mal", "madb", "ann", "bgm", "seesaa", "keyframe"],
-    # Duration (minutes per episode): AniList / MAL
-    "duration": ["anilist", "mal", "madb", "ann", "bgm", "seesaa", "keyframe"],
-    # Dates
-    "start_date": ["anilist", "madb", "mal", "ann", "bgm", "seesaa", "keyframe"],
-    "end_date": ["anilist", "madb", "mal", "ann", "bgm", "seesaa", "keyframe"],
-    # Status: AniList is most up-to-date
-    "status": ["anilist", "mal", "madb", "ann", "bgm", "seesaa", "keyframe"],
-    # Source material
-    "source_mat": ["anilist", "mal", "madb", "ann", "bgm", "seesaa", "keyframe"],
-    # Work type / scale_class: madb most accurate for JP productions
-    "work_type": ["madb", "anilist", "mal", "ann", "bgm", "seesaa", "keyframe"],
-    "scale_class": ["madb", "anilist", "mal", "ann", "bgm", "seesaa", "keyframe"],
-    # Country of origin: AniList
-    "country_of_origin": ["anilist", "mal", "madb", "ann", "bgm", "seesaa", "keyframe"],
-}
+from src.etl.resolved.strategy_loader import load_strategy
 
-# ---------------------------------------------------------------------------
-# persons field → ordered source list
-# ---------------------------------------------------------------------------
-PERSONS_RANKING: dict[str, list[str]] = {
-    # JA name: SeesaaWiki has deep JA coverage; AniList next
-    "name_ja": ["seesaa", "anilist", "madb", "mal", "bgm", "ann", "keyframe"],
-    # EN name: AniList / MAL / ANN are best for romaji/English
-    "name_en": ["anilist", "mal", "ann", "bgm", "seesaa", "madb", "keyframe"],
-    "name_ko": ["bgm", "anilist", "mal", "ann"],
-    "name_zh": ["bgm", "anilist", "mal", "ann"],
-    # Gender: Bangumi has explicit gender data; AniList next
-    "gender": ["bgm", "anilist", "ann", "mal", "seesaa", "madb", "keyframe"],
-    # Birth date: AniList / ANN have structured dates
-    "birth_date": ["anilist", "ann", "mal", "bgm", "seesaa", "madb", "keyframe"],
-    "death_date": ["anilist", "ann", "mal", "bgm", "seesaa", "madb", "keyframe"],
-    # Nationality
-    "nationality": ["anilist", "ann", "mal", "bgm", "seesaa", "madb", "keyframe"],
-}
 
-# ---------------------------------------------------------------------------
-# studios field → ordered source list
-# ---------------------------------------------------------------------------
-STUDIOS_RANKING: dict[str, list[str]] = {
-    # Name: AniList has the largest cross-referenced studio set
-    "name": ["anilist", "mal", "seesaa", "madb", "bgm", "ann", "keyframe"],
-    # Country: AniList explicit country_of_origin
-    "country_of_origin": ["anilist", "mal", "madb", "bgm", "ann", "seesaa", "keyframe"],
-    "is_animation_studio": ["anilist", "mal", "madb", "bgm", "ann", "seesaa", "keyframe"],
-}
+def _build_ranking(entity_type: str) -> dict[str, list[str]]:
+    fields = load_strategy()["entities"][entity_type]["fields"]
+    return {f: list(spec["priority"]) for f, spec in fields.items()}
 
-# ---------------------------------------------------------------------------
-# Helper: extract source prefix from a conformed ID string
-# ---------------------------------------------------------------------------
+
+ANIME_RANKING: dict[str, list[str]] = _build_ranking("anime")
+PERSONS_RANKING: dict[str, list[str]] = _build_ranking("person")
+STUDIOS_RANKING: dict[str, list[str]] = _build_ranking("studio")
 
 
 def source_prefix(conformed_id: str) -> str:
