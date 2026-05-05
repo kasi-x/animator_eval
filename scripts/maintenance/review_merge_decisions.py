@@ -165,7 +165,7 @@ def main() -> None:
     p.add_argument("--out", dest="out", required=True)
     p.add_argument("--max", type=int, default=0, help="0 = 全件")
     p.add_argument("--base-url", default=os.environ.get("LLM_BASE_URL", "http://localhost:11434"))
-    p.add_argument("--model", default=os.environ.get("LLM_MODEL", "qwen3.6:35b-a3b"))
+    p.add_argument("--model", default=os.environ.get("LLM_MODEL", "qwen2.5:14b-instruct"))
     p.add_argument("--api-key", default=os.environ.get("LLM_API_KEY", ""))
     p.add_argument("--dry-run", action="store_true", help="LLM 呼出せず record をそのまま転記")
     args = p.parse_args()
