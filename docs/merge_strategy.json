@@ -1,9 +1,22 @@
 {
-  "version": "1.0",
+  "version": "1.2",
   "generated_at": "2026-05-05",
-  "approved_by": null,
-  "approved_at": null,
-  "description": "Resolved 層 代表値選抜戦略 (cluster + field priority + selection rules)。LLM レビュー後 approved_by/at を埋める。実装は src/etl/resolved/strategy_loader.py 経由。",
+  "approved_by": "qwen2.5:14b-instruct (3-round full LLM review)",
+  "approved_at": "2026-05-05",
+  "approval_evidence": {
+    "rounds": 3,
+    "samples_per_round": 9394,
+    "wrong_value_trend": [218, 28, 12],
+    "split_trend": [30, 3, 3],
+    "improvement_pct": {"wrong_value": -94.5, "split": -90.0},
+    "remaining_issues": "戦略レベルでなくデータ品質 (bronze cleansing): typo / 機関名・グループ名混入 / 役職表記 / TMDb 異常値"
+  },
+  "description": "Resolved 層 代表値選抜戦略 (cluster + field priority + selection rules)。LLM レビュー (qwen2.5:14b-instruct) 3 周で wrong_value を 218→12 (94.5% 削減)、split を 30→3 (90% 削減) まで改善した承認済戦略。実装は src/etl/resolved/strategy_loader.py 経由。",
+  "version_history": [
+    {"v": "1.0", "date": "2026-05-05", "change": "初版 — 既存 source_ranking.py から JSON 抽出"},
+    {"v": "1.1", "date": "2026-05-05", "change": "TMDb を全 person field + anime.title_en に追加 (1周目 LLM 検証で 99 件 name_en 取りこぼし発見、428K 件流入回復)"},
+    {"v": "1.2", "date": "2026-05-05", "change": "tmdb を anime.title_ja から除外 (2周目 LLM で外国語 21 件 wrong_value 検出)"}
+  ],
 
   "selection_rules": {
     "priority_fallback": {

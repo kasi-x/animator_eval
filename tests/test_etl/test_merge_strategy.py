@@ -22,7 +22,7 @@ from src.etl.resolved._select import select_representative_value
 def test_strategy_json_valid() -> None:
     """JSON が parse でき必須 key を持つ。"""
     s = strategy_loader.load_strategy()
-    assert s["version"] == "1.0"
+    assert isinstance(s.get("version"), str)
     assert "selection_rules" in s
     assert "entities" in s
     for ent in ("anime", "person", "studio"):
