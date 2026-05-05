@@ -75,6 +75,30 @@ def test_title_en_numeric_invalid() -> None:
     assert is_invalid_for_field("title_en", "Attack on Titan") is False
 
 
+def test_title_ja_no_japanese_invalid() -> None:
+    """title_ja に日本語が含まれない → invalid。"""
+    assert is_invalid_for_field("title_ja", "GUN HAZARD") is True
+    assert is_invalid_for_field("title_ja", "TECMO SUPER BOWL") is True
+    assert is_invalid_for_field("title_ja", "JUST DANCE WiiU") is True
+    assert is_invalid_for_field("title_ja", "DigDug Digging Strike") is True
+    # 1 文字でも日本語を含む → valid
+    assert is_invalid_for_field("title_ja", "進撃の巨人") is False
+    assert is_invalid_for_field("title_ja", "進撃の巨人 Season 1") is False
+    assert is_invalid_for_field("title_ja", "シナぷしゅ") is False
+    # title_en には日本語 check 適用しない
+    assert is_invalid_for_field("title_en", "GUN HAZARD") is False
+
+
+def test_title_ja_episode_token_invalid() -> None:
+    """エピソード番号 suffix を含む title_ja は invalid。"""
+    assert is_invalid_for_field("title_ja", "オーバーロードⅣ Episode6") is True
+    assert is_invalid_for_field("title_ja", "Lesson 21") is True
+    assert is_invalid_for_field("title_ja", "Track-12 Breathless") is True
+    assert is_invalid_for_field("title_ja", "Chapter 5 はじまり") is True
+    # episode 番号なし → valid
+    assert is_invalid_for_field("title_ja", "進撃の巨人") is False
+
+
 def test_name_ja_role_suffix_invalid() -> None:
     assert is_invalid_for_field("name_ja", "日映科学映画製作所[製作]") is True
 

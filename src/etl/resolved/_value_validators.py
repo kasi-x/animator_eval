@@ -52,6 +52,34 @@ def _is_numeric_only(value: str) -> bool:
     return bool(re.fullmatch(r"[\d\s\-_/.]+", value.strip()))
 
 
+# 日本語文字 (CJK Unified / Hiragana / Katakana / 半角カタカナ / 全角英数等)
+_JA_CHAR_RE = re.compile(
+    r"[぀-ゟ"   # Hiragana
+    r"゠-ヿ"   # Katakana
+    r"一-鿿"   # CJK Unified
+    r"㐀-䶿"   # CJK Extension A
+    r"ｦ-ﾟ"   # Hankaku Katakana
+    r"]"
+)
+
+
+def _has_japanese_char(value: str) -> bool:
+    """value に日本語 (ひらがな/カタカナ/漢字/半角カナ) が 1 文字でも含まれるか。"""
+    return bool(_JA_CHAR_RE.search(value))
+
+
+# Episode/Lesson/Track 等の番号 suffix
+_EPISODE_TOKEN_RE = re.compile(
+    r"\b(Episode|Lesson|Track|Vol|Volume|Chapter|Part|Stage|Round|Ep|Eps|EP)\s*[\d０-９]+\b",
+    re.IGNORECASE,
+)
+
+
+def _has_episode_token(value: str) -> bool:
+    """'Episode 6' 'Lesson 21' 'Track-12' 等のエピソード番号 token を含むか。"""
+    return bool(_EPISODE_TOKEN_RE.search(value))
+
+
 def _has_role_suffix_brackets(value: str) -> bool:
     """末尾に角括弧 suffix `[製作]` 等を持つか。"""
     return bool(_ROLE_SUFFIX_RE.search(value))
@@ -85,6 +113,16 @@ def is_invalid_for_field(field: str, value: Any) -> bool:
 
     if field in ("title_en", "title_ja"):
         if _is_numeric_only(v):
+            return True
+
+    if field == "title_ja":
+        # 日本語文字 1 つも含まない値は title_ja として invalid
+        # (madb の 'GUN HAZARD' 'TECMO SUPER BOWL' 'JUST DANCE WiiU' 等)
+        if not _has_japanese_char(v):
+            return True
+        # 'Episode 6' 'Lesson 21' 等のエピソード番号 suffix を含む
+        # (madb の 'オーバーロードⅣ Episode6' 等)
+        if _has_episode_token(v):
             return True
 
     if field == "name_ja":
