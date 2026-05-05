@@ -90,3 +90,59 @@ def is_invalid_for_field(field: str, value: Any) -> bool:
             return True
 
     return False
+
+
+# ── Cleansing (parser 修正時の参照実装) ─────────────────────────────────────
+#
+# 検出された異常値の根本原因は parser/scraper 側 (seesaawiki: 複数名 1 cell
+# 24,124 件、madb: 末尾 [xxx] suffix 8,130 件)。本来は scraper / parser を
+# 直して bronze 段階から綺麗にすべき。
+#
+# 現状は `is_invalid_for_field()` を Resolved 層 _select で使う一段防衛のみ。
+# 以下の cleanse_* 関数は **未使用**。parser 修正時に同じ判定ロジックを
+# bronze writer / scraper の name 抽出処理に移植するための参照実装として残す。
+#
+# 移植先候補:
+#   - src/scrapers/seesaawiki_scraper.py の persons 抽出 (複数名 split)
+#   - src/scrapers/mediaarts_scraper.py の credit 抽出 (suffix strip)
+#
+# TODO: parser 修正後、本 module の cleanse_* は削除可。validator は残す
+#       (上流追加 source や既知データ汚染への二次防衛として有用)。
+
+
+def cleanse_name_ja(value: Any) -> str | None:
+    """name_ja の正規化。None/空/異常値は None 返却、末尾 [xxx] suffix は strip。
+
+    挙動:
+      - None / 空文字 → None
+      - 機関名キーワード含む → None
+      - 空白区切り 3+ tokens (複数名混在) → None
+      - 末尾 [xxx] / 【xxx】 suffix → strip して残部返却 (空なら None)
+      - その他 → strip した値
+    """
+    if not isinstance(value, str):
+        return None
+    s = value.strip()
+    if not s:
+        return None
+    if _is_institution_name(s):
+        return None
+    if _has_multiple_persons(s):
+        return None
+    # 末尾 [xxx] strip
+    s = _ROLE_SUFFIX_RE.sub("", s).strip()
+    if not s:
+        return None
+    return s
+
+
+def cleanse_title(value: Any) -> str | None:
+    """title (ja/en) の正規化。数字のみは None、その他 strip。"""
+    if not isinstance(value, str):
+        return None
+    s = value.strip()
+    if not s:
+        return None
+    if _is_numeric_only(s):
+        return None
+    return s

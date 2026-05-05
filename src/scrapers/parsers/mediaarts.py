@@ -30,6 +30,10 @@ def parse_contributor_text(text: str) -> list[tuple[str, str]]:
     - No brackets: "仲倉重郎" -> ("other", "仲倉重郎")
     - Multiple roles: "[脚本・演出]名前" -> [("脚本", "名前"), ("演出", "名前")]
     - Fullwidth slash: ／ (JSON-LD dump format)
+    - Trailing role suffix: "日映科学映画製作所[製作]" -> ("製作", "日映科学映画製作所")
+      (madb の一部レコードで観測される、規約外だが防御的に対応)
+    - Wrap-only brackets: "[こだま兼嗣]" -> ("other", "こだま兼嗣")
+      (role 部分が name で名前が空の異常 — 中身を name として救済)
     """
     if not text or not text.strip():
         return []
@@ -44,21 +48,41 @@ def parse_contributor_text(text: str) -> list[tuple[str, str]]:
         if not segment:
             continue
 
-        match = re.match(r"\[([^\]]+)\]\s*(.+)", segment)
+        # 1. 先頭 [role]name (公式形式) — name 空の "[name]" 単独も拾う
+        match = re.match(r"\[([^\]]+)\]\s*(.*)$", segment)
         if match:
             role_text = match.group(1).strip()
             name = match.group(2).strip()
             if not name:
+                # "[こだま兼嗣]" 単独 → role 部分を name として救済
+                if role_text:
+                    results.append(("other", role_text))
                 continue
             roles = re.split(r"[・/]", role_text)
             for role in roles:
                 role = role.strip()
                 if role:
                     results.append((role, name))
-        else:
-            name = segment.strip()
+            continue
+
+        # 2. 末尾 name[role] (madb 異常データ対策)
+        m_suffix = re.match(r"^(.+?)\s*[\[【]([^\]】]*)[\]】]\s*$", segment)
+        if m_suffix:
+            name = m_suffix.group(1).strip()
+            role_text = m_suffix.group(2).strip()
             if name:
-                results.append(("other", name))
+                if role_text:
+                    roles = re.split(r"[・/]", role_text)
+                    for role in roles:
+                        role = role.strip()
+                        if role:
+                            results.append((role, name))
+                else:
+                    results.append(("other", name))
+            continue
+
+        # 3. plain
+        results.append(("other", segment))
 
     return results
 
@@ -269,7 +293,11 @@ def _normalize_label(label: str) -> str:
 def _split_production_company_segments(raw: str) -> list[tuple[str, str]]:
     """Split productionCompany text into (role_label, company_name) pairs.
 
-    Handles both bracketed "[役割]会社名" and bare "会社名" forms.
+    対応形式:
+    - 先頭 "[役割]会社名"      (公式形式)
+    - 末尾 "会社名[役割]"      (madb 異常データ、`日映科学映画製作所[製作]` 等)
+    - 包み "[会社名]"          (role 空 → company として救済)
+    - bare "会社名"
     Returns empty list for missing/non-string input.
     """
     if not raw or not isinstance(raw, str):
@@ -281,14 +309,27 @@ def _split_production_company_segments(raw: str) -> list[tuple[str, str]]:
         seg = seg.strip()
         if not seg:
             continue
+        # 1. 先頭 [role]name
         m = re.match(r"\[([^\]]*)\]\s*(.+)", seg)
         if m:
             role = m.group(1).strip()
             name = m.group(2).strip()
             if name:
                 pairs.append((role, name))
-        else:
-            pairs.append(("", seg))
+            elif role:
+                # "[会社名]" 単独 → role 部分を name として救済
+                pairs.append(("", role))
+            continue
+        # 2. 末尾 name[role]
+        m_suffix = re.match(r"^(.+?)\s*[\[【]([^\]】]*)[\]】]\s*$", seg)
+        if m_suffix:
+            name = m_suffix.group(1).strip()
+            role = m_suffix.group(2).strip()
+            if name:
+                pairs.append((role, name))
+            continue
+        # 3. plain
+        pairs.append(("", seg))
     return pairs
 
 

@@ -107,6 +107,27 @@ class TestParseContributorText:
             ("脚本", "佐藤三"),
         ]
 
+    def test_trailing_role_suffix(self):
+        """末尾 name[role] 形式 (madb 異常データ対策)。"""
+        # "日映科学映画製作所[製作]" → ("製作", "日映科学映画製作所")
+        result = parse_contributor_text("日映科学映画製作所[製作]")
+        assert result == [("製作", "日映科学映画製作所")]
+
+    def test_trailing_role_fullwidth_brackets(self):
+        """末尾 【役割】 (全角)。"""
+        result = parse_contributor_text("田中太郎【監督】")
+        assert result == [("監督", "田中太郎")]
+
+    def test_wrap_only_brackets(self):
+        """[name] 単独 → role 空、role 部分を name として救済。"""
+        result = parse_contributor_text("[こだま兼嗣]")
+        assert result == [("other", "こだま兼嗣")]
+
+    def test_trailing_multi_role(self):
+        """末尾 [脚本・演出] 複数 role。"""
+        result = parse_contributor_text("田中太郎[脚本・演出]")
+        assert result == [("脚本", "田中太郎"), ("演出", "田中太郎")]
+
     def test_whitespace_handling(self):
         """Extra whitespace handling."""
         text = "  [監督]  田中 太郎  /  [脚本]  鈴木 次郎  "
