@@ -1146,6 +1146,56 @@ async def scrape_seesaawiki(
     return stats
 
 
+def _emit_single_person_credit(
+    persons_bw,
+    credits_bw,
+    person_cache: dict[str, Person],
+    stats: dict,
+    anime_id: str,
+    name: str,
+    parsed: "ParsedCredit",
+    episode: int | None,
+    total_episodes: int | None,
+    source_listing_position: int | None,
+) -> None:
+    """1 person の credit を保存 (multi-name split 用 helper)。"""
+    if name not in person_cache:
+        person_id = make_seesaa_person_id(name)
+        person = Person(id=person_id, name_ja=name)
+        persons_bw.append(person.model_dump(mode="json"))
+        person_cache[name] = person
+        stats["persons_created"] += 1
+    else:
+        person = person_cache[name]
+
+    role = parse_role(parsed.role)
+    resolved_episodes: list[int] = list(parsed.episodes) if parsed.episodes else []
+    if parsed.episode_from is not None and total_episodes:
+        resolved_episodes.extend(range(parsed.episode_from, total_episodes + 1))
+    if resolved_episodes:
+        resolved_episodes = sorted(set(resolved_episodes))
+
+    if resolved_episodes:
+        for ep in resolved_episodes:
+            credit = Credit(
+                person_id=person.id, anime_id=anime_id, role=role,
+                raw_role=parsed.role, episode=ep, source="seesaawiki",
+                affiliation=parsed.affiliation, position=parsed.position,
+                source_listing_position=source_listing_position,
+            )
+            credits_bw.append(credit.model_dump(mode="json"))
+            stats["credits_created"] += 1
+    else:
+        credit = Credit(
+            person_id=person.id, anime_id=anime_id, role=role,
+            raw_role=parsed.role, episode=episode, source="seesaawiki",
+            affiliation=parsed.affiliation, position=parsed.position,
+            source_listing_position=source_listing_position,
+        )
+        credits_bw.append(credit.model_dump(mode="json"))
+        stats["credits_created"] += 1
+
+
 def _save_credit(
     persons_bw,
     credits_bw,
@@ -1174,6 +1224,19 @@ def _save_credit(
     if parsed.is_company:
         # Store as studio involvement, not person credit
         _save_studio_credit(studios_bw, anime_studios_bw, anime_id, parsed.name, parsed.role, stats)
+        return
+
+    # 複数名混在検出 (空白区切り 3+ tokens、parser の split 漏れ対策)。
+    # LLM 検証 (3周目) で 24,124 件の seesaa name_ja が複数名 1 cell に混在と判明。
+    # 例: '越智浩一 池口裕児 石野桂子 Adil Tahir' → 4 個別 person + 4 credits
+    # 2 token (姓 名 / John Smith) は単一人名扱いで split せず、3+ tokens のみ split。
+    name_tokens = [t for t in re.split(r"[\s　]+", parsed.name.strip()) if t]
+    if len(name_tokens) >= 3:
+        for tok in name_tokens:
+            _emit_single_person_credit(
+                persons_bw, credits_bw, person_cache, stats,
+                anime_id, tok, parsed, episode, total_episodes, source_listing_position,
+            )
         return
 
     if parsed.name not in person_cache:
