@@ -182,10 +182,26 @@ class PolicyMonopsonyReport(BaseReportGenerator):
         if violations:
             findings_html += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
 
+        from ..section_builder import KPICard
+        kpis = [
+            KPICard("HHI 範囲", f"{hhi_min:.1f} – {hhi_max:.1f}",
+                    f"{yr_min}–{yr_max} 年"),
+            KPICard("対象年数", f"{n_years}", "年次集計"),
+            KPICard("アクティブスタジオ数",
+                    f"{min(n_studios):,} – {max(n_studios):,}",
+                    "年次レンジ"),
+        ]
+
         return ReportSection(
             title="スタジオ集中度（HHI）時系列",
             findings_html=findings_html,
             visualization_html=viz_embed(fig, "chart_hhi_trends", height=420),
+            kpi_cards=kpis,
+            chart_caption=(
+                "横軸 = 年、左軸 = HHI 生値 (実線・紫)、右軸 = HHI 正規化 (点線・青)。"
+                "点線 (1500) は米国 DOJ 競争的市場上限。"
+                "HHI 高 = 上位スタジオへの集中、HHI 低 = 分散。"
+            ),
             method_note=(
                 "HHI_y = Σ_s (share_{s,y})² × 10000。"
                 "share_{s,y} = スタジオsの年yにおける総クレジット数 / 全スタジオ合計クレジット数。"

@@ -27,6 +27,41 @@ exceptions:
       replaces. Naming the prohibited terms is required to specify what the
       glossary blocks.
 
+  - file: scripts/report_generators/_spec.py
+    line_pattern: 能力低下
+    term: 能力
+    reason: >
+      Appears inside the _AUDIENCE_DEFAULT_FORBIDDEN dictionary as a
+      blocklist literal. Naming the prohibited term is required for the
+      InterpretationGuard to filter it out of interpretation text.
+
+  - file: scripts/report_generators/_spec.py
+    line_pattern: 能力 / 実績 / 過小評価
+    term: 能力
+    reason: >
+      Appears in a docstring example showing what audience-default
+      forbidden_framing values look like. Negation/blocklist context.
+
+  - file: scripts/report_generators/_spec.py
+    line_pattern: 能力不足
+    term: 能力
+    reason: Appears in the hr-audience blocklist literal.
+
+  - file: scripts/report_generators/_spec.py
+    line_pattern: 実力ランキング
+    term: 実力
+    reason: Appears in the hr-audience blocklist literal.
+
+  - file: scripts/report_generators/_spec.py
+    line_pattern: 優秀人材
+    term: 優秀
+    reason: Appears in the hr-audience blocklist literal.
+
+  - file: scripts/report_generators/_spec.py
+    line_pattern: 隠れた才能
+    term: 才能
+    reason: Appears in the biz-audience blocklist literal.
+
   - file: scripts/report_generators/section_builder.py
     line_pattern: "ability, skill, artistry, or professional worth"
     term: ability

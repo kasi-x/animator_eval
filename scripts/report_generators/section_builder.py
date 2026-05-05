@@ -296,8 +296,27 @@ METHOD_NOTE_TEMPLATES: dict[str, str] = {
 
 
 @dataclass
+class KPICard:
+    """One headline KPI shown above the section findings.
+
+    The label is short noun phrase (not a conclusion). The value is the
+    rendered string ("12,345", "0.42", "n/a"). The ``hint`` is an optional
+    one-line caption beneath the value (e.g. "対象期間 1990–2024").
+    """
+
+    label: str
+    value: str
+    hint: str = ""
+
+
+@dataclass
 class ReportSection:
-    """A single section of a v2-compliant report.
+    """A single section of a v2/v3-compliant report.
+
+    v3 (2026-05-05): Added ``kpi_cards`` (要点先出し) and ``chart_caption``
+    (図 1 文説明). Both are optional but encouraged for every section that
+    produces a chart, matching the dense, scannable layout used in
+    ``industry_overview.html``.
 
     Attributes:
         title: Noun phrase (not a conclusion). e.g. "Score Distribution by Tier"
@@ -309,6 +328,12 @@ class ReportSection:
         interpretation_html: Optional. If present, must be labeled,
             state authorship, present min 1 alternative, disclose premises.
         section_id: HTML id attribute for anchor links.
+        kpi_cards: 2-6 KPIs rendered above findings as a stats-grid strip.
+            Use this to surface the section's headline numbers (n, CI width,
+            null-model deviation, etc.) so the reader sees the answer first.
+        chart_caption: Single sentence directly under the chart explaining
+            "what this chart shows" (axes, units, color encoding). The chart
+            title carries the WHAT; the caption carries HOW TO READ IT.
     """
 
     title: str
@@ -317,6 +342,8 @@ class ReportSection:
     method_note: str = ""
     interpretation_html: str | None = None
     section_id: str = ""
+    kpi_cards: list[KPICard] | None = None
+    chart_caption: str = ""
 
 
 @dataclass
@@ -452,14 +479,63 @@ class SectionBuilder:
         self._check_interpretation_has_alt(interpretation_html)
 
     @staticmethod
+    def _render_kpi_strip_block(section: "ReportSection") -> str:
+        """v3: KPI 要点先出しストリップ (industry_overview.html 風)。"""
+        if not section.kpi_cards:
+            return ""
+        cards: list[str] = []
+        for kpi in section.kpi_cards:
+            hint = (
+                f'<div class="hint" style="font-size:0.72rem;color:#7a7a92;'
+                f'margin-top:0.25rem;">{kpi.hint}</div>'
+                if kpi.hint else ""
+            )
+            cards.append(
+                '<div class="stat-card">'
+                f'<div class="value">{kpi.value}</div>'
+                f'<div class="label">{kpi.label}</div>'
+                f"{hint}"
+                "</div>"
+            )
+        return (
+            '  <div class="stats-grid" style="margin-bottom:1rem;">\n    '
+            + "\n    ".join(cards)
+            + "\n  </div>"
+        )
+
+    @staticmethod
     def _render_findings_block(section: "ReportSection") -> str:
         return f'  <div class="findings">\n    {section.findings_html}\n  </div>'
 
     @staticmethod
-    def _render_visualization_block(section: "ReportSection") -> str:
+    def _default_chart_caption(section: "ReportSection") -> str:
+        """v3: chart_caption 未指定時のデフォルト 1 文。
+
+        section.title から「この図は X を示す。横軸/縦軸/凡例は本文と
+        Method Note を参照。」を生成する。ReportSection 側で
+        chart_caption を明示指定すれば override される。
+        """
+        if not section.title:
+            return ""
+        return (
+            f"この図は「{section.title}」を可視化する。"
+            "軸ラベル / 凡例 / 信頼区間の意味は本文と Method Note を参照。"
+        )
+
+    @classmethod
+    def _render_visualization_block(cls, section: "ReportSection") -> str:
         if not section.visualization_html:
             return ""
-        return f'  <div class="chart-container">\n    {section.visualization_html}\n  </div>'
+        caption = section.chart_caption or cls._default_chart_caption(section)
+        caption_html = (
+            '<p class="chart-caption" style="font-size:0.82rem;color:#9a9ab0;'
+            f'margin-top:0.5rem;line-height:1.5;">{caption}</p>'
+            if caption else ""
+        )
+        return (
+            f'  <div class="chart-container">\n    {section.visualization_html}\n'
+            f"  </div>{caption_html}"
+        )
 
     @staticmethod
     def _render_method_note_block(section: "ReportSection") -> str:
@@ -479,11 +555,21 @@ class SectionBuilder:
         return f"{_INTERPRETATION_HEADER_HTML}    {section.interpretation_html}\n  </div>"
 
     def build_section(self, section: ReportSection) -> str:
-        """Render a ReportSection to v2-compliant HTML."""
+        """Render a ReportSection to v2/v3-compliant HTML.
+
+        v3 layout (top → bottom):
+          1. <h2> section title
+          2. KPI strip (optional, ``kpi_cards``) — 要点先出し
+          3. Findings — descriptive paragraphs
+          4. Chart + chart_caption (optional, ``chart_caption``) — 図 1 文説明
+          5. Method note (folded)
+          6. Interpretation (optional, labelled)
+        """
         sid = section.section_id or section.title.lower().replace(" ", "-")[:40]
         blocks = [
             f'<div class="card report-section" id="sec-{sid}">',
             f"  <h2>{section.title}</h2>",
+            self._render_kpi_strip_block(section),
             self._render_findings_block(section),
             self._render_visualization_block(section),
             self._render_method_note_block(section),

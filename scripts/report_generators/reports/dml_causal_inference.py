@@ -103,10 +103,30 @@ class DMLCausalInferenceReport(BaseReportGenerator):
         if violations:
             findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
 
+        from ..section_builder import KPICard
+        n_pairs = len(rows)
+        n_sig = sum(
+            1 for p in ci_points
+            if p.p_value is not None and p.p_value < 0.05
+        )
+        total_n = sum(p.n or 0 for p in ci_points)
+        kpis = [
+            KPICard("処置-結果ペア", f"{n_pairs}", "DML 推定対象"),
+            KPICard("有意 (p<0.05)", f"{n_sig} / {n_pairs}",
+                    "Wald 95% CI が 0 を跨がない"),
+            KPICard("総観測数", f"{total_n:,}", "全ペア合計"),
+        ]
+
         return ReportSection(
             title="DML処置効果推定値",
             findings_html=findings,
             visualization_html=viz_embed(fig, "chart_dml_overview"),
+            kpi_cards=kpis,
+            chart_caption=(
+                "横軸 = ATE 推定値 (95% CI = ±1.96·SE)、縦軸 = 処置→結果ペア。"
+                "塗り潰し = 有意 (95% CI が 0 を跨がない)、中抜き = 非有意。"
+                "点線 (ATE=0) は無効果線。GBM 5-fold cross-fit による交絡調整済み。"
+            ),
             method_note=(
                 "DML推定値はfeat_causal_estimates（Phase 9因果モジュール）由来。"
                 "ATE = 交差適合法で推定された平均処置効果。"

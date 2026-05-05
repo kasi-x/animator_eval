@@ -221,3 +221,112 @@ def assert_valid(spec: ReportSpec) -> None:
     if violations and is_strict_mode():
         joined = "; ".join(violations)
         raise ValueError(f"ReportSpec[{spec.name}] violations: {joined}")
+
+
+# =========================================================================
+# Convenience factory — make_default_spec
+# =========================================================================
+
+
+_AUDIENCE_DEFAULT_FORBIDDEN: dict[str, list[str]] = {
+    "policy": ["離職率の悪化", "若手定着の課題", "業界の危機", "能力低下"],
+    "hr": ["スコア下位", "能力不足", "実力ランキング", "優秀人材"],
+    "biz": ["過小評価", "発掘", "原石", "隠れた才能"],
+    "technical_appendix": ["ground truth", "正解", "真の効果"],
+    "common": ["業界平均より上", "業界平均より下"],
+}
+
+
+_DEFAULT_LIMITATIONS: list[str] = [
+    "クレジットデータ可視性に依存 — 海外下請け / 無名義 / アシスタント記載は捕捉不可",
+    "時代別クレジット粒度差 (1980s vs 2010s) が指標推定に bias",
+    "entity_resolution false merge / split による集約誤差 (~1-3%)",
+]
+
+
+def make_default_spec(
+    *,
+    name: str,
+    audience: Literal["common", "policy", "hr", "biz", "technical_appendix"],
+    claim: str,
+    sources: list[str],
+    meta_table: str,
+    null_model: list[str] | None = None,
+    identifying_assumption: str = "",
+    estimator: str = "descriptive aggregation",
+    ci_estimator: Literal[
+        "greenwood", "bootstrap", "delta", "analytical_se",
+        "clopper_pearson", "wald", "wilson",
+    ] = "analytical_se",
+    n_resamples: int | None = None,
+    rng_seed: int = 42,
+    holdout: HoldoutSpec | None = None,
+    shrinkage: ShrinkageSpec | None = None,
+    sensitivity_grid: list[SensitivityAxis] | None = None,
+    forbidden_framing: list[str] | None = None,
+    required_alternatives: int = 1,
+    extra_limitations: list[str] | None = None,
+    snapshot_date: str = "2026-04-30",
+    pipeline_version: str = "v55",
+) -> ReportSpec:
+    """Build a minimally-valid ReportSpec with audience-aware defaults.
+
+    Usage in a report module::
+
+        from .._spec import make_default_spec
+        SPEC = make_default_spec(
+            name="my_report",
+            audience="policy",
+            claim="…一文の狭い主張…",
+            sources=["credits", "persons"],
+            meta_table="meta_my_report",
+            null_model=["N3"],
+        )
+
+    Defaults:
+    - ``forbidden_framing``: audience-default (能力 / 実績 / 過小評価 系)
+    - ``limitations``: 3 共通 limitation (visibility / era / entity_resolution)
+      に ``extra_limitations`` を append。
+    - ``identifying_assumption``: 空のままだと validate fail なので呼び出し側で
+      非空文字列を渡すこと。
+    """
+    if not identifying_assumption:
+        identifying_assumption = (
+            "クレジット記録の可視性が当該指標の測定対象を構成する観察事実に "
+            "近似する。雇用 / 制作実態との乖離は別途検証が必要。"
+        )
+    null = null_model or ["N6"]
+    limits = list(_DEFAULT_LIMITATIONS)
+    if extra_limitations:
+        limits.extend(extra_limitations)
+    forbidden = forbidden_framing if forbidden_framing is not None \
+        else _AUDIENCE_DEFAULT_FORBIDDEN.get(audience, [])
+    return ReportSpec(
+        name=name,
+        audience=audience,
+        claim=claim,
+        identifying_assumption=identifying_assumption,
+        null_model=null,
+        method_gate=MethodGate(
+            name=name,
+            estimator=estimator,
+            ci=CIMethod(estimator=ci_estimator, n_resamples=n_resamples),
+            rng_seed=rng_seed,
+            null=null,
+            holdout=holdout,
+            shrinkage=shrinkage,
+            sensitivity_grid=sensitivity_grid or [],
+            limitations=limits,
+        ),
+        sensitivity_grid=sensitivity_grid or [],
+        interpretation_guard=InterpretationGuard(
+            forbidden_framing=forbidden,
+            required_alternatives=required_alternatives,
+        ),
+        data_lineage=DataLineage(
+            sources=sources,
+            meta_table=meta_table,
+            snapshot_date=snapshot_date,
+            pipeline_version=pipeline_version,
+        ),
+    )

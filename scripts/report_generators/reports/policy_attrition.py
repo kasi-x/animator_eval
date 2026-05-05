@@ -28,7 +28,7 @@ from src.viz.primitives import (
 
 from ..helpers import insert_lineage
 from ..html_templates import plotly_div_safe  # noqa: F401  (legacy shim still used elsewhere)
-from ..section_builder import ReportSection, SectionBuilder
+from ..section_builder import KPICard, ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
 
 _JSON_DIR = Path(__file__).parents[4] / "result" / "json"
@@ -235,10 +235,32 @@ class PolicyAttritionReport(BaseReportGenerator):
         if violations:
             findings_html += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
 
+        # v3: KPI strip (要点先出し)
+        n_cohorts = len(strata)
+        total_n = sum(s.n for s in strata if s.n is not None) if strata else 0
+        medians = [s.median_survival for s in strata if s.median_survival is not None]
+        kpis = [
+            KPICard("コホート数", f"{n_cohorts}", "デビュー年代区分"),
+            KPICard("対象人物数", f"{total_n:,}" if total_n else "n/a",
+                    "全コホート合計"),
+        ]
+        if medians:
+            kpis.append(KPICard(
+                "中央生存時間", f"{min(medians):.1f}–{max(medians):.1f}年",
+                "コホート間レンジ",
+            ))
+
         return ReportSection(
             title="デビューコホート別生存曲線",
             findings_html=findings_html,
             visualization_html=viz_html,
+            kpi_cards=kpis,
+            chart_caption=(
+                "横軸 = デビューからの経過年数、縦軸 = 翌年クレジットが観測される割合 "
+                "S(t)。線色はデビューコホート、薄い帯は Greenwood 95% 信頼区間。"
+                "下の at-risk 表が各時点でまだ観測されていない (打切り前) 人物数。"
+                "中央値線 (点線) は S(t)=0.5 への到達時間。"
+            ),
             method_note=(
                 "KM推定量（Kaplan–Meier）。"
                 "イベント定義: gap_type == 'exit' かつ returned == 0。"
@@ -359,10 +381,31 @@ class PolicyAttritionReport(BaseReportGenerator):
         if violations:
             findings_html += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
 
+        # v3: KPI strip
+        n_sig = sum(
+            1 for i, p in enumerate(p_vals)
+            if p is not None and p < 0.05
+        )
+        kpis = [
+            KPICard("共変量数", f"{len(covariates)}", "Cox PH 入力変数"),
+            KPICard("有意 (p<0.05)", f"{n_sig} / {len(covariates)}",
+                    "Wald 検定 (95% CI が HR=1 を跨がない)"),
+        ]
+        if dml_theta is not None:
+            kpis.append(KPICard("DML ATE θ", f"{dml_theta:.4f}",
+                                "GBM 5-fold cross-fit"))
+
         return ReportSection(
             title="処置効果推定（Cox HR + DML ATE）",
             findings_html=findings_html,
             visualization_html=viz_html,
+            kpi_cards=kpis,
+            chart_caption=(
+                "横軸 = ハザード比 HR (対数スケール)、縦軸 = 共変量。"
+                "塗り潰し四角 = 有意 (p<0.05)、中抜き = 非有意。"
+                "誤差棒 = Wald 95% 信頼区間。点線 (HR=1) は無効果線。"
+                "HR > 1 でイベント (クレジット可視性喪失) のハザードが増加する観察上の関連。"
+            ),
             method_note=(
                 "CoxPHモデル: Breslow基底ハザード推定、比例ハザード仮定のもとで推定。"
                 "HR > 1はイベント（離職）リスクの増加を示す。"
@@ -464,10 +507,25 @@ class PolicyAttritionReport(BaseReportGenerator):
         if violations:
             findings_html += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
 
+        # v3: KPI strip
+        theta_range = (
+            f"{min(thetas):.3f} – {max(thetas):.3f}" if thetas else "n/a"
+        )
+        kpis = [
+            KPICard("感度軸", f"{len(labels)} 条件", "exit 閾値 3/5/7 年"),
+            KPICard("θ レンジ", theta_range, "全感度条件のばらつき"),
+        ]
+
         return ReportSection(
             title="exit定義別感度分析",
             findings_html=findings_html,
             visualization_html=viz_embed(fig, "chart_sensitivity", height=380),
+            kpi_cards=kpis,
+            chart_caption=(
+                "横軸 = exit 閾値 (3/5/7 年)、縦軸 = DML ATE 推定値 θ。"
+                "棒の高さ揃いが小さいほど exit 定義に対する推定の頑健性が高い。"
+                "点線 (θ=0) は無効果線。"
+            ),
             method_note=(
                 "感度分析: exitの定義閾値を3年・5年・7年に変えて、"
                 "DML ATE推定値の安定性を検証。"

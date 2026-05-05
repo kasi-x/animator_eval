@@ -156,10 +156,27 @@ class MgmtDirectorMentorReport(BaseReportGenerator):
                 f"[v2: {'; '.join(violations)}]</p>"
             )
 
+        # v3: KPI strip
+        from ..section_builder import KPICard
+        kpis = [
+            KPICard("分析監督数", f"{n_total:,}", "M̂_d 算出可能"),
+            KPICard("ヌル有意 (p<0.05)", f"{n_significant:,}",
+                    "permutation null model"),
+            KPICard("M̂_d レンジ", f"{m_min:.3f} – {m_max:.3f}",
+                    "EB 縮小推定値"),
+        ]
+
         return ReportSection(
             title="監督育成実績プロファイル（M̂_d）",
             findings_html=findings,
             visualization_html=viz_embed(fig, "chart_director_ranking"),
+            kpi_cards=kpis,
+            chart_caption=(
+                "横軸 = M̂_d (メンティー固定効果の平均変化量)、縦軸 = 監督。"
+                "塗り潰し = ヌルモデル有意 (p<0.05)、中抜き = 非有意。"
+                "誤差棒 = 95% 信頼区間。点線 (M̂_d=0) はメンティー集団平均線。"
+                "EB 縮小によりメンティー数が少ない監督は中央方向に補正済み。"
+            ),
             method_note=(
                 "M̂_d: 監督の指導下でメンティーが経験した"
                 "個人固定効果（AKM θ_i）の平均変化量。"

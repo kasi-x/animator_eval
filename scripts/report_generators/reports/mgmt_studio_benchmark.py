@@ -340,10 +340,25 @@ class MgmtStudioBenchmarkReport(BaseReportGenerator):
                 f"[v2: {'; '.join(violations)}]</p>"
             )
 
+        from ..section_builder import KPICard
+        kpis = [
+            KPICard("分析スタジオ数", f"{n:,}", "R5_shrunk 算出可能"),
+            KPICard("R5 レンジ", f"{r5_min:.3f} – {r5_max:.3f}",
+                    "EB 縮小推定値"),
+            KPICard("Top1 / Bottom1", f"{top_name} / {bot_name}",
+                    "順位は EB 縮小値"),
+        ]
+
         return ReportSection(
             title="R5定着率（Top10 / Bottom10）",
             findings_html=findings,
             visualization_html=viz_embed(fig, "chart_studio_retention"),
+            kpi_cards=kpis,
+            chart_caption=(
+                "横軸 = R5 定着率 (EB 縮小推定値)、縦軸 = スタジオ。"
+                "上半 = Top10、下半 = Bottom10。誤差棒 = r5_ci 95% 信頼区間。"
+                "サンプル小スタジオは業界平均方向に補正済み (EB shrinkage)。"
+            ),
             method_note=(
                 "R5定着率: デビューから5年後に同スタジオでクレジットが"
                 "確認される人物の割合。"

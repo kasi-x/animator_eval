@@ -155,10 +155,26 @@ class MgmtTeamChemistryReport(BaseReportGenerator):
                 f"[v2: {'; '.join(violations)}]</p>"
             )
 
+        from ..section_builder import KPICard
+        kpis = [
+            KPICard("分析ペア数", f"{n_analyzed:,}", "共同クレジット 2 作以上"),
+            KPICard("BH 有意ペア", f"{n_significant:,}",
+                    "Benjamini-Hochberg q<0.05"),
+            KPICard("ポジティブペア", f"{n_positive:,}",
+                    "mean_res > 0 かつ有意"),
+        ]
+
         return ReportSection(
             title="ポジティブ化学反応ペア（Top20）",
             findings_html=findings,
             visualization_html=viz_embed(fig, "chart_chemistry_top_pairs"),
+            kpi_cards=kpis,
+            chart_caption=(
+                "横軸 = 平均ペア残差 mean_res (95% CI = ±1.96·SE)、"
+                "縦軸 = 共同制作ペア (上位 20)。"
+                "正の値 = ペア実績が線形予測を上回る観察上の関連。"
+                "誤差棒が 0 を跨がないペアは BH 補正後でも有意。"
+            ),
             method_note=(
                 "mean_res: 共同クレジット作品における"
                 "ペアの実績値と線形予測値の差の平均（ペア残差）。"
