@@ -15,7 +15,7 @@ import plotly.graph_objects as go
 
 from ..ci_utils import distribution_summary, format_ci, format_distribution_inline
 from ..html_templates import plotly_div_safe, stratification_tabs, strat_panel
-from ..section_builder import ReportSection, SectionBuilder
+from ..section_builder import KPICard, ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
 
 
@@ -161,10 +161,34 @@ class CompensationFairnessReport(BaseReportGenerator):
         if violations:
             findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
 
+        # v3: curated KPI strip
+        # Top-90% Gini: exclude bottom 10% of scores
+        if len(all_vals) > 10:
+            cutoff_10 = sorted(all_vals)[int(len(all_vals) * 0.10)]
+            top90_vals = [v for v in all_vals if v >= cutoff_10]
+            top90_gini = _gini(top90_vals)
+            top90_str = f"{top90_gini:.4f}"
+        else:
+            top90_str = "n/a"
+
+        kpis = [
+            KPICard("Gini 全人物", f"{overall_gini:.4f}", f"n={len(all_vals):,}"),
+            KPICard("Gini 上位90%", top90_str, "下位10%除外後"),
+            KPICard("変化幅 (P0→P10)", f"{abs(overall_gini - _gini(top90_vals)):.4f}" if top90_str != "n/a" else "n/a", "低スコア除外感度"),
+        ]
+
         return ReportSection(
             title="IVスコアのGini係数",
             findings_html=findings,
             visualization_html=tabs_html + panels,
+            kpi_cards=kpis,
+            chart_caption=(
+                "横軸 = IV スコア（非負値）、縦軸 = 人数。"
+                "50 ビンのヒストグラムで全人物のスコア分布形状を示す。"
+                "Gini = 0 は完全平等、Gini = 1 は最大集中（スコアが 1 人に集中）を意味し、"
+                "分布の右裾が重いほど Gini が高くなる傾向がある。"
+                "タブ切替で性別・Tier・年代別の Gini 値を確認できる。"
+            ),
             method_note=(
                 "Gini係数は feat_person_scores.iv_score（非負値のみ）から算出。"
                 "計算式: (2 × Σ(順位 × 値)) / (n × Σ値) − (n+1)/n。"
@@ -306,10 +330,32 @@ class CompensationFairnessReport(BaseReportGenerator):
         if violations:
             findings += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
 
+        # v3: curated KPI strip
+        gini_p0 = gini_results[0][2] if gini_results else None
+        gini_p25 = gini_results[-1][2] if gini_results else None
+        delta_str = (
+            f"{abs(gini_p0 - gini_p25):.4f}" if gini_p0 is not None and gini_p25 is not None else "n/a"
+        )
+        n_conditions = len(gini_results)
+
+        kpis = [
+            KPICard("Gini (P0, 全員)", f"{gini_p0:.4f}" if gini_p0 is not None else "n/a", "除外なし基準値"),
+            KPICard("Gini (P25 除外)", f"{gini_p25:.4f}" if gini_p25 is not None else "n/a", "下位25%を除外"),
+            KPICard("変化幅", delta_str, f"全 {n_conditions} 条件でのレンジ"),
+        ]
+
         return ReportSection(
             title="閾値感度分析",
             findings_html=findings,
             visualization_html=plotly_div_safe(fig, "chart_sensitivity", height=380),
+            kpi_cards=kpis,
+            chart_caption=(
+                "横軸 = 除外した下位パーセンタイル（%）、縦軸 = Gini 係数。"
+                "x=0 は全人物を含む基準値（P0）、右に進むほど低スコア人物を多く除外する。"
+                "曲線の傾きが急なほど Gini 推定が下端分布に敏感であることを示す。"
+                "傾きが緩やかな場合、Gini は中・上位スコア人物の分布形状に主に依存する。"
+                "除外の妥当性は「低スコア＝真の低活動か、データ疎さか」の前提に依拠する。"
+            ),
             method_note=(
                 "感度分析: 各パーセンタイル以下の人物を除外してGiniを再計算。"
                 "テスト閾値: 0th（全員含む）、5th、10th、20th、25th パーセンタイル。"

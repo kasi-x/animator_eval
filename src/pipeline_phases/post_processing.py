@@ -6,8 +6,41 @@ from typing import Any
 import structlog
 
 from src.analysis.confidence import batch_compute_confidence
+from src.analysis.io.mart_writer import write_report_specs
 
 logger = structlog.get_logger()
+
+
+def upsert_report_specs() -> int:
+    """Collect SPEC from every V2 report module and persist to mart.meta_report_spec.
+
+    Each report module declares a module-level ``SPEC = ReportSpec(...)`` variable.
+    This function iterates V2_REPORT_CLASSES, resolves each class's module via
+    ``inspect.getmodule()``, and collects the module-level SPEC (if present).
+    Duplicate SPEC objects (same name) from classes sharing a module are
+    deduplicated by name before the batch upsert.
+
+    Returns the number of specs written.
+    """
+    import inspect
+
+    from scripts.report_generators.reports import V2_REPORT_CLASSES
+
+    seen: dict[str, object] = {}
+    for cls in V2_REPORT_CLASSES:
+        mod = inspect.getmodule(cls)
+        spec = getattr(mod, "SPEC", None)
+        if spec is not None and spec.name not in seen:
+            seen[spec.name] = spec
+
+    specs = list(seen.values())
+    if not specs:
+        logger.warning("report_spec_upsert_no_specs_found")
+        return 0
+
+    n = write_report_specs(specs)
+    logger.info("report_specs_upserted", count=n, total_classes=len(V2_REPORT_CLASSES))
+    return n
 
 
 def post_process_results(results: list[dict], credits: list, akm_result: Any) -> None:
@@ -56,3 +89,9 @@ def post_process_results(results: list[dict], credits: list, akm_result: Any) ->
         sources_per_person=source_counts,
         akm_residuals=akm_residuals,
     )
+
+    logger.info("step_start", step="report_spec_upsert")
+    try:
+        upsert_report_specs()
+    except Exception as exc:
+        logger.warning("report_spec_upsert_failed", error=str(exc))

@@ -16,7 +16,7 @@ from plotly.subplots import make_subplots
 
 from ..helpers import insert_lineage
 from ..html_templates import plotly_div_safe
-from ..section_builder import ReportSection, SectionBuilder
+from ..section_builder import KPICard, ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
 
 _JSON_DIR = Path(__file__).parents[4] / "result" / "json"
@@ -207,10 +207,50 @@ class PolicyGenderBottleneckReport(BaseReportGenerator):
         if violations:
             findings_html += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
 
+        # v3: curated KPI strip
+        coverage_pct_val = (data.get("data_quality", {}) or {}).get("coverage_pct") if isinstance(data, dict) else None
+        coverage_str = f"{coverage_pct_val:.1f}%" if coverage_pct_val is not None else "n/a"
+
+        # Collect log-rank p values across stages for summary
+        lr_p_vals = []
+        for sk in stage_keys:
+            sd = surv_by_stage.get(sk, {})
+            if isinstance(sd, dict) and sd.get("logrank_p") is not None:
+                lr_p_vals.append(sd["logrank_p"])
+        lr_range_str = (
+            f"{min(lr_p_vals):.4f}–{max(lr_p_vals):.4f}" if lr_p_vals else "n/a"
+        )
+
+        total_n_all = 0
+        for sk in stage_keys:
+            sd = surv_by_stage.get(sk, {})
+            if isinstance(sd, dict):
+                total_n_all = max(
+                    total_n_all,
+                    (sd.get("n_F") or 0) + (sd.get("n_M") or 0),
+                )
+        total_n_str = f"{total_n_all:,}" if total_n_all else "n/a"
+
+        kpis = [
+            KPICard("gender カバレッジ", coverage_str, "性別推定カバレッジ率"),
+            KPICard("対象人物数", total_n_str, "最大ステージの F+M 合計"),
+            KPICard("log-rank p レンジ", lr_range_str, "全ステージ F vs M 検定"),
+        ]
+
         return ReportSection(
             title="ステージ遷移別生存曲線（性別比較）",
             findings_html=findings_html,
             visualization_html=plotly_div_safe(fig, "chart_surv_stage", height=420),
+            kpi_cards=kpis,
+            chart_caption=(
+                "横軸 = デビューからの経過年数（年）、縦軸 = ステージ閾値到達率 S(t)。"
+                "ピンク実線 = 女性推定（F）、水色点線 = 男性推定（M）、"
+                "薄帯 = Greenwood 95% 信頼区間。"
+                "log-rank p はパネル単位で F/M 曲線の同一性を検定し、"
+                "p < 0.05 でない限り差の解釈は慎重に行う。"
+                "性別不明人物は全パネルで除外されているため、"
+                "カバレッジ率が低い場合は代表性を確認のこと。"
+            ),
             method_note=(
                 "KM推定量。イベント: 各ステージ閾値への到達（stage_0_to_k = ステージk以上到達）。"
                 "ログランク検定（logrank_p）: F/M生存曲線の同一性検定。"

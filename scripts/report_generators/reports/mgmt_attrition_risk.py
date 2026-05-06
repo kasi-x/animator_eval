@@ -14,7 +14,7 @@ from pathlib import Path
 import plotly.graph_objects as go
 
 from ..html_templates import plotly_div_safe
-from ..section_builder import ReportSection, SectionBuilder
+from ..section_builder import KPICard, ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
 
 _JSON_DIR = Path(__file__).parents[4] / "result" / "json"
@@ -161,11 +161,28 @@ class MgmtAttritionRiskReport(BaseReportGenerator):
                 f"[v2: {'; '.join(violations)}]</p>"
             )
 
+        # v3: curated KPI strip (gate pass 時のみ)
+        kpis = [
+            KPICard("C-index", f"{c_val:.3f}", f"ゲート閾値 {_C_INDEX_GATE:.2f} 達成"),
+            KPICard("対象コホート", f"{n_tiers} Tier", "キャリア段階別集計"),
+            KPICard("Brier score", brier_str, "確率較正精度（低いほど良）"),
+        ]
+
         return ReportSection(
             title="モデル性能（C-index / キャリブレーション）",
             findings_html=findings,
             visualization_html=plotly_div_safe(
                 fig, "chart_attrition_perf", height=420
+            ),
+            kpi_cards=kpis,
+            chart_caption=(
+                "横軸 = キャリア段階 Tier（数値が大きいほど上位ステージ）、"
+                "縦軸 = 平均離職リスク推定値（0–1）。"
+                "色別に 1 年・3 年・5 年の予測ホライズンを示す。"
+                "C-index ≥ 0.70 を公開ゲートとしており、"
+                "未達の場合はこのチャートは非表示となる。"
+                "絶対確率は較正（calibration）が別途必要であり、"
+                "Tier 間の相対的パターンを参照するに留める。"
             ),
             method_note=(
                 "Random Survival Forest, temporal split "
@@ -247,11 +264,29 @@ class MgmtAttritionRiskReport(BaseReportGenerator):
                 f"[v2: {'; '.join(violations)}]</p>"
             )
 
+        # v3: curated KPI strip
+        n_top_shap = min(len(fi), 10)
+        kpis = [
+            KPICard("最上位 SHAP 特徴量", top_feat[:20] if top_feat != "N/A" else "n/a",
+                    f"MDI 重要度 {top_imp:.4f}"),
+            KPICard("対象特徴量数", f"{len(fi):,}", "全モデル入力変数"),
+            KPICard("Top SHAP 表示数", f"{n_top_shap}", "MDI Top 10 を表示"),
+        ]
+
         return ReportSection(
             title="特徴量重要度（Top 10）",
             findings_html=findings,
             visualization_html=plotly_div_safe(
                 fig, "chart_attrition_fi", height=420
+            ),
+            kpi_cards=kpis,
+            chart_caption=(
+                "横軸 = MDI 特徴量重要度（0–1 に正規化、大きいほど離職予測への寄与が大）、"
+                "縦軸 = 特徴量名（上位ほど重要度が高い）。"
+                "MDI は Random Survival Forest の平均不純度減少量であり、"
+                "高カーディナリティ変数（ID 等）を過大評価するバイアスを持つ。"
+                "因果的寄与ではなく予測関連性を示す指標であり、"
+                "permutation importance と照合して解釈することを推奨する。"
             ),
             method_note=(
                 "特徴量重要度: Random Survival Forest の"

@@ -14,7 +14,7 @@ from pathlib import Path
 import plotly.graph_objects as go
 
 from ..html_templates import plotly_div_safe
-from ..section_builder import ReportSection, SectionBuilder
+from ..section_builder import KPICard, ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
 
 _JSON_DIR = Path(__file__).parents[4] / "result" / "json"
@@ -170,11 +170,27 @@ class MgmtSuccessionReport(BaseReportGenerator):
                 f"[v2: {'; '.join(violations)}]</p>"
             )
 
+        # v3: curated KPI strip
+        kpis = [
+            KPICard("ベテラン数", n_vet_str, "リスクスコア対象人物"),
+            KPICard("候補者総数", f"{n:,}", "スコア取得済み人物数"),
+            KPICard("平均退職リスク", f"{mean_risk:.3f}", "0–1、高いほど離脱リスク大"),
+        ]
+
         return ReportSection(
             title="退職リスクスコア分布",
             findings_html=findings,
             visualization_html=plotly_div_safe(
                 fig, "chart_succession_risk", height=420
+            ),
+            kpi_cards=kpis,
+            chart_caption=(
+                "横軸 = 退職リスクスコア（0–1、5 年以内のクレジット可視性喪失確率）、"
+                "縦軸 = 人数（ベテラン人材対象）。"
+                "橙の破線（閾値 0.5）はレポート表示用の参照値であり、"
+                "個別意思決定の単一閾値として使用すべきでない。"
+                "類似性指標（役職・ジャンルベクトルの cosine 類似度 × 共クレジット履歴）"
+                "による近似であり、実際の後継選択は経営判断・個人意向に依存する。"
             ),
             method_note=(
                 "退職リスクスコア: 生存モデル（Random Survival Forest）による"
@@ -271,11 +287,26 @@ class MgmtSuccessionReport(BaseReportGenerator):
                 f"[v2: {'; '.join(violations)}]</p>"
             )
 
+        # v3: curated KPI strip
+        kpis = [
+            KPICard("ベテラン数", f"{total:,}", "退職リスク上位対象人物"),
+            KPICard("候補者総数", f"{covered + uncovered:,}", "カバー済み＋未整備"),
+            KPICard("平均カバレッジ", f"{coverage_rate:.1%}", "後継候補が整備された割合"),
+        ]
+
         return ReportSection(
             title="後継カバレッジ率",
             findings_html=findings,
             visualization_html=plotly_div_safe(
                 fig, "chart_succession_coverage", height=400
+            ),
+            kpi_cards=kpis,
+            chart_caption=(
+                "円グラフは退職リスク上位者のうち後継候補が整備されている割合を示す。"
+                "緑 = カバー済み（上位 k 候補が存在）、橙 = カバー未整備。"
+                "類似性指標（役職・ジャンルベクトルの cosine 類似度 × 共クレジット履歴）"
+                "による近似であり、実際の後継選択は経営判断・個人意向に依存する。"
+                "個人特定を避けるため aggregate のみ公開し、個別ペアは表示しない。"
             ),
             method_note=(
                 "後継カバレッジ = 退職リスク上位者のうち"

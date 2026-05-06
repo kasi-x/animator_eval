@@ -10,8 +10,6 @@ REPORT_DESIGN_v3.md §7 example C: removes evaluation framing
 ("過小評価", "タレント") in favor of structural label
 ("露出機会ギャップ人材プール" = high-θ_i / low-exposure pair candidates).
 
-A backward-compatibility alias ``BizUndervaluedTalentReport`` is kept
-for one release so existing V2_REPORT_CLASSES registries do not break.
 The DB / Hamilton ``meta_biz_undervalued`` table name is unchanged
 (rename requires a schema migration handled in a follow-up PR).
 """
@@ -344,15 +342,6 @@ class BizExposureGapReport(BaseReportGenerator):
             ),
             section_id="up_recovery",
         )
-
-
-# ─────────────────────────────────────────────────────────────────
-# v3 rename backward-compatibility alias.
-# Existing V2_REPORT_CLASSES registries and external callers may still
-# reference ``BizUndervaluedTalentReport``; this alias keeps them
-# working until the next major release.
-# ─────────────────────────────────────────────────────────────────
-BizUndervaluedTalentReport = BizExposureGapReport
 
 
 # v3 curated SPEC — REPORT_DESIGN_v3 §7 example C.

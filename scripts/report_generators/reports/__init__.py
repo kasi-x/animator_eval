@@ -58,7 +58,7 @@ from .mgmt_attrition_risk import MgmtAttritionRiskReport
 from .mgmt_succession import MgmtSuccessionReport
 from .mgmt_team_chemistry import MgmtTeamChemistryReport
 # Phase 9: Biz briefs
-from .biz_exposure_gap import BizExposureGapReport, BizUndervaluedTalentReport
+from .biz_exposure_gap import BizExposureGapReport
 from .biz_genre_whitespace import BizGenreWhitespaceReport
 from .biz_team_template import BizTeamTemplateReport
 from .biz_trust_entry import BizTrustEntryReport
@@ -167,7 +167,6 @@ __all__ = [
     "MgmtSuccessionReport",
     "MgmtTeamChemistryReport",
     "BizExposureGapReport",
-    "BizUndervaluedTalentReport",  # deprecated alias, removed after next major release
     "BizGenreWhitespaceReport",
     "BizTeamTemplateReport",
     "BizTrustEntryReport",

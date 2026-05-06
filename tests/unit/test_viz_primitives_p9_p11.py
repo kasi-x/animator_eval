@@ -94,12 +94,15 @@ def test_parallel_coords_empty():
 
 
 def test_choropleth_bar_fallback_render():
+    """v3 bumped the default to fallback_to_bar=False — explicitly request
+    the bar fallback path here. Real-choropleth path is covered in
+    tests/unit/test_viz_choropleth_jp.py."""
     spec = ChoroplethJPSpec(
         values={"東京都": 1500, "大阪府": 800, "京都府": 350},
         title="prefecture credits",
+        fallback_to_bar=True,
     )
     fig = render_choropleth_jp(spec)
-    # bar fallback emits 1 trace
     assert len(fig.data) == 1
     assert fig.data[0].type == "bar"
 

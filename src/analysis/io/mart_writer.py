@@ -56,6 +56,7 @@ _MART_PK_MAP: dict[str, tuple[str, ...]] = {
     "agg_person_network": ("person_id",),
     "corrections_credit_year": ("id",),
     "corrections_role": ("id",),
+    "meta_report_spec": ("report_id",),
     "feat_birank_annual": ("person_id", "year"),
     "feat_career": ("person_id",),
     "feat_career_annual": ("person_id", "career_year"),
@@ -475,6 +476,20 @@ CREATE TABLE IF NOT EXISTS corrections_role (
     corrected_at       TIMESTAMP DEFAULT current_timestamp,
     corrected_by       TEXT NOT NULL DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS meta_report_spec (
+    report_id                   TEXT PRIMARY KEY,
+    audience                    TEXT NOT NULL,
+    claim                       TEXT NOT NULL,
+    identifying_assumption      TEXT NOT NULL,
+    null_model_ids              TEXT NOT NULL,
+    method_gate_json            TEXT NOT NULL,
+    sensitivity_grid_json       TEXT NOT NULL,
+    interpretation_guard_json   TEXT NOT NULL,
+    data_lineage_json           TEXT NOT NULL,
+    spec_hash                   TEXT NOT NULL,
+    curated_at                  TIMESTAMP NOT NULL
+);
 """
 
 
@@ -658,6 +673,86 @@ def write_entity_resolution_audit_ddb(
         )
 
     logger.info("entity_resolution_audit_written", rows=len(rows))
+    return len(rows)
+
+
+def write_report_specs(
+    specs: list,
+    gold_path: Path | str | None = None,
+) -> int:
+    """Upsert ReportSpec declarations into mart.meta_report_spec.
+
+    Serialises every field of each ReportSpec to JSON, computes a SHA-256
+    content hash for change detection, and inserts or replaces the row.
+
+    Args:
+        specs: List of ReportSpec dataclass instances.
+        gold_path: Path to gold.duckdb.  Defaults to DEFAULT_GOLD_DB_PATH.
+
+    Returns:
+        Number of specs upserted.
+    """
+    if not specs:
+        return 0
+
+    import dataclasses
+    import hashlib
+    import json as _json
+    from datetime import datetime, timezone
+
+    rows: list[tuple] = []
+    now = datetime.now(timezone.utc)
+
+    for spec in specs:
+        d = dataclasses.asdict(spec)
+
+        null_model_ids = _json.dumps(d.get("null_model", []))
+        method_gate_json = _json.dumps(d.get("method_gate", {}))
+        sensitivity_grid_json = _json.dumps(d.get("sensitivity_grid", []))
+        interpretation_guard_json = _json.dumps(d.get("interpretation_guard", {}))
+        data_lineage_json = _json.dumps(d.get("data_lineage", {}))
+
+        # Canonical JSON for hashing — keys sorted for determinism.
+        canonical = _json.dumps(d, sort_keys=True)
+        spec_hash = hashlib.sha256(canonical.encode()).hexdigest()
+
+        rows.append((
+            d["name"],
+            d["audience"],
+            d["claim"],
+            d["identifying_assumption"],
+            null_model_ids,
+            method_gate_json,
+            sensitivity_grid_json,
+            interpretation_guard_json,
+            data_lineage_json,
+            spec_hash,
+            now,
+        ))
+
+    cols = (
+        "report_id", "audience", "claim", "identifying_assumption",
+        "null_model_ids", "method_gate_json", "sensitivity_grid_json",
+        "interpretation_guard_json", "data_lineage_json",
+        "spec_hash", "curated_at",
+    )
+    placeholders = ", ".join("?" for _ in cols)
+    update_set = ", ".join(
+        f"{c}=excluded.{c}"
+        for c in cols
+        if c != "report_id"
+    )
+
+    with gold_connect_write(gold_path) as conn:
+        conn.execute(_DDL)
+        conn.executemany(
+            f"""INSERT INTO meta_report_spec ({", ".join(cols)})
+                VALUES ({placeholders})
+                ON CONFLICT (report_id) DO UPDATE SET {update_set}""",
+            rows,
+        )
+
+    logger.info("report_specs_written", count=len(rows))
     return len(rows)
 
 

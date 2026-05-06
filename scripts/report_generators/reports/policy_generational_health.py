@@ -15,7 +15,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 from ..html_templates import plotly_div_safe
-from ..section_builder import ReportSection, SectionBuilder
+from ..section_builder import KPICard, ReportSection, SectionBuilder
 from ._base import BaseReportGenerator
 
 _JSON_DIR = Path(__file__).parents[4] / "result" / "json"
@@ -143,10 +143,38 @@ class PolicyGenerationalHealthReport(BaseReportGenerator):
         if violations:
             findings_html += f'<p style="color:#e05080;font-size:0.8rem;">[v2: {"; ".join(violations)}]</p>'
 
+        # v3: curated KPI strip
+        total_n_cohorts = len(decades)
+        all_n_vals = [
+            cohort_surv[d].get("n") or 0
+            for d in decades
+            if isinstance(cohort_surv[d], dict)
+        ]
+        total_persons = sum(all_n_vals) if all_n_vals else 0
+        total_n_str = f"{total_persons:,}" if total_persons else "n/a"
+
+        # Median survival time range across cohorts (S5 as proxy)
+        s5_range_kpi = s5_range_str  # already computed above
+
+        kpis = [
+            KPICard("コホート数", f"{total_n_cohorts}", "デビュー年代区分"),
+            KPICard("対象人物数", total_n_str, "全コホート合計"),
+            KPICard("S5 レンジ", s5_range_kpi, "5 年生存率・コホート間"),
+        ]
+
         return ReportSection(
             title="デビュー年代別生存率（S5/S10/S15）",
             findings_html=findings_html,
             visualization_html=plotly_div_safe(fig, "chart_cohort_surv", height=420),
+            kpi_cards=kpis,
+            chart_caption=(
+                "横軸 = デビュー年代（decade 区切り）、縦軸 = 生存率 S(k)（0–1）。"
+                "棒の色は観察期間 k（S5 = 緑、S10 = 黄、S15 = オレンジ、S20 = 黄橙）。"
+                "S(k) はデビューから k 年後もクレジット記録が存在する人物の割合であり、"
+                "雇用継続率とは異なる（クレジット可視性喪失を代理指標として使用）。"
+                "APC 識別問題（年齢・期間・コホート交絡）により、"
+                "コホート間差は时代効果と世代効果を分離できない点に留意すること。"
+            ),
             method_note=(
                 "S(k) = デビューからk年後（k=5/10/15/20）もアクティブ"
                 "（年間クレジット記録が存在する）人物の割合。"
