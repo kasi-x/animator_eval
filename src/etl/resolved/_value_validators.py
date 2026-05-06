@@ -62,10 +62,18 @@ _JA_CHAR_RE = re.compile(
     r"]"
 )
 
+# Latin (ASCII a-z A-Z) — title_en validation 用
+_LATIN_CHAR_RE = re.compile(r"[a-zA-Z]")
+
 
 def _has_japanese_char(value: str) -> bool:
     """value に日本語 (ひらがな/カタカナ/漢字/半角カナ) が 1 文字でも含まれるか。"""
     return bool(_JA_CHAR_RE.search(value))
+
+
+def _has_latin_char(value: str) -> bool:
+    """value に Latin alphabet (a-z, A-Z) が 1 文字でも含まれるか。"""
+    return bool(_LATIN_CHAR_RE.search(value))
 
 
 # Episode/Lesson/Track 等の番号 suffix
@@ -113,6 +121,13 @@ def is_invalid_for_field(field: str, value: Any) -> bool:
 
     if field in ("title_en", "title_ja"):
         if _is_numeric_only(v):
+            return True
+
+    if field == "title_en":
+        # Latin alphabet 1 文字も含まない値は title_en として invalid
+        # (TMDb のロシア語 'Дудка-веселушка', 日本語 '学園に吹く嵐!...',
+        #  bgm の中文 '宇宙战争' 等が title_en に流入するケース)
+        if not _has_latin_char(v):
             return True
 
     if field == "title_ja":

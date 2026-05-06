@@ -75,6 +75,22 @@ def test_title_en_numeric_invalid() -> None:
     assert is_invalid_for_field("title_en", "Attack on Titan") is False
 
 
+def test_title_en_no_latin_invalid() -> None:
+    """title_en に英字 1 文字も含まない → invalid。"""
+    # ロシア語 のみ
+    assert is_invalid_for_field("title_en", "Дудка-веселушка") is True
+    # 日本語 のみ
+    assert is_invalid_for_field("title_en", "学園に吹く嵐!アダルトチェンジひな子先生") is True
+    # 中文簡体字 のみ
+    assert is_invalid_for_field("title_en", "宇宙战争") is True
+    # 英字含む → valid
+    assert is_invalid_for_field("title_en", "Attack on Titan") is False
+    # 英字 + 日本語混在 → valid (英字 1 文字でも含めばOK、bgm 'DARKER THAN BLACK -黑之契约者-' 等)
+    assert is_invalid_for_field("title_en", "DARKER THAN BLACK -黒の契約者-") is False
+    # 英字 + 数字 → valid (Pinyin 'Xian Jian Qi Xia Zhuan 1' 等)
+    assert is_invalid_for_field("title_en", "Xian Jian Qi Xia Zhuan 1") is False
+
+
 def test_title_ja_no_japanese_invalid() -> None:
     """title_ja に日本語が含まれない → invalid。"""
     assert is_invalid_for_field("title_ja", "GUN HAZARD") is True
