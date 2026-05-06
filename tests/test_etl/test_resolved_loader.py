@@ -628,14 +628,29 @@ class TestCrossSourceAnimeClustering:
         assert re.match(r"^resolved:anime:[0-9a-f]{12}$", cid), f"Bad canonical_id: {cid}"
 
     def test_deterministic_canonical_id(self):
-        """Same title+year always produces the same canonical_id."""
+        """Same member set always produces the same canonical_id (idempotent).
+
+        Note: canonical_id is now derived from sorted member IDs, NOT from
+        title+year.  Two distinct rows with the same title produce DIFFERENT
+        canonical_ids — this is intentional and prevents collision bugs when
+        year=None rows share a title across independent UF groups.
+        See: TASK_CARDS/19_resolved_cluster_fix/04_canonical_id_collision.md
+        """
         from src.etl.resolved._cross_source_ids import build_cross_source_anime_clusters
 
-        rows1 = self._make_anime_rows([("anilist:572", "風の谷のナウシカ", 1984, None)])
+        # Same single row → canonical_id must be stable across repeated calls
+        rows = self._make_anime_rows([("anilist:572", "風の谷のナウシカ", 1984, None)])
+        c1 = list(build_cross_source_anime_clusters(rows, bronze_root=None).keys())[0]
+        c2 = list(build_cross_source_anime_clusters(rows, bronze_root=None).keys())[0]
+        assert c1 == c2, "canonical_id must be deterministic for repeated calls with same input"
+
+        # Different member IDs → different canonical_id (collision-free)
         rows2 = self._make_anime_rows([("seesaa:x", "風の谷のナウシカ", 1984, None)])
-        c1 = list(build_cross_source_anime_clusters(rows1).keys())[0]
-        c2 = list(build_cross_source_anime_clusters(rows2).keys())[0]
-        assert c1 == c2
+        c3 = list(build_cross_source_anime_clusters(rows2, bronze_root=None).keys())[0]
+        assert c1 != c3, (
+            "Different member IDs must produce different canonical_ids — "
+            "same title+year is NOT sufficient for canonical_id equality"
+        )
 
     def test_nfkc_normalization_clusters_together(self):
         """Full-width and half-width variants of the same title cluster together."""

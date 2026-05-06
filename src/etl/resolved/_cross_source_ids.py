@@ -14,6 +14,11 @@ H3 compliance:
 
 H1 compliance:
   - No score / popularity values are read or written here.
+
+canonical_id guarantees:
+  - **Idempotent**: same input member set + format_suffix → same canonical_id.
+  - **Collision-free**: different member sets always produce different canonical_id
+    (cluster_key is derived from sorted member IDs, not title+year which can alias).
 """
 
 from __future__ import annotations
@@ -135,6 +140,45 @@ def _load_keyframe_to_anilist_map(bronze_root: Path) -> dict[str, int]:
 # Union-Find for cluster building
 # ---------------------------------------------------------------------------
 
+def _compute_canonical_id(
+    member_rows: list[dict[str, Any]],
+    format_suffix: str | None,
+) -> str:
+    """Deterministic canonical_id from sorted member ids + optional format suffix.
+
+    Idempotent: same input member set + format_suffix → same canonical_id.
+    Collision-free: different member sets → different canonical_id.
+
+    The key is built from sorted member IDs joined with ASCII unit-separator
+    (\\x1f, which never appears in source IDs) rather than from title+year
+    strings, which can alias across independent UF groups when year=None.
+
+    Args:
+        member_rows: All conformed rows belonging to this sub-cluster.
+        format_suffix: Optional format string (e.g. "TV", "MOVIE") appended
+            to the key only when a UF group is split into multiple sub-clusters
+            by format.  Pass None when the group is not split.
+
+    Returns:
+        canonical_id string of the form "resolved:anime:<12-hex-digest>".
+
+    Note — caveat:
+        Adding or removing members from a cluster changes its canonical_id.
+        All downstream credits / scores must be re-computed on each full rebuild.
+        This is acceptable because the ETL is designed to be run to fixpoint on
+        a fixed conformed snapshot (idempotent for fixed input is preserved).
+    """
+    import hashlib
+
+    member_ids_sorted = sorted(r["id"] for r in member_rows)
+    parts = list(member_ids_sorted)
+    if format_suffix:
+        parts.append(f"__fmt__{format_suffix}")
+    key = "\x1f".join(parts)  # ASCII unit separator — absent from source IDs
+    digest = hashlib.sha256(key.encode()).hexdigest()[:12]
+    return f"resolved:anime:{digest}"
+
+
 class _UnionFind:
     """Path-compressed Union-Find for anime cluster construction."""
 
@@ -190,7 +234,6 @@ def build_cross_source_anime_clusters(
         Dict of {cluster_key: [conformed_row, ...]} where cluster_key is the
         canonical_id that will be assigned (or a deterministic surrogate key).
     """
-    import hashlib
     import unicodedata
 
     def _norm(t: str) -> str:
@@ -316,22 +359,16 @@ def build_cross_source_anime_clusters(
             subclusters = list(by_format.values())
 
         for sc_idx, sc_rows in enumerate(subclusters):
-            rep = sc_rows[0]
-            title_ja = (rep.get("title_ja") or "").strip()
-            fmt_suffix = (rep.get("format") or "").strip().upper() or "UNK"
-            if not title_ja:
-                cluster_key = f"__nontitle__|{root}|{fmt_suffix}"
+            # Derive format_suffix only when the UF group was split into
+            # multiple sub-clusters by format; single-subcluster groups need
+            # no suffix because member IDs alone are sufficient for uniqueness.
+            if len(subclusters) >= 2:
+                rep = sc_rows[0]
+                fmt_suffix: str | None = (rep.get("format") or "").strip().upper() or None
             else:
-                cluster_key = f"{_norm(title_ja)}|{rep.get('year') or ''}|{fmt_suffix}"
-            # subcluster 数 ≥2 のときのみ key に format を含める (canonical_id 安定性のため)
-            if len(subclusters) == 1:
-                cluster_key = (
-                    f"__nontitle__|{root}" if not title_ja
-                    else f"{_norm(title_ja)}|{rep.get('year') or ''}"
-                )
+                fmt_suffix = None
 
-            digest = hashlib.sha256(cluster_key.encode()).hexdigest()[:12]
-            canonical_id = f"resolved:anime:{digest}"
+            canonical_id = _compute_canonical_id(sc_rows, format_suffix=fmt_suffix)
             result[canonical_id] = sc_rows
 
     logger.info(
