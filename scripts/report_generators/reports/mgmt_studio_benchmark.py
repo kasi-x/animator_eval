@@ -14,6 +14,8 @@ from pathlib import Path
 
 import plotly.graph_objects as go
 
+from src.viz import embed as viz_embed
+from src.viz.primitives import ParallelAxis, ParallelCoordsSpec, render_parallel_coords
 from ..helpers import insert_lineage
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
@@ -161,50 +163,24 @@ class MgmtStudioBenchmarkReport(BaseReportGenerator):
             _safe_float(e.get("scale_tier")) for e in entries_sorted
         ]
 
-        fig = go.Figure(
-            go.Parcoords(
-                line=dict(
-                    color=[
-                        _safe_float(e.get("composite_percentile"))
-                        for e in entries_sorted
-                    ],
-                    colorscale="Viridis",
-                    showscale=True,
-                    colorbar=dict(title="総合パーセンタイル"),
-                ),
-                dimensions=[
-                    dict(
-                        label="R5定着率",
-                        values=_rank_pct(r5_vals),
-                        range=[0, 100],
-                    ),
-                    dict(
-                        label="人材VA",
-                        values=_rank_pct(va_vals),
-                        range=[0, 100],
-                    ),
-                    dict(
-                        label="ロール多様性",
-                        values=_rank_pct(re_vals),
-                        range=[0, 100],
-                    ),
-                    dict(
-                        label="アトラクション",
-                        values=_rank_pct(att_vals),
-                        range=[0, 100],
-                    ),
-                    dict(
-                        label="規模Tier",
-                        values=_rank_pct(sc_vals),
-                        range=[0, 100],
-                    ),
-                ],
-            )
-        )
-        fig.update_layout(
+        parcoords_spec = ParallelCoordsSpec(
+            axes=[
+                ParallelAxis(label="R5定着率", values=_rank_pct(r5_vals), range_min=0, range_max=100),
+                ParallelAxis(label="人材VA", values=_rank_pct(va_vals), range_min=0, range_max=100),
+                ParallelAxis(label="ロール多様性", values=_rank_pct(re_vals), range_min=0, range_max=100),
+                ParallelAxis(label="アトラクション", values=_rank_pct(att_vals), range_min=0, range_max=100),
+                ParallelAxis(label="規模Tier", values=_rank_pct(sc_vals), range_min=0, range_max=100),
+            ],
+            color_values=[
+                _safe_float(e.get("composite_percentile"))
+                for e in entries_sorted
+            ],
+            color_label="総合パーセンタイル",
+            colorscale="Viridis",
             title="スタジオ5軸ベンチマーク（上位30スタジオ、各軸パーセンタイル）",
             height=500,
         )
+        fig = render_parallel_coords(parcoords_spec)
 
         findings = (
             f"<p>スタジオベンチマークデータが利用可能なスタジオ数: "
@@ -225,9 +201,7 @@ class MgmtStudioBenchmarkReport(BaseReportGenerator):
         return ReportSection(
             title="スタジオ5軸ベンチマーク（業界パーセンタイル）",
             findings_html=findings,
-            visualization_html=plotly_div_safe(
-                fig, "chart_studio_parcoords", height=500
-            ),
+            visualization_html=viz_embed(fig, "chart_studio_parcoords", height=500),
             method_note=(
                 "5軸パーセンタイル: R5定着率 / 人材VA / ロール多様性 / "
                 "アトラクション / 規模Tier。"

@@ -84,7 +84,9 @@ STAGE_LABELS: dict[int, str] = {
 }
 
 # v3: CB-safe gender + decade palette (cross-report consistent)
+from src.viz import embed as viz_embed  # noqa: E402
 from src.viz import palettes as _v3_pal  # noqa: E402
+from src.viz.primitives import HeatmapSpec, render_heatmap  # noqa: E402
 
 _GENDER_COLORS = {
     "Male": _v3_pal.GENDER["M"],
@@ -1243,23 +1245,18 @@ class CohortAnimationReport(BaseReportGenerator):
             for dec in COHORT_DECADES
         ]
 
-        fig = go.Figure(
-            go.Heatmap(
-                x=ph_years,
-                y=[COHORT_LABELS[d] for d in COHORT_DECADES],
-                z=z_data,
-                colorscale="Plasma",
-                hovertemplate=(
-                    "%{x}年 / %{y}: %{z}人昇進<extra></extra>"
-                ),
-                colorbar=dict(title="昇進人数"),
-            )
-        )
-        fig.update_layout(
+        promo_spec = HeatmapSpec(
+            z=z_data,
+            x_labels=[str(y) for y in ph_years],
+            y_labels=[COHORT_LABELS[d] for d in COHORT_DECADES],
             title="作監以上への昇進数ヒートマップ",
-            xaxis_title="年",
-            yaxis_title="コホート",
+            x_label="年",
+            y_label="コホート",
+            z_label="昇進人数",
+            colorscale="Viridis",
+            height=400,
         )
+        fig = render_heatmap(promo_spec)
 
         total_promos = sum(
             sum(d.values()) for d in promo_heatmap.values()
@@ -1283,9 +1280,7 @@ class CohortAnimationReport(BaseReportGenerator):
         return ReportSection(
             title="監督昇進ヒートマップ",
             findings_html=findings,
-            visualization_html=plotly_div_safe(
-                fig, "promo-heatmap", height=400
-            ),
+            visualization_html=viz_embed(fig, "promo-heatmap", height=400),
             method_note=(
                 "昇進イベントは milestones.json の"
                 "type='promotion' かつ to_stage ≥ 4 のもの。"
@@ -2008,24 +2003,18 @@ class CohortAnimationReport(BaseReportGenerator):
             for cn in cl_names
         ]
 
-        fig = go.Figure(
-            go.Heatmap(
-                x=[COHORT_LABELS[d] for d in COHORT_DECADES],
-                y=cl_names,
-                z=z_data,
-                colorscale="Viridis",
-                hovertemplate=(
-                    "クラスタ: %{y}<br>コホート: %{x}<br>"
-                    "人数: %{z}<extra></extra>"
-                ),
-                colorbar=dict(title="人数"),
-            )
-        )
-        fig.update_layout(
+        cluster_cohort_spec = HeatmapSpec(
+            z=z_data,
+            x_labels=[COHORT_LABELS[d] for d in COHORT_DECADES],
+            y_labels=cl_names,
             title="MLクラスタ x コホート人数分布",
-            xaxis_title="デビュー年代コホート",
-            yaxis_title="MLクラスタ",
+            x_label="デビュー年代コホート",
+            y_label="MLクラスタ",
+            z_label="人数",
+            colorscale="Viridis",
+            height=440,
         )
+        fig = render_heatmap(cluster_cohort_spec)
 
         total_in_heatmap = sum(
             sum(cc.values()) for cc in cluster_cohort.values()
@@ -2047,9 +2036,7 @@ class CohortAnimationReport(BaseReportGenerator):
         return ReportSection(
             title="MLクラスタ x コホート分布ヒートマップ",
             findings_html=findings,
-            visualization_html=plotly_div_safe(
-                fig, "cluster-cohort-heatmap", height=440
-            ),
+            visualization_html=viz_embed(fig, "cluster-cohort-heatmap", height=440),
             method_note=(
                 "クラスタは ml_clusters.json 由来。"
                 "デビュー年代は scores.json の career.first_year 由来。"
@@ -2104,24 +2091,18 @@ class CohortAnimationReport(BaseReportGenerator):
         ]
         labels = [COHORT_LABELS[d] for d in COHORT_DECADES]
 
-        fig = go.Figure(
-            go.Heatmap(
-                x=labels,
-                y=labels,
-                z=z_data,
-                colorscale="Magma",
-                hovertemplate=(
-                    "縦: %{y}<br>横: %{x}<br>"
-                    "コラボ強度: %{z:.0f}<extra></extra>"
-                ),
-                colorbar=dict(title="共作品数合計"),
-            )
-        )
-        fig.update_layout(
+        collab_spec = HeatmapSpec(
+            z=z_data,
+            x_labels=labels,
+            y_labels=labels,
             title="世代間コラボレーションマトリックス（共作品数ベース）",
-            xaxis_title="コホートB",
-            yaxis_title="コホートA",
+            x_label="コホートB",
+            y_label="コホートA",
+            z_label="共作品数合計",
+            colorscale="Viridis",
+            height=440,
         )
+        fig = render_heatmap(collab_spec)
 
         # Diagonal dominance check
         diag_total = sum(
@@ -2155,9 +2136,7 @@ class CohortAnimationReport(BaseReportGenerator):
         return ReportSection(
             title="世代間コラボレーションマトリックス",
             findings_html=findings,
-            visualization_html=plotly_div_safe(
-                fig, "intgen-collab-matrix", height=440
-            ),
+            visualization_html=viz_embed(fig, "intgen-collab-matrix", height=440),
             method_note=(
                 "協業エッジは collaborations.json 由来。"
                 "ウェイト = shared_works。行列は対称。"

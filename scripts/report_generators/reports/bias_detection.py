@@ -13,6 +13,8 @@ from pathlib import Path
 
 import plotly.graph_objects as go
 
+from src.viz import embed as viz_embed
+from src.viz.primitives import HeatmapSpec, render_heatmap
 from ..ci_utils import distribution_summary, format_ci, format_distribution_inline
 from ..html_templates import plotly_div_safe, stratification_tabs, strat_panel
 from ..section_builder import ReportSection, SectionBuilder
@@ -178,27 +180,35 @@ class BiasDetectionReport(BaseReportGenerator):
                     )
         findings += "</ul>"
 
-        fig = go.Figure()
-        gender_colors = {"Male": "#3593D2", "Female": "#E07532", "unknown": "#a0a0c0"}
+        tier_lbls = [f"T{t}" for t in tiers]
+        z_medians = []
         for g in genders:
-            medians = []
-            tier_lbls = []
+            row = []
             for t in tiers:
                 vals = cell_scores.get((t, g), [])
                 if vals:
                     cs = distribution_summary(vals, label=f"T{t}_{g}")
-                    medians.append(cs["median"])
-                    tier_lbls.append(f"T{t}")
-            fig.add_trace(go.Scatter(
-                x=tier_lbls, y=medians, name=g,
-                mode="lines+markers",
-                line=dict(color=gender_colors.get(g, "#a0a0c0")),
-                hovertemplate=f"{g}: %{{y:.3f}}<extra></extra>",
-            ))
-        fig.update_layout(
+                    row.append(cs["median"])
+                else:
+                    row.append(0.0)
+            z_medians.append(row)
+
+        tier_gender_spec = HeatmapSpec(
+            z=z_medians,
+            x_labels=tier_lbls,
+            y_labels=genders,
             title="Tier × 性別別 IVスコア中央値",
-            xaxis_title="スケールTier", yaxis_title="IVスコア中央値",
+            x_label="スケールTier",
+            y_label="性別",
+            z_label="IVスコア中央値",
+            colorscale="RdBu_r",
+            diverging=True,
+            z_mid=0,
+            text_overlay=True,
+            text_format=".3f",
+            height=400,
         )
+        fig = render_heatmap(tier_gender_spec)
 
         violations = sb.validate_findings(findings)
         if violations:
@@ -207,7 +217,7 @@ class BiasDetectionReport(BaseReportGenerator):
         return ReportSection(
             title="Tier × 性別インタラクション",
             findings_html=findings,
-            visualization_html=plotly_div_safe(fig, "chart_tier_gender", height=400),
+            visualization_html=viz_embed(fig, "chart_tier_gender", height=400),
             method_note=(
                 "Person-tier-gender observations: each distinct (person, scale_tier, gender) triple "
                 "contributes one iv_score value. A person credited on works across tiers "

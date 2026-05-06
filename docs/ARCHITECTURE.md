@@ -863,6 +863,82 @@ DBML形式により、以下を可視化できます：
 
 ---
 
-**Last Updated**: 2026-05-02
-**Version**: 1.2.0
+## レポート層 / 可視化層 (v3)
+
+設計仕様の完全版: [`docs/REPORT_DESIGN_v3.md`](REPORT_DESIGN_v3.md) / [`docs/VIZ_SYSTEM_v3.md`](VIZ_SYSTEM_v3.md)
+
+### ReportSpec / BriefArc データクラス階層
+
+```
+ReportSpec                    # 各レポートが宣言する方法論メタデータ
+├── claim                     # 1文の主張 (狭い名前)
+├── identifying_assumption    # 主張の成立前提
+├── null_model                # 帰無モデル定義
+├── method_gate               # CI / 縮約 / holdout / 感度の最低要件
+├── sensitivity_grid          # window / threshold 代替選択 (1軸以上)
+├── interpretation_guard      # 禁止 framing + 必須代替解釈数
+└── data_lineage              # Source → Mart 経路 + meta_lineage table 参照
+
+BriefArc                      # 3 brief の narrative 構造を規定するデータクラス
+├── phenomenon                # Section 1: 現象の提示 (評価的形容詞なし)
+├── null_contrast             # Section 2: null model との対比
+├── interpretive_limit        # Section 3: 解釈の限界と不確実性の明示
+└── alternative_view          # Section 4: 代替解釈の併記
+```
+
+`ReportSpec` を持たないレポートは Pipeline Phase 5 strict mode でブロックされる (`ci_check_report_spec.py`)。全 45 reports が curated SPEC を保持している (v3.0 完了時点)。
+
+### Phase 5 Strict Mode
+
+v3 から Pipeline Phase 5 (Core Scoring) の出口に SPEC バリデーションゲートを追加。
+
+```
+Phase 5: Core Scoring
+    └── SPEC gate (ci_check_report_spec.py)
+         ├── ReportSpec 存在確認
+         ├── method_gate フィールド充足確認 (CI / null_model / holdout)
+         └── 未充足 → pipeline 停止 (exit code 1)
+```
+
+手動実行:
+```bash
+pixi run check-report-spec-strict   # 全レポート SPEC 検証
+```
+
+### Visualization Layer (src/viz/)
+
+```
+src/viz/
+├── primitives/          # P1-P11 chart primitive (CI / null overlay / shrinkage badge デフォルト ON)
+│   ├── ci_scatter.py    # P1: 点推定 + 誤差バー
+│   ├── km_curve.py      # P2: 生存曲線
+│   ├── event_study.py   # P3: 介入前後 dynamic effect
+│   ├── small_multiples.py # P4: facet grid
+│   ├── ridge.py         # P5: 分布重ね
+│   ├── box_strip_ci.py  # P6: box + strip + 95% CI
+│   ├── sankey.py        # P7: 段階遷移 flow
+│   ├── radial_network.py # P8: ego-network 局所図
+│   ├── heatmap.py       # P9: 相関 / 共起行列
+│   ├── parallel_coords.py # P10: 多軸 parallel coordinates
+│   └── choropleth_jp.py # P11: 都道府県 choropleth (GeoJSON pending)
+├── theme.py             # Plotly layout テンプレート (全レポート共通)
+├── palettes.py          # Okabe-Ito 8色 + 460-hex アクセシビリティテーブル
+├── typography.py        # フォント / サイズ規定
+├── ci.py                # CI band 描画ヘルパー
+├── null_overlay.py      # null model envelope 描画ヘルパー
+├── shrinkage_badge.py   # 縮約済み値 badge
+├── interactivity.py     # linked brushing (brief 内 primitive 横断)
+└── export.py            # HTML / SVG / PDF 並走 export (kaleido)
+```
+
+**設計原則**: 全 primitive が `auto_ci=True` / `auto_null=True` / `shrinkage_badge=True` をデフォルトとする。CI band または null envelope の描画はレポート側コードではなく primitive が強制するため、`REPORT_PHILOSOPHY.md §3.1` の viz 漏れが構造的に発生しない。
+
+### Glossary v3
+
+[`docs/GLOSSARY_v3.md`](GLOSSARY_v3.md) — 全 45 レポートで使用する用語の canonical 定義。`forbidden_vocab` の 19 件の例外 (rationale + スコープ付き) を管理する。新語追加・例外追加は Glossary v3 への PR を通す。
+
+---
+
+**Last Updated**: 2026-05-06
+**Version**: 1.3.0
 **Schema**: v62+ (5層アーキテクチャ)

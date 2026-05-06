@@ -86,15 +86,6 @@ exceptions:
       is NOT an individual ability indicator. Naming what the metric is
       not is required for the limitation disclosure.
 
-  - file: scripts/report_generators/reports/knowledge_network.py
-    line_pattern: 能力加重協業中心性
-    term: 能力
-    reason: >
-      AWCC ("能力加重協業中心性") is the legacy operational name registered
-      in COMMON_GLOSSARY_TERMS. The SPEC claim must reference the
-      registered glossary term to maintain cross-report consistency.
-      A renamed glossary entry ("協業者加重中心性") is a separate cleanup PR.
-
   # docs/GLOSSARY_v3.md は禁止語 → 代替語マッピング表を含む。
   # 禁止語を表のセルに書かないと glossary 機能を果たさない。
   - file: docs/GLOSSARY_v3.md
@@ -315,15 +306,6 @@ exceptions:
     reason: >
       Negation in DISCLAIMER constant: "実力の不足を意味するものではありません"
       (does not imply insufficient ability). Mandatory legal disclaimer.
-
-  - file: scripts/report_generators/html_templates.py
-    line_pattern: "能力加重協業中心性"
-    term: 能力
-    reason: >
-      Established technical abbreviation: AWCC (Ability-Weighted Co-Credit Centrality)
-      → 能力加重協業中心性. The metric is computed from collaborators' IV Score (network
-      position), not individual ability. The "能力加重" label refers to the weighting
-      formula input (IV Score), not an individual ability judgment.
 
   - file: scripts/report_generators/html_templates.py
     line_pattern: "個人の実力ではなく環境要因"

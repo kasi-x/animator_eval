@@ -52,6 +52,59 @@ pixi run serve            # API サーバー (localhost:8000)
 
 `task report-briefs` で生成。詳細は [`docs/REPORT_PHILOSOPHY.md`](docs/REPORT_PHILOSOPHY.md)、レポート一覧は [`docs/REPORT_INVENTORY.md`](docs/REPORT_INVENTORY.md)。
 
+## v3 Visualization System
+
+Animetor Eval v3 introduces a unified visualization layer in `src/viz/` that enforces `REPORT_PHILOSOPHY.md §3` requirements (CI / null model / shrinkage badge) at the chart-construction level rather than relying on each report to implement them correctly.
+
+### 11 Chart Primitives (P1-P11)
+
+| ID | Primitive | 用途 |
+|----|-----------|------|
+| P1 | `CIScatter` | 点推定 + 誤差バー / forest plot |
+| P2 | `KMCurve` | 生存曲線 (Greenwood band) |
+| P3 | `EventStudyPanel` | 介入前後 dynamic effect |
+| P4 | `SmallMultiples` | facet grid (cohort × role 等) |
+| P5 | `RidgePlot` | 分布の重ね (theta_i コホート比較) |
+| P6 | `BoxStripCI` | 分布要約 + raw 点 + 95% CI |
+| P7 | `SankeyFlow` | キャリア段階遷移 |
+| P8 | `RadialNetwork` | ego-network 局所図 |
+| P9 | `HeatMap` | 相関 / 共起行列 |
+| P10 | `ParallelCoords` | 多軸 parallel coordinates |
+| P11 | `ChoroplethJP` | 都道府県 choropleth |
+
+全 primitive は `auto_ci=True` / `auto_null=True` / `shrinkage_badge=True` をデフォルトとし、CI band と null envelope の描画漏れを構造的に防ぐ。
+
+### src/viz/ 構造
+
+```
+src/viz/
+├── primitives/          # P1-P11 chart primitive 実装
+├── theme.py             # Plotly layout テンプレート (全レポート共通)
+├── palettes.py          # Okabe-Ito 8色 + 460-hex アクセシビリティテーブル
+├── typography.py        # フォント / サイズ規定
+├── ci.py                # CI band 描画ヘルパー
+├── null_overlay.py      # null model envelope 描画ヘルパー
+├── shrinkage_badge.py   # 縮約済み値 badge
+├── interactivity.py     # linked brushing (brief 内 primitive 横断)
+└── export.py            # HTML / SVG / PDF 並走 export (kaleido)
+```
+
+### SPEC 強制ゲート
+
+各レポートは `ReportSpec` データクラス (7 フィールド: `claim` / `identifying_assumption` / `null_model` / `method_gate` / `sensitivity_grid` / `interpretation_guard` / `data_lineage`) を宣言しなければならない。未宣言のレポートは Pipeline Phase 5 でブロックされる。
+
+strict mode チェック:
+
+```bash
+pixi run check-report-spec-strict
+```
+
+### Glossary v3
+
+`docs/GLOSSARY_v3.md` — 全 45 レポートで使用する用語の canonical 定義。`forbidden_vocab` の 19 件の例外 (rationale 付き) を管理する。
+
+詳細: [`docs/VIZ_SYSTEM_v3.md`](docs/VIZ_SYSTEM_v3.md) / [`docs/REPORT_DESIGN_v3.md`](docs/REPORT_DESIGN_v3.md) / [`docs/GLOSSARY_v3.md`](docs/GLOSSARY_v3.md)
+
 ## Documentation
 
 - [`CLAUDE.md`](CLAUDE.md) — プロジェクト原則 (エージェント向け)

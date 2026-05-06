@@ -412,7 +412,7 @@ SPEC = make_default_spec(
     name='knowledge_network',
     audience='technical_appendix',
     claim=(
-        'AWCC (能力加重協業中心性) / NDI (Network Diffusion Index) / メンタリング密度 '
+        'AWCC (協業者加重中心性) / NDI (Network Diffusion Index) / メンタリング密度 '
         '(高経験者と低経験者の共クレジット比率) の Tier 別分布が、'
         'configuration model null 95% 区間外に位置する構造的パターンを示す'
     ),

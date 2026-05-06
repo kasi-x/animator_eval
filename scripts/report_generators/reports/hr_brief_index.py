@@ -15,6 +15,7 @@ from .._spec import (
     LimitationBlock,
     NullContrast,
 )
+from src.viz import link_brushing
 from ._base import BaseReportGenerator
 
 
@@ -199,11 +200,21 @@ anime.score was not used in any hr-brief computation.</p>
             "</div>"
         )
         # v3: 4 段 narrative arc
+        arc_html = self._ARC.to_html()
+        # link_brushing smoke: arc sections arc-phenomena / arc-null-contrast
+        # have no plotly traces today, but we embed the JS scaffold so that
+        # when real chart divs (carrying customdata with section_id) are added
+        # in future iterations the cross-highlight handler is already wired.
+        brushing_js = link_brushing(
+            ["arc-phenomena", "arc-null-contrast"],
+            key="section_id",
+        )
         body = (
             overview_card
             + findings_card
             + self._METHOD_OVERVIEW
-            + self._ARC.to_html()
+            + arc_html
+            + brushing_js
         )
         return self.write_report(body)
 

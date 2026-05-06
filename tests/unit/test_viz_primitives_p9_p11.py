@@ -1,29 +1,19 @@
-"""Smoke tests for primitives P9 (Heatmap) / P10 (ParallelCoords) / P11 (ChoroplethJP)
-plus interactivity + static export.
+"""Smoke tests for primitives P9 (Heatmap) / P10 (ParallelCoords) / P11 (ChoroplethJP).
+
+Export tests → tests/unit/test_viz_export.py
+Interactivity tests → tests/unit/test_viz_interactivity.py
 """
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import numpy as np
-import pytest
 
-from src.viz import (
-    CrossFilterFacet,
-    cross_filter_panel,
-    export,
-    link_brushing,
-)
 from src.viz.primitives import (
     ChoroplethJPSpec,
-    CIPoint,
-    CIScatterSpec,
     HeatmapSpec,
     ParallelAxis,
     ParallelCoordsSpec,
     render_choropleth_jp,
-    render_ci_scatter,
     render_heatmap,
     render_parallel_coords,
 )
@@ -119,64 +109,3 @@ def test_choropleth_empty():
     assert "(no data)" in fig.layout.title.text
 
 
-# ---- interactivity ------------------------------------------------------
-
-
-def test_link_brushing_emits_attached_handlers():
-    js = link_brushing(["chart_a", "chart_b"], key="person_id")
-    assert "chart_a" in js
-    assert "chart_b" in js
-    assert "plotly_hover" in js
-    assert "person_id" in js
-
-
-def test_cross_filter_panel_renders_select_per_facet():
-    panel = cross_filter_panel(
-        [
-            CrossFilterFacet(field="cohort_decade", label="デビュー年代",
-                             options=["1990s", "2000s", "2010s"]),
-            CrossFilterFacet(field="role_group", label="役職グループ",
-                             options=["animator", "director"]),
-        ],
-        target_div_ids=["chart_a", "chart_b"],
-    )
-    assert "cohort_decade" in panel
-    assert "role_group" in panel
-    assert "chart_a" in panel and "chart_b" in panel
-    assert "Plotly.restyle" in panel
-
-
-# ---- static export ------------------------------------------------------
-
-
-def _sample_fig():
-    spec = CIScatterSpec(
-        points=[CIPoint("a", 1.2, 1.0, 1.4, p_value=0.01)],
-        x_label="HR", reference=1.0,
-    )
-    return render_ci_scatter(spec, theme="dark")
-
-
-def test_export_svg(tmp_path: Path):
-    out = export.to_svg(_sample_fig(), tmp_path / "x.svg")
-    assert out.exists() and out.stat().st_size > 0
-
-
-def test_export_png(tmp_path: Path):
-    out = export.to_png(_sample_fig(), tmp_path / "x.png", scale=1.0)
-    assert out.exists() and out.stat().st_size > 0
-
-
-def test_export_pdf_single(tmp_path: Path):
-    out = export.to_pdf(_sample_fig(), tmp_path / "x.pdf")
-    assert out.exists() and out.stat().st_size > 0
-
-
-def test_export_format_routing(tmp_path: Path):
-    out = export.export(_sample_fig(), tmp_path / "x.svg", format="svg")
-    assert out.exists()
-
-
-def test_export_unknown_format_raises(tmp_path: Path):
-    with pytest.raises(ValueError):
-        export.export(_sample_fig(), tmp_path / "x.bmp", format="bmp")  # type: ignore[arg-type]

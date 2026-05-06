@@ -158,12 +158,18 @@ class MgmtDirectorMentorReport(BaseReportGenerator):
 
         # v3: KPI strip
         from ..section_builder import KPICard
+        n_sig_pct = (
+            f"{n_significant / n_total * 100:.1f}%"
+            if n_total > 0 else "N/A"
+        )
         kpis = [
             KPICard("分析監督数", f"{n_total:,}", "M̂_d 算出可能"),
             KPICard("ヌル有意 (p<0.05)", f"{n_significant:,}",
                     "permutation null model"),
             KPICard("M̂_d レンジ", f"{m_min:.3f} – {m_max:.3f}",
                     "EB 縮小推定値"),
+            KPICard("null < 観測値 比率", n_sig_pct,
+                    f"{n_significant}/{n_total} 監督"),
         ]
 
         return ReportSection(
@@ -173,9 +179,17 @@ class MgmtDirectorMentorReport(BaseReportGenerator):
             kpi_cards=kpis,
             chart_caption=(
                 "横軸 = M̂_d (メンティー固定効果の平均変化量)、縦軸 = 監督。"
-                "塗り潰し = ヌルモデル有意 (p<0.05)、中抜き = 非有意。"
-                "誤差棒 = 95% 信頼区間。点線 (M̂_d=0) はメンティー集団平均線。"
-                "EB 縮小によりメンティー数が少ない監督は中央方向に補正済み。"
+                "M̂_d は監督との共起後 5 年以内にデビューしたメンティー集団の"
+                "AKM 個人固定効果 (θ_i) 平均変化量で、"
+                "値が大きいほど接触後にメンティーのネットワーク位置が上方シフトした集団を指す。"
+                "塗り潰し (オレンジ) = 置換ヌルモデルに対し p<0.05 で有意、"
+                "中抜き (グレー) = null 95% 区間内 (ランダム割当と区別不能)。"
+                "誤差棒 = 95% 信頼区間 (解析的導出)。"
+                "点線 (M̂_d=0) はメンティー集団全体の平均線 (帰無仮説の基準)。"
+                "EB (Empirical Bayes) 縮小推定により、メンティー数が少ない監督の推定値は"
+                "全体平均方向に補正されるため、生の標本平均よりも順位間の差が圧縮される。"
+                "有意な監督と非有意な監督の差は「指導効果の差」ではなく"
+                "「null モデルとの構造的距離」として読む。"
             ),
             method_note=(
                 "M̂_d: 監督の指導下でメンティーが経験した"
