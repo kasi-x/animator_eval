@@ -400,6 +400,8 @@ async def scrape_madb(
                     format=fmt or None,
                     madb_id=madb_id,
                     studios=studios,
+                    parent_madb_id=record.get("parent_madb_id") or None,
+                    record_type=record.get("record_type") or None,
                 )
                 anime_bw.append(anime.model_dump(mode="json"))
                 stats["anime_fetched"] += 1

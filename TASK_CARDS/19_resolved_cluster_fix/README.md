@@ -33,12 +33,12 @@
 
 ## Sub-cards
 
-| ID | Title | Priority | Blocks |
-|---|---|---|---|
-| [01_madb_parent_link.md](01_madb_parent_link.md) | madb parser に `parent_madb_id` + `record_type` 追加 → cluster は C 起点 + M 別保持 | 🟠 | A 系 cluster 全件 |
-| [02_persons_tmdb_homonym.md](02_persons_tmdb_homonym.md) | `_numeric_id_key` に tmdb_id 追加 + en_name_groups guard 強化 | 🟠 | B 系 cluster |
-| [03_audit_post_fix.md](03_audit_post_fix.md) | 修正後 cluster size 分布再計測 + 戦略 LLM 再 review | 🟡 | 01/02 後 |
-| [04_canonical_id_collision.md](04_canonical_id_collision.md) | canonical_id をメンバ ID ハッシュに置換 → year=None 同タイトル衝突 (20,511 row silent drop) 解消 | 🔴 | resolved 全数保証 |
+| ID | Title | Priority | Status | Blocks |
+|---|---|---|---|---|
+| [01_madb_parent_link.md](01_madb_parent_link.md) | madb parser に `parent_madb_id` + `record_type` 追加 → cluster は C 起点 + M 別保持 | 🟠 | ✅ 完了 (2026-05-07) | A 系 cluster 全件 |
+| [02_persons_tmdb_homonym.md](02_persons_tmdb_homonym.md) | `_numeric_id_key` に tmdb_id 追加 + en_name_groups guard 強化 | 🟠 | 未着手 | B 系 cluster |
+| [03_audit_post_fix.md](03_audit_post_fix.md) | 修正後 cluster size 分布再計測 + 戦略 LLM 再 review | 🟡 | 未着手 | 01/02 後 |
+| [04_canonical_id_collision.md](04_canonical_id_collision.md) | canonical_id をメンバ ID ハッシュに置換 → year=None 同タイトル衝突 (20,511 row silent drop) 解消 | 🔴 | ✅ 完了 (686e161) | resolved 全数保証 |
 
 ---
 

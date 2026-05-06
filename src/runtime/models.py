@@ -1403,6 +1403,8 @@ class BronzeAnime(BaseModel):
     mal_id: int | None = None
     anilist_id: int | None = None
     madb_id: str | None = None
+    parent_madb_id: str | None = None  # schema:isPartOf C-series ID (M-rows only)
+    record_type: str | None = None     # @type suffix, e.g. "AnimationTVRegularSeries"
     ann_id: int | None = None
     format: str | None = None
     status: str | None = None

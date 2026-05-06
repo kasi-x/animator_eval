@@ -131,10 +131,17 @@ def _load_conformed_anime(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any
         ).fetchall()
     }
     title_zh_expr = "title_zh" if "title_zh" in table_cols else "'' AS title_zh"
+    parent_madb_id_expr = (
+        "parent_madb_id" if "parent_madb_id" in table_cols else "NULL AS parent_madb_id"
+    )
+    record_type_expr = (
+        "record_type" if "record_type" in table_cols else "NULL AS record_type"
+    )
     rel = conn.execute(
         f"SELECT id, title_ja, title_en, {title_zh_expr}, year, season, quarter, episodes, format, "
         f"duration, start_date, end_date, status, source_mat, work_type, scale_class, "
-        f"country_of_origin, {mal_id_expr} FROM conformed.anime "
+        f"country_of_origin, {mal_id_expr}, {parent_madb_id_expr}, {record_type_expr} "
+        "FROM conformed.anime "
         "WHERE id NOT LIKE 'madb:C%'"
     )
     cols = [d[0] for d in rel.description]
@@ -229,11 +236,16 @@ def build_resolved_anime(
     _insert_resolved_anime(resolved_path, resolved_rows, batch_size)
     _insert_audit(resolved_path, audit_rows, batch_size)
 
+    # Build and write resolved.episodes from madb M-rows
+    episode_rows = _build_episode_rows(clusters)
+    _insert_episodes(resolved_path, episode_rows, batch_size)
+
     count = len(resolved_rows)
     logger.info(
         "resolve_anime_done",
         canonical_count=count,
         audit_count=len(audit_rows),
+        episode_count=len(episode_rows),
     )
     return count
 
@@ -317,6 +329,92 @@ def _insert_resolved_anime(
                         (r.get(f) or "") if f in _ANIME_NOT_NULL_STR else r.get(f)
                         for f in fields
                     )
+                    for r in batch
+                ]
+                conn.executemany(sql, values)
+        conn.commit()
+    finally:
+        conn.close()
+
+
+_EPISODE_FIELDS: list[str] = [
+    "episode_id",
+    "parent_anime_id",
+    "record_type",
+    "title_ja",
+    "year",
+]
+
+
+def _build_episode_rows(
+    clusters: dict[str, list[dict[str, Any]]],
+) -> list[dict[str, Any]]:
+    """Extract madb M-rows from clusters into episode records.
+
+    Each M-row in a cluster becomes one episode row with the cluster's
+    canonical_id as parent_anime_id.  Non-madb rows are ignored.
+
+    Args:
+        clusters: Output of build_cross_source_anime_clusters: {canonical_id: [rows]}.
+
+    Returns:
+        List of episode dicts ready for INSERT into resolved.episodes.
+    """
+    episode_rows: list[dict[str, Any]] = []
+    seen_ids: set[str] = set()
+
+    for canonical_id, cluster_rows in clusters.items():
+        for row in cluster_rows:
+            rid = row["id"]
+            if not rid.startswith("madb:M"):
+                continue
+            if rid in seen_ids:
+                continue
+            seen_ids.add(rid)
+            episode_rows.append(
+                {
+                    "episode_id": rid,
+                    "parent_anime_id": canonical_id,
+                    "record_type": row.get("record_type"),
+                    "title_ja": row.get("title_ja") or "",
+                    "year": row.get("year"),
+                }
+            )
+
+    return episode_rows
+
+
+def _insert_episodes(
+    resolved_path: Path | str,
+    rows: list[dict[str, Any]],
+    batch_size: int,
+) -> None:
+    """Insert resolved episode rows, wiping and rewriting the table each build."""
+    conn = duckdb.connect(str(resolved_path))
+    try:
+        conn.execute("DELETE FROM episodes")
+        if not rows:
+            conn.commit()
+            return
+
+        try:
+            tbl = _rows_to_arrow(rows, _EPISODE_FIELDS, frozenset({"title_ja"}))
+            conn.register("_episodes_staging", tbl)
+            conn.execute(
+                f"INSERT OR REPLACE INTO episodes ({', '.join(_EPISODE_FIELDS)}) "
+                f"SELECT {', '.join(_EPISODE_FIELDS)} FROM _episodes_staging"
+            )
+            conn.unregister("_episodes_staging")
+        except ImportError:
+            placeholders = ", ".join("?" * len(_EPISODE_FIELDS))
+            sql = (
+                f"INSERT OR REPLACE INTO episodes ({', '.join(_EPISODE_FIELDS)}) "
+                f"VALUES ({placeholders})"
+            )
+            for i in range(0, len(rows), batch_size):
+                batch = rows[i : i + batch_size]
+                values = [
+                    tuple(r.get(f) for f in _EPISODE_FIELDS)
                     for r in batch
                 ]
                 conn.executemany(sql, values)

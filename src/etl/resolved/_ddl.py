@@ -132,6 +132,22 @@ CREATE INDEX IF NOT EXISTS idx_credits_role
     ON credits(role)
 """
 
+CREATE_EPISODES = """
+CREATE TABLE IF NOT EXISTS episodes (
+    episode_id       VARCHAR PRIMARY KEY,   -- "madb:M{n}" — source M-row identifier
+    parent_anime_id  VARCHAR NOT NULL,      -- resolved canonical_id of the parent series
+    record_type      VARCHAR,               -- @type suffix, e.g. "AnimationTVProgram"
+    title_ja         VARCHAR NOT NULL DEFAULT '',  -- episode subtitle (from schema:name)
+    year             INTEGER,               -- broadcast year
+    built_at         TIMESTAMP DEFAULT now()
+)
+"""
+
+CREATE_IDX_EPISODES_PARENT = """
+CREATE INDEX IF NOT EXISTS idx_episodes_parent
+    ON episodes(parent_anime_id)
+"""
+
 ALL_DDL: list[str] = [
     CREATE_ANIME,
     CREATE_PERSONS,
@@ -143,4 +159,6 @@ ALL_DDL: list[str] = [
     CREATE_IDX_CREDITS_PERSON,
     CREATE_IDX_CREDITS_ANIME,
     CREATE_IDX_CREDITS_ROLE,
+    CREATE_EPISODES,
+    CREATE_IDX_EPISODES_PARENT,
 ]

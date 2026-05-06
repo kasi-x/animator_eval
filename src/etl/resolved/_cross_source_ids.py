@@ -180,17 +180,37 @@ def _compute_canonical_id(
 
 
 class _UnionFind:
-    """Path-compressed Union-Find for anime cluster construction."""
+    """Path-compressed Union-Find for anime cluster construction.
+
+    Uses iterative path compression to avoid Python recursion depth limits
+    when large clusters (e.g. 1,000+ madb M-rows per C-series) are formed.
+    """
 
     def __init__(self) -> None:
         self._parent: dict[str, str] = {}
 
     def find(self, x: str) -> str:
+        """Iterative find with two-pass path compression."""
         if x not in self._parent:
             self._parent[x] = x
-        if self._parent[x] != x:
-            self._parent[x] = self.find(self._parent[x])
-        return self._parent[x]
+            return x
+
+        # Step 1: walk up to root
+        root = x
+        while self._parent[root] != root:
+            root = self._parent[root]
+            if root not in self._parent:
+                self._parent[root] = root
+                break
+
+        # Step 2: path compression — point all visited nodes directly to root
+        current = x
+        while self._parent[current] != root:
+            nxt = self._parent[current]
+            self._parent[current] = root
+            current = nxt
+
+        return root
 
     def union(self, a: str, b: str) -> None:
         ra, rb = self.find(a), self.find(b)
@@ -247,6 +267,34 @@ def build_cross_source_anime_clusters(
     for row in conformed_rows:
         uf.find(row["id"])
 
+    # madb M-row → parent C-row linking via schema:isPartOf.
+    # M-rows carry episode-level data; their parent C-row represents the series.
+    # If a C-row exists in conformed.anime (it was loaded separately), union M to C.
+    # If the C-row does NOT appear in conformed rows (orphan M), the M-row forms its
+    # own singleton cluster — self-contained and independently identifiable.
+    #
+    # Note: conformed loader excludes madb:C* from resolve_anime input (line 138-139),
+    # so we map M-rows to a synthetic "madb:C{parent_id}" anchor node.  This anchor
+    # may not exist as a real conformed row, but the UF still groups all M-rows sharing
+    # the same parent C-id together — forming one cluster per series.
+    madb_m_to_anchor: dict[str, str] = {}  # conformed_id → anchor_id
+    for row in conformed_rows:
+        rid = row["id"]
+        if not rid.startswith("madb:M"):
+            continue
+        parent_id = row.get("parent_madb_id") or ""
+        if parent_id.startswith("C"):
+            anchor = f"madb:{parent_id}"
+            madb_m_to_anchor[rid] = anchor
+            uf.union(rid, anchor)
+
+    if madb_m_to_anchor:
+        logger.info(
+            "madb_m_to_c_links",
+            count=len(madb_m_to_anchor),
+            unique_anchors=len(set(madb_m_to_anchor.values())),
+        )
+
     if bronze_root is not None:
         bronze_root = Path(bronze_root)
         al_to_mal = _load_anilist_to_mal_map(bronze_root)
@@ -299,12 +347,21 @@ def build_cross_source_anime_clusters(
     # Group rows that share the same (norm title_ja, year) key
     # and union them together (even across source prefixes)
     #
-    # year IS NULL の場合は cluster 形成を抑止 (over-merge 防止):
-    # madb の長寿シリーズ (サザエさん 1,919 件等) や年不明 row が year=None を共有
-    # するため、title 一致だけで全部 1 cluster に潰される問題を緩和。
+    # 除外 1 — year IS NULL: cluster 形成を抑止 (over-merge 防止)
+    # madb の長寿シリーズ (サザエさん 等) や年不明 row が year=None を共有するため。
     # year 不明 row は ID-link 経由でしか cluster されない (singleton fallback)。
+    #
+    # 除外 2 — madb:M* (M-manifestation rows): 話数 / 個別放送回 は series title を
+    # 共有するが本質的に別エンティティ (各話)。M-row は §madb_m_to_c_anchor ステップで
+    # 親 C-series 経由の anchor cluster に吸収済み (parent_madb_id あり)。
+    # parent_madb_id なし (orphan) の M-row も title+year 集約しない — 孤立 singleton
+    # として保持し resolved.episodes に流す (情報保持原則)。
     title_year_index: dict[str, str] = {}  # key → first row_id seen
     for row in conformed_rows:
+        rid = row["id"]
+        # Skip all madb M-rows: episodes must not be clustered by title+year
+        if rid.startswith("madb:M"):
+            continue
         title_ja = (row.get("title_ja") or "").strip()
         if not title_ja:
             continue

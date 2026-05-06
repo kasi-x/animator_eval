@@ -73,25 +73,27 @@ CREATE TABLE IF NOT EXISTS anime_studios (
 );
 
 CREATE TABLE IF NOT EXISTS anime (
-    id          VARCHAR PRIMARY KEY,
-    title_ja    VARCHAR NOT NULL DEFAULT '',
-    title_en    VARCHAR NOT NULL DEFAULT '',
-    title_zh    VARCHAR NOT NULL DEFAULT '',
-    year        INTEGER,
-    season      VARCHAR,
-    quarter     INTEGER,
-    episodes    INTEGER,
-    format      VARCHAR,
-    duration    INTEGER,
-    start_date  VARCHAR,
-    end_date    VARCHAR,
-    status      VARCHAR,
-    source_mat  VARCHAR,
-    work_type   VARCHAR,
-    scale_class VARCHAR,
-    fetched_at  TIMESTAMP,
-    content_hash VARCHAR,
-    updated_at  TIMESTAMP DEFAULT now()
+    id               VARCHAR PRIMARY KEY,
+    title_ja         VARCHAR NOT NULL DEFAULT '',
+    title_en         VARCHAR NOT NULL DEFAULT '',
+    title_zh         VARCHAR NOT NULL DEFAULT '',
+    year             INTEGER,
+    season           VARCHAR,
+    quarter          INTEGER,
+    episodes         INTEGER,
+    format           VARCHAR,
+    duration         INTEGER,
+    start_date       VARCHAR,
+    end_date         VARCHAR,
+    status           VARCHAR,
+    source_mat       VARCHAR,
+    work_type        VARCHAR,
+    scale_class      VARCHAR,
+    fetched_at       TIMESTAMP,
+    content_hash     VARCHAR,
+    updated_at       TIMESTAMP DEFAULT now(),
+    parent_madb_id   VARCHAR,
+    record_type      VARCHAR
 );
 
 CREATE TABLE IF NOT EXISTS persons (
@@ -177,7 +179,9 @@ WITH bronze AS (
         {scale_class}           AS scale_class,
         {fetched_at}            AS fetched_at,
         {content_hash}          AS content_hash,
-        now()                   AS updated_at
+        now()                   AS updated_at,
+        {parent_madb_id}        AS parent_madb_id,
+        {record_type}           AS record_type
     FROM (
         SELECT *,
                ROW_NUMBER() OVER (PARTITION BY id ORDER BY date DESC) AS _rn
@@ -532,6 +536,8 @@ def _build_anime_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
         scale_class="scale_class" if "scale_class" in cols else "NULL::VARCHAR",
         fetched_at="TRY_CAST(fetched_at AS TIMESTAMP)" if "fetched_at" in cols else "NULL::TIMESTAMP",
         content_hash="content_hash" if "content_hash" in cols else "NULL::VARCHAR",
+        parent_madb_id="NULLIF(parent_madb_id, '')" if "parent_madb_id" in cols else "NULL::VARCHAR",
+        record_type="NULLIF(record_type, '')" if "record_type" in cols else "NULL::VARCHAR",
     )
 
 

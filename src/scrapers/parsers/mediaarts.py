@@ -608,6 +608,35 @@ def parse_original_work_link(item: dict) -> OriginalWorkLink | None:
     )
 
 
+def _extract_parent_madb_id(item: dict) -> str:
+    """Extract parent C-series ID from schema:isPartOf.
+
+    M-manifestation items link to their parent C-series via:
+      schema:isPartOf: {"@id": "https://mediaarts-db.artmuseums.go.jp/id/C12345"}
+
+    Returns:
+        Parent ID string (e.g. "C12345") if present, else "".
+    """
+    parent_link = item.get("schema:isPartOf")
+    if not isinstance(parent_link, dict):
+        return ""
+    m = re.search(r"/id/([^/]+)$", parent_link.get("@id", ""))
+    return m.group(1) if m else ""
+
+
+def _extract_record_type(item: dict) -> str:
+    """Extract the item's schema class suffix from @type.
+
+    @type is typically "class:AnimationTVRegularSeries" or
+    "class:AnimationTVProgram". Returns the suffix after the last colon,
+    e.g. "AnimationTVRegularSeries".
+    """
+    raw = item.get("@type", "")
+    if not raw or not isinstance(raw, str):
+        return ""
+    return raw.split(":")[-1]
+
+
 def parse_jsonld_dump(json_path: Path, format_code: str = "") -> list[dict]:
     """Parse a JSON-LD file and extract anime information.
 
@@ -618,6 +647,8 @@ def parse_jsonld_dump(json_path: Path, format_code: str = "") -> list[dict]:
         "format": "TV",
         "contributors": [(role, name), ...],
         "studios": ["マッドハウス"],
+        "parent_madb_id": "C2483",      # from schema:isPartOf (M→C link); "" for C-rows
+        "record_type": "AnimationTVRegularSeries",  # from @type suffix
         # §10.2 additions:
         "broadcasters": [Broadcaster, ...],
         "broadcast_schedule": BroadcastSchedule | None,
@@ -666,6 +697,8 @@ def parse_jsonld_dump(json_path: Path, format_code: str = "") -> list[dict]:
                 "format": format_code,
                 "contributors": contributors,
                 "studios": studios,
+                "parent_madb_id": _extract_parent_madb_id(item),
+                "record_type": _extract_record_type(item),
                 # §10.2 additions
                 "broadcasters": parse_broadcasters(item),
                 "broadcast_schedule": parse_broadcast_schedule(item),
