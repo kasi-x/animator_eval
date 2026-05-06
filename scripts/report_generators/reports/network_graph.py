@@ -433,7 +433,23 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='network_graph',
     audience='technical_appendix',
-    claim='ネットワーク可視化 に関する記述的指標 (subtitle: 協業グラフのTop-Nサブグラフ・コミュニティ散布図)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        '協業グラフ Top-N (N=200 / 500 / 1000) ノードのサブグラフを Louvain '
+        'コミュニティ着色で可視化し、コミュニティ境界の安定性を modularity Q で記述'
+    ),
+    identifying_assumption=(
+        'Top-N 抽出は次数 / weighted PageRank で行い、cutoff の choice で'
+        '可視化対象集合が変動する。コミュニティ境界は Louvain で確率的。'
+        '可視化は記述的、関係の意味解釈は別 report で行う。'
+    ),
+    null_model=['N1'],
+    sources=['credits', 'persons', 'anime'],
     meta_table='meta_network_graph',
+    estimator='Louvain (resolution=1.0) + ForceAtlas2 layout',
+    ci_estimator='bootstrap', n_resamples=200,
+    extra_limitations=[
+        'Top-N cutoff の choice で可視化対象が変動',
+        'Louvain seed ごとに community 境界 ~10-15% 揺らぐ',
+        'ForceAtlas2 layout は美的選択、距離は意味を持たない',
+    ],
 )

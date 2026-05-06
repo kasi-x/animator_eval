@@ -411,7 +411,24 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='knowledge_network',
     audience='technical_appendix',
-    claim='知識伝達ネットワーク に関する記述的指標 (subtitle: AWCC・NDI・メンタリング密度の分布とTier別特性)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        'AWCC (能力加重協業中心性) / NDI (Network Diffusion Index) / メンタリング密度 '
+        '(高経験者と低経験者の共クレジット比率) の Tier 別分布が、'
+        'configuration model null 95% 区間外に位置する構造的パターンを示す'
+    ),
+    identifying_assumption=(
+        'AWCC は協業者の IV スコアで重み付けした次数中心性 — 真の知識伝達効率'
+        'ではなく構造的近接性。NDI は graph-based diffusion の理論モデル指標。'
+        'メンタリング ≠ 共クレジット — 後者を operational proxy として使用。'
+    ),
+    null_model=['N1', 'N2'],
+    sources=['credits', 'persons', 'anime', 'feat_person_scores'],
     meta_table='meta_knowledge_network',
+    estimator='AWCC + NDI + Tier 別分布 (median + IQR)',
+    ci_estimator='bootstrap', n_resamples=500,
+    extra_limitations=[
+        'AWCC は構造的近接性指標 — 知識伝達の実態とは別',
+        'NDI 理論モデルの仮定 (homogeneous transmission) を満たさない可能性',
+        'Tier 境界 (5 階層) は事前固定、別境界で結論変動可能',
+    ],
 )

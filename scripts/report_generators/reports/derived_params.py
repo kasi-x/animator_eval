@@ -244,7 +244,24 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='derived_params',
     audience='technical_appendix',
-    claim='導出パラメータ透明性レポート に関する記述的指標 (subtitle: IVウェイト・Tier分類閾値・役職ウェイト・パラメータ登録簿)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        'IV 重み λ1-λ5 / Tier 分類閾値 / 役職 weight / dormancy 関数 など '
+        '全ての導出パラメータをレジストリに列挙し、各値の出典 (固定 / 推定 / 学習) '
+        'と更新履歴を記述する'
+    ),
+    identifying_assumption=(
+        'パラメータの「正しい」値は存在しない — 全て operational 選択。'
+        '本レポートは選択を可視化するもので、選択の正当化はしない。'
+        '異なる選択での結果は感度分析で別 report に提示。'
+    ),
+    null_model=['N6'],
+    sources=['credits', 'persons', 'anime'],
     meta_table='meta_derived_params',
+    estimator='registry enumeration + provenance trace',
+    ci_estimator='analytical_se',
+    extra_limitations=[
+        'パラメータは選択 — 「最適値」ではない',
+        '更新履歴は git log と config.py 経由でのみトレース可能',
+        'パイプライン全体への影響伝播は本レポート対象外',
+    ],
 )

@@ -228,7 +228,23 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='policy_brief_index',
     audience='policy',
-    claim='政策提言 Brief に関する記述的指標 (subtitle: 翌年クレジット可視性・労働市場構造・ジェンダー動態 — 記述的指標サマリー)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        'policy brief 5 reports (attrition / monopsony / gender_bottleneck / '
+        'generational_health / compensation_fairness) を 4 段 narrative arc で集約'
+    ),
+    identifying_assumption=(
+        '本 brief は集約と narrative であり、新規指標は持たない。'
+        '各 sub-report の SPEC が validate されている前提で集約する。'
+        '政策提言そのものではなく、政策提言のための記述的エビデンスのサマリー。'
+    ),
+    null_model=['N6'],
+    sources=['credits', 'persons', 'anime'],
     meta_table='meta_policy_brief_index',
+    estimator='aggregation of 5 policy reports + 4-stage arc',
+    ci_estimator='analytical_se',
+    extra_limitations=[
+        '本 brief は集約 — 個別 report の限界が合算される',
+        '因果主張は識別戦略 (DML / Cox / log-rank) を明示し interpretation 章のみで提示',
+        '政策意思決定の単独根拠としての使用は推奨しない',
+    ],
 )

@@ -292,7 +292,23 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='madb_coverage',
     audience='technical_appendix',
-    claim='データカバレッジ分析 に関する記述的指標 (subtitle: MADB/SeesaaWiki網羅率・名前解決統計・欠損パターン・ソース比較)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        '5 source (MADB / SeesaaWiki / AniList / MAL / allcinema) 別の作品・人物・'
+        'クレジット網羅率と、source 間 cross-validation での名前解決成功率を年代別に提示'
+    ),
+    identifying_assumption=(
+        '網羅率 = 観察可能な記録数 / 推定全体数。推定全体数は MADB 公式統計と'
+        'AniList active count から推定し、絶対値の精度は ±10%。'
+        '名前解決の precision/recall は手動検証 sample (~500) で算出。'
+    ),
+    null_model=['N6'],
+    sources=['credits', 'persons', 'anime', 'sources'],
     meta_table='meta_madb_coverage',
+    estimator='source overlap counts + Wilson CI for proportions',
+    ci_estimator='wilson',
+    extra_limitations=[
+        '推定全体数の誤差で網羅率の絶対値は ±10%',
+        '名前解決検証 sample は ~500 件 / 出典 — 全体精度の点推定',
+        'crowdsourced source (SeesaaWiki) の品質は時代別に変動',
+    ],
 )

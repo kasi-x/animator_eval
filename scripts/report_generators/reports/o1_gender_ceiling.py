@@ -695,7 +695,24 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='o1_gender_ceiling',
     audience='policy',
-    claim='ジェンダー天井効果分析 に関する記述的指標 (subtitle: 役職進行ハザード率の性別差 (Cox 回帰) / 同コホート内昇進タイミング (Mann-Whitney U) / ego-network 性別構成 vs. null model)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        '推定ジェンダー間で 役職進行 (動画 → 原画 → 作監 → 監督) ハザード率 HR と '
+        'コホート内昇進タイミング中央値が、Cox PH 95% CI / Mann-Whitney U で '
+        '0 を跨がない差を示す'
+    ),
+    identifying_assumption=(
+        'ジェンダーは name + DB 推定で ~88% カバレッジ (~5% 誤分類)。'
+        'Cox PH 比例ハザード仮定の Schoenfeld 残差検定で確認必要。'
+        'ego-network 同性比率は permutation null との比較で構造的差異を測る。'
+    ),
+    null_model=['N4', 'N5'],
+    sources=['credits', 'persons', 'anime'],
     meta_table='meta_o1_gender_ceiling',
+    estimator='Cox PH + Mann-Whitney U + ego-network permutation (1000 iter)',
+    ci_estimator='delta',
+    extra_limitations=[
+        'gender 推定 ~88% カバレッジ、残り 12% は unknown 別カテゴリ',
+        'non-binary identities は捕捉外',
+        'Cox PH 仮定違反時は cohort × time 相互作用で再検証',
+    ],
 )

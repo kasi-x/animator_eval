@@ -240,7 +240,24 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='biz_brief_index',
     audience='biz',
-    claim='新たな試み提案 Brief に関する記述的指標 (subtitle: ジャンル空白地図・露出機会ギャップ人材プール・信頼ネットワーク参入)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        'biz brief 5 reports (whitespace / exposure_gap / trust_entry / '
+        'team_template / independent_unit) を 4 段 narrative arc '
+        '(現象提示 → null 対比 → 限界 → 解釈) で集約'
+    ),
+    identifying_assumption=(
+        '本 brief は集約と narrative であり、新規指標は持たない。'
+        '各 sub-report の SPEC が validate されている前提で集約する。'
+        'arc は arc_html() 経由で動的に render される。'
+    ),
+    null_model=['N6'],
+    sources=['credits', 'persons', 'anime'],
     meta_table='meta_biz_brief_index',
+    estimator='aggregation of 5 biz reports + 4-stage arc',
+    ci_estimator='analytical_se',
+    extra_limitations=[
+        '本 brief は集約 — 個別 report の限界が合算される',
+        'arc の null contrast 値は 5 reports の代表値、全期間平均ではない',
+        'recommendation は著者解釈、対立する価値観からの代替推奨も併記',
+    ],
 )

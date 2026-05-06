@@ -997,7 +997,25 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='o3_ip_dependency',
     audience='biz',
-    claim='IP 人的依存リスク分析 に関する記述的指標 (subtitle: シリーズ単位 key person 寄与集中度・counterfactual 下落 / IP Person-Dependency Risk Analysis)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        'シリーズ (relations_json union-find クラスタ) 単位で key person の '
+        'contribution_share (role_weight × scale 加重比率) が null distribution '
+        '95p を超える集中度を持つ IP が存在し、counterfactual_drop_pct で '
+        'リスクを定量化できる'
+    ),
+    identifying_assumption=(
+        'シリーズ ID = SEQUEL/PREQUEL/PARENT/SIDE_STORY 関係の Union-Find クラスタ。'
+        'counterfactual_drop は加重寄与の additive decomposition で、'
+        '実際の制作中止リスクとは別の構造的指標。null は random removal 1000 iter。'
+    ),
+    null_model=['N4'],
+    sources=['credits', 'persons', 'anime', 'anime_relations'],
     meta_table='meta_o3_ip_dependency',
+    estimator='contribution_share + counterfactual_drop + bootstrap CI',
+    ci_estimator='bootstrap', n_resamples=1000,
+    extra_limitations=[
+        'シリーズ識別は relations_json の精度に依存 (~5% 漏れ)',
+        'counterfactual ≠ 制作中止 — 構造的依存度の代理指標',
+        '単発作品 (シリーズなし) は別カテゴリ (1 ノードクラスタ)',
+    ],
 )

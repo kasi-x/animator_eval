@@ -587,7 +587,23 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='ml_clustering',
     audience='technical_appendix',
-    claim='MLクラスタリング分析 に関する記述的指標 (subtitle: PCA次元圧縮 × K-Meansクラスタリング)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        'PCA 上位 3 主成分 (累積寄与 ≥ 60%) で K-Means (K=5) を実行し、'
+        'silhouette ≥ 0.30 の cluster 構造が得られる'
+    ),
+    identifying_assumption=(
+        'PCA は線形次元圧縮 — 非線形多様体 (manifold) 構造は捕捉外。'
+        'K-Means は球形 cluster を仮定。silhouette は cluster 同士の'
+        '分離度を測るが、内部均質性は別指標 (Calinski-Harabasz) で確認。'
+    ),
+    null_model=['N1', 'N6'],
+    sources=['feat_person_scores'],
     meta_table='meta_ml_clustering',
+    estimator='PCA(n=3) + K-Means(K=5) + silhouette',
+    ci_estimator='bootstrap', n_resamples=500,
+    extra_limitations=[
+        'PCA 線形仮定で非凸構造を捕捉できない',
+        'K-Means の label switching で実行間で cluster ID 不変ではない',
+        'silhouette < 0.30 で cluster 解釈は弱い (実行間で安定しない)',
+    ],
 )

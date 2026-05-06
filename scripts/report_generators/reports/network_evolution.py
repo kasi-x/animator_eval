@@ -500,7 +500,23 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='network_evolution',
     audience='technical_appendix',
-    claim='ネットワーク時系列変化 に関する記述的指標 (subtitle: 協業グラフのノード・エッジ成長とTier構成の経年変化)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        '年次協業グラフのノード数 / エッジ数 / 平均次数 / クラスタリング係数が '
+        '1970-2025 で時系列パターン (拡大期・安定期・縮小期) を示す'
+    ),
+    identifying_assumption=(
+        '年次グラフは「その年の作品でのみ」観察される協業エッジ。'
+        '時代別の credit-record 粒度差 (1980s vs 2010s) で構造指標が'
+        '上方バイアスを受ける可能性。年次境界は事前固定。'
+    ),
+    null_model=['N5'],
+    sources=['credits', 'persons', 'anime'],
     meta_table='meta_network_evolution',
+    estimator='年次グラフ構造指標 (count / mean / clustering coefficient)',
+    ci_estimator='bootstrap', n_resamples=300,
+    extra_limitations=[
+        'クレジット記録粒度の時代差で構造指標に上方バイアス',
+        '年次境界は固定、移動窓 (3y / 5y) で滑らかにする選択肢あり',
+        'edge weight は年次内の単純カウント、累積効果は別指標',
+    ],
 )

@@ -86,6 +86,15 @@ exceptions:
       is NOT an individual ability indicator. Naming what the metric is
       not is required for the limitation disclosure.
 
+  - file: scripts/report_generators/reports/knowledge_network.py
+    line_pattern: 能力加重協業中心性
+    term: 能力
+    reason: >
+      AWCC ("能力加重協業中心性") is the legacy operational name registered
+      in COMMON_GLOSSARY_TERMS. The SPEC claim must reference the
+      registered glossary term to maintain cross-report consistency.
+      A renamed glossary entry ("協業者加重中心性") is a separate cleanup PR.
+
   # docs/GLOSSARY_v3.md は禁止語 → 代替語マッピング表を含む。
   # 禁止語を表のセルに書かないと glossary 機能を果たさない。
   - file: docs/GLOSSARY_v3.md

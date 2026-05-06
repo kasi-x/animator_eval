@@ -235,7 +235,23 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='hr_brief_index',
     audience='hr',
-    claim='現場 Workflow 分析 Brief に関する記述的指標 (subtitle: 配置適合度プロファイル — スタジオ定着・育成貢献・チーム組成)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        'hr brief 6 reports (studio_benchmark / director_mentor / attrition_risk / '
+        'succession / team_chemistry / growth_scores) を 4 段 narrative arc で集約'
+    ),
+    identifying_assumption=(
+        '本 brief は集約と narrative であり、新規指標は持たない。'
+        '各 sub-report の SPEC が validate されている前提で集約する。'
+        'arc は arc_html() 経由で動的に render される。'
+    ),
+    null_model=['N6'],
+    sources=['credits', 'persons', 'anime'],
     meta_table='meta_hr_brief_index',
+    estimator='aggregation of 6 hr reports + 4-stage arc',
+    ci_estimator='analytical_se',
+    extra_limitations=[
+        '本 brief は集約 — 個別 report の限界が合算される',
+        'arc の null contrast 値は 6 reports の代表値',
+        '人事意思決定の単独根拠としての使用は推奨しない',
+    ],
 )

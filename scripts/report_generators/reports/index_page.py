@@ -388,7 +388,23 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='index',
     audience='common',
-    claim='Animetor Eval Reports に関する記述的指標 (subtitle: アニメ業界評価パイプライン — 全分析レポートインデックス)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        '全 49 reports を audience (common / policy / hr / biz / technical) と '
+        'category (brief / overview / fairness / etc.) でカテゴリ分類した landing page'
+    ),
+    identifying_assumption=(
+        'カテゴリ分類は事前固定 (REPORT_INVENTORY.md 参照)。'
+        'リンク切れは ci_check_report_lineage_refs で検出。'
+        'index 自体は記述的指標を持たず、navigation 専用。'
+    ),
+    null_model=['N6'],
+    sources=['credits', 'persons', 'anime'],
     meta_table='meta_index',
+    estimator='static enumeration of 49 report classes',
+    ci_estimator='analytical_se',
+    extra_limitations=[
+        'index は navigation のみ — 数値指標は持たない',
+        'カテゴリ分類は事前固定、再分類で構造変更',
+        '新規 report 追加時に手動更新必要',
+    ],
 )

@@ -443,7 +443,24 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='o2_mid_management',
     audience='hr',
-    claim='中堅枯渇パイプライン分析 に関する記述的指標 (subtitle: 動画 → 原画 → 作監 → 監督 進行年数 KM curve + スタジオ別パイプライン詰まり指標)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        '動画→原画→作監→監督 4 段階進行の KM 中央生存時間 (年) が「中堅 (作監)」'
+        '段階で著しく長く、スタジオ別 blockage_score (studio_median - industry_median) '
+        'の上位スタジオが bootstrap 95% CI で正値を示す'
+    ),
+    identifying_assumption=(
+        '役職進行 = credit-record の役職タイトル変化。実際の社内昇進と一致しない。'
+        'スタジオ帰属 = 主クレジットスタジオで、副業・フリーランスは捕捉外。'
+        'blockage_score の符号は「業界中央値」を基準にした相対指標で絶対値ではない。'
+    ),
+    null_model=['N4', 'N5'],
+    sources=['credits', 'persons', 'anime', 'studios'],
     meta_table='meta_o2_mid_management',
+    estimator='KM survival (Greenwood CI) + studio bootstrap blockage_score',
+    ci_estimator='bootstrap', n_resamples=1000,
+    extra_limitations=[
+        '社内昇進 (タイトル不変の実務拡大) は捕捉外',
+        '主スタジオ判定が anime_studios join 精度に依存',
+        '5 名未満の小規模スタジオは集計対象外',
+    ],
 )
