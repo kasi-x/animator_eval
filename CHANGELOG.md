@@ -41,7 +41,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Deprecated
 
-- `BizUndervaluedTalentReport` class alias — BC compatibility shim active for one release, scheduled for removal in v3.1
+- ~~`BizUndervaluedTalentReport` class alias — BC compatibility shim~~ → 削除完了 (commit 45a6435)
 
 ### Fixed
 
@@ -50,10 +50,32 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [v3.0.1] - 2026-05-06
+
+### Added (TODO §16 残務全消化, commit 45a6435)
+
+- **§16.2 ChoroplethJP 真 render**: `data/geo/japan_prefectures.geojson` (dataofjapan/land MIT, 47 features) を `scripts/maintenance/fetch_jp_geojson.py` で取得。`src/viz/primitives/choropleth_jp.py` を `go.Choropleth` (geojson + featureidkey="properties.nam_ja") に実装。GeoJSON 不在 / unknown 名 / 強制 fallback で bar fallback 維持。
+- **§16.3 DB migration v63**: `mart.meta_report_spec` テーブル DDL (`src/analysis/io/mart_writer.py`) と `write_report_specs()` 関数 (SHA-256 spec_hash, idempotent upsert) を追加。`src/pipeline_phases/post_processing.py` に upsert step (`46 SPEC`, non-fatal) を統合。
+- **§16.4 viz tests 拡張**: `tests/viz/test_primitives_graceful_fallback.py` (P1-P11 各 graceful fallback 21 tests) + `tests/reports/test_spec_gate.py` (strict mode toggle / `make_default_spec` / `BriefArc.to_html` 18 tests) + `tests/unit/test_viz_choropleth_jp.py` (6 tests)
+- **5 reports curated KPI/caption** (Agent H): `policy_gender_bottleneck` / `policy_generational_health` / `compensation_fairness` / `mgmt_attrition_risk` / `mgmt_succession`
+
+### Removed
+
+- **§16.1**: `BizUndervaluedTalentReport` BC alias を削除 (`biz_exposure_gap.py` + `__init__.py`)、外部参照ゼロ確認、`V2_REPORT_CLASSES` 件数 46 維持
+
+### Tests
+
+- 211 / 211 v3 関連 tests pass (regression なし)
+- `ci_check_report_spec-strict`: 45 / 45 modules pass
+
+---
+
 ## [Unreleased]
 
 ### Planned
 
-- Remove `BizUndervaluedTalentReport` BC alias (v3.1)
-- P11 `ChoroplethJP` GeoJSON data integration
-- DB migration for `ReportSpec` persistence in `mart.meta_report_spec`
+- 各 report に actual `link_brushing` / `cross_filter` 統合 (現状 hr_brief_index に scaffold のみ)
+- `temporal_foresight` 予測精度 holdout 検証 (現状「foresight」名称は概念的のみ)
+- インライン手動 KPI/caption の更なる拡張 (~30 reports auto-extract のまま)
+- Atlas migration apply (DB v63 物理 schema 反映)
+- CI workflow に GeoJSON fetch step 追加 (`data/` git ignored の補完)
