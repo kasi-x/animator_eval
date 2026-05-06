@@ -82,8 +82,13 @@
           "selection_rule": "priority_fallback"
         },
         "title_en": {
-          "priority": ["anilist", "mal", "tmdb", "ann", "bgm", "seesaa", "madb", "keyframe"],
-          "rationale": "AniList/MAL が EN/romaji 第一、tmdb は海外作品の英題保持",
+          "priority": ["anilist", "mal", "tmdb", "ann", "seesaa", "madb", "keyframe"],
+          "rationale": "AniList/MAL が EN/romaji 第一、tmdb は海外作品の英題保持。bgm は除外 (中文簡体字を持ち英語名なし、name_cn は title_zh へ分離した)",
+          "selection_rule": "priority_fallback"
+        },
+        "title_zh": {
+          "priority": ["bgm", "tmdb", "anilist", "mal", "ann", "seesaa", "madb", "keyframe"],
+          "rationale": "Bangumi (bgm) が中文ネイティブ source。tmdb 等他 source の name 中文表記が来るケースも fallback で拾う",
           "selection_rule": "priority_fallback"
         },
         "year": {

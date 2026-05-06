@@ -37,7 +37,7 @@ logger = structlog.get_logger()
 ANIME_FIELDS: list[str] = list(ANIME_RANKING.keys())
 
 # NOT NULL DEFAULT '' fields — coerce None → '' on insert
-_ANIME_NOT_NULL_STR = frozenset({"title_ja", "title_en", "source_ids_json"})
+_ANIME_NOT_NULL_STR = frozenset({"title_ja", "title_en", "title_zh", "source_ids_json"})
 
 
 def _resolve_cluster(
@@ -123,8 +123,16 @@ def _load_conformed_anime(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any
     # madb:C* (Contents/個別商品: DVD巻号/CD/声優名/出版社名等) は anime ではない。
     # 516K 件混在で title_ja 汚染源 (LLM 検証で 22 件の wrong_value 全部この系)。
     # madb:M* (Media/作品) のみ anime cluster の入力として採用。
+    table_cols = {
+        c[0]
+        for c in conn.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_schema='conformed' AND table_name='anime'"
+        ).fetchall()
+    }
+    title_zh_expr = "title_zh" if "title_zh" in table_cols else "'' AS title_zh"
     rel = conn.execute(
-        f"SELECT id, title_ja, title_en, year, season, quarter, episodes, format, "
+        f"SELECT id, title_ja, title_en, {title_zh_expr}, year, season, quarter, episodes, format, "
         f"duration, start_date, end_date, status, source_mat, work_type, scale_class, "
         f"country_of_origin, {mal_id_expr} FROM conformed.anime "
         "WHERE id NOT LIKE 'madb:C%'"
@@ -231,12 +239,12 @@ def build_resolved_anime(
 
 
 _ANIME_INSERT_FIELDS: list[str] = [
-    "canonical_id", "title_ja", "title_en", "year", "season", "quarter",
+    "canonical_id", "title_ja", "title_en", "title_zh", "year", "season", "quarter",
     "episodes", "format", "duration", "start_date", "end_date", "status",
     "source_mat", "work_type", "scale_class", "country_of_origin",
     "source_ids_json", "source_count",
-    "title_ja_source", "title_en_source", "year_source", "episodes_source",
-    "format_source", "duration_source", "source_mat_source",
+    "title_ja_source", "title_en_source", "title_zh_source", "year_source",
+    "episodes_source", "format_source", "duration_source", "source_mat_source",
 ]
 
 

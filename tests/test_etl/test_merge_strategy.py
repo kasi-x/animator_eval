@@ -93,28 +93,28 @@ def test_select_no_value() -> None:
 def test_select_majority_vote_threshold_override() -> None:
     """threshold=2 で 2 件同値が majority_vote 発動。"""
     cands = [
-        {"id": "anilist:1", "title_ja": "A"},
-        {"id": "anilist:2", "title_ja": "A"},
-        {"id": "anilist:3", "title_ja": "B"},
+        {"id": "anilist:1", "title_ja": "進撃の巨人"},
+        {"id": "anilist:2", "title_ja": "進撃の巨人"},
+        {"id": "anilist:3", "title_ja": "別作品"},
     ]
     val, src, rule = select_representative_value(
         "title_ja", cands, ["anilist"], majority_threshold_value=2
     )
-    assert val == "A"
+    assert val == "進撃の巨人"
     assert rule == "majority_vote"
 
 
 def test_select_tie_break_default_threshold_3() -> None:
     """デフォルト閾値 3 では 2:1 は tie_break。"""
     cands = [
-        {"id": "anilist:1", "title_ja": "A"},
-        {"id": "anilist:2", "title_ja": "A"},
-        {"id": "anilist:3", "title_ja": "B"},
+        {"id": "anilist:1", "title_ja": "進撃の巨人"},
+        {"id": "anilist:2", "title_ja": "進撃の巨人"},
+        {"id": "anilist:3", "title_ja": "別作品"},
     ]
     val, src, rule = select_representative_value(
         "title_ja", cands, ["anilist"], majority_threshold_value=3
     )
-    assert val == "A"  # insertion 順第1
+    assert val == "進撃の巨人"  # insertion 順第1
     assert rule == "tie_break"
 
 
@@ -225,10 +225,10 @@ def test_strategy_threshold_used_by_default(monkeypatch: pytest.MonkeyPatch) -> 
         "src.etl.resolved._select.majority_threshold", lambda: 2
     )
     cands = [
-        {"id": "anilist:1", "title_ja": "A"},
-        {"id": "anilist:2", "title_ja": "A"},
-        {"id": "anilist:3", "title_ja": "B"},
+        {"id": "anilist:1", "title_ja": "進撃の巨人"},
+        {"id": "anilist:2", "title_ja": "進撃の巨人"},
+        {"id": "anilist:3", "title_ja": "別作品"},
     ]
     val, src, rule = select_representative_value("title_ja", cands, ["anilist"])
     assert rule == "majority_vote"
-    assert val == "A"
+    assert val == "進撃の巨人"

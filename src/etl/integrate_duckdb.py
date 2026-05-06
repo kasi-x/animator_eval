@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS anime (
     id          VARCHAR PRIMARY KEY,
     title_ja    VARCHAR NOT NULL DEFAULT '',
     title_en    VARCHAR NOT NULL DEFAULT '',
+    title_zh    VARCHAR NOT NULL DEFAULT '',
     year        INTEGER,
     season      VARCHAR,
     quarter     INTEGER,
@@ -161,6 +162,7 @@ WITH bronze AS (
         id,
         COALESCE(title_ja, '')  AS title_ja,
         COALESCE(title_en, '')  AS title_en,
+        {title_zh}              AS title_zh,
         {year}                  AS year,
         {season}                AS season,
         {quarter}               AS quarter,
@@ -515,6 +517,7 @@ def _build_anime_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
     """Build anime INSERT SQL with schema-dependent column mapping."""
     cols = _parquet_columns(conn, glob)
     return _ANIME_SQL_INSERT_TMPL.format(
+        title_zh="COALESCE(title_zh, '')" if "title_zh" in cols else "''::VARCHAR",
         year="year" if "year" in cols else "NULL::INTEGER",
         season="season" if "season" in cols else "NULL::VARCHAR",
         quarter="quarter" if "quarter" in cols else "NULL::INTEGER",

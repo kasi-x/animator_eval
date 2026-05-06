@@ -65,7 +65,10 @@ _DDL_CHARACTERS_EXTENSION = [
 # ─── SQL templates ───────────────────────────────────────────────────────────
 
 # subjects (type=2 = anime) → anime table.
-# name_cn goes into title_en slot (best available non-JA title).
+# bgm の name 系: name=日本語 (title_ja), name_cn=中国語 (title_zh) のみ。
+# 英語 title 不在のため title_en は空文字。中文タイトルを title_en に流用すると
+# Resolved 層代表値選抜で「英語 title に簡体字混入」の wrong_value が多発する
+# ため title_zh 列を新設 (旧設計は name_cn → title_en、不適切として廃止)。
 # platform stored as TEXT (bangumi integer code preserved as string).
 # H1: score/rank/favorite → display_* columns.
 _SUBJECTS_SQL = """
@@ -73,6 +76,7 @@ INSERT INTO anime (
     id,
     title_ja,
     title_en,
+    title_zh,
     infobox_json,
     platform,
     meta_tags_json,
@@ -86,7 +90,8 @@ INSERT INTO anime (
 SELECT
     'bgm:s' || CAST(id AS VARCHAR)                       AS id,
     COALESCE(name, '')                                   AS title_ja,
-    COALESCE(name_cn, '')                                AS title_en,
+    ''                                                   AS title_en,
+    COALESCE(name_cn, '')                                AS title_zh,
     infobox                                              AS infobox_json,
     CAST(platform AS VARCHAR)                            AS platform,
     meta_tags                                            AS meta_tags_json,
