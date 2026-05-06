@@ -275,10 +275,34 @@ class SHAPExplanationReport(BaseReportGenerator):
 # report-specific values when curating this module.
 from .._spec import make_default_spec  # noqa: E402
 
+from .._spec import HoldoutSpec  # noqa: E402
+
 SPEC = make_default_spec(
     name='shap_explanation',
     audience='technical_appendix',
-    claim='SHAP特徴量重要度 に関する記述的指標 (subtitle: IVスコア予測モデルのSHAP値・ホールドアウト検証)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        'IV スコア予測 GBM モデルの SHAP 値 上位 10 特徴量 (5 IV 成分 + '
+        'デモグラ + 経験) のうち上位 3 が SHAP |φ| 寄与の 50% 以上を占める'
+    ),
+    identifying_assumption=(
+        'SHAP は Shapley 値の機械学習近似 — 特徴量間の依存性 (correlated features) '
+        'で寄与配分が変動する。MDI (Mean Decrease Impurity) と一致しない場合あり。'
+        'ホールドアウト検証で予測精度 (R² > 0.7) を gate とする。'
+    ),
+    null_model=['N3'],
+    sources=['credits', 'persons', 'anime', 'feat_person_scores'],
     meta_table='meta_shap_explanation',
+    estimator='SHAP TreeExplainer on GBM regressor',
+    ci_estimator='bootstrap', n_resamples=200,
+    holdout=HoldoutSpec(
+        method='time-split',
+        holdout_size='last 3 years (2022-2024)',
+        metric='R² (IV score prediction)',
+        naive_baseline='median IV score',
+    ),
+    extra_limitations=[
+        'SHAP は correlated feature で寄与配分が不安定',
+        'TreeExplainer は GBM 専用、他モデル (RF / linear) では実装変更必要',
+        'ホールドアウト R² < 0.7 のときは特徴量重要度を非公開化',
+    ],
 )

@@ -303,7 +303,24 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='temporal_foresight',
     audience='technical_appendix',
-    claim='キャリア軌跡記述分析 に関する記述的指標 (subtitle: 活動パターンの回顧的記述・不確実性の定量化（v2 3.3）)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        '個人キャリア軌跡を回顧的に記述し、5 typology (急成長 / 安定 / 早期離脱 / '
+        '中断回帰 / 緩やか成長) に分類できる '
+        '— 予測ではなく retrospective description'
+    ),
+    identifying_assumption=(
+        '本指標は「予測」ではなく「回顧記述」である。報告内に "foresight" の語を含むが、'
+        'holdout 検証なしで予測精度は保証しない。typology は事後的な解釈ラベル。'
+        '将来軌跡の予測には別途 holdout 設計が必要。'
+    ),
+    null_model=['N3'],
+    sources=['credits', 'persons', 'anime', 'feat_person_scores'],
     meta_table='meta_temporal_foresight',
+    estimator='K-Means (K=5) on retrospective trajectory features',
+    ci_estimator='bootstrap', n_resamples=500,
+    extra_limitations=[
+        '予測精度の holdout 検証なし — 「foresight」名称は概念的のみ',
+        '5 typology は事前固定 K-means、解釈ラベルは label switching',
+        'IV スコアの sample selection (高 visibility のみ) でバイアス',
+    ],
 )

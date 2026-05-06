@@ -970,7 +970,25 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='o4_foreign_talent',
     audience='policy',
-    claim='海外人材ポジション分析 に関する記述的指標 (subtitle: 国籍別 person FE 分布 (Mann-Whitney U) / 国籍 × 役職進行 KM curve / studio FE 帰属パターン)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        '推定国籍 (country_of_origin / name_zh-ko) 別の person FE 分布が '
+        'Mann-Whitney U で 95% CI 0 を跨がない国籍ペアが存在し、'
+        '役職進行 KM curve も国籍層別で識別可能な差を示す'
+    ),
+    identifying_assumption=(
+        '国籍推定: country_of_origin (high) → name_zh-ko (medium) → unknown (low) の '
+        '3 段階。誤分類率は high < 5%, medium ~10-15%。'
+        'limited mobility bias (Andrews et al. 2008): 海外人材のスタジオ間移動が '
+        '少なく person FE 推定精度が低下する。'
+    ),
+    null_model=['N4', 'N5'],
+    sources=['credits', 'persons', 'anime', 'studios'],
     meta_table='meta_o4_foreign_talent',
+    estimator='Mann-Whitney U + KM (Greenwood) + studio FE Pearson r',
+    ci_estimator='bootstrap', n_resamples=1000,
+    extra_limitations=[
+        '国籍推定誤分類 (medium ~10-15%) で結論が ±10% 振動',
+        'limited mobility bias で海外人材 person FE が下方バイアス',
+        'unknown 国籍 (~30%) を別カテゴリで集計、解釈に注意',
+    ],
 )

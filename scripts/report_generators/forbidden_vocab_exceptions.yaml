@@ -78,6 +78,14 @@ exceptions:
       Naming the prohibited phrase in the blocklist is required for the
       InterpretationGuard to filter it out of interpretation text.
 
+  - file: scripts/report_generators/reports/growth_scores.py
+    line_pattern: 個人の能力指標ではない
+    term: 能力
+    reason: >
+      Negation context: SPEC limitation explicitly stating that IV score
+      is NOT an individual ability indicator. Naming what the metric is
+      not is required for the limitation disclosure.
+
   # docs/GLOSSARY_v3.md は禁止語 → 代替語マッピング表を含む。
   # 禁止語を表のセルに書かないと glossary 機能を果たさない。
   - file: docs/GLOSSARY_v3.md

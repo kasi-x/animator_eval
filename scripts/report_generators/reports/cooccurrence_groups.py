@@ -1799,7 +1799,23 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='cooccurrence_groups',
     audience='technical_appendix',
-    claim='共同制作集団分析 に関する記述的指標 (subtitle: コアスタッフの繰り返し共同制作パターン検出・K-Means/ML分類)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        '共クレジット 3 作以上のコアスタッフ集合 (size 3-5) を K-Means + ML 分類で '
+        '識別し、集団内の役職構成 / スケール / ジャンル で 5-7 typology が抽出される'
+    ),
+    identifying_assumption=(
+        '共クレジット 3 作以上 = 「集団」 を operational に定義。'
+        '実際のチーム / circle / 派閥としての結束度は本指標で直接測らない。'
+        'typology は K-means cluster の解釈ラベルであり、客観的分類ではない。'
+    ),
+    null_model=['N1', 'N2'],
+    sources=['credits', 'persons', 'anime'],
     meta_table='meta_cooccurrence_groups',
+    estimator='K-Means + ML classifier on (role_mix, scale, genre, era)',
+    ci_estimator='bootstrap', n_resamples=500,
+    extra_limitations=[
+        '共クレジット 3 作閾値は事前固定 — 2 作 / 5 作で集団数が桁単位変動',
+        'cluster typology は label switching、実行間で安定しない',
+        '時代別の集団サイズ分布は credit-record 粒度差を含む',
+    ],
 )

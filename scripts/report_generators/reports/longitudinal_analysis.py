@@ -2689,12 +2689,20 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
 
         t_rels = list(range(-4, 5))
         line_specs = [
-            ("up", "小/中規模 → 大手", "#E09BC2"),
-            ("down", "大手 → 小/中規模", "#E07532"),
+            ("up", "小/中規模 → 大手"),
+            ("down", "大手 → 小/中規模"),
         ]
 
-        fig = go.Figure()
-        for key, label, color in line_specs:
+        # v3: 各遷移方向を EventStudyPanel primitive で個別 panel として描画し、
+        # SmallMultiples primitive で 1 行 2 列に並べる
+        from src.viz import embed as viz_embed
+        from src.viz.primitives import (
+            EventStudySpec, FacetCell, SmallMultiplesSpec,
+            render_event_study, render_small_multiples,
+        )
+
+        facets: list[FacetCell] = []
+        for key, label in line_specs:
             grp = event_data.get(key, {})
             ys: list[float] = []
             yerr: list[float] = []
@@ -2709,24 +2717,35 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
                     except Exception:
                         yerr.append(0)
                     valid_t.append(t)
-            if ys:
-                fig.add_trace(go.Scatter(
-                    x=valid_t, y=ys, name=label,
-                    line=dict(color=color, width=2.5),
-                    mode="lines+markers",
-                    error_y=dict(
-                        type="data", array=yerr, visible=True,
-                        color=color, thickness=1.5, width=4,
-                    ),
-                ))
-        fig.add_vline(x=0, line_dash="dash", line_color="gray",
-                       annotation_text="遷移年")
-        fig.update_layout(
-            title_text="イベントスタディ: スタジオ規模遷移前後のクレジット",
-            xaxis_title="遷移からの相対年数",
-            yaxis_title="年間クレジット中央値（± 95% CI）",
-            legend=dict(orientation="h", y=-0.15),
-        )
+            if not ys:
+                continue
+            sub = render_event_study(
+                EventStudySpec(
+                    leads_lags=valid_t,
+                    estimates=ys,
+                    ci_lo=[ys[i] - yerr[i] for i in range(len(ys))],
+                    ci_hi=[ys[i] + yerr[i] for i in range(len(ys))],
+                    pre_period_normalization=None,
+                    x_label='遷移からの相対年数',
+                    y_label='年間クレジット中央値',
+                ),
+                theme='dark',
+            )
+            facets.append(FacetCell(row_label=label, col_label='', sub_figure=sub))
+
+        if facets:
+            fig = render_small_multiples(
+                SmallMultiplesSpec(
+                    facets=facets,
+                    title='イベントスタディ: スタジオ規模遷移前後のクレジット',
+                    n_cols=len(facets),
+                    shared_y=False,
+                ),
+                theme='dark',
+            )
+        else:
+            fig = go.Figure()
+            fig.update_layout(title='(no transitions detected)')
 
         n_up = sum(1 for _, (_, d) in transitions.items() if d == "up")
         n_down = sum(1 for _, (_, d) in transitions.items() if d == "down")
@@ -2747,7 +2766,7 @@ class LongitudinalAnalysisReport(BaseReportGenerator):
         return ReportSection(
             title="因果推論 -- スタジオ規模効果",
             findings_html=findings,
-            visualization_html=plotly_div_safe(fig, "event-study-chart", height=500),
+            visualization_html=viz_embed(fig, "event-study-chart", height=500),
             method_note=(
                 "スタジオ規模は anime_studios.favourites に基づく: "
                 "大手 (≥1000)、中規模 (100–999)、小規模 (<100)。"
@@ -2775,7 +2794,23 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='longitudinal_analysis',
     audience='technical_appendix',
-    claim='縦断分析 に関する記述的指標 (subtitle: キャリア軌跡・コホート比較・役職推移・離脱パターン — 全33チャート + 性別/Tier層別分析)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        'デビューコホート × 経過年 (career_year) 別の IV スコア中央値軌跡 / '
+        '役職遷移 / 可視性喪失パターンが、コホート間で異なる時系列形状を示す'
+    ),
+    identifying_assumption=(
+        'コホート効果と age 効果は完全には分離不可 (Lexis identification problem)。'
+        '「経過年差」は age effect / cohort effect / period effect の混合を含む。'
+        '役職遷移は credit-record の visibility に依存し、内部昇進は捕捉外。'
+    ),
+    null_model=['N3', 'N5'],
+    sources=['credits', 'persons', 'anime', 'feat_person_scores'],
     meta_table='meta_longitudinal_analysis',
+    estimator='cohort × career_year median + IQR (rolling)',
+    ci_estimator='bootstrap', n_resamples=1000,
+    extra_limitations=[
+        'Age × Period × Cohort identification problem (3 軸完全分離不可)',
+        '内部昇進 (役職タイトル変更) は credit-record で捕捉できない',
+        '可視性喪失と active 復帰の混合がコホート別軌跡を歪める',
+    ],
 )

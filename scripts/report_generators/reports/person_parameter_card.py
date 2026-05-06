@@ -475,7 +475,24 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='person_parameter_card',
     audience='common',
-    claim='個人パラメータカード に関する記述的指標 (subtitle: K=6アーキタイプ別パラメータ分布（10軸）)',
-    sources=["credits", "persons", "anime"],
-    meta_table='meta_person_parameter_card',
+    claim=(
+        '個人ごとの 10 軸パラメータ (theta_i / birank / studio_exp / patronage / '
+        'AWCC / dormancy / tenure / role_diversity / network_reach / total_credits) を '
+        'K=6 アーキタイプに分類し、各個人カードを集計値で提示'
+    ),
+    identifying_assumption=(
+        'アーキタイプ = K-Means cluster の解釈ラベル — 客観的分類ではない。'
+        '個別カードは集計値の表示であり、個人特定 / 評価判断には使用しない設計。'
+        '10 軸の選択は事前固定、別の軸選択で異なるアーキタイプが得られる。'
+    ),
+    null_model=['N6'],
+    sources=['credits', 'persons', 'anime', 'feat_person_scores'],
+    meta_table='meta_common_person_parameters',
+    estimator='K-Means (K=6) on z-normalized 10-axis vector',
+    ci_estimator='bootstrap', n_resamples=500,
+    extra_limitations=[
+        '10 軸の選択は固定、軸セット変更でアーキタイプが変化',
+        'K=6 は事前固定、silhouette 最適 K と異なる可能性',
+        '個別カードは集計値表示、個人特定情報は除外',
+    ],
 )

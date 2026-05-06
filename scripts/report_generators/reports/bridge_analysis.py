@@ -994,7 +994,24 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='bridge_analysis',
     audience='technical_appendix',
-    claim='ネットワークブリッジ分析 に関する記述的指標 (subtitle: コミュニティ間を接続する人材の分布・スタジオクラスタ横断・構造的特性)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        '異なる Louvain コミュニティ間を接続する人物 (high inter-community '
+        'edge weight) の分布が、degree-preserving rewiring null 95% 区間外に '
+        '位置する集中パターンを示す'
+    ),
+    identifying_assumption=(
+        'コミュニティ境界は Louvain modularity 最適化 — resolution パラメータ依存。'
+        'Bridge は構造的位置の記述であり、機能的「橋渡し」役割の証明ではない。'
+        'スタジオクラスタ横断は anime_studios の精度に依存。'
+    ),
+    null_model=['N1', 'N2'],
+    sources=['credits', 'persons', 'anime', 'studios'],
     meta_table='meta_bridge_analysis',
+    estimator='inter-community edge weight + Burt constraint',
+    ci_estimator='bootstrap', n_resamples=500,
+    extra_limitations=[
+        'Louvain resolution で community 境界変動 → bridge 数 ±20%',
+        'Burt constraint は ego-network 単位の構造的穴を測る、global bridge とは異なる',
+        '時代別の community 構造は credit-record 粒度差を反映',
+    ],
 )

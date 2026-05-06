@@ -2175,7 +2175,23 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='cohort_animation',
     audience='technical_appendix',
-    claim='デビューコホート分析 に関する記述的指標 (subtitle: コホート別Gapminder・世代間コラボ・供給需要比較・性別構成・Tier到達を含む14セクション)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        'デビュー decade 別の Gapminder 風 trajectory (年 × IV / クレジット数) と '
+        '性別構成 / Tier 到達率の時系列パターンが decade 間で異なる'
+    ),
+    identifying_assumption=(
+        'コホート効果と age effect は分離不可 (Lexis problem)。'
+        'Tier 到達は credit-record visibility に依存し、活動継続中も低 visibility なら '
+        'Tier 推定不可。世代間コラボは「同時期共クレジット」を指し因果効果ではない。'
+    ),
+    null_model=['N3', 'N5'],
+    sources=['credits', 'persons', 'anime'],
     meta_table='meta_cohort_animation',
+    estimator='cohort × year aggregate (median / mean / counts)',
+    ci_estimator='bootstrap', n_resamples=500,
+    extra_limitations=[
+        'APC identification problem (age × period × cohort 完全分離不可)',
+        'gender 推定 ~88% カバレッジ、残り 12% を「unknown」で集計',
+        'Tier 到達は visibility-based、内部昇進は捕捉外',
+    ],
 )

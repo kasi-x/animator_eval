@@ -374,7 +374,24 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='bias_detection',
     audience='common',
-    claim='スコア差異分析 に関する記述的指標 (subtitle: 性別・Tier・年代別スコアパターンの統計的記述)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        'IV スコアの性別 / Tier / 年代別中央値分布が、permutation null '
+        '(group label シャッフル) 95% 区間外に位置する系統的差異を示す '
+        '(差の符号と大きさを集計値で提示)'
+    ),
+    identifying_assumption=(
+        '差異 ≠ バイアス — 観察された差異は構造的差異 (採用機会 / 役職割当) と '
+        '推定誤差 (gender 推定 ~5% 誤分類) の混合。'
+        '本指標は系統的パターンの「検出」のみで、原因分解はしない。'
+    ),
+    null_model=['N3', 'N4'],
+    sources=['credits', 'persons', 'anime', 'feat_person_scores'],
     meta_table='meta_bias_detection',
+    estimator='permutation test + median difference + bootstrap CI',
+    ci_estimator='bootstrap', n_resamples=1000,
+    extra_limitations=[
+        'gender 推定 ~88% カバレッジ、~5% 誤分類で差異を歪める可能性',
+        'Tier は scale_tier に依存、Tier 境界の choice で差異が変動',
+        '差異の原因分解は本指標スコープ外、別 report (Oaxaca / DML) で行う',
+    ],
 )

@@ -1018,7 +1018,24 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='network_analysis',
     audience='technical_appendix',
-    claim='ネットワーク分析（DB駆動版） に関する記述的指標 (subtitle: 中心性分布 / Hub vs Broker / スケール階層別構造 / AKMモビリティ診断)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        '協業グラフの中心性分布 (degree / weighted PageRank / betweenness) と '
+        'Hub-Broker 二軸散布図が configuration model null 95% 区間外に位置する '
+        '構造的パターンを示す'
+    ),
+    identifying_assumption=(
+        'Hub = 高 degree、Broker = 高 betweenness の operational 定義。'
+        '実際のネットワーク機能 (情報伝達 / 機会割当) は本指標で直接測らない。'
+        'スケール階層別構造は AKM 連結集合内のみ可比較。'
+    ),
+    null_model=['N1', 'N2'],
+    sources=['credits', 'persons', 'anime'],
     meta_table='meta_network_analysis',
+    estimator='degree / weighted PageRank / Brandes betweenness (Rust 並列)',
+    ci_estimator='bootstrap', n_resamples=500,
+    extra_limitations=[
+        '中心性は graph 密度 / エッジ重みに依存、時代間比較に注意',
+        'Brandes betweenness は O(VE) で大規模グラフは Rust 拡張依存',
+        '連結集合外ノードは中心性推定対象外',
+    ],
 )

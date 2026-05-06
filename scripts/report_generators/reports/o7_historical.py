@@ -673,7 +673,24 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='o7_historical',
     audience='technical_appendix',
-    claim='歴史的クレジット記録復元分析 に関する記述的指標 (subtitle: 戦前〜1980 年代作品のクレジット多源復元状況 / Historical Credit Record Restoration Analysis (pre-1990))',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        '戦前〜1980 年代作品のクレジット復元状況を多ソース照合で記述し、'
+        '年代別の record-density 上昇曲線と未復元ギャップ (年代 × 役職別) を提示'
+    ),
+    identifying_assumption=(
+        '「復元」 = MADB / SeesaaWiki / allcinema / ANN / 補助 source の併合。'
+        '完全復元は不可能 — 失われた一次史料 / 名前解決失敗 / クレジットなし制作 が残る。'
+        '未復元ギャップは present-day visibility 比較として記述、'
+        '実際の記録残存率の推定ではない。'
+    ),
+    null_model=['N5'],
+    sources=['credits', 'persons', 'anime', 'sources'],
     meta_table='meta_o7_historical',
+    estimator='年代 × 役職 record-density (count / Wilson CI for proportion)',
+    ci_estimator='wilson',
+    extra_limitations=[
+        '完全復元は理論的に不可能 — 残存率の絶対値は推定不能',
+        '名前解決の precision は古作品ほど低い (~70%, モダン ~95%)',
+        'crowdsourced source (SeesaaWiki) の記載品質は時代別に変動',
+    ],
 )

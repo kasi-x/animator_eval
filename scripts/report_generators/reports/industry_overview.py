@@ -2427,7 +2427,25 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='industry_overview',
     audience='common',
-    claim='業界概観ダッシュボード に関する記述的指標 (subtitle: アニメ制作業界の記述的統計と構造的分布)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        'アニメ業界の規模・構成・時系列パターンを 14 チャートで記述する '
+        '(年次クレジット数 / 役職構成 / コホート別ストック / 価値フロー)。'
+        '評価判断ではなく純粋に記述的'
+    ),
+    identifying_assumption=(
+        '「業界規模」 = データベース上のクレジット記録密度。'
+        '実際の制作物量とは credit-record 粒度差で乖離する可能性 '
+        '(1980s vs 2010s で記載慣行が異なる)。'
+        '海外下請け / 無名義参加 / アシスタント / 配信オリジナル の捕捉率は変動する。'
+    ),
+    null_model=['N6'],
+    sources=['credits', 'persons', 'anime', 'studios'],
     meta_table='meta_industry_overview',
+    estimator='年次集計 + Wilson CI for proportions',
+    ci_estimator='wilson',
+    extra_limitations=[
+        'クレジット記録密度の時代差で年次比較に下方 / 上方バイアス',
+        '海外下請け / 配信オリジナル の捕捉率は時代別に変動',
+        '役職分類は 24 → 7 集約、集約境界に依存して構成比率が変動',
+    ],
 )

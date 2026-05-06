@@ -133,6 +133,8 @@ lifelines = ">=0.30"
 econml = ">=0.16.0"
 # v3 viz static export (SVG / PDF / PNG) — see src/viz/export.py
 kaleido = ">=1.1.0"
+# v3 multi-page PDF concatenation — see src/viz/export.to_pdf
+pypdf = ">=5.0"
 
 # ============================================================================
 # Feature: api — FastAPI web server

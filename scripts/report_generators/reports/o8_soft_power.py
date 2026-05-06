@@ -910,7 +910,25 @@ from .._spec import make_default_spec  # noqa: E402
 SPEC = make_default_spec(
     name='o8_soft_power',
     audience='biz',
-    claim='ソフトパワー指標 — 国際配信プラットフォーム分析 に関する記述的指標 (subtitle: 配信プラットフォーム別 anime 分布 × 関与人材ネットワーク位置 / Soft Power Index — International Streaming Distribution Analysis)',
-    sources=["credits", "persons", "anime"],
+    claim=(
+        '国際配信プラットフォーム (Netflix / Crunchyroll / Hulu / etc.) 経由配信 '
+        '作品の関与人材 theta_proxy 分布が、国内専作品の分布と Mann-Whitney U で '
+        '95% CI 0 を跨がない差を示し、soft_power_index が算出可能'
+    ),
+    identifying_assumption=(
+        'soft_power_index = anime_count × mean(theta_proxy) — 配信普及と '
+        '人材ネットワーク位置の合成指標。実際のソフトパワー (受容度 / 文化影響) '
+        'は本指標で直接測らない。配信プラットフォームリストは AniList '
+        'external_links_json に依存する。'
+    ),
+    null_model=['N3', 'N4'],
+    sources=['credits', 'persons', 'anime'],
     meta_table='meta_o8_soft_power',
+    estimator='Mann-Whitney U + soft_power_index = count × mean_theta',
+    ci_estimator='bootstrap', n_resamples=1000,
+    extra_limitations=[
+        'AniList external_links_json の捕捉率に依存、新規プラットフォームは遅延',
+        'theta_proxy は anime.score 不使用の構造的代理 — 真の theta_i との差あり',
+        'platform_weight 全 1.0 固定 (Tier1)、Tier2 で重み付け予定',
+    ],
 )
