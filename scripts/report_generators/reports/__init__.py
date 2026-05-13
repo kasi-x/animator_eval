@@ -82,7 +82,7 @@ from .structure_international import StructureInternationalReport
 
 #: All v2 report classes, in generation order
 #:
-#: Audience brief body count (policy + hr + biz) = 16, total active = 37.
+#: Audience brief body count (policy + hr + biz) = 16, total active = 38.
 #: Target per detailed_todo §4.6: ≤20 audience-brief reports — met.
 V2_REPORT_CLASSES = [
     # common: audience-agnostic landing pages
@@ -188,5 +188,6 @@ __all__ = [
     "O7HistoricalRestorationReport",
     "O8SoftPowerReport",
     "CareerTypologyReport",
+    "StructureInternationalReport",
     "V2_REPORT_CLASSES",
 ]
