@@ -345,3 +345,183 @@ exceptions:
       Negation in report intro disclaimer: "スコアは個人の主観的評価・能力判断を意味しない。"
       (Scores do not imply individual subjective evaluation or ability judgment.)
       Required for legal/ethical transparency per REPORT_PHILOSOPHY v2 §9.
+
+  # ----------------------------------------------------------------------
+  # ranking_framing exceptions (added 2026-05-06)
+  # ----------------------------------------------------------------------
+  # `ranking_framing` bans serial ordering of *individuals*. When the
+  # ordered objects are non-persons (genres, features, clusters), the
+  # ranking is not a labor-first violation.
+  # ----------------------------------------------------------------------
+
+  - file: scripts/report_generators/reports/cooccurrence_groups.py
+    line_pattern: name_clusters_by_rank
+    term: ranking
+    reason: >
+      Refers to a clustering algorithm naming convention (relative cluster
+      centroid ranking), not to ordering of individual persons. The function
+      name `name_clusters_by_rank` describes how K-Means cluster *labels* are
+      assigned, not how persons are evaluated.
+
+  - file: scripts/report_generators/reports/biz_genre_whitespace.py
+    line_pattern: ジャンル空白地スコア（W_g）ランキング
+    term: ランキング
+    reason: >
+      Ranks *genres* by whitespace score (W_g), not individuals. Genre
+      ordering does not violate labor-first stance.
+
+  - file: scripts/report_generators/reports/compensation_fairness.py
+    line_pattern: 偏りのないランキング
+    term: ランキング
+    reason: >
+      Refers to the null hypothesis distribution of `person_fe_pct`
+      (uniform under H0), explaining what the diagnostic plot tests.
+      Used to *check* fairness of the percentile rank, not to recommend it.
+
+  - file: scripts/report_generators/reports/compensation_fairness.py
+    line_pattern: ランキングがグループに依存しない
+    term: ランキング
+    reason: >
+      Statistical statement of null hypothesis for the equity test. Names
+      what is being tested, not endorsing ranking as an outcome metric.
+
+  - file: scripts/report_generators/reports/mgmt_attrition_risk.py
+    line_pattern: MDI）によるランキング
+    term: ランキング
+    reason: >
+      Ranks *features* by importance (RSF MDI), not individuals. Feature
+      importance ordering does not violate labor-first stance.
+
+
+  - file: scripts/report_generators/_spec.py
+    line_pattern: 実力ランキング
+    term: ランキング
+    reason: >
+      Appears in the hr-audience blocklist literal (forbidden_framing list),
+      naming a prohibited phrase so InterpretationGuard can filter it.
+      Same as the existing `term: 実力` exception for the same line.
+
+  # docs/report_cross_cutting.md — technical/normative documentation
+  # Lists the CONTEXTUAL_BIGRAMS patterns that the lint_vocab linter itself uses.
+  # Naming these terms is required to document *what* the linter detects.
+  # This is meta-level documentation of the linting rules, not report content.
+
+  - file: docs/report_cross_cutting.md
+    line_pattern: 翌年クレジット不在者数
+    term: 人材
+    reason: >
+      CONTEXTUAL_BIGRAMS code documentation. Literal showing what the linter detects.
+      Naming the 2-gram pairs is required for technical linter documentation.
+
+  - file: docs/report_cross_cutting.md
+    line_pattern: クレジット不在期間
+    term: 能力
+    reason: >
+      CONTEXTUAL_BIGRAMS code documentation. Second 2-gram pattern.
+
+  - file: docs/report_cross_cutting.md
+    line_pattern: 露出機会ギャップ人材プール
+    term: 才能
+    reason: >
+      CONTEXTUAL_BIGRAMS code documentation. Third 2-gram pattern.
+
+  - file: docs/report_cross_cutting.md
+    line_pattern: クレジット頻度低
+    term: 実力
+    reason: >
+      CONTEXTUAL_BIGRAMS code documentation. Fourth 2-gram pattern.
+
+  - file: docs/report_cross_cutting.md
+    line_pattern: 各 term 単独では合法
+    term: 人材
+    reason: >
+      Design rationale paragraph explaining CONTEXTUAL_BIGRAMS logic.
+      Negation context: explains why each term alone is permissible.
+
+  - file: docs/report_cross_cutting.md
+    line_pattern: ability framing を暗示
+    term: ability
+    reason: >
+      Design rationale explanation. Negation context: naming "ability framing"
+      is required to explain what the 2-gram combination implies.
+
+  - file: docs/report_cross_cutting.md
+    line_pattern: 教育制度ランキング
+    term: 優秀
+    reason: >
+      §5 deferred-review table. Candidate pattern documentation for 12-month
+      review. Naming the term documents which patterns to monitor.
+
+  - file: docs/report_cross_cutting.md
+    line_pattern: 教育制度ランキング
+    term: ランキング
+    reason: >
+      Same table row: documents candidate pattern for future linting review.
+
+  # Bigram pattern documentation in §5 (CONTEXTUAL_BIGRAMS)
+  # These exceptions allow documenting the lint rules themselves in normative form.
+  # The patterns MUST appear in the technical documentation to be useful.
+
+  - file: docs/report_cross_cutting.md
+    line_pattern: Pattern A
+    term: 人材
+    reason: >
+      Normative documentation of CONTEXTUAL_BIGRAMS Pattern A. Showing the
+      prohibited 2-gram combination is required to document the lint rule.
+
+  - file: docs/report_cross_cutting.md
+    line_pattern: Pattern B
+    term: 能力
+    reason: >
+      Normative documentation of CONTEXTUAL_BIGRAMS Pattern B. Required for
+      technical lint rule documentation.
+
+  - file: docs/report_cross_cutting.md
+    line_pattern: Pattern C
+    term: 才能
+    reason: >
+      Normative documentation of CONTEXTUAL_BIGRAMS Pattern C. Required for
+      technical lint rule documentation.
+
+  - file: docs/report_cross_cutting.md
+    line_pattern: Pattern D
+    term: 実力
+    reason: >
+      Normative documentation of CONTEXTUAL_BIGRAMS Pattern D. Required for
+      technical lint rule documentation.
+
+  - file: docs/report_cross_cutting.md
+    line_pattern: "Pattern A"
+    term: ability
+    reason: >
+      Normative documentation describing CONTEXTUAL_BIGRAMS Pattern A.
+      The linter rule itself is the subject of documentation here.
+
+  - file: docs/report_cross_cutting.md
+    line_pattern: "Pattern C"
+    term: talent
+    reason: >
+      Normative documentation describing CONTEXTUAL_BIGRAMS Pattern C.
+      Required for documenting the lint rule.
+
+  - file: docs/report_cross_cutting.md
+    line_pattern: 不在  能力  近接
+    term: ability_framing (2-gram)
+    reason: >
+      Numbered list Pattern B: describes what the 2-gram linter detects.
+      Meta-level documentation of lint patterns.
+
+  - file: docs/report_cross_cutting.md
+    line_pattern: 埋もれた  才能  近接
+    term: ability_framing (2-gram)
+    reason: >
+      Numbered list Pattern C: describes what the 2-gram linter detects.
+      Meta-level documentation of lint patterns.
+
+  - file: docs/report_cross_cutting.md
+    line_pattern: 眠っている  実力  近接
+    term: ability_framing (2-gram)
+    reason: >
+      Numbered list Pattern D: describes what the 2-gram linter detects.
+      Meta-level documentation of lint patterns.
+
