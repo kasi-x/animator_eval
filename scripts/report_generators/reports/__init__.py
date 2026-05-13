@@ -79,6 +79,8 @@ from .biz_brief_index import BizBriefIndexReport
 from .career_typology import CareerTypologyReport
 # Card 26-02: international collaboration edge structure
 from .structure_international import StructureInternationalReport
+# Card 25-01: studio transfer DiD causal analysis
+from .causal_studio_transfer import CausalStudioTransferReport
 
 #: All v2 report classes, in generation order
 #:
@@ -139,6 +141,7 @@ V2_REPORT_CLASSES = [
     KnowledgeNetworkReport,
     TemporalForesightReport,
     BridgeAnalysisReport,
+    CausalStudioTransferReport,
 ]
 
 __all__ = [
@@ -189,5 +192,6 @@ __all__ = [
     "O8SoftPowerReport",
     "CareerTypologyReport",
     "StructureInternationalReport",
+    "CausalStudioTransferReport",
     "V2_REPORT_CLASSES",
 ]
