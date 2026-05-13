@@ -57,6 +57,7 @@ _MART_PK_MAP: dict[str, tuple[str, ...]] = {
     "corrections_credit_year": ("id",),
     "corrections_role": ("id",),
     "meta_report_spec": ("report_id",),
+    "meta_score_frozen": ("snapshot_id",),
     "feat_birank_annual": ("person_id", "year"),
     "feat_career": ("person_id",),
     "feat_career_annual": ("person_id", "career_year"),
@@ -490,6 +491,27 @@ CREATE TABLE IF NOT EXISTS meta_report_spec (
     spec_hash                   TEXT NOT NULL,
     curated_at                  TIMESTAMP NOT NULL
 );
+
+-- Reproducibility snapshot for high-venue publication (§5.4 replication policy).
+-- snapshot_policy=not_taken is the default; this table records exceptions.
+-- spec_hash: SHA-256 of the IV formula λ weights + pipeline version.
+-- score_hash: SHA-256 of the serialised person_scores rows at snapshot time.
+-- frozen scores survive λ recalibration — consumers must join on snapshot_id.
+CREATE TABLE IF NOT EXISTS meta_score_frozen (
+    snapshot_id     TEXT PRIMARY KEY,
+    paper_anchor    TEXT NOT NULL,
+    venue           TEXT NOT NULL,
+    spec_hash       TEXT NOT NULL,
+    score_hash      TEXT NOT NULL,
+    lambda_json     TEXT NOT NULL DEFAULT '{}',
+    pipeline_version TEXT NOT NULL DEFAULT '',
+    git_sha         TEXT NOT NULL DEFAULT '',
+    pixi_lock_hash  TEXT NOT NULL DEFAULT '',
+    resolved_db_hash TEXT NOT NULL DEFAULT '',
+    score_rows_json TEXT NOT NULL DEFAULT '[]',
+    frozen_at       TIMESTAMP NOT NULL DEFAULT current_timestamp,
+    notes           TEXT NOT NULL DEFAULT ''
+);
 """
 
 
@@ -754,6 +776,100 @@ def write_report_specs(
 
     logger.info("report_specs_written", count=len(rows))
     return len(rows)
+
+
+def write_score_frozen(
+    *,
+    snapshot_id: str,
+    paper_anchor: str,
+    venue: str,
+    spec_hash: str,
+    score_rows: list[dict],
+    lambda_json: str = "{}",
+    pipeline_version: str = "",
+    git_sha: str = "",
+    pixi_lock_hash: str = "",
+    resolved_db_hash: str = "",
+    notes: str = "",
+    gold_path: "Path | str | None" = None,
+) -> str:
+    """Upsert a frozen score snapshot into mart.meta_score_frozen.
+
+    Idempotent: re-inserting the same snapshot_id with identical content is a
+    no-op (ON CONFLICT DO UPDATE).  Changing content on the same snapshot_id
+    updates the row and refreshes frozen_at.
+
+    Args:
+        snapshot_id: Unique identifier for this snapshot, e.g.
+            ``<paper_anchor>_<yyyymmdd>``.
+        paper_anchor: Short identifier for the paper this snapshot is tied to,
+            e.g. ``career_network_2026``.
+        venue: Target venue name, e.g. ``JASSS``.
+        spec_hash: SHA-256 of the IV formula λ weights + pipeline version
+            string.  Computed externally so the caller controls what counts as
+            a "formula change".
+        score_rows: List of person score dicts (serialised to JSON for the
+            frozen record).
+        lambda_json: JSON string of IV formula λ weights at snapshot time.
+        pipeline_version: Human-readable pipeline version string.
+        git_sha: Git commit SHA at snapshot time.
+        pixi_lock_hash: SHA-256 of pixi.lock at snapshot time.
+        resolved_db_hash: SHA-256 of resolved.duckdb at snapshot time.
+        notes: Free-text notes.
+        gold_path: Path to gold.duckdb.  Defaults to DEFAULT_GOLD_DB_PATH.
+
+    Returns:
+        score_hash: SHA-256 of the serialised score_rows, for cross-referencing
+        the snapshot record.
+    """
+    import hashlib
+    import json as _json
+    from datetime import date, datetime, timezone
+
+    def _json_default(obj: object) -> object:
+        """Serialise types that stdlib json cannot handle."""
+        if isinstance(obj, (datetime, date)):
+            return obj.isoformat()
+        raise TypeError(f"Object of type {type(obj).__name__} is not JSON serialisable")
+
+    score_blob = _json.dumps(score_rows, sort_keys=True, default=_json_default)
+    score_hash = hashlib.sha256(score_blob.encode()).hexdigest()
+    now = datetime.now(timezone.utc)
+
+    cols = (
+        "snapshot_id", "paper_anchor", "venue", "spec_hash", "score_hash",
+        "lambda_json", "pipeline_version", "git_sha", "pixi_lock_hash",
+        "resolved_db_hash", "score_rows_json", "frozen_at", "notes",
+    )
+    row = (
+        snapshot_id, paper_anchor, venue, spec_hash, score_hash,
+        lambda_json, pipeline_version, git_sha, pixi_lock_hash,
+        resolved_db_hash, score_blob, now, notes,
+    )
+    placeholders = ", ".join("?" for _ in cols)
+    update_set = ", ".join(
+        f"{c}=excluded.{c}"
+        for c in cols
+        if c != "snapshot_id"
+    )
+
+    with gold_connect_write(gold_path) as conn:
+        conn.execute(_DDL)
+        conn.execute(
+            f"""INSERT INTO meta_score_frozen ({", ".join(cols)})
+                VALUES ({placeholders})
+                ON CONFLICT (snapshot_id) DO UPDATE SET {update_set}""",
+            list(row),
+        )
+
+    logger.info(
+        "score_frozen_written",
+        snapshot_id=snapshot_id,
+        venue=venue,
+        score_hash=score_hash[:12],
+        n_rows=len(score_rows),
+    )
+    return score_hash
 
 
 # ---------------------------------------------------------------------------

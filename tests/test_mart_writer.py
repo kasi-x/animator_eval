@@ -135,8 +135,16 @@ class TestGoldReader:
 
         self._setup(gold_path)
         row = GoldReader(gold_path).person_scores_for("p1")
-        for field in ("person_id", "person_fe", "studio_fe_exposure", "birank",
-                      "patronage", "dormancy", "awcc", "iv_score"):
+        for field in (
+            "person_id",
+            "person_fe",
+            "studio_fe_exposure",
+            "birank",
+            "patronage",
+            "dormancy",
+            "awcc",
+            "iv_score",
+        ):
             assert field in row
 
 
@@ -146,6 +154,7 @@ class TestRankingQuery:
     @pytest.fixture()
     def sqlite_path(self, tmp_path):
         import sqlite3
+
         path = tmp_path / "silver.db"
         conn = sqlite3.connect(str(path))
         conn.executescript("""
@@ -173,11 +182,13 @@ class TestRankingQuery:
 
     def _setup_gold(self, gold_path):
         from src.analysis.io.mart_writer import GoldWriter
+
         with GoldWriter(gold_path) as gw:
             gw.write_person_scores(SCORE_ROWS)
 
     def test_returns_total_and_rows(self, gold_path, sqlite_path):
         from src.analysis.io.mart_writer import GoldReader
+
         self._setup_gold(gold_path)
         total, rows = GoldReader(gold_path).ranking_query(sqlite_path, limit=10)
         assert total == 3
@@ -185,6 +196,7 @@ class TestRankingQuery:
 
     def test_rows_ordered_by_iv_desc(self, gold_path, sqlite_path):
         from src.analysis.io.mart_writer import GoldReader
+
         self._setup_gold(gold_path)
         _, rows = GoldReader(gold_path).ranking_query(sqlite_path, limit=10)
         scores = [r["iv_score"] for r in rows]
@@ -192,27 +204,43 @@ class TestRankingQuery:
 
     def test_row_has_expected_fields(self, gold_path, sqlite_path):
         from src.analysis.io.mart_writer import GoldReader
+
         self._setup_gold(gold_path)
         _, rows = GoldReader(gold_path).ranking_query(sqlite_path, limit=10)
         row = rows[0]
-        for field in ("person_id", "name_ja", "name_en", "iv_score",
-                      "birank", "patronage", "person_fe", "awcc", "dormancy",
-                      "first_year", "latest_year", "primary_role"):
+        for field in (
+            "person_id",
+            "name_ja",
+            "name_en",
+            "iv_score",
+            "birank",
+            "patronage",
+            "person_fe",
+            "awcc",
+            "dormancy",
+            "first_year",
+            "latest_year",
+            "primary_role",
+        ):
             assert field in row, f"missing field: {field}"
 
     def test_limit_applied(self, gold_path, sqlite_path):
         from src.analysis.io.mart_writer import GoldReader
+
         self._setup_gold(gold_path)
         total, rows = GoldReader(gold_path).ranking_query(sqlite_path, limit=2)
-        assert total == 3      # total is unaffected by limit
+        assert total == 3  # total is unaffected by limit
         assert len(rows) == 2
 
     def test_condition_filter(self, gold_path, sqlite_path):
         from src.analysis.io.mart_writer import GoldReader
+
         self._setup_gold(gold_path)
         # Filter to persons who have a director credit in sl.credits
-        conds = ["EXISTS (SELECT 1 FROM sl.credits cr WHERE cr.person_id = s.person_id"
-                 " AND cr.role = ?)"]
+        conds = [
+            "EXISTS (SELECT 1 FROM sl.credits cr WHERE cr.person_id = s.person_id"
+            " AND cr.role = ?)"
+        ]
         total, rows = GoldReader(gold_path).ranking_query(
             sqlite_path, conditions=conds, params=["director"], limit=10
         )
@@ -221,6 +249,7 @@ class TestRankingQuery:
 
     def test_primary_role_populated(self, gold_path, sqlite_path):
         from src.analysis.io.mart_writer import GoldReader
+
         self._setup_gold(gold_path)
         _, rows = GoldReader(gold_path).ranking_query(sqlite_path, limit=10)
         by_pid = {r["person_id"]: r for r in rows}
@@ -228,6 +257,7 @@ class TestRankingQuery:
 
     def test_first_latest_year(self, gold_path, sqlite_path):
         from src.analysis.io.mart_writer import GoldReader
+
         self._setup_gold(gold_path)
         _, rows = GoldReader(gold_path).ranking_query(sqlite_path, limit=10)
         by_pid = {r["person_id"]: r for r in rows}
