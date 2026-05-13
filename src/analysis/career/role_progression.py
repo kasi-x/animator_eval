@@ -116,7 +116,8 @@ def compute_progression_years(
     """Compute per-person years from first role_from credit to first role_to credit.
 
     Args:
-        conn: SILVER-layer DuckDB connection (conformed schema).
+        conn: Database connection exposing a ``credits`` table
+            (DuckDB conformed schema or SQLite in-memory for tests).
         role_from: Source role string (e.g. 'in_between').
         role_to: Target role string (e.g. 'key_animator').
         min_year: Earliest plausible debut year (filters noisy data).
@@ -132,7 +133,7 @@ def compute_progression_years(
 
     sql_from = """
         SELECT person_id, MIN(credit_year) AS first_year
-        FROM conformed.credits
+        FROM credits
         WHERE role = ?
           AND credit_year IS NOT NULL
           AND credit_year >= ?
@@ -141,7 +142,7 @@ def compute_progression_years(
     """
     sql_to = """
         SELECT person_id, MIN(credit_year) AS first_year
-        FROM conformed.credits
+        FROM credits
         WHERE role = ?
           AND credit_year IS NOT NULL
           AND credit_year >= ?
@@ -355,12 +356,12 @@ def _studio_affiliation_by_person(
 
     Primary = studio with the most credits for that person.
     Uses the anime.studio_id field via the credits → anime join.
-    Returns empty dict if studio data is unavailable.
+    Returns empty dict if studio data is unavailable or the join fails.
     """
     sql = """
         SELECT c.person_id, a.studio_id, COUNT(*) AS cnt
-        FROM conformed.credits c
-        JOIN conformed.anime a ON c.anime_id = a.id
+        FROM credits c
+        JOIN anime a ON c.anime_id = a.id
         WHERE a.studio_id IS NOT NULL AND a.studio_id != ''
         GROUP BY c.person_id, a.studio_id
     """
@@ -398,7 +399,7 @@ def compute_studio_blockage(
     95% CI computed via bootstrap (n_bootstrap resamples).
 
     Args:
-        conn: SILVER-layer DuckDB connection (conformed schema).
+        conn: Database connection exposing ``credits`` and ``anime`` tables.
         role_from: Source role in the progression pair.
         role_to: Target role in the progression pair.
         n_bootstrap: Number of bootstrap resamples for CI.
@@ -484,7 +485,7 @@ def compute_role_counts(
     """Return distinct person counts per role from the credits SILVER table.
 
     Args:
-        conn: SILVER-layer DuckDB connection (conformed schema).
+        conn: Database connection exposing a ``credits`` table.
         roles: Roles to query.  Defaults to PIPELINE_ROLES.
 
     Returns:
@@ -496,7 +497,7 @@ def compute_role_counts(
     counts: dict[str, int] = {}
     for role in roles:
         row = conn.execute(
-            "SELECT COUNT(DISTINCT person_id) FROM conformed.credits WHERE role = ?", (role,)
+            "SELECT COUNT(DISTINCT person_id) FROM credits WHERE role = ?", (role,)
         ).fetchone()
         counts[role] = int(row[0]) if row else 0
 

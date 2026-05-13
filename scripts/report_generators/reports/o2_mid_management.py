@@ -296,14 +296,8 @@ class O2MidManagementReport(BaseReportGenerator):
                 seen.add(r.studio_id)
                 dedup_rows.append(r)
 
-        labels = [r.studio_id for r in dedup_rows]
         scores = [r.blockage_score for r in dedup_rows]
-        ci_lo_err = [r.blockage_score - r.ci_low for r in dedup_rows]
-        ci_hi_err = [r.ci_high - r.blockage_score for r in dedup_rows]
         n_list = [r.n_persons for r in dedup_rows]
-        colors = [
-            "#E07532" if s > 0 else "#3BC494" for s in scores
-        ]
 
         industry_median = rows[0].industry_median if rows else 0.0
         positive_count = sum(1 for r in rows if r.blockage_score > 0)
