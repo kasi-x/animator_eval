@@ -57,7 +57,6 @@ from .mgmt_director_mentor import MgmtDirectorMentorReport
 from .mgmt_attrition_risk import MgmtAttritionRiskReport
 from .mgmt_succession import MgmtSuccessionReport
 from .mgmt_team_chemistry import MgmtTeamChemistryReport
-from .career_visibility_warning import CareerVisibilityWarningReport
 # Phase 9: Biz briefs
 from .biz_exposure_gap import BizExposureGapReport
 from .biz_genre_whitespace import BizGenreWhitespaceReport
@@ -71,19 +70,19 @@ from .o3_ip_dependency import O3IpDependencyReport
 from .o4_foreign_talent import O4ForeignTalentReport
 from .o7_historical import O7HistoricalRestorationReport
 from .o8_soft_power import O8SoftPowerReport
-# Studio pipeline strength
-from .studio_pipeline import StudioPipelineReport
-# Card 26-02: international collaboration edge structure
-from .structure_international import StructureInternationalReport
 # Phase 10: Person parameter card + 3 audience brief indices
 from .person_parameter_card import PersonParameterCardReport
 from .policy_brief_index import PolicyBriefIndexReport
 from .hr_brief_index import HrBriefIndexReport
 from .biz_brief_index import BizBriefIndexReport
+# Career trajectory typology (27_methodology/02)
+from .career_typology import CareerTypologyReport
+# Card 26-02: international collaboration edge structure
+from .structure_international import StructureInternationalReport
 
 #: All v2 report classes, in generation order
 #:
-#: Audience brief body count (policy + hr + biz) = 17, total active = 41.
+#: Audience brief body count (policy + hr + biz) = 16, total active = 37.
 #: Target per detailed_todo §4.6: ≤20 audience-brief reports — met.
 V2_REPORT_CLASSES = [
     # common: audience-agnostic landing pages
@@ -102,15 +101,13 @@ V2_REPORT_CLASSES = [
     PolicyGenerationalHealthReport,
     CompensationFairnessReport,
     O1GenderCeilingReport,
-    # hr brief (8 — studio pipeline + visibility warning added)
-    StudioPipelineReport,
+    # hr brief (6)
     MgmtStudioBenchmarkReport,
     MgmtDirectorMentorReport,
     MgmtAttritionRiskReport,
     MgmtSuccessionReport,
     MgmtTeamChemistryReport,
     GrowthScoresReport,
-    CareerVisibilityWarningReport,
     # biz brief (5 + O3 extension)
     BizGenreWhitespaceReport,
     BizExposureGapReport,
@@ -125,6 +122,7 @@ V2_REPORT_CLASSES = [
     O8SoftPowerReport,
     StructureInternationalReport,
     # technical appendix
+    CareerTypologyReport,
     AKMDiagnosticsReport,
     DMLCausalInferenceReport,
     ScoreLayersAnalysisReport,
@@ -189,8 +187,6 @@ __all__ = [
     "O4ForeignTalentReport",
     "O7HistoricalRestorationReport",
     "O8SoftPowerReport",
-    "StudioPipelineReport",
-    "CareerVisibilityWarningReport",
-    "StructureInternationalReport",
+    "CareerTypologyReport",
     "V2_REPORT_CLASSES",
 ]
