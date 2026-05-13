@@ -9,6 +9,7 @@ Endpoints:
   GET /api/persons/{id}/network  — ego graph
   GET /api/persons/{id}/milestones — career milestones
   GET /api/persons/{id}/profile  — two-layer contribution profile
+  GET /api/persons/{id}/iv       — IV transparent decomposition (5 components + dormancy)
 """
 
 from __future__ import annotations
@@ -309,6 +310,158 @@ def get_person_milestones(person_id: PersonId):
     if person_id not in data:
         raise HTTPException(status_code=404, detail=f"No milestones for {person_id}")
     return {"person_id": person_id, "milestones": data[person_id]}
+
+
+@router.get("/api/persons/{person_id}/iv")
+def get_person_iv(person_id: PersonId):
+    """IV decomposition: 5 components + dormancy multiplier with cohort percentile.
+
+    Returns the Integrated Value broken down into its 5 structural components
+    (person_fe, birank, studio_exposure, awcc, patronage) and a dormancy multiplier.
+    Each component includes its contribution percentage and within-cohort percentile.
+
+    Cohort is defined as debut decade × primary role group. Percentile is always
+    within the same cohort, not a global rank.
+
+    If any pair of components has |r| > 0.9, a Shapley-equivalent decomposition
+    is used and reported in the response.
+    """
+    from src.analysis.scoring.iv_decomposition import (
+        build_cohort_labels,
+        build_person_cohort_data_from_scores,
+        compute_component_correlations,
+        decompose_iv_for_person,
+    )
+
+    # Load all person score rows (need full population for cohort computation)
+    try:
+        with gold_connect_with_silver() as conn:
+            # person_scores + career data
+            score_sql = """
+                SELECT
+                    s.person_id,
+                    s.person_fe, s.birank, s.awcc, s.patronage,
+                    s.studio_fe_exposure, s.dormancy, s.iv_score,
+                    fc.first_year, fc.latest_year, fc.primary_role
+                FROM person_scores s
+                LEFT JOIN feat_career fc ON fc.person_id = s.person_id
+                WHERE s.iv_score IS NOT NULL
+            """
+            rel = conn.execute(score_sql)
+            cols = [d[0] for d in rel.description]
+            rows = [dict(zip(cols, row)) for row in rel.fetchall()]
+    except Exception as exc:
+        logger.warning("iv_endpoint_db_unavailable", error=str(exc))
+        raise HTTPException(status_code=503, detail="Score data unavailable")
+
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"Person {person_id} not found")
+
+    # Build cohort labels for the entire population
+    debut_years, primary_roles = build_person_cohort_data_from_scores(rows)
+    cohort_labels = build_cohort_labels(debut_years, primary_roles)
+
+    # Assemble component dicts from DB rows
+    raw_components: dict[str, dict[str, float]] = {
+        "person_fe": {},
+        "birank": {},
+        "studio_exposure": {},
+        "awcc": {},
+        "patronage": {},
+    }
+    dormancy_map: dict[str, float] = {}
+    iv_scores_map: dict[str, float] = {}
+    last_credit_years: dict[str, int | None] = {}
+
+    for r in rows:
+        pid = r["person_id"]
+        raw_components["person_fe"][pid] = r.get("person_fe") or 0.0
+        raw_components["birank"][pid] = r.get("birank") or 0.0
+        raw_components["studio_exposure"][pid] = r.get("studio_fe_exposure") or 0.0
+        raw_components["awcc"][pid] = r.get("awcc") or 0.0
+        raw_components["patronage"][pid] = r.get("patronage") or 0.0
+        dormancy_map[pid] = r.get("dormancy") or 1.0
+        iv_scores_map[pid] = r.get("iv_score") or 0.0
+        last_credit_years[pid] = r.get("latest_year")
+
+    if person_id not in iv_scores_map:
+        raise HTTPException(status_code=404, detail=f"Person {person_id} not found")
+
+    # Compute correlation check across full population
+    corr_report = compute_component_correlations(raw_components)
+
+    # Build component breakdown using equal-lambda approximation from stored scores
+    # (no re-run of full PCA needed for decomposition; use λ=0.2 for contribution %)
+    equal_lambda: dict[str, float] = {name: 0.2 for name in raw_components}
+    component_breakdown: dict[str, dict[str, float]] = {}
+    for r in rows:
+        pid = r["person_id"]
+        bd: dict[str, float] = {}
+        for name, comp_dict in raw_components.items():
+            bd[name] = equal_lambda[name] * comp_dict.get(pid, 0.0)
+        bd["dormancy"] = dormancy_map.get(pid, 1.0)
+        component_breakdown[pid] = bd
+
+    result = decompose_iv_for_person(
+        person_id=person_id,
+        iv_scores=iv_scores_map,
+        component_breakdown=component_breakdown,
+        lambda_weights=equal_lambda,
+        dormancy=dormancy_map,
+        last_credit_years=last_credit_years,
+        cohort_labels=cohort_labels,
+        raw_components=raw_components,
+        correlation_report=corr_report,
+    )
+
+    if result is None:
+        raise HTTPException(status_code=404, detail=f"Person {person_id} not found")
+
+    # Serialize to JSON-serializable dict
+    components_out = {
+        name: {
+            "value": cd.value,
+            "contrib_pct": cd.contrib_pct,
+            "cohort_pctl": cd.cohort_pctl,
+        }
+        for name, cd in result.components.items()
+    }
+
+    return {
+        "person_id": person_id,
+        "iv": result.iv,
+        "cohort": result.cohort,
+        "cohort_size": result.cohort_size,
+        "percentile_in_cohort": result.percentile_in_cohort,
+        "components": components_out,
+        "dormancy": {
+            "D": result.dormancy.D,
+            "last_credit_year": result.dormancy.last_credit_year,
+        },
+        "shapley_fallback": result.shapley_fallback,
+        "method_note": result.method_note,
+        "correlation_diagnostics": {
+            "max_abs_r": corr_report.max_abs_r,
+            "high_corr_pairs": [
+                {"a": a, "b": b, "r": r}
+                for a, b, r in corr_report.high_corr_pairs
+            ],
+        },
+        "metadata": {
+            "disclaimer_ja": (
+                "各成分はネットワーク上の位置・協業密度に基づく構造的指標です。"
+                "個人の能力・技量を測定するものではありません。"
+                "コホート百分位は同デビュー年代・同役職グループ内での位置を示します。"
+            ),
+            "disclaimer_en": (
+                "Components are structural indicators based on network position and "
+                "collaboration density. They do not measure individual merit or artistic quality. "
+                "Cohort percentile reflects position within the same debut decade and role group."
+            ),
+            "cohort_definition": "debut_decade × primary_role_group",
+            "percentile_scope": "within-cohort only — not a global rank",
+        },
+    }
 
 
 @router.get("/api/persons/{person_id}/profile")
