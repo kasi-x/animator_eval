@@ -35,6 +35,20 @@ log = structlog.get_logger(__name__)
 # Relation types that define a series chain (union-find)
 _CHAIN_RELATIONS = frozenset({"SEQUEL", "PREQUEL", "PARENT", "SIDE_STORY"})
 
+
+def _detect_schema_prefix(conn: Any) -> str:
+    """Return 'conformed.' if the conformed schema is accessible, else ''.
+
+    Tries a lightweight probe query against conformed.anime.  Falls back to
+    the empty prefix (plain table names) when the schema is unavailable
+    (e.g. in-memory SQLite test fixtures).
+    """
+    try:
+        conn.execute("SELECT 1 FROM conformed.anime LIMIT 0")
+        return "conformed."
+    except Exception:
+        return ""
+
 # Bootstrap samples for CI estimation
 _N_BOOTSTRAP = 1000
 # Random removal null model iterations
@@ -104,10 +118,12 @@ def _build_series_clusters(conn: Any) -> list[SeriesCluster]:
     Returns:
         List of SeriesCluster sorted by cluster_id.
     """
+    schema = _detect_schema_prefix(conn)
+
     # Prefer the pre-computed SILVER column (fast path)
     try:
         rows = conn.execute(
-            "SELECT id, title_romaji, series_cluster_id FROM conformed.anime"
+            f"SELECT id, title_romaji, series_cluster_id FROM {schema}anime"
         ).fetchall()
         if rows and rows[0][2] is not None:
             return _clusters_from_precomputed(rows)
@@ -116,7 +132,7 @@ def _build_series_clusters(conn: Any) -> list[SeriesCluster]:
 
     # Fallback: on-the-fly Union-Find from relations_json
     log.info("series_cluster_fallback_to_relations_json")
-    return _clusters_from_relations_json(conn)
+    return _clusters_from_relations_json(conn, schema)
 
 
 def _clusters_from_precomputed(
@@ -151,7 +167,7 @@ def _clusters_from_precomputed(
     return clusters
 
 
-def _clusters_from_relations_json(conn: Any) -> list[SeriesCluster]:
+def _clusters_from_relations_json(conn: Any, schema: str = "") -> list[SeriesCluster]:
     """On-the-fly Union-Find fallback using relations_json column.
 
     Used only when series_cluster_id has not yet been backfilled.
@@ -159,13 +175,14 @@ def _clusters_from_relations_json(conn: Any) -> list[SeriesCluster]:
 
     Args:
         conn: DB connection.
+        schema: schema prefix, e.g. 'conformed.' or '' for unqualified.
 
     Returns:
         List of SeriesCluster sorted by cluster_id.
     """
     try:
         rows = conn.execute(
-            "SELECT id, title_romaji, relations_json FROM conformed.anime"
+            f"SELECT id, title_romaji, relations_json FROM {schema}anime"
         ).fetchall()
     except Exception as exc:
         log.warning("series_cluster_query_failed", error=str(exc))
@@ -227,14 +244,16 @@ def _clusters_from_relations_json(conn: Any) -> list[SeriesCluster]:
 # Step 2: production_scale helper (pure SQL)
 # ---------------------------------------------------------------------------
 
-_PRODUCTION_SCALE_SQL = """
+def _production_scale_sql(schema: str, placeholders: str) -> str:
+    """Build production_scale query with the given schema prefix and placeholders."""
+    return f"""
 SELECT
     c.anime_id,
     a.episodes,
     a.duration,
     COUNT(DISTINCT c.id) AS staff_count
-FROM conformed.credits c
-JOIN conformed.anime a ON c.anime_id = a.id
+FROM {schema}credits c
+JOIN {schema}anime a ON c.anime_id = a.id
 WHERE c.anime_id IN ({placeholders})
 GROUP BY c.anime_id, a.episodes, a.duration
 """
@@ -255,8 +274,9 @@ def _fetch_anime_scales(conn: Any, anime_ids: list[str]) -> dict[str, float]:
     """
     if not anime_ids:
         return {}
+    schema = _detect_schema_prefix(conn)
     placeholders = ",".join("?" * len(anime_ids))
-    sql = _PRODUCTION_SCALE_SQL.format(placeholders=placeholders)
+    sql = _production_scale_sql(schema, placeholders)
     try:
         rows = conn.execute(sql, anime_ids).fetchall()
     except Exception as exc:
@@ -278,14 +298,16 @@ def _fetch_anime_scales(conn: Any, anime_ids: list[str]) -> dict[str, float]:
 # Step 3: contribution_share computation
 # ---------------------------------------------------------------------------
 
-_CREDIT_SQL = """
+def _credit_sql(schema: str, placeholders: str) -> str:
+    """Build credit query with the given schema prefix and placeholders."""
+    return f"""
 SELECT
     c.person_id,
     p.name_romaji,
     c.anime_id,
     c.role
-FROM conformed.credits c
-JOIN conformed.persons p ON c.person_id = p.id
+FROM {schema}credits c
+JOIN {schema}persons p ON c.person_id = p.id
 WHERE c.anime_id IN ({placeholders})
 """
 
@@ -334,8 +356,9 @@ def compute_series_contribution_shares(
     if not anime_ids:
         return []
 
+    schema = _detect_schema_prefix(conn)
     placeholders = ",".join("?" * len(anime_ids))
-    sql = _CREDIT_SQL.format(placeholders=placeholders)
+    sql = _credit_sql(schema, placeholders)
     try:
         credit_rows = conn.execute(sql, anime_ids).fetchall()
     except Exception as exc:
