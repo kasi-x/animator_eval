@@ -6,6 +6,7 @@
 指標:
 1. peer_percentile: 同役職×同キャリア年数コホート内の順位
 2. opportunity_residual: 機会要因を統制した後の残差（個人の独自貢献）
+   analytical CI (SE=σ/√n) + permutation null model 付き (CLAUDE.md H4)
 3. consistency: 作品間の貢献安定性
 4. independent_value: コラボレーターへの波及効果
 """
@@ -18,6 +19,10 @@ import networkx as nx
 import numpy as np
 import structlog
 
+from src.analysis.scoring.opportunity import (
+    OpportunityResidualResult,
+    compute_opportunity_residual_panel,
+)
 from src.runtime.models import AnimeAnalysis as Anime, Credit
 
 logger = structlog.get_logger()
@@ -34,12 +39,20 @@ MIN_COLLABORATORS = 3
 
 @dataclass
 class IndividualProfile:
-    """Individual contribution profile."""
+    """Individual contribution profile.
+
+    opportunity_residual and its inferential fields are populated via panel OLS
+    with analytical CI (SE=σ/√n) and permutation null (CLAUDE.md H4).
+    """
 
     person_id: str
     peer_percentile: float | None = None
     peer_cohort: dict | None = None
     opportunity_residual: float | None = None
+    opportunity_residual_se: float | None = None
+    opportunity_residual_ci_lower: float | None = None
+    opportunity_residual_ci_upper: float | None = None
+    opportunity_residual_p_value: float | None = None
     consistency: float | None = None
     independent_value: float | None = None
 
@@ -258,82 +271,62 @@ def compute_peer_percentile(
 
 def compute_opportunity_residual(
     features: dict[str, dict],
-) -> tuple[dict[str, float], float]:
-    """Compute opportunity-controlled residuals.
+    theta_map: dict[str, float] | None = None,
+    n_permutations: int = 0,
+) -> tuple[dict[str, float | None], float | None]:
+    """Compute opportunity-controlled residuals via panel OLS + analytical CI.
 
-    OLS: composite ~ career_years + avg_staff_count + unique_studios + role_dummies
+    Delegates to :func:`src.analysis.scoring.opportunity.compute_opportunity_residual_panel`
+    which implements the full method (CLAUDE.md H4):
+
+        log(credit_count[i]) = β0 + β1·theta_i + β2·tenure_i
+                              + β3·role_diversity_i + role_dummies + ε[i]
+
+        SE[i] = σ_ε / √n_years[i]    (analytical, not heuristic)
+
+    The full :class:`OpportunityResidualResult` (with CI + p-value) is
+    available via :func:`compute_opportunity_residual_full`.
 
     Args:
         features: person_id → 特徴量辞書
+        theta_map: AKM theta_i per person (optional).
+        n_permutations: permutation null draws (0 = skip, faster).
 
     Returns:
-        (person_id → z-score残差, R²)
+        (person_id → mean OLS residual, R²)
     """
-    pids = list(features.keys())
-    if len(pids) < 10:
-        logger.warning("insufficient_data_for_regression", persons=len(pids))
-        return {pid: None for pid in pids}, None
+    results, summary = compute_opportunity_residual_panel(
+        features, theta_map=theta_map, n_permutations=n_permutations
+    )
+    residuals = {pid: r.residual for pid, r in results.items()}
+    return residuals, summary.r_squared
 
-    # dummy-encode roles
-    roles = sorted({f["primary_role"] for f in features.values()})
-    role_to_idx = {r: i for i, r in enumerate(roles)}
 
-    y = np.array([features[pid]["iv_score"] for pid in pids])
+def compute_opportunity_residual_full(
+    features: dict[str, dict],
+    theta_map: dict[str, float] | None = None,
+    n_permutations: int = 0,
+) -> tuple[dict[str, OpportunityResidualResult], float | None]:
+    """Full opportunity residual with CI and permutation null.
 
-    # feature matrix: [career_years, avg_staff_count, unique_studios, role_dummies...]
-    n = len(pids)
-    n_roles = max(len(roles) - 1, 0)  # Fix B06: 1ロール時は0列（零列を避ける）
-    X = np.zeros((n, 3 + n_roles))
+    Returns the complete per-person result including:
+    - residual (mean OLS ε)
+    - se (analytical SE = σ/√n)
+    - ci_lower / ci_upper (95% CI)
+    - p_value_permutation (empirical p from 1000 null draws)
 
-    for i, pid in enumerate(pids):
-        f = features[pid]
-        X[i, 0] = f["career_years"]
-        X[i, 1] = f["avg_staff_count"]
-        X[i, 2] = f["unique_studios"]
-        ridx = role_to_idx.get(f["primary_role"], 0)
-        if ridx > 0 and ridx <= n_roles:
-            X[i, 2 + ridx] = 1.0
+    Args:
+        features: person_id → 特徴量辞書
+        theta_map: AKM theta_i per person (optional).
+        n_permutations: permutation null draws.
 
-    # add intercept
-    X = np.column_stack([np.ones(n), X])
-
-    # OLS: β = (X'X)^-1 X'y with leverage correction (studentized residuals)
-    try:
-        XtX = X.T @ X
-        # regularisation (guard against singular matrix)
-        XtX += np.eye(XtX.shape[0]) * 1e-8
-        XtX_inv = np.linalg.inv(XtX)
-        beta = XtX_inv @ (X.T @ y)
-        y_hat = X @ beta
-        residuals = y - y_hat
-
-        # R²
-        ss_res = np.sum(residuals**2)
-        ss_tot = np.sum((y - np.mean(y)) ** 2)
-        r_squared = 1.0 - ss_res / ss_tot if ss_tot > 0 else 0.0
-
-        # Studentized residuals with leverage correction
-        p = X.shape[1]  # number of predictors
-        H_diag = np.sum((X @ XtX_inv) * X, axis=1)  # hat matrix diagonal
-        s = np.sqrt(ss_res / max(n - p, 1))
-        z_residuals = np.zeros(n)
-        for i in range(n):
-            denom = s * np.sqrt(max(1.0 - H_diag[i], 1e-10))
-            z_residuals[i] = residuals[i] / denom if denom > 0 else 0.0
-
-        result = {pids[i]: round(float(z_residuals[i]), 3) for i in range(n)}
-
-        logger.info(
-            "opportunity_residual_computed",
-            persons=n,
-            r_squared=round(r_squared, 3),
-            roles=len(roles),
-        )
-        return result, round(r_squared, 3)
-
-    except np.linalg.LinAlgError:
-        logger.warning("regression_failed")
-        return {pid: None for pid in pids}, None
+    Returns:
+        (person_id → OpportunityResidualResult, R²)
+    """
+    results, summary = compute_opportunity_residual_panel(
+        features, theta_map=theta_map, n_permutations=n_permutations
+    )
+    return results, summary.r_squared
 
 
 def compute_consistency(
@@ -760,7 +753,7 @@ def compute_independent_value(
 def _assemble_individual_profiles(
     features: dict,
     peer_data: dict,
-    residuals: dict,
+    opp_results: dict,
     consistency_scores: dict,
     independent_values: dict,
 ) -> dict:
@@ -769,21 +762,28 @@ def _assemble_individual_profiles(
     Args:
         features: person_id → 特徴量辞書
         peer_data: person_id → {peer_percentile, peer_cohort, ...}
-        residuals: person_id → opportunity_residual
+        opp_results: person_id → OpportunityResidualResult (full CI + p-value)
         consistency_scores: person_id → consistency
         independent_values: person_id → independent_value
 
     Returns:
-        person_id → {peer_percentile, opportunity_residual, consistency, independent_value, ...}
+        person_id → {peer_percentile, opportunity_residual, opportunity_residual_se,
+            opportunity_residual_ci_lower, opportunity_residual_ci_upper,
+            opportunity_residual_p_value, consistency, independent_value, ...}
     """
     profiles = {}
     for pid in features:
         peer = peer_data.get(pid, {})
+        opp = opp_results.get(pid)
         profile = IndividualProfile(
             person_id=pid,
             peer_percentile=peer.get("peer_percentile"),
             peer_cohort=peer.get("peer_cohort"),
-            opportunity_residual=residuals.get(pid),
+            opportunity_residual=opp.residual if opp else None,
+            opportunity_residual_se=opp.se if opp else None,
+            opportunity_residual_ci_lower=opp.ci_lower if opp else None,
+            opportunity_residual_ci_upper=opp.ci_upper if opp else None,
+            opportunity_residual_p_value=opp.p_value_permutation if opp else None,
             consistency=consistency_scores.get(pid),
             independent_value=independent_values.get(pid),
         )
@@ -806,6 +806,8 @@ def compute_individual_profiles(
     collaboration_graph: nx.Graph | None = None,
     akm_residuals: dict[tuple[str, str], float] | None = None,
     community_map: dict[str, int] | None = None,
+    theta_map: dict[str, float] | None = None,
+    opportunity_n_permutations: int = 0,
 ) -> IndividualContributionResult:
     """Integrate all metrics to compute the Individual Contribution Profile.
 
@@ -818,6 +820,9 @@ def compute_individual_profiles(
         collaboration_graph: コラボレーショングラフ
         akm_residuals: (person_id, anime_id) → AKM残差（consistency改善用）
         community_map: person_id → community_id（クラスタパーセンタイル用）
+        theta_map: person_id → AKM theta_i (opportunity residual 用)
+        opportunity_n_permutations: permutation null draws for opportunity residual.
+            Default 0 (skip) for performance; set to 1000 for full inference.
 
     Returns:
         IndividualContributionResult
@@ -832,8 +837,10 @@ def compute_individual_profiles(
     # 1. peer comparison percentile (+ cluster-based)
     peer_data = compute_peer_percentile(features, community_map=community_map)
 
-    # 2. opportunity-controlled residual
-    residuals, r_squared = compute_opportunity_residual(features)
+    # 2. opportunity-controlled residual with analytical CI + permutation null
+    opp_results, r_squared = compute_opportunity_residual_full(
+        features, theta_map=theta_map, n_permutations=opportunity_n_permutations
+    )
 
     # 3. consistency score (can use AKM residuals)
     consistency_scores = compute_consistency(
@@ -847,7 +854,7 @@ def compute_individual_profiles(
 
     # integrate: combine four metrics into one profile
     profiles = _assemble_individual_profiles(
-        features, peer_data, residuals, consistency_scores, independent_values
+        features, peer_data, opp_results, consistency_scores, independent_values
     )
 
     logger.info(
@@ -858,6 +865,10 @@ def compute_individual_profiles(
         ),
         with_residual=sum(
             1 for p in profiles.values() if p["opportunity_residual"] is not None
+        ),
+        with_ci=sum(
+            1 for p in profiles.values()
+            if p.get("opportunity_residual_ci_lower") is not None
         ),
         with_consistency=sum(
             1 for p in profiles.values() if p["consistency"] is not None

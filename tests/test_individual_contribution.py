@@ -257,10 +257,10 @@ class TestOpportunityResidual:
         assert r_squared is not None
         assert 0 <= r_squared <= 1.0
 
-    def test_residuals_are_z_scores(
+    def test_residuals_mean_near_zero(
         self, results_list, credits_list, anime_map, role_profiles, career_data
     ):
-        """Standardized residuals should have mean ~0 and std ~1."""
+        """OLS residuals must have mean ≈ 0 (arithmetic property of OLS)."""
         import numpy as np
 
         features = _build_person_features(
@@ -269,9 +269,6 @@ class TestOpportunityResidual:
         residuals, _ = compute_opportunity_residual(features)
         vals = [v for v in residuals.values() if v is not None]
         assert abs(np.mean(vals)) < 0.1
-        assert (
-            abs(np.std(vals) - 1.0) < 0.3
-        )  # studentized residuals have wider distribution
 
     def test_insufficient_data(self):
         """With <10 persons, should return None values."""
@@ -459,17 +456,17 @@ class TestLeverageCorrection:
     def test_leverage_corrected_residuals(
         self, results_list, credits_list, anime_map, role_profiles, career_data
     ):
-        """Studentized residuals should handle high-leverage points."""
+        """OLS residuals should be finite and within a reasonable magnitude."""
         features = _build_person_features(
             results_list, credits_list, anime_map, role_profiles, career_data
         )
         residuals, r_squared = compute_opportunity_residual(features)
-        # Should still produce valid z-scores
+        # Should produce valid OLS residuals (in log-credit-count space)
         vals = [v for v in residuals.values() if v is not None]
         assert len(vals) == 15
-        # z-scores should generally be bounded
+        # log(credit_count) is bounded; residuals should be finite and not extreme
         for v in vals:
-            assert -10 < v < 10
+            assert -20 < v < 20
 
 
 class TestComputeIndividualProfiles:
@@ -502,6 +499,10 @@ class TestComputeIndividualProfiles:
             assert "person_id" in profile
             assert "peer_percentile" in profile
             assert "opportunity_residual" in profile
+            assert "opportunity_residual_se" in profile
+            assert "opportunity_residual_ci_lower" in profile
+            assert "opportunity_residual_ci_upper" in profile
+            assert "opportunity_residual_p_value" in profile
             assert "consistency" in profile
             assert "independent_value" in profile
 
