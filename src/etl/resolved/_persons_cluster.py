@@ -37,11 +37,11 @@ def _conformed_row_to_person(row: dict[str, Any]) -> "Any":
     """Convert a conformed.persons dict to a runtime.models.Person.
 
     Only populates fields used by entity_resolution:
-      id, name_ja, name_en, mal_id, anilist_id, madb_id, ann_id, tmdb_id, bgm_id.
+      id, name_ja, name_en, mal_id, anilist_id, ann_id, madb_id, tmdb_id, bgm_id.
 
     Source-specific numeric ID 抽出は homonym guard (entity_resolution._definitely_different)
     で必須。tmdb_id 不在で TMDb 同名異人 (Jonas 47 件等) が 1 cluster に over-merge する
-    bug が判明したため tmdb_id / bgm_id も抽出する。
+    bug が判明したため tmdb_id / bgm_id / ann_id も抽出する。
     """
     from src.runtime.models import Person
 
@@ -50,6 +50,7 @@ def _conformed_row_to_person(row: dict[str, Any]) -> "Any":
     # Extract source-specific numeric IDs where available
     anilist_id: int | None = None
     mal_id: int | None = None
+    ann_id: int | None = None
     madb_id: str | None = None
     tmdb_id: int | None = None
     bgm_id: int | None = None
@@ -62,6 +63,11 @@ def _conformed_row_to_person(row: dict[str, Any]) -> "Any":
     elif pid.startswith("mal:"):
         try:
             mal_id = int(pid.replace("mal:", "").replace("p", ""))
+        except ValueError:
+            pass
+    elif pid.startswith("ann-"):
+        try:
+            ann_id = int(pid.replace("ann-", ""))
         except ValueError:
             pass
     elif pid.startswith("madb:"):
@@ -94,6 +100,7 @@ def _conformed_row_to_person(row: dict[str, Any]) -> "Any":
         name_zh=row.get("name_zh") or "",
         mal_id=mal_id,
         anilist_id=anilist_id,
+        ann_id=ann_id,
         madb_id=madb_id,
         tmdb_id=tmdb_id,
         bgm_id=bgm_id,
