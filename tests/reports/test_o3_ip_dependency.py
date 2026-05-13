@@ -74,26 +74,49 @@ def _build_test_db() -> sqlite3.Connection:
     # Series s0: a0 → a1 (SEQUEL) → a2 (SEQUEL)
     anime_rows = [
         # id, title_romaji, episodes, duration, relations_json
-        ("a0", "Series Alpha S1", 12, 24,
-         '[{"relation_type":"SEQUEL","related_anime_id":"a1"}]'),
-        ("a1", "Series Alpha S2", 12, 24,
-         '[{"relation_type":"PREQUEL","related_anime_id":"a0"},'
-         '{"relation_type":"SEQUEL","related_anime_id":"a2"}]'),
-        ("a2", "Series Alpha S3", 12, 24,
-         '[{"relation_type":"PREQUEL","related_anime_id":"a1"}]'),
+        (
+            "a0",
+            "Series Alpha S1",
+            12,
+            24,
+            '[{"relation_type":"SEQUEL","related_anime_id":"a1"}]',
+        ),
+        (
+            "a1",
+            "Series Alpha S2",
+            12,
+            24,
+            '[{"relation_type":"PREQUEL","related_anime_id":"a0"},'
+            '{"relation_type":"SEQUEL","related_anime_id":"a2"}]',
+        ),
+        (
+            "a2",
+            "Series Alpha S3",
+            12,
+            24,
+            '[{"relation_type":"PREQUEL","related_anime_id":"a1"}]',
+        ),
         # Series s1: b0 → b1
-        ("b0", "Series Beta S1", 24, 30,
-         '[{"relation_type":"SEQUEL","related_anime_id":"b1"}]'),
-        ("b1", "Series Beta S2", 24, 30,
-         '[{"relation_type":"PREQUEL","related_anime_id":"b0"}]'),
+        (
+            "b0",
+            "Series Beta S1",
+            24,
+            30,
+            '[{"relation_type":"SEQUEL","related_anime_id":"b1"}]',
+        ),
+        (
+            "b1",
+            "Series Beta S2",
+            24,
+            30,
+            '[{"relation_type":"PREQUEL","related_anime_id":"b0"}]',
+        ),
         # Single-anime series
         ("c0", "Standalone Gamma", 1, 90, None),
         ("d0", "Standalone Delta", 6, 30, None),
         ("e0", "Standalone Epsilon", 13, 24, None),
     ]
-    conn.executemany(
-        "INSERT INTO anime VALUES (?, ?, ?, ?, ?)", anime_rows
-    )
+    conn.executemany("INSERT INTO anime VALUES (?, ?, ?, ?, ?)", anime_rows)
 
     # 6 persons
     persons = [
@@ -195,7 +218,9 @@ class TestBuildSeriesClusters:
     def test_empty_db_returns_empty(self):
         conn = sqlite3.connect(":memory:")
         conn.row_factory = sqlite3.Row
-        conn.execute("CREATE TABLE anime (id TEXT, title_romaji TEXT, relations_json TEXT)")
+        conn.execute(
+            "CREATE TABLE anime (id TEXT, title_romaji TEXT, relations_json TEXT)"
+        )
         result = _build_series_clusters(conn)
         assert result == []
 
@@ -242,9 +267,14 @@ class TestComputeSeriesContributionShares:
         cluster = self._get_cluster_s0(test_conn)
         scales = _fetch_anime_scales(test_conn, cluster.anime_ids)
         rows = compute_series_contribution_shares(
-            test_conn, cluster,
-            {"director": 3.0, "key_animator": 2.0, "animation_director": 2.8,
-             "character_designer": 2.3},
+            test_conn,
+            cluster,
+            {
+                "director": 3.0,
+                "key_animator": 2.0,
+                "animation_director": 2.8,
+                "character_designer": 2.3,
+            },
             scales,
         )
         assert isinstance(rows, list)
@@ -254,9 +284,14 @@ class TestComputeSeriesContributionShares:
         cluster = self._get_cluster_s0(test_conn)
         scales = _fetch_anime_scales(test_conn, cluster.anime_ids)
         rows = compute_series_contribution_shares(
-            test_conn, cluster,
-            {"director": 3.0, "key_animator": 2.0, "animation_director": 2.8,
-             "character_designer": 2.3},
+            test_conn,
+            cluster,
+            {
+                "director": 3.0,
+                "key_animator": 2.0,
+                "animation_director": 2.8,
+                "character_designer": 2.3,
+            },
             scales,
         )
         total_share = sum(r.contribution_share for r in rows)
@@ -266,9 +301,14 @@ class TestComputeSeriesContributionShares:
         cluster = self._get_cluster_s0(test_conn)
         scales = _fetch_anime_scales(test_conn, cluster.anime_ids)
         rows = compute_series_contribution_shares(
-            test_conn, cluster,
-            {"director": 3.0, "key_animator": 2.0, "animation_director": 2.8,
-             "character_designer": 2.3},
+            test_conn,
+            cluster,
+            {
+                "director": 3.0,
+                "key_animator": 2.0,
+                "animation_director": 2.8,
+                "character_designer": 2.3,
+            },
             scales,
         )
         # p1 (director on all 3 anime) should have the highest share
@@ -278,7 +318,8 @@ class TestComputeSeriesContributionShares:
         cluster = self._get_cluster_s0(test_conn)
         scales = _fetch_anime_scales(test_conn, cluster.anime_ids)
         rows = compute_series_contribution_shares(
-            test_conn, cluster,
+            test_conn,
+            cluster,
             {"director": 3.0, "key_animator": 2.0},
             scales,
         )
@@ -463,7 +504,9 @@ _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 class TestLintVocabCompliance:
     """Verify that o3_ip_dependency.py contains no forbidden vocabulary."""
 
-    REPORT_FILE = _PROJECT_ROOT / "scripts/report_generators/reports/o3_ip_dependency.py"
+    REPORT_FILE = (
+        _PROJECT_ROOT / "scripts/report_generators/reports/o3_ip_dependency.py"
+    )
     FORBIDDEN_PATTERN = re.compile(
         r"\b(ability|skill|talent|competence|capability)\b", re.IGNORECASE
     )
@@ -500,8 +543,11 @@ class TestMethodGate:
         result = compute_counterfactual_drop(rows, total, "p1", rng, n_bootstrap=100)
         assert result is not None
         # CI must not be degenerate (lower == upper == 0) unless 0 credits
-        assert not (result.ci_lower == 0.0 and result.ci_upper == 0.0
-                    and result.counterfactual_drop > 0)
+        assert not (
+            result.ci_lower == 0.0
+            and result.ci_upper == 0.0
+            and result.counterfactual_drop > 0
+        )
 
     def test_null_model_returns_distribution(self, rng):
         rows = [
@@ -523,5 +569,6 @@ class TestMethodGate:
         assert cf is not None
         null = compute_null_distribution(rows, total, {}, rng, n_iter=200)
         from scripts.report_generators.reports.o3_ip_dependency import _null_percentile
+
         cf.null_percentile = _null_percentile(cf.counterfactual_drop_pct, null)
         assert 0.0 <= cf.null_percentile <= 100.0

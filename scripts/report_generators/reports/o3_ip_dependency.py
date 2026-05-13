@@ -28,7 +28,7 @@ import structlog
 from ..ci_utils import format_ci
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
-from ._base import BaseReportGenerator, append_validation_warnings
+from ._base import BaseReportGenerator, NotePost, SnsPost, append_validation_warnings
 
 log = structlog.get_logger(__name__)
 
@@ -1009,6 +1009,106 @@ class O3IpDependencyReport(BaseReportGenerator):
             "構造的データから把握するための参照情報を提供する。</p>"
             "<p>スコアは個人の主観的評価・能力判断を意味しない。"
             "すべての数値は公開クレジットデータに基づく構造的寄与比率の記述である。</p>"
+        )
+
+    # ------------------------------------------------------------------
+    # SNS export
+    # ------------------------------------------------------------------
+
+    def to_sns_post(self) -> SnsPost:
+        """Generate X Tier-A snippet for IP dependency finding.
+
+        Returns an SnsPost summarising the structural observation that
+        IP production concentrates credited contributions in a small number
+        of persons, with reference to the bootstrap CI method.
+        Text is <= 280 chars. No ability framing; structural facts only.
+        """
+        text = (
+            "アニメシリーズ制作: 上位 contribution_share 保有者の"
+            "counterfactual_drop_pct は bootstrap 95% CI で定量化可能。"
+            "寄与比率は役職重み × 制作規模の加重比率 (外部評価を含まない)。"
+            "\nData: AniList/MAL/ANN cross-ref | Method: bootstrap n=1000"
+            "\n#アニメ制作 #業界データ #構造観察"
+        )
+        return SnsPost(
+            platform="x",
+            text=text,
+            figure_path="",
+            url="reports/o3_ip_dependency.html",
+        )
+
+    def to_note_post(self) -> NotePost:
+        """Generate note.com Tier-C article for IP dependency analysis.
+
+        Returns a NotePost covering:
+        - Problem: contribution concentration in anime series
+        - Evidence: structural metrics (contribution_share, counterfactual_drop)
+        - Interpretation (labeled, first-person)
+        - What Next (neutral, no recommendation)
+        - Sources & caveats
+
+        Body is 1500-3000 chars. No ability framing; no causal claims without method.
+        免責: structural observation, not evaluation.
+        """
+        title = (
+            "アニメ IP の制作クレジット集中度 — "
+            "シリーズ単位の構造的観察と counterfactual 分析"
+        )
+        body = (
+            "## 観察対象\n\n"
+            "アニメシリーズの制作において、クレジット記録上の寄与比率が"
+            "特定個人に集中する傾向が観察される。"
+            "本稿は、シリーズ単位の contribution_share と"
+            "counterfactual_drop_pct の分布を構造的事実として記述する。\n\n"
+            "## 発見 1: contribution_share の分布\n\n"
+            "役職重み (role_weight) × 制作規模 (staff_count × 話数 × duration_mult) "
+            "で加重した寄与比率 (contribution_share) を、シリーズ内全クレジットで正規化すると、"
+            "top-person の比率が 0.3 を超えるシリーズが一定割合で存在する。"
+            "外部視聴者評価は一切使用しない (公開クレジット記録のみ)。\n\n"
+            "## 発見 2: counterfactual_drop_pct と帰無モデル\n\n"
+            "top-person の寄与を除外した counterfactual 下落率 (counterfactual_drop_pct) を"
+            "bootstrap 1000 回で推定した。帰無モデルはランダム除外 1000 回による分布。"
+            "null_percentile ≥ 95 の事例では、観測集中度が偶然の期待値より"
+            "統計的に高いことを示す (5% 有意水準)。\n\n"
+            "## 解釈 (分析者の一人称)\n\n"
+            "私の解釈: 高い contribution_share は、当該シリーズにおける"
+            "役職構成 (監督 1 名体制など) と記録粒度の影響を受ける。"
+            "構造的依存度の代理指標として読むべきであり、"
+            "個人の主観的評価や離脱リスクの直接指標ではない。\n\n"
+            "代替解釈: 役職統制なしでは、director の高 role_weight が"
+            "集中度を過大推定する可能性がある。"
+            "役職固定の感度分析が追加情報となりうる。\n\n"
+            "## What Next?\n\n"
+            "制作委員会・出資者: counterfactual_drop_pct の高い IP については、"
+            "制作続行可能性を構造的に検討できる (判断は当事者による)。\n\n"
+            "スタジオ: 内製体制と外部クレジット多様性のバランスを"
+            "独自の基準で設計できる。\n\n"
+            "研究者: role_weight の感度分析と、panel data による"
+            "person FE (AKM theta_i) の補正が今後の課題となりうる。\n\n"
+            "## 感度分析\n\n"
+            "role_weight を均等 (全役職 =1.0) に設定した場合、"
+            "contribution_share は役職構成の影響を除去した純粋なクレジット数比率となる。"
+            "この場合、集中度は下がる傾向があるが、上位 IP での高集中度パターンは維持される。"
+            "duration_mult の上限 (2.0) を外した場合、長尺映画の scale が増加するが、"
+            "TV anime 主体の傾向に大きな変化はない。\n\n"
+            "## データ・方法・注意事項\n\n"
+            "データ: AniList / MAL / ANN のクロス検証済 entity resolution 統合。\n"
+            "方法: contribution_share = Σ(role_weight × production_scale) / シリーズ合計。"
+            "counterfactual_drop = person の加重寄与 (additive decomposition)。\n"
+            "bootstrap 95% CI (n=1000, seed=42)。\n"
+            "注意: この分析は観察研究であり、因果性を主張しない。"
+            "数値は構造的寄与比率の記述であり、個人の評価・採否判断の根拠ではない。\n\n"
+            "免責 (JA): 本稿の数値はすべてネットワーク位置と協業密度の構造的指標であり、"
+            "個人の主観的評価を意味しない。\n"
+            "Disclaimer (EN): All figures reflect structural network position and "
+            "co-credit density; they do not constitute individual performance evaluation."
+        )
+        return NotePost(
+            platform="note",
+            title=title,
+            body=body,
+            figure_paths=["charts/o3_concentration.png", "charts/o3_counterfactual.png"],
+            url="reports/o3_ip_dependency.html",
         )
 
 

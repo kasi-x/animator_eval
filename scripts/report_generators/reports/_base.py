@@ -4,6 +4,7 @@ All report generators inherit from BaseReportGenerator, which provides:
 - Connection and provider injection
 - Common write_report() method with v2 wrapping
 - Abstract generate() method for subclass implementation
+- Abstract SNS generation: to_sns_post() / to_note_post()
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import structlog
+from pydantic import BaseModel, field_validator
 
 from ..html_templates import COMMON_GLOSSARY_TERMS, REPORTS_DIR, wrap_html_v2
 from ..section_builder import DataStatementParams, SectionBuilder
@@ -23,6 +25,68 @@ log = structlog.get_logger()
 
 if TYPE_CHECKING:
     from ..section_builder import ReportSection
+
+
+# ---------------------------------------------------------------------------
+# SNS post data models (Pydantic v2)
+# ---------------------------------------------------------------------------
+
+_X_CHAR_LIMIT = 280
+_NOTE_CHAR_MIN = 1500
+_NOTE_CHAR_MAX = 3000
+
+
+class SnsPost(BaseModel):
+    """X (Twitter) short-form post.
+
+    text must be <= 280 characters (platform limit).
+    figure_path is optional (relative to output dir or absolute).
+    url is the link to the full report.
+    hashtags are included in text — callers must count chars accordingly.
+    """
+
+    platform: str = "x"
+    text: str
+    figure_path: str = ""
+    url: str = ""
+
+    @field_validator("text")
+    @classmethod
+    def text_within_x_limit(cls, v: str) -> str:
+        if len(v) > _X_CHAR_LIMIT:
+            raise ValueError(
+                f"SnsPost.text exceeds {_X_CHAR_LIMIT} chars: {len(v)} chars. "
+                "Truncate or rewrite."
+            )
+        return v
+
+
+class NotePost(BaseModel):
+    """note.com long-form article.
+
+    body must be 1500-3000 characters.
+    title is the article heading.
+    """
+
+    platform: str = "note"
+    title: str
+    body: str
+    figure_paths: list[str] = []
+    url: str = ""
+
+    @field_validator("body")
+    @classmethod
+    def body_within_note_range(cls, v: str) -> str:
+        length = len(v)
+        if length < _NOTE_CHAR_MIN:
+            raise ValueError(
+                f"NotePost.body is too short: {length} chars (min {_NOTE_CHAR_MIN})."
+            )
+        if length > _NOTE_CHAR_MAX:
+            raise ValueError(
+                f"NotePost.body exceeds {_NOTE_CHAR_MAX} chars: {length} chars."
+            )
+        return v
 
 
 def append_validation_warnings(findings: str, sb: SectionBuilder) -> str:
@@ -81,6 +145,40 @@ class BaseReportGenerator(ABC):
     def generate(self) -> Path | None:
         """Generate the report. Returns output path or None on failure."""
         ...
+
+    def to_sns_post(self) -> SnsPost:
+        """Generate an X (Twitter) Tier-A short-form post from this report.
+
+        Default implementation raises NotImplementedError.
+        Subclasses that want SNS export must override this method.
+
+        Returns:
+            SnsPost with text <= 280 chars, optional figure_path, and url.
+
+        Raises:
+            NotImplementedError: when the report has not implemented SNS export.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} has not implemented to_sns_post(). "
+            "Override this method in the report subclass."
+        )
+
+    def to_note_post(self) -> NotePost:
+        """Generate a note.com Tier-C long-form article from this report.
+
+        Default implementation raises NotImplementedError.
+        Subclasses that want SNS export must override this method.
+
+        Returns:
+            NotePost with body 1500-3000 chars.
+
+        Raises:
+            NotImplementedError: when the report has not implemented note export.
+        """
+        raise NotImplementedError(
+            f"{self.__class__.__name__} has not implemented to_note_post(). "
+            "Override this method in the report subclass."
+        )
 
     def write_report(
         self,

@@ -17,7 +17,7 @@ import plotly.graph_objects as go
 from ..helpers import insert_lineage
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
-from ._base import BaseReportGenerator
+from ._base import BaseReportGenerator, NotePost, SnsPost
 
 # Pipeline pairs for KM analysis
 _PIPELINE_PAIRS: list[tuple[str, str, str]] = [
@@ -363,6 +363,99 @@ class O2MidManagementReport(BaseReportGenerator):
                 "スタジオ帰属はクレジット記録上の推定であり、雇用契約形態を直接反映しない。"
             ),
             section_id="studio_blockage",
+        )
+
+    # ── SNS export ────────────────────────────────────────────────────────────
+
+    def to_sns_post(self) -> SnsPost:
+        """Generate X Tier-A snippet for mid-management pipeline finding.
+
+        Summarises the role-progression pipeline observation (動画→原画→作監→監督)
+        using structural data (KM survival, credit records). No ability framing.
+        Text is <= 280 chars.
+        """
+        text = (
+            "アニメ制作 役職進行 (動画→原画→作監→監督):"
+            " KM 推定による中央生存時間から、作監段階でのパイプライン詰まりを観察。"
+            " スタジオ別 blockage_score = studio_median - industry_median (bootstrap 95% CI)。"
+            "\nData: AniList/MAL/ANN | Method: KM+bootstrap"
+            "\n#アニメ制作 #業界データ #構造観察"
+        )
+        return SnsPost(
+            platform="x",
+            text=text,
+            figure_path="",
+            url="reports/o2_mid_management.html",
+        )
+
+    def to_note_post(self) -> NotePost:
+        """Generate note.com Tier-C article for mid-management pipeline.
+
+        Covers role-progression survival analysis (KM), studio blockage scores,
+        and funnel structure. Interpretation is labeled; no causal claims.
+        Body 1500-3000 chars; no ability framing; structural facts only.
+        """
+        title = (
+            "アニメ制作の役職進行パイプライン — "
+            "動画→原画→作監→監督 の構造的観察"
+        )
+        body = (
+            "## 観察対象\n\n"
+            "アニメ制作の役職進行 (動画 → 原画 → 作監 → 監督) について、"
+            "クレジット記録を用いたカプラン–マイヤー推定 (KM) により"
+            "各ステージの進行年数分布を記述する。\n\n"
+            "## 発見 1: 役職進行年数の KM 推定\n\n"
+            "5 年区切りデビューコホート別に KM 生存曲線を推定した。"
+            "横軸は役職取得からの経過年数、縦軸は未昇進率 S(t)。"
+            "Greenwood 公式による 95% CI を付与。"
+            "コホート間の差異は多変量ログランク検定で確認した。"
+            "作監 (animation_director) ステージでの中央生存時間が"
+            "他のステージと比較して長い傾向が観察された (コホート依存)。\n\n"
+            "## 発見 2: スタジオ別 blockage_score\n\n"
+            "動画→原画の進行年数について、スタジオ別中央値と業界全体中央値の差"
+            "(blockage_score) を bootstrap 95% CI (n=1000, seed=42) で推定した。"
+            "正値は業界平均より進行に年数を要することを示す (絶対的な「遅さ」ではなく相対指標)。"
+            "観測進行者 5 名以上のスタジオのみ集計対象。\n\n"
+            "## 発見 3: 昇進ファネル\n\n"
+            "各役職でクレジットが記録された個人の延べ人数は、上位役職ほど少なくなる。"
+            "これは横断的観察 (同一期間の全クレジット集計) であり、"
+            "縦断的コホート追跡ではない点に注意が必要。\n\n"
+            "## 解釈 (分析者の一人称)\n\n"
+            "私の解釈: 作監ステージでの KM 中央生存時間の長さは、"
+            "当該役職への到達機会そのもの (ファネル上位の絞り込み) を反映する可能性がある。"
+            "役職進行の遅延が個人の意思選択なのか、機会制約なのかは"
+            "クレジット記録だけでは判別できない。\n\n"
+            "代替解釈: blockage_score の正値は、大規模スタジオが内製体制を強化した結果、"
+            "外部 (アドホック) クレジットの相対比率が下がった構造変化を反映する可能性もある。\n\n"
+            "## What Next?\n\n"
+            "スタジオ: blockage_score が高い場合、内部の役職転換経路を"
+            "透明化する仕組みを設計できる (判断は各スタジオによる)。\n\n"
+            "労働組合: 役職転換の最低機会保障を団体交渉の論点として検討できる。\n\n"
+            "研究者: 実際の社内昇進 (タイトル変化以外) と"
+            "クレジット記録の乖離を検証する追加調査が有益と考えられる。\n\n"
+            "## 感度分析\n\n"
+            "若手 / 中堅の定義年数 (<3y vs <5y, 5-10y vs 5-15y) を変更した場合、"
+            "blockage_score の絶対値は変化するが符号の傾向は維持される。"
+            "スタジオ帰属方法 (主クレジット vs 全クレジット加重) を変えると"
+            "小規模スタジオの順位は変動しうる。\n\n"
+            "## データ・方法・注意事項\n\n"
+            "データ: AniList / MAL / ANN entity resolution 統合。\n"
+            "方法: KM 推定 (lifelines>=0.30), Greenwood 95% CI。"
+            "studio blockage_score: bootstrap n=1000, percentile 法 (2.5/97.5th)。\n"
+            "注意: 役職進行 = クレジット記録上の役職変化。"
+            "実際の雇用契約形態や社内昇進とは異なる場合がある。"
+            "スタジオ帰属はクレジット主帰属の推定であり、副業・フリーランスは捕捉外。\n\n"
+            "免責 (JA): 本稿の数値はネットワーク位置と協業密度の構造的指標であり、"
+            "個人の主観的評価を意味しない。\n"
+            "Disclaimer (EN): All figures reflect structural network position and "
+            "co-credit density; they do not constitute individual performance evaluation."
+        )
+        return NotePost(
+            platform="note",
+            title=title,
+            body=body,
+            figure_paths=["charts/km_role_tenure.png", "charts/studio_blockage.png"],
+            url="reports/o2_mid_management.html",
         )
 
     # ── Section 3: Promotion funnel ───────────────────────────────────────────

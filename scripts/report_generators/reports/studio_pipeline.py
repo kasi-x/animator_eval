@@ -28,7 +28,7 @@ import plotly.graph_objects as go
 from ..helpers import insert_lineage
 from ..html_templates import plotly_div_safe
 from ..section_builder import KPICard, ReportSection, SectionBuilder
-from ._base import BaseReportGenerator
+from ._base import BaseReportGenerator, NotePost, SnsPost
 
 _JSON_DIR = Path(__file__).parents[4] / "result" / "json"
 
@@ -642,6 +642,97 @@ class StudioPipelineReport(BaseReportGenerator):
                 "破線 = 業界平均。右下 = 集中型、左上 = 分散型。"
             ),
             section_id="concentration_bus",
+        )
+
+
+    # ── SNS export ────────────────────────────────────────────────────────────
+
+    def to_sns_post(self) -> SnsPost:
+        """Generate X Tier-A snippet for studio pipeline structural observation.
+
+        Summarises the 4-axis pipeline observation (young theta growth,
+        mid-career retention, key-person concentration, bus factor).
+        No ability framing; structural facts only. Text <= 280 chars.
+        """
+        text = (
+            "スタジオ育成パイプライン 4 軸:"
+            " 若手 θ 成長 / 中堅クレジット3年継続率 / top-3 集中度 / bus factor (1/HHI)。"
+            " すべて構造的クレジット記録のみ (外部評価を含まない)。"
+            " bootstrap 95% CI。"
+            "\n#アニメ制作 #業界データ #構造観察"
+        )
+        return SnsPost(
+            platform="x",
+            text=text,
+            figure_path="",
+            url="reports/studio_pipeline.html",
+        )
+
+    def to_note_post(self) -> NotePost:
+        """Generate note.com Tier-C article for studio pipeline analysis.
+
+        Covers 4 structural axes with bootstrap CI, interpretation labeled,
+        no causal claims. Body 1500-3000 chars; no ability framing.
+        """
+        title = (
+            "スタジオ育成パイプラインの構造的観察 — "
+            "4 軸 (若手θ / 中堅継続率 / 集中度 / bus factor)"
+        )
+        body = (
+            "## 観察対象\n\n"
+            "アニメ制作スタジオの「育成パイプライン強度」を、"
+            "公開クレジット記録と AKM person FE (theta_i) のみから"
+            "4 つの構造的指標で記述する。外部視聴者評価は一切使用しない。\n\n"
+            "## 4 軸の定義\n\n"
+            "1. **young_theta_growth**: デビュー 3 年未満スタッフの theta_i がコホート平均から"
+            "どの程度乖離するかの軌跡。production-scale への構造的応答を反映する。\n"
+            "2. **mid_career_retention**: 中堅 (5–10 年) スタッフの3年クレジット継続率。"
+            "クレジット可視性の継続であり、雇用継続と等価ではない。\n"
+            "3. **key_person_concentration**: 上位 3 名のクレジット share 合計。"
+            "集中度の代理指標 (role_weight × production_scale 加重)。\n"
+            "4. **bus_factor**: クレジット分布の逆 HHI (bus_factor = 1/HHI)。"
+            "高値 = クレジット分散型、低値 = 集中型。\n\n"
+            "## 発見: スタジオ間の4軸分布\n\n"
+            "各指標について bootstrap 95% CI (n=1000, cluster=staff) を算出した。"
+            "大手・中規模・小規模スタジオの tier 別に分布を比較すると、"
+            "tier 間で指標値の構造的差異が観察される。"
+            "経験的ベイズ縮約 (Empirical Bayes shrinkage) を適用し、"
+            "n=30 未満のスタジオは業界平均方向に縮約している。\n\n"
+            "## 解釈 (分析者の一人称)\n\n"
+            "私の解釈: 4 軸の組み合わせパターンは、スタジオの制作体制の多様性を示す。"
+            "高い key_person_concentration と低い bus_factor の組み合わせは、"
+            "クレジット記録上の構造的集中を示すが、これが制作品質や個人評価に"
+            "直接つながるわけではない。\n\n"
+            "代替解釈: young_theta_growth の低さは、studio-specific selection 効果"
+            "(特定スタジオに構造的に低規模作品が集中する) の反映である可能性もある。"
+            "AKM 連結集合外のスタジオでは theta_i の比較が困難。\n\n"
+            "## What Next?\n\n"
+            "スタジオ: 4 軸の自社値を業界分布と照合し、独自の判断で"
+            "パイプライン設計を見直すことができる。\n\n"
+            "労働組合: mid_career_retention の低いスタジオに対して、"
+            "クレジット継続機会の透明化を求める交渉を行うことができる。\n\n"
+            "研究者: AKM 連結集合の coverage と theta_i 推定精度の"
+            "スタジオ別感度分析が有益と考えられる。\n\n"
+            "## データ・方法・注意事項\n\n"
+            "データ: credits / persons / anime / studios / mart.akm_results。\n"
+            "方法: bootstrap 95% CI (n=1000); Empirical Bayes 縮約 (n_threshold=30)。\n"
+            "注意: クレジット記録の可視性 ≈ 制作参加だが、等価ではない。"
+            "古い年代 (1980s) では mid_career_retention が不安定な場合がある。\n\n"
+            "免責 (JA): 本稿の数値はネットワーク位置と協業密度の構造的指標であり、"
+            "個人の主観的評価を意味しない。\n"
+            "Disclaimer (EN): All figures reflect structural network position and "
+            "co-credit density; they do not constitute individual performance evaluation."
+        )
+        return NotePost(
+            platform="note",
+            title=title,
+            body=body,
+            figure_paths=[
+                "charts/young_theta_growth.png",
+                "charts/mid_career_retention.png",
+                "charts/concentration_bus.png",
+            ],
+            url="reports/studio_pipeline.html",
         )
 
 
