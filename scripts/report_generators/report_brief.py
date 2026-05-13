@@ -215,7 +215,9 @@ class ReportBrief:
         import re
         errors: list[str] = []
         for sid, section in self.sections.items():
-            combined = (section.get("findings", "") + " " + section.get("interpretation", "")).lower()
+            findings = section.get("findings") or ""
+            interpretation = section.get("interpretation") or ""
+            combined = (findings + " " + interpretation).lower()
             for pattern in self._PROHIBITED_VOCAB:
                 m = re.search(pattern, combined)
                 if m:
@@ -289,8 +291,8 @@ class PolicyBrief(ReportBrief):
 
 
 class HRBrief(ReportBrief):
-    """Report brief for HR/Operations audience."""
-    
+    """Report brief for HR/Operations audience (legacy alias — use WorkersBrief)."""
+
     def __init__(self):
         super().__init__(
             audience=AudienceType.HR_OPERATIONS,
@@ -307,6 +309,38 @@ class HRBrief(ReportBrief):
                 "Team formation",
                 "Retention programs",
                 "Succession planning",
+            ],
+        )
+
+
+class WorkersBrief(ReportBrief):
+    """Report brief for workers and labor unions (labor-first rebrand of HR brief).
+
+    Per STANCE.md Section 1, this brief is targeted at individual animators,
+    crew members, and labor union HR departments, not studio management.
+    Focus is on structural position transparency and compensation negotiation
+    evidence — not studio HR optimization.
+    """
+
+    def __init__(self):
+        super().__init__(
+            audience=AudienceType.HR_OPERATIONS,
+            title="Workers Brief",
+            description=(
+                "Structural position, cohort context, and compensation evidence "
+                "for individual animators and labor union representatives"
+            ),
+            target_readers=[
+                "Individual animators and crew members",
+                "Labor union representatives (JAniCA and similar)",
+                "Workers seeking compensation negotiation evidence",
+                "Freelance staff assessing their structural position",
+            ],
+            decision_points=[
+                "Compensation negotiation (knowing your structural position vs. peers)",
+                "Credit transparency advocacy (requesting studios to publish credits)",
+                "Opportunity gap identification (structural, not individual)",
+                "Career pipeline awareness (cohort-level advancement patterns)",
             ],
         )
 

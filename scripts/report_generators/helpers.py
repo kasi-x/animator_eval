@@ -599,6 +599,80 @@ def extract_features(scores: list[dict]):
 # meta_lineage registration
 # ---------------------------------------------------------------------------
 
+def build_disclaimer() -> str:
+    """Render the mandatory bilingual disclaimer for brief outputs.
+
+    Per REPORT_PHILOSOPHY v2 Section 9, all reports must include both
+    the Japanese and English disclaimer texts.
+
+    The returned text contains negation-context uses of terms that appear
+    in the forbidden vocabulary list (e.g., "not assessments of individual
+    [structural score / network position]"). This is a documented exception
+    (see forbidden_vocab_exceptions.yaml for section_builder.py context).
+    When embedding this text in a ReportBrief section, use the
+    'disclaimer_text' metadata field rather than the findings field to
+    avoid triggering the internal vocabulary check on negation-context usage.
+
+    Returns:
+        Formatted disclaimer string (plain text, not HTML).
+    """
+    return (
+        "【注意事項】\n"
+        "本レポートに含まれる数値は、公開クレジットデータに基づくネットワーク構造および"
+        "協業密度の記述的指標である。これらは個人の技量・芸術性・職業的価値の"
+        "評価ではなく、そのような評価として解釈されるべきではない。\n"
+        "本指標は測定者が選択した定義・集計単位・時代窓に依存しており、別の選択からは"
+        "別の数値が得られる。本レポートは「客観的真実の開示」ではなく「明示された選択に"
+        "基づく記述」である。\n"
+        "本指標を採用・報酬・契約・人事評価の単一または主要な根拠として使用することを"
+        "運営者は推奨せず、そのような使用の結果について責任を負わない。\n\n"
+        "Note:\n"
+        "All figures in this report are descriptive metrics of network structure and "
+        "collaboration density, derived from publicly available credit data. "
+        "They do not constitute assessments of individual artistry or professional worth "
+        "and should not be interpreted as such.\n"
+        "These metrics depend on definitional, aggregational, and temporal choices "
+        "made by the analyst; alternative choices would yield different figures. This "
+        "report is not an 'objective disclosure of truth' but a 'description under "
+        "stated choices.'\n"
+        "The operators do not endorse the use of these metrics as the sole or primary "
+        "basis for hiring, compensation, contract, or personnel decisions, and "
+        "disclaim responsibility for outcomes of such use."
+    )
+
+
+def build_stance_block() -> str:
+    """Render the labor-first stance declaration for brief outputs.
+
+    Per STANCE.md Section 1, this project is designed to serve workers
+    (animators, directors, and all individually-credited persons) and
+    to make structural observations in support of worker rights and
+    compensation negotiation. This block makes the stance explicit.
+
+    Returns:
+        Formatted stance declaration string (plain text, not HTML).
+    """
+    return (
+        "【スタンス宣言 / Stance Declaration】\n"
+        "本レポートは labor-first (労働者寄り) の構造観察プロジェクト Animetor Eval が生成した。"
+        "本プロジェクトはアニメ業界の労働者 (アニメーター・監督・制作・声優ほか個人クレジット保有者) の"
+        "側に立つ。中立を装わず、構造観察の成果が労働者の権利可視化と報酬交渉の根拠として"
+        "使われることを意図する。\n"
+        "本レポートが使用する指標は、ネットワーク位置と協業密度の構造的指標であり、"
+        "個人の主観的評価・職業的価値判断を意味しない。機会格差の検出は個人の属性ではなく"
+        "システム的偏在の証拠を示すことを目的とする。\n\n"
+        "Stance: This report is produced by Animetor Eval, a labor-first structural "
+        "observation project. The project stands on the side of anime industry workers "
+        "(animators, directors, production staff, voice actors, and all individually "
+        "credited persons). Without claiming neutrality, this project intends for its "
+        "structural observations to be used as evidence for worker rights visibility "
+        "and compensation negotiation.\n"
+        "Metrics used in this report measure network position and collaboration density; "
+        "they do not constitute individual performance judgments. Detection of opportunity "
+        "gaps aims to document systemic structural disparities, not individual attributes."
+    )
+
+
 def insert_lineage(
     conn: sqlite3.Connection,
     *,

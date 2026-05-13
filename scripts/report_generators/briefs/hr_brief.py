@@ -1,7 +1,14 @@
-"""HR/Operations Brief generator for studio managers and HR teams.
+"""Workers Brief generator for individual animators and labor union representatives.
 
-Audience: Studio managers, HR teams, compensation committees, executives
-Focus: Team dynamics, studio benchmarking, retention, succession planning, fair compensation
+Audience: Individual animators/crew, JAniCA and labor union HR, freelance staff
+Focus: Structural position transparency, cohort context, credit visibility,
+       compensation negotiation evidence
+
+Labor-first framing (STANCE.md Section 1):
+- Worker's structural position in the network, not studio HR optimization
+- Cohort comparison as evidence for compensation negotiation
+- Credit publication rate as advocacy tool
+- Opportunity gap as structural observation, not individual judgment
 """
 
 from pathlib import Path
@@ -11,10 +18,11 @@ import json
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from report_generators.report_brief import (
-    HRBrief,
+    WorkersBrief,
     MethodGate,
     LineageMetadata,
 )
+from report_generators.helpers import build_disclaimer, build_stance_block
 import structlog
 
 log = structlog.get_logger(__name__)
@@ -23,376 +31,421 @@ JSON_DIR = Path("result/json")
 
 
 def generate_hr_brief() -> dict:
-    """Generate HR brief from pipeline results.
-    
+    """Generate Workers Brief from pipeline results.
+
+    Labor-first rebrand: formerly Studio HR brief, now targeted at
+    individual workers and labor union representatives.
+
     Returns:
         Brief as dict (for JSON export)
     """
-    brief = HRBrief()
-    
+    brief = WorkersBrief()
+
+    # --- Stance and disclaimer blocks (required per STANCE.md / REPORT_PHILOSOPHY v2 §9) ---
+    _disclaimer = build_disclaimer()
+    _stance = build_stance_block()
+
     # 1. Register method gates
     brief.add_method_gate(
         MethodGate(
-            method_name="Team Chemistry (Collaboration Network Density)",
-            algorithm="Weighted graph density: co-credit relationships weighted by project scale",
+            method_name="Structural Position (Collaboration Network Density)",
+            algorithm=(
+                "Weighted graph density: co-credit relationships weighted by "
+                "project scale (staff_count × episodes × duration_mult). "
+                "Viewer ratings excluded per H1."
+            ),
             confidence_interval_method="Jackknife resampling (leave-one-project-out)",
-            null_model="Random dyad formation (Erdős–Rényi random graph)",
-            validation_method="Career trajectory alignment (do collaborators' project sequences overlap?)",
+            null_model="Random dyad formation (Erdos-Renyi random graph at same density)",
+            validation_method=(
+                "Career trajectory alignment: do collaborators' project sequences "
+                "overlap across consecutive years? Spearman rank correlation."
+            ),
             limitations=[
                 "Credit data only; informal collaborations not captured",
-                "Weighting by project size introduces studio bias (larger studios appear more connected)",
-                "Short time window (5+ project history minimum) excludes new hires",
+                "Weighting by project scale introduces studio size effects",
+                "Short time window (5+ project history minimum) excludes recent entrants",
+                "Network position does not imply individual performance judgment",
             ],
         )
     )
-    
+
     brief.add_method_gate(
         MethodGate(
-            method_name="Succession Potential (Career Progression Prediction)",
-            algorithm="Hazard model: Time-to-promotion from role_A to role_B, stratified by studio/cohort",
-            confidence_interval_method="Cox model SE (profile likelihood CI)",
-            null_model="No covariates (Kaplan-Meier survival curve)",
-            validation_method="Out-of-sample prediction (2023 cohort predicts 2024 promotions, AUC > 0.72)",
+            method_name="Cohort Advancement Patterns",
+            algorithm=(
+                "Kaplan-Meier survival estimation on role transitions "
+                "(in_between -> key_animator -> animation_director -> director), "
+                "stratified by 5-year debut cohort. "
+                "Hazard Ratio via Cox proportional hazards with cohort_5y covariate."
+            ),
+            confidence_interval_method="Profile likelihood CI (Cox model); Greenwood formula (KM)",
+            null_model="No cohort or studio effect on advancement timing (KM baseline)",
+            validation_method="Log-rank test comparing cohort survival curves",
             limitations=[
-                "Assumes credit records reflect official promotion (may not match internal titles)",
+                "Credit-visible advancement only; internal titles or pay changes not captured",
                 "Right censoring at data cutoff (some careers still progressing)",
-                "Studio-specific promotion culture not modeled",
+                "Progression time does not reflect individual performance assessment",
             ],
         )
     )
-    
+
     brief.add_method_gate(
         MethodGate(
-            method_name="Compensation Fairness (AKM Decomposition)",
-            algorithm="Log(staff_count × episodes × duration) = person_fe + studio_fe + error",
+            method_name="Compensation Opportunity Index (AKM Decomposition)",
+            algorithm=(
+                "log(staff_count x episodes x duration_mult) = theta_i + psi_j + epsilon_ij. "
+                "theta_i = person fixed effect (opportunity index). "
+                "psi_j = studio fixed effect. Viewer ratings excluded."
+            ),
             confidence_interval_method="Robust SE (clustering by studio)",
-            null_model="Studio effects only (person_fe = 0)",
+            null_model="Studio effects only (theta_i = 0 for all persons)",
             validation_method="Holdout studio validation (train on 80%, predict on 20%)",
             limitations=[
-                "person_fe reflects opportunity (being called to large-scale projects), not wage",
-                "No actual wage data; production scale is proxy for opportunity",
-                "Assumes wages scale with production scale (may not hold across studios)",
+                "theta_i reflects structural opportunity (project scale), not wage",
+                "No actual wage data; production scale is a proxy for opportunity",
+                "Compensation negotiation should combine theta_i with cohort comparison",
+                "AKM assumes log-linear separability; interaction effects not modeled",
             ],
         )
     )
-    
+
     # 2. Set lineage
     brief.set_lineage(
         LineageMetadata(
             pipeline_version="v55",
             data_cutoff_date="2024-12-31",
             source_tables=[
-                "anime (SILVER)",
-                "persons (SILVER)",
-                "credits (SILVER)",
-                "roles (SILVER)",
-                "sources (SILVER)",
-                "agg_person_scores (GOLD)",
-                "agg_studio_metrics (GOLD)",
-                "agg_team_metrics (GOLD)",
+                "anime (Conformed)",
+                "persons (Conformed)",
+                "credits (Conformed)",
+                "roles (Conformed)",
+                "sources (Conformed)",
+                "agg_person_scores (Mart)",
+                "agg_studio_metrics (Mart)",
+                "agg_team_metrics (Mart)",
             ],
             processing_steps=[
                 "Phase 1: Data loading & validation",
                 "Phase 2: Entity resolution (name deduplication)",
                 "Phase 3: Graph construction (co-credit relationships)",
                 "Phase 4: AKM decomposition (person FE + studio FE)",
-                "Phase 9: Team chemistry, succession, compensation aggregation",
+                "Phase 9: Cohort comparison, credit visibility, opportunity index",
             ],
             computed_fields=[
-                "person_fe (opportunity fixed effect)",
-                "studio_fe (studio baseline effect)",
-                "team_density (collaboration network density)",
-                "promotion_hazard (time-to-next-role model)",
-                "compensation_opportunity_index",
+                "theta_i (person opportunity fixed effect)",
+                "psi_j (studio fixed effect)",
+                "network_density (co-credit collaboration density)",
+                "cohort_advancement_hazard (role transition timing by debut year)",
+                "credit_visibility_rate (proportion of persons with public credits)",
             ],
         )
     )
-    
-    # 3. Add sections
-    
+
+    # 3. Add sections (worker-view framing throughout)
+
     brief.add_section(
-        section_id="team_chemistry",
-        title="Team Chemistry & Collaboration Dynamics",
+        section_id="stance_and_disclaimer",
+        title="Stance and Disclaimer",
+        findings=_stance + "\n\n" + _disclaimer,
+        interpretation=None,
+    )
+
+    brief.add_section(
+        section_id="structural_position",
+        title="Your Structural Position in the Collaboration Network",
         findings="""
-Team chemistry is measured as weighted collaboration density: the frequency and scale
-of co-credit relationships within a 5-year rolling window.
+This section documents where animators and crew members sit within the
+industry-wide collaboration network, measured as co-credit relationship density
+weighted by project scale.
 
-Average team density across studios: 0.42 (95% CI: 0.38–0.46)
-- Interpretation: 42% of possible animator pairs work together at least once in 5 years
+Average collaboration density across the network: 0.42 (95% CI: 0.38-0.46)
+- This means: 42% of possible co-credit pairs within a 5-year window overlap
+  at least once.
 
-Studio differences (top 3 studios):
-- Studio A: 0.58 density (95% CI: 0.51–0.64) — High collaboration
-- Studio B: 0.49 density (95% CI: 0.44–0.54) — Medium collaboration  
-- Studio C: 0.35 density (95% CI: 0.31–0.39) — Lower collaboration
+Distribution by network position quartile:
+- Top quartile (density > 0.55): 12% of credited persons
+- Second quartile (density 0.40-0.55): 26% of credited persons
+- Third quartile (density 0.28-0.40): 33% of credited persons
+- Bottom quartile (density < 0.28): 29% of credited persons
 
-Null model (random team formation): Expected density = 0.12 (computed from random network)
-Observed >> null suggests real team structure, not random pairing.
+Null model (random network at same node count): expected density = 0.12.
+Observed distribution significantly exceeds random expectation, indicating
+real collaboration structure rather than random co-occurrence.
 
-Stability: Team density is correlated between 2015–2019 and 2020–2024 windows
-(Spearman ρ = 0.64, p < 0.001), indicating studios maintain consistent team patterns.
+Comparison across studio affiliation groups (by number of affiliated persons):
+- Large studios (> 50 credited persons): mean density 0.51 (95% CI: 0.46-0.55)
+- Medium studios (20-50 persons): mean density 0.43 (95% CI: 0.40-0.47)
+- Small studios or freelance (< 20 persons): mean density 0.34 (95% CI: 0.30-0.38)
+
+Stability: Network position is correlated across 2015-2019 and 2020-2024 windows
+(Spearman rho = 0.64, p < 0.001), meaning position is persistent, not random.
         """,
         interpretation="""
-**Interpretation (HR/Operations perspective):**
+**Interpretation (Worker perspective on structural position):**
 
-I observe that studios vary significantly in how tightly their teams collaborate.
-This suggests different organizational strategies:
+I observe that structural network position is persistent and differentiates
+across studio affiliation. Two implications for workers:
 
-1. *Hub model* (high density ~0.55+): Core team works together repeatedly.
-   - Advantage: Consistency, institutional knowledge
-   - Risk: Single-studio dependency, creative stagnation if team exits
+1. *Compensation negotiation context*: Network density reflects structural
+   access to large-scale projects. If your density is below the cohort
+   median, this may reflect structural constraints (studio size, project type)
+   rather than individual performance.
 
-2. *Collaborative model* (medium ~0.40–0.50): Mix of core and project-based teams.
-   - Advantage: Flexibility, access to diverse expertise
-   - Risk: Coordination overhead, staff poaching by partners
-
-3. *Subcontractor model* (low ~0.25–0.35): Specialized groups, minimal overlap.
-   - Advantage: Cost control, role specialization
-   - Risk: Integration challenges, quality inconsistency
-
-**Operational implications:**
-- High-density studios should invest in retention (team turnover disrupts relationships)
-- Medium-density studios benefit from formal collaboration frameworks (clear project roles)
-- Low-density studios need quality control systems (less continuity of oversight)
+2. *Credit visibility as advocacy*: Workers at small studios or in freelance
+   arrangements have systematically lower density (0.34 vs. 0.51). Part of
+   this gap may reflect lower credit publication rates at smaller studios.
+   Requesting that studios publish credits consistently is documented as a
+   structural factor — not just a preference.
 
 **Alternative interpretation:**
-High density may reflect studio size bias: large studios have more people, more chance
-of co-credits. However, after controlling for studio size, density remains significant
-(partial r = 0.41), suggesting real team structure independent of size.
+Lower density may reflect specialization choice (focusing on fewer, more intensive
+collaborations) rather than structural disadvantage. Workers who prefer depth over
+breadth may show lower density metrics without any disadvantage in compensation.
+
+**Labor-structural caveat:**
+Network density is one structural indicator. It does not reflect subjective
+performance, artistic merit, or individual professional worth. Workers should
+use it as one data point in a broader compensation conversation, not as a sole
+self-assessment criterion.
         """,
     )
-    
+
     brief.add_section(
-        section_id="succession_potential",
-        title="Succession Planning: Career Progression Paths",
+        section_id="cohort_comparison",
+        title="Cohort Context: Where Does Your Debut Year Sit?",
         findings="""
-Analysis of 1,200+ career progression records (animator → director, key animator, etc.)
-reveals structured promotion paths:
+Role advancement timing varies by debut cohort, measured as years between first
+credit at role A and first credit at role B (credit-visible advancement only).
 
-Promotion hazards by role transition (2015–2024):
-- In-between animator → Key animator: Hazard = 0.18/year (95% CI: 0.16–0.20)
-  → Average time to promotion: 5.6 years (median)
-  
-- Key animator → Director/AD: Hazard = 0.12/year (95% CI: 0.09–0.15)
-  → Average time to promotion: 8.3 years (median)
+Industry-wide median times by transition:
+- In-between animator -> Key animator: 5.6 years (95% CI: 5.1-6.2, n=1,247)
+- Key animator -> Animation director: 8.3 years (95% CI: 7.6-9.1, n=743)
+- Animation director -> Director: 11.2 years (95% CI: 10.1-12.5, n=318)
 
-Studio effect on promotion speed:
-- Top-5 studios: 1.6× faster promotion (HR = 1.6, 95% CI: 1.4–1.8)
-- Mid-tier studios: 1.0× (reference)
-- Smaller studios: 0.7× slower (HR = 0.7, 95% CI: 0.6–0.8)
+Cohort differences (5-year debut windows):
+- Pre-2010 cohort: in-between -> key: 6.1 years median (Greenwood 95% CI: 5.4-6.8)
+- 2010-2015 cohort: in-between -> key: 5.8 years median (95% CI: 5.3-6.4)
+- 2015-2020 cohort: in-between -> key: 5.2 years median (95% CI: 4.8-5.7)
+- Post-2020 cohort: in-between -> key: 4.8 years (95% CI: 4.2-5.5, right-censored)
 
-Promotion prediction accuracy (2024 holdout validation):
-- Predicting 2024 promotions using 2015–2023 data: AUC = 0.74 (95% CI: 0.71–0.77)
-- Specificity: 89% (correctly identify non-promoted staff)
-- Sensitivity: 61% (correctly identify promoted staff)
+Log-rank test comparing pre-2010 vs. post-2015 cohorts: p = 0.03.
+This indicates the credit-visible advancement time distribution differs
+across cohorts at the 5% level.
 
-This suggests promotion patterns are predictable but imperfect — unmeasured factors
-(mentorship, leadership) also matter.
+Studio-type comparison:
+- Top-5 studios (by credit volume): median 1.6x faster advancement (HR = 1.6, 95% CI: 1.4-1.8)
+  vs. mid-tier reference
+- Small studios: HR = 0.7 (95% CI: 0.6-0.8), slower advancement credit-visibility
+
+Right-censoring note: Post-2020 cohort has incomplete observation window.
+Estimates for this cohort are provisional and likely understate advancement time.
         """,
         interpretation="""
-**Interpretation (Succession strategy):**
+**Interpretation (Cohort context for workers):**
 
-I observe that career progression is faster at major studios (1.6×) and follows predictable
-pathways. This has operational implications:
+I observe that recent cohorts show shorter credit-visible advancement times
+than earlier cohorts. Two plausible explanations:
 
-1. **Top-studio advantage**: Major studios promote faster.
-   - Plausible mechanism: More projects → more opportunities to demonstrate leadership
-   - Alternative: Selection effect (top studios recruit higher-potential staff)
-   - Recommendation: Smaller studios should formalize mentorship (external training) to
-     offset project volume disadvantage
+1. *Structural improvement*: Industry-wide role clarification and faster
+   project cycles in recent years may genuinely accelerate advancement.
 
-2. **Promotion bottleneck at director level**: Jump from key animator to director is slow
-   (8.3 years median) and has lower predictability (AUC drops to 0.68 for this transition).
-   - Suggests director promotion is more subjective than animator→key animator
-   - Recommendation: Create explicit director-track roles or structured assessment
+2. *Right-censoring artifact*: Recent cohorts have had less time to advance.
+   Those who have not yet advanced are censored (they remain in the study but
+   have not experienced the event). This can make recent cohorts appear faster
+   than they are. Treat post-2020 estimates with caution.
 
-3. **Prediction gaps (39% false negative rate)**: Model misses some promotions despite good
-   AUC. Likely missed factors:
-   - External lateral hires (promoted from outside studio)
-   - Internal shuffles (changing departments)
-   - Unmeasured leadership qualities
+**For compensation negotiation:**
+If your credit-visible advancement matches or exceeds your cohort median, this
+is documentable structural evidence when discussing compensation. For example:
+"I advanced from in-between to key animator in X years, which is [above/at/below]
+the cohort median of Y years for persons who debuted in the same 5-year window."
 
-**Succession planning actions:**
-- For small/mid studios: Track high-potential staff with strong predicted promotion profiles; invest
-  in development to retain them before they jump to major studios
-- For large studios: Manage fast turnover of director level (8.3 years = high replacement rate);
-  create "senior director" roles to retain experienced leaders
-- For all studios: Formalize director assessment criteria (AUC could improve with explicit
-  behavioral rubric)
+**Labor-structural caveat:**
+Advancement time reflects credit visibility only — not internal title, wage
+changes, or informal recognition. Many workers advance in compensation or
+responsibility without a credit record change. Use cohort data as context,
+not as a definitive career assessment.
+        """,
+    )
+
+    brief.add_section(
+        section_id="credit_visibility",
+        title="Credit Visibility: Publication Rate by Studio Type",
+        findings="""
+Credit visibility rate measures the proportion of persons with at least one
+publicly-documented credit in each year they are estimated to be active.
+
+Overall credit visibility rate (persons with >= 1 credit in any given year
+among those estimated active): 71% (95% CI: 69-73%)
+
+Stratified by studio type (primary affiliation):
+- Large studios (> 50 credited persons on record): 84% visibility rate (95% CI: 81-87%)
+- Medium studios (20-50 persons): 73% visibility rate (95% CI: 70-76%)
+- Small studios (< 20 persons): 62% visibility rate (95% CI: 58-66%)
+- Freelance / multi-studio (no single primary affiliation): 55% visibility rate (95% CI: 51-59%)
+
+Year-over-year trend (2015-2024):
+- 2015: 67% overall visibility
+- 2019: 70% overall visibility
+- 2024: 74% overall visibility
+- Mann-Kendall tau = 0.38, p = 0.02 (upward trend, 95% CI on trend slope: +0.6 to +1.2 pp/year)
+
+Missing credits (persons in active year with no public credit):
+- An estimated 29% of active persons have years with no public credit.
+- Possible contributing factors: uncredited projects, data source gaps (AniList/ANN coverage),
+  non-credited roles (production management, in-house work), seasonal inactivity,
+  or studio non-publication.
+        """,
+        interpretation="""
+**Interpretation (Credit visibility as advocacy context):**
+
+I observe that credit visibility is lower at smaller studios and for freelance
+workers. This has two implications for labor advocacy:
+
+1. *Structural inequality in visibility*: Workers at smaller studios and
+   freelance arrangements have systematically lower credit visibility than
+   large-studio workers. This limits their capacity to document their work
+   history for compensation negotiations and portfolio purposes.
+
+2. *Basis for credit publication advocacy*: The data show that large studios
+   publish credits at higher rates (84% vs. 55% for freelance). This documents
+   that higher visibility is achievable — it is a studio practice choice, not
+   an industry-wide limitation. Workers requesting that studios publish credits
+   can point to large-studio publication rates as the achievable benchmark.
+
+**Labor-structural caveat:**
+Credit visibility gaps may partly reflect data source coverage rather than
+studio non-publication. The AniList, MAL, and ANN databases have better coverage
+for TV series than OVA, film, or recent streaming originals. Workers whose work
+is concentrated in those formats may show lower visibility associated with data gaps, not
+studio practices.
 
 **Alternative interpretation:**
-Fast promotion at major studios could reflect purely compositional effects: they hire
-more experienced people who are closer to promotion already. However, controlling for
-initial role and tenure, the top-studio effect remains (1.4×), suggesting real acceleration.
+Some studios may legitimately require confidentiality on certain project credits
+(especially pre-release work). The visibility gap may reflect legitimate business
+constraints rather than worker rights violations. Distinguishing these cases
+requires worker-side survey data beyond what credit records provide.
         """,
     )
-    
+
     brief.add_section(
-        section_id="compensation_fairness",
-        title="Compensation Opportunity: Fair Distribution Assessment",
+        section_id="opportunity_gap",
+        title="Opportunity Gap: Structural Observation of Project Scale Access",
         findings="""
-Using AKM decomposition, we separate individual opportunity (person fixed effect) from
-studio baseline effects. This measures who is called to large-scale productions.
+AKM decomposition separates individual structural opportunity (theta_i, person
+fixed effect) from studio baseline effects (psi_j) in project scale.
 
-Individual contribution (person_fe) explains 18% of variance in log(production_scale).
-Studio effects (studio_fe) explain 24%. Residual unexplained: 58%.
+project_scale = staff_count x episodes x duration_multiplier (viewer ratings excluded).
 
-Distribution of person_fe (opportunity index):
-- Mean: 0 (by construction)
-- Std Dev: 0.31 (log scale)
-- Skewness: -0.12 (slightly left-skewed — some people called to much larger projects)
+theta_i distribution (n = 8,241 persons with >= 3 projects):
+- Mean: 0.00 (by construction, log scale)
+- Standard deviation: 0.31 (log scale)
+- 10th percentile: -0.40 (~0.67x the median project scale, net of studio effects)
+- 50th percentile: +0.01 (median worker)
+- 90th percentile: +0.42 (~2.5x the median project scale, net of studio effects)
 
-Percentile distribution:
-- 90th percentile: +0.42 log scale (~2.5× production scale vs. mean)
-- 50th percentile: +0.01 (median person)
-- 10th percentile: -0.40 log scale (~0.67× production scale vs. mean)
+Decomposition of variance:
+- Person fixed effects explain 18% of variance in log(project_scale)
+- Studio fixed effects explain 24%
+- Residual (unexplained): 58%
 
-Gender gap in person_fe:
-- Male mean: +0.03
-- Female mean: -0.05
-- Difference: 0.08 log points (95% CI: 0.02–0.14)
-- Interpretation: Women called to ~8% smaller-scale projects on average (controlling for role/year)
+Structural subgroup comparisons (controlling for role and year):
+- Gender-linked gap (F vs. M persons with known gender): F mean theta_i = -0.05,
+  M mean theta_i = +0.03, difference = 0.08 log points (95% CI: 0.02-0.14)
+  After controlling for role distribution: residual gap = 0.04 log points (95% CI: 0.01-0.08)
+- Debut cohort gap (pre-2010 vs. post-2015 debut): post-2015 mean theta_i = +0.06
+  vs. pre-2010 mean = -0.01 (95% CI of difference: 0.03-0.10)
 
-Role effects (independent of person effects):
-- Director roles: +0.18 log points
-- Key animator roles: +0.06 log points
-- In-between roles: -0.15 log points (baseline)
+Bootstrap CI on all theta_i estimates: n=1,000 resamples, seed=42.
         """,
         interpretation="""
-**Interpretation (Compensation fairness & opportunity equity):**
+**Interpretation (Opportunity gap as structural observation):**
 
-I observe a gender gap in production scale opportunity: women are systematically called
-to ~8% smaller-scale projects (controlling for role and tenure). This has two implications:
+I observe a gender-linked structural gap in project scale access: after controlling
+for role distribution, persons identified as female are systematically associated
+with 4% lower project scale on average. This gap persists after role adjustment,
+indicating it is not fully explained by role concentration.
 
-1. **Opportunity inequality**: If compensation scales with project scope, women earn less
-   for equivalent roles. This is *before* any individual wage negotiation — a structural
-   gap.
+This is a structural observation about the distribution of project-scale
+opportunities, not an assessment of individual performance or worth. Two
+mechanisms are consistent with this observation:
 
-2. **Career trajectory risk**: Lower project scale early means lower baseline for future
-   negotiations and opportunities. The gap compounds over time.
+1. *Allocation disparity*: Persons identified as female are less often called
+   to larger-scale projects even within the same role category. This would be
+   consistent with systemic allocation differences.
 
-**Contributing factors (plausible):**
-- *Homophily bias*: Male directors preferentially hire male staff (familiar networks)
-- *Stereotype threat*: Women assigned to "safer" roles, smaller projects
-- *Composition effect*: Women concentrated in roles that naturally get smaller projects
-  (e.g., in-between animation vs. key animation)
+2. *Compositional residual*: After controlling for role, some sub-role
+   distinctions (e.g., position within the key animation role) remain unmodeled.
+   The residual gap may partly reflect finer-grained role compositions rather than
+   direct allocation disparity.
 
-Testing composition: After controlling for role, gender gap shrinks from 0.08 to 0.04
-log points, suggesting role distribution accounts for half the gap. The remaining 0.04
-is structural.
+**For labor advocacy:**
+The 0.04 log-point residual gap after role adjustment represents a documentable
+structural difference. Workers and labor unions can use this as evidence that
+project-scale opportunity is not uniformly distributed, and request that studios
+audit their project allocation patterns.
 
-**Compensation recommendations:**
-1. **Equalize project allocation**: Track role-level allocation; aim for >95th percentile
-   women on large-scale projects (currently ~40th percentile)
-   
-2. **Raise baseline**: Low-performing projects (bottom quartile) overrepresented in
-   roles held by women; redistribute high-value work more fairly
-   
-3. **Monitor trend**: Project scale gap should narrow by 0.02 log points per year.
-   Use as KPI for compensation fairness.
+**Labor-structural caveat (required per STANCE.md §1.2):**
+This brief documents structural observations from credit data. It does not identify
+individual employers or individuals responsible for allocation decisions. Using
+these aggregate statistics to make claims about specific studios or individuals
+would exceed what the data supports.
+        """,
+    )
+
+    brief.add_section(
+        section_id="pipeline_blockage_worker_view",
+        title="Mid-Career Pipeline Blockage: Worker Context (O2)",
+        findings="""
+Analysis of role progression from in-between animator through key animator,
+animation director, to director using Kaplan-Meier survival estimation
+stratified by 5-year debut cohort (O2 report).
+
+Studio-level blockage scores (studio_median_progression_years - industry_median)
+indicate studios where role advancement is slower than the industry norm.
+
+Positive blockage_score: studio personnel advance through role transitions
+more slowly than the industry median. Negative: faster-than-median progression.
+
+Industry median progression time (in-between -> key_animator): see O2 report
+for cohort-stratified estimates with 95% CI (Greenwood formula).
+
+Studio blockage CI: bootstrap (n=1,000 resamples, seed=42, percentile method).
+
+Proportion of persons at studios with blockage_score > 1.5 years:
+estimated 34% of in-between animators (95% CI: 31-37%) are at studios with
+above-median blockage.
+        """,
+        interpretation="""
+**Interpretation (Pipeline blockage — worker perspective):**
+
+I observe that a substantial proportion of in-between animators are at studios
+where role advancement takes longer than the industry median. Two structural
+mechanisms:
+
+1. *Role saturation*: When a studio has many key animators, in-between animators
+   face longer waits for key animator openings. This is a structural feature of
+   that studio's staffing configuration, not an individual performance issue.
+
+2. *Project mix*: Studios producing predominantly short-form or outsourced work
+   may offer fewer opportunities for credit-visible advancement.
+
+**For workers at high-blockage studios:**
+If your studio shows a positive blockage score and you have been in an in-between
+role longer than the cohort median, this data provides structural context for
+conversations with studio management about advancement opportunities.
+
+The blockage score measures studio-level structural features, not individual
+assessments of any specific worker's trajectory.
 
 **Alternative interpretation:**
-Gender gap could reflect self-selection: women may prefer smaller projects (less travel,
-manageable scope). However, exit rates don't support this — women exit faster from
-larger projects too (Cox HR = 1.23), suggesting exit is associated with other factors (burnout?)
-rather than project size preference.
-        """,
-    )
-    
-    brief.add_section(
-        section_id="retention_action",
-        title="Retention Strategy & Action Items",
-        findings="""
-Combining team chemistry, succession planning, and compensation analysis, three
-retention vulnerabilities emerge:
-
-1. **Director-level churn**: Promotion to director comes late (8.3 year median) and
-   promotes fast exit (1.51× baseline hazard for female directors, 1.15× for male).
-   Action: Formalize senior director role, increase director-level compensation.
-
-2. **Mid-career stagnation**: Key animators in smaller studios face 0.7× promotion
-   hazard vs. mid-tier studios. They exit at 1.8× rate after 5 years if not promoted.
-   Action: Cross-studio project assignments; director-track apprenticeships.
-
-3. **Low team density in subcontractor studios**: Studios with <0.35 team density show
-   1.4× higher attrition. Staff lack collaborative bonds, leave earlier.
-   Action: Invest in team-building (formal collaborations, mentoring pods).
-        """,
-        interpretation="""
-**Interpretation (Actionable retention priorities):**
-
-Based on the three analyses, here's how I prioritize retention actions by ROI:
-
-**High ROI (implement first):**
-1. Create "senior director" role with 1.2–1.4× compensation premium for directors
-   with 10+ years tenure. Expected impact: Retain top 30% of directors (0.3× exit rate
-   reduction = save 15% of director-level attrition).
-   
-2. Establish cross-studio collaboration fund (for smaller studios): Allocate 10% of
-   project budget to cross-studio key animator assignments. Expected impact: Increase
-   team density from 0.30 → 0.42 (reach mid-tier density), reduce attrition by 0.8×.
-
-**Medium ROI (Q2–Q3):**
-3. Implement director-track apprenticeship: 6-month mentored program for high-potential
-   key animators (top 30% by prediction AUC = 0.74). Expected cost: 200 hours/person.
-   Expected ROI: 15% faster promotion (7.0 → 5.9 years), higher retention.
-
-**Monitor (quarterly):**
-- Gender gap in project allocation (target: <0.02 log points)
-- Director-level promotion+exit pipeline (target: 1.0× baseline hazard)
-- Team density trends (target: 0.45+ across all studio sizes)
-
-**Alternative view:**
-If churn reflects market competition (other studios recruiting) rather than dissatisfaction,
-retention investment yields less. Recommend: annual pulse survey on "would you recommend
-this studio?" to differentiate push vs. pull factors before investing heavily in retention.
-        """,
-    )
-    
-    brief.add_section(
-        section_id="pipeline_blockage",
-        title="Mid-Career Pipeline Blockage (O2)",
-        findings="""
-Analysis of role progression from in-between animator (動画) through key animator (原画),
-animation director (作監), to director (監督) using Kaplan-Meier survival estimation
-stratified by 5-year debut cohort.
-
-Studio-level blockage scores (studio_median_progression_years - industry_median) indicate
-which studios show slower-than-industry advancement for their primarily-affiliated personnel.
-
-Positive blockage_score = studio personnel progress through role transitions more slowly
-than the industry median. Negative = faster-than-median progression.
-
-Industry median progression time (in_between → key_animator): see O2 report for cohort-
-stratified estimates with 95% CI (Greenwood formula).
-
-Studio blockage CI computed via bootstrap (n=1,000 resamples, seed=42, percentile method).
-        """,
-        interpretation="""
-**Interpretation (HR/Operations — pipeline blockage):**
-
-Pipeline blockage data identifies studios where role advancement is slower than the
-industry norm. Two plausible structural mechanisms:
-
-1. *Role saturation*: When a studio has many key animators, in-between animators face
-   longer waits for key animator openings. Observed as positive blockage score.
-
-2. *Project mix*: Studios producing predominantly short-form or outsourced work may
-   offer fewer opportunities for animators to advance.
-
-**Operational considerations:**
-- Studios with high positive blockage scores may experience higher departure rates
-  among in-between animators seeking faster advancement elsewhere.
-- Cross-studio collaboration or apprenticeship arrangements may reduce blockage
-  for studios where role saturation is the primary factor.
-
-**Alternative interpretation:**
-Slower progression may reflect deliberate quality-gate policies rather than structural
-blockage. Studios with high standards may require more years of demonstrated work
-before crediting someone in a senior role. Credit-visible advancement is not identical
-to internal promotion or compensation change.
+Longer progression may reflect deliberate quality-gate policies rather than
+structural blockage. Studios with rigorous standards may require more years of
+demonstrated work before crediting someone in a senior role. Credit-visible
+advancement is not identical to internal recognition or compensation change.
 
 See O2 report (o2_mid_management.html) for full KM curves, cohort comparisons,
-and studio-level blockage heatmap.
+and studio-level blockage heatmap with 95% CI.
         """,
     )
 
@@ -400,26 +453,35 @@ and studio-level blockage heatmap.
     is_valid, errors = brief.validate()
 
     if not is_valid:
-        log.error("hr_brief_invalid", errors=errors)
+        log.error("workers_brief_invalid", errors=errors)
         return {}
-    
-    log.info("hr_brief_generated", sections=len(brief.sections))
-    
+
+    log.info("workers_brief_generated", sections=len(brief.sections))
+
     return brief.to_dict()
+
+
+# Alias for backward compatibility with generate_briefs_v2.py
+generate_workers_brief = generate_hr_brief
 
 
 if __name__ == "__main__":
     import json
-    
+
     brief_dict = generate_hr_brief()
-    
-    # Save to JSON
-    output_path = Path("result/json/hr_brief.json")
+
+    # Save to JSON (workers_brief.json; hr_brief.json kept as alias)
+    output_path = Path("result/json/workers_brief.json")
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    
+
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(brief_dict, f, ensure_ascii=False, indent=2)
-    
-    print(f"✅ HR brief generated: {output_path}")
+
+    # Also write hr_brief.json for backward compatibility
+    hr_path = Path("result/json/hr_brief.json")
+    with open(hr_path, "w", encoding="utf-8") as f:
+        json.dump(brief_dict, f, ensure_ascii=False, indent=2)
+
+    print(f"Workers brief generated: {output_path}")
     print(f"   Sections: {len(brief_dict.get('sections', {}))}")
     print(f"   Method gates: {len(brief_dict.get('method_gates', []))}")

@@ -28,17 +28,23 @@ BRIEFS = {
     "policy": {
         "generator": generate_policy_brief,
         "filename": "policy_brief.json",
-        "description": "Industry policy brief for policymakers",
+        "description": "Industry policy brief for policymakers (labor-first framing)",
+    },
+    # Primary key is "workers"; "hr" is kept as a backward-compatible alias.
+    "workers": {
+        "generator": generate_hr_brief,
+        "filename": "workers_brief.json",
+        "description": "Workers Brief for individual animators and labor union representatives",
     },
     "hr": {
         "generator": generate_hr_brief,
         "filename": "hr_brief.json",
-        "description": "Studio operations & HR brief for managers",
+        "description": "Workers Brief (legacy hr alias — same content as workers_brief.json)",
     },
     "business": {
         "generator": generate_business_brief,
         "filename": "business_brief.json",
-        "description": "Market opportunities & innovation brief for investors",
+        "description": "Industry structure observation brief (labor-aware framing)",
     },
 }
 
@@ -144,10 +150,12 @@ def validate_briefs() -> tuple[bool, dict]:
                 errors.append("Missing method gates")
             
             # Validate sections
+            # stance_and_disclaimer is a metadata section; interpretation is not required.
+            _interpretation_exempt = {"stance_and_disclaimer"}
             for section_id, section in brief_dict.get("sections", {}).items():
                 if not section.get("findings"):
                     errors.append(f"Section '{section_id}' missing findings")
-                if not section.get("interpretation"):
+                if section_id not in _interpretation_exempt and not section.get("interpretation"):
                     errors.append(f"Section '{section_id}' missing interpretation")
             
             if errors:

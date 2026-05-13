@@ -16,16 +16,24 @@
 
 ---
 
-## Audience key
+## Audience key (labor-first 改訂 — 2026-05-13)
 
-| Code | Meaning | Target reader |
-|------|---------|---------------|
-| `common` | 全 audience 共通基盤 | 全員 |
-| `policy` | 政策提言 Brief | 政府・業界団体 |
-| `hr` | 人材評価 / 現場効率化 Brief | スタジオ HR・制作デスク |
-| `biz` | 新たな試み提案 Brief | 投資家・新規企画者 |
-| `technical_appendix` | 手法・診断レポート | 監査・研究者 |
-| `archived` | `archived/` へ退避 | — |
+| Code | Meaning | Target reader | Brief file |
+|------|---------|---------------|------------|
+| `common` | 全 audience 共通基盤 | 全員 | — |
+| `policy` | 政策提言 Brief (labor-first 強化) | 政府・業界団体・議連スタッフ | `policy_brief.json` |
+| `hr` → `workers` | **Workers Brief** (labor-first リブランド) | 個別アニメーター・JAniCA 等労組 HR | `workers_brief.json` (旧 `hr_brief.json` は alias) |
+| `biz` | 業界構造観察 Brief (労働者寄り framing) | 労働構造観察者・労組戦略担当 | `business_brief.json` |
+| `technical_appendix` | 手法・診断レポート | 監査・研究者 | — |
+| `archived` | `archived/` へ退避 | — | — |
+
+### Brief 改訂概要 (34_report_rebuild/02_brief_restructure — 2026-05-13)
+
+| Brief | 変更前 | 変更後 |
+|-------|-------|-------|
+| Policy Brief | 政策担当向け長文・学術寄り | labor-first STANCE 段落追加、各 finding に caveat block、政策推奨に根拠 CI 明示 |
+| HR Brief | スタジオ HR 向け (採用・評価支援) | **Workers Brief** にリブランド。労働者・労組 HR 向け。採用判断語句を削除、自分の構造的位置・コホート比較・クレジット公表率・報酬交渉 fact として再構成 |
+| Business Brief | 投資家向け (過小評価人材発掘・提携推奨) | 労働者寄り業界構造観察に転換。各 finding に「労働構造への影響」追記、採用ターゲット語句を削除、opportunity_residual を採用提案ではなく機会格差検出として再記述 |
 
 ---
 

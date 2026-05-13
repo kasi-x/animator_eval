@@ -18,9 +18,11 @@ import pytest
 # fmt_num
 # ---------------------------------------------------------------------------
 
+
 class TestFmtNum:
     def _fmt(self, n):
         from scripts.report_generators.helpers import fmt_num
+
         return fmt_num(n)
 
     def test_integer_formatted_with_commas(self):
@@ -52,9 +54,11 @@ class TestFmtNum:
 # name_clusters_by_rank
 # ---------------------------------------------------------------------------
 
+
 class TestNameClustersByRank:
     def _run(self, centers, feat_specs):
         from scripts.report_generators.helpers import name_clusters_by_rank
+
         return name_clusters_by_rank(centers, feat_specs)
 
     def test_two_clusters_single_feature(self):
@@ -102,9 +106,11 @@ class TestNameClustersByRank:
 # name_clusters_distinctive
 # ---------------------------------------------------------------------------
 
+
 class TestNameClustersDistinctive:
     def _run(self, centers, feature_names):
         from scripts.report_generators.helpers import name_clusters_distinctive
+
         return name_clusters_distinctive(centers, feature_names)
 
     def test_returns_one_name_per_cluster(self):
@@ -114,11 +120,13 @@ class TestNameClustersDistinctive:
 
     def test_no_duplicate_names(self):
         """Name collision resolution appends suffix."""
-        centers = np.array([
-            [1.0, 0.0],
-            [0.9, 0.1],
-            [0.0, 1.0],
-        ])
+        centers = np.array(
+            [
+                [1.0, 0.0],
+                [0.9, 0.1],
+                [0.0, 1.0],
+            ]
+        )
         result = self._run(centers, ["birank", "patronage"])
         names = list(result.values())
         assert len(names) == len(set(names))
@@ -128,9 +136,11 @@ class TestNameClustersDistinctive:
 # adaptive_height
 # ---------------------------------------------------------------------------
 
+
 class TestAdaptiveHeight:
     def _h(self, n, **kw):
         from scripts.report_generators.helpers import adaptive_height
+
         return adaptive_height(n, **kw)
 
     def test_zero_items_returns_base(self):
@@ -147,6 +157,7 @@ class TestAdaptiveHeight:
 # ---------------------------------------------------------------------------
 # insert_lineage (DB write)
 # ---------------------------------------------------------------------------
+
 
 class TestInsertLineage:
     @pytest.fixture
@@ -171,6 +182,7 @@ class TestInsertLineage:
 
     def _insert(self, conn, version="v1.0"):
         from scripts.report_generators.helpers import insert_lineage
+
         insert_lineage(
             conn,
             table_name="meta_test",
@@ -200,6 +212,7 @@ class TestInsertLineage:
 
     def test_inputs_hash_auto_generated_when_none(self, conn):
         from scripts.report_generators.helpers import insert_lineage
+
         insert_lineage(
             conn,
             table_name="meta_autohash",
@@ -217,6 +230,7 @@ class TestInsertLineage:
     def test_skips_gracefully_when_no_lineage_table(self, tmp_path):
         conn = sqlite3.connect(str(tmp_path / "empty.db"))
         from scripts.report_generators.helpers import insert_lineage
+
         # Should not raise even when no lineage table exists
         insert_lineage(
             conn,
@@ -232,9 +246,11 @@ class TestInsertLineage:
 # subsample_for_scatter
 # ---------------------------------------------------------------------------
 
+
 class TestSubsampleForScatter:
     def _sub(self, data, max_n, seed=42):
         from scripts.report_generators.helpers import subsample_for_scatter
+
         return subsample_for_scatter(data, max_n=max_n, seed=seed)
 
     def test_returns_all_when_under_limit(self):
@@ -264,9 +280,11 @@ class TestSubsampleForScatter:
 # capped_categories
 # ---------------------------------------------------------------------------
 
+
 class TestCappedCategories:
     def _cap(self, counter, max_cats):
         from scripts.report_generators.helpers import capped_categories
+
         return capped_categories(counter, max_cats=max_cats)
 
     def test_returns_as_is_when_under_limit(self):
@@ -295,9 +313,11 @@ class TestCappedCategories:
 # safe_nested
 # ---------------------------------------------------------------------------
 
+
 class TestSafeNested:
     def _sn(self, d, *keys, default=0.0):
         from scripts.report_generators.helpers import safe_nested
+
         return safe_nested(d, *keys, default=default)
 
     def test_simple_key_exists(self):
@@ -323,9 +343,11 @@ class TestSafeNested:
 # data_driven_badges / badge_class
 # ---------------------------------------------------------------------------
 
+
 class TestDataDrivenBadges:
     def _badges(self, values):
         from scripts.report_generators.helpers import data_driven_badges
+
         return data_driven_badges(values)
 
     def test_returns_p25_p75(self):
@@ -346,6 +368,7 @@ class TestDataDrivenBadges:
 class TestBadgeClass:
     def _bc(self, value, low, high):
         from scripts.report_generators.helpers import badge_class
+
         return badge_class(value, low, high)
 
     def test_high_badge(self):
@@ -368,10 +391,12 @@ class TestBadgeClass:
 # add_distribution_stats
 # ---------------------------------------------------------------------------
 
+
 class TestAddDistributionStats:
     def test_adds_vlines_to_figure(self):
         import plotly.graph_objects as go
         from scripts.report_generators.helpers import add_distribution_stats
+
         fig = go.Figure(go.Histogram(x=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]))
         result = add_distribution_stats(fig, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
         assert result is fig  # returns same figure
@@ -379,6 +404,7 @@ class TestAddDistributionStats:
     def test_empty_values_returns_figure_unchanged(self):
         import plotly.graph_objects as go
         from scripts.report_generators.helpers import add_distribution_stats
+
         fig = go.Figure()
         result = add_distribution_stats(fig, [])
         assert result is fig
@@ -386,6 +412,7 @@ class TestAddDistributionStats:
     def test_none_values_filtered_out(self):
         import plotly.graph_objects as go
         from scripts.report_generators.helpers import add_distribution_stats
+
         fig = go.Figure()
         # Should not raise on None-containing values
         add_distribution_stats(fig, [1.0, None, 2.0, None, 3.0])
