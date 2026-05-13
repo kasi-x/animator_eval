@@ -78,8 +78,10 @@
 | growth_scores.py | GrowthScoresReport | 成長スコア分析 | keep | — | キャリア軌跡 |
 | structural_career.py | StructuralCareerReport | 構造的キャリア分析 | merge | growth_scores | 吸収 |
 | career_dynamics.py | CareerDynamicsReport | キャリアダイナミクス | merge | growth_scores | 統合 |
+| studio_pipeline.py | StudioPipelineReport | スタジオ育成パイプライン構造 | **new** | — | TASK_CARDS/26_industry_structure/03; 若手θ成長・中堅継続率・集中度・bus factor |
+| career_visibility_warning.py | CareerVisibilityWarningReport | 翌年クレジット可視性喪失 早期警告 | **new** | — | TASK_CARDS/25_compensation_fairness/03; LightGBM+isotonic, temporal holdout AUC gate, subgroup fairness |
 
-> 統合後 hr = **6 本** (上限)。
+> 統合後 hr = **8 本**（25/03 career_visibility_warning 追加）。
 
 ---
 
@@ -133,6 +135,28 @@
 | o4_foreign_talent.py | O4ForeignTalentReport | 外国籍クレジット分析 | policy | active |
 | o7_historical.py | O7HistoricalRestorationReport | 歴史的クレジット記録復元分析 | technical_appendix | active (2026-05-02) |
 | o8_soft_power.py | O8SoftPowerReport | ソフトパワー輸出分析 | biz | active |
+
+---
+
+## 26_industry_structure — 国際共同制作 edge 構造
+
+### structure_international — 国際共同制作 edge 構造分析 (完了 2026-05-13)
+
+- **Card**: `TASK_CARDS/26_industry_structure/02_international_collab.md`
+- **Method**: nationality_resolver (country_of_origin high → name_zh/ko medium → unknown low)
+  + 役職別海外比率時系列 (委託系 vs クリエイティブ主導)
+  + JP–CN / JP–KR / JP–SE_ASIA 協業 edge 密度 (co-credit edges per anime per year)
+  + 委託系役職 → クリエイティブ主導役職 移行率 (国籍グループ別)
+  + Louvain community detection (resolution=1.0, seed=42)
+  + null model permutation test: 非 JP ノード group ラベルをランダム置換 (n_rounds=199, seed=42)
+- **Framing**: 「海外協業比率」「役職別海外配分」のみ使用。「空洞化」「下請け」禁止。
+- **CJK homonym guard**: 19-02 cluster fix (commit f0d4547) 適用済。
+- **Honest gaps**: credits 漏れバイアス (ANN/AniList 海外スタジオ under-credit)、表記ゆれ残存リスク。
+- **Low coverage stop-if**: overseas person < 5 → low_coverage_warning フラグ、p_value 信頼性警告。
+- **Hard constraints**: H1 遵守 (anime.score 不使用)、H2 遵守 (lint_vocab clean)、H3 遵守 (entity_resolution 不変)
+- **meta_lineage_table**: `meta_structure_international`
+- **Analysis module**: `src/analysis/network/international_collab.py`
+- **Tests**: `tests/analysis/network/test_international_collab.py` + `tests/reports/test_structure_international.py`
 
 ---
 
