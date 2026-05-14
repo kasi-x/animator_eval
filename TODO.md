@@ -1,6 +1,6 @@
 # TODO.md — 未完了作業の一元管理
 
-作成日: 2026-04-22 / 最終更新: 2026-05-15 (4 カード並列消化: 27/01, 15/01, 15/03, 25/02 完了 → DONE.md)
+作成日: 2026-04-22 / 最終更新: 2026-05-15 (8 カード並列消化完了: 27/01-03, 28/01, 25/02-03, 15/01, 15/03 → DONE.md)
 
 未完了項目のみ。完了済みは `DONE.md`、設計原則は `CLAUDE.md`。
 
@@ -22,7 +22,7 @@
 | 🟠 High | 補償公正の核 | DiD 移籍 / opportunity null model / 可視性喪失 holdout / Oaxaca 分解 → `TASK_CARDS/25_compensation_fairness/` (4 cards) |
 | 🟡 Medium | 業界構造観察 | 制作委員会 centrality / 国際協業 / studio pipeline strength → `TASK_CARDS/26_industry_structure/` (3 cards) |
 | 🟠 High | 方法論強化 | missingness 開示 / career typology / IV XAI → `TASK_CARDS/27_methodology/` (3 cards、`01_missingness_disclosure` は基盤) |
-| 🟡 Medium | 品質監視 | entity resolution drift 週次 snapshot → `TASK_CARDS/28_monitoring/` (1 card) |
+| ✅ Done | 品質監視 | entity resolution drift 週次 snapshot (28/01 完了 2026-05-15、commit `9e6ad3e`) |
 | 🟠 High | 法的・倫理 | full public + opt-out 法務 review / publication ethics / opt-out 機構 → `TASK_CARDS/29_legal/` (3 cards) |
 | 🟡 Medium | ステークホルダー | JAniCA outreach / 個別 SNS / press kit → `TASK_CARDS/30_stakeholder/` (3 cards) |
 | 🟠 High | Business (startup) | startup 形態整理 / B2C 設計 / funding plan → `TASK_CARDS/31_business/` (3 cards) |
@@ -212,7 +212,7 @@ analytical CI / null model / holdout の method gate を満たした **causal ev
 |------|------|------|
 | `01_did_studio_transfer` | スタジオ移籍 DiD: theta_i / opportunity 因果効果 (event-study 含) | publication / 政策 |
 | `02_opportunity_residual_null` | ✅ 完了 (2026-05-15) panel + analytical CI + permutation null | business / 政策 |
-| `03_visibility_loss_holdout` | 翌年クレジット可視性喪失 早期警告 (LightGBM + temporal holdout + calibration) | business (HR) |
+| `03_visibility_loss_holdout` | ✅ 完了 (2026-05-15、commit `1905083`) LightGBM + ECE 0.065 + AUC 0.822、isotonic calibration、20 tests | business (HR) |
 | `04_pay_equity_decomp` | Oaxaca-Blinder 分解 (gender / cohort / 所属): endowment vs structural | publication / 政策 |
 
 依存: `04` は `§15` gender 充足 + `01` 完了が望ましい。
@@ -240,8 +240,8 @@ honest reporting / 説明可能性 / 軌跡分類。
 | Card | 内容 | 経路 |
 |------|------|------|
 | `01_missingness_disclosure` | ✅ 完了 (2026-05-15) coverage 行列 + caveat block + base hook | 全経路 (基盤) |
-| `02_career_trajectory_typology` | 役職遷移 sequence の Optimal Matching + cluster | publication / business |
-| `03_iv_xai` | IV 5 成分 + dormancy 透明分解、個人向け API 出力 | business (個人 SaaS) |
+| `02_career_trajectory_typology` | ✅ 完了 (2026-05-15、commit `ea5280f`) OM distance + Ward cluster + Markov + 24 tests | publication / business |
+| `03_iv_xai` | ✅ 完了 (2026-05-15、commit `1112510`) decompose_iv + breakdown report + 19 tests (Σ contrib_pct=100, IV 一致 ≤1e-9) | business (個人 SaaS) |
 
 `01` は他カード全ての信頼性基盤、最優先。
 
@@ -251,7 +251,7 @@ honest reporting / 説明可能性 / 軌跡分類。
 
 | Card | 内容 | 経路 |
 |------|------|------|
-| `01_entity_resolution_drift` | cross-source disagreement 週次 snapshot + CUSUM drift 検出 | 基盤 |
+| `01_entity_resolution_drift` | ✅ 完了 (2026-05-15、commit `9e6ad3e`) cross-source disagreement 週次 snapshot + CUSUM drift 検出 | 基盤 |
 
 ---
 
