@@ -371,7 +371,7 @@ class O2MidManagementReport(BaseReportGenerator):
         """Generate X Tier-A snippet for mid-management pipeline finding.
 
         Summarises the role-progression pipeline observation (動画→原画→作監→監督)
-        using structural data (KM survival, credit records). No ability framing.
+        using structural data (KM survival, credit records). No evaluative framing.
         Text is <= 280 chars.
         """
         text = (
@@ -393,7 +393,7 @@ class O2MidManagementReport(BaseReportGenerator):
 
         Covers role-progression survival analysis (KM), studio blockage scores,
         and funnel structure. Interpretation is labeled; no causal claims.
-        Body 1500-3000 chars; no ability framing; structural facts only.
+        Body 1500-3000 chars; no evaluative framing; structural facts only.
         """
         title = (
             "アニメ制作の役職進行パイプライン — "
