@@ -540,3 +540,241 @@ def test_no_anime_score_in_source() -> None:
     src = Path(__file__).parents[3] / "src" / "analysis" / "career" / "visibility_loss.py"
     text = src.read_text(encoding="utf-8")
     assert "anime.score" not in text, "anime.score must not appear in visibility_loss.py"
+
+
+# ---------------------------------------------------------------------------
+# ECE (Expected Calibration Error) unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_ece_perfect_calibration_is_zero() -> None:
+    """完全に較正済みの場合 ECE = 0 になることを確認する。
+
+    全予測 0.0 で全観測 0 → 各ビンの mean_pred == frac_pos → ECE = 0。
+    """
+    from src.analysis.career.visibility_loss import compute_expected_calibration_error
+
+    y_true = np.zeros(100, dtype=float)
+    y_score = np.zeros(100, dtype=float)
+    ece = compute_expected_calibration_error(y_true, y_score, n_bins=10)
+    assert ece == 0.0, f"Perfect calibration should yield ECE=0, got {ece}"
+
+
+def test_ece_total_miscalibration_is_one() -> None:
+    """完全な誤較正 (確信 1.0 で実測 0、または逆) で ECE = 1 に近くなる。"""
+    from src.analysis.career.visibility_loss import compute_expected_calibration_error
+
+    # 全予測 1.0 だが実測ゼロ
+    y_true = np.zeros(100, dtype=float)
+    y_score = np.ones(100, dtype=float)
+    ece = compute_expected_calibration_error(y_true, y_score, n_bins=10)
+    assert ece == pytest.approx(1.0, abs=1e-6), (
+        f"Total miscalibration should yield ECE=1, got {ece}"
+    )
+
+
+def test_ece_empty_input_is_nan() -> None:
+    """空配列に対して ECE が NaN を返すことを確認する。"""
+    import math
+    from src.analysis.career.visibility_loss import compute_expected_calibration_error
+
+    ece = compute_expected_calibration_error(
+        np.array([], dtype=float), np.array([], dtype=float)
+    )
+    assert math.isnan(ece), f"Empty input should yield NaN, got {ece}"
+
+
+def test_ece_value_in_unit_interval() -> None:
+    """任意の予測について ECE ∈ [0, 1] を確認する (確率的に強い不等式)。"""
+    from src.analysis.career.visibility_loss import compute_expected_calibration_error
+
+    rng = np.random.default_rng(42)
+    for _ in range(20):
+        n = rng.integers(50, 500)
+        y_true = (rng.random(n) > 0.5).astype(float)
+        y_score = rng.random(n)
+        ece = compute_expected_calibration_error(y_true, y_score, n_bins=10)
+        assert 0.0 <= ece <= 1.0, f"ECE must be in [0,1], got {ece}"
+
+
+# ---------------------------------------------------------------------------
+# Signal-rich synthetic data: AUC > 0.7 and ECE < 0.1
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def signal_rich_conn() -> sqlite3.Connection:
+    """信号の強い合成データ — 線形 declining パターンで visibility loss を予測可能にする。
+
+    Pattern:
+        - 約 1/3: stable (常時 active、low loss rate)
+        - 約 1/3: declining (年々 credit が減少、高 loss rate)
+        - 約 1/3: noise (random、中間 loss rate)
+    """
+    conn = sqlite3.connect(":memory:")
+    conn.executescript("""
+        CREATE TABLE persons (id TEXT PRIMARY KEY, name_en TEXT, gender TEXT);
+        CREATE TABLE anime (id TEXT PRIMARY KEY, title_ja TEXT, studio_id TEXT, year INTEGER);
+        CREATE TABLE credits (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            person_id TEXT, anime_id TEXT, role TEXT,
+            credit_year INTEGER, evidence_source TEXT DEFAULT ''
+        );
+    """)
+
+    rng = np.random.default_rng(42)
+
+    for idx in range(60):
+        yr = 2008 + (idx % 17)
+        conn.execute(
+            "INSERT INTO anime (id, title_ja, studio_id, year) VALUES (?,?,?,?)",
+            (f"a{idx}", f"Anime{idx}", f"studio_{idx % 5}", yr),
+        )
+
+    for p_idx in range(300):
+        if p_idx < 100:
+            gender = "female"
+        elif p_idx < 200:
+            gender = "male"
+        else:
+            gender = None
+        conn.execute(
+            "INSERT INTO persons (id, name_en, gender) VALUES (?,?,?)",
+            (f"p{p_idx}", f"Person{p_idx}", gender),
+        )
+
+    for p_idx in range(300):
+        pattern = p_idx % 3
+        debut_year = 2010 + (p_idx % 5)
+        for yr in range(debut_year, 2024):
+            if pattern == 0:
+                # stable: 2-3 credits/year
+                n = 2 + (yr % 2)
+                active = True
+            elif pattern == 1:
+                # declining: prob drops over time → eventually loses visibility
+                years_since = yr - debut_year
+                prob = max(0.05, 0.9 - 0.08 * years_since)
+                active = bool(rng.random() < prob)
+                n = 1 if active else 0
+            else:
+                # noise: random ~ 60% per year
+                active = bool(rng.random() < 0.6)
+                n = 1 if active else 0
+            for k in range(n if active else 0):
+                anime_id = f"a{(p_idx + yr + k) % 60}"
+                role = "in_between" if pattern == 1 or p_idx % 4 == 0 else "key_animator"
+                conn.execute(
+                    "INSERT INTO credits (person_id, anime_id, role, credit_year)"
+                    " VALUES (?,?,?,?)",
+                    (f"p{p_idx}", anime_id, role, yr),
+                )
+
+    conn.commit()
+    return conn
+
+
+def test_holdout_auc_above_threshold_and_ece_below_threshold(
+    signal_rich_conn: sqlite3.Connection,
+) -> None:
+    """信号の強い合成データで holdout AUC > 0.7 かつ ECE < 0.1 を満たすことを確認。
+
+    Method gate (TASK_CARDS/25_compensation_fairness/03):
+        - holdout AUC ≥ 0.65 で公開可。AUC > 0.7 で確実性高。
+        - ECE < 0.10 で個別予測確率の解釈が可能。
+    """
+    try:
+        import lightgbm  # noqa: F401
+    except ImportError:
+        pytest.skip("lightgbm not installed — skipping signal-rich AUC/ECE test")
+
+    from src.analysis.career.visibility_loss import (
+        build_credit_panel,
+        compute_visibility_label,
+        engineer_features,
+        enrich_panel_with_scores,
+        temporal_train_test_split,
+        train_visibility_model,
+        evaluate_model,
+    )
+
+    panel = build_credit_panel(signal_rich_conn, min_year=2010, max_year=2023)
+    enrich_panel_with_scores(panel, signal_rich_conn)
+
+    all_rows = []
+    for ref_year in range(2013, 2022):
+        labels = compute_visibility_label(panel, ref_year=ref_year)
+        if labels:
+            rows = engineer_features(panel, signal_rich_conn, labels, ref_year=ref_year)
+            all_rows.extend(rows)
+
+    assert len(all_rows) > 100, f"Insufficient feature rows: {len(all_rows)}"
+
+    train_rows, holdout_rows = temporal_train_test_split(all_rows, holdout_year=2020)
+    assert len(holdout_rows) >= 30, f"Insufficient holdout: {len(holdout_rows)}"
+
+    n_pos_holdout = sum(r.label for r in holdout_rows)
+    assert n_pos_holdout >= 3, (
+        f"Holdout must contain at least 3 positives, got {n_pos_holdout}"
+    )
+
+    model = train_visibility_model(train_rows, holdout_year=2020, rng_seed=42)
+    assert model is not None, "Model training failed"
+
+    evaluation = evaluate_model(model, holdout_rows, train_rows)
+
+    assert evaluation.auc_roc > 0.7, (
+        f"Signal-rich holdout AUC must exceed 0.7, got {evaluation.auc_roc:.3f}. "
+        f"Either the synthetic signal degraded or the model is underfitting."
+    )
+    assert evaluation.ece < 0.1, (
+        f"Calibration ECE must be < 0.10, got {evaluation.ece:.3f}. "
+        f"isotonic calibration is failing on this signal-rich panel."
+    )
+    assert evaluation.passes_gate, "Should pass the AUC ≥ 0.65 gate"
+
+
+def test_evaluation_has_ece_field(credit_conn: sqlite3.Connection) -> None:
+    """ModelEvaluation に ece フィールドが存在し、[0, 1] または NaN であることを確認。"""
+    try:
+        import lightgbm  # noqa: F401
+    except ImportError:
+        pytest.skip("lightgbm not installed")
+
+    import math
+    from src.analysis.career.visibility_loss import (
+        build_credit_panel,
+        compute_visibility_label,
+        engineer_features,
+        enrich_panel_with_scores,
+        temporal_train_test_split,
+        train_visibility_model,
+        evaluate_model,
+    )
+
+    panel = build_credit_panel(credit_conn, min_year=2010, max_year=2023)
+    enrich_panel_with_scores(panel, credit_conn)
+
+    all_rows = []
+    for ref_year in range(2015, 2022):
+        labels = compute_visibility_label(panel, ref_year=ref_year)
+        if labels:
+            rows = engineer_features(panel, credit_conn, labels, ref_year=ref_year)
+            all_rows.extend(rows)
+
+    if len(all_rows) < 60:
+        pytest.skip("Insufficient data")
+
+    train_rows, holdout_rows = temporal_train_test_split(all_rows, holdout_year=2021)
+    model = train_visibility_model(train_rows, holdout_year=2021, rng_seed=42)
+    if model is None:
+        pytest.skip("Model training failed")
+
+    evaluation = evaluate_model(model, holdout_rows, train_rows)
+    assert hasattr(evaluation, "ece"), "ModelEvaluation must expose ece"
+    assert math.isnan(evaluation.ece) or 0.0 <= evaluation.ece <= 1.0, (
+        f"ECE must be in [0,1] or NaN, got {evaluation.ece}"
+    )
+    assert hasattr(evaluation, "reliability_curve"), (
+        "ModelEvaluation must expose reliability_curve"
+    )

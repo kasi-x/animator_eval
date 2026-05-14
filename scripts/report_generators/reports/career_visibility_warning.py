@@ -33,6 +33,7 @@ _JSON_DIR = Path(__file__).parents[4] / "result" / "json"
 
 _AUC_GATE = 0.65
 _SUBGROUP_DIFF_GATE = 0.10
+_ECE_GATE = 0.10
 
 
 def _load_json(name: str) -> dict:
@@ -155,11 +156,13 @@ def _build_model_performance(sb: SectionBuilder, data: dict) -> ReportSection:
 
     lo_bin = _safe_float(data.get("calibration_lo_bin"))
     hi_bin = _safe_float(data.get("calibration_hi_bin"))
+    ece = _safe_float(data.get("ece"))
 
     findings = (
         f"<p>holdout ({holdout_year} 年度) ROC-AUC = {_fmt(auc)}"
         f"（ゲート閾値 {_AUC_GATE:.2f} 達成）、"
         f"Brier score = {_fmt(brier)}、"
+        f"ECE (10-bin) = {_fmt(ece)}（ゲート閾値 {_ECE_GATE:.2f}）、"
         f"holdout n = {n_holdout:,}（うち可視性喪失 = {n_positive:,}件）。"
         f"ベースライン AUC (last-3-year mean) = {_fmt(baseline_auc)}。</p>"
         f"<p>calibration ビン確認: 予測確率 0–0.2 区間の実測喪失率 = {_fmt(lo_bin, 2)}"
@@ -169,6 +172,7 @@ def _build_model_performance(sb: SectionBuilder, data: dict) -> ReportSection:
     kpis = [
         KPICard("holdout AUC", _fmt(auc), f"ゲート {_AUC_GATE:.2f} 達成"),
         KPICard("Brier score", _fmt(brier), "確率較正精度（低いほど良）"),
+        KPICard("ECE", _fmt(ece), f"ゲート {_ECE_GATE:.2f}（低いほど良）"),
         KPICard("holdout n", f"{n_holdout:,}", f"{holdout_year} 年度"),
         KPICard("ベースライン AUC", _fmt(baseline_auc), "last-3-year mean baseline"),
     ]

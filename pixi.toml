@@ -125,6 +125,8 @@ plotly = ">=6.5.2,<7"
 scipy = "*"
 scikit-learn = ">=1.0,<1.7"
 shap = ">=0.44,<0.49"
+# 翌年クレジット可視性喪失 予測モデル — see src/analysis/career/visibility_loss.py
+lightgbm = ">=4.0,<5.0"
 
 [feature.analysis.pypi-dependencies]
 openskill = "*"

@@ -14,15 +14,16 @@ Model: LightGBM binary classifier + isotonic calibration。
 Validation: year split (train ≤ T-1, holdout year = T)。
 
 Public API:
-    build_credit_panel()         : person × year 集計
-    compute_visibility_label()   : label 付与
-    engineer_features()          : feature matrix 構築
-    temporal_train_test_split()  : year-split でデータを分割
-    train_visibility_model()     : LightGBM + isotonic 学習
-    predict_visibility_loss()    : holdout 予測
-    evaluate_model()             : AUC / Brier / calibration 集計
-    check_subgroup_fairness()    : subgroup AUC 差
-    run_leakage_check()          : holdout 行に未来 feature がないか検証
+    build_credit_panel()                      : person × year 集計
+    compute_visibility_label()                : label 付与
+    engineer_features()                       : feature matrix 構築
+    temporal_train_test_split()               : year-split でデータを分割
+    train_visibility_model()                  : LightGBM + isotonic 学習
+    predict_visibility_loss()                 : holdout 予測
+    evaluate_model()                          : AUC / Brier / ECE 集計
+    compute_expected_calibration_error()      : ECE (10-bin) 計算
+    check_subgroup_fairness()                 : subgroup AUC 差
+    run_leakage_check()                       : holdout 行に未来 feature がないか検証
 """
 
 from __future__ import annotations
@@ -131,6 +132,7 @@ class ModelEvaluation:
     Fields:
         auc_roc: holdout ROC-AUC。
         brier_score: Brier score (低いほど良)。
+        ece: Expected Calibration Error (10 等分ビン、低いほど良)。
         n_holdout: holdout サンプル数。
         n_positive: holdout 陽性数 (visibility_loss=1)。
         calibration_lo_bin: 低確率ビンの実測率 (0-0.2 平均)。
@@ -139,10 +141,12 @@ class ModelEvaluation:
         passes_gate: AUC ≥ AUC_GATE かつ n_holdout ≥ MIN_HOLDOUT_N。
         subgroup_auc: subgroup → AUC の辞書。
         subgroup_max_diff: subgroup 間 AUC 最大差。
+        reliability_curve: (bin_center, mean_pred, frac_positive, count) のリスト。
     """
 
     auc_roc: float
     brier_score: float
+    ece: float
     n_holdout: int
     n_positive: int
     calibration_lo_bin: float
@@ -151,6 +155,7 @@ class ModelEvaluation:
     passes_gate: bool
     subgroup_auc: dict[str, float] = field(default_factory=dict)
     subgroup_max_diff: float = 0.0
+    reliability_curve: list[tuple[float, float, float, int]] = field(default_factory=list)
 
 
 @dataclass
@@ -878,6 +883,75 @@ def _compute_calibration_bins(
     return lo_rate, hi_rate
 
 
+def _compute_reliability_curve(
+    y_true: np.ndarray,
+    y_score: np.ndarray,
+    n_bins: int = 10,
+) -> list[tuple[float, float, float, int]]:
+    """信頼性曲線 (reliability diagram) のビンを計算する。
+
+    Args:
+        y_true: 観測 0/1 配列。
+        y_score: 予測確率配列。
+        n_bins: ビン数 (デフォルト 10、等幅)。
+
+    Returns:
+        (bin_center, mean_predicted_prob, fraction_positive, count) のリスト。
+        サンプル数 0 のビンは省略する。
+    """
+    if len(y_score) == 0:
+        return []
+    edges = np.linspace(0.0, 1.0, n_bins + 1)
+    curve: list[tuple[float, float, float, int]] = []
+    for i in range(n_bins):
+        lo, hi = edges[i], edges[i + 1]
+        if i == n_bins - 1:
+            mask = (y_score >= lo) & (y_score <= hi)
+        else:
+            mask = (y_score >= lo) & (y_score < hi)
+        count = int(mask.sum())
+        if count == 0:
+            continue
+        center = float((lo + hi) / 2.0)
+        mean_pred = float(y_score[mask].mean())
+        frac_pos = float(y_true[mask].mean())
+        curve.append((center, mean_pred, frac_pos, count))
+    return curve
+
+
+def compute_expected_calibration_error(
+    y_true: np.ndarray,
+    y_score: np.ndarray,
+    n_bins: int = 10,
+) -> float:
+    """Expected Calibration Error (ECE) を計算する。
+
+    ECE = Σ_b (n_b / N) · | mean_pred_b - frac_pos_b |
+
+    等幅 n_bins 個のビンで、ビン内の平均予測確率と実測陽性率の差の
+    サンプル重み付き平均を取る。値域は [0, 1]、低いほど較正が良い。
+
+    Args:
+        y_true: 観測 0/1 配列。
+        y_score: 予測確率配列 [0, 1]。
+        n_bins: ビン数 (デフォルト 10)。
+
+    Returns:
+        ECE 値。サンプル無しの場合は NaN。
+    """
+    if len(y_score) == 0:
+        return float("nan")
+    curve = _compute_reliability_curve(y_true, y_score, n_bins=n_bins)
+    if not curve:
+        return float("nan")
+    n_total = float(len(y_score))
+    ece = sum(
+        (count / n_total) * abs(mean_pred - frac_pos)
+        for _center, mean_pred, frac_pos, count in curve
+    )
+    return float(ece)
+
+
 def _last3year_mean_baseline(
     train_rows: list[FeatureRow],
     holdout_rows: list[FeatureRow],
@@ -927,6 +1001,7 @@ def evaluate_model(
         return ModelEvaluation(
             auc_roc=float("nan"),
             brier_score=float("nan"),
+            ece=float("nan"),
             n_holdout=0,
             n_positive=0,
             calibration_lo_bin=float("nan"),
@@ -940,7 +1015,9 @@ def evaluate_model(
 
     auc = _compute_auc(y_true, y_score)
     brier = _compute_brier(y_true, y_score)
+    ece = compute_expected_calibration_error(y_true, y_score)
     lo_bin, hi_bin = _compute_calibration_bins(y_true, y_score)
+    reliability = _compute_reliability_curve(y_true, y_score)
     baseline_auc = _last3year_mean_baseline(train_rows, holdout_rows)
 
     n_holdout = len(holdout_rows)
@@ -959,6 +1036,7 @@ def evaluate_model(
         "model_evaluated",
         auc_roc=auc,
         brier_score=brier,
+        ece=ece,
         n_holdout=n_holdout,
         n_positive=n_positive,
         baseline_auc=baseline_auc,
@@ -968,6 +1046,7 @@ def evaluate_model(
     return ModelEvaluation(
         auc_roc=auc,
         brier_score=brier,
+        ece=ece,
         n_holdout=n_holdout,
         n_positive=n_positive,
         calibration_lo_bin=lo_bin,
@@ -976,6 +1055,7 @@ def evaluate_model(
         passes_gate=passes,
         subgroup_auc=subgroup_auc,
         subgroup_max_diff=max_diff,
+        reliability_curve=reliability,
     )
 
 
