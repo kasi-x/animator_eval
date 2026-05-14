@@ -81,6 +81,8 @@ from .career_typology import CareerTypologyReport
 from .structure_international import StructureInternationalReport
 # Card 25-01: studio transfer DiD causal analysis
 from .causal_studio_transfer import CausalStudioTransferReport
+# Card 34-04: B2C individual person view (labor-first)
+from .individual_view import IndividualViewReport
 
 #: All v2 report classes, in generation order
 #:
@@ -142,6 +144,7 @@ V2_REPORT_CLASSES = [
     TemporalForesightReport,
     BridgeAnalysisReport,
     CausalStudioTransferReport,
+    IndividualViewReport,
 ]
 
 __all__ = [
@@ -193,5 +196,6 @@ __all__ = [
     "CareerTypologyReport",
     "StructureInternationalReport",
     "CausalStudioTransferReport",
+    "IndividualViewReport",
     "V2_REPORT_CLASSES",
 ]
