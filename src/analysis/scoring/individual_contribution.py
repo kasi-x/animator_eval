@@ -21,6 +21,7 @@ import structlog
 
 from src.analysis.scoring.opportunity import (
     OpportunityResidualResult,
+    compute_opportunity_residual_from_credits,
     compute_opportunity_residual_panel,
 )
 from src.runtime.models import AnimeAnalysis as Anime, Credit
@@ -837,10 +838,33 @@ def compute_individual_profiles(
     # 1. peer comparison percentile (+ cluster-based)
     peer_data = compute_peer_percentile(features, community_map=community_map)
 
-    # 2. opportunity-controlled residual with analytical CI + permutation null
-    opp_results, r_squared = compute_opportunity_residual_full(
-        features, theta_map=theta_map, n_permutations=opportunity_n_permutations
+    # 2. opportunity-controlled residual with analytical CI + permutation null.
+    #    Prefer the true per-(person, year) panel when credits + anime_map carry
+    #    year information; this is the canonical spec (CLAUDE.md H4). Fall back
+    #    to the cross-sectional features-only panel only when year info is
+    #    sparse (insufficient panel).
+    opp_results_panel, panel_summary = compute_opportunity_residual_from_credits(
+        credits,
+        anime_map,
+        theta_map=theta_map,
+        n_permutations=opportunity_n_permutations,
     )
+    if panel_summary.r_squared is not None and panel_summary.n_panel_obs > 0:
+        # Merge: persons in input features without panel rows get a None result
+        opp_results = {
+            pid: opp_results_panel.get(
+                pid,
+                OpportunityResidualResult(
+                    residual=None, se=None, ci_lower=None, ci_upper=None, n_years=0
+                ),
+            )
+            for pid in features
+        }
+        r_squared = panel_summary.r_squared
+    else:
+        opp_results, r_squared = compute_opportunity_residual_full(
+            features, theta_map=theta_map, n_permutations=opportunity_n_permutations
+        )
 
     # 3. consistency score (can use AKM residuals)
     consistency_scores = compute_consistency(
@@ -867,7 +891,8 @@ def compute_individual_profiles(
             1 for p in profiles.values() if p["opportunity_residual"] is not None
         ),
         with_ci=sum(
-            1 for p in profiles.values()
+            1
+            for p in profiles.values()
             if p.get("opportunity_residual_ci_lower") is not None
         ),
         with_consistency=sum(

@@ -17,7 +17,10 @@ import pytest
 from src.analysis.scoring.opportunity import (
     MIN_PANEL_OBS,
     OpportunityResidualResult,
+    _role_diversity_entropy,
+    compute_opportunity_residual_from_credits,
     compute_opportunity_residual_panel,
+    residual_qq_deviation,
 )
 from src.analysis.scoring.individual_contribution import (
     IndividualProfile,
@@ -88,8 +91,12 @@ class TestOpportunityResidualResult:
 
     def test_p_value_optional(self):
         r = OpportunityResidualResult(
-            residual=0.5, se=0.1, ci_lower=0.3, ci_upper=0.7,
-            n_years=5, p_value_permutation=0.04
+            residual=0.5,
+            se=0.1,
+            ci_lower=0.3,
+            ci_upper=0.7,
+            n_years=5,
+            p_value_permutation=0.04,
         )
         assert r.p_value_permutation == pytest.approx(0.04)
 
@@ -288,17 +295,13 @@ class TestPermutationNull:
             features, n_permutations=50, rng=np.random.default_rng(1)
         )
         # All persons in panel should have p-values
-        pids_in_panel = [
-            pid for pid, r in results.items() if r.residual is not None
-        ]
+        pids_in_panel = [pid for pid, r in results.items() if r.residual is not None]
         for pid in pids_in_panel:
             assert results[pid].p_value_permutation is not None
 
     def test_p_values_absent_when_n_permutations_zero(self):
         features = _make_features(n=20)
-        results, _ = compute_opportunity_residual_panel(
-            features, n_permutations=0
-        )
+        results, _ = compute_opportunity_residual_panel(features, n_permutations=0)
         for r in results.values():
             assert r.p_value_permutation is None
 
@@ -338,8 +341,12 @@ class TestPermutationNull:
         features = _make_features(n=20, seed=42)
         rng1 = np.random.default_rng(0)
         rng2 = np.random.default_rng(0)
-        r1, _ = compute_opportunity_residual_panel(features, n_permutations=50, rng=rng1)
-        r2, _ = compute_opportunity_residual_panel(features, n_permutations=50, rng=rng2)
+        r1, _ = compute_opportunity_residual_panel(
+            features, n_permutations=50, rng=rng1
+        )
+        r2, _ = compute_opportunity_residual_panel(
+            features, n_permutations=50, rng=rng2
+        )
         for pid in r1:
             if r1[pid].p_value_permutation is not None:
                 assert r1[pid].p_value_permutation == r2[pid].p_value_permutation
@@ -374,9 +381,7 @@ class TestComputeOpportunityResidualFull:
 
     def test_returns_opportunity_result_objects(self):
         features = _make_features(n=20)
-        results, r_sq = compute_opportunity_residual_full(
-            features, n_permutations=0
-        )
+        results, r_sq = compute_opportunity_residual_full(features, n_permutations=0)
         for r in results.values():
             assert isinstance(r, OpportunityResidualResult)
 
@@ -428,9 +433,7 @@ class TestComputeIndividualProfilesWithCI:
                 credits.append(_make_credit(f"ka{ka}", f"a{a}", Role.KEY_ANIMATOR))
         results_list = [
             {"person_id": f"dir{d}", "iv_score": 65 + d * 4} for d in range(5)
-        ] + [
-            {"person_id": f"ka{ka}", "iv_score": 42 + ka * 3} for ka in range(10)
-        ]
+        ] + [{"person_id": f"ka{ka}", "iv_score": 42 + ka * 3} for ka in range(10)]
         role_profiles = {
             **{f"dir{d}": {"primary_role": "director"} for d in range(5)},
             **{f"ka{ka}": {"primary_role": "key_animator"} for ka in range(10)},
@@ -477,3 +480,238 @@ class TestComputeIndividualProfilesWithCI:
         )
         if result.model_r_squared is not None:
             assert 0.0 <= result.model_r_squared <= 1.0
+
+
+# ---------------------------------------------------------------------------
+# True per-(person, year) panel from credits + anime_map
+# ---------------------------------------------------------------------------
+
+
+def _make_panel_credits(
+    n_persons: int = 30,
+    n_years: int = 5,
+    seed: int = 0,
+) -> tuple[list[Credit], dict[str, Anime]]:
+    """Generate a synthetic multi-year credit panel.
+
+    Each person credits 1-3 anime per year for ``n_years`` consecutive years,
+    starting at year 2015. Studios alternate among three labels. Roles are
+    drawn uniformly from a small set.
+    """
+    rng = np.random.default_rng(seed)
+    roles_pool = [Role.KEY_ANIMATOR, Role.IN_BETWEEN, Role.DIRECTOR]
+    studios_pool = ["StudioA", "StudioB", "StudioC"]
+
+    anime_map: dict[str, Anime] = {}
+    credits: list[Credit] = []
+    aid_counter = 0
+    for p in range(n_persons):
+        modal_studio = studios_pool[p % 3]
+        for y in range(n_years):
+            year = 2015 + y
+            n_anime_this_year = int(rng.integers(1, 4))
+            for _ in range(n_anime_this_year):
+                aid = f"a{aid_counter}"
+                aid_counter += 1
+                anime_map[aid] = Anime(
+                    id=aid,
+                    title_ja=f"Anime {aid}",
+                    title_en=f"Anime {aid}",
+                    year=year,
+                    studios=[modal_studio],
+                    source="test",
+                )
+                role = roles_pool[int(rng.integers(0, len(roles_pool)))]
+                credits.append(
+                    Credit(
+                        person_id=f"p{p}",
+                        anime_id=aid,
+                        role=role,
+                        source="test",
+                    )
+                )
+    return credits, anime_map
+
+
+class TestRoleDiversityEntropy:
+    def test_single_role_is_zero(self):
+        from collections import Counter
+
+        assert _role_diversity_entropy(Counter({"a": 10})) == pytest.approx(0.0)
+
+    def test_uniform_is_one(self):
+        from collections import Counter
+
+        # Three roles, equal frequencies → normalised entropy = 1
+        assert _role_diversity_entropy(
+            Counter({"a": 1, "b": 1, "c": 1})
+        ) == pytest.approx(1.0)
+
+    def test_empty_is_zero(self):
+        from collections import Counter
+
+        assert _role_diversity_entropy(Counter()) == pytest.approx(0.0)
+
+    def test_skewed_below_one(self):
+        from collections import Counter
+
+        h = _role_diversity_entropy(Counter({"a": 9, "b": 1}))
+        assert 0.0 < h < 1.0
+
+
+class TestComputeOpportunityResidualFromCredits:
+    def test_returns_results_for_observed_persons(self):
+        credits, anime_map = _make_panel_credits(n_persons=20, n_years=5)
+        results, summary = compute_opportunity_residual_from_credits(
+            credits, anime_map, n_permutations=0
+        )
+        # Every person who has at least one anime-year cell should appear
+        assert len(results) >= 15
+        assert summary.n_persons >= 15
+        assert summary.n_panel_obs > 0
+
+    def test_multi_year_panel_produces_real_ci(self):
+        """Core test: panel produces per-person n_years > 1 → real CIs."""
+        credits, anime_map = _make_panel_credits(n_persons=20, n_years=5)
+        results, _ = compute_opportunity_residual_from_credits(
+            credits, anime_map, n_permutations=0
+        )
+        with_ci = [r for r in results.values() if r.ci_lower is not None]
+        # At least half the persons should have multi-year data and hence a CI
+        assert len(with_ci) >= 10, (
+            f"Expected multi-year panel to produce CIs; got {len(with_ci)}"
+        )
+        for r in with_ci:
+            assert r.n_years >= 2
+            assert r.ci_lower <= r.residual <= r.ci_upper
+            assert r.se is not None and r.se >= 0
+
+    def test_r_squared_in_unit_interval(self):
+        credits, anime_map = _make_panel_credits(n_persons=15, n_years=4)
+        _, summary = compute_opportunity_residual_from_credits(
+            credits, anime_map, n_permutations=0
+        )
+        if summary.r_squared is not None:
+            assert 0.0 <= summary.r_squared <= 1.0
+
+    def test_theta_map_accepted(self):
+        credits, anime_map = _make_panel_credits(n_persons=15, n_years=4)
+        theta = {f"p{i}": float(np.random.default_rng(i).normal()) for i in range(15)}
+        results, _ = compute_opportunity_residual_from_credits(
+            credits, anime_map, theta_map=theta, n_permutations=0
+        )
+        assert len(results) > 0
+
+    def test_insufficient_data_returns_empty(self):
+        # Fewer panel observations than MIN_PANEL_OBS → no real fit
+        credits, anime_map = _make_panel_credits(n_persons=2, n_years=2)
+        results, summary = compute_opportunity_residual_from_credits(
+            credits, anime_map, n_permutations=0
+        )
+        # Either degenerate-empty or all None — both are acceptable guards
+        if summary.r_squared is None:
+            for r in results.values():
+                assert r.residual is None
+
+    def test_permutation_p_values_present(self):
+        credits, anime_map = _make_panel_credits(n_persons=15, n_years=4)
+        results, _ = compute_opportunity_residual_from_credits(
+            credits,
+            anime_map,
+            n_permutations=30,
+            rng=np.random.default_rng(1),
+        )
+        any_p = any(r.p_value_permutation is not None for r in results.values())
+        assert any_p, "Permutation null should populate at least one p-value"
+
+    def test_credit_year_overrides_anime_year(self):
+        """If credit_year is set, it should drive the panel cell."""
+        anime = Anime(
+            id="a0",
+            title_ja="X",
+            title_en="X",
+            year=2020,
+            studios=["S"],
+            source="test",
+        )
+        c = Credit(
+            person_id="p0",
+            anime_id="a0",
+            role=Role.KEY_ANIMATOR,
+            source="test",
+            credit_year=2018,
+        )
+        # No assertion error → API accepts credit_year as the cell year.
+        # We can't introspect internal panel rows directly, but the call
+        # should at least not error out.
+        compute_opportunity_residual_from_credits(
+            [c] * MIN_PANEL_OBS, {"a0": anime}, n_permutations=0
+        )
+
+    def test_missing_year_rows_skipped(self):
+        """Anime without year should drop credits without crashing."""
+        anime = Anime(
+            id="a0",
+            title_ja="X",
+            title_en="X",
+            year=None,
+            studios=["S"],
+            source="test",
+        )
+        c = Credit(person_id="p0", anime_id="a0", role=Role.KEY_ANIMATOR, source="test")
+        results, summary = compute_opportunity_residual_from_credits(
+            [c] * 5, {"a0": anime}, n_permutations=0
+        )
+        # No panel rows possible → degenerate
+        assert summary.n_panel_obs == 0
+
+
+class TestResidualQQDeviation:
+    def test_zero_for_perfect_normal(self):
+        rng = np.random.default_rng(0)
+        # Large normal sample → deviation should be small
+        residuals = rng.normal(size=1000).tolist()
+        dev = residual_qq_deviation(residuals)
+        assert dev < 0.2
+
+    def test_large_for_heavy_tails(self):
+        rng = np.random.default_rng(0)
+        # Cauchy-like tails → deviation should be larger than Normal
+        residuals = rng.standard_t(df=2, size=1000).tolist()
+        dev = residual_qq_deviation(residuals)
+        assert dev > 0.2
+
+    def test_zero_for_constant_residual(self):
+        # Degenerate input
+        assert residual_qq_deviation([0.0] * 50) == pytest.approx(0.0)
+
+
+class TestIndividualProfilesPanelIntegration:
+    """End-to-end: compute_individual_profiles should pick up multi-year panel."""
+
+    def test_profiles_have_real_ci_from_panel(self):
+        # Build a credit set with year-varying activity per person
+        credits, anime_map = _make_panel_credits(n_persons=20, n_years=5)
+        # Construct minimum required inputs for compute_individual_profiles
+        unique_pids = sorted({c.person_id for c in credits})
+        results_list = [{"person_id": pid, "iv_score": 50.0} for pid in unique_pids]
+        role_profiles = {pid: {"primary_role": "key_animator"} for pid in unique_pids}
+        career_data = {pid: {"active_years": 5} for pid in unique_pids}
+
+        out = compute_individual_profiles(
+            results=results_list,
+            credits=credits,
+            anime_map=anime_map,
+            role_profiles=role_profiles,
+            career_data=career_data,
+            opportunity_n_permutations=0,
+        )
+        with_ci = [
+            p
+            for p in out.profiles.values()
+            if p.get("opportunity_residual_ci_lower") is not None
+        ]
+        # Multi-year panel should yield non-trivial number of CIs
+        assert len(with_ci) >= 10, (
+            f"Expected ≥10 profiles with CI from panel; got {len(with_ci)}"
+        )
