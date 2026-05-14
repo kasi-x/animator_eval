@@ -30,7 +30,7 @@ from typing import Any
 import plotly.graph_objects as go
 import structlog
 
-from ..ci_utils import analytical_ci, bootstrap_ci, format_ci
+from ..ci_utils import analytical_ci, format_ci
 from ..helpers import insert_lineage
 from ..html_templates import plotly_div_safe
 from ..section_builder import ReportSection, SectionBuilder
@@ -272,8 +272,6 @@ class O4ForeignTalentReport(BaseReportGenerator):
             load_nationality_records,
             person_fe_by_nationality,
             studio_foreign_share,
-            GROUP_DOMESTIC,
-            GROUP_UNKNOWN,
             CONF_HIGH,
             CONF_MEDIUM,
         )
@@ -311,8 +309,6 @@ class O4ForeignTalentReport(BaseReportGenerator):
                 self._build_studio_fe_section(sb, studio_rows, coverage_note)
             ),
         ]
-
-        interpretation_html = self._build_interpretation(fe_by_group, summary)
 
         insert_lineage(
             self.conn,
@@ -809,10 +805,10 @@ class O4ForeignTalentReport(BaseReportGenerator):
         )
         if studios_with_fe:
             findings_html += (
-                f"<p>studio FE (psi_j) との相関: "
-                f"Pearson r 値と 95% CI を散布図に表示。"
-                f"正の相関は「海外人材を多く起用するスタジオが production_scale 上の "
-                f"studio FE が高い」ことを示す (因果解釈不可)。</p>"
+                "<p>studio FE (psi_j) との相関: "
+                "Pearson r 値と 95% CI を散布図に表示。"
+                "正の相関は「海外人材を多く起用するスタジオが production_scale 上の "
+                "studio FE が高い」ことを示す (因果解釈不可)。</p>"
             )
         findings_html += coverage_note
         findings_html = append_validation_warnings(findings_html, sb)
