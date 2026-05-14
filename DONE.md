@@ -106,6 +106,13 @@
 ### scraper queries/parsers 分離 (2026-04-24)
 - 他 scraper クエリ・パース関数を `src/scrapers/queries/` / `src/scrapers/parsers/` に分離
 
+### entity resolution drift 監視 (#28-01, 2026-05-15)
+- `src/analysis/quality/resolution_drift.py`: cross-source disagreement metrics (gender/hometown/birthday/role_label) + CUSUM drift detection (k=0.02, h=0.10)
+- `scripts/monitoring/weekly_resolution_snapshot.py`: cron エントリポイント。`--dry-run` / `--verbose` / `--db` / `--week-start` オプション
+- `tests/analysis/quality/test_resolution_drift.py`: 28 tests — CUSUM unit / disagreement metrics integration / snapshot persistence / E2E run_snapshot
+- mart DDL: `mart.meta_resolution_audit_weekly` (CREATE TABLE IF NOT EXISTS、PRIMARY KEY on week_start + source_pair + attribute)
+- commit 9e6ad3e
+
 ---
 
 ## スキーマ進化

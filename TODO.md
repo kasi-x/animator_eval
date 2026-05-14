@@ -48,7 +48,6 @@
 | `27/01_missingness_disclosure` | ◎ | ◎ | ◎ |
 | `27/02_career_trajectory_typology` | ◎ | ○ |  |
 | `27/03_iv_xai` | ○ | ◎ |  |
-| `28/01_entity_resolution_drift` |  | ◎ |  |
 
 推奨着手順:
 1. `27/01` (基盤、全 report の信頼性向上)
