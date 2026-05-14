@@ -65,8 +65,8 @@ SELECT
     TRY_CAST(b.episodes AS INTEGER)                                AS episodes,
     CASE b.media_type
         WHEN 'tv'    THEN 'TV'
-        WHEN 'movie' THEN 'Movie'
-        ELSE b.media_type
+        WHEN 'movie' THEN 'MOVIE'
+        ELSE UPPER(b.media_type)
     END                                                            AS format,
     TRY_CAST(b.runtime AS INTEGER)                                 AS duration,
     COALESCE(b.first_air_date, b.release_date)                     AS start_date,

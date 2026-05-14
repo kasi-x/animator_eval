@@ -106,9 +106,9 @@ SELECT
     COALESCE(b.title_japanese, b.title, '')          AS title_ja,
     COALESCE(b.title_english, b.title, '')           AS title_en,
     b.anime_year,
-    b.season,
+    UPPER(b.season)                                  AS season,
     b.ep_count                                       AS episodes,
-    b.type                                           AS format,
+    UPPER(REPLACE(b.type, ' ', '_'))                 AS format,
     NULL                                             AS duration,
     CASE
         WHEN b.aired_from IS NOT NULL AND LENGTH(TRIM(b.aired_from)) >= 10

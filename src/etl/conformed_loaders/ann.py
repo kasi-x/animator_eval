@@ -452,7 +452,12 @@ def _build_anime_insert_sql(
         _col(
             "episodes", "episodes", "TRY_CAST(t.episodes AS INTEGER)", "NULL::INTEGER"
         ),
-        _col("format", "format", "t.format", "NULL::VARCHAR"),
+        _col(
+            "format",
+            "format",
+            "UPPER(REPLACE(t.format, ' ', '_'))",
+            "NULL::VARCHAR",
+        ),
         "    NULL::INTEGER                                           AS duration",
         _col(
             "start_date",

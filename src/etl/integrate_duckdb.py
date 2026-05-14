@@ -521,6 +521,45 @@ WHERE src.person_id IS NOT NULL AND src.anime_id IS NOT NULL AND src.role IS NOT
 """
 
 
+def _date_iso_expr(col: str) -> str:
+    """SQL expression converting JSON `{year,month,day}` strings to ISO date.
+
+    Non-JSON values pass through. NULL `year` returns NULL. Missing month/day
+    are dropped (YYYY / YYYY-MM / YYYY-MM-DD).
+    """
+    return f"""
+        CASE
+            WHEN {col} LIKE '{{%' THEN
+                CASE
+                    WHEN json_extract_string({col}, '$.year') IS NULL
+                         OR json_extract_string({col}, '$.year') = 'null'
+                    THEN NULL
+                    ELSE
+                        LPAD(json_extract_string({col}, '$.year'), 4, '0')
+                        || COALESCE(
+                            CASE
+                                WHEN json_extract_string({col}, '$.month') IS NULL
+                                     OR json_extract_string({col}, '$.month') = 'null'
+                                THEN NULL
+                                ELSE '-' || LPAD(json_extract_string({col}, '$.month'), 2, '0')
+                            END
+                            || COALESCE(
+                                CASE
+                                    WHEN json_extract_string({col}, '$.day') IS NULL
+                                         OR json_extract_string({col}, '$.day') = 'null'
+                                    THEN NULL
+                                    ELSE '-' || LPAD(json_extract_string({col}, '$.day'), 2, '0')
+                                END,
+                                ''
+                            ),
+                            ''
+                        )
+                END
+            ELSE {col}
+        END
+    """
+
+
 def _build_anime_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
     """Build anime INSERT SQL with schema-dependent column mapping."""
     cols = _parquet_columns(conn, glob)
@@ -532,8 +571,8 @@ def _build_anime_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
         episodes="episodes" if "episodes" in cols else "NULL::INTEGER",
         format="UPPER(REPLACE(format, ' ', '_'))" if "format" in cols else "NULL::VARCHAR",
         duration="duration" if "duration" in cols else "NULL::INTEGER",
-        start_date="start_date" if "start_date" in cols else "NULL::VARCHAR",
-        end_date="end_date" if "end_date" in cols else "NULL::VARCHAR",
+        start_date=_date_iso_expr("start_date") if "start_date" in cols else "NULL::VARCHAR",
+        end_date=_date_iso_expr("end_date") if "end_date" in cols else "NULL::VARCHAR",
         status="status" if "status" in cols else "NULL::VARCHAR",
         source_mat="TRY_CAST(original_work_type AS VARCHAR)"
         if "original_work_type" in cols

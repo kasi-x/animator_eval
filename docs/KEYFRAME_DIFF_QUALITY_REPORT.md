@@ -201,6 +201,34 @@ missing_side 100%.
 
 ---
 
+## Verification — re-ingest 後の実測 (2026-05-15)
+
+I1 (source_mat fallback NULL 化) / I2 (season + format UPPER 正規化、mal/tmdb/ann
+loader + integrate_duckdb 共通 path) / I3 (date JSON dict → ISO 変換、keyframe
+parser + integrate_duckdb downstream patch) を適用し、`integrate()` で
+conformed schema full rebuild + 全 resolved 再 build 後の diff:
+
+| field | before | after | Δ |
+|---|---:|---:|---:|
+| anime.season | 3,124 | 0 | -100% |
+| anime.format | 700 | 0 | -100% |
+| anime.source_mat | 2,438 | 0 | -100% |
+| anime.start_date | 4,994 | 503 | -90% |
+| anime.end_date | 4,007 | 550 | -86% |
+| anime cluster (合計) | 17,670 | 4,764 | -73% |
+
+副次効果:
+- studio cluster 538 → 611 (Phase 2b multi-source 統合で比較対象拡大)
+- credit_role cluster 67,530 → 85,180 (anime cluster 修復 = `_load_keyframe_to_anilist_map` を
+  `build_resolved_anime(..., bronze_root=...)` 経由で再有効化したことで keyframe credit
+  と他 source credit の照合可能 pair が増加。`bronze_root` 引数忘れの修復タスク
+  として記録)
+
+合計 diff 行数: 125,314 → 129,137 (母集団拡大による微増)。schema 修正で
+**実体差以外の diff を約 16K 件削減** + cluster 修復で **comparison coverage 拡大**。
+
+---
+
 ## Limitations
 
 - ISO date は parser コード修正済だが、**既存 BRONZE parquet は再 ingest が必要**. 再 ingest 前 / 後で再測定するべき.
