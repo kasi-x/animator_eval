@@ -1,4 +1,5 @@
 """Tests for src/etl/conformed_loaders/keyframe.py (Card 14/06)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -79,47 +80,77 @@ def _make_silver_conn(tmp_path: Path) -> duckdb.DuckDBPyConnection:
 
 def _write_bronze(root: Path) -> None:
     """Write minimal BRONZE parquet fixtures for all keyframe tables."""
-    with BronzeWriter("keyframe", table="person_jobs", root=root, compact_on_exit=False) as bw:
+    with BronzeWriter(
+        "keyframe", table="person_jobs", root=root, compact_on_exit=False
+    ) as bw:
         bw.append({"person_id": 101, "job": "原画"})
         bw.append({"person_id": 101, "job": "作画監督"})
         bw.append({"person_id": 102, "job": "演出"})
 
-    with BronzeWriter("keyframe", table="person_studios", root=root, compact_on_exit=False) as bw:
-        bw.append({"person_id": 101, "studio_name": "スタジオA", "alt_names": '["Studio A"]'})
+    with BronzeWriter(
+        "keyframe", table="person_studios", root=root, compact_on_exit=False
+    ) as bw:
+        bw.append(
+            {"person_id": 101, "studio_name": "スタジオA", "alt_names": '["Studio A"]'}
+        )
         bw.append({"person_id": 102, "studio_name": "スタジオB", "alt_names": None})
 
-    with BronzeWriter("keyframe", table="studios_master", root=root, compact_on_exit=False) as bw:
+    with BronzeWriter(
+        "keyframe", table="studios_master", root=root, compact_on_exit=False
+    ) as bw:
         bw.append({"studio_id": 1, "name_ja": "スタジオA", "name_en": "Studio A"})
         bw.append({"studio_id": 2, "name_ja": "スタジオB", "name_en": "Studio B"})
 
-    with BronzeWriter("keyframe", table="anime_studios", root=root, compact_on_exit=False) as bw:
-        bw.append({"anime_id": "anilist:1", "studio_name": "スタジオA", "is_main": True})
+    with BronzeWriter(
+        "keyframe", table="anime_studios", root=root, compact_on_exit=False
+    ) as bw:
+        bw.append(
+            {"anime_id": "anilist:1", "studio_name": "スタジオA", "is_main": True}
+        )
 
-    with BronzeWriter("keyframe", table="settings_categories", root=root, compact_on_exit=False) as bw:
-        bw.append({"anime_id": "anilist:1", "category_name": "キャラクター", "category_order": 1})
-        bw.append({"anime_id": "anilist:1", "category_name": "メカ", "category_order": 2})
+    with BronzeWriter(
+        "keyframe", table="settings_categories", root=root, compact_on_exit=False
+    ) as bw:
+        bw.append(
+            {
+                "anime_id": "anilist:1",
+                "category_name": "キャラクター",
+                "category_order": 1,
+            }
+        )
+        bw.append(
+            {"anime_id": "anilist:1", "category_name": "メカ", "category_order": 2}
+        )
 
-    with BronzeWriter("keyframe", table="anime", root=root, compact_on_exit=False) as bw:
-        bw.append({
-            "id": "anilist:1",
-            "kf_uuid": "abc-123",
-            "kf_status": "published",
-            "slug": "test-anime",
-            "delimiters": "{}",
-            "episode_delimiters": "{}",
-            "role_delimiters": "{}",
-            "staff_delimiters": "{}",
-        })
+    with BronzeWriter(
+        "keyframe", table="anime", root=root, compact_on_exit=False
+    ) as bw:
+        bw.append(
+            {
+                "id": "anilist:1",
+                "kf_uuid": "abc-123",
+                "kf_status": "published",
+                "slug": "test-anime",
+                "delimiters": "{}",
+                "episode_delimiters": "{}",
+                "role_delimiters": "{}",
+                "staff_delimiters": "{}",
+            }
+        )
 
-    with BronzeWriter("keyframe", table="person_profile", root=root, compact_on_exit=False) as bw:
-        bw.append({
-            "person_id": 101,
-            "is_studio": False,
-            "name_ja": "山田太郎",
-            "name_en": "Taro Yamada",
-            "avatar": "https://example.com/avatar.jpg",
-            "bio": "アニメーター",
-        })
+    with BronzeWriter(
+        "keyframe", table="person_profile", root=root, compact_on_exit=False
+    ) as bw:
+        bw.append(
+            {
+                "person_id": 101,
+                "is_studio": False,
+                "name_ja": "山田太郎",
+                "name_en": "Taro Yamada",
+                "avatar": "https://example.com/avatar.jpg",
+                "bio": "アニメーター",
+            }
+        )
 
 
 # ─── fixtures ────────────────────────────────────────────────────────────────
@@ -137,7 +168,9 @@ def silver_conn(tmp_path: Path) -> duckdb.DuckDBPyConnection:
     conn = _make_silver_conn(tmp_path)
     # Seed anime + persons rows that keyframe will UPDATE.
     conn.execute("INSERT INTO anime (id, title_ja) VALUES ('anilist:1', 'テスト')")
-    conn.execute("INSERT INTO persons (id, name_ja, name_en) VALUES ('101', '山田太郎', 'Taro Yamada')")
+    conn.execute(
+        "INSERT INTO persons (id, name_ja, name_en) VALUES ('101', '山田太郎', 'Taro Yamada')"
+    )
     return conn
 
 
@@ -172,37 +205,41 @@ def test_person_jobs_dedup(silver_conn, bronze_dir):
 
 def test_person_studio_affiliations_loaded(silver_conn, bronze_dir):
     integrate(silver_conn, bronze_dir)
-    count = silver_conn.execute("SELECT COUNT(*) FROM person_studio_affiliations").fetchone()[0]
+    count = silver_conn.execute(
+        "SELECT COUNT(*) FROM person_studio_affiliations"
+    ).fetchone()[0]
     assert count == 2
 
 
 def test_studios_master_loaded(silver_conn, bronze_dir):
-    """studios_master rows use 'kf:s<id>' prefix."""
+    """studios_master rows use 'keyframe:s<id>' prefix."""
     integrate(silver_conn, bronze_dir)
     ids = {r[0] for r in silver_conn.execute("SELECT id FROM studios").fetchall()}
-    assert "kf:s1" in ids
-    assert "kf:s2" in ids
+    assert "keyframe:s1" in ids
+    assert "keyframe:s2" in ids
 
 
 def test_anime_studios_name_based_loaded(silver_conn, bronze_dir):
-    """anime_studios rows use 'kf:n:<name>' prefix for studio_id."""
+    """anime_studios rows use 'keyframe:n:<name>' prefix for studio_id."""
     integrate(silver_conn, bronze_dir)
     studio_ids = {
         r[0]
         for r in silver_conn.execute("SELECT studio_id FROM anime_studios").fetchall()
     }
-    assert "kf:n:スタジオA" in studio_ids
+    assert "keyframe:n:スタジオA" in studio_ids
 
 
 def test_anime_studios_no_anilist_collision(silver_conn, bronze_dir):
-    """kf:n: prefix must not collide with hypothetical anilist-style IDs."""
+    """keyframe:n: prefix must not collide with hypothetical anilist-style IDs."""
     # Seed an anilist-style studio
-    silver_conn.execute("INSERT INTO studios (id, name) VALUES ('anilist:s:999', 'Some Studio')")
+    silver_conn.execute(
+        "INSERT INTO studios (id, name) VALUES ('anilist:s:999', 'Some Studio')"
+    )
     integrate(silver_conn, bronze_dir)
     all_ids = {r[0] for r in silver_conn.execute("SELECT id FROM studios").fetchall()}
     assert "anilist:s:999" in all_ids  # untouched
-    # kf:n: prefixed rows are separate
-    kf_ids = {i for i in all_ids if i.startswith("kf:")}
+    # keyframe:n: prefixed rows are separate (loader output starts with 'keyframe:')
+    kf_ids = {i for i in all_ids if i.startswith("keyframe:")}
     assert len(kf_ids) > 0
 
 
@@ -210,7 +247,7 @@ def test_anime_studios_source_column_populated(silver_conn, bronze_dir):
     """anime_studios rows inserted by keyframe loader carry source='keyframe'."""
     integrate(silver_conn, bronze_dir)
     rows = silver_conn.execute(
-        "SELECT source FROM anime_studios WHERE studio_id LIKE 'kf:n:%'"
+        "SELECT source FROM anime_studios WHERE studio_id LIKE 'keyframe:n:%'"
     ).fetchall()
     assert len(rows) > 0
     assert all(r[0] == "keyframe" for r in rows)
@@ -227,7 +264,9 @@ def test_anime_studios_no_pk_collision_on_repeated_insert(silver_conn, bronze_di
 
 def test_settings_categories_loaded(silver_conn, bronze_dir):
     integrate(silver_conn, bronze_dir)
-    rows = silver_conn.execute("SELECT category_name, category_order FROM anime_settings_categories").fetchall()
+    rows = silver_conn.execute(
+        "SELECT category_name, category_order FROM anime_settings_categories"
+    ).fetchall()
     names = {r[0] for r in rows}
     assert "キャラクター" in names
     assert "メカ" in names
@@ -258,12 +297,8 @@ def test_persons_profile_image_large_updated(silver_conn, bronze_dir):
 
 def test_persons_profile_coalesce_existing_wins(silver_conn, bronze_dir):
     """Existing description/image_large must not be overwritten by keyframe."""
-    silver_conn.execute(
-        "ALTER TABLE persons ADD COLUMN IF NOT EXISTS description TEXT"
-    )
-    silver_conn.execute(
-        "ALTER TABLE persons ADD COLUMN IF NOT EXISTS image_large TEXT"
-    )
+    silver_conn.execute("ALTER TABLE persons ADD COLUMN IF NOT EXISTS description TEXT")
+    silver_conn.execute("ALTER TABLE persons ADD COLUMN IF NOT EXISTS image_large TEXT")
     silver_conn.execute(
         "UPDATE persons SET description='既存説明', image_large='https://existing.example/img.jpg' WHERE id='101'"
     )
@@ -278,15 +313,19 @@ def test_persons_profile_coalesce_existing_wins(silver_conn, bronze_dir):
 def test_persons_profile_studio_rows_skipped(tmp_path):
     """is_studio=True rows in person_profile must not update persons."""
     root = tmp_path / "bronze_studio"
-    with BronzeWriter("keyframe", table="person_profile", root=root, compact_on_exit=False) as bw:
-        bw.append({
-            "person_id": 999,
-            "is_studio": True,
-            "name_ja": "スタジオ名",
-            "name_en": "Studio Name",
-            "avatar": "https://studio.example/logo.jpg",
-            "bio": "スタジオ法人",
-        })
+    with BronzeWriter(
+        "keyframe", table="person_profile", root=root, compact_on_exit=False
+    ) as bw:
+        bw.append(
+            {
+                "person_id": 999,
+                "is_studio": True,
+                "name_ja": "スタジオ名",
+                "name_en": "Studio Name",
+                "avatar": "https://studio.example/logo.jpg",
+                "bio": "スタジオ法人",
+            }
+        )
     silver_dir = tmp_path / "silver_studio"
     silver_dir.mkdir(parents=True, exist_ok=True)
     conn2 = _make_silver_conn(silver_dir)

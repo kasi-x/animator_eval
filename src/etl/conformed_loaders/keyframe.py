@@ -4,8 +4,8 @@ Tables loaded / updated:
 - person_jobs                  (NEW)  keyframe/table=person_jobs
 - person_studio_affiliations   (NEW)  keyframe/table=person_studios
 - studios                      existing, INSERT ON CONFLICT DO NOTHING
-    - studios_master rows      prefix 'kf:s' + studio_id
-    - anime_studios name rows  prefix 'kf:n:' + studio_name
+    - studios_master rows      prefix 'keyframe:s' + studio_id
+    - anime_studios name rows  prefix 'keyframe:n:' + studio_name
 - anime_studios                existing, INSERT ON CONFLICT DO NOTHING
 - anime_settings_categories    (NEW)  keyframe/table=settings_categories
 - anime                        UPDATE kf_* columns  keyframe/table=anime
@@ -16,6 +16,7 @@ Hard-rule compliance:
 - H1: no score / popularity / favourites columns touched
 - H4: credits table not touched (already loaded by integrate_duckdb)
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -106,7 +107,7 @@ WHERE person_id   IS NOT NULL
 _STUDIOS_MASTER_SQL = """
 INSERT OR IGNORE INTO studios (id, name)
 SELECT DISTINCT
-    'kf:s' || CAST(studio_id AS VARCHAR),
+    'keyframe:s' || CAST(studio_id AS VARCHAR),
     COALESCE(name_ja, name_en, '')
 FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
 WHERE studio_id IS NOT NULL
@@ -115,7 +116,7 @@ WHERE studio_id IS NOT NULL
 _ANIME_STUDIOS_INSERT_STUDIO_SQL = """
 INSERT OR IGNORE INTO studios (id, name)
 SELECT DISTINCT
-    'kf:n:' || studio_name,
+    'keyframe:n:' || studio_name,
     studio_name
 FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
 WHERE studio_name IS NOT NULL
@@ -125,7 +126,7 @@ _ANIME_STUDIOS_LINK_SQL = """
 INSERT OR IGNORE INTO anime_studios (anime_id, studio_id, is_main, role, source)
 SELECT DISTINCT
     anime_id,
-    'kf:n:' || studio_name,
+    'keyframe:n:' || studio_name,
     COALESCE(TRY_CAST(is_main AS BOOLEAN), FALSE),
     ''          AS role,
     'keyframe'  AS source
@@ -187,7 +188,9 @@ WHERE persons.id = CAST(bronze.person_id AS VARCHAR)
 
 def _glob(bronze_root: Path, table: str) -> str:
     """Return glob pattern for keyframe BRONZE parquet files."""
-    return str(bronze_root / "source=keyframe" / f"table={table}" / "date=*" / "*.parquet")
+    return str(
+        bronze_root / "source=keyframe" / f"table={table}" / "date=*" / "*.parquet"
+    )
 
 
 def _has_files(bronze_root: Path, table: str) -> bool:
@@ -210,7 +213,11 @@ def _run_if_files_exist(
 
 def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
     """Create new tables and add extension columns."""
-    for ddl_block in (_DDL_PERSON_JOBS, _DDL_PERSON_STUDIO_AFFILIATIONS, _DDL_ANIME_SETTINGS_CATEGORIES):
+    for ddl_block in (
+        _DDL_PERSON_JOBS,
+        _DDL_PERSON_STUDIO_AFFILIATIONS,
+        _DDL_ANIME_SETTINGS_CATEGORIES,
+    ):
         for stmt in ddl_block.strip().split(";"):
             stmt = stmt.strip()
             if stmt:
@@ -226,7 +233,9 @@ def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
 # ─── public API ──────────────────────────────────────────────────────────────
 
 
-def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[str, int]:
+def integrate(
+    conn: duckdb.DuckDBPyConnection, bronze_root: Path | str
+) -> dict[str, int]:
     """Load keyframe BRONZE extras into SILVER.
 
     Args:
@@ -245,19 +254,25 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
 
     _apply_ddl(conn)
 
-    _run_if_files_exist(conn, _PERSON_JOBS_SQL,                 bronze_root, "person_jobs")
-    _run_if_files_exist(conn, _PERSON_STUDIO_AFFILIATIONS_SQL,  bronze_root, "person_studios")
-    _run_if_files_exist(conn, _STUDIOS_MASTER_SQL,              bronze_root, "studios_master")
-    _run_if_files_exist(conn, _ANIME_STUDIOS_INSERT_STUDIO_SQL, bronze_root, "anime_studios")
-    _run_if_files_exist(conn, _ANIME_STUDIOS_LINK_SQL,          bronze_root, "anime_studios")
-    _run_if_files_exist(conn, _SETTINGS_CATEGORIES_SQL,         bronze_root, "settings_categories")
-    _run_if_files_exist(conn, _ANIME_EXTRAS_SQL,                bronze_root, "anime")
-    _run_if_files_exist(conn, _PERSONS_PROFILE_UPDATE_SQL,      bronze_root, "person_profile")
+    _run_if_files_exist(conn, _PERSON_JOBS_SQL, bronze_root, "person_jobs")
+    _run_if_files_exist(
+        conn, _PERSON_STUDIO_AFFILIATIONS_SQL, bronze_root, "person_studios"
+    )
+    _run_if_files_exist(conn, _STUDIOS_MASTER_SQL, bronze_root, "studios_master")
+    _run_if_files_exist(
+        conn, _ANIME_STUDIOS_INSERT_STUDIO_SQL, bronze_root, "anime_studios"
+    )
+    _run_if_files_exist(conn, _ANIME_STUDIOS_LINK_SQL, bronze_root, "anime_studios")
+    _run_if_files_exist(
+        conn, _SETTINGS_CATEGORIES_SQL, bronze_root, "settings_categories"
+    )
+    _run_if_files_exist(conn, _ANIME_EXTRAS_SQL, bronze_root, "anime")
+    _run_if_files_exist(
+        conn, _PERSONS_PROFILE_UPDATE_SQL, bronze_root, "person_profile"
+    )
 
     return {
-        "person_jobs": conn.execute(
-            "SELECT COUNT(*) FROM person_jobs"
-        ).fetchone()[0],
+        "person_jobs": conn.execute("SELECT COUNT(*) FROM person_jobs").fetchone()[0],
         "person_studio_affiliations": conn.execute(
             "SELECT COUNT(*) FROM person_studio_affiliations"
         ).fetchone()[0],

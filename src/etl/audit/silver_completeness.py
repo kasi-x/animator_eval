@@ -13,6 +13,7 @@ Public API:
     check(bronze_root, silver_db) -> list[CoverageRow]
     generate_report(rows, out_path)
 """
+
 from __future__ import annotations
 
 import datetime
@@ -56,140 +57,154 @@ _MappingValue = Optional[tuple[str, Optional[str], Optional[str]]]
 SOURCE_TABLE_TO_SILVER: dict[tuple[str, str], _MappingValue] = {
     # ── AniList ────────────────────────────────────────────────────────────
     # anilist/anime: each scrape date emits a full snapshot → dedup by id
-    ("anilist", "anime"):                    ("anime",    "id LIKE 'anilist:%'",
-                                              "id"),
-    ("anilist", "persons"):                  ("persons",  "id LIKE 'anilist:%'",
-                                              "id"),
+    ("anilist", "anime"): ("anime", "id LIKE 'anilist:%'", "id"),
+    ("anilist", "persons"): ("persons", "id LIKE 'anilist:%'", "id"),
     # anilist/credits: snapshot partitions — dedup by (person_id, anime_id, role, episode)
-    ("anilist", "credits"):                  ("credits",  "evidence_source = 'anilist'",
-                                              "COALESCE(person_id,'') || '|' || COALESCE(anime_id,'') || '|' || COALESCE(role,'') || '|' || COALESCE(CAST(episode AS VARCHAR),'NULL')"),
+    ("anilist", "credits"): (
+        "credits",
+        "evidence_source = 'anilist'",
+        "COALESCE(person_id,'') || '|' || COALESCE(anime_id,'') || '|' || COALESCE(role,'') || '|' || COALESCE(CAST(episode AS VARCHAR),'NULL')",
+    ),
     # anilist/characters: snapshot partitions → dedup by id
-    ("anilist", "characters"):               ("characters", "id LIKE 'anilist:%'",
-                                              "id"),
+    ("anilist", "characters"): ("characters", "id LIKE 'anilist:%'", "id"),
     # anilist/character_voice_actors: snapshot partitions → dedup by (character_id, person_id, anime_id)
-    ("anilist", "character_voice_actors"):   ("character_voice_actors", "source = 'anilist'",
-                                              "COALESCE(CAST(character_id AS VARCHAR),'') || '|' || COALESCE(CAST(person_id AS VARCHAR),'') || '|' || COALESCE(CAST(anime_id AS VARCHAR),'')"),
+    ("anilist", "character_voice_actors"): (
+        "character_voice_actors",
+        "source = 'anilist'",
+        "COALESCE(CAST(character_id AS VARCHAR),'') || '|' || COALESCE(CAST(person_id AS VARCHAR),'') || '|' || COALESCE(CAST(anime_id AS VARCHAR),'')",
+    ),
     # anilist/studios: single snapshot partition → dedup by id is still correct
-    ("anilist", "studios"):                  ("studios",  "id LIKE 'anilist:%'",
-                                              "id"),
-    ("anilist", "anime_studios"):            None,   # merged with other sources, not directly filterable
-    ("anilist", "relations"):                None,   # folded into anime.relations_json
+    ("anilist", "studios"): ("studios", "id LIKE 'anilist:%'", "id"),
+    (
+        "anilist",
+        "anime_studios",
+    ): None,  # merged with other sources, not directly filterable
+    ("anilist", "relations"): None,  # folded into anime.relations_json
     # ── ANN ────────────────────────────────────────────────────────────────
-    ("ann", "anime"):                        None,   # ann has no direct SILVER id (ann_id column in anime)
-    ("ann", "persons"):                      None,   # ANN persons not yet a primary SILVER source
+    ("ann", "anime"): None,  # ann has no direct SILVER id (ann_id column in anime)
+    ("ann", "persons"): None,  # ANN persons not yet a primary SILVER source
     # ann/credits: ANN credits are loaded in bulk (no snapshot partitions observed)
-    ("ann", "credits"):                      ("credits", "evidence_source = 'ann'",
-                                              None),
-    ("ann", "cast"):                         None,   # cast ⊆ credits (character casting)
-    ("ann", "company"):                      None,   # folded into studios / anime metadata
-    ("ann", "episodes"):                     None,   # not yet loaded into SILVER
-    ("ann", "news"):                         None,   # not loaded
-    ("ann", "related"):                      None,   # not loaded
-    ("ann", "releases"):                     None,   # not loaded
+    ("ann", "credits"): ("credits", "evidence_source = 'ann'", None),
+    ("ann", "cast"): None,  # cast ⊆ credits (character casting)
+    ("ann", "company"): None,  # folded into studios / anime metadata
+    ("ann", "episodes"): None,  # not yet loaded into SILVER
+    ("ann", "news"): None,  # not loaded
+    ("ann", "related"): None,  # not loaded
+    ("ann", "releases"): None,  # not loaded
     # ── Bangumi ────────────────────────────────────────────────────────────
     # Bangumi has no snapshot partitions (single-pass bulk load)
-    ("bangumi", "subjects"):                 ("anime",    "id LIKE 'bgm:%'",
-                                              "id"),
-    ("bangumi", "persons"):                  ("persons",  "id LIKE 'bgm:%'",
-                                              "id"),
-    ("bangumi", "subject_persons"):          ("credits",  "evidence_source = 'bangumi'",
-                                              None),
-    ("bangumi", "characters"):               ("characters", "id LIKE 'bgm:%' OR id LIKE 'bgm:%'",
-                                              "id"),
-    ("bangumi", "subject_characters"):       None,   # folded into characters table
-    ("bangumi", "person_characters"):        None,   # character voice-actor relationship, not loaded
+    ("bangumi", "subjects"): ("anime", "id LIKE 'bgm:%'", "id"),
+    ("bangumi", "persons"): ("persons", "id LIKE 'bgm:%'", "id"),
+    ("bangumi", "subject_persons"): ("credits", "evidence_source = 'bangumi'", None),
+    ("bangumi", "characters"): (
+        "characters",
+        "id LIKE 'bgm:%' OR id LIKE 'bgm:%'",
+        "id",
+    ),
+    ("bangumi", "subject_characters"): None,  # folded into characters table
+    (
+        "bangumi",
+        "person_characters",
+    ): None,  # character voice-actor relationship, not loaded
     # ── Keyframe ───────────────────────────────────────────────────────────
-    ("keyframe", "anime"):                   ("anime",    "id LIKE 'keyframe:%'",
-                                              "id"),
-    ("keyframe", "persons"):                 ("persons",  "id LIKE 'keyframe:%'",
-                                              "id"),
+    ("keyframe", "anime"): ("anime", "id LIKE 'keyframe:%'", "id"),
+    ("keyframe", "persons"): ("persons", "id LIKE 'keyframe:%'", "id"),
     # keyframe/credits: schema changed across partitions (role → role_ja/role_en).
     # SILVER accumulates credits from all scrape runs; no simple distinct key spans
     # all schema versions.  Reported as FILTERED (intentional subset) — see audit notes.
-    ("keyframe", "credits"):                 ("credits",  "evidence_source = 'keyframe'",
-                                              None),
-    ("keyframe", "person_credits"):          None,   # alternative credits path, merged into credits
-    ("keyframe", "anime_studios"):           ("anime_studios", None, None),   # all rows from keyframe
-    # keyframe/studios_master → SILVER studios WHERE id LIKE 'kf:s%'
-    # (kf:n:% IDs originate from anime_studios names, not studios_master)
-    ("keyframe", "studios_master"):          ("studios",  "id LIKE 'kf:s%'",
-                                              "studio_id"),
-    ("keyframe", "person_jobs"):             ("person_jobs", "source = 'keyframe'",
-                                              None),
-    ("keyframe", "person_studios"):          ("person_studio_affiliations", "source = 'keyframe'",
-                                              None),
-    ("keyframe", "person_profile"):          None,   # enriches persons table (UPDATE, not INSERT)
-    ("keyframe", "roles_master"):            None,   # lookup table, not stored in SILVER
-    ("keyframe", "settings_categories"):     ("anime_settings_categories", None, None),
-    ("keyframe", "preview"):                 None,   # preview metadata, not loaded
+    ("keyframe", "credits"): ("credits", "evidence_source = 'keyframe'", None),
+    (
+        "keyframe",
+        "person_credits",
+    ): None,  # alternative credits path, merged into credits
+    ("keyframe", "anime_studios"): (
+        "anime_studios",
+        None,
+        None,
+    ),  # all rows from keyframe
+    # keyframe/studios_master → SILVER studios WHERE id LIKE 'keyframe:s%'
+    # (keyframe:n:% IDs originate from anime_studios names, not studios_master)
+    ("keyframe", "studios_master"): ("studios", "id LIKE 'keyframe:s%'", "studio_id"),
+    ("keyframe", "person_jobs"): ("person_jobs", "source = 'keyframe'", None),
+    ("keyframe", "person_studios"): (
+        "person_studio_affiliations",
+        "source = 'keyframe'",
+        None,
+    ),
+    ("keyframe", "person_profile"): None,  # enriches persons table (UPDATE, not INSERT)
+    ("keyframe", "roles_master"): None,  # lookup table, not stored in SILVER
+    ("keyframe", "settings_categories"): ("anime_settings_categories", None, None),
+    ("keyframe", "preview"): None,  # preview metadata, not loaded
     # ── MAL ────────────────────────────────────────────────────────────────
-    ("mal", "anime"):                        ("anime",    "id LIKE 'mal:%'",
-                                              None),
-    ("mal", "staff_credits"):                ("credits",  "evidence_source = 'mal'",
-                                              None),
-    ("mal", "va_credits"):                   ("character_voice_actors", "source = 'mal'",
-                                              None),
-    ("mal", "anime_studios"):                ("anime_studios", None, None),
-    ("mal", "anime_genres"):                 ("anime_genres", None, None),
-    ("mal", "anime_characters"):             None,   # character listing, folded into characters
-    ("mal", "anime_episodes"):               ("anime_episodes", None, None),
-    ("mal", "anime_external"):               None,   # external links, not loaded
-    ("mal", "anime_moreinfo"):               None,   # free-text, not loaded
-    ("mal", "anime_news"):                   ("anime_news", None, None),
-    ("mal", "anime_pictures"):               None,   # not loaded
-    ("mal", "anime_recommendations"):        ("anime_recommendations", None, None),
-    ("mal", "anime_relations"):              ("anime_relations", None, None),
-    ("mal", "anime_statistics"):             None,   # display-only stats, not loaded into SILVER
-    ("mal", "anime_streaming"):              None,   # streaming links, not loaded
-    ("mal", "anime_themes"):                 None,   # OP/ED themes, not loaded
-    ("mal", "anime_videos_ep"):              None,   # videos, not loaded
-    ("mal", "anime_videos_promo"):           None,   # promos, not loaded
+    ("mal", "anime"): ("anime", "id LIKE 'mal:%'", None),
+    ("mal", "staff_credits"): ("credits", "evidence_source = 'mal'", None),
+    ("mal", "va_credits"): ("character_voice_actors", "source = 'mal'", None),
+    ("mal", "anime_studios"): ("anime_studios", None, None),
+    ("mal", "anime_genres"): ("anime_genres", None, None),
+    ("mal", "anime_characters"): None,  # character listing, folded into characters
+    ("mal", "anime_episodes"): ("anime_episodes", None, None),
+    ("mal", "anime_external"): None,  # external links, not loaded
+    ("mal", "anime_moreinfo"): None,  # free-text, not loaded
+    ("mal", "anime_news"): ("anime_news", None, None),
+    ("mal", "anime_pictures"): None,  # not loaded
+    ("mal", "anime_recommendations"): ("anime_recommendations", None, None),
+    ("mal", "anime_relations"): ("anime_relations", None, None),
+    ("mal", "anime_statistics"): None,  # display-only stats, not loaded into SILVER
+    ("mal", "anime_streaming"): None,  # streaming links, not loaded
+    ("mal", "anime_themes"): None,  # OP/ED themes, not loaded
+    ("mal", "anime_videos_ep"): None,  # videos, not loaded
+    ("mal", "anime_videos_promo"): None,  # promos, not loaded
     # ── MediaArts DB (MADB) ────────────────────────────────────────────────
     # MADB tables use snapshot partitions (each scrape rewrites the full dataset)
-    ("mediaarts", "anime"):                  ("anime",    "id LIKE 'madb:%'",
-                                              "id"),
-    ("mediaarts", "persons"):                ("persons",  "id LIKE 'madb:%'",
-                                              "id"),
-    ("mediaarts", "credits"):                ("credits",  "evidence_source = 'mediaarts'",
-                                              None),
+    ("mediaarts", "anime"): ("anime", "id LIKE 'madb:%'", "id"),
+    ("mediaarts", "persons"): ("persons", "id LIKE 'madb:%'", "id"),
+    ("mediaarts", "credits"): ("credits", "evidence_source = 'mediaarts'", None),
     # mediaarts/broadcasters: snapshot partitions → dedup by (madb_id, name)
-    ("mediaarts", "broadcasters"):           ("anime_broadcasters", None,
-                                              "COALESCE(CAST(madb_id AS VARCHAR),'') || '|' || COALESCE(name,'')"),
-    ("mediaarts", "broadcast_schedule"):     ("anime_broadcast_schedule", None, None),
-    ("mediaarts", "original_work_links"):    ("anime_original_work_links", None, None),
-    ("mediaarts", "production_committee"):   ("anime_production_committee", None, None),
+    ("mediaarts", "broadcasters"): (
+        "anime_broadcasters",
+        None,
+        "COALESCE(CAST(madb_id AS VARCHAR),'') || '|' || COALESCE(name,'')",
+    ),
+    ("mediaarts", "broadcast_schedule"): ("anime_broadcast_schedule", None, None),
+    ("mediaarts", "original_work_links"): ("anime_original_work_links", None, None),
+    ("mediaarts", "production_committee"): ("anime_production_committee", None, None),
     # mediaarts/production_companies: snapshot partitions → dedup by (madb_id, company_name)
-    ("mediaarts", "production_companies"):   ("anime_production_companies", None,
-                                              "COALESCE(CAST(madb_id AS VARCHAR),'') || '|' || COALESCE(company_name,'')"),
+    ("mediaarts", "production_companies"): (
+        "anime_production_companies",
+        None,
+        "COALESCE(CAST(madb_id AS VARCHAR),'') || '|' || COALESCE(company_name,'')",
+    ),
     # mediaarts/video_releases: 50.0% coverage is a known 2-partition snapshot pattern
-    ("mediaarts", "video_releases"):         ("anime_video_releases", None, None),
+    ("mediaarts", "video_releases"): ("anime_video_releases", None, None),
     # ── Sakuga@wiki ────────────────────────────────────────────────────────
     # sakuga_atwiki/credits: SILVER only contains credits where the work title
     # could be resolved to a SILVER anime_id.  Unresolved credits are intentionally
     # excluded.  Coverage <50% is expected (FILTERED, not a loader bug).
-    ("sakuga_atwiki", "credits"):            ("credits",  "evidence_source = 'sakuga_atwiki'",
-                                              None),
-    ("sakuga_atwiki", "pages"):              None,   # raw wiki pages, not a SILVER table
+    ("sakuga_atwiki", "credits"): (
+        "credits",
+        "evidence_source = 'sakuga_atwiki'",
+        None,
+    ),
+    ("sakuga_atwiki", "pages"): None,  # raw wiki pages, not a SILVER table
     # sakuga_atwiki/persons: snapshot partitions → dedup by page_id
-    ("sakuga_atwiki", "persons"):            ("persons",  "id LIKE 'sakuga:%'",
-                                              "CAST(page_id AS VARCHAR)"),
-    ("sakuga_atwiki", "work_staff"):         None,   # denormalized; merged into credits
+    ("sakuga_atwiki", "persons"): (
+        "persons",
+        "id LIKE 'sakuga:%'",
+        "CAST(page_id AS VARCHAR)",
+    ),
+    ("sakuga_atwiki", "work_staff"): None,  # denormalized; merged into credits
     # ── SeesaaWiki ─────────────────────────────────────────────────────────
     # seesaawiki/anime: snapshot partitions → dedup by id
-    ("seesaawiki", "anime"):                 ("anime",    "id LIKE 'seesaa:%'",
-                                              "id"),
-    ("seesaawiki", "persons"):               ("persons",  "id LIKE 'seesaa:%'",
-                                              None),
-    ("seesaawiki", "credits"):               ("credits",  "evidence_source = 'seesaawiki'",
-                                              None),
-    ("seesaawiki", "studios"):               ("studios",  "id LIKE 'seesaa:%'",
-                                              None),
-    ("seesaawiki", "anime_studios"):         None,   # merged with other sources
-    ("seesaawiki", "episode_titles"):        ("anime_episode_titles", None, None),
-    ("seesaawiki", "theme_songs"):           ("anime_theme_songs", None, None),
-    ("seesaawiki", "gross_studios"):         ("anime_gross_studios", None, None),
-    ("seesaawiki", "original_work_info"):    ("anime_original_work_info", None, None),
-    ("seesaawiki", "production_committee"):  ("anime_production_committee", None, None),
+    ("seesaawiki", "anime"): ("anime", "id LIKE 'seesaa:%'", "id"),
+    ("seesaawiki", "persons"): ("persons", "id LIKE 'seesaa:%'", None),
+    ("seesaawiki", "credits"): ("credits", "evidence_source = 'seesaawiki'", None),
+    ("seesaawiki", "studios"): ("studios", "id LIKE 'seesaa:%'", None),
+    ("seesaawiki", "anime_studios"): None,  # merged with other sources
+    ("seesaawiki", "episode_titles"): ("anime_episode_titles", None, None),
+    ("seesaawiki", "theme_songs"): ("anime_theme_songs", None, None),
+    ("seesaawiki", "gross_studios"): ("anime_gross_studios", None, None),
+    ("seesaawiki", "original_work_info"): ("anime_original_work_info", None, None),
+    ("seesaawiki", "production_committee"): ("anime_production_committee", None, None),
 }
 
 
@@ -200,10 +215,10 @@ class CoverageRow:
     source: str
     bronze_table: str
     bronze_rows: int
-    silver_target: Optional[str]   # None = unmapped
-    silver_filter: Optional[str]   # None = full table count used
+    silver_target: Optional[str]  # None = unmapped
+    silver_filter: Optional[str]  # None = full table count used
     silver_rows: int
-    coverage: Optional[float]      # None = unmapped
+    coverage: Optional[float]  # None = unmapped
     unmapped: bool
     error: Optional[str] = field(default=None)
 
@@ -280,7 +295,9 @@ def _count_bronze_rows(
     When *distinct_expr* is None, ``COUNT(*)`` is used (total rows across all
     partitions).
     """
-    glob = str(bronze_root / f"source={source}" / f"table={table}" / "date=*" / "*.parquet")
+    glob = str(
+        bronze_root / f"source={source}" / f"table={table}" / "date=*" / "*.parquet"
+    )
     try:
         if distinct_expr:
             sql = f"SELECT COUNT(DISTINCT {distinct_expr}) FROM read_parquet(?, hive_partitioning=true, union_by_name=true)"
@@ -329,7 +346,10 @@ def check(
 
     tables = list_bronze_tables(bronze_root)
     if not tables:
-        logger.warning("silver_completeness.check: no BRONZE tables found", bronze_root=str(bronze_root))
+        logger.warning(
+            "silver_completeness.check: no BRONZE tables found",
+            bronze_root=str(bronze_root),
+        )
 
     silver_conn = duckdb.connect(silver_db, read_only=True)
     bronze_conn = duckdb.connect(":memory:")
@@ -342,41 +362,51 @@ def check(
 
             if mapping == "UNKNOWN":
                 # Not declared in our mapping at all — use COUNT(*) for the bronze count
-                bronze_rows, b_err = _count_bronze_rows(bronze_conn, bronze_root, source, table)
-                rows.append(CoverageRow(
-                    source=source,
-                    bronze_table=table,
-                    bronze_rows=bronze_rows,
-                    silver_target=None,
-                    silver_filter=None,
-                    silver_rows=0,
-                    coverage=None,
-                    unmapped=True,
-                    error=b_err,
-                ))
+                bronze_rows, b_err = _count_bronze_rows(
+                    bronze_conn, bronze_root, source, table
+                )
+                rows.append(
+                    CoverageRow(
+                        source=source,
+                        bronze_table=table,
+                        bronze_rows=bronze_rows,
+                        silver_target=None,
+                        silver_filter=None,
+                        silver_rows=0,
+                        coverage=None,
+                        unmapped=True,
+                        error=b_err,
+                    )
+                )
                 continue
 
             if mapping is None:
                 # Explicitly declared as unmapped (no corresponding SILVER table)
-                bronze_rows, b_err = _count_bronze_rows(bronze_conn, bronze_root, source, table)
-                rows.append(CoverageRow(
-                    source=source,
-                    bronze_table=table,
-                    bronze_rows=bronze_rows,
-                    silver_target=None,
-                    silver_filter=None,
-                    silver_rows=0,
-                    coverage=None,
-                    unmapped=True,
-                    error=b_err,
-                ))
+                bronze_rows, b_err = _count_bronze_rows(
+                    bronze_conn, bronze_root, source, table
+                )
+                rows.append(
+                    CoverageRow(
+                        source=source,
+                        bronze_table=table,
+                        bronze_rows=bronze_rows,
+                        silver_target=None,
+                        silver_filter=None,
+                        silver_rows=0,
+                        coverage=None,
+                        unmapped=True,
+                        error=b_err,
+                    )
+                )
                 continue
 
             silver_table, silver_filter, distinct_expr = mapping
             bronze_rows, b_err = _count_bronze_rows(
                 bronze_conn, bronze_root, source, table, distinct_expr
             )
-            silver_rows, s_err = _count_silver_rows(silver_conn, silver_table, silver_filter)
+            silver_rows, s_err = _count_silver_rows(
+                silver_conn, silver_table, silver_filter
+            )
 
             error = b_err or s_err
             if error:
@@ -386,17 +416,19 @@ def check(
             else:
                 coverage = silver_rows / bronze_rows
 
-            rows.append(CoverageRow(
-                source=source,
-                bronze_table=table,
-                bronze_rows=bronze_rows,
-                silver_target=silver_table,
-                silver_filter=silver_filter,
-                silver_rows=silver_rows,
-                coverage=coverage,
-                unmapped=False,
-                error=error,
-            ))
+            rows.append(
+                CoverageRow(
+                    source=source,
+                    bronze_table=table,
+                    bronze_rows=bronze_rows,
+                    silver_target=silver_table,
+                    silver_filter=silver_filter,
+                    silver_rows=silver_rows,
+                    coverage=coverage,
+                    unmapped=False,
+                    error=error,
+                )
+            )
             logger.debug(
                 "silver_completeness.check",
                 source=source,
@@ -429,7 +461,13 @@ def sample_missing_rows(
     """
     bronze_root = Path(bronze_root)
     silver_db = str(silver_db)
-    glob = str(bronze_root / f"source={source}" / f"table={bronze_table}" / "date=*" / "*.parquet")
+    glob = str(
+        bronze_root
+        / f"source={source}"
+        / f"table={bronze_table}"
+        / "date=*"
+        / "*.parquet"
+    )
 
     try:
         conn = duckdb.connect(silver_db, read_only=True)
@@ -452,7 +490,12 @@ def sample_missing_rows(
         finally:
             conn.close()
     except Exception as exc:
-        logger.warning("sample_missing_rows failed", source=source, table=bronze_table, error=str(exc))
+        logger.warning(
+            "sample_missing_rows failed",
+            source=source,
+            table=bronze_table,
+            error=str(exc),
+        )
         return []
 
 
@@ -498,7 +541,8 @@ def generate_report(rows: list[CoverageRow], out_path: Path) -> None:
 
     sections.append(f"# BRONZE → SILVER Completeness Report\n\nGenerated: {now}\n")
 
-    sections.append(textwrap.dedent(f"""\
+    sections.append(
+        textwrap.dedent(f"""\
         ## Summary
 
         | Metric | Count |
@@ -510,7 +554,8 @@ def generate_report(rows: list[CoverageRow], out_path: Path) -> None:
         | OK (≥95%) | {len(ok)} |
         | PARTIAL (50–95%) | {len(partial)} |
         | LOW (<50%) | {len(low)} |
-    """))
+    """)
+    )
 
     # Per-source breakdown
     sections.append("## Per-source Coverage\n")
@@ -529,7 +574,8 @@ def generate_report(rows: list[CoverageRow], out_path: Path) -> None:
         sections.append("")
 
     # Disclaimer
-    sections.append(textwrap.dedent("""\
+    sections.append(
+        textwrap.dedent("""\
         ---
 
         **Disclaimer (JA)**: 本レポートは公開クレジットデータの構造的網羅率を示すものであり、
@@ -538,7 +584,8 @@ def generate_report(rows: list[CoverageRow], out_path: Path) -> None:
         **Disclaimer (EN)**: This report presents structural coverage metrics
         derived solely from public credit records. The figures reflect network
         position and ingestion density, not any subjective assessment of individuals.
-    """))
+    """)
+    )
 
     report = "\n".join(sections)
     out_path.write_text(report, encoding="utf-8")
@@ -562,6 +609,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="BRONZE → SILVER completeness audit")
     parser.add_argument("--bronze-root", type=Path, default=Path("result/bronze"))
     parser.add_argument("--silver-db", type=str, default="result/silver.duckdb")
-    parser.add_argument("--out", type=Path, default=Path("result/audit/silver_completeness.md"))
+    parser.add_argument(
+        "--out", type=Path, default=Path("result/audit/silver_completeness.md")
+    )
     args = parser.parse_args()
     main(bronze_root=args.bronze_root, silver_db=args.silver_db, out=args.out)
