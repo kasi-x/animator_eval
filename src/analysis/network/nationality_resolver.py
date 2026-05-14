@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass, field
+from typing import Any
 
 import structlog
 
@@ -132,30 +133,57 @@ def resolve_nationality(
     )
 
 
-def load_nationality_records(conn: sqlite3.Connection) -> list[NationalityRecord]:
-    """Load and resolve nationality for all persons in SILVER.
+def _persons_columns(conn: Any) -> set[str]:
+    """Detect available columns on the `persons` table for SQLite or DuckDB.
 
-    Queries persons table for country_of_origin, name_zh, name_ko.
-    Gracefully handles missing columns (older schema).
+    SQLite: `PRAGMA table_info(persons)`. DuckDB lacks PRAGMA but supports
+    `information_schema.columns`; fall back to it on PRAGMA failure.
+    """
+    try:
+        col_info = conn.execute("PRAGMA table_info(persons)").fetchall()
+        if col_info:
+            return {r[1] for r in col_info}
+    except Exception:
+        pass
+    try:
+        rows = conn.execute(
+            "SELECT column_name FROM information_schema.columns "
+            "WHERE table_name = 'persons'"
+        ).fetchall()
+        return {r[0] for r in rows}
+    except Exception:
+        return set()
+
+
+def load_nationality_records(
+    conn: sqlite3.Connection | Any,
+) -> list[NationalityRecord]:
+    """Load and resolve nationality for all persons.
+
+    Queries persons table for nationality (preferred, ISO scalar from
+    35/01 backfill), country_of_origin, name_zh, name_ko. Gracefully
+    handles missing columns (older schema). Works against SQLite SILVER
+    or DuckDB Conformed / Resolved.
 
     Args:
-        conn: SILVER SQLite connection.
+        conn: SILVER SQLite or DuckDB connection.
 
     Returns:
         List of NationalityRecord, one per person.
     """
-    # Detect available columns
-    try:
-        col_info = conn.execute("PRAGMA table_info(persons)").fetchall()
-        cols = {r[1] for r in col_info}
-    except Exception:
-        cols = set()
+    cols = _persons_columns(conn)
 
+    has_nationality = "nationality" in cols
     has_country = "country_of_origin" in cols
     has_zh = "name_zh" in cols
     has_ko = "name_ko" in cols
 
     select_parts = ["id"]
+    # nationality (35/01: scalar ISO code preferred over country_of_origin)
+    if has_nationality:
+        select_parts.append("nationality")
+    else:
+        select_parts.append("NULL AS nationality")
     if has_country:
         select_parts.append("country_of_origin")
     else:
@@ -179,8 +207,10 @@ def load_nationality_records(conn: sqlite3.Connection) -> list[NationalityRecord
 
     records: list[NationalityRecord] = []
     for row in rows:
-        pid, country, zh, ko = row[0], row[1], row[2], row[3]
-        records.append(resolve_nationality(pid, country, zh, ko))
+        pid, nationality, country, zh, ko = row[0], row[1], row[2], row[3], row[4]
+        # nationality 列が非空なら country_of_origin 上書き優先
+        country_input = nationality or country
+        records.append(resolve_nationality(pid, country_input, zh, ko))
 
     return records
 
