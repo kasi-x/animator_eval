@@ -469,6 +469,47 @@ commits: 6b2fa6e → 404f161 → b1e9faa → 65a9303 → bf91532 → 0ad2fb2 →
 
 ---
 
+## 並列検証・整合化 (2026-05-15 second wave)
+
+既実装カードの検証 + docs sync + lint 残務消化 (sonnet × 4 + haiku × 2 並列)。
+
+### 26/02 international_collab (実装は事前完了、検証 2026-05-15)
+
+- `src/analysis/network/international_collab.py` 893 行 + `nationality_resolver.py` 346 行 + `structure_international.py` 853 行
+- 41 tests pass、lint clean、forbidden vocab 0、anime.score 漏洩 0
+- Method 充足: country tag / 役職別海外比率 / JP-CN/KR/SE_ASIA edges per anime / role progression / Louvain + null model permutation
+- レポート登録 + brief 組込済
+- 制約: nationality 入力 0% (`'[]'` 流入バグ) で実データ動作には `35/01` 完了必要
+
+### 15/04 O4 foreign_talent (実装事前完了、lint 残務 + 検証 2026-05-15)
+
+- `scripts/report_generators/reports/o4_foreign_talent.py` 994 行 + `nationality_resolver.py` 共有
+- 27 tests pass、lint 残務 (F401×3 + F841 + F541×4) を ruff auto-fix + 手動 1 件で解消、再 lint 0 件
+- Method 充足: FE 分布 (violin + Mann-Whitney U) / 役職進行 (KM + log-rank) / studio FE 散布図 / limited mobility bias (Andrews 2008) 注記
+- レポート登録 + brief 組込済 (REPORT_INVENTORY L143/287/301/321/346-347)
+- 制約: 26/02 同様 nationality 0% で `35/01` 後に実動作
+
+### 15/x cross_cutting (commit `27a1cad`, 2026-05-13)
+
+- `docs/report_cross_cutting.md` 278 行 (§1 brief mapping / §2 新 audience 12ヶ月 deferral / §3 method gate / §4 11×8 metric matrix / §5 lint vocab / §6 method note template / §7 roadmap)
+- `scripts/lint_report_vocabulary.py` `CONTEXTUAL_BIGRAMS` L97-142 で 4 文脈 2-gram パターン実装 (失われた人材 / 不在能力 / 埋もれた才能 / 眠っている実力)
+- `scripts/report_generators/section_builder.py` `METHOD_NOTE_TEMPLATES` 8 手法 (cox / mwu / km / counterfactual / louvain / propensity / did / weighted_pagerank)、`_base.py` で自動呼出
+- `forbidden_vocab_exceptions.yaml` 180 行 / 23 例外、lint pass (51 files scanned, 3 ranking_framing exception 内)
+
+### 19_resolved_cluster_fix docs sync (2026-05-15)
+
+- 02_persons_tmdb_homonym (commit `f0d4547`) / 03_audit_post_fix (`f0d4547`) / 05_keyframe_id_dedup (Phase 2b `d8bd282`+`09a13df`) を完了状態に揃え
+- README.md sub-cards 表 + 各 sub-card 冒頭 Status banner + TODO.md priority 表を実状態に同期
+
+### 新規発見: resolved.nationality `'[]'` 流入バグ → `35/01` カード起票
+
+- 調査結果: conformed.persons.nationality は seesaa 148K 行のみ `'[]'` (空 JSON array)、他 source 全 NULL
+- `_select.py:_is_empty()` が `'[]'` を非空扱いで通過、seesaa 値が「唯一の非空値」として採用 → resolved.persons.nationality 全件 `'[]'`
+- 対応カード: `TASK_CARDS/35_data_quality_backfill/01_nationality_backfill.md` (validator 強化 + anilist loader UPDATE パス追加 + nationality_resolver DuckDB 化 + scalar 化)
+- O4 / international_collab はこの修復後に実データで意味のある分布を出す
+
+---
+
 ## 並列カード消化 (2026-05-15)
 
 4 カード並列実装 (sonnet × 3 + opus × 1、worktree isolation)。

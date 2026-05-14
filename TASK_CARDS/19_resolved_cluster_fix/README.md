@@ -36,10 +36,10 @@
 | ID | Title | Priority | Status | Blocks |
 |---|---|---|---|---|
 | [01_madb_parent_link.md](01_madb_parent_link.md) | madb parser に `parent_madb_id` + `record_type` 追加 → cluster は C 起点 + M 別保持 | 🟠 | ✅ 完了 (2026-05-07) | A 系 cluster 全件 |
-| [02_persons_tmdb_homonym.md](02_persons_tmdb_homonym.md) | `_numeric_id_key` に tmdb_id 追加 + en_name_groups guard 強化 | 🟠 | 未着手 | B 系 cluster |
-| [03_audit_post_fix.md](03_audit_post_fix.md) | 修正後 cluster size 分布再計測 + 戦略 LLM 再 review | 🟡 | 未着手 | 01/02 後 |
+| [02_persons_tmdb_homonym.md](02_persons_tmdb_homonym.md) | `_numeric_id_key` に tmdb_id 追加 + en_name_groups guard 強化 | 🟠 | ✅ 完了 (2026-05-13, commit f0d4547) | B 系 cluster |
+| [03_audit_post_fix.md](03_audit_post_fix.md) | 修正後 cluster size 分布再計測 + 戦略 LLM 再 review | 🟡 | ✅ 完了 (2026-05-15, commit f0d4547) | 01/02 後 |
 | [04_canonical_id_collision.md](04_canonical_id_collision.md) | canonical_id をメンバ ID ハッシュに置換 → year=None 同タイトル衝突 (20,511 row silent drop) 解消 | 🔴 | ✅ 完了 (686e161) | resolved 全数保証 |
-| [05_keyframe_id_dedup.md](05_keyframe_id_dedup.md) | keyframe BRONZE 内 SHA hash ID と slug ID の dedup 戦略調査 + 修正 | 🟡 | 未着手 (調査) | keyframe orphan 比率 / studio Phase 2b cluster size |
+| [05_keyframe_id_dedup.md](05_keyframe_id_dedup.md) | keyframe BRONZE 内 SHA hash ID と slug ID の dedup 戦略調査 + 修正 | 🟡 | ✅ 主要修正完了 (Phase 2b) | keyframe orphan 比率 / studio Phase 2b cluster size |
 
 ---
 

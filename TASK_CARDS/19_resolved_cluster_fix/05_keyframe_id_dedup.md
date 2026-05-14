@@ -1,5 +1,7 @@
 # Task: keyframe BRONZE 内 ID dedup (SHA ↔ slug)
 
+**Status**: ✅ 主要修正完了 (Phase 2b: 2026-05-15 commit 09a13df、prefix 統一 `kf:` → `keyframe:` (d8bd282)、resolve_studios cross-source clustering 実装済。Step 2c SHA↔slug 3 件のみ out-of-scope)
+
 **ID**: `19_resolved_cluster_fix/05_keyframe_id_dedup`
 **Priority**: 🟡 Medium
 **Created**: 2026-05-15

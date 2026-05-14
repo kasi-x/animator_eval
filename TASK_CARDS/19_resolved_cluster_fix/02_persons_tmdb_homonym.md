@@ -1,5 +1,7 @@
 # Task: persons cluster TMDb 同名 over-merge 修正
 
+**Status**: ✅ 完了 (2026-05-13、commit f0d4547、Jonas 47 cluster → 各 tmdb_id ごと分離、tests 6/6 pass)
+
 **ID**: `19_resolved_cluster_fix/02_persons_tmdb_homonym`
 **Priority**: 🟠 High
 **Estimated changes**: ~+80 / -10 lines, 2 files
