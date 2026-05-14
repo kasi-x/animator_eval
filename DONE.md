@@ -442,3 +442,37 @@ commits: 6b2fa6e → 404f161 → b1e9faa → 65a9303 → bf91532 → 0ad2fb2 →
 - export SVG / PNG / multi-page PDF (kaleido + pypdf)
 - interactivity (linked brushing + cross-filter)
 - Glossary v3 27 用語 + forbidden_vocab 19 documented exceptions
+
+---
+
+## 並列カード消化 (2026-05-15)
+
+4 カード並列実装 (sonnet × 3 + opus × 1、worktree isolation)。
+
+### 27/01 missingness disclosure (commit `44dac5d`)
+
+- `src/analysis/quality/coverage_matrix.py` — coverage[source, role_group, year] 行列
+- `scripts/report_generators/_coverage_block.py` — HTML caveat block
+- `scripts/report_generators/reports/_base.py` — base hook 配線 (auto-inject、DB 不在 graceful degrade)
+- 46 tests pass / hits 8 件 / lint_vocab 0
+
+### 15/01 O3 ip_dependency (commit `0b5b8e8`)
+
+- `O3IpDependencyReport` (既存) のみ修正: unused import / dead var / interpretation 配線漏れ / docstring "ability" → "performance framing"
+- 38 tests pass / anime.score 0 / forbidden vocab 0
+
+### 15/03 O2 mid_management (commit `b433ca2` merge of `78f6a32`)
+
+- `O2MidManagementReport` (既存) docstring "ability" → "evaluative framing"
+- KM curve / studio blockage / cohort 昇進ファネル / HR+Policy brief 組込済
+- 15 tests pass / lint_vocab 0
+
+### 25/02 opportunity_residual_null (commit `d03d57c`)
+
+- `src/analysis/scoring/opportunity.py` cross-sectional → **true (person, year) panel**
+- studio FE (modal) + year FE、Shannon entropy 役職多様性
+- analytical CI (within-person σ/√n, t_{n-1, 0.975}) + permutation null (1000 perms, 0.55s)
+- `compute_opportunity_residual_from_credits()` / `_role_diversity_entropy()` / `_build_panel_from_credits()` / `residual_qq_deviation()`
+- 46 tests pass (was 30) / 下流 161+35 pass / calibration 0.9500 (target 0.950, tol ±0.020)
+- Q-Q deviation 0.039 (Stop-if 0.5 下) / permutation 0.55s (Stop-if 24h 下)
+- `docs/method_notes/opportunity_residual.md` 仮定 + 代替 spec 文書化
