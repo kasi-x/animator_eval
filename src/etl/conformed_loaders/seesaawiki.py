@@ -217,7 +217,11 @@ FROM (
         date,
         name_native_raw,
         TRY_CAST(aliases             AS VARCHAR) AS aliases_v,
-        TRY_CAST(nationality         AS VARCHAR) AS nationality_v,
+        -- 空 array '[]' / '[NULL]' は NULL 扱い (priority list で次 tier に進める)
+        CASE
+            WHEN nationality IS NULL OR len(nationality) = 0 THEN NULL
+            ELSE CAST(nationality[1] AS VARCHAR)
+        END                                      AS nationality_v,
         TRY_CAST(primary_occupations AS VARCHAR) AS primary_occupations_v,
         TRY_CAST(years_active        AS VARCHAR) AS years_active_v,
         TRY_CAST(hometown            AS VARCHAR) AS hometown_v,

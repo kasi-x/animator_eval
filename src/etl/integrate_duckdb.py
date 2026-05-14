@@ -110,6 +110,7 @@ CREATE TABLE IF NOT EXISTS persons (
     image_medium        VARCHAR,
     hometown            VARCHAR,
     blood_type          VARCHAR,
+    nationality         VARCHAR,
     updated_at          TIMESTAMP DEFAULT now()
 );
 
@@ -220,6 +221,7 @@ SELECT
     {image_medium}              AS image_medium,
     {hometown}                  AS hometown,
     {blood_type}                AS blood_type,
+    {nationality}               AS nationality,
     now()                       AS updated_at
 FROM (
     SELECT *,
@@ -262,6 +264,14 @@ def _build_persons_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
         image_medium="image_medium" if "image_medium" in cols else "NULL::VARCHAR",
         hometown="hometown" if "hometown" in cols else "NULL::VARCHAR",
         blood_type="blood_type" if "blood_type" in cols else "NULL::VARCHAR",
+        # nationality は BRONZE 形式が source 別: anilist=VARCHAR[]/ seesaa=INTEGER[]
+        # (union_by_name で VARCHAR[] 統一). 空配列なら NULL, 非空なら最初の要素を採用.
+        nationality=(
+            "CASE WHEN nationality IS NULL OR len(nationality) = 0 "
+            "THEN NULL ELSE CAST(nationality[1] AS VARCHAR) END"
+            if "nationality" in cols
+            else "NULL::VARCHAR"
+        ),
     )
 
 
