@@ -15,6 +15,34 @@ def _json_or_none(v: object) -> str | None:
     return json.dumps(v, ensure_ascii=False) if v is not None else None
 
 
+def _date_dict_to_iso(d: object) -> str | None:
+    """Convert AniList-style `{year, month, day}` dict to ISO date string.
+
+    Truncates to year or year-month when month / day are missing.
+    Returns None for unrecognized input or fully missing year.
+    """
+    if not isinstance(d, dict):
+        return None
+    y, m, day = d.get("year"), d.get("month"), d.get("day")
+    if not y:
+        return None
+    try:
+        yi = int(y)
+    except (TypeError, ValueError):
+        return None
+    if m and day:
+        try:
+            return f"{yi:04d}-{int(m):02d}-{int(day):02d}"
+        except (TypeError, ValueError):
+            return f"{yi:04d}"
+    if m:
+        try:
+            return f"{yi:04d}-{int(m):02d}"
+        except (TypeError, ValueError):
+            return f"{yi:04d}"
+    return f"{yi:04d}"
+
+
 def collect_person_ids_from_preload(data: dict) -> set[int]:
     """Extract all numeric person IDs from preloadData menus credits (excludes studios)."""
     ids: set[int] = set()
@@ -35,12 +63,16 @@ def collect_person_ids_from_preload(data: dict) -> set[int]:
 
 
 def build_anime_row(anime_meta: dict, anime_id: str) -> dict:
-    """Serialize anime_meta nested fields to JSON strings for stable Parquet schema."""
+    """Serialize anime_meta nested fields for stable Parquet schema.
+
+    Dates are emitted as ISO strings (YYYY-MM-DD / YYYY-MM / YYYY) for parity
+    with anilist/mal/ann/seesaa. Other nested fields are JSON-serialized.
+    """
     return {
         "id": anime_id,
         **anime_meta,
-        "start_date": _json_or_none(anime_meta.get("start_date") or {}),
-        "end_date": _json_or_none(anime_meta.get("end_date") or {}),
+        "start_date": _date_dict_to_iso(anime_meta.get("start_date")),
+        "end_date": _date_dict_to_iso(anime_meta.get("end_date")),
         "synonyms": _json_or_none(anime_meta.get("synonyms") or []),
         "delimiters": _json_or_none(anime_meta.get("delimiters")),
         "episode_delimiters": _json_or_none(anime_meta.get("episode_delimiters")),

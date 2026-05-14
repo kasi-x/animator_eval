@@ -527,17 +527,17 @@ def _build_anime_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
     return _ANIME_SQL_INSERT_TMPL.format(
         title_zh="COALESCE(title_zh, '')" if "title_zh" in cols else "''::VARCHAR",
         year="year" if "year" in cols else "NULL::INTEGER",
-        season="season" if "season" in cols else "NULL::VARCHAR",
+        season="UPPER(season)" if "season" in cols else "NULL::VARCHAR",
         quarter="quarter" if "quarter" in cols else "NULL::INTEGER",
         episodes="episodes" if "episodes" in cols else "NULL::INTEGER",
-        format="format" if "format" in cols else "NULL::VARCHAR",
+        format="UPPER(REPLACE(format, ' ', '_'))" if "format" in cols else "NULL::VARCHAR",
         duration="duration" if "duration" in cols else "NULL::INTEGER",
         start_date="start_date" if "start_date" in cols else "NULL::VARCHAR",
         end_date="end_date" if "end_date" in cols else "NULL::VARCHAR",
         status="status" if "status" in cols else "NULL::VARCHAR",
-        source_mat="COALESCE(TRY_CAST(original_work_type AS VARCHAR), TRY_CAST(source AS VARCHAR))"
+        source_mat="TRY_CAST(original_work_type AS VARCHAR)"
         if "original_work_type" in cols
-        else "'unknown'::VARCHAR",
+        else "NULL::VARCHAR",
         work_type="work_type" if "work_type" in cols else "NULL::VARCHAR",
         scale_class="scale_class" if "scale_class" in cols else "NULL::VARCHAR",
         fetched_at="TRY_CAST(fetched_at AS TIMESTAMP)"
