@@ -63,6 +63,7 @@ def silver_gold_dbs(tmp_path, monkeypatch):
         c.execute(_DDL)
 
     monkeypatch.setattr(sr, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(sr, "DEFAULT_DB_PATH", silver_path)
     monkeypatch.setattr(gw, "DEFAULT_GOLD_DB_PATH", gold_path)
     return gold_path
 
@@ -235,6 +236,7 @@ def silver_gold_with_studios(tmp_path, monkeypatch):
         c.execute(_DDL)
 
     monkeypatch.setattr(sr, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(sr, "DEFAULT_DB_PATH", silver_path)
     monkeypatch.setattr(gw, "DEFAULT_GOLD_DB_PATH", gold_path)
     return gold_path
 
@@ -292,6 +294,7 @@ class TestComputeFeatStudioAffiliation:
             c.execute(_DDL)
 
         monkeypatch.setattr(sr, "DEFAULT_SILVER_PATH", silver_path)
+        monkeypatch.setattr(sr, "DEFAULT_DB_PATH", silver_path)
         monkeypatch.setattr(gw, "DEFAULT_GOLD_DB_PATH", gold_path)
 
         n = compute_feat_studio_affiliation_ddb()
