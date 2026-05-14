@@ -82,6 +82,22 @@
 `silver.credits` 6.79M rows のうち kf prefix 参照は person=430K, anime=430K
 (全体の約 6.3%). dedup 影響は中規模.
 
+### Step 1.6: anime SHA-hash vs slug 並存の実態 (2026-05-15)
+
+`conformed.anime` keyframe-source row 2700 件の内訳:
+- 48-hex: 1584 / slug-kebab: 939 / other (短 slug 等): 177
+- **year は全 NULL** (keyframe scraper の限界)
+- 同 (title, year=NULL) で hex+slug **両方** 持つ重複 = わずか **3 件**
+
+つまり SHA-hash と slug は **異なる anime を指す相互補完データ**. dedup 対象は 3 件のみ.
+
+`resolved.anime` での cluster 統合状況:
+- keyframe anime 2,695 件 (5 件は重複統合済)
+- multi-source cluster で他 source 統合済: **2,420 件 (90%)**
+- singleton 残: **275 件 (10%)** — year 欠損が原因で title-only fallback でも match 困難
+
+→ 2c 課題は事実上ほぼ解消済. 残 275 件は scraper 上流での year 補完が筋
+
 ### Step 1.5: Phase 2b 適用後 実 DB 数値 (2026-05-15)
 
 prefix 統一 (v63 silver / v64 conformed / v65 mart) + resolve_studios Phase 2b
