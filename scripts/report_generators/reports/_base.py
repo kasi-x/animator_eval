@@ -20,11 +20,45 @@ from pydantic import BaseModel, field_validator
 from ..html_templates import COMMON_GLOSSARY_TERMS, REPORTS_DIR, wrap_html_v2
 from ..section_builder import DataStatementParams, SectionBuilder
 from ..stratified_loader import StratifiedDataProvider
+from .._coverage_block import coverage_block_html as _coverage_block_html
 
 log = structlog.get_logger()
 
 if TYPE_CHECKING:
     from ..section_builder import ReportSection
+    from src.analysis.quality.coverage_matrix import CoverageMatrix
+
+
+# ---------------------------------------------------------------------------
+# Coverage caveat block helper (27_methodology/01_missingness_disclosure)
+# ---------------------------------------------------------------------------
+
+
+def _build_coverage_block_html(
+    matrix: "CoverageMatrix | None",
+) -> str:
+    """Return coverage caveat block HTML for injection into every report.
+
+    When matrix is None, compute_coverage_matrix() is called with the
+    default resolved.duckdb path. This degrades gracefully when the DB
+    is absent (returns an empty-matrix notice).
+
+    Args:
+        matrix: Pre-computed CoverageMatrix, or None to auto-compute.
+
+    Returns:
+        HTML string for the coverage_block_html parameter of wrap_html_v2().
+    """
+    if matrix is None:
+        try:
+            from src.analysis.quality.coverage_matrix import compute_coverage_matrix
+            matrix = compute_coverage_matrix()
+        except Exception as exc:
+            log.warning("coverage_block_compute_failed", error=str(exc))
+            from src.analysis.quality.coverage_matrix import CoverageMatrix
+            matrix = CoverageMatrix()
+
+    return _coverage_block_html(matrix)
 
 
 # ---------------------------------------------------------------------------
@@ -187,6 +221,7 @@ class BaseReportGenerator(ABC):
         intro_html: str = "",
         data_statement_params: DataStatementParams | None = None,
         extra_glossary: dict[str, str] | None = None,
+        coverage_matrix: "CoverageMatrix | None" = None,
     ) -> Path:
         """Write a v2-compliant HTML report file.
 
@@ -195,6 +230,10 @@ class BaseReportGenerator(ABC):
             intro_html: optional intro block before the body
             data_statement_params: params for data statement (uses defaults if None)
             extra_glossary: additional glossary terms merged with common ones
+            coverage_matrix: optional CoverageMatrix for the caveat block.
+                When None, compute_coverage_matrix() is called automatically
+                so every report gets the mandatory coverage disclosure per
+                TASK_CARDS/27_methodology/01_missingness_disclosure.
 
         Returns:
             Path to the written file.
@@ -210,6 +249,9 @@ class BaseReportGenerator(ABC):
         if extra_glossary:
             terms.update(extra_glossary)
 
+        # Build mandatory coverage caveat block (27_methodology/01_missingness_disclosure)
+        cov_block = _build_coverage_block_html(coverage_matrix)
+
         html = wrap_html_v2(
             title=self.title,
             subtitle=self.subtitle,
@@ -219,6 +261,7 @@ class BaseReportGenerator(ABC):
             glossary_terms=terms,
             data_statement_html=ds_html,
             disclaimer_html=disclaimer_html,
+            coverage_block_html=cov_block,
         )
 
         fname = self.filename or f"{self.name}.html"
@@ -238,6 +281,7 @@ class BaseReportGenerator(ABC):
         interpretation_html: str = "",
         data_statement_params: "DataStatementParams | None" = None,
         extra_glossary: "dict[str, str] | None" = None,
+        coverage_matrix: "CoverageMatrix | None" = None,
     ) -> "Path":
         """Render a report using the mandatory v2 unified section structure.
 
@@ -258,6 +302,8 @@ class BaseReportGenerator(ABC):
                                   contain at least one alternative interpretation).
             data_statement_params: Override defaults for the data statement.
             extra_glossary: Additional glossary terms.
+            coverage_matrix: optional CoverageMatrix for the caveat block.
+                Passed through to write_report(). When None, auto-computed.
 
         Returns:
             Path to the written HTML file.
@@ -322,4 +368,5 @@ class BaseReportGenerator(ABC):
             body,
             data_statement_params=data_statement_params,
             extra_glossary=extra_glossary,
+            coverage_matrix=coverage_matrix,
         )
