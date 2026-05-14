@@ -79,6 +79,8 @@ from .biz_brief_index import BizBriefIndexReport
 from .career_typology import CareerTypologyReport
 # Card 26-02: international collaboration edge structure
 from .structure_international import StructureInternationalReport
+# Card 26-01: production committee bipartite influence centrality
+from .structure_committee import StructureCommitteeReport
 # Card 25-01: studio transfer DiD causal analysis
 from .causal_studio_transfer import CausalStudioTransferReport
 
@@ -123,6 +125,7 @@ V2_REPORT_CLASSES = [
     O7HistoricalRestorationReport,
     O8SoftPowerReport,
     StructureInternationalReport,
+    StructureCommitteeReport,
     # technical appendix
     CareerTypologyReport,
     AKMDiagnosticsReport,
@@ -192,6 +195,7 @@ __all__ = [
     "O8SoftPowerReport",
     "CareerTypologyReport",
     "StructureInternationalReport",
+    "StructureCommitteeReport",
     "CausalStudioTransferReport",
     "V2_REPORT_CLASSES",
 ]

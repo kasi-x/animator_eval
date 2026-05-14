@@ -15,3 +15,4 @@ from .knowledge_spanners import *  # noqa: F401,F403
 from .core_periphery import *  # noqa: F401,F403
 from .peer_effects import *  # noqa: F401,F403
 from .international_collab import *  # noqa: F401,F403
+from .committee_centrality import *  # noqa: F401,F403
