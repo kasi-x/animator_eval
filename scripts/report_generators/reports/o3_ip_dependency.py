@@ -15,10 +15,9 @@ Method overview:
 from __future__ import annotations
 
 import json
-import math
 import random
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -439,10 +438,7 @@ def _bootstrap_share_ci(
     per_credit = person_weighted / n_credits
     shares: list[float] = []
     for _ in range(n_iter):
-        resampled = sum(
-            per_credit for _ in range(rng.choices(range(n_credits), k=n_credits).__len__())
-        )
-        # Use actual resample count (replacement)
+        # Resample person i's credits with replacement; count = resample size
         resample_count = len(rng.choices(range(n_credits), k=n_credits))
         resample_total = resample_count * per_credit
         # Remaining series scale stays fixed (we only resample person i's credits)
@@ -661,7 +657,12 @@ class O3IpDependencyReport(BaseReportGenerator):
             ),
         ]
 
-        interpretation_html = self._build_interpretation(top_results)
+        interp_html = self._build_interpretation(top_results)
+        if interp_html:
+            sections.append(
+                f'<div class="card" id="o3_interpretation">'
+                f"<h2>解釈 / Interpretation</h2>{interp_html}</div>"
+            )
 
         return self.write_report(
             "\n".join(sections),
@@ -1021,7 +1022,7 @@ class O3IpDependencyReport(BaseReportGenerator):
         Returns an SnsPost summarising the structural observation that
         IP production concentrates credited contributions in a small number
         of persons, with reference to the bootstrap CI method.
-        Text is <= 280 chars. No ability framing; structural facts only.
+        Text is <= 280 chars. No performance framing; structural facts only.
         """
         text = (
             "アニメシリーズ制作: 上位 contribution_share 保有者の"
@@ -1047,7 +1048,7 @@ class O3IpDependencyReport(BaseReportGenerator):
         - What Next (neutral, no recommendation)
         - Sources & caveats
 
-        Body is 1500-3000 chars. No ability framing; no causal claims without method.
+        Body is 1500-3000 chars. No performance framing; no causal claims without method.
         免責: structural observation, not evaluation.
         """
         title = (
