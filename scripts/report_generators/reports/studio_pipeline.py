@@ -652,7 +652,7 @@ class StudioPipelineReport(BaseReportGenerator):
 
         Summarises the 4-axis pipeline observation (young theta growth,
         mid-career retention, key-person concentration, bus factor).
-        No ability framing; structural facts only. Text <= 280 chars.
+        Structural facts only; evaluative framing excluded. Text <= 280 chars.
         """
         text = (
             "スタジオ育成パイプライン 4 軸:"
@@ -672,7 +672,7 @@ class StudioPipelineReport(BaseReportGenerator):
         """Generate note.com Tier-C article for studio pipeline analysis.
 
         Covers 4 structural axes with bootstrap CI, interpretation labeled,
-        no causal claims. Body 1500-3000 chars; no ability framing.
+        no causal claims. Body 1500-3000 chars; structural framing only.
         """
         title = (
             "スタジオ育成パイプラインの構造的観察 — "

@@ -1,0 +1,32 @@
+{
+  "audit_date": "2026-05-15",
+  "lint_version": "forbidden_vocab.yaml enforced_categories=['ability_framing', 'causal_verbs', 'evaluative_adjectives', 'ranking_framing', 'hiring_framing']",
+  "reports_dir": "scripts/report_generators/reports",
+  "files_scanned": 49,
+  "files_flagged": 0,
+  "total_violations": 0,
+  "fixed_in_this_run": 0,
+  "categories": {
+    "ability_framing": {
+      "count": 0,
+      "files": []
+    },
+    "causal_verbs": {
+      "count": 0,
+      "files": []
+    },
+    "evaluative_adjectives": {
+      "count": 0,
+      "files": []
+    },
+    "ranking_framing": {
+      "count": 0,
+      "files": []
+    },
+    "hiring_framing": {
+      "count": 0,
+      "files": []
+    }
+  },
+  "per_file": []
+}
