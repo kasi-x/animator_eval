@@ -183,6 +183,19 @@ def is_invalid_for_field(field: str, value: Any) -> bool:
         if _is_numeric_only(v):
             return True
 
+    if field == "nationality":
+        # 空 JSON array '[]' / '{}' は invalid (seesaa 由来 148K 件)
+        if v in ("[]", "{}"):
+            return True
+        # 非空判定: '[...]' 形式なら json.loads して len > 0 を要求
+        if v.startswith("["):
+            import json
+
+            try:
+                return len(json.loads(v)) == 0
+            except json.JSONDecodeError:
+                return False
+
     return False
 
 

@@ -155,6 +155,27 @@ def test_unknown_field_passes() -> None:
     assert is_invalid_for_field("nonexistent", "any value") is False
 
 
+def test_nationality_empty_json_array_invalid() -> None:
+    """seesaa 由来の空 JSON array '[]' は invalid (148K 件流入バグ対策)。"""
+    assert is_invalid_for_field("nationality", "[]") is True
+    assert is_invalid_for_field("nationality", "{}") is True
+    # 空白入り
+    assert is_invalid_for_field("nationality", "[ ]") is True
+
+
+def test_nationality_non_empty_array_valid() -> None:
+    """国籍コードを含む JSON array は valid。"""
+    assert is_invalid_for_field("nationality", '["JP"]') is False
+    assert is_invalid_for_field("nationality", '["JP", "US"]') is False
+    # scalar VARCHAR で来ても valid (案 A 移行後)
+    assert is_invalid_for_field("nationality", "JP") is False
+
+
+def test_nationality_malformed_json_passes_through() -> None:
+    """parse できない '[...' は invalid 扱いせず通す (上流バグは別途検出)。"""
+    assert is_invalid_for_field("nationality", "[malformed") is False
+
+
 # ── select_representative_value 統合 ───────────────────────────────────────
 
 
