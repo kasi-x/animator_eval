@@ -1,4 +1,5 @@
 """Tests for src/etl/atomic_swap.py."""
+
 from pathlib import Path
 
 import pytest

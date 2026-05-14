@@ -226,7 +226,7 @@ def main() -> int:
     skipped = [t for t, s in results.items() if s.startswith("skipped")]
     errors = [(t, s) for t, s in results.items() if s.startswith("error")]
 
-    print(f"\nResults:")
+    print("\nResults:")
     print(f"  Added: {len(added)}")
     if added:
         for t in sorted(added):

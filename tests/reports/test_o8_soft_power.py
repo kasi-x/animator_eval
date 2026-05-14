@@ -69,18 +69,37 @@ CREATE TABLE IF NOT EXISTS roles (
 # Anime with various external links
 _ANIME_ROWS = [
     # id, title, eps, dur, external_links_json
-    ("a1", "Intl Anime A", 12, 24,
-     '[{"url": "https://www.netflix.com/title/12345"}, '
-     '{"url": "https://www.crunchyroll.com/intl-anime-a"}]'),
-    ("a2", "Intl Anime B", 24, 24,
-     '[{"url": "https://crunchyroll.com/intl-anime-b"}]'),
-    ("a3", "Intl Anime C", 12, 30,
-     '[{"url": "https://www.funimation.com/shows/intl-anime-c/"}]'),
+    (
+        "a1",
+        "Intl Anime A",
+        12,
+        24,
+        '[{"url": "https://www.netflix.com/title/12345"}, '
+        '{"url": "https://www.crunchyroll.com/intl-anime-a"}]',
+    ),
+    ("a2", "Intl Anime B", 24, 24, '[{"url": "https://crunchyroll.com/intl-anime-b"}]'),
+    (
+        "a3",
+        "Intl Anime C",
+        12,
+        30,
+        '[{"url": "https://www.funimation.com/shows/intl-anime-c/"}]',
+    ),
     ("a4", "Domestic Only", 13, 24, None),
-    ("a5", "Domestic With Link", 1, 90,
-     '[{"url": "https://www.example.com/domestic"}]'),  # no matching platform
-    ("a6", "Hidive Anime", 12, 24,
-     '[{"url": "https://www.hidive.com/stream/hidive-anime"}]'),
+    (
+        "a5",
+        "Domestic With Link",
+        1,
+        90,
+        '[{"url": "https://www.example.com/domestic"}]',
+    ),  # no matching platform
+    (
+        "a6",
+        "Hidive Anime",
+        12,
+        24,
+        '[{"url": "https://www.hidive.com/stream/hidive-anime"}]',
+    ),
 ]
 
 _PERSON_ROWS = [
@@ -100,7 +119,11 @@ _CREDIT_ROWS = [
     ("p4", "a6", "character_designer"),
     # Persons on domestic anime only
     ("p5", "a4", "director"),
-    ("p2", "a5", "key_animator"),  # p2 also on domestic (but still counts as intl due to a1)
+    (
+        "p2",
+        "a5",
+        "key_animator",
+    ),  # p2 also on domestic (but still counts as intl due to a1)
 ]
 
 _ROLE_ROWS = [
@@ -199,7 +222,10 @@ class TestExtractAnimeDistributionProfiles:
     def test_platform_counts_correct(self, test_conn):
         _, platform_counts = extract_anime_distribution_profiles(test_conn)
         # crunchyroll in a1 + a2 = 2
-        assert platform_counts.get("crunchyroll", PlatformCount("", "", 0)).anime_count == 2
+        assert (
+            platform_counts.get("crunchyroll", PlatformCount("", "", 0)).anime_count
+            == 2
+        )
 
     def test_null_external_links_excluded(self, test_conn):
         profiles, _ = extract_anime_distribution_profiles(test_conn)
@@ -310,13 +336,23 @@ class TestComputeMannWhitney:
     def _make_rows(self, intl_vals, dom_vals) -> list[PersonNetworkRow]:
         rows = []
         for i, v in enumerate(intl_vals):
-            rows.append(PersonNetworkRow(
-                person_id=f"pi{i}", name=f"Intl {i}", theta_proxy=v, is_international=True
-            ))
+            rows.append(
+                PersonNetworkRow(
+                    person_id=f"pi{i}",
+                    name=f"Intl {i}",
+                    theta_proxy=v,
+                    is_international=True,
+                )
+            )
         for i, v in enumerate(dom_vals):
-            rows.append(PersonNetworkRow(
-                person_id=f"pd{i}", name=f"Dom {i}", theta_proxy=v, is_international=False
-            ))
+            rows.append(
+                PersonNetworkRow(
+                    person_id=f"pd{i}",
+                    name=f"Dom {i}",
+                    theta_proxy=v,
+                    is_international=False,
+                )
+            )
         return rows
 
     def test_returns_result_with_sufficient_data(self, rng):
@@ -562,17 +598,23 @@ class TestMethodGate:
         rng = random.Random(99)
         rows = []
         for i in range(n_intl):
-            rows.append(PersonNetworkRow(
-                f"pi{i}", f"Intl {i}",
-                theta_proxy=rng.uniform(1.0, 5.0),
-                is_international=True,
-            ))
+            rows.append(
+                PersonNetworkRow(
+                    f"pi{i}",
+                    f"Intl {i}",
+                    theta_proxy=rng.uniform(1.0, 5.0),
+                    is_international=True,
+                )
+            )
         for i in range(n_dom):
-            rows.append(PersonNetworkRow(
-                f"pd{i}", f"Dom {i}",
-                theta_proxy=rng.uniform(0.5, 3.0),
-                is_international=False,
-            ))
+            rows.append(
+                PersonNetworkRow(
+                    f"pd{i}",
+                    f"Dom {i}",
+                    theta_proxy=rng.uniform(0.5, 3.0),
+                    is_international=False,
+                )
+            )
         return rows
 
     def test_bootstrap_ci_computed(self):

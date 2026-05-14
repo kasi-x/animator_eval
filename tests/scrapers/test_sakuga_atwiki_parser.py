@@ -1,4 +1,5 @@
 """Unit tests for sakuga atwiki person parser."""
+
 from __future__ import annotations
 
 import math
@@ -15,7 +16,9 @@ from src.scrapers.parsers.sakuga_atwiki import (
     parse_person_page,
 )
 
-_PERSONS_DIR = Path(__file__).parent.parent / "fixtures" / "scrapers" / "sakuga" / "persons"
+_PERSONS_DIR = (
+    Path(__file__).parent.parent / "fixtures" / "scrapers" / "sakuga" / "persons"
+)
 
 
 def _html(name: str) -> str:
@@ -30,6 +33,7 @@ def _expected(name: str) -> int:
 # ---------------------------------------------------------------------------
 # Fixture parse: 30 persons — credit count within ±10% of expected
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.parametrize(
     "fixture",
@@ -51,6 +55,7 @@ def test_fixture_credit_count(fixture: str) -> None:
 # Name extraction
 # ---------------------------------------------------------------------------
 
+
 class TestNameExtraction:
     def test_basic_name(self) -> None:
         html = _html("person_01.html")
@@ -66,6 +71,7 @@ class TestNameExtraction:
 # ---------------------------------------------------------------------------
 # Alias extraction
 # ---------------------------------------------------------------------------
+
 
 class TestAliasExtraction:
     def test_betsumei_alias(self) -> None:
@@ -88,6 +94,7 @@ class TestAliasExtraction:
 # active_since_year
 # ---------------------------------------------------------------------------
 
+
 class TestActiveSinceYear:
     def test_min_year_taken(self) -> None:
         html = _html("person_10.html")  # works 2013, 2015, 2018
@@ -104,6 +111,7 @@ class TestActiveSinceYear:
 # source_html_sha256
 # ---------------------------------------------------------------------------
 
+
 def test_sha256_deterministic() -> None:
     html = _html("person_01.html")
     r1 = parse_person_page(html)
@@ -115,6 +123,7 @@ def test_sha256_deterministic() -> None:
 # ---------------------------------------------------------------------------
 # Credit field correctness
 # ---------------------------------------------------------------------------
+
 
 class TestCreditFields:
     def test_work_format_tv(self) -> None:
@@ -146,6 +155,7 @@ class TestCreditFields:
 # No subjective words in output
 # ---------------------------------------------------------------------------
 
+
 def test_no_subjective_words_in_credits() -> None:
     for fixture in [f"person_{i:02d}.html" for i in range(1, 31)]:
         result = parse_person_page(_html(fixture))
@@ -159,13 +169,18 @@ def test_no_subjective_words_in_credits() -> None:
 # LLM fallback invocation
 # ---------------------------------------------------------------------------
 
+
 def test_llm_fallback_called_when_regex_empty() -> None:
     # Page with content but no parseable markers
     # "テキスト内容 " = 7 chars; need wikibody_text >= 500 chars → use * 80
-    html = """<html><body><div id='wikibody'>
+    html = (
+        """<html><body><div id='wikibody'>
     <p>フィルモグラフィ</p>
-    <p>""" + "テキスト内容 " * 80 + """</p>
+    <p>"""
+        + "テキスト内容 " * 80
+        + """</p>
     </div></body></html>"""
+    )
 
     mock_result = [
         ParsedSakugaCredit(
@@ -201,6 +216,7 @@ def test_llm_fallback_not_called_when_credits_found() -> None:
 # ---------------------------------------------------------------------------
 # Helper unit tests
 # ---------------------------------------------------------------------------
+
 
 class TestHelpers:
     def test_extract_year(self) -> None:

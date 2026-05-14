@@ -15,6 +15,7 @@ Role normalization is performed via src.etl.role_mappers at ETL time:
   credits.role     = normalized Role.value  (e.g. "animation_director")
   credits.raw_role = original string from bronze  (NOT NULL)
 """
+
 from __future__ import annotations
 
 import os
@@ -38,14 +39,10 @@ logger = structlog.get_logger()
 
 # Phase 1c: integrate writes to animetor.duckdb (conformed schema).
 # DEFAULT_SILVER_PATH kept as alias for backward-compat (tests / CLI).
-DEFAULT_DB_PATH = Path(
-    os.environ.get("ANIMETOR_DB_PATH", "result/animetor.duckdb")
-)
+DEFAULT_DB_PATH = Path(os.environ.get("ANIMETOR_DB_PATH", "result/animetor.duckdb"))
 DEFAULT_SILVER_PATH = DEFAULT_DB_PATH
 CONFORMED_SCHEMA = "conformed"
-DEFAULT_BRONZE_ROOT = Path(
-    os.environ.get("ANIMETOR_BRONZE_ROOT", "result/bronze")
-)
+DEFAULT_BRONZE_ROOT = Path(os.environ.get("ANIMETOR_BRONZE_ROOT", "result/bronze"))
 
 # Minimal DDL for the three core SILVER tables.
 # Full BRONZE schema lives in src/db/schema.py.
@@ -252,7 +249,9 @@ def _build_persons_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
         name_en="COALESCE(name_en, '')" if "name_en" in cols else "''::VARCHAR",
         name_ko="COALESCE(name_ko, '')" if "name_ko" in cols else "''::VARCHAR",
         name_zh="COALESCE(name_zh, '')" if "name_zh" in cols else "''::VARCHAR",
-        names_alt="COALESCE(names_alt, '{}')" if "names_alt" in cols else "'{}'::VARCHAR",
+        names_alt="COALESCE(names_alt, '{}')"
+        if "names_alt" in cols
+        else "'{}'::VARCHAR",
         birth_date="date_of_birth" if "date_of_birth" in cols else "NULL::VARCHAR",
         death_date="date_of_death" if "date_of_death" in cols else "NULL::VARCHAR",
         website_url="site_url" if "site_url" in cols else "NULL::VARCHAR",
@@ -264,6 +263,7 @@ def _build_persons_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
         hometown="hometown" if "hometown" in cols else "NULL::VARCHAR",
         blood_type="blood_type" if "blood_type" in cols else "NULL::VARCHAR",
     )
+
 
 def _build_credits_insert_seesaawiki(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
     """Load SeesaaWiki credits: (anime_id, role, name, position, episode, affiliation).
@@ -434,7 +434,9 @@ WHERE src.person_id IS NOT NULL AND src.anime_id IS NOT NULL AND src.role IS NOT
 """
 
 
-def _build_credits_insert_sakuga_atwiki(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
+def _build_credits_insert_sakuga_atwiki(
+    conn: duckdb.DuckDBPyConnection, glob: str
+) -> str:
     """Load Sakuga@wiki credits: person_id prefixed, anime_id intentionally NULL.
 
     Sakuga@wiki bronze does not carry an anime_id — only a work_title string.
@@ -485,7 +487,9 @@ def _build_credits_insert_mediaarts(conn: duckdb.DuckDBPyConnection, glob: str) 
     as the fallback to satisfy the NOT NULL constraint.
     """
     cols = _parquet_columns(conn, glob)
-    raw_role_expr = "COALESCE(src.raw_role, src.role)" if "raw_role" in cols else "src.role"
+    raw_role_expr = (
+        "COALESCE(src.raw_role, src.role)" if "raw_role" in cols else "src.role"
+    )
 
     conn.create_function(
         "map_role_mediaarts",
@@ -531,13 +535,21 @@ def _build_anime_sql(conn: duckdb.DuckDBPyConnection, glob: str) -> str:
         start_date="start_date" if "start_date" in cols else "NULL::VARCHAR",
         end_date="end_date" if "end_date" in cols else "NULL::VARCHAR",
         status="status" if "status" in cols else "NULL::VARCHAR",
-        source_mat="COALESCE(TRY_CAST(original_work_type AS VARCHAR), TRY_CAST(source AS VARCHAR))" if "original_work_type" in cols else "'unknown'::VARCHAR",
+        source_mat="COALESCE(TRY_CAST(original_work_type AS VARCHAR), TRY_CAST(source AS VARCHAR))"
+        if "original_work_type" in cols
+        else "'unknown'::VARCHAR",
         work_type="work_type" if "work_type" in cols else "NULL::VARCHAR",
         scale_class="scale_class" if "scale_class" in cols else "NULL::VARCHAR",
-        fetched_at="TRY_CAST(fetched_at AS TIMESTAMP)" if "fetched_at" in cols else "NULL::TIMESTAMP",
+        fetched_at="TRY_CAST(fetched_at AS TIMESTAMP)"
+        if "fetched_at" in cols
+        else "NULL::TIMESTAMP",
         content_hash="content_hash" if "content_hash" in cols else "NULL::VARCHAR",
-        parent_madb_id="NULLIF(parent_madb_id, '')" if "parent_madb_id" in cols else "NULL::VARCHAR",
-        record_type="NULLIF(record_type, '')" if "record_type" in cols else "NULL::VARCHAR",
+        parent_madb_id="NULLIF(parent_madb_id, '')"
+        if "parent_madb_id" in cols
+        else "NULL::VARCHAR",
+        record_type="NULLIF(record_type, '')"
+        if "record_type" in cols
+        else "NULL::VARCHAR",
     )
 
 
@@ -669,7 +681,9 @@ def integrate(
         if _parquet_columns(conn, studios_glob):
             try:
                 conn.execute(_STUDIOS_SQL, [studios_glob])
-                counts["studios"] = conn.execute("SELECT COUNT(*) FROM studios").fetchone()[0]
+                counts["studios"] = conn.execute(
+                    "SELECT COUNT(*) FROM studios"
+                ).fetchone()[0]
                 logger.info("silver_studios", count=counts["studios"])
             except Exception as exc:
                 logger.warning("silver_studios_skip", error=str(exc))
@@ -724,7 +738,9 @@ def integrate(
 def main() -> None:
     import argparse
 
-    parser = argparse.ArgumentParser(description="Integrate BRONZE parquet → SILVER duckdb")
+    parser = argparse.ArgumentParser(
+        description="Integrate BRONZE parquet → SILVER duckdb"
+    )
     parser.add_argument("--bronze-root", default=None)
     parser.add_argument("--silver-path", default=None)
     parser.add_argument("--memory-limit", default="2GB")

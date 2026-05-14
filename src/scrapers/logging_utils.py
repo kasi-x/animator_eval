@@ -141,5 +141,3 @@ def scraper_timer(source: str, operation: str):
             metrics["elapsed_ms"] = int((time.time() - start) * 1000)
         if "source" not in metrics:
             metrics["source"] = source
-
-

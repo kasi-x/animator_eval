@@ -50,18 +50,18 @@ def build_person_show_rows(parsed: dict) -> dict[str, list[dict]]:
     profile = parsed["profile"]
     pid = profile["id"]
     return {
-        "person_profile": [{
-            "person_id": pid,
-            "is_studio": profile["is_studio"],
-            "name_ja": profile["name_ja"],
-            "name_en": profile["name_en"],
-            "aliases_json": json.dumps(profile["aliases_json"], ensure_ascii=False),
-            "avatar": profile["avatar"],
-            "bio": profile["bio"],
-        }],
-        "person_jobs": [
-            {"person_id": pid, "job": job} for job in parsed["jobs"]
+        "person_profile": [
+            {
+                "person_id": pid,
+                "is_studio": profile["is_studio"],
+                "name_ja": profile["name_ja"],
+                "name_en": profile["name_en"],
+                "aliases_json": json.dumps(profile["aliases_json"], ensure_ascii=False),
+                "avatar": profile["avatar"],
+                "bio": profile["bio"],
+            }
         ],
+        "person_jobs": [{"person_id": pid, "job": job} for job in parsed["jobs"]],
         "person_studios": [
             {
                 "person_id": pid,
@@ -98,7 +98,9 @@ def parse_roles_master(data: list[dict]) -> list[dict]:
                 }
             )
         except (KeyError, TypeError, ValueError) as exc:
-            log.warning("keyframe_roles_parse_error", err=str(exc)[:120], row=str(r)[:120])
+            log.warning(
+                "keyframe_roles_parse_error", err=str(exc)[:120], row=str(r)[:120]
+            )
     return rows
 
 
@@ -206,7 +208,9 @@ def _parse_person_credits(credits_raw: list[dict]) -> list[dict]:
                                 "studio_at_credit": ep_credit.get("studio"),
                                 "is_nc": bool(ep_credit.get("is_nc")),
                                 "comment": ep_credit.get("comment"),
-                                "is_primary_alias": bool(ep_credit.get("is_primary_alias")),
+                                "is_primary_alias": bool(
+                                    ep_credit.get("is_primary_alias")
+                                ),
                             }
                         )
     return rows
@@ -255,19 +259,25 @@ def _normalize_preview_entry(entry: dict) -> dict:
     """Normalize a single preview list entry (recent/airing/data)."""
     anilist_id_raw = entry.get("anilistId")
     try:
-        anilist_id: int | None = int(anilist_id_raw) if anilist_id_raw is not None else None
+        anilist_id: int | None = (
+            int(anilist_id_raw) if anilist_id_raw is not None else None
+        )
     except (TypeError, ValueError):
         anilist_id = None
 
     last_modified_raw = entry.get("lastModified")
     try:
-        last_modified: int | None = int(last_modified_raw) if last_modified_raw is not None else None
+        last_modified: int | None = (
+            int(last_modified_raw) if last_modified_raw is not None else None
+        )
     except (TypeError, ValueError):
         last_modified = None
 
     season_year_raw = entry.get("seasonYear")
     try:
-        season_year: int | None = int(season_year_raw) if season_year_raw is not None else None
+        season_year: int | None = (
+            int(season_year_raw) if season_year_raw is not None else None
+        )
     except (TypeError, ValueError):
         season_year = None
 
@@ -340,5 +350,3 @@ def parse_translate_result(data: list[dict]) -> list[dict]:
             }
         )
     return rows
-
-

@@ -24,7 +24,9 @@ from .event_study import EventStudySpec, render_event_study
 from .heatmap import HeatmapSpec, render_heatmap
 from .km_curve import KMCurveSpec, KMStratum, NullSeries, render_km_curve
 from .parallel_coords import (
-    ParallelAxis, ParallelCoordsSpec, render_parallel_coords,
+    ParallelAxis,
+    ParallelCoordsSpec,
+    render_parallel_coords,
 )
 from .radial_network import Neighbor, RadialNetworkSpec, render_radial_network
 from .ridge import RidgePlotSpec, RidgeRow, render_ridge_plot
@@ -33,25 +35,47 @@ from .small_multiples import FacetCell, SmallMultiplesSpec, render_small_multipl
 
 __all__ = [
     # P1
-    "CIPoint", "CIScatterSpec", "ShrinkageInfo", "render_ci_scatter",
+    "CIPoint",
+    "CIScatterSpec",
+    "ShrinkageInfo",
+    "render_ci_scatter",
     # P2
-    "KMCurveSpec", "KMStratum", "NullSeries", "render_km_curve",
+    "KMCurveSpec",
+    "KMStratum",
+    "NullSeries",
+    "render_km_curve",
     # P3
-    "EventStudySpec", "render_event_study",
+    "EventStudySpec",
+    "render_event_study",
     # P4
-    "FacetCell", "SmallMultiplesSpec", "render_small_multiples",
+    "FacetCell",
+    "SmallMultiplesSpec",
+    "render_small_multiples",
     # P5
-    "RidgePlotSpec", "RidgeRow", "render_ridge_plot",
+    "RidgePlotSpec",
+    "RidgeRow",
+    "render_ridge_plot",
     # P6
-    "BoxGroup", "BoxStripCISpec", "render_box_strip_ci",
+    "BoxGroup",
+    "BoxStripCISpec",
+    "render_box_strip_ci",
     # P7
-    "SankeyFlowSpec", "SankeyLink", "SankeyNode", "render_sankey_flow",
+    "SankeyFlowSpec",
+    "SankeyLink",
+    "SankeyNode",
+    "render_sankey_flow",
     # P8
-    "Neighbor", "RadialNetworkSpec", "render_radial_network",
+    "Neighbor",
+    "RadialNetworkSpec",
+    "render_radial_network",
     # P9
-    "HeatmapSpec", "render_heatmap",
+    "HeatmapSpec",
+    "render_heatmap",
     # P10
-    "ParallelAxis", "ParallelCoordsSpec", "render_parallel_coords",
+    "ParallelAxis",
+    "ParallelCoordsSpec",
+    "render_parallel_coords",
     # P11
-    "ChoroplethJPSpec", "render_choropleth_jp",
+    "ChoroplethJPSpec",
+    "render_choropleth_jp",
 ]

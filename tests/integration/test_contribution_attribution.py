@@ -1,4 +1,5 @@
 """contribution_attribution.py coverage tests."""
+
 from src.analysis.contribution_attribution import (
     ContributionMetrics,
     aggregate_contributions_by_person,
@@ -41,6 +42,7 @@ def _anime(
 
 def _credit(pid: str, aid: str, role: Role = Role.KEY_ANIMATOR) -> Credit:
     return Credit(person_id=pid, anime_id=aid, role=role, source="test")
+
 
 class TestRoleWeightEstimation:
     """OLS-based role weight estimation tests."""

@@ -70,6 +70,7 @@ def _rows_as_dicts(
 # Typed loaders — return the same Pydantic model types as database.py
 # ---------------------------------------------------------------------------
 
+
 def load_persons_silver(path: Path | str | None = None) -> list:
     """Load all persons from silver.duckdb as Person model instances.
 
@@ -86,13 +87,15 @@ def load_persons_silver(path: Path | str | None = None) -> list:
     persons = []
     for r in rows:
         try:
-            persons.append(Person(
-                id=r["id"],
-                name_ja=r.get("name_ja") or "",
-                name_en=r.get("name_en") or "",
-                date_of_birth=r.get("birth_date"),
-                site_url=r.get("website_url"),
-            ))
+            persons.append(
+                Person(
+                    id=r["id"],
+                    name_ja=r.get("name_ja") or "",
+                    name_en=r.get("name_en") or "",
+                    date_of_birth=r.get("birth_date"),
+                    site_url=r.get("website_url"),
+                )
+            )
         except Exception:
             logger.debug("silver_person_skip", id=r.get("id"))
     return persons
@@ -134,25 +137,27 @@ def load_anime_silver(path: Path | str | None = None) -> list:
                 no_studios += 1
             if not r.get("year"):
                 no_year += 1
-            anime_list.append(AnimeAnalysis(
-                id=r["id"],
-                title_ja=r.get("title_ja") or "",
-                title_en=r.get("title_en") or "",
-                year=r.get("year"),
-                season=r.get("season"),
-                quarter=r.get("quarter"),
-                episodes=r.get("episodes"),
-                format=r.get("format"),
-                status=r.get("status"),
-                start_date=r.get("start_date"),
-                end_date=r.get("end_date"),
-                duration=r.get("duration"),
-                original_work_type=r.get("source_mat"),
-                source=r.get("source_mat"),
-                work_type=r.get("work_type"),
-                scale_class=r.get("scale_class"),
-                studios=studios,
-            ))
+            anime_list.append(
+                AnimeAnalysis(
+                    id=r["id"],
+                    title_ja=r.get("title_ja") or "",
+                    title_en=r.get("title_en") or "",
+                    year=r.get("year"),
+                    season=r.get("season"),
+                    quarter=r.get("quarter"),
+                    episodes=r.get("episodes"),
+                    format=r.get("format"),
+                    status=r.get("status"),
+                    start_date=r.get("start_date"),
+                    end_date=r.get("end_date"),
+                    duration=r.get("duration"),
+                    original_work_type=r.get("source_mat"),
+                    source=r.get("source_mat"),
+                    work_type=r.get("work_type"),
+                    scale_class=r.get("scale_class"),
+                    studios=studios,
+                )
+            )
         except Exception:
             logger.debug("silver_anime_skip", id=r.get("id"))
     logger.info(
@@ -182,15 +187,17 @@ def load_credits_silver(path: Path | str | None = None) -> list:
     skipped = 0
     for r in rows:
         try:
-            credits.append(Credit(
-                person_id=r["person_id"],
-                anime_id=r["anime_id"],
-                role=Role(r["role"]),
-                raw_role=r.get("raw_role") or None,
-                episode=r.get("episode"),
-                source=r.get("evidence_source") or "",
-                evidence_source=r.get("evidence_source"),
-            ))
+            credits.append(
+                Credit(
+                    person_id=r["person_id"],
+                    anime_id=r["anime_id"],
+                    role=Role(r["role"]),
+                    raw_role=r.get("raw_role") or None,
+                    episode=r.get("episode"),
+                    source=r.get("evidence_source") or "",
+                    evidence_source=r.get("evidence_source"),
+                )
+            )
         except (ValueError, KeyError):
             skipped += 1
     if skipped:
@@ -201,6 +208,7 @@ def load_credits_silver(path: Path | str | None = None) -> list:
 # ---------------------------------------------------------------------------
 # Raw dict loaders — for analytics that don't need Pydantic model conversion
 # ---------------------------------------------------------------------------
+
 
 def query_silver(
     sql: str,
@@ -215,6 +223,7 @@ def query_silver(
 # ---------------------------------------------------------------------------
 # Convenience helpers used by api.py (Step C migration)
 # ---------------------------------------------------------------------------
+
 
 def silver_available(path: Path | str | None = None) -> bool:
     """Return True if silver.duckdb exists and is readable."""
@@ -267,7 +276,9 @@ def load_all_anime(path: Path | str | None = None) -> list:
             r = dict(zip(cols, row))
             try:
                 studios_raw = r.get("studios")
-                studios = list(studios_raw) if isinstance(studios_raw, (list, tuple)) else []
+                studios = (
+                    list(studios_raw) if isinstance(studios_raw, (list, tuple)) else []
+                )
                 result.append(
                     AnimeAnalysis(
                         id=r["id"],
@@ -299,7 +310,10 @@ def silver_db_stats(
     gold_path: Path | str | None = None,
 ) -> dict:
     """Return DB stats for the /api/stats endpoint. Returns {} if gold unavailable."""
-    from src.analysis.io.mart_writer import gold_connect_with_silver, DEFAULT_GOLD_DB_PATH
+    from src.analysis.io.mart_writer import (
+        gold_connect_with_silver,
+        DEFAULT_GOLD_DB_PATH,
+    )
 
     g_path = Path(str(gold_path or DEFAULT_GOLD_DB_PATH))
     if not g_path.exists():

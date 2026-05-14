@@ -19,7 +19,7 @@ from ..theme import apply_theme
 
 @dataclass(frozen=True)
 class EventStudySpec:
-    leads_lags: Sequence[int]          # e.g. [-5, -4, ..., 5]
+    leads_lags: Sequence[int]  # e.g. [-5, -4, ..., 5]
     estimates: Sequence[float]
     ci_lo: Sequence[float]
     ci_hi: Sequence[float]
@@ -103,8 +103,10 @@ def render_event_study(spec: EventStudySpec, *, theme: str = "dark") -> go.Figur
     fig.add_hline(y=0, line_dash="dot", line_color="rgba(255,255,255,0.3)")
 
     # 5. pre-period normalization marker
-    if spec.pre_period_normalization is not None and \
-            spec.pre_period_normalization in spec.leads_lags:
+    if (
+        spec.pre_period_normalization is not None
+        and spec.pre_period_normalization in spec.leads_lags
+    ):
         fig.add_annotation(
             x=spec.pre_period_normalization,
             y=0,

@@ -104,8 +104,8 @@ def silver_conn() -> sqlite3.Connection:
         ("JP", 300, None, None),
         ("CN", 60, None, None),
         ("KR", 40, None, None),
-        ("TH", 20, None, None),   # SE_ASIA
-        (None, 20, None, None),   # unknown
+        ("TH", 20, None, None),  # SE_ASIA
+        (None, 20, None, None),  # unknown
     ]
     p_idx = 0
     for country, count, zh, ko in configs:
@@ -149,7 +149,9 @@ def empty_conn() -> sqlite3.Connection:
 
 def test_generate_returns_path(silver_conn: sqlite3.Connection, tmp_path: Path) -> None:
     """O4ForeignTalentReport.generate() returns a valid HTML path."""
-    from scripts.report_generators.reports.o4_foreign_talent import O4ForeignTalentReport
+    from scripts.report_generators.reports.o4_foreign_talent import (
+        O4ForeignTalentReport,
+    )
 
     report = O4ForeignTalentReport(silver_conn, output_dir=tmp_path)
     result = report.generate()
@@ -164,7 +166,9 @@ def test_generate_returns_path(silver_conn: sqlite3.Connection, tmp_path: Path) 
 
 def test_generate_empty_db(empty_conn: sqlite3.Connection, tmp_path: Path) -> None:
     """O4ForeignTalentReport.generate() with empty DB returns path gracefully."""
-    from scripts.report_generators.reports.o4_foreign_talent import O4ForeignTalentReport
+    from scripts.report_generators.reports.o4_foreign_talent import (
+        O4ForeignTalentReport,
+    )
 
     report = O4ForeignTalentReport(empty_conn, output_dir=tmp_path)
     result = report.generate()
@@ -172,9 +176,13 @@ def test_generate_empty_db(empty_conn: sqlite3.Connection, tmp_path: Path) -> No
     assert result.exists()
 
 
-def test_generate_creates_lineage(silver_conn: sqlite3.Connection, tmp_path: Path) -> None:
+def test_generate_creates_lineage(
+    silver_conn: sqlite3.Connection, tmp_path: Path
+) -> None:
     """insert_lineage must populate meta_lineage with CI and null_model."""
-    from scripts.report_generators.reports.o4_foreign_talent import O4ForeignTalentReport
+    from scripts.report_generators.reports.o4_foreign_talent import (
+        O4ForeignTalentReport,
+    )
 
     report = O4ForeignTalentReport(silver_conn, output_dir=tmp_path)
     report.generate()
@@ -190,16 +198,18 @@ def test_generate_creates_lineage(silver_conn: sqlite3.Connection, tmp_path: Pat
     assert null_model, "null_model must be non-empty"
 
 
-def test_generate_html_has_disclaimer(silver_conn: sqlite3.Connection, tmp_path: Path) -> None:
+def test_generate_html_has_disclaimer(
+    silver_conn: sqlite3.Connection, tmp_path: Path
+) -> None:
     """Generated HTML must contain the disclaimer (JA + EN)."""
-    from scripts.report_generators.reports.o4_foreign_talent import O4ForeignTalentReport
+    from scripts.report_generators.reports.o4_foreign_talent import (
+        O4ForeignTalentReport,
+    )
 
     report = O4ForeignTalentReport(silver_conn, output_dir=tmp_path)
     result = report.generate()
     html = result.read_text(encoding="utf-8")
-    assert "Disclaimer" in html or "免責" in html, (
-        "Report must contain a disclaimer"
-    )
+    assert "Disclaimer" in html or "免責" in html, "Report must contain a disclaimer"
 
 
 # ---------------------------------------------------------------------------
@@ -254,7 +264,8 @@ def _lint_vocab_violations(path: Path) -> list[str]:
     patterns = _compile_patterns(terms)
     findings = lint_file(path, patterns, replacements)
     real_findings = [
-        f for f in findings
+        f
+        for f in findings
         if not _is_definitional(f) and not _is_excepted(f, exceptions)
     ]
     return [f.format() for f in real_findings]
@@ -272,20 +283,25 @@ def test_lint_vocab_analysis() -> None:
     """nationality_resolver.py must not contain forbidden vocabulary."""
     violations = _lint_vocab_violations(_ANALYSIS_SRC)
     assert not violations, (
-        "Forbidden vocabulary found in nationality_resolver.py:\n" + "\n".join(violations)
+        "Forbidden vocabulary found in nationality_resolver.py:\n"
+        + "\n".join(violations)
     )
 
 
 def test_no_anime_score_in_report() -> None:
     """o4_foreign_talent.py must not reference anime.score."""
     text = _REPORT_SRC.read_text(encoding="utf-8")
-    assert "anime.score" not in text, "anime.score must not appear in o4_foreign_talent.py"
+    assert "anime.score" not in text, (
+        "anime.score must not appear in o4_foreign_talent.py"
+    )
 
 
 def test_no_anime_score_in_analysis() -> None:
     """nationality_resolver.py must not reference anime.score."""
     text = _ANALYSIS_SRC.read_text(encoding="utf-8")
-    assert "anime.score" not in text, "anime.score must not appear in nationality_resolver.py"
+    assert "anime.score" not in text, (
+        "anime.score must not appear in nationality_resolver.py"
+    )
 
 
 def test_no_ability_framing_in_report() -> None:
@@ -304,9 +320,9 @@ def test_method_gate_ci_present() -> None:
     """Report source must declare a CI method."""
     text = _REPORT_SRC.read_text(encoding="utf-8")
     assert "ci_method" in text, "ci_method must be declared in insert_lineage call"
-    assert "95%" in text or "bootstrap" in text.lower() or "analytical" in text.lower(), (
-        "CI method must mention 95% or bootstrap or analytical"
-    )
+    assert (
+        "95%" in text or "bootstrap" in text.lower() or "analytical" in text.lower()
+    ), "CI method must mention 95% or bootstrap or analytical"
 
 
 def test_method_gate_null_model_present() -> None:
@@ -468,7 +484,7 @@ def test_nationality_summary(silver_conn: sqlite3.Connection) -> None:
 
     assert summary.total_persons == 440
     assert summary.n_high_confidence == 420  # 300+60+40+20 = 420
-    assert summary.n_low_confidence == 20     # unknown group
+    assert summary.n_low_confidence == 20  # unknown group
     assert summary.coverage_pct == pytest.approx(95.45, abs=0.5)
 
 
@@ -487,7 +503,9 @@ def test_studio_foreign_share(silver_conn: sqlite3.Connection) -> None:
     if len(rows) >= 2:
         # Sorted descending by foreign_share
         shares = [r["foreign_share"] for r in rows]
-        assert shares == sorted(shares, reverse=True), "Should be sorted desc by foreign_share"
+        assert shares == sorted(shares, reverse=True), (
+            "Should be sorted desc by foreign_share"
+        )
 
     for row in rows:
         assert 0.0 <= row["foreign_share"] <= 1.0, "foreign_share must be in [0,1]"
@@ -502,7 +520,9 @@ def test_person_fe_by_nationality_empty() -> None:
     )
 
     conn = sqlite3.connect(":memory:")
-    conn.execute("CREATE TABLE persons (id TEXT PRIMARY KEY, name_en TEXT NOT NULL DEFAULT '')")
+    conn.execute(
+        "CREATE TABLE persons (id TEXT PRIMARY KEY, name_en TEXT NOT NULL DEFAULT '')"
+    )
     conn.execute("INSERT INTO persons VALUES ('p1', 'Test')")
     conn.commit()
 
@@ -529,7 +549,9 @@ def test_analysis_src_exists() -> None:
 def test_report_registered_in_init() -> None:
     """O4ForeignTalentReport must be in V2_REPORT_CLASSES."""
     from scripts.report_generators.reports import V2_REPORT_CLASSES
-    from scripts.report_generators.reports.o4_foreign_talent import O4ForeignTalentReport
+    from scripts.report_generators.reports.o4_foreign_talent import (
+        O4ForeignTalentReport,
+    )
 
     assert O4ForeignTalentReport in V2_REPORT_CLASSES, (
         "O4ForeignTalentReport must be in V2_REPORT_CLASSES"
@@ -538,7 +560,9 @@ def test_report_registered_in_init() -> None:
 
 def test_report_name_and_filename() -> None:
     """O4ForeignTalentReport must have correct name and filename."""
-    from scripts.report_generators.reports.o4_foreign_talent import O4ForeignTalentReport
+    from scripts.report_generators.reports.o4_foreign_talent import (
+        O4ForeignTalentReport,
+    )
 
     assert O4ForeignTalentReport.name == "o4_foreign_talent"
     assert O4ForeignTalentReport.filename == "o4_foreign_talent.html"

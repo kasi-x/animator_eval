@@ -66,8 +66,10 @@ class TestMethodNoteTemplatesDefinition:
         assert "Greenwood" in METHOD_NOTE_TEMPLATES["km"]
 
     def test_counterfactual_template_mentions_bootstrap(self):
-        assert "Bootstrap" in METHOD_NOTE_TEMPLATES["counterfactual"] or \
-               "bootstrap" in METHOD_NOTE_TEMPLATES["counterfactual"]
+        assert (
+            "Bootstrap" in METHOD_NOTE_TEMPLATES["counterfactual"]
+            or "bootstrap" in METHOD_NOTE_TEMPLATES["counterfactual"]
+        )
 
     def test_louvain_template_mentions_modularity(self):
         assert "モジュラリティ" in METHOD_NOTE_TEMPLATES["louvain"]
@@ -205,9 +207,7 @@ class TestMethodNoteFromLineageWithMethodKeys:
     def test_multiple_method_keys(self):
         conn = _make_lineage_conn()
         sb = SectionBuilder()
-        html = sb.method_note_from_lineage(
-            "meta_test", conn, method_keys=["mwu", "km"]
-        )
+        html = sb.method_note_from_lineage("meta_test", conn, method_keys=["mwu", "km"])
         assert "Mann-Whitney" in html
         assert "Kaplan-Meier" in html
 
@@ -221,9 +221,7 @@ class TestMethodNoteFromLineageWithMethodKeys:
         """Lineage source tables should still appear even when method_keys is set."""
         conn = _make_lineage_conn()
         sb = SectionBuilder()
-        html = sb.method_note_from_lineage(
-            "meta_test", conn, method_keys=["did"]
-        )
+        html = sb.method_note_from_lineage("meta_test", conn, method_keys=["did"])
         assert "credits" in html
         assert "persons" in html
         assert "DID" in html or "差分の差分" in html

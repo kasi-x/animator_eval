@@ -48,8 +48,7 @@ class TestCareerEdgeCases:
 
     def test_same_year_many_credits(self):
         anime_map = {
-            f"a{i}": Anime(id=f"a{i}", title_en=f"X{i}", year=2024)
-            for i in range(20)
+            f"a{i}": Anime(id=f"a{i}", title_en=f"X{i}", year=2024) for i in range(20)
         }
         credits = [
             Credit(person_id="p1", anime_id=f"a{i}", role=Role.KEY_ANIMATOR)

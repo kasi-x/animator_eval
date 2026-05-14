@@ -42,7 +42,9 @@ from src.scrapers.queries.bangumi_graphql import DEFAULT_USER_AGENT
 # ---------------------------------------------------------------------------
 
 
-def _gql_response(data: dict[str, Any], status: int = 200, headers: dict | None = None) -> httpx.Response:
+def _gql_response(
+    data: dict[str, Any], status: int = 200, headers: dict | None = None
+) -> httpx.Response:
     """Wrap data in a standard GraphQL envelope {data: ...}."""
     body = json.dumps({"data": data}).encode()
     return httpx.Response(status, content=body, headers=headers or {})
@@ -122,13 +124,24 @@ _SAMPLE_SUBJECT = {
     "nameCN": "魔法少女小圆",
     "summary": "Test summary",
     "infobox": [{"key": "放送开始", "values": [{"k": None, "v": "2011"}]}],
-    "images": {"large": "/l/328.jpg", "medium": "/m/328.jpg", "small": "/s/328.jpg", "grid": "/g/328.jpg"},
+    "images": {
+        "large": "/l/328.jpg",
+        "medium": "/m/328.jpg",
+        "small": "/s/328.jpg",
+        "grid": "/g/328.jpg",
+    },
     "airtime": {"date": "2011-01-07", "month": 1, "weekday": 5, "year": 2011},
     "rating": {"score": 9.0, "rank": 1, "total": 50000},
     "tags": [{"name": "魔法少女", "count": 100}],
     "persons": [
         {
-            "person": {"id": 9527, "name": "新房昭之", "type": 1, "career": ["animator"], "images": None},
+            "person": {
+                "id": 9527,
+                "name": "新房昭之",
+                "type": 1,
+                "career": ["animator"],
+                "images": None,
+            },
             "position": 2,
         }
     ],
@@ -137,7 +150,12 @@ _SAMPLE_SUBJECT = {
             "character": {
                 "id": 4321,
                 "name": "鹿目まどか",
-                "images": {"large": "/cl.jpg", "medium": "/cm.jpg", "small": "/cs.jpg", "grid": "/cg.jpg"},
+                "images": {
+                    "large": "/cl.jpg",
+                    "medium": "/cm.jpg",
+                    "small": "/cs.jpg",
+                    "grid": "/cg.jpg",
+                },
                 "summary": "",
             },
             "type": 1,
@@ -158,7 +176,12 @@ _SAMPLE_PERSON_REST = {
     "birth_year": 1961,
     "birth_mon": 9,
     "birth_day": 27,
-    "images": {"large": "/pl.jpg", "medium": "/pm.jpg", "small": "/ps.jpg", "grid": "/pg.jpg"},
+    "images": {
+        "large": "/pl.jpg",
+        "medium": "/pm.jpg",
+        "small": "/ps.jpg",
+        "grid": "/pg.jpg",
+    },
     "stat": {"comments": 42, "collects": 3000},
     "locked": False,
     "last_modified": "2024-01-01T00:00:00Z",
@@ -175,7 +198,12 @@ _SAMPLE_CHARACTER_REST = {
     "birth_year": None,
     "birth_mon": None,
     "birth_day": None,
-    "images": {"large": "/cl.jpg", "medium": "/cm.jpg", "small": "/cs.jpg", "grid": "/cg.jpg"},
+    "images": {
+        "large": "/cl.jpg",
+        "medium": "/cm.jpg",
+        "small": "/cs.jpg",
+        "grid": "/cg.jpg",
+    },
     "stat": {"comments": 5, "collects": 1500},
     "locked": False,
     "nsfw": False,
@@ -274,7 +302,9 @@ def test_other_graphql_error_raises_scraper_error():
 def test_fetch_subject_retries_on_429_then_succeeds():
     """A 429 response followed by a 200 should yield the successful result."""
     responses = [
-        httpx.Response(429, content=b'{"title":"Rate Limited"}', headers={"Retry-After": "1"}),
+        httpx.Response(
+            429, content=b'{"title":"Rate Limited"}', headers={"Retry-After": "1"}
+        ),
         _gql_response({"subject": _SAMPLE_SUBJECT}),
     ]
     transport = _SequenceTransport(responses)
@@ -438,9 +468,20 @@ _SAMPLE_SUBJECT_CHARS_REST = [
         "name": "鹿目まどか",
         "relation": "主角",
         "type": 1,
-        "images": {"large": "/cl.jpg", "medium": "/cm.jpg", "small": "/cs.jpg", "grid": "/cg.jpg"},
+        "images": {
+            "large": "/cl.jpg",
+            "medium": "/cm.jpg",
+            "small": "/cs.jpg",
+            "grid": "/cg.jpg",
+        },
         "actors": [
-            {"id": 9527, "name": "悠木碧", "type": 1, "career": ["seiyu"], "images": None}
+            {
+                "id": 9527,
+                "name": "悠木碧",
+                "type": 1,
+                "career": ["seiyu"],
+                "images": None,
+            }
         ],
     }
 ]
@@ -553,7 +594,9 @@ def test_fetch_subjects_batched_empty_list_raises():
 # Fixture-based tests (real API responses saved to tests/fixtures/scrapers/bangumi/)
 # ---------------------------------------------------------------------------
 
-_FIXTURES_DIR = pathlib.Path(__file__).parent.parent / "fixtures" / "scrapers" / "bangumi"
+_FIXTURES_DIR = (
+    pathlib.Path(__file__).parent.parent / "fixtures" / "scrapers" / "bangumi"
+)
 
 
 def _load_fixture(name: str) -> dict:
@@ -582,7 +625,14 @@ def test_fixture_adapt_subject_persons_real_shape():
 def test_adapt_subject_characters_rest_no_actors():
     """adapt_subject_characters_rest handles characters with no actors."""
     rest_chars = [
-        {"id": 1, "name": "ルルーシュ", "relation": "主角", "type": 1, "images": None, "actors": []}
+        {
+            "id": 1,
+            "name": "ルルーシュ",
+            "relation": "主角",
+            "type": 1,
+            "images": None,
+            "actors": [],
+        }
     ]
     chars = adapt_subject_characters_rest(rest_chars)
     assert len(chars) == 1
@@ -604,9 +654,20 @@ _SAMPLE_SUBJECT_CHARS_REST_API = [
         "name": "ルルーシュ・ランペルージ",
         "relation": "主角",
         "type": 1,
-        "images": {"large": "/l/1.jpg", "medium": "/m/1.jpg", "small": "/s/1.jpg", "grid": "/g/1.jpg"},
+        "images": {
+            "large": "/l/1.jpg",
+            "medium": "/m/1.jpg",
+            "small": "/s/1.jpg",
+            "grid": "/g/1.jpg",
+        },
         "actors": [
-            {"id": 3818, "name": "福山潤", "type": 1, "career": ["seiyu"], "images": None}
+            {
+                "id": 3818,
+                "name": "福山潤",
+                "type": 1,
+                "career": ["seiyu"],
+                "images": None,
+            }
         ],
     }
 ]
@@ -614,7 +675,9 @@ _SAMPLE_SUBJECT_CHARS_REST_API = [
 
 def test_fetch_subject_characters_rest_returns_list():
     """fetch_subject_characters_rest returns a list with nested actors."""
-    transport = _StaticTransport(httpx.Response(200, json=_SAMPLE_SUBJECT_CHARS_REST_API))
+    transport = _StaticTransport(
+        httpx.Response(200, json=_SAMPLE_SUBJECT_CHARS_REST_API)
+    )
 
     async def run(client: BangumiGraphQLClient):
         return await client.fetch_subject_characters_rest(8)

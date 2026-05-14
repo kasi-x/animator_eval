@@ -26,7 +26,8 @@ from src.viz.primitives import (
 def _sample_fig():
     spec = CIScatterSpec(
         points=[CIPoint("a", 1.2, 1.0, 1.4, p_value=0.01)],
-        x_label="HR", reference=1.0,
+        x_label="HR",
+        reference=1.0,
     )
     return render_ci_scatter(spec, theme="dark")
 
@@ -73,6 +74,7 @@ def test_export_pdf_multi_page(tmp_path: Path):
     assert out.exists() and out.stat().st_size > 0
 
     from pypdf import PdfReader
+
     reader = PdfReader(str(out))
     assert len(reader.pages) == 3
 

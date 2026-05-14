@@ -12,6 +12,7 @@ from typing import Optional
 @dataclass
 class MethodMetadata:
     """Method metadata extracted from meta_lineage."""
+
     table_name: str
     audience: str
     source_silver_tables: list[str]
@@ -24,13 +25,15 @@ class MethodMetadata:
     inputs_hash: Optional[str]
 
 
-def load_method_metadata(conn: duckdb.DuckDBPyConnection, table_name: str) -> Optional[MethodMetadata]:
+def load_method_metadata(
+    conn: duckdb.DuckDBPyConnection, table_name: str
+) -> Optional[MethodMetadata]:
     """Load method metadata for a report from meta_lineage.
-    
+
     Args:
         conn: Database connection
         table_name: Name of the meta_* table (e.g., 'meta_policy_attrition')
-    
+
     Returns:
         MethodMetadata instance or None if not found
     """
@@ -41,7 +44,7 @@ def load_method_metadata(conn: duckdb.DuckDBPyConnection, table_name: str) -> Op
         FROM meta_lineage
         WHERE table_name = ?
         """,
-        (table_name,)
+        (table_name,),
     )
     row = cursor.fetchone()
     if not row:
@@ -63,55 +66,65 @@ def load_method_metadata(conn: duckdb.DuckDBPyConnection, table_name: str) -> Op
 
 def render_method_notes(metadata: MethodMetadata) -> str:
     """Render method notes HTML from metadata.
-    
+
     Args:
         metadata: MethodMetadata instance
-    
+
     Returns:
         HTML string suitable for inclusion in report
     """
     html_parts = [
         '<section id="method-notes">',
-        '<h2>Method Notes</h2>',
-        f'<p><strong>Formula version:</strong> {metadata.formula_version}</p>',
+        "<h2>Method Notes</h2>",
+        f"<p><strong>Formula version:</strong> {metadata.formula_version}</p>",
     ]
 
     # Silver tables used
     if metadata.source_silver_tables:
-        tables_str = ", ".join([f"<code>{t}</code>" for t in metadata.source_silver_tables])
-        html_parts.append(f'<p><strong>Source tables:</strong> {tables_str}</p>')
+        tables_str = ", ".join(
+            [f"<code>{t}</code>" for t in metadata.source_silver_tables]
+        )
+        html_parts.append(f"<p><strong>Source tables:</strong> {tables_str}</p>")
 
     # CI method
     if metadata.ci_method:
-        html_parts.append(f'<p><strong>Confidence interval method:</strong> {metadata.ci_method}</p>')
+        html_parts.append(
+            f"<p><strong>Confidence interval method:</strong> {metadata.ci_method}</p>"
+        )
 
     # Null model
     if metadata.null_model:
-        html_parts.append(f'<p><strong>Null model:</strong> {metadata.null_model}</p>')
+        html_parts.append(f"<p><strong>Null model:</strong> {metadata.null_model}</p>")
 
     # Holdout validation
     if metadata.holdout_method:
-        html_parts.append(f'<p><strong>Holdout validation:</strong> {metadata.holdout_method}</p>')
+        html_parts.append(
+            f"<p><strong>Holdout validation:</strong> {metadata.holdout_method}</p>"
+        )
 
     # Sample size
     if metadata.row_count:
-        html_parts.append(f'<p><strong>Sample size:</strong> {metadata.row_count:,} observations</p>')
+        html_parts.append(
+            f"<p><strong>Sample size:</strong> {metadata.row_count:,} observations</p>"
+        )
 
     # Additional notes
     if metadata.notes:
-        html_parts.append(f'<p><strong>Notes:</strong> {metadata.notes}</p>')
+        html_parts.append(f"<p><strong>Notes:</strong> {metadata.notes}</p>")
 
-    html_parts.append('</section>')
+    html_parts.append("</section>")
     return "\n".join(html_parts)
 
 
-def audit_method_completeness(conn: duckdb.DuckDBPyConnection, table_name: str) -> tuple[list[str], list[str]]:
+def audit_method_completeness(
+    conn: duckdb.DuckDBPyConnection, table_name: str
+) -> tuple[list[str], list[str]]:
     """Audit method metadata completeness.
-    
+
     Args:
         conn: Database connection
         table_name: Name of the meta_* table
-    
+
     Returns:
         (errors, warnings) tuple - errors are mandatory gaps, warnings are nice-to-haves
     """
@@ -130,10 +143,16 @@ def audit_method_completeness(conn: duckdb.DuckDBPyConnection, table_name: str) 
 
     # Nice-to-have fields (warnings if missing)
     if not metadata.ci_method and metadata.audience != "technical_appendix":
-        warnings.append(f"{table_name}: ci_method is not specified (needed for public reports)")
+        warnings.append(
+            f"{table_name}: ci_method is not specified (needed for public reports)"
+        )
     if not metadata.null_model and metadata.audience in ("policy", "hr"):
-        warnings.append(f"{table_name}: null_model is not specified (recommended for causal claims)")
+        warnings.append(
+            f"{table_name}: null_model is not specified (recommended for causal claims)"
+        )
     if not metadata.holdout_method and "predictive" in (metadata.notes or "").lower():
-        warnings.append(f"{table_name}: holdout_method is not specified (required for predictive claims)")
+        warnings.append(
+            f"{table_name}: holdout_method is not specified (required for predictive claims)"
+        )
 
     return errors, warnings

@@ -1,4 +1,5 @@
 """Career analysis subpackage."""
+
 from src.analysis.career.career import *  # noqa: F401, F403
 from src.analysis.career.career_friction import *  # noqa: F401, F403
 from src.analysis.career.growth import *  # noqa: F401, F403

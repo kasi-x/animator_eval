@@ -25,8 +25,16 @@ def _build_driver(*, with_checkpoint: bool = False):
 
     from hamilton import driver
     from src.pipeline_phases.hamilton_modules import (
-        assembly, causal, core, genre, loading, metrics,
-        network, resolution, scoring, studio,
+        assembly,
+        causal,
+        core,
+        genre,
+        loading,
+        metrics,
+        network,
+        resolution,
+        scoring,
+        studio,
     )
     from src.pipeline_phases.lifecycle import CheckpointHook, TimingHook
 
@@ -36,8 +44,18 @@ def _build_driver(*, with_checkpoint: bool = False):
 
     return (
         driver.Builder()
-        .with_modules(loading, resolution, scoring, metrics, assembly,
-                      core, studio, genre, network, causal)
+        .with_modules(
+            loading,
+            resolution,
+            scoring,
+            metrics,
+            assembly,
+            core,
+            studio,
+            genre,
+            network,
+            causal,
+        )
         .with_adapters(*adapters)
         .build()
     )
@@ -138,7 +156,7 @@ def run_scoring_pipeline(
 
     # ── Hamilton: Phases 1-9 ─────────────────────────────────────────────────
     from src.pipeline_phases.analysis_modules import run_analysis_modules_phase
-    
+
     if dry_run:
         dr = _build_driver()
         result = dr.execute(
@@ -213,7 +231,9 @@ def run_scoring_pipeline(
     # ── Phase 9 post-step: persist meta_common_person_parameters ─────────────
     person_params = ctx.analysis_results.get("person_parameters")
     if person_params:
-        from src.analysis.person_parameters import populate_meta_common_person_parameters
+        from src.analysis.person_parameters import (
+            populate_meta_common_person_parameters,
+        )
 
         populate_meta_common_person_parameters(person_params)
 
@@ -223,7 +243,7 @@ def run_scoring_pipeline(
     export_and_visualize_phase(ctx, elapsed)
 
     # ── Checkpoint cleanup ────────────────────────────────────────────────────
-    
+
     PipelineCheckpoint(JSON_DIR).delete()
 
     # ── Performance report ────────────────────────────────────────────────────
@@ -234,7 +254,9 @@ def run_scoring_pipeline(
     for old in sorted(JSON_DIR.glob("performance_*.json"))[:-10]:
         old.unlink(missing_ok=True)
 
-    logger.info("pipeline_complete", elapsed=round(elapsed, 2), persons=len(ctx.results))
+    logger.info(
+        "pipeline_complete", elapsed=round(elapsed, 2), persons=len(ctx.results)
+    )
 
     if ws_broadcaster:
         ws_broadcaster.complete_pipeline(len(ctx.results), elapsed)
@@ -252,7 +274,9 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Animetor Eval パイプライン")
     parser.add_argument("--visualize", action="store_true", help="可視化を生成")
-    parser.add_argument("--dry-run", action="store_true", help="データ検証のみ（スコア計算なし）")
+    parser.add_argument(
+        "--dry-run", action="store_true", help="データ検証のみ（スコア計算なし）"
+    )
     parser.add_argument(
         "--incremental",
         action="store_true",

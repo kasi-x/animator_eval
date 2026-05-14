@@ -108,22 +108,25 @@ _PUNCT_RE = re.compile(r"[・．。、，,.\-\s　]+")
 
 # Columns that use the date_iso8601_with_subset normalization rule.
 # Subset-compatible detection runs as a second pass for these columns.
-_DATE_COLUMNS: frozenset[str] = frozenset({
-    "start_date",
-    "end_date",
-    "aired_from",
-    "aired_to",
-    "release_date",
-    "first_air_date",
-    "last_air_date",
-    "birth_date",
-    "death_date",
-})
+_DATE_COLUMNS: frozenset[str] = frozenset(
+    {
+        "start_date",
+        "end_date",
+        "aired_from",
+        "aired_to",
+        "release_date",
+        "first_air_date",
+        "last_air_date",
+        "birth_date",
+        "death_date",
+    }
+)
 
 
 # ---------------------------------------------------------------------------
 # Core result type (defined early so date functions can reference it)
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class ConsensusResult:
@@ -141,6 +144,7 @@ class ConsensusResult:
 # Normalization
 # ---------------------------------------------------------------------------
 
+
 def _normalize_value(value: str) -> str:
     """Return NFKC + 旧字体→新字体 + lowercase + punct-strip normalized string."""
     s = unicodedata.normalize("NFKC", value)
@@ -153,6 +157,7 @@ def _normalize_value(value: str) -> str:
 # ---------------------------------------------------------------------------
 # Date-specific consensus: subset-compatible grouping
 # ---------------------------------------------------------------------------
+
 
 def classify_consensus_date(
     source_value_map: dict[str, str | None],
@@ -232,7 +237,15 @@ def classify_consensus_date(
     majority_share = top_count / n_sources
 
     # Pick the most precise date from the winning cluster (source-priority order).
-    _SOURCE_PRIORITY = ["anilist", "mal", "bgm", "ann", "madb", "keyframe", "seesaawiki"]
+    _SOURCE_PRIORITY = [
+        "anilist",
+        "mal",
+        "bgm",
+        "ann",
+        "madb",
+        "keyframe",
+        "seesaawiki",
+    ]
     ordered_values = _priority_ordered_values(top_members, present, _SOURCE_PRIORITY)
     most_precise_iso = pick_most_precise_date(ordered_values)
     majority_value = most_precise_iso or (ordered_values[0] if ordered_values else None)
@@ -267,7 +280,9 @@ def classify_consensus_date(
 
     # ── strict majority (>50%) ────────────────────────────────────────────────
     if majority_share > 0.5:
-        flag: ConsensusFlag = "unique_outlier" if len(minority_sources) == 1 else "majority"
+        flag: ConsensusFlag = (
+            "unique_outlier" if len(minority_sources) == 1 else "majority"
+        )
         return ConsensusResult(
             majority_value=majority_value,
             majority_count=top_count,
@@ -312,6 +327,7 @@ def _priority_ordered_values(
 # ---------------------------------------------------------------------------
 # Core classification
 # ---------------------------------------------------------------------------
+
 
 def _resolve_tie_by_source_priority(
     top_values: list[str],
@@ -451,6 +467,7 @@ def classify_consensus(
 # Internal: source prefix extraction
 # ---------------------------------------------------------------------------
 
+
 def _source_prefix(conformed_id: str) -> str:
     """Extract the source name from a conformed ID like 'anilist:123' → 'anilist'."""
     return conformed_id.split(":")[0]
@@ -459,6 +476,7 @@ def _source_prefix(conformed_id: str) -> str:
 # ---------------------------------------------------------------------------
 # Internal: load silver rows for a set of conformed IDs
 # ---------------------------------------------------------------------------
+
 
 def _load_silver_rows(
     silver_conn: duckdb.DuckDBPyConnection,
@@ -493,13 +511,16 @@ def _load_silver_rows(
     for row in rows:
         row_dict = dict(zip(col_names, row))
         sid = row_dict.pop("id")
-        result[sid] = {k: (str(v) if v is not None else None) for k, v in row_dict.items()}
+        result[sid] = {
+            k: (str(v) if v is not None else None) for k, v in row_dict.items()
+        }
     return result
 
 
 # ---------------------------------------------------------------------------
 # Internal: build one consensus record
 # ---------------------------------------------------------------------------
+
 
 def _build_broad_format_consensus(
     source_value_map: dict[str, str | None],
@@ -510,8 +531,7 @@ def _build_broad_format_consensus(
     (e.g. "OVA" and "OAV" both → "ova_special") are treated as identical.
     """
     broad_source_map: dict[str, str | None] = {
-        src: to_broad_format(val)
-        for src, val in source_value_map.items()
+        src: to_broad_format(val) for src, val in source_value_map.items()
     }
     return classify_consensus(broad_source_map)
 
@@ -564,7 +584,8 @@ def _build_consensus_record(
         # broad-level flag, meaning sources disagree on format even after 8-category
         # normalization — these cases warrant LLM judgment (24/02 pipeline).
         format_taxonomy_diff: bool = broad_result.consensus_flag not in (
-            "unanimous", "unique_outlier"
+            "unanimous",
+            "unique_outlier",
         )
     else:
         broad_format_consensus_flag = None
@@ -572,7 +593,9 @@ def _build_consensus_record(
         format_taxonomy_diff = False
 
     n_sources = sum(1 for v in source_value_map.values() if v is not None and v != "")
-    n_distinct = len({v for v in source_value_map.values() if v is not None and v != ""})
+    n_distinct = len(
+        {v for v in source_value_map.values() if v is not None and v != ""}
+    )
 
     return {
         "canonical_id": canonical_id,
@@ -580,7 +603,11 @@ def _build_consensus_record(
         "n_sources": n_sources,
         "n_distinct_values": n_distinct,
         "values_json": json.dumps(
-            {src: val for src, val in source_value_map.items() if val is not None and val != ""},
+            {
+                src: val
+                for src, val in source_value_map.items()
+                if val is not None and val != ""
+            },
             ensure_ascii=False,
         ),
         "majority_value": result.majority_value,
@@ -600,6 +627,7 @@ def _build_consensus_record(
 # ---------------------------------------------------------------------------
 # Public: collect_consensus
 # ---------------------------------------------------------------------------
+
 
 def collect_consensus(
     resolved_conn: duckdb.DuckDBPyConnection,
@@ -746,6 +774,7 @@ def _write_consensus_csv(path: Path, rows: list[dict[str, object]]) -> None:
 # Public: export_consensus
 # ---------------------------------------------------------------------------
 
+
 def export_consensus(
     resolved_path: Path | str,
     silver_path: Path | str,
@@ -803,6 +832,7 @@ def export_consensus(
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
+
 
 def _cli_main() -> None:
     """CLI: python -m src.etl.audit.cross_source_consensus [--output-dir PATH]"""

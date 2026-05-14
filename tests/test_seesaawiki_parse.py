@@ -1,4 +1,5 @@
 """Tests for seesaawiki_scraper parse functions (no network calls)."""
+
 from __future__ import annotations
 
 from src.scrapers.seesaawiki_scraper import (
@@ -18,6 +19,7 @@ from src.scrapers.parsers.seesaawiki import (
 # ---------------------------------------------------------------------------
 # _parse_episode_ranges
 # ---------------------------------------------------------------------------
+
 
 class TestParseEpisodeRanges:
     def test_single_episode(self):
@@ -49,6 +51,7 @@ class TestParseEpisodeRanges:
 # ---------------------------------------------------------------------------
 # parse_credit_line
 # ---------------------------------------------------------------------------
+
 
 class TestParseCreditLine:
     def test_single_name(self):
@@ -117,6 +120,7 @@ class TestParseCreditLine:
 # parse_series_staff
 # ---------------------------------------------------------------------------
 
+
 class TestParseSeriesStaff:
     def test_empty_body_returns_empty(self):
         assert parse_series_staff("") == []
@@ -137,7 +141,9 @@ class TestParseSeriesStaff:
         assert "田中" not in names
 
     def test_cast_section_skipped(self):
-        body = "監督：監督名\nキャスト\nキャラ名（CV：声優名）\nスタッフ\n脚本：脚本家\n"
+        body = (
+            "監督：監督名\nキャスト\nキャラ名（CV：声優名）\nスタッフ\n脚本：脚本家\n"
+        )
         credits = parse_series_staff(body)
         names = {c.name for c in credits}
         assert "声優名" not in names
@@ -152,6 +158,7 @@ class TestParseSeriesStaff:
 # ---------------------------------------------------------------------------
 # parse_episodes
 # ---------------------------------------------------------------------------
+
 
 class TestParseEpisodes:
     def test_empty_body_returns_empty(self):
@@ -174,9 +181,7 @@ class TestParseEpisodes:
     def test_cast_section_excluded(self):
         body = "#01\nスタッフ\n絵コンテ：正しい人\nキャスト\n山田（CV：声優）\n"
         episodes = parse_episodes(body)
-        names_in_credits = {
-            c.name for ep in episodes for c in ep["credits"]
-        }
+        names_in_credits = {c.name for ep in episodes for c in ep["credits"]}
         assert "正しい人" in names_in_credits
         assert "声優" not in names_in_credits
 
@@ -197,6 +202,7 @@ class TestParseEpisodes:
 # ---------------------------------------------------------------------------
 # _split_names_paren_aware
 # ---------------------------------------------------------------------------
+
 
 class TestSplitNamesParenAware:
     """Test paren-aware name splitting logic."""
@@ -257,6 +263,7 @@ class TestSplitNamesParenAware:
 # _is_company_name
 # ---------------------------------------------------------------------------
 
+
 class TestIsCompanyName:
     """Test company/studio name detection."""
 
@@ -292,6 +299,7 @@ class TestIsCompanyName:
 # ---------------------------------------------------------------------------
 # _clean_name
 # ---------------------------------------------------------------------------
+
 
 class TestCleanName:
     """Test name cleaning and extraction of metadata."""
@@ -333,9 +341,7 @@ class TestCleanName:
 
     def test_prefers_affiliation_over_episodes(self):
         # "スタジオA" looks like company, not episodes
-        cleaned, affiliation, episodes, ep_from = _clean_name(
-            "太郎（スタジオA）"
-        )
+        cleaned, affiliation, episodes, ep_from = _clean_name("太郎（スタジオA）")
         assert affiliation == "スタジオA"
         assert episodes is None
 
@@ -343,6 +349,7 @@ class TestCleanName:
 # ---------------------------------------------------------------------------
 # parse_credit_line (extended tests)
 # ---------------------------------------------------------------------------
+
 
 class TestParseCreditLineExtended:
     """Extended edge case tests for parse_credit_line."""
@@ -429,6 +436,7 @@ class TestParseCreditLineExtended:
 # parse_episode_ranges (extended tests)
 # ---------------------------------------------------------------------------
 
+
 class TestParseEpisodeRangesExtended:
     """Extended tests for episode range parsing."""
 
@@ -458,9 +466,7 @@ class TestParseEpisodeRangesExtended:
 
     def test_complex_mixed_notation(self):
         # "第1話〜第21話、第23話〜第33話、第35話"
-        eps, from_ep = _parse_episode_ranges(
-            "第1話〜第21話、第23話〜第33話、第35話"
-        )
+        eps, from_ep = _parse_episode_ranges("第1話〜第21話、第23話〜第33話、第35話")
         assert 1 in eps and 21 in eps
         assert 23 in eps and 33 in eps
         assert 35 in eps
@@ -498,6 +504,7 @@ class TestParseEpisodeRangesExtended:
 # parse_series_staff (extended tests)
 # ---------------------------------------------------------------------------
 
+
 class TestParseSeriesStaffExtended:
     """Extended tests for series-level staff parsing."""
 
@@ -529,6 +536,7 @@ class TestParseSeriesStaffExtended:
 # ---------------------------------------------------------------------------
 # parse_episodes (extended tests)
 # ---------------------------------------------------------------------------
+
 
 class TestParseEpisodesExtended:
     """Extended tests for episode parsing."""

@@ -1901,9 +1901,7 @@ def _record_batch_completion(
     items = [
         (
             name,
-            hashlib.sha256(
-                f"{phase_input_hash}|{name}|v1".encode("utf-8")
-            ).hexdigest(),
+            hashlib.sha256(f"{phase_input_hash}|{name}|v1".encode("utf-8")).hexdigest(),
             str(json_dir / f"{name}.json"),
         )
         for name in done_names
@@ -2033,7 +2031,9 @@ def run_analysis_modules_phase(
                 b2_light, context, phase_input_hash, JSON_DIR
             )
             if skipped_b2_light:
-                logger.info("analysis_batch_cached", batch="batch2a", tasks=skipped_b2_light)
+                logger.info(
+                    "analysis_batch_cached", batch="batch2a", tasks=skipped_b2_light
+                )
             c, f, done_names = _run_task_batch(
                 runnable_b2_light,
                 context,
@@ -2056,7 +2056,9 @@ def run_analysis_modules_phase(
                 b2_heavy, context, phase_input_hash, JSON_DIR
             )
             if skipped_b2_heavy:
-                logger.info("analysis_batch_cached", batch="batch2b", tasks=skipped_b2_heavy)
+                logger.info(
+                    "analysis_batch_cached", batch="batch2b", tasks=skipped_b2_heavy
+                )
             c, f, done_names = _run_task_batch(
                 runnable_b2_heavy, context, results_lock, 1, "batch2", json_dir=JSON_DIR
             )
@@ -2078,7 +2080,9 @@ def run_analysis_modules_phase(
                 all_light, context, phase_input_hash, JSON_DIR
             )
             if skipped_all_light:
-                logger.info("analysis_batch_cached", batch="all_light", tasks=skipped_all_light)
+                logger.info(
+                    "analysis_batch_cached", batch="all_light", tasks=skipped_all_light
+                )
             c, f, done_names = _run_task_batch(
                 runnable_all_light,
                 context,
@@ -2100,7 +2104,9 @@ def run_analysis_modules_phase(
                 all_heavy, context, phase_input_hash, JSON_DIR
             )
             if skipped_all_heavy:
-                logger.info("analysis_batch_cached", batch="all_heavy", tasks=skipped_all_heavy)
+                logger.info(
+                    "analysis_batch_cached", batch="all_heavy", tasks=skipped_all_heavy
+                )
             c, f, done_names = _run_task_batch(
                 runnable_all_heavy, context, results_lock, 1, "all", json_dir=JSON_DIR
             )
@@ -2158,6 +2164,7 @@ def run_analysis_modules_phase(
 #           graphml_export, AKM diagnostics (batch-only), insights_report.
 # ---------------------------------------------------------------------------
 
+
 def run_analysis_modules_hamilton(context: dict) -> dict:
     """Execute analysis modules via Hamilton DAG driver (H-1 PoC).
 
@@ -2165,7 +2172,13 @@ def run_analysis_modules_hamilton(context: dict) -> dict:
     Errors are caught per-node and logged; the pipeline does not abort.
     """
     from hamilton import driver
-    from src.pipeline_phases.hamilton_modules import core, studio, genre, network, causal
+    from src.pipeline_phases.hamilton_modules import (
+        core,
+        studio,
+        genre,
+        network,
+        causal,
+    )
     from src.pipeline_phases.hamilton_modules import ANALYSIS_NODE_NAMES
     from src.pipeline_phases.lifecycle import TimingHook
 

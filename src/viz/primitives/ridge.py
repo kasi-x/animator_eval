@@ -65,8 +65,11 @@ def render_ridge_plot(spec: RidgePlotSpec, *, theme: str = "dark") -> go.Figure:
 
     # 1. domain (shared x grid)
     all_samples = np.concatenate(
-        [np.asarray(r.samples, dtype=float) for r in spec.distributions
-         if len(r.samples) > 0]
+        [
+            np.asarray(r.samples, dtype=float)
+            for r in spec.distributions
+            if len(r.samples) > 0
+        ]
     )
     if len(all_samples) == 0:
         fig.update_layout(title=spec.title or "(empty samples)")
@@ -86,8 +89,9 @@ def render_ridge_plot(spec: RidgePlotSpec, *, theme: str = "dark") -> go.Figure:
     # 3. shared null distribution (drawn under every row)
     null_density = None
     if spec.null_distribution is not None and len(spec.null_distribution) > 0:
-        null_density = _kde(np.asarray(spec.null_distribution, dtype=float),
-                            grid, spec.bandwidth)
+        null_density = _kde(
+            np.asarray(spec.null_distribution, dtype=float), grid, spec.bandwidth
+        )
         null_density = null_density / max(null_density.max(), 1e-9) * ymax_global
 
     # 4. each row, stacked top-to-bottom

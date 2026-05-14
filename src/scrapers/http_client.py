@@ -189,7 +189,9 @@ class RetryingHttpClient:
 
         async def _once() -> httpx.Response:
             await self._throttle()
-            resp = await self._client.request(method, url, params=params, json=json, headers=headers)
+            resp = await self._client.request(
+                method, url, params=params, json=json, headers=headers
+            )
             if rate_limit_context is not None:
                 self._update_rate_limit_context(resp, rate_limit_context)
             return resp

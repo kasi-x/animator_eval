@@ -65,7 +65,11 @@ def select_representative_value(
         - reason: one of 'priority_fallback' | 'majority_vote' | 'tie_break' | 'no_value'.
     """
     vk = value_key or field
-    threshold = majority_threshold_value if majority_threshold_value is not None else majority_threshold()
+    threshold = (
+        majority_threshold_value
+        if majority_threshold_value is not None
+        else majority_threshold()
+    )
 
     # Group non-empty + valid values by source prefix, preserving insertion order
     by_source: dict[str, list[Any]] = {}

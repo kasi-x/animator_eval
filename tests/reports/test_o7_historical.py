@@ -89,11 +89,11 @@ def _build_test_db() -> sqlite3.Connection:
 
     anime_rows = [
         # id,    title_ja,                   title_en,               year, episodes, duration
-        ("a1920", "無声映画A",                 "Silent Film A",       1920,  1,  60),
-        ("a1963", "鉄腕アトム風作品",           "Astro Boy-like",      1963, 52,  25),
-        ("a1979", "銀河鉄道風作品",             "Galaxy Express-like", 1979, 113, 25),
-        ("a1985", "テスト旧作",                "Old Test Work",        1985, 26,  25),
-        ("a1995", "新世紀作品",                "New Century Work",     1995, 26,  25),
+        ("a1920", "無声映画A", "Silent Film A", 1920, 1, 60),
+        ("a1963", "鉄腕アトム風作品", "Astro Boy-like", 1963, 52, 25),
+        ("a1979", "銀河鉄道風作品", "Galaxy Express-like", 1979, 113, 25),
+        ("a1985", "テスト旧作", "Old Test Work", 1985, 26, 25),
+        ("a1995", "新世紀作品", "New Century Work", 1995, 26, 25),
     ]
     conn.executemany(
         "INSERT INTO anime (id, title_ja, title_en, year, episodes, duration) VALUES (?, ?, ?, ?, ?, ?)",
@@ -105,15 +105,35 @@ def _build_test_db() -> sqlite3.Connection:
         ("p2", "松本風", "Matsumoto-like"),
         ("p3", "新人", "Newcomer"),
     ]
-    conn.executemany("INSERT INTO persons (id, name_ja, name_en) VALUES (?, ?, ?)", persons)
+    conn.executemany(
+        "INSERT INTO persons (id, name_ja, name_en) VALUES (?, ?, ?)", persons
+    )
 
     # Existing HIGH-tier credits.
     credits = [
         # person_id, anime_id, role,          raw_role,           evidence_source, confidence_tier, credit_year, episode
-        ("p1", "a1963", "director",        "director",         "ann",        "HIGH",     1963, None),
-        ("p2", "a1979", "director",        "director",         "mediaarts",  "HIGH",     1979, None),
-        ("p1", "a1985", "key_animator",    "key_animator",     "seesaawiki", "HIGH",     1985, None),
-        ("p3", "a1995", "animation_director", "animation_director", "ann",   "HIGH",     1995, None),
+        ("p1", "a1963", "director", "director", "ann", "HIGH", 1963, None),
+        ("p2", "a1979", "director", "director", "mediaarts", "HIGH", 1979, None),
+        (
+            "p1",
+            "a1985",
+            "key_animator",
+            "key_animator",
+            "seesaawiki",
+            "HIGH",
+            1985,
+            None,
+        ),
+        (
+            "p3",
+            "a1995",
+            "animation_director",
+            "animation_director",
+            "ann",
+            "HIGH",
+            1995,
+            None,
+        ),
     ]
     conn.executemany(
         """INSERT OR IGNORE INTO credits
@@ -130,8 +150,26 @@ def _build_db_with_restored(conn: sqlite3.Connection) -> None:
     """Add RESTORED-tier rows to an existing test DB."""
     restored = [
         # person_id, anime_id, role,       raw_role,         evidence_source,          confidence_tier, credit_year, episode
-        ("p1", "a1920", "director",    "手塚風",           "restoration_estimated",  "RESTORED",  1920, None),
-        ("p2", "a1963", "key_animator", "松本風",          "restoration_estimated",  "RESTORED",  1963, None),
+        (
+            "p1",
+            "a1920",
+            "director",
+            "手塚風",
+            "restoration_estimated",
+            "RESTORED",
+            1920,
+            None,
+        ),
+        (
+            "p2",
+            "a1963",
+            "key_animator",
+            "松本風",
+            "restoration_estimated",
+            "RESTORED",
+            1963,
+            None,
+        ),
     ]
     conn.executemany(
         """INSERT OR IGNORE INTO credits
@@ -202,7 +240,9 @@ class TestComputeRestorationCI:
     def test_in_range_01(self):
         for n_restored, n_total in [(0, 100), (50, 100), (100, 100), (1, 5)]:
             lo, hi = _compute_restoration_ci(n_restored, n_total)
-            assert 0.0 <= lo <= hi <= 1.0, f"CI out of range for ({n_restored}/{n_total})"
+            assert 0.0 <= lo <= hi <= 1.0, (
+                f"CI out of range for ({n_restored}/{n_total})"
+            )
 
     def test_ci_width_decreases_with_n(self):
         lo_small, hi_small = _compute_restoration_ci(5, 10)
@@ -452,6 +492,7 @@ class TestO7HistoricalRestorationReportSmoke:
         """H1: viewer ratings excluded from computation (structural data only)."""
         # Verify by checking the report source contains no SQL with anime.score
         import ast
+
         source = (
             Path(__file__).resolve().parents[2]
             / "scripts/report_generators/reports/o7_historical.py"
@@ -517,6 +558,7 @@ class TestLintVocabCompliance:
     def test_no_anime_score_in_sql_queries(self):
         """H1: anime.score must not appear in SQL SELECT/WHERE clauses."""
         import ast
+
         source = self.REPORT_FILE.read_text(encoding="utf-8")
         # Parse SQL strings only — look for anime.score in actual query strings
         # (not in method notes or explanatory text that mention it to explain exclusion).

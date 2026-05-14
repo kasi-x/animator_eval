@@ -11,6 +11,7 @@ DDL for the anime extension columns is declared in src/db/schema.py
 H1 compliance: bare BRONZE columns are mapped exclusively to display_* prefixed
 SILVER columns (display_score, display_mean_score, display_favourites, etc.).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -363,9 +364,7 @@ WHERE (rel).id IS NOT NULL
 """
 
 
-def _anime_glob_has_studios_column(
-    conn: duckdb.DuckDBPyConnection, glob: str
-) -> bool:
+def _anime_glob_has_studios_column(conn: duckdb.DuckDBPyConnection, glob: str) -> bool:
     """Return True if the anime BRONZE parquet has a 'studios' array column."""
     try:
         cols = conn.execute(
@@ -378,10 +377,17 @@ def _anime_glob_has_studios_column(
 
 def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
     """Create characters / CVA / studios / anime_studios tables and add anime/persons extension columns."""
-    for ddl_block in (_DDL_CHARACTERS, _DDL_CVA, _DDL_ANIME_RELATIONS,
-                      _DDL_STUDIOS, _DDL_ANIME_STUDIOS,
-                      _DDL_GENRES_MASTER, _DDL_MEDIA_TAGS_MASTER,
-                      _DDL_MEDIA_TRENDS, _DDL_AIRING_SCHEDULES):
+    for ddl_block in (
+        _DDL_CHARACTERS,
+        _DDL_CVA,
+        _DDL_ANIME_RELATIONS,
+        _DDL_STUDIOS,
+        _DDL_ANIME_STUDIOS,
+        _DDL_GENRES_MASTER,
+        _DDL_MEDIA_TAGS_MASTER,
+        _DDL_MEDIA_TRENDS,
+        _DDL_AIRING_SCHEDULES,
+    ):
         for stmt in ddl_block.split(";"):
             stmt = stmt.strip()
             if stmt:
@@ -405,7 +411,9 @@ def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
 
 
 def _glob_path(bronze_root: Path, table: str) -> str:
-    return str(bronze_root / "source=anilist" / f"table={table}" / "date=*" / "*.parquet")
+    return str(
+        bronze_root / "source=anilist" / f"table={table}" / "date=*" / "*.parquet"
+    )
 
 
 def _has_parquet(conn: duckdb.DuckDBPyConnection, glob: str) -> bool:
@@ -565,7 +573,9 @@ ON CONFLICT (id) DO NOTHING
 """
 
 
-def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[str, int]:
+def integrate(
+    conn: duckdb.DuckDBPyConnection, bronze_root: Path | str
+) -> dict[str, int]:
     """Load AniList characters / CVA / anime extras / anime_relations into SILVER.
 
     Args:
@@ -583,12 +593,12 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
 
     _apply_ddl(conn)
 
-    chars_glob     = _glob_path(bronze_root, "characters")
-    cva_glob       = _glob_path(bronze_root, "character_voice_actors")
-    anime_glob     = _glob_path(bronze_root, "anime")
-    studios_glob   = _glob_path(bronze_root, "studios")
-    as_table_glob  = _glob_path(bronze_root, "anime_studios")
-    credits_glob   = _glob_path(bronze_root, "credits")
+    chars_glob = _glob_path(bronze_root, "characters")
+    cva_glob = _glob_path(bronze_root, "character_voice_actors")
+    anime_glob = _glob_path(bronze_root, "anime")
+    studios_glob = _glob_path(bronze_root, "studios")
+    as_table_glob = _glob_path(bronze_root, "anime_studios")
+    credits_glob = _glob_path(bronze_root, "credits")
 
     # Backfill orphan persons from credits before any UPDATE-style enrichment runs.
     if _has_parquet(conn, credits_glob):
@@ -625,7 +635,9 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
     # embedded in the anime table rather than the anime_studios table.
     # Guard: only run when the BRONZE parquet actually has a 'studios' column
     # (older or synthetic fixtures may lack it).
-    if _has_parquet(conn, anime_glob) and _anime_glob_has_studios_column(conn, anime_glob):
+    if _has_parquet(conn, anime_glob) and _anime_glob_has_studios_column(
+        conn, anime_glob
+    ):
         conn.execute(_STUDIOS_FROM_ARRAY_SQL, [anime_glob])
         conn.execute(_ANIME_STUDIOS_FROM_ARRAY_SQL, [anime_glob])
 
@@ -659,9 +671,15 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
         "anime_studios_anilist": conn.execute(
             "SELECT COUNT(DISTINCT anime_id) FROM anime_studios WHERE source = 'anilist'"
         ).fetchone()[0],
-        "genres_master": conn.execute("SELECT COUNT(*) FROM genres_master").fetchone()[0],
-        "media_tags_master": conn.execute("SELECT COUNT(*) FROM media_tags_master").fetchone()[0],
+        "genres_master": conn.execute("SELECT COUNT(*) FROM genres_master").fetchone()[
+            0
+        ],
+        "media_tags_master": conn.execute(
+            "SELECT COUNT(*) FROM media_tags_master"
+        ).fetchone()[0],
         "media_trends": conn.execute("SELECT COUNT(*) FROM media_trends").fetchone()[0],
-        "airing_schedules": conn.execute("SELECT COUNT(*) FROM airing_schedules").fetchone()[0],
+        "airing_schedules": conn.execute(
+            "SELECT COUNT(*) FROM airing_schedules"
+        ).fetchone()[0],
     }
     return counts

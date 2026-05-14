@@ -11,6 +11,7 @@ Coverage:
 - _classify_severity: threshold logic
 - generate_report: markdown output shape
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -37,9 +38,13 @@ from src.etl.audit.silver_column_coverage import (
 # ---------------------------------------------------------------------------
 
 
-def _write_parquet(bronze_root: Path, source: str, table: str, rows: list[dict]) -> None:
+def _write_parquet(
+    bronze_root: Path, source: str, table: str, rows: list[dict]
+) -> None:
     """Write rows to a BRONZE parquet under bronze_root."""
-    with BronzeWriter(source, table=table, root=bronze_root, compact_on_exit=False) as bw:
+    with BronzeWriter(
+        source, table=table, root=bronze_root, compact_on_exit=False
+    ) as bw:
         for row in rows:
             bw.append(row)
 
@@ -136,22 +141,33 @@ def _make_silver_conn(
         for p in persons:
             placeholders = ", ".join(["?"] * len(p))
             cols = ", ".join(p.keys())
-            conn.execute(f"INSERT INTO persons ({cols}) VALUES ({placeholders})", list(p.values()))
+            conn.execute(
+                f"INSERT INTO persons ({cols}) VALUES ({placeholders})",
+                list(p.values()),
+            )
     if anime:
         for a in anime:
             placeholders = ", ".join(["?"] * len(a))
             cols = ", ".join(a.keys())
-            conn.execute(f"INSERT INTO anime ({cols}) VALUES ({placeholders})", list(a.values()))
+            conn.execute(
+                f"INSERT INTO anime ({cols}) VALUES ({placeholders})", list(a.values())
+            )
     if characters:
         for c in characters:
             placeholders = ", ".join(["?"] * len(c))
             cols = ", ".join(c.keys())
-            conn.execute(f"INSERT INTO characters ({cols}) VALUES ({placeholders})", list(c.values()))
+            conn.execute(
+                f"INSERT INTO characters ({cols}) VALUES ({placeholders})",
+                list(c.values()),
+            )
     if studios:
         for s in studios:
             placeholders = ", ".join(["?"] * len(s))
             cols = ", ".join(s.keys())
-            conn.execute(f"INSERT INTO studios ({cols}) VALUES ({placeholders})", list(s.values()))
+            conn.execute(
+                f"INSERT INTO studios ({cols}) VALUES ({placeholders})",
+                list(s.values()),
+            )
 
     return conn
 
@@ -262,11 +278,16 @@ def test_measure_column_coverage_empty_table() -> None:
 def test_find_bronze_source_basic(tmp_path: Path) -> None:
     """BRONZE with 3 persons, 2 have gender → rows_with_value = 2."""
     bronze_root = tmp_path / "bronze"
-    _write_parquet(bronze_root, "anilist", "persons", [
-        {"id": "anilist:p1", "gender": "male"},
-        {"id": "anilist:p2", "gender": "female"},
-        {"id": "anilist:p3", "gender": None},
-    ])
+    _write_parquet(
+        bronze_root,
+        "anilist",
+        "persons",
+        [
+            {"id": "anilist:p1", "gender": "male"},
+            {"id": "anilist:p2", "gender": "female"},
+            {"id": "anilist:p3", "gender": None},
+        ],
+    )
     bronze_conn = duckdb.connect(":memory:")
     try:
         stat = find_bronze_source_with_value(
@@ -281,10 +302,15 @@ def test_find_bronze_source_basic(tmp_path: Path) -> None:
 def test_find_bronze_source_empty_string_excluded(tmp_path: Path) -> None:
     """Empty-string values must NOT count as 'with value'."""
     bronze_root = tmp_path / "bronze"
-    _write_parquet(bronze_root, "anilist", "persons", [
-        {"id": "anilist:p1", "gender": ""},
-        {"id": "anilist:p2", "gender": "male"},
-    ])
+    _write_parquet(
+        bronze_root,
+        "anilist",
+        "persons",
+        [
+            {"id": "anilist:p1", "gender": ""},
+            {"id": "anilist:p2", "gender": "male"},
+        ],
+    )
     bronze_conn = duckdb.connect(":memory:")
     try:
         stat = find_bronze_source_with_value(
@@ -298,9 +324,14 @@ def test_find_bronze_source_empty_string_excluded(tmp_path: Path) -> None:
 def test_find_bronze_source_missing_column(tmp_path: Path) -> None:
     """BRONZE table without the target column → error set."""
     bronze_root = tmp_path / "bronze"
-    _write_parquet(bronze_root, "anilist", "persons", [
-        {"id": "anilist:p1", "name_ja": "A"},
-    ])
+    _write_parquet(
+        bronze_root,
+        "anilist",
+        "persons",
+        [
+            {"id": "anilist:p1", "name_ja": "A"},
+        ],
+    )
     bronze_conn = duckdb.connect(":memory:")
     try:
         stat = find_bronze_source_with_value(
@@ -329,20 +360,27 @@ def test_find_bronze_source_nonexistent_parquet(tmp_path: Path) -> None:
 def test_find_bronze_source_dedup_across_snapshots(tmp_path: Path) -> None:
     """Two snapshot partitions with the same 2 rows → rows_with_value = 2 (not 4)."""
     import datetime as _dt
+
     bronze_root = tmp_path / "bronze"
     rows = [
         {"id": "anilist:p1", "gender": "male"},
         {"id": "anilist:p2", "gender": "female"},
     ]
     with BronzeWriter(
-        "anilist", table="persons", root=bronze_root, compact_on_exit=False,
-        date=_dt.date(2026, 4, 1)
+        "anilist",
+        table="persons",
+        root=bronze_root,
+        compact_on_exit=False,
+        date=_dt.date(2026, 4, 1),
     ) as bw:
         for row in rows:
             bw.append(row)
     with BronzeWriter(
-        "anilist", table="persons", root=bronze_root, compact_on_exit=False,
-        date=_dt.date(2026, 4, 2)
+        "anilist",
+        table="persons",
+        root=bronze_root,
+        compact_on_exit=False,
+        date=_dt.date(2026, 4, 2),
     ) as bw:
         for row in rows:
             bw.append(row)
@@ -406,11 +444,16 @@ def test_classify_severity_exactly_thresholds() -> None:
 def minimal_bronze_root(tmp_path: Path) -> Path:
     """BRONZE with anilist persons (gender filled for 2 out of 3)."""
     root = tmp_path / "bronze"
-    _write_parquet(root, "anilist", "persons", [
-        {"id": "anilist:p1", "gender": "male"},
-        {"id": "anilist:p2", "gender": "female"},
-        {"id": "anilist:p3", "gender": None},
-    ])
+    _write_parquet(
+        root,
+        "anilist",
+        "persons",
+        [
+            {"id": "anilist:p1", "gender": "male"},
+            {"id": "anilist:p2", "gender": "female"},
+            {"id": "anilist:p3", "gender": None},
+        ],
+    )
     return root
 
 
@@ -444,7 +487,11 @@ def test_gap_analysis_detects_gender_gap(
     try:
         rows = gap_analysis(silver_conn, bronze_conn, minimal_bronze_root)
         gender_row = next(
-            (r for r in rows if r.silver_table == "persons" and r.silver_col == "gender"),
+            (
+                r
+                for r in rows
+                if r.silver_table == "persons" and r.silver_col == "gender"
+            ),
             None,
         )
         assert gender_row is not None
@@ -481,16 +528,18 @@ def test_gap_analysis_ok_when_silver_full(
 
 def test_gap_analysis_unmapped_column(tmp_path: Path) -> None:
     """Columns in SILVER_AUDIT_TARGETS but not in COLUMN_BRONZE_MAP → mapped=False."""
-    silver_conn = _make_silver_conn(
-        persons=[{"id": "p1", "name_ja": "A"}]
-    )
+    silver_conn = _make_silver_conn(persons=[{"id": "p1", "name_ja": "A"}])
     bronze_conn = duckdb.connect(":memory:")
     bronze_root = tmp_path / "bronze_empty"
     try:
         rows = gap_analysis(silver_conn, bronze_conn, bronze_root)
         # death_date has no BRONZE mapping
         death_row = next(
-            (r for r in rows if r.silver_table == "persons" and r.silver_col == "death_date"),
+            (
+                r
+                for r in rows
+                if r.silver_table == "persons" and r.silver_col == "death_date"
+            ),
             None,
         )
         assert death_row is not None
@@ -502,9 +551,7 @@ def test_gap_analysis_unmapped_column(tmp_path: Path) -> None:
 
 def test_gap_analysis_no_bronze_dir(tmp_path: Path) -> None:
     """Non-existent bronze_root is handled gracefully (no exception)."""
-    silver_conn = _make_silver_conn(
-        persons=[{"id": "p1", "name_ja": "A"}]
-    )
+    silver_conn = _make_silver_conn(persons=[{"id": "p1", "name_ja": "A"}])
     bronze_conn = duckdb.connect(":memory:")
     bronze_root = tmp_path / "no_such_dir"
     try:
@@ -688,7 +735,5 @@ def test_silver_audit_targets_persons_gender() -> None:
 
 def test_silver_audit_targets_anime_country_of_origin() -> None:
     """anime.country_of_origin must be in SILVER_AUDIT_TARGETS."""
-    anime_cols = next(
-        cols for table, cols in SILVER_AUDIT_TARGETS if table == "anime"
-    )
+    anime_cols = next(cols for table, cols in SILVER_AUDIT_TARGETS if table == "anime")
     assert "country_of_origin" in anime_cols

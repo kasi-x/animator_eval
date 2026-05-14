@@ -1,4 +1,5 @@
 """Tests for sakuga atwiki BRONZE parquet writer."""
+
 from __future__ import annotations
 
 import json
@@ -11,7 +12,9 @@ from src.runtime.models import ParsedSakugaCredit, ParsedSakugaPerson
 from src.scrapers.bronze_writer import write_sakuga_atwiki_bronze
 
 
-def _make_person(page_id: int, name: str, credits: list[ParsedSakugaCredit]) -> ParsedSakugaPerson:
+def _make_person(
+    page_id: int, name: str, credits: list[ParsedSakugaCredit]
+) -> ParsedSakugaPerson:
     return ParsedSakugaPerson(
         page_id=page_id,
         name=name,
@@ -22,7 +25,9 @@ def _make_person(page_id: int, name: str, credits: list[ParsedSakugaCredit]) -> 
     )
 
 
-def _make_credit(work: str = "作品A", role: str = "原画", ep: int = 3) -> ParsedSakugaCredit:
+def _make_credit(
+    work: str = "作品A", role: str = "原画", ep: int = 3
+) -> ParsedSakugaCredit:
     return ParsedSakugaCredit(
         work_title=work,
         work_year=2020,
@@ -36,7 +41,11 @@ def _make_credit(work: str = "作品A", role: str = "原画", ep: int = 3) -> Pa
 @pytest.fixture()
 def sample_persons() -> list[ParsedSakugaPerson]:
     return [
-        _make_person(101, "山田花子", [_make_credit("作品A", "原画", 3), _make_credit("作品A", "作画監督", 7)]),
+        _make_person(
+            101,
+            "山田花子",
+            [_make_credit("作品A", "原画", 3), _make_credit("作品A", "作画監督", 7)],
+        ),
         _make_person(102, "佐藤次郎", [_make_credit("作品B", "原画", 1)]),
         _make_person(103, "田中三郎", []),  # parse failed — no credits
     ]
@@ -45,18 +54,38 @@ def sample_persons() -> list[ParsedSakugaPerson]:
 @pytest.fixture()
 def sample_pages_meta() -> list[dict]:
     return [
-        {"id": 101, "url": "https://www18.atwiki.jp/sakuga/pages/101.html",
-         "title": "山田花子", "page_kind": "person",
-         "discovered_at": "2026-04-25T00:00:00+00:00", "last_hash": "a" * 64},
-        {"id": 102, "url": "https://www18.atwiki.jp/sakuga/pages/102.html",
-         "title": "佐藤次郎", "page_kind": "person",
-         "discovered_at": "2026-04-25T00:00:00+00:00", "last_hash": "b" * 64},
-        {"id": 103, "url": "https://www18.atwiki.jp/sakuga/pages/103.html",
-         "title": "田中三郎", "page_kind": "person",
-         "discovered_at": "2026-04-25T00:00:00+00:00", "last_hash": "c" * 64},
-        {"id": 200, "url": "https://www18.atwiki.jp/sakuga/pages/200.html",
-         "title": "一覧ページ", "page_kind": "index",
-         "discovered_at": "2026-04-25T00:00:00+00:00", "last_hash": "d" * 64},
+        {
+            "id": 101,
+            "url": "https://www18.atwiki.jp/sakuga/pages/101.html",
+            "title": "山田花子",
+            "page_kind": "person",
+            "discovered_at": "2026-04-25T00:00:00+00:00",
+            "last_hash": "a" * 64,
+        },
+        {
+            "id": 102,
+            "url": "https://www18.atwiki.jp/sakuga/pages/102.html",
+            "title": "佐藤次郎",
+            "page_kind": "person",
+            "discovered_at": "2026-04-25T00:00:00+00:00",
+            "last_hash": "b" * 64,
+        },
+        {
+            "id": 103,
+            "url": "https://www18.atwiki.jp/sakuga/pages/103.html",
+            "title": "田中三郎",
+            "page_kind": "person",
+            "discovered_at": "2026-04-25T00:00:00+00:00",
+            "last_hash": "c" * 64,
+        },
+        {
+            "id": 200,
+            "url": "https://www18.atwiki.jp/sakuga/pages/200.html",
+            "title": "一覧ページ",
+            "page_kind": "index",
+            "discovered_at": "2026-04-25T00:00:00+00:00",
+            "last_hash": "d" * 64,
+        },
     ]
 
 
@@ -73,7 +102,10 @@ def sample_raw_texts() -> dict[int, str]:
 # 3 parquet files written
 # ---------------------------------------------------------------------------
 
-def test_three_parquets_written(tmp_path, sample_persons, sample_pages_meta, sample_raw_texts):
+
+def test_three_parquets_written(
+    tmp_path, sample_persons, sample_pages_meta, sample_raw_texts
+):
     written = write_sakuga_atwiki_bronze(
         persons=sample_persons,
         pages_metadata=sample_pages_meta,
@@ -92,6 +124,7 @@ def test_three_parquets_written(tmp_path, sample_persons, sample_pages_meta, sam
 # Partition path structure
 # ---------------------------------------------------------------------------
 
+
 def test_partition_path_structure(tmp_path, sample_persons, sample_pages_meta):
     write_sakuga_atwiki_bronze(
         persons=sample_persons,
@@ -109,30 +142,39 @@ def test_partition_path_structure(tmp_path, sample_persons, sample_pages_meta):
 # Row counts
 # ---------------------------------------------------------------------------
 
+
 def test_pages_row_count(tmp_path, sample_persons, sample_pages_meta):
     write_sakuga_atwiki_bronze(
-        persons=sample_persons, pages_metadata=sample_pages_meta,
-        output_dir=tmp_path, date_partition="20260425",
+        persons=sample_persons,
+        pages_metadata=sample_pages_meta,
+        output_dir=tmp_path,
+        date_partition="20260425",
     )
     con = duckdb.connect()
     glob = str(tmp_path / "source=sakuga_atwiki/table=pages/date=20260425/*.parquet")
     count = con.execute(f"SELECT COUNT(*) FROM '{glob}'").fetchone()[0]
     assert count == 4  # all pages including non-person
 
+
 def test_persons_row_count(tmp_path, sample_persons, sample_pages_meta):
     write_sakuga_atwiki_bronze(
-        persons=sample_persons, pages_metadata=sample_pages_meta,
-        output_dir=tmp_path, date_partition="20260425",
+        persons=sample_persons,
+        pages_metadata=sample_pages_meta,
+        output_dir=tmp_path,
+        date_partition="20260425",
     )
     con = duckdb.connect()
     glob = str(tmp_path / "source=sakuga_atwiki/table=persons/date=20260425/*.parquet")
     count = con.execute(f"SELECT COUNT(*) FROM '{glob}'").fetchone()[0]
     assert count == 3  # 3 person pages
 
+
 def test_credits_row_count(tmp_path, sample_persons, sample_pages_meta):
     write_sakuga_atwiki_bronze(
-        persons=sample_persons, pages_metadata=sample_pages_meta,
-        output_dir=tmp_path, date_partition="20260425",
+        persons=sample_persons,
+        pages_metadata=sample_pages_meta,
+        output_dir=tmp_path,
+        date_partition="20260425",
     )
     con = duckdb.connect()
     glob = str(tmp_path / "source=sakuga_atwiki/table=credits/date=20260425/*.parquet")
@@ -144,10 +186,13 @@ def test_credits_row_count(tmp_path, sample_persons, sample_pages_meta):
 # evidence_source = "sakuga_atwiki" (H4)
 # ---------------------------------------------------------------------------
 
+
 def test_evidence_source(tmp_path, sample_persons, sample_pages_meta):
     write_sakuga_atwiki_bronze(
-        persons=sample_persons, pages_metadata=sample_pages_meta,
-        output_dir=tmp_path, date_partition="20260425",
+        persons=sample_persons,
+        pages_metadata=sample_pages_meta,
+        output_dir=tmp_path,
+        date_partition="20260425",
     )
     con = duckdb.connect()
     glob = str(tmp_path / "source=sakuga_atwiki/table=credits/date=20260425/*.parquet")
@@ -159,10 +204,13 @@ def test_evidence_source(tmp_path, sample_persons, sample_pages_meta):
 # parse_ok flag
 # ---------------------------------------------------------------------------
 
+
 def test_parse_ok_flag(tmp_path, sample_persons, sample_pages_meta):
     write_sakuga_atwiki_bronze(
-        persons=sample_persons, pages_metadata=sample_pages_meta,
-        output_dir=tmp_path, date_partition="20260425",
+        persons=sample_persons,
+        pages_metadata=sample_pages_meta,
+        output_dir=tmp_path,
+        date_partition="20260425",
     )
     con = duckdb.connect()
     glob = str(tmp_path / "source=sakuga_atwiki/table=persons/date=20260425/*.parquet")
@@ -178,10 +226,15 @@ def test_parse_ok_flag(tmp_path, sample_persons, sample_pages_meta):
 # raw_wikibody_text stored (生データ保存)
 # ---------------------------------------------------------------------------
 
-def test_raw_wikibody_text_stored(tmp_path, sample_persons, sample_pages_meta, sample_raw_texts):
+
+def test_raw_wikibody_text_stored(
+    tmp_path, sample_persons, sample_pages_meta, sample_raw_texts
+):
     write_sakuga_atwiki_bronze(
-        persons=sample_persons, pages_metadata=sample_pages_meta,
-        output_dir=tmp_path, date_partition="20260425",
+        persons=sample_persons,
+        pages_metadata=sample_pages_meta,
+        output_dir=tmp_path,
+        date_partition="20260425",
         raw_texts=sample_raw_texts,
     )
     con = duckdb.connect()
@@ -193,10 +246,14 @@ def test_raw_wikibody_text_stored(tmp_path, sample_persons, sample_pages_meta, s
     assert len(rows[0][1]) > 0  # raw text preserved for the failed-parse page
 
 
-def test_raw_wikibody_text_empty_when_not_provided(tmp_path, sample_persons, sample_pages_meta):
+def test_raw_wikibody_text_empty_when_not_provided(
+    tmp_path, sample_persons, sample_pages_meta
+):
     write_sakuga_atwiki_bronze(
-        persons=sample_persons, pages_metadata=sample_pages_meta,
-        output_dir=tmp_path, date_partition="20260425",
+        persons=sample_persons,
+        pages_metadata=sample_pages_meta,
+        output_dir=tmp_path,
+        date_partition="20260425",
         raw_texts=None,
     )
     con = duckdb.connect()
@@ -210,14 +267,19 @@ def test_raw_wikibody_text_empty_when_not_provided(tmp_path, sample_persons, sam
 # aliases stored as JSON
 # ---------------------------------------------------------------------------
 
+
 def test_aliases_json(tmp_path, sample_persons, sample_pages_meta):
     write_sakuga_atwiki_bronze(
-        persons=sample_persons, pages_metadata=sample_pages_meta,
-        output_dir=tmp_path, date_partition="20260425",
+        persons=sample_persons,
+        pages_metadata=sample_pages_meta,
+        output_dir=tmp_path,
+        date_partition="20260425",
     )
     con = duckdb.connect()
     glob = str(tmp_path / "source=sakuga_atwiki/table=persons/date=20260425/*.parquet")
-    row = con.execute(f"SELECT aliases_json FROM '{glob}' WHERE page_id = 101").fetchone()
+    row = con.execute(
+        f"SELECT aliases_json FROM '{glob}' WHERE page_id = 101"
+    ).fetchone()
     aliases = json.loads(row[0])
     assert "alias_en" in aliases
 
@@ -226,10 +288,13 @@ def test_aliases_json(tmp_path, sample_persons, sample_pages_meta):
 # No subjective evaluation columns exist
 # ---------------------------------------------------------------------------
 
+
 def test_no_subjective_columns(tmp_path, sample_persons, sample_pages_meta):
     write_sakuga_atwiki_bronze(
-        persons=sample_persons, pages_metadata=sample_pages_meta,
-        output_dir=tmp_path, date_partition="20260425",
+        persons=sample_persons,
+        pages_metadata=sample_pages_meta,
+        output_dir=tmp_path,
+        date_partition="20260425",
     )
     con = duckdb.connect()
     glob = str(tmp_path / "source=sakuga_atwiki/table=credits/date=20260425/*.parquet")

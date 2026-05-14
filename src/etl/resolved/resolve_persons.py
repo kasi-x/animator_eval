@@ -225,10 +225,20 @@ def build_resolved_persons(
 
 
 _PERSONS_INSERT_FIELDS: list[str] = [
-    "canonical_id", "name_ja", "name_en", "name_ko", "name_zh",
-    "birth_date", "death_date", "gender", "nationality",
+    "canonical_id",
+    "name_ja",
+    "name_en",
+    "name_ko",
+    "name_zh",
+    "birth_date",
+    "death_date",
+    "gender",
+    "nationality",
     "source_ids_json",
-    "name_ja_source", "name_en_source", "gender_source", "birth_date_source",
+    "name_ja_source",
+    "name_en_source",
+    "gender_source",
+    "birth_date_source",
 ]
 
 
@@ -306,8 +316,12 @@ def _insert_audit_persons(
         return
 
     _AUDIT_FIELDS_P = [
-        "canonical_id", "entity_type", "field_name",
-        "field_value", "source_name", "selection_reason",
+        "canonical_id",
+        "entity_type",
+        "field_name",
+        "field_value",
+        "source_name",
+        "selection_reason",
     ]
 
     conn = duckdb.connect(str(resolved_path))

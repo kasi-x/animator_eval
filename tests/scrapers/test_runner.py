@@ -1,4 +1,5 @@
 """Tests for src.scrapers.runner.ScrapeRunner."""
+
 from __future__ import annotations
 
 import asyncio
@@ -102,7 +103,9 @@ def test_runner_fetcher_none_increments_skipped(tmp_path):
 
     assert stats.processed == 2
     assert stats.written == 0
-    assert stats.skipped == 0  # fetcher None = processed but no write (no skipped increment in current impl)
+    assert (
+        stats.skipped == 0
+    )  # fetcher None = processed but no write (no skipped increment in current impl)
 
 
 def test_runner_parser_none_increments_skipped(tmp_path):

@@ -1,4 +1,5 @@
 """Atomic file swap for DuckDB output (no writer block on readers)."""
+
 from __future__ import annotations
 
 import contextlib

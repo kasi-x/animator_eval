@@ -412,7 +412,9 @@ def run_entity_resolution(loaded: LoadedData) -> EntityResolutionResult:
         # (anime_canonical_map may have remapped this conformed ID)
         final_id = anime_canonical_map.get(conformed_id, conformed_id)
         # Look up via the input anime_map in case it was remapped to another conformed ID
-        canonical_obj = primary_anime_map.get(final_id) or loaded.anime_map.get(final_id)
+        canonical_obj = primary_anime_map.get(final_id) or loaded.anime_map.get(
+            final_id
+        )
         if canonical_obj is not None:
             resolved_anime_map[conformed_id] = canonical_obj
 
@@ -432,4 +434,3 @@ def run_entity_resolution(loaded: LoadedData) -> EntityResolutionResult:
         anime_list=anime_list,
         anime_map=resolved_anime_map,
     )
-

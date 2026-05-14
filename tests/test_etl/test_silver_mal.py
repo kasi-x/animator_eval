@@ -6,6 +6,7 @@ SILVER duckdb, then calls integrate() and checks row counts and H1 invariants.
 H1 invariant: SILVER columns must NOT contain bare score / popularity /
 favourites / members / rank — only display_*_mal prefixed variants.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -147,6 +148,7 @@ def _make_silver_conn() -> duckdb.DuckDBPyConnection:
 
 # ─── BRONZE fixtures ──────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def bronze_dir(tmp_path: Path) -> Path:
     """Write synthetic MAL BRONZE parquet for all 9 required tables."""
@@ -154,142 +156,164 @@ def bronze_dir(tmp_path: Path) -> Path:
 
     # anime
     with BronzeWriter("mal", table="anime", root=root) as bw:
-        bw.append({
-            "mal_id": 1,
-            "url": "https://myanimelist.net/anime/1",
-            "title": "Cowboy Bebop",
-            "title_english": "Cowboy Bebop",
-            "title_japanese": "カウボーイビバップ",
-            "titles_alt_json": "[]",
-            "synonyms_json": "[]",
-            "type": "TV",
-            "source": "Original",
-            "episodes": 26,
-            "status": "Finished Airing",
-            "airing": False,
-            "aired_from": "1998-04-03",
-            "aired_to": "1999-04-24",
-            "aired_string": "Apr 3, 1998 to Apr 24, 1999",
-            "duration_raw": "24 min per ep",
-            "rating": "R - 17+",
-            "season": "spring",
-            "year": 1998,
-            "broadcast_day": None,
-            "broadcast_time": None,
-            "broadcast_timezone": None,
-            "broadcast_string": None,
-            "synopsis": "A classic anime.",
-            "background": None,
-            "approved": True,
-            # H1: these are already prefixed display_* in the BRONZE schema
-            "display_score": 8.75,
-            "display_scored_by": 900000,
-            "display_rank": 28,
-            "display_popularity": 39,
-            "display_members": 1200000,
-            "display_favorites": 75000,
-            "image_url": "https://cdn.myanimelist.net/images/anime/4/19644.jpg",
-            "image_url_large": None,
-            "trailer_youtube_id": None,
-            "fetched_at": "2026-04-25T00:00:00",
-            "content_hash": "abc123",
-        })
+        bw.append(
+            {
+                "mal_id": 1,
+                "url": "https://myanimelist.net/anime/1",
+                "title": "Cowboy Bebop",
+                "title_english": "Cowboy Bebop",
+                "title_japanese": "カウボーイビバップ",
+                "titles_alt_json": "[]",
+                "synonyms_json": "[]",
+                "type": "TV",
+                "source": "Original",
+                "episodes": 26,
+                "status": "Finished Airing",
+                "airing": False,
+                "aired_from": "1998-04-03",
+                "aired_to": "1999-04-24",
+                "aired_string": "Apr 3, 1998 to Apr 24, 1999",
+                "duration_raw": "24 min per ep",
+                "rating": "R - 17+",
+                "season": "spring",
+                "year": 1998,
+                "broadcast_day": None,
+                "broadcast_time": None,
+                "broadcast_timezone": None,
+                "broadcast_string": None,
+                "synopsis": "A classic anime.",
+                "background": None,
+                "approved": True,
+                # H1: these are already prefixed display_* in the BRONZE schema
+                "display_score": 8.75,
+                "display_scored_by": 900000,
+                "display_rank": 28,
+                "display_popularity": 39,
+                "display_members": 1200000,
+                "display_favorites": 75000,
+                "image_url": "https://cdn.myanimelist.net/images/anime/4/19644.jpg",
+                "image_url_large": None,
+                "trailer_youtube_id": None,
+                "fetched_at": "2026-04-25T00:00:00",
+                "content_hash": "abc123",
+            }
+        )
 
     # persons (optional — test the graceful-skip via absent table path,
     # but we also test the populated path with an explicit small fixture)
     with BronzeWriter("mal", table="persons", root=root) as bw:
-        bw.append({
-            "mal_id": 101,
-            "name": "Shinichiro Watanabe",
-            "url": "https://myanimelist.net/people/101",
-            "image_url": None,
-            "birthday": None,
-            "about": None,
-            "fetched_at": "2026-04-25T00:00:00",
-            "content_hash": "p101",
-        })
+        bw.append(
+            {
+                "mal_id": 101,
+                "name": "Shinichiro Watanabe",
+                "url": "https://myanimelist.net/people/101",
+                "image_url": None,
+                "birthday": None,
+                "about": None,
+                "fetched_at": "2026-04-25T00:00:00",
+                "content_hash": "p101",
+            }
+        )
 
     # staff_credits
     with BronzeWriter("mal", table="staff_credits", root=root) as bw:
-        bw.append({
-            "mal_id": 1,
-            "mal_person_id": 101,
-            "person_name": "Shinichiro Watanabe",
-            "position": "Director",
-        })
-        bw.append({
-            "mal_id": 1,
-            "mal_person_id": 102,
-            "person_name": "Yoko Kanno",
-            "position": "Music",
-        })
+        bw.append(
+            {
+                "mal_id": 1,
+                "mal_person_id": 101,
+                "person_name": "Shinichiro Watanabe",
+                "position": "Director",
+            }
+        )
+        bw.append(
+            {
+                "mal_id": 1,
+                "mal_person_id": 102,
+                "person_name": "Yoko Kanno",
+                "position": "Music",
+            }
+        )
 
     # anime_characters
     with BronzeWriter("mal", table="anime_characters", root=root) as bw:
-        bw.append({
-            "mal_id": 1,
-            "mal_character_id": 201,
-            "character_name": "Spike Spiegel",
-            "character_url": "https://myanimelist.net/character/201",
-            "role": "Main",
-            "display_favorites": 50000,
-            "image_url": None,
-        })
+        bw.append(
+            {
+                "mal_id": 1,
+                "mal_character_id": 201,
+                "character_name": "Spike Spiegel",
+                "character_url": "https://myanimelist.net/character/201",
+                "role": "Main",
+                "display_favorites": 50000,
+                "image_url": None,
+            }
+        )
 
     # va_credits
     with BronzeWriter("mal", table="va_credits", root=root) as bw:
-        bw.append({
-            "mal_id": 1,
-            "mal_character_id": 201,
-            "mal_person_id": 301,
-            "person_name": "Koichi Yamadera",
-            "language": "Japanese",
-        })
+        bw.append(
+            {
+                "mal_id": 1,
+                "mal_character_id": 201,
+                "mal_person_id": 301,
+                "person_name": "Koichi Yamadera",
+                "language": "Japanese",
+            }
+        )
 
     # anime_genres
     with BronzeWriter("mal", table="anime_genres", root=root) as bw:
-        bw.append({
-            "mal_id": 1,
-            "genre_id": 1,
-            "name": "Action",
-            "kind": "genre",
-        })
-        bw.append({
-            "mal_id": 1,
-            "genre_id": 2,
-            "name": "Sci-Fi",
-            "kind": "genre",
-        })
+        bw.append(
+            {
+                "mal_id": 1,
+                "genre_id": 1,
+                "name": "Action",
+                "kind": "genre",
+            }
+        )
+        bw.append(
+            {
+                "mal_id": 1,
+                "genre_id": 2,
+                "name": "Sci-Fi",
+                "kind": "genre",
+            }
+        )
 
     # anime_studios
     with BronzeWriter("mal", table="anime_studios", root=root) as bw:
-        bw.append({
-            "mal_id": 1,
-            "mal_producer_id": 14,
-            "name": "Sunrise",
-            "kind": "Studios",
-            "url": "https://myanimelist.net/anime/producer/14",
-        })
+        bw.append(
+            {
+                "mal_id": 1,
+                "mal_producer_id": 14,
+                "name": "Sunrise",
+                "kind": "Studios",
+                "url": "https://myanimelist.net/anime/producer/14",
+            }
+        )
 
     # anime_relations
     with BronzeWriter("mal", table="anime_relations", root=root) as bw:
-        bw.append({
-            "mal_id": 1,
-            "relation_type": "Side story",
-            "target_type": "anime",
-            "target_mal_id": 5,
-            "target_name": "Cowboy Bebop: The Movie",
-            "target_url": "https://myanimelist.net/anime/5",
-        })
+        bw.append(
+            {
+                "mal_id": 1,
+                "relation_type": "Side story",
+                "target_type": "anime",
+                "target_mal_id": 5,
+                "target_name": "Cowboy Bebop: The Movie",
+                "target_url": "https://myanimelist.net/anime/5",
+            }
+        )
 
     # anime_recommendations
     with BronzeWriter("mal", table="anime_recommendations", root=root) as bw:
-        bw.append({
-            "mal_id": 1,
-            "recommended_mal_id": 6,
-            "recommended_url": "https://myanimelist.net/anime/6",
-            "votes": 42,
-        })
+        bw.append(
+            {
+                "mal_id": 1,
+                "recommended_mal_id": 6,
+                "recommended_url": "https://myanimelist.net/anime/6",
+                "votes": 42,
+            }
+        )
 
     return root
 
@@ -300,32 +324,40 @@ def bronze_dir_no_persons(tmp_path: Path) -> Path:
     root = tmp_path / "bronze_no_persons"
 
     with BronzeWriter("mal", table="anime", root=root) as bw:
-        bw.append({
-            "mal_id": 999,
-            "title": "Ghost in the Shell",
-            "title_english": "Ghost in the Shell",
-            "title_japanese": "攻殻機動隊",
-            "type": "Movie",
-            "source": "Manga",
-            "episodes": 1,
-            "status": "Finished Airing",
-            "airing": False,
-            "aired_from": "1995-11-18",
-            "aired_to": "1995-11-18",
-            "season": None,
-            "year": 1995,
-            "display_score": 8.5,
-            "display_scored_by": 200000,
-            "display_rank": 50,
-            "display_popularity": 100,
-            "display_members": 500000,
-            "display_favorites": 20000,
-        })
+        bw.append(
+            {
+                "mal_id": 999,
+                "title": "Ghost in the Shell",
+                "title_english": "Ghost in the Shell",
+                "title_japanese": "攻殻機動隊",
+                "type": "Movie",
+                "source": "Manga",
+                "episodes": 1,
+                "status": "Finished Airing",
+                "airing": False,
+                "aired_from": "1995-11-18",
+                "aired_to": "1995-11-18",
+                "season": None,
+                "year": 1995,
+                "display_score": 8.5,
+                "display_scored_by": 200000,
+                "display_rank": 50,
+                "display_popularity": 100,
+                "display_members": 500000,
+                "display_favorites": 20000,
+            }
+        )
 
     # Provide empty tables to avoid glob errors on optional tables
-    for tbl in ["staff_credits", "anime_characters", "va_credits",
-                "anime_genres", "anime_studios", "anime_relations",
-                "anime_recommendations"]:
+    for tbl in [
+        "staff_credits",
+        "anime_characters",
+        "va_credits",
+        "anime_genres",
+        "anime_studios",
+        "anime_relations",
+        "anime_recommendations",
+    ]:
         with BronzeWriter("mal", table=tbl, root=root) as bw:
             pass  # empty — no rows
 
@@ -333,6 +365,7 @@ def bronze_dir_no_persons(tmp_path: Path) -> Path:
 
 
 # ─── Tests ───────────────────────────────────────────────────────────────────
+
 
 class TestAnime:
     def test_anime_inserted(self, bronze_dir: Path) -> None:
@@ -346,9 +379,7 @@ class TestAnime:
         """Anime rows use 'mal:a<id>' format."""
         conn = _make_silver_conn()
         mal_loader.integrate(conn, bronze_dir)
-        row = conn.execute(
-            "SELECT id FROM anime WHERE id = 'mal:a1'"
-        ).fetchone()
+        row = conn.execute("SELECT id FROM anime WHERE id = 'mal:a1'").fetchone()
         conn.close()
         assert row is not None
 
@@ -364,12 +395,12 @@ class TestAnime:
         ).fetchone()
         conn.close()
         assert row is not None
-        assert row[0] == pytest.approx(8.75)   # display_score_mal
-        assert row[1] == 39                     # display_popularity_mal
-        assert row[2] == 1200000                # display_members_mal
-        assert row[3] == 75000                  # display_favorites_mal
-        assert row[4] == 28                     # display_rank_mal
-        assert row[5] == 900000                 # display_scored_by_mal
+        assert row[0] == pytest.approx(8.75)  # display_score_mal
+        assert row[1] == 39  # display_popularity_mal
+        assert row[2] == 1200000  # display_members_mal
+        assert row[3] == 75000  # display_favorites_mal
+        assert row[4] == 28  # display_rank_mal
+        assert row[5] == 900000  # display_scored_by_mal
 
     def test_h1_no_bare_score_columns(self, bronze_dir: Path) -> None:
         """H1: SILVER anime table must NOT have bare score/popularity/etc columns."""
@@ -639,7 +670,9 @@ class TestStudios:
         assert len(rows) > 0
         assert all(r[0] == "mal" for r in rows)
 
-    def test_anime_studios_no_pk_collision_on_repeated_insert(self, bronze_dir: Path) -> None:
+    def test_anime_studios_no_pk_collision_on_repeated_insert(
+        self, bronze_dir: Path
+    ) -> None:
         """Running integrate twice must not raise PK violation in anime_studios."""
         conn = _make_silver_conn()
         mal_loader.integrate(conn, bronze_dir)
@@ -697,7 +730,10 @@ class TestRelations:
         """anime_relations table must have a source column after DDL (H4)."""
         conn = _make_silver_conn()
         mal_loader.integrate(conn, bronze_dir)
-        cols = {r[1] for r in conn.execute("PRAGMA table_info('anime_relations')").fetchall()}
+        cols = {
+            r[1]
+            for r in conn.execute("PRAGMA table_info('anime_relations')").fetchall()
+        }
         conn.close()
         assert "source" in cols
 
@@ -729,13 +765,9 @@ class TestRecommendations:
         """integrate() twice does not duplicate recommendation rows."""
         conn = _make_silver_conn()
         mal_loader.integrate(conn, bronze_dir)
-        c1 = conn.execute(
-            "SELECT COUNT(*) FROM anime_recommendations"
-        ).fetchone()[0]
+        c1 = conn.execute("SELECT COUNT(*) FROM anime_recommendations").fetchone()[0]
         mal_loader.integrate(conn, bronze_dir)
-        c2 = conn.execute(
-            "SELECT COUNT(*) FROM anime_recommendations"
-        ).fetchone()[0]
+        c2 = conn.execute("SELECT COUNT(*) FROM anime_recommendations").fetchone()[0]
         conn.close()
         assert c1 == c2
 

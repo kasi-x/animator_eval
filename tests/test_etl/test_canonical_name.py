@@ -8,6 +8,7 @@ Covers:
 - None / empty edge cases
 - backfill() on an in-memory DuckDB fixture
 """
+
 from __future__ import annotations
 
 import duckdb
@@ -206,12 +207,12 @@ def silver_conn() -> duckdb.DuckDBPyConnection:
     conn.executemany(
         "INSERT INTO persons (id, name_ja) VALUES (?, ?)",
         [
-            ("p1", "渡邊"),        # 旧→新
-            ("p2", "齊藤"),        # 旧→新
-            ("p3", "Ｈ・Ｐ"),      # NFKC
-            ("p4", "田中一郎"),    # already normalized
-            ("p5", ""),            # empty → NULL
-            ("p6", "濱田"),        # 旧→新
+            ("p1", "渡邊"),  # 旧→新
+            ("p2", "齊藤"),  # 旧→新
+            ("p3", "Ｈ・Ｐ"),  # NFKC
+            ("p4", "田中一郎"),  # already normalized
+            ("p5", ""),  # empty → NULL
+            ("p6", "濱田"),  # 旧→新
         ],
     )
     yield conn
@@ -228,10 +229,7 @@ class TestBackfill:
 
     def test_column_created(self, silver_conn: duckdb.DuckDBPyConnection) -> None:
         backfill(silver_conn)
-        cols = [
-            row[0]
-            for row in silver_conn.execute("DESCRIBE persons").fetchall()
-        ]
+        cols = [row[0] for row in silver_conn.execute("DESCRIBE persons").fetchall()]
         assert "canonical_name_ja" in cols
 
     def test_kyu_shin_converted(self, silver_conn: duckdb.DuckDBPyConnection) -> None:
@@ -267,17 +265,13 @@ class TestBackfill:
         # empty string → canonical_name_ja('') is None → stored as ''
         assert val == "" or val is None
 
-    def test_idempotent_on_rerun(
-        self, silver_conn: duckdb.DuckDBPyConnection
-    ) -> None:
+    def test_idempotent_on_rerun(self, silver_conn: duckdb.DuckDBPyConnection) -> None:
         n1 = backfill(silver_conn)
         n2 = backfill(silver_conn)
         assert n1 == 5  # p5 (empty name_ja) is skipped
         assert n2 == 0  # all eligible rows already have canonical_name_ja
 
-    def test_hama_old_converted(
-        self, silver_conn: duckdb.DuckDBPyConnection
-    ) -> None:
+    def test_hama_old_converted(self, silver_conn: duckdb.DuckDBPyConnection) -> None:
         backfill(silver_conn)
         val = silver_conn.execute(
             "SELECT canonical_name_ja FROM persons WHERE id = 'p6'"

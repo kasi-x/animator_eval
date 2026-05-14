@@ -21,7 +21,16 @@ from src.scrapers.bronze_writer import BronzeWriterGroup
 from src.scrapers.parsers.ann import parse_anime_xml, parse_person_html
 
 FIXTURES = Path(__file__).parent.parent / "fixtures" / "scrapers" / "ann"
-TABLES_8 = ("anime", "credits", "cast", "company", "episodes", "releases", "news", "related")
+TABLES_8 = (
+    "anime",
+    "credits",
+    "cast",
+    "company",
+    "episodes",
+    "releases",
+    "news",
+    "related",
+)
 
 
 def _make_group(tmp_path: Path) -> BronzeWriterGroup:
@@ -53,7 +62,13 @@ def test_anime_table_has_expected_columns(tmp_path):
     files = list((tmp_path / "source=ann" / "table=anime").rglob("*.parquet"))
     schema = pq.read_schema(files[0])
     col_names = set(schema.names)
-    for col in ("ann_id", "title_en", "display_rating_votes", "opening_themes_json", "image_url"):
+    for col in (
+        "ann_id",
+        "title_en",
+        "display_rating_votes",
+        "opening_themes_json",
+        "image_url",
+    ):
         assert col in col_names, f"Missing column {col!r} in anime table"
 
 
@@ -98,5 +113,11 @@ def test_person_detail_new_columns(tmp_path):
     assert files
     schema = pq.read_schema(files[0])
     col_names = set(schema.names)
-    for col in ("credits_json", "alt_names_json", "family_name_ja", "given_name_ja", "description_raw"):
+    for col in (
+        "credits_json",
+        "alt_names_json",
+        "family_name_ja",
+        "given_name_ja",
+        "description_raw",
+    ):
         assert col in col_names, f"Missing column {col!r} in persons table"

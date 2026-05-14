@@ -110,7 +110,9 @@ class AnnClient:
     async def close(self) -> None:
         await self._http.aclose()
 
-    async def get(self, url: str, params: dict | None = None, *, max_attempts: int = 8) -> httpx.Response:
+    async def get(
+        self, url: str, params: dict | None = None, *, max_attempts: int = 8
+    ) -> httpx.Response:
         resp = await self._http.get(url, params=params, max_attempts=max_attempts)
         resp.raise_for_status()
         return resp
@@ -222,6 +224,7 @@ async def fetch_person_batch(
 
 # ─── Phase 3 (HTML): person HTML scraping ────────────────────────────────────
 
+
 async def fetch_person_html(
     client: AnnClient,
     ann_id: int,
@@ -249,8 +252,14 @@ async def fetch_person_html(
 
 
 _ANIME_BRONZE_TABLES = (
-    "anime", "credits", "cast", "company",
-    "episodes", "releases", "news", "related",
+    "anime",
+    "credits",
+    "cast",
+    "company",
+    "episodes",
+    "releases",
+    "news",
+    "related",
 )
 
 
@@ -298,7 +307,9 @@ def save_anime_parse_result(
 @app.command("scrape-anime")
 def cmd_scrape_anime(
     limit: LimitOpt = 0,
-    batch_size: int = typer.Option(BATCH_SIZE, "--batch-size", help="XML API batch size"),
+    batch_size: int = typer.Option(
+        BATCH_SIZE, "--batch-size", help="XML API batch size"
+    ),
     delay: DelayOpt = DEFAULT_DELAY,
     checkpoint_interval: CheckpointIntervalOpt = SCRAPE_CHECKPOINT_INTERVAL,
     data_dir: DataDirOpt = DEFAULT_DATA_DIR,
@@ -336,7 +347,9 @@ async def _run_scrape_anime(
     dry_run: bool = False,
     progress_override: bool | None = None,
 ) -> None:
-    cp = resolve_checkpoint(data_dir / "anime_checkpoint.json", force=force, resume=resume)
+    cp = resolve_checkpoint(
+        data_dir / "anime_checkpoint.json", force=force, resume=resume
+    )
     client = AnnClient(delay=delay)
     try:
         if "all_ids" in cp:
@@ -370,7 +383,9 @@ async def _run_scrape_anime(
         total_credits = 0
         done_this_run = 0
         flush_every = max(1, checkpoint_interval // batch_size)
-        batches = [pending[i : i + batch_size] for i in range(0, len(pending), batch_size)]
+        batches = [
+            pending[i : i + batch_size] for i in range(0, len(pending), batch_size)
+        ]
 
         with BronzeWriterGroup("ann", tables=list(_ANIME_BRONZE_TABLES)) as group:
             with scrape_progress(
@@ -415,7 +430,9 @@ async def _run_scrape_anime(
 @app.command("scrape-persons")
 def cmd_scrape_persons(
     limit: LimitOpt = 0,
-    batch_size: int = typer.Option(BATCH_SIZE, "--batch-size", help="(unused; HTML is per-ID)"),
+    batch_size: int = typer.Option(
+        BATCH_SIZE, "--batch-size", help="(unused; HTML is per-ID)"
+    ),
     delay: DelayOpt = DEFAULT_DELAY,
     checkpoint_interval: CheckpointIntervalOpt = SCRAPE_CHECKPOINT_INTERVAL,
     data_dir: DataDirOpt = DEFAULT_DATA_DIR,
@@ -458,7 +475,9 @@ async def _run_scrape_persons(
 ) -> None:
     import pyarrow.dataset as ds
 
-    cp = resolve_checkpoint(data_dir / "persons_checkpoint.json", force=force, resume=resume)
+    cp = resolve_checkpoint(
+        data_dir / "persons_checkpoint.json", force=force, resume=resume
+    )
 
     credits_path = DEFAULT_BRONZE_ROOT / "source=ann" / "table=credits"
     if not credits_path.exists():
@@ -468,7 +487,9 @@ async def _run_scrape_persons(
     credits_ds = ds.dataset(credits_path, format="parquet")
     tbl = credits_ds.to_table(columns=["ann_person_id"])
     all_ann_ids: list[int] = list(
-        dict.fromkeys(pid for pid in tbl.column("ann_person_id").to_pylist() if pid is not None)
+        dict.fromkeys(
+            pid for pid in tbl.column("ann_person_id").to_pylist() if pid is not None
+        )
     )
 
     if dry_run:
@@ -497,13 +518,19 @@ async def _run_scrape_persons(
             runner = ScrapeRunner(
                 fetcher=_fetch_person_html,
                 parser=lambda raw, id_: parse_person_html(raw, id_),
-                sink=BronzeSink(g, lambda rec: {"persons": [dataclasses.asdict(rec)]}, add_hash=False),
+                sink=BronzeSink(
+                    g,
+                    lambda rec: {"persons": [dataclasses.asdict(rec)]},
+                    add_hash=False,
+                ),
                 checkpoint=cp,
                 label="ann_persons",
                 flush=g.flush_all,
                 flush_every=checkpoint_interval,
             )
-            stats = await runner.run(all_ann_ids, limit=limit, progress_override=progress_override)
+            stats = await runner.run(
+                all_ann_ids, limit=limit, progress_override=progress_override
+            )
         log.info("ann_persons_done", **dataclasses.asdict(stats))
     finally:
         await client.close()

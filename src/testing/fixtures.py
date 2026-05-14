@@ -12,7 +12,14 @@ from pathlib import Path
 import duckdb
 import structlog
 
-from src.runtime.models import BronzeAnime, Character, CharacterVoiceActor, Credit, Person, Role
+from src.runtime.models import (
+    BronzeAnime,
+    Character,
+    CharacterVoiceActor,
+    Credit,
+    Person,
+    Role,
+)
 
 logger = structlog.get_logger()
 

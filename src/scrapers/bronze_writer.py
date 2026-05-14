@@ -8,6 +8,7 @@ Files are immutable once written. Re-running a scraper produces a new
 file under the same partition. integrate ETL (04_duckdb/03) reads the
 glob and dedups in SILVER.
 """
+
 from __future__ import annotations
 
 import datetime as _dt
@@ -30,8 +31,17 @@ DEFAULT_BRONZE_ROOT: Path = Path(
 )
 
 ALLOWED_SOURCES = {
-    "anilist", "ann", "allcinema", "seesaawiki", "keyframe", "mal", "mediaarts", "jvmg",
-    "sakuga_atwiki", "bangumi", "tmdb",
+    "anilist",
+    "ann",
+    "allcinema",
+    "seesaawiki",
+    "keyframe",
+    "mal",
+    "mediaarts",
+    "jvmg",
+    "sakuga_atwiki",
+    "bangumi",
+    "tmdb",
 }
 
 
@@ -122,6 +132,7 @@ class BronzeWriter:
         """
         # Local import to avoid circular import (bronze_compaction → bronze_writer).
         from src.scrapers.bronze_compaction import compact_partition
+
         try:
             return compact_partition(
                 self.source, self.table, self._date.isoformat(), root=self._root
@@ -197,13 +208,14 @@ class BronzeWriterGroup:
 # 作画@wiki — 3-table BRONZE export
 # ---------------------------------------------------------------------------
 
+
 def write_sakuga_atwiki_bronze(
-    persons: list,                        # list[ParsedSakugaPerson]
+    persons: list,  # list[ParsedSakugaPerson]
     pages_metadata: list[dict],
     output_dir: "Path | str",
     date_partition: str,
     raw_texts: "dict[int, str] | None" = None,
-    works: "list | None" = None,          # list[ParsedSakugaWork]
+    works: "list | None" = None,  # list[ParsedSakugaWork]
 ) -> dict[str, Path]:
     """Write src_sakuga_atwiki_{pages,persons,credits,work_staff} parquet.
 
@@ -238,56 +250,66 @@ def write_sakuga_atwiki_bronze(
             or (parsed_work is not None and len(parsed_work.staff) > 0)  # type: ignore[union-attr]
         )
 
-        page_rows.append({
-            "page_id": pid,
-            "url": meta.get("url", ""),
-            "title": meta.get("title", ""),
-            "page_kind": kind,
-            "last_fetched_at": meta.get("discovered_at", ""),
-            "html_sha256": meta.get("last_hash", ""),
-            "parse_ok": parse_ok,
-            "date_partition": date_partition,
-        })
+        page_rows.append(
+            {
+                "page_id": pid,
+                "url": meta.get("url", ""),
+                "title": meta.get("title", ""),
+                "page_kind": kind,
+                "last_fetched_at": meta.get("discovered_at", ""),
+                "html_sha256": meta.get("last_hash", ""),
+                "parse_ok": parse_ok,
+                "date_partition": date_partition,
+            }
+        )
 
         if parsed_person is not None:
-            person_rows.append({
-                "page_id": pid,
-                "name": parsed_person.name,  # type: ignore[union-attr]
-                "aliases_json": _json.dumps(parsed_person.aliases, ensure_ascii=False),  # type: ignore[union-attr]
-                "active_since_year": parsed_person.active_since_year,  # type: ignore[union-attr]
-                "html_sha256": parsed_person.source_html_sha256,  # type: ignore[union-attr]
-                "raw_wikibody_text": raw_texts.get(pid, ""),
-                "parse_ok": len(parsed_person.credits) > 0,  # type: ignore[union-attr]
-                "date_partition": date_partition,
-            })
-            for credit in parsed_person.credits:  # type: ignore[union-attr]
-                credit_rows.append({
-                    "person_page_id": pid,
-                    "work_title": credit.work_title,
-                    "work_year": credit.work_year,
-                    "work_format": credit.work_format,
-                    "role_raw": credit.role_raw,
-                    "episode_raw": credit.episode_raw,
-                    "episode_num": credit.episode_num,
-                    "evidence_source": "sakuga_atwiki",
+            person_rows.append(
+                {
+                    "page_id": pid,
+                    "name": parsed_person.name,  # type: ignore[union-attr]
+                    "aliases_json": _json.dumps(
+                        parsed_person.aliases, ensure_ascii=False
+                    ),  # type: ignore[union-attr]
+                    "active_since_year": parsed_person.active_since_year,  # type: ignore[union-attr]
+                    "html_sha256": parsed_person.source_html_sha256,  # type: ignore[union-attr]
+                    "raw_wikibody_text": raw_texts.get(pid, ""),
+                    "parse_ok": len(parsed_person.credits) > 0,  # type: ignore[union-attr]
                     "date_partition": date_partition,
-                })
+                }
+            )
+            for credit in parsed_person.credits:  # type: ignore[union-attr]
+                credit_rows.append(
+                    {
+                        "person_page_id": pid,
+                        "work_title": credit.work_title,
+                        "work_year": credit.work_year,
+                        "work_format": credit.work_format,
+                        "role_raw": credit.role_raw,
+                        "episode_raw": credit.episode_raw,
+                        "episode_num": credit.episode_num,
+                        "evidence_source": "sakuga_atwiki",
+                        "date_partition": date_partition,
+                    }
+                )
 
         if parsed_work is not None:
             for s in parsed_work.staff:  # type: ignore[union-attr]
-                work_staff_rows.append({
-                    "work_page_id": pid,
-                    "work_title": parsed_work.title,  # type: ignore[union-attr]
-                    "work_year": parsed_work.year,  # type: ignore[union-attr]
-                    "work_format": parsed_work.work_format,  # type: ignore[union-attr]
-                    "person_name": s.person_name,
-                    "role_raw": s.role_raw,
-                    "episode_num": s.episode_num,
-                    "episode_raw": s.episode_raw,
-                    "is_main_staff": s.is_main_staff,
-                    "evidence_source": "sakuga_atwiki",
-                    "date_partition": date_partition,
-                })
+                work_staff_rows.append(
+                    {
+                        "work_page_id": pid,
+                        "work_title": parsed_work.title,  # type: ignore[union-attr]
+                        "work_year": parsed_work.year,  # type: ignore[union-attr]
+                        "work_format": parsed_work.work_format,  # type: ignore[union-attr]
+                        "person_name": s.person_name,
+                        "role_raw": s.role_raw,
+                        "episode_num": s.episode_num,
+                        "episode_raw": s.episode_raw,
+                        "is_main_staff": s.is_main_staff,
+                        "evidence_source": "sakuga_atwiki",
+                        "date_partition": date_partition,
+                    }
+                )
 
     written: dict[str, Path] = {}
     tables = [
@@ -297,7 +319,9 @@ def write_sakuga_atwiki_bronze(
         ("work_staff", work_staff_rows),
     ]
     for table, rows in tables:
-        with BronzeWriter("sakuga_atwiki", table=table, root=output_dir, date=None) as bw:
+        with BronzeWriter(
+            "sakuga_atwiki", table=table, root=output_dir, date=None
+        ) as bw:
             bw._partition = (
                 output_dir
                 / "source=sakuga_atwiki"
@@ -308,7 +332,9 @@ def write_sakuga_atwiki_bronze(
             p = bw.flush()
             if p:
                 written[table] = p
-                logger.info("sakuga_bronze_written", table=table, rows=len(rows), path=str(p))
+                logger.info(
+                    "sakuga_bronze_written", table=table, rows=len(rows), path=str(p)
+                )
             else:
                 logger.warning("sakuga_bronze_empty", table=table)
 

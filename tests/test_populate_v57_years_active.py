@@ -1,4 +1,5 @@
 """Test v57 years_active population logic."""
+
 import pytest
 import duckdb
 from pathlib import Path
@@ -98,7 +99,9 @@ def test_no_credits(test_gold_db: duckdb.DuckDBPyConnection) -> None:
     assert row[0] == "[]"
 
 
-def test_already_set_person_not_touched(test_gold_db: duckdb.DuckDBPyConnection) -> None:
+def test_already_set_person_not_touched(
+    test_gold_db: duckdb.DuckDBPyConnection,
+) -> None:
     """Person with existing years_active is not overwritten."""
     conn = test_gold_db
 

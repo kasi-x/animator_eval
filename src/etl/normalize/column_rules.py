@@ -140,7 +140,7 @@ _FORMAT_8_CATEGORY_MAP: dict[str, str] = {
     # tv
     "TV": "tv",
     "TV_SHORT": "short",  # TV_SHORT goes to short (< 15 min label)
-    "TV SPECIAL": "tv",   # TV special → tv (放送経路優先)
+    "TV SPECIAL": "tv",  # TV special → tv (放送経路優先)
     "TV_SPECIAL": "tv",
     # movie
     "MOVIE": "movie",

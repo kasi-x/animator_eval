@@ -251,12 +251,33 @@ def build_resolved_anime(
 
 
 _ANIME_INSERT_FIELDS: list[str] = [
-    "canonical_id", "title_ja", "title_en", "title_zh", "year", "season", "quarter",
-    "episodes", "format", "duration", "start_date", "end_date", "status",
-    "source_mat", "work_type", "scale_class", "country_of_origin",
-    "source_ids_json", "source_count",
-    "title_ja_source", "title_en_source", "title_zh_source", "year_source",
-    "episodes_source", "format_source", "duration_source", "source_mat_source",
+    "canonical_id",
+    "title_ja",
+    "title_en",
+    "title_zh",
+    "year",
+    "season",
+    "quarter",
+    "episodes",
+    "format",
+    "duration",
+    "start_date",
+    "end_date",
+    "status",
+    "source_mat",
+    "work_type",
+    "scale_class",
+    "country_of_origin",
+    "source_ids_json",
+    "source_count",
+    "title_ja_source",
+    "title_en_source",
+    "title_zh_source",
+    "year_source",
+    "episodes_source",
+    "format_source",
+    "duration_source",
+    "source_mat_source",
 ]
 
 
@@ -269,9 +290,15 @@ def _rows_to_arrow(
     import pyarrow as pa
 
     # Build column arrays — all as string (VARCHAR) unless known integer
-    _INT_FIELDS = frozenset({
-        "year", "quarter", "episodes", "duration", "source_count",
-    })
+    _INT_FIELDS = frozenset(
+        {
+            "year",
+            "quarter",
+            "episodes",
+            "duration",
+            "source_count",
+        }
+    )
 
     columns: dict[str, list] = {f: [] for f in fields}
     for r in rows:
@@ -413,10 +440,7 @@ def _insert_episodes(
             )
             for i in range(0, len(rows), batch_size):
                 batch = rows[i : i + batch_size]
-                values = [
-                    tuple(r.get(f) for f in _EPISODE_FIELDS)
-                    for r in batch
-                ]
+                values = [tuple(r.get(f) for f in _EPISODE_FIELDS) for r in batch]
                 conn.executemany(sql, values)
         conn.commit()
     finally:
@@ -424,8 +448,12 @@ def _insert_episodes(
 
 
 _AUDIT_FIELDS: list[str] = [
-    "canonical_id", "entity_type", "field_name",
-    "field_value", "source_name", "selection_reason",
+    "canonical_id",
+    "entity_type",
+    "field_name",
+    "field_value",
+    "source_name",
+    "selection_reason",
 ]
 
 

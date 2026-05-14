@@ -93,7 +93,9 @@ def adjust_for_dark(palette: tuple[str, ...]) -> tuple[str, ...]:
     For Okabe-Ito the only swap needed is black → off-white. Other
     colors retain enough contrast on the glass-morphism dark background.
     """
-    return tuple(OKABE_ITO_DARK[i] if c == "#000000" else c for i, c in enumerate(palette))
+    return tuple(
+        OKABE_ITO_DARK[i] if c == "#000000" else c for i, c in enumerate(palette)
+    )
 
 
 def hex_to_rgba(hex_color: str, alpha: float = 1.0) -> str:

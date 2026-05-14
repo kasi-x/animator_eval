@@ -186,15 +186,23 @@ def test_api_person_response_contains_score_fields(tmp_path, monkeypatch):
 
     silver_path = tmp_path / "silver.duckdb"
     gold_path = tmp_path / "gold.duckdb"
-    monkeypatch.setattr(src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(
+        src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path
+    )
     monkeypatch.setattr(src.analysis.io.mart_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
     monkeypatch.setattr(src.runtime.api, "JSON_DIR", tmp_path)
     monkeypatch.setattr(src.utils.json_io, "JSON_DIR", tmp_path)
 
     sconn = duckdb.connect(str(silver_path))
-    sconn.execute("CREATE TABLE persons (id VARCHAR PRIMARY KEY, name_ja VARCHAR DEFAULT '', name_en VARCHAR DEFAULT '', name_ko VARCHAR DEFAULT '', name_zh VARCHAR DEFAULT '', names_alt VARCHAR DEFAULT '{}', aliases VARCHAR DEFAULT '[]', image_medium VARCHAR)")
-    sconn.execute("CREATE TABLE anime (id VARCHAR PRIMARY KEY, title_en VARCHAR, year INTEGER)")
-    sconn.execute("CREATE TABLE credits (person_id VARCHAR, anime_id VARCHAR, role VARCHAR, credit_year INTEGER, evidence_source VARCHAR)")
+    sconn.execute(
+        "CREATE TABLE persons (id VARCHAR PRIMARY KEY, name_ja VARCHAR DEFAULT '', name_en VARCHAR DEFAULT '', name_ko VARCHAR DEFAULT '', name_zh VARCHAR DEFAULT '', names_alt VARCHAR DEFAULT '{}', aliases VARCHAR DEFAULT '[]', image_medium VARCHAR)"
+    )
+    sconn.execute(
+        "CREATE TABLE anime (id VARCHAR PRIMARY KEY, title_en VARCHAR, year INTEGER)"
+    )
+    sconn.execute(
+        "CREATE TABLE credits (person_id VARCHAR, anime_id VARCHAR, role VARCHAR, credit_year INTEGER, evidence_source VARCHAR)"
+    )
     sconn.execute("INSERT INTO persons(id, name_ja) VALUES ('p1', 'テスト太郎')")
     sconn.close()
 
@@ -215,7 +223,15 @@ def test_api_person_response_contains_score_fields(tmp_path, monkeypatch):
     assert resp.status_code == 200, resp.text
 
     body = resp.json()
-    score_cols = {"person_fe", "studio_fe_exposure", "birank", "patronage", "dormancy", "awcc", "iv_score"}
+    score_cols = {
+        "person_fe",
+        "studio_fe_exposure",
+        "birank",
+        "patronage",
+        "dormancy",
+        "awcc",
+        "iv_score",
+    }
     missing = score_cols - set(body.keys())
     assert not missing, (
         f"GET /api/persons/{{id}} レスポンスに score フィールドが存在しない: {missing}"

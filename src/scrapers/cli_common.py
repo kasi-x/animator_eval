@@ -20,6 +20,7 @@ Usage::
 The typer.Option metadata (flag names, help text) is attached to the type via
 `Annotated`, so each call site only specifies the default value.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -138,7 +139,10 @@ def make_scraper_app(
     Side effect: forces typer multi-command mode (subcommand name required),
     so even single-command scrapers (e.g. keyframe) keep the `<app> run` form.
     """
-    kwargs: dict = {"add_completion": add_completion, "no_args_is_help": no_args_is_help}
+    kwargs: dict = {
+        "add_completion": add_completion,
+        "no_args_is_help": no_args_is_help,
+    }
     if name is not None:
         kwargs["name"] = name
     if help is not None:

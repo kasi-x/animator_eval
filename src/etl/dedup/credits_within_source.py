@@ -171,7 +171,13 @@ def dedup(
         deleted = to_delete
 
     after: int = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]  # type: ignore[index]
-    log.info("credits_dedup.done", before=before, after=after, deleted=deleted, dry_run=dry_run)
+    log.info(
+        "credits_dedup.done",
+        before=before,
+        after=after,
+        deleted=deleted,
+        dry_run=dry_run,
+    )
 
     return {
         "before": before,

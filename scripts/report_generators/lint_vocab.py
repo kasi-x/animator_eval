@@ -58,6 +58,8 @@ ENFORCED_CATEGORIES = (
     "ability_framing",
     "causal_verbs",
     "evaluative_adjectives",
+    "ranking_framing",
+    "hiring_framing",
 )
 
 # ---------------------------------------------------------------------------
@@ -378,9 +380,70 @@ def load_exceptions(path: Path = EXCEPTIONS_PATH) -> list[dict]:
     return raw.get("exceptions", [])
 
 
+_NEGATION_CONTEXT = re.compile(
+    r"(?:"
+    # English negation / prohibition patterns
+    r"\bNot for\b|"
+    r"\bnot used as\b|"
+    r"\bnot intended (?:for|as)\b|"
+    r"\bnot a basis\b|"
+    r"\bnot a judgment\b|"
+    r"\bmust not\b|"
+    r"\bshould not\b|"
+    r"\bcannot be used\b|"
+    r"\bexplicitly NOT for\b|"
+    r"\bforbidden_framing\b|"
+    r"\bblocklist\b|"
+    r"\bdisclaimer-?title\b|"
+    r"\bDisclaimer\b|"
+    r"\bnot individual ability\b|"
+    r"\bnot[, ]+(?:talent|ability|competence)\b|"
+    r"\bnever ability\b|"
+    r"\bnot.{0,40}(?:investor talent[ -]scouting|hiring decisions|studio.{0,10}ranking)|"
+    r"due to (?:small|limited) sample|"
+    r"excluded due to|"
+    # Banned-term enumeration in stance / brief / disclaimer context.
+    # These appear inside docstrings / metadata that *prohibit* such uses.
+    r"\b(?:Studio HR )?talent[ -]?(?:scouting|ranking)\b|"
+    r"\bstudio (?:talent )?ranking\b|"
+    r"\bInvestor-side\b|"
+    r"\bability assessments?\b|"
+    r"performance evaluations?\b|"
+    r"hiring decision support|"
+    r"individual performance evaluation|"
+    # Technical algorithm names that legitimately contain "ranking" as a math term.
+    r"BiRank|"
+    r"二部グラフランキング|"
+    r"ランキングアルゴリズム|"
+    # Japanese negation / prohibition patterns
+    r"してはならない|"
+    r"してはいけない|"
+    r"を(?:意味|表|測|評価|判断|示唆|示|示す)(?:する|す)?(?:.{0,4})?ものではな|"
+    r"frame[ 　]*禁止|"
+    r"framing[ 　]*禁止|"
+    r"を評価・測定・示唆するものではな|"
+    r"を測るものではな|"
+    r"・適性を測|"
+    r"の根拠として使用してはならない|"
+    r"免責事項|"
+    r"stance-block"
+    r")",
+    re.IGNORECASE,
+)
+
+
 def _is_definitional(finding: "Finding") -> bool:
-    """True if the entire context string IS the matched term (forbidden-term set definition)."""
-    return finding.context.strip() == finding.term.term
+    """True if the entire context IS the term, OR the term sits inside an
+    explicit negation / prohibition / disclaimer / stance-block context.
+
+    Negation contexts are how the project *forbids* a framing — naming the
+    forbidden term is required to prohibit it. Treating these as violations
+    creates a chicken-and-egg loop where STANCE.md / disclaimers cannot
+    name what they ban.
+    """
+    if finding.context.strip() == finding.term.term:
+        return True
+    return bool(_NEGATION_CONTEXT.search(finding.context))
 
 
 def _is_excepted(finding: "Finding", exceptions: list[dict]) -> bool:

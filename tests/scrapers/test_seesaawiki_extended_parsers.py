@@ -6,6 +6,7 @@ parse_credit_listing_positions.
 
 All tests are pure unit tests — no network calls, no file I/O.
 """
+
 from __future__ import annotations
 
 from src.scrapers.parsers.seesaawiki import (
@@ -59,7 +60,11 @@ class TestParseEpisodeTitles:
         titles = parse_episode_titles(body)
         assert len(titles) == 3
         assert [t.episode for t in titles] == [1, 2, 3]
-        assert [t.title for t in titles] == ["エピソード一", "エピソード二", "エピソード三"]
+        assert [t.title for t in titles] == [
+            "エピソード一",
+            "エピソード二",
+            "エピソード三",
+        ]
 
     def test_multiple_titles_on_episode_header(self):
         # Hidamari-style: 第N話「title1」「title2」 — only first title extracted
@@ -119,10 +124,7 @@ class TestParseGrossStudios:
         assert studios[0].episode is None
 
     def test_multiple_episodes_different_studios(self):
-        body = (
-            "第1話「A」\n制作協力：スタジオA\n\n"
-            "第2話「B」\n制作協力：スタジオB"
-        )
+        body = "第1話「A」\n制作協力：スタジオA\n\n第2話「B」\n制作協力：スタジオB"
         studios = parse_gross_studios(body)
         assert len(studios) == 2
         names = {s.studio_name for s in studios}
@@ -131,8 +133,7 @@ class TestParseGrossStudios:
 
     def test_same_studio_repeated_different_episodes(self):
         body = (
-            "第1話「A」\n制作協力：ガイナックス\n\n"
-            "第2話「B」\n制作協力：ガイナックス"
+            "第1話「A」\n制作協力：ガイナックス\n\n第2話「B」\n制作協力：ガイナックス"
         )
         studios = parse_gross_studios(body)
         # Different episodes → 2 records
@@ -172,14 +173,16 @@ class TestParseThemeSongs:
         return "\n".join(lines)
 
     def test_main_theme_with_credits(self):
-        body = self._body_with_theme([
-            "主題歌",
-            "「ワイワイワールド」",
-            "作詞：河岸亜砂",
-            "作曲：菊池俊輔",
-            "編曲：たかしまあきひこ",
-            "唄：水森亜土",
-        ])
+        body = self._body_with_theme(
+            [
+                "主題歌",
+                "「ワイワイワールド」",
+                "作詞：河岸亜砂",
+                "作曲：菊池俊輔",
+                "編曲：たかしまあきひこ",
+                "唄：水森亜土",
+            ]
+        )
         songs = parse_theme_songs(body)
         assert len(songs) == 4
         roles = {s.role for s in songs}
@@ -189,7 +192,9 @@ class TestParseThemeSongs:
         assert "artist" in roles
 
     def test_inline_title_on_section_header(self):
-        body = "主題歌「星空のエンジェル・クィーン」\n作詞：MOKO NANRI\nうた：デラ・セダカ"
+        body = (
+            "主題歌「星空のエンジェル・クィーン」\n作詞：MOKO NANRI\nうた：デラ・セダカ"
+        )
         songs = parse_theme_songs(body)
         assert songs[0].song_title == "星空のエンジェル・クィーン"
         assert all(s.song_title == "星空のエンジェル・クィーン" for s in songs)
@@ -207,11 +212,7 @@ class TestParseThemeSongs:
         assert "insert" in types
 
     def test_second_song_title_updates_current_title(self):
-        body = (
-            "主題歌\n"
-            "「曲A」\n作詞：山田\n"
-            "「曲B」\n作曲：鈴木"
-        )
+        body = "主題歌\n「曲A」\n作詞：山田\n「曲B」\n作曲：鈴木"
         songs = parse_theme_songs(body)
         titles = [s.song_title for s in songs]
         assert "曲A" in titles
@@ -375,11 +376,7 @@ class TestParseOriginalWorkInfo:
 
 class TestParseCreditListingPositions:
     def test_positions_are_zero_based_monotonic(self):
-        body = (
-            "脚本：山田\n"
-            "監督：鈴木\n"
-            "作画監督：田中"
-        )
+        body = "脚本：山田\n監督：鈴木\n作画監督：田中"
         results = parse_credit_listing_positions(body)
         positions = [r.source_listing_position for r in results]
         assert positions == list(range(len(results)))
@@ -395,11 +392,7 @@ class TestParseCreditListingPositions:
         assert all(r.episode is None for r in results)
 
     def test_episode_resets_after_header(self):
-        body = (
-            "監督：山田\n\n"
-            "第1話「A」\n脚本：A脚本\n\n"
-            "第2話「B」\n脚本：B脚本"
-        )
+        body = "監督：山田\n\n第1話「A」\n脚本：A脚本\n\n第2話「B」\n脚本：B脚本"
         results = parse_credit_listing_positions(body)
         series_credits = [r for r in results if r.episode is None]
         ep1_credits = [r for r in results if r.episode == 1]
@@ -418,11 +411,7 @@ class TestParseCreditListingPositions:
         assert all("CV" not in r.credit.role for r in results)
 
     def test_position_counter_is_global_across_episodes(self):
-        body = (
-            "監督：山田\n"
-            "第1話「A」\n脚本：A\n"
-            "第2話「B」\n脚本：B"
-        )
+        body = "監督：山田\n第1話「A」\n脚本：A\n第2話「B」\n脚本：B"
         results = parse_credit_listing_positions(body)
         positions = [r.source_listing_position for r in results]
         # Positions must be strictly increasing

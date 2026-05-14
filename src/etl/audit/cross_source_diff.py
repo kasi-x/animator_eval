@@ -85,7 +85,9 @@ _ENTITY_ATTRS: dict[Entity, list[str]] = {
 }
 
 # Year-type attribute names — triggers digit_count_mismatch / off_by_year logic.
-_YEAR_ATTRS: frozenset[str] = frozenset({"year", "start_date", "end_date", "birth_date", "death_date"})
+_YEAR_ATTRS: frozenset[str] = frozenset(
+    {"year", "start_date", "end_date", "birth_date", "death_date"}
+)
 
 # Punctuation strip regex (applied during normalize step).
 _PUNCT_RE = re.compile(r"[・．。、，,.\-\s　]+")
@@ -111,6 +113,7 @@ def _normalize_value(value: str) -> str:
 # Levenshtein distance (pure Python, no external dep required)
 # ---------------------------------------------------------------------------
 
+
 def _levenshtein(a: str, b: str) -> int:
     """Return Levenshtein edit distance between two strings."""
     if a == b:
@@ -128,8 +131,8 @@ def _levenshtein(a: str, b: str) -> int:
         for j, cb in enumerate(b, 1):
             curr.append(
                 min(
-                    prev[j] + 1,          # deletion
-                    curr[j - 1] + 1,      # insertion
+                    prev[j] + 1,  # deletion
+                    curr[j - 1] + 1,  # insertion
                     prev[j - 1] + (ca != cb),  # substitution
                 )
             )
@@ -140,6 +143,7 @@ def _levenshtein(a: str, b: str) -> int:
 # ---------------------------------------------------------------------------
 # Public: classify_diff
 # ---------------------------------------------------------------------------
+
 
 def classify_diff(
     value_a: str | None,
@@ -210,6 +214,7 @@ def classify_diff(
 # Internal: source prefix extraction
 # ---------------------------------------------------------------------------
 
+
 def _source_prefix(conformed_id: str) -> str:
     """Extract the source name from a conformed ID like 'anilist:123' → 'anilist'."""
     return conformed_id.split(":")[0]
@@ -218,6 +223,7 @@ def _source_prefix(conformed_id: str) -> str:
 # ---------------------------------------------------------------------------
 # Internal: load silver rows for a set of conformed IDs
 # ---------------------------------------------------------------------------
+
 
 def _load_silver_rows(
     silver_conn: duckdb.DuckDBPyConnection,
@@ -254,13 +260,16 @@ def _load_silver_rows(
         row_dict = dict(zip(col_names, row))
         sid = row_dict.pop("id")
         # Convert all values to str or None
-        result[sid] = {k: (str(v) if v is not None else None) for k, v in row_dict.items()}
+        result[sid] = {
+            k: (str(v) if v is not None else None) for k, v in row_dict.items()
+        }
     return result
 
 
 # ---------------------------------------------------------------------------
 # Public: collect_diffs
 # ---------------------------------------------------------------------------
+
 
 def collect_diffs(
     resolved_conn: duckdb.DuckDBPyConnection,
@@ -294,7 +303,9 @@ def collect_diffs(
     try:
         canonical_rows = resolved_conn.execute(sql).fetchall()
     except Exception as exc:
-        logger.warning("cross_source_diff.resolved_query_failed", entity=entity, error=str(exc))
+        logger.warning(
+            "cross_source_diff.resolved_query_failed", entity=entity, error=str(exc)
+        )
         return []
 
     logger.info(
@@ -475,6 +486,7 @@ def _write_csv(path: Path, rows: list[dict[str, str | None]]) -> None:
 # ---------------------------------------------------------------------------
 # CLI entry point
 # ---------------------------------------------------------------------------
+
 
 def _cli_main() -> None:
     """CLI: python -m src.etl.audit.cross_source_diff [--output-dir PATH]"""

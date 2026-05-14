@@ -6,6 +6,7 @@ Applies to SILVER layer after integrate_duckdb and credits are populated.
 Represents the earliest and latest credit years observed, allowing gap detection
 downstream (e.g., dormancy analysis, career friction detection).
 """
+
 from __future__ import annotations
 
 import duckdb
@@ -55,10 +56,13 @@ def populate_persons_years_active(conn: duckdb.DuckDBPyConnection) -> dict[str, 
     conn.commit()
 
     # Step 3: Count after
-    updated = count_before - (
-        conn.execute(
-            "SELECT COUNT(*) FROM persons WHERE years_active IS NULL OR years_active = '[]'"
-        ).fetchone()[0]
+    updated = (
+        count_before
+        - (
+            conn.execute(
+                "SELECT COUNT(*) FROM persons WHERE years_active IS NULL OR years_active = '[]'"
+            ).fetchone()[0]
+        )
     )
     populated = conn.execute(
         "SELECT COUNT(*) FROM persons WHERE years_active IS NOT NULL AND years_active != '[]'"

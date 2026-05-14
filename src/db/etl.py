@@ -73,7 +73,9 @@ def upsert_person(
                 person.hometown,
                 person.blood_type,
                 person.description,
-                json.dumps(getattr(person, "years_active", []) or [], ensure_ascii=False),
+                json.dumps(
+                    getattr(person, "years_active", []) or [], ensure_ascii=False
+                ),
                 person.favourites,
                 person.site_url,
                 incoming_priority,
@@ -105,7 +107,9 @@ def upsert_person(
 
     final_aliases = json.dumps(old_aliases, ensure_ascii=False)
 
-    incoming_years_active = json.dumps(getattr(person, "years_active", []) or [], ensure_ascii=False)
+    incoming_years_active = json.dumps(
+        getattr(person, "years_active", []) or [], ensure_ascii=False
+    )
 
     if update_primary:
         conn.execute(
@@ -129,15 +133,23 @@ def upsert_person(
                    name_priority = ?
                WHERE id = ?""",
             (
-                person.name_ja, person.name_en, person.name_ko, person.name_zh,
+                person.name_ja,
+                person.name_en,
+                person.name_ko,
+                person.name_zh,
                 getattr(person, "names_alt", "{}") or "{}",
                 final_aliases,
                 json.dumps(person.nationality, ensure_ascii=False),
-                person.mal_id, person.anilist_id,
-                person.date_of_birth, person.hometown, person.blood_type,
+                person.mal_id,
+                person.anilist_id,
+                person.date_of_birth,
+                person.hometown,
+                person.blood_type,
                 person.description,
-                incoming_years_active, incoming_years_active,
-                person.favourites, person.site_url,
+                incoming_years_active,
+                incoming_years_active,
+                person.favourites,
+                person.site_url,
                 max(incoming_priority, existing_priority),
                 person.id,
             ),
@@ -161,11 +173,16 @@ def upsert_person(
             (
                 final_aliases,
                 json.dumps(person.nationality, ensure_ascii=False),
-                person.mal_id, person.anilist_id,
-                person.date_of_birth, person.hometown, person.blood_type,
+                person.mal_id,
+                person.anilist_id,
+                person.date_of_birth,
+                person.hometown,
+                person.blood_type,
                 person.description,
-                incoming_years_active, incoming_years_active,
-                person.favourites, person.site_url,
+                incoming_years_active,
+                incoming_years_active,
+                person.favourites,
+                person.site_url,
                 person.id,
             ),
         )
@@ -195,18 +212,21 @@ def normalize_primary_names_by_credits(conn: sqlite3.Connection) -> int:
     # Source → bronze name table mapping
     _BRONZE_NAME_QUERY: dict[str, str] = {
         "anilist": "SELECT name_ja, name_en FROM src_anilist_persons "
-                   "WHERE anilist_id = CAST(? AS INT)",
-        "ann":     "SELECT name_ja, name_en FROM src_ann_persons "
-                   "WHERE ann_id = CAST(? AS INT)",
-        "mal":     "SELECT name_ja, name_en FROM src_mal_persons "
-                   "WHERE mal_id = CAST(? AS INT)",
+        "WHERE anilist_id = CAST(? AS INT)",
+        "ann": "SELECT name_ja, name_en FROM src_ann_persons "
+        "WHERE ann_id = CAST(? AS INT)",
+        "mal": "SELECT name_ja, name_en FROM src_mal_persons "
+        "WHERE mal_id = CAST(? AS INT)",
     }
 
     # Build (person_id → best source) mapping by credit count
     best: dict[str, tuple[str, int]] = {}  # person_id → (source, n_credits)
     for (pid, src), n in credit_counts.items():
         cur_src, cur_n = best.get(pid, ("", 0))
-        if n > cur_n or (n == cur_n and _SOURCE_PRIORITY.get(src, 0) > _SOURCE_PRIORITY.get(cur_src, 0)):
+        if n > cur_n or (
+            n == cur_n
+            and _SOURCE_PRIORITY.get(src, 0) > _SOURCE_PRIORITY.get(cur_src, 0)
+        ):
             best[pid] = (src, n)
 
     updated = 0
@@ -253,7 +273,8 @@ def normalize_primary_names_by_credits(conn: sqlite3.Connection) -> int:
                    aliases = ?
                WHERE id = ?""",
             (
-                top_name_ja, top_name_en,
+                top_name_ja,
+                top_name_en,
                 json.dumps(old_aliases, ensure_ascii=False),
                 pid,
             ),
@@ -309,13 +330,16 @@ def upsert_anime(conn: sqlite3.Connection, anime: BronzeAnime) -> None:
             anime.start_date,
             anime.end_date,
             anime.duration,
-            getattr(anime, "original_work_type", None) or getattr(anime, "source", None),
+            getattr(anime, "original_work_type", None)
+            or getattr(anime, "source", None),
             anime.quarter,
             anime.work_type,
             anime.scale_class,
             getattr(anime, "country_of_origin", None),
             _json.dumps(getattr(anime, "synonyms", []) or [], ensure_ascii=False),
-            1 if getattr(anime, "is_adult", None) else (0 if getattr(anime, "is_adult", None) is not None else None),
+            1
+            if getattr(anime, "is_adult", None)
+            else (0 if getattr(anime, "is_adult", None) is not None else None),
         ),
     )
 

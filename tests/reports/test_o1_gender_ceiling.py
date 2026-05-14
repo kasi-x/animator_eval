@@ -137,7 +137,9 @@ def silver_conn() -> sqlite3.Connection:
 
 def test_generate_returns_path(silver_conn: sqlite3.Connection, tmp_path: Path) -> None:
     """O1GenderCeilingReport.generate() returns a valid HTML path."""
-    from scripts.report_generators.reports.o1_gender_ceiling import O1GenderCeilingReport
+    from scripts.report_generators.reports.o1_gender_ceiling import (
+        O1GenderCeilingReport,
+    )
 
     report = O1GenderCeilingReport(silver_conn, output_dir=tmp_path)
     result = report.generate()
@@ -152,7 +154,9 @@ def test_generate_returns_path(silver_conn: sqlite3.Connection, tmp_path: Path) 
 
 def test_generate_empty_db(tmp_path: Path) -> None:
     """O1GenderCeilingReport.generate() with empty DB returns path gracefully."""
-    from scripts.report_generators.reports.o1_gender_ceiling import O1GenderCeilingReport
+    from scripts.report_generators.reports.o1_gender_ceiling import (
+        O1GenderCeilingReport,
+    )
 
     empty_conn = sqlite3.connect(":memory:")
     empty_conn.executescript("""
@@ -194,9 +198,13 @@ def test_generate_empty_db(tmp_path: Path) -> None:
     assert result.exists()
 
 
-def test_generate_creates_lineage(silver_conn: sqlite3.Connection, tmp_path: Path) -> None:
+def test_generate_creates_lineage(
+    silver_conn: sqlite3.Connection, tmp_path: Path
+) -> None:
     """insert_lineage must populate meta_lineage with CI and null_model."""
-    from scripts.report_generators.reports.o1_gender_ceiling import O1GenderCeilingReport
+    from scripts.report_generators.reports.o1_gender_ceiling import (
+        O1GenderCeilingReport,
+    )
 
     report = O1GenderCeilingReport(silver_conn, output_dir=tmp_path)
     report.generate()
@@ -232,11 +240,7 @@ _REPORT_SRC = (
 )
 
 _ANALYSIS_SRC = (
-    Path(__file__).parents[2]
-    / "src"
-    / "analysis"
-    / "causal"
-    / "gender_progression.py"
+    Path(__file__).parents[2] / "src" / "analysis" / "causal" / "gender_progression.py"
 )
 
 
@@ -248,11 +252,9 @@ def _lint_vocab_violations(path: Path) -> list[str]:
     causal_verbs, evaluative_adjectives).
     """
     import sys
+
     lint_vocab_module = (
-        Path(__file__).parents[2]
-        / "scripts"
-        / "report_generators"
-        / "lint_vocab.py"
+        Path(__file__).parents[2] / "scripts" / "report_generators" / "lint_vocab.py"
     )
     if str(lint_vocab_module.parent) not in sys.path:
         sys.path.insert(0, str(lint_vocab_module.parent))
@@ -273,7 +275,8 @@ def _lint_vocab_violations(path: Path) -> list[str]:
     patterns = _compile_patterns(terms)
     findings = lint_file(path, patterns, replacements)
     real_findings = [
-        f for f in findings
+        f
+        for f in findings
         if not _is_definitional(f) and not _is_excepted(f, exceptions)
     ]
     return [f.format() for f in real_findings]
@@ -290,9 +293,11 @@ def test_lint_vocab_report() -> None:
 def test_lint_vocab_jp_report() -> None:
     """o1_gender_ceiling.py must not contain forbidden Japanese vocabulary."""
     violations = _lint_vocab_violations(_REPORT_SRC)
-    jp_violations = [v for v in violations if any(
-        term in v for term in ("能力", "実力", "優秀", "劣る")
-    )]
+    jp_violations = [
+        v
+        for v in violations
+        if any(term in v for term in ("能力", "実力", "優秀", "劣る"))
+    ]
     assert not jp_violations, (
         "Forbidden Japanese vocabulary found in o1_gender_ceiling.py:\n"
         + "\n".join(jp_violations)
@@ -310,13 +315,17 @@ def test_lint_vocab_analysis() -> None:
 def test_no_anime_score_in_report() -> None:
     """o1_gender_ceiling.py must not reference anime.score."""
     text = _REPORT_SRC.read_text(encoding="utf-8")
-    assert "anime.score" not in text, "anime.score must not appear in o1_gender_ceiling.py"
+    assert "anime.score" not in text, (
+        "anime.score must not appear in o1_gender_ceiling.py"
+    )
 
 
 def test_no_anime_score_in_analysis() -> None:
     """gender_progression.py must not reference anime.score."""
     text = _ANALYSIS_SRC.read_text(encoding="utf-8")
-    assert "anime.score" not in text, "anime.score must not appear in gender_progression.py"
+    assert "anime.score" not in text, (
+        "anime.score must not appear in gender_progression.py"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -353,9 +362,7 @@ def test_load_gender_progression_records_basic(
     """load_gender_progression_records returns records with valid gender values."""
     from src.analysis.causal.gender_progression import load_gender_progression_records
 
-    records = load_gender_progression_records(
-        silver_conn, "in_between", "key_animator"
-    )
+    records = load_gender_progression_records(silver_conn, "in_between", "key_animator")
     assert len(records) > 0, "Must return at least some records"
 
     for rec in records:
@@ -387,9 +394,7 @@ def test_load_gender_progression_records_excludes_unknown(
 
     from src.analysis.causal.gender_progression import load_gender_progression_records
 
-    records = load_gender_progression_records(
-        silver_conn, "in_between", "key_animator"
-    )
+    records = load_gender_progression_records(silver_conn, "in_between", "key_animator")
     pids = {r.person_id for r in records}
     assert "pX" not in pids, "Person with NULL gender must be excluded"
 
@@ -455,9 +460,7 @@ def test_mannwhitney_advancement_timing_basic(
     )
 
     records = load_gender_progression_records(silver_conn, "in_between", "key_animator")
-    results = mannwhitney_advancement_timing(
-        records, "動画→原画", min_cohort_size=2
-    )
+    results = mannwhitney_advancement_timing(records, "動画→原画", min_cohort_size=2)
 
     for res in results:
         assert isinstance(res, MannWhitneyResult)
@@ -501,9 +504,7 @@ def test_compute_ego_network_gender_composition_basic(
         assert 0.0 <= r.null_percentile <= 100.0, (
             f"null_percentile must be in [0,100], got {r.null_percentile}"
         )
-        assert r.gender in ("M", "F"), (
-            f"gender must be M or F, got {r.gender!r}"
-        )
+        assert r.gender in ("M", "F"), f"gender must be M or F, got {r.gender!r}"
         assert r.n_collaborators > 0
 
 
@@ -537,22 +538,20 @@ def test_ego_network_null_percentile_distribution(
 
 def test_report_src_exists() -> None:
     """o1_gender_ceiling.py source file must exist."""
-    assert _REPORT_SRC.exists(), (
-        f"Report source not found: {_REPORT_SRC}"
-    )
+    assert _REPORT_SRC.exists(), f"Report source not found: {_REPORT_SRC}"
 
 
 def test_analysis_src_exists() -> None:
     """gender_progression.py source file must exist."""
-    assert _ANALYSIS_SRC.exists(), (
-        f"Analysis source not found: {_ANALYSIS_SRC}"
-    )
+    assert _ANALYSIS_SRC.exists(), f"Analysis source not found: {_ANALYSIS_SRC}"
 
 
 def test_report_registered_in_init() -> None:
     """O1GenderCeilingReport must be in V2_REPORT_CLASSES."""
     from scripts.report_generators.reports import V2_REPORT_CLASSES
-    from scripts.report_generators.reports.o1_gender_ceiling import O1GenderCeilingReport
+    from scripts.report_generators.reports.o1_gender_ceiling import (
+        O1GenderCeilingReport,
+    )
 
     assert O1GenderCeilingReport in V2_REPORT_CLASSES, (
         "O1GenderCeilingReport must be in V2_REPORT_CLASSES"
@@ -561,7 +560,9 @@ def test_report_registered_in_init() -> None:
 
 def test_report_name_and_filename() -> None:
     """O1GenderCeilingReport must have correct name and filename."""
-    from scripts.report_generators.reports.o1_gender_ceiling import O1GenderCeilingReport
+    from scripts.report_generators.reports.o1_gender_ceiling import (
+        O1GenderCeilingReport,
+    )
 
     assert O1GenderCeilingReport.name == "o1_gender_ceiling"
     assert O1GenderCeilingReport.filename == "o1_gender_ceiling.html"

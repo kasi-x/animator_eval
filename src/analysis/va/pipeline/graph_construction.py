@@ -34,12 +34,8 @@ def build_va_graphs_phase(
         return result
 
     result.va_anime_graph = build_va_anime_graph(va_credits, anime_map)
-    result.va_collaboration_graph = build_va_collaboration_graph(
-        va_credits, anime_map
-    )
-    result.va_sd_graph = build_va_sound_director_graph(
-        va_credits, credits, anime_map
-    )
+    result.va_collaboration_graph = build_va_collaboration_graph(va_credits, anime_map)
+    result.va_sd_graph = build_va_sound_director_graph(va_credits, credits, anime_map)
 
     logger.info(
         "va_graphs_built",

@@ -866,7 +866,9 @@ class TestParseProductionCommittee:
         assert result[0].role_label == "製作"
 
     def test_multiple_committee_members(self):
-        pc = "[アニメーション制作]スタジオA ／ [製作]会社A ／ [製作]会社B ／ [著作]会社C"
+        pc = (
+            "[アニメーション制作]スタジオA ／ [製作]会社A ／ [製作]会社B ／ [著作]会社C"
+        )
         result = parse_production_committee(self._item(pc))
         assert len(result) == 3
         names = {m.company_name for m in result}
@@ -875,9 +877,7 @@ class TestParseProductionCommittee:
         assert "会社C" in names
 
     def test_seisaku_iinkai_label(self):
-        result = parse_production_committee(
-            self._item("[製作委員会]DTB製作委員会")
-        )
+        result = parse_production_committee(self._item("[製作委員会]DTB製作委員会"))
         assert len(result) == 1
         assert result[0].role_label == "製作委員会"
 
@@ -1010,7 +1010,13 @@ class TestParseVideoReleases:
 
     def test_runtime_parsed(self):
         result = parse_video_releases(
-            self._item(**{"ma:mediaFormat": "DVD", "schema:datePublished": "2010", "schema:duration": 25})
+            self._item(
+                **{
+                    "ma:mediaFormat": "DVD",
+                    "schema:datePublished": "2010",
+                    "schema:duration": 25,
+                }
+            )
         )
         assert result[0].runtime_min == 25
 

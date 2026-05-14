@@ -2,6 +2,7 @@
 
 Guards against regressions in the mandatory-report lineage gate.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -60,15 +61,10 @@ def test_defines_report_class_detects_subclass(tmp_path: Path) -> None:
     )
     not_subclass = tmp_path / "not_subclass.py"
     not_subclass.write_text(
-        "class Foo:\n"
-        "    def generate(self):\n"
-        "        return None\n"
+        "class Foo:\n    def generate(self):\n        return None\n"
     )
     no_generate = tmp_path / "no_generate.py"
-    no_generate.write_text(
-        "class Foo(BaseReportGenerator):\n"
-        "    pass\n"
-    )
+    no_generate.write_text("class Foo(BaseReportGenerator):\n    pass\n")
 
     assert _defines_report_class(ok) is True
     assert _defines_report_class(not_subclass) is False

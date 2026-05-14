@@ -140,6 +140,7 @@ def _load_keyframe_to_anilist_map(bronze_root: Path) -> dict[str, int]:
 # Union-Find for cluster building
 # ---------------------------------------------------------------------------
 
+
 def _compute_canonical_id(
     member_rows: list[dict[str, Any]],
     format_suffix: str | None,
@@ -406,7 +407,7 @@ def build_cross_source_anime_clusters(
             subclusters = [member_rows]
         elif len(by_format) == 1:
             # 1 format のみ → unknown_format をそこに合流
-            (only_fmt, fmt_rows), = by_format.items()
+            ((only_fmt, fmt_rows),) = by_format.items()
             subclusters = [fmt_rows + unknown_format]
         else:
             # 複数 format 検出 → format ごとに subcluster、unknown_format は最大の subcluster に合流
@@ -421,7 +422,9 @@ def build_cross_source_anime_clusters(
             # no suffix because member IDs alone are sufficient for uniqueness.
             if len(subclusters) >= 2:
                 rep = sc_rows[0]
-                fmt_suffix: str | None = (rep.get("format") or "").strip().upper() or None
+                fmt_suffix: str | None = (
+                    rep.get("format") or ""
+                ).strip().upper() or None
             else:
                 fmt_suffix = None
 

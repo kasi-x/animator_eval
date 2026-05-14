@@ -10,6 +10,7 @@ integrate() and checks:
   - persons UPDATE path (birth_date / gender / blood_type COALESCE)
   - CVA JOIN (person_characters JOIN subject_characters)
 """
+
 from __future__ import annotations
 
 import datetime as _dt
@@ -120,28 +121,29 @@ def _make_silver_conn() -> duckdb.DuckDBPyConnection:
 
 # ─── BRONZE fixture helpers ───────────────────────────────────────────────────
 
+
 def _write_subjects(root: Path, rows: list[dict] | None = None) -> None:
     if rows is None:
         rows = [
-        {
-            "id": 1001,
-            "type": 2,
-            "name": "テストアニメ",
-            "name_cn": "测试动画",
-            "infobox": '{"key": "value"}',
-            "platform": 1,
-            "summary": "A test anime.",
-            "nsfw": False,
-            "tags": "[]",
-            "meta_tags": "[]",
-            "score": 8.5,
-            "score_details": '{"1":10}',
-            "rank": 42,
-            "release_date": "2024-01",
-            "favorite": "123",
-            "series": True,
-        }
-    ]
+            {
+                "id": 1001,
+                "type": 2,
+                "name": "テストアニメ",
+                "name_cn": "测试动画",
+                "infobox": '{"key": "value"}',
+                "platform": 1,
+                "summary": "A test anime.",
+                "nsfw": False,
+                "tags": "[]",
+                "meta_tags": "[]",
+                "score": 8.5,
+                "score_details": '{"1":10}',
+                "rank": 42,
+                "release_date": "2024-01",
+                "favorite": "123",
+                "series": True,
+            }
+        ]
     with BronzeWriter("bangumi", table="subjects", root=root) as bw:
         for r in rows:
             bw.append(r)
@@ -156,7 +158,7 @@ def _write_persons(root: Path, rows: list[dict] | None = None) -> None:
                 "type": 1,
                 "career": '["animation"]',
                 "summary": "A test animator.",
-                "infobox": '{}',
+                "infobox": "{}",
                 "gender": "male",
                 "blood_type": 1,
                 "birth_year": 1985,
@@ -185,7 +187,7 @@ def _write_characters(root: Path, rows: list[dict] | None = None) -> None:
                 "locked": False,
                 "nsfw": False,
                 "summary": "A test character.",
-                "infobox": '{}',
+                "infobox": "{}",
                 "gender": "female",
                 "blood_type": 2,
                 "birth_year": None,
@@ -270,6 +272,7 @@ def bronze_dir(tmp_path: Path) -> Path:
 
 # ─── Tests ───────────────────────────────────────────────────────────────────
 
+
 class TestIntegrateCounts:
     def test_anime_inserted(self, bronze_dir: Path) -> None:
         conn = _make_silver_conn()
@@ -323,9 +326,9 @@ class TestH1Invariants:
         ).fetchone()
         conn.close()
         assert row is not None
-        assert row[0] == pytest.approx(8.5)   # display_score_bgm
-        assert row[1] == 42                    # display_rank_bgm
-        assert row[2] == 123                   # display_favorite_bgm
+        assert row[0] == pytest.approx(8.5)  # display_score_bgm
+        assert row[1] == 42  # display_rank_bgm
+        assert row[2] == 123  # display_favorite_bgm
 
 
 class TestIdValues:
@@ -348,7 +351,9 @@ class TestIdValues:
     def test_character_id_prefix(self, bronze_dir: Path) -> None:
         conn = _make_silver_conn()
         bangumi_loader.integrate(conn, bronze_dir)
-        row = conn.execute("SELECT id FROM characters WHERE id LIKE 'bgm:c%'").fetchone()
+        row = conn.execute(
+            "SELECT id FROM characters WHERE id LIKE 'bgm:c%'"
+        ).fetchone()
         conn.close()
         assert row is not None
         assert row[0] == "bgm:c3001"
@@ -383,18 +388,21 @@ class TestRoleMapping:
         _write_subjects(root)
         _write_persons(root)
         _write_characters(root)
-        _write_subject_persons(root, rows=[
-            {
-                "subject_id": 1001,
-                "person_id": 2001,
-                "position": "原画",
-                "person_type": 1,
-                "career": None,
-                "eps": None,
-                "name_raw": "山田太郎",
-                "fetched_at": None,
-            }
-        ])
+        _write_subject_persons(
+            root,
+            rows=[
+                {
+                    "subject_id": 1001,
+                    "person_id": 2001,
+                    "position": "原画",
+                    "person_type": 1,
+                    "career": None,
+                    "eps": None,
+                    "name_raw": "山田太郎",
+                    "fetched_at": None,
+                }
+            ],
+        )
         _write_person_characters(root)
         _write_subject_characters(root)
 
@@ -417,10 +425,10 @@ class TestRoleMapping:
 
         positions_expected = [
             ("作画监督", Role.ANIMATION_DIRECTOR.value),
-            ("演出",    Role.EPISODE_DIRECTOR.value),
-            ("分镜",    Role.EPISODE_DIRECTOR.value),
-            ("导演",    Role.DIRECTOR.value),
-            ("脚本",    Role.SCREENPLAY.value),
+            ("演出", Role.EPISODE_DIRECTOR.value),
+            ("分镜", Role.EPISODE_DIRECTOR.value),
+            ("导演", Role.DIRECTOR.value),
+            ("脚本", Role.SCREENPLAY.value),
         ]
 
         # Write one person per position code
@@ -526,7 +534,9 @@ class TestIdempotency:
         conn = _make_silver_conn()
         bangumi_loader.integrate(conn, bronze_dir)
         bangumi_loader.integrate(conn, bronze_dir)
-        count = conn.execute("SELECT COUNT(*) FROM anime WHERE id LIKE 'bgm:s%'").fetchone()[0]
+        count = conn.execute(
+            "SELECT COUNT(*) FROM anime WHERE id LIKE 'bgm:s%'"
+        ).fetchone()[0]
         conn.close()
         assert count == 1
 
@@ -534,7 +544,9 @@ class TestIdempotency:
         conn = _make_silver_conn()
         bangumi_loader.integrate(conn, bronze_dir)
         bangumi_loader.integrate(conn, bronze_dir)
-        count = conn.execute("SELECT COUNT(*) FROM persons WHERE id LIKE 'bgm:p%'").fetchone()[0]
+        count = conn.execute(
+            "SELECT COUNT(*) FROM persons WHERE id LIKE 'bgm:p%'"
+        ).fetchone()[0]
         conn.close()
         assert count == 1
 
@@ -542,7 +554,9 @@ class TestIdempotency:
         conn = _make_silver_conn()
         bangumi_loader.integrate(conn, bronze_dir)
         bangumi_loader.integrate(conn, bronze_dir)
-        count = conn.execute("SELECT COUNT(*) FROM characters WHERE id LIKE 'bgm:c%'").fetchone()[0]
+        count = conn.execute(
+            "SELECT COUNT(*) FROM characters WHERE id LIKE 'bgm:c%'"
+        ).fetchone()[0]
         conn.close()
         assert count == 1
 
@@ -573,16 +587,47 @@ class TestSubjectsTypeFilter:
     def test_non_anime_subjects_excluded(self, tmp_path: Path) -> None:
         root = tmp_path / "bronze"
         # type=1 is books, type=3 is music — neither should be imported
-        _write_subjects(root, rows=[
-            {"id": 1001, "type": 2, "name": "Anime A", "name_cn": "", "infobox": None,
-             "platform": 1, "summary": None, "nsfw": False, "tags": None,
-             "meta_tags": None, "score": 7.0, "score_details": None, "rank": 10,
-             "release_date": "2024", "favorite": "5", "series": False},
-            {"id": 9001, "type": 1, "name": "Manga B", "name_cn": "", "infobox": None,
-             "platform": 0, "summary": None, "nsfw": False, "tags": None,
-             "meta_tags": None, "score": None, "score_details": None, "rank": None,
-             "release_date": None, "favorite": None, "series": False},
-        ])
+        _write_subjects(
+            root,
+            rows=[
+                {
+                    "id": 1001,
+                    "type": 2,
+                    "name": "Anime A",
+                    "name_cn": "",
+                    "infobox": None,
+                    "platform": 1,
+                    "summary": None,
+                    "nsfw": False,
+                    "tags": None,
+                    "meta_tags": None,
+                    "score": 7.0,
+                    "score_details": None,
+                    "rank": 10,
+                    "release_date": "2024",
+                    "favorite": "5",
+                    "series": False,
+                },
+                {
+                    "id": 9001,
+                    "type": 1,
+                    "name": "Manga B",
+                    "name_cn": "",
+                    "infobox": None,
+                    "platform": 0,
+                    "summary": None,
+                    "nsfw": False,
+                    "tags": None,
+                    "meta_tags": None,
+                    "score": None,
+                    "score_details": None,
+                    "rank": None,
+                    "release_date": None,
+                    "favorite": None,
+                    "series": False,
+                },
+            ],
+        )
         _write_persons(root, rows=[])
         _write_characters(root, rows=[])
         _write_subject_persons(root, rows=[])
@@ -599,21 +644,53 @@ class TestSubjectsTypeFilter:
         """Two date partitions with same subject_id → keep newest name."""
         root = tmp_path / "bronze"
 
-        with BronzeWriter("bangumi", table="subjects", root=root,
-                          date=_dt.date(2026, 4, 22)) as bw:
-            bw.append({"id": 5001, "type": 2, "name": "OLD_NAME", "name_cn": "",
-                        "infobox": None, "platform": 1, "summary": None,
-                        "nsfw": False, "tags": None, "meta_tags": None,
-                        "score": None, "score_details": None, "rank": None,
-                        "release_date": None, "favorite": None, "series": False})
+        with BronzeWriter(
+            "bangumi", table="subjects", root=root, date=_dt.date(2026, 4, 22)
+        ) as bw:
+            bw.append(
+                {
+                    "id": 5001,
+                    "type": 2,
+                    "name": "OLD_NAME",
+                    "name_cn": "",
+                    "infobox": None,
+                    "platform": 1,
+                    "summary": None,
+                    "nsfw": False,
+                    "tags": None,
+                    "meta_tags": None,
+                    "score": None,
+                    "score_details": None,
+                    "rank": None,
+                    "release_date": None,
+                    "favorite": None,
+                    "series": False,
+                }
+            )
 
-        with BronzeWriter("bangumi", table="subjects", root=root,
-                          date=_dt.date(2026, 4, 23)) as bw:
-            bw.append({"id": 5001, "type": 2, "name": "NEW_NAME", "name_cn": "",
-                        "infobox": None, "platform": 1, "summary": None,
-                        "nsfw": False, "tags": None, "meta_tags": None,
-                        "score": None, "score_details": None, "rank": None,
-                        "release_date": None, "favorite": None, "series": False})
+        with BronzeWriter(
+            "bangumi", table="subjects", root=root, date=_dt.date(2026, 4, 23)
+        ) as bw:
+            bw.append(
+                {
+                    "id": 5001,
+                    "type": 2,
+                    "name": "NEW_NAME",
+                    "name_cn": "",
+                    "infobox": None,
+                    "platform": 1,
+                    "summary": None,
+                    "nsfw": False,
+                    "tags": None,
+                    "meta_tags": None,
+                    "score": None,
+                    "score_details": None,
+                    "rank": None,
+                    "release_date": None,
+                    "favorite": None,
+                    "series": False,
+                }
+            )
 
         _write_persons(root, rows=[])
         _write_characters(root, rows=[])
@@ -623,7 +700,9 @@ class TestSubjectsTypeFilter:
 
         conn = _make_silver_conn()
         bangumi_loader.integrate(conn, root)
-        row = conn.execute("SELECT title_ja FROM anime WHERE id = 'bgm:s5001'").fetchone()
+        row = conn.execute(
+            "SELECT title_ja FROM anime WHERE id = 'bgm:s5001'"
+        ).fetchone()
         conn.close()
 
         assert row is not None
@@ -669,30 +748,31 @@ class TestBangumiRoleMapperExtension:
 
     def test_known_zh_positions_map_correctly(self) -> None:
         from src.etl.role_mappers import map_role
+
         cases = [
-            ("原画",    Role.KEY_ANIMATOR.value),
+            ("原画", Role.KEY_ANIMATOR.value),
             ("作画监督", Role.ANIMATION_DIRECTOR.value),
-            ("演出",    Role.EPISODE_DIRECTOR.value),
-            ("分镜",    Role.EPISODE_DIRECTOR.value),
+            ("演出", Role.EPISODE_DIRECTOR.value),
+            ("分镜", Role.EPISODE_DIRECTOR.value),
             ("补间动画", Role.IN_BETWEEN.value),
-            ("脚本",    Role.SCREENPLAY.value),
-            ("导演",    Role.DIRECTOR.value),
+            ("脚本", Role.SCREENPLAY.value),
+            ("导演", Role.DIRECTOR.value),
             ("音响监督", Role.SOUND_DIRECTOR.value),
-            ("音乐",    Role.MUSIC.value),
+            ("音乐", Role.MUSIC.value),
             ("背景美术", Role.BACKGROUND_ART.value),
         ]
         for zh, expected in cases:
-            assert map_role("bangumi", zh) == expected, (
-                f"{zh!r}: expected {expected!r}"
-            )
+            assert map_role("bangumi", zh) == expected, f"{zh!r}: expected {expected!r}"
 
     def test_integer_code_still_works(self) -> None:
         from src.etl.role_mappers import map_role
+
         assert map_role("bangumi", "2") == Role.DIRECTOR.value
         assert map_role("bangumi", "20") == Role.KEY_ANIMATOR.value
 
     def test_unknown_zh_returns_other(self) -> None:
         from src.etl.role_mappers import map_role
+
         assert map_role("bangumi", "完全に未知の役職XYZ") == Role.OTHER.value
 
 
@@ -702,27 +782,30 @@ class TestCollectCount:
     def test_collect_count_computed_from_json_favorite(self, tmp_path: Path) -> None:
         """favorite JSON with collection categories → display_collect_count_bgm = their sum."""
         root = tmp_path / "bronze"
-        _write_subjects(root, rows=[
-            {
-                "id": 7001,
-                "type": 2,
-                "name": "CollectAnime",
-                "name_cn": "",
-                "infobox": None,
-                "platform": 1,
-                "summary": None,
-                "nsfw": False,
-                "tags": None,
-                "meta_tags": None,
-                "score": 7.0,
-                "score_details": None,
-                "rank": 100,
-                "release_date": "2024",
-                # favorite as JSON collection dict (bangumi API format)
-                "favorite": '{"wish": 100, "done": 500, "doing": 50, "on_hold": 20, "dropped": 10}',
-                "series": False,
-            }
-        ])
+        _write_subjects(
+            root,
+            rows=[
+                {
+                    "id": 7001,
+                    "type": 2,
+                    "name": "CollectAnime",
+                    "name_cn": "",
+                    "infobox": None,
+                    "platform": 1,
+                    "summary": None,
+                    "nsfw": False,
+                    "tags": None,
+                    "meta_tags": None,
+                    "score": 7.0,
+                    "score_details": None,
+                    "rank": 100,
+                    "release_date": "2024",
+                    # favorite as JSON collection dict (bangumi API format)
+                    "favorite": '{"wish": 100, "done": 500, "doing": 50, "on_hold": 20, "dropped": 10}',
+                    "series": False,
+                }
+            ],
+        )
         _write_persons(root, rows=[])
         _write_characters(root, rows=[])
         _write_subject_persons(root, rows=[])
@@ -748,7 +831,9 @@ class TestCollectCount:
         conn.close()
         assert "display_collect_count_bgm" in cols
 
-    def test_collect_count_null_safe_for_non_json_favorite(self, tmp_path: Path) -> None:
+    def test_collect_count_null_safe_for_non_json_favorite(
+        self, tmp_path: Path
+    ) -> None:
         """favorite='123' (plain integer string) → display_collect_count_bgm = 0 (JSON misses)."""
         root = tmp_path / "bronze"
         # The standard fixture has favorite="123" (plain integer string, not JSON dict)
@@ -773,31 +858,37 @@ class TestCollectCount:
 
 # ─── 22/02: anime_studios from infobox ───────────────────────────────────────
 
+
 class TestAnimeStudiosFromInfobox:
     """22/02: bangumi infobox 动画制作 field → anime_studios + studios."""
 
-    def _make_bronze_with_studio(self, root: Path, subject_id: int, infobox: str) -> None:
+    def _make_bronze_with_studio(
+        self, root: Path, subject_id: int, infobox: str
+    ) -> None:
         """Write a minimal bangumi subjects parquet with a given infobox."""
-        _write_subjects(root, rows=[
-            {
-                "id": subject_id,
-                "type": 2,
-                "name": f"テスト {subject_id}",
-                "name_cn": "",
-                "infobox": infobox,
-                "platform": 1,
-                "summary": None,
-                "nsfw": False,
-                "tags": None,
-                "meta_tags": None,
-                "score": 7.0,
-                "score_details": None,
-                "rank": 1,
-                "release_date": "2024",
-                "favorite": "0",
-                "series": False,
-            }
-        ])
+        _write_subjects(
+            root,
+            rows=[
+                {
+                    "id": subject_id,
+                    "type": 2,
+                    "name": f"テスト {subject_id}",
+                    "name_cn": "",
+                    "infobox": infobox,
+                    "platform": 1,
+                    "summary": None,
+                    "nsfw": False,
+                    "tags": None,
+                    "meta_tags": None,
+                    "score": 7.0,
+                    "score_details": None,
+                    "rank": 1,
+                    "release_date": "2024",
+                    "favorite": "0",
+                    "series": False,
+                }
+            ],
+        )
         _write_persons(root, rows=[])
         _write_characters(root, rows=[])
         _write_subject_persons(root, rows=[])
@@ -921,6 +1012,7 @@ class TestAnimeStudiosFromInfobox:
 
 # ─── 22/04: persons.description UPDATE path ──────────────────────────────────
 
+
 class TestPersonsDescriptionUpdate:
     """22/04: bangumi summary → persons.description via COALESCE UPDATE."""
 
@@ -960,27 +1052,30 @@ class TestPersonsDescriptionUpdate:
         """If bangumi summary is NULL, persons.description stays NULL (no overwrite)."""
         root = tmp_path / "bronze"
         _write_subjects(root)
-        _write_persons(root, rows=[
-            {
-                "id": 2002,
-                "name": "要約なし",
-                "type": 1,
-                "career": None,
-                "summary": None,   # no summary
-                "infobox": None,
-                "gender": "male",
-                "blood_type": None,
-                "birth_year": None,
-                "birth_mon": None,
-                "birth_day": None,
-                "images": None,
-                "locked": False,
-                "stat_comments": 0,
-                "stat_collects": 0,
-                "last_modified": None,
-                "fetched_at": None,
-            }
-        ])
+        _write_persons(
+            root,
+            rows=[
+                {
+                    "id": 2002,
+                    "name": "要約なし",
+                    "type": 1,
+                    "career": None,
+                    "summary": None,  # no summary
+                    "infobox": None,
+                    "gender": "male",
+                    "blood_type": None,
+                    "birth_year": None,
+                    "birth_mon": None,
+                    "birth_day": None,
+                    "images": None,
+                    "locked": False,
+                    "stat_comments": 0,
+                    "stat_collects": 0,
+                    "last_modified": None,
+                    "fetched_at": None,
+                }
+            ],
+        )
         _write_characters(root, rows=[])
         _write_subject_persons(root, rows=[])
         _write_person_characters(root, rows=[])
@@ -997,6 +1092,7 @@ class TestPersonsDescriptionUpdate:
 
 
 # ─── 22/04: characters.date_of_birth UPDATE path ─────────────────────────────
+
 
 class TestCharactersDateOfBirthUpdate:
     """22/04: bangumi birth_year/birth_mon/birth_day → characters.date_of_birth."""
@@ -1019,26 +1115,29 @@ class TestCharactersDateOfBirthUpdate:
         root = tmp_path / "bronze"
         _write_subjects(root)
         _write_persons(root, rows=[])
-        _write_characters(root, rows=[
-            {
-                "id": 4001,
-                "name": "誕生日キャラ",
-                "type": 1,
-                "locked": False,
-                "nsfw": False,
-                "summary": "Test",
-                "infobox": None,
-                "gender": "female",
-                "blood_type": 1,
-                "birth_year": 2000,
-                "birth_mon": 7,
-                "birth_day": 15,
-                "images": None,
-                "stat_comments": 0,
-                "stat_collects": 0,
-                "fetched_at": None,
-            }
-        ])
+        _write_characters(
+            root,
+            rows=[
+                {
+                    "id": 4001,
+                    "name": "誕生日キャラ",
+                    "type": 1,
+                    "locked": False,
+                    "nsfw": False,
+                    "summary": "Test",
+                    "infobox": None,
+                    "gender": "female",
+                    "blood_type": 1,
+                    "birth_year": 2000,
+                    "birth_mon": 7,
+                    "birth_day": 15,
+                    "images": None,
+                    "stat_comments": 0,
+                    "stat_collects": 0,
+                    "fetched_at": None,
+                }
+            ],
+        )
         _write_subject_persons(root, rows=[])
         _write_person_characters(root, rows=[])
         _write_subject_characters(root, rows=[])
@@ -1057,26 +1156,29 @@ class TestCharactersDateOfBirthUpdate:
         root = tmp_path / "bronze"
         _write_subjects(root)
         _write_persons(root, rows=[])
-        _write_characters(root, rows=[
-            {
-                "id": 4002,
-                "name": "既存DOBキャラ",
-                "type": 1,
-                "locked": False,
-                "nsfw": False,
-                "summary": None,
-                "infobox": None,
-                "gender": None,
-                "blood_type": None,
-                "birth_year": 1999,
-                "birth_mon": 1,
-                "birth_day": 1,
-                "images": None,
-                "stat_comments": 0,
-                "stat_collects": 0,
-                "fetched_at": None,
-            }
-        ])
+        _write_characters(
+            root,
+            rows=[
+                {
+                    "id": 4002,
+                    "name": "既存DOBキャラ",
+                    "type": 1,
+                    "locked": False,
+                    "nsfw": False,
+                    "summary": None,
+                    "infobox": None,
+                    "gender": None,
+                    "blood_type": None,
+                    "birth_year": 1999,
+                    "birth_mon": 1,
+                    "birth_day": 1,
+                    "images": None,
+                    "stat_comments": 0,
+                    "stat_collects": 0,
+                    "fetched_at": None,
+                }
+            ],
+        )
         _write_subject_persons(root, rows=[])
         _write_person_characters(root, rows=[])
         _write_subject_characters(root, rows=[])

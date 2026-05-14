@@ -54,6 +54,7 @@ def _load(name: str) -> dict:
 
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def anime_full_raw():
     return _load("anime_1_full.json")
@@ -146,6 +147,7 @@ def schedules_raw():
 
 # ── parse_anime_full ──────────────────────────────────────────────────────────
 
+
 def test_anime_full_returns_record(anime_full_raw):
     record, *_ = parse_anime_full(anime_full_raw)
     assert isinstance(record, MalAnimeRecord)
@@ -227,6 +229,7 @@ def test_anime_full_empty_raw():
 
 # ── parse_anime_staff_full ────────────────────────────────────────────────────
 
+
 def test_staff_full_returns_credits(staff_raw):
     credits = parse_anime_staff_full(1, staff_raw)
     assert len(credits) > 0
@@ -241,16 +244,22 @@ def test_staff_full_raw_position(staff_raw):
 
 
 def test_staff_full_skips_missing_person_id():
-    fake = {"data": [
-        {"person": {"mal_id": None, "name": "Ghost"}, "positions": ["Director"]},
-        {"person": {"mal_id": 42, "name": "Real"}, "positions": ["Animation Director"]},
-    ]}
+    fake = {
+        "data": [
+            {"person": {"mal_id": None, "name": "Ghost"}, "positions": ["Director"]},
+            {
+                "person": {"mal_id": 42, "name": "Real"},
+                "positions": ["Animation Director"],
+            },
+        ]
+    }
     credits = parse_anime_staff_full(99, fake)
     assert len(credits) == 1
     assert credits[0].mal_person_id == 42
 
 
 # ── parse_anime_characters_va ─────────────────────────────────────────────────
+
 
 def test_characters_va_returns_both(characters_raw):
     chars, vas = parse_anime_characters_va(1, characters_raw)
@@ -272,6 +281,7 @@ def test_characters_va_language_raw(characters_raw):
 
 
 # ── parse_anime_episodes ──────────────────────────────────────────────────────
+
 
 def test_episodes_basic(episodes_raw):
     eps = parse_anime_episodes(1, episodes_raw)
@@ -295,6 +305,7 @@ def test_episodes_null_safe():
 
 # ── parse_anime_videos ────────────────────────────────────────────────────────
 
+
 def test_videos_returns_promos_and_eps(videos_raw):
     promos, ep_vids = parse_anime_videos(1, videos_raw)
     assert isinstance(promos, list)
@@ -304,6 +315,7 @@ def test_videos_returns_promos_and_eps(videos_raw):
 
 
 # ── parse_anime_external / streaming ─────────────────────────────────────────
+
 
 def test_external_basic():
     raw = {"data": [{"name": "Official", "url": "http://example.com"}]}
@@ -319,6 +331,7 @@ def test_streaming_basic():
 
 
 # ── parse_anime_statistics ────────────────────────────────────────────────────
+
 
 def test_statistics_all_display_h1(statistics_raw):
     stat = parse_anime_statistics(1, statistics_raw)
@@ -336,6 +349,7 @@ def test_statistics_scores_json(statistics_raw):
 
 # ── parse_anime_moreinfo ──────────────────────────────────────────────────────
 
+
 def test_moreinfo_basic(moreinfo_raw):
     m = parse_anime_moreinfo(1, moreinfo_raw)
     assert m.mal_id == 1
@@ -347,6 +361,7 @@ def test_moreinfo_null_safe():
 
 
 # ── parse_anime_recommendations ───────────────────────────────────────────────
+
 
 def test_recommendations_basic(recommendations_raw):
     recs = parse_anime_recommendations(1, recommendations_raw)
@@ -362,6 +377,7 @@ def test_recommendations_empty():
 
 # ── parse_anime_news ──────────────────────────────────────────────────────────
 
+
 def test_news_basic(news_raw):
     items = parse_anime_news(1, news_raw)
     assert len(items) > 0
@@ -375,6 +391,7 @@ def test_news_intro_maps_excerpt(news_raw):
 
 
 # ── parse_person_full ─────────────────────────────────────────────────────────
+
 
 def test_person_full_basic(person_full_raw):
     p = parse_person_full(person_full_raw)
@@ -405,6 +422,7 @@ def test_person_full_null_safe():
 
 # ── parse_character_full ──────────────────────────────────────────────────────
 
+
 def test_character_full_basic(character_full_raw):
     c = parse_character_full(character_full_raw)
     assert isinstance(c, MalCharacter)
@@ -420,6 +438,7 @@ def test_character_display_favorites_h1(character_full_raw):
 
 
 # ── parse_producer_full ───────────────────────────────────────────────────────
+
 
 def test_producer_full_basic(producer_full_raw):
     prod, externals = parse_producer_full(producer_full_raw)
@@ -449,6 +468,7 @@ def test_producer_titles_json(producer_full_raw):
 
 
 # ── parse_manga_full ──────────────────────────────────────────────────────────
+
 
 def test_manga_full_basic(manga_full_raw):
     manga, authors, serials, rels = parse_manga_full(manga_full_raw)
@@ -487,6 +507,7 @@ def test_manga_relations(manga_full_raw):
 
 # ── parse_schedules ───────────────────────────────────────────────────────────
 
+
 def test_schedules_basic(schedules_raw):
     items = parse_schedules(schedules_raw, "monday", "2026-04-25")
     assert len(items) > 0
@@ -496,6 +517,7 @@ def test_schedules_basic(schedules_raw):
 
 
 # ── parse_master_genres / magazines ──────────────────────────────────────────
+
 
 def test_master_genres_basic(genres_raw):
     genres = parse_master_genres(genres_raw, "genre")
@@ -513,16 +535,35 @@ def test_master_magazines_basic(magazines_raw):
 
 # ── H1 regression: no raw score key in dataclass dicts ───────────────────────
 
+
 def test_h1_no_raw_score_in_anime_full(anime_full_raw):
     record, *_ = parse_anime_full(anime_full_raw)
     fields = asdict(record).keys()
-    for forbidden in ("score", "popularity", "rank", "members", "favorites", "scored_by"):
-        assert forbidden not in fields, f"H1 violation: '{forbidden}' in MalAnimeRecord fields"
+    for forbidden in (
+        "score",
+        "popularity",
+        "rank",
+        "members",
+        "favorites",
+        "scored_by",
+    ):
+        assert forbidden not in fields, (
+            f"H1 violation: '{forbidden}' in MalAnimeRecord fields"
+        )
 
 
 def test_h1_no_raw_score_in_statistics(statistics_raw):
     stat = parse_anime_statistics(1, statistics_raw)
     fields = asdict(stat).keys()
-    for forbidden in ("watching", "completed", "on_hold", "dropped", "plan_to_watch",
-                      "total", "scores_json"):
-        assert forbidden not in fields, f"H1 violation: '{forbidden}' in MalAnimeStatistics fields"
+    for forbidden in (
+        "watching",
+        "completed",
+        "on_hold",
+        "dropped",
+        "plan_to_watch",
+        "total",
+        "scores_json",
+    ):
+        assert forbidden not in fields, (
+            f"H1 violation: '{forbidden}' in MalAnimeStatistics fields"
+        )

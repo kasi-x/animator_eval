@@ -1,4 +1,5 @@
 """Unit tests for src/scrapers/parsers/keyframe_api.py."""
+
 from __future__ import annotations
 
 import json
@@ -70,7 +71,14 @@ class TestParseRolesMaster:
         rows = parse_roles_master(raw)
         assert len(rows) == 10
         for r in rows:
-            for key in ("role_id", "name_en", "name_ja", "category", "episode_category", "description"):
+            for key in (
+                "role_id",
+                "name_en",
+                "name_ja",
+                "category",
+                "episode_category",
+                "description",
+            ):
                 assert key in r
 
 
@@ -104,9 +112,15 @@ class TestParsePersonShow:
     def test_credit_has_expected_keys(self, sample_show):
         result = parse_person_show(sample_show)
         required = {
-            "anime_uuid", "anime_slug", "category",
-            "role_ja", "role_en", "episode",
-            "is_nc", "comment", "is_primary_alias",
+            "anime_uuid",
+            "anime_slug",
+            "category",
+            "role_ja",
+            "role_en",
+            "episode",
+            "is_nc",
+            "comment",
+            "is_primary_alias",
         }
         for credit in result["credits"]:
             assert required <= set(credit.keys()), f"Missing keys in {credit}"
@@ -188,9 +202,17 @@ class TestParsePreview:
     def test_entry_has_expected_keys(self, sample_preview):
         result = parse_preview(sample_preview)
         required = {
-            "uuid", "slug", "title", "title_native",
-            "status", "last_modified", "anilist_id",
-            "season", "season_year", "studios_str", "contributors_json",
+            "uuid",
+            "slug",
+            "title",
+            "title_native",
+            "status",
+            "last_modified",
+            "anilist_id",
+            "season",
+            "season_year",
+            "studios_str",
+            "contributors_json",
         }
         for section in ("recent", "airing", "data"):
             for entry in result[section]:

@@ -16,6 +16,7 @@ from src.testing.fixtures import generate_synthetic_data
 # Class-scoped shared fixture — pipeline runs ONCE for the whole class
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(scope="class")
 def synthetic_db(tmp_path_factory):
     """合成データ入りのテストDB (class-scoped)。各クラスで1回だけ初期化される."""
@@ -89,6 +90,7 @@ def pipeline_results(synthetic_db):
 # Function-scoped fixture for tests that need a pristine (no-run) DB
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def synthetic_db_fresh(monkeypatch, tmp_path):
     """合成データ入りのテストDB (function-scoped)。パイプライン未実行の状態が必要なテスト用."""
@@ -128,7 +130,9 @@ def synthetic_db_fresh(monkeypatch, tmp_path):
     silver_path = tmp_path / "silver.duckdb"
     gold_path = tmp_path / "gold.duckdb"
     build_silver_duckdb(silver_path, persons, anime_list, credits)
-    monkeypatch.setattr(src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(
+        src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path
+    )
     monkeypatch.setattr(src.analysis.io.mart_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
 
     return db_path
@@ -138,13 +142,16 @@ def synthetic_db_fresh(monkeypatch, tmp_path):
 # Main test class — all tests share one pipeline run (~15s total, not 12×15s)
 # ---------------------------------------------------------------------------
 
+
 class TestFullPipeline:
     def test_pipeline_produces_scores(self, pipeline_results):
         assert len(pipeline_results) > 0
 
     def test_multiple_components_nonzero(self, pipeline_results):
         """少なくとも一部の人物が複数コンポーネントで非ゼロスコアを持つ."""
-        has_multiple = any(r["birank"] > 0 and r["person_fe"] != 0 for r in pipeline_results)
+        has_multiple = any(
+            r["birank"] > 0 and r["person_fe"] != 0 for r in pipeline_results
+        )
         assert has_multiple
 
     def test_iv_score_ordering(self, pipeline_results):
@@ -168,8 +175,12 @@ class TestFullPipeline:
             generate_text_report,
         )
 
-        json_path = generate_json_report(pipeline_results, output_path=tmp_path / "r.json")
-        text_path = generate_text_report(pipeline_results, output_path=tmp_path / "r.txt")
+        json_path = generate_json_report(
+            pipeline_results, output_path=tmp_path / "r.json"
+        )
+        text_path = generate_text_report(
+            pipeline_results, output_path=tmp_path / "r.txt"
+        )
         csv_path = generate_csv_report(pipeline_results, output_path=tmp_path / "r.csv")
 
         assert json_path.exists()
@@ -253,6 +264,7 @@ class TestFullPipeline:
 # ---------------------------------------------------------------------------
 # Dry-run test — needs pristine DB (no prior pipeline run)
 # ---------------------------------------------------------------------------
+
 
 class TestDryRun:
     def test_dry_run_returns_empty(self, synthetic_db_fresh):

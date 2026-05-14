@@ -15,7 +15,9 @@ from src.runtime.models import (
 )
 
 
-def build_silver_duckdb(silver_path: Path, persons: list, anime_list: list, credits: list) -> None:
+def build_silver_duckdb(
+    silver_path: Path, persons: list, anime_list: list, credits: list
+) -> None:
     """Create a minimal silver.duckdb for testing.
 
     Writes persons, anime, and credits into a fresh DuckDB file at silver_path.
@@ -90,7 +92,13 @@ def build_silver_duckdb(silver_path: Path, persons: list, anime_list: list, cred
     for c in credits:
         conn.execute(
             "INSERT INTO credits (person_id, anime_id, role, episode, evidence_source) VALUES (?, ?, ?, ?, ?)",
-            [c.person_id, c.anime_id, c.role.value, c.episode, getattr(c, "evidence_source", None) or getattr(c, "source", "") or ""],
+            [
+                c.person_id,
+                c.anime_id,
+                c.role.value,
+                c.episode,
+                getattr(c, "evidence_source", None) or getattr(c, "source", "") or "",
+            ],
         )
     conn.close()
 

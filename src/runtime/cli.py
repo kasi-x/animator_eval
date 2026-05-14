@@ -9,7 +9,9 @@ from rich.table import Table
 from src.infra.logging import setup_logging
 from src.i18n import set_language, t
 
-app = typer.Typer(name="animetor-eval", help="Anime industry personnel network evaluation tool")
+app = typer.Typer(
+    name="animetor-eval", help="Anime industry personnel network evaluation tool"
+)
 console = Console()
 
 
@@ -48,9 +50,7 @@ def stats(lang: str = lang_option) -> None:
             n_persons = conn.execute("SELECT COUNT(*) FROM persons").fetchone()[0]
             n_anime = conn.execute("SELECT COUNT(*) FROM anime").fetchone()[0]
             n_credits = conn.execute("SELECT COUNT(*) FROM credits").fetchone()[0]
-            n_scores = conn.execute(
-                "SELECT COUNT(*) FROM person_scores"
-            ).fetchone()[0]
+            n_scores = conn.execute("SELECT COUNT(*) FROM person_scores").fetchone()[0]
 
             # role distribution
             rel = conn.execute(
@@ -149,8 +149,12 @@ def ranking(
         "-s",
         help="Sort axis (iv_score/person_fe/birank/patronage)",
     ),
-    year_from: int = typer.Option(None, "--year-from", help="Lower bound for career start year"),
-    year_to: int = typer.Option(None, "--year-to", help="Upper bound for latest activity year"),
+    year_from: int = typer.Option(
+        None, "--year-from", help="Lower bound for career start year"
+    ),
+    year_to: int = typer.Option(
+        None, "--year-to", help="Upper bound for latest activity year"
+    ),
 ) -> None:
     """Display score ranking."""
     setup_logging()
@@ -253,7 +257,9 @@ def ranking(
 
 
 @app.command()
-def profile(person_id: str = typer.Argument(help="Person ID (e.g. anilist:p100)")) -> None:
+def profile(
+    person_id: str = typer.Argument(help="Person ID (e.g. anilist:p100)"),
+) -> None:
     """Display a specific person's profile."""
     setup_logging()
 
@@ -307,10 +313,16 @@ def profile(person_id: str = typer.Argument(help="Person ID (e.g. anilist:p100)"
 
     if score:
         console.print("\n[bold]Scores:[/bold]")
-        console.print(f"  IV Score:    [magenta]{(score.get('iv_score') or 0):.2f}[/magenta]")
-        console.print(f"  Person FE:   [blue]{(score.get('person_fe') or 0):.4f}[/blue]")
+        console.print(
+            f"  IV Score:    [magenta]{(score.get('iv_score') or 0):.2f}[/magenta]"
+        )
+        console.print(
+            f"  Person FE:   [blue]{(score.get('person_fe') or 0):.4f}[/blue]"
+        )
         console.print(f"  BiRank:      [green]{(score.get('birank') or 0):.4f}[/green]")
-        console.print(f"  Patronage:   [yellow]{(score.get('patronage') or 0):.4f}[/yellow]")
+        console.print(
+            f"  Patronage:   [yellow]{(score.get('patronage') or 0):.4f}[/yellow]"
+        )
         console.print(f"  Dormancy:    {(score.get('dormancy') or 0):.2f}")
         console.print(f"  AWCC:        {(score.get('awcc') or 0):.4f}")
 
@@ -470,9 +482,7 @@ def compare(
                 return None
             person = dict(zip(cols, row))
 
-            rel = conn.execute(
-                "SELECT * FROM person_scores WHERE person_id = ?", [pid]
-            )
+            rel = conn.execute("SELECT * FROM person_scores WHERE person_id = ?", [pid])
             cols = [d[0] for d in rel.description]
             score_row = rel.fetchone()
             score = dict(zip(cols, score_row)) if score_row else None
@@ -1085,7 +1095,9 @@ def versatility(
     with_v.sort(key=lambda x: x["versatility"]["score"], reverse=True)
 
     console.print("\n[bold blue]Role Versatility Ranking[/bold blue]")
-    console.print("[dim]Diversity metric for persons active across multiple role categories.[/dim]\n")
+    console.print(
+        "[dim]Diversity metric for persons active across multiple role categories.[/dim]\n"
+    )
 
     table = Table()
     table.add_column("#", justify="right", style="dim")
@@ -1510,7 +1522,9 @@ def mentorships(
     data = json_mod.loads(path.read_text())
 
     console.print("\n[bold blue]Inferred Mentorships[/bold blue]")
-    console.print("[dim]Mentor-apprentice relationships inferred from co-credit patterns.[/dim]\n")
+    console.print(
+        "[dim]Mentor-apprentice relationships inferred from co-credit patterns.[/dim]\n"
+    )
 
     console.print(f"  Total mentorships: {data.get('total', 0)}")
 
@@ -1815,7 +1829,9 @@ def freshness(lang: str = lang_option) -> None:
     setup_logging()
 
     # Freshness data lives in ops_source_scrape_status — not yet in DuckDB.
-    console.print("[yellow]Freshness data not available (SQLite ops tables not yet migrated).[/yellow]")
+    console.print(
+        "[yellow]Freshness data not available (SQLite ops tables not yet migrated).[/yellow]"
+    )
 
 
 if __name__ == "__main__":
@@ -1920,7 +1936,11 @@ def neo4j_export(
     setup_logging()
 
     from src.analysis.io.mart_writer import GoldReader
-    from src.analysis.io.conformed_reader import load_anime_silver, load_credits_silver, load_persons_silver
+    from src.analysis.io.conformed_reader import (
+        load_anime_silver,
+        load_credits_silver,
+        load_persons_silver,
+    )
 
     console.print("\n[bold blue]Neo4j Direct Export[/bold blue]\n")
 
@@ -2266,15 +2286,33 @@ def pipeline_node(
     """
     from hamilton import driver
     from src.pipeline_phases.hamilton_modules import (
-        assembly, causal, core, genre, loading, metrics,
-        network, resolution, scoring, studio,
+        assembly,
+        causal,
+        core,
+        genre,
+        loading,
+        metrics,
+        network,
+        resolution,
+        scoring,
+        studio,
     )
     from src.pipeline_phases.lifecycle import TimingHook
 
     dr = (
         driver.Builder()
-        .with_modules(loading, resolution, scoring, metrics, assembly,
-                      core, studio, genre, network, causal)
+        .with_modules(
+            loading,
+            resolution,
+            scoring,
+            metrics,
+            assembly,
+            core,
+            studio,
+            genre,
+            network,
+            causal,
+        )
         .with_adapters(TimingHook())
         .build()
     )

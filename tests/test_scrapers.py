@@ -105,7 +105,7 @@ class TestANNParser:
     def test_ann_anime_record_has_titles_alt_field(self):
         """AnnAnimeRecord should have titles_alt field (default empty dict)."""
         rec = AnnAnimeRecord(ann_id=1, title_en="Test Anime")
-        assert hasattr(rec, 'titles_alt')
+        assert hasattr(rec, "titles_alt")
         assert rec.titles_alt == "{}"
 
 
@@ -113,7 +113,7 @@ class TestAllcinemaParser:
     def test_allcinema_anime_record_has_titles_alt_field(self):
         """AllcinemaAnimeRecord should have titles_alt field (default empty dict)."""
         rec = AllcinemaAnimeRecord(cinema_id=1, title_ja="テスト")
-        assert hasattr(rec, 'titles_alt')
+        assert hasattr(rec, "titles_alt")
         assert rec.titles_alt == "{}"
 
     def test_parse_staff_missing_mal_id(self):

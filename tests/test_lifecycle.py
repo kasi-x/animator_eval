@@ -7,7 +7,6 @@ import json
 from unittest.mock import patch
 
 
-
 # ---------------------------------------------------------------------------
 # TimingHook
 # ---------------------------------------------------------------------------
@@ -161,6 +160,7 @@ class TestCheckpointHook:
 class TestResumePathUnit:
     def test_build_phase14_driver_builds(self):
         from src.runtime.pipeline import _build_phase14_driver
+
         dr = _build_phase14_driver()
         assert dr is not None
 

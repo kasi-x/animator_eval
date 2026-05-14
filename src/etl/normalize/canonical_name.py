@@ -6,6 +6,7 @@ entity_resolution ロジックは変更しない (H3)。
 CLI entry point:
     python -m src.etl.normalize.canonical_name backfill
 """
+
 from __future__ import annotations
 
 import sys
@@ -197,7 +198,7 @@ KYU_SHIN_MAP: dict[str, str] = {
     "栁": "柳",
     "桝": "枡",
     "靑": "青",
-    "﨑": "崎",   # compatibility CJK variant U+F9B2
+    "﨑": "崎",  # compatibility CJK variant U+F9B2
 }
 
 

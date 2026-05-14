@@ -94,7 +94,9 @@ def test_p2_km_curve_ci_none():
 def test_p2_km_curve_no_null_envelope():
     """Spec without null_envelope must render cleanly."""
     stratum = KMStratum("g", timeline=[0, 5], survival=[1.0, 0.6])
-    fig = render_km_curve(KMCurveSpec(strata=[stratum], null_envelope=None, risk_table=False))
+    fig = render_km_curve(
+        KMCurveSpec(strata=[stratum], null_envelope=None, risk_table=False)
+    )
     assert len(fig.data) >= 1
 
 
@@ -174,16 +176,16 @@ def test_p6_box_strip_ci_ci_none():
 
 def test_p7_sankey_empty_nodes_no_raise():
     """Empty nodes and links must produce (no data) placeholder."""
-    fig = render_sankey_flow(
-        SankeyFlowSpec(nodes=[], links=[], layer_labels=[])
-    )
+    fig = render_sankey_flow(SankeyFlowSpec(nodes=[], links=[], layer_labels=[]))
     assert "(no data)" in (fig.layout.title.text or "")
 
 
 def test_p7_sankey_empty_links_no_raise():
     """Nodes with no links must produce (no data) placeholder."""
     nodes = [SankeyNode("a", "src", 0), SankeyNode("b", "tgt", 1)]
-    fig = render_sankey_flow(SankeyFlowSpec(nodes=nodes, links=[], layer_labels=["L0", "L1"]))
+    fig = render_sankey_flow(
+        SankeyFlowSpec(nodes=nodes, links=[], layer_labels=["L0", "L1"])
+    )
     assert "(no data)" in (fig.layout.title.text or "")
 
 
@@ -217,7 +219,9 @@ def test_p9_heatmap_empty_no_raise():
 def test_p9_heatmap_no_null_envelope():
     """Spec with null_envelope=None (default) must render cleanly."""
     fig = render_heatmap(
-        HeatmapSpec(z=[[1.0, 2.0], [3.0, 4.0]], x_labels=["c0", "c1"], y_labels=["r0", "r1"])
+        HeatmapSpec(
+            z=[[1.0, 2.0], [3.0, 4.0]], x_labels=["c0", "c1"], y_labels=["r0", "r1"]
+        )
     )
     assert len(fig.data) == 1
 

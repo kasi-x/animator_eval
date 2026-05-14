@@ -37,9 +37,13 @@ class Role(str, Enum):
     KEY_ANIMATOR = "key_animator"
     SECOND_KEY_ANIMATOR = "second_key_animator"  # second key animation
     IN_BETWEEN = "in_between"
-    EPISODE_DIRECTOR = "episode_director"  # + storyboard; series composition → SCREENPLAY
+    EPISODE_DIRECTOR = (
+        "episode_director"  # + storyboard; series composition → SCREENPLAY
+    )
     CHARACTER_DESIGNER = "character_designer"  # + mechanical design
-    PHOTOGRAPHY_DIRECTOR = "photography_director"  # + effects (compositing + special effects)
+    PHOTOGRAPHY_DIRECTOR = (
+        "photography_director"  # + effects (compositing + special effects)
+    )
     PRODUCER = "producer"
     PRODUCTION_MANAGER = "production_manager"  # production coordinator, production desk, various production staff
     SOUND_DIRECTOR = "sound_director"
@@ -49,13 +53,17 @@ class Role(str, Enum):
     BACKGROUND_ART = "background_art"  # + art director
     CGI_DIRECTOR = "cgi_director"
     LAYOUT = "layout"
-    FINISHING = "finishing"  # + color design, color specification, finishing, inspection
+    FINISHING = (
+        "finishing"  # + color design, color specification, finishing, inspection
+    )
     EDITING = "editing"  # editing / post-production
     SETTINGS = "settings"  # settings/design materials
     VOICE_ACTOR = "voice_actor"  # + ADR
     LOCALIZATION = "localization"  # localization staff (translation, dub direction, regional producers, etc.)
     OTHER = "other"  # other — unidentifiable role / unclassifiable credit
-    SPECIAL = "special"  # special thanks, guest participation, non-production special credits
+    SPECIAL = (
+        "special"  # special thanks, guest participation, non-production special credits
+    )
 
 
 # Mapping from MAL/AniList job title strings → Role
@@ -1255,10 +1263,16 @@ class Person(BaseModel):
     name_en: str = ""
     name_ko: str = ""
     name_zh: str = ""
-    names_alt: str = "{}"  # JSON dict: {"th": "...", "ar": "..."} for non-JA/EN/KO/ZH scripts
-    name_native_raw: str = ""  # raw AniList name.native before script routing (bronze use)
+    names_alt: str = (
+        "{}"  # JSON dict: {"th": "...", "ar": "..."} for non-JA/EN/KO/ZH scripts
+    )
+    name_native_raw: str = (
+        ""  # raw AniList name.native before script routing (bronze use)
+    )
     aliases: list[str] = Field(default_factory=list)
-    nationality: list[str] = Field(default_factory=list)  # ISO 3166-1 alpha-2, e.g. ["JP", "KR"]
+    nationality: list[str] = Field(
+        default_factory=list
+    )  # ISO 3166-1 alpha-2, e.g. ["JP", "KR"]
     mal_id: int | None = None
     anilist_id: int | None = None
     madb_id: str | None = None  # Media Arts DB URI
@@ -1301,7 +1315,14 @@ class Person(BaseModel):
             alt_first = next(iter(alt_names.values()), "") if alt_names else ""
         except (json.JSONDecodeError, TypeError):
             alt_first = ""
-        return self.name_ja or self.name_ko or self.name_zh or alt_first or self.name_en or self.id
+        return (
+            self.name_ja
+            or self.name_ko
+            or self.name_zh
+            or alt_first
+            or self.name_en
+            or self.id
+        )
 
     @classmethod
     def from_db_row(cls, row: "PersonRow") -> "Person":
@@ -1395,7 +1416,9 @@ class BronzeAnime(BaseModel):
     id: str
     title_ja: str = ""
     title_en: str = ""
-    titles_alt: str = "{}"  # JSON dict: {"ko": "...", "zh": "..."} for non-JA native titles
+    titles_alt: str = (
+        "{}"  # JSON dict: {"ko": "...", "zh": "..."} for non-JA native titles
+    )
     year: int | None = None
     season: str | None = None
     quarter: int | None = None
@@ -1404,7 +1427,7 @@ class BronzeAnime(BaseModel):
     anilist_id: int | None = None
     madb_id: str | None = None
     parent_madb_id: str | None = None  # schema:isPartOf C-series ID (M-rows only)
-    record_type: str | None = None     # @type suffix, e.g. "AnimationTVRegularSeries"
+    record_type: str | None = None  # @type suffix, e.g. "AnimationTVRegularSeries"
     ann_id: int | None = None
     format: str | None = None
     status: str | None = None
@@ -1484,8 +1507,10 @@ class BronzeAnime(BaseModel):
             start_date=row.start_date,
             end_date=row.end_date,
             duration=row.duration,
-            original_work_type=getattr(row, "original_work_type", None) or getattr(row, "source", None),
-            source=getattr(row, "original_work_type", None) or getattr(row, "source", None),
+            original_work_type=getattr(row, "original_work_type", None)
+            or getattr(row, "source", None),
+            source=getattr(row, "original_work_type", None)
+            or getattr(row, "source", None),
             genres=json.loads(genres_raw or "[]"),
             tags=json.loads(tags_raw or "[]"),
             popularity_rank=getattr(row, "popularity_rank", None),
@@ -1594,11 +1619,17 @@ class Credit(BaseModel):
     episode: int | None = None
     source: str = ""
     evidence_source: str | None = None
-    credit_year: int | None = None  # attribution year (may differ per episode for long-running titles)
+    credit_year: int | None = (
+        None  # attribution year (may differ per episode for long-running titles)
+    )
     credit_quarter: int | None = None  # attribution quarter (1-4)
     affiliation: str | None = None  # subcontractor studio/company (SeesaaWiki)
-    position: int | None = None  # 0-based order within role; Bronze preservation only, not for analysis
-    source_listing_position: int | None = None  # 0-based global listing position on the page (ED-order proxy)
+    position: int | None = (
+        None  # 0-based order within role; Bronze preservation only, not for analysis
+    )
+    source_listing_position: int | None = (
+        None  # 0-based global listing position on the page (ED-order proxy)
+    )
 
     @classmethod
     def from_db_row(cls, row: "CreditRow") -> "Credit":
@@ -1878,14 +1909,17 @@ class BronzeKeyframePreview(BaseModel):
 # BRONZE: 作画@wiki raw parse results (source-faithful, no normalization)
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True, slots=True)
 class ParsedSakugaCredit:
     work_title: str
     work_year: int | None
-    work_format: str | None       # "劇場" / "TV" / "OVA" / "TVSP" / None
+    work_format: str | None  # "劇場" / "TV" / "OVA" / "TVSP" / None
     role_raw: str
-    episode_raw: str | None       # raw episode spec e.g. "3話", "#5,7,9", "OP"
-    episode_num: int | None       # first resolved episode number; range detail in episode_raw
+    episode_raw: str | None  # raw episode spec e.g. "3話", "#5,7,9", "OP"
+    episode_num: (
+        int | None
+    )  # first resolved episode number; range detail in episode_raw
 
 
 @dataclass(frozen=True, slots=True)
@@ -1904,7 +1938,7 @@ class ParsedSakugaWorkStaff:
     role_raw: str
     episode_num: int | None
     episode_raw: str | None
-    is_main_staff: bool   # True = series-level, False = episode/scene-level
+    is_main_staff: bool  # True = series-level, False = episode/scene-level
 
 
 @dataclass(frozen=True, slots=True)

@@ -211,7 +211,9 @@ def _latest_partition_date(bronze_root: Path, source: str, table: str) -> str | 
     table_dir = bronze_root / f"source={source}" / f"table={table}"
     if not table_dir.exists():
         return None
-    dates = sorted(d.name.split("=", 1)[1] for d in table_dir.glob("date=*") if d.is_dir())
+    dates = sorted(
+        d.name.split("=", 1)[1] for d in table_dir.glob("date=*") if d.is_dir()
+    )
     return dates[-1] if dates else None
 
 
@@ -225,7 +227,9 @@ def _count_bronze_rows(
 
     Uses DuckDB's parquet scanning with glob. Returns 0 if no parquet found.
     """
-    glob = str(bronze_root / f"source={source}" / f"table={table}" / "date=*" / "*.parquet")
+    glob = str(
+        bronze_root / f"source={source}" / f"table={table}" / "date=*" / "*.parquet"
+    )
     try:
         result = conn.execute(f"SELECT COUNT(*) FROM read_parquet('{glob}')").fetchone()
         return int(result[0]) if result else 0
@@ -294,8 +298,12 @@ def collect(
         silver_count = _count_silver_rows(conn, silver_table)
 
         for bronze_source, bronze_table in sources:
-            bronze_count = _count_bronze_rows(conn, bronze_root, bronze_source, bronze_table)
-            latest_date = _latest_partition_date(bronze_root, bronze_source, bronze_table)
+            bronze_count = _count_bronze_rows(
+                conn, bronze_root, bronze_source, bronze_table
+            )
+            latest_date = _latest_partition_date(
+                bronze_root, bronze_source, bronze_table
+            )
 
             log.debug(
                 "lineage_row",
@@ -365,7 +373,9 @@ def main() -> None:
     """CLI entry: collect lineage and print summary."""
     silver_path, bronze_root = _parse_args()
 
-    log.info("lineage_collect_start", silver=str(silver_path), bronze_root=str(bronze_root))
+    log.info(
+        "lineage_collect_start", silver=str(silver_path), bronze_root=str(bronze_root)
+    )
 
     conn = duckdb.connect(str(silver_path))
     try:

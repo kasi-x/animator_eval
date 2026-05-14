@@ -54,7 +54,9 @@ class TmdbAnimeRecord:
     production_companies: str = "[]"  # JSON array of {id,name,country}
     production_countries: str = "[]"  # JSON array of {iso_3166_1,name}
     networks: str = "[]"  # tv only — JSON array of {id,name,origin_country}
-    created_by: str = "[]"  # tv only — JSON array of {id,name,credit_id} (program creators)
+    created_by: str = (
+        "[]"  # tv only — JSON array of {id,name,credit_id} (program creators)
+    )
     belongs_to_collection: str | None = None  # movie only — JSON {id,name,...}
     overview: str | None = None
     tagline: str | None = None
@@ -76,13 +78,21 @@ class TmdbAnimeRecord:
     # JSON-blob extras (cross-source useful, kept raw to avoid lossy parsing).
     keywords: str = "[]"  # JSON array of {id,name}
     alternative_titles: str = "[]"  # JSON array of {iso_3166_1,title,type}
-    translations: str = "[]"  # JSON array of {iso_3166_1,iso_639_1,name,overview,homepage,tagline}
+    translations: str = (
+        "[]"  # JSON array of {iso_3166_1,iso_639_1,name,overview,homepage,tagline}
+    )
     release_dates: str = "[]"  # movie only — JSON array per country: {iso_3166_1, releases:[{type,release_date,certification,note}]}
     content_ratings: str = "[]"  # tv only — JSON array of {iso_3166_1,rating}
-    videos: str = "[]"  # JSON array of {id,site,key,name,type,iso_639_1,iso_3166_1,published_at}
+    videos: str = (
+        "[]"  # JSON array of {id,site,key,name,type,iso_639_1,iso_3166_1,published_at}
+    )
     images: str = "{}"  # JSON dict {posters:[…], backdrops:[…], logos:[…]} with file_path/lang/votes
-    watch_providers: str = "{}"  # JSON dict per-country {flatrate/buy/rent/free → providers}
-    recommendation_ids: str = "[]"  # JSON array of recommended TMDB ids (this media_type)
+    watch_providers: str = (
+        "{}"  # JSON dict per-country {flatrate/buy/rent/free → providers}
+    )
+    recommendation_ids: str = (
+        "[]"  # JSON array of recommended TMDB ids (this media_type)
+    )
     credits: list[TmdbCreditEntry] = field(default_factory=list)
 
 
@@ -194,9 +204,7 @@ def parse_tmdb_anime(raw: dict, media_type: str) -> TmdbAnimeRecord:
         seasons = None
         runtime = raw.get("runtime")
         origin_countries = [
-            c.get("iso_3166_1")
-            for c in production_countries_raw
-            if c.get("iso_3166_1")
+            c.get("iso_3166_1") for c in production_countries_raw if c.get("iso_3166_1")
         ]
         coll = raw.get("belongs_to_collection")
         if coll:
@@ -246,7 +254,8 @@ def parse_tmdb_anime(raw: dict, media_type: str) -> TmdbAnimeRecord:
         if c.get("iso_3166_1")
     ]
     spoken_languages = [
-        s.get("iso_639_1") for s in (raw.get("spoken_languages") or [])
+        s.get("iso_639_1")
+        for s in (raw.get("spoken_languages") or [])
         if s.get("iso_639_1")
     ]
 
@@ -273,9 +282,7 @@ def parse_tmdb_anime(raw: dict, media_type: str) -> TmdbAnimeRecord:
 
     alt_titles_block = raw.get("alternative_titles") or {}
     alt_titles_raw = (
-        alt_titles_block.get("titles")
-        or alt_titles_block.get("results")
-        or []
+        alt_titles_block.get("titles") or alt_titles_block.get("results") or []
     )
     alternative_titles = [
         {

@@ -124,9 +124,9 @@ def insert_restored_credits(
                 cand.anime_id,
                 cand.role,
                 cand.person_name_candidate,  # stored as raw_role for traceability
-                EVIDENCE_SOURCE,             # evidence_source = 'restoration_estimated'
-                RESTORED_TIER,               # confidence_tier = 'RESTORED'
-                cand.cohort_year,            # credit_year
+                EVIDENCE_SOURCE,  # evidence_source = 'restoration_estimated'
+                RESTORED_TIER,  # confidence_tier = 'RESTORED'
+                cand.cohort_year,  # credit_year
             )
         )
 

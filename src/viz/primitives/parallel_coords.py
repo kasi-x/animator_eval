@@ -27,7 +27,7 @@ class ParallelAxis:
 @dataclass(frozen=True)
 class ParallelCoordsSpec:
     axes: list[ParallelAxis]
-    color_values: Sequence[float]    # gradient color per row (composite score)
+    color_values: Sequence[float]  # gradient color per row (composite score)
     color_label: str = "score"
     colorscale: str = "Viridis"
     title: str = ""

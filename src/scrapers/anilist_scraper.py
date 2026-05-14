@@ -62,6 +62,8 @@ from src.scrapers.queries.anilist import (  # noqa: E402
     ANIME_STAFF_MINIMAL_QUERY,
     PERSON_DETAILS_QUERY,
     TOP_ANIME_QUERY,
+    build_rebuild_batch_query,
+    build_anime_deep_pages_query,
 )
 
 app = make_scraper_app("anilist")
@@ -86,7 +88,7 @@ def get_anime_ids_to_skip_since(since_str: str) -> set[str]:
         conn = duckdb.connect(str(silver_path), read_only=True)
         result = conn.execute(
             "SELECT id FROM anime WHERE fetched_at >= ? ORDER BY fetched_at DESC",
-            [since_dt]
+            [since_dt],
         ).fetchall()
         conn.close()
 
@@ -125,6 +127,36 @@ def get_anime_ids_in_bronze() -> set[str]:
     except Exception as e:
         log.warning("bronze_seed_failed", error=str(e))
         return set()
+
+
+def load_rebuild_target_ids(v1_path: str) -> list[tuple[int, str]]:
+    """Load (anilist_id, anime_id) pairs from a v1 bronze parquet directory.
+
+    Used by --rebuild-from-v1 to enumerate every anime previously scraped
+    so each can be re-fetched under the new schema, bypassing the public
+    API's 5000-result page cap.
+    """
+    import duckdb
+    from pathlib import Path
+
+    glob = f"{v1_path.rstrip('/')}/table=anime/**/*.parquet"
+    target_dir = Path(v1_path) / "table=anime"
+    if not target_dir.exists() or not any(target_dir.rglob("*.parquet")):
+        log.warning("rebuild_v1_anime_table_missing", path=str(target_dir))
+        return []
+    try:
+        conn = duckdb.connect()
+        rows = conn.execute(
+            f"SELECT DISTINCT anilist_id, id FROM read_parquet('{glob}') "
+            f"WHERE anilist_id IS NOT NULL ORDER BY anilist_id"
+        ).fetchall()
+        conn.close()
+        pairs = [(int(r[0]), str(r[1])) for r in rows]
+        log.info("rebuild_v1_ids_loaded", count=len(pairs), path=v1_path)
+        return pairs
+    except Exception as e:
+        log.error("rebuild_v1_ids_failed", error=str(e), path=v1_path)
+        return []
 
 
 def save_anime_batch_to_bronze(anime_bw, anime_batch):
@@ -166,6 +198,7 @@ async def _fetch_genre_and_tag_master(client) -> None:
     so the main scrape still proceeds.
     """
     from src.scrapers.bronze_writer import BronzeWriter
+
     try:
         genres = await client.get_genre_collection()
         with BronzeWriter("anilist", table="genres_master") as gw:
@@ -182,15 +215,17 @@ async def _fetch_genre_and_tag_master(client) -> None:
             for t in tags:
                 if not t.get("id"):
                     continue
-                tw.append({
-                    "id": t.get("id"),
-                    "name": t.get("name") or "",
-                    "description": t.get("description"),
-                    "category": t.get("category"),
-                    "is_adult": t.get("isAdult"),
-                    "is_general_spoiler": t.get("isGeneralSpoiler"),
-                    "is_media_spoiler": t.get("isMediaSpoiler"),
-                })
+                tw.append(
+                    {
+                        "id": t.get("id"),
+                        "name": t.get("name") or "",
+                        "description": t.get("description"),
+                        "category": t.get("category"),
+                        "is_adult": t.get("isAdult"),
+                        "is_general_spoiler": t.get("isGeneralSpoiler"),
+                        "is_media_spoiler": t.get("isMediaSpoiler"),
+                    }
+                )
         log.info("anilist_media_tag_master_fetched", count=len(tags))
     except Exception as exc:
         log.warning("anilist_media_tag_master_failed", error=str(exc))
@@ -251,7 +286,9 @@ class AniListClient:
         else:
             log.info("anilist_no_token", will_use_unauthenticated=True)
         # Create RetryingHttpClient (handles retries + rate limit backoff)
-        self._client = RetryingHttpClient(source="anilist", delay=REQUEST_INTERVAL, timeout=60.0)
+        self._client = RetryingHttpClient(
+            source="anilist", delay=REQUEST_INTERVAL, timeout=60.0
+        )
 
         # Rate limit tracking
         self.requests_remaining = None
@@ -411,9 +448,7 @@ class AniListClient:
                         source="anilist",
                         status=resp.status_code,
                         errors=errors,
-                        token_format="JWT"
-                        if "." in self._access_token
-                        else "non-JWT",
+                        token_format="JWT" if "." in self._access_token else "non-JWT",
                     )
                     error_str = str(errors).lower()
                     if (
@@ -455,6 +490,21 @@ class AniListClient:
                 )
                 return None
 
+            if resp.status_code >= 400:
+                body_text = ""
+                try:
+                    body_text = resp.text[:2000]
+                except Exception:
+                    pass
+                log.error(
+                    "http_error_body",
+                    source="anilist",
+                    status=resp.status_code,
+                    body=body_text,
+                    variables=variables,
+                    has_token=bool(self._access_token),
+                )
+
             resp.raise_for_status()
             data = resp.json()
             if "errors" in data:
@@ -470,6 +520,7 @@ class AniListClient:
 
         except httpx.HTTPError as e:
             from src.scrapers.exceptions import EndpointUnreachableError
+
             raise EndpointUnreachableError(
                 f"Failed to query AniList: {e}",
                 source="anilist",
@@ -484,6 +535,40 @@ class AniListClient:
         return await self.query(
             TOP_ANIME_QUERY, {"page": page, "perPage": per_page, "sort": sort}
         )
+
+    async def get_anime_rebuild_batch(
+        self,
+        anilist_ids: list[int],
+        staff_pages: int = 4,
+        char_pages: int = 3,
+    ) -> dict:
+        """Batch-fetch up to 50 anime in one request via Page.media(id_in:).
+        Uses GraphQL aliases to pull staff pages 1..staff_pages and
+        characters pages 1..char_pages in the same round-trip.
+        """
+        query = build_rebuild_batch_query(
+            staff_pages=staff_pages, char_pages=char_pages
+        )
+        return await self.query(query, {"ids": anilist_ids})
+
+    async def get_anime_deep_pages(
+        self,
+        anilist_id: int,
+        staff_start: int = 0,
+        staff_count: int = 0,
+        char_start: int = 0,
+        char_count: int = 0,
+    ) -> dict:
+        """Second-pass single-anime fetch for staff/character pages beyond
+        what the 1-pass batch covered. Pass 0 counts to skip a section.
+        """
+        query = build_anime_deep_pages_query(
+            staff_start=max(staff_start, 1),
+            staff_count=staff_count,
+            char_start=max(char_start, 1),
+            char_count=char_count,
+        )
+        return await self.query(query, {"id": anilist_id})
 
     async def get_anime_staff(
         self,
@@ -534,14 +619,17 @@ class AniListClient:
     async def get_genre_collection(self) -> list[str]:
         """Fetch master list of all AniList genres (single request, ~25 names)."""
         from src.scrapers.queries.anilist import GENRE_COLLECTION_QUERY
+
         resp = await self.query(GENRE_COLLECTION_QUERY, {})
         return list((resp or {}).get("GenreCollection") or [])
 
     async def get_media_tag_collection(self) -> list[dict]:
         """Fetch master list of all AniList media tags (single request, ~150 entries)."""
         from src.scrapers.queries.anilist import MEDIA_TAG_COLLECTION_QUERY
+
         resp = await self.query(MEDIA_TAG_COLLECTION_QUERY, {})
         return list((resp or {}).get("MediaTagCollection") or [])
+
 
 async def fetch_top_anime_credits(
     n_anime: int = 50,
@@ -573,6 +661,16 @@ async def fetch_top_anime_credits(
     await client.verify_auth()
 
     try:
+        # AniList public API caps results at page*perPage <= 5000.
+        if n_anime > 5000:
+            log.warning(
+                "anilist_n_anime_clamped",
+                source="anilist",
+                requested=n_anime,
+                capped=5000,
+                hint="AniList public API caps at 5000 results per sort order.",
+            )
+            n_anime = 5000
         pages_needed = (n_anime + 49) // 50
         anime_ids: list[tuple[int, str]] = []
 
@@ -865,9 +963,7 @@ async def _load_anime_ids(
     # 認証状況を表示 (AniList は token 有無に関わらず 30 req/min が現行値)
     limit = client.rate_limit_max or 30
     if client.is_authenticated:
-        console.print(
-            f"[green]🔑 認証済み (rate limit: {limit} req/min)[/green]"
-        )
+        console.print(f"[green]🔑 認証済み (rate limit: {limit} req/min)[/green]")
     else:
         console.print(f"[yellow]⚠️ 未認証 (rate limit: {limit} req/min)[/yellow]")
 
@@ -922,9 +1018,14 @@ async def _fetch_staff_phase(
             if anime_id in since_ids:
                 continue
 
-            credits, person_ids, va_count, characters, cva_list, had_error = await fetch_staff_ids_for_anime(
-                client, anilist_id, anime_id
-            )
+            (
+                credits,
+                person_ids,
+                va_count,
+                characters,
+                cva_list,
+                had_error,
+            ) = await fetch_staff_ids_for_anime(client, anilist_id, anime_id)
 
             all_person_ids_to_fetch.update(person_ids)
             if had_error:
@@ -933,7 +1034,9 @@ async def _fetch_staff_phase(
             save_anime_batch_to_bronze(anime_bw, [anime])
             if studios_pending and anime_id in studios_pending:
                 studios, anime_studio_edges = studios_pending.pop(anime_id)
-                save_studios_to_bronze(studios_bw, anime_studios_bw, studios, anime_studio_edges)
+                save_studios_to_bronze(
+                    studios_bw, anime_studios_bw, studios, anime_studio_edges
+                )
             if relations_pending and anime_id in relations_pending:
                 save_relations_to_bronze(relations_bw, relations_pending.pop(anime_id))
             save_credits_batch_to_bronze(credits_bw, credits)
@@ -962,19 +1065,487 @@ async def _fetch_staff_phase(
                 characters_bw.flush()
                 cva_bw.flush()
                 cp = Checkpoint(checkpoint_file)
-                cp.data.update(create_checkpoint_data(
-                    loop_idx + 1, fetched_ids, totals, time_module.time()
-                ))
+                cp.data.update(
+                    create_checkpoint_data(
+                        loop_idx + 1, fetched_ids, totals, time_module.time()
+                    )
+                )
                 cp.save(stamp_time=False)
-                p.log("anilist_staff_checkpoint", done=loop_idx + 1, total=len(anime_ids))
+                p.log(
+                    "anilist_staff_checkpoint", done=loop_idx + 1, total=len(anime_ids)
+                )
 
         cp = Checkpoint(checkpoint_file)
-        cp.data.update(create_checkpoint_data(
-            len(anime_ids), fetched_ids, totals, time_module.time()
-        ))
+        cp.data.update(
+            create_checkpoint_data(
+                len(anime_ids), fetched_ids, totals, time_module.time()
+            )
+        )
         cp.save(stamp_time=False)
 
     return all_person_ids_to_fetch
+
+
+def _collect_alias_pages(media: dict, prefix: str) -> tuple[list[dict], int, bool]:
+    """Aggregate edges across alias pages (e.g. staff_p1, staff_p2, ...).
+
+    Returns:
+        (all_edges, last_seen_page, has_more)
+        has_more=True if the deepest alias page still reports hasNextPage.
+    """
+    edges: list[dict] = []
+    last_page = 0
+    has_more = False
+    page = 1
+    while True:
+        key = f"{prefix}_p{page}"
+        if key not in media:
+            break
+        block = media.get(key) or {}
+        page_edges = block.get("edges") or []
+        edges.extend(page_edges)
+        if page_edges or page == 1:
+            last_page = page
+        has_more = bool((block.get("pageInfo") or {}).get("hasNextPage"))
+        page += 1
+    return edges, last_page, has_more
+
+
+async def _fetch_full_anime(client, anilist_id: int, anime_id: str):
+    """Fetch full anime payload (anime + staff + characters + studios + relations)
+    for a single anime ID. Walks staff/character pagination.
+
+    Used by --rebuild-from-v1 to bypass the top-anime 5000 cap.
+
+    Returns:
+        anime, studios, anime_studios, relations,
+        credits, persons, characters, cva_list, person_ids_seed
+    """
+    anime: BronzeAnime | None = None
+    studios_acc: list[Studio] = []
+    anime_studios_acc: list[AnimeStudio] = []
+    relations: list[AnimeRelation] = []
+    credits: list[Credit] = []
+    persons_acc: list[Person] = []
+    characters: list = []
+    cva_list: list = []
+    seen_char_ids: set = set()
+    seen_person_ids: set = set()
+    person_ids_seed: set[int] = set()
+
+    staff_page = 1
+    char_page = 1
+    has_more_staff = True
+    has_more_chars = True
+    first_page = True
+
+    while has_more_staff or has_more_chars:
+        resp = await client.get_anime_staff(
+            anilist_id,
+            staff_page=staff_page if has_more_staff else 1,
+            staff_per_page=25 if has_more_staff else 1,
+            char_page=char_page if has_more_chars else 1,
+            char_per_page=25 if has_more_chars else 1,
+        )
+        if not resp:
+            break
+        media = resp.get("Media") or {}
+        if not media:
+            break
+
+        if first_page:
+            anime = parse_anilist_anime(media)
+            studios_p, anime_studios_p = parse_anilist_studios(media, anime.id)
+            studios_acc.extend(studios_p)
+            anime_studios_acc.extend(anime_studios_p)
+            relations = parse_anilist_relations(media, anime.id)
+            first_page = False
+
+        if has_more_staff:
+            staff_obj = media.get("staff", {}) or {}
+            edges = staff_obj.get("edges", []) or []
+            persons_p, credits_p = parse_anilist_staff(edges, anime.id)
+            for p in persons_p:
+                if p.id not in seen_person_ids:
+                    seen_person_ids.add(p.id)
+                    persons_acc.append(p)
+            credits.extend(credits_p)
+            for edge in edges:
+                pid = edge.get("node", {}).get("id")
+                if pid:
+                    person_ids_seed.add(pid)
+            has_more_staff = staff_obj.get("pageInfo", {}).get("hasNextPage", False)
+            if has_more_staff:
+                staff_page += 1
+
+        if has_more_chars:
+            char_obj = media.get("characters", {}) or {}
+            char_edges = char_obj.get("edges", []) or []
+            page_chars, page_cvas = parse_anilist_characters(char_edges, anime.id)
+            for ch in page_chars:
+                if ch.anilist_id not in seen_char_ids:
+                    seen_char_ids.add(ch.anilist_id)
+                    characters.append(ch)
+            cva_list.extend(page_cvas)
+            va_persons_p, va_credits_p = parse_anilist_voice_actors(
+                char_edges, anime.id
+            )
+            for p in va_persons_p:
+                if p.id not in seen_person_ids:
+                    seen_person_ids.add(p.id)
+                    persons_acc.append(p)
+            credits.extend(va_credits_p)
+            for edge in char_edges:
+                for va in edge.get("voiceActors", []) or []:
+                    vid = va.get("id")
+                    if vid:
+                        person_ids_seed.add(vid)
+            has_more_chars = char_obj.get("pageInfo", {}).get("hasNextPage", False)
+            if has_more_chars:
+                char_page += 1
+
+    return (
+        anime,
+        studios_acc,
+        anime_studios_acc,
+        relations,
+        credits,
+        persons_acc,
+        characters,
+        cva_list,
+        person_ids_seed,
+    )
+
+
+REBUILD_BATCH_SIZE = 30
+REBUILD_STAFF_PAGES = 4
+REBUILD_CHAR_PAGES = 3
+REBUILD_DEEP_STAFF_PAGES = 6  # extra alias pages per second-pass staff fetch
+REBUILD_DEEP_CHAR_PAGES = 4  # extra alias pages per second-pass char fetch
+
+
+def _save_anime_record(
+    media: dict,
+    anime_id: str,
+    writers: dict,
+    seen_person_ids: set,
+    download_queue,
+    totals: dict,
+):
+    """Parse one media record from a batch response and write all derived
+    rows. Returns (deep_staff_start, deep_char_start) — start page numbers
+    needed for second-pass deep fetches, or None if no further pages.
+    """
+    anime = parse_anilist_anime(media)
+    studios, anime_studios = parse_anilist_studios(media, anime.id)
+    relations = parse_anilist_relations(media, anime.id)
+
+    staff_edges, staff_last, staff_more = _collect_alias_pages(media, "staff")
+    char_edges, char_last, char_more = _collect_alias_pages(media, "characters")
+
+    persons_p, credits_p = parse_anilist_staff(staff_edges, anime.id)
+    chars_p, cvas_p = parse_anilist_characters(char_edges, anime.id)
+    va_persons_p, va_credits_p = parse_anilist_voice_actors(char_edges, anime.id)
+
+    save_anime_batch_to_bronze(writers["anime"], [anime])
+    if studios:
+        save_studios_to_bronze(
+            writers["studios"], writers["anime_studios"], studios, anime_studios
+        )
+    if relations:
+        save_relations_to_bronze(writers["relations"], relations)
+    save_credits_batch_to_bronze(writers["credits"], credits_p)
+    save_credits_batch_to_bronze(writers["credits"], va_credits_p)
+    save_characters_to_bronze(writers["characters"], chars_p)
+    save_cva_to_bronze(writers["cva"], cvas_p)
+
+    new_count = 0
+    for person in persons_p + va_persons_p:
+        if person.id in seen_person_ids:
+            continue
+        seen_person_ids.add(person.id)
+        writers["persons"].append(person.model_dump(mode="json"))
+        new_count += 1
+        if person.image_large or person.image_medium:
+            download_queue.add_person(
+                person.id, person.image_large, person.image_medium
+            )
+            totals["images"] += 1
+
+    if anime.cover_large or anime.cover_extra_large or anime.banner:
+        download_queue.add_anime(
+            anime.id, anime.cover_large, anime.cover_extra_large, anime.banner
+        )
+        totals["images"] += 1
+
+    totals["anime"] += 1
+    totals["credits"] += len(credits_p) + len(va_credits_p)
+    totals["voice_actors"] += len(va_credits_p)
+    totals["characters"] += len(chars_p)
+    totals["persons"] = totals.get("persons", 0) + new_count
+
+    deep_staff_start = (staff_last + 1) if staff_more else None
+    deep_char_start = (char_last + 1) if char_more else None
+    return deep_staff_start, deep_char_start
+
+
+async def _rebuild_anime_phase(
+    client,
+    anime_bw,
+    credits_bw,
+    studios_bw,
+    anime_studios_bw,
+    relations_bw,
+    characters_bw,
+    cva_bw,
+    persons_bw,
+    rebuild_pairs,
+    totals,
+    fetched_ids,
+    download_queue,
+    checkpoint_interval,
+    checkpoint_file,
+    create_checkpoint_data,
+    time_module,
+    show_progress: bool = True,
+):
+    """GraphQL-batched rebuild path.
+
+    1-pass: 30 anime per request via Page.media(id_in:) with staff p1-4 +
+    character p1-3 alias multiplexing. Bypasses the 5000-cap top-anime API.
+    2-pass: anime whose deepest alias page still has hasNextPage are
+    re-fetched individually for staff_p5+ / char_p4+ via build_anime_deep_pages_query.
+
+    Persons are written inline (no Phase 2B). 1 req = 1 rate-limit cost.
+    """
+    from src.scrapers.progress import scrape_progress as _scrape_progress
+
+    writers = {
+        "anime": anime_bw,
+        "credits": credits_bw,
+        "studios": studios_bw,
+        "anime_studios": anime_studios_bw,
+        "relations": relations_bw,
+        "characters": characters_bw,
+        "cva": cva_bw,
+        "persons": persons_bw,
+    }
+    seen_person_ids: set = set()
+    deep_queue: list[tuple[int, str, int | None, int | None]] = []
+
+    targets = [(aid, anid) for aid, anid in rebuild_pairs if anid not in fetched_ids]
+    total_targets = len(targets)
+
+    def _flush_all():
+        for w in writers.values():
+            w.flush()
+
+    def _save_checkpoint(done: int):
+        cp = Checkpoint(checkpoint_file)
+        cp.data.update(
+            create_checkpoint_data(done, fetched_ids, totals, time_module.time())
+        )
+        cp.save(stamp_time=False)
+
+    # ===== 1-pass: id_in batch =====
+    with _scrape_progress(
+        total=total_targets,
+        description="anilist rebuild 1-pass",
+        enabled=show_progress,
+    ) as p:
+        for batch_start in range(0, total_targets, REBUILD_BATCH_SIZE):
+            batch = targets[batch_start : batch_start + REBUILD_BATCH_SIZE]
+            ids = [aid for aid, _ in batch]
+            id_to_anime = {aid: anid for aid, anid in batch}
+
+            try:
+                resp = await client.get_anime_rebuild_batch(
+                    ids,
+                    staff_pages=REBUILD_STAFF_PAGES,
+                    char_pages=REBUILD_CHAR_PAGES,
+                )
+            except Exception as e:
+                log.error(
+                    "rebuild_batch_failed",
+                    source="anilist",
+                    batch_start=batch_start,
+                    batch_size=len(ids),
+                    error_type=type(e).__name__,
+                    error_message=str(e),
+                )
+                totals["errors"] += len(ids)
+                for _ in batch:
+                    p.advance()
+                continue
+
+            page_data = (resp or {}).get("Page") or {}
+            media_list = page_data.get("media") or []
+            seen_ids: set = set()
+
+            for media in media_list:
+                anilist_id = media.get("id")
+                anime_id = id_to_anime.get(anilist_id)
+                if not anime_id:
+                    continue
+                seen_ids.add(anilist_id)
+                try:
+                    deep_staff, deep_char = _save_anime_record(
+                        media,
+                        anime_id,
+                        writers,
+                        seen_person_ids,
+                        download_queue,
+                        totals,
+                    )
+                except Exception as e:
+                    log.error(
+                        "rebuild_save_failed",
+                        source="anilist",
+                        anilist_id=anilist_id,
+                        anime_id=anime_id,
+                        error_type=type(e).__name__,
+                        error_message=str(e),
+                    )
+                    totals["errors"] += 1
+                    fetched_ids.add(anime_id)
+                    p.advance()
+                    continue
+                fetched_ids.add(anime_id)
+                if deep_staff is not None or deep_char is not None:
+                    deep_queue.append((anilist_id, anime_id, deep_staff, deep_char))
+                p.advance()
+
+            for missing in set(ids) - seen_ids:
+                log.warning(
+                    "rebuild_missing_in_response",
+                    source="anilist",
+                    anilist_id=missing,
+                    anime_id=id_to_anime.get(missing),
+                )
+                fetched_ids.add(id_to_anime[missing])
+                totals["skipped"] = totals.get("skipped", 0) + 1
+                p.advance()
+
+            done_so_far = batch_start + len(batch)
+            if (
+                done_so_far % (REBUILD_BATCH_SIZE * 10) < REBUILD_BATCH_SIZE
+                or done_so_far >= total_targets
+            ):
+                _flush_all()
+                _save_checkpoint(done_so_far)
+                p.log(
+                    "rebuild_1pass_checkpoint",
+                    done=done_so_far,
+                    total=total_targets,
+                    deep_pending=len(deep_queue),
+                )
+
+    log.info(
+        "rebuild_1pass_complete",
+        anime_done=totals["anime"],
+        deep_queue=len(deep_queue),
+    )
+
+    # ===== 2-pass: deep page fetches for hasNextPage anime =====
+    if deep_queue:
+        with _scrape_progress(
+            total=len(deep_queue),
+            description="anilist rebuild 2-pass deep",
+            enabled=show_progress,
+        ) as p:
+            for idx, (anilist_id, anime_id, deep_staff, deep_char) in enumerate(
+                deep_queue
+            ):
+                staff_count = REBUILD_DEEP_STAFF_PAGES if deep_staff else 0
+                char_count = REBUILD_DEEP_CHAR_PAGES if deep_char else 0
+                try:
+                    resp = await client.get_anime_deep_pages(
+                        anilist_id,
+                        staff_start=deep_staff or 1,
+                        staff_count=staff_count,
+                        char_start=deep_char or 1,
+                        char_count=char_count,
+                    )
+                except Exception as e:
+                    log.error(
+                        "rebuild_deep_fetch_failed",
+                        source="anilist",
+                        anilist_id=anilist_id,
+                        anime_id=anime_id,
+                        error_type=type(e).__name__,
+                        error_message=str(e),
+                    )
+                    totals["errors"] += 1
+                    p.advance()
+                    continue
+                media = (resp or {}).get("Media") or {}
+                if not media:
+                    p.advance()
+                    continue
+
+                if staff_count:
+                    extra_edges, _, _ = _collect_alias_pages(media, "staff")
+                    persons_p, credits_p = parse_anilist_staff(extra_edges, anime_id)
+                    save_credits_batch_to_bronze(credits_bw, credits_p)
+                    for person in persons_p:
+                        if person.id in seen_person_ids:
+                            continue
+                        seen_person_ids.add(person.id)
+                        persons_bw.append(person.model_dump(mode="json"))
+                        if person.image_large or person.image_medium:
+                            download_queue.add_person(
+                                person.id, person.image_large, person.image_medium
+                            )
+                            totals["images"] += 1
+                        totals["persons"] = totals.get("persons", 0) + 1
+                    totals["credits"] += len(credits_p)
+
+                if char_count:
+                    extra_char_edges, _, _ = _collect_alias_pages(media, "characters")
+                    chars_p, cvas_p = parse_anilist_characters(
+                        extra_char_edges, anime_id
+                    )
+                    va_persons_p, va_credits_p = parse_anilist_voice_actors(
+                        extra_char_edges, anime_id
+                    )
+                    save_characters_to_bronze(characters_bw, chars_p)
+                    save_cva_to_bronze(cva_bw, cvas_p)
+                    save_credits_batch_to_bronze(credits_bw, va_credits_p)
+                    for person in va_persons_p:
+                        if person.id in seen_person_ids:
+                            continue
+                        seen_person_ids.add(person.id)
+                        persons_bw.append(person.model_dump(mode="json"))
+                        if person.image_large or person.image_medium:
+                            download_queue.add_person(
+                                person.id, person.image_large, person.image_medium
+                            )
+                            totals["images"] += 1
+                        totals["persons"] = totals.get("persons", 0) + 1
+                    totals["credits"] += len(va_credits_p)
+                    totals["voice_actors"] += len(va_credits_p)
+                    totals["characters"] += len(chars_p)
+
+                p.advance()
+                if (idx + 1) % (checkpoint_interval) == 0:
+                    _flush_all()
+                    _save_checkpoint(total_targets)
+                    p.log(
+                        "rebuild_2pass_checkpoint",
+                        done=idx + 1,
+                        total=len(deep_queue),
+                    )
+
+    _flush_all()
+    _save_checkpoint(total_targets)
+    log.info(
+        "rebuild_complete",
+        anime=totals["anime"],
+        credits=totals["credits"],
+        characters=totals["characters"],
+        persons=totals.get("persons", 0),
+        errors=totals["errors"],
+    )
 
 
 async def _fetch_person_details_phase(
@@ -1083,6 +1654,12 @@ def run(
         "--since",
         help="ISO形式の日時以降のみ差分更新 (YYYY-MM-DDTHH:MM:SS、SILVER.anime のfetched_at基準)",
     ),
+    rebuild_from_v1: str = typer.Option(
+        None,
+        "--rebuild-from-v1",
+        help="退避済 v1 BRONZE パスから anime ID を全列挙して新 schema で再取得 "
+        "(例: result/bronze/source=anilist_v1)。top-anime API の 5000 cap を回避。",
+    ),
     quiet: QuietOpt = False,
     progress: ProgressOpt = False,
 ) -> None:
@@ -1096,9 +1673,16 @@ def run(
     # Override callback's default level with --log-level. Re-wrap only — do not
     # call structlog.configure() here, which would drop the file sink processor
     # installed by configure_file_logging() in the callback.
-    level_map = {"debug": logging.DEBUG, "info": logging.INFO, "warning": logging.WARNING, "error": logging.ERROR}
+    level_map = {
+        "debug": logging.DEBUG,
+        "info": logging.INFO,
+        "warning": logging.WARNING,
+        "error": logging.ERROR,
+    }
     structlog.configure(
-        wrapper_class=structlog.make_filtering_bound_logger(level_map.get(log_level.lower(), logging.ERROR)),
+        wrapper_class=structlog.make_filtering_bound_logger(
+            level_map.get(log_level.lower(), logging.ERROR)
+        ),
     )
     console = Console()
     show_progress = _progress_enabled(resolve_progress_enabled(quiet, progress))
@@ -1166,8 +1750,8 @@ def run(
         )
 
     # Seed fetched_ids from BRONZE (skip already-scraped anime)
-    # Bypass with --force or --update for full re-fetch.
-    if not force and not update:
+    # Bypass with --force, --update, or --rebuild-from-v1.
+    if not force and not update and not rebuild_from_v1:
         bronze_ids = get_anime_ids_in_bronze()
         new_seed = bronze_ids - fetched_ids
         if new_seed:
@@ -1177,9 +1761,7 @@ def run(
                 f"[cyan]✓ BRONZE 既存 anime: {len(new_seed):,} 件 skip "
                 f"(checkpoint {start_index:,} 件と合算 → 計 {len(fetched_ids):,} 件)[/cyan]"
             )
-            console.print(
-                "[dim]  全件再取得は --update または --force[/dim]"
-            )
+            console.print("[dim]  全件再取得は --update または --force[/dim]")
             console.print()
 
     # Fetch with incremental saving
@@ -1292,7 +1874,8 @@ def run(
                 "  └ 🎤 声優", f"[bright_blue]{totals['voice_actors']:,}[/bright_blue]"
             )
             final_table.add_row(
-                "🎭 キャラクター", f"[bright_blue]{totals.get('characters', 0):,}[/bright_blue]"
+                "🎭 キャラクター",
+                f"[bright_blue]{totals.get('characters', 0):,}[/bright_blue]",
             )
 
             if totals.get("skipped", 0) > 0:
@@ -1371,7 +1954,6 @@ def run(
                 "total_errors": totals["errors"],
                 "timestamp": timestamp,
             }
-
 
         def display_checkpoint_panel(checkpoint_num, stats_table):
             """Display checkpoint save panel."""
@@ -1534,13 +2116,29 @@ def run(
 
             page = 1
             has_next_page = True
+            # AniList public API caps results at page*perPage <= 5000.
+            # perPage=50 → max 100 pages. Beyond that returns 400.
+            per_page = 50
+            max_pages = 5000 // per_page
             with Live(_make_1_group(), console=console, refresh_per_second=4) as live1:
                 while has_next_page:
+                    if page > max_pages:
+                        log.info(
+                            "anilist_public_api_cap_reached",
+                            source="anilist",
+                            page=page,
+                            max_pages=max_pages,
+                            cap=5000,
+                            hint="Use multiple sort orders (POPULARITY/START_DATE/ID) to exceed 5000.",
+                        )
+                        break
                     resp = await client.get_top_anime(
-                        page=page, per_page=50, sort=sort_order
+                        page=page, per_page=per_page, sort=sort_order
                     )
                     page_data = resp.get("Page", {})
-                    has_next_page = page_data.get("pageInfo", {}).get("hasNextPage", False)
+                    has_next_page = page_data.get("pageInfo", {}).get(
+                        "hasNextPage", False
+                    )
 
                     for raw in page_data.get("media", []):
                         anime = parse_anilist_anime(raw)
@@ -1686,7 +2284,9 @@ def run(
                     if has_more_chars:
                         characters_obj = media.get("characters", {})
                         char_edges = characters_obj.get("edges", [])
-                        page_chars, page_cvas = parse_anilist_characters(char_edges, anime_id)
+                        page_chars, page_cvas = parse_anilist_characters(
+                            char_edges, anime_id
+                        )
                         for char in page_chars:
                             if char.anilist_id not in seen_char_ids:
                                 seen_char_ids.add(char.anilist_id)
@@ -1751,79 +2351,136 @@ def run(
             # catalog (id / category / description) for cross-anime tag analysis.
             await _fetch_genre_and_tag_master(client)
 
-            # ===== PHASE 1: Fetch Anime List =====
-            anime_ids = await _load_anime_ids(
-                client,
-                fetched_ids,
-                console,
-                update,
-                reverse,
-                anime_list_cache_file,
-                fetch_anime_list_from_api,
-                create_phase1_summary_table,
-                display_phase1_summary,
-            )
-
-            # ===== PHASE 2A: スタッフリスト収集 (クレジットとID) =====
             from src.scrapers.bronze_writer import BronzeWriter, BronzeWriterGroup
 
-            with BronzeWriterGroup(
-                "anilist",
-                tables=["anime", "credits", "studios", "anime_studios", "relations", "characters", "character_voice_actors"],
-            ) as g:
-                anime_bw = g["anime"]
-                credits_bw = g["credits"]
-                studios_bw = g["studios"]
-                anime_studios_bw = g["anime_studios"]
-                relations_bw = g["relations"]
-                characters_bw = g["characters"]
-                cva_bw = g["character_voice_actors"]
-
-                all_person_ids_to_fetch = await _fetch_staff_phase(
+            if rebuild_from_v1:
+                # ===== REBUILD PATH (v1 ID 全件 → 新 schema) =====
+                rebuild_pairs = load_rebuild_target_ids(rebuild_from_v1)
+                if not rebuild_pairs:
+                    console.print(
+                        f"[red]✗ rebuild 対象 ID が見つからない: {rebuild_from_v1}[/red]"
+                    )
+                    return
+                console.print(
+                    Rule(
+                        f"[bold magenta]REBUILD: v1 から {len(rebuild_pairs):,} 件 ID 列挙[/bold magenta]",
+                        style="magenta",
+                    )
+                )
+                console.print()
+                with BronzeWriterGroup(
+                    "anilist",
+                    tables=[
+                        "anime",
+                        "credits",
+                        "studios",
+                        "anime_studios",
+                        "relations",
+                        "characters",
+                        "character_voice_actors",
+                        "persons",
+                    ],
+                ) as g:
+                    await _rebuild_anime_phase(
+                        client,
+                        g["anime"],
+                        g["credits"],
+                        g["studios"],
+                        g["anime_studios"],
+                        g["relations"],
+                        g["characters"],
+                        g["character_voice_actors"],
+                        g["persons"],
+                        rebuild_pairs,
+                        totals,
+                        fetched_ids,
+                        download_queue,
+                        checkpoint_interval,
+                        checkpoint_file,
+                        create_checkpoint_data,
+                        time_module,
+                        show_progress=show_progress,
+                    )
+            else:
+                # ===== PHASE 1: Fetch Anime List =====
+                anime_ids = await _load_anime_ids(
                     client,
-                    anime_bw,
-                    credits_bw,
-                    studios_bw,
-                    anime_studios_bw,
-                    relations_bw,
-                    characters_bw,
-                    cva_bw,
-                    anime_ids,
-                    totals,
                     fetched_ids,
-                    download_queue,
-                    checkpoint_interval,
-                    checkpoint_file,
-                    fetch_staff_ids_for_anime,
-                    create_checkpoint_data,
-                    time_module,
-                    studios_pending=studios_pending,
-                    relations_pending=relations_pending,
-                    since_ids=since_ids,
-                    show_progress=show_progress,
+                    console,
+                    update,
+                    reverse,
+                    anime_list_cache_file,
+                    fetch_anime_list_from_api,
+                    create_phase1_summary_table,
+                    display_phase1_summary,
                 )
 
-            # Phase 2A サマリ
-            ids_to_fetch = sorted(all_person_ids_to_fetch)
-            total_unique = len(all_person_ids_to_fetch)
+                # ===== PHASE 2A: スタッフリスト収集 (クレジットとID) =====
+                with BronzeWriterGroup(
+                    "anilist",
+                    tables=[
+                        "anime",
+                        "credits",
+                        "studios",
+                        "anime_studios",
+                        "relations",
+                        "characters",
+                        "character_voice_actors",
+                    ],
+                ) as g:
+                    anime_bw = g["anime"]
+                    credits_bw = g["credits"]
+                    studios_bw = g["studios"]
+                    anime_studios_bw = g["anime_studios"]
+                    relations_bw = g["relations"]
+                    characters_bw = g["characters"]
+                    cva_bw = g["character_voice_actors"]
 
-            console.print()
-            console.print(
-                f"[cyan]✅ フェーズ2A完了: {totals['anime']}件のアニメ → "
-                f"{totals['credits']:,}クレジット, "
-                f"{total_unique:,}人 (フェーズ2Bで取得)[/cyan]"
-            )
+                    all_person_ids_to_fetch = await _fetch_staff_phase(
+                        client,
+                        anime_bw,
+                        credits_bw,
+                        studios_bw,
+                        anime_studios_bw,
+                        relations_bw,
+                        characters_bw,
+                        cva_bw,
+                        anime_ids,
+                        totals,
+                        fetched_ids,
+                        download_queue,
+                        checkpoint_interval,
+                        checkpoint_file,
+                        fetch_staff_ids_for_anime,
+                        create_checkpoint_data,
+                        time_module,
+                        studios_pending=studios_pending,
+                        relations_pending=relations_pending,
+                        since_ids=since_ids,
+                        show_progress=show_progress,
+                    )
 
-            # ===== PHASE 2B: 個人情報詳細取得 =====
-            with BronzeWriter("anilist", table="persons") as persons_bw:
-                await _fetch_person_details_phase(
-                    client,
-                    persons_bw,
-                    ids_to_fetch,
-                    totals,
-                    download_queue,
-                    show_progress=show_progress,
+                # Phase 2A サマリ
+                ids_to_fetch = sorted(all_person_ids_to_fetch)
+                total_unique = len(all_person_ids_to_fetch)
+
+                console.print()
+                console.print(
+                    f"[cyan]✅ フェーズ2A完了: {totals['anime']}件のアニメ → "
+                    f"{totals['credits']:,}クレジット, "
+                    f"{total_unique:,}人 (フェーズ2Bで取得)[/cyan]"
                 )
+
+                # ===== PHASE 2B: 個人情報詳細取得 =====
+                with BronzeWriter("anilist", table="persons") as persons_bw:
+                    await _fetch_person_details_phase(
+                        client,
+                        persons_bw,
+                        ids_to_fetch,
+                        totals,
+                        download_queue,
+                        show_progress=show_progress,
+                    )
 
             # Delete checkpoint file on completion
             cp = Checkpoint(checkpoint_file)
@@ -1864,9 +2521,7 @@ def run(
     since_ids = set()
     if since:
         since_ids = get_anime_ids_to_skip_since(since)
-        console.print(
-            f"[cyan]✓ --since mode: {len(since_ids)} anime to skip[/cyan]"
-        )
+        console.print(f"[cyan]✓ --since mode: {len(since_ids)} anime to skip[/cyan]")
 
     asyncio.run(fetch_with_checkpoints(since_ids))
 
@@ -1897,7 +2552,9 @@ def fetch_persons(
         # Read anilist person IDs from bronze credits parquet
         credits_path = DEFAULT_BRONZE_ROOT / "source=anilist" / "table=credits"
         if not credits_path.exists():
-            console.print("[yellow]Bronze credits not found — run 'run' first.[/yellow]")
+            console.print(
+                "[yellow]Bronze credits not found — run 'run' first.[/yellow]"
+            )
             return
 
         credits_ds = ds.dataset(credits_path, format="parquet")

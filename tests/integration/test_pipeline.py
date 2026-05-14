@@ -97,7 +97,9 @@ def populated_db(tmp_path, monkeypatch):
 
     import src.analysis.io.conformed_reader
 
-    monkeypatch.setattr(src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(
+        src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path
+    )
 
     import src.db.init
 

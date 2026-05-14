@@ -47,7 +47,9 @@ def assemble_result_entries(
     iv_scores = supp.iv_scores
     dormancy_scores = supp.dormancy_scores
 
-    all_person_ids = set(core.person_fe) | set(core.birank_person_scores) | set(iv_scores)
+    all_person_ids = (
+        set(core.person_fe) | set(core.birank_person_scores) | set(iv_scores)
+    )
 
     results: list[dict] = []
 
@@ -131,7 +133,9 @@ def assemble_result_entries(
         score = scores_by_pid[pid]
 
         node_data = (
-            graphs.person_anime_graph.nodes.get(pid, {}) if graphs.person_anime_graph else {}
+            graphs.person_anime_graph.nodes.get(pid, {})
+            if graphs.person_anime_graph
+            else {}
         )
 
         peer_boost = 0.0
@@ -244,7 +248,9 @@ def assemble_result_entries(
             }
 
         person_credits = credits_by_person.get(pid, [])
-        birank_factors = explain_authority(pid, credits, anime_map, _person_credits=person_credits)
+        birank_factors = explain_authority(
+            pid, credits, anime_map, _person_credits=person_credits
+        )
         patronage_factors = explain_trust(
             pid,
             credits,

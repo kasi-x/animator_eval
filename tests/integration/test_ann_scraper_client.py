@@ -24,6 +24,7 @@ def _run(coro: Awaitable):
 @pytest.fixture(autouse=True)
 def _no_sleep(monkeypatch):
     """Skip backoff sleeps so retry tests run instantly."""
+
     async def _instant(*args, **kwargs):
         return None
 

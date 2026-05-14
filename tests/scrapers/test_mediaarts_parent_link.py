@@ -4,6 +4,7 @@ Verifies that parse_jsonld_dump correctly extracts:
   - parent_madb_id: C-series ID from schema:isPartOf (M-rows)
   - record_type:    @type suffix (all rows)
 """
+
 from __future__ import annotations
 
 import json

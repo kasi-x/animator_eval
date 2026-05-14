@@ -108,12 +108,13 @@ def _fuzzy_sim(a: str, b: str) -> float:
         return 0.0
     try:
         from rapidfuzz import fuzz  # type: ignore[import]
+
         return fuzz.token_sort_ratio(a, b) / 100.0
     except ImportError:
         # Fallback: character overlap ratio (Dice coefficient).
         sa, sb = set(a.lower()), set(b.lower())
         intersection = len(sa & sb)
-        denom = (len(sa) + len(sb))
+        denom = len(sa) + len(sb)
         return (2 * intersection / denom) if denom else 0.0
 
 
@@ -186,10 +187,10 @@ def _fetch_bronze_credits_for_title(
 
     # Source table probes: (table_name, title_col, person_col, role_col, source_label)
     source_probes = [
-        ("src_ann_credits",        "title",     "person_name", "role",    "ann"),
-        ("src_mediaarts_credits",  "title_ja",  "person_name", "role_ja", "mediaarts"),
-        ("src_seesaawiki_credits", "anime_title","name",        "role",    "seesaawiki"),
-        ("src_allcinema_credits",  "title",     "name",        "role",    "allcinema"),
+        ("src_ann_credits", "title", "person_name", "role", "ann"),
+        ("src_mediaarts_credits", "title_ja", "person_name", "role_ja", "mediaarts"),
+        ("src_seesaawiki_credits", "anime_title", "name", "role", "seesaawiki"),
+        ("src_allcinema_credits", "title", "name", "role", "allcinema"),
     ]
 
     for table, title_col, person_col, role_col, source_label in source_probes:
@@ -203,17 +204,17 @@ def _fetch_bronze_credits_for_title(
         for row in rows:
             raw_title = str(row[0] or "")
             raw_person = str(row[1] or "")
-            raw_role   = str(row[2] or "")
+            raw_role = str(row[2] or "")
             if not raw_person or not raw_role:
                 continue
             sim = _fuzzy_sim(raw_title, title_ja)
             if sim >= threshold:
                 candidates.append(
                     {
-                        "source":       source_label,
-                        "person_name":  raw_person,
-                        "role_raw":     raw_role.lower().replace(" ", "_"),
-                        "title_sim":    sim,
+                        "source": source_label,
+                        "person_name": raw_person,
+                        "role_raw": raw_role.lower().replace(" ", "_"),
+                        "title_sim": sim,
                     }
                 )
 
@@ -306,14 +307,23 @@ def _check_role_progression_consistency(
     if person_id is None or cohort_year is None:
         return True  # cannot evaluate; allow
 
-    _SENIOR_ROLES = frozenset({
-        "director", "series_director", "chief_director",
-        "animation_director", "character_designer",
-    })
-    _JUNIOR_ROLES = frozenset({
-        "key_animator", "animator", "inbetweener",
-        "second_key_animator",
-    })
+    _SENIOR_ROLES = frozenset(
+        {
+            "director",
+            "series_director",
+            "chief_director",
+            "animation_director",
+            "character_designer",
+        }
+    )
+    _JUNIOR_ROLES = frozenset(
+        {
+            "key_animator",
+            "animator",
+            "inbetweener",
+            "second_key_animator",
+        }
+    )
 
     try:
         rows = conn.execute(
@@ -383,7 +393,9 @@ def find_restoration_candidates(
         log.info("no_historical_anime_found", cutoff=year_cutoff)
         return []
 
-    log.info("restoration_scan_start", anime_count=len(historical_anime), threshold=threshold)
+    log.info(
+        "restoration_scan_start", anime_count=len(historical_anime), threshold=threshold
+    )
 
     all_candidates: list[RestorationCandidate] = []
 
@@ -396,6 +408,7 @@ def find_restoration_candidates(
 
         # Aggregate hits by (person_name_normalised, role).
         from collections import defaultdict
+
         aggregated: dict[tuple[str, str], dict[str, Any]] = defaultdict(
             lambda: {"sources": [], "max_sim": 0.0}
         )
@@ -419,9 +432,7 @@ def find_restoration_candidates(
             # Determine confidence tier.
             tier = "MEDIUM" if len(sources) >= 2 else "LOW"
 
-            prog_ok = _check_role_progression_consistency(
-                conn, person_id, role, year
-            )
+            prog_ok = _check_role_progression_consistency(conn, person_id, role, year)
 
             all_candidates.append(
                 RestorationCandidate(

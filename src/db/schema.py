@@ -1251,18 +1251,58 @@ def init_db_v2(conn: sqlite3.Connection) -> None:
     log.info("init_db_v2_complete")
 
 
-
-
 def _seed_sources(conn: sqlite3.Connection) -> None:
     """Seed the sources lookup table with canonical data sources."""
     SOURCE_SEEDS = [
-        ("anilist",    "AniList",             "https://anilist.co",                "proprietary", "GraphQL で structured staff 情報が最も豊富"),
-        ("mal",        "MyAnimeList",          "https://myanimelist.net",           "proprietary", "viewer ratings の参照源 (表示のみ、分析不使用)"),
-        ("ann",        "Anime News Network",   "https://www.animenewsnetwork.com",  "proprietary", "historical depth と職種粒度"),
-        ("seesaawiki", "SeesaaWiki",           "https://seesaawiki.jp",             "CC-BY-SA",    "fan-curated 詳細エピソード情報"),
-        ("keyframe",   "Sakugabooru/Keyframe", "https://www.sakugabooru.com",       "CC",          "sakuga コミュニティ別名情報"),
-        ("madb",       "メディア芸術DB",         "https://mediaarts-db.bunka.go.jp",  "public",      "文化庁 メディア芸術データベース (日本政府公開)"),
-        ("tmdb",       "The Movie Database",   "https://www.themoviedb.org",        "CC-BY-NC",    "海外配信メタ + 越境アニメ作品のクレジット"),
+        (
+            "anilist",
+            "AniList",
+            "https://anilist.co",
+            "proprietary",
+            "GraphQL で structured staff 情報が最も豊富",
+        ),
+        (
+            "mal",
+            "MyAnimeList",
+            "https://myanimelist.net",
+            "proprietary",
+            "viewer ratings の参照源 (表示のみ、分析不使用)",
+        ),
+        (
+            "ann",
+            "Anime News Network",
+            "https://www.animenewsnetwork.com",
+            "proprietary",
+            "historical depth と職種粒度",
+        ),
+        (
+            "seesaawiki",
+            "SeesaaWiki",
+            "https://seesaawiki.jp",
+            "CC-BY-SA",
+            "fan-curated 詳細エピソード情報",
+        ),
+        (
+            "keyframe",
+            "Sakugabooru/Keyframe",
+            "https://www.sakugabooru.com",
+            "CC",
+            "sakuga コミュニティ別名情報",
+        ),
+        (
+            "madb",
+            "メディア芸術DB",
+            "https://mediaarts-db.bunka.go.jp",
+            "public",
+            "文化庁 メディア芸術データベース (日本政府公開)",
+        ),
+        (
+            "tmdb",
+            "The Movie Database",
+            "https://www.themoviedb.org",
+            "CC-BY-NC",
+            "海外配信メタ + 越境アニメ作品のクレジット",
+        ),
     ]
     for code, name_ja, base_url, license_, desc in SOURCE_SEEDS:
         conn.execute(
@@ -1275,30 +1315,128 @@ def _seed_sources(conn: sqlite3.Connection) -> None:
 def _seed_roles(conn: sqlite3.Connection) -> None:
     """Seed the roles lookup table with 24 standardized roles."""
     ROLE_SEEDS = [
-        ("director",            "監督",               "Director",            "director",    2.0, "作品全体の演出・制作統括"),
-        ("episode_director",    "演出",               "Episode Director",    "director",    1.6, "個別エピソードの演出"),
-        ("animation_director",  "作画監督",            "Animation Director",  "animator",    1.8, "作画品質の統括"),
-        ("key_animator",        "原画",               "Key Animator",        "animator",    1.5, "アニメーションの原画担当"),
-        ("second_key_animator", "第二原画",            "Second Key Animator", "animator",    1.2, "原画の補佐担当"),
-        ("in_between",          "動画",               "In-Between",          "animator",    0.8, "中割アニメーション担当"),
-        ("character_designer",  "キャラクターデザイン", "Character Designer",  "animator",    1.7, "キャラクターの視覚デザイン"),
-        ("layout",              "レイアウト",           "Layout",              "animator",    1.2, "画面構成・レイアウト担当"),
-        ("settings",            "設定",               "Settings",            "animator",    1.0, "世界観・設定デザイン担当"),
-        ("photography_director","撮影監督",             "Photography Director","production",  1.3, "撮影・合成の統括"),
-        ("cgi_director",        "CGI監督",             "CGI Director",        "production",  1.3, "CG制作の統括"),
-        ("background_art",      "背景美術",             "Background Art",      "production",  1.1, "背景・美術担当"),
-        ("finishing",           "仕上げ",              "Finishing/Color",     "production",  1.0, "仕上げ・色彩設計"),
-        ("editing",             "編集",               "Editing",             "production",  1.1, "映像編集担当"),
-        ("producer",            "プロデューサー",        "Producer",            "production",  1.5, "制作プロデュース統括"),
-        ("production_manager",  "制作進行",             "Production Manager",  "production",  0.9, "制作スケジュール管理"),
-        ("sound_director",      "音響監督",             "Sound Director",      "sound",       1.4, "音響・SE・アフレコの統括"),
-        ("music",               "音楽",               "Music",               "sound",       1.2, "劇伴・音楽担当"),
-        ("screenplay",          "脚本",               "Screenplay",          "writer",      1.6, "脚本・シナリオ担当"),
-        ("original_creator",    "原作者",              "Original Creator",    "writer",      1.5, "原作（漫画・小説等）の作者"),
-        ("voice_actor",         "声優",               "Voice Actor",         "voice_actor", 1.0, "キャラクターの声優"),
-        ("localization",        "ローカライズ",          "Localization",        "other",       0.8, "翻訳・ローカライズ担当"),
-        ("other",               "その他",              "Other",               "other",       0.5, "上記以外の担当"),
-        ("special",             "スペシャル",           "Special",             "other",       0.5, "特別クレジット"),
+        ("director", "監督", "Director", "director", 2.0, "作品全体の演出・制作統括"),
+        (
+            "episode_director",
+            "演出",
+            "Episode Director",
+            "director",
+            1.6,
+            "個別エピソードの演出",
+        ),
+        (
+            "animation_director",
+            "作画監督",
+            "Animation Director",
+            "animator",
+            1.8,
+            "作画品質の統括",
+        ),
+        (
+            "key_animator",
+            "原画",
+            "Key Animator",
+            "animator",
+            1.5,
+            "アニメーションの原画担当",
+        ),
+        (
+            "second_key_animator",
+            "第二原画",
+            "Second Key Animator",
+            "animator",
+            1.2,
+            "原画の補佐担当",
+        ),
+        ("in_between", "動画", "In-Between", "animator", 0.8, "中割アニメーション担当"),
+        (
+            "character_designer",
+            "キャラクターデザイン",
+            "Character Designer",
+            "animator",
+            1.7,
+            "キャラクターの視覚デザイン",
+        ),
+        ("layout", "レイアウト", "Layout", "animator", 1.2, "画面構成・レイアウト担当"),
+        ("settings", "設定", "Settings", "animator", 1.0, "世界観・設定デザイン担当"),
+        (
+            "photography_director",
+            "撮影監督",
+            "Photography Director",
+            "production",
+            1.3,
+            "撮影・合成の統括",
+        ),
+        ("cgi_director", "CGI監督", "CGI Director", "production", 1.3, "CG制作の統括"),
+        (
+            "background_art",
+            "背景美術",
+            "Background Art",
+            "production",
+            1.1,
+            "背景・美術担当",
+        ),
+        (
+            "finishing",
+            "仕上げ",
+            "Finishing/Color",
+            "production",
+            1.0,
+            "仕上げ・色彩設計",
+        ),
+        ("editing", "編集", "Editing", "production", 1.1, "映像編集担当"),
+        (
+            "producer",
+            "プロデューサー",
+            "Producer",
+            "production",
+            1.5,
+            "制作プロデュース統括",
+        ),
+        (
+            "production_manager",
+            "制作進行",
+            "Production Manager",
+            "production",
+            0.9,
+            "制作スケジュール管理",
+        ),
+        (
+            "sound_director",
+            "音響監督",
+            "Sound Director",
+            "sound",
+            1.4,
+            "音響・SE・アフレコの統括",
+        ),
+        ("music", "音楽", "Music", "sound", 1.2, "劇伴・音楽担当"),
+        ("screenplay", "脚本", "Screenplay", "writer", 1.6, "脚本・シナリオ担当"),
+        (
+            "original_creator",
+            "原作者",
+            "Original Creator",
+            "writer",
+            1.5,
+            "原作（漫画・小説等）の作者",
+        ),
+        (
+            "voice_actor",
+            "声優",
+            "Voice Actor",
+            "voice_actor",
+            1.0,
+            "キャラクターの声優",
+        ),
+        (
+            "localization",
+            "ローカライズ",
+            "Localization",
+            "other",
+            0.8,
+            "翻訳・ローカライズ担当",
+        ),
+        ("other", "その他", "Other", "other", 0.5, "上記以外の担当"),
+        ("special", "スペシャル", "Special", "other", 0.5, "特別クレジット"),
     ]
     for code, name_ja, name_en, role_group, weight, desc_ja in ROLE_SEEDS:
         conn.execute(
@@ -1315,14 +1453,14 @@ def _upgrade_v56_multilang(conn: sqlite3.Connection) -> None:
     Safe to call on fresh DBs too — ALTER TABLE failures are caught.
     """
     for table, col, defn in [
-        ("persons",            "name_ko",    "TEXT NOT NULL DEFAULT ''"),
-        ("persons",            "name_zh",    "TEXT NOT NULL DEFAULT ''"),
-        ("persons",            "nationality", "TEXT NOT NULL DEFAULT '[]'"),
-        ("persons",            "hometown",   "TEXT"),
-        ("src_anilist_persons", "name_ko",   "TEXT NOT NULL DEFAULT ''"),
-        ("src_anilist_persons", "name_zh",   "TEXT NOT NULL DEFAULT ''"),
+        ("persons", "name_ko", "TEXT NOT NULL DEFAULT ''"),
+        ("persons", "name_zh", "TEXT NOT NULL DEFAULT ''"),
+        ("persons", "nationality", "TEXT NOT NULL DEFAULT '[]'"),
+        ("persons", "hometown", "TEXT"),
+        ("src_anilist_persons", "name_ko", "TEXT NOT NULL DEFAULT ''"),
+        ("src_anilist_persons", "name_zh", "TEXT NOT NULL DEFAULT ''"),
         ("src_anilist_persons", "nationality", "TEXT NOT NULL DEFAULT '[]'"),
-        ("person_aliases",     "lang",       "TEXT"),
+        ("person_aliases", "lang", "TEXT"),
     ]:
         try:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
@@ -1337,20 +1475,20 @@ def _upgrade_v57_structural_metadata(conn: sqlite3.Connection) -> None:
     """
     for table, col, defn in [
         # Silver anime: factual production metadata
-        ("anime",               "country_of_origin", "TEXT"),
-        ("anime",               "synonyms",          "TEXT NOT NULL DEFAULT '[]'"),
-        ("anime",               "is_adult",          "INTEGER"),
+        ("anime", "country_of_origin", "TEXT"),
+        ("anime", "synonyms", "TEXT NOT NULL DEFAULT '[]'"),
+        ("anime", "is_adult", "INTEGER"),
         # Silver studios: studio nationality
-        ("studios",             "country_of_origin", "TEXT"),
+        ("studios", "country_of_origin", "TEXT"),
         # Silver persons: career timeline
-        ("persons",             "years_active",      "TEXT NOT NULL DEFAULT '[]'"),
+        ("persons", "years_active", "TEXT NOT NULL DEFAULT '[]'"),
         # BRONZE tables: raw field preservation
-        ("src_anilist_anime",   "country_of_origin", "TEXT"),
-        ("src_anilist_anime",   "is_licensed",       "INTEGER"),
-        ("src_anilist_anime",   "is_adult",          "INTEGER"),
-        ("src_anilist_anime",   "mean_score",        "INTEGER"),
-        ("src_anilist_anime",   "relations_json",    "TEXT"),
-        ("src_anilist_persons", "years_active",      "TEXT DEFAULT '[]'"),
+        ("src_anilist_anime", "country_of_origin", "TEXT"),
+        ("src_anilist_anime", "is_licensed", "INTEGER"),
+        ("src_anilist_anime", "is_adult", "INTEGER"),
+        ("src_anilist_anime", "mean_score", "INTEGER"),
+        ("src_anilist_anime", "relations_json", "TEXT"),
+        ("src_anilist_persons", "years_active", "TEXT DEFAULT '[]'"),
     ]:
         try:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
@@ -1364,8 +1502,8 @@ def _upgrade_v58_credits_metadata(conn: sqlite3.Connection) -> None:
     Safe to call on fresh DBs too — ALTER TABLE failures are caught.
     """
     for table, col, defn in [
-        ("credits", "affiliation",    "TEXT"),
-        ("credits", "position",       "INTEGER"),
+        ("credits", "affiliation", "TEXT"),
+        ("credits", "position", "INTEGER"),
     ]:
         try:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
@@ -1379,7 +1517,7 @@ def _upgrade_v59_names_alt(conn: sqlite3.Connection) -> None:
     Safe to call on fresh DBs too — ALTER TABLE failures are caught.
     """
     for table, col, defn in [
-        ("persons",             "names_alt", "TEXT NOT NULL DEFAULT '{}'"),
+        ("persons", "names_alt", "TEXT NOT NULL DEFAULT '{}'"),
         ("src_anilist_persons", "names_alt", "TEXT NOT NULL DEFAULT '{}'"),
     ]:
         try:
@@ -1498,9 +1636,9 @@ def _upgrade_v60_corrections(conn: sqlite3.Connection) -> None:
 def _upgrade_v61_src_multilang(conn: sqlite3.Connection) -> None:
     """Add name_ko/name_zh/names_alt to src_ann_persons."""
     for table, col, defn in [
-        ("src_ann_persons",       "name_ko",   "TEXT NOT NULL DEFAULT ''"),
-        ("src_ann_persons",       "name_zh",   "TEXT NOT NULL DEFAULT ''"),
-        ("src_ann_persons",       "names_alt", "TEXT NOT NULL DEFAULT '{}'"),
+        ("src_ann_persons", "name_ko", "TEXT NOT NULL DEFAULT ''"),
+        ("src_ann_persons", "name_zh", "TEXT NOT NULL DEFAULT ''"),
+        ("src_ann_persons", "names_alt", "TEXT NOT NULL DEFAULT '{}'"),
     ]:
         try:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {defn}")
@@ -1511,7 +1649,9 @@ def _upgrade_v61_src_multilang(conn: sqlite3.Connection) -> None:
 def _upgrade_v61_titles_alt(conn: sqlite3.Connection) -> None:
     """Add titles_alt JSON column to anime for non-JA native titles (KR/CN/TW etc.)."""
     try:
-        conn.execute("ALTER TABLE anime ADD COLUMN titles_alt TEXT NOT NULL DEFAULT '{}'")
+        conn.execute(
+            "ALTER TABLE anime ADD COLUMN titles_alt TEXT NOT NULL DEFAULT '{}'"
+        )
     except Exception:
         pass  # column already exists
 
@@ -1585,27 +1725,27 @@ def _upgrade_v62_canonical_name_ja(conn: sqlite3.Connection) -> None:
 # ===== anilist extension (Card 14/01) =====
 # anime 拡張列 (display 系は display_* prefix で H1 隔離)
 _ANILIST_EXTENSION_COLUMNS: list[tuple[str, str]] = [
-    ("synonyms",               "TEXT"),
-    ("country_of_origin",      "TEXT"),
-    ("is_licensed",            "INTEGER"),
-    ("is_adult",               "INTEGER"),
-    ("hashtag",                "TEXT"),
-    ("site_url",               "TEXT"),
-    ("trailer_url",            "TEXT"),
-    ("trailer_site",           "TEXT"),
-    ("description",            "TEXT"),
-    ("cover_large",            "TEXT"),
-    ("cover_extra_large",      "TEXT"),
-    ("cover_medium",           "TEXT"),
-    ("banner",                 "TEXT"),
-    ("external_links_json",    "TEXT"),
-    ("airing_schedule_json",   "TEXT"),
-    ("relations_json",         "TEXT"),
-    ("display_score",          "REAL"),
-    ("display_mean_score",     "REAL"),
-    ("display_favourites",     "INTEGER"),
-    ("display_popularity_rank","INTEGER"),
-    ("display_rankings_json",  "TEXT"),
+    ("synonyms", "TEXT"),
+    ("country_of_origin", "TEXT"),
+    ("is_licensed", "INTEGER"),
+    ("is_adult", "INTEGER"),
+    ("hashtag", "TEXT"),
+    ("site_url", "TEXT"),
+    ("trailer_url", "TEXT"),
+    ("trailer_site", "TEXT"),
+    ("description", "TEXT"),
+    ("cover_large", "TEXT"),
+    ("cover_extra_large", "TEXT"),
+    ("cover_medium", "TEXT"),
+    ("banner", "TEXT"),
+    ("external_links_json", "TEXT"),
+    ("airing_schedule_json", "TEXT"),
+    ("relations_json", "TEXT"),
+    ("display_score", "REAL"),
+    ("display_mean_score", "REAL"),
+    ("display_favourites", "INTEGER"),
+    ("display_popularity_rank", "INTEGER"),
+    ("display_rankings_json", "TEXT"),
 ]
 
 
@@ -1627,13 +1767,13 @@ def _upgrade_anilist_anime_extension(conn: sqlite3.Connection) -> None:
 # anime 拡張列 — keyframe 固有メタデータ (slug / status / delimiter設定)。
 # display 系なし: 全列が構造的メタデータ (H1 対象外)。
 _KEYFRAME_ANIME_EXTENSION_COLUMNS: list[tuple[str, str]] = [
-    ("kf_uuid",                "TEXT"),
-    ("kf_status",              "TEXT"),
-    ("kf_slug",                "TEXT"),
-    ("kf_delimiters",          "TEXT"),  # JSON
-    ("kf_episode_delimiters",  "TEXT"),
-    ("kf_role_delimiters",     "TEXT"),
-    ("kf_staff_delimiters",    "TEXT"),
+    ("kf_uuid", "TEXT"),
+    ("kf_status", "TEXT"),
+    ("kf_slug", "TEXT"),
+    ("kf_delimiters", "TEXT"),  # JSON
+    ("kf_episode_delimiters", "TEXT"),
+    ("kf_role_delimiters", "TEXT"),
+    ("kf_staff_delimiters", "TEXT"),
 ]
 
 # persons 拡張列 — Card 04 (seesaawiki) との共有。image_large が未追加の場合のみ追加。
@@ -1774,13 +1914,13 @@ CREATE INDEX IF NOT EXISTS idx_aow_anime ON anime_original_work_links(anime_id);
 # anime ALTER 列 — H1: display 系は display_*_mal suffix で隔離。
 # mal_id_int は構造的 ID (integer 形式、既存 TEXT id とは別)。
 _MAL_EXTENSION_COLUMNS: list[tuple[str, str]] = [
-    ("mal_id_int",               "INTEGER"),
-    ("display_score_mal",        "REAL"),
-    ("display_popularity_mal",   "INTEGER"),
-    ("display_members_mal",      "INTEGER"),
-    ("display_favorites_mal",    "INTEGER"),
-    ("display_rank_mal",         "INTEGER"),
-    ("display_scored_by_mal",    "INTEGER"),
+    ("mal_id_int", "INTEGER"),
+    ("display_score_mal", "REAL"),
+    ("display_popularity_mal", "INTEGER"),
+    ("display_members_mal", "INTEGER"),
+    ("display_favorites_mal", "INTEGER"),
+    ("display_rank_mal", "INTEGER"),
+    ("display_scored_by_mal", "INTEGER"),
 ]
 
 # DDL for anime_recommendations (new SILVER table).
@@ -1867,15 +2007,15 @@ def _upgrade_seesaawiki_extension(conn: sqlite3.Connection) -> None:
 
     # persons 拡張列 (DuckDB loader と対称)
     for col, defn in [
-        ("name_native_raw",     "TEXT"),
-        ("aliases",             "TEXT"),
-        ("nationality",         "TEXT"),
+        ("name_native_raw", "TEXT"),
+        ("aliases", "TEXT"),
+        ("nationality", "TEXT"),
         ("primary_occupations", "TEXT"),
-        ("years_active",        "TEXT"),
-        ("description",         "TEXT"),
-        ("image_large",         "TEXT"),
-        ("image_medium",        "TEXT"),
-        ("hometown",            "TEXT"),
+        ("years_active", "TEXT"),
+        ("description", "TEXT"),
+        ("image_large", "TEXT"),
+        ("image_medium", "TEXT"),
+        ("hometown", "TEXT"),
     ]:
         try:
             conn.execute(f"ALTER TABLE persons ADD COLUMN {col} {defn}")

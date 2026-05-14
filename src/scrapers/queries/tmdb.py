@@ -79,10 +79,7 @@ def detail_url(media: str, tmdb_id: int) -> str:
 
 
 def person_url(tmdb_person_id: int) -> str:
-    return (
-        f"{TMDB_BASE}/person/{tmdb_person_id}"
-        "?append_to_response=external_ids,images"
-    )
+    return f"{TMDB_BASE}/person/{tmdb_person_id}?append_to_response=external_ids,images"
 
 
 def find_by_external_id(external_id: str, source: str) -> str:

@@ -4,6 +4,7 @@ Test structure:
     TestTitleMatcher    — unit tests for _normalize and match_title
     TestSakugaLoader    — integration tests using an in-memory DuckDB with synthetic data
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -16,6 +17,7 @@ from src.etl.conformed_loaders.sakuga_atwiki import integrate, _apply_ddl
 
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
+
 
 def _make_silver_db() -> duckdb.DuckDBPyConnection:
     """Create an in-memory SILVER DuckDB with minimal schema for testing."""
@@ -125,6 +127,7 @@ def _write_parquet(tmp_path: Path, table: str, rows: list[dict]) -> Path:
 
 # ─── TestTitleMatcher ────────────────────────────────────────────────────────
 
+
 class TestNormalize:
     def test_nfkc_fullwidth(self) -> None:
         """Full-width ASCII chars are normalized to half-width."""
@@ -147,7 +150,12 @@ class TestMatchTitle:
     _anime = [
         ("a1", "進撃の巨人", "Attack on Titan", 2013),
         ("a2", "ヴァイオレット・エヴァーガーデン", "Violet Evergarden", 2018),
-        ("a3", "Re：ゼロから始める異世界生活", "Re:ZERO -Starting Life in Another World-", 2016),
+        (
+            "a3",
+            "Re：ゼロから始める異世界生活",
+            "Re:ZERO -Starting Life in Another World-",
+            2016,
+        ),
     ]
 
     def test_exact_match_ja(self) -> None:
@@ -164,7 +172,9 @@ class TestMatchTitle:
 
     def test_normalized_match(self) -> None:
         # Fullwidth colon → halfwidth, but otherwise same title
-        aid, method, score = match_title("Re：ゼロから始める異世界生活", 2016, self._anime)
+        aid, method, score = match_title(
+            "Re：ゼロから始める異世界生活", 2016, self._anime
+        )
         # Should be exact (the strings match literally in this case)
         assert aid == "a3"
         assert score >= 0.95
@@ -222,6 +232,7 @@ class TestMatchTitle:
 
 # ─── TestSakugaLoader ────────────────────────────────────────────────────────
 
+
 class TestApplyDDL:
     def test_creates_resolution_table(self) -> None:
         conn = _make_silver_db()
@@ -246,19 +257,44 @@ class TestApplyDDL:
 class TestIntegrate:
     def test_persons_inserted(self, tmp_path: Path) -> None:
         conn = _make_silver_db()
-        bronze_root = _write_parquet(tmp_path, "persons", [
-            {"page_id": 1, "name": "山田太郎", "aliases_json": '["ヤマダ"]',
-             "active_since_year": 2000, "html_sha256": "abc", "raw_wikibody_text": "",
-             "parse_ok": True, "date": 20260426, "source": "sakuga_atwiki",
-             "table": "persons"},
-        ])
+        bronze_root = _write_parquet(
+            tmp_path,
+            "persons",
+            [
+                {
+                    "page_id": 1,
+                    "name": "山田太郎",
+                    "aliases_json": '["ヤマダ"]',
+                    "active_since_year": 2000,
+                    "html_sha256": "abc",
+                    "raw_wikibody_text": "",
+                    "parse_ok": True,
+                    "date": 20260426,
+                    "source": "sakuga_atwiki",
+                    "table": "persons",
+                },
+            ],
+        )
         # Also write empty credits and work_staff parquets so the loader can proceed
-        _write_parquet(tmp_path, "credits", [
-            {"person_page_id": 1, "work_title": "ダミー作品", "work_year": 2000,
-             "work_format": "TV", "role_raw": "原画", "episode_raw": "1",
-             "episode_num": 1, "evidence_source": "sakuga_atwiki",
-             "date": 20260426, "source": "sakuga_atwiki", "table": "credits"},
-        ])
+        _write_parquet(
+            tmp_path,
+            "credits",
+            [
+                {
+                    "person_page_id": 1,
+                    "work_title": "ダミー作品",
+                    "work_year": 2000,
+                    "work_format": "TV",
+                    "role_raw": "原画",
+                    "episode_raw": "1",
+                    "episode_num": 1,
+                    "evidence_source": "sakuga_atwiki",
+                    "date": 20260426,
+                    "source": "sakuga_atwiki",
+                    "table": "credits",
+                },
+            ],
+        )
         counts = integrate(conn, bronze_root)
         assert counts["sakuga_persons"] >= 1
         row = conn.execute(
@@ -271,12 +307,24 @@ class TestIntegrate:
 
     def test_persons_no_duplicate_on_rerun(self, tmp_path: Path) -> None:
         conn = _make_silver_db()
-        bronze_root = _write_parquet(tmp_path, "persons", [
-            {"page_id": 2, "name": "鈴木花子", "aliases_json": "[]",
-             "active_since_year": None, "html_sha256": "x", "raw_wikibody_text": "",
-             "parse_ok": True, "date": 20260426, "source": "sakuga_atwiki",
-             "table": "persons"},
-        ])
+        bronze_root = _write_parquet(
+            tmp_path,
+            "persons",
+            [
+                {
+                    "page_id": 2,
+                    "name": "鈴木花子",
+                    "aliases_json": "[]",
+                    "active_since_year": None,
+                    "html_sha256": "x",
+                    "raw_wikibody_text": "",
+                    "parse_ok": True,
+                    "date": 20260426,
+                    "source": "sakuga_atwiki",
+                    "table": "persons",
+                },
+            ],
+        )
         _write_parquet(tmp_path, "credits", [])
         integrate(conn, bronze_root)
         integrate(conn, bronze_root)  # second run — must not raise or duplicate
@@ -293,12 +341,25 @@ class TestIntegrate:
             VALUES ('anilist:1', '進撃の巨人', 'Attack on Titan', 2013)
         """)
         bronze_root = _write_parquet(tmp_path, "persons", [])
-        _write_parquet(tmp_path, "credits", [
-            {"person_page_id": 10, "work_title": "進撃の巨人", "work_year": 2013,
-             "work_format": "TV", "role_raw": "原画", "episode_raw": "1",
-             "episode_num": 1, "evidence_source": "sakuga_atwiki",
-             "date": 20260426, "source": "sakuga_atwiki", "table": "credits"},
-        ])
+        _write_parquet(
+            tmp_path,
+            "credits",
+            [
+                {
+                    "person_page_id": 10,
+                    "work_title": "進撃の巨人",
+                    "work_year": 2013,
+                    "work_format": "TV",
+                    "role_raw": "原画",
+                    "episode_raw": "1",
+                    "episode_num": 1,
+                    "evidence_source": "sakuga_atwiki",
+                    "date": 20260426,
+                    "source": "sakuga_atwiki",
+                    "table": "credits",
+                },
+            ],
+        )
         counts = integrate(conn, bronze_root)
         assert counts["resolution_rows"] == 1
         assert counts["resolved_anime_ids"] == 1
@@ -322,13 +383,25 @@ class TestIntegrate:
             VALUES ('sakuga:p5', NULL, 'key_animator', '原画', 1, 'sakuga_atwiki')
         """)
         bronze_root = _write_parquet(tmp_path, "persons", [])
-        _write_parquet(tmp_path, "credits", [
-            {"person_page_id": 5, "work_title": "ヴァイオレット・エヴァーガーデン",
-             "work_year": 2018, "work_format": "TV", "role_raw": "原画",
-             "episode_raw": "1", "episode_num": 1,
-             "evidence_source": "sakuga_atwiki",
-             "date": 20260426, "source": "sakuga_atwiki", "table": "credits"},
-        ])
+        _write_parquet(
+            tmp_path,
+            "credits",
+            [
+                {
+                    "person_page_id": 5,
+                    "work_title": "ヴァイオレット・エヴァーガーデン",
+                    "work_year": 2018,
+                    "work_format": "TV",
+                    "role_raw": "原画",
+                    "episode_raw": "1",
+                    "episode_num": 1,
+                    "evidence_source": "sakuga_atwiki",
+                    "date": 20260426,
+                    "source": "sakuga_atwiki",
+                    "table": "credits",
+                },
+            ],
+        )
         counts = integrate(conn, bronze_root)
         assert counts["credits_resolved"] >= 1
         row = conn.execute(
@@ -345,13 +418,25 @@ class TestIntegrate:
             VALUES ('sakuga:p7', NULL, 'key_animator', 'unknown_role', 1, 'sakuga_atwiki')
         """)
         bronze_root = _write_parquet(tmp_path, "persons", [])
-        _write_parquet(tmp_path, "credits", [
-            {"person_page_id": 7, "work_title": "存在しない作品", "work_year": 2024,
-             "work_format": "TV", "role_raw": "unknown_role",
-             "episode_raw": "1", "episode_num": 1,
-             "evidence_source": "sakuga_atwiki",
-             "date": 20260426, "source": "sakuga_atwiki", "table": "credits"},
-        ])
+        _write_parquet(
+            tmp_path,
+            "credits",
+            [
+                {
+                    "person_page_id": 7,
+                    "work_title": "存在しない作品",
+                    "work_year": 2024,
+                    "work_format": "TV",
+                    "role_raw": "unknown_role",
+                    "episode_raw": "1",
+                    "episode_num": 1,
+                    "evidence_source": "sakuga_atwiki",
+                    "date": 20260426,
+                    "source": "sakuga_atwiki",
+                    "table": "credits",
+                },
+            ],
+        )
         integrate(conn, bronze_root)
         row = conn.execute(
             "SELECT anime_id FROM credits WHERE person_id = 'sakuga:p7'"
@@ -370,13 +455,25 @@ class TestIntegrate:
             VALUES ('sakuga:p8', NULL, 'other', 'なにか', 1, 'sakuga_atwiki')
         """)
         bronze_root = _write_parquet(tmp_path, "persons", [])
-        _write_parquet(tmp_path, "credits", [
-            {"person_page_id": 8, "work_title": "テスト", "work_year": 2020,
-             "work_format": "TV", "role_raw": "なにか",
-             "episode_raw": "1", "episode_num": 1,
-             "evidence_source": "sakuga_atwiki",
-             "date": 20260426, "source": "sakuga_atwiki", "table": "credits"},
-        ])
+        _write_parquet(
+            tmp_path,
+            "credits",
+            [
+                {
+                    "person_page_id": 8,
+                    "work_title": "テスト",
+                    "work_year": 2020,
+                    "work_format": "TV",
+                    "role_raw": "なにか",
+                    "episode_raw": "1",
+                    "episode_num": 1,
+                    "evidence_source": "sakuga_atwiki",
+                    "date": 20260426,
+                    "source": "sakuga_atwiki",
+                    "table": "credits",
+                },
+            ],
+        )
         integrate(conn, bronze_root)
         row = conn.execute(
             "SELECT evidence_source FROM credits WHERE person_id = 'sakuga:p8'"
@@ -391,13 +488,25 @@ class TestIntegrate:
             VALUES ('anilist:4', '千と千尋の神隠し', 'Spirited Away', 2001)
         """)
         bronze_root = _write_parquet(tmp_path, "persons", [])
-        _write_parquet(tmp_path, "credits", [
-            {"person_page_id": 9, "work_title": "千と千尋の神隠し", "work_year": 2001,
-             "work_format": "Movie", "role_raw": "作画監督",
-             "episode_raw": None, "episode_num": None,
-             "evidence_source": "sakuga_atwiki",
-             "date": 20260426, "source": "sakuga_atwiki", "table": "credits"},
-        ])
+        _write_parquet(
+            tmp_path,
+            "credits",
+            [
+                {
+                    "person_page_id": 9,
+                    "work_title": "千と千尋の神隠し",
+                    "work_year": 2001,
+                    "work_format": "Movie",
+                    "role_raw": "作画監督",
+                    "episode_raw": None,
+                    "episode_num": None,
+                    "evidence_source": "sakuga_atwiki",
+                    "date": 20260426,
+                    "source": "sakuga_atwiki",
+                    "table": "credits",
+                },
+            ],
+        )
         integrate(conn, bronze_root)
         integrate(conn, bronze_root)  # second run
         cnt = conn.execute(

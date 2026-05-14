@@ -177,9 +177,7 @@ class TestComputeClusters:
     def _setup(self, conn, anime_ids, relations):
         """Insert anime rows and relation rows into in-memory DB."""
         for aid in anime_ids:
-            conn.execute(
-                "INSERT INTO anime(id, title_ja) VALUES (?, '')", [aid]
-            )
+            conn.execute("INSERT INTO anime(id, title_ja) VALUES (?, '')", [aid])
         for anime_id, related_id, rel_type in relations:
             conn.execute(
                 "INSERT INTO anime_relations VALUES (?, ?, ?)",
@@ -316,9 +314,7 @@ class TestBackfill:
     def _make_conn_with_data(self, anime_ids, relations):
         conn = _make_conn()
         for aid in anime_ids:
-            conn.execute(
-                "INSERT INTO anime(id, title_ja) VALUES (?, '')", [aid]
-            )
+            conn.execute("INSERT INTO anime(id, title_ja) VALUES (?, '')", [aid])
         for anime_id, related_id, rel_type in relations:
             conn.execute(
                 "INSERT INTO anime_relations VALUES (?, ?, ?)",

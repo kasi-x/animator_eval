@@ -65,7 +65,6 @@ app = make_scraper_app("wikidata")
 CHECKPOINT_FILE = Path(__file__).parent.parent.parent / "data" / "jvmg_checkpoint.json"
 
 
-
 class WikidataClient:
     """Async Wikidata SPARQL client (wraps RetryingHttpClient)."""
 
@@ -204,7 +203,10 @@ async def fetch_anime_staff(
 @app.command()
 def run(
     max_records: int = typer.Option(
-        5000, "--max-records", "--limit", "-n",
+        5000,
+        "--max-records",
+        "--limit",
+        "-n",
         help="Maximum number of records. Alias: --limit",
     ),
     resume: ResumeOpt = True,
@@ -270,7 +272,9 @@ def run(
 
                         pages_since_checkpoint += 1
                         offset += page_size
-                        p.advance(min(page_size, max(0, max_records - (offset - page_size))))
+                        p.advance(
+                            min(page_size, max(0, max_records - (offset - page_size)))
+                        )
 
                         # Flush checkpoint every N pages
                         if pages_since_checkpoint >= checkpoint_interval:

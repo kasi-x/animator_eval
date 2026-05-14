@@ -1,4 +1,5 @@
 """robots.txt disallow checker for w.atwiki.jp."""
+
 from __future__ import annotations
 
 from fnmatch import fnmatch
@@ -20,7 +21,7 @@ async def fetch_disallow_patterns() -> list[str]:
     for line in resp.text.splitlines():
         stripped = line.strip()
         if stripped.lower().startswith("disallow:"):
-            path = stripped[len("disallow:"):].strip()
+            path = stripped[len("disallow:") :].strip()
             if path:
                 patterns.append(path)
     log.info("robots_fetched", disallow_count=len(patterns))

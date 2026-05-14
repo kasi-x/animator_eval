@@ -59,7 +59,9 @@ def parse_anilist_person(staff: dict) -> Person:
     primary_occupations = [o for o in primary_occupations_raw if o]
 
     hometown_val = staff.get("homeTown")
-    name_ja, name_ko, name_zh, names_alt, native, nationality = parse_anilist_native_name(name, hometown_val)
+    name_ja, name_ko, name_zh, names_alt, native, nationality = (
+        parse_anilist_native_name(name, hometown_val)
+    )
 
     return Person(
         id=person_id,
@@ -324,7 +326,9 @@ def parse_anilist_staff(
         primary_occupations = [o for o in primary_occupations_raw if o]
 
         hometown_val = node.get("homeTown")
-        name_ja, name_ko, name_zh, names_alt, native, nationality = parse_anilist_native_name(name, hometown_val)
+        name_ja, name_ko, name_zh, names_alt, native, nationality = (
+            parse_anilist_native_name(name, hometown_val)
+        )
 
         persons.append(
             Person(
@@ -436,7 +440,9 @@ def parse_anilist_voice_actors(
             primary_occupations = [o for o in primary_occupations_raw if o]
 
             hometown_val = va.get("homeTown")
-            name_ja, name_ko, name_zh, names_alt, native, nationality = parse_anilist_native_name(name, hometown_val)
+            name_ja, name_ko, name_zh, names_alt, native, nationality = (
+                parse_anilist_native_name(name, hometown_val)
+            )
 
             persons.append(
                 Person(

@@ -200,7 +200,9 @@ def test_ryan_cooper_split_by_source_numeric_id(ryan_cooper_persons):
 
     # exact_match_cluster merges English-only persons with same name
     # (different sources don't have separate name groups)
-    assert len(result) >= 1, "Expected merging for same English name in exact_match_cluster"
+    assert len(result) >= 1, (
+        "Expected merging for same English name in exact_match_cluster"
+    )
 
 
 def test_same_tmdb_id_should_merge(duplicate_tmdb_same_person):
@@ -216,7 +218,9 @@ def test_same_tmdb_id_should_merge(duplicate_tmdb_same_person):
     # Note: This test documents expected behavior, but the fixture has different person_ids,
     # so merging via name alone (without checking tmdb_id equivalence) is expected.
     # If both have tmdb_id=12345, they represent the same person and merging is correct.
-    assert len(result) <= 1, f"Expected at most one merge for duplicate tmdb_id, got: {result}"
+    assert len(result) <= 1, (
+        f"Expected at most one merge for duplicate tmdb_id, got: {result}"
+    )
 
 
 def test_mixed_sources_respects_homonym_guard():
@@ -253,7 +257,9 @@ def test_mixed_sources_respects_homonym_guard():
 
     # exact_match_cluster merges English-only persons with same name
     # (the homonym guard only checks if IDs are SAME; different IDs don't prevent merge here)
-    assert len(result) >= 1, "Expected merge for same English name in exact_match_cluster"
+    assert len(result) >= 1, (
+        "Expected merge for same English name in exact_match_cluster"
+    )
 
 
 def test_no_numeric_id_same_name_may_merge():
@@ -282,6 +288,11 @@ def test_no_numeric_id_same_name_may_merge():
     result = exact_match_cluster(persons)
 
     # Should merge: no numeric IDs to prevent it
-    assert len(result) == 1, f"Expected 1 merge for unknown sources without numeric IDs, got: {result}"
+    assert len(result) == 1, (
+        f"Expected 1 merge for unknown sources without numeric IDs, got: {result}"
+    )
     # One should point to the other
-    assert result.get("unknown:p2") == "unknown:p1" or result.get("unknown:p1") == "unknown:p2"
+    assert (
+        result.get("unknown:p2") == "unknown:p1"
+        or result.get("unknown:p1") == "unknown:p2"
+    )

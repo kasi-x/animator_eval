@@ -162,10 +162,16 @@ async def fetch_page_list(
                 # Search parent (and grandparent for table layouts) for update date
                 container = a_tag.parent
                 gp = container.parent if container else None
-                search_text = (gp or container).get_text(" ", strip=True) if (gp or container) else ""
+                search_text = (
+                    (gp or container).get_text(" ", strip=True)
+                    if (gp or container)
+                    else ""
+                )
                 date_match = _DATE_RE.search(search_text)
                 last_updated = date_match.group(1) if date_match else None
-                pages.append({"url": full_url, "title": title, "last_updated": last_updated})
+                pages.append(
+                    {"url": full_url, "title": title, "last_updated": last_updated}
+                )
 
     return pages
 
@@ -181,7 +187,9 @@ async def fetch_all_page_urls(
     """
     cache_path = data_dir / "page_urls.json"
     if cache_path.exists():
-        age_hours = (datetime.now(timezone.utc).timestamp() - cache_path.stat().st_mtime) / 3600
+        age_hours = (
+            datetime.now(timezone.utc).timestamp() - cache_path.stat().st_mtime
+        ) / 3600
         if age_hours < PAGE_LIST_CACHE_TTL_HOURS:
             cached = json.loads(cache_path.read_text(encoding="utf-8"))
             log.info("seesaa_page_list_cached", count=len(cached))
@@ -330,13 +338,17 @@ def _clear_bronze_partitions(
     date_str = date or _dt.date.today().isoformat()
     deleted = 0
     for table in tables:
-        partition = bronze_root / f"source={source}" / f"table={table}" / f"date={date_str}"
+        partition = (
+            bronze_root / f"source={source}" / f"table={table}" / f"date={date_str}"
+        )
         if partition.exists():
             for f in partition.glob("*.parquet"):
                 f.unlink()
                 deleted += 1
     if deleted:
-        log.info("bronze_partitions_cleared", source=source, date=date_str, files=deleted)
+        log.info(
+            "bronze_partitions_cleared", source=source, date=date_str, files=deleted
+        )
     return deleted
 
 
@@ -421,12 +433,18 @@ def _log_inline_experiment(
             "sections": len(regex_sections),
             "total_credits": len(regex_credits),
             "unique_name_role": len(regex_pairs),
-            "top10": [{"name": n, "role": r, "count": c} for (n, r), c in regex_pairs.most_common(10)],
+            "top10": [
+                {"name": n, "role": r, "count": c}
+                for (n, r), c in regex_pairs.most_common(10)
+            ],
         },
         "llm": {
             "total_credits": len(llm_records),
             "unique_name_role": len(llm_pairs),
-            "top10": [{"name": n, "role": r, "count": c} for (n, r), c in llm_pairs.most_common(10)],
+            "top10": [
+                {"name": n, "role": r, "count": c}
+                for (n, r), c in llm_pairs.most_common(10)
+            ],
         },
     }
 
@@ -434,7 +452,9 @@ def _log_inline_experiment(
     out_dir.mkdir(parents=True, exist_ok=True)
     safe = re.sub(r"[^\w\-]", "_", title)[:60]
     out_path = out_dir / f"{safe}.json"
-    out_path.write_text(json.dumps(comparison, ensure_ascii=False, indent=2), encoding="utf-8")
+    out_path.write_text(
+        json.dumps(comparison, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     log.info(
         "inline_experiment_saved",
         title=title,
@@ -549,7 +569,10 @@ def parse_inline_with_llm(body_text: str) -> list[dict]:
                 "model": LLM_MODEL_NAME,
                 "prompt": prompt,
                 "stream": False,
-                "options": {"temperature": LLM_TEMPERATURE, "num_predict": LLM_MAX_TOKENS},
+                "options": {
+                    "temperature": LLM_TEMPERATURE,
+                    "num_predict": LLM_MAX_TOKENS,
+                },
             },
             timeout=LLM_TIMEOUT * 4,
         )
@@ -574,11 +597,13 @@ def parse_inline_with_llm(body_text: str) -> list[dict]:
             role = r.get("role", "")
             name = r.get("name", "")
             if role and name and len(name) >= 2:
-                valid.append({
-                    "section": r.get("section"),
-                    "role": str(role),
-                    "name": _clean_name(str(name)),
-                })
+                valid.append(
+                    {
+                        "section": r.get("section"),
+                        "role": str(role),
+                        "name": _clean_name(str(name)),
+                    }
+                )
 
         log.info("inline_llm_extraction", raw=len(records), valid=len(valid))
         return valid
@@ -785,7 +810,9 @@ def _is_newer(wiki_date: str, scraped_at: str) -> bool:
         wiki_dt: datetime | None = None
         for fmt in ("%Y/%m/%d %H:%M", "%Y-%m-%d %H:%M", "%Y/%m/%d", "%Y-%m-%d"):
             try:
-                wiki_dt = datetime.strptime(wiki_date.strip(), fmt).replace(tzinfo=timezone.utc)
+                wiki_dt = datetime.strptime(wiki_date.strip(), fmt).replace(
+                    tzinfo=timezone.utc
+                )
                 break
             except ValueError:
                 continue
@@ -803,8 +830,6 @@ def _is_newer(wiki_date: str, scraped_at: str) -> bool:
 # =============================================================================
 # Checkpoint
 # =============================================================================
-
-
 
 
 # =============================================================================
@@ -881,7 +906,9 @@ async def scrape_seesaawiki(
         )
         try:
             # Phase 1: Enumerate pages
-            all_pages = await fetch_all_page_urls(client, delay=delay, data_dir=data_dir)
+            all_pages = await fetch_all_page_urls(
+                client, delay=delay, data_dir=data_dir
+            )
 
             if list_only:
                 log.info("seesaa_list_only", total_pages=len(all_pages))
@@ -893,7 +920,10 @@ async def scrape_seesaawiki(
 
             # Load checkpoint
             from src.scrapers.checkpoint import resolve_checkpoint
-            cp = resolve_checkpoint(data_dir / "checkpoint.json", force=fresh, resume=not fresh)
+
+            cp = resolve_checkpoint(
+                data_dir / "checkpoint.json", force=fresh, resume=not fresh
+            )
 
             # Handle legacy migration: old "processed_urls" list format
             if "processed_urls" in cp.data and "scraped" not in cp.data:
@@ -928,9 +958,15 @@ async def scrape_seesaawiki(
 
                     if page_url in scraped_times:
                         page_last_updated = page_info.get("last_updated")
-                        if page_last_updated and _is_newer(page_last_updated, scraped_times[page_url]):
+                        if page_last_updated and _is_newer(
+                            page_last_updated, scraped_times[page_url]
+                        ):
                             stats["pages_updated"] += 1
-                            log.debug("seesaa_update_detected", url=page_url, last_updated=page_last_updated)
+                            log.debug(
+                                "seesaa_update_detected",
+                                url=page_url,
+                                last_updated=page_last_updated,
+                            )
                         else:
                             stats["pages_skipped"] += 1
                             continue
@@ -1005,7 +1041,8 @@ async def scrape_seesaawiki(
                                     unknown_ratio=f"{unknown_ratio:.0%}",
                                     llm_reason=llm_validation.get("reason", ""),
                                     sample_unknowns=[
-                                        f"{c.role}:{c.name}" for c in unknown_credits[:5]
+                                        f"{c.role}:{c.name}"
+                                        for c in unknown_credits[:5]
                                     ],
                                 )
                                 # Flush what we have so far
@@ -1059,7 +1096,9 @@ async def scrape_seesaawiki(
 
                     # Derive total episode count from parsed data (for open-ended ranges)
                     total_episodes = (
-                        max((ep_data["episode"] or 0 for ep_data in episodes), default=0)
+                        max(
+                            (ep_data["episode"] or 0 for ep_data in episodes), default=0
+                        )
                         or None
                     )
 
@@ -1178,18 +1217,28 @@ def _emit_single_person_credit(
     if resolved_episodes:
         for ep in resolved_episodes:
             credit = Credit(
-                person_id=person.id, anime_id=anime_id, role=role,
-                raw_role=parsed.role, episode=ep, source="seesaawiki",
-                affiliation=parsed.affiliation, position=parsed.position,
+                person_id=person.id,
+                anime_id=anime_id,
+                role=role,
+                raw_role=parsed.role,
+                episode=ep,
+                source="seesaawiki",
+                affiliation=parsed.affiliation,
+                position=parsed.position,
                 source_listing_position=source_listing_position,
             )
             credits_bw.append(credit.model_dump(mode="json"))
             stats["credits_created"] += 1
     else:
         credit = Credit(
-            person_id=person.id, anime_id=anime_id, role=role,
-            raw_role=parsed.role, episode=episode, source="seesaawiki",
-            affiliation=parsed.affiliation, position=parsed.position,
+            person_id=person.id,
+            anime_id=anime_id,
+            role=role,
+            raw_role=parsed.role,
+            episode=episode,
+            source="seesaawiki",
+            affiliation=parsed.affiliation,
+            position=parsed.position,
             source_listing_position=source_listing_position,
         )
         credits_bw.append(credit.model_dump(mode="json"))
@@ -1223,7 +1272,9 @@ def _save_credit(
     """
     if parsed.is_company:
         # Store as studio involvement, not person credit
-        _save_studio_credit(studios_bw, anime_studios_bw, anime_id, parsed.name, parsed.role, stats)
+        _save_studio_credit(
+            studios_bw, anime_studios_bw, anime_id, parsed.name, parsed.role, stats
+        )
         return
 
     # 複数名混在検出 (空白区切り 3+ tokens、parser の split 漏れ対策)。
@@ -1234,8 +1285,16 @@ def _save_credit(
     if len(name_tokens) >= 3:
         for tok in name_tokens:
             _emit_single_person_credit(
-                persons_bw, credits_bw, person_cache, stats,
-                anime_id, tok, parsed, episode, total_episodes, source_listing_position,
+                persons_bw,
+                credits_bw,
+                person_cache,
+                stats,
+                anime_id,
+                tok,
+                parsed,
+                episode,
+                total_episodes,
+                source_listing_position,
             )
         return
 
@@ -1387,10 +1446,17 @@ def reparse_from_raw(
 
     # Clear today's partitions before writing (idempotent reparse)
     _reparse_tables = [
-        "anime", "persons", "credits", "studios", "anime_studios",
+        "anime",
+        "persons",
+        "credits",
+        "studios",
+        "anime_studios",
         # §10.1 extended tables
-        "episode_titles", "gross_studios", "theme_songs",
-        "production_committee", "original_work_info",
+        "episode_titles",
+        "gross_studios",
+        "theme_songs",
+        "production_committee",
+        "original_work_info",
     ]
     if clear_first:
         _clear_bronze_partitions("seesaawiki", _reparse_tables)
@@ -1465,13 +1531,17 @@ def reparse_from_raw(
                 stats["inline_pages"] += 1
             else:
                 series_staff = parse_series_staff(body_text)
-            regex_credits = sum(len(ep["credits"]) for ep in episodes) + len(series_staff)
+            regex_credits = sum(len(ep["credits"]) for ep in episodes) + len(
+                series_staff
+            )
 
             llm_records: list[dict] = []
             if is_inline and experiment_inline and llm_available:
                 # Run LLM in parallel for comparison only — don't use for actual write
                 inline_llm = parse_inline_with_llm(body_text)
-                _log_inline_experiment(title, inline_sections if is_inline else [], inline_llm, data_dir)
+                _log_inline_experiment(
+                    title, inline_sections if is_inline else [], inline_llm, data_dir
+                )
             elif llm_available and regex_credits < 3 and len(body_text) > 500:
                 llm_records = parse_with_llm(body_text)
                 if llm_records:
@@ -1507,7 +1577,8 @@ def reparse_from_raw(
             stats["anime_created"] += 1
 
             total_episodes = (
-                max((ep_data["episode"] or 0 for ep_data in episodes), default=0) or None
+                max((ep_data["episode"] or 0 for ep_data in episodes), default=0)
+                or None
             )
 
             # Build source_listing_position index for this page
@@ -1578,52 +1649,62 @@ def reparse_from_raw(
 
             # episode_titles
             for et in parse_episode_titles(body_text):
-                episode_titles_bw.append({
-                    "anime_id": anime_id,
-                    "episode": et.episode,
-                    "title": et.title,
-                })
+                episode_titles_bw.append(
+                    {
+                        "anime_id": anime_id,
+                        "episode": et.episode,
+                        "title": et.title,
+                    }
+                )
                 stats["episode_titles_created"] += 1
 
             # gross_studios
             for gs in parse_gross_studios(body_text):
-                gross_studios_bw.append({
-                    "anime_id": anime_id,
-                    "studio_name": gs.studio_name,
-                    "episode": gs.episode,
-                })
+                gross_studios_bw.append(
+                    {
+                        "anime_id": anime_id,
+                        "studio_name": gs.studio_name,
+                        "episode": gs.episode,
+                    }
+                )
                 stats["gross_studios_created"] += 1
 
             # theme_songs
             for ts in parse_theme_songs(body_text):
-                theme_songs_bw.append({
-                    "anime_id": anime_id,
-                    "song_type": ts.song_type,
-                    "song_title": ts.song_title,
-                    "role": ts.role,
-                    "name": ts.name,
-                })
+                theme_songs_bw.append(
+                    {
+                        "anime_id": anime_id,
+                        "song_type": ts.song_type,
+                        "song_title": ts.song_title,
+                        "role": ts.role,
+                        "name": ts.name,
+                    }
+                )
                 stats["theme_songs_created"] += 1
 
             # production_committee
             for cm in parse_production_committee(body_text):
-                production_committee_bw.append({
-                    "anime_id": anime_id,
-                    "member_name": cm.member_name,
-                })
+                production_committee_bw.append(
+                    {
+                        "anime_id": anime_id,
+                        "member_name": cm.member_name,
+                    }
+                )
                 stats["committee_members_created"] += 1
 
             # original_work_info
             owi = parse_original_work_info(body_text)
             if owi is not None:
-                original_work_info_bw.append({
-                    "anime_id": anime_id,
-                    "author": owi.author,
-                    "publisher": owi.publisher,
-                    "label": owi.label,
-                    "magazine": owi.magazine,
-                    "serialization_type": owi.serialization_type,
-                })
+                original_work_info_bw.append(
+                    {
+                        "anime_id": anime_id,
+                        "author": owi.author,
+                        "publisher": owi.publisher,
+                        "label": owi.label,
+                        "magazine": owi.magazine,
+                        "serialization_type": owi.serialization_type,
+                    }
+                )
                 stats["original_work_created"] += 1
 
             stats["pages_processed"] += 1
@@ -1694,12 +1775,14 @@ def reparse(
         50, "--checkpoint", "-c", help="Checkpoint interval"
     ),
     clear_first: bool = typer.Option(
-        True, "--clear/--no-clear",
-        help="Clear today's partitions before writing (default: on, makes reparse idempotent)"
+        True,
+        "--clear/--no-clear",
+        help="Clear today's partitions before writing (default: on, makes reparse idempotent)",
     ),
     experiment_inline: bool = typer.Option(
-        False, "--experiment-inline",
-        help="For inline-section pages: run LLM in parallel and save comparison to inline_experiment/"
+        False,
+        "--experiment-inline",
+        help="For inline-section pages: run LLM in parallel and save comparison to inline_experiment/",
     ),
     quiet: QuietOpt = False,
     progress: ProgressOpt = False,

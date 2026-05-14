@@ -1,4 +1,5 @@
 """growth_acceleration.py coverage tests."""
+
 from src.analysis.growth_acceleration import (
     AccelerationMetrics,
     compute_adjusted_person_fe_with_growth,
@@ -37,6 +38,7 @@ def _anime(
 
 def _credit(pid: str, aid: str, role: Role = Role.KEY_ANIMATOR) -> Credit:
     return Credit(person_id=pid, anime_id=aid, role=role, source="test")
+
 
 class TestAccelerationMetrics:
     def test_defaults(self):

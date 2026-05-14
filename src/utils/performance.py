@@ -216,7 +216,10 @@ class PerformanceMonitor:
         peak = max((s.rss_mb for s in self.memory_snapshots_list), default=0.0)
         delta = 0.0
         if len(self.memory_snapshots_list) >= 2:
-            delta = self.memory_snapshots_list[-1].rss_mb - self.memory_snapshots_list[0].rss_mb
+            delta = (
+                self.memory_snapshots_list[-1].rss_mb
+                - self.memory_snapshots_list[0].rss_mb
+            )
         return peak, delta
 
     def _compute_cache_stats(self) -> dict:
@@ -267,6 +270,7 @@ class PerformanceMonitor:
 
     def _print_summary_table(self, console: Any, report: "PerformanceReport") -> None:
         from rich.table import Table
+
         console.print("\n[bold blue]Performance Report[/bold blue]\n")
         t = Table(title="Summary")
         t.add_column("Metric", style="cyan")
@@ -277,8 +281,11 @@ class PerformanceMonitor:
         t.add_row("Cache Hit Rate", f"{report.cache_stats['hit_rate']:.1%}")
         console.print(t)
 
-    def _print_timing_table(self, console: Any, report: "PerformanceReport", show_percentiles: bool) -> None:
+    def _print_timing_table(
+        self, console: Any, report: "PerformanceReport", show_percentiles: bool
+    ) -> None:
         from rich.table import Table
+
         if not report.timings:
             return
         t = Table(title="Operation Timings")
@@ -293,15 +300,23 @@ class PerformanceMonitor:
         t.add_column("Min", justify="right", style="dim")
         t.add_column("Max", justify="right", style="red")
         for stats in sorted(report.timings, key=lambda x: x.total, reverse=True):
-            row = [stats.operation, str(stats.count), f"{stats.total:.3f}s", f"{stats.avg:.3f}s"]
+            row = [
+                stats.operation,
+                str(stats.count),
+                f"{stats.total:.3f}s",
+                f"{stats.avg:.3f}s",
+            ]
             if show_percentiles:
-                row.extend([f"{stats.median:.3f}s", f"{stats.p95:.3f}s", f"{stats.p99:.3f}s"])
+                row.extend(
+                    [f"{stats.median:.3f}s", f"{stats.p95:.3f}s", f"{stats.p99:.3f}s"]
+                )
             row.extend([f"{stats.min:.3f}s", f"{stats.max:.3f}s"])
             t.add_row(*row)
         console.print(t)
 
     def _print_memory_table(self, console: Any, report: "PerformanceReport") -> None:
         from rich.table import Table
+
         if not report.memory_snapshots:
             return
         t = Table(title="Memory Snapshots")
@@ -312,7 +327,13 @@ class PerformanceMonitor:
         t.add_column("% Used", justify="right", style="magenta")
         for snap in report.memory_snapshots:
             delta_str = f"{snap.delta_mb:+.1f}" if snap.delta_mb is not None else "-"
-            t.add_row(snap.checkpoint, f"{snap.timestamp:.2f}s", f"{snap.rss_mb:.1f}", delta_str, f"{snap.percent:.1f}%")
+            t.add_row(
+                snap.checkpoint,
+                f"{snap.timestamp:.2f}s",
+                f"{snap.rss_mb:.1f}",
+                delta_str,
+                f"{snap.percent:.1f}%",
+            )
         console.print(t)
 
     def print_report(self, show_percentiles: bool = True) -> None:

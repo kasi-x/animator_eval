@@ -24,6 +24,7 @@ from src.analysis.io.mart_writer import _DDL, write_report_specs
 # Minimal ReportSpec fixture
 # ---------------------------------------------------------------------------
 
+
 def _make_spec(name: str = "test_report") -> ReportSpec:
     return ReportSpec(
         name=name,
@@ -87,10 +88,17 @@ class TestMetaReportSpecDDL:
             ).fetchall()
         }
         expected = {
-            "report_id", "audience", "claim", "identifying_assumption",
-            "null_model_ids", "method_gate_json", "sensitivity_grid_json",
-            "interpretation_guard_json", "data_lineage_json",
-            "spec_hash", "curated_at",
+            "report_id",
+            "audience",
+            "claim",
+            "identifying_assumption",
+            "null_model_ids",
+            "method_gate_json",
+            "sensitivity_grid_json",
+            "interpretation_guard_json",
+            "data_lineage_json",
+            "spec_hash",
+            "curated_at",
         }
         assert expected.issubset(cols)
 
@@ -121,10 +129,17 @@ class TestWriteReportSpecs:
 
         assert row is not None
         col_names = [
-            "report_id", "audience", "claim", "identifying_assumption",
-            "null_model_ids", "method_gate_json", "sensitivity_grid_json",
-            "interpretation_guard_json", "data_lineage_json",
-            "spec_hash", "curated_at",
+            "report_id",
+            "audience",
+            "claim",
+            "identifying_assumption",
+            "null_model_ids",
+            "method_gate_json",
+            "sensitivity_grid_json",
+            "interpretation_guard_json",
+            "data_lineage_json",
+            "spec_hash",
+            "curated_at",
         ]
         record = dict(zip(col_names, row))
 
@@ -183,7 +198,9 @@ class TestWriteReportSpecs:
         write_report_specs([spec_v2], gold_path)
 
         d = dataclasses.asdict(spec_v2)
-        expected_hash = hashlib.sha256(json.dumps(d, sort_keys=True).encode()).hexdigest()
+        expected_hash = hashlib.sha256(
+            json.dumps(d, sort_keys=True).encode()
+        ).hexdigest()
 
         conn = duckdb.connect(str(gold_path), read_only=True)
         try:
@@ -232,7 +249,9 @@ class TestV2ReportClassesSpecCoverage:
             mod = inspect.getmodule(cls)
             if getattr(mod, "SPEC", None) is not None:
                 specs_found.append(cls)
-        assert len(specs_found) > 0, "No module-level SPEC found in any V2_REPORT_CLASSES module"
+        assert len(specs_found) > 0, (
+            "No module-level SPEC found in any V2_REPORT_CLASSES module"
+        )
 
     def test_upsert_report_specs_pipeline_step(self, gold_path, monkeypatch):
         """upsert_report_specs() writes > 0 rows using real V2_REPORT_CLASSES."""

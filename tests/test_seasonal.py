@@ -6,15 +6,9 @@ from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 def _make_test_data():
     anime_map = {
-        "a1": Anime(
-            id="a1", title_en="Winter 2020", year=2020, season="winter"
-        ),
-        "a2": Anime(
-            id="a2", title_en="Spring 2020", year=2020, season="spring"
-        ),
-        "a3": Anime(
-            id="a3", title_en="Summer 2021", year=2021, season="summer"
-        ),
+        "a1": Anime(id="a1", title_en="Winter 2020", year=2020, season="winter"),
+        "a2": Anime(id="a2", title_en="Spring 2020", year=2020, season="spring"),
+        "a3": Anime(id="a3", title_en="Summer 2021", year=2021, season="summer"),
         "a4": Anime(id="a4", title_en="Fall 2021", year=2021, season="fall"),
         "a5": Anime(id="a5", title_en="No Season", year=2022),
     }

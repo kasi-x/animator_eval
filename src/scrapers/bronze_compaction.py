@@ -18,6 +18,7 @@ CLI:
     python -m src.scrapers.bronze_compaction --all                   # all sources
     python -m src.scrapers.bronze_compaction --all --dry-run         # plan only
 """
+
 from __future__ import annotations
 
 import uuid
@@ -312,7 +313,9 @@ def _cli(
     source: str | None = typer.Option(
         None, help=f"Source name ({sorted(ALLOWED_SOURCES)}). Omit with --all."
     ),
-    table: str | None = typer.Option(None, help="Single table only (default: all tables)"),
+    table: str | None = typer.Option(
+        None, help="Single table only (default: all tables)"
+    ),
     date: str | None = typer.Option(
         None, help="Partition date YYYY-MM-DD (default: all dates)"
     ),
@@ -322,7 +325,9 @@ def _cli(
     dedup: bool = typer.Option(
         False, "--dedup", help="Dedup (DISTINCT) instead of plain merge"
     ),
-    dry_run: bool = typer.Option(False, "--dry-run", help="List candidates without merging"),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="List candidates without merging"
+    ),
     root: Path | None = typer.Option(None, help="Bronze root override"),
 ) -> None:
     """Merge small parquet files in BRONZE partitions into one file each."""

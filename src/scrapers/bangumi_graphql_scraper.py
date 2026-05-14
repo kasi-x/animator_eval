@@ -159,7 +159,9 @@ class BangumiGraphQLClient:
         """
         t0 = time.monotonic()
         query = SUBJECT_FULL_QUERY(subject_id)
-        raw = await self._post_with_retry(query, context=f"subject_full id={subject_id}")
+        raw = await self._post_with_retry(
+            query, context=f"subject_full id={subject_id}"
+        )
         if raw is None:
             return None
         result: dict[str, Any] | None = raw.get("data", {}).get("subject")
@@ -199,7 +201,9 @@ class BangumiGraphQLClient:
 
         t0 = time.monotonic()
         query = SUBJECT_BATCH_QUERY(subject_ids)
-        raw = await self._post_with_retry(query, context=f"subject_batch n={len(subject_ids)}")
+        raw = await self._post_with_retry(
+            query, context=f"subject_batch n={len(subject_ids)}"
+        )
         if raw is None:
             return {}
 
@@ -264,7 +268,9 @@ class BangumiGraphQLClient:
             character_url(character_id), context=f"character_rest id={character_id}"
         )
 
-    async def fetch_subject_characters_rest(self, subject_id: int) -> list[dict[str, Any]]:
+    async def fetch_subject_characters_rest(
+        self, subject_id: int
+    ) -> list[dict[str, Any]]:
         """Fetch subject characters via REST GET /v0/subjects/{id}/characters.
 
         Returns the full character list with nested ``actors`` array per character.
@@ -285,22 +291,30 @@ class BangumiGraphQLClient:
         from src.scrapers.queries.bangumi import subject_characters_url
 
         url = subject_characters_url(subject_id)
-        return await self._get_list_with_retry(url, context=f"subject_characters_rest id={subject_id}")
+        return await self._get_list_with_retry(
+            url, context=f"subject_characters_rest id={subject_id}"
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
 
-    async def _get_dict_with_retry(self, url: str, *, context: str = "") -> dict[str, Any] | None:
+    async def _get_dict_with_retry(
+        self, url: str, *, context: str = ""
+    ) -> dict[str, Any] | None:
         """GET a REST endpoint that returns a JSON object. None on 404."""
         return await self._get_rest_retry(url, context=context, not_found=None)
 
-    async def _get_list_with_retry(self, url: str, *, context: str = "") -> list[dict[str, Any]]:
+    async def _get_list_with_retry(
+        self, url: str, *, context: str = ""
+    ) -> list[dict[str, Any]]:
         """GET a REST endpoint that returns a JSON array. [] on 404."""
         result = await self._get_rest_retry(url, context=context, not_found=[])
         return result if isinstance(result, list) else []
 
-    async def _get_rest_retry(self, url: str, *, context: str = "", not_found: Any) -> Any:
+    async def _get_rest_retry(
+        self, url: str, *, context: str = "", not_found: Any
+    ) -> Any:
         """GET with rate-limiting + exponential backoff retry.
 
         Args:
@@ -468,7 +482,9 @@ def adapt_subject_persons_gql(
                 "id": p.get("id"),
                 "name": p.get("name"),
                 "type": p.get("type"),
-                "relation": "" if entry.get("position") is None else str(entry["position"]),
+                "relation": ""
+                if entry.get("position") is None
+                else str(entry["position"]),
                 "career": p.get("career") or [],
                 "eps": "",
                 "images": _flatten_images(p.get("images")),

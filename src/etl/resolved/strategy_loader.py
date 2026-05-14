@@ -16,7 +16,9 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-DEFAULT_STRATEGY_PATH = Path(__file__).resolve().parents[3] / "docs" / "merge_strategy.json"
+DEFAULT_STRATEGY_PATH = (
+    Path(__file__).resolve().parents[3] / "docs" / "merge_strategy.json"
+)
 
 
 @lru_cache(maxsize=4)
@@ -26,7 +28,9 @@ def load_strategy(path: str | Path = DEFAULT_STRATEGY_PATH) -> dict[str, Any]:
         return json.load(f)
 
 
-def priority_for(entity_type: str, field: str, *, path: str | Path = DEFAULT_STRATEGY_PATH) -> list[str]:
+def priority_for(
+    entity_type: str, field: str, *, path: str | Path = DEFAULT_STRATEGY_PATH
+) -> list[str]:
     """entity (anime/person/studio) × field → priority list を返す。"""
     strategy = load_strategy(path)
     fields = strategy["entities"][entity_type]["fields"]
@@ -36,7 +40,9 @@ def priority_for(entity_type: str, field: str, *, path: str | Path = DEFAULT_STR
     return list(spec["priority"])
 
 
-def selection_rule_for(entity_type: str, field: str, *, path: str | Path = DEFAULT_STRATEGY_PATH) -> str:
+def selection_rule_for(
+    entity_type: str, field: str, *, path: str | Path = DEFAULT_STRATEGY_PATH
+) -> str:
     """field の selection_rule (priority_fallback 等) を返す。"""
     strategy = load_strategy(path)
     fields = strategy["entities"][entity_type]["fields"]
@@ -50,13 +56,17 @@ def majority_threshold(*, path: str | Path = DEFAULT_STRATEGY_PATH) -> int:
     return int(strategy["selection_rules"]["majority_vote"]["threshold"])
 
 
-def fields_for(entity_type: str, *, path: str | Path = DEFAULT_STRATEGY_PATH) -> list[str]:
+def fields_for(
+    entity_type: str, *, path: str | Path = DEFAULT_STRATEGY_PATH
+) -> list[str]:
     """entity の field 一覧を strategy 順で返す。"""
     strategy = load_strategy(path)
     return list(strategy["entities"][entity_type]["fields"].keys())
 
 
-def cluster_spec(entity_type: str, *, path: str | Path = DEFAULT_STRATEGY_PATH) -> dict[str, Any]:
+def cluster_spec(
+    entity_type: str, *, path: str | Path = DEFAULT_STRATEGY_PATH
+) -> dict[str, Any]:
     """entity の cluster strategy 設定を返す。"""
     strategy = load_strategy(path)
     return dict(strategy["entities"][entity_type]["cluster"])

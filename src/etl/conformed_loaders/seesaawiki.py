@@ -14,6 +14,7 @@ Hard constraints:
 - H1: score / popularity columns NOT present in seesaawiki BRONZE → nothing to worry about.
 - H4: credits.evidence_source untouched — credits already integrated in integrate_duckdb.py.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -263,7 +264,9 @@ def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
 # ─── Public API ──────────────────────────────────────────────────────────────
 
 
-def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[str, int]:
+def integrate(
+    conn: duckdb.DuckDBPyConnection, bronze_root: Path | str
+) -> dict[str, int]:
     """Load SeesaaWiki BRONZE extras into SILVER.
 
     Args:
@@ -281,16 +284,30 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
     _apply_ddl(conn)
 
     pairs: list[tuple[str, str, str]] = [
-        ("studios",              _glob(bronze_root, "studios"),              _STUDIOS_SQL),
-        ("anime_studios",        _glob(bronze_root, "anime_studios"),        _ANIME_STUDIOS_SQL),
-        ("anime_theme_songs",    _glob(bronze_root, "theme_songs"),          _THEME_SONGS_SQL),
-        ("anime_episode_titles", _glob(bronze_root, "episode_titles"),       _EPISODE_TITLES_SQL),
-        ("anime_gross_studios",  _glob(bronze_root, "gross_studios"),        _GROSS_STUDIOS_SQL),
-        ("anime_production_committee",
-                                 _glob(bronze_root, "production_committee"), _PRODUCTION_COMMITTEE_SQL),
-        ("anime_original_work_info",
-                                 _glob(bronze_root, "original_work_info"),   _ORIGINAL_WORK_INFO_SQL),
-        ("persons",              _glob(bronze_root, "persons"),              _PERSONS_EXTRAS_SQL),
+        ("studios", _glob(bronze_root, "studios"), _STUDIOS_SQL),
+        ("anime_studios", _glob(bronze_root, "anime_studios"), _ANIME_STUDIOS_SQL),
+        ("anime_theme_songs", _glob(bronze_root, "theme_songs"), _THEME_SONGS_SQL),
+        (
+            "anime_episode_titles",
+            _glob(bronze_root, "episode_titles"),
+            _EPISODE_TITLES_SQL,
+        ),
+        (
+            "anime_gross_studios",
+            _glob(bronze_root, "gross_studios"),
+            _GROSS_STUDIOS_SQL,
+        ),
+        (
+            "anime_production_committee",
+            _glob(bronze_root, "production_committee"),
+            _PRODUCTION_COMMITTEE_SQL,
+        ),
+        (
+            "anime_original_work_info",
+            _glob(bronze_root, "original_work_info"),
+            _ORIGINAL_WORK_INFO_SQL,
+        ),
+        ("persons", _glob(bronze_root, "persons"), _PERSONS_EXTRAS_SQL),
     ]
 
     counts: dict[str, int] = {}

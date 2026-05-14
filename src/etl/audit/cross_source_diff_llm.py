@@ -324,7 +324,9 @@ def _append_checkpoint(
     try:
         with open(cp, "a", encoding="utf-8") as fh:
             fh.write(
-                json.dumps({"cache_key": cache_key, "result": result}, ensure_ascii=False)
+                json.dumps(
+                    {"cache_key": cache_key, "result": result}, ensure_ascii=False
+                )
                 + "\n"
             )
     except Exception as exc:

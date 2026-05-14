@@ -51,9 +51,7 @@ def silver_path_with_related(tmp_path):
         s = stmt.strip()
         if s:
             conn.execute(s)
-    conn.execute(
-        "CREATE TABLE anime_genres (anime_id VARCHAR, genre_name VARCHAR)"
-    )
+    conn.execute("CREATE TABLE anime_genres (anime_id VARCHAR, genre_name VARCHAR)")
     conn.execute(
         "CREATE TABLE anime_tags (anime_id VARCHAR, tag_name VARCHAR, rank INTEGER)"
     )
@@ -63,8 +61,10 @@ def silver_path_with_related(tmp_path):
     )
     conn.executemany(
         "INSERT INTO anime (id, title_ja, title_en, year) VALUES (?,?,?,?)",
-        [("a1", "テストアニメ", "Test Anime", 2020),
-         ("a2", "別アニメ", "Another Anime", 2021)],
+        [
+            ("a1", "テストアニメ", "Test Anime", 2020),
+            ("a2", "別アニメ", "Another Anime", 2021),
+        ],
     )
     conn.executemany(
         "INSERT INTO credits (person_id, anime_id, role, evidence_source) VALUES (?,?,?,?)",
@@ -199,7 +199,7 @@ class TestAggCollaboratorCountsDdb:
         by_pid = {r["person_id"]: r["n_collaborators"] for r in rows}
         assert by_pid.get("p0") == 1  # collabs with p1
         assert by_pid.get("p1") == 1  # collabs with p0
-        assert "p2" not in by_pid     # sole staff on a2, no collaborators
+        assert "p2" not in by_pid  # sole staff on a2, no collaborators
 
     def test_excludes_self(self, tmp_path):
         from src.analysis.duckdb_io import agg_collaborator_counts_ddb
@@ -235,11 +235,11 @@ class TestAggPatronageCollabsDdb:
         conn.executemany(
             "INSERT INTO credits VALUES (?,?,?,?)",
             [
-                ("dir1", "a1", "director",      "t"),
-                ("p1",   "a1", "key_animator",  "t"),
-                ("p2",   "a1", "key_animator",  "t"),
-                ("dir1", "a2", "director",      "t"),
-                ("p1",   "a2", "key_animator",  "t"),
+                ("dir1", "a1", "director", "t"),
+                ("p1", "a1", "key_animator", "t"),
+                ("p2", "a1", "key_animator", "t"),
+                ("dir1", "a2", "director", "t"),
+                ("p1", "a2", "key_animator", "t"),
             ],
         )
         conn.close()

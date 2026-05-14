@@ -30,6 +30,7 @@ from src.etl.resolved._cross_source_ids import (
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _row(
     row_id: str,
     title_ja: str = "",
@@ -48,6 +49,7 @@ def _row(
 # ---------------------------------------------------------------------------
 # Case 1: サイボーグ009 1968 TV — regression for canonical_id collision
 # ---------------------------------------------------------------------------
+
 
 class TestSaiborg009Regression:
     """Regression for canonical_id collision when two independent UF groups
@@ -126,9 +128,7 @@ class TestSaiborg009Regression:
         clusters = build_cross_source_anime_clusters(rows, bronze_root=None)
 
         singleton_clusters = {
-            next(iter(v))["id"]: cid
-            for cid, v in clusters.items()
-            if len(v) == 1
+            next(iter(v))["id"]: cid for cid, v in clusters.items() if len(v) == 1
         }
         assert "bgm:s13605" in singleton_clusters, "bgm singleton missing"
         kf_id = "keyframe:4837b9269266b69e7c6186c96a006b9d7c3aede1e8fd06fe"
@@ -157,6 +157,7 @@ class TestSaiborg009Regression:
 # ---------------------------------------------------------------------------
 # Case 2: Full row coverage — all rows must appear in exactly one cluster
 # ---------------------------------------------------------------------------
+
 
 class TestFullRowCoverage:
     """All input rows must flow into exactly one cluster (no silent drops)."""
@@ -193,11 +194,17 @@ class TestFullRowCoverage:
         """50-row mixed input: all rows must appear in clusters."""
         rows = []
         for i in range(10):
-            rows.append(_row(f"src_x:{i}", title_ja=f"作品{i}", year=2020 + i, fmt="TV"))
-            rows.append(_row(f"src_y:{i}", title_ja=f"作品{i}", year=2020 + i, fmt="TV"))
+            rows.append(
+                _row(f"src_x:{i}", title_ja=f"作品{i}", year=2020 + i, fmt="TV")
+            )
+            rows.append(
+                _row(f"src_y:{i}", title_ja=f"作品{i}", year=2020 + i, fmt="TV")
+            )
             rows.append(_row(f"src_z:{i}", title_ja=f"未知{i}", year=None, fmt=None))
             rows.append(_row(f"src_w:{i}", title_ja="", year=None, fmt=None))
-            rows.append(_row(f"src_v:{i}", title_ja=f"映画{i}", year=2010 + i, fmt="MOVIE"))
+            rows.append(
+                _row(f"src_v:{i}", title_ja=f"映画{i}", year=2010 + i, fmt="MOVIE")
+            )
 
         clusters = build_cross_source_anime_clusters(rows, bronze_root=None)
         total = sum(len(v) for v in clusters.values())
@@ -226,6 +233,7 @@ class TestFullRowCoverage:
 # ---------------------------------------------------------------------------
 # Case 3: Idempotency — row order must not affect canonical_id
 # ---------------------------------------------------------------------------
+
 
 class TestIdempotency:
     """canonical_id must be stable regardless of input order."""
@@ -268,7 +276,9 @@ class TestIdempotency:
             {"id": "mal:a1"},
             {"id": "anilist:1"},
         ]
-        assert _compute_canonical_id(rows_a, None) == _compute_canonical_id(rows_b, None)
+        assert _compute_canonical_id(rows_a, None) == _compute_canonical_id(
+            rows_b, None
+        )
 
     def test_compute_canonical_id_format_suffix_changes_id(self):
         """format_suffix must change the canonical_id to prevent collisions between

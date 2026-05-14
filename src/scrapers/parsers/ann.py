@@ -246,6 +246,7 @@ def _extract_ratings(
     Hard Rule: callers MUST store results only in display_rating_* fields.
     MUST NOT flow into scoring, edge weights, or optimization targets.
     """
+
     def _float(s: str | None) -> float | None:
         try:
             return float(s) if s else None
@@ -286,15 +287,19 @@ def _extract_credit_list(soup) -> list[dict]:  # type: ignore[no-untyped-def]
     mc = soup.find(id="maincontent")
     if not mc:
         return items
-    for link in mc.find_all("a", href=re.compile(r"/encyclopedia/anime\.php\?id=(\d+)")):
+    for link in mc.find_all(
+        "a", href=re.compile(r"/encyclopedia/anime\.php\?id=(\d+)")
+    ):
         m = re.search(r"id=(\d+)", link["href"])
         if not m:
             continue
-        items.append({
-            "ann_anime_id": int(m.group(1)),
-            "anime_title": link.get_text(strip=True),
-            "task": _extract_link_task(link),
-        })
+        items.append(
+            {
+                "ann_anime_id": int(m.group(1)),
+                "anime_title": link.get_text(strip=True),
+                "task": _extract_link_task(link),
+            }
+        )
     return items
 
 
@@ -317,9 +322,18 @@ def _parse_vintage(vintage: str) -> tuple[int | None, str | None, str | None]:
     m = date_re.search(vintage)
     if m:
         months = {
-            "Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4,
-            "May": 5, "Jun": 6, "Jul": 7, "Aug": 8,
-            "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12,
+            "Jan": 1,
+            "Feb": 2,
+            "Mar": 3,
+            "Apr": 4,
+            "May": 5,
+            "Jun": 6,
+            "Jul": 7,
+            "Aug": 8,
+            "Sep": 9,
+            "Oct": 10,
+            "Nov": 11,
+            "Dec": 12,
         }
         sm, sd, sy = m.group(1), int(m.group(2)), int(m.group(3))
         year = sy
@@ -371,7 +385,9 @@ def parse_anime_xml(root: ET.Element) -> AnimeXmlParseResult:
             if itype == "Alternative title":
                 lang = info.get("lang") or ""
                 if lang in ("JA", "ja"):
-                    rec.title_ja = text  # last JA title wins (kanji > romaji in XML order)
+                    rec.title_ja = (
+                        text  # last JA title wins (kanji > romaji in XML order)
+                    )
                 alt_titles_by_lang.setdefault(lang, []).append(text)
             elif itype == "Vintage":
                 rec.vintage_raw = text
@@ -436,7 +452,11 @@ def parse_anime_xml(root: ET.Element) -> AnimeXmlParseResult:
             if name and task:
                 rec.staff.append(
                     AnnStaffEntry(
-                        ann_person_id=pid, name_en=name, task=task, task_raw=task, gid=gid
+                        ann_person_id=pid,
+                        name_en=name,
+                        task=task,
+                        task_raw=task,
+                        gid=gid,
                     )
                 )
 
@@ -770,8 +790,12 @@ def parse_person_html(html: str, ann_id: int) -> AnnPersonDetail | None:
     credits_list = _extract_credit_list(soup)
 
     # Route name_ja via script detection (ANN has no native script info, so fallback to empty nationality)
-    name_ja_routed, name_ko_routed, name_zh_routed, names_alt_dict = assign_native_name_fields(name_ja, [])
-    names_alt_json = json.dumps(names_alt_dict, ensure_ascii=False) if names_alt_dict else "{}"
+    name_ja_routed, name_ko_routed, name_zh_routed, names_alt_dict = (
+        assign_native_name_fields(name_ja, [])
+    )
+    names_alt_json = (
+        json.dumps(names_alt_dict, ensure_ascii=False) if names_alt_dict else "{}"
+    )
 
     return AnnPersonDetail(
         ann_id=ann_id,

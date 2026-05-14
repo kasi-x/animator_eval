@@ -22,6 +22,7 @@ ANN ID prefix convention (matches integrate_duckdb._build_credits_insert_ann):
   persons → 'ann:p' || ann_id / ann_person_id
   cast    → character 'ann:c' || character_id
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -388,6 +389,7 @@ WHERE ann_anime_id   IS NOT NULL
 
 # ─── helpers ────────────────────────────────────────────────────────────────
 
+
 def _g(bronze_root: Path, table: str) -> str:
     """Return glob path for an ANN BRONZE table."""
     return str(bronze_root / "source=ann" / f"table={table}" / "date=*" / "*.parquet")
@@ -431,7 +433,9 @@ def _build_anime_insert_sql(
     the UPDATE path (_ANIME_EXTRAS_SQL).
     """
 
-    def _col(silver_name: str, bronze_name: str, expr: str, fallback: str) -> str | None:
+    def _col(
+        silver_name: str, bronze_name: str, expr: str, fallback: str
+    ) -> str | None:
         """Return 'expr AS silver_name' when both sides exist; None to skip entirely."""
         if silver_name not in silver_cols:
             return None  # column absent from silver → omit alias (BY NAME strict)
@@ -440,22 +444,36 @@ def _build_anime_insert_sql(
 
     core_lines = [
         f"    'ann:a' || CAST(t.ann_id AS VARCHAR){'':18} AS id",
-        _col("title_ja",    "title_ja",    "COALESCE(t.title_ja, '')",        "''::VARCHAR"),
-        _col("title_en",    "title_en",    "COALESCE(t.title_en, '')",        "''::VARCHAR"),
-        _col("year",        "year",        "TRY_CAST(t.year AS INTEGER)",     "NULL::INTEGER"),
+        _col("title_ja", "title_ja", "COALESCE(t.title_ja, '')", "''::VARCHAR"),
+        _col("title_en", "title_en", "COALESCE(t.title_en, '')", "''::VARCHAR"),
+        _col("year", "year", "TRY_CAST(t.year AS INTEGER)", "NULL::INTEGER"),
         "    NULL::VARCHAR                                           AS season",
         "    NULL::INTEGER                                           AS quarter",
-        _col("episodes",   "episodes",    "TRY_CAST(t.episodes AS INTEGER)", "NULL::INTEGER"),
-        _col("format",     "format",      "t.format",                        "NULL::VARCHAR"),
+        _col(
+            "episodes", "episodes", "TRY_CAST(t.episodes AS INTEGER)", "NULL::INTEGER"
+        ),
+        _col("format", "format", "t.format", "NULL::VARCHAR"),
         "    NULL::INTEGER                                           AS duration",
-        _col("start_date", "start_date",  "TRY_CAST(t.start_date AS VARCHAR)", "NULL::VARCHAR"),
-        _col("end_date",   "end_date",    "TRY_CAST(t.end_date AS VARCHAR)",   "NULL::VARCHAR"),
+        _col(
+            "start_date",
+            "start_date",
+            "TRY_CAST(t.start_date AS VARCHAR)",
+            "NULL::VARCHAR",
+        ),
+        _col(
+            "end_date", "end_date", "TRY_CAST(t.end_date AS VARCHAR)", "NULL::VARCHAR"
+        ),
         "    NULL::VARCHAR                                           AS status",
         "    NULL::VARCHAR                                           AS source_mat",
         "    NULL::VARCHAR                                           AS work_type",
         "    NULL::VARCHAR                                           AS scale_class",
-        _col("fetched_at",    "fetched_at",    "TRY_CAST(t.fetched_at AS TIMESTAMP)", "NULL::TIMESTAMP"),
-        _col("content_hash",  "content_hash",  "t.content_hash",                      "NULL::VARCHAR"),
+        _col(
+            "fetched_at",
+            "fetched_at",
+            "TRY_CAST(t.fetched_at AS TIMESTAMP)",
+            "NULL::TIMESTAMP",
+        ),
+        _col("content_hash", "content_hash", "t.content_hash", "NULL::VARCHAR"),
         "    now()                                                   AS updated_at",
     ]
 
@@ -489,7 +507,9 @@ def _build_persons_insert_sql(
     and BRONZE 'website' maps to SILVER 'website_url'.
     """
 
-    def _col(silver_name: str, bronze_name: str, expr: str, fallback: str) -> str | None:
+    def _col(
+        silver_name: str, bronze_name: str, expr: str, fallback: str
+    ) -> str | None:
         if silver_name not in silver_cols:
             return None
         value = expr if bronze_name in bronze_cols else fallback
@@ -503,14 +523,14 @@ def _build_persons_insert_sql(
 
     core_lines = [
         f"    'ann:p' || CAST(t.ann_id AS VARCHAR){'':18} AS id",
-        _col("name_ja",     "name_ja",      "COALESCE(t.name_ja, '')",        "''::VARCHAR"),
-        _col("name_en",     "name_en",      "COALESCE(t.name_en, '')",        "''::VARCHAR"),
-        _col("name_ko",     "name_ko",      "COALESCE(t.name_ko, '')",        "''::VARCHAR"),
-        _col("name_zh",     "name_zh",      "COALESCE(t.name_zh, '')",        "''::VARCHAR"),
-        _col("names_alt",   "names_alt",    "COALESCE(t.names_alt, '{}')",    "'{}'::VARCHAR"),
-        _col("birth_date",  "date_of_birth", "t.date_of_birth",               "NULL::VARCHAR"),
-        _static("death_date",   "NULL::VARCHAR"),
-        _col("website_url", "website",      "t.website",                      "NULL::VARCHAR"),
+        _col("name_ja", "name_ja", "COALESCE(t.name_ja, '')", "''::VARCHAR"),
+        _col("name_en", "name_en", "COALESCE(t.name_en, '')", "''::VARCHAR"),
+        _col("name_ko", "name_ko", "COALESCE(t.name_ko, '')", "''::VARCHAR"),
+        _col("name_zh", "name_zh", "COALESCE(t.name_zh, '')", "''::VARCHAR"),
+        _col("names_alt", "names_alt", "COALESCE(t.names_alt, '{}')", "'{}'::VARCHAR"),
+        _col("birth_date", "date_of_birth", "t.date_of_birth", "NULL::VARCHAR"),
+        _static("death_date", "NULL::VARCHAR"),
+        _col("website_url", "website", "t.website", "NULL::VARCHAR"),
         "    now()                                                   AS updated_at",
     ]
 
@@ -562,6 +582,7 @@ def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
 
 # ─── public API ─────────────────────────────────────────────────────────────
 
+
 def integrate(
     conn: duckdb.DuckDBPyConnection,
     bronze_root: Path | str,
@@ -604,10 +625,10 @@ def integrate(
     # BRONZE uses ann_id (INTEGER) rather than an 'id' (VARCHAR) column.
     # Credits were already INSERTed with 'ann:a<id>' / 'ann:p<id>' keys;
     # without these INSERTs those credits are orphaned in the FK graph.
-    anime_glob   = _g(bronze_root, "anime")
+    anime_glob = _g(bronze_root, "anime")
     persons_glob = _g(bronze_root, "persons")
 
-    silver_anime_cols   = _silver_table_cols(conn, "anime")
+    silver_anime_cols = _silver_table_cols(conn, "anime")
     silver_persons_cols = _silver_table_cols(conn, "persons")
 
     try:
@@ -646,14 +667,14 @@ def integrate(
 
     # Phase 2: UPDATE ANN extra columns onto now-existing anime + persons rows.
     pairs = [
-        ("anime",    _ANIME_EXTRAS_SQL),
-        ("persons",  _PERSONS_EXTRAS_SQL),
+        ("anime", _ANIME_EXTRAS_SQL),
+        ("persons", _PERSONS_EXTRAS_SQL),
         ("episodes", _EPISODES_SQL),
-        ("company",  _COMPANIES_SQL),
+        ("company", _COMPANIES_SQL),
         ("releases", _RELEASES_SQL),
-        ("news",     _NEWS_SQL),
-        ("related",  _RELATED_SQL),
-        ("cast",     _CAST_SQL),
+        ("news", _NEWS_SQL),
+        ("related", _RELATED_SQL),
+        ("cast", _CAST_SQL),
     ]
 
     for table, sql in pairs:
@@ -674,8 +695,12 @@ def integrate(
     except Exception as exc:  # noqa: BLE001
         counts["anime_studios_ann_error"] = str(exc)
 
-    for silver_table in ("anime_episodes", "anime_companies",
-                         "anime_releases", "anime_news"):
+    for silver_table in (
+        "anime_episodes",
+        "anime_companies",
+        "anime_releases",
+        "anime_news",
+    ):
         counts[silver_table] = conn.execute(
             f"SELECT COUNT(*) FROM {silver_table}"  # noqa: S608
         ).fetchone()[0]

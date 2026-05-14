@@ -118,7 +118,9 @@ def exact_match_cluster(
     ko_name_groups: dict[str, list[str]] = defaultdict(list)
     zh_name_groups: dict[str, list[str]] = defaultdict(list)
     # names_alt: per-lang groups (th, ar, hi, vi, ...)
-    alt_name_groups: dict[str, dict[str, list[str]]] = defaultdict(lambda: defaultdict(list))
+    alt_name_groups: dict[str, dict[str, list[str]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
     # group by English name (only persons without a native name)
     en_name_groups: dict[str, list[str]] = defaultdict(list)
     # group by alias
@@ -144,7 +146,9 @@ def exact_match_cluster(
                 zh_name_groups[normalized_zh].append(p.id)
                 has_native = True
         try:
-            for lang, alt_name in (json.loads(getattr(p, "names_alt", "{}") or "{}") or {}).items():
+            for lang, alt_name in (
+                json.loads(getattr(p, "names_alt", "{}") or "{}") or {}
+            ).items():
                 if alt_name:
                     n = normalize_name(alt_name)
                     if n:
@@ -237,11 +241,14 @@ def exact_match_cluster(
         unique_ids = list(dict.fromkeys(ids))
         # alias match allowed only when person has no native name
         valid_ids = [
-            pid for pid in unique_ids
-            if not (persons_by_id[pid].name_ja
-                    or persons_by_id[pid].name_ko
-                    or persons_by_id[pid].name_zh
-                    or (getattr(persons_by_id[pid], "names_alt", "{}") or "{}") != "{}")
+            pid
+            for pid in unique_ids
+            if not (
+                persons_by_id[pid].name_ja
+                or persons_by_id[pid].name_ko
+                or persons_by_id[pid].name_zh
+                or (getattr(persons_by_id[pid], "names_alt", "{}") or "{}") != "{}"
+            )
         ]
         _merge_group(valid_ids, alias, "exact_match_alias")
 
@@ -385,7 +392,9 @@ def cross_source_match(persons: list[Person]) -> dict[str, str]:
     # MAL → AniList matching
     for anilist_pid, p in anilist_persons.items():
         try:
-            alt_vals = list((json.loads(getattr(p, "names_alt", "{}") or "{}") or {}).values())
+            alt_vals = list(
+                (json.loads(getattr(p, "names_alt", "{}") or "{}") or {}).values()
+            )
         except (json.JSONDecodeError, TypeError):
             alt_vals = []
         for name in [p.name_ja, p.name_ko, p.name_zh, p.name_en] + p.aliases + alt_vals:
@@ -593,10 +602,14 @@ def similarity_based_cluster(
 
         for p in source_persons:
             try:
-                alt_values = list((json.loads(getattr(p, "names_alt", "{}") or "{}") or {}).values())
+                alt_values = list(
+                    (json.loads(getattr(p, "names_alt", "{}") or "{}") or {}).values()
+                )
             except (json.JSONDecodeError, TypeError):
                 alt_values = []
-            for name_field in [p.name_ja, p.name_ko, p.name_zh, p.name_en] + p.aliases + alt_values:
+            for name_field in (
+                [p.name_ja, p.name_ko, p.name_zh, p.name_en] + p.aliases + alt_values
+            ):
                 if not name_field:
                     continue
                 normalized = normalize_name(name_field)

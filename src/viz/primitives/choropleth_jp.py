@@ -47,18 +47,16 @@ def _load_geojson() -> dict | None:
 
 @dataclass(frozen=True)
 class ChoroplethJPSpec:
-    values: Mapping[str, float]   # prefecture name (JA, e.g. "東京都") → value
+    values: Mapping[str, float]  # prefecture name (JA, e.g. "東京都") → value
     title: str = ""
     z_label: str = "count"
     colorscale: str = "Viridis"
     height: int = 540
     fallback_to_bar: bool = False  # if True, force the bar fallback even when
-                                   # GeoJSON is available (used for printing)
+    # GeoJSON is available (used for printing)
 
 
-def _render_bar_fallback(
-    spec: ChoroplethJPSpec, theme: str
-) -> go.Figure:
+def _render_bar_fallback(spec: ChoroplethJPSpec, theme: str) -> go.Figure:
     """Sortable bar chart when prefecture GeoJSON is unavailable."""
     items = sorted(spec.values.items(), key=lambda kv: kv[1], reverse=True)
     labels = [k for k, _ in items]
@@ -68,8 +66,12 @@ def _render_bar_fallback(
             x=vals,
             y=labels,
             orientation="h",
-            marker=dict(color=vals, colorscale=spec.colorscale, showscale=True,
-                        colorbar=dict(title=spec.z_label)),
+            marker=dict(
+                color=vals,
+                colorscale=spec.colorscale,
+                showscale=True,
+                colorbar=dict(title=spec.z_label),
+            ),
             hovertemplate="%{y}: %{x:,}<extra></extra>",
         )
     )
@@ -82,9 +84,7 @@ def _render_bar_fallback(
     return apply_theme(fig, theme=theme, height=spec.height)
 
 
-def render_choropleth_jp(
-    spec: ChoroplethJPSpec, *, theme: str = "dark"
-) -> go.Figure:
+def render_choropleth_jp(spec: ChoroplethJPSpec, *, theme: str = "dark") -> go.Figure:
     """Render an interactive Japan-prefecture choropleth.
 
     When ``data/geo/japan_prefectures.geojson`` is present and

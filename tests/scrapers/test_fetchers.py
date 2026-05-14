@@ -1,4 +1,5 @@
 """Tests for src.scrapers.fetchers."""
+
 from __future__ import annotations
 
 import asyncio
@@ -71,7 +72,9 @@ def test_html_fetcher_no_namespace_always_fetches(monkeypatch):
 def test_xml_batch_fetcher_slash_ids():
     url = "https://ann.net/api.xml?anime=1/2/3"
     client = _MockClient({url: _Resp(200, "<ann/>")})
-    fetcher = XmlBatchFetcher(client, "https://ann.net/api.xml", id_param_name="anime", source="test")
+    fetcher = XmlBatchFetcher(
+        client, "https://ann.net/api.xml", id_param_name="anime", source="test"
+    )
     assert _run(fetcher([1, 2, 3])) == "<ann/>"
     assert client.calls[0] == url
 
@@ -79,14 +82,18 @@ def test_xml_batch_fetcher_slash_ids():
 def test_xml_batch_fetcher_single_id():
     url = "https://ann.net/api.xml?anime=5"
     client = _MockClient({url: _Resp(200, "<root/>")})
-    fetcher = XmlBatchFetcher(client, "https://ann.net/api.xml", id_param_name="anime", source="test")
+    fetcher = XmlBatchFetcher(
+        client, "https://ann.net/api.xml", id_param_name="anime", source="test"
+    )
     assert _run(fetcher(5)) == "<root/>"
 
 
 def test_xml_batch_fetcher_404_none():
     url = "https://ann.net/api.xml?anime=999"
     client = _MockClient({url: _Resp(404)})
-    fetcher = XmlBatchFetcher(client, "https://ann.net/api.xml", id_param_name="anime", source="test")
+    fetcher = XmlBatchFetcher(
+        client, "https://ann.net/api.xml", id_param_name="anime", source="test"
+    )
     assert _run(fetcher(999)) is None
 
 
@@ -96,12 +103,16 @@ def test_xml_batch_fetcher_404_none():
 def test_json_fetcher_returns_dict():
     url = "https://api.ex.com/42"
     client = _MockClient({url: _Resp(200, json_data={"id": 42})})
-    fetcher = JsonFetcher(client, lambda id_: f"https://api.ex.com/{id_}", source="test")
+    fetcher = JsonFetcher(
+        client, lambda id_: f"https://api.ex.com/{id_}", source="test"
+    )
     assert _run(fetcher(42)) == {"id": 42}
 
 
 def test_json_fetcher_404_none():
     url = "https://api.ex.com/0"
     client = _MockClient({url: _Resp(404)})
-    fetcher = JsonFetcher(client, lambda id_: f"https://api.ex.com/{id_}", source="test")
+    fetcher = JsonFetcher(
+        client, lambda id_: f"https://api.ex.com/{id_}", source="test"
+    )
     assert _run(fetcher(0)) is None

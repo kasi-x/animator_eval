@@ -112,9 +112,42 @@ def conformed_path(tmp_path: Path) -> Path:
         "(id, title_ja, title_en, year, format, episodes, duration, source_mat, scale_class, country_of_origin) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
-            ("seesaa:a1", "風の谷のナウシカ", "", 1984, "MOVIE", 1, 117, "MANGA", "large", None),
-            ("anilist:a2", "風の谷のナウシカ", "Nausicaa", 1984, "MOVIE", 1, 116, "MANGA", "large", "JP"),
-            ("mal:a3", "風の谷のナウシカ", "Nausicaa of the Valley", 1984, "MOVIE", 1, 117, "MANGA", "large", "JP"),
+            (
+                "seesaa:a1",
+                "風の谷のナウシカ",
+                "",
+                1984,
+                "MOVIE",
+                1,
+                117,
+                "MANGA",
+                "large",
+                None,
+            ),
+            (
+                "anilist:a2",
+                "風の谷のナウシカ",
+                "Nausicaa",
+                1984,
+                "MOVIE",
+                1,
+                116,
+                "MANGA",
+                "large",
+                "JP",
+            ),
+            (
+                "mal:a3",
+                "風の谷のナウシカ",
+                "Nausicaa of the Valley",
+                1984,
+                "MOVIE",
+                1,
+                117,
+                "MANGA",
+                "large",
+                "JP",
+            ),
         ],
     )
 
@@ -224,10 +257,12 @@ class TestSelectRepresentativeValue:
     def test_priority_fallback_first_source(self):
         from src.etl.resolved._select import select_representative_value
 
-        candidates = self._make_candidates([
-            ("anilist:a1", "Nausicaa"),
-            ("mal:a2", "Nausicaa of the Valley"),
-        ])
+        candidates = self._make_candidates(
+            [
+                ("anilist:a1", "Nausicaa"),
+                ("mal:a2", "Nausicaa of the Valley"),
+            ]
+        )
         val, src, reason = select_representative_value(
             "field", candidates, ["anilist", "mal"]
         )
@@ -238,10 +273,12 @@ class TestSelectRepresentativeValue:
     def test_priority_fallback_second_when_first_null(self):
         from src.etl.resolved._select import select_representative_value
 
-        candidates = self._make_candidates([
-            ("anilist:a1", None),
-            ("mal:a2", "Nausicaa"),
-        ])
+        candidates = self._make_candidates(
+            [
+                ("anilist:a1", None),
+                ("mal:a2", "Nausicaa"),
+            ]
+        )
         val, src, reason = select_representative_value(
             "field", candidates, ["anilist", "mal"]
         )
@@ -251,10 +288,12 @@ class TestSelectRepresentativeValue:
     def test_priority_fallback_second_when_first_empty_string(self):
         from src.etl.resolved._select import select_representative_value
 
-        candidates = self._make_candidates([
-            ("anilist:a1", ""),
-            ("mal:a2", "Nausicaa"),
-        ])
+        candidates = self._make_candidates(
+            [
+                ("anilist:a1", ""),
+                ("mal:a2", "Nausicaa"),
+            ]
+        )
         val, src, reason = select_representative_value(
             "field", candidates, ["anilist", "mal"]
         )
@@ -302,9 +341,7 @@ class TestSelectRepresentativeValue:
     def test_empty_candidates(self):
         from src.etl.resolved._select import select_representative_value
 
-        val, src, reason = select_representative_value(
-            "field", [], ["anilist", "mal"]
-        )
+        val, src, reason = select_representative_value("field", [], ["anilist", "mal"])
         assert val is None
         assert reason == "no_value"
 
@@ -324,9 +361,7 @@ class TestResolveAnime:
         # 3 rows with same title_ja+year should cluster into 1 canonical
         assert count == 1
 
-    def test_canonical_row_written(
-        self, conformed_path: Path, resolved_path: Path
-    ):
+    def test_canonical_row_written(self, conformed_path: Path, resolved_path: Path):
         from src.etl.resolved.resolve_anime import build_resolved_anime
 
         build_resolved_anime(conformed_path, resolved_path)
@@ -389,9 +424,7 @@ class TestResolveAnime:
         conn.close()
         assert cnt == 1
 
-    def test_year_selected_by_priority(
-        self, conformed_path: Path, resolved_path: Path
-    ):
+    def test_year_selected_by_priority(self, conformed_path: Path, resolved_path: Path):
         """year priority: madb > anilist > mal — no madb in fixture, so anilist wins."""
         from src.etl.resolved.resolve_anime import build_resolved_anime
 
@@ -421,9 +454,7 @@ class TestResolvePersons:
         # (seesaa:p1, anilist:p2, bgm:p3 → 1 canonical row)
         assert count == 1
 
-    def test_gender_source_priority(
-        self, conformed_path: Path, resolved_path: Path
-    ):
+    def test_gender_source_priority(self, conformed_path: Path, resolved_path: Path):
         """Merged cluster: gender selected by source priority (bgm > anilist > mal).
 
         All 3 rows (seesaa:p1, anilist:p2, bgm:p3) share the name '宮崎駿' and
@@ -501,9 +532,7 @@ class TestResolveStudios:
         count = build_resolved_studios(conformed_path, resolved_path)
         assert count == 2
 
-    def test_studio_name_preserved(
-        self, conformed_path: Path, resolved_path: Path
-    ):
+    def test_studio_name_preserved(self, conformed_path: Path, resolved_path: Path):
         from src.etl.resolved.resolve_studios import build_resolved_studios
 
         build_resolved_studios(conformed_path, resolved_path)
@@ -530,6 +559,127 @@ class TestResolveStudios:
 
 
 # ---------------------------------------------------------------------------
+# Phase 2b: cross-source studio clustering — name normalization
+# ---------------------------------------------------------------------------
+
+
+class TestStudioNameNormalization:
+    def test_normalize_strips_corporate_suffixes(self):
+        from src.etl.resolved.resolve_studios import _normalize_studio_name
+
+        assert _normalize_studio_name("株式会社シャフト") == "シャフト"
+        assert _normalize_studio_name("シャフト株式会社") == "シャフト"
+        assert _normalize_studio_name("Studio Ghibli Inc.") == "studio ghibli"
+        assert _normalize_studio_name("Toei Animation Co., Ltd.") == "toei animation"
+        assert _normalize_studio_name("㈱ufotable") == "ufotable"
+
+    def test_normalize_empty(self):
+        from src.etl.resolved.resolve_studios import _normalize_studio_name
+
+        assert _normalize_studio_name(None) == ""
+        assert _normalize_studio_name("") == ""
+
+    def test_normalize_case_insensitive_match(self):
+        from src.etl.resolved.resolve_studios import _normalize_studio_name
+
+        assert _normalize_studio_name("SHAFT") == _normalize_studio_name("shaft")
+
+    def test_cluster_canonical_id_uses_highest_priority_source(self):
+        from src.etl.resolved.resolve_studios import _cluster_canonical_id
+
+        rows = [
+            {"id": "keyframe:s99", "name": "シャフト"},
+            {"id": "anilist:s1", "name": "Shaft"},
+            {"id": "mal:s2", "name": "SHAFT"},
+        ]
+        # anilist has highest priority for name field
+        assert _cluster_canonical_id(rows) == "anilist:s1"
+
+    def test_cluster_rows_by_name_groups_normalized_match(self):
+        from src.etl.resolved.resolve_studios import _cluster_rows_by_name
+
+        rows = [
+            {"id": "anilist:s1", "name": "Studio Ghibli"},
+            {"id": "mal:s2", "name": "Studio Ghibli Inc."},
+            {"id": "keyframe:s3", "name": "Studio Ghibli"},
+            {"id": "anilist:s4", "name": "Sunrise"},
+            {"id": "mal:s5", "name": ""},
+        ]
+        clusters = _cluster_rows_by_name(rows)
+        # Find the Ghibli cluster (size 3) + Sunrise singleton + empty singleton
+        sizes = sorted(len(c) for c in clusters)
+        assert sizes == [1, 1, 3]
+
+
+class TestResolveStudiosMultiSource:
+    """Integration: cross-source clustering by normalized name."""
+
+    @pytest.fixture()
+    def multi_studio_path(self, tmp_path: Path) -> Path:
+        path = tmp_path / "animetor.duckdb"
+        conn = duckdb.connect(str(path))
+        for stmt in _CONFORMED_DDL.split(";"):
+            s = stmt.strip()
+            if s:
+                conn.execute(s)
+        conn.executemany(
+            "INSERT INTO conformed.studios (id, name, is_animation_studio, country_of_origin) "
+            "VALUES (?, ?, ?, ?)",
+            [
+                # cross-source: same normalized name "shaft"
+                # cross-script (JP↔EN) is intentionally NOT merged — only
+                # case/suffix normalization within the same script clusters.
+                ("anilist:s1", "Shaft", True, "JP"),
+                ("mal:s2", "SHAFT", True, None),
+                ("kf:s100", "Shaft Inc.", None, None),
+                # singleton (different normalized name)
+                ("anilist:s99", "Studio Ghibli", True, "JP"),
+            ],
+        )
+        conn.commit()
+        conn.close()
+        return path
+
+    def test_multi_source_cluster_merges(
+        self, multi_studio_path: Path, resolved_path: Path
+    ):
+        from src.etl.resolved.resolve_studios import build_resolved_studios
+
+        count = build_resolved_studios(multi_studio_path, resolved_path)
+        # 4 conformed rows → 2 canonical rows (3 Shaft variants merged + 1 Ghibli)
+        assert count == 2
+
+    def test_multi_source_canonical_id_is_anilist(
+        self, multi_studio_path: Path, resolved_path: Path
+    ):
+        from src.etl.resolved.resolve_studios import build_resolved_studios
+
+        build_resolved_studios(multi_studio_path, resolved_path)
+        conn = duckdb.connect(str(resolved_path), read_only=True)
+        rows = conn.execute(
+            "SELECT canonical_id, source_ids_json FROM studios ORDER BY canonical_id"
+        ).fetchall()
+        conn.close()
+        by_id = {r[0]: json.loads(r[1]) for r in rows}
+        # Shaft cluster: anilist is highest priority for `name` → canonical_id = anilist:s1
+        assert "anilist:s1" in by_id
+        assert set(by_id["anilist:s1"]) == {"anilist:s1", "mal:s2", "kf:s100"}
+
+    def test_multi_source_name_picks_highest_priority(
+        self, multi_studio_path: Path, resolved_path: Path
+    ):
+        from src.etl.resolved.resolve_studios import build_resolved_studios
+
+        build_resolved_studios(multi_studio_path, resolved_path)
+        conn = duckdb.connect(str(resolved_path), read_only=True)
+        row = conn.execute(
+            "SELECT name, name_source FROM studios WHERE canonical_id = 'anilist:s1'"
+        ).fetchone()
+        conn.close()
+        assert row == ("Shaft", "anilist")
+
+
+# ---------------------------------------------------------------------------
 # Phase 2b: cross-source anime clustering (_cross_source_ids)
 # ---------------------------------------------------------------------------
 
@@ -553,11 +703,13 @@ class TestCrossSourceAnimeClustering:
         """Without bronze_root, same title+year rows cluster together."""
         from src.etl.resolved._cross_source_ids import build_cross_source_anime_clusters
 
-        rows = self._make_anime_rows([
-            ("anilist:572", "風の谷のナウシカ", 1984, None),
-            ("mal:a572", "風の谷のナウシカ", 1984, None),
-            ("seesaa:fc2", "風の谷のナウシカ", 1984, None),
-        ])
+        rows = self._make_anime_rows(
+            [
+                ("anilist:572", "風の谷のナウシカ", 1984, None),
+                ("mal:a572", "風の谷のナウシカ", 1984, None),
+                ("seesaa:fc2", "風の谷のナウシカ", 1984, None),
+            ]
+        )
         clusters = build_cross_source_anime_clusters(rows, bronze_root=None)
         assert len(clusters) == 1
         members = list(clusters.values())[0]
@@ -567,10 +719,12 @@ class TestCrossSourceAnimeClustering:
         """Same title but different years must produce separate clusters."""
         from src.etl.resolved._cross_source_ids import build_cross_source_anime_clusters
 
-        rows = self._make_anime_rows([
-            ("anilist:1", "進撃の巨人", 2013, None),
-            ("anilist:2", "進撃の巨人", 2017, None),
-        ])
+        rows = self._make_anime_rows(
+            [
+                ("anilist:1", "進撃の巨人", 2013, None),
+                ("anilist:2", "進撃の巨人", 2017, None),
+            ]
+        )
         clusters = build_cross_source_anime_clusters(rows, bronze_root=None)
         assert len(clusters) == 2
 
@@ -578,11 +732,13 @@ class TestCrossSourceAnimeClustering:
         """Rows with empty title_ja each get their own cluster."""
         from src.etl.resolved._cross_source_ids import build_cross_source_anime_clusters
 
-        rows = self._make_anime_rows([
-            ("madb:M1", "", 2000, None),
-            ("madb:M2", "", 2001, None),
-            ("madb:M3", "", 2000, None),
-        ])
+        rows = self._make_anime_rows(
+            [
+                ("madb:M1", "", 2000, None),
+                ("madb:M2", "", 2001, None),
+                ("madb:M3", "", 2000, None),
+            ]
+        )
         clusters = build_cross_source_anime_clusters(rows, bronze_root=None)
         # Each untitled row is its own cluster
         assert len(clusters) == 3
@@ -594,10 +750,12 @@ class TestCrossSourceAnimeClustering:
 
         # anilist:572 has id suffix 572; mal:a572 has mal_id_int=572
         # Without BRONZE, only title+year clusters — they should cluster by title
-        rows = self._make_anime_rows([
-            ("anilist:572", "風の谷のナウシカ", 1984, None),
-            ("mal:a572", "風の谷のナウシカ", None, 572),
-        ])
+        rows = self._make_anime_rows(
+            [
+                ("anilist:572", "風の谷のナウシカ", 1984, None),
+                ("mal:a572", "風の谷のナウシカ", None, 572),
+            ]
+        )
         # Without year on MAL row, title cluster includes both (same title, year None vs 1984 → 2 clusters)
         clusters = build_cross_source_anime_clusters(rows, bronze_root=None)
         # anilist has year=1984, mal has year=None → different cluster keys
@@ -607,11 +765,13 @@ class TestCrossSourceAnimeClustering:
         """Clusters record the number of contributing sources."""
         from src.etl.resolved._cross_source_ids import build_cross_source_anime_clusters
 
-        rows = self._make_anime_rows([
-            ("anilist:572", "風の谷のナウシカ", 1984, None),
-            ("mal:a572", "風の谷のナウシカ", 1984, None),
-            ("seesaa:x", "風の谷のナウシカ", 1984, None),
-        ])
+        rows = self._make_anime_rows(
+            [
+                ("anilist:572", "風の谷のナウシカ", 1984, None),
+                ("mal:a572", "風の谷のナウシカ", 1984, None),
+                ("seesaa:x", "風の谷のナウシカ", 1984, None),
+            ]
+        )
         clusters = build_cross_source_anime_clusters(rows, bronze_root=None)
         assert len(clusters) == 1
         cluster_rows = list(clusters.values())[0]
@@ -625,7 +785,9 @@ class TestCrossSourceAnimeClustering:
         rows = self._make_anime_rows([("anilist:572", "風の谷のナウシカ", 1984, None)])
         clusters = build_cross_source_anime_clusters(rows, bronze_root=None)
         cid = list(clusters.keys())[0]
-        assert re.match(r"^resolved:anime:[0-9a-f]{12}$", cid), f"Bad canonical_id: {cid}"
+        assert re.match(r"^resolved:anime:[0-9a-f]{12}$", cid), (
+            f"Bad canonical_id: {cid}"
+        )
 
     def test_deterministic_canonical_id(self):
         """Same member set always produces the same canonical_id (idempotent).
@@ -642,7 +804,9 @@ class TestCrossSourceAnimeClustering:
         rows = self._make_anime_rows([("anilist:572", "風の谷のナウシカ", 1984, None)])
         c1 = list(build_cross_source_anime_clusters(rows, bronze_root=None).keys())[0]
         c2 = list(build_cross_source_anime_clusters(rows, bronze_root=None).keys())[0]
-        assert c1 == c2, "canonical_id must be deterministic for repeated calls with same input"
+        assert c1 == c2, (
+            "canonical_id must be deterministic for repeated calls with same input"
+        )
 
         # Different member IDs → different canonical_id (collision-free)
         rows2 = self._make_anime_rows([("seesaa:x", "風の谷のナウシカ", 1984, None)])
@@ -657,10 +821,12 @@ class TestCrossSourceAnimeClustering:
         from src.etl.resolved._cross_source_ids import build_cross_source_anime_clusters
 
         # Full-width 'ＮＨＫ' vs ASCII 'NHK' — NFKC normalizes both to same form
-        rows = self._make_anime_rows([
-            ("anilist:1", "ＮＨＫにようこそ！", 2004, None),
-            ("mal:1", "NHKにようこそ！", 2004, None),
-        ])
+        rows = self._make_anime_rows(
+            [
+                ("anilist:1", "ＮＨＫにようこそ！", 2004, None),
+                ("mal:1", "NHKにようこそ！", 2004, None),
+            ]
+        )
         clusters = build_cross_source_anime_clusters(rows, bronze_root=None)
         assert len(clusters) == 1
 
@@ -695,10 +861,12 @@ class TestPersonsCluster:
         """Persons with identical name_ja across sources should be merged."""
         from src.etl.resolved._persons_cluster import build_persons_canonical_map
 
-        rows = self._make_person_rows([
-            ("seesaa:p1", "宮崎駿", "", None),
-            ("anilist:p96870", "宮崎駿", "Hayao Miyazaki", None),
-        ])
+        rows = self._make_person_rows(
+            [
+                ("seesaa:p1", "宮崎駿", "", None),
+                ("anilist:p96870", "宮崎駿", "Hayao Miyazaki", None),
+            ]
+        )
         cmap = build_persons_canonical_map(rows, fast_only=True)
         # One of them maps to the other
         assert len(cmap) >= 1
@@ -707,10 +875,12 @@ class TestPersonsCluster:
         """Persons with different names must not be merged."""
         from src.etl.resolved._persons_cluster import build_persons_canonical_map
 
-        rows = self._make_person_rows([
-            ("seesaa:p1", "宮崎駿", "", None),
-            ("seesaa:p2", "高畑勲", "", None),
-        ])
+        rows = self._make_person_rows(
+            [
+                ("seesaa:p1", "宮崎駿", "", None),
+                ("seesaa:p2", "高畑勲", "", None),
+            ]
+        )
         cmap = build_persons_canonical_map(rows, fast_only=True)
         # Neither maps to the other
         assert "seesaa:p1" not in cmap or cmap.get("seesaa:p1") != "seesaa:p2"
@@ -804,9 +974,7 @@ class TestResolvedReader:
         build_resolved_persons(conformed_path, resolved_path)
         build_resolved_studios(conformed_path, resolved_path)
 
-    def test_resolved_available_false_before_build(
-        self, resolved_path: Path
-    ):
+    def test_resolved_available_false_before_build(self, resolved_path: Path):
         from src.analysis.io.resolved_reader import resolved_available
 
         assert not resolved_available(resolved_path)
@@ -864,9 +1032,7 @@ class TestResolvedReader:
         result = load_anime_resolved(absent)
         assert result == []
 
-    def test_query_resolved(
-        self, conformed_path: Path, resolved_path: Path
-    ):
+    def test_query_resolved(self, conformed_path: Path, resolved_path: Path):
         from src.analysis.io.resolved_reader import query_resolved
 
         self._build_all(conformed_path, resolved_path)
@@ -914,9 +1080,7 @@ class TestResolveCredits:
         # 3 conformed credits → 3 resolved credit rows
         assert count == 3
 
-    def test_canonical_ids_substituted(
-        self, conformed_path: Path, resolved_path: Path
-    ):
+    def test_canonical_ids_substituted(self, conformed_path: Path, resolved_path: Path):
         """All 3 conformed credits must map to a single canonical person_id and anime_id.
 
         Phase 2b merges all 3 persons (seesaa:p1, anilist:p2, bgm:p3) → 1 canonical.
@@ -937,16 +1101,16 @@ class TestResolveCredits:
         # After merge: all 3 credits should have the same canonical person_id + anime_id
         person_ids = {r[0] for r in rows}
         anime_ids = {r[1] for r in rows}
-        assert len(person_ids) == 1, f"Expected 1 canonical person_id, got: {person_ids}"
+        assert len(person_ids) == 1, (
+            f"Expected 1 canonical person_id, got: {person_ids}"
+        )
         assert len(anime_ids) == 1, f"Expected 1 canonical anime_id, got: {anime_ids}"
         # anime_id must be the resolved:anime:* format
         assert next(iter(anime_ids)).startswith("resolved:anime:"), (
             f"anime_id not in resolved:anime: format: {anime_ids}"
         )
 
-    def test_evidence_source_preserved(
-        self, conformed_path: Path, resolved_path: Path
-    ):
+    def test_evidence_source_preserved(self, conformed_path: Path, resolved_path: Path):
         """evidence_source must be preserved unchanged (H4)."""
         from src.etl.resolved.resolve_credits import build_resolved_credits
 
@@ -956,7 +1120,9 @@ class TestResolveCredits:
         conn = duckdb.connect(str(resolved_path), read_only=True)
         sources = {
             r[0]
-            for r in conn.execute("SELECT DISTINCT evidence_source FROM credits").fetchall()
+            for r in conn.execute(
+                "SELECT DISTINCT evidence_source FROM credits"
+            ).fetchall()
         }
         conn.close()
         # Original evidence sources are seesaa, anilist, bgm
@@ -964,9 +1130,7 @@ class TestResolveCredits:
         assert "anilist" in sources
         assert "bgm" in sources
 
-    def test_idempotent_rebuild(
-        self, conformed_path: Path, resolved_path: Path
-    ):
+    def test_idempotent_rebuild(self, conformed_path: Path, resolved_path: Path):
         """Running build_resolved_credits twice produces the same count."""
         from src.etl.resolved.resolve_credits import build_resolved_credits
 
@@ -1023,9 +1187,7 @@ class TestResolveCredits:
         conn.close()
         # IDs should pass through unchanged (no canonical map available)
         ids = {r[0] for r in rows}
-        assert any(
-            pid.startswith(("seesaa:", "anilist:", "bgm:")) for pid in ids
-        )
+        assert any(pid.startswith(("seesaa:", "anilist:", "bgm:")) for pid in ids)
 
 
 # ---------------------------------------------------------------------------
@@ -1082,7 +1244,9 @@ class TestResolvedReaderCredits:
         person_ids = {c.person_id for c in credits}
         anime_ids = {c.anime_id for c in credits}
         # All 3 credits should map to the same canonical IDs
-        assert len(person_ids) == 1, f"Expected 1 canonical person_id, got: {person_ids}"
+        assert len(person_ids) == 1, (
+            f"Expected 1 canonical person_id, got: {person_ids}"
+        )
         assert len(anime_ids) == 1, f"Expected 1 canonical anime_id, got: {anime_ids}"
         assert next(iter(anime_ids)).startswith("resolved:anime:"), (
             f"anime_id not in resolved:anime: format: {anime_ids}"
@@ -1103,7 +1267,9 @@ class TestResolvedReaderCredits:
         # All map to the same canonical_id
         canonical_ids = set(cmap.values())
         assert len(canonical_ids) == 1
-        assert next(iter(canonical_ids)).startswith("resolved:person:") or True  # may be conformed id
+        assert (
+            next(iter(canonical_ids)).startswith("resolved:person:") or True
+        )  # may be conformed id
 
     def test_load_persons_conformed_id_map_absent_returns_empty(self, tmp_path: Path):
         from src.analysis.io.resolved_reader import load_persons_conformed_id_map

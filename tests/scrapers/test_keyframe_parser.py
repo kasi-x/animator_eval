@@ -1,4 +1,5 @@
 """Tests for src/scrapers/parsers/keyframe.py — HTML preloadData parsers."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -127,7 +128,11 @@ class TestParseAnimeMeta:
             "anilistId": 21,
             "anilist": {
                 "id": 21,
-                "title": {"native": "ワンピース", "english": "ONE PIECE", "romaji": "One Piece"},
+                "title": {
+                    "native": "ワンピース",
+                    "english": "ONE PIECE",
+                    "romaji": "One Piece",
+                },
                 "synonyms": ["OP"],
                 "format": "TV",
                 "episodes": None,
@@ -253,8 +258,18 @@ _SIMPLE_PRELOAD = {
                             "name": "Director",
                             "original": "監督",
                             "staff": [
-                                {"id": 100, "ja": "田中", "en": "Tanaka", "isStudio": False},
-                                {"id": None, "ja": "テスト", "en": "", "isStudio": False},
+                                {
+                                    "id": 100,
+                                    "ja": "田中",
+                                    "en": "Tanaka",
+                                    "isStudio": False,
+                                },
+                                {
+                                    "id": None,
+                                    "ja": "テスト",
+                                    "en": "",
+                                    "isStudio": False,
+                                },
                             ],
                         },
                         {
@@ -301,11 +316,31 @@ class TestParseCreditsFromData:
 
     def test_empty_person_skipped(self):
         """Staff with id=None AND no name should be skipped."""
-        data = {"menus": [{"name": "Overview", "credits": [{"roles": [
-            {"name": "Misc", "original": "", "staff": [
-                {"id": None, "ja": "", "en": "", "isStudio": False}
-            ]}
-        ]}]}]}
+        data = {
+            "menus": [
+                {
+                    "name": "Overview",
+                    "credits": [
+                        {
+                            "roles": [
+                                {
+                                    "name": "Misc",
+                                    "original": "",
+                                    "staff": [
+                                        {
+                                            "id": None,
+                                            "ja": "",
+                                            "en": "",
+                                            "isStudio": False,
+                                        }
+                                    ],
+                                }
+                            ]
+                        }
+                    ],
+                }
+            ]
+        }
         credits = parse_credits_from_data(data, "slug")
         assert len(credits) == 0
 
@@ -326,9 +361,24 @@ class TestParseCreditsFromData:
 class TestCollectStudioMaster:
     def test_deduplicates_studio_ids(self):
         credits = [
-            {"is_studio_role": True, "person_id": 10, "name_ja": "スタジオ", "name_en": "Studio"},
-            {"is_studio_role": True, "person_id": 10, "name_ja": "スタジオ", "name_en": "Studio"},
-            {"is_studio_role": False, "person_id": 20, "name_ja": "Person", "name_en": "Person"},
+            {
+                "is_studio_role": True,
+                "person_id": 10,
+                "name_ja": "スタジオ",
+                "name_en": "Studio",
+            },
+            {
+                "is_studio_role": True,
+                "person_id": 10,
+                "name_ja": "スタジオ",
+                "name_en": "Studio",
+            },
+            {
+                "is_studio_role": False,
+                "person_id": 20,
+                "name_ja": "Person",
+                "name_en": "Person",
+            },
         ]
         masters = collect_studio_master(credits)
         assert len(masters) == 1

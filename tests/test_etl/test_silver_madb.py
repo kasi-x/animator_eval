@@ -10,6 +10,7 @@ Verifies BRONZE parquet → SILVER DuckDB integration for all 6 mediaarts tables
 
 Uses synthetic parquet files written to a tmp directory.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -25,6 +26,7 @@ from src.etl.conformed_loaders import madb
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture()
 def conn() -> duckdb.DuckDBPyConnection:
@@ -49,27 +51,31 @@ def bronze_root(tmp_path: Path) -> Path:
     # broadcasters
     _write(
         "broadcasters",
-        pa.schema([
-            pa.field("madb_id", pa.string()),
-            pa.field("name", pa.string()),
-            pa.field("is_network_station", pa.bool_()),
-        ]),
+        pa.schema(
+            [
+                pa.field("madb_id", pa.string()),
+                pa.field("name", pa.string()),
+                pa.field("is_network_station", pa.bool_()),
+            ]
+        ),
         {
-            "madb_id":             ["C001", "C001", "C002"],
-            "name":                ["NHK", "NHK", "TBS"],
-            "is_network_station":  [True, True, False],
+            "madb_id": ["C001", "C001", "C002"],
+            "name": ["NHK", "NHK", "TBS"],
+            "is_network_station": [True, True, False],
         },
     )
 
     # broadcast_schedule
     _write(
         "broadcast_schedule",
-        pa.schema([
-            pa.field("madb_id", pa.string()),
-            pa.field("raw_text", pa.string()),
-        ]),
+        pa.schema(
+            [
+                pa.field("madb_id", pa.string()),
+                pa.field("raw_text", pa.string()),
+            ]
+        ),
         {
-            "madb_id":  ["C001", "C002"],
+            "madb_id": ["C001", "C002"],
             "raw_text": ["日曜日09:00~", "月曜日23:00~"],
         },
     )
@@ -77,77 +83,85 @@ def bronze_root(tmp_path: Path) -> Path:
     # production_committee
     _write(
         "production_committee",
-        pa.schema([
-            pa.field("madb_id", pa.string()),
-            pa.field("company_name", pa.string()),
-            pa.field("role_label", pa.string()),
-        ]),
+        pa.schema(
+            [
+                pa.field("madb_id", pa.string()),
+                pa.field("company_name", pa.string()),
+                pa.field("role_label", pa.string()),
+            ]
+        ),
         {
-            "madb_id":      ["C001", "C001"],
+            "madb_id": ["C001", "C001"],
             "company_name": ["Studio A", "Distributor B"],
-            "role_label":   ["幹事", None],
+            "role_label": ["幹事", None],
         },
     )
 
     # production_companies
     _write(
         "production_companies",
-        pa.schema([
-            pa.field("madb_id", pa.string()),
-            pa.field("company_name", pa.string()),
-            pa.field("role_label", pa.string()),
-            pa.field("is_main", pa.bool_()),
-        ]),
+        pa.schema(
+            [
+                pa.field("madb_id", pa.string()),
+                pa.field("company_name", pa.string()),
+                pa.field("role_label", pa.string()),
+                pa.field("is_main", pa.bool_()),
+            ]
+        ),
         {
-            "madb_id":      ["C001", "C001"],
+            "madb_id": ["C001", "C001"],
             "company_name": ["Studio A", "Studio B"],
-            "role_label":   ["制作", "制作協力"],
-            "is_main":      [True, False],
+            "role_label": ["制作", "制作協力"],
+            "is_main": [True, False],
         },
     )
 
     # video_releases
     _write(
         "video_releases",
-        pa.schema([
-            pa.field("madb_id", pa.string()),
-            pa.field("series_madb_id", pa.string()),
-            pa.field("media_format", pa.string()),
-            pa.field("date_published", pa.string()),
-            pa.field("publisher", pa.string()),
-            pa.field("product_id", pa.string()),
-            pa.field("gtin", pa.string()),
-            pa.field("runtime_min", pa.int64()),
-            pa.field("volume_number", pa.string()),
-            pa.field("release_title", pa.string()),
-        ]),
+        pa.schema(
+            [
+                pa.field("madb_id", pa.string()),
+                pa.field("series_madb_id", pa.string()),
+                pa.field("media_format", pa.string()),
+                pa.field("date_published", pa.string()),
+                pa.field("publisher", pa.string()),
+                pa.field("product_id", pa.string()),
+                pa.field("gtin", pa.string()),
+                pa.field("runtime_min", pa.int64()),
+                pa.field("volume_number", pa.string()),
+                pa.field("release_title", pa.string()),
+            ]
+        ),
         {
-            "madb_id":        ["R001", "R002"],
+            "madb_id": ["R001", "R002"],
             "series_madb_id": ["C001", "C001"],
-            "media_format":   ["BD", "DVD"],
+            "media_format": ["BD", "DVD"],
             "date_published": ["2020-01-01", "2020-03-01"],
-            "publisher":      ["Aniplex", "Aniplex"],
-            "product_id":     ["ANZX-1234", "ANSB-5678"],
-            "gtin":           ["", ""],
-            "runtime_min":    [120, 90],
-            "volume_number":  ["Vol.1", "Vol.2"],
-            "release_title":  ["Title A Vol.1", "Title A Vol.2"],
+            "publisher": ["Aniplex", "Aniplex"],
+            "product_id": ["ANZX-1234", "ANSB-5678"],
+            "gtin": ["", ""],
+            "runtime_min": [120, 90],
+            "volume_number": ["Vol.1", "Vol.2"],
+            "release_title": ["Title A Vol.1", "Title A Vol.2"],
         },
     )
 
     # original_work_links
     _write(
         "original_work_links",
-        pa.schema([
-            pa.field("madb_id", pa.string()),
-            pa.field("work_name", pa.string()),
-            pa.field("creator_text", pa.string()),
-            pa.field("series_link_id", pa.string()),
-        ]),
+        pa.schema(
+            [
+                pa.field("madb_id", pa.string()),
+                pa.field("work_name", pa.string()),
+                pa.field("creator_text", pa.string()),
+                pa.field("series_link_id", pa.string()),
+            ]
+        ),
         {
-            "madb_id":        ["C001"],
-            "work_name":      ["原作マンガ"],
-            "creator_text":   ["作者 太郎"],
+            "madb_id": ["C001"],
+            "work_name": ["原作マンガ"],
+            "creator_text": ["作者 太郎"],
             "series_link_id": ["SL001"],
         },
     )
@@ -156,15 +170,17 @@ def bronze_root(tmp_path: Path) -> Path:
     # C001 has Studio A (also in production_companies), C002 has Studio C (only in array)
     _write(
         "anime",
-        pa.schema([
-            pa.field("madb_id", pa.string()),
-            pa.field("title_ja", pa.string()),
-            pa.field("studios", pa.list_(pa.string())),
-        ]),
+        pa.schema(
+            [
+                pa.field("madb_id", pa.string()),
+                pa.field("title_ja", pa.string()),
+                pa.field("studios", pa.list_(pa.string())),
+            ]
+        ),
         {
-            "madb_id":   ["C001", "C002"],
-            "title_ja":  ["テスト1", "テスト2"],
-            "studios":   [["Studio A"], ["Studio C"]],
+            "madb_id": ["C001", "C002"],
+            "title_ja": ["テスト1", "テスト2"],
+            "studios": [["Studio A"], ["Studio C"]],
         },
     )
 
@@ -174,6 +190,7 @@ def bronze_root(tmp_path: Path) -> Path:
 # ---------------------------------------------------------------------------
 # create_tables
 # ---------------------------------------------------------------------------
+
 
 class TestCreateTables:
     def test_all_tables_exist(self, conn: duckdb.DuckDBPyConnection) -> None:
@@ -185,10 +202,7 @@ class TestCreateTables:
             "anime_video_releases",
             "anime_original_work_links",
         }
-        tables = {
-            row[0]
-            for row in conn.execute("SHOW TABLES").fetchall()
-        }
+        tables = {row[0] for row in conn.execute("SHOW TABLES").fetchall()}
         assert expected.issubset(tables)
 
     def test_idempotent(self, conn: duckdb.DuckDBPyConnection) -> None:
@@ -199,6 +213,7 @@ class TestCreateTables:
 # ---------------------------------------------------------------------------
 # integrate
 # ---------------------------------------------------------------------------
+
 
 class TestIntegrate:
     def test_returns_counts_for_all_tables(
@@ -273,7 +288,9 @@ class TestIntegrate:
             "anime_video_releases",
             "anime_original_work_links",
         ]:
-            assert counts1[key] == counts2[key], f"{key}: {counts1[key]} != {counts2[key]}"
+            assert counts1[key] == counts2[key], (
+                f"{key}: {counts1[key]} != {counts2[key]}"
+            )
 
     def test_is_network_station_cast(
         self, conn: duckdb.DuckDBPyConnection, bronze_root: Path
@@ -315,18 +332,18 @@ class TestIntegrate:
         error_keys = [k for k in counts if k.endswith("_error")]
         assert len(error_keys) > 0
 
-    def test_null_madb_id_skipped(
-        self, tmp_path: Path
-    ) -> None:
+    def test_null_madb_id_skipped(self, tmp_path: Path) -> None:
         """Rows with NULL madb_id are not inserted."""
         root = tmp_path
         date_dir = root / "source=mediaarts" / "table=broadcasters" / "date=2026-04-27"
         date_dir.mkdir(parents=True, exist_ok=True)
-        schema = pa.schema([
-            pa.field("madb_id", pa.string()),
-            pa.field("name", pa.string()),
-            pa.field("is_network_station", pa.bool_()),
-        ])
+        schema = pa.schema(
+            [
+                pa.field("madb_id", pa.string()),
+                pa.field("name", pa.string()),
+                pa.field("is_network_station", pa.bool_()),
+            ]
+        )
         tbl = pa.Table.from_arrays(
             [
                 pa.array([None, "C001"], type=pa.string()),
@@ -405,16 +422,28 @@ class TestIntegrate:
     ) -> None:
         """22/02: missing anime parquet for the array path does not add _error keys."""
         # Only write production_companies, not anime table
-        date_dir = tmp_path / "source=mediaarts" / "table=production_companies" / "date=2026-04-27"
+        date_dir = (
+            tmp_path
+            / "source=mediaarts"
+            / "table=production_companies"
+            / "date=2026-04-27"
+        )
         date_dir.mkdir(parents=True, exist_ok=True)
-        schema = pa.schema([
-            pa.field("madb_id", pa.string()),
-            pa.field("company_name", pa.string()),
-            pa.field("role_label", pa.string()),
-            pa.field("is_main", pa.bool_()),
-        ])
+        schema = pa.schema(
+            [
+                pa.field("madb_id", pa.string()),
+                pa.field("company_name", pa.string()),
+                pa.field("role_label", pa.string()),
+                pa.field("is_main", pa.bool_()),
+            ]
+        )
         tbl = pa.Table.from_arrays(
-            [pa.array(["C001"]), pa.array(["Studio A"]), pa.array(["アニメーション制作"]), pa.array([True])],
+            [
+                pa.array(["C001"]),
+                pa.array(["Studio A"]),
+                pa.array(["アニメーション制作"]),
+                pa.array([True]),
+            ],
             schema=schema,
         )
         pq.write_table(tbl, date_dir / "data.parquet")

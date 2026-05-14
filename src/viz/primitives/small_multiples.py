@@ -47,7 +47,9 @@ def _facet_grid(facets: list[FacetCell], n_cols: int) -> tuple[int, int]:
     return rows, cols
 
 
-def render_small_multiples(spec: SmallMultiplesSpec, *, theme: str = "dark") -> go.Figure:
+def render_small_multiples(
+    spec: SmallMultiplesSpec, *, theme: str = "dark"
+) -> go.Figure:
     if not spec.facets:
         fig = go.Figure()
         fig.update_layout(title=spec.title or "(no facets)")
@@ -57,8 +59,7 @@ def render_small_multiples(spec: SmallMultiplesSpec, *, theme: str = "dark") -> 
 
     if spec.show_facet_titles:
         subplot_titles = [
-            f"{f.row_label} × {f.col_label}".strip(" ×")
-            for f in spec.facets
+            f"{f.row_label} × {f.col_label}".strip(" ×") for f in spec.facets
         ]
     else:
         subplot_titles = None

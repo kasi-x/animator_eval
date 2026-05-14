@@ -15,6 +15,7 @@ ID prefix conventions:
   'bgm:p<person_id>'    — persons
   'bgm:c<character_id>' — characters
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -407,7 +408,9 @@ CREATE TABLE IF NOT EXISTS studios (
 
 def _glob(bronze_root: Path, table: str) -> str:
     """Return a glob pattern for a bangumi BRONZE table partition."""
-    return str(bronze_root / "source=bangumi" / f"table={table}" / "date=*" / "*.parquet")
+    return str(
+        bronze_root / "source=bangumi" / f"table={table}" / "date=*" / "*.parquet"
+    )
 
 
 def _has_parquet(conn: duckdb.DuckDBPyConnection, glob: str) -> bool:
@@ -462,7 +465,9 @@ def _register_udf(conn: duckdb.DuckDBPyConnection) -> None:
     )
 
 
-def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[str, int]:
+def integrate(
+    conn: duckdb.DuckDBPyConnection, bronze_root: Path | str
+) -> dict[str, int]:
     """Load bangumi.tv BRONZE data into SILVER tables.
 
     Args:
@@ -480,12 +485,12 @@ def integrate(conn: duckdb.DuckDBPyConnection, bronze_root: Path | str) -> dict[
     _apply_ddl(conn)
     _register_udf(conn)
 
-    subjects_glob    = _glob(bronze_root, "subjects")
-    persons_glob     = _glob(bronze_root, "persons")
-    characters_glob  = _glob(bronze_root, "characters")
-    sp_glob          = _glob(bronze_root, "subject_persons")
-    pc_glob          = _glob(bronze_root, "person_characters")
-    sc_glob          = _glob(bronze_root, "subject_characters")
+    subjects_glob = _glob(bronze_root, "subjects")
+    persons_glob = _glob(bronze_root, "persons")
+    characters_glob = _glob(bronze_root, "characters")
+    sp_glob = _glob(bronze_root, "subject_persons")
+    pc_glob = _glob(bronze_root, "person_characters")
+    sc_glob = _glob(bronze_root, "subject_characters")
 
     if _has_parquet(conn, subjects_glob):
         conn.execute(_SUBJECTS_SQL, [subjects_glob])

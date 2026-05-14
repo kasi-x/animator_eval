@@ -1,4 +1,5 @@
 """docs/merge_strategy.json + strategy_loader + decisions_log の test。"""
+
 from __future__ import annotations
 
 import json
@@ -73,9 +74,7 @@ def test_select_priority_fallback() -> None:
         {"id": "anilist:1", "title_ja": "テスト"},
         {"id": "mal:1", "title_ja": "test"},
     ]
-    val, src, rule = select_representative_value(
-        "title_ja", cands, ["anilist", "mal"]
-    )
+    val, src, rule = select_representative_value("title_ja", cands, ["anilist", "mal"])
     assert val == "テスト"
     assert src == "anilist"
     assert rule == "priority_fallback"
@@ -83,9 +82,7 @@ def test_select_priority_fallback() -> None:
 
 def test_select_no_value() -> None:
     cands = [{"id": "anilist:1", "title_ja": ""}]
-    val, src, rule = select_representative_value(
-        "title_ja", cands, ["anilist"]
-    )
+    val, src, rule = select_representative_value("title_ja", cands, ["anilist"])
     assert val is None
     assert rule == "no_value"
 
@@ -159,7 +156,11 @@ def test_build_decision_record_shape() -> None:
     assert rec["entity_type"] == "anime"
     assert rec["field"] == "title_ja"
     assert len(rec["candidates"]) == 3
-    assert rec["selected"] == {"value": "進撃の巨人", "src": "seesaa", "rule": "priority_fallback"}
+    assert rec["selected"] == {
+        "value": "進撃の巨人",
+        "src": "seesaa",
+        "rule": "priority_fallback",
+    }
     assert rec["context"]["cluster_size"] == 3
     assert rec["context"]["value_distinct_count"] == 2
     assert rec["context"]["string_edit_distance_max"] > 0
@@ -174,20 +175,30 @@ def test_build_decision_record_shape() -> None:
 def test_decisions_logger_roundtrip(tmp_path: Path) -> None:
     log_path = tmp_path / "decisions.jsonl"
     with DecisionsLogger(log_path, sample_rate=1.0) as log:
-        log.write(build_decision_record(
-            canonical_id="x", entity_type="anime", field="title_ja",
-            candidates=[{"id": "anilist:1", "title_ja": "A"}],
-            selected_value="A", winning_source="anilist",
-            selection_rule="priority_fallback",
-            priority=["anilist"],
-        ))
-        log.write(build_decision_record(
-            canonical_id="y", entity_type="anime", field="title_ja",
-            candidates=[{"id": "mal:1", "title_ja": "B"}],
-            selected_value="B", winning_source="mal",
-            selection_rule="priority_fallback",
-            priority=["mal"],
-        ))
+        log.write(
+            build_decision_record(
+                canonical_id="x",
+                entity_type="anime",
+                field="title_ja",
+                candidates=[{"id": "anilist:1", "title_ja": "A"}],
+                selected_value="A",
+                winning_source="anilist",
+                selection_rule="priority_fallback",
+                priority=["anilist"],
+            )
+        )
+        log.write(
+            build_decision_record(
+                canonical_id="y",
+                entity_type="anime",
+                field="title_ja",
+                candidates=[{"id": "mal:1", "title_ja": "B"}],
+                selected_value="B",
+                winning_source="mal",
+                selection_rule="priority_fallback",
+                priority=["mal"],
+            )
+        )
     lines = log_path.read_text(encoding="utf-8").strip().split("\n")
     assert len(lines) == 2
     rec0 = json.loads(lines[0])
@@ -199,13 +210,18 @@ def test_decisions_logger_sampling(tmp_path: Path) -> None:
     log_path = tmp_path / "decisions.jsonl"
     with DecisionsLogger(log_path, sample_rate=0.0) as log:
         for i in range(10):
-            log.write(build_decision_record(
-                canonical_id=f"x{i}", entity_type="anime", field="title_ja",
-                candidates=[{"id": "anilist:1", "title_ja": "A"}],
-                selected_value="A", winning_source="anilist",
-                selection_rule="priority_fallback",
-                priority=["anilist"],
-            ))
+            log.write(
+                build_decision_record(
+                    canonical_id=f"x{i}",
+                    entity_type="anime",
+                    field="title_ja",
+                    candidates=[{"id": "anilist:1", "title_ja": "A"}],
+                    selected_value="A",
+                    winning_source="anilist",
+                    selection_rule="priority_fallback",
+                    priority=["anilist"],
+                )
+            )
     assert log.skipped == 10
     assert log.written == 0
 
@@ -221,9 +237,7 @@ def test_decisions_logger_truncate(tmp_path: Path) -> None:
 def test_strategy_threshold_used_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     """select_representative_value() は明示指定なき時 strategy_loader 経由の threshold を使う。"""
     # threshold=2 を返すよう monkeypatch
-    monkeypatch.setattr(
-        "src.etl.resolved._select.majority_threshold", lambda: 2
-    )
+    monkeypatch.setattr("src.etl.resolved._select.majority_threshold", lambda: 2)
     cands = [
         {"id": "anilist:1", "title_ja": "進撃の巨人"},
         {"id": "anilist:2", "title_ja": "進撃の巨人"},

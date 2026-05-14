@@ -98,9 +98,7 @@ def tv_payload() -> dict:
         "origin_country": ["JP"],
         "status": "Ended",
         "genres": [{"id": 16, "name": "Animation"}, {"id": 80, "name": "Crime"}],
-        "production_companies": [
-            {"id": 5, "name": "Madhouse", "origin_country": "JP"}
-        ],
+        "production_companies": [{"id": 5, "name": "Madhouse", "origin_country": "JP"}],
         "overview": "Synopsis.",
         "poster_path": "/poster.jpg",
         "vote_average": 8.7,
@@ -250,7 +248,9 @@ def test_parse_credits_skips_persons_without_id() -> None:
         "name": "x",
         "aggregate_credits": {
             "cast": [{"name": "no id", "roles": [{"character": "c"}]}],
-            "crew": [{"id": 5, "department": "Directing", "jobs": [{"job": "Director"}]}],
+            "crew": [
+                {"id": 5, "department": "Directing", "jobs": [{"job": "Director"}]}
+            ],
         },
     }
     rec = parse_tmdb_anime(raw, "tv")

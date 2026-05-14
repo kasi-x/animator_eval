@@ -21,5 +21,3 @@ def person_url(person_id: int) -> str:
 def character_url(character_id: int) -> str:
     """Return the URL for GET /v0/characters/{id}."""
     return f"{BANGUMI_API_BASE}/v0/characters/{character_id}"
-
-

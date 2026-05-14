@@ -41,18 +41,30 @@ DateTuple = tuple[Optional[int], Optional[int], Optional[int]]
 # ---------------------------------------------------------------------------
 
 _MONTH_NAMES: dict[str, int] = {
-    "january": 1, "jan": 1,
-    "february": 2, "feb": 2,
-    "march": 3, "mar": 3,
-    "april": 4, "apr": 4,
+    "january": 1,
+    "jan": 1,
+    "february": 2,
+    "feb": 2,
+    "march": 3,
+    "mar": 3,
+    "april": 4,
+    "apr": 4,
     "may": 5,
-    "june": 6, "jun": 6,
-    "july": 7, "jul": 7,
-    "august": 8, "aug": 8,
-    "september": 9, "sep": 9, "sept": 9,
-    "october": 10, "oct": 10,
-    "november": 11, "nov": 11,
-    "december": 12, "dec": 12,
+    "june": 6,
+    "jun": 6,
+    "july": 7,
+    "jul": 7,
+    "august": 8,
+    "aug": 8,
+    "september": 9,
+    "sep": 9,
+    "sept": 9,
+    "october": 10,
+    "oct": 10,
+    "november": 11,
+    "nov": 11,
+    "december": 12,
+    "dec": 12,
 }
 
 # ---------------------------------------------------------------------------
@@ -60,40 +72,25 @@ _MONTH_NAMES: dict[str, int] = {
 # ---------------------------------------------------------------------------
 
 # ISO / slash / dot: YYYY[-/.]MM[-/.]DD  or  YYYY[-/.]MM  or  YYYY alone
-_ISO_FULL_RE = re.compile(
-    r"^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$"
-)
-_ISO_YM_RE = re.compile(
-    r"^(\d{4})[-/.](\d{1,2})$"
-)
-_ISO_Y_RE = re.compile(
-    r"^(\d{4})$"
-)
+_ISO_FULL_RE = re.compile(r"^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$")
+_ISO_YM_RE = re.compile(r"^(\d{4})[-/.](\d{1,2})$")
+_ISO_Y_RE = re.compile(r"^(\d{4})$")
 
 # ISO with XX placeholders: YYYY-MM-XX / YYYY-XX-XX (our own output format)
-_ISO_XX_FULL_RE = re.compile(
-    r"^(\d{4})-(XX|\d{2})-(XX|\d{2})$", re.IGNORECASE
-)
-_ISO_XX_YM_RE = re.compile(
-    r"^(\d{4})-(XX|\d{2})-XX$", re.IGNORECASE
-)
-_ISO_XX_Y_RE = re.compile(
-    r"^(\d{4})-XX-XX$", re.IGNORECASE
-)
+_ISO_XX_FULL_RE = re.compile(r"^(\d{4})-(XX|\d{2})-(XX|\d{2})$", re.IGNORECASE)
+_ISO_XX_YM_RE = re.compile(r"^(\d{4})-(XX|\d{2})-XX$", re.IGNORECASE)
+_ISO_XX_Y_RE = re.compile(r"^(\d{4})-XX-XX$", re.IGNORECASE)
 
 # English: "April 15, 2020" / "Apr 15 2020"
-_EN_MONTH_DAY_YEAR_RE = re.compile(
-    r"^([A-Za-z]+)\s+(\d{1,2})[,\s]+(\d{4})$"
-)
+_EN_MONTH_DAY_YEAR_RE = re.compile(r"^([A-Za-z]+)\s+(\d{1,2})[,\s]+(\d{4})$")
 # English: "2020 Apr 15"
-_EN_YEAR_MONTH_DAY_RE = re.compile(
-    r"^(\d{4})\s+([A-Za-z]+)\s+(\d{1,2})$"
-)
+_EN_YEAR_MONTH_DAY_RE = re.compile(r"^(\d{4})\s+([A-Za-z]+)\s+(\d{1,2})$")
 
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
 
 def _clamp_month(m: int) -> Optional[int]:
     """Return month if in 1-12 range, else None."""
@@ -190,6 +187,7 @@ def _try_english(value: str) -> Optional[DateTuple]:
 # Public: parse_date
 # ---------------------------------------------------------------------------
 
+
 def parse_date(value: str | None) -> Optional[DateTuple]:
     """Parse a date string into a (year, month, day) tuple.
 
@@ -228,6 +226,7 @@ def parse_date(value: str | None) -> Optional[DateTuple]:
 # Public: to_iso8601
 # ---------------------------------------------------------------------------
 
+
 def to_iso8601(parsed: DateTuple) -> str:
     """Serialize a DateTuple to ISO 8601 with 'XX' for unknown components.
 
@@ -248,6 +247,7 @@ def to_iso8601(parsed: DateTuple) -> str:
 # ---------------------------------------------------------------------------
 # Public: normalize_date
 # ---------------------------------------------------------------------------
+
 
 def normalize_date(value: str | None) -> Optional[str]:
     """Parse and re-serialize a date string to ISO 8601 with XX placeholders.
@@ -270,6 +270,7 @@ def normalize_date(value: str | None) -> Optional[str]:
 # Public: precision_score
 # ---------------------------------------------------------------------------
 
+
 def precision_score(parsed: DateTuple) -> int:
     """Return numeric precision (higher = more detail).
 
@@ -288,6 +289,7 @@ def precision_score(parsed: DateTuple) -> int:
 # ---------------------------------------------------------------------------
 # Public: is_date_subset_compatible
 # ---------------------------------------------------------------------------
+
 
 def is_date_subset_compatible(a: str | None, b: str | None) -> bool:
     """Return True if dates a and b are subset-compatible.
@@ -325,6 +327,7 @@ def is_date_subset_compatible(a: str | None, b: str | None) -> bool:
 # ---------------------------------------------------------------------------
 # Public: pick_most_precise_date
 # ---------------------------------------------------------------------------
+
 
 def pick_most_precise_date(values: list[str | None]) -> Optional[str]:
     """From a list of date strings, return the ISO 8601 form of the most precise.

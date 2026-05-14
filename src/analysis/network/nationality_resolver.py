@@ -332,13 +332,15 @@ def studio_foreign_share(
             continue
         foreign = studio_foreign.get(studio_id, 0)
         share = foreign / total if total > 0 else 0.0
-        results.append({
-            "studio_id": studio_id,
-            "total_credits": total,
-            "foreign_credits": foreign,
-            "foreign_share": share,
-            "studio_fe": studio_fe.get(studio_id),
-        })
+        results.append(
+            {
+                "studio_id": studio_id,
+                "total_credits": total,
+                "foreign_credits": foreign,
+                "foreign_share": share,
+                "studio_fe": studio_fe.get(studio_id),
+            }
+        )
 
     results.sort(key=lambda x: x["foreign_share"], reverse=True)
     return results

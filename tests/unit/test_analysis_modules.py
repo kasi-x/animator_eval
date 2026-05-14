@@ -1,4 +1,5 @@
 """Tests for Phase 9: analysis_modules parallel execution."""
+
 import threading
 
 import pytest

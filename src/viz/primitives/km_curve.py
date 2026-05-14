@@ -170,12 +170,17 @@ def render_km_curve(spec: KMCurveSpec, *, theme: str = "dark") -> go.Figure:
 
     # 3. risk table subplot
     if spec.risk_table:
-        risk_times = list(spec.risk_table_times) if spec.risk_table_times \
+        risk_times = (
+            list(spec.risk_table_times)
+            if spec.risk_table_times
             else _auto_risk_times(spec.strata)
+        )
         for idx, stratum in enumerate(spec.strata):
             ys = [stratum.label] * len(risk_times)
             counts = [_at_risk_at(stratum, t) for t in risk_times]
-            color = stratum.color or spec.default_palette[idx % len(spec.default_palette)]
+            color = (
+                stratum.color or spec.default_palette[idx % len(spec.default_palette)]
+            )
             text = [str(c) if c is not None else "" for c in counts]
             fig.add_trace(
                 go.Scatter(

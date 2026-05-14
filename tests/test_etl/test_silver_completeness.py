@@ -4,6 +4,7 @@ Uses synthetic BRONZE parquet (written via BronzeWriter) and an in-memory
 DuckDB as the SILVER database.  No real silver.duckdb or result/bronze
 parquet files are required.
 """
+
 from __future__ import annotations
 
 import datetime as _dt
@@ -26,9 +27,14 @@ from src.etl.audit.silver_completeness import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _write_parquet(bronze_root: Path, source: str, table: str, rows: list[dict]) -> None:
+
+def _write_parquet(
+    bronze_root: Path, source: str, table: str, rows: list[dict]
+) -> None:
     """Write rows to a BRONZE parquet under bronze_root."""
-    with BronzeWriter(source, table=table, root=bronze_root, compact_on_exit=False) as bw:
+    with BronzeWriter(
+        source, table=table, root=bronze_root, compact_on_exit=False
+    ) as bw:
         for row in rows:
             bw.append(row)
 
@@ -203,40 +209,103 @@ def _make_silver_db(tmp_path: Path) -> Path:
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def bronze_root(tmp_path: Path) -> Path:
     """Write minimal synthetic BRONZE parquet for anilist and mal."""
     root = tmp_path / "bronze"
 
     # anilist/anime — 3 rows
-    _write_parquet(root, "anilist", "anime", [
-        {"id": "anilist:1", "title_ja": "アニメA", "title_en": "Anime A",
-         "content_hash": "h1", "fetched_at": "2024-01-01"},
-        {"id": "anilist:2", "title_ja": "アニメB", "title_en": "Anime B",
-         "content_hash": "h2", "fetched_at": "2024-01-01"},
-        {"id": "anilist:3", "title_ja": "アニメC", "title_en": "Anime C",
-         "content_hash": "h3", "fetched_at": "2024-01-01"},
-    ])
+    _write_parquet(
+        root,
+        "anilist",
+        "anime",
+        [
+            {
+                "id": "anilist:1",
+                "title_ja": "アニメA",
+                "title_en": "Anime A",
+                "content_hash": "h1",
+                "fetched_at": "2024-01-01",
+            },
+            {
+                "id": "anilist:2",
+                "title_ja": "アニメB",
+                "title_en": "Anime B",
+                "content_hash": "h2",
+                "fetched_at": "2024-01-01",
+            },
+            {
+                "id": "anilist:3",
+                "title_ja": "アニメC",
+                "title_en": "Anime C",
+                "content_hash": "h3",
+                "fetched_at": "2024-01-01",
+            },
+        ],
+    )
 
     # anilist/credits — 4 rows
-    _write_parquet(root, "anilist", "credits", [
-        {"person_id": "anilist:p1", "anime_id": "anilist:1", "role": "animation_director",
-         "raw_role": "Animation Director", "episode": None, "source": "anilist"},
-        {"person_id": "anilist:p2", "anime_id": "anilist:1", "role": "key_animation",
-         "raw_role": "Key Animation", "episode": 1, "source": "anilist"},
-        {"person_id": "anilist:p1", "anime_id": "anilist:2", "role": "director",
-         "raw_role": "Director", "episode": None, "source": "anilist"},
-        {"person_id": "anilist:p3", "anime_id": "anilist:3", "role": "other",
-         "raw_role": "Misc", "episode": None, "source": "anilist"},
-    ])
+    _write_parquet(
+        root,
+        "anilist",
+        "credits",
+        [
+            {
+                "person_id": "anilist:p1",
+                "anime_id": "anilist:1",
+                "role": "animation_director",
+                "raw_role": "Animation Director",
+                "episode": None,
+                "source": "anilist",
+            },
+            {
+                "person_id": "anilist:p2",
+                "anime_id": "anilist:1",
+                "role": "key_animation",
+                "raw_role": "Key Animation",
+                "episode": 1,
+                "source": "anilist",
+            },
+            {
+                "person_id": "anilist:p1",
+                "anime_id": "anilist:2",
+                "role": "director",
+                "raw_role": "Director",
+                "episode": None,
+                "source": "anilist",
+            },
+            {
+                "person_id": "anilist:p3",
+                "anime_id": "anilist:3",
+                "role": "other",
+                "raw_role": "Misc",
+                "episode": None,
+                "source": "anilist",
+            },
+        ],
+    )
 
     # mal/anime — 2 rows
-    _write_parquet(root, "mal", "anime", [
-        {"id": "mal:a1", "title_ja": "マルA", "title_en": "Mal Anime A",
-         "content_hash": "m1"},
-        {"id": "mal:a2", "title_ja": "マルB", "title_en": "Mal Anime B",
-         "content_hash": "m2"},
-    ])
+    _write_parquet(
+        root,
+        "mal",
+        "anime",
+        [
+            {
+                "id": "mal:a1",
+                "title_ja": "マルA",
+                "title_en": "Mal Anime A",
+                "content_hash": "m1",
+            },
+            {
+                "id": "mal:a2",
+                "title_ja": "マルB",
+                "title_en": "Mal Anime B",
+                "content_hash": "m2",
+            },
+        ],
+    )
 
     return root
 
@@ -271,6 +340,7 @@ def silver_db(tmp_path: Path, bronze_root: Path) -> Path:
 # list_bronze_tables tests
 # ---------------------------------------------------------------------------
 
+
 def test_list_bronze_tables_finds_known_tables(bronze_root: Path) -> None:
     tables = list_bronze_tables(bronze_root)
     assert ("anilist", "anime") in tables
@@ -299,6 +369,7 @@ def test_list_bronze_tables_empty_root(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # check() tests
 # ---------------------------------------------------------------------------
+
 
 def test_check_returns_coverage_rows(bronze_root: Path, silver_db: Path) -> None:
     """check() must return a non-empty list of CoverageRow."""
@@ -345,7 +416,9 @@ def test_check_unmapped_table(tmp_path: Path) -> None:
     db_path = _make_silver_db(tmp_path)
 
     rows = check(root, str(db_path))
-    row = next((r for r in rows if r.source == "ann" and r.bronze_table == "episodes"), None)
+    row = next(
+        (r for r in rows if r.source == "ann" and r.bronze_table == "episodes"), None
+    )
     assert row is not None
     assert row.unmapped is True
     assert row.status == "UNMAPPED"
@@ -371,6 +444,7 @@ def test_check_empty_bronze_source(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # CoverageRow property tests
 # ---------------------------------------------------------------------------
+
 
 def test_coverage_row_status_ok() -> None:
     r = CoverageRow("src", "tbl", 100, "anime", None, 97, 0.97, False)
@@ -406,7 +480,10 @@ def test_coverage_row_zero_bronze() -> None:
 # generate_report() smoke test
 # ---------------------------------------------------------------------------
 
-def test_generate_report_creates_file(bronze_root: Path, silver_db: Path, tmp_path: Path) -> None:
+
+def test_generate_report_creates_file(
+    bronze_root: Path, silver_db: Path, tmp_path: Path
+) -> None:
     """generate_report() creates a markdown file with expected sections."""
     rows = check(bronze_root, str(silver_db))
     out = tmp_path / "report" / "silver_completeness.md"
@@ -436,6 +513,7 @@ def test_generate_report_contains_source_sections(
 # ---------------------------------------------------------------------------
 # sample_missing_rows smoke test
 # ---------------------------------------------------------------------------
+
 
 def test_sample_missing_rows_returns_list(bronze_root: Path, silver_db: Path) -> None:
     """sample_missing_rows must return a list of dicts (may be empty)."""
@@ -470,7 +548,9 @@ def _write_parquet_on_date(
     date: _dt.date,
 ) -> None:
     """Write rows to a BRONZE parquet under bronze_root for a specific date."""
-    with BronzeWriter(source, table=table, root=bronze_root, compact_on_exit=False, date=date) as bw:
+    with BronzeWriter(
+        source, table=table, root=bronze_root, compact_on_exit=False, date=date
+    ) as bw:
         for row in rows:
             bw.append(row)
 
@@ -529,10 +609,13 @@ def test_partition_aware_bronze_rows_deduped(snapshot_bronze_root: Path) -> None
     """_count_bronze_rows with distinct_expr must count distinct entities only."""
     from src.etl.audit.silver_completeness import _count_bronze_rows
     import duckdb as _duckdb
+
     bronze_conn = _duckdb.connect(":memory:")
     try:
         # Without dedup → 6 rows (2 partitions × 3 rows each)
-        count_raw, err = _count_bronze_rows(bronze_conn, snapshot_bronze_root, "anilist", "anime")
+        count_raw, err = _count_bronze_rows(
+            bronze_conn, snapshot_bronze_root, "anilist", "anime"
+        )
         assert err is None
         assert count_raw == 6
 
@@ -583,12 +666,16 @@ def test_no_distinct_expr_uses_count_star(tmp_path: Path) -> None:
     root = tmp_path / "bronze"
     # Write ann/credits (no distinct_expr in mapping)
     _write_parquet_on_date(
-        root, "ann", "credits",
+        root,
+        "ann",
+        "credits",
         [{"person_id": "p1", "anime_id": "a1", "role": "director"}],
         _dt.date(2026, 4, 1),
     )
     _write_parquet_on_date(
-        root, "ann", "credits",
+        root,
+        "ann",
+        "credits",
         [{"person_id": "p1", "anime_id": "a1", "role": "director"}],
         _dt.date(2026, 4, 2),
     )

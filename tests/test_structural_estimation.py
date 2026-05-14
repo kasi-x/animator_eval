@@ -95,7 +95,7 @@ def _make_panel(
                 score = (
                     person_fes[i]
                     + (true_effect if is_major else 0.0)
-                    + 0.5 * float(t)   # experience effect
+                    + 0.5 * float(t)  # experience effect
                     + float(rng.normal(0.0, noise_sd))
                 )
 
@@ -153,7 +153,9 @@ class TestFixedEffectsBasic:
 
     def test_ci_contains_true_effect(self) -> None:
         """A4: 95% CI should bracket the true effect (high signal, low noise)."""
-        panel = _make_panel(true_effect=TRUE_MAJOR_EFFECT, noise_sd=0.2, obs_per_person=6)
+        panel = _make_panel(
+            true_effect=TRUE_MAJOR_EFFECT, noise_sd=0.2, obs_per_person=6
+        )
         result = estimate_fixed_effects(panel)
         # CI must be finite and ordered
         assert math.isfinite(result.ci_lower)
@@ -193,7 +195,9 @@ class TestStatisticalProperties:
         panel_high = _make_panel(noise_sd=5.0, obs_per_person=5)
         se_low = estimate_fixed_effects(panel_low).se
         se_high = estimate_fixed_effects(panel_high).se
-        assert se_high > se_low, f"SE(high noise)={se_high} not > SE(low noise)={se_low}"
+        assert se_high > se_low, (
+            f"SE(high noise)={se_high} not > SE(low noise)={se_low}"
+        )
 
     def test_no_within_variation_returns_error_result(self) -> None:
         """B3: fewer than 10 valid persons → error result with se=inf."""
@@ -322,7 +326,10 @@ class TestEdgeCases:
             for i in range(40)
         ]
         result = estimate_difference_in_differences(panel_no_treatment)
-        assert result.se == np.inf or result.diagnostics.get("error") == "no_treatment_observed"
+        assert (
+            result.se == np.inf
+            or result.diagnostics.get("error") == "no_treatment_observed"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -341,6 +348,7 @@ class TestRobustnessChecks:
 
     def test_parallel_trends_zero_betas_pass(self) -> None:
         """E2: all pre-treatment betas ≈ 0 → parallel trends passes."""
+
         # Build fake event study results with zero pre-treatment betas
         def _make_result(beta: float, p_value: float) -> RegressionResult:
             return RegressionResult(
@@ -368,7 +376,9 @@ class TestRobustnessChecks:
         }
         check = check_parallel_trends(event_results)
         assert isinstance(check, RobustnessCheck)
-        assert check.result == "passed", f"Expected 'passed', got '{check.result}': {check.detail}"
+        assert check.result == "passed", (
+            f"Expected 'passed', got '{check.result}': {check.detail}"
+        )
 
     def test_placebo_test_insufficient_obs(self) -> None:
         """E3: fewer than 20 pre-treatment obs → placebo returns 'inconclusive'."""

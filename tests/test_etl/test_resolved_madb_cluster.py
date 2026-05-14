@@ -6,6 +6,7 @@ Verifies:
   3. No cluster exceeds source_count=100 when M-rows are correctly anchored.
   4. _build_episode_rows extracts M-row metadata correctly.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -19,7 +20,9 @@ from src.etl.resolved.resolve_anime import _build_episode_rows
 # ---------------------------------------------------------------------------
 
 
-def _m_row(madb_id: str, parent_id: str = "", title: str = "episode", year: int | None = 2020) -> dict[str, Any]:
+def _m_row(
+    madb_id: str, parent_id: str = "", title: str = "episode", year: int | None = 2020
+) -> dict[str, Any]:
     """Build a minimal conformed anime row for a madb M-item."""
     return {
         "id": f"madb:{madb_id}",
@@ -45,7 +48,9 @@ def _m_row(madb_id: str, parent_id: str = "", title: str = "episode", year: int 
     }
 
 
-def _other_row(source_id: str, title: str = "other anime", year: int | None = 2020) -> dict[str, Any]:
+def _other_row(
+    source_id: str, title: str = "other anime", year: int | None = 2020
+) -> dict[str, Any]:
     """Build a minimal conformed anime row for a non-madb source."""
     return {
         "id": source_id,
@@ -90,10 +95,13 @@ class TestMadbMRowClustering:
         assert max(sizes) >= 3, "All M-rows with same parent should be in one cluster"
         # The anchor cluster should contain all M-rows
         anchor_clusters = [
-            v for v in clusters.values()
+            v
+            for v in clusters.values()
             if any(r["id"] in {"madb:M100", "madb:M101", "madb:M102"} for r in v)
         ]
-        assert len(anchor_clusters) == 1, "All same-parent M-rows should share one cluster"
+        assert len(anchor_clusters) == 1, (
+            "All same-parent M-rows should share one cluster"
+        )
         assert len(anchor_clusters[0]) == 3
 
     def test_m_rows_with_different_parents_form_separate_clusters(self):
@@ -107,11 +115,19 @@ class TestMadbMRowClustering:
         clusters = build_cross_source_anime_clusters(rows)
         # Find clusters containing A-rows and B-rows
         a_cluster = next(
-            (v for v in clusters.values() if any(r["id"] in {"madb:M200", "madb:M201"} for r in v)),
+            (
+                v
+                for v in clusters.values()
+                if any(r["id"] in {"madb:M200", "madb:M201"} for r in v)
+            ),
             None,
         )
         b_cluster = next(
-            (v for v in clusters.values() if any(r["id"] in {"madb:M300", "madb:M301"} for r in v)),
+            (
+                v
+                for v in clusters.values()
+                if any(r["id"] in {"madb:M300", "madb:M301"} for r in v)
+            ),
             None,
         )
         assert a_cluster is not None
@@ -119,7 +135,9 @@ class TestMadbMRowClustering:
         # They should be different clusters
         a_ids = {r["id"] for r in a_cluster}
         b_ids = {r["id"] for r in b_cluster}
-        assert a_ids.isdisjoint(b_ids), "Different-parent M-rows must not share a cluster"
+        assert a_ids.isdisjoint(b_ids), (
+            "Different-parent M-rows must not share a cluster"
+        )
 
     def test_orphan_m_row_forms_singleton(self):
         """M-rows without parent_madb_id form their own singleton cluster."""
@@ -129,8 +147,7 @@ class TestMadbMRowClustering:
         clusters = build_cross_source_anime_clusters(rows)
         # Orphan M-row should be in exactly one cluster of size 1
         m_clusters = [
-            v for v in clusters.values()
-            if any(r["id"] == "madb:M999" for r in v)
+            v for v in clusters.values() if any(r["id"] == "madb:M999" for r in v)
         ]
         assert len(m_clusters) == 1
         assert len(m_clusters[0]) == 1

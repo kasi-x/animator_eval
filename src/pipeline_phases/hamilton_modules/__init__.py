@@ -49,22 +49,15 @@ ANALYSIS_NODE_NAMES: list[str] = (
 
 # Phase 5-8 scoring nodes (H-2)
 SCORING_NODE_NAMES: list[str] = (
-    scoring.NODE_NAMES
-    + metrics.NODE_NAMES
-    + assembly.NODE_NAMES
+    scoring.NODE_NAMES + metrics.NODE_NAMES + assembly.NODE_NAMES
 )
 
 # Phase 1-4 loading/graph nodes (H-3)
-LOADING_NODE_NAMES: list[str] = (
-    loading.NODE_NAMES
-    + resolution.NODE_NAMES
-)
+LOADING_NODE_NAMES: list[str] = loading.NODE_NAMES + resolution.NODE_NAMES
 
 # All node names (Phase 1-9)
 ALL_NODE_NAMES: list[str] = (
-    LOADING_NODE_NAMES
-    + SCORING_NODE_NAMES
-    + ANALYSIS_NODE_NAMES
+    LOADING_NODE_NAMES + SCORING_NODE_NAMES + ANALYSIS_NODE_NAMES
 )
 
 __all__ = [

@@ -39,9 +39,9 @@ def _invalid_spec() -> ReportSpec:
     return ReportSpec(
         name="test_invalid",
         audience="policy",
-        claim="",                       # violation: claim missing
+        claim="",  # violation: claim missing
         identifying_assumption="ok",
-        null_model=[],                  # violation: null_model required
+        null_model=[],  # violation: null_model required
         method_gate=MethodGate(
             name="test_invalid",
             estimator="descriptive",
@@ -143,8 +143,11 @@ def test_assert_valid_non_strict_env_0(monkeypatch):
 
 def test_make_default_spec_policy_forbidden_framing():
     spec = make_default_spec(
-        name="p", audience="policy", claim="claim",
-        sources=["credits"], meta_table="meta_p",
+        name="p",
+        audience="policy",
+        claim="claim",
+        sources=["credits"],
+        meta_table="meta_p",
     )
     forbidden = spec.interpretation_guard.forbidden_framing
     assert "離職率の悪化" in forbidden
@@ -153,8 +156,11 @@ def test_make_default_spec_policy_forbidden_framing():
 
 def test_make_default_spec_hr_forbidden_framing():
     spec = make_default_spec(
-        name="h", audience="hr", claim="claim",
-        sources=["credits"], meta_table="meta_h",
+        name="h",
+        audience="hr",
+        claim="claim",
+        sources=["credits"],
+        meta_table="meta_h",
     )
     forbidden = spec.interpretation_guard.forbidden_framing
     assert "能力不足" in forbidden
@@ -163,8 +169,11 @@ def test_make_default_spec_hr_forbidden_framing():
 
 def test_make_default_spec_biz_forbidden_framing():
     spec = make_default_spec(
-        name="b", audience="biz", claim="claim",
-        sources=["credits"], meta_table="meta_b",
+        name="b",
+        audience="biz",
+        claim="claim",
+        sources=["credits"],
+        meta_table="meta_b",
     )
     forbidden = spec.interpretation_guard.forbidden_framing
     assert "過小評価" in forbidden
@@ -173,8 +182,11 @@ def test_make_default_spec_biz_forbidden_framing():
 
 def test_make_default_spec_technical_appendix_forbidden_framing():
     spec = make_default_spec(
-        name="t", audience="technical_appendix", claim="claim",
-        sources=["credits"], meta_table="meta_t",
+        name="t",
+        audience="technical_appendix",
+        claim="claim",
+        sources=["credits"],
+        meta_table="meta_t",
     )
     forbidden = spec.interpretation_guard.forbidden_framing
     assert "ground truth" in forbidden
@@ -184,8 +196,11 @@ def test_make_default_spec_technical_appendix_forbidden_framing():
 def test_make_default_spec_custom_forbidden_framing_overrides_default():
     """Explicitly passed forbidden_framing replaces the audience default."""
     spec = make_default_spec(
-        name="c", audience="policy", claim="claim",
-        sources=["credits"], meta_table="meta_c",
+        name="c",
+        audience="policy",
+        claim="claim",
+        sources=["credits"],
+        meta_table="meta_c",
         forbidden_framing=["custom_term"],
     )
     assert spec.interpretation_guard.forbidden_framing == ["custom_term"]

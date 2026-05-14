@@ -159,9 +159,39 @@ def silver_conn() -> duckdb.DuckDBPyConnection:
     conn.executemany(
         "INSERT INTO anime VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
-            ("anilist:a10", "進撃の巨人", "Attack on Titan", "2011", None, None, "25", "TV", "24"),
-            ("mal:a10",    "進撃の巨人", "Attack on Titan", "2011", None, None, "25", "TV", "24"),
-            ("bgm:a10",    "進撃の巨人", "Attack on Titan", "2010", None, None, "25", "TV", "24"),
+            (
+                "anilist:a10",
+                "進撃の巨人",
+                "Attack on Titan",
+                "2011",
+                None,
+                None,
+                "25",
+                "TV",
+                "24",
+            ),
+            (
+                "mal:a10",
+                "進撃の巨人",
+                "Attack on Titan",
+                "2011",
+                None,
+                None,
+                "25",
+                "TV",
+                "24",
+            ),
+            (
+                "bgm:a10",
+                "進撃の巨人",
+                "Attack on Titan",
+                "2010",
+                None,
+                None,
+                "25",
+                "TV",
+                "24",
+            ),
         ],
     )
 
@@ -169,10 +199,50 @@ def silver_conn() -> duckdb.DuckDBPyConnection:
     conn.executemany(
         "INSERT INTO anime VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
-            ("anilist:a20", "魔法少女まどか☆マギカ", "Madoka Magica", "2011", None, None, "12", "TV", "24"),
-            ("mal:a20",    "魔法少女まどか☆マギカ", "Madoka Magica", "2011", None, None, "12", "TV", "24"),
-            ("bgm:a20",    "魔法少女まどかマギカ",   "Madoka Magica", "2011", None, None, "12", "TV", "24"),
-            ("ann:a20",    "魔法少女まどかマギカ",   "Madoka Magica", "2011", None, None, "12", "TV", "24"),
+            (
+                "anilist:a20",
+                "魔法少女まどか☆マギカ",
+                "Madoka Magica",
+                "2011",
+                None,
+                None,
+                "12",
+                "TV",
+                "24",
+            ),
+            (
+                "mal:a20",
+                "魔法少女まどか☆マギカ",
+                "Madoka Magica",
+                "2011",
+                None,
+                None,
+                "12",
+                "TV",
+                "24",
+            ),
+            (
+                "bgm:a20",
+                "魔法少女まどかマギカ",
+                "Madoka Magica",
+                "2011",
+                None,
+                None,
+                "12",
+                "TV",
+                "24",
+            ),
+            (
+                "ann:a20",
+                "魔法少女まどかマギカ",
+                "Madoka Magica",
+                "2011",
+                None,
+                None,
+                "12",
+                "TV",
+                "24",
+            ),
         ],
     )
 
@@ -180,9 +250,39 @@ def silver_conn() -> duckdb.DuckDBPyConnection:
     conn.executemany(
         "INSERT INTO anime VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
-            ("anilist:a30", "ソードアートオンライン", "Sword Art Online", "2012", None, None, "25", "TV", "23"),
-            ("mal:a30",    "ソードアートオンライン", "Sword Art Online", "2012", None, None, "25", "TV", "23"),
-            ("bgm:a30",    "ソードアートオンラィン", "Sword Art Online", "2012", None, None, "25", "TV", "23"),
+            (
+                "anilist:a30",
+                "ソードアートオンライン",
+                "Sword Art Online",
+                "2012",
+                None,
+                None,
+                "25",
+                "TV",
+                "23",
+            ),
+            (
+                "mal:a30",
+                "ソードアートオンライン",
+                "Sword Art Online",
+                "2012",
+                None,
+                None,
+                "25",
+                "TV",
+                "23",
+            ),
+            (
+                "bgm:a30",
+                "ソードアートオンラィン",
+                "Sword Art Online",
+                "2012",
+                None,
+                None,
+                "25",
+                "TV",
+                "23",
+            ),
         ],
     )
 
@@ -190,8 +290,28 @@ def silver_conn() -> duckdb.DuckDBPyConnection:
     conn.executemany(
         "INSERT INTO anime VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
-            ("anilist:a40", "鬼滅の刃", "Demon Slayer", "2019", None, None, "26", "TV", "23"),
-            ("mal:a40",    "鬼滅の刃：無限列車編", "Demon Slayer", "2020", None, None, "7", "TV", "23"),
+            (
+                "anilist:a40",
+                "鬼滅の刃",
+                "Demon Slayer",
+                "2019",
+                None,
+                None,
+                "26",
+                "TV",
+                "23",
+            ),
+            (
+                "mal:a40",
+                "鬼滅の刃：無限列車編",
+                "Demon Slayer",
+                "2020",
+                None,
+                None,
+                "7",
+                "TV",
+                "23",
+            ),
         ],
     )
 
@@ -199,8 +319,8 @@ def silver_conn() -> duckdb.DuckDBPyConnection:
     conn.executemany(
         "INSERT INTO persons VALUES (?, ?, ?, ?, ?)",
         [
-            ("anilist:p10",  "田中 一郎", "Ichiro Tanaka", "1985-03-15", "Male"),
-            ("mal:p10",      "田中 一郎", "Ichiro Tanaka", "1985-03-15", "Male"),
+            ("anilist:p10", "田中 一郎", "Ichiro Tanaka", "1985-03-15", "Male"),
+            ("mal:p10", "田中 一郎", "Ichiro Tanaka", "1985-03-15", "Male"),
             ("keyframe:p10", "田中 一郎", "Ichiro Tanaka", "1985-03-16", "Male"),
         ],
     )
@@ -210,7 +330,7 @@ def silver_conn() -> duckdb.DuckDBPyConnection:
         "INSERT INTO studios VALUES (?, ?, ?)",
         [
             ("anilist:s10", "J.C.STAFF", "JP"),
-            ("mal:s10",     "JC STAFF",  "JP"),
+            ("mal:s10", "JC STAFF", "JP"),
         ],
     )
 
@@ -238,7 +358,9 @@ class TestClassifyConsensusUnanimous:
         assert result.outlier_values == []
 
     def test_two_sources_agree(self) -> None:
-        result = classify_consensus({"anilist": "Attack on Titan", "mal": "Attack on Titan"})
+        result = classify_consensus(
+            {"anilist": "Attack on Titan", "mal": "Attack on Titan"}
+        )
         assert result.consensus_flag == "unanimous"
         assert result.majority_share == 1.0
 
@@ -255,7 +377,9 @@ class TestClassifyConsensusUnanimous:
 
     def test_null_sources_excluded_from_count(self) -> None:
         # one null + two agree → unanimous on the two non-null
-        result = classify_consensus({"anilist": "進撃の巨人", "mal": "進撃の巨人", "bgm": None})
+        result = classify_consensus(
+            {"anilist": "進撃の巨人", "mal": "進撃の巨人", "bgm": None}
+        )
         assert result.consensus_flag == "unanimous"
         assert result.majority_count == 2
 
@@ -281,10 +405,10 @@ class TestClassifyConsensusMajority:
         result = classify_consensus(
             {
                 "anilist": "Sword Art Online",
-                "mal":     "Sword Art Online",
-                "bgm":     "Sword Art Online",
-                "ann":     "SAO",
-                "madb":    "other",
+                "mal": "Sword Art Online",
+                "bgm": "Sword Art Online",
+                "ann": "SAO",
+                "madb": "other",
             }
         )
         assert result.consensus_flag == "majority"
@@ -297,7 +421,11 @@ class TestClassifyConsensusUniqueOutlier:
 
     def test_2_of_3_unique_outlier(self) -> None:
         result = classify_consensus(
-            {"anilist": "ソードアートオンライン", "mal": "ソードアートオンライン", "bgm": "ソードアートオンラィン"}
+            {
+                "anilist": "ソードアートオンライン",
+                "mal": "ソードアートオンライン",
+                "bgm": "ソードアートオンラィン",
+            }
         )
         assert result.consensus_flag == "unique_outlier"
         assert result.majority_value == "ソードアートオンライン"
@@ -307,9 +435,7 @@ class TestClassifyConsensusUniqueOutlier:
 
     def test_4_of_5_unique_outlier(self) -> None:
         result = classify_consensus(
-            {
-                "anilist": "X", "mal": "X", "bgm": "X", "ann": "X", "madb": "Y"
-            }
+            {"anilist": "X", "mal": "X", "bgm": "X", "ann": "X", "madb": "Y"}
         )
         assert result.consensus_flag == "unique_outlier"
         assert result.outlier_sources == ["madb"]
@@ -342,9 +468,9 @@ class TestClassifyConsensusTie:
         result = classify_consensus(
             {
                 "anilist": "魔法少女まどか☆マギカ",
-                "mal":     "魔法少女まどか☆マギカ",
-                "bgm":     "魔法少女まどかマギカ",
-                "ann":     "魔法少女まどかマギカ",
+                "mal": "魔法少女まどか☆マギカ",
+                "bgm": "魔法少女まどかマギカ",
+                "ann": "魔法少女まどかマギカ",
             }
         )
         assert result.consensus_flag == "tie"
@@ -402,11 +528,21 @@ class TestCollectConsensus:
     ) -> None:
         records = collect_consensus(resolved_conn, "anime", silver_conn)
         required_keys = {
-            "canonical_id", "attribute", "n_sources", "n_distinct_values",
-            "values_json", "majority_value", "majority_count", "majority_share",
-            "consensus_flag", "outlier_sources", "outlier_values",
-            "normalized_consensus_flag", "normalized_majority_value",
-            "broad_format_consensus_flag", "broad_format_majority_value",
+            "canonical_id",
+            "attribute",
+            "n_sources",
+            "n_distinct_values",
+            "values_json",
+            "majority_value",
+            "majority_count",
+            "majority_share",
+            "consensus_flag",
+            "outlier_sources",
+            "outlier_values",
+            "normalized_consensus_flag",
+            "normalized_majority_value",
+            "broad_format_consensus_flag",
+            "broad_format_majority_value",
             "format_taxonomy_diff",
         }
         for rec in records:
@@ -420,8 +556,10 @@ class TestCollectConsensus:
         """All 3 sources agree on title_ja → unanimous."""
         records = collect_consensus(resolved_conn, "anime", silver_conn)
         rec = next(
-            r for r in records
-            if r["canonical_id"] == "resolved:anime:3src" and r["attribute"] == "title_ja"
+            r
+            for r in records
+            if r["canonical_id"] == "resolved:anime:3src"
+            and r["attribute"] == "title_ja"
         )
         assert rec["consensus_flag"] == "unanimous"
         assert rec["majority_value"] == "進撃の巨人"
@@ -437,7 +575,8 @@ class TestCollectConsensus:
         """2/3 sources agree on year=2011 → unique_outlier (bgm has 2010)."""
         records = collect_consensus(resolved_conn, "anime", silver_conn)
         rec = next(
-            r for r in records
+            r
+            for r in records
             if r["canonical_id"] == "resolved:anime:3src" and r["attribute"] == "year"
         )
         assert rec["consensus_flag"] == "unique_outlier"
@@ -452,8 +591,10 @@ class TestCollectConsensus:
         """4 sources split 2-2 on title_ja → tie."""
         records = collect_consensus(resolved_conn, "anime", silver_conn)
         rec = next(
-            r for r in records
-            if r["canonical_id"] == "resolved:anime:tie" and r["attribute"] == "title_ja"
+            r
+            for r in records
+            if r["canonical_id"] == "resolved:anime:tie"
+            and r["attribute"] == "title_ja"
         )
         assert rec["consensus_flag"] == "tie"
         assert rec["n_sources"] == 4
@@ -467,8 +608,10 @@ class TestCollectConsensus:
         """3 sources with 1 outlier → unique_outlier for title_ja."""
         records = collect_consensus(resolved_conn, "anime", silver_conn)
         rec = next(
-            r for r in records
-            if r["canonical_id"] == "resolved:anime:outlier" and r["attribute"] == "title_ja"
+            r
+            for r in records
+            if r["canonical_id"] == "resolved:anime:outlier"
+            and r["attribute"] == "title_ja"
         )
         assert rec["consensus_flag"] == "unique_outlier"
         assert rec["majority_value"] == "ソードアートオンライン"
@@ -484,7 +627,11 @@ class TestCollectConsensus:
         records = collect_consensus(resolved_conn, "anime", silver_conn)
         for rec in records:
             assert rec["normalized_consensus_flag"] in {
-                "unanimous", "majority", "unique_outlier", "plurality", "tie"
+                "unanimous",
+                "majority",
+                "unique_outlier",
+                "plurality",
+                "tie",
             }
 
     def test_normalized_flag_can_differ_from_raw(
@@ -495,7 +642,8 @@ class TestCollectConsensus:
         """studios name: raw=tie (J.C.STAFF vs JC STAFF), normalized=unanimous."""
         records = collect_consensus(resolved_conn, "studios", silver_conn)
         rec = next(
-            r for r in records
+            r
+            for r in records
             if r["canonical_id"] == "resolved:studio:s10" and r["attribute"] == "name"
         )
         # Raw values differ → not unanimous; normalized both reduce to "jcstaff" → unanimous
@@ -517,8 +665,10 @@ class TestCollectConsensus:
         """2/3 agree on birth_date; keyframe differs by 1 day → unique_outlier."""
         records = collect_consensus(resolved_conn, "persons", silver_conn)
         rec = next(
-            r for r in records
-            if r["canonical_id"] == "resolved:person:p10" and r["attribute"] == "birth_date"
+            r
+            for r in records
+            if r["canonical_id"] == "resolved:person:p10"
+            and r["attribute"] == "birth_date"
         )
         assert rec["consensus_flag"] == "unique_outlier"
         assert rec["majority_value"] == "1985-03-15"
@@ -665,11 +815,21 @@ class TestExportConsensus:
             reader = csv.DictReader(fh)
             fieldnames = set(reader.fieldnames or [])
         expected = {
-            "canonical_id", "attribute", "n_sources", "n_distinct_values",
-            "values_json", "majority_value", "majority_count", "majority_share",
-            "consensus_flag", "outlier_sources", "outlier_values",
-            "normalized_consensus_flag", "normalized_majority_value",
-            "broad_format_consensus_flag", "broad_format_majority_value",
+            "canonical_id",
+            "attribute",
+            "n_sources",
+            "n_distinct_values",
+            "values_json",
+            "majority_value",
+            "majority_count",
+            "majority_share",
+            "consensus_flag",
+            "outlier_sources",
+            "outlier_values",
+            "normalized_consensus_flag",
+            "normalized_majority_value",
+            "broad_format_consensus_flag",
+            "broad_format_majority_value",
             "format_taxonomy_diff",
         }
         assert expected == fieldnames
@@ -712,7 +872,8 @@ class TestExportConsensus:
             rows = list(csv.DictReader(fh))
 
         unanimous_rows = [
-            r for r in rows
+            r
+            for r in rows
             if r["consensus_flag"] == "unanimous"
             and r["canonical_id"] == "resolved:anime:3src"
             and r["attribute"] == "title_ja"
@@ -872,7 +1033,8 @@ class TestBroadFormatConsensus:
         """3src anime all have format=TV → broad_format unanimous=tv."""
         records = collect_consensus(resolved_conn, "anime", silver_conn)
         rec = next(
-            r for r in records
+            r
+            for r in records
             if r["canonical_id"] == "resolved:anime:3src" and r["attribute"] == "format"
         )
         assert rec["broad_format_consensus_flag"] == "unanimous"
@@ -891,9 +1053,6 @@ class TestBroadFormatConsensus:
         for rec in format_recs:
             if rec["broad_format_consensus_flag"] in ("unanimous", "unique_outlier"):
                 assert rec["format_taxonomy_diff"] is False
-
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -1082,63 +1241,77 @@ class TestClassifyConsensusDate:
 
     def test_year_only_vs_full_date_unanimous(self) -> None:
         """Core requirement: "2020" vs "2020-04-15" → unanimous + precise value."""
-        result = classify_consensus_date({
-            "anilist": "2020",
-            "mal": "2020-04-15",
-        })
+        result = classify_consensus_date(
+            {
+                "anilist": "2020",
+                "mal": "2020-04-15",
+            }
+        )
         assert result.consensus_flag == "unanimous"
         assert result.majority_value == "2020-04-15"
         assert result.majority_count == 2
 
     def test_three_sources_year_vs_full_unanimous(self) -> None:
         """3 sources: 2 × "2020", 1 × "2020-04-15" → unanimous (most precise)."""
-        result = classify_consensus_date({
-            "anilist": "2020",
-            "mal": "2020",
-            "bgm": "2020-04-15",
-        })
+        result = classify_consensus_date(
+            {
+                "anilist": "2020",
+                "mal": "2020",
+                "bgm": "2020-04-15",
+            }
+        )
         assert result.consensus_flag == "unanimous"
         assert result.majority_value == "2020-04-15"
         assert result.outlier_sources == []
 
     def test_all_same_unanimous(self) -> None:
-        result = classify_consensus_date({
-            "anilist": "2020-04-15",
-            "mal": "2020-04-15",
-            "bgm": "2020-04-15",
-        })
+        result = classify_consensus_date(
+            {
+                "anilist": "2020-04-15",
+                "mal": "2020-04-15",
+                "bgm": "2020-04-15",
+            }
+        )
         assert result.consensus_flag == "unanimous"
         assert result.majority_value == "2020-04-15"
 
     def test_different_years_not_unanimous(self) -> None:
-        result = classify_consensus_date({
-            "anilist": "2020",
-            "mal": "2021",
-        })
+        result = classify_consensus_date(
+            {
+                "anilist": "2020",
+                "mal": "2021",
+            }
+        )
         assert result.consensus_flag == "tie"
 
     def test_majority_over_outlier(self) -> None:
         """2020 compatible cluster (anilist+mal) vs 2021 (bgm) → unique_outlier."""
-        result = classify_consensus_date({
-            "anilist": "2020",
-            "mal": "2020-04-15",
-            "bgm": "2021",
-        })
+        result = classify_consensus_date(
+            {
+                "anilist": "2020",
+                "mal": "2020-04-15",
+                "bgm": "2021",
+            }
+        )
         assert result.consensus_flag == "unique_outlier"
         assert result.outlier_sources == ["bgm"]
 
     def test_slash_format_compatible(self) -> None:
-        result = classify_consensus_date({
-            "anilist": "2020/04/15",
-            "mal": "2020-04-15",
-        })
+        result = classify_consensus_date(
+            {
+                "anilist": "2020/04/15",
+                "mal": "2020-04-15",
+            }
+        )
         assert result.consensus_flag == "unanimous"
 
     def test_english_format_compatible(self) -> None:
-        result = classify_consensus_date({
-            "anilist": "April 15, 2020",
-            "mal": "2020-04-15",
-        })
+        result = classify_consensus_date(
+            {
+                "anilist": "April 15, 2020",
+                "mal": "2020-04-15",
+            }
+        )
         assert result.consensus_flag == "unanimous"
 
     def test_empty_sources_unanimous(self) -> None:
@@ -1151,21 +1324,25 @@ class TestClassifyConsensusDate:
         assert result.consensus_flag == "unanimous"
 
     def test_null_excluded_from_count(self) -> None:
-        result = classify_consensus_date({
-            "anilist": "2020",
-            "mal": "2020-04-15",
-            "bgm": None,
-        })
+        result = classify_consensus_date(
+            {
+                "anilist": "2020",
+                "mal": "2020-04-15",
+                "bgm": None,
+            }
+        )
         assert result.consensus_flag == "unanimous"
         assert result.majority_count == 2
 
     def test_majority_value_is_most_precise(self) -> None:
         """When 3 sources all subset-compatible, pick the most precise."""
-        result = classify_consensus_date({
-            "anilist": "2020",
-            "mal": "2020-04",
-            "bgm": "2020-04-15",
-        })
+        result = classify_consensus_date(
+            {
+                "anilist": "2020",
+                "mal": "2020-04",
+                "bgm": "2020-04-15",
+            }
+        )
         assert result.consensus_flag == "unanimous"
         assert result.majority_value == "2020-04-15"
 
@@ -1223,9 +1400,39 @@ def silver_conn_with_dates() -> duckdb.DuckDBPyConnection:
     conn.executemany(
         "INSERT INTO anime VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
-            ("anilist:d10", "テストアニメ", "Test Anime", "2020", "2020", None, "12", "TV", "24"),
-            ("mal:d10",     "テストアニメ", "Test Anime", "2020", "2020", None, "12", "TV", "24"),
-            ("bgm:d10",     "テストアニメ", "Test Anime", "2020", "2020-04-15", None, "12", "TV", "24"),
+            (
+                "anilist:d10",
+                "テストアニメ",
+                "Test Anime",
+                "2020",
+                "2020",
+                None,
+                "12",
+                "TV",
+                "24",
+            ),
+            (
+                "mal:d10",
+                "テストアニメ",
+                "Test Anime",
+                "2020",
+                "2020",
+                None,
+                "12",
+                "TV",
+                "24",
+            ),
+            (
+                "bgm:d10",
+                "テストアニメ",
+                "Test Anime",
+                "2020",
+                "2020-04-15",
+                None,
+                "12",
+                "TV",
+                "24",
+            ),
         ],
     )
     yield conn
@@ -1245,7 +1452,8 @@ class TestDateColumnIntegration:
             resolved_conn_with_dates, "anime", silver_conn_with_dates
         )
         rec = next(
-            r for r in records
+            r
+            for r in records
             if r["canonical_id"] == "resolved:anime:date_test"
             and r["attribute"] == "start_date"
         )
@@ -1267,7 +1475,8 @@ class TestDateColumnIntegration:
             resolved_conn_with_dates, "anime", silver_conn_with_dates
         )
         rec = next(
-            r for r in records
+            r
+            for r in records
             if r["canonical_id"] == "resolved:anime:date_test"
             and r["attribute"] == "start_date"
         )

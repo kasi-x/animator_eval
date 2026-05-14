@@ -11,6 +11,7 @@ Data layout:
 robots.txt: /sakuga/pages/* is allow. /*/search, /*/backup, /*/edit* are disallow.
 Rate limit: delay >= 3.0s per request (atwiki ToS + robots convention).
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -29,8 +30,16 @@ from src.scrapers.bronze_writer import write_sakuga_atwiki_bronze
 from src.scrapers.checkpoint import Checkpoint
 from src.scrapers.cli_common import ForceOpt, LimitOpt, ResumeOpt, make_scraper_app
 from src.scrapers.http_playwright import PlaywrightFetcher
-from src.scrapers.parsers.sakuga_atwiki import classify_page_kind, extract_page_ids, parse_person_page, parse_work_page
-from src.scrapers.parsers.sakuga_atwiki_robots import fetch_disallow_patterns, is_allowed
+from src.scrapers.parsers.sakuga_atwiki import (
+    classify_page_kind,
+    extract_page_ids,
+    parse_person_page,
+    parse_work_page,
+)
+from src.scrapers.parsers.sakuga_atwiki_robots import (
+    fetch_disallow_patterns,
+    is_allowed,
+)
 from src.utils.config import SCRAPE_DELAY_SECONDS
 
 log = structlog.get_logger()
@@ -73,7 +82,9 @@ def _load_discovered(data_dir: Path) -> tuple[Checkpoint, dict[int, PageRecord]]
     # One-time migration: if legacy file exists, seed checkpoint
     legacy_path = data_dir / "discovered_pages.json"
     if legacy_path.exists() and "pages" not in cp.data:
-        legacy_records: list[PageRecord] = json.loads(legacy_path.read_text(encoding="utf-8"))
+        legacy_records: list[PageRecord] = json.loads(
+            legacy_path.read_text(encoding="utf-8")
+        )
         cp["pages"] = legacy_records
         cp.save(stamp_time=False)
         log.info("sakuga_checkpoint_migrated", count=len(legacy_records))
@@ -103,13 +114,25 @@ def _extract_title(html: str) -> str:
 @app.command()
 def discover(
     limit: LimitOpt = 3000,
-    delay: float = typer.Option(_DEFAULT_DELAY, "--delay", help="Seconds between requests"),
+    delay: float = typer.Option(
+        _DEFAULT_DELAY, "--delay", help="Seconds between requests"
+    ),
     data_dir: Path = typer.Option(_DEFAULT_DATA_DIR, "--data-dir"),
     headless: bool = typer.Option(True, "--headless/--headful"),
-    cdp_url: str = typer.Option("", "--chrome", help="CDP URL of running Chrome (e.g. http://localhost:9222)"),
+    cdp_url: str = typer.Option(
+        "", "--chrome", help="CDP URL of running Chrome (e.g. http://localhost:9222)"
+    ),
 ) -> None:
     """BFS crawl 作画@wiki to discover and classify all pages."""
-    asyncio.run(_discover(max_pages=limit, delay=delay, data_dir=data_dir, headless=headless, cdp_url=cdp_url or None))
+    asyncio.run(
+        _discover(
+            max_pages=limit,
+            delay=delay,
+            data_dir=data_dir,
+            headless=headless,
+            cdp_url=cdp_url or None,
+        )
+    )
 
 
 async def _discover(
@@ -256,7 +279,9 @@ def export_bronze(
         log.error("discovered_pages_missing", path=str(discovered_path))
         raise typer.Exit(1)
 
-    all_pages: list[PageRecord] = json.loads(discovered_path.read_text(encoding="utf-8"))
+    all_pages: list[PageRecord] = json.loads(
+        discovered_path.read_text(encoding="utf-8")
+    )
     person_pages = [p for p in all_pages if p.get("page_kind") == "person"]
     work_pages = [p for p in all_pages if p.get("page_kind") == "work"]
     log.info(
@@ -280,6 +305,7 @@ def export_bronze(
         html = gzip.decompress(cache.read_bytes()).decode()
         try:
             from bs4 import BeautifulSoup as _BS
+
             _soup = _BS(html, "lxml")
             _wb = _soup.find("div", id="wikibody") or _soup.find("body") or _soup
             raw_texts[pid] = _wb.get_text(separator="\n")[:8000]
@@ -313,7 +339,7 @@ def export_bronze(
         "export_parse_summary",
         persons_parsed=len(persons),
         person_regex_ok=parse_ok_count,
-        person_ok_rate=f"{parse_ok_count/max(len(persons),1):.1%}",
+        person_ok_rate=f"{parse_ok_count / max(len(persons), 1):.1%}",
         works_parsed=len(works),
         work_ok=work_ok_count,
     )
@@ -339,7 +365,9 @@ def run(
     force: ForceOpt = False,
     resume: ResumeOpt = True,
     headless: bool = typer.Option(True, "--headless/--headful"),
-    cdp_url: str = typer.Option("", "--chrome", help="CDP URL of running Chrome (e.g. http://localhost:9222)"),
+    cdp_url: str = typer.Option(
+        "", "--chrome", help="CDP URL of running Chrome (e.g. http://localhost:9222)"
+    ),
 ) -> None:
     """Diff-update: re-fetch changed pages, append new date partition to BRONZE."""
     asyncio.run(
@@ -386,7 +414,9 @@ async def _incremental(
     # Check person + index + unknown pages. index pages link to new person pages,
     # so skipping them means newly added persons are never discovered.
     crawlable_kinds = {"person", "index", "work", "unknown"}
-    crawl_ids = [pid for pid, r in discovered.items() if r.get("page_kind") in crawlable_kinds]
+    crawl_ids = [
+        pid for pid, r in discovered.items() if r.get("page_kind") in crawlable_kinds
+    ]
 
     async with PlaywrightFetcher(headless=headless, cdp_url=cdp_url) as fetcher:
         # ── Phase 1: diff-check existing crawlable pages ───────────────────
@@ -433,7 +463,11 @@ async def _incremental(
                     changed_persons.append(parsed)
                     changed_meta.append(discovered[pid])
                     soup_wb = BeautifulSoup(html, "lxml")
-                    wb = soup_wb.find("div", id="wikibody") or soup_wb.find("body") or soup_wb
+                    wb = (
+                        soup_wb.find("div", id="wikibody")
+                        or soup_wb.find("body")
+                        or soup_wb
+                    )
                     changed_raw_texts[pid] = wb.get_text(separator="\n")[:8000]
                 except Exception as exc:
                     log.warning("parse_error", page_id=pid, error=str(exc))
@@ -463,7 +497,9 @@ async def _incremental(
                     continue
 
                 new_title = _extract_title(new_html)
-                new_kind = "meta" if new_id == 1 else classify_page_kind(new_title, new_html)
+                new_kind = (
+                    "meta" if new_id == 1 else classify_page_kind(new_title, new_html)
+                )
                 new_hash2 = _html_hash(new_html)
                 rec: PageRecord = {
                     "id": new_id,
@@ -483,17 +519,25 @@ async def _incremental(
                         changed_persons.append(parsed)
                         changed_meta.append(rec)
                         soup_wb2 = BeautifulSoup(new_html, "lxml")
-                        wb2 = soup_wb2.find("div", id="wikibody") or soup_wb2.find("body") or soup_wb2
+                        wb2 = (
+                            soup_wb2.find("div", id="wikibody")
+                            or soup_wb2.find("body")
+                            or soup_wb2
+                        )
                         changed_raw_texts[new_id] = wb2.get_text(separator="\n")[:8000]
                     except Exception as exc:
-                        log.warning("new_page_parse_error", page_id=new_id, error=str(exc))
+                        log.warning(
+                            "new_page_parse_error", page_id=new_id, error=str(exc)
+                        )
                 elif new_kind == "work":
                     try:
                         parsed_work = parse_work_page(new_html, page_id=new_id)
                         changed_works.append(parsed_work)
                         changed_meta.append(rec)
                     except Exception as exc:
-                        log.warning("new_work_parse_error", page_id=new_id, error=str(exc))
+                        log.warning(
+                            "new_work_parse_error", page_id=new_id, error=str(exc)
+                        )
 
             await asyncio.sleep(delay)
 

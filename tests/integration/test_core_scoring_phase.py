@@ -22,6 +22,7 @@ from src.testing.fixtures import generate_synthetic_data
 class _DummyMonitor:
     def measure(self, name):
         from contextlib import nullcontext
+
         return nullcontext()
 
     def record_memory(self, label):
@@ -34,6 +35,7 @@ class _DummyMonitor:
 class _FakeContext:
     def __init__(self, visualize=False, dry_run=False):
         import datetime
+
         self.visualize = visualize
         self.dry_run = dry_run
         self.monitor = _DummyMonitor()
@@ -74,7 +76,9 @@ def _make_context(monkeypatch, tmp_path: Path) -> PipelineContext:
     silver_path = tmp_path / "silver.duckdb"
     gold_path = tmp_path / "gold.duckdb"
     build_silver_duckdb(silver_path, persons, anime_list, credits)
-    monkeypatch.setattr(src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(
+        src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path
+    )
     monkeypatch.setattr(src.analysis.io.mart_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
 
     from src.pipeline_phases.data_loading import load_pipeline_data
@@ -101,6 +105,7 @@ def _make_context(monkeypatch, tmp_path: Path) -> PipelineContext:
 def ctx(monkeypatch, tmp_path):
     c = _make_context(monkeypatch, tmp_path)
     from src.pipeline_phases.core_scoring import compute_core_scores_phase
+
     compute_core_scores_phase(c)
     return c
 

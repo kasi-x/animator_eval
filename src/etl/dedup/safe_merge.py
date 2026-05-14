@@ -204,10 +204,7 @@ def merge_persons(
 
     if dry_run:
         # Verify that both IDs still exist in silver before reporting counts
-        existing = {
-            row[0]
-            for row in conn.execute("SELECT id FROM persons").fetchall()
-        }
+        existing = {row[0] for row in conn.execute("SELECT id FROM persons").fetchall()}
         actual = [
             r
             for r in high_conf

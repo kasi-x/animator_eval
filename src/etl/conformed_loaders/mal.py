@@ -22,6 +22,7 @@ H1 compliance:
     | rg -v '^\\s*#'
   must return 0 lines.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -299,14 +300,13 @@ WHERE mal_id IS NOT NULL
 
 def _glob(bronze_root: Path, table: str) -> str:
     """Return glob pattern for a MAL BRONZE table partition."""
-    return str(
-        bronze_root / "source=mal" / f"table={table}" / "date=*" / "*.parquet"
-    )
+    return str(bronze_root / "source=mal" / f"table={table}" / "date=*" / "*.parquet")
 
 
 def _parquet_exists(bronze_root: Path, table: str) -> bool:
     """Return True if at least one parquet file exists for this table."""
     import glob as _glob_mod
+
     return bool(_glob_mod.glob(_glob(bronze_root, table)))
 
 
@@ -323,7 +323,11 @@ def _apply_ddl(conn: duckdb.DuckDBPyConnection) -> None:
         anime.mal_id_int, anime.display_*_mal (7 columns)
         anime_relations.source (cross-source tracking, H4)
     """
-    for ddl_block in (_DDL_ANIME_GENRES, _DDL_ANIME_RELATIONS, _DDL_ANIME_RECOMMENDATIONS):
+    for ddl_block in (
+        _DDL_ANIME_GENRES,
+        _DDL_ANIME_RELATIONS,
+        _DDL_ANIME_RECOMMENDATIONS,
+    ):
         for stmt in ddl_block.split(";"):
             stmt = stmt.strip()
             if stmt:
@@ -363,9 +367,7 @@ def _load_persons_from_credits(
     conn.execute(_PERSONS_FROM_CREDITS_SQL_TMPL.format(union_blocks=union_sql))
 
 
-def _load_staff_credits(
-    conn: duckdb.DuckDBPyConnection, bronze_root: Path
-) -> int:
+def _load_staff_credits(conn: duckdb.DuckDBPyConnection, bronze_root: Path) -> int:
     """Load staff_credits from BRONZE → credits using a DuckDB UDF for role mapping.
 
     Registers map_role_mal UDF on first call (idempotent — silently skips if

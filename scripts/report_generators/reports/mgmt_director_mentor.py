@@ -1,7 +1,7 @@
 """監督共起後 5 年メンティー M̂ プロファイル — v2 compliant.
 
 Management brief: director mentoring value-add.
-- Section 1: M̂_d ranking (EB shrinkage), Top 20
+- Section 1: M̂_d cohort percentile (EB shrinkage), top 20 by point estimate
 - Section 2: Permutation null model vs observed values
 - Section 3: Mentee career trajectory scatter (fe_before vs fe_after)
 """

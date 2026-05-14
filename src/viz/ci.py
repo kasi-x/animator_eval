@@ -34,9 +34,7 @@ def add_ci_band(
     base hex; alpha is taken from theme defaults if not given.
     """
     if not (len(x) == len(lo) == len(hi)):
-        raise ValueError(
-            f"x/lo/hi length mismatch: {len(x)}/{len(lo)}/{len(hi)}"
-        )
+        raise ValueError(f"x/lo/hi length mismatch: {len(x)}/{len(lo)}/{len(hi)}")
     op = opacity if opacity is not None else get_theme(theme).ci_band.opacity
     x_poly = list(x) + list(reversed(list(x)))
     y_poly = list(hi) + list(reversed(list(lo)))
@@ -98,7 +96,9 @@ def add_ci_whisker(
             type="data",
             symmetric=False,
             array=[hi[i] - y[i] for i in range(n) if isinstance(y[i], (int, float))],
-            arrayminus=[y[i] - lo[i] for i in range(n) if isinstance(y[i], (int, float))],
+            arrayminus=[
+                y[i] - lo[i] for i in range(n) if isinstance(y[i], (int, float))
+            ],
             color=color,
             thickness=line_width,
             width=6,

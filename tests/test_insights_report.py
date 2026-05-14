@@ -738,9 +738,9 @@ class TestGenerateRecommendations:
         prohibited_words = ["ability", "skill", "talent", "competence", "capability"]
         for rec in recs:
             for word in prohibited_words:
-                assert (
-                    word.lower() not in rec.lower()
-                ), f"Prohibited word '{word}' in recommendation: {rec}"
+                assert word.lower() not in rec.lower(), (
+                    f"Prohibited word '{word}' in recommendation: {rec}"
+                )
 
 
 # ============================================================================
@@ -1051,17 +1051,17 @@ class TestVocabularyCompliance:
         )
 
         for rec in insights.recommendations:
-            assert not prohibited_pattern.search(
-                rec
-            ), f"Prohibited word in recommendation: {rec}"
+            assert not prohibited_pattern.search(rec), (
+                f"Prohibited word in recommendation: {rec}"
+            )
 
         for finding in insights.key_findings:
-            assert not prohibited_pattern.search(
-                finding
-            ), f"Prohibited word in finding: {finding}"
+            assert not prohibited_pattern.search(finding), (
+                f"Prohibited word in finding: {finding}"
+            )
 
         if insights.undervaluation_alerts:
             for alert in insights.undervaluation_alerts:
-                assert not prohibited_pattern.search(
-                    alert.reason
-                ), f"Prohibited word in reason: {alert.reason}"
+                assert not prohibited_pattern.search(alert.reason), (
+                    f"Prohibited word in reason: {alert.reason}"
+                )

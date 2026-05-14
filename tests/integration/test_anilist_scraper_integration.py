@@ -30,6 +30,7 @@ def _run(coro):
 @pytest.fixture(autouse=True)
 def _no_sleep(monkeypatch):
     """Skip backoff sleeps so retry tests run instantly."""
+
     async def _instant(*args, **kwargs):
         return None
 
@@ -58,7 +59,9 @@ class TestAniListScraper:
         client._last_request_time = 0.0
 
         async def run():
-            with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+            with patch(
+                "src.scrapers.anilist_scraper.load_cached_json", return_value=None
+            ):
                 return await client.query("query {}", {})
 
         result = _run(run())
@@ -102,7 +105,9 @@ class TestAniListScraper:
         )
 
         async def run():
-            with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+            with patch(
+                "src.scrapers.anilist_scraper.load_cached_json", return_value=None
+            ):
                 return await client.query("query {}", {})
 
         result = _run(run())
@@ -136,7 +141,9 @@ class TestAniListScraper:
         )
 
         async def run():
-            with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+            with patch(
+                "src.scrapers.anilist_scraper.load_cached_json", return_value=None
+            ):
                 return await client.query("query {}", {})
 
         result = _run(run())
@@ -155,7 +162,9 @@ class TestAniListScraper:
         )
 
         async def run():
-            with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+            with patch(
+                "src.scrapers.anilist_scraper.load_cached_json", return_value=None
+            ):
                 return await client.query("query {}", {})
 
         with pytest.raises(EndpointUnreachableError):
@@ -182,7 +191,9 @@ class TestAniListScraper:
         client._client._client.post = AsyncMock(return_value=invalid_response)
 
         async def run():
-            with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+            with patch(
+                "src.scrapers.anilist_scraper.load_cached_json", return_value=None
+            ):
                 try:
                     return await client.query("query {}", {})
                 except Exception as e:
@@ -213,7 +224,9 @@ class TestAniListScraper:
         client._last_request_time = 0.0
 
         async def run():
-            with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+            with patch(
+                "src.scrapers.anilist_scraper.load_cached_json", return_value=None
+            ):
                 return await client.query("query {}", {})
 
         result = _run(run())

@@ -49,7 +49,9 @@ def sample_persons():
         Person(id="p3", name_ja="スタジオA", name_en="Studio A"),
         Person(id="p4", name_ja="音響スタジオB", name_en="Sound Studio B"),
         Person(id="p5", name_ja="ACME Corp", name_en="ACME Corp"),
-        Person(id="p6", name_ja="田中宏（フジテレビ）", name_en="Hiroshi Tanaka (Fuji)"),
+        Person(
+            id="p6", name_ja="田中宏（フジテレビ）", name_en="Hiroshi Tanaka (Fuji)"
+        ),
         Person(id="p7", name_ja="山田・鈴木", name_en="Yamada, Suzuki"),
     ]
 
@@ -88,13 +90,13 @@ class TestExtractJsonArray:
 
     def test_extract_json_with_backticks_only(self):
         """Extract JSON from triple backticks without language specifier."""
-        response = "```\n[{\"name\": \"test\"}]\n```"
+        response = '```\n[{"name": "test"}]\n```'
         result = _extract_json_array(response)
         assert result == [{"name": "test"}]
 
     def test_extract_json_with_surrounding_text(self):
         """Extract JSON embedded in other text."""
-        response = "Here is the result:\n[{\"name\": \"test\", \"type\": \"org\"}]\nDone!"
+        response = 'Here is the result:\n[{"name": "test", "type": "org"}]\nDone!'
         result = _extract_json_array(response)
         assert result == [{"name": "test", "type": "org"}]
 
@@ -125,6 +127,7 @@ class TestIsLlmEnabled:
         with patch.dict("os.environ", {}, clear=False):
             # Ensure ANIMETOR_LLM is not set
             import os
+
             os.environ.pop("ANIMETOR_LLM", None)
             assert not is_llm_enabled()
 
@@ -176,6 +179,7 @@ class TestCheckLlmAvailable:
     def test_llm_unavailable_timeout(self):
         """Return False on timeout."""
         import httpx
+
         with patch("httpx.get") as mock_get:
             mock_get.side_effect = httpx.TimeoutException("Timeout")
 
@@ -225,6 +229,7 @@ class TestCallLlm:
     def test_llm_call_timeout(self):
         """Return empty string on timeout."""
         import httpx
+
         with patch("httpx.post") as mock_post:
             mock_post.side_effect = httpx.TimeoutException("Timeout")
 
@@ -268,7 +273,9 @@ class TestCacheFunctions:
             mock_load.return_value = cache_data
 
             with patch("src.analysis.llm_pipeline.upsert_llm_decision") as mock_save:
-                _save_db_decision(None, "Studio A", "org_classification", {"type": "org"})
+                _save_db_decision(
+                    None, "Studio A", "org_classification", {"type": "org"}
+                )
                 mock_save.assert_called_once()
 
             cache = _load_db_cache(None, "org_classification")
@@ -346,7 +353,9 @@ class TestClassifyPersonOrOrg:
             Person(id="p1", name_ja="太郎"),  # has hiragana
         ]
         with patch("src.analysis.llm_pipeline.is_llm_enabled", return_value=True):
-            with patch("src.analysis.llm_pipeline.check_llm_available", return_value=True):
+            with patch(
+                "src.analysis.llm_pipeline.check_llm_available", return_value=True
+            ):
                 with patch("src.analysis.llm_pipeline._call_llm", return_value=""):
                     result = classify_person_or_org(persons, studio_names)
 
@@ -360,7 +369,9 @@ class TestClassifyPersonOrOrg:
             Person(id="p2", name_ja="Studio A"),
         ]
         with patch("src.analysis.llm_pipeline.is_llm_enabled", return_value=True):
-            with patch("src.analysis.llm_pipeline.check_llm_available", return_value=True):
+            with patch(
+                "src.analysis.llm_pipeline.check_llm_available", return_value=True
+            ):
                 with patch("src.analysis.llm_pipeline._call_llm", return_value=""):
                     result = classify_person_or_org(persons, studio_names)
 
@@ -375,9 +386,13 @@ class TestClassifyPersonOrOrg:
             mock_load_cache.return_value = {"太郎": {"type": "person"}}
 
             with patch("src.analysis.llm_pipeline.is_llm_enabled", return_value=True):
-                with patch("src.analysis.llm_pipeline.check_llm_available", return_value=True):
+                with patch(
+                    "src.analysis.llm_pipeline.check_llm_available", return_value=True
+                ):
                     with patch("src.analysis.llm_pipeline._call_llm") as mock_llm:
-                        result = classify_person_or_org(sample_persons[:1], studio_names)
+                        result = classify_person_or_org(
+                            sample_persons[:1], studio_names
+                        )
 
                         # LLM should not be called (used cache)
                         mock_llm.assert_not_called()
@@ -390,7 +405,9 @@ class TestClassifyPersonOrOrg:
             Person(id="p1", name_ja="未知の名前"),  # unknown, no hiragana
         ]
         with patch("src.analysis.llm_pipeline.is_llm_enabled", return_value=True):
-            with patch("src.analysis.llm_pipeline.check_llm_available", return_value=False):
+            with patch(
+                "src.analysis.llm_pipeline.check_llm_available", return_value=False
+            ):
                 result = classify_person_or_org(persons, studio_names)
 
                 # Fallback: treat as person
@@ -399,27 +416,41 @@ class TestClassifyPersonOrOrg:
 
     def test_llm_batch_classification(self, sample_persons, studio_names):
         """LLM classifies batch of candidates."""
-        llm_response = json.dumps([
-            {"name": "太郎", "type": "person"},
-            {"name": "花子", "type": "person"},
-        ])
+        llm_response = json.dumps(
+            [
+                {"name": "太郎", "type": "person"},
+                {"name": "花子", "type": "person"},
+            ]
+        )
 
         with patch("src.analysis.llm_pipeline._load_db_cache") as mock_load_cache:
             mock_load_cache.return_value = {}  # Empty cache
             with patch("src.analysis.llm_pipeline.is_llm_enabled", return_value=True):
-                with patch("src.analysis.llm_pipeline.check_llm_available", return_value=True):
-                    with patch("src.analysis.llm_pipeline._call_llm", return_value=llm_response):
+                with patch(
+                    "src.analysis.llm_pipeline.check_llm_available", return_value=True
+                ):
+                    with patch(
+                        "src.analysis.llm_pipeline._call_llm", return_value=llm_response
+                    ):
                         with patch("src.analysis.llm_pipeline._save_db_decision"):
-                            result = classify_person_or_org(sample_persons[:2], studio_names)
+                            result = classify_person_or_org(
+                                sample_persons[:2], studio_names
+                            )
 
                             assert result.from_llm >= 1
-                            assert "p1" in result.person_ids or "p2" in result.person_ids
+                            assert (
+                                "p1" in result.person_ids or "p2" in result.person_ids
+                            )
 
     def test_llm_malformed_response_fallback(self, sample_persons, studio_names):
         """Malformed LLM response falls back to persons."""
         with patch("src.analysis.llm_pipeline.is_llm_enabled", return_value=True):
-            with patch("src.analysis.llm_pipeline.check_llm_available", return_value=True):
-                with patch("src.analysis.llm_pipeline._call_llm", return_value="not json"):
+            with patch(
+                "src.analysis.llm_pipeline.check_llm_available", return_value=True
+            ):
+                with patch(
+                    "src.analysis.llm_pipeline._call_llm", return_value="not json"
+                ):
                     result = classify_person_or_org(sample_persons, studio_names)
 
                     # Fallback: treat all as persons
@@ -459,7 +490,9 @@ class TestNormalizeNames:
             Person(id="p2", name_ja=""),
         ]
         with patch("src.analysis.llm_pipeline.is_llm_enabled", return_value=True):
-            with patch("src.analysis.llm_pipeline.check_llm_available", return_value=True):
+            with patch(
+                "src.analysis.llm_pipeline.check_llm_available", return_value=True
+            ):
                 result = normalize_names(persons)
 
                 # No parentheses/slashes/commas, so no candidates
@@ -473,14 +506,22 @@ class TestNormalizeNames:
         with patch("src.analysis.llm_pipeline._load_db_cache") as mock_load_cache:
             mock_load_cache.return_value = {}  # Empty cache
             with patch("src.analysis.llm_pipeline.is_llm_enabled", return_value=True):
-                with patch("src.analysis.llm_pipeline.check_llm_available", return_value=True):
-                    llm_response = json.dumps([{
-                        "original": "田中宏（フジテレビ）",
-                        "names": ["田中宏"],
-                        "episode_info": None,
-                        "is_org": False,
-                    }])
-                    with patch("src.analysis.llm_pipeline._call_llm", return_value=llm_response):
+                with patch(
+                    "src.analysis.llm_pipeline.check_llm_available", return_value=True
+                ):
+                    llm_response = json.dumps(
+                        [
+                            {
+                                "original": "田中宏（フジテレビ）",
+                                "names": ["田中宏"],
+                                "episode_info": None,
+                                "is_org": False,
+                            }
+                        ]
+                    )
+                    with patch(
+                        "src.analysis.llm_pipeline._call_llm", return_value=llm_response
+                    ):
                         with patch("src.analysis.llm_pipeline._save_db_decision"):
                             result = normalize_names(persons)
 
@@ -503,7 +544,9 @@ class TestNormalizeNames:
             mock_load_cache.return_value = {"田中宏（フジテレビ）": cached_decision}
 
             with patch("src.analysis.llm_pipeline.is_llm_enabled", return_value=True):
-                with patch("src.analysis.llm_pipeline.check_llm_available", return_value=True):
+                with patch(
+                    "src.analysis.llm_pipeline.check_llm_available", return_value=True
+                ):
                     with patch("src.analysis.llm_pipeline._call_llm") as mock_llm:
                         result = normalize_names(persons)
 
@@ -519,7 +562,9 @@ class TestNormalizeNames:
         with patch("src.analysis.llm_pipeline._load_db_cache") as mock_load_cache:
             mock_load_cache.return_value = {}  # Empty cache
             with patch("src.analysis.llm_pipeline.is_llm_enabled", return_value=True):
-                with patch("src.analysis.llm_pipeline.check_llm_available", return_value=False):
+                with patch(
+                    "src.analysis.llm_pipeline.check_llm_available", return_value=False
+                ):
                     result = normalize_names(persons)
 
                     # No cache, LLM unavailable: return empty
@@ -533,8 +578,12 @@ class TestNormalizeNames:
         with patch("src.analysis.llm_pipeline._load_db_cache") as mock_load_cache:
             mock_load_cache.return_value = {}  # Empty cache
             with patch("src.analysis.llm_pipeline.is_llm_enabled", return_value=True):
-                with patch("src.analysis.llm_pipeline.check_llm_available", return_value=True):
-                    with patch("src.analysis.llm_pipeline._call_llm", return_value="not json"):
+                with patch(
+                    "src.analysis.llm_pipeline.check_llm_available", return_value=True
+                ):
+                    with patch(
+                        "src.analysis.llm_pipeline._call_llm", return_value="not json"
+                    ):
                         result = normalize_names(persons)
 
                         # Malformed response: skip batch, continue
@@ -546,18 +595,26 @@ class TestNormalizeNames:
         persons = [
             Person(id="p1", name_ja="太郎作画担当、花子背景美術"),
         ]
-        llm_response = json.dumps([{
-            "original": "太郎作画担当、花子背景美術",
-            "names": ["太郎", "花子"],
-            "episode_info": None,
-            "is_org": False,
-        }])
+        llm_response = json.dumps(
+            [
+                {
+                    "original": "太郎作画担当、花子背景美術",
+                    "names": ["太郎", "花子"],
+                    "episode_info": None,
+                    "is_org": False,
+                }
+            ]
+        )
 
         with patch("src.analysis.llm_pipeline._load_db_cache") as mock_load_cache:
             mock_load_cache.return_value = {}  # Empty cache
             with patch("src.analysis.llm_pipeline.is_llm_enabled", return_value=True):
-                with patch("src.analysis.llm_pipeline.check_llm_available", return_value=True):
-                    with patch("src.analysis.llm_pipeline._call_llm", return_value=llm_response):
+                with patch(
+                    "src.analysis.llm_pipeline.check_llm_available", return_value=True
+                ):
+                    with patch(
+                        "src.analysis.llm_pipeline._call_llm", return_value=llm_response
+                    ):
                         with patch("src.analysis.llm_pipeline._save_db_decision"):
                             result = normalize_names(persons)
 
@@ -571,18 +628,26 @@ class TestNormalizeNames:
         persons = [
             Person(id="p1", name_ja="名前（括弧）"),
         ]
-        llm_response = json.dumps([{
-            "original": "名前（括弧）",
-            "names": ["名前"],
-            "episode_info": "(1~10話)",
-            "is_org": False,
-        }])
+        llm_response = json.dumps(
+            [
+                {
+                    "original": "名前（括弧）",
+                    "names": ["名前"],
+                    "episode_info": "(1~10話)",
+                    "is_org": False,
+                }
+            ]
+        )
 
         with patch("src.analysis.llm_pipeline._load_db_cache") as mock_load_cache:
             mock_load_cache.return_value = {}  # Empty cache
             with patch("src.analysis.llm_pipeline.is_llm_enabled", return_value=True):
-                with patch("src.analysis.llm_pipeline.check_llm_available", return_value=True):
-                    with patch("src.analysis.llm_pipeline._call_llm", return_value=llm_response):
+                with patch(
+                    "src.analysis.llm_pipeline.check_llm_available", return_value=True
+                ):
+                    with patch(
+                        "src.analysis.llm_pipeline._call_llm", return_value=llm_response
+                    ):
                         with patch("src.analysis.llm_pipeline._save_db_decision"):
                             result = normalize_names(persons)
 
@@ -704,8 +769,10 @@ class TestFindAiMatchCandidates:
     def test_max_candidates_limit(self):
         """Result respects max_candidates parameter."""
         # Create many similar names
-        persons = [Person(id=f"p{i}", name_ja=f"太{chr(0x3042 + i % 10)}", name_en=f"Taro{i}")
-                   for i in range(20)]
+        persons = [
+            Person(id=f"p{i}", name_ja=f"太{chr(0x3042 + i % 10)}", name_en=f"Taro{i}")
+            for i in range(20)
+        ]
         result = find_ai_match_candidates(
             persons,
             set(),

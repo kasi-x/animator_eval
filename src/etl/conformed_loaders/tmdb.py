@@ -15,6 +15,7 @@ H1 compliance:
     rg '\\b(vote_average|popularity)\\b' src/etl/conformed_loaders/tmdb.py | rg -v 'display_'
   must return 0 lines.
 """
+
 from __future__ import annotations
 
 import glob as _glob_mod
@@ -198,9 +199,7 @@ WHERE NOT EXISTS (
 
 def _glob(bronze_root: Path, table: str) -> str:
     """Return glob pattern for a TMDb BRONZE table partition."""
-    return str(
-        bronze_root / "source=tmdb" / f"table={table}" / "date=*" / "*.parquet"
-    )
+    return str(bronze_root / "source=tmdb" / f"table={table}" / "date=*" / "*.parquet")
 
 
 def _parquet_exists(bronze_root: Path, table: str) -> bool:

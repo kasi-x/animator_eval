@@ -67,7 +67,9 @@ ON CONFLICT (scope, calc_name) DO UPDATE SET
 
 
 @contextmanager
-def _connect(path: Path | str | None = None) -> Generator[duckdb.DuckDBPyConnection, None, None]:
+def _connect(
+    path: Path | str | None = None,
+) -> Generator[duckdb.DuckDBPyConnection, None, None]:
     """Open a DuckDB connection, ensure DDL, yield, close."""
     resolved = str(path or DEFAULT_CACHE_PATH)
     Path(resolved).parent.mkdir(parents=True, exist_ok=True)

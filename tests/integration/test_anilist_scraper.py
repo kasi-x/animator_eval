@@ -28,6 +28,7 @@ def _run(coro):
     """Helper to run async coroutines in sync tests."""
     return asyncio.run(coro)
 
+
 # ---------------------------------------------------------------------------
 # AniList scraper tests
 # ---------------------------------------------------------------------------
@@ -122,7 +123,9 @@ class TestAniListClient:
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+                with patch(
+                    "src.scrapers.anilist_scraper.load_cached_json", return_value=None
+                ):
                     return await client.query("query {}", {})
 
         result = _run(run())
@@ -173,7 +176,9 @@ class TestAniListClient:
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+                with patch(
+                    "src.scrapers.anilist_scraper.load_cached_json", return_value=None
+                ):
                     return await client.query("query {}", {})
 
         _run(run())
@@ -206,7 +211,9 @@ class TestAniListClient:
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+                with patch(
+                    "src.scrapers.anilist_scraper.load_cached_json", return_value=None
+                ):
                     return await client.query("query {}", {})
 
         result = _run(run())
@@ -249,7 +256,9 @@ class TestAniListClient:
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+                with patch(
+                    "src.scrapers.anilist_scraper.load_cached_json", return_value=None
+                ):
                     return await client.query("query {}", {})
 
         with pytest.raises(EndpointUnreachableError) as exc_info:
@@ -359,7 +368,9 @@ class TestAniListClient:
 
         async def run():
             with patch("asyncio.sleep", new_callable=AsyncMock):
-                with patch("src.scrapers.anilist_scraper.load_cached_json", return_value=None):
+                with patch(
+                    "src.scrapers.anilist_scraper.load_cached_json", return_value=None
+                ):
                     return await client.query("query {}", {})
 
         with pytest.raises(EndpointUnreachableError):
@@ -709,6 +720,9 @@ class TestAniListBatchSave:
 
         mock_bw = MagicMock()
         c1 = MagicMock()
-        c1.model_dump.return_value = {"person_id": "anilist:p1", "anime_id": "anilist:1"}
+        c1.model_dump.return_value = {
+            "person_id": "anilist:p1",
+            "anime_id": "anilist:1",
+        }
         save_credits_batch_to_bronze(mock_bw, [c1])
         mock_bw.append.assert_called_once()

@@ -44,7 +44,9 @@ class SankeyFlowSpec:
     default_palette: tuple[str, ...] = field(default_factory=lambda: OKABE_ITO_DARK)
 
 
-def _aggregate_small_links(spec: SankeyFlowSpec) -> tuple[list[SankeyNode], list[SankeyLink]]:
+def _aggregate_small_links(
+    spec: SankeyFlowSpec,
+) -> tuple[list[SankeyNode], list[SankeyLink]]:
     if spec.min_link_value <= 0:
         return spec.nodes, spec.links
 
@@ -67,8 +69,9 @@ def _aggregate_small_links(spec: SankeyFlowSpec) -> tuple[list[SankeyNode], list
         layer = target.layer
         if layer not in other_by_layer:
             other_id = f"__other_{layer}"
-            other_node = SankeyNode(id=other_id, label=spec.other_label,
-                                    layer=layer, color="#7a7a7a")
+            other_node = SankeyNode(
+                id=other_id, label=spec.other_label, layer=layer, color="#7a7a7a"
+            )
             other_by_layer[layer] = other_node
             nodes.append(other_node)
             nodes_by_id[other_id] = other_node
@@ -98,13 +101,21 @@ def render_sankey_flow(spec: SankeyFlowSpec, *, theme: str = "dark") -> go.Figur
         for n in nodes
     ]
 
-    link_sources = [id_to_idx[link.source_id] for link in links if link.source_id in id_to_idx]
-    link_targets = [id_to_idx[link.target_id] for link in links if link.target_id in id_to_idx]
-    link_values = [link.value for link in links
-                   if link.source_id in id_to_idx and link.target_id in id_to_idx]
+    link_sources = [
+        id_to_idx[link.source_id] for link in links if link.source_id in id_to_idx
+    ]
+    link_targets = [
+        id_to_idx[link.target_id] for link in links if link.target_id in id_to_idx
+    ]
+    link_values = [
+        link.value
+        for link in links
+        if link.source_id in id_to_idx and link.target_id in id_to_idx
+    ]
     link_colors = [
         link.color or hex_to_rgba(node_colors[id_to_idx[link.source_id]], 0.35)
-        for link in links if link.source_id in id_to_idx
+        for link in links
+        if link.source_id in id_to_idx
     ]
     customdata = []
     for link in links:

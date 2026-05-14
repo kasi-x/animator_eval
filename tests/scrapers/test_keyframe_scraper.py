@@ -3,6 +3,7 @@
 All network calls are mocked. Uses a tmp_path BRONZE root.
 pytest-asyncio is not installed; async tests use asyncio.run().
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -39,7 +40,7 @@ _SITEMAP_XML = """\
 """
 
 _PRELOAD_HTML = (
-    '<html><head></head><body><script>preloadData = '
+    "<html><head></head><body><script>preloadData = "
     '{"title":"Test","slug":"test-anime-1","uuid":"abc-123","anilistId":21,'
     '"settings":{"categories":[{"name":"Main Staff"}]},'
     '"anilist":{"id":21,"studios":{"edges":[{"node":{"name":"Toei"},"isMain":true}]}},'
@@ -47,8 +48,8 @@ _PRELOAD_HTML = (
     '{"name":"Director","original":"監督","staff":['
     '{"id":100,"ja":"テスト太郎","en":"Taro Test","isStudio":false},'
     '{"id":200,"ja":"スタジオA","en":"Studio A","isStudio":true}'
-    ']}]}]}]}'
-    ';</script></body></html>'
+    "]}]}]}]}"
+    ";</script></body></html>"
 )
 
 _SHOW_DATA = json.loads((FIXTURE_DIR / "sample_show.json").read_text())
@@ -90,15 +91,7 @@ class TestCollectPersonIds:
     def test_skips_studio_entries(self):
         data = {
             "menus": [
-                {
-                    "credits": [
-                        {
-                            "roles": [
-                                {"staff": [{"id": 999, "isStudio": True}]}
-                            ]
-                        }
-                    ]
-                }
+                {"credits": [{"roles": [{"staff": [{"id": 999, "isStudio": True}]}]}]}
             ]
         }
         ids = collect_person_ids_from_preload(data)
@@ -151,8 +144,15 @@ def mock_client():
         # Return fixture data (which has credits) for any person ID
         # The fixture uses person_id=133359 internally but we return it for all IDs
         return {
-            "staff": {"id": pid, "isStudio": False, "ja": "名前", "en": "Name",
-                      "aliases": [], "avatar": None, "bio": None},
+            "staff": {
+                "id": pid,
+                "isStudio": False,
+                "ja": "名前",
+                "en": "Name",
+                "aliases": [],
+                "avatar": None,
+                "bio": None,
+            },
             "jobs": ["Key Animation"],
             "studios": {"スタジオA": ["Studio A"]},
             "credits": _SHOW_DATA["credits"][:1],  # at least one credit row
@@ -178,7 +178,9 @@ def count_parquet_rows(bronze_root: Path, table: str) -> int:
         return 0
     con = duckdb.connect(":memory:")
     file_list = [str(f) for f in files]
-    return con.execute(f"SELECT count(*) FROM read_parquet({file_list!r})").fetchone()[0]
+    return con.execute(f"SELECT count(*) FROM read_parquet({file_list!r})").fetchone()[
+        0
+    ]
 
 
 def _scrape(mock_client, data_dir, skip_persons=True, max_anime=1, fresh=True):
@@ -211,7 +213,9 @@ class TestRunScraper:
         _scrape(mock_client, data_dir)
         assert count_parquet_rows(bronze_root, "anime_studios") >= 1
 
-    def test_phase2_writes_settings_categories(self, bronze_root, data_dir, mock_client):
+    def test_phase2_writes_settings_categories(
+        self, bronze_root, data_dir, mock_client
+    ):
         _scrape(mock_client, data_dir)
         assert count_parquet_rows(bronze_root, "settings_categories") >= 1
 
@@ -259,7 +263,9 @@ class TestRunScraper:
         assert cp["roles_master_fetched_at"] is not None
         assert cp["completed_ids"]  # contains completed slugs
 
-    def test_checkpoint_resume_skips_completed(self, bronze_root, data_dir, mock_client):
+    def test_checkpoint_resume_skips_completed(
+        self, bronze_root, data_dir, mock_client
+    ):
         """Running twice with fresh=False does not re-fetch roles_master."""
         _scrape(mock_client, data_dir)
 
@@ -298,4 +304,3 @@ class TestRunScraper:
         with gzip.open(gz_files[0], "rt", encoding="utf-8") as fh:
             content = fh.read()
         assert "preloadData" in content
-

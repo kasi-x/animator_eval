@@ -10,16 +10,22 @@ from src.pipeline_phases.context import PipelineContext
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _anime(aid, year=2020, episodes=12, duration=24):
     # Use BronzeAnime: production load_all_anime() returns BronzeAnime objects,
     # and VA analysis modules access .genres which only BronzeAnime has.
-    return BronzeAnime(id=aid, title_en=f"Anime {aid}", year=year,
-                       episodes=episodes, duration=duration)
+    return BronzeAnime(
+        id=aid, title_en=f"Anime {aid}", year=year, episodes=episodes, duration=duration
+    )
 
 
 def _cva(person_id, anime_id, char_id="c1", role="MAIN"):
-    return CharacterVoiceActor(person_id=person_id, character_id=char_id,
-                               anime_id=anime_id, character_role=role)
+    return CharacterVoiceActor(
+        person_id=person_id,
+        character_id=char_id,
+        anime_id=anime_id,
+        character_role=role,
+    )
 
 
 def _credit(pid, aid, role):
@@ -29,6 +35,7 @@ def _credit(pid, aid, role):
 # ---------------------------------------------------------------------------
 # Fixture
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture
 def minimal_va_context():
@@ -64,15 +71,18 @@ def minimal_va_context():
 # Tests
 # ---------------------------------------------------------------------------
 
+
 class TestVaGraphConstructionPhase:
     def test_builds_va_graphs(self, minimal_va_context):
         from src.analysis.va.pipeline import build_va_graphs_phase
+
         build_va_graphs_phase(minimal_va_context)
         assert minimal_va_context.va_anime_graph is not None
         assert minimal_va_context.va_collaboration_graph is not None
 
     def test_va_anime_graph_has_edges(self, minimal_va_context):
         from src.analysis.va.pipeline import build_va_graphs_phase
+
         build_va_graphs_phase(minimal_va_context)
         assert minimal_va_context.va_anime_graph.number_of_edges() > 0
 
@@ -83,6 +93,7 @@ class TestVaGraphConstructionPhase:
         ctx.anime_map = {}
         ctx.va_person_ids = set()
         from src.analysis.va.pipeline import build_va_graphs_phase
+
         build_va_graphs_phase(ctx)  # should not raise
 
 
@@ -90,6 +101,7 @@ class TestVaCoreScoringPhase:
     def test_scores_populated_after_run(self, minimal_va_context):
         from src.analysis.va.pipeline import build_va_graphs_phase
         from src.analysis.va.pipeline import compute_va_core_scores_phase
+
         build_va_graphs_phase(minimal_va_context)
         compute_va_core_scores_phase(minimal_va_context)
         assert isinstance(minimal_va_context.va_iv_scores, dict)
@@ -98,6 +110,7 @@ class TestVaCoreScoringPhase:
         ctx = PipelineContext(visualize=False, dry_run=True)
         ctx.va_credits = []
         from src.analysis.va.pipeline import compute_va_core_scores_phase
+
         compute_va_core_scores_phase(ctx)  # should not raise
         assert ctx.va_iv_scores == {}
 
@@ -109,6 +122,7 @@ class TestVaSupplementaryMetricsPhase:
         from src.analysis.va.pipeline import (
             compute_va_supplementary_metrics_phase,
         )
+
         build_va_graphs_phase(minimal_va_context)
         compute_va_core_scores_phase(minimal_va_context)
         compute_va_supplementary_metrics_phase(minimal_va_context)
@@ -119,6 +133,7 @@ class TestVaSupplementaryMetricsPhase:
         from src.analysis.va.pipeline import (
             compute_va_supplementary_metrics_phase,
         )
+
         compute_va_supplementary_metrics_phase(ctx)  # should not raise
 
 
@@ -127,6 +142,7 @@ class TestVaResultAssemblyPhase:
         from src.analysis.va.pipeline import build_va_graphs_phase
         from src.analysis.va.pipeline import compute_va_core_scores_phase
         from src.analysis.va.pipeline import assemble_va_results
+
         build_va_graphs_phase(minimal_va_context)
         compute_va_core_scores_phase(minimal_va_context)
         assemble_va_results(minimal_va_context)
@@ -137,6 +153,7 @@ class TestVaResultAssemblyPhase:
         ctx.va_credits = []
         ctx.va_person_ids = set()
         from src.analysis.va.pipeline import assemble_va_results
+
         assemble_va_results(ctx)
         assert ctx.va_results == []
 
@@ -145,6 +162,7 @@ class TestVaResultAssemblyPhase:
         from src.analysis.va.pipeline import build_va_graphs_phase
         from src.analysis.va.pipeline import compute_va_core_scores_phase
         from src.analysis.va.pipeline import assemble_va_results
+
         build_va_graphs_phase(minimal_va_context)
         compute_va_core_scores_phase(minimal_va_context)
         assemble_va_results(minimal_va_context)
@@ -156,12 +174,20 @@ class TestVaResultAssemblyPhase:
         from src.analysis.va.pipeline import build_va_graphs_phase
         from src.analysis.va.pipeline import compute_va_core_scores_phase
         from src.analysis.va.pipeline import assemble_va_results
+
         build_va_graphs_phase(minimal_va_context)
         compute_va_core_scores_phase(minimal_va_context)
         assemble_va_results(minimal_va_context)
         required = {
-            "person_id", "name", "person_fe", "birank", "trust",
-            "patronage", "dormancy", "awcc", "va_iv_score",
+            "person_id",
+            "name",
+            "person_fe",
+            "birank",
+            "trust",
+            "patronage",
+            "dormancy",
+            "awcc",
+            "va_iv_score",
             "replacement_difficulty",
         }
         for row in minimal_va_context.va_results:

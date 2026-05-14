@@ -14,6 +14,7 @@ handle both forms:
 Input: Role.value string or English role string from AniList.
 Output: Role.value string.
 """
+
 from __future__ import annotations
 
 from src.etl.role_mappers import register

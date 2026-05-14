@@ -1,17 +1,23 @@
-"""Studio canonical row builder for the Resolved layer (Phase 2a).
+"""Studio canonical row builder for the Resolved layer (Phase 2b).
 
 Reads conformed.studios rows and builds one canonical row per unique studio.
 
-Entity clustering strategy (Phase 2a):
-- Each unique conformed id gets its own canonical row (conservative).
-- Future work: cross-source studio name matching (Phase 2b+).
+Entity clustering strategy:
+- Phase 2a (legacy): 1 conformed = 1 canonical (conservative).
+- Phase 2b (current): cluster rows by normalized name. Rows whose normalized
+  name match are merged into a single canonical row. canonical_id = the id
+  of the highest-priority-source member (per `name` field priority).
+- Rows with NULL/empty name are kept as singletons (no normalization key).
 
-canonical_id: use the conformed id directly for Phase 2a.
+canonical_id format:
+- single-member cluster: conformed id (back-compat with Phase 2a).
+- multi-member cluster: id of the cluster's highest-priority source.
 """
 
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -21,7 +27,7 @@ import structlog
 from src.etl.resolved._ddl import ALL_DDL
 from src.etl.resolved._decisions_log import DecisionsLogger, build_decision_record
 from src.etl.resolved._select import build_audit_entries, select_representative_value
-from src.etl.resolved.source_ranking import STUDIOS_RANKING
+from src.etl.resolved.source_ranking import STUDIOS_RANKING, source_prefix
 
 logger = structlog.get_logger()
 
@@ -30,28 +36,55 @@ STUDIOS_FIELDS: list[str] = list(STUDIOS_RANKING.keys())
 # NOT NULL DEFAULT '' fields — coerce None → '' on insert
 _STUDIOS_NOT_NULL_STR = frozenset({"name", "source_ids_json"})
 
+# Cluster key normalization: legal/corporate suffix stripping + lowercase trim.
+_STUDIO_NAME_SUFFIX_RE = re.compile(
+    r"株式会社|㈱|有限会社|\(株\)|\(有\)|Inc\.?|Ltd\.?|Co\.?,? ?Ltd\.?",
+    flags=re.IGNORECASE,
+)
+
+
+def _normalize_studio_name(name: str | None) -> str:
+    """Return cluster key for a studio name. Empty string means no clustering."""
+    if not name:
+        return ""
+    stripped = _STUDIO_NAME_SUFFIX_RE.sub("", name).strip().lower()
+    return stripped
+
+
+def _cluster_canonical_id(rows: list[dict[str, Any]]) -> str:
+    """Pick canonical_id from cluster rows: highest-priority source for `name` field."""
+    priority = STUDIOS_RANKING["name"]
+    rank: dict[str, int] = {src: i for i, src in enumerate(priority)}
+    sentinel = len(priority)
+
+    def _row_rank(row: dict[str, Any]) -> tuple[int, str]:
+        return (rank.get(source_prefix(row["id"]), sentinel), row["id"])
+
+    return min(rows, key=_row_rank)["id"]
+
 
 def _load_conformed_studios(conn: duckdb.DuckDBPyConnection) -> list[dict[str, Any]]:
     """Load conformed studios rows as dicts."""
     rel = conn.execute(
-        "SELECT id, name, is_animation_studio, country_of_origin "
-        "FROM conformed.studios"
+        "SELECT id, name, is_animation_studio, country_of_origin FROM conformed.studios"
     )
     cols = [d[0] for d in rel.description]
     return [dict(zip(cols, row)) for row in rel.fetchall()]
 
 
-def _resolve_studio_row(
-    row: dict[str, Any],
+def _resolve_studio_cluster(
+    rows: list[dict[str, Any]],
     *,
     decisions_logger: DecisionsLogger | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    """Resolve a single conformed studio into a canonical row.
+    """Resolve one studio cluster (1+ conformed rows) into a canonical row.
 
-    Phase 2a: single-source, so no multi-row selection needed.
+    For single-row clusters, canonical_id = conformed id (back-compat).
+    For multi-row clusters, canonical_id = id of the highest-priority source
+    member, and per-field values are picked via `select_representative_value`.
     """
-    canonical_id = row["id"]  # conservative: conformed id IS canonical id
-    source_ids = [row["id"]]
+    canonical_id = rows[0]["id"] if len(rows) == 1 else _cluster_canonical_id(rows)
+    source_ids = [r["id"] for r in rows]
 
     resolved: dict[str, Any] = {
         "canonical_id": canonical_id,
@@ -63,7 +96,7 @@ def _resolve_studio_row(
         priority = STUDIOS_RANKING[field]
         value, winning_source, reason = select_representative_value(
             field=field,
-            candidates=[row],
+            candidates=rows,
             priority=priority,
             id_key="id",
         )
@@ -86,7 +119,7 @@ def _resolve_studio_row(
                     canonical_id=canonical_id,
                     entity_type="studio",
                     field=field,
-                    candidates=[row],
+                    candidates=rows,
                     selected_value=value,
                     winning_source=winning_source,
                     selection_rule=reason,
@@ -95,6 +128,21 @@ def _resolve_studio_row(
             )
 
     return resolved, audit_entries
+
+
+def _cluster_rows_by_name(
+    rows: list[dict[str, Any]],
+) -> list[list[dict[str, Any]]]:
+    """Group conformed studio rows by normalized name. Empty key → singleton."""
+    by_key: dict[str, list[dict[str, Any]]] = {}
+    singletons: list[list[dict[str, Any]]] = []
+    for r in rows:
+        key = _normalize_studio_name(r.get("name"))
+        if not key:
+            singletons.append([r])
+            continue
+        by_key.setdefault(key, []).append(r)
+    return list(by_key.values()) + singletons
 
 
 def build_resolved_studios(
@@ -143,8 +191,17 @@ def build_resolved_studios(
         log_ctx = None
 
     try:
-        for row in rows:
-            resolved_row, row_audit = _resolve_studio_row(row, decisions_logger=log_ctx)
+        clusters = _cluster_rows_by_name(rows)
+        multi_source_clusters = sum(1 for c in clusters if len(c) > 1)
+        logger.info(
+            "resolve_studios_clusters",
+            total=len(clusters),
+            multi_source=multi_source_clusters,
+        )
+        for cluster in clusters:
+            resolved_row, row_audit = _resolve_studio_cluster(
+                cluster, decisions_logger=log_ctx
+            )
             resolved_rows.append(resolved_row)
             audit_rows.extend(row_audit)
     finally:
@@ -179,9 +236,13 @@ def _insert_resolved_studios(
         return
 
     insert_fields = [
-        "canonical_id", "name", "is_animation_studio", "country_of_origin",
+        "canonical_id",
+        "name",
+        "is_animation_studio",
+        "country_of_origin",
         "source_ids_json",
-        "name_source", "country_source",
+        "name_source",
+        "country_source",
     ]
     placeholders = ", ".join("?" * len(insert_fields))
     sql = (

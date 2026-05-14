@@ -172,7 +172,15 @@ def find_dup_by_name_and_actor(conn: duckdb.DuckDBPyConnection) -> list[dict[str
             id_a, id_b, name_a, name_b, shared_actor_id, criterion, similarity
     """
     rows = conn.execute(_DUP_BY_NAME_AND_ACTOR_SQL).fetchall()
-    cols = ["id_a", "id_b", "name_a", "name_b", "shared_actor_id", "criterion", "similarity"]
+    cols = [
+        "id_a",
+        "id_b",
+        "name_a",
+        "name_b",
+        "shared_actor_id",
+        "criterion",
+        "similarity",
+    ]
     return [dict(zip(cols, r)) for r in rows]
 
 
@@ -184,7 +192,15 @@ def find_dup_by_name_and_anime(conn: duckdb.DuckDBPyConnection) -> list[dict[str
             id_a, id_b, name_a, name_b, shared_anime_id, criterion, similarity
     """
     rows = conn.execute(_DUP_BY_NAME_AND_ANIME_SQL).fetchall()
-    cols = ["id_a", "id_b", "name_a", "name_b", "shared_anime_id", "criterion", "similarity"]
+    cols = [
+        "id_a",
+        "id_b",
+        "name_a",
+        "name_b",
+        "shared_anime_id",
+        "criterion",
+        "similarity",
+    ]
     return [dict(zip(cols, r)) for r in rows]
 
 
@@ -220,35 +236,41 @@ def _merge_rows_dedup(
     """
     out: list[dict[str, Any]] = []
     for r in anilist_rows:
-        out.append({
-            "id_a": r["id_a"],
-            "id_b": r["id_b"],
-            "criterion": r["criterion"],
-            "evidence_detail": str(r.get("anilist_id", "")),
-            "name_a": r["name_a"],
-            "name_b": r["name_b"],
-            "similarity": r["similarity"],
-        })
+        out.append(
+            {
+                "id_a": r["id_a"],
+                "id_b": r["id_b"],
+                "criterion": r["criterion"],
+                "evidence_detail": str(r.get("anilist_id", "")),
+                "name_a": r["name_a"],
+                "name_b": r["name_b"],
+                "similarity": r["similarity"],
+            }
+        )
     for r in actor_rows:
-        out.append({
-            "id_a": r["id_a"],
-            "id_b": r["id_b"],
-            "criterion": r["criterion"],
-            "evidence_detail": r.get("shared_actor_id", ""),
-            "name_a": r["name_a"],
-            "name_b": r["name_b"],
-            "similarity": r["similarity"],
-        })
+        out.append(
+            {
+                "id_a": r["id_a"],
+                "id_b": r["id_b"],
+                "criterion": r["criterion"],
+                "evidence_detail": r.get("shared_actor_id", ""),
+                "name_a": r["name_a"],
+                "name_b": r["name_b"],
+                "similarity": r["similarity"],
+            }
+        )
     for r in anime_rows:
-        out.append({
-            "id_a": r["id_a"],
-            "id_b": r["id_b"],
-            "criterion": r["criterion"],
-            "evidence_detail": r.get("shared_anime_id", ""),
-            "name_a": r["name_a"],
-            "name_b": r["name_b"],
-            "similarity": r["similarity"],
-        })
+        out.append(
+            {
+                "id_a": r["id_a"],
+                "id_b": r["id_b"],
+                "criterion": r["criterion"],
+                "evidence_detail": r.get("shared_anime_id", ""),
+                "name_a": r["name_a"],
+                "name_b": r["name_b"],
+                "similarity": r["similarity"],
+            }
+        )
     return out
 
 
@@ -277,7 +299,9 @@ def _check_stop_if(
             f"is {rate * 100:.1f}% of total {total} — exceeds 5% threshold. "
             "Tighten detection criteria before proceeding."
         )
-        log.error("characters_dedup.stop_if", rate=rate, candidates=merge_candidate_count)
+        log.error(
+            "characters_dedup.stop_if", rate=rate, candidates=merge_candidate_count
+        )
         raise RuntimeError(msg)
 
 
@@ -350,7 +374,9 @@ def audit(
         f"| name_and_anime | {len(anime_rows):,} |",
         f"| **unique pairs (all criteria)** | **{total_unique:,}** |",
         "",
-        f"Rate: {total_unique / total * 100:.2f}% of total characters" if total > 0 else "Rate: n/a (empty table)",
+        f"Rate: {total_unique / total * 100:.2f}% of total characters"
+        if total > 0
+        else "Rate: n/a (empty table)",
         "",
         "H1: `characters.favourites` not used in scoring.",
         "H3: No merges performed here. Use `characters_safe_merge.py`.",

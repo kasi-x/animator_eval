@@ -6,6 +6,7 @@ anime_video_releases / anime_original_work_links.
 
 DDL reference: src/db/schema.py `_MADB_SILVER_DDL` (Card 14/02).
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -258,12 +259,32 @@ CREATE TABLE IF NOT EXISTS studios (
 
 # (label, insert_sql, bronze_table_name, silver_table_name)
 _LOAD_PLAN: list[tuple[str, str, str, str]] = [
-    ("broadcasters",         _BROADCASTERS_SQL,     "broadcasters",         "anime_broadcasters"),
-    ("broadcast_schedule",   _BROADCAST_SCHEDULE_SQL, "broadcast_schedule", "anime_broadcast_schedule"),
-    ("production_committee", _PROD_COMMITTEE_SQL,   "production_committee", "anime_production_committee"),
-    ("production_companies", _PROD_COMPANIES_SQL,   "production_companies", "anime_production_companies"),
-    ("video_releases",       _VIDEO_RELEASES_SQL,   "video_releases",       "anime_video_releases"),
-    ("original_work_links",  _ORIGINAL_WORK_LINKS_SQL, "original_work_links", "anime_original_work_links"),
+    ("broadcasters", _BROADCASTERS_SQL, "broadcasters", "anime_broadcasters"),
+    (
+        "broadcast_schedule",
+        _BROADCAST_SCHEDULE_SQL,
+        "broadcast_schedule",
+        "anime_broadcast_schedule",
+    ),
+    (
+        "production_committee",
+        _PROD_COMMITTEE_SQL,
+        "production_committee",
+        "anime_production_committee",
+    ),
+    (
+        "production_companies",
+        _PROD_COMPANIES_SQL,
+        "production_companies",
+        "anime_production_companies",
+    ),
+    ("video_releases", _VIDEO_RELEASES_SQL, "video_releases", "anime_video_releases"),
+    (
+        "original_work_links",
+        _ORIGINAL_WORK_LINKS_SQL,
+        "original_work_links",
+        "anime_original_work_links",
+    ),
 ]
 
 # ---------------------------------------------------------------------------
@@ -290,7 +311,9 @@ def create_tables(conn: duckdb.DuckDBPyConnection) -> None:
 
 def _bronze_glob(bronze_root: Path, table: str) -> str:
     """Return glob path for a mediaarts BRONZE table."""
-    return str(bronze_root / "source=mediaarts" / f"table={table}" / "date=*" / "*.parquet")
+    return str(
+        bronze_root / "source=mediaarts" / f"table={table}" / "date=*" / "*.parquet"
+    )
 
 
 def _has_parquet(conn: duckdb.DuckDBPyConnection, glob: str) -> bool:

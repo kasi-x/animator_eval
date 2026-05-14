@@ -14,6 +14,7 @@ Input: Role.value string (e.g. "animation_director") or Japanese role string
        (e.g. "作画監督", "演出").
 Output: Role.value string.
 """
+
 from __future__ import annotations
 
 from src.etl.role_mappers import register

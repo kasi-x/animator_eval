@@ -70,16 +70,19 @@ def render_box_strip_ci(spec: BoxStripCISpec, *, theme: str = "dark") -> go.Figu
                 boxpoints=False,  # use strip below instead
                 showlegend=False,
                 hovertemplate=f"<b>{grp.label}</b><br>"
-                              "Q1=%{q1:.3f} Q3=%{q3:.3f}<br>"
-                              "median=%{median:.3f}<extra></extra>",
+                "Q1=%{q1:.3f} Q3=%{q3:.3f}<br>"
+                "median=%{median:.3f}<extra></extra>",
             )
         )
 
         # 2. strip (subsampled raw points; plotly applies categorical jitter
         #    automatically when x is a category list, so we only subsample)
         if spec.show_strip and s.size:
-            sample = s if s.size <= spec.strip_max_n \
+            sample = (
+                s
+                if s.size <= spec.strip_max_n
                 else rng.choice(s, size=spec.strip_max_n, replace=False)
+            )
             xs = [grp.label] * sample.size
             fig.add_trace(
                 go.Scatter(
@@ -120,7 +123,7 @@ def render_box_strip_ci(spec: BoxStripCISpec, *, theme: str = "dark") -> go.Figu
                         width=8,
                     ),
                     hovertemplate=f"<b>{grp.label}</b> 95% CI<br>"
-                                  f"[{grp.ci_lo:.3f}, {grp.ci_hi:.3f}]<extra></extra>",
+                    f"[{grp.ci_lo:.3f}, {grp.ci_hi:.3f}]<extra></extra>",
                     showlegend=False,
                 )
             )

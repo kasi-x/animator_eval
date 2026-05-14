@@ -10,6 +10,7 @@ Verifies that copy_from_anilist():
   - honours H1 (no score columns added)
   - works when no linkage is possible (no-op, no error)
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -458,8 +459,8 @@ def test_no_copy_without_anilist_id_int(tmp_path: Path) -> None:
     ).fetchone()
     conn.close()
     assert row is not None
-    assert row[0] is None     # country not copied
-    assert row[1] is None     # anilist_id_int not set
+    assert row[0] is None  # country not copied
+    assert row[1] is None  # anilist_id_int not set
 
 
 def test_no_op_when_no_bronze(tmp_path: Path) -> None:

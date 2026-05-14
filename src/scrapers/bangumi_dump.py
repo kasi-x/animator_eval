@@ -113,9 +113,7 @@ async def fetch_latest_release_meta() -> dict[str, Any]:
         release = resp.json()
         assets = release.get("assets", [])
         # Pick the largest zip (most complete dump)
-        zip_assets = [
-            a for a in assets if a.get("name", "").endswith(".zip")
-        ]
+        zip_assets = [a for a in assets if a.get("name", "").endswith(".zip")]
         if not zip_assets:
             raise ValueError("No zip assets found in latest GitHub release")
         best = max(zip_assets, key=lambda a: a.get("size", 0))
@@ -414,9 +412,7 @@ def _extract_stored(fp, out_path: Path, comp_size: int) -> None:
             remaining -= len(chunk)
 
 
-def _extract_deflate(
-    fp, out_path: Path, comp_size_hdr: int, has_dd: bool
-) -> None:
+def _extract_deflate(fp, out_path: Path, comp_size_hdr: int, has_dd: bool) -> None:
     """Extract a deflate-compressed (method=8) entry.
 
     When ``has_dd`` is True the local header reports comp_size=0 and we must

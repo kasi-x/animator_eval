@@ -15,6 +15,7 @@ Usage:
     cp.mark_completed(item_id)              # add to set, sync into "completed_ids"
     cp.mark_failed(item_id, status="404")   # append to failed_ids list
 """
+
 from __future__ import annotations
 
 import datetime as _dt
@@ -29,7 +30,9 @@ import structlog
 logger = structlog.get_logger()
 
 
-def atomic_write_json(path: Path, data: Any, *, ensure_ascii: bool = False, indent: int | None = None) -> None:
+def atomic_write_json(
+    path: Path, data: Any, *, ensure_ascii: bool = False, indent: int | None = None
+) -> None:
     """Write JSON to path atomically (tmp file → rename).
 
     Crash-safe: a Ctrl+C or power loss mid-write leaves the original file intact.
@@ -37,7 +40,10 @@ def atomic_write_json(path: Path, data: Any, *, ensure_ascii: bool = False, inde
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, tmp_str = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.tmp-")
     try:
-        os.write(fd, json.dumps(data, ensure_ascii=ensure_ascii, indent=indent).encode("utf-8"))
+        os.write(
+            fd,
+            json.dumps(data, ensure_ascii=ensure_ascii, indent=indent).encode("utf-8"),
+        )
         os.close(fd)
         Path(tmp_str).rename(path)
     except Exception:
@@ -173,14 +179,18 @@ class Checkpoint:
         if item_id not in ids:
             ids.append(item_id)
 
-    def mark_failed(self, item_id: Hashable, *, status: str | int, detail: str | None = None) -> None:
+    def mark_failed(
+        self, item_id: Hashable, *, status: str | int, detail: str | None = None
+    ) -> None:
         entry: dict[str, Any] = {"id": item_id, "status": status}
         if detail is not None:
             entry["detail"] = detail
         self.failed_ids.append(entry)
 
 
-def resolve_checkpoint(path: Path | str, *, force: bool = False, resume: bool = True) -> Checkpoint:
+def resolve_checkpoint(
+    path: Path | str, *, force: bool = False, resume: bool = True
+) -> Checkpoint:
     """Return a Checkpoint for `path` according to force/resume flags.
 
     - ``resume=True, force=False`` (default): load existing checkpoint.

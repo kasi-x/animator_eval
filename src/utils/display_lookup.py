@@ -330,7 +330,9 @@ def get_display_genres(
         return []
 
     try:
-        result = json.loads(genres_json) if isinstance(genres_json, str) else genres_json
+        result = (
+            json.loads(genres_json) if isinstance(genres_json, str) else genres_json
+        )
         if not isinstance(result, list):
             result = []
     except (json.JSONDecodeError, TypeError):
@@ -398,7 +400,11 @@ def get_display_synonyms(
         return []
 
     try:
-        result = json.loads(synonyms_json) if isinstance(synonyms_json, str) else synonyms_json
+        result = (
+            json.loads(synonyms_json)
+            if isinstance(synonyms_json, str)
+            else synonyms_json
+        )
         if not isinstance(result, list):
             result = []
     except (json.JSONDecodeError, TypeError):

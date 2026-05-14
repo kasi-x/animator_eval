@@ -60,7 +60,9 @@ def results_post_processed(
     from src.pipeline_phases.post_processing import post_process_results
 
     post_process_results(
-        results_assembled, entity_resolved.resolved_credits, ctx_core_populated.akm_result
+        results_assembled,
+        entity_resolved.resolved_credits,
+        ctx_core_populated.akm_result,
     )
     return results_assembled
 

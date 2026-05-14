@@ -18,18 +18,20 @@ from ..theme import apply_theme
 
 @dataclass(frozen=True)
 class HeatmapSpec:
-    z: Sequence[Sequence[float]]   # 2D matrix [n_rows][n_cols]
-    x_labels: Sequence[str]        # column labels
-    y_labels: Sequence[str]        # row labels
+    z: Sequence[Sequence[float]]  # 2D matrix [n_rows][n_cols]
+    x_labels: Sequence[str]  # column labels
+    y_labels: Sequence[str]  # row labels
     title: str = ""
     x_label: str = ""
     y_label: str = ""
     z_label: str = "value"
-    colorscale: str = "Viridis"   # CB-safe perceptually uniform
-    diverging: bool = False        # if True, use RdBu_r centered at zero
-    z_mid: float | None = None     # midpoint for diverging scale
-    null_envelope: tuple[Sequence[Sequence[float]], Sequence[Sequence[float]]] | None = None
-    text_overlay: bool = False     # show z values in cells
+    colorscale: str = "Viridis"  # CB-safe perceptually uniform
+    diverging: bool = False  # if True, use RdBu_r centered at zero
+    z_mid: float | None = None  # midpoint for diverging scale
+    null_envelope: (
+        tuple[Sequence[Sequence[float]], Sequence[Sequence[float]]] | None
+    ) = None
+    text_overlay: bool = False  # show z values in cells
     text_format: str = ".2f"
     height: int = 480
     aspect: Literal["auto", "equal"] = "auto"
@@ -72,8 +74,10 @@ def render_heatmap(spec: HeatmapSpec, *, theme: str = "dark") -> go.Figure:
                 if v < lo[i][j] or v > hi[i][j]:
                     fig.add_shape(
                         type="rect",
-                        x0=j - 0.5, x1=j + 0.5,
-                        y0=i - 0.5, y1=i + 0.5,
+                        x0=j - 0.5,
+                        x1=j + 0.5,
+                        y0=i - 0.5,
+                        y1=i + 0.5,
                         line=dict(color="#ffffff", width=2),
                         fillcolor="rgba(0,0,0,0)",
                     )

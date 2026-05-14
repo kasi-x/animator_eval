@@ -118,9 +118,7 @@ def test_fetch_person_success():
 
     async def run_test():
         mock_client = AsyncMock()
-        mock_client.post = AsyncMock(
-            return_value=MagicMock(json=lambda: mock_response)
-        )
+        mock_client.post = AsyncMock(return_value=MagicMock(json=lambda: mock_response))
         result = await _fetch_person(mock_client, 123456)
         assert result is not None
         assert result["name"]["native"] == "김송"
@@ -148,9 +146,7 @@ def test_fetch_person_null_hometown():
 
     async def run_test():
         mock_client = AsyncMock()
-        mock_client.post = AsyncMock(
-            return_value=MagicMock(json=lambda: mock_response)
-        )
+        mock_client.post = AsyncMock(return_value=MagicMock(json=lambda: mock_response))
         result = await _fetch_person(mock_client, 234567)
         assert result is not None
         assert result["homeTown"] is None
@@ -337,7 +333,11 @@ class TestIntegration:
                 "data": {
                     "Staff": {
                         "id": 123456,
-                        "name": {"full": "Kim", "native": "김송", "alternative": "Kim Song"},
+                        "name": {
+                            "full": "Kim",
+                            "native": "김송",
+                            "alternative": "Kim Song",
+                        },
                         "homeTown": "Seoul, South Korea",
                     }
                 }
@@ -346,7 +346,11 @@ class TestIntegration:
                 "data": {
                     "Staff": {
                         "id": 234567,
-                        "name": {"full": "Li", "native": "李伟", "alternative": "Li Wei"},
+                        "name": {
+                            "full": "Li",
+                            "native": "李伟",
+                            "alternative": "Li Wei",
+                        },
                         "homeTown": "Beijing, China",
                     }
                 }
@@ -355,7 +359,11 @@ class TestIntegration:
                 "data": {
                     "Staff": {
                         "id": 345678,
-                        "name": {"full": "Yamada", "native": "山田太郎", "alternative": None},
+                        "name": {
+                            "full": "Yamada",
+                            "native": "山田太郎",
+                            "alternative": None,
+                        },
                         "homeTown": "Tokyo, Japan",
                     }
                 }
@@ -373,7 +381,9 @@ class TestIntegration:
         args = Namespace(dry_run=True, limit=3)
 
         async def run_test():
-            with patch("scripts.maintenance.backfill_anilist_hometown.httpx.AsyncClient") as mock_client_class:
+            with patch(
+                "scripts.maintenance.backfill_anilist_hometown.httpx.AsyncClient"
+            ) as mock_client_class:
                 mock_client = AsyncMock()
                 mock_client.post = mock_post
                 mock_client.__aenter__ = AsyncMock(return_value=mock_client)

@@ -6,6 +6,7 @@ Tests each source mapper independently:
   - Registry: map_role(source, raw) dispatches correctly
   - Bangumi: integer code strings → Role.value
 """
+
 from __future__ import annotations
 
 import pytest
@@ -18,11 +19,18 @@ from src.runtime.models import Role
 # Registry
 # ---------------------------------------------------------------------------
 
+
 class TestRegistry:
     def test_all_expected_sources_registered(self) -> None:
         expected = {
-            "seesaawiki", "anilist", "ann", "mal", "mediaarts", "bangumi",
-            "keyframe", "sakuga_atwiki",
+            "seesaawiki",
+            "anilist",
+            "ann",
+            "mal",
+            "mediaarts",
+            "bangumi",
+            "keyframe",
+            "sakuga_atwiki",
         }
         assert expected.issubset(MAPPERS.keys())
 
@@ -40,27 +48,31 @@ class TestRegistry:
 # SeesaaWiki mapper
 # ---------------------------------------------------------------------------
 
+
 class TestSeesaawikiMapper:
-    @pytest.mark.parametrize("raw,expected", [
-        ("監督", Role.DIRECTOR.value),
-        ("作画監督", Role.ANIMATION_DIRECTOR.value),
-        ("総作画監督", Role.ANIMATION_DIRECTOR.value),
-        ("原画", Role.KEY_ANIMATOR.value),
-        ("第二原画", Role.SECOND_KEY_ANIMATOR.value),
-        ("動画", Role.IN_BETWEEN.value),
-        ("絵コンテ", Role.EPISODE_DIRECTOR.value),
-        ("演出", Role.EPISODE_DIRECTOR.value),
-        ("キャラクターデザイン", Role.CHARACTER_DESIGNER.value),
-        ("音響監督", Role.SOUND_DIRECTOR.value),
-        ("音楽", Role.MUSIC.value),
-        ("脚本", Role.SCREENPLAY.value),
-        ("撮影監督", Role.PHOTOGRAPHY_DIRECTOR.value),
-        ("編集", Role.EDITING.value),
-        ("仕上げ", Role.FINISHING.value),
-        ("背景", Role.BACKGROUND_ART.value),
-        ("プロデューサー", Role.PRODUCER.value),
-        ("制作進行", Role.PRODUCTION_MANAGER.value),
-    ])
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("監督", Role.DIRECTOR.value),
+            ("作画監督", Role.ANIMATION_DIRECTOR.value),
+            ("総作画監督", Role.ANIMATION_DIRECTOR.value),
+            ("原画", Role.KEY_ANIMATOR.value),
+            ("第二原画", Role.SECOND_KEY_ANIMATOR.value),
+            ("動画", Role.IN_BETWEEN.value),
+            ("絵コンテ", Role.EPISODE_DIRECTOR.value),
+            ("演出", Role.EPISODE_DIRECTOR.value),
+            ("キャラクターデザイン", Role.CHARACTER_DESIGNER.value),
+            ("音響監督", Role.SOUND_DIRECTOR.value),
+            ("音楽", Role.MUSIC.value),
+            ("脚本", Role.SCREENPLAY.value),
+            ("撮影監督", Role.PHOTOGRAPHY_DIRECTOR.value),
+            ("編集", Role.EDITING.value),
+            ("仕上げ", Role.FINISHING.value),
+            ("背景", Role.BACKGROUND_ART.value),
+            ("プロデューサー", Role.PRODUCER.value),
+            ("制作進行", Role.PRODUCTION_MANAGER.value),
+        ],
+    )
     def test_known_ja_roles(self, raw: str, expected: str) -> None:
         assert map_role("seesaawiki", raw) == expected
 
@@ -83,23 +95,27 @@ class TestSeesaawikiMapper:
 # AniList mapper
 # ---------------------------------------------------------------------------
 
+
 class TestAnilistMapper:
-    @pytest.mark.parametrize("raw,expected", [
-        ("director", Role.DIRECTOR.value),
-        ("key animation", Role.KEY_ANIMATOR.value),
-        ("animation director", Role.ANIMATION_DIRECTOR.value),
-        ("chief animation director", Role.ANIMATION_DIRECTOR.value),
-        ("episode director", Role.EPISODE_DIRECTOR.value),
-        ("storyboard", Role.EPISODE_DIRECTOR.value),
-        ("character design", Role.CHARACTER_DESIGNER.value),
-        ("original creator", Role.ORIGINAL_CREATOR.value),
-        ("series composition", Role.SCREENPLAY.value),
-        ("sound director", Role.SOUND_DIRECTOR.value),
-        ("music", Role.MUSIC.value),
-        ("producer", Role.PRODUCER.value),
-        ("2nd key animation", Role.SECOND_KEY_ANIMATOR.value),
-        ("in-between animation", Role.IN_BETWEEN.value),
-    ])
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("director", Role.DIRECTOR.value),
+            ("key animation", Role.KEY_ANIMATOR.value),
+            ("animation director", Role.ANIMATION_DIRECTOR.value),
+            ("chief animation director", Role.ANIMATION_DIRECTOR.value),
+            ("episode director", Role.EPISODE_DIRECTOR.value),
+            ("storyboard", Role.EPISODE_DIRECTOR.value),
+            ("character design", Role.CHARACTER_DESIGNER.value),
+            ("original creator", Role.ORIGINAL_CREATOR.value),
+            ("series composition", Role.SCREENPLAY.value),
+            ("sound director", Role.SOUND_DIRECTOR.value),
+            ("music", Role.MUSIC.value),
+            ("producer", Role.PRODUCER.value),
+            ("2nd key animation", Role.SECOND_KEY_ANIMATOR.value),
+            ("in-between animation", Role.IN_BETWEEN.value),
+        ],
+    )
     def test_known_en_roles(self, raw: str, expected: str) -> None:
         assert map_role("anilist", raw) == expected
 
@@ -115,6 +131,7 @@ class TestAnilistMapper:
 # ANN mapper
 # ---------------------------------------------------------------------------
 
+
 class TestAnnMapper:
     def test_known_role(self) -> None:
         assert map_role("ann", "director") == Role.DIRECTOR.value
@@ -126,6 +143,7 @@ class TestAnnMapper:
 # ---------------------------------------------------------------------------
 # MAL mapper
 # ---------------------------------------------------------------------------
+
 
 class TestMalMapper:
     def test_known_role(self) -> None:
@@ -139,15 +157,19 @@ class TestMalMapper:
 # MediaArts mapper
 # ---------------------------------------------------------------------------
 
+
 class TestMediaartsMapper:
-    @pytest.mark.parametrize("raw,expected", [
-        ("director", Role.DIRECTOR.value),
-        ("key_animator", Role.KEY_ANIMATOR.value),
-        ("animation_director", Role.ANIMATION_DIRECTOR.value),
-        ("in_between", Role.IN_BETWEEN.value),
-        ("finishing", Role.FINISHING.value),
-        ("other", Role.OTHER.value),
-    ])
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("director", Role.DIRECTOR.value),
+            ("key_animator", Role.KEY_ANIMATOR.value),
+            ("animation_director", Role.ANIMATION_DIRECTOR.value),
+            ("in_between", Role.IN_BETWEEN.value),
+            ("finishing", Role.FINISHING.value),
+            ("other", Role.OTHER.value),
+        ],
+    )
     def test_valid_role_values_pass_through(self, raw: str, expected: str) -> None:
         """Values that are already Role.value strings are returned unchanged."""
         assert map_role("mediaarts", raw) == expected
@@ -164,29 +186,33 @@ class TestMediaartsMapper:
 # Bangumi mapper
 # ---------------------------------------------------------------------------
 
+
 class TestBangumiMapper:
-    @pytest.mark.parametrize("code,expected", [
-        ("2", Role.DIRECTOR.value),        # Director/Direction
-        ("1", Role.ORIGINAL_CREATOR.value), # Original Creator/Original Work
-        ("3", Role.SCREENPLAY.value),       # Script/Screenplay
-        ("4", Role.EPISODE_DIRECTOR.value), # Storyboard
-        ("5", Role.EPISODE_DIRECTOR.value), # Episode Direction
-        ("6", Role.MUSIC.value),            # Music
-        ("8", Role.CHARACTER_DESIGNER.value), # Character Design
-        ("10", Role.SCREENPLAY.value),      # Series Composition
-        ("14", Role.ANIMATION_DIRECTOR.value), # Chief Animation Director
-        ("15", Role.ANIMATION_DIRECTOR.value), # Animation Direction
-        ("20", Role.KEY_ANIMATOR.value),    # Key Animation
-        ("21", Role.SECOND_KEY_ANIMATOR.value), # 2nd Key Animation
-        ("51", Role.IN_BETWEEN.value),      # In-Between Animation
-        ("54", Role.PRODUCER.value),        # Producer
-        ("44", Role.SOUND_DIRECTOR.value),  # Sound Director
-        ("28", Role.EDITING.value),         # Editing
-        ("13", Role.FINISHING.value),       # Color Design
-        ("25", Role.BACKGROUND_ART.value),  # Background Art
-        ("17", Role.PHOTOGRAPHY_DIRECTOR.value), # Director of Photography
-        ("69", Role.CGI_DIRECTOR.value),    # CG Director
-    ])
+    @pytest.mark.parametrize(
+        "code,expected",
+        [
+            ("2", Role.DIRECTOR.value),  # Director/Direction
+            ("1", Role.ORIGINAL_CREATOR.value),  # Original Creator/Original Work
+            ("3", Role.SCREENPLAY.value),  # Script/Screenplay
+            ("4", Role.EPISODE_DIRECTOR.value),  # Storyboard
+            ("5", Role.EPISODE_DIRECTOR.value),  # Episode Direction
+            ("6", Role.MUSIC.value),  # Music
+            ("8", Role.CHARACTER_DESIGNER.value),  # Character Design
+            ("10", Role.SCREENPLAY.value),  # Series Composition
+            ("14", Role.ANIMATION_DIRECTOR.value),  # Chief Animation Director
+            ("15", Role.ANIMATION_DIRECTOR.value),  # Animation Direction
+            ("20", Role.KEY_ANIMATOR.value),  # Key Animation
+            ("21", Role.SECOND_KEY_ANIMATOR.value),  # 2nd Key Animation
+            ("51", Role.IN_BETWEEN.value),  # In-Between Animation
+            ("54", Role.PRODUCER.value),  # Producer
+            ("44", Role.SOUND_DIRECTOR.value),  # Sound Director
+            ("28", Role.EDITING.value),  # Editing
+            ("13", Role.FINISHING.value),  # Color Design
+            ("25", Role.BACKGROUND_ART.value),  # Background Art
+            ("17", Role.PHOTOGRAPHY_DIRECTOR.value),  # Director of Photography
+            ("69", Role.CGI_DIRECTOR.value),  # CG Director
+        ],
+    )
     def test_known_codes(self, code: str, expected: str) -> None:
         assert map_role("bangumi", code) == expected
 
@@ -205,25 +231,29 @@ class TestBangumiMapper:
 # Keyframe mapper
 # ---------------------------------------------------------------------------
 
+
 class TestKeyframeMapper:
     """Keyframe mapper delegates to SeesaaWiki — same ROLE_MAP covers both sources."""
 
-    @pytest.mark.parametrize("raw,expected", [
-        ("監督", Role.DIRECTOR.value),
-        ("作画監督", Role.ANIMATION_DIRECTOR.value),
-        ("原画", Role.KEY_ANIMATOR.value),
-        ("動画", Role.IN_BETWEEN.value),
-        ("絵コンテ", Role.EPISODE_DIRECTOR.value),
-        ("演出", Role.EPISODE_DIRECTOR.value),
-        ("キャラクターデザイン", Role.CHARACTER_DESIGNER.value),
-        ("脚本", Role.SCREENPLAY.value),
-        ("音響監督", Role.SOUND_DIRECTOR.value),
-        ("音楽", Role.MUSIC.value),
-        ("背景", Role.BACKGROUND_ART.value),
-        ("仕上げ", Role.FINISHING.value),
-        ("撮影監督", Role.PHOTOGRAPHY_DIRECTOR.value),
-        ("プロデューサー", Role.PRODUCER.value),
-    ])
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("監督", Role.DIRECTOR.value),
+            ("作画監督", Role.ANIMATION_DIRECTOR.value),
+            ("原画", Role.KEY_ANIMATOR.value),
+            ("動画", Role.IN_BETWEEN.value),
+            ("絵コンテ", Role.EPISODE_DIRECTOR.value),
+            ("演出", Role.EPISODE_DIRECTOR.value),
+            ("キャラクターデザイン", Role.CHARACTER_DESIGNER.value),
+            ("脚本", Role.SCREENPLAY.value),
+            ("音響監督", Role.SOUND_DIRECTOR.value),
+            ("音楽", Role.MUSIC.value),
+            ("背景", Role.BACKGROUND_ART.value),
+            ("仕上げ", Role.FINISHING.value),
+            ("撮影監督", Role.PHOTOGRAPHY_DIRECTOR.value),
+            ("プロデューサー", Role.PRODUCER.value),
+        ],
+    )
     def test_known_ja_roles(self, raw: str, expected: str) -> None:
         assert map_role("keyframe", raw) == expected
 
@@ -242,18 +272,22 @@ class TestKeyframeMapper:
 # Sakuga@wiki mapper
 # ---------------------------------------------------------------------------
 
+
 class TestSakugaAtwikiMapper:
     """Sakuga@wiki mapper delegates to SeesaaWiki — same Japanese role vocabulary."""
 
-    @pytest.mark.parametrize("raw,expected", [
-        ("原画", Role.KEY_ANIMATOR.value),
-        ("動画", Role.IN_BETWEEN.value),
-        ("作画監督", Role.ANIMATION_DIRECTOR.value),
-        ("監督", Role.DIRECTOR.value),
-        ("背景", Role.BACKGROUND_ART.value),
-        ("仕上げ", Role.FINISHING.value),
-        ("演出", Role.EPISODE_DIRECTOR.value),
-    ])
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("原画", Role.KEY_ANIMATOR.value),
+            ("動画", Role.IN_BETWEEN.value),
+            ("作画監督", Role.ANIMATION_DIRECTOR.value),
+            ("監督", Role.DIRECTOR.value),
+            ("背景", Role.BACKGROUND_ART.value),
+            ("仕上げ", Role.FINISHING.value),
+            ("演出", Role.EPISODE_DIRECTOR.value),
+        ],
+    )
     def test_known_ja_roles(self, raw: str, expected: str) -> None:
         assert map_role("sakuga_atwiki", raw) == expected
 

@@ -5,6 +5,7 @@ Usage:
         html = await f.fetch("https://example.com/page")
         # caller controls rate: await asyncio.sleep(delay)
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -50,7 +51,11 @@ class PlaywrightFetcher:
         if self._cdp_url:
             # Connect to existing Chrome via CDP (inherits cookies/CF clearance)
             self._browser = await self._pw.chromium.connect_over_cdp(self._cdp_url)
-            self._context = self._browser.contexts[0] if self._browser.contexts else await self._browser.new_context()
+            self._context = (
+                self._browser.contexts[0]
+                if self._browser.contexts
+                else await self._browser.new_context()
+            )
         else:
             self._profile_dir.mkdir(parents=True, exist_ok=True)
             self._context = await self._pw.chromium.launch_persistent_context(

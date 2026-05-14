@@ -19,10 +19,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 
 
-
 def _run(coro):
     """Helper to run async coroutines in sync tests."""
     return asyncio.run(coro)
+
 
 # ---------------------------------------------------------------------------
 # Image downloader tests

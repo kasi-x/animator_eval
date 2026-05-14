@@ -11,19 +11,23 @@ from src.runtime.models import AnimeAnalysis as Anime, Credit, Role
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _credit(person_id: str, anime_id: str, role: str = "key_animator") -> Credit:
-    return Credit(person_id=person_id, anime_id=anime_id, role=Role(role),
-                  raw_role=role)
+    return Credit(
+        person_id=person_id, anime_id=anime_id, role=Role(role), raw_role=role
+    )
 
 
 def _anime(anime_id: str, year: int | None, episodes: int = 12) -> Anime:
-    return Anime(id=anime_id, title_en=f"Anime {anime_id}", year=year,
-                 episodes=episodes)
+    return Anime(
+        id=anime_id, title_en=f"Anime {anime_id}", year=year, episodes=episodes
+    )
 
 
 # ---------------------------------------------------------------------------
 # compute_dormancy_penalty tests
 # ---------------------------------------------------------------------------
+
 
 class TestDormancyPenalty:
     def test_within_grace_period_no_penalty(self):
@@ -32,19 +36,23 @@ class TestDormancyPenalty:
         anime.year=2024, current_year=2025 → gap ≈ 1.5 yrs (Q2 fallback) < grace_period.
         """
         from src.analysis.scoring.patronage_dormancy import compute_dormancy_penalty
+
         credits = [_credit("p1", "a1")]
         anime_map = {"a1": _anime("a1", year=2024)}
-        result = compute_dormancy_penalty(credits, anime_map, current_year=2025,
-                                          grace_period=2.0)
+        result = compute_dormancy_penalty(
+            credits, anime_map, current_year=2025, grace_period=2.0
+        )
         assert result["p1"] == pytest.approx(1.0)
 
     def test_gap_exceeds_grace_period_decay_applied(self):
         """anime.year=2020, current_year=2025 → gap ≈ 5.5, effective ≈ 3.5, D < 1."""
         from src.analysis.scoring.patronage_dormancy import compute_dormancy_penalty
+
         credits = [_credit("p1", "a1")]
         anime_map = {"a1": _anime("a1", year=2020)}
-        result = compute_dormancy_penalty(credits, anime_map, current_year=2025,
-                                          decay_rate=0.5, grace_period=2.0)
+        result = compute_dormancy_penalty(
+            credits, anime_map, current_year=2025, decay_rate=0.5, grace_period=2.0
+        )
         assert "p1" in result
         assert result["p1"] < 1.0
         assert result["p1"] > 0.0
@@ -57,22 +65,27 @@ class TestDormancyPenalty:
         effective = 5.5 - 2.0 = 3.5 → D = exp(-0.5 * 3.5) ≈ 0.174
         """
         from src.analysis.scoring.patronage_dormancy import compute_dormancy_penalty
+
         credits = [_credit("p1", "a1")]
         anime_map = {"a1": _anime("a1", year=2020)}
-        result = compute_dormancy_penalty(credits, anime_map, current_year=2025,
-                                          decay_rate=0.5, grace_period=2.0)
+        result = compute_dormancy_penalty(
+            credits, anime_map, current_year=2025, decay_rate=0.5, grace_period=2.0
+        )
         expected = math.exp(-0.5 * 3.5)
         assert result["p1"] == pytest.approx(expected, rel=0.01)
 
     def test_higher_decay_rate_lowers_d(self):
         """Monotonicity: higher decay_rate → lower D for same gap."""
         from src.analysis.scoring.patronage_dormancy import compute_dormancy_penalty
+
         credits = [_credit("p1", "a1")]
         anime_map = {"a1": _anime("a1", year=2015)}
-        d_low = compute_dormancy_penalty(credits, anime_map, current_year=2025,
-                                         decay_rate=0.1)
-        d_high = compute_dormancy_penalty(credits, anime_map, current_year=2025,
-                                          decay_rate=1.0)
+        d_low = compute_dormancy_penalty(
+            credits, anime_map, current_year=2025, decay_rate=0.1
+        )
+        d_high = compute_dormancy_penalty(
+            credits, anime_map, current_year=2025, decay_rate=1.0
+        )
         assert d_low["p1"] > d_high["p1"]
 
     def test_uses_most_recent_credit(self):
@@ -82,18 +95,21 @@ class TestDormancyPenalty:
         Without the 2024 credit, the 2010 credit would give gap ≈ 15.5 → D ≈ 0.
         """
         from src.analysis.scoring.patronage_dormancy import compute_dormancy_penalty
+
         credits = [_credit("p1", "a1"), _credit("p1", "a2")]
         anime_map = {
             "a1": _anime("a1", year=2010),
             "a2": _anime("a2", year=2024),
         }
-        result = compute_dormancy_penalty(credits, anime_map, current_year=2025,
-                                          grace_period=2.0)
+        result = compute_dormancy_penalty(
+            credits, anime_map, current_year=2025, grace_period=2.0
+        )
         assert result["p1"] == pytest.approx(1.0)
 
     def test_person_with_no_valid_year_excluded(self):
         """Credit on anime with year=None → person not in result."""
         from src.analysis.scoring.patronage_dormancy import compute_dormancy_penalty
+
         credits = [_credit("p1", "a1")]
         anime_map = {"a1": _anime("a1", year=None)}
         result = compute_dormancy_penalty(credits, anime_map, current_year=2025)
@@ -101,6 +117,7 @@ class TestDormancyPenalty:
 
     def test_empty_inputs_return_empty(self):
         from src.analysis.scoring.patronage_dormancy import compute_dormancy_penalty
+
         assert compute_dormancy_penalty([], {}, current_year=2025) == {}
 
 
@@ -108,26 +125,32 @@ class TestDormancyPenalty:
 # compute_patronage_premium tests
 # ---------------------------------------------------------------------------
 
+
 class TestPatronagePremium:
     def test_empty_inputs_return_empty(self):
         from src.analysis.scoring.patronage_dormancy import compute_patronage_premium
+
         assert compute_patronage_premium([], {}, {}) == {}
 
     def test_no_director_birank_yields_zero(self):
         """Without BiRank for director, patronage formula = 0."""
         from src.analysis.scoring.patronage_dormancy import compute_patronage_premium
+
         anime_map = {"a1": _anime("a1", year=2020)}
         credits = [
             _credit("dir1", "a1", "director"),
             _credit("p1", "a1", "key_animator"),
         ]
-        result = compute_patronage_premium(credits, anime_map, director_birank_scores={})
+        result = compute_patronage_premium(
+            credits, anime_map, director_birank_scores={}
+        )
         # No BiRank → PR_d = 0 → Π_i = 0
         assert result.get("p1", 0.0) == pytest.approx(0.0)
 
     def test_higher_director_birank_yields_more_patronage(self):
         """Person who worked with a high-BiRank director gets more patronage."""
         from src.analysis.scoring.patronage_dormancy import compute_patronage_premium
+
         anime_map = {"a1": _anime("a1", year=2020), "a2": _anime("a2", year=2020)}
         credits = [
             _credit("dir_high", "a1", "director"),
@@ -142,11 +165,17 @@ class TestPatronagePremium:
     def test_repeat_collaborations_increase_patronage(self):
         """Π_i = Σ PR_d × log(1+N_id) — more collabs with same director → higher score."""
         from src.analysis.scoring.patronage_dormancy import compute_patronage_premium
+
         n = 4
         credits_repeat = [_credit("dir1", f"a{i}", "director") for i in range(n)]
-        credits_repeat += [_credit("p_repeat", f"a{i}", "key_animator") for i in range(n)]
+        credits_repeat += [
+            _credit("p_repeat", f"a{i}", "key_animator") for i in range(n)
+        ]
 
-        credits_single = [_credit("dir1", "a0", "director"), _credit("p_single", "a0", "key_animator")]
+        credits_single = [
+            _credit("dir1", "a0", "director"),
+            _credit("p_single", "a0", "key_animator"),
+        ]
 
         birank = {"dir1": 1.0}
 
@@ -163,9 +192,13 @@ class TestPatronagePremium:
 # compute_patronage_and_dormancy integration test
 # ---------------------------------------------------------------------------
 
+
 class TestPatronageAndDormancy:
     def test_returns_result_with_both_components(self):
-        from src.analysis.scoring.patronage_dormancy import compute_patronage_and_dormancy
+        from src.analysis.scoring.patronage_dormancy import (
+            compute_patronage_and_dormancy,
+        )
+
         anime_map = {"a1": _anime("a1", year=2023)}
         credits = [
             _credit("dir1", "a1", "director"),
@@ -180,7 +213,10 @@ class TestPatronageAndDormancy:
 
     def test_patronage_details_lineage_recorded(self):
         """patronage_details should record director_id / anime_id / birank for downstream lineage."""
-        from src.analysis.scoring.patronage_dormancy import compute_patronage_and_dormancy
+        from src.analysis.scoring.patronage_dormancy import (
+            compute_patronage_and_dormancy,
+        )
+
         anime_map = {"a1": _anime("a1", year=2023)}
         credits = [
             _credit("dir1", "a1", "director"),
@@ -200,10 +236,14 @@ class TestPatronageAndDormancy:
 # compute_career_aware_dormancy tests
 # ---------------------------------------------------------------------------
 
+
 class TestCareerAwareDormancy:
     def test_veteran_with_high_iv_protected_to_floor(self):
         """High IV percentile + 30+ years + stage=6 → career_capital >= 0.7 → floor applied."""
-        from src.analysis.scoring.patronage_dormancy import compute_career_aware_dormancy
+        from src.analysis.scoring.patronage_dormancy import (
+            compute_career_aware_dormancy,
+        )
+
         raw = {"vet1": 0.1}
         iv_hist = {"vet1": 1.0, "junior1": 0.0}  # vet1 at 100th percentile
         career = {"vet1": {"active_years": 30, "highest_stage": 6}}
@@ -214,7 +254,10 @@ class TestCareerAwareDormancy:
 
     def test_low_career_capital_unchanged(self):
         """New person with high IV but few years → not protected."""
-        from src.analysis.scoring.patronage_dormancy import compute_career_aware_dormancy
+        from src.analysis.scoring.patronage_dormancy import (
+            compute_career_aware_dormancy,
+        )
+
         raw = {"newcomer": 0.05}
         iv_hist = {"newcomer": 1.0, "other": 0.0}
         career = {"newcomer": {"active_years": 1, "highest_stage": 1}}
@@ -222,7 +265,10 @@ class TestCareerAwareDormancy:
         assert result["newcomer"] == pytest.approx(0.05)
 
     def test_empty_inputs_return_raw_dormancy(self):
-        from src.analysis.scoring.patronage_dormancy import compute_career_aware_dormancy
+        from src.analysis.scoring.patronage_dormancy import (
+            compute_career_aware_dormancy,
+        )
+
         raw = {"p1": 0.3}
         # Either iv_hist or career empty → return raw
         assert compute_career_aware_dormancy(raw, {}, {"p1": {}}) == raw
@@ -230,7 +276,9 @@ class TestCareerAwareDormancy:
 
     def test_dataclass_career_data_supported(self):
         """career_aware_dormancy supports dataclass-like career objects via getattr."""
-        from src.analysis.scoring.patronage_dormancy import compute_career_aware_dormancy
+        from src.analysis.scoring.patronage_dormancy import (
+            compute_career_aware_dormancy,
+        )
 
         class _CareerSnap:
             def __init__(self, active_years, highest_stage):

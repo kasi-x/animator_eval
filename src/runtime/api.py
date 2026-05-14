@@ -292,8 +292,13 @@ def ranking(
             }
         except Exception as exc:
             logger.warning("ranking_gold_duckdb_failed", error=str(exc))
-            raise HTTPException(status_code=503, detail="Ranking data not available. Run pipeline first.")
-    raise HTTPException(status_code=503, detail="Ranking data not available. Run pipeline first.")
+            raise HTTPException(
+                status_code=503,
+                detail="Ranking data not available. Run pipeline first.",
+            )
+    raise HTTPException(
+        status_code=503, detail="Ranking data not available. Run pipeline first."
+    )
 
 
 @app.get("/api/anime")
@@ -573,7 +578,11 @@ def data_quality():
                 ).fetchone()[0]
             if total_persons:
                 try:
-                    from src.analysis.io.mart_writer import gold_connect, DEFAULT_GOLD_DB_PATH
+                    from src.analysis.io.mart_writer import (
+                        gold_connect,
+                        DEFAULT_GOLD_DB_PATH,
+                    )
+
                     if DEFAULT_GOLD_DB_PATH.exists():
                         with gold_connect() as gc:
                             persons_with_score = gc.execute(

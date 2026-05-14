@@ -45,8 +45,7 @@ def _good_spec(name: str = "policy_attrition") -> ReportSpec:
         null_model=["N3", "N5"],
         method_gate=_good_method_gate(),
         sensitivity_grid=[
-            SensitivityAxis(name="exit definition window",
-                            values=["1y", "3y", "5y"]),
+            SensitivityAxis(name="exit definition window", values=["1y", "3y", "5y"]),
         ],
         interpretation_guard=InterpretationGuard(
             forbidden_framing=["離職率の悪化", "若手定着の課題"],
@@ -87,11 +86,14 @@ def test_assert_valid_does_not_raise_in_default_mode(monkeypatch):
         method_gate=_good_method_gate(),
         sensitivity_grid=[],
         interpretation_guard=InterpretationGuard(
-            forbidden_framing=[], required_alternatives=1,
+            forbidden_framing=[],
+            required_alternatives=1,
         ),
         data_lineage=DataLineage(
-            sources=["a"], meta_table="m",
-            snapshot_date="2026-01-01", pipeline_version="v1",
+            sources=["a"],
+            meta_table="m",
+            snapshot_date="2026-01-01",
+            pipeline_version="v1",
         ),
     )
     # No raise in non-strict mode.
@@ -183,11 +185,14 @@ def test_strict_mode_raises_on_invalid_spec(monkeypatch):
         method_gate=_good_method_gate(),
         sensitivity_grid=[],
         interpretation_guard=InterpretationGuard(
-            forbidden_framing=[], required_alternatives=1,
+            forbidden_framing=[],
+            required_alternatives=1,
         ),
         data_lineage=DataLineage(
-            sources=["a"], meta_table="m",
-            snapshot_date="2026-01-01", pipeline_version="v1",
+            sources=["a"],
+            meta_table="m",
+            snapshot_date="2026-01-01",
+            pipeline_version="v1",
         ),
     )
     with pytest.raises(ValueError):
@@ -214,8 +219,10 @@ def test_brief_arc_to_html_emits_4_sections():
         presenting_phenomena=["policy_attrition"],
         null_contrast=[
             NullContrast(
-                section_id="hhi_trends", observed=0.38,
-                null_lo=0.001, null_hi=0.001,
+                section_id="hhi_trends",
+                observed=0.38,
+                null_lo=0.001,
+                null_hi=0.001,
             )
         ],
         limitation_block=LimitationBlock(

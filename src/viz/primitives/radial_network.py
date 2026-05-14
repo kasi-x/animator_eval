@@ -132,7 +132,7 @@ def render_radial_network(spec: RadialNetworkSpec, *, theme: str = "dark") -> go
                 textposition="top center" if y >= 0 else "bottom center",
                 textfont=dict(size=10),
                 hovertemplate=f"<b>{nb.label}</b><br>"
-                              f"weight={nb.edge_weight:.3f}{ci_text}<extra></extra>",
+                f"weight={nb.edge_weight:.3f}{ci_text}<extra></extra>",
                 showlegend=False,
             )
         )

@@ -237,15 +237,14 @@ def _insert_resolved_credits(
             conn.unregister("_credits_staging")
         except ImportError:
             placeholders = ", ".join("?" * len(fields))
-            sql = (
-                f"INSERT INTO credits ({', '.join(fields)}) "
-                f"VALUES ({placeholders})"
-            )
+            sql = f"INSERT INTO credits ({', '.join(fields)}) VALUES ({placeholders})"
             for i in range(0, len(rows), batch_size):
                 batch = rows[i : i + batch_size]
                 values = [
                     tuple(
-                        (r.get(f) or "") if f in ("raw_role", "evidence_source") else r.get(f)
+                        (r.get(f) or "")
+                        if f in ("raw_role", "evidence_source")
+                        else r.get(f)
                         for f in fields
                     )
                     for r in batch

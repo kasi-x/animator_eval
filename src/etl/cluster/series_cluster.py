@@ -196,8 +196,7 @@ def compute_clusters(conn: Any) -> dict[str, str]:
 
 _ALTER_SQL = "ALTER TABLE anime ADD COLUMN IF NOT EXISTS series_cluster_id VARCHAR"
 _INDEX_SQL = (
-    "CREATE INDEX IF NOT EXISTS idx_anime_series_cluster"
-    " ON anime(series_cluster_id)"
+    "CREATE INDEX IF NOT EXISTS idx_anime_series_cluster ON anime(series_cluster_id)"
 )
 
 
@@ -255,9 +254,7 @@ def backfill(conn: Any) -> int:
         items = list(clusters.items())
         for offset in range(0, len(items), batch_size):
             batch = items[offset : offset + batch_size]
-            conn.executemany(
-                "INSERT INTO _tmp_series_cluster VALUES (?, ?)", batch
-            )
+            conn.executemany("INSERT INTO _tmp_series_cluster VALUES (?, ?)", batch)
 
     # Bulk UPDATE via temp table join
     conn.execute(
@@ -301,7 +298,9 @@ def _cli_backfill() -> None:
 
     db_path = os.environ.get(
         "SILVER_DB_PATH",
-        os.path.join(os.path.dirname(__file__), "..", "..", "..", "result", "silver.duckdb"),
+        os.path.join(
+            os.path.dirname(__file__), "..", "..", "..", "result", "silver.duckdb"
+        ),
     )
     db_path = os.path.normpath(db_path)
 
@@ -316,5 +315,7 @@ if __name__ == "__main__":
     if len(sys.argv) >= 2 and sys.argv[1] == "backfill":
         _cli_backfill()
     else:
-        print("Usage: python -m src.etl.cluster.series_cluster backfill", file=sys.stderr)
+        print(
+            "Usage: python -m src.etl.cluster.series_cluster backfill", file=sys.stderr
+        )
         sys.exit(1)

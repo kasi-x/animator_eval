@@ -8,18 +8,28 @@ from pathlib import Path
 from src.db import init_db
 
 EXPECTED = {
-    "anime", "persons", "credits",
-    "sources", "roles",
-    "anime_studios", "anime_genres", "anime_tags",
-    "anime_external_ids", "person_external_ids",
-    "person_scores", "voice_actor_scores",
-    "ops_source_scrape_status", "ops_lineage",
+    "anime",
+    "persons",
+    "credits",
+    "sources",
+    "roles",
+    "anime_studios",
+    "anime_genres",
+    "anime_tags",
+    "anime_external_ids",
+    "person_external_ids",
+    "person_scores",
+    "voice_actor_scores",
+    "ops_source_scrape_status",
+    "ops_lineage",
     "schema_meta",
 }
 
 FORBIDDEN = {
-    "anime_display", "anime_analysis",
-    "va_scores", "scores",
+    "anime_display",
+    "anime_analysis",
+    "va_scores",
+    "scores",
     "data_sources",
     "meta_lineage",
     "source_scrape_status",

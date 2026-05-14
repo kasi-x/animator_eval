@@ -4,6 +4,7 @@ Creates minimal synthetic BRONZE parquet in a temp dir, builds a minimal
 SILVER duckdb (mirroring the DDL from integrate_duckdb._DDL), then calls
 integrate() and checks row counts and H1 invariants.
 """
+
 from __future__ import annotations
 
 import datetime as _dt
@@ -70,86 +71,94 @@ def _insert_anime(conn: duckdb.DuckDBPyConnection, anime_id: str = "anilist:1") 
 
 # ─── BRONZE fixtures ─────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def bronze_dir(tmp_path: Path) -> Path:
     """Write minimal valid BRONZE parquet for characters, CVA, and anime."""
     root = tmp_path / "bronze"
 
     with BronzeWriter("anilist", table="characters", root=root) as bw:
-        bw.append({
-            "id": "anilist:c1",
-            "name_ja": "テストキャラ",
-            "name_en": "Test Char",
-            "aliases": ["TC"],
-            "anilist_id": 999,
-            "image_large": "https://example.com/large.png",
-            "image_medium": "https://example.com/medium.png",
-            "description": "A test character.",
-            "gender": "Female",
-            "date_of_birth": None,
-            "age": None,
-            "blood_type": None,
-            "favourites": 42,
-            "site_url": "https://anilist.co/character/999",
-            "display_name": "テストキャラ",
-        })
+        bw.append(
+            {
+                "id": "anilist:c1",
+                "name_ja": "テストキャラ",
+                "name_en": "Test Char",
+                "aliases": ["TC"],
+                "anilist_id": 999,
+                "image_large": "https://example.com/large.png",
+                "image_medium": "https://example.com/medium.png",
+                "description": "A test character.",
+                "gender": "Female",
+                "date_of_birth": None,
+                "age": None,
+                "blood_type": None,
+                "favourites": 42,
+                "site_url": "https://anilist.co/character/999",
+                "display_name": "テストキャラ",
+            }
+        )
 
     with BronzeWriter("anilist", table="character_voice_actors", root=root) as bw:
-        bw.append({
-            "character_id": "anilist:c1",
-            "person_id":    "anilist:p1",
-            "anime_id":     "anilist:1",
-            "character_role": "MAIN",
-            "source": "anilist",
-        })
+        bw.append(
+            {
+                "character_id": "anilist:c1",
+                "person_id": "anilist:p1",
+                "anime_id": "anilist:1",
+                "character_role": "MAIN",
+                "source": "anilist",
+            }
+        )
 
     with BronzeWriter("anilist", table="anime", root=root) as bw:
-        bw.append({
-            "id": "anilist:1",
-            "title_ja": "テストアニメ",
-            "title_en": "Test Anime",
-            "year": 2024,
-            "season": "WINTER",
-            "quarter": 1,
-            "episodes": 12,
-            "format": "TV",
-            "duration": 24,
-            "start_date": "2024-01-01",
-            "end_date": "2024-03-25",
-            "status": "FINISHED",
-            "original_work_type": "MANGA",
-            "source": "MANGA",
-            "work_type": None,
-            "scale_class": None,
-            "score": 7.5,
-            "mean_score": 74.0,
-            "favourites": 1234,
-            "popularity_rank": 500,
-            "rankings_json": "[]",
-            "synonyms": '["Test"]',
-            "country_of_origin": "JP",
-            "is_licensed": 1,
-            "is_adult": 0,
-            "hashtag": "#TestAnime",
-            "site_url": "https://anilist.co/anime/1",
-            "trailer_url": "https://youtube.com/v/abc",
-            "trailer_site": "youtube",
-            "description": "A test anime.",
-            "cover_large": "https://example.com/cover_large.jpg",
-            "cover_extra_large": "https://example.com/cover_xl.jpg",
-            "cover_medium": "https://example.com/cover_medium.jpg",
-            "banner": "https://example.com/banner.jpg",
-            "external_links_json": "[]",
-            "airing_schedule_json": "[]",
-            "relations_json": "[]",
-            "fetched_at": "2024-04-24T12:00:00",
-            "content_hash": "abc123",
-        })
+        bw.append(
+            {
+                "id": "anilist:1",
+                "title_ja": "テストアニメ",
+                "title_en": "Test Anime",
+                "year": 2024,
+                "season": "WINTER",
+                "quarter": 1,
+                "episodes": 12,
+                "format": "TV",
+                "duration": 24,
+                "start_date": "2024-01-01",
+                "end_date": "2024-03-25",
+                "status": "FINISHED",
+                "original_work_type": "MANGA",
+                "source": "MANGA",
+                "work_type": None,
+                "scale_class": None,
+                "score": 7.5,
+                "mean_score": 74.0,
+                "favourites": 1234,
+                "popularity_rank": 500,
+                "rankings_json": "[]",
+                "synonyms": '["Test"]',
+                "country_of_origin": "JP",
+                "is_licensed": 1,
+                "is_adult": 0,
+                "hashtag": "#TestAnime",
+                "site_url": "https://anilist.co/anime/1",
+                "trailer_url": "https://youtube.com/v/abc",
+                "trailer_site": "youtube",
+                "description": "A test anime.",
+                "cover_large": "https://example.com/cover_large.jpg",
+                "cover_extra_large": "https://example.com/cover_xl.jpg",
+                "cover_medium": "https://example.com/cover_medium.jpg",
+                "banner": "https://example.com/banner.jpg",
+                "external_links_json": "[]",
+                "airing_schedule_json": "[]",
+                "relations_json": "[]",
+                "fetched_at": "2024-04-24T12:00:00",
+                "content_hash": "abc123",
+            }
+        )
 
     return root
 
 
 # ─── Tests ───────────────────────────────────────────────────────────────────
+
 
 def test_characters_loaded(bronze_dir: Path) -> None:
     """integrate() inserts characters from BRONZE."""
@@ -193,10 +202,10 @@ def test_anime_display_columns_populated(bronze_dir: Path) -> None:
     conn.close()
 
     assert row is not None
-    assert row[0] == pytest.approx(7.5)     # display_score
-    assert row[1] == pytest.approx(74.0)    # display_mean_score
-    assert row[2] == 1234                   # display_favourites
-    assert row[3] == 500                    # display_popularity_rank
+    assert row[0] == pytest.approx(7.5)  # display_score
+    assert row[1] == pytest.approx(74.0)  # display_mean_score
+    assert row[2] == 1234  # display_favourites
+    assert row[3] == 500  # display_popularity_rank
 
 
 def test_h1_no_bare_score_column(bronze_dir: Path) -> None:
@@ -262,10 +271,14 @@ def test_characters_dedup_latest_date(tmp_path: Path) -> None:
     """When the same character id appears in two date partitions, keep the newest."""
     root = tmp_path / "bronze"
 
-    with BronzeWriter("anilist", table="characters", root=root, date=_dt.date(2026, 4, 22)) as bw:
+    with BronzeWriter(
+        "anilist", table="characters", root=root, date=_dt.date(2026, 4, 22)
+    ) as bw:
         bw.append(_full_character_row("anilist:c99", "OLD_NAME", 99))
 
-    with BronzeWriter("anilist", table="characters", root=root, date=_dt.date(2026, 4, 23)) as bw:
+    with BronzeWriter(
+        "anilist", table="characters", root=root, date=_dt.date(2026, 4, 23)
+    ) as bw:
         bw.append(_full_character_row("anilist:c99", "NEW_NAME", 99))
 
     # Provide empty CVA and anime parquets so the loader doesn't error
@@ -276,7 +289,9 @@ def test_characters_dedup_latest_date(tmp_path: Path) -> None:
 
     conn = _make_silver_conn()
     anilist_loader.integrate(conn, root)
-    row = conn.execute("SELECT name_ja FROM characters WHERE id='anilist:c99'").fetchone()
+    row = conn.execute(
+        "SELECT name_ja FROM characters WHERE id='anilist:c99'"
+    ).fetchone()
     conn.close()
 
     assert row is not None
@@ -296,8 +311,8 @@ def test_structural_columns_populated(bronze_dir: Path) -> None:
     conn.close()
 
     assert row is not None
-    assert row[1] == "JP"      # country_of_origin
-    assert row[2] == 0         # is_adult
+    assert row[1] == "JP"  # country_of_origin
+    assert row[2] == 0  # is_adult
     assert row[3] == "#TestAnime"  # hashtag
     assert "anilist.co" in row[4]  # site_url
 
@@ -314,7 +329,9 @@ def test_extras_external_links_json_populated(bronze_dir: Path) -> None:
     conn.close()
 
     assert row is not None
-    assert row[0] is not None, "external_links_json must not be NULL after extras update"
+    assert row[0] is not None, (
+        "external_links_json must not be NULL after extras update"
+    )
 
 
 def test_extras_airing_schedule_json_populated(bronze_dir: Path) -> None:
@@ -329,7 +346,9 @@ def test_extras_airing_schedule_json_populated(bronze_dir: Path) -> None:
     conn.close()
 
     assert row is not None
-    assert row[0] is not None, "airing_schedule_json must not be NULL after extras update"
+    assert row[0] is not None, (
+        "airing_schedule_json must not be NULL after extras update"
+    )
 
 
 def test_extras_trailer_columns_populated(bronze_dir: Path) -> None:
@@ -345,7 +364,7 @@ def test_extras_trailer_columns_populated(bronze_dir: Path) -> None:
 
     assert row is not None
     assert row[0] == "https://youtube.com/v/abc"  # trailer_url
-    assert row[1] == "youtube"                    # trailer_site
+    assert row[1] == "youtube"  # trailer_site
 
 
 def test_extras_display_rankings_json_populated(bronze_dir: Path) -> None:
@@ -362,8 +381,12 @@ def test_extras_display_rankings_json_populated(bronze_dir: Path) -> None:
     conn.close()
 
     assert row is not None
-    assert row[0] is not None, "display_rankings_json must not be NULL after extras update"
-    assert "rankings_json" not in cols, "bare rankings_json must not exist in SILVER (H1)"
+    assert row[0] is not None, (
+        "display_rankings_json must not be NULL after extras update"
+    )
+    assert "rankings_json" not in cols, (
+        "bare rankings_json must not exist in SILVER (H1)"
+    )
 
 
 def test_anime_relations_table_created(bronze_dir: Path) -> None:
@@ -372,7 +395,9 @@ def test_anime_relations_table_created(bronze_dir: Path) -> None:
     anilist_loader.integrate(conn, bronze_dir)
 
     tables = {r[0] for r in conn.execute("SHOW TABLES").fetchall()}
-    cols = {r[1] for r in conn.execute("PRAGMA table_info('anime_relations')").fetchall()}
+    cols = {
+        r[1] for r in conn.execute("PRAGMA table_info('anime_relations')").fetchall()
+    }
     conn.close()
 
     assert "anime_relations" in tables
@@ -384,47 +409,49 @@ def test_anime_relations_from_relations_json(tmp_path: Path) -> None:
     root = tmp_path / "bronze"
 
     with BronzeWriter("anilist", table="anime", root=root) as bw:
-        bw.append({
-            "id": "anilist:10",
-            "title_ja": "シーズン1",
-            "title_en": "Season 1",
-            "year": 2023,
-            "season": "WINTER",
-            "quarter": 1,
-            "episodes": 12,
-            "format": "TV",
-            "duration": 24,
-            "start_date": "2023-01-01",
-            "end_date": "2023-03-25",
-            "status": "FINISHED",
-            "original_work_type": "ORIGINAL",
-            "source": "ORIGINAL",
-            "work_type": None,
-            "scale_class": None,
-            "score": 8.0,
-            "mean_score": 80.0,
-            "favourites": 500,
-            "popularity_rank": 100,
-            "rankings_json": "[]",
-            "synonyms": "[]",
-            "country_of_origin": "JP",
-            "is_licensed": 1,
-            "is_adult": 0,
-            "hashtag": None,
-            "site_url": "https://anilist.co/anime/10",
-            "trailer_url": None,
-            "trailer_site": None,
-            "description": "Season 1",
-            "cover_large": None,
-            "cover_extra_large": None,
-            "cover_medium": None,
-            "banner": None,
-            "external_links_json": "[]",
-            "airing_schedule_json": "[]",
-            "relations_json": '[{"id": 20, "type": "SEQUEL", "title": "Season 2", "format": "TV"}]',
-            "fetched_at": "2024-04-24T12:00:00",
-            "content_hash": "xyz789",
-        })
+        bw.append(
+            {
+                "id": "anilist:10",
+                "title_ja": "シーズン1",
+                "title_en": "Season 1",
+                "year": 2023,
+                "season": "WINTER",
+                "quarter": 1,
+                "episodes": 12,
+                "format": "TV",
+                "duration": 24,
+                "start_date": "2023-01-01",
+                "end_date": "2023-03-25",
+                "status": "FINISHED",
+                "original_work_type": "ORIGINAL",
+                "source": "ORIGINAL",
+                "work_type": None,
+                "scale_class": None,
+                "score": 8.0,
+                "mean_score": 80.0,
+                "favourites": 500,
+                "popularity_rank": 100,
+                "rankings_json": "[]",
+                "synonyms": "[]",
+                "country_of_origin": "JP",
+                "is_licensed": 1,
+                "is_adult": 0,
+                "hashtag": None,
+                "site_url": "https://anilist.co/anime/10",
+                "trailer_url": None,
+                "trailer_site": None,
+                "description": "Season 1",
+                "cover_large": None,
+                "cover_extra_large": None,
+                "cover_medium": None,
+                "banner": None,
+                "external_links_json": "[]",
+                "airing_schedule_json": "[]",
+                "relations_json": '[{"id": 20, "type": "SEQUEL", "title": "Season 2", "format": "TV"}]',
+                "fetched_at": "2024-04-24T12:00:00",
+                "content_hash": "xyz789",
+            }
+        )
 
     with BronzeWriter("anilist", table="characters", root=root) as bw:
         pass
@@ -432,7 +459,9 @@ def test_anime_relations_from_relations_json(tmp_path: Path) -> None:
         pass
 
     conn = _make_silver_conn()
-    conn.execute("INSERT INTO anime (id, title_ja, title_en) VALUES ('anilist:10', 'シーズン1', 'Season 1')")
+    conn.execute(
+        "INSERT INTO anime (id, title_ja, title_en) VALUES ('anilist:10', 'シーズン1', 'Season 1')"
+    )
     counts = anilist_loader.integrate(conn, root)
 
     row = conn.execute(
@@ -454,26 +483,49 @@ def test_anime_relations_idempotent(tmp_path: Path) -> None:
     root = tmp_path / "bronze"
 
     with BronzeWriter("anilist", table="anime", root=root) as bw:
-        bw.append({
-            "id": "anilist:11",
-            "title_ja": "Test", "title_en": "Test",
-            "year": 2024, "season": "SPRING", "quarter": 2,
-            "episodes": 12, "format": "TV", "duration": 24,
-            "start_date": "2024-04-01", "end_date": None, "status": "RELEASING",
-            "original_work_type": "MANGA", "source": "MANGA",
-            "work_type": None, "scale_class": None,
-            "score": None, "mean_score": None, "favourites": 0,
-            "popularity_rank": None, "rankings_json": "[]",
-            "synonyms": "[]", "country_of_origin": "JP",
-            "is_licensed": 0, "is_adult": 0, "hashtag": None,
-            "site_url": None, "trailer_url": None, "trailer_site": None,
-            "description": "A test.", "cover_large": None,
-            "cover_extra_large": None, "cover_medium": None, "banner": None,
-            "external_links_json": "[]", "airing_schedule_json": "[]",
-            "relations_json": '[{"id": 30, "type": "PREQUEL", "title": "Before", "format": "TV"}]',
-            "fetched_at": "2024-04-24T12:00:00",
-            "content_hash": "dup123",
-        })
+        bw.append(
+            {
+                "id": "anilist:11",
+                "title_ja": "Test",
+                "title_en": "Test",
+                "year": 2024,
+                "season": "SPRING",
+                "quarter": 2,
+                "episodes": 12,
+                "format": "TV",
+                "duration": 24,
+                "start_date": "2024-04-01",
+                "end_date": None,
+                "status": "RELEASING",
+                "original_work_type": "MANGA",
+                "source": "MANGA",
+                "work_type": None,
+                "scale_class": None,
+                "score": None,
+                "mean_score": None,
+                "favourites": 0,
+                "popularity_rank": None,
+                "rankings_json": "[]",
+                "synonyms": "[]",
+                "country_of_origin": "JP",
+                "is_licensed": 0,
+                "is_adult": 0,
+                "hashtag": None,
+                "site_url": None,
+                "trailer_url": None,
+                "trailer_site": None,
+                "description": "A test.",
+                "cover_large": None,
+                "cover_extra_large": None,
+                "cover_medium": None,
+                "banner": None,
+                "external_links_json": "[]",
+                "airing_schedule_json": "[]",
+                "relations_json": '[{"id": 30, "type": "PREQUEL", "title": "Before", "format": "TV"}]',
+                "fetched_at": "2024-04-24T12:00:00",
+                "content_hash": "dup123",
+            }
+        )
 
     with BronzeWriter("anilist", table="characters", root=root) as bw:
         pass
@@ -481,7 +533,9 @@ def test_anime_relations_idempotent(tmp_path: Path) -> None:
         pass
 
     conn = _make_silver_conn()
-    conn.execute("INSERT INTO anime (id, title_ja, title_en) VALUES ('anilist:11', 'Test', 'Test')")
+    conn.execute(
+        "INSERT INTO anime (id, title_ja, title_en) VALUES ('anilist:11', 'Test', 'Test')"
+    )
     anilist_loader.integrate(conn, root)
     anilist_loader.integrate(conn, root)
     count = conn.execute(
@@ -493,6 +547,7 @@ def test_anime_relations_idempotent(tmp_path: Path) -> None:
 
 
 # ─── 22/04: persons extension columns via _build_persons_sql ─────────────────
+
 
 def _write_anilist_persons(root: Path, rows: list[dict] | None = None) -> None:
     """Write minimal anilist persons BRONZE parquet with extra columns."""
@@ -599,8 +654,8 @@ def test_persons_extra_columns_loaded_from_anilist_bronze(tmp_path: Path) -> Non
     assert row[3] == "https://example.com/medium.png"
     assert row[4] == "Tokyo"
     assert row[5] == "A"
-    assert row[6] == "1985-04-01"   # date_of_birth → birth_date
-    assert "anilist.co" in row[7]   # site_url → website_url
+    assert row[6] == "1985-04-01"  # date_of_birth → birth_date
+    assert "anilist.co" in row[7]  # site_url → website_url
 
 
 def test_persons_extra_columns_null_when_absent_in_bronze(tmp_path: Path) -> None:
@@ -610,11 +665,13 @@ def test_persons_extra_columns_null_when_absent_in_bronze(tmp_path: Path) -> Non
     root = tmp_path / "bronze"
     # Write persons with only minimal columns (no gender/description/etc.)
     with BronzeWriter("anilist", table="persons", root=root) as bw:
-        bw.append({
-            "id": "anilist:p200",
-            "name_ja": "最小テスト",
-            "name_en": "Minimal Test",
-        })
+        bw.append(
+            {
+                "id": "anilist:p200",
+                "name_ja": "最小テスト",
+                "name_en": "Minimal Test",
+            }
+        )
 
     persons_glob = str(root / "source=*" / "table=persons" / "date=*" / "*.parquet")
 

@@ -1,4 +1,5 @@
 """Unit tests for sakuga atwiki page discovery (no network calls)."""
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -17,61 +18,70 @@ def _html(name: str) -> str:
 # classify_page_kind — 5 kinds × 2 fixtures
 # ---------------------------------------------------------------------------
 
+
 class TestClassifyPageKind:
     def test_meta_menu(self):
-        assert classify_page_kind(
-            "メニュー - 作画@wiki - atwiki（アットウィキ）", _html("meta.html")
-        ) == "meta"
+        assert (
+            classify_page_kind(
+                "メニュー - 作画@wiki - atwiki（アットウィキ）", _html("meta.html")
+            )
+            == "meta"
+        )
 
     def test_meta_sitemap(self):
-        assert classify_page_kind(
-            "サイトマップ - 作画@wiki - atwiki（アットウィキ）", _html("meta2.html")
-        ) == "meta"
+        assert (
+            classify_page_kind(
+                "サイトマップ - 作画@wiki - atwiki（アットウィキ）", _html("meta2.html")
+            )
+            == "meta"
+        )
 
     def test_index_list_title(self):
-        assert classify_page_kind(
-            "アニメーター一覧 - 作画@wiki", _html("index.html")
-        ) == "index"
+        assert (
+            classify_page_kind("アニメーター一覧 - 作画@wiki", _html("index.html"))
+            == "index"
+        )
 
     def test_index_50on_heading(self):
-        assert classify_page_kind(
-            "さ行 - 作画@wiki", _html("index2.html")
-        ) == "index"
+        assert classify_page_kind("さ行 - 作画@wiki", _html("index2.html")) == "index"
 
     def test_person_filmography(self):
-        assert classify_page_kind(
-            "下谷智之 - 作画@wiki - atwiki（アットウィキ）", _html("person.html")
-        ) == "person"
+        assert (
+            classify_page_kind(
+                "下谷智之 - 作画@wiki - atwiki（アットウィキ）", _html("person.html")
+            )
+            == "person"
+        )
 
     def test_person_credits(self):
-        assert classify_page_kind(
-            "山田太郎 - 作画@wiki", _html("person2.html")
-        ) == "person"
+        assert (
+            classify_page_kind("山田太郎 - 作画@wiki", _html("person2.html"))
+            == "person"
+        )
 
     def test_work_staff(self):
-        assert classify_page_kind(
-            "ある作品 - 作画@wiki", _html("work.html")
-        ) == "work"
+        assert classify_page_kind("ある作品 - 作画@wiki", _html("work.html")) == "work"
 
     def test_work_episodes(self):
-        assert classify_page_kind(
-            "別の作品 - 作画@wiki", _html("work2.html")
-        ) == "work"
+        assert classify_page_kind("別の作品 - 作画@wiki", _html("work2.html")) == "work"
 
     def test_unknown_no_markers(self):
-        assert classify_page_kind(
-            "テストページ - 作画@wiki", _html("unknown.html")
-        ) == "unknown"
+        assert (
+            classify_page_kind("テストページ - 作画@wiki", _html("unknown.html"))
+            == "unknown"
+        )
 
     def test_unknown_inline(self):
-        assert classify_page_kind(
-            "編集中 - 作画@wiki", _html("unknown2.html")
-        ) == "unknown"
+        assert (
+            classify_page_kind("編集中 - 作画@wiki", _html("unknown2.html"))
+            == "unknown"
+        )
 
 
 # ---------------------------------------------------------------------------
 # is_allowed — robots.txt patterns
 # ---------------------------------------------------------------------------
+
 
 class TestIsAllowed:
     _PATTERNS = ["/*/search", "/*/backup", "/*/edit*"]
@@ -96,6 +106,7 @@ class TestIsAllowed:
 # extract_page_ids
 # ---------------------------------------------------------------------------
 
+
 class TestExtractPageIds:
     def test_relative_hrefs(self):
         html = '<a href="/sakuga/pages/42.html">x</a><a href="/sakuga/pages/100.html">y</a>'
@@ -106,7 +117,9 @@ class TestExtractPageIds:
         assert extract_page_ids(html) == [7]
 
     def test_deduplicates(self):
-        html = '<a href="/sakuga/pages/5.html">a</a><a href="/sakuga/pages/5.html">b</a>'
+        html = (
+            '<a href="/sakuga/pages/5.html">a</a><a href="/sakuga/pages/5.html">b</a>'
+        )
         assert extract_page_ids(html) == [5]
 
     def test_no_links(self):

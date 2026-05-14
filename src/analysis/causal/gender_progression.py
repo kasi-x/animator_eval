@@ -30,10 +30,10 @@ log = structlog.get_logger(__name__)
 
 #: Ordered pipeline roles (low → high stage)
 PIPELINE_ROLES: list[str] = [
-    "in_between",          # 動画 — Stage 1
-    "key_animator",        # 原画 — Stage 2
+    "in_between",  # 動画 — Stage 1
+    "key_animator",  # 原画 — Stage 2
     "animation_director",  # 作監 — Stage 3
-    "director",            # 監督 — Stage 4
+    "director",  # 監督 — Stage 4
 ]
 
 #: Pipeline stage pairs for Cox / Mann-Whitney analysis
@@ -71,7 +71,7 @@ class GenderProgressionRecord:
     """
 
     person_id: str
-    gender: str          # 'M', 'F', 'NB' — unknown persons excluded upstream
+    gender: str  # 'M', 'F', 'NB' — unknown persons excluded upstream
     role_from: str
     role_to: str
     first_year_from: int
@@ -94,16 +94,16 @@ class CoxResult:
     role_from: str
     role_to: str
     pair_label: str
-    hr_female_vs_male: float           # hazard ratio F vs M
-    ci_lower: float                    # 95% CI lower
-    ci_upper: float                    # 95% CI upper
+    hr_female_vs_male: float  # hazard ratio F vs M
+    ci_lower: float  # 95% CI lower
+    ci_upper: float  # 95% CI upper
     p_value: float | None
     n_female: int
     n_male: int
     n_events_female: int
     n_events_male: int
     method: str = "CoxPHFitter (lifelines, age+cohort covariate)"
-    logrank_p: float | None = None     # log-rank test F vs M
+    logrank_p: float | None = None  # log-rank test F vs M
 
 
 @dataclass
@@ -121,7 +121,7 @@ class MannWhitneyResult:
     n_male: int
     u_statistic: float
     p_value: float
-    effect_r: float     # |Z| / sqrt(n_female + n_male)
+    effect_r: float  # |Z| / sqrt(n_female + n_male)
     median_years_female: float | None
     median_years_male: float | None
     method: str = "Mann-Whitney U (scipy.stats.mannwhitneyu, two-sided)"
@@ -155,7 +155,7 @@ class EgoNetworkSummary:
     mean_same_gender_share_male: float
     median_null_percentile_female: float
     median_null_percentile_male: float
-    n_above_95th_female: int   # persons where observed > 95th null pct
+    n_above_95th_female: int  # persons where observed > 95th null pct
     n_above_95th_male: int
     n_null_iterations: int = 1000
 
@@ -230,8 +230,7 @@ def load_gender_progression_records(
             for r in conn.execute(sql_to, (role_to, min_year, max_year)).fetchall()
         }
         gender_map: dict[str, str | None] = {
-            r[0]: _normalise_gender(r[1])
-            for r in conn.execute(sql_gender).fetchall()
+            r[0]: _normalise_gender(r[1]) for r in conn.execute(sql_gender).fetchall()
         }
     except Exception as exc:
         log.warning("gender_progression_query_failed", error=str(exc))
@@ -325,12 +324,14 @@ def cox_progression_hazard(
     for rec in mf_records:
         dur = rec.duration_years if rec.duration_years is not None else censor_years
         event = int(rec.duration_years is not None)
-        rows.append({
-            "duration": dur,
-            "event": event,
-            "gender_f": 1 if rec.gender == "F" else 0,
-            "cohort_5y": rec.cohort_5y,
-        })
+        rows.append(
+            {
+                "duration": dur,
+                "event": event,
+                "gender_f": 1 if rec.gender == "F" else 0,
+                "cohort_5y": rec.cohort_5y,
+            }
+        )
 
     df = pd.DataFrame(rows)
 
@@ -364,11 +365,17 @@ def cox_progression_hazard(
     # Log-rank test F vs M
     logrank_p: float | None = None
     try:
-        f_dur = [r.duration_years if r.duration_years is not None else censor_years
-                 for r in mf_records if r.gender == "F"]
+        f_dur = [
+            r.duration_years if r.duration_years is not None else censor_years
+            for r in mf_records
+            if r.gender == "F"
+        ]
         f_evt = [r.duration_years is not None for r in mf_records if r.gender == "F"]
-        m_dur = [r.duration_years if r.duration_years is not None else censor_years
-                 for r in mf_records if r.gender == "M"]
+        m_dur = [
+            r.duration_years if r.duration_years is not None else censor_years
+            for r in mf_records
+            if r.gender == "M"
+        ]
         m_evt = [r.duration_years is not None for r in mf_records if r.gender == "M"]
         lr = logrank_test(f_dur, m_dur, event_observed_A=f_evt, event_observed_B=m_evt)
         logrank_p = float(lr.p_value)
@@ -377,8 +384,12 @@ def cox_progression_hazard(
 
     n_f = sum(1 for r in mf_records if r.gender == "F")
     n_m = sum(1 for r in mf_records if r.gender == "M")
-    n_evt_f = sum(1 for r in mf_records if r.gender == "F" and r.duration_years is not None)
-    n_evt_m = sum(1 for r in mf_records if r.gender == "M" and r.duration_years is not None)
+    n_evt_f = sum(
+        1 for r in mf_records if r.gender == "F" and r.duration_years is not None
+    )
+    n_evt_m = sum(
+        1 for r in mf_records if r.gender == "M" and r.duration_years is not None
+    )
 
     log.info(
         "cox_progression_hazard_computed",
@@ -439,8 +450,7 @@ def mannwhitney_advancement_timing(
         return []
 
     mf_observed = [
-        r for r in records
-        if r.gender in ("M", "F") and r.duration_years is not None
+        r for r in records if r.gender in ("M", "F") and r.duration_years is not None
     ]
 
     cohort_groups: dict[int, list[GenderProgressionRecord]] = {}
@@ -627,10 +637,13 @@ def compute_ego_network_gender_composition(
         null_mean = sum(null_shares) / len(null_shares)
         null_sd = (
             math.sqrt(sum((x - null_mean) ** 2 for x in null_shares) / len(null_shares))
-            if len(null_shares) > 1 else 0.0
+            if len(null_shares) > 1
+            else 0.0
         )
         null_pct = (
-            100.0 * sum(1 for v in null_shares if v <= observed_share) / len(null_shares)
+            100.0
+            * sum(1 for v in null_shares if v <= observed_share)
+            / len(null_shares)
         )
 
         results.append(
@@ -656,8 +669,16 @@ def compute_ego_network_gender_composition(
         s = sorted(vals)
         return s[len(s) // 2]
 
-    mean_share_f = sum(r.same_gender_share for r in f_results) / len(f_results) if f_results else 0.0
-    mean_share_m = sum(r.same_gender_share for r in m_results) / len(m_results) if m_results else 0.0
+    mean_share_f = (
+        sum(r.same_gender_share for r in f_results) / len(f_results)
+        if f_results
+        else 0.0
+    )
+    mean_share_m = (
+        sum(r.same_gender_share for r in m_results) / len(m_results)
+        if m_results
+        else 0.0
+    )
     med_pct_f = _median([r.null_percentile for r in f_results])
     med_pct_m = _median([r.null_percentile for r in m_results])
     n95_f = sum(1 for r in f_results if r.null_percentile >= 95)

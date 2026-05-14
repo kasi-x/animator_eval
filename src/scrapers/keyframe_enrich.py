@@ -54,11 +54,15 @@ def _pending_translate_targets(
             try:
                 rows.append(pq.read_table(f, columns=columns).to_pydict())
             except Exception as exc:
-                log.warning("keyframe_bronze_read_error", file=str(f), err=str(exc)[:80])
+                log.warning(
+                    "keyframe_bronze_read_error", file=str(f), err=str(exc)[:80]
+                )
         return rows
 
     persons: dict[int, tuple[str | None, str | None]] = {}
-    for d in _read_parquet_columns("person_profile", ["person_id", "name_ja", "name_en"]):
+    for d in _read_parquet_columns(
+        "person_profile", ["person_id", "name_ja", "name_en"]
+    ):
         for pid, ja, en in zip(d["person_id"], d["name_ja"], d["name_en"]):
             try:
                 persons[int(pid)] = (ja or None, en or None)
@@ -101,16 +105,20 @@ async def _translate_one(
     match_count = len(matches)
 
     for m in matches:
-        bw.append({
-            "person_id": pid,
-            "query_lang": lang,
-            "query_name": name,
-            "match_count": match_count,
-            **{
-                k: json.dumps(v, ensure_ascii=False) if isinstance(v, (list, dict)) else v
-                for k, v in m.items()
-            },
-        })
+        bw.append(
+            {
+                "person_id": pid,
+                "query_lang": lang,
+                "query_name": name,
+                "match_count": match_count,
+                **{
+                    k: json.dumps(v, ensure_ascii=False)
+                    if isinstance(v, (list, dict))
+                    else v
+                    for k, v in m.items()
+                },
+            }
+        )
 
     if match_count == 1:
         stats["translate_matched"] += 1

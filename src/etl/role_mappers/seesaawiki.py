@@ -9,6 +9,7 @@ Input: Japanese role string (e.g. "作画監督", "仕上げ", "演出").
 Output: Role.value string (e.g. "animation_director", "finishing", "episode_director").
 Falls back to Role.OTHER.value for unknown strings.
 """
+
 from __future__ import annotations
 
 from src.etl.role_mappers import register

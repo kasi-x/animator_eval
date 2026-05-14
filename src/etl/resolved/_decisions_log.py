@@ -74,17 +74,21 @@ def build_decision_record(
             tier = priority.index(src)
         except ValueError:
             tier = -1
-        cands.append({
-            "src_id": rid,
-            "src": src,
-            "value": _normalize_value(val),
-            "tier": tier,
-        })
+        cands.append(
+            {
+                "src_id": rid,
+                "src": src,
+                "value": _normalize_value(val),
+                "tier": tier,
+            }
+        )
         if isinstance(val, str) and val.strip():
             str_values.append(val)
 
-    distinct_values = sorted({c["value"] for c in cands if c["value"] not in (None, "")},
-                             key=lambda x: str(x))
+    distinct_values = sorted(
+        {c["value"] for c in cands if c["value"] not in (None, "")},
+        key=lambda x: str(x),
+    )
     edit_max = 0
     if len(str_values) >= 2:
         for i in range(len(str_values)):

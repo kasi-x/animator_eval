@@ -114,9 +114,7 @@ def _run_va_patronage(
     birank_person_scores: dict,
 ) -> None:
     """Compute VA patronage scores from sound-director affinity."""
-    sd_birank = {
-        pid: birank_person_scores.get(pid, 0.0) for pid in result.va_sd_fe
-    }
+    sd_birank = {pid: birank_person_scores.get(pid, 0.0) for pid in result.va_sd_fe}
     result.va_patronage_scores = compute_va_patronage(
         va_credits, credits, anime_map, sd_birank
     )

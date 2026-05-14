@@ -36,14 +36,34 @@ class TestPhase14DagBuilds:
         """Full Phase 1-9 DAG: loading → resolution → scoring → metrics → assembly → analysis."""
         from hamilton import driver
         from src.pipeline_phases.hamilton_modules import (
-            assembly, causal, core, genre, loading, metrics,
-            network, resolution, scoring, studio,
+            assembly,
+            causal,
+            core,
+            genre,
+            loading,
+            metrics,
+            network,
+            resolution,
+            scoring,
+            studio,
         )
 
-        dr = driver.Builder().with_modules(
-            loading, resolution, scoring, metrics, assembly,
-            core, studio, genre, network, causal,
-        ).build()
+        dr = (
+            driver.Builder()
+            .with_modules(
+                loading,
+                resolution,
+                scoring,
+                metrics,
+                assembly,
+                core,
+                studio,
+                genre,
+                network,
+                causal,
+            )
+            .build()
+        )
         nodes = {v.name for v in dr.list_available_variables()}
         assert "raw_data_loaded" in nodes
         assert "graphs_built" in nodes
@@ -77,21 +97,28 @@ class TestPhase14DagBuilds:
 class TestLoadingResolutionNodeNames:
     def test_loading_node_names_count(self):
         from src.pipeline_phases.hamilton_modules.loading import NODE_NAMES
+
         # ctx + raw_data_loaded + loaded_data + data_validated = 4
         assert len(NODE_NAMES) == 4
 
     def test_resolution_node_names_count(self):
         from src.pipeline_phases.hamilton_modules.resolution import NODE_NAMES
+
         # H-4: added entity_resolved + graphs_result bridge nodes; was 2, now 4
         assert len(NODE_NAMES) == 4
 
     def test_loading_node_names_in_all_names(self):
-        from src.pipeline_phases.hamilton_modules import ALL_NODE_NAMES, LOADING_NODE_NAMES
+        from src.pipeline_phases.hamilton_modules import (
+            ALL_NODE_NAMES,
+            LOADING_NODE_NAMES,
+        )
+
         for name in LOADING_NODE_NAMES:
             assert name in ALL_NODE_NAMES
 
     def test_loading_node_names_no_duplicates(self):
         from src.pipeline_phases.hamilton_modules import ALL_NODE_NAMES
+
         assert len(ALL_NODE_NAMES) == len(set(ALL_NODE_NAMES))
 
 
@@ -104,22 +131,28 @@ class TestNodeChaining:
     def test_data_validated_depends_on_loaded_data(self):
         """data_validated takes loaded_data (pass-through of raw_data_loaded)."""
         from src.pipeline_phases.hamilton_modules.loading import data_validated
+
         params = inspect.signature(data_validated).parameters
         assert "loaded_data" in params
 
     def test_entity_resolution_depends_on_data_validated(self):
-        from src.pipeline_phases.hamilton_modules.resolution import entity_resolution_run
+        from src.pipeline_phases.hamilton_modules.resolution import (
+            entity_resolution_run,
+        )
+
         params = inspect.signature(entity_resolution_run).parameters
         assert "data_validated" in params
 
     def test_graphs_built_depends_on_entity_resolution(self):
         from src.pipeline_phases.hamilton_modules.resolution import graphs_built
+
         params = inspect.signature(graphs_built).parameters
         assert "entity_resolution_run" in params
 
     def test_akm_estimation_takes_typed_bags(self):
         # H-4: akm_estimation takes entity_resolved + graphs_result (no ctx)
         from src.pipeline_phases.hamilton_modules.scoring import akm_estimation
+
         params = inspect.signature(akm_estimation).parameters
         assert "entity_resolved" in params
         assert "graphs_result" in params
@@ -127,22 +160,28 @@ class TestNodeChaining:
 
     def test_bipartite_enhanced_depends_on_akm(self):
         from src.pipeline_phases.hamilton_modules.scoring import bipartite_enhanced
+
         params = inspect.signature(bipartite_enhanced).parameters
         assert "akm_estimation" in params
 
     def test_integrated_value_depends_on_birank_rescaled(self):
-        from src.pipeline_phases.hamilton_modules.scoring import integrated_value_computation
+        from src.pipeline_phases.hamilton_modules.scoring import (
+            integrated_value_computation,
+        )
+
         params = inspect.signature(integrated_value_computation).parameters
         assert "birank_rescaled" in params
 
     def test_engagement_decay_depends_on_iv(self):
         from src.pipeline_phases.hamilton_modules.metrics import engagement_decay
+
         params = inspect.signature(engagement_decay).parameters
         assert "integrated_value_computation" in params
 
     def test_results_assembled_depends_on_metrics_bridge(self):
         # H-4: results_assembled depends on ctx_metrics_populated (final Phase 6 bridge)
         from src.pipeline_phases.hamilton_modules.assembly import results_assembled
+
         params = inspect.signature(results_assembled).parameters
         assert "ctx_metrics_populated" in params
 
@@ -155,20 +194,41 @@ class TestNodeChaining:
 class TestTotalNodeCount:
     def test_all_node_names_count(self):
         from src.pipeline_phases.hamilton_modules import ALL_NODE_NAMES
+
         # Phase 1-4: 4, Phase 5-8: 8+17+2=27, Phase 9: 12+5+5+10+8=40
         assert len(ALL_NODE_NAMES) >= 70
 
     def test_full_dag_node_count(self):
         from hamilton import driver
         from src.pipeline_phases.hamilton_modules import (
-            assembly, causal, core, genre, loading, metrics,
-            network, resolution, scoring, studio,
+            assembly,
+            causal,
+            core,
+            genre,
+            loading,
+            metrics,
+            network,
+            resolution,
+            scoring,
+            studio,
         )
 
-        dr = driver.Builder().with_modules(
-            loading, resolution, scoring, metrics, assembly,
-            core, studio, genre, network, causal,
-        ).build()
+        dr = (
+            driver.Builder()
+            .with_modules(
+                loading,
+                resolution,
+                scoring,
+                metrics,
+                assembly,
+                core,
+                studio,
+                genre,
+                network,
+                causal,
+            )
+            .build()
+        )
         # ctx + all node functions
         n = len([v for v in dr.list_available_variables() if v.name != "ctx"])
         assert n >= 70

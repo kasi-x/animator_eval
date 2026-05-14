@@ -20,13 +20,13 @@ _DEFAULT_SOURCES = {
 
 def get_source_prefix(conn: sqlite3.Connection, source_code: str) -> str:
     """Get ID prefix for a source code.
-    
+
     Falls back to _DEFAULT_SOURCES if sources table not available.
-    
+
     Args:
         conn: Database connection
         source_code: Source code (e.g., 'anilist', 'ann')
-        
+
     Returns:
         ID prefix (e.g., 'anilist:', 'ann-')
     """
@@ -42,21 +42,21 @@ def get_source_prefix(conn: sqlite3.Connection, source_code: str) -> str:
             return f"{source_code}:"
     except sqlite3.OperationalError:
         pass  # sources table doesn't exist
-    
+
     # Fallback
     if source_code in _DEFAULT_SOURCES:
         return _DEFAULT_SOURCES[source_code]["prefix"]
-    
+
     log.warning("unknown_source_code", source=source_code)
     return f"{source_code}:"
 
 
 def get_all_sources(conn: sqlite3.Connection) -> list[str]:
     """Get list of all available sources.
-    
+
     Args:
         conn: Database connection
-        
+
     Returns:
         List of source codes (e.g., ['anilist', 'ann', 'allcinema', ...])
     """
@@ -68,18 +68,18 @@ def get_all_sources(conn: sqlite3.Connection) -> list[str]:
             return sources
     except sqlite3.OperationalError:
         pass  # sources table doesn't exist
-    
+
     # Fallback
     return list(_DEFAULT_SOURCES.keys())
 
 
 def validate_source(conn: sqlite3.Connection, source_code: str) -> bool:
     """Check if source is valid and available.
-    
+
     Args:
         conn: Database connection
         source_code: Source code to validate
-        
+
     Returns:
         True if valid, False otherwise
     """
@@ -89,6 +89,6 @@ def validate_source(conn: sqlite3.Connection, source_code: str) -> bool:
         return cursor.fetchone() is not None
     except sqlite3.OperationalError:
         pass  # sources table doesn't exist
-    
+
     # Fallback
     return source_code in _DEFAULT_SOURCES

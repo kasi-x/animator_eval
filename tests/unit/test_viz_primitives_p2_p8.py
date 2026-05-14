@@ -45,20 +45,24 @@ def test_km_curve_basic_overlay():
     spec = KMCurveSpec(
         strata=[
             KMStratum(
-                "1990s", timeline=[0, 2, 5, 10],
+                "1990s",
+                timeline=[0, 2, 5, 10],
                 survival=[1.0, 0.85, 0.62, 0.40],
                 ci_lo=[1.0, 0.78, 0.55, 0.32],
                 ci_hi=[1.0, 0.91, 0.69, 0.48],
                 n_at_risk=[100, 75, 50, 28],
-                median_survival=7.2, n=100,
+                median_survival=7.2,
+                n=100,
             ),
             KMStratum(
-                "2010s", timeline=[0, 2, 5, 10],
+                "2010s",
+                timeline=[0, 2, 5, 10],
                 survival=[1.0, 0.92, 0.78, 0.62],
                 ci_lo=[1.0, 0.86, 0.71, 0.55],
                 ci_hi=[1.0, 0.97, 0.84, 0.69],
                 n_at_risk=[200, 180, 150, 120],
-                median_survival=12.0, n=200,
+                median_survival=12.0,
+                n=200,
             ),
         ],
     )
@@ -117,21 +121,31 @@ def test_event_study_length_validation():
 
 
 def test_small_multiples_renders_each_facet():
-    sub1 = render_event_study(EventStudySpec(
-        leads_lags=[-1, 0, 1], estimates=[0, 0.1, 0.2],
-        ci_lo=[-0.05, 0, 0.1], ci_hi=[0.05, 0.2, 0.3],
-    ))
-    sub2 = render_event_study(EventStudySpec(
-        leads_lags=[-1, 0, 1], estimates=[0, 0.05, 0.15],
-        ci_lo=[-0.05, -0.05, 0.05], ci_hi=[0.05, 0.15, 0.25],
-    ))
-    fig = render_small_multiples(SmallMultiplesSpec(
-        facets=[
-            FacetCell("cohort=1990", "role=animator", sub1),
-            FacetCell("cohort=2010", "role=animator", sub2),
-        ],
-        n_cols=2,
-    ))
+    sub1 = render_event_study(
+        EventStudySpec(
+            leads_lags=[-1, 0, 1],
+            estimates=[0, 0.1, 0.2],
+            ci_lo=[-0.05, 0, 0.1],
+            ci_hi=[0.05, 0.2, 0.3],
+        )
+    )
+    sub2 = render_event_study(
+        EventStudySpec(
+            leads_lags=[-1, 0, 1],
+            estimates=[0, 0.05, 0.15],
+            ci_lo=[-0.05, -0.05, 0.05],
+            ci_hi=[0.05, 0.15, 0.25],
+        )
+    )
+    fig = render_small_multiples(
+        SmallMultiplesSpec(
+            facets=[
+                FacetCell("cohort=1990", "role=animator", sub1),
+                FacetCell("cohort=2010", "role=animator", sub2),
+            ],
+            n_cols=2,
+        )
+    )
     # each facet contributes 2 traces (CI band + line)
     assert len(fig.data) == 4
 
@@ -175,10 +189,20 @@ def test_box_strip_ci_basic():
     rng = np.random.default_rng(42)
     spec = BoxStripCISpec(
         groups=[
-            BoxGroup("A", samples=rng.normal(0, 1, 250).tolist(),
-                     ci_lo=-0.1, ci_hi=0.1, n=250),
-            BoxGroup("B", samples=rng.normal(0.5, 0.9, 180).tolist(),
-                     ci_lo=0.3, ci_hi=0.7, n=180),
+            BoxGroup(
+                "A",
+                samples=rng.normal(0, 1, 250).tolist(),
+                ci_lo=-0.1,
+                ci_hi=0.1,
+                n=250,
+            ),
+            BoxGroup(
+                "B",
+                samples=rng.normal(0.5, 0.9, 180).tolist(),
+                ci_lo=0.3,
+                ci_hi=0.7,
+                n=180,
+            ),
         ],
         null_median=0.0,
     )
@@ -230,7 +254,7 @@ def test_sankey_aggregates_small_links():
         ],
         links=[
             SankeyLink("a", "b", 50),  # kept
-            SankeyLink("a", "c", 2),   # aggregated
+            SankeyLink("a", "c", 2),  # aggregated
         ],
         layer_labels=["L0", "L1"],
         min_link_value=5,

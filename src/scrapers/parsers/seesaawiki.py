@@ -2534,7 +2534,9 @@ def parse_inline_sections(body_text: str) -> list[dict]:
         m = _RE_INLINE_SECTION.match(stripped)
         if m:
             if current_credits:
-                sections.append({"episode": current_section, "credits": current_credits})
+                sections.append(
+                    {"episode": current_section, "credits": current_credits}
+                )
             current_section = int(m.group(1))
             current_credits = []
             in_cast = False
@@ -2661,9 +2663,7 @@ def parse_episode_titles(body_text: str) -> list[EpisodeTitle]:
 # --- Gross studio extraction ---
 
 # "制作協力：StudioName" or "制作協力　StudioName"
-_RE_GROSS_STUDIO = re.compile(
-    r"制作協力\s*[：:]\s*(.+)|制作協力\s{1,4}(.+)"
-)
+_RE_GROSS_STUDIO = re.compile(r"制作協力\s*[：:]\s*(.+)|制作協力\s{1,4}(.+)")
 
 # Episode header regex (reused from above)
 _RE_EPISODE_FOR_GROSS = _RE_EPISODE
@@ -2885,9 +2885,7 @@ def parse_theme_songs(body_text: str) -> list[ThemeSong]:
 # --- Production committee extraction ---
 
 # Lines that introduce the production committee
-_RE_COMMITTEE_LINE = re.compile(
-    r"^(?:製作|制作)\s*[：:\s]\s*(.+)"
-)
+_RE_COMMITTEE_LINE = re.compile(r"^(?:製作|制作)\s*[：:\s]\s*(.+)")
 
 # Common separators used to list committee members
 _RE_COMMITTEE_SEP = re.compile(r"[・、,，／/]")
@@ -2944,9 +2942,7 @@ def parse_production_committee(body_text: str) -> list[CommitteeMember]:
 # --- Original work info extraction ---
 
 # Pattern: 原作：AuthorName (possibly on next line: publisher info in parentheses)
-_RE_ORIGINAL_WORK = re.compile(
-    r"^原作\s*[：:\s]\s*(.+)"
-)
+_RE_ORIGINAL_WORK = re.compile(r"^原作\s*[：:\s]\s*(.+)")
 
 # Publisher/label parenthetical: (集英社「マガジン」連載) or (講談社「KC」刊)
 _RE_PUBLISHER_PAREN = re.compile(
@@ -2972,7 +2968,9 @@ class OriginalWorkInfo:
     serialization_type: str | None  # "serialized" | "published" | None
 
 
-def _extract_publisher_from_paren(paren_text: str) -> tuple[str | None, str | None, str | None]:
+def _extract_publisher_from_paren(
+    paren_text: str,
+) -> tuple[str | None, str | None, str | None]:
     """Extract (publisher, label, magazine) from a parenthetical publisher string.
 
     e.g. "集英社「週刊少年ジャンプ」連載" → ("集英社", None, "週刊少年ジャンプ")
@@ -2984,11 +2982,30 @@ def _extract_publisher_from_paren(paren_text: str) -> tuple[str | None, str | No
 
     # Known publishers
     _publishers = (
-        "集英社", "講談社", "小学館", "角川書店", "KADOKAWA", "芳文社", "白泉社",
-        "秋田書店", "少年画報社", "双葉社", "新書館", "ワニブックス", "マッグガーデン",
-        "一迅社", "スクウェア・エニックス", "スクエニ", "メディアワークス",
-        "アスキー・メディアワークス", "竹書房", "日本文芸社", "リブレ出版",
-        "フロンティアワークス", "ぶんか社", "宙出版",
+        "集英社",
+        "講談社",
+        "小学館",
+        "角川書店",
+        "KADOKAWA",
+        "芳文社",
+        "白泉社",
+        "秋田書店",
+        "少年画報社",
+        "双葉社",
+        "新書館",
+        "ワニブックス",
+        "マッグガーデン",
+        "一迅社",
+        "スクウェア・エニックス",
+        "スクエニ",
+        "メディアワークス",
+        "アスキー・メディアワークス",
+        "竹書房",
+        "日本文芸社",
+        "リブレ出版",
+        "フロンティアワークス",
+        "ぶんか社",
+        "宙出版",
     )
 
     for pub in _publishers:
@@ -3056,12 +3073,16 @@ def parse_original_work_info(body_text: str) -> OriginalWorkInfo | None:
                 if not next_norm:
                     continue
                 # Stop if a new credit line starts
-                if _RE_ORIGINAL_WORK.match(next_norm) or _RE_CREDIT_COLON.match(next_norm):
+                if _RE_ORIGINAL_WORK.match(next_norm) or _RE_CREDIT_COLON.match(
+                    next_norm
+                ):
                     break
                 paren_match2 = _RE_PUBLISHER_PAREN.search(next_norm)
                 if paren_match2:
                     paren_text = paren_match2.group(1) or paren_match2.group(2) or ""
-                    publisher, label, magazine = _extract_publisher_from_paren(paren_text)
+                    publisher, label, magazine = _extract_publisher_from_paren(
+                        paren_text
+                    )
                     if any(kw in paren_text for kw in _SERIALIZATION_KEYWORDS):
                         serialization_type = "serialized"
                     else:
@@ -3091,6 +3112,7 @@ def parse_original_work_info(body_text: str) -> OriginalWorkInfo | None:
 
 
 # --- Credit listing position (source_listing_position) ---
+
 
 @dataclass
 class CreditWithPosition:

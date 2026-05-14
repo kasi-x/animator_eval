@@ -19,6 +19,7 @@ from src.analysis.io.conformed_reader import conformed_connect
 # 1. Credits — full-table scan
 # ---------------------------------------------------------------------------
 
+
 def load_credits_ddb(silver_path: Path | str | None = None) -> list[dict[str, Any]]:
     """Load all credits rows using DuckDB's vectorized scan.
 
@@ -40,7 +41,10 @@ def load_credits_ddb(silver_path: Path | str | None = None) -> list[dict[str, An
 # year, scale_class) is already present in silver.
 # ---------------------------------------------------------------------------
 
-def load_anime_joined_ddb(silver_path: Path | str | None = None) -> list[dict[str, Any]]:
+
+def load_anime_joined_ddb(
+    silver_path: Path | str | None = None,
+) -> list[dict[str, Any]]:
     """Load anime rows, with genres/tags/studios aggregated where available.
 
     If the related tables (anime_genres, anime_tags, anime_studios, studios)
@@ -105,6 +109,7 @@ def load_anime_joined_ddb(silver_path: Path | str | None = None) -> list[dict[st
 # 3. Credit aggregation per person / year / role — AKM / feat_career feed
 # ---------------------------------------------------------------------------
 
+
 def agg_credits_per_person_ddb(
     silver_path: Path | str | None = None,
 ) -> list[dict[str, Any]]:
@@ -151,6 +156,7 @@ def agg_credits_per_person_ddb(
 # (anime → set of persons → cross-product collaborator count).
 # Pure aggregation: vectorized hash join + GROUP BY in DuckDB.
 # ---------------------------------------------------------------------------
+
 
 def agg_collaborator_counts_ddb(
     silver_path: Path | str | None = None,

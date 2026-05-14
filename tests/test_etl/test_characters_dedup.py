@@ -261,9 +261,7 @@ class TestFindDupByAnilistId:
         # anilist:c2 has no duplicate → not in any pair
         assert "anilist:c2" not in ids
 
-    def test_empty_when_no_dups(
-        self, mem_conn: duckdb.DuckDBPyConnection
-    ) -> None:
+    def test_empty_when_no_dups(self, mem_conn: duckdb.DuckDBPyConnection) -> None:
         mem_conn.execute(
             "INSERT INTO characters (id, name_ja, anilist_id) VALUES (?, ?, ?)",
             ["anilist:c1", "テスト", 1],
@@ -286,9 +284,7 @@ class TestFindDupByNameAndActor:
         criteria = {r["criterion"] for r in rows}
         assert "name_and_actor" in criteria
 
-    def test_id_ordering(
-        self, actor_dup_conn: duckdb.DuckDBPyConnection
-    ) -> None:
+    def test_id_ordering(self, actor_dup_conn: duckdb.DuckDBPyConnection) -> None:
         rows = find_dup_by_name_and_actor(actor_dup_conn)
         for r in rows:
             assert r["id_a"] < r["id_b"]
@@ -339,9 +335,7 @@ class TestFindDupByNameAndAnime:
         criteria = {r["criterion"] for r in rows}
         assert "name_and_anime" in criteria
 
-    def test_id_ordering(
-        self, anime_dup_conn: duckdb.DuckDBPyConnection
-    ) -> None:
+    def test_id_ordering(self, anime_dup_conn: duckdb.DuckDBPyConnection) -> None:
         rows = find_dup_by_name_and_anime(anime_dup_conn)
         for r in rows:
             assert r["id_a"] < r["id_b"]
@@ -402,9 +396,7 @@ class TestAudit:
         audit(actor_dup_conn, tmp_path)
         assert (tmp_path / "characters_dedup_summary.md").exists()
 
-    def test_stop_if_raises_on_high_rate(
-        self, tmp_path: Path
-    ) -> None:
+    def test_stop_if_raises_on_high_rate(self, tmp_path: Path) -> None:
         """Audit raises RuntimeError if dup rate > 5% on a realistic-size dataset."""
         conn = duckdb.connect(":memory:")
         # Table without UNIQUE(anilist_id) so we can insert duplicates freely
@@ -519,8 +511,16 @@ class TestMergeDryRun:
             "SELECT COUNT(*) FROM character_voice_actors"
         ).fetchone()[0]
         merge(actor_dup_conn, csv_path, dry_run=True)
-        assert actor_dup_conn.execute("SELECT COUNT(*) FROM characters").fetchone()[0] == before_chars
-        assert actor_dup_conn.execute("SELECT COUNT(*) FROM character_voice_actors").fetchone()[0] == before_cva
+        assert (
+            actor_dup_conn.execute("SELECT COUNT(*) FROM characters").fetchone()[0]
+            == before_chars
+        )
+        assert (
+            actor_dup_conn.execute(
+                "SELECT COUNT(*) FROM character_voice_actors"
+            ).fetchone()[0]
+            == before_cva
+        )
 
     def test_dry_run_zero_for_ghost_ids(
         self, actor_dup_conn: duckdb.DuckDBPyConnection, tmp_path: Path
@@ -587,7 +587,9 @@ class TestMergeActual:
     ) -> None:
         merge(actor_dup_conn, self._csv_actor(tmp_path))
         # anilist:c10 < bgm:c20 → canonical
-        ids = {r[0] for r in actor_dup_conn.execute("SELECT id FROM characters").fetchall()}
+        ids = {
+            r[0] for r in actor_dup_conn.execute("SELECT id FROM characters").fetchall()
+        }
         assert "anilist:c10" in ids
         assert "bgm:c20" not in ids
 

@@ -34,6 +34,7 @@ def scores_data(tmp_path, monkeypatch):
 
     # Set up a test database with schema and 3 test persons
     import src.db.init
+
     db_path = tmp_path / "test_scores.db"
     monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
     monkeypatch.setattr(src.db.init, "DEFAULT_DB_PATH", db_path)
@@ -444,7 +445,9 @@ def persons_duckdb_data(tmp_path, monkeypatch):
 
     silver_path = tmp_path / "silver.duckdb"
     gold_path = tmp_path / "gold.duckdb"
-    monkeypatch.setattr(src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(
+        src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path
+    )
     monkeypatch.setattr(src.analysis.io.mart_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
 
     # Create silver.duckdb
@@ -459,7 +462,9 @@ def persons_duckdb_data(tmp_path, monkeypatch):
         aliases VARCHAR DEFAULT '[]',
         image_medium VARCHAR
     )""")
-    sconn.execute("CREATE TABLE anime (id VARCHAR PRIMARY KEY, title_en VARCHAR, year INTEGER)")
+    sconn.execute(
+        "CREATE TABLE anime (id VARCHAR PRIMARY KEY, title_en VARCHAR, year INTEGER)"
+    )
     sconn.execute("""CREATE TABLE credits (
         person_id VARCHAR,
         anime_id VARCHAR,
@@ -467,8 +472,14 @@ def persons_duckdb_data(tmp_path, monkeypatch):
         credit_year INTEGER,
         evidence_source VARCHAR
     )""")
-    for pid, ja, en in [("p1", "監督A", "Director A"), ("p2", "", "Animator B"), ("p3", "", "Newbie C")]:
-        sconn.execute("INSERT INTO persons(id,name_ja,name_en) VALUES (?,?,?)", [pid, ja, en])
+    for pid, ja, en in [
+        ("p1", "監督A", "Director A"),
+        ("p2", "", "Animator B"),
+        ("p3", "", "Newbie C"),
+    ]:
+        sconn.execute(
+            "INSERT INTO persons(id,name_ja,name_en) VALUES (?,?,?)", [pid, ja, en]
+        )
     sconn.execute("INSERT INTO anime VALUES ('a1','Anime 1',2023)")
     sconn.execute("INSERT INTO credits VALUES ('p1','a1','director',2023,'test')")
     sconn.execute("INSERT INTO credits VALUES ('p2','a1','key_animator',2023,'test')")
@@ -477,6 +488,7 @@ def persons_duckdb_data(tmp_path, monkeypatch):
 
     # Create gold.duckdb using GoldWriter DDL
     from src.analysis.io.mart_writer import _DDL
+
     gconn = duckdb.connect(str(gold_path))
     gconn.execute(_DDL)
     for pid, iv, bi, pa, fe, aw, do in [

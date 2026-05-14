@@ -88,10 +88,10 @@ def link_brushing(div_ids: Sequence[str], *, key: str = "person_id") -> str:
 
 @dataclass(frozen=True)
 class CrossFilterFacet:
-    field: str             # e.g. "cohort_decade"
-    label: str             # e.g. "デビュー年代"
-    options: list[str]     # e.g. ["1990s", "2000s", "2010s", "2020s"]
-    default: str = "all"   # "all" = no filter
+    field: str  # e.g. "cohort_decade"
+    label: str  # e.g. "デビュー年代"
+    options: list[str]  # e.g. ["1990s", "2000s", "2010s", "2020s"]
+    default: str = "all"  # "all" = no filter
 
 
 def cross_filter_panel(
@@ -107,12 +107,10 @@ def cross_filter_panel(
     # Filter UI
     selectors_html: list[str] = []
     for f in facets:
-        opts = "\n".join(
-            f'<option value="{o}">{o}</option>' for o in f.options
-        )
+        opts = "\n".join(f'<option value="{o}">{o}</option>' for o in f.options)
         selectors_html.append(
             f'<label style="margin-right:1.2rem;font-size:0.85rem;color:#a0a0c0;">'
-            f'{f.label}: '
+            f"{f.label}: "
             f'<select data-facet-field="{f.field}" '
             f'style="background:#2a2a4a;color:#e0e0e0;border:1px solid #3a3a5c;'
             f'padding:0.3rem 0.6rem;border-radius:4px;font-size:0.85rem;">'
@@ -127,9 +125,7 @@ def cross_filter_panel(
         'style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08);'
         'padding:0.8rem 1rem;margin-bottom:1.5rem;border-radius:8px;">'
         '<strong style="color:#a0d2db;font-size:0.85rem;margin-right:1rem;">'
-        '🔍 フィルタ:</strong>'
-        + "".join(selectors_html)
-        + "</div>"
+        "🔍 フィルタ:</strong>" + "".join(selectors_html) + "</div>"
     )
 
     script = f"""<script>

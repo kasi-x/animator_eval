@@ -214,8 +214,8 @@ class ProductionCompany:
 
     madb_id: str
     company_name: str
-    role_label: str   # e.g. "アニメーション制作", "制作プロダクション"
-    is_main: bool     # True = primary animation studio, False = support/협력
+    role_label: str  # e.g. "アニメーション制作", "制作プロダクション"
+    is_main: bool  # True = primary animation studio, False = support/협력
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,26 +225,26 @@ class VideoRelease:
     Populated from AnimationVideoPackage items (metadata202 etc.).
     """
 
-    madb_id: str              # package item identifier (e.g. M1000000)
-    series_madb_id: str       # parent series via schema:isPartOf
-    media_format: str         # e.g. "DVD", "Blu-ray", "VHS"
-    date_published: str       # raw datePublished string
-    publisher: str            # distributor/label
-    product_id: str           # schema:productID (catalogue number)
-    gtin: str                 # schema:gtin (JAN/EAN barcode)
-    runtime_min: int | None   # schema:duration (minutes)
-    volume_number: str        # schema:volumeNumber
-    release_title: str        # ma:releasedTitle (if different from series title)
+    madb_id: str  # package item identifier (e.g. M1000000)
+    series_madb_id: str  # parent series via schema:isPartOf
+    media_format: str  # e.g. "DVD", "Blu-ray", "VHS"
+    date_published: str  # raw datePublished string
+    publisher: str  # distributor/label
+    product_id: str  # schema:productID (catalogue number)
+    gtin: str  # schema:gtin (JAN/EAN barcode)
+    runtime_min: int | None  # schema:duration (minutes)
+    volume_number: str  # schema:volumeNumber
+    release_title: str  # ma:releasedTitle (if different from series title)
 
 
 @dataclass(frozen=True, slots=True)
 class OriginalWorkLink:
     """Link to the original work (manga / LN / game / etc.)."""
 
-    madb_id: str           # anime series identifier
-    work_name: str         # ma:originalWorkName (cleaned; brackets stripped)
-    creator_text: str      # ma:originalWorkCreator (raw; may have role labels)
-    series_link_id: str    # from schema:isPartOf @id (madb series URI fragment)
+    madb_id: str  # anime series identifier
+    work_name: str  # ma:originalWorkName (cleaned; brackets stripped)
+    creator_text: str  # ma:originalWorkCreator (raw; may have role labels)
+    series_link_id: str  # from schema:isPartOf @id (madb series URI fragment)
 
 
 # ---------------------------------------------------------------------------
@@ -506,9 +506,7 @@ def parse_video_releases(item: dict) -> list[VideoRelease]:
         series_madb_id = ""
 
     publisher_raw = (
-        item.get("schema:publisher", "")
-        or item.get("ma:publisher", "")
-        or ""
+        item.get("schema:publisher", "") or item.get("ma:publisher", "") or ""
     )
     if isinstance(publisher_raw, dict):
         publisher_raw = publisher_raw.get("@value", "")

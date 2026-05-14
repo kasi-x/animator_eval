@@ -87,11 +87,15 @@ _CP_PERSONS = _DATA_DIR / "checkpoint_persons.json"
 _CP_CHARACTERS = _DATA_DIR / "checkpoint_characters.json"
 
 _SUBJECTS_GLOB = "result/bronze/source=bangumi/table=subjects/**/*.parquet"
-_SUBJECT_PERSONS_GLOB = "result/bronze/source=bangumi/table=subject_persons/**/*.parquet"
-_SUBJECT_CHARS_GLOB = "result/bronze/source=bangumi/table=subject_characters/**/*.parquet"
+_SUBJECT_PERSONS_GLOB = (
+    "result/bronze/source=bangumi/table=subject_persons/**/*.parquet"
+)
+_SUBJECT_CHARS_GLOB = (
+    "result/bronze/source=bangumi/table=subject_characters/**/*.parquet"
+)
 _PERSON_CHARS_GLOB = "result/bronze/source=bangumi/table=person_characters/**/*.parquet"
 
-_GRAPHQL_BATCH = 25   # subjects per GraphQL POST
+_GRAPHQL_BATCH = 25  # subjects per GraphQL POST
 _CHECKPOINT_FLUSH = 100  # items between parquet flush + checkpoint save
 
 # ─── subjects schema ──────────────────────────────────────────────────────────
@@ -153,7 +157,9 @@ def _serialise_subject_row(raw: dict[str, Any]) -> dict[str, Any] | None:
         src_name = "date" if name == "release_date" else name
         if src_name in _SUBJECTS_JSON_FIELDS:
             value = raw.get(src_name)
-            row[name] = json.dumps(value, ensure_ascii=False) if value is not None else None
+            row[name] = (
+                json.dumps(value, ensure_ascii=False) if value is not None else None
+            )
         else:
             row[name] = raw.get(src_name)
     return row
@@ -168,7 +174,9 @@ def _stream_anime_rows(jsonlines_path: Path):
             try:
                 doc = json.loads(raw_line)
             except json.JSONDecodeError as exc:
-                log.warning("bangumi_subjects_json_parse_error", line=line_num, error=str(exc))
+                log.warning(
+                    "bangumi_subjects_json_parse_error", line=line_num, error=str(exc)
+                )
                 continue
             row = _serialise_subject_row(doc)
             if row is not None:
@@ -205,7 +213,9 @@ def _write_subjects_parquet(
         table = pa.Table.from_pylist(buffer, schema=_SUBJECTS_SCHEMA)
         if not dry_run:
             if writer is None:
-                writer = pq.ParquetWriter(out_path, schema=_SUBJECTS_SCHEMA, compression="zstd")
+                writer = pq.ParquetWriter(
+                    out_path, schema=_SUBJECTS_SCHEMA, compression="zstd"
+                )
             writer.write_table(table, row_group_size=chunk_size)
         total_written += len(buffer)
         buffer.clear()
@@ -236,7 +246,9 @@ def _write_subjects_parquet(
 
 def _load_subject_ids() -> list[int]:
     con = duckdb.connect()
-    rows = con.execute(f"SELECT id FROM read_parquet('{_SUBJECTS_GLOB}') ORDER BY id").fetchall()
+    rows = con.execute(
+        f"SELECT id FROM read_parquet('{_SUBJECTS_GLOB}') ORDER BY id"
+    ).fetchall()
     con.close()
     return [int(r[0]) for r in rows]
 
@@ -290,7 +302,9 @@ def _build_character_and_actor_rows(
                     "character_id": char_id,
                     "person_id": int(actor.get("id", 0)),
                     "actor_type": int(actor.get("type") or 0),
-                    "actor_career": json.dumps(actor.get("career") or [], ensure_ascii=False),
+                    "actor_career": json.dumps(
+                        actor.get("career") or [], ensure_ascii=False
+                    ),
                     "fetched_at": fetched_at,
                 }
             )
@@ -307,7 +321,9 @@ def _check_relations_idempotent(all_ids: list[int], date_str: str) -> None:
         return
     cp = Checkpoint.load(_CP_RELATIONS)
     if set(all_ids).issubset(cp.completed_set):
-        console.print("[green]All subjects completed + parquet exists. Use --force to re-run.[/green]")
+        console.print(
+            "[green]All subjects completed + parquet exists. Use --force to re-run.[/green]"
+        )
         raise typer.Exit(0)
 
 
@@ -335,7 +351,9 @@ async def _run_relations(
         all_ids, _CP_RELATIONS, limit=limit, force=force, resume=resume
     )
     if resume and not force:
-        console.print(f"[cyan]Checkpoint:[/cyan] completed={len(completed_set):,}  failed={len(cp.failed_set):,}")
+        console.print(
+            f"[cyan]Checkpoint:[/cyan] completed={len(completed_set):,}  failed={len(cp.failed_set):,}"
+        )
     console.print(f"[cyan]Pending:[/cyan] {len(pending):,}")
 
     if dry_run:
@@ -354,7 +372,9 @@ async def _run_relations(
         console.print("[green]relations: all subjects completed.[/green]")
         return
 
-    chunks = [pending[i : i + _GRAPHQL_BATCH] for i in range(0, len(pending), _GRAPHQL_BATCH)]
+    chunks = [
+        pending[i : i + _GRAPHQL_BATCH] for i in range(0, len(pending), _GRAPHQL_BATCH)
+    ]
     date = dt.date.fromisoformat(date_str)
 
     with BronzeWriterGroup(
@@ -378,7 +398,11 @@ async def _run_relations(
                         try:
                             batch_result = await client.fetch_subjects_batched(chunk)
                         except ScraperError as exc:
-                            log.error("bangumi_graphql_batch_failed", chunk=chunk, error=str(exc))
+                            log.error(
+                                "bangumi_graphql_batch_failed",
+                                chunk=chunk,
+                                error=str(exc),
+                            )
                             for sid in chunk:
                                 cp.mark_failed(sid, status="error", detail=str(exc))
                             p.advance()
@@ -389,11 +413,17 @@ async def _run_relations(
                             if subject_data is None:
                                 cp.mark_failed(subject_id, status=404)
                                 continue
-                            persons = adapt_subject_persons_gql(subject_id, subject_data)
-                            for row in _build_person_rows(subject_id, persons, fetched_at):
+                            persons = adapt_subject_persons_gql(
+                                subject_id, subject_data
+                            )
+                            for row in _build_person_rows(
+                                subject_id, persons, fetched_at
+                            ):
                                 bw_persons.append(row)
                             try:
-                                rest_chars = await client.fetch_subject_characters_rest(subject_id)
+                                rest_chars = await client.fetch_subject_characters_rest(
+                                    subject_id
+                                )
                             except Exception as exc:
                                 # Soft fault: persons row already written; chars/actors stored empty.
                                 # Logged at error so it surfaces in monitoring. Subject is still
@@ -430,7 +460,11 @@ async def _run_relations(
 
     cp.sync_completed(completed_set)
     cp.save()
-    log.info("bangumi_relations_done", completed=len(completed_set), failed=len(cp.failed_ids))
+    log.info(
+        "bangumi_relations_done",
+        completed=len(completed_set),
+        failed=len(cp.failed_ids),
+    )
 
 
 # ─── persons helpers ──────────────────────────────────────────────────────────
@@ -448,7 +482,9 @@ def _load_person_ids() -> list[int]:
     return [int(r[0]) for r in rows]
 
 
-def _build_person_row(person: dict[str, Any], fetched_at: dt.datetime) -> dict[str, Any]:
+def _build_person_row(
+    person: dict[str, Any], fetched_at: dt.datetime
+) -> dict[str, Any]:
     stat = person.get("stat") or {}
     images = person.get("images") or {}
     return {
@@ -493,7 +529,9 @@ async def _run_persons(
         all_ids, _CP_PERSONS, limit=limit, force=force, resume=resume
     )
     if resume and not force:
-        console.print(f"[cyan]Checkpoint:[/cyan] completed={len(completed_set):,}  failed={len(cp.failed_set):,}")
+        console.print(
+            f"[cyan]Checkpoint:[/cyan] completed={len(completed_set):,}  failed={len(cp.failed_set):,}"
+        )
     console.print(f"[cyan]Pending:[/cyan] {len(pending):,}")
 
     if dry_run:
@@ -522,7 +560,11 @@ async def _run_persons(
                         try:
                             person_raw = await client.fetch_person_rest(person_id)
                         except ScraperError as exc:
-                            log.error("bangumi_person_fetch_failed", person_id=person_id, error=str(exc))
+                            log.error(
+                                "bangumi_person_fetch_failed",
+                                person_id=person_id,
+                                error=str(exc),
+                            )
                             cp.mark_failed(person_id, status="error", detail=str(exc))
                             p.advance()
                             continue
@@ -546,14 +588,19 @@ async def _run_persons(
                         if (i + 1) % _CHECKPOINT_FLUSH == 0:
                             bw.flush()
                             cp.save()
-                            p.log("bangumi_persons_checkpoint", completed=len(completed_set))
+                            p.log(
+                                "bangumi_persons_checkpoint",
+                                completed=len(completed_set),
+                            )
                         p.advance()
         finally:
             bw.flush()
 
     cp.sync_completed(completed_set)
     cp.save()
-    log.info("bangumi_persons_done", completed=len(completed_set), failed=len(cp.failed_ids))
+    log.info(
+        "bangumi_persons_done", completed=len(completed_set), failed=len(cp.failed_ids)
+    )
 
 
 # ─── characters helpers ───────────────────────────────────────────────────────
@@ -571,7 +618,9 @@ def _load_character_ids() -> list[int]:
     return [int(r[0]) for r in rows]
 
 
-def _build_character_row(character: dict[str, Any], fetched_at: dt.datetime) -> dict[str, Any]:
+def _build_character_row(
+    character: dict[str, Any], fetched_at: dt.datetime
+) -> dict[str, Any]:
     stat = character.get("stat") or {}
     images = character.get("images") or {}
     return {
@@ -615,7 +664,9 @@ async def _run_characters(
         all_ids, _CP_CHARACTERS, limit=limit, force=force, resume=resume
     )
     if resume and not force:
-        console.print(f"[cyan]Checkpoint:[/cyan] completed={len(completed_set):,}  failed={len(cp.failed_set):,}")
+        console.print(
+            f"[cyan]Checkpoint:[/cyan] completed={len(completed_set):,}  failed={len(cp.failed_set):,}"
+        )
     console.print(f"[cyan]Pending:[/cyan] {len(pending):,}")
 
     if dry_run:
@@ -644,8 +695,14 @@ async def _run_characters(
                         try:
                             char_raw = await client.fetch_character_rest(character_id)
                         except ScraperError as exc:
-                            log.error("bangumi_character_fetch_failed", character_id=character_id, error=str(exc))
-                            cp.mark_failed(character_id, status="error", detail=str(exc))
+                            log.error(
+                                "bangumi_character_fetch_failed",
+                                character_id=character_id,
+                                error=str(exc),
+                            )
+                            cp.mark_failed(
+                                character_id, status="error", detail=str(exc)
+                            )
                             p.advance()
                             continue
                         if char_raw is None:
@@ -658,14 +715,21 @@ async def _run_characters(
                         if (i + 1) % _CHECKPOINT_FLUSH == 0:
                             bw.flush()
                             cp.save()
-                            p.log("bangumi_characters_checkpoint", completed=len(completed_set))
+                            p.log(
+                                "bangumi_characters_checkpoint",
+                                completed=len(completed_set),
+                            )
                         p.advance()
         finally:
             bw.flush()
 
     cp.sync_completed(completed_set)
     cp.save()
-    log.info("bangumi_characters_done", completed=len(completed_set), failed=len(cp.failed_ids))
+    log.info(
+        "bangumi_characters_done",
+        completed=len(completed_set),
+        failed=len(cp.failed_ids),
+    )
 
 
 # ─── CLI commands ─────────────────────────────────────────────────────────────
@@ -692,7 +756,9 @@ async def _run_fetch_dump(*, tag: str, force: bool) -> None:
     manifest_path = tag_dir / "manifest.json"
     if manifest_path.exists() and not force:
         log.info("bangumi_dump_skip_already_extracted", tag=tag)
-        console.print(f"[green]Already extracted:[/green] {tag} — use --force to re-download.")
+        console.print(
+            f"[green]Already extracted:[/green] {tag} — use --force to re-download."
+        )
         return
 
     _DUMP_ROOT.mkdir(parents=True, exist_ok=True)
@@ -720,17 +786,23 @@ async def _run_fetch_dump(*, tag: str, force: bool) -> None:
     console.print(f"[cyan]✓[/cyan] Extracted {len(extracted_paths)} file(s)")
 
     manifest = build_manifest(tag_dir, tag)
-    manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8")
+    manifest_path.write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
     zip_path.unlink(missing_ok=True)
     update_latest_symlink(_DUMP_ROOT, tag)
     console.print(f"[green]✓[/green] Done: {tag}")
     for f in manifest["files"]:
-        console.print(f"  {f['name']:40s}  {fmt_bytes(f['size']):>10s}  {f['line_count']:>10,} lines")
+        console.print(
+            f"  {f['name']:40s}  {fmt_bytes(f['size']):>10s}  {f['line_count']:>10,} lines"
+        )
 
 
 @app.command("subjects")
 def cmd_subjects(
-    dump_dir: Path = typer.Option(_DUMP_LATEST, help="Dump directory (default: latest)"),
+    dump_dir: Path = typer.Option(
+        _DUMP_LATEST, help="Dump directory (default: latest)"
+    ),
     bronze_root: Path = typer.Option(Path("result/bronze"), help="BRONZE root"),
     dry_run: DryRunOpt = False,
     force: ForceOpt = False,
@@ -752,17 +824,25 @@ def cmd_subjects(
     date_str = _release_date_from_tag(manifest["release_tag"])
 
     out_path = (
-        bronze_root / "source=bangumi" / "table=subjects" / f"date={date_str}" / "part-0.parquet"
+        bronze_root
+        / "source=bangumi"
+        / "table=subjects"
+        / f"date={date_str}"
+        / "part-0.parquet"
     )
     if out_path.exists() and not force and not dry_run:
-        console.print(f"[yellow]⚠[/yellow] Already exists: {out_path} — use --force to overwrite.")
+        console.print(
+            f"[yellow]⚠[/yellow] Already exists: {out_path} — use --force to overwrite."
+        )
         raise typer.Exit(0)
 
     console.print(f"[cyan]→[/cyan] Scanning {jsonlines_path} …")
     estimated = _count_type2_lines(jsonlines_path)
     console.print(f"   ~{estimated:,} anime records")
 
-    written = _write_subjects_parquet(jsonlines_path, out_path, dry_run=dry_run, estimated_rows=estimated)
+    written = _write_subjects_parquet(
+        jsonlines_path, out_path, dry_run=dry_run, estimated_rows=estimated
+    )
     if dry_run:
         console.print(f"[green]dry-run:[/green] would write {written:,} rows")
     else:
@@ -842,8 +922,12 @@ def cmd_run(
     dry_run: DryRunOpt = False,
     quiet: QuietOpt = False,
     progress: ProgressOpt = False,
-    skip_persons: bool = typer.Option(False, "--skip-persons", help="Skip persons phase"),
-    skip_characters: bool = typer.Option(False, "--skip-characters", help="Skip characters phase"),
+    skip_persons: bool = typer.Option(
+        False, "--skip-persons", help="Skip persons phase"
+    ),
+    skip_characters: bool = typer.Option(
+        False, "--skip-characters", help="Skip characters phase"
+    ),
 ) -> None:
     """Run relations → persons → characters in sequence."""
     log.info("bangumi_run_start")

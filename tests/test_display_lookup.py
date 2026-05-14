@@ -147,7 +147,10 @@ def test_ann_prefix_has_no_score(tmp_path):
     db_path = _make_db(
         tmp_path,
         rows=[
-            ("INSERT INTO src_ann_anime (ann_id, title_ja, year) VALUES (1, 'x', 2020)", ()),
+            (
+                "INSERT INTO src_ann_anime (ann_id, title_ja, year) VALUES (1, 'x', 2020)",
+                (),
+            ),
         ],
     )
     try:
@@ -293,7 +296,10 @@ def test_description_cross_source_fallback_via_external_ids(tmp_path):
                 (),
             ),
             # Anilist has the row but no description (NULL) — fallback should trigger.
-            ("INSERT INTO src_anilist_anime (anilist_id, description) VALUES (42, NULL)", ()),
+            (
+                "INSERT INTO src_anilist_anime (anilist_id, description) VALUES (42, NULL)",
+                (),
+            ),
         ],
     )
     try:

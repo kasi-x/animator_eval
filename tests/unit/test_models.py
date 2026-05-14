@@ -1,6 +1,12 @@
 """models モジュールのテスト."""
 
-from src.runtime.models import BronzeAnime as Anime, Person, Role, ScoreResult, parse_role
+from src.runtime.models import (
+    BronzeAnime as Anime,
+    Person,
+    Role,
+    ScoreResult,
+    parse_role,
+)
 
 
 class TestParseRole:

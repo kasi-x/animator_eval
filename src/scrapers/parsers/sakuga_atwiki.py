@@ -1,4 +1,5 @@
 """作画@wiki page classifier, link extractor, and person parser."""
+
 from __future__ import annotations
 
 import hashlib
@@ -10,7 +11,12 @@ from typing import Literal
 import structlog
 from bs4 import BeautifulSoup, Tag
 
-from src.runtime.models import ParsedSakugaCredit, ParsedSakugaPerson, ParsedSakugaWork, ParsedSakugaWorkStaff
+from src.runtime.models import (
+    ParsedSakugaCredit,
+    ParsedSakugaPerson,
+    ParsedSakugaWork,
+    ParsedSakugaWorkStaff,
+)
 
 log = structlog.get_logger()
 
@@ -72,7 +78,10 @@ def classify_page_kind(title: str, html: str) -> PageKind:
         nfkc_lines = [ln.strip() for ln in body_nfkc.splitlines() if ln.strip()]
         if any(_GENGA_LABEL_RE.match(ln) for ln in nfkc_lines):
             return "work"
-        if any(ln.startswith("■") and _ROLE_INLINE_RE.search(ln[1:].strip()) for ln in nfkc_lines):
+        if any(
+            ln.startswith("■") and _ROLE_INLINE_RE.search(ln[1:].strip())
+            for ln in nfkc_lines
+        ):
             return "work"
         if any(_WORK_DOT_ROLE_RE.match(ln) for ln in nfkc_lines):
             return "work"
@@ -99,9 +108,14 @@ def extract_page_ids(html: str) -> list[int]:
 # ---------------------------------------------------------------------------
 
 _TITLE_SITE_SUFFIX = re.compile(r"\s*[-–]\s*作画@wiki.*$")
-_ALIAS_LABEL_RE = re.compile(r"別名[：:]\s*|旧名[：:]\s*|英字[：:]\s*|読み[：:]\s*|英名[：:]\s*")
+_ALIAS_LABEL_RE = re.compile(
+    r"別名[：:]\s*|旧名[：:]\s*|英字[：:]\s*|読み[：:]\s*|英名[：:]\s*"
+)
 _YEAR_RE = re.compile(r"((?:19|20)\d{2})")
-_FORMAT_RE = re.compile(r"劇場(?:版|アニメ)?|映画|Movie|OVA|OAD|TVSP|TV特番|TV Special|\bTV\b|テレビ|配信|Web配信|ネット配信", re.IGNORECASE)
+_FORMAT_RE = re.compile(
+    r"劇場(?:版|アニメ)?|映画|Movie|OVA|OAD|TVSP|TV特番|TV Special|\bTV\b|テレビ|配信|Web配信|ネット配信",
+    re.IGNORECASE,
+)
 _EP_SINGLE_RE = re.compile(r"(?:第\s*)?(\d+)\s*話|#(\d+)|EP\.?\s*(\d+)|第(\d+)回")
 _EP_RANGE_RE = re.compile(r"(?:第\s*)?(\d+)\s*[〜~\-ー–]\s*(?:第\s*)?(\d+)\s*話?")
 _ROLE_INLINE_RE = re.compile(
@@ -118,9 +132,7 @@ _ROLE_INLINE_RE = re.compile(
 _SUBJECTIVE_RE = re.compile(r"神作画|作画崩壊|作監暴走|sakuga|[Ss]akuga")
 
 # Inline credit format: 「作品名」(役職) embedded in narrative text
-_BRACKET_CREDIT_RE = re.compile(
-    r"「([^」]{1,60})」[（(]([^)）]{1,50})[)）]"
-)
+_BRACKET_CREDIT_RE = re.compile(r"「([^」]{1,60})」[（(]([^)）]{1,50})[)）]")
 
 
 def parse_person_page(html: str, page_id: int = 0) -> ParsedSakugaPerson:
@@ -203,17 +215,21 @@ def _extract_bracket_credits(text: str) -> list[ParsedSakugaCredit]:
         roles_raw = m.group(2).strip()
         if not title or not _ROLE_INLINE_RE.search(roles_raw):
             continue
-        year = _extract_year(roles_raw) or _extract_year(text[max(0, m.start()-30):m.start()])
+        year = _extract_year(roles_raw) or _extract_year(
+            text[max(0, m.start() - 30) : m.start()]
+        )
         fmt = _extract_format(roles_raw) or _extract_format(title)
         for role_m in _ROLE_INLINE_RE.finditer(roles_raw):
-            credits.append(ParsedSakugaCredit(
-                work_title=_clean_title(title),
-                work_year=year,
-                work_format=fmt,
-                role_raw=role_m.group(0),
-                episode_raw=None,
-                episode_num=None,
-            ))
+            credits.append(
+                ParsedSakugaCredit(
+                    work_title=_clean_title(title),
+                    work_year=year,
+                    work_format=fmt,
+                    role_raw=role_m.group(0),
+                    episode_raw=None,
+                    episode_num=None,
+                )
+            )
     return credits
 
 
@@ -240,7 +256,9 @@ def _parse_block(elements: list) -> list[ParsedSakugaCredit]:
 
         elif el.name in ("ul", "ol"):
             for li in el.find_all("li", recursive=False):
-                li_text = unicodedata.normalize("NFKC", li.get_text(separator=" ", strip=True))
+                li_text = unicodedata.normalize(
+                    "NFKC", li.get_text(separator=" ", strip=True)
+                )
                 c = _parse_list_item(li_text, current_work, current_year, current_fmt)
                 if c is not None:
                     credits.append(c)
@@ -357,7 +375,9 @@ def _parse_bullet_segment(segment: str) -> list[ParsedSakugaCredit]:
         return []
 
     year = _extract_year(paren_content) if paren_content else _extract_year(raw_title)
-    fmt = _extract_format(paren_content) if paren_content else _extract_format(raw_title)
+    fmt = (
+        _extract_format(paren_content) if paren_content else _extract_format(raw_title)
+    )
 
     role_matches = list(_ROLE_INLINE_RE.finditer(rest))
     if not role_matches:
@@ -367,7 +387,9 @@ def _parse_bullet_segment(segment: str) -> list[ParsedSakugaCredit]:
     for i, rm in enumerate(role_matches):
         role_raw = rm.group(0)
         ep_text_start = rm.end()
-        ep_text_end = role_matches[i + 1].start() if i + 1 < len(role_matches) else len(rest)
+        ep_text_end = (
+            role_matches[i + 1].start() if i + 1 < len(role_matches) else len(rest)
+        )
         ep_text = rest[ep_text_start:ep_text_end]
 
         ep_nums = [int(m) for m in re.findall(r"(\d+)\s*話", ep_text)]
@@ -377,14 +399,16 @@ def _parse_bullet_segment(segment: str) -> list[ParsedSakugaCredit]:
         else:
             ep_raw, ep_num = _parse_episode(ep_text)
 
-        credits.append(ParsedSakugaCredit(
-            work_title=work_title,
-            work_year=year,
-            work_format=fmt,
-            role_raw=role_raw,
-            episode_raw=ep_raw,
-            episode_num=ep_num,
-        ))
+        credits.append(
+            ParsedSakugaCredit(
+                work_title=work_title,
+                work_year=year,
+                work_format=fmt,
+                role_raw=role_raw,
+                episode_raw=ep_raw,
+                episode_num=ep_num,
+            )
+        )
 
     return credits
 
@@ -397,19 +421,28 @@ def _parse_table(table: Tag) -> list[ParsedSakugaCredit]:
 
     # Detect column order from header row
     header_cells = rows[0].find_all(["th", "td"])
-    headers = [unicodedata.normalize("NFKC", c.get_text(strip=True)) for c in header_cells]
+    headers = [
+        unicodedata.normalize("NFKC", c.get_text(strip=True)) for c in header_cells
+    ]
 
     work_col = _find_col(headers, ["作品", "タイトル", "作品名", "title"])
     role_col = _find_col(headers, ["役職", "クレジット", "担当", "役", "スタッフ"])
     ep_col = _find_col(headers, ["話数", "エピソード", "回", "#", "EP"])
 
     for row in rows[1:]:
-        cells = [unicodedata.normalize("NFKC", c.get_text(strip=True)) for c in row.find_all(["td", "th"])]
+        cells = [
+            unicodedata.normalize("NFKC", c.get_text(strip=True))
+            for c in row.find_all(["td", "th"])
+        ]
         if len(cells) < 2:
             continue
 
-        work = cells[work_col] if work_col is not None and work_col < len(cells) else None
-        role_raw_cell = cells[role_col] if role_col is not None and role_col < len(cells) else None
+        work = (
+            cells[work_col] if work_col is not None and work_col < len(cells) else None
+        )
+        role_raw_cell = (
+            cells[role_col] if role_col is not None and role_col < len(cells) else None
+        )
         ep_cell = cells[ep_col] if ep_col is not None and ep_col < len(cells) else None
 
         if not work or not role_raw_cell:
@@ -420,14 +453,16 @@ def _parse_table(table: Tag) -> list[ParsedSakugaCredit]:
         ep_raw, ep_num = _parse_episode(ep_cell or "")
         year = _extract_year(work)
         fmt = _extract_format(work)
-        credits.append(ParsedSakugaCredit(
-            work_title=_clean_title(work),
-            work_year=year,
-            work_format=fmt,
-            role_raw=role_raw_cell,
-            episode_raw=ep_raw or (ep_cell if ep_cell else None),
-            episode_num=ep_num,
-        ))
+        credits.append(
+            ParsedSakugaCredit(
+                work_title=_clean_title(work),
+                work_year=year,
+                work_format=fmt,
+                role_raw=role_raw_cell,
+                episode_raw=ep_raw or (ep_cell if ep_cell else None),
+                episode_num=ep_num,
+            )
+        )
     return credits
 
 
@@ -465,8 +500,12 @@ def _llm_fallback(wikibody_text: str) -> list[ParsedSakugaCredit]:
     try:
         resp = httpx.post(
             f"{ollama_base}/api/generate",
-            json={"model": LLM_MODEL_NAME, "prompt": prompt, "stream": False,
-                  "options": {"temperature": 0, "num_predict": 2000}},
+            json={
+                "model": LLM_MODEL_NAME,
+                "prompt": prompt,
+                "stream": False,
+                "options": {"temperature": 0, "num_predict": 2000},
+            },
             timeout=LLM_TIMEOUT * 3,
         )
         resp.raise_for_status()
@@ -491,14 +530,16 @@ def _llm_fallback(wikibody_text: str) -> list[ParsedSakugaCredit]:
                 continue
             ep_raw = item.get("episode_raw")
             ep_num = item.get("episode_num")
-            credits.append(ParsedSakugaCredit(
-                work_title=work,
-                work_year=item.get("work_year"),
-                work_format=None,
-                role_raw=role,
-                episode_raw=str(ep_raw) if ep_raw is not None else None,
-                episode_num=int(ep_num) if ep_num is not None else None,
-            ))
+            credits.append(
+                ParsedSakugaCredit(
+                    work_title=work,
+                    work_year=item.get("work_year"),
+                    work_format=None,
+                    role_raw=role,
+                    episode_raw=str(ep_raw) if ep_raw is not None else None,
+                    episode_num=int(ep_num) if ep_num is not None else None,
+                )
+            )
         log.info("llm_fallback_ok", credits=len(credits))
         return credits
     except Exception as exc:
@@ -509,6 +550,7 @@ def _llm_fallback(wikibody_text: str) -> list[ParsedSakugaCredit]:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _extract_year(text: str) -> int | None:
     m = _YEAR_RE.search(text)
@@ -652,8 +694,10 @@ def _extract_work_staff(wikibody: Tag) -> list[ParsedSakugaWorkStaff]:
     staff: list[ParsedSakugaWorkStaff] = []
     current_ep: int | None = None
     current_ep_raw: str | None = None
-    is_main = True        # True until we hit the first episode block
-    genga_role: str | None = None   # set when we see standalone role label or pending colon-role
+    is_main = True  # True until we hit the first episode block
+    genga_role: str | None = (
+        None  # set when we see standalone role label or pending colon-role
+    )
 
     staff_blocks_seen = 0  # count of blocks with role:name content
 
@@ -681,7 +725,11 @@ def _extract_work_staff(wikibody: Tag) -> list[ParsedSakugaWorkStaff]:
         staff_blocks_seen += 1
         # After the first staff block: subsequent blocks without episode markers
         # are episode-level (e.g. エウレカセブン where each <p> = one episode)
-        if staff_blocks_seen > 1 and not block_has_staff_marker and not block_is_date_ep:
+        if (
+            staff_blocks_seen > 1
+            and not block_has_staff_marker
+            and not block_is_date_ep
+        ):
             is_main = False
             current_ep = None
             current_ep_raw = None
@@ -705,17 +753,21 @@ def _extract_work_staff(wikibody: Tag) -> list[ParsedSakugaWorkStaff]:
                 colon_pos = stripped.find(":")
                 if colon_pos != -1:
                     # ■シーン説明:人名
-                    names_raw = stripped[colon_pos + 1:].strip()
+                    names_raw = stripped[colon_pos + 1 :].strip()
                     for name in _split_names(names_raw):
-                        staff.append(ParsedSakugaWorkStaff(
-                            person_name=name,
-                            role_raw="原画",
-                            episode_num=current_ep,
-                            episode_raw=current_ep_raw,
-                            is_main_staff=False,
-                        ))
+                        staff.append(
+                            ParsedSakugaWorkStaff(
+                                person_name=name,
+                                role_raw="原画",
+                                episode_num=current_ep,
+                                episode_raw=current_ep_raw,
+                                is_main_staff=False,
+                            )
+                        )
                     genga_role = None
-                elif _GENGA_LABEL_RE.match(stripped) or _ROLE_INLINE_RE.search(stripped):
+                elif _GENGA_LABEL_RE.match(stripped) or _ROLE_INLINE_RE.search(
+                    stripped
+                ):
                     # ■役職名 → next lines are names
                     genga_role = stripped
                 else:
@@ -729,8 +781,12 @@ def _extract_work_staff(wikibody: Tag) -> list[ParsedSakugaWorkStaff]:
                 current_ep_raw = f"{current_ep}話"
                 is_main = False
                 genga_role = None
-                rest = line[ep_m.end():].strip()
-                staff.extend(_parse_colon_staff_line(rest, current_ep, current_ep_raw, is_main_staff=False))
+                rest = line[ep_m.end() :].strip()
+                staff.extend(
+                    _parse_colon_staff_line(
+                        rest, current_ep, current_ep_raw, is_main_staff=False
+                    )
+                )
                 continue
 
             # `[役職]` bracket format
@@ -755,15 +811,19 @@ def _extract_work_staff(wikibody: Tag) -> list[ParsedSakugaWorkStaff]:
                 )
                 if not is_role_line:
                     ep_here = None if (is_main and not block_is_date_ep) else current_ep
-                    ep_raw_here = None if (is_main and not block_is_date_ep) else current_ep_raw
+                    ep_raw_here = (
+                        None if (is_main and not block_is_date_ep) else current_ep_raw
+                    )
                     for name in _split_names(line):
-                        staff.append(ParsedSakugaWorkStaff(
-                            person_name=name,
-                            role_raw=genga_role,
-                            episode_num=ep_here,
-                            episode_raw=ep_raw_here,
-                            is_main_staff=(is_main and not block_is_date_ep),
-                        ))
+                        staff.append(
+                            ParsedSakugaWorkStaff(
+                                person_name=name,
+                                role_raw=genga_role,
+                                episode_num=ep_here,
+                                episode_raw=ep_raw_here,
+                                is_main_staff=(is_main and not block_is_date_ep),
+                            )
+                        )
                     continue
                 genga_role = None  # reset, fall through to role processing below
 
@@ -857,9 +917,13 @@ def _extract_work_staff_ns(wikibody: Tag) -> list[ParsedSakugaWorkStaff]:
             current_ep_raw = f"{current_ep}話"
             is_main = False
             genga_role = None
-            rest = line[ep_m.end():].strip()
+            rest = line[ep_m.end() :].strip()
             if rest:
-                staff.extend(_parse_colon_staff_line(rest, current_ep, current_ep_raw, is_main_staff=False))
+                staff.extend(
+                    _parse_colon_staff_line(
+                        rest, current_ep, current_ep_raw, is_main_staff=False
+                    )
+                )
             continue
 
         # `[役職]` bracket format
@@ -883,13 +947,15 @@ def _extract_work_staff_ns(wikibody: Tag) -> list[ParsedSakugaWorkStaff]:
                 ep_here = current_ep if not is_main else None
                 ep_raw_here = current_ep_raw if not is_main else None
                 for name in _split_names(line):
-                    staff.append(ParsedSakugaWorkStaff(
-                        person_name=name,
-                        role_raw=genga_role,
-                        episode_num=ep_here,
-                        episode_raw=ep_raw_here,
-                        is_main_staff=is_main,
-                    ))
+                    staff.append(
+                        ParsedSakugaWorkStaff(
+                            person_name=name,
+                            role_raw=genga_role,
+                            episode_num=ep_here,
+                            episode_raw=ep_raw_here,
+                            is_main_staff=is_main,
+                        )
+                    )
                 continue
             genga_role = None  # reset, fall through
 
@@ -907,7 +973,9 @@ def _extract_work_staff_ns(wikibody: Tag) -> list[ParsedSakugaWorkStaff]:
             continue
 
         # `役職・名前` dot format (e.g. 監督・アミノテツロー)
-        dot_staff = _parse_dot_staff_line(line, current_ep, current_ep_raw, is_main_staff=is_main)
+        dot_staff = _parse_dot_staff_line(
+            line, current_ep, current_ep_raw, is_main_staff=is_main
+        )
         if dot_staff:
             genga_role = None
             staff.extend(dot_staff)
@@ -941,7 +1009,14 @@ def _parse_dot_staff_line(
         clean = re.sub(r"[&＆]", "・", part).strip()
         # Check each &-separated sub-part
         sub_parts = [s.strip() for s in clean.split("・") if s.strip()]
-        all_roles = all(_ROLE_INLINE_RE.fullmatch(s) or _GENGA_LABEL_RE.match(s) for s in sub_parts) if sub_parts else False
+        all_roles = (
+            all(
+                _ROLE_INLINE_RE.fullmatch(s) or _GENGA_LABEL_RE.match(s)
+                for s in sub_parts
+            )
+            if sub_parts
+            else False
+        )
         if all_roles:
             role_parts.append(part.strip())
         else:
@@ -953,13 +1028,15 @@ def _parse_dot_staff_line(
     role_raw = "・".join(role_parts)
     result = []
     for name in _split_names(name_raw):
-        result.append(ParsedSakugaWorkStaff(
-            person_name=name,
-            role_raw=role_raw,
-            episode_num=episode_num,
-            episode_raw=episode_raw,
-            is_main_staff=is_main_staff,
-        ))
+        result.append(
+            ParsedSakugaWorkStaff(
+                person_name=name,
+                role_raw=role_raw,
+                episode_num=episode_num,
+                episode_raw=episode_raw,
+                is_main_staff=is_main_staff,
+            )
+        )
     return result
 
 
@@ -983,13 +1060,15 @@ def _parse_colon_staff_line(
         names_raw = line[name_start:name_end].strip()
         # Multiple names for same role separated by spaces (e.g. "伊藤嘉之 稲留和美")
         for name in _split_names(names_raw):
-            result.append(ParsedSakugaWorkStaff(
-                person_name=name,
-                role_raw=role_raw,
-                episode_num=episode_num,
-                episode_raw=episode_raw,
-                is_main_staff=is_main_staff,
-            ))
+            result.append(
+                ParsedSakugaWorkStaff(
+                    person_name=name,
+                    role_raw=role_raw,
+                    episode_num=episode_num,
+                    episode_raw=episode_raw,
+                    is_main_staff=is_main_staff,
+                )
+            )
 
     return result
 

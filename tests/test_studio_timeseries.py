@@ -150,12 +150,8 @@ class TestRetentionCalculation:
     def test_high_retention_same_staff(self):
         """All same staff across years → retention=1.0."""
         anime_map = {
-            "a1": Anime(
-                id="a1", title_en="X1", year=2020, studios=["StudioX"]
-            ),
-            "a2": Anime(
-                id="a2", title_en="X2", year=2021, studios=["StudioX"]
-            ),
+            "a1": Anime(id="a1", title_en="X1", year=2020, studios=["StudioX"]),
+            "a2": Anime(id="a2", title_en="X2", year=2021, studios=["StudioX"]),
         }
         credits = [
             Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="test"),
@@ -180,12 +176,8 @@ class TestRetentionCalculation:
     def test_complete_turnover_zero_retention(self):
         """Completely different staff between years → retention=0."""
         anime_map = {
-            "a1": Anime(
-                id="a1", title_en="Y1", year=2020, studios=["StudioY"]
-            ),
-            "a2": Anime(
-                id="a2", title_en="Y2", year=2021, studios=["StudioY"]
-            ),
+            "a1": Anime(id="a1", title_en="Y1", year=2020, studios=["StudioY"]),
+            "a2": Anime(id="a2", title_en="Y2", year=2021, studios=["StudioY"]),
         }
         credits = [
             Credit(person_id="p1", anime_id="a1", role=Role.DIRECTOR, source="test"),

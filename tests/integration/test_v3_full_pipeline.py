@@ -79,21 +79,15 @@ _VALID_NULL_IDS = set(NULL_MODEL_CATALOGUE)
 @pytest.mark.parametrize("module_name", _REPORT_MODULES)
 def test_report_spec_valid(module_name: str) -> None:
     """Each report module must have a valid SPEC with no violations."""
-    mod = importlib.import_module(
-        f"scripts.report_generators.reports.{module_name}"
-    )
+    mod = importlib.import_module(f"scripts.report_generators.reports.{module_name}")
 
     # 1. SPEC constant exists
-    assert hasattr(mod, "SPEC"), (
-        f"{module_name}: missing SPEC constant"
-    )
+    assert hasattr(mod, "SPEC"), f"{module_name}: missing SPEC constant"
     spec = mod.SPEC
 
     # 2. validate() returns no violations
     violations = spec.validate()
-    assert violations == [], (
-        f"{module_name}: SPEC.validate() violations: {violations}"
-    )
+    assert violations == [], f"{module_name}: SPEC.validate() violations: {violations}"
 
     # 3. method_gate.limitations has >= 3 entries
     n_limitations = len(spec.method_gate.limitations)

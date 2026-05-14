@@ -260,9 +260,7 @@ def run(
     year_from: int = typer.Option(
         1900, "--year-from", help="Earliest year used when year-split is required."
     ),
-    year_to: int = typer.Option(
-        0, "--year-to", help="Latest year (0 = current year)."
-    ),
+    year_to: int = typer.Option(0, "--year-to", help="Latest year (0 = current year)."),
     skip_persons: bool = typer.Option(
         False, "--skip-persons", help="Skip phase 3 (person fanout)."
     ),
@@ -371,7 +369,9 @@ async def _main(
                 flush=g2.flush_all,
                 flush_every=200,
             )
-            stats2 = await runner2.run(all_anime_ids, progress_override=progress_override)
+            stats2 = await runner2.run(
+                all_anime_ids, progress_override=progress_override
+            )
             log.info("tmdb_detail_stats", **dataclasses.asdict(stats2))
 
         if skip_persons:

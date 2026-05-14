@@ -4,6 +4,7 @@ LLM 検証 (3周目) で seesaa name_ja に '越智浩一 池口裕児 石野桂
 24,124 件の複数名 1 cell 混在を発見。空白区切り 3+ tokens を個別 person + 個別
 credit に split する parser fix の回帰防止。
 """
+
 from __future__ import annotations
 
 from src.runtime.models import Person
@@ -43,8 +44,12 @@ def _new_state():
 def test_single_name_no_split() -> None:
     s = _new_state()
     _save_credit(
-        s["persons_bw"], s["credits_bw"], s["studios_bw"], s["anime_studios_bw"],
-        s["person_cache"], s["stats"],
+        s["persons_bw"],
+        s["credits_bw"],
+        s["studios_bw"],
+        s["anime_studios_bw"],
+        s["person_cache"],
+        s["stats"],
         anime_id="seesaa:s_1",
         parsed=_ParsedCredit("田中太郎"),
         episode=None,
@@ -58,8 +63,12 @@ def test_two_token_name_no_split() -> None:
     """2 token (姓 名 / John Smith) は単一人名で split しない。"""
     s = _new_state()
     _save_credit(
-        s["persons_bw"], s["credits_bw"], s["studios_bw"], s["anime_studios_bw"],
-        s["person_cache"], s["stats"],
+        s["persons_bw"],
+        s["credits_bw"],
+        s["studios_bw"],
+        s["anime_studios_bw"],
+        s["person_cache"],
+        s["stats"],
         anime_id="seesaa:s_1",
         parsed=_ParsedCredit("John Smith"),
         episode=None,
@@ -72,8 +81,12 @@ def test_three_token_name_splits() -> None:
     """3 token → 個別 person + 個別 credit に split。"""
     s = _new_state()
     _save_credit(
-        s["persons_bw"], s["credits_bw"], s["studios_bw"], s["anime_studios_bw"],
-        s["person_cache"], s["stats"],
+        s["persons_bw"],
+        s["credits_bw"],
+        s["studios_bw"],
+        s["anime_studios_bw"],
+        s["person_cache"],
+        s["stats"],
         anime_id="seesaa:s_1",
         parsed=_ParsedCredit("越智浩一 池口裕児 石野桂子"),
         episode=None,
@@ -93,8 +106,12 @@ def test_four_token_with_english_name_splits() -> None:
     """
     s = _new_state()
     _save_credit(
-        s["persons_bw"], s["credits_bw"], s["studios_bw"], s["anime_studios_bw"],
-        s["person_cache"], s["stats"],
+        s["persons_bw"],
+        s["credits_bw"],
+        s["studios_bw"],
+        s["anime_studios_bw"],
+        s["person_cache"],
+        s["stats"],
         anime_id="seesaa:s_1",
         parsed=_ParsedCredit("越智浩一 池口裕児 石野桂子 Adil Tahir"),
         episode=None,
@@ -111,8 +128,12 @@ def test_full_width_space_split() -> None:
     """全角空白区切りでも split される。"""
     s = _new_state()
     _save_credit(
-        s["persons_bw"], s["credits_bw"], s["studios_bw"], s["anime_studios_bw"],
-        s["person_cache"], s["stats"],
+        s["persons_bw"],
+        s["credits_bw"],
+        s["studios_bw"],
+        s["anime_studios_bw"],
+        s["person_cache"],
+        s["stats"],
         anime_id="seesaa:s_1",
         parsed=_ParsedCredit("田中　佐藤　鈴木"),
         episode=None,
@@ -125,16 +146,24 @@ def test_split_uses_person_cache() -> None:
     s = _new_state()
     # 1 回目: 3 names
     _save_credit(
-        s["persons_bw"], s["credits_bw"], s["studios_bw"], s["anime_studios_bw"],
-        s["person_cache"], s["stats"],
+        s["persons_bw"],
+        s["credits_bw"],
+        s["studios_bw"],
+        s["anime_studios_bw"],
+        s["person_cache"],
+        s["stats"],
         anime_id="seesaa:s_1",
         parsed=_ParsedCredit("A B C"),
         episode=None,
     )
     # 2 回目: A 重複
     _save_credit(
-        s["persons_bw"], s["credits_bw"], s["studios_bw"], s["anime_studios_bw"],
-        s["person_cache"], s["stats"],
+        s["persons_bw"],
+        s["credits_bw"],
+        s["studios_bw"],
+        s["anime_studios_bw"],
+        s["person_cache"],
+        s["stats"],
         anime_id="seesaa:s_1",
         parsed=_ParsedCredit("A D E"),
         episode=None,

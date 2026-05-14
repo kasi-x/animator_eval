@@ -10,6 +10,7 @@ variants are discovered.
 Input: Japanese role string from `role_raw` (e.g. "原画", "作画監督").
 Output: Role.value string.  Falls back to Role.OTHER.value for unknown strings.
 """
+
 from __future__ import annotations
 
 from src.etl.role_mappers import register

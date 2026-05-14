@@ -29,6 +29,7 @@ IMPORTANT — Phase 2 migration note:
     must be removed and callers updated to read from the Resolved layer.
     See: docs/ARCHITECTURE_5_TIER_PROPOSAL.md
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -175,7 +176,9 @@ def _populate_anilist_id_int(
     kf_glob = str(
         bronze_root / "source=keyframe" / "table=anime" / "date=*" / "*.parquet"
     )
-    kf_files = list((bronze_root / "source=keyframe" / "table=anime").glob("date=*/*.parquet"))
+    kf_files = list(
+        (bronze_root / "source=keyframe" / "table=anime").glob("date=*/*.parquet")
+    )
     if kf_files:
         try:
             conn.execute(_POPULATE_KEYFRAME_ROWS_SQL, [kf_glob])
@@ -189,7 +192,9 @@ def _populate_anilist_id_int(
     al_glob = str(
         bronze_root / "source=anilist" / "table=anime" / "date=*" / "*.parquet"
     )
-    al_files = list((bronze_root / "source=anilist" / "table=anime").glob("date=*/*.parquet"))
+    al_files = list(
+        (bronze_root / "source=anilist" / "table=anime").glob("date=*/*.parquet")
+    )
     if al_files:
         try:
             conn.execute(_POPULATE_MAL_ROWS_SQL, [al_glob])

@@ -13,6 +13,7 @@ Year guard: if both work_year and anime year are non-NULL and differ by more
 than 1, the candidate is skipped.  A tolerance of ±1 year accommodates
 December/January boundary mismatches in credit records.
 """
+
 from __future__ import annotations
 
 import re

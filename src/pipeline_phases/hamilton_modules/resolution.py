@@ -13,7 +13,11 @@ from typing import Any
 
 from hamilton.function_modifiers import tag
 
-from src.pipeline_phases.pipeline_types import EntityResolutionResult, GraphsResult, LoadedData
+from src.pipeline_phases.pipeline_types import (
+    EntityResolutionResult,
+    GraphsResult,
+    LoadedData,
+)
 
 NODE_NAMES: list[str] = [
     "entity_resolution_run",
@@ -24,7 +28,9 @@ NODE_NAMES: list[str] = [
 
 
 @tag(stage="phase3", cost="moderate", domain="resolution")
-def entity_resolution_run(loaded_data: LoadedData, data_validated: Any, ctx: Any) -> Any:
+def entity_resolution_run(
+    loaded_data: LoadedData, data_validated: Any, ctx: Any
+) -> Any:
     """5-step entity resolution: exact → cross-source → romaji → similarity → AI (Phase 3).
 
     Deduplicates person and anime entities across sources (AniList, MADB, etc.),
@@ -76,7 +82,9 @@ def graphs_built(ctx: dict, entity_resolution_run: Any) -> Any:
     ctx.community_map = result.community_map
 
     return {
-        "graph_nodes": ctx.person_anime_graph.number_of_nodes() if ctx.person_anime_graph else 0,
+        "graph_nodes": ctx.person_anime_graph.number_of_nodes()
+        if ctx.person_anime_graph
+        else 0,
         "collab_edges": (
             ctx.collaboration_graph.number_of_edges()
             if ctx.collaboration_graph is not None

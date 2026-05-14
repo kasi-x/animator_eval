@@ -342,13 +342,32 @@ class BriefHTMLRenderer:
         )
 
     def _render_disclaimer(self) -> str:
-        """Mandatory legal/ethical disclaimer block (English)."""
+        """Mandatory legal/ethical disclaimer block.
+
+        Updated 2026-05-06 per docs/STANCE.md: labor-first stance is now
+        explicit. Scores must not be used for hiring decisions, performance
+        evaluation, or studio ranking.
+        """
         return """
+        <div class='stance-block' style='border-left:3px solid #7aa2f7;padding:0.6rem 1rem;margin:1rem 0;background:rgba(122,162,247,0.06);font-size:0.85rem;'>
+            <strong>Project stance.</strong> Animetor Eval is operated as a
+            <em>labor-first</em> structural observation project. It stands with
+            industry workers (animators, directors, production staff, voice
+            actors), not in a neutral position. See
+            <a href='/docs/STANCE.md'>docs/STANCE.md</a>.
+        </div>
         <div class='disclaimer'>
             <div class='disclaimer-title'>Disclaimer</div>
-            <p>This report presents analysis of industry collaboration networks based on public credit data.
-            Scores measure structural network position, not individual competence or ability.
-            All estimates include confidence intervals. See methodology section for complete details.</p>
+            <p>This report analyzes anime industry collaboration networks based
+            on publicly disclosed credit data. Scores represent
+            <strong>structural network position and co-credit density</strong>,
+            not individual ability, talent, or competence. They must not be
+            used as a basis for hiring decisions, performance evaluation, or
+            studio ranking. All person-level estimates include analytical
+            confidence intervals. The project provides an on-request removal
+            mechanism (opt-out). See
+            <a href='/docs/REPORT_PHILOSOPHY.md'>docs/REPORT_PHILOSOPHY.md</a>
+            for methodology and limitations.</p>
         </div>
         """
 

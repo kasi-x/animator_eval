@@ -112,9 +112,7 @@ class TestSilverConnect:
         from src.analysis.io.conformed_reader import conformed_connect
 
         with conformed_connect(silver_path, memory_limit="256MB") as conn:
-            limit = conn.execute(
-                "SELECT current_setting('memory_limit')"
-            ).fetchone()[0]
+            limit = conn.execute("SELECT current_setting('memory_limit')").fetchone()[0]
         assert limit and "M" in limit.upper()
 
     def test_unavailable_path_raises(self, tmp_path):
@@ -204,9 +202,7 @@ class TestLoadAnimeSilver:
             if s:
                 conn.execute(s)
         # anime_studios + studios 表追加
-        conn.execute(
-            "CREATE TABLE studios (id VARCHAR PRIMARY KEY, name VARCHAR)"
-        )
+        conn.execute("CREATE TABLE studios (id VARCHAR PRIMARY KEY, name VARCHAR)")
         conn.execute(
             "CREATE TABLE anime_studios (anime_id VARCHAR, studio_id VARCHAR, "
             "role VARCHAR DEFAULT '', source VARCHAR DEFAULT '', "

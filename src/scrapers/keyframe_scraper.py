@@ -75,7 +75,13 @@ SKIP_ENV_VAR = "ANIMETOR_SKIP_KEYFRAME"
 
 
 def keyframe_skip_requested() -> bool:
-    return os.environ.get(SKIP_ENV_VAR, "").strip().lower() in {"1", "true", "yes", "on"}
+    return os.environ.get(SKIP_ENV_VAR, "").strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
 
 PHASE2_TABLES = (
     "anime",
@@ -110,8 +116,13 @@ async def run_scraper(
     cp_person = resolve_checkpoint(data_dir / "checkpoint_person.json", force=fresh)
 
     stats: dict = cp_anime.get("stats") or {}
-    for k in ("roles_fetched", "anime_fetched", "anime_skipped",
-              "person_fetched", "person_skipped"):
+    for k in (
+        "roles_fetched",
+        "anime_fetched",
+        "anime_skipped",
+        "person_fetched",
+        "person_skipped",
+    ):
         stats.setdefault(k, 0)
 
     client = KeyframeApiClient(delay=delay)

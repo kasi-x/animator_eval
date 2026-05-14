@@ -7,6 +7,7 @@ and H1 invariants.
 H1 invariant: SILVER columns must NOT contain bare vote_average / popularity /
 vote_count — only display_*_tmdb prefixed variants.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -87,6 +88,7 @@ def _make_silver_conn() -> duckdb.DuckDBPyConnection:
 
 # ─── BRONZE fixtures ──────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def bronze_dir(tmp_path: Path) -> Path:
     """Write synthetic TMDb BRONZE parquet for anime, persons, and credits."""
@@ -94,200 +96,214 @@ def bronze_dir(tmp_path: Path) -> Path:
 
     # anime — two rows: one tv, one movie
     with BronzeWriter("tmdb", table="anime", root=root) as bw:
-        bw.append({
-            "tmdb_id": 10001,
-            "media_type": "tv",
-            "title": "Spirited Away TV",
-            "original_title": "千と千尋の神隠し TV",
-            "original_lang": "ja",
-            "origin_countries": '["JP"]',
-            "spoken_languages": '["ja"]',
-            "year": 2002,
-            "first_air_date": "2002-07-20",
-            "last_air_date": "2002-07-20",
-            "release_date": None,
-            "episodes": 1,
-            "seasons": 1,
-            "runtime": 125,
-            "status": "Ended",
-            "type": "Scripted",
-            "in_production": 0,
-            "adult": 0,
-            "genres": '["Animation", "Family"]',
-            "production_companies": '[]',
-            "production_countries": '[]',
-            "networks": '[]',
-            "created_by": '[]',
-            "belongs_to_collection": None,
-            "overview": "A classic.",
-            "tagline": None,
-            "homepage": None,
-            "poster_path": "/abc.jpg",
-            "backdrop_path": None,
-            "imdb_id": "tt0245429",
-            "tvdb_id": 98765,
-            "wikidata_id": None,
-            "facebook_id": None,
-            "instagram_id": None,
-            "twitter_id": None,
-            "display_vote_avg": 8.5,
-            "display_vote_count": 12000,
-            "display_popularity": 120.5,
-            "display_budget": None,
-            "display_revenue": None,
-            "keywords": '[]',
-            "alternative_titles": '[{"iso_3166_1":"JP","title":"千と千尋","type":""}]',
-            "translations": '[{"iso_3166_1":"US","iso_639_1":"en","name":"Spirited Away"}]',
-            "release_dates": '[]',
-            "content_ratings": '[]',
-            "videos": '[]',
-            "images": '{}',
-            "watch_providers": '{}',
-            "recommendation_ids": '[]',
-            "fetched_at": "2026-05-02T00:00:00",
-            "content_hash": "hash_tv_10001",
-        })
-        bw.append({
-            "tmdb_id": 20002,
-            "media_type": "movie",
-            "title": "My Neighbor Totoro",
-            "original_title": "となりのトトロ",
-            "original_lang": "ja",
-            "origin_countries": '["JP"]',
-            "spoken_languages": '["ja"]',
-            "year": 1988,
-            "first_air_date": None,
-            "last_air_date": None,
-            "release_date": "1988-04-16",
-            "episodes": None,
-            "seasons": None,
-            "runtime": 86,
-            "status": "Released",
-            "type": None,
-            "in_production": None,
-            "adult": 0,
-            "genres": '["Animation", "Family"]',
-            "production_companies": '[]',
-            "production_countries": '[]',
-            "networks": '[]',
-            "created_by": '[]',
-            "belongs_to_collection": None,
-            "overview": "Another classic.",
-            "tagline": None,
-            "homepage": None,
-            "poster_path": "/def.jpg",
-            "backdrop_path": None,
-            "imdb_id": "tt0096283",
-            "tvdb_id": None,
-            "wikidata_id": None,
-            "facebook_id": None,
-            "instagram_id": None,
-            "twitter_id": None,
-            "display_vote_avg": 8.7,
-            "display_vote_count": 9500,
-            "display_popularity": 85.3,
-            "display_budget": 0,
-            "display_revenue": 0,
-            "keywords": '[]',
-            "alternative_titles": '[]',
-            "translations": '[]',
-            "release_dates": '[]',
-            "content_ratings": '[]',
-            "videos": '[]',
-            "images": '{}',
-            "watch_providers": '{}',
-            "recommendation_ids": '[]',
-            "fetched_at": "2026-05-02T00:00:00",
-            "content_hash": "hash_movie_20002",
-        })
+        bw.append(
+            {
+                "tmdb_id": 10001,
+                "media_type": "tv",
+                "title": "Spirited Away TV",
+                "original_title": "千と千尋の神隠し TV",
+                "original_lang": "ja",
+                "origin_countries": '["JP"]',
+                "spoken_languages": '["ja"]',
+                "year": 2002,
+                "first_air_date": "2002-07-20",
+                "last_air_date": "2002-07-20",
+                "release_date": None,
+                "episodes": 1,
+                "seasons": 1,
+                "runtime": 125,
+                "status": "Ended",
+                "type": "Scripted",
+                "in_production": 0,
+                "adult": 0,
+                "genres": '["Animation", "Family"]',
+                "production_companies": "[]",
+                "production_countries": "[]",
+                "networks": "[]",
+                "created_by": "[]",
+                "belongs_to_collection": None,
+                "overview": "A classic.",
+                "tagline": None,
+                "homepage": None,
+                "poster_path": "/abc.jpg",
+                "backdrop_path": None,
+                "imdb_id": "tt0245429",
+                "tvdb_id": 98765,
+                "wikidata_id": None,
+                "facebook_id": None,
+                "instagram_id": None,
+                "twitter_id": None,
+                "display_vote_avg": 8.5,
+                "display_vote_count": 12000,
+                "display_popularity": 120.5,
+                "display_budget": None,
+                "display_revenue": None,
+                "keywords": "[]",
+                "alternative_titles": '[{"iso_3166_1":"JP","title":"千と千尋","type":""}]',
+                "translations": '[{"iso_3166_1":"US","iso_639_1":"en","name":"Spirited Away"}]',
+                "release_dates": "[]",
+                "content_ratings": "[]",
+                "videos": "[]",
+                "images": "{}",
+                "watch_providers": "{}",
+                "recommendation_ids": "[]",
+                "fetched_at": "2026-05-02T00:00:00",
+                "content_hash": "hash_tv_10001",
+            }
+        )
+        bw.append(
+            {
+                "tmdb_id": 20002,
+                "media_type": "movie",
+                "title": "My Neighbor Totoro",
+                "original_title": "となりのトトロ",
+                "original_lang": "ja",
+                "origin_countries": '["JP"]',
+                "spoken_languages": '["ja"]',
+                "year": 1988,
+                "first_air_date": None,
+                "last_air_date": None,
+                "release_date": "1988-04-16",
+                "episodes": None,
+                "seasons": None,
+                "runtime": 86,
+                "status": "Released",
+                "type": None,
+                "in_production": None,
+                "adult": 0,
+                "genres": '["Animation", "Family"]',
+                "production_companies": "[]",
+                "production_countries": "[]",
+                "networks": "[]",
+                "created_by": "[]",
+                "belongs_to_collection": None,
+                "overview": "Another classic.",
+                "tagline": None,
+                "homepage": None,
+                "poster_path": "/def.jpg",
+                "backdrop_path": None,
+                "imdb_id": "tt0096283",
+                "tvdb_id": None,
+                "wikidata_id": None,
+                "facebook_id": None,
+                "instagram_id": None,
+                "twitter_id": None,
+                "display_vote_avg": 8.7,
+                "display_vote_count": 9500,
+                "display_popularity": 85.3,
+                "display_budget": 0,
+                "display_revenue": 0,
+                "keywords": "[]",
+                "alternative_titles": "[]",
+                "translations": "[]",
+                "release_dates": "[]",
+                "content_ratings": "[]",
+                "videos": "[]",
+                "images": "{}",
+                "watch_providers": "{}",
+                "recommendation_ids": "[]",
+                "fetched_at": "2026-05-02T00:00:00",
+                "content_hash": "hash_movie_20002",
+            }
+        )
 
     # persons — two rows
     with BronzeWriter("tmdb", table="persons", root=root) as bw:
-        bw.append({
-            "tmdb_id": 5001,
-            "name": "Hayao Miyazaki",
-            "also_known_as": '["宮崎 駿"]',
-            "gender": 2,
-            "birthday": "1941-01-05",
-            "deathday": None,
-            "place_of_birth": "Tokyo, Japan",
-            "biography": "Legendary animator.",
-            "known_for_dept": "Directing",
-            "profile_path": "/miyazaki.jpg",
-            "homepage": None,
-            "adult": 0,
-            "imdb_id": "nm0594503",
-            "facebook_id": None,
-            "instagram_id": None,
-            "twitter_id": None,
-            "tiktok_id": None,
-            "youtube_id": None,
-            "wikidata_id": "Q55400",
-            "images": '[]',
-            "display_popularity": 15.2,
-        })
-        bw.append({
-            "tmdb_id": 5002,
-            "name": "Joe Hisaishi",
-            "also_known_as": '["久石 譲"]',
-            "gender": 2,
-            "birthday": "1950-12-06",
-            "deathday": None,
-            "place_of_birth": "Nagano, Japan",
-            "biography": "Composer.",
-            "known_for_dept": "Sound",
-            "profile_path": None,
-            "homepage": None,
-            "adult": 0,
-            "imdb_id": "nm0386810",
-            "facebook_id": None,
-            "instagram_id": None,
-            "twitter_id": None,
-            "tiktok_id": None,
-            "youtube_id": None,
-            "wikidata_id": None,
-            "images": '[]',
-            "display_popularity": 8.1,
-        })
+        bw.append(
+            {
+                "tmdb_id": 5001,
+                "name": "Hayao Miyazaki",
+                "also_known_as": '["宮崎 駿"]',
+                "gender": 2,
+                "birthday": "1941-01-05",
+                "deathday": None,
+                "place_of_birth": "Tokyo, Japan",
+                "biography": "Legendary animator.",
+                "known_for_dept": "Directing",
+                "profile_path": "/miyazaki.jpg",
+                "homepage": None,
+                "adult": 0,
+                "imdb_id": "nm0594503",
+                "facebook_id": None,
+                "instagram_id": None,
+                "twitter_id": None,
+                "tiktok_id": None,
+                "youtube_id": None,
+                "wikidata_id": "Q55400",
+                "images": "[]",
+                "display_popularity": 15.2,
+            }
+        )
+        bw.append(
+            {
+                "tmdb_id": 5002,
+                "name": "Joe Hisaishi",
+                "also_known_as": '["久石 譲"]',
+                "gender": 2,
+                "birthday": "1950-12-06",
+                "deathday": None,
+                "place_of_birth": "Nagano, Japan",
+                "biography": "Composer.",
+                "known_for_dept": "Sound",
+                "profile_path": None,
+                "homepage": None,
+                "adult": 0,
+                "imdb_id": "nm0386810",
+                "facebook_id": None,
+                "instagram_id": None,
+                "twitter_id": None,
+                "tiktok_id": None,
+                "youtube_id": None,
+                "wikidata_id": None,
+                "images": "[]",
+                "display_popularity": 8.1,
+            }
+        )
 
     # credits — three rows (crew)
     with BronzeWriter("tmdb", table="credits", root=root) as bw:
-        bw.append({
-            "tmdb_anime_id": 10001,
-            "media_type": "tv",
-            "tmdb_person_id": 5001,
-            "credit_type": "crew",
-            "role": "director",
-            "role_raw": "Director",
-            "character": None,
-            "department": "Directing",
-            "job": "Director",
-            "episode_count": 1,
-        })
-        bw.append({
-            "tmdb_anime_id": 10001,
-            "media_type": "tv",
-            "tmdb_person_id": 5002,
-            "credit_type": "crew",
-            "role": "music",
-            "role_raw": "Music",
-            "character": None,
-            "department": "Sound",
-            "job": "Music",
-            "episode_count": 1,
-        })
-        bw.append({
-            "tmdb_anime_id": 20002,
-            "media_type": "movie",
-            "tmdb_person_id": 5001,
-            "credit_type": "crew",
-            "role": "director",
-            "role_raw": "Director",
-            "character": None,
-            "department": "Directing",
-            "job": "Director",
-            "episode_count": None,
-        })
+        bw.append(
+            {
+                "tmdb_anime_id": 10001,
+                "media_type": "tv",
+                "tmdb_person_id": 5001,
+                "credit_type": "crew",
+                "role": "director",
+                "role_raw": "Director",
+                "character": None,
+                "department": "Directing",
+                "job": "Director",
+                "episode_count": 1,
+            }
+        )
+        bw.append(
+            {
+                "tmdb_anime_id": 10001,
+                "media_type": "tv",
+                "tmdb_person_id": 5002,
+                "credit_type": "crew",
+                "role": "music",
+                "role_raw": "Music",
+                "character": None,
+                "department": "Sound",
+                "job": "Music",
+                "episode_count": 1,
+            }
+        )
+        bw.append(
+            {
+                "tmdb_anime_id": 20002,
+                "media_type": "movie",
+                "tmdb_person_id": 5001,
+                "credit_type": "crew",
+                "role": "director",
+                "role_raw": "Director",
+                "character": None,
+                "department": "Directing",
+                "job": "Director",
+                "episode_count": None,
+            }
+        )
 
     return root
 
@@ -297,63 +313,66 @@ def bronze_dir_anime_only(tmp_path: Path) -> Path:
     """BRONZE fixture with anime only — no persons or credits."""
     root = tmp_path / "bronze_anime_only"
     with BronzeWriter("tmdb", table="anime", root=root) as bw:
-        bw.append({
-            "tmdb_id": 30003,
-            "media_type": "tv",
-            "title": "Test Anime",
-            "original_title": "テスト",
-            "original_lang": "ja",
-            "origin_countries": '["JP"]',
-            "spoken_languages": '["ja"]',
-            "year": 2020,
-            "first_air_date": "2020-01-01",
-            "last_air_date": None,
-            "release_date": None,
-            "episodes": 12,
-            "seasons": 1,
-            "runtime": 24,
-            "status": "Ended",
-            "type": "Scripted",
-            "in_production": 0,
-            "adult": 0,
-            "genres": '["Animation"]',
-            "production_companies": '[]',
-            "production_countries": '[]',
-            "networks": '[]',
-            "created_by": '[]',
-            "belongs_to_collection": None,
-            "overview": None,
-            "tagline": None,
-            "homepage": None,
-            "poster_path": None,
-            "backdrop_path": None,
-            "imdb_id": None,
-            "tvdb_id": None,
-            "wikidata_id": None,
-            "facebook_id": None,
-            "instagram_id": None,
-            "twitter_id": None,
-            "display_vote_avg": 7.0,
-            "display_vote_count": 100,
-            "display_popularity": 10.0,
-            "display_budget": None,
-            "display_revenue": None,
-            "keywords": '[]',
-            "alternative_titles": '[]',
-            "translations": '[]',
-            "release_dates": '[]',
-            "content_ratings": '[]',
-            "videos": '[]',
-            "images": '{}',
-            "watch_providers": '{}',
-            "recommendation_ids": '[]',
-            "fetched_at": "2026-05-02T00:00:00",
-            "content_hash": "hash_tv_30003",
-        })
+        bw.append(
+            {
+                "tmdb_id": 30003,
+                "media_type": "tv",
+                "title": "Test Anime",
+                "original_title": "テスト",
+                "original_lang": "ja",
+                "origin_countries": '["JP"]',
+                "spoken_languages": '["ja"]',
+                "year": 2020,
+                "first_air_date": "2020-01-01",
+                "last_air_date": None,
+                "release_date": None,
+                "episodes": 12,
+                "seasons": 1,
+                "runtime": 24,
+                "status": "Ended",
+                "type": "Scripted",
+                "in_production": 0,
+                "adult": 0,
+                "genres": '["Animation"]',
+                "production_companies": "[]",
+                "production_countries": "[]",
+                "networks": "[]",
+                "created_by": "[]",
+                "belongs_to_collection": None,
+                "overview": None,
+                "tagline": None,
+                "homepage": None,
+                "poster_path": None,
+                "backdrop_path": None,
+                "imdb_id": None,
+                "tvdb_id": None,
+                "wikidata_id": None,
+                "facebook_id": None,
+                "instagram_id": None,
+                "twitter_id": None,
+                "display_vote_avg": 7.0,
+                "display_vote_count": 100,
+                "display_popularity": 10.0,
+                "display_budget": None,
+                "display_revenue": None,
+                "keywords": "[]",
+                "alternative_titles": "[]",
+                "translations": "[]",
+                "release_dates": "[]",
+                "content_ratings": "[]",
+                "videos": "[]",
+                "images": "{}",
+                "watch_providers": "{}",
+                "recommendation_ids": "[]",
+                "fetched_at": "2026-05-02T00:00:00",
+                "content_hash": "hash_tv_30003",
+            }
+        )
     return root
 
 
 # ─── Tests ───────────────────────────────────────────────────────────────────
+
 
 class TestAnime:
     def test_anime_inserted(self, bronze_dir: Path) -> None:
@@ -441,8 +460,8 @@ class TestAnime:
         ).fetchone()
         conn.close()
         assert row is not None
-        assert row[0] == pytest.approx(8.5)   # display_vote_avg_tmdb
-        assert row[1] == 12000                 # display_vote_count_tmdb
+        assert row[0] == pytest.approx(8.5)  # display_vote_avg_tmdb
+        assert row[1] == 12000  # display_vote_count_tmdb
         assert row[2] == pytest.approx(120.5)  # display_popularity_tmdb
 
     def test_anime_idempotent(self, bronze_dir: Path) -> None:
@@ -615,15 +634,21 @@ class TestH1Invariant:
         """H1: persons table must not have bare 'popularity' column."""
         conn = _make_silver_conn()
         tmdb_loader.integrate(conn, bronze_dir)
-        cols = {row[1] for row in conn.execute("PRAGMA table_info('persons')").fetchall()}
+        cols = {
+            row[1] for row in conn.execute("PRAGMA table_info('persons')").fetchall()
+        }
         conn.close()
         assert "popularity" not in cols
 
-    def test_persons_display_popularity_tmdb_column_present(self, bronze_dir: Path) -> None:
+    def test_persons_display_popularity_tmdb_column_present(
+        self, bronze_dir: Path
+    ) -> None:
         """H1: persons has display_popularity_tmdb column, not bare popularity."""
         conn = _make_silver_conn()
         tmdb_loader.integrate(conn, bronze_dir)
-        cols = {row[1] for row in conn.execute("PRAGMA table_info('persons')").fetchall()}
+        cols = {
+            row[1] for row in conn.execute("PRAGMA table_info('persons')").fetchall()
+        }
         conn.close()
         assert "display_popularity_tmdb" in cols
 
@@ -635,19 +660,26 @@ class TestH1Invariant:
         Returns 0 lines.
         """
         import subprocess
+
         src_path = (
             Path(__file__).parent.parent.parent
-            / "src" / "etl" / "conformed_loaders" / "tmdb.py"
+            / "src"
+            / "etl"
+            / "conformed_loaders"
+            / "tmdb.py"
         )
         rg1 = subprocess.run(
             ["rg", r"\b(vote_average|popularity)\b", str(src_path)],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if not rg1.stdout.strip():
             return  # no matches at all — clean
         rg2 = subprocess.run(
             ["rg", "-v", "display_"],
-            input=rg1.stdout, capture_output=True, text=True,
+            input=rg1.stdout,
+            capture_output=True,
+            text=True,
         )
         remaining = rg2.stdout.strip()
         assert not remaining, (
@@ -663,8 +695,11 @@ class TestH1Invariant:
         """
         conn = _make_silver_conn()
         from src.etl.conformed_loaders import tmdb as _tmdb_ldr
+
         _tmdb_ldr._apply_ddl(conn)
-        cols = {row[1] for row in conn.execute("PRAGMA table_info('persons')").fetchall()}
+        cols = {
+            row[1] for row in conn.execute("PRAGMA table_info('persons')").fetchall()
+        }
         conn.close()
         assert "popularity" not in cols
         assert "display_popularity_tmdb" in cols

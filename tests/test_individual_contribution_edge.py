@@ -1,8 +1,8 @@
 """individual_contribution.py edge case tests."""
+
 from src.runtime.models import BronzeAnime as Anime, Credit, Role
 
 import networkx as nx
-
 
 
 def _anime(
@@ -31,15 +31,14 @@ def _anime(
 def _credit(pid: str, aid: str, role: Role = Role.KEY_ANIMATOR) -> Credit:
     return Credit(person_id=pid, anime_id=aid, role=role, source="test")
 
+
 class TestIndividualContributionEdgeCases:
     def test_consistency_with_zero_mean(self):
         """anime.score=0 should result in None consistency."""
         from src.analysis.scoring.individual_contribution import compute_consistency
 
         features = {"p1": {"iv_score": 50}}
-        anime_map = {
-            f"a{i}": Anime(id=f"a{i}", title_ja=f"a{i}") for i in range(6)
-        }
+        anime_map = {f"a{i}": Anime(id=f"a{i}", title_ja=f"a{i}") for i in range(6)}
         credits = [_credit("p1", f"a{i}") for i in range(6)]
         result = compute_consistency(features, credits, anime_map)
         assert result["p1"] is None

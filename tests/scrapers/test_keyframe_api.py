@@ -13,6 +13,7 @@ covered by its own test module.
 
 pytest-asyncio is not installed in this project; async tests use asyncio.run().
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -156,7 +157,9 @@ class TestEndpointUrlRouting:
             captured.append(url)
             return resp
 
-        return patch.object(client._client, "request", side_effect=fake_request), captured
+        return patch.object(
+            client._client, "request", side_effect=fake_request
+        ), captured
 
     def test_get_person_show_routes_correctly(self):
         payload = {"staff": {"id": 123}, "credits": []}

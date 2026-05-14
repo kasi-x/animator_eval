@@ -65,7 +65,9 @@ def synthetic_pipeline(monkeypatch, tmp_path):
     silver_path = tmp_path / "silver.duckdb"
     gold_path = tmp_path / "gold.duckdb"
     build_silver_duckdb(silver_path, persons, anime_list, credits)
-    monkeypatch.setattr(src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(
+        src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path
+    )
     monkeypatch.setattr(src.analysis.io.mart_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
 
     # パイプライン実行

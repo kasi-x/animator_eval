@@ -6,6 +6,7 @@ country_of_origin. Applies to SILVER layer after integrate_duckdb has run.
 Runs in atomicity: read anime_studios + anime, compute majority per studio,
 write to studios in a single transaction.
 """
+
 from __future__ import annotations
 
 import duckdb
@@ -14,7 +15,9 @@ import structlog
 logger = structlog.get_logger()
 
 
-def populate_studios_country_of_origin(conn: duckdb.DuckDBPyConnection) -> dict[str, int]:
+def populate_studios_country_of_origin(
+    conn: duckdb.DuckDBPyConnection,
+) -> dict[str, int]:
     """Populate studios.country_of_origin via majority vote from anime.
 
     For each studio, count its associated anime by country_of_origin and
@@ -70,16 +73,21 @@ def populate_studios_country_of_origin(conn: duckdb.DuckDBPyConnection) -> dict[
     conn.commit()
 
     # Step 4: Count after
-    updated = count_before - (
-        conn.execute(
-            "SELECT COUNT(*) FROM studios WHERE country_of_origin IS NULL OR country_of_origin = ''"
-        ).fetchone()[0]
+    updated = (
+        count_before
+        - (
+            conn.execute(
+                "SELECT COUNT(*) FROM studios WHERE country_of_origin IS NULL OR country_of_origin = ''"
+            ).fetchone()[0]
+        )
     )
     populated = conn.execute(
         "SELECT COUNT(*) FROM studios WHERE country_of_origin IS NOT NULL AND country_of_origin != ''"
     ).fetchone()[0]
 
-    logger.info("populate_studios_country_of_origin", updated=updated, populated=populated)
+    logger.info(
+        "populate_studios_country_of_origin", updated=updated, populated=populated
+    )
 
     return {"studios_updated": updated, "studios_populated": populated}
 
@@ -92,7 +100,11 @@ def main() -> None:
     parser = argparse.ArgumentParser(
         description="Populate studios.country_of_origin via majority vote from anime"
     )
-    parser.add_argument("--gold-path", default=None, help="Path to GOLD DuckDB (default: env ANIMETOR_GOLD_DB_PATH)")
+    parser.add_argument(
+        "--gold-path",
+        default=None,
+        help="Path to GOLD DuckDB (default: env ANIMETOR_GOLD_DB_PATH)",
+    )
     parser.parse_args()
 
     with gold_connect() as conn:

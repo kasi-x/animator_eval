@@ -10,7 +10,11 @@ from collections import defaultdict
 
 import structlog
 
-from src.analysis.io.conformed_reader import load_anime_silver, load_credits_silver, load_persons_silver
+from src.analysis.io.conformed_reader import (
+    load_anime_silver,
+    load_credits_silver,
+    load_persons_silver,
+)
 from src.analysis.io.resolved_reader import (
     load_anime_conformed_id_map,
     load_anime_resolved,
@@ -356,10 +360,16 @@ def _load_anime_from_resolved_or_conformed(
         # load_anime_resolved.  That function only populates studios when
         # conformed_path is not None — passing None would silently omit all
         # studio data needed by AKM.
-        from src.analysis.io.conformed_reader import DEFAULT_DB_PATH as _DEFAULT_CONFORMED_PATH
+        from src.analysis.io.conformed_reader import (
+            DEFAULT_DB_PATH as _DEFAULT_CONFORMED_PATH,
+        )
 
-        effective_conformed_path = conformed_path if conformed_path is not None else _DEFAULT_CONFORMED_PATH
-        anime_list = load_anime_resolved(resolved_path, conformed_path=effective_conformed_path)
+        effective_conformed_path = (
+            conformed_path if conformed_path is not None else _DEFAULT_CONFORMED_PATH
+        )
+        anime_list = load_anime_resolved(
+            resolved_path, conformed_path=effective_conformed_path
+        )
         if anime_list:
             with_studios = sum(1 for a in anime_list if a.studios)
             logger.info(
@@ -435,11 +445,15 @@ def load_pipeline_data_resolved(
     Returns:
         LoadedData populated from Resolved (or Conformed as fallback).
     """
-    all_persons = _load_persons_from_resolved_or_conformed(resolved_path, conformed_path)
+    all_persons = _load_persons_from_resolved_or_conformed(
+        resolved_path, conformed_path
+    )
     anime_list, conformed_alias_map = _load_anime_from_resolved_or_conformed(
         resolved_path, conformed_path
     )
-    all_credits = _load_credits_from_resolved_or_conformed(resolved_path, conformed_path)
+    all_credits = _load_credits_from_resolved_or_conformed(
+        resolved_path, conformed_path
+    )
 
     # When credits use resolved canonical IDs, build a persons alias map
     # so that person_id filtering in _build_loaded_data works correctly.
@@ -502,7 +516,9 @@ def _build_loaded_data(
         logger.info("filtered_llm_orgs", count=len(llm_org_ids))
 
     # LLM-assisted name normalization
-    filtered_persons, extra_credits = _llm_normalize_names(filtered_persons, all_credits)
+    filtered_persons, extra_credits = _llm_normalize_names(
+        filtered_persons, all_credits
+    )
 
     # Filter out orphan credits
     person_ids = {p.id for p in filtered_persons}

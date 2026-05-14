@@ -259,9 +259,7 @@ def parse_credits_from_data(data: dict, slug: str) -> list[dict]:
                             "studio_en": studio_obj.get("en"),
                             "studio_id": studio_obj.get("id"),
                             "studio_is_studio": (
-                                bool(studio_obj.get("isStudio"))
-                                if studio_obj
-                                else None
+                                bool(studio_obj.get("isStudio")) if studio_obj else None
                             ),
                         }
                     )

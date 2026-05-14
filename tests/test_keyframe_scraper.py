@@ -1,4 +1,5 @@
 """Tests for keyframe_scraper parse functions (no network calls)."""
+
 from __future__ import annotations
 
 from src.scrapers.parsers.keyframe import (
@@ -11,6 +12,7 @@ from src.scrapers.parsers.keyframe import (
 # ---------------------------------------------------------------------------
 # _extract_episode_num
 # ---------------------------------------------------------------------------
+
 
 class TestExtractEpisodeNum:
     def test_hash_format(self):
@@ -84,11 +86,14 @@ class TestExtractPreloadData:
 # parse_credits_from_data
 # ---------------------------------------------------------------------------
 
+
 def _make_preload(menus: list[dict]) -> dict:
     return {"title": "Anime X", "menus": menus}
 
 
-def _make_menu(name: str, staff_list: list[dict], role_ja="原画", role_en="Key Animation") -> dict:
+def _make_menu(
+    name: str, staff_list: list[dict], role_ja="原画", role_en="Key Animation"
+) -> dict:
     return {
         "name": name,
         "credits": [
@@ -105,7 +110,9 @@ def _make_menu(name: str, staff_list: list[dict], role_ja="原画", role_en="Key
     }
 
 
-def _make_staff(pid: int, name_ja: str = "", name_en: str = "", is_studio: bool = False) -> dict:
+def _make_staff(
+    pid: int, name_ja: str = "", name_en: str = "", is_studio: bool = False
+) -> dict:
     return {"id": pid, "ja": name_ja, "en": name_en, "isStudio": is_studio}
 
 

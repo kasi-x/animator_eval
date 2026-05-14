@@ -488,9 +488,7 @@ class TestCommitmentWeighting:
             Person(id="p2", name_en="One Episode"),
             Person(id="p3", name_en="Director"),
         ]
-        anime_map = {
-            "a1": Anime(id="a1", title_en="Long Anime", episodes=50)
-        }
+        anime_map = {"a1": Anime(id="a1", title_en="Long Anime", episodes=50)}
         credits = [
             # p3 is director (through-role, full coverage)
             Credit(person_id="p3", anime_id="a1", role=Role.DIRECTOR),

@@ -149,7 +149,7 @@ def test_display_rating_weighted(anime_by_id):
 
 
 def test_anime_without_rating_has_none():
-    xml_no_rating = "<ann><anime id=\"9999\" type=\"TV\" name=\"X\"></anime></ann>"
+    xml_no_rating = '<ann><anime id="9999" type="TV" name="X"></anime></ann>'
     result = parse_anime_xml(ET.fromstring(xml_no_rating))
     assert result.anime[0].display_rating_votes is None
     assert result.anime[0].display_rating_weighted is None
@@ -292,23 +292,26 @@ def test_related_fields(anime_result):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("ann_type,expected", [
-    ("TV", "TV"),
-    ("tv", "TV"),
-    ("movie", "MOVIE"),
-    ("Movie", "MOVIE"),
-    ("OVA", "OVA"),
-    ("OAV", "OVA"),
-    ("oav", "OVA"),
-    ("ONA", "ONA"),
-    ("special", "SPECIAL"),
-    ("TV Special", "SPECIAL"),
-    ("Web", "ONA"),
-    (" TV ", "TV"),
-    ("Music Video", "MUSIC_VIDEO"),
-    ("Unknown", None),
-    ("", None),
-])
+@pytest.mark.parametrize(
+    "ann_type,expected",
+    [
+        ("TV", "TV"),
+        ("tv", "TV"),
+        ("movie", "MOVIE"),
+        ("Movie", "MOVIE"),
+        ("OVA", "OVA"),
+        ("OAV", "OVA"),
+        ("oav", "OVA"),
+        ("ONA", "ONA"),
+        ("special", "SPECIAL"),
+        ("TV Special", "SPECIAL"),
+        ("Web", "ONA"),
+        (" TV ", "TV"),
+        ("Music Video", "MUSIC_VIDEO"),
+        ("Unknown", None),
+        ("", None),
+    ],
+)
 def test_ann_type_map(ann_type, expected):
     assert _normalize_format(ann_type) == expected
 
@@ -318,13 +321,16 @@ def test_ann_type_map(ann_type, expected):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("vintage,expected", [
-    ("Apr 3, 1998 to Apr 24, 1999", (1998, "1998-04-03", "1999-04-24")),
-    ("Jan 5, 2001", (2001, "2001-01-05", None)),
-    ("2001", (2001, None, None)),
-    ("", (None, None, None)),
-    ("Unknown", (None, None, None)),
-])
+@pytest.mark.parametrize(
+    "vintage,expected",
+    [
+        ("Apr 3, 1998 to Apr 24, 1999", (1998, "1998-04-03", "1999-04-24")),
+        ("Jan 5, 2001", (2001, "2001-01-05", None)),
+        ("2001", (2001, None, None)),
+        ("", (None, None, None)),
+        ("Unknown", (None, None, None)),
+    ],
+)
 def test_parse_vintage(vintage, expected):
     assert _parse_vintage(vintage) == expected
 
@@ -334,12 +340,15 @@ def test_parse_vintage(vintage, expected):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("text,title,artist", [
-    ('"All My Soul" by Naw Naw', "All My Soul", "Naw Naw"),
-    ('"Title"', "Title", ""),
-    ("Title by Artist", "Title", "Artist"),
-    ("Plain title", "Plain title", ""),
-])
+@pytest.mark.parametrize(
+    "text,title,artist",
+    [
+        ('"All My Soul" by Naw Naw', "All My Soul", "Naw Naw"),
+        ('"Title"', "Title", ""),
+        ("Title by Artist", "Title", "Artist"),
+        ("Plain title", "Plain title", ""),
+    ],
+)
 def test_parse_theme(text, title, artist):
     result = _parse_theme(text)
     assert result["title"] == title
@@ -373,15 +382,18 @@ def test_masterlist_returns_html():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("text,expected", [
-    ("1941-01-05", "1941-01-05"),
-    ("Jan 5, 1941", "1941-01-05"),
-    ("January 5, 1941", "1941-01-05"),
-    ("1941", "1941"),
-    ("born 1941 somewhere", "1941"),
-    ("", None),
-    ("unknown", None),
-])
+@pytest.mark.parametrize(
+    "text,expected",
+    [
+        ("1941-01-05", "1941-01-05"),
+        ("Jan 5, 1941", "1941-01-05"),
+        ("January 5, 1941", "1941-01-05"),
+        ("1941", "1941"),
+        ("born 1941 somewhere", "1941"),
+        ("", None),
+        ("unknown", None),
+    ],
+)
 def test_parse_dob_html(text, expected):
     assert _parse_dob_html(text) == expected
 

@@ -175,7 +175,13 @@ def _make_bronze_tree(root: Path) -> None:
     date = "2026-05-01"
     for source, tables in tree.items():
         for table, rows in tables.items():
-            parquet_path = root / f"source={source}" / f"table={table}" / f"date={date}" / "part.parquet"
+            parquet_path = (
+                root
+                / f"source={source}"
+                / f"table={table}"
+                / f"date={date}"
+                / "part.parquet"
+            )
             _write_parquet(parquet_path, rows)
 
 
@@ -215,7 +221,9 @@ class TestMetaLineageDDL:
     def test_ddl_creates_table(self) -> None:
         conn = duckdb.connect(":memory:")
         conn.execute(_META_LINEAGE_DDL)
-        cols = {row[1] for row in conn.execute("PRAGMA table_info(meta_lineage)").fetchall()}
+        cols = {
+            row[1] for row in conn.execute("PRAGMA table_info(meta_lineage)").fetchall()
+        }
         assert "silver_table" in cols
         assert "bronze_source" in cols
         assert "bronze_table" in cols
@@ -318,7 +326,9 @@ class TestCollectIdempotent:
         n_first = silver_conn.execute("SELECT COUNT(*) FROM meta_lineage").fetchone()[0]
 
         collect(silver_conn, bronze_root)
-        n_second = silver_conn.execute("SELECT COUNT(*) FROM meta_lineage").fetchone()[0]
+        n_second = silver_conn.execute("SELECT COUNT(*) FROM meta_lineage").fetchone()[
+            0
+        ]
 
         assert n_first == n_second
 

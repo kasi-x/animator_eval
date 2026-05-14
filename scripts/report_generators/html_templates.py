@@ -288,10 +288,25 @@ details.section-accordion > .accordion-body { padding: 1rem; }
 # Content constants
 DISCLAIMER = (
     "本スコアは公開クレジットデータに基づくネットワーク上の位置・協業密度の定量指標であり、"
-    "個人の能力・技量・芸術性を評価・測定・示唆するものではありません。"
+    "個人の能力・技量・芸術性を評価・測定・示唆するものではない。"
     "低スコアはデータセット上のネットワーク可視性が限定的であることを意味し、"
-    "実力の不足を意味するものではありません。"
-    "本データを雇用・報酬・人事評価の唯一の根拠として使用することは推奨されません。"
+    "労働者の実力不足を意味するものではない。"
+    "本データを採用判断・人事評価・スタジオ序列化の根拠として使用することは禁止する。"
+    "本プロジェクトは on-request 削除機構 (opt-out) を提供する。"
+    "詳細は <a href='/docs/STANCE.md'>docs/STANCE.md</a> および "
+    "<a href='/docs/REPORT_PHILOSOPHY.md'>docs/REPORT_PHILOSOPHY.md</a> を参照。"
+)
+
+STANCE_BLOCK = (
+    "<div class='stance-block' style='border-left:3px solid #7aa2f7;"
+    "padding:0.6rem 1rem;margin:1rem 0;background:rgba(122,162,247,0.06);"
+    "font-size:0.85rem;'>"
+    "<strong>本プロジェクトの立場.</strong> Animetor Eval は "
+    "<em>労働者寄り (labor-first)</em> の構造観察プロジェクトとして運営されている。"
+    "本レポートは中立を装わず、業界の労働者 (アニメーター・監督・制作・声優ほか個人クレジット保有者) の側に立つ。"
+    "目的は、労働者のクレジット可視性の権利と報酬交渉のための構造的根拠を提供することである。"
+    "詳細は <a href='/docs/STANCE.md'>docs/STANCE.md</a>。"
+    "</div>"
 )
 
 METHODOLOGY_SUMMARY = (
@@ -696,6 +711,37 @@ V2_CSS = """
     color: #9a9ab0; vertical-align: top; width: 25%;
     font-weight: 600;
 }
+
+/* Coverage caveat block (27_methodology/01_missingness_disclosure) */
+.coverage-block {
+    border-left: 3px solid #5aafaf;
+    background: rgba(90,175,175,0.06);
+    border-radius: 0 12px 12px 0;
+    padding: 1rem 1.4rem;
+    margin: 1rem 0;
+    font-size: 0.88rem;
+    color: #c0d4d4;
+    line-height: 1.7;
+}
+.coverage-block .cb-title {
+    color: #5aafaf; font-weight: 700; font-size: 0.95rem;
+    margin-bottom: 0.5rem; display: block;
+}
+.coverage-block .cb-under { color: #e0a050; font-weight: 600; }
+.coverage-block table {
+    font-size: 0.82rem; width: 100%; border-collapse: collapse; margin-top: 0.6rem;
+}
+.coverage-block th {
+    color: #5aafaf; text-align: left; padding: 0.3rem 0.5rem;
+    border-bottom: 1px solid rgba(90,175,175,0.3); font-weight: 600;
+}
+.coverage-block td {
+    padding: 0.25rem 0.5rem; color: #b0c4c4;
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+.coverage-block .cb-ratio-low  { color: #e07060; }
+.coverage-block .cb-ratio-mid  { color: #e0c060; }
+.coverage-block .cb-ratio-high { color: #60d0a0; }
 """
 
 # Tab switching JavaScript (embedded in wrap_html_v2)
@@ -891,6 +937,7 @@ def wrap_html_v2(
     glossary_terms: dict[str, str] | None = None,
     data_statement_html: str = "",
     disclaimer_html: str = "",
+    coverage_block_html: str = "",
 ) -> str:
     """v2-compliant HTML wrapper.
 
@@ -898,6 +945,10 @@ def wrap_html_v2(
         doc_type: 'main', 'brief', or 'appendix' — controls header styling
         data_statement_html: pre-rendered data statement (from SectionBuilder)
         disclaimer_html: pre-rendered v2 disclaimer (from SectionBuilder)
+        coverage_block_html: pre-rendered coverage caveat block
+            (from _coverage_block.coverage_block_html()). Injected after
+            STANCE_BLOCK per TASK_CARDS/27_methodology/01_missingness_disclosure.
+            When empty string (default), block is omitted (backward-compatible).
     """
     ts = datetime.now().strftime("%Y-%m-%d %H:%M")
     glossary_html = build_glossary(glossary_terms) if glossary_terms else ""
@@ -916,6 +967,8 @@ def wrap_html_v2(
 <div class="page-bg">
 <div class="container">
 {header}
+{STANCE_BLOCK}
+{coverage_block_html}
 {intro_html}
 {body}
 {glossary_html}

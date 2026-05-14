@@ -977,7 +977,9 @@ def export_single_result_file(
     return True
 
 
-def export_and_visualize_phase(context: ExportContext | dict, elapsed: float = 0.0) -> None:
+def export_and_visualize_phase(
+    context: ExportContext | dict, elapsed: float = 0.0
+) -> None:
     """Export all results to JSON and generate visualizations.
 
     Uses declarative registry to export all 26 JSON files.
@@ -1061,23 +1063,25 @@ def _persist_features_to_db(context: dict) -> None:
             for d in context.results:
                 car = d.get("career") or {}
                 grw = d.get("growth") or {}
-                career_rows.append((
-                    d["person_id"],
-                    car.get("first_year"),
-                    car.get("latest_year"),
-                    car.get("active_years"),
-                    d.get("total_credits"),
-                    car.get("highest_stage"),
-                    d.get("primary_role"),
-                    d.get("career_track"),
-                    car.get("peak_year"),
-                    car.get("peak_credits"),
-                    grw.get("trend"),
-                    d.get("growth_score"),
-                    grw.get("activity_ratio"),
-                    grw.get("recent_credits"),
-                    now,
-                ))
+                career_rows.append(
+                    (
+                        d["person_id"],
+                        car.get("first_year"),
+                        car.get("latest_year"),
+                        car.get("active_years"),
+                        d.get("total_credits"),
+                        car.get("highest_stage"),
+                        d.get("primary_role"),
+                        d.get("career_track"),
+                        car.get("peak_year"),
+                        car.get("peak_credits"),
+                        grw.get("trend"),
+                        d.get("growth_score"),
+                        grw.get("activity_ratio"),
+                        grw.get("recent_credits"),
+                        now,
+                    )
+                )
             if career_rows:
                 conn.executemany(
                     """
@@ -1112,19 +1116,21 @@ def _persist_features_to_db(context: dict) -> None:
             for d in context.results:
                 car = d.get("career") or {}
                 grw = d.get("growth") or {}
-                agg_career_rows.append((
-                    d["person_id"],
-                    car.get("first_year"),
-                    car.get("latest_year"),
-                    car.get("active_years"),
-                    d.get("total_credits"),
-                    grw.get("recent_credits"),
-                    car.get("highest_stage"),
-                    d.get("primary_role"),
-                    car.get("peak_year"),
-                    car.get("peak_credits"),
-                    now,
-                ))
+                agg_career_rows.append(
+                    (
+                        d["person_id"],
+                        car.get("first_year"),
+                        car.get("latest_year"),
+                        car.get("active_years"),
+                        d.get("total_credits"),
+                        grw.get("recent_credits"),
+                        car.get("highest_stage"),
+                        d.get("primary_role"),
+                        car.get("peak_year"),
+                        car.get("peak_credits"),
+                        now,
+                    )
+                )
             if agg_career_rows:
                 conn.executemany(
                     """
@@ -1152,14 +1158,16 @@ def _persist_features_to_db(context: dict) -> None:
             career_score_rows: list[tuple] = []
             for d in context.results:
                 grw = d.get("growth") or {}
-                career_score_rows.append((
-                    d["person_id"],
-                    d.get("career_track"),
-                    grw.get("trend"),
-                    d.get("growth_score"),
-                    grw.get("activity_ratio"),
-                    now,
-                ))
+                career_score_rows.append(
+                    (
+                        d["person_id"],
+                        d.get("career_track"),
+                        grw.get("trend"),
+                        d.get("growth_score"),
+                        grw.get("activity_ratio"),
+                        now,
+                    )
+                )
             if career_score_rows:
                 conn.executemany(
                     """
@@ -1182,21 +1190,23 @@ def _persist_features_to_db(context: dict) -> None:
             for d in context.results:
                 c = d.get("centrality") or {}
                 net = d.get("network") or {}
-                network_rows.append((
-                    d["person_id"],
-                    d.get("birank"),
-                    d.get("patronage"),
-                    d.get("bridge_score"),
-                    d.get("n_bridge_communities"),
-                    c.get("degree"),
-                    c.get("betweenness"),
-                    c.get("closeness"),
-                    c.get("eigenvector"),
-                    net.get("hub_score"),
-                    net.get("collaborators"),
-                    net.get("unique_anime"),
-                    now,
-                ))
+                network_rows.append(
+                    (
+                        d["person_id"],
+                        d.get("birank"),
+                        d.get("patronage"),
+                        d.get("bridge_score"),
+                        d.get("n_bridge_communities"),
+                        c.get("degree"),
+                        c.get("betweenness"),
+                        c.get("closeness"),
+                        c.get("eigenvector"),
+                        net.get("hub_score"),
+                        net.get("collaborators"),
+                        net.get("unique_anime"),
+                        now,
+                    )
+                )
             if network_rows:
                 conn.executemany(
                     """
@@ -1229,13 +1239,15 @@ def _persist_features_to_db(context: dict) -> None:
             agg_network_rows: list[tuple] = []
             for d in context.results:
                 net = d.get("network") or {}
-                agg_network_rows.append((
-                    d["person_id"],
-                    net.get("collaborators"),
-                    net.get("unique_anime"),
-                    d.get("n_bridge_communities"),
-                    now,
-                ))
+                agg_network_rows.append(
+                    (
+                        d["person_id"],
+                        net.get("collaborators"),
+                        net.get("unique_anime"),
+                        d.get("n_bridge_communities"),
+                        now,
+                    )
+                )
             if agg_network_rows:
                 conn.executemany(
                     """
@@ -1256,18 +1268,20 @@ def _persist_features_to_db(context: dict) -> None:
             for d in context.results:
                 c = d.get("centrality") or {}
                 net = d.get("network") or {}
-                network_score_rows.append((
-                    d["person_id"],
-                    d.get("birank"),
-                    d.get("patronage"),
-                    c.get("degree"),
-                    c.get("betweenness"),
-                    c.get("closeness"),
-                    c.get("eigenvector"),
-                    net.get("hub_score"),
-                    d.get("bridge_score"),
-                    now,
-                ))
+                network_score_rows.append(
+                    (
+                        d["person_id"],
+                        d.get("birank"),
+                        d.get("patronage"),
+                        c.get("degree"),
+                        c.get("betweenness"),
+                        c.get("closeness"),
+                        c.get("eigenvector"),
+                        net.get("hub_score"),
+                        d.get("bridge_score"),
+                        now,
+                    )
+                )
             if network_score_rows:
                 conn.executemany(
                     """
@@ -1337,8 +1351,12 @@ def _persist_features_to_db(context: dict) -> None:
                 for pid, genres in genre_data.items():
                     if isinstance(genres, dict):
                         for genre, info in genres.items():
-                            score = info.get("score") if isinstance(info, dict) else info
-                            work_count = info.get("count") if isinstance(info, dict) else None
+                            score = (
+                                info.get("score") if isinstance(info, dict) else info
+                            )
+                            work_count = (
+                                info.get("count") if isinstance(info, dict) else None
+                            )
                             genre_rows.append((pid, genre, score, work_count, now))
             if genre_rows:
                 conn.executemany(
@@ -1360,25 +1378,29 @@ def _persist_features_to_db(context: dict) -> None:
             if isinstance(contrib_data, dict):
                 for pid, prof in contrib_data.items():
                     if isinstance(prof, dict):
-                        contrib_rows.append((
-                            pid,
-                            prof.get("peer_percentile"),
-                            prof.get("opportunity_residual"),
-                            prof.get("consistency"),
-                            prof.get("independent_value"),
-                            now,
-                        ))
+                        contrib_rows.append(
+                            (
+                                pid,
+                                prof.get("peer_percentile"),
+                                prof.get("opportunity_residual"),
+                                prof.get("consistency"),
+                                prof.get("independent_value"),
+                                now,
+                            )
+                        )
             elif isinstance(contrib_data, list):
                 for prof in contrib_data:
                     if isinstance(prof, dict) and "person_id" in prof:
-                        contrib_rows.append((
-                            prof["person_id"],
-                            prof.get("peer_percentile"),
-                            prof.get("opportunity_residual"),
-                            prof.get("consistency"),
-                            prof.get("independent_value"),
-                            now,
-                        ))
+                        contrib_rows.append(
+                            (
+                                prof["person_id"],
+                                prof.get("peer_percentile"),
+                                prof.get("opportunity_residual"),
+                                prof.get("consistency"),
+                                prof.get("independent_value"),
+                                now,
+                            )
+                        )
             if contrib_rows:
                 conn.executemany(
                     """
@@ -1406,14 +1428,16 @@ def _persist_features_to_db(context: dict) -> None:
                     for ev in events:
                         if not isinstance(ev, dict):
                             continue
-                        milestone_rows.append((
-                            person_id,
-                            ev.get("type") or "",
-                            int(ev.get("year") or 0),
-                            ev.get("anime_id") or "",
-                            ev.get("anime_title"),
-                            ev.get("description"),
-                        ))
+                        milestone_rows.append(
+                            (
+                                person_id,
+                                ev.get("type") or "",
+                                int(ev.get("year") or 0),
+                                ev.get("anime_id") or "",
+                                ev.get("anime_title"),
+                                ev.get("description"),
+                            )
+                        )
                 if milestone_rows:
                     conn.executemany(
                         """
@@ -1516,14 +1540,18 @@ def _persist_director_circles_duckdb(conn: Any, circles_dict: dict, now: Any) ->
             if not pid:
                 continue
             roles = member.get("roles") or []
-            batch.append((
-                pid,
-                director_id,
-                member.get("shared_works") or 0,
-                member.get("hit_rate"),
-                _json.dumps(roles, ensure_ascii=False) if isinstance(roles, list) else roles,
-                member.get("latest_year"),
-            ))
+            batch.append(
+                (
+                    pid,
+                    director_id,
+                    member.get("shared_works") or 0,
+                    member.get("hit_rate"),
+                    _json.dumps(roles, ensure_ascii=False)
+                    if isinstance(roles, list)
+                    else roles,
+                    member.get("latest_year"),
+                )
+            )
     if not batch:
         return
     conn.executemany(
@@ -1558,7 +1586,9 @@ def _build_debut_year_map(credits: list) -> dict[str, int]:
     return debut
 
 
-def _lookup_era_fe(debut_year: int | None, era_fe_map: dict[int, float]) -> float | None:
+def _lookup_era_fe(
+    debut_year: int | None, era_fe_map: dict[int, float]
+) -> float | None:
     """Map a debut year to its era fixed effect.
 
     Falls back to the nearest available year when the exact year is absent.
@@ -1615,13 +1645,11 @@ def _persist_causal_estimates_duckdb(conn: Any, context: dict, now: Any) -> None
     elif isinstance(individual_profiles, list):
         for prof in individual_profiles:
             if isinstance(prof, dict) and "person_id" in prof:
-                opportunity_residuals[prof["person_id"]] = prof.get("opportunity_residual")
+                opportunity_residuals[prof["person_id"]] = prof.get(
+                    "opportunity_residual"
+                )
 
-    all_pids = (
-        set(peer_boosts)
-        | set(friction_index)
-        | set(context.iv_scores)
-    )
+    all_pids = set(peer_boosts) | set(friction_index) | set(context.iv_scores)
     if not all_pids:
         return
 
@@ -1636,16 +1664,18 @@ def _persist_causal_estimates_duckdb(conn: Any, context: dict, now: Any) -> None
             else None
         )
         opp_res = opportunity_residuals.get(pid)
-        rows.append((
-            pid,
-            round(peer_boosts.get(pid, 0.0), 6),
-            round(friction_index.get(pid, 0.0), 6),
-            round(era_fe_val, 6) if era_fe_val is not None else None,
-            era_deflated,
-            round(opp_res, 6) if opp_res is not None else None,
-            round(iv, 6) if iv is not None else None,
-            now,
-        ))
+        rows.append(
+            (
+                pid,
+                round(peer_boosts.get(pid, 0.0), 6),
+                round(friction_index.get(pid, 0.0), 6),
+                round(era_fe_val, 6) if era_fe_val is not None else None,
+                era_deflated,
+                round(opp_res, 6) if opp_res is not None else None,
+                round(iv, 6) if iv is not None else None,
+                now,
+            )
+        )
 
     conn.executemany(
         """
@@ -1692,7 +1722,9 @@ def _persist_cluster_membership_duckdb(conn: Any, context: dict, now: Any) -> No
 
     # --- growth_trend per person ---
     growth_trend_map: dict[str, str] = {}
-    persons_data = growth_data.get("persons", {}) if isinstance(growth_data, dict) else {}
+    persons_data = (
+        growth_data.get("persons", {}) if isinstance(growth_data, dict) else {}
+    )
     if isinstance(persons_data, dict):
         for pid, info in persons_data.items():
             if isinstance(info, dict) and "trend" in info:
@@ -1754,16 +1786,18 @@ def _persist_cluster_membership_duckdb(conn: Any, context: dict, now: Any) -> No
     rows_out: list[tuple] = []
     for pid in all_pids:
         sc = studio_cluster_map.get(pid, (None, None))
-        rows_out.append((
-            pid,
-            community_map.get(pid),
-            career_tracks.get(pid),
-            growth_trend_map.get(pid),
-            sc[0],
-            sc[1],
-            cooccurrence_map.get(pid),
-            now,
-        ))
+        rows_out.append(
+            (
+                pid,
+                community_map.get(pid),
+                career_tracks.get(pid),
+                growth_trend_map.get(pid),
+                sc[0],
+                sc[1],
+                cooccurrence_map.get(pid),
+                now,
+            )
+        )
 
     conn.executemany(
         """
@@ -1810,15 +1844,17 @@ def _persist_birank_annual_duckdb(conn: Any, context: dict, now: Any) -> None:
             birank = snap.get("birank")
             if year is None or birank is None or year < _BIRANK_ANNUAL_MIN_YEAR:
                 continue
-            rows.append((
-                pid,
-                year,
-                float(birank),
-                snap.get("raw_pagerank"),
-                snap.get("graph_size"),
-                snap.get("n_credits_cumulative"),
-                now,
-            ))
+            rows.append(
+                (
+                    pid,
+                    year,
+                    float(birank),
+                    snap.get("raw_pagerank"),
+                    snap.get("graph_size"),
+                    snap.get("n_credits_cumulative"),
+                    now,
+                )
+            )
 
     if not rows:
         return
@@ -1838,7 +1874,11 @@ def _persist_birank_annual_duckdb(conn: Any, context: dict, now: Any) -> None:
         """,
         rows,
     )
-    logger.info("feat_birank_annual_written_duckdb", count=len(rows), min_year=_BIRANK_ANNUAL_MIN_YEAR)
+    logger.info(
+        "feat_birank_annual_written_duckdb",
+        count=len(rows),
+        min_year=_BIRANK_ANNUAL_MIN_YEAR,
+    )
 
 
 def _get_analysis_result(context: dict, key: str, default: Any) -> Any:

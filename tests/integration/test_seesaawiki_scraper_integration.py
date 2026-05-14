@@ -30,6 +30,7 @@ def _run(coro):
 @pytest.fixture(autouse=True)
 def _no_sleep(monkeypatch):
     """Skip backoff sleeps so retry tests run instantly."""
+
     async def _instant(*args, **kwargs):
         return None
 
@@ -46,6 +47,7 @@ class TestSeesaaWikiScraper:
 
     def test_successful_page_fetch_returns_html(self):
         """Test 1: Normal operation — successful fetch returns parsed page list."""
+
         def handler(req: httpx.Request) -> httpx.Response:
             # SeesaaWiki is EUC-JP encoded. We must send bytes, not text.
             html_content = """
@@ -103,6 +105,7 @@ class TestSeesaaWikiScraper:
 
     def test_504_gateway_timeout_response_raises(self):
         """Test 3: 504 Gateway Timeout raises HTTPStatusError (no auto-retry in AsyncClient)."""
+
         def handler(req: httpx.Request) -> httpx.Response:
             return httpx.Response(
                 504,
@@ -118,6 +121,7 @@ class TestSeesaaWikiScraper:
 
     def test_httpx_timeout_exception_propagates(self):
         """Test 4: httpx.TimeoutException propagates from AsyncClient."""
+
         def handler(req: httpx.Request) -> httpx.Response:
             raise httpx.TimeoutException("request timeout")
 
@@ -130,6 +134,7 @@ class TestSeesaaWikiScraper:
 
     def test_malformed_html_parses_gracefully(self):
         """Test 5: Malformed HTML (200 status) is parsed by BeautifulSoup gracefully."""
+
         def handler(req: httpx.Request) -> httpx.Response:
             # Unclosed tags — BeautifulSoup handles this
             html_content = '<html><body><a href="/w/radioi_34/d/test">Unclosed</body>'
@@ -150,6 +155,7 @@ class TestSeesaaWikiScraper:
 
     def test_empty_response_body_returns_empty_list(self):
         """Test 6: Empty response (200 with no body) returns empty page list."""
+
         def handler(req: httpx.Request) -> httpx.Response:
             return httpx.Response(
                 200,

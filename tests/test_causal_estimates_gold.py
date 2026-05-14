@@ -20,6 +20,7 @@ import pytest
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _make_credit(person_id: str, credit_year: int | None):
     """Return a minimal Credit-like object."""
     return SimpleNamespace(person_id=person_id, credit_year=credit_year)
@@ -51,6 +52,7 @@ def _make_context(
 # ---------------------------------------------------------------------------
 # Unit: _build_debut_year_map
 # ---------------------------------------------------------------------------
+
 
 class TestBuildDebutYearMap:
     def test_single_credit(self):
@@ -106,6 +108,7 @@ class TestBuildDebutYearMap:
 # Unit: _lookup_era_fe
 # ---------------------------------------------------------------------------
 
+
 class TestLookupEraFe:
     def test_exact_year_match(self):
         from src.pipeline_phases.export_and_viz import _lookup_era_fe
@@ -142,6 +145,7 @@ class TestLookupEraFe:
 # Unit: era_deflated_iv arithmetic
 # ---------------------------------------------------------------------------
 
+
 class TestEraDelfatedIvArithmetic:
     """Verify the central requirement: iv_score - era_fe = era_deflated_iv."""
 
@@ -160,12 +164,14 @@ class TestEraDelfatedIvArithmetic:
 # Integration: _persist_causal_estimates_duckdb writes era columns
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def gold_with_ddl(tmp_path):
     """gold.duckdb with DDL applied (no silver needed for this test)."""
     gold_path = tmp_path / "gold.duckdb"
     with duckdb.connect(str(gold_path)) as conn:
         from src.analysis.io.mart_writer import _DDL
+
         conn.execute(_DDL)
     return gold_path
 
@@ -296,7 +302,9 @@ class TestPersistCausalEstimatesDuckdb:
         now = datetime.datetime.now(datetime.timezone.utc)
         with duckdb.connect(str(gold_with_ddl)) as conn:
             _persist_causal_estimates_duckdb(conn, ctx, now)
-            count = conn.execute("SELECT COUNT(*) FROM feat_causal_estimates").fetchone()[0]
+            count = conn.execute(
+                "SELECT COUNT(*) FROM feat_causal_estimates"
+            ).fetchone()[0]
 
         assert count == 0
 

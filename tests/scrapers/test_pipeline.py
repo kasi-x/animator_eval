@@ -1,4 +1,5 @@
 """Smoke tests for src.scrapers.pipeline.run_pipeline."""
+
 from __future__ import annotations
 
 import asyncio

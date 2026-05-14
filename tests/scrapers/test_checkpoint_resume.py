@@ -5,6 +5,7 @@ The old API returned an empty dict instead, silently re-processing all
 fetched IDs (20K+ anime). These tests pin the contract so it cannot
 regress.
 """
+
 from pathlib import Path
 
 from src.scrapers.checkpoint import Checkpoint, resolve_checkpoint

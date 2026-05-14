@@ -17,6 +17,7 @@ Public API:
     gap_analysis(silver_conn, bronze_conn, bronze_root) -> list[GapRow]
     generate_report(gap_rows, out_path)
 """
+
 from __future__ import annotations
 
 import datetime
@@ -48,109 +49,109 @@ COLUMN_BRONZE_MAP: dict[
 ] = {
     # ── persons ────────────────────────────────────────────────────────────────
     ("persons", "gender"): {
-        "anilist":  ("persons", "gender"),
-        "bangumi":  ("persons", "gender"),
+        "anilist": ("persons", "gender"),
+        "bangumi": ("persons", "gender"),
         "keyframe": ("persons", "gender"),
     },
     ("persons", "birth_date"): {
-        "anilist":  ("persons", "date_of_birth"),
-        "bangumi":  ("persons", "birth_year"),   # partial: year only
+        "anilist": ("persons", "date_of_birth"),
+        "bangumi": ("persons", "birth_year"),  # partial: year only
     },
     ("persons", "death_date"): {
         # No known BRONZE source carries death_date; reported as unmapped
     },
     ("persons", "image_large"): {
-        "anilist":  ("persons", "image_large"),
+        "anilist": ("persons", "image_large"),
         "keyframe": ("persons", "image_large"),
     },
     ("persons", "image_medium"): {
-        "anilist":  ("persons", "image_medium"),
+        "anilist": ("persons", "image_medium"),
         "keyframe": ("persons", "image_medium"),
     },
     ("persons", "hometown"): {
-        "anilist":  ("persons", "hometown"),
+        "anilist": ("persons", "hometown"),
         "keyframe": ("persons", "hometown"),
     },
     ("persons", "nationality"): {
-        "anilist":  ("persons", "nationality"),
+        "anilist": ("persons", "nationality"),
         "keyframe": ("persons", "nationality"),
     },
     ("persons", "description"): {
-        "anilist":  ("persons", "description"),
-        "bangumi":  ("persons", "summary"),
+        "anilist": ("persons", "description"),
+        "bangumi": ("persons", "summary"),
     },
     ("persons", "blood_type"): {
-        "anilist":  ("persons", "blood_type"),
-        "bangumi":  ("persons", "blood_type"),
+        "anilist": ("persons", "blood_type"),
+        "bangumi": ("persons", "blood_type"),
     },
     ("persons", "website_url"): {
-        "anilist":  ("persons", "site_url"),
+        "anilist": ("persons", "site_url"),
     },
     # ── anime ──────────────────────────────────────────────────────────────────
     ("anime", "country_of_origin"): {
-        "anilist":  ("anime", "country_of_origin"),
+        "anilist": ("anime", "country_of_origin"),
     },
     ("anime", "year"): {
-        "anilist":  ("anime", "year"),
-        "mal":      ("anime", "year"),
+        "anilist": ("anime", "year"),
+        "mal": ("anime", "year"),
     },
     ("anime", "episodes"): {
-        "anilist":  ("anime", "episodes"),
-        "mal":      ("anime", "episodes"),
+        "anilist": ("anime", "episodes"),
+        "mal": ("anime", "episodes"),
     },
     ("anime", "format"): {
-        "anilist":  ("anime", "format"),
-        "mal":      ("anime", "type"),           # mal uses "type" for format
+        "anilist": ("anime", "format"),
+        "mal": ("anime", "type"),  # mal uses "type" for format
     },
     ("anime", "synonyms"): {
-        "anilist":  ("anime", "synonyms"),
+        "anilist": ("anime", "synonyms"),
     },
     ("anime", "trailer_url"): {
-        "anilist":  ("anime", "trailer_url"),
+        "anilist": ("anime", "trailer_url"),
     },
     ("anime", "external_links_json"): {
-        "anilist":  ("anime", "external_links_json"),
+        "anilist": ("anime", "external_links_json"),
     },
     ("anime", "airing_schedule_json"): {
-        "anilist":  ("anime", "airing_schedule_json"),
+        "anilist": ("anime", "airing_schedule_json"),
     },
     ("anime", "description"): {
-        "anilist":  ("anime", "description"),
-        "mal":      ("anime", "synopsis"),
+        "anilist": ("anime", "description"),
+        "mal": ("anime", "synopsis"),
     },
     ("anime", "start_date"): {
-        "anilist":  ("anime", "start_date"),
-        "mal":      ("anime", "aired_from"),
+        "anilist": ("anime", "start_date"),
+        "mal": ("anime", "aired_from"),
     },
     ("anime", "status"): {
-        "anilist":  ("anime", "status"),
-        "mal":      ("anime", "status"),
+        "anilist": ("anime", "status"),
+        "mal": ("anime", "status"),
     },
     # ── characters ─────────────────────────────────────────────────────────────
     ("characters", "gender"): {
-        "anilist":  ("characters", "gender"),
+        "anilist": ("characters", "gender"),
     },
     ("characters", "description"): {
-        "anilist":  ("characters", "description"),
+        "anilist": ("characters", "description"),
     },
     ("characters", "date_of_birth"): {
-        "anilist":  ("characters", "date_of_birth"),
+        "anilist": ("characters", "date_of_birth"),
     },
     ("characters", "image_large"): {
-        "anilist":  ("characters", "image_large"),
+        "anilist": ("characters", "image_large"),
     },
     ("characters", "image_medium"): {
-        "anilist":  ("characters", "image_medium"),
+        "anilist": ("characters", "image_medium"),
     },
     # ── studios ────────────────────────────────────────────────────────────────
     ("studios", "country_of_origin"): {
-        "anilist":  ("studios", "country_of_origin"),
+        "anilist": ("studios", "country_of_origin"),
     },
     ("studios", "is_animation_studio"): {
-        "anilist":  ("studios", "is_animation_studio"),
+        "anilist": ("studios", "is_animation_studio"),
     },
     ("studios", "site_url"): {
-        "anilist":  ("studios", "site_url"),
+        "anilist": ("studios", "site_url"),
     },
 }
 
@@ -160,56 +161,68 @@ COLUMN_BRONZE_MAP: dict[
 
 # (table, [nullable_col, ...]) — only nullable columns are interesting for gap analysis
 SILVER_AUDIT_TARGETS: list[tuple[str, list[str]]] = [
-    ("persons", [
-        "gender",
-        "birth_date",
-        "death_date",
-        "image_large",
-        "image_medium",
-        "hometown",
-        "nationality",
-        "description",
-        "blood_type",
-        "website_url",
-        "aliases",
-        "primary_occupations",
-        "years_active",
-    ]),
-    ("anime", [
-        "country_of_origin",
-        "year",
-        "episodes",
-        "format",
-        "season",
-        "synonyms",
-        "trailer_url",
-        "external_links_json",
-        "airing_schedule_json",
-        "description",
-        "start_date",
-        "end_date",
-        "status",
-        "source_mat",
-        "work_type",
-        "scale_class",
-        "is_adult",
-    ]),
-    ("characters", [
-        "gender",
-        "description",
-        "date_of_birth",
-        "image_large",
-        "image_medium",
-        "blood_type",
-        "age",
-    ]),
-    ("studios", [
-        "country_of_origin",
-        "is_animation_studio",
-        "site_url",
-        "anilist_id",
-        "favourites",
-    ]),
+    (
+        "persons",
+        [
+            "gender",
+            "birth_date",
+            "death_date",
+            "image_large",
+            "image_medium",
+            "hometown",
+            "nationality",
+            "description",
+            "blood_type",
+            "website_url",
+            "aliases",
+            "primary_occupations",
+            "years_active",
+        ],
+    ),
+    (
+        "anime",
+        [
+            "country_of_origin",
+            "year",
+            "episodes",
+            "format",
+            "season",
+            "synonyms",
+            "trailer_url",
+            "external_links_json",
+            "airing_schedule_json",
+            "description",
+            "start_date",
+            "end_date",
+            "status",
+            "source_mat",
+            "work_type",
+            "scale_class",
+            "is_adult",
+        ],
+    ),
+    (
+        "characters",
+        [
+            "gender",
+            "description",
+            "date_of_birth",
+            "image_large",
+            "image_medium",
+            "blood_type",
+            "age",
+        ],
+    ),
+    (
+        "studios",
+        [
+            "country_of_origin",
+            "is_animation_studio",
+            "site_url",
+            "anilist_id",
+            "favourites",
+        ],
+    ),
 ]
 
 
@@ -226,7 +239,7 @@ class ColumnCoverageRow:
     silver_col: str
     total: int
     non_null: int
-    non_empty: int        # non_null AND non-empty-string (for VARCHAR cols)
+    non_empty: int  # non_null AND non-empty-string (for VARCHAR cols)
     error: Optional[str] = field(default=None)
 
     @property
@@ -268,8 +281,8 @@ class GapRow:
     non_null_silver: int
     null_rate: float
     bronze_sources: list[BronzeSourceStat]
-    severity: str           # CRITICAL / HIGH / MEDIUM / LOW / OK
-    mapped: bool            # False = no BRONZE mapping declared
+    severity: str  # CRITICAL / HIGH / MEDIUM / LOW / OK
+    mapped: bool  # False = no BRONZE mapping declared
 
 
 # ---------------------------------------------------------------------------
@@ -277,7 +290,9 @@ class GapRow:
 # ---------------------------------------------------------------------------
 
 
-def _silver_column_exists(conn: duckdb.DuckDBPyConnection, table: str, col: str) -> bool:
+def _silver_column_exists(
+    conn: duckdb.DuckDBPyConnection, table: str, col: str
+) -> bool:
     """Return True if col exists in table (SILVER)."""
     try:
         rows = conn.execute(f"DESCRIBE {table}").fetchall()
@@ -385,7 +400,8 @@ def find_bronze_source_with_value(
         id_col = "id" if "id" in schema_cols else None
         if id_col:
             # Dedup to most-recent date, then count rows with value
-            count = bronze_conn.execute(f"""
+            count = bronze_conn.execute(
+                f"""
                 SELECT COUNT(DISTINCT CASE
                     WHEN {col} IS NOT NULL AND CAST({col} AS VARCHAR) <> ''
                     THEN {id_col}
@@ -397,13 +413,18 @@ def find_bronze_source_with_value(
                     WHERE {id_col} IS NOT NULL
                 )
                 WHERE _rn = 1
-            """, [glob]).fetchone()[0]
+            """,
+                [glob],
+            ).fetchone()[0]
         else:
-            count = bronze_conn.execute(f"""
+            count = bronze_conn.execute(
+                f"""
                 SELECT COUNT(*)
                 FROM read_parquet(?, hive_partitioning=true, union_by_name=true)
                 WHERE {col} IS NOT NULL AND CAST({col} AS VARCHAR) <> ''
-            """, [glob]).fetchone()[0]
+            """,
+                [glob],
+            ).fetchone()[0]
 
         return BronzeSourceStat(
             source=source,
@@ -500,16 +521,18 @@ def gap_analysis(
 
             severity = _classify_severity(null_rate, total_bronze_with_value)
 
-            rows.append(GapRow(
-                silver_table=silver_table,
-                silver_col=col,
-                total_silver=cov.total,
-                non_null_silver=cov.non_null,
-                null_rate=null_rate,
-                bronze_sources=bronze_sources,
-                severity=severity,
-                mapped=mapped,
-            ))
+            rows.append(
+                GapRow(
+                    silver_table=silver_table,
+                    silver_col=col,
+                    total_silver=cov.total,
+                    non_null_silver=cov.non_null,
+                    null_rate=null_rate,
+                    bronze_sources=bronze_sources,
+                    severity=severity,
+                    mapped=mapped,
+                )
+            )
 
             logger.debug(
                 "silver_column_coverage.gap_analysis",
@@ -575,14 +598,17 @@ def generate_report(
     low = [r for r in gap_rows if r.severity == "LOW"]
     ok = [r for r in gap_rows if r.severity == "OK"]
 
-    sorted_rows = sorted(gap_rows, key=lambda r: (_severity_sort_key(r.severity), r.null_rate * -1))
+    sorted_rows = sorted(
+        gap_rows, key=lambda r: (_severity_sort_key(r.severity), r.null_rate * -1)
+    )
 
     sections: list[str] = []
 
     # ── Header ───────────────────────────────────────────────────────────────
     sections.append(f"# SILVER Column Coverage Audit\n\nGenerated: {now}\n")
 
-    sections.append(textwrap.dedent(f"""\
+    sections.append(
+        textwrap.dedent(f"""\
         ## Summary
 
         | Metric | Count |
@@ -593,7 +619,8 @@ def generate_report(
         | MEDIUM (null>30%) | {len(medium)} |
         | LOW (null>10%) | {len(low)} |
         | OK | {len(ok)} |
-    """))
+    """)
+    )
 
     # ── Critical gaps ────────────────────────────────────────────────────────
     if critical:
@@ -654,7 +681,8 @@ def generate_report(
     sections.append("")
 
     # ── Disclaimer ───────────────────────────────────────────────────────────
-    sections.append(textwrap.dedent("""\
+    sections.append(
+        textwrap.dedent("""\
         ---
 
         **Disclaimer (JA)**: 本レポートは公開クレジットデータの列単位取込率を示す構造的監査であり、
@@ -663,7 +691,8 @@ def generate_report(
         **Disclaimer (EN)**: This report presents structural column-coverage metrics
         derived solely from public credit records. The figures reflect ingestion
         completeness, not any subjective assessment of individuals.
-    """))
+    """)
+    )
 
     report = "\n".join(sections)
     out_path.write_text(report, encoding="utf-8")
@@ -712,6 +741,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="SILVER column coverage audit")
     parser.add_argument("--bronze-root", type=Path, default=Path("result/bronze"))
     parser.add_argument("--silver-db", type=str, default="result/silver.duckdb")
-    parser.add_argument("--out", type=Path, default=Path("result/audit/silver_column_coverage.md"))
+    parser.add_argument(
+        "--out", type=Path, default=Path("result/audit/silver_column_coverage.md")
+    )
     args = parser.parse_args()
     main(bronze_root=args.bronze_root, silver_db=args.silver_db, out=args.out)

@@ -48,9 +48,12 @@ def causal_identification(ctx: dict) -> Any:
         identify_studio_effects,
         export_identification_report,
     )
+
     person_scores = {r["person_id"]: r for r in ctx.results}
     result = identify_studio_effects(
-        ctx.credits, ctx.anime_map, person_scores,
+        ctx.credits,
+        ctx.anime_map,
+        person_scores,
         potential_value_scores=ctx.potential_value_scores,
         growth_acceleration_data=ctx.growth_acceleration_data,
     )
@@ -68,13 +71,16 @@ def structural_estimation(ctx: dict) -> Any:
         estimate_structural_model,
         export_structural_estimation,
     )
+
     person_scores = {r["person_id"]: r for r in ctx.results}
     major_studios: set[str] = {
-        a.studios[0] for a in ctx.anime_map.values()
-        if getattr(a, "studios", None)
+        a.studios[0] for a in ctx.anime_map.values() if getattr(a, "studios", None)
     }
     result = estimate_structural_model(
-        ctx.credits, ctx.anime_map, person_scores, major_studios,
+        ctx.credits,
+        ctx.anime_map,
+        person_scores,
+        major_studios,
         potential_value_scores=ctx.potential_value_scores,
     )
     export_structural_estimation(result)
@@ -85,6 +91,7 @@ def structural_estimation(ctx: dict) -> Any:
 def dml_analysis(ctx: dict) -> Any:
     """Double Machine Learning causal analysis."""
     from src.analysis.causal.dml import run_dml_analysis
+
     return run_dml_analysis(ctx.credits, ctx.anime_map, ctx.person_fe, ctx.studio_fe)
 
 
@@ -103,11 +110,19 @@ def compensation(ctx: dict) -> Any:
 @tag(stage="phase9", cost="moderate", domain="analysis")
 def bias_detection(ctx: dict) -> Any:
     """Detect systematic biases in score distribution."""
-    from src.analysis.bias_detector import detect_systematic_biases, generate_bias_report
+    from src.analysis.bias_detector import (
+        detect_systematic_biases,
+        generate_bias_report,
+    )
+
     person_scores = {r["person_id"]: r for r in ctx.results}
     result = detect_systematic_biases(
-        ctx.contribution_data, person_scores, ctx.studio_bias_metrics,
-        ctx.growth_acceleration_data, ctx.potential_value_scores, ctx.role_profiles,
+        ctx.contribution_data,
+        person_scores,
+        ctx.studio_bias_metrics,
+        ctx.growth_acceleration_data,
+        ctx.potential_value_scores,
+        ctx.role_profiles,
     )
     generate_bias_report(result)
     return result
@@ -148,6 +163,7 @@ def attrition_risk(ctx: dict) -> Any:
 def monopsony(ctx: dict) -> Any:
     """Monopsony market power analysis (policy brief input)."""
     from src.analysis.market.monopsony import run_monopsony_analysis
+
     return run_monopsony_analysis(ctx.studio_assignments, ctx.person_fe)
 
 
@@ -178,6 +194,7 @@ def succession_matrix(ctx: dict) -> Any:
     if not ctx.studio_assignments or not ctx.person_fe:
         return {}
     from src.analysis.talent.succession import run_succession_matrix
+
     try:
         return run_succession_matrix(ctx.person_fe, ctx.credits, ctx.studio_assignments)
     except (IndexError, ValueError):
@@ -189,6 +206,7 @@ def succession_matrix(ctx: dict) -> Any:
 def director_value_add(ctx: dict) -> Any:
     """Director value-add: mentor contribution to animator trajectories."""
     from src.analysis.mentor.director_value_add import run_director_value_add
+
     # mentorships list comes from the mentorships node; use empty list for H-1.
     return run_director_value_add([], ctx.person_fe, ctx.credits, ctx.anime_map)
 
@@ -197,6 +215,7 @@ def director_value_add(ctx: dict) -> Any:
 def team_chemistry(ctx: dict) -> Any:
     """Team chemistry analysis — collaboration effectiveness."""
     from src.analysis.team.chemistry import run_team_chemistry
+
     return run_team_chemistry(ctx.credits, ctx.anime_map, ctx.iv_scores)
 
 
@@ -204,4 +223,5 @@ def team_chemistry(ctx: dict) -> Any:
 def team_templates(ctx: dict) -> Any:
     """Cluster team composition patterns into archetypes."""
     from src.analysis.team.templates import cluster_team_patterns
+
     return cluster_team_patterns(ctx.credits, ctx.anime_map, ctx.iv_scores)

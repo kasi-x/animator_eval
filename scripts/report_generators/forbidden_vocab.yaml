@@ -151,6 +151,69 @@ evaluative_adjectives:
     - wonderful
 
 # ----------------------------------------------------------------------
+# Category 4a: ranking_framing (added 2026-05-06 per docs/STANCE.md)
+# ----------------------------------------------------------------------
+# Labor-first stance forbids explicit ordinal ranking of individuals.
+# Use percentile / cohort position instead. "ランキング 1 位" / "Top 10"
+# implies serial ordering of human worth — replace with "cohort 内
+# percentile" or "上位 N (with confidence interval)" with explicit CI.
+# Studio rankings are also banned (see STANCE §4.2).
+# ----------------------------------------------------------------------
+ranking_framing:
+  severity: error
+  reason: >
+    Implicit serial ordering of individuals violates labor-first stance
+    (docs/STANCE.md §1). Use percentile / cohort position with CI,
+    not absolute rank.
+  ja:
+    - ランキング
+    - 順位付け
+    - 序列化
+    - スター選手
+    - エース格
+    - 一軍
+    - 二軍
+    - 格付け
+  en:
+    - ranking
+    - ranked first
+    - top performer
+    - star player
+    - A-list
+    - B-list
+    - tier-1 talent
+
+# ----------------------------------------------------------------------
+# Category 4b: hiring_framing (added 2026-05-06 per docs/STANCE.md)
+# ----------------------------------------------------------------------
+# Stance forbids using these scores as hiring / firing / performance
+# evaluation signals. Banned terms steer the reader toward those uses.
+# ----------------------------------------------------------------------
+hiring_framing:
+  severity: error
+  reason: >
+    Stance forbids using structural metrics as hiring / firing /
+    performance signals (docs/STANCE.md §1.2). Reframe as structural
+    observation, not personnel recommendation.
+  ja:
+    - 採用すべき
+    - 不採用
+    - 解雇すべき
+    - 雇うべき
+    - 推薦できる人材
+    - 推薦できない
+    - 雇用に値する
+    - 雇用に値しない
+  en:
+    - should be hired
+    - should not be hired
+    - hireable
+    - unhireable
+    - recommended for hire
+    - not recommended for hire
+    - fire-worthy
+
+# ----------------------------------------------------------------------
 # Category 4: interpretation_markers (non-blocking, informational)
 # ----------------------------------------------------------------------
 # Presence of these terms indicates the text is likely Interpretation

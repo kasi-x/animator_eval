@@ -71,7 +71,7 @@ def _sort_points(spec: CIScatterSpec) -> list[CIPoint]:
     if spec.sort_by == "label":
         return sorted(pts, key=lambda p: p.label)
     if spec.sort_by == "p":
-        return sorted(pts, key=lambda p: (p.p_value if p.p_value is not None else 1.0))
+        return sorted(pts, key=lambda p: p.p_value if p.p_value is not None else 1.0)
     return pts
 
 
@@ -159,7 +159,11 @@ def render_ci_scatter(spec: CIScatterSpec, *, theme: str = "dark") -> go.Figure:
         )
         hover = []
         for p in group:
-            parts = [f"<b>{p.label}</b>", f"x={p.x:.3f}", f"CI=[{p.ci_lo:.3f}, {p.ci_hi:.3f}]"]
+            parts = [
+                f"<b>{p.label}</b>",
+                f"x={p.x:.3f}",
+                f"CI=[{p.ci_lo:.3f}, {p.ci_hi:.3f}]",
+            ]
             if p.p_value is not None:
                 parts.append(f"p={p.p_value:.3g}")
             if p.n is not None:
@@ -180,7 +184,8 @@ def render_ci_scatter(spec: CIScatterSpec, *, theme: str = "dark") -> go.Figure:
                     thickness=spec.line_width,
                     width=6,
                 ),
-                name=("有意 (p<{:g})".format(spec.significance_threshold)) if sig
+                name=("有意 (p<{:g})".format(spec.significance_threshold))
+                if sig
                 else "非有意",
                 hovertext=hover,
                 hoverinfo="text",

@@ -10,7 +10,9 @@ from src.viz.primitives import ChoroplethJPSpec, render_choropleth_jp
 from src.viz.primitives import choropleth_jp as _choropleth_module
 
 
-_GEO_PATH = Path(__file__).resolve().parents[2] / "data" / "geo" / "japan_prefectures.geojson"
+_GEO_PATH = (
+    Path(__file__).resolve().parents[2] / "data" / "geo" / "japan_prefectures.geojson"
+)
 
 
 @pytest.fixture(autouse=True)
@@ -25,8 +27,11 @@ def _clear_geojson_cache():
 def test_geojson_file_exists_and_has_47_prefectures():
     """The bundled GeoJSON file is the v3 minimum; CI relies on it."""
     if not _GEO_PATH.exists():
-        pytest.skip("GeoJSON file not present (run scripts/maintenance/fetch_jp_geojson.py)")
+        pytest.skip(
+            "GeoJSON file not present (run scripts/maintenance/fetch_jp_geojson.py)"
+        )
     import json
+
     with _GEO_PATH.open(encoding="utf-8") as f:
         geo = json.load(f)
     assert geo["type"] == "FeatureCollection"
@@ -75,7 +80,9 @@ def test_empty_values_renders_placeholder():
 
 def test_missing_geojson_falls_back_to_bar(monkeypatch):
     """Even when the GeoJSON file is absent the chart still renders."""
-    monkeypatch.setattr(_choropleth_module, "_GEO_PATH", Path("/non/existent/path.geojson"))
+    monkeypatch.setattr(
+        _choropleth_module, "_GEO_PATH", Path("/non/existent/path.geojson")
+    )
     _choropleth_module._geojson_cache = None
     spec = ChoroplethJPSpec(values={"東京都": 100})
     fig = render_choropleth_jp(spec)

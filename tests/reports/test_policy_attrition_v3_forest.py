@@ -102,21 +102,25 @@ def test_cox_forest_uses_v3_ci_scatter(patched_loader):
         body = out.read_text()
 
         # 1. forest div was emitted (CIScatter renders into 'chart_cox_forest')
-        assert 'id="chart_cox_forest"' in body, \
+        assert 'id="chart_cox_forest"' in body, (
             "v3 CIScatter primitive should render the chart_cox_forest div"
+        )
 
         # 2. v3 CIScatter splits significance into two legend groups
         traces = _decode_chart_traces(body, "chart_cox_forest")
         names = [t.get("name", "") for t in traces]
-        assert any("有意" in n for n in names), \
+        assert any("有意" in n for n in names), (
             f"v3 forest should label significant points; got names={names}"
-        assert any("非有意" in n for n in names), \
+        )
+        assert any("非有意" in n for n in names), (
             f"v3 forest should label non-significant points; got names={names}"
+        )
 
         # 3. v3 emits 2 traces (sig + nonsig); legacy emitted exactly 1 forest trace
         forest_marker_traces = [t for t in traces if t.get("type") == "scatter"]
-        assert len(forest_marker_traces) >= 2, \
+        assert len(forest_marker_traces) >= 2, (
             "v3 CIScatter should emit ≥2 scatter traces (sig+nonsig split)"
+        )
 
 
 def test_no_legacy_hardcoded_pink_marker(patched_loader):

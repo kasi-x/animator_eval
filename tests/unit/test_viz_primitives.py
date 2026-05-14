@@ -33,8 +33,15 @@ def test_career_stage_mapping_complete():
 
 
 def test_role_group_covers_seven_buckets():
-    for role in ("animator", "director", "designer", "production",
-                 "writing", "technical", "other"):
+    for role in (
+        "animator",
+        "director",
+        "designer",
+        "production",
+        "writing",
+        "technical",
+        "other",
+    ):
         assert role in palettes.ROLE_GROUP
 
 

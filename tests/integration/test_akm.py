@@ -34,21 +34,11 @@ def studio_data():
       p7, p8: Studio C only (p8 added to a3 too for connected set)
     """
     anime_map = {
-        "a1": Anime(
-            id="a1", title_en="Alpha", year=2018, studios=["StudioA"]
-        ),
-        "a2": Anime(
-            id="a2", title_en="Beta", year=2019, studios=["StudioA"]
-        ),
-        "a3": Anime(
-            id="a3", title_en="Gamma", year=2019, studios=["StudioB"]
-        ),
-        "a4": Anime(
-            id="a4", title_en="Delta", year=2020, studios=["StudioB"]
-        ),
-        "a5": Anime(
-            id="a5", title_en="Epsilon", year=2021, studios=["StudioC"]
-        ),
+        "a1": Anime(id="a1", title_en="Alpha", year=2018, studios=["StudioA"]),
+        "a2": Anime(id="a2", title_en="Beta", year=2019, studios=["StudioA"]),
+        "a3": Anime(id="a3", title_en="Gamma", year=2019, studios=["StudioB"]),
+        "a4": Anime(id="a4", title_en="Delta", year=2020, studios=["StudioB"]),
+        "a5": Anime(id="a5", title_en="Epsilon", year=2021, studios=["StudioC"]),
     }
 
     credits = [
@@ -111,9 +101,7 @@ class TestInferStudioAssignment:
 
     def test_anime_without_studio_skipped(self):
         """Credits for anime with no studio are ignored."""
-        anime_map = {
-            "a1": Anime(id="a1", title_en="NoStudio", year=2020, studios=[])
-        }
+        anime_map = {"a1": Anime(id="a1", title_en="NoStudio", year=2020, studios=[])}
         credits = [
             Credit(person_id="p1", anime_id="a1", role=Role.KEY_ANIMATOR, source="test")
         ]
@@ -1264,9 +1252,7 @@ class TestResolvedLayerLoading:
         anime_list = load_anime_resolved(akm_resolved_path)
         assert all(a.studios == [] for a in anime_list)
 
-    def test_load_persons_resolved_returns_correct_count(
-        self, akm_resolved_path
-    ):
+    def test_load_persons_resolved_returns_correct_count(self, akm_resolved_path):
         """load_persons_resolved returns the 4 synthetic persons."""
         from src.analysis.io.resolved_reader import load_persons_resolved
 
@@ -1310,13 +1296,9 @@ class TestResolvedLayerLoading:
         # resolved has same 2 canonical anime (clustered from 2 conformed)
         assert len(result.anime_list) >= 1
         # All canonical IDs should use resolved:anime: prefix
-        assert all(
-            a.id.startswith("resolved:anime:") for a in result.anime_list
-        )
+        assert all(a.id.startswith("resolved:anime:") for a in result.anime_list)
 
-    def test_akm_runs_on_resolved_data(
-        self, akm_resolved_path, akm_conformed_path
-    ):
+    def test_akm_runs_on_resolved_data(self, akm_resolved_path, akm_conformed_path):
         """AKM estimate_akm runs successfully on data loaded via resolved layer.
 
         End-to-end smoke: resolved anime have studios, so AKM can assign

@@ -1,4 +1,5 @@
 """anime_value.py coverage tests."""
+
 from src.analysis.anime_value import (
     AnimeValueMetrics,
     compute_anime_values,
@@ -43,6 +44,7 @@ def _anime(
 def _credit(pid: str, aid: str, role: Role = Role.KEY_ANIMATOR) -> Credit:
     return Credit(person_id=pid, anime_id=aid, role=role, source="test")
 
+
 class TestAnimeValueMetrics:
     def test_defaults(self):
         m = AnimeValueMetrics(anime_id="a1", title="Test")
@@ -75,9 +77,7 @@ class TestComputeCommercialValue:
 
 class TestComputeCriticalValue:
     def test_with_tags_and_score(self):
-        anime = _anime(
-            "a1", tags=[{"name": f"tag{i}", "rank": i} for i in range(10)]
-        )
+        anime = _anime("a1", tags=[{"name": f"tag{i}", "rank": i} for i in range(10)])
         credits = [_credit("p1", "a1")]
         result = compute_critical_value(anime, credits)
         assert 0 < result <= 1.0

@@ -19,10 +19,10 @@ import httpx
 import pytest
 
 
-
 def _run(coro):
     """Helper to run async coroutines in sync tests."""
     return asyncio.run(coro)
+
 
 # ---------------------------------------------------------------------------
 # MAL/Jikan scraper tests
@@ -109,7 +109,8 @@ class TestJikanClient:
         result = _run(client.get_all_anime(page=2))
         assert result == {"data": [], "pagination": {}}
         client.get.assert_called_once_with(
-            "/anime", params={"page": 2, "limit": 25, "order_by": "mal_id", "sort": "asc"}
+            "/anime",
+            params={"page": 2, "limit": 25, "order_by": "mal_id", "sort": "asc"},
         )
         _run(client.close())
 

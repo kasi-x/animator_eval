@@ -7,6 +7,7 @@ Delegates to the shared ROLE_MAP which covers common English role strings.
 Input: English role string from ANN.
 Output: Role.value string.  Falls back to Role.OTHER.value for unknown strings.
 """
+
 from __future__ import annotations
 
 from src.etl.role_mappers import register

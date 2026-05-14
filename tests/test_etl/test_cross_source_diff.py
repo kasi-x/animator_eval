@@ -135,14 +135,74 @@ def silver_conn() -> duckdb.DuckDBPyConnection:
         "INSERT INTO anime VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
             # anilist:a1 vs mal:a1 — title_ja identical after normalize; year off_by_year
-            ("anilist:a1", "魔法少女まどか☆マギカ", "Madoka Magica", "2011", None, None, "12", "TV", "24"),
-            ("mal:a1", "魔法少女まどか★マギカ", "Madoka Magica", "2010", None, None, "12", "TV", "24"),
+            (
+                "anilist:a1",
+                "魔法少女まどか☆マギカ",
+                "Madoka Magica",
+                "2011",
+                None,
+                None,
+                "12",
+                "TV",
+                "24",
+            ),
+            (
+                "mal:a1",
+                "魔法少女まどか★マギカ",
+                "Madoka Magica",
+                "2010",
+                None,
+                None,
+                "12",
+                "TV",
+                "24",
+            ),
             # anilist:a2 vs bgm:a2 — title_ja single_char_diff; year identical
-            ("anilist:a2", "ソードアートオンライン", "Sword Art Online", "2012", None, None, "25", "TV", "23"),
-            ("bgm:a2", "ソードアートオンラィン", "Sword Art Online", "2012", None, None, "25", "TV", "23"),
+            (
+                "anilist:a2",
+                "ソードアートオンライン",
+                "Sword Art Online",
+                "2012",
+                None,
+                None,
+                "25",
+                "TV",
+                "23",
+            ),
+            (
+                "bgm:a2",
+                "ソードアートオンラィン",
+                "Sword Art Online",
+                "2012",
+                None,
+                None,
+                "25",
+                "TV",
+                "23",
+            ),
             # seesaa:a3 vs mal:a3 — completely different title_en; episodes multi_char_diff
-            ("seesaa:a3", "進撃の巨人", "Attack on Titan", "2013", "2013-04-06", None, "25", "TV", "24"),
-            ("mal:a3", "進撃の巨人", "Shingeki no Kyojin", "2013", "2013-04-07", None, "24", "TV", "24"),
+            (
+                "seesaa:a3",
+                "進撃の巨人",
+                "Attack on Titan",
+                "2013",
+                "2013-04-06",
+                None,
+                "25",
+                "TV",
+                "24",
+            ),
+            (
+                "mal:a3",
+                "進撃の巨人",
+                "Shingeki no Kyojin",
+                "2013",
+                "2013-04-07",
+                None,
+                "24",
+                "TV",
+                "24",
+            ),
         ],
     )
 
@@ -202,7 +262,10 @@ class TestClassifyDiffIdenticalAfterNormalize:
 
     def test_jc_staff_punct(self) -> None:
         # "J.C.STAFF" vs "JC STAFF" → punct stripped → "jcstaff" both
-        assert classify_diff("J.C.STAFF", "JC STAFF", "name") == "identical_after_normalize"
+        assert (
+            classify_diff("J.C.STAFF", "JC STAFF", "name")
+            == "identical_after_normalize"
+        )
 
     def test_fullwidth_digits(self) -> None:
         # "２０１１" vs "2011"
@@ -213,7 +276,10 @@ class TestClassifyDiffIdenticalAfterNormalize:
         assert classify_diff("渡邊", "渡辺", "name_ja") == "identical_after_normalize"
 
     def test_case_difference(self) -> None:
-        assert classify_diff("Sword Art Online", "sword art online", "title_en") == "identical_after_normalize"
+        assert (
+            classify_diff("Sword Art Online", "sword art online", "title_en")
+            == "identical_after_normalize"
+        )
 
     def test_star_variant(self) -> None:
         # ☆ vs ★ — both are stripped by punct regex? No — test actual behavior
@@ -234,7 +300,10 @@ class TestClassifyDiffDigitCountMismatch:
         assert classify_diff("2020", "2", "year") == "digit_count_mismatch"
 
     def test_start_date_year_length(self) -> None:
-        assert classify_diff("2020-01-01", "20-01-01", "start_date") == "digit_count_mismatch"
+        assert (
+            classify_diff("2020-01-01", "20-01-01", "start_date")
+            == "digit_count_mismatch"
+        )
 
 
 class TestClassifyDiffOffByYear:
@@ -260,10 +329,18 @@ class TestClassifyDiffSingleCharDiff:
 
     def test_one_char_typo_long_word(self) -> None:
         # "ソードアートオンライン" vs "ソードアートオンラィン" (ィ vs イ)
-        assert classify_diff("ソードアートオンライン", "ソードアートオンラィン", "title_ja") == "single_char_diff"
+        assert (
+            classify_diff(
+                "ソードアートオンライン", "ソードアートオンラィン", "title_ja"
+            )
+            == "single_char_diff"
+        )
 
     def test_one_char_typo_english(self) -> None:
-        assert classify_diff("Attack on Titan", "Attack on Titen", "title_en") == "single_char_diff"
+        assert (
+            classify_diff("Attack on Titan", "Attack on Titen", "title_en")
+            == "single_char_diff"
+        )
 
     def test_length_3_not_single_char(self) -> None:
         # "abc" vs "axc" → dist=1 but len=3, so should not be single_char_diff
@@ -335,8 +412,15 @@ class TestCollectDiffs:
     ) -> None:
         diffs = collect_diffs(resolved_conn, "anime", silver_conn)
         required_keys = {
-            "canonical_id", "attribute", "source_a", "conformed_id_a",
-            "value_a", "source_b", "conformed_id_b", "value_b", "classification",
+            "canonical_id",
+            "attribute",
+            "source_a",
+            "conformed_id_a",
+            "value_a",
+            "source_b",
+            "conformed_id_b",
+            "value_b",
+            "classification",
         }
         for diff in diffs:
             assert required_keys.issubset(diff.keys()), f"Missing keys in: {diff}"
@@ -349,8 +433,10 @@ class TestCollectDiffs:
         # anilist:a1 and mal:a1 have same title_en → must not appear as diff
         diffs = collect_diffs(resolved_conn, "anime", silver_conn)
         title_en_diffs = [
-            d for d in diffs
-            if d["canonical_id"] == "resolved:anime:aaa" and d["attribute"] == "title_en"
+            d
+            for d in diffs
+            if d["canonical_id"] == "resolved:anime:aaa"
+            and d["attribute"] == "title_en"
         ]
         assert len(title_en_diffs) == 0
 
@@ -361,7 +447,8 @@ class TestCollectDiffs:
     ) -> None:
         diffs = collect_diffs(resolved_conn, "anime", silver_conn)
         year_diffs = [
-            d for d in diffs
+            d
+            for d in diffs
             if d["canonical_id"] == "resolved:anime:aaa" and d["attribute"] == "year"
         ]
         assert len(year_diffs) == 1
@@ -382,7 +469,8 @@ class TestCollectDiffs:
     ) -> None:
         diffs = collect_diffs(resolved_conn, "persons", silver_conn)
         name_en_diffs = [
-            d for d in diffs
+            d
+            for d in diffs
             if d["canonical_id"] == "resolved:person:p1" and d["attribute"] == "name_en"
         ]
         assert len(name_en_diffs) == 1
@@ -483,11 +571,20 @@ class TestExportAudit:
             )
         """)
         for row in silver_conn.execute("SELECT * FROM anime").fetchall():
-            out.execute("INSERT INTO anime VALUES " + "(" + ",".join(["?"] * len(row)) + ")", list(row))
+            out.execute(
+                "INSERT INTO anime VALUES " + "(" + ",".join(["?"] * len(row)) + ")",
+                list(row),
+            )
         for row in silver_conn.execute("SELECT * FROM persons").fetchall():
-            out.execute("INSERT INTO persons VALUES " + "(" + ",".join(["?"] * len(row)) + ")", list(row))
+            out.execute(
+                "INSERT INTO persons VALUES " + "(" + ",".join(["?"] * len(row)) + ")",
+                list(row),
+            )
         for row in silver_conn.execute("SELECT * FROM studios").fetchall():
-            out.execute("INSERT INTO studios VALUES " + "(" + ",".join(["?"] * len(row)) + ")", list(row))
+            out.execute(
+                "INSERT INTO studios VALUES " + "(" + ",".join(["?"] * len(row)) + ")",
+                list(row),
+            )
         out.close()
         return p
 

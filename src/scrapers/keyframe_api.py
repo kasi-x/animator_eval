@@ -121,7 +121,9 @@ class KeyframeApiClient:
 
     async def get_person_show(self, person_id: int) -> dict | None:
         """Fetch /api/person/show.php?id=<id>&type=person — person detail + all credits."""
-        return await self._get_json(f"{BASE}/api/person/show.php?id={person_id}&type=person")  # type: ignore[return-value]
+        return await self._get_json(
+            f"{BASE}/api/person/show.php?id={person_id}&type=person"
+        )  # type: ignore[return-value]
 
     async def get_preview(self) -> dict | None:
         """Fetch /api/stafflists/preview.php — recent/airing/data top-page snapshot."""
@@ -129,11 +131,15 @@ class KeyframeApiClient:
 
     async def search_staff(self, query: str, offset: int = 0) -> dict | None:
         """Fetch /api/search/?q=<q>&type=staff — staff search results (50/page)."""
-        return await self._get_json(f"{BASE}/api/search/?q={quote(query)}&type=staff&offset={offset}")  # type: ignore[return-value]
+        return await self._get_json(
+            f"{BASE}/api/search/?q={quote(query)}&type=staff&offset={offset}"
+        )  # type: ignore[return-value]
 
     async def search_all(self, query: str, offset: int = 0) -> dict | None:
         """Fetch /api/search/?q=<q>&type=all — staff + stafflists search (50/page)."""
-        return await self._get_json(f"{BASE}/api/search/?q={quote(query)}&type=all&offset={offset}")  # type: ignore[return-value]
+        return await self._get_json(
+            f"{BASE}/api/search/?q={quote(query)}&type=all&offset={offset}"
+        )  # type: ignore[return-value]
 
     async def translate_name(
         self,
@@ -156,7 +162,9 @@ class KeyframeApiClient:
         url = f"{BASE}/api/data/translate.v4.php?{lang}={quote(name)}&uuid={cat_param}"
         return await self._get_json(url)  # type: ignore[return-value]
 
-    async def get_person_by_id(self, person_id: int | str, is_studio: bool = False) -> dict | None:
+    async def get_person_by_id(
+        self, person_id: int | str, is_studio: bool = False
+    ) -> dict | None:
         """Fetch /api/person/get_by_id.php — lightweight name lookup by keyframe ID."""
         studio_flag = 1 if is_studio else 0
         url = f"{BASE}/api/person/get_by_id.php?id={quote(str(person_id))}&studio={studio_flag}"

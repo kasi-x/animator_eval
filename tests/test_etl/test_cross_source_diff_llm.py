@@ -327,7 +327,9 @@ def _mock_llm_result() -> dict[str, Any]:
 
 
 class TestEnrichCsv:
-    def test_output_csv_created(self, tmp_path: Path, sample_csv: Path, monkeypatch) -> None:
+    def test_output_csv_created(
+        self, tmp_path: Path, sample_csv: Path, monkeypatch
+    ) -> None:
         out = tmp_path / "anime_llm_classified.csv"
         monkeypatch.setattr(
             "src.etl.audit.cross_source_diff_llm.check_llm_available", lambda: True
@@ -339,7 +341,9 @@ class TestEnrichCsv:
         enrich_csv(sample_csv, out, entity_type="anime", sample=None)
         assert out.exists()
 
-    def test_output_has_llm_columns(self, tmp_path: Path, sample_csv: Path, monkeypatch) -> None:
+    def test_output_has_llm_columns(
+        self, tmp_path: Path, sample_csv: Path, monkeypatch
+    ) -> None:
         out = tmp_path / "anime_llm_classified.csv"
         monkeypatch.setattr(
             "src.etl.audit.cross_source_diff_llm.check_llm_available", lambda: True
@@ -355,7 +359,9 @@ class TestEnrichCsv:
             for col in LLM_FIELDNAMES:
                 assert col in reader.fieldnames, f"Missing column: {col}"
 
-    def test_row_count_preserved(self, tmp_path: Path, sample_csv: Path, monkeypatch) -> None:
+    def test_row_count_preserved(
+        self, tmp_path: Path, sample_csv: Path, monkeypatch
+    ) -> None:
         out = tmp_path / "anime_llm_classified.csv"
         monkeypatch.setattr(
             "src.etl.audit.cross_source_diff_llm.check_llm_available", lambda: True
@@ -369,7 +375,9 @@ class TestEnrichCsv:
             rows = list(csv.DictReader(fh))
         assert len(rows) == 10
 
-    def test_sample_limits_rows(self, tmp_path: Path, sample_csv: Path, monkeypatch) -> None:
+    def test_sample_limits_rows(
+        self, tmp_path: Path, sample_csv: Path, monkeypatch
+    ) -> None:
         out = tmp_path / "anime_llm_classified.csv"
         monkeypatch.setattr(
             "src.etl.audit.cross_source_diff_llm.check_llm_available", lambda: True
@@ -383,7 +391,9 @@ class TestEnrichCsv:
             rows = list(csv.DictReader(fh))
         assert len(rows) == 5
 
-    def test_limit_limits_rows(self, tmp_path: Path, sample_csv: Path, monkeypatch) -> None:
+    def test_limit_limits_rows(
+        self, tmp_path: Path, sample_csv: Path, monkeypatch
+    ) -> None:
         out = tmp_path / "anime_llm_classified.csv"
         monkeypatch.setattr(
             "src.etl.audit.cross_source_diff_llm.check_llm_available", lambda: True
@@ -472,7 +482,9 @@ class TestEnrichCsv:
             assert row["llm_best_guess"] == "neither"
             assert float(row["llm_confidence"]) == 0.0
 
-    def test_checkpoint_written(self, tmp_path: Path, sample_csv: Path, monkeypatch) -> None:
+    def test_checkpoint_written(
+        self, tmp_path: Path, sample_csv: Path, monkeypatch
+    ) -> None:
         out = tmp_path / "anime_out.csv"
         monkeypatch.setattr(
             "src.etl.audit.cross_source_diff_llm.check_llm_available", lambda: True

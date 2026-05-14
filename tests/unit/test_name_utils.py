@@ -1,4 +1,5 @@
 """Tests for src/utils/name_utils — script detection, nationality inference, JSON loading."""
+
 from __future__ import annotations
 
 import json
@@ -88,9 +89,16 @@ class TestInferNationalitiesCache:
     def test_llm_result_stored_in_cache(self, monkeypatch, tmp_path):
         # Patch JSON path to a temp file so we don't pollute real cache
         fake_json = tmp_path / "hometown_tokens.json"
-        fake_json.write_text(json.dumps(
-            {"tokens": {"JP": [], "CN": [], "KR": []}, "arabic_tokens": {}, "_cache": {}}
-        ), encoding="utf-8")
+        fake_json.write_text(
+            json.dumps(
+                {
+                    "tokens": {"JP": [], "CN": [], "KR": []},
+                    "arabic_tokens": {},
+                    "_cache": {},
+                }
+            ),
+            encoding="utf-8",
+        )
         monkeypatch.setattr("src.utils.name_utils._TOKENS_JSON_PATH", fake_json)
         # Remove key from in-memory cache to force LLM path
         _HOMETOWN_CACHE.pop("Noplace, Neverland", None)
@@ -105,13 +113,22 @@ class TestInferNationalitiesCache:
 
     def test_llm_none_stored_as_null(self, monkeypatch, tmp_path):
         fake_json = tmp_path / "hometown_tokens.json"
-        fake_json.write_text(json.dumps(
-            {"tokens": {"JP": [], "CN": [], "KR": []}, "arabic_tokens": {}, "_cache": {}}
-        ), encoding="utf-8")
+        fake_json.write_text(
+            json.dumps(
+                {
+                    "tokens": {"JP": [], "CN": [], "KR": []},
+                    "arabic_tokens": {},
+                    "_cache": {},
+                }
+            ),
+            encoding="utf-8",
+        )
         monkeypatch.setattr("src.utils.name_utils._TOKENS_JSON_PATH", fake_json)
         _HOMETOWN_CACHE.pop("Mystery Island", None)
 
-        monkeypatch.setattr("src.utils.name_utils._llm_infer_nationality", lambda h: None)
+        monkeypatch.setattr(
+            "src.utils.name_utils._llm_infer_nationality", lambda h: None
+        )
         result = infer_nationalities("宮崎", "Mystery Island", use_llm=True)
         assert result == []
         assert _HOMETOWN_CACHE.get("Mystery Island") is None

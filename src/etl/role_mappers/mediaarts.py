@@ -8,6 +8,7 @@ ROLE_MAP is tried as a fallback for any Japanese strings that slipped through.
 Input: role string from MediaArts bronze (expected to already be a Role.value).
 Output: Role.value string.  Falls back to Role.OTHER.value for unknown strings.
 """
+
 from __future__ import annotations
 
 from src.etl.role_mappers import register

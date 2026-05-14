@@ -6,7 +6,11 @@ import json
 from pathlib import Path
 
 from src.scrapers.anilist_scraper import parse_anilist_anime
-from src.scrapers.parsers.anilist import parse_anilist_characters, parse_anilist_person, parse_anilist_staff
+from src.scrapers.parsers.anilist import (
+    parse_anilist_characters,
+    parse_anilist_person,
+    parse_anilist_staff,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "scrapers" / "anilist"
 
@@ -105,7 +109,11 @@ def test_parse_anilist_staff_primary_occupations():
             "role": "Animation Director",
             "node": {
                 "id": 99,
-                "name": {"full": "Staff San", "native": "スタッフさん", "alternative": []},
+                "name": {
+                    "full": "Staff San",
+                    "native": "スタッフさん",
+                    "alternative": [],
+                },
                 "primaryOccupations": ["Key Animator"],
                 "yearsActive": [2015],
                 "homeTown": None,
@@ -131,7 +139,11 @@ _CHAR_EDGES = [
         "role": "MAIN",
         "node": {
             "id": 101,
-            "name": {"full": "Spike Spiegel", "native": "スパイク・スピーゲル", "alternative": []},
+            "name": {
+                "full": "Spike Spiegel",
+                "native": "スパイク・スピーゲル",
+                "alternative": [],
+            },
             "image": {"large": "https://example.com/spike.jpg", "medium": None},
             "description": "A bounty hunter.",
             "gender": "Male",
@@ -147,7 +159,11 @@ _CHAR_EDGES = [
         "role": "SUPPORTING",
         "node": {
             "id": 102,
-            "name": {"full": "Jet Black", "native": "ジェット・ブラック", "alternative": []},
+            "name": {
+                "full": "Jet Black",
+                "native": "ジェット・ブラック",
+                "alternative": [],
+            },
             "image": {"large": None, "medium": None},
             "description": None,
             "gender": "Male",

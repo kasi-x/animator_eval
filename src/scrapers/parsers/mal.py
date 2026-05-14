@@ -12,6 +12,7 @@ from src.scrapers.hash_utils import hash_anime_data
 
 # ── string constants ──────────────────────────────────────────────────────────
 
+
 class MalProducerKind:
     STUDIO = "studio"
     PRODUCER = "producer"
@@ -32,11 +33,13 @@ class MalRelationTargetType:
 
 # ── dataclasses (Card 01) ─────────────────────────────────────────────────────
 
+
 @dataclass
 class MalAnimeRecord:
     """raw Jikan v4 /anime/{id}/full response 最小変換版。SILVER 解釈は別タスク。
     H1 (No viewer ratings in scoring): display_* 列は scoring / edge_weight に参入してはならない。
     """
+
     mal_id: int
     url: str | None
     title: str
@@ -79,6 +82,7 @@ class MalAnimeRecord:
 @dataclass
 class MalAnimeGenre:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_id: int
     genre_id: int
     name: str
@@ -88,6 +92,7 @@ class MalAnimeGenre:
 @dataclass
 class MalAnimeRelation:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_id: int
     relation_type: str
     target_type: str
@@ -99,6 +104,7 @@ class MalAnimeRelation:
 @dataclass
 class MalAnimeTheme:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_id: int
     kind: str
     position: int
@@ -108,6 +114,7 @@ class MalAnimeTheme:
 @dataclass
 class MalAnimeExternal:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_id: int
     name: str
     url: str
@@ -116,6 +123,7 @@ class MalAnimeExternal:
 @dataclass
 class MalAnimeStreaming:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_id: int
     name: str
     url: str
@@ -124,6 +132,7 @@ class MalAnimeStreaming:
 @dataclass
 class MalAnimeVideoPromo:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_id: int
     title: str
     youtube_id: str | None
@@ -135,6 +144,7 @@ class MalAnimeVideoPromo:
 @dataclass
 class MalAnimeVideoEp:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_id: int
     mal_episode_id: int | None
     episode_label: str
@@ -147,6 +157,7 @@ class MalAnimeEpisode:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。
     H1 (No viewer ratings in scoring): display_* 列は scoring / edge_weight に参入してはならない。
     """
+
     mal_id: int
     episode_no: int
     title: str | None
@@ -163,6 +174,7 @@ class MalAnimeEpisode:
 @dataclass
 class MalAnimePicture:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_id: int
     image_url: str
     small_image_url: str | None
@@ -174,6 +186,7 @@ class MalAnimeStatistics:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。
     H1 (No viewer ratings in scoring): display_* 列は scoring / edge_weight に参入してはならない。
     """
+
     mal_id: int
     display_watching: int
     display_completed: int
@@ -187,6 +200,7 @@ class MalAnimeStatistics:
 @dataclass
 class MalAnimeMoreinfo:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_id: int
     moreinfo: str | None
 
@@ -194,6 +208,7 @@ class MalAnimeMoreinfo:
 @dataclass
 class MalAnimeRecommendation:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_id: int
     recommended_mal_id: int
     recommended_url: str
@@ -203,6 +218,7 @@ class MalAnimeRecommendation:
 @dataclass
 class MalAnimeStudio:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_id: int
     mal_producer_id: int
     name: str
@@ -213,6 +229,7 @@ class MalAnimeStudio:
 @dataclass
 class MalStaffCredit:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_id: int
     mal_person_id: int
     person_name: str
@@ -224,6 +241,7 @@ class MalAnimeCharacter:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。
     H1 (No viewer ratings in scoring): display_* 列は scoring / edge_weight に参入してはならない。
     """
+
     mal_id: int
     mal_character_id: int
     character_name: str
@@ -236,6 +254,7 @@ class MalAnimeCharacter:
 @dataclass
 class MalVaCredit:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_id: int
     mal_character_id: int
     mal_person_id: int
@@ -248,6 +267,7 @@ class MalPerson:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。
     H1 (No viewer ratings in scoring): display_* 列は scoring / edge_weight に参入してはならない。
     """
+
     mal_person_id: int
     url: str
     name: str
@@ -267,6 +287,7 @@ class MalPerson:
 @dataclass
 class MalPersonPicture:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_person_id: int
     image_url: str
 
@@ -276,6 +297,7 @@ class MalCharacter:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。
     H1 (No viewer ratings in scoring): display_* 列は scoring / edge_weight に参入してはならない。
     """
+
     mal_character_id: int
     url: str
     name: str
@@ -291,6 +313,7 @@ class MalCharacter:
 @dataclass
 class MalCharacterPicture:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_character_id: int
     image_url: str
 
@@ -300,6 +323,7 @@ class MalProducer:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。
     H1 (No viewer ratings in scoring): display_* 列は scoring / edge_weight に参入してはならない。
     """
+
     mal_producer_id: int
     url: str
     titles_json: str
@@ -317,6 +341,7 @@ class MalProducer:
 @dataclass
 class MalProducerExternal:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_producer_id: int
     name: str
     url: str
@@ -327,6 +352,7 @@ class MalManga:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。
     H1 (No viewer ratings in scoring): display_* 列は scoring / edge_weight に参入してはならない。
     """
+
     mal_manga_id: int
     url: str
     title: str
@@ -356,6 +382,7 @@ class MalManga:
 @dataclass
 class MalMangaAuthor:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_manga_id: int
     mal_person_id: int
     name: str
@@ -365,6 +392,7 @@ class MalMangaAuthor:
 @dataclass
 class MalMangaSerialization:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_manga_id: int
     mal_magazine_id: int
     name: str
@@ -374,6 +402,7 @@ class MalMangaSerialization:
 @dataclass
 class MalAnimeNews:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_id: int
     mal_news_id: int
     url: str
@@ -389,6 +418,7 @@ class MalAnimeNews:
 @dataclass
 class MalAnimeSchedule:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_id: int
     day_of_week: str
     snapshot_date: str
@@ -397,6 +427,7 @@ class MalAnimeSchedule:
 @dataclass
 class MalMasterGenre:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     genre_id: int
     name: str
     url: str
@@ -407,6 +438,7 @@ class MalMasterGenre:
 @dataclass
 class MalMasterMagazine:
     """raw Jikan v4 response 最小変換版。SILVER 解釈は別タスク。"""
+
     mal_magazine_id: int
     name: str
     url: str
@@ -414,6 +446,7 @@ class MalMasterMagazine:
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
+
 
 def _extract_image_url(images: dict) -> str | None:
     jpg = (images or {}).get("jpg") or {}
@@ -456,7 +489,10 @@ def _extract_news_id(url: str) -> int:
 
 # ── parsers (Card 02) ─────────────────────────────────────────────────────────
 
-def parse_anime_full(raw: dict) -> tuple[
+
+def parse_anime_full(
+    raw: dict,
+) -> tuple[
     MalAnimeRecord,
     list[MalAnimeGenre],
     list[MalAnimeRelation],
@@ -468,12 +504,12 @@ def parse_anime_full(raw: dict) -> tuple[
     """`/anime/{id}/full` 全フィールド抽出。
     H1: score / scored_by / rank / popularity / members / favorites は display_* prefix。
     """
-    data = (raw.get("data") or {})
+    data = raw.get("data") or {}
     mal_id: int = data.get("mal_id") or 0
-    aired = (data.get("aired") or {})
-    broadcast = (data.get("broadcast") or {})
-    images = (data.get("images") or {})
-    trailer = (data.get("trailer") or {})
+    aired = data.get("aired") or {}
+    broadcast = data.get("broadcast") or {}
+    images = data.get("images") or {}
+    trailer = data.get("trailer") or {}
     titles = data.get("titles") or []
     title_en, title_ja, titles_alt_json, synonyms_json = _extract_titles(titles)
 
@@ -525,47 +561,63 @@ def parse_anime_full(raw: dict) -> tuple[
         "demographics": MalGenreKind.DEMOGRAPHIC,
     }
     for field, kind in kind_map.items():
-        for g in (data.get(field) or []):
-            genres.append(MalAnimeGenre(
-                mal_id=mal_id,
-                genre_id=g.get("mal_id") or 0,
-                name=g.get("name") or "",
-                kind=kind,
-            ))
+        for g in data.get(field) or []:
+            genres.append(
+                MalAnimeGenre(
+                    mal_id=mal_id,
+                    genre_id=g.get("mal_id") or 0,
+                    name=g.get("name") or "",
+                    kind=kind,
+                )
+            )
 
     relations: list[MalAnimeRelation] = []
-    for rel in (data.get("relations") or []):
+    for rel in data.get("relations") or []:
         rel_type = rel.get("relation") or ""
-        for entry in (rel.get("entry") or []):
-            relations.append(MalAnimeRelation(
-                mal_id=mal_id,
-                relation_type=rel_type,
-                target_type=entry.get("type") or "",
-                target_mal_id=entry.get("mal_id") or 0,
-                target_name=entry.get("name") or "",
-                target_url=entry.get("url"),
-            ))
+        for entry in rel.get("entry") or []:
+            relations.append(
+                MalAnimeRelation(
+                    mal_id=mal_id,
+                    relation_type=rel_type,
+                    target_type=entry.get("type") or "",
+                    target_mal_id=entry.get("mal_id") or 0,
+                    target_name=entry.get("name") or "",
+                    target_url=entry.get("url"),
+                )
+            )
 
     themes: list[MalAnimeTheme] = []
-    theme = (data.get("theme") or {})
+    theme = data.get("theme") or {}
     for pos, text in enumerate(theme.get("openings") or []):
-        themes.append(MalAnimeTheme(mal_id=mal_id, kind="opening", position=pos, raw_text=text))
+        themes.append(
+            MalAnimeTheme(mal_id=mal_id, kind="opening", position=pos, raw_text=text)
+        )
     for pos, text in enumerate(theme.get("endings") or []):
-        themes.append(MalAnimeTheme(mal_id=mal_id, kind="ending", position=pos, raw_text=text))
+        themes.append(
+            MalAnimeTheme(mal_id=mal_id, kind="ending", position=pos, raw_text=text)
+        )
 
     externals: list[MalAnimeExternal] = []
-    for e in (data.get("external") or []):
+    for e in data.get("external") or []:
         if e.get("url"):
-            externals.append(MalAnimeExternal(
-                mal_id=mal_id, name=e.get("name") or "", url=e["url"],
-            ))
+            externals.append(
+                MalAnimeExternal(
+                    mal_id=mal_id,
+                    name=e.get("name") or "",
+                    url=e["url"],
+                )
+            )
 
     streamings: list[MalAnimeStreaming] = []
-    for s in (data.get("streaming") or []):
+    for s in data.get("streaming") or []:
         if s.get("url"):
-            streamings.append(MalAnimeStreaming(
-                mal_id=mal_id, name=s.get("name") or "", url=s["url"],
-            ))
+            streamings.append(
+                MalAnimeStreaming(
+                    mal_id=mal_id,
+                    name=s.get("name") or "",
+                    url=s["url"],
+                )
+            )
 
     studios: list[MalAnimeStudio] = []
     studio_kind_map = [
@@ -574,14 +626,16 @@ def parse_anime_full(raw: dict) -> tuple[
         ("licensors", MalProducerKind.LICENSOR),
     ]
     for field, kind in studio_kind_map:
-        for s in (data.get(field) or []):
-            studios.append(MalAnimeStudio(
-                mal_id=mal_id,
-                mal_producer_id=s.get("mal_id") or 0,
-                name=s.get("name") or "",
-                kind=kind,
-                url=s.get("url"),
-            ))
+        for s in data.get(field) or []:
+            studios.append(
+                MalAnimeStudio(
+                    mal_id=mal_id,
+                    mal_producer_id=s.get("mal_id") or 0,
+                    name=s.get("name") or "",
+                    kind=kind,
+                    url=s.get("url"),
+                )
+            )
 
     return record, genres, relations, themes, externals, streamings, studios
 
@@ -589,22 +643,30 @@ def parse_anime_full(raw: dict) -> tuple[
 def parse_anime_external(mal_id: int, raw: dict) -> list[MalAnimeExternal]:
     """`/anime/{id}/external` レスポンス → MalAnimeExternal list。"""
     result = []
-    for e in (raw.get("data") or []):
+    for e in raw.get("data") or []:
         if e.get("url"):
-            result.append(MalAnimeExternal(
-                mal_id=mal_id, name=e.get("name") or "", url=e["url"],
-            ))
+            result.append(
+                MalAnimeExternal(
+                    mal_id=mal_id,
+                    name=e.get("name") or "",
+                    url=e["url"],
+                )
+            )
     return result
 
 
 def parse_anime_streaming(mal_id: int, raw: dict) -> list[MalAnimeStreaming]:
     """`/anime/{id}/streaming` レスポンス → MalAnimeStreaming list。"""
     result = []
-    for s in (raw.get("data") or []):
+    for s in raw.get("data") or []:
         if s.get("url"):
-            result.append(MalAnimeStreaming(
-                mal_id=mal_id, name=s.get("name") or "", url=s["url"],
-            ))
+            result.append(
+                MalAnimeStreaming(
+                    mal_id=mal_id,
+                    name=s.get("name") or "",
+                    url=s["url"],
+                )
+            )
     return result
 
 
@@ -612,65 +674,73 @@ def parse_anime_videos(
     mal_id: int, raw: dict
 ) -> tuple[list[MalAnimeVideoPromo], list[MalAnimeVideoEp]]:
     """`/anime/{id}/videos` レスポンス → (promos, episode_videos)。"""
-    data = (raw.get("data") or {})
+    data = raw.get("data") or {}
     promos: list[MalAnimeVideoPromo] = []
-    for p in (data.get("promo") or []):
-        trailer = (p.get("trailer") or {})
-        images = (trailer.get("images") or {})
-        promos.append(MalAnimeVideoPromo(
-            mal_id=mal_id,
-            title=p.get("title") or "",
-            youtube_id=trailer.get("youtube_id"),
-            url=trailer.get("url"),
-            embed_url=trailer.get("embed_url"),
-            image_url=images.get("image_url"),
-        ))
+    for p in data.get("promo") or []:
+        trailer = p.get("trailer") or {}
+        images = trailer.get("images") or {}
+        promos.append(
+            MalAnimeVideoPromo(
+                mal_id=mal_id,
+                title=p.get("title") or "",
+                youtube_id=trailer.get("youtube_id"),
+                url=trailer.get("url"),
+                embed_url=trailer.get("embed_url"),
+                image_url=images.get("image_url"),
+            )
+        )
     ep_videos: list[MalAnimeVideoEp] = []
-    for e in (data.get("episodes") or []):
+    for e in data.get("episodes") or []:
         images = (e.get("images") or {}).get("jpg") or {}
-        ep_videos.append(MalAnimeVideoEp(
-            mal_id=mal_id,
-            mal_episode_id=e.get("mal_id"),
-            episode_label=e.get("episode") or "",
-            url=e.get("url"),
-            image_url=images.get("image_url"),
-        ))
+        ep_videos.append(
+            MalAnimeVideoEp(
+                mal_id=mal_id,
+                mal_episode_id=e.get("mal_id"),
+                episode_label=e.get("episode") or "",
+                url=e.get("url"),
+                image_url=images.get("image_url"),
+            )
+        )
     return promos, ep_videos
 
 
 def parse_anime_episodes(mal_id: int, raw: dict) -> list[MalAnimeEpisode]:
     """`/anime/{id}/episodes` レスポンス → MalAnimeEpisode list。"""
     result = []
-    for ep in (raw.get("data") or []):
-        result.append(MalAnimeEpisode(
-            mal_id=mal_id,
-            episode_no=ep.get("mal_id") or 0,
-            title=ep.get("title"),
-            title_japanese=ep.get("title_japanese"),
-            title_romanji=ep.get("title_romanji"),
-            aired=ep.get("aired"),
-            filler=bool(ep.get("filler")),
-            recap=bool(ep.get("recap")),
-            forum_url=ep.get("forum_url"),
-            synopsis=ep.get("synopsis"),
-            display_score=ep.get("score"),
-        ))
+    for ep in raw.get("data") or []:
+        result.append(
+            MalAnimeEpisode(
+                mal_id=mal_id,
+                episode_no=ep.get("mal_id") or 0,
+                title=ep.get("title"),
+                title_japanese=ep.get("title_japanese"),
+                title_romanji=ep.get("title_romanji"),
+                aired=ep.get("aired"),
+                filler=bool(ep.get("filler")),
+                recap=bool(ep.get("recap")),
+                forum_url=ep.get("forum_url"),
+                synopsis=ep.get("synopsis"),
+                display_score=ep.get("score"),
+            )
+        )
     return result
 
 
 def parse_anime_pictures(mal_id: int, raw: dict) -> list[MalAnimePicture]:
     """`/anime/{id}/pictures` レスポンス → MalAnimePicture list。"""
     result = []
-    for p in (raw.get("data") or []):
-        jpg = (p.get("jpg") or {})
+    for p in raw.get("data") or []:
+        jpg = p.get("jpg") or {}
         url = jpg.get("image_url") or jpg.get("large_image_url")
         if url:
-            result.append(MalAnimePicture(
-                mal_id=mal_id,
-                image_url=url,
-                small_image_url=jpg.get("small_image_url"),
-                large_image_url=jpg.get("large_image_url"),
-            ))
+            result.append(
+                MalAnimePicture(
+                    mal_id=mal_id,
+                    image_url=url,
+                    small_image_url=jpg.get("small_image_url"),
+                    large_image_url=jpg.get("large_image_url"),
+                )
+            )
     return result
 
 
@@ -678,7 +748,7 @@ def parse_anime_statistics(mal_id: int, raw: dict) -> MalAnimeStatistics:
     """`/anime/{id}/statistics` レスポンス → MalAnimeStatistics。
     H1: 全列 display_* prefix — scoring path に参入してはならない。
     """
-    data = (raw.get("data") or {})
+    data = raw.get("data") or {}
     return MalAnimeStatistics(
         mal_id=mal_id,
         display_watching=data.get("watching") or 0,
@@ -693,50 +763,52 @@ def parse_anime_statistics(mal_id: int, raw: dict) -> MalAnimeStatistics:
 
 def parse_anime_moreinfo(mal_id: int, raw: dict) -> MalAnimeMoreinfo:
     """`/anime/{id}/moreinfo` レスポンス → MalAnimeMoreinfo。"""
-    data = (raw.get("data") or {})
+    data = raw.get("data") or {}
     return MalAnimeMoreinfo(
         mal_id=mal_id,
         moreinfo=data.get("moreinfo"),
     )
 
 
-def parse_anime_recommendations(
-    mal_id: int, raw: dict
-) -> list[MalAnimeRecommendation]:
+def parse_anime_recommendations(mal_id: int, raw: dict) -> list[MalAnimeRecommendation]:
     """`/anime/{id}/recommendations` レスポンス → MalAnimeRecommendation list。"""
     result = []
-    for r in (raw.get("data") or []):
-        entry = (r.get("entry") or {})
+    for r in raw.get("data") or []:
+        entry = r.get("entry") or {}
         rec_id = entry.get("mal_id")
         rec_url = entry.get("url") or ""
         if rec_id:
-            result.append(MalAnimeRecommendation(
-                mal_id=mal_id,
-                recommended_mal_id=rec_id,
-                recommended_url=rec_url,
-                votes=r.get("votes") or 0,
-            ))
+            result.append(
+                MalAnimeRecommendation(
+                    mal_id=mal_id,
+                    recommended_mal_id=rec_id,
+                    recommended_url=rec_url,
+                    votes=r.get("votes") or 0,
+                )
+            )
     return result
 
 
 def parse_anime_news(mal_id: int, raw: dict) -> list[MalAnimeNews]:
     """`/anime/{id}/news` レスポンス → MalAnimeNews list。"""
     result = []
-    for n in (raw.get("data") or []):
+    for n in raw.get("data") or []:
         url = n.get("url") or ""
         images = (n.get("images") or {}).get("jpg") or {}
-        result.append(MalAnimeNews(
-            mal_id=mal_id,
-            mal_news_id=_extract_news_id(url),
-            url=url,
-            title=n.get("title") or "",
-            date=n.get("date") or "",
-            author_username=n.get("author_username"),
-            author_url=n.get("author_url"),
-            forum_url=n.get("forum_url"),
-            intro=n.get("excerpt"),
-            image_url=images.get("image_url"),
-        ))
+        result.append(
+            MalAnimeNews(
+                mal_id=mal_id,
+                mal_news_id=_extract_news_id(url),
+                url=url,
+                title=n.get("title") or "",
+                date=n.get("date") or "",
+                author_username=n.get("author_username"),
+                author_url=n.get("author_url"),
+                forum_url=n.get("forum_url"),
+                intro=n.get("excerpt"),
+                image_url=images.get("image_url"),
+            )
+        )
     return result
 
 
@@ -746,50 +818,56 @@ def parse_anime_characters_va(
     """`/anime/{id}/characters` レスポンス → (characters, va_credits)。"""
     characters: list[MalAnimeCharacter] = []
     va_credits: list[MalVaCredit] = []
-    for entry in (raw.get("data") or []):
-        char = (entry.get("character") or {})
+    for entry in raw.get("data") or []:
+        char = entry.get("character") or {}
         char_id = char.get("mal_id")
         if not char_id:
             continue
-        images = (char.get("images") or {})
-        characters.append(MalAnimeCharacter(
-            mal_id=mal_id,
-            mal_character_id=char_id,
-            character_name=char.get("name") or "",
-            character_url=char.get("url"),
-            role=entry.get("role") or "",
-            display_favorites=entry.get("favorites") or 0,
-            image_url=_extract_image_url(images),
-        ))
-        for va in (entry.get("voice_actors") or []):
-            person = (va.get("person") or {})
+        images = char.get("images") or {}
+        characters.append(
+            MalAnimeCharacter(
+                mal_id=mal_id,
+                mal_character_id=char_id,
+                character_name=char.get("name") or "",
+                character_url=char.get("url"),
+                role=entry.get("role") or "",
+                display_favorites=entry.get("favorites") or 0,
+                image_url=_extract_image_url(images),
+            )
+        )
+        for va in entry.get("voice_actors") or []:
+            person = va.get("person") or {}
             person_id = person.get("mal_id")
             if person_id:
-                va_credits.append(MalVaCredit(
-                    mal_id=mal_id,
-                    mal_character_id=char_id,
-                    mal_person_id=person_id,
-                    person_name=person.get("name") or "",
-                    language=va.get("language") or "",
-                ))
+                va_credits.append(
+                    MalVaCredit(
+                        mal_id=mal_id,
+                        mal_character_id=char_id,
+                        mal_person_id=person_id,
+                        person_name=person.get("name") or "",
+                        language=va.get("language") or "",
+                    )
+                )
     return characters, va_credits
 
 
 def parse_anime_staff_full(mal_id: int, raw: dict) -> list[MalStaffCredit]:
     """`/anime/{id}/staff` レスポンス → MalStaffCredit list。"""
     result = []
-    for entry in (raw.get("data") or []):
-        person = (entry.get("person") or {})
+    for entry in raw.get("data") or []:
+        person = entry.get("person") or {}
         person_id = person.get("mal_id")
         if not person_id:
             continue
-        for pos in (entry.get("positions") or []):
-            result.append(MalStaffCredit(
-                mal_id=mal_id,
-                mal_person_id=person_id,
-                person_name=person.get("name") or "",
-                position=pos.strip(),
-            ))
+        for pos in entry.get("positions") or []:
+            result.append(
+                MalStaffCredit(
+                    mal_id=mal_id,
+                    mal_person_id=person_id,
+                    person_name=person.get("name") or "",
+                    position=pos.strip(),
+                )
+            )
     return result
 
 
@@ -798,8 +876,8 @@ def parse_person_full(raw: dict) -> MalPerson:
     anime / voices / manga 出演リストは credit 生成に使わない (Phase A で取得済)。
     H1: display_favorites は scoring / edge_weight に参入してはならない。
     """
-    data = (raw.get("data") or {})
-    images = (data.get("images") or {})
+    data = raw.get("data") or {}
+    images = data.get("images") or {}
     alt_names = data.get("alternate_names") or []
     return MalPerson(
         mal_person_id=data.get("mal_id") or 0,
@@ -819,13 +897,11 @@ def parse_person_full(raw: dict) -> MalPerson:
     )
 
 
-def parse_person_pictures(
-    mal_person_id: int, raw: dict
-) -> list[MalPersonPicture]:
+def parse_person_pictures(mal_person_id: int, raw: dict) -> list[MalPersonPicture]:
     """`/people/{id}/pictures` レスポンス → MalPersonPicture list。"""
     result = []
-    for p in (raw.get("data") or []):
-        jpg = (p.get("jpg") or {})
+    for p in raw.get("data") or []:
+        jpg = p.get("jpg") or {}
         url = jpg.get("image_url") or jpg.get("large_image_url")
         if url:
             result.append(MalPersonPicture(mal_person_id=mal_person_id, image_url=url))
@@ -836,8 +912,8 @@ def parse_character_full(raw: dict) -> MalCharacter:
     """`/characters/{id}/full`。anime / manga 出演リストは credit 生成に使わない。
     H1: display_favorites は scoring / edge_weight に参入してはならない。
     """
-    data = (raw.get("data") or {})
-    images = (data.get("images") or {})
+    data = raw.get("data") or {}
+    images = data.get("images") or {}
     nicknames = data.get("nicknames") or []
     return MalCharacter(
         mal_character_id=data.get("mal_id") or 0,
@@ -858,13 +934,16 @@ def parse_character_pictures(
 ) -> list[MalCharacterPicture]:
     """`/characters/{id}/pictures` レスポンス → MalCharacterPicture list。"""
     result = []
-    for p in (raw.get("data") or []):
-        jpg = (p.get("jpg") or {})
+    for p in raw.get("data") or []:
+        jpg = p.get("jpg") or {}
         url = jpg.get("image_url") or jpg.get("large_image_url")
         if url:
-            result.append(MalCharacterPicture(
-                mal_character_id=mal_character_id, image_url=url,
-            ))
+            result.append(
+                MalCharacterPicture(
+                    mal_character_id=mal_character_id,
+                    image_url=url,
+                )
+            )
     return result
 
 
@@ -874,9 +953,9 @@ def parse_producer_full(
     """`/producers/{id}/full` → (producer, external_links)。
     H1: display_favorites は scoring / edge_weight に参入してはならない。
     """
-    data = (raw.get("data") or {})
+    data = raw.get("data") or {}
     producer_id = data.get("mal_id") or 0
-    images = (data.get("images") or {})
+    images = data.get("images") or {}
     titles = data.get("titles") or []
     titles_json = json.dumps(titles, ensure_ascii=False)
     title_default = ""
@@ -909,7 +988,7 @@ def parse_producer_external(
     mal_producer_id: int, raw: dict
 ) -> list[MalProducerExternal]:
     """`/producers/{id}/external` (または full レスポンス) → MalProducerExternal list。"""
-    data = (raw.get("data") or {})
+    data = raw.get("data") or {}
     ext_list = data.get("external") or []
     # /producers/{id}/external レスポンスは data が list の場合もある
     if isinstance(data, list):
@@ -919,15 +998,19 @@ def parse_producer_external(
     result = []
     for e in ext_list:
         if e.get("url"):
-            result.append(MalProducerExternal(
-                mal_producer_id=mal_producer_id,
-                name=e.get("name") or "",
-                url=e["url"],
-            ))
+            result.append(
+                MalProducerExternal(
+                    mal_producer_id=mal_producer_id,
+                    name=e.get("name") or "",
+                    url=e["url"],
+                )
+            )
     return result
 
 
-def parse_manga_full(raw: dict) -> tuple[
+def parse_manga_full(
+    raw: dict,
+) -> tuple[
     MalManga,
     list[MalMangaAuthor],
     list[MalMangaSerialization],
@@ -936,12 +1019,12 @@ def parse_manga_full(raw: dict) -> tuple[
     """`/manga/{id}/full` → (manga, authors, serializations, relations)。
     H1: display_* 列は scoring / edge_weight に参入してはならない。
     """
-    data = (raw.get("data") or {})
+    data = raw.get("data") or {}
     manga_id = data.get("mal_id") or 0
-    images = (data.get("images") or {})
+    images = data.get("images") or {}
     titles = data.get("titles") or []
     title_en, title_ja, titles_alt_json, _ = _extract_titles(titles)
-    published = (data.get("published") or {})
+    published = data.get("published") or {}
 
     manga = MalManga(
         mal_manga_id=manga_id,
@@ -971,40 +1054,46 @@ def parse_manga_full(raw: dict) -> tuple[
     )
 
     authors: list[MalMangaAuthor] = []
-    for a in (data.get("authors") or []):
+    for a in data.get("authors") or []:
         pid = a.get("mal_id")
         role_raw = a.get("type") or ""
         if pid:
-            authors.append(MalMangaAuthor(
-                mal_manga_id=manga_id,
-                mal_person_id=pid,
-                name=a.get("name") or "",
-                role=role_raw,
-            ))
+            authors.append(
+                MalMangaAuthor(
+                    mal_manga_id=manga_id,
+                    mal_person_id=pid,
+                    name=a.get("name") or "",
+                    role=role_raw,
+                )
+            )
 
     serials: list[MalMangaSerialization] = []
-    for s in (data.get("serializations") or []):
+    for s in data.get("serializations") or []:
         sid = s.get("mal_id")
         if sid:
-            serials.append(MalMangaSerialization(
-                mal_manga_id=manga_id,
-                mal_magazine_id=sid,
-                name=s.get("name") or "",
-                url=s.get("url"),
-            ))
+            serials.append(
+                MalMangaSerialization(
+                    mal_manga_id=manga_id,
+                    mal_magazine_id=sid,
+                    name=s.get("name") or "",
+                    url=s.get("url"),
+                )
+            )
 
     relations: list[MalAnimeRelation] = []
-    for rel in (data.get("relations") or []):
+    for rel in data.get("relations") or []:
         rel_type = rel.get("relation") or ""
-        for entry in (rel.get("entry") or []):
-            relations.append(MalAnimeRelation(
-                mal_id=manga_id,
-                relation_type=rel_type,
-                target_type=entry.get("type") or "",
-                target_mal_id=entry.get("mal_id") or 0,
-                target_name=entry.get("name") or "",
-                target_url=entry.get("url"),
-            ))
+        for entry in rel.get("entry") or []:
+            relations.append(
+                MalAnimeRelation(
+                    mal_id=manga_id,
+                    relation_type=rel_type,
+                    target_type=entry.get("type") or "",
+                    target_mal_id=entry.get("mal_id") or 0,
+                    target_name=entry.get("name") or "",
+                    target_url=entry.get("url"),
+                )
+            )
 
     return manga, authors, serials, relations
 
@@ -1014,49 +1103,56 @@ def parse_schedules(
 ) -> list[MalAnimeSchedule]:
     """`/schedules?filter={day}` → MalAnimeSchedule list。"""
     result = []
-    for entry in (raw.get("data") or []):
+    for entry in raw.get("data") or []:
         mal_id = entry.get("mal_id")
         if mal_id:
-            result.append(MalAnimeSchedule(
-                mal_id=mal_id,
-                day_of_week=day_of_week,
-                snapshot_date=snapshot_date,
-            ))
+            result.append(
+                MalAnimeSchedule(
+                    mal_id=mal_id,
+                    day_of_week=day_of_week,
+                    snapshot_date=snapshot_date,
+                )
+            )
     return result
 
 
 def parse_master_genres(raw: dict, kind: str) -> list[MalMasterGenre]:
     """`/genres/anime?filter={kind}` → MalMasterGenre list。"""
     result = []
-    for g in (raw.get("data") or []):
+    for g in raw.get("data") or []:
         gid = g.get("mal_id")
         if gid:
-            result.append(MalMasterGenre(
-                genre_id=gid,
-                name=g.get("name") or "",
-                url=g.get("url") or "",
-                count=g.get("count") or 0,
-                kind=kind,
-            ))
+            result.append(
+                MalMasterGenre(
+                    genre_id=gid,
+                    name=g.get("name") or "",
+                    url=g.get("url") or "",
+                    count=g.get("count") or 0,
+                    kind=kind,
+                )
+            )
     return result
 
 
 def parse_master_magazines(raw: dict) -> list[MalMasterMagazine]:
     """`/magazines` → MalMasterMagazine list。"""
     result = []
-    for m in (raw.get("data") or []):
+    for m in raw.get("data") or []:
         mid = m.get("mal_id")
         if mid:
-            result.append(MalMasterMagazine(
-                mal_magazine_id=mid,
-                name=m.get("name") or "",
-                url=m.get("url") or "",
-                count=m.get("count") or 0,
-            ))
+            result.append(
+                MalMasterMagazine(
+                    mal_magazine_id=mid,
+                    name=m.get("name") or "",
+                    url=m.get("url") or "",
+                    count=m.get("count") or 0,
+                )
+            )
     return result
 
 
 # ── legacy parsers (互換維持) ─────────────────────────────────────────────────
+
 
 def parse_anime_data(raw: dict) -> BronzeAnime:
     mal_id = raw.get("mal_id")

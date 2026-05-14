@@ -1,4 +1,5 @@
 """Tests for src.scrapers.sinks.BronzeSink."""
+
 from __future__ import annotations
 
 import dataclasses
@@ -26,7 +27,9 @@ def _mapper(rec: _Anime) -> dict[str, list[dict]]:
 
 def test_sink_writes_primary_and_secondary_tables(tmp_path):
     rec = _Anime(anime_id=1, title="A", credits=[{"name": "X"}, {"name": "Y"}])
-    with BronzeWriterGroup("allcinema", tables=["anime", "credits"], root=tmp_path) as g:
+    with BronzeWriterGroup(
+        "allcinema", tables=["anime", "credits"], root=tmp_path
+    ) as g:
         sink = BronzeSink(g, _mapper, add_hash=True)
         n = sink(rec)
     assert n == 3  # 1 anime + 2 credits
@@ -37,7 +40,9 @@ def test_sink_injects_hash_and_fetched_at(tmp_path):
     import pyarrow.dataset as ds
 
     rec = _Anime(anime_id=2, title="B")
-    with BronzeWriterGroup("allcinema", tables=["anime", "credits"], root=tmp_path) as g:
+    with BronzeWriterGroup(
+        "allcinema", tables=["anime", "credits"], root=tmp_path
+    ) as g:
         sink = BronzeSink(g, _mapper, add_hash=True)
         sink(rec)
 
@@ -69,6 +74,8 @@ def test_sink_no_hash_when_disabled(tmp_path):
 
 def test_sink_returns_total_row_count(tmp_path):
     rec = _Anime(anime_id=4, title="D", credits=[{"name": "Z"}])
-    with BronzeWriterGroup("allcinema", tables=["anime", "credits"], root=tmp_path) as g:
+    with BronzeWriterGroup(
+        "allcinema", tables=["anime", "credits"], root=tmp_path
+    ) as g:
         sink = BronzeSink(g, _mapper, add_hash=False)
         assert sink(rec) == 2  # 1 anime + 1 credit

@@ -26,6 +26,7 @@ def _run(coro):
     """Helper to run async coroutines in sync tests."""
     return asyncio.run(coro)
 
+
 # ---------------------------------------------------------------------------
 # JVMG / Wikidata fetcher tests
 # ---------------------------------------------------------------------------

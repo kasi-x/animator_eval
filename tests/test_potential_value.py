@@ -1,4 +1,5 @@
 """potential_value.py coverage tests."""
+
 from src.analysis.scoring.potential_value import (
     PotentialValueScore,
     ValueCategory,
@@ -39,6 +40,7 @@ def _anime(
 
 def _credit(pid: str, aid: str, role: Role = Role.KEY_ANIMATOR) -> Credit:
     return Credit(person_id=pid, anime_id=aid, role=role, source="test")
+
 
 class TestValueCategory:
     def test_enum_values(self):

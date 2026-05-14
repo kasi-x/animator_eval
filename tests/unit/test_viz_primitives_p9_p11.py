@@ -38,12 +38,16 @@ def test_heatmap_basic_render():
 
 def test_heatmap_diverging_uses_rdbu():
     spec = HeatmapSpec(
-        z=[[1, 2], [3, 4]], x_labels=["a", "b"], y_labels=["r1", "r2"],
-        diverging=True, z_mid=2.5,
+        z=[[1, 2], [3, 4]],
+        x_labels=["a", "b"],
+        y_labels=["r1", "r2"],
+        diverging=True,
+        z_mid=2.5,
     )
     fig = render_heatmap(spec)
-    assert fig.data[0].colorscale[0][1].lower().startswith("rgb") or \
-        "RdBu" in str(fig.data[0].colorscale)
+    assert fig.data[0].colorscale[0][1].lower().startswith("rgb") or "RdBu" in str(
+        fig.data[0].colorscale
+    )
 
 
 def test_heatmap_null_envelope_outlines_outliers():
@@ -52,7 +56,9 @@ def test_heatmap_null_envelope_outlines_outliers():
     lo = [[-0.5, -0.5], [-0.5, -0.5]]
     hi = [[0.5, 0.5], [0.5, 0.5]]
     spec = HeatmapSpec(
-        z=z, x_labels=["c0", "c1"], y_labels=["r0", "r1"],
+        z=z,
+        x_labels=["c0", "c1"],
+        y_labels=["r0", "r1"],
         null_envelope=(lo, hi),
     )
     fig = render_heatmap(spec)
@@ -84,9 +90,7 @@ def test_parallel_coords_basic():
 
 
 def test_parallel_coords_empty():
-    fig = render_parallel_coords(
-        ParallelCoordsSpec(axes=[], color_values=[])
-    )
+    fig = render_parallel_coords(ParallelCoordsSpec(axes=[], color_values=[]))
     assert "(no data)" in fig.layout.title.text
 
 
@@ -110,5 +114,3 @@ def test_choropleth_bar_fallback_render():
 def test_choropleth_empty():
     fig = render_choropleth_jp(ChoroplethJPSpec(values={}))
     assert "(no data)" in fig.layout.title.text
-
-

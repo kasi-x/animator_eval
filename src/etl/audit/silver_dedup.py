@@ -32,9 +32,7 @@ _NORM_TITLE_SQL = (
     " '[\\s]+', '', 'g'))"
 )
 
-_NORM_NAME_SQL = (
-    "LOWER(REGEXP_REPLACE({col}, '[\\s\\t.,，。、・／/·]+', '', 'g'))"
-)
+_NORM_NAME_SQL = "LOWER(REGEXP_REPLACE({col}, '[\\s\\t.,，。、・／/·]+', '', 'g'))"
 
 # ---------------------------------------------------------------------------
 # Detection: persons
@@ -366,7 +364,9 @@ def audit(
         "credits_within_src": len(credit_rows),
     }
 
-    _write_summary(conn, counts, persons_rows, anime_rows, studio_rows, credit_rows, output_dir)
+    _write_summary(
+        conn, counts, persons_rows, anime_rows, studio_rows, credit_rows, output_dir
+    )
     log.info("silver_dedup.audit: done", **counts)
     return counts
 
@@ -470,7 +470,14 @@ def _write_summary(
         _table_section(
             "Persons Candidates (name_ja + birth_date, cross-source)",
             persons_rows,
-            ["candidate_id_a", "candidate_id_b", "sources", "evidence_name", "evidence_birth_date", "similarity"],
+            [
+                "candidate_id_a",
+                "candidate_id_b",
+                "sources",
+                "evidence_name",
+                "evidence_birth_date",
+                "similarity",
+            ],
         )
     )
 
@@ -478,7 +485,14 @@ def _write_summary(
         _table_section(
             "Anime Candidates (norm title_ja + year + format, cross-source)",
             anime_rows,
-            ["candidate_id_a", "candidate_id_b", "sources", "evidence_title", "evidence_year", "evidence_format"],
+            [
+                "candidate_id_a",
+                "candidate_id_b",
+                "sources",
+                "evidence_title",
+                "evidence_year",
+                "evidence_format",
+            ],
         )
     )
 
@@ -486,7 +500,13 @@ def _write_summary(
         _table_section(
             "Studios Candidates (norm name + country, cross-source)",
             studio_rows,
-            ["candidate_id_a", "candidate_id_b", "sources", "evidence_name", "country_of_origin"],
+            [
+                "candidate_id_a",
+                "candidate_id_b",
+                "sources",
+                "evidence_name",
+                "country_of_origin",
+            ],
         )
     )
 
@@ -494,21 +514,30 @@ def _write_summary(
         _table_section(
             "Credits Within-Source Duplicates",
             credit_rows,
-            ["person_id", "anime_id", "role", "evidence_source", "episode", "dup_count"],
+            [
+                "person_id",
+                "anime_id",
+                "role",
+                "evidence_source",
+                "episode",
+                "dup_count",
+            ],
         )
     )
 
-    lines.extend([
-        "",
-        "## Notes",
-        "",
-        "- **Persons**: matched on `name_ja` (exact) + `birth_date` (exact). Cross-source only.",
-        "- **Anime**: matched on NFKC-lowercased `title_ja` (punctuation stripped) + `year` + `format`. Cross-source only.",
-        "- **Studios**: matched on lowercased `name` (whitespace/punctuation stripped) + `country_of_origin`. Cross-source only.",
-        "- **Credits within-source**: `person_id × anime_id × role × evidence_source × episode` exact group. Null person_id rows included.",
-        "- All CSVs in `result/audit/silver_dedup_*.csv`.",
-        "- No merges performed. Use `src/analysis/entity_resolution.py` for actual resolution.",
-    ])
+    lines.extend(
+        [
+            "",
+            "## Notes",
+            "",
+            "- **Persons**: matched on `name_ja` (exact) + `birth_date` (exact). Cross-source only.",
+            "- **Anime**: matched on NFKC-lowercased `title_ja` (punctuation stripped) + `year` + `format`. Cross-source only.",
+            "- **Studios**: matched on lowercased `name` (whitespace/punctuation stripped) + `country_of_origin`. Cross-source only.",
+            "- **Credits within-source**: `person_id × anime_id × role × evidence_source × episode` exact group. Null person_id rows included.",
+            "- All CSVs in `result/audit/silver_dedup_*.csv`.",
+            "- No merges performed. Use `src/analysis/entity_resolution.py` for actual resolution.",
+        ]
+    )
 
     summary_path = output_dir / "silver_dedup_summary.md"
     summary_path.write_text("\n".join(lines) + "\n", encoding="utf-8")

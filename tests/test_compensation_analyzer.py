@@ -289,7 +289,7 @@ def test_fairness_metrics_inverse_allocation(simple_contributions):
     """Allocations partially reverse Shapley order → shapley_corr negative."""
     allocations = {
         "dir_001": 20.0,  # reverse (was 100)
-        "ka_001": 80.0,   # same (was 80)
+        "ka_001": 80.0,  # same (was 80)
         "bg_001": 100.0,  # reverse (was 20)
     }
     metrics = compute_fairness_metrics(allocations, simple_contributions)
@@ -339,9 +339,7 @@ def test_analyze_fair_compensation_proportional_allocation(
         anime_id="tv_1cour_001",
         total_budget=200.0,
     )
-    result = analyze_fair_compensation(
-        request, simple_contributions, tv_1cour_anime
-    )
+    result = analyze_fair_compensation(request, simple_contributions, tv_1cour_anime)
 
     # Total = 100 + 80 + 20 = 200 shapley units
     # Shares: 100/200=50%, 80/200=40%, 20/200=10%
@@ -360,9 +358,7 @@ def test_analyze_fair_compensation_with_min_compensation(
         total_budget=200.0,
         min_compensation={Role.BACKGROUND_ART: 50.0},
     )
-    result = analyze_fair_compensation(
-        request, simple_contributions, tv_1cour_anime
-    )
+    result = analyze_fair_compensation(request, simple_contributions, tv_1cour_anime)
 
     # bg_001 originally gets 20, min is 50 → raised to 50
     # But then total (100+80+50=230) > budget (200) → all rescaled by 200/230
@@ -416,9 +412,7 @@ def test_analyze_fair_compensation_max_ratio_constraint(
         total_budget=1000.0,
         max_ratio=3.0,  # max/min <= 3
     )
-    result = analyze_fair_compensation(
-        request, large_contributions, tv_1cour_anime
-    )
+    result = analyze_fair_compensation(request, large_contributions, tv_1cour_anime)
 
     min_alloc = min(result.allocations.values())
     max_alloc = max(result.allocations.values())
@@ -435,9 +429,7 @@ def test_analyze_fair_compensation_result_structure(
         anime_id="tv_1cour_001",
         total_budget=200.0,
     )
-    result = analyze_fair_compensation(
-        request, simple_contributions, tv_1cour_anime
-    )
+    result = analyze_fair_compensation(request, simple_contributions, tv_1cour_anime)
 
     assert isinstance(result, CompensationAnalysis)
     assert result.anime_id == "tv_1cour_001"
@@ -480,9 +472,7 @@ def test_batch_analyze_compensation_empty():
     assert len(results) == 0
 
 
-def test_batch_analyze_compensation_single_anime(
-    tv_1cour_anime, simple_contributions
-):
+def test_batch_analyze_compensation_single_anime(tv_1cour_anime, simple_contributions):
     """Single anime batch → single result."""
     results = batch_analyze_compensation(
         [tv_1cour_anime],
@@ -544,17 +534,13 @@ def test_export_compensation_report_empty():
     assert len(report["analyses"]) == 0
 
 
-def test_export_compensation_report_single_anime(
-    tv_1cour_anime, simple_contributions
-):
+def test_export_compensation_report_single_anime(tv_1cour_anime, simple_contributions):
     """Single anime report → includes allocations and fairness."""
     request = CompensationAnalysisRequest(
         anime_id="tv_1cour_001",
         total_budget=200.0,
     )
-    analysis = analyze_fair_compensation(
-        request, simple_contributions, tv_1cour_anime
-    )
+    analysis = analyze_fair_compensation(request, simple_contributions, tv_1cour_anime)
 
     person_names = {
         "dir_001": "Director One",
@@ -584,9 +570,7 @@ def test_export_compensation_report_with_anime_scores(
         anime_id="tv_1cour_001",
         total_budget=200.0,
     )
-    analysis = analyze_fair_compensation(
-        request, simple_contributions, tv_1cour_anime
-    )
+    analysis = analyze_fair_compensation(request, simple_contributions, tv_1cour_anime)
 
     person_names = {"dir_001": "Director", "ka_001": "Animator", "bg_001": "BG"}
     anime_scores = {"tv_1cour_001": 7.5}  # display metadata only
@@ -609,9 +593,7 @@ def test_export_compensation_report_allocations_sorted_descending(
         anime_id="tv_1cour_001",
         total_budget=200.0,
     )
-    analysis = analyze_fair_compensation(
-        request, simple_contributions, tv_1cour_anime
-    )
+    analysis = analyze_fair_compensation(request, simple_contributions, tv_1cour_anime)
 
     person_names = {"dir_001": "Director", "ka_001": "Animator", "bg_001": "BG"}
     report = export_compensation_report(
@@ -666,9 +648,7 @@ def test_allocation_sums_reasonably(tv_1cour_anime, simple_contributions):
         anime_id="tv_1cour_001",
         total_budget=500.0,
     )
-    result = analyze_fair_compensation(
-        request, simple_contributions, tv_1cour_anime
-    )
+    result = analyze_fair_compensation(request, simple_contributions, tv_1cour_anime)
 
     total_alloc = sum(result.allocations.values())
     # After all adjustments, should be close to budget
@@ -687,7 +667,9 @@ def test_zero_budget_handling():
         anime_id="test",
         total_budget=0.0,
     )
-    contributions = {"p1": {"role": "director", "shapley_value": 100.0, "value_share": 1.0}}
+    contributions = {
+        "p1": {"role": "director", "shapley_value": 100.0, "value_share": 1.0}
+    }
 
     result = analyze_fair_compensation(request, contributions, anime)
     assert result is not None
@@ -706,7 +688,9 @@ def test_no_anime_score_in_allocation_logic():
     # Compensation analyzer only uses: episodes, season, title, format
     # (structural metadata, never anime.score)
     request = CompensationAnalysisRequest(anime_id="test", total_budget=100.0)
-    contributions = {"p1": {"role": "director", "shapley_value": 50.0, "value_share": 1.0}}
+    contributions = {
+        "p1": {"role": "director", "shapley_value": 50.0, "value_share": 1.0}
+    }
 
     result = analyze_fair_compensation(request, contributions, anime)
     assert result is not None

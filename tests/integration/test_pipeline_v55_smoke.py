@@ -9,6 +9,7 @@ Pipeline check (integration, uses synthetic data):
 - Full pipeline runs to completion on a fresh schema
 - person_scores TABLE is populated
 """
+
 from __future__ import annotations
 
 import sqlite3
@@ -20,6 +21,7 @@ from src.db import SCHEMA_VERSION, get_schema_version, init_db
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _table_type(conn: sqlite3.Connection, name: str) -> str | None:
     """Return 'table' or 'view' for name, or None if absent."""
@@ -36,6 +38,7 @@ def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_fresh_init_reaches_schema_version_55(tmp_path: Path) -> None:
     """init_db must set schema_version to SCHEMA_VERSION (55)."""
@@ -85,7 +88,13 @@ def test_fresh_init_person_scores_is_table_not_view(tmp_path: Path) -> None:
 
 def test_fresh_init_no_deprecated_tables(tmp_path: Path) -> None:
     """Deprecated tables must not exist in a fresh v2 schema."""
-    deprecated = {"meta_lineage", "anime_display", "scores", "data_sources", "va_scores"}
+    deprecated = {
+        "meta_lineage",
+        "anime_display",
+        "scores",
+        "data_sources",
+        "va_scores",
+    }
     conn = sqlite3.connect(str(tmp_path / "fresh.db"))
     try:
         init_db(conn)
@@ -124,6 +133,7 @@ def test_fresh_init_sources_seeded(tmp_path: Path) -> None:
 # Pipeline completion test (integration)
 # ---------------------------------------------------------------------------
 
+
 def test_pipeline_completes_on_fresh_schema(tmp_path, monkeypatch) -> None:
     """Full pipeline must complete on a fresh v56 schema and populate person_scores."""
     import src.db.init
@@ -152,7 +162,9 @@ def test_pipeline_completes_on_fresh_schema(tmp_path, monkeypatch) -> None:
     silver_path = tmp_path / "silver.duckdb"
     gold_path = tmp_path / "gold.duckdb"
     build_silver_duckdb(silver_path, persons, anime_list, credits)
-    monkeypatch.setattr(src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path)
+    monkeypatch.setattr(
+        src.analysis.io.conformed_reader, "DEFAULT_SILVER_PATH", silver_path
+    )
     monkeypatch.setattr(src.analysis.io.mart_writer, "DEFAULT_GOLD_DB_PATH", gold_path)
 
     results = run_scoring_pipeline(enable_websocket=False)

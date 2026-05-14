@@ -21,9 +21,16 @@ _CHECKPOINT_NODE = "ctx_results_populated"
 _CHECKPOINT_FILE = "pipeline_checkpoint.json.gz"
 
 _CHECKPOINT_FIELDS = [
-    "iv_scores", "iv_scores_historical", "person_fe", "studio_fe",
-    "birank_person_scores", "birank_anime_scores",
-    "patronage_scores", "dormancy_scores", "iv_lambda_weights", "results",
+    "iv_scores",
+    "iv_scores_historical",
+    "person_fe",
+    "studio_fe",
+    "birank_person_scores",
+    "birank_anime_scores",
+    "patronage_scores",
+    "dormancy_scores",
+    "iv_lambda_weights",
+    "results",
 ]
 
 

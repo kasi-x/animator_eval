@@ -129,9 +129,13 @@ class TestUpsertPersonUpdateLowerPriority:
 
 class TestUpsertPersonAliasAccumulation:
     def test_aliases_accumulate_across_updates(self, conn):
-        upsert_person(conn, Person(id="p1", name_ja="名前A", aliases=["別名1"]), source="ann")
+        upsert_person(
+            conn, Person(id="p1", name_ja="名前A", aliases=["別名1"]), source="ann"
+        )
         conn.commit()
-        upsert_person(conn, Person(id="p1", name_ja="名前B", aliases=["別名2"]), source="anilist")
+        upsert_person(
+            conn, Person(id="p1", name_ja="名前B", aliases=["別名2"]), source="anilist"
+        )
         conn.commit()
         row = _row(conn, "p1")
         aliases = json.loads(row["aliases"])
@@ -151,7 +155,9 @@ class TestUpsertPersonAliasAccumulation:
 
 
 class TestNormalizePrimaryNamesByCredits:
-    def _insert_anilist_person(self, conn, anilist_id: int, name_ja: str, name_en: str) -> None:
+    def _insert_anilist_person(
+        self, conn, anilist_id: int, name_ja: str, name_en: str
+    ) -> None:
         conn.execute(
             "INSERT OR IGNORE INTO src_anilist_persons (anilist_id, name_ja, name_en) "
             "VALUES (?, ?, ?)",
@@ -180,7 +186,9 @@ class TestNormalizePrimaryNamesByCredits:
         assert result == 0
 
     def test_updates_name_when_most_credited_source_differs(self, conn):
-        upsert_person(conn, Person(id="p1", name_ja="古い名", anilist_id=101), source="ann")
+        upsert_person(
+            conn, Person(id="p1", name_ja="古い名", anilist_id=101), source="ann"
+        )
         conn.commit()
         self._insert_anilist_person(conn, 101, "新しい名", "New Name")
         self._link_person(conn, "p1", "anilist", "101")

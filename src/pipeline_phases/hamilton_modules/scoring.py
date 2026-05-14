@@ -13,7 +13,11 @@ from typing import Any
 
 from hamilton.function_modifiers import tag
 
-from src.pipeline_phases.pipeline_types import CoreScoresResult, EntityResolutionResult, GraphsResult
+from src.pipeline_phases.pipeline_types import (
+    CoreScoresResult,
+    EntityResolutionResult,
+    GraphsResult,
+)
 
 NODE_NAMES: list[str] = [
     "akm_estimation",
@@ -32,7 +36,9 @@ _BIRANK_REF_POPULATION = 10000
 
 
 @tag(stage="phase5", cost="expensive", domain="scoring")
-def akm_estimation(entity_resolved: EntityResolutionResult, graphs_result: GraphsResult) -> dict:
+def akm_estimation(
+    entity_resolved: EntityResolutionResult, graphs_result: GraphsResult
+) -> dict:
     """AKM person/studio fixed effects estimation.
 
     Returns dict: akm_result, person_fe, studio_fe, studio_assignments.
@@ -40,7 +46,9 @@ def akm_estimation(entity_resolved: EntityResolutionResult, graphs_result: Graph
     """
     from src.analysis.scoring.akm import estimate_akm, infer_studio_assignment
 
-    akm_result = estimate_akm(entity_resolved.resolved_credits, entity_resolved.anime_map)
+    akm_result = estimate_akm(
+        entity_resolved.resolved_credits, entity_resolved.anime_map
+    )
     studio_assignments = akm_result.studio_assignments or infer_studio_assignment(
         entity_resolved.resolved_credits, entity_resolved.anime_map
     )
@@ -85,7 +93,9 @@ def birank_computation(graphs_result: GraphsResult, bipartite_enhanced: dict) ->
 
 
 @tag(stage="phase5", cost="moderate", domain="scoring")
-def knowledge_spanners_computation(graphs_result: GraphsResult, birank_computation: dict) -> dict:
+def knowledge_spanners_computation(
+    graphs_result: GraphsResult, birank_computation: dict
+) -> dict:
     """Knowledge spanner scores: AWCC (cross-community connections) + NDI (diversity index).
 
     Returns {pid: KnowledgeSpannerMetrics}.
@@ -137,7 +147,9 @@ def dormancy_penalty_computation(
 
 
 @tag(stage="phase5", cost="cheap", domain="scoring")
-def birank_rescaled(birank_computation: dict, dormancy_penalty_computation: dict) -> dict:
+def birank_rescaled(
+    birank_computation: dict, dormancy_penalty_computation: dict
+) -> dict:
     """Rescale BiRank from probability space to log expected-count space.
 
     Step 1: ×N_ref=10000 (→ expected-count space, mean≈1).
@@ -150,10 +162,12 @@ def birank_rescaled(birank_computation: dict, dormancy_penalty_computation: dict
     anime_scores = birank_computation["anime_scores"]
     if person_scores:
         person_scores = {
-            pid: math.log1p(s * _BIRANK_REF_POPULATION) for pid, s in person_scores.items()
+            pid: math.log1p(s * _BIRANK_REF_POPULATION)
+            for pid, s in person_scores.items()
         }
         anime_scores = {
-            aid: math.log1p(s * _BIRANK_REF_POPULATION) for aid, s in anime_scores.items()
+            aid: math.log1p(s * _BIRANK_REF_POPULATION)
+            for aid, s in anime_scores.items()
         }
     return {"person_scores": person_scores, "anime_scores": anime_scores}
 

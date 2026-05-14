@@ -1,4 +1,5 @@
 """studio bias_correction.py coverage tests."""
+
 from src.analysis.studio.bias_correction import (
     DebiasedScore,
     StudioBiasMetrics,
@@ -43,6 +44,7 @@ def _anime(
 
 def _credit(pid: str, aid: str, role: Role = Role.KEY_ANIMATOR) -> Credit:
     return Credit(person_id=pid, anime_id=aid, role=role, source="test")
+
 
 class TestExtractStudio:
     def test_studios_list_preferred(self):

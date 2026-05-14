@@ -241,11 +241,15 @@ class TestIsHighConfidencePerson:
 class TestIsHighConfidenceStudio:
     def test_matching_normed_name_null_country(self) -> None:
         row = {"similarity": "1.0"}
-        assert _is_high_confidence_studio(row, "J.C.STAFF", "JC STAFF", None, None) is True
+        assert (
+            _is_high_confidence_studio(row, "J.C.STAFF", "JC STAFF", None, None) is True
+        )
 
     def test_matching_normed_name_same_country(self) -> None:
         row = {"similarity": "1.0"}
-        assert _is_high_confidence_studio(row, "ufotable", "ufotable", "JP", "JP") is True
+        assert (
+            _is_high_confidence_studio(row, "ufotable", "ufotable", "JP", "JP") is True
+        )
 
     def test_different_country_excluded(self) -> None:
         row = {"similarity": "1.0"}
@@ -253,7 +257,9 @@ class TestIsHighConfidenceStudio:
 
     def test_sim_below_threshold(self) -> None:
         row = {"similarity": "0.98"}
-        assert _is_high_confidence_studio(row, "jcstaff", "jcstaff", None, None) is False
+        assert (
+            _is_high_confidence_studio(row, "jcstaff", "jcstaff", None, None) is False
+        )
 
     def test_normed_names_differ_excluded(self) -> None:
         row = {"similarity": "1.0"}
@@ -582,8 +588,12 @@ class TestMergeStudiosActual:
         self, mem_conn: duckdb.DuckDBPyConnection, tmp_path: Path
     ) -> None:
         # Two studios with same normalized name but different countries
-        mem_conn.execute("INSERT INTO studios VALUES (?, ?, ?)", ["a:s1", "MAPPA", "JP"])
-        mem_conn.execute("INSERT INTO studios VALUES (?, ?, ?)", ["b:s1", "MAPPA", "KR"])
+        mem_conn.execute(
+            "INSERT INTO studios VALUES (?, ?, ?)", ["a:s1", "MAPPA", "JP"]
+        )
+        mem_conn.execute(
+            "INSERT INTO studios VALUES (?, ?, ?)", ["b:s1", "MAPPA", "KR"]
+        )
         csv_path = tmp_path / "studios.csv"
         _write_studio_csv(
             csv_path,

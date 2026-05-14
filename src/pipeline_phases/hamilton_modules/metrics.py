@@ -71,7 +71,9 @@ def engagement_decay(
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")
-def role_classification(entity_resolved: EntityResolutionResult, engagement_decay: dict) -> dict:
+def role_classification(
+    entity_resolved: EntityResolutionResult, engagement_decay: dict
+) -> dict:
     """Primary role classification per person (animator / director / etc.)."""
     from src.analysis.graph import determine_primary_role_for_each_person
 
@@ -79,11 +81,15 @@ def role_classification(entity_resolved: EntityResolutionResult, engagement_deca
 
 
 @tag(stage="phase6", cost="moderate", domain="metrics")
-def career_analysis(entity_resolved: EntityResolutionResult, role_classification: dict) -> dict:
+def career_analysis(
+    entity_resolved: EntityResolutionResult, role_classification: dict
+) -> dict:
     """Career trajectory analysis: stage, peak, active years."""
     from src.analysis.career import batch_career_analysis
 
-    return batch_career_analysis(entity_resolved.resolved_credits, entity_resolved.anime_map)
+    return batch_career_analysis(
+        entity_resolved.resolved_credits, entity_resolved.anime_map
+    )
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")
@@ -96,7 +102,10 @@ def career_aware_dormancy_recomputed(
 
     Returns dict: dormancy_scores (updated), iv_scores (updated).
     """
-    from src.analysis.scoring.integrated_value import compute_integrated_value, compute_studio_exposure
+    from src.analysis.scoring.integrated_value import (
+        compute_integrated_value,
+        compute_studio_exposure,
+    )
     from src.analysis.scoring.patronage_dormancy import compute_career_aware_dormancy
 
     career_dormancy = compute_career_aware_dormancy(
@@ -109,7 +118,9 @@ def career_aware_dormancy_recomputed(
         ctx_core_populated.studio_fe,
         studio_assignments=ctx_core_populated.studio_assignments,
     )
-    awcc_scores = {pid: m.awcc for pid, m in ctx_core_populated.knowledge_spanner_scores.items()}
+    awcc_scores = {
+        pid: m.awcc for pid, m in ctx_core_populated.knowledge_spanner_scores.items()
+    }
     iv_scores = compute_integrated_value(
         ctx_core_populated.person_fe,
         ctx_core_populated.birank_person_scores,
@@ -131,11 +142,15 @@ def director_circles(
     """Director circles: frequent collaborator groups around each director."""
     from src.analysis.network.circles import find_director_circles
 
-    return find_director_circles(entity_resolved.resolved_credits, entity_resolved.anime_map)
+    return find_director_circles(
+        entity_resolved.resolved_credits, entity_resolved.anime_map
+    )
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")
-def versatility_computed(entity_resolved: EntityResolutionResult, director_circles: dict) -> dict:
+def versatility_computed(
+    entity_resolved: EntityResolutionResult, director_circles: dict
+) -> dict:
     """Versatility: breadth of role categories and specific roles per person."""
     from src.analysis.versatility import compute_versatility
 
@@ -185,7 +200,9 @@ def growth_trends_precomputed(
     """Growth trends: rising / stable / declining career trajectory."""
     from src.analysis.growth import compute_growth_trends
 
-    return compute_growth_trends(entity_resolved.resolved_credits, entity_resolved.anime_map)
+    return compute_growth_trends(
+        entity_resolved.resolved_credits, entity_resolved.anime_map
+    )
 
 
 @tag(stage="phase6", cost="moderate", domain="metrics")
@@ -262,7 +279,9 @@ def growth_acceleration_computed(
     person_scores = _build_person_scores(
         ctx_core_populated, career_aware_dormancy_recomputed["iv_scores"]
     )
-    growth_metrics = compute_growth_metrics(entity_resolved.resolved_credits, entity_resolved.anime_map)
+    growth_metrics = compute_growth_metrics(
+        entity_resolved.resolved_credits, entity_resolved.anime_map
+    )
     adjusted_skills = compute_adjusted_person_fe_with_growth(
         person_scores, growth_metrics, growth_weight=0.3
     )
@@ -371,7 +390,8 @@ def potential_value_computed(
             betweenness_cache=betweenness_cache,
         )
         return {
-            pid: {**vars(p), "category": p.category.value} for pid, p in potential_scores.items()
+            pid: {**vars(p), "category": p.category.value}
+            for pid, p in potential_scores.items()
         }
     return {}
 
@@ -383,7 +403,9 @@ def career_tracks_inferred(
     """Career track inference: animator / director / animator_director / etc."""
     from src.analysis.network.multilayer import infer_all_career_tracks
 
-    return infer_all_career_tracks(entity_resolved.resolved_credits, entity_resolved.anime_map)
+    return infer_all_career_tracks(
+        entity_resolved.resolved_credits, entity_resolved.anime_map
+    )
 
 
 @tag(stage="phase6", cost="cheap", domain="metrics")

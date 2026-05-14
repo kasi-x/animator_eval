@@ -30,6 +30,7 @@ def _run(coro):
 @pytest.fixture(autouse=True)
 def _no_sleep(monkeypatch):
     """Skip backoff sleeps so retry tests run instantly."""
+
     async def _instant(*args, **kwargs):
         return None
 
@@ -50,10 +51,11 @@ class TestAnnScraper:
 
     def test_successful_fetch_returns_xml(self):
         """Test 1: Normal operation — successful fetch returns XML data."""
+
         def handler(req: httpx.Request) -> httpx.Response:
             return httpx.Response(
                 200,
-                text='<ann><anime><title>Test Anime</title></anime></ann>',
+                text="<ann><anime><title>Test Anime</title></anime></ann>",
             )
 
         client = _make_client_with(handler)
@@ -78,7 +80,7 @@ class TestAnnScraper:
                 )
             return httpx.Response(
                 200,
-                text='<ann><result>ok</result></ann>',
+                text="<ann><result>ok</result></ann>",
             )
 
         client = _make_client_with(handler)
@@ -115,6 +117,7 @@ class TestAnnScraper:
 
     def test_httpx_timeout_exception_raises(self):
         """Test 4: httpx.TimeoutException after max_attempts raises HTTPStatusError."""
+
         def handler(req: httpx.Request) -> httpx.Response:
             raise httpx.TimeoutException("request timeout")
 
@@ -127,6 +130,7 @@ class TestAnnScraper:
 
     def test_malformed_xml_response_returns_text(self):
         """Test 5: Malformed XML (200 status) is returned as-is, not parsed here."""
+
         def handler(req: httpx.Request) -> httpx.Response:
             return httpx.Response(
                 200,
@@ -144,6 +148,7 @@ class TestAnnScraper:
 
     def test_empty_response_body(self):
         """Test 6: Empty response (200 with no body) is handled gracefully."""
+
         def handler(req: httpx.Request) -> httpx.Response:
             return httpx.Response(200, text="")
 

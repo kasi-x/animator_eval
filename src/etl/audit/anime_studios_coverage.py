@@ -13,6 +13,7 @@ Public API:
     measure(silver_db, bronze_root) -> list[CoverageRow]
     generate_report(rows, out_path)
 """
+
 from __future__ import annotations
 
 import datetime
@@ -62,12 +63,16 @@ class CoverageRow:
 
 
 def _glob(bronze_root: Path, source: str, table: str) -> str:
-    return str(bronze_root / f"source={source}" / f"table={table}" / "date=*" / "*.parquet")
+    return str(
+        bronze_root / f"source={source}" / f"table={table}" / "date=*" / "*.parquet"
+    )
 
 
 def _has_parquet(con: duckdb.DuckDBPyConnection, glob: str) -> bool:
     try:
-        con.execute(f"DESCRIBE SELECT * FROM read_parquet('{glob}', union_by_name=true) LIMIT 0")
+        con.execute(
+            f"DESCRIBE SELECT * FROM read_parquet('{glob}', union_by_name=true) LIMIT 0"
+        )
         return True
     except Exception:
         return False
@@ -130,7 +135,9 @@ def _measure_anilist(
             pass
 
     # anime_studios BRONZE table
-    bronze_with_studio_table = _count_distinct(con, as_glob, "anime_id") if _has_parquet(con, as_glob) else 0
+    bronze_with_studio_table = (
+        _count_distinct(con, as_glob, "anime_id") if _has_parquet(con, as_glob) else 0
+    )
 
     # Union of both sources
     bronze_with_studio = max(bronze_with_studio_array, bronze_with_studio_table)
@@ -184,7 +191,9 @@ def _measure_ann(
 
     bronze_anime = _count_distinct(con, anime_glob, "ann_id")
     bronze_with_studio = (
-        _count_distinct(con, company_glob, "ann_anime_id", "task = 'Animation Production'")
+        _count_distinct(
+            con, company_glob, "ann_anime_id", "task = 'Animation Production'"
+        )
         if _has_parquet(con, company_glob)
         else 0
     )
@@ -207,7 +216,11 @@ def _measure_mediaarts(
     anime_glob = _glob(bronze_root, "mediaarts", "anime")
     pc_glob = _glob(bronze_root, "mediaarts", "production_companies")
 
-    bronze_anime = _count_distinct(con, anime_glob, "madb_id") if _has_parquet(con, anime_glob) else 0
+    bronze_anime = (
+        _count_distinct(con, anime_glob, "madb_id")
+        if _has_parquet(con, anime_glob)
+        else 0
+    )
 
     # C-prefix anime have a studios array
     bronze_with_studio_array = 0
@@ -223,8 +236,10 @@ def _measure_mediaarts(
     # production_companies with アニメーション制作 role
     bronze_with_pc = (
         _count_distinct(
-            con, pc_glob, "madb_id",
-            "role_label = 'アニメーション制作' OR is_main = true"
+            con,
+            pc_glob,
+            "madb_id",
+            "role_label = 'アニメーション制作' OR is_main = true",
         )
         if _has_parquet(con, pc_glob)
         else 0
@@ -275,7 +290,9 @@ def _measure_keyframe(
     anime_glob = _glob(bronze_root, "keyframe", "anime")
     as_glob = _glob(bronze_root, "keyframe", "anime_studios")
 
-    bronze_anime = _count_distinct(con, anime_glob, "id") if _has_parquet(con, anime_glob) else 0
+    bronze_anime = (
+        _count_distinct(con, anime_glob, "id") if _has_parquet(con, anime_glob) else 0
+    )
     bronze_with_studio = (
         _count_distinct(con, as_glob, "anime_id") if _has_parquet(con, as_glob) else 0
     )
@@ -421,10 +438,18 @@ def generate_report(
 if __name__ == "__main__":
     import argparse
 
-    parser = argparse.ArgumentParser(description="Measure anime_studios BRONZE→SILVER coverage")
-    parser.add_argument("--bronze-root", default="result/bronze", help="BRONZE parquet root")
-    parser.add_argument("--silver-db", default="result/silver.duckdb", help="SILVER DuckDB path")
-    parser.add_argument("--out", default="result/audit/anime_studios_coverage.md", help="Output path")
+    parser = argparse.ArgumentParser(
+        description="Measure anime_studios BRONZE→SILVER coverage"
+    )
+    parser.add_argument(
+        "--bronze-root", default="result/bronze", help="BRONZE parquet root"
+    )
+    parser.add_argument(
+        "--silver-db", default="result/silver.duckdb", help="SILVER DuckDB path"
+    )
+    parser.add_argument(
+        "--out", default="result/audit/anime_studios_coverage.md", help="Output path"
+    )
     args = parser.parse_args()
 
     silver_con = duckdb.connect(args.silver_db, read_only=True)

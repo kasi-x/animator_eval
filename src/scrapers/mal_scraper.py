@@ -63,22 +63,51 @@ from src.scrapers.progress import scrape_progress
 log = structlog.get_logger()
 
 BASE_URL = "https://api.jikan.moe/v4"
-CHECKPOINT_FILE = Path(__file__).parent.parent.parent / "data" / "mal" / "checkpoint.json"
+CHECKPOINT_FILE = (
+    Path(__file__).parent.parent.parent / "data" / "mal" / "checkpoint.json"
+)
 
-DAYS_OF_WEEK = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+DAYS_OF_WEEK = [
+    "monday",
+    "tuesday",
+    "wednesday",
+    "thursday",
+    "friday",
+    "saturday",
+    "sunday",
+]
 
 ALL_TABLES = [
-    "anime", "anime_genres", "anime_relations", "anime_themes",
-    "anime_external", "anime_streaming", "anime_studios",
-    "anime_videos_promo", "anime_videos_ep", "anime_episodes",
-    "anime_pictures", "anime_statistics", "anime_moreinfo",
-    "anime_recommendations", "anime_characters", "va_credits",
-    "staff_credits", "anime_news", "anime_schedule",
-    "persons", "person_pictures",
-    "characters", "character_pictures",
-    "producers", "producer_external",
-    "manga", "manga_authors", "manga_serializations",
-    "master_genres", "master_magazines",
+    "anime",
+    "anime_genres",
+    "anime_relations",
+    "anime_themes",
+    "anime_external",
+    "anime_streaming",
+    "anime_studios",
+    "anime_videos_promo",
+    "anime_videos_ep",
+    "anime_episodes",
+    "anime_pictures",
+    "anime_statistics",
+    "anime_moreinfo",
+    "anime_recommendations",
+    "anime_characters",
+    "va_credits",
+    "staff_credits",
+    "anime_news",
+    "anime_schedule",
+    "persons",
+    "person_pictures",
+    "characters",
+    "character_pictures",
+    "producers",
+    "producer_external",
+    "manga",
+    "manga_authors",
+    "manga_serializations",
+    "master_genres",
+    "master_magazines",
 ]
 
 JIKAN_LIMITER = DualWindowRateLimiter(per_second=2, per_minute=45)
@@ -137,8 +166,10 @@ class JikanClient:
     # ── anime list ────────────────────────────────────────────────────────────
 
     async def get_all_anime(self, page: int = 1) -> dict:
-        return await self.get("/anime", params={"page": page, "limit": 25,
-                                                "order_by": "mal_id", "sort": "asc"})
+        return await self.get(
+            "/anime",
+            params={"page": page, "limit": 25, "order_by": "mal_id", "sort": "asc"},
+        )
 
     # ── anime sub-endpoints ───────────────────────────────────────────────────
 
@@ -201,8 +232,10 @@ class JikanClient:
         return await self.get(f"/producers/{pid}/external")
 
     async def get_producers_list(self, page: int = 1) -> dict:
-        return await self.get("/producers", params={"page": page, "order_by": "mal_id",
-                                                    "sort": "asc", "limit": 25})
+        return await self.get(
+            "/producers",
+            params={"page": page, "order_by": "mal_id", "sort": "asc", "limit": 25},
+        )
 
     async def get_manga_full(self, mid: int) -> dict:
         return await self.get(f"/manga/{mid}/full")
@@ -221,6 +254,7 @@ class JikanClient:
 
 
 # ── Phase A ───────────────────────────────────────────────────────────────────
+
 
 async def _phase_a_anime(
     client: JikanClient,
@@ -272,9 +306,13 @@ async def _phase_a_anime(
     for i, mal_id in enumerate(pending):
         try:
             await _fetch_one_anime(
-                client, group, mal_id,
-                discovered_persons, discovered_chars,
-                discovered_producers, discovered_manga,
+                client,
+                group,
+                mal_id,
+                discovered_persons,
+                discovered_chars,
+                discovered_producers,
+                discovered_manga,
             )
         except Exception as e:
             log.error("phase_a_anime_failed", mal_id=mal_id, error=str(e))
@@ -317,15 +355,30 @@ def _emit_list(group: BronzeWriterGroup, table: str, records) -> None:
 # (Complex endpoints with tuple unpacking / side effects stay inline below.)
 _SIMPLE_LIST_ENDPOINTS = (
     ("anime_external", "anime_external", "get_anime_external", parse_anime_external),
-    ("anime_streaming", "anime_streaming", "get_anime_streaming", parse_anime_streaming),
+    (
+        "anime_streaming",
+        "anime_streaming",
+        "get_anime_streaming",
+        parse_anime_streaming,
+    ),
     ("anime_pictures", "anime_pictures", "get_anime_pictures", parse_anime_pictures),
-    ("anime_recommendations", "anime_recommendations", "get_anime_recommendations", parse_anime_recommendations),
+    (
+        "anime_recommendations",
+        "anime_recommendations",
+        "get_anime_recommendations",
+        parse_anime_recommendations,
+    ),
     ("anime_news", "anime_news", "get_anime_news", parse_anime_news),
 )
 
 # Single-record endpoints: result → one record → append to one table.
 _SINGLE_RECORD_ENDPOINTS = (
-    ("anime_statistics", "anime_statistics", "get_anime_statistics", parse_anime_statistics),
+    (
+        "anime_statistics",
+        "anime_statistics",
+        "get_anime_statistics",
+        parse_anime_statistics,
+    ),
     ("anime_moreinfo", "anime_moreinfo", "get_anime_moreinfo", parse_anime_moreinfo),
 )
 
@@ -343,7 +396,9 @@ async def _fetch_one_anime(
     # /anime/{id}/full → 7 dataclass types, with manga & producer discovery
     raw = await _safe_call("anime_full", mal_id, client.get_anime_full(mal_id))
     if raw is not None:
-        record, genres, relations, themes, externals, streamings, studios = parse_anime_full(raw)
+        record, genres, relations, themes, externals, streamings, studios = (
+            parse_anime_full(raw)
+        )
         group["anime"].append(asdict(record))
         _emit_list(group, "anime_genres", genres)
         for relation in relations:
@@ -365,7 +420,9 @@ async def _fetch_one_anime(
             discovered_persons.add(credit.mal_person_id)
 
     # /anime/{id}/characters → character + VA-person discovery
-    raw = await _safe_call("anime_characters", mal_id, client.get_anime_characters(mal_id))
+    raw = await _safe_call(
+        "anime_characters", mal_id, client.get_anime_characters(mal_id)
+    )
     if raw is not None:
         chars, vas = parse_anime_characters_va(mal_id, raw)
         for char in chars:
@@ -396,17 +453,22 @@ async def _fetch_one_anime(
         _emit_list(group, "anime_videos_ep", ep_vids)
 
     for endpoint_name, table, getter_name, parser in _SIMPLE_LIST_ENDPOINTS:
-        raw = await _safe_call(endpoint_name, mal_id, getattr(client, getter_name)(mal_id))
+        raw = await _safe_call(
+            endpoint_name, mal_id, getattr(client, getter_name)(mal_id)
+        )
         if raw is not None:
             _emit_list(group, table, parser(mal_id, raw))
 
     for endpoint_name, table, getter_name, parser in _SINGLE_RECORD_ENDPOINTS:
-        raw = await _safe_call(endpoint_name, mal_id, getattr(client, getter_name)(mal_id))
+        raw = await _safe_call(
+            endpoint_name, mal_id, getattr(client, getter_name)(mal_id)
+        )
         if raw is not None:
             group[table].append(asdict(parser(mal_id, raw)))
 
 
 # ── shared loop helper ────────────────────────────────────────────────────────
+
 
 async def _iterate_with_checkpoints(
     items: list[int],
@@ -463,6 +525,7 @@ async def _iterate_with_checkpoints(
 
 # ── Phase B ───────────────────────────────────────────────────────────────────
 
+
 async def _phase_b_persons_characters(
     client: JikanClient,
     group: BronzeWriterGroup,
@@ -477,11 +540,16 @@ async def _phase_b_persons_characters(
     discovered_persons: list[int] = ckpt["discovered_person_ids"]
     discovered_chars: list[int] = ckpt["discovered_character_ids"]
 
-    pending_persons = [pid for pid in discovered_persons if pid not in completed_persons]
+    pending_persons = [
+        pid for pid in discovered_persons if pid not in completed_persons
+    ]
     pending_chars = [cid for cid in discovered_chars if cid not in completed_chars]
 
-    log.info("phase_b_start", pending_persons=len(pending_persons),
-             pending_chars=len(pending_chars))
+    log.info(
+        "phase_b_start",
+        pending_persons=len(pending_persons),
+        pending_chars=len(pending_chars),
+    )
 
     async def _process_person(pid: int) -> None:
         raw = await client.get_person_full(pid)
@@ -492,18 +560,32 @@ async def _phase_b_persons_characters(
     async def _process_character(cid: int) -> None:
         raw = await client.get_character_full(cid)
         group["characters"].append(asdict(parse_character_full(raw)))
-        for pic in parse_character_pictures(cid, await client.get_character_pictures(cid)):
+        for pic in parse_character_pictures(
+            cid, await client.get_character_pictures(cid)
+        ):
             group["character_pictures"].append(asdict(pic))
 
     done = await _iterate_with_checkpoints(
-        pending_persons, completed_persons, _process_person,
-        cp=cp, ckpt_key="completed_person_ids", group=group, progress=p,
-        checkpoint_interval=checkpoint_interval, error_event="phase_b_person_failed",
+        pending_persons,
+        completed_persons,
+        _process_person,
+        cp=cp,
+        ckpt_key="completed_person_ids",
+        group=group,
+        progress=p,
+        checkpoint_interval=checkpoint_interval,
+        error_event="phase_b_person_failed",
     )
     await _iterate_with_checkpoints(
-        pending_chars, completed_chars, _process_character,
-        cp=cp, ckpt_key="completed_character_ids", group=group, progress=p,
-        checkpoint_interval=checkpoint_interval, error_event="phase_b_character_failed",
+        pending_chars,
+        completed_chars,
+        _process_character,
+        cp=cp,
+        ckpt_key="completed_character_ids",
+        group=group,
+        progress=p,
+        checkpoint_interval=checkpoint_interval,
+        error_event="phase_b_character_failed",
         done_start=done,
     )
 
@@ -512,6 +594,7 @@ async def _phase_b_persons_characters(
 
 
 # ── Phase C ───────────────────────────────────────────────────────────────────
+
 
 async def _phase_c_producers_manga_masters(
     client: JikanClient,
@@ -548,11 +631,16 @@ async def _phase_c_producers_manga_masters(
             page += 1
         ckpt["discovered_producer_ids"] = list(discovered_producers)
 
-    pending_producers = [pid for pid in discovered_producers if pid not in completed_producers]
+    pending_producers = [
+        pid for pid in discovered_producers if pid not in completed_producers
+    ]
     pending_manga = [mid for mid in discovered_manga if mid not in completed_manga]
 
-    log.info("phase_c_start", pending_producers=len(pending_producers),
-             pending_manga=len(pending_manga))
+    log.info(
+        "phase_c_start",
+        pending_producers=len(pending_producers),
+        pending_manga=len(pending_manga),
+    )
 
     async def _process_producer(pid: int) -> None:
         raw = await client.get_producer_full(pid)
@@ -578,14 +666,26 @@ async def _phase_c_producers_manga_masters(
             group["manga_serializations"].append(asdict(s))
 
     done = await _iterate_with_checkpoints(
-        pending_producers, completed_producers, _process_producer,
-        cp=cp, ckpt_key="completed_producer_ids", group=group, progress=p,
-        checkpoint_interval=checkpoint_interval, error_event="phase_c_producer_failed",
+        pending_producers,
+        completed_producers,
+        _process_producer,
+        cp=cp,
+        ckpt_key="completed_producer_ids",
+        group=group,
+        progress=p,
+        checkpoint_interval=checkpoint_interval,
+        error_event="phase_c_producer_failed",
     )
     await _iterate_with_checkpoints(
-        pending_manga, completed_manga, _process_manga,
-        cp=cp, ckpt_key="completed_manga_ids", group=group, progress=p,
-        checkpoint_interval=checkpoint_interval, error_event="phase_c_manga_failed",
+        pending_manga,
+        completed_manga,
+        _process_manga,
+        cp=cp,
+        ckpt_key="completed_manga_ids",
+        group=group,
+        progress=p,
+        checkpoint_interval=checkpoint_interval,
+        error_event="phase_c_manga_failed",
         done_start=done,
     )
 
@@ -630,6 +730,7 @@ async def _phase_c_producers_manga_masters(
 
 # ── CLI entry point ───────────────────────────────────────────────────────────
 
+
 @app.command()
 def run(
     phase: str = typer.Option("all", "--phase", help="A / B / C / all"),
@@ -667,7 +768,9 @@ def run(
                         cp.save(stamp_time=False)
 
                     if phase in ("B", "all"):
-                        await _phase_b_persons_characters(client, group, cp, p, checkpoint_interval)
+                        await _phase_b_persons_characters(
+                            client, group, cp, p, checkpoint_interval
+                        )
                         ckpt["phase"] = "C"
                         cp.save(stamp_time=False)
 

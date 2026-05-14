@@ -22,6 +22,7 @@ Usage::
             if (i + 1) % 100 == 0:
                 p.log("checkpoint_flushed", completed=done, remaining=todo)
 """
+
 from __future__ import annotations
 
 import os
@@ -93,7 +94,10 @@ class _LogReporter:
         self._done += n
         is_done = self._total is not None and self._done >= self._total
         if self._done % self._log_every == 0 or is_done:
-            fields: dict[str, Any] = {"description": self._description, "done": self._done}
+            fields: dict[str, Any] = {
+                "description": self._description,
+                "done": self._done,
+            }
             if self._total is not None:
                 fields["total"] = self._total
                 fields["remaining"] = max(0, self._total - self._done)

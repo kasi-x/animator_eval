@@ -23,6 +23,7 @@ match_title() in sakuga_title_matcher is kept for unit tests; its logic is
 faithfully replicated in the SQL query below.  sakuga_atwiki.py no longer
 imports match_title directly — tests import it from sakuga_title_matcher.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -165,26 +166,20 @@ WHERE credits.evidence_source = 'sakuga_atwiki'
 
 # ─── Helpers ────────────────────────────────────────────────────────────────
 
+
 def _glob(bronze_root: Path, table: str) -> str:
     """Return glob string for a sakuga_atwiki BRONZE table."""
     return str(
-        bronze_root
-        / "source=sakuga_atwiki"
-        / f"table={table}"
-        / "date=*"
-        / "*.parquet"
+        bronze_root / "source=sakuga_atwiki" / f"table={table}" / "date=*" / "*.parquet"
     )
 
 
 def _has_parquet(bronze_root: Path, table: str) -> bool:
     """Return True if at least one parquet file exists for the given table."""
     import glob as _glob_mod
+
     pattern = str(
-        bronze_root
-        / "source=sakuga_atwiki"
-        / f"table={table}"
-        / "date=*"
-        / "*.parquet"
+        bronze_root / "source=sakuga_atwiki" / f"table={table}" / "date=*" / "*.parquet"
     )
     return bool(_glob_mod.glob(pattern))
 
@@ -384,12 +379,13 @@ def _resolve_work_titles(
         ON CONFLICT DO NOTHING
     """)
 
-    return conn.execute(
-        "SELECT COUNT(*) FROM sakuga_work_title_resolution"
-    ).fetchone()[0]
+    return conn.execute("SELECT COUNT(*) FROM sakuga_work_title_resolution").fetchone()[
+        0
+    ]
 
 
 # ─── Public API ─────────────────────────────────────────────────────────────
+
 
 def integrate(
     conn: duckdb.DuckDBPyConnection,

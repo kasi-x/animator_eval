@@ -25,10 +25,12 @@ def _run(coro: Awaitable):
 @pytest.fixture(autouse=True)
 def _no_sleep(monkeypatch):
     """Skip backoff sleeps."""
+
     async def _instant(*args, **kwargs):
         return None
 
     from src.scrapers import http_client
+
     monkeypatch.setattr(http_client.asyncio, "sleep", _instant)
 
 

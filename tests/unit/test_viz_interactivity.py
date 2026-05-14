@@ -29,10 +29,16 @@ def test_link_brushing_emits_attached_handlers():
 def test_cross_filter_panel_renders_select_per_facet():
     panel = cross_filter_panel(
         [
-            CrossFilterFacet(field="cohort_decade", label="デビュー年代",
-                             options=["1990s", "2000s", "2010s"]),
-            CrossFilterFacet(field="role_group", label="役職グループ",
-                             options=["animator", "director"]),
+            CrossFilterFacet(
+                field="cohort_decade",
+                label="デビュー年代",
+                options=["1990s", "2000s", "2010s"],
+            ),
+            CrossFilterFacet(
+                field="role_group",
+                label="役職グループ",
+                options=["animator", "director"],
+            ),
         ],
         target_div_ids=["chart_a", "chart_b"],
     )
@@ -67,7 +73,8 @@ def test_cross_filter_default_value_all():
     panel = cross_filter_panel(
         [
             CrossFilterFacet(
-                field="studio_tier", label="スタジオ規模",
+                field="studio_tier",
+                label="スタジオ規模",
                 options=["大手", "中堅", "独立"],
                 default="all",
             ),

@@ -1,4 +1,5 @@
 """Test v57 metadata population logic."""
+
 import pytest
 import duckdb
 from pathlib import Path
@@ -48,9 +49,7 @@ def test_majority_vote_single_country(test_gold_db: duckdb.DuckDBPyConnection) -
     conn.execute(
         "INSERT INTO anime VALUES ('anime:1', 'Title 1', 'JP'), ('anime:2', 'Title 2', 'JP'), ('anime:3', 'Title 3', 'US')"
     )
-    conn.execute(
-        "INSERT INTO studios VALUES ('studio:1', 'Studio A', NULL)"
-    )
+    conn.execute("INSERT INTO studios VALUES ('studio:1', 'Studio A', NULL)")
     conn.execute(
         "INSERT INTO anime_studios VALUES ('anime:1', 'studio:1', 1), ('anime:2', 'studio:1', 1), ('anime:3', 'studio:1', 0)"
     )
@@ -60,7 +59,9 @@ def test_majority_vote_single_country(test_gold_db: duckdb.DuckDBPyConnection) -
     assert result["studios_updated"] == 1
     assert result["studios_populated"] == 1
 
-    row = conn.execute("SELECT country_of_origin FROM studios WHERE id = 'studio:1'").fetchone()
+    row = conn.execute(
+        "SELECT country_of_origin FROM studios WHERE id = 'studio:1'"
+    ).fetchone()
     assert row[0] == "JP"  # JP wins 2-1
 
 
@@ -71,9 +72,7 @@ def test_tie_broken_alphabetically(test_gold_db: duckdb.DuckDBPyConnection) -> N
     conn.execute(
         "INSERT INTO anime VALUES ('anime:1', 'Title 1', 'US'), ('anime:2', 'Title 2', 'JP')"
     )
-    conn.execute(
-        "INSERT INTO studios VALUES ('studio:1', 'Studio B', NULL)"
-    )
+    conn.execute("INSERT INTO studios VALUES ('studio:1', 'Studio B', NULL)")
     conn.execute(
         "INSERT INTO anime_studios VALUES ('anime:1', 'studio:1', 1), ('anime:2', 'studio:1', 1)"
     )
@@ -82,7 +81,9 @@ def test_tie_broken_alphabetically(test_gold_db: duckdb.DuckDBPyConnection) -> N
 
     assert result["studios_updated"] == 1
 
-    row = conn.execute("SELECT country_of_origin FROM studios WHERE id = 'studio:1'").fetchone()
+    row = conn.execute(
+        "SELECT country_of_origin FROM studios WHERE id = 'studio:1'"
+    ).fetchone()
     assert row[0] == "JP"  # JP < US alphabetically
 
 
@@ -93,9 +94,7 @@ def test_skip_null_and_empty_countries(test_gold_db: duckdb.DuckDBPyConnection) 
     conn.execute(
         "INSERT INTO anime VALUES ('anime:1', 'Title 1', 'JP'), ('anime:2', 'Title 2', NULL), ('anime:3', 'Title 3', '')"
     )
-    conn.execute(
-        "INSERT INTO studios VALUES ('studio:1', 'Studio C', NULL)"
-    )
+    conn.execute("INSERT INTO studios VALUES ('studio:1', 'Studio C', NULL)")
     conn.execute(
         "INSERT INTO anime_studios VALUES ('anime:1', 'studio:1', 1), ('anime:2', 'studio:1', 0), ('anime:3', 'studio:1', 0)"
     )
@@ -104,7 +103,9 @@ def test_skip_null_and_empty_countries(test_gold_db: duckdb.DuckDBPyConnection) 
 
     assert result["studios_updated"] == 1
 
-    row = conn.execute("SELECT country_of_origin FROM studios WHERE id = 'studio:1'").fetchone()
+    row = conn.execute(
+        "SELECT country_of_origin FROM studios WHERE id = 'studio:1'"
+    ).fetchone()
     assert row[0] == "JP"
 
 
@@ -122,29 +123,29 @@ def test_no_anime_association(test_gold_db: duckdb.DuckDBPyConnection) -> None:
     assert result["studios_updated"] == 0
     assert result["studios_populated"] == 0
 
-    row = conn.execute("SELECT country_of_origin FROM studios WHERE id = 'studio:2'").fetchone()
+    row = conn.execute(
+        "SELECT country_of_origin FROM studios WHERE id = 'studio:2'"
+    ).fetchone()
     assert row[0] is None
 
 
-def test_already_set_studio_not_touched(test_gold_db: duckdb.DuckDBPyConnection) -> None:
+def test_already_set_studio_not_touched(
+    test_gold_db: duckdb.DuckDBPyConnection,
+) -> None:
     """Studio with existing country_of_origin is not updated."""
     conn = test_gold_db
 
-    conn.execute(
-        "INSERT INTO anime VALUES ('anime:1', 'Title 1', 'JP')"
-    )
-    conn.execute(
-        "INSERT INTO studios VALUES ('studio:1', 'Studio F', 'US')"
-    )
-    conn.execute(
-        "INSERT INTO anime_studios VALUES ('anime:1', 'studio:1', 1)"
-    )
+    conn.execute("INSERT INTO anime VALUES ('anime:1', 'Title 1', 'JP')")
+    conn.execute("INSERT INTO studios VALUES ('studio:1', 'Studio F', 'US')")
+    conn.execute("INSERT INTO anime_studios VALUES ('anime:1', 'studio:1', 1)")
 
     result = populate_studios_country_of_origin(conn)
 
     assert result["studios_updated"] == 0
 
-    row = conn.execute("SELECT country_of_origin FROM studios WHERE id = 'studio:1'").fetchone()
+    row = conn.execute(
+        "SELECT country_of_origin FROM studios WHERE id = 'studio:1'"
+    ).fetchone()
     assert row[0] == "US"  # unchanged
 
 
@@ -168,9 +169,15 @@ def test_multiple_studios(test_gold_db: duckdb.DuckDBPyConnection) -> None:
     assert result["studios_updated"] == 2
     assert result["studios_populated"] == 2
 
-    s1 = conn.execute("SELECT country_of_origin FROM studios WHERE id = 's1'").fetchone()[0]
-    s2 = conn.execute("SELECT country_of_origin FROM studios WHERE id = 's2'").fetchone()[0]
-    s3 = conn.execute("SELECT country_of_origin FROM studios WHERE id = 's3'").fetchone()[0]
+    s1 = conn.execute(
+        "SELECT country_of_origin FROM studios WHERE id = 's1'"
+    ).fetchone()[0]
+    s2 = conn.execute(
+        "SELECT country_of_origin FROM studios WHERE id = 's2'"
+    ).fetchone()[0]
+    s3 = conn.execute(
+        "SELECT country_of_origin FROM studios WHERE id = 's3'"
+    ).fetchone()[0]
 
     assert s1 == "JP"
     assert s2 == "US"

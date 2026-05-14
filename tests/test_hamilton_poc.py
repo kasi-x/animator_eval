@@ -16,6 +16,7 @@ import pytest
 # Fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture()
 def minimal_context():
     """Minimal context namespace for testing Hamilton nodes."""
@@ -72,6 +73,7 @@ def minimal_context():
 class _DummyMonitor:
     def measure(self, name):
         from contextlib import nullcontext
+
         return nullcontext()
 
     def get_summary(self):
@@ -82,10 +84,17 @@ class _DummyMonitor:
 # DAG construction
 # ---------------------------------------------------------------------------
 
+
 class TestHamiltonDagConstruction:
     def test_dag_builds_without_error(self):
         from hamilton import driver
-        from src.pipeline_phases.hamilton_modules import core, studio, genre, network, causal
+        from src.pipeline_phases.hamilton_modules import (
+            core,
+            studio,
+            genre,
+            network,
+            causal,
+        )
 
         dr = driver.Builder().with_modules(core, studio, genre, network, causal).build()
         assert dr is not None
@@ -94,7 +103,11 @@ class TestHamiltonDagConstruction:
         from hamilton import driver
         from src.pipeline_phases.hamilton_modules import (
             ANALYSIS_NODE_NAMES,
-            core, studio, genre, network, causal,
+            core,
+            studio,
+            genre,
+            network,
+            causal,
         )
 
         dr = driver.Builder().with_modules(core, studio, genre, network, causal).build()
@@ -114,7 +127,11 @@ class TestHamiltonDagConstruction:
         from hamilton import driver
         from src.pipeline_phases.hamilton_modules import (
             ANALYSIS_NODE_NAMES,
-            core, studio, genre, network, causal,
+            core,
+            studio,
+            genre,
+            network,
+            causal,
         )
 
         dr = driver.Builder().with_modules(core, studio, genre, network, causal).build()
@@ -127,29 +144,36 @@ class TestHamiltonDagConstruction:
 # Node name exports
 # ---------------------------------------------------------------------------
 
+
 class TestNodeNameLists:
     def test_core_node_names_nonempty(self):
         from src.pipeline_phases.hamilton_modules.core import NODE_NAMES
+
         assert len(NODE_NAMES) > 0
 
     def test_studio_node_names_nonempty(self):
         from src.pipeline_phases.hamilton_modules.studio import NODE_NAMES
+
         assert len(NODE_NAMES) > 0
 
     def test_genre_node_names_nonempty(self):
         from src.pipeline_phases.hamilton_modules.genre import NODE_NAMES
+
         assert len(NODE_NAMES) > 0
 
     def test_network_node_names_nonempty(self):
         from src.pipeline_phases.hamilton_modules.network import NODE_NAMES
+
         assert len(NODE_NAMES) > 0
 
     def test_causal_node_names_nonempty(self):
         from src.pipeline_phases.hamilton_modules.causal import NODE_NAMES
+
         assert len(NODE_NAMES) > 0
 
     def test_all_node_names_no_duplicates(self):
         from src.pipeline_phases.hamilton_modules import ALL_NODE_NAMES
+
         assert len(ALL_NODE_NAMES) == len(set(ALL_NODE_NAMES))
 
 
@@ -157,29 +181,35 @@ class TestNodeNameLists:
 # Individual node execution on empty context
 # ---------------------------------------------------------------------------
 
+
 class TestCoreNodesMinimal:
     def test_anime_stats_returns_something(self, minimal_context):
         from src.pipeline_phases.hamilton_modules.core import anime_stats
+
         result = anime_stats(minimal_context)
         assert result is not None or result == {}
 
     def test_outliers_on_empty_context(self, minimal_context):
         from src.pipeline_phases.hamilton_modules.core import outliers
+
         result = outliers(minimal_context)
         assert result is not None
 
     def test_crossval_on_empty_results(self, minimal_context):
         from src.pipeline_phases.hamilton_modules.core import crossval
+
         result = crossval(minimal_context)
         assert result is not None
 
     def test_collaborations_skips_without_graph(self, minimal_context):
         from src.pipeline_phases.hamilton_modules.network import collaborations
+
         result = collaborations(minimal_context)
         assert result == []
 
     def test_bridges_without_graph_returns_empty_result(self, minimal_context):
         from src.pipeline_phases.hamilton_modules.core import bridges
+
         result = bridges(minimal_context)
         # detect_bridges returns a valid empty structure even without a graph
         assert isinstance(result, dict)
@@ -190,9 +220,11 @@ class TestCoreNodesMinimal:
 # run_analysis_modules_hamilton() end-to-end
 # ---------------------------------------------------------------------------
 
+
 class TestRunAnalysisModulesHamilton:
     def test_runs_without_exception(self, minimal_context):
         from src.pipeline_phases.analysis_modules import run_analysis_modules_hamilton
+
         results = run_analysis_modules_hamilton(minimal_context)
         assert isinstance(results, dict)
 
@@ -207,6 +239,7 @@ class TestRunAnalysisModulesHamilton:
     def test_does_not_raise(self, minimal_context):
         """run_analysis_modules_hamilton never propagates exceptions upward."""
         from src.pipeline_phases.analysis_modules import run_analysis_modules_hamilton
+
         # Should complete without raising even when individual nodes fail on empty context
         results = run_analysis_modules_hamilton(minimal_context)
         assert isinstance(results, dict)
@@ -215,6 +248,7 @@ class TestRunAnalysisModulesHamilton:
 # ---------------------------------------------------------------------------
 # run_analysis_modules_phase() — ThreadPoolExecutor parallel path
 # ---------------------------------------------------------------------------
+
 
 class TestRunAnalysisModulesPhase:
     def test_runs_without_exception(self, minimal_context, tmp_path, monkeypatch):

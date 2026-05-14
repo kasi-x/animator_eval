@@ -24,17 +24,17 @@ from src.utils.config import LLM_BASE_URL, LLM_MODEL_NAME, LLM_TIMEOUT
 # "cjk" is handled specially (continues loop to check for overriding kana).
 # Sort order matters: checked linearly per codepoint.
 _SCRIPT_RANGES: list[tuple[int, int, str]] = [
-    (0x0370, 0x03FF, "el"),    # Greek
-    (0x0400, 0x04FF, "ru"),    # Cyrillic
-    (0x0600, 0x06FF, "ar"),    # Arabic
-    (0x0900, 0x097F, "hi"),    # Devanagari
-    (0x0E00, 0x0E7F, "th"),    # Thai
-    (0x1100, 0x11FF, "ko"),    # Hangul Jamo
-    (0x3040, 0x309F, "ja"),    # Hiragana
-    (0x30A0, 0x30FF, "ja"),    # Katakana
-    (0x3130, 0x318F, "ko"),    # Hangul Compatibility Jamo
-    (0x4E00, 0x9FFF, "cjk"),   # CJK Unified Ideographs
-    (0xAC00, 0xD7AF, "ko"),    # Hangul Syllables
+    (0x0370, 0x03FF, "el"),  # Greek
+    (0x0400, 0x04FF, "ru"),  # Cyrillic
+    (0x0600, 0x06FF, "ar"),  # Arabic
+    (0x0900, 0x097F, "hi"),  # Devanagari
+    (0x0E00, 0x0E7F, "th"),  # Thai
+    (0x1100, 0x11FF, "ko"),  # Hangul Jamo
+    (0x3040, 0x309F, "ja"),  # Hiragana
+    (0x30A0, 0x30FF, "ja"),  # Katakana
+    (0x3130, 0x318F, "ko"),  # Hangul Compatibility Jamo
+    (0x4E00, 0x9FFF, "cjk"),  # CJK Unified Ideographs
+    (0xAC00, 0xD7AF, "ko"),  # Hangul Syllables
 ]
 
 # Script tag → BCP-47-like lang code for person_aliases.lang
@@ -97,10 +97,16 @@ def _load_tokens_json() -> dict:
 
 _tokens_data = _load_tokens_json()
 
-_JAPANESE_HOMETOWN_TOKENS: frozenset[str] = frozenset(_tokens_data["tokens"].get("JP", []))
-_CHINESE_HOMETOWN_TOKENS:  frozenset[str] = frozenset(_tokens_data["tokens"].get("CN", []))
-_KOREAN_HOMETOWN_TOKENS:   frozenset[str] = frozenset(_tokens_data["tokens"].get("KR", []))
-_ARABIC_HOMETOWN_TOKENS:   dict[str, str] = _tokens_data.get("arabic_tokens", {})
+_JAPANESE_HOMETOWN_TOKENS: frozenset[str] = frozenset(
+    _tokens_data["tokens"].get("JP", [])
+)
+_CHINESE_HOMETOWN_TOKENS: frozenset[str] = frozenset(
+    _tokens_data["tokens"].get("CN", [])
+)
+_KOREAN_HOMETOWN_TOKENS: frozenset[str] = frozenset(
+    _tokens_data["tokens"].get("KR", [])
+)
+_ARABIC_HOMETOWN_TOKENS: dict[str, str] = _tokens_data.get("arabic_tokens", {})
 # Mutable dict; updated at runtime by LLM cache writes
 _HOMETOWN_CACHE: dict[str, str | None] = _tokens_data.get("_cache", {})
 
@@ -114,14 +120,15 @@ def _build_hometown_re(tokens: frozenset[str]) -> re.Pattern[str]:
 
 
 _JAPANESE_RE = _build_hometown_re(_JAPANESE_HOMETOWN_TOKENS)
-_CHINESE_RE  = _build_hometown_re(_CHINESE_HOMETOWN_TOKENS)
-_KOREAN_RE   = _build_hometown_re(_KOREAN_HOMETOWN_TOKENS)
+_CHINESE_RE = _build_hometown_re(_CHINESE_HOMETOWN_TOKENS)
+_KOREAN_RE = _build_hometown_re(_KOREAN_HOMETOWN_TOKENS)
 
 # Arabic: sorted longest-first so "hong kong" matches before "hong"
 _arabic_keys_sorted = sorted(_ARABIC_HOMETOWN_TOKENS.keys(), key=len, reverse=True)
 _ARABIC_RE = (
     re.compile("|".join(map(re.escape, _arabic_keys_sorted)), re.IGNORECASE)
-    if _arabic_keys_sorted else re.compile(r"(?!)")
+    if _arabic_keys_sorted
+    else re.compile(r"(?!)")
 )
 
 
@@ -146,6 +153,7 @@ def _save_hometown_cache(hometown_key: str, code: str | None) -> None:
 # ---------------------------------------------------------------------------
 # LLM nationality inference — decomposed helpers
 # ---------------------------------------------------------------------------
+
 
 def _build_llm_prompt(hometown: str) -> str:
     return (
@@ -202,6 +210,7 @@ def _llm_infer_nationality(hometown: str) -> str | None:
 # infer_nationalities — decomposed helpers
 # ---------------------------------------------------------------------------
 
+
 def _from_script_direct(script: str) -> list[str] | None:
     """Return a single-country list for unambiguous scripts, else None."""
     if script == "ko":
@@ -244,6 +253,7 @@ def _resolve_arabic(hometown_lower: str) -> list[str]:
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
 
 def lang_of_alias(alias: str) -> str | None:
     """Return BCP-47-like lang tag for an alias string, or None if unknown.
@@ -336,8 +346,12 @@ def parse_anilist_native_name(
     """
     native = name_dict.get("native") or ""
     nationality = infer_nationalities(native, hometown)
-    name_ja, name_ko, name_zh, names_alt_dict = assign_native_name_fields(native, nationality)
-    names_alt_json = json.dumps(names_alt_dict, ensure_ascii=False) if names_alt_dict else "{}"
+    name_ja, name_ko, name_zh, names_alt_dict = assign_native_name_fields(
+        native, nationality
+    )
+    names_alt_json = (
+        json.dumps(names_alt_dict, ensure_ascii=False) if names_alt_dict else "{}"
+    )
     return name_ja, name_ko, name_zh, names_alt_json, native, nationality
 
 
@@ -384,11 +398,11 @@ def format_person_name(person: object, report_lang: str = "ja") -> str:
     for Japanese readers, so romaji (name_en) is preferred.
     For other langs (th, ar, hi, vi, ...), names_alt JSON is checked first.
     """
-    ja  = getattr(person, "name_ja",  "") or ""
-    ko  = getattr(person, "name_ko",  "") or ""
-    zh  = getattr(person, "name_zh",  "") or ""
-    en  = getattr(person, "name_en",  "") or ""
-    pid = getattr(person, "id",       "") or ""
+    ja = getattr(person, "name_ja", "") or ""
+    ko = getattr(person, "name_ko", "") or ""
+    zh = getattr(person, "name_zh", "") or ""
+    en = getattr(person, "name_en", "") or ""
+    pid = getattr(person, "id", "") or ""
 
     if report_lang not in ("ja", "en", "ko"):
         try:

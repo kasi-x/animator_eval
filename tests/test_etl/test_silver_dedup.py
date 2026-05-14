@@ -197,11 +197,15 @@ def loaded_conn() -> duckdb.DuckDBPyConnection:
 
 
 class TestFindPersonDupCandidates:
-    def test_empty_db_returns_empty(self, empty_conn: duckdb.DuckDBPyConnection) -> None:
+    def test_empty_db_returns_empty(
+        self, empty_conn: duckdb.DuckDBPyConnection
+    ) -> None:
         result = find_person_dup_candidates(empty_conn)
         assert result == []
 
-    def test_cross_source_dup_detected(self, loaded_conn: duckdb.DuckDBPyConnection) -> None:
+    def test_cross_source_dup_detected(
+        self, loaded_conn: duckdb.DuckDBPyConnection
+    ) -> None:
         result = find_person_dup_candidates(loaded_conn)
         # Only anilist:p1 + bgm:p99 should appear
         assert len(result) == 1
@@ -211,7 +215,9 @@ class TestFindPersonDupCandidates:
         assert row["evidence_name"] == "山田太郎"
         assert row["evidence_birth_date"] == "1985-04-01"
 
-    def test_same_source_not_returned(self, loaded_conn: duckdb.DuckDBPyConnection) -> None:
+    def test_same_source_not_returned(
+        self, loaded_conn: duckdb.DuckDBPyConnection
+    ) -> None:
         # bgm:p200 + bgm:p201 are same source, should not appear
         result = find_person_dup_candidates(loaded_conn)
         ids = [r["candidate_id_a"] + r["candidate_id_b"] for r in result]
@@ -239,22 +245,32 @@ class TestFindPersonDupCandidates:
 
 
 class TestFindAnimeDupCandidates:
-    def test_empty_db_returns_empty(self, empty_conn: duckdb.DuckDBPyConnection) -> None:
+    def test_empty_db_returns_empty(
+        self, empty_conn: duckdb.DuckDBPyConnection
+    ) -> None:
         result = find_anime_dup_candidates(empty_conn)
         assert result == []
 
-    def test_cross_source_dup_detected(self, loaded_conn: duckdb.DuckDBPyConnection) -> None:
+    def test_cross_source_dup_detected(
+        self, loaded_conn: duckdb.DuckDBPyConnection
+    ) -> None:
         result = find_anime_dup_candidates(loaded_conn)
         assert len(result) >= 1
         # The madoka match should appear
-        madoka = [r for r in result if "anilist:a1" in (r["candidate_id_a"], r["candidate_id_b"])]
+        madoka = [
+            r
+            for r in result
+            if "anilist:a1" in (r["candidate_id_a"], r["candidate_id_b"])
+        ]
         assert madoka, "madoka cross-source pair not detected"
         row = madoka[0]
         assert "anilist" in row["sources"]
         assert "madb" in row["sources"]
         assert row["evidence_year"] == 2011
 
-    def test_different_year_not_returned(self, loaded_conn: duckdb.DuckDBPyConnection) -> None:
+    def test_different_year_not_returned(
+        self, loaded_conn: duckdb.DuckDBPyConnection
+    ) -> None:
         # 進撃の巨人: anilist 2013 vs madb 2014 → should NOT be dup candidate
         result = find_anime_dup_candidates(loaded_conn)
         shingeki_cross = [
@@ -290,11 +306,15 @@ class TestFindAnimeDupCandidates:
 
 
 class TestFindStudioDupCandidates:
-    def test_empty_db_returns_empty(self, empty_conn: duckdb.DuckDBPyConnection) -> None:
+    def test_empty_db_returns_empty(
+        self, empty_conn: duckdb.DuckDBPyConnection
+    ) -> None:
         result = find_studio_dup_candidates(empty_conn)
         assert result == []
 
-    def test_cross_source_dup_detected(self, loaded_conn: duckdb.DuckDBPyConnection) -> None:
+    def test_cross_source_dup_detected(
+        self, loaded_conn: duckdb.DuckDBPyConnection
+    ) -> None:
         result = find_studio_dup_candidates(loaded_conn)
         assert len(result) >= 1
         jcstaff = [
@@ -307,9 +327,15 @@ class TestFindStudioDupCandidates:
         assert "anilist" in row["sources"]
         assert "kf" in row["sources"]
 
-    def test_unique_studio_not_returned(self, loaded_conn: duckdb.DuckDBPyConnection) -> None:
+    def test_unique_studio_not_returned(
+        self, loaded_conn: duckdb.DuckDBPyConnection
+    ) -> None:
         result = find_studio_dup_candidates(loaded_conn)
-        bones = [r for r in result if "anilist:s2" in (r["candidate_id_a"], r["candidate_id_b"])]
+        bones = [
+            r
+            for r in result
+            if "anilist:s2" in (r["candidate_id_a"], r["candidate_id_b"])
+        ]
         assert bones == []
 
     def test_return_type(self, loaded_conn: duckdb.DuckDBPyConnection) -> None:
@@ -327,11 +353,15 @@ class TestFindStudioDupCandidates:
 
 
 class TestFindCreditWithinSourceDup:
-    def test_empty_db_returns_empty(self, empty_conn: duckdb.DuckDBPyConnection) -> None:
+    def test_empty_db_returns_empty(
+        self, empty_conn: duckdb.DuckDBPyConnection
+    ) -> None:
         result = find_credit_within_source_dup(empty_conn)
         assert result == []
 
-    def test_within_source_dup_detected(self, loaded_conn: duckdb.DuckDBPyConnection) -> None:
+    def test_within_source_dup_detected(
+        self, loaded_conn: duckdb.DuckDBPyConnection
+    ) -> None:
         result = find_credit_within_source_dup(loaded_conn)
         assert len(result) >= 2  # director dup + key_animator dup
 
@@ -345,11 +375,15 @@ class TestFindCreditWithinSourceDup:
         assert director_dups, "director within-source dup not detected"
         assert director_dups[0]["dup_count"] == 2
 
-    def test_cross_source_not_counted(self, loaded_conn: duckdb.DuckDBPyConnection) -> None:
+    def test_cross_source_not_counted(
+        self, loaded_conn: duckdb.DuckDBPyConnection
+    ) -> None:
         # bgm:p99/director/bangumi is unique → not in results
         result = find_credit_within_source_dup(loaded_conn)
         bangumi_director = [
-            r for r in result if r["evidence_source"] == "bangumi" and r["role"] == "director"
+            r
+            for r in result
+            if r["evidence_source"] == "bangumi" and r["role"] == "director"
         ]
         assert bangumi_director == []
 
@@ -368,19 +402,30 @@ class TestFindCreditWithinSourceDup:
 
 
 class TestAudit:
-    def test_smoke_empty(self, empty_conn: duckdb.DuckDBPyConnection, tmp_path: Path) -> None:
+    def test_smoke_empty(
+        self, empty_conn: duckdb.DuckDBPyConnection, tmp_path: Path
+    ) -> None:
         counts = audit(empty_conn, tmp_path)
-        assert set(counts.keys()) == {"persons", "anime", "studios", "credits_within_src"}
+        assert set(counts.keys()) == {
+            "persons",
+            "anime",
+            "studios",
+            "credits_within_src",
+        }
         assert all(v == 0 for v in counts.values())
 
-    def test_smoke_loaded(self, loaded_conn: duckdb.DuckDBPyConnection, tmp_path: Path) -> None:
+    def test_smoke_loaded(
+        self, loaded_conn: duckdb.DuckDBPyConnection, tmp_path: Path
+    ) -> None:
         counts = audit(loaded_conn, tmp_path)
         assert counts["persons"] >= 1
         assert counts["anime"] >= 1
         assert counts["studios"] >= 1
         assert counts["credits_within_src"] >= 2
 
-    def test_csvs_created(self, loaded_conn: duckdb.DuckDBPyConnection, tmp_path: Path) -> None:
+    def test_csvs_created(
+        self, loaded_conn: duckdb.DuckDBPyConnection, tmp_path: Path
+    ) -> None:
         audit(loaded_conn, tmp_path)
         for fname in (
             "silver_dedup_persons.csv",
@@ -390,7 +435,9 @@ class TestAudit:
         ):
             assert (tmp_path / fname).exists(), f"{fname} not created"
 
-    def test_summary_created(self, loaded_conn: duckdb.DuckDBPyConnection, tmp_path: Path) -> None:
+    def test_summary_created(
+        self, loaded_conn: duckdb.DuckDBPyConnection, tmp_path: Path
+    ) -> None:
         audit(loaded_conn, tmp_path)
         summary = tmp_path / "silver_dedup_summary.md"
         assert summary.exists()
@@ -406,7 +453,9 @@ class TestAudit:
         audit(loaded_conn, nested)
         assert nested.is_dir()
 
-    def test_returns_dict(self, loaded_conn: duckdb.DuckDBPyConnection, tmp_path: Path) -> None:
+    def test_returns_dict(
+        self, loaded_conn: duckdb.DuckDBPyConnection, tmp_path: Path
+    ) -> None:
         counts = audit(loaded_conn, tmp_path)
         assert isinstance(counts, dict)
         for v in counts.values():

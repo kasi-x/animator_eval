@@ -7,9 +7,15 @@ from src.scrapers.jvmg_fetcher import parse_wikidata_results
 from src.scrapers.wikidata_role_map import WIKIDATA_ROLE_MAP
 
 
-def _binding(anime_qid: str, person_qid: str, role: str = "director",
-             anime_label: str = "Test Anime", person_label: str = "Test Person",
-             person_label_ja: str = "", year: str = "2020") -> dict:
+def _binding(
+    anime_qid: str,
+    person_qid: str,
+    role: str = "director",
+    anime_label: str = "Test Anime",
+    person_label: str = "Test Person",
+    person_label_ja: str = "",
+    year: str = "2020",
+) -> dict:
     return {
         "anime": {"value": f"http://www.wikidata.org/entity/{anime_qid}"},
         "animeLabel": {"value": anime_label},
@@ -135,6 +141,7 @@ class TestParseWikidataResults:
 class TestWikidataRoleMap:
     def test_all_values_parseable(self):
         from src.runtime.models import parse_role, Role
+
         for prop, token in WIKIDATA_ROLE_MAP.items():
             role = parse_role(token)
             assert role != Role.SPECIAL, (

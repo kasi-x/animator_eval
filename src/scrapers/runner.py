@@ -136,7 +136,9 @@ class ScrapeRunner(Generic[ID, Raw, Rec]):
                 progress.advance()
 
                 if (i + 1) % self.flush_every == 0:
-                    self._checkpoint_flush(completed, stats, progress, i + 1, len(pending))
+                    self._checkpoint_flush(
+                        completed, stats, progress, i + 1, len(pending)
+                    )
 
         self._final_flush(completed)
         self._log_done(stats)
