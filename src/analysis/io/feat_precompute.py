@@ -411,11 +411,14 @@ def compute_feat_studio_affiliation_ddb() -> int:
     log.info("feat_studio_affiliation_compute_start")
 
     with conformed_connect() as silver:
-        # Graceful check: skip if anime_studios not yet in silver
+        # Graceful check: skip if anime_studios not yet present.
+        # Accept both legacy `main` schema (test fixtures) and `conformed`
+        # schema (production animetor.duckdb).
         tables = {
             r[0]
             for r in silver.execute(
-                "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+                "SELECT table_name FROM information_schema.tables "
+                "WHERE table_schema IN ('main', 'conformed')"
             ).fetchall()
         }
         if "anime_studios" not in tables:

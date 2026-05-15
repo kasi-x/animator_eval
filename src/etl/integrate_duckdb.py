@@ -778,6 +778,24 @@ def integrate(
                     source=source_name,
                     error=str(exc),
                 )
+
+        # credit_year backfill: anime.year を credits.credit_year に伝播
+        # (全 source の INSERT 経路で credit_year を NULL ハードコードしているため)
+        try:
+            conn.execute(
+                "UPDATE credits SET credit_year = anime.year "
+                "FROM anime "
+                "WHERE anime.id = credits.anime_id "
+                "AND credits.credit_year IS NULL "
+                "AND anime.year IS NOT NULL"
+            )
+            r = conn.execute(
+                "SELECT COUNT(*) FROM credits WHERE credit_year IS NOT NULL"
+            ).fetchone()
+            counts["credit_year_populated"] = r[0]
+            logger.info("credit_year_backfilled", populated=r[0])
+        except Exception as exc:
+            logger.warning("credit_year_backfill_skip", error=str(exc))
     finally:
         conn.close()
 
